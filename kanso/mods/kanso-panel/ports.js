@@ -497,7 +497,7 @@ export class Ports {
       .child(div().text_size(narrow ? 17 : 20).text_color(c.text).child("Ports"))
       .child(h_flex().gap(G.xs).items_center()
         .when(this.canShare(), (el) => el.child(iconButton("pt-share", "share", "Share", (cx) => this.share.toggle(cx), c, { active: this.share.open })))
-        .child(iconButton("pt-refresh", "refresh", "Read again", (cx) => this.refresh(cx, { history: true, now: true }), c, { spin: this.reading })));
+        .child(iconButton("pt-refresh", "refresh-cw", "Read again", (cx) => this.refresh(cx, { history: true, now: true }), c, { spin: this.reading })));
     const history = this.history(c);
     const others = this.list === null ? [] : this.remoteSections(c);
     const body = this.list === null

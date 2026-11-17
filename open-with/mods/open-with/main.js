@@ -56,7 +56,7 @@ const LIST_ROWS = 13;
 const TILE_TONES = ["blue", "teal", "violet", "yellow", "green", "red"];
 
 // One shell pass: prints `app|cli|flatpak <tab> key <tab> path` per hit.
-const PREVIEW = { id: "preview", name: "Preview in the panel", icon: "mods/kanso-chrome/icons/file-text.svg", builtin: true };
+const PREVIEW = { id: "preview", name: "Preview in the panel", icon: "mods/kanso-chrome/icons/file.svg", builtin: true };
 
 function showPreview(file, machine) {
   if (!walkLayout(layout(), "panel-body")) return false;

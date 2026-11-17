@@ -26,17 +26,17 @@ function items(tg) {
     run("pane.split", { pane, direction: dir === "down" ? "down" : "right" });
   }, icon, key];
   return [
-    split("Split right", "right", "split-right", "kanso-strip.new-right"),
-    split("Split left", "left", "split-right", "kanso-strip.new-left"),
-    split("Split down", "down", "split-down", "kanso-strip.new-down"),
-    ["Wider or narrower", () => setShared("strip.req", { op: "width", pane, n: Date.now() + Math.random() }), "zoom", "kanso-strip.width"],
+    split("Split right", "right", "columns-2", "kanso-strip.new-right"),
+    split("Split left", "left", "columns-2", "kanso-strip.new-left"),
+    split("Split down", "down", "rows-2", "kanso-strip.new-down"),
+    ["Wider or narrower", () => setShared("strip.req", { op: "width", pane, n: Date.now() + Math.random() }), "move-horizontal", "kanso-strip.width"],
     [pinned ? "Unpin pane" : "Pin pane", () => setShared("strip.req", { op: "pin", pane, n: Date.now() + Math.random() }), "pin", "kanso-strip.pin"],
     ...(term ? [[toProgram ? "Use Herdr right-click menu" : "Send right-clicks to pane",
-      () => run("terminal.right_click", { terminal: term.address, to: toProgram ? "menu" : "program" }), "sidebar", null]] : []),
+      () => run("terminal.right_click", { terminal: term.address, to: toProgram ? "menu" : "program" }), "panel-left", null]] : []),
     ...(parent ? [[`Send back to ${parent.name || parent.address}`, () => run("terminal.park", { terminal: term.address }), "chevron-right", null]] : []),
-    ...(info?.cwd ? [["Open with…", () => openWithPopup(info), "open-with", "mod.open:open-with"]] : []),
+    ...(info?.cwd ? [["Open with…", () => openWithPopup(info), "external-link", "mod.open:open-with"]] : []),
     ...(info?.terminal ? [["Send to an agent…", () => openOverlay({ mod: "kanso-send", kind: "dialog", width: 520, props: { pane } }), "send", "kanso-strip.send"]] : []),
-    ["Close pane", () => run("pane.close", { pane }), "close", "kanso-strip.close"],
+    ["Close pane", () => run("pane.close", { pane }), "x", "kanso-strip.close"],
   ];
 }
 

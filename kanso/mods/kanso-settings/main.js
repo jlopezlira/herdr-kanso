@@ -340,7 +340,7 @@ export default class Settings extends View {
 
   creditsPage(t, c) {
     const link = (id, start, title, note, url) => row(`credit-${id}`, c, {
-      start, name: title, second: note, meta: url.replace(/^https:\/\//, ""), flag: "open-with", onClick: (cx) => cx.open_url(url),
+      start, name: title, second: note, meta: url.replace(/^https:\/\//, ""), flag: "external-link", onClick: (cx) => cx.open_url(url),
     });
     const heading = (text) => row(`credits-${text}`, c, { name: text, heading: true }).mt(G.lg);
     return v_flex().w_full()

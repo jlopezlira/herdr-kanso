@@ -199,8 +199,8 @@ export class Companion {
     const tile = (p) => {
       const on = p.id === this.id;
       return v_flex().id(`pet-${p.id}`).w(104).gap(4).p(8).items_center().rounded(10).cursor_pointer()
-        .border_1().border_color(on ? c.accent : CLEAR).bg(on ? alpha(c.accent, TINT.faint) : CLEAR)
-        .hover((s) => s.bg(c.w4))
+        .border_1().border_color(on ? c.accent : CLEAR).bg(on ? alpha(c.accent, TINT.key) : CLEAR)
+        .hover((s) => s.bg(alpha(c.text, TINT.hover)))
         .on_click((_e, cx) => { this.choose(p.id); onChoose(p, cx); cx.notify(); })
         .child(h_flex().h(84).items_end().justify_center()
           .child(p.sheet ? petFrame(p, "idle", { scale: 0.4, still: true, small: true }) : hachi(t, { mood: "calm", px: 5 })))

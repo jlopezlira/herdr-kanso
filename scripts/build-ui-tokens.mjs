@@ -25,13 +25,20 @@ const PICK = {
 const TIMING = { SPIN: "k-spin-ms", GLINT_MS: "k-glint-ms", GLINT_STAGGER: "k-glint-stagger", DOTS_MS: "k-dots-ms" };
 // Transitions: a duration and an easing.
 const MOTION = { EASE: { duration: "k-fade-ms", easing: "k-glide-ease" }, GLIDE: { duration: "k-glide-ms", easing: "k-glide-ease" } };
+const EASINGS = { GLINT_EASE: "k-ease-out" };
+// Beats: an opacity that falls to `from` and back to full every `period`.
+const BEATS = { working: { from: "k-op-beat-working", period: "k-beat-working-ms" }, blocked: { from: "k-op-beat-blocked", period: "k-beat-blocked-ms" } };
 // Shares of full strength, from 0 to 1.
 const SHARES = {
-  OPACITY: { away: "k-op-away", held: "k-op-held", hover: "k-op-hover", quiet: "k-op-quiet", blockedWash: "k-wash-blocked", blockedRow: "k-wash-blocked-row", glintFaint: "k-op-glint-faint", glintMid: "k-op-glint-mid" },
-  TINT: { faint: "k-tint-faint", soft: "k-tint-soft", strong: "k-tint-strong", line: "k-tint-line" },
+  OPACITY: {
+    away: "k-op-away", held: "k-op-held", hover: "k-op-hover", quiet: "k-op-quiet", idle: "k-op-idle", thumb: "k-op-thumb", trace: "k-op-trace",
+    pending: "k-op-pending", part: "k-op-part", pet: "k-op-pet", blockedWash: "k-wash-blocked", blockedRow: "k-wash-blocked-row", glintFaint: "k-op-glint-faint", glintMid: "k-op-glint-mid",
+  },
+  TINT: Object.fromEntries(["board", "chip", "cell", "hover", "row", "card", "tab", "pill", "diff", "faint", "key", "control", "goal", "bound", "soft", "strong", "frame", "boundLine", "ring", "line"]
+    .map((key) => [key, `k-tint-${key.replace(/[A-Z]/g, (ch) => `-${ch.toLowerCase()}`)}`])),
 };
 // Colours that are the same in every theme: marks and fallbacks.
-const INK = { faint: "faint", dojoFur: "dojo-fur", dojoCream: "dojo-cream", dojoInk: "dojo-ink" };
+const INK = { faint: "faint", fallback: "fallback", dojoFur: "dojo-fur", dojoCream: "dojo-cream", dojoInk: "dojo-ink" };
 
 const reader = (unit) => (tokens) => {
   const all = Object.entries(tokens).filter(([group]) => group !== "colour").flatMap(([, list]) => list);
@@ -82,9 +89,12 @@ const constant = (name, pick, read) => (typeof pick === "string"
 const constants = (picks, read) => Object.entries(picks).map(([name, pick]) => constant(name, pick, read));
 
 export function block(tokens) {
-  const duration = ms(tokens), ease = easing(tokens);
+  const duration = ms(tokens);
+  const ease = easing(tokens);
+  const of = share(tokens);
   const motion = Object.entries(MOTION).map(([name, pick]) => `export const ${name} = { duration: ${duration(pick.duration)}, easing: ${ease(pick.easing)} };`);
-  return [START, ...constants(PICK, px(tokens)), ...constants(TIMING, duration), ...motion, ...constants(SHARES, share(tokens)),
+  const beats = `export const BEAT = { ${Object.entries(BEATS).map(([key, pick]) => `${key}: { from: ${of(pick.from)}, to: 1, period: ${duration(pick.period)} }`).join(", ")} };`;
+  return [START, ...constants(PICK, px(tokens)), ...constants(TIMING, duration), ...motion, ...constants(EASINGS, ease), beats, ...constants(SHARES, of),
     washes(tokens), constant("INK", INK, ink(tokens)), END].join("\n");
 }
 

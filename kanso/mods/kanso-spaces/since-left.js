@@ -1,6 +1,6 @@
 import { div, svg } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
-import { G, H, R, T, ICON, tokens } from "./ui.js";
+import { G, H, R, T, ICON, TINT, alpha, tokens } from "./ui.js";
 import { iconButton } from "./ui-button.js";
 import { present, RETURN_LABEL, focusedTarget, MAINTENANCE_MS } from "./since-left-model.js";
 import { SinceStore } from "./since-left-store.js";
@@ -13,7 +13,7 @@ const ROW_GAP = 1; // the sidebar list's gap; the kit has no token for it
 
 // An error has no glyph; the sidebar draws the blocked disc for a failed agent.
 const lead = (c, mark) => (mark === "pr"
-  ? svg("mods/kanso-chrome/icons/pull-request.svg").size(ICON).flex_none().text_color(c.muted)
+  ? svg("mods/kanso-chrome/icons/git-pull-request.svg").size(ICON).flex_none().text_color(c.muted)
   : statusMark(c, mark === "error" ? "blocked" : mark));
 
 export class SinceLeft {
@@ -94,7 +94,7 @@ export class SinceLeft {
   }
 
   dismissControl(c) {
-    return iconButton("since-dismiss", "close", "Dismiss", (cx) => { cx.stop_propagation(); return this.dismiss(cx).catch(() => {}); }, c);
+    return iconButton("since-dismiss", "x", "Dismiss", (cx) => { cx.stop_propagation(); return this.dismiss(cx).catch(() => {}); }, c);
   }
 
   line(t, c, row, nav, reach) {
@@ -109,7 +109,7 @@ export class SinceLeft {
       .child(div().flex_1())
       .when(Boolean(row.age), (el) => el.child(div().flex_none().text_size(T.body).text_color(t.dim).child(row.age)));
     return h_flex().id(id).h(heightOf(row)).w_full().flex_none().pl(AGENT_PAD).pr(G.md).gap(G.md).min_w(0).items_center().rounded(R.card)
-      .when(Boolean(go), (el) => el.cursor_pointer().hover((s) => s.bg(tokens(t).w4)).on_click((_e, cx) => go(cx)))
+      .when(Boolean(go), (el) => el.cursor_pointer().hover((s) => s.bg(alpha(t.foreground, TINT.row))).on_click((_e, cx) => go(cx)))
       .when(selected, (el) => el.border_1().border_color(t.accent))
       .when(!row.more, (el) => el.child(lead(c, row.mark)))
       .child(v_flex().flex_1().min_w(0).justify_center().child(top)

@@ -608,7 +608,7 @@ export class Worktrees {
       .child(h_flex().gap(G.xs).items_center().flex_none()
         .when(Boolean(this.phase), (el) => el.child(div().pr(G.xs).text_size(11).text_color(c.dim).child(this.phase)))
         .child(iconButton("wt-share", "share", "Share", (cx) => this.share.toggle(cx), c))
-        .child(iconButton("wt-refresh", "refresh", "Scan again", (cx) => { if (!this.working) this.refresh(cx); }, c, { spin: scanning })));
+        .child(iconButton("wt-refresh", "refresh-cw", "Scan again", (cx) => { if (!this.working) this.refresh(cx); }, c, { spin: scanning })));
   }
 
   freedBones(c, narrow) {
@@ -766,7 +766,7 @@ export class Worktrees {
     return v_flex().w_full().gap(G.lg)
       .child(section(c, "Where the space is", fmtSize(total)))
       .child(h_flex().w_full().h(10).rounded(5).overflow_hidden().gap(2)
-        .children(parts.filter((p) => p.kb > 0).map((p) => div().h_full().w(pct(p.kb)).flex_shrink_0().bg(color[p.key]).opacity(p.key === "checking" ? 1 : OPACITY.quiet)
+        .children(parts.filter((p) => p.kb > 0).map((p) => div().h_full().w(pct(p.kb)).flex_shrink_0().bg(color[p.key]).opacity(p.key === "checking" ? 1 : OPACITY.part)
           .tooltip(`${p.label}: ${fmtSize(p.kb)}`))))
       .child(v_flex().w_full().gap(6)
         .children(parts.map((p) => h_flex().w_full().items_center().gap(G.sm)
@@ -865,7 +865,7 @@ export class Worktrees {
     const body = !scanned && this.phase ? this.skeleton(c, narrow)
       : !scanned ? (this.note
         ? failNote("wt-failed", this.note, c, [{ label: "Refresh", onClick: (cx) => { if (!this.working) this.refresh(cx); } }])
-        : stateEmpty("wt-empty", "worktree", "No worktrees besides your checkouts", c))
+        : stateEmpty("wt-empty", "git-fork", "No worktrees besides your checkouts", c))
         : this.page(c, narrow, groups, shown);
     return sizedPage.call(this, v_flex().id("kanso-worktrees").size_full().min_h(0).bg(c.canvas).text_color(c.text).overflow_y_scrollbar(), narrow, (column) => column
           .child(this.header(c, narrow))

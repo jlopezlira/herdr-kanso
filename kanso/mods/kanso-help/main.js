@@ -71,11 +71,11 @@ export default class Help extends View {
     const does = bound.get(name);
     const pressed = this.capLight.lit?.key === name;
     const picked = !isMod && this.picked === name;
-    const fill = pressed || picked ? c.accent : held ? c.w14 : does ? alpha(c.accent, TINT.soft) : c.w4;
+    const fill = pressed || picked ? c.accent : held ? alpha(c.text, TINT.soft) : does ? alpha(c.accent, TINT.bound) : alpha(c.text, TINT.cell);
     const ink = pressed || picked ? (t.accent_foreground ?? c.canvas) : does || held ? c.text : c.dim;
     const label = (isMod ? modifierLabels(localName()).MOD_GLYPH[name] : CAP[name]) ?? (name.length === 1 ? name.toUpperCase() : name);
     return div().id(`cap-${name}-${i}`).w(width).h(U).flex_none().rounded(7)
-      .border_1().border_color(pressed || picked ? c.accent : does ? alpha(c.accent, TINT.line) : held ? alpha(c.text, TINT.strong) : c.border)
+      .border_1().border_color(pressed || picked ? c.accent : does ? alpha(c.accent, TINT.boundLine) : held ? alpha(c.text, TINT.strong) : c.border)
       .bg(fill).flex().items_center().justify_center()
       .text_size(label.length > 1 ? 11 : 13.5).font_medium().text_color(ink)
       .cursor_pointer().hover((s) => s.border_color(c.accent))
@@ -89,7 +89,7 @@ export default class Help extends View {
 
   chip(c, id, text, on, act) {
     return div().id(id).h(28).px(12).flex().items_center().rounded(7).cursor_pointer()
-      .border_1().border_color(on ? c.accent : c.border).bg(on ? alpha(c.accent, TINT.soft) : c.w4)
+      .border_1().border_color(on ? c.accent : c.border).bg(on ? alpha(c.accent, TINT.bound) : alpha(c.text, TINT.chip))
       .text_size(12.5).font_medium().text_color(on ? c.text : c.muted)
       .hover((s) => s.border_color(c.accent))
       .on_click((_e, cx) => { act(); cx.notify(); })
@@ -111,9 +111,9 @@ export default class Help extends View {
         .child(this.chip(c, "mod-lists", "Lists: j k gg G", this.lists, () => { this.lists = !this.lists; this.mods = []; this.picked = "j"; }))
         .child(div().flex_1())
         .child(div().text_size(12).text_color(c.dim).child(`${layerName} · ${bound.size} ${bound.size === 1 ? "key" : "keys"}`)))
-      .child(v_flex().gap(GAP).p(14).rounded(12).bg(c.w4).border_1().border_color(c.border).items_center()
+      .child(v_flex().gap(GAP).p(14).rounded(12).bg(alpha(c.text, TINT.board)).border_1().border_color(c.border).items_center()
         .children(ROWS.map((row, r) => h_flex().gap(GAP).children(row.map((k, i) => this.cap(t, c, k, `${r}-${i}`, bound))))))
-      .child(h_flex().h(44).px(14).gap(G.md).items_center().rounded(10).bg(chosen ? alpha(c.accent, TINT.faint) : c.w4)
+      .child(h_flex().h(44).px(14).gap(G.md).items_center().rounded(10).bg(chosen ? alpha(c.accent, TINT.diff) : alpha(c.text, TINT.chip))
         .child(div().min_w(64).text_size(17).font_semibold().text_color(chosen ? c.text : c.dim).child(chosen ? chordOf(chosen) : glyphs([...this.mods, this.picked].join("-"))))
         .child(div().flex_1().text_size(13.5).text_color(chosen ? c.text : c.dim)
           .child(chosen ? describe(chosen.action) : "Nothing on this key here. Press a key, or pick one.")))
@@ -168,7 +168,7 @@ export default class Help extends View {
     return pagedDialog({
       name: "help", handle: this.handle, onKey: (e, cx) => this.key(e, cx),
       head: h_flex().w_full().items_center().gap(G.md)
-        .child(svg("mods/kanso-chrome/icons/help.svg").size(17).text_color(c.accent))
+        .child(svg("mods/kanso-chrome/icons/circle-question-mark.svg").size(17).text_color(c.accent))
         .child(div().flex_1().text_size(15).font_semibold().child("kansō help"))
         .child(quietLink("help-settings", "Settings", toSettings, c, { color: c.accent }))
         .child(div().text_size(11).text_color(t.dim).child("Esc")),

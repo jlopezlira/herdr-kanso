@@ -32,7 +32,7 @@ export function palette(t = theme() ?? {}) {
 const esc = (s) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 // #rrggbb (or #rrggbbaa) as fill plus opacity, which every renderer understands.
 function paint(hex, alpha) {
-  const h = String(hex ?? INK.faint).replace(/^#/, "");
+  const h = String(hex ?? INK.fallback).replace(/^#/, "");
   const base = `#${h.slice(0, 6).padEnd(6, "8")}`;
   const a = alpha ?? (h.length === 8 ? parseInt(h.slice(6), 16) / 255 : 1);
   return `fill="${base}"${a < 1 ? ` fill-opacity="${Math.round(a * 1000) / 1000}"` : ""}`;

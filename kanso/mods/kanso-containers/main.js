@@ -472,7 +472,7 @@ export default class Containers extends View {
     const c = tokens(theme()), narrow = this.width < 560;
     const header = h_flex().w_full().items_center().justify_between().gap(G.md)
       .child(div().text_size(narrow ? 17 : 20).text_color(c.text).child("Containers"))
-      .child(iconButton("ct-refresh", "refresh", "Read again", (cx) => this.refresh(cx, true, true), c, { spin: this.reading }));
+      .child(iconButton("ct-refresh", "refresh-cw", "Read again", (cx) => this.refresh(cx, true, true), c, { spin: this.reading }));
     return v_flex().id("kanso-containers").size_full().min_h(0).bg(c.canvas).text_color(c.text).overflow_y_scrollbar()
       .on_size_change((s, sizeCx) => { if (Math.abs(this.width - s.width) >= 1) { this.width = s.width; sizeCx.notify(); } })
       .child(pageFrame(narrow, narrow ? 28 : 40, (column) => column

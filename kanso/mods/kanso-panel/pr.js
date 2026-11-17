@@ -704,7 +704,7 @@ export class PullRequest {
   pickerFor(kind, c) {
     const id = `pr-pick-${kind}`;
     const label = { labels: "Change labels", assignees: "Assign people", reviewers: "Request a review" }[kind];
-    const trigger = button(`${id}-trigger`, label, null, c, { kind: "icon", icon: kind === "labels" ? "tag" : "user-plus" });
+    const trigger = button(`${id}-trigger`, label, null, c, { kind: "icon", icon: "plus" });
     const popover = Popover.new(id).trigger(trigger).anchor("top_right")
       .open(this.picker === kind)
       .on_open_change((open, cx) => this.openPicker(kind, open, cx));
@@ -839,9 +839,9 @@ export class PullRequest {
       .child(h_flex().gap(G.xs).items_center().flex_none()
         .when(this.inboxOn, (el) => el.child(this.reviewPill(c)))
         .when(pill, (el) => el.child(this.switchPill(c)))
-        .child(iconButton("pr-refresh", "refresh", refreshed ? `Refresh · ${refreshed}` : "Refresh", (cx) => this.again(cx), c, { spin: this.loading }))
+        .child(iconButton("pr-refresh", "refresh-cw", refreshed ? `Refresh · ${refreshed}` : "Refresh", (cx) => this.again(cx), c, { spin: this.loading }))
         .when(Boolean(pr?.url) && !this.listing && !here, (el) => el.child(iconButton("pr-copy", this.copied === pr.url ? "check" : "copy", this.copied === pr.url ? "Copied" : "Copy link", (cx) => this.copyUrl(pr.url, cx), c)))
-        .when(Boolean(pr?.url) && !here, (el) => el.child(iconButton("pr-web", "open-with", "Open on GitHub", () => openUrl(pr.url), c))));
+        .when(Boolean(pr?.url) && !here, (el) => el.child(iconButton("pr-web", "external-link", "Open on GitHub", () => openUrl(pr.url), c))));
   }
 
   copyUrl(url, cx) {
@@ -1079,7 +1079,7 @@ export class PullRequest {
     return v_flex().w_full().mb(G.sm).rounded(6).border_1().border_color(c.border).overflow_hidden().font_family(monoFont()).text_size(11)
       .children(diffRows(lines, { max: MAX_DIFF, width: 400 }).map((r) => r.kind === "@"
         ? div().h(20).px(10).flex_none().truncate().text_color(c.dim).child(r.text)
-        : h_flex().h(20).flex_none().gap(8).when(r.kind === "+", (e) => e.bg(alpha(c.green, TINT.faint))).when(r.kind === "-", (e) => e.bg(alpha(c.red, TINT.faint)))
+        : h_flex().h(20).flex_none().gap(8).when(r.kind === "+", (e) => e.bg(alpha(c.green, TINT.diff))).when(r.kind === "-", (e) => e.bg(alpha(c.red, TINT.diff)))
           .child(div().w(30).flex_none().text_right().text_color(c.dim).child(r.number === undefined ? "" : String(r.number)))
           .child(div().flex_1().min_w(0).truncate().text_color(c.text).child(r.text))))
       .when(lines.length > MAX_DIFF, (el) => el.child(div().px(10).py(4).text_color(c.dim).child(`The first ${MAX_DIFF} lines; the rest is on GitHub.`)));

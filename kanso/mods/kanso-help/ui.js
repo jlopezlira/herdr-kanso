@@ -22,10 +22,12 @@ export const GLINT_STAGGER = 160;
 export const DOTS_MS = 380;
 export const EASE = { duration: 180, easing: "ease-out" };
 export const GLIDE = { duration: 220, easing: "ease-out" };
-export const OPACITY = { away: 0.55, held: 0.4, hover: 0.75, quiet: 0.55, blockedWash: 0.4, blockedRow: 0.08, glintFaint: 0.35, glintMid: 0.6 };
-export const TINT = { faint: 0.1, soft: 0.15, strong: 0.25, line: 0.55 };
+export const GLINT_EASE = "linear";
+export const BEAT = { working: { from: 0.35, to: 1, period: 1800 }, blocked: { from: 0.45, to: 1, period: 1600 } };
+export const OPACITY = { away: 0.55, held: 0.4, hover: 0.75, quiet: 0.55, idle: 0.7, thumb: 0.7, trace: 0.6, pending: 0.8, part: 0.85, pet: 0.85, blockedWash: 0.4, blockedRow: 0.08, glintFaint: 0.35, glintMid: 0.6 };
+export const TINT = { board: 0.02, chip: 0.024, cell: 0.03, hover: 0.04, row: 0.047, card: 0.063, tab: 0.07, pill: 0.08, diff: 0.094, faint: 0.1, key: 0.11, control: 0.12, goal: 0.133, bound: 0.14, soft: 0.15, strong: 0.25, frame: 0.314, boundLine: 0.44, ring: 0.5, line: 0.55 };
 export const WASHES = { dark: { w4: 0.04, w7: 0.07, w12: 0.12, w14: 0.14 }, light: { w4: 0.05, w7: 0.095, w12: 0.18, w14: 0.21 } };
-export const INK = { faint: "#8a867d", dojoFur: "#e8963a", dojoCream: "#f6ece0", dojoInk: "#161615" };
+export const INK = { faint: "#8a867d", fallback: "#888888", dojoFur: "#e8963a", dojoCream: "#f6ece0", dojoInk: "#161615" };
 // End of the generated sizes.
 /** A second press within this long confirms what cannot be undone. */
 export const ARM_MS = 4000;

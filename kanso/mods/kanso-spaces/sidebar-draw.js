@@ -1,7 +1,7 @@
 import { div, svg } from "gpui-kit";
 import { h_flex } from "gpui-base";
 import { run } from "herdr";
-import { G, R, T, tokens } from "./ui.js";
+import { G, R, T, TINT, alpha, tokens } from "./ui.js";
 import { quietLink } from "./ui-button.js";
 import { pendingDot, PENDING } from "./ui-state.js";
 import { commitLayout } from "./layout.js";
@@ -10,6 +10,9 @@ import { ASLEEP_ROW, asleepControls, gitControls, gitTask, pullKey } from "./sid
 const stop = (el, go) => el.cursor_pointer()
   .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
   .on_mouse_up("left", (_e, cx) => { cx.stop_propagation(); go(cx); });
+
+// A row's ground reaches the list's edges, as the kit's row does; its content stays `left` and `right` in from the list's padding.
+export const flush = (el, left, right) => el.mx(-G.sm).pl(left + G.sm).pr(right + G.sm).rounded(R.control);
 
 export function openAhead(space) {
   if (!space?.id) return;
@@ -27,14 +30,14 @@ export function gitTail(g, tree, name, t, place, act) {
     // A pull is drawn done at once; the dot breathes until git answers.
     if (control.pulling) return base.child(pendingDot(`git-pending-${act.id}`, tokens(t)));
     const go = control.kind === "ahead" ? act.open : act.pull;
-    return stop(base.px(4).py(2).rounded(4).text_size(T.body).text_color(t.muted).hover((s) => s.bg(tokens(t).w12).text_color(t.foreground)), go).child(control.label);
+    return stop(base.px(4).py(2).rounded(4).text_size(T.body).text_color(t.muted).hover((s) => s.bg(alpha(t.foreground, TINT.control)).text_color(t.foreground)), go).child(control.label);
   };
   const pending = controls.some((control) => control.pulling);
   return h_flex().flex_1().min_w(0).gap(4).items_center().text_size(T.body).text_color(t.dim)
     .opacity(pending ? PENDING : 1)
     .when(Boolean(repo), (el) => el.child(div().min_w(0).truncate().child(repo)))
     .when(Boolean(branch), (el) => el
-      .child(svg("mods/kanso-chrome/icons/branch.svg").size(12).flex_none().text_color(t.dim))
+      .child(svg("mods/kanso-chrome/icons/git-branch.svg").size(12).flex_none().text_color(t.dim))
       .child(div().min_w(0).truncate().text_color(t.muted).child(branch)))
     .when(Boolean(commit), (el) => el.child(div().flex_none().child(commit)))
     .children(controls.map(count))
@@ -45,10 +48,9 @@ export function asleepRow(a, pad, t, row, wake, label) {
   const c = tokens(t);
   const controls = asleepControls(a);
   const kbd = Boolean(row.kbd);
-  return h_flex().id(`space-agent-${a.address}`).h(ASLEEP_ROW).flex_none()
-    .pl(pad).pr(G.md).gap(G.md).items_center().rounded(R.card).cursor_pointer()
+  return flush(h_flex().id(`space-agent-${a.address}`).h(ASLEEP_ROW).flex_none().gap(G.md).items_center().cursor_pointer(), pad, G.md)
     .when(kbd, (el) => el.border_1().border_color(t.accent))
-    .hover((s) => s.bg(tokens(t).w4))
+    .hover((s) => s.bg(alpha(t.foreground, TINT.row)))
     .on_click((_e, cx) => { cx.stop_propagation(); row.menu(cx); })
     .on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); row.menu(cx); })
     .when(Boolean(row.hover), (el) => el.on_hover((h, cx) => row.hover(h, cx)))

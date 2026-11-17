@@ -25,7 +25,7 @@ import { listKey, moveTo } from "./listkeys.js";
 import { commitLayout, setRail, foldSidebar, railWidth, OPEN_MIN, dropStripDrag } from "./layout.js";
 import { afterMount } from "./pure.js";
 import { commandLoop, MachineRead } from "./sidebar.js";
-import { gitTail, asleepRow, openAhead } from "./sidebar-draw.js";
+import { gitTail, asleepRow, openAhead, flush } from "./sidebar-draw.js";
 import { guideBars, climb } from "./guides.js";
 import { projectControls, pullKey, runPull, canWake, enterOpens, machineWordTone, ASLEEP_ROW, sectionMarkOf, sectionCount, rowDirectory, threadWord, threadActions, closedControls, signInCommand, noProjectsOn, sortOf, foldTail, readWord, viewChord } from "./sidebar-rows.js";
 import { breathe, H, G, T, R, W, ICON, GLIDE, OPACITY, TINT, alpha, tokens, washes } from "./ui.js";
@@ -102,11 +102,10 @@ const SIDEBAR_W = 256;
 // Dragged narrower, rows keep one line under ONE_LINE_W.
 const ONE_LINE_W = 240;
 
-
 const VIEWS = {
   spaces: { label: "Projects", icon: "folder" },
-  agents: { label: "Status", icon: "pulse" },
-  threads: { label: "Threads", icon: "message" },
+  agents: { label: "Status", icon: "activity" },
+  threads: { label: "Threads", icon: "message-square" },
 };
 // A project's key: its machine and folder.
 export const projectKey = (w) => `${w?.machine ?? ""}:${w?.folder || home()}`;
@@ -1315,13 +1314,13 @@ export default class Spaces extends View {
     return closedProjects(ctx.registry.filter((p) => (p.machine || null) === (m ?? null)), ctx.spaces, home()).map((project) => ({ key: keyOfProject(project), project }));
   }
 
-  closedRow(t, c, { key, project }, names) {
+  closedRow(t, { key, project }, names) {
     const name = names.get(project.id) ?? project.name;
     const open = () => openOverlay({ mod: "kanso-spaces", kind: "popup", width: 252, height: 420, at: "pointer", props: { spaceMenu: { key } } });
     const missing = Boolean(project.missing);
     const controls = closedControls({ hovered: this.hoverSpace === key, missing });
-    const row = h_flex().id(`closed-project-${key}`).h(rowHeight({ tree: null })).flex_none().px(8).gap(9).items_center().rounded(8).cursor_pointer()
-      .hover((s) => s.bg(c.w4))
+    const row = flush(h_flex().id(`closed-project-${key}`).h(rowHeight({ tree: null })).flex_none().gap(G.sm).items_center().cursor_pointer(), G.sm, G.sm)
+      .hover((s) => s.bg(alpha(t.foreground, TINT.row)))
       .on_hover((h, cx) => { if (h ? this.hoverSpace !== key : this.hoverSpace === key) { this.hoverSpace = h ? key : null; cx.notify(); } })
       .when(this.navMark(`closed-project:${key}`, open), (el) => el.border_1().border_color(t.accent))
       .on_click((_e, cx) => { open(); cx.notify(); })
@@ -1368,8 +1367,8 @@ export default class Spaces extends View {
   asleepHead(t, c, group, { name = null, pad = AGENT_PAD } = {}) {
     const open = this.asleepOpenOf(group.id);
     const label = name || group.name || "Asleep";
-    const row = h_flex().id(`asleep-group-${group.id}`).h(32).flex_none().pl(pad).pr(12).gap(9).items_center().rounded(8).cursor_pointer()
-      .hover((s) => s.bg(c.w4))
+    const row = flush(h_flex().id(`asleep-group-${group.id}`).h(32).flex_none().gap(G.sm).items_center().cursor_pointer(), pad, G.md)
+      .hover((s) => s.bg(alpha(t.foreground, TINT.row)))
       .when(this.navMark(`asleep:${group.id}`, (cx) => this.toggleAsleep(group.id, this.asleepOpenOf(group.id), cx)), (el) => el.border_1().border_color(t.accent))
       .on_click((_e, cx) => { this.toggleAsleep(group.id, open, cx); cx.notify(); })
       .child(div().flex_1().min_w(0).truncate().text_size(13.5).font_medium().text_color(t.muted).child(label))
@@ -1523,15 +1522,15 @@ export default class Spaces extends View {
       ...(asleep.length ? [{ heading: "Asleep" }, ...asleep.map((z) => item(`Wake ${z.tab}`, () => wakeRow(z), { icon: "sun", hint: z.saved ? since(z.saved) : null }))] : []),
       ...(asleep.length > 1 ? [item(`Wake all ${asleep.length}`, () => arrange({ wake: { space: w.id } }), { icon: "undo" })] : []),
       ...(place && !project?.missing ? [item("New agent\u2026", () => this.newAgentMenu(place), { icon: "plus" }),
-        item("New agent in a worktree\u2026", () => this.worktreeDialog(place), { icon: "worktree" })] : []),
-      ...(trees.length ? [{ heading: "Worktrees" }, { scroll: trees.map((x) => item(x.branch ?? "detached", () => this.openTree(place, x), { icon: "branch", hint: where(x.path) })) }] : []),
+        item("New agent in a worktree\u2026", () => this.worktreeDialog(place), { icon: "git-fork" })] : []),
+      ...(trees.length ? [{ heading: "Worktrees" }, { scroll: trees.map((x) => item(x.branch ?? "detached", () => this.openTree(place, x), { icon: "git-branch", hint: where(x.path) })) }] : []),
       ...(active ? [item("Sleep this tab\u2026", () => sleepTab(w.id, active.id), { icon: "moon" })] : []),
       ...(tabs > 1 ? [item("Sleep the whole project\u2026", () => sleepProject(w.id), { icon: "moon" })] : []),
       ...(w ? [item("Project options\u2026", options, { icon: "settings" })] : []),
       ...(keepable ? [item("Keep as a project", keep, { icon: "pin", keep: true })] : []),
       ...(project?.missing && !project?.machine ? [item("Locate folder\u2026", locate, { icon: "file", keep: true })] : []),
       // Any project you see can go: one you added (its row too), or an open space you never kept.
-      ...(project || w ? [item("Remove project", remove, { icon: "close", keep: true, verb: w ? `remove it and close its ${tabs} tab${tabs === 1 ? "" : "s"}` : "remove it", armed: this.armed.is("remove") })] : []),
+      ...(project || w ? [item("Remove project", remove, { icon: "x", keep: true, verb: w ? `remove it and close its ${tabs} tab${tabs === 1 ? "" : "s"}` : "remove it", armed: this.armed.is("remove") })] : []),
     ]);
   }
 
@@ -1553,7 +1552,7 @@ export default class Spaces extends View {
     return this.popup(t, title, [
       ...this.known.filter((a) => a.installed).map((a) => item(a.name, () => pick(a), { hint: a.key === project?.agent ? "last" : null, keep: true })),
       item("Terminal", () => pick(null), { keep: true }),
-      ...(place.tree ? [] : [{ separator: true }, item("In a new worktree\u2026", () => this.worktreeDialog(place), { icon: "worktree" })]),
+      ...(place.tree ? [] : [{ separator: true }, item("In a new worktree\u2026", () => this.worktreeDialog(place), { icon: "git-fork" })]),
     ]);
   }
 
@@ -1632,7 +1631,7 @@ export default class Spaces extends View {
       return run.slab ? { ...end, y: end.y + 1 } : end;
     }, { y: 0, focus: null, focusH: 0 });
     const out = runs.flatMap((run) => (run.slab
-      ? [v_flex().id(`stack-${run.key}`).flex_none().mx(-G.sm).px(G.sm).rounded(R.control).bg(c.w4).children(run.rows.map((r) => r.el))]
+      ? [v_flex().id(`stack-${run.key}`).flex_none().mx(-G.sm).px(G.sm).rounded(R.control).bg(alpha(t.foreground, TINT.cell)).children(run.rows.map((r) => r.el))]
       : run.rows.map((r) => r.el)));
     return { out, h: Math.max(0, y - 1), focus, focusH };
   }
@@ -1852,7 +1851,7 @@ export default class Spaces extends View {
     const loadingRow = m => item(this.machineBones(t, collapsed, m), collapsed ? RAIL_MARK : PLAIN_ROW);
     // Projects you added with no space open, on their machine; each keeps a + to start an agent in it.
     const names = shownNames(ctx.registry);
-    const closed = (m) => (collapsed ? [] : this.closedOn(m, ctx)).flatMap((entry) => [item(div().h(10).flex_none(), 10), item(this.closedRow(t, c, entry, names), rowHeight({ tree: null }))]);
+    const closed = (m) => (collapsed ? [] : this.closedOn(m, ctx)).flatMap((entry) => [item(div().h(10).flex_none(), 10), item(this.closedRow(t, entry, names), rowHeight({ tree: null }))]);
     const heads = shown("sidebar.computers", true, pieces(shared));
     if (!remote.length || !heads) {
       const shut = [null, ...(heads ? [] : remote)].flatMap((m) => closed(m));
@@ -1881,7 +1880,7 @@ export default class Spaces extends View {
       // Sign in runs the login in a terminal pane; a click on the row still copies its command.
       signin: () => m && this.machineButton(`machine-login:${key}`, `machine-login-${m}`, "key", "Sign in", () => run("terminal.open", signInCommand(m)), t),
       power: () => m && this.machineButton(`machine-power:${key}`, powerId(m), "power", phase === "connected" ? "Turn off" : `Turn ${title} on`, (cx) => this.setPower(m, this.phaseOf(m) === "off", cx), t),
-      retry: () => m && this.machineButton(`machine-retry:${key}`, `machine-retry-${m}`, "refresh", "Refresh", (cx) => this.retryMachine(m, cx), t),
+      retry: () => m && this.machineButton(`machine-retry:${key}`, `machine-retry-${m}`, "refresh-cw", "Refresh", (cx) => this.retryMachine(m, cx), t),
       plus: () => this.machineButton(`machine-add:${key}`, `machine-add-${key}`, "plus", `New project on ${title}`, () => run("space.new", { machine: m ?? "" }), t),
       sync: () => this.syncButton(m, t),
     };
@@ -1962,10 +1961,9 @@ export default class Spaces extends View {
     const tools = collapsed ? [] : this.machineActions(m, phase, hot, t);
     const icon = svg(`mods/kanso-chrome/icons/${m ? "server" : "monitor"}.svg`).size(ICON).flex_none().text_color(phase === "connected" ? t.muted : ink);
     const pending = phase === "loading" && Boolean(m) && this.waking?.has(m);
-    const wash = c.w4;
-    return h_flex().id(`machine-${key}`).h(collapsed ? RAIL_MARK : PLAIN_ROW).flex_none()
-      .px(collapsed ? 0 : G.sm).gap(G.sm).items_center().rounded(R.card).text_color(ink)
-      .when(collapsed, (el) => el.justify_center())
+    const wash = alpha(t.foreground, TINT.row);
+    return (collapsed ? h_flex().rounded(R.card).justify_center() : flush(h_flex(), G.sm, G.sm))
+      .id(`machine-${key}`).h(collapsed ? RAIL_MARK : PLAIN_ROW).flex_none().gap(G.sm).items_center().text_color(ink)
       .when(ring, (el) => el.border_1().border_color(t.accent))
       .when(phase !== "loading", (el) => el.cursor_pointer().hover((s) => s.bg(wash)))
       .on_click((e, cx) => { if (e.click_count === 2) return; go(cx); })
@@ -2015,7 +2013,7 @@ export default class Spaces extends View {
   connector({ last, reach = GUIDE_OVERLAP }, t) {
     const line = washes(t)?.w12 ?? t.border;
     return guideBars(last ? "end" : "tee", { x: GUIDE_X, elbow: ELBOW_W, h: TREE_ROW, reach })
-      .map((b) => div().absolute().left(b.left).top(b.top).w(b.w).h(b.h).bg(line));
+      .map((b) => div().absolute().left(b.left + G.sm).top(b.top).w(b.w).h(b.h).bg(line));
   }
 
   // Folded: the most urgent mark and how many, and a click there unfolds. Open, the row itself folds.
@@ -2052,9 +2050,10 @@ export default class Spaces extends View {
     const closing = !open && mine;
     const start = open && mine && this.folding.open && this.folding.phase === 0;
     const h = this.foldH?.[id];
-    const inner = v_flex().w_full().flex_none().gap(gap).children(rows)
+    const inner = v_flex().w_full().flex_none().px(G.sm).gap(gap).children(rows)
       .on_size_change((s, cx) => { if (this.foldH[id] !== s.height) { this.foldH[id] = s.height; cx.notify(); } });
-    return [v_flex().id(`fold-${id}`).w_full().flex_none().overflow_hidden()
+    // Out to the list's edges, so the rows' ground is not cut short.
+    return [v_flex().id(`fold-${id}`).mx(-G.sm).flex_none().overflow_hidden()
       .h(closing || start ? 0 : h ?? "auto").opacity(closing || start ? 0 : 1)
       .transition("height", GLIDE).transition("opacity", GLIDE)
       .child(inner)];
@@ -2083,21 +2082,17 @@ export default class Spaces extends View {
     const spot = placeOfSpace(w);
     const controls = projectControls({ active: on, hovered: this.hoverSpace === w.id, place: spot });
     // A wash of the text color, never a theme accent; under the space you are in it is the list's pill.
-    const washHover = c.w4;
+    const washHover = alpha(t.foreground, TINT.row);
     const asleep = Boolean(group);
     // Shown, a settled tab comes back without its agents: a project whose every tab sleeps wakes from its menu.
     const away = asleep && (w.tabs ?? []).every((tb) => tb.settled);
     const ring = this.navMark(`space:${w.id}`, (cx) => this.openSpace(w, group, on, away, mine, cx),
       on && !mine.some((a) => a.focused));
-    const row = v_flex()
-      .relative()
-      .id(`space-${w.id}`)
+    const row = flush(v_flex().relative().id(`space-${w.id}`), G.sm, G.sm)
       .when(ring, (el) => el.border_1().border_color(t.accent))
-      .px(8)
       .h(rowHeight({ tree }))
       .flex_none()
       .justify_center()
-      .rounded(8)
       .cursor_pointer()
       .hover((s) => s.bg(washHover))
       .when(this.over === w.id && this.takes(w, tree), (el) => (spaceAt(this.pressed) < spaceAt(w.id) ? el.border_b(2) : el.border_t(2)).border_color(t.accent))
@@ -2125,7 +2120,7 @@ export default class Spaces extends View {
         h_flex()
           .gap(9)
           .items_center()
-          .when(Boolean(tree), el => el.pl(CHILD_PAD).child(svg("mods/kanso-chrome/icons/branch.svg").size(13).text_color(t.muted)))
+          .when(Boolean(tree), el => el.pl(CHILD_PAD).child(svg("mods/kanso-chrome/icons/git-branch.svg").size(13).text_color(t.muted)))
           .child(div().flex_shrink(0).max_w(150).truncate().text_size(13.5).font_semibold().text_color(tree && !on ? t.muted : t.foreground).child(w.name))
           .child(g && !asleep && shown("sidebar.git", true, pieces(shared)) ? gitTail(g, tree, w.name, t, place, { id: w.id, active: on, pulling: this.pulling, pull: (cx) => this.pull(place, cx), open: () => openAhead(w) }) : div().flex_1())
           .when(asleep, (el) => el.children(this.asleepTail(t, c, group)))
@@ -2255,9 +2250,9 @@ export default class Spaces extends View {
     const strong = rows.some((r) => r.strong);
     return h_flex().w_full().h(RAIL_MARK).flex_none().justify_center().items_center().child(
       v_flex().id(id).w(36).h(40).flex_none().gap(3).items_center().justify_center().rounded(6).cursor_pointer().tooltip(tip)
-        .when(on, (el) => el.bg(c.w7))
-        .when(!on, (el) => el.hover((s) => s.bg(c.w4)))
-        .when(strong, (el) => el.border_1().border_color(alpha(t.accent, TINT.line)))
+        .when(on, (el) => el.bg(alpha(t.foreground, TINT.pill)))
+        .when(!on, (el) => el.hover((s) => s.bg(alpha(t.foreground, TINT.row))))
+        .when(strong, (el) => el.border_1().border_color(alpha(t.accent, TINT.ring)))
         .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
         .on_click(list)
         .on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); (menu ?? list)(); })
@@ -2337,7 +2332,7 @@ export default class Spaces extends View {
       const p = s.project ? ctx.project(s.project) : null;
       const w = s.project ? sp.find((x) => x.id === s.project) : null;
       const list = s.rows.map(({ a }) => this.railRow(a, p ? null : ctx.project(a.space)?.name ?? null, ctx.now));
-      const lead = p ? this.railInitial(p.name, p.fill) : this.railIcon(t, icons[s.id] ?? "message");
+      const lead = p ? this.railInitial(p.name, p.fill) : this.railIcon(t, icons[s.id] ?? "message-square");
       return item(this.railMark(t, c, `rail-thread-${s.id}`, { lead, rows: list, tip: p?.name ?? s.label ?? "Conversations", on: Boolean(w?.active), space: w?.id ?? null, menu: w ? () => this.menu(w) : null }), RAIL_MARK);
     });
   }
@@ -2359,7 +2354,7 @@ export default class Spaces extends View {
     const c = tokens(t);
     const project = this.projectOf(sp, t);
     const rows = this.threadRows(ctx);
-    if (!rows.length) return [item(stateEmpty("threads-empty", "message", "No conversations yet", c))];
+    if (!rows.length) return [item(stateEmpty("threads-empty", "message-square", "No conversations yet", c))];
     const sections = threadSections(rows, { order: this.threadOrder, group: this.threadGroup, now: ctx.now, since: this.since ?? {} });
     // Under its project's header a conversation is nested: indented, the agent's icon as its mark, and no project line.
     const row = ({ a, th }, nested = false) => {
@@ -2485,10 +2480,10 @@ export default class Spaces extends View {
         ...(movedTo ? [item("Back to where it runs", () => moveTo(null), { icon: "undo" })] : [])] : []),
       { separator: true },
       ...(p?.cwd ? [item("Copy folder", copy(p.cwd), { icon: "copy" })] : []),
-      ...(p?.branch ? [item("Copy branch", copy(p.branch), { icon: "branch" })] : []),
+      ...(p?.branch ? [item("Copy branch", copy(p.branch), { icon: "git-branch" })] : []),
       ...(session ? [item("Copy conversation id", copy(session), { icon: "copy" })] : []),
       { separator: true },
-      item(a ? "Close agent" : "Close terminal", kill, { icon: "close", keep: !this.armed.is("close"), verb: "close it", armed: this.armed.is("close") }),
+      item(a ? "Close agent" : "Close terminal", kill, { icon: "x", keep: !this.armed.is("close"), verb: "close it", armed: this.armed.is("close") }),
     ]);
   }
 
@@ -2583,11 +2578,9 @@ export default class Spaces extends View {
   list(t, collapsed, view, items) {
     const gap = view === "threads" ? 6 : ROW_GAP;
     const { els, space, agent } = laidOut(items, gap);
-    const { w7 } = tokens(t);
     const pills = collapsed ? [] : [
-      ...(space ? [pill("pill-space", space.y, space.h, w7)] : []),
-      // A session row reaches the list's edges, as the kit's row does.
-      ...(agent ? [pill(`pill-agent-${view}`, agent.y, agent.h, w7, 0)] : []),
+      ...(space ? [pill("pill-space", space.y, space.h, alpha(t.foreground, TINT.pill))] : []),
+      ...(agent ? [pill(`pill-agent-${view}`, agent.y, agent.h, alpha(t.foreground, TINT.tab))] : []),
     ];
     // Named, so its scroll position survives every redraw (an unnamed one is placed anew and starts at the top).
     return v_flex().id(`spaces-list-${collapsed ? "rail" : view}`).relative().flex_1().min_h(0).px(collapsed ? 0 : 8).gap(collapsed ? 0 : gap).pt(collapsed ? 6 : 0).pb(14).overflow_y_scrollbar().mode(collapsed ? "hover" : "always")

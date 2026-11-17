@@ -496,7 +496,7 @@ export class Look {
   noteRow(p, i, c) {
     return row(`look-note-${i}`, c, {
       start: [pinBadge(c, p, i)], name: p.note ?? "No note yet", dimmed: !p.note,
-      action: { kind: "icon", icon: "close", label: "Remove this pin", onClick: (cx) => this.drop(i, cx) },
+      action: { kind: "icon", icon: "x", label: "Remove this pin", onClick: (cx) => this.drop(i, cx) },
       onClick: (cx) => this.askNote(i, cx),
     }).flex_none();
   }
@@ -507,7 +507,7 @@ export class Look {
     const color = item.color || c.accent;
     return Button.new(`look-dot-${keyOf(item.path)}`).size(H.compact).flex_none().items_center().justify_center().cursor_pointer()
       .accessibility_label(item.name)
-      .when(!on, (el) => el.hover((s) => s.opacity(OPACITY.hover)))
+      .when(!on, (el) => el.hover((s) => s.opacity(OPACITY.thumb)))
       .on_click((_e, cx) => this.select(item, cx, true))
       .child(div().size(G.sm).rounded_full().border_1().border_color(on ? color : c.muted).when(on, (el) => el.bg(color)));
   }
@@ -574,7 +574,7 @@ export class Look {
           .child(div().truncate().text_size(10.5).text_color(c.dim).child([who ? tilde(terminals().find((k) => k.address === address)?.cwd ?? "") : "", this.held ? asOf(this.held.at, Date.now()) : ""].filter(Boolean).join(" · "))))
         .when(Boolean(address), (el) => el.child(iconButton("look-pin", "pin", this.pinned ? "Follow the pane in focus" : "Stay on this agent",
           (cx) => { this.pinned = this.pinned ? null : address; this.keep(); cx.notify(); }, c, { active: Boolean(this.pinned) })))
-        .child(iconButton("look-refresh", "refresh", this.held ? "Retry" : "Read again", (cx) => { this.poll = pollStart(); this.arm = null; this.read(cx); if (item && shows(item) && !this.shown?.deferred) this.draw(item, cx); }, c, { spin: this.reading })))
+        .child(iconButton("look-refresh", "refresh-cw", this.held ? "Retry" : "Read again", (cx) => { this.poll = pollStart(); this.arm = null; this.read(cx); if (item && shows(item) && !this.shown?.deferred) this.draw(item, cx); }, c, { spin: this.reading })))
       .child(v_flex().id("look-view").flex_1().min_h(0).w_full().overflow_hidden().items_center().justify_center().child(this.view(c)))
       .when(list.length > 0, (el) => el.child(this.dots(list, c)))
       .when(this.pins.length > 0, (el) => el.child(v_flex().id("look-notes").flex_none().max_h(H.line * NOTE_ROWS).px(G.lg).py(G.sm).overflow_y_scrollbar().border_t(1).border_color(c.border)

@@ -42,14 +42,25 @@ export function violations(files, tokens) {
 
 // Washes, opacity and motion have names in ui.js, the one file that may write them as numbers.
 const first = (m) => [m[1]];
+// Every number in the call but full (1) and none (0).
+const shares = (m) => (m[1].match(/(?<![\w.])\d*\.?\d+(?![\w.])/g) ?? []).filter((n) => Number(n) !== 0 && Number(n) !== 1);
 export const LOOKS = [
   { pattern: /\+\s*("[0-9a-f]{2}")/gi, values: first, what: "hex-alpha wash", use: "c.w4, c.w7, c.w12, c.w14, CLEAR or alpha() with TINT" },
-  { pattern: /\.opacity\(((?:[^()]|\([^()]*\))*)\)/g, values: (m) => m[1].match(/(?<![\w.])\d*\.\d+/g) ?? [], what: "opacity", use: "OPACITY, BREATH or PULSE" },
-  { pattern: /\bduration:\s*(\d+)/g, values: first, what: "duration", use: "EASE or GLIDE" },
+  { pattern: /\.opacity\s*\(((?:[^()]|\([^()]*\))*)\)/g, values: shares, what: "opacity", use: "OPACITY, BEAT, BREATH or PULSE" },
+  { pattern: /\bduration\s*:\s*(\d+)/g, values: first, what: "duration", use: "EASE or GLIDE" },
 ];
 
-export const looks = (files) => lines(files.filter(({ file }) => !file.endsWith("/ui.js")), (line) => LOOKS.flatMap(({ pattern, values, what, use }) =>
-  [...line.matchAll(pattern)].flatMap(values).map((value) => ({ value, message: `${value} is a literal ${what}: use ${use} from ui.js` }))));
+// Whole files, so a call or a key split over lines is still seen; it is reported on the line it starts.
+const lineAt = (text, index) => text.slice(0, index).split("\n").length;
+export const looks = (files) => files.filter(({ file }) => !file.endsWith("/ui.js")).flatMap(({ file, text }) => {
+  const rows = text.split(/\r?\n/);
+  return LOOKS.flatMap(({ pattern, values, what, use }) => [...text.matchAll(pattern)].flatMap((m) => values(m).map((value) => ({ m, value, what, use }))))
+    .sort((a, b) => a.m.index - b.m.index)
+    .map(({ m, value, what, use }) => {
+      const number = lineAt(text, m.index);
+      return { file, number, line: rows[number - 1].trim(), value, message: `${value} is a literal ${what}: use ${use} from ui.js` };
+    });
+});
 
 const key = (v) => JSON.stringify([v.file, v.line, v.value]);
 

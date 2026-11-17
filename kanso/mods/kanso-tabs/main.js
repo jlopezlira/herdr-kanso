@@ -13,7 +13,7 @@ import { walkLayout, commitLayout, sidebarBack, foldSidebar, dropStripDrag } fro
 import { Updater } from "./update.js";
 import { tryOr, readCommands } from "./pure.js";
 import { openArrange } from "./open.js";
-import { G, H, W, CLEAR, EASE, GLIDE, tokens } from "./ui.js";
+import { G, H, W, CLEAR, EASE, GLIDE, TINT, alpha, tokens } from "./ui.js";
 import { button, iconButton, pressAgain, Armed } from "./ui-button.js";
 import { TextField } from "./ui-field.js";
 import { menu } from "./ui-menu.js";
@@ -59,13 +59,13 @@ const ICON = "mods/kanso-chrome/icons/";
 const openSettings = (page) => openOverlay({ mod: "kanso-settings", kind: "dialog", width: 860, height: 680, props: { page } });
 const BUILTIN = [
   { id: "files", label: "Files", icon: `${ICON}file.svg` },
-  { id: "insights", label: "Spend", icon: `${ICON}chart.svg` },
-  { id: "pr", label: "PR", icon: `${ICON}pull-request.svg` },
+  { id: "insights", label: "Spend", icon: `${ICON}chart-column.svg` },
+  { id: "pr", label: "PR", icon: `${ICON}git-pull-request.svg` },
   { id: "shipped", label: "Shipped", icon: `${ICON}trophy.svg` },
-  { id: "worktrees", label: "Worktrees", icon: `${ICON}worktree.svg` },
+  { id: "worktrees", label: "Worktrees", icon: `${ICON}git-fork.svg` },
   { id: "ports", label: "Ports", icon: `${ICON}plug.svg` },
   { id: "containers", label: "Containers", icon: `${ICON}container.svg` },
-  { id: "memory", label: "Memory", icon: `${ICON}memory.svg` },
+  { id: "memory", label: "Memory", icon: `${ICON}memory-stick.svg` },
   { id: "look", label: "Images", icon: `${ICON}eye.svg` },
   { id: "sim", label: "Simulator", icon: `${ICON}smartphone.svg` },
 ];
@@ -509,9 +509,9 @@ export default class Tabs extends View {
         .transition("opacity", EASE)
         .child(div().pl(6).pr(4).whitespace_nowrap().child(p.label));
       return h_flex().id(`panel-${p.id}`).h(TAB_H).min_w(TAB_H).px(p.icon ? 5.5 : 4).flex_none().items_center().justify_center().rounded(6)
-        .text_size(12).bg(on ? c.w7 : CLEAR)
+        .text_size(12).bg(on ? alpha(t.foreground, TINT.tab) : CLEAR)
         .text_color(on ? t.foreground : t.muted)
-        .hover(s => s.bg(target ? c.w12 : on ? c.w7 : c.w4).text_color(t.foreground))
+        .hover(s => s.bg(alpha(t.foreground, target ? TINT.faint : on ? TINT.tab : TINT.hover)).text_color(t.foreground))
         .on_hover((hovered, cx) => {
           if (hovered) this.hoverPanel = p.id; else if (this.hoverPanel === p.id) this.hoverPanel = null;
           cx.notify();
@@ -539,11 +539,11 @@ export default class Tabs extends View {
       .child(this.tabArea(c, { space, openTabs, ps, state, tools }))
       .child(h_flex().flex_none().gap(2).items_center().children(shownPanels.map(panelButton))
         // Help and settings, alike and side by side: not panels, never dragged nor turned off.
-        .child(tool("kanso-help", "help", window()?.platform === "macos" ? "kansō help  ⌘⇧/" : "kansō help  Ctrl+Shift+/", () => run("mod.open", { name: "kanso-help" })).ml(4))
+        .child(tool("kanso-help", "circle-question-mark", window()?.platform === "macos" ? "kansō help  ⌘⇧/" : "kansō help  Ctrl+Shift+/", () => run("mod.open", { name: "kanso-help" })).ml(4))
         .child(tool("kanso-settings", "settings", update ? `kansō ${update} is available` : window()?.platform === "macos" ? "kansō settings  ⌃⇧," : "kansō settings  Ctrl+Shift+,",
           () => openSettings(update ? "news" : "pieces"))))
       .when(window()?.buttons, el => el.child(tool("minimize", "minus", "Minimize", () => run("window.minimize")))
         .child(tool("maximize", "square", "Maximize", () => run("window.maximize")))
-        .child(tool("close-window", "close", "Close", () => run("window.close"))));
+        .child(tool("close-window", "x", "Close", () => run("window.close"))));
   }
 }

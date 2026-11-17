@@ -16,7 +16,7 @@ import { openWithPopup } from "./popup.js";
 import { FIND } from "./find-key.js";
 import { rollupState, headerHold, prFacts, prLine } from "./ghchecks.js";
 import { pieces, shown, runs, setPiece, STORE } from "./pieces.js";
-import { G, R, T, W, ICON, OPACITY, TINT, PULSE, CLEAR, DRAG_START, alpha, breathe, glyphOf, mix, tokens, washes } from "./ui.js";
+import { G, R, T, W, ICON, OPACITY, TINT, BEAT, CLEAR, DRAG_START, alpha, breathe, glyphOf, mix, tokens, washes } from "./ui.js";
 import { mark } from "./ui-mark.js";
 import { iconButton, Armed } from "./ui-button.js";
 import { menu } from "./ui-menu.js";
@@ -274,7 +274,7 @@ export default class Strip extends View {
     const takes = Boolean(drag) && drag.pane !== p.edge; // a held pane can land beyond this edge
     const calm = onBattery(); // on battery the dots hold still (marks.js)
     const dot = (st, size) => (["working", "blocked", "done"].includes(st)
-      ? div().size(size).rounded_full().bg(t[st]).when(!calm && st !== "done", (d) => breathe(d, PULSE)) : null);
+      ? div().size(size).rounded_full().bg(t[st]).when(!calm && st !== "done", (d) => breathe(d, BEAT[st])) : null);
     const MAX_TILES = 8;
     const tile = (id) => {
       const info = byId.get(id), d = dot(info?.status, 7);
@@ -299,7 +299,7 @@ export default class Strip extends View {
     const card = menu("edge-menu", { title: `${ids.length === 1 ? "One pane" : `${ids.length} panes`} beyond the ${left ? "left" : "right"} edge`, items: ids.map(item) }, tokens(t));
     return v_flex().id("edge").size_full().items_center().justify_center().bg(t.chrome).cursor_pointer()
       .hover((h) => h.bg(takes ? alpha(t.accent, TINT.strong) : t.hover))
-      .when(takes, (el) => el.bg(alpha(t.accent, TINT.soft)).cursor_grabbing())
+      .when(takes, (el) => el.bg(alpha(t.accent, TINT.bound)).cursor_grabbing())
       .on_mouse_up("left", () => dropMove(p.edge, left ? "after" : "before", false))
       .on_click(() => show(p.edge))
       .on_scroll_wheel((e) => { const d = wheelDelta(e); if (d) postScroll(d / WHEEL_PX); })
@@ -633,7 +633,7 @@ export default class Strip extends View {
       .child(programIcon(p.program, ICON, c.muted) ?? svg(glyphOf("terminal")).size(ICON).flex_none().text_color(c.muted))
       .child(this.headName(c, pane, f.name))
       .when(Boolean(f.where.folder) && shownAt(f.fold, "folder"), (el) => el.child(headerSegment(`ph-folder-${pane}`, { icon: "folder", parts: [{ text: shortFolder(f.where.folder) }] }, c)))
-      .when(Boolean(f.where.branch) && shownAt(f.fold, "branch"), (el) => el.child(headerSegment(`ph-branch-${pane}`, { icon: "branch", parts: [{ text: f.where.branch }] }, c)))
+      .when(Boolean(f.where.branch) && shownAt(f.fold, "branch"), (el) => el.child(headerSegment(`ph-branch-${pane}`, { icon: "git-branch", parts: [{ text: f.where.branch }] }, c)))
       .when(f.segments.length > 0, (el) => el.child(this.digestBar(c, p, f.segments, { fold: f.fold, working: p.status === "working", reading: Boolean(f.record?.reading), strip: f.strip, does })))
       .when(f.pinned, (el) => el.child(headerSegment(`ph-pinned-${pane}`, { icon: "pin", tone: "dim", title: "Pinned" }, c)))
       .child(div().flex_1())
@@ -1244,7 +1244,7 @@ export default class Strip extends View {
     const n = st.n ?? DEFAULT_N;
     const tiny = (id, label, tip, action) => div().id(id).size(16).flex_none().flex().items_center().justify_center().rounded(6)
       .text_size(11).text_color(t.dim).cursor_pointer().tooltip(tip)
-      .hover((h) => h.bg(tokens(t).w7).text_color(t.foreground))
+      .hover((h) => h.bg(alpha(t.foreground, TINT.tab)).text_color(t.foreground))
       .on_click(() => { action(); this.dirty = true; })
       .child(label);
     return h_flex().id("strip-map").size_full().gap(3).justify_center().items_center()

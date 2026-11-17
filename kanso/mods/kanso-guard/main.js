@@ -257,7 +257,7 @@ export default class Memory extends View {
       .child(div().text_size(narrow ? 17 : 20).text_color(c.text).child(this.now?.data?.metric === "working set" ? "Memory · working set" : "Memory"))
       .child(h_flex().gap(G.xs).items_center().flex_none()
         .when(this.canShare(), (el) => el.child(iconButton("guard-share", "share", "Share", (cx) => this.share.toggle(cx), c, { active: this.share.open })))
-        .child(iconButton("guard-refresh", "refresh", tip, (cx) => this.check(cx), c, { spin: busy, disabled: busy })));
+        .child(iconButton("guard-refresh", "refresh-cw", tip, (cx) => this.check(cx), c, { spin: busy, disabled: busy })));
   }
 
   skeleton(c, narrow) {
@@ -369,7 +369,7 @@ export default class Memory extends View {
 
   spark(c, ratios) {
     return h_flex().h(16).flex_none().items_end().gap(1)
-      .children(ratios.map((r) => div().w(2).flex_none().rounded_t(1).h(r > 0 ? Math.max(2, Math.round(r * 16)) : 1).bg(r > 0 ? c.muted : c.border).opacity(r > 0 ? OPACITY.quiet : 1)));
+      .children(ratios.map((r) => div().w(2).flex_none().rounded_t(1).h(r > 0 ? Math.max(2, Math.round(r * 16)) : 1).bg(r > 0 ? c.muted : c.border).opacity(r > 0 ? OPACITY.trace : 1)));
   }
 
   agents(c, data) {

@@ -6,7 +6,7 @@ herdr.dev gallery reads.
 
 ## What you see
 
-The Worktrees panel (`kanso-panel` with `worktrees`, `worktree.svg`) is
+The Worktrees panel (`kanso-panel` with `worktrees`, `git-fork.svg`) is
 drawn like PR and Spend. It searches the top folders of your spaces
 under your home and the temp folders (or exactly shared
 `kanso.worktrees.roots`) for `.git/worktrees/*/gitdir` and `.git`

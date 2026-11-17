@@ -158,6 +158,7 @@ const motionSample = (name) => {
   if (name === 'k-spin-ms') return mark({ status: 'working' });
   if (name === 'k-skel-ms') return '<span class="kanso-skeleton kanso-tokens__skeleton"></span>';
   if (/^k-(fade|glide)-/.test(name)) return '<span class="kanso-tokens__glide"><i></i></span>';
+  if (/^k-beat-/.test(name)) return '<span class="kanso-tokens__beat"></span>';
   const glint = '<span class="kanso-text--glint">checkout</span>';
   return name === 'k-glint-ms' ? glint : `<span class="kanso-tokens__glint">${glint}${measure(name)}</span>`;
 };

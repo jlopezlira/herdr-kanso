@@ -42,6 +42,7 @@ the branch's rules.
 - The panels and Spend lost their repeated code: the pages' column, stats and header, Spend's command reader, parsers, store and cost totals each live in one place. Nothing on screen changes.
 - The sidebar's toolbar has larger buttons, 4 apart; Sort stays dim at its default order and its menu ticks the current order before each choice; in the collapsed sidebar, Sort and Search wait under a caret below + and Show sidebar. (#281)
 - The collapsed sidebar no longer shows Herdr's mark above + and Show sidebar.
+- Every icon is Lucide's own drawing, as in the Storybook: close is an x, Refresh the circling arrows, the PR, branch, worktree, Memory, Spend, help, threads and split icons take their Lucide shapes, Status takes the activity line, the pull request's label and people pickers open from a plus, and the menu's Wider or narrower takes the same arrows as the pane header. The ensō marks stay kansō's own.
 - The tabs follow the Storybook: a tab carries a mark only while an agent in it waits for you and you are on another tab, with no program icon, no working or done mark and no Z after a zoomed tab, whose Unzoom stays in the pane header's menu. Close asks twice on a tab holding an agent, a double-click renames the tab in place, a dragged tab shows where it lands, tabs that do not fit fold behind +N, and a project on another computer shows its tabs loading or out of reach. (#233)
 - Add computer leaves the sidebar footer. It is now the last row of the + menu on Status and Threads, and it is in a computer's right-click menu, which also offers Rename, Turn off or on, Sync, New project, Hide “Computers” and Settings for this. Hiding Add a computer in kansō settings still leaves it out. The footer is Settings, with kansō's update above it while one is ready.
 - The sidebar footer follows the new design: kansō's update row while one is ready (a beta is named by its build) and Settings, and in the collapsed sidebar the same as squares. A pressed update turns quiet at once; a refused one keeps its row and shows the tool's words under it, with Update to try again. The account chip is gone; Herdr settings are in the Settings menu. (#241)
@@ -76,10 +77,11 @@ the branch's rules.
 - A computer that needs a login offers Sign in, which runs the login in a terminal pane; one with no project says so with New project; an unreachable one keeps its projects, dimmed, as last read; Sync that cannot run says so on the row. (#230)
 - The first read of Status, Threads and a computer draws the skeleton at the rows' height, and the view switch names each view's key. (#230)
 - Every Storybook page is approved and marked Ready; a page added later starts In review.
-- Hover and selection washes, coloured tints, dimmed items and slide timings come from the same few shades and speeds everywhere: the sidebar, the tab bar, the panes, the panels, Help and the dōjō. Some hovers and tints are a touch lighter or stronger than before, and the strip's working and blocked dots pulse at one pace.
+- Hover and selection washes, coloured tints, dimmed items and slide timings in the sidebar, the tab bar, the panes, the panels, Help and the dōjō each have one name, and CI rejects a new unnamed one. Nothing on screen changes.
 
 ### Fixed
 
+- In the sidebar, every row now lights up on hover across the full width, with the same rounded corners: projects, computers, sessions, asleep rows and the footer, where the session rows were cut square and the others stopped short of the edge.
 - A long computer name on the status bar trims with an ellipsis instead of keeping its full width.
 - In the collapsed sidebar, a group's state mark and the marks in its menu are drawn at the kit's small and row sizes, 12px and 14px, instead of one pixel smaller. (#277)
 - An agent's state mark in the tab bar, the header strip and beside the sidebar's sleeping conversations is 14px, the size of every other icon in a row, instead of one pixel smaller. (#267)

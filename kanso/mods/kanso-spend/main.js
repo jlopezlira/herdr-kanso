@@ -27,7 +27,6 @@ const MOD = "kanso-spend";
 const RUNTIME_FILE = `mods/${MOD}/runtime.json`;
 const PRESENTER_FILE = `mods/${MOD}/presenter.mjs`;
 const DATA_DIR = `data/${MOD}`;
-const icon = (name) => `mods/${MOD}/icons/${name}.svg`;
 // A project or model chooser shows this many, then scrolls.
 const CHOOSER_ROWS = 8;
 const PAYLOAD_KIND = "kanso-spend-costs";
@@ -491,15 +490,15 @@ export default class TokenSpend extends View {
     const crumb = this.page === "settings" ? "" : top ? ({ project: "Project", model: "Model", task: "Task" })[top.kind] : "";
     return h_flex().w_full().items_center().justify_between().gap(G.md)
       .child(h_flex().flex_1().min_w(0).items_center().gap(G.sm)
-        .when(inner, (el) => el.child(iconButton("spend-back", icon("back"), "Back", (cx) => this.back(cx), c)))
+        .when(inner, (el) => el.child(iconButton("spend-back", "chevron-left", "Back", (cx) => this.back(cx), c)))
         .child(v_flex().flex_1().min_w(0).gap(1)
           .when(Boolean(crumb), (el) => el.child(div().text_size(11).text_color(c.dim).child(crumb)))
           .child(div().truncate().text_size(inner ? (narrow ? 15 : 17) : (narrow ? 17 : 20)).text_color(c.text).tooltip(title).child(title))))
       .child(h_flex().gap(G.xs).items_center().flex_none()
         .when(Boolean(reading), (el) => el.child(div().pr(G.xs).text_size(11).text_color(c.dim).child(reading)))
-        .when(this.canShare(), (el) => el.child(iconButton("spend-share", icon("share"), "Share", (cx) => this.share.toggle(cx), c, { active: this.share.open })))
-        .child(iconButton("spend-refresh", icon("refresh"), tip, (cx) => this.run("snapshot", cx), c, { spin: busy, disabled: busy }))
-        .when(this.page !== "settings", (el) => el.child(iconButton("spend-settings", icon("settings"), "Settings", (cx) => this.openSettings(cx), c))));
+        .when(this.canShare(), (el) => el.child(iconButton("spend-share", "share", "Share", (cx) => this.share.toggle(cx), c, { active: this.share.open })))
+        .child(iconButton("spend-refresh", "refresh-cw", tip, (cx) => this.run("snapshot", cx), c, { spin: busy, disabled: busy }))
+        .when(this.page !== "settings", (el) => el.child(iconButton("spend-settings", "settings", "Settings", (cx) => this.openSettings(cx), c))));
   }
 
   sourcesBones(c) {
@@ -732,7 +731,7 @@ export default class TokenSpend extends View {
           .child(div().text_size(12).text_color(c.dim).child("$"))
           .child(div().w(84).flex_none().child(field(`ins-plan-amount-${index}`, input.amount, c)))
           .child(div().text_size(11).text_color(c.dim).child("/ mo"))
-          .child(iconButton(`ins-plan-remove-${index}`, icon("close"), "Remove plan", (cx) => this.removePlan(index, cx), c))))
+          .child(iconButton(`ins-plan-remove-${index}`, "x", "Remove plan", (cx) => this.removePlan(index, cx), c))))
         .child(h_flex().w_full().gap(G.lg).items_center().pt(G.sm)
           .child(quietLink("ins-plan-add", "Add plan", (cx) => this.addPlan(cx), c))
           .child(quietLink("ins-plan-save", "Save plans", (cx) => this.savePlans(cx), c))

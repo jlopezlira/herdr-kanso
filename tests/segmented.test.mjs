@@ -116,7 +116,7 @@ test("Off: dim text, no hover, no pointer, no press", async () => {
 
 test("A dot marks an unselected item; collapsed, the items are icons with their label as tip", async () => {
   const { segmented, H, G, c } = await kit();
-  const items = [{ key: "spaces", label: "Projects", icon: "folder" }, { key: "agents", label: "Status", icon: "pulse", dot: true }];
+  const items = [{ key: "spaces", label: "Projects", icon: "folder" }, { key: "agents", label: "Status", icon: "activity", dot: true }];
   const open = segmented("v", items, "spaces", () => {}, c);
   assert.equal(open.kids[1].kids.at(-1).calls.some((call) => call[0] === "bg" && call[1] === c.blocked), true);
   assert.equal(segmented("v", items, "agents", () => {}, c).kids[1].kids.some((kid) => kid.calls.some((call) => call[0] === "bg" && call[1] === c.blocked)), false, "no dot on the chosen item");
