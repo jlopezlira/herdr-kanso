@@ -2,7 +2,9 @@
 // is one Tab cannot reach and Enter and Space cannot press. The ones left belong to compositions not yet shared; the baseline only shrinks.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { repoText } from "./helpers.mjs";
+import { repoText, load, nodes, texts, themed, KIT_NIGHT, drawingHost } from "./helpers.mjs";
+import { loadTokens } from "./mod-fixtures.mjs";
+import * as storybook from "../stories/kit/pieces.js";
 import { outsideKit } from "./mod-sources.mjs";
 
 const BASELINE = "tests/press-targets-baseline.json";
@@ -144,9 +146,6 @@ test("The press targets this baseline started from are drawn by the kit now", ()
 });
 
 // The pieces the replaced targets are drawn with, as the app's kit draws them.
-const { load, nodes, texts, themed, KIT_NIGHT, drawingHost } = await import("./helpers.mjs");
-const { loadTokens } = await import("./mod-fixtures.mjs");
-const storybook = await import("../stories/kit/pieces.js");
 const kit = async () => themed({ ...await loadTokens(drawingHost()), ...await load("kanso-panel/kit.js", ["button", "row", "explainButton"], drawingHost()) }, KIT_NIGHT);
 const calls = (el, name) => el.calls.filter((call) => call[0] === name);
 // Button.new(id) is drawn under its id: Tab reaches it and Enter and Space press it. The ring is its focus style.
