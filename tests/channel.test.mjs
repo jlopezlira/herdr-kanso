@@ -115,21 +115,30 @@ test("Workflows publish a beta from develop, a release candidate on demand, and 
   assert.match(ci, /KANSO_BRANCH: \$\{\{ github\.event_name == 'pull_request' && github\.base_ref \|\| github\.ref_name \}\}/);
   const stable = ci.slice(ci.indexOf("\n  stable:"));
   assert.match(stable, /needs: platform\n    if: github\.event_name == 'push' && github\.ref == 'refs\/heads\/main'/, "a stable release waits for all three platforms");
-  assert.match(stable, /release-plan\.mjs stable/);
+  assert.match(stable, /uses: \.\/\.github\/workflows\/release\.yml\n    with:\n      kind: stable\n      branch: main/);
   assert.doesNotMatch(stable, /--prerelease/);
-  assert.deepEqual((await readdir(workflows)).sort(), ["ci.yml", "pages.yml", "rc.yml"], "no workflow publishes a stable release beside CI");
+  assert.deepEqual((await readdir(workflows)).sort(), ["ci.yml", "pages.yml", "rc.yml", "release.yml"]);
+  const release = await workflow("release.yml");
+  assert.match(release, /^on:\n  workflow_call:\n/m, "the release workflow runs only when CI or the release candidate calls it");
+  assert.doesNotMatch(release, /\n\s*(push|workflow_dispatch|pull_request):/, "no workflow publishes a stable release beside CI");
+  assert.match(release, /release-plan\.mjs \$\{\{ inputs\.kind \}\}/);
+  assert.match(release, /test "\$GITHUB_REF_NAME" = "\$\{\{ inputs\.branch \}\}"/);
+  const archive = release.slice(release.indexOf("Tag the archive"), release.indexOf("Commit and tag"));
+  assert.match(archive, /release-tag\.mjs "\$RELEASE_TAG"/);
+  assert.match(archive, /git push origin "refs\/tags\/\$RELEASE_TAG"/);
+  assert.doesNotMatch(archive, /HEAD:refs\/heads/);
   const beta = ci.slice(ci.indexOf("\n  beta:"), ci.indexOf("\n  stable:"));
   assert.match(beta, /needs: platform\n    if: github\.event_name == 'push' && github\.ref == 'refs\/heads\/develop'/, "a beta waits for all three platforms");
-  assert.match(beta, /release-plan\.mjs beta/);
+  assert.match(beta, /kind: beta\n      branch: develop/);
   assert.match(beta, /--prerelease/);
-  assert.match(beta, /release-tag\.mjs "\$RELEASE_TAG"/);
-  assert.match(beta, /git push origin "refs\/tags\/\$RELEASE_TAG"/);
+  assert.match(beta, /tag: archive/);
   assert.match(beta, /--verify-tag/);
   assert.doesNotMatch(beta, /--target|HEAD:refs\/heads\/develop/);
   assert.doesNotMatch(ci, /workflow_dispatch/);
   const rc = await workflow("rc.yml");
   assert.match(rc, /workflow_dispatch/);
-  assert.match(rc, /release-plan\.mjs rc/);
+  assert.match(rc, /kind: rc --prepare\n      branch: develop/);
+  assert.match(rc, /tag: commit/);
   assert.match(rc, /--prerelease/);
   assert.doesNotMatch(rc, /\n\s*push:/);
   const pages = await workflow("pages.yml");
@@ -144,7 +153,8 @@ test("CI drops only a pull request's older run, and every job of every workflow 
   for (const name of await readdir(workflows)) {
     const text = await workflow(name);
     const jobs = text.slice(text.indexOf("\njobs:")).match(/^  [\w-]+:$/gm);
-    assert.equal(text.match(/^    timeout-minutes: \d+$/gm)?.length, jobs.length, name);
+    const calls = text.match(/^    uses: \.\/\.github\/workflows\//gm)?.length ?? 0;
+    assert.equal(text.match(/^    timeout-minutes: \d+$/gm)?.length ?? 0, jobs.length - calls, `${name}: a job that calls the release workflow takes its limit`);
   }
 });
 
