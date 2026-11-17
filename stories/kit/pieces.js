@@ -1,6 +1,6 @@
 // The kit's pieces: every function here returns markup; compositions.js only calls them.
 import { diffText, facts, plus } from '../../kanso/mods/kanso-panel/ui-facts.js';
-import { diffNumbers } from '../../kanso/mods/kanso-spaces/pure.js';
+import { diffNumbers, markdownBlocks } from '../../kanso/mods/kanso-spaces/pure.js';
 
 export const escape = (text) => String(text).replace(/[&<>"]/g, (char) => `&#${char.charCodeAt(0)};`);
 
@@ -101,18 +101,22 @@ export const input = ({ text: value, label: placeholder, icon, error, disabled, 
 
 const inline = (text) => escape(text).replace(/`([^`]+)`/g, '<code>$1</code>').replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>');
 const cells = (row, tag) => `<tr>${row.split('|').slice(1, -1).map((cell) => `<${tag}>${inline(cell.trim())}</${tag}>`).join('')}</tr>`;
-const blocksOf = (source) => source.trim().split(/\n\s*\n/).map((block) => {
+// One block's markup from its Markdown: a heading, a table, a list or a paragraph.
+const blockOf = (block) => {
   const lines = block.split('\n');
   if (block.startsWith('## ')) return `<div class="kanso-markdown__subheading">${inline(block.slice(3))}</div>`;
   if (block.startsWith('# ')) return `<div class="kanso-markdown__heading">${inline(block.slice(2))}</div>`;
   if (lines.every((line) => line.trim().startsWith('|'))) return `<table class="kanso-markdown__table">${lines.filter((line) => !/^\s*\|[\s:|-]+\|\s*$/.test(line)).map((line, index) => cells(line.trim(), index ? 'td' : 'th')).join('')}</table>`;
   if (lines.every((line) => line.startsWith('- '))) return `<ul>${lines.map((line) => `<li>${inline(line.slice(2))}</li>`).join('')}</ul>`;
   return `<p>${lines.map(inline).join(' ')}</p>`;
-});
-export const markdown = ({ source, block, state }) => `<div class="kanso-markdown">${blocksOf(source).map((html, index) => {
-  const on = index + 1 === block ? { hover: ' kanso-row--hover', editing: ' kanso-editor--editing kanso-control--focus' }[state] ?? '' : '';
-  return `<div class="kanso-markdown__block${on}"${on.includes('editing') ? ' contenteditable="true"' : ''}>${html}</div>`;
-}).join('')}</div>`;
+};
+const BLOCK_STATES = { hover: ' kanso-row--hover', editing: ' kanso-editor--editing kanso-control--focus' };
+// One block of a document: at rest, under the pointer, or being edited. Proposed: `content`, markup drawn in place of its formatted source (the editor's field, a picture).
+export const markdownBlock = ({ source, state = 'rest', content = '' }) => {
+  const on = BLOCK_STATES[state] ?? '';
+  return `<div class="kanso-markdown__block${on}"${state === 'editing' ? ' contenteditable="true"' : ''}>${content || blockOf(source)}</div>`;
+};
+export const markdown = ({ source, block, state }) => `<div class="kanso-markdown">${markdownBlocks(source).map((one, index) => markdownBlock({ source: one, state: index + 1 === block ? state : 'rest' })).join('')}</div>`;
 
 export const menu = ({ title, items }) => {
   const rows = (Array.isArray(items) ? items : []).map((item) => {
@@ -207,7 +211,8 @@ export const tabs = ({ items, value, size, track, disabled, icon, label: named }
     + `${(item.dot || (square && item.mark === 'blocked')) && !on ? '<i class="kanso-tabs__dot"></i>' : ''}${on && item.closable && !square && !item.editing ? '<svg class="kanso-icon kanso-tabs__close"><use href="#lu-x"/></svg>' : ''}</span>`;
 }).join('')}</div>`;
 
-export const thumbnail = ({ image, label, selected, loading }) => `<span class="kanso-thumbnail${selected ? ' kanso-control--selected' : ''}${loading ? ' kanso-skeleton--shape' : ''}" role="button" aria-pressed="${selected}" aria-label="${escape(label)}" title="${escape(label)}" tabindex="0">${image && !loading ? `<img src="${escape(image)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">` : ''}</span>`;
+// Proposed: `color`, the picture's own colour as its ground while the picture is not drawn.
+export const thumbnail = ({ image, label, selected, loading, color = '' }) => `<span class="kanso-thumbnail${selected ? ' kanso-control--selected' : ''}${loading ? ' kanso-skeleton--shape' : ''}${color && !loading ? ' kanso-thumbnail--color' : ''}"${color ? ` data-color="${escape(color)}"` : ''} role="button" aria-pressed="${selected}" aria-label="${escape(label)}" title="${escape(label)}" tabindex="0">${image && !loading ? `<img src="${escape(image)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">` : ''}</span>`;
 
 export const levels = { error: 'blocked', warning: 'working', success: 'done', info: 'accent' };
 const lead = (level) => level === 'error' ? '<svg class="kanso-mark kanso-mark--blocked" aria-hidden="true"><use href="#e-blk"/></svg>'

@@ -206,7 +206,7 @@ const DRAWN = {
   "kanso/mods/kanso-dojo/main.js": ['button({ label: "Choose your pet", kind: "quiet"', 'row({ letter: String(L.n), name: L.name'],
   "kanso/mods/kanso-dojo/pets.js": ['button({ label: p.name, kind: "quiet", active: on, content: [face] })(`pet-${p.id}`'],
   "kanso/mods/kanso-panel/doc.js": ['kitButton({ label: tip, kind: "icon", size: "sm"'],
-  "kanso/mods/kanso-panel/look.js": ['kitButton({ label: item.name, kind: "icon", size: "compact", content: [face] })(`look-dot-'],
+  "kanso/mods/kanso-panel/look.js": ['thumbnail({ image: shown?.image ?? "", label: item.name, selected: on, loading: Boolean(shown?.busy), color: item.color ?? "" })('],
   "kanso/mods/kanso-panel/pr-view.js": ['kitRow({ icon: on ? "chevron-down" : "chevron-right", name: label'],
   "kanso/mods/kanso-panel/pr.js": ["(`pr-check-${i}`, c, {", "kitRow({ name: body, second, wrap: true })(`pr-thread-${i}`, c, {", "(`pr-file-${i}`, c, {"],
   "kanso/mods/kanso-panel/worktrees.js": ['explainButton({ agent: this.explainer?.name ?? "an agent", size: "sm" })(`wt-explain-'],
@@ -217,7 +217,7 @@ const DRAWN = {
 const GONE = {
   "kanso/mods/kanso-panel/pr.js": ["listButton", "Button.new(`pr-"],
   "kanso/mods/kanso-panel/pr-view.js": ['Button.new("pr-details")'],
-  "kanso/mods/kanso-panel/look.js": ["Button.new(`look-dot"],
+  "kanso/mods/kanso-panel/look.js": ["Button.new(`look-dot", "look-dot"],
   "kanso/mods/kanso-spend/main.js": ["fadedButton", "Button.new("],
   "kanso/mods/kanso-panel/worktrees.js": ['"Explain it"'],
   "kanso/mods/kanso-chrome/footer.js": ["h_flex().id(`footer-"],
