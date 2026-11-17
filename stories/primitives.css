@@ -1459,3 +1459,9 @@
 
 /* Pointer: the mouse pointer placed over a piece. */
 .kanso-pointer{position:absolute;width:var(--k-ic-row);height:var(--k-ic-empty)}
+[data-left]{left:var(--kanso-left)}
+[data-top]{top:var(--kanso-top)}
+[data-right]{right:var(--kanso-right)}
+[data-bottom]{bottom:var(--kanso-bottom)}
+[data-width]{width:var(--kanso-width)}
+[data-height]{height:var(--kanso-height)}

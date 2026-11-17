@@ -1,4 +1,5 @@
 import { content, statesFor } from './catalog.js';
+import { applyGeometry } from './geometry.js';
 
 export const ARM_MS = 4000;
 export const behaviours = {
@@ -182,6 +183,7 @@ export function mountBehaviours(root, { page, state, inlineSurfaces = false, upd
       ?? candidates.find((item) => item.label === (kind === 'menu' ? 'Default' : 'Dialog')) ?? candidates[0];
     const holder = doc.createElement('div');
     holder.innerHTML = content(fixture.markup);
+    applyGeometry(holder);
     const surface = holder.querySelector(surfaces);
     surface.classList.add('kanso-story__overlay');
     surface.setAttribute('role', kind === 'menu' ? 'menu' : 'dialog');
