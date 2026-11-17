@@ -31,6 +31,12 @@ function world(reply) {
 }
 const tick = () => new Promise((resolve) => setImmediate(resolve));
 
+// The clock at `at`, and the dark computer connected.
+const syncAt = async (box, at) => {
+  box.at(at);
+  await box.awake.sync([row("dark", "connected")]);
+};
+
 test("each system gets an argv array", async () => {
   const { holdCommand, LEASE_S, RENEW_MS, EXEC_TIMEOUT_MS } = await loadApi();
   assert.equal(LEASE_S, 300);
@@ -83,11 +89,9 @@ test("a lease renews at 270s and overlaps the one still running", async () => {
   assert.equal(box.awake.nextWait(0), 270_000);
   assert.equal(box.awake.nextWait(269_000), 1_000);
   assert.equal(box.awake.nextWait(270_000), 0);
-  box.at(269_000);
-  await box.awake.sync([row("dark", "connected")]);
+  await syncAt(box, 269_000);
   assert.equal(holds(box.calls).length, 1);
-  box.at(270_000);
-  await box.awake.sync([row("dark", "connected")]);
+  await syncAt(box, 270_000);
   assert.deepEqual(clone(holds(box.calls).map((call) => call.args)), [["-i", "-t", "300"], ["-i", "-t", "300"]]);
   assert.equal(box.pending.length, 2);
   assert.equal(box.calls.filter((call) => call.command === "uname").length, 1);
@@ -157,8 +161,7 @@ test("a failure from the previous connection does not stop the next one", async 
   await box.awake.sync([row("dark", "connected")]);
   releases[0].reject(Object.assign(new Error("not found"), { code: "ENOENT" }));
   await new Promise((resolve) => setImmediate(resolve));
-  box.at(270_000);
-  await box.awake.sync([row("dark", "connected")]);
+  await syncAt(box, 270_000);
   assert.equal(box.calls.filter((call) => call.command === "uname").length, 2);
   assert.equal(holds(box.calls).length, 3);
 });

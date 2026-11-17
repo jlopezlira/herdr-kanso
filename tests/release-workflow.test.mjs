@@ -53,6 +53,15 @@ test("Workflow commands preserve PR history, publish computed notes and prepare 
     assert.equal(result.status, 0, result.stderr);
     return result;
   };
+  // The next release candidate prepared, and the version file it leaves.
+  const prepareRc = () => {
+    run("release-plan", ["rc", "--prepare"]);
+    return read(versionFile);
+  };
+  const checkedBeta = () => {
+    run("check-version", [], pr);
+    run("release-plan", ["beta"]);
+  };
   write("event.json", JSON.stringify({ pull_request: { base: { sha: base } } }));
   const pr = { GITHUB_EVENT_NAME: "pull_request", GITHUB_EVENT_PATH: join(root, "event.json") };
   run("check-version", [], pr);
@@ -95,8 +104,7 @@ test("Workflow commands preserve PR history, publish computed notes and prepare 
   git("push", "--atomic", "origin", "HEAD:refs/heads/develop", "refs/tags/v1.2.0-rc.1");
   const fixedVersion = read(versionFile), fixedLog = read("CHANGELOG.md");
   run("check-version");
-  run("release-plan", ["rc", "--prepare"]);
-  assert.equal(read(versionFile), fixedVersion);
+  assert.equal(prepareRc(), fixedVersion);
   assert.equal(read("CHANGELOG.md"), fixedLog);
   assert.match(read("output"), /tag=v1\.2\.0-rc\.2\n/);
   const fixedBase = git("rev-parse", "HEAD");
@@ -104,8 +112,7 @@ test("Workflow commands preserve PR history, publish computed notes and prepare 
   write("kanso/mods/kanso-chrome/feature.js", "export const feature = false;\n");
   commit("Fix feature");
   write("event.json", JSON.stringify({ pull_request: { base: { sha: fixedBase } } }));
-  run("check-version", [], pr);
-  run("release-plan", ["beta"]);
+  checkedBeta();
   assert.equal(read("kanso-release-notes.md"), `### Fixed\n\n- Bug.\n\n${footer}\n`);
   assert.match(read("output"), /tag=v1\.2\.0-beta\.15\n/);
   const fixHead = git("rev-parse", "develop");
@@ -114,8 +121,7 @@ test("Workflow commands preserve PR history, publish computed notes and prepare 
   assert.equal(git("rev-parse", "develop"), fixHead);
   assert.equal(git("diff", "--name-only", fixHead, "v1.2.0-beta.15"), "", "a beta after an RC already has the matching core version");
   git("checkout", "develop");
-  run("release-plan", ["rc", "--prepare"]);
-  assert.equal(read(versionFile), fixedVersion);
+  assert.equal(prepareRc(), fixedVersion);
   assert.match(read("CHANGELOG.md"), /- Feature\.[\s\S]*- Bug\./);
   assert.equal(read("kanso-release-notes.md"), `${rcIntro}\n\n## Changes\n\n${pending}\n\n### Fixed\n\n- Bug.\n\n${footer}\n`);
   commit("Update release candidate");
@@ -125,14 +131,13 @@ test("Workflow commands preserve PR history, publish computed notes and prepare 
   write("kanso/mods/kanso-chrome/feature.js", "export const feature = null;\n");
   commit("Remove old behavior");
   write("event.json", JSON.stringify({ pull_request: { base: { sha: minorHead } } }));
-  run("check-version", [], pr);
-  run("release-plan", ["beta"]);
+  checkedBeta();
   assert.match(read("output"), /tag=v2\.0\.0-beta\.1\n/);
   run("release-tag", ["v2.0.0-beta.1"]);
   assert.equal(JSON.parse(git("show", `v2.0.0-beta.1:${versionFile}`)).version, "2.0.0");
   assert.equal(JSON.parse(git("show", `develop:${versionFile}`)).version, "1.2.0");
   git("checkout", "develop");
-  run("release-plan", ["rc", "--prepare"]);
+  prepareRc();
   assert.match(read("output"), /tag=v2\.0\.0-rc\.1\n/);
   assert.equal(JSON.parse(read(versionFile)).version, "2.0.0");
   assert.ok(!read("CHANGELOG.md").includes("[1.2.0]"));
