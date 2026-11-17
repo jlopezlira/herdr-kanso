@@ -369,3 +369,8 @@ const drawnAt = (tag) => (path) => { const el = chain(tag); el.calls.push([tag, 
 export const drawingHost = () => ({ ...gpuiHost(), svg: drawnAt("svg"), image: drawnAt("image") });
 // The one value each named call set on an element.
 export const boxOf = (el, ...names) => names.map((name) => one(el, name));
+// Herdr's text file reads and writes on the real disk: a missing file reads as null, a write makes its folder.
+export const textFiles = {
+  readTextFile: readOrNull,
+  writeTextFile: async (path, text) => { await mkdir(join(path, ".."), { recursive: true }); await writeFile(path, text); return null; },
+};
