@@ -3,7 +3,7 @@ import { processApi } from "./platform-processes.js";
 import { div, list, svg } from "gpui-kit";
 import { v_flex, h_flex, VirtualListScrollHandle, Scrollbar } from "gpui-base";
 import { exec, hc, readTextFile, home, theme, props, closeOverlay, run, agents, shared, setShared } from "herdr";
-import { tokens, G, H, R, T, ICON, EASE } from "./ui.js";
+import { tokens, G, H, R, T, ICON, EASE, PAGE } from "./ui.js";
 import { iconButton } from "./ui-button.js";
 import { field, TextField } from "./ui-field.js";
 import { skeleton } from "./ui-skeleton.js";
@@ -15,7 +15,6 @@ import {
 } from "./find.js";
 
 const WAIT = 120;
-const MAX = 300; // the list stops here so Find does not cover the terminal
 
 function hintOf(address) {
   const agent = tryOr(() => agents().find((a) => a.address === address));
@@ -312,18 +311,18 @@ export class Find {
     const hit = this.hits[this.at];
     const turn = this.state.turns[hit?.turn];
     const text = String(turn?.text ?? "");
-    return v_flex().w_full().max_h(MAX)
+    return v_flex().w_full().max_h(PAGE.findList)
       .child(h_flex().px(G.sm).pt(G.xs).items_center()
         .child(iconButton("find-back", "chevron-left", "Back", (cx) => this.back(cx), c))
         .children(turnMeta(turn, c)))
       .child(div().px(G.md).pb(G.xs).child(this.excerpt(hit ? partsOf(text, hit, EXCERPT) : [], c)))
-      .child(markdownView(`find-turn-${hit?.turn ?? 0}-${hit?.at ?? 0}`, text, t).max_h(MAX));
+      .child(markdownView(`find-turn-${hit?.turn ?? 0}-${hit?.at ?? 0}`, text, t).max_h(PAGE.findList));
   }
 
   listBox(c, laid) {
-    return v_flex().relative().w_full().max_h(MAX).min_h(0)
+    return v_flex().relative().w_full().max_h(PAGE.findList).min_h(0)
       .child(list("kanso-find", laid.items.length, (i) => this.keyOf(laid.items[i]), (i) => this.cell(laid.items[i], c))
-        .w_full().max_h(MAX).track_scroll(this.scroll).on_item_click((key, cx) => this.pick(key, cx)))
+        .w_full().max_h(PAGE.findList).track_scroll(this.scroll).on_item_click((key, cx) => this.pick(key, cx)))
       .child(Scrollbar.vertical("kanso-find").absolute().inset_0());
   }
 

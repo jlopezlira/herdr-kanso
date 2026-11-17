@@ -5,7 +5,7 @@ import { v_flex, h_flex } from "gpui-base";
 import { theme, props, closeOverlay, appHome, settings } from "herdr";
 import { focusOn } from "./pure.js";
 import { Lit } from "./lit.js";
-import { G, OPACITY, TINT, CLEAR, alpha, tokens } from "./ui.js";
+import { G, DOJO_CELL, OPACITY, TINT, CLEAR, alpha, tokens } from "./ui.js";
 import { button, iconButton } from "./ui-button.js";
 import { Store } from "./store.js";
 import { Share } from "./share.js";
@@ -14,7 +14,6 @@ import { TICK_MS, Companion } from "./pets.js";
 import { LEVELS, gridWorld, textWorld, move, shortest, newTarget, points, same } from "./dojo.js";
 
 const TARGETS = 10, HINT_MS = 2000, LIT_MS = 600, SLEEP_MS = 20000;
-const CELL = 30;
 const FINGER = { h: ["←", "index, reach"], j: ["↓", "index"], k: ["↑", "middle"], l: ["→", "ring"] };
 
 export default class Dojo extends View {
@@ -191,7 +190,7 @@ export default class Dojo extends View {
     const { w, h } = this.world;
     return v_flex().gap(3).children(Array.from({ length: h }, (_, y) => h_flex().gap(3).children(Array.from({ length: w }, (_, x) => {
       const { here, goal } = this.cellMark(x, y);
-      return div().size(CELL).rounded(5).bg(here ? c.accent : alpha(c.text, TINT.cell)).when(goal && !here, (el) => el.border_2().border_color(c.accent));
+      return div().size(DOJO_CELL).rounded(5).bg(here ? c.accent : alpha(c.text, TINT.cell)).when(goal && !here, (el) => el.border_2().border_color(c.accent));
     }))));
   }
 

@@ -9,7 +9,7 @@ import { exec, theme, shared, setShared, notify } from "herdr";
 import { Store } from "./shipped-store.js";
 import { shippedSpec, shareText } from "./shipped-card.js";
 import { Share, shareRows } from "./share.js";
-import { G, TINT, alpha, tokens } from "./ui.js";
+import { G, HEATMAP_GAP, TINT, alpha, tokens } from "./ui.js";
 import { quietLink, iconButton } from "./ui-button.js";
 import { section } from "./ui-section.js";
 import { ghost } from "./ui-skeleton.js";
@@ -26,7 +26,6 @@ const REFRESH_MS = 5 * 60 * 1000;
 const PARALLEL = 6;
 const RETRIES = 6; // GitHub answers 202 while it computes a repository's statistics
 const REPO_ROWS = 8;
-const CELL_GAP = 3;
 export const PERIODS = ["day", "week", "month", "year"];
 const PERIOD_NAMES = { day: "Day", week: "Week", month: "Month", year: "Year" };
 const FULL_MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
@@ -174,8 +173,8 @@ export function recordText(k, r) {
 
 export function heatLayout(width) {
   const w = Math.max(120, Math.floor(width));
-  const weeks = Math.max(4, Math.min(53, Math.floor((w + CELL_GAP) / (9 + CELL_GAP))));
-  const cell = Math.max(9, Math.min(16, Math.floor((w - (weeks - 1) * CELL_GAP) / weeks)));
+  const weeks = Math.max(4, Math.min(53, Math.floor((w + HEATMAP_GAP) / (9 + HEATMAP_GAP))));
+  const cell = Math.max(9, Math.min(16, Math.floor((w - (weeks - 1) * HEATMAP_GAP) / weeks)));
   return { weeks, cell };
 }
 
@@ -488,9 +487,9 @@ export class Shipped {
       .child(h_flex().items_end().gap(G.sm)
         .child(div().text_size(40).line_height(1).font_light().text_color(c.text).child(fmt(current)))
         .child(div().pb(4).text_size(12).text_color(c.dim).child(current === 1 ? "day in a row" : "days in a row")))
-      .child(h_flex().w_full().gap(CELL_GAP).children(weeks.map((w, wi) => {
+      .child(h_flex().w_full().gap(HEATMAP_GAP).children(weeks.map((w, wi) => {
         const byDay = new Map(w.contributionDays.map((d) => [d.weekday, d]));
-        return v_flex().flex_none().gap(CELL_GAP).children([0, 1, 2, 3, 4, 5, 6].map((i) => square(byDay.get(i), `heat-${wi}-${i}`)));
+        return v_flex().flex_none().gap(HEATMAP_GAP).children([0, 1, 2, 3, 4, 5, 6].map((i) => square(byDay.get(i), `heat-${wi}-${i}`)));
       })));
   }
 

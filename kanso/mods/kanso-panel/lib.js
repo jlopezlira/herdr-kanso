@@ -1,5 +1,6 @@
 import { collect } from "./blocks.js";
 import { paths } from "./platform-paths.js";
+import { PAGE } from "./ui.js";
 import { div } from "gpui-kit";
 import { EditorState, TextView } from "gpui-base";
 import { spaces, panes, focused, layout, theme, home } from "herdr";
@@ -89,7 +90,7 @@ export function codeState(path, text, options = {}) {
 
 export function markdownView(id, text, t) {
   return div().id(`${id}-scroll`).flex_1().min_h(0).overflow_y_scrollbar()
-    .child(div().flex_none().w_full().px(16).py(12).text_size(13).text_color(t.foreground)
+    .child(div().flex_none().w_full().px(16).py(12).text_size(PAGE.markdown).text_color(t.foreground)
       .child(TextView.markdown(id, text.length > MAX_TEXT ? text.slice(0, MAX_TEXT) + "\n\n… (file truncated)" : text).selectable(true)));
 }
 

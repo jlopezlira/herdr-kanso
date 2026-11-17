@@ -1,15 +1,13 @@
 import { div, svg } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
-import { G, H, R, T, ICON, TINT, alpha, tokens } from "./ui.js";
+import { G, H, R, T, ICON, SIDEBAR, TINT, alpha, tokens } from "./ui.js";
 import { iconButton } from "./ui-button.js";
 import { present, RETURN_LABEL, focusedTarget, MAINTENANCE_MS } from "./since-left-model.js";
 import { SinceStore } from "./since-left-store.js";
-import { statusMark, AGENT_PAD, duration } from "./agents.js";
+import { statusMark, duration } from "./agents.js";
 
 // A row with what the agent did is two lines; the header and the rest, one.
 const heightOf = (row) => (row.did ? H.two : H.line);
-
-const ROW_GAP = 1; // the sidebar list's gap; the kit has no token for it
 
 // An error has no glyph; the sidebar draws the blocked disc for a failed agent.
 const lead = (c, mark) => (mark === "pr"
@@ -90,7 +88,7 @@ export class SinceLeft {
   blockHeight() {
     if (!this.heights.length) return 0;
     const items = [...this.heights, ...(this.headed ? [H.line] : [])];
-    return items.reduce((sum, h) => sum + h, 0) + (items.length - 1) * ROW_GAP;
+    return items.reduce((sum, h) => sum + h, 0) + (items.length - 1) * SIDEBAR.gap;
   }
 
   dismissControl(c) {
@@ -108,7 +106,7 @@ export class SinceLeft {
       .when(Boolean(row.outcome), (el) => el.child(div().flex_none().text_size(T.body).text_color(t.muted).child(row.outcome)))
       .child(div().flex_1())
       .when(Boolean(row.age), (el) => el.child(div().flex_none().text_size(T.body).text_color(t.dim).child(row.age)));
-    return h_flex().id(id).h(heightOf(row)).w_full().flex_none().pl(AGENT_PAD).pr(G.md).gap(G.md).min_w(0).items_center().rounded(R.card)
+    return h_flex().id(id).h(heightOf(row)).w_full().flex_none().pl(SIDEBAR.agentX).pr(G.md).gap(G.md).min_w(0).items_center().rounded(R.card)
       .when(Boolean(go), (el) => el.cursor_pointer().hover((s) => s.bg(alpha(t.foreground, TINT.row))).on_click((_e, cx) => go(cx)))
       .when(selected, (el) => el.border_1().border_color(t.accent))
       .when(!row.more, (el) => el.child(lead(c, row.mark)))
@@ -124,6 +122,6 @@ export class SinceLeft {
     if (!this.showing) return div();
     const c = tokens(t);
     const body = shown.rows.map((row) => this.line(t, c, row, nav, reach));
-    return v_flex().w_full().gap(ROW_GAP).children(head ? [head(RETURN_LABEL, shown.count, this.dismissControl(c)), ...body] : body);
+    return v_flex().w_full().gap(SIDEBAR.gap).children(head ? [head(RETURN_LABEL, shown.count, this.dismissControl(c)), ...body] : body);
   }
 }

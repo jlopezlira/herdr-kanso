@@ -21,6 +21,14 @@ const PICK = {
   DRAG_START: "k-drag-start",
   GLINT: { run: "k-glint-run", wide: "k-glint-w1", mid: "k-glint-w2", narrow: "k-glint-w3" },
   SWITCH: { w: "k-sw-w", h: "k-sw-h", knob: "k-sw-knob" },
+  PAGE: { w: "k-w-page", toolbar: "k-h-file-toolbar", toolbarX: "k-file-toolbar-x", note: "k-note-text", markdown: "k-markdown-text", unitGap: "k-metric-unit-gap", unitY: "k-metric-unit-y", skeletonY: "k-skeleton-row-y", findList: "k-h-find-list" },
+  SIDEBAR: { w: "k-w-sidebar", narrow: "k-w-sidebar-narrow", min: "k-w-sidebar-min", railRow: "k-rail-row", guideX: "k-guide-x", agentX: "k-sidebar-agent-x", elbowGap: "k-sidebar-elbow-gap", gap: "k-sidebar-row-gap" },
+  PANE: { edge: "k-edge-w", gap: "k-pane-gap", minW: "k-pane-min-w", minH: "k-pane-min-h", pills: "k-w-pills" },
+  KEY: { x: "k-keycap-x", text: "k-keycap-text", unit: "k-help-key", gap: "k-help-key-gap" },
+  DIALOG: { prompt: "k-dialog-prompt", pad: "k-dialog-paged-pad", settingsW: "k-settings-w", settingsH: "k-settings-tall" },
+  PR: { title: "k-pr-title", titleMax: "k-pr-title-max", fold: "k-pr-body-fold" },
+  HEATMAP_GAP: "k-heatmap-gap",
+  DOJO_CELL: "k-dojo-cell",
 };
 // Durations in milliseconds.
 const TIMING = { SPIN: "k-spin-ms", GLINT_MS: "k-glint-ms", GLINT_STAGGER: "k-glint-stagger", DOTS_MS: "k-dots-ms" };

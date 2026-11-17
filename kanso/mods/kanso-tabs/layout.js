@@ -3,6 +3,7 @@
 // Herdr loads a mod's files from its own folder only, so this file is copied byte for byte into each mod; `npm run sync:share` copies it and a test fails when a copy differs.
 import { layout, run, shared, setShared, window } from "herdr";
 import { nodeById } from "./pure.js";
+import { SIDEBAR } from "./ui.js";
 
 export const LAYOUT_INTENT = "kanso.layout";
 export const STRIP_INTENT = "kanso.layout.strip";
@@ -85,7 +86,6 @@ function paintRail(tree, rail) {
   return { ...tree, resizable: rail.open, children: kids.with(at, { ...kids[at], min: rail.min, hidden: false }) };
 }
 
-export const OPEN_MIN = 120; // open, the edge drags this far, past where a drag folds it
 // The collapsed rail is as wide as the macOS traffic lights need, so they never spill over the tab bar.
 export const railWidth = () => (window()?.platform === "macos" ? 76 : 44);
 
@@ -96,7 +96,7 @@ const writePainted = (tree) => {
 };
 
 export function setRail(open, width) {
-  const min = open ? OPEN_MIN : railWidth();
+  const min = open ? SIDEBAR.min : railWidth();
   rememberLayout({ rail: { open, min } });
   const tree = layout();
   const sidebar = (tree?.children ?? []).find((n) => n.id === "sidebar");

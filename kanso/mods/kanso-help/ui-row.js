@@ -113,7 +113,7 @@ const heightOf = ({ title, under, two }) => {
 };
 
 // An elbow leaves its guide at the middle of the first line and stops short of the row's icon.
-const ELBOW = { y: H.line / 2, w: ICON_ROW / 2 + G.xs };
+export const ELBOW = { y: H.line / 2, w: ICON_ROW / 2 + G.xs };
 const line = (c) => div().absolute().border_color(c.w12);
 const GUIDES = {
   pass: (c, x) => [line(c).top_0().bottom_0().left(x).border_l_1()],
