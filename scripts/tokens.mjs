@@ -23,7 +23,7 @@ const toHex = (c) => "#" + c.map((v) => Math.round(v).toString(16).padStart(2, "
 export function colour(tokens, theme, name) {
   const t = tokens.colour[theme].find((x) => x.name === name);
   if (!t) throw new Error(`no colour ${name} in ${theme}`);
-  const mix = /^color-mix\(in srgb, var\(--([a-z]+)\) ([\d.]+)%, var\(--([a-z]+)\)\)$/.exec(t.value);
+  const mix = /^color-mix\(in srgb, var\(--([a-z0-9-]+)\) ([\d.]+)%, var\(--([a-z0-9-]+)\)\)$/.exec(t.value);
   if (!mix) return t.value;
   const a = rgb(colour(tokens, theme, mix[1])), b = rgb(colour(tokens, theme, mix[3])), p = Number(mix[2]) / 100;
   return toHex(a.map((v, i) => v * p + b[i] * (1 - p)));
@@ -40,7 +40,7 @@ export function contrast(a, b) {
 }
 
 export const TEXT = ["fg", "muted", "dim"];
-export const SURFACES = ["canvas", "chrome", "bg", "raised", "popover"];
+export const SURFACES = ["canvas", "chrome", "surface-1", "surface-3", "surface-2"];
 export const MIN_CONTRAST = 4.5;
 
 export function pairs(tokens) {

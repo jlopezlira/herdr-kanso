@@ -23,30 +23,30 @@
 .kanso-text--chrome{color:var(--chrome)!important}
 .kanso-fill--chrome{background:var(--chrome)}
 .kanso-ring--chrome{box-shadow:inset 0 0 0 1px var(--chrome)}
-.kanso-text--bg{color:var(--bg)!important}
-.kanso-fill--bg{background:var(--bg)}
-.kanso-ring--bg{box-shadow:inset 0 0 0 1px var(--bg)}
-.kanso-text--popover{color:var(--popover)!important}
-.kanso-fill--popover{background:var(--popover)}
-.kanso-ring--popover{box-shadow:inset 0 0 0 1px var(--popover)}
-.kanso-text--raised{color:var(--raised)!important}
-.kanso-fill--raised{background:var(--raised)}
-.kanso-ring--raised{box-shadow:inset 0 0 0 1px var(--raised)}
+.kanso-text--surface-1{color:var(--surface-1)!important}
+.kanso-fill--surface-1{background:var(--surface-1)}
+.kanso-ring--surface-1{box-shadow:inset 0 0 0 1px var(--surface-1)}
+.kanso-text--surface-2{color:var(--surface-2)!important}
+.kanso-fill--surface-2{background:var(--surface-2)}
+.kanso-ring--surface-2{box-shadow:inset 0 0 0 1px var(--surface-2)}
+.kanso-text--surface-3{color:var(--surface-3)!important}
+.kanso-fill--surface-3{background:var(--surface-3)}
+.kanso-ring--surface-3{box-shadow:inset 0 0 0 1px var(--surface-3)}
 .kanso-text--hover{color:var(--hover)!important}
 .kanso-fill--hover{background:var(--hover)}
 .kanso-ring--hover{box-shadow:inset 0 0 0 1px var(--hover)}
 .kanso-text--selected{color:var(--selected)!important}
 .kanso-fill--selected{background:var(--selected)}
 .kanso-ring--selected{box-shadow:inset 0 0 0 1px var(--selected)}
-.kanso-text--w4{color:var(--w4)!important}
-.kanso-fill--w4{background:var(--w4)}
-.kanso-ring--w4{box-shadow:inset 0 0 0 1px var(--w4)}
-.kanso-text--w7{color:var(--w7)!important}
-.kanso-fill--w7{background:var(--w7)}
-.kanso-ring--w7{box-shadow:inset 0 0 0 1px var(--w7)}
-.kanso-text--w12{color:var(--w12)!important}
-.kanso-fill--w12{background:var(--w12)}
-.kanso-ring--w12{box-shadow:inset 0 0 0 1px var(--w12)}
+.kanso-text--wash-4{color:var(--wash-4)!important}
+.kanso-fill--wash-4{background:var(--wash-4)}
+.kanso-ring--wash-4{box-shadow:inset 0 0 0 1px var(--wash-4)}
+.kanso-text--wash-7{color:var(--wash-7)!important}
+.kanso-fill--wash-7{background:var(--wash-7)}
+.kanso-ring--wash-7{box-shadow:inset 0 0 0 1px var(--wash-7)}
+.kanso-text--wash-12{color:var(--wash-12)!important}
+.kanso-fill--wash-12{background:var(--wash-12)}
+.kanso-ring--wash-12{box-shadow:inset 0 0 0 1px var(--wash-12)}
 .kanso-text--w14{color:var(--w14)!important}
 .kanso-fill--w14{background:var(--w14)}
 .kanso-ring--w14{box-shadow:inset 0 0 0 1px var(--w14)}

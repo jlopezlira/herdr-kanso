@@ -44,17 +44,17 @@ export const guidelines = {
     ["Kansō", "One solid action.", "Solid for the one main action, tonal for supporting ones, quiet or icon on a row. In a dialog, Cancel is quiet and the solid action comes last; in a panel, the solid action comes first. The first fix of a failure is solid, the rest tonal."],
     ["Seijaku", "Two sizes.", "md: 30 high, radius 6, body size, weight 500, padding 12. sm: 24 high, meta size, padding 8, on a row, a toast or a header. A program button carries its mark at 14."],
     ["Seijaku", "Icon sizes.", "An icon button is sm 20 with icon 12 on a row, md 26 with 15 in the tab bar and pane tools, lg 32 with 17 in the sidebar tools."],
-    ["Shizen", "Live states.", "Hover w7, selected and pressed w12, never on a disabled control. Off is w4 with dim text. One focus ring: 2 px accent outside."],
+    ["Shizen", "Live states.", "Hover wash-7, selected and pressed wash-12, never on a disabled control. Off is wash-4 with dim text. One focus ring: 2 px accent outside."],
     ["Kansō", "Armed.", "Only an irreversible action asks twice: same box, filled with accent, \"Press again to …\" for 4 s."],
   ],
   "Primitives/Chip": [
     ["Kansō", "Only a fact not said elsewhere.", "A count or a short fact the row does not already say."],
-    ["Seijaku", "One look.", "24 high, radius 6, on w7, meta size."],
+    ["Seijaku", "One look.", "24 high, radius 6, on wash-7, meta size."],
   ],
   "Primitives/Code": [
     ["Seijaku", "Exact characters.", "Monospaced, line numbers in dim. Keywords violet, strings done, numbers working."],
-    ["Kokō", "A diff marks only change.", "Added lines on done at 13%, deleted on blocked at 13%, hunks dim on w4."],
-    ["Kansō", "A snippet quotes three lines.", "The line a comment talks about sits on w7."],
+    ["Kokō", "A diff marks only change.", "Added lines on done at 13%, deleted on blocked at 13%, hunks dim on wash-4."],
+    ["Kansō", "A snippet quotes three lines.", "The line a comment talks about sits on wash-7."],
     ["Kokō", "A log keeps the tool's words.", "Output stays in order and unchanged; only failure lines turn blocked."],
   ],
   "Primitives/Dialog": [
@@ -231,8 +231,8 @@ export const guidelines = {
     ["Shizen", "Only working moves.", "The working ensō spins at 900 ms; reduced motion holds it still."],
   ],
   "Primitives/Markdown": [
-    ["Seijaku", "Reads like the window.", "Headings 20 and 15, body 13.5, code 11.5 on w7, tables 12.5 with border rows."],
-    ["Yūgen", "One click edits in place.", "The block under the pointer takes the hover wash; a click gives it the raised slab and the kit's focus ring. A click on a link still follows it."],
+    ["Seijaku", "Reads like the window.", "Headings 20 and 15, body 13.5, code 11.5 on wash-7, tables 12.5 with border rows."],
+    ["Yūgen", "One click edits in place.", "The block under the pointer takes the hover wash; a click gives it the surface-3 slab and the kit's focus ring. A click on a link still follows it."],
     ["Shizen", "Save follows code.", "⌘S or the button, never on its own. Esc closes any block."],
   ],
   "Primitives/Menu": [
@@ -245,14 +245,14 @@ export const guidelines = {
     ["Kansō", "Facts follow, quiet.", "Supporting facts sit on one dim line under it; none repeats the number."],
   ],
   "Primitives/Switch": [
-    ["Seijaku", "One switch.", "Off is raised with the input edge, on is solid; only the knob moves."],
+    ["Seijaku", "One switch.", "Off is surface-3 with the input edge, on is solid; only the knob moves."],
     ["Kansō", "Disabled is quiet.", "The 4% wash and a dim knob. The label is spoken, not shown inside."],
   ],
   "Primitives/Row": [
     ["Seijaku", "One row.", "32 high, icon 14, name, an optional dim tail, the meta and the state mark at the right. Rows touch."],
     ["Kansō", "Two lines only while there is something to say.", "The second line is meta and ends in an ellipsis."],
-    ["Shizen", "State is tone.", "Hover w7, current the selected fill, selected the shared accent ring, dimmed muted; a pending row is at 80% with the breathing dot until it is written."],
-    ["Kokō", "Depth and headings, not new rows.", "A heading is the name in strong; depth one and two indent by an icon, two with a w12 guide. Tools show on hover or focus and take the meta’s place; one button for what is wrong stays."],
+    ["Shizen", "State is tone.", "Hover wash-7, current the selected fill, selected the shared accent ring, dimmed muted; a pending row is at 80% with the breathing dot until it is written."],
+    ["Kokō", "Depth and headings, not new rows.", "A heading is the name in strong; depth one and two indent by an icon, two with a wash-12 guide. Tools show on hover or focus and take the meta’s place; one button for what is wrong stays."],
     ["Kokō", "Every list uses this row.", "Files, ports, sessions, projects, computers and pick lists are this row with their own lead and meta."],
   ],
   "Primitives/Skeleton": [
@@ -263,15 +263,15 @@ export const guidelines = {
   "Primitives/Tab": [
     ["Kokō", "One tab for every choice among a few.", "Window tabs, periods, views and settings are this tab. A setting with two or three values is tabs, not a switch."],
     ["Seijaku", "Three sizes.", "sm 24 inside a row or a card, md 26 in a bar, lg 30 in a panel or a dialog. Body size, icon 14, radius 6."],
-    ["Shizen", "Selection is a tone, never a weight,", "so nothing moves: the chosen tab is a quiet fill, w7, raised on a track; no ring, no border. Hover w4 with foreground text. On a track (w4 behind the group) the tabs share its width."],
+    ["Shizen", "Selection is a tone, never a weight,", "so nothing moves: the chosen tab is a quiet fill, wash-7, raised on a track; no ring, no border. Hover wash-4 with foreground text. On a track (wash-4 behind the group) the tabs share its width."],
     ["Kokō", "A mark only when it asks.", "Working, blocked or done after the label; a dot marks an unchosen tab that needs you."],
     ["Kansō", "Close only where it acts.", "The × shows on the chosen tab when it can close; a tab holding an agent arms for 4 s."],
     ["Kansō", "Icon, label or both.", "Without a label each tab is a square the size of its height, the label its tooltip, and marks give way to the one dot. Compositions build on this: the rail's column of views is icon tabs."],
   ],
   "Primitives/Thumbnail": [
-    ["Seijaku", "One thumbnail.", "40 square, radius 4, border edge on raised; the picture is cropped to fill it. One per shot in a strip, 4 apart."],
+    ["Seijaku", "One thumbnail.", "40 square, radius 4, border edge on surface-3; the picture is cropped to fill it. One per shot in a strip, 4 apart."],
     ["Shizen", "Selected is the shared state.", "The chosen thumbnail takes kanso-control--selected: the 2 px accent ring outside, the same as a focused field, a row or a menu item; nothing moves."],
-    ["Kansō", "Nothing to show, nothing drawn.", "A picture that cannot load leaves the raised square; the name is its tooltip."],
+    ["Kansō", "Nothing to show, nothing drawn.", "A picture that cannot load leaves the surface-3 square; the name is its tooltip."],
   ],
   "Primitives/Toast": [
     ["Kansō", "Only what has no home on screen.", "A toast says a result whose row is not visible; when the row is on screen, the row says it instead."],

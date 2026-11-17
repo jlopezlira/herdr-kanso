@@ -4,11 +4,12 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { load, gpuiHost as host } from "./helpers.mjs";
 import { ROOT, loadTokens, colour, contrast, THEME_FILES as THEMES } from "../scripts/tokens.mjs";
+import { WASH_TOKENS } from "../scripts/build-ui-tokens.mjs";
 
 const kit = () => load("kanso-panel/ui.js", ["tokens", "washes", "WASHES"], host());
 const tokens = loadTokens();
 const NAMES = ["w4", "w7", "w12", "w14"];
-const share = (theme, name) => Number(/var\(--fg\) ([\d.]+)%, transparent\)$/.exec(tokens.colour[theme].find((x) => x.name === name).value)[1]) / 100;
+const share = (theme, name) => Number(/var\(--fg\) ([\d.]+)%, transparent\)$/.exec(tokens.colour[theme].find((x) => x.name === WASH_TOKENS[name]).value)[1]) / 100;
 const hex2 = (p) => Math.round(p * 255).toString(16).padStart(2, "0");
 const rgb = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
 const over = (fg, bg, p) => `#${rgb(fg).map((v, i) => Math.round(v * p + rgb(bg)[i] * (1 - p)).toString(16).padStart(2, "0")).join("")}`;

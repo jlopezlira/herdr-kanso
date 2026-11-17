@@ -29,15 +29,15 @@
 .kanso-tokens .kanso-tokens__name { font: var(--k-fs-mono) var(--mono); color: var(--muted); white-space: nowrap; }
 .kanso-tokens__swatch { display: block; inline-size: var(--k-h-row); block-size: var(--k-h-compact); border-radius: var(--k-r-sm); box-shadow: inset 0 0 0 var(--k-w-line) var(--border); }
 :root[data-theme="light"] .kanso-tokens__value--dark, :root:not([data-theme="light"]) .kanso-tokens__value--light { display: none; }
-.sbdocs .sbdocs-preview { border: var(--k-w-line) solid var(--border); border-radius: var(--k-r-card); box-shadow: none; background: var(--bg); }
+.sbdocs .sbdocs-preview { border: var(--k-w-line) solid var(--border); border-radius: var(--k-r-card); box-shadow: none; background: var(--surface-1); }
 .sbdocs .docblock-argstable, .sbdocs .docblock-argstable :is(th, td) { background: transparent; color: var(--fg); border-color: var(--border); }
 .sbdocs .docblock-argstable-body { box-shadow: 0 0 0 var(--k-w-line) var(--border); border-radius: var(--k-r-card); }
 .sbdocs :is(select, input, textarea) { background: var(--canvas); color: var(--fg); border: var(--k-w-line) solid var(--input); border-radius: var(--k-r-sm); box-shadow: none; }
 .sbdocs .docblock-code-toggle, .sbdocs [class*="ActionBar"] button { color: var(--muted); background: transparent; border-color: var(--border); }
 .kanso-tokens__space { display: flex; }
 .kanso-tokens__space > i { inline-size: var(--k-sp-3); block-size: var(--k-sp-3); border-radius: var(--k-r-sm); background: var(--muted); }
-.kanso-tokens__radius { display: block; inline-size: var(--k-h-header); block-size: var(--k-h-control); background: var(--raised); box-shadow: inset 0 0 0 var(--k-w-line) var(--input); }
-.kanso-tokens__height { display: block; inline-size: var(--k-h-header); background: var(--raised); box-shadow: inset 0 0 0 var(--k-w-line) var(--input); border-radius: var(--k-r-sm); }
+.kanso-tokens__radius { display: block; inline-size: var(--k-h-header); block-size: var(--k-h-control); background: var(--surface-3); box-shadow: inset 0 0 0 var(--k-w-line) var(--input); }
+.kanso-tokens__height { display: block; inline-size: var(--k-h-header); background: var(--surface-3); box-shadow: inset 0 0 0 var(--k-w-line) var(--input); border-radius: var(--k-r-sm); }
 .kanso-tokens .kanso-tokens__lines { display: inline-block; font-size: var(--k-fs-body); }
 .kanso-tokens td:first-child { color: var(--fg); }
 .kanso-tokens .kanso-tokens__example { white-space: nowrap; }
@@ -70,7 +70,7 @@
 .kanso-story__strip--end { justify-content: flex-end; }
 .kanso-story__slice { inline-size: var(--k-w-sidebar); padding: var(--k-sp-2); box-sizing: border-box; border-radius: var(--k-r-card); background: var(--chrome); box-shadow: 0 0 0 var(--k-w-line) var(--border); }
 .kanso-story__slice > .kanso-menu { margin-top: var(--k-sp-1); }
-.kanso-story__slice.kanso-story__settings { inline-size: var(--k-w-panel); padding-inline: var(--k-sp-4); background: var(--bg); }
+.kanso-story__slice.kanso-story__settings { inline-size: var(--k-w-panel); padding-inline: var(--k-sp-4); background: var(--surface-1); }
 .kanso-story__frame > .kanso-panel.kanso-story__panel { inline-size: var(--k-w-panel); block-size: auto; }
 .kanso-story__frame > .kanso-pane.kanso-story__pane { flex: none; inline-size: var(--k-w-pane); max-inline-size: 100%; }
 .kanso-story__frame > .kanso-pane.kanso-story__pane { overflow: visible; }
