@@ -113,6 +113,12 @@ export const guidelines = {
   "Compositions/Sidebar/Tile": [
     ["Kansō", "A group in the rail.", "An Avatar with the project’s initial, or the state’s Mark, and a quiet Chip with how many."],
   ],
+  "Compositions/Switcher": [
+    ["Yūgen", "Nothing at rest.", "It shows only while ⌃ is held; one tap of ⌃Tab and letting go returns to the session you were in before, with no list seen."],
+    ["Kansō", "One Menu, one fact per row.", "Program, name, place and the mark the session row already has. No model, context or time: they live on the session row."],
+    ["Kokō", "Colour only on who asks.", "The order is most recent first, never by state; a blocked mark is the only colour."],
+    ["Kansō", "Every session one press away.", "Tab and ⇧Tab move, ↑ and ↓ too, Enter or a click lands, Esc closes; on macOS it stays ⌃Tab, since ⌘Tab is the system's."],
+  ],
   "Compositions/Sidebar/Footer": [
     ["Kokō", "Rows with an icon.", "An update when there is one, then Settings. Add computer lives in a computer's menu: the footer configures, it does not create."],
   ],

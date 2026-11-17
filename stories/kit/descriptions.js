@@ -33,6 +33,7 @@ export const descriptions = {
   Asleep: 'The sessions put to sleep, folded into one line.',
   Section: 'A heading over rows in Status and Threads.',
   'View switch': 'Projects, Status and Threads: by name in the sidebar, as icons in the rail.',
+  Switcher: 'Proposed: every session on every computer, most recent first, held open by ⌃Tab; letting go lands on the picked one.',
   Tile: 'A project or a state in the rail: its initial or mark and a count.',
   Footer: 'The bottom of the sidebar: an update when there is one, then Settings.',
   'Dawn Mode': 'The early channel’s mark in the sidebar header; Stable Mode shows nothing.',
