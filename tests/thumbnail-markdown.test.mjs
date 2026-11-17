@@ -2,7 +2,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { load, nodes, calls, one, arg, chain, themed, KIT_NIGHT, drawingHost, numberArguments, repoText } from "./helpers.mjs";
-import { thumbnail as storyThumbnail, markdown as storyMarkdown, markdownBlock as storyBlock } from "../stories/kit/pieces.js";
+import { thumbnail as storyThumbnail, markdown as storyMarkdown, markdownBlock as storyBlock, markdownWords as storyWords } from "../stories/kit/pieces.js";
 import { markdownBlocks } from "../kanso/mods/kanso-spaces/pure.js";
 
 // Herdr's TextView, as a chain that keeps the Markdown it was given.
@@ -12,7 +12,7 @@ const kit = async () => themed({
   ...await load("kanso-panel/ui.js", ["tokens", "G", "H", "R", "T", "LH"], host()),
   ...await load("kanso-panel/ui-thumbnail.js", ["thumbnail"], host()),
   ...await load("kanso-panel/ui-markdown.js", ["markdown", "markdownBlock"], host()),
-  app: await load("kanso-panel/kit.js", ["thumbnail", "markdown", "markdownBlock"], host()),
+  app: await load("kanso-panel/kit.js", ["thumbnail", "markdown", "markdownBlock", "markdownWords"], host()),
 }, KIT_NIGHT);
 
 const faceOf = (el) => el.kids[0];
@@ -91,12 +91,25 @@ test("Proposed: a block's content takes its words' place, in both kits", async (
   const el = app.markdownBlock({ state: "editing", content: [field] })("b", c);
   assert.deepEqual(sources(el), []);
   assert.ok(el.kids.includes(field));
-  const picture = chain("picture"), mixed = app.markdownBlock({ source: "x", content: ["See [a](b.md)", picture] })("b", c, { onLink: () => {} });
-  assert.deepEqual([sources(mixed), mixed.kids[1], calls(mixed.kids[0], "on_link_click").length], [["See [a](b.md)"], picture, 1], "a picture block's words are drawn by the block itself");
+  const links = [], picture = chain("picture");
+  const words = app.markdownWords({ source: "See [a](b.md)" })("b-0", c, { onLink: (url) => links.push(url) });
+  const mixed = app.markdownBlock({ source: "x", content: [words, picture] })("b", c);
+  assert.deepEqual([sources(mixed), mixed.kids[1]], [["See [a](b.md)"], picture], "a picture block's words are the kit's markdownWords");
+  calls(mixed.kids[0], "on_link_click")[0][1]("b.md", {});
+  assert.deepEqual(links, ["b.md"], "its links still follow");
   assert.deepEqual(nodes(mixed).flatMap((kid) => calls(kid, "px")).length, 1, "one padding: its words sit where a plain block's do");
   assert.equal(storyBlock({ source: "# Lost", state: "editing", content: "<span>field</span>" }).includes("Lost"), false);
   assert.match(repoText("stories/kit/pieces.js"), /Proposed: `content`/);
   assert.match(repoText("scripts/storybook-kit.mjs"), /add\('Markdown', 'Editing, in its field'[\s\S]*?'Proposed\./);
+});
+
+test("A block's `content` is drawn pieces in both kits: a string in it is not drawn as markdown; markdownWords draws words in both", async () => {
+  const { app, c } = await kit();
+  assert.deepEqual(sources(app.markdownBlock({ source: "x", content: ["**hi**"] })("b", c)), [], "the app draws no markdown from a string in content");
+  assert.match(storyBlock({ source: "x", content: "**hi**" }), /\*\*hi\*\*/, "nor does the Storybook");
+  assert.deepEqual(sources(app.markdownWords({ source: "**hi**" })("w", c)), ["**hi**"]);
+  assert.equal(storyWords({ source: "**hi**" }), "<p><b>hi</b></p>");
+  assert.throws(() => app.markdownWords({ source: "x" })("w", c, { state: "hover" }), /only handlers, not state/);
 });
 
 test("A block's double press and its links come as handlers: a pressable block takes the pointer's wash, and anything else throws", async () => {

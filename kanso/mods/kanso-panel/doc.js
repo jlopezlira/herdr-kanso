@@ -7,7 +7,7 @@ import { readTextFile, writeTextFile, theme, settings, home, appHome } from "her
 import { parseBlocks, joinBlocks, headingOf, headingLine, parseTable, tableLines } from "./blocks.js";
 import { G, H, R, T, W, tokens } from "./ui.js";
 import { button } from "./ui-button.js";
-import { button as kitButton, skeletonOf, tooltip, emptyState, failureLine, markdownBlock, row } from "./kit.js";
+import { button as kitButton, skeletonOf, tooltip, emptyState, failureLine, markdownBlock, markdownWords, row } from "./kit.js";
 import { bring, appRelative, markdownParts, staleView, bytesLabel, copyFailure, quietError } from "./remote-file.js";
 import { EDIT_LIMIT, drafts, draftKey, remember, opened, restore, seenDisk, typed, beginSave, commitText, applied, word, didFail, keepMine, takeTheirs, tooLarge, wholeText, overRead } from "./edit.js";
 
@@ -357,11 +357,11 @@ export class MarkdownDoc {
     return markdownBlock({ source: md, content })(key, c, { ...this.links(), onPress: editable ? press : undefined });
   }
 
-  // A block with pictures: its words as markdown source the block draws, each picture loading, waiting for Load, failed or drawn.
+  // A block with pictures: its words drawn by the kit, each picture loading, waiting for Load, failed or drawn.
   pictureParts(parts, key, c) {
     return parts.map((part, k) => {
       const at = `${key}-${k}`;
-      if (part.kind === "text") return part.text.trim() ? part.text : null;
+      if (part.kind === "text") return part.text.trim() ? markdownWords({ source: part.text })(at, c, this.links()) : null;
       const file = linkTarget(part.url, this.path)?.file;
       const shot = file && this.shots?.has(file) ? this.shots.get(file) : undefined;
       if (shot === undefined) return skeletonOf({ shape: "picture" })(at, c);
