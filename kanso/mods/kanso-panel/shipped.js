@@ -587,7 +587,7 @@ export class Shipped {
             .child(div().truncate().text_size(narrow ? 17 : 20).text_color(c.text).child("Shipped"))
             .child(h_flex().gap(G.xs).items_center()
               .child(iconButton("shipped-share", "share", "Share", (cx) => this.share.toggle(cx), c, { disabled: !this.days }))
-              .child(iconButton("shipped-refresh", "refresh", "Refresh", (cx) => this.refresh(cx, true), c, { spin: this.loading || this.syncing }))))
+              .child(iconButton("shipped-refresh", "refresh-cw", "Refresh", (cx) => this.refresh(cx, true), c, { spin: this.loading || this.syncing }))))
           .children(shareRows(this, c, "Only the totals, streak, records and hours: no repository or computer names. The post opens with the image in it."))
           .child(this.periods(c))
           .child(body));

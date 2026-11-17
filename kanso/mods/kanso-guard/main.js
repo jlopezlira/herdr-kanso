@@ -257,7 +257,7 @@ export default class Memory extends View {
       .child(div().text_size(narrow ? 17 : 20).text_color(c.text).child(this.now?.data?.metric === "working set" ? "Memory · working set" : "Memory"))
       .child(h_flex().gap(G.xs).items_center().flex_none()
         .when(this.canShare(), (el) => el.child(iconButton("guard-share", "share", "Share", (cx) => this.share.toggle(cx), c, { active: this.share.open })))
-        .child(iconButton("guard-refresh", "refresh", tip, (cx) => this.check(cx), c, { spin: busy, disabled: busy })));
+        .child(iconButton("guard-refresh", "refresh-cw", tip, (cx) => this.check(cx), c, { spin: busy, disabled: busy })));
   }
 
   skeleton(c, narrow) {

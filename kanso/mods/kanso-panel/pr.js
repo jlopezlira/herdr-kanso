@@ -704,7 +704,7 @@ export class PullRequest {
   pickerFor(kind, c) {
     const id = `pr-pick-${kind}`;
     const label = { labels: "Change labels", assignees: "Assign people", reviewers: "Request a review" }[kind];
-    const trigger = button(`${id}-trigger`, label, null, c, { kind: "icon", icon: kind === "labels" ? "tag" : "user-plus" });
+    const trigger = button(`${id}-trigger`, label, null, c, { kind: "icon", icon: "plus" });
     const popover = Popover.new(id).trigger(trigger).anchor("top_right")
       .open(this.picker === kind)
       .on_open_change((open, cx) => this.openPicker(kind, open, cx));
@@ -839,9 +839,9 @@ export class PullRequest {
       .child(h_flex().gap(G.xs).items_center().flex_none()
         .when(this.inboxOn, (el) => el.child(this.reviewPill(c)))
         .when(pill, (el) => el.child(this.switchPill(c)))
-        .child(iconButton("pr-refresh", "refresh", refreshed ? `Refresh · ${refreshed}` : "Refresh", (cx) => this.again(cx), c, { spin: this.loading }))
+        .child(iconButton("pr-refresh", "refresh-cw", refreshed ? `Refresh · ${refreshed}` : "Refresh", (cx) => this.again(cx), c, { spin: this.loading }))
         .when(Boolean(pr?.url) && !this.listing && !here, (el) => el.child(iconButton("pr-copy", this.copied === pr.url ? "check" : "copy", this.copied === pr.url ? "Copied" : "Copy link", (cx) => this.copyUrl(pr.url, cx), c)))
-        .when(Boolean(pr?.url) && !here, (el) => el.child(iconButton("pr-web", "open-with", "Open on GitHub", () => openUrl(pr.url), c))));
+        .when(Boolean(pr?.url) && !here, (el) => el.child(iconButton("pr-web", "external-link", "Open on GitHub", () => openUrl(pr.url), c))));
   }
 
   copyUrl(url, cx) {

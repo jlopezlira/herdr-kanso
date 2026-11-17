@@ -608,7 +608,7 @@ export class Worktrees {
       .child(h_flex().gap(G.xs).items_center().flex_none()
         .when(Boolean(this.phase), (el) => el.child(div().pr(G.xs).text_size(11).text_color(c.dim).child(this.phase)))
         .child(iconButton("wt-share", "share", "Share", (cx) => this.share.toggle(cx), c))
-        .child(iconButton("wt-refresh", "refresh", "Scan again", (cx) => { if (!this.working) this.refresh(cx); }, c, { spin: scanning })));
+        .child(iconButton("wt-refresh", "refresh-cw", "Scan again", (cx) => { if (!this.working) this.refresh(cx); }, c, { spin: scanning })));
   }
 
   freedBones(c, narrow) {
@@ -865,7 +865,7 @@ export class Worktrees {
     const body = !scanned && this.phase ? this.skeleton(c, narrow)
       : !scanned ? (this.note
         ? failNote("wt-failed", this.note, c, [{ label: "Refresh", onClick: (cx) => { if (!this.working) this.refresh(cx); } }])
-        : stateEmpty("wt-empty", "worktree", "No worktrees besides your checkouts", c))
+        : stateEmpty("wt-empty", "git-fork", "No worktrees besides your checkouts", c))
         : this.page(c, narrow, groups, shown);
     return sizedPage.call(this, v_flex().id("kanso-worktrees").size_full().min_h(0).bg(c.canvas).text_color(c.text).overflow_y_scrollbar(), narrow, (column) => column
           .child(this.header(c, narrow))

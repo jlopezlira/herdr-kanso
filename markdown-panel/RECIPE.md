@@ -126,7 +126,7 @@ files next to it are one build of it.
   - `markdown-handler.sh`: Kanso Markdown, below;
   - `md-review`: the review command; `recent.sh`: the "From this terminal"
     search (`hc`, `python3`, `pbpaste` or `wl-paste`);
-  - `icons/`: `close`, `refresh`, `chevron-left` (16 px strokes);
+  - `icons/`: Lucide's `x`, `refresh-cw` and `chevron-left`, unchanged;
   - `mod.json`: `{ "place": "none", "title": "Markdown", "overlay": {
     "kind": "window", "width": 560, "height": 0.9, "key": "markdown-panel" } }`.
 - **One key**, in `keys.json`: `"global": { "cmd-shift-m":

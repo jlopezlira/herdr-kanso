@@ -403,7 +403,7 @@ export function agentRow(a, indent, t, c, row, more = {}) {
     .when(Boolean(machine) && !word && !more.noMachine, (el) => el.child(div().flex_none().text_size(11.5).text_color(t.dim).child(machine)))
     .when(Boolean(word), (el) => el.child(div().flex_none().truncate().text_size(11.5).text_color(t.dim)
       .when(Boolean(more.wordTip), (d) => d.tooltip(more.wordTip)).child(word)))
-    .when(Boolean(more.refresh), (el) => el.child(iconTool(`refresh-${a.address}`, "refresh", "Refresh", more.refresh)))
+    .when(Boolean(more.refresh), (el) => el.child(iconTool(`refresh-${a.address}`, "refresh-cw", "Refresh", more.refresh)))
     .when(pinned && !hovered, (el) => el.child(svg("mods/kanso-chrome/icons/pin.svg").size(12).flex_none().text_color(t.dim)))
     .when(hovered && Boolean(row?.pin), (el) => el.child(iconTool(`pin-${a.address}`, "pin", pinned ? "Unpin" : "Pin to the top", (cx) => row.pin(cx))))
     .children(actions.map((x) => iconTool(`act-${x.id}-${a.address}`, x.icon, x.tip, x.act)))

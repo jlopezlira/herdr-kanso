@@ -107,8 +107,8 @@ const MARK = { ansi6: "#22a99a", ansi3: "#e3814f", ansi4: "#5b8def", ansi5: "#8b
 
 const VIEWS = {
   spaces: { label: "Projects", icon: "folder" },
-  agents: { label: "Status", icon: "pulse" },
-  threads: { label: "Threads", icon: "message" },
+  agents: { label: "Status", icon: "activity" },
+  threads: { label: "Threads", icon: "message-square" },
 };
 // A project's key: its machine and folder.
 export const projectKey = (w) => `${w?.machine ?? ""}:${w?.folder || home()}`;
@@ -1525,15 +1525,15 @@ export default class Spaces extends View {
       ...(asleep.length ? [{ heading: "Asleep" }, ...asleep.map((z) => item(`Wake ${z.tab}`, () => wakeRow(z), { icon: "sun", hint: z.saved ? since(z.saved) : null }))] : []),
       ...(asleep.length > 1 ? [item(`Wake all ${asleep.length}`, () => arrange({ wake: { space: w.id } }), { icon: "undo" })] : []),
       ...(place && !project?.missing ? [item("New agent\u2026", () => this.newAgentMenu(place), { icon: "plus" }),
-        item("New agent in a worktree\u2026", () => this.worktreeDialog(place), { icon: "worktree" })] : []),
-      ...(trees.length ? [{ heading: "Worktrees" }, { scroll: trees.map((x) => item(x.branch ?? "detached", () => this.openTree(place, x), { icon: "branch", hint: where(x.path) })) }] : []),
+        item("New agent in a worktree\u2026", () => this.worktreeDialog(place), { icon: "git-fork" })] : []),
+      ...(trees.length ? [{ heading: "Worktrees" }, { scroll: trees.map((x) => item(x.branch ?? "detached", () => this.openTree(place, x), { icon: "git-branch", hint: where(x.path) })) }] : []),
       ...(active ? [item("Sleep this tab\u2026", () => sleepTab(w.id, active.id), { icon: "moon" })] : []),
       ...(tabs > 1 ? [item("Sleep the whole project\u2026", () => sleepProject(w.id), { icon: "moon" })] : []),
       ...(w ? [item("Project options\u2026", options, { icon: "settings" })] : []),
       ...(keepable ? [item("Keep as a project", keep, { icon: "pin", keep: true })] : []),
       ...(project?.missing && !project?.machine ? [item("Locate folder\u2026", locate, { icon: "file", keep: true })] : []),
       // Any project you see can go: one you added (its row too), or an open space you never kept.
-      ...(project || w ? [item("Remove project", remove, { icon: "close", keep: true, verb: w ? `remove it and close its ${tabs} tab${tabs === 1 ? "" : "s"}` : "remove it", armed: this.armed.is("remove") })] : []),
+      ...(project || w ? [item("Remove project", remove, { icon: "x", keep: true, verb: w ? `remove it and close its ${tabs} tab${tabs === 1 ? "" : "s"}` : "remove it", armed: this.armed.is("remove") })] : []),
     ]);
   }
 
@@ -1555,7 +1555,7 @@ export default class Spaces extends View {
     return this.popup(t, title, [
       ...this.known.filter((a) => a.installed).map((a) => item(a.name, () => pick(a), { hint: a.key === project?.agent ? "last" : null, keep: true })),
       item("Terminal", () => pick(null), { keep: true }),
-      ...(place.tree ? [] : [{ separator: true }, item("In a new worktree\u2026", () => this.worktreeDialog(place), { icon: "worktree" })]),
+      ...(place.tree ? [] : [{ separator: true }, item("In a new worktree\u2026", () => this.worktreeDialog(place), { icon: "git-fork" })]),
     ]);
   }
 
@@ -1885,7 +1885,7 @@ export default class Spaces extends View {
       // Sign in runs the login in a terminal pane; a click on the row still copies its command.
       signin: () => m && this.machineButton(`machine-login:${key}`, `machine-login-${m}`, "key", "Sign in", () => run("terminal.open", signInCommand(m)), t),
       power: () => m && this.machineButton(`machine-power:${key}`, powerId(m), "power", phase === "connected" ? "Turn off" : `Turn ${title} on`, (cx) => this.setPower(m, this.phaseOf(m) === "off", cx), t),
-      retry: () => m && this.machineButton(`machine-retry:${key}`, `machine-retry-${m}`, "refresh", "Refresh", (cx) => this.retryMachine(m, cx), t),
+      retry: () => m && this.machineButton(`machine-retry:${key}`, `machine-retry-${m}`, "refresh-cw", "Refresh", (cx) => this.retryMachine(m, cx), t),
       plus: () => this.machineButton(`machine-add:${key}`, `machine-add-${key}`, "plus", `New project on ${title}`, () => run("space.new", { machine: m ?? "" }), t),
       sync: () => this.syncButton(m, t),
     };
@@ -2129,7 +2129,7 @@ export default class Spaces extends View {
         h_flex()
           .gap(9)
           .items_center()
-          .when(Boolean(tree), el => el.pl(CHILD_PAD).child(svg("mods/kanso-chrome/icons/branch.svg").size(13).text_color(t.muted)))
+          .when(Boolean(tree), el => el.pl(CHILD_PAD).child(svg("mods/kanso-chrome/icons/git-branch.svg").size(13).text_color(t.muted)))
           .child(div().flex_shrink(0).max_w(150).truncate().text_size(13.5).font_semibold().text_color(tree && !on ? t.muted : t.foreground).child(w.name))
           .child(g && !asleep && shown("sidebar.git", true, pieces(shared)) ? gitTail(g, tree, w.name, t, place, { id: w.id, active: on, pulling: this.pulling, pull: (cx) => this.pull(place, cx), open: () => openAhead(w) }) : div().flex_1())
           .when(asleep, (el) => el.children(this.asleepTail(t, c, group)))
@@ -2341,7 +2341,7 @@ export default class Spaces extends View {
       const p = s.project ? ctx.project(s.project) : null;
       const w = s.project ? sp.find((x) => x.id === s.project) : null;
       const list = s.rows.map(({ a }) => this.railRow(a, p ? null : ctx.project(a.space)?.name ?? null, ctx.now));
-      const lead = p ? this.railInitial(p.name, p.fill) : this.railIcon(t, icons[s.id] ?? "message");
+      const lead = p ? this.railInitial(p.name, p.fill) : this.railIcon(t, icons[s.id] ?? "message-square");
       return item(this.railMark(t, c, `rail-thread-${s.id}`, { lead, rows: list, tip: p?.name ?? s.label ?? "Conversations", on: Boolean(w?.active), space: w?.id ?? null, menu: w ? () => this.menu(w) : null }), RAIL_MARK);
     });
   }
@@ -2363,7 +2363,7 @@ export default class Spaces extends View {
     const c = tokens(t);
     const project = this.projectOf(sp, t);
     const rows = this.threadRows(ctx);
-    if (!rows.length) return [item(stateEmpty("threads-empty", "message", "No conversations yet", c))];
+    if (!rows.length) return [item(stateEmpty("threads-empty", "message-square", "No conversations yet", c))];
     const sections = threadSections(rows, { order: this.threadOrder, group: this.threadGroup, now: ctx.now, since: this.since ?? {} });
     // Under its project's header a conversation is nested: indented, the agent's icon as its mark, and no project line.
     const row = ({ a, th }, nested = false) => {
@@ -2490,10 +2490,10 @@ export default class Spaces extends View {
         ...(movedTo ? [item("Back to where it runs", () => moveTo(null), { icon: "undo" })] : [])] : []),
       { separator: true },
       ...(p?.cwd ? [item("Copy folder", copy(p.cwd), { icon: "copy" })] : []),
-      ...(p?.branch ? [item("Copy branch", copy(p.branch), { icon: "branch" })] : []),
+      ...(p?.branch ? [item("Copy branch", copy(p.branch), { icon: "git-branch" })] : []),
       ...(session ? [item("Copy conversation id", copy(session), { icon: "copy" })] : []),
       { separator: true },
-      item(a ? "Close agent" : "Close terminal", kill, { icon: "close", keep: !this.armed.is("close"), verb: "close it", armed: this.armed.is("close") }),
+      item(a ? "Close agent" : "Close terminal", kill, { icon: "x", keep: !this.armed.is("close"), verb: "close it", armed: this.armed.is("close") }),
     ]);
   }
 

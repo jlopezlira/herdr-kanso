@@ -168,7 +168,7 @@ export default class Help extends View {
     return pagedDialog({
       name: "help", handle: this.handle, onKey: (e, cx) => this.key(e, cx),
       head: h_flex().w_full().items_center().gap(G.md)
-        .child(svg("mods/kanso-chrome/icons/help.svg").size(17).text_color(c.accent))
+        .child(svg("mods/kanso-chrome/icons/circle-question-mark.svg").size(17).text_color(c.accent))
         .child(div().flex_1().text_size(15).font_semibold().child("kansō help"))
         .child(quietLink("help-settings", "Settings", toSettings, c, { color: c.accent }))
         .child(div().text_size(11).text_color(t.dim).child("Esc")),

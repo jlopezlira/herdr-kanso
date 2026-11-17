@@ -634,7 +634,7 @@ export default class Strip extends View {
       .child(programIcon(p.program, ICON, c.muted) ?? svg(glyphOf("terminal")).size(ICON).flex_none().text_color(c.muted))
       .child(this.headName(c, pane, f.name))
       .when(Boolean(f.where.folder) && shownAt(f.fold, "folder"), (el) => el.child(headerSegment(`ph-folder-${pane}`, { icon: "folder", parts: [{ text: shortFolder(f.where.folder) }] }, c)))
-      .when(Boolean(f.where.branch) && shownAt(f.fold, "branch"), (el) => el.child(headerSegment(`ph-branch-${pane}`, { icon: "branch", parts: [{ text: f.where.branch }] }, c)))
+      .when(Boolean(f.where.branch) && shownAt(f.fold, "branch"), (el) => el.child(headerSegment(`ph-branch-${pane}`, { icon: "git-branch", parts: [{ text: f.where.branch }] }, c)))
       .when(f.segments.length > 0, (el) => el.child(this.digestBar(c, p, f.segments, { fold: f.fold, working: p.status === "working", reading: Boolean(f.record?.reading), strip: f.strip, does })))
       .when(f.pinned, (el) => el.child(headerSegment(`ph-pinned-${pane}`, { icon: "pin", tone: "dim", title: "Pinned" }, c)))
       .child(div().flex_1())

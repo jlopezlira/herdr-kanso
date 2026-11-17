@@ -30,7 +30,7 @@ const closeGlyph = (id, ink, c, onClose, disabled) => div().id(`${id}-close`).fl
   .when(!disabled, (el) => el.hover((s) => s.text_color(c.text))
     .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
     .on_click((_e, cx) => { cx.stop_propagation(); onClose(cx); }))
-  .child(svg(`${ICONS}close.svg`).size(ICON_ROW));
+  .child(svg(`${ICONS}x.svg`).size(ICON_ROW));
 
 const nameOf = (id, item, c, nameWidth) => (item.editing
   ? div().id(`${id}-rename`).min_w(0).on_mouse_down("left", (_e, cx) => cx.stop_propagation()).on_click((_e, cx) => cx.stop_propagation())

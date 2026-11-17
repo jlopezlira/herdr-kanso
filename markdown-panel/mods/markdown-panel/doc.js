@@ -412,7 +412,7 @@ export class MarkdownDoc {
     const palette = tokens(t), quiet = { kind: "quiet", small: true, color: palette.muted };
     const icon = (key, tip, action) => div().id(key).size(20).flex_none().flex().items_center().justify_center().rounded(4).cursor_pointer()
       .text_color(t.dim).hover((s) => s.bg(t.hover).text_color(t.foreground)).tooltip(tip).on_click((_e, cx) => action(cx))
-      .child(svg(`${this.icons}/close.svg`).size(11));
+      .child(svg(`${this.icons}/x.svg`).size(11));
     const cell = (s, key, strong) => div().id(key).flex_1().min_w(96).border_r(1).border_color(t.border)
       .child(Textarea.new(s).w_full().px(8).py(5).text_size(12.5).text_color(t.foreground).when(strong, (el) => el.font_semibold()));
     const line = (cells, key, strong, end) => h_flex().id(key).w_full().items_start().border_b(1).border_color(t.border)

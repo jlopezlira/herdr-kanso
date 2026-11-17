@@ -12,6 +12,11 @@ import { modScript } from "../scripts/mod-source.mjs";
 
 const runFile = promisify(execFile);
 export const fileExists = (path) => access(path).then(() => true, () => false);
+// A file of this repository as text.
+export const repoText = (file) => readFileSync(new URL(`../${file}`, import.meta.url), "utf8");
+// An SVG's shapes as [tag, attributes], the form of tests/fixtures/lucide-icons.json.
+export const svgShapes = (markup) => [...markup.matchAll(/<(path|circle|rect|line|polyline|polygon|ellipse)\b([^>]*?)\s*\/?>/g)]
+  .map(([, tag, attrs]) => [tag, Object.fromEntries([...attrs.matchAll(/([\w-]+)="([^"]*)"/g)].map(([, name, value]) => [name, value]))]);
 const api = JSON.parse(readFileSync(new URL("./herdr-api.json", import.meta.url), "utf8"));
 export { api as herdrApi };
 const declaredNames = (mod) => api.modules[mod] ?? [];

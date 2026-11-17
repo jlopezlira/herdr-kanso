@@ -59,13 +59,13 @@ const ICON = "mods/kanso-chrome/icons/";
 const openSettings = (page) => openOverlay({ mod: "kanso-settings", kind: "dialog", width: 860, height: 680, props: { page } });
 const BUILTIN = [
   { id: "files", label: "Files", icon: `${ICON}file.svg` },
-  { id: "insights", label: "Spend", icon: `${ICON}chart.svg` },
-  { id: "pr", label: "PR", icon: `${ICON}pull-request.svg` },
+  { id: "insights", label: "Spend", icon: `${ICON}chart-column.svg` },
+  { id: "pr", label: "PR", icon: `${ICON}git-pull-request.svg` },
   { id: "shipped", label: "Shipped", icon: `${ICON}trophy.svg` },
-  { id: "worktrees", label: "Worktrees", icon: `${ICON}worktree.svg` },
+  { id: "worktrees", label: "Worktrees", icon: `${ICON}git-fork.svg` },
   { id: "ports", label: "Ports", icon: `${ICON}plug.svg` },
   { id: "containers", label: "Containers", icon: `${ICON}container.svg` },
-  { id: "memory", label: "Memory", icon: `${ICON}memory.svg` },
+  { id: "memory", label: "Memory", icon: `${ICON}memory-stick.svg` },
   { id: "look", label: "Images", icon: `${ICON}eye.svg` },
   { id: "sim", label: "Simulator", icon: `${ICON}smartphone.svg` },
 ];
@@ -541,11 +541,11 @@ export default class Tabs extends View {
       .child(this.tabArea(c, { space, openTabs, ps, state, tools }))
       .child(h_flex().flex_none().gap(2).items_center().children(shownPanels.map(panelButton))
         // Help and settings, alike and side by side: not panels, never dragged nor turned off.
-        .child(tool("kanso-help", "help", window()?.platform === "macos" ? "kansō help  ⌘⇧/" : "kansō help  Ctrl+Shift+/", () => run("mod.open", { name: "kanso-help" })).ml(4))
+        .child(tool("kanso-help", "circle-question-mark", window()?.platform === "macos" ? "kansō help  ⌘⇧/" : "kansō help  Ctrl+Shift+/", () => run("mod.open", { name: "kanso-help" })).ml(4))
         .child(tool("kanso-settings", "settings", update ? `kansō ${update} is available` : window()?.platform === "macos" ? "kansō settings  ⌃⇧," : "kansō settings  Ctrl+Shift+,",
           () => openSettings(update ? "news" : "pieces"))))
       .when(window()?.buttons, el => el.child(tool("minimize", "minus", "Minimize", () => run("window.minimize")))
         .child(tool("maximize", "square", "Maximize", () => run("window.maximize")))
-        .child(tool("close-window", "close", "Close", () => run("window.close"))));
+        .child(tool("close-window", "x", "Close", () => run("window.close"))));
   }
 }

@@ -34,7 +34,7 @@ export function gitTail(g, tree, name, t, place, act) {
     .opacity(pending ? PENDING : 1)
     .when(Boolean(repo), (el) => el.child(div().min_w(0).truncate().child(repo)))
     .when(Boolean(branch), (el) => el
-      .child(svg("mods/kanso-chrome/icons/branch.svg").size(12).flex_none().text_color(t.dim))
+      .child(svg("mods/kanso-chrome/icons/git-branch.svg").size(12).flex_none().text_color(t.dim))
       .child(div().min_w(0).truncate().text_color(t.muted).child(branch)))
     .when(Boolean(commit), (el) => el.child(div().flex_none().child(commit)))
     .children(controls.map(count))

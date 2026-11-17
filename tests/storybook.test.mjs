@@ -1,10 +1,10 @@
 // Check the Storybook's structure, tokens, public copy, names and icons.
 import assert from "node:assert/strict";
-import { cpSync, readFileSync, writeFileSync } from "node:fs";
+import { cpSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import test from "node:test";
 import vm from "node:vm";
-import { inTemporaryDir } from "./helpers.mjs";
+import { inTemporaryDir, repoText as read, svgShapes } from "./helpers.mjs";
 import { expand } from "../scripts/storybook-catalog.mjs";
 import { compositionErrors, lint, markupTags, primitiveErrors, rawValueErrors, rawValues, storyFiles, structureErrors } from "../scripts/lint-storybook.mjs";
 import { statusOf, statusTags } from "../stories/kit/status.js";
@@ -13,7 +13,6 @@ import { promptFor } from "../stories/kit/prompt.js";
 import { content, statesFor } from "../stories/kit/catalog.js";
 import { tokenRecords } from "../scripts/storybook-kit.mjs";
 
-const read = (file) => readFileSync(new URL(`../${file}`, import.meta.url), "utf8");
 const json = (file) => JSON.parse(read(file));
 const records = expand(json("stories/catalog.json"));
 const files = storyFiles("stories");
@@ -146,10 +145,8 @@ test("Every earlier state stays reachable by name", () => {
 
 test("Drawings use only sprite symbols, and every icon is the exact Lucide shape", () => {
   const { icons } = json("tests/fixtures/lucide-icons.json");
-  const shapes = (inner) => [...inner.matchAll(/<(path|circle|rect|line|polyline|polygon|ellipse)\b([^>]*?)\s*\/?>/g)]
-    .map(([, tag, attrs]) => [tag, Object.fromEntries([...attrs.matchAll(/([\w-]+)="([^"]*)"/g)].map(([, name, value]) => [name, value]))]);
   const symbols = new Map([...read("stories/proto-sprite.svg").matchAll(/<symbol id="([^"]+)"[^>]*>([^]*?)<\/symbol>/g)].map(([, id, inner]) => [id, inner]));
-  for (const [id, inner] of symbols) if (id.startsWith("lu-")) assert.deepEqual(shapes(inner), icons[id.slice(3)], id);
+  for (const [id, inner] of symbols) if (id.startsWith("lu-")) assert.deepEqual(svgShapes(inner), icons[id.slice(3)], id);
   const used = new Set(records.flatMap((record) => [...(record.html ?? "").matchAll(/href="#([^"]+)"/g)].map((match) => match[1])));
   assert.deepEqual([...used].filter((id) => !symbols.has(id)), []);
   assert.deepEqual([...used].filter((id) => !/^(?:lu|e|p)-/.test(id) && id !== "i-ptr"), []);
