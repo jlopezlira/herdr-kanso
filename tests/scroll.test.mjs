@@ -2,8 +2,7 @@
 // identified by where it sits, so a redraw can place it anew and send it back to the top.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readdir, readFile } from "node:fs/promises";
-import { join } from "node:path";
+import { readFile } from "node:fs/promises";
 import { jsFiles } from "./helpers.mjs";
 
 const ROOTS = ["kanso/mods", "markdown-panel/mods"];

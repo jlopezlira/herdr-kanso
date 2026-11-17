@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { databaseTimer, load, exec, temporary, clone, nativeWindow, success, openedKdb, textFiles } from "./helpers.mjs";
+import { load, exec, temporary, clone, nativeWindow, success, openedKdb, textFiles } from "./helpers.mjs";
 
 const names = ["Store", "repoName", "parseLog", "insertCommits", "machineFile", "readMachineFile", "weekOf", "weeklyStats", "WEEK0"];
 const store = (host = {}) => load("kanso-panel/shipped-store.js", names, host);

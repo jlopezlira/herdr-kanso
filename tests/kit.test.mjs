@@ -3,7 +3,7 @@ import { loadTokens, loadRow, loadMenu } from "./mod-fixtures.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { load, chain, gpuiHost, nodes, texts, press, themed, KIT_NIGHT, drawingHost } from "./helpers.mjs";
+import { load, nodes, texts, press, themed, KIT_NIGHT, drawingHost } from "./helpers.mjs";
 import { exportedNames } from "../scripts/mod-source.mjs";
 import * as storybookKit from "../stories/kit/kit.js";
 import * as storybookPieces from "../stories/kit/pieces.js";

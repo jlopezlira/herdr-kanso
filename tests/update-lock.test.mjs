@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { mkdir, readFile, readdir } from "node:fs/promises";
 import { join } from "node:path";
-import { windows, test, fixture, updates, staged, pending, holder, took, version, updated, startUpdater, started, landed, installing, secondCopy, offered, chromeMain, installedNew, twoWindows } from "./update-harness.mjs";
+import { windows, test, updates, staged, pending, holder, took, version, updated, startUpdater, started, landed, installing, secondCopy, offered, chromeMain, installedNew, twoWindows } from "./update-harness.mjs";
 
 // A started window, and a holder elsewhere that took the lock.
 const heldElsewhere = async (t) => {

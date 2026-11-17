@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFile, readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { context } from "./helpers.mjs";
-import { repo, test, fixture, staged, pending, version, told, updated, started, installed, landed, shippedKeys, chromeMain, secondCopy, offered, installing, errorsTold, installedNew, twoWindows } from "./update-harness.mjs";
+import { repo, test, staged, pending, version, told, updated, started, installed, landed, shippedKeys, chromeMain, secondCopy, offered, installing, errorsTold, installedNew, twoWindows } from "./update-harness.mjs";
 
 test("Updating Kanso swaps its mods, merges its keys and keeps your layout aside", async (t) => {
   const { f, cx, drain } = await started(t);

@@ -2,7 +2,7 @@
 import { loadKdb } from "./mod-fixtures.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { databaseTimer, clone, temporary, exec, openedKdb } from "./helpers.mjs";
+import { clone, temporary, exec, openedKdb } from "./helpers.mjs";
 
 async function database(t) {
   const dir = await temporary(t), calls = [];

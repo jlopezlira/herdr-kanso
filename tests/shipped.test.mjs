@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { databaseTimer, load, context, temporary, clone, exec as run, nativeWindow, success, textFiles } from "./helpers.mjs";
 

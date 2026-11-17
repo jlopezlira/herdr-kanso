@@ -1,8 +1,7 @@
 // The theme colour `input` draws edges only: fills, guide lines and text use their own tokens.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readdir, readFile } from "node:fs/promises";
-import { join } from "node:path";
+import { readFile } from "node:fs/promises";
 import { jsFiles } from "./helpers.mjs";
 
 const ROOTS = ["kanso/mods", "markdown-panel/mods", "open-with/mods"];

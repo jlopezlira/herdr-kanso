@@ -2,7 +2,7 @@ import { loadMarkdownDoc, loadFiles, listedFiles } from "./mod-fixtures.mjs";
 import assert from "node:assert/strict";
 import test from "node:test";
 import vm from "node:vm";
-import { mkdtemp, readdir, readFile, rename, rm, stat, unlink, writeFile, mkdir } from "node:fs/promises";
+import { mkdtemp, readdir, readFile, rm, stat, unlink, writeFile, mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { fileApi } from "../kanso/mods/kanso-panel/platform-files.js";

@@ -2,7 +2,7 @@
 import { loadRow, loadPendingState } from "./mod-fixtures.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { load, chain, gpuiHost, numberArguments, calls, one, styled, themed, KIT_NIGHT, drawingHost } from "./helpers.mjs";
+import { load, chain, numberArguments, calls, one, styled, themed, KIT_NIGHT, drawingHost } from "./helpers.mjs";
 import { marks, rowDepths } from "../stories/kit/pieces.js";
 
 const kit = async () => themed({

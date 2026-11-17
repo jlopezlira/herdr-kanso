@@ -2,8 +2,7 @@
 import { loadSpaces, temporaryKdbFile } from "./mod-fixtures.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { join } from "node:path";
-import { databaseTimer, load, clone, temporary, exec, context, failure } from "./helpers.mjs";
+import { load, clone, temporary, exec, context, failure } from "./helpers.mjs";
 import { loadSidebar, mountedState, recorder } from "./sidebar-fixtures.mjs";
 
 const record = { name: "dark", target: "dark.example", via: "", session: "", temporary: false };
