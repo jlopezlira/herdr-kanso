@@ -12,7 +12,7 @@ import { v_flex, h_flex } from "gpui-base";
 import { exec, spaces, panes, home, run, theme, shared, notify, knownAgents } from "herdr";
 import { Share, postText, shareRows } from "./share.js";
 import { WorktreeStore } from "./worktrees-store.js";
-import { G, breathe, tokens } from "./ui.js";
+import { G, OPACITY, breathe, tokens } from "./ui.js";
 import { Armed, button, quietLink, iconButton } from "./ui-button.js";
 import { row } from "./ui-row.js";
 import { section } from "./ui-section.js";
@@ -746,7 +746,7 @@ export class Worktrees {
             .child(div().w(peak ? 3 : 2).flex_none().rounded_t(1)
               .h(d.kb ? Math.max(3, Math.round((d.kb / top) * height)) : 1)
               .bg(peak ? c.accent : d.kb ? c.muted : c.border)
-              .opacity(peak || !d.kb ? 1 : 0.55));
+              .opacity(peak || !d.kb ? 1 : OPACITY.quiet));
         })))
       .child(h_flex().w_full().justify_between()
         .child(div().text_size(10).text_color(c.dim).child(shortDate(days[0].at)))
@@ -766,7 +766,7 @@ export class Worktrees {
     return v_flex().w_full().gap(G.lg)
       .child(section(c, "Where the space is", fmtSize(total)))
       .child(h_flex().w_full().h(10).rounded(5).overflow_hidden().gap(2)
-        .children(parts.filter((p) => p.kb > 0).map((p) => div().h_full().w(pct(p.kb)).flex_shrink_0().bg(color[p.key]).opacity(p.key === "checking" ? 1 : 0.85)
+        .children(parts.filter((p) => p.kb > 0).map((p) => div().h_full().w(pct(p.kb)).flex_shrink_0().bg(color[p.key]).opacity(p.key === "checking" ? 1 : OPACITY.quiet)
           .tooltip(`${p.label}: ${fmtSize(p.kb)}`))))
       .child(v_flex().w_full().gap(6)
         .children(parts.map((p) => h_flex().w_full().items_center().gap(G.sm)

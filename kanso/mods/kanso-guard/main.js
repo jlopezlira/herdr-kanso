@@ -5,7 +5,7 @@ import { systemApi } from "./platform-system.js";
 import { View, div } from "gpui-kit";
 import { v_flex, h_flex, Button } from "gpui-base";
 import { appHome, theme, nextCommand, readTextFile } from "herdr";
-import { G, T, PULSE, breathe, tokens } from "./ui.js";
+import { G, T, OPACITY, PULSE, breathe, tokens } from "./ui.js";
 import { Armed, quietLink, iconButton } from "./ui-button.js";
 import { section } from "./ui-section.js";
 import { ghost } from "./ui-skeleton.js";
@@ -293,7 +293,7 @@ export default class Memory extends View {
       .when(stale, (el) => el.child(h_flex().w_full().gap(G.lg).items_center()
         .child(div().text_size(12).text_color(c.red).child(`Stopped at ${clock(data.at)}`))
         .child(quietLink("guard-on", this.busy.install ? "Turning on…" : "Turn on", (cx) => { if (!this.busy.install) this.turnOn(cx); }, c, { color: c.text }))))
-      .child(v_flex().w_full().gap(narrow ? 36 : 48).opacity(stale ? 0.55 : 1)
+      .child(v_flex().w_full().gap(narrow ? 36 : 48).opacity(stale ? OPACITY.away : 1)
         .child(this.hero(c, data, narrow))
         .child(this.chart(c))
         .child(this.agents(c, data))
@@ -364,12 +364,12 @@ export default class Memory extends View {
       .child(div().w(bar.mark ? 3 : 2).flex_none().rounded_t(1)
         .h(bar.empty ? 1 : Math.max(2, Math.round(bar.ratio * height)))
         .bg(bar.mark ? c.accent : bar.empty ? c.border : bar.low ? c.red : c.muted)
-        .opacity(bar.mark || bar.empty ? 1 : 0.55));
+        .opacity(bar.mark || bar.empty ? 1 : OPACITY.quiet));
   }
 
   spark(c, ratios) {
     return h_flex().h(16).flex_none().items_end().gap(1)
-      .children(ratios.map((r) => div().w(2).flex_none().rounded_t(1).h(r > 0 ? Math.max(2, Math.round(r * 16)) : 1).bg(r > 0 ? c.muted : c.border).opacity(r > 0 ? 0.6 : 1)));
+      .children(ratios.map((r) => div().w(2).flex_none().rounded_t(1).h(r > 0 ? Math.max(2, Math.round(r * 16)) : 1).bg(r > 0 ? c.muted : c.border).opacity(r > 0 ? OPACITY.quiet : 1)));
   }
 
   agents(c, data) {

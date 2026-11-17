@@ -10,6 +10,7 @@ import { div } from "gpui-kit";
 import { h_flex } from "gpui-base";
 import { exec, home, writeTextFile, notify, theme, appHome } from "herdr";
 import { findAsync, retry, tryOrAsync } from "./pure.js";
+import { INK, OPACITY } from "./ui.js";
 import { button } from "./ui-button.js";
 
 export const NETWORKS = {
@@ -31,7 +32,7 @@ export function palette(t = theme() ?? {}) {
 const esc = (s) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 // #rrggbb (or #rrggbbaa) as fill plus opacity, which every renderer understands.
 function paint(hex, alpha) {
-  const h = String(hex ?? "#888888").replace(/^#/, "");
+  const h = String(hex ?? INK.faint).replace(/^#/, "");
   const base = `#${h.slice(0, 6).padEnd(6, "8")}`;
   const a = alpha ?? (h.length === 8 ? parseInt(h.slice(6), 16) / 255 : 1);
   return `fill="${base}"${a < 1 ? ` fill-opacity="${Math.round(a * 1000) / 1000}"` : ""}`;
@@ -141,7 +142,7 @@ const barsBlock = (b, c) => (from) => {
     ...blockTitle(b, c, titleY),
     ...values.map((v, i) => {
       const height = Math.max(4, Math.round((v / highest) * bh));
-      return `<rect x="${PAD + i * (bw + gap)}" y="${top + bh - height}" width="${bw}" height="${height}" rx="3" ${v ? paint(c.accent, i === peak ? 1 : 0.55) : paint(c.subtle)}/>`;
+      return `<rect x="${PAD + i * (bw + gap)}" y="${top + bh - height}" width="${bw}" height="${height}" rx="3" ${v ? paint(c.accent, i === peak ? 1 : OPACITY.quiet) : paint(c.subtle)}/>`;
     }),
     ...ticks.map((t, i) => text(PAD + (last ? (i * INNER) / last : 0), y, 18, c.dim, t, `text-anchor="${i === 0 ? "start" : i === last ? "end" : "middle"}"`)),
   ]);

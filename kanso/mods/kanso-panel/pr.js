@@ -9,7 +9,7 @@ import { div, svg } from "gpui-kit";
 import { v_flex, h_flex, Button, Popover, TextView, ScrollHandle } from "gpui-base";
 import { exec, notify, run, theme, setShared, shared, window, layout, focused, panes, terminals, props } from "herdr";
 import { walkLayout } from "./layout.js";
-import { G, T, breathe, tokens } from "./ui.js";
+import { G, T, OPACITY, TINT, alpha, breathe, tokens } from "./ui.js";
 import { Armed, button, quietLink, iconButton } from "./ui-button.js";
 import { TextField } from "./ui-field.js";
 import { menu } from "./ui-menu.js";
@@ -1028,7 +1028,7 @@ export class PullRequest {
     const asked = (pr.reviewRequests ?? []).map((r) => person(r.login ?? r.name ?? r.slug, r.login ? "requested" : "team · requested", c.yellow));
     const labels = (pr.labels ?? []).map((l) => {
       const color = labelColor(l.color) ?? c.dim;
-      return h_flex().h(22).px(8).gap(5).items_center().rounded(6).bg(color + "26")
+      return h_flex().h(22).px(8).gap(5).items_center().rounded(6).bg(alpha(color, TINT.soft))
         .child(div().size(6).rounded_full().bg(color))
         .child(div().max_w(160).truncate().text_size(11.5).text_color(c.text).child(l.name));
     });
@@ -1079,7 +1079,7 @@ export class PullRequest {
     return v_flex().w_full().mb(G.sm).rounded(6).border_1().border_color(c.border).overflow_hidden().font_family(monoFont()).text_size(11)
       .children(diffRows(lines, { max: MAX_DIFF, width: 400 }).map((r) => r.kind === "@"
         ? div().h(20).px(10).flex_none().truncate().text_color(c.dim).child(r.text)
-        : h_flex().h(20).flex_none().gap(8).when(r.kind === "+", (e) => e.bg(c.green + "18")).when(r.kind === "-", (e) => e.bg(c.red + "18"))
+        : h_flex().h(20).flex_none().gap(8).when(r.kind === "+", (e) => e.bg(alpha(c.green, TINT.faint))).when(r.kind === "-", (e) => e.bg(alpha(c.red, TINT.faint)))
           .child(div().w(30).flex_none().text_right().text_color(c.dim).child(r.number === undefined ? "" : String(r.number)))
           .child(div().flex_1().min_w(0).truncate().text_color(c.text).child(r.text))))
       .when(lines.length > MAX_DIFF, (el) => el.child(div().px(10).py(4).text_color(c.dim).child(`The first ${MAX_DIFF} lines; the rest is on GitHub.`)));
@@ -1112,7 +1112,7 @@ export class PullRequest {
         const all = f.path.split("/"), parts = all.slice(0, -1), name = all.at(-1), on = this.openFile === f.path;
         const mark = { ADDED: "added", DELETED: "deleted", RENAMED: "renamed" }[f.changeType] ?? "";
         return v_flex().w_full().when(i > 0, (el) => el.border_t(1).border_color(c.border))
-          .child(Button.new(`pr-file-${i}`).w_full().py(7).cursor_pointer().hover((s) => s.opacity(0.75))
+          .child(Button.new(`pr-file-${i}`).w_full().py(7).cursor_pointer().hover((s) => s.opacity(OPACITY.hover))
             .on_click((_e, cx) => this.pickFile(f.path, cx))
             .child(detailRow(detailColumn()
                 .child(div().truncate().text_size(13).text_color(c.text).when(on, (e) => e.font_medium()).child(name))
@@ -1243,4 +1243,4 @@ const prSkeleton = ({ block, row }, narrow) => skeletonStack(narrow)
   .child(v_flex().gap(G.sm).children([0, 1, 2].map((i) => h_flex().gap(G.md).child(block(70, 10)).child(block([90, 120, 80][i], 10)))))
   .child(v_flex().w_full().child(h_flex().pb(G.sm).child(block(70, 12))).children([0, 1, 2, 3, 4].map(row)));
 
-const listButton = (button, index, c) => button.when(index > 0, (el) => el.border_t(1).border_color(c.border)).hover((style) => style.opacity(0.75));
+const listButton = (button, index, c) => button.when(index > 0, (el) => el.border_t(1).border_color(c.border)).hover((style) => style.opacity(OPACITY.hover));

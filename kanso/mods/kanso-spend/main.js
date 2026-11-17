@@ -7,7 +7,7 @@ import { fileApi } from "./platform-files.js";
 import { View, div } from "gpui-kit";
 import { v_flex, h_flex, Button, Popover } from "gpui-base";
 import { exec, appHome, home, theme, nextCommand, readTextFile, writeTextFile, layout, machines, shared, setShared } from "herdr";
-import { G, H, PULSE, breathe, tokens } from "./ui.js";
+import { G, H, OPACITY, PULSE, breathe, tokens } from "./ui.js";
 import { quietLink, iconButton } from "./ui-button.js";
 import { field, TextField } from "./ui-field.js";
 import { menu } from "./ui-menu.js";
@@ -532,7 +532,7 @@ export default class TokenSpend extends View {
     ].filter(Boolean);
     const wide = (this.width || 960) >= 860;
     return v_flex().w_full().gap(narrow ? 36 : 48)
-      .opacity(this.running === "prepare" ? 0.55 : 1)
+      .opacity(this.running === "prepare" ? OPACITY.away : 1)
       .when(Boolean(this.error) && !this.running, (el) => el.child(h_flex().w_full().gap(G.md).items_center()
         .child(div().flex_1().min_w(0).text_size(12).text_color(c.red).truncate().tooltip(this.error)
           .child(`Last update failed: ${this.error}`))
@@ -639,7 +639,7 @@ export default class TokenSpend extends View {
           .child(div().w(bar.peak ? 3 : 2).flex_none().rounded_t(1)
             .h(bar.ratio > 0 ? Math.max(3, Math.round(bar.ratio * height)) : 1)
             .bg(bar.peak ? c.accent : bar.ratio > 0 ? c.muted : c.border)
-            .opacity(bar.peak || bar.ratio === 0 ? 1 : 0.55)))))
+            .opacity(bar.peak || bar.ratio === 0 ? 1 : OPACITY.quiet)))))
       .child(h_flex().w_full().justify_between()
         .child(div().text_size(10).text_color(c.dim).child(chart.first))
         .child(div().text_size(10).text_color(c.dim).child(chart.title))
@@ -814,5 +814,5 @@ const spendSkeleton = (c, narrow) => {
     .children([0, 1, 2, 3, 4].map(row)));
 };
 
-const fadedButton = (button) => button.hover((style) => style.opacity(0.75)).focus((style) => style.opacity(0.75));
+const fadedButton = (button) => button.hover((style) => style.opacity(OPACITY.hover)).focus((style) => style.opacity(OPACITY.hover));
 const separatedRow = (row, c, index) => row.when(index > 0, (el) => el.border_t(1).border_color(c.border));

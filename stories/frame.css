@@ -51,8 +51,20 @@
 .kanso-tokens__opacity { background: var(--fg); }
 .kanso-tokens__opacity[data-token="k-op-away"] { opacity: var(--k-op-away); }
 .kanso-tokens__opacity[data-token="k-op-held"] { opacity: var(--k-op-held); }
+.kanso-tokens__opacity[data-token="k-op-hover"] { opacity: var(--k-op-hover); }
+.kanso-tokens__opacity[data-token="k-op-quiet"] { opacity: var(--k-op-quiet); }
 .kanso-tokens__blocked { background: color-mix(in srgb, var(--blocked) var(--k-wash-blocked), transparent); }
-@media (prefers-reduced-motion: reduce) { .kanso-skeleton.kanso-tokens__skeleton { animation: none; } }
+.kanso-tokens__tint { background: color-mix(in srgb, var(--accent) var(--kanso-tint), transparent); }
+.kanso-tokens__tint[data-token="k-tint-faint"] { --kanso-tint: var(--k-tint-faint); }
+.kanso-tokens__tint[data-token="k-tint-soft"] { --kanso-tint: var(--k-tint-soft); }
+.kanso-tokens__tint[data-token="k-tint-strong"] { --kanso-tint: var(--k-tint-strong); }
+.kanso-tokens__tint[data-token="k-tint-line"] { --kanso-tint: var(--k-tint-line); }
+.kanso-tokens__glide { display: block; position: relative; inline-size: var(--k-h-header); block-size: var(--k-sp-2); border-radius: var(--k-r-full); background: var(--wash-7); }
+.kanso-tokens__glide i { position: absolute; inset-block: 0; inline-size: var(--k-sp-3); border-radius: var(--k-r-full); background: var(--fg); animation: kanso-glide var(--k-glide-ms) var(--k-glide-ease) infinite alternate; }
+.kanso-tokens__example[data-token="k-fade-ms"] .kanso-tokens__glide i { animation: kanso-fade var(--k-fade-ms) var(--k-glide-ease) infinite alternate; }
+@keyframes kanso-glide { to { inset-inline-start: calc(100% - var(--k-sp-3)); } }
+@keyframes kanso-fade { to { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .kanso-skeleton.kanso-tokens__skeleton, .kanso-tokens__glide i { animation: none; } }
 .kanso-story__gallery { display: flex; flex-direction: column; gap: var(--k-sp-6); padding: var(--k-sp-4); }
 .kanso-story__variant-label { margin: 0 0 var(--k-sp-2); font-size: var(--k-fs-meta); font-weight: var(--k-fw-medium); color: var(--dim); }
 .sbdocs.sbdocs-content { max-width: none; }

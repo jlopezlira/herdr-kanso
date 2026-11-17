@@ -76,6 +76,7 @@ the branch's rules.
 - A computer that needs a login offers Sign in, which runs the login in a terminal pane; one with no project says so with New project; an unreachable one keeps its projects, dimmed, as last read; Sync that cannot run says so on the row. (#230)
 - The first read of Status, Threads and a computer draws the skeleton at the rows' height, and the view switch names each view's key. (#230)
 - Every Storybook page is approved and marked Ready; a page added later starts In review.
+- Hover and selection washes, coloured tints, dimmed items and slide timings come from the same few shades and speeds everywhere: the sidebar, the tab bar, the panes, the panels, Help and the dōjō. Some hovers and tints are a touch lighter or stronger than before, and the strip's working and blocked dots pulse at one pace.
 
 ### Fixed
 

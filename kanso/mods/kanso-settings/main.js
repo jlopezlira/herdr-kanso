@@ -6,7 +6,7 @@ import { imageApi } from "./platform-images.js";
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import { theme, props, closeOverlay, keys, shared, setShared, readTextFile, writeTextFile, appHome, run } from "herdr";
-import { G, T, tokens, breathe } from "./ui.js";
+import { G, T, TINT, alpha, tokens, breathe } from "./ui.js";
 import { avatar, tile } from "./ui-avatar.js";
 import { button, quietLink, iconButton, Armed, pressAgain } from "./ui-button.js";
 import { field, TextField } from "./ui-field.js";
@@ -302,7 +302,7 @@ export default class Settings extends View {
         .child(h_flex().w_full().gap(G.sm).items_baseline()
           .child(div().text_size(15).font_medium().text_color(c.text).child(e.version))
           .when(Boolean(e.date), (el) => el.child(div().text_size(11.5).text_color(c.dim).child(e.date)))
-          .when(Boolean(tag), (el) => el.child(div().px(6).h(18).rounded_full().bg((rel === 0 ? c.green : c.accent) + "26").flex().items_center()
+          .when(Boolean(tag), (el) => el.child(div().px(6).h(18).rounded_full().bg(alpha(rel === 0 ? c.green : c.accent, TINT.soft)).flex().items_center()
             .text_size(11).font_medium().text_color(rel === 0 ? c.green : c.accent).child(tag))))
         .children(e.sections.map((s) => v_flex().w_full().pt(G.xs).gap(G.xs)
           .child(div().text_size(12).text_color(c.dim).child(s.name))
@@ -330,7 +330,7 @@ export default class Settings extends View {
         .child(
           button("check-kanso-update", "Check for updates", () => run("kanso-tabs.check"), c)))
       .when(entries === null, (el) => el.child(this.newsBones(c)))
-      .when(Boolean(waiting), (el) => el.child(h_flex().w_full().gap(G.md).items_center().p(G.md).rounded(8).bg(c.accent + "1a")
+      .when(Boolean(waiting), (el) => el.child(h_flex().w_full().gap(G.md).items_center().p(G.md).rounded(8).bg(alpha(c.accent, TINT.faint))
         .child(div().flex_1().text_size(13).text_color(c.text).child(`kansō ${waiting} is available. You have ${have}.`))
         .child(button("update-kanso", `Update to ${waiting}`, () => { run("kanso-tabs.update"); closeOverlay(props().overlay); }, c))))
       .when(Boolean(error), (el) => el.child(div().text_size(12.5).text_color(c.red).child(error)))

@@ -13,7 +13,7 @@ import { aliasText, machineTitle, tryOr } from "./pure.js";
 import { parseProcesses, etimeSecs } from "./procs.js";
 import { STOP_LOOP, systemApi } from "./platform-system.js";
 export { STOP_LOOP };
-import { G, tokens, breathe } from "./ui.js";
+import { G, OPACITY, tokens, breathe } from "./ui.js";
 import { Armed, button, quietLink, iconButton } from "./ui-button.js";
 import { row } from "./ui-row.js";
 import { section } from "./ui-section.js";
@@ -430,7 +430,7 @@ export class Ports {
             .when(Boolean(bar.mark), (el) => el.child(div().text_size(10).text_color(c.text).whitespace_nowrap().child(bar.value)))
             .child(v_flex().w(bar.mark ? 3 : 2).flex_none()
               .when(total - looseH > 0, (el) => el.child(div().w_full().h(total - looseH).rounded_t(1)
-                .bg(bar.mark ? c.accent : bar.empty ? c.border : c.muted).opacity(bar.mark || bar.empty ? 1 : 0.55)))
+                .bg(bar.mark ? c.accent : bar.empty ? c.border : c.muted).opacity(bar.mark || bar.empty ? 1 : OPACITY.quiet)))
               .when(looseH > 0, (el) => el.child(div().w_full().h(looseH).when(total === looseH, (d) => d.rounded_t(1)).bg(c.yellow))));
         })))
       .child(h_flex().w_full().justify_between().items_center()
@@ -505,12 +505,12 @@ export class Ports {
       : v_flex().w_full().gap(narrow ? 32 : 44)
         .child(this.hero(c, list, narrow))
         .when(state !== undefined && state !== "ok", (el) => el.child(this.guardOff(c)))
-        .when(Boolean(this.digest), (el) => el.child(v_flex().w_full().opacity(state === "stale" ? 0.55 : 1).child(this.chart(c))))
+        .when(Boolean(this.digest), (el) => el.child(v_flex().w_full().opacity(state === "stale" ? OPACITY.away : 1).child(this.chart(c))))
         .when(list.length > 0, (el) => el.child(v_flex().w_full().gap(2)
           .child(section(c, others.length ? machineTitle("", "", aliasText(shared("kanso.alias"), "")) : "Running", ""))
           .children(list.map((s) => this.row(s, c)))))
         .children(others)
-        .when(Boolean(history), (el) => el.child(v_flex().w_full().opacity(state === "stale" ? 0.55 : 1).child(history)));
+        .when(Boolean(history), (el) => el.child(v_flex().w_full().opacity(state === "stale" ? OPACITY.away : 1).child(history)));
     return sizedPage.call(this, v_flex().id("kanso-ports").size_full().min_h(0).bg(c.canvas).text_color(c.text).overflow_y_scrollbar(), narrow, (column) => column
           .child(header)
           .children(shareRows(this, c, "Only counts and sizes: no ports, folders, projects or commands. The post opens with the image in it."))

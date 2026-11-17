@@ -9,7 +9,7 @@ import { tellsSomething } from "./pure.js";
 import { parseProcesses, etimeMs } from "./procs.js";
 import { oneLine } from "./since-left-model.js";
 import { foldTail } from "./sidebar-rows.js";
-import { H } from "./ui.js";
+import { GLIDE, H } from "./ui.js";
 import { mark, MARK_SIZES } from "./ui-mark.js";
 import { sessionRow } from "./session-row.js";
 import { machineOf } from "./machines.js";
@@ -19,13 +19,12 @@ export { NAME_LABEL };
 export const AGENT_PAD = 34; // under the space name: 8px row padding, a 22px avatar, the gap
 
 // Native GPUI motion, no per-frame script; fold and pill share the pace so they move together.
-export const FOLD = { duration: 220, easing: "ease-out" };
-export const FOLD_MS = FOLD.duration + 40; // rows stay drawn this long after a fold, so the close is seen
+export const FOLD_MS = GLIDE.duration + 40; // rows stay drawn this long after a fold, so the close is seen
 
 // Drawn before the rows so they sit on top; `inset` is the list's side padding.
 export function pill(id, y, h, color, inset = 8) {
   return div().id(id).absolute().left(inset).right(inset).top(y).h(h).rounded(8).bg(color)
-    .transition("top", FOLD).transition("height", FOLD);
+    .transition("top", GLIDE).transition("height", GLIDE);
 }
 
 // The height the session row draws: lists sum these to place the pill.

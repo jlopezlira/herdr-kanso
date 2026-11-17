@@ -23,8 +23,15 @@ const PICK = {
 };
 // Durations in milliseconds.
 const TIMING = { SPIN: "k-spin-ms", GLINT_MS: "k-glint-ms", GLINT_STAGGER: "k-glint-stagger", DOTS_MS: "k-dots-ms" };
+// Transitions: a duration and an easing.
+const MOTION = { EASE: { duration: "k-fade-ms", easing: "k-glide-ease" }, GLIDE: { duration: "k-glide-ms", easing: "k-glide-ease" } };
 // Shares of full strength, from 0 to 1.
-const SHARES = { away: "k-op-away", held: "k-op-held", blockedWash: "k-wash-blocked", blockedRow: "k-wash-blocked-row", glintFaint: "k-op-glint-faint", glintMid: "k-op-glint-mid" };
+const SHARES = {
+  OPACITY: { away: "k-op-away", held: "k-op-held", hover: "k-op-hover", quiet: "k-op-quiet", blockedWash: "k-wash-blocked", blockedRow: "k-wash-blocked-row", glintFaint: "k-op-glint-faint", glintMid: "k-op-glint-mid" },
+  TINT: { faint: "k-tint-faint", soft: "k-tint-soft", strong: "k-tint-strong", line: "k-tint-line" },
+};
+// Colours that are the same in every theme: marks and fallbacks.
+const INK = { faint: "faint", dojoFur: "dojo-fur", dojoCream: "dojo-cream", dojoInk: "dojo-ink" };
 
 const reader = (unit) => (tokens) => {
   const all = Object.entries(tokens).filter(([group]) => group !== "colour").flatMap(([, list]) => list);
@@ -57,16 +64,28 @@ export function washes(tokens) {
   return `export const WASHES = { dark: ${one("dark")}, light: ${one("light")} };`;
 }
 
+const easing = (tokens) => (name) => {
+  const t = tokens.motion.find((x) => x.name === name);
+  if (!t || /^-?[\d.]+\w*$/.test(t.value)) throw new Error(`no easing ${name} in ${TOKENS}`);
+  return JSON.stringify(t.value);
+};
+const ink = (tokens) => (name) => {
+  const values = new Set(Object.values(tokens.colour).map((list) => list.find((x) => x.name === name)?.value));
+  const [value] = values;
+  if (values.size !== 1 || !/^#[0-9a-f]{6}$/i.test(value ?? "")) throw new Error(`${name} is not one #rrggbb in every theme in ${TOKENS}`);
+  return JSON.stringify(value);
+};
+
+const constant = (name, pick, read) => (typeof pick === "string"
+  ? `export const ${name} = ${read(pick)};`
+  : `export const ${name} = { ${Object.entries(pick).map(([key, token]) => `${key}: ${read(token)}`).join(", ")} };`);
+const constants = (picks, read) => Object.entries(picks).map(([name, pick]) => constant(name, pick, read));
+
 export function block(tokens) {
-  const value = px(tokens);
-  const lines = Object.entries(PICK).map(([name, pick]) => typeof pick === "string"
-    ? `export const ${name} = ${value(pick)};`
-    : `export const ${name} = { ${Object.entries(pick).map(([key, token]) => `${key}: ${value(token)}`).join(", ")} };`);
-  const duration = ms(tokens);
-  const timings = Object.entries(TIMING).map(([name, token]) => `export const ${name} = ${duration(token)};`);
-  const of = share(tokens);
-  const shares = `export const OPACITY = { ${Object.entries(SHARES).map(([key, token]) => `${key}: ${of(token)}`).join(", ")} };`;
-  return [START, ...lines, ...timings, shares, washes(tokens), END].join("\n");
+  const duration = ms(tokens), ease = easing(tokens);
+  const motion = Object.entries(MOTION).map(([name, pick]) => `export const ${name} = { duration: ${duration(pick.duration)}, easing: ${ease(pick.easing)} };`);
+  return [START, ...constants(PICK, px(tokens)), ...constants(TIMING, duration), ...motion, ...constants(SHARES, share(tokens)),
+    washes(tokens), constant("INK", INK, ink(tokens)), END].join("\n");
 }
 
 export function withTokens(text, tokens) {

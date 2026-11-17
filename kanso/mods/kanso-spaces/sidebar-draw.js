@@ -27,7 +27,7 @@ export function gitTail(g, tree, name, t, place, act) {
     // A pull is drawn done at once; the dot breathes until git answers.
     if (control.pulling) return base.child(pendingDot(`git-pending-${act.id}`, tokens(t)));
     const go = control.kind === "ahead" ? act.open : act.pull;
-    return stop(base.px(4).py(2).rounded(4).text_size(T.body).text_color(t.muted).hover((s) => s.bg(t.foreground + "1f").text_color(t.foreground)), go).child(control.label);
+    return stop(base.px(4).py(2).rounded(4).text_size(T.body).text_color(t.muted).hover((s) => s.bg(tokens(t).w12).text_color(t.foreground)), go).child(control.label);
   };
   const pending = controls.some((control) => control.pulling);
   return h_flex().flex_1().min_w(0).gap(4).items_center().text_size(T.body).text_color(t.dim)
@@ -48,7 +48,7 @@ export function asleepRow(a, pad, t, row, wake, label) {
   return h_flex().id(`space-agent-${a.address}`).h(ASLEEP_ROW).flex_none()
     .pl(pad).pr(G.md).gap(G.md).items_center().rounded(R.card).cursor_pointer()
     .when(kbd, (el) => el.border_1().border_color(t.accent))
-    .hover((s) => s.bg(t.foreground + "0c"))
+    .hover((s) => s.bg(tokens(t).w4))
     .on_click((_e, cx) => { cx.stop_propagation(); row.menu(cx); })
     .on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); row.menu(cx); })
     .when(Boolean(row.hover), (el) => el.on_hover((h, cx) => row.hover(h, cx)))

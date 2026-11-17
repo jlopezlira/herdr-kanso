@@ -2,7 +2,7 @@
 // Kept byte for byte by `npm run sync:share`: edit kanso-panel/ui-menu.js.
 import { div, svg } from "gpui-kit";
 import { h_flex, v_flex, Button } from "gpui-base";
-import { G, H, R, T, W, ICON_ROW, breathe, glyphOf, mix } from "./ui.js";
+import { G, H, R, T, W, ICON_ROW, TINT, breathe, glyphOf, mix } from "./ui.js";
 import { armedLook, pressAgain, withLook } from "./ui-button.js";
 import { tile } from "./ui-avatar.js";
 import { field } from "./ui-field.js";
@@ -10,7 +10,6 @@ import { dot as drawDot } from "./ui-dot.js";
 import { mark } from "./ui-mark.js";
 import { stateBlock, stateBlockPx } from "./ui-state.js";
 
-const BADGE_WASH = 0.15;
 const RULE = 1;
 const ITEM_PX = H.control;
 const TWO_LINES_PX = H.control + G.md;
@@ -28,7 +27,7 @@ const lead = (c, { picture, letter, tone, dot, icon }, ink) => {
   if (dot) return spacer().child(drawDot(c, dot));
   return icon ? svg(glyphOf(icon)).size(ICON_ROW).flex_none().text_color(ink) : spacer();
 };
-const badge = (text, c) => div().flex().flex_none().items_center().h(H.badge).px(G.sm).rounded_full().bg(mix(c.accent, c.popover, BADGE_WASH))
+const badge = (text, c) => div().flex().flex_none().items_center().h(H.badge).px(G.sm).rounded_full().bg(mix(c.accent, c.popover, TINT.soft))
   .text_size(T.body).font_semibold().text_color(c.accent).child(text);
 const labelOf = (words, second, ink, c) => (second
   ? v_flex().flex_1().min_w(0).child(div().truncate().text_size(T.value).text_color(ink).child(words))
