@@ -18,6 +18,9 @@ import { button, iconButton, pressAgain, Armed } from "./ui-button.js";
 import { TextField } from "./ui-field.js";
 import { menu } from "./ui-menu.js";
 import { tabSkeleton } from "./ui-skeleton.js";
+import { tooltip } from "./kit.js";
+import { boundChord } from "./ui-tooltip.js";
+import { KANSO_SETTINGS } from "./footer-model.js";
 import { tabItem, tabInsertion, tabPill, TAB_NAME_LIMIT } from "./ui-tab.js";
 import { tabMark, barState, foldTabs, pillAt, dropSide, renameWaits } from "./tab-bar-model.js";
 import { Kdb, projectKey } from "./kdb.js";
@@ -491,7 +494,7 @@ export default class Tabs extends View {
     const tools = state === "connected" ? [
       tool("tab-new", "plus", "New", () => openOverlay({ mod: "new-menu", kind: "popup", width: 250, height: 512 }))
         .on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); openArrange(); }),
-      shown("tabs.arrange", true, map) ? tool("tab-arrange", "layers", window()?.platform === "macos" ? "Arrangements  ⌥⌘T" : "Arrangements", () => openArrange()) : null,
+      shown("tabs.arrange", true, map) ? tool("tab-arrange", "layers", tooltip({ label: "Arrangements", chord: boundChord("kanso-strip.arrange") }), () => openArrange()) : null,
     ].filter(Boolean) : [];
     this.reconcile(space, panel, body, now);
     this.syncPanel(space, now, enabled);
@@ -538,8 +541,8 @@ export default class Tabs extends View {
       .child(this.tabArea(c, { space, openTabs, ps, state, tools }))
       .child(h_flex().flex_none().gap(2).items_center().children(shownPanels.map(panelButton))
         // Help and settings, alike and side by side: not panels, never dragged nor turned off.
-        .child(tool("kanso-help", "circle-question-mark", window()?.platform === "macos" ? "kansō help  ⌘⇧/" : "kansō help  Ctrl+Shift+/", () => run("mod.open", { name: "kanso-help" })).ml(4))
-        .child(tool("kanso-settings", "settings", update ? `kansō ${update} is available` : window()?.platform === "macos" ? "kansō settings  ⌃⇧," : "kansō settings  Ctrl+Shift+,",
+        .child(tool("kanso-help", "circle-question-mark", tooltip({ label: "kansō help", chord: boundChord("mod.open:kanso-help") }), () => run("mod.open", { name: "kanso-help" })).ml(4))
+        .child(tool("kanso-settings", "settings", tooltip(update ? { label: `kansō ${update} is available` } : { label: "kansō settings", chord: boundChord(KANSO_SETTINGS) }),
           () => openSettings(update ? "news" : "pieces"))))
       .when(window()?.buttons, el => el.child(tool("minimize", "minus", "Minimize", () => run("window.minimize")))
         .child(tool("maximize", "square", "Maximize", () => run("window.maximize")))

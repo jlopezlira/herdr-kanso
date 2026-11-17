@@ -13,7 +13,7 @@ import { G, T, PR, OPACITY, TINT, alpha, tokens } from "./ui.js";
 import { Armed, button, quietLink, iconButton } from "./ui-button.js";
 import { TextField } from "./ui-field.js";
 import { menu } from "./ui-menu.js";
-import { failureBlock, skeletonOf, diffText, facts, code } from "./kit.js";
+import { failureBlock, skeletonOf, diffText, facts, code, tooltip } from "./kit.js";
 import { dot } from "./ui-dot.js";
 import { section } from "./ui-section.js";
 import { segmented } from "./ui-tab.js";
@@ -769,7 +769,7 @@ export class PullRequest {
       else this.refresh(cx);
       cx.notify();
     }, c, { kind: "tonal", small: true, active: this.listing, spoken })
-      .tooltip(this.listing ? "Back to the one shown" : "Every open pull request, and the closed ones")
+      .tooltip(tooltip({ label: this.listing ? "Back to the one shown" : "Every open pull request, and the closed ones" }))
       .when(!this.listing, (el) => el.child(svg(`${ICON}chevron-right.svg`).size(12).text_color(c.muted)));
   }
 
@@ -826,7 +826,7 @@ export class PullRequest {
       else this.noteSeen(this.pr?.url);
       cx.notify();
     }, c, { kind: "tonal", small: true, active: this.inboxOpen })
-      .tooltip(this.inboxOpen ? "Back to this pane" : "Reviews and your open pull requests");
+      .tooltip(tooltip({ label: this.inboxOpen ? "Back to this pane" : "Reviews and your open pull requests" }));
   }
 
   readNote() { return footOf(this).text; }

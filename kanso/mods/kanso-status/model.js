@@ -58,8 +58,6 @@ export function workingItem(agents) {
   return { count, mark: count > 0 ? "working" : "idle", words: String(count), command: STATUS_COMMAND, tooltip: `${plural(count, "agent", "agents")} working` };
 }
 
-export const paletteTip = (platform) => `Command palette ${platform === "macos" ? "⌘⇧P" : "Ctrl+Shift+P"}`;
-
 export function memoryLow(text, now = Date.now()) {
   const raw = typeof text === "string" ? parseOr(text, null) : text;
   if (!raw || raw.v !== 1 || typeof raw.at !== "number" || now - raw.at > MEMORY_STALE_MS) return null;

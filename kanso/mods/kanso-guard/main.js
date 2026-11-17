@@ -9,7 +9,7 @@ import { G, T, OPACITY, breathe, tokens } from "./ui.js";
 import { mark } from "./ui-mark.js";
 import { Armed, quietLink, iconButton } from "./ui-button.js";
 import { section } from "./ui-section.js";
-import { metric, skeletonOf } from "./kit.js";
+import { metric, skeletonOf, tooltip } from "./kit.js";
 import { factList } from "./ui-facts.js";
 import { segmented } from "./ui-tab.js";
 import { Share } from "./share.js";
@@ -341,7 +341,7 @@ export default class Memory extends View {
 
   chartBar(bar, height, c) {
     const h = height + 18;
-    return v_flex().flex_1().min_w(0).h(h).items_center().justify_end().gap(4).tooltip(bar.tip)
+    return v_flex().flex_1().min_w(0).h(h).items_center().justify_end().gap(4).tooltip(tooltip({ label: bar.tip }))
       .when(Boolean(bar.mark), (el) => el.child(div().whitespace_nowrap().text_size(10).text_color(c.text).child(bar.value)))
       .child(div().w(bar.mark ? 3 : 2).flex_none().rounded_t(1)
         .h(bar.empty ? 1 : Math.max(2, Math.round(bar.ratio * height)))

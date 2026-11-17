@@ -7,7 +7,7 @@ import { focusOn } from "./pure.js";
 import { Lit } from "./lit.js";
 import { G, DOJO_CELL, OPACITY, TINT, CLEAR, alpha, tokens } from "./ui.js";
 import { button, iconButton } from "./ui-button.js";
-import { metric } from "./kit.js";
+import { metric, tooltip } from "./kit.js";
 import { Store } from "./store.js";
 import { Share } from "./share.js";
 import { dojoShare } from "./card.js";
@@ -219,7 +219,7 @@ export default class Dojo extends View {
   // The pet, at its reaction; a click chooses another.
   petView(t, c, now) {
     const asleep = this.mood() === "sleep";
-    return v_flex().id("dojo-pet").gap(6).cursor_pointer().tooltip("Choose your pet")
+    return v_flex().id("dojo-pet").gap(6).cursor_pointer().tooltip(tooltip({ label: "Choose your pet" }))
       .hover((s) => s.opacity(OPACITY.pet))
       .on_click((_e, cx) => { this.toggleChooser(cx); cx.notify(); })
       .child(h_flex().h(128).gap(G.md).items_end()

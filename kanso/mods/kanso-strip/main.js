@@ -22,7 +22,8 @@ import { iconButton, Armed } from "./ui-button.js";
 import { menu } from "./ui-menu.js";
 import { field, TextField } from "./ui-field.js";
 import { pendingDot, PENDING } from "./ui-state.js";
-import { failureLine } from "./kit.js";
+import { failureLine, tooltip } from "./kit.js";
+import { boundChord } from "./ui-tooltip.js";
 import { headerSegment } from "./ui-header.js";
 import { NAME_LIMIT, ENTRIES, DIGEST_PIECES, PIECE_GROUP, shownAt, foldFor, headerWidths, headerTools, hoverTools, menuEntries, placeOf, paneLabel, headerMark, prTitle } from "./header-model.js";
 
@@ -1236,7 +1237,7 @@ export default class Strip extends View {
     if (!shown("strip.minimap", true, pieces(shared))) return div();
     const n = st.n ?? DEFAULT_N;
     const tiny = (id, label, tip, action) => div().id(id).size(16).flex_none().flex().items_center().justify_center().rounded(6)
-      .text_size(11).text_color(t.dim).cursor_pointer().tooltip(tip)
+      .text_size(11).text_color(t.dim).cursor_pointer().tooltip(tooltip(tip))
       .hover((h) => h.bg(alpha(t.foreground, TINT.tab)).text_color(t.foreground))
       .on_click(() => { action(); this.dirty = true; })
       .child(label);
@@ -1246,9 +1247,9 @@ export default class Strip extends View {
       // Past what fits, the extra marks are cut here, never the stepper.
       .child(h_flex().id("strip-pills").flex_shrink(1).min_w(0).max_w(PANE.pills).overflow_hidden().gap(3).items_center().children(pills))
       .child(div().w(8).flex_none())
-      .child(tiny("strip-fewer", "\u2212", "Fewer panes per view", () => this.edit(tab, st, (now) => this.setN(now, n - 1, now.focus))))
-      .child(div().id("strip-n").flex_none().text_size(11).text_color(t.muted).tooltip(`${n} per view · click to even out`).cursor_pointer()
+      .child(tiny("strip-fewer", "\u2212", { label: "Fewer panes per view", chord: boundChord("kanso-strip.fewer") }, () => this.edit(tab, st, (now) => this.setN(now, n - 1, now.focus))))
+      .child(div().id("strip-n").flex_none().text_size(11).text_color(t.muted).tooltip(tooltip({ label: `${n} per view`, chord: boundChord("kanso-strip.fit"), detail: "click to even out" })).cursor_pointer()
         .on_click(() => { this.edit(tab, st, (now) => this.fit(now, now.focus)); this.dirty = true; }).child(String(n)))
-      .child(tiny("strip-more", "+", "More panes per view", () => this.edit(tab, st, (now) => this.setN(now, n + 1, now.focus))));
+      .child(tiny("strip-more", "+", { label: "More panes per view", chord: boundChord("kanso-strip.more") }, () => this.edit(tab, st, (now) => this.setN(now, n + 1, now.focus))));
   }
 }

@@ -23,7 +23,6 @@
     "stack",
     "stepper",
     "thumbnail",
-    "tooltip",
     "windowControls"
   ],
   "renamed": {
@@ -48,6 +47,7 @@
     "statusItem": { "app": ["onClick", "tip"] },
     "tabs": { "storybook": ["icon", "items", "label", "value"], "app": ["collapsed", "spoken"] },
     "toast": { "app": ["onClick"] },
-    "toggle": { "storybook": ["checked"] }
+    "toggle": { "storybook": ["checked"] },
+    "tooltip": { "storybook": ["icon", "open", "side"] }
   }
 }

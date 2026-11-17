@@ -2,28 +2,15 @@
 // Motion is native and keeps going behind other windows: a ring that stops when the window loses the keyboard reads as a stalled agent.
 export { onBattery } from "./ui.js";
 import { KEY } from "./ui.js";
+// A chord as this computer writes it lives with the tooltip that shows it.
+import { MAC, OTHER, LINUX, modifierGlyphs, chordParts, glyphs } from "./ui-tooltip.js";
+export { MAC, OTHER, LINUX, modifierGlyphs, glyphs };
 import { div, svg, image } from "gpui-kit";
-import { terminals, window, shared } from "herdr";
+import { terminals, shared } from "herdr";
 
 export function keycap(t, text, faint = false) {
   return div().flex_none().h(16).px(KEY.x).rounded(4).bg(t.foreground + (faint ? "0c" : "14")).flex().items_center().justify_center()
     .text_size(KEY.text).font_medium().text_color(faint ? t.dim : t.foreground).whitespace_nowrap().child(text);
-}
-
-export const MAC = { ctrl: "⌃", alt: "⌥", shift: "⇧", cmd: "⌘", fn: "fn" };
-export const OTHER = { ctrl: "Ctrl", alt: "Alt", shift: "Shift", cmd: "Win", fn: "Fn" };
-export const LINUX = { ...OTHER, cmd: "Super" };
-export const modifierGlyphs = (platform) => platform === "macos" ? MAC : platform === "linux" ? LINUX : OTHER;
-const NAMES = { space: "Space", left: "←", right: "→", up: "↑", down: "↓", enter: "↩", escape: "Esc", tab: "⇥", backspace: "⌫", delete: "⌦", home: "Home", end: "End", pageup: "PgUp", pagedown: "PgDn" };
-const ORDER = ["ctrl", "alt", "shift", "cmd", "fn"];
-const chordParts = (chord) => {
-  const all = String(chord).split("-");
-  return { mods: ORDER.filter((m) => all.slice(0, -1).includes(m)), key: all.at(-1) || "-" };
-};
-export function glyphs(chord, platform = window()?.platform ?? "macos") {
-  const { mods, key } = chordParts(chord), labels = modifierGlyphs(platform);
-  const name = NAMES[key] ?? (key.length === 1 ? key.toUpperCase() : key);
-  return labels === MAC ? `${mods.map((m) => labels[m]).join("")}${name}` : [...mods.map((m) => labels[m]), name].join("+");
 }
 
 export const familyPattern = (chord) => chord.replace(/[1-9]$/, "N");

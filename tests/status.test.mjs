@@ -2,7 +2,7 @@
 import { loadSpaces, loadWorkspaceStatus, loadQuestionOf } from "./mod-fixtures.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { clone, load, tape } from "./helpers.mjs";
+import { clone, load, tape, repoText } from "./helpers.mjs";
 
 const now = 1_700_000_000_000;
 const row = (address, status, extra = {}) => ({ address, status, pane: `pane-${address}`, name: address, project: "kanso", ...extra });
@@ -125,6 +125,8 @@ function bar() {
     theme: () => new Proxy({ chrome: "chrome" }, { get: (obj, key) => (key in obj ? obj[key] : String(key)) }),
     spaces: () => state.spaces, agents: () => state.agents, terminals: () => state.terminals, machines: () => state.machines,
     props: () => state.props, window: () => ({ platform: state.platform }),
+    // Herdr's own key table for this platform, as keys() gives it: the palette's chord is read from it.
+    keys: () => Object.entries(JSON.parse(repoText(`tests/herdr-keys${state.platform === "macos" ? ".macos" : ""}.json`))).flatMap(([section, bound]) => Object.entries(bound).map(([chord, action]) => ({ section, keys: chord, action }))),
     shared: (key) => state.shared[key], run: (command) => { runs.push(command); },
     appHome: () => "/Users/person/Library/Application Support/herdr",
     readTextFile: async (path) => { state.reads.push(path); return state.file; },
@@ -186,7 +188,7 @@ test("One waiting off screen: the bar names who waits and what they ask, then lo
   assert.equal(ui.tips.get("needs-you"), "Fury · kanso · Which approach?\nRey · site · Ship the site");
   assert.equal(ui.tips.get("status-memory"), "Memory 8% free");
   assert.equal(ui.tips.get("status-working"), "1 agent working");
-  assert.equal(ui.tips.get("palette"), "Command palette ⌘⇧P");
+  assert.equal(ui.tips.get("palette"), "Command palette ⇧⌘P", "the chord comes from the key table, in the order the computer writes it");
   ui.handlers.get("needs-you")();
   ui.handlers.get("status-memory")();
   ui.handlers.get("status-working")();
