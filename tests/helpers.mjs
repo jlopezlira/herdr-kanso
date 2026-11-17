@@ -381,3 +381,9 @@ export const CHROME_NIGHT = {
 };
 // A text field holding `value`.
 export const fieldWith = ({ value }) => ({ on() {}, focus() {}, value: () => value, set_selected_range() {}, release() {} });
+// Every .js file under dir, at any depth; a folder that is not there has none.
+export async function jsFiles(dir) {
+  const entries = await readdir(dir, { withFileTypes: true }).catch(() => []);
+  const nested = await Promise.all(entries.map((e) => (e.isDirectory() ? jsFiles(join(dir, e.name)) : Promise.resolve(e.name.endsWith(".js") ? [join(dir, e.name)] : []))));
+  return nested.flat();
+}

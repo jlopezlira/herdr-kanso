@@ -4,16 +4,12 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
+import { jsFiles } from "./helpers.mjs";
 
 const ROOTS = ["kanso/mods", "markdown-panel/mods"];
 const SCROLL = /\.overflow_(?:x_|y_)?scroll(?:bar)?\(\)/g;
 const START = /\b(?:v_flex|h_flex|div)\(\)/g;
 
-async function sources(dir) {
-  const entries = await readdir(dir, { withFileTypes: true });
-  const nested = await Promise.all(entries.map((e) => (e.isDirectory() ? sources(join(dir, e.name)) : Promise.resolve(e.name.endsWith(".js") ? [join(dir, e.name)] : []))));
-  return nested.flat();
-}
 
 // The builder chain a scroll call belongs to: from the last element made before it.
 export function unnamedScrolls(text) {
@@ -32,7 +28,7 @@ test("a named scroll area passes, an unnamed one is found", () => {
 });
 
 test("every scroll area in Kanso has a name, so it keeps its place", async () => {
-  const files = (await Promise.all(ROOTS.map(sources))).flat();
+  const files = (await Promise.all(ROOTS.map(jsFiles))).flat();
   const found = (await Promise.all(files.map(async (f) => unnamedScrolls(await readFile(f, "utf8")).map((line) => `${f}:${line}`)))).flat();
   assert.deepEqual(found, []);
 });

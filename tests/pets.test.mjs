@@ -12,6 +12,13 @@ const NAMES = ["petOf", "parsePets", "frameOf", "installedPets", "bringAgentPets
 const pets = (host = {}) => load("kanso-dojo/pets.js", NAMES, { div: () => null, image: () => null, exec, appHome: () => "/app", home: () => "/home", ...host });
 const exists = (p) => stat(p).then(() => true, () => false);
 
+// Single-use elements whose images keep their path.
+const drawnImages = async () => {
+  const { singleUse } = await import("./helpers.mjs");
+  const ui = singleUse(), images = [];
+  return { ui, images, image: (path) => { images.push(path); return ui.div(); } };
+};
+
 test("a pet.json with only its id takes the Codex Pets atlas: nine rows, their frames, 192 x 208 cells", async () => {
   const { petOf, ROWS } = await pets();
   const p = clone(petOf("codex", "codex.png", { id: "codex" }));
@@ -99,9 +106,7 @@ test("the agents' pets are brought into Kanso's folder, never Codex's; one missi
 });
 
 test("the dōjō draws its pet at each reaction, and the chooser with every pet", async () => {
-  const { singleUse } = await import("./helpers.mjs");
-  const ui = singleUse(), images = [];
-  const image = (path) => { images.push(path); return ui.div(); };
+  const { ui, images, image } = await drawnImages();
   const { petOf } = await pets();
   const { Dojo } = await load("kanso-dojo/main.js", ["Dojo"], {
     ...ui, image, exec, appHome: () => "/app", home: () => "/home", settings: () => ({}),
@@ -149,9 +154,7 @@ test("the dōjō draws its pet at each reaction, and the chooser with every pet"
 });
 
 test("kansō help's dōjō page shows your pet, and every pet to choose from there", async () => {
-  const { singleUse } = await import("./helpers.mjs");
-  const ui = singleUse(), images = [];
-  const image = (path) => { images.push(path); return ui.div(); };
+  const { ui, images, image } = await drawnImages();
   const { petOf } = await pets();
   const { Help } = await loadHelp({
     ...ui, image, exec, appHome: () => "/app", home: () => "/home", keys: () => ({}), run: () => {}, openOverlay: () => {},
