@@ -17,7 +17,7 @@ const groundOf = (c, { on, track, armed, held, fill }) => {
   if (armed) return armedLook(c).fill;
   if (held) return c.selected;
   if (!on || !fill) return null;
-  return track ? c.raised : c.w7;
+  return track ? c.raised : c.w12;
 };
 
 const inkOf = (c, { on, disabled, armed }) => {
@@ -73,7 +73,7 @@ export function tabItem(id, item, c, { on = false, disabled = false, collapsed =
 export const tabInsertion = (c) => div().w(G.hair).h(H.badge).flex_none().rounded(R.sm).bg(c.accent);
 
 /** The chosen fill on its own, for a group that slides it under the chosen tab. */
-export const tabPill = (c, size = "md") => div().h(TAB[size] ?? TAB.lg).rounded(R.control).bg(c.w7);
+export const tabPill = (c, size = "md") => div().h(TAB[size] ?? TAB.lg).rounded(R.control).bg(c.w12);
 
 /** One tab group: the chosen tab is a quiet fill (raised on a track), never a weight, so nothing moves. Items: { key, label, icon, dot, tip, drop } and tabItem's states;
  * `drop` draws where a dragged tab lands, before it. `size`: sm 24, md 26, lg 30, the track's thickness, or each tab's without one. Collapsed: a column of icons, each label its tip. */

@@ -178,5 +178,7 @@
 .kanso-icon--dot{inline-size:var(--k-ic-dot);block-size:var(--k-ic-dot)}
 .kanso-height--tab-bar{block-size:var(--k-h-tab-bar)}
 .kanso-height--strip{block-size:var(--k-h-strip)}
+.kanso-height--sidebar-footer{block-size:var(--k-h-sidebar-footer)}
+.kanso-height--spaces-min{block-size:var(--k-h-spaces-min)}
 .kanso-height--file-toolbar{block-size:var(--k-h-file-toolbar)}
 .kanso-height--find-list{block-size:var(--k-h-find-list)}
