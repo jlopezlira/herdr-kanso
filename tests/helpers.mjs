@@ -260,21 +260,42 @@ export function singleUse() {
 }
 
 // A UI host that keeps the text drawn and each clickable id's handler.
+// An element that is never awaited and runs `when`'s branch; `handle(key, el)` answers what it records, any other call returns it.
+export const recordingElement = (handle) => {
+  const el = new Proxy({}, { get: (_target, key) => {
+    if (key === "then") return undefined;
+    if (key === "when") return (on, apply) => (on ? apply(el) : el);
+    return handle(key, el) ?? (() => el);
+  } });
+  return el;
+};
+
+// Every call `style(recorder)` makes, as [name, ...args].
+const styleCalls = (style) => {
+  const seen = [];
+  const recorder = new Proxy({}, { get: (_t, name) => (...args) => { seen.push([name, ...args]); return recorder; } });
+  style(recorder);
+  return seen;
+};
+
+// A UI host that keeps the text drawn, each clickable id's handler, and each id's tooltip, opacity and hover style.
 export function tape() {
-  const texts = [], handlers = new Map();
+  const texts = [], colors = [], ids = [], handlers = new Map(), tips = new Map(), opacities = new Map(), hovers = new Map();
   const node = (initial = null) => {
     let id = initial;
-    const el = new Proxy({}, { get(_target, key) {
-      if (key === "then") return undefined;
-      if (key === "id") return (value) => { id = value; return el; };
-      if (key === "child") return (value) => { if (typeof value === "string") texts.push(value); return el; };
-      if (key === "when") return (on, apply) => on ? apply(el) : el;
-      if (key === "on_click") return (fn) => { handlers.set(id, fn); return el; };
-      return () => el;
-    } });
-    return el;
+    const by = (map) => (value) => { map.set(id, value); };
+    const record = {
+      id: (value) => { id = value; ids.push(value); },
+      child: (value) => { if (typeof value === "string") texts.push(value); },
+      on_click: by(handlers),
+      tooltip: by(tips),
+      opacity: by(opacities),
+      hover: (style) => { hovers.set(id, styleCalls(style)); },
+      text_color: (value) => { colors.push(value); },
+    };
+    return recordingElement((key, el) => (Object.hasOwn(record, key) ? (value) => { record[key](value); return el; } : undefined));
   };
-  return { texts, handlers, host: { div: node, svg: node, h_flex: node, v_flex: node, Button: { new: node } } };
+  return { texts, colors, ids, handlers, tips, opacities, hovers, host: { div: node, svg: node, h_flex: node, v_flex: node, Button: { new: node } } };
 }
 
 // A gpui element that records its calls, and a host that builds them.

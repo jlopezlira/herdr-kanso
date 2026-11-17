@@ -2,7 +2,7 @@
 import { loadSpaces, loadWorkspaceStatus, loadQuestionOf } from "./mod-fixtures.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { clone, load } from "./helpers.mjs";
+import { clone, load, tape } from "./helpers.mjs";
 
 const now = 1_700_000_000_000;
 const row = (address, status, extra = {}) => ({ address, status, pane: `pane-${address}`, name: address, project: "kanso", ...extra });
@@ -116,32 +116,12 @@ test("Low memory uses the guard's words, and a stale or fine reading says nothin
 });
 
 function bar() {
-  const texts = [], colors = [], handlers = new Map(), tips = new Map(), runs = [], marks = [], ids = [], opacities = new Map(), hovers = new Map();
-  const node = () => {
-    let id = null;
-    const el = new Proxy({}, { get(_target, key) {
-      if (key === "then") return undefined;
-      if (key === "id") return (value) => { id = value; ids.push(value); return el; };
-      if (key === "opacity") return (value) => { opacities.set(id, value); return el; };
-      if (key === "hover") return (style) => {
-        const seen = [];
-        const recorder = new Proxy({}, { get: (_t, name) => (...args) => { seen.push([name, ...args]); return recorder; } });
-        style(recorder);
-        hovers.set(id, seen);
-        return el;
-      };
-      if (key === "tooltip") return (value) => { tips.set(id, value); return el; };
-      if (key === "text_color") return (value) => { colors.push(value); return el; };
-      if (key === "child") return (value) => { if (typeof value === "string") texts.push(value); return el; };
-      if (key === "when") return (on, apply) => on ? apply(el) : el;
-      if (key === "on_click") return (fn) => { handlers.set(id, fn); return el; };
-      return () => el;
-    } });
-    return el;
-  };
+  const drawn = tape();
+  const runs = [], marks = [];
+  const node = drawn.host.div;
   const state = { spaces: [], agents: [], terminals: [], machines: [], props: { side: "right" }, platform: "macos", shared: {}, file: null, reads: [] };
   const host = {
-    div: node, svg: node, h_flex: node, v_flex: node, Button: { new: (id) => node().id(id) },
+    ...drawn.host, Button: { new: (id) => node().id(id) },
     theme: () => new Proxy({ chrome: "chrome" }, { get: (obj, key) => (key in obj ? obj[key] : String(key)) }),
     spaces: () => state.spaces, agents: () => state.agents, terminals: () => state.terminals, machines: () => state.machines,
     props: () => state.props, window: () => ({ platform: state.platform }),
@@ -150,14 +130,30 @@ function bar() {
     readTextFile: async (path) => { state.reads.push(path); return state.file; },
     mark: (c, { status, size = "md" }) => { marks.push([status, size, c.blocked]); return node().child(status === "blocked" ? "!" : ""); },
   };
+  const { texts, colors, handlers, tips, ids, opacities, hovers } = drawn;
   return { texts, colors, handlers, tips, runs, marks, ids, opacities, hovers, state, host };
 }
+
+// The status bar's view, on a host whose state starts with `state`.
+const statusBar = async (state = {}) => {
+  const ui = bar();
+  Object.assign(ui.state, state);
+  const { WorkspaceStatus } = await loadWorkspaceStatus(ui.host);
+  return { ui, WorkspaceStatus };
+};
+const DEVBOX = { active: true, machine: "devbox", branch: "feat/status-attention" };
+// A view drawn while 8% of memory is free.
+const lowMemory = (WorkspaceStatus) => {
+  const view = new WorkspaceStatus();
+  view.memoryText = reading(8, Date.now());
+  view.render();
+  return view;
+};
 
 const at = (texts, word) => texts.indexOf(word);
 
 test("One waiting off screen: the bar names who waits and what they ask, then low memory, the working count and the palette", async () => {
-  const ui = bar();
-  const { WorkspaceStatus } = await loadWorkspaceStatus(ui.host);
+  const { ui, WorkspaceStatus } = await statusBar();
   ui.state.agents = [
     { address: "a", status: "blocked", title: "ignored title", program: { key: "claude", name: "Claude" } },
     { address: "c", status: "working", title: "Busy" },
@@ -171,9 +167,7 @@ test("One waiting off screen: the bar names who waits and what they ask, then lo
     { address: "b", pane: "p2", status: "blocked", name: "Rey", project: "site" },
     { address: "d", pane: "p3", status: "done", name: "Done", project: "old" },
   ] };
-  const view = new WorkspaceStatus();
-  view.memoryText = reading(8, Date.now());
-  view.render();
+  const view = lowMemory(WorkspaceStatus);
   assert.ok(at(ui.texts, "Fury") < at(ui.texts, "Which approach?"));
   assert.ok(at(ui.texts, "Which approach?") < at(ui.texts, "+1"));
   assert.ok(at(ui.texts, "+1") < at(ui.texts, "Memory 8% free"));
@@ -202,19 +196,15 @@ test("One waiting off screen: the bar names who waits and what they ask, then lo
 });
 
 test("Several waiting: the bar names the oldest and how many more wait", async () => {
-  const ui = bar();
-  const { WorkspaceStatus } = await loadWorkspaceStatus(ui.host);
+  const { ui, WorkspaceStatus } = await statusBar();
   ui.state.shared["kanso.needs-you"] = { rows: ["a", "b", "c"].map((address) => row(address, "blocked")) };
   new WorkspaceStatus().render();
-  assert.ok(ui.texts.includes("a"));
-  assert.ok(ui.texts.includes("+2"));
-  assert.equal(ui.texts.includes("b"), false);
+  assert.deepEqual(["a", "+2", "b"].map((word) => ui.texts.includes(word)), [true, true, false], "the oldest and how many more, not the next");
   assert.equal(ui.tips.get("needs-you"), "a · kanso\nb · kanso\nc · kanso");
 });
 
 test("A title stands in for an empty question, and a quiet bar keeps only the palette", async () => {
-  const ui = bar();
-  const { WorkspaceStatus } = await loadWorkspaceStatus(ui.host);
+  const { ui, WorkspaceStatus } = await statusBar();
   ui.state.agents = [{ address: "a", status: "blocked", title: "Add the countdown?", program: { key: "claude", name: "Claude" } }];
   ui.state.terminals = [{ address: "a", report: { msg: "" } }];
   ui.state.shared["kanso.needs-you"] = { rows: [{ address: "a", pane: "p", status: "blocked", name: "Fury", project: "kanso" }] };
@@ -234,8 +224,7 @@ test("A title stands in for an empty question, and a quiet bar keeps only the pa
 });
 
 test("Sessions at work: the bar shows the working mark and how many, and shown always it counts zero", async () => {
-  const ui = bar();
-  const { WorkspaceStatus } = await loadWorkspaceStatus(ui.host);
+  const { ui, WorkspaceStatus } = await statusBar();
   ui.state.agents = [{ address: "a", status: "working" }, { address: "b", status: "working" }, { address: "c", status: "idle" }];
   const view = new WorkspaceStatus();
   view.render();
@@ -255,11 +244,8 @@ test("Sessions at work: the bar shows the working mark and how many, and shown a
 });
 
 test("Low memory stand-in: the bar says how much is free while it is low, and nothing once it recovers", async () => {
-  const ui = bar();
-  const { WorkspaceStatus } = await loadWorkspaceStatus(ui.host);
-  const view = new WorkspaceStatus();
-  view.memoryText = reading(8, Date.now());
-  view.render();
+  const { ui, WorkspaceStatus } = await statusBar();
+  const view = lowMemory(WorkspaceStatus);
   assert.ok(ui.texts.includes("Memory 8% free"));
   assert.ok(ui.colors.includes("blocked"));
   ui.texts.length = 0;
@@ -271,9 +257,7 @@ test("Low memory stand-in: the bar says how much is free while it is low, and no
 });
 
 test("Visible home stand-in: with the sidebar open the computer is not repeated; folded, the bar names it without a branch", async () => {
-  const ui = bar();
-  const { WorkspaceStatus } = await loadWorkspaceStatus(ui.host);
-  ui.state.props = { side: "left" };
+  const { ui, WorkspaceStatus } = await statusBar({ props: { side: "left" } });
   ui.state.spaces = [{ active: true, branch: "develop" }];
   const view = new WorkspaceStatus();
   view.render();
@@ -286,7 +270,7 @@ test("Visible home stand-in: with the sidebar open the computer is not repeated;
   assert.equal(ui.handlers.has("needs-you"), false);
   assert.equal(ui.handlers.has("palette"), false);
   ui.texts.length = 0;
-  ui.state.spaces = [{ active: true, machine: "devbox", branch: "feat/status-attention" }];
+  ui.state.spaces = [DEVBOX];
   ui.state.machines = [{ name: "devbox", layout: "loading" }];
   view.render();
   assert.ok(ui.texts.includes("devbox"));
@@ -294,10 +278,8 @@ test("Visible home stand-in: with the sidebar open the computer is not repeated;
 });
 
 test("A computer that is connecting is drawn at the pending opacity with its breathing dot", async () => {
-  const ui = bar();
+  const { ui, WorkspaceStatus } = await statusBar({ props: { side: "left" } });
   const { PENDING } = await load("kanso-status/ui-state.js", ["PENDING"], ui.host);
-  const { WorkspaceStatus } = await loadWorkspaceStatus(ui.host);
-  ui.state.props = { side: "left" };
   ui.state.shared["sidebar.collapsed"] = true;
   ui.state.spaces = [{ active: true, machine: "devbox" }];
   ui.state.machines = [{ name: "devbox", layout: "loading" }];
@@ -315,12 +297,8 @@ test("A computer that is connecting is drawn at the pending opacity with its bre
 });
 
 test("Low memory keeps its blocked colour under the pointer; an item without a state turns foreground", async () => {
-  const ui = bar();
-  const { WorkspaceStatus } = await loadWorkspaceStatus(ui.host);
-  ui.state.agents = [{ address: "a", status: "working" }];
-  const view = new WorkspaceStatus();
-  view.memoryText = reading(8, Date.now());
-  view.render();
+  const { ui, WorkspaceStatus } = await statusBar({ agents: [{ address: "a", status: "working" }] });
+  const view = lowMemory(WorkspaceStatus);
   const memory = ui.hovers.get("status-memory");
   assert.ok(memory.some(([name]) => name === "bg"));
   assert.equal(memory.some(([name]) => name === "text_color"), false);
@@ -328,10 +306,8 @@ test("Low memory keeps its blocked colour under the pointer; an item without a s
 });
 
 test("An unreachable computer is a failure line whose Refresh is the only computer button, even with the sidebar open", async () => {
-  const ui = bar();
-  const { WorkspaceStatus } = await loadWorkspaceStatus(ui.host);
-  ui.state.props = { side: "left" };
-  ui.state.spaces = [{ active: true, machine: "devbox", branch: "feat/status-attention" }];
+  const { ui, WorkspaceStatus } = await statusBar({ props: { side: "left" } });
+  ui.state.spaces = [DEVBOX];
   ui.state.machines = [{ name: "devbox", layout: "unavailable" }];
   const view = new WorkspaceStatus();
   view.render();
@@ -346,8 +322,7 @@ test("An unreachable computer is a failure line whose Refresh is the only comput
 });
 
 test("Hidden computer, working count and palette stay hidden, and Windows names its palette chord", async () => {
-  const ui = bar();
-  const { WorkspaceStatus } = await loadWorkspaceStatus(ui.host);
+  const { ui, WorkspaceStatus } = await statusBar();
   ui.state.platform = "windows";
   ui.state.agents = [{ address: "a", status: "working" }];
   const view = new WorkspaceStatus();
