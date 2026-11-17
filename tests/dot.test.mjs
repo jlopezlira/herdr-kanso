@@ -2,6 +2,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
+import { basename } from "node:path";
 import { load, gpuiHost, calls, KIT_NIGHT } from "./helpers.mjs";
 import { sharedFile } from "../scripts/sync-share.mjs";
 
@@ -24,7 +25,7 @@ test("A dot takes a kit tone or a colour, at the medium size unless it is a smal
 });
 
 test("No mod draws a dot by hand: every one outside the kit is the kit's dot or mark", () => {
-  const found = readdirSync(MODS, { recursive: true }).filter((path) => path.endsWith(".js") && !sharedFile(path.split("/").at(-1)))
+  const found = readdirSync(MODS, { recursive: true }).filter((path) => path.endsWith(".js") && !sharedFile(basename(path)))
     .flatMap((path) => {
       const source = readFileSync(new URL(path, MODS), "utf8");
       return [...source.matchAll(HAND_DOT)].map((m) => `${path}:${source.slice(0, m.index).split("\n").length}`);
