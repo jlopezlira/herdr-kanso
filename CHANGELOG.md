@@ -78,6 +78,7 @@ the branch's rules.
 - The first read of Status, Threads and a computer draws the skeleton at the rows' height, and the view switch names each view's key. (#230)
 - Every Storybook page is approved and marked Ready; a page added later starts In review.
 - The sidebar, the panes, the panel buttons in the tab bar, the pull request view, Shipped's heatmap, Help's keyboard, the dōjō board and the panel pages take their sizes from kansō's design tokens, and nothing on screen moves. (#315)
+- Hover and selection washes, coloured tints, dimmed items and slide timings in the sidebar, the tab bar, the panes, the panels, Help and the dōjō each have one name, and CI rejects a new unnamed one. Nothing on screen changes.
 
 ### Fixed
 

@@ -2,10 +2,12 @@
 import { div } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 import { hachiPixels } from "./mascot-pixels.js";
+import { INK } from "./ui.js";
 
 // Each mark's color, from the theme: the same on screen and on a share card.
 export function hachiInk(t) {
-  return { O: t.chrome ?? "#161615", F: "#e8963a", C: "#f6ece0", D: "#f6ece0", N: t.chrome ?? "#161615", K: t.chrome ?? "#161615", T: t.accent, B: t.ansi4 ?? "#8e9fb2" };
+  const outline = t.chrome ?? INK.dojoInk;
+  return { O: outline, F: INK.dojoFur, C: INK.dojoCream, D: INK.dojoCream, N: outline, K: outline, T: t.accent, B: t.ansi4 };
 }
 
 export function hachi(t, { mood = "calm", px = 6 } = {}) {

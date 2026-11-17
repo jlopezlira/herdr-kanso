@@ -68,11 +68,46 @@
   --k-dots-ms: 380ms;
   --k-skel-ms: 1800ms;
   --k-spin-ms: 900ms;
+  --k-fade-ms: 180ms;
+  --k-glide-ms: 220ms;
+  --k-glide-ease: ease-out;
+  --k-beat-working-ms: 1800ms;
+  --k-beat-blocked-ms: 1600ms;
   --k-op-away: .55;
   --k-op-held: .4;
   --k-op-glint-faint: .35;
   --k-op-glint-mid: .6;
   --k-wash-blocked-row: 8%;
+  --k-op-hover: .75;
+  --k-op-quiet: .55;
+  --k-op-idle: .7;
+  --k-op-thumb: .7;
+  --k-op-trace: .6;
+  --k-op-pending: .8;
+  --k-op-part: .85;
+  --k-op-pet: .85;
+  --k-op-beat-working: .35;
+  --k-op-beat-blocked: .45;
+  --k-tint-board: 2%;
+  --k-tint-chip: 2.4%;
+  --k-tint-cell: 3%;
+  --k-tint-hover: 4%;
+  --k-tint-row: 4.7%;
+  --k-tint-card: 6.3%;
+  --k-tint-tab: 7%;
+  --k-tint-pill: 8%;
+  --k-tint-diff: 9.4%;
+  --k-tint-faint: 10%;
+  --k-tint-key: 11%;
+  --k-tint-control: 12%;
+  --k-tint-goal: 13.3%;
+  --k-tint-bound: 14%;
+  --k-tint-soft: 15%;
+  --k-tint-strong: 25%;
+  --k-tint-frame: 31.4%;
+  --k-tint-bound-line: 44%;
+  --k-tint-ring: 50%;
+  --k-tint-line: 55%;
   --k-wash-blocked: 40%;
   --k-w-pane-name: 256px;
   --k-w-pane-segment: 224px;
@@ -281,6 +316,7 @@
   --dojo-cream: #f6ece0;
   --dojo-ink: #161615;
   --faint: #8a867d;
+  --fallback: #888888;
 }
 
 :root[data-theme="dark"] { color-scheme: dark; }

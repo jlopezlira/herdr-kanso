@@ -12,7 +12,7 @@ import { bring, machineOf, copyFailure, drawablePath, remoteDue, ArmPoll, pollSt
 import { div, image } from "gpui-kit";
 import { v_flex, h_flex, Button } from "gpui-base";
 import { hc, focused, panes, terminals, theme, appHome, home, shared, setShared, watchFolder, openOverlay, window, layout } from "herdr";
-import { G, H, T, tokens, breathe } from "./ui.js";
+import { G, H, T, OPACITY, tokens, breathe } from "./ui.js";
 import { button, quietLink, iconButton } from "./ui-button.js";
 import { row } from "./ui-row.js";
 import { skeleton } from "./ui-skeleton.js";
@@ -507,7 +507,7 @@ export class Look {
     const color = item.color || c.accent;
     return Button.new(`look-dot-${keyOf(item.path)}`).size(H.compact).flex_none().items_center().justify_center().cursor_pointer()
       .accessibility_label(item.name)
-      .when(!on, (el) => el.hover((s) => s.opacity(0.7)))
+      .when(!on, (el) => el.hover((s) => s.opacity(OPACITY.thumb)))
       .on_click((_e, cx) => this.select(item, cx, true))
       .child(div().size(G.sm).rounded_full().border_1().border_color(on ? color : c.muted).when(on, (el) => el.bg(color)));
   }

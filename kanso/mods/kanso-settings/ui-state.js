@@ -2,7 +2,7 @@
 // Kept byte for byte by `npm run sync:share`: edit kanso-panel/ui-state.js.
 import { div, svg } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
-import { G, H, R, T, ICON_ROW, breathe, glyphOf } from "./ui.js";
+import { G, H, R, T, ICON_ROW, OPACITY, breathe, glyphOf } from "./ui.js";
 import { button } from "./ui-button.js";
 
 /** A reversible action, done: what happened, and Undo at the end of its line. */
@@ -44,5 +44,5 @@ export const stateLine = (id, mark, what, c, fix = null) => h_flex().id(id).min_
   .when(Boolean(fix), (el) => el.child(button(`${id}-fix`, fix?.label, fix?.onClick, c, { kind: "tonal", small: true })));
 
 /** Pending: the new state drawn at once at this opacity, with `pendingDot` breathing beside it until the write is confirmed. */
-export const PENDING = 0.8;
+export const PENDING = OPACITY.pending;
 export const pendingDot = (id, c) => breathe(div().id(id).size(G.xs).flex_none().rounded_full().bg(c.muted));

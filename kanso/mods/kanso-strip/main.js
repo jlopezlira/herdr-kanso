@@ -16,7 +16,7 @@ import { openWithPopup } from "./popup.js";
 import { FIND } from "./find-key.js";
 import { rollupState, headerHold, prFacts, prLine } from "./ghchecks.js";
 import { pieces, shown, runs, setPiece, STORE } from "./pieces.js";
-import { G, R, T, W, ICON, OPACITY, CLEAR, DRAG_START, CHROME_SQUARE, PANE, glyphOf, mix, tokens, washes } from "./ui.js";
+import { G, R, T, W, ICON, OPACITY, TINT, BEAT, CLEAR, DRAG_START, CHROME_SQUARE, PANE, alpha, breathe, glyphOf, mix, tokens, washes } from "./ui.js";
 import { mark } from "./ui-mark.js";
 import { iconButton, Armed } from "./ui-button.js";
 import { menu } from "./ui-menu.js";
@@ -266,9 +266,8 @@ export default class Strip extends View {
     const drag = shared("strip.drag");
     const takes = Boolean(drag) && drag.pane !== p.edge; // a held pane can land beyond this edge
     const calm = onBattery(); // on battery the dots hold still (marks.js)
-    const dot = (st, size) => st === "working" ? div().size(size).rounded_full().bg(t.working).when(!calm, (d) => d.loop("opacity", { from: 0.35, to: 1, period: 1800 }))
-      : st === "blocked" ? div().size(size).rounded_full().bg(t.blocked).when(!calm, (d) => d.loop("opacity", { from: 0.45, to: 1, period: 1600 }))
-      : st === "done" ? div().size(size).rounded_full().bg(t.done) : null;
+    const dot = (st, size) => (["working", "blocked", "done"].includes(st)
+      ? div().size(size).rounded_full().bg(t[st]).when(!calm && st !== "done", (d) => breathe(d, BEAT[st])) : null);
     const MAX_TILES = 8;
     const tile = (id) => {
       const info = byId.get(id), d = dot(info?.status, 7);
@@ -292,8 +291,8 @@ export default class Strip extends View {
     };
     const card = menu("edge-menu", { title: `${ids.length === 1 ? "One pane" : `${ids.length} panes`} beyond the ${left ? "left" : "right"} edge`, items: ids.map(item) }, tokens(t));
     return v_flex().id("edge").size_full().items_center().justify_center().bg(t.chrome).cursor_pointer()
-      .hover((h) => h.bg(takes ? t.accent + "40" : t.hover))
-      .when(takes, (el) => el.bg(t.accent + "24").cursor_grabbing())
+      .hover((h) => h.bg(takes ? alpha(t.accent, TINT.strong) : t.hover))
+      .when(takes, (el) => el.bg(alpha(t.accent, TINT.bound)).cursor_grabbing())
       .on_mouse_up("left", () => dropMove(p.edge, left ? "after" : "before", false))
       .on_click(() => show(p.edge))
       .on_scroll_wheel((e) => { const d = wheelDelta(e); if (d) postScroll(d / WHEEL_PX); })
@@ -324,7 +323,7 @@ export default class Strip extends View {
       .when(takes, (el) => el.cursor_grabbing()
         .on_mouse_move(() => { const d = shared("strip.drop"); if (d?.to !== what || d.side !== "below") setShared("strip.drop", { to: what, side: "below" }); })
         .on_mouse_up("left", () => dropMove(what, "below")))
-      .when(drop?.to === what && drop.side === "below", (el) => el.child(div().size_full().rounded_b(R.card).bg(t.accent + "40")));
+      .when(drop?.to === what && drop.side === "below", (el) => el.child(div().size_full().rounded_b(R.card).bg(alpha(t.accent, TINT.strong))));
   }
 
   // The drop card stands in for a pane's terminal, which lives on: the whole pane takes the drop, not just its header.
@@ -343,9 +342,9 @@ export default class Strip extends View {
         .text_color(strong ? t.foreground : t.muted).child(nameOf(info, given)));
     const across = side === "before" || side === "after";
     const first = side === "before" || side === "above";
-    const ghost = () => label(held, true).bg(t.accent + "40");
+    const ghost = () => label(held, true).bg(alpha(t.accent, TINT.strong));
     return div().id(`drop-${id}`).size_full().relative().cursor_grabbing()
-      .when(mine, (el) => el.opacity(0.4))
+      .when(mine, (el) => el.opacity(OPACITY.held))
       .when(!mine, (el) => el
         .on_mouse_move((e) => {
           const s = zoneOf(e), d = shared("strip.drop");
@@ -557,7 +556,7 @@ export default class Strip extends View {
 
   // Where a held pane would land on this header: its left or right half, or both for "above".
   dropZones(t, side) {
-    const zone = (lit) => div().flex_1().h_full().when(lit, (d) => d.bg(t.accent + "40"));
+    const zone = (lit) => div().flex_1().h_full().when(lit, (d) => d.bg(alpha(t.accent, TINT.strong)));
     return h_flex().absolute().inset_0().rounded_t(R.card).overflow_hidden()
       .child(zone(side === "before" || side === "above"))
       .child(zone(side === "after" || side === "above"));
@@ -1098,7 +1097,7 @@ export default class Strip extends View {
     // Every pane keeps a 1px border, clear except the selected one's accent, so moving the selection never shifts a terminal.
     const t = theme();
     const sel = ps.length > 1 && !sorting ? st.focus : null;
-    const edgeOf = (id) => ({ width: 1, color: id === sel ? t.accent + "8c" : t.background + "00" });
+    const edgeOf = (id) => ({ width: 1, color: id === sel ? alpha(t.accent, TINT.line) : CLEAR });
     const live = (id, size, min) => ({ id: `strip-${id}`, type: "column", size, min, background: "background", radius: R.card,
       border: edgeOf(id), children: [header(id), body(id), ruler(id)] });
     const share = (c, id) => (c.hs?.[id] ?? 1) / c.panes.reduce((s, k) => s + (c.hs?.[k] ?? 1), 0);
@@ -1238,7 +1237,7 @@ export default class Strip extends View {
     const n = st.n ?? DEFAULT_N;
     const tiny = (id, label, tip, action) => div().id(id).size(16).flex_none().flex().items_center().justify_center().rounded(6)
       .text_size(11).text_color(t.dim).cursor_pointer().tooltip(tip)
-      .hover((h) => h.bg(t.foreground + "12").text_color(t.foreground))
+      .hover((h) => h.bg(alpha(t.foreground, TINT.tab)).text_color(t.foreground))
       .on_click(() => { action(); this.dirty = true; })
       .child(label);
     return h_flex().id("strip-map").size_full().gap(3).justify_center().items_center()
