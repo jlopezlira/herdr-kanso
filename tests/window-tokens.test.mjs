@@ -3,11 +3,10 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { load, gpuiHost, chain, calls, arg, find, all, repoText, KIT_NIGHT } from "./helpers.mjs";
 import { loadTokens, THEME_FILES } from "../scripts/tokens.mjs";
-import { LAYOUT, LAYOUT_SIZES, layoutWithTokens, px } from "../scripts/build-ui-tokens.mjs";
+import { LAYOUT, LAYOUT_SIZES, layoutWithTokens, layoutSizes, nodesOf, px } from "../scripts/build-ui-tokens.mjs";
 
 const tokens = loadTokens();
 const layoutText = repoText(LAYOUT);
-const nodesOf = (node) => [node, ...(node.children ?? []).flatMap(nodesOf)];
 const at = (node, path) => path.split(".").reduce((value, key) => value?.[key], node);
 
 // Every number in a node but its children, as "path": value; a weight shares the room and is no size.
@@ -15,11 +14,7 @@ const numbersIn = (value, path = "") => (typeof value === "number" ? [[path, val
   : value && typeof value === "object" ? Object.entries(value).filter(([key]) => key !== "children").flatMap(([key, v]) => numbersIn(v, path ? `${path}.${key}` : key)) : []);
 
 test("Each size in kanso.json is its layout token", () => {
-  const tree = JSON.parse(layoutText), size = px(tokens);
-  const byId = new Map(nodesOf(tree).map((node) => [node.id, node]));
-  for (const [id, sizes] of Object.entries(LAYOUT_SIZES)) {
-    for (const [path, token] of Object.entries(sizes)) assert.equal(at(byId.get(id), path), size(token), `${id} ${path} is ${token}`);
-  }
+  for (const { node, path, token, value } of layoutSizes(JSON.parse(layoutText), tokens)) assert.equal(at(node, path), value, `${node.id} ${path} is ${token}`);
   assert.equal(layoutWithTokens(layoutText, tokens), layoutText, "npm run build:ui-tokens leaves kanso.json as it is");
 });
 

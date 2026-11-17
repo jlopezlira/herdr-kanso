@@ -134,7 +134,8 @@ export const LAYOUT_SIZES = {
   "strip-map": { "size.px": "k-status-slot" },
 };
 
-const nodesOf = (node) => [node, ...(node.children ?? []).flatMap(nodesOf)];
+/** Every node of the layout tree, the root first. */
+export const nodesOf = (node) => [node, ...(node.children ?? []).flatMap(nodesOf)];
 const setAt = (node, path, value) => {
   const keys = path.split("."), last = keys.pop();
   const parent = keys.reduce((at, key) => at?.[key], node);
@@ -142,15 +143,20 @@ const setAt = (node, path, value) => {
   parent[last] = value;
 };
 
-/** The layout file with every size in LAYOUT_SIZES written from its token. */
-export function layoutWithTokens(text, tokens) {
-  const tree = JSON.parse(text), size = px(tokens);
-  const byId = new Map(nodesOf(tree).map((node) => [node.id, node]));
-  for (const [id, sizes] of Object.entries(LAYOUT_SIZES)) {
+/** Each size in LAYOUT_SIZES on its node of the layout tree, with its token and the number that token gives. */
+export function layoutSizes(tree, tokens) {
+  const size = px(tokens), byId = new Map(nodesOf(tree).map((node) => [node.id, node]));
+  return Object.entries(LAYOUT_SIZES).flatMap(([id, sizes]) => {
     const node = byId.get(id);
     if (!node) throw new Error(`${LAYOUT} has no node ${id}`);
-    for (const [path, token] of Object.entries(sizes)) setAt(node, path, size(token));
-  }
+    return Object.entries(sizes).map(([path, token]) => ({ node, path, token, value: size(token) }));
+  });
+}
+
+/** The layout file with every size in LAYOUT_SIZES written from its token. */
+export function layoutWithTokens(text, tokens) {
+  const tree = JSON.parse(text);
+  for (const { node, path, value } of layoutSizes(tree, tokens)) setAt(node, path, value);
   return `${JSON.stringify(tree, null, 2)}\n`;
 }
 
