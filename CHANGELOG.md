@@ -75,6 +75,7 @@ the branch's rules.
 - Threads shows when a snoozed conversation wakes, Woke on one that did, and Can't read with Refresh on one that cannot be read; under the pointer a finished one offers Settle, and a project's + shows under the pointer. (#230)
 - A computer that needs a login offers Sign in, which runs the login in a terminal pane; one with no project says so with New project; an unreachable one keeps its projects, dimmed, as last read; Sync that cannot run says so on the row. (#230)
 - The first read of Status, Threads and a computer draws the skeleton at the rows' height, and the view switch names each view's key. (#230)
+- Every Storybook page is approved and marked Ready; a page added later starts In review.
 
 ### Fixed
 
