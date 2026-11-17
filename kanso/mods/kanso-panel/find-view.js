@@ -10,28 +10,8 @@ import { skeleton } from "./ui-skeleton.js";
 import { markdownView } from "./lib.js";
 import { tryOr } from "./pure.js";
 import {
-  locateConversation,
-  resolveFind,
-  readSlice,
-  freshRead,
-  applySlice,
-  extendIndex,
-  searchIndex,
-  chooseMatch,
-  layOut,
-  partsOf,
-  wordsByLine,
-  whoOf,
-  whenLabel,
-  countLabel,
-  blankQuery,
-  retarget,
-  keptQuery,
-  withQuery,
-  findChord,
-  FIND,
-  EXCERPT,
-  DRAW,
+  locateConversation, resolveFind, readSlice, freshRead, applySlice, extendIndex, searchIndex,
+  chooseMatch, layOut, partsOf, wordsByLine, whoOf, whenLabel, countLabel, blankQuery, retarget, keptQuery, withQuery, findChord, FIND, EXCERPT, DRAW,
 } from "./find.js";
 
 const WAIT = 120;
