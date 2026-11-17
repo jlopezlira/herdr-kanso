@@ -2,9 +2,8 @@
 // Usage: npm run build:site [-- --check]
 // Writes each site/<page>.html from site/pages/<page>.html and the layout it names; --check fails when one differs.
 import { readdirSync, readFileSync, writeFileSync } from "node:fs";
-import { CHECK, isMain } from "./cli.mjs";
+import { CHECK, isMain, ROOT_URL as ROOT } from "./cli.mjs";
 
-const ROOT = new URL("../", import.meta.url);
 const SOURCES = "site/pages/";
 const read = (path) => readFileSync(new URL(path, ROOT), "utf8");
 

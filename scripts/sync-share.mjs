@@ -89,13 +89,16 @@ export function sharedDependencies(modules, canonical) {
   return needed;
 }
 
+// Every mod folder under kanso/mods, as a path from the repository.
+export const kansoModFolders = async () => (await readdir(new URL("kanso/mods/", root), { withFileTypes: true })).filter((entry) => entry.isDirectory())
+  .map((entry) => `kanso/mods/${entry.name}/`);
+
 async function importedShares() {
   const canonical = new Map(await Promise.all((await readdir(new URL(PLATFORM, root))).filter(sharedFile)
     .map(async (name) => [name, await readFile(new URL(PLATFORM + name, root), "utf8")])));
   const shared = new Map([...canonical.keys()].map((name) => [name, { source: PLATFORM + name, copies: [] }]));
   const overrides = new Map(COMMON.flatMap(({ source, copies }) => copies.map((copy) => [copy, source])));
-  const folders = (await readdir(new URL("kanso/mods/", root), { withFileTypes: true })).filter((entry) => entry.isDirectory())
-    .map((entry) => `kanso/mods/${entry.name}/`).concat(["markdown-panel/mods/markdown-panel/"]);
+  const folders = (await kansoModFolders()).concat(["markdown-panel/mods/markdown-panel/"]);
   const obsolete = [];
   for (const folder of folders) {
     if (folder === PLATFORM) continue;

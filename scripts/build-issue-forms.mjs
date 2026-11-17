@@ -2,9 +2,8 @@
 // Usage: npm run build:issue-forms [-- --check]
 // Writes the Bug and Work item issue forms from one set of fields; --check fails when one differs.
 import { readFileSync, writeFileSync } from "node:fs";
-import { CHECK, isMain } from "./cli.mjs";
+import { CHECK, isMain, ROOT_URL as ROOT } from "./cli.mjs";
 
-const ROOT = new URL("../", import.meta.url);
 const FOLDER = ".github/ISSUE_TEMPLATE/";
 const CI_GREEN = "CI is green on macOS, Windows and Linux";
 
