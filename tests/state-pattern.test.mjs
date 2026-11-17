@@ -2,13 +2,12 @@
 import { loadWorkspaceChrome } from "./mod-fixtures.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { load, chain, gpuiHost, calls, find } from "./helpers.mjs";
+import { load, chain, gpuiHost, calls, find, texts } from "./helpers.mjs";
 
 const kit = async () => ({ ...await load("kanso-panel/ui.js", ["tokens", "G", "H", "R", "T", "ICON_ROW", "BREATH"], gpuiHost()), ...await load("kanso-panel/ui-state.js", ["stateEmpty", "stateBlock", "stateBlockPx", "stateLine", "pendingDot", "PENDING"], gpuiHost()) });
 const night = { background: "#1b1b19", foreground: "#d8d4cb", hover: "#232321", selected: "#2b2b28", solid: "#d8d4cb", solid_foreground: "#161615", dim: "#6b6860", muted: "#949086", blocked: "#d5674f" };
 
 const arg = (el, name) => calls(el, name)[0]?.[1];
-const texts = (el) => [...calls(el, "child").map((call) => call[1]).filter((x) => typeof x === "string"), ...el.kids.flatMap(texts)];
 
 const buttons = (el) => [...(calls(el, "accessibility_label").length ? [el] : []), ...el.kids.flatMap(buttons)];
 

@@ -374,3 +374,10 @@ export const textFiles = {
   readTextFile: readOrNull,
   writeTextFile: async (path, text) => { await mkdir(join(path, ".."), { recursive: true }); await writeFile(path, text); return null; },
 };
+// The night colours the strip and the tab bar draw with.
+export const CHROME_NIGHT = {
+  background: "#1b1b19", foreground: "#d8d4cb", hover: "#232321", selected: "#2b2b28", dim: "#6b6860", muted: "#949086",
+  blocked: "#d5674f", working: "#d9a74a", done: "#7fa66b", accent: "#7d9cd4", popover: "#222220", border: "#33332f", chrome: "#141413",
+};
+// A text field holding `value`.
+export const fieldWith = ({ value }) => ({ on() {}, focus() {}, value: () => value, set_selected_range() {}, release() {} });

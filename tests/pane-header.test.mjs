@@ -1,12 +1,9 @@
 // The pane header as the Storybook draws it: how it folds, its tools and ⋯, each state, the failure line and the refresh pending.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { load, clone, chain, gpuiHost, failure, success, calls, arg, find, all } from "./helpers.mjs";
+import { load, clone, chain, gpuiHost, failure, success, calls, arg, find, all, CHROME_NIGHT, fieldWith, texts } from "./helpers.mjs";
 
-const night = {
-  background: "#1b1b19", foreground: "#d8d4cb", hover: "#232321", selected: "#2b2b28", dim: "#6b6860", muted: "#949086",
-  blocked: "#d5674f", working: "#d9a74a", done: "#7fa66b", accent: "#7d9cd4", popover: "#222220", border: "#33332f", chrome: "#141413",
-};
+const night = CHROME_NIGHT;
 const model = () => load("kanso-strip/header-model.js", ["FOLDS", "shownAt", "foldFor", "headerWidths", "hoverTools", "menuEntries", "placeOf", "paneLabel", "headerMark", "prTitle"]);
 const strip = () => load("kanso-strip/main.js", ["digestSegments", "readDigest", "settleDigest"]);
 const pr = { number: 142, state: "OPEN", mergeStateStatus: "UNSTABLE", fail: 1, failed: "test / unit", pending: 0 };
@@ -104,7 +101,7 @@ async function header({ pane: over = {}, space: room = {}, store: kept = {}, com
     program: { agent: true, shell: false, name: "Claude Code", icon: null }, ...over };
   const { Strip, tokens, mix, OPACITY } = await load("kanso-strip/main.js", ["Strip", "tokens", "mix", "OPACITY"], {
     ...gpuiHost(), Popover: { new: (id) => chain(id) }, HoverCard: { new: (id) => chain(id) },
-    InputState: { new: ({ value }) => ({ on() {}, focus() {}, value: () => value, set_selected_range() {}, release() {} }) },
+    InputState: { new: fieldWith },
     theme: () => night, props: () => ({ pane: "p1", strip: true }), panes: () => [pane], agents: () => [], focused: () => null,
     spaces: () => [{ id: "s1", folder: "/repo", branch: "main", machine: null, tabs: [{ id: "t1" }], ...room }], machines: () => computers,
     home: () => "/home/me", terminals: () => [], shared: (key) => store[key] ?? null, setShared: (key, value) => { store[key] = value; },
@@ -123,7 +120,6 @@ const menuItems = (root) => {
   const pop = find(root, (el) => calls(el, "content").length > 0);
   return pop ? all(arg(pop, "content"), (el) => /^ph-menu-list-p1-\d+$/.test(el.tag)) : [];
 };
-const texts = (el) => [...calls(el, "child").map((call) => call[1]).filter((x) => typeof x === "string"), ...el.kids.flatMap(texts)];
 
 test("Each look is a state: focus is the ground, waiting the wash and mark, keyboard focus the accent ring, out of reach 55% with no mark", async () => {
   const focus = await header();
