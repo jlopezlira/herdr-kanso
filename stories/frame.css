@@ -40,15 +40,8 @@
 .kanso-tokens .kanso-tokens__lines { display: inline-block; font-size: var(--k-fs-body); }
 .kanso-tokens td:first-child { color: var(--fg); }
 .kanso-tokens .kanso-tokens__example { white-space: nowrap; }
-.kanso-tokens__wash { display: block; inline-size: var(--k-h-header); block-size: var(--k-h-control); border-radius: var(--k-r-control); box-shadow: inset 0 0 0 var(--k-w-line) var(--border); transition: background-color var(--kanso-hover-out, var(--k-hover-out)) var(--kanso-ease-out, var(--k-ease-out)) var(--kanso-hover-delay, 0ms); }
-.kanso-tokens__wash:is(:hover, :focus-visible) { background: var(--hover); transition-duration: var(--kanso-hover-in, var(--k-hover-in)); transition-timing-function: var(--kanso-ease-in, var(--k-ease-in)); }
-.kanso-tokens__wash[data-token="k-hover-in"] { --kanso-hover-in: var(--k-hover-in); }
-.kanso-tokens__wash[data-token="k-hover-out"] { --kanso-hover-out: var(--k-hover-out); }
-.kanso-tokens__wash[data-token="k-ease-in"] { --kanso-ease-in: var(--k-ease-in); }
-.kanso-tokens__wash[data-token="k-ease-out"] { --kanso-ease-out: var(--k-ease-out); }
-.kanso-tokens__wash[data-token="k-hover-ms"] { --kanso-hover-in: var(--k-hover-ms); --kanso-hover-out: var(--k-hover-ms); }
-.kanso-tokens__wash[data-token="k-hover-delay"] { --kanso-hover-delay: var(--k-hover-delay); }
-.kanso-tokens__wash[data-token="k-hover-ease"] { --kanso-ease-in: var(--k-hover-ease); --kanso-ease-out: var(--k-hover-ease); }
+.kanso-tokens__example[data-token="k-hover-out"] .kanso-button { --k-hover-ms: var(--k-hover-out); }
+.kanso-tokens__example[data-token="k-ease-out"] .kanso-button { --k-hover-ease: var(--k-ease-out); }
 .kanso-tokens__contrast { display: inline-flex; align-items: center; justify-content: center; inline-size: var(--k-h-header); block-size: var(--k-h-control); border-radius: var(--k-r-control); font-weight: var(--k-fw-medium); }
 .kanso-skeleton.kanso-tokens__skeleton { inline-size: var(--k-h-header); background-image: none; animation: ghost var(--k-skel-ms) var(--k-hover-ease) infinite alternate; }
 .kanso-tokens__measure { display: block; height: var(--k-sp-3); background: var(--muted); }

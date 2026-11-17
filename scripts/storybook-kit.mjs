@@ -146,7 +146,7 @@ const reference = (name, html) => ({ id: `tokens/${name}`, source: 'tokens', pag
 const frameToken = ({ name }) => /^k-(?:w-window(?:-(?:wide|narrow|small))?$|room-|h-strip$|dawn-preview)/.test(name);
 const measure = (name, height = false) => `<span class="kanso-tokens__measure${height ? ' kanso-tokens__measure--height' : ''}" data-${height ? 'height' : 'width'}="var(--${name})"></span>`;
 const motionSample = (name) => {
-  if (/^k-(hover|ease)-/.test(name)) return `<span class="kanso-tokens__wash" data-token="${name}" tabindex="0"></span>`;
+  if (/^k-(hover|ease)-/.test(name)) return button({ label: 'Hover', kind: 'tonal' });
   if (name === 'k-arm-ms') return button({ label: 'Close', kind: 'tonal', armed: true });
   if (name === 'k-spin-ms') return mark({ status: 'working' });
   if (name === 'k-skel-ms') return '<span class="kanso-skeleton kanso-tokens__skeleton"></span>';
