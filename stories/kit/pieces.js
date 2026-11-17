@@ -110,6 +110,8 @@ const blockOf = (block) => {
   if (lines.every((line) => line.startsWith('- '))) return `<ul>${lines.map((line) => `<li>${inline(line.slice(2))}</li>`).join('')}</ul>`;
   return `<p>${lines.map(inline).join(' ')}</p>`;
 };
+// A block's words: its Markdown drawn, with no padding of their own.
+export const markdownWords = ({ source }) => blockOf(source);
 const BLOCK_STATES = { hover: ' kanso-row--hover', editing: ' kanso-editor--editing kanso-control--focus' };
 // One block of a document: at rest, under the pointer, or being edited. Proposed: `content`, markup drawn in place of its formatted source (the editor's field, a picture).
 export const markdownBlock = ({ source, state = 'rest', content = '' }) => {

@@ -10,7 +10,7 @@ import { diffText, facts, plus } from "./ui-facts.js";
 import { card as drawCard } from "./ui-card.js";
 import { code as drawCode } from "./ui-code.js";
 import { thumbnail as drawThumbnail } from "./ui-thumbnail.js";
-import { markdown as drawMarkdown, markdownBlock as drawMarkdownBlock } from "./ui-markdown.js";
+import { markdown as drawMarkdown, markdownBlock as drawMarkdownBlock, markdownWords as drawMarkdownWords } from "./ui-markdown.js";
 import { tipText } from "./ui-tooltip.js";
 import { avatar as drawAvatar } from "./ui-avatar.js";
 import { chip as drawChip } from "./ui-chip.js";
@@ -159,7 +159,13 @@ export const markdown = ({ source, block = 0, state = "rest" }) => (id, c, more 
   return drawMarkdown(id, c, { source, block, state }, { onLink });
 };
 
-// One block of a document. Proposed: `content`, kit pieces, elements or markdown words in place of its formatted source. `onPress` takes a press on it (a double press edits it).
+// A block's words: `source` drawn as markdown, with no padding of their own; `onLink` takes a link's press.
+export const markdownWords = ({ source = "" }) => (id, c, more = {}) => {
+  const { onLink = null } = given(more);
+  return drawMarkdownWords(id, c, { source }, { onLink });
+};
+
+// One block of a document. Proposed: `content`, drawn pieces in place of its formatted source (`markdownWords` for words). `onPress` takes a press on it (a double press edits it).
 export const markdownBlock = ({ source = "", state = "rest", content = [] }) => (id, c, more = {}) => {
   const { onLink = null, onPress = null } = given(more);
   return drawMarkdownBlock(id, c, { source, state, content: drawn(id, c, "content", content) }, { onLink, onPress });
