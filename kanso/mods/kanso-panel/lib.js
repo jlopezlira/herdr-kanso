@@ -1,11 +1,9 @@
-import { collect } from "./blocks.js";
 import { paths } from "./platform-paths.js";
 import { PAGE } from "./ui.js";
 import { div } from "gpui-kit";
-import { EditorState, TextView } from "gpui-base";
-import { spaces, panes, focused, layout, theme, home } from "herdr";
+import { TextView } from "gpui-base";
+import { spaces, panes, focused, layout, home } from "herdr";
 import { walkLayout, commitLayout } from "./layout.js";
-import { monoFont } from "./ui.js";
 
 export function tilde(path) {
   if (!path) return "";
@@ -32,14 +30,6 @@ export async function pool(items, n, work) {
   return lanes.flat(2).toSorted((a, b) => a[0] - b[0]).map(([, answer]) => answer);
 }
 
-// step(state, item, i) answers [state, value]; the values are gathered in runs of RUN.
-export function mapWith(list, step, init) {
-  return collect(list.length, (state, index) => {
-    const [next, value] = step(state, list[index], index);
-    return { state: next, emit: value };
-  }, init, () => true);
-}
-
 export function insideRoot(path) {
   if (!path || typeof path !== "string" || path.includes("\0")) return false;
   if (path.startsWith("/") || path.startsWith("\\") || /^[A-Za-z]:/.test(path)) return false;
@@ -55,38 +45,9 @@ export function location() {
 // A read's context is the folder and the machine, not the space.
 export const key = () => { const { cwd, on } = location(); return JSON.stringify({ cwd, on }); };
 
-// Each line is numbered once, so a frame only draws the rows on screen.
-export function diffRows(lines, { max, width } = {}) {
-  return mapWith(max ? lines.slice(0, max) : lines, (at, line) => {
-    const m = /^@@ -(\d+)(?:,\d+)? \+(\d+)/.exec(line);
-    if (m) return [{ old: +m[1], next: +m[2] }, { kind: "@", text: line }];
-    const kind = line[0], body = line.slice(1) || " ", text = width ? body.slice(0, width) : body;
-    if (kind === "-") return [{ old: at.old + 1, next: at.next }, { kind, number: at.old, text }];
-    if (kind === "+") return [{ old: at.old, next: at.next + 1 }, { kind, number: at.next, text }];
-    if (kind === " ") return [{ old: at.old + 1, next: at.next + 1 }, { kind, number: at.next, text }];
-    return [at, { kind: "", text: line }];
-  }, { old: 0, next: 0 });
-}
-
-const LANG = { ts: "js", tsx: "js", mts: "js", cts: "js", jsx: "js", mjs: "js", toml: "yaml", jsonc: "json", svelte: "html", vue: "html" };
 const MAX_TEXT = 400000;
 export const ext = (path) => (path.includes(".") ? path.split(".").at(-1).toLowerCase() : "");
 export const isMarkdown = (path) => ["md", "markdown", "mdx"].includes(ext(path));
-
-// Release the returned state when done.
-export function codeState(path, text, options = {}) {
-  const t = theme(), e = ext(path) || "txt";
-  const limit = options.limit ?? MAX_TEXT;
-  const big = text.length > limit;
-  const readonly = options.readonly !== false || big;
-  const state = EditorState.new({ language: LANG[e] ?? e, readonly,
-    value: big ? text.slice(0, limit) + "\n… (file truncated)" : text,
-    line_numbers: options.line_numbers !== false, folding: options.folding !== false,
-    font_family: monoFont(), font_size: 12,
-    syntax: { keyword: t.ansi5, string: t.ansi2, comment: t.dim, function: t.ansi4, type: t.ansi3, number: t.ansi1, constant: t.ansi6 } });
-  if (options.onChange && !readonly) state.on("change", (_e, cx) => options.onChange(state.value(), cx));
-  return state;
-}
 
 export function markdownView(id, text, t) {
   return div().id(`${id}-scroll`).flex_1().min_h(0).overflow_y_scrollbar()

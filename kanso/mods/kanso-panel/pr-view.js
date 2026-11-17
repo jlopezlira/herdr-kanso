@@ -3,14 +3,14 @@ import { scopedColumn } from "./ui-page.js";
 import { div, svg } from "gpui-kit";
 import { shared } from "herdr";
 import { v_flex, h_flex, Button } from "gpui-base";
-import { G, H, R, T, toneColor } from "./ui.js";
+import { G, H, R, T, PR, PAGE, OPACITY, toneColor } from "./ui.js";
 import { button, quietLink } from "./ui-button.js";
 import { row } from "./ui-row.js";
 import { section } from "./ui-section.js";
 import { diffText, failureBlock } from "./kit.js";
 import { ageOf, footLine } from "./pr-poll.js";
 import { aliasText, machineTitle } from "./pure.js";
-import { verdictCard, VIEW } from "./pr-body.js";
+import { verdictBody } from "./pr-body.js";
 import { dot } from "./ui-dot.js";
 
 const ICON = "mods/kanso-chrome/icons/";
@@ -32,8 +32,8 @@ function scopeRow(panel, c) {
   const text = scopeText(panel);
   if (!text && !panel.pr) return null;
   return h_flex().w_full().items_center().justify_between().gap(G.md)
-    .child(div().min_w(0).truncate().text_size(VIEW.meta).text_color(c.dim).child(text))
-    .when(Boolean(panel.pr), (el) => el.child(div().flex_none().text_size(VIEW.meta).text_color(c.dim).child(`#${panel.pr.number}`)));
+    .child(div().min_w(0).truncate().text_size(PAGE.note).text_color(c.dim).child(text))
+    .when(Boolean(panel.pr), (el) => el.child(div().flex_none().text_size(PAGE.note).text_color(c.dim).child(`#${panel.pr.number}`)));
 }
 
 function actionLabel(panel, action) {
@@ -102,7 +102,7 @@ function detailsButton(panel, c, view) {
   return Button.new("pr-details").w_full().h(H.compact).gap(G.sm).items_center().cursor_pointer()
     .accessibility_label(label)
     .on_click((_e, cx) => panel.setDetails(cx))
-    .child(svg(`${ICON}chevron-${on ? "down" : "right"}.svg`).size(VIEW.meta).text_color(c.muted))
+    .child(svg(`${ICON}chevron-${on ? "down" : "right"}.svg`).size(PAGE.note).text_color(c.muted))
     .child(div().flex_none().text_size(T.value).text_color(c.muted).child(label))
     .child(div().flex_1())
     .child(div().min_w(0).truncate().text_size(T.value).text_color(c.dim).child(view.detailsNote ?? ""));
@@ -152,18 +152,18 @@ function heroTop(panel, c, view) {
       .when(Boolean(view.primary), (row) => row.child(actionButton(panel, c, view.primary)))
       .when(Boolean(view.quiet), (row) => row.child(quietAction(panel, c, view.quiet))));
   return scopedColumn(scope)
-    .when(Boolean(panel.pr?.title), (el) => el.child(div().w_full().max_h(VIEW.titleMax).overflow_hidden().text_size(VIEW.title).line_height(1.3).font_medium().text_color(c.text).child(panel.pr.title)))
+    .when(Boolean(panel.pr?.title), (el) => el.child(div().w_full().max_h(PR.titleMax).overflow_hidden().text_size(PR.title).line_height(1.3).font_medium().text_color(c.text).child(panel.pr.title)))
     .child(h_flex().gap(G.sm).items_center()
       .child(dot(c, ink))
       .child(div().text_size(T.card).font_medium().text_color(ink).child(view.text)))
     .when(Boolean(view.note), (el) => el.child(div().text_size(T.value).text_color(c.muted).child(view.note)))
-    .child(view.dimmed ? body.opacity(VIEW.stale) : body);
+    .child(view.dimmed ? body.opacity(OPACITY.away) : body);
 }
 
 // The fold's blocks are siblings of the verdict, so a scroll can land on the checks.
 export function heroPieces(panel, c) {
   const view = panel.view();
-  const veil = (el) => view.dimmed ? el.opacity(VIEW.stale) : el;
+  const veil = (el) => view.dimmed ? el.opacity(OPACITY.away) : el;
   const note = panel.note ? [["remark", veil(failureBlock(panel.note)("remark", c))]] : [];
   const foot = footnote(panel, c);
   const tail = foot ? [["foot", foot.id("foot")]] : [];
@@ -192,4 +192,4 @@ export function drawEmpty(panel, c) {
     .when(Boolean(foot), (el) => el.child(foot));
 }
 
-const viewParts = (panel, c, view) => ({ scope: scopeRow(panel, c), card: verdictCard(c, view.body) });
+const viewParts = (panel, c, view) => ({ scope: scopeRow(panel, c), card: verdictBody(c, view.body) });

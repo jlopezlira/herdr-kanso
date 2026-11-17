@@ -146,7 +146,7 @@ test("the side panels show the shared skeleton before they are ready and while t
   Object.assign(pr, { tab: "closed", closedPrs: null, closedLoading: true, openPrs: [] });
   assertSkeleton(pr.listPage(c));
   Object.assign(pr, { diffLoading: true, diffs: null });
-  assertSkeleton(pr.diffView(c, "a.js"));
+  assertSkeleton(pr.fileDiff(c, "a.js"));
   Object.assign(pr, { picker: "labels", pr: { author: { login: "me" } }, candidates: null, query: "", pickerError: null, search: {}, pending: null, truncated: false });
   assertSkeleton(pr.pickerFor("labels", c));
 

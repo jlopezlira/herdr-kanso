@@ -35,7 +35,11 @@ export const avatar = ({ initial, image, size, tone }) => {
   return `<span class="kanso-avatar kanso-avatar--round${avatarSizes[size] ?? ""}${tone ? ` kanso-text--host-${escape(tone)}` : ""}">${picture}${escape(initial.slice(0, 1))}</span>`;
 };
 
-export const card = ({ author, image, age, body, loading }) => `<div class="kanso-card${loading ? ' kanso-skeleton--shape' : ''}"><div class="kanso-card__header">${avatar({ initial: author, image, size: 'md' })}<b>${escape(author)}</b>${grow()}<span class="kanso-text--dim">${escape(age)}</span></div><div class="kanso-prose">${escape(body)}</div></div>`;
+// `initial`: the avatar's letter, none when empty; `where`: a path in mono; `step`: what it was doing; `content`: pieces in place of the prose `body`.
+export const card = ({ author, image, age, body, loading, initial = author, where = '', step = '', content = '' }) => {
+  const header = author ? `<div class="kanso-card__header">${initial ? avatar({ initial, image, size: 'md' }) : ''}<b>${escape(author)}</b>${step ? `${iconSvg('lu-chevron-right', 'inline', 'dim')}<span class="kanso-text--muted">${escape(step)}</span>` : ''}${where ? `<span class="kanso-text--dim kanso-text--code">${escape(where)}</span>` : ''}${grow()}<span class="kanso-text--dim">${escape(age)}</span></div>` : '';
+  return `<div class="kanso-card${loading ? ' kanso-skeleton--shape' : ''}">${header}${content || `<div class="kanso-prose">${escape(body)}</div>`}</div>`;
+};
 
 const syntax = /("[^"\n]*"|'[^'\n]*'|`[^`]*`)|\b(\d+)\b|\b(import|from|export|default|function|const|let|var|return|if|else|for|while|async|await|new|class)\b/g;
 const highlight = (line) => {
@@ -48,15 +52,27 @@ const highlight = (line) => {
   return html + escape(line.slice(at));
 };
 const signs = { '+': 'added', '-': 'deleted', '@': 'hunk' };
-const failure = /\b(fail(ed|ure)?|error|exception)\b|^\s*>/i;
+const failure = /\b(fail(ed|ure)?|\w*error|\w*exception)\b|^\s*>/i;
+const hunk = /^@@ -(\d+)(?:,\d+)? \+(\d+)/;
+const steps = { '-': { old: 1, next: 0, from: 'old' }, '+': { old: 0, next: 1, from: 'next' }, ' ': { old: 1, next: 1, from: 'next' } };
+// A diff numbers its lines from its hunk headers: a deleted line by the old file, the others by the new one.
+const diffNumbers = (lines, first) => lines.reduce(({ at, numbers }, source) => {
+  const head = hunk.exec(source);
+  if (head) return { at: { old: Number(head[1]), next: Number(head[2]) }, numbers: [...numbers, undefined] };
+  const step = steps[source[0]];
+  if (!step) return { at, numbers: [...numbers, undefined] };
+  return { at: { old: at.old + step.old, next: at.next + step.next }, numbers: [...numbers, at[step.from]] };
+}, { at: { old: first, next: first }, numbers: [] }).numbers;
 export const code = ({ text, kind, first, line }) => {
-  const rows = text.split('\n').map((source, index) => {
+  const lines = text.split('\n');
+  const numbers = kind === 'diff' ? diffNumbers(lines, first) : lines.map((_, index) => first + index);
+  const rows = lines.map((source, index) => {
     const sign = kind === 'diff' ? signs[source[0]] : undefined;
-    const classes = ['kanso-code__line', sign ? `kanso-code__line--${sign}` : '', first + index === line ? 'kanso-control--on' : ''].filter(Boolean).join(' ');
+    const classes = ['kanso-code__line', sign ? `kanso-code__line--${sign}` : '', numbers[index] === line ? 'kanso-control--on' : ''].filter(Boolean).join(' ');
     if (sign === 'hunk') return `<div class="${classes}">${escape(source)}</div>`;
     if (kind === 'log') return `<div class="${classes}"><span class="kanso-code__number"></span><span class="kanso-code__sign"> </span>${failure.test(source) ? `<span class="kanso-text--blocked">${escape(source)}</span>` : escape(source)}</div>`;
     const body = sign || (kind === 'diff' && source[0] === ' ') ? source.slice(1) : source;
-    return `<div class="${classes}"><span class="kanso-code__number">${first + index}</span><span class="kanso-code__sign">${sign === 'added' ? '+' : sign === 'deleted' ? '-' : ' '}</span>${kind === 'source' ? highlight(body) : escape(body)}</div>`;
+    return `<div class="${classes}"><span class="kanso-code__number">${numbers[index] ?? ''}</span><span class="kanso-code__sign">${sign === 'added' ? '+' : sign === 'deleted' ? '-' : ' '}</span>${kind === 'source' ? highlight(body) : escape(body)}</div>`;
   }).join('');
   return `<div class="kanso-code">${rows}</div>`;
 };

@@ -1,5 +1,6 @@
 import { startRemotePoll, advanceRemotePoll, bring, appRelative, svgPixels, copyFailure, quietError, remoteDue, fileId, ArmPoll, takeStamp, staleView, asOf, bytesLabel } from "./remote-file.js";
-import { restorePath, codeState, isMarkdown, showPanel } from "./lib.js";
+import { restorePath, isMarkdown, showPanel } from "./lib.js";
+import { sourceState } from "./ui-code.js";
 import { documentBones } from "./ui-page.js";
 import { div, image } from "gpui-kit";
 import { v_flex, h_flex, Editor } from "gpui-base";
@@ -250,7 +251,7 @@ export class Preview {
     const shown = this.code ? this.code.value() : null;
     if (!state.big && shown === state.text) return;
     if (this.code) this.code.release();
-    this.code = codeState(path, state.text ?? "", {
+    this.code = sourceState(path, state.text ?? "", {
       readonly: Boolean(state.big), limit: EDIT_LIMIT,
       onChange: state.big ? null : (value, cx) => {
         this.edit = typed(this.edit, value);

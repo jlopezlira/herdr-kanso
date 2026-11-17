@@ -1,4 +1,4 @@
-import { spawnAndNotify, commandOk, location, key, diffRows, tilde, said } from "./lib.js";
+import { spawnAndNotify, commandOk, location, key, tilde, said } from "./lib.js";
 import { detailRow, detailColumn, pageSize, pageBones, listBones } from "./ui-page.js";
 import { drawHero, drawEmpty, footOf, listedRow, prRow, heroPieces } from "./pr-view.js";
 import { localService } from "./platform-host.js";
@@ -9,11 +9,11 @@ import { div, svg } from "gpui-kit";
 import { v_flex, h_flex, Button, Popover, TextView, ScrollHandle } from "gpui-base";
 import { exec, notify, run, theme, setShared, shared, window, layout, focused, panes, terminals, props } from "herdr";
 import { walkLayout } from "./layout.js";
-import { G, T, PR, OPACITY, TINT, alpha, monoFont, tokens } from "./ui.js";
+import { G, T, PR, OPACITY, TINT, alpha, tokens } from "./ui.js";
 import { Armed, button, quietLink, iconButton } from "./ui-button.js";
 import { TextField } from "./ui-field.js";
 import { menu } from "./ui-menu.js";
-import { failureBlock, skeletonOf, diffText, facts } from "./kit.js";
+import { failureBlock, skeletonOf, diffText, facts, code } from "./kit.js";
 import { dot } from "./ui-dot.js";
 import { section } from "./ui-section.js";
 import { segmented } from "./ui-tab.js";
@@ -22,7 +22,6 @@ import { STATES, checkState, onePerJob, checkSummary, runIdOf, listHold, mergeRe
 import { deliver, isAgent } from "./deliver.js";
 import { nameOf, givenNames } from "./marks.js";
 import { verdictOf, failedLog, sendText, sendStep } from "./pr-verdict.js";
-import { VIEW } from "./pr-body.js";
 import { readyProviders } from "./pr-providers.js";
 import { groupInbox, inboxLabel, isNew, limitLine, mergeInbox, refreshInbox, seenSql, recordPrFacts } from "./pr-inbox.js";
 import { prMemory } from "./panel-state.js";
@@ -837,7 +836,7 @@ export class PullRequest {
     const limited = this.inbox?.limitedUntil;
     const refreshed = this.readNote() ?? (limited ? `limited until ${limitLine(limited).match(/\d{2}:\d{2}/)?.[0]}` : null);
     return h_flex().w_full().items_center().justify_between().gap(G.md)
-      .child(div().truncate().text_size(narrow ? VIEW.title : T.page).text_color(c.text).child(this.inboxOn || this.listing ? "Pull requests" : "Pull request"))
+      .child(div().truncate().text_size(narrow ? PR.title : T.page).text_color(c.text).child(this.inboxOn || this.listing ? "Pull requests" : "Pull request"))
       .child(h_flex().gap(G.xs).items_center().flex_none()
         .when(this.inboxOn, (el) => el.child(this.reviewPill(c)))
         .when(pill, (el) => el.child(this.switchPill(c)))
@@ -1061,17 +1060,15 @@ export class PullRequest {
             .when(th.outdated, (el) => el.child(div().text_size(11).text_color(c.dim).child("outdated")))))));
   }
 
-  diffView(c, path) {
+  // A line is cut at MAX_DIFF characters too: a minified file's one line stays cheap to draw.
+  fileDiff(c, path) {
     if (this.diffLoading && !this.diffs) return this.diffBones(c);
     const lines = this.diffs?.[path];
-    if (!lines) return div().py(6).text_size(11).text_color(c.dim).child(this.diffs ? "No text diff for this file." : "");
-    return v_flex().w_full().mb(G.sm).rounded(6).border_1().border_color(c.border).overflow_hidden().font_family(monoFont()).text_size(11)
-      .children(diffRows(lines, { max: MAX_DIFF, width: 400 }).map((r) => r.kind === "@"
-        ? div().h(20).px(10).flex_none().truncate().text_color(c.dim).child(r.text)
-        : h_flex().h(20).flex_none().gap(8).when(r.kind === "+", (e) => e.bg(alpha(c.green, TINT.diff))).when(r.kind === "-", (e) => e.bg(alpha(c.red, TINT.diff)))
-          .child(div().w(30).flex_none().text_right().text_color(c.dim).child(r.number === undefined ? "" : String(r.number)))
-          .child(div().flex_1().min_w(0).truncate().text_color(c.text).child(r.text))))
-      .when(lines.length > MAX_DIFF, (el) => el.child(div().px(10).py(4).text_color(c.dim).child(`The first ${MAX_DIFF} lines; the rest is on GitHub.`)));
+    const note = (text) => div().py(G.xs).text_size(T.body).text_color(c.dim).child(text);
+    if (!lines?.length) return note(this.diffs ? "No text diff for this file." : "");
+    return v_flex().w_full().mb(G.sm)
+      .child(code({ text: lines.slice(0, MAX_DIFF).map((line) => line.slice(0, MAX_DIFF)).join("\n"), kind: "diff" })("pr-diff", c))
+      .when(lines.length > MAX_DIFF, (el) => el.child(note(`The first ${MAX_DIFF} lines; the rest is on GitHub.`).px(G.lg)));
   }
 
   pickFile(path, cx) {
@@ -1107,7 +1104,7 @@ export class PullRequest {
                 .child(div().truncate().text_size(13).text_color(c.text).when(on, (e) => e.font_medium()).child(name))
                 .when(parts.length > 0 || Boolean(mark), (el) => el.child(div().truncate().text_size(11).text_color(c.dim).child([parts.join("/"), mark].filter(Boolean).join(" · ")))))
               .child(div().text_size(11).text_color(c.dim).child(diffText({ add: f.additions, del: f.deletions })))))
-          .when(on, (el) => el.child(this.diffView(c, f.path)));
+          .when(on, (el) => el.child(this.fileDiff(c, f.path)));
       }))
       .when(files.length > FILE_ROWS, (el) => el.child(h_flex().pt(G.sm).child(quietLink("pr-files-more", open ? "Show fewer" : `Show ${files.length - FILE_ROWS} more`, (cx) => { this.expanded = { ...this.expanded, files: !open }; cx.notify(); }, c))))
       .when(files.length < pr.changedFiles, (el) => el.child(div().pt(G.sm).text_size(11).text_color(c.dim).child(`GitHub lists the first ${files.length} of ${pr.changedFiles} files.`)));
