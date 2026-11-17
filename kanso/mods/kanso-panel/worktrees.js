@@ -1,5 +1,5 @@
 import { spawnAndNotify, commandOk, tilde, pool, said, failNote } from "./lib.js";
-import { sizedPage, responsiveSkeleton, pageBones, skeletonStack, skeletonMetrics, heroStack, heroHeading, metricValue, metricStats, skeletonBars } from "./ui-page.js";
+import { sizedPage, pageBones, skeletonStack, skeletonMetrics, heroStack, heroHeading, metricValue, metricStats, skeletonBars } from "./ui-page.js";
 import { localService } from "./platform-host.js";
 import { paths } from "./platform-paths.js";
 import { fileApi } from "./platform-files.js";
@@ -626,10 +626,10 @@ export class Worktrees {
   }
 
   bones(c, narrow = true) {
-    return pageBones(c, narrow, { title: [110, 140], body: this.skeleton(c, narrow) });
+    return pageBones(c, narrow, { title: { narrow: 110, wide: 140 }, body: this.skeleton(c, narrow) });
   }
 
-  skeleton(c, narrow) { return worktreesSkeleton(c, narrow); }
+  skeleton(c, narrow) { return worktreesSkeleton(ghost(c), narrow); }
 
   hero(c, narrow) {
     const all = this.groups.flatMap((g) => g.items), live = all.filter((w) => !w.missing);
@@ -890,10 +890,8 @@ const cleanedStats = (h) => [
   { value: String(h.records + h.orphans), unit: "leftovers cleared" },
 ];
 
-const worktreesSkeleton = (c, narrow) => responsiveSkeleton(c, ({ block, row }) => {
-    return skeletonStack(narrow)
-      .child(v_flex().gap(G.md).child(block(110, 12)).child(block(narrow ? 150 : 220, narrow ? 40 : 58, 6)).child(block(200, 11))
-        .child(skeletonMetrics(block, narrow)))
-      .child(v_flex().w_full().child(h_flex().pb(G.sm).child(block(90, 12))).children([0, 1, 2, 3].map(row)))
-      .child(v_flex().w_full().child(h_flex().pb(G.sm).child(block(70, 12))).children([0, 1, 2].map(row)));
-});
+const worktreesSkeleton = ({ block, row }, narrow) => skeletonStack(narrow)
+  .child(v_flex().gap(G.md).child(block(110, 12)).child(block(narrow ? 150 : 220, narrow ? 40 : 58, 6)).child(block(200, 11))
+    .child(skeletonMetrics(block, narrow)))
+  .child(v_flex().w_full().child(h_flex().pb(G.sm).child(block(90, 12))).children([0, 1, 2, 3].map(row)))
+  .child(v_flex().w_full().child(h_flex().pb(G.sm).child(block(70, 12))).children([0, 1, 2].map(row)));

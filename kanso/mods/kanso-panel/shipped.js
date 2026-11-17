@@ -1,4 +1,4 @@
-import { sizedPage, responsiveSkeleton, pageBones, skeletonStack } from "./ui-page.js";
+import { sizedPage, pageBones, skeletonStack } from "./ui-page.js";
 import { localSleep } from "./platform-host.js";
 // Kanso's Shipped panel, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
 // Statistics only, never one item at a time from GitHub.
@@ -564,7 +564,7 @@ export class Shipped {
   skeleton(c, narrow) { return shippedSkeleton(c, narrow); }
 
   bones(c, narrow = true) {
-    return pageBones(c, narrow, { title: [90, 110], body: this.skeleton(c, narrow), extra: [h_flex().h(26).gap(G.xs).items_center().children([64, 52, 48, 40].map((w) => ghost(c).block(w, 26, 6)))] });
+    return pageBones(c, narrow, { title: { narrow: 90, wide: 110 }, body: this.skeleton(c, narrow), extra: [h_flex().h(26).gap(G.xs).items_center().children([64, 52, 48, 40].map((w) => ghost(c).block(w, 26, 6)))] });
   }
 
   render(cx) {
@@ -594,14 +594,15 @@ export class Shipped {
   }
 }
 
-const shippedSkeleton = (c, narrow) => responsiveSkeleton(c, ({ block, line, row }) => {
-    const hours = [8, 12, 6, 10, 18, 28, 40, 48, 36, 22, 14, 10, 16, 30, 44, 50, 38, 20, 12, 8, 6, 10, 18, 24];
-    return skeletonStack(narrow)
-      .child(v_flex().gap(G.md)
-        .child(line(120, 15))
-        .child(block(narrow ? 140 : 180, narrow ? 40 : 56, 6))
-        .child(h_flex().gap(narrow ? G.xl : 48).pt(G.md).children([40, 52, 36].map((w) => block(w, narrow ? 20 : 24, 4)))))
-      .child(h_flex().w_full().h(56).items_end().gap(2)
-        .children(hours.map((h) => div().flex_1().min_w(2).h(h).rounded(2).bg(c.border))))
-      .child(v_flex().w_full().child(h_flex().pb(G.sm).child(line(90, 12))).children([0, 1, 2, 3].map(row)));
-});
+const shippedSkeleton = (c, narrow) => {
+  const { block, line, row } = ghost(c);
+  const hours = [8, 12, 6, 10, 18, 28, 40, 48, 36, 22, 14, 10, 16, 30, 44, 50, 38, 20, 12, 8, 6, 10, 18, 24];
+  return skeletonStack(narrow)
+    .child(v_flex().gap(G.md)
+      .child(line(120, 15))
+      .child(block(narrow ? 140 : 180, narrow ? 40 : 56, 6))
+      .child(h_flex().gap(narrow ? G.xl : 48).pt(G.md).children([40, 52, 36].map((w) => block(w, narrow ? 20 : 24, 4)))))
+    .child(h_flex().w_full().h(56).items_end().gap(2)
+      .children(hours.map((h) => div().flex_1().min_w(2).h(h).rounded(2).bg(c.border))))
+    .child(v_flex().w_full().child(h_flex().pb(G.sm).child(line(90, 12))).children([0, 1, 2, 3].map(row)));
+};

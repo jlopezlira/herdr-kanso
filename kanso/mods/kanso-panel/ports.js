@@ -484,7 +484,7 @@ export class Ports {
   }
 
   bones(c, narrow = true) {
-    return pageBones(c, narrow, { title: [70, 90], body: this.skeleton(c, narrow) });
+    return pageBones(c, narrow, { title: { narrow: 70, wide: 90 }, body: this.skeleton(c, narrow) });
   }
 
   render(cx) {

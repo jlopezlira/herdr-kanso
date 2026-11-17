@@ -24,7 +24,7 @@ export function pageSize({ always = false } = {}) {
 export function pageBones(c, narrow, { title, body, extra = [], background = c.canvas, gap } = {}) {
   const { header } = ghost(c);
   return pageFrame(c, background).child(pagePadding(narrow)
-    .child(pageContent(narrow, gap).child(header(narrow ? title[0] : title[1], narrow ? 17 : 20)).children(extra).child(body)));
+    .child(pageContent(narrow, gap).child(header(narrow ? title.narrow : title.wide, narrow ? 17 : 20)).children(extra).child(body)));
 }
 
 export const skeletonMetrics = (block, narrow, widths = [30, 46, 40, 30]) => h_flex().gap(narrow ? G.xl : 48).pt(G.md)
@@ -43,7 +43,6 @@ export const detailRow = (column) => h_flex().w_full().items_end().gap(G.md).chi
 
 export const documentBones = (c, width, body) => pageFrame(c).child(fileToolbar(c).child(ghost(c).header(width, 13))).child(body);
 export const scopedColumn = (scope) => v_flex().w_full().gap(G.lg).when(Boolean(scope), (el) => el.child(scope));
-export const responsiveSkeleton = (c, draw) => draw(ghost(c));
 
 export function sizedPage(root, narrow, draw) {
   return root.on_size_change(pageSize.call(this)).child(pageBody(narrow, draw));

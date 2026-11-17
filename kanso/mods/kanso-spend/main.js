@@ -1,4 +1,4 @@
-import { detailColumn, responsiveSkeleton, metricStats, pageBody, pageSize, skeletonStack, skeletonBars, heroStack, heroHeading } from "./ui-page.js";
+import { detailColumn, metricStats, pageBody, pageSize, skeletonStack, skeletonBars, heroStack, heroHeading } from "./ui-page.js";
 import { localService, serviceOn } from "./platform-host.js";
 import { paths } from "./platform-paths.js";
 import { fileApi } from "./platform-files.js";
@@ -796,22 +796,23 @@ export default class TokenSpend extends View {
   }
 }
 
-const spendSkeleton = (c, narrow) => responsiveSkeleton(c, ({ block, line, row }) => {
+const spendSkeleton = (c, narrow) => {
+  const { block, line, row } = ghost(c);
   const heights = [18, 26, 22, 40, 64, 92, 48, 52, 36, 44, 20, 38, 70, 50, 42, 46, 28, 34, 58, 30, 44, 24, 14, 10, 8, 8, 6, 6, 6, 6, 8];
   return skeletonStack(narrow)
-    .child(h_flex().w_full().gap(G.lg).items_center()
-      .children([44, 52, 34, 52].map((w) => block(w, 10))))
-    .child(v_flex().gap(G.md)
-      .child(line(110, 12))
-      .child(block(narrow ? 170 : 250, narrow ? 40 : 58, 6))
-      .child(line(170, 11))
-      .child(h_flex().gap(narrow ? G.xl : 48).pt(G.md).children([46, 64, 58].map((w) => block(w, narrow ? 18 : 22, 4)))))
-    .child(h_flex().w_full().h(150).items_end()
-      .children(skeletonBars(block, heights)))
-    .child(v_flex().w_full()
-      .child(h_flex().pb(G.sm).child(line(70, 12)))
-      .children([0, 1, 2, 3, 4].map(row)));
-});
+  .child(h_flex().w_full().gap(G.lg).items_center()
+    .children([44, 52, 34, 52].map((w) => block(w, 10))))
+  .child(v_flex().gap(G.md)
+    .child(line(110, 12))
+    .child(block(narrow ? 170 : 250, narrow ? 40 : 58, 6))
+    .child(line(170, 11))
+    .child(h_flex().gap(narrow ? G.xl : 48).pt(G.md).children([46, 64, 58].map((w) => block(w, narrow ? 18 : 22, 4)))))
+  .child(h_flex().w_full().h(150).items_end()
+    .children(skeletonBars(block, heights)))
+  .child(v_flex().w_full()
+    .child(h_flex().pb(G.sm).child(line(70, 12)))
+    .children([0, 1, 2, 3, 4].map(row)));
+};
 
 const fadedButton = (button) => button.hover((style) => style.opacity(0.75)).focus((style) => style.opacity(0.75));
 const separatedRow = (row, c, index) => row.when(index > 0, (el) => el.border_t(1).border_color(c.border));

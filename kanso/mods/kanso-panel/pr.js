@@ -1,5 +1,5 @@
 import { spawnAndNotify, commandOk, location, key, diffRows, monoFont, tilde, failure, said, failNote } from "./lib.js";
-import { detailRow, detailColumn, responsiveSkeleton, pageSize, pageBones, skeletonStack, skeletonMetrics } from "./ui-page.js";
+import { detailRow, detailColumn, pageSize, pageBones, skeletonStack, skeletonMetrics } from "./ui-page.js";
 import { prMeta, prState, drawHero, drawEmpty, footOf, listedRow, heroPieces } from "./pr-view.js";
 import { localService } from "./platform-host.js";
 import { openApi } from "./platform-open.js";
@@ -866,10 +866,10 @@ export class PullRequest {
   }
 
   bones(c, narrow = true) {
-    return pageBones(c, narrow, { title: [110, 140], body: this.skeleton(c, narrow), background: c.background, gap: G.lg });
+    return pageBones(c, narrow, { title: { narrow: 110, wide: 140 }, body: this.skeleton(c, narrow), background: c.background, gap: G.lg });
   }
 
-  skeleton(c, narrow) { return prSkeleton(c, narrow); }
+  skeleton(c, narrow) { return prSkeleton(ghost(c), narrow); }
 
   waiting(c, title, detail, action) {
     return v_flex().w_full().gap(G.sm)
@@ -1246,12 +1246,10 @@ export class PullRequest {
   }
 }
 
-const prSkeleton = (c, narrow) => responsiveSkeleton(c, ({ block, row }) => {
-    return skeletonStack(narrow)
-      .child(v_flex().gap(G.md).child(block(140, 12)).child(block(narrow ? 240 : 420, narrow ? 22 : 28, 4)).child(block(180, 22, 4)).child(block(150, 11))
-        .child(skeletonMetrics(block, narrow)))
-      .child(v_flex().gap(G.sm).children([0, 1, 2].map((i) => h_flex().gap(G.md).child(block(70, 10)).child(block([90, 120, 80][i], 10)))))
-      .child(v_flex().w_full().child(h_flex().pb(G.sm).child(block(70, 12))).children([0, 1, 2, 3, 4].map(row)));
-});
+const prSkeleton = ({ block, row }, narrow) => skeletonStack(narrow)
+  .child(v_flex().gap(G.md).child(block(140, 12)).child(block(narrow ? 240 : 420, narrow ? 22 : 28, 4)).child(block(180, 22, 4)).child(block(150, 11))
+    .child(skeletonMetrics(block, narrow)))
+  .child(v_flex().gap(G.sm).children([0, 1, 2].map((i) => h_flex().gap(G.md).child(block(70, 10)).child(block([90, 120, 80][i], 10)))))
+  .child(v_flex().w_full().child(h_flex().pb(G.sm).child(block(70, 12))).children([0, 1, 2, 3, 4].map(row)));
 
 const listButton = (button, index, c) => button.when(index > 0, (el) => el.border_t(1).border_color(c.border)).hover((style) => style.opacity(0.75));
