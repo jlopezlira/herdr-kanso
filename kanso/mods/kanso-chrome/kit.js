@@ -9,6 +9,7 @@ import { figure } from "./ui-metric.js";
 import { diffText, facts, plus } from "./ui-facts.js";
 import { card as drawCard } from "./ui-card.js";
 import { code as drawCode } from "./ui-code.js";
+import { tipText } from "./ui-tooltip.js";
 
 // Facts as words, as the Storybook writes them.
 export { diffText, facts, plus };
@@ -101,4 +102,11 @@ export const card = ({ content = [], ...props }) => (id, c, more = {}) => {
 export const code = (props) => (id, c, more = {}) => {
   given(more);
   return drawCode(id, c, props);
+};
+
+// Herdr's `.tooltip()` takes only a string, so the tooltip is its words: `.tooltip(tooltip({ label, detail, chord }))`.
+// `chord` is the key table's chord ("cmd-shift-p", from ui-tooltip.js `boundChord`), written as this computer writes it. Anything else throws.
+export const tooltip = ({ label, detail = "", chord = "", ...rest }) => {
+  if (Object.keys(rest).length) throw new Error(`kit: a tooltip takes label, detail and chord, not ${Object.keys(rest).join(", ")}`);
+  return tipText({ label, detail, chord });
 };

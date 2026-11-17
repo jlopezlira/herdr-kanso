@@ -18,7 +18,6 @@ import { Kdb, restDue, machinesToAsk, kansoDir } from "./kdb.js";
 import { agentSnapshot, agentTargets, observedAgents, targetOf, parseTarget, returnSignature, RETURN_LABEL, AWAY_PIECE, destinationOf, livePlaces } from "./since-left-model.js";
 import { SinceLeft } from "./since-left.js";
 import { REGISTRY, WORKTREES, keyOfSpace, keyOfProject, closedProjects, shownNames, startingProjects, folderName, addWorktree, worktreesOf, missingFolders, trimmed, sameProjects } from "./projects.js";
-import { glyphs } from "./marks.js";
 import { sleepingNow, asleepGroups, nameOf, seenNow, conversationOfThread, shownThread, terminalNames, agentKey, SHOWN_LABEL, PROJECT_LABEL, ID_LABEL } from "./roster.js";
 import { pollable, activePlaces } from "./background.js";
 import { listKey, moveTo } from "./listkeys.js";
@@ -30,7 +29,7 @@ import { projectRow } from "./project-row.js";
 import { computerRow } from "./computer-row.js";
 import { section } from "./section.js";
 import { asleep } from "./asleep.js";
-import { pullKey, runPull, canWake, enterOpens, sectionMarkOf, sectionCount, rowDirectory, threadWord, threadActions, signInCommand, noProjectsOn, sortOf, foldTail, readWord, viewChord } from "./sidebar-rows.js";
+import { pullKey, runPull, canWake, enterOpens, sectionMarkOf, sectionCount, rowDirectory, threadWord, threadActions, signInCommand, noProjectsOn, sortOf, foldTail, readWord } from "./sidebar-rows.js";
 import { H, G, T, R, W, ICON, SIDEBAR, GLIDE, OPACITY, TINT, alpha, tokens } from "./ui.js";
 import { ELBOW } from "./ui-row.js";
 import { button, Armed } from "./ui-button.js";
@@ -38,7 +37,8 @@ import { dialog } from "./ui-dialog.js";
 import { field, TextField } from "./ui-field.js";
 import { segmented } from "./ui-tab.js";
 import { mark } from "./ui-mark.js";
-import { menu, row, emptyState, skeletonOf } from "./kit.js";
+import { menu, row, emptyState, skeletonOf, tooltip } from "./kit.js";
+import { boundChord } from "./ui-tooltip.js";
 import { menuList, menuHeight } from "./ui-menu.js";
 import { toolbar } from "./ui-toolbar.js";
 import { header } from "./ui-sidebar-header.js";
@@ -1902,7 +1902,7 @@ export default class Spaces extends View {
       .when(phase !== "loading", (el) => el.cursor_pointer().hover((s) => s.bg(alpha(t.foreground, TINT.row))))
       .on_click((_e, cx) => go(cx))
       .on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); this.computerMenu(m, phase); })
-      .tooltip(machineTip(title, phase, hint))
+      .tooltip(tooltip({ label: machineTip(title, phase, hint) }))
       .child(svg(`mods/kanso-chrome/icons/${m ? "server" : "monitor"}.svg`).size(ICON).flex_none().text_color(phase === "connected" ? t.muted : ink));
   }
 
@@ -1954,7 +1954,7 @@ export default class Spaces extends View {
     // Unreachable: its projects as last read, dim, with when.
     if (phase === "unavailable" && !collapsed && mine.length) {
       const when = readWord(this.seenOn?.[m ?? ""]);
-      return [headItem, ...draw(mine).map((it) => ({ ...it, el: it.el.opacity(OPACITY.away).when(Boolean(when), (el) => el.tooltip(when)) }))];
+      return [headItem, ...draw(mine).map((it) => ({ ...it, el: it.el.opacity(OPACITY.away).when(Boolean(when), (el) => el.tooltip(tooltip({ label: when }))) }))];
     }
     if (phase !== "connected" || folded) return [headItem];
     const empty = emptyState({ icon: "folder", text: noProjectsOn(this.names.title(m)), action: "New project" })(`machine-new-${m ?? "local"}`, c, { onClick: () => run("space.new", { machine: m ?? "" }) });
@@ -2163,7 +2163,7 @@ export default class Spaces extends View {
     const list = () => (rows.length ? this.railMenu(tip, rows, space) : space ? run("space.select", { id: space }) : null);
     const strong = rows.some((r) => r.strong);
     return h_flex().w_full().h(SIDEBAR.railRow).flex_none().justify_center().items_center().child(
-      v_flex().id(id).w(36).h(40).flex_none().gap(3).items_center().justify_center().rounded(6).cursor_pointer().tooltip(tip)
+      v_flex().id(id).w(36).h(40).flex_none().gap(3).items_center().justify_center().rounded(6).cursor_pointer().tooltip(tooltip({ label: tip }))
         .when(on, (el) => el.bg(alpha(t.foreground, TINT.pill)))
         .when(!on, (el) => el.hover((s) => s.bg(alpha(t.foreground, TINT.row))))
         .when(strong, (el) => el.border_1().border_color(alpha(t.accent, TINT.ring)))
@@ -2254,8 +2254,7 @@ export default class Spaces extends View {
   // The three views; collapsed, the rail's column of icons.
   viewSwitch(t, sp, collapsed = false) {
     const asks = sp.some((s) => s.status === "blocked");
-    const platform = window()?.platform;
-    const tipOf = (key) => { const chord = viewChord(key, platform); return chord ? `${VIEWS[key].label} ${glyphs(chord, platform)}` : VIEWS[key].label; };
+    const tipOf = (key) => tooltip({ label: VIEWS[key].label, chord: boundChord(`kanso-spaces.view-${key}`) });
     const items = Object.keys(VIEWS).map((key) => ({ key, label: VIEWS[key].label, icon: collapsed ? VIEWS[key].icon : null, dot: asks && key === "agents", tip: tipOf(key) }));
     const pick = (view, cx) => { this.setView(view, cx); cx.notify(); };
     return collapsed

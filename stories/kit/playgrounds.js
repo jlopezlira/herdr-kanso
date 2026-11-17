@@ -578,11 +578,11 @@ export const playgrounds = {
     markup: toast,
   },
   'Primitives/Tooltip': {
-    args: { text: 'Adding up', detail: '14 repositories to go', key: '', icon: 'lu-refresh-cw', side: 'auto', open: true },
+    args: { label: 'Adding up', detail: '14 repositories to go', chord: '', icon: 'lu-refresh-cw', side: 'auto', open: true },
     argTypes: {
-      text: textArg('text'),
+      label: textArg('label'),
       detail: textArg('detail'),
-      key: { name: 'key', control: { type: 'text', maxLength: 6 } },
+      chord: { name: 'chord', control: { type: 'text', maxLength: 6 }, description: 'As the computer writes it; the app reads it from the key table' },
       icon: { ...select('icon', icons.filter((id) => id !== 'none')), description: 'The unnamed control it names' },
       side: { ...select('side', sides), description: 'Auto: the side with the most room around the control' },
       open: boolArg('open', { description: 'Off: shown on hover and keyboard focus' }),

@@ -4,14 +4,15 @@
 // Modified by jlopezlira (Kanso, https://github.com/jlopezlira/herdr-kanso): renamed from mn-status; one quiet line; who is waiting and what they ask (a click goes there, as Cmd+J); low memory from the guard's file; stand-ins that show only while their home is out of sight.
 import { View, div } from "gpui-kit";
 import { h_flex } from "gpui-base";
-import { spaces, agents, terminals, machines, theme, run, window, props, shared, appHome, readTextFile } from "herdr";
+import { spaces, agents, terminals, machines, theme, run, props, shared, appHome, readTextFile } from "herdr";
 import { G, T, tokens } from "./ui.js";
 import { iconButton } from "./ui-button.js";
-import { failureLine } from "./kit.js";
+import { failureLine, tooltip } from "./kit.js";
+import { boundChord } from "./ui-tooltip.js";
 import { statusItem, needsItem } from "./ui-status.js";
 import { afterMount, aliasText, tryOrAsync } from "./pure.js";
 import { paths } from "./platform-paths.js";
-import { MEMORY_MS, PALETTE_COMMAND, computerOf, computerShown, waitingItem, questionOf, memoryLow, workingItem, paletteTip } from "./model.js";
+import { MEMORY_MS, PALETTE_COMMAND, computerOf, computerShown, waitingItem, questionOf, memoryLow, workingItem } from "./model.js";
 import { pieces, shown } from "./pieces.js";
 
 const GUARD_NOW = ["data", "kanso-guard", "now.json"];
@@ -76,6 +77,6 @@ export default class WorkspaceStatus extends View {
       .when(Boolean(low), (el) => el.child(statusItem("status-memory", c, { text: low.words, tone: low.tone, tip: low.tooltip, onClick: go(low.command) })))
       .when(right && shown("status.agents", working.count > 0, map), (el) => el.child(statusItem("status-working", c,
         { mark: working.mark, text: working.words, tip: working.tooltip, onClick: go(working.command) })))
-      .when(right && shown("status.palette", true, map), (el) => el.child(iconButton("palette", "command", paletteTip(window()?.platform), go(PALETTE_COMMAND), c, { size: "sm" })));
+      .when(right && shown("status.palette", true, map), (el) => el.child(iconButton("palette", "command", tooltip({ label: "Command palette", chord: boundChord(PALETTE_COMMAND) }), go(PALETTE_COMMAND), c, { size: "sm" })));
   }
 }

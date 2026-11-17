@@ -13,7 +13,7 @@ import { quietLink, iconButton } from "./ui-button.js";
 import { field, TextField } from "./ui-field.js";
 import { menu } from "./ui-menu.js";
 import { section } from "./ui-section.js";
-import { metric, skeletonOf } from "./kit.js";
+import { metric, skeletonOf, tooltip } from "./kit.js";
 import { factList } from "./ui-facts.js";
 import { segmented } from "./ui-tab.js";
 import { toggleSwitch } from "./ui-toggle.js";
@@ -90,7 +90,7 @@ function formatTime(iso) {
 
 function metricLine(c, name, tokensText, value, { color = c.text, tip = "", medium = false } = {}) {
   return h_flex().w_full().items_end().gap(G.md)
-    .child(div().flex_1().min_w(0).truncate().text_size(13).text_color(color).when(medium, (el) => el.font_medium()).when(Boolean(tip), (el) => el.tooltip(tip)).child(name))
+    .child(div().flex_1().min_w(0).truncate().text_size(13).text_color(color).when(medium, (el) => el.font_medium()).when(Boolean(tip), (el) => el.tooltip(tooltip({ label: tip }))).child(name))
     .child(div().text_size(11).text_color(c.dim).child(tokensText))
     .child(div().min_w(64).text_right().text_size(15).font_light().text_color(c.text).child(value));
 }
@@ -495,7 +495,7 @@ export default class TokenSpend extends View {
         .when(inner, (el) => el.child(iconButton("spend-back", "chevron-left", "Back", (cx) => this.back(cx), c)))
         .child(v_flex().flex_1().min_w(0).gap(1)
           .when(Boolean(crumb), (el) => el.child(div().text_size(11).text_color(c.dim).child(crumb)))
-          .child(div().truncate().text_size(inner ? (narrow ? 15 : 17) : (narrow ? 17 : 20)).text_color(c.text).tooltip(title).child(title))))
+          .child(div().truncate().text_size(inner ? (narrow ? 15 : 17) : (narrow ? 17 : 20)).text_color(c.text).tooltip(tooltip({ label: title })).child(title))))
       .child(h_flex().gap(G.xs).items_center().flex_none()
         .when(Boolean(reading), (el) => el.child(div().pr(G.xs).text_size(11).text_color(c.dim).child(reading)))
         .when(this.canShare(), (el) => el.child(iconButton("spend-share", "share", "Share", (cx) => this.share.toggle(cx), c, { active: this.share.open })))
@@ -527,7 +527,7 @@ export default class TokenSpend extends View {
     return v_flex().w_full().gap(narrow ? 36 : 48)
       .opacity(this.running === "prepare" ? OPACITY.away : 1)
       .when(Boolean(this.error) && !this.running, (el) => el.child(h_flex().w_full().gap(G.md).items_center()
-        .child(div().flex_1().min_w(0).text_size(12).text_color(c.red).truncate().tooltip(this.error)
+        .child(div().flex_1().min_w(0).text_size(12).text_color(c.red).truncate().tooltip(tooltip({ label: this.error }))
           .child(`Last update failed: ${this.error}`))
         .child(quietLink("spend-retry-inline", "Try again", (cx) => this.run("snapshot", cx), c))))
       .child(this.controls(c, Boolean(top)))
@@ -624,7 +624,7 @@ export default class TokenSpend extends View {
     return v_flex().w_full().gap(G.sm)
       .child(h_flex().w_full().items_end()
         .children(chart.bars.map((bar) => v_flex().flex_1().min_w(0).h(height + 18).items_center().justify_end().gap(4)
-          .tooltip(bar.tip)
+          .tooltip(tooltip({ label: bar.tip }))
           .when(bar.peak, (el) => el.child(div().text_size(10).text_color(c.text).whitespace_nowrap().child(bar.value)))
           .child(div().w(bar.peak ? 3 : 2).flex_none().rounded_t(1)
             .h(bar.ratio > 0 ? Math.max(3, Math.round(bar.ratio * height)) : 1)
@@ -704,7 +704,7 @@ export default class TokenSpend extends View {
         .children((s?.sources ?? []).map((source, index) => separatedRow(h_flex().w_full().items_center().gap(G.md).py(G.sm), c, index)
           .child(detailColumn()
             .child(div().text_size(13).text_color(source.enabled ? c.text : c.muted).child(source.label))
-            .child(div().truncate().text_size(11).text_color(c.dim).tooltip(source.roots).child(source.roots)))
+            .child(div().truncate().text_size(11).text_color(c.dim).tooltip(tooltip({ label: source.roots })).child(source.roots)))
           .child(toggleSwitch(`ins-source-${source.id}`, source.enabled, (next, cx) => this.toggleSource(source.id, next, cx), c, {
             label: `${source.label}: ${source.enabled ? "on" : "off"}`,
           }))))
@@ -745,7 +745,7 @@ export default class TokenSpend extends View {
         .child(v_flex().flex_1().min_w(0).gap(3)
           .child(h_flex().w_full().gap(G.sm).items_end()
             .when(Boolean(s.ticket), (el) => el.child(div().flex_none().text_size(12).font_medium().text_color(c.muted).child(s.ticket)))
-            .child(div().flex_1().min_w(0).truncate().text_size(13).text_color(c.text).tooltip(s.tip).child(s.title)))
+            .child(div().flex_1().min_w(0).truncate().text_size(13).text_color(c.text).tooltip(tooltip({ label: s.tip })).child(s.title)))
           .child(h_flex().w_full().flex_wrap().gap_x(G.md).children(s.meta.map((part) => div().text_size(11).text_color(c.dim).whitespace_nowrap().child(part)))))
         .child(v_flex().items_end().gap(2).flex_none()
           .child(div().text_size(17).font_light().text_color(c.text).child(s.usdText))
@@ -767,7 +767,7 @@ export default class TokenSpend extends View {
           .child(v_flex().flex_1().min_w(0).gap(4)
             .child(h_flex().w_full().gap(G.sm).items_end()
               .when(Boolean(task.ticket), (el) => el.child(div().flex_none().text_size(12).font_medium().text_color(c.muted).child(task.ticket)))
-              .child(div().flex_1().min_w(0).truncate().text_size(13).text_color(c.text).tooltip(task.tip).child(task.title)))
+              .child(div().flex_1().min_w(0).truncate().text_size(13).text_color(c.text).tooltip(tooltip({ label: task.tip })).child(task.title)))
             .child(h_flex().w_full().flex_wrap().gap_x(G.md).children(task.meta.map((part) => div().text_size(11).text_color(c.dim).whitespace_nowrap().child(part)))))
           .child(v_flex().items_end().gap(2).flex_none()
             .child(div().text_size(17).font_light().text_color(c.text).child(task.usdText))

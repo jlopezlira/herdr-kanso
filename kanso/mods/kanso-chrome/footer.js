@@ -4,7 +4,7 @@ import { h_flex, v_flex, Popover } from "gpui-base";
 import { G, R, T, ICON_CHROME, CHROME_SQUARE, glyphOf } from "./ui.js";
 import { row } from "./ui-row.js";
 import { menu } from "./ui-menu.js";
-import { failureBlock } from "./kit.js";
+import { failureBlock, tooltip } from "./kit.js";
 import { ROW, PAD, REFUSAL, refusalBlock } from "./footer-model.js";
 
 const inkOf = (c, quiet) => (quiet ? c.muted : c.text);
@@ -18,7 +18,7 @@ const line = (c, { key, icon, name, quiet, onClick }) => flush(row(`footer-${key
 })).text_size(T.card); // the kit row has no size: the Storybook's row has none either
 
 const square = (c, { key, icon, name, quiet, onClick }) => h_flex().id(`footer-${key}`).size(CHROME_SQUARE).flex_none()
-  .items_center().justify_center().rounded(R.control).cursor_pointer().tooltip(name)
+  .items_center().justify_center().rounded(R.control).cursor_pointer().tooltip(tooltip({ label: name }))
   .hover((s) => s.bg(c.subtle)).active((s) => s.bg(c.selected))
   .when(Boolean(onClick), (el) => el.on_click((_e, cx) => onClick(cx)))
   .child(chromeGlyph(icon, inkOf(c, quiet)));
