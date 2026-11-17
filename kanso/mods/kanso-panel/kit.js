@@ -61,14 +61,16 @@ const given = (more) => {
 // The first piece given `presses` checks, once drawn, that each name found a drawn target, as `on` checks its tools:
 // a renamed label or icon throws instead of leaving its press unbound. Pieces under it take theirs with `pressOf`.
 // `Symbol.for`: one mark across every copy of the kit, as a composition and its slots may each import their own.
+const noTool = (id, missing) => {
+  if (missing.length) throw new Error(`kit: ${id} has no tool ${missing.join(", ")}`);
+};
 const TAKEN = Symbol.for("kanso.presses.taken");
 const pressing = (draw) => (id, c, more = {}, context = {}) => {
   const { presses } = more;
   if (!presses || presses[TAKEN]) return draw(id, c, more, context);
   const taken = new Set();
   const el = draw(id, c, { ...more, presses: { ...presses, [TAKEN]: taken } }, context);
-  const missing = Object.keys(presses).filter((key) => !taken.has(key));
-  if (missing.length) throw new Error(`kit: ${id} has no tool ${missing.join(", ")}`);
+  noTool(id, Object.keys(presses).filter((key) => !taken.has(key)));
   return el;
 };
 const pressOf = (presses, key) => {
@@ -87,8 +89,7 @@ const withHandlers = (id, raw, actions, action, detail) => {
   const lone = withIcon(action);
   const facts = parts(detail).map(withIcon);
   const presses = [...own, lone, ...facts.filter(pressFact)];
-  const missing = Object.keys(on).filter((key) => !presses.some((tool) => tool && keyOf(tool) === key));
-  if (missing.length) throw new Error(`kit: ${id} has no tool ${missing.join(", ")}`);
+  noTool(id, Object.keys(on).filter((key) => !presses.some((tool) => tool && keyOf(tool) === key)));
   return { actions: own.map(wired(on)), action: wired(on)(lone), detail: facts.map((part) => (pressFact(part) ? wired(on)(part) : part)) };
 };
 
