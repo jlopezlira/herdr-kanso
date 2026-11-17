@@ -48,7 +48,7 @@ export const loadTerminalNames = (host) => load("kanso-spaces/roster.js", ["term
 export const loadPendingState = (host) => load("kanso-panel/ui-state.js", ["PENDING"], host);
 export const loadDefaultKeys = (host) => load("kanso-settings/defaults.js", ["DEFAULT_KEYS"], host);
 export const loadSettings = (host) => load("kanso-settings/main.js", ["Settings"], host);
-export const loadAgentRowH = (host) => load("kanso-spaces/agents.js", ["agentRowH"], host);
+export const loadSessionHeight = (host) => load("kanso-spaces/agents.js", ["sessionHeight"], host);
 export const loadSimulatorApi = (host) => load("kanso-panel/platform-simulator.js", ["simulatorApi"], host);
 export const loadRecordPrFacts = (host) => load("kanso-panel/pr-inbox.js", ["recordPrFacts"], host);
 export const loadDuration = (host) => load("kanso-spaces/agents.js", ["duration"], host);

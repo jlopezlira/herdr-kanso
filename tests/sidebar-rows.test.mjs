@@ -3,8 +3,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   ASLEEP_ROW, showPlus, showDots, projectControls, pullKey, pullLabel, pullCommand, refusalLine,
-  aheadOpen, gitControls, runPull, activityTone, machineWordTone, canWake, enterOpens, asleepControls,
-  gitTask, behindTip, aheadTip, foldTail, sectionMarkOf, sectionCount, rowDirectory, timePlace, untilWord, readWord,
+  aheadOpen, gitControls, runPull, machineWordTone, canWake, enterOpens, asleepControls,
+  gitTask, behindTip, aheadTip, foldTail, sectionMarkOf, sectionCount, rowDirectory, untilWord, readWord,
   threadWord, threadActions, closedControls, signInCommand, noProjectsOn, sortOf, viewChord,
 } from "../kanso/mods/kanso-spaces/sidebar-rows.js";
 import { readFile } from "node:fs/promises";
@@ -74,14 +74,6 @@ test("a count ahead goes to that project and opens the pull request panel", () =
   assert.equal(controls.find((item) => item.kind === "ahead").label, "\u21912");
 });
 
-test("an agent's second line is full ink while it waits, quiet while it works, and dim when it is finished", () => {
-  assert.equal(activityTone("blocked"), "foreground");
-  assert.equal(activityTone("working"), "muted");
-  assert.equal(activityTone("done"), "dim");
-  assert.equal(activityTone("idle"), "dim");
-  assert.equal(activityTone("asleep"), "muted");
-});
-
 test("A computer's state on its row is a dim word, unreachable included", () => {
   assert.equal(machineWordTone("unavailable"), "dim");
   assert.equal(machineWordTone("connected"), "dim");
@@ -141,13 +133,10 @@ test("a section head carries a mark only for Needs you, and its count only once 
   assert.equal(sectionCount(false, 2), 2);
 });
 
-test("a session row puts its project after the name, the computer when not this one, and its time after what it is on", () => {
+test("a session row puts its project after the name, and the computer when not this one", () => {
   assert.equal(rowDirectory("kansō", null), "kansō");
   assert.equal(rowDirectory("ops", "dark"), "ops · dark");
   assert.equal(rowDirectory(null, null), null);
-  assert.equal(timePlace("Reviewing step 01", "3m"), "line");
-  assert.equal(timePlace(null, "3m"), "end", "with no second line the time keeps its place at the end");
-  assert.equal(timePlace("x", null), null);
 });
 
 test("a thread row says it cannot be read, until when it sleeps, or that it woke", () => {

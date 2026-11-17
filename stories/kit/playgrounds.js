@@ -1,10 +1,11 @@
 // Pages whose story is built from Storybook controls instead of drawn states.
 import sprite from '../proto-sprite.svg?raw';
-import { activity, activityMenu, asleep, paneFolds, paneHeader, panelHeaderForms, panelLooks, paneReaches, paneStates, noticeHomes, noticePlaces, noticeStates, systemMessage, toastStack, heldChord, keyboard, keyboardExplorer, keyboards, keyboardSystems, keyNames, shortcutRowStates, channelSettings, channels, computerItem, computerItemStates, computerRow, computerStates, failureMenu, header, panelDoors, projectRow, section, sessionRow, sidebarFooter, tabBarStates, tile, toolbar, views, viewSwitch } from './compositions.js';
+import { activity, activityMenu, asleep, paneFolds, paneHeader, panelHeaderForms, panelLooks, paneReaches, paneStates, noticeHomes, noticePlaces, noticeStates, systemMessage, toastStack, heldChord, keyboard, keyboardExplorer, keyboards, keyboardSystems, keyNames, shortcutRowStates, channelSettings, channels, computerItem, computerItemStates, computerRow, computerStates, failureMenu, header, panelDoors, projectRow, section, sidebarFooter, tabBarStates, tile, toolbar, views, viewSwitch } from './compositions.js';
+import { sessionRow } from './session-row.js';
 import { avatar, avatarSizes, button, card, chip, code, dawn, dialog, emptyState, escape, failureBlock, input, keycapStates, keyHint, kinds, levels, mark, markdown, marks, markSizes, menu, metric, row, rowDepths, sides, skeletonOf, skeletonShapes, stack, statePatterns, tabs, thumbnail, toast, toggle, tooltip, windowControls } from './pieces.js';
 import { barWidths, inBar } from './frames.js';
 import { edgeSides, layerDefaults, memoryShown, needsShown, panelContents, panelReads, panelRowLooks, statedPages, stepperShown, tabActs } from './states.js';
-import { appNotices, keyLayer, keyLayerMods, pullRequest, sampleDojo, sampleNotices, samplePanelHeader, sampleSidebar, statusMenus } from './samples.js';
+import { appNotices, keyLayer, keyLayerMods, pullRequest, sampleDojo, sampleNotices, samplePanelHeader, sampleSidebar, sessionCommandsTip, sessionTools, statusMenus } from './samples.js';
 
 const icons = ['none', ...[...sprite.matchAll(/id="(lu-[^"]+)"/g)].map(([, id]) => id).sort()];
 const frame = (markup) => `<div class="kanso-story"><div class="kanso-story__theme kanso-story__frame kanso-story--free">${markup}</div></div>`;
@@ -261,7 +262,7 @@ export const playgrounds = {
     },
   },
   'Compositions/Sidebar/Session row': {
-    args: { program: 'p-claude', name: 'Atlas', activity: 'Reviewing step 01', time: '3m', place: '', status: 'working', depth: 1, current: false, pinned: false, commands: 0, hover: false, focus: false, dimmed: false },
+    args: { program: 'p-claude', name: 'Atlas', activity: 'Reviewing step 01', time: '3m', place: '', status: 'working', depth: 1, current: false, pinned: false, commands: 0, hover: false, focus: false, dimmed: false, step: '', stuck: false, pinnable: true, menu: true, selected: false, settle: false, refresh: false, drop: 'none', guide: 'none' },
     argTypes: {
       ...agentArgs,
       activity: textArg('activity'),
@@ -272,8 +273,18 @@ export const playgrounds = {
       ...flags('current', 'pinned'),
       commands: numberArg('commands', 0),
       ...flags('hover', 'focus', 'dimmed'),
+      step: textArg('step time'),
+      stuck: boolArg('stuck'),
+      pinnable: boolArg('pin tool'),
+      menu: boolArg('More tool'),
+      selected: boolArg('keyboard ring'),
+      settle: boolArg('Settle tool'),
+      refresh: boolArg('Refresh'),
+      drop: select('drop line', ['none', 'before', 'after']),
+      guide: select('guide', ['none', 'tee', 'end', 'pass']),
     },
-    markup: (args) => inSidebar(sessionRow(args)),
+    markup: ({ step, stuck, settle, drop, guide, ...args }) => inSidebar(sessionRow({ ...args, step: step ? { time: step, stuck } : null, tools: settle ? sessionTools : [],
+      drop: drop === 'none' ? null : drop, guides: guide === 'none' ? [] : [null, guide], commandsTip: args.commands ? sessionCommandsTip : null, placeTip: args.place || null })),
   },
   'Compositions/Sidebar/Project row': {
     args: { name: 'kansō', folder: 'herdr-kanso', branch: 'main', sync: '↓12', open: false, status: 'blocked', count: 0, hover: false, focus: false },
@@ -482,7 +493,7 @@ export const playgrounds = {
     markup: toggle,
   },
   'Primitives/Row': {
-    args: { icon: 'lu-file', name: 'checkout.ts', detail: 'src/api', meta: '+14 −3', mark: 'none', second: '', heading: false, title: false, depth: 0, tools: false, current: false, selected: false, hover: false, focus: false, dimmed: false, pending: false },
+    args: { icon: 'lu-file', name: 'checkout.ts', detail: 'src/api', meta: '+14 −3', mark: 'none', second: '', heading: false, title: false, depth: 0, tools: false, current: false, selected: false, hover: false, focus: false, dimmed: false, pending: false, drop: 'none', wash: 'none', guide: 'none' },
     argTypes: {
       icon: select('icon', icons.concat(['p-claude', 'p-codex'])),
       name: textArg('name'),
@@ -495,8 +506,12 @@ export const playgrounds = {
       depth: radioArg('depth', rowDepths),
       tools: boolArg('tools on hover'),
       ...flags('current', 'selected', 'hover', 'focus', 'dimmed', 'pending'),
+      drop: select('drop line', ['none', 'before', 'after']),
+      wash: select('wash', ['none', 'blocked']),
+      guide: select('guide at depth 2', ['none', 'tee', 'end', 'pass']),
     },
-    markup: ({ tools, ...args }) => `<div class="kanso-panel">${row({ ...args, actions: tools ? [{ icon: 'lu-pin', label: 'Pin' }, { icon: 'lu-ellipsis', label: 'More' }] : [] })}</div>`,
+    markup: ({ tools, drop, wash, guide, ...args }) => `<div class="kanso-panel">${row({ ...args, drop: drop === 'none' ? null : drop, wash: wash === 'none' ? null : wash, guides: guide === 'none' ? [] : [null, guide],
+      actions: tools ? [{ icon: 'lu-pin', label: 'Pin' }, { icon: 'lu-ellipsis', label: 'More' }] : [] })}</div>`,
   },
   'Primitives/Skeleton': {
     args: { shape: 'row', count: 3 },

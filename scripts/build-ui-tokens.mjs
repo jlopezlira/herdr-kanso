@@ -8,7 +8,7 @@ export const END = "// End of the generated sizes.";
 
 const PICK = {
   G: { hair: "k-sp-hair", xs: "k-sp-1", sm: "k-sp-2", md: "k-sp-3", lg: "k-sp-4", xl: "k-sp-6" },
-  H: { control: "k-h-control", compact: "k-h-compact", icon: "k-h-icon", row: "k-h-header", line: "k-h-row", badge: "k-h-badge" },
+  H: { control: "k-h-control", compact: "k-h-compact", icon: "k-h-icon", row: "k-h-header", line: "k-h-row", two: "k-h-row2", badge: "k-h-badge" },
   R: { sm: "k-r-sm", control: "k-r-control", card: "k-r-card" },
   W: { paneName: "k-w-pane-name", paneSegment: "k-w-pane-segment", menu: "k-w-menu", question: "k-w-question", tabLabel: "k-w-tab-label", tabSkeleton: "k-w-tab-skeleton", tabSkeletonShort: "k-w-tab-skeleton-short" },
   T: { display: "k-fs-display", page: "k-fs-title", title: "k-fs-section", card: "k-fs-name", value: "k-fs-body", body: "k-fs-meta", mono: "k-fs-mono" },
@@ -18,12 +18,13 @@ const PICK = {
   ICON_CHROME: "k-ic-chrome",
   CHROME_SQUARE: "k-h-pane",
   DRAG_START: "k-drag-start",
+  GLINT: { run: "k-glint-run", wide: "k-glint-w1", mid: "k-glint-w2", narrow: "k-glint-w3" },
   SWITCH: { w: "k-sw-w", h: "k-sw-h", knob: "k-sw-knob" },
 };
 // Durations in milliseconds.
-const TIMING = { SPIN: "k-spin-ms" };
+const TIMING = { SPIN: "k-spin-ms", GLINT_MS: "k-glint-ms", GLINT_STAGGER: "k-glint-stagger", DOTS_MS: "k-dots-ms" };
 // Shares of full strength, from 0 to 1.
-const SHARES = { away: "k-op-away", held: "k-op-held", blockedWash: "k-wash-blocked" };
+const SHARES = { away: "k-op-away", held: "k-op-held", blockedWash: "k-wash-blocked", blockedRow: "k-wash-blocked-row", glintFaint: "k-op-glint-faint", glintMid: "k-op-glint-mid" };
 
 const reader = (unit) => (tokens) => {
   const all = Object.entries(tokens).filter(([group]) => group !== "colour").flatMap(([, list]) => list);

@@ -1,4 +1,4 @@
-import { loadSpaces, loadPullRequest, loadSinceLeft, loadAgentRowH, loadRecordPrFacts, loadDuration, temporaryKdb } from "./mod-fixtures.mjs";
+import { loadSpaces, loadPullRequest, loadSinceLeft, loadRecordPrFacts, loadDuration, temporaryKdb } from "./mod-fixtures.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { load, clone, exec, singleUse, context, tape, recordingElement } from "./helpers.mjs";
@@ -480,7 +480,6 @@ test("While you were away is a piece: off, nothing is recorded, read or drawn", 
 test("a row says who, what happened and what it did; a gone agent's row stays but leads nowhere", async () => {
   const ui = tape();
   const { SinceLeft } = await loadSinceLeft(ui.host);
-  const { agentRowH } = await loadAgentRowH(ui.host);
   const view = Object.assign(new SinceLeft(null), { project, rows: [
     { id: 1, target: "agent:c1", kind: "finished", text: "Cassian", did: "Fixed the away rows", at: 0 },
     { id: 2, target: "agent:gone", kind: "error", text: "Bodhi", did: null, at: 0 },
@@ -492,7 +491,8 @@ test("a row says who, what happened and what it did; a gone agent's row stays bu
   assert.equal(ui.handlers.has("since-2"), false);
   ui.handlers.get("since-1")({}, { notify() {} });
   assert.deepEqual(went, [1]);
-  assert.equal(view.blockHeight(), agentRowH({}, { activity: "x" }) + agentRowH({}, {}) + 1);
+  const { H } = await load("kanso-spaces/ui.js", ["H"], ui.host);
+  assert.equal(view.blockHeight(), H.two + H.line + 1, "a two-line row with what it did, a one-line row without");
 });
 
 test("with While you were away off, a pull request read records no fact", async (t) => {

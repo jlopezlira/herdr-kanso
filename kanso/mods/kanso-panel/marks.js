@@ -1,7 +1,6 @@
 // This is the source copy; `npm run sync:share` copies it into every mod, and a test fails when a copy differs.
 // Motion is native and keeps going behind other windows: a ring that stops when the window loses the keyboard reads as a stalled agent.
-// A native loop redraws the whole window about 30 times a second, so on battery motion steps instead of gliding.
-export const onBattery = () => shared("kanso.battery") === true;
+export { onBattery } from "./ui.js";
 import { div, svg, image } from "gpui-kit";
 import { terminals, window, shared } from "herdr";
 

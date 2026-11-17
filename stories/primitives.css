@@ -1272,8 +1272,18 @@
 .kanso-row--title .kanso-row__name{font-size:var(--k-fs-title);font-weight:var(--k-fw-strong);line-height:var(--k-lh-tight);color:var(--fg)}
 .kanso-row--title:is(:hover,.kanso-control--hover){background:none}
 .kanso-row--depth-1{padding-left:calc(var(--k-sp-2) * 2 + var(--k-ic-row))}
-.kanso-row--depth-2{position:relative;padding-left:calc(var(--k-sp-2) * 3 + var(--k-ic-row) * 2)}
-.kanso-row--depth-2::before{content:"";position:absolute;inset-block:0;left:calc(var(--k-sp-2) * 2 + var(--k-ic-row) * 1.5);width:var(--k-w-line);background:var(--wash-12)}
+.kanso-row--depth-2{padding-left:calc(var(--k-sp-2) * 3 + var(--k-ic-row) * 2)}
+.kanso-row--drop-before{box-shadow:inset 0 var(--k-sp-hair) 0 var(--accent)}
+.kanso-row--drop-after{box-shadow:inset 0 calc(-1 * var(--k-sp-hair)) 0 var(--accent)}
+.kanso-row--wash-blocked{background:color-mix(in srgb,var(--blocked) var(--k-wash-blocked-row),transparent)}
+.kanso-row--tree{position:relative}
+.kanso-row__guide{position:absolute;inset-block:0;width:var(--k-w-line);background:var(--wash-12)}
+.kanso-row__guide--level-0{left:calc(var(--k-sp-2) + var(--k-ic-row) * .5)}
+.kanso-row__guide--level-1{left:calc(var(--k-sp-2) * 2 + var(--k-ic-row) * 1.5)}
+.kanso-row__guide--level-2{left:calc(var(--k-sp-2) * 3 + var(--k-ic-row) * 2.5)}
+.kanso-row__guide--end{bottom:50%}
+.kanso-row__guide:is(.kanso-row__guide--tee,.kanso-row__guide--end)::after{content:"";position:absolute;top:50%;left:0;width:calc(var(--k-ic-row) / 2 + var(--k-sp-1));height:var(--k-w-line);background:var(--wash-12)}
+.kanso-row__guide--end::after{top:auto;bottom:0}
 .kanso-row__detail{display:flex;align-items:center;gap:var(--k-sp-1);min-width:0;overflow:hidden;white-space:nowrap;color:var(--dim)}
 .kanso-row__detail>span:not(:last-child){margin-right:var(--k-sp-1)}
 .kanso-row__flag{display:flex;color:var(--dim)}
@@ -1288,6 +1298,7 @@
 .kanso-state-line--pending{opacity:.8}
 .kanso-state-line__pending-dot{display:inline-block;flex:none;width:var(--k-sp-1);height:var(--k-sp-1);border-radius:50%;background:var(--muted);animation:ghost var(--k-skel-ms) ease-in-out infinite alternate}
 
+.kanso-control--dim .kanso-icon--program{opacity:var(--k-op-away)}
 .kanso-control--dim,.kanso-control--dim :is(.kanso-row__name,.kanso-row__task,.kanso-row__meta){color:var(--muted)}
 .kanso-control--selected.kanso-control--selected{outline:var(--k-w-focus) solid var(--accent);outline-offset:var(--k-w-line);color:var(--fg)}
 

@@ -1,8 +1,9 @@
 import { elements, escapeMarkup as escape, frame } from './storybook-markup.mjs';
 import { THEMES, colour, contrast } from './tokens.mjs';
-import { asleep, computerRow, header, projectRow, section, sessionRow, sidebarFooter, tile, viewSwitch } from '../stories/kit/compositions.js';
+import { asleep, computerRow, header, projectRow, section, sidebarFooter, tile, viewSwitch } from '../stories/kit/compositions.js';
+import { sessionRow } from '../stories/kit/session-row.js';
 import { button, dawn as dawnSky, mark, marks, stack, windowControls } from '../stories/kit/pieces.js';
-import { sampleSidebar } from '../stories/kit/samples.js';
+import { sampleSidebar, sessionTools } from '../stories/kit/samples.js';
 import { statedPages } from '../stories/kit/states.js';
 export { elements } from './storybook-markup.mjs';
 
@@ -81,6 +82,12 @@ export function kitRecords(records) {
     ['Session row', 'Sub-session needs you', inSidebar([sessionRow(atlas), sessionRow({ ...juno, activity: 'Allow network access?', time: '1m', status: 'blocked' }), sessionRow(iris)].join('')), 'Its own mark and line.'],
     ['Session row', 'Status and Threads', inSidebar([sessionRow({ name: 'Atlas', place: 'kansō', depth: 0 }), sessionRow({ name: 'Nova', place: 'amtelser · dark', status: 'idle', depth: 0 })].join('')), 'The project after the name, the computer when not this one.'],
     ['Session row', 'Computer unreachable', inSidebar(sessionRow({ name: 'ops', status: 'idle', dimmed: true })), 'Dim, the ensō idle; its computer row says why.'],
+    ['Session row', 'Stuck on a step', inSidebar(sessionRow({ name: 'Atlas', activity: 'Reviewing step 01', step: { time: '14m', stuck: true }, time: '20m' })), 'How long on this step, in the blocked colour once it is long.'],
+    ['Session row', 'Under the pointer, pinned', inSidebar(sessionRow({ name: 'Atlas', status: 'done', pinned: true, hover: true })), 'Unpin takes the pin\'s place.'],
+    ['Session row', 'Conversation tools', inSidebar(sessionRow({ name: 'Iris', status: 'done', depth: 0, pinnable: false, tools: sessionTools, hover: true })), 'Settle, and the menu; pin stays in the menu.'],
+    ['Session row', "Can't read", inSidebar(sessionRow({ name: 'Iris', status: 'idle', depth: 0, place: "Can't read", placeTip: 'The transcript is gone', refresh: true, dimmed: true })), 'Refresh beside the word.'],
+    ['Session row', 'Dragged over', inSidebar(sessionRow({ name: 'Atlas', status: 'idle', drop: 'before' })), 'Where the dragged row lands.'],
+    ['Session row', 'Tree', inSidebar(stack({ variant: 'rows' }, sessionRow({ name: 'Atlas' }), sessionRow({ program: 'p-codex', name: 'Juno', status: 'idle', depth: 2, guides: [null, 'tee'] }), sessionRow({ program: 'p-codex', name: 'Iris', status: 'done', depth: 2, guides: [null, 'end'] }))), 'Each sub-session hangs from its parent.'],
     ['Project row', 'At rest', inSidebar(projectRow({ name: 'kansō', folder: 'herdr-kanso', branch: 'main', sync: '↓12' })), 'Name, folder, branch and sync.'],
     ['Project row', 'Folded', inSidebar(projectRow({ name: 'kansō', folder: 'herdr-kanso', branch: 'main', count: 3 })), 'The most urgent mark and how many.'],
     ['Computer row', 'This computer', inSidebar(computerRow({ name: 'light', remote: false })), 'This computer first.'],

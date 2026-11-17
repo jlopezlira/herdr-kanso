@@ -1,17 +1,18 @@
 import { paths } from "./platform-paths.js";
 // Added by José Gutiérrez (minimalistic): agents nested under their space. Pure drawing helpers; the
 // fold state lives in main.js.
-import { div, svg } from "gpui-kit";
-import { h_flex, v_flex } from "gpui-base";
+import { div } from "gpui-kit";
+import { h_flex } from "gpui-base";
 import { run, openOverlay } from "herdr";
-import { programIcon, NAME_LABEL, onBattery } from "./marks.js";
+import { NAME_LABEL } from "./marks.js";
 import { tellsSomething } from "./pure.js";
 import { parseProcesses, etimeMs } from "./procs.js";
 import { oneLine } from "./since-left-model.js";
-import { activityTone, foldTail, timePlace } from "./sidebar-rows.js";
-import { washes } from "./ui.js";
+import { foldTail } from "./sidebar-rows.js";
+import { H } from "./ui.js";
 import { mark, MARK_SIZES } from "./ui-mark.js";
-import { guideBars, reachOf } from "./guides.js";
+import { sessionRow } from "./session-row.js";
+import { machineOf } from "./machines.js";
 
 export { NAME_LABEL };
 
@@ -27,13 +28,10 @@ export function pill(id, y, h, color, inset = 8) {
     .transition("top", FOLD).transition("height", FOLD);
 }
 
-// Must equal the height agentRow draws: lists sum these to place the pill.
+// The height the session row draws: lists sum these to place the pill.
 // `more.oneLine`: a narrow sidebar keeps the first line only. A second line only when there is something to say.
 const twoLines = (more) => !more.oneLine && Boolean(more.activity);
-export function agentRowH(a, more = {}) {
-  const two = twoLines(more);
-  return two ? TWO : a.sub ? ROW - 4 : ROW;
-}
+export const sessionHeight = (more = {}) => (twoLines(more) ? H.two : H.line);
 
 // A row flush with the list's 10px inset (the Status and Threads views).
 export const FLUSH = 10 - AGENT_PAD;
@@ -336,102 +334,64 @@ export function agentFold(id, mine, open, onToggle, t, c) {
     .child(div().child(String(tail.count)));
 }
 
-// One column per level, icon-wide, so a sub-agent's icon sits under its parent's name.
-const GUIDE_W = 15, GUIDE_X = 7, GUIDE_REACH = 4;
-const GUIDE_KIND = { "└": "end", "├": "tee", "│": "pass" };
-// `reach`: up to the row above's line, or into the parent's row, which has none in this column.
-function guide(l, h, t, reach) {
-  const col = div().relative().w(GUIDE_W).h(h).flex_none();
-  if (!l) return col;
-  const line = washes(t)?.w12 ?? t.border;
-  return col.children(guideBars(GUIDE_KIND[l], { x: GUIDE_X, elbow: GUIDE_W - GUIDE_X + 7, h, reach })
-    .map((b) => div().absolute().left(b.left).top(b.top).w(b.w).h(b.h).bg(line)));
-}
+const GUIDE_KIND = { "├": "tee", "└": "end", "│": "pass" };
+// The program's own art, or the terminal's icon for a terminal or an unknown program.
+const programOf = (a) => (a.program?.icon ? { icon: a.program.icon, tint: a.program.tint } : "terminal");
+const TASK_TIP = 90;
+const tasksTip = (tasks) => tasks.map((x) => `${x.command.length > TASK_TIP ? `${x.command.slice(0, TASK_TIP - 1)}\u2026` : x.command} \u00b7 ${x.time}`).join("\n");
 
-// Each glint window slides one way while its copy of the text slides the other, so the lit letters stay in place.
-const GLINT = [[44, 0.35], [26, 0.6], [12, 1]];
-const REACH = 240; // past the longest title the row can show
-function shimmer(text, t, address) {
-  const dots = () => div().w(16).flex_none().text_color(t.muted).frames(["", ".", "..", "..."], 380);
-  if (onBattery()) return h_flex().flex_1().min_w(0).items_center()
-    .child(div().min_w(0).flex_shrink(1).truncate().text_color(t.foreground).child(text))
-    .child(dots());
-  const pace = 2200 + ([...address].reduce((n, c) => n + c.charCodeAt(0), 0) % 7) * 160;
-  const lit = ([w, strength]) => div().absolute().top(0).bottom(0).w(w).overflow_hidden().opacity(strength)
-    .loop("left", { from: -w, to: REACH, period: pace, easing: "linear" })
-    .child(div().absolute().top(0).whitespace_nowrap().text_color(t.foreground).child(text)
-      .loop("left", { from: w, to: -REACH, period: pace, easing: "linear" }));
-  return h_flex().flex_1().min_w(0).items_center()
-    .child(div().relative().min_w(0).flex_shrink(1).overflow_hidden()
-      .child(div().truncate().text_color(t.muted).child(text))
-      .children(GLINT.map(lit)))
-    .child(dots());
-}
+// A sub-agent's tree lines (├ └ │), one per depth below `base`, as the row's guides.
+const guidesOf = (base, lines) => (lines.length ? [...Array.from({ length: base }, () => null), ...lines.map((l) => GUIDE_KIND[l] ?? null)] : []);
 
-// `more.steady` keeps the second line even with nothing to say, so the list never jumps.
-// Each event has one handler: a second one would replace the first.
-const ROW = 32, TWO = 50, G_HAIR = 2;
-export function agentRow(a, indent, t, c, row, more = {}) {
-  const pic = programIcon(a.program, a.sub ? 13 : 15, t.foreground);
-  const zz = Boolean(a.dozing);
-  const live = !zz && (a.status === "working" || a.status === "blocked" || more.strong);
-  const ink = more.quiet ? t.muted : zz ? t.dim : a.focused || live ? t.foreground : a.sub ? t.dim : t.muted;
-  const machine = a.address.includes("/") ? a.address.split("/")[0] : null;
-  const pinned = a.pin != null, drag = row?.drag;
+// What the session row shows: `base` is the depth of a top-level row in this list, each sub-agent one deeper.
+export function sessionProps(a, base, row, more = {}) {
   const lines = more.lines ?? [];
   const two = twoLines(more);
   const tasks = a.status === "working" ? [] : more.tasks ?? [];
-  const h = agentRowH(a, more);
-  const hovered = Boolean(row?.hovered);
-  const actions = hovered ? row.actions ?? [] : [];
-  // Under the pointer, pin and the menu take the time's place; a pin already set stays before the mark.
-  const tools = hovered && (Boolean(row?.menu) || Boolean(row?.pin) || actions.length > 0);
-  const place = timePlace(two ? more.activity : null, more.time);
-  const word = more.directory ?? null;
-  // The program's icon leads; a terminal or an unknown program takes the terminal's.
-  const lead = (pic ?? svg("mods/kanso-chrome/icons/terminal.svg").size(a.sub ? 13 : 15).flex_none().text_color(t.muted))
-    .opacity(zz ? 0.45 : a.focused || live ? 1 : 0.75);
-  const iconTool = (id, icon, tip, act, size = 12) => rowTool(div().id(id).size(20).flex_none().rounded(6)
-    .flex().items_center().justify_center().text_color(t.muted).tooltip(tip), t)
-    .on_click((_e, cx) => { cx.stop_propagation(); act(cx); })
-    .child(svg(`mods/kanso-chrome/icons/${icon}.svg`).size(size));
-  const top = h_flex().h(two ? 22 : h).gap(8).items_center()
-    // One weight always: a changed weight would reflow the name and make the row jump.
-    .child(a.status === "working" && !zz
-      ? shimmer(more.label ?? agentLabel(a), t, a.address).text_size(13.5).font_medium()
-      : div().flex_1().min_w(0).truncate().text_size(13.5).font_medium().text_color(ink).child(more.label ?? agentLabel(a)))
-    .when(Boolean(machine) && !word && !more.noMachine, (el) => el.child(div().flex_none().text_size(11.5).text_color(t.dim).child(machine)))
-    .when(Boolean(word), (el) => el.child(div().flex_none().truncate().text_size(11.5).text_color(t.dim)
-      .when(Boolean(more.wordTip), (d) => d.tooltip(more.wordTip)).child(word)))
-    .when(Boolean(more.refresh), (el) => el.child(iconTool(`refresh-${a.address}`, "refresh-cw", "Refresh", more.refresh)))
-    .when(pinned && !hovered, (el) => el.child(svg("mods/kanso-chrome/icons/pin.svg").size(12).flex_none().text_color(t.dim)))
-    .when(hovered && Boolean(row?.pin), (el) => el.child(iconTool(`pin-${a.address}`, "pin", pinned ? "Unpin" : "Pin to the top", (cx) => row.pin(cx))))
-    .children(actions.map((x) => iconTool(`act-${x.id}-${a.address}`, x.icon, x.tip, x.act)))
-    .when(place === "end" && !tools, (el) => el.child(div().flex_none().text_size(11.5).text_color(a.status === "blocked" ? t.blocked : t.dim).child(more.time)))
-    .when(tasks.length > 0, (el) => el.child(div().id(`tasks-${a.address}`).flex_none().h(18).px(6).rounded_full().bg(t.foreground + "12")
-      .flex().items_center().text_size(11).text_color(t.muted).tooltip(tasks.map((x) => `${x.command.length > 90 ? x.command.slice(0, 89) + "\u2026" : x.command} \u00b7 ${x.time}`).join("\n"))
-      .child(String(tasks.length))))
-    .when(hovered && Boolean(row?.menu), (el) => el.child(iconTool(`dots-${a.address}`, "ellipsis", "More", (cx) => row.menu(cx), 14)))
-    .child(statusMark(c, zz ? "asleep" : a.status));
-  const second = h_flex().h(20).mt(G_HAIR).min_w(0).items_center().text_size(11.5)
-    .when(Boolean(more.activity), (el) => el.child(div().flex_shrink(1).min_w(0).truncate().text_color(t[activityTone(a.status)]).child(more.activity)))
-    .when(place === "line" && !tools, (el) => el.child(div().flex_none().pl(4).text_color(t.dim).child(`\u00b7 ${more.time}`)))
-    .when(Boolean(more.step), (el) => el.child(div().flex_none().pl(5).text_color(more.step.stuck ? t.blocked : t.dim).child(more.step.time)));
-  const body = two ? v_flex().flex_1().min_w(0).justify_center().child(top).child(second) : div().flex_1().min_w(0).child(top);
-  return h_flex().id(`space-agent-${a.address}`).h(h).flex_none().pl(AGENT_PAD + indent).pr(12).gap(12)
-    .items_center().rounded(8).cursor_pointer()
-    // The focused row's wash is the list's pill (main.js), which glides here.
-    .when(a.status === "blocked" && !a.focused, (el) => el.bg(t.blocked + "14"))
-    .when(Boolean(row?.kbd), (el) => el.border_1().border_color(t.accent))
-    .hover((s) => s.bg(t.foreground + "0c"))
-    .on_click((_e, cx) => { if (a.pane) run("pane.focus", { pane: a.pane }); else run("terminal.peek", { terminal: a.address }); })
-    .on_mouse_down("left", (e) => { if (e.click_count === 2) renameTerminal(a.address, more.label ?? agentLabel(a)); else drag?.down(); })
-    .when(Boolean(drag), (el) => el.on_mouse_up("left", (_e, cx) => drag.up(cx)))
-    .when(Boolean(row?.hover), (el) => el.on_hover((h, cx) => row.hover(h, cx)))
-    .when(Boolean(row?.menu), (el) => el.on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); row.menu(cx); }))
-    .when(drag?.target === "before", (el) => el.border_t(2).border_color(t.accent))
-    .when(drag?.target === "after", (el) => el.border_b(2).border_color(t.accent))
-    .children(lines.map((l, c) => guide(l, h, t, reachOf(lines, c, more, GUIDE_REACH))))
-    .child(two ? v_flex().h(h).pt(Math.round((h - 45) / 2) + 3).flex_none().child(lead) : lead)
-    .child(body);
+  return {
+    program: programOf(a),
+    name: more.label ?? agentLabel(a),
+    status: a.dozing ? "asleep" : a.status,
+    activity: two ? more.activity : null,
+    step: two ? more.step ?? null : null,
+    time: more.time ?? null,
+    place: more.directory ?? (more.noMachine ? null : machineOf(a.address)),
+    placeTip: more.wordTip ?? null,
+    depth: base + lines.length,
+    guides: guidesOf(base, lines),
+    // The list's pill is the focused row's ground, and it glides there.
+    current: Boolean(a.focused),
+    ground: false,
+    pinned: a.pin != null,
+    pinnable: Boolean(row?.pin),
+    menu: Boolean(row?.menu),
+    commands: tasks.length,
+    commandsTip: tasks.length ? tasksTip(tasks) : null,
+    tools: (row?.actions ?? []).map((x) => ({ icon: x.icon, label: x.tip })),
+    refresh: Boolean(more.refresh),
+    drop: row?.drag?.target ?? null,
+    hover: Boolean(row?.hovered),
+    selected: Boolean(row?.kbd),
+    dimmed: Boolean(more.quiet || a.dozing),
+  };
 }
+
+// What the app does with it: each tool by name, the click, the drag, a double-click to rename and the right-click menu.
+export function sessionHandlers(a, row, more = {}) {
+  const drag = row?.drag;
+  return {
+    on: {
+      ...(row?.pin ? { pin: (cx) => row.pin(cx) } : {}),
+      ...(row?.menu ? { ellipsis: (cx) => row.menu(cx) } : {}),
+      ...(more.refresh ? { "refresh-cw": more.refresh } : {}),
+      ...Object.fromEntries((row?.actions ?? []).map((x) => [x.icon, x.act])),
+    },
+    onClick: () => (a.pane ? run("pane.focus", { pane: a.pane }) : run("terminal.peek", { terminal: a.address })),
+    onHover: row?.hover,
+    onPress: (e) => (e.click_count === 2 ? renameTerminal(a.address, more.label ?? agentLabel(a)) : drag?.down()),
+    onRelease: drag ? (_e, cx) => drag.up(cx) : undefined,
+    onMenu: row?.menu ? (_e, cx) => { cx.stop_propagation(); row.menu(cx); } : undefined,
+  };
+}
+
+export const agentSession = (a, base, c, row, more = {}) => sessionRow(sessionProps(a, base, row, more))(`space-agent-${a.address}`, c, sessionHandlers(a, row, more));
