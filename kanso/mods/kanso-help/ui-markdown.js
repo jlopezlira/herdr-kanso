@@ -11,18 +11,18 @@ const GROUNDS = {
   editing: (el, c) => el.py(G.xs).bg(c.raised).border_2().border_color(c.accent),
 };
 
-const wordsOf = (id, source, onLink, onPress) => {
-  const words = TextView.markdown(`${id}-words`, source).selectable(!onPress);
+const wordsOf = (id, source, onLink) => {
+  const words = TextView.markdown(`${id}-words`, source);
   return onLink ? words.on_link_click(onLink) : words;
 };
 
-/** One block: `state` rest, hover or editing; `content`, drawn elements in place of its formatted `source` (the editor's field, a picture).
- * `onPress` (a press on the block, as `on_mouse_down`) gives it the pointer's wash and leaves its words unselectable; `onLink` takes a link's press. */
+/** One block: `state` rest, hover or editing; `content`, drawn elements in place of its formatted `source` (the editor's field, a picture), a string among them drawn as markdown words.
+ * `onPress` (a press on the block, as `on_mouse_down`) gives it the pointer's wash; its words stay selectable. `onLink` takes a link's press. */
 export const markdownBlock = (id, c, { source = "", state = "rest", content = [] }, handlers = {}) => {
   const { onLink = null, onPress = null } = handlers, ground = GROUNDS[state] ?? GROUNDS.rest;
   return ground(v_flex().id(id).w_full().gap(G.sm).px(G.sm).rounded(R.control).text_size(T.card).line_height(LH.body).text_color(c.text), c)
     .when(Boolean(onPress) && state === "rest", (el) => el.hover((s) => s.bg(c.subtle)).on_mouse_down("left", onPress))
-    .children(content.length ? content : [wordsOf(id, source, onLink, onPress)]);
+    .children(content.length ? content.map((part, k) => (typeof part === "string" ? wordsOf(`${id}-${k}`, part, onLink) : part)) : [wordsOf(id, source, onLink)]);
 };
 
 /** A document: `source` in its blocks, split as the Storybook splits them; the `block`th (from 1) is drawn in `state`. */

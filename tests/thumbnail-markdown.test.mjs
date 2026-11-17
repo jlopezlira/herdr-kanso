@@ -91,6 +91,9 @@ test("Proposed: a block's content takes its words' place, in both kits", async (
   const el = app.markdownBlock({ state: "editing", content: [field] })("b", c);
   assert.deepEqual(sources(el), []);
   assert.ok(el.kids.includes(field));
+  const picture = chain("picture"), mixed = app.markdownBlock({ source: "x", content: ["See [a](b.md)", picture] })("b", c, { onLink: () => {} });
+  assert.deepEqual([sources(mixed), mixed.kids[1], calls(mixed.kids[0], "on_link_click").length], [["See [a](b.md)"], picture, 1], "a picture block's words are drawn by the block itself");
+  assert.deepEqual(nodes(mixed).flatMap((kid) => calls(kid, "px")).length, 1, "one padding: its words sit where a plain block's do");
   assert.equal(storyBlock({ source: "# Lost", state: "editing", content: "<span>field</span>" }).includes("Lost"), false);
   assert.match(repoText("stories/kit/pieces.js"), /Proposed: `content`/);
   assert.match(repoText("scripts/storybook-kit.mjs"), /add\('Markdown', 'Editing, in its field'[\s\S]*?'Proposed\./);
@@ -104,7 +107,8 @@ test("A block's double press and its links come as handlers: a pressable block t
   assert.deepEqual(presses, [2]);
   assert.equal(calls(el, "hover").length, 1);
   const words = nodes(el).find((kid) => kid.tag === "text");
-  assert.deepEqual(calls(words, "selectable").map((call) => call[1]), [false], "a pressable block's words are not selected by a press");
+  assert.deepEqual(calls(words, "selectable"), [], "an editable block's words keep TextView's selection: they can be dragged over and copied");
+  assert.equal(calls(el, "on_mouse_down").length, 1, "and its double press still opens it");
   calls(words, "on_link_click")[0][1]("b.md", {});
   assert.deepEqual(links, ["b.md"]);
   const still = app.markdownBlock({ source: "x" })("b", c);

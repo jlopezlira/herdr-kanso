@@ -159,7 +159,7 @@ export const markdown = ({ source, block = 0, state = "rest" }) => (id, c, more 
   return drawMarkdown(id, c, { source, block, state }, { onLink });
 };
 
-// One block of a document. Proposed: `content`, kit pieces or elements in place of its formatted source. `onPress` takes a press on it (a double press edits it).
+// One block of a document. Proposed: `content`, kit pieces, elements or markdown words in place of its formatted source. `onPress` takes a press on it (a double press edits it).
 export const markdownBlock = ({ source = "", state = "rest", content = [] }) => (id, c, more = {}) => {
   const { onLink = null, onPress = null } = given(more);
   return drawMarkdownBlock(id, c, { source, state, content: drawn(id, c, "content", content) }, { onLink, onPress });

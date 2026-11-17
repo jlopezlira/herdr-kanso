@@ -357,11 +357,11 @@ export class MarkdownDoc {
     return markdownBlock({ source: md, content })(key, c, { ...this.links(), onPress: editable ? press : undefined });
   }
 
-  // A block with pictures: its words as kit markdown, each picture loading, waiting for Load, failed or drawn.
+  // A block with pictures: its words as markdown source the block draws, each picture loading, waiting for Load, failed or drawn.
   pictureParts(parts, key, c) {
     return parts.map((part, k) => {
       const at = `${key}-${k}`;
-      if (part.kind === "text") return part.text.trim() ? markdownBlock({ source: part.text })(at, c, this.links()) : null;
+      if (part.kind === "text") return part.text.trim() ? part.text : null;
       const file = linkTarget(part.url, this.path)?.file;
       const shot = file && this.shots?.has(file) ? this.shots.get(file) : undefined;
       if (shot === undefined) return skeletonOf({ shape: "picture" })(at, c);
