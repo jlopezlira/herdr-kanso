@@ -41,7 +41,7 @@ const COMMON = [
   { source: "kanso/mods/open-with/popup.js", copies: ["kanso/mods/kanso-menu/popup.js", "kanso/mods/kanso-strip/popup.js"] },
   // The way into the arrangements dialog, from the tab bar and from the strip.
   { source: "kanso/mods/kanso-arrange/open.js", copies: ["kanso/mods/kanso-strip/open.js", "kanso/mods/kanso-tabs/open.js"] },
-  // The answer both rename dialogs give: a terminal's label, or a command with the new name.
+  // The view both rename dialogs are, the one-line and the many-line, and the answer they give: a terminal's label, or a command with the new name.
   { source: "kanso/mods/kanso-prompt/rename.js", copies: ["kanso/mods/kanso-prompt-editor/rename.js"] },
   // A folder's short word, the same in Send and in the strip's pane header.
   { source: "kanso/mods/kanso-send/folder.js", copies: ["kanso/mods/kanso-strip/folder.js"] },

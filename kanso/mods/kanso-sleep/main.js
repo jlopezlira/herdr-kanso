@@ -2,15 +2,14 @@ import { paths } from "./platform-paths.js";
 // Sleep, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
 // Props: sleep { scope: "agent" | "tab" | "project", space, tab, pane }, wake { space, tab, terminal }.
 // Asleep is Herdr's own state: each Claude terminal keeps its conversation id as a label, and its tab is settled.
-import { View, div } from "gpui-kit";
-import { v_flex, h_flex } from "gpui-base";
+import { View } from "gpui-kit";
 import { spaces, panes, terminals, shared, hc, run, props, closeOverlay, theme, home } from "herdr";
 import { isClaude, promptEmpty, asksToExit, RESUME_LABEL, isSessionId, resumeLine, asleepTerminal } from "./resume.js";
 import { tilde, describe, spaceBeside } from "./tabkit.js";
 import { focusOn } from "./pure.js";
 import { tokens } from "./ui.js";
 import { dialog, statusNotes } from "./ui-dialog.js";
-import { skeletonOf } from "./kit.js";
+import { skeletonOf, row, stack } from "./kit.js";
 
 export const CLEAR_MS = 3000;
 export const RESEND_MS = 5000;
@@ -181,24 +180,22 @@ export default class Sleep extends View {
   }
 
   render() {
-    const t = theme();
     const close = () => closeOverlay(props()?.overlay);
     const scope = this.order?.scope ?? null;
-    const c = tokens(t);
+    const c = tokens(theme());
     const shell = { focusHandle: this.handle, held: Boolean(this.busy), onCancel: close };
     if (!scope) return dialog("kanso-sleep", c, { ...shell, title: "Wake", notes: statusNotes(this) });
     const project = this.space?.name ?? tilde(this.space?.folder);
     const list = (this.reads ?? []).filter((r) => r.resume || r.running);
     const others = [...new Set(list.filter((r) => !r.resume).map((r) => describe(r.argv)))];
-    const line = (r, i) => h_flex().id(`sl-${i}`).w_full().gap(10).items_center()
-      .child(div().flex_1().min_w(0).truncate().text_size(12.5).text_color(r.resume ? t.foreground : t.muted).child(r.resume ? r.name : describe(r.argv)))
-      .child(div().flex_none().max_w(180).truncate().text_size(11.5).text_color(t.dim).child(r.resume ? "keeps its conversation" : tilde(r.cwd)));
+    // What keeps its conversation, by name; anything else that will stop, dimmed, by what it runs, its folder giving way first.
+    const line = (r) => (r.resume ? row({ name: r.name, meta: "keeps its conversation" }) : row({ name: describe(r.argv), detail: tilde(r.cwd), dimmed: true }));
     return dialog("kanso-sleep", c, {
       ...shell,
       title: scope === "project" ? `Sleep ${project}` : scope === "agent" ? "Sleep this agent" : "Sleep this tab",
       body: [
         this.reads === null && !this.error ? skeletonOf({ shape: "list row", count: 3 })("kanso-skeleton", c) : null,
-        v_flex().gap(4).children(list.map(line)),
+        list.length ? stack({ variant: "dialog list" }, list.map(line))("sl", c) : null,
       ],
       notes: [{ text: WHAT_SLEEPS[scope] ?? WHAT_SLEEPS.tab }, ...(others.length ? [{ text: `${others.join(", ")} will stop now.` }] : []), ...statusNotes(this)],
       primary: scope === "project" ? "Sleep" : null,

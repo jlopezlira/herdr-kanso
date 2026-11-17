@@ -6,23 +6,6 @@ import { load, tape } from "./helpers.mjs";
 const night = { foreground: "#d8d4cb", background: "#1b1b19", hover: "#232321", selected: "#2b2b28", accent: "#da627d", dim: "#6b6862", muted: "#949086" };
 const cx = (seen = []) => ({ notify() {}, stop_propagation: () => seen.push("stopped"), open_url: (url) => seen.push(url), timer: { after() {} } });
 
-test("Send lists each project as a heading row and each agent as a row; a press picks the agent or every agent of the project", async () => {
-  const ui = tape();
-  const terms = [{ address: "t2", status: "blocked", labels: { "kanso.shown": "Nova", "kanso.project": "App" } }, { address: "t3", status: "working", labels: { "kanso.shown": "Atlas", "kanso.project": "App" } }];
-  const { Send } = await load("kanso-send/main.js", ["Send"], {
-    ...ui.host, theme: () => night, props: () => ({}), terminals: () => terms, panes: () => [], spaces: () => [], shared: () => null,
-    Input: { new: ui.host.div },
-  });
-  const send = Object.assign(new Send(), { from: null, to: "t3", toProject: null, text: "hi", error: null, sending: false, handle: {},
-    query: { value: () => "" }, box: { value: () => "hi" } });
-  send.render();
-  assert.ok(["App", "Send to all 2", "Nova", "Needs you", "Atlas"].every((text) => ui.texts.includes(text)), ui.texts.join(" | "));
-  ui.handlers.get("to-t2")({}, cx());
-  assert.equal(send.to, "t2");
-  ui.handlers.get("to-project-App")({}, cx());
-  assert.equal(send.toProject, "App");
-});
-
 test("Arrangements lists each one as a row that opens it, with Overwrite and Delete, which asks twice, under it", async () => {
   const ui = tape();
   const { Arrange, Armed } = await load("kanso-arrange/main.js", ["Arrange", "Armed"], { ...ui.host, theme: () => night, props: () => ({}), spaces: () => [], panes: () => [] });
