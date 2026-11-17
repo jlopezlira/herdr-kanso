@@ -73,7 +73,7 @@ const share = (tokens) => {
 const WASH = /^color-mix\(in srgb, var\(--fg\) ([\d.]+)%, transparent\)$/;
 
 // The foreground washes' shares per theme, keyed by the kit's names and read from their tokens.
-export const WASH_TOKENS = { w4: "wash-4", w7: "wash-7", w12: "wash-12", w14: "wash-14" };
+export const WASH_TOKENS = { w4: "wash-4", w7: "wash-7", w12: "wash-12", w14: "wash-14", chosen: "wash-chosen" };
 export function washes(tokens) {
   const share = (theme, name) => {
     const t = tokens.colour[theme].find((x) => x.name === name), m = WASH.exec(t?.value ?? "");
@@ -117,4 +117,45 @@ export function withTokens(text, tokens) {
   return text.slice(0, from) + block(tokens) + text.slice(to + END.length);
 }
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) writeChanged(UI, withTokens(read(UI), loadTokens()));
+export const LAYOUT = "kanso/layouts/kanso.json";
+// The layout file's sizes, by node id and the path to the number inside it; `root` is the tree's own. Weights and zeros are not sizes.
+export const LAYOUT_SIZES = {
+  root: { "terminal_padding.0": "k-terminal-x", "terminal_padding.1": "k-terminal-y", "traffic_lights.0": "k-traffic-x", "traffic_lights.1": "k-traffic-y" },
+  sidebar: { "size.px": "k-w-sidebar", min: "k-w-sidebar-layout-min", max: "k-w-sidebar-max" },
+  brand: { "size.px": "k-h-tab-bar" },
+  spaces: { min: "k-h-spaces-min" },
+  "sidebar-footer": { "size.px": "k-h-sidebar-footer" },
+  work: { padding: "k-pane-gap", gap: "k-sp-1" },
+  tabs: { "size.px": "k-h-tab-bar" },
+  "work-body": { gap: "k-pane-gap" },
+  main: { "content.pane.header.height": "k-h-pane", "content.pane.radius": "k-r-card", "content.pane.gap": "k-pane-gap" },
+  "panel-body": { "size.px": "k-w-panel-inline", min: "k-w-panel-min", max: "k-w-panel-max", radius: "k-r-card" },
+  "status-row": { "size.px": "k-h-bar" },
+  "strip-map": { "size.px": "k-status-slot" },
+};
+
+const nodesOf = (node) => [node, ...(node.children ?? []).flatMap(nodesOf)];
+const setAt = (node, path, value) => {
+  const keys = path.split("."), last = keys.pop();
+  const parent = keys.reduce((at, key) => at?.[key], node);
+  if (parent?.[last] === undefined) throw new Error(`${LAYOUT} has no ${path} on ${node.id}`);
+  parent[last] = value;
+};
+
+/** The layout file with every size in LAYOUT_SIZES written from its token. */
+export function layoutWithTokens(text, tokens) {
+  const tree = JSON.parse(text), size = px(tokens);
+  const byId = new Map(nodesOf(tree).map((node) => [node.id, node]));
+  for (const [id, sizes] of Object.entries(LAYOUT_SIZES)) {
+    const node = byId.get(id);
+    if (!node) throw new Error(`${LAYOUT} has no node ${id}`);
+    for (const [path, token] of Object.entries(sizes)) setAt(node, path, size(token));
+  }
+  return `${JSON.stringify(tree, null, 2)}\n`;
+}
+
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  const tokens = loadTokens();
+  writeChanged(UI, withTokens(read(UI), tokens));
+  writeChanged(LAYOUT, layoutWithTokens(read(LAYOUT), tokens));
+}

@@ -615,7 +615,7 @@ export default class Strip extends View {
     const blocked = p.status === "blocked";
     const row = h_flex().id(`pane-head-${pane}`).size_full().pl(G.md).pr(G.sm).gap(G.sm).items_center().text_size(T.value).text_color(c.text).relative()
       .rounded_t(R.card).border_2().border_color(f.keyboard ? c.accent : CLEAR)
-      .when(f.on && !blocked, (el) => el.bg(c.selected))
+      .when(f.on && !blocked, (el) => el.bg(c.chosen))
       .when(blocked, (el) => el.bg(mix(c.blocked, c.background, OPACITY.blockedWash)))
       .when(f.away, (el) => el.opacity(OPACITY.away))
       .when(f.drag?.pane === pane, (el) => el.opacity(OPACITY.held))

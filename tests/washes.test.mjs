@@ -8,7 +8,7 @@ import { WASH_TOKENS } from "../scripts/build-ui-tokens.mjs";
 
 const kit = () => load("kanso-panel/ui.js", ["tokens", "washes", "WASHES"], host());
 const tokens = loadTokens();
-const NAMES = ["w4", "w7", "w12", "w14"];
+const NAMES = ["w4", "w7", "w12", "w14", "chosen"];
 const share = (theme, name) => Number(/var\(--fg\) ([\d.]+)%, transparent\)$/.exec(tokens.colour[theme].find((x) => x.name === WASH_TOKENS[name]).value)[1]) / 100;
 const hex2 = (p) => Math.round(p * 255).toString(16).padStart(2, "0");
 const rgb = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
@@ -23,9 +23,9 @@ test("The washes are the foreground at the Colour page's shares, in the dark and
   }
 });
 
-test("The dark theme's washes are 4, 7, 12 and 14 percent and the light theme's 5, 9.5, 18 and 21", async () => {
+test("The dark theme's washes are 4, 7, 12 and 14 percent and the light theme's 5, 9.5, 18 and 21; the chosen wash is 12 in both", async () => {
   const { WASHES, washes } = await kit();
-  assert.deepEqual(JSON.parse(JSON.stringify(WASHES)), { dark: { w4: 0.04, w7: 0.07, w12: 0.12, w14: 0.14 }, light: { w4: 0.05, w7: 0.095, w12: 0.18, w14: 0.21 } });
+  assert.deepEqual(JSON.parse(JSON.stringify(WASHES)), { dark: { w4: 0.04, w7: 0.07, w12: 0.12, w14: 0.14, chosen: 0.12 }, light: { w4: 0.05, w7: 0.095, w12: 0.18, w14: 0.21, chosen: 0.12 } });
   assert.equal(washes({ foreground: "#d8d4cb", background: "#161615" }).w7, "#d8d4cb12");
   assert.equal(washes({ foreground: "#2a2723", background: "#ebe8e2" }).w12, "#2a27232e");
 });
@@ -35,7 +35,7 @@ test("A wash is never the opaque foreground: without a #rrggbb foreground the op
   for (const foreground of [undefined, "#fff", "red", "#2a2723zz"]) {
     assert.equal(washes({ foreground, background: "#ebe8e2" }), null, String(foreground));
     const c = kitTokens({ foreground, background: "#ebe8e2", hover: "#dddad5", selected: "#d4d1cb" });
-    assert.deepEqual([c.w4, c.w7, c.w12, c.w14], ["#dddad5", "#dddad5", "#d4d1cb", "#d4d1cb"], String(foreground));
+    assert.deepEqual([c.w4, c.w7, c.w12, c.w14, c.chosen], ["#dddad5", "#dddad5", "#d4d1cb", "#d4d1cb", "#d4d1cb"], String(foreground));
   }
   assert.equal(washes({ foreground: "#2a2723ff", background: "#ebe8e2" }).w7, "#2a272318", "a foreground with alpha takes the wash's own");
 });
