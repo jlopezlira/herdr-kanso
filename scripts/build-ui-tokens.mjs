@@ -112,12 +112,12 @@ const PAINT = new Set(["fill", "stroke", "stop-color", "stop-opacity", "opacity"
 const dawnRules = (css) => new Map([...css.matchAll(/(?:^|[}\n])(?:\.kanso-dawn )?(\.kanso-dawn__[\w-]+(?:\.kanso-dawn__[\w-]+)?)\{([^}]*)\}/g)]
   .map(([, selector, body]) => [selector.slice(1).split(".").join(" "), body.split(";").map((part) => part.split(":")).filter(([name]) => PAINT.has(name))]));
 export function dawnSvg(tokens, theme, css) {
-  const rules = dawnRules(css);
+  const rules = dawnRules(css), size = px(tokens);
   const paint = (value) => value.replace(/var\(--([\w-]+)\)/g, (_, name) => colour(tokens, theme, name));
   return `${dawn().replace(/ class="([^"]*)"/g, (_, classes) => {
     const own = [...new Set([...classes.split(" "), classes])].flatMap((selector) => rules.get(selector) ?? []);
     return own.map(([name, value]) => ` ${name}="${paint(value)}"`).join("");
-  }).replace("<svg ", '<svg xmlns="http://www.w3.org/2000/svg" width="256" height="56" ')}\n`;
+  }).replace("<svg ", `<svg xmlns="http://www.w3.org/2000/svg" width="${size("k-dawn-w")}" height="${size("k-dawn-h")}" `)}\n`;
 }
 export function dawnInks(tokens) {
   const one = (theme) => `{ ${Object.entries(DAWN_INKS).map(([key, name]) => `${key}: ${JSON.stringify(colour(tokens, theme, name))}`).join(", ")}, art: ${JSON.stringify(dawnArt(theme))} }`;
