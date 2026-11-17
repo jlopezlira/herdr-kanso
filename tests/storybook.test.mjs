@@ -47,6 +47,11 @@ test("A primitive given an inline style or a raw px or colour fails the lint", (
   assert.deepEqual(lintChanged(css, `${read(css)}.kanso-row{width:937px;color:#123456}\n`), raw);
 });
 
+test("A component size passed as geometry data must be a token, while a placed region keeps its board pixels", () => {
+  const html = '<span class="kanso-skeleton" data-width="110"></span><i data-left="4" data-top="8" data-width="30"></i><i data-height="40%"></i><i data-height="var(--k-sp-2)"></i>';
+  assert.deepEqual(rawValues("Panels/Files", markupTags(html)), [{ source: "Panels/Files", value: 'raw data-width="110"' }]);
+});
+
 test("A pull request number a story shows is not a raw colour, while a colour in its markup still is", () => {
   const html = '<div class="kanso-panel__scope" data-tone="#fa0" aria-label="Open PR #142">#142 · src/api</div>';
   assert.deepEqual(rawValues("Panels/PR", markupTags(html)), [{ source: "Panels/PR", value: "raw #fa0" }]);
@@ -147,7 +152,7 @@ test("Drawings use only sprite symbols, and every icon is the exact Lucide shape
 });
 
 test("An approved page is ready with no tag, and every other page is in review", () => {
-  assert.deepEqual(["Start/How to read this Storybook", "Panels/Current"].map((page) => [statusOf(page), statusTags(page)]), [["Ready", []], ["In review", ["In review"]]]);
+  assert.deepEqual(["Start/Philosophy", "Panels/Current"].map((page) => [statusOf(page), statusTags(page)]), [["Ready", []], ["In review", ["In review"]]]);
 });
 
 test("A page without its status tag, or with a code in its title, fails the lint", () => {

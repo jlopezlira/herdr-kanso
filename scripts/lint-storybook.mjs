@@ -135,6 +135,11 @@ export function primitiveErrors(records, owned, tokens) {
   return records.filter((record) => record.html !== undefined && !record.fragment).flatMap(pageErrors);
 }
 
+// A size passed as geometry data is a token unless the element is placed on the board: a bare number there is board pixels.
+const PLACED = /\sdata-(?:left|top|right|bottom)="/;
+const bareSizes = (text) => [...text.matchAll(/<[a-z][^>]*>/gi)].filter(([tag]) => !PLACED.test(tag))
+  .flatMap(([tag]) => [...tag.matchAll(/data-(?:width|height|radius|max)="(?!0")-?\d*\.?\d+(?:px)?"/g)]);
+
 // Values a story writes itself instead of taking a token or a primitive: inline styles, and raw px or colours outside them.
 export function rawValues(source, text, css = false) {
   const code = text.replace(/\/\*[\s\S]*?\*\//g, '');
@@ -142,7 +147,7 @@ export function rawValues(source, text, css = false) {
   const rest = code.replace(INLINE, '');
   const raw = css
     ? [...rest.matchAll(/([-\w]+)\s*:\s*([^;{}]+)/g)].map(([found]) => found.trim()).filter((found) => RAW.test(found))
-    : [...rest.matchAll(new RegExp(RAW, 'gi'))].map(([found]) => found);
+    : [...rest.matchAll(new RegExp(RAW, 'gi')), ...bareSizes(rest)].map(([found]) => found);
   return [...inline, ...raw.map((found) => `raw ${found}`)].map((value) => ({ source, value }));
 }
 
