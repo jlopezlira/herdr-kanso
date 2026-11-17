@@ -17,7 +17,8 @@ const PANEL = "kanso/mods/kanso-panel/";
 const HELPERS = new Set(["escape", "list", "phrase", "grow"]);
 
 const read = (path) => readFileSync(`${root}${path}`, "utf8");
-const appFiles = () => [...readdirSync(`${root}${PANEL}`).filter((name) => /^ui(-[\w-]+)?\.js$/.test(name)).sort(), "marks.js"];
+// kit.js first: a piece a ui file draws is compared by that file's own props.
+const appFiles = () => ["kit.js", ...readdirSync(`${root}${PANEL}`).filter((name) => /^ui(-[\w-]+)?\.js$/.test(name)).sort(), "marks.js"];
 
 // The index of the quote that ends the string opening at `start`.
 const stringEnd = (text, start) => {

@@ -167,7 +167,7 @@ test("the side panels show the shared skeleton before they are ready and while t
   assertSkeleton(trees.bones(c, true));
   trees.hist = null; trees.storeNote = null;
   assertSkeleton(trees.freed(c, true));
-  trees.storeNote = { what: "Can't read the history", why: "database is locked" };
+  trees.storeNote = { text: "Can't read the history", source: "database is locked" };
   const texts = walk(trees.freed(c, true)).texts;
   assert.equal(texts.includes("Can't read the history") && texts.includes("database is locked"), true, "our words, then the tool's words");
 
