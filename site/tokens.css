@@ -207,6 +207,9 @@
   --k-sidebar-agent-x: 34px;
   --k-sidebar-elbow-gap: 6px;
   --k-sidebar-row-gap: 1px;
+  --k-sidebar-gutter: 16px;
+  --k-sidebar-group-gap: 16px;
+  --k-sidebar-computer-gap: 24px;
   --k-keycap-x: 5px;
   --k-keycap-text: 10.5px;
   --k-rail-w: 76px;

@@ -88,10 +88,12 @@ const groundOf = (c, { current, hover, title, wash }) => {
 };
 
 // A wrapped name runs over as many lines as it needs, such as a review thread's comment.
-const nameOf = (id, c, { name, heading, title, ink, glint, wrap }) => (glint ? glinting(name, c, id) : div().min_w(0).text_color(ink)
+// A group's head is in the label type: smaller, strong and muted, over the rows of its group.
+const nameOf = (id, c, { name, heading, group, title, ink, glint, wrap }) => (glint ? glinting(name, c, id) : div().min_w(0).text_color(group ? c.muted : ink)
   .when(wrap, (el) => el.flex_1().line_height(LH.body))
   .when(!wrap, (el) => el.truncate())
-  .when(heading || title, (el) => el.font_semibold())
+  .when(heading || group || title, (el) => el.font_semibold())
+  .when(group, (el) => el.text_size(T.body))
   .when(title, (el) => el.text_size(T.page))
   .child(name));
 
@@ -152,9 +154,9 @@ const wire = (el, c, { onClick, onHover, onKey, focusHandle }) => el
 
 // `start`, `tools`: drawn elements before the icon and always at the end; `actions`: tools shown with `hover` or `focus`; `keys`: key hint props.
 // `level` makes it a tree row, `open` its folder's fold; `verbs`: quiet word actions on a line under it.
-// `wrap`: the name wraps instead of one truncated line; `drop`: where a dragged row lands; `wash`: a state's ground; `guides`: one per level.
+// `group`: a heading that heads a group, such as a computer over its projects; `wrap`: the name wraps instead of one truncated line; `drop`: where a dragged row lands; `wash`: a state's ground; `guides`: one per level.
 export function row(id, c, {
-  icon = null, tone = null, letter = null, level = null, open = null, name, detail = null, meta = null, chip: count = null, flag = null, mark: status = "none", second = null, heading = false, title = false,
+  icon = null, tone = null, letter = null, level = null, open = null, name, detail = null, meta = null, chip: count = null, flag = null, mark: status = "none", second = null, heading = false, group = false, title = false,
   depth = 0, selected = false, current = false, dimmed = false, pending = false, hover = false, focus = false, actions = [], action = null, verbs = [], start = [], tools = [], keys = [],
   glint = false, wrap = false, drop = null, wash = null, guides = [],
   onClick = null, onHover = null, onKey = null, focusHandle = null,
@@ -169,7 +171,7 @@ export function row(id, c, {
     ...start,
     level === null ? null : foldOf(c, open),
     slotOf(c, { letter, icon, tone, ink, dimmed }),
-    nameOf(`${id}-name`, c, { name, heading, title, ink, glint, wrap }),
+    nameOf(`${id}-name`, c, { name, heading, group, title, ink, glint, wrap }),
     detailOf(c, id, detail),
     div().flex_1(),
     ...(shown && actions.length ? [] : asideOf(id, c, { meta, flag, dimmed })),

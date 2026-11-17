@@ -748,7 +748,7 @@
 .kanso-sidebar__tools{height:var(--k-h-header);flex:none;display:flex;align-items:center}
 .kanso-sidebar__list{flex:1;min-height:0;overflow:hidden}
 .kanso-sidebar__group{display:flex;align-items:center;gap:var(--k-sp-2);height:var(--k-h-row);padding:0 var(--k-sp-2);margin-top:var(--k-sp-4);font-size:var(--k-fs-body);font-weight:var(--k-fw-strong);color:var(--muted)}
-.kanso-sidebar__footer{flex:none;padding:var(--k-sp-2) 0 var(--k-sp-4)}
+.kanso-sidebar__footer{flex:none;padding:var(--k-sp-2) calc(var(--k-sidebar-gutter) - var(--k-sp-2)) var(--k-sp-4)}
 .kanso-sidebar__footer-row{display:flex;align-items:center;gap:var(--k-sp-2);height:var(--k-h-pane);padding:0 var(--k-sp-2);font-size:var(--k-fs-name);color:var(--muted)}
 .kanso-sidebar__section .kanso-section__count{color:var(--dim);font-weight:var(--k-fw-regular)}
 .kanso-sidebar__footer,.kanso-sidebar__list{position:relative;z-index:1}
@@ -852,8 +852,9 @@
 .kanso-window--rest .kanso-sidebar{padding:0 var(--k-sp-2);display:flex;flex-direction:column}
 .kanso-sidebar__title{height:var(--k-h-tab-bar);flex:none;display:flex;align-items:center;padding-left:var(--k-sp-1)}
 .kanso-sidebar__actions{height:var(--k-h-header);flex:none;display:flex;align-items:center;gap:var(--k-sp-2)}
-.kanso-sidebar__rows{flex:1;min-height:0;display:flex;flex-direction:column;padding-top:var(--k-sp-1)}
-.kanso-sidebar__row-group+.kanso-sidebar__row-group{margin-top:var(--k-sp-4)}
+.kanso-sidebar__rows{flex:1;min-height:0;display:flex;flex-direction:column;padding-top:var(--k-sp-1);padding-inline:calc(var(--k-sidebar-gutter) - var(--k-sp-2))}
+.kanso-sidebar__row-group+.kanso-sidebar__row-group{margin-top:var(--k-sidebar-group-gap)}
+.kanso-sidebar__row-group.kanso-sidebar__row-group--computer{margin-top:var(--k-sidebar-computer-gap)}
 .kanso-sidebar__row{height:var(--k-h-row);display:flex;align-items:center;gap:var(--k-sp-2);padding:0 var(--k-sp-2);border-radius:var(--k-r-control);box-sizing:border-box;font-size:var(--k-fs-name);color:var(--muted);position:relative;font-variant-numeric:tabular-nums}
 .kanso-sidebar__row .kanso-row__name{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:var(--k-fw-medium)}
 .kanso-sidebar__row.kanso-project .kanso-row__name{font-weight:var(--k-fw-strong);flex:none;max-width:60%}
@@ -1284,6 +1285,7 @@
 .kanso-row--wrap :is(.kanso-content__primary,.kanso-row__name){align-items:flex-start;white-space:normal}
 .kanso-row--wrap .kanso-row__name{flex:1;line-height:var(--k-lh-body);overflow-wrap:anywhere}
 .kanso-row--heading .kanso-row__name{font-weight:var(--k-fw-strong);color:var(--fg)}
+.kanso-row--group .kanso-row__name{font-size:var(--k-fs-meta);font-weight:var(--k-fw-strong);color:var(--muted)}
 /* Row, title form: a panel's heading, the name at title size and the scope under it; it is not a choice, so no wash. */
 .kanso-row--title,.kanso-row--title .kanso-content__primary{height:var(--k-h-header);align-items:center}
 .kanso-row--title.kanso-row--two-lines{height:auto;padding-block:0}

@@ -7,7 +7,7 @@ import { NAME_LABEL } from "./marks.js";
 import { tellsSomething } from "./pure.js";
 import { parseProcesses, etimeMs } from "./procs.js";
 import { oneLine } from "./since-left-model.js";
-import { GLIDE, H, R, DIALOG } from "./ui.js";
+import { G, GLIDE, H, R, DIALOG, SIDEBAR } from "./ui.js";
 import { mark, MARK_SIZES } from "./ui-mark.js";
 import { sessionRow } from "./session-row.js";
 import { machineOf } from "./machines.js";
@@ -18,9 +18,10 @@ export { NAME_LABEL };
 // Native GPUI motion, no per-frame script; fold and pill share the pace so they move together.
 export const FOLD_MS = GLIDE.duration + 40; // rows stay drawn this long after a fold, so the close is seen
 
-// Drawn before the rows so they sit on top, out to the list's edges as the kit's row is.
+// Drawn before the rows so they sit on top, where a row's ground is: the gutter less the row's own padding from each side.
+const GROUND = SIDEBAR.gutter - G.sm;
 export function pill(id, y, h, color) {
-  return div().id(id).absolute().left_0().right_0().top(y).h(h).rounded(R.control).bg(color)
+  return div().id(id).absolute().left(GROUND).right(GROUND).top(y).h(h).rounded(R.control).bg(color)
     .transition("top", GLIDE).transition("height", GLIDE);
 }
 

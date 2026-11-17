@@ -165,9 +165,10 @@ const rowTool = (action) => button({ kind: 'icon', size: 'sm', ...action });
 export const rowDepths = [0, 1, 2];
 // `actions` show on hover or focus and take the meta's place; `action` and the drawn `tools` are always shown; `keys` are the row's key hints, last.
 // The title form is a panel's heading: the name at title size, the second line its scope.
+// Proposed: `group` makes a heading the head of a group, its name in the label type (a computer over its projects).
 // Proposed: `wrap` lets the name run over as many lines as it needs, such as a review thread's comment, instead of one truncated line.
 // `second`, `detail` and `meta` take facts with a tone and a tip, a detail fact with a `label` is a press, `chip` takes a tip; `drop` is where a dragged row lands, `wash` a state's ground, `guides` one per depth above it ('tee', 'end', 'pass', or null), under that depth's icon; without them a deeper row hangs from its parent.
-export const row = ({ icon = 'none', tone = '', name, detail, meta, chip: count, flag, mark: status = 'none', second, heading, title, depth = 0, glint, wrap, selected, current, dimmed, pending, hover, focus, actions = [], action, start = [], tools = [], keys = [], drop, wash, guides = [] }) => {
+export const row = ({ icon = 'none', tone = '', name, detail, meta, chip: count, flag, mark: status = 'none', second, heading, group, title, depth = 0, glint, wrap, selected, current, dimmed, pending, hover, focus, actions = [], action, start = [], tools = [], keys = [], drop, wash, guides = [] }) => {
   const lines = guides.length ? guides : depth > 1 ? [null, 'pass'] : [];
   const lead = `${lines.map(guide).join('')}${list(start)}${icon === 'none' ? '' : glyph(icon, tone)}`;
   const label = `<span class="kanso-row__name${glint ? ' kanso-text--glint' : ''}">${escape(name)}</span>`;
@@ -176,7 +177,7 @@ export const row = ({ icon = 'none', tone = '', name, detail, meta, chip: count,
     + `${meta ? `<span${marked(factOf(meta), 'kanso-row__meta')}>${escape(factOf(meta).text)}</span>` : ''}${flag ? `<span class="kanso-row__flag">${glyph(flag)}</span>` : ''}`
     + `${actions.length ? `<span class="kanso-row__actions">${actions.map(rowTool).join('')}</span>` : ''}${count ? countOf(count) : ''}${action ? button({ size: 'sm', ...action }) : ''}${list(tools)}${keys.map(keyHint).join('')}`
     + `${pending ? '<span class="kanso-state-line__pending-dot"></span>' : ''}${!status || status === 'none' ? '' : mark({ status })}`;
-  const states = [second && 'kanso-row--two-lines', heading && 'kanso-row--heading', title && 'kanso-row--title', depth && `kanso-row--depth-${depth}`, selected && 'kanso-control--selected', current && 'kanso-row--selected',
+  const states = [second && 'kanso-row--two-lines', heading && 'kanso-row--heading', group && 'kanso-row--group', title && 'kanso-row--title', depth && `kanso-row--depth-${depth}`, selected && 'kanso-control--selected', current && 'kanso-row--selected',
     dimmed && 'kanso-control--dim', pending && 'kanso-state-line--pending', hover && 'kanso-control--hover', focus && 'kanso-control--focus',
     drop && `kanso-row--drop-${drop}`, wash && `kanso-row--wash-${wash}`, lines.length && 'kanso-row--tree', wrap && 'kanso-row--wrap'].filter(Boolean).map((name) => ` ${name}`).join('');
   return second
@@ -320,7 +321,8 @@ export const stacks = {
   'header title': { block: 'kanso-header__title' },
   sidebar: { block: 'kanso-sidebar', tag: 'aside' },
   rows: { block: 'kanso-sidebar__rows' },
-  'row group': { block: 'kanso-sidebar__row-group' },
+  // Proposed: `computer`, a computer's group, wider apart from the group above it than projects are.
+  'row group': { block: 'kanso-sidebar__row-group', states: ['computer'] },
   'view switch': { block: 'kanso-sidebar__view-switch' },
   'view menu': { block: 'kanso-sidebar__view-menu' },
   footer: { block: 'kanso-sidebar__footer' },
