@@ -44,6 +44,13 @@ export function recorder() {
   return { node, host, ids, texts, tips, icons, handlers, lines, clear };
 }
 
+// Draws `view` now, and again on each call, from a clean record.
+export const drawEachTime = (view, clear) => {
+  const render = () => { clear(); view.render(); };
+  render();
+  return render;
+};
+
 // The sidebar's Spaces, drawing with `elements`, in a host that `over` changes.
 export const loadSidebar = (elements, over = {}) => loadSpaces({
   ...elements, theme: () => SIDEBAR_THEME, shared: () => null, setShared: () => {},
@@ -57,5 +64,6 @@ export const mountedState = (extra = {}) => ({
   machines: [], parked: [], folded: new Set(), agentsFolded: new Set(), sectionsFolded: new Set(), shelvesOpen: new Set(),
   waking: new Set(), login: new Set(), failed: new Set(), powerBusy: new Set(), hints: {}, hoverSpace: null, hoverRow: null,
   handle: { is_focused: () => false, focus() {} }, hostName: "macbook", sync: { config: {}, status: {} },
-  panel: { set() {}, agents: new Map() }, threads: null, tasks: {}, steps: {}, ...extra,
+  panel: { set() {}, agents: new Map() }, threads: null, tasks: {}, steps: {}, since: {}, foldH: {}, folding: null,
+  pressed: null, over: null, alive: null, ...extra,
 });

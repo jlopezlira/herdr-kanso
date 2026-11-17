@@ -9,6 +9,14 @@ const NOW = Date.now();
 const local = (extra = {}) => ({ id: "sp1", name: "app", folder: "/work/app", machine: null, active: true, tabs: [{ id: "tab1" }], ...extra });
 const agent = (address, extra = {}) => ({ address, pane: `p-${address}`, tab: "tab1", space: "sp1", space_name: "app", status: null, program: { agent: true, name: "Claude Code" }, title: address, seq: 1, ...extra });
 
+const ops = { id: "sp2", name: "ops", folder: "/srv/ops", machine: "dark", active: false, tabs: [{ id: "tab2" }] };
+// The sidebar after a double click on the project's name.
+const nameDoubleClicked = async () => {
+  const drawn = await sidebar({});
+  drawn.handlers["on_mouse_down:left:space-sp1"]({ click_count: 2 }, { notify() {}, stop_propagation() {} });
+  return drawn;
+};
+
 async function sidebar(state) {
   const calls = [], focused = [];
   const drawn = recorder();
@@ -80,8 +88,7 @@ test("a kept project whose folder is gone says Not found and offers Locate", asy
 });
 
 test("double-clicking a project's name opens the rename dialog, not a field in the row", async () => {
-  const drawn = await sidebar({});
-  drawn.handlers["on_mouse_down:left:space-sp1"]({ click_count: 2 }, { notify() {}, stop_propagation() {} });
+  const drawn = await nameDoubleClicked();
   assert.deepEqual(drawn.calls, [["space.rename", { id: "sp1" }]], "no name: Herdr asks for one in its dialog");
   drawn.ids.length = 0;
   drawn.view.render();
@@ -90,8 +97,7 @@ test("double-clicking a project's name opens the rename dialog, not a field in t
 });
 
 test("Esc while renaming a project sends nothing to the focused agent: the sidebar takes no keys", async () => {
-  const drawn = await sidebar({});
-  drawn.handlers["on_mouse_down:left:space-sp1"]({ click_count: 2 }, { notify() {}, stop_propagation() {} });
+  const drawn = await nameDoubleClicked();
   drawn.view.render();
   assert.deepEqual(drawn.focused, [], "no field in the sidebar holds the keyboard while the dialog asks");
   assert.deepEqual(drawn.calls.filter(([c]) => c !== "space.rename"), [], "nothing reaches a terminal");
@@ -135,7 +141,7 @@ test("Status draws its sections with only Needs you marked, a count once folded,
 
 test("Status puts the project after a session's name, and the computer when it is not this one", async () => {
   const agents = [agent("t1", { status: "working" }), agent("dark/t2", { status: "working", space: "sp2", space_name: "ops" })];
-  const spaces = [local(), { id: "sp2", name: "ops", folder: "/srv/ops", machine: "dark", active: false, tabs: [{ id: "tab2" }] }];
+  const spaces = [local(), ops];
   const drawn = await sidebar({ view: "agents", agents, spaces, layouts: [{ name: null, layout: "ready" }, { name: "dark", layout: "ready" }] });
   assert.equal(drawn.texts.includes("app"), true);
   assert.equal(drawn.texts.includes("ops · dark"), true);
@@ -233,7 +239,7 @@ test("Sort's menu opened in one form of the sidebar does not come back in the ot
 });
 
 test("a computer folded shows its most urgent mark and how many projects; connected with none, the kit empty", async () => {
-  const spaces = [local(), { id: "sp2", name: "ops", folder: "/srv/ops", machine: "dark", active: false, tabs: [{ id: "tab2" }] }];
+  const spaces = [local(), ops];
   const layouts = [{ name: null, layout: "ready" }, { name: "dark", layout: "ready" }];
   const own = { machines: [{ name: "dark", state: "connected", target: "dark" }] };
   const agents = [agent("dark/t2", { status: "blocked", space: "sp2", tab: "tab2" })];

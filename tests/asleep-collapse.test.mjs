@@ -1,29 +1,8 @@
 // A project or tab that is asleep is one quiet row until a click; waking it opens the usual group.
-import { loadSpaces } from "./mod-fixtures.mjs";
+import { drawEachTime, loadSidebar, mountedState, recorder } from "./sidebar-fixtures.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { load, clone } from "./helpers.mjs";
-
-const theme = { foreground: "#fff", muted: "#888", dim: "#666", blocked: "#c44", input: "#222", accent: "#09f", chrome: "#111", hover: "#222", ansi2: "#0f0", border: "#333", popover: "#111", selected: "#222" };
-
-function recorder() {
-  const handlers = {}, ids = new Set();
-  const node = () => {
-    let id = null;
-    const proxy = new Proxy({}, {
-      get(_t, prop) {
-        if (prop === "then") return undefined;
-        if (prop === "id") return (x) => { id = x; ids.add(x); return proxy; };
-        if (prop === "on_click" || prop === "on_mouse_up" || prop === "on_mouse_down") return (...a) => { if (id) handlers[`${prop}:${id}`] = a.at(-1); return proxy; };
-        if (prop === "when") return (cond, fn) => (cond ? fn(proxy) : proxy);
-        return () => proxy;
-      },
-    });
-    return proxy;
-  };
-  const clear = () => { for (const k of Object.keys(handlers)) delete handlers[k]; ids.clear(); };
-  return { node, handlers, ids, clear };
-}
 
 // Asleep is Herdr's state: a settled tab, and terminals at their prompt that keep a conversation.
 const shell = (address, resume, name) => ({ address, state: "live", program: { shell: true }, labels: { "kanso.resume": resume, "kanso.name": name } });
@@ -33,32 +12,18 @@ const sleepers = [{ pane: "p1", tab: "tb", terminal: "t1", cwd: "/Users/me/fury"
 const sleeperTerms = [shell("t1", "00000000-0000-4000-8000-000000000001", "Ada"), shell("t2", "00000000-0000-4000-8000-000000000002", "Bea")];
 const registry = [{ id: "p-fury", name: "fury", folder: "/Users/me/fury", machine: "", missing: false }];
 
-function ready(view, extra = {}) {
-  return Object.assign(view, {
-    view: "spaces", git: {}, shown: new Set(extra.shown ?? []), born: {}, custom: {}, order: "updated", machines: [],
-    folded: new Set(), agentsFolded: new Set(), tasks: {}, steps: {}, since: {}, foldH: {}, folding: null,
-    pressed: null, over: null, hoverRow: null, hoverSpace: null, sectionsFolded: new Set(), shelvesOpen: new Set(),
-    threadGroup: true, threadOrder: "said", statusOrder: "latest", threads: null, alive: null, ...extra,
-  });
-}
-
 async function draw({ spaces = () => [], agents = () => [], panes = () => [], terminals = () => [], collapsed = false } = {}) {
-  const { node, handlers, ids, clear } = recorder();
+  const { host, handlers, ids, clear } = recorder();
   const shared = (k) => (k === "kanso.registry" ? registry : k === "sidebar.collapsed" ? collapsed : null);
-  const { Spaces } = await loadSpaces({
-    div: node, svg: node, image: node, h_flex: node, v_flex: node, Button: { new: node }, Popover: { new: node },
-    theme: () => theme, shared, setShared: () => {}, spaces, panes, agents, terminals, machines: () => [],
-    run: () => {}, home: () => "/Users/me", openOverlay: () => {}, props: () => ({}),
-  });
-  const view = ready(new Spaces(), { shown: new Set(spaces().map((w) => w.id)) });
-  const render = () => { clear(); view.render(); };
-  render();
+  const { Spaces } = await loadSidebar(host, { shared, spaces, panes, agents, terminals, machines: () => [] });
+  const view = Object.assign(new Spaces(), mountedState({ shown: new Set(spaces().map((w) => w.id)), threadGroup: true }));
+  const render = drawEachTime(view, clear);
   return { view, handlers, ids, render };
 }
 const asleepProject = () => draw({ spaces: () => fury([asleepTab]), panes: () => sleepers, terminals: () => sleeperTerms });
 
 const cx = { stop_propagation() {}, notify() {} };
-const has = (ids, id) => ids.has(id);
+const has = (ids, id) => ids.includes(id);
 
 test("a project with nothing awake is one group, and a sleeping tab beside a live agent is its own", async () => {
   const { asleepGroups } = await load("kanso-spaces/roster.js", ["asleepGroups"], {});
