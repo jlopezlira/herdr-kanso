@@ -24,7 +24,7 @@ const tools = [{ icon: "lu-pin", label: "Pin to the top" }, { icon: "lu-ellipsis
 
 test("A row from the shared kit draws what the app's row draws with the same props", async () => {
   const { row, app, c } = await kits();
-  const props = { icon: "file", name: "checkout.ts", detail: ["src/api", { icon: "branch", text: "main" }], meta: "4m", mark: "working", depth: 1, current: true, hover: true, chip: 2, actions: [{ icon: "pin", label: "Pin to the top" }] };
+  const props = { icon: "file", name: "checkout.ts", detail: ["src/api", { icon: "git-branch", text: "main" }], meta: "4m", mark: "working", depth: 1, current: true, hover: true, chip: 2, actions: [{ icon: "pin", label: "Pin to the top" }] };
   assert.deepEqual(drawn(app.row(props)("r", c)), drawn(row("r", c, props)));
 });
 

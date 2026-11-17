@@ -45,7 +45,7 @@ test("An item is a control tall, its icon muted, its words in the body size; a c
 
 test("An armed item is filled with the accent and reads Press again", async () => {
   const { menu, c } = await kit();
-  const [close] = menu("m", { items: [{ icon: "close", label: "Close", armed: true, verb: "close checkout" }] }, c).kids;
+  const [close] = menu("m", { items: [{ icon: "x", label: "Close", armed: true, verb: "close checkout" }] }, c).kids;
   assert.equal(arg(close, "bg"), c.accent);
   assert.equal(arg(close, "accessibility_label"), "Press again to close checkout");
   assert.equal(arg(close.kids[1], "text_color"), c.accentText);

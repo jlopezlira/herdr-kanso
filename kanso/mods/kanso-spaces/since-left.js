@@ -13,7 +13,7 @@ const ROW_GAP = 1; // the sidebar list's gap; the kit has no token for it
 
 // An error has no glyph; the sidebar draws the blocked disc for a failed agent.
 const lead = (c, mark) => (mark === "pr"
-  ? svg("mods/kanso-chrome/icons/pull-request.svg").size(ICON).flex_none().text_color(c.muted)
+  ? svg("mods/kanso-chrome/icons/git-pull-request.svg").size(ICON).flex_none().text_color(c.muted)
   : statusMark(c, mark === "error" ? "blocked" : mark));
 
 export class SinceLeft {
@@ -94,7 +94,7 @@ export class SinceLeft {
   }
 
   dismissControl(c) {
-    return iconButton("since-dismiss", "close", "Dismiss", (cx) => { cx.stop_propagation(); return this.dismiss(cx).catch(() => {}); }, c);
+    return iconButton("since-dismiss", "x", "Dismiss", (cx) => { cx.stop_propagation(); return this.dismiss(cx).catch(() => {}); }, c);
   }
 
   line(t, c, row, nav, reach) {

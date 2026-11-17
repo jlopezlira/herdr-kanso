@@ -30,7 +30,7 @@ test("Every kind is one box from the tokens: 30 high, 12 inside, radius 6, and t
       assert.equal(calls(label, "font_medium").length, 1);
     }
   }
-  const icon = button("i", "Refresh", () => {}, c, { kind: "icon", icon: "refresh" });
+  const icon = button("i", "Refresh", () => {}, c, { kind: "icon", icon: "refresh-cw" });
   assert.equal(one(icon, "h"), H.icon);
   assert.equal(one(icon, "w"), H.icon);
   assert.equal(one(icon, "tooltip"), "Refresh");

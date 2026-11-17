@@ -209,9 +209,9 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     `#98ad8f`.
   - Light: background `#f4f1eb`, foreground `#3c3934`, chrome `#e3dfd6`,
     working `#8f7d52`, blocked `#9a6e68`, done `#6d7d62`.
-- **Icons**: one Lucide-style set in `mods/kanso-chrome/icons/`, every one
-  with the same stroke (2 on a 24 grid, 1.4 on a 16 grid), so they read as
-  one family.
+- **Icons**: Lucide's own icons in `mods/kanso-chrome/icons/`, unchanged and
+  named as Lucide names them (stroke 2 on a 24 grid); the ensō marks
+  (`enso`, `enso-idle`, `working`) are marks, not icons.
 
 ## How it behaves
 
