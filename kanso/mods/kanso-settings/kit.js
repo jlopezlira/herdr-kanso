@@ -9,6 +9,8 @@ import { figure } from "./ui-metric.js";
 import { diffText, facts, plus } from "./ui-facts.js";
 import { card as drawCard } from "./ui-card.js";
 import { code as drawCode } from "./ui-code.js";
+import { thumbnail as drawThumbnail } from "./ui-thumbnail.js";
+import { markdown as drawMarkdown, markdownBlock as drawMarkdownBlock } from "./ui-markdown.js";
 import { tipText } from "./ui-tooltip.js";
 import { avatar as drawAvatar } from "./ui-avatar.js";
 import { chip as drawChip } from "./ui-chip.js";
@@ -34,8 +36,8 @@ const EVENTS = {
   onMenu: (el, fn) => el.on_mouse_down("right", fn),
   onMove: (el, fn) => el.on_mouse_move(fn),
 };
-// `onChange(key, cx)`: a choice among tabs or menu items; `onOpen(open, cx)`: a menu under a button opens or shuts.
-const HANDLERS = ["on", "onClick", "onChange", "onOpen", "onHover", "onKey", "focusHandle", ...Object.keys(EVENTS)];
+// `onChange(key, cx)`: a choice among tabs or menu items; `onOpen(open, cx)`: a menu under a button opens or shuts; `onLink(url, cx)`: a link's press in markdown.
+const HANDLERS = ["on", "onClick", "onChange", "onOpen", "onHover", "onKey", "onLink", "focusHandle", ...Object.keys(EVENTS)];
 const withEvents = (el, events) => Object.entries(events).filter(([, fn]) => fn).reduce((drawnEl, [name, fn]) => EVENTS[name](drawnEl, fn), el);
 const appIcon = (icon) => (typeof icon === "string" ? icon.replace(/^lu-/, "") : icon);
 const iconOf = (icon) => (icon === "none" ? null : appIcon(icon));
@@ -143,6 +145,24 @@ export const card = ({ content = [], ...props }) => (id, c, more = {}) => {
 export const code = (props) => (id, c, more = {}) => {
   given(more);
   return drawCode(id, c, props);
+};
+
+// A picture to pick: its press picks it. Proposed: `color`, its ground until the picture is drawn.
+export const thumbnail = ({ image = "", label, selected = false, loading = false, color = "" }) => (id, c, more = {}) => {
+  const { onClick = null } = given(more);
+  return drawThumbnail(id, c, { image, label, selected, loading, color }, onClick);
+};
+
+// Prose in blocks, the `block`th (from 1) hovered or edited; `onLink` takes a link's press.
+export const markdown = ({ source, block = 0, state = "rest" }) => (id, c, more = {}) => {
+  const { onLink = null } = given(more);
+  return drawMarkdown(id, c, { source, block, state }, { onLink });
+};
+
+// One block of a document. Proposed: `content`, kit pieces, elements or markdown words in place of its formatted source. `onPress` takes a press on it (a double press edits it).
+export const markdownBlock = ({ source = "", state = "rest", content = [] }) => (id, c, more = {}) => {
+  const { onLink = null, onPress = null } = given(more);
+  return drawMarkdownBlock(id, c, { source, state, content: drawn(id, c, "content", content) }, { onLink, onPress });
 };
 
 // Herdr's `.tooltip()` takes only a string, so the tooltip is its words: `.tooltip(tooltip({ label, detail, chord }))`.

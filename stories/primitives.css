@@ -1171,6 +1171,8 @@
 .kanso-thumbnail{position:relative;display:inline-block;flex:none;width:var(--k-h-header);height:var(--k-h-header);padding:var(--k-sp-hair);box-sizing:border-box;overflow:hidden;border-radius:var(--k-r-sm);background:var(--surface-4);box-shadow:inset 0 0 0 var(--k-w-line) var(--border)}
 .kanso-thumbnail img{display:block;width:100%;height:100%;object-fit:cover;border-radius:var(--k-r-sm)}
 .kanso-thumbnail--swatch{box-shadow:none}
+/* Proposed: a picture not drawn yet shows its own colour. */
+.kanso-thumbnail--color{background:var(--kanso-color)}
 .kanso-thumbnail:is(:focus-visible,.kanso-control--focus){outline:var(--k-w-focus) solid var(--accent);outline-offset:var(--k-w-line)}
 
 .kanso-switch{display:flex;align-items:center;flex:none;width:var(--k-sw-w);height:var(--k-sw-h);padding:var(--k-sp-hair);box-sizing:border-box;border-radius:var(--k-r-full);background:var(--surface-4);box-shadow:inset 0 0 0 var(--k-w-line) var(--line-strong)}

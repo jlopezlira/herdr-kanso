@@ -8,7 +8,7 @@ import { computerRow } from '../stories/kit/computer-row.js';
 import { section } from '../stories/kit/section.js';
 import { asleep } from '../stories/kit/asleep.js';
 import { sessionRow } from '../stories/kit/session-row.js';
-import { button, dawn as dawnSky, mark, marks, row, stack, windowControls } from '../stories/kit/pieces.js';
+import { button, dawn as dawnSky, input, mark, markdownBlock, marks, row, stack, thumbnail, windowControls } from '../stories/kit/pieces.js';
 import { sampleSidebar, sessionTools } from '../stories/kit/samples.js';
 import { statedPages } from '../stories/kit/states.js';
 export { elements } from './storybook-markup.mjs';
@@ -45,6 +45,10 @@ export function kitRecords(records) {
   }
   add('Row', 'Wrapped', `<div class="kanso-panel">${row({ name: 'This retries forever when the bucket is empty: Retry-After is in seconds, so wait that long once and give up after three tries instead of looping on every 429 the server answers.', second: ['src/api/limits.ts:42', 'mara', '2 replies'], wrap: true })}</div>`,
     'Proposed. A review thread: its comment wraps, up to 240 characters, over the path, author and replies.');
+  add('Thumbnail', 'Colour, not drawn yet', `<div class="kanso-panel"><div class="kanso-picture__thumbnails">${thumbnail({ label: 'cart-countdown.png', color: 'var(--working)', selected: true })}${thumbnail({ label: 'checkout.png', color: 'var(--accent)' })}${thumbnail({ label: 'receipt.png' })}</div></div>`,
+    'Proposed. Images: a picture not copied for drawing yet shows its own colour; one with none keeps the plain square.');
+  add('Markdown', 'Editing, in its field', `<div class="kanso-panel"><div class="kanso-markdown">${markdownBlock({ source: '# Rate limits' })}${markdownBlock({ state: 'editing', content: input({ text: 'Each customer gets a bucket of requests.', label: 'Write…', icon: 'none', multiline: true, limit: 400 }) })}</div></div>`,
+    'Proposed. The block being edited holds the text field, its Markdown as written, where the formatted block was.');
   const photo = 'https://images.placeholders.dev/96x96';
   const avatar = (size, inner) => `<span class="kanso-avatar kanso-avatar--round${size ? ` kanso-avatar--${size}` : ''}">${inner}</span>`;
   const img = `<img src="${photo}" alt="" loading="lazy" referrerpolicy="no-referrer">`;
