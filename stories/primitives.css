@@ -1591,3 +1591,15 @@
 .kanso-skeleton__row.kanso-skeleton__row--stacked{margin-top:var(--k-sp-1)}
 .kanso-badge.kanso-badge--beside{margin-left:calc(-1 * var(--k-sp-4))}
 .kanso-dialog--settings.kanso-dialog--snug{padding:var(--k-sp-2) var(--k-sp-6) var(--k-sp-4)}
+.kanso-sidebar--footer-preview.kanso-sidebar--footer-placed{position:absolute;padding-top:var(--k-sp-2)}
+.kanso-tooltip.kanso-tooltip--flush{margin:0}
+.kanso-sidebar--slice.kanso-sidebar--flush-top{padding-top:0}
+.kanso-sidebar--slice.kanso-sidebar--tight{padding:0 var(--k-sp-2) var(--k-sp-1)}
+.kanso-rail.kanso-rail--padded{padding:var(--k-sp-1) 0}
+.kanso-popover.kanso-popover--padded{padding:var(--k-sp-3)}
+.kanso-menu.kanso-menu--spaced{margin-top:var(--k-sp-4)}
+.kanso-panel.kanso-panel--loose{margin-top:var(--k-sp-6)}
+.kanso-panel__column.kanso-panel__column--wide{gap:var(--k-sp-6)}
+.kanso-panel--stale.kanso-panel--log{padding:var(--k-sp-2) var(--k-sp-3);font:var(--k-fs-body)/var(--k-lh-code) var(--mono);color:var(--muted);white-space:pre}
+.kanso-sidebar__row.kanso-sidebar__row--bare{padding:0;gap:var(--k-sp-2)}
+.kanso-rail__list.kanso-rail__list--roomy{gap:var(--k-sp-2)}
