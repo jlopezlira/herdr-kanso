@@ -114,7 +114,7 @@ const workflow = (name) => readFile(new URL(name, workflows), "utf8");
 test("Workflows publish a beta from develop, a release candidate on demand, and a stable release from main", async () => {
   const ci = await workflow("ci.yml");
   assert.match(ci, /branches: \[main, develop\]/);
-  assert.match(ci, /KANSO_BRANCH: \$\{\{ github\.event_name == 'pull_request' && github\.base_ref \|\| github\.ref_name \}\}/);
+  assert.match(ci, /KANSO_BRANCH: \$\{\{ github\.ref_name \}\}/);
   const stable = ci.slice(ci.indexOf("\n  stable:"));
   assert.match(stable, /needs: platform\n    if: github\.event_name == 'push' && github\.ref == 'refs\/heads\/main'/, "a stable release waits for all three platforms");
   assert.match(stable, /uses: \.\/\.github\/workflows\/release\.yml\n    with:\n      kind: stable\n      branch: main/);
@@ -149,9 +149,10 @@ test("Workflows publish a beta from develop, a release candidate on demand, and 
   assert.doesNotMatch(pages, /develop/);
 });
 
-test("CI drops only a pull request's older run, and every job of every workflow has a time limit", async () => {
+test("CI runs only on pushes to main and develop, never cancels a run, and every job of every workflow has a time limit", async () => {
   const ci = await workflow("ci.yml");
-  assert.match(ci, /group: ci-\$\{\{ github\.event\.pull_request\.number \|\| github\.run_id \}\}\n  cancel-in-progress: \$\{\{ github\.event_name == 'pull_request' \}\}/);
+  assert.match(ci, /^on:\n  push:\n    branches: \[main, develop\]\n/m);
+  assert.doesNotMatch(ci, /pull_request|cancel-in-progress/, "pull requests are checked locally before they are opened");
   for (const name of await readdir(workflows)) {
     const text = await workflow(name);
     const jobs = text.slice(text.indexOf("\njobs:")).match(/^  [\w-]+:$/gm);
