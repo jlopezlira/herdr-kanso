@@ -1,29 +1,25 @@
 // The sidebar's Toolbar, Header and Footer: the Storybook's compositions, copied as they are and drawn by the app kit, state by state.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { load, nodes, texts, svgsOf, themed, calls, arg, chain, KIT_NIGHT, drawingHost, repoText, sameCopies, numberArguments } from "./helpers.mjs";
+import { load, nodes, texts, svgsOf, themed, calls, arg, KIT_NIGHT, popoverHost as host, everyDrawn as every, blockedDots, repoText, sameCopies, numberArguments } from "./helpers.mjs";
 import { loadSidebar, mountedState, recorder } from "./sidebar-fixtures.mjs";
-import { loadWorkspaceChrome } from "./mod-fixtures.mjs";
+import { mountChrome } from "./mod-fixtures.mjs";
 import { statedPages } from "../stories/kit/states.js";
 import { kitRecords } from "../scripts/storybook-kit.mjs";
 
-const host = () => ({ ...drawingHost(), Popover: { new: (id) => chain(id) } });
 const compositions = async () => themed({
+  kit: await load("kanso-panel/kit.js", ["menu", "stack"], host()),
   ...await load("kanso-spaces/toolbar.js", ["toolbar", "addLabels"], host()),
   ...await load("kanso-chrome/header.js", ["header"], host()),
   ...await load("kanso-chrome/sidebar-footer.js", ["sidebarFooter"], host()),
   ...await load("kanso-panel/ui.js", ["tokens", "G", "H", "R", "DAWN", "DAWN_H"], host()),
-  kit: await load("kanso-panel/kit.js", ["menu", "stack"], host()),
 }, KIT_NIGHT);
-const cx = { stop_propagation() {}, notify() {} };
-// What a popover holds as its trigger and content, besides its kids.
-const inside = (el) => [...el.kids, ...el.calls.filter((call) => call[0] === "trigger" || call[0] === "content").map((call) => call[1])];
-const every = (el) => [el, ...inside(el).flatMap(every)];
 const tipsOf = (el) => every(el).flatMap((kid) => calls(kid, "tooltip").map((call) => call[1]));
 const byTip = (el, tip) => every(el).find((kid) => calls(kid, "tooltip").some((call) => call[1] === tip)) ?? null;
 const sortMenu = (kit) => kit.menu({ items: [{ heading: "Agents, pinned first, then by" }, { label: "Last update", icon: "check" }] });
 // A Toolbar state's preset, drawn by the app: its menus as the app's Menu.
 const drawState = ({ toolbar, kit, c }, args, handlers = { onOpen() {} }) => toolbar({ ...args, sortMenu: args.menu ? sortMenu(kit) : null, addMenu: args.add ? sortMenu(kit) : null, menu: undefined, add: undefined })("t", c, handlers);
+const cx = { stop_propagation() {}, notify() {} };
 
 test("The app's copies of the Toolbar, the Header and the Footer are the Storybook's, byte for byte", () => {
   sameCopies(["toolbar", "header"]);
@@ -127,9 +123,7 @@ test("The app sidebar draws its header from the composition, the lights left to 
 
 test("The window's title block draws the Header's lights' row: in Dawn Mode the sky and, open, the pill", async () => {
   const draw = async (shared) => {
-    const { WorkspaceChrome } = await loadWorkspaceChrome({ ...host(), theme: () => KIT_NIGHT, props: () => ({}), shared: (key) => shared[key] ?? null, setShared() {} });
-    const view = new WorkspaceChrome();
-    view.init({}, { spawn() {}, timer: { after() {}, every() {} } });
+    const view = await mountChrome({ ...host(), theme: () => KIT_NIGHT, props: () => ({}), shared: (key) => shared[key] ?? null, setShared() {} });
     return { el: view.render() }; // wrapped: a drawn element answers every name, `then` too
   };
   const { el: stable } = await draw({});
@@ -158,7 +152,7 @@ test("Collapsed, while someone needs you and Status is not on show, the view but
   const { tokens } = await load("kanso-panel/ui.js", ["tokens"], host());
   const c = tokens(KIT_NIGHT);
   const button = (props) => nodes(viewSwitch({ column: true, ...props })("v", c, { onChange() {}, onOpen() {} })).map((kid) => arg(kid, "trigger")).find(Boolean);
-  const dots = (el) => nodes(el).filter((kid) => calls(kid, "rounded_full").length && calls(kid, "bg").some((call) => call[1] === c.blocked)).length;
+  const dots = (el) => blockedDots(el, c);
   const asked = button({ view: "spaces", asks: true });
   assert.equal(dots(asked), 1, "the Status dot, on the view button");
   assert.equal(arg(asked, "accessibility_label"), "Projects · Someone needs you");

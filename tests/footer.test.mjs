@@ -1,15 +1,12 @@
 // The sidebar footer: the Storybook's Footer composition, drawn by kanso-chrome with kansō's update in each mode, its refusal, Settings and its one menu, Herdr's update, and the rail.
-import { loadWorkspaceChrome } from "./mod-fixtures.mjs";
+import { mountChrome } from "./mod-fixtures.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { load, chain, gpuiHost, calls } from "./helpers.mjs";
+import { load, chain, gpuiHost, calls, everyDrawn as all } from "./helpers.mjs";
 
 const night = { background: "#1b1b19", foreground: "#d8d4cb", chrome: "#161615", hover: "#232321", selected: "#2b2b28", dim: "#6b6860", muted: "#949086", blocked: "#d5674f", accent: "#c9a46a" };
 
 const arg = (el, name) => calls(el, name)[0]?.[1];
-// Kids, and what a popover holds as its trigger and content.
-const inside = (el) => [...el.kids, ...el.calls.filter((call) => call[0] === "trigger" || call[0] === "content").map((call) => call[1])];
-const all = (el) => [el, ...inside(el).flatMap(all)];
 const texts = (el) => all(el).flatMap((x) => calls(x, "child").map((call) => call[1]).filter((v) => typeof v === "string"));
 const byId = (el, id) => all(el).find((x) => x.tag === id || arg(x, "id") === id) ?? null;
 const holding = (el, words) => all(el).find((x) => calls(x, "on_click").length && texts(x).includes(words)) ?? null;
@@ -28,10 +25,8 @@ async function footer({ shared = {}, ready = null, bindings = [{ action: "kanso-
     run: (name, args) => { ran.push([name, args]); }, openOverlay: (spec) => { overlays.push(spec); return "o"; },
     updates: () => ({ app: { ready } }), keys: () => bindings, settings: () => ({ font_family: "Mono" }), window: () => ({ platform: "macos" }),
   };
-  const { WorkspaceChrome } = await loadWorkspaceChrome(host);
+  const view = await mountChrome(host);
   const kit = await load("kanso-chrome/ui.js", ["H", "G", "T"], host);
-  const view = new WorkspaceChrome();
-  view.init({}, { spawn() {}, timer: { after() {}, every() {} } });
   view.updater = { available: () => null, busy: false, refused: () => null, install: (context) => installs.push(context), ...updater };
   return { view, ran, overlays, installs, ...kit };
 }
