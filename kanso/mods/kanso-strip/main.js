@@ -95,6 +95,8 @@ const PX = "strip.px";
 const DRAG_MAX = 12000; // ms a held pane stays held with nobody dropping it (let go over a gutter)
 
 const iconOf = (prog, size, color) => programIcon(prog, size, color) ?? div().size(size);
+// A pane beyond the edge shows its agent's mark only while it has something to say.
+const EDGE_MARKS = ["working", "blocked", "done"];
 const zoneOf = (e, fallback = "below") => {
   const w = e.bounds?.width, h = e.bounds?.height, at = e.local_position;
   if (!w || !h || !at) return fallback;
@@ -288,19 +290,14 @@ export default class Strip extends View {
       .child(div().h(16).text_size(14).text_color(takes ? t.foreground : t.muted).child(chevron))
       .children(ids.slice(0, MAX_TILES).map(tile))
       .when(ids.length > MAX_TILES, (el) => el.child(div().text_size(10).text_color(t.dim).child(`+${ids.length - MAX_TILES}`)));
-    const rowOf = (id) => {
-      const info = byId.get(id), d = dot(info?.status, 6);
-      return h_flex().id(`edge-row-${id}`).h(26).px(8).gap(8).items_center().rounded(6).cursor_pointer()
-        .hover((h) => h.bg(t.hover))
-        .on_click((_e, cx) => { cx.stop_propagation(); show(id); })
-        .child(iconOf(info?.program, 13, t.muted))
-        .child(div().flex_1().min_w(0).truncate().text_size(12.5).text_color(t.foreground).child(nameOf(info, given)))
-        .when(Boolean(d), (el) => el.child(d));
+    const item = (id) => {
+      const info = byId.get(id), prog = info?.program;
+      return {
+        ...(prog?.icon ? { [prog.tint ? "icon" : "picture"]: prog.icon } : {}), label: nameOf(info, given),
+        mark: EDGE_MARKS.includes(info?.status) ? info.status : null, onClick: (cx) => { cx.stop_propagation(); show(id); },
+      };
     };
-    const card = v_flex().w(220).p(6).gap(1).rounded(8).bg(t.chrome).shadow_md()
-      .child(div().h(22).px(8).flex().items_center().text_size(11).text_color(t.dim)
-        .child(`${ids.length === 1 ? "One pane" : `${ids.length} panes`} beyond the ${left ? "left" : "right"} edge`))
-      .children(ids.map(rowOf));
+    const card = menu("edge-menu", { title: `${ids.length === 1 ? "One pane" : `${ids.length} panes`} beyond the ${left ? "left" : "right"} edge`, items: ids.map(item) }, tokens(t));
     return v_flex().id("edge").size_full().items_center().justify_center().bg(t.chrome).cursor_pointer()
       .hover((h) => h.bg(takes ? t.accent + "40" : t.hover))
       .when(takes, (el) => el.bg(t.accent + "24").cursor_grabbing())

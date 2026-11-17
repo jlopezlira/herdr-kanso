@@ -86,4 +86,7 @@ export class Armed {
   button(id, label, verb, key, act, c, o = {}) { return button(id, label, (cx) => this.press(key, cx, act), c, { ...o, verb, armed: this.is(key) }); }
 
   link(id, label, verb, key, act, c, o = {}) { return quietLink(id, label, (cx) => this.press(key, cx, act), c, { ...o, verb, armed: this.is(key) }); }
+
+  /** A row's verb that asks twice, as props. */
+  verb(label, verb, key, act, o = {}) { return { ...o, label, verb, armed: this.is(key), onClick: (cx) => this.press(key, cx, act) }; }
 }

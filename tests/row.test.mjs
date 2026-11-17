@@ -2,7 +2,7 @@
 import { loadRow, loadPendingState } from "./mod-fixtures.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { load, chain, numberArguments, calls, one, styled, themed, KIT_NIGHT, drawingHost } from "./helpers.mjs";
+import { load, chain, numberArguments, calls, one, styled, themed, KIT_NIGHT, drawingHost, svgsOf as svgs } from "./helpers.mjs";
 import { marks, rowDepths } from "../stories/kit/pieces.js";
 
 const kit = async () => themed({
@@ -13,7 +13,6 @@ const kit = async () => themed({
 
 const all = (el) => [el, ...el.kids.flatMap(all)];
 const byTag = (el, tag) => all(el).find((kid) => kid.tag === tag);
-const svgs = (el) => all(el).flatMap((kid) => calls(kid, "svg").map((call) => call[1]));
 const texts = (el) => all(el).flatMap((kid) => calls(kid, "child").map((call) => call[1]).filter((value) => typeof value === "string"));
 const line = (el) => all(el).find((kid) => kid.tag === "h_flex" && kid !== el);
 
@@ -82,11 +81,16 @@ test("Heading, current, selected, focus, dimmed and pending are each one state o
   assert.ok(all(pending).some((kid) => calls(kid, "id").some((call) => call[1] === "r-pending")), "the pending dot breathes beside it");
 });
 
+// A row with something under its line has no fixed height and is padded by its gap.
+const grows = (el, G) => {
+  assert.equal(calls(el, "h").length, 0);
+  assert.equal(one(el, "py") + G.hair, G.sm);
+};
+
 test("Two lines put the second fact under the name in the meta size, dim, and let the row grow", async () => {
   const { row, G, T, c } = await kit();
   const el = row("r", c, { name: "Atlas", second: "Reviewing step 01", meta: "3m" });
-  assert.equal(calls(el, "h").length, 0);
-  assert.equal(one(el, "py") + G.hair, G.sm);
+  grows(el, G);
   const body = byTag(el, "v_flex");
   assert.equal(one(body, "gap"), G.sm);
   const second = body.kids.at(-1);
@@ -160,7 +164,7 @@ test("Clicking a tool runs that tool once and not the row", async () => {
   assert.deepEqual(hits, ["more"]);
 });
 
-test("The row takes its click, hover, keyboard and focus from the caller, and wires none it is not given", async () => {
+test("The row takes its click, hover, keyboard and focus from the caller, wires none it is not given, and is a button when it acts", async () => {
   const { row, c } = await kit();
   const onHover = () => {}, onKey = () => {}, focusHandle = { is_focused: () => false };
   const wired = row("r", c, { name: "Juno", onClick: () => {}, onHover, onKey, focusHandle });
@@ -170,6 +174,10 @@ test("The row takes its click, hover, keyboard and focus from the caller, and wi
   assert.equal(one(wired, "on_key_down"), onKey);
   assert.equal(one(wired, "track_focus"), focusHandle);
   assert.deepEqual(styled(wired, "focus"), [["border_color", c.accent]]);
+  assert.equal(wired.tag, "h_flex", "a handle drives it, so it stays a plain row");
+  const pressable = row("r", c, { name: "Juno", onClick: () => {} });
+  assert.equal(pressable.tag, "r", "a row that acts is a Button: Tab reaches it, Enter and Space press it");
+  assert.deepEqual(styled(pressable, "focus"), [["border_color", c.accent]]);
   const bare = row("r", c, { name: "Juno" });
   for (const name of ["on_click", "cursor_pointer", "on_hover", "on_key_down", "track_focus", "focus"]) assert.equal(calls(bare, name).length, 0, name);
 });
@@ -217,4 +225,66 @@ test("Tools are always shown after the action, and key hints close the right sid
   assert.ok(at(byTag(el, "r-action")) < at(reset) && at(reset) < at(hints[0]), "action, tools, then keys");
   assert.equal(at(hints[1]), kids.length - 2, "the mark stays last");
   assert.ok(texts(el).includes("changed"), "tools do not hide the meta: only the hover tools do");
+});
+
+test("A tree row steps in by its level and leads with its fold: a chevron for a folder, open or not, and an empty slot for a file", async () => {
+  const { row, c, G, ICON_ROW, ICON_INLINE } = await kit();
+  const pads = [0, 1, 3].map((level) => one(row("r", c, { name: "src", level }), "pl") + G.hair);
+  assert.deepEqual(pads, [G.sm, G.sm + G.lg, G.sm + G.lg * 3]);
+  assert.deepEqual(svgs(row("r", c, { name: "src", icon: "folder", level: 0, open: true })), ["mods/kanso-chrome/icons/chevron-down.svg", "mods/kanso-chrome/icons/folder.svg"]);
+  assert.deepEqual(svgs(row("r", c, { name: "src", icon: "folder", level: 0, open: false })), ["mods/kanso-chrome/icons/chevron-right.svg", "mods/kanso-chrome/icons/folder.svg"]);
+  const file = row("r", c, { name: "a.ts", icon: "file", level: 1 });
+  assert.deepEqual(svgs(file), ["mods/kanso-chrome/icons/file.svg"]);
+  assert.equal(one(line(file).kids[0], "w"), ICON_INLINE, "a file keeps the fold's slot so names align");
+  assert.equal(one(row("r", c, { name: "src", depth: 1 }), "pl") + G.hair, G.sm * 2 + ICON_ROW, "without a level the depth steps in as before");
+});
+
+test("A file's git letter takes the icon's slot in its tone, and modified keeps the slot empty", async () => {
+  const { row, c, ICON_ROW, T } = await kit();
+  const slot = (letter) => line(row("r", c, { name: "a.ts", icon: "file", letter })).kids[0];
+  for (const [letter, ink] of [["A", c.dim], ["D", c.dim], ["U", c.blocked]]) {
+    assert.deepEqual(texts(slot(letter)), [letter]);
+    assert.equal(one(slot(letter), "text_color"), ink, letter);
+  }
+  assert.deepEqual(texts(slot("M")), [""]);
+  assert.equal(one(slot("M"), "w"), ICON_ROW);
+  assert.equal(one(slot("M"), "text_size"), T.body);
+  assert.deepEqual(svgs(row("r", c, { name: "a.ts", icon: "file", letter: "M" })), [], "the letter, not the icon");
+});
+
+test("A toned fact in the detail leads with its dot and its words take the tone; a tip names what it holds", async () => {
+  const { row, c, G } = await kit();
+  const el = row("r", c, { name: "web", detail: [{ text: "failed (1)", tone: "blocked", tip: "Exited" }, "pg:16"] });
+  const dot = all(el).find((kid) => calls(kid, "rounded_full").length);
+  assert.equal(one(dot, "size"), G.sm);
+  assert.equal(one(dot, "bg"), c.blocked);
+  const words = all(el).find((kid) => calls(kid, "child").some((call) => call[1] === "failed (1)"));
+  assert.equal(one(words, "text_color"), c.blocked);
+  assert.equal(one(words, "tooltip"), "Exited");
+  assert.deepEqual(texts(el), ["web", "failed (1)", "pg:16"]);
+});
+
+test("The second line takes facts, the first giving way, and the meta takes a tone without a dot", async () => {
+  const { row, c } = await kit();
+  const el = row("r", c, { name: ":3000", meta: { text: "failed", tone: "blocked" }, second: ["node server.js", null, { text: "3 min", tip: "Since 10:02" }] });
+  assert.deepEqual(texts(el), [":3000", "failed", "node server.js", "3 min"]);
+  const meta = all(el).find((kid) => calls(kid, "child").some((call) => call[1] === "failed"));
+  assert.equal(one(meta, "text_color"), c.blocked);
+  assert.equal(all(el).some((kid) => calls(kid, "rounded_full").length), false);
+  const age = all(el).find((kid) => calls(kid, "child").some((call) => call[1] === "3 min"));
+  assert.equal(one(age, "tooltip"), "Since 10:02");
+  assert.equal(calls(age, "flex_none").length, 1, "only the first fact gives way");
+});
+
+test("Verbs are a line of small quiet word actions under the row, they let it grow, and a press runs the verb and not the row", async () => {
+  const { row, c, G } = await kit();
+  const hits = [];
+  const el = row("r", c, { name: ":3000", verbs: [{ label: "Open", onClick: () => hits.push("open") }, { label: "Stop", verb: "stop", armed: true, onClick: () => hits.push("stop") }], onClick: () => hits.push("row") });
+  grows(el, G);
+  const verbs = byTag(el, "v_flex").kids.at(-1);
+  assert.equal(calls(verbs, "flex_wrap").length, 1);
+  assert.deepEqual(texts(el), [":3000", "Open", "Stop", "Press again to stop"]);
+  press(one(byTag(el, "r-verb-0"), "on_click"), one(el, "on_click"));
+  press(one(byTag(el, "r-verb-1"), "on_click"), one(el, "on_click"));
+  assert.deepEqual(hits, ["open", "stop"]);
 });

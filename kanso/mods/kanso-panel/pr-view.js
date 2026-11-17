@@ -5,6 +5,7 @@ import { shared } from "herdr";
 import { v_flex, h_flex, Button } from "gpui-base";
 import { G, H, R, T, toneColor } from "./ui.js";
 import { button, quietLink } from "./ui-button.js";
+import { row } from "./ui-row.js";
 import { section } from "./ui-section.js";
 import { ageOf, footLine } from "./pr-poll.js";
 import { aliasText, machineTitle } from "./pure.js";
@@ -66,26 +67,19 @@ function onAction(panel, action, cx) {
 
 export function listedRow(panel, c, p, i, { finished = false, id = null } = {}) {
   const on = p.url === panel.pr?.url;
-  const state = !finished ? panel.rowState(p, c)
-    : p.state === "MERGED" ? { text: "Merged", color: c.violet } : { text: "Closed without merging", color: c.red };
+  const state = !finished ? panel.rowState(p)
+    : p.state === "MERGED" ? { text: "Merged", tone: "violet" } : { text: "Closed without merging", tone: "blocked" };
   const when = !finished ? `updated ${ageOf(p.updatedAt, Date.now())}`
     : p.state === "MERGED" ? `merged ${ageOf(p.mergedAt || p.updatedAt, Date.now())}` : `closed ${ageOf(p.closedAt || p.updatedAt, Date.now())}`;
   const mine = Boolean(panel.viewer) && p.author?.login === panel.viewer;
   const meta = [`#${p.number}`, mine ? "you" : p.author?.login, when].filter(Boolean).join(" · ");
-  return Button.new(id || `pr-${finished ? "done" : "open"}-${i}`).w_full().px(G.md).py(10).rounded(6).cursor_pointer()
-    .selected(on)
-    .when(on, (el) => el.bg(c.selected))
-    .when(!on, (el) => el.hover((s) => s.bg(c.subtle)))
-    .accessibility_label(`#${p.number} ${p.title}${on ? ", shown" : ""}`)
-    .on_click((_e, cx) => panel.choose(p, cx))
-    .child(v_flex().w_full().min_w(0).gap(4)
-      .child(h_flex().w_full().items_start().gap(G.md)
-        .child(div().flex_1().min_w(0).text_size(14).line_height(1.35).text_color(c.text).when(on, (e) => e.font_medium()).child(p.title))
-        .when(on, (el) => el.child(div().flex_none().pt(2).text_size(11).text_color(c.text).child("Shown"))))
-      .child(prMeta(c, meta))
-      .child(prState(c, state)
-        .when(p.additions !== undefined, (el) => el.child(div().text_size(12).text_color(c.dim).child(`+${p.additions} −${p.deletions}`)))));
+  return prRow(id || `pr-${finished ? "done" : "open"}-${i}`, c, p, { meta, state, on, onClick: (cx) => panel.choose(p, cx) });
 }
+
+// A pull request in a list: its title, its state and what it changes, then who and when.
+export const prRow = (id, c, p, { meta, state, on = false, onClick }) => row(id, c, {
+  name: p.title, detail: [state, p.additions == null ? null : `+${p.additions} −${p.deletions}`], meta: on ? "Shown" : null, second: meta, current: on, onClick,
+}).aria_selected(on).accessibility_label(`#${p.number} ${p.title}${on ? ", shown" : ""}`);
 
 function otherPrs(panel, c, titled) {
   const rows = (panel.openPrs ?? []).filter((pr) => pr.url !== panel.pr?.url);
@@ -197,8 +191,4 @@ export function drawEmpty(panel, c) {
     .when(Boolean(foot), (el) => el.child(foot));
 }
 
-export const prMeta = (c, meta) => div().w_full().truncate().text_size(11.5).text_color(c.dim).child(meta);
-export const prState = (c, state) => h_flex().w_full().gap(G.sm).items_center()
-  .child(div().size(6).flex_none().rounded_full().bg(state.color))
-  .child(div().text_size(12).text_color(state.color === c.dim ? c.muted : state.color).child(state.text));
 const viewParts = (panel, c, view) => ({ scope: scopeRow(panel, c), card: verdictCard(c, view.body) });

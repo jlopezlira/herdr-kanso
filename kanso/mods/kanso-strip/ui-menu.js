@@ -2,10 +2,11 @@
 // Kept byte for byte by `npm run sync:share`: edit kanso-panel/ui-menu.js.
 import { div, svg } from "gpui-kit";
 import { h_flex, v_flex, Button } from "gpui-base";
-import { G, H, R, T, W, ICON_ROW, breathe, glyphOf, mix, toneColor } from "./ui.js";
+import { G, H, R, T, W, ICON_ROW, breathe, glyphOf, mix } from "./ui.js";
 import { armedLook, pressAgain, withLook } from "./ui-button.js";
 import { tile } from "./ui-avatar.js";
 import { field } from "./ui-field.js";
+import { dot as drawDot } from "./ui-dot.js";
 import { mark } from "./ui-mark.js";
 import { stateBlock, stateBlockPx } from "./ui-state.js";
 
@@ -21,11 +22,10 @@ export const menuHeading = (title, c, status = null) => div().min_h(H.icon).flex
   .when(Boolean(status), (el) => el.justify_between().gap(G.sm).child(mark(c, { status, size: "sm" })));
 export const menuSeparator = (c) => div().m(G.xs).border_t_1().border_color(c.border);
 const spacer = () => div().size(ICON_ROW).flex_none().flex().items_center().justify_center();
-const dotOf = (c, tone) => div().size(G.sm).rounded_full().bg(tone.startsWith("#") ? tone : toneColor(c, tone));
 // An item leads with an app's picture or letter as a tile, a colour dot, or its icon.
 const lead = (c, { picture, letter, tone, dot, icon }, ink) => {
   if (picture || letter) return tile(c, { initial: letter ?? "", image: picture, size: "sm", tone });
-  if (dot) return spacer().child(dotOf(c, dot));
+  if (dot) return spacer().child(drawDot(c, dot));
   return icon ? svg(glyphOf(icon)).size(ICON_ROW).flex_none().text_color(ink) : spacer();
 };
 const badge = (text, c) => div().flex().flex_none().items_center().h(H.badge).px(G.sm).rounded_full().bg(mix(c.accent, c.popover, BADGE_WASH))

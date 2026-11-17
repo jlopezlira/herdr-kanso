@@ -7,15 +7,16 @@ import { fileApi } from "./platform-files.js";
 // Modified by 0OZ: root no longer draws its own rounded, bordered card.
 // Modified by José Gutiérrez (minimalistic, 0oz design fork): renamed from oz-files.
 // Modified by jlopezlira (Kanso, https://github.com/jlopezlira/herdr-kanso): renamed from mn-files; one of the kanso-panel mod's panels.
-import { div, svg } from "gpui-kit";
+import { div } from "gpui-kit";
 import { v_flex, h_flex, v_virtual_list, Scrollbar } from "gpui-base";
 import { exec, watchFolder, theme, openOverlay, shared, setShared, window, layout } from "herdr";
 import { location, key, insideRoot, showPanel, failure } from "./lib.js";
 import { walkLayout } from "./layout.js";
 import { mapSeries } from "./pure.js";
 import { filesMemory } from "./panel-state.js";
-import { breathe, tokens } from "./ui.js";
+import { G, H, breathe, tokens } from "./ui.js";
 import { quietLink } from "./ui-button.js";
+import { row } from "./ui-row.js";
 import { skeleton } from "./ui-skeleton.js";
 import { stateEmpty } from "./ui-state.js";
 import { Front } from "./front.js";
@@ -265,18 +266,17 @@ export class Files {
     });
   }
 
-  row({ path, entry, depth, mark }, t) {
-    const open = this.folders.has(path);
-    return h_flex().id(`file-${path}`).h(28).flex_none().pl(8 + depth * 18).pr(8).gap(7).items_center().rounded(6).cursor_pointer().hover(s => s.bg(t.hover))
-      .child(entry.dir ? svg(`mods/kanso-panel/chevron-${open ? "down" : "right"}.svg`).size(12).flex_none().text_color(t.dim) : div().w(12).flex_none())
-      .child(svg(`mods/kanso-panel/${entry.dir ? "folder" : "file"}.svg`).size(14).flex_none().text_color(t.muted))
-      .child(div().flex_1().min_w(0).truncate().child(entry.name))
-      .when(Boolean(mark), el => el.child(div().text_size(11).text_color(mark === "A" ? t.ansi2 : mark === "D" || mark === "U" ? t.ansi1 : t.blocked).child(mark)));
+  // The list takes the clicks: a row in it registers none of its own.
+  row({ path, entry, depth, mark }, c) {
+    return row(`file-${path}`, c, {
+      name: entry.name, icon: entry.dir ? "folder" : "file", letter: mark ?? null,
+      level: this.changed ? null : depth, open: entry.dir ? this.folders.has(path) : null,
+    }).flex_none().cursor_pointer();
   }
 
   listBones(c) {
-    const { row } = skeleton(c);
-    return breathe(v_flex().id("kanso-skeleton").w_full().p(6)).children([0, 1, 2, 3, 4, 5, 6].map((i) => row(i, 28)));
+    const { row: bone } = skeleton(c);
+    return breathe(v_flex().id("kanso-skeleton").w_full().p(G.sm)).children([0, 1, 2, 3, 4, 5, 6].map((i) => bone(i, H.line)));
   }
 
   bones(c) { return documentBones(c, 52, this.listBones(c)); }
@@ -289,15 +289,16 @@ export class Files {
     }
     if (this.on && !this.arm && remoteDue(this.on, window()?.active, walkLayout(layout(), "panel-body")?.hidden)) new ArmPoll(this).start(cx, (tick) => this.probe(tick));
     const t = theme();
+    const c = tokens(t);
     const items = this.rows();
     return v_flex().id("files").size_full().min_h(0).bg(t.background).text_color(t.foreground).text_size(13)
       .child(h_flex().h(42).flex_none().px(14).gap(8).items_center().border_b(1).border_color(t.border)
         .child(div().font_semibold().child("Files"))
-        .when(Boolean(this.changed), (el) => el.child(quietLink("files-all", "All files", (clickCx) => { this.changed = false; clickCx.notify(); }, tokens(t))))
+        .when(Boolean(this.changed), (el) => el.child(quietLink("files-all", "All files", (clickCx) => { this.changed = false; clickCx.notify(); }, c)))
         .child(div().flex_1().min_w(0).truncate().text_right().text_size(12).text_color(t.dim).child(this.root?.split(/[\\/]/).at(-1) ?? "")))
       .child(v_flex().id("files-tree").flex_1().min_h(0).p(6)
         .when(items.length > 0, (el) => el.child(div().flex_1().min_h(0).relative()
-          .child(v_virtual_list("files-rows", items.length, 28, (i) => items[i].path, (range) => items.slice(range.start, range.end).map((item) => this.row(item, t)))
+          .child(v_virtual_list("files-rows", items.length, H.line, (i) => items[i].path, (range) => items.slice(range.start, range.end).map((item) => this.row(item, c)))
             // Item renderers run during native layout, where per-row handlers are forbidden.
             .on_item_click((path, cx) => {
               const item = items.find((item) => item.path === path);
@@ -308,15 +309,15 @@ export class Files {
             .on_item_secondary_click((path) => {
               const item = items.find((item) => item.path === path);
               if (item && !item.entry.dir) this.openWith(path);
-            }).size_full())
+            }).size_full().px(G.sm))
           .child(Scrollbar.vertical("files-rows").absolute().inset_0())))
         .when(Boolean(this.held), (el) => el.child(h_flex().id("files-stale").px(8).py(4).gap(8).items_center()
           .child(div().text_size(12).text_color(t.dim).child(asOf(this.held.at, Date.now())))
-          .child(quietLink("files-retry", "Retry", (cx) => this.retry(cx), tokens(t)))))
-        .when(Boolean(this.error), (el) => el.child(div().p(8).child(failure("files-error", "Can't list the files", tokens(t),
+          .child(quietLink("files-retry", "Retry", (cx) => this.retry(cx), c))))
+        .when(Boolean(this.error), (el) => el.child(div().p(8).child(failure("files-error", "Can't list the files", c,
           { why: this.error, fixes: this.on ? [{ label: "Refresh", onClick: (cx) => this.retry(cx) }] : [] }))))
         .when(!this.error && this.loading && !this.entries.get("")?.length, el => el.child(this.listBones({ border: t.border })))
-        .when(!this.error && !this.loading && items.length === 0, el => el.child(stateEmpty("files-empty", "file", this.changed ? "Nothing changed" : this.root ? "No files" : "No folder", tokens(t))))
+        .when(!this.error && !this.loading && items.length === 0, el => el.child(stateEmpty("files-empty", "file", this.changed ? "Nothing changed" : this.root ? "No files" : "No folder", c)))
         .when(this.limited, el => el.child(div().p(8).text_size(11).text_color(t.dim).child("File list limited to 500 entries per folder and 5,000 total"))));
   }
 }

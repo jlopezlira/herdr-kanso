@@ -1,0 +1,88 @@
+// The dialogs' and panels' lists draw each item through the kit row, and every item still does what it did.
+import test from "node:test";
+import assert from "node:assert/strict";
+import { load, tape } from "./helpers.mjs";
+
+const night = { foreground: "#d8d4cb", background: "#1b1b19", hover: "#232321", selected: "#2b2b28", accent: "#da627d", dim: "#6b6862", muted: "#949086" };
+const cx = (seen = []) => ({ notify() {}, stop_propagation: () => seen.push("stopped"), open_url: (url) => seen.push(url), timer: { after() {} } });
+
+test("Send lists each project as a heading row and each agent as a row; a press picks the agent or every agent of the project", async () => {
+  const ui = tape();
+  const terms = [{ address: "t2", status: "blocked", labels: { "kanso.shown": "Nova", "kanso.project": "App" } }, { address: "t3", status: "working", labels: { "kanso.shown": "Atlas", "kanso.project": "App" } }];
+  const { Send } = await load("kanso-send/main.js", ["Send"], {
+    ...ui.host, theme: () => night, props: () => ({}), terminals: () => terms, panes: () => [], spaces: () => [], shared: () => null,
+    Input: { new: ui.host.div },
+  });
+  const send = Object.assign(new Send(), { from: null, to: "t3", toProject: null, text: "hi", error: null, sending: false, handle: {},
+    query: { value: () => "" }, box: { value: () => "hi" } });
+  send.render();
+  assert.ok(["App", "Send to all 2", "Nova", "Needs you", "Atlas"].every((text) => ui.texts.includes(text)), ui.texts.join(" | "));
+  ui.handlers.get("to-t2")({}, cx());
+  assert.equal(send.to, "t2");
+  ui.handlers.get("to-project-App")({}, cx());
+  assert.equal(send.toProject, "App");
+});
+
+test("Arrangements lists each one as a row that opens it, with Overwrite and Delete, which asks twice, under it", async () => {
+  const ui = tape();
+  const { Arrange, Armed } = await load("kanso-arrange/main.js", ["Arrange", "Armed"], { ...ui.host, theme: () => night, props: () => ({}), spaces: () => [], panes: () => [] });
+  const arrange = new Arrange();
+  const saved = { name: "Review", from: "/repo", cols: [{ panes: [{ argv: ["claude"], cwd: "/repo" }, { argv: ["npm", "run", "dev"], cwd: "/repo" }] }] };
+  const done = [];
+  Object.assign(arrange, { armed: new Armed(), handle: {}, space: { name: "App", folder: "/repo" }, busy: null, error: null, at: 0, others: [], view: "list", list: [saved],
+    open: (a) => done.push(["open", a.name]), startSave: (_cx, a) => done.push(["overwrite", a.name]), remove: (a) => done.push(["delete", a.name]) });
+  arrange.render();
+  assert.ok(["Review", "Overwrite", "Delete"].every((text) => ui.texts.includes(text)), ui.texts.join(" | "));
+  assert.ok(ui.texts.some((text) => text.startsWith("2 panes: ")));
+  const id = [...ui.handlers.keys()].find((key) => key?.startsWith("ar-") && !key.includes("-verb-"));
+  ui.handlers.get(id)({}, cx());
+  ui.handlers.get(`${id}-verb-0`)({}, cx());
+  ui.handlers.get(`${id}-verb-1`)({}, cx());
+  assert.deepEqual(done, [["open", "Review"], ["overwrite", "Review"]], "Delete waits for its second press");
+  arrange.render();
+  ui.handlers.get(`${id}-verb-1`)({}, cx());
+  assert.deepEqual(done.at(-1), ["delete", "Review"]);
+});
+
+test("Credits are rows with their picture, words and address, and a press opens the address", async () => {
+  const ui = tape();
+  const { Settings, tokens } = await load("kanso-settings/main.js", ["Settings", "tokens"], { ...ui.host, image: ui.host.div, theme: () => night, props: () => ({}) });
+  const settings = new Settings();
+  settings.creditsPage(night, tokens(night));
+  assert.ok(["Where it comes from", "Herdr", "herdr.dev", "Made by", "JJ", "@jlopezlira on GitHub"].every((text) => ui.texts.includes(text)), ui.texts.join(" | "));
+  const seen = [];
+  ui.handlers.get("credit-herdr")({}, cx(seen));
+  assert.deepEqual(seen, ["https://herdr.dev"]);
+});
+
+test("Look's note rows: a press writes the note again, and the remove tool drops the pin without writing", async () => {
+  const ui = tape();
+  const { Look, tokens } = await load("kanso-panel/look.js", ["Look", "tokens"], { ...ui.host, image: ui.host.div });
+  const done = [];
+  const look = Object.assign(Object.create(Look.prototype), { askNote: (i) => done.push(["ask", i]), drop: (i) => done.push(["drop", i]) });
+  look.noteRow({ note: null }, 0, tokens(night));
+  look.noteRow({ note: "crop the top" }, 1, tokens(night));
+  assert.ok(["1", "No note yet", "2", "crop the top"].every((text) => ui.texts.includes(text)), ui.texts.join(" | "));
+  ui.handlers.get("look-note-1")({}, cx());
+  const seen = [];
+  ui.handlers.get("look-note-0-action")({}, cx(seen));
+  assert.deepEqual(done, [["ask", 1], ["drop", 0]]);
+  assert.deepEqual(seen, ["stopped"], "the pin's row does not open its note too");
+});
+
+test("Settings' shortcuts are rows with their keys as key hints; a press records, and a changed one offers Reset", async () => {
+  const ui = tape();
+  const { Settings, Armed, tokens, GROUPS } = await load("kanso-settings/main.js", ["Settings", "Armed", "tokens", "GROUPS"], {
+    ...ui.host, image: ui.host.div, theme: () => night, props: () => ({}), window: () => ({ platform: "macos" }), keys: () => [],
+  });
+  const settings = Object.assign(new Settings(), { capture: null, conflict: null, message: null, armed: new Armed() });
+  const started = [];
+  settings.startCapture = (row) => started.push(row.label);
+  settings.keysPage(night, tokens(night));
+  const plain = GROUPS.find((g) => !g.bar).actions[0];
+  const id = `key-${plain.family ?? plain.action}`;
+  assert.ok(ui.texts.includes(plain.label) && ui.texts.includes("No key"), ui.texts.join(" | "));
+  assert.ok(ui.handlers.has(`${id}-action`), "unbound from what ships, it offers Reset");
+  ui.handlers.get(id)({}, cx());
+  assert.deepEqual(started, [plain.label]);
+});

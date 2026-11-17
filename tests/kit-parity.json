@@ -42,6 +42,9 @@
     "tabs": "tab",
     "toggle": "toggleSwitch"
   },
+  "waiting": {
+    "row": ["letter", "level", "open", "verbs"]
+  },
   "props": {
     "button": { "storybook": ["key", "label"], "app": ["color", "small", "spoken"] },
     "chip": { "storybook": ["pill"] },
