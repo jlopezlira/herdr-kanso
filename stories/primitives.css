@@ -1278,6 +1278,9 @@
 .kanso-row:is(:hover,.kanso-control--hover){background:var(--hover)}
 .kanso-row:is(:focus-visible,.kanso-control--focus){outline:var(--k-w-focus) solid var(--accent);outline-offset:calc(-1 * var(--k-w-focus))}
 .kanso-row__name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.kanso-row--wrap{height:auto;align-items:flex-start;padding-block:var(--k-sp-2)}
+.kanso-row--wrap :is(.kanso-content__primary,.kanso-row__name){align-items:flex-start;white-space:normal}
+.kanso-row--wrap .kanso-row__name{flex:1;line-height:var(--k-lh-body);overflow-wrap:anywhere}
 .kanso-row--heading .kanso-row__name{font-weight:var(--k-fw-strong);color:var(--fg)}
 /* Row, title form: a panel's heading, the name at title size and the scope under it; it is not a choice, so no wash. */
 .kanso-row--title,.kanso-row--title .kanso-content__primary{height:var(--k-h-header);align-items:center}
@@ -1340,6 +1343,10 @@
 .kanso-button:is(.kanso-button--solid,.kanso-button--tonal,.kanso-button--quiet).kanso-button--sm{height:var(--k-h-compact);padding:0 var(--k-sp-2);font-size:var(--k-fs-meta)}
 .kanso-button:is(.kanso-button--solid,.kanso-button--tonal) :is(.kanso-icon,.kanso-icon--program){width:var(--k-ic-row);height:var(--k-ic-row)}
 .kanso-button--tonal .kanso-icon--program{width:var(--k-ic-inline);height:var(--k-ic-inline)}
+/* Proposed, a trimmed label: cut at its widest, such as a menu's chosen project. */
+.kanso-button--truncate .kanso-button__label{min-width:0;max-width:var(--k-w-button-label);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* A drawn face: the button takes its content's size, a picture with its name or a key's tile. */
+.kanso-button.kanso-button--drawn:not(.kanso-button--icon){display:inline-flex;flex-direction:column;align-items:center;height:auto;padding:var(--k-sp-2);border-radius:var(--k-r-control)}
 .kanso-button--icon{display:grid;place-items:center;flex:none;width:var(--k-h-icon);height:var(--k-h-icon);border-radius:var(--k-r-control);color:var(--muted)}
 .kanso-button--icon .kanso-icon{width:var(--k-ic-control);height:var(--k-ic-control)}
 .kanso-button--icon.kanso-button--sm{width:var(--k-h-badge);height:var(--k-h-badge)}

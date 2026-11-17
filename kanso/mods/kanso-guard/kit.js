@@ -75,10 +75,14 @@ export const row = ({ icon, flag, detail, action, actions, start, tools, ...prop
 };
 
 // `icon: "none"` is the Storybook's no icon; app-only props, such as `color`, pass through as the row's do.
-export const button = ({ label, icon = "none", ...props }) => (id, c, more = {}) => {
+// `content`: kit pieces or elements drawn in place of the icon and label, such as a picture and its name.
+export const button = ({ label, icon = "none", content = [], ...props }) => (id, c, more = {}) => {
   const { onClick = null } = given(more);
-  return drawButton(id, label, onClick, c, { ...props, icon: iconOf(icon) });
+  return drawButton(id, label, onClick, c, { ...props, icon: iconOf(icon), content: drawn(id, c, "content", content) });
 };
+
+// Explain to <agent>: the bot icon and the agent named in words; its press starts that agent on the question.
+export const explainButton = ({ agent, size = "md" }) => button({ label: `Explain to ${agent}`, kind: "tonal", size, icon: "lu-bot" });
 
 // Each item carries its own `onClick`, or, with a `key`, calls `onChange` with it: a menu's items are data, not tools.
 export const menu = ({ title = null, items = [] }) => (id, c, more = {}) => {

@@ -203,8 +203,8 @@ test("The footer is as tall as the rows it shows, and a size an older kansō set
   assert.equal(footerPx(null, "words"), 56, "a refusal shows only under an update row");
   const block = Math.ceil(stateBlockPx({ source: "words", fix: "Update" }, 2));
   assert.equal(footerPx("3.31.0", "words"), 88 + 2 + block + 8, "the kit's block with our words on two lines, a hair under its row and 8 above the next");
-  assert.equal(footerPx("3.31.0", "words", false), 90, "in the rail two squares of 34 a hair apart, 8 above and 12 below, and no block");
-  assert.equal(footerPx(null, null, false), 54, "one square");
+  assert.equal(footerPx("3.31.0", "words", false), 86, "in the rail two of the kit's large icon buttons (32) a hair apart, 8 above and 12 below, and no block");
+  assert.equal(footerPx(null, null, false), 52, "one square");
 });
 
 test("A refused update makes room for its block in the open footer, and gives it back in the rail", async (t) => {
@@ -216,7 +216,7 @@ test("A refused update makes room for its block in the open footer, and gives it
   assert.ok(f.resizes.at(-1) > 88, "the block fits under the update row");
   f.store["sidebar.collapsed"] = true;
   f.updater.fit();
-  assert.equal(f.resizes.at(-1), 90, "the rail fits its squares and draws no block");
+  assert.equal(f.resizes.at(-1), 86, "the rail fits its squares and draws no block");
 });
 
 test("A refused update keeps the tool's words for the footer, and an update that lands clears them", async (t) => {

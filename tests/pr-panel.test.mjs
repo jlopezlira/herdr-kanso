@@ -1,9 +1,9 @@
-import { loadPullRequest } from "./mod-fixtures.mjs";
+import { loadPullRequest, loadTokens } from "./mod-fixtures.mjs";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
-import { load, context, exec as realExec, singleUse, temporary, success, failure, refreshedContext } from "./helpers.mjs";
+import { load, context, exec as realExec, singleUse, temporary, success, failure, refreshedContext, gpuiHost, nodes, KIT_NIGHT } from "./helpers.mjs";
 import { blankPanel, refreshAgain, PASSED } from "./pr-fixtures.mjs";
 
 const url = (n) => `https://github.com/o/here/pull/${n}`;
@@ -481,4 +481,20 @@ test("each write runs the one command that state names", async () => {
   await go("draft", gh, ["pr", "ready", panel.pr.url, "--undo"]);
   await go("close", gh, ["pr", "close", panel.pr.url]);
   await go("reopen", gh, ["pr", "reopen", panel.pr.url]);
+});
+
+test("a review thread's comment is drawn wrapped on its row, up to 240 characters, not only in a tooltip", async () => {
+  const { PullRequest } = await loadPullRequest(gpuiHost());
+  const { tokens } = await loadTokens(gpuiHost());
+  const panel = Object.create(PullRequest.prototype);
+  const body = `${"Retry-After is in seconds; wait once and give up after three tries. ".repeat(5)}`;
+  panel.threads = [{ body, path: "src/api.ts", line: 4, author: "bea", replies: 2, outdated: false, url: "https://github.com/o/r/pull/4#discussion_r1" }];
+  const drawn = nodes(panel.discussion(tokens(KIT_NIGHT)));
+  const shown = `${body.slice(0, 240)}…`;
+  const comment = drawn.find((el) => el.calls.some(([name, text]) => name === "child" && text === shown));
+  assert.ok(comment, "the first 240 characters are drawn on the row");
+  const calls = comment.calls.map(([name]) => name);
+  assert.ok(!calls.includes("truncate"), "the comment is not cut to one line");
+  assert.ok(calls.includes("line_height"), "the comment wraps over its lines");
+  assert.ok(!drawn.some((el) => el.calls.some(([name]) => name === "tooltip")), "the comment is not hidden in a tooltip");
 });

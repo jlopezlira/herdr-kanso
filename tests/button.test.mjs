@@ -138,3 +138,13 @@ test("A small icon button is the row's tool, 20 with a 12 glyph, and the field's
   assert.equal(one(text, "h"), H.compact, "a small text button is the compact one");
   assert.equal(one(text.kids.at(-1), "text_size"), T.body);
 });
+
+test("A trimmed button cuts a long label at the token's width, as Spend's project menu does (press-targets checks it uses it), and any other grows with its label", async () => {
+  const { button, c } = await kit();
+  const { W } = await load("kanso-panel/ui.js", ["W"], gpuiHost());
+  const long = "a-project-folder-with-a-very-long-name-that-would-push-the-filters-away";
+  const label = (o) => button("b", long, () => {}, c, { kind: "quiet", small: true, icon: "chevron-down", ...o }).kids.at(-1);
+  assert.equal(one(label({ truncate: true }), "max_w"), W.buttonLabel);
+  assert.equal(calls(label({ truncate: true }), "truncate").length, 1);
+  assert.equal(calls(label({}), "max_w").length, 0);
+});

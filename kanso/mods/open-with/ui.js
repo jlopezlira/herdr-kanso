@@ -4,10 +4,10 @@ import { shared, settings } from "herdr";
 
 // Sizes generated from kanso/tokens.json by npm run build:ui-tokens.
 export const G = { hair: 2, xs: 4, sm: 8, md: 12, lg: 16, xl: 24 };
-export const H = { control: 30, compact: 24, icon: 26, row: 40, line: 32, two: 50, badge: 20 };
+export const H = { control: 30, compact: 24, icon: 26, row: 40, line: 32, two: 50, badge: 20, petPicture: 84, petStage: 128 };
 export const R = { sm: 4, control: 6, card: 8 };
-export const W = { paneName: 256, paneSegment: 224, menu: 252, question: 260, tabLabel: 170, tabSkeleton: 92, tabSkeletonShort: 64 };
-export const T = { display: 48, page: 20, title: 15, card: 13.5, value: 12.5, body: 11.5, mono: 11.5 };
+export const W = { paneName: 256, paneSegment: 224, menu: 252, question: 260, tabLabel: 170, tabSkeleton: 92, tabSkeletonShort: 64, keyTile: 78, petTile: 104, buttonLabel: 170 };
+export const T = { display: 48, page: 20, title: 15, card: 13.5, value: 12.5, body: 11.5, mono: 11.5, micro: 11 };
 export const ICON = 15;
 export const ICON_ROW = 14;
 export const ICON_INLINE = 12;
