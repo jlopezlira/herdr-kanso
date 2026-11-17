@@ -5,6 +5,7 @@
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { modDirs } from "./check-imports.mjs";
+import { REPO_ROOT } from "./cli.mjs";
 
 export const SKIPPED = "skipped: Herdr app not found";
 
@@ -19,8 +20,7 @@ export function checkMods(dirs, spawn) {
 }
 
 function main() {
-  const root = fileURLToPath(new URL("..", import.meta.url));
-  const outcome = checkMods(modDirs(root), (dir) => spawnSync("herdr-app", ["check", dir], { cwd: root, stdio: "inherit" }));
+  const outcome = checkMods(modDirs(REPO_ROOT), (dir) => spawnSync("herdr-app", ["check", dir], { cwd: REPO_ROOT, stdio: "inherit" }));
   if (outcome.skipped) { console.log(SKIPPED); return; }
   if (outcome.failures.length) process.exit(1);
 }
