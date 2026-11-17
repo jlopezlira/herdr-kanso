@@ -161,8 +161,8 @@ test("An approved page is ready with no tag, and every other page is in review",
 
 test("A page without its status tag, or with a code in its title, fails the lint", () => {
   const catalog = json("stories/catalog.json"), template = read("stories/kit/ComponentPage.jsx");
-  const untagged = { ...files, "stories/components/compositions-panel-header.stories.js": files["stories/components/compositions-panel-header.stories.js"].replace(/, tags: \[[^\]]*\]/, "") };
-  assert.ok(structureErrors(untagged, catalog, template).includes("stories/components/compositions-panel-header.stories.js: needs exactly one status tag"));
+  const untagged = { ...files, "stories/components/panels-later.stories.js": files["stories/components/panels-pr.stories.js"].replaceAll("Panels/PR", "Panels/Later") };
+  assert.ok(structureErrors(untagged, catalog, template).includes("stories/components/panels-later.stories.js: needs exactly one status tag"));
   const coded = { ...files, "stories/start/extra.mdx": '<Meta title="Start/S12 notes" tags={["Ready"]} />\n\n## Prompt for agents\n\n```text\nRead.\n```\n' };
   assert.ok(structureErrors(coded, catalog, template).includes("stories/start/extra.mdx: code in title Start/S12 notes"));
 });
