@@ -113,6 +113,15 @@
 .kanso-text--focus{color:var(--focus)!important}
 .kanso-fill--focus{background:var(--focus)}
 .kanso-ring--focus{box-shadow:inset 0 0 0 1px var(--focus)}
+.kanso-text--dojo-fur{color:var(--dojo-fur)!important}
+.kanso-fill--dojo-fur{background:var(--dojo-fur)}
+.kanso-ring--dojo-fur{box-shadow:inset 0 0 0 1px var(--dojo-fur)}
+.kanso-text--dojo-cream{color:var(--dojo-cream)!important}
+.kanso-fill--dojo-cream{background:var(--dojo-cream)}
+.kanso-ring--dojo-cream{box-shadow:inset 0 0 0 1px var(--dojo-cream)}
+.kanso-text--dojo-ink{color:var(--dojo-ink)!important}
+.kanso-fill--dojo-ink{background:var(--dojo-ink)}
+.kanso-ring--dojo-ink{box-shadow:inset 0 0 0 1px var(--dojo-ink)}
 .kanso-shadow{box-shadow:var(--shadow)}
 .kanso-type--display{font-size:var(--k-fs-display)}
 .kanso-type--title{font-size:var(--k-fs-title)}
@@ -130,6 +139,9 @@
 .kanso-weight--strong{font-weight:var(--k-fw-strong)}
 .kanso-tracking--tight{letter-spacing:var(--k-ls-tight)}
 .kanso-leading--mono{line-height:var(--k-lh-mono)}
+.kanso-type--micro{font-size:var(--k-fs-micro)}
+.kanso-leading--meta{line-height:var(--k-lh-meta)}
+.kanso-leading--summary{line-height:var(--k-lh-summary)}
 .kanso-gap--hair{gap:var(--k-sp-hair)}
 .kanso-gap--1{gap:var(--k-sp-1)}
 .kanso-gap--2{gap:var(--k-sp-2)}
@@ -137,6 +149,7 @@
 .kanso-gap--4{gap:var(--k-sp-4)}
 .kanso-gap--6{gap:var(--k-sp-6)}
 .kanso-gap--8{gap:var(--k-sp-8)}
+.kanso-radius--xs{border-radius:var(--k-r-xs)}
 .kanso-radius--sm{border-radius:var(--k-r-sm)}
 .kanso-radius--control{border-radius:var(--k-r-control)}
 .kanso-radius--card{border-radius:var(--k-r-card)}
@@ -156,5 +169,6 @@
 .kanso-icon--control{inline-size:var(--k-ic-control);block-size:var(--k-ic-control)}
 .kanso-icon--chrome{inline-size:var(--k-ic-chrome);block-size:var(--k-ic-chrome)}
 .kanso-icon--empty{inline-size:var(--k-ic-empty);block-size:var(--k-ic-empty)}
+.kanso-icon--dot{inline-size:var(--k-ic-dot);block-size:var(--k-ic-dot)}
 .kanso-height--tab-bar{block-size:var(--k-h-tab-bar)}
 .kanso-height--strip{block-size:var(--k-h-strip)}
