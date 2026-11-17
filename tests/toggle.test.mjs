@@ -193,3 +193,20 @@ test("Settings and Spend keep each switch on its row and flip the same way", asy
   assert.equal(cx.notified, true);
   assert.equal(source.calls.some((call) => call[0] === "on_click"), false);
 });
+
+test("Spend keeps every source toggle queued during a scan", async () => {
+  const { TokenSpend } = await load("kanso-spend/main.js", ["TokenSpend"], host());
+  const spend = new TokenSpend();
+  Object.assign(spend, {
+    closed: false,
+    nodeBinary: "node",
+    running: "snapshot",
+    queued: { snapshot: false, prepare: false },
+    queuedSources: null,
+  });
+  const cx = { notify() {} };
+  spend.run("configure", cx, { pi: false });
+  spend.run("configure", cx, { claude: false });
+  spend.run("configure", cx, { pi: true });
+  assert.equal(JSON.stringify(spend.queuedSources), JSON.stringify({ pi: true, claude: false }));
+});
