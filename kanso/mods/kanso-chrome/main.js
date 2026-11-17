@@ -3,8 +3,8 @@ import { systemApi } from "./platform-system.js";
 // Derived from the `workspace-chrome` mod shipped with Herdr (Apache-2.0, https://github.com/herdrdev/herdr-app).
 // Modified by 0OZ: brand bar, solid sidebar footer with Settings, Add machine and an account chip.
 // Modified by José Gutiérrez (minimalistic, 0oz design fork): renamed from oz-chrome.
-// Modified by jlopezlira (Kanso, https://github.com/jlopezlira/herdr-kanso): renamed from mn-chrome; sidebar footer as centred squares when collapsed, one icon set (icons/), a title bar of the lights only; an "Update Kanso" row for Kanso's own releases (update.js); Settings opens one menu (footer.js).
-import { View, div } from "gpui-kit";
+// Modified by jlopezlira (Kanso, https://github.com/jlopezlira/herdr-kanso): renamed from mn-chrome; sidebar footer as centred squares when collapsed, one icon set (icons/), a title bar of the lights and, in Dawn Mode, its sky and pill (header.js); an "Update Kanso" row for Kanso's own releases (update.js); Settings opens one menu (sidebar-footer.js).
+import { View } from "gpui-kit";
 import { theme, run, props, shared, setShared, updates, keys, nextCommand, openOverlay, appHome, notify } from "herdr";
 import { Updater } from "./update.js";
 import { tryOrAsync, readCommands } from "./pure.js";
@@ -13,8 +13,11 @@ import { outOfMemory } from "./notices.js";
 import { glyphs } from "./marks.js";
 import { tokens } from "./ui.js";
 import { Armed } from "./ui-button.js";
-import { ROW, ITEM, COLLAPSED, footerRows, settingsChord, settingsEntries } from "./footer-model.js";
-import { sidebarFooter } from "./footer.js";
+import { menu } from "./kit.js";
+import { channelOf } from "./release.js";
+import { ITEM, COLLAPSED, refusalBlock, settingsChord, settingsEntries, updateLabel } from "./footer-model.js";
+import { header } from "./header.js";
+import { sidebarFooter } from "./sidebar-footer.js";
 
 const SAMPLE_MS = 120_000;
 const openSettings = (page = "pieces") => openOverlay({ mod: "kanso-settings", kind: "dialog", width: 860, height: 680, props: { page } });
@@ -85,37 +88,38 @@ export default class WorkspaceChrome extends View {
     run("app.quit");
   }
 
-  rows() {
-    const update = this.updater?.available() ?? null;
-    const acts = { [ROW.update]: (cx) => this.updater.install(cx) };
-    return footerRows({ update, busy: Boolean(this.updater?.busy) })
-      .map((entry) => ({ ...entry, onClick: acts[entry.key] ?? null }));
-  }
-
   // Read only while the menu is open: Herdr's waiting update and the key bound to kansō settings.
   settingsMenu() {
-    const setOpen = (open, cx) => { this.menuOpen = open; cx.notify(); };
+    if (!this.menuOpen) return null;
     const acts = {
-      [ITEM.kanso]: (cx) => { setOpen(false, cx); openSettings(); },
-      [ITEM.herdr]: (cx) => { setOpen(false, cx); run("app.settings"); },
+      [ITEM.kanso]: (cx) => { this.setMenu(false, cx); openSettings(); },
+      [ITEM.herdr]: (cx) => { this.setMenu(false, cx); run("app.settings"); },
       [ITEM.updateHerdr]: (cx) => this.armed.press(ITEM.updateHerdr, cx, () => run("app.update")),
     };
-    const chord = this.menuOpen ? settingsChord(keys()) : null;
-    const entries = this.menuOpen ? settingsEntries({ ready: updates().app.ready, hint: chord && glyphs(chord) }) : [];
-    const items = entries.map((entry) => (entry.separator ? entry : { ...entry, armed: this.armed.is(entry.key), onClick: acts[entry.key] }));
-    return { open: this.menuOpen, onOpenChange: setOpen, items };
+    const chord = settingsChord(keys());
+    const entries = settingsEntries({ ready: updates().app.ready, hint: chord && glyphs(chord) });
+    return menu({ title: "Settings", items: entries.map((entry) => (entry.separator ? entry : { ...entry, armed: this.armed.is(entry.key), onClick: acts[entry.key] })) });
   }
 
-  refusal() {
-    const why = this.updater?.available() && !this.updater.busy ? this.updater.refused() : null;
-    return why && { why, retry: (cx) => this.updater.install(cx) };
+  setMenu(open, cx) {
+    this.menuOpen = open;
+    cx.notify();
+  }
+
+  // The Footer composition: kansō's update while one is offered (quiet once pressed, its refusal under it), then Settings and its menu.
+  footer(collapsed) {
+    const update = this.updater?.available() ?? null, busy = Boolean(this.updater?.busy);
+    const why = update && !busy ? this.updater.refused() : null;
+    const install = (cx) => this.updater.install(cx);
+    return sidebarFooter({ update: update && updateLabel(update, busy), busy, refused: why ? refusalBlock(why) : null, menu: this.settingsMenu(), collapsed })(
+      "footer", tokens(theme()), { presses: { "refresh-cw": install, Update: install }, onOpen: (open, cx) => this.setMenu(open, cx) });
   }
 
   render() {
-    const t = theme();
-    // The title bar holds the window's own lights, nothing else.
-    if (!props()?.footer) return div().size_full().bg(t.chrome);
     const collapsed = shared(COLLAPSED) === true;
-    return sidebarFooter(tokens(t), { collapsed, rows: this.rows(), settings: this.settingsMenu(), refused: this.refusal() });
+    if (props()?.footer) return this.footer(collapsed);
+    // The title bar: Herdr's own lights, and in Dawn Mode the sky behind them and, open, the pill that says the mode.
+    const dawn = channelOf(shared("kanso.update")?.channel) === "beta";
+    return header({ collapsed, dawn })("brand", tokens(theme()));
   }
 }

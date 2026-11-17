@@ -206,7 +206,7 @@ test("Projects, Status and Threads keep the return digest when Needs you is hidd
   Object.assign(returned, { project: `:${state.spaces[0].folder}`, rows: [{ id: 7, target: "agent:a", text: "Finished while you were away" }] });
   Object.assign(view, {
     sinceLeft: returned, returnPlaces: new Map([["agent:a", "a"]]), custom: {}, order: "updated", assignColors() {}, projectOf: () => null,
-    listed: () => [], seen: () => new Map(), tools: ui.host.div, switchViews: ui.host.div,
+    listed: () => [], seen: () => new Map(), header: ui.host.div, switchViews: ui.host.div,
     agentsView: () => [], threadsView: () => [], grouped: () => [],
   });
   const drawAs = (mode, open) => {

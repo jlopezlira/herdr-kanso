@@ -242,7 +242,7 @@ test("A panel header needs only its title; what goes before it, under it and aft
 });
 
 test("The sidebar's + names what it adds in each view, and Sort is quiet at its default", async () => {
-  const { addLabels, toolbar } = await import("../stories/kit/compositions.js");
+  const { addLabels, toolbar } = await import("../stories/kit/toolbar.js");
   const { views } = await import("../stories/kit/view-switch.js");
   assert.deepEqual(Object.keys(addLabels), views.map((view) => view.key));
   for (const [view, label] of Object.entries(addLabels)) assert.match(toolbar({ view }), new RegExp(`title="${label}"`), view);

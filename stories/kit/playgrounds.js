@@ -1,6 +1,7 @@
 // Pages whose story is built from Storybook controls instead of drawn states.
 import sprite from '../proto-sprite.svg?raw';
-import { activity, activityMenu, paneFolds, paneHeader, panelHeaderForms, panelLooks, paneReaches, paneStates, noticeHomes, noticePlaces, noticeStates, systemMessage, toastStack, heldChord, keyboard, keyboardExplorer, keyboards, keyboardSystems, keyNames, shortcutRowStates, channelSettings, channels, computerItem, computerItemStates, failureMenu, header, panelDoors, sidebarFooter, tabBarStates, toolbar } from './compositions.js';
+import { activity, activityMenu, paneFolds, paneHeader, panelHeaderForms, panelLooks, paneReaches, paneStates, noticeHomes, noticePlaces, noticeStates, systemMessage, toastStack, heldChord, keyboard, keyboardExplorer, keyboards, keyboardSystems, keyNames, shortcutRowStates, channelSettings, channels, computerItem, computerItemStates, failureMenu, panelDoors, tabBarStates } from './compositions.js';
+import { sidebarFooter } from './sidebar-footer.js';
 import { tile } from './tile.js';
 import { views, viewSwitch } from './view-switch.js';
 import { projectRow } from './project-row.js';
@@ -11,7 +12,7 @@ import { sessionRow } from './session-row.js';
 import { avatar, avatarSizes, button, card, chip, code, dawn, dialog, emptyState, escape, failureBlock, input, keycapStates, keyHint, kinds, levels, mark, markdown, marks, markSizes, menu, metric, row, rowDepths, sides, skeletonOf, skeletonShapes, stack, statePatterns, tabs, thumbnail, toast, toggle, tooltip, windowControls } from './pieces.js';
 import { barWidths, inBar } from './frames.js';
 import { edgeSides, layerDefaults, memoryShown, needsShown, panelContents, panelReads, panelRowLooks, statedPages, stepperShown, tabActs } from './states.js';
-import { appNotices, keyLayer, keyLayerMods, pullRequest, sampleDojo, sampleNotices, samplePanelHeader, sampleSidebar, sessionCommandsTip, sessionTools, statusMenus } from './samples.js';
+import { appNotices, keyLayer, keyLayerMods, pullRequest, sampleDojo, sampleHeader, sampleNotices, samplePanelHeader, sampleRefusal, sampleSettingsMenu, sampleSidebar, sessionCommandsTip, sessionTools, statusMenus } from './samples.js';
 
 const icons = ['none', ...[...sprite.matchAll(/id="(lu-[^"]+)"/g)].map(([, id]) => id).sort()];
 const frame = (markup) => `<div class="kanso-story"><div class="kanso-story__theme kanso-story__frame kanso-story--free">${markup}</div></div>`;
@@ -168,15 +169,16 @@ export const playgrounds = {
       column: boolArg('collapsed'),
       open: boolArg('tools open', { if: { arg: 'column' } }),
       sorted: boolArg('sorted'),
+      order: textArg('order in use'),
       menu: boolArg('Sort menu'),
       add: boolArg('+ menu'),
     },
   },
   'Compositions/Header': {
-    args: { collapsed: false, dawn: false, art: true },
+    args: { collapsed: false, dawn: false, art: true, title: true },
     argTypes: { collapsed: boolArg('collapsed'), dawn: boolArg('Dawn Mode'),
-      art: boolArg('Dawn sky', { if: { arg: 'dawn' } }) },
-    markup: header,
+      art: boolArg('Dawn sky', { if: { arg: 'dawn' } }), title: boolArg('lights row') },
+    markup: sampleHeader,
   },
   'Compositions/Dawn Mode': {
     args: { channel: 'dawn', art: true, collapsed: false },
@@ -185,7 +187,7 @@ export const playgrounds = {
       art: boolArg('Dawn sky', { if: { arg: 'channel', eq: 'dawn' } }),
       collapsed: boolArg('collapsed'),
     },
-    markup: ({ channel, art, collapsed }) => `<p class="kanso-story__caption">Sidebar header</p>${header({ collapsed, dawn: channel === 'dawn', art })}`
+    markup: ({ channel, art, collapsed }) => `<p class="kanso-story__caption">Sidebar header</p>${sampleHeader({ collapsed, dawn: channel === 'dawn', art })}`
       + `<p class="kanso-story__caption">Settings · Updates</p><div class="kanso-story__slice kanso-story__settings">${channelSettings({ channel, art })}</div>`,
   },
   'Compositions/Notifications': {
@@ -359,9 +361,11 @@ export const playgrounds = {
     markup: (args) => inRail(tile(args)),
   },
   'Compositions/Sidebar/Footer': {
-    args: { update: '' },
-    argTypes: { update: textArg('update') },
-    markup: (args) => inSidebar(sidebarFooter(args)),
+    args: { update: '', busy: false, refused: false, menu: false, collapsed: false },
+    argTypes: { update: textArg('update'), busy: boolArg('updating', { if: { arg: 'update' } }), refused: boolArg('refused', { if: { arg: 'update' } }),
+      menu: boolArg('Settings menu'), collapsed: boolArg('collapsed') },
+    markup: ({ update, refused, menu: open, collapsed, ...args }) => (collapsed ? inRail : inSidebar)(sidebarFooter({ ...args, collapsed, update: update || null,
+      refused: refused ? sampleRefusal : null, menu: open ? sampleSettingsMenu() : null })),
   },
   'Compositions/Sidebar': {
     args: { collapsed: false, dawn: false, art: true, view: 'spaces', switcher: true, menu: false },

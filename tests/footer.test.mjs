@@ -1,4 +1,4 @@
-// The sidebar footer: kansō's update row in each mode, its refusal, Settings and its one menu, Herdr's update, and the rail.
+// The sidebar footer: the Storybook's Footer composition, drawn by kanso-chrome with kansō's update in each mode, its refusal, Settings and its one menu, Herdr's update, and the rail.
 import { loadWorkspaceChrome } from "./mod-fixtures.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -13,6 +13,7 @@ const all = (el) => [el, ...inside(el).flatMap(all)];
 const texts = (el) => all(el).flatMap((x) => calls(x, "child").map((call) => call[1]).filter((v) => typeof v === "string"));
 const byId = (el, id) => all(el).find((x) => x.tag === id || arg(x, "id") === id) ?? null;
 const holding = (el, words) => all(el).find((x) => calls(x, "on_click").length && texts(x).includes(words)) ?? null;
+const popover = (el) => all(el).find((x) => calls(x, "trigger").length) ?? null;
 
 const cx = () => ({ notified: 0, notify() { this.notified += 1; }, timer: { after() {} }, stop_propagation() {} });
 const press = (el, context = cx()) => { arg(el, "on_click")({}, context); return context; };
@@ -28,7 +29,7 @@ async function footer({ shared = {}, ready = null, bindings = [{ action: "kanso-
     updates: () => ({ app: { ready } }), keys: () => bindings, settings: () => ({ font_family: "Mono" }), window: () => ({ platform: "macos" }),
   };
   const { WorkspaceChrome } = await loadWorkspaceChrome(host);
-  const kit = await load("kanso-chrome/ui.js", ["H", "ICON_CHROME", "T", "G"], host);
+  const kit = await load("kanso-chrome/ui.js", ["H", "G", "T"], host);
   const view = new WorkspaceChrome();
   view.init({}, { spawn() {}, timer: { after() {}, every() {} } });
   view.updater = { available: () => null, busy: false, refused: () => null, install: (context) => installs.push(context), ...updater };
@@ -40,29 +41,24 @@ test("In Stable Mode with nothing to install, the footer is Settings alone: Add 
   assert.deepEqual(texts(view.render()), ["Settings"]);
 });
 
-test("Open, every row is at chrome size, muted at rest, 8 above and 16 below; the rail keeps 12 below", async () => {
-  const { view, ICON_CHROME, T, G } = await footer();
+test("Open, the footer's rows are the kit's rows, 8 above and 16 below at the sidebar's gutter; the rail keeps 12 below, its Buttons a hair apart", async () => {
+  const { view, G, T } = await footer();
   const open = view.render();
-  for (const id of ["footer-settings"]) {
-    const row = byId(open, id);
-    assert.equal(calls(row, "text_size").at(-1)[1], T.card, `${id} reads at 13.5: the last size set wins`);
-    const glyph = all(row).find((x) => arg(x, "size") === ICON_CHROME);
-    assert.equal(arg(glyph, "text_color"), night.muted, `${id}'s icon is 17, muted`);
-  }
-  assert.deepEqual([arg(open, "pt"), arg(open, "pb")], [G.sm, G.lg]);
+  assert.deepEqual([arg(open, "pt"), arg(open, "px"), arg(open, "pb")], [G.sm, G.sm, G.lg]);
   assert.equal(arg(open, "gap"), undefined, "open rows touch");
+  const settings = holding(open, "Settings");
+  assert.equal(arg(settings, "text_size"), T.value, "the kit's row size, as the Storybook's row");
   const rail = await footer({ shared: { "sidebar.collapsed": true } });
   const squares = rail.view.render();
   assert.deepEqual([arg(squares, "pt"), arg(squares, "pb"), arg(squares, "gap")], [G.sm, G.md, G.hair]);
 });
 
 test("A kansō update is a row on top, in the foreground, and a press installs it", async () => {
-  const { view, installs, ICON_CHROME } = await footer({ updater: { available: () => "3.31.0" } });
+  const { view, installs } = await footer({ updater: { available: () => "3.31.0" } });
   const drawn = view.render();
   assert.deepEqual(texts(drawn), ["Update kansō to 3.31.0", "Settings"]);
-  const row = byId(drawn, "footer-kanso-update");
-  const glyph = all(row).find((x) => arg(x, "size") === ICON_CHROME);
-  assert.equal(arg(glyph, "text_color"), night.foreground, "the update's icon is at chrome size, in the foreground");
+  const row = holding(drawn, "Update kansō to 3.31.0");
+  assert.equal(arg(row, "text_color"), night.foreground);
   press(row);
   assert.equal(installs.length, 1);
 });
@@ -76,36 +72,40 @@ test("A pressed update says Updating kansō at once and stays quiet until it lan
   const { view } = await footer({ updater: { available: () => "3.31.0", busy: true, refused: () => "old words" } });
   const drawn = view.render();
   assert.deepEqual(texts(drawn), ["Updating kansō", "Settings"], "no refusal while it runs");
-  const name = all(byId(drawn, "footer-kanso-update")).find((x) => calls(x, "child").some((call) => call[1] === "Updating kansō"));
-  assert.equal(arg(name, "text_color"), night.muted);
+  assert.equal(arg(all(drawn).find((x) => texts(x)[0] === "Updating kansō" && calls(x, "text_color").length), "text_color"), night.muted);
 });
 
 test("A refused update keeps its row and shows the tool's words under it, with Update to try again", async () => {
   const why = "git ls-remote: Could not resolve host: github.com";
-  const { view, installs } = await footer({ updater: { available: () => "3.31.0", refused: () => why } });
+  const { view, installs, G } = await footer({ updater: { available: () => "3.31.0", refused: () => why } });
   const drawn = view.render();
   assert.deepEqual(texts(drawn), ["Update kansō to 3.31.0", "!", "kansō didn't update", why, "Update", "Settings"], "the blocked mark, our words, the tool's words, the fix");
-  press(holding(byId(drawn, "footer-refused"), "Update"));
+  const block = all(drawn).find((x) => calls(x, "mt").length);
+  assert.deepEqual([arg(block, "mt"), arg(block, "mb")], [G.hair, G.sm], "a hair under its row, 8 above Settings");
+  press(holding(block, "Update"));
   assert.equal(installs.length, 1);
 });
 
-test("Settings under the pointer opens one menu: kansō settings with its key, and Herdr settings", async () => {
+test("Settings opens one menu: kansō settings with its key, and Herdr settings; choosing shuts it", async () => {
   const { view, ran, overlays } = await footer();
   const closed = view.render();
-  const trigger = byId(closed, "footer-settings");
-  assert.equal(calls(trigger, "on_click").length, 0, "the menu owns the press");
-  const menu = byId(closed, "footer-settings-menu");
-  assert.equal(arg(menu, "trigger"), trigger);
+  const menu = popover(closed);
+  const trigger = arg(menu, "trigger");
   assert.equal(arg(menu, "open"), false);
-  arg(menu, "on_open_change")(true, cx());
+  press(trigger);
+  assert.equal(view.menuOpen, true, "a press on Settings, the pointer's or Enter's, opens it");
   const open = view.render();
-  assert.deepEqual(texts(byId(open, "footer-settings-list")), ["Settings", "kansō settings", "⌃⇧,", "Herdr settings"]);
+  assert.equal(calls(arg(popover(open), "trigger"), "on_click").length, 0, "open, the popover owns the next press");
+  assert.deepEqual(texts(arg(popover(open), "content")), ["Settings", "kansō settings", "⌃⇧,", "Herdr settings"]);
   press(holding(open, "kansō settings"));
   assert.equal(overlays[0].mod, "kanso-settings");
   assert.equal(view.menuOpen, false, "choosing closes the menu");
   view.menuOpen = true;
   press(holding(view.render(), "Herdr settings"));
   assert.deepEqual(ran, [["app.settings", undefined]]);
+  view.menuOpen = true;
+  arg(popover(view.render()), "on_open_change")(false, cx());
+  assert.equal(view.menuOpen, false, "a press outside or Escape shuts it");
 });
 
 test("Herdr's waiting update is the menu's third row: the first press arms it, the second restarts Herdr", async () => {
@@ -126,16 +126,22 @@ test("Without a Herdr update the menu has no third row, and the footer no longer
   assert.equal(texts(view.render()).some((words) => /Herdr to|update ready/.test(words)), false);
 });
 
-test("In the rail the footer is chrome squares with their names as tips, and the gear opens the same menu", async () => {
-  const { view, H } = await footer({ shared: { "sidebar.collapsed": true }, updater: { available: () => "3.31.0", refused: () => "words" } });
-  const drawn = view.render();
-  assert.deepEqual(texts(drawn), [], "no names, no refusal block in the rail");
-  const squares = ["footer-kanso-update", "footer-settings"].map((id) => byId(drawn, id));
-  // Button.new(id) is drawn under its id: the kit's large icon button, which Tab reaches and Enter and Space press.
-  assert.deepEqual(squares.map((el) => [el.tag, arg(el, "w"), arg(el, "h")]), [["footer-kanso-update", H.line, H.line], ["footer-settings", H.line, H.line]]);
-  assert.ok(squares.every((el) => calls(el, "focus").length === 1), "each shows the focus ring");
-  assert.ok(squares.every((el) => calls(el, "hover").length === 1 && calls(el, "active").length === 1), "each keeps its hover and press shading, from the kit's button");
-  assert.deepEqual(squares.map((el) => arg(el, "tooltip")), ["Update kansō to 3.31.0", "Settings"]);
-  assert.equal(arg(byId(drawn, "footer-settings-menu"), "trigger"), squares[1]);
-  assert.equal(byId(drawn, "footer-machine"), null, "Add computer lives in +, not in the rail");
+test("Keyboard first: Tab reaches each footer target, a kit Button with the focus ring, and Enter or Space presses it, open and in the rail", async () => {
+  for (const collapsed of [false, true]) {
+    const { view, installs, H } = await footer({ shared: { "sidebar.collapsed": collapsed }, updater: { available: () => "3.31.0" } });
+    const drawn = view.render();
+    const update = collapsed ? byId(drawn, "footer-0") : holding(drawn, "Update kansō to 3.31.0");
+    const settings = arg(popover(drawn), "trigger");
+    for (const el of [update, settings]) {
+      assert.ok(/^footer-/.test(el.tag), `${el.tag} is a Button: Tab reaches it, Enter and Space press it`);
+      assert.equal(calls(el, "focus").length, 1, `${el.tag} shows the focus ring`);
+    }
+    press(update);
+    press(settings);
+    assert.deepEqual([installs.length, view.menuOpen], [1, true]);
+    if (collapsed) {
+      assert.deepEqual(texts(drawn), [], "no names, no refusal block in the rail");
+      assert.deepEqual([update, settings].map((el) => [arg(el, "w"), arg(el, "tooltip")]), [[H.line, "Update kansō to 3.31.0"], [H.line, "Settings"]]);
+    }
+  }
 });

@@ -4,7 +4,7 @@ import { shared, settings } from "herdr";
 
 // Sizes generated from kanso/tokens.json by npm run build:ui-tokens.
 export const G = { hair: 2, xs: 4, sm: 8, md: 12, lg: 16, xl: 24 };
-export const H = { control: 30, compact: 24, icon: 26, row: 40, line: 32, two: 50, badge: 20, petPicture: 84, petStage: 128 };
+export const H = { control: 30, compact: 24, tabBar: 48, icon: 26, row: 40, line: 32, two: 50, badge: 20, petPicture: 84, petStage: 128 };
 export const R = { sm: 4, control: 6, card: 8 };
 export const W = { paneName: 256, paneSegment: 224, menu: 252, question: 260, tabLabel: 170, tabSkeleton: 92, tabSkeletonShort: 64, keyTile: 78, petTile: 104, buttonLabel: 170 };
 export const T = { display: 48, page: 20, title: 15, card: 13.5, value: 12.5, body: 11.5, mono: 11.5, micro: 11 };
@@ -15,6 +15,7 @@ export const ICON_CHROME = 17;
 export const ICON_EMPTY = 20;
 export const CHROME_SQUARE = 34;
 export const DRAG_START = 4;
+export const DAWN_H = 56;
 export const GLINT = { run: 240, wide: 44, mid: 26, narrow: 12 };
 export const SWITCH = { w: 28, h: 16, knob: 12 };
 export const PAGE = { w: 1080, toolbar: 42, toolbarX: 14, note: 12, markdown: 13, unitGap: 6, unitY: 3, findList: 300 };
@@ -39,6 +40,7 @@ export const BEAT = { working: { from: 0.35, to: 1, period: 1800 }, blocked: { f
 export const OPACITY = { away: 0.55, held: 0.4, hover: 0.75, quiet: 0.55, idle: 0.7, thumb: 0.7, trace: 0.6, pending: 0.8, part: 0.85, pet: 0.85, blockedWash: 0.4, blockedRow: 0.08, glintFaint: 0.35, glintMid: 0.6 };
 export const TINT = { board: 0.02, chip: 0.024, cell: 0.03, hover: 0.04, row: 0.047, card: 0.063, tab: 0.07, pill: 0.08, diff: 0.094, faint: 0.1, key: 0.11, control: 0.12, goal: 0.133, bound: 0.14, soft: 0.15, strong: 0.25, frame: 0.314, boundLine: 0.44, ring: 0.5, line: 0.55 };
 export const WASHES = { dark: { w4: 0.04, w7: 0.07, w12: 0.12, w14: 0.14 }, light: { w4: 0.05, w7: 0.095, w12: 0.18, w14: 0.21 } };
+export const DAWN = { dark: { top: "#262339", star: "#d9d3e6", art: "mods/kanso-chrome/dawn-dark.svg" }, light: { top: "#aeb0d6", star: "#fbf6ea", art: "mods/kanso-chrome/dawn-light.svg" } };
 export const INK = { faint: "#8a867d", fallback: "#888888", dojoFur: "#e8963a", dojoCream: "#f6ece0", dojoInk: "#161615" };
 // End of the generated sizes.
 /** A second press within this long confirms what cannot be undone. */
@@ -70,6 +72,8 @@ export function tokens(t = {}) {
     // A host's teal: blue and done, half each.
     teal: mix(blue, done, 0.5),
     ...(washes(t) ?? { w4: subtle, w7: subtle, w12: selected, w14: selected }),
+    // Dawn Mode's inks and its sky's art, in this theme.
+    dawn: DAWN[isDay(t) ? "light" : "dark"],
   };
 }
 
@@ -94,12 +98,16 @@ const HEX = /^#[0-9a-f]{6}(?:[0-9a-f]{2})?$/i;
 // `hex` at `share` opacity: it lets the ground below show through; any other colour stays as it is.
 export const alpha = (hex, share) => (RGB.test(hex ?? "") ? `${hex.slice(0, 7)}${Math.round(share * 255).toString(16).padStart(2, "0")}` : hex);
 const lightness = (hex) => [0, 1, 2].reduce((sum, i) => sum + parseInt(hex.slice(1 + 2 * i, 3 + 2 * i), 16), 0);
+// A light theme: its ground is lighter than its ink.
+const isDay = (t) => {
+  const fg = t.foreground, bg = t.background ?? t.canvas;
+  return HEX.test(fg ?? "") && HEX.test(bg ?? "") && lightness(bg) > lightness(fg);
+};
 /** The foreground washes w4, w7, w12, w14 at the light or the dark theme's shares; null without a #rrggbb foreground, so a caller keeps its opaque token. */
 export function washes(t = {}) {
-  const fg = t.foreground, bg = t.background ?? t.canvas;
+  const fg = t.foreground;
   if (!HEX.test(fg ?? "")) return null;
-  const day = HEX.test(bg ?? "") && lightness(bg) > lightness(fg);
-  return Object.fromEntries(Object.entries(day ? WASHES.light : WASHES.dark).map(([name, share]) => [name, alpha(fg, share)]));
+  return Object.fromEntries(Object.entries(isDay(t) ? WASHES.light : WASHES.dark).map(([name, share]) => [name, alpha(fg, share)]));
 }
 
 export const WASH = { off: 0.04, hover: 0.88, press: 0.76 };

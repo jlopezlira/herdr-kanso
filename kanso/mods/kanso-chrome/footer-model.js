@@ -9,8 +9,8 @@ export const REFUSAL_LINES = 2;
 export const ROW = Object.freeze({ update: "kanso-update", settings: "settings" });
 export const ITEM = Object.freeze({ kanso: "kanso", herdr: "herdr", updateHerdr: "update-herdr" });
 
-// Open, rows touch between 8 above and 16 below, their edge 8 in (a kit row reaches 8 past its parent); in the rail, squares a hair apart above 12.
-export const PAD = Object.freeze({ top: G.sm, bottom: G.lg, side: G.lg, railBottom: G.md, railGap: G.hair });
+// Open, rows touch between 8 above and 16 below; in the rail, icon Buttons a hair apart above 12 (the kit's footer stacks).
+export const PAD = Object.freeze({ top: G.sm, bottom: G.lg, railBottom: G.md, railGap: G.hair });
 // A refused update's block sits under its row, a hair below it and 8 above the next.
 export const REFUSAL = Object.freeze({ above: G.hair, below: G.sm });
 

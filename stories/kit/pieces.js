@@ -316,7 +316,13 @@ export const stacks = {
   'row group': { block: 'kanso-sidebar__row-group' },
   'view switch': { block: 'kanso-sidebar__view-switch' },
   'view menu': { block: 'kanso-sidebar__view-menu' },
+  // Proposed: `asks`, the collapsed view button carries the dot while someone needs you.
+  'view button': { block: 'kanso-sidebar__view-button', tag: 'span', states: ['asks'] },
   footer: { block: 'kanso-sidebar__footer' },
+  // Proposed: Settings and its open menu; a refused update's block under its row.
+  'footer settings': { block: 'kanso-sidebar__footer-settings' },
+  'footer menu': { block: 'kanso-sidebar__footer-menu' },
+  'footer refusal': { block: 'kanso-sidebar__footer-refusal' },
   rail: { block: 'kanso-rail', tag: 'aside' },
   'rail list': { block: 'kanso-rail__list' },
   // Proposed: `strong`, something in the group is unread or woke; `rail count`, a tile's state mark beside its count.

@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { fileURLToPath } from "node:url";
-import { TOKENS, loadTokens, read, writeChanged } from "./tokens.mjs";
+import { TOKENS, THEMES, colour, loadTokens, read, writeChanged } from "./tokens.mjs";
+import { dawn } from "../stories/kit/pieces.js";
 
 export const UI = "kanso/mods/kanso-panel/ui.js";
 export const START = `// Sizes generated from ${TOKENS} by npm run build:ui-tokens.`;
@@ -8,7 +9,7 @@ export const END = "// End of the generated sizes.";
 
 const PICK = {
   G: { hair: "k-sp-hair", xs: "k-sp-1", sm: "k-sp-2", md: "k-sp-3", lg: "k-sp-4", xl: "k-sp-6" },
-  H: { control: "k-h-control", compact: "k-h-compact", icon: "k-h-icon", row: "k-h-header", line: "k-h-row", two: "k-h-row2", badge: "k-h-badge", petPicture: "k-h-pet-picture", petStage: "k-h-pet-stage" },
+  H: { control: "k-h-control", compact: "k-h-compact", tabBar: "k-h-tab-bar", icon: "k-h-icon", row: "k-h-header", line: "k-h-row", two: "k-h-row2", badge: "k-h-badge", petPicture: "k-h-pet-picture", petStage: "k-h-pet-stage" },
   R: { sm: "k-r-sm", control: "k-r-control", card: "k-r-card" },
   W: { paneName: "k-w-pane-name", paneSegment: "k-w-pane-segment", menu: "k-w-menu", question: "k-w-question", tabLabel: "k-w-tab-label", tabSkeleton: "k-w-tab-skeleton", tabSkeletonShort: "k-w-tab-skeleton-short", keyTile: "k-w-key-tile", petTile: "k-w-pet-tile", buttonLabel: "k-w-button-label" },
   T: { display: "k-fs-display", page: "k-fs-title", title: "k-fs-section", card: "k-fs-name", value: "k-fs-body", body: "k-fs-meta", mono: "k-fs-mono", micro: "k-fs-micro" },
@@ -19,6 +20,7 @@ const PICK = {
   ICON_EMPTY: "k-ic-empty",
   CHROME_SQUARE: "k-h-pane",
   DRAG_START: "k-drag-start",
+  DAWN_H: "k-dawn-h",
   GLINT: { run: "k-glint-run", wide: "k-glint-w1", mid: "k-glint-w2", narrow: "k-glint-w3" },
   SWITCH: { w: "k-sw-w", h: "k-sw-h", knob: "k-sw-knob" },
   PAGE: { w: "k-w-page", toolbar: "k-h-file-toolbar", toolbarX: "k-file-toolbar-x", note: "k-note-text", markdown: "k-markdown-text", unitGap: "k-metric-unit-gap", unitY: "k-metric-unit-y", findList: "k-h-find-list" },
@@ -101,6 +103,27 @@ const constant = (name, pick, read) => (typeof pick === "string"
   : `export const ${name} = { ${Object.entries(pick).map(([key, token]) => `${key}: ${read(token)}`).join(", ")} };`);
 const constants = (picks, read) => Object.entries(picks).map(([name, pick]) => constant(name, pick, read));
 
+// Dawn Mode's art: the Storybook's sky with each theme's colours written in, at its last frame, as Herdr's image() draws a file.
+export const STYLES = "stories/primitives.css";
+const DAWN_INKS = { top: "dawn-top", star: "dawn-star" };
+export const dawnArt = (theme) => `mods/kanso-chrome/dawn-${theme}.svg`;
+const PAINT = new Set(["fill", "stroke", "stop-color", "stop-opacity", "opacity"]);
+// The still rules of the art's classes: one class, or a class and its modifier; the animated (`--rising`) ones are left out.
+const dawnRules = (css) => new Map([...css.matchAll(/(?:^|[}\n])(?:\.kanso-dawn )?(\.kanso-dawn__[\w-]+(?:\.kanso-dawn__[\w-]+)?)\{([^}]*)\}/g)]
+  .map(([, selector, body]) => [selector.slice(1).split(".").join(" "), body.split(";").map((part) => part.split(":")).filter(([name]) => PAINT.has(name))]));
+export function dawnSvg(tokens, theme, css) {
+  const rules = dawnRules(css);
+  const paint = (value) => value.replace(/var\(--([\w-]+)\)/g, (_, name) => colour(tokens, theme, name));
+  return `${dawn().replace(/ class="([^"]*)"/g, (_, classes) => {
+    const own = [...new Set([...classes.split(" "), classes])].flatMap((selector) => rules.get(selector) ?? []);
+    return own.map(([name, value]) => ` ${name}="${paint(value)}"`).join("");
+  }).replace("<svg ", '<svg xmlns="http://www.w3.org/2000/svg" width="256" height="56" ')}\n`;
+}
+export function dawnInks(tokens) {
+  const one = (theme) => `{ ${Object.entries(DAWN_INKS).map(([key, name]) => `${key}: ${JSON.stringify(colour(tokens, theme, name))}`).join(", ")}, art: ${JSON.stringify(dawnArt(theme))} }`;
+  return `export const DAWN = { ${THEMES.map((theme) => `${theme}: ${one(theme)}`).join(", ")} };`;
+}
+
 export function block(tokens) {
   const duration = ms(tokens);
   const ease = easing(tokens);
@@ -108,7 +131,7 @@ export function block(tokens) {
   const motion = Object.entries(MOTION).map(([name, pick]) => `export const ${name} = { duration: ${duration(pick.duration)}, easing: ${ease(pick.easing)} };`);
   const beats = `export const BEAT = { ${Object.entries(BEATS).map(([key, pick]) => `${key}: { from: ${of(pick.from)}, to: 1, period: ${duration(pick.period)} }`).join(", ")} };`;
   return [START, ...constants(PICK, px(tokens)), ...constants(LEADINGS, reader("")(tokens)), ...constants(TIMING, duration), ...motion, ...constants(EASINGS, ease), beats, ...constants(SHARES, of),
-    washes(tokens), constant("INK", INK, ink(tokens)), END].join("\n");
+    washes(tokens), dawnInks(tokens), constant("INK", INK, ink(tokens)), END].join("\n");
 }
 
 export function withTokens(text, tokens) {
@@ -164,4 +187,5 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const tokens = loadTokens();
   writeChanged(UI, withTokens(read(UI), tokens));
   writeChanged(LAYOUT, layoutWithTokens(read(LAYOUT), tokens));
+  for (const theme of THEMES) writeChanged(`kanso/${dawnArt(theme)}`, dawnSvg(tokens, theme, read(STYLES)));
 }
