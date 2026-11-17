@@ -142,6 +142,14 @@ function github({ computing = new Set(), weeks = {} } = {}) {
   return { exec, calls };
 }
 
+// The Shipped panel opened on `gh`, settled.
+const shownPanel = async (t, gh) => {
+  const p = await panelWith(t, gh);
+  const panel = new p.Shipped();
+  panel.init(p.cx); await p.settle();
+  return { p, panel };
+};
+
 async function panelWith(t, gh) {
   const root = await temporary(t);
   const home = join(root, "app");
@@ -168,9 +176,7 @@ test("Shipped asks each repository for its sums once, and again only after a pus
     "other-org/thing": [{ w: thisWeek - 200 * 86400, a: 5000, d: 0, c: 40 }],
   };
   const gh = github({ weeks, computing: new Set(["me/tool"]) });
-  const p = await panelWith(t, gh);
-  const panel = new p.Shipped();
-  panel.init(p.cx); await p.settle();
+  const { p, panel } = await shownPanel(t, gh);
 
   assert.equal(Object.keys(panel.stats.repos).length, 3, "contributed to and reachable, every organization");
   assert.equal(gh.calls.filter((c) => c === "stats me/tool").length, 2, "asked again while GitHub computed it");
@@ -193,9 +199,7 @@ test("Shipped keeps going when GitHub keeps computing a repository", async (t) =
   const gh = github({ weeks: { "org/slow": [], "org/fine": [{ w: 1793491200, a: 3, d: 0, c: 1 }] } });
   const always = gh.exec;
   gh.exec = async (command, args, options) => (command === "gh" && args[1] === "repos/org/slow/stats/contributors" ? success("{}") : always(command, args, options));
-  const p = await panelWith(t, gh);
-  const panel = new p.Shipped();
-  panel.init(p.cx); await p.settle();
+  const { p, panel } = await shownPanel(t, gh);
   assert.equal(panel.syncing, false, "it stops waiting, and asks again next time");
   assert.equal(panel.syncError, null);
   assert.ok(panel.stats.repos["org/fine"]);

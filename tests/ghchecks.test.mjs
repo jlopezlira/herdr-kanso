@@ -7,6 +7,9 @@ import { load } from "./helpers.mjs";
 const run = (status, conclusion = "", name) => ({ __typename: "CheckRun", status, conclusion, ...(name ? { name } : {}) });
 const commit = (state, context) => ({ __typename: "StatusContext", state, ...(context ? { context } : {}) });
 
+// A pull request panel that never ran its constructor: only its methods.
+const barePanel = async () => Object.create((await loadPullRequest()).PullRequest.prototype);
+
 test("A check run reads by its status, then its conclusion", async () => {
   const { checkState } = await loadCheckState();
   assert.equal(checkState(run("COMPLETED", "SUCCESS")), "pass");
@@ -91,8 +94,7 @@ test("Of the same key the worst is kept, whatever the times say", async () => {
 
 test("The header's digest and the PR panel agree on the same checks", async () => {
   const { checksOf } = await load("kanso-strip/main.js", ["checksOf"]);
-  const { PullRequest } = await loadPullRequest();
-  const panel = Object.create(PullRequest.prototype);
+  const panel = await barePanel();
   const colors = { dim: "dim", red: "red", yellow: "yellow", green: "green", violet: "violet" };
   // The panel's row says it in words; the header in one of four.
   const panelSays = (rollup) => {
@@ -120,8 +122,7 @@ test("The header's digest and the PR panel agree on the same checks", async () =
 });
 
 test("A list row keeps the check words while permission is unread", async () => {
-  const { PullRequest } = await loadPullRequest();
-  const panel = Object.create(PullRequest.prototype);
+  const panel = await barePanel();
   panel.permission = null;
   panel.permissionRepo = "o/r";
   const colors = { dim: "dim", muted: "muted", red: "red", yellow: "yellow", green: "green", violet: "violet", blocked: "red", working: "yellow", done: "green" };
@@ -138,5 +139,5 @@ test("A list row keeps the check words while permission is unread", async () => 
   panel.permission = null;
   assert.equal(row({ mergeStateStatus: "CLEAN", reviewDecision: "REVIEW_REQUIRED" }), "Review required");
   assert.equal(row({ mergeStateStatus: "CLEAN" }).includes("Checking"), false);
-  assert.equal(row({ mergeStateStatus: "CLEAN", reviewDecision: "APPROVED" }), "Approved");
+  assert.equal(row({ mergeStateStatus: "CLEAN", reviewDecision: "APPROVED" }), "Approved", "an approval still reads after a required review");
 });

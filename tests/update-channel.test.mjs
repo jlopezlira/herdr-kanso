@@ -27,6 +27,8 @@ function updaterHost({ store, toasts = [], version = "3.30.0", onExec }) {
   };
 }
 
+// An updater on 3.30.0, and a context to run it in.
+const installedAt = (Updater) => ({ updater: Object.assign(new Updater(), { installed: "3.30.0" }), cx: context().cx });
 const updaterWith = async (options) => (await loadUpdater(updaterHost(options))).Updater;
 
 test("A prerelease download uses the tag, and the version check wants X.Y.Z", async () => {
@@ -41,8 +43,7 @@ test("A prerelease download uses the tag, and the version check wants X.Y.Z", as
       return success("");
     },
   });
-  const updater = Object.assign(new Updater(), { installed: "3.30.0" });
-  const { cx } = context();
+  const { updater, cx } = installedAt(Updater);
   await updater.install(cx);
   const spec = hostInstall("3.30.0-beta.2", "3.30.0");
   const launch = sh.find((args) => String(args[1]).startsWith("dir="));
@@ -57,8 +58,7 @@ test("A prerelease download uses the tag, and the version check wants X.Y.Z", as
 test("A finished install records its tag when version.json is that version", async () => {
   const store = { "kanso.update": { channel: "beta", tag: "3.30.0-beta.1" } };
   const Updater = await updaterWith({ store });
-  const updater = Object.assign(new Updater(), { installed: "3.30.0" });
-  const { cx } = context();
+  const { updater, cx } = installedAt(Updater);
   await updater.report(cx, "ok", "", { version: "3.30.0-beta.2" });
   assert.equal(store["kanso.update"].tag, "3.30.0-beta.2");
 

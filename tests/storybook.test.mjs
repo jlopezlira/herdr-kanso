@@ -18,9 +18,14 @@ test("Every page follows the structure lint", () => {
   assert.deepEqual(lint(), []);
 });
 
-test("A composition that draws its own markup fails the lint", () => {
+// The kit's compositions, and the lint's errors with one more line added.
+const compositions = () => {
   const source = read("stories/kit/compositions.js");
-  const added = (line) => compositionErrors(`${source}${line}\n`);
+  return { source, added: (line) => compositionErrors(`${source}${line}\n`) };
+};
+
+test("A composition that draws its own markup fails the lint", () => {
+  const { source, added } = compositions();
   assert.deepEqual(compositionErrors(source), []);
   assert.deepEqual(added("export const extra = () => stack({ variant: 'rows' }).replace('div', '<div>');"), ["stories/kit/compositions.js: markup tag in a composition"]);
   assert.deepEqual(added("export const extra = () => stack({ variant: 'rows' }).replace('div', 'div class=x');"), ["stories/kit/compositions.js: class attribute in a composition"]);
@@ -40,8 +45,7 @@ test("A composition that draws its own markup fails the lint", () => {
 });
 
 test("A composition that treats pieces as strings fails the lint", () => {
-  const source = read("stories/kit/compositions.js");
-  const added = (line) => compositionErrors(`${source}${line}\n`);
+  const { source, added } = compositions();
   assert.deepEqual(added("export const extra = ({ name }) => row({ name: `Wake ${name}` });"), ["stories/kit/compositions.js: template literal in a composition"]);
   assert.deepEqual(added("export const extra = ({ names }) => names.map((name) => row({ name })).join();"), ["stories/kit/compositions.js: join in a composition"]);
   assert.deepEqual(added("export const extra = ({ open }) => list(row({ name: 'Asleep' }), open ? grow() : '');"), ["stories/kit/compositions.js: empty string as nothing in a composition"]);

@@ -61,8 +61,10 @@ test("The first RC moves Unreleased, fixes the version, and keeps stable history
   assert.equal(planRelease({ ...input, kind: "rc", branch: "develop", changelog: stableLog }).action, "fail");
 });
 
+const firstCandidate = () => prepareCandidate({ version: "1.1.0", changelog: pendingLog, tags: ["1.1.0"], date: "2026-11-02" });
+
 test("Later RCs retain the version when the combined categories need no larger bump", () => {
-  const first = prepareCandidate({ version: "1.1.0", changelog: pendingLog, tags: ["1.1.0"], date: "2026-11-02" });
+  const first = firstCandidate();
   const tags = ["1.1.0", "1.2.0-beta.13", "1.2.0-rc.1", "v1.2.0-rc.2"];
   assert.deepEqual(prepareCandidate({ ...first, tags, date: "2026-11-12" }), first, "no entries means no file changes");
   assert.equal(planRelease({ ...first, tags, kind: "rc", branch: "develop" }).tag, "v1.2.0-rc.3");
@@ -81,7 +83,7 @@ test("Later RCs retain the version when the combined categories need no larger b
 });
 
 test("A later RC recomputes all unreleased entries and renames a minor candidate for Breaking or Removed", () => {
-  const first = prepareCandidate({ version: "1.1.0", changelog: pendingLog, tags: ["1.1.0"], date: "2026-11-02" });
+  const first = firstCandidate();
   const tags = ["1.1.0", "1.2.0-rc.1", "1.2.0-rc.7"];
   for (const category of ["Breaking", "Removed"]) {
     const changelog = first.changelog.replace("## [1.2.0]", `## [Unreleased]\n\n### ${category}\n\n- Old behavior.\n\n## [1.2.0]`);

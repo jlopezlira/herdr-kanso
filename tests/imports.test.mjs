@@ -7,10 +7,9 @@ import { fileURLToPath } from "node:url";
 import { bannedGlobals, fixtureDrift, loadDeclarations, parseDeclarations } from "../scripts/herdr-api.mjs";
 import { globalUses, importsOf, issuesIn, repositoryAudit, resolveSpec } from "../scripts/check-imports.mjs";
 import { SKIPPED, checkMods } from "../scripts/check-mods.mjs";
-import { MOD_BANNED_GLOBALS, bindHerdrModules, modSandbox } from "./helpers.mjs";
+import { MOD_BANNED_GLOBALS, bindHerdrModules, modSandbox, herdrApi as api } from "./helpers.mjs";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
-const api = JSON.parse(readFileSync(new URL("./herdr-api.json", import.meta.url), "utf8"));
 const read = (files) => (file) => {
   if (!Object.hasOwn(files, file)) throw new Error("missing");
   return files[file];

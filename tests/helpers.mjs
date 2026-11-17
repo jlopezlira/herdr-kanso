@@ -13,6 +13,7 @@ import { modScript } from "../scripts/mod-source.mjs";
 const runFile = promisify(execFile);
 export const fileExists = (path) => access(path).then(() => true, () => false);
 const api = JSON.parse(readFileSync(new URL("./herdr-api.json", import.meta.url), "utf8"));
+export { api as herdrApi };
 const declaredNames = (mod) => api.modules[mod] ?? [];
 const HERDR_MODULES = {
   "fs/promises": declaredNames("fs/promises"),
