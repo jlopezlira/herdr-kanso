@@ -1,5 +1,7 @@
 // A design hypothesis for each thing the app shows today that a page drops, hides, moves or changes, in the user's terms.
 // Today rests on the running app; every job gets a new home or the hypothesis stops; with no signal yet it is unproven.
+import { pullRequest } from './samples.js';
+
 export const hypotheses = {
   'Compositions/Toolbar': [
     {
@@ -30,7 +32,7 @@ export const hypotheses = {
   'Compositions/Notifications': [
     {
       change: 'No pop-up for a result you can already see where you acted.',
-      today: 'kansō pops up "kansō is already being updated" while the footer says Updating kansō, "Merged #142" while the PR panel shows Merged, and that a folder is already a project.',
+      today: `kansō pops up "kansō is already being updated" while the footer says Updating kansō, "Merged ${pullRequest(142)}" while the PR panel shows Merged, and that a folder is already a project.`,
       why: 'they confirm that what you did worked.',
       question: 'why repeat, over your work, what the screen in front of you is saying at the same moment?',
       believe: 'saying a result only where you acted lets people see it where they look, with fewer pop-ups over their work.',
@@ -41,7 +43,7 @@ export const hypotheses = {
     },
     {
       change: 'A pop-up says one sentence; its second line moves into its tooltip.',
-      today: 'a pop-up has a title and a second line, "Merged #142" over the pull request\'s title, "Freed 1.2 GB" over the space freed so far; when they do not fit, its tooltip shows both whole.',
+      today: `a pop-up has a title and a second line, "Merged ${pullRequest(142)}" over the pull request's title, "Freed 1.2 GB" over the space freed so far; when they do not fit, its tooltip shows both whole.`,
       why: 'the second line gives context: which item, how much in all, why it failed.',
       question: 'why read two lines in a pop-up that leaves on its own, when a click takes you to the whole fact?',
       believe: 'one sentence lets people take in a pop-up at a glance, with the context one point or one click away.',

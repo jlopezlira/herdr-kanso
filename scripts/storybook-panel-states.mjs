@@ -24,7 +24,7 @@ const swap = (html, from, to) => {
 };
 const metric = (value, unit) => `<div class="kanso-metric"><span class="kanso-metric__value">${value}</span><span class="kanso-metric__unit">${unit}</span></div>`;
 const frame = (title, scope, body, tools = '', window = false) => `<div class="kanso-story"><div class="kanso-story__theme kanso-story__frame ${window ? 'kanso-story--free' : 'kanso-panel kanso-panel--fit'}">${panel({ look: window ? 'window' : 'panel', header: panelHeader({ title, form: window ? 'bar' : 'page', start: window && title !== 'Markdown' ? [panelBack()] : [], second: scope, tools: [tools, panelRefresh(), panelClose()] }) }, body)}</div></div>`;
-const chart = (title, values, unit) => section(title) + `<div class="kanso-chart" role="img" aria-label="${title}: ${values.join(', ')} ${unit}, November 1 through today">${values.map((v, i) => `<i${v === Math.max(...values) ? ' class="kanso-chart__bar--peak"' : ''} style="height:calc(var(--k-sp-1) * ${v || 0.25})" title="Nov ${i + 1} · ${v} ${unit}"></i>`).join('')}</div><div class="kanso-chart__axis"><span>Nov 1</span><span>Today</span></div>`;
+const chart = (title, values, unit) => section(title) + `<div class="kanso-chart" role="img" aria-label="${title}: ${values.join(', ')} ${unit}, November 1 through today">${values.map((v, i) => `<i${v === Math.max(...values) ? ' class="kanso-chart__bar--peak"' : ''} data-height="calc(var(--k-sp-1) * ${v || 0.25})" title="Nov ${i + 1} · ${v} ${unit}"></i>`).join('')}</div><div class="kanso-chart__axis"><span>Nov 1</span><span>Today</span></div>`;
 
 export function panelStateRecords(records) {
   const drawings = [], find = (part) => records.find((r) => r.id.includes(part) && r.html)?.html;
@@ -34,7 +34,7 @@ export function panelStateRecords(records) {
       const total = values.reduce((sum, value) => sum + value, 0), peak = Math.max(...values);
       const bars = values.map((value, index) => {
         const tip = `Nov ${index + 1} · $${value.toFixed(2)} · ${(value * 24000).toLocaleString('en-US')} tokens`;
-        return `<i class="${value ? value === peak ? 'kanso-chart__bar--peak' : '' : 'kanso-chart__bar--empty'}" style="height:${value ? `calc(var(--k-sp-4) * ${value / peak * 5})` : 'var(--k-sp-hair)'}" role="listitem" aria-label="${tip}" title="${tip}">${value && value === peak ? `<span class="kanso-chart__value">$${value.toFixed(2)}</span>` : ''}</i>`;
+        return `<i class="${value ? value === peak ? 'kanso-chart__bar--peak' : '' : 'kanso-chart__bar--empty'}" data-height="${value ? `calc(var(--k-sp-4) * ${value / peak * 5})` : 'var(--k-sp-hair)'}" role="listitem" aria-label="${tip}" title="${tip}">${value && value === peak ? `<span class="kanso-chart__value">$${value.toFixed(2)}</span>` : ''}</i>`;
       }).join('');
       return frame('Spend', task ? 'checkout' : 'All computers', metric(`$${total.toFixed(2)}`, 'API value this month') + (total ? '' : empty('chart-column', 'No usage this month')) + `<div class="kanso-chart__bars kanso-chart--spend" role="list" aria-label="API value per day">${bars}</div><div class="kanso-chart__ticks"><span>Nov 1</span><span>Per day</span><span>Nov 30</span></div>`, tool('sliders-vertical', 'Sources and plans'));
     };
@@ -78,11 +78,9 @@ export function panelStateRecords(records) {
   if (ports) put('Panels/Ports', 'Ports', 'Not attributed', ports.replace(/(?:<\/div>){4}$/, (end) => blocked('Some servers cannot be attributed', 'Working directories require a Herdr API on Windows.') + end), 'Where working directories cannot be read, servers are still listed and can be stopped; the panel says why they have no project.', 'The panel: header, rows and the failure block.');
   const pinned = find('panels/images/ImagesTwoNotesReadyToSend/Default');
   if (pinned) {
-    const one = swap(swap(pinned, '<span class="kanso-annotation" style="left:30%;top:88%">2</span>', ''), elements(pinned, 'kanso-panel__annotation')[1], '');
+    const one = swap(swap(pinned, '<span class="kanso-annotation" data-left="30%" data-top="88%">2</span>', ''), elements(pinned, 'kanso-panel__annotation')[1], '');
     put('Panels/Images', 'Images', 'One pin, no session to send to', swap(one, '<div class="kanso-actions"><span class="kanso-button kanso-button--solid">Send to checkout</span><span class="kanso-button kanso-button--quiet">Open</span><span class="kanso-button kanso-button--quiet">Clear 2 pins</span></div>', refused('No agent to send to') + actions(primary('Send'), button('Open'), button('Clear the pin'))), 'Send with no session in focus says so and keeps the pin; Clear the pin removes it.', 'The panel: picture, pin list, the note line and the action row.');
   }
-  const dojo = find('proto/layouts-hjkl-dojo/HjklDojo/Default');
-  if (dojo) put('Panels/Dojo', 'Practice Feedback', 'sqlite3 missing', swap(dojo, 'Make a move to start: 10 targets, in as few moves as you can.', 'Install sqlite3 to keep your rounds.'), 'Without sqlite3 the dōjō plays, and the line under Hachi says rounds are not kept.', 'The dōjō: path, board, feedback line and keyboard.');
   const shipped = find('panels/shipped/ShippedGitHubCLINotInstalled/Default');
   if (shipped) put('Panels/Shipped', 'Shipped', 'sqlite3 missing', swap(shipped, elements(shipped, 'kanso-state-empty')[0], blocked('Adding up stopped', "Install sqlite3 to keep Shipped's statistics.")), 'Without sqlite3 nothing is added up; the tool’s words say what to install.', 'The panel: header, scope and the failure block.');
   const pr = find('panels/pr/PRDetailsDetailsOpen/Default');

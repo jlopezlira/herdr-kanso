@@ -1,5 +1,3 @@
-import { COMPONENT_CSS } from './storybook-components.mjs';
-
 export function cssBlocks(css) {
   const blocks = [];
   let start = 0, depth = 0, quote = "", comment = false;
@@ -19,11 +17,7 @@ export function cssBlocks(css) {
 
 export const CSS_MARK = '/* Additional panel drawing rules. Written by scripts/import-panels.mjs. */';
 
-export function normalizeCss(css, { kit = false } = {}) {
-  if (kit) {
-    const [base, extra] = css.split(CSS_MARK);
-    css = base + COMPONENT_CSS + (extra === undefined ? '' : CSS_MARK + extra);
-  }
+export function normalizeCss(css) {
   css = css.replaceAll('.kanso-button--tonal:first-of-type', '.kanso-button--tonal:not(.kanso-explain):first-of-type');
   css = css.replace(/^:is\(\.kanso-state-block__actions,\.kanso-state-empty\)>\.kanso-button--tonal[^\n{]*\{[^}]*\}\n?/gm, '');
   css = css.replaceAll('.kanso-state-block>.kanso-state-block__actions>.kanso-button--tonal{', '.kanso-state-block>.kanso-state-block__actions>:is(.kanso-button,.kanso-button--tonal){');

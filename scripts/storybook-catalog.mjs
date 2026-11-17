@@ -3,14 +3,13 @@ import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { normalizeComponent } from './storybook-components.mjs';
 import { normalizeCss } from './storybook-css.mjs';
-import { kitRecords, tokenRecords } from './storybook-kit.mjs';
+import { kitRecords, statedRecords, tokenRecords } from './storybook-kit.mjs';
 import { gapDocument, mergeCoverage } from './storybook-coverage.mjs';
 import { referenceText, sampleText } from './storybook-markup.mjs';
 import { panelStateRecords } from './storybook-panel-states.mjs';
-import { generateReferences } from "./storybook-references.mjs";
 import { statusTags } from "../stories/kit/status.js";
 
-export const SECTIONS = ['Start', 'Tokens', 'Primitives', 'Compositions', 'Features', 'Panels', 'Layouts'];
+export const SECTIONS = ['Start', 'Tokens', 'Primitives', 'Compositions', 'Panels', 'Layouts'];
 export const slug = (s) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 export const cleanText = (s = '') => sampleText(referenceText(s)).replace(/; [^;.]+ keeps this component and its states in the shared kit\./g, '.').replace(/\b(?:prototype|board)(?:s|'s)?\b/gi, 'example').replace(/\bdesigners?\b/gi, 'reader').replace(/\bagents?\b/gi, (s) => s[0] === 'A' ? 'Session' : 'session').replace(/\ban? session\b/gi, 'a session').replace(/\bsubtracted\b/gi, 'simplified').replace(/\bremoved facts?\b/gi, 'simplified information').replace(/\bremoved\b/gi, 'cleared').replace(/\(S06 says why\)/g, '(its computer row says why)');
 const read = (file) => JSON.parse(readFileSync(file, 'utf8'));
@@ -108,7 +107,7 @@ const coveragePage = {
   ContainerList: 'Panels/Containers', ContainerRow: 'Panels/Containers', ComposeProject: 'Panels/Containers', ContainerDisk: 'Panels/Containers',
   Practice: 'Panels/Dojo', PracticeFeedback: 'Panels/Dojo', PracticeResult: 'Panels/Dojo', PracticePet: 'Panels/Dojo',
   Memory: 'Panels/Memory', MemoryAgent: 'Panels/Memory', MemoryRecovery: 'Panels/Memory', MemoryHistory: 'Panels/Memory', MemoryChart: 'Primitives/Chart', SystemNotice: 'Compositions/Notifications',
-  Help: 'Panels/Help', Guide: 'Panels/Help', KeyboardExplorer: 'Compositions/Keyboard', MarkdownFiles: 'Panels/Markdown', MarkdownReview: 'Panels/Markdown',
+  Help: 'Compositions/Keyboard', Guide: 'Compositions/Keyboard', KeyboardExplorer: 'Compositions/Keyboard', MarkdownFiles: 'Panels/Markdown', MarkdownReview: 'Panels/Markdown',
   PaneMenu: 'Compositions/Pane menu', OpenWith: 'Primitives/Dialog', Files: 'Panels/Files', Preview: 'Panels/Preview', MarkdownEditing: 'Panels/Preview', ConversationFind: 'Panels/Find',
   Images: 'Panels/Images', Ports: 'Panels/Ports', PortHistory: 'Panels/Ports', PullRequest: 'Panels/PR', PullRequestContext: 'Panels/PR', PullRequestList: 'Panels/PR', PullRequestDetails: 'Panels/PR', PullRequestPicker: 'Panels/PR',
   WorktreeVerdict: 'Panels/Worktrees', Worktrees: 'Panels/Worktrees', WorktreeHistory: 'Panels/Worktrees', Shipped: 'Panels/Shipped', Share: 'Panels/Share', VerdictBody: 'Panels/PR', CodeLimits: 'Primitives/Code', HistoryChart: 'Primitives/Chart', ActionNotice: 'Primitives/Toast', ShareCard: 'Panels/Share',
@@ -121,6 +120,7 @@ const coveragePage = {
 
 export function pageFor(source, file, key) {
   const base = file.replace(/\.(json|stories\.js)$/, '');
+  if (source === 'panels' && key === 'SystemNotice') return coveragePage.SystemNotice;
   if (source === 'panels') return ({ skeleton: 'Compositions/Panel', availability: 'Compositions/State patterns' })[base] ?? `Panels/${base === 'pr' ? 'PR' : base[0].toUpperCase() + base.slice(1)}`;
   if (source === 'coverage') {
     if (!coveragePage[key]) throw new Error(`Missing component route: ${file}:${key}`);
@@ -161,17 +161,16 @@ export function generate(root = '.') {
   const file = join(root, 'stories/catalog.json');
   const retained = expand(read(file)).filter((record) => !['kit', 'tokens'].includes(record.source));
   const drawings = panelStateRecords(retained), regenerated = new Set(drawings.map((record) => record.id));
-  const originals = mergeCoverage([...retained.filter((record) => !regenerated.has(record.id)), ...drawings].map((record) => record.html === undefined ? record : normalizeComponent(record)));
+  const originals = mergeCoverage([...retained.filter((record) => !regenerated.has(record.id)), ...drawings, ...statedRecords()].map((record) => record.html === undefined ? record : normalizeComponent(record)));
   const tokenFile = join(root, 'kanso/tokens.json');
   const tokens = existsSync(tokenFile) ? read(tokenFile) : null;
   const catalog = pack([...originals, ...kitRecords(originals).map(normalizeComponent), ...(tokens ? tokenRecords(tokens) : [])]);
   writeFileSync(file, serialize(catalog));
   writeFileSync(join(root, 'stories/GAPS.md'), gapDocument(expand(catalog)));
   const records = expand(catalog);
-  const references = existsSync(join(root, 'stories/references.json')) ? read(join(root, 'stories/references.json')).pages : [];
-  const pages = pagesOf(records).filter(([page]) => !references.some((reference) => reference.page === page && !reference.existing));
+  const pages = pagesOf(records);
   const cssFile = join(root, 'stories/proto.css');
-  if (existsSync(cssFile)) writeFileSync(cssFile, normalizeCss(readFileSync(cssFile, 'utf8'), { kit: true }));
+  if (existsSync(cssFile)) writeFileSync(cssFile, normalizeCss(readFileSync(cssFile, 'utf8')));
   const out = join(root, 'stories/components');
   rmSync(out, { recursive: true, force: true });
   mkdirSync(out, { recursive: true });
@@ -180,7 +179,6 @@ export function generate(root = '.') {
     writeFileSync(join(out, `${file}.stories.js`), `import { componentStory } from '../kit/story.js';\n\nexport default { title: ${JSON.stringify(page)}, tags: ${JSON.stringify(statusTags(page))} };\nexport const Variants = componentStory(${JSON.stringify(page)});\n`);
     writeFileSync(join(out, `${file}.mdx`), `import { Meta } from '@storybook/addon-docs/blocks';\nimport * as stories from './${file}.stories.js';\nimport { ComponentPage } from '../kit/ComponentPage.jsx';\n\n<Meta of={stories} name="Overview" />\n<ComponentPage of={stories} page=${JSON.stringify(page)} />\n`);
   }
-  generateReferences(root, records);
   return { stories: pages.length, states: catalog.records.filter((record) => record.markup !== undefined).length, covered: catalog.records.filter((record) => record.design).length, gaps: catalog.records.filter((record) => record.gap).length };
 }
 

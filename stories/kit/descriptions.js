@@ -1,6 +1,6 @@
 export const descriptions = {
   Button: 'An action control: solid for the one main action, tonal for supporting actions, quiet or icon on a row.',
-  Field: 'A labelled text entry, 30 high, for a short value, a search or a multiline response.',
+  Field: 'A labelled text entry for a short value, a search or a multiline response.',
   Switch: 'A setting that takes effect the moment it is flipped.',
   Mark: 'A compact symbol for working, blocked, finished or idle, placed beside the item it belongs to.',
   Chip: 'A small label for a count or short fact not said elsewhere on the row.',
@@ -76,8 +76,9 @@ export const descriptions = {
   Colour: 'The colour roles and washes for both themes.',
   'Contrast, light and dark': 'Text, edges and marks against every surface, in both themes.',
   Type: 'The type roles with size, weight and line height.',
-  Spacing: 'The spacing scale and control dimensions.',
+  Spacing: 'The spacing scale.',
   Radius: 'The corner radius scale.',
   Motion: 'Durations, easing and the only animations allowed; reduced motion holds still.',
+  Sizes: 'Sizes that belong to one component, grouped by it.',
   Icons: 'The sprite symbols and icon sizes.',
 };

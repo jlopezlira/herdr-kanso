@@ -51,7 +51,7 @@ test("Storybook token classes match kanso/tokens.json", () => {
 test("field edges (input) keep 3:1 on every surface in both themes", () => {
   const tokens = loadTokens();
   const low = THEMES.flatMap((theme) => SURFACES.map((surface) => ({
-    theme, surface, ratio: contrast(colour(tokens, theme, "input"), colour(tokens, theme, surface)),
+    theme, surface, ratio: contrast(colour(tokens, theme, "line-strong"), colour(tokens, theme, surface)),
   }))).filter((p) => p.ratio < 3).map((p) => `${p.theme} input on ${p.surface}: ${p.ratio.toFixed(2)}`);
   assert.deepEqual(low, []);
 });

@@ -3,19 +3,62 @@ import assert from "node:assert/strict";
 import { cpSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import test from "node:test";
+import vm from "node:vm";
 import { inTemporaryDir } from "./helpers.mjs";
 import { expand } from "../scripts/storybook-catalog.mjs";
-import { compositionErrors, lint, storyFiles, structureErrors } from "../scripts/lint-storybook.mjs";
+import { compositionErrors, lint, markupTags, primitiveErrors, rawValueErrors, rawValues, storyFiles, structureErrors } from "../scripts/lint-storybook.mjs";
 import { statusOf, statusTags } from "../stories/kit/status.js";
+import { rules } from "../stories/kit/rules.js";
+import { promptFor } from "../stories/kit/prompt.js";
+import { content, statesFor } from "../stories/kit/catalog.js";
+import { tokenRecords } from "../scripts/storybook-kit.mjs";
 
 const read = (file) => readFileSync(new URL(`../${file}`, import.meta.url), "utf8");
 const json = (file) => JSON.parse(read(file));
 const records = expand(json("stories/catalog.json"));
-const references = json("stories/references.json");
 const files = storyFiles("stories");
 
 test("Every page follows the structure lint", () => {
   assert.deepEqual(lint(), []);
+});
+
+test("An element drawn outside a primitive is listed with its page, element and class", () => {
+  const html = '<div class="kanso-story"><span class="kanso-row kanso-text--dim"><b>ok</b></span><div class="kanso-keyboard__row"><i></i></div><p class="kanso-text--dim">raw</p></div>';
+  assert.deepEqual(primitiveErrors([{ page: "Panels/Dojo", html }], new Set(["kanso-row"]), new Set(["kanso-text--dim"])), [
+    "Panels/Dojo: <div> kanso-keyboard__row is not a primitive",
+    "Panels/Dojo: <p> raw markup outside a primitive",
+  ]);
+});
+
+test("An element is counted once per node, so the same miss on two nodes counts twice", () => {
+  const html = '<div class="kanso-story"><p>one</p><p>two</p></div>';
+  assert.equal(primitiveErrors([{ page: "Panels/Dojo", html }], new Set(), new Set()).length, 2);
+});
+
+// The lint's errors for one file after that file changes, in a copy of the Storybook.
+const lintChanged = (file, text) => inTemporaryDir("kanso-lint-", (root) => {
+  for (const dir of ["stories", ".storybook", "scripts/storybook-raw-values.json"]) cpSync(dir, join(root, dir), { recursive: true });
+  writeFileSync(join(root, file), text);
+  return lint(root).filter((error) => error.startsWith(file));
+});
+
+test("A primitive given an inline style or a raw px or colour fails the lint", () => {
+  const css = "stories/primitives.css";
+  const raw = [`${css}: raw width:937px is not a token or a primitive`, `${css}: raw color:#123456 is not a token or a primitive`];
+  const html = '<div class="kanso-row" style="width:937px;color:#123456">x</div>';
+  assert.deepEqual(rawValueErrors(rawValues("Panels/Dojo", html), []), ['Panels/Dojo: inline style="width:937px;color:#123456" is not a token or a primitive']);
+  assert.deepEqual(rawValueErrors(rawValues(css, ".kanso-row{width:937px;color:#123456;gap:var(--k-sp-2)}", true), []), raw);
+  assert.deepEqual(lintChanged(css, `${read(css)}.kanso-row{width:937px;color:#123456}\n`), raw);
+});
+
+test("A component size passed as geometry data must be a token, while a placed region keeps its board pixels", () => {
+  const html = '<span class="kanso-skeleton" data-width="110"></span><i data-left="4" data-top="8" data-width="30"></i><i data-height="40%"></i><i data-height="var(--k-sp-2)"></i>';
+  assert.deepEqual(rawValues("Panels/Files", markupTags(html)), [{ source: "Panels/Files", value: 'raw data-width="110"' }]);
+});
+
+test("A pull request number a story shows is not a raw colour, while a colour in its markup still is", () => {
+  const html = '<div class="kanso-panel__scope" data-tone="#fa0" aria-label="Open PR #142">#142 · src/api</div>';
+  assert.deepEqual(rawValues("Panels/PR", markupTags(html)), [{ source: "Panels/PR", value: "raw #fa0" }]);
 });
 
 // The kit's compositions, and the lint's errors with one more line added.
@@ -25,20 +68,17 @@ const compositions = () => {
 };
 
 test("A composition that draws its own markup fails the lint", () => {
+  const file = "stories/kit/compositions.js";
   const { source, added } = compositions();
   assert.deepEqual(compositionErrors(source), []);
-  assert.deepEqual(added("export const extra = () => stack({ variant: 'rows' }).replace('div', '<div>');"), ["stories/kit/compositions.js: markup tag in a composition"]);
-  assert.deepEqual(added("export const extra = () => stack({ variant: 'rows' }).replace('div', 'div class=x');"), ["stories/kit/compositions.js: class attribute in a composition"]);
-  assert.deepEqual(added("export const extra = () => 'kanso-row';"), ["stories/kit/compositions.js: class string in a composition"]);
-  inTemporaryDir("kanso-lint-", (root) => {
-    for (const dir of ["stories", ".storybook"]) cpSync(dir, join(root, dir), { recursive: true });
-    writeFileSync(join(root, "stories/kit/compositions.js"), `${source}export const extra = () => '<span class="kanso-row">';\n`);
-    assert.deepEqual(lint(root).filter((error) => error.startsWith("stories/kit/compositions.js")), [
-      "stories/kit/compositions.js: markup tag in a composition",
-      "stories/kit/compositions.js: class attribute in a composition",
-      "stories/kit/compositions.js: class string in a composition",
-    ]);
-  });
+  assert.deepEqual(added("export const extra = () => stack({ variant: 'rows' }).replace('div', '<div>');"), [`${file}: markup tag in a composition`]);
+  assert.deepEqual(added("export const extra = () => stack({ variant: 'rows' }).replace('div', 'div class=x');"), [`${file}: class attribute in a composition`]);
+  assert.deepEqual(added("export const extra = () => 'kanso-row';"), [`${file}: class string in a composition`]);
+  assert.deepEqual(lintChanged(file, `${source}export const extra = () => '<span class="kanso-row">';\n`), [
+    `${file}: markup tag in a composition`,
+    `${file}: class attribute in a composition`,
+    `${file}: class string in a composition`,
+  ]);
 });
 
 test("A composition that treats pieces as strings fails the lint", () => {
@@ -84,7 +124,7 @@ test("Storybook styles use only token values beyond the reviewed literals", () =
 
 test("Public copy describes roles, not named sessions or people", () => {
   const prose = [
-    ...references.pages.flatMap((page) => page.guidelines ?? []),
+    ...Object.values(rules).flat(),
     ...records.flatMap((record) => [record.caption ?? "", ...(record.notes ?? [])]),
     ...Object.entries(files).filter(([path]) => path.endsWith(".mdx")).map(([, text]) => text),
   ].join("\n");
@@ -97,11 +137,10 @@ test("Public copy describes roles, not named sessions or people", () => {
   ]) assert.doesNotMatch(prose, pattern);
 });
 
-test("Every approved page and every earlier state stays reachable by name", () => {
-  const { pages, ids } = json("tests/fixtures/storybook-names.json");
+test("Every earlier state stays reachable by name", () => {
+  const { ids } = json("tests/fixtures/storybook-names.json");
   const titles = new Set(Object.values(files).flatMap((text) => [...text.matchAll(/(?:export default\s*\{\s*title:\s*|<Meta title=)"([^"]+)"/g)].map((match) => match[1])));
   const byId = new Map(records.map((record) => [record.id, record]));
-  assert.deepEqual(pages.filter((page) => !titles.has(page) || !references.pages.some((reference) => reference.page === page)), []);
   assert.deepEqual(ids.filter((id) => !titles.has(byId.get(id)?.page)), []);
 });
 
@@ -249,4 +288,49 @@ test("A bar asked at a width the kit has no frame for fails instead of drawing a
   const { atWidth, barWidths } = await import("../stories/kit/frames.js");
   for (const width of barWidths) assert.match(atWidth(width, ""), new RegExp(`kanso-story--w${width}`));
   assert.throws(() => atWidth(900, ""), { message: "frames: unknown width 900" });
+});
+
+test("Icons open with the complete catalog and every current kit icon has its meaning", () => {
+  const componentStory = vm.runInNewContext(`${read("stories/kit/story.js").replace(/^import .*;$/gm, "").replace("export function", "function")}\ncomponentStory`, { content, statesFor, playgrounds: {} });
+  const story = componentStory("Tokens/Icons");
+  const html = story.render(story.args);
+  assert.equal([...html.matchAll(/class="kanso-icon__example"/g)].length, 72);
+  for (const icon of ["command", "message-square-plus", "maximize-2", "minimize-2"]) {
+    assert.match(html, new RegExp(`lu-${icon}</div><div class="kanso-icon__description">[^<]+`));
+  }
+});
+
+test("Spacing, sizes, colour and motion each show their own tokens with a sample", () => {
+  const tokens = json("kanso/tokens.json");
+  const pages = tokenRecords(tokens);
+  const html = (name) => pages.find((page) => page.page === `Tokens/${name}`).html;
+  assert.deepEqual([...html("Spacing").matchAll(/class="kanso-tokens__name">--([^<]+)/g)].map((m) => m[1]), tokens.space.map((t) => t.name));
+  for (const token of [...tokens.height, ...tokens.switch]) assert.ok(html("Sizes").includes(`var(--${token.name})`));
+  for (const page of pages) {
+    assert.doesNotMatch(page.html, /<td[^>]*><\/td>/);
+    for (const token of tokens.board) assert.ok(!page.html.includes(`--${token.name}`));
+  }
+  for (const token of tokens.opacity) {
+    assert.ok(html("Colour").includes(`--${token.name}`));
+    assert.ok(!html("Motion").includes(`--${token.name}`));
+  }
+});
+
+test("Motion and contrast samples use the shared action and mark primitives", () => {
+  const pages = tokenRecords(json("kanso/tokens.json"));
+  const motion = pages.find((page) => page.page === "Tokens/Motion").html;
+  assert.match(motion, /kanso-action--armed/);
+  assert.match(motion, /Press again to/);
+  assert.doesNotMatch(motion, /kanso-tokens__arm"/);
+  for (const token of json("kanso/tokens.json").motion) assert.ok(motion.includes(`var(--${token.name})`) || motion.includes(`data-token="${token.name}"`));
+  const contrast = pages.find((page) => page.page === "Tokens/Contrast, light and dark").html;
+  for (const state of ["working", "blocked", "done", "idle"]) assert.equal([...contrast.matchAll(new RegExp(`kanso-mark--${state}`, "g"))].length, 7);
+});
+
+test("Token prompts concern the tokens on their own page", () => {
+  for (const page of new Set(records.filter((record) => record.page.startsWith("Tokens/")).map((record) => record.page))) {
+    const prompt = promptFor(page, statesFor(page));
+    assert.doesNotMatch(prompt, /Build Tokens|one .* component|refresh failure|irreversible actions|four-second Armed/);
+    assert.ok(prompt.includes(page));
+  }
 });

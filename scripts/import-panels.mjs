@@ -270,7 +270,7 @@ export function generate(sourceDir, masterPath, notesPath, reportDir) {
   const references = expand(JSON.parse(readFileSync("stories/catalog.json", "utf8"))).filter((record) => record.source === "proto");
   replaceSource("panels", [...records, ...panelStateRecords([...references, ...records])]);
   const master = readFileSync(masterPath, "utf8");
-  writeFileSync("stories/proto.css", normalizeCss(css.content, { kit: true }));
+  writeFileSync("stories/proto.css", normalizeCss(css.content));
   writeFileSync("stories/proto-sprite.svg", sprite);
   const rows = inventory(master, reportDir);
   const summary = { boards: rows.length, coveredBefore: rows.filter((r) => r.covered).length, stories: entries.length, sourceCounts: sources.map((source) => entriesOf(source).length), counts, cssRules: css.count };
