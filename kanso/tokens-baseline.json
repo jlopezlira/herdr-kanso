@@ -300,8 +300,6 @@
   {"file":"kanso/mods/kanso-spaces/main.js","line":"const label = (text) => div().text_size(12).text_color(t.muted).child(text);","value":12},
   {"file":"kanso/mods/kanso-spaces/main.js","line":".child(div().flex_1().min_w(0).truncate().text_size(13).text_color(this.projectFolder ? t.foreground : t.dim).child(shown))","value":13},
   {"file":"kanso/mods/kanso-spaces/main.js","line":".child(svg(\"mods/kanso-chrome/icons/plus.svg\").size(13));","value":13},
-  {"file":"kanso/mods/kanso-spaces/main.js","line":"const row = h_flex().id(`closed-project-${key}`).h(rowHeight({ tree: null })).flex_none().px(8).gap(9).items_center().rounded(8).cursor_pointer()","value":9},
-  {"file":"kanso/mods/kanso-spaces/main.js","line":"const row = h_flex().id(`asleep-group-${group.id}`).h(32).flex_none().pl(pad).pr(12).gap(9).items_center().rounded(8).cursor_pointer()","value":9},
   {"file":"kanso/mods/kanso-spaces/main.js","line":"const gap = r.tree || r === rows[0] ? [] : [item(div().h(10).flex_none(), 10)];","value":10},
   {"file":"kanso/mods/kanso-spaces/main.js","line":"const closed = (m) => (collapsed ? [] : this.closedOn(m, ctx)).flatMap((entry) => [item(div().h(10).flex_none(), 10), item(this.closedRow(t, entry, names), rowHeight({ tree: null }))]);","value":10},
   {"file":"kanso/mods/kanso-spaces/main.js","line":".gap(9)","value":9},
