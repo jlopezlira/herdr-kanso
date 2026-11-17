@@ -98,6 +98,7 @@ the branch's rules.
 - Storybook draws all missing Sidebar and Activity feature states with the shared kit, including queues, sleeping conversations, Git controls and activity overflow.
 - Storybook draws missing Settings and Memory feature states with the shared kit and source-linked coverage.
 - Storybook draws all missing pull request and Spend feature states with the shared kit.
+- Notices in the corner share the kit's toast: the lead, one sentence at body size instead of bold, and at most one small fix, with the detail in the tooltip. Tab reaches a notice, and Enter or Space opens it as a click does. (#321)
 - Cmd+J (Ctrl+Shift+J on Windows) jumps to finished agents again, after the ones waiting for you.
 - Storybook panel and layout stories draw at real size without a frame card, with the row actions, header marks, device rows, skeleton bars, checks list and code lines of the approved designs.
 - Storybook controls respond with sample data: selection, editing, toggles, Armed confirmation and Undo, menus, dialogs, navigation folds, filtering and copy feedback reset with the State control.
