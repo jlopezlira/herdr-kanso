@@ -1,11 +1,12 @@
 // Unchanged sidebar inputs reuse sleeping and needs-you rows across redraws.
+import { loadSpaces } from "./mod-fixtures.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { load, clone } from "./helpers.mjs";
+import { clone } from "./helpers.mjs";
 
 async function drawHost() {
   const state = { panes: [{ terminal: "a", tab: "tab" }], rows: 0, needs: 0, terms: [{ address: "a", state: "live", labels: {} }], list: [{ address: "a", pane: "p", status: "blocked", name: "A" }], layouts: [] };
-  const { Spaces } = await load("kanso-spaces/main.js", ["Spaces"], {
+  const { Spaces } = await loadSpaces({
     home: () => "/home", shared: () => null,
     agents: () => clone(state.list), terminals: () => clone(state.terms), panes: () => clone(state.panes), machines: () => clone(state.layouts),
     sleepingNow: () => { state.rows += 1; return { rows: [], dozing: new Set() }; },

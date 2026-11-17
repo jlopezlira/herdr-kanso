@@ -1,7 +1,6 @@
 import { readFileSync, readdirSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { join } from 'node:path';
 import { posix } from 'node:path';
-import { pathToFileURL } from 'node:url';
 import { SECTIONS, expand } from './storybook-catalog.mjs';
 import { explainErrors } from './storybook-components.mjs';
 import { gapDocument, overlapFor } from './storybook-coverage.mjs';
@@ -9,6 +8,7 @@ import { STORYBOOK_CLASSES, cssSelectors, markupClasses, selectorClasses } from 
 import { descriptions } from '../stories/kit/descriptions.js';
 import { STATUSES, statusTags } from '../stories/kit/status.js';
 import references from "../stories/references.json" with { type: "json" };
+import { isMain } from './cli.mjs';
 
 const STORY_FILE = /\.stories\.(?:js|jsx|mjs|ts|tsx)$/;
 const BEM = /^kanso-[a-z0-9]+(?:-[a-z0-9]+)*(__[a-z0-9-]+)?(--[a-z0-9-]+)?$/;
@@ -132,7 +132,7 @@ export function lint(root = '.') {
   return errors;
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
+if (isMain(import.meta.url)) {
   const errors = lint();
   if (errors.length) { console.error(errors.join('\n')); process.exitCode = 1; }
   else console.log('Storybook structure passed');

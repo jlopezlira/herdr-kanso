@@ -1,10 +1,11 @@
 // Hachi's pixel map: pure, so the app and the Storybook draw the same one.
+import { loadHachiPixels } from "./mod-fixtures.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { clone, load } from "./helpers.mjs";
+import { clone } from "./helpers.mjs";
 
 const MOODS = ["calm", "glad", "sweat", "sleep"];
-const pixels = async () => (await load("kanso-dojo/mascot-pixels.js", ["hachiPixels"])).hachiPixels;
+const pixels = async () => (await loadHachiPixels()).hachiPixels;
 
 test("every mood of Hachi is a map 16 wide and 15 high", async () => {
   const hachiPixels = await pixels();

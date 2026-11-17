@@ -1,7 +1,8 @@
 // The sidebar's Header and Toolbar: large icon buttons in a row, and collapsed a column whose caret holds Sort and Search.
+import { loadMenu } from "./mod-fixtures.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { load, chain, gpuiHost, numberArguments } from "./helpers.mjs";
+import { load, chain, gpuiHost, numberArguments, calls, arg, themed, CHROME_NIGHT } from "./helpers.mjs";
 
 const host = () => ({
   ...gpuiHost(),
@@ -9,15 +10,14 @@ const host = () => ({
   Popover: { new: (id) => chain(id) },
   image: (path) => { const el = chain("image"); el.calls.push(["image", path]); return el; },
 });
-const kit = async () => ({
+const kit = async () => themed({
   ...await load("kanso-panel/ui.js", ["tokens", "G", "H", "R", "ICON_CHROME"], host()),
   ...await load("kanso-panel/ui-toolbar.js", ["toolbar", "addLabels"], host()),
   ...await load("kanso-panel/ui-sidebar-header.js", ["header"], host()),
-  ...await load("kanso-panel/ui-menu.js", ["menu"], host()),
-});
-const night = { background: "#1b1b19", foreground: "#d8d4cb", hover: "#232321", selected: "#2b2b28", dim: "#6b6860", muted: "#949086", accent: "#7d9cd4", popover: "#222220", border: "#33332f" };
-const calls = (el, name) => el.calls.filter((call) => call[0] === name);
-const arg = (el, name) => calls(el, name).at(-1)?.[1];
+  ...await loadMenu(host()),
+}, night);
+const night = CHROME_NIGHT;
+
 const all = (el) => [el, ...el.kids.flatMap(all)];
 const named = (el) => arg(el, "id") ?? el.tag;
 const byTag = (el, tag) => all(el).find((kid) => named(kid) === tag);
@@ -46,8 +46,7 @@ test("+ says what it adds: Add project on Projects, New conversation on Status a
 });
 
 test("Sort is dim at its default order, drawn like the other tools when sorted, and selected while its menu is open", async () => {
-  const { toolbar, tokens } = await kit();
-  const c = tokens(night);
+  const { toolbar, c } = await kit();
   const ink = (o) => arg(sortOf(toolbar("t", c, o)).kids[0], "text_color");
   assert.equal(ink({}), c.dim);
   assert.equal(ink({ sorted: true }), c.muted);
@@ -57,8 +56,7 @@ test("Sort is dim at its default order, drawn like the other tools when sorted, 
 });
 
 test("Sort's menu hangs under it in a row and beside it in a column, and only while it is open", async () => {
-  const { toolbar, tokens, G } = await kit();
-  const c = tokens(night);
+  const { toolbar, G, c } = await kit();
   const pop = (o) => byTag(toolbar("t", c, { sortMenu: () => chain("sort-menu"), ...o }), "t-sort-menu");
   assert.equal(calls(pop({}), "content").length, 0);
   const row = pop({ sortOpen: true });
@@ -73,8 +71,7 @@ test("Sort's menu hangs under it in a row and beside it in a column, and only wh
 });
 
 test("Collapsed, + and Show sidebar head the column and stay 8 apart and Sort and Search fold under a caret that opens on a quiet wash", async () => {
-  const { toolbar, tokens, G, R } = await kit();
-  const c = tokens(night);
+  const { toolbar, G, R, c } = await kit();
   const shut = toolbar("t", c, { column: true });
   assert.deepEqual(tags(shut), ["t-add", "t-sidebar", "t-group"]);
   assert.equal(arg(shut, "gap"), G.sm);
@@ -114,8 +111,7 @@ test("The Header holds the Toolbar 40 tall with 8 at its sides; collapsed, it ce
 });
 
 test("A Menu heading item is drawn like its title, so the Sort menu can name its orders and what it shows", async () => {
-  const { menu, tokens } = await kit();
-  const c = tokens(night);
+  const { menu, c } = await kit();
   const el = menu("m", { items: [{ heading: "Agents, pinned first, then by" }, { label: "Last update", icon: "check" }, { separator: true }, { heading: "Show" }] }, c);
   assert.equal(arg(el.kids[0], "child"), "Agents, pinned first, then by");
   assert.equal(arg(el.kids[0], "text_color"), c.dim);

@@ -1,9 +1,9 @@
 // Check the Storybook's structure, tokens, public copy, names and icons.
 import assert from "node:assert/strict";
-import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { cpSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import test from "node:test";
+import { inTemporaryDir } from "./helpers.mjs";
 import { expand } from "../scripts/storybook-catalog.mjs";
 import { compositionErrors, lint, storyFiles, structureErrors } from "../scripts/lint-storybook.mjs";
 import { statusOf, statusTags } from "../stories/kit/status.js";
@@ -18,15 +18,19 @@ test("Every page follows the structure lint", () => {
   assert.deepEqual(lint(), []);
 });
 
-test("A composition that draws its own markup fails the lint", () => {
+// The kit's compositions, and the lint's errors with one more line added.
+const compositions = () => {
   const source = read("stories/kit/compositions.js");
-  const added = (line) => compositionErrors(`${source}${line}\n`);
+  return { source, added: (line) => compositionErrors(`${source}${line}\n`) };
+};
+
+test("A composition that draws its own markup fails the lint", () => {
+  const { source, added } = compositions();
   assert.deepEqual(compositionErrors(source), []);
   assert.deepEqual(added("export const extra = () => stack({ variant: 'rows' }).replace('div', '<div>');"), ["stories/kit/compositions.js: markup tag in a composition"]);
   assert.deepEqual(added("export const extra = () => stack({ variant: 'rows' }).replace('div', 'div class=x');"), ["stories/kit/compositions.js: class attribute in a composition"]);
   assert.deepEqual(added("export const extra = () => 'kanso-row';"), ["stories/kit/compositions.js: class string in a composition"]);
-  const root = mkdtempSync(join(tmpdir(), "kanso-lint-"));
-  try {
+  inTemporaryDir("kanso-lint-", (root) => {
     for (const dir of ["stories", ".storybook"]) cpSync(dir, join(root, dir), { recursive: true });
     writeFileSync(join(root, "stories/kit/compositions.js"), `${source}export const extra = () => '<span class="kanso-row">';\n`);
     assert.deepEqual(lint(root).filter((error) => error.startsWith("stories/kit/compositions.js")), [
@@ -34,14 +38,11 @@ test("A composition that draws its own markup fails the lint", () => {
       "stories/kit/compositions.js: class attribute in a composition",
       "stories/kit/compositions.js: class string in a composition",
     ]);
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
+  });
 });
 
 test("A composition that treats pieces as strings fails the lint", () => {
-  const source = read("stories/kit/compositions.js");
-  const added = (line) => compositionErrors(`${source}${line}\n`);
+  const { source, added } = compositions();
   assert.deepEqual(added("export const extra = ({ name }) => row({ name: `Wake ${name}` });"), ["stories/kit/compositions.js: template literal in a composition"]);
   assert.deepEqual(added("export const extra = ({ names }) => names.map((name) => row({ name })).join();"), ["stories/kit/compositions.js: join in a composition"]);
   assert.deepEqual(added("export const extra = ({ open }) => list(row({ name: 'Asleep' }), open ? grow() : '');"), ["stories/kit/compositions.js: empty string as nothing in a composition"]);

@@ -1,8 +1,8 @@
 // Budgets count production paths through their first loading draw.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { databaseTimer, temporary } from "./helpers.mjs";
-import { fixture, firstDraw, PANEL_IDS, loadMod } from "./perf-harness.mjs";
+import { temporary } from "./helpers.mjs";
+import { fixture, firstDraw, PANEL_IDS, loadMod, sidebarOn } from "./perf-harness.mjs";
 
 for (const id of [...PANEL_IDS, "spaces", "tabs", "strip"]) {
   test(`${id} opens and switches projects within the first-draw budget`, async (t) => {
@@ -38,13 +38,7 @@ for (const quiet of ["sleeping", "off"]) {
 
 for (const [working, budget] of [[2, 8], [0, 2]]) test(`sidebar at rest with 10 agents, ${working} working, in 4 projects starts at most ${budget} processes per minute`, async (t) => {
   const dir = await temporary(t), f = fixture({ dir, working });
-  const { Kdb } = await loadMod("kanso-spaces/kdb.js", ["Kdb"], f.host);
-  f.host.Kdb = Kdb;
-  const db = new Kdb(databaseTimer);
-  await db.open();
-  await db.migrate();
-  const { Spaces } = await loadMod("kanso-spaces/main.js", ["Spaces"], f.host);
-  const view = new Spaces();
+  const view = await sidebarOn(f);
   f.state.draw = () => view.render();
   view.init({}, f.cx);
   view.render();

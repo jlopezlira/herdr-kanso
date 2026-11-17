@@ -1,8 +1,8 @@
 // The theme colour `input` draws edges only: fills, guide lines and text use their own tokens.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readdir, readFile } from "node:fs/promises";
-import { join } from "node:path";
+import { readFile } from "node:fs/promises";
+import { jsFiles } from "./helpers.mjs";
 
 const ROOTS = ["kanso/mods", "markdown-panel/mods", "open-with/mods"];
 const USE = /\b(?:t|c|theme)\.input\b/g;
@@ -11,11 +11,6 @@ const OPEN = { ")": "(", "]": "[", "}": "{" };
 const EDGE_CALL = /\bborder_color\($/;
 const EDGE_NAME = /^\s*(?:const\s+)?(?:edge\s*=|border\s*:|input\s*:)/;
 
-async function sources(dir) {
-  const entries = await readdir(dir, { withFileTypes: true }).catch(() => []);
-  const nested = await Promise.all(entries.map((e) => (e.isDirectory() ? sources(join(dir, e.name)) : Promise.resolve(e.name.endsWith(".js") ? [join(dir, e.name)] : []))));
-  return nested.flat();
-}
 
 // The innermost bracket still open before `at`, and where it is.
 const enclosing = (text, at) => {
@@ -53,7 +48,7 @@ test("an edge in the input colour passes, a fill, a guide line or a text colour 
 });
 
 test("no mod uses the input colour as a fill, a guide line or a text colour", async () => {
-  const files = (await Promise.all(ROOTS.map(sources))).flat();
+  const files = (await Promise.all(ROOTS.map(jsFiles))).flat();
   const found = (await Promise.all(files.map(async (f) => inputMisuses(await readFile(f, "utf8")).map((line) => `${f}:${line}`)))).flat();
   assert.deepEqual(found, []);
 });

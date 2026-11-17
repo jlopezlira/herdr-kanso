@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { bareRelease, compareReleases, parseRelease } from "../kanso/mods/kanso-chrome/release.js";
-import { CATEGORIES, CHANGELOG, UNRELEASED, VERSION_FILE, check, compare, installedChangedSince, isCandidate, listTags, nextVersion, notes, parse, parseChangelog, readChangelog, readVersion, stableTags, versionBranch } from "./check-version.mjs";
+import { CATEGORIES, CHANGELOG, UNRELEASED, VERSION_FILE, check, compare, installedChangedSince, isCandidate, listTags, nextVersion, notes, parse, parseChangelog, changelogSections, readReleaseFiles, stableTags, versionBranch } from "./check-version.mjs";
 
 const fail = (message) => ({ action: "fail", message });
 const skip = (message) => ({ action: "skip", message });
@@ -32,8 +32,7 @@ export function activeCandidate(version, tags) {
 }
 
 export function prepareCandidate({ version, changelog, tags, date = new Date().toISOString().slice(0, 10) }) {
-  const { sections, errors } = parseChangelog(changelog);
-  if (errors.length) throw new Error(errors.join("; "));
+  const sections = changelogSections(changelog);
   const pending = sections.find((s) => s.version === UNRELEASED);
   const current = activeCandidate(version, tags);
   const computed = nextVersion(changelog, tags);
@@ -85,12 +84,13 @@ export function planRelease({ kind, branch, version, changelog, tags, installedC
   }
 }
 
+export const REPORT_LINE = "Report a problem: https://github.com/jlopezlira/herdr-kanso/issues/new?template=bug.yml";
+
 export function releaseNotes({ kind, version, changelog }) {
   const section = parseChangelog(changelog).sections.find((s) => s.version === (kind === "beta" ? UNRELEASED : version));
   if (!section) return null;
   if (kind === "stable") return section.body;
-  const footer = "Report a problem: https://github.com/jlopezlira/herdr-kanso/issues/new?template=bug.yml";
-  if (kind === "beta") return `${section.body}\n\n${footer}`;
+  if (kind === "beta") return `${section.body}\n\n${REPORT_LINE}`;
   let upgrade = false;
   const changes = section.body.split("\n").filter((line) => {
     if (line.startsWith("### ")) upgrade = line.slice(4).trim() === "Upgrade";
@@ -101,7 +101,7 @@ export function releaseNotes({ kind, version, changelog }) {
     ["## Changes", changes].filter(Boolean).join("\n\n"),
   ];
   if (section.categories.Upgrade) parts.push(`## Before you update\n\n${section.categories.Upgrade.map((entry) => `- ${entry}`).join("\n")}`);
-  return [...parts, footer].join("\n\n");
+  return [...parts, REPORT_LINE].join("\n\n");
 }
 
 function writeOutputs(pairs) {
@@ -116,20 +116,16 @@ function main() {
     console.error("usage: node scripts/release-plan.mjs stable|beta|rc");
     process.exit(1);
   }
-  let version, changelog;
-  try { version = readVersion(); }
-  catch (e) { console.error(`error: ${VERSION_FILE} could not be read: ${e.message}`); process.exit(1); }
-  try { changelog = readChangelog(); }
-  catch (e) { console.error(`error: ${CHANGELOG} could not be read: ${e.message}`); process.exit(1); }
+  const read = readReleaseFiles();
   const tags = listTags();
   const branch = versionBranch();
-  const errors = check({ version, changelog, tags, installedChangedSince, branch });
+  const errors = check({ ...read, tags, installedChangedSince, branch });
   if (errors.length) {
     for (const error of errors) console.error(`error: ${error}`);
     process.exit(1);
   }
   const changedSince = kind === "beta" ? (tag) => installedChangedSince(tag, { ignoreVersion: true }) : installedChangedSince;
-  const plan = planRelease({ kind, branch, version, changelog, tags, installedChangedSince: changedSince });
+  const plan = planRelease({ kind, branch, ...read, tags, installedChangedSince: changedSince });
   if (plan.action === "fail") {
     console.error(`error: ${plan.message}`);
     process.exit(1);
@@ -139,17 +135,13 @@ function main() {
     writeOutputs([["action", "skip"]]);
     return;
   }
-  if (kind === "rc") {
-    const candidate = prepareCandidate({ version, changelog, tags });
-    if (process.argv.includes("--prepare")) {
-      if (candidate.changelog !== changelog) writeFileSync(CHANGELOG, candidate.changelog);
-      if (candidate.version !== version) {
-        const data = JSON.parse(readFileSync(VERSION_FILE, "utf8"));
-        writeFileSync(VERSION_FILE, `${JSON.stringify({ ...data, version: candidate.version }, null, 2)}\n`);
-      }
+  const { version, changelog } = kind === "rc" ? prepareCandidate({ ...read, tags }) : read;
+  if (kind === "rc" && process.argv.includes("--prepare")) {
+    if (changelog !== read.changelog) writeFileSync(CHANGELOG, changelog);
+    if (version !== read.version) {
+      const data = JSON.parse(readFileSync(VERSION_FILE, "utf8"));
+      writeFileSync(VERSION_FILE, `${JSON.stringify({ ...data, version }, null, 2)}\n`);
     }
-    version = candidate.version;
-    changelog = candidate.changelog;
   }
   const body = releaseNotes({ kind, version, changelog });
   if (body === null) {

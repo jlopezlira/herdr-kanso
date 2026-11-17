@@ -7,6 +7,7 @@
 import { cp, mkdir, readdir, readFile, rm } from "node:fs/promises";
 import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
+import { CHECK, isMain } from "./cli.mjs";
 
 export const ROOT = fileURLToPath(new URL("..", import.meta.url));
 export const STANDALONE = ["open-with"];
@@ -40,13 +41,12 @@ export async function differences(mod) {
   return out;
 }
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const check = process.argv.includes("--check");
+if (isMain(import.meta.url)) {
   let stale = 0;
   for (const mod of STANDALONE) {
     const diff = await differences(mod);
     if (!diff.length) continue;
-    if (check) {
+    if (CHECK) {
       console.error(`${mod}/mods/${mod} is out of date (run npm run sync:mods):\n  ${diff.join("\n  ")}`);
       stale += 1;
       continue;

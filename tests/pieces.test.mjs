@@ -1,10 +1,11 @@
 // The piece registry: one list, one read, and a hidden piece issues no command.
+import { loadSpaces, loadStrip, loadTabPanels, loadSimulatorTools, loadSimulator, loadUpdater } from "./mod-fixtures.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { load } from "./helpers.mjs";
+import { load, failure, success, storeShared, context } from "./helpers.mjs";
 import {
   PIECES, GROUPS, STATE_LABEL, STORE, MIGRATED, pieceOf, choice, shown, runs, setPiece,
   migratePieces, loadPieces, pieces, filterPieces, groupsOf, withRoster,
@@ -169,26 +170,26 @@ test("every shown or runs id is in the registry, and every registry id is read",
 
 const TERM = { address: "t1", state: "live", status: "working", pid: 50, foreground: { pid: 101 } };
 
+const NO_ACTIVITY = { "sidebar.activity": "hide", "sidebar.tasks": "hide" };
+// Pieces stored as `map`, and the commands a view starts.
+const piecesStore = (map) => ({ store: { [MIGRATED]: true, [STORE]: map }, cmds: [] });
+
 async function sidebar(map) {
-  const store = { [MIGRATED]: true, [STORE]: map };
-  const cmds = [];
-  const { Spaces } = await load("kanso-spaces/main.js", ["Spaces"], {
-    shared: (key) => store[key] ?? null,
-    setShared: (key, value) => { store[key] = value; },
+  const { store, cmds } = piecesStore(map);
+  const { Spaces } = await loadSpaces({
+    ...storeShared(store, null),
     window: () => ({ active: true, platform: "macos" }),
     terminals: () => [TERM],
     spaces: () => [], panes: () => [], agents: () => [], machines: () => [],
     home: () => "/tmp",
-    exec: async (cmd) => { cmds.push(cmd); return { code: 1, stdout: "", stderr: "" }; },
-    hc: async () => { cmds.push("hc"); return { code: 0, stdout: "[]", stderr: "" }; },
+    exec: async (cmd) => { cmds.push(cmd); return failure(""); },
+    hc: async () => { cmds.push("hc"); return success("[]"); },
   });
-  const pending = [];
-  const cx = { notify() {}, spawn(fn) { const task = fn(cx); pending.push(task); return task; } };
+  const { cx, drain: flush } = context();
   const view = Object.assign(new Spaces(), {
     tasks: {}, threads: {}, psLook: null, pending: new Set(), refreshing: false, git: {}, checked: {},
     unsure: new Set(), watching: new Set(), machines: [], parked: [], waking: new Set(), login: new Set(), failed: new Set(),
   });
-  const flush = async () => { while (pending.length) await pending.shift(); };
   const ask = async (map) => {
     cmds.length = 0;
     store[STORE] = map;
@@ -205,13 +206,13 @@ test("sidebar.activity hidden issues no ps when tasks are hidden too", async () 
   const { ask } = await sidebar({});
   assert.ok(await ask({}) > 0, "both shown: ps runs");
   assert.ok(await ask({ "sidebar.activity": "hide" }) > 0, "tasks still asks for the table");
-  assert.equal(await ask({ "sidebar.activity": "hide", "sidebar.tasks": "hide" }), 0);
+  assert.equal(await ask(NO_ACTIVITY), 0);
 });
 
 test("sidebar.tasks hidden issues no ps when activity is hidden too", async () => {
   const { ask } = await sidebar({});
   assert.ok(await ask({ "sidebar.tasks": "hide" }) > 0, "activity still asks for the table");
-  assert.equal(await ask({ "sidebar.activity": "hide", "sidebar.tasks": "hide" }), 0);
+  assert.equal(await ask(NO_ACTIVITY), 0);
 });
 
 test("sidebar.git hidden issues no git status", async () => {
@@ -250,13 +251,11 @@ test("sidebar.computers hidden does not list computers", async () => {
 });
 
 async function digestCmds(map) {
-  const store = { [MIGRATED]: true, [STORE]: map };
-  const cmds = [];
-  const { Strip } = await load("kanso-strip/main.js", ["Strip"], {
-    shared: (key) => store[key] ?? null,
-    setShared: (key, value) => { store[key] = value; },
+  const { store, cmds } = piecesStore(map);
+  const { Strip } = await loadStrip({
+    ...storeShared(store, null),
     spaces: () => [], panes: () => [],
-    exec: async (cmd) => { cmds.push(cmd); return { code: 1, stdout: "", stderr: "" }; },
+    exec: async (cmd) => { cmds.push(cmd); return failure(""); },
   });
   const view = Object.assign(new Strip(), { digesting: new Set() });
   const pending = [];
@@ -278,11 +277,10 @@ test("header.pr hidden issues no gh command", async () => {
 });
 
 test("a hidden panel is not mounted", async () => {
-  const { TOOLS } = await load("kanso-sim/registration.js", ["TOOLS"]);
+  const { TOOLS } = await loadSimulatorTools();
   const store = { [MIGRATED]: true, [STORE]: {}, [TOOLS]: { ios: true } };
   const { panelList } = await load("kanso-tabs/main.js", ["panelList"], {
-    shared: (key) => store[key],
-    setShared: (key, value) => { store[key] = value; },
+    ...storeShared(store),
   });
   for (const row of PIECES.filter((piece) => piece.id.startsWith("panel."))) {
     store[STORE] = { [row.id]: "hide" };
@@ -295,14 +293,12 @@ test("a hidden panel is not mounted", async () => {
 });
 
 test("panel.sim hidden issues no probe and no frame", async () => {
-  const { TOOLS } = await load("kanso-sim/registration.js", ["TOOLS"]);
+  const { TOOLS } = await loadSimulatorTools();
   const store = { [MIGRATED]: true, [STORE]: { "panel.sim": "hide" }, [TOOLS]: { ios: "/simctl" } };
   const commands = [];
-  const pending = [];
   const host = {
-    shared: (key) => store[key] ?? null,
-    setShared: (key, value) => { store[key] = value; },
-    exec: async (cmd) => { commands.push(cmd); return { code: 0, stdout: "", stderr: "" }; },
+    ...storeShared(store, null),
+    exec: async (cmd) => { commands.push(cmd); return success(""); },
     home: () => "/home/me",
     appHome: () => "/app",
     window: () => ({ platform: "macos", active: true }),
@@ -312,14 +308,13 @@ test("panel.sim hidden issues no probe and no frame", async () => {
     exists: async () => false,
     InputState: { new: () => ({ on() {}, value: () => "", release() {} }) },
   };
-  const cx = {
-    notify() {},
-    focus_handle: () => ({ focus() {}, release() {} }),
-    timer: { after() { return { cancel() {} }; } },
-    spawn(fn) { const task = fn(cx); pending.push(task); return task; },
+  const { cx, drain } = context();
+  Object.assign(cx, { focus_handle: () => ({ focus() {}, release() {} }), timer: { after() { return { cancel() {} }; } } });
+  const hideSim = () => {
+    commands.length = 0;
+    store[STORE] = { "panel.sim": "hide" };
   };
-  const drain = async () => { while (pending.length) await pending.shift(); };
-  const { Tabs, panelList } = await load("kanso-tabs/main.js", ["Tabs", "panelList"], host);
+  const { Tabs, panelList } = await loadTabPanels(host);
   assert.equal(panelList().find((item) => item.id === "sim").on, false);
   const tabs = new Tabs();
   tabs.probeSimulator(cx);
@@ -329,8 +324,7 @@ test("panel.sim hidden issues no probe and no frame", async () => {
   tabs.probeSimulator(cx);
   await drain();
   assert.ok(commands.includes("xcode-select"), "shown: the probe runs");
-  commands.length = 0;
-  store[STORE] = { "panel.sim": "hide" };
+  hideSim();
   tabs.probeSimulator(cx);
   await drain();
   assert.equal(commands.length, 0, "hidden again: no probe");
@@ -338,7 +332,7 @@ test("panel.sim hidden issues no probe and no frame", async () => {
   assert.equal(panelList().some((item) => item.id === "sim"), false, "no tools: not listed");
   store[TOOLS] = { adb: "adb" };
   store[STORE] = {};
-  const { Simulator } = await load("kanso-sim/main.js", ["Simulator"], host);
+  const { Simulator } = await loadSimulator(host);
   const view = new Simulator();
   view.init({}, cx);
   view.devices = [{ id: "android:usb", platform: "android", state: "Booted", target: "usb" }];
@@ -346,8 +340,7 @@ test("panel.sim hidden issues no probe and no frame", async () => {
   view.tick(cx);
   await drain();
   assert.ok(commands.length > 0, "shown: the open panel reads the device");
-  commands.length = 0;
-  store[STORE] = { "panel.sim": "hide" };
+  hideSim();
   view.tick(cx);
   await drain();
   assert.equal(commands.length, 0, "hidden: no frame");
@@ -356,17 +349,16 @@ test("panel.sim hidden issues no probe and no frame", async () => {
 test("update.check hidden does not poll, and Check still looks", async () => {
   const store = { [MIGRATED]: true, [STORE]: { "update.check": "hide" }, "kanso.update": { autoCheck: true } };
   let asked = 0;
-  const { Updater } = await load("kanso-chrome/update.js", ["Updater"], {
+  const { Updater } = await loadUpdater({
     appHome: () => "/nowhere",
-    shared: (key) => store[key],
-    setShared: (key, value) => { store[key] = value; },
+    ...storeShared(store),
     notify() {},
     readTextFile: async () => '{ "version": "1.3.1" }',
     layout: () => null,
     run: () => null,
     exec: async (command) => {
       if (command === "git") asked += 1;
-      return { code: 0, stdout: command === "git" ? "x\trefs/tags/v1.4.0\n" : "", stderr: "" };
+      return success(command === "git" ? "x\trefs/tags/v1.4.0\n" : "");
     },
   });
   const pending = [];
