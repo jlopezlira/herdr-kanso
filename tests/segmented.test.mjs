@@ -51,11 +51,11 @@ test("Selection is a tone: on its track the chosen tab is raised in the text col
   }
 });
 
-test("Without a track the chosen tab is the w7 wash, the group has no ground, and each tab is the size high", async () => {
+test("Without a track the chosen tab is the w12 wash, the group has no ground, and each tab is the size high", async () => {
   const { tab, H, c } = await kit();
   const el = tab("t", ITEMS, "day", () => {}, c, { track: false, size: "sm" });
   for (const name of ["bg", "p", "h", "rounded"]) assert.equal(calls(el, name).length, 0, name);
-  assert.equal(one(el.kids[0], "bg"), c.w7);
+  assert.equal(one(el.kids[0], "bg"), c.w12);
   for (const item of el.kids) {
     assert.equal(one(item, "h"), H.compact);
     assert.equal(calls(item, "flex_1").length, 0, "tabs size to their label");

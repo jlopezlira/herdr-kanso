@@ -504,7 +504,7 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
 
 ## Built from
 
-- **Layout tree** (`layouts/kanso.json`), root `row`, `titlebar: "none"`,
+- **Layout tree** (`layouts/kanso.json`, its sizes written from the layout tokens by `npm run build:ui-tokens`), root `row`, `titlebar: "none"`,
   `traffic_lights: [12, 16]`, `resizable: true`, `terminal_menu: "kanso-menu"`:
   - `sidebar` (column, `chrome`, 256 px, min 200, max 480):
     - `brand`: block `kanso-chrome` (Herdr's mark), 48 px, `window_drag`.
