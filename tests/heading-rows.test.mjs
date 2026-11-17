@@ -2,7 +2,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { load, nodes, texts, themed, KIT_NIGHT, drawingHost, drawn, clone } from "./helpers.mjs";
+import { load, nodes, texts, tipsOf, themed, KIT_NIGHT, drawingHost, drawn, clone } from "./helpers.mjs";
 import { loadSidebar, mountedState, recorder } from "./sidebar-fixtures.mjs";
 
 const FILES = ["project-row", "computer-row", "section", "asleep"];
@@ -15,7 +15,6 @@ const compositions = async () => themed({
   ...await load("kanso-panel/ui.js", ["tokens"], drawingHost()),
   kit: await load("kanso-panel/kit.js", ["row", "list", "phrase"], drawingHost()),
 }, KIT_NIGHT);
-const tips = (el) => nodes(el).flatMap((kid) => kid.calls.filter((call) => call[0] === "tooltip").map((call) => call[1]));
 const cx = { stop_propagation() {}, notify() {}, timer: { after() {} } };
 
 test("The sidebar's copies of the project, computer, section and asleep rows are the Storybook's, byte for byte", () => {
@@ -40,7 +39,7 @@ test("Each composition is the kit row with its own props: the app draws what a h
 
 test("A computer row shows its Storybook state: Turn on when off, Refresh when unreachable, Sign in for a login, and its tools only when on", async () => {
   const { computerRow, c } = await compositions();
-  const shown = (props) => tips(computerRow({ name: "dark", ...props })("m", c));
+  const shown = (props) => tipsOf(computerRow({ name: "dark", ...props })("m", c));
   assert.deepEqual(shown({ state: "off" }), ["Turn dark on"]);
   assert.deepEqual(shown({ state: "unreachable", tip: "ssh timed out" }), ["ssh timed out", "Refresh"]);
   assert.deepEqual(shown({ state: "login" }), ["Sign in"]);
@@ -48,7 +47,7 @@ test("A computer row shows its Storybook state: Turn on when off, Refresh when u
   assert.deepEqual(shown({ state: "on", hover: true }), ["Turn off", "New project on dark", "Sync"]);
   assert.deepEqual(shown({ state: "on", sync: "Sync dark: synced 2 min ago" }), ["Sync dark: synced 2 min ago"], "Sync on stays out");
   assert.deepEqual(shown({ state: "on", hover: true, pending: true }), [], "turning on, its tools wait");
-  assert.deepEqual(tips(computerRow({ name: "This computer", remote: false, hover: true })("m", c)), ["New project on This computer"], "this computer: + alone");
+  assert.deepEqual(tipsOf(computerRow({ name: "This computer", remote: false, hover: true })("m", c)), ["New project on This computer"], "this computer: + alone");
 });
 
 test("A detail fact with a label is a press wired by that label; the kit refuses a handler with no tool", async () => {
@@ -59,7 +58,7 @@ test("A detail fact with a label is a press wired by that label; the kit refuses
   });
   for (const id of ["space-app-detail-1", "space-app-detail-2"]) nodes(el).find((kid) => kid.tag === id).calls.find((call) => call[0] === "on_click").at(-1)({}, cx);
   assert.deepEqual(hits, ["ahead", "pull"]);
-  assert.deepEqual(tips(el).filter((tip) => tip.startsWith("Pull") || tip.includes("GitHub")), ["2 commits not on GitHub", "Pull 3"]);
+  assert.deepEqual(tipsOf(el).filter((tip) => tip.startsWith("Pull") || tip.includes("GitHub")), ["2 commits not on GitHub", "Pull 3"]);
   assert.throws(() => projectRow({ name: "app" })("space-app", c, { on: { Pull: () => {} } }), /has no tool Pull/);
 });
 
@@ -104,10 +103,10 @@ test("A section folds on a press, and a project's conversations offer + under th
   const { section, c } = await compositions();
   const added = [];
   const head = section({ title: "app", add: "New conversation in app", hover: true })("thread-app", c, { on: { plus: () => added.push("plus") } });
-  assert.deepEqual(tips(head), ["New conversation in app"]);
+  assert.deepEqual(tipsOf(head), ["New conversation in app"]);
   nodes(head).find((kid) => kid.tag === "thread-app-tool-0").calls.find((call) => call[0] === "on_click").at(-1)({}, cx);
   assert.deepEqual(added, ["plus"]);
-  assert.deepEqual(tips(section({ title: "app", add: "New conversation in app" })("thread-app", c, { on: { plus: () => {} } })), [], "at rest, no +");
+  assert.deepEqual(tipsOf(section({ title: "app", add: "New conversation in app" })("thread-app", c, { on: { plus: () => {} } })), [], "at rest, no +");
   const agents = [{ address: "t1", pane: "p1", tab: "tab1", space: "sp1", space_name: "app", status: "idle", program: { agent: true }, title: "t1", seq: 1 }];
   const d = await sidebar({ view: "agents", agents });
   const fold = Object.keys(d.handlers).find((key) => key.startsWith("on_click:section-"));

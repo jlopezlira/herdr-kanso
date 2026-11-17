@@ -334,6 +334,7 @@ export function chain(tag) {
 // A chain drawing's every element, its words, and a press on the tool with that id.
 export const nodes = (el) => [el, ...el.kids.flatMap(nodes)];
 export const svgsOf = (el) => nodes(el).flatMap((kid) => kid.calls.filter((call) => call[0] === "svg").map((call) => call[1]));
+export const tipsOf = (el) => nodes(el).flatMap((kid) => kid.calls.filter((call) => call[0] === "tooltip").map((call) => call[1]));
 export const texts = (el) => nodes(el).flatMap((kid) => kid.calls.filter((call) => call[0] === "child" && typeof call[1] === "string").map((call) => call[1]));
 export const press = (el, id) => {
   const tool = nodes(el).find((kid) => kid.tag === id);
