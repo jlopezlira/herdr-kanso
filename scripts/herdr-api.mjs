@@ -47,16 +47,6 @@ export function skipString(text, i) {
   return i;
 }
 
-function skipTemplate(text, i) {
-  i++;
-  while (i < text.length) {
-    if (text[i] === "\\") { i += 2; continue; }
-    if (text[i] === "`") return i + 1;
-    i++;
-  }
-  return i;
-}
-
 function skipGap(text, i) {
   while (i < text.length) {
     if (/\s/.test(text[i])) { i++; continue; }
@@ -67,23 +57,33 @@ function skipGap(text, i) {
   return i;
 }
 
-function skipLiteral(text, i) {
-  const ch = text[i];
-  if (ch === "'" || ch === '"') return skipString(text, i);
-  if (ch === "`") return skipTemplate(text, i);
-  return i;
+// A string or template literal is skipped whole; skipString reads its closing quote from its opening one.
+const skipLiteral = (text, i) => ("'\"`".includes(text[i]) ? skipString(text, i) : i);
+
+// The index of the next character of code from i, past spaces, comments and literals.
+function nextCode(text, i) {
+  for (;;) {
+    i = skipGap(text, i);
+    const skipped = skipLiteral(text, i);
+    if (skipped === i) return i;
+    i = skipped;
+  }
+}
+
+// The name a declaration of one of these kinds at j gives, and where it ends; undefined when j starts none of them.
+function declaredName(text, j, kinds) {
+  const kind = kinds.find((word) => keyword(text, j, word));
+  if (!kind) return undefined;
+  const at = skipGap(text, j + kind.length);
+  const name = readIdent(text, at);
+  return name ? { name, next: at + name.length } : { next: at };
 }
 
 function matchBrace(text, open) {
-  let depth = 0, i = open;
-  while (i < text.length) {
-    i = skipGap(text, i);
-    if (i >= text.length) break;
-    const skipped = skipLiteral(text, i);
-    if (skipped !== i) { i = skipped; continue; }
-    if (text[i] === "{") { depth++; i++; continue; }
-    if (text[i] === "}") { depth--; if (depth === 0) return i; i++; continue; }
-    i++;
+  let depth = 0;
+  for (let i = nextCode(text, open); i < text.length; i = nextCode(text, i + 1)) {
+    if (text[i] === "{") depth++;
+    if (text[i] === "}" && --depth === 0) return i;
   }
   return text.length;
 }
@@ -105,22 +105,12 @@ function readExport(text, i) {
   if (keyword(text, j, "abstract")) j = skipGap(text, j + "abstract".length);
   if (keyword(text, j, "async")) j = skipGap(text, j + "async".length);
   if (keyword(text, j, "declare")) j = skipGap(text, j + "declare".length);
-  for (const kind of ["function", "class", "const", "let", "var", "enum"]) {
-    if (!keyword(text, j, kind)) continue;
-    j = skipGap(text, j + kind.length);
-    const name = readIdent(text, j);
-    return name ? { name, next: j + name.length } : { next: j };
-  }
-  return { next: j + 1 };
+  return declaredName(text, j, ["function", "class", "const", "let", "var", "enum"]) ?? { next: j + 1 };
 }
 
 function walk(text, atTop) {
-  let i = 0, depth = 0;
-  while (i < text.length) {
-    i = skipGap(text, i);
-    if (i >= text.length) break;
-    const skipped = skipLiteral(text, i);
-    if (skipped !== i) { i = skipped; continue; }
+  let depth = 0;
+  for (let i = nextCode(text, 0); i < text.length; i = nextCode(text, i)) {
     if (text[i] === "{") { depth++; i++; continue; }
     if (text[i] === "}") { depth = Math.max(0, depth - 1); i++; continue; }
     if (depth === 0) {
@@ -159,13 +149,8 @@ function readModule(text, i) {
 function readGlobal(text, i) {
   let j = skipGap(text, i + "declare".length);
   if (keyword(text, j, "module") || keyword(text, j, "global") || keyword(text, j, "namespace") || keyword(text, j, "type") || keyword(text, j, "interface")) return null;
-  for (const kind of ["function", "const", "var", "class", "let"]) {
-    if (!keyword(text, j, kind)) continue;
-    j = skipGap(text, j + kind.length);
-    const name = readIdent(text, j);
-    return name ? { name, next: j + name.length } : null;
-  }
-  return null;
+  const found = declaredName(text, j, ["function", "const", "var", "class", "let"]);
+  return found?.name ? found : null;
 }
 
 function scanFile(text) {

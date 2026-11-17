@@ -4,11 +4,12 @@ import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSy
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
+import { REPORT_LINE } from "../scripts/release-plan.mjs";
 
 const project = fileURLToPath(new URL("../", import.meta.url));
 const versionFile = "kanso/mods/kanso-chrome/version.json";
 const stable = "## [1.1.0] - 2026-11-01\n\n### Added\n\n- Stable.\n";
-const footer = "Report a problem: https://github.com/jlopezlira/herdr-kanso/issues/new?template=bug.yml";
+const footer = REPORT_LINE;
 const rcIntro = "Release candidate for 1.2.0. It becomes 1.2.0 stable if nothing blocks it.";
 const pending = "### Added\n\n- Feature.\n\n  Detail kept in release notes.";
 
