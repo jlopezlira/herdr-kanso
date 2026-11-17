@@ -5,6 +5,7 @@ import { div, svg } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 import { run, openOverlay } from "herdr";
 import { programIcon, NAME_LABEL, onBattery } from "./marks.js";
+import { tellsSomething } from "./pure.js";
 import { parseProcesses, etimeMs } from "./procs.js";
 import { oneLine } from "./since-left-model.js";
 import { activityTone, foldTail, timePlace } from "./sidebar-rows.js";
@@ -102,10 +103,8 @@ export function agentLabel(a) {
 
 // A title that is just a path, a user@host prompt or the program's name tells nothing.
 export function liveTitle(a) {
-  const live = clean(a.title), raw = (a.title ?? "").trim();
-  const telling = live && !/^[~/]|^[A-Za-z]:\\/.test(raw) && !/^[~/]|^[A-Za-z]:\\/.test(live) && !live.includes("@")
-    && live.toLowerCase() !== a.program?.key && live !== a.program?.name;
-  return telling ? live : null;
+  const live = clean(a.title);
+  return tellsSomething(live, (a.title ?? "").trim(), a.program) ? live : null;
 }
 
 export function duration(ms) {
@@ -320,15 +319,18 @@ export function withTerminals(list, ps, ss) {
 
 export const mostUrgent = (list) => list.reduce((m, a) => ((RANK[a.status] ?? 0) > (RANK[m] ?? 0) ? a.status : m), null);
 
+// A small tool on a row: it lights under the pointer and keeps its press from the row below.
+export const rowTool = (el, t) => el
+  .hover((s) => s.bg(t.hover).text_color(t.foreground))
+  .on_mouse_down("left", (_e, cx) => cx.stop_propagation());
+
 // Open, nothing: the row itself folds. Folded, the most urgent mark and how many; a click unfolds.
 export function agentFold(id, mine, open, onToggle, t, c) {
   const tail = foldTail(open, mine.map((a) => a.status));
   if (!tail) return null;
-  return h_flex().id(`agents-fold-${id}`).flex_none().h(20).px(3).gap(4).items_center().rounded(6)
-    .text_size(11.5).text_color(t.dim).cursor_pointer()
-    .hover((s) => s.bg(t.hover).text_color(t.foreground))
-    // The row selects on mouse up and drags on mouse down: keep both to the toggle.
-    .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
+  // The row selects on mouse up and drags on mouse down: keep both to the toggle.
+  return rowTool(h_flex().id(`agents-fold-${id}`).flex_none().h(20).px(3).gap(4).items_center().rounded(6)
+    .text_size(11.5).text_color(t.dim).cursor_pointer(), t)
     .on_mouse_up("left", (_e, cx) => { cx.stop_propagation(); onToggle(cx); })
     .when(Boolean(tail.mark), (el) => el.child(mark(c, { status: tail.mark, size: "sm" })))
     .child(div().child(String(tail.count)));
@@ -350,9 +352,10 @@ function guide(l, h, t, reach) {
 const GLINT = [[44, 0.35], [26, 0.6], [12, 1]];
 const REACH = 240; // past the longest title the row can show
 function shimmer(text, t, address) {
+  const dots = () => div().w(16).flex_none().text_color(t.muted).frames(["", ".", "..", "..."], 380);
   if (onBattery()) return h_flex().flex_1().min_w(0).items_center()
     .child(div().min_w(0).flex_shrink(1).truncate().text_color(t.foreground).child(text))
-    .child(div().w(16).flex_none().text_color(t.muted).frames(["", ".", "..", "..."], 380));
+    .child(dots());
   const pace = 2200 + ([...address].reduce((n, c) => n + c.charCodeAt(0), 0) % 7) * 160;
   const lit = ([w, strength]) => div().absolute().top(0).bottom(0).w(w).overflow_hidden().opacity(strength)
     .loop("left", { from: -w, to: REACH, period: pace, easing: "linear" })
@@ -362,7 +365,7 @@ function shimmer(text, t, address) {
     .child(div().relative().min_w(0).flex_shrink(1).overflow_hidden()
       .child(div().truncate().text_color(t.muted).child(text))
       .children(GLINT.map(lit)))
-    .child(div().w(16).flex_none().text_color(t.muted).frames(["", ".", "..", "..."], 380));
+    .child(dots());
 }
 
 // `more.steady` keeps the second line even with nothing to say, so the list never jumps.
@@ -388,10 +391,8 @@ export function agentRow(a, indent, t, c, row, more = {}) {
   // The program's icon leads; a terminal or an unknown program takes the terminal's.
   const lead = (pic ?? svg("mods/kanso-chrome/icons/terminal.svg").size(a.sub ? 13 : 15).flex_none().text_color(t.muted))
     .opacity(zz ? 0.45 : a.focused || live ? 1 : 0.75);
-  const iconTool = (id, icon, tip, act, size = 12) => div().id(id).size(20).flex_none().rounded(6)
-    .flex().items_center().justify_center().text_color(t.muted).tooltip(tip)
-    .hover((s) => s.bg(t.hover).text_color(t.foreground))
-    .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
+  const iconTool = (id, icon, tip, act, size = 12) => rowTool(div().id(id).size(20).flex_none().rounded(6)
+    .flex().items_center().justify_center().text_color(t.muted).tooltip(tip), t)
     .on_click((_e, cx) => { cx.stop_propagation(); act(cx); })
     .child(svg(`mods/kanso-chrome/icons/${icon}.svg`).size(size));
   const top = h_flex().h(two ? 22 : h).gap(8).items_center()

@@ -12,7 +12,8 @@ import { div, image } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import { appHome, home } from "herdr";
 import { parseOr } from "./pure.js";
-import { hachi, hachiPixels, hachiInk } from "./mascot.js";
+import { hachi, hachiInk } from "./mascot.js";
+import { hachiPixels } from "./mascot-pixels.js";
 import { Store } from "./store.js";
 
 export const SITE = "https://codex-pets.net";

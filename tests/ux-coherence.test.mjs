@@ -13,6 +13,8 @@ import { describe } from "../kanso/mods/kanso-help/keymap.js";
 const root = fileURLToPath(new URL("../", import.meta.url));
 const text = (path) => readFile(join(root, path), "utf8");
 
+const MOD_ROOTS = ["kanso/mods", "open-with/mods", "markdown-panel/mods"];
+
 test("Spend opens on today, and a chosen period is the one it accepts next time", () => {
   assert.equal(spendPeriod(undefined), "day");
   assert.equal(spendPeriod("nope"), "day");
@@ -116,7 +118,7 @@ test("armed ink comes from the kit token", async () => {
 });
 
 test("one armed wording: only the kit says Press again, and only as Press again to <verb>", async () => {
-  const dirs = ["kanso/mods", "open-with/mods", "markdown-panel/mods"].map((dir) => join(root, dir));
+  const dirs = MOD_ROOTS.map((dir) => join(root, dir));
   const all = async (dir) => (await readdir(dir, { recursive: true })).filter((name) => /\.m?js$/.test(name)).map((name) => join(dir, name));
   const files = (await Promise.all(dirs.map(all))).flat().filter((file) => !/[\\/]ui-button\.js$/.test(file));
   const found = [];
@@ -292,7 +294,7 @@ test("a comment beside a regular expression is not text a person reads", () => {
 });
 
 test("retired words stay out of the words a person reads", async () => {
-  const dirs = ["kanso/mods", "open-with/mods", "markdown-panel/mods"].map((dir) => join(root, dir));
+  const dirs = MOD_ROOTS.map((dir) => join(root, dir));
   const files = (await Promise.all(dirs.map((dir) => sources(dir)))).flat();
   const found = [];
   for (const file of files) {

@@ -3,11 +3,10 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { load, gpuiHost as host } from "./helpers.mjs";
-import { ROOT, loadTokens, colour, contrast } from "../scripts/tokens.mjs";
+import { ROOT, loadTokens, colour, contrast, THEME_FILES as THEMES } from "../scripts/tokens.mjs";
 
 const kit = () => load("kanso-panel/ui.js", ["tokens", "washes", "WASHES"], host());
 const tokens = loadTokens();
-const THEMES = { dark: "kanso/themes/kanso.json", light: "kanso/themes/kanso-day.json" };
 const NAMES = ["w4", "w7", "w12", "w14"];
 const share = (theme, name) => Number(/var\(--fg\) ([\d.]+)%, transparent\)$/.exec(tokens.colour[theme].find((x) => x.name === name).value)[1]) / 100;
 const hex2 = (p) => Math.round(p * 255).toString(16).padStart(2, "0");

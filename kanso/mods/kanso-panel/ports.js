@@ -1,3 +1,4 @@
+import { sizedPage, pageBones, heroStack, heroHeading, metricStats, skeletonBars } from "./ui-page.js";
 import { localService, serviceFor, REMOTE_TIMEOUT } from "./platform-host.js";
 import { paths } from "./platform-paths.js";
 import { processApi } from "./platform-processes.js";
@@ -18,7 +19,7 @@ import { row } from "./ui-row.js";
 import { section } from "./ui-section.js";
 import { ghost } from "./ui-skeleton.js";
 import { segmented } from "./ui-tab.js";
-import { Share } from "./share.js";
+import { Share, shareRows } from "./share.js";
 import { portsSpec, portsText } from "./ports-card.js";
 import { parsePorts, historyOf, RANGES, activeSeries, portStats, historyLists, size, clock } from "./ports-model.js";
 import { portsMemory } from "./panel-state.js";
@@ -195,20 +196,21 @@ export class Ports {
     if (this.busy.install && (hist.state === "ok" || now - this.busy.install > BUSY_MS)) this.idle();
   }
 
+  pictureTask(work) { return (cx) => work(cx, this.picture()); }
+
   refresh(cx, { history = false, then = null, now = false } = {}) {
     if (this.front.behind()) { this.front.rest(); return; }
     this.front.woke();
     this.readRemotes(cx, now);
     if (this.reading) { if (then) cx.timer.after(1000, (cx) => this.refresh(cx, { history, then })); return; }
     this.reading = true;
-    cx.spawn(async (cx) => {
-      const before = this.picture();
+    cx.spawn(this.pictureTask(async (cx, before) => {
       try {
         if (history || Date.now() - this.histAt >= HISTORY_MS) await this.readHistory();
         this.list = await this.read(); this.note = this.attribution;
       } catch (e) { this.note = said("Can't read the ports", e?.message ?? e); this.list = this.list ?? []; }
       finally { this.reading = false; then?.(); if (this.picture() !== before) cx.notify(); }
-    });
+    }));
   }
 
   readRemotes(cx, now = false) {
@@ -220,15 +222,14 @@ export class Ports {
       if (r.reading && at - r.reading < LONGEST_MS) continue;
       if (!now && at < r.next) continue;
       this.remote = { ...this.remote, [name]: { ...r, reading: at } };
-      cx.spawn(async (cx) => {
-        const before = this.picture();
+      cx.spawn(this.pictureTask(async (cx, before) => {
         const was = this.remote[name], fails = now ? 0 : was.fails;
         const next = await this.read(name).then(
           (list) => ({ list, why: null, fails: 0, next: Date.now() + REST_MS }),
           (e) => ({ list: null, why: unreadable(e), fails: fails + 1, next: Date.now() + backoffMs(fails + 1) }));
         this.remote = { ...this.remote, [name]: { ...next, said: next.list ? null : this.remote[name]?.said ?? null, reading: 0 } };
         if (this.picture() !== before) cx.notify();
-      });
+      }));
     }
   }
 
@@ -379,16 +380,12 @@ export class Ports {
       st ? { value: String(st.stopped), unit: "stopped by you", tip: st.since ? `Since ${clock(st.since)}` : null } : null,
       st && st.freedMB > 0 ? { value: size(st.freedMB), unit: "given back", tip: st.since ? `Since ${clock(st.since)}` : null } : null,
     ].filter(Boolean);
-    return v_flex().w_full().gap(G.xl)
-      .child(v_flex().gap(G.xs)
+    return heroStack(heroHeading()
         .child(div().text_size(15).text_color(c.muted).child(here ? `Listening on ${machineTitle("", "", here)}` : "Listening on this computer"))
         .child(h_flex().items_end().gap(G.md)
           .child(div().text_size(narrow ? 48 : 64).line_height(1).font_light().text_color(c.text).child(String(list.length)))
           .child(div().pb(narrow ? 6 : 9).text_size(13).text_color(c.dim).child(list.length === 1 ? "server" : "servers"))))
-      .child(h_flex().w_full().flex_wrap().gap_x(narrow ? G.xl : 48).gap_y(G.lg)
-        .children(stats.map((s) => h_flex().items_end().gap(6).when(Boolean(s.tip), (el) => el.tooltip(s.tip))
-          .child(div().text_size(narrow ? 22 : 28).line_height(1).font_light().text_color(s.hot ? c.yellow : c.text).child(s.value))
-          .child(div().pb(3).text_size(12).text_color(c.dim).child(s.unit)))))
+      .child(metricStats(stats, c, narrow))
       .when(loose.length > 0, (el) => el.child(h_flex().gap(G.lg).items_center().flex_wrap()
         .child(this.armed.button("pt-stop-all", `Stop ${loose.length} ${NO_PANE}`, `stop ${loose.length}`, "all", (cx) => this.stop(loose, cx), c))
         .child(div().text_size(12).text_color(c.dim).child("The ones in a pane stay."))));
@@ -483,18 +480,12 @@ export class Ports {
         .child(h_flex().items_end().gap(G.md).child(block(narrow ? 72 : 96, narrow ? 48 : 64, 6)).child(line(70, 13))))
       .child(h_flex().gap(narrow ? G.xl : 48).children([52, 46, 64].map((w) => block(w, narrow ? 22 : 28, 4))))
       .child(h_flex().w_full().h(72).items_end()
-        .children(heights.map((h) => v_flex().flex_1().min_w(0).items_center().justify_end().child(block(2, Math.min(h, 72), 1)))))
+        .children(skeletonBars(block, heights.map((h) => Math.min(h, 72)))))
       .child(v_flex().w_full().child(h_flex().pb(G.sm).child(line(70, 12))).children([0, 1, 2, 3].map(two)));
   }
 
   bones(c, narrow = true) {
-    const { header } = ghost(c);
-    const pad = narrow ? G.lg : 32;
-    return v_flex().size_full().min_h(0).bg(c.canvas).text_color(c.text)
-      .child(h_flex().flex_none().w_full().justify_center().px(pad).py(narrow ? G.lg : 28)
-        .child(v_flex().w_full().max_w(1080).gap(narrow ? 32 : 44)
-          .child(header(narrow ? 70 : 90, narrow ? 17 : 20))
-          .child(this.skeleton(c, narrow))));
+    return pageBones(c, narrow, { title: { narrow: 70, wide: 90 }, body: this.skeleton(c, narrow) });
   }
 
   render(cx) {
@@ -520,14 +511,10 @@ export class Ports {
           .children(list.map((s) => this.row(s, c)))))
         .children(others)
         .when(Boolean(history), (el) => el.child(v_flex().w_full().opacity(state === "stale" ? 0.55 : 1).child(history)));
-    return v_flex().id("kanso-ports").size_full().min_h(0).bg(c.canvas).text_color(c.text).overflow_y_scrollbar()
-      .on_size_change((size, sizeCx) => { if (Math.abs((this.width || 0) - size.width) >= 1) { this.width = size.width; sizeCx.notify(); } })
-      .child(h_flex().flex_none().w_full().justify_center().px(narrow ? G.lg : 32).py(narrow ? G.lg : 28)
-        .child(v_flex().w_full().max_w(1080).gap(narrow ? 32 : 44)
+    return sizedPage.call(this, v_flex().id("kanso-ports").size_full().min_h(0).bg(c.canvas).text_color(c.text).overflow_y_scrollbar(), narrow, (column) => column
           .child(header)
-          .when(this.share.open && this.canShare(), (el) => el.child(this.share.row(c, () => this.shareCard(),
-            "Only counts and sizes: no ports, folders, projects or commands. The post opens with the image in it.", G.sm)))
+          .children(shareRows(this, c, "Only counts and sizes: no ports, folders, projects or commands. The post opens with the image in it."))
           .child(body)
-          .when(Boolean(this.note), (el) => el.child(failNote("pt-note", this.note, c)))));
+          .when(Boolean(this.note), (el) => el.child(failNote("pt-note", this.note, c))));
   }
 }

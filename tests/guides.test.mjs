@@ -24,10 +24,16 @@ const worktreeBars = ({ items, ys }) => items.flatMap((it, i) => (it.tree
   ? guideBars(it.last ? "end" : "tee", { x: 13, elbow: 11, h: ROW, reach: it.reach }).map((b) => ({ ...b, top: b.top + ys[i] }))
   : []));
 
-test("A project's worktree guides join row to row, past a closed fold, without painting any pixel twice", () => {
-  const laid = worktrees([{ tree: false }, { tree: true }, { tree: true, box: 0 }, { tree: true }, { tree: true, last: true }]);
+// The worktree guides' pixels, none of them painted twice.
+const paintedOnce = (laid) => {
   const px = paint(worktreeBars(laid));
   assert.deepEqual(twice(px), []);
+  return px;
+};
+
+test("A project's worktree guides join row to row, past a closed fold, without painting any pixel twice", () => {
+  const laid = worktrees([{ tree: false }, { tree: true }, { tree: true, box: 0 }, { tree: true }, { tree: true, last: true }]);
+  const px = paintedOnce(laid);
   const ys = column(px, 13);
   assert.ok(unbroken(ys), "the line has no gap");
   const heads = laid.items.map((it, i) => [it, laid.ys[i]]).filter(([it]) => it.tree).map(([, y]) => y);
@@ -37,8 +43,7 @@ test("A project's worktree guides join row to row, past a closed fold, without p
 
 test("A worktree guide stops above an open fold, as before, and still paints nothing twice", () => {
   const laid = worktrees([{ tree: false }, { tree: true, box: 40 }, { tree: true, last: true }]);
-  const px = paint(worktreeBars(laid));
-  assert.deepEqual(twice(px), []);
+  const px = paintedOnce(laid);
   assert.equal(laid.items[3].reach, OVERLAP);
 });
 

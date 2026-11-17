@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { load, temporary, clone } from "./helpers.mjs";
+import { load, temporary, clone, success } from "./helpers.mjs";
 
 const SHARE = ["cardSvg", "postText", "renderPng", "copyImage", "NETWORKS", "wrap", "outputPath", "shareImage", "palette"];
 const share = (host = {}) => load("kanso-panel/share.js", SHARE, host);
@@ -91,7 +91,7 @@ test("Sharing words fit a post and the networks take them from a link", async ()
 async function machine(t, { typer = true } = {}) {
   const dir = await temporary(t);
   const tried = [], opened = [], notes = [];
-  const ok = { code: 0, stdout: "", stderr: "" };
+  const ok = success("");
   const host = {
     window: () => ({ platform: "linux" }), home: () => dir, appHome: () => dir, theme: () => ({}),
     notify: (n) => notes.push(n),

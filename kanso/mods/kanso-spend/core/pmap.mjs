@@ -145,9 +145,13 @@ export class PMap {
     return one ? !one.g : baseHas(this.base, key);
   }
 
-  with(key, value) {
+  entry(key) {
     const hash = hashOf(key);
-    const one = lookup(this.root, hash, key, 0);
+    return { hash, one: lookup(this.root, hash, key, 0) };
+  }
+
+  with(key, value) {
+    const { hash, one } = this.entry(key);
     const live = one ? !one.g : baseHas(this.base, key);
     if (live && (one ? one.v : baseGet(this.base, key)) === value) return this;
     const fresh = live ? Boolean(one?.f) : true;
@@ -156,8 +160,7 @@ export class PMap {
   }
 
   without(key) {
-    const hash = hashOf(key);
-    const one = lookup(this.root, hash, key, 0);
+    const { hash, one } = this.entry(key);
     if (one ? one.g : !baseHas(this.base, key)) return this;
     const root = baseHas(this.base, key)
       ? insert(this.root, leaf(key, undefined, hash, 0, false, true), 0)

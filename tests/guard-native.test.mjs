@@ -8,10 +8,11 @@ import { randomUUID } from "node:crypto";
 import { guardHost } from "../kanso/mods/kanso-guard/guard-host.mjs";
 import { exec, nativePlatform, temporary } from "./helpers.mjs";
 
+const nativeGuard = async (t) => guardHost({ platform: nativePlatform, run: exec, appHome: await temporary(t) });
 const windowsOnly = { skip: nativePlatform !== "windows" && "Windows guard native integration" };
 
 test("Windows guard reads its own process, working set, idle seconds and machine memory", windowsOnly, async (t) => {
-  const host = guardHost({ platform: nativePlatform, run: exec, appHome: await temporary(t) });
+  const host = await nativeGuard(t);
   const rows = await host.processes(), own = rows.find((p) => p.pid === process.pid);
   assert.ok(own);
   assert.ok(own.executable);
@@ -25,7 +26,7 @@ test("Windows guard reads its own process, working set, idle seconds and machine
 });
 
 test("Windows guard stops only a child created for the native test", windowsOnly, async (t) => {
-  const host = guardHost({ platform: nativePlatform, run: exec, appHome: await temporary(t) });
+  const host = await nativeGuard(t);
   const child = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], { windowsHide: true, stdio: "ignore" });
   await once(child, "spawn");
   const closed = once(child, "close");

@@ -1,4 +1,5 @@
 // A computer's right-click menu: its rows by phase, drawn by the kit, each one acting, the keyboard included.
+import { loadSpaces } from "./mod-fixtures.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { load, clone, chain, gpuiHost } from "./helpers.mjs";
@@ -30,7 +31,7 @@ test("Add computer switched off in kansō settings leaves the menu without it or
 // The popup as Herdr mounts it, with the kit drawing into recording elements.
 async function popup({ menuProps, stored = null }) {
   const calls = [], overlays = [], closed = [], store = { "kanso.pieces": stored };
-  const { Spaces } = await load("kanso-spaces/main.js", ["Spaces"], {
+  const { Spaces } = await loadSpaces({
     ...gpuiHost(),
     Popover: { new: (id) => chain(id) }, Scrollbar: { vertical: () => chain() },
     theme: () => ({ foreground: "#fff", muted: "#888", dim: "#666", border: "#333", popover: "#222", selected: "#444" }),

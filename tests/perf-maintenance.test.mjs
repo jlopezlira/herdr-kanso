@@ -1,11 +1,11 @@
 // Unchanged sidebar state does not start database maintenance.
+import { loadSpaces } from "./mod-fixtures.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { load } from "./helpers.mjs";
 
 test("seen state writes only on changes and coalesces changes for ten seconds", async () => {
   const writes = [];
-  const { Spaces } = await load("kanso-spaces/main.js", ["Spaces"], { terminals: () => [], shared: () => null });
+  const { Spaces } = await loadSpaces({ terminals: () => [], shared: () => null });
   const row = { conversation: "c1", terminal: "t1", title: "First" };
   const panel = { agents: new Map(), remember: (seen, at) => writes.push([at, seen.size]) };
   const view = Object.assign(new Spaces(), { panel, panelReady: true, seenNow: new Map([["t1", row]]), nameTerminals() {} });
@@ -20,7 +20,7 @@ test("seen state writes only on changes and coalesces changes for ten seconds", 
 
 test("names and projects are read again only when asked, while a save waits, or after two minutes", async () => {
   let now = 100000, reads = 0, pending = null;
-  const { Spaces } = await load("kanso-spaces/main.js", ["Spaces"], {
+  const { Spaces } = await loadSpaces({
     Date: { now: () => now }, spaces: () => [], machines: () => [], home: () => "/home", shared: () => null,
   });
   const view = Object.assign(new Spaces(), {
@@ -41,7 +41,7 @@ test("names and projects are read again only when asked, while a save waits, or 
 test("project folders are checked only after registry changes or five minutes", async () => {
   let now = 0, checks = 0;
   const rows = [{ id: "p1", folder: "/project", name: "Project", machine: "" }];
-  const { Spaces } = await load("kanso-spaces/main.js", ["Spaces"], {
+  const { Spaces } = await loadSpaces({
     Date: { now: () => now }, shared: () => null, spaces: () => [], home: () => "/home",
     fileApi: () => ({ existing: async () => { checks += 1; return []; } }),
   });

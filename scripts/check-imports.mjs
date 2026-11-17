@@ -11,6 +11,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { skipString } from "./herdr-api.mjs";
 import { exportedNames } from "./mod-source.mjs";
+import { REPO_ROOT } from "./cli.mjs";
 
 export const MOD_ROOTS = ["kanso/mods", "markdown-panel/mods", "open-with/mods"];
 const MULTI = [">>>=", ">>=", "<<=", ">>>", "===", "!==", "...", "?.", "=>", "&&", "||", "??", "==", "!=", "<=", ">=", "++", "--", "<<", ">>", "**", "+=", "-=", "*=", "/=", "%=", "&=", "|=", "^="];
@@ -144,14 +145,15 @@ function specsOf(head) {
   return specs;
 }
 
+// Where the import statement at i ends, or -1 when none starts there.
+const importEnd = (tokens, i) => (tokens[i].value === "import" && tokens[i].type === "ident" && isBoundary(tokens, i) && tokens[i + 1]?.value !== ":" ? statementEnd(tokens, i) : -1);
+
 export function importsOf(source) {
   const tokens = lex(source);
   const imports = [];
   for (let i = 0; i < tokens.length; i++) {
-    const token = tokens[i];
-    if (token.value !== "import" || token.type !== "ident" || !isBoundary(tokens, i)) continue;
-    if (tokens[i + 1]?.value === ":") continue;
-    const end = statementEnd(tokens, i);
+    const token = tokens[i], end = importEnd(tokens, i);
+    if (end < 0) continue;
     const stmt = tokens.slice(i + 1, end);
     const bare = stmt.length === 1 && stmt[0].type === "string";
     const fromAt = bare ? 0 : stmt.findIndex((part, index) => part.value === "from" && stmt[index + 1]?.type === "string");
@@ -183,6 +185,9 @@ export function resolveSpec(fromFile, spec) {
 
 const missing = (file, line, imported, from) => `${file}:${line}: no export '${imported}' in '${from}'`;
 
+// Each name the import asks for that `have` does not hold.
+const missingSpecs = (file, item, have) => item.specs.filter((spec) => !have.has(spec.imported)).map((spec) => missing(file, spec.line, spec.imported, item.from));
+
 export function issuesIn(file, text, read, api, modDir) {
   const issues = [];
   for (const item of importsOf(text)) {
@@ -191,18 +196,16 @@ export function issuesIn(file, text, read, api, modDir) {
       let body = null;
       if (target.startsWith(`${modDir}/`)) { try { body = read(target); } catch { body = null; } }
       if (body == null) { issues.push(`${file}:${item.line}: '${item.from}' does not resolve`); continue; }
-      const have = jsExports(body);
-      for (const spec of item.specs) if (!have.has(spec.imported)) issues.push(missing(file, spec.line, spec.imported, item.from));
+      issues.push(...missingSpecs(file, item, jsExports(body)));
       continue;
     }
     const declared = api.modules[item.from];
     if (!declared) {
       if (!item.specs.length) issues.push(`${file}:${item.line}: '${item.from}' is not a module Herdr provides`);
-      else for (const spec of item.specs) issues.push(missing(file, spec.line, spec.imported, item.from));
+      else issues.push(...missingSpecs(file, item, new Set()));
       continue;
     }
-    const have = new Set(declared);
-    for (const spec of item.specs) if (!have.has(spec.imported)) issues.push(missing(file, spec.line, spec.imported, item.from));
+    issues.push(...missingSpecs(file, item, new Set(declared)));
   }
   return issues;
 }
@@ -229,11 +232,12 @@ export function globalUses(file, source, names) {
   const tokens = lex(source);
   const uses = [];
   for (let i = 0; i < tokens.length; i++) {
-    const token = tokens[i];
-    if (token.value === "import" && token.type === "ident" && isBoundary(tokens, i) && tokens[i + 1]?.value !== ":") {
-      i = statementEnd(tokens, i);
+    const end = importEnd(tokens, i);
+    if (end >= 0) {
+      i = end;
       continue;
     }
+    const token = tokens[i];
     if (token.type !== "ident" || !banned.has(token.value) || property(tokens[i - 1]) || tokens[i + 1]?.value === ":" || bindingName(tokens, i)) continue;
     uses.push({ file, line: token.line, name: token.value });
   }
@@ -296,9 +300,8 @@ export function repositoryAudit(root, api, names = []) {
 }
 
 function main() {
-  const root = fileURLToPath(new URL("..", import.meta.url));
   const api = JSON.parse(readFileSync(new URL("../tests/herdr-api.json", import.meta.url), "utf8"));
-  const { issues } = repositoryAudit(root, api);
+  const { issues } = repositoryAudit(REPO_ROOT, api);
   if (!issues.length) return;
   for (const line of issues) console.error(line);
   process.exit(1);

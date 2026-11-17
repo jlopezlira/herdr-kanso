@@ -5,7 +5,7 @@ import { spaces, panes, shared, hc, props, closeOverlay, theme, home } from "her
 import { Store } from "./store.js";
 import { base, tilde, captureTab, describe, summary, projectOf, folderOfKey, openTab } from "./tabkit.js";
 import { listKey, moveTo } from "./listkeys.js";
-import { tryOr } from "./pure.js";
+import { tryOr, focusOn } from "./pure.js";
 import { breathe, G, H, tokens } from "./ui.js";
 import { Armed } from "./ui-button.js";
 import { dialog, statusNotes } from "./ui-dialog.js";
@@ -36,8 +36,7 @@ export function rebase(a, folder) {
 
 export default class Arrange extends View {
   init(_props, cx) {
-    this.handle = cx.focus_handle();
-    this.handle.focus();
+    this.handle = focusOn(cx);
     this.view = "list";
     this.list = null;
     this.others = [];

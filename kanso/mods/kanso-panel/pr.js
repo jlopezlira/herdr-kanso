@@ -1,3 +1,6 @@
+import { spawnAndNotify, commandOk, location, key, diffRows, monoFont, tilde, failure, said, failNote } from "./lib.js";
+import { detailRow, detailColumn, pageSize, pageBones, skeletonStack, skeletonMetrics } from "./ui-page.js";
+import { drawHero, drawEmpty, footOf, listedRow, prRow, heroPieces } from "./pr-view.js";
 import { localService } from "./platform-host.js";
 import { openApi } from "./platform-open.js";
 // Kanso's pull request panel, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
@@ -5,9 +8,8 @@ import { openApi } from "./platform-open.js";
 import { div, svg } from "gpui-kit";
 import { v_flex, h_flex, Button, Popover, TextView, ScrollHandle } from "gpui-base";
 import { exec, notify, run, theme, setShared, shared, window, layout, focused, panes, terminals, props } from "herdr";
-import { location, key, diffRows, monoFont, tilde, failure, said, failNote } from "./lib.js";
 import { walkLayout } from "./layout.js";
-import { G, H, R, T, breathe, tokens } from "./ui.js";
+import { G, T, breathe, tokens } from "./ui.js";
 import { Armed, button, quietLink, iconButton } from "./ui-button.js";
 import { TextField } from "./ui-field.js";
 import { menu } from "./ui-menu.js";
@@ -20,7 +22,6 @@ import { deliver, isAgent } from "./deliver.js";
 import { nameOf, givenNames } from "./marks.js";
 import { verdictOf, failedLog, sendText, sendStep } from "./pr-verdict.js";
 import { VIEW } from "./pr-body.js";
-import { drawHero, drawEmpty, footOf, listedRow, prRow, heroPieces } from "./pr-view.js";
 import { readyProviders } from "./pr-providers.js";
 import { groupInbox, inboxLabel, isNew, limitLine, mergeInbox, refreshInbox, seenSql, recordPrFacts } from "./pr-inbox.js";
 import { prMemory } from "./panel-state.js";
@@ -384,7 +385,7 @@ export class PullRequest {
     if (!this.inboxDb) {
       try { await this.db.open(); this.inboxDb = this.db; }
       catch (e) {
-        this.note = said("Could not keep pull requests", String(e?.message ?? e).split("\n")[0]);
+        this.inboxFailure(e);
         this.inboxOn = false; this.inboxOpen = null;
         return;
       }
@@ -401,7 +402,7 @@ export class PullRequest {
     if (model instanceof Error) {
       const e = model;
       if (key() !== context) return;
-      this.note = said("Could not keep pull requests", String(e?.message ?? e).split("\n")[0]);
+      this.inboxFailure(e);
       return;
     }
     if (key() !== context) return;
@@ -421,7 +422,7 @@ export class PullRequest {
     if (!url || this.inboxOpen !== false || !this.inboxDb) return;
     const now = Date.now();
     try { await this.inboxDb.run(seenSql(url, now)); }
-    catch (e) { this.note = said("Could not keep pull requests", String(e?.message ?? e).split("\n")[0]); return; }
+    catch (e) { this.inboxFailure(e); return; }
     const stamp = (item) => item.url === url ? { ...item, seenAt: now } : item;
     const needs = (this.inbox?.needs ?? []).map(stamp);
     if (this.inbox) this.inbox = { ...this.inbox, needs, yours: (this.inbox.yours ?? []).map(stamp), unseen: needs.filter(isNew).length };
@@ -547,8 +548,7 @@ export class PullRequest {
     if (this.closedLoading || !this.root || this.wait) return;
     this.bind(cx);
     this.closedLoading = true;
-    const context = this.context;
-    cx.spawn(async (cx) => {
+    cx.spawn(this.contextTask(async (cx, context) => {
       try {
         const r = await this.gh(["pr", "list", "--state", "closed", "--limit", String(DONE_LIMIT), "--json", DONE]);
         if (r?.code === 0 && key() === context) {
@@ -559,7 +559,7 @@ export class PullRequest {
         }
       } catch { }
       finally { this.closedLoading = false; cx.notify(); }
-    });
+    }));
   }
 
   showTab(tab, cx) {
@@ -576,54 +576,64 @@ export class PullRequest {
     this.loadedAt = 0; this.refresh(cx); cx.notify();
   }
 
+  inboxFailure(error) { this.note = said("Could not keep pull requests", String(error?.message ?? error).split("\n")[0]); }
+
+  finishAction(cx) { this.busy = null; cx.notify(); }
+
+  finishAndRefresh(cx) {
+    this.busy = null; this.loadedAt = 0; cx.notify(); this.refresh(cx);
+  }
+
+  contextTask(work) {
+    const context = this.context;
+    return (cx) => work(cx, context);
+  }
+
   act(label, args, cx, run = (a) => this.gh(a)) {
     if (this.busy) return;
     this.bind(cx);
     this.busy = label; this.note = null; this.armed.clear();
-    cx.spawn(async (cx) => {
+    spawnAndNotify(cx, async (cx) => {
       try {
         const r = await run(args);
-        if (r.code !== 0) throw new Error((r.stderr || r.stdout).trim().split("\n")[0]);
+        commandOk(r);
       } catch (e) { this.note = said(`${label} failed`, e?.message ?? e); }
-      finally { this.busy = null; this.loadedAt = 0; cx.notify(); this.refresh(cx); }
+      finally { this.finishAndRefresh(cx); }
     });
-    cx.notify();
   }
 
   mergeNow(cx) {
     const pr = this.pr;
     this.bind(cx);
     this.busy = "Merge"; this.note = null;
-    cx.spawn(async (cx) => {
+    spawnAndNotify(cx, async (cx) => {
       try {
         const { o, r: name } = this.repo();
         const repo = await this.gh(["repo", "view", `${o}/${name}`, "--json", "squashMergeAllowed,mergeCommitAllowed,rebaseMergeAllowed"]);
         const allowed = repo.code === 0 ? JSON.parse(repo.stdout) : {};
         const method = allowed.squashMergeAllowed !== false ? "--squash" : allowed.mergeCommitAllowed ? "--merge" : "--rebase";
         const r = await this.gh(["pr", "merge", pr.url, method]);
-        if (r.code !== 0) throw new Error((r.stderr || r.stdout).trim().split("\n")[0]);
+        commandOk(r);
         notify({ title: `Merged #${pr.number}`, body: pr.title, level: "success" });
       } catch (e) { this.note = said("Merge failed", e?.message ?? e); }
-      finally { this.busy = null; this.loadedAt = 0; cx.notify(); this.refresh(cx); }
+      finally { this.finishAndRefresh(cx); }
     });
-    cx.notify();
   }
 
   createPr(cx) {
     if (this.busy) return;
     this.bind(cx);
     this.busy = "Create"; this.note = null;
-    cx.spawn(async (cx) => {
+    spawnAndNotify(cx, async (cx) => {
       try {
         const now = await this.readPushed(this.root, this.on);
         if (!now || now.state === "late") throw new Error("It took too long to answer.");
         if (now.state !== "pushed") throw new Error(`${now.state === "behind" ? "pull" : "push"} ${this.branch ?? "the branch"} first`);
         const r = await this.gh(["pr", "create", "--web"]);
-        if (r.code !== 0) throw new Error((r.stderr || r.stdout).trim().split("\n")[0]);
+        commandOk(r);
       } catch (e) { this.note = said("Could not create it", e?.message ?? e); }
-      finally { this.busy = null; cx.notify(); }
+      finally { this.finishAction(cx); }
     });
-    cx.notify();
   }
 
   // terminal.open cannot name a machine; the pane opens in the space already on screen.
@@ -643,7 +653,7 @@ export class PullRequest {
         try {
           const q = kind === "labels" ? LABELS : PEOPLE;
           const r = await this.gh(["api", "graphql", "-f", `query=${q}`, "-F", `o=${repo.o}`, "-F", `r=${repo.r}`]);
-          if (r.code !== 0) throw new Error((r.stderr || r.stdout).trim().split("\n")[0]);
+          commandOk(r);
           if (this.context !== context || this.picker !== kind) return;
           const data = JSON.parse(r.stdout).data;
           if (data?.viewer?.login) this.viewer = data.viewer.login;
@@ -677,10 +687,9 @@ export class PullRequest {
     const failed = { labels: on ? `Could not take ${name} off` : `Could not put ${name} on`, assignees: on ? `Could not unassign ${name}` : `Could not assign ${name}`, reviewers: on ? `Could not take back the request to ${name}` : `Could not ask ${name} for a review` }[kind];
     const why = { labels: "Changing labels needs triage access on this repository.", assignees: "Assigning needs triage access on this repository.", reviewers: "Asking for a review needs write access on this repository." }[kind];
     this.pending = name;
-    cx.spawn(async (cx) => {
+    spawnAndNotify(cx, async (cx) => {
       try {
-        const res = await this.gh(["api", ...call, "--silent"]);
-        if (res.code !== 0) throw new Error((res.stderr || res.stdout).trim().split("\n")[0]);
+        commandOk(await this.gh(["api", ...call, "--silent"]));
         // Reflect it at once; the reread below confirms it.
         const pr = this.pr;
         if (kind === "labels") this.pr = { ...pr, labels: on ? pr.labels.filter((l) => l.name !== name) : [...pr.labels, (this.candidates ?? []).find((l) => l.name === name) ?? { name }] };
@@ -690,7 +699,6 @@ export class PullRequest {
       } catch (e) { notify({ title: failed, body: `${String(e?.message ?? e)} ${why}`, level: "error" }); }
       finally { this.pending = null; cx.notify(); this.loadedAt = 0; this.refresh(cx); }
     });
-    cx.notify();
   }
 
   pickerFor(kind, c) {
@@ -859,23 +867,10 @@ export class PullRequest {
   }
 
   bones(c, narrow = true) {
-    const { header } = ghost(c);
-    const pad = narrow ? G.lg : 32;
-    return v_flex().size_full().min_h(0).bg(c.background).text_color(c.text)
-      .child(h_flex().flex_none().w_full().justify_center().px(pad).py(narrow ? G.lg : 28)
-        .child(v_flex().w_full().max_w(1080).gap(G.lg)
-          .child(header(narrow ? 110 : 140, narrow ? 17 : 20))
-          .child(this.skeleton(c, narrow))));
+    return pageBones(c, narrow, { title: { narrow: 110, wide: 140 }, body: this.skeleton(c, narrow), background: c.background, gap: G.lg });
   }
 
-  skeleton(c, narrow) {
-    const { block, row } = ghost(c);
-    return breathe(v_flex().id("kanso-skeleton").w_full().gap(narrow ? 36 : 48))
-      .child(v_flex().gap(G.md).child(block(140, 12)).child(block(narrow ? 240 : 420, narrow ? 22 : 28, 4)).child(block(180, 22, 4)).child(block(150, 11))
-        .child(h_flex().gap(narrow ? G.xl : 48).pt(G.md).children([30, 46, 40, 30].map((w) => block(w, narrow ? 18 : 22, 4)))))
-      .child(v_flex().gap(G.sm).children([0, 1, 2].map((i) => h_flex().gap(G.md).child(block(70, 10)).child(block([90, 120, 80][i], 10)))))
-      .child(v_flex().w_full().child(h_flex().pb(G.sm).child(block(70, 12))).children([0, 1, 2, 3, 4].map(row)));
-  }
+  skeleton(c, narrow) { return prSkeleton(ghost(c), narrow); }
 
   waiting(c, title, detail, action) {
     return v_flex().w_full().gap(G.sm)
@@ -946,14 +941,13 @@ export class PullRequest {
     const address = this.frontAgent()?.address;
     if (!address) { this.note = said("Not sent: no agent in front"); cx.notify(); return; }
     this.busy = "Send"; this.sendShown = false; this.note = null; this.bind(cx);
-    cx.spawn(async (cx) => {
+    spawnAndNotify(cx, async (cx) => {
       try {
         const sent = await deliver(address, text, "you");
         if (sent?.code !== 0) this.note = said("Not sent", String(sent?.stderr || sent?.stdout || "could not send").split("\n")[0]);
       } catch (e) { this.note = said("Not sent", e?.message ?? e); }
-      finally { this.busy = null; cx.notify(); }
+      finally { this.finishAction(cx); }
     });
-    cx.notify();
   }
 
   openChecks(cx) { this.expanded = { ...this.expanded, checks: true }; this.setDetails(cx, true); }
@@ -996,11 +990,10 @@ export class PullRequest {
   loadOthers(cx) {
     if (this.listingOthers || this.listed || this.wait || !this.root) return;
     this.listingOthers = true; this.bind(cx);
-    const context = this.context;
-    cx.spawn(async (cx) => {
+    cx.spawn(this.contextTask(async (cx, context) => {
       try { this.takeOpen(await this.gh(openListArgs()).catch(() => null), context); }
       finally { this.listingOthers = false; cx.notify(); }
-    });
+    }));
   }
 
   description(c) {
@@ -1056,12 +1049,9 @@ export class PullRequest {
     const note = checksNote(summaryOf(checks));
     return v_flex().w_full()
       .child(section(c, "Checks", note))
-      .children(shown.map((ch, i) => Button.new(`pr-check-${i}`).w_full().py(7).cursor_pointer()
-        .when(i > 0, (el) => el.border_t(1).border_color(c.border))
-        .hover((s) => s.opacity(0.75))
+      .children(shown.map((ch, i) => listButton(Button.new(`pr-check-${i}`).w_full().py(7).cursor_pointer(), i, c)
         .on_click(() => { if (ch.url) openUrl(ch.url); })
-        .child(h_flex().w_full().items_end().gap(G.md)
-          .child(v_flex().flex_1().min_w(0).gap(2)
+        .child(detailRow(detailColumn()
             .child(div().truncate().text_size(13).text_color(c.text).child(ch.name))
             .when(Boolean(ch.workflow), (el) => el.child(div().truncate().text_size(11).text_color(c.dim).child(ch.workflow))))
           .child(div().text_size(12).text_color(c[CHECK_WORDS[ch.state].color]).child(CHECK_WORDS[ch.state].label)))))
@@ -1071,9 +1061,7 @@ export class PullRequest {
   discussion(c) {
     return v_flex().w_full()
       .child(section(c, "Unresolved threads", String(this.threads.length)))
-      .children(this.threads.map((th, i) => Button.new(`pr-thread-${i}`).w_full().py(8).cursor_pointer()
-        .when(i > 0, (el) => el.border_t(1).border_color(c.border))
-        .hover((s) => s.opacity(0.75))
+      .children(this.threads.map((th, i) => listButton(Button.new(`pr-thread-${i}`).w_full().py(8).cursor_pointer(), i, c)
         .on_click(() => { if (th.url) openUrl(th.url); })
         .child(v_flex().w_full().gap(3)
           .child(div().w_full().text_size(13).line_height(1.45).text_color(c.text).child(th.body.length > 240 ? th.body.slice(0, 240) + "…" : th.body))
@@ -1126,8 +1114,7 @@ export class PullRequest {
         return v_flex().w_full().when(i > 0, (el) => el.border_t(1).border_color(c.border))
           .child(Button.new(`pr-file-${i}`).w_full().py(7).cursor_pointer().hover((s) => s.opacity(0.75))
             .on_click((_e, cx) => this.pickFile(f.path, cx))
-            .child(h_flex().w_full().items_end().gap(G.md)
-              .child(v_flex().flex_1().min_w(0).gap(2)
+            .child(detailRow(detailColumn()
                 .child(div().truncate().text_size(13).text_color(c.text).when(on, (e) => e.font_medium()).child(name))
                 .when(parts.length > 0 || Boolean(mark), (el) => el.child(div().truncate().text_size(11).text_color(c.dim).child([parts.join("/"), mark].filter(Boolean).join(" · ")))))
               .child(div().text_size(11).text_color(c.dim).child(`+${f.additions} −${f.deletions}`))))
@@ -1243,9 +1230,17 @@ export class PullRequest {
     const padX = narrow ? G.lg : 32;
     const padY = narrow ? G.lg : 28;
     return v_flex().id("kanso-pr").size_full().min_h(0).bg(c.background).text_color(c.text).overflow_y_scrollbar()
-      .on_size_change((size, sizeCx) => { if (Math.abs((this.width || 0) - size.width) >= 1) { this.width = size.width; sizeCx.notify(); } })
+      .on_size_change(pageSize.call(this))
       .pt(padY).pb(padY).gap(G.lg).track_scroll(this.scroll)
       .children(nodes.map(([, el]) => h_flex().flex_none().w_full().justify_center().px(padX)
         .child(v_flex().w_full().max_w(1080).child(el))));
   }
 }
+
+const prSkeleton = ({ block, row }, narrow) => skeletonStack(narrow)
+  .child(v_flex().gap(G.md).child(block(140, 12)).child(block(narrow ? 240 : 420, narrow ? 22 : 28, 4)).child(block(180, 22, 4)).child(block(150, 11))
+    .child(skeletonMetrics(block, narrow)))
+  .child(v_flex().gap(G.sm).children([0, 1, 2].map((i) => h_flex().gap(G.md).child(block(70, 10)).child(block([90, 120, 80][i], 10)))))
+  .child(v_flex().w_full().child(h_flex().pb(G.sm).child(block(70, 12))).children([0, 1, 2, 3, 4].map(row)));
+
+const listButton = (button, index, c) => button.when(index > 0, (el) => el.border_t(1).border_color(c.border)).hover((style) => style.opacity(0.75));

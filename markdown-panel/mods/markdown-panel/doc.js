@@ -378,26 +378,31 @@ export class MarkdownDoc {
     const prior = this.shots ?? new Map();
     this.shots = new Map(files.map((file) => [file, prior.has(file) ? prior.get(file) : undefined]));
     this.shotSeq = (this.shotSeq ?? 0) + 1;
-    const seq = this.shotSeq, path = this.path, on = this.on;
-    cx.spawn(async (cx) => {
+    this.shotTask(cx, async (cx, { seq, path, on }) => {
       await files.reduce(async (done, file) => {
         await done;
         if (this.shotSeq !== seq || this.path !== path) return;
         const shot = await bring(file, on).then((got) => got.deferred ? { deferred: true, size: got.size, file } : appRelative(got.path, appHome())).catch(() => null);
-        if (this.shotSeq !== seq || this.path !== path) return;
-        this.shots = new Map([...this.shots, [file, shot]]);
-        cx.notify();
+        this.keepShot(file, shot, seq, path, cx);
       }, Promise.resolve());
     });
   }
 
+  shotTask(cx, work) {
+    const address = { seq: this.shotSeq, path: this.path, on: this.on };
+    cx.spawn((next) => work(next, address));
+  }
+
+  keepShot(file, shot, seq, path, cx) {
+    if (this.shotSeq !== seq || this.path !== path) return;
+    this.shots = new Map([...this.shots, [file, shot]]);
+    cx.notify();
+  }
+
   loadShot(file, cx) {
-    const seq = this.shotSeq, path = this.path, on = this.on;
-    cx.spawn(async (cx) => {
+    this.shotTask(cx, async (cx, { seq, path, on }) => {
       const shot = await bring(file, on, { ask: true }).then((got) => appRelative(got.path, appHome())).catch(() => null);
-      if (this.shotSeq !== seq || this.path !== path) return;
-      this.shots = new Map([...this.shots, [file, shot]]);
-      cx.notify();
+      this.keepShot(file, shot, seq, path, cx);
     });
   }
 

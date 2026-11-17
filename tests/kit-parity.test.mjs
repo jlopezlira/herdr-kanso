@@ -26,14 +26,16 @@ const stringEnd = (text, start) => {
   return i;
 };
 
+// Where the string starting at i ends, or i when none starts there.
+const pastString = (text, i) => ("\"'`".includes(text[i]) ? stringEnd(text, i) : i);
+
 // The index of the bracket that closes the one at `start`, skipping strings.
 const closing = (text, start) => {
   let depth = 0;
   for (let i = start; i < text.length; i++) {
-    const char = text[i];
-    if ("\"'`".includes(char)) i = stringEnd(text, i);
-    else if ("([{".includes(char)) depth++;
-    else if (")]}".includes(char) && --depth === 0) return i;
+    i = pastString(text, i);
+    if ("([{".includes(text[i])) depth++;
+    else if (")]}".includes(text[i]) && --depth === 0) return i;
   }
   throw new Error(`No closing bracket for ${text.slice(start, start + 40)}`);
 };
@@ -42,10 +44,9 @@ const topLevel = (text) => {
   const parts = [];
   let from = 0;
   for (let i = 0; i < text.length; i++) {
-    const char = text[i];
-    if ("\"'`".includes(char)) i = stringEnd(text, i);
-    else if ("([{".includes(char)) i = closing(text, i);
-    else if (char === ",") { parts.push(text.slice(from, i)); from = i + 1; }
+    i = pastString(text, i);
+    if ("([{".includes(text[i])) i = closing(text, i);
+    else if (text[i] === ",") { parts.push(text.slice(from, i)); from = i + 1; }
   }
   return [...parts, text.slice(from)].map((part) => part.trim()).filter(Boolean);
 };

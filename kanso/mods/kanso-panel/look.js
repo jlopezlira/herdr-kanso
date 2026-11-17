@@ -1,3 +1,5 @@
+import { restorePath, nearestRemaining, tilde } from "./lib.js";
+import { pageFrame, toolbar } from "./ui-page.js";
 import { localService, serviceOn } from "./platform-host.js";
 import { paths } from "./platform-paths.js";
 import { fileApi } from "./platform-files.js";
@@ -10,7 +12,6 @@ import { bring, machineOf, copyFailure, drawablePath, remoteDue, ArmPoll, pollSt
 import { div, image } from "gpui-kit";
 import { v_flex, h_flex, Button } from "gpui-base";
 import { hc, focused, panes, terminals, theme, appHome, home, shared, setShared, watchFolder, openOverlay, window, layout } from "herdr";
-import { tilde } from "./lib.js";
 import { G, H, T, tokens, breathe } from "./ui.js";
 import { button, quietLink, iconButton } from "./ui-button.js";
 import { row } from "./ui-row.js";
@@ -73,9 +74,9 @@ export class Look {
 
   saveState() { return this.selected?.path ? { path: this.selected.path, on: machineOf(this.agent()) } : null; }
 
-  async restoreState(state) {
-    const path = typeof state?.path === "string" ? state.path : "";
-    if (!path) return false;
+  async restoreState(state) { return restorePath.call(this, state, this.restoreImage); }
+
+  async restoreImage(path, state) {
     const ok = await (await serviceOn(fileApi, state?.on || null)).test(path).catch(() => false);
     if (!lookMemory(state, () => ok) || !shows(itemOf(path))) return false;
     this.keptPath = path;
@@ -129,16 +130,23 @@ export class Look {
 
   armLocal(cx) { this.armWhen(cx, this.screenDue(), (tick) => this.probeLocal(tick)); }
 
+  agentFile(address) { return this.transcript?.address === address ? this.transcript.file : null; }
+
+  readChanged(outcome, cx) {
+    if (!outcome) return true;
+    if (outcome === "changed") this.read(cx);
+    return false;
+  }
+
   probeLocal(cx) {
     const address = this.agent();
-    const file = this.transcript?.address === address ? this.transcript.file : null;
+    const file = this.agentFile(address);
     if (!this.screenDue()) return;
     if (!file) { this.read(cx); return; }
     cx.spawn(async (cx) => {
       const outcome = await this.take(address, () => localService(fileApi).stat(file), listFailure(new Error("timed out"), null));
-      if (!outcome) return;
-      if (outcome === "changed") this.read(cx);
-      else { this.poll = pollNext(this.poll, outcome); this.armLocal(cx); if (outcome === "failed") cx.notify(); }
+      if (this.readChanged(outcome, cx)) return;
+      if (outcome !== "changed") { this.poll = pollNext(this.poll, outcome); this.armLocal(cx); if (outcome === "failed") cx.notify(); }
     });
   }
 
@@ -168,13 +176,12 @@ export class Look {
 
   probe(cx) {
     const address = this.agent(), on = machineOf(address);
-    const file = this.transcript?.address === address ? this.transcript.file : null;
+    const file = this.agentFile(address);
     if (!file || !remoteDue(on, window()?.active, this.paneHidden())) return;
     cx.spawn(async (cx) => {
       const outcome = await this.take(address, async () => (await serviceOn(fileApi, on)).stat(file), copyFailure(new Error("timed out"), on));
-      if (!outcome) return;
-      if (outcome === "changed") this.read(cx);
-      else { this.poll = pollNext(this.poll, outcome); this.armCheck(cx); }
+      if (this.readChanged(outcome, cx)) return;
+      if (outcome !== "changed") { this.poll = pollNext(this.poll, outcome); this.armCheck(cx); }
       cx.notify();
     });
   }
@@ -242,9 +249,9 @@ export class Look {
         if (this.selected && !still(this.selected)) {
           const gone = this.selected.path;
           const at = previous.findIndex((i) => i.path === gone);
-          const next = previous.slice(at + 1).find(still) ?? previous.slice(0, Math.max(at, 0)).toReversed().find(still) ?? null;
+          const next = nearestRemaining(previous, at, still);
           this.picked = false;
-          if (next) this.select(this.list().find((i) => i.path === next.path), cx, false);
+          if (next) this.selectRemaining(next, cx);
           else { this.hold(); this.selected = null; this.shown = null; this.pins = []; }
         } else if (fresh && !this.picked && !this.pins.length) this.select(fresh, cx, false);
         const live = new Set(this.list().map((i) => i.path));
@@ -333,8 +340,8 @@ export class Look {
         this.dropBlind(path);
         this.selected = null; this.shown = null; this.pins = [];
         const still = (i) => this.list().some((k) => k.path === i.path);
-        const next = previous.slice(at + 1).find(still) ?? previous.slice(0, Math.max(at, 0)).toReversed().find(still) ?? null;
-        if (next) this.select(this.list().find((i) => i.path === next.path), cx, false);
+        const next = nearestRemaining(previous, at, still);
+        this.selectRemaining(next, cx);
         cx.notify();
         return;
       }
@@ -529,12 +536,12 @@ export class Look {
     return breathe(v_flex().id("kanso-skeleton").flex_1().w_full().items_center().justify_center()).child(block(240, 180, 8));
   }
 
+  selectRemaining(next, cx) {
+    if (next) this.select(this.list().find((item) => item.path === next.path), cx, false);
+  }
+
   bones(c) {
-    const { header } = skeleton(c);
-    return v_flex().size_full().min_h(0).bg(c.canvas).text_color(c.text)
-      .child(h_flex().flex_none().px(G.lg).py(G.sm).gap(G.sm).items_center().border_b(1).border_color(c.border)
-        .child(header(72, 13)))
-      .child(this.drawing(c));
+    return pageFrame(c).child(toolbar(c).child(skeleton(c).header(72, 13))).child(this.drawing(c));
   }
 
   view(c) {
@@ -560,7 +567,7 @@ export class Look {
     const status = this.note?.text ?? (this.pins.length ? "" : item ? "Pin a spot" : "");
     return v_flex().id("kanso-look").track_focus(this.handle).size_full().min_h(0).bg(c.canvas).text_color(c.text)
       .on_key_down((e, cx) => { if (sendKey(e)) { this.send(cx); cx.stop_propagation(); } })
-      .child(h_flex().flex_none().px(G.lg).py(G.sm).gap(G.sm).items_center().border_b(1).border_color(c.border)
+      .child(toolbar(c)
         .child(programIcon(who?.pane?.program, 15, c.muted) ?? div())
         .child(v_flex().flex_1().min_w(0)
           .child(div().truncate().font_semibold().text_size(T.card).child(who?.name ?? "Images"))

@@ -1,11 +1,11 @@
-import { paths } from "./platform-paths.js";
 // Send to an agent, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
 // props.pane: the pane whose work the draft is about.
 import { View, div } from "gpui-kit";
 import { v_flex } from "gpui-base";
-import { panes, spaces, terminals, shared, setShared, run, props, closeOverlay, theme, home } from "herdr";
+import { panes, spaces, terminals, shared, setShared, run, props, closeOverlay, theme } from "herdr";
 import { programIcon, givenNames, nameOf } from "./marks.js";
 import { deliver, isAgent, sendKey, waitingNote } from "./deliver.js";
+import { shortFolder } from "./folder.js";
 import { G, H, ICON_ROW, tokens } from "./ui.js";
 import { dialog } from "./ui-dialog.js";
 import { field, TextField } from "./ui-field.js";
@@ -14,11 +14,6 @@ import { row } from "./ui-row.js";
 const LAST = "kanso.send.last";
 // Rows the list shows before it scrolls.
 const LIST_ROWS = 6;
-
-const tilde = (cwd) => {
-  if (!cwd) return "";
-  return paths.shorten(cwd, home());
-};
 
 export function targetsOf(all, from, last) {
   const list = all.filter((p) => p.pane !== from && p.terminal && isAgent(p));
@@ -50,7 +45,7 @@ export function everyone(terms, ps, { from = null, last = null, query = "", name
 
 export function draftFor(p, digest) {
   if (!p?.cwd) return "Review the latest changes.";
-  const where = tilde(p.cwd);
+  const where = shortFolder(p.cwd);
   const head = p.branch ? `Review the changes on branch ${p.branch} in ${where}.` : `Review the changes in ${where}.`;
   return digest?.pr ? `${head} Its pull request is #${digest.pr.number}.` : head;
 }
@@ -119,7 +114,7 @@ export default class Send extends View {
       meta: q.status === "blocked" ? { text: "Needs you", tone: "blocked" } : null, mark: q.status, current: !this.toProject && q.terminal === this.to,
       onClick: (cx) => { this.to = q.terminal; this.toProject = null; this.error = null; cx.notify(); },
     }).flex_none();
-    const from = this.from ? `From ${name(this.from)}${this.from.cwd ? `, in ${tilde(this.from.cwd)}` : ""}` : "";
+    const from = this.from ? `From ${name(this.from)}${this.from.cwd ? `, in ${shortFolder(this.from.cwd)}` : ""}` : "";
     const ready = Boolean(this.toProject || this.to) && Boolean(this.text.trim());
     const rows = groups.flatMap((g) => [head(g), ...g.agents.map(agent)]);
     const close = () => closeOverlay(p.overlay);

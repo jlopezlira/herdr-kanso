@@ -1,3 +1,5 @@
+import { spawnAndNotify, commandOk, tilde, pool, said, failNote } from "./lib.js";
+import { sizedPage, pageBones, skeletonStack, skeletonMetrics, heroStack, heroHeading, metricValue, metricStats, skeletonBars } from "./ui-page.js";
 import { localService } from "./platform-host.js";
 import { paths } from "./platform-paths.js";
 import { fileApi } from "./platform-files.js";
@@ -8,16 +10,15 @@ import { systemApi } from "./platform-system.js";
 import { div } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import { exec, spaces, panes, home, run, theme, shared, notify, knownAgents } from "herdr";
-import { Share, postText } from "./share.js";
+import { Share, postText, shareRows } from "./share.js";
 import { WorktreeStore } from "./worktrees-store.js";
-import { tilde, pool, said, failNote } from "./lib.js";
 import { G, breathe, tokens } from "./ui.js";
 import { Armed, button, quietLink, iconButton } from "./ui-button.js";
 import { row } from "./ui-row.js";
 import { section } from "./ui-section.js";
 import { ghost } from "./ui-skeleton.js";
 import { stateEmpty } from "./ui-state.js";
-import { aliasText, machineTitle, range, reduceSeries } from "./pure.js";
+import { aliasText, machineTitle, range, reduceSeries, MONTHS } from "./pure.js";
 import { worktreesMemory } from "./panel-state.js";
 
 const TEMP = ["/private/tmp", "/tmp"];
@@ -169,7 +170,6 @@ export function lastDays(byDay, now = Date.now(), n = 30) {
 
 const best = (byDay) => Object.entries(byDay ?? {}).reduce((b, [day, kb]) => (kb > (b?.kb ?? 0) ? { day, kb } : b), null);
 
-const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 export const shortDate = (ms) => { const d = new Date(ms); return `${MONTHS[d.getMonth()]} ${d.getDate()}`; };
 const splitSize = (kb) => { const [n, u] = fmtSize(kb).split(" "); return { big: n || "0", small: u || "KB" }; };
 
@@ -179,9 +179,7 @@ export function freedSpec(h, current, at = Date.now()) {
   const freed = (h?.kb ?? 0) > 0, days = lastDays(freed ? h.freedByDay : h?.diskByDay, at);
   const size = splitSize(freed ? h.kb : current?.size ?? 0), top = best(freed ? h.freedByDay : h?.diskByDay);
   const stats = freed ? [
-    { value: String(h.worktrees), unit: h.worktrees === 1 ? "worktree removed" : "worktrees removed" },
-    { value: String(h.branches), unit: h.branches === 1 ? "merged branch deleted" : "merged branches deleted" },
-    { value: String(h.records + h.orphans), unit: "leftovers cleared" },
+    ...cleanedStats(h),
   ] : [
     { value: String(current?.worktrees ?? 0), unit: "worktrees" },
     { value: fmtSize(current?.canGoSize) || "0 KB", unit: "can go, losing nothing" },
@@ -376,7 +374,7 @@ export class Worktrees {
     const id = this.scan + 1;
     this.scan = id;
     this.phase = "Finding repositories"; this.note = null; this.picked = this.heldPick === undefined ? null : this.heldPick; this.heldPick = undefined; this.armed.clear(); this.done = false;
-    cx.spawn(async (cx) => {
+    spawnAndNotify(cx, async (cx) => {
       this.tempDirs = await localService(systemApi).temporary().catch(() => []);
       const { roots, search } = this.roots();
       try {
@@ -433,7 +431,6 @@ export class Worktrees {
         if (id === this.scan) { this.phase = null; this.note = said("Can't scan for worktrees", e?.message ?? e); }
       } finally { if (id === this.scan) cx.notify(); }
     });
-    cx.notify();
   }
 
   apply(path, p) {
@@ -445,19 +442,17 @@ export class Worktrees {
     const w = this.item(keyOf(target));
     if (this.working || !w) return;
     this.working = w.path; this.note = null;
-    cx.spawn(async (cx) => {
+    spawnAndNotify(cx, async (cx) => {
       try {
         const r = await exec("git", ["worktree", "repair", w.path], { cwd: w.repo });
-        if (r.code !== 0) throw new Error((r.stderr || r.stdout).trim().split("\n")[0]);
-        const g = this.groups.find((g) => g.repo === w.repo);
-        const p = parseProbe((await localService(repositoryApi).probe(w.path, idleMinutes(), g?.bases ?? [])).stdout);
+        commandOk(r);
+        const p = await this.probeWorktree(w);
         this.apply(w.path, p);
         if (p.broken) throw new Error("git still can't read it");
         notify({ title: `Repaired ${name(w.path)}`, body: "It is linked to its repository again.", level: "success" });
       } catch (e) { this.note = said(`Can't repair ${name(w.path)}`, e?.message ?? e); }
-      finally { this.working = null; cx.notify(); }
+      finally { this.finishWork(cx); }
     });
-    cx.notify();
   }
 
   async removeOne(w) {
@@ -498,8 +493,7 @@ export class Worktrees {
       const r = { code: (w.replaced ? exists : !exists) ? 0 : 1 };
       return r.code === 0 ? this.item(path) : null;
     }
-    const g = this.groups.find((g) => g.repo === w.repo);
-    const p = parseProbe((await localService(repositoryApi).probe(w.path, idleMinutes(), g?.bases ?? [])).stdout);
+    const p = await this.probeWorktree(w);
     this.apply(path, p);
     this.markOpen();
     const now = this.item(path);
@@ -512,7 +506,7 @@ export class Worktrees {
     if (!w || w.open || w.locked || this.working || !w.fresh) return;
     this.working = w.path; this.armed.clear(); this.note = null; this.notice = null;
     const before = { dirty: w.dirty ?? 0, only: w.only ?? 0 };
-    cx.spawn(async (cx) => {
+    spawnAndNotify(cx, async (cx) => {
       try {
         const now = await this.still(w.path, (x) => removable(x) && (x.dirty ?? 0) <= before.dirty && (x.only ?? 0) <= before.only);
         if (!now) {
@@ -523,16 +517,15 @@ export class Worktrees {
         this.drop(now); await this.credit([[now, got]]);
         if (got.kb) notify({ title: `Freed ${fmtSize(got.kb)}`, body: this.hist?.kb ? `${fmtSize(this.hist.kb)} freed so far` : undefined, level: "success" });
       } catch (e) { this.note = said(`Can't remove ${name(w.path)}`, e.message ?? e); }
-      finally { this.working = null; cx.notify(); }
+      finally { this.finishWork(cx); }
     });
-    cx.notify();
   }
 
   prune(targets, cx) {
     const missing = targets.map((t) => this.item(keyOf(t))).filter(Boolean);
     if (!missing.length || this.working) return;
     this.working = missing[0].repo; this.note = null;
-    cx.spawn(async (cx) => {
+    spawnAndNotify(cx, async (cx) => {
       try {
         for (const w of missing.filter((w) => w.replaced)) await this.removeOne(w);
         const plain = missing.find((w) => !w.replaced);
@@ -541,10 +534,11 @@ export class Worktrees {
         await this.credit(missing.map((w) => [w, { records: 1 }]));
       }
       catch (e) { this.note = said(`Can't prune ${name(missing[0].repo)}`, e.message ?? e); }
-      finally { this.working = null; cx.notify(); }
+      finally { this.finishWork(cx); }
     });
-    cx.notify();
   }
+
+  finishWork(cx) { this.working = null; cx.notify(); }
 
   plan() {
     return this.groups.flatMap((g) => g.items.filter(safe));
@@ -560,7 +554,7 @@ export class Worktrees {
     const paths = targets.map(keyOf);
     if (!paths.length || this.working) return;
     this.working = "all"; this.batch = new Set(paths); this.armed.clear(); this.note = null; this.notice = null;
-    cx.spawn(async (cx) => {
+    spawnAndNotify(cx, async (cx) => {
       // `pruned`: repositories already pruned; their other missing rows go with it.
       const { done, kept, failed, got } = await reduceSeries(paths, async (t, path) => {
         this.phase = `Removing ${t.done + t.kept + t.failed.length + 1} of ${paths.length}`;
@@ -587,7 +581,6 @@ export class Worktrees {
         body: `${done} removed${total ? `, ${fmtSize(total)} freed so far` : ""}`, level: failed.length ? "warning" : "success" });
       cx.notify();
     });
-    cx.notify();
   }
 
   verdict(w) {
@@ -625,27 +618,19 @@ export class Worktrees {
       .child(h_flex().items_end().gap(G.md).child(block(narrow ? 90 : 120, narrow ? 36 : 48, 6)).child(line(80, 13)))
       .child(line(200, 12))
       .child(h_flex().w_full().h(96).items_end()
-        .children(heights.map((h) => v_flex().flex_1().min_w(0).items_center().justify_end().child(block(2, h, 1)))));
+        .children(skeletonBars(block, heights)));
+  }
+
+  async probeWorktree(w) {
+    const group = this.groups.find((item) => item.repo === w.repo);
+    return parseProbe((await localService(repositoryApi).probe(w.path, idleMinutes(), group?.bases ?? [])).stdout);
   }
 
   bones(c, narrow = true) {
-    const { header } = ghost(c);
-    const pad = narrow ? G.lg : 32;
-    return v_flex().size_full().min_h(0).bg(c.canvas).text_color(c.text)
-      .child(h_flex().flex_none().w_full().justify_center().px(pad).py(narrow ? G.lg : 28)
-        .child(v_flex().w_full().max_w(1080).gap(narrow ? 32 : 44)
-          .child(header(narrow ? 110 : 140, narrow ? 17 : 20))
-          .child(this.skeleton(c, narrow))));
+    return pageBones(c, narrow, { title: { narrow: 110, wide: 140 }, body: this.skeleton(c, narrow) });
   }
 
-  skeleton(c, narrow) {
-    const { block, row } = ghost(c);
-    return breathe(v_flex().id("kanso-skeleton").w_full().gap(narrow ? 36 : 48))
-      .child(v_flex().gap(G.md).child(block(110, 12)).child(block(narrow ? 150 : 220, narrow ? 40 : 58, 6)).child(block(200, 11))
-        .child(h_flex().gap(narrow ? G.xl : 48).pt(G.md).children([30, 46, 40, 30].map((w) => block(w, narrow ? 18 : 22, 4)))))
-      .child(v_flex().w_full().child(h_flex().pb(G.sm).child(block(90, 12))).children([0, 1, 2, 3].map(row)))
-      .child(v_flex().w_full().child(h_flex().pb(G.sm).child(block(70, 12))).children([0, 1, 2].map(row)));
-  }
+  skeleton(c, narrow) { return worktreesSkeleton(ghost(c), narrow); }
 
   hero(c, narrow) {
     const all = this.groups.flatMap((g) => g.items), live = all.filter((w) => !w.missing);
@@ -665,17 +650,13 @@ export class Worktrees {
     const primary = this.armed.button("wt-clean", busy ? "Removing…" : `Clean up ${plan.length}`, `remove ${plan.length}`, "all", (cx) => this.cleanUp(cx), c, { disabled: !can });
     const gist = !this.done ? "Clean up waits for the scan to finish."
       : plan.length ? `${freed ? `${fmtSize(freed)} of it` : `${plan.length} of them`} can go without losing anything.` : "Nothing can go without losing work.";
-    return v_flex().w_full().gap(G.xl)
-      .child(v_flex().gap(G.xs)
+    return heroStack(heroHeading()
         .child(div().text_size(15).text_color(c.muted).child(here ? `On ${machineTitle("", "", here)}` : "On this computer"))
-        .child(h_flex().flex_wrap().items_end().gap_x(G.md)
+        .child(metricValue()
           .child(div().text_size(narrow ? 48 : 72).line_height(1).font_light().text_color(c.text).child(measured ? fmtSize(total) : String(live.length)))
           .child(div().pb(narrow ? 6 : 10).text_size(13).text_color(c.dim).child(measured ? "in worktrees" : "worktrees")))
         .child(div().text_size(15).text_color(c.dim).child(gist)))
-      .child(h_flex().w_full().flex_wrap().gap_x(narrow ? G.xl : 48).gap_y(G.lg)
-        .children(stats.map((s) => h_flex().items_end().gap(6)
-          .child(div().text_size(narrow ? 22 : 28).line_height(1).font_light().text_color(c.text).child(s.value))
-          .child(div().pb(3).text_size(12).text_color(c.dim).child(s.unit)))))
+      .child(metricStats(stats, c, narrow))
       .child(v_flex().w_full().gap(G.sm)
         .child(h_flex().w_full().flex_wrap().gap_x(G.lg).gap_y(G.sm).items_center()
           .child(primary)
@@ -812,15 +793,13 @@ export class Worktrees {
     const freedBars = this.bars(c, h.freedByDay, "Freed each day", 96, "fills as you remove")
       , diskBars = this.bars(c, h.diskByDay, "In worktrees each day", 56, "a bar per day with a scan");
     const stats = [
-      { value: String(h.worktrees), unit: h.worktrees === 1 ? "worktree removed" : "worktrees removed" },
-      { value: String(h.branches), unit: h.branches === 1 ? "merged branch deleted" : "merged branches deleted" },
-      { value: String(h.records + h.orphans), unit: "leftovers cleared" },
+      ...cleanedStats(h),
     ];
     const outside = h.kb - h.kanso;
     return v_flex().w_full().gap(G.lg)
       .child(section(c, "Freed", h.since ? `since ${shortDate(h.since)}` : ""))
       .child(v_flex().gap(G.xs)
-        .child(h_flex().flex_wrap().items_end().gap_x(G.md)
+        .child(metricValue()
           .child(div().text_size(narrow ? 36 : 48).line_height(1).font_light().text_color(c.text).child(fmtSize(h.kb) || "0 KB"))
           .child(div().pb(narrow ? 4 : 7).text_size(13).text_color(c.dim).child("of disk freed")))
         .child(div().text_size(12).text_color(c.dim).child(!h.kb
@@ -888,14 +867,22 @@ export class Worktrees {
         ? failNote("wt-failed", this.note, c, [{ label: "Refresh", onClick: (cx) => { if (!this.working) this.refresh(cx); } }])
         : stateEmpty("wt-empty", "worktree", "No worktrees besides your checkouts", c))
         : this.page(c, narrow, groups, shown);
-    return v_flex().id("kanso-worktrees").size_full().min_h(0).bg(c.canvas).text_color(c.text).overflow_y_scrollbar()
-      .on_size_change((size, sizeCx) => { if (Math.abs((this.width || 0) - size.width) >= 1) { this.width = size.width; sizeCx.notify(); } })
-      .child(h_flex().flex_none().w_full().justify_center().px(narrow ? G.lg : 32).py(narrow ? G.lg : 28)
-        .child(v_flex().w_full().max_w(1080).gap(narrow ? 32 : 44)
+    return sizedPage.call(this, v_flex().id("kanso-worktrees").size_full().min_h(0).bg(c.canvas).text_color(c.text).overflow_y_scrollbar(), narrow, (column) => column
           .child(this.header(c, narrow))
-          .when(this.share.open, (el) => el.child(this.share.row(c, () => this.shareCard(),
-            (this.hist?.kb ?? 0) > 0 ? "Only the totals: how much was freed, how many were removed, and the days. Never a repository, branch or folder name."
-              : "Nothing freed yet, so it shares what the worktrees take now: totals only, never a repository, branch or folder name.", G.sm)))
-          .child(body)));
+          .children(shareRows(this, c, (this.hist?.kb ?? 0) > 0 ? "Only the totals: how much was freed, how many were removed, and the days. Never a repository, branch or folder name."
+              : "Nothing freed yet, so it shares what the worktrees take now: totals only, never a repository, branch or folder name."))
+          .child(body));
   }
 }
+
+const cleanedStats = (h) => [
+  { value: String(h.worktrees), unit: h.worktrees === 1 ? "worktree removed" : "worktrees removed" },
+  { value: String(h.branches), unit: h.branches === 1 ? "merged branch deleted" : "merged branches deleted" },
+  { value: String(h.records + h.orphans), unit: "leftovers cleared" },
+];
+
+const worktreesSkeleton = ({ block, row }, narrow) => skeletonStack(narrow)
+  .child(v_flex().gap(G.md).child(block(110, 12)).child(block(narrow ? 150 : 220, narrow ? 40 : 58, 6)).child(block(200, 11))
+    .child(skeletonMetrics(block, narrow)))
+  .child(v_flex().w_full().child(h_flex().pb(G.sm).child(block(90, 12))).children([0, 1, 2, 3].map(row)))
+  .child(v_flex().w_full().child(h_flex().pb(G.sm).child(block(70, 12))).children([0, 1, 2].map(row)));

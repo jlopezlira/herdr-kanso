@@ -1,3 +1,4 @@
+import { loadSpaces, loadContainers, loadFiles, loadPullRequest, loadMemory, loadPorts, loadLook, loadSettings, loadTokenSpend } from "./mod-fixtures.mjs";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { load } from "./helpers.mjs";
@@ -115,7 +116,7 @@ function hostFor(make) {
 test("files, preview and a document show the shared skeleton while they are read", async () => {
   const make = tape();
   const host = hostFor(make);
-  const { Files } = await load("kanso-panel/files.js", ["Files"], host);
+  const { Files } = await loadFiles(host);
   const files = new Files();
   Object.assign(files, { context: "ctx", loading: true, entries: new Map(), file: null, error: null, root: "/repo", folders: new Set(), marks: {}, limited: false });
   assertSkeleton(files.render({}));
@@ -142,14 +143,14 @@ test("files, preview and a document show the shared skeleton while they are read
 test("the side panels show the shared skeleton before they are ready and while their data is still out", async () => {
   const make = tape();
   const host = hostFor(make);
-  const { Look } = await load("kanso-panel/look.js", ["Look"], host);
+  const { Look } = await loadLook(host);
   const look = new Look();
   look.selected = { path: "/repo/shot.png" };
   look.shown = { busy: true };
   assertSkeleton(look.view(c));
   assertSkeleton(look.bones(c));
 
-  const { PullRequest } = await load("kanso-panel/pr.js", ["PullRequest"], host);
+  const { PullRequest } = await loadPullRequest(host);
   const pr = new PullRequest();
   assertSkeleton(pr.skeleton(c, true));
   assertSkeleton(pr.bones(c, true));
@@ -170,7 +171,7 @@ test("the side panels show the shared skeleton before they are ready and while t
   const texts = walk(trees.freed(c, true)).texts;
   assert.equal(texts.includes("Can't read the history") && texts.includes("database is locked"), true, "our words, then the tool's words");
 
-  const { Ports } = await load("kanso-panel/ports.js", ["Ports"], host);
+  const { Ports } = await loadPorts(host);
   const ports = new Ports();
   Object.assign(ports, { list: null, width: 368, share: { open: false }, reading: false, note: null, hist: null, digest: { lists: { opened: [], ended: [] } }, range: "day" });
   assertSkeleton(ports.render({}));
@@ -198,26 +199,26 @@ test("the side panels show the shared skeleton before they are ready and while t
 test("spend, settings, memory and containers load as the shared skeleton", async () => {
   const make = tape();
   const host = hostFor(make);
-  const { TokenSpend } = await load("kanso-spend/main.js", ["TokenSpend"], host);
+  const { TokenSpend } = await loadTokenSpend(host);
   const spend = new TokenSpend();
   Object.assign(spend, { runtimeError: null, error: null, running: null, scan: { partial: true, processed: 1, total: 4 }, settings: null, planInputs: [], queuedSources: false });
   assertSkeleton(spend.waitingView(c, true));
   assert.equal(/first time/.test(walk(spend.waitingView(c, true)).texts.join(" ")), false);
   assertSkeleton(spend.settingsView(c));
 
-  const { Settings } = await load("kanso-settings/main.js", ["Settings"], host);
+  const { Settings } = await loadSettings(host);
   const settings = new Settings();
   settings.news = { entries: null, error: null, from: null };
   settings.installed = "3.18.11";
   assertSkeleton(settings.newsPage({}, c));
   assert.equal(walk(settings.newsPage({}, c)).texts.includes("Check for updates"), true);
 
-  const { Memory } = await load("kanso-guard/main.js", ["Memory"], host);
+  const { Memory } = await loadMemory(host);
   const memory = new Memory();
   Object.assign(memory, { awake: true, width: 960, now: null, share: { open: false }, busy: {} });
   assertSkeleton(memory.render({ timer: { after() {} } }));
 
-  const { Containers } = await load("kanso-containers/main.js", ["Containers"], host);
+  const { Containers } = await loadContainers(host);
   const containers = new Containers();
   Object.assign(containers, { state: "reading", groups: null, width: 368, reading: false, error: null, note: null });
   assertSkeleton(containers.render());
@@ -228,7 +229,7 @@ test("spend, settings, memory and containers load as the shared skeleton", async
 test("spaces, sleep and arrangements show the shape they are about to draw", async () => {
   const make = tape();
   const host = hostFor(make);
-  const { Spaces } = await load("kanso-spaces/main.js", ["Spaces"], host);
+  const { Spaces } = await loadSpaces(host);
   const spaces = new Spaces();
   const open = assertSkeleton(spaces.machineBones({ border: "#ccc" }, false, null), "machine-loading-local");
   assert.equal(open.calls.some(([p, a]) => p === "h" && a[0] === 32), true, "a computer's first read is one row at the rows' height");

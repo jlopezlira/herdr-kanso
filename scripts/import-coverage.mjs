@@ -1,8 +1,8 @@
 import { readFileSync, readdirSync } from 'node:fs';
-import { join, resolve } from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { join } from 'node:path';
 import { CLASSES } from './import-proto.mjs';
 import { recordsFrom, replaceSource } from './storybook-catalog.mjs';
+import { isMain } from './cli.mjs';
 
 export function importCoverage(dir, root = '.') {
   const records = readdirSync(dir).filter((file) => file.endsWith('.json')).sort().flatMap((file) => recordsFrom('coverage', file, JSON.parse(readFileSync(join(dir, file), 'utf8'))));
@@ -15,7 +15,7 @@ export function importCoverage(dir, root = '.') {
   return records.length;
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
+if (isMain(import.meta.url)) {
   if (!process.argv[2]) throw new Error('usage: node scripts/import-coverage.mjs <coverage-json-dir>');
   console.log(`${importCoverage(process.argv[2])} coverage states imported`);
 }

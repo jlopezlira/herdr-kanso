@@ -1,3 +1,4 @@
+import { loadGuideSections, loadHelp } from "./mod-fixtures.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -16,7 +17,7 @@ test("Help names Windows modifiers and preserves macOS glyphs", async () => {
 });
 
 test("The Guide reads its chords by action from live keys on every platform", async () => {
-  const { guideSections } = await load("kanso-help/guide.js", ["guideSections"]);
+  const { guideSections } = await loadGuideSections();
   for (const platform of ["windows", "macos", "linux"]) {
     const bindings = bindingsOf(platform), home = platform === "windows" ? "C:\\Users\\Jo\\AppData\\Roaming\\herdr-app" : "/custom/herdr";
     const text = linesOf(guideSections(bindings, platform, home));
@@ -33,7 +34,7 @@ test("The Guide reads its chords by action from live keys on every platform", as
 });
 
 test("An unbound Guide action leaves a complete sentence with no chord", async () => {
-  const { guideSections } = await load("kanso-help/guide.js", ["guideSections"]);
+  const { guideSections } = await loadGuideSections();
   const sections = clone(guideSections([], "windows", "/custom"));
   assert.equal(sections[0][1][0], "Every pane sits in a row you slide along, each one wide enough to read. Open a pane to the right or below it in the same column.");
   const text = linesOf(sections);
@@ -43,7 +44,7 @@ test("An unbound Guide action leaves a complete sentence with no chord", async (
 // Help opened on `platform` with these bindings and folders, drawing on a tape.
 async function openHelp(platform, bindings, { folder = "/actual/config", userHome = "/users/jo" } = {}) {
   const ui = tape();
-  const { Help } = await load("kanso-help/main.js", ["Help"], {
+  const { Help } = await loadHelp({
     ...ui.host, window: () => ({ platform }), keys: () => bindings, appHome: () => folder, home: () => userHome, props: () => ({}),
     Companion: class { load() {} },
   });
@@ -68,7 +69,7 @@ test("Help's keyboard and Guide render the current platform and bindings", async
 });
 
 test("The Guide shows each family once and shares modifiers across a run", async () => {
-  const { guideSections } = await load("kanso-help/guide.js", ["guideSections"]);
+  const { guideSections } = await loadGuideSections();
   for (const [platform, vim, columns, panels] of [
     ["macos", "⌥⌘H J K L", "⌃⌥1–9", "⌃⇧1–9"],
     ["windows", "Alt+H J K L", "Alt+Shift+1–9", "Ctrl+Shift+1–9"],

@@ -1,7 +1,7 @@
 // Real mod code with a fake clock, inert native elements and counted host boundaries.
 import { performance } from "node:perf_hooks";
 import { pathToFileURL } from "node:url";
-import { load, exec as runFile, clone, until } from "./helpers.mjs";
+import { load, exec as runFile, clone, until, success, failure, openedKdb } from "./helpers.mjs";
 
 export const PANEL_IDS = ["files", "pr", "preview", "shipped", "worktrees", "ports", "look", "find"];
 const source = process.env.PERF_SOURCE_ROOT ? pathToFileURL(`${process.env.PERF_SOURCE_ROOT}/kanso/mods/`) : undefined;
@@ -55,27 +55,27 @@ export function fixture({ dir = "/fixture", blocked = false, quiet = null, worki
     state.inFlight += 1;
     try {
       if (command === "sqlite3" || command === "mkdir") return await runFile(command, args, options);
-      if (command === "ps") return { code: 0, stdout: terms.map((t, i) => `${200 + i} 1 00:01 agent`).join("\n"), stderr: "" };
+      if (command === "ps") return success(terms.map((t, i) => `${200 + i} 1 00:01 agent`).join("\n"));
       if (command === "hc") {
         if (args[0] === "label") {
           const term = terms.find((t) => t.address === args[1]);
           for (const pair of args.slice(2)) { const at = pair.indexOf("="); if (term) term.labels[pair.slice(0, at)] = pair.slice(at + 1); }
         }
-        return { code: 0, stdout: JSON.stringify(args[0] === "get" ? terms.find((term) => term.address === args[1]) ?? {} : { machines: [] }), stderr: "" };
+        return success(JSON.stringify(args[0] === "get" ? terms.find((term) => term.address === args[1]) ?? {} : { machines: [] }));
       }
-      if (command === "git") return { code: 128, stdout: "", stderr: "not a git repository" };
+      if (command === "git") return failure("not a git repository", 128);
       if (command === "wc") {
         const transcript = transcripts.find((row) => row.file === args[1]);
         return { code: transcript ? 0 : 1, stdout: transcript ? `${Buffer.byteLength(transcript.text)} ${transcript.file}\n` : "", stderr: "" };
       }
       if (command === "sh" && args[1].startsWith('pid="$1"')) {
         const transcript = transcripts.find((row) => row.pid === Number(args[3]));
-        return { code: 0, stdout: transcript ? `claude\t${JSON.stringify({ sessionId: transcript.sessionId, cwd: transcript.cwd })}\n` : "", stderr: "" };
+        return success(transcript ? `claude\t${JSON.stringify({ sessionId: transcript.sessionId, cwd: transcript.cwd })}\n` : "");
       }
       if (command === "sh" && args[1].startsWith('f="$1"; said()')) {
-        return { code: 0, stdout: transcripts.find((row) => row.file === args[3])?.text ?? "", stderr: "" };
+        return success(transcripts.find((row) => row.file === args[3])?.text ?? "");
       }
-      return { code: 0, stdout: "", stderr: "" };
+      return success("");
     } finally {
       state.inFlight -= 1;
       const at = state.flights.indexOf(command);
@@ -135,6 +135,32 @@ export function fixture({ dir = "/fixture", blocked = false, quiet = null, worki
   };
   return { state, host, cx, shared, projects, list, terms, transcripts, ps, settle, advance };
 }
+
+// The processes started over the next `ms`, counted from none.
+export const freshAdvance = async (f, ms) => {
+  f.state.processes.length = 0;
+  await f.advance(ms);
+};
+// A view behind brought in front, and what it starts at once.
+export const broughtForward = async (f, view) => {
+  f.state.active = true;
+  view.render(f.cx);
+  await freshAdvance(f, 0);
+};
+export const initialised = async (f, view, ...args) => {
+  view.init(...args);
+  await f.settle();
+  return view;
+};
+// The sidebar on a migrated database, its Kdb on the host.
+export const sidebarOn = async (f) => {
+  const { Kdb } = await loadMod("kanso-spaces/kdb.js", ["Kdb"], f.host);
+  f.host.Kdb = Kdb;
+  const db = await openedKdb(Kdb);
+  await db.migrate();
+  const { Spaces } = await loadMod("kanso-spaces/main.js", ["Spaces"], f.host);
+  return new Spaces();
+};
 
 export async function firstDraw(id) {
   const f = fixture({ blocked: true });

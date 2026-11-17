@@ -1,7 +1,8 @@
 // Shared by the tests: load a mod's real source into a fake Herdr host.
 import { execFile, execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
-import { access, mkdir, mkdtemp, readFile, readdir, rmdir, rm, unlink, writeFile } from "node:fs/promises";
+import assert from "node:assert/strict";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { access, mkdir, mkdtemp, readFile, readdir, rename, rmdir, rm, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { promisify } from "node:util";
@@ -10,8 +11,9 @@ import { bannedGlobals } from "../scripts/herdr-api.mjs";
 import { modScript } from "../scripts/mod-source.mjs";
 
 const runFile = promisify(execFile);
-const fileExists = (path) => access(path).then(() => true, () => false);
+export const fileExists = (path) => access(path).then(() => true, () => false);
 const api = JSON.parse(readFileSync(new URL("./herdr-api.json", import.meta.url), "utf8"));
+export { api as herdrApi };
 const declaredNames = (mod) => api.modules[mod] ?? [];
 const HERDR_MODULES = {
   "fs/promises": declaredNames("fs/promises"),
@@ -56,6 +58,35 @@ const herdrModules = (host) => {
 };
 
 export const clone = (value) => JSON.parse(JSON.stringify(value));
+export const success = (stdout) => ({ code: 0, stdout, stderr: "" });
+export const failure = (stderr, code = 1) => ({ code, stdout: "", stderr });
+export const readOrNull = async (path) => { try { return await readFile(path, "utf8"); } catch { return null; } };
+// What `base64 -D -i <in> -o <out>` does, as exec answers it.
+export const isDecode = (cmd, args) => (cmd === "base64" || cmd === "/usr/bin/base64") && args[0] === "-D";
+export const decoded = async (args) => {
+  const text = await readFile(args[2], "utf8");
+  await writeFile(args[4], Buffer.from(text.replace(/\s/g, ""), "base64"));
+  return success("");
+};
+// What `mv <from> <to>` does, as exec answers it.
+export const moved = async (args) => {
+  await rename(args.at(-2), args.at(-1));
+  return success("");
+};
+export const calls = (el, name) => el.calls.filter((call) => call[0] === name);
+export const one = (el, name) => {
+  const found = calls(el, name);
+  assert.equal(found.length, 1, name);
+  return found[0][1];
+};
+export const styled = (el, name) => {
+  const style = chain();
+  one(el, name)(style);
+  return style.calls;
+};
+export const arg = (el, name) => calls(el, name).at(-1)?.[1];
+export const find = (el, test) => (test(el) ? el : el.kids.map((kid) => find(kid, test)).find(Boolean) ?? null);
+export const all = (el, test) => [...(test(el) ? [el] : []), ...el.kids.flatMap((kid) => all(kid, test))];
 export const nativePlatform = ({ darwin: "macos", win32: "windows" })[process.platform] ?? "linux";
 export const nativeWindow = () => ({ platform: nativePlatform });
 const mods = new URL("../kanso/mods/", import.meta.url);
@@ -126,7 +157,64 @@ export async function exec(command, args, options = {}) {
   }
 }
 
+// A host whose shared state lives in `state` and whose layout is `tree()`, each read as a copy.
+export const layoutHost = (state, tree, run) => ({
+  shared: (key) => clone(state[key] ?? null), setShared: (key, value) => { state[key] = clone(value); },
+  layout: () => clone(tree()), window: () => ({ platform: "macos" }), run,
+});
+
+// git in `cwd` as a test user, with `config` first; a failing git fails the test.
+export const gitOk = (...config) => async (cwd, ...args) => {
+  const r = await exec("git", ["-c", "core.autocrlf=false", "-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false", ...config, ...args], { cwd });
+  assert.equal(r.code, 0, `git ${args.join(" ")}: ${r.stderr}`);
+  return r.stdout.trim();
+};
+
 export const databaseTimer = { after(ms, fn) { const timer = setTimeout(fn, ms); timer.unref(); return { cancel: () => clearTimeout(timer) }; } };
+
+export const openedKdb = async (Kdb) => {
+  const db = new Kdb(databaseTimer);
+  await db.open();
+  return db;
+};
+
+// A view context whose timers wait in `timers` as [ms, fn] and whose spawned tasks can be awaited; `extra` adds to it.
+export const timedContext = (timers, extra = {}) => {
+  const pending = [];
+  const cx = {
+    notify() {}, ...extra,
+    spawn(fn) { const p = fn(cx); pending.push(p); return { cancel() {} }; },
+    timer: { every: () => ({ cancel() {} }), after: (ms, fn) => { timers.push([ms, fn]); return { cancel() {} }; } },
+  };
+  return { cx, pending, drain: async () => { while (pending.length) await pending.shift(); } };
+};
+
+// Elements that keep their children in order, every id and every word drawn.
+const KIDS = Symbol("kids");
+export const keeping = () => {
+  const ids = [], words = [];
+  const element = () => {
+    const kids = [];
+    const proxy = new Proxy(function el() {}, { get: (_target, method) => {
+      if (method === KIDS) return kids;
+      return (...args) => {
+        if (method === "when" && args[0]) args[1](proxy);
+        if (method === "id") ids.push(args[0]);
+        if (method === "child") kids.push(args[0]);
+        if (method === "child" && typeof args[0] === "string") words.push(args[0]);
+        if (method === "children") kids.push(...args[0]);
+        return proxy;
+      };
+    } });
+    return proxy;
+  };
+  return { element, ids, words };
+};
+// The words under a kept element, in the order they show.
+export const wordsOf = (node) => (typeof node === "string" ? [node] : node?.[KIDS] ? node[KIDS].flatMap(wordsOf) : []);
+
+// Herdr's shared state, kept in `store`.
+export const storeShared = (store, missing = undefined) => ({ shared: (key) => store[key] ?? missing, setShared: (key, value) => { store[key] = value; } });
 
 // A view context whose spawned tasks can be awaited.
 export function context() {
@@ -134,6 +222,20 @@ export function context() {
   const cx = { notify() {}, spawn(fn) { const task = fn(cx); pending.push(task); return task; } };
   return { cx, async drain() { while (pending.length) await pending.shift(); } };
 }
+
+// A context whose every() ticks wait in `timers` as { ms, fn }.
+export const tickingContext = (timers) => {
+  const tasks = context();
+  tasks.cx.timer = { every(ms, fn) { timers.push({ ms, fn }); } };
+  return tasks;
+};
+
+export const refreshedContext = async (view) => {
+  const tasks = context();
+  view.refresh(tasks.cx);
+  await tasks.drain();
+  return tasks;
+};
 
 // GPUI's elements are single-use: one added to a second parent fails the render
 // ("element was already added to a parent"). These fakes fail the same way.
@@ -159,21 +261,42 @@ export function singleUse() {
 }
 
 // A UI host that keeps the text drawn and each clickable id's handler.
+// An element that is never awaited and runs `when`'s branch; `handle(key, el)` answers what it records, any other call returns it.
+export const recordingElement = (handle) => {
+  const el = new Proxy({}, { get: (_target, key) => {
+    if (key === "then") return undefined;
+    if (key === "when") return (on, apply) => (on ? apply(el) : el);
+    return handle(key, el) ?? (() => el);
+  } });
+  return el;
+};
+
+// Every call `style(recorder)` makes, as [name, ...args].
+const styleCalls = (style) => {
+  const seen = [];
+  const recorder = new Proxy({}, { get: (_t, name) => (...args) => { seen.push([name, ...args]); return recorder; } });
+  style(recorder);
+  return seen;
+};
+
+// A UI host that keeps the text drawn, each clickable id's handler, and each id's tooltip, opacity and hover style.
 export function tape() {
-  const texts = [], handlers = new Map();
+  const texts = [], colors = [], ids = [], handlers = new Map(), tips = new Map(), opacities = new Map(), hovers = new Map();
   const node = (initial = null) => {
     let id = initial;
-    const el = new Proxy({}, { get(_target, key) {
-      if (key === "then") return undefined;
-      if (key === "id") return (value) => { id = value; return el; };
-      if (key === "child") return (value) => { if (typeof value === "string") texts.push(value); return el; };
-      if (key === "when") return (on, apply) => on ? apply(el) : el;
-      if (key === "on_click") return (fn) => { handlers.set(id, fn); return el; };
-      return () => el;
-    } });
-    return el;
+    const by = (map) => (value) => { map.set(id, value); };
+    const record = {
+      id: (value) => { id = value; ids.push(value); },
+      child: (value) => { if (typeof value === "string") texts.push(value); },
+      on_click: by(handlers),
+      tooltip: by(tips),
+      opacity: by(opacities),
+      hover: (style) => { hovers.set(id, styleCalls(style)); },
+      text_color: (value) => { colors.push(value); },
+    };
+    return recordingElement((key, el) => (Object.hasOwn(record, key) ? (value) => { record[key](value); return el; } : undefined));
   };
-  return { texts, handlers, host: { div: node, svg: node, h_flex: node, v_flex: node, Button: { new: node } } };
+  return { texts, colors, ids, handlers, tips, opacities, hovers, host: { div: node, svg: node, h_flex: node, v_flex: node, Button: { new: node } } };
 }
 
 // A gpui element that records its calls, and a host that builds them.
@@ -237,3 +360,41 @@ export const gpuiHost = () => ({
 
 // Every call in a kit file that takes a bare number other than 0, as the token lint counts them: a piece reads its sizes from the tokens instead.
 export const numberArguments = (file) => [...readFileSync(new URL(`../kanso/mods/${file}`, import.meta.url), "utf8").matchAll(/\.\w+\([^()]*?(?<![\w.])-?(?:0\.\d|[1-9])[\d.]*\s*[,)]/g)].map((m) => m[0]);
+
+// A kit's exports with `c`, its colours in `theme`.
+export const themed = (kit, theme) => ({ ...kit, c: kit.tokens(theme) });
+export const eachTheme = (tokens, ...themes) => themes.map((theme) => ({ theme, c: tokens(theme) }));
+// The kit's night colours, as the row and kit tests draw them.
+export const KIT_NIGHT = { foreground: "#d8d4cb", background: "#1b1b19", hover: "#232321", selected: "#2b2b28", accent: "#da627d", dim: "#6b6862", muted: "#949086", blocked: "#ca938b", working: "#c4b07e", done: "#98ad8f" };
+// A host whose svg and image elements keep the path they draw.
+const drawnAt = (tag) => (path) => { const el = chain(tag); el.calls.push([tag, path]); return el; };
+export const drawingHost = () => ({ ...gpuiHost(), svg: drawnAt("svg"), image: drawnAt("image") });
+// The one value each named call set on an element.
+export const boxOf = (el, ...names) => names.map((name) => one(el, name));
+// Herdr's text file reads and writes on the real disk: a missing file reads as null, a write makes its folder.
+export const textFiles = {
+  readTextFile: readOrNull,
+  writeTextFile: async (path, text) => { await mkdir(join(path, ".."), { recursive: true }); await writeFile(path, text); return null; },
+};
+// The night colours the strip and the tab bar draw with.
+export const CHROME_NIGHT = {
+  background: "#1b1b19", foreground: "#d8d4cb", hover: "#232321", selected: "#2b2b28", dim: "#6b6860", muted: "#949086",
+  blocked: "#d5674f", working: "#d9a74a", done: "#7fa66b", accent: "#7d9cd4", popover: "#222220", border: "#33332f", chrome: "#141413",
+};
+// A text field holding `value`.
+export const fieldWith = ({ value }) => ({ on() {}, focus() {}, value: () => value, set_selected_range() {}, release() {} });
+// Every .js file under dir, at any depth; a folder that is not there has none.
+export async function jsFiles(dir) {
+  const entries = await readdir(dir, { withFileTypes: true }).catch(() => []);
+  const nested = await Promise.all(entries.map((e) => (e.isDirectory() ? jsFiles(join(dir, e.name)) : Promise.resolve(e.name.endsWith(".js") ? [join(dir, e.name)] : []))));
+  return nested.flat();
+}
+// Runs `use` in a new temporary folder, removed after, whatever happens.
+export const inTemporaryDir = (prefix, use) => {
+  const root = mkdtempSync(join(tmpdir(), prefix));
+  try {
+    return use(root);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+};

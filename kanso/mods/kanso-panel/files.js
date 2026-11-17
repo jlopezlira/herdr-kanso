@@ -1,3 +1,5 @@
+import { startRemotePoll, advanceRemotePoll, listFailure, remoteDue, parseTree, pollStart, pollNext, ArmPoll, takeStamp, staleView, asOf } from "./remote-file.js";
+import { documentBones } from "./ui-page.js";
 import { serviceOn } from "./platform-host.js";
 import { paths } from "./platform-paths.js";
 import { fileApi } from "./platform-files.js";
@@ -8,9 +10,8 @@ import { fileApi } from "./platform-files.js";
 import { div } from "gpui-kit";
 import { v_flex, h_flex, v_virtual_list, Scrollbar } from "gpui-base";
 import { exec, watchFolder, theme, openOverlay, shared, setShared, window, layout } from "herdr";
-import { location, key, insideRoot, showPanel } from "./lib.js";
+import { location, key, insideRoot, showPanel, failure } from "./lib.js";
 import { walkLayout } from "./layout.js";
-import { listFailure, remoteDue, parseTree, pollStart, pollNext, ArmPoll, takeStamp, staleView, asOf } from "./remote-file.js";
 import { mapSeries } from "./pure.js";
 import { filesMemory } from "./panel-state.js";
 import { G, H, breathe, tokens } from "./ui.js";
@@ -18,7 +19,6 @@ import { quietLink } from "./ui-button.js";
 import { row } from "./ui-row.js";
 import { skeleton } from "./ui-skeleton.js";
 import { stateEmpty } from "./ui-state.js";
-import { failure } from "./lib.js";
 import { Front } from "./front.js";
 
 const PER_FOLDER = 500, TOTAL = 5000, WATCHED_MS = 60_000;
@@ -53,7 +53,7 @@ export class Files {
       setShared(RETURN, null);
       if (back.context === key()) { this.context = back.context; ({ cwd: this.root, on: this.on } = location()); this.folders = new Set(back.folders ?? []); }
     }
-    this.poll = pollStart(); this.stamp = null; this.fresh = null; this.held = null; this.arm = null;
+    startRemotePoll.call(this);
     this.front = new Front();
     if (this.front.behind()) this.front.rest();
     else this.refresh(cx);
@@ -123,7 +123,7 @@ export class Files {
       this.folders = new Set(mem?.folders ?? []);
       this.pendingFile = mem?.file ?? null;
       this.pending = new Set(); this.marks = {}; this.watched = null; this.error = null; this.limited = false;
-      this.stamp = null; this.fresh = null; this.held = null; this.poll = pollStart(); this.arm = null;
+      startRemotePoll.call(this);
       this.rev = this.rev + 1;
     }
     if (!cwd) return;
@@ -160,7 +160,7 @@ export class Files {
     if (key() !== context) return;
     this.marks = status?.code === 0 ? marksFrom(top.stdout.trim(), status.stdout.split("\0")) : {};
     this.rev = this.rev + 1; this.error = null; this.listedAt = Date.now(); this.watch(cwd, cx);
-    if (this.pendingFile) { const file = this.pendingFile; this.pendingFile = null; this.openSaved(file, cx); }
+    this.openPending(cx);
   }
 
   async loadRemote(cwd, context, cx) {
@@ -181,7 +181,14 @@ export class Files {
     this.fresh = Date.now(); this.held = null; this.error = null;
     this.poll = pollNext(this.poll, "changed");
     this.rev = this.rev + 1;
-    if (this.pendingFile) { const file = this.pendingFile; this.pendingFile = null; this.openSaved(file, cx); }
+    this.openPending(cx);
+  }
+
+  openPending(cx) {
+    if (!this.pendingFile) return;
+    const file = this.pendingFile;
+    this.pendingFile = null;
+    this.openSaved(file, cx);
   }
 
   probe(cx) {
@@ -193,14 +200,10 @@ export class Files {
       if (outcome === "changed") this.refresh(cx);
       else {
         if (outcome === "seen") this.stamp = next;
-        if (outcome === "failed") {
-          const view = staleView(Boolean(this.entries.get("")?.length), this.fresh, Date.now(), listFailure(new Error("timed out"), on));
-          if (view.keep) { this.held = view.hold; this.error = null; }
-          else if (!this.error) this.error = view.error;
-        }
-        this.poll = pollNext(this.poll, outcome);
-        new ArmPoll(this).start(cx, (tick) => this.probe(tick));
-        cx.notify();
+        const failure = outcome === "failed"
+          ? staleView(Boolean(this.entries.get("")?.length), this.fresh, Date.now(), listFailure(new Error("timed out"), on)) : null;
+        if (failure?.keep) { this.held = failure.hold; this.error = null; }
+        advanceRemotePoll.call(this, cx, outcome, failure);
       }
     });
   }
@@ -276,13 +279,7 @@ export class Files {
     return breathe(v_flex().id("kanso-skeleton").w_full().p(G.sm)).children([0, 1, 2, 3, 4, 5, 6].map((i) => bone(i, H.line)));
   }
 
-  bones(c) {
-    const { header } = skeleton(c);
-    return v_flex().size_full().min_h(0).bg(c.canvas).text_color(c.text)
-      .child(h_flex().h(42).flex_none().px(14).gap(8).items_center().border_b(1).border_color(c.border)
-        .child(header(52, 13)))
-      .child(this.listBones(c));
-  }
+  bones(c) { return documentBones(c, 52, this.listBones(c)); }
 
   render(cx) {
     if (!this.on) this.front?.wake(cx, (wakeCx) => this.refresh(wakeCx));

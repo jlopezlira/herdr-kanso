@@ -1,11 +1,12 @@
 // Sidebar process readers reuse the live host records.
+import { loadSpaces, loadFindThreads } from "./mod-fixtures.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { load, clone, context } from "./helpers.mjs";
 
 test("thread discovery uses each terminal's foreground pid and argv without hc get", async () => {
   const calls = [];
-  const { findThreads } = await load("kanso-spaces/threads.js", ["findThreads"], {
+  const { findThreads } = await loadFindThreads({
     home: () => "/home/me",
     exec: async (command, args) => { calls.push([command, args]); return { code: 0, stdout: command === "sh" && args.length === 2 ? "/home/me" : "" }; },
     hc: () => assert.fail("thread discovery spawned hc get"),
@@ -17,7 +18,7 @@ test("thread discovery uses each terminal's foreground pid and argv without hc g
 
 test("terminal identity labels use created_ms without another process read", async () => {
   const calls = [];
-  const { Spaces } = await load("kanso-spaces/main.js", ["Spaces"], { hc: async (args) => { calls.push(clone(args)); return { code: 0 }; } });
+  const { Spaces } = await loadSpaces({ hc: async (args) => { calls.push(clone(args)); return { code: 0 }; } });
   const view = new Spaces();
   await view.labelTerminal("t1", { "kanso.shown": "Name" }, { created_ms: 123, labels: {} });
   await view.labelTerminal("t2", {}, { created_ms: 456, labels: { "kanso.id": "kept" } });
@@ -28,7 +29,9 @@ test("transcripts check size on status or turn changes and after five minutes", 
   const calls = [];
   let size = 123, now = 0;
   const file = "/session folder/rollout-01234567-1234-1234-1234-0123456789ab.jsonl";
-  const { findThreads } = await load("kanso-spaces/threads.js", ["findThreads"], {
+  // The commands asked since the last look, and none kept after.
+  const asked = () => calls.splice(0).map(([command]) => command);
+  const { findThreads } = await loadFindThreads({
     Date: { now: () => now },
     home: () => "/home/me",
     exec: async (command, args) => {
@@ -48,23 +51,20 @@ test("transcripts check size on status or turn changes and after five minutes", 
   const working = [{ ...terms[0], status: "working" }];
   now = 1000;
   const checked = await findThreads(list, found, working);
-  assert.deepEqual(calls.map(([command]) => command), ["wc"]);
-  calls.length = 0;
+  assert.deepEqual(asked(), ["wc"]);
   await findThreads(list, checked, working);
   assert.deepEqual(calls, [], "an unchanged size still records the latest status");
   size = 124;
   const nextTurn = [{ ...working[0], turn: 2 }];
   const grown = await findThreads(list, checked, nextTurn);
   assert.equal(grown.t1.size, 124);
-  assert.deepEqual(calls.map(([command]) => command), ["wc", "sh"]);
-  calls.length = 0;
+  assert.deepEqual(asked(), ["wc", "sh"]);
   now = 300999;
   await findThreads(list, grown, nextTurn);
   assert.deepEqual(calls, []);
   now = 301000;
   const fallback = await findThreads(list, grown, nextTurn);
-  assert.deepEqual(calls.map(([command]) => command), ["wc"]);
-  calls.length = 0;
+  assert.deepEqual(asked(), ["wc"]);
   now += 1;
   await findThreads(list, fallback, nextTurn);
   assert.deepEqual(calls, [], "the fallback waits five minutes from the last size check");
@@ -112,7 +112,7 @@ test("missing transcripts retry after 1, 2, 4, 8 and at most 10 minutes, resetti
 test("machine polling stops after the first local read and resumes for a remote or parked machine", async () => {
   const calls = [];
   let layouts = [{ name: null, layout: "ready" }];
-  const { Spaces } = await load("kanso-spaces/main.js", ["Spaces"], {
+  const { Spaces } = await loadSpaces({
     machines: () => layouts,
     hc: async (args) => { calls.push(clone(args)); return { code: 0, stdout: '{"machines":[]}' }; },
   });

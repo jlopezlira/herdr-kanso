@@ -1,9 +1,8 @@
 // What each pull request state says, and the one action that state can take.
 import assert from "node:assert/strict";
 import test from "node:test";
-import { load } from "./helpers.mjs";
+import { load, clone as host } from "./helpers.mjs";
 
-const host = (value) => JSON.parse(JSON.stringify(value));
 const agent = { isAgent: true, name: "checkout", address: "t1", blocked: false };
 const now = Date.parse("2026-11-11T18:00:00Z");
 

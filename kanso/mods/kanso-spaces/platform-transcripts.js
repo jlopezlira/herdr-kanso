@@ -119,9 +119,11 @@ tail -c 4000000 "$f" | said | tail -n 40; printf '\n\036\n'
 tail -c ${TAIL} "$f"`;
 
 
-const WINDOWS_SLICE = String.raw`
-$stream=[IO.File]::Open($file,[IO.FileMode]::Open,[IO.FileAccess]::Read,[IO.FileShare]::ReadWrite)
-try {
+const windowsStream = (body) => `$stream=[IO.File]::Open($file,[IO.FileMode]::Open,[IO.FileAccess]::Read,[IO.FileShare]::ReadWrite)
+try {${body}} finally { $stream.Dispose() }
+`;
+
+const WINDOWS_SLICE = windowsStream(String.raw`
   $size=$stream.Length
   if ($from -lt 0 -or $from -gt $size) { $from=0 }
   $start=$from; $end=$from; $data=[byte[]]@()
@@ -144,12 +146,9 @@ try {
   [Console]::Write("$end $size"+[char]10)
   $text=[Text.Encoding]::UTF8.GetString($data)
   [Console]::Write((($text -split [string][char]10 | ForEach-Object { $_.TrimEnd([char]13) } | Where-Object { $_.Length -lt $longest }) -join [string][char]10))
-} finally { $stream.Dispose() }
-`;
+`);
 
-const WINDOWS_THREAD = String.raw`
-$stream=[IO.File]::Open($file,[IO.FileMode]::Open,[IO.FileAccess]::Read,[IO.FileShare]::ReadWrite)
-try {
+const WINDOWS_THREAD = windowsStream(String.raw`
   function part($start,$count) {
     $null=$stream.Seek($start,[IO.SeekOrigin]::Begin)
     $buffer=New-Object byte[] ([Math]::Min($count,$stream.Length-$start))
@@ -167,8 +166,7 @@ try {
   function said($text) { $text -split [string][char]10 | Where-Object { $_.Length -lt 16000 -and $_ -match '"type":"user"|"user_message"' -and $_ -notmatch '"tool_result"' } }
   $separator=[string][char]10+[char]30+[string][char]10
   [Console]::Write((@(($titles | Select-Object -Last 1), ((said $head | Select-Object -First 60) -join [string][char]10), ((said $recent | Select-Object -Last 40) -join [string][char]10), $tail) -join $separator))
-} finally { $stream.Dispose() }
-`;
+`);
 
 
 const WINDOWS_SCAN = String.raw`

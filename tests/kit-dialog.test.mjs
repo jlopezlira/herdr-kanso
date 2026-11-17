@@ -1,10 +1,11 @@
 // The dialog piece: its title, scope, notes and footer, and Cancel and Escape through one handler.
+import { loadTokens } from "./mod-fixtures.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { load, gpuiHost, numberArguments, clone, nodes, texts, press } from "./helpers.mjs";
 
 const night = { foreground: "#d8d4cb", background: "#1b1b19", accent: "#da627d", dim: "#6b6862", muted: "#949086", blocked: "#ca938b", popover: "#20201e" };
-const { tokens } = await load("kanso-panel/ui.js", ["tokens"], gpuiHost());
+const { tokens } = await loadTokens(gpuiHost());
 const { dialog, statusNotes } = await load("kanso-panel/ui-dialog.js", ["dialog", "statusNotes"], gpuiHost());
 const c = tokens(night);
 const button = (el, id) => nodes(el).find((kid) => kid.tag === id);

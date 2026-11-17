@@ -1,3 +1,4 @@
+import { loadSpaces, loadSinceLeft, loadWorkspaceStatus, loadNeedsYouView } from "./mod-fixtures.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
@@ -8,6 +9,9 @@ import { load, clone, singleUse, tape } from "./helpers.mjs";
 const agent = (address, status = "blocked", extra = {}) => ({ address, status, pane: `pane-${address}`, space: "project", space_name: "Project", tab: "tab", title: address, seq: 1, ...extra });
 const terminal = (address, status_ms = 1, extra = {}) => ({ address, status_ms, state: "live", ...extra });
 const addresses = (rows) => rows.map((row) => row.address);
+
+const MODES = ["spaces", "agents", "threads"];
+const waitingNotFinished = (texts) => assert.deepEqual(["Waiting for you", "Finished"].map((word) => texts.includes(word)), [true, false]);
 
 test("Only an agent waiting on you is listed, oldest first across projects", () => {
   const rows = waitingQueue([agent("new"), agent("finished", "done"), agent("old", "blocked", { space_name: "Other" })],
@@ -86,7 +90,7 @@ test("Only changed queue rows or availability need to be published", () => {
 async function controller() {
   const state = { list: [agent("a"), agent("b")], terms: [terminal("a", 1), terminal("b", 2)], spaces: [], layouts: [], runs: [], timers: [], writes: 0, builds: 0 };
   const sharedState = new Map(), ui = tape();
-  const { Spaces } = await load("kanso-spaces/main.js", ["Spaces"], { ...ui.host,
+  const { Spaces } = await loadSpaces({ ...ui.host,
     agents: () => state.list, terminals: () => state.terms, spaces: () => state.spaces, machines: () => state.layouts,
     panes: () => state.panes ?? [], props: () => ({}), theme: () => ({}), image: ui.host.div,
     waitingQueue: (...args) => { state.builds++; return waitingQueue(...args); },
@@ -185,8 +189,7 @@ test("The sidebar list supports click and Enter, with project, name, reason and 
   view.nav = view.navNext;
   assert.ok(ui.texts.includes("Project"));
   assert.ok(ui.texts.includes("a"));
-  assert.ok(ui.texts.includes("Waiting for you"));
-  assert.equal(ui.texts.includes("Finished"), false);
+  waitingNotFinished(ui.texts);
   assert.ok(ui.texts.includes("1m"));
   view.listKeyDown({ key: "down" }, cx);
   assert.deepEqual(scrolled, [1]);
@@ -197,7 +200,7 @@ test("The sidebar list supports click and Enter, with project, name, reason and 
 
 test("Projects, Status and Threads keep the return digest when Needs you is hidden, and a stored choice stays", async () => {
   const { state, view, ui, sharedState } = await controller();
-  const { SinceLeft } = await load("kanso-spaces/since-left.js", ["SinceLeft"], ui.host);
+  const { SinceLeft } = await loadSinceLeft(ui.host);
   state.spaces = [{ id: "project", active: true, folder: "C:\\work\\project", tabs: [] }];
   const returned = new SinceLeft(null);
   Object.assign(returned, { project: `:${state.spaces[0].folder}`, rows: [{ id: 7, target: "agent:a", text: "Finished while you were away" }] });
@@ -206,37 +209,33 @@ test("Projects, Status and Threads keep the return digest when Needs you is hidd
     listed: () => [], seen: () => new Map(), tools: ui.host.div, viewSwitch: ui.host.div,
     agentsView: () => [], threadsView: () => [], grouped: () => [],
   });
-  for (const mode of ["spaces", "agents", "threads"]) {
-    view.view = mode;
-    view.needsOpen = false;
+  const drawAs = (mode, open) => {
+    Object.assign(view, { view: mode, needsOpen: open });
     ui.texts.length = 0;
     view.render();
+  };
+  const digestShown = () => {
+    assert.ok(ui.texts.includes(returned.rows[0].text));
+    assert.equal(returned.showing, true);
+  };
+  for (const mode of MODES) {
+    drawAs(mode, false);
     assert.equal(ui.texts.includes("Needs you · 2"), false);
     assert.ok(ui.texts.includes("While you were away"));
-    assert.ok(ui.texts.includes(returned.rows[0].text));
-    assert.equal(returned.showing, true);
-    view.needsOpen = true;
-    ui.texts.length = 0;
-    view.render();
+    digestShown();
+    drawAs(mode, true);
     assert.equal(ui.texts.includes("Waiting for you"), false);
-    assert.ok(ui.texts.includes(returned.rows[0].text));
-    assert.equal(returned.showing, true);
+    digestShown();
   }
   for (const choice of ["show", "needed"]) {
     sharedState.set("kanso.pieces", { "sidebar.needs": choice });
-    for (const mode of ["spaces", "agents", "threads"]) {
-      view.view = mode;
-      view.needsOpen = false;
-      ui.texts.length = 0;
-      view.render();
+    for (const mode of MODES) {
+      drawAs(mode, false);
       assert.ok(ui.texts.includes("Needs you · 2"), choice);
       assert.ok(ui.texts.includes("While you were away"));
       assert.equal(returned.showing, true);
-      view.needsOpen = true;
-      ui.texts.length = 0;
-      view.render();
-      assert.ok(ui.texts.includes("Waiting for you"));
-      assert.equal(ui.texts.includes("Finished"), false);
+      drawAs(mode, true);
+      waitingNotFinished(ui.texts);
       assert.equal(returned.showing, false, "a hidden digest is not acknowledged");
       assert.ok(!view.nav.some((row) => row.key === "since-7"));
       view.needsOpen = false;
@@ -274,7 +273,7 @@ test("Opening the queue from the collapsed rail expands the list", async () => {
 test("The status bar reads the sidebar queue rather than counting a different set", async () => {
   const ui = tape();
   const rows = waitingQueue([agent("a"), agent("b", "done")], []);
-  const { WorkspaceStatus } = await load("kanso-status/main.js", ["WorkspaceStatus"], { ...ui.host,
+  const { WorkspaceStatus } = await loadWorkspaceStatus({ ...ui.host,
     theme: () => ({}), spaces: () => [], agents: () => [], terminals: () => [], props: () => ({ side: "right" }),
     window: () => ({ platform: "windows" }), shared: (key) => key === NEEDS_YOU ? { rows } : [],
     mark: () => null,
@@ -286,7 +285,7 @@ test("The status bar reads the sidebar queue rather than counting a different se
 });
 
 test("The kit renders every queue state with single-use elements", async () => {
-  const { queueControl, queueList } = await load("kanso-spaces/needs-you-view.js", ["queueControl", "queueList"], singleUse());
+  const { queueControl, queueList } = await loadNeedsYouView(singleUse());
   for (const state of ["ready", "loading", "unavailable"]) {
     const empty = { rows: [], state };
     queueControl({}, empty, false, true, () => {});
@@ -294,7 +293,7 @@ test("The kit renders every queue state with single-use elements", async () => {
   }
   queueList({}, { rows: waitingQueue([agent("a")], []), state: "ready" }, () => ({ selected: true, go() {} }), () => "1m");
   const ui = tape();
-  const kit = await load("kanso-spaces/needs-you-view.js", ["queueControl", "queueList"], ui.host);
+  const kit = await loadNeedsYouView(ui.host);
   kit.queueControl({}, { rows: [], state: "ready" }, false, true, () => {});
   kit.queueList({}, { rows: [], state: "unavailable" }, () => ({}), () => "");
   assert.ok(ui.texts.includes("Nobody is waiting"));

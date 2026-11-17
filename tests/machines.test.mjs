@@ -1,8 +1,9 @@
 // A remote machine can be turned off from the sidebar and back on with the setup that was saved.
+import { loadSpaces, temporaryKdbFile } from "./mod-fixtures.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { join } from "node:path";
-import { databaseTimer, load, clone, temporary, exec, context } from "./helpers.mjs";
+import { load, clone, temporary, exec, context, failure } from "./helpers.mjs";
+import { loadSidebar, mountedState, recorder } from "./sidebar-fixtures.mjs";
 
 const record = { name: "dark", target: "dark.example", via: "", session: "", temporary: false };
 const darkKey = JSON.stringify(["dark", "/srv"]);
@@ -139,45 +140,36 @@ test("off hides that machine, and this computer has no switch", async () => {
 });
 
 async function sidebar(state) {
-  const ids = [];
-  const texts = [];
-  const tips = [];
-  const node = () => {
-    const proxy = new Proxy({}, {
-      get(_target, prop) {
-        if (prop === "then") return undefined;
-        if (prop === "id") return (id) => { ids.push(id); return proxy; };
-        if (prop === "child") return (value) => { if (typeof value === "string") texts.push(value); return proxy; };
-        if (prop === "tooltip") return (value) => { if (typeof value === "string") tips.push(value); return proxy; };
-        if (prop === "when") return (cond, fn) => (cond ? fn(proxy) : proxy);
-        return () => proxy;
-      },
-    });
-    return proxy;
-  };
-  const { Spaces } = await load("kanso-spaces/main.js", ["Spaces"], {
-    div: node, svg: node, image: node, h_flex: node, v_flex: node,
-    Popover: { new: node }, Toggle: { new: (id) => { ids.push(id); return node(); } }, Button: { new: (id) => { ids.push(id); return node(); } },
-    theme: () => ({ foreground: "#fff", muted: "#888", dim: "#666", chrome: "#111", hover: "#222", ansi2: "#0f0", blocked: "#c44", border: "#333", raised: "#222", accent: "#09f" }),
-    shared: (key) => (key === "sidebar.collapsed" ? state.collapsed === true : null), setShared: () => {},
-    spaces: () => state.spaces, panes: () => [], agents: () => [], terminals: () => [],
-    machines: () => state.layouts, run: () => {}, home: () => "/Users/me", props: () => ({}),
+  const { node, host, ids, texts, tips } = recorder();
+  const { Spaces } = await loadSidebar(host, {
+    shared: (key) => (key === "sidebar.collapsed" ? state.collapsed === true : null),
+    spaces: () => state.spaces, machines: () => state.layouts,
   });
-  const view = Object.assign(new Spaces(), {
-    git: {}, shown: new Set(state.spaces.map((space) => space.id)), born: {}, custom: {}, order: "updated",
-    machines: state.live ?? [], parked: state.parked ?? [], folded: new Set(), agentsFolded: new Set(),
+  const view = Object.assign(new Spaces(), mountedState({
+    shown: new Set(state.spaces.map((space) => space.id)),
+    machines: state.live ?? [], parked: state.parked ?? [],
     waking: state.waking ?? new Set(), login: state.login ?? new Set(), failed: state.failed ?? new Set(),
-    powerBusy: new Set(), hints: state.hints ?? {}, hoverMachine: state.hover ?? null,
+    hints: state.hints ?? {}, hoverMachine: state.hover ?? null,
     kbd: state.kbd === true, navKey: state.navKey ?? null,
     handle: { is_focused: () => state.kbd === true, focus() {} },
     hostName: state.hostName ?? "macbook", tools: node, sync: state.sync ?? { config: {}, status: {} },
-  });
+  }));
   view.render();
   return { view, ids, texts, tips };
 }
 
 const local = { id: "home", name: "~", folder: "/Users/me", machine: null, active: true, tabs: [] };
 const remote = { id: "dark-sp", name: "app", folder: "/srv", machine: "dark", active: false, tabs: [] };
+
+const parkedDark = { spaces: [local, remote], layouts: [{ name: null, layout: "ready" }], parked: [record] };
+const connected = { spaces: [local, remote], layouts: [{ name: null, layout: "ready" }, { name: "dark", layout: "ready" }], live: [{ ...record, state: "connected" }] };
+const unreachable = { spaces: [local, remote], layouts: [{ name: null, layout: "ready" }, { name: "dark", layout: "unavailable" }], live: [{ ...record, state: "unreachable" }] };
+const ADD_DARK = ["machine", "add", "dark.example", "--name", "dark", "--json"];
+const turnedOff = async (view) => {
+  const tasks = context();
+  view.turnOff("dark", tasks.cx);
+  await tasks.drain();
+};
 
 const oneRow = (drawn, name) => drawn.view.nav.filter((row) => row.key === `machine:${name}`).length;
 
@@ -201,26 +193,17 @@ test("each machine state is one row, and this computer has no power button", asy
   assert.equal(off.texts.includes("Off"), true);
   assert.equal(off.texts.includes("Unavailable"), false);
 
-  const offHover = await sidebar({
-    spaces: [local, remote], layouts: [{ name: null, layout: "ready" }], parked: [record], hover: "dark",
-  });
+  const offHover = await sidebar({ ...parkedDark, hover: "dark" });
   assert.equal(offHover.ids.includes("machine-power-dark"), true);
   assert.equal(offHover.tips.includes("Turn dark on"), true);
   assert.equal(offHover.ids.includes("machine-add-dark"), false);
   assert.equal(offHover.ids.includes("machine-retry-dark"), false);
 
-  const keys = await sidebar({
-    spaces: [local, remote], layouts: [{ name: null, layout: "ready" }], parked: [record],
-    kbd: true, navKey: "machine:dark",
-  });
+  const keys = await sidebar({ ...parkedDark, kbd: true, navKey: "machine:dark" });
   assert.equal(keys.ids.includes("machine-power-dark"), true);
   assert.ok(keys.view.nav.some((row) => row.key === "machine-power:dark"));
 
-  const back = await sidebar({
-    spaces: [local, remote],
-    layouts: [{ name: null, layout: "ready" }, { name: "dark", layout: "ready" }],
-    live: [{ ...record, state: "connected" }], hover: "dark",
-  });
+  const back = await sidebar({ ...connected, hover: "dark" });
   assert.equal(oneRow(back, "dark"), 1);
   assert.equal(back.ids.includes("space-dark-sp"), true, "on: its project is back");
   assert.equal(back.ids.includes("machine-power-dark"), true);
@@ -230,28 +213,16 @@ test("each machine state is one row, and this computer has no power button", asy
   assert.equal(back.texts.includes("Off"), false);
   assert.equal(back.tips.includes("Connected"), false);
 
-  const onQuiet = await sidebar({
-    spaces: [local, remote],
-    layouts: [{ name: null, layout: "ready" }, { name: "dark", layout: "ready" }],
-    live: [{ ...record, state: "connected" }],
-  });
+  const onQuiet = await sidebar(connected);
   assert.equal(oneRow(onQuiet, "dark"), 1);
   assert.equal(onQuiet.ids.includes("machine-power-dark"), false, "turn off waits for hover");
   assert.equal(onQuiet.ids.includes("machine-add-dark"), false);
 
-  const onKeys = await sidebar({
-    spaces: [local, remote],
-    layouts: [{ name: null, layout: "ready" }, { name: "dark", layout: "ready" }],
-    live: [{ ...record, state: "connected" }],
-    kbd: true, navKey: "machine:dark",
-  });
+  const onKeys = await sidebar({ ...connected, kbd: true, navKey: "machine:dark" });
   assert.equal(onKeys.ids.includes("machine-power-dark"), true);
   assert.equal(onKeys.ids.includes("machine-add-dark"), true);
 
-  const rail = await sidebar({
-    spaces: [local, remote], layouts: [{ name: null, layout: "ready" }], parked: [record],
-    collapsed: true, hover: "dark",
-  });
+  const rail = await sidebar({ ...parkedDark, collapsed: true, hover: "dark" });
   assert.equal(oneRow(rail, "dark"), 1);
   assert.equal(rail.ids.includes("machine-power-dark"), false);
   assert.equal(rail.ids.includes("machine-retry-dark"), false);
@@ -271,11 +242,7 @@ test("loading, unreachable, and needs login each stay on that one row", async ()
   assert.equal(loading.tips.includes("Loading"), false);
   assert.equal(loading.ids.includes("machine-power-dark"), false);
 
-  const down = await sidebar({
-    spaces: [local, remote],
-    layouts: [{ name: null, layout: "ready" }, { name: "dark", layout: "unavailable" }],
-    live: [{ ...record, state: "unreachable" }], hints: { dark: "ssh timed out" }, hover: "dark",
-  });
+  const down = await sidebar({ ...unreachable, hints: { dark: "ssh timed out" }, hover: "dark" });
   assert.equal(oneRow(down, "dark"), 1);
   assert.equal(down.ids.includes("machine-unavailable-dark"), false);
   assert.equal(down.ids.includes("machine-retry-dark"), true);
@@ -286,9 +253,7 @@ test("loading, unreachable, and needs login each stay on that one row", async ()
   assert.equal(down.tips.includes("Refresh"), true);
   assert.equal(down.ids.includes("space-dark-sp"), true, "its projects stay, as last read");
 
-  const login = await sidebar({
-    spaces: [local, remote], layouts: [{ name: null, layout: "ready" }], parked: [record], login: new Set(["dark"]), hover: "dark",
-  });
+  const login = await sidebar({ ...parkedDark, login: new Set(["dark"]), hover: "dark" });
   assert.equal(oneRow(login, "dark"), 1);
   assert.equal(login.ids.includes("machine-login-dark"), true);
   assert.equal(login.ids.includes("machine-login-copy-dark"), false);
@@ -299,18 +264,12 @@ test("loading, unreachable, and needs login each stay on that one row", async ()
   assert.equal(login.tips.includes("Sign in"), true);
   assert.equal(login.ids.includes("space-dark-sp"), false);
 
-  const loginQuiet = await sidebar({
-    spaces: [local, remote], layouts: [{ name: null, layout: "ready" }], parked: [record], login: new Set(["dark"]),
-  });
+  const loginQuiet = await sidebar({ ...parkedDark, login: new Set(["dark"]) });
   assert.equal(oneRow(loginQuiet, "dark"), 1);
   assert.equal(loginQuiet.ids.includes("machine-login-dark"), true, "Sign in stays on the row");
   assert.equal(loginQuiet.ids.includes("machine-power-dark"), false);
 
-  const quiet = await sidebar({
-    spaces: [local, remote],
-    layouts: [{ name: null, layout: "ready" }, { name: "dark", layout: "unavailable" }],
-    live: [{ ...record, state: "unreachable" }],
-  });
+  const quiet = await sidebar(unreachable);
   assert.equal(oneRow(quiet, "dark"), 1);
   assert.equal(quiet.ids.includes("machine-retry-dark"), true, "retry stays on the row");
   assert.equal(quiet.ids.includes("machine-power-dark"), false);
@@ -318,21 +277,13 @@ test("loading, unreachable, and needs login each stay on that one row", async ()
 });
 
 test("turning a machine off stops reading it at once, and turning it on adds the saved setup", async () => {
-  const calls = [];
   const db = { parked: [], async parkMachine(row) { this.parked = [clone(row)]; }, async forgetMachine() { this.parked = []; }, async machinesOff() { return this.parked; } };
-  const { Spaces } = await load("kanso-spaces/main.js", ["Spaces"], {
-    hc: async (args) => {
-      calls.push(args);
-      if (args[0] === "machine" && args[1] === "ls") return { code: 0, stdout: JSON.stringify({ machines: [] }) };
-      if (args[1] === "add") return { code: 1, stdout: JSON.stringify({ error: { kind: "login_needed", message: "needs a login" } }) };
-      return { code: 0, stdout: "" };
-    },
-    machines: () => [], shared: () => null, home: () => "/home", exec: async () => ({ code: 0, stdout: "" }),
-  });
-  const view = Object.assign(new Spaces(), {
-    parked: [], machines: [{ ...record, state: "connected" }], waking: new Set(), login: new Set(), failed: new Set(), powerBusy: new Set(),
-    git: {}, at: {}, busy: {}, ready: {}, folded: new Set(), checked: {}, unsure: new Set(), db: () => db,
-  });
+  const { view, calls } = await parkedView(async (args) => {
+    if (args[0] === "machine" && args[1] === "ls") return { code: 0, stdout: JSON.stringify({ machines: [] }) };
+    if (args[1] === "add") return { code: 1, stdout: JSON.stringify({ error: { kind: "login_needed", message: "needs a login" } }) };
+    return { code: 0, stdout: "" };
+  }, db, { shared: () => null, home: () => "/home" });
+  view.machines = [{ ...record, state: "connected" }];
   const { cx, drain } = context();
   view.turnOff("dark", cx);
   assert.equal(view.parked.some((row) => row.name === "dark"), true, "the row goes dim before hc answers");
@@ -344,7 +295,7 @@ test("turning a machine off stops reading it at once, and turning it on adds the
   assert.equal(view.due(Date.now(), sp, [], places, true).has(darkKey), false);
   assert.equal(view.due(Date.now(), sp, [], places, true).has(homeKey), true);
   const gitCalls = [];
-  const { Spaces: WithExec } = await load("kanso-spaces/main.js", ["Spaces"], {
+  const { Spaces: WithExec } = await loadSpaces({
     exec: (...args) => { gitCalls.push(args); return { code: 1, stderr: "skipped" }; }, machines: () => [],
   });
   const quiet = Object.assign(new WithExec(), { parked: [record], checked: {}, unsure: new Set(), git: {} });
@@ -357,7 +308,7 @@ test("turning a machine off stops reading it at once, and turning it on adds the
   calls.length = 0;
   view.turnOn("dark", cx);
   await drain();
-  assert.deepEqual(clone(calls[0]), ["machine", "add", "dark.example", "--name", "dark", "--json"]);
+  assert.deepEqual(clone(calls[0]), ADD_DARK);
   assert.equal(calls[0].includes("--install"), false);
   assert.equal(view.login.has("dark"), true);
   assert.equal(view.parked.some((row) => row.name === "dark"), true, "a login keeps the saved setup");
@@ -369,19 +320,24 @@ test("turning a machine off stops reading it at once, and turning it on adds the
   assert.equal(view.due(Date.now(), sp, [], places, true).has(darkKey), true, "on: it is read again");
 });
 
-async function parkedView(hc, db) {
-  const { Spaces } = await load("kanso-spaces/main.js", ["Spaces"], { hc, machines: () => [], exec: async () => ({ code: 0, stdout: "" }) });
-  return Object.assign(new Spaces(), {
+// A view whose machine commands `answer` gives, kept in `calls`.
+async function parkedView(answer, db, host = {}) {
+  const calls = [];
+  const hc = async (args) => {
+    calls.push(args);
+    return answer(args);
+  };
+  const { Spaces } = await loadSpaces({ hc, machines: () => [], exec: async () => ({ code: 0, stdout: "" }), ...host });
+  const view = Object.assign(new Spaces(), {
     parked: [], machines: [], waking: new Set(), login: new Set(), failed: new Set(), powerBusy: new Set(), hints: {},
     git: {}, at: {}, busy: {}, ready: {}, folded: new Set(), checked: {}, unsure: new Set(), db: () => db,
   });
+  return { view, calls };
 }
 
 test("an unreachable add keeps the machine and does not pass --via false", async () => {
-  const calls = [];
   const db = { parked: [record], async parkMachine(row) { this.parked = [clone(row)]; }, async forgetMachine() { this.parked = []; } };
-  const view = await parkedView(async (args) => {
-    calls.push(args);
+  const { view, calls } = await parkedView(async (args) => {
     if (args[1] === "add") return { code: 1, stdout: JSON.stringify({ error: { kind: "unreachable", message: "timed out", hint: "ssh timed out" } }) };
     return { code: 0, stdout: JSON.stringify({ machines: [] }) };
   }, db);
@@ -396,17 +352,14 @@ test("an unreachable add keeps the machine and does not pass --via false", async
   assert.equal(view.login.has("dark"), false);
   assert.equal(view.parked.some((row) => row.name === "dark"), true);
   assert.equal(view.hints.dark, "ssh timed out");
-  assert.deepEqual(clone(calls[0]), ["machine", "add", "dark.example", "--name", "dark", "--json"]);
+  assert.deepEqual(clone(calls[0]), ADD_DARK);
 });
 
 test("a remove that cannot be stored keeps the row and offers retry", async () => {
-  const calls = [];
   const db = { async parkMachine() { throw new Error("disk"); }, async forgetMachine() {} };
-  const view = await parkedView(async (args) => { calls.push(args); return { code: 0, stdout: "" }; }, db);
+  const { view, calls } = await parkedView(async () => ({ code: 0, stdout: "" }), db);
   view.machines = [{ name: "dark", target: "dark.example", via: false, session: null, state: "connected" }];
-  const { cx, drain } = context();
-  view.turnOff("dark", cx);
-  await drain();
+  await turnedOff(view);
   assert.deepEqual(clone(calls[0]), ["machine", "rm", "dark"]);
   assert.equal(view.parked.some((row) => row.name === "dark" && row.via === "" && row.session === ""), true);
   assert.equal(view.failed.has("dark"), true);
@@ -414,28 +367,24 @@ test("a remove that cannot be stored keeps the row and offers retry", async () =
 
 test("a remove Herdr refuses puts the machine back", async () => {
   const db = { parked: [], async parkMachine(row) { this.parked = [clone(row)]; }, async forgetMachine() { this.parked = []; } };
-  const view = await parkedView(async () => ({ code: 1, stdout: "", stderr: "still there" }), db);
+  const { view } = await parkedView(async () => (failure("still there")), db);
   view.machines = [{ ...record, state: "connected" }];
-  const { cx, drain } = context();
-  view.turnOff("dark", cx);
-  await drain();
+  await turnedOff(view);
   assert.equal(view.parked.some((row) => row.name === "dark"), false);
   assert.equal(view.failed.has("dark"), false);
   assert.deepEqual(db.parked, []);
 });
 
 test("an off machine is still off after the database is opened again", async (t) => {
-  const dir = await temporary(t);
-  const { Kdb } = await load("kanso-spaces/kdb.js", ["Kdb"], { exec, appHome: () => dir });
-  const file = join(dir, "kanso");
-  await new Kdb(databaseTimer, file).parkMachine({ name: "dark", target: "dark.example", via: "ssh -J jump", session: "sess", temporary: true });
-  assert.deepEqual(clone(await new Kdb(databaseTimer, file).machinesOff()), [{ name: "dark", target: "dark.example", via: "ssh -J jump", session: "sess", temporary: true }]);
-  await new Kdb(databaseTimer, file).forgetMachine("dark");
-  assert.deepEqual(clone(await new Kdb(databaseTimer, file).machinesOff()), []);
-  await new Kdb(databaseTimer, file).parkMachine({ name: "kept", target: "kept.example", via: "ssh -J jump", session: "sess", temporary: false });
-  await new Kdb(databaseTimer, file).parkMachine({ name: "plain", target: "plain.example", via: "false", session: "null", temporary: false });
-  await new Kdb(databaseTimer, file).parkMachine({ name: "mixed", target: "mixed.example", via: "null", session: "sess", temporary: false });
-  assert.deepEqual(clone(await new Kdb(databaseTimer, file).machinesOff()), [
+  const { fresh } = await temporaryKdbFile(t);
+  await fresh().parkMachine({ name: "dark", target: "dark.example", via: "ssh -J jump", session: "sess", temporary: true });
+  assert.deepEqual(clone(await fresh().machinesOff()), [{ name: "dark", target: "dark.example", via: "ssh -J jump", session: "sess", temporary: true }]);
+  await fresh().forgetMachine("dark");
+  assert.deepEqual(clone(await fresh().machinesOff()), []);
+  await fresh().parkMachine({ name: "kept", target: "kept.example", via: "ssh -J jump", session: "sess", temporary: false });
+  await fresh().parkMachine({ name: "plain", target: "plain.example", via: "false", session: "null", temporary: false });
+  await fresh().parkMachine({ name: "mixed", target: "mixed.example", via: "null", session: "sess", temporary: false });
+  assert.deepEqual(clone(await fresh().machinesOff()), [
     { name: "kept", target: "kept.example", via: "ssh -J jump", session: "sess", temporary: false },
     { name: "mixed", target: "mixed.example", via: "", session: "sess", temporary: false },
     { name: "plain", target: "plain.example", via: "", session: "", temporary: false },
@@ -444,7 +393,6 @@ test("an off machine is still off after the database is opened again", async (t)
 
 const ACTION = /^machine-(power|retry|login|add|sync)-dark$/;
 const syncOn = { config: { version: 1, peers: { dark: { enabled: true } } }, status: {} };
-const connected = { spaces: [local, remote], layouts: [{ name: null, layout: "ready" }, { name: "dark", layout: "ready" }], live: [{ ...record, state: "connected" }] };
 
 test("a connected machine's row keeps Sync in sight when it is on or cannot run, and with its hover actions when off", async () => {
   const off = await sidebar(connected);
@@ -499,7 +447,7 @@ test("Sync on is the normal text tone, off is dim, and one that cannot run is th
 });
 
 async function syncView({ sync = { config: {}, status: {} }, host = {} } = {}) {
-  const { Spaces } = await load("kanso-spaces/main.js", ["Spaces"], { appHome: () => "/app", setShared: () => {}, ...host });
+  const { Spaces } = await loadSpaces({ appHome: () => "/app", setShared: () => {}, ...host });
   return Object.assign(new Spaces(), { sync, machines: [], parked: [] });
 }
 

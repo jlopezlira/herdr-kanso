@@ -1,14 +1,13 @@
 // Check that importing approved drawings leaves the Storybook's guidelines as they are.
 import assert from "node:assert/strict";
-import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { cpSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import test from "node:test";
+import { inTemporaryDir } from "./helpers.mjs";
 import { importApproved } from "../scripts/import-approved.mjs";
 
 test("Importing the approved drawings keeps the guidelines written in the Storybook", () => {
-  const root = mkdtempSync(join(tmpdir(), "kanso-approved-"));
-  try {
+  inTemporaryDir("kanso-approved-", (root) => {
     cpSync(new URL("../stories", import.meta.url), join(root, "stories"), { recursive: true });
     const before = JSON.parse(readFileSync(join(root, "stories/references.json"), "utf8"));
     const rows = before.boards.map((board) => `<tr><td class="no">${board.code}</td><td><span class="st st-ok"><i></i>Approved</span></td></tr>`).join("");
@@ -18,7 +17,5 @@ test("Importing the approved drawings keeps the guidelines written in the Storyb
     importApproved(master, root);
     const after = JSON.parse(readFileSync(join(root, "stories/references.json"), "utf8"));
     assert.deepEqual(after.pages.map((page) => [page.page, page.guidelines]), before.pages.map((page) => [page.page, page.guidelines]));
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
+  });
 });

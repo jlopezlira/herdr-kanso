@@ -7,6 +7,7 @@ import { v_flex, h_flex } from "gpui-base";
 import { spaces, panes, terminals, shared, hc, run, props, closeOverlay, theme, home } from "herdr";
 import { isClaude, promptEmpty, asksToExit, RESUME_LABEL, isSessionId, resumeLine, asleepTerminal } from "./resume.js";
 import { tilde, describe, spaceBeside } from "./tabkit.js";
+import { focusOn } from "./pure.js";
 import { breathe, tokens } from "./ui.js";
 import { dialog, statusNotes } from "./ui-dialog.js";
 import { skeleton } from "./ui-skeleton.js";
@@ -105,8 +106,7 @@ async function leave(cx, { terminal, pid, name }) {
 
 export default class Sleep extends View {
   init(_props, cx) {
-    this.handle = cx.focus_handle();
-    this.handle.focus();
+    this.handle = focusOn(cx);
     const ask = props() ?? {};
     this.order = ask.sleep ?? null;
     this.space = spaces().find((s) => s.id === (ask.sleep ?? ask.wake)?.space) ?? spaces().find((s) => s.active) ?? null;

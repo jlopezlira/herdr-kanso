@@ -6,8 +6,11 @@ export const OUT = "site/tokens.css";
 
 const vars = (list, indent) => list.map((t) => `${indent}--${t.name}: ${t.value};`).join("\n");
 
+// Every token that is not a colour.
+export const sizeTokens = (tokens) => Object.entries(tokens).filter(([group]) => group !== "colour").flatMap(([, list]) => list);
+
 export function render(tokens) {
-  const sizes = Object.entries(tokens).filter(([group]) => group !== "colour").flatMap(([, list]) => list);
+  const sizes = sizeTokens(tokens);
   return `/* Generated from ${TOKENS} by npm run build:site-tokens. */
 :root {
 ${vars(sizes, "  ")}
@@ -44,7 +47,7 @@ const SIZES = {
 export function renderUtilities(tokens) {
   const rule = ([name, body]) => `.${name}{${body}}`;
   const colours = tokens.colour.dark.map((t) => t.name).filter((n) => n !== "shadow");
-  const sizes = Object.entries(tokens).filter(([group]) => group !== "colour").flatMap(([, list]) => list)
+  const sizes = sizeTokens(tokens)
     .flatMap((t) => Object.entries(SIZES).filter(([prefix]) => t.name.startsWith(prefix)).map(([prefix, make]) => make(t.name.slice(prefix.length))));
   return `/* Generated from ${TOKENS} by npm run build:site-tokens: one class per token. */
 ${colours.flatMap((n) => [[`kanso-text--${n}`, `color:var(--${n})!important`], [`kanso-fill--${n}`, `background:var(--${n})`], [`kanso-ring--${n}`, `box-shadow:inset 0 0 0 1px var(--${n})`]]).map(rule).join("\n")}

@@ -2,6 +2,7 @@
 // Herdr's layout.set replaces the whole tree and a set that hasn't landed still reads as the old one, so every writer keeps its piece in shared state and each write puts them all back.
 // Herdr loads a mod's files from its own folder only, so this file is copied byte for byte into each mod; `npm run sync:share` copies it and a test fails when a copy differs.
 import { layout, run, shared, setShared, window } from "herdr";
+import { nodeById } from "./pure.js";
 
 export const LAYOUT_INTENT = "kanso.layout";
 export const STRIP_INTENT = "kanso.layout.strip";
@@ -9,14 +10,10 @@ export const STRIP_INTENT = "kanso.layout.strip";
 // Right after layout.switch, layout() can still read the previous tree, so only Kanso's tree (the one with the strip map) is ever written.
 export const isKansoTree = (n) => n?.id === "strip-map" || (n?.children ?? []).some(isKansoTree);
 
-export function walkLayout(node, id) {
-  if (node?.id === id) return node;
-  for (const child of node?.children ?? []) {
-    const found = walkLayout(child, id);
-    if (found) return found;
-  }
-  return null;
-}
+export const walkLayout = (node, id) => nodeById(node, id);
+
+// A pane held in the strip and let go anywhere else goes back where it was.
+export const dropStripDrag = () => { if (shared("strip.drag")) { setShared("strip.drop", null); setShared("strip.drag", null); } };
 
 export function pathTo(node, id) {
   if (node?.id === id) return [];
@@ -92,16 +89,19 @@ export const OPEN_MIN = 120; // open, the edge drags this far, past where a drag
 // The collapsed rail is as wide as the macOS traffic lights need, so they never spill over the tab bar.
 export const railWidth = () => (window()?.platform === "macos" ? 76 : 44);
 
+// The painted tree lands only when it is Kanso's own.
+const writePainted = (tree) => {
+  const painted = paintLayout(tree);
+  if (isKansoTree(painted)) run("layout.set", { layout: painted });
+};
+
 export function setRail(open, width) {
   const min = open ? OPEN_MIN : railWidth();
   rememberLayout({ rail: { open, min } });
   const tree = layout();
   const sidebar = (tree?.children ?? []).find((n) => n.id === "sidebar");
   if (!sidebar) return;
-  if (tree.resizable !== open || sidebar.min !== min || sidebar.hidden) {
-    const painted = paintLayout(tree);
-    if (isKansoTree(painted)) run("layout.set", { layout: painted });
-  }
+  if (tree.resizable !== open || sidebar.min !== min || sidebar.hidden) writePainted(tree);
   run("layout.resize", { id: "sidebar", px: width });
 }
 
@@ -135,7 +135,6 @@ export function commitLayout(patch) {
   rememberLayout(patch);
   const tree = layout();
   if (!tree) return false;
-  const painted = paintLayout(tree);
-  if (isKansoTree(painted)) run("layout.set", { layout: painted });
+  writePainted(tree);
   return true;
 }
