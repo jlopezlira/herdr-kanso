@@ -1,10 +1,12 @@
 // Usage: [KANSO_BASE=origin/develop] npm run check:dupes [-- --report <file.md>] [-- --write]
-// Finds every block of code repeated in the repository's code; fails on one the baseline does not list, or a baseline that grew.
+// Finds every block of code repeated in the repository's code, skipping copies and built files; fails on one the baseline does not list, or a baseline that grew.
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { readFile, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { SHARED } from "./sync-share.mjs";
+import { BUILT } from "./build-site.mjs";
+import { OUT as SITE_TOKENS } from "./build-site-tokens.mjs";
 
 const ROOT = new URL("../", import.meta.url);
 const BASELINE_NAME = "kanso/dupes-baseline.json";
@@ -137,8 +139,8 @@ export const report = (groups) => [
 const git = (...args) => execFileSync("git", args, { cwd: ROOT, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
 
 export const scannedFiles = async () => {
-  const copies = new Set(SHARED.flatMap(({ copies }) => copies));
-  const paths = git("ls-files", "-z", "--", ...FOLDERS).split("\0").filter((path) => CODE.test(path) && !copies.has(path));
+  const made = new Set([...SHARED.flatMap(({ copies }) => copies), ...BUILT, SITE_TOKENS]);
+  const paths = git("ls-files", "-z", "--", ...FOLDERS).split("\0").filter((path) => CODE.test(path) && !made.has(path));
   return Object.fromEntries(await Promise.all(paths.map(async (path) => [path, await readFile(new URL(path, ROOT), "utf8")])));
 };
 

@@ -8,11 +8,14 @@ From a clone, with Node 22.15 or newer, Git, Bash and sqlite3:
 - `npm run sync:share -- --check`
 - `npm run check:version`
 - `npm run check:dupes`
+- `npm run build:site -- --check`
 - `herdr-app check <mod folder>`
 
 `herdr-app check kanso/mods/kanso-guard` is one. `herdr-app check` passes for the `kanso-*` mods and `open-with`.
 
-`npm run check:dupes` fails on code repeated in `kanso/mods`, `stories`, `scripts`, `site`, `tests` or `.github` that `kanso/dupes-baseline.json` does not list: one line from 80 characters of code, or lines in a row from 50. Make it one component, state or primitive instead. Copies made by `npm run sync:share` are skipped. The baseline lists today's repeats and can only shrink: after removing one, run `npm run check:dupes -- --write`. In a pull request, CI also fails when the baseline lists more than the base branch's (`KANSO_BASE=origin/develop npm run check:dupes` checks it locally). `-- --report <file>` writes every repeat with its places.
+A site page is edited in `site/pages/`; `npm run build:site` writes it to `site/` with the shared head, nav and footer.
+
+`npm run check:dupes` fails on code repeated in `kanso/mods`, `stories`, `scripts`, `site`, `tests` or `.github` that `kanso/dupes-baseline.json` does not list: one line from 80 characters of code, or lines in a row from 50. Make it one component, state or primitive instead. Copies made by `npm run sync:share`, the site pages `npm run build:site` writes and `site/tokens.css` are skipped. The baseline lists today's repeats and can only shrink: after removing one, run `npm run check:dupes -- --write`. In a pull request, CI also fails when the baseline lists more than the base branch's (`KANSO_BASE=origin/develop npm run check:dupes` checks it locally). `-- --report <file>` writes every repeat with its places.
 
 ## Version
 
