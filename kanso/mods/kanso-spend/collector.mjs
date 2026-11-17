@@ -1,19 +1,12 @@
 #!/usr/bin/env node
 import { randomUUID } from "node:crypto";
-import { realpathSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
+import { renameSync, unlinkSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
 import { migrateLoadedConfig, normalizeConfig, sourcesSignature } from "./core/config.mjs";
 import { scanSources } from "./core/scan.mjs";
-import {
-  clearCollectedData,
-  loadStore,
-  saveStore,
-  snapshotRows,
-  storeWith,
-} from "./core/store.mjs";
-import { ExitError, exitWith, withStoreLock } from "./core/util.mjs";
+import { clearCollectedData, loadStore, saveStore, snapshotRows, storeWith } from "./core/store.mjs";
+import { ExitError, withStoreLock, parseCommand, unknownCommand, entryPoint, entryUrlMatches, runCommand } from "./core/util.mjs";
 
 // herdr stops an exec after 30 s; leave room for the save, derivation and startup, then continue next run.
 export const SCAN_BUDGET_MS = 18_000;
@@ -24,24 +17,6 @@ function usage() {
     "  collector.mjs snapshot --store <file> [--home <dir>] [--rebuild]",
     "  collector.mjs configure --store <file> [--home <dir>] --config <json> [--rebuild]",
   ].join("\n");
-}
-
-function parseFlags(argv, index = 1, options = { rebuild: false }) {
-  if (index >= argv.length) return options;
-  const arg = argv[index];
-  if (arg === "--rebuild") return parseFlags(argv, index + 1, { ...options, rebuild: true });
-  if (arg === "--help" || arg === "-h") return parseFlags(argv, index + 1, { ...options, help: true });
-  const match = /^-{2}(store|home|config)(?:=(.*))?$/.exec(arg);
-  if (!match) throw new Error(`unknown argument ${arg}`);
-  const key = match[1];
-  const inline = match[2] !== undefined;
-  const value = inline ? match[2] : argv[index + 1];
-  if (value === undefined) throw new Error(`--${key} needs a value`);
-  return parseFlags(argv, index + (inline ? 1 : 2), { ...options, [key]: value });
-}
-
-function parseArgs(argv) {
-  return { command: argv[0], options: parseFlags(argv) };
 }
 
 /** The in-process caller (presenter) reuses the scanned store instead of parsing it again. */
@@ -125,14 +100,12 @@ async function scanWithProgress(store, storePath, home, deadline) {
 
 async function snapshotWithStore(storePath, home, { rebuild = false } = {}) {
   const scanStartedAt = Date.now();
-  return withStoreLock(storePath, async () => {
-    const loaded = await loadStore(storePath);
+  return withLoadedStore(storePath, async (loaded) => {
     const store = rebuild ? clearCollectedData(loaded.store) : loaded.store;
     const dirty = loaded.dirty || rebuild;
-    const scan = await scanWithProgress(store, storePath, home, scanStartedAt + SCAN_BUDGET_MS);
+    const scan = await scanStore(store, storePath, home, scanStartedAt);
     const saved = dirty || scan.dirty ? await saveStore(storePath, scan.store) : scan.store;
-    const now = new Date().toISOString();
-    return withStore(await buildSnapshot(saved, scan, now, loaded.warnings, loaded.errors), saved);
+    return collectedSnapshot(saved, scan, loaded);
   });
 }
 
@@ -147,8 +120,7 @@ async function configureStore(storePath, home, rawConfig, { rebuild = false } = 
     }
   })();
 
-  return withStoreLock(storePath, async () => {
-    const loaded = await loadStore(storePath);
+  return withLoadedStore(storePath, async (loaded) => {
     const configChanged = JSON.stringify(loaded.store.config) !== JSON.stringify(config);
     const mappingsChanged =
       sourcesSignature(loaded.store.config) !== sourcesSignature(config);
@@ -160,20 +132,19 @@ async function configureStore(storePath, home, rawConfig, { rebuild = false } = 
       ? await saveStore(storePath, cleared)
       : cleared;
 
-    const scan = await scanWithProgress(store, storePath, home, scanStartedAt + SCAN_BUDGET_MS);
+    const scan = await scanStore(store, storePath, home, scanStartedAt);
     const saved = scan.dirty ? await saveStore(storePath, scan.store) : scan.store;
-    const now = new Date().toISOString();
-    return withStore(await buildSnapshot(saved, scan, now, loaded.warnings, loaded.errors), saved);
+    return collectedSnapshot(saved, scan, loaded);
   });
 }
 
 export async function run(argv) {
-  const { command, options } = parseArgs(argv);
+  const { command, options } = parseCommand(argv, ["store", "home", "config"], { rebuild: false });
   if (options.help || !command) {
     return { exitCode: 0, stdout: "", stderr: `${usage()}\n` };
   }
   if (command !== "snapshot" && command !== "configure") {
-    return { exitCode: 2, stdout: "", stderr: `unknown command ${command}\n${usage()}\n` };
+    return unknownCommand(command, usage);
   }
   if (!options.store) {
     return { exitCode: 2, stdout: "", stderr: "--store is required\n" };
@@ -201,28 +172,11 @@ export async function collectSnapshot(command, options) {
     : configureStore(storePath, home, options.config, { rebuild: options.rebuild });
 }
 
-async function main() {
-  try {
-    const result = await run(process.argv.slice(2));
-    if (result.stdout) process.stdout.write(result.stdout);
-    if (result.stderr) process.stderr.write(result.stderr);
-    await exitWith(result.exitCode);
-  } catch (error) {
-    process.stderr.write(`kanso-spend collector: ${error.message}\n`);
-    await exitWith(error.exitCode ?? 1);
-  }
-}
+const collectedSnapshot = async (saved, scan, loaded) => withStore(
+  await buildSnapshot(saved, scan, new Date().toISOString(), loaded.warnings, loaded.errors), saved,
+);
 
-function isInvokedDirectly() {
-  const entry = process.argv[1];
-  if (!entry) return false;
-  try {
-    return realpathSync(entry) === realpathSync(fileURLToPath(import.meta.url));
-  } catch {
-    return pathToFileURL(entry).href === import.meta.url;
-  }
-}
+const scanStore = (store, storePath, home, startedAt) => scanWithProgress(store, storePath, home, startedAt + SCAN_BUDGET_MS);
 
-if (isInvokedDirectly()) {
-  await main();
-}
+const withLoadedStore = (storePath, work) => withStoreLock(storePath, async () => work(await loadStore(storePath)));
+if (entryPoint(import.meta.url, entryUrlMatches)) await runCommand(run, "kanso-spend collector");

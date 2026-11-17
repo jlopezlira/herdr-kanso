@@ -80,7 +80,7 @@ export function groupInbox(items, { repos = [], projects = [] } = {}) {
 export async function readInbox(db, { provider, host, login }) {
   const items = (await db.read(`SELECT * FROM pr_items WHERE provider=${q(provider)} AND host=${q(host)};`)).map(itemOf);
   const repos = await db.read(`SELECT * FROM pr_repos WHERE provider=${q(provider)} AND host=${q(host)};`);
-  const projects = await db.read("SELECT id, name, folder, machine FROM projects WHERE removed IS NULL;");
+  const projects = await inboxProjects(db);
   const fetch = (await db.read(`SELECT * FROM pr_fetches WHERE key=${q(`inbox:${provider}:${host}`)};`))[0] ?? null;
   const needs = items.filter((item) => item.role === "reviewer" || item.role === "both");
   const yours = items.filter((item) => item.role === "author");
@@ -101,7 +101,7 @@ async function saveSession(db, provider, session, now) {
 
 // The error column holds the project list, so a new project rescans before the ten minutes.
 async function scanRepos(db, run, { sessions, now }) {
-  const projects = await db.read("SELECT id, name, folder, machine FROM projects WHERE removed IS NULL;");
+  const projects = await inboxProjects(db);
   const local = projects.filter((project) => project.folder && !project.machine);
   const sig = projectSignature(local);
   const prev = (await db.read(`SELECT fetched_at, error FROM pr_fetches WHERE key=${q(SCAN)};`))[0];
@@ -239,3 +239,5 @@ export function mergeInbox(parts) {
     writeError: all.map((part) => part.writeError).find(Boolean) ?? null,
   };
 }
+
+const inboxProjects = (db) => db.read("SELECT id, name, folder, machine FROM projects WHERE removed IS NULL;");

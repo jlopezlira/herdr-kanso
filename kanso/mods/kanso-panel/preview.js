@@ -1,3 +1,6 @@
+import { startRemotePoll, advanceRemotePoll, bring, appRelative, svgPixels, copyFailure, quietError, remoteDue, fileId, ArmPoll, pollStart, takeStamp, staleView, asOf, bytesLabel } from "./remote-file.js";
+import { restorePath, codeState, isMarkdown, showPanel } from "./lib.js";
+import { documentBones } from "./ui-page.js";
 import { div, image } from "gpui-kit";
 import { v_flex, h_flex, Editor } from "gpui-base";
 import { readTextFile, watchFolder, theme, openOverlay, window, layout, appHome, nextCommand } from "herdr";
@@ -6,17 +9,14 @@ import { localService, serviceOn } from "./platform-host.js";
 import { paths } from "./platform-paths.js";
 import { fileApi } from "./platform-files.js";
 import { imageApi } from "./platform-images.js";
-import { codeState, isMarkdown, showPanel } from "./lib.js";
 import { kindOf } from "./kinds.js";
 import { MarkdownDoc, tildePath, readingLines, conflictBar, textIo, readWhole } from "./doc.js";
 import { drafts, draftKey, remember, restore, seenDisk, typed, opened, beginSave, commitText, applied, word, needsSave, didFail, EDIT_LIMIT, keepMine, takeTheirs, tooLarge } from "./edit.js";
 import { tokens } from "./ui.js";
 import { quietLink, iconButton, Armed } from "./ui-button.js";
-import { skeleton } from "./ui-skeleton.js";
 import { tryOrAsync, extOf, afterMount } from "./pure.js";
 import { fileMemory } from "./panel-state.js";
 import { walkLayout } from "./layout.js";
-import { bring, appRelative, svgPixels, copyFailure, quietError, remoteDue, fileId, ArmPoll, pollStart, pollNext, takeStamp, staleView, asOf, bytesLabel } from "./remote-file.js";
 
 const folderOf = (path) => path.replace(/[\\/][^\\/]*$/, "") || "/";
 const nameOf = (path) => path.split(/[\\/]/).at(-1);
@@ -65,7 +65,7 @@ export class Preview {
     this.on = p.on ?? kept?.on ?? null;
     this.back = BACK[p.back] ? p.back : (kept?.back && BACK[kept.back] ? kept.back : null);
     this.handle = cx.focus_handle();
-    this.poll = pollStart(); this.stamp = null; this.fresh = null; this.held = null; this.arm = null;
+    startRemotePoll.call(this);
     this.ask = new Armed(); this.edit = null;
     previewKeys.bind(this, cx);
     this.open(p.path || kept?.path || "", cx);
@@ -77,19 +77,21 @@ export class Preview {
   }
 
   // A file that is gone leaves the preview empty, with no error.
-  async restoreState(state) {
-    const path = typeof state?.path === "string" ? state.path : "";
-    if (!path) return false;
+  async restoreState(state) { return restorePath.call(this, state, this.restoreFile); }
+
+  async restoreFile(path, state) {
     if (previewKind(path) === "picture") {
       const ok = await (await serviceOn(fileApi, state.on ?? null)).test(path).catch(() => false);
       const next = ok ? fileMemory(state, () => true) : null;
-      if (!next) return false;
-      this.kept = next;
-      return true;
+      return this.keepRestored(next);
     }
     const text = await tryOrAsync(() => readTextFile(path, { on: state.on ?? null }));
     if (text == null || String(text).includes("\0")) return false;
     const next = fileMemory(state, () => true);
+    return this.keepRestored(next);
+  }
+
+  keepRestored(next) {
     if (!next) return false;
     this.kept = next;
     return true;
@@ -141,17 +143,20 @@ export class Preview {
     return saving;
   }
 
-  saveCode(cx) {
+  withCodeSave(work) {
     const saving = this.armCode();
-    if (!saving) return;
-    cx.notify();
-    cx.spawn(async (cx) => { await this.finishCode(saving); cx.notify(); });
+    return saving ? work(saving) : undefined;
+  }
+
+  saveCode(cx) {
+    this.withCodeSave((saving) => {
+      cx.notify();
+      cx.spawn(async (cx) => { await this.finishCode(saving); cx.notify(); });
+    });
   }
 
   async flushCode() {
-    const saving = this.armCode();
-    if (!saving) return;
-    await this.finishCode(saving);
+    return this.withCodeSave((saving) => this.finishCode(saving));
   }
 
   async finishCode(saving) {
@@ -179,11 +184,15 @@ export class Preview {
     this.saveCode(cx);
   }
 
+  rememberCode(cx) {
+    remember(drafts, draftKey(this.path, this.on), this.edit);
+    cx.notify();
+  }
+
   takeCode(cx) {
     this.edit = takeTheirs(this.edit);
     if (this.code) this.code.set_value(this.edit.text ?? "");
-    remember(drafts, draftKey(this.path, this.on), this.edit);
-    cx.notify();
+    this.rememberCode(cx);
   }
 
   load(cx) {
@@ -245,8 +254,7 @@ export class Preview {
       readonly: Boolean(state.big), limit: EDIT_LIMIT,
       onChange: state.big ? null : (value, cx) => {
         this.edit = typed(this.edit, value);
-        remember(drafts, draftKey(this.path, this.on), this.edit);
-        cx.notify();
+        this.rememberCode(cx);
       },
     });
   }
@@ -295,15 +303,11 @@ export class Preview {
       if (this.path !== path) return;
       if (outcome === "seen") this.stamp = next;
       if (outcome === "changed") { this.stamp = next; this.load(cx); }
-      if (outcome === "failed") {
-        const had = Boolean(this.code || this.picture?.image || this.picture?.deferred || this.doc?.saved != null);
-        const view = staleView(had, this.fresh ?? this.doc?.fresh, Date.now(), copyFailure(new Error("timed out"), on));
-        if (view.keep) this.held = view.hold;
-        else if (!this.error) this.error = view.error;
-      }
-      this.poll = pollNext(this.poll, outcome);
-      new ArmPoll(this).start(cx, (tick) => this.probe(tick));
-      cx.notify();
+      const had = Boolean(this.code || this.picture?.image || this.picture?.deferred || this.doc?.saved != null);
+      const failure = outcome === "failed"
+        ? staleView(had, this.fresh ?? this.doc?.fresh, Date.now(), copyFailure(new Error("timed out"), on)) : null;
+      if (failure?.keep) this.held = failure.hold;
+      advanceRemotePoll.call(this, cx, outcome, failure);
     });
   }
 
@@ -334,13 +338,7 @@ export class Preview {
     this.leave(cx, () => { previewKeys.unbind(this); showPanel(this.back, { mod: "kanso-panel", props: { panel: this.back } }); });
   }
 
-  bones(c) {
-    const { header } = skeleton(c);
-    return v_flex().size_full().min_h(0).bg(c.canvas).text_color(c.text)
-      .child(h_flex().h(42).flex_none().px(14).gap(8).items_center().border_b(1).border_color(c.border)
-        .child(header(120, 13)))
-      .child(readingLines(c));
-  }
+  bones(c) { return documentBones(c, 120, readingLines(c)); }
 
   render(cx) {
     if (this.on && this.path && !this.arm && remoteDue(this.on, window()?.active, walkLayout(layout(), "panel-body")?.hidden)) new ArmPoll(this).start(cx, (tick) => this.probe(tick));

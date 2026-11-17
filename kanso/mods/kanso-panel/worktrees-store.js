@@ -1,3 +1,4 @@
+import { sqliteOk } from "./platform-database.js";
 import { sqliteApi } from "./platform-sqlite.js";
 import { localService } from "./platform-host.js";
 import { paths } from "./platform-paths.js";
@@ -85,7 +86,7 @@ export class WorktreeStore {
     await writeTextFile(path, `BEGIN;\n${text}\nCOMMIT;\n`, null);
     try {
       const r = await exec("sqlite3", [...BUSY, this.db, paths.sqliteRead(path)]);
-      if (r.code !== 0) throw new Error((r.stderr || "sqlite3 failed").trim().split("\n")[0]);
+      sqliteOk(r);
     } finally { await localService(fileApi).remove([path]).catch(() => {}); }
   }
 

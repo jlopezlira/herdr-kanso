@@ -1,3 +1,4 @@
+import { collect } from "./blocks.js";
 import { paths } from "./platform-paths.js";
 import { div } from "gpui-kit";
 import { EditorState, TextView } from "gpui-base";
@@ -33,14 +34,10 @@ export async function pool(items, n, work) {
 
 // step(state, item, i) answers [state, value]; the values are gathered in runs of RUN.
 export function mapWith(list, step, init) {
-  const done = Array.from({ length: Math.ceil(list.length / RUN) }, (_, r) => r).reduce((acc, r) => {
-    const run = list.slice(r * RUN, (r + 1) * RUN).reduce((inner, item, k) => {
-      const [state, value] = step(inner.state, item, r * RUN + k);
-      return { state, values: [...inner.values, value] };
-    }, { state: acc.state, values: [] });
-    return { state: run.state, runs: [...acc.runs, run.values] };
-  }, { state: init, runs: [] });
-  return done.runs.flat();
+  return collect(list.length, (state, index) => {
+    const [next, value] = step(state, list[index], index);
+    return { state: next, emit: value };
+  }, init, () => true);
 }
 
 export const monoFont = () => settings().font_family ?? "JetBrains Mono";
@@ -112,3 +109,19 @@ export const failure = (id, what, c, { why = null, fixes = [] } = {}) =>
 // A note for `failure`: our words, and the tool's words when there are any.
 export const said = (what, why = null) => ({ what, why: why === null || why === undefined ? null : String(why) });
 export const failNote = (id, note, c, fixes = []) => failure(id, note.what, c, { why: note.why, fixes });
+
+export const commandOk = (result, fallback = null) => {
+  if (result.code !== 0) throw new Error((result.stderr || fallback || result.stdout).trim().split("\n")[0]);
+  return result;
+};
+
+export const statePath = (state) => typeof state?.path === "string" ? state.path : "";
+export const nearestRemaining = (previous, at, still) => previous.slice(at + 1).find(still)
+  ?? previous.slice(0, Math.max(at, 0)).toReversed().find(still) ?? null;
+
+export async function restorePath(state, restore) {
+  const path = statePath(state);
+  return path ? restore.call(this, path, state) : false;
+}
+
+export const spawnAndNotify = (cx, work) => { cx.spawn(work); cx.notify(); };
