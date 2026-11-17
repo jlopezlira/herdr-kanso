@@ -8,10 +8,10 @@ export const END = "// End of the generated sizes.";
 
 const PICK = {
   G: { hair: "k-sp-hair", xs: "k-sp-1", sm: "k-sp-2", md: "k-sp-3", lg: "k-sp-4", xl: "k-sp-6" },
-  H: { control: "k-h-control", compact: "k-h-compact", icon: "k-h-icon", row: "k-h-header", line: "k-h-row", two: "k-h-row2", badge: "k-h-badge" },
+  H: { control: "k-h-control", compact: "k-h-compact", icon: "k-h-icon", row: "k-h-header", line: "k-h-row", two: "k-h-row2", badge: "k-h-badge", petPicture: "k-h-pet-picture", petStage: "k-h-pet-stage" },
   R: { sm: "k-r-sm", control: "k-r-control", card: "k-r-card" },
-  W: { paneName: "k-w-pane-name", paneSegment: "k-w-pane-segment", menu: "k-w-menu", question: "k-w-question", tabLabel: "k-w-tab-label", tabSkeleton: "k-w-tab-skeleton", tabSkeletonShort: "k-w-tab-skeleton-short", keyTile: "k-w-key-tile", petTile: "k-w-pet-tile" },
-  T: { display: "k-fs-display", page: "k-fs-title", title: "k-fs-section", card: "k-fs-name", value: "k-fs-body", body: "k-fs-meta", mono: "k-fs-mono" },
+  W: { paneName: "k-w-pane-name", paneSegment: "k-w-pane-segment", menu: "k-w-menu", question: "k-w-question", tabLabel: "k-w-tab-label", tabSkeleton: "k-w-tab-skeleton", tabSkeletonShort: "k-w-tab-skeleton-short", keyTile: "k-w-key-tile", petTile: "k-w-pet-tile", buttonLabel: "k-w-button-label" },
+  T: { display: "k-fs-display", page: "k-fs-title", title: "k-fs-section", card: "k-fs-name", value: "k-fs-body", body: "k-fs-meta", mono: "k-fs-mono", micro: "k-fs-micro" },
   ICON: "k-ic-control",
   ICON_ROW: "k-ic-row",
   ICON_INLINE: "k-ic-inline",

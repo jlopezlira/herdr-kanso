@@ -2,7 +2,7 @@
 // Kept byte for byte by `npm run sync:share`: edit kanso-panel/ui-row.js.
 import { div, svg, image } from "gpui-kit";
 import { h_flex, v_flex, Button } from "gpui-base";
-import { G, H, R, T, ICON_ROW, ICON_INLINE, CLEAR, OPACITY, alpha, glyphOf, toneColor } from "./ui.js";
+import { G, H, LH, R, T, ICON_ROW, ICON_INLINE, CLEAR, OPACITY, alpha, glyphOf, toneColor } from "./ui.js";
 import { button } from "./ui-button.js";
 import { chip } from "./ui-chip.js";
 import { dot } from "./ui-dot.js";
@@ -82,7 +82,10 @@ const groundOf = (c, { current, hover, title, wash }) => {
   return WASHES[wash]?.(c) ?? null;
 };
 
-const nameOf = (id, c, { name, heading, title, ink, glint }) => (glint ? glinting(name, c, id) : div().min_w(0).truncate().text_color(ink)
+// A wrapped name runs over as many lines as it needs, such as a review thread's comment.
+const nameOf = (id, c, { name, heading, title, ink, glint, wrap }) => (glint ? glinting(name, c, id) : div().min_w(0).text_color(ink)
+  .when(wrap, (el) => el.flex_1().line_height(LH.body))
+  .when(!wrap, (el) => el.truncate())
   .when(heading || title, (el) => el.font_semibold())
   .when(title, (el) => el.text_size(T.page))
   .child(name));
@@ -144,24 +147,24 @@ const wire = (el, c, { onClick, onHover, onKey, focusHandle }) => el
 
 // `start`, `tools`: drawn elements before the icon and always at the end; `actions`: tools shown with `hover` or `focus`; `keys`: key hint props.
 // `level` makes it a tree row, `open` its folder's fold; `verbs`: quiet word actions on a line under it.
-// `drop`: where a dragged row lands; `wash`: a state's ground; `guides`: one per level.
+// `wrap`: the name wraps instead of one truncated line; `drop`: where a dragged row lands; `wash`: a state's ground; `guides`: one per level.
 export function row(id, c, {
   icon = null, tone = null, letter = null, level = null, open = null, name, detail = null, meta = null, chip: count = null, flag = null, mark: status = "none", second = null, heading = false, title = false,
   depth = 0, selected = false, current = false, dimmed = false, pending = false, hover = false, focus = false, actions = [], action = null, verbs = [], start = [], tools = [], keys = [],
-  glint = false, drop = null, wash = null, guides = [],
+  glint = false, wrap = false, drop = null, wash = null, guides = [],
   onClick = null, onHover = null, onKey = null, focusHandle = null,
 } = {}) {
   const ink = dimmed ? c.muted : c.text;
   const shown = hover || focus;
   const ground = groundOf(c, { current, hover, title, wash });
-  const under = Boolean(second) || verbs.length > 0;
-  const two = Boolean(second) && !title && !verbs.length;
+  const under = Boolean(second) || verbs.length > 0 || wrap;
+  const two = Boolean(second) && !title && !verbs.length && !wrap;
   const height = heightOf({ title, under, two });
-  const first = h_flex().w_full().min_w(0).items_center().gap(G.sm).when(Boolean(second && title), (el) => el.h(H.row)).children([
+  const first = h_flex().w_full().min_w(0).items_center().gap(G.sm).when(wrap, (el) => el.items_start()).when(Boolean(second && title), (el) => el.h(H.row)).children([
     ...start,
     level === null ? null : foldOf(c, open),
     slotOf(c, { letter, icon, tone, ink, dimmed }),
-    nameOf(`${id}-name`, c, { name, heading, title, ink, glint }),
+    nameOf(`${id}-name`, c, { name, heading, title, ink, glint, wrap }),
     detailOf(c, id, detail),
     div().flex_1(),
     ...(shown && actions.length ? [] : asideOf(c, { meta, flag, dimmed })),

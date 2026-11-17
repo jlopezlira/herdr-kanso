@@ -296,10 +296,10 @@ export class Worktrees {
     this.width = 368; this.done = false;
     this.share = new Share("kanso-panel");
     this.store = new WorktreeStore(); this.stored = false; this.known = new Map(); this.hist = null;
-    // The agent Explain names: the first installed, as `ask` starts it.
-    this.agent = null;
+    // The one agent Explain names and starts: the first installed, looked up once.
+    this.explainer = null;
     cx.spawn(async (cx) => {
-      this.agent = (await knownAgents({ on: null }).catch(() => [])).find((a) => a.installed)?.name ?? null;
+      this.explainer = (await knownAgents({ on: null }).catch(() => [])).find((a) => a.installed) ?? null;
       cx.notify();
     });
     // What the last scan kept shows at once; the scan then checks it all again.
@@ -684,7 +684,7 @@ export class Worktrees {
         .child(h_flex().flex_wrap().gap_x(G.lg)
           .when(s === "broken", (el) => el.child(quietLink(`wt-repair-${w.path}`, this.working === w.path ? "Repairing…" : "Repair the link",
             (cx) => this.repair(w.path, cx), c, { color: c.text, disabled: Boolean(this.working) })))
-          .when(!w.missing && s !== "broken", (el) => el.child(explainButton({ agent: this.agent ?? "an agent", size: "sm" })(`wt-explain-${w.path}`, c, {
+          .when(!w.missing && s !== "broken", (el) => el.child(explainButton({ agent: this.explainer?.name ?? "an agent", size: "sm" })(`wt-explain-${w.path}`, c, {
             onClick: () => this.ask(`Explain ${name(w.path)}`, w.path, explainPrompt(this.item(w.path) ?? w, this.groups.find((g) => g.repo === w.repo)?.base)),
           })))
           .when(!w.missing, (el) => el.child(quietLink(`wt-open-${w.path}`, "Open in a new tab", () => run("tab.new", { folder: w.path }), c)))
@@ -719,11 +719,8 @@ export class Worktrees {
   }
 
   ask(title, folder, prompt) {
-    knownAgents({ on: null }).then((list) => {
-      const agent = list.find((a) => a.installed);
-      if (!agent) throw new Error("no agent is installed");
-      run("tab.new", { name: title, space: spaces().find((s) => s.active)?.id, folder, argv: agent.run, task: prompt });
-    }).catch((e) => notify({ title: "Could not start the agent", body: String(e?.message ?? e), level: "error" }));
+    if (!this.explainer) { notify({ title: "Could not start the agent", body: "no agent is installed", level: "error" }); return; }
+    run("tab.new", { name: title, space: spaces().find((s) => s.active)?.id, folder, argv: this.explainer.run, task: prompt });
   }
 
   bars(c, byDay, title, height, empty) {

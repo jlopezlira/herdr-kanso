@@ -5,7 +5,7 @@ import { v_flex, h_flex } from "gpui-base";
 import { theme, props, closeOverlay, appHome, settings } from "herdr";
 import { focusOn } from "./pure.js";
 import { Lit } from "./lit.js";
-import { G, DOJO_CELL, TINT, CLEAR, alpha, tokens } from "./ui.js";
+import { G, H, T, DOJO_CELL, TINT, CLEAR, alpha, tokens } from "./ui.js";
 import { iconButton, button as drawButton } from "./ui-button.js";
 import { button, metric, row, tooltip } from "./kit.js";
 import { Store } from "./store.js";
@@ -220,10 +220,10 @@ export default class Dojo extends View {
   petView(t, c, now) {
     const asleep = this.mood() === "sleep";
     const face = v_flex().gap(G.xs)
-      .child(h_flex().h(128).gap(G.md).items_end()
+      .child(h_flex().h(H.petStage).gap(G.md).items_end()
         .child(this.pal.face(t, this.reaction(now).state, { now, since: this.reaction(now).since, mood: this.mood() }))
-        .child(div().pb(4).text_size(11).text_color(c.dim).child(asleep ? "z z" : "")))
-      .child(div().text_size(11.5).text_color(this.choosing ? c.accent : c.dim).child(this.pal.pet.name));
+        .child(div().pb(G.xs).text_size(T.micro).text_color(c.dim).child(asleep ? "z z" : "")))
+      .child(div().text_size(T.body).text_color(this.choosing ? c.accent : c.dim).child(this.pal.pet.name));
     return button({ label: "Choose your pet", kind: "quiet", active: this.choosing, content: [face] })("dojo-pet", c, { onClick: (cx) => { this.toggleChooser(cx); cx.notify(); } })
       .tooltip(tooltip({ label: "Choose your pet" }));
   }

@@ -208,11 +208,11 @@ const DRAWN = {
   "kanso/mods/kanso-panel/doc.js": ['kitButton({ label: tip, kind: "icon", size: "sm"'],
   "kanso/mods/kanso-panel/look.js": ['kitButton({ label: item.name, kind: "icon", size: "compact", content: [face] })(`look-dot-'],
   "kanso/mods/kanso-panel/pr-view.js": ['kitRow({ icon: on ? "chevron-down" : "chevron-right", name: label'],
-  "kanso/mods/kanso-panel/pr.js": ["(`pr-check-${i}`, c, {", "(`pr-thread-${i}`, c, {", "(`pr-file-${i}`, c, {"],
-  "kanso/mods/kanso-panel/worktrees.js": ['explainButton({ agent: this.agent ?? "an agent", size: "sm" })(`wt-explain-'],
+  "kanso/mods/kanso-panel/pr.js": ["(`pr-check-${i}`, c, {", "kitRow({ name: body, second, wrap: true })(`pr-thread-${i}`, c, {", "(`pr-file-${i}`, c, {"],
+  "kanso/mods/kanso-panel/worktrees.js": ['explainButton({ agent: this.explainer?.name ?? "an agent", size: "sm" })(`wt-explain-'],
   "kanso/mods/kanso-settings/main.js": ['kitButton({ label, kind: "quiet", active: this.capture?.row === row, content: ['],
   "kanso/mods/kanso-sim/main.js": ["})(`sim-device-${item.id}`, c, { onClick: (next) => this.pick(item, next) })"],
-  "kanso/mods/kanso-spend/main.js": ['kitButton({ label: shown, kind: "quiet", small: true, icon: "lu-chevron-down"', "row({ name: item.name, detail: item.tokensText", "return row({ name: task.title"],
+  "kanso/mods/kanso-spend/main.js": ['kitButton({ label: shown, kind: "quiet", small: true, icon: "lu-chevron-down", truncate: true,', "row({ name: item.name, detail: item.tokensText", "return row({ name: task.title"],
 };
 const GONE = {
   "kanso/mods/kanso-panel/pr.js": ["listButton", "Button.new(`pr-"],

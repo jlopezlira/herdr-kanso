@@ -571,7 +571,7 @@ export default class TokenSpend extends View {
     const shown = value === "all" ? allLabel : (facet.find((entry) => entry.value === value)?.label ?? projectName(value));
     const id = `ins-menu-${field}`;
     // The kit's quiet button with the menu's caret: Tab reaches it, Enter and Space open the menu.
-    const trigger = kitButton({ label: shown, kind: "quiet", small: true, icon: "lu-chevron-down", spoken: `${field === "project" ? "Project" : "Model"}: ${shown}`, color: value === "all" ? c.muted : c.text })(`${id}-trigger`, c);
+    const trigger = kitButton({ label: shown, kind: "quiet", small: true, icon: "lu-chevron-down", truncate: true, spoken: `${field === "project" ? "Project" : "Model"}: ${shown}`, color: value === "all" ? c.muted : c.text })(`${id}-trigger`, c);
     const popover = Popover.new(id).trigger(trigger)
       .open(this.openMenu === id)
       .on_open_change((open, cx) => {

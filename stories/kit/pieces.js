@@ -18,10 +18,11 @@ export const grow = (inner = '') => `<span class="kanso-layout__grow">${inner}</
 
 export const kinds = { solid: 'kanso-button--solid', tonal: 'kanso-button--tonal', quiet: 'kanso-button--quiet kanso-text--fg', icon: 'kanso-button--icon' };
 // `content`: markup drawn in place of the icon and label, such as a picture with its name; `label` is then what the button says.
-export const button = ({ label, kind = 'solid', size = 'md', icon = 'none', disabled = false, verb = '', armed = false, active = false, spin = false, key = '', content = '' }) => {
-  const classes = ['kanso-button', kinds[kind], size === 'md' ? '' : `kanso-button--${size}`, disabled ? 'kanso-control--off' : '', armed ? 'kanso-action kanso-action--armed' : '', active ? 'kanso-button--active' : '', spin ? 'kanso-button--spinning' : '', content ? 'kanso-button--drawn' : ''].filter(Boolean).join(' ');
+// Proposed: `truncate` cuts a long label at --k-w-button-label, such as a menu's chosen project, so the button never grows past it.
+export const button = ({ label, kind = 'solid', size = 'md', icon = 'none', disabled = false, verb = '', armed = false, active = false, spin = false, key = '', content = '', truncate = false }) => {
+  const classes = ['kanso-button', kinds[kind], size === 'md' ? '' : `kanso-button--${size}`, disabled ? 'kanso-control--off' : '', armed ? 'kanso-action kanso-action--armed' : '', active ? 'kanso-button--active' : '', spin ? 'kanso-button--spinning' : '', content ? 'kanso-button--drawn' : '', truncate ? 'kanso-button--truncate' : ''].filter(Boolean).join(' ');
   const lead = icon === 'none' ? (spin ? mark({ status: 'working', size: 'sm' }) : '') : iconSvg(icon, 'control');
-  const text = kind === 'icon' ? '' : escape(label);
+  const text = kind === 'icon' ? '' : truncate ? `<span class="kanso-button__label">${escape(label)}</span>` : escape(label);
   const again = `Press again to ${escape(verb || label.toLowerCase())}`;
   const inner = content || (armed && kind !== 'icon' ? `<span>${text}</span><span>${again}</span>` : `${lead}${text}${key ? ` ${keyHint({ text: key })}` : ''}`);
   return `<span class="${classes}" tabindex="0" title="${armed && kind === 'icon' ? again : escape(label)}"${disabled ? ' aria-disabled="true"' : ''}${spin ? ' aria-busy="true"' : ''}>${inner}</span>`;
@@ -153,8 +154,9 @@ const rowTool = (action) => button({ kind: 'icon', size: 'sm', ...action });
 export const rowDepths = [0, 1, 2];
 // `actions` show on hover or focus and take the meta's place; `action` and the drawn `tools` are always shown; `keys` are the row's key hints, last.
 // The title form is a panel's heading: the name at title size, the second line its scope.
+// Proposed: `wrap` lets the name run over as many lines as it needs, such as a review thread's comment, instead of one truncated line.
 // `second` and `meta` take facts with a tone, `chip` a tip; `drop` is where a dragged row lands, `wash` a state's ground, `guides` one per depth above it ('tee', 'end', 'pass', or null), under that depth's icon; without them a deeper row hangs from its parent.
-export const row = ({ icon = 'none', tone = '', name, detail, meta, chip: count, flag, mark: status = 'none', second, heading, title, depth = 0, glint, selected, current, dimmed, pending, hover, focus, actions = [], action, start = [], tools = [], keys = [], drop, wash, guides = [] }) => {
+export const row = ({ icon = 'none', tone = '', name, detail, meta, chip: count, flag, mark: status = 'none', second, heading, title, depth = 0, glint, wrap, selected, current, dimmed, pending, hover, focus, actions = [], action, start = [], tools = [], keys = [], drop, wash, guides = [] }) => {
   const lines = guides.length ? guides : depth > 1 ? [null, 'pass'] : [];
   const lead = `${lines.map(guide).join('')}${list(start)}${icon === 'none' ? '' : glyph(icon, tone)}`;
   const label = `<span class="kanso-row__name${glint ? ' kanso-text--glint' : ''}">${escape(name)}</span>`;
@@ -165,7 +167,7 @@ export const row = ({ icon = 'none', tone = '', name, detail, meta, chip: count,
     + `${pending ? '<span class="kanso-state-line__pending-dot"></span>' : ''}${!status || status === 'none' ? '' : mark({ status })}`;
   const states = [second && 'kanso-row--two-lines', heading && 'kanso-row--heading', title && 'kanso-row--title', depth && `kanso-row--depth-${depth}`, selected && 'kanso-control--selected', current && 'kanso-row--selected',
     dimmed && 'kanso-control--dim', pending && 'kanso-state-line--pending', hover && 'kanso-control--hover', focus && 'kanso-control--focus',
-    drop && `kanso-row--drop-${drop}`, wash && `kanso-row--wash-${wash}`, lines.length && 'kanso-row--tree'].filter(Boolean).map((name) => ` ${name}`).join('');
+    drop && `kanso-row--drop-${drop}`, wash && `kanso-row--wash-${wash}`, lines.length && 'kanso-row--tree', wrap && 'kanso-row--wrap'].filter(Boolean).map((name) => ` ${name}`).join('');
   return second
     ? `<div class="kanso-row${states}" tabindex="0"><div class="kanso-content__primary">${lead}${label}${tail}</div><div class="kanso-content__secondary">${typeof second === 'string' ? escape(second) : second.filter(Boolean).map(fact).join('')}</div></div>`
     : `<div class="kanso-row${states}" tabindex="0">${lead}${label}${tail}</div>`;

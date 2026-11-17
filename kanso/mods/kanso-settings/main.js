@@ -6,7 +6,7 @@ import { imageApi } from "./platform-images.js";
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import { theme, props, closeOverlay, keys, shared, setShared, readTextFile, writeTextFile, appHome, run } from "herdr";
-import { G, T, W, TINT, alpha, tokens } from "./ui.js";
+import { G, R, T, W, ICON, TINT, alpha, tokens } from "./ui.js";
 import { avatar, tile } from "./ui-avatar.js";
 import { dot } from "./ui-dot.js";
 import { button, quietLink, iconButton, Armed, pressAgain } from "./ui-button.js";
@@ -161,8 +161,8 @@ export default class Settings extends View {
     const capturing = this.capture?.row === panelRow || this.capture?.row === gearRow;
     // Each tile is the kit's button with the panel's icon, name and key as its face: Tab reaches it, Enter and Space start the capture.
     const tile = (id, icon, label, row, chord, old) => kitButton({ label, kind: "quiet", active: this.capture?.row === row, content: [v_flex().w(W.keyTile).py(G.sm).gap(G.xs).items_center()
-      .child(icon ? svg(icon).size(16).text_color(c.muted) : div().size(16).rounded(4).bg(c.subtle))
-      .child(div().w_full().px(4).text_center().truncate().text_size(11.5).text_color(c.text).child(label))
+      .child(icon ? svg(icon).size(ICON).text_color(c.muted) : div().size(ICON).rounded(R.sm).bg(c.subtle))
+      .child(div().w_full().px(G.xs).text_center().truncate().text_size(T.body).text_color(c.text).child(label))
       .child(chord ? keycap(t, glyphs(chord)) : keycap(t, "No key", true))] })(`bar-${id}`, c, { onClick: (cx) => this.startCapture(row, group.section, old, cx) })
       .tooltip(tooltip({ label, detail: "click, then press the new key" }));
     const gear = this.chordsOf(gearRow, group.section, list)[0] ?? null;

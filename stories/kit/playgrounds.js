@@ -28,7 +28,7 @@ const osArg = radioArg('computer', keyboardSystems);
 
 export const playgrounds = {
   'Primitives/Button': {
-    args: { label: 'Create', kind: 'solid', size: 'md', icon: 'none', disabled: false, armed: false, verb: '', active: false, spin: false, face: false },
+    args: { label: 'Create', kind: 'solid', size: 'md', icon: 'none', disabled: false, armed: false, verb: '', active: false, spin: false, face: false, truncate: false },
     argTypes: {
       label: textArg('label'),
       kind: select('kind', Object.keys(kinds)),
@@ -38,6 +38,8 @@ export const playgrounds = {
       verb: textArg('verb', { if: { arg: 'armed' } }),
       ...flags('active', 'spin'),
       face: boolArg('Drawn face (content)'),
+      // Proposed: a long label trimmed at the button's widest, as the Spend menus show a long project.
+      truncate: boolArg('Trimmed label'),
     },
     // Proposed: a face the caller draws, such as a pet's picture and name in the dōjō or a panel's key tile in Settings; the label is what it says.
     markup: ({ face, ...args }) => button({ ...args, content: face ? `${mark({ status: 'idle' })}<span class="kanso-content__text">${escape(args.label)}</span><span class="kanso-content__secondary">Kanso</span>` : '' }),
@@ -495,7 +497,7 @@ export const playgrounds = {
     markup: toggle,
   },
   'Primitives/Row': {
-    args: { icon: 'lu-file', name: 'checkout.ts', detail: 'src/api', meta: '+14 −3', mark: 'none', second: '', heading: false, title: false, depth: 0, tools: false, current: false, selected: false, hover: false, focus: false, dimmed: false, pending: false, drop: 'none', wash: 'none', guide: 'none' },
+    args: { icon: 'lu-file', name: 'checkout.ts', detail: 'src/api', meta: '+14 −3', mark: 'none', second: '', heading: false, title: false, depth: 0, tools: false, current: false, selected: false, hover: false, focus: false, dimmed: false, pending: false, wrap: false, drop: 'none', wash: 'none', guide: 'none' },
     argTypes: {
       icon: select('icon', icons.concat(['p-claude', 'p-codex'])),
       name: textArg('name'),
@@ -508,6 +510,8 @@ export const playgrounds = {
       depth: radioArg('depth', rowDepths),
       tools: boolArg('tools on hover'),
       ...flags('current', 'selected', 'hover', 'focus', 'dimmed', 'pending'),
+      // Proposed: the name wraps, as a pull request's review thread shows its comment.
+      wrap: boolArg('wrapped name'),
       drop: select('drop line', ['none', 'before', 'after']),
       wash: select('wash', ['none', 'blocked']),
       guide: select('guide at depth 2', ['none', 'tee', 'end', 'pass']),

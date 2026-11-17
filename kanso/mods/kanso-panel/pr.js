@@ -1049,8 +1049,8 @@ export class PullRequest {
       .children(this.threads.map((th, i) => {
         const body = th.body.length > 240 ? th.body.slice(0, 240) + "…" : th.body;
         const second = [`${th.path}${th.line ? `:${th.line}` : ""}`, th.author, th.replies > 0 ? `${th.replies} repl${th.replies > 1 ? "ies" : "y"}` : null, th.outdated ? "outdated" : null];
-        // One line of the thread on the row; its first 240 characters in the tooltip.
-        return kitRow({ name: body, second })(`pr-thread-${i}`, c, { onClick: () => { if (th.url) openUrl(th.url); } }).tooltip(tooltip({ label: body }));
+        // The thread's first 240 characters, wrapped over its lines.
+        return kitRow({ name: body, second, wrap: true })(`pr-thread-${i}`, c, { onClick: () => { if (th.url) openUrl(th.url); } });
       }));
   }
 

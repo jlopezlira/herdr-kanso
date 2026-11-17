@@ -267,3 +267,18 @@ test("Worktrees finds every kind in a real repository and cleans up the safe one
   assert.equal(stateOf(row("moved")), "changes");
   assert.equal(row("moved").dirty, 1);
 });
+
+test("Explain names and starts the one installed agent, looked up once", async () => {
+  let lookups = 0;
+  const started = [];
+  const codex = { name: "Codex", installed: true, run: ["codex"] };
+  const { Worktrees } = await worktrees({ knownAgents: async () => { lookups++; return [{ name: "Claude", installed: false, run: ["claude"] }, codex]; }, run: (verb, args) => started.push([verb, args]) });
+  const { cx, drain } = context();
+  const panel = new Worktrees();
+  panel.init(cx); await drain();
+  assert.equal(panel.explainer.name, "Codex");
+  assert.equal(typeof panel.agent, "function", "the Ask your agent section still draws");
+  panel.ask("Explain web", "/w", "Explain it");
+  assert.deepEqual(clone(started), [["tab.new", { name: "Explain web", folder: "/w", argv: ["codex"], task: "Explain it" }]]);
+  assert.equal(lookups, 1);
+});

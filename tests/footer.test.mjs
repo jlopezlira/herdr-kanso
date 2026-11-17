@@ -134,6 +134,7 @@ test("In the rail the footer is chrome squares with their names as tips, and the
   // Button.new(id) is drawn under its id: the kit's large icon button, which Tab reaches and Enter and Space press.
   assert.deepEqual(squares.map((el) => [el.tag, arg(el, "w"), arg(el, "h")]), [["footer-kanso-update", H.line, H.line], ["footer-settings", H.line, H.line]]);
   assert.ok(squares.every((el) => calls(el, "focus").length === 1), "each shows the focus ring");
+  assert.ok(squares.every((el) => calls(el, "hover").length === 1 && calls(el, "active").length === 1), "each keeps its hover and press shading, from the kit's button");
   assert.deepEqual(squares.map((el) => arg(el, "tooltip")), ["Update kansō to 3.31.0", "Settings"]);
   assert.equal(arg(byId(drawn, "footer-settings-menu"), "trigger"), squares[1]);
   assert.equal(byId(drawn, "footer-machine"), null, "Add computer lives in +, not in the rail");
