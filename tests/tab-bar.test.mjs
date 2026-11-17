@@ -89,7 +89,7 @@ test("Chosen, at rest and waiting each draw their own state: the quiet fill, mut
   const b = await bar();
   const root = b.view.render(b.cx);
   const [chosen, rest, waiting] = ["t1", "t2", "t3"].map((id) => tab(root, id));
-  assert.equal(arg(chosen, "bg"), b.c.w7, "until measured, the chosen tab wears its fill");
+  assert.equal(arg(chosen, "bg"), b.c.w12, "until measured, the chosen tab wears the selection wash");
   assert.equal(arg(chosen, "text_color"), b.c.text);
   assert.equal(arg(chosen, "selected"), true);
   assert.ok(byTag(chosen, "tab-t1-close"), "the chosen tab ends with ×");
@@ -114,7 +114,7 @@ test("Once measured, the chosen fill glides under the chosen tab and the tab pai
   const pill = byTag(root, "tab-pill");
   assert.equal(arg(pill, "left"), 0);
   assert.equal(arg(pill, "w"), 90);
-  assert.equal(arg(pill, "bg"), b.c.w7);
+  assert.equal(arg(pill, "bg"), b.c.w12);
   assert.equal(calls(tab(root, "t1"), "bg").length, 0);
 });
 

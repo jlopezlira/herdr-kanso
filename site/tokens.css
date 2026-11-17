@@ -147,6 +147,16 @@
   --k-w-page: 1080px;
   --k-w-sidebar-narrow: 240px;
   --k-w-sidebar-min: 120px;
+  --k-w-sidebar-layout-min: 200px;
+  --k-w-sidebar-max: 480px;
+  --k-h-sidebar-footer: 156px;
+  --k-h-spaces-min: 90px;
+  --k-w-panel-min: 280px;
+  --k-w-panel-max: 900px;
+  --k-terminal-x: 14px;
+  --k-terminal-y: 10px;
+  --k-traffic-x: 12px;
+  --k-traffic-y: 16px;
   --k-h-file-toolbar: 42px;
   --k-file-toolbar-x: 14px;
   --k-h-find-list: 300px;
