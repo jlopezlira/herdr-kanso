@@ -1598,6 +1598,8 @@
 .kanso-arrangement__column.kanso-arrangement__column--main{flex:1.4}
 .kanso-dialog__note.kanso-dialog__note--lead{margin-top:var(--k-sp-3);color:var(--fg)}
 .kanso-dialog__list.kanso-dialog__list--flush{margin-top:0}
+/* Proposed: a list that scrolls past six rows, keeping its rows' side room so a ring is not cut (Send). */
+.kanso-dialog__list.kanso-dialog__list--scroll{max-height:var(--k-h-dialog-list);overflow-y:auto;margin-inline:calc(-1 * var(--k-sp-2));padding-inline:var(--k-sp-2)}
 .kanso-dialog__group.kanso-dialog__group--stacked{margin-top:var(--k-sp-1)}
 .kanso-toast.kanso-toast--near{margin-top:var(--k-sp-3)}
 .kanso-field.kanso-field--stacked{margin:0 0 var(--k-sp-3)}

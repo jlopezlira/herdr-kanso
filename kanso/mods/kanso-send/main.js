@@ -1,19 +1,16 @@
 // Send to an agent, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
 // props.pane: the pane whose work the draft is about.
-import { View, div } from "gpui-kit";
-import { v_flex } from "gpui-base";
+import { View } from "gpui-kit";
 import { panes, spaces, terminals, shared, setShared, run, props, closeOverlay, theme } from "herdr";
-import { programIcon, givenNames, nameOf } from "./marks.js";
+import { givenNames, nameOf } from "./marks.js";
 import { deliver, isAgent, sendKey, waitingNote } from "./deliver.js";
 import { shortFolder } from "./folder.js";
-import { G, H, ICON_ROW, tokens } from "./ui.js";
+import { tokens } from "./ui.js";
 import { dialog } from "./ui-dialog.js";
 import { field, TextField } from "./ui-field.js";
-import { row } from "./ui-row.js";
+import { row, stack, emptyState } from "./kit.js";
 
 const LAST = "kanso.send.last";
-// Rows the list shows before it scrolls.
-const LIST_ROWS = 6;
 
 export function targetsOf(all, from, last) {
   const list = all.filter((p) => p.pane !== from && p.terminal && isAgent(p));
@@ -91,7 +88,7 @@ export default class Send extends View {
   }
 
   render() {
-    const t = theme(), c = tokens(t);
+    const c = tokens(theme());
     const p = props() ?? {};
     const given = givenNames(), sp = spaces();
     const name = (q) => nameOf(q, given);
@@ -104,16 +101,14 @@ export default class Send extends View {
     if (!this.toProject && !list.some((q) => q.terminal === this.to)) this.to = list[0]?.terminal ?? null;
     const head = (g) => {
       const on = this.toProject === g.project;
-      return row(`to-project-${g.project}`, c, {
-        name: g.project, heading: true, current: on, meta: on ? `All ${g.agents.length}` : g.agents.length > 1 ? `Send to all ${g.agents.length}` : null,
-        onClick: (cx) => { this.toProject = on ? null : g.project; this.error = null; cx.notify(); },
-      }).flex_none();
+      return row({ name: g.project, heading: true, current: on, meta: on ? `All ${g.agents.length}` : g.agents.length > 1 ? `Send to all ${g.agents.length}` : null })(
+        `to-project-${g.project}`, c, { onClick: (cx) => { this.toProject = on ? null : g.project; this.error = null; cx.notify(); } });
     };
-    const agent = (q) => row(`to-${q.terminal}`, c, {
-      start: [programIcon(q.program, ICON_ROW, c.muted) ?? div().size(ICON_ROW)], name: q.name, detail: q.pane?.branch ?? null,
+    // A program with no art of its own takes the terminal's, so every name starts at the same place.
+    const agent = (q) => row({
+      icon: q.program?.icon ? q.program : "terminal", tone: "muted", name: q.name, detail: q.pane?.branch ?? null,
       meta: q.status === "blocked" ? { text: "Needs you", tone: "blocked" } : null, mark: q.status, current: !this.toProject && q.terminal === this.to,
-      onClick: (cx) => { this.to = q.terminal; this.toProject = null; this.error = null; cx.notify(); },
-    }).flex_none();
+    })(`to-${q.terminal}`, c, { onClick: (cx) => { this.to = q.terminal; this.toProject = null; this.error = null; cx.notify(); } });
     const from = this.from ? `From ${name(this.from)}${this.from.cwd ? `, in ${shortFolder(this.from.cwd)}` : ""}` : "";
     const ready = Boolean(this.toProject || this.to) && Boolean(this.text.trim());
     const rows = groups.flatMap((g) => [head(g), ...g.agents.map(agent)]);
@@ -121,12 +116,10 @@ export default class Send extends View {
     return dialog("kanso-send", c, {
       title: "Send to an agent", scope: from,
       body: [
-        field("send-to", this.query, c, { label: "To" }).pb(G.sm),
-        rows.length
-          // A set height, rows that never shrink: past it, the list scrolls.
-          ? v_flex().id("send-list").flex_none().h(Math.min(rows.length, LIST_ROWS) * H.line).mx(-G.sm).px(G.sm).overflow_y_scrollbar().children(rows)
-          : div().py(8).text_size(12).text_color(t.muted).child(this.query.value().trim() ? "No agent or project by that name." : "No other agent is running. Start one in a pane, then send."),
-        field("send-message", this.box, c, { label: "Message" }).pt(G.lg),
+        field("send-to", this.query, c, { label: "To" }),
+        (rows.length ? stack({ variant: "dialog list", scroll: true }, rows)
+          : emptyState({ text: this.query.value().trim() ? "No agent or project by that name." : "No other agent is running. Start one in a pane, then send." }))("send-list", c),
+        field("send-message", this.box, c, { label: "Message" }),
       ],
       notes: [{ text: this.error ?? "Pasted into its terminal and sent with Enter, as if you typed it there.", tone: this.error ? "error" : "dim" }],
       secondary: "Cancel", primary: this.toProject ? `Send to ${this.toProject}  ⌘↩` : "Send  ⌘↩",

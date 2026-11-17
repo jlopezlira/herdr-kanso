@@ -8,7 +8,7 @@ import { computerRow } from '../stories/kit/computer-row.js';
 import { section } from '../stories/kit/section.js';
 import { asleep } from '../stories/kit/asleep.js';
 import { sessionRow } from '../stories/kit/session-row.js';
-import { button, dawn as dawnSky, input, mark, markdownBlock, marks, row, stack, thumbnail, windowControls } from '../stories/kit/pieces.js';
+import { button, dawn as dawnSky, dialog, input, mark, markdownBlock, marks, row, stack, thumbnail, windowControls } from '../stories/kit/pieces.js';
 import { sampleSidebar, sessionTools } from '../stories/kit/samples.js';
 import { statedPages } from '../stories/kit/states.js';
 export { elements } from './storybook-markup.mjs';
@@ -49,6 +49,19 @@ export function kitRecords(records) {
     'Proposed. Images: a picture not copied for drawing yet shows its own colour; one with none keeps the plain square.');
   add('Markdown', 'Editing, in its field', `<div class="kanso-panel"><div class="kanso-markdown">${markdownBlock({ source: '# Rate limits' })}${markdownBlock({ state: 'editing', content: input({ text: 'Each customer gets a bucket of requests.', label: 'Write…', icon: 'none', multiline: true, limit: 400 }) })}</div></div>`,
     'Proposed. The block being edited holds the text field, its Markdown as written, where the formatted block was.');
+  const agents = [row({ name: 'acme-shop', heading: true, meta: 'Send to all 2' }), row({ icon: 'p-claude', tone: 'muted', name: 'tests', detail: 'limits-docs', current: true }),
+    row({ icon: 'p-codex', tone: 'muted', name: 'checkout', meta: { text: 'Needs you', tone: 'blocked' }, mark: 'blocked' })];
+  add('Dialog', 'Send, its rows from the kit', dialog({ title: 'Send to an agent', scope: 'From docs, in ~/acme-shop-docs', secondary: 'Cancel', primary: 'Send  ⌘↩',
+    body: input({ text: '', label: 'To', icon: 'none', limit: 80 }) + stack({ variant: 'dialog list', scroll: true }, agents) + input({ text: 'Review the latest changes.', label: 'Message', icon: 'none', multiline: true, limit: 400 }),
+    notes: [{ text: 'Pasted into its terminal and sent with Enter, as if you typed it there.' }] }),
+  'Proposed. Send: the agents, by project, are kit rows in a dialog list that scrolls past six; a heading row sends to all of a project.');
+  add('Dialog', 'Sleep, what will stop', dialog({ title: 'Sleep acme-shop', secondary: '', primary: 'Sleep',
+    body: stack({ variant: 'dialog list' }, row({ name: 'checkout', meta: 'keeps its conversation' }), row({ name: 'npm run dev', detail: '~/acme-shop', dimmed: true })),
+    notes: [{ text: "Every tab's agents exit and the tabs are put away. Wake brings them back, each agent on its conversation." }, { text: 'npm run dev will stop now.' }] }),
+  'Proposed. Sleep: what keeps its conversation, and what will only stop, dimmed with its folder, as kit rows.');
+  add('Dialog', 'Many lines', dialog({ title: 'Task', secondary: 'Cancel', primary: 'Save',
+    body: input({ text: 'Explain this pull request.\nList the risks.', label: 'Task', icon: 'none', multiline: true, limit: 4000 }), notes: [{ text: 'The new tab starts its agent on this.' }] }),
+  'Proposed. The prompt of many lines: the dialog with one multiline field; Enter writes a new line, Escape and Cancel close it.');
   const photo = 'https://images.placeholders.dev/96x96';
   const avatar = (size, inner) => `<span class="kanso-avatar kanso-avatar--round${size ? ` kanso-avatar--${size}` : ''}">${inner}</span>`;
   const img = `<img src="${photo}" alt="" loading="lazy" referrerpolicy="no-referrer">`;
