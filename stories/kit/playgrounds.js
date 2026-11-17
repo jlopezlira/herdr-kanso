@@ -573,11 +573,13 @@ export const playgrounds = {
     markup: tabs,
   },
   'Primitives/Thumbnail': {
-    args: { image: 'https://images.placeholders.dev/120x80', label: 'cart-countdown.png', selected: false, loading: false },
+    args: { image: 'https://images.placeholders.dev/120x80', label: 'cart-countdown.png', selected: false, loading: false, color: '' },
     argTypes: {
       image: textArg('image'),
       label: textArg('label'),
       ...flags('selected', 'loading'),
+      // Proposed: the picture's own colour, its ground until the picture is drawn, as Images shows a picture it has not copied.
+      color: textArg('picture colour', { description: 'Proposed. A CSS colour, such as var(--working); seen with no image.' }),
     },
     markup: thumbnail,
   },

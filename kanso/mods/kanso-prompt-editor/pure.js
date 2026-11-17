@@ -17,6 +17,14 @@ export const diffNumbers = (lines, first) => lines.reduce(({ at, numbers }, sour
   return { at: { old: at.old + step.old, next: at.next + step.next }, numbers: [...numbers, at[step.from]] };
 }, { at: { old: first, next: first }, numbers: [] }).numbers;
 
+// A Markdown source's blocks, as both kits draw them: runs of lines between empty lines, a fenced block kept whole.
+const FENCED = /^\s{0,3}(?:`{3,}|~{3,})/;
+export const markdownBlocks = (source) => String(source).trim().split("\n").reduce(({ blocks, fenced }, line) => {
+  const fence = FENCED.test(line) ? !fenced : fenced;
+  if (!fenced && !line.trim()) return { blocks: blocks.at(-1)?.length ? [...blocks, []] : blocks, fenced };
+  return { blocks: [...blocks.slice(0, -1), [...(blocks.at(-1) ?? []), line]], fenced: fence };
+}, { blocks: [[]], fenced: false }).blocks.filter((lines) => lines.length).map((lines) => lines.join("\n"));
+
 export const tryOr = (fn, fallback = null) => {
   try { return fn(); } catch { return fallback; }
 };
