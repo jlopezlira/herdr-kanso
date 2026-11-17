@@ -13,7 +13,7 @@ export const guidelines = {
     ["Seijaku", "Checking a change.", "Any change to a token is measured against every surface in the table, hover and selected included, before it is published."],
   ],
   "Tokens/Type": [
-    ["Fukinsei", "Hierarchy.", "Six roles, each with one size, weight and tone. Display 48 regular, the one number. Title 20 strong. Section 15 strong. Group 13.5 strong. Name 13.5 medium. Body 12.5 regular, with controls at 12.5 medium. Meta 11.5 regular in muted or dim. Size and weight tell the level; colour comes last."],
+    ["Fukinsei", "Hierarchy.", "Six roles, each with one size, weight and tone. Display 48 regular, the one number. Title 20 strong. Section 15 strong. Group 13.5 strong. Name 13.5 medium. Body 12.5 regular, with controls at 12.5 medium. Meta 11.5 regular in muted or dim. Badge counts and table headings go one step down, micro 11. Size and weight tell the level; colour comes last."],
     ["Fukinsei", "Dim is the floor:", "foreground, muted, dim; dim passes 3:1 on its ground."],
     ["Seijaku", "One line never wraps.", "A one-line text ends in an ellipsis when it does not fit. Never a cut, never a second line."],
   ],
@@ -21,13 +21,16 @@ export const guidelines = {
     ["Seijaku", "Space.", "Use the 4-based scale only: 2, 4, 8, 12, 16, 24, 32. The same relation always gets the same gap. Icon to label is 8. Control to control is 8. Rows touch. Groups and fields are 12 apart. Panel padding is 16. Nothing is glued and nothing floats."],
   ],
   "Tokens/Radius": [
-    ["Seijaku", "Radius.", "Use the scale only: 4, 6, 8, 12 and full. Key hints and skeletons 4. Buttons, rows and fields 6. Cards, menus, panels and dialogs 8. Windows and frames 12. Pills and switches full. The same piece always gets the same radius."],
+    ["Seijaku", "Radius.", "Use the scale only: 2, 4, 6, 8, 12 and full. Chart bars, minimap tiles, heatmap cells and progress ticks 2. Key hints and skeletons 4. Buttons, rows and fields 6. Cards, menus, panels and dialogs 8. Windows and frames 12. Pills and switches full. The same piece always gets the same radius."],
     ["Shizen", "Content keeps its own corner.", "A device's frame follows the device, so its radius is not from the scale."],
   ],
   "Tokens/Motion": [
     ["Shizen", "Motion.", "Only three things move. The ensō spins at 900 ms. A working name shimmers with three glints over 2200 ms, with no dots. A blocked pane's bar breathes. Nothing changes size or place. Reduced motion holds everything still."],
     ["Shizen", "Live states.", "Hover moves only tone, entering in 120 ms and leaving in 80 ms. Hover never reaches a disabled control and never replaces a state."],
     ["Kansō", "Armed.", "Only an action that cannot be undone asks twice. It fills with accent and reads \"Press again to <verb>\" for 4 s. Both labels share one cell, so nothing moves."],
+  ],
+  "Tokens/Components": [
+    ["Seijaku", "One component, one group.", "A size that only one component uses lives in that component's group, never in the global scale. A size two components share is a global token."],
   ],
   "Tokens/Icons": [
     ["Kokō", "Icons.", "Use exact Lucide icons, one name per meaning, at 12, 14, 15 or 17. Show an icon only where it tells something apart. The ensō marks and program marks are marks, not icons."],

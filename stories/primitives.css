@@ -118,7 +118,7 @@
 .kanso-heatmap .kanso-heatmap__cell--empty{background:transparent}
 
 /* Annotation */
-.kanso-annotation{width:var(--k-annotation);height:var(--k-annotation);border-radius:50%;background:var(--accent);color:var(--accentfg);font-size:var(--k-fs-meta);font-weight:600;display:grid;place-items:center;flex:none}
+.kanso-annotation{width:var(--k-annotation-size);height:var(--k-annotation-size);border-radius:50%;background:var(--accent);color:var(--accentfg);font-size:var(--k-fs-meta);font-weight:600;display:grid;place-items:center;flex:none}
 .kanso-annotation.kanso-annotation--inactive{background:var(--input);color:var(--fg)}
 .kanso-annotation__region{position:absolute;border:calc(1.5 * var(--k-w-line)) solid var(--accent);border-radius:var(--k-r-sm);background:color-mix(in srgb,var(--accent) 10%,transparent);box-sizing:border-box}
 .kanso-annotation__region .kanso-annotation{left:0;top:0}
@@ -277,7 +277,7 @@
 .kanso-review__comment .kanso-card__header{display:flex;align-items:center;gap:var(--k-sp-2);font-size:var(--k-fs-body);white-space:nowrap}
 .kanso-review__comment .kanso-card__header b{font-weight:500}
 .kanso-review__comment .kanso-prose{margin-top:var(--k-sp-1)}
-.kanso-review__add{display:inline-grid;place-items:center;width:var(--k-annotation);height:var(--k-annotation);border-radius:var(--k-r-sm);background:var(--solid);color:var(--solidfg);font:var(--k-fw-strong) var(--k-fs-meta)/1 var(--ui);vertical-align:middle}
+.kanso-review__add{display:inline-grid;place-items:center;width:var(--k-annotation-size);height:var(--k-annotation-size);border-radius:var(--k-r-sm);background:var(--solid);color:var(--solidfg);font:var(--k-fw-strong) var(--k-fs-meta)/1 var(--ui);vertical-align:middle}
 .kanso-review__reply .kanso-card__header b{font-weight:var(--k-fw-medium)}
 .kanso-review__snippet{margin:var(--k-sp-2) calc(-1 * var(--k-sp-3)) 0}
 .kanso-review__line+.kanso-review__line{margin-top:var(--k-sp-1)}

@@ -47,7 +47,7 @@ const preview = {
       storySort: {
         order: [
           'Start',
-          'Tokens', ['Colour', 'Contrast, light and dark', 'Type', 'Spacing', 'Radius', 'Motion', 'Icons'],
+          'Tokens', ['Colour', 'Contrast, light and dark', 'Type', 'Spacing', 'Radius', 'Motion', 'Icons', 'Components'],
           'Primitives',
           'Compositions', ['Header', 'Sidebar', 'Toolbar', 'Tab bar', 'Pane header', 'Edges', 'Status bar', 'Activity', 'Notifications', 'Keyboard', 'Panel', 'State patterns', 'Dawn Mode'],
           'Panels',
