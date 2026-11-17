@@ -50,9 +50,6 @@
 .kanso-text--wash-14{color:var(--wash-14)!important}
 .kanso-fill--wash-14{background:var(--wash-14)}
 .kanso-ring--wash-14{box-shadow:inset 0 0 0 1px var(--wash-14)}
-.kanso-text--wash-chosen{color:var(--wash-chosen)!important}
-.kanso-fill--wash-chosen{background:var(--wash-chosen)}
-.kanso-ring--wash-chosen{box-shadow:inset 0 0 0 1px var(--wash-chosen)}
 .kanso-text--wash-blocked{color:var(--wash-blocked)!important}
 .kanso-fill--wash-blocked{background:var(--wash-blocked)}
 .kanso-ring--wash-blocked{box-shadow:inset 0 0 0 1px var(--wash-blocked)}

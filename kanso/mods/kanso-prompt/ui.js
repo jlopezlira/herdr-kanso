@@ -38,7 +38,7 @@ export const GLINT_EASE = "linear";
 export const BEAT = { working: { from: 0.35, to: 1, period: 1800 }, blocked: { from: 0.45, to: 1, period: 1600 } };
 export const OPACITY = { away: 0.55, held: 0.4, hover: 0.75, quiet: 0.55, idle: 0.7, thumb: 0.7, trace: 0.6, pending: 0.8, part: 0.85, pet: 0.85, blockedWash: 0.4, blockedRow: 0.08, glintFaint: 0.35, glintMid: 0.6 };
 export const TINT = { board: 0.02, chip: 0.024, cell: 0.03, hover: 0.04, row: 0.047, card: 0.063, tab: 0.07, pill: 0.08, diff: 0.094, faint: 0.1, key: 0.11, control: 0.12, goal: 0.133, bound: 0.14, soft: 0.15, strong: 0.25, frame: 0.314, boundLine: 0.44, ring: 0.5, line: 0.55 };
-export const WASHES = { dark: { w4: 0.04, w7: 0.07, w12: 0.12, w14: 0.14, chosen: 0.12 }, light: { w4: 0.05, w7: 0.095, w12: 0.18, w14: 0.21, chosen: 0.12 } };
+export const WASHES = { dark: { w4: 0.04, w7: 0.07, w12: 0.12, w14: 0.14 }, light: { w4: 0.05, w7: 0.095, w12: 0.18, w14: 0.21 } };
 export const INK = { faint: "#8a867d", fallback: "#888888", dojoFur: "#e8963a", dojoCream: "#f6ece0", dojoInk: "#161615" };
 // End of the generated sizes.
 /** A second press within this long confirms what cannot be undone. */
@@ -69,7 +69,7 @@ export function tokens(t = {}) {
     red: t.ansi1, green: t.ansi2, yellow: t.ansi3, violet: t.ansi5, blue,
     // A host's teal: blue and done, half each.
     teal: mix(blue, done, 0.5),
-    ...(washes(t) ?? { w4: subtle, w7: subtle, w12: selected, w14: selected, chosen: selected }),
+    ...(washes(t) ?? { w4: subtle, w7: subtle, w12: selected, w14: selected }),
   };
 }
 
@@ -94,7 +94,7 @@ const HEX = /^#[0-9a-f]{6}(?:[0-9a-f]{2})?$/i;
 // `hex` at `share` opacity: it lets the ground below show through; any other colour stays as it is.
 export const alpha = (hex, share) => (RGB.test(hex ?? "") ? `${hex.slice(0, 7)}${Math.round(share * 255).toString(16).padStart(2, "0")}` : hex);
 const lightness = (hex) => [0, 1, 2].reduce((sum, i) => sum + parseInt(hex.slice(1 + 2 * i, 3 + 2 * i), 16), 0);
-/** The foreground washes w4, w7, w12, w14 and `chosen` (the active project, the chosen tab, the focused pane header) at the light or the dark theme's shares; null without a #rrggbb foreground, so a caller keeps its opaque token. */
+/** The foreground washes w4, w7, w12, w14 at the light or the dark theme's shares; null without a #rrggbb foreground, so a caller keeps its opaque token. */
 export function washes(t = {}) {
   const fg = t.foreground, bg = t.background ?? t.canvas;
   if (!HEX.test(fg ?? "")) return null;

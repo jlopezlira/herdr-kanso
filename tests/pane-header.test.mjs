@@ -128,7 +128,7 @@ const menuItems = (root) => {
 test("Each look is a state: focus is the ground, waiting the wash and mark, keyboard focus the accent ring, out of reach 55% with no mark", async () => {
   const focus = await header();
   const root = focus.view.render();
-  assert.equal(arg(root, "bg"), focus.c.chosen, "the chosen wash, shared with the chosen project and tab");
+  assert.equal(arg(root, "bg"), focus.c.selected);
   assert.equal(arg(root, "border_color"), "#00000000", "no ring without the keyboard");
   assert.equal(texts(root).includes("Needs you"), false);
   const waits = await header({ pane: { status: "blocked" } });

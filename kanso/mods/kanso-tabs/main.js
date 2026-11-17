@@ -412,7 +412,7 @@ export default class Tabs extends View {
     const from = openTabs.findIndex((other) => other.id === this.pressed), to = openTabs.findIndex((other) => other.id === tab.id);
     const target = this.dropAt === tab.id && from >= 0 && from !== to;
     const item = tabItem(`tab-${tab.id}`, this.tabLook(tab), c, {
-      on: tab.active, disabled: !connected, size: "md", track: false, index, count, fill: !glide, bar: true, nameWidth: W.tabLabel,
+      on: tab.active, disabled: !connected, size: "md", track: false, index, count, fill: !glide, nameWidth: W.tabLabel,
       onChange: () => { this.armed.clear(); run("tab.select", { id: tab.id }); },
       onClose: openTabs.length > 1 ? (cx) => this.closeTab(tab, ps, cx) : null,
       onPress: (e, cx) => this.pressTab(tab, e, cx),

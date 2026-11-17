@@ -300,7 +300,6 @@
   --wash-7: light-dark(color-mix(in srgb, var(--fg) 9.5%, transparent), color-mix(in srgb, var(--fg) 7%, transparent));
   --wash-12: light-dark(color-mix(in srgb, var(--fg) 18%, transparent), color-mix(in srgb, var(--fg) 12%, transparent));
   --wash-14: light-dark(color-mix(in srgb, var(--fg) 21%, transparent), color-mix(in srgb, var(--fg) 14%, transparent));
-  --wash-chosen: color-mix(in srgb, var(--fg) 12%, transparent);
   --wash-blocked: light-dark(#d0c4bf, #3d322f);
   --code-keyword: light-dark(#7a52c7, #b89cf0);
   --code-type: light-dark(#2a6fa8, #7fb0dc);

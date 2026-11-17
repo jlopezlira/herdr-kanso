@@ -2229,7 +2229,7 @@ export default class Spaces extends View {
     const strong = rows.some((r) => r.strong);
     return h_flex().w_full().h(SIDEBAR.railRow).flex_none().justify_center().items_center().child(
       v_flex().id(id).w(36).h(40).flex_none().gap(3).items_center().justify_center().rounded(6).cursor_pointer().tooltip(tooltip({ label: tip }))
-        .when(on, (el) => el.bg(c.chosen))
+        .when(on, (el) => el.bg(c.w12))
         .when(!on, (el) => el.hover((s) => s.bg(alpha(t.foreground, TINT.row))))
         .when(strong, (el) => el.border_1().border_color(alpha(t.accent, TINT.ring)))
         .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
@@ -2557,7 +2557,7 @@ export default class Spaces extends View {
     const gap = view === "threads" ? 6 : SIDEBAR.gap;
     const { els, space, agent } = laidOut(items, gap);
     const pills = collapsed ? [] : [
-      ...(space ? [pill("pill-space", space.y, space.h, tokens(t).chosen)] : []),
+      ...(space ? [pill("pill-space", space.y, space.h, tokens(t).w12)] : []),
       ...(agent ? [pill(`pill-agent-${view}`, agent.y, agent.h, alpha(t.foreground, TINT.tab))] : []),
     ];
     // Named, so its scroll position survives every redraw (an unnamed one is placed anew and starts at the top).

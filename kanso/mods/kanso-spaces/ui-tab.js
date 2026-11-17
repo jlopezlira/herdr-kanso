@@ -13,12 +13,11 @@ const TAB = { sm: H.compact, md: H.icon, lg: H.control };
 /** The most characters a tab's name holds. */
 export const TAB_NAME_LIMIT = 64;
 
-const groundOf = (c, { on, track, armed, held, fill, bar }) => {
+const groundOf = (c, { on, track, armed, held, fill }) => {
   if (armed) return armedLook(c).fill;
   if (held) return c.selected;
   if (!on || !fill) return null;
-  if (track) return c.raised;
-  return bar ? c.chosen : c.w7;
+  return track ? c.raised : c.w12;
 };
 
 const inkOf = (c, { on, disabled, armed }) => {
@@ -41,12 +40,12 @@ const nameOf = (id, item, c, nameWidth) => (item.editing
 
 /** One tab. `item`: { key, label, icon, dot, tip, mark, pending, held, armed, editing }; `dot` marks it while unselected, `mark` is a status drawn after the name,
  * `editing` the TextField renaming it in place. `onClose`: the chosen tab ends with ×. `onPress`: a left press, before the tab keeps it from the window.
- * `fill`: false when the group's pill draws the chosen fill. `bar`: a tab of the window's tab bar, chosen with the chosen wash. `nameWidth`: the name trims past it. */
-export function tabItem(id, item, c, { on = false, disabled = false, collapsed = false, track = true, size = "lg", index = 0, count = 1, onChange = null, onClose = null, onPress = null, fill = true, bar = false, nameWidth = null } = {}) {
+ * `fill`: false when the group's pill draws the chosen fill. `nameWidth`: the name trims past it. */
+export function tabItem(id, item, c, { on = false, disabled = false, collapsed = false, track = true, size = "lg", index = 0, count = 1, onChange = null, onClose = null, onPress = null, fill = true, nameWidth = null } = {}) {
   const side = TAB[size] ?? TAB.lg, inner = track ? side - 2 * G.hair : side;
   const armed = Boolean(item.armed) && !disabled;
   const ink = inkOf(c, { on, disabled, armed });
-  const ground = groundOf(c, { on, track, armed, held: Boolean(item.held), fill, bar });
+  const ground = groundOf(c, { on, track, armed, held: Boolean(item.held), fill });
   const dot = drawDot(c, "blocked");
   return Button.new(id).items_center().justify_center().gap(G.xs).rounded(R.control)
     .border_2().border_color(CLEAR).focus((s) => s.border_color(c.accent))
@@ -73,8 +72,8 @@ export function tabItem(id, item, c, { on = false, disabled = false, collapsed =
 /** Where a dragged tab lands: the accent bar between two tabs. */
 export const tabInsertion = (c) => div().w(G.hair).h(H.badge).flex_none().rounded(R.sm).bg(c.accent);
 
-/** The tab bar's chosen fill on its own, slid under the chosen tab: the chosen wash. */
-export const tabPill = (c, size = "md") => div().h(TAB[size] ?? TAB.lg).rounded(R.control).bg(c.chosen);
+/** The chosen fill on its own, for a group that slides it under the chosen tab. */
+export const tabPill = (c, size = "md") => div().h(TAB[size] ?? TAB.lg).rounded(R.control).bg(c.w12);
 
 /** One tab group: the chosen tab is a quiet fill (raised on a track), never a weight, so nothing moves. Items: { key, label, icon, dot, tip, drop } and tabItem's states;
  * `drop` draws where a dragged tab lands, before it. `size`: sm 24, md 26, lg 30, the track's thickness, or each tab's without one. Collapsed: a column of icons, each label its tip. */
