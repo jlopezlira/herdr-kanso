@@ -1,17 +1,13 @@
 // Kanso's terminal right-click menu, by jlopezlira (https://github.com/jlopezlira/herdr-kanso).
 // Apache-2.0; derived from Herdr's shipped `menu` mod.
 // In the strip Herdr's menu gets the block id ("term-<pane>"), so pane commands fail: this menu resolves the real pane.
-import { View, div, svg } from "gpui-kit";
-import { v_flex, h_flex } from "gpui-base";
-import { run, props, closeOverlay, openOverlay, theme, terminals, panes, spaces, shared, setShared, keys } from "herdr";
+import { View } from "gpui-kit";
+import { run, props, closeOverlay, openOverlay, theme, terminals, panes, shared, setShared, keys } from "herdr";
 import { listKey, moveTo } from "./listkeys.js";
-
-const ICON = "mods/kanso-chrome/icons/";
-
-function openWith(p) {
-  const space = spaces().find((s) => s.tabs.some((x) => x.id === p.tab));
-  openOverlay({ mod: "open-with", kind: "popup", width: 340, props: { folder: p.cwd, machine: space?.machine ?? null } });
-}
+import { focusOn } from "./pure.js";
+import { openWithPopup } from "./popup.js";
+import { tokens } from "./ui.js";
+import { menuList } from "./ui-menu.js";
 
 function items(tg) {
   const ps = panes();
@@ -38,7 +34,7 @@ function items(tg) {
     ...(term ? [[toProgram ? "Use Herdr right-click menu" : "Send right-clicks to pane",
       () => run("terminal.right_click", { terminal: term.address, to: toProgram ? "menu" : "program" }), "sidebar", null]] : []),
     ...(parent ? [[`Send back to ${parent.name || parent.address}`, () => run("terminal.park", { terminal: term.address }), "chevron-right", null]] : []),
-    ...(info?.cwd ? [["Open with…", () => openWith(info), "open-with", "mod.open:open-with"]] : []),
+    ...(info?.cwd ? [["Open with…", () => openWithPopup(info), "open-with", "mod.open:open-with"]] : []),
     ...(info?.terminal ? [["Send to an agent…", () => openOverlay({ mod: "kanso-send", kind: "dialog", width: 520, props: { pane } }), "send", "kanso-strip.send"]] : []),
     ["Close pane", () => run("pane.close", { pane }), "close", "kanso-strip.close"],
   ];
@@ -49,8 +45,14 @@ const shortcut = (action) => (action ? keys().find((b) => b.action === action)?.
 export default class KansoMenu extends View {
   init(_props, cx) {
     this.at = -1; // nothing chosen for you: j or the down arrow lights the first
-    this.handle = cx.focus_handle();
-    this.handle.focus();
+    this.handle = focusOn(cx);
+  }
+
+  // The pending g (for gg) is kept on the view between keys.
+  listed(e) {
+    const nav = listKey(e, this.listG);
+    this.listG = nav.gAt;
+    return nav.move;
   }
 
   choose(i) {
@@ -61,26 +63,20 @@ export default class KansoMenu extends View {
   }
 
   render() {
-    const t = theme();
     const list = items(props()?.target ?? {});
-    return v_flex().id("kanso-menu").track_focus(this.handle).w_full().min_h(0).p(5).bg(t.popover).text_size(12.8)
+    // A line before the first move, before Open with and before Close.
+    const ruled = (it, i) => i > 0 && (i === 3 || it[0] === "Open with…" || it[0] === "Close pane");
+    const lines = list.flatMap((it, i) => [...(ruled(it, i) ? [{ separator: true }] : []),
+      { icon: it[2], label: it[0], hint: shortcut(it[3]) || null, selected: i === this.at, onClick: () => this.choose(i) }]);
+    return menuList("kanso-menu", { items: lines }, tokens(theme())).track_focus(this.handle)
       .on_key_down((e, cx) => {
-        const { move, gAt } = listKey(e, this.listG);
-        this.listG = gAt;
+        const move = this.listed(e);
         if (!move) return;
         if (move === "enter") this.choose(this.at);
         else if (move === "escape") closeOverlay(props().overlay);
         else this.at = moveTo(move, this.at, list.length);
         cx.stop_propagation();
         cx.notify();
-      })
-      .children(list.map((it, i) => v_flex()
-        .when(i > 0 && (i === 3 || it[0] === "Open with…" || it[0] === "Close pane"),(el) => el.child(div().mx(7).my(4).h(1).bg(t.border)))
-        .child(h_flex().id(`km-${i}`).h(30).px(8).gap(9).rounded(6).items_center()
-          .text_color(t.foreground).when(i === this.at, (el) => el.bg(t.selected)).hover((s) => s.bg(t.hover))
-          .on_click(() => this.choose(i))
-          .child(svg(`${ICON}${it[2]}.svg`).size(14).flex_none().text_color(t.muted))
-          .child(div().flex_1().child(it[0]))
-          .child(div().text_size(11).text_color(t.dim).child(shortcut(it[3]))))));
+      });
   }
 }

@@ -41,10 +41,9 @@ export const lookStamp = (name) => {
 };
 
 export const sweepLook = async (root, id, keep) => {
-  const names = await readdir(root).catch(() => []);
-  const now = Date.now();
+  const { names, now } = await cacheContents(root);
   const drop = dropCopies(names.map((name) => ({ name, mtime: lookStamp(name) })), { id, keep, now });
-  await Promise.all(drop.map((old) => unlink(paths.join(root, old)).catch(() => {})));
+  await removeCached(root, drop);
 };
 
 export const said = (error) => String(error?.message ?? error ?? "").replace(/^Error:\s*/, "").trim();
@@ -221,12 +220,11 @@ const readKept = async (file) => (await readFile(file, "utf8").catch(() => "")).
 const atOf = (rows, name) => rows.find((row) => row[0] === name)?.[1];
 
 const sweep = async (root, id, keep) => {
-  const names = await readdir(root).catch(() => []);
-  const now = Date.now();
+  const { names, now } = await cacheContents(root);
   const rows = await readKept(keptFile(root));
   const known = atOf(rows, keep) === undefined ? [...rows, [keep, now]] : rows;
   const drop = dropCopies(names.map((entry) => ({ name: entry, mtime: atOf(known, entry) ?? stampAt(entry) })), { id, keep, now });
-  await Promise.all(drop.map((old) => unlink(paths.join(root, old)).catch(() => {})));
+  await removeCached(root, drop);
   const gone = new Set(drop);
   const live = names.filter((entry) => !gone.has(entry)).map((entry) => [entry, atOf(known, entry) ?? now]);
   const listed = live.some((row) => row[0] === keep) ? live : [...live, [keep, atOf(known, keep) ?? now]];
@@ -286,4 +284,18 @@ export async function bring(file, on, { ask = false } = {}) {
   } catch (e) {
     throw new Error(copyFailure(e, on));
   }
+}
+
+const cacheContents = async (root) => ({ names: await readdir(root).catch(() => []), now: Date.now() });
+const removeCached = (root, names) => Promise.all(names.map((name) => unlink(paths.join(root, name)).catch(() => {})));
+
+export function startRemotePoll() {
+  this.poll = pollStart(); this.stamp = null; this.fresh = null; this.held = null; this.arm = null;
+}
+
+export function advanceRemotePoll(cx, outcome, failure = null) {
+  if (failure && !failure.keep && !this.error) this.error = failure.error;
+  this.poll = pollNext(this.poll, outcome);
+  new ArmPoll(this).start(cx, (tick) => this.probe(tick));
+  cx.notify();
 }

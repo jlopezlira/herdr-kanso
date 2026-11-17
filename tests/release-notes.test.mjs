@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { check, nextVersion, requiredBump } from "../scripts/check-version.mjs";
-import { releaseNotes } from "../scripts/release-plan.mjs";
+import { releaseNotes, REPORT_LINE } from "../scripts/release-plan.mjs";
 
-const footer = "Report a problem: https://github.com/jlopezlira/herdr-kanso/issues/new?template=bug.yml";
+const footer = REPORT_LINE;
 const changes = "### Added\n\n- A feature.\n\n### Fixed\n\n- A bug.";
 const intro = "Release candidate for 1.1.0. It becomes 1.1.0 stable if nothing blocks it.";
 const log = (body) => `# Changelog\n\n## [1.1.0] - 2026-11-12\n\n${body}\n`;

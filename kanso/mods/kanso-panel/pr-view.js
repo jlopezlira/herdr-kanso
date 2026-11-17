@@ -1,4 +1,5 @@
 // The pull request page: the verdict, its one action, and the fold under it.
+import { scopedColumn } from "./ui-page.js";
 import { div, svg } from "gpui-kit";
 import { shared } from "herdr";
 import { v_flex, h_flex, Button } from "gpui-base";
@@ -81,10 +82,8 @@ export function listedRow(panel, c, p, i, { finished = false, id = null } = {}) 
       .child(h_flex().w_full().items_start().gap(G.md)
         .child(div().flex_1().min_w(0).text_size(14).line_height(1.35).text_color(c.text).when(on, (e) => e.font_medium()).child(p.title))
         .when(on, (el) => el.child(div().flex_none().pt(2).text_size(11).text_color(c.text).child("Shown"))))
-      .child(div().w_full().truncate().text_size(11.5).text_color(c.dim).child(meta))
-      .child(h_flex().w_full().gap(G.sm).items_center()
-        .child(div().size(6).flex_none().rounded_full().bg(state.color))
-        .child(div().text_size(12).text_color(state.color === c.dim ? c.muted : state.color).child(state.text))
+      .child(prMeta(c, meta))
+      .child(prState(c, state)
         .when(p.additions !== undefined, (el) => el.child(div().text_size(12).text_color(c.dim).child(`+${p.additions} −${p.deletions}`)))));
 }
 
@@ -145,8 +144,7 @@ function footnote(panel, c) {
 }
 
 function heroTop(panel, c, view) {
-  const scope = scopeRow(panel, c);
-  const card = verdictCard(c, view.body);
+  const { scope, card } = viewParts(panel, c, view);
   const preview = panel.sendShown && panel.sendFor ? String(panel.sendFor).split("\n") : null;
   const ink = toneColor(c, view.tone);
   const body = v_flex().w_full().gap(G.lg)
@@ -158,8 +156,7 @@ function heroTop(panel, c, view) {
     .child(h_flex().w_full().gap(G.lg).items_center().flex_wrap()
       .when(Boolean(view.primary), (row) => row.child(actionButton(panel, c, view.primary)))
       .when(Boolean(view.quiet), (row) => row.child(quietAction(panel, c, view.quiet))));
-  return v_flex().w_full().gap(G.lg)
-    .when(Boolean(scope), (el) => el.child(scope))
+  return scopedColumn(scope)
     .when(Boolean(panel.pr?.title), (el) => el.child(div().w_full().max_h(VIEW.titleMax).overflow_hidden().text_size(VIEW.title).line_height(1.3).font_medium().text_color(c.text).child(panel.pr.title)))
     .child(h_flex().gap(G.sm).items_center()
       .child(div().size(VIEW.dot).flex_none().rounded_full().bg(ink))
@@ -190,14 +187,18 @@ export function drawHero(panel, c) {
 export function drawEmpty(panel, c) {
   const view = panel.view();
   const action = view.primary ? actionButton(panel, c, view.primary) : view.quiet ? quietAction(panel, c, view.quiet) : null;
-  const scope = scopeRow(panel, c);
-  const card = verdictCard(c, view.body);
+  const { scope, card } = viewParts(panel, c, view);
   const foot = footnote(panel, c);
-  return v_flex().w_full().gap(G.lg)
-    .when(Boolean(scope), (el) => el.child(scope))
+  return scopedColumn(scope)
     .child(panel.waiting(c, view.text, null, action))
     .when(Boolean(card), (el) => el.child(card))
     .when(view.details, (el) => el.child(fold(panel, c, view)))
     .when(Boolean(panel.note), (el) => el.child(failNote("pr-view-note", panel.note, c)))
     .when(Boolean(foot), (el) => el.child(foot));
 }
+
+export const prMeta = (c, meta) => div().w_full().truncate().text_size(11.5).text_color(c.dim).child(meta);
+export const prState = (c, state) => h_flex().w_full().gap(G.sm).items_center()
+  .child(div().size(6).flex_none().rounded_full().bg(state.color))
+  .child(div().text_size(12).text_color(state.color === c.dim ? c.muted : state.color).child(state.text));
+const viewParts = (panel, c, view) => ({ scope: scopeRow(panel, c), card: verdictCard(c, view.body) });

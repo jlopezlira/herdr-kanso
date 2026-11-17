@@ -1,12 +1,12 @@
 // Divider sampling is slow at rest and responsive during a held pane drag.
+import { loadStrip } from "./mod-fixtures.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { load } from "./helpers.mjs";
 
 test("strip adopt polls at most once a second at rest and every 150 ms during a drag", async () => {
   const state = { now: 0, drag: null, reads: 0, notices: 0 };
   class Clock extends Date { static now() { return state.now; } }
-  const { Strip } = await load("kanso-strip/main.js", ["Strip"], {
+  const { Strip } = await loadStrip({
     Date: Clock, shared: () => state.drag, setShared: (key, value) => { if (key === "strip.drag") state.drag = value; },
   });
   const view = new Strip();

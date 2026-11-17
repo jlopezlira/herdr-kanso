@@ -1,17 +1,7 @@
+import { realpathSync } from "node:fs";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { createHash, randomBytes } from "node:crypto";
-import {
-  chmod,
-  copyFile,
-  constants as fsConstants,
-  mkdir,
-  open,
-  readFile,
-  readdir,
-  rename,
-  rmdir,
-  stat,
-  unlink,
-} from "node:fs/promises";
+import { chmod, copyFile, constants as fsConstants, mkdir, open, readFile, readdir, rename, rmdir, stat, unlink } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { findAsync, range } from "../pure.js";
@@ -260,8 +250,7 @@ async function takeLock(lockPath, ownerPath, owner) {
     await writeNewSynced(ownerPath, owner);
     return null;
   } catch (error) {
-    await unlink(ownerPath).catch(() => {});
-    await rmdir(lockPath).catch(() => {});
+    await releaseLock(lockPath, ownerPath);
     return { error };
   }
 }
@@ -312,8 +301,57 @@ export async function withStoreLock(
   } finally {
     const current = await readLockInfo(lockPath);
     if (current?.token === token) {
-      await unlink(ownerPath).catch(() => {});
-      await rmdir(lockPath).catch(() => {});
+      await releaseLock(lockPath, ownerPath);
     }
   }
+}
+
+export function parseCommand(argv, names, defaults = {}) {
+  const flags = (index, options) => {
+    if (index >= argv.length) return options;
+    const arg = argv[index];
+    if (arg === "--help" || arg === "-h") return flags(index + 1, { ...options, help: true });
+    if (arg === "--rebuild" && Object.hasOwn(defaults, "rebuild")) return flags(index + 1, { ...options, rebuild: true });
+    const match = /^--([^=]+)(?:=(.*))?$/.exec(arg);
+    if (!match || !names.includes(match[1])) throw new Error(`unknown argument ${arg}`);
+    const inline = match[2] !== undefined;
+    const value = inline ? match[2] : argv[index + 1];
+    if (value === undefined) throw new Error(`--${match[1]} needs a value`);
+    return flags(index + (inline ? 1 : 2), { ...options, [match[1]]: value });
+  };
+  return { command: argv[0], options: flags(1, defaults) };
+}
+
+export const unknownCommand = (command, usage) => ({ exitCode: 2, stdout: "", stderr: `unknown command ${command}\n${usage()}\n` });
+
+export function entryPoint(url, fallback = () => false) {
+  const entry = process.argv[1];
+  if (!entry) return false;
+  try {
+    return realpathSync(path.resolve(entry)) === realpathSync(fileURLToPath(url));
+  } catch {
+    return fallback(entry, url);
+  }
+}
+
+export const entryUrlMatches = (entry, url) => pathToFileURL(entry).href === url;
+
+export async function runCommand(run, prefix) {
+  try {
+    const result = await run(process.argv.slice(2));
+    if (result.stdout) process.stdout.write(result.stdout);
+    if (result.stderr) process.stderr.write(result.stderr);
+    await exitWith(result.exitCode);
+  } catch (error) {
+    process.stderr.write(`${prefix}: ${error.message}\n`);
+    await exitWith(error.exitCode ?? 1);
+  }
+}
+
+export const tokenVector = (tokens) => [tokens.input, tokens.output, tokens.cacheRead, tokens.cacheWrite, tokens.reasoning];
+export const missingFile = (error) => { if (error?.code === "ENOENT") return null; throw error; };
+
+async function releaseLock(lockPath, ownerPath) {
+  await unlink(ownerPath).catch(() => {});
+  await rmdir(lockPath).catch(() => {});
 }

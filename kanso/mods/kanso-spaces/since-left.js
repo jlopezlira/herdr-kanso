@@ -19,17 +19,20 @@ const lead = (c, mark) => (mark === "pr"
 export class SinceLeft {
   constructor(db) {
     this.store = new SinceStore(db);
-    this.project = null;
-    this.rows = [];
-    this.expanded = false;
+    this.clear();
     this.heights = [];
     this.headed = false;
   }
 
-  leave() {
+  // Nothing shown any more: the list starts empty again.
+  clear() {
     this.project = null;
     this.rows = [];
     this.expanded = false;
+  }
+
+  leave() {
+    this.clear();
     this.showing = false;
   }
 

@@ -5,9 +5,10 @@ import { spaces, panes, shared, hc, props, closeOverlay, theme, home } from "her
 import { Store } from "./store.js";
 import { base, tilde, captureTab, describe, summary, projectOf, folderOfKey, openTab } from "./tabkit.js";
 import { listKey, moveTo } from "./listkeys.js";
-import { tryOr } from "./pure.js";
+import { tryOr, focusOn } from "./pure.js";
 import { breathe, G, tokens } from "./ui.js";
-import { button, Armed } from "./ui-button.js";
+import { Armed } from "./ui-button.js";
+import { dialog, statusNotes } from "./ui-dialog.js";
 import { field, TextField } from "./ui-field.js";
 import { skeleton } from "./ui-skeleton.js";
 
@@ -32,8 +33,7 @@ export function rebase(a, folder) {
 
 export default class Arrange extends View {
   init(_props, cx) {
-    this.handle = cx.focus_handle();
-    this.handle.focus();
+    this.handle = focusOn(cx);
     this.view = "list";
     this.list = null;
     this.others = [];
@@ -148,26 +148,9 @@ export default class Arrange extends View {
     const p = props() ?? {};
     const project = this.space?.name ?? tilde(this.space?.folder);
     const c = tokens(t);
-    const head = (title, sub) => v_flex().gap(4)
-      .child(h_flex().items_center()
-        .child(div().flex_1().text_size(15).font_semibold().child(title))
-        .child(div().text_size(11).text_color(t.dim).child("Esc")))
-      .child(div().truncate().text_size(11.5).text_color(t.dim).child(sub));
-    const note = (text, tone) => div().pt(10).text_size(11.5).line_height(1.45).text_color(tone ?? t.dim).child(text);
-    const shell = v_flex().id("kanso-arrange").track_focus(this.handle).w_full().min_h(0).p(18).bg(t.popover).text_color(t.foreground)
-      .on_key_down((e, cx) => {
-        // Not in the save view: its name field takes letters.
-        const move = this.view !== "save" ? this.listed(e) : (e.key === "escape" ? "escape" : null);
-        if (!move) return;
-        if (move !== "escape") {
-          const order = this.order ?? [];
-          if (move === "enter") { if (!this.busy && order[this.at ?? 0]) this.open(order[this.at ?? 0], cx); }
-          else if (move !== "pending") this.at = moveTo(move, this.at ?? 0, order.length);
-          cx.stop_propagation(); cx.notify(); return;
-        }
-        if (this.view === "save") { this.view = "list"; this.target = null; cx.notify(); } else closeOverlay(p.overlay);
-        cx.stop_propagation();
-      });
+    const said = statusNotes(this);
+    const back = (cx) => { this.view = "list"; this.target = null; cx.notify(); };
+    const shell = (look) => dialog("kanso-arrange", c, { ...look, focusHandle: this.handle });
 
     if (this.view === "save") {
       const cols = this.capture?.cols ?? [];
@@ -177,21 +160,21 @@ export default class Arrange extends View {
       const starts = cols.map((_, ci) => cols.slice(0, ci).reduce((s, c) => s + c.panes.length, 0));
       const typed = this.name.value().trim(), tg = this.target;
       const replaces = (tg && tg.name === typed) ? tg : (this.list ?? []).some((a) => a.name === typed) ? { name: typed } : null;
-      return shell
-        .child(head(tg ? `Overwrite ${tg.name}` : "Save this tab", tg ? "With this tab as it is now" : `An arrangement for ${project}`))
-        .child(field("ar-name", this.name, c, { label: "Name" }).pt(G.lg))
-        .child(cols.length
-          ? div().pt(16).pb(7).text_size(11.5).text_color(t.dim).child(`${cols.length} ${cols.length === 1 ? "column" : "columns"}, left to right`)
-          : this.captureBones(t))
-        .when(cols.length > 0, (el) => el.child(v_flex().gap(10).children(cols.map((c, ci) => h_flex().w_full().gap(10).items_stretch()
-          .child(div().w(2).flex_none().rounded_full().bg(t.border))
-          .child(v_flex().flex_1().min_w(0).gap(4).children(c.panes.map((q, ri) => line(q, `${ci}-${starts[ci] + ri}`))))))))
-        .child(note("Each program is kept with the flags you started it with. A resumed session's id is left out, so each agent starts fresh."))
-        .when(Boolean(replaces), (el) => el.child(note(`This replaces the arrangement named ${replaces?.name}.`, t.muted)))
-        .when(Boolean(this.error), (el) => el.child(note(this.error, t.blocked)))
-        .child(h_flex().pt(18).gap(8).justify_end()
-          .child(button("ar-back", "Back", (cx) => { this.view = "list"; this.target = null; cx.notify(); }, c, { kind: "quiet" }))
-          .child(button("ar-save", replaces ? "Overwrite" : "Save", (cx) => this.save(cx), c, { disabled: !cols.length })));
+      return shell({
+        title: tg ? `Overwrite ${tg.name}` : "Save this tab", scope: tg ? "With this tab as it is now" : `An arrangement for ${project}`,
+        body: [
+          field("ar-name", this.name, c, { label: "Name" }),
+          cols.length ? v_flex().pt(G.md).gap(G.md).children(cols.map((c, ci) => h_flex().w_full().gap(G.md).items_stretch()
+            .child(div().w(2).flex_none().rounded_full().bg(t.border))
+            .child(v_flex().flex_1().min_w(0).gap(4).children(c.panes.map((q, ri) => line(q, `${ci}-${starts[ci] + ri}`)))))) : this.captureBones(t),
+        ],
+        notes: [...(cols.length ? [{ text: `${cols.length} ${cols.length === 1 ? "column" : "columns"}, left to right` }] : []),
+          { text: "Each program is kept with the flags you started it with. A resumed session's id is left out, so each agent starts fresh." },
+          ...(replaces ? [{ text: `This replaces the arrangement named ${replaces.name}.`, tone: "muted" }] : []),
+          ...statusNotes({ error: this.error })],
+        secondary: "Back", primary: replaces ? "Overwrite" : "Save", state: cols.length ? "default" : "disabled",
+        onCancel: back, onPrimary: (cx) => this.save(cx),
+      });
     }
 
     const list = this.list ?? [];
@@ -219,10 +202,10 @@ export default class Arrange extends View {
           .on_mouse_down("left", (_e, cx) => cx.stop_propagation()));
     };
     const label = (text) => div().pt(12).pb(4).px(10).text_size(11.5).text_color(t.dim).child(text);
-    return shell
-      .child(head("Arrangements", `Opens in ${project}`))
+    return shell({
+      title: "Arrangements", scope: `Opens in ${project}`,
       // The list's content in a column that never shrinks: past 420 it scrolls.
-      .child(v_flex().id("ar-list").pt(14).max_h(420).overflow_y_scrollbar().child(v_flex().flex_none().w_full().gap(2)
+      body: v_flex().id("ar-list").pt(2).max_h(420).overflow_y_scrollbar().child(v_flex().flex_none().w_full().gap(2)
         .when(this.list === null, (el) => el.child(this.listBones(t)))
         .when(this.list !== null && !list.length && !others.length, (el) => el.child(v_flex().py(6).gap(4)
           .child(div().text_size(13).text_color(t.muted).child("No arrangement yet."))
@@ -230,11 +213,18 @@ export default class Arrange extends View {
         .when(list.length > 0 && others.length > 0, (el) => el.child(label("This project")))
         .children(list.map(row))
         .when(others.length > 0, (el) => el.child(label(list.length ? "Other projects, opened here" : "From other projects, opened here")))
-        .children(others.map(row))))
-      .when(Boolean(this.busy), (el) => el.child(note(this.busy, t.muted)))
-      .when(Boolean(this.error), (el) => el.child(note(this.error, t.blocked)))
-      .child(h_flex().pt(18).gap(8).justify_end()
-        .child(button("ar-close", "Close", () => closeOverlay(p.overlay), c, { kind: "quiet" }))
-        .child(button("ar-new", "Save this tab", (cx) => this.startSave(cx), c, { kind: !list.length && !others.length ? "solid" : "tonal", disabled: Boolean(this.busy) })));
+        .children(others.map(row))),
+      notes: said,
+      primary: "Save this tab", kind: !list.length && !others.length ? "solid" : "tonal", state: this.busy ? "disabled" : "default",
+      onPrimary: (cx) => this.startSave(cx), onCancel: () => closeOverlay(p.overlay),
+      onKey: (e, cx) => {
+        const move = this.listed(e);
+        if (!move) return;
+        const order = this.order ?? [];
+        if (move === "enter") { if (!this.busy && order[this.at ?? 0]) this.open(order[this.at ?? 0], cx); }
+        else if (move !== "pending") this.at = moveTo(move, this.at ?? 0, order.length);
+        cx.stop_propagation(); cx.notify();
+      },
+    });
   }
 }

@@ -59,7 +59,7 @@
 .kanso-story__frame > .kanso-dawn { position: relative; inline-size: 256px; }
 .kanso-story__popup-room { padding-top: var(--k-room-popup); }
 .kanso-story__menu-room { padding-bottom: var(--k-room-menu); }
-.kanso-story__sort-room { padding-bottom: var(--k-room-sort-menu); }
+.kanso-story__tools-room { padding-bottom: var(--k-room-tools-menu); }
 .kanso-story--w520 { inline-size: var(--k-w-window-small); }
 .kanso-story--w760 { inline-size: var(--k-w-window-narrow); }
 .kanso-story--w1040 { inline-size: var(--k-w-window); }

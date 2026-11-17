@@ -3,13 +3,14 @@ import { openApi } from "./platform-open.js";
 // Open with: opens the focused pane's folder in a code editor installed on this computer.
 // Other mods open it with openOverlay({ mod: "open-with", kind: "popup", props: { folder, machine } }), or props.file (full path) for one file; a text file is also offered to kanso-panel's preview.
 
-import { View, div, svg, image } from "gpui-kit";
-import { h_flex, v_flex } from "gpui-base";
+import { View } from "gpui-kit";
 import { exec, run, notify, theme, props, closeOverlay, focused, panes, spaces, home, appHome, shared, setShared, layout, window as win } from "herdr";
 import { walkLayout, commitLayout } from "./layout.js";
 import { listKey, moveTo } from "./listkeys.js";
 import { isText } from "./kinds.js";
-import { aliasText, machineTitle } from "./pure.js";
+import { aliasText, machineTitle, focusOn } from "./pure.js";
+import { tokens } from "./ui.js";
+import { menuList } from "./ui-menu.js";
 
 const MOD = "open-with";
 const RECENT = `${MOD}.recent`;
@@ -49,7 +50,10 @@ const EDITORS = [
   { id: "vim", name: "Vim", cli: ["vim"], tui: true, icon: "icons/vim.svg" },
 ];
 const BY_ID = Object.fromEntries(EDITORS.map((e) => [e.id, e]));
-const TILES = ["#5b8def", "#22a99a", "#8b7cf6", "#e3814f", "#3fae6a", "#d9649a"];
+// The editors show this many, then scroll.
+const LIST_ROWS = 13;
+// A letter tile's hue, by the editor's place in the catalog.
+const TILE_TONES = ["blue", "teal", "violet", "yellow", "green", "red"];
 
 // One shell pass: prints `app|cli|flatpak <tab> key <tab> path` per hit.
 const PREVIEW = { id: "preview", name: "Preview in the panel", icon: "mods/kanso-chrome/icons/file-text.svg", builtin: true };
@@ -72,8 +76,7 @@ export default class OpenWith extends View {
     this.found = shared(FOUND) ?? null;
     this.at = 0;
     this.icons = {};
-    this.handle = cx.focus_handle();
-    this.handle.focus();
+    this.handle = focusOn(cx);
     this.target = this.resolveTarget();
     cx.spawn(async (cx) => {
       try {
@@ -159,32 +162,18 @@ export default class OpenWith extends View {
     return openApi(this.platform, exec).spawn(cli, args);
   }
 
-  glyph(e, t) {
-    if (e.builtin) return div().size(18).flex_none().rounded(6).bg(t.accent + "33").flex().items_center().justify_center().child(svg(e.icon).size(13).text_color(t.foreground));
-    if (this.icons[e.id]) return image(this.icons[e.id]).size(18).flex_none();
-    if (e.icon) return div().size(18).flex_none().items_center().justify_center().flex().child(svg(e.icon).size(15).text_color(t.foreground));
-    const c = TILES[EDITORS.indexOf(e) % TILES.length];
-    return div().size(18).flex_none().rounded(6).bg(c).flex().items_center().justify_center()
-      .text_size(10.5).font_bold().text_color("#ffffff").child(e.name[0]);
-  }
-
-  row(e, i, sel, t) {
+  // An editor as a Menu item: its app's picture, its own icon, or its letter; one that cannot open a remote folder is dim and says so.
+  item(e, i, sel) {
     const ok = this.canOpen(e);
-    const recent = (shared(RECENT) ?? [])[0] === e.id;
-    const hint = !ok ? "local only" : e.builtin ? "no editor" : e.tui ? "split" : recent ? "last used" : "";
-    return h_flex().id(`ow-${e.id}`).h(32).px(9).gap(10).rounded(6).items_center().flex_none()
-      .text_color(ok ? t.foreground : t.dim)
-      .when(i === sel && ok, (el) => el.bg(t.selected))
-      .when(ok, (el) => el.cursor_pointer().hover((s) => s.bg(t.hover)))
-      .on_click((_ev, cx) => { if (ok) this.open(e); else cx.stop_propagation(); })
-      .child(this.glyph(e, t))
-      .child(div().flex_1().truncate().child(e.name))
-      .child(div().text_size(11).text_color(t.dim).child(hint))
-      .child(div().w(12).text_size(11).text_color(t.dim).child(i < 9 && ok ? String(i + 1) : ""));
+    const picture = this.icons[e.id] ?? null;
+    return {
+      picture, icon: picture ? null : e.icon ?? null, letter: picture || e.icon ? null : e.name[0], tone: TILE_TONES[EDITORS.indexOf(e) % TILE_TONES.length],
+      label: e.name, hint: !ok ? "local only" : i < 9 ? String(i + 1) : null,
+      disabled: !ok, selected: i === sel && ok, onClick: () => this.open(e),
+    };
   }
 
   render() {
-    const t = theme();
     const list = this.list();
     const pickable = list.filter((e) => this.canOpen(e));
     this.at = Math.max(0, Math.min(this.at, pickable.length - 1));
@@ -192,17 +181,13 @@ export default class OpenWith extends View {
     const { folder, machine, file } = this.target;
     const shown = file ?? folder;
     const firstTui = list.findIndex((e) => e.tui);
-
-    const note = !this.found ? div().px(9).py(8).text_color(t.dim).child("Looking for editors…")
-      : this.error && !list.length ? div().px(9).py(8).text_color(t.blocked).child(`Could not look for editors: ${this.error}`)
-      : !list.length ? div().px(9).py(8).text_color(t.dim).child("No code editor found. Install Cursor, VS Code, Zed or another editor and open this again.")
-      : null;
-    const body = [
-      ...(note ? [note] : []),
-      ...list.flatMap((e, i) => [...(i === firstTui ? [div().px(9).pt(8).pb(4).text_size(11).text_color(t.dim).child("In a split")] : []), this.row(e, i, sel, t)]),
-    ];
-
-    return v_flex().id("open-with").track_focus(this.handle).w_full().min_h(0).bg(t.popover).p(6).text_size(12.8)
+    const state = !this.found ? [{ loading: true }, { loading: true }]
+      : this.error && !list.length ? [{ failure: { text: "Could not look for editors", source: this.error } }]
+      : !list.length ? [{ heading: "No code editor found. Install Cursor, VS Code, Zed or another editor and open this again." }]
+      : [];
+    const editors = list.flatMap((e, i) => [...(i === firstTui ? [{ heading: "In a split" }] : []), this.item(e, i, sel)]);
+    const title = `Open with · ${machine ? `${machine}: ${shown}` : shortPath(shown, machine)}`;
+    return menuList("open-with", { title, items: [...state, { scroll: editors, rows: LIST_ROWS }] }, tokens(theme())).track_focus(this.handle)
       .on_key_down((ev, cx) => {
         const k = ev.key, { move, gAt } = listKey(ev, this.listG);
         this.listG = gAt;
@@ -214,13 +199,6 @@ export default class OpenWith extends View {
         else return;
         cx.stop_propagation();
         cx.notify();
-      })
-      .child(h_flex().px(9).pt(6).pb(8).gap(10).items_center()
-        .child(v_flex().flex_1().min_w(0).gap(2)
-          .child(div().text_size(14).font_semibold().text_color(t.foreground).child("Open with"))
-          .child(div().text_size(11).text_color(t.dim).truncate().child(machine ? `${machine}: ${shown}` : shortPath(shown, machine))))
-        .child(div().text_size(11).text_color(t.dim).child("Esc")))
-      .child(div().h(1).mx(4).mb(4).bg(t.border))
-      .child(v_flex().id("open-with-list").max_h(420).overflow_y_scrollbar().child(v_flex().flex_none().w_full().children(body)));
+      });
   }
 }

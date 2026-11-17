@@ -204,10 +204,14 @@ export class Find {
     });
   }
 
+  async nextSlice() {
+    const prev = this.state.from;
+    return { prev, parsed: await readSlice(exec, this.file, prev, SLICE_BUDGET, LINE_MAX, localName()) };
+  }
+
   async catchUp(cx) {
     while (!this.gone) {
-      const prev = this.state.from;
-      const parsed = await readSlice(exec, this.file, prev, SLICE_BUDGET, LINE_MAX, localName());
+      const { prev, parsed } = await this.nextSlice();
       if (this.gone) return;
       if (!parsed) { this.missing = prev === 0 && !this.state.turns.length; break; }
       if (parsed.end === prev) break;
@@ -225,8 +229,7 @@ export class Find {
     if (this.slicing || this.gone || !this.file) return;
     this.slicing = true;
     try {
-      const prev = this.state.from;
-      const parsed = await readSlice(exec, this.file, prev, SLICE_BUDGET, LINE_MAX, localName());
+      const { prev, parsed } = await this.nextSlice();
       if (this.gone || !parsed) return;
       const applied = applySlice(this.state, parsed);
       if (applied.reset) { this.restart(); await this.catchUp(cx); return; }
@@ -301,8 +304,7 @@ export class Find {
       .when(on, (el) => el.bg(c.selected))
       .hover((s) => s.bg(c.selected))
       .child(h_flex().gap(G.sm).items_center()
-        .child(div().text_size(10.5).text_color(c.muted).child(whoOf(turn)))
-        .child(div().text_size(10.5).text_color(c.dim).child(whenLabel(turn?.at))))
+        .children(turnMeta(turn, c)))
       .child(this.excerpt(this.partsFor(item), c));
   }
 
@@ -313,8 +315,7 @@ export class Find {
     return v_flex().w_full().max_h(MAX)
       .child(h_flex().px(G.sm).pt(G.xs).items_center()
         .child(iconButton("find-back", "chevron-left", "Back", (cx) => this.back(cx), c))
-        .child(div().text_size(10.5).text_color(c.muted).child(whoOf(turn)))
-        .child(div().text_size(10.5).text_color(c.dim).child(whenLabel(turn?.at))))
+        .children(turnMeta(turn, c)))
       .child(div().px(G.md).pb(G.xs).child(this.excerpt(hit ? partsOf(text, hit, EXCERPT) : [], c)))
       .child(markdownView(`find-turn-${hit?.turn ?? 0}-${hit?.at ?? 0}`, text, t).max_h(MAX));
   }
@@ -392,3 +393,8 @@ export class Find {
     return root;
   }
 }
+
+const turnMeta = (turn, c) => [
+  div().text_size(10.5).text_color(c.muted).child(whoOf(turn)),
+  div().text_size(10.5).text_color(c.dim).child(whenLabel(turn?.at)),
+];

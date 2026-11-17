@@ -1,7 +1,8 @@
 // kanso-toast: a toast already on screen is not shown again, and the stack keeps the newest three.
+import { loadToast } from "./mod-fixtures.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { load, clone } from "./helpers.mjs";
+import { load, clone, recordingElement } from "./helpers.mjs";
 
 // Herdr's side: posting opens a copy of the mod with the notification as its props.
 async function screen(clock = null) {
@@ -14,7 +15,7 @@ async function screen(clock = null) {
     closeOverlay: (id) => closed.push(id),
     ...(clock ? { Date: { now: () => clock.now } } : {}),
   };
-  const { Toast } = await load("kanso-toast/main.js", ["Toast"], host);
+  const { Toast } = await loadToast(host);
   const post = (overlay, n) => {
     current.props = { overlay, ...n };
     const t = new Toast();
@@ -101,15 +102,11 @@ test("Clicking one away closes those past their clock too, so none is forgotten 
 async function drawn(notification) {
   const calls = [], ran = [], closed = [];
   const node = (kind, arg) => {
-    const el = new Proxy({}, { get(_target, key) {
-      if (key === "then") return undefined;
-      if (key === "when") return (on, apply) => (on ? apply(el) : el);
-      return (...args) => { calls.push([kind, key, ...args]); return el; };
-    } });
+    const el = recordingElement((key, self) => (...args) => { calls.push([kind, key, ...args]); return self; });
     calls.push([kind, "new", arg]);
     return el;
   };
-  const { Toast } = await load("kanso-toast/main.js", ["Toast"], {
+  const { Toast } = await loadToast({
     div: () => node("div"), image: (path) => node("image", path), svg: (path) => node("svg", path), h_flex: () => node("row"),
     Button: { new: (id) => node("button", id) },
     run: (name, args) => ran.push([name, args]), shared: () => undefined, setShared: () => {}, closeOverlay: (id) => closed.push(id),

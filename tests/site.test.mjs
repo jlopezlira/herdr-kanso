@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { MIN_CONTRAST, SURFACES, THEMES, colour, contrast, loadTokens, pairs, read } from "../scripts/tokens.mjs";
-import { OUT, UTILITIES, render, renderUtilities } from "../scripts/build-site-tokens.mjs";
+import { OUT, UTILITIES, render, renderUtilities, sizeTokens } from "../scripts/build-site-tokens.mjs";
 
 const CSS = ["site/style.css"];
 const PAGES = ["index", "changelog", "credits", "privacy", "terms", "use"].map((p) => `site/${p}.html`);
@@ -31,8 +31,17 @@ function sheets() {
 const COLOUR = /#[0-9a-f]{3,8}\b|\b(?:rgb|rgba|hsl|hsla|hwb|lab|lch|oklab|oklch)\(/i;
 const UNIT = /(?<![\w-])-?\d*\.?\d+(?:px|ms|s)\b/;
 
+const declared = () => sheets().flatMap(({ path, rules }) => rules.map(([name, value]) => ({ path, name, value })));
+
 test("site/tokens.css matches kanso/tokens.json", () => {
   assert.equal(read(OUT), render(loadTokens()), `${OUT} is out of date: run npm run build:site-tokens`);
+});
+
+test("No token name is declared twice: in the sizes, or in one theme's colours", () => {
+  const tokens = loadTokens();
+  const sizes = sizeTokens(tokens);
+  const twice = (list) => list.map((t) => t.name).filter((name, i, names) => names.indexOf(name) !== i);
+  assert.deepEqual([sizes, ...THEMES.map((theme) => tokens.colour[theme])].flatMap(twice), []);
 });
 
 test("Storybook token classes match kanso/tokens.json", () => {
@@ -62,23 +71,19 @@ test("the layout block holds only layout literals and font stacks", () => {
 });
 
 test("site CSS has no colour, px or ms literal outside the layout block", () => {
-  for (const { path, rules } of sheets()) {
-    for (const [name, value] of rules) {
-      assert.doesNotMatch(value, COLOUR, `${path} ${name}: ${value}`);
-      assert.doesNotMatch(value, UNIT, `${path} ${name}: ${value}`);
-    }
+  for (const { path, name, value } of declared()) {
+    assert.doesNotMatch(value, COLOUR, `${path} ${name}: ${value}`);
+    assert.doesNotMatch(value, UNIT, `${path} ${name}: ${value}`);
   }
 });
 
 test("every font-size in the site CSS is a type token", () => {
   const sizes = new Set(loadTokens().type.filter((t) => t.name.startsWith("k-fs-")).map((t) => t.name));
-  for (const { path, rules } of sheets()) {
-    for (const [name, value] of rules) {
-      assert.notEqual(name, "font", `${path}: use font-size and font-family, not the font shorthand`);
-      if (name !== "font-size") continue;
-      const token = /^var\(--([\w-]+)\)$/.exec(value)?.[1];
-      assert.ok(sizes.has(token), `${path} font-size: ${value}`);
-    }
+  for (const { path, name, value } of declared()) {
+    assert.notEqual(name, "font", `${path}: use font-size and font-family, not the font shorthand`);
+    if (name !== "font-size") continue;
+    const token = /^var\(--([\w-]+)\)$/.exec(value)?.[1];
+    assert.ok(sizes.has(token), `${path} font-size: ${value}`);
   }
 });
 

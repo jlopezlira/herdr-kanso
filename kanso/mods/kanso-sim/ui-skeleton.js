@@ -2,7 +2,7 @@
 // Kept byte for byte by `npm run sync:share`: edit kanso-panel/ui-skeleton.js.
 import { div } from "gpui-kit";
 import { h_flex } from "gpui-base";
-import { G } from "./ui.js";
+import { G, H, R, W, breathe } from "./ui.js";
 
 const SK_W = [120, 96, 140, 84, 110, 72];
 // A height is a fixed row with its icon; without one, the py(9) list row the panels already use.
@@ -21,3 +21,6 @@ export function skeleton(c) {
   return { line, block, row, header };
 }
 export const ghost = skeleton;
+
+/** One breathing tab while a tab bar waits for its computer: the first long, every later one short. */
+export const tabSkeleton = (id, c, index) => breathe(div().id(id).w(index ? W.tabSkeletonShort : W.tabSkeleton).h(H.icon).flex_none().rounded(R.control).bg(c.border));

@@ -1,4 +1,4 @@
-// The sidebar footer: kansō's update row, Settings and its one menu, Add computer, all at chrome size; in the rail, squares.
+// The sidebar footer: kansō's update row, Settings and its one menu, both at chrome size; in the rail, squares.
 import { svg } from "gpui-kit";
 import { h_flex, v_flex, Popover } from "gpui-base";
 import { R, T, ICON_CHROME, CHROME_SQUARE, glyphOf } from "./ui.js";

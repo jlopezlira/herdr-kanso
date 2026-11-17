@@ -14,22 +14,25 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
 - **Sidebar**, theme `chrome` (`#161615` dark, `#e3dfd6` light).
   - **Top strip**, 48 tall: the macOS traffic lights (at `[12, 16]`) and,
     at its right end (14 in), Herdr's mark: its icon
-    (`frame/welcome/herdr.png`, 20, radius 6) and "Herdr" (13, semibold,
+    (`frame/welcome/herdr.png`, 20, radius 4) and "Herdr" (13, semibold,
     `foreground`). It drags the window.
-    Collapsed, the strip is empty and the mark sits lower, over the rail's
-    buttons.
+    Collapsed, the strip is empty.
   - **Spaces** (`kanso-spaces`), filling the middle.
-    - Open (256 wide): a 40-tall row with a + (New project) at the left, and
-      Search and Hide sidebar at the right. Each is a 32 square with a 17 icon
-      in `muted` that turns `foreground` on hover over a `foreground`+`12`
-      wash.
+    - Open (256 wide): the Toolbar, a 40-tall row with + at the left (Add
+      project on Projects, New conversation on Status and Threads), and Sort,
+      Search and Hide sidebar at the right, 4 apart. Each is the kit's large
+      icon button, a 32 square with a 17 icon in `muted`. Sort is `dim` at
+      its default order; its menu (the orders, the current one ticked, then
+      Show) opens under it.
     - Space rows are 36 tall, radius 8: name 13.5 semibold, repo, branch
       and counts 11.5. + stays on the active project; + and … on hover.
       ↓N asks twice, then Pulling…; ↑N goes to the project and opens the
       panel. Active `foreground`+`14`, hover `foreground`+`0c`.
     - Worktree spaces nest under their repo on 1px `input` guide lines.
     - Agents under a space: icon 15, title 12.5, status mark.
-    - Collapsed (76 wide): the + and Hide buttons, stacked, then one mark
+    - Collapsed (76 wide): + and Show sidebar, stacked 8 apart, and a caret
+      whose Sort and Search open below it on a `w4` wash (Sort's menu opens
+      beside it); then the view switch and one mark
       per group (project, status, shelf): a project's initial in its color,
       no square (else an icon), under it the most urgent state and count.
       A click lists the group in a popup (click goes; asleep: wake menu).
@@ -69,12 +72,27 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
   that 6 gutter is where Herdr's own dividers are dragged.
     - **Tab bar** (`kanso-tabs`), 48 tall, no line under it. It drags the
       window.
-      - Tabs are 26 tall with radius 6: program icon 15, name 12.5, then the
-        tab's status. The active tab has a `foreground`+`12` wash and the
-        rest are `muted`, with no borders and no tray behind them. A close x
-        (13) shows on the active tab only when there is more than one tab.
-      - After the tabs, a + (16 icon, 28 square) opens the shipped
-        `new-menu`.
+      - Tabs are the kit's tab (`ui-tab.js`), 26 tall with radius 6, 2
+        apart: the name 12.5, trimmed at 170, then a mark only when an
+        agent in a tab out of view waits for you. No program icon, no
+        working or done mark, nothing after a zoomed tab. The chosen tab
+        has the `w7` fill, gliding under it, and the rest are `muted` with
+        the `w4` wash on hover. A close x shows on the chosen tab only when
+        there is more than one tab; on a tab holding an agent the first
+        press arms it with the accent for 4 s, "Press again to close
+        <name>".
+      - Double-click renames in place, the name selected: Enter or leaving
+        keeps it, Escape restores it. On another computer the new name draws
+        at 80% with a breathing dot until the tab carries it; refused, the
+        old name returns with a toast.
+      - A tab dragged onto another is held on the `selected` wash, with a
+        2-wide accent bar where it lands.
+      - Tabs that do not fit fold behind +N, a Menu of them with their
+        marks. While a project on another computer connects, one breathing
+        skeleton per known tab; unreachable, the tabs step down to `dim`.
+        Both have no + and no Arrange.
+      - After the tabs, 8 apart, a + (26 square) opens the shipped
+        `new-menu`, then Arrange.
       - At the right are the panel buttons: Files, Spend, PR,
         Shipped, Worktrees, Ports, Containers, Memory, Look, Simulator, as icons only (15, in a 26 square ghost
         button), and a wash when their panel is open. While the pointer is

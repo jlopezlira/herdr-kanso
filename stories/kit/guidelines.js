@@ -76,9 +76,6 @@ export const guidelines = {
   "Primitives/Window controls": [
     ["Seijaku", "The system's lights.", "Three 12 circles, 8 apart, in the input colour. The system draws them; kansō keeps their place free."],
   ],
-  "Primitives/Herdr mark": [
-    ["Shizen", "The host's own mark.", "Herdr's ivory tile and ram, at 20, in its own colours in dark and light. A mark, not an icon: it heads the collapsed sidebar; open, the window's top bar carries it."],
-  ],
   "Primitives/Dawn": [
     ["Shizen", "One sky.", "The same colours in dark and light. The sun rises once on load; reduced motion shows the last frame."],
   ],
@@ -114,7 +111,7 @@ export const guidelines = {
     ["Kansō", "A group in the rail.", "An Avatar with the project’s initial, or the state’s Mark, and a quiet Chip with how many."],
   ],
   "Compositions/Sidebar/Footer": [
-    ["Kokō", "Rows with an icon.", "An update when there is one, then Settings and Add computer."],
+    ["Kokō", "Rows with an icon.", "An update when there is one, then Settings. Add computer lives in + on Status and Threads and in a computer's menu: the footer configures, it does not create."],
   ],
   "Compositions/Sidebar": [
     ["Kansō","Built from the pieces above.","Header, View switch, the rows of the chosen view and Footer. Collapsed, the rail keeps every tool, one view button with its menu and each group as a Tile."],

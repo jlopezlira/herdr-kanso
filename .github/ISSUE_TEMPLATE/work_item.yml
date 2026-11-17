@@ -1,3 +1,4 @@
+# Generated from scripts/build-issue-forms.mjs by npm run build:issue-forms.
 name: Work item
 description: "A change we plan: design, scope, acceptance criteria, ready and done."
 labels: ["enhancement"]

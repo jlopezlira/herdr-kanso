@@ -3,7 +3,7 @@
 /* Toolbar: icon buttons in a row; collapsed, a column where a caret holds Sort and Search; Sort is dim at its default. */
 .kanso-toolbar{display:flex;flex:none;align-items:center;gap:var(--k-sp-1);color:var(--muted)}
 .kanso-toolbar.kanso-toolbar--column{flex-direction:column;gap:var(--k-sp-2)}
-.kanso-toolbar__sort{position:relative;display:flex}
+.kanso-toolbar__add,.kanso-toolbar__sort{position:relative;display:flex}
 .kanso-toolbar__sort:not(.kanso-toolbar__sort--sorted)>.kanso-button:not(.kanso-button--active){color:var(--dim)}
 .kanso-toolbar__menu{position:absolute;top:calc(100% + var(--k-sp-1));left:0;z-index:1}
 .kanso-toolbar--column .kanso-toolbar__menu{top:0;left:calc(100% + var(--k-sp-1))}

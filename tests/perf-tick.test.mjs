@@ -1,4 +1,5 @@
 // The sidebar keeps focus responsive while tracking agents only every two seconds.
+import { loadSpaces } from "./mod-fixtures.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { load } from "./helpers.mjs";
@@ -7,7 +8,7 @@ async function tickHost() {
   const state = { now: 0, focus: null, tracking: 0, panes: 0, reads: 0, notices: 0 };
   class Clock extends Date { static now() { return state.now; } }
   const projects = [{ id: "a", folder: "/a", machine: "", name: "A" }];
-  const { Spaces } = await load("kanso-spaces/main.js", ["Spaces"], {
+  const { Spaces } = await loadSpaces({
     Date: Clock, props: () => ({}), window: () => ({ active: true }), shared: () => projects,
     spaces: () => [{ id: "new", tabs: [] }], panes: () => { state.panes += 1; return []; },
     focused: () => ({ terminal: state.focus }), agents: () => { state.reads += 1; return [{ address: "a", focused: true, status: "idle" }]; },

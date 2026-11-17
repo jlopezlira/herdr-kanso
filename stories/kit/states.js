@@ -2,7 +2,7 @@
 import { computerItem, edge, toolbar, keyboardSystems, layoutPaused, paletteDoor, panel, panelBack, panelHeader, panelRefresh, pickedKey, shortcutRow, stepperMenu, tabBar } from './compositions.js';
 import { emptyState, failureBlock, keycap, metric, needsItem, row, skeletonOf, stack, statusItem, stepper, tabs } from './pieces.js';
 import { atWidth, inBar } from './frames.js';
-import { keyLayer, keyLayerMods, samplePanel, samplePanelHeader, sampleSortMenus, statusMenus, statusPanels } from './samples.js';
+import { keyLayer, keyLayerMods, samplePanel, samplePanelHeader, sampleAddMenu, sampleSortMenus, statusMenus, statusPanels } from './samples.js';
 
 export const layerDefaults = Object.fromEntries(keyboardSystems.map((os) => [`${os}Layer`, keyLayerMods[os][0]]));
 const settingsSlice = (markup) => `<div class="kanso-story__slice kanso-story__settings">${markup}</div>`;
@@ -59,14 +59,15 @@ export const panelReads = {
 
 export const statedPages = {
   'Compositions/Toolbar': {
-    args: { view: 'spaces', column: false, open: false, sorted: false, menu: false },
-    markup: ({ menu: shown, ...args }) => {
-      const bar = toolbar({ ...args, sortMenu: shown ? sampleSortMenus[args.view]() : null });
-      return shown ? `<div class="kanso-story__sort-room">${bar}</div>` : bar;
+    args: { view: 'spaces', column: false, open: false, sorted: false, menu: false, add: false },
+    markup: ({ menu: shown, add, ...args }) => {
+      const bar = toolbar({ ...args, sortMenu: shown ? sampleSortMenus[args.view]() : null, addMenu: add ? sampleAddMenu() : null });
+      return shown || add ? `<div class="kanso-story__tools-room">${bar}</div>` : bar;
     },
     states: [
       { label: 'Projects', args: {}, caption: 'Sidebar open on Projects: + adds a project.' },
       { label: 'Status and Threads', args: { view: 'agents' }, caption: '+ starts a conversation in a project you pick.' },
+      { label: '+ menu', args: { view: 'agents', add: true }, caption: 'After a click on +, on Status and Threads: Add computer… ends it.' },
       { label: 'Sorted', args: { sorted: true }, caption: 'The order is not the default one.' },
       { label: 'Sort menu, Projects', args: { menu: true }, caption: 'After a click on Sort, on Projects.' },
       { label: 'Sort menu, Status', args: { view: 'agents', menu: true }, caption: 'After a click on Sort, on Status.' },

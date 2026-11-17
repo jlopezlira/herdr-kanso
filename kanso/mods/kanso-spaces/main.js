@@ -8,9 +8,9 @@ import { systemApi } from "./platform-system.js";
 // Modified by jlopezlira (Kanso, https://github.com/jlopezlira/herdr-kanso): renamed from mn-spaces; a fixed 76px rail when collapsed (resizable only when open), space avatars in the theme's hues, a breathing dot instead of a spinner, background polling slowed when the window is behind.
 // Modified by Iván Campaña (https://github.com/icampana): layout writers set the tree only when it is Kanso's, so a switch from another layout never saves that layout into kanso.json.
 
-import { View, div, svg, image } from "gpui-kit";
-import { v_flex, h_flex, Popover, v_virtual_list, VirtualListScrollHandle, Scrollbar, ScrollHandle } from "gpui-base";
-import { agentSession, agentFold, agentLabel, AGENT_PAD, FLUSH, NESTED, renameTerminal, statusMark, SETTLED_LABEL, SNOOZE_LABEL, UNREAD_LABEL, THREAD_LABEL, settledOf, snoozedUntil, isUnread, woke, backFromSettled, threadSections, snoozePresets, THREAD_ORDERS, STATUS_ORDERS, withTerminals, NAME_LABEL, PIN_LABEL, ORDERS, DEFAULT_ORDER, orderSessions, moved, nest, track, elapsed, activityOf, bySection, duration, trackSteps, stepOf, tasksOf, said, FOLD, FOLD_MS, pill, sessionHeight, mostUrgent } from "./agents.js";
+import { View, div, svg } from "gpui-kit";
+import { v_flex, h_flex, ScrollHandle } from "gpui-base";
+import { agentSession, agentFold, agentLabel, AGENT_PAD, FLUSH, NESTED, renameTerminal, statusMark, SETTLED_LABEL, SNOOZE_LABEL, UNREAD_LABEL, THREAD_LABEL, settledOf, snoozedUntil, isUnread, woke, backFromSettled, threadSections, snoozePresets, THREAD_ORDERS, STATUS_ORDERS, withTerminals, NAME_LABEL, PIN_LABEL, ORDERS, DEFAULT_ORDER, orderSessions, moved, nest, track, elapsed, activityOf, bySection, duration, trackSteps, stepOf, tasksOf, said, FOLD, FOLD_MS, pill, sessionHeight, mostUrgent, rowTool } from "./agents.js";
 import { ThreadLocator, findThreads, pidsOf, aliveIn, aliveDue, ALIVE_MS, ALIVE_BEHIND_MS } from "./threads.js";
 import { Panel, sameSeen } from "./panel.js";
 import { Store } from "./store.js";
@@ -22,23 +22,29 @@ import { glyphs } from "./marks.js";
 import { sleepingNow, asleepGroups, nameOf, seenNow, conversationOfThread, shownThread, terminalNames, agentKey, SHOWN_LABEL, PROJECT_LABEL, ID_LABEL } from "./roster.js";
 import { pollable, activePlaces } from "./background.js";
 import { listKey, moveTo } from "./listkeys.js";
-import { commitLayout, setRail, foldSidebar, railWidth, OPEN_MIN } from "./layout.js";
+import { commitLayout, setRail, foldSidebar, railWidth, OPEN_MIN, dropStripDrag } from "./layout.js";
 import { afterMount } from "./pure.js";
 import { commandLoop, MachineRead } from "./sidebar.js";
 import { gitTail, asleepRow, openAhead } from "./sidebar-draw.js";
 import { guideBars, climb } from "./guides.js";
 import { projectControls, pullKey, runPull, canWake, enterOpens, machineWordTone, ASLEEP_ROW, sectionMarkOf, sectionCount, rowDirectory, threadWord, threadActions, closedControls, signInCommand, noProjectsOn, sortOf, foldTail, readWord, viewChord } from "./sidebar-rows.js";
-import { breathe, H, G, T, R, ICON, tokens, washes } from "./ui.js";
-import { button, iconButton, Armed, armedLabel, armedLook } from "./ui-button.js";
+import { breathe, H, G, T, R, W, ICON, tokens, washes } from "./ui.js";
+import { button, iconButton, Armed } from "./ui-button.js";
+import { dialog } from "./ui-dialog.js";
 import { field, TextField } from "./ui-field.js";
 import { skeleton } from "./ui-skeleton.js";
 import { stateEmpty, pendingDot } from "./ui-state.js";
 import { segmented } from "./ui-tab.js";
 import { mark } from "./ui-mark.js";
+import { menu } from "./kit.js";
+import { menuList, menuHeight } from "./ui-menu.js";
+import { toolbar } from "./ui-toolbar.js";
+import { header } from "./ui-sidebar-header.js";
 import { pieces, shown, runs, asksPs, setPiece, pieceOf, STORE } from "./pieces.js";
 import { machineRecord, canRestore, addArgs, rmArgs, loginLine, hcError, needsLogin, heldNames, connectedNames, machinePhase, powerId, machineOf, visibleSpaces, visibleAgents, pollKeys, machineState, machineHot, machineTip, machineVisible, machineInk, listedMachines } from "./machines.js";
 import { Names } from "./alias.js";
 import { syncIcon, peerOn, withPeer } from "./sync.js";
+import { computerMenuItems } from "./computer-menu.js";
 import { readSync, saveSync } from "./sync-row.js";
 import { createAwake, keepAwake } from "./awake.js";
 import { NEEDS_YOU, EMPTY_NOTICE_MS, waitingSignature, sleepingSignature, sameQueue, waitingQueue, nextWaiting, queueState } from "./needs-you.js";
@@ -59,7 +65,11 @@ function placesOf(sp, ps) {
   }));
 }
 const TREE_ROW = 32;
-const MENU_ROW = 30; // a popup row: the conversation picker's virtual list places rows by it
+const CONV_ROWS = 11; // the conversation picker's projects show this many, then scroll
+// A right click on the item does what a left one does.
+const rightToo = (line) => ({ ...line, onSecondaryClick: line.onClick });
+// An item's look without its act: a popup measured before it opens.
+const sketch = (label, _act, { keep: _keep, ...look } = {}) => ({ ...look, label });
 const RAIL_MARK = 46; // one group in the collapsed rail
 const RAIL_MENU_ROWS = 10; // a rail popup shows this many rows; the rest scroll
 const PLAIN_ROW = 32;
@@ -175,7 +185,7 @@ export default class Spaces extends View {
       // Nothing is chosen for you: no row lit until the keyboard moves.
       this.armed = new Armed(); this.menuAt = -1; this.handle = cx.focus_handle();
       // A scroll handle is state: made here, never during render (Herdr refuses it there).
-      if (props()?.newConversation || props()?.railMenu) this.convScroll = VirtualListScrollHandle.new();
+      if (props()?.newConversation || props()?.railMenu) this.convScroll = ScrollHandle.new();
       this.openPopup(cx); return;
     }
     this.loadNames().catch(() => {});
@@ -217,7 +227,7 @@ export default class Spaces extends View {
       try { if (await this.panel.load()) this.applyPrefs(); this.panelReady = true; } catch { /* tried again from keepSeen; the copy stays meanwhile */ }
       cx.notify();
     });
-    this.orderOpen = false;
+    this.orderOpen = null;
     this.threads = null; // terminal -> its conversation (threads.js), once read
     // A pre-2.7 hide choice moves into the pieces map once.
     for (const [key, id] of [["switch", "sidebar.switch"], ["activity", "sidebar.activity"]]) {
@@ -345,7 +355,7 @@ export default class Spaces extends View {
 
   // A project's name and folder, asked in a dialog; `start`: a conversation begins in it once made.
   addProject(start = false) {
-    openOverlay({ mod: "kanso-spaces", kind: "dialog", width: 460, height: 270, props: { newProject: { start } } });
+    openOverlay({ mod: "kanso-spaces", kind: "dialog", width: 460, props: { newProject: { start } } });
   }
 
   // The click's context ends with the click: the dialog redraws from its own spawned one.
@@ -385,57 +395,69 @@ export default class Spaces extends View {
     const shown = this.projectFolder ? this.projectFolder.replace(trimmed(home()), "~") : "No folder chosen";
     const c = tokens(t);
     const label = (text) => div().text_size(12).text_color(t.muted).child(text);
-    return v_flex().id("project-dialog").size_full().p(18).gap(8).bg(t.popover).text_color(t.foreground)
-      .on_key_down((e, cx) => { if (String(e.key).toLowerCase() === "escape") { closeOverlay(props().overlay); cx.stop_propagation(); } })
-      .child(div().pb(4).text_size(15).font_semibold().child(start ? "New project with a conversation" : "New project"))
-      .child(label("Folder"))
-      .child(h_flex().gap(8).items_center()
-        .child(div().flex_1().min_w(0).truncate().text_size(13).text_color(this.projectFolder ? t.foreground : t.dim).child(shown))
-        .child(button("project-choose", this.projectFolder ? "Change\u2026" : "Choose\u2026", (cx) => this.chooseProjectFolder(cx), c, { kind: "tonal" })))
-      .child(field("project-name", this.projectName, c, { label: "Name" }))
-      .child(div().min_h(16).text_size(12).text_color(this.projectError ? t.blocked : t.dim).child(this.projectError ?? (start ? "The agent you used there last starts in it." : "It stays in Projects even with nothing open.")))
-      .child(h_flex().gap(8).justify_end()
-        .child(button("project-cancel", "Cancel", () => closeOverlay(props().overlay), c, { kind: "quiet" }))
-        .child(button("project-create", this.creating ? "Creating\u2026" : start ? "Create and start" : "Create project", (cx) => this.createProject(cx), c)));
+    return dialog("project-dialog", c, {
+      title: start ? "New project with a conversation" : "New project",
+      body: [
+        label("Folder"),
+        h_flex().gap(8).items_center()
+          .child(div().flex_1().min_w(0).truncate().text_size(13).text_color(this.projectFolder ? t.foreground : t.dim).child(shown))
+          .child(button("project-choose", this.projectFolder ? "Change\u2026" : "Choose\u2026", (cx) => this.chooseProjectFolder(cx), c, { kind: "tonal" })),
+        field("project-name", this.projectName, c, { label: "Name" }).pt(G.sm),
+      ],
+      notes: [{ text: this.projectError ?? (start ? "The agent you used there last starts in it." : "It stays in Projects even with nothing open."), tone: this.projectError ? "error" : "dim" }],
+      secondary: "Cancel", primary: start ? "Create and start" : "Create project", state: this.creating ? "loading" : "default",
+      onCancel: () => closeOverlay(props().overlay), onPrimary: (cx) => this.createProject(cx),
+    });
   }
 
 
+  // Opens at the height its Menu draws.
   newConversationMenu() {
-    openOverlay({ mod: "kanso-spaces", kind: "popup", width: 280, height: 460, at: "pointer", props: { newConversation: true } });
+    const height = menuHeight(this.conversationLines(sketch, () => {}));
+    openOverlay({ mod: "kanso-spaces", kind: "popup", width: 280, height, at: "pointer", props: { newConversation: true } });
   }
 
   // Every project: the open ones (each space), then the ones you added that have none open.
-  // A project chosen asks which agent.
-  newConversationView(t) {
+  conversationEntries() {
     const sp = spaces();
-    const item = this.items(t);
     const closed = closedProjects(registry(), sp, home()).filter((p) => !p.missing);
     const names = shownNames(registry());
-    // A project chosen, then which agent, in its own menu: nothing is started for you.
-    const start = (place) => { closeOverlay(props().overlay); this.newAgentMenu(place); };
-    const entries = [
+    return [
       ...sp.map((w) => ({ id: `conv-${w.id}`, place: placeOfSpace(w), hint: w.machine ?? null })),
       // The shown name tells two alike apart; the space keeps the project's own.
       ...closed.map((p) => ({ id: `conv-${p.id}`, place: placeOfKey(keyOfProject(p), p), hint: p.machine || "closed", label: names.get(p.id) ?? p.name })),
     ];
-    // Every row's act is there for the keyboard, drawn or not; the list draws only what shows, and follows the selection.
-    this.menuActs = entries.map((e) => (cx) => start(e.place));
-    this.menuScroll = this.convScroll ? { handle: this.convScroll, count: entries.length } : null;
-    // Drawn inside the virtual list: no handlers on the rows; the list's own say which row, by its key.
-    const row = (e, at) => this.menuRow(t, e.id, e.label ?? e.place.name ?? "~", at, null, { hint: e.hint });
-    const byKey = (key) => entries.find((e) => e.id === key) ?? null;
-    return this.menuFrame(t)
-      .child(this.menuTitle(t, "New conversation in"))
-      .child(v_flex().relative().flex_none().h(Math.min(330, entries.length * MENU_ROW))
-        .child(v_virtual_list("conv-list", entries.length, MENU_ROW, (i) => entries[i].id,
-          (range) => entries.slice(range.start, range.end).map((e, k) => row(e, range.start + k)))
-          .when(Boolean(this.convScroll), (el) => el.track_scroll(this.convScroll))
-          .on_item_click((key, cx) => { const e = byKey(key); if (e) start(e.place); cx.notify(); })
-          .on_item_secondary_click((key, _ev, cx) => { const e = byKey(key); if (e) { cx.stop_propagation(); start(e.place); } }))
-        .child(Scrollbar.vertical("conv-list").absolute().inset_0()))
-      .child(div().mx(8).my(4).h(1).bg(t.border))
-      .child(item("conv-add-project", "New project with a conversation\u2026", () => this.addProject(true), { icon: "folder-plus" }))
-      .child(item("conv-folder", "Open a folder, no project\u2026", () => run("kanso-spaces.open-folder"), { icon: "file" }));
+  }
+
+  // Under the line: a new project, a folder, and Add computer unless it is switched off.
+  conversationActions() {
+    const machine = shown("footer.machine", true, pieces(shared));
+    return [
+      { id: "conv-add-project", label: "New project with a conversation\u2026", act: () => this.addProject(true), icon: "folder-plus" },
+      { id: "conv-folder", label: "Open a folder, no project\u2026", act: () => run("kanso-spaces.open-folder"), icon: "file" },
+      ...(machine ? [{ id: "conv-machine", label: "Add computer\u2026", act: () => run("mod.open", { name: "machine-add" }), icon: "server" }] : []),
+    ];
+  }
+
+  // Every project in a run that scrolls, then the other ways in; a project chosen asks which agent.
+  conversationLines(item, start) {
+    const entries = this.conversationEntries();
+    return {
+      title: "New conversation in",
+      items: [
+        { scroll: entries.map((e) => rightToo(item(e.label ?? e.place.name ?? "~", () => start(e.place), { hint: e.hint, keep: true }))), rows: CONV_ROWS, handle: this.convScroll },
+        { separator: true },
+        ...this.conversationActions().map(({ label, act, icon }) => item(label, act, { icon })),
+      ],
+    };
+  }
+
+  newConversationView(t) {
+    // A project chosen, then which agent, in its own menu: nothing is started for you.
+    const start = (place) => { closeOverlay(props().overlay); this.newAgentMenu(place); };
+    const { title, items } = this.conversationLines(this.lines(), start);
+    this.menuScroll = this.convScroll ? { handle: this.convScroll, count: items[0].scroll.length } : null;
+    return this.popup(t, title, items);
   }
 
   newAgentMenu(place) {
@@ -444,10 +466,8 @@ export default class Spaces extends View {
 
   // A project's + : asks which agent, of the ones installed.
   plus(id, t, place, tip = "New conversation") {
-    return div().id(id).size(20).flex_none().rounded(6).flex().items_center().justify_center().text_color(t.muted)
-      .tooltip(tip)
-      .hover((s) => s.bg(t.hover).text_color(t.foreground))
-      .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
+    return rowTool(div().id(id).size(20).flex_none().rounded(6).flex().items_center().justify_center().text_color(t.muted)
+      .tooltip(tip), t)
       .on_mouse_up("left", (_e, cx) => { cx.stop_propagation(); this.newAgentMenu(place); })
       .on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); this.newAgentMenu(place); })
       .child(svg("mods/kanso-chrome/icons/plus.svg").size(13));
@@ -502,6 +522,9 @@ export default class Spaces extends View {
     else if (c === "agent-up" || c === "agent-down") this.besideAgent(c === "agent-up" ? -1 : 1);
     else if (c === "agent-back" || c === "agent-forward") this.stepAgent(c === "agent-back" ? -1 : 1, cx);
     else if (c.startsWith("retry-machine:") && c.length > "retry-machine:".length) this.retryMachine(c.slice("retry-machine:".length), cx);
+    // From a computer's menu, which is gone once clicked: the sidebar holds the computer's state.
+    else if (c.startsWith("power-machine:") && c.length > "power-machine:".length) { const m = c.slice("power-machine:".length); this.setPower(m, this.phaseOf(m) === "off", cx); }
+    else if (c.startsWith("sync-machine:") && c.length > "sync-machine:".length) this.toggleSync(c.slice("sync-machine:".length), cx);
     else if (c === "sidebar") this.toggleRail();
     else if (c === "needs-you.list") this.toggleNeeds(cx);
     else if (c === "list") this.enterList(cx);
@@ -522,9 +545,14 @@ export default class Spaces extends View {
     return { dozing, layouts, allows: (address) => pollable(address, dozing, layouts) };
   }
 
-  pollingPlaces(sp = spaces(), ps = panes(), places = placesOf(sp, ps)) {
+  // What the sidebar's own work may touch: the places awake, and the computers that answer.
+  activePlacesOf(sp, ps) {
     const background = this.background(sp, ps);
-    const allowed = activePlaces(sp, ps, background.dozing, background.layouts);
+    return { background, allowed: activePlaces(sp, ps, background.dozing, background.layouts) };
+  }
+
+  pollingPlaces(sp = spaces(), ps = panes(), places = placesOf(sp, ps)) {
+    const { allowed } = this.activePlacesOf(sp, ps);
     return new Map([...places].filter(([id]) => allowed.has(id)));
   }
 
@@ -845,8 +873,7 @@ export default class Spaces extends View {
   trackReturn(sp, ps, active, now, cx) {
     if (this.sinceLeft.busy) return;
     if (!runs("sidebar.away", pieces(shared))) { this.returnSignature = null; this.sinceLeft.leave(); return; }
-    const background = this.background(sp, ps);
-    const allowed = activePlaces(sp, ps, background.dozing, background.layouts);
+    const { background, allowed } = this.activePlacesOf(sp, ps);
     const off = this.offNames();
     const focus = focused(), list = visibleAgents(agents(), off).filter((a) => allowed.has(a.space)), rawTerms = visibleAgents(terminals(), off).filter((k) => background.allows(k.address));
     const signature = returnSignature(list, rawTerms, sp, ps, this.seenNow, this.panel.agents);
@@ -1170,11 +1197,16 @@ export default class Spaces extends View {
     this.powerBusy.add(name);
     this.clearFlags(name);
     this.parked = [...(this.parked ?? []).filter((row) => row.name !== name), record];
+    this.powerRun(name, cx, () => this.settleOff(name, record, live, rev));
+  }
+
+  // Both power changes: the machine is held awake, the work runs in the background, and the row frees whatever happened.
+  powerRun(name, cx, work) {
     this.holdAwake(cx);
     cx.notify();
-    cx.spawn(async (cx) => {
-      try { await this.settleOff(name, record, live, rev); }
-      finally { this.powerBusy.delete(name); this.holdAwake(cx); cx.notify(); }
+    cx.spawn(async (spawnCx) => {
+      try { await work(spawnCx); }
+      finally { this.powerBusy.delete(name); this.holdAwake(spawnCx); spawnCx.notify(); }
     });
   }
 
@@ -1184,19 +1216,11 @@ export default class Spaces extends View {
     this.powerBusy.add(name);
     this.clearFlags(name);
     this.waking.add(name);
-    this.holdAwake(cx);
-    cx.notify();
-    cx.spawn(async (cx) => {
-      try {
-        const result = await hc(addArgs(record)).catch((error) => ({ code: 1, stdout: "", stderr: String(error) }));
-        const why = hcError(result);
-        if (!why) { await this.readMachines().catch(() => {}); return; }
-        this.markFailed(name, why);
-      } finally {
-        this.powerBusy.delete(name);
-        this.holdAwake(cx);
-        cx.notify();
-      }
+    this.powerRun(name, cx, async () => {
+      const result = await hc(addArgs(record)).catch((error) => ({ code: 1, stdout: "", stderr: String(error) }));
+      const why = hcError(result);
+      if (!why) { await this.readMachines().catch(() => {}); return; }
+      this.markFailed(name, why);
     });
   }
 
@@ -1313,9 +1337,13 @@ export default class Spaces extends View {
     return row;
   }
 
-  // A project whose folder is gone: pick where it is now.
+  // A project whose folder is gone: pick where it is now; the promise is the pick and the move.
+  relocateTo(project) {
+    return pickFolder({ prompt: "Use this folder" }).then((folder) => folder && this.db().relocateProject(project.id, trimmed(folder)));
+  }
+
   locate(project) {
-    pickFolder({ prompt: "Use this folder" }).then((folder) => folder && this.db().relocateProject(project.id, trimmed(folder)))
+    this.relocateTo(project)
       .then(() => this.publishRegistry(this.db()))
       .catch((e) => notify({ title: "The folder was not changed", body: String(e?.message ?? e), level: "error" }));
   }
@@ -1410,9 +1438,9 @@ export default class Spaces extends View {
     return asleepRow(a, AGENT_PAD + indent, t, row, row.wake, agentLabel(a));
   }
 
-  // Each item() adds itself to menuActs as it draws: the keyboard walks the items in screen order.
-  menuFrame(t) {
-    return v_flex().id("spaces-menu").track_focus(this.handle).w_full().p(5).gap(1).bg(t.popover).text_size(13)
+  // A popup's keyboard: j and k or the arrows walk menuActs, Enter runs the lit one, Escape closes.
+  menuKeys(el) {
+    return el.track_focus(this.handle)
       .on_key_down((e, cx) => {
         const { move, gAt } = listKey(e, this.menuG);
         this.menuG = gAt;
@@ -1427,39 +1455,23 @@ export default class Spaces extends View {
       });
   }
 
-  // A popup's rows from the start: the keyboard's list emptied, and the row maker for this theme.
-  items(t) {
+  // A popup's Menu, walked by the keyboard; Herdr draws its frame.
+  popup(t, title, items) { return this.menuKeys(menuList("spaces-menu", { title, items }, tokens(t))); }
+
+  // A popup's items from the start: the keyboard's list emptied, and the item maker.
+  lines() {
     this.menuActs = [];
-    return (id, text, act, opts) => this.menuItem(t, id, text, act, opts);
+    return (text, act, opts) => this.menuLine(text, act, opts);
   }
 
-  // One line of a popup: added to menuActs as it draws, so the keyboard walks them in screen order.
+  // One item, added to menuActs as it is made, so the keyboard walks them in screen order.
   // One activation for the keyboard and the mouse: the act, then the popup closes unless `keep`.
-  menuItem(t, id, text, act, opts = {}) {
+  menuLine(text, act, { keep = false, ...look } = {}) {
     const at = this.menuActs.length;
-    const go = (cx) => { act(cx); if (!opts.keep) closeOverlay(props().overlay); };
+    const go = (cx) => { act(cx); if (!keep) closeOverlay(props().overlay); };
     this.menuActs = [...this.menuActs, go];
-    return this.menuRow(t, id, text, at, go, opts);
+    return { ...look, label: text, selected: at === this.menuAt, onClick: (cx) => { go(cx); cx.notify(); } };
   }
-
-  // The row itself, at its place `at` in the keyboard's order; `go` runs on a click (none in a virtual list).
-  // `lead`: an element in the icon's place (a rail list's state marks). `verb`: it asks twice, `armed` after the first press.
-  menuRow(t, id, text, at, go, { icon = null, lead = null, hint = null, ink = t.foreground, badge = null, verb = null, armed = false } = {}) {
-    const look = armed ? armedLook(tokens(t)) : null;
-    return h_flex().id(`menu-${id}`).flex_none().h(MENU_ROW).px(8).gap(10).items_center().rounded(6).cursor_pointer().text_size(13).text_color(look?.ink ?? ink)
-      .when(at === this.menuAt && !look, (el) => el.bg(t.selected))
-      .when(Boolean(look), (el) => el.bg(look.fill).active((s) => s.bg(look.press)))
-      .hover((s) => s.bg(look?.hover ?? t.hover))
-      // A row of a virtual list takes no handler of its own (registering one there throws): its list's on_item_click acts.
-      .when(Boolean(go), (el) => el.on_click((_e, cx) => { go(cx); cx.notify(); }))
-      .child(h_flex().w(14).flex_none().justify_center().when(Boolean(icon), (el) => el.child(svg(`mods/kanso-chrome/icons/${icon}.svg`).size(14).text_color(look?.ink ?? t.muted))).when(Boolean(lead), (el) => el.child(lead)))
-      .child(verb ? armedLabel(text, verb, armed, (words) => div().truncate().child(words), { start: true }).flex_1().min_w(0) : div().flex_1().truncate().child(text))
-      .when(Boolean(badge), (el) => el.child(div().flex_none().px(6).h(18).rounded_full().bg(t.accent + "26")
-        .flex().items_center().text_size(11).font_semibold().text_color(t.accent).child(badge)))
-      .when(Boolean(hint), (el) => el.child(div().flex_none().text_size(11.5).text_color(t.dim).child(hint)));
-  }
-
-  menuTitle(t, text) { return div().h(26).pl(32).flex().items_center().text_size(11.5).text_color(t.dim).child(text); }
 
   // Opens a worktree's folder: where something already runs there it is shown; else a shell starts there.
   openTree(place, x) {
@@ -1471,7 +1483,7 @@ export default class Spaces extends View {
   }
 
   worktreeDialog(place) {
-    openOverlay({ mod: "kanso-spaces", kind: "dialog", width: 440, height: 230, props: { worktree: place } });
+    openOverlay({ mod: "kanso-spaces", kind: "dialog", width: 440, props: { worktree: place } });
   }
 
 
@@ -1492,8 +1504,8 @@ export default class Spaces extends View {
     const place = this.menuPlace(m);
     const project = place?.project ? registry().find((p) => p.id === place.project) ?? null : null;
     const asleep = w ? [...new Map(sleepingNow([w], panes(), terminals()).rows.map((a) => [a.asleep.id, a.asleep])).values()] : [];
-    if (!w && !project) return v_flex().id("spaces-menu").p(10).bg(t.popover).text_size(12.5).text_color(t.dim).child("This project is no longer here.");
-    const item = this.items(t);
+    if (!w && !project) return this.popup(t, null, [{ heading: "This project is no longer here." }]);
+    const item = this.lines();
     const active = w?.tabs?.find((x) => x.active);
     const tabs = w?.tabs?.length ?? 0;
     const trees = this.trees ?? [];
@@ -1501,31 +1513,28 @@ export default class Spaces extends View {
     const where = (path) => base && paths.within(path, base) ? "kans\u014d" : paths.within(path, home_) ? `~/${paths.relative(home_, path).split(/[\\/]/).slice(-2).join("/")}` : path.split(/[\\/]/).slice(-2).join("/");
     // Keeping it: a space's folder (not home) can be a project of yours.
     const keepable = Boolean(w && !project && w.folder && trimmed(w.folder) !== home_);
-    return this.menuFrame(t)
-      .when(asleep.length > 0, (el) => el
-        .child(this.menuTitle(t, "Asleep"))
-        .children(asleep.map((z, i) => item(`wake-${i}`, `Wake ${z.tab}`, () => wakeRow(z), { icon: "sun", hint: z.saved ? since(z.saved) : null })))
-        .when(asleep.length > 1, (el) => el.child(item("wake-all", `Wake all ${asleep.length}`, () => arrange({ wake: { space: w.id } }), { icon: "undo" }))))
-      .when(Boolean(place) && !project?.missing, (el) => el
-        .child(item("new-agent", "New agent\u2026", () => this.newAgentMenu(place), { icon: "plus" }))
-        .child(item("new-worktree", "New agent in a worktree\u2026", () => this.worktreeDialog(place), { icon: "worktree" })))
-      .when(trees.length > 0, (el) => el.child(this.menuTitle(t, "Worktrees"))
-        .child(v_flex().id("tree-list").flex_none().h(Math.min(trees.length, 4) * 30).overflow_y_scrollbar()
-          .children(trees.map((x, i) => item(`tree-${i}`, x.branch ?? "detached", () => this.openTree(place, x), { icon: "branch", hint: where(x.path) })))))
-      .when(Boolean(active), (el) => el.child(item("sleep-tab", "Sleep this tab\u2026", () => sleepTab(w.id, active.id), { icon: "moon" })))
-      .when((w?.tabs?.length ?? 0) > 1, (el) => el.child(item("sleep-project", "Sleep the whole project\u2026", () => sleepProject(w.id), { icon: "moon" })))
-      .when(Boolean(w), (el) => el.child(item("space-options", "Project options\u2026", () => openOverlay({ mod: "menu", kind: "popup", width: 200, height: 260, props: { tab: "space", target: { id: w.id } } }), { icon: "settings" })))
-      .when(keepable, (el) => el.child(item("keep-project", "Keep as a project", () => {
-        this.thenClose(this.db().addProject({ name: folderName(w.folder), folder: trimmed(w.folder), machine: w.machine ?? "" }));
-      }, { icon: "pin", keep: true })))
-      .when(Boolean(project?.missing) && !project?.machine, (el) => el.child(item("locate", "Locate folder\u2026", () => {
-        pickFolder({ prompt: "Use this folder" }).then((folder) => folder && this.db().relocateProject(project.id, trimmed(folder)))
-          .catch((e) => notify({ title: "The folder was not changed", body: String(e?.message ?? e), level: "error" }))
-          .finally(() => this.thenClose(null));
-      }, { icon: "file", keep: true })))
+    const keep = () => this.thenClose(this.db().addProject({ name: folderName(w.folder), folder: trimmed(w.folder), machine: w.machine ?? "" }));
+    const locate = () => {
+      this.relocateTo(project)
+        .catch((e) => notify({ title: "The folder was not changed", body: String(e?.message ?? e), level: "error" }))
+        .finally(() => this.thenClose(null));
+    };
+    const options = () => openOverlay({ mod: "menu", kind: "popup", width: 200, height: 260, props: { tab: "space", target: { id: w.id } } });
+    const remove = (cx) => { this.armed.press("remove", cx, () => this.removeProject(project, w)); };
+    return this.popup(t, null, [
+      ...(asleep.length ? [{ heading: "Asleep" }, ...asleep.map((z) => item(`Wake ${z.tab}`, () => wakeRow(z), { icon: "sun", hint: z.saved ? since(z.saved) : null }))] : []),
+      ...(asleep.length > 1 ? [item(`Wake all ${asleep.length}`, () => arrange({ wake: { space: w.id } }), { icon: "undo" })] : []),
+      ...(place && !project?.missing ? [item("New agent\u2026", () => this.newAgentMenu(place), { icon: "plus" }),
+        item("New agent in a worktree\u2026", () => this.worktreeDialog(place), { icon: "worktree" })] : []),
+      ...(trees.length ? [{ heading: "Worktrees" }, { scroll: trees.map((x) => item(x.branch ?? "detached", () => this.openTree(place, x), { icon: "branch", hint: where(x.path) })) }] : []),
+      ...(active ? [item("Sleep this tab\u2026", () => sleepTab(w.id, active.id), { icon: "moon" })] : []),
+      ...(tabs > 1 ? [item("Sleep the whole project\u2026", () => sleepProject(w.id), { icon: "moon" })] : []),
+      ...(w ? [item("Project options\u2026", options, { icon: "settings" })] : []),
+      ...(keepable ? [item("Keep as a project", keep, { icon: "pin", keep: true })] : []),
+      ...(project?.missing && !project?.machine ? [item("Locate folder\u2026", locate, { icon: "file", keep: true })] : []),
       // Any project you see can go: one you added (its row too), or an open space you never kept.
-      .when(Boolean(project) || Boolean(w), (el) => el.child(item("remove-project", "Remove project", (cx) => { this.armed.press("remove", cx, () => this.removeProject(project, w)); },
-        { icon: "close", ink: t.muted, keep: true, verb: w ? `remove it and close its ${tabs} tab${tabs === 1 ? "" : "s"}` : "remove it", armed: this.armed.is("remove") })));
+      ...(project || w ? [item("Remove project", remove, { icon: "close", keep: true, verb: w ? `remove it and close its ${tabs} tab${tabs === 1 ? "" : "s"}` : "remove it", armed: this.armed.is("remove") })] : []),
+    ]);
   }
 
   // Every + ends here: which agent of the ones installed (or a shell), none chosen for you; the one used last
@@ -1533,8 +1542,9 @@ export default class Spaces extends View {
   newAgentView(t) {
     const place = props().newAgent;
     const project = registry().find((p) => p.id === place.project) ?? null;
-    if (!this.known) return v_flex().id("spaces-menu").p(10).bg(t.popover).text_size(12.5).text_color(t.dim).child("Looking for your agents\u2026");
-    const item = this.items(t);
+    const title = `New in ${place.tree?.branch ?? place.name ?? "this project"}`;
+    if (!this.known) return this.popup(t, title, [{ loading: true }, { loading: true }]);
+    const item = this.lines();
     const pick = (a) => {
       if (this.starting) return; // a second click while the first is written starts nothing
       this.starting = true;
@@ -1542,12 +1552,11 @@ export default class Spaces extends View {
       else startIn(place, a?.run ?? null);
       this.thenClose(project && a ? this.db().setProjectAgent(project.id, a.key) : null);
     };
-    return this.menuFrame(t)
-      .child(this.menuTitle(t, `New in ${place.tree?.branch ?? place.name ?? "this project"}`))
-      .children(this.known.filter((a) => a.installed).map((a) => item(`agent-${a.key}`, a.name, () => pick(a), { hint: a.key === project?.agent ? "last" : null, keep: true })))
-      .child(item("agent-shell", "Terminal", () => pick(null), { keep: true }))
-      .when(!place.tree, (el) => el.child(div().mx(8).my(4).h(1).bg(t.border))
-        .child(item("agent-worktree", "In a new worktree\u2026", () => this.worktreeDialog(place), { icon: "worktree" })));
+    return this.popup(t, title, [
+      ...this.known.filter((a) => a.installed).map((a) => item(a.name, () => pick(a), { hint: a.key === project?.agent ? "last" : null, keep: true })),
+      item("Terminal", () => pick(null), { keep: true }),
+      ...(place.tree ? [] : [{ separator: true }, item("In a new worktree\u2026", () => this.worktreeDialog(place), { icon: "worktree" })]),
+    ]);
   }
 
   makeWorktree(cx) {
@@ -1573,15 +1582,14 @@ export default class Spaces extends View {
     const base = kansoWorktrees(place.machine);
     const shownBase = base ? base.replace(trimmed(home()), "~") : "~/.kanso/worktrees";
     const c = tokens(t);
-    return v_flex().id("worktree-dialog").size_full().p(18).gap(10).bg(t.popover).text_color(t.foreground)
-      .on_key_down((e, cx) => { if (String(e.key).toLowerCase() === "escape") { closeOverlay(props().overlay); cx.stop_propagation(); } })
-      .child(div().text_size(15).font_semibold().child(`New agent in a worktree of ${place.name ?? "this project"}`))
-      .child(div().text_size(12).text_color(t.muted).child(`A new branch (or one you have), checked out in its own folder under ${shownBase}. The agent starts there.`))
-      .child(field("wt-branch", this.branch, c, { error: Boolean(this.wtError) }))
-      .child(div().min_h(16).text_size(12).text_color(this.wtError ? t.blocked : t.dim).child(this.wtError ?? (this.making ? "Making the worktree\u2026" : "Enter to make it, Esc to cancel.")))
-      .child(h_flex().gap(8).justify_end()
-        .child(button("wt-cancel", "Cancel", () => closeOverlay(props().overlay), c, { kind: "quiet" }))
-        .child(button("wt-make", this.making ? "Making\u2026" : "Make worktree", (cx) => this.makeWorktree(cx), c)));
+    return dialog("worktree-dialog", c, {
+      title: `New agent in a worktree of ${place.name ?? "this project"}`,
+      body: field("wt-branch", this.branch, c, { error: Boolean(this.wtError) }),
+      notes: [{ text: `A new branch (or one you have), checked out in its own folder under ${shownBase}. The agent starts there.`, tone: "muted" },
+        { text: this.wtError ?? (this.making ? "Making the worktree\u2026" : "Enter to make it, Esc to cancel."), tone: this.wtError ? "error" : "dim" }],
+      secondary: "Cancel", primary: "Make worktree", state: this.making ? "loading" : "default",
+      onCancel: () => closeOverlay(props().overlay), onPrimary: (cx) => this.makeWorktree(cx),
+    });
   }
 
   // Each worktree space moves under its main checkout's.
@@ -1665,7 +1673,7 @@ export default class Spaces extends View {
   setOrder(key, value, cx) {
     this[key] = value;
     this.panel.set(`spaces.${key}`, key === "threadGroup" ? (value ? "on" : "off") : value);
-    this.orderOpen = false;
+    this.orderOpen = null;
     cx.notify();
   }
 
@@ -1766,29 +1774,41 @@ export default class Spaces extends View {
     });
   }
 
-  orderPicker(t) {
-    const view = this.showSwitch === false ? "spaces" : this.view;
-    const { orders, current, key, head, plain } = sortOf(view, this, { ORDERS, STATUS_ORDERS, THREAD_ORDERS, DEFAULT_ORDER });
-    const trigger = div().id("spaces-order").size(28).flex_none().rounded(6).flex().items_center().justify_center().cursor_pointer()
-      .text_color(plain ? t.dim : t.muted).tooltip(`Sort: ${orders[current]}`)
-      .hover((s) => s.bg(t.hover).text_color(t.foreground))
-      .child(svg("mods/kanso-chrome/icons/sort.svg").size(14));
-    const tick = (on) => (el) => el.when(on, (el) => el.child(div().text_size(11).child("\u2713")));
-    const line = (id, text, on, act) => h_flex().id(id).h(30).px(8).gap(8).items_center().rounded(6).cursor_pointer().text_size(12.5)
-      .text_color(on ? t.foreground : t.muted).hover((s) => s.bg(t.hover).text_color(t.foreground))
-      .on_click((_e, cx) => act(cx)).child(div().flex_1().child(text)).map(tick(on));
-    const title = (text) => div().h(26).px(8).flex().items_center().text_size(11.5).text_color(t.dim).child(text);
-    return Popover.new("spaces-order-popover").trigger(trigger).anchor("top_left")
-      .open(this.orderOpen).on_open_change((open, cx) => { this.orderOpen = open; cx.notify(); })
-      .content(v_flex().w(232).p(5).gap(1).rounded(10).bg(t.popover).border_1().border_color(t.border)
-        .child(title(head))
-        .children(Object.keys(orders).map((mode) => line(`spaces-order-${mode}`, orders[mode], mode === current, (cx) => this.setOrder(key, mode, cx))))
-        .when(view === "threads", (el) => el.child(line("spaces-group", "Grouped by project", this.threadGroup, (cx) => this.setOrder("threadGroup", !this.threadGroup, cx))))
-        .child(div().mx(8).my(5).h(1).bg(t.border))
-        .child(title("Show"))
-        .child(line("spaces-show-activity", "What each agent is on", this.showActivity !== false, (cx) => this.setShown("activity", this.showActivity === false, cx)))
-        .child(line("spaces-show-away", RETURN_LABEL, this.showAway !== false, (cx) => this.setShown("away", this.showAway === false, cx)))
-        .child(line("spaces-show-switch", "Projects, Status and Threads", this.showSwitch !== false, (cx) => this.setShown("switch", this.showSwitch === false, cx))));
+  // The Sort menu: the view's orders, the current one ticked, then what the sidebar shows.
+  sortMenu(c, view) {
+    const { orders, current, key, head } = sortOf(view, this, { ORDERS, STATUS_ORDERS, THREAD_ORDERS, DEFAULT_ORDER });
+    const ticked = (label, on, onClick) => ({ label, icon: on ? "check" : null, onClick });
+    const grouped = view === "threads" ? [ticked("Grouped by project", this.threadGroup, (cx) => this.setOrder("threadGroup", !this.threadGroup, cx))] : [];
+    return menu({ items: [
+      { heading: head },
+      ...Object.keys(orders).map((mode) => ticked(orders[mode], mode === current, (cx) => this.setOrder(key, mode, cx))),
+      ...grouped,
+      { separator: true },
+      { heading: "Show" },
+      ticked("What each agent is on", this.showActivity !== false, (cx) => this.setShown("activity", this.showActivity === false, cx)),
+      ticked(RETURN_LABEL, this.showAway !== false, (cx) => this.setShown("away", this.showAway === false, cx)),
+      ticked("Projects, Status and Threads", this.showSwitch !== false, (cx) => this.setShown("switch", this.showSwitch === false, cx)),
+    ] })("spaces-order-menu", c);
+  }
+
+  // The header's Toolbar: + names what it adds in this view; collapsed, Sort and Search fold under the caret.
+  tools(c, view, collapsed) {
+    const { orders, current, plain } = sortOf(view, this, { ORDERS, STATUS_ORDERS, THREAD_ORDERS, DEFAULT_ORDER });
+    const form = collapsed ? "rail" : "bar";
+    // Sort's menu stays with the form it opened in, and in the rail with the caret open; anywhere else it is shut for good.
+    const sortOpen = this.orderOpen === form && (!collapsed || this.toolsOpen === true);
+    if (!sortOpen) this.orderOpen = null;
+    return toolbar("spaces-tools", c, {
+      view, column: collapsed, open: this.toolsOpen === true, sorted: !plain,
+      sortOpen, sortTip: `Sort: ${orders[current]}`, sortMenu: () => this.sortMenu(c, view),
+      on: {
+        add: () => (view === "spaces" ? this.addProject() : this.newConversationMenu()),
+        sort: (open, cx) => { this.orderOpen = open ? form : null; cx.notify(); },
+        search: () => run("mod.open", { name: "picker" }),
+        sidebar: () => this.toggleRail(),
+        more: (cx) => { this.toolsOpen = !this.toolsOpen; cx.notify(); },
+      },
+    });
   }
 
   grouped(t, collapsed, sp, ps, ctx) {
@@ -1852,9 +1872,13 @@ export default class Spaces extends View {
       .when(ring, (el) => el.border_1().border_color(t.accent));
   }
 
+  // A computer's two words: its key in the maps, and the name a person reads.
+  machineWords(m) {
+    return { key: m ?? "local", title: this.names.title(m) };
+  }
+
   machineActions(m, phase, hot, t) {
-    const key = m ?? "local";
-    const title = this.names.title(m);
+    const { key, title } = this.machineWords(m);
     const button = {
       // Sign in runs the login in a terminal pane; a click on the row still copies its command.
       signin: () => m && this.machineButton(`machine-login:${key}`, `machine-login-${m}`, "key", "Sign in", () => run("terminal.open", signInCommand(m)), t),
@@ -1864,6 +1888,34 @@ export default class Spaces extends View {
       sync: () => this.syncButton(m, t),
     };
     return machineVisible(phase, hot, Boolean(m), peerOn(this.sync.config, m)).map((name) => button[name]()).filter(Boolean);
+  }
+
+  // A computer's menu, drawn by the kit at the pointer; it reads the phase and sync the row had.
+  computerMenu(m, phase) {
+    openOverlay({ mod: "kanso-spaces", kind: "popup", frame: "none", width: W.menu, at: "pointer", props: {
+      machineMenu: { route: m ?? "", shown: this.names.title(m), phase, syncOn: Boolean(m) && peerOn(this.sync.config, m) } } });
+  }
+
+  computerMenuView(t) {
+    const { route = "", shown: title = "", phase = "connected", syncOn = false } = props().machineMenu;
+    const acts = {
+      rename: () => this.names.ask(route, title),
+      power: () => run(`kanso-spaces.power-machine:${route}`),
+      sync: () => run(`kanso-spaces.sync-machine:${route}`),
+      retry: () => run(`kanso-spaces.retry-machine:${route}`),
+      signin: () => run("terminal.open", signInCommand(route)),
+      plus: () => run("space.new", { machine: route }),
+      add: () => run("mod.open", { name: "machine-add" }),
+      hide: () => this.hide("sidebar.computers", true),
+      settings: () => openOverlay({ mod: "kanso-settings", kind: "dialog", width: 860, height: 680, props: { page: "pieces", find: "Computers" } }),
+    };
+    const rows = computerMenuItems({ remote: Boolean(route), phase, syncOn, addComputer: shown("footer.machine", true, pieces(shared)) });
+    const go = (key) => () => { acts[key](); closeOverlay(props().overlay); };
+    const acting = rows.filter((row) => row.key);
+    this.menuActs = acting.map((row) => go(row.key));
+    const lit = acting[this.menuAt]?.key ?? null;
+    const items = rows.map((row) => (row.key ? { ...row, selected: row.key === lit, onClick: go(row.key) } : row));
+    return this.menuKeys(menu({ title, items })("computer-menu", tokens(t)));
   }
 
   syncButton(m, t) {
@@ -1900,8 +1952,7 @@ export default class Spaces extends View {
   }
 
   machineHead(m, phase, t, c, collapsed, folded, tail = null) {
-    const key = m ?? "local";
-    const title = this.names.title(m);
+    const { key, title } = this.machineWords(m);
     const syncWord = m && phase === "connected" && peerOn(this.sync.config, m) && syncIcon({ name: m, ...this.sync, now: Date.now() }).state === "cannot";
     const word = machineState(phase) || (syncWord ? "Sync can't run" : "");
     const hint = m ? ((this.hints ?? {})[m] ?? "") : "";
@@ -1921,7 +1972,7 @@ export default class Spaces extends View {
       .when(phase !== "loading", (el) => el.cursor_pointer().hover((s) => s.bg(wash)))
       .on_click((e, cx) => { if (e.click_count === 2) return; go(cx); })
       .on_mouse_down("left", (e, cx) => { if (e.click_count !== 2) return; cx.stop_propagation(); this.names.rename(m); })
-      .on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); this.names.open(m); })
+      .on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); this.computerMenu(m, phase); })
       .on_hover((h, cx) => { if (h ? this.hoverMachine !== key : this.hoverMachine === key) { this.hoverMachine = h ? key : null; cx.notify(); } })
       .when(collapsed, (el) => el.tooltip(machineTip(title, phase, hint)).child(icon))
       .when(!collapsed, (el) => el.child(icon)
@@ -2017,11 +2068,16 @@ export default class Spaces extends View {
   }
 
   dots(id, t, open) {
-    return div().id(id).size(20).flex_none().rounded(6).flex().items_center().justify_center().text_color(t.muted).tooltip("More")
-      .hover((s) => s.bg(t.hover).text_color(t.foreground))
-      .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
+    return rowTool(div().id(id).size(20).flex_none().rounded(6).flex().items_center().justify_center().text_color(t.muted).tooltip("More"), t)
       .on_mouse_up("left", (_e, cx) => { cx.stop_propagation(); open(); })
       .child(svg("mods/kanso-chrome/icons/ellipsis.svg").size(14));
+  }
+
+  // One press on a project: its agents fold or unfold (a sleeping group wakes), and the space opens when it is not the one you are in.
+  openSpace(w, group, on, away, mine, cx) {
+    if (group) this.toggleAsleep(group.id, this.asleepOpenOf(group.id), cx);
+    else if (mine.length) this.setAgentsFolded(w.id, on ? !this.agentsFolded.has(w.id) : false, cx);
+    if (!on && !away) run("space.select", { id: w.id });
   }
 
   row({ w, g, tree, place }, t, c, mine = [], group = null) {
@@ -2033,11 +2089,8 @@ export default class Spaces extends View {
     const asleep = Boolean(group);
     // Shown, a settled tab comes back without its agents: a project whose every tab sleeps wakes from its menu.
     const away = asleep && (w.tabs ?? []).every((tb) => tb.settled);
-    const ring = this.navMark(`space:${w.id}`, (cx) => {
-      if (asleep) this.toggleAsleep(group.id, this.asleepOpenOf(group.id), cx);
-      else if (mine.length) this.setAgentsFolded(w.id, on ? !this.agentsFolded.has(w.id) : false, cx);
-      if (!on && !away) run("space.select", { id: w.id });
-    }, on && !mine.some((a) => a.focused));
+    const ring = this.navMark(`space:${w.id}`, (cx) => this.openSpace(w, group, on, away, mine, cx),
+      on && !mine.some((a) => a.focused));
     const row = v_flex()
       .relative()
       .id(`space-${w.id}`)
@@ -2061,11 +2114,7 @@ export default class Spaces extends View {
         this.pressed = null;
         this.over = null;
         if (drop) run("space.move", { id: from, index: spaceAt(w.id) + 1 });
-        else if (from === null || from === w.id) {
-          if (asleep) this.toggleAsleep(group.id, this.asleepOpenOf(group.id), cx);
-          else if (mine.length) this.setAgentsFolded(w.id, on ? !this.agentsFolded.has(w.id) : false, cx);
-          if (!on && !away) run("space.select", { id: w.id });
-        }
+        else if (from === null || from === w.id) this.openSpace(w, group, on, away, mine, cx);
         cx.notify();
       })
       .on_mouse_down("right", () => this.menu(w))
@@ -2121,8 +2170,7 @@ export default class Spaces extends View {
   }
 
   agentsView(t, sp, ps, ctx) {
-    const c = tokens(t);
-    const sections = this.statusSections(sp, ctx);
+    const { c, sections } = this.agentsCtx(t, sp, ctx);
     if (!sections.length) return machines().some((m) => m.layout === "loading") ? [item(this.silhouette(t), 3 * 32 + 4)]
       : [item(stateEmpty("agents-empty", "activity", "No agents running", c))];
     const project = this.projectOf(sp, t);
@@ -2240,39 +2288,40 @@ export default class Spaces extends View {
   }
 
   railMenu(title, rows, space = null) {
-    const height = 18 + 26 + Math.min(rows.length, RAIL_MENU_ROWS) * (MENU_ROW + 1) + (space ? MENU_ROW + 9 : 0);
+    const height = menuHeight(this.railLines(sketch, { title, rows, space }));
     openOverlay({ mod: "kanso-spaces", kind: "popup", width: 260, height, at: "pointer", props: { railMenu: { title, rows, space } } });
   }
 
-  // The rail's list of one group: each row with its state, a click goes to it; an asleep one opens its wake menu.
+  // The rail's list of one group, each row with its state, in a run that scrolls; then the way to its project.
+  railLines(item, { title, rows, space }, to = () => () => {}) {
+    return {
+      title,
+      items: [
+        { scroll: rows.map((r) => item(r.name, to(r), { mark: r.status, hint: r.hint, badge: r.badge, keep: true })), rows: RAIL_MENU_ROWS, handle: this.convScroll },
+        ...(space ? [{ separator: true }, item("Go to project", () => run("space.select", { id: space }), { icon: "chevron-right" })] : []),
+      ],
+    };
+  }
+
+  // A click goes to the row; an asleep one opens its wake menu.
   railMenuView(t) {
-    const c = tokens(t);
     const m = props().railMenu;
-    const item = this.items(t);
     const to = (r) => (r.asleep ? () => { closeOverlay(props().overlay); openOverlay({ mod: "kanso-spaces", kind: "popup", width: 252, height: 170, at: "pointer", props: { menu: { address: r.address, asleep: r.asleep, name: r.name } } }); }
       : () => { closeOverlay(props().overlay); r.pane ? run("pane.focus", { pane: r.pane }) : run("terminal.peek", { terminal: r.address }); });
-    // As the conversation picker's: every row's act for the keyboard, the list drawing what shows and scrolled to the selection.
-    this.menuActs = m.rows.map(to);
+    // The keyboard brings the row it lights into view.
     this.menuScroll = this.convScroll ? { handle: this.convScroll, count: m.rows.length } : null;
-    const key = (r) => `rail-${r.address}`;
-    const byKey = (k) => m.rows.find((r) => key(r) === k) ?? null;
-    const row = (r, at) => this.menuRow(t, key(r), r.name, at, null, { lead: mark(c, { status: r.status }), hint: r.hint, badge: r.badge, ink: r.status === "asleep" ? t.muted : t.foreground });
-    return this.menuFrame(t)
-      .child(this.menuTitle(t, m.title))
-      .child(v_flex().relative().flex_none().h(Math.min(m.rows.length, RAIL_MENU_ROWS) * MENU_ROW)
-        .child(v_virtual_list("rail-menu-list", m.rows.length, MENU_ROW, (i) => key(m.rows[i]),
-          (range) => m.rows.slice(range.start, range.end).map((r, k) => row(r, range.start + k)))
-          .when(Boolean(this.convScroll), (el) => el.track_scroll(this.convScroll))
-          .on_item_click((k, cx) => { const r = byKey(k); if (r) to(r)(); cx.notify(); }))
-        .child(Scrollbar.vertical("rail-menu-list").absolute().inset_0()))
-      .when(Boolean(m.space), (el) => el.child(div().mx(8).my(4).h(1).bg(t.border))
-        .child(item("rail-go", "Go to project", () => run("space.select", { id: m.space }), { icon: "chevron-right" })));
+    const { title, items } = this.railLines(this.lines(), m, to);
+    return this.popup(t, title, items);
+  }
+
+  // Both agents views read the same two things: the kit's colours and the sections' rows.
+  agentsCtx(t, sp, ctx) {
+    return { c: tokens(t), sections: this.statusSections(sp, ctx) };
   }
 
   // Status, collapsed: one mark per section.
   agentsRail(t, sp, ctx) {
-    const c = tokens(t);
-    const sections = this.statusSections(sp, ctx);
+    const { c, sections } = this.agentsCtx(t, sp, ctx);
     return sections.map((s) => {
       const rows = s.entries.filter((e) => !e.lines.length).map((e) => this.railRow(e.a, e.a.space_name || null, ctx.now));
       const lead = s.id === "other" ? this.railIcon(t, "layers") : h_flex().h(G.lg).items_center().child(statusMark(c, s.id));
@@ -2303,7 +2352,7 @@ export default class Spaces extends View {
     const items = Object.keys(VIEWS).map((key) => ({ key, label: VIEWS[key].label, icon: collapsed ? VIEWS[key].icon : null, dot: asks && key === "agents", tip: tipOf(key) }));
     const pick = (view, cx) => { this.setView(view, cx); cx.notify(); };
     return collapsed
-      ? segmented("rail-view", items, this.view, pick, tokens(t), { collapsed }).mt(4)
+      ? segmented("rail-view", items, this.view, pick, tokens(t), { collapsed }).self_center().mt(4)
       : segmented("spaces-view", items, this.view, pick, tokens(t)).mx(18).mt(4).mb(14);
   }
 
@@ -2408,8 +2457,7 @@ export default class Spaces extends View {
     const pinned = l[PIN_LABEL] != null && l[PIN_LABEL] !== "";
     const settled = Boolean(settledOf(l)), snoozed = snoozedUntil(l) > now;
     const free = a?.status !== "working" && a?.status !== "blocked";
-    const item = this.items(t);
-    const rule = () => div().mx(8).my(4).h(1).bg(t.border);
+    const item = this.lines();
     const copy = (text) => (cx) => cx.write_to_clipboard?.(text);
     const session = m.session ? paths.basename(m.session).replace(/\.jsonl$/, "").replace(/^rollout-.*?-(?=[0-9a-f]{8}-)/, "") : null;
     const title = m.title ?? l[THREAD_LABEL] ?? null;
@@ -2420,41 +2468,39 @@ export default class Spaces extends View {
     const shownIn = movedTo ?? sp?.id ?? null;
     // A short queue, so two quick moves both land.
     const moveTo = (project) => setShared("kanso.move", [...(Array.isArray(shared("kanso.move")) ? shared("kanso.move") : []).slice(-15), { address: m.address, project, n: Date.now() + Math.random() }]);
-    return this.menuFrame(t)
-      .when(Boolean(p), (el) => el.child(item("open", "Open", () => run("pane.focus", { pane: p.pane }), { icon: "chevron-right" })))
-      .child(item("pin", pinned ? "Unpin" : "Pin to the top", () => this.pinThread({ address: m.address, pin: pinned ? 1 : null }), { icon: "pin" }))
-      .when(settled, (el) => el.child(item("unsettle", "Bring back", () => label(m.address, SETTLED_LABEL), { icon: "undo" })))
-      .when(!settled && free, (el) => el.child(item("settle", "Settle", () => label(m.address, SETTLED_LABEL, `${now}:${k?.turn ?? 0}`), { icon: "check" })))
-      .when(snoozed, (el) => el.child(item("wake", "Wake", () => label(m.address, SNOOZE_LABEL), { icon: "clock" })))
-      .when(!snoozed, (el) => el.child(div().h(26).pl(32).flex().items_center().text_size(11.5).text_color(t.dim).child("Snooze"))
-        .children(snoozePresets(now).map((x) => item(`snooze-${x.id}`, x.label, () => label(m.address, SNOOZE_LABEL, x.until), { hint: x.when }))))
-      .when(Boolean(p?.tab) && Boolean(sp) && Boolean(a), (el) => el.child(item("sleep-agent", "Sleep this agent", () => sleepAgent(sp.id, p.tab, p.pane), { icon: "moon" })))
-      .when(Boolean(p?.tab) && Boolean(sp), (el) => el.child(item("sleep-tab", "Sleep its tab", () => sleepTab(sp.id, p.tab), { icon: "moon" })))
-      .when((sp?.tabs?.length ?? 0) > 1, (el) => el.child(item("sleep-project", "Sleep its project\u2026", () => sleepProject(sp.id), { icon: "moon" })))
-      .child(item("unread", isUnread(l) ? "Mark read" : "Mark unread", () => label(m.address, UNREAD_LABEL, isUnread(l) ? "" : "1"), { icon: "enso" }))
-      .child(item("rename", "Rename\u2026", () => renameTerminal(m.address, l[NAME_LABEL] || l[THREAD_LABEL] || title || a?.title || "")))
-      .when(Boolean(m.address), (el) => el.child(div().h(26).pl(32).flex().items_center().text_size(11.5).text_color(t.dim).child("Move to project"))
-        // Four show, the rest scroll, so the menu's own items stay in view.
-        .child(((list) => v_flex().id("move-list").flex_none().h(Math.min(list.length, 4) * 30).overflow_y_scrollbar()
-          .children(list.map((w) => item(`move-${w.id}`, w.name, () => moveTo(w.id), { icon: "chevron-right" }).flex_none())))(spaces().filter((w) => !w.machine && w.id !== shownIn)))
-        .when(Boolean(movedTo), (el2) => el2.child(item("move-back", "Back to where it runs", () => moveTo(null), { icon: "undo" }))))
-      .child(rule())
-      .when(Boolean(p?.cwd), (el) => el.child(item("copy-path", "Copy folder", copy(p.cwd), { icon: "copy" })))
-      .when(Boolean(p?.branch), (el) => el.child(item("copy-branch", "Copy branch", copy(p.branch), { icon: "branch" })))
-      .when(Boolean(session), (el) => el.child(item("copy-id", "Copy conversation id", copy(session), { icon: "copy" })))
-      .child(rule())
-      .child(item("close", a ? "Close agent" : "Close terminal", (cx) => {
-        this.armed.press("close", cx, () => run("terminal.kill", { terminal: m.address }));
-      }, { icon: "close", ink: t.blocked, keep: !this.armed.is("close"), verb: "close it", armed: this.armed.is("close") }));
+    const kill = (cx) => { this.armed.press("close", cx, () => run("terminal.kill", { terminal: m.address })); };
+    const others = spaces().filter((w) => !w.machine && w.id !== shownIn);
+    return this.popup(t, null, [
+      ...(p ? [item("Open", () => run("pane.focus", { pane: p.pane }), { icon: "chevron-right" })] : []),
+      item(pinned ? "Unpin" : "Pin to the top", () => this.pinThread({ address: m.address, pin: pinned ? 1 : null }), { icon: "pin" }),
+      ...(settled ? [item("Bring back", () => label(m.address, SETTLED_LABEL), { icon: "undo" })] : []),
+      ...(!settled && free ? [item("Settle", () => label(m.address, SETTLED_LABEL, `${now}:${k?.turn ?? 0}`), { icon: "check" })] : []),
+      ...(snoozed ? [item("Wake", () => label(m.address, SNOOZE_LABEL), { icon: "clock" })]
+        : [{ heading: "Snooze" }, ...snoozePresets(now).map((x) => item(x.label, () => label(m.address, SNOOZE_LABEL, x.until), { hint: x.when }))]),
+      ...(p?.tab && sp && a ? [item("Sleep this agent", () => sleepAgent(sp.id, p.tab, p.pane), { icon: "moon" })] : []),
+      ...(p?.tab && sp ? [item("Sleep its tab", () => sleepTab(sp.id, p.tab), { icon: "moon" })] : []),
+      ...((sp?.tabs?.length ?? 0) > 1 ? [item("Sleep its project\u2026", () => sleepProject(sp.id), { icon: "moon" })] : []),
+      item(isUnread(l) ? "Mark read" : "Mark unread", () => label(m.address, UNREAD_LABEL, isUnread(l) ? "" : "1"), { icon: "enso" }),
+      item("Rename\u2026", () => renameTerminal(m.address, l[NAME_LABEL] || l[THREAD_LABEL] || title || a?.title || "")),
+      // Four show, the rest scroll, so the menu's own items stay in view.
+      ...(m.address ? [{ heading: "Move to project" }, { scroll: others.map((w) => item(w.name, () => moveTo(w.id), { icon: "chevron-right" })) },
+        ...(movedTo ? [item("Back to where it runs", () => moveTo(null), { icon: "undo" })] : [])] : []),
+      { separator: true },
+      ...(p?.cwd ? [item("Copy folder", copy(p.cwd), { icon: "copy" })] : []),
+      ...(p?.branch ? [item("Copy branch", copy(p.branch), { icon: "branch" })] : []),
+      ...(session ? [item("Copy conversation id", copy(session), { icon: "copy" })] : []),
+      { separator: true },
+      item(a ? "Close agent" : "Close terminal", kill, { icon: "close", keep: !this.armed.is("close"), verb: "close it", armed: this.armed.is("close") }),
+    ]);
   }
 
   zzMenuView(t, m) {
     const z = m.asleep;
-    const item = this.items(t);
-    return this.menuFrame(t)
-      .child(div().h(26).px(8).flex().items_center().text_size(11.5).text_color(t.dim).truncate().child(z.saved ? `${m.name}, asleep since ${since(z.saved)}` : `${m.name}, asleep`))
-      .child(item("wake", z.n > 1 ? `Wake it and ${z.n - 1} more of ${z.tab}` : "Wake", () => wakeRow(z), { icon: "sun" }))
-      .child(item("copy-id", "Copy conversation id", (cx) => cx.write_to_clipboard?.(z.resume), { icon: "copy" }));
+    const item = this.lines();
+    return this.popup(t, z.saved ? `${m.name}, asleep since ${since(z.saved)}` : `${m.name}, asleep`, [
+      item(z.n > 1 ? `Wake it and ${z.n - 1} more of ${z.tab}` : "Wake", () => wakeRow(z), { icon: "sun" }),
+      item("Copy conversation id", (cx) => cx.write_to_clipboard?.(z.resume), { icon: "copy" }),
+    ]);
   }
 
   // Kept in shared "space.colors" so every window agrees; a gone space gives its hue up.
@@ -2485,7 +2531,7 @@ export default class Spaces extends View {
     if (props()?.newConversation) return this.newConversationView(t);
     if (props()?.newProject) return this.newProjectView(t);
     if (props()?.worktree) return this.worktreeView(t);
-    if (props()?.machineMenu) return this.names.menu(t);
+    if (props()?.machineMenu) return this.computerMenuView(t);
     const collapsed = shared("sidebar.collapsed") === true;
     if (this.sinceLeft) this.sinceLeft.showing = false;
     this.narrow = !collapsed && (this.width ?? SIDEBAR_W) < ONE_LINE_W;
@@ -2495,12 +2541,6 @@ export default class Spaces extends View {
     const sp = visibleSpaces(spaces(), this.offNames());
     const ps = panes();
     this.assignColors(sp);
-    const quiet = (id, icon, tip, action) => div().id(id).size(32).flex_none().flex().items_center().justify_center().rounded(6)
-      .text_color(t.muted).cursor_pointer().tooltip(tip)
-      .hover((s) => s.bg(t.foreground + "12").text_color(t.foreground))
-      .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
-      .on_click(action)
-      .child(svg(`mods/kanso-chrome/icons/${icon}.svg`).size(17));
     const active = sp.find((p) => p.active);
     // Read once per draw: each read copies every record.
     const map = pieces(shared);
@@ -2522,30 +2562,13 @@ export default class Spaces extends View {
     const queue = this.refreshNeeds(sp, read.terms, asleep);
     this.seenNow = this.seen(sp, ctx);
     this.seenAt = ctx.now; // when it was seen: a later write of it is no newer
-    // In Projects, + adds a project; in Status and Threads, it starts a conversation in a project you pick.
-    const plus = view === "spaces"
-      ? quiet("space-new", "plus", "Add project", () => this.addProject())
-      : quiet("space-new", "plus", "New conversation", () => this.newConversationMenu());
-    const hide = quiet("sidebar-toggle", "sidebar", collapsed ? "Show sidebar" : "Hide sidebar", () => this.toggleRail());
-    const search = quiet("search", "search", "Search", () => run("mod.open", { name: "picker" }));
-    // Collapsed, Herdr's mark sits here; open, kanso-chrome draws it in the top bar.
-    const brand = image("frame/welcome/herdr.png").size(20).rounded(6).flex_none();
-    // Collapsed, stacked so two buttons never sit on top of each other.
-    const add = collapsed
-      ? v_flex().w_full().pt(8).gap(6).items_center().child(brand).child(plus).child(hide).when(switchShown, (el) => el.child(this.viewSwitch(t, sp, true)))
-      : h_flex().h(40).px(10).gap(4).items_center()
-        .child(plus)
-        .child(div().flex_1())
-        .child(this.orderPicker(t))
-        .child(search)
-        .child(hide);
     const root = v_flex().id("spaces-root").track_focus(this.handle).size_full().min_h(0).bg(t.chrome).text_size(13)
       .on_key_down((e, cx) => this.listKeyDown(e, cx))
       .on_size_change((size, cx) => this.sized(size.width, cx))
       // A pane held in the strip and let go here goes back where it was.
-      .on_mouse_up("left", () => { if (shared("strip.drag")) { setShared("strip.drop", null); setShared("strip.drag", null); } })
-      .child(add)
-      .when(!collapsed && switchShown, (el) => el.child(this.viewSwitch(t, sp)))
+      .on_mouse_up("left", dropStripDrag)
+      .child(header("spaces-header", { collapsed }, this.tools(tokens(t), view, collapsed)))
+      .when(switchShown, (el) => el.child(this.viewSwitch(t, sp, collapsed)))
       .when(shown("sidebar.needs", queue.rows.length > 0 || this.needsEmpty, map), (el) => el.child(queueControl(t, queue, collapsed, this.needsEmpty && !queue.rows.length, (cx) => this.toggleNeeds(cx))))
       .child(this.needsOpen && shown("sidebar.needs", true, map) ? this.needsList(t, queue, read.now) : this.list(t, collapsed, view, [
         ...(!collapsed ? this.returnRows(t, active) : []),

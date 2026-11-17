@@ -1,20 +1,17 @@
 // The glint: a working name lit by windows that cross it, the dots counting after it, and on battery the dots alone.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { load, chain, gpuiHost, numberArguments } from "./helpers.mjs";
+import { load, chain, gpuiHost, numberArguments, nodes, themed, KIT_NIGHT } from "./helpers.mjs";
 
 const host = (battery = false) => ({ ...gpuiHost(), div: () => chain("div"), shared: (key) => (key === "kanso.battery" ? battery : null) });
-const kit = async (battery) => ({
+const kit = async (battery) => themed({
   ...await load("kanso-panel/ui.js", ["tokens", "G", "GLINT", "GLINT_MS", "GLINT_STAGGER", "DOTS_MS", "OPACITY"], host(battery)),
   ...await load("kanso-panel/ui-glint.js", ["glint"], host(battery)),
-});
-const night = { foreground: "#d8d4cb", background: "#1b1b19", dim: "#6b6862", muted: "#949086" };
-const all = (el) => [el, ...el.kids.flatMap(all)];
-const calls = (el, name) => all(el).flatMap((kid) => kid.calls.filter((call) => call[0] === name));
+}, KIT_NIGHT);
+const calls = (el, name) => nodes(el).flatMap((kid) => kid.calls.filter((call) => call[0] === name));
 
 test("A working name glints with three windows at the kit's widths, strengths and pace, and its dots count after it", async () => {
-  const { glint, tokens, G, GLINT, GLINT_MS, GLINT_STAGGER, DOTS_MS, OPACITY } = await kit(false);
-  const c = tokens(night);
+  const { glint, G, GLINT, GLINT_MS, GLINT_STAGGER, DOTS_MS, OPACITY, c } = await kit(false);
   const el = glint("Atlas", c, "a");
   const loops = calls(el, "loop");
   assert.equal(loops.length, 6, "each window and its copy of the text move");
@@ -30,8 +27,7 @@ test("A working name glints with three windows at the kit's widths, strengths an
 });
 
 test("On battery a working name stands still in full ink and only the dots step", async () => {
-  const { glint, tokens, DOTS_MS } = await kit(true);
-  const c = tokens(night);
+  const { glint, DOTS_MS, c } = await kit(true);
   const el = glint("Atlas", c, "a");
   assert.equal(calls(el, "loop").length, 0);
   assert.ok(calls(el, "text_color").some(([, ink]) => ink === c.text));

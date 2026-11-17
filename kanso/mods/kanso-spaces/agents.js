@@ -5,6 +5,7 @@ import { div } from "gpui-kit";
 import { h_flex } from "gpui-base";
 import { run, openOverlay } from "herdr";
 import { NAME_LABEL } from "./marks.js";
+import { tellsSomething } from "./pure.js";
 import { parseProcesses, etimeMs } from "./procs.js";
 import { oneLine } from "./since-left-model.js";
 import { foldTail } from "./sidebar-rows.js";
@@ -100,10 +101,8 @@ export function agentLabel(a) {
 
 // A title that is just a path, a user@host prompt or the program's name tells nothing.
 export function liveTitle(a) {
-  const live = clean(a.title), raw = (a.title ?? "").trim();
-  const telling = live && !/^[~/]|^[A-Za-z]:\\/.test(raw) && !/^[~/]|^[A-Za-z]:\\/.test(live) && !live.includes("@")
-    && live.toLowerCase() !== a.program?.key && live !== a.program?.name;
-  return telling ? live : null;
+  const live = clean(a.title);
+  return tellsSomething(live, (a.title ?? "").trim(), a.program) ? live : null;
 }
 
 export function duration(ms) {
@@ -318,15 +317,18 @@ export function withTerminals(list, ps, ss) {
 
 export const mostUrgent = (list) => list.reduce((m, a) => ((RANK[a.status] ?? 0) > (RANK[m] ?? 0) ? a.status : m), null);
 
+// A small tool on a row: it lights under the pointer and keeps its press from the row below.
+export const rowTool = (el, t) => el
+  .hover((s) => s.bg(t.hover).text_color(t.foreground))
+  .on_mouse_down("left", (_e, cx) => cx.stop_propagation());
+
 // Open, nothing: the row itself folds. Folded, the most urgent mark and how many; a click unfolds.
 export function agentFold(id, mine, open, onToggle, t, c) {
   const tail = foldTail(open, mine.map((a) => a.status));
   if (!tail) return null;
-  return h_flex().id(`agents-fold-${id}`).flex_none().h(20).px(3).gap(4).items_center().rounded(6)
-    .text_size(11.5).text_color(t.dim).cursor_pointer()
-    .hover((s) => s.bg(t.hover).text_color(t.foreground))
-    // The row selects on mouse up and drags on mouse down: keep both to the toggle.
-    .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
+  // The row selects on mouse up and drags on mouse down: keep both to the toggle.
+  return rowTool(h_flex().id(`agents-fold-${id}`).flex_none().h(20).px(3).gap(4).items_center().rounded(6)
+    .text_size(11.5).text_color(t.dim).cursor_pointer(), t)
     .on_mouse_up("left", (_e, cx) => { cx.stop_propagation(); onToggle(cx); })
     .when(Boolean(tail.mark), (el) => el.child(mark(c, { status: tail.mark, size: "sm" })))
     .child(div().child(String(tail.count)));

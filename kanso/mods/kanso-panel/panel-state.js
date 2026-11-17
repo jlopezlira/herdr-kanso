@@ -36,7 +36,7 @@ export function takeState(panel) {
   try {
     const state = panel.saveState();
     if (state === undefined) return undefined;
-    if (!state || typeof state !== "object" || Array.isArray(state)) return null;
+    if (!recordState(state)) return null;
     return state;
   } catch { return undefined; }
 }
@@ -81,7 +81,7 @@ export function shippedMemory(state) {
 }
 
 export function portsMemory(state) {
-  if (!state || typeof state !== "object" || Array.isArray(state)) return null;
+  if (!recordState(state)) return null;
   return {
     range: RANGES.has(state.range) ? state.range : "day",
     tab: typeof state.tab === "string" ? state.tab : null,
@@ -90,10 +90,12 @@ export function portsMemory(state) {
 }
 
 export function worktreesMemory(state) {
-  if (!state || typeof state !== "object" || Array.isArray(state)) return null;
+  if (!recordState(state)) return null;
   return {
     picked: typeof state.picked === "string" && state.picked ? state.picked : null,
     more: Array.isArray(state.more) ? state.more.filter((x) => typeof x === "string") : [],
     allRepos: Boolean(state.allRepos),
   };
 }
+
+const recordState = (state) => Boolean(state && typeof state === "object" && !Array.isArray(state));

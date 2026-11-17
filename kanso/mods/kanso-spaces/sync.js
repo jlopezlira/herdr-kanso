@@ -50,8 +50,7 @@ export function identityText(identity) {
 }
 
 export function configFrom(text) {
-  const parsed = parseOr(typeof text === "string" ? text : "", null);
-  const peers = parsed?.peers;
+  const peers = parsedPeers(text);
   return { version: 1, peers: peers && typeof peers === "object" && !Array.isArray(peers) ? peers : {} };
 }
 
@@ -100,8 +99,7 @@ export function rowsText(rows) {
 }
 
 export function statusFrom(text) {
-  const parsed = parseOr(typeof text === "string" ? text : "", null);
-  const peers = parsed?.peers;
+  const peers = parsedPeers(text);
   return peers && typeof peers === "object" && !Array.isArray(peers) ? peers : {};
 }
 
@@ -255,3 +253,5 @@ export function syncIcon({ name, config, status, now }) {
 export function holdsOf(status, stored = [], live = []) {
   return Object.entries(status ?? {}).flatMap(([id, row]) => (row?.reason === "update" && !isOff(id, stored, live) ? [{ id, text: UPDATE_TEXT }] : []));
 }
+
+const parsedPeers = (text) => parseOr(typeof text === "string" ? text : "", null)?.peers;

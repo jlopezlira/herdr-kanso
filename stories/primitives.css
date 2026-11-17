@@ -304,5 +304,3 @@
 .kanso-setting__note{grid-column:1/-1;font-size:var(--k-fs-meta);line-height:var(--k-lh-line);color:var(--dim)}
 .kanso-setting__note>.kanso-button{display:inline-flex;vertical-align:baseline}
 
-/* Herdr's mark: the host's tile at a badge's size. */
-.kanso-herdr-mark{width:var(--k-h-badge);height:var(--k-h-badge);flex:none}

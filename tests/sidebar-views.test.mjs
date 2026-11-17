@@ -1,4 +1,6 @@
 // The sidebar's rows and its Projects, Status and Threads views draw what the Storybook drawings show.
+import { loadSessionHeight } from "./mod-fixtures.mjs";
+import { loadSidebar, mountedState, recorder } from "./sidebar-fixtures.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { load, clone } from "./helpers.mjs";
@@ -7,49 +9,35 @@ const NOW = Date.now();
 const local = (extra = {}) => ({ id: "sp1", name: "app", folder: "/work/app", machine: null, active: true, tabs: [{ id: "tab1" }], ...extra });
 const agent = (address, extra = {}) => ({ address, pane: `p-${address}`, tab: "tab1", space: "sp1", space_name: "app", status: null, program: { agent: true, name: "Claude Code" }, title: address, seq: 1, ...extra });
 
+const ops = { id: "sp2", name: "ops", folder: "/srv/ops", machine: "dark", active: false, tabs: [{ id: "tab2" }] };
+// The sidebar after a double click on the project's name.
+const nameDoubleClicked = async () => {
+  const drawn = await sidebar({});
+  drawn.handlers["on_mouse_down:left:space-sp1"]({ click_count: 2 }, { notify() {}, stop_propagation() {} });
+  return drawn;
+};
+
 async function sidebar(state) {
-  const ids = [], texts = [], tips = [], icons = [], calls = [], handlers = {}, focused = [];
-  const node = () => {
-    let id = null;
-    const proxy = new Proxy({}, {
-      get(_target, prop) {
-        if (prop === "then") return undefined;
-        if (prop === "id") return (x) => { id = x; ids.push(x); return proxy; };
-        if (prop === "child") return (value) => { if (typeof value === "string") texts.push(value); return proxy; };
-        if (prop === "tooltip") return (value) => { if (typeof value === "string") tips.push(value); return proxy; };
-        if (prop === "when") return (cond, fn) => (cond ? fn(proxy) : proxy);
-        if (prop === "on_click" || prop === "on_mouse_up" || prop === "on_mouse_down") return (...a) => { if (id) handlers[`${prop}:${id}`] = handlers[`${prop}:${a.length > 1 ? `${a[0]}:` : ""}${id}`] = a.at(-1); return proxy; };
-        return () => proxy;
-      },
-    });
-    return proxy;
-  };
+  const calls = [], focused = [];
+  const drawn = recorder();
   const field = { on() {}, value: () => state.typed ?? "", set_value() {}, focus() { focused.push(true); }, release() {} };
-  const { Spaces } = await load("kanso-spaces/main.js", ["Spaces"], {
-    div: node, image: node, h_flex: node, v_flex: node,
-    svg: (path) => { icons.push(path); return node(); },
-    Popover: { new: node }, Toggle: { new: node }, Button: { new: (x) => { ids.push(x); return node(); } },
-    InputState: { new: () => field }, Input: { new: node },
-    theme: () => ({ foreground: "#fff", muted: "#888", dim: "#666", chrome: "#111", hover: "#222", input: "#333", ansi2: "#0f0", blocked: "#c44", border: "#333", raised: "#222", accent: "#09f" }),
-    shared: (key) => (key === "kanso.registry" ? state.registry ?? [] : null), setShared: () => {},
-    spaces: () => state.spaces ?? [local()], panes: () => [], agents: () => state.agents ?? [], terminals: () => state.terminals ?? [],
+  const spaces = state.spaces ?? [local()];
+  const { Spaces } = await loadSidebar(drawn.host, {
+    InputState: { new: () => field },
+    shared: (key) => (key === "kanso.registry" ? state.registry ?? [] : state.shared?.(key) ?? null),
+    spaces: () => spaces, agents: () => state.agents ?? [], terminals: () => state.terminals ?? [],
     machines: () => state.layouts ?? [{ name: null, layout: "ready" }], run: (cmd, args) => calls.push([cmd, clone(args ?? null)]),
-    home: () => "/Users/me", props: () => ({}), window: () => ({ platform: "macos", active: true }),
+    window: () => ({ platform: "macos", active: true }),
   });
-  const view = Object.assign(new Spaces(), {
-    git: state.git ?? {}, shown: new Set((state.spaces ?? [local()]).map((s) => s.id)), born: {}, custom: {},
-    order: "updated", statusOrder: "latest", threadOrder: "said", threadGroup: false,
-    machines: [], parked: [], folded: new Set(), agentsFolded: state.agentsFolded ?? new Set(),
-    sectionsFolded: state.sectionsFolded ?? new Set(), shelvesOpen: state.shelvesOpen ?? new Set(),
-    waking: new Set(), login: new Set(), failed: new Set(), powerBusy: new Set(), hints: {},
-    hoverSpace: state.hoverSpace ?? null, hoverRow: state.hoverRow ?? null,
-    handle: { is_focused: () => false, focus() {} }, hostName: "macbook", sync: { config: {}, status: {} },
-    panel: { set() {}, agents: new Map() }, threads: state.threads ?? null, view: state.view ?? "spaces",
-    tasks: {}, steps: {},
+  const view = Object.assign(new Spaces(), mountedState({
+    git: state.git ?? {}, shown: new Set(spaces.map((s) => s.id)),
+    agentsFolded: state.agentsFolded ?? new Set(), sectionsFolded: state.sectionsFolded ?? new Set(), shelvesOpen: state.shelvesOpen ?? new Set(),
+    hoverSpace: state.hoverSpace ?? null, hoverRow: state.hoverRow ?? null, threads: state.threads ?? null, view: state.view ?? "spaces",
     ...state.own,
-  });
+  }));
   if (state.before) state.before(view);
   view.render();
+  const { ids, texts, tips, icons, handlers } = drawn;
   return { view, ids, texts, tips, icons, calls, handlers, focused };
 }
 
@@ -100,8 +88,7 @@ test("a kept project whose folder is gone says Not found and offers Locate", asy
 });
 
 test("double-clicking a project's name opens the rename dialog, not a field in the row", async () => {
-  const drawn = await sidebar({});
-  drawn.handlers["on_mouse_down:left:space-sp1"]({ click_count: 2 }, { notify() {}, stop_propagation() {} });
+  const drawn = await nameDoubleClicked();
   assert.deepEqual(drawn.calls, [["space.rename", { id: "sp1" }]], "no name: Herdr asks for one in its dialog");
   drawn.ids.length = 0;
   drawn.view.render();
@@ -110,8 +97,7 @@ test("double-clicking a project's name opens the rename dialog, not a field in t
 });
 
 test("Esc while renaming a project sends nothing to the focused agent: the sidebar takes no keys", async () => {
-  const drawn = await sidebar({});
-  drawn.handlers["on_mouse_down:left:space-sp1"]({ click_count: 2 }, { notify() {}, stop_propagation() {} });
+  const drawn = await nameDoubleClicked();
   drawn.view.render();
   assert.deepEqual(drawn.focused, [], "no field in the sidebar holds the keyboard while the dialog asks");
   assert.deepEqual(drawn.calls.filter(([c]) => c !== "space.rename"), [], "nothing reaches a terminal");
@@ -133,7 +119,7 @@ test("each session row has its own mark and words: a terminal's icon, the time a
 });
 
 test("a sub-session that needs you gets its own line; the others stay on one", async () => {
-  const { sessionHeight } = await load("kanso-spaces/agents.js", ["sessionHeight"], { div: () => ({}), svg: () => ({}) });
+  const { sessionHeight } = await loadSessionHeight({ div: () => ({}), svg: () => ({}) });
   assert.equal(sessionHeight({}), 32, "a sub-session is the row's one line, as in its Storybook story");
   assert.equal(sessionHeight({ activity: "Allow network access?" }), 50);
   assert.equal(sessionHeight({ activity: null }), 32, "finished with nothing to say: one line");
@@ -155,7 +141,7 @@ test("Status draws its sections with only Needs you marked, a count once folded,
 
 test("Status puts the project after a session's name, and the computer when it is not this one", async () => {
   const agents = [agent("t1", { status: "working" }), agent("dark/t2", { status: "working", space: "sp2", space_name: "ops" })];
-  const spaces = [local(), { id: "sp2", name: "ops", folder: "/srv/ops", machine: "dark", active: false, tabs: [{ id: "tab2" }] }];
+  const spaces = [local(), ops];
   const drawn = await sidebar({ view: "agents", agents, spaces, layouts: [{ name: null, layout: "ready" }, { name: "dark", layout: "ready" }] });
   assert.equal(drawn.texts.includes("app"), true);
   assert.equal(drawn.texts.includes("ops · dark"), true);
@@ -200,25 +186,60 @@ test("Threads lists active, finished, snoozed and settled conversations, and one
 });
 
 test("away from its default, the sort stays on the toolbar and keeps working in each view", async () => {
+  const orders = await load("kanso-spaces/agents.js", ["ORDERS", "STATUS_ORDERS", "THREAD_ORDERS"], {});
   const cases = [
-    ["spaces", { order: "attention" }, "Sort: Needs you first", "order", "updated"],
-    ["agents", { statusOrder: "longest" }, "Sort: Longest in its state", "statusOrder", "latest"],
-    ["threads", { threadOrder: "started" }, "Sort: When it started", "threadOrder", "said"],
+    ["spaces", { order: "attention" }, "Sort: Needs you first", "order", "updated", orders.ORDERS],
+    ["agents", { statusOrder: "longest" }, "Sort: Longest in its state", "statusOrder", "latest", orders.STATUS_ORDERS],
+    ["threads", { threadOrder: "started" }, "Sort: When it started", "threadOrder", "said", orders.THREAD_ORDERS],
   ];
-  for (const [view, own, tip, key, rest] of cases) {
-    const drawn = await sidebar({ view, own, agents: [agent("t1", { status: "working" })], threads: {} });
-    assert.equal(drawn.ids.includes("spaces-order"), true, view);
+  for (const [view, own, tip, key, rest, list] of cases) {
+    const drawn = await sidebar({ view, own: { ...own, orderOpen: "bar" }, agents: [agent("t1", { status: "working" })], threads: {} });
+    assert.equal(drawn.ids.includes("spaces-tools-sort"), true, view);
     assert.equal(drawn.tips.includes(tip), true, view);
     const cx = { notify() {} };
-    const back = drawn.handlers[`on_click:spaces-order-${rest}`];
+    // The menu opens with its heading first, then the view's orders.
+    const back = drawn.handlers[`on_click:spaces-order-menu-${Object.keys(list).indexOf(rest) + 1}`];
     assert.ok(back, `${view}: its default is one press away`);
     back({}, cx);
     assert.equal(drawn.view[key], rest);
   }
 });
 
+test("the toolbar's Search opens the picker, its sidebar tool folds the sidebar, and the Sort menu's switches and grouping still act", async () => {
+  const hits = [];
+  const own = {
+    toggleRail: () => hits.push(["rail"]), orderOpen: "bar",
+    setShown: (key, on) => hits.push(["shown", key, on]), setOrder: (key, value) => hits.push(["order", key, value]),
+  };
+  const drawn = await sidebar({ view: "threads", own, agents: [], threads: {} });
+  const cx = { notify() {}, stop_propagation() {} };
+  drawn.handlers["on_click:spaces-tools-search"]({}, cx);
+  drawn.handlers["on_click:spaces-tools-sidebar"]({}, cx);
+  // Threads: heading, its two orders, Grouped by project, separator, the Show heading, then the three switches.
+  [3, 6, 7, 8].forEach((at) => drawn.handlers[`on_click:spaces-order-menu-${at}`]({}, cx));
+  assert.deepEqual(drawn.calls, [["mod.open", { name: "picker" }]]);
+  assert.deepEqual(hits, [["rail"], ["order", "threadGroup", true], ["shown", "activity", false], ["shown", "away", false], ["shown", "switch", false]]);
+});
+
+test("Sort's menu opened in one form of the sidebar does not come back in the other, nor when the caret folds it away", async () => {
+  const shared = (collapsed) => (key) => (key === "sidebar.collapsed" ? collapsed : null);
+  const open = await sidebar({ own: { orderOpen: "bar" } });
+  assert.equal(open.ids.includes("spaces-order-menu"), true);
+  const view = open.view;
+  const opened = await sidebar({ own: { orderOpen: "rail", toolsOpen: true }, shared: shared(true) });
+  assert.equal(opened.ids.includes("spaces-order-menu"), true, "in the rail it opens beside the caret");
+  const folded = await sidebar({ own: { orderOpen: "rail", toolsOpen: false }, shared: shared(true) });
+  assert.equal(folded.ids.includes("spaces-order-menu"), false);
+  assert.equal(folded.view.orderOpen, null, "folded away, it is shut for good");
+  const moved = await sidebar({ own: { orderOpen: "bar", toolsOpen: true }, shared: shared(true) });
+  assert.equal(moved.ids.includes("spaces-order-menu"), false);
+  assert.equal(moved.view.orderOpen, null);
+  open.handlers["on_open_change:spaces-tools-sort-menu"](true, { notify() {} });
+  assert.equal(view.orderOpen, "bar", "a press on Sort opens it where it is");
+});
+
 test("a computer folded shows its most urgent mark and how many projects; connected with none, the kit empty", async () => {
-  const spaces = [local(), { id: "sp2", name: "ops", folder: "/srv/ops", machine: "dark", active: false, tabs: [{ id: "tab2" }] }];
+  const spaces = [local(), ops];
   const layouts = [{ name: null, layout: "ready" }, { name: "dark", layout: "ready" }];
   const own = { machines: [{ name: "dark", state: "connected", target: "dark" }] };
   const agents = [agent("dark/t2", { status: "blocked", space: "sp2", tab: "tab2" })];

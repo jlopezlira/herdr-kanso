@@ -1,21 +1,16 @@
-import { paths } from "./platform-paths.js";
 // Send to an agent, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
 // props.pane: the pane whose work the draft is about.
 import { View, div } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
-import { panes, spaces, terminals, shared, setShared, run, props, closeOverlay, theme, home } from "herdr";
+import { panes, spaces, terminals, shared, setShared, run, props, closeOverlay, theme } from "herdr";
 import { programIcon, givenNames, nameOf } from "./marks.js";
 import { deliver, isAgent, sendKey, waitingNote } from "./deliver.js";
+import { shortFolder } from "./folder.js";
 import { G, tokens } from "./ui.js";
-import { button } from "./ui-button.js";
+import { dialog } from "./ui-dialog.js";
 import { field, TextField } from "./ui-field.js";
 
 const LAST = "kanso.send.last";
-
-const tilde = (cwd) => {
-  if (!cwd) return "";
-  return paths.shorten(cwd, home());
-};
 
 export function targetsOf(all, from, last) {
   const list = all.filter((p) => p.pane !== from && p.terminal && isAgent(p));
@@ -47,7 +42,7 @@ export function everyone(terms, ps, { from = null, last = null, query = "", name
 
 export function draftFor(p, digest) {
   if (!p?.cwd) return "Review the latest changes.";
-  const where = tilde(p.cwd);
+  const where = shortFolder(p.cwd);
   const head = p.branch ? `Review the changes on branch ${p.branch} in ${where}.` : `Review the changes in ${where}.`;
   return digest?.pr ? `${head} Its pull request is #${digest.pr.number}.` : head;
 }
@@ -105,10 +100,11 @@ export default class Send extends View {
     if (this.toProject && !groups.some((g) => g.project === this.toProject)) this.toProject = null;
     if (!this.toProject && !list.some((q) => q.terminal === this.to)) this.to = list[0]?.terminal ?? null;
     const dot = (st) => ({ working: t.working, blocked: t.blocked, done: t.done }[st] ?? t.idle);
+    // The chosen row keeps its light; another one only lights under the pointer.
+    const chosen = (el, on) => el.when(on, (x) => x.bg(t.selected)).when(!on, (x) => x.hover((s) => s.bg(t.hover)));
     const head = (g) => {
       const on = this.toProject === g.project;
-      return h_flex().id(`to-project-${g.project}`).flex_none().h(28).px(10).gap(8).items_center().rounded(7).cursor_pointer()
-        .when(on, (el) => el.bg(t.selected)).when(!on, (el) => el.hover((s) => s.bg(t.hover)))
+      return chosen(h_flex().id(`to-project-${g.project}`).flex_none().h(28).px(10).gap(8).items_center().rounded(7).cursor_pointer(), on)
         .on_click((_e, cx) => { this.toProject = on ? null : g.project; this.error = null; cx.notify(); })
         .child(div().flex_1().min_w(0).truncate().text_size(11.5).font_medium().text_color(t.muted).child(g.project))
         .child(div().flex_none().text_size(11).text_color(on ? t.foreground : t.dim).child(on ? `All ${g.agents.length}` : g.agents.length > 1 ? `Send to all ${g.agents.length}` : ""));
@@ -116,8 +112,7 @@ export default class Send extends View {
     const row = (q) => {
       const on = !this.toProject && q.terminal === this.to;
       const where = q.pane?.branch ?? "";
-      return h_flex().id(`to-${q.terminal}`).flex_none().h(34).px(10).gap(10).items_center().rounded(7).cursor_pointer()
-        .when(on, (el) => el.bg(t.selected)).when(!on, (el) => el.hover((s) => s.bg(t.hover)))
+      return chosen(h_flex().id(`to-${q.terminal}`).flex_none().h(34).px(10).gap(10).items_center().rounded(7).cursor_pointer(), on)
         .on_click((_e, cx) => { this.to = q.terminal; this.toProject = null; this.error = null; cx.notify(); })
         .child(programIcon(q.program, 15, t.muted) ?? div().size(15))
         .child(div().flex_none().max_w(200).truncate().text_size(12.8).text_color(t.foreground).when(on, (el) => el.font_medium()).child(q.name))
@@ -126,28 +121,25 @@ export default class Send extends View {
           .when(q.status === "blocked", (el) => el.child("Needs you"))
           .child(div().size(6).rounded_full().bg(dot(q.status))));
     };
-    const from = this.from ? `From ${name(this.from)}${this.from.cwd ? `, in ${tilde(this.from.cwd)}` : ""}` : "";
-    const ready = Boolean(this.toProject || this.to) && Boolean(this.text.trim()) && !this.sending;
+    const from = this.from ? `From ${name(this.from)}${this.from.cwd ? `, in ${shortFolder(this.from.cwd)}` : ""}` : "";
+    const ready = Boolean(this.toProject || this.to) && Boolean(this.text.trim());
     const rows = groups.flatMap((g) => [head(g), ...g.agents.map(row)]);
-    return v_flex().id("kanso-send").track_focus(this.handle).w_full().min_h(0).p(18).bg(t.popover).text_color(t.foreground)
-      .on_key_down((e, cx) => {
-        if (e.key === "escape") { closeOverlay(p.overlay); cx.stop_propagation(); }
-        else if (sendKey(e)) { this.send(cx, groups); cx.stop_propagation(); }
-      })
-      .child(h_flex().items_center()
-        .child(div().flex_1().text_size(15).font_semibold().child("Send to an agent"))
-        .child(div().text_size(11).text_color(t.dim).child("Esc")))
-      .when(Boolean(from), (el) => el.child(div().pt(4).truncate().text_size(11.5).text_color(t.dim).child(from)))
-      .child(field("send-to", this.query, c, { label: "To" }).pt(G.lg).pb(G.sm))
-      .child(rows.length
-        // A set height, rows that never shrink: past it, the list scrolls.
-        ? v_flex().id("send-list").flex_none().h(Math.min(rows.length * 34, 6 * 34)).overflow_y_scrollbar().gap(1).children(rows)
-        : div().py(8).text_size(12).text_color(t.muted).child(this.query.value().trim() ? "No agent or project by that name." : "No other agent is running. Start one in a pane, then send."))
-      .child(field("send-message", this.box, c, { label: "Message" }).pt(G.lg))
-      .child(div().pt(6).text_size(11.5).text_color(this.error ? t.blocked : t.dim)
-        .child(this.error ?? "Pasted into its terminal and sent with Enter, as if you typed it there."))
-      .child(h_flex().pt(18).gap(8).justify_end()
-        .child(button("send-cancel", "Cancel", () => closeOverlay(p.overlay), c, { kind: "quiet" }))
-        .child(button("send-go", this.sending ? "Sending…" : this.toProject ? `Send to ${this.toProject}  ⌘↩` : "Send  ⌘↩", (cx) => this.send(cx, groups), c, { disabled: !ready })));
+    const close = () => closeOverlay(p.overlay);
+    return dialog("kanso-send", c, {
+      title: "Send to an agent", scope: from,
+      body: [
+        field("send-to", this.query, c, { label: "To" }).pb(G.sm),
+        rows.length
+          // A set height, rows that never shrink: past it, the list scrolls.
+          ? v_flex().id("send-list").flex_none().h(Math.min(rows.length * 34, 6 * 34)).overflow_y_scrollbar().gap(1).children(rows)
+          : div().py(8).text_size(12).text_color(t.muted).child(this.query.value().trim() ? "No agent or project by that name." : "No other agent is running. Start one in a pane, then send."),
+        field("send-message", this.box, c, { label: "Message" }).pt(G.lg),
+      ],
+      notes: [{ text: this.error ?? "Pasted into its terminal and sent with Enter, as if you typed it there.", tone: this.error ? "error" : "dim" }],
+      secondary: "Cancel", primary: this.toProject ? `Send to ${this.toProject}  ⌘↩` : "Send  ⌘↩",
+      state: this.sending ? "loading" : ready ? "default" : "disabled",
+      onCancel: close, onPrimary: (cx) => this.send(cx, groups), focusHandle: this.handle,
+      onKey: (e, cx) => { if (sendKey(e)) { this.send(cx, groups); cx.stop_propagation(); } },
+    });
   }
 }

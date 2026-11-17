@@ -2,22 +2,18 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { load, chain, gpuiHost } from "./helpers.mjs";
+import { load, gpuiHost, nodes, texts, themed, KIT_NIGHT, drawingHost } from "./helpers.mjs";
 import { sessionRow } from "../stories/kit/session-row.js";
 
-const night = { foreground: "#d8d4cb", background: "#1b1b19", hover: "#232321", selected: "#2b2b28", accent: "#da627d", dim: "#6b6862", muted: "#949086", blocked: "#ca938b", working: "#c4b07e", done: "#98ad8f" };
 const sidebar = async (ran = []) => {
-  const host = { ...gpuiHost(), image: () => chain("image"), svg: (path) => { const el = chain("svg"); el.calls.push(["svg", path]); return el; },
-    run: (name, args) => ran.push([name, args]), openOverlay: (o) => ran.push(["overlay", o.props.title]) };
-  return {
+  const host = { ...drawingHost(), run: (name, args) => ran.push([name, args]), openOverlay: (o) => ran.push(["overlay", o.props.title]) };
+  return themed({
     ...await load("kanso-spaces/agents.js", ["sessionProps", "sessionHandlers", "agentSession", "sessionHeight"], host),
     ...await load("kanso-spaces/ui.js", ["tokens", "H"], host),
-  };
+  }, KIT_NIGHT);
 };
-const all = (el) => [el, ...el.kids.flatMap(all)];
-const ids = (el) => all(el).flatMap((kid) => kid.calls.filter((call) => call[0] === "id").map((call) => call[1]).concat(kid.tag && kid.tag.includes("-") ? [kid.tag] : []));
-const texts = (el) => all(el).flatMap((kid) => kid.calls.filter((call) => call[0] === "child" && typeof call[1] === "string").map((call) => call[1]));
-const tips = (el) => all(el).flatMap((kid) => kid.calls.filter((call) => call[0] === "tooltip").map((call) => call[1]));
+const ids = (el) => nodes(el).flatMap((kid) => kid.calls.filter((call) => call[0] === "id").map((call) => call[1]).concat(kid.tag && kid.tag.includes("-") ? [kid.tag] : []));
+const tips = (el) => nodes(el).flatMap((kid) => kid.calls.filter((call) => call[0] === "tooltip").map((call) => call[1]));
 const handler = (el, name, arg) => el.calls.filter((call) => call[0] === name && (arg === undefined || call[1] === arg)).map((call) => call.at(-1))[0];
 const plain = (value) => JSON.parse(JSON.stringify(value));
 const claude = { icon: "programs/claude.svg", tint: true };
@@ -54,8 +50,7 @@ test("A sub-agent hangs one depth deeper from its parent by tree guides, and a t
 
 test("Each thing a session row did by hand still works: click, double-click to rename, drag and drop, right-click, pin, the menu, Settle and Refresh", async () => {
   const ran = [], hits = [];
-  const { agentSession, tokens } = await sidebar(ran);
-  const c = tokens(night);
+  const { agentSession, c } = await sidebar(ran);
   const row = {
     hovered: true, pin: () => hits.push("pin"), menu: () => hits.push("menu"), hover: () => hits.push("hover"),
     actions: [{ id: "settle", icon: "check", tip: "Settle", act: () => hits.push("settle") }],
@@ -71,18 +66,17 @@ test("Each thing a session row did by hand still works: click, double-click to r
   handler(el, "on_mouse_down", "left")({ click_count: 1 }, cx);
   handler(el, "on_mouse_up", "left")({}, cx);
   handler(el, "on_mouse_down", "right")({}, cx);
-  for (const tool of ["space-agent-t1-tool-0", "space-agent-t1-tool-1", "space-agent-t1-tool-2", "space-agent-t1-action"]) handler(all(el).find((kid) => kid.tag === tool), "on_click")({}, cx);
+  for (const tool of ["space-agent-t1-tool-0", "space-agent-t1-tool-1", "space-agent-t1-tool-2", "space-agent-t1-action"]) handler(nodes(el).find((kid) => kid.tag === tool), "on_click")({}, cx);
   assert.deepEqual(hits.filter((hit) => hit !== "stopped"), ["down", "up", "menu", "settle", "pin", "menu", "refresh"]);
   assert.deepEqual(tips(el).filter((tip) => ["Settle", "Pin to the top", "More", "Refresh"].includes(tip)).sort(), ["More", "Pin to the top", "Refresh", "Settle"]);
-  assert.ok(all(el).some((kid) => kid.calls.some((call) => call[0] === "bg" && call[1] === c.accent)), "the drop line shows where it lands");
+  assert.ok(nodes(el).some((kid) => kid.calls.some((call) => call[0] === "bg" && call[1] === c.accent)), "the drop line shows where it lands");
   const peek = await sidebar(ran);
   handler(peek.agentSession({ address: "t9", status: "idle" }, 0, c, null, {}), "on_click")({}, cx);
   assert.deepEqual(plain(ran.at(-1)), ["terminal.peek", { terminal: "t9" }]);
 });
 
 test("A session row is the Storybook composition drawn by the app kit, one line or the two-line height the list adds up", async () => {
-  const { agentSession, sessionHeight, tokens, H } = await sidebar();
-  const c = tokens(night);
+  const { agentSession, sessionHeight, H, c } = await sidebar();
   const one = agentSession({ ...atlas, status: "idle" }, 1, c, null, { label: "Atlas" });
   const two = agentSession({ ...atlas, status: "blocked" }, 1, c, null, { label: "Atlas", activity: "Run npm publish?", time: "2m" });
   assert.equal(handler(one, "h"), sessionHeight({}));
@@ -93,8 +87,7 @@ test("A session row is the Storybook composition drawn by the app kit, one line 
 });
 
 test("The focused row paints no ground of its own: the list's pill is its ground and glides there; a waiting row keeps its wash only when it is not the focused one", async () => {
-  const { agentSession, tokens } = await sidebar();
-  const c = tokens(night);
+  const { agentSession, c } = await sidebar();
   const grounds = (el) => el.calls.filter((call) => call[0] === "bg").map((call) => call[1]);
   assert.deepEqual(grounds(agentSession({ ...atlas, status: "idle", focused: true }, 1, c, { hovered: false }, {})), []);
   assert.deepEqual(grounds(agentSession({ ...atlas, status: "blocked", focused: true }, 1, c, null, {})), [], "no wash under the pill");
@@ -104,9 +97,8 @@ test("The focused row paints no ground of its own: the list's pill is its ground
 });
 
 test("Under the pointer a row shows only the tools it can run, and the keyboard's ring shows none and keeps the time", async () => {
-  const { agentSession, tokens } = await sidebar();
-  const c = tokens(night);
-  const toolTags = (el) => all(el).map((kid) => kid.tag).filter((tag) => /-tool-\d$/.test(tag ?? ""));
+  const { agentSession, c } = await sidebar();
+  const toolTags = (el) => nodes(el).map((kid) => kid.tag).filter((tag) => /-tool-\d$/.test(tag ?? ""));
   const noMenu = agentSession({ ...atlas, status: "idle", address: "s" }, 2, c, { hovered: true }, { time: "3m" });
   assert.deepEqual(toolTags(noMenu), [], "no More without a menu, no pin without pinning");
   assert.ok(texts(noMenu).includes("3m"), "with no tools the time stays");
@@ -119,10 +111,9 @@ test("Under the pointer a row shows only the tools it can run, and the keyboard'
 });
 
 test("A dozing or unreadable row fades its program's art, and the activity takes its status's tone, as before", async () => {
-  const { agentSession, tokens } = await sidebar();
-  const c = tokens(night);
+  const { agentSession, c } = await sidebar();
   const art = { icon: "programs/codex.png", tint: false };
-  const fade = (el) => all(el).find((kid) => kid.tag === "image").calls.filter((call) => call[0] === "opacity").map((call) => call[1]);
+  const fade = (el) => nodes(el).find((kid) => kid.tag === "image").calls.filter((call) => call[0] === "opacity").map((call) => call[1]);
   const { OPACITY } = await load("kanso-spaces/ui.js", ["OPACITY"], gpuiHost());
   assert.deepEqual(fade(agentSession({ ...atlas, program: art, dozing: true }, 1, c, null, {})), [OPACITY.away]);
   assert.deepEqual(fade(agentSession({ ...atlas, program: art, status: "idle" }, 1, c, null, { quiet: true })), [OPACITY.away]);

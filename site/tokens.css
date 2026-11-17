@@ -86,16 +86,13 @@
   --k-room-popup: 256px;
   --k-room-menu: 192px;
   --k-room-pane-menu: 320px;
-  --k-room-sort-menu: 320px;
+  --k-room-tools-menu: 320px;
   --dawn-top: #262339;
   --dawn-mid: #5e4160;
   --dawn-low: #b8735f;
   --dawn-edge: #dba066;
   --dawn-sun: #f3d9a4;
   --dawn-star: #d9d3e6;
-  --herdr-tile: #f4f1e9;
-  --herdr-edge: #c9c6bd;
-  --herdr-ram: #303438;
   --canvas: #161615;
   --chrome: #161615;
   --bg: #1b1b19;
@@ -139,9 +136,6 @@
     --dawn-edge: #dba066;
     --dawn-sun: #f3d9a4;
     --dawn-star: #d9d3e6;
-    --herdr-tile: #f4f1e9;
-    --herdr-edge: #c9c6bd;
-    --herdr-ram: #303438;
     --canvas: #e2ded6;
     --chrome: #dbd7ce;
     --bg: #ebe8e2;
@@ -184,9 +178,6 @@
   --dawn-edge: #dba066;
   --dawn-sun: #f3d9a4;
   --dawn-star: #d9d3e6;
-  --herdr-tile: #f4f1e9;
-  --herdr-edge: #c9c6bd;
-  --herdr-ram: #303438;
   --canvas: #161615;
   --chrome: #161615;
   --bg: #1b1b19;
@@ -229,9 +220,6 @@
   --dawn-edge: #dba066;
   --dawn-sun: #f3d9a4;
   --dawn-star: #d9d3e6;
-  --herdr-tile: #f4f1e9;
-  --herdr-edge: #c9c6bd;
-  --herdr-ram: #303438;
   --canvas: #e2ded6;
   --chrome: #dbd7ce;
   --bg: #ebe8e2;

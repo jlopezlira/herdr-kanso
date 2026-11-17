@@ -2,7 +2,7 @@ import { paths } from "./platform-paths.js";
 // Images' reading of a terminal: the pictures an agent printed, and what you tell it about one.
 import { KINDS, kindOf } from "./kinds.js";
 
-const EXT = [...new Set(Object.values(KINDS).flat())].toSorted((a, b) => b.length - a.length).join("|");
+export const EXT = [...new Set(Object.values(KINDS).flat())].toSorted((a, b) => b.length - a.length).join("|");
 // A path as agents print it: bare, quoted, in backticks, brackets or parentheses, after "file://".
 const PATH = new RegExp(`(?<=^|[\\s"'\`(\\[<=:])(?:file://)?([\\w@+.~/-]*\\.(?:${EXT}))(?=$|[\\s"'\`)\\]>,;:!?]|\\.(?:\\s|$))`, "gim");
 // One with spaces, whole between matching quotes or backticks: "/tmp/home page.png".

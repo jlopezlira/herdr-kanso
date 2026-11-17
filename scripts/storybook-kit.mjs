@@ -2,7 +2,7 @@ import { elements, escapeMarkup as escape, frame } from './storybook-markup.mjs'
 import { THEMES, colour, contrast } from './tokens.mjs';
 import { asleep, computerRow, header, projectRow, section, sidebarFooter, tile, viewSwitch } from '../stories/kit/compositions.js';
 import { sessionRow } from '../stories/kit/session-row.js';
-import { dawn as dawnSky, herdrMark, stack, windowControls } from '../stories/kit/pieces.js';
+import { dawn as dawnSky, stack, windowControls } from '../stories/kit/pieces.js';
 import { sampleSidebar, sessionTools } from '../stories/kit/samples.js';
 import { statedPages } from '../stories/kit/states.js';
 export { elements } from './storybook-markup.mjs';
@@ -53,7 +53,6 @@ export function kitRecords(records) {
   const pillHeader = headers.find((html) => html.includes('kanso-badge--count'));
   const byId = (id) => originals.find((record) => record.id === id)?.html ?? '';
   add('Window controls', 'Default', windowControls(), 'The three lights, where the system draws them.');
-  add('Herdr mark', 'Default', herdrMark(), 'Herdr’s tile, where the collapsed sidebar starts.');
   add('Dawn', 'Default', dawnSky(), 'The sky of Dawn Mode; the sun rises once on load.');
   for (const [id, label, html, caption] of [
     ['kit/Header/Open', 'Expanded', header(), 'The lights; + on the left; sort, search and hide on the right.'],
@@ -85,7 +84,7 @@ export function kitRecords(records) {
     ['View switch', 'Column', inRail(viewSwitch({ column: true })), 'Sidebar collapsed: the three views as icons.'],
     ['Tile', 'Project', inRail(tile({ initial: 'A', status: 'blocked', count: 4, open: true })), 'A project in the rail.'],
     ['Tile', 'Status', inRail(tile({ status: 'working', count: 3 })), 'A state in the rail.'],
-    ['Footer', 'Default', inSidebar(sidebarFooter()), 'Settings and Add computer.'],
+    ['Footer', 'Default', inSidebar(sidebarFooter()), 'Settings.'],
     ['Footer', 'Update', inSidebar(sidebarFooter({ update: 'Update kansō to 3.31.0' })), 'An update adds a row on top.'],
     ['Sidebar', 'Open', sampleSidebar(), 'Header, views, rows and footer.'],
     ['Sidebar', 'Collapsed', sampleSidebar({ collapsed: true }), 'The rail.'],
@@ -132,6 +131,9 @@ const contrastRecord = (tokens) => {
   return { id: 'tokens/Contrast', source: 'tokens', page: 'Tokens/Contrast, light and dark', label: 'Reference', caption: 'Ratios from kanso/tokens.json.', html: frame(html) };
 };
 
+// One token group's reference page.
+const reference = (name, html) => ({ id: `tokens/${name}`, source: 'tokens', page: `Tokens/${name}`, label: 'Reference', caption: 'Values and roles from kanso/tokens.json.', html: frame(html) });
+
 export function tokenRecords(tokens) {
   const groups = { Colour: ['colour'], Type: ['type'], Spacing: ['space', 'height', 'switch'], Radius: ['radius'], Motion: ['motion'], Icons: ['icon'] };
   return Object.entries(groups).map(([name, keys]) => {
@@ -139,7 +141,7 @@ export function tokenRecords(tokens) {
       const names = [...new Set(Object.values(tokens.colour).flatMap((values) => values.map((row) => row.name)))];
       const value = (theme, n) => tokens.colour[theme].find((row) => row.name === n);
       const html = `<table class="kanso-tokens"><thead><tr><th></th><th>Token</th><th>Value</th><th>Use</th></tr></thead><tbody>${names.map((n) => `<tr><td><span class="kanso-tokens__swatch ${n === 'shadow' ? 'kanso-shadow' : `kanso-fill--${escape(n)}`}"></span></td><td class="kanso-tokens__name">--${escape(n)}</td><td class="kanso-tokens__name">${Object.keys(tokens.colour).map((theme) => `<span class="kanso-tokens__value kanso-tokens__value--${theme}">${escape(value(theme, n)?.value ?? '')}</span>`).join('')}</td><td>${escape((value('dark', n) ?? value('light', n)).role)}</td></tr>`).join('')}</tbody></table>`;
-      return { id: `tokens/${name}`, source: 'tokens', page: `Tokens/${name}`, label: 'Reference', caption: 'Values and roles from kanso/tokens.json.', html: frame(html) };
+      return reference(name, html);
     }
     const rows = keys.flatMap((key) => tokens[key].map((row) => ({ ...row, group: key })));
     const sample = ({ group, name: n }) => {
@@ -155,6 +157,6 @@ export function tokenRecords(tokens) {
     };
     const role = (text) => text.replace(/:? ?ui\.js [\w.]+/g, '').replace(/ ?\(\d+ merged here\)/g, '').replace(/^4-based$/, 'base step').trim();
     const html = `<table class="kanso-tokens"><thead><tr><th></th><th>Token</th><th>Value</th><th>Use</th></tr></thead><tbody>${rows.map((row) => `<tr><td class="kanso-tokens__example">${sample(row)}</td><td class="kanso-tokens__name">--${escape(row.name)}</td><td class="kanso-tokens__name">${escape(row.value)}</td><td>${escape(role(row.role))}</td></tr>`).join('')}</tbody></table>`;
-    return { id: `tokens/${name}`, source: 'tokens', page: `Tokens/${name}`, label: 'Reference', caption: 'Values and roles from kanso/tokens.json.', html: frame(html) };
+    return reference(name, html);
   }).concat(contrastRecord(tokens));
 }

@@ -1,4 +1,5 @@
 // Kanso settings: the keys page's bookkeeping, the changelog reader and the
+import { loadDefaultKeys, loadSettings } from "./mod-fixtures.mjs";
 // shipped keys it resets to.
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -51,7 +52,7 @@ const herdrKeys = () => {
 test("The Keys page lists Kanso's own keys only, and Reset knows them all", async () => {
   const { GROUPS, HERDRS, ofRow } = await actions();
   const herdrChords = herdrKeys();
-  const { DEFAULT_KEYS } = await load("kanso-settings/defaults.js", ["DEFAULT_KEYS"]);
+  const { DEFAULT_KEYS } = await loadDefaultKeys();
   const shipped = JSON.parse(readFileSync(new URL("../kanso/keys.json", import.meta.url), "utf8"));
   assert.deepEqual(clone(DEFAULT_KEYS["kanso/keys.json"]), shipped, "regenerate kanso-settings/defaults.js from kanso/keys.json");
   for (const [section, map] of Object.entries(shipped)) {
@@ -156,11 +157,11 @@ test("Windows takes Herdr keys for the same intent, except the named agent navig
 });
 
 test("Settings compares and resets to this platform's shipped bindings", async () => {
-  const { DEFAULT_KEYS } = await load("kanso-settings/defaults.js", ["DEFAULT_KEYS"]);
+  const { DEFAULT_KEYS } = await loadDefaultKeys();
   const windows = JSON.parse(readFileSync(new URL("../kanso/keys.windows.json", import.meta.url), "utf8"));
   assert.deepEqual(clone(DEFAULT_KEYS["kanso/keys.windows.json"]), windows, "regenerate defaults with node scripts/sync-keys.mjs");
   for (const platform of ["macos", "linux", "windows"]) {
-    const { Settings } = await load("kanso-settings/main.js", ["Settings"], { window: () => ({ platform }) });
+    const { Settings } = await loadSettings({ window: () => ({ platform }) });
     const settings = new Settings(), row = { action: "kanso-strip.new-right" }, section = "layout:kanso";
     const chord = platform === "windows" ? "ctrl-shift-o" : "cmd-d";
     assert.deepEqual(clone(settings.shipped(row, section)), [chord]);

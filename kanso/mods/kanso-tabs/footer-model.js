@@ -4,10 +4,9 @@ import { parseRelease } from "./release.js";
 
 export const KANSO_SETTINGS = "kanso-tabs.settings";
 export const COLLAPSED = "sidebar.collapsed";
-export const MACHINE_PIECE = "footer.machine";
 // At the sidebar's narrowest our words can wrap once; the block is fitted for that.
 export const REFUSAL_LINES = 2;
-export const ROW = Object.freeze({ update: "kanso-update", settings: "settings", machine: "machine" });
+export const ROW = Object.freeze({ update: "kanso-update", settings: "settings" });
 export const ITEM = Object.freeze({ kanso: "kanso", herdr: "herdr", updateHerdr: "update-herdr" });
 
 // Open, rows touch between 8 above and 16 below, their edge 8 in (a kit row reaches 8 past its parent); in the rail, squares a hair apart above 12.
@@ -21,11 +20,10 @@ export const updateLabel = (version, busy) => {
   return parseRelease(version)?.channel ? `Update to ${version}` : `Update kansō to ${version}`;
 };
 
-/** kansō's update while one is offered (quiet once pressed), Settings, and Add computer unless it is switched off. */
-export const footerRows = ({ update = null, busy = false, machine = true } = {}) => [
+/** kansō's update while one is offered (quiet once pressed), then Settings. */
+export const footerRows = ({ update = null, busy = false } = {}) => [
   ...(update ? [{ key: ROW.update, icon: "refresh-cw", name: updateLabel(update, busy), quiet: busy }] : []),
   { key: ROW.settings, icon: "settings", name: "Settings", quiet: true },
-  ...(machine ? [{ key: ROW.machine, icon: "server", name: "Add computer", quiet: true }] : []),
 ];
 
 /** The open footer's height: its rows, and `refusedPx` (a refused update's block, or 0) with its margins. */

@@ -1,4 +1,5 @@
 // Each fact is one sentence: a finished row, an update, a question, low memory, a failed sleep, a server with no pane.
+import { loadWorkspaceChrome, loadTabs, loadQuestionOf } from "./mod-fixtures.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
@@ -42,14 +43,14 @@ test("An update draws no dot on the gear or the footer", async () => {
     div: drawn.node, svg: drawn.node, image: drawn.node, h_flex: drawn.node, v_flex: drawn.node, Button: { new: drawn.node }, Popover: { new: drawn.node },
     theme, run: () => {}, openOverlay: () => {}, home: () => "/Users/me", window: () => ({ platform: "macos" }),
   };
-  const { WorkspaceChrome } = await load("kanso-chrome/main.js", ["WorkspaceChrome"], {
+  const { WorkspaceChrome } = await loadWorkspaceChrome({
     ...host, props: () => ({ footer: true }), shared: () => null, setShared: () => {},
     updates: () => ({ app: { ready: "0.1.16" } }), keys: () => [], settings: () => ({}),
   });
   const footer = new WorkspaceChrome();
   footer.updater = { available: () => "3.31.0", busy: false, refused: () => null, install() {} };
   footer.render();
-  const { Tabs } = await load("kanso-tabs/main.js", ["Tabs"], {
+  const { Tabs } = await loadTabs({
     ...host, spaces: () => [{ id: "s", active: true, tabs: [] }], panes: () => [], layout: () => null,
     shared: () => null, setShared: () => {},
   });
@@ -64,7 +65,7 @@ test("An update draws no dot on the gear or the footer", async () => {
 
 test("A waiting question is one sentence, cut at 200", async () => {
   const { oneLine, DID_CAP } = await load("kanso-spaces/pure.js", ["oneLine", "DID_CAP"]);
-  const { questionOf } = await load("kanso-status/model.js", ["questionOf"]);
+  const { questionOf } = await loadQuestionOf();
   const { said } = await load("kanso-spaces/agents.js", ["said"]);
   const msg = `Add the countdown? ${"x".repeat(240)}`;
   const sentence = oneLine(msg);

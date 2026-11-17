@@ -37,13 +37,19 @@ for (const { source, copies } of SHARED) {
   }
 }
 
+// A mod's folder, checked to hold what the gallery lists and no layouts.
+const galleryMod = (mod) => {
+  const dir = join(ROOT, mod);
+  for (const f of ["RECIPE.md", "preview.png", `mods/${mod}/main.js`, `mods/${mod}/mod.json`]) {
+    assert.ok(existsSync(join(dir, f)), `${mod}/${f} is missing`);
+  }
+  assert.ok(!existsSync(join(dir, "layouts")), "a mod folder has no layouts/");
+  return dir;
+};
+
 for (const mod of OWN) {
   test(`${mod} is a folder the gallery lists as a mod`, () => {
-    const dir = join(ROOT, mod);
-    for (const f of ["RECIPE.md", "preview.png", `mods/${mod}/main.js`, `mods/${mod}/mod.json`]) {
-      assert.ok(existsSync(join(dir, f)), `${mod}/${f} is missing`);
-    }
-    assert.ok(!existsSync(join(dir, "layouts")), "a mod folder has no layouts/");
+    galleryMod(mod);
     assert.ok(!existsSync(join(ROOT, "kanso", "mods", mod)), "Kanso doesn't install it: Herdr would dock a second copy");
   });
 }
@@ -54,11 +60,7 @@ for (const mod of STANDALONE) {
   });
 
   test(`${mod} on its own is a folder the gallery lists as a mod`, () => {
-    const dir = join(ROOT, mod);
-    for (const f of ["RECIPE.md", "preview.png", `mods/${mod}/main.js`, `mods/${mod}/mod.json`]) {
-      assert.ok(existsSync(join(dir, f)), `${mod}/${f} is missing`);
-    }
-    assert.ok(!existsSync(join(dir, "layouts")), "a mod folder has no layouts/");
+    const dir = galleryMod(mod);
     assert.match(readFileSync(join(dir, "RECIPE.md"), "utf8"), /!\[[^\]]*\]\(preview\.png\)/);
     if (existsSync(join(dir, "keys.json"))) JSON.parse(readFileSync(join(dir, "keys.json"), "utf8"));
   });

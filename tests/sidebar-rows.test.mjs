@@ -8,7 +8,7 @@ import {
   threadWord, threadActions, closedControls, signInCommand, noProjectsOn, sortOf, viewChord,
 } from "../kanso/mods/kanso-spaces/sidebar-rows.js";
 import { readFile } from "node:fs/promises";
-import { load } from "./helpers.mjs";
+import { load, failure } from "./helpers.mjs";
 
 const place = { cwd: "/work/app", on: "dark", key: "[dark]" };
 const git = { branch: "feat", ahead: 2, behind: 3 };
@@ -48,10 +48,10 @@ test("a refusal shows git's own first line and a clean pull says nothing", async
   assert.equal(refusalLine({ code: 0, stderr: "already up to date" }), null);
   assert.equal(refusalLine({ code: 1, stderr: "\nfatal: Not possible to fast-forward\nmore", stdout: "hint" }), "fatal: Not possible to fast-forward");
   assert.equal(refusalLine({ code: 1, stderr: "  ", stdout: "could not read\nrest" }), "could not read");
-  assert.equal(refusalLine({ code: 1, stderr: "", stdout: "" }), null);
+  assert.equal(refusalLine(failure("")), null);
   const calls = [];
   const notes = [];
-  const exec = async (command, args, options) => { calls.push({ command, args, options }); return { code: 1, stderr: "fatal: no\nmore", stdout: "" }; };
+  const exec = async (command, args, options) => { calls.push({ command, args, options }); return failure("fatal: no\nmore"); };
   const notify = (note) => notes.push(note);
   const failed = await runPull(exec, notify, { folder: "/work/app", on: "dark" });
   assert.equal(failed.code, 1);
@@ -102,8 +102,6 @@ test("nothing is painted that cannot act", () => {
   assert.equal(gitControls({ ahead: 4, behind: 0, branch: "main" }, { folder: "/work/app", on: null }).some((item) => item.kind === "behind"), false);
   assert.equal(gitControls(null, { folder: "/work/app", on: null }).length, 0);
 });
-
-
 
 test("a project row names its repository when it differs, its branch, or a detached commit's short id", () => {
   assert.deepEqual(gitTask({ name: "herdr-kanso", branch: "main" }, "kansō", null), { repo: "herdr-kanso", branch: "main", commit: "" });

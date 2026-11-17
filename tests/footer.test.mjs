@@ -1,11 +1,11 @@
 // The sidebar footer: kansō's update row in each mode, its refusal, Settings and its one menu, Herdr's update, and the rail.
+import { loadWorkspaceChrome } from "./mod-fixtures.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { load, chain, gpuiHost } from "./helpers.mjs";
+import { load, chain, gpuiHost, calls } from "./helpers.mjs";
 
 const night = { background: "#1b1b19", foreground: "#d8d4cb", chrome: "#161615", hover: "#232321", selected: "#2b2b28", dim: "#6b6860", muted: "#949086", blocked: "#d5674f", accent: "#c9a46a" };
 
-const calls = (el, name) => el.calls.filter((call) => call[0] === name);
 const arg = (el, name) => calls(el, name)[0]?.[1];
 // Kids, and what a popover holds as its trigger and content.
 const inside = (el) => [...el.kids, ...el.calls.filter((call) => call[0] === "trigger" || call[0] === "content").map((call) => call[1])];
@@ -27,7 +27,7 @@ async function footer({ shared = {}, ready = null, bindings = [{ action: "kanso-
     run: (name, args) => { ran.push([name, args]); }, openOverlay: (spec) => { overlays.push(spec); return "o"; },
     updates: () => ({ app: { ready } }), keys: () => bindings, settings: () => ({ font_family: "Mono" }), window: () => ({ platform: "macos" }),
   };
-  const { WorkspaceChrome } = await load("kanso-chrome/main.js", ["WorkspaceChrome"], host);
+  const { WorkspaceChrome } = await loadWorkspaceChrome(host);
   const kit = await load("kanso-chrome/ui.js", ["CHROME_SQUARE", "ICON_CHROME", "T", "G"], host);
   const view = new WorkspaceChrome();
   view.init({}, { spawn() {}, timer: { after() {}, every() {} } });
@@ -35,15 +35,15 @@ async function footer({ shared = {}, ready = null, bindings = [{ action: "kanso-
   return { view, ran, overlays, installs, ...kit };
 }
 
-test("In Stable Mode with nothing to install, the footer is Settings and Add computer", async () => {
+test("In Stable Mode with nothing to install, the footer is Settings alone: Add computer lives in +", async () => {
   const { view } = await footer();
-  assert.deepEqual(texts(view.render()), ["Settings", "Add computer"]);
+  assert.deepEqual(texts(view.render()), ["Settings"]);
 });
 
 test("Open, every row is at chrome size, muted at rest, 8 above and 16 below; the rail keeps 12 below", async () => {
   const { view, ICON_CHROME, T, G } = await footer();
   const open = view.render();
-  for (const id of ["footer-settings", "footer-machine"]) {
+  for (const id of ["footer-settings"]) {
     const row = byId(open, id);
     assert.equal(calls(row, "text_size").at(-1)[1], T.card, `${id} reads at 13.5: the last size set wins`);
     const glyph = all(row).find((x) => arg(x, "size") === ICON_CHROME);
@@ -59,7 +59,7 @@ test("Open, every row is at chrome size, muted at rest, 8 above and 16 below; th
 test("A kansō update is a row on top, in the foreground, and a press installs it", async () => {
   const { view, installs, ICON_CHROME } = await footer({ updater: { available: () => "3.31.0" } });
   const drawn = view.render();
-  assert.deepEqual(texts(drawn), ["Update kansō to 3.31.0", "Settings", "Add computer"]);
+  assert.deepEqual(texts(drawn), ["Update kansō to 3.31.0", "Settings"]);
   const row = byId(drawn, "footer-kanso-update");
   const glyph = all(row).find((x) => arg(x, "size") === ICON_CHROME);
   assert.equal(arg(glyph, "text_color"), night.foreground, "the update's icon is at chrome size, in the foreground");
@@ -75,7 +75,7 @@ test("A Dawn Mode build is offered by its own name", async () => {
 test("A pressed update says Updating kansō at once and stays quiet until it lands", async () => {
   const { view } = await footer({ updater: { available: () => "3.31.0", busy: true, refused: () => "old words" } });
   const drawn = view.render();
-  assert.deepEqual(texts(drawn), ["Updating kansō", "Settings", "Add computer"], "no refusal while it runs");
+  assert.deepEqual(texts(drawn), ["Updating kansō", "Settings"], "no refusal while it runs");
   const name = all(byId(drawn, "footer-kanso-update")).find((x) => calls(x, "child").some((call) => call[1] === "Updating kansō"));
   assert.equal(arg(name, "text_color"), night.muted);
 });
@@ -84,7 +84,7 @@ test("A refused update keeps its row and shows the tool's words under it, with U
   const why = "git ls-remote: Could not resolve host: github.com";
   const { view, installs } = await footer({ updater: { available: () => "3.31.0", refused: () => why } });
   const drawn = view.render();
-  assert.deepEqual(texts(drawn), ["Update kansō to 3.31.0", "!", "kansō didn't update", why, "Update", "Settings", "Add computer"], "the blocked mark, our words, the tool's words, the fix");
+  assert.deepEqual(texts(drawn), ["Update kansō to 3.31.0", "!", "kansō didn't update", why, "Update", "Settings"], "the blocked mark, our words, the tool's words, the fix");
   press(holding(byId(drawn, "footer-refused"), "Update"));
   assert.equal(installs.length, 1);
 });
@@ -127,21 +127,12 @@ test("Without a Herdr update the menu has no third row, and the footer no longer
 });
 
 test("In the rail the footer is chrome squares with their names as tips, and the gear opens the same menu", async () => {
-  const { view, ran, CHROME_SQUARE } = await footer({ shared: { "sidebar.collapsed": true }, updater: { available: () => "3.31.0", refused: () => "words" } });
+  const { view, CHROME_SQUARE } = await footer({ shared: { "sidebar.collapsed": true }, updater: { available: () => "3.31.0", refused: () => "words" } });
   const drawn = view.render();
   assert.deepEqual(texts(drawn), [], "no names, no refusal block in the rail");
-  const squares = ["footer-kanso-update", "footer-settings", "footer-machine"].map((id) => byId(drawn, id));
-  assert.deepEqual(squares.map((el) => arg(el, "size")), [CHROME_SQUARE, CHROME_SQUARE, CHROME_SQUARE]);
-  assert.deepEqual(squares.map((el) => arg(el, "tooltip")), ["Update kansō to 3.31.0", "Settings", "Add computer"]);
+  const squares = ["footer-kanso-update", "footer-settings"].map((id) => byId(drawn, id));
+  assert.deepEqual(squares.map((el) => arg(el, "size")), [CHROME_SQUARE, CHROME_SQUARE]);
+  assert.deepEqual(squares.map((el) => arg(el, "tooltip")), ["Update kansō to 3.31.0", "Settings"]);
   assert.equal(arg(byId(drawn, "footer-settings-menu"), "trigger"), squares[1]);
-  press(squares[2]);
-  assert.deepEqual(ran.map(([name, args]) => [name, args?.name]), [["mod.open", "machine-add"]]);
-});
-
-test("Add computer switched off leaves its row out, open or in the rail", async () => {
-  const hidden = { "kanso.pieces": { "footer.machine": "hide" } };
-  const { view } = await footer({ shared: hidden });
-  assert.deepEqual(texts(view.render()), ["Settings"]);
-  const rail = await footer({ shared: { ...hidden, "sidebar.collapsed": true } });
-  assert.equal(byId(rail.view.render(), "footer-machine"), null);
+  assert.equal(byId(drawn, "footer-machine"), null, "Add computer lives in +, not in the rail");
 });

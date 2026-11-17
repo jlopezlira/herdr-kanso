@@ -31,15 +31,19 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0 # tags: the version check compares against the last release
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
+      - uses: ./.github/actions/node
       - name: Versioning (version.json, CHANGELOG.md, semantic bumps)
         env:
           KANSO_BRANCH: ${{ github.event_name == 'pull_request' && github.base_ref || github.ref_name }}
         run: npm run check:version
       - name: Shared files
         run: npm run sync:share -- --check
+      - name: Built files
+        run: npm run build:site -- --check && npm run build:issue-forms -- --check
+      - name: Repeated code
+        env:
+          KANSO_BASE: ${{ github.event_name == 'pull_request' && format('origin/{0}', github.base_ref) || '' }}
+        run: npm run check:dupes
       - name: sqlite3 on Linux
         if: runner.os == 'Linux'
         run: command -v sqlite3 || (sudo apt-get update -qq && sudo apt-get install -y -qq sqlite3)
@@ -69,71 +73,23 @@ jobs:
   beta:
     needs: platform
     if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
+    uses: ./.github/workflows/release.yml
+    with:
+      kind: beta
+      branch: develop
+      group: develop-release
+      tag: archive
+      options: --verify-tag --prerelease
     permissions:
       contents: write
-    concurrency:
-      group: develop-release
-      cancel-in-progress: false
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-      - name: Check the versioning
-        env:
-          KANSO_BRANCH: ${{ github.ref_name }}
-        run: npm run check:version
-      - name: Plan the beta
-        id: plan
-        env:
-          KANSO_BRANCH: ${{ github.ref_name }}
-        run: node scripts/release-plan.mjs beta
-      - name: Tag the beta archive
-        if: steps.plan.outputs.action == 'release'
-        env:
-          RELEASE_TAG: ${{ steps.plan.outputs.tag }}
-        run: |
-          git config user.name "$GITHUB_ACTOR"
-          git config user.email "$GITHUB_ACTOR_ID+$GITHUB_ACTOR@users.noreply.github.com"
-          node scripts/release-tag.mjs "$RELEASE_TAG"
-          git push origin "refs/tags/$RELEASE_TAG"
-      - name: Publish the beta
-        if: steps.plan.outputs.action == 'release'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: gh release create "${{ steps.plan.outputs.tag }}" --verify-tag --title "${{ steps.plan.outputs.title }}" --notes-file "${{ steps.plan.outputs.notes }}" --prerelease
   stable:
     needs: platform
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
+    uses: ./.github/workflows/release.yml
+    with:
+      kind: stable
+      branch: main
+      group: release
+      options: --target "$GITHUB_SHA"
     permissions:
       contents: write
-    concurrency:
-      group: release
-      cancel-in-progress: false
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-      - name: Check the versioning
-        env:
-          KANSO_BRANCH: ${{ github.ref_name }}
-        run: npm run check:version
-      - name: Plan the stable release
-        id: plan
-        env:
-          KANSO_BRANCH: ${{ github.ref_name }}
-        run: node scripts/release-plan.mjs stable
-      - name: Publish the stable release
-        if: steps.plan.outputs.action == 'release'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: gh release create "${{ steps.plan.outputs.tag }}" --target "$GITHUB_SHA" --title "${{ steps.plan.outputs.title }}" --notes-file "${{ steps.plan.outputs.notes }}"

@@ -7,15 +7,19 @@ import { fileApi } from "./platform-files.js";
 // Modified by jlopezlira (Kanso, https://github.com/jlopezlira/herdr-kanso): renamed from mn-tabs; tabs and panel buttons without outlines; side panels mounted on demand (only the open one exists); Spend and Worktrees built in, Specs and Changes dropped; panel buttons are icons with their name on hover, dragged into any order, and hidden from Pieces (right-click one); trackpad scrolling moves one tab per swipe.
 // Modified by Iván Campaña (https://github.com/icampana): layout writers set the tree only when it is Kanso's, so a switch from another layout never saves that layout into kanso.json.
 import { View, div, svg } from "gpui-kit";
-import { h_flex, v_flex } from "gpui-base";
-import { spaces, panes, run, openOverlay, props, theme, window, shared, setShared, layout, appHome, exec, watchFolder, nextCommand, home } from "herdr";
-import { programIcon } from "./marks.js";
-import { walkLayout, commitLayout, sidebarBack, foldSidebar } from "./layout.js";
+import { h_flex, Popover } from "gpui-base";
+import { spaces, panes, run, openOverlay, props, theme, window, shared, setShared, layout, appHome, exec, watchFolder, nextCommand, home, machines, notify } from "herdr";
+import { walkLayout, commitLayout, sidebarBack, foldSidebar, dropStripDrag } from "./layout.js";
 import { Updater } from "./update.js";
-import { tryOr, tryOrAsync, afterMount } from "./pure.js";
-import { tokens } from "./ui.js";
-import { mark } from "./ui-mark.js";
-import { iconButton } from "./ui-button.js";
+import { tryOr, readCommands } from "./pure.js";
+import { openArrange } from "./open.js";
+import { G, H, W, tokens } from "./ui.js";
+import { button, iconButton, pressAgain, Armed } from "./ui-button.js";
+import { TextField } from "./ui-field.js";
+import { menu } from "./ui-menu.js";
+import { tabSkeleton } from "./ui-skeleton.js";
+import { tabItem, tabInsertion, tabPill, TAB_NAME_LIMIT } from "./ui-tab.js";
+import { tabMark, barState, foldTabs, pillAt, dropSide, renameWaits } from "./tab-bar-model.js";
 import { Kdb, projectKey } from "./kdb.js";
 import { projectOpen, OPEN } from "./panel-state.js";
 import { TOOLS, PROBE_MS, available, probeTools } from "./sim-registration.js";
@@ -88,8 +92,6 @@ function setPanelOn(id, on) {
   setShared(STORE, setPiece(pieces(shared), `panel.${id}`, on ? "show" : "hide"));
 }
 
-const openArrange = () => openOverlay({ mod: "kanso-arrange", kind: "dialog", width: 480 });
-
 function panelContent(id) {
   if (id === "preview") return { mod: "kanso-panel", props: { panel: "preview" } };
   if (PANELS[id]) return { ...PANELS[id] };
@@ -101,6 +103,9 @@ function panelContent(id) {
 const TAB_H = 26; // inside the 2px padding of the pill, so the pill is 30px
 const CLEAR = "#00000000";
 const GLIDE = { duration: 220, easing: "ease-out" }; // the pill under the chosen tab, as the sidebar's
+// A size reported after layout: the sizes with it, or the same ones when it moved less than half a pixel.
+const withSize = (sizes, key, width) => (Math.abs((sizes[key] ?? 0) - width) < 0.5 ? sizes : { ...sizes, [key]: width });
+const closeKey = (tab) => `close-${tab.id}`;
 
 // Reads and removes the paths waiting in the inbox; returns the newest.
 export async function takeOpens(dir) {
@@ -110,6 +115,14 @@ export async function takeOpens(dir) {
 }
 
 export default class Tabs extends View {
+  tabW = {};
+  barW = {};
+  armed = new Armed();
+  dropAt = null;
+  renaming = null;
+  renamed = null;
+  moreOpen = false;
+
   init(_props, cx) {
     this.pressed = null;
     this.dragPanel = null;
@@ -128,23 +141,21 @@ export default class Tabs extends View {
       this.updater = new Updater();
       this.updater.start(cx);
       cx.timer.after(0, (next) => this.probeSimulator(next));
-      // keys.json: tab-N and panel-N arrive here as commands.
-      afterMount(cx, (cx) => cx.spawn(async (cx) => {
-        for (;;) {
-          const next = await tryOrAsync(async () => { const c = await nextCommand(); cx.notify(); return { c }; });
-          if (!next) break; // a replaced build (hot reload, update) stops here, before acting
-          const name = String(next.c).replace(/^kanso-tabs\./, "");
-          if (name === "update") this.updater.install(cx);
-          else if (name === "check") { await this.updater.check(cx, true, true); this.updater.fit(); }
-          else if (name === "settings" || name.startsWith("settings-")) {
-            const asked = name.slice(9);
-            openSettings(!asked || asked === "mods" ? "pieces" : asked);
-          }
-          else this.command(name);
-          cx.notify();
-        }
-      }));
+      readCommands(cx, () => nextCommand(), (c, cx) => this.barCommand(c, cx));
     }
+  }
+
+  // keys.json: tab-N and panel-N arrive here as commands.
+  async barCommand(c, cx) {
+    const name = String(c).replace(/^kanso-tabs\./, "");
+    if (name === "update") this.updater.install(cx);
+    else if (name === "check") { await this.updater.check(cx, true, true); this.updater.fit(); }
+    else if (name === "settings" || name.startsWith("settings-")) {
+      const asked = name.slice(9);
+      openSettings(!asked || asked === "mods" ? "pieces" : asked);
+    }
+    else this.command(name);
+    cx.notify();
   }
 
   probeSimulator(cx) {
@@ -310,6 +321,143 @@ export default class Tabs extends View {
     this.wheelSum = 0;
   }
 
+  // A size that moved draws again.
+  sized(sizes, key, width, cx) {
+    const next = withSize(sizes, key, width);
+    if (next !== sizes) cx.notify();
+    return next;
+  }
+
+  // Double-click renames in place, the name selected; Enter or leaving keeps it, Escape restores it.
+  startRename(tab, cx) {
+    const text = new TextField({ value: tab.name }, { limit: TAB_NAME_LIMIT });
+    text.set_selected_range({ start: 0, end: tab.name.length });
+    text.on("submit", (_e, cx) => this.endRename(cx, true));
+    text.on("blur", (_e, cx) => this.endRename(cx, true));
+    this.renaming = { id: tab.id, from: tab.name, text };
+    text.focus();
+    cx.timer?.after(0, () => this.renaming?.text.focus());
+    cx.notify();
+  }
+
+  endRename(cx, keep) {
+    const renaming = this.renaming;
+    if (!renaming) return;
+    this.renaming = null;
+    const name = renaming.text.value().trim();
+    renaming.text.release();
+    if (keep && name !== renaming.from) this.rename(renaming, name);
+    cx.notify();
+  }
+
+  // The new name draws at once and waits, on another computer, until the tab carries it.
+  rename({ id, from }, name) {
+    this.renamed = { id, from, name };
+    try { run("tab.rename", { id, name }); } catch { this.refuseRename(); }
+  }
+
+  refuseRename() {
+    const { from } = this.renamed;
+    this.renamed = null;
+    notify({ title: `Couldn't rename ${from}`, level: "error" });
+  }
+
+  // Confirmed when the tab carries the name; refused when its computer cannot be reached.
+  settleRename(tabs, state) {
+    if (!this.renamed) return;
+    if (state === "unreachable") this.refuseRename();
+    else if (!renameWaits(this.renamed, tabs)) this.renamed = null;
+  }
+
+  // A tab holding an agent asks twice; a plain shell closes on one press.
+  closeTab(tab, ps, cx) {
+    const close = () => run("tab.close", { id: tab.id });
+    if (ps.some((p) => p.tab === tab.id && p.program?.agent)) this.armed.press(closeKey(tab), cx, close);
+    else close();
+  }
+
+  pressTab(tab, e, cx) {
+    if (e.click_count === 2) { this.pressed = null; this.startRename(tab, cx); return; }
+    this.pressed = tab.id;
+  }
+
+  // While a tab is held, the one under the pointer is where it lands.
+  hoverTab(tab, hovered, cx) {
+    if (!this.pressed) return;
+    const next = hovered ? tab.id : (this.dropAt === tab.id ? null : this.dropAt);
+    if (next === this.dropAt) return;
+    this.dropAt = next;
+    cx.notify();
+  }
+
+  dropTab(tab, space) {
+    const from = this.pressed;
+    if (from && from !== tab.id) run("tab.move", { id: from, index: space.tabs.findIndex((other) => other.id === tab.id) + 1 });
+  }
+
+  // What the tab draws now: its mark, the press that arms it, the rename in place or waiting, the hold while it is dragged.
+  tabLook(tab) {
+    // Armed only while its × is there to press again: the chosen tab.
+    const armed = tab.active && this.armed.is(closeKey(tab));
+    const waiting = this.renamed?.id === tab.id;
+    return {
+      key: tab.id, label: waiting ? this.renamed.name : tab.name, mark: tabMark(tab), armed, pending: waiting,
+      tip: armed ? pressAgain(`close ${tab.name}`) : null,
+      held: this.pressed === tab.id && Boolean(this.dropAt) && this.dropAt !== tab.id,
+      editing: this.renaming?.id === tab.id ? this.renaming.text : null,
+    };
+  }
+
+  tabBox(c, tab, { space, openTabs, ps, connected, glide, index, count }) {
+    const from = openTabs.findIndex((other) => other.id === this.pressed), to = openTabs.findIndex((other) => other.id === tab.id);
+    const target = this.dropAt === tab.id && from >= 0 && from !== to;
+    const item = tabItem(`tab-${tab.id}`, this.tabLook(tab), c, {
+      on: tab.active, disabled: !connected, size: "md", track: false, index, count, fill: !glide, nameWidth: W.tabLabel,
+      onChange: () => { this.armed.clear(); run("tab.select", { id: tab.id }); },
+      onClose: openTabs.length > 1 ? (cx) => this.closeTab(tab, ps, cx) : null,
+      onPress: (e, cx) => this.pressTab(tab, e, cx),
+    });
+    const wired = connected ? item
+      .on_hover((hovered, cx) => this.hoverTab(tab, hovered, cx))
+      .on_mouse_up("left", () => this.dropTab(tab, space))
+      .on_mouse_down("right", () => openOverlay({ mod: "menu", kind: "popup", width: 200, props: { tab: "tab", target: { id: tab.id, space: space.id } } }))
+      .on_key_down((e, cx) => { if (this.renaming?.id === tab.id && e.key === "escape") { cx.stop_propagation(); this.endRename(cx, false); } }) : item;
+    const landing = target ? tabInsertion(c).absolute().top((H.icon - H.badge) / 2) : null;
+    return div().id(`tab-box-${tab.id}`).relative().flex_none()
+      .on_size_change((s, cx) => { this.tabW = this.sized(this.tabW, tab.id, s.width, cx); })
+      .child(wired)
+      .when(Boolean(landing), (box) => box.child(dropSide(from, to) === "before" ? landing.left(-G.hair) : landing.right(-G.hair)));
+  }
+
+  // Tabs that do not fit fold behind +N, a Menu of them with their marks; a pick chooses the tab.
+  moreTabs(c, folded) {
+    const pick = (tab) => (cx) => { this.moreOpen = false; run("tab.select", { id: tab.id }); cx.notify(); };
+    const trigger = button("tab-more", `+${folded.length}`, null, c, { kind: "quiet", active: this.moreOpen });
+    const pop = Popover.new("tab-more-menu").trigger(trigger).open(this.moreOpen)
+      .on_open_change((open, cx) => { this.moreOpen = open; cx.notify(); });
+    const items = folded.map((tab) => ({ label: tab.name, mark: tabMark(tab), onClick: pick(tab) }));
+    return div().id("tab-more-box").flex_none().on_size_change((s, cx) => { this.barW = this.sized(this.barW, "more", s.width, cx); })
+      .child(this.moreOpen ? pop.content(menu("tab-more-list", { items }, c)) : pop);
+  }
+
+  // The tabs and +N, then new tab and Arrange. Connecting: a breathing skeleton per known tab; unreachable: the tabs step down, no tools.
+  tabArea(c, { space, openTabs, ps, state, tools }) {
+    const area = h_flex().id("tab-area").flex_1().min_w(0).h_full().items_center().gap(G.sm)
+      .on_size_change((s, cx) => { this.barW = this.sized(this.barW, "area", s.width, cx); });
+    if (state === "connecting") return area.children(Array.from({ length: Math.max(openTabs.length, 1) }, (_, i) => tabSkeleton(`tab-skeleton-${i}`, c, i)));
+    const connected = state === "connected";
+    const room = this.barW.area ? this.barW.area - tools.length * (H.icon + G.sm) : 0;
+    const { shown, folded } = foldTabs({ widths: openTabs.map((tab) => this.tabW[tab.id]), chosen: openTabs.findIndex((tab) => tab.active), room, gap: G.hair, more: (this.barW.more ?? 0) + G.sm });
+    const drawn = shown.map((i) => openTabs[i]);
+    const pill = pillAt(drawn.map((tab) => this.tabW[tab.id]), drawn.findIndex((tab) => tab.active), G.hair);
+    const group = h_flex().flex_none().min_w(0).gap(G.hair).items_center().relative()
+      .when(Boolean(pill), (el) => el.child(tabPill(c).id("tab-pill").absolute().top(0).left(pill.left).w(pill.width).transition("left", GLIDE).transition("width", GLIDE)))
+      .children(drawn.map((tab, index) => this.tabBox(c, tab, { space, openTabs, ps, connected, glide: Boolean(pill), index, count: drawn.length })));
+    return area.child(group)
+      .when(folded.length > 0 && connected, (el) => el.child(this.moreTabs(c, folded.map((i) => openTabs[i]))))
+      .children(tools);
+  }
+
   render(cx) {
     if (!this.arrange && cx && !this.simQueued && this.simSignature !== simulatorRoster()) {
       this.simQueued = true;
@@ -325,38 +473,10 @@ export default class Tabs extends View {
     const c = tokens(t);
     // A press on a tool never starts a window drag.
     const tool = (id, icon, tip, action) => iconButton(id, icon, tip, action, c).on_mouse_down("left", stop);
-    const tabMark = (status) => mark(c, { status });
-    // The pill under the chosen tab glides to it; tab widths are measured as they draw.
-    this.tabW ??= {};
-    for (const id of Object.keys(this.tabW)) if (!openTabs.some((c) => c.id === id)) delete this.tabW[id];
-    const { at } = openTabs.reduce((acc, c) => {
-      const w = this.tabW[c.id];
-      return { at: c.active && w ? { left: acc.x, width: w } : acc.at, x: acc.x + (w ?? 0) + 2 };
-    }, { at: null, x: 0 });
-    const tabPill = at && openTabs.every((c) => this.tabW[c.id])
-      ? div().id("tab-pill").absolute().top(0).left(at.left).w(at.width).h(TAB_H).rounded(6).bg(t.foreground + "12").transition("left", GLIDE).transition("width", GLIDE)
-      : null;
-    const item = (c, i) => {
-      const program = ps.find(p => p.tab === c.id && p.program?.agent)?.program ?? ps.find(p => p.tab === c.id)?.program;
-      const name = c.name;
-      return h_flex().id(`tab-${c.id}`).h(TAB_H).px(10).gap(6).rounded(6).items_center().flex_none().text_size(12.5)
-        .text_color(c.active ? t.foreground : t.muted)
-        // Until every tab is measured there is no pill: the chosen tab wears the wash itself.
-        .when(c.active && !tabPill, el => el.bg(t.foreground + "12"))
-        .hover(s => s.bg(t.foreground + "0a").text_color(t.foreground))
-        .on_size_change((s, cx) => { if (Math.abs((this.tabW[c.id] ?? 0) - s.width) >= 0.5) { this.tabW[c.id] = s.width; cx.notify(); } })
-        .on_mouse_down("left", (e, cx) => { cx.stop_propagation(); this.pressed = i; if (e.click_count === 2) run("tab.rename", { id: c.id }); })
-        .on_mouse_up("left", () => {
-          const from = this.pressed; this.pressed = null;
-          if (from !== null && from !== i) run("tab.move", { id: openTabs[from].id, index: space.tabs.findIndex(x => x.id === c.id) + 1 });
-          else run("tab.select", { id: c.id });
-        })
-        .on_mouse_down("right", () => openOverlay({ mod: "menu", kind: "popup", width: 200, props: { tab: "tab", target: { id: c.id, space: space.id } } }))
-        .when(Boolean(program?.icon), el => el.child(programIcon(program, 15, t.muted).opacity(c.active ? 1 : 0.8)))
-        .child(div().max_w(170).truncate().child(c.zoomed ? `${name} Z` : name))
-        .when(["working", "blocked", "done"].includes(c.status), el => el.child(tabMark(c.status)))
-        .when(c.active && openTabs.length > 1, el => el.child(div().id(`close-${c.id}`).text_color(t.dim).hover(s => s.text_color(t.foreground)).on_mouse_down("left", stop).on_click((_e, cx) => { cx.stop_propagation(); run("tab.close", { id: c.id }); }).child(svg("mods/kanso-chrome/icons/close.svg").size(13))));
-    };
+    // Tab widths are measured as they draw: the chosen fill glides to its tab and what does not fit folds.
+    this.tabW = Object.fromEntries(Object.entries(this.tabW).filter(([id]) => openTabs.some((tab) => tab.id === id)));
+    const state = barState(space, machines());
+    this.settleRename(openTabs, state);
     const panel = walkLayout(tree, "panel"), body = walkLayout(tree, "panel-body");
     const now = this.openPanel(panel, body);
     if (this.db && space) {
@@ -371,6 +491,11 @@ export default class Tabs extends View {
     if (JSON.stringify(roster) !== JSON.stringify(shared("kanso.panels.all") ?? null)) setShared("kanso.panels.all", roster);
     const map = pieces(shared);
     const update = this.updater?.available() ?? null;
+    const tools = state === "connected" ? [
+      tool("tab-new", "plus", "New", () => openOverlay({ mod: "new-menu", kind: "popup", width: 250, height: 512 }))
+        .on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); openArrange(); }),
+      shown("tabs.arrange", true, map) ? tool("tab-arrange", "layers", window()?.platform === "macos" ? "Arrangements  ⌥⌘T" : "Arrangements", () => openArrange()) : null,
+    ].filter(Boolean) : [];
     this.reconcile(space, panel, body, now);
     this.syncPanel(space, now, enabled);
     // A panel turned off while open closes (a file's preview has no button to turn off).
@@ -408,14 +533,12 @@ export default class Tabs extends View {
     return h_flex().id("tab-bar").size_full().min_w(0).px(12).gap(2).items_center()
       .on_size_change(() => this.keepRail(layout()))
       // A pane held in the strip and let go here goes back where it was.
-      .on_mouse_up("left", () => { if (shared("strip.drag")) { setShared("strip.drop", null); setShared("strip.drag", null); } })
-      .on_mouse_up("left", () => { this.pressed = null; this.dragPanel = null; })
+      .on_mouse_up("left", dropStripDrag)
+      .on_mouse_up("left", (_e, cx) => { this.pressed = null; this.dropAt = null; this.dragPanel = null; cx.notify(); })
+      // A held tab let go outside the bar lands nowhere.
+      .on_hover((hovered, cx) => { if (!hovered && this.pressed) { this.pressed = null; this.dropAt = null; cx.notify(); } })
       .on_scroll_wheel(e => this.wheel(e))
-      .child(h_flex().id("tab-scroll").flex_1().min_w(0).h_full().items_center().gap(6).overflow_x_scrollbar()
-        .child(h_flex().flex_none().gap(2).items_center().relative().when(Boolean(tabPill), (el) => el.child(tabPill)).children(openTabs.map(item)))
-        .child(tool("tab-new", "plus", "New", () => openOverlay({ mod: "new-menu", kind: "popup", width: 250, height: 512 }))
-          .on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); openArrange(); }))
-        .when(shown("tabs.arrange", true, map), (el) => el.child(tool("tab-arrange", "layers", window()?.platform === "macos" ? "Arrangements  ⌥⌘T" : "Arrangements", () => openArrange()))))
+      .child(this.tabArea(c, { space, openTabs, ps, state, tools }))
       .child(h_flex().flex_none().gap(2).items_center().children(shownPanels.map(panelButton))
         // Help and settings, alike and side by side: not panels, never dragged nor turned off.
         .child(tool("kanso-help", "help", window()?.platform === "macos" ? "kansō help  ⌘⇧/" : "kansō help  Ctrl+Shift+/", () => run("mod.open", { name: "kanso-help" })).ml(4))
