@@ -2258,7 +2258,7 @@ export default class Spaces extends View {
     const tips = Object.fromEntries(Object.entries(VIEWS).map(([key, label]) => [key, tooltip({ label, chord: boundChord(`kanso-spaces.view-${key}`) })]));
     const pick = (view, cx) => { this.setView(view, cx); cx.notify(); };
     const open = (next, cx) => { this.viewMenu = next; cx.notify(); };
-    const look = { view: this.view, column: collapsed, open: collapsed && this.viewMenu === true, asks: sp.some((s) => s.status === "blocked"), tips };
+    const look = { view: this.view, column: collapsed, open: collapsed && this.viewMenu === true, asks: sp.some((s) => s.status === "blocked"), carry: true, tips };
     return viewSwitch(look)(collapsed ? "rail-view" : "spaces-view", tokens(t), collapsed ? { onChange: pick, onOpen: open } : { onChange: pick });
   }
 

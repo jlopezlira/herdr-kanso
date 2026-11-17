@@ -4,9 +4,11 @@ import { button, failureBlock, row, stack } from './kit.js';
 // The update's one icon: the footer row that runs it and every notice about it.
 export const updateIcon = 'lu-refresh-cw';
 const icon = (label, name) => button({ label, kind: 'icon', size: 'lg', icon: name });
-// Proposed: `menu`, Settings' menu, drawn, open over it.
-const settings = (collapsed, menu) => stack({ variant: 'footer settings' },
-  collapsed ? icon('Settings', 'lu-settings') : row({ icon: 'lu-settings', name: 'Settings' }), menu ? stack({ variant: 'footer menu' }, menu) : null);
+// Proposed: `menu`, Settings' menu, drawn, open over it; shut, Settings is its row or Button alone.
+const settings = (collapsed, menu) => {
+  const own = collapsed ? icon('Settings', 'lu-settings') : row({ icon: 'lu-settings', name: 'Settings' });
+  return menu ? stack({ variant: 'footer settings' }, own, stack({ variant: 'footer menu' }, menu)) : own;
+};
 // `update`: the row's words. Proposed: `busy`, the update runs, so its row is quiet; `refused`, the failure block's words when it did not update,
 // under its row with Update to try again; `collapsed`, the rail's column, where neither words nor the refusal fit.
 export const sidebarFooter = ({ update = null, busy = false, refused = null, menu = null, collapsed = false } = {}) => collapsed

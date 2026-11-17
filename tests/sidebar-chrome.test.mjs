@@ -160,12 +160,15 @@ const rail = async (own = {}) => {
 
 test("Collapsed, while someone needs you and Status is not on show, the view button carries the dot and says so", async () => {
   const { viewSwitch } = await load("kanso-spaces/view-switch.js", ["viewSwitch"], host());
-  const { tokens } = await load("kanso-panel/ui.js", ["tokens"], host());
+  const { tokens, LINE } = await load("kanso-panel/ui.js", ["tokens", "LINE"], host());
   const c = tokens(KIT_NIGHT);
-  const button = (props) => nodes(viewSwitch({ column: true, ...props })("v", c, { onChange() {}, onOpen() {} })).map((kid) => arg(kid, "trigger")).find(Boolean);
+  const button = (props) => nodes(viewSwitch({ column: true, carry: true, ...props })("v", c, { onChange() {}, onOpen() {} })).map((kid) => arg(kid, "trigger")).find(Boolean);
   const dots = (el) => blockedDots(el, c);
   const asked = button({ view: "spaces", asks: true });
   assert.equal(dots(asked), 1, "the Status dot, on the view button");
+  const dot = nodes(asked).find((kid) => calls(kid, "bg").some((call) => call[1] === c.blocked));
+  assert.deepEqual([arg(dot, "top"), arg(dot, "right"), LINE], [1, 1, 1], "a hairline (k-w-line) in from the corner, as the Storybook's --k-w-line");
+  assert.equal(dots(button({ view: "spaces", asks: true, carry: false })), 0, "without carry, the approved button: no dot");
   assert.equal(arg(asked, "accessibility_label"), "Projects · Someone needs you");
   assert.equal(arg(asked, "tooltip"), "Projects · Someone needs you");
   assert.equal(dots(button({ view: "spaces" })), 0);

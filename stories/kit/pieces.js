@@ -324,8 +324,8 @@ export const stacks = {
   'row group': { block: 'kanso-sidebar__row-group' },
   'view switch': { block: 'kanso-sidebar__view-switch' },
   'view menu': { block: 'kanso-sidebar__view-menu' },
-  // Proposed: `asks`, the collapsed view button carries the dot while someone needs you.
-  'view button': { block: 'kanso-sidebar__view-button', tag: 'span', states: ['asks'] },
+  // Proposed: the collapsed view button carrying the dot while someone needs you.
+  'view button': { block: 'kanso-sidebar__view-button', tag: 'span' },
   footer: { block: 'kanso-sidebar__footer' },
   // Proposed: Settings and its open menu; a refused update's block under its row.
   'footer settings': { block: 'kanso-sidebar__footer-settings' },

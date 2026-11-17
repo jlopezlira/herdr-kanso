@@ -2,7 +2,7 @@
 // Kept byte for byte by `npm run sync:share`: edit kanso-panel/ui-stack.js.
 import { h_flex, v_flex, Button, Popover } from "gpui-base";
 import { div } from "gpui-kit";
-import { G, H, R, SIDEBAR, TINT, CLEAR, alpha } from "./ui.js";
+import { G, H, R, LINE, SIDEBAR, TINT, CLEAR, alpha } from "./ui.js";
 import { dot } from "./ui-dot.js";
 
 // Each child piece drawn with its own id and its stack's handlers; a piece that draws nothing leaves no gap. `context` says where it sits.
@@ -13,11 +13,11 @@ const placed = (el, id, c, kids, more, context) => el.children(drawn(id, c, kids
 // A Button whose menu, open, hangs beside it (`anchor`): a press on the Button opens it; once open, Herdr's popover shuts it
 // on a press, outside it or on Escape. `onOpen(open, cx)` says which. Without `onOpen` the pieces are only placed.
 const withMenu = (anchor, room) => (id, c, _flags, [first, menu = null], more, wire, context) => {
-  const { onOpen = null } = more;
+  const { onOpen = null, onChange = null } = more;
   if (!onOpen) return placed(h_flex().flex_none(), id, c, [first, menu], more, context);
   const trigger = first(`${id}-button`, c, { ...more, onClick: menu ? null : (cx) => onOpen(true, cx) }, { ...context, ink: menu ? null : context.ink });
   const pop = Popover.new(id).trigger(trigger).anchor(anchor(context)).open(Boolean(menu)).on_open_change((open, cx) => onOpen(open, cx));
-  return menu ? pop.content(room(context).child(menu(`${id}-menu`, c, {}, context))) : pop;
+  return menu ? pop.content(room(context).child(menu(`${id}-menu`, c, { onChange }, context))) : pop;
 };
 
 // One group on the rail, centred in its row: a button, so Tab reaches it and Enter or Space presses it; `wire` gives it the pointer's handlers.
@@ -33,13 +33,12 @@ const railTile = (id, c, { on, strong, label }, kids, { onClick = null }, wire) 
   .children(drawn(id, c, kids))));
 
 // Open, the track across the sidebar's gutter. Collapsed (`onOpen`), the current view's button; open, its menu beside it.
-// A press on the button opens the menu; once it is open, Herdr's popover closes it on a press, outside it or on Escape.
-const viewSwitch = (id, c, _flags, [first, menu = null], { onChange = null, onOpen = null }) => {
-  if (!onOpen) return first(`${id}-tabs`, c, { onChange }).mx(G.sm).mt(G.xs).mb(G.sm);
-  // The view button: its press opens the menu.
-  const trigger = first(`${id}-button`, c, { onClick: menu ? null : (cx) => onOpen(true, cx) });
-  const pop = Popover.new(id).trigger(trigger).anchor("left_center").open(Boolean(menu)).on_open_change((open, cx) => onOpen(open, cx));
-  return h_flex().flex_none().justify_center().mt(G.xs).mb(G.sm).child(menu ? pop.content(menu(`${id}-menu`, c, { onChange })) : pop);
+// The button and its menu are a Button with its menu, as Sort's and Settings' are.
+const viewMenu = withMenu(() => "left_center", () => div());
+const viewSwitch = (id, c, flags, kids, more, wire, context) => {
+  const { onChange = null, onOpen = null } = more;
+  if (!onOpen) return kids[0](`${id}-tabs`, c, { onChange }).mx(G.sm).mt(G.xs).mb(G.sm);
+  return h_flex().flex_none().justify_center().mt(G.xs).mb(G.sm).child(viewMenu(id, c, flags, kids, more, wire, context));
 };
 
 // The Toolbar: large icon Buttons in a row 4 apart, or a column 8 apart; a press in it stays in it.
@@ -70,8 +69,8 @@ const STACKS = {
   "rail count": { draw: (id, c, _flags, kids) => h_flex().flex_none().items_center().gap(G.hair).children(drawn(id, c, kids)) },
   "view switch": { draw: viewSwitch },
   "view menu": { draw: (id, c, _flags, kids, more) => div().pl(G.xs).children(drawn(id, c, kids, more)) },
-  // Proposed: the collapsed view button carries the dot while someone needs you, at the corner as an icon tab's.
-  "view button": { states: ["asks"], draw: (id, c, { asks }, [button], more) => button(id, c, more).when(asks, (el) => el.relative().child(dot(c, "blocked").absolute().top(G.hair).right(G.hair))) },
+  // Proposed: the collapsed view button carrying the dot while someone needs you, a hairline in from its corner.
+  "view button": { draw: (id, c, _flags, [button], more) => button(id, c, more).relative().child(dot(c, "blocked").absolute().top(LINE).right(LINE)) },
   // Open, the footer's rows touch, 8 above and 16 below; in the rail, its icon Buttons a hair apart above 12. Both sit at the block's foot.
   footer: { draw: (id, c, _flags, kids, more) => placed(v_flex().id(id).size_full().justify_end().bg(c.chrome).pt(G.sm).px(G.sm).pb(G.lg), id, c, kids, more) },
   "rail footer": { draw: (id, c, _flags, kids, more) => placed(v_flex().id(id).size_full().justify_end().items_center().bg(c.chrome).pt(G.sm).pb(G.md).gap(G.hair), id, c, kids, more) },

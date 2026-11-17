@@ -342,8 +342,8 @@ export const playgrounds = {
     markup: ({ add, ...args }) => inSidebar(section({ ...args, add: add || null })),
   },
   'Compositions/Sidebar/View switch': {
-    args: { view: 'spaces', column: false, open: false, asks: false },
-    argTypes: { view: radioArg('view', views.map((item) => item.key)), column: boolArg('column'), open: boolArg('menu', { if: { arg: 'column' } }), asks: boolArg('someone needs you') },
+    args: { view: 'spaces', column: false, open: false, asks: false, carry: false },
+    argTypes: { view: radioArg('view', views.map((item) => item.key)), column: boolArg('column'), open: boolArg('menu', { if: { arg: 'column' } }), asks: boolArg('someone needs you'), carry: boolArg('button carries the dot (Proposed)', { if: { arg: 'column' } }) },
     markup: (args) => (args.column ? inRail : inSidebar)(viewSwitch(args)),
   },
   'Compositions/Sidebar/Tile': {

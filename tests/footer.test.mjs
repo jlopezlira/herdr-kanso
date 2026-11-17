@@ -84,10 +84,8 @@ test("A refused update keeps its row and shows the tool's words under it, with U
 test("Settings opens one menu: kansō settings with its key, and Herdr settings; choosing shuts it", async () => {
   const { view, ran, overlays } = await footer();
   const closed = view.render();
-  const menu = popover(closed);
-  const trigger = arg(menu, "trigger");
-  assert.equal(arg(menu, "open"), false);
-  press(trigger);
+  assert.equal(popover(closed), null, "shut, Settings is its row alone, as the Storybook draws it");
+  press(holding(closed, "Settings"));
   assert.equal(view.menuOpen, true, "a press on Settings, the pointer's or Enter's, opens it");
   const open = view.render();
   assert.equal(calls(arg(popover(open), "trigger"), "on_click").length, 0, "open, the popover owns the next press");
@@ -126,7 +124,7 @@ test("Keyboard first: Tab reaches each footer target, a kit Button with the focu
     const { view, installs, H } = await footer({ shared: { "sidebar.collapsed": collapsed }, updater: { available: () => "3.31.0" } });
     const drawn = view.render();
     const update = collapsed ? byId(drawn, "footer-0") : holding(drawn, "Update kansō to 3.31.0");
-    const settings = arg(popover(drawn), "trigger");
+    const settings = all(drawn).find((x) => calls(x, "on_click").length && arg(x, "tooltip") === "Settings") ?? holding(drawn, "Settings");
     for (const el of [update, settings]) {
       assert.ok(/^footer-/.test(el.tag), `${el.tag} is a Button: Tab reaches it, Enter and Space press it`);
       assert.equal(calls(el, "focus").length, 1, `${el.tag} shows the focus ring`);

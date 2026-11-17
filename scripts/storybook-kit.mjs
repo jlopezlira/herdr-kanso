@@ -124,7 +124,7 @@ export function kitRecords(records) {
     ['View switch', 'Row', inSidebar(viewSwitch()), 'Sidebar open: the three views by name.'],
     ['View switch', 'Column', inRail(viewSwitch({ column: true })), 'Sidebar collapsed: the three views as icons.'],
     ['View switch', 'Someone needs you', inSidebar(viewSwitch({ asks: true, tips: { spaces: 'Projects ⌃⌥P', agents: 'Status ⌃⌥S', threads: 'Threads ⌃⌥T' } })), 'Status carries the dot; each view\'s tooltip has its key.'],
-    ['View switch', 'Collapsed, someone needs you', inRail(viewSwitch({ column: true, asks: true })), 'Proposed. The view button carries the mark while Status is not the view on show.'],
+    ['View switch', 'Collapsed, someone needs you', inRail(viewSwitch({ column: true, asks: true, carry: true })), 'Proposed. The view button carries the mark while Status is not the view on show.'],
     ['View switch', 'Menu', inRail(viewSwitch({ column: true, open: true, asks: true })), 'Collapsed, the button opens the three views; Status is marked while someone needs you.'],
     ['Tile', 'Project', inRail(tile({ initial: 'A', status: 'blocked', count: 4, open: true })), 'A project in the rail.'],
     ['Tile', 'Status', inRail(tile({ status: 'working', count: 3 })), 'A state in the rail.'],
