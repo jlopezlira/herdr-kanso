@@ -2,7 +2,7 @@
 import { execFile, execFileSync } from "node:child_process";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { access, mkdir, mkdtemp, readFile, readdir, rmdir, rm, unlink, writeFile } from "node:fs/promises";
+import { access, mkdir, mkdtemp, readFile, readdir, rename, rmdir, rm, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { promisify } from "node:util";
@@ -59,6 +59,11 @@ const herdrModules = (host) => {
 export const clone = (value) => JSON.parse(JSON.stringify(value));
 export const success = (stdout) => ({ code: 0, stdout, stderr: "" });
 export const failure = (stderr, code = 1) => ({ code, stdout: "", stderr });
+// What `mv <from> <to>` does, as exec answers it.
+export const moved = async (args) => {
+  await rename(args.at(-2), args.at(-1));
+  return success("");
+};
 export const calls = (el, name) => el.calls.filter((call) => call[0] === name);
 export const one = (el, name) => {
   const found = calls(el, name);
