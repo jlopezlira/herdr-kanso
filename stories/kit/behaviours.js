@@ -61,6 +61,7 @@ export const behaviours = {
 const groups = '.kanso-segmented,.kanso-segmented--options,.kanso-segmented--sidebar,.kanso-segmented--tabs,.kanso-rail__views,.kanso-tab-bar';
 const surfaces = '.kanso-menu,.kanso-dialog,.kanso-dialog--settings,.kanso-dialog--worktree,.kanso-sidebar__dialog';
 const selector = Object.keys(behaviours).map((name) => `.${name}`).join(',');
+const kindOf = (node) => Object.entries(behaviours).find(([name]) => node.classList.contains(name))?.[1];
 const disabled = (node) => !!node.closest('[disabled],[aria-disabled="true"],[aria-busy="true"],.kanso-control--off,.kanso-button--off,.kanso-button--pending,.kanso-menu__item--busy');
 const normal = (label) => label.trim().toLowerCase();
 const labelOf = (node) => node.getAttribute('aria-label') || node.title || node.textContent.trim() || node.querySelector('use')?.getAttribute('href')?.replace('#lu-', '') || 'Action';
@@ -164,7 +165,7 @@ export function mountBehaviours(root, { page, state, inlineSurfaces = false, upd
       }
     }
     for (const node of scope.querySelectorAll(selector)) {
-      const kind = Object.entries(behaviours).find(([name]) => node.classList.contains(name))?.[1];
+      const kind = kindOf(node);
       if (['animate', 'surface', 'field', 'select'].includes(kind) || node.closest('.kanso-skeleton__list')) continue;
       if (!node.hasAttribute('tabindex')) node.tabIndex = disabled(node) ? -1 : 0;
       if (!node.hasAttribute('role') && !node.matches('button,a,input,textarea')) node.setAttribute('role', node.matches('.kanso-menu__item') ? 'menuitem' : kind === 'toggle' ? 'switch' : 'button');
@@ -319,7 +320,7 @@ export function mountBehaviours(root, { page, state, inlineSurfaces = false, upd
     const node = target.closest(selector);
     if (group && (!node || node === group)) return { node: target, kind: 'select' };
     if (!node || !root.contains(node)) return {};
-    const kind = Object.entries(behaviours).find(([name]) => node.classList.contains(name))?.[1];
+    const kind = kindOf(node);
     return { node, kind };
   };
   const on = (target, type, fn) => target.addEventListener(type, fn, { signal: abort.signal });

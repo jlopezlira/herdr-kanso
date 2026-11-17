@@ -1471,45 +1471,6 @@
  "8c0de462c4ff": {
   "site/index.html": 2
  },
- "118224a42944": {
-  "stories/kit/behaviours.js": 2
- },
- "ded739646bb6": {
-  "stories/kit/playgrounds.js": 2
- },
- "959082454a5c": {
-  "stories/kit/playgrounds.js": 2
- },
- "b79e86916e06": {
-  "stories/kit/playgrounds.js": 3
- },
- "692e57a727c0": {
-  "stories/kit/playgrounds.js": 2
- },
- "58dbb5a9d508": {
-  "stories/kit/playgrounds.js": 2
- },
- "d32e45992eef": {
-  "stories/kit/playgrounds.js": 2
- },
- "0ee53f6b92d4": {
-  "stories/kit/playgrounds.js": 4
- },
- "65937c186ab6": {
-  "stories/kit/playgrounds.js": 2
- },
- "2bc390f530f6": {
-  "stories/kit/playgrounds.js": 4
- },
- "84e62a9ef41d": {
-  "stories/kit/playgrounds.js": 2
- },
- "f23cc91a4684": {
-  "stories/kit/playgrounds.js": 2
- },
- "109a3876ea0b": {
-  "stories/kit/playgrounds.js": 2
- },
  "679c30885262": {
   "tests/agent-nav.test.mjs": 1,
   "tests/machines.test.mjs": 1
