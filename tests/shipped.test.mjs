@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { databaseTimer, load, context, temporary, clone, exec as run, nativeWindow, success } from "./helpers.mjs";
+import { databaseTimer, load, context, temporary, clone, exec as run, nativeWindow, success, readOrNull } from "./helpers.mjs";
 
 const names = ["Shipped", "periodRange", "comparedRange", "periodLabel", "streaks", "computeRecords", "mergeRecords", "periodQuery",
   "REPOS", "fmt", "yourWeeks", "weekAt", "sumWeeks", "heatLayout", "contributionsIn"];
@@ -150,7 +150,7 @@ async function panelWith(t, gh) {
     window: nativeWindow, exec: gh.exec, appHome: () => home, home: () => join(root, "home"), spaces: () => [], panes: () => [], theme: () => ({}),
     shared: (k) => store[k], setShared: (k, v) => { store[k] = v; },
     notify: (n) => { toasts.push(n); return "1"; },
-    readTextFile: async (p) => { try { return await readFile(p, "utf8"); } catch { return null; } },
+    readTextFile: readOrNull,
     writeTextFile: async (p, text) => { await mkdir(join(p, ".."), { recursive: true }); await writeFile(p, text); return null; },
   };
   const { Store } = await load("kanso-panel/shipped-store.js", ["Store"], host);

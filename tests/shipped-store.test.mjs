@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { databaseTimer, load, exec, temporary, clone, nativeWindow, success } from "./helpers.mjs";
+import { databaseTimer, load, exec, temporary, clone, nativeWindow, success, readOrNull } from "./helpers.mjs";
 
 const names = ["Store", "repoName", "parseLog", "insertCommits", "machineFile", "readMachineFile", "weekOf", "weeklyStats", "WEEK0"];
 const store = (host = {}) => load("kanso-panel/shipped-store.js", names, host);
@@ -57,7 +57,7 @@ async function setup(t, { otherMachine = null } = {}) {
   const host = {
     window: nativeWindow,
     appHome: () => app, home: () => home, spaces: () => [], panes: () => [],
-    readTextFile: async (p) => { try { return await readFile(p, "utf8"); } catch { return null; } },
+    readTextFile: readOrNull,
     writeTextFile: async (p, text) => { await mkdir(join(p, ".."), { recursive: true }); await writeFile(p, text); return null; },
     exec: async (command, args, options) => {
       if (command !== "gh") return exec(command, args, options);

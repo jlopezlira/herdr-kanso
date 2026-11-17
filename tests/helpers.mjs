@@ -59,6 +59,7 @@ const herdrModules = (host) => {
 export const clone = (value) => JSON.parse(JSON.stringify(value));
 export const success = (stdout) => ({ code: 0, stdout, stderr: "" });
 export const failure = (stderr, code = 1) => ({ code, stdout: "", stderr });
+export const readOrNull = async (path) => { try { return await readFile(path, "utf8"); } catch { return null; } };
 // What `base64 -D -i <in> -o <out>` does, as exec answers it.
 export const isDecode = (cmd, args) => (cmd === "base64" || cmd === "/usr/bin/base64") && args[0] === "-D";
 export const decoded = async (args) => {

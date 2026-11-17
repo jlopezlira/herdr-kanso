@@ -4,7 +4,7 @@ import { execFile, execFileSync, spawn } from "node:child_process";
 import { cp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { load, context, exec, nativePlatform, nativeWindow, temporary, clone, until, failure, success } from "./helpers.mjs";
+import { load, context, exec, nativePlatform, nativeWindow, temporary, clone, until, failure, success, readOrNull } from "./helpers.mjs";
 
 const names = ["Updater", "newestTag", "compareVersions", "mergeKeys", "SOURCE", "footerPx", "HOLD", "INSTALL_SCRIPT", "RECOVER", "LAUNCH", "updateHost", "windowsInstallScript", "windowsLaunchScript", "windowsRecoverScript", "sameVolume"];
 export const repo = new URL("../kanso/", import.meta.url);
@@ -13,10 +13,13 @@ export const test = (name, options, fn) => typeof options === "function"
   ? nodeTest(name, { timeout: 60_000 }, options)
   : nodeTest(name, { timeout: 60_000, ...options }, fn);
 const livePids = new Map();
+const taskkill = (pid) => {
+  try { execFileSync("taskkill", ["/PID", String(pid), "/T", "/F"], { stdio: "ignore", windowsHide: true }); } catch { /* already gone */ }
+};
 function endTree(pid) {
   if (!pid) return;
   if (windows) {
-    try { execFileSync("taskkill", ["/PID", String(pid), "/T", "/F"], { stdio: "ignore", windowsHide: true }); } catch { /* already gone */ }
+    taskkill(pid);
   } else {
     try { process.kill(-pid, "SIGKILL"); } catch { /* already gone */ }
   }
@@ -46,9 +49,13 @@ afterAll(() => {
   }
   for (const [pid, name] of left) {
     console.error(`update tests left pid ${pid} started by ${name}`);
-    try { execFileSync("taskkill", ["/PID", String(pid), "/T", "/F"], { stdio: "ignore", windowsHide: true }); } catch { /* already gone */ }
+    taskkill(pid);
   }
 });
+const packRelease = async (site) => {
+  const made = await exec("tar", ["-czf", join(site, "v1.1.0.tar.gz"), "-C", join(site, "build"), "herdr-kanso-1.1.0"]);
+  assert.equal(made.code, 0, made.stderr);
+};
 async function stopInstalls(root) {
   const entries = await readdir(root, { withFileTypes: true }).catch(() => []);
   for (const entry of entries) {
@@ -147,8 +154,7 @@ export async function fixture(t, { layoutChanged = true, homeName = "O'Brien hom
   await cp(new URL(".", repo), join(top, "kanso"), { recursive: true });
   await writeFile(join(top, "kanso/mods/kanso-chrome/version.json"), '{ "version": "1.1.0" }\n');
   await writeFile(join(top, "README.md"), "not installed\n");
-  const made = await exec("tar", ["-czf", join(site, "v1.1.0.tar.gz"), "-C", join(site, "build"), "herdr-kanso-1.1.0"]);
-  assert.equal(made.code, 0, made.stderr);
+  await packRelease(site);
   // And its raw files, which decide the keys and the layout before the download.
   await mkdir(join(site, "v1.1.0/kanso/layouts"), { recursive: true });
   const newKeymap = await readFile(new URL("keys.json", repo), "utf8");
@@ -200,7 +206,7 @@ export async function fixture(t, { layoutChanged = true, homeName = "O'Brien hom
       shared: (k) => store[k],
       setShared: (k, v) => { store[k] = v; },
       notify: (n) => { toasts.push(n); return String(toasts.length); },
-      readTextFile: async (p) => { try { return await readFile(p, "utf8"); } catch { return null; } },
+      readTextFile: readOrNull,
       writeTextFile: async (p, text) => { await writeFile(p, text); return null; },
       window: nativeWindow,
       exec: async (command, args, options) => {
@@ -281,8 +287,7 @@ export async function small(t) {
   await mkdir(join(top, "layouts"), { recursive: true });
   await writeFile(join(top, "layouts/kanso.json"), '{"root":{"id":"1.1.0"}}\n');
   await writeFile(join(top, "layouts/kanso.png"), "png 1.1.0\n");
-  const made = await exec("tar", ["-czf", join(site, "v1.1.0.tar.gz"), "-C", join(site, "build"), "herdr-kanso-1.1.0"]);
-  assert.equal(made.code, 0, made.stderr);
+  await packRelease(site);
   for (const name of ["kanso-chrome", "kanso-tabs"]) await mod(join(base, "mods"), name, "1.0.0");
   await mkdir(join(base, "mods/token-spend"), { recursive: true });
   await writeFile(join(base, "mods/token-spend/main.js"), "// someone else's\n");
@@ -389,10 +394,7 @@ export async function killed(t, f, stop) {
   process.env.KANSO_UPDATE_STOP = String(stop);
   t.after(() => { delete process.env.KANSO_UPDATE_STOP; });
   await f.flag("slow");
-  f.ctl.abandon = true;
-  f.updater.install(cx);
-  await until(async () => f.ctl.stuck > 0);
-  f.ctl.abandon = false;
+  await abandoned(f, cx);
   const pid = join(updates(f.home), `${pending(f)[0]}.pid`);
   await f.flag("go");
   await until(async () => (await f.updater.host.alive(pid)).code !== 0);
@@ -426,3 +428,61 @@ export const startUpdater = async (f) => {
   await tasks.drain();
   return tasks;
 };
+
+// A fixture with its updater started, and the context it runs in.
+export const started = async (t, options) => {
+  const f = await fixture(t, options);
+  return { f, ...await startUpdater(f) };
+};
+// The first window's install, after its copy is replaced mid-swap.
+export const diedHalfNew = async (t) => {
+  const f = await fixture(t);
+  return { f, ...await killed(t, f, await chromeIn()) };
+};
+// An install started and then replaced: never heard from again.
+export const abandoned = async (f, cx) => {
+  f.ctl.abandon = true;
+  f.updater.install(cx);
+  await until(async () => f.ctl.stuck > 0);
+  f.ctl.abandon = false;
+};
+// An install under way, every mod checked and open-with held: `run` is the install itself.
+export const installing = async (f, cx) => {
+  const run = f.updater.install(cx);
+  await until(async () => f.updater.error || (await f.checks()).includes("open-with"));
+  assert.equal(f.updater.error, null, f.updater.error);
+  return { run };
+};
+export const installed = async (w, cx) => {
+  await w.updater.install(cx);
+  assert.equal(w.updater.error, null, w.updater.error);
+};
+// No error, and 1.1.0 in place.
+export const landed = async (w, home) => {
+  assert.equal(w.updater.error, null, w.updater.error);
+  assert.equal(await version(home), "1.1.0");
+};
+// A window told 1.1.0 is out.
+export const offered = async (w) => {
+  w.store["kanso.update"] = { latest: "1.1.0" };
+  await w.updater.readInstalled();
+};
+// Another copy of the updater in the same window, as the tab bar's.
+export const secondCopy = async (f) => {
+  const copy = new f.Updater(f.source);
+  await copy.readInstalled();
+  return copy;
+};
+export const freshCopy = (f, cx) => {
+  const copy = new f.Updater(f.source);
+  copy.start(cx);
+  return copy;
+};
+// Every followed install settled, and what it left drawn.
+export const settled = async (f, drain) => {
+  await until(async () => pending(f).length === 0);
+  await drain();
+};
+export const chromeMain = (home) => readFile(join(home, "mods/kanso-chrome/main.js"), "utf8");
+export const shippedKeys = async () => JSON.parse(await readFile(new URL("keys.json", repo), "utf8"))["layout:kanso"];
+export const errorsTold = (f) => f.toasts.filter((n) => n.level === "error").length;
