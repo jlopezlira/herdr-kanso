@@ -1,4 +1,5 @@
 // The app kit against the Storybook kit: same pieces, same prop names, and the committed gap may only shrink.
+// `waiting` holds app props the Storybook draws on sb-preview but not yet on develop; each clears when it lands.
 import test from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
@@ -9,6 +10,7 @@ import * as storybookKit from "../stories/kit/pieces.js";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 const STORYBOOK = "stories/kit/pieces.js";
+const PREVIEW = "origin/sb-preview";
 const LIST = "tests/kit-parity.json";
 const PANEL = "kanso/mods/kanso-panel/";
 // Exports of the Storybook kit that draw no piece of their own: they escape text, join children or words, or push siblings apart.
@@ -107,10 +109,16 @@ const factsOf = (list) => [
   ...Object.entries(list.props ?? {}).flatMap(([name, sides]) => ["storybook", "app"].flatMap((side) => (sides[side] ?? []).map((prop) => ({ kind: "props", name, side, prop, text: `${name} prop "${prop}" only in the ${side}` })))),
 ];
 
+// Props the app has ahead of the Storybook: each one still app only, and drawn on sb-preview when that kit is given.
+const waitingErrors = (waiting, differences, preview) => Object.entries(waiting).flatMap(([name, names]) => names.flatMap((prop) => [
+  ...(differences[name]?.app ?? []).includes(prop) ? [] : [`${name}: prop "${prop}" is in the Storybook now: take it off waiting`],
+  ...!preview || (preview.get(name)?.props ?? []).includes(prop) ? [] : [`${name}: prop "${prop}" is waiting, but sb-preview's Storybook does not draw it`],
+]));
+
 // What the app kit lacks, and every way the committed list disagrees with the two kits or grew since `base`.
-const compare = ({ storybook, app, list, base = null }) => {
+const compare = ({ storybook, app, list, base = null, preview = null }) => {
   const errors = [];
-  const missing = list.missing ?? [], renamed = list.renamed ?? {}, props = list.props ?? {};
+  const missing = list.missing ?? [], renamed = list.renamed ?? {}, props = list.props ?? {}, waiting = list.waiting ?? {};
   const gap = [], differences = {};
   for (const name of new Set(missing.filter((name, i) => missing.indexOf(name) !== i))) errors.push(`"${name}" is in missing twice`);
   for (const name of new Set([...missing, ...Object.keys(renamed), ...Object.keys(props)])) {
@@ -132,12 +140,14 @@ const compare = ({ storybook, app, list, base = null }) => {
     if (missing.includes(name) && !app.has(name)) errors.push(`${name} is in the app kit as ${as}: take it off missing`);
     const actual = { storybook: minus(piece.props, other.props), app: minus(other.props, piece.props) };
     if (actual.storybook.length || actual.app.length) differences[name] = actual;
+    const ahead = { ...actual, app: minus(actual.app, waiting[name] ?? []) };
     for (const side of ["storybook", "app"]) {
       const listed = props[name]?.[side] ?? [];
-      for (const prop of minus(actual[side], listed)) errors.push(`${name}: prop "${prop}" is only in the ${side} kit, and it is not listed`);
-      for (const prop of minus(listed, actual[side])) errors.push(`${name}: prop "${prop}" no longer differs: take it off props`);
+      for (const prop of minus(ahead[side], listed)) errors.push(`${name}: prop "${prop}" is only in the ${side} kit, and it is not listed`);
+      for (const prop of minus(listed, ahead[side])) errors.push(`${name}: prop "${prop}" no longer differs: take it off props`);
     }
   }
+  errors.push(...waitingErrors(waiting, differences, preview));
   if (base?.list) {
     const before = new Set(factsOf(base.list).map((fact) => fact.text));
     for (const fact of factsOf(list).filter((fact) => !before.has(fact.text))) {
@@ -169,7 +179,9 @@ const kits = () => ({
 test("The app kit has every Storybook piece with the same prop names, except the committed list, which only shrinks", (t) => {
   const { storybook, app, list } = kits();
   const base = baseline();
-  const { gap, differences, errors } = compare({ storybook, app, list, base });
+  const source = shown(PREVIEW, STORYBOOK);
+  if (!source) t.diagnostic(`${PREVIEW} is not here: the waiting props are not checked against it`);
+  const { gap, differences, errors } = compare({ storybook, app, list, base, preview: source && storybookPieces(source) });
   t.diagnostic(`Storybook pieces (${storybook.size}), app kit files: ${appFiles().join(", ")}, compared with ${base.commit.slice(0, 7)}`);
   t.diagnostic(`Missing from the app kit (${gap.length}): ${gap.join(", ")}`);
   t.diagnostic(`Named differently: ${Object.entries(list.renamed ?? {}).map(([name, as]) => `${name} → ${as}`).join(", ")}`);
@@ -249,4 +261,15 @@ test("A piece added to the app kit with the same name and props leaves the missi
   const app = appOf(appButton, "export function avatar(id, c, { initial, size } = {}) {}");
   assert.deepEqual(compare({ storybook, app, list: { missing: [] }, base }), { gap: [], differences: {}, errors: [] });
   assert.deepEqual(compare({ storybook, app, list: { missing: ["avatar"] }, base }).errors, ["avatar is in the app kit now: take it off missing"]);
+});
+
+test("An app prop the Storybook draws only on sb-preview waits in the list, and clears when the Storybook lands", () => {
+  const storybook = storybookOf(sbButton), app = appOf("export function button(id, c, { label, kind, verbs } = {}) {}");
+  const preview = storybookOf("export const button = ({ label, kind, verbs }) => '';");
+  const list = { waiting: { button: ["verbs"] } };
+  const base = { list: {}, storybook };
+  assert.deepEqual(compare({ storybook, app, list, base, preview }).errors, []);
+  assert.deepEqual(compare({ storybook, app, list, base, preview: storybookOf(sbButton) }).errors,
+    ["button: prop \"verbs\" is waiting, but sb-preview's Storybook does not draw it"]);
+  assert.deepEqual(compare({ storybook: preview, app, list, base, preview }).errors, ["button: prop \"verbs\" is in the Storybook now: take it off waiting"]);
 });

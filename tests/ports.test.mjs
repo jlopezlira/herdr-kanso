@@ -99,7 +99,7 @@ test("Ports lists this computer's servers and another computer's, each under its
   assert.ok(dark >= 0 && light > dark, "dark's group, then light's");
   assert.ok(texts.indexOf(":3000") > dark && texts.indexOf(":3000") < light);
   assert.ok(texts.indexOf(":5173") > light);
-  assert.ok(f.ids.includes("pt-stop-light-200") && f.ids.includes("pt-open-light-200"), "light's row keeps its actions");
+  assert.ok(["pt-light-200", "pt-light-200-verb-0", "pt-light-200-verb-1"].every((id) => f.ids.includes(id)), "light's row keeps its Open and Stop");
 });
 
 test("Stop and Open on another computer's server act on that computer", async () => {

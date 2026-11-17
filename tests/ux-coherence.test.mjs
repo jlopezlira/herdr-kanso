@@ -69,6 +69,20 @@ test("a second press within four seconds confirms, and after that it arms again"
   }
 });
 
+test("A row's verb that asks twice arms on the first press, reads as armed, and runs on the second", async () => {
+  const { Armed } = await load("kanso-panel/ui-button.js", ["Armed"], { Date });
+  const armed = new Armed();
+  const ran = [];
+  const cx = { notify() {}, timer: { after() {} } };
+  const stop = () => armed.verb("Stop", "stop", "stop:1", () => ran.push("stop"), { disabled: false });
+  assert.deepEqual({ ...stop(), onClick: null }, { label: "Stop", verb: "stop", armed: false, disabled: false, onClick: null });
+  stop().onClick(cx);
+  assert.equal(stop().armed, true);
+  assert.deepEqual(ran, []);
+  stop().onClick(cx);
+  assert.deepEqual(ran, ["stop"]);
+});
+
 test("the sidebar and settings confirm through Armed", async () => {
   const spaces = await text("kanso/mods/kanso-spaces/main.js");
   assert.equal(spaces.includes("confirmClose"), false);

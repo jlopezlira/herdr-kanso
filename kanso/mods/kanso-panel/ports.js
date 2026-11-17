@@ -15,6 +15,7 @@ import { STOP_LOOP, systemApi } from "./platform-system.js";
 export { STOP_LOOP };
 import { G, tokens, breathe } from "./ui.js";
 import { Armed, button, quietLink, iconButton } from "./ui-button.js";
+import { row } from "./ui-row.js";
 import { section } from "./ui-section.js";
 import { ghost } from "./ui-skeleton.js";
 import { segmented } from "./ui-tab.js";
@@ -346,25 +347,25 @@ export class Ports {
     return { pane: p, name: given || p?.program?.name || p?.title || address };
   }
 
+  // The server's ports, then where it runs; its command, folder and age under them, and its actions last.
   row(s, c) {
     const busy = this.stopping.has(portKey(s)), id = rowId(s);
     const owner = s.owner ? this.paneOf(s.owner) : null;
     const since = s.startedAt ?? Date.now() - s.secs * 1000;
-    return v_flex().w_full().px(G.md).py(10).gap(4).rounded(6).hover((st) => st.bg(c.subtle)).when(busy, (el) => el.opacity(0.45))
-      .child(h_flex().w_full().items_center().gap(G.md)
-        .child(div().flex_none().text_size(17).font_light().text_color(c.text).child(s.ports.map((p) => `:${p}`).join(" ")))
-        .child(div().flex_1().min_w(0).truncate().text_size(12.5).text_color(c.muted).child(shortArgs(s.args)))
-        .when(typeof s.mb === "number", (el) => el.child(div().flex_none().text_size(12.5).text_color(c.muted).child(size(s.mb))))
-        .child(div().flex_none().text_size(11.5).text_color(c.dim).tooltip(`Since ${clock(since)}`).child(age(s.secs))))
-      .child(h_flex().w_full().min_w(0).gap(G.sm).items_center()
-        .child(div().size(6).flex_none().rounded_full().bg(owner ? c.green : c.yellow))
-        .child(div().flex_none().text_size(12).text_color(owner ? c.muted : c.yellow).child(owner ? `In ${owner.name}` : NO_PANE))
-        .when(Boolean(s.cwd || s.project || s.cwdReason), (el) => el.child(div().flex_1().min_w(0).truncate().text_size(11.5).text_color(c.dim).child(s.cwd ? tilde(s.cwd) : s.project || s.cwdReason))))
-      .child(h_flex().flex_wrap().gap_x(G.lg)
-        .child(quietLink(`pt-open-${id}`, "Open in the browser", (cx) => this.openPort(s, cx), c, { color: c.text }))
-        .when(Boolean(owner?.pane), (el) => el.child(quietLink(`pt-go-${id}`, "Go to its pane", () => run("pane.focus", { terminal: s.owner }), c)))
-        .child(this.armed.link(`pt-stop-${id}`, busy ? "Stopping…" : s.force ? "Force stop" : "Stop", s.force ? "force stop" : "stop",
-          `stop:${id}`, (cx) => this.stop([s], cx), c, { disabled: busy })));
+    const stop = this.armed.verb(busy ? "Stopping…" : s.force ? "Force stop" : "Stop", s.force ? "force stop" : "stop",
+      `stop:${id}`, (cx) => this.stop([s], cx), { disabled: busy });
+    return row(`pt-${id}`, c, {
+      name: s.ports.map((p) => `:${p}`).join(" "),
+      detail: owner ? `In ${owner.name}` : { text: NO_PANE, tone: "working" },
+      meta: typeof s.mb === "number" ? size(s.mb) : null,
+      second: [shortArgs(s.args), s.cwd ? tilde(s.cwd) : s.project || s.cwdReason, { text: age(s.secs), tip: `Since ${clock(since)}` }],
+      verbs: [
+        { label: "Open in the browser", onClick: (cx) => this.openPort(s, cx), color: c.text },
+        owner?.pane ? { label: "Go to its pane", onClick: () => run("pane.focus", { terminal: s.owner }) } : null,
+        stop,
+      ].filter(Boolean),
+      pending: busy,
+    });
   }
 
   hero(c, list, narrow) {

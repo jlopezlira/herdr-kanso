@@ -57,7 +57,7 @@ test("Each thing a session row did by hand still works: click, double-click to r
     drag: { target: "before", down: () => hits.push("down"), up: () => hits.push("up") },
   };
   const el = agentSession({ ...atlas, status: "done" }, 1, c, row, { refresh: () => hits.push("refresh"), label: "Atlas" });
-  assert.equal(handler(el, "id"), "space-agent-t1");
+  assert.equal(el.tag, "space-agent-t1", "a row that acts is a Button named by its id");
   const cx = { stop_propagation: () => hits.push("stopped"), notify: () => {} };
   handler(el, "on_click")({}, cx);
   assert.deepEqual(plain(ran.at(-1)), ["pane.focus", { pane: "p1" }]);

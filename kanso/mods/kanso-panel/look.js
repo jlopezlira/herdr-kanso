@@ -12,8 +12,9 @@ import { bring, machineOf, copyFailure, drawablePath, remoteDue, ArmPoll, pollSt
 import { div, image } from "gpui-kit";
 import { v_flex, h_flex, Button } from "gpui-base";
 import { hc, focused, panes, terminals, theme, appHome, home, shared, setShared, watchFolder, openOverlay, window, layout } from "herdr";
-import { G, H, R, T, tokens, breathe } from "./ui.js";
+import { G, H, T, tokens, breathe } from "./ui.js";
 import { button, quietLink, iconButton } from "./ui-button.js";
+import { row } from "./ui-row.js";
 import { skeleton } from "./ui-skeleton.js";
 import { stateEmpty } from "./ui-state.js";
 import { programIcon, givenNames, nameOf } from "./marks.js";
@@ -26,6 +27,10 @@ import { Front } from "./front.js";
 import { transcriptPaths, MOST } from "./transcript.js";
 
 const LINES = 400;
+const NOTE_ROWS = 5; // notes shown before the list scrolls
+// A pin's number, on the picture and on its note's row: the accent once it has a note.
+const pinBadge = (c, p, i) => div().size(G.lg).flex_none().rounded_full().bg(p.note ? c.accent : c.muted)
+  .flex().items_center().justify_center().text_size(T.body).font_bold().text_color(c.canvas).child(String(i + 1));
 const TICK_MS = 1000; // which agent is in focus: Herdr's state, no process
 const DIR = "data/kanso-panel/look"; // the copies image() draws, under the app's folder
 const KEPT = "kanso.look"; // { follow, pinned }: whose pictures these are, kept while the panel is closed
@@ -489,12 +494,11 @@ export class Look {
 
   // One pin's row: its number, its note (or that it has none yet), a click to write it again, an x to drop it.
   noteRow(p, i, c) {
-    return h_flex().id(`look-note-${i}`).flex_none().min_h(H.compact).px(G.sm).gap(G.sm).items_center().rounded(R.control).cursor_pointer()
-      .hover((s) => s.bg(c.subtle)).on_click((_e, cx) => this.askNote(i, cx))
-      .child(div().flex_none().size(G.lg).rounded_full().bg(p.note ? c.accent : c.border).flex().items_center().justify_center().text_size(9.5).font_bold().text_color(c.canvas).child(String(i + 1)))
-      .child(div().flex_1().min_w(0).text_size(T.body).text_color(p.note ? c.text : c.dim).child(p.note ?? "No note yet"))
-      .child(div().id(`look-drop-${i}`).flex_none().px(G.xs).text_size(T.card).text_color(c.muted).cursor_pointer().hover((s) => s.text_color(c.text))
-        .on_click((_e, cx) => { cx.stop_propagation(); this.drop(i, cx); }).child("×"));
+    return row(`look-note-${i}`, c, {
+      start: [pinBadge(c, p, i)], name: p.note ?? "No note yet", dimmed: !p.note,
+      action: { kind: "icon", icon: "close", label: "Remove this pin", onClick: (cx) => this.drop(i, cx) },
+      onClick: (cx) => this.askNote(i, cx),
+    }).flex_none();
   }
 
   // One circle per picture. The one shown is filled with that picture's color.
@@ -516,8 +520,7 @@ export class Look {
   picture(c) {
     const s = this.shown;
     if (!s?.image) return null;
-    const mark = (p, i) => div().absolute().left(`${p.x * 100}%`).top(`${p.y * 100}%`).ml(-G.sm).mt(-G.sm).size(G.lg).rounded_full().bg(p.note ? c.accent : c.muted)
-      .flex().items_center().justify_center().text_size(9.5).font_bold().text_color(c.canvas).child(String(i + 1));
+    const mark = (p, i) => pinBadge(c, p, i).absolute().left(`${p.x * 100}%`).top(`${p.y * 100}%`).ml(-G.sm).mt(-G.sm);
     return div().id("look-picture").relative().w_full().cursor_crosshair()
       .on_mouse_down("left", (e, cx) => this.pin(e, cx))
       .child(image(s.image).w_full())
@@ -574,7 +577,7 @@ export class Look {
         .child(iconButton("look-refresh", "refresh", this.held ? "Retry" : "Read again", (cx) => { this.poll = pollStart(); this.arm = null; this.read(cx); if (item && shows(item) && !this.shown?.deferred) this.draw(item, cx); }, c, { spin: this.reading })))
       .child(v_flex().id("look-view").flex_1().min_h(0).w_full().overflow_hidden().items_center().justify_center().child(this.view(c)))
       .when(list.length > 0, (el) => el.child(this.dots(list, c)))
-      .when(this.pins.length > 0, (el) => el.child(v_flex().id("look-notes").flex_none().max_h(H.compact * 5 + G.xs * 4).px(G.lg).py(G.sm).gap(G.xs).overflow_y_scrollbar().border_t(1).border_color(c.border)
+      .when(this.pins.length > 0, (el) => el.child(v_flex().id("look-notes").flex_none().max_h(H.line * NOTE_ROWS).px(G.lg).py(G.sm).overflow_y_scrollbar().border_t(1).border_color(c.border)
         .children(this.pins.map((p, i) => this.noteRow(p, i, c)))))
       .when(Boolean(item), (el) => el.child(h_flex().id("look-bar").flex_none().h(H.control).px(G.lg).gap(G.md).items_center().border_t(1).border_color(c.border)
         .child(div().flex_1().min_w(0).truncate().text_size(T.body).text_color(c.dim).child(tilde(item.path)))

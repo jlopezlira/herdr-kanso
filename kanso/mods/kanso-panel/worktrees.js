@@ -8,12 +8,13 @@ import { systemApi } from "./platform-system.js";
 // Kanso's Worktrees panel, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
 // Removing a worktree keeps its branch; only uncommitted changes and commits no branch, tag or remote holds can be lost.
 import { div } from "gpui-kit";
-import { v_flex, h_flex, Button } from "gpui-base";
+import { v_flex, h_flex } from "gpui-base";
 import { exec, spaces, panes, home, run, theme, shared, notify, knownAgents } from "herdr";
 import { Share, postText, shareRows } from "./share.js";
 import { WorktreeStore } from "./worktrees-store.js";
-import { G, PULSE, breathe, tokens } from "./ui.js";
+import { G, breathe, tokens } from "./ui.js";
 import { Armed, button, quietLink, iconButton } from "./ui-button.js";
+import { row } from "./ui-row.js";
 import { section } from "./ui-section.js";
 import { ghost } from "./ui-skeleton.js";
 import { stateEmpty } from "./ui-state.js";
@@ -582,21 +583,21 @@ export class Worktrees {
     });
   }
 
-  verdict(w, c) {
+  verdict(w) {
     const s = stateOf(w), n = (k, one, many) => `${w[k]} ${w[k] === 1 ? one : many}`;
     return {
-      checking: { text: "Checking", color: c.dim },
-      missing: { text: "Folder gone", color: c.dim },
-      orphan: { text: "Its repository moved or was deleted", color: c.dim },
-      open: { text: "Open in Herdr", color: c.yellow },
-      locked: { text: "Locked", color: c.dim },
-      changes: { text: n("dirty", "uncommitted change", "uncommitted changes"), color: c.red },
-      lost: { text: `${n("only", "commit", "commits")} only here`, color: c.red },
-      broken: { text: "Its repository moved: repair the link", color: c.yellow },
-      recent: { text: "In use today", color: c.yellow, pulse: true },
-      merged: { text: "Merged", color: c.green },
-      detached: { text: "Detached, its commits are on branches", color: c.green, quiet: true },
-      unmerged: { text: w.ahead > 0 ? `Not merged, ${n("ahead", "commit", "commits")} stay on its branch` : "Not merged, stays on its branch", color: c.green, quiet: true },
+      checking: { text: "Checking", tone: "dim" },
+      missing: { text: "Folder gone", tone: "dim" },
+      orphan: { text: "Its repository moved or was deleted", tone: "dim" },
+      open: { text: "Open in Herdr", tone: "working" },
+      locked: { text: "Locked", tone: "dim" },
+      changes: { text: n("dirty", "uncommitted change", "uncommitted changes"), tone: "blocked" },
+      lost: { text: `${n("only", "commit", "commits")} only here`, tone: "blocked" },
+      broken: { text: "Its repository moved: repair the link", tone: "working" },
+      recent: { text: "In use today", tone: "working" },
+      merged: { text: "Merged", tone: "done" },
+      detached: { text: "Detached, its commits are on branches", tone: "done" },
+      unmerged: { text: w.ahead > 0 ? `Not merged, ${n("ahead", "commit", "commits")} stay on its branch` : "Not merged, stays on its branch", tone: "done" },
     }[s];
   }
 
@@ -666,24 +667,14 @@ export class Worktrees {
   }
 
   row(w, c) {
-    const v = this.verdict(w, c), picked = this.picked === w.path, busy = this.working === w.path || Boolean(this.batch?.has(w.path));
+    const v = this.verdict(w), picked = this.picked === w.path, busy = this.working === w.path || Boolean(this.batch?.has(w.path));
     const age = fmtAge(w.last), when = age ? (age === "today" ? "last commit today" : `last commit ${age} ago`) : "";
     const meta = [w.orphan ? tilde(w.path) : w.branch && w.branch !== name(w.path) ? w.branch : !w.branch ? "detached HEAD" : "", when].filter(Boolean).join(" · ");
-    const button = Button.new(`wt-${w.path}`).w_full().px(G.md).py(10).rounded(6).cursor_pointer()
-      .selected(picked)
-      .when(picked, (el) => el.bg(c.selected))
-      .when(!picked, (el) => el.hover((s) => s.bg(c.subtle)))
-      .when(busy, (el) => el.opacity(0.45))
-      .accessibility_label(`${name(w.path)}, ${v.text}`)
-      .on_click((_e, cx) => { this.picked = picked ? null : w.path; this.armed.clear(); cx.notify(); })
-      .child(h_flex().w_full().items_start().gap(G.md)
-        .child(v_flex().flex_1().min_w(0).gap(4)
-          .child(div().w_full().truncate().text_size(14).text_color(c.text).when(picked, (e) => e.font_medium()).child(name(w.path)))
-          .when(Boolean(meta), (el) => el.child(div().w_full().truncate().text_size(11.5).text_color(c.dim).child(meta)))
-          .child(h_flex().w_full().min_w(0).gap(G.sm).items_center()
-            .child(div().size(6).flex_none().rounded_full().bg(v.color).when(Boolean(v.pulse), (el) => breathe(el, PULSE)))
-            .child(div().min_w(0).truncate().text_size(12).text_color(v.quiet || v.color === c.dim ? c.muted : v.color).child(busy ? "Removing…" : v.text))))
-        .child(div().flex_none().text_size(15).font_light().text_color(c.text).child(fmtSize(w.size))));
+    const button = row(`wt-${w.path}`, c, {
+      name: name(w.path), detail: { text: busy ? "Removing…" : v.text, tone: v.tone }, meta: fmtSize(w.size), second: meta || null,
+      current: picked, pending: busy,
+      onClick: (cx) => { this.picked = picked ? null : w.path; this.armed.clear(); cx.notify(); },
+    }).aria_selected(picked).accessibility_label(`${name(w.path)}, ${v.text}`);
     if (!picked) return button;
     const s = stateOf(w);
     const blocked = s === "open" ? "Close its tabs in Herdr to remove it." : s === "locked" ? "Locked: run git worktree unlock to remove it."
