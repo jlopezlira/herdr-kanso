@@ -4,6 +4,29 @@ import test from "node:test";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { load, context, exec as realExec, singleUse, temporary, success, failure, refreshedContext } from "./helpers.mjs";
+import { blankPanel, refreshAgain, PASSED } from "./pr-fixtures.mjs";
+
+const url = (n) => `https://github.com/o/here/pull/${n}`;
+const openOne = { number: 8, title: "Open", url: url(8), state: "OPEN", author: { login: "you" }, headRefName: "c", updatedAt: "2026-10-05T00:00:00Z" };
+
+// git on `branch` of o/here and gh signed in as me: `answer` goes first.
+const repoExec = (branch, answer, calls = []) => async (command, args) => {
+  calls.push([command, ...args].join(" "));
+  if (command === "git") return success({ "rev-parse": "/repo\n", branch: `${branch}\n`, remote: "git@github.com:o/here.git\n" }[args[0]] ?? "");
+  const own = await answer(args);
+  if (own) return own;
+  if (args[0] === "api" && args[1] === "user") return success("me\n");
+  return failure("offline");
+};
+
+const listing = (args) => args[0] === "pr" && args[1] === "list";
+
+// A panel in /repo, read once.
+const panelOn = async (exec, host = {}, state = {}) => {
+  const { PullRequest } = await loadPullRequest({ exec, key: () => "repo", location: () => ({ cwd: "/repo", on: null }), ...host });
+  const panel = blankPanel(PullRequest, undefined, state);
+  return { panel, ...await refreshedContext(panel) };
+};
 
 test("Send shows the failing log, then hands it to the agent in front", async () => {
   const sent = [];
@@ -59,35 +82,20 @@ test("Sign in opens gh auth login in the space already on screen", async () => {
 });
 
 test("Pull request panel lists the repository's open ones, by anyone, and shows the one you pick", async () => {
-  const url = (n) => `https://github.com/o/here/pull/${n}`;
   const prs = {
     [url(1)]: { number: 1, title: "Branch work", url: url(1), author: { login: "me" }, headRefName: "feat", updatedAt: "2026-10-01T00:00:00Z" },
     [url(2)]: { number: 2, title: "Other work", url: url(2), author: { login: "me" }, headRefName: "other", updatedAt: "2026-10-02T00:00:00Z" },
     [url(3)]: { number: 3, title: "Bump a dependency", url: url(3), author: { login: "app/dependabot" }, headRefName: "deps", updatedAt: "2026-10-03T00:00:00Z" },
   };
   const calls = [];
-  const exec = async (command, args) => {
-    calls.push([command, ...args].join(" "));
-    if (command === "git") {
-      const out = { "rev-parse": "/repo\n", branch: "feat\n", remote: "git@github.com:o/here.git\n" }[args[0]];
-      return success(out);
-    }
-    if (args[0] === "pr" && args[1] === "list") return success(JSON.stringify(Object.values(prs)));
+  const { panel, cx, drain } = await panelOn(repoExec("feat", (args) => {
+    if (listing(args)) return success(JSON.stringify(Object.values(prs)));
     if (args[0] === "pr" && args[1] === "view") return success(JSON.stringify(prs[args[2] === "--json" ? url(1) : args[2]]));
-    if (args[0] === "api" && args[1] === "user") return success("me\n");
-    return failure("offline");
-  };
-  const { PullRequest } = await loadPullRequest({
-    exec, key: () => "repo", location: () => ({ cwd: "/repo", on: null }),
-  });
-  const panel = new PullRequest();
-  Object.assign(panel, { expanded: {}, openPrs: [], selected: null, threads: [] });
-  const { cx, drain } = await refreshedContext(panel);
+  }, calls));
   assert.equal(panel.pr.number, 1);
   assert.equal(calls.some((c) => c.includes("pr list")), false, "the branch's pull request does not ask for every open one");
   panel.listing = true;
-  panel.loading = false;
-  panel.refresh(cx); await drain();
+  await refreshAgain(panel, cx, drain);
   assert.deepEqual([...panel.openPrs].map((p) => p.number), [3, 2, 1], "every author, newest first");
   assert.ok(calls.includes(`gh pr list --state open --limit 100 --json ${calls.find((c) => c.startsWith("gh pr list")).split("--json ")[1]}`));
   assert.ok(!calls.some((c) => c.includes("--author")), "not only yours");
@@ -102,30 +110,17 @@ test("Pull request panel lists the repository's open ones, by anyone, and shows 
 });
 
 test("Pull request panel stays empty when the branch has none, and does not stand in another", async () => {
-  const url = (n) => `https://github.com/o/here/pull/${n}`;
   const prs = {
     [url(4)]: { number: 4, title: "Older", url: url(4), author: { login: "me" }, headRefName: "a", updatedAt: "2026-10-01T00:00:00Z" },
     [url(5)]: { number: 5, title: "Newest", url: url(5), author: { login: "you" }, headRefName: "b", updatedAt: "2026-10-05T00:00:00Z" },
   };
-  const exec = async (command, args) => {
-    if (command === "git") {
-      const out = { "rev-parse": "/repo\n", branch: "lonely\n", remote: "git@github.com:o/here.git\n" }[args[0]];
-      return success(out);
-    }
-    if (args[0] === "pr" && args[1] === "list") return success(JSON.stringify(Object.values(prs)));
+  const { panel, cx, drain } = await panelOn(repoExec("lonely", (args) => {
+    if (listing(args)) return success(JSON.stringify(Object.values(prs)));
     if (args[0] === "pr" && args[1] === "view") {
       if (args[2] === "--json") return failure('no pull requests found for branch "lonely"');
       return success(JSON.stringify(prs[args[2]]));
     }
-    if (args[0] === "api" && args[1] === "user") return success("me\n");
-    return failure("offline");
-  };
-  const { PullRequest } = await loadPullRequest({
-    exec, key: () => "repo", location: () => ({ cwd: "/repo", on: null }),
-  });
-  const panel = new PullRequest();
-  Object.assign(panel, { expanded: {}, openPrs: [], selected: null, threads: [] });
-  const { cx, drain } = await refreshedContext(panel);
+  }));
   assert.equal(panel.pr, null, "another open pull request does not stand in");
   assert.equal(panel.none, true);
   assert.equal(panel.selected, null, "it keeps following the branch");
@@ -135,27 +130,13 @@ test("Pull request panel stays empty when the branch has none, and does not stan
 });
 
 test("Pull request panel skips the branch's merged or closed one", async () => {
-  const url = (n) => `https://github.com/o/here/pull/${n}`;
   const done = { 6: { number: 6, title: "Merged", url: url(6), state: "MERGED" }, 7: { number: 7, title: "Closed", url: url(7), state: "CLOSED" } };
-  const openOne = { number: 8, title: "Open", url: url(8), state: "OPEN", author: { login: "you" }, headRefName: "c", updatedAt: "2026-10-05T00:00:00Z" };
   for (const n of [6, 7]) {
     for (const open of [[openOne], []]) {
-      const exec = async (command, args) => {
-        if (command === "git") {
-          const out = { "rev-parse": "/repo\n", branch: "develop\n", remote: "git@github.com:o/here.git\n" }[args[0]];
-          return success(out);
-        }
+      const { panel } = await panelOn(repoExec("develop", (args) => {
         if (args[0] === "pr" && args[1] === "list") return success(JSON.stringify(open));
         if (args[0] === "pr" && args[1] === "view") return success(JSON.stringify(args[2] === "--json" ? done[n] : openOne));
-        if (args[0] === "api" && args[1] === "user") return success("me\n");
-        return failure("offline");
-      };
-      const { PullRequest } = await loadPullRequest({
-        exec, key: () => "repo", location: () => ({ cwd: "/repo", on: null }),
-      });
-      const panel = new PullRequest();
-      Object.assign(panel, { expanded: {}, openPrs: [], selected: null, threads: [] });
-      const { cx, drain } = await refreshedContext(panel);
+      }));
       assert.equal(panel.branchUrl, null, `#${n} is not the branch's any more`);
       assert.equal(panel.pr, null, "a finished one is not shown, and neither is another open one");
       assert.equal(panel.none, true);
@@ -165,10 +146,7 @@ test("Pull request panel skips the branch's merged or closed one", async () => {
 
 test("Pull request panel shows a quiet placeholder outside a repository, not an error", async () => {
   const exec = async (command) => command === "git" ? failure("not a git repository", 128) : failure("");
-  const { PullRequest } = await loadPullRequest({ exec, key: () => "home", location: () => ({ cwd: "/home", on: null }) });
-  const panel = new PullRequest();
-  Object.assign(panel, { expanded: {}, openPrs: [], selected: null, threads: [] });
-  const { cx, drain } = await refreshedContext(panel);
+  const { panel } = await panelOn(exec, { key: () => "home", location: () => ({ cwd: "/home", on: null }) });
   assert.equal(panel.outside, true);
   assert.equal(panel.error, null);
 });
@@ -185,34 +163,19 @@ test("Pull request panel reads the description and folds it only when long", asy
 });
 
 test("Pull request panel keeps finished ones in the list's Closed tab, never as the one it opens on", async () => {
-  const url = (n) => `https://github.com/o/here/pull/${n}`;
-  const openOne = { number: 8, title: "Open", url: url(8), state: "OPEN", author: { login: "you" }, headRefName: "c", updatedAt: "2026-10-05T00:00:00Z" };
   const closed = [
     { number: 6, title: "Merged by a colleague", url: url(6), state: "MERGED", author: { login: "ana" }, headRefName: "x", updatedAt: "2026-10-02T00:00:00Z", mergedAt: "2026-10-02T00:00:00Z" },
     { number: 7, title: "Closed", url: url(7), state: "CLOSED", author: { login: "me" }, headRefName: "develop", updatedAt: "2026-10-04T00:00:00Z", closedAt: "2026-10-04T00:00:00Z" },
   ];
   const calls = [];
-  const exec = async (command, args) => {
-    calls.push([command, ...args].join(" "));
-    if (command === "git") {
-      const out = { "rev-parse": "/repo\n", branch: "develop\n", remote: "git@github.com:o/here.git\n" }[args[0]];
-      return success(out);
-    }
+  const { panel, cx, drain } = await panelOn(repoExec("develop", (args) => {
     if (args[0] === "pr" && args[1] === "list" && args[3] === "open") return success(JSON.stringify([openOne]));
     if (args[0] === "pr" && args[1] === "list" && args[3] === "closed") return success(JSON.stringify(closed));
     if (args[0] === "pr" && args[1] === "view") {
       const pick = args[2] === "--json" ? closed[1] : [openOne, ...closed].find((p) => p.url === args[2]);
       return success(JSON.stringify(pick));
     }
-    if (args[0] === "api" && args[1] === "user") return success("me\n");
-    return failure("offline");
-  };
-  const { PullRequest } = await loadPullRequest({
-    exec, key: () => "repo", location: () => ({ cwd: "/repo", on: null }),
-  });
-  const panel = new PullRequest();
-  Object.assign(panel, { expanded: {}, openPrs: [], selected: null, threads: [], tab: "open", closedPrs: null });
-  const { cx, drain } = await refreshedContext(panel);
+  }, calls), {}, { tab: "open", closedPrs: null });
   assert.equal(panel.pr, null, "the branch's finished one is not the one it opens on");
   assert.equal(panel.none, true);
   assert.ok(!calls.some((c) => c.includes("--state closed")), "closed ones are read only when asked for");
@@ -241,26 +204,23 @@ test("Pull request panel offers to create one only where gh can: a branch pushed
   const show = async (cwd, view, open = []) => {
     const ids = [];
     const ui = singleUse();
-    const { PullRequest } = await loadPullRequest({
+    const exec = (command, args, options) => command === "gh"
+      ? Promise.resolve(args[1] === "list" ? success(JSON.stringify(open))
+        : args[0] === "repo" ? success("main\n")
+          : args[1] === "view" && args[2] !== "--json" ? success(JSON.stringify(other))
+            : args[1] === "view" ? view : failure("offline"))
+      : realExec(command, args, options);
+    const { panel, cx, drain } = await panelOn(exec, {
       ...ui, home: () => "/Users/x", Popover: ui.Button, Button: { new: (id) => { ids.push(id); return ui.Button.new(); } },
-      exec: (command, args, options) => command === "gh"
-        ? Promise.resolve(args[1] === "list" ? success(JSON.stringify(open))
-          : args[0] === "repo" ? success("main\n")
-            : args[1] === "view" && args[2] !== "--json" ? success(JSON.stringify(other))
-              : args[1] === "view" ? view : failure("offline"))
-        : realExec(command, args, options),
       key: () => cwd, location: () => ({ cwd, on: null }),
     });
-    const panel = new PullRequest();
-    Object.assign(panel, { expanded: {}, openPrs: [], selected: null, threads: [] });
-    const { cx, drain } = await refreshedContext(panel);
     let said = null;
     const waiting = panel.waiting.bind(panel);
     panel.waiting = (c, title, detail, action) => { said = { title, detail }; return waiting(c, title, detail, action); };
     panel.body({}, true);
     const link = ids.includes("pr-create");
-    panel.listing = true; panel.tab = "open"; panel.loading = false; ids.length = 0;
-    panel.refresh(cx); await drain();
+    panel.listing = true; panel.tab = "open"; ids.length = 0;
+    await refreshAgain(panel, cx, drain);
     panel.body({}, true);
     return { panel, said, link, listLink: ids.includes("pr-create-list") };
   };
@@ -305,9 +265,13 @@ test("Pull request panel offers to create one only where gh can: a branch pushed
   await git(github, "checkout", "-q", "feat");
   const bare = join(await temporary(t), "bare.git");
   await git(github, "init", "-q", "--bare", bare);
-  await git(github, "remote", "set-url", "origin", bare);
-  await git(github, "push", "-q", "-u", "origin", "feat");
-  await git(github, "remote", "set-url", "origin", "https://github.com/o/here.git");
+  const push = async (...args) => {
+    await git(github, "remote", "set-url", "origin", bare);
+    await git(github, "push", "-q", ...args);
+    await git(github, "remote", "set-url", "origin", "https://github.com/o/here.git");
+  };
+  const notListed = async (view) => assert.equal((await show(github, view, [other])).listLink, false, "nor in the list");
+  await push("-u", "origin", "feat");
   r = await show(github, noPr);
   assert.equal(r.panel.pushed, true);
   assert.equal(r.said.title, "No pull request for feat");
@@ -322,31 +286,24 @@ test("Pull request panel offers to create one only where gh can: a branch pushed
   assert.equal(r.panel.pushed, false, "a commit past the upstream is not on GitHub");
   assert.deepEqual(r.said, { title: "1 commit not on GitHub", detail: null });
   assert.equal(r.link, false, "branch ahead of its upstream");
-  r = await show(github, noPr, [other]);
-  assert.equal(r.listLink, false, "nor in the list");
+  await notListed(noPr);
 
-  await git(github, "remote", "set-url", "origin", bare);
-  await git(github, "push", "-q", "origin", "feat");
-  await git(github, "remote", "set-url", "origin", "https://github.com/o/here.git");
+  await push("origin", "feat");
   await git(github, "reset", "-q", "--hard", "HEAD~1");
   r = await show(github, noPr);
   assert.equal(r.panel.pushed, false, "an upstream past HEAD is not this branch on GitHub");
   assert.equal(r.panel.behind, true);
   assert.deepEqual(r.said, { title: "1 commit behind GitHub", detail: null });
   assert.equal(r.link, false, "branch behind its upstream");
-  r = await show(github, noPr, [other]);
-  assert.equal(r.listLink, false, "nor in the list");
+  await notListed(noPr);
 
   await git(github, "checkout", "-q", "-b", "main");
-  await git(github, "remote", "set-url", "origin", bare);
-  await git(github, "push", "-q", "-u", "origin", "main");
-  await git(github, "remote", "set-url", "origin", "https://github.com/o/here.git");
+  await push("-u", "origin", "main");
   r = await show(github, failure('no pull requests found for branch "main"'));
   assert.equal(r.panel.pushed, true);
   assert.deepEqual(r.said, { title: "main is the default branch", detail: null });
   assert.equal(r.link, false, "the default branch");
-  r = await show(github, failure('no pull requests found for branch "main"'), [other]);
-  assert.equal(r.listLink, false, "nor in the list");
+  await notListed(failure('no pull requests found for branch "main"'));
 });
 
 const TONE = { dim: "dim", red: "red", yellow: "yellow", green: "green", violet: "violet", blocked: "red", working: "yellow", done: "green", muted: "dim" };
@@ -354,29 +311,21 @@ const canMerge = (panel) => {
   const primary = panel.view().primary;
   return Boolean(primary?.id === "pr-merge" && primary.acts !== false && !primary.disabled);
 };
-const passed = [{ __typename: "CheckRun", status: "COMPLETED", conclusion: "SUCCESS", name: "ci" }];
 const failed = [{ __typename: "CheckRun", status: "COMPLETED", conclusion: "FAILURE", name: "ci" }];
 
 async function shownMerge(pr, permission = "WRITE") {
   const ids = [];
   const ui = singleUse();
-  const exec = async (command, args) => {
-    if (command === "git") {
-      const out = { "rev-parse": "/repo\n", branch: "feat\n", remote: "git@github.com:o/here.git\n" }[args[0]];
-      return success(out ?? "");
-    }
+  const exec = repoExec("feat", (args) => {
     if (args[0] === "pr" && args[1] === "list") return success(JSON.stringify([pr]));
     if (args[0] === "pr" && args[1] === "view") return success(JSON.stringify(pr));
     if (args[0] === "repo" && args.includes("viewerPermission")) return success(`${permission}\n`);
-    if (args[0] === "api" && args[1] === "user") return success("me\n");
-    return failure("offline");
-  };
+  });
   const { PullRequest } = await loadPullRequest({
     ...ui, Button: { new: (id) => { ids.push(id); return ui.Button.new(); } },
     exec, key: () => "repo", location: () => ({ cwd: "/repo", on: null }),
   });
-  const panel = new PullRequest();
-  Object.assign(panel, { expanded: {}, openPrs: [], selected: null, threads: [] });
+  const panel = blankPanel(PullRequest);
   const { cx, drain } = context();
   panel.context = "repo";
   panel.listing = true;
@@ -388,14 +337,18 @@ async function shownMerge(pr, permission = "WRITE") {
 const pull = (over) => ({
   number: 575, title: "Ship it", url: "https://github.com/o/here/pull/575", state: "OPEN", isDraft: false,
   author: { login: "me" }, headRefName: "feat", baseRefName: "main", updatedAt: "2026-11-10T00:00:00Z",
-  mergeable: "MERGEABLE", statusCheckRollup: passed, additions: 1, deletions: 0, changedFiles: 1, ...over,
+  mergeable: "MERGEABLE", statusCheckRollup: PASSED, additions: 1, deletions: 0, changedFiles: 1, ...over,
 });
 
-function assertHeld(view, text) {
-  assert.equal(view.panel.view().text, text);
+function assertNoMerge(view) {
   assert.equal(canMerge(view.panel), false);
   assert.equal(view.merge, false);
   assert.equal(/ready/i.test(view.panel.view().text), false);
+}
+
+function assertHeld(view, text) {
+  assert.equal(view.panel.view().text, text);
+  assertNoMerge(view);
   assert.equal(view.panel.rowState(view.panel.openPrs[0], TONE).text, text);
   assert.equal(/ready/i.test(view.panel.rowState(view.panel.openPrs[0], TONE).text), false);
 }
@@ -413,9 +366,7 @@ test("A clean pull request is ready to merge only for someone who can push", asy
   const no = await shownMerge(pull({ mergeStateStatus: "CLEAN", reviewDecision: "APPROVED" }), "READ");
   assertHeld(no, "No permission to merge");
   const unread = await shownMerge(pull({ mergeStateStatus: "CLEAN" }), "");
-  assert.equal(canMerge(unread.panel), false);
-  assert.equal(unread.merge, false);
-  assert.equal(/ready/i.test(unread.panel.view().text), false);
+  assertNoMerge(unread);
   assert.equal(unread.panel.rowState(unread.panel.openPrs[0], TONE).text, "Checks passed");
 });
 
@@ -429,9 +380,7 @@ test("A pull request with hooks still offers merge when GitHub would", async () 
 test("An unstable pull request shows the failing checks and no Merge", async () => {
   const view = await shownMerge(pull({ mergeStateStatus: "UNSTABLE", statusCheckRollup: failed }));
   assert.equal(view.panel.view().text, "1 check failing");
-  assert.equal(canMerge(view.panel), false);
-  assert.equal(view.merge, false);
-  assert.equal(/ready/i.test(view.panel.view().text), false);
+  assertNoMerge(view);
   assert.equal(view.panel.rowState(view.panel.openPrs[0], TONE).text, "1 check failing");
 });
 
@@ -486,30 +435,18 @@ test("a failed run's log is read once, and not while the window is behind", asyn
       detailsUrl: "https://github.com/o/here/actions/runs/99",
     }],
   };
-  const exec = async (command, args) => {
-    if (command === "git") {
-      const out = { "rev-parse": "/repo\n", branch: "feat\n", remote: "git@github.com:o/here.git\n" }[args[0]];
-      return success(out ?? "");
-    }
+  const exec = repoExec("feat", (args) => {
     if (args[0] === "run" && args[1] === "view") {
       runs.push(args.join(" "));
       return success("ci\tstep\tFAIL no\n");
     }
     if (args[0] === "pr" && args[1] === "view") return success(JSON.stringify(pr));
-    if (args[0] === "api" && args[1] === "user") return success("me\n");
     if (args[0] === "api" && args[1] === "graphql") return success(JSON.stringify({ data: { repository: { pullRequest: { reviewThreads: { nodes: [] } } } } }));
     if (args[0] === "repo") return success("WRITE\n");
-    return failure("offline");
-  };
-  const { PullRequest } = await loadPullRequest({
-    exec, key: () => "repo", location: () => ({ cwd: "/repo", on: null }), window: () => ({ active }),
   });
-  const panel = new PullRequest();
-  Object.assign(panel, { expanded: {}, openPrs: [], selected: null, threads: [] });
-  const { cx, drain } = await refreshedContext(panel);
+  const { panel, cx, drain } = await panelOn(exec, { window: () => ({ active }) });
   assert.deepEqual(runs, ["run view 99 --log-failed"]);
-  panel.loading = false;
-  panel.refresh(cx); await drain();
+  await refreshAgain(panel, cx, drain);
   assert.equal(runs.length, 1);
   active = false;
   panel.again(cx); await drain();

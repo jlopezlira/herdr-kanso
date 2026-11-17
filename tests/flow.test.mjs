@@ -5,6 +5,7 @@ import assert from "node:assert/strict";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { databaseTimer, load, clone, temporary, exec, singleUse, failure, success } from "./helpers.mjs";
+import { PASSED } from "./pr-fixtures.mjs";
 
 const HOME = "/Users/me";
 
@@ -37,7 +38,7 @@ test("The header digest names why a blocked pull request cannot merge", async ()
       return JSON.stringify({
         number: 575, state: "OPEN", isDraft: false, mergeable: "MERGEABLE", mergeStateStatus: "BLOCKED",
         reviewDecision: "REVIEW_REQUIRED", baseRefName: "main",
-        statusCheckRollup: [{ __typename: "CheckRun", status: "COMPLETED", conclusion: "SUCCESS", name: "ci" }],
+        statusCheckRollup: PASSED,
       });
     }
     const line = args.join(" ");

@@ -145,6 +145,12 @@ export async function exec(command, args, options = {}) {
 
 export const databaseTimer = { after(ms, fn) { const timer = setTimeout(fn, ms); timer.unref(); return { cancel: () => clearTimeout(timer) }; } };
 
+export const openedKdb = async (Kdb) => {
+  const db = new Kdb(databaseTimer);
+  await db.open();
+  return db;
+};
+
 // A view context whose spawned tasks can be awaited.
 export function context() {
   const pending = [];

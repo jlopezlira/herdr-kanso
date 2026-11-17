@@ -1,5 +1,5 @@
 // Named loaders for production modules used by multiple tests.
-import { load } from "./helpers.mjs";
+import { exec, load, openedKdb, temporary } from "./helpers.mjs";
 
 export const loadSpaces = (host) => load("kanso-spaces/main.js", ["Spaces"], host);
 export const loadDescribe = (host) => load("kanso-help/keymap.js", ["describe"], host);
@@ -53,3 +53,10 @@ export const loadRecordPrFacts = (host) => load("kanso-panel/pr-inbox.js", ["rec
 export const loadDuration = (host) => load("kanso-spaces/agents.js", ["duration"], host);
 export const loadTokenSpend = (host) => load("kanso-spend/main.js", ["TokenSpend"], host);
 export const loadToast = (host) => load("kanso-toast/main.js", ["Toast"], host);
+
+// A real kanso.db in its own temporary folder, opened: `names` are more of kdb.js's exports, `wrap` watches its commands.
+export const temporaryKdb = async (t, names = [], wrap = (run) => run) => {
+  const dir = await temporary(t);
+  const loaded = await load("kanso-spaces/kdb.js", ["Kdb", ...names], { exec: wrap(exec), appHome: () => dir });
+  return { ...loaded, dir, db: await openedKdb(loaded.Kdb) };
+};
