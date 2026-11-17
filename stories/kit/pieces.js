@@ -168,8 +168,15 @@ export const skeletonShapes = {
   'list row': () => `<div class="kanso-row">${bar('line')}${grow()}${bar('meta')}</div>`,
   header: () => `<div class="kanso-panel__header">${bar('title')}${grow()}${bar('control')}</div>`,
   line: () => `<div class="kanso-row">${bar('line')}</div>`,
+  // Proposed: the app's loading states this kit lacked.
+  'two lines': () => `<div class="kanso-row kanso-row--two-lines"><div class="kanso-content__primary">${bar('line')}${grow()}${bar('meta')}</div><div class="kanso-content__secondary">${bar('detail')}</div></div>`,
+  picture: () => bar('picture'),
+  metric: () => `<div class="kanso-skeleton__metric">${bar('value')}${bar('line')}<div class="kanso-skeleton__stats">${bar('stat').repeat(3)}</div></div>`,
+  tile: () => `<div class="kanso-skeleton__tile">${bar('tile')}</div>`,
+  device: () => bar('device'),
 };
-export const skeletonOf = ({ shape, count }) => `<div class="kanso-skeleton__list kanso-skeleton--breathing" role="status" aria-label="Loading">${Array.from({ length: shape === 'header' ? 1 : count }, (_, i) => skeletonShapes[shape](i)).join('')}</div>`;
+const drawnOnce = ['header', 'picture', 'metric', 'device'];
+export const skeletonOf = ({ shape, count }) => `<div class="kanso-skeleton__list kanso-skeleton--breathing" role="status" aria-label="Loading">${Array.from({ length: drawnOnce.includes(shape) ? 1 : count }, (_, i) => skeletonShapes[shape](i)).join('')}</div>`;
 
 export const tabNameLimit = 64;
 const choose = "if (this.closest('.kanso-control--off')) return; for (const tab of this.parentNode.children) { tab.classList.toggle('kanso-tabs__tab--on', tab === this); tab.setAttribute('aria-selected', tab === this); }";

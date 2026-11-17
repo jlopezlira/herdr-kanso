@@ -5,17 +5,14 @@ import { div, svg, image } from "gpui-kit";
 import { v_flex, h_flex, Editor, EditorState, TextView, Textarea, TextareaState } from "gpui-base";
 import { readTextFile, writeTextFile, theme, settings, home, appHome } from "herdr";
 import { parseBlocks, joinBlocks, headingOf, headingLine, parseTable, tableLines } from "./blocks.js";
-import { breathe, tokens } from "./ui.js";
+import { G, tokens } from "./ui.js";
 import { quietLink, button } from "./ui-button.js";
-import { skeleton } from "./ui-skeleton.js";
+import { skeletonOf } from "./kit.js";
 import { bring, appRelative, markdownParts, staleView, bytesLabel, copyFailure, quietError } from "./remote-file.js";
 import { EDIT_LIMIT, drafts, draftKey, remember, opened, restore, seenDisk, typed, beginSave, commitText, applied, word, didFail, keepMine, takeTheirs, tooLarge, wholeText, overRead } from "./edit.js";
 
-export function readingLines(t) {
-  const { line } = skeleton({ border: t.border });
-  return breathe(v_flex().id("kanso-skeleton").w_full().max_w(760).px(16).pt(14).gap(10))
-    .children([280, 200, 240, 120, 220, 160, 190].map((w) => line(w, 12)));
-}
+// Where text is about to be: a preview's few lines, a Markdown document's more.
+export const readingLines = (t, count = 4) => v_flex().w_full().px(G.lg).pt(G.md).child(skeletonOf({ shape: "line", count })("kanso-skeleton", t));
 
 const AUTOSAVE_MS = 700;
 const HEADING_SIZE = [0, 22, 18, 16, 15, 14, 13.5];
@@ -324,7 +321,7 @@ export class MarkdownDoc {
   body(t, id) {
     if (this.big) return div().p(16).text_color(t.dim).child("Too large to edit");
     if (this.error) return div().p(16).text_color(t.dim).child(this.error);
-    if (this.text === null) return readingLines(t);
+    if (this.text === null) return readingLines(t, 6);
     const conflict = this.conflict ? conflictBar(id, t, (cx) => this.keepMine(cx), (cx) => this.takeTheirs(cx)) : null;
     const main = this.source
       ? div().flex_1().min_h(0).px(6).py(4).child(Editor.new(this.source).size_full())
@@ -359,7 +356,7 @@ export class MarkdownDoc {
       if (part.kind === "text") return part.text.trim() ? TextView.markdown(`${id}-v${i}-${k}`, part.text).on_link_click((url, cx) => this.follow(url, cx)) : null;
       const file = linkTarget(part.url, this.path)?.file;
       const shot = file && this.shots?.has(file) ? this.shots.get(file) : undefined;
-      if (shot === undefined) return breathe(div().id(`${id}-shot-${k}`)).child(skeleton({ border: t.border }).block(240, 140, 8));
+      if (shot === undefined) return skeletonOf({ shape: "picture" })(`${id}-shot-${k}`, t);
       if (shot?.deferred) return h_flex().id(`${id}-shot-${k}`).gap(8).items_center()
         .child(div().text_size(12).text_color(t.foreground).child(paths.basename(file)))
         .child(div().text_size(12).text_color(t.dim).child(bytesLabel(shot.size)))

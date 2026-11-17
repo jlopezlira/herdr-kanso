@@ -6,12 +6,12 @@ import { Store } from "./store.js";
 import { base, tilde, captureTab, describe, summary, projectOf, folderOfKey, openTab } from "./tabkit.js";
 import { listKey, moveTo } from "./listkeys.js";
 import { tryOr, focusOn } from "./pure.js";
-import { breathe, G, H, tokens } from "./ui.js";
+import { G, H, tokens } from "./ui.js";
 import { Armed } from "./ui-button.js";
 import { dialog, statusNotes } from "./ui-dialog.js";
 import { field, TextField } from "./ui-field.js";
 import { row } from "./ui-row.js";
-import { skeleton } from "./ui-skeleton.js";
+import { skeletonOf } from "./kit.js";
 
 const LIST_ROWS = 13;
 
@@ -130,22 +130,6 @@ export default class Arrange extends View {
     return move;
   }
 
-  listBones(t) {
-    const { block, line } = skeleton({ border: t.border });
-    const row = (i) => h_flex().w_full().px(10).py(8).gap(10).items_center()
-      .child(block(15, 15, 4))
-      .child(v_flex().flex_1().gap(2).child(line([120, 96, 140, 84][i], 13)).child(line([180, 150, 100, 160][i], 11)));
-    return breathe(v_flex().id("kanso-skeleton").w_full().gap(2)).children([0, 1, 2, 3].map(row));
-  }
-
-  captureBones(t) {
-    const { line } = skeleton({ border: t.border });
-    const col = (i) => h_flex().w_full().gap(10).items_stretch()
-      .child(div().w(2).flex_none().rounded_full().bg(t.border))
-      .child(v_flex().flex_1().gap(4).child(line([140, 100][i], 12)).child(line([90, 120][i], 11)));
-    return breathe(v_flex().id("kanso-skeleton").w_full().gap(10)).children([0, 1].map(col));
-  }
-
   render() {
     const t = theme();
     const p = props() ?? {};
@@ -167,7 +151,7 @@ export default class Arrange extends View {
           field("ar-name", this.name, c, { label: "Name" }),
           cols.length ? v_flex().pt(G.md).gap(G.md).children(cols.map((c, ci) => h_flex().w_full().gap(G.md).items_stretch()
             .child(div().w(2).flex_none().rounded_full().bg(t.border))
-            .child(v_flex().flex_1().min_w(0).gap(4).children(c.panes.map((q, ri) => line(q, `${ci}-${starts[ci] + ri}`)))))) : this.captureBones(t),
+            .child(v_flex().flex_1().min_w(0).gap(4).children(c.panes.map((q, ri) => line(q, `${ci}-${starts[ci] + ri}`)))))) : skeletonOf({ shape: "list row", count: 2 })("kanso-skeleton", c),
         ],
         notes: [...(cols.length ? [{ text: `${cols.length} ${cols.length === 1 ? "column" : "columns"}, left to right` }] : []),
           { text: "Each program is kept with the flags you started it with. A resumed session's id is left out, so each agent starts fresh." },
@@ -198,7 +182,7 @@ export default class Arrange extends View {
       title: "Arrangements", scope: `Opens in ${project}`,
       // The list's content in a column that never shrinks: past LIST_ROWS lines it scrolls.
       body: v_flex().id("ar-list").pt(G.hair).max_h(LIST_ROWS * H.line).mx(-G.sm).px(G.sm).overflow_y_scrollbar().child(v_flex().flex_none().w_full()
-        .when(this.list === null, (el) => el.child(this.listBones(t)))
+        .when(this.list === null, (el) => el.child(skeletonOf({ shape: "two lines", count: 3 })("kanso-skeleton", c)))
         .when(this.list !== null && !list.length && !others.length, (el) => el.child(v_flex().py(6).gap(4)
           .child(div().text_size(13).text_color(t.muted).child("No arrangement yet."))
           .child(div().text_size(11.5).line_height(1.45).text_color(t.dim).child("Set up a tab the way you work, with your agents, their flags and your servers, then save it to open it again in one click, in this project or any other."))))

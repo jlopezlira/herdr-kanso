@@ -1,5 +1,5 @@
 import { spawnAndNotify, commandOk, location, key, diffRows, tilde, said } from "./lib.js";
-import { detailRow, detailColumn, pageSize, pageBones, skeletonStack, skeletonMetrics } from "./ui-page.js";
+import { detailRow, detailColumn, pageSize, pageBones, listBones } from "./ui-page.js";
 import { drawHero, drawEmpty, footOf, listedRow, prRow, heroPieces } from "./pr-view.js";
 import { localService } from "./platform-host.js";
 import { openApi } from "./platform-open.js";
@@ -9,14 +9,13 @@ import { div, svg } from "gpui-kit";
 import { v_flex, h_flex, Button, Popover, TextView, ScrollHandle } from "gpui-base";
 import { exec, notify, run, theme, setShared, shared, window, layout, focused, panes, terminals, props } from "herdr";
 import { walkLayout } from "./layout.js";
-import { G, T, PR, OPACITY, TINT, alpha, breathe, monoFont, tokens } from "./ui.js";
+import { G, T, PR, OPACITY, TINT, alpha, monoFont, tokens } from "./ui.js";
 import { Armed, button, quietLink, iconButton } from "./ui-button.js";
 import { TextField } from "./ui-field.js";
 import { menu } from "./ui-menu.js";
-import { failureBlock } from "./kit.js";
+import { failureBlock, skeletonOf } from "./kit.js";
 import { dot } from "./ui-dot.js";
 import { section } from "./ui-section.js";
-import { ghost } from "./ui-skeleton.js";
 import { segmented } from "./ui-tab.js";
 import { aliasText, machineTitle, tryOr, tryOrAsync, bounded } from "./pure.js";
 import { STATES, checkState, onePerJob, checkSummary, runIdOf, listHold, mergeReadiness } from "./ghchecks.js";
@@ -854,26 +853,13 @@ export class PullRequest {
     cx.timer.after(1500, (cx) => { if (this.copiedAt === at) { this.copied = null; cx.notify(); } });
   }
 
-  closedBones(c) {
-    const { block, line } = ghost(c);
-    return breathe(v_flex().id("kanso-skeleton").w_full().gap(G.lg))
-      .children([0, 1, 2].map((i) => v_flex().w_full().px(G.md).py(10).gap(4)
-        .child(line([220, 180, 200][i], 14))
-        .child(line([140, 120, 160][i], 11))
-        .child(h_flex().gap(G.sm).items_center().child(block(6, 6, 6)).child(line(72, 12)))));
-  }
+  closedBones(c) { return skeletonOf({ shape: "line", count: 3 })("kanso-skeleton", c); }
 
-  diffBones(c) {
-    const { line } = ghost(c);
-    return breathe(v_flex().id("kanso-skeleton").w_full().py(6).gap(2))
-      .children([160, 200, 120, 180, 90].map((w) => h_flex().h(20).flex_none().items_center().px(10).child(line(w, 11))));
-  }
+  diffBones(c) { return skeletonOf({ shape: "line", count: 4 })("kanso-skeleton", c); }
 
   bones(c, narrow = true) {
-    return pageBones(c, narrow, { title: { narrow: 110, wide: 140 }, body: this.skeleton(c, narrow), background: c.background, gap: G.lg });
+    return pageBones(c, narrow, { body: listBones(c), background: c.background, gap: G.lg });
   }
-
-  skeleton(c, narrow) { return prSkeleton(ghost(c), narrow); }
 
   waiting(c, title, detail, action) {
     return v_flex().w_full().gap(G.sm)
@@ -1163,7 +1149,7 @@ export class PullRequest {
     if (this.listing) return this.listPage(c);
     const kind = this.sceneKind();
     if (kind === "pr") return this.hero(c);
-    if (kind === "loading") return this.skeleton(c, narrow);
+    if (kind === "loading") return listBones(c);
     if (kind === "wait") return this.waiting(c, this.wait);
     if (kind === "error") return failureBlock({ text: this.error.title, source: this.error.detail, fix: "Refresh" })("pr-failed", c, { onClick: (cx) => this.again(cx) });
     return drawEmpty(this, c);
@@ -1238,11 +1224,5 @@ export class PullRequest {
         .child(v_flex().w_full().max_w(1080).child(el))));
   }
 }
-
-const prSkeleton = ({ block, row }, narrow) => skeletonStack(narrow)
-  .child(v_flex().gap(G.md).child(block(140, 12)).child(block(narrow ? 240 : 420, narrow ? 22 : 28, 4)).child(block(180, 22, 4)).child(block(150, 11))
-    .child(skeletonMetrics(block, narrow)))
-  .child(v_flex().gap(G.sm).children([0, 1, 2].map((i) => h_flex().gap(G.md).child(block(70, 10)).child(block([90, 120, 80][i], 10)))))
-  .child(v_flex().w_full().child(h_flex().pb(G.sm).child(block(70, 12))).children([0, 1, 2, 3, 4].map(row)));
 
 const listButton = (button, index, c) => button.when(index > 0, (el) => el.border_t(1).border_color(c.border)).hover((style) => style.opacity(OPACITY.hover));

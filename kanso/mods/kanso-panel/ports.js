@@ -1,4 +1,4 @@
-import { sizedPage, pageBones, heroStack, heroHeading, metricStats, skeletonBars } from "./ui-page.js";
+import { sizedPage, listBones, heroStack, heroHeading, metricStats } from "./ui-page.js";
 import { localService, serviceFor, REMOTE_TIMEOUT } from "./platform-host.js";
 import { paths } from "./platform-paths.js";
 import { processApi } from "./platform-processes.js";
@@ -15,11 +15,10 @@ import { aliasText, machineTitle, tryOr } from "./pure.js";
 import { parseProcesses, etimeSecs } from "./procs.js";
 import { STOP_LOOP, systemApi } from "./platform-system.js";
 export { STOP_LOOP };
-import { G, OPACITY, tokens, breathe } from "./ui.js";
+import { G, OPACITY, tokens } from "./ui.js";
 import { Armed, button, quietLink, iconButton } from "./ui-button.js";
 import { row } from "./ui-row.js";
 import { section } from "./ui-section.js";
-import { ghost } from "./ui-skeleton.js";
 import { segmented } from "./ui-tab.js";
 import { Share, shareRows } from "./share.js";
 import { portsSpec, portsText } from "./ports-card.js";
@@ -471,24 +470,7 @@ export class Ports {
         .child(quietLink("pt-more", this.showAll ? "Show fewer" : `Show ${tab.rows.length - LIST_ROWS} more`, (cx) => { this.showAll = !this.showAll; cx.notify(); }, c))));
   }
 
-  skeleton(c, narrow) {
-    const { block, line } = ghost(c);
-    const heights = [28, 50, 36, 72, 40, 60, 24, 44, 32, 48, 20, 56];
-    const two = (i) => v_flex().w_full().py(10).gap(4)
-      .child(line([140, 110, 160, 96][i], 13)).child(line([180, 150, 120, 170][i], 11));
-    return breathe(v_flex().id("kanso-skeleton").w_full().gap(narrow ? 32 : 44))
-      .child(v_flex().gap(G.xs)
-        .child(line(160, 15))
-        .child(h_flex().items_end().gap(G.md).child(block(narrow ? 72 : 96, narrow ? 48 : 64, 6)).child(line(70, 13))))
-      .child(h_flex().gap(narrow ? G.xl : 48).children([52, 46, 64].map((w) => block(w, narrow ? 22 : 28, 4))))
-      .child(h_flex().w_full().h(72).items_end()
-        .children(skeletonBars(block, heights.map((h) => Math.min(h, 72)))))
-      .child(v_flex().w_full().child(h_flex().pb(G.sm).child(line(70, 12))).children([0, 1, 2, 3].map(two)));
-  }
-
-  bones(c, narrow = true) {
-    return pageBones(c, narrow, { title: { narrow: 70, wide: 90 }, body: this.skeleton(c, narrow) });
-  }
+  skeleton(c) { return listBones(c); }
 
   render(cx) {
     this.front?.wake(cx, (wakeCx) => this.refresh(wakeCx));
@@ -503,7 +485,7 @@ export class Ports {
     const history = this.history(c);
     const others = this.list === null ? [] : this.remoteSections(c);
     const body = this.list === null
-      ? this.skeleton(c, narrow)
+      ? this.skeleton(c)
       : v_flex().w_full().gap(narrow ? 32 : 44)
         .child(this.hero(c, list, narrow))
         .when(state !== undefined && state !== "ok", (el) => el.child(this.guardOff(c)))

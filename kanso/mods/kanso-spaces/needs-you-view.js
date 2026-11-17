@@ -2,7 +2,7 @@ import { div } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import { G, H, R, T, tokens } from "./ui.js";
 import { quietLink } from "./ui-button.js";
-import { skeleton } from "./ui-skeleton.js";
+import { skeletonOf } from "./kit.js";
 import { waitingReason, queueMessage } from "./needs-you.js";
 
 export function queueLabel(queue, collapsed, empty) {
@@ -34,7 +34,7 @@ export function queueList(t, queue, rowFor, age, scroll = null) {
           .child(div().truncate().text_size(10.5).text_color(c.dim).child(row.project))
           .child(h_flex().gap(G.sm).child(line(waitingReason(row), c.muted)).child(line(age(row), c.dim))));
     }))
-    .when(queue.state === "loading", (el) => el.child(skeleton(c).row(0, H.control)))
+    .when(queue.state === "loading", (el) => el.child(skeletonOf({ shape: "row" })("needs-you-loading", c)))
     .when(queue.state === "unavailable" || (!queue.rows.length && queue.state === "ready"),
       (el) => el.child(line(queueMessage(queue.state), c.dim)));
 }

@@ -14,11 +14,10 @@ import { location, key, insideRoot, showPanel } from "./lib.js";
 import { walkLayout } from "./layout.js";
 import { mapSeries } from "./pure.js";
 import { filesMemory } from "./panel-state.js";
-import { G, H, breathe, tokens } from "./ui.js";
+import { G, H, tokens } from "./ui.js";
 import { quietLink } from "./ui-button.js";
 import { row } from "./ui-row.js";
-import { skeleton } from "./ui-skeleton.js";
-import { emptyState, failureBlock } from "./kit.js";
+import { emptyState, failureBlock, skeletonOf } from "./kit.js";
 import { Front } from "./front.js";
 
 const PER_FOLDER = 500, TOTAL = 5000, WATCHED_MS = 60_000;
@@ -274,12 +273,9 @@ export class Files {
     }).flex_none().cursor_pointer();
   }
 
-  listBones(c) {
-    const { row: bone } = skeleton(c);
-    return breathe(v_flex().id("kanso-skeleton").w_full().p(G.sm)).children([0, 1, 2, 3, 4, 5, 6].map((i) => bone(i, H.line)));
-  }
+  listBones(c) { return div().w_full().p(G.sm).child(skeletonOf({ shape: "row", count: 5 })("kanso-skeleton", c)); }
 
-  bones(c) { return documentBones(c, 52, this.listBones(c)); }
+  bones(c) { return documentBones(c, this.listBones(c)); }
 
   render(cx) {
     if (!this.on) this.front?.wake(cx, (wakeCx) => this.refresh(wakeCx));
@@ -316,7 +312,7 @@ export class Files {
           .child(quietLink("files-retry", "Retry", (cx) => this.retry(cx), c))))
         .when(Boolean(this.error), (el) => el.child(div().p(8).child(failureBlock({ text: "Can't list the files", source: this.error, fix: this.on ? "Refresh" : "" })("files-error", c,
           { onClick: (cx) => this.retry(cx) }))))
-        .when(!this.error && this.loading && !this.entries.get("")?.length, el => el.child(this.listBones({ border: t.border })))
+        .when(!this.error && this.loading && !this.entries.get("")?.length, el => el.child(this.listBones(t)))
         .when(!this.error && !this.loading && items.length === 0, el => el.child(emptyState({ icon: "file", text: this.changed ? "Nothing changed" : this.root ? "No files" : "No folder" })("files-empty", c)))
         .when(this.limited, el => el.child(div().p(8).text_size(11).text_color(t.dim).child("File list limited to 500 entries per folder and 5,000 total"))));
   }

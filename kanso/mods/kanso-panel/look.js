@@ -12,11 +12,10 @@ import { bring, machineOf, copyFailure, drawablePath, remoteDue, ArmPoll, pollSt
 import { div, image } from "gpui-kit";
 import { v_flex, h_flex, Button } from "gpui-base";
 import { hc, focused, panes, terminals, theme, appHome, home, shared, setShared, watchFolder, openOverlay, window, layout } from "herdr";
-import { G, H, T, OPACITY, tokens, breathe } from "./ui.js";
+import { G, H, T, OPACITY, tokens } from "./ui.js";
 import { button, quietLink, iconButton } from "./ui-button.js";
 import { row } from "./ui-row.js";
-import { skeleton } from "./ui-skeleton.js";
-import { emptyState } from "./kit.js";
+import { emptyState, skeletonOf } from "./kit.js";
 import { programIcon, givenNames, nameOf } from "./marks.js";
 import { deliver, isAgent, sendKey, waitingNote } from "./deliver.js";
 import { openPath, toPng } from "./share.js";
@@ -531,17 +530,14 @@ export class Look {
     return v_flex().flex_1().w_full().justify_center().child(emptyState({ icon: "eye", text: this.emptyLine() })("look-empty", c));
   }
 
-  drawing(c) {
-    const { block } = skeleton(c);
-    return breathe(v_flex().id("kanso-skeleton").flex_1().w_full().items_center().justify_center()).child(block(240, 180, 8));
-  }
+  drawing(c) { return v_flex().flex_1().w_full().items_center().justify_center().child(skeletonOf({ shape: "picture" })("kanso-skeleton", c)); }
 
   selectRemaining(next, cx) {
     if (next) this.select(this.list().find((item) => item.path === next.path), cx, false);
   }
 
   bones(c) {
-    return pageFrame(c).child(toolbar(c).child(skeleton(c).header(72, 13))).child(this.drawing(c));
+    return pageFrame(c).child(toolbar(c).child(skeletonOf({ shape: "header" })("kanso-skeleton-header", c))).child(this.drawing(c));
   }
 
   view(c) {

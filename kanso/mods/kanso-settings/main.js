@@ -6,14 +6,14 @@ import { imageApi } from "./platform-images.js";
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import { theme, props, closeOverlay, keys, shared, setShared, readTextFile, writeTextFile, appHome, run } from "herdr";
-import { G, T, TINT, alpha, tokens, breathe } from "./ui.js";
+import { G, T, TINT, alpha, tokens } from "./ui.js";
 import { avatar, tile } from "./ui-avatar.js";
 import { dot } from "./ui-dot.js";
 import { button, quietLink, iconButton, Armed, pressAgain } from "./ui-button.js";
 import { field, TextField } from "./ui-field.js";
 import { row } from "./ui-row.js";
 import { section } from "./ui-section.js";
-import { skeleton } from "./ui-skeleton.js";
+import { skeletonOf } from "./kit.js";
 import { undoLine } from "./ui-state.js";
 import { segmented } from "./ui-tab.js";
 import { toggleSwitch } from "./ui-toggle.js";
@@ -282,13 +282,6 @@ export default class Settings extends View {
     });
   }
 
-  newsBones(c) {
-    const { line } = skeleton(c);
-    return breathe(v_flex().id("kanso-skeleton").w_full().pt(G.lg).gap(G.sm))
-      .child(line(72, 15)).child(line(220, 12)).child(line(180, 12))
-      .child(line(64, 15)).child(line(200, 12));
-  }
-
   newsPage(t, c) {
     const { entries, error, from } = this.news;
     const updateState = shared("kanso.update") ?? {};
@@ -330,7 +323,7 @@ export default class Settings extends View {
       .child(h_flex().w_full().pt(G.sm).items_center()
         .child(
           button("check-kanso-update", "Check for updates", () => run("kanso-tabs.check"), c)))
-      .when(entries === null, (el) => el.child(this.newsBones(c)))
+      .when(entries === null, (el) => el.child(skeletonOf({ shape: "line", count: 4 })("kanso-skeleton", c)))
       .when(Boolean(waiting), (el) => el.child(h_flex().w_full().gap(G.md).items_center().p(G.md).rounded(8).bg(alpha(c.accent, TINT.faint))
         .child(div().flex_1().text_size(13).text_color(c.text).child(`kansō ${waiting} is available. You have ${have}.`))
         .child(button("update-kanso", `Update to ${waiting}`, () => { run("kanso-tabs.update"); closeOverlay(props().overlay); }, c))))
