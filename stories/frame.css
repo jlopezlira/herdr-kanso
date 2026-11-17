@@ -12,7 +12,7 @@
 .kanso-docs dd { margin: 0 0 var(--k-sp-2); }
 .kanso-docs__guidelines li { margin-block-end: var(--k-sp-2); }
 .kanso-docs__principle { margin-inline-end: var(--k-sp-2); font-weight: var(--k-fw-medium); color: var(--done); }
-.kanso-docs pre.kanso-docs__prompt { margin-block: var(--k-sp-3); padding: var(--k-sp-4); border: var(--k-w-line) solid var(--border); border-radius: var(--k-r-control); font-family: var(--mono); font-size: var(--k-fs-mono); line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; }
+.kanso-docs pre.kanso-docs__prompt { margin-block: var(--k-sp-3); padding: var(--k-sp-4); border: var(--k-w-line) solid var(--border); border-radius: var(--k-r-control); font-family: var(--mono); font-size: var(--k-fs-mono); line-height: var(--k-lh-code); white-space: pre-wrap; overflow-wrap: anywhere; }
 .kanso-docs__status { display: flex; margin-block: var(--k-sp-2) var(--k-sp-4); }
 .kanso-story__viewport [hidden] { display: none !important; }
 .kanso-story__feedback { display: flex; align-items: center; gap: var(--k-sp-3); margin-top: var(--k-sp-3); }
