@@ -1,6 +1,8 @@
 import { elements, escapeMarkup as escape, frame } from './storybook-markup.mjs';
 import { THEMES, colour, contrast } from './tokens.mjs';
-import { header, sidebarFooter, tile, viewSwitch } from '../stories/kit/compositions.js';
+import { header, sidebarFooter } from '../stories/kit/compositions.js';
+import { tile } from '../stories/kit/tile.js';
+import { viewSwitch } from '../stories/kit/view-switch.js';
 import { projectRow } from '../stories/kit/project-row.js';
 import { computerRow } from '../stories/kit/computer-row.js';
 import { section } from '../stories/kit/section.js';
@@ -114,8 +116,13 @@ export function kitRecords(records) {
     ['Section', 'Folded', inSidebar(section({ title: 'Idle', count: 2 })), 'How many, once it is folded.'],
     ['View switch', 'Row', inSidebar(viewSwitch()), 'Sidebar open: the three views by name.'],
     ['View switch', 'Column', inRail(viewSwitch({ column: true })), 'Sidebar collapsed: the three views as icons.'],
+    ['View switch', 'Someone needs you', inSidebar(viewSwitch({ asks: true, tips: { spaces: 'Projects ⌃⌥P', agents: 'Status ⌃⌥S', threads: 'Threads ⌃⌥T' } })), 'Status carries the dot; each view\'s tooltip has its key.'],
+    ['View switch', 'Menu', inRail(viewSwitch({ column: true, open: true, asks: true })), 'Collapsed, the button opens the three views; Status is marked while someone needs you.'],
     ['Tile', 'Project', inRail(tile({ initial: 'A', status: 'blocked', count: 4, open: true })), 'A project in the rail.'],
     ['Tile', 'Status', inRail(tile({ status: 'working', count: 3 })), 'A state in the rail.'],
+    ['Tile', 'A shelf', inRail(tile({ icon: 'lu-pin', status: 'working', count: 2, marked: true, label: 'Pinned' })), 'A shelf or a group with no state leads with its icon.'],
+    ['Tile', 'Its most urgent state', inRail(tile({ initial: 'D', tone: 'yellow', status: 'working', count: 1, marked: true, label: 'dojo' })), 'The mark of the most urgent state inside, beside the count.'],
+    ['Tile', 'Unread', inRail(tile({ initial: 'A', status: 'done', count: 2, strong: true, label: 'kansō' })), 'Something inside is unread or woke: a ring.'],
     ['Footer', 'Default', inSidebar(sidebarFooter()), 'Settings.'],
     ['Footer', 'Update', inSidebar(sidebarFooter({ update: 'Update kansō to 3.31.0' })), 'An update adds a row on top.'],
     ['Sidebar', 'Open', sampleSidebar(), 'Header, views, rows and footer.'],

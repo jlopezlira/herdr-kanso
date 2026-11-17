@@ -12,7 +12,6 @@
     "dojoSummary",
     "dojoTitle",
     "explainButton",
-    "glyph",
     "keyLegend",
     "keyPicked",
     "markdown",
@@ -20,14 +19,12 @@
     "paneName",
     "setting",
     "sleepLabel",
-    "stack",
     "stepper",
     "thumbnail",
     "windowControls"
   ],
   "renamed": {
     "input": "field",
-    "tabs": "tab",
     "toggle": "toggleSwitch"
   },
   "waiting": {
@@ -45,7 +42,6 @@
     "keycap": { "storybook": ["corner", "finger", "hint", "hover", "inert", "label", "state", "units"] },
     "row": { "app": ["focusHandle", "onClick", "onHover", "onKey"] },
     "statusItem": { "app": ["onClick", "tip"] },
-    "tabs": { "storybook": ["icon", "items", "label", "value"], "app": ["collapsed", "spoken"] },
     "toast": { "app": ["onClick"] },
     "toggle": { "storybook": ["checked"] },
     "tooltip": { "storybook": ["icon", "open", "side"] }

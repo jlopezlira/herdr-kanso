@@ -90,6 +90,8 @@ const COMMON = [
   { source: "stories/kit/computer-row.js", copies: ["kanso/mods/kanso-spaces/computer-row.js"] },
   { source: "stories/kit/section.js", copies: ["kanso/mods/kanso-spaces/section.js"] },
   { source: "stories/kit/asleep.js", copies: ["kanso/mods/kanso-spaces/asleep.js"] },
+  { source: "stories/kit/tile.js", copies: ["kanso/mods/kanso-spaces/tile.js"] },
+  { source: "stories/kit/view-switch.js", copies: ["kanso/mods/kanso-spaces/view-switch.js"] },
   { source: "kanso/mods/kanso-panel/blocks.js", copies: ["markdown-panel/mods/markdown-panel/blocks.js"] },
   { source: "kanso/mods/kanso-tabs/markdown-handler.sh", copies: ["markdown-panel/mods/markdown-panel/markdown-handler.sh"] },
 ];

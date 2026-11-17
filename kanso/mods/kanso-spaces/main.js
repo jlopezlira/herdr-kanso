@@ -10,7 +10,7 @@ import { systemApi } from "./platform-system.js";
 
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex, ScrollHandle } from "gpui-base";
-import { agentSession, agentLabel, renameTerminal, statusMark, SETTLED_LABEL, SNOOZE_LABEL, UNREAD_LABEL, THREAD_LABEL, settledOf, snoozedUntil, isUnread, woke, backFromSettled, threadSections, snoozePresets, THREAD_ORDERS, STATUS_ORDERS, withTerminals, NAME_LABEL, PIN_LABEL, ORDERS, DEFAULT_ORDER, orderSessions, moved, nest, track, elapsed, activityOf, bySection, duration, trackSteps, stepOf, tasksOf, said, FOLD_MS, pill, sessionHeight, mostUrgent } from "./agents.js";
+import { agentSession, agentLabel, renameTerminal, SETTLED_LABEL, SNOOZE_LABEL, UNREAD_LABEL, THREAD_LABEL, settledOf, snoozedUntil, isUnread, woke, backFromSettled, threadSections, snoozePresets, THREAD_ORDERS, STATUS_ORDERS, withTerminals, NAME_LABEL, PIN_LABEL, ORDERS, DEFAULT_ORDER, orderSessions, moved, nest, track, elapsed, activityOf, bySection, duration, trackSteps, stepOf, tasksOf, said, FOLD_MS, pill, sessionHeight, mostUrgent } from "./agents.js";
 import { ThreadLocator, findThreads, pidsOf, aliveIn, aliveDue, ALIVE_MS, ALIVE_BEHIND_MS } from "./threads.js";
 import { Panel, sameSeen } from "./panel.js";
 import { Store } from "./store.js";
@@ -29,14 +29,14 @@ import { projectRow } from "./project-row.js";
 import { computerRow, computerTools } from "./computer-row.js";
 import { section } from "./section.js";
 import { asleep } from "./asleep.js";
+import { tile } from "./tile.js";
+import { views, viewSwitch } from "./view-switch.js";
 import { pullKey, runPull, canWake, enterOpens, sectionMarkOf, sectionCount, rowDirectory, threadWord, threadActions, signInCommand, noProjectsOn, sortOf, foldTail, readWord } from "./sidebar-rows.js";
 import { H, G, T, R, W, ICON, SIDEBAR, GLIDE, OPACITY, TINT, alpha, tokens } from "./ui.js";
 import { ELBOW } from "./ui-row.js";
 import { button, Armed } from "./ui-button.js";
 import { dialog } from "./ui-dialog.js";
 import { field, TextField } from "./ui-field.js";
-import { segmented } from "./ui-tab.js";
-import { mark } from "./ui-mark.js";
 import { menu, row, emptyState, skeletonOf, tooltip } from "./kit.js";
 import { boundChord } from "./ui-tooltip.js";
 import { menuList, menuHeight } from "./ui-menu.js";
@@ -95,11 +95,12 @@ const PS_GIVE_UP_MS = 10000;
 // Under the 30 s machine look, so a hung list is free before the next one.
 const MACHINE_READ_MS = 20_000;
 
-const VIEWS = {
-  spaces: { label: "Projects", icon: "folder" },
-  agents: { label: "Status", icon: "activity" },
-  threads: { label: "Threads", icon: "message-square" },
-};
+// The views' names, by key, as the view switch says them.
+const VIEWS = Object.fromEntries(views.map(({ key, label }) => [key, label]));
+// A project's stored hue, as the Storybook's avatar tone.
+const HUES = { ansi6: "teal", ansi3: "yellow", ansi4: "blue", ansi5: "violet", ansi2: "green", ansi1: "red" };
+// A project's tile shows its first letter, upper case.
+const initialOf = (name) => (name?.[0] ?? "?").toUpperCase();
 // A computer's phase as its row's state: loading is on, and breathes while it turns on.
 const COMPUTER_STATE = { connected: "on", loading: "on", off: "off", unavailable: "unreachable", login: "login" };
 // A project's key: its machine and folder.
@@ -2006,9 +2007,9 @@ export default class Spaces extends View {
       .child(inner)];
   }
 
-  avatarColor(w, t) {
-    const color = this.colors?.[w.id] ?? "ansi6";
-    return color.startsWith("#") ? color : (t[color] ?? t.dim);
+  // A project's hue, as the avatar's tone.
+  avatarTone(w) {
+    return HUES[this.colors?.[w.id] ?? "ansi6"] ?? null;
   }
 
   // One press on a project: its agents fold or unfold (a sleeping group wakes), and the space opens when it is not the one you are in.
@@ -2072,7 +2073,7 @@ export default class Spaces extends View {
   // Projects, collapsed: one mark per project; a click lists its agents, or goes to it when it has none.
   compact({ w }, t, c, ctx) {
     const rows = (ctx.rowsBy.get(w.id) ?? []).map((a) => this.railRow(a, null, ctx.now));
-    return this.railMark(t, c, `space-${w.id}`, { lead: this.railInitial(w.name, this.avatarColor(w, t)), rows, tip: w.name, on: w.active, space: w.id, menu: () => this.menu(w) });
+    return this.railTile(c, `space-${w.id}`, { initial: initialOf(w.name), tone: this.avatarTone(w), rows, label: w.name, open: w.active, space: w.id, menu: () => this.menu(w) });
   }
 
   // Asleep is a status like the others: those agents are entries too.
@@ -2136,7 +2137,7 @@ export default class Spaces extends View {
 
   projectOf(sp, t) {
     const byId = new Map(sp.map((s) => [s.id, s]));
-    return (id) => { const w = byId.get(id); return w ? { name: w.name, fill: this.avatarColor(w, t) } : null; };
+    return (id) => { const w = byId.get(id); return w ? { name: w.name, tone: this.avatarTone(w) } : null; };
   }
 
   openMenu(a, { title = null, session = null } = {}) {
@@ -2154,36 +2155,19 @@ export default class Spaces extends View {
     };
   }
 
-  // One group in the collapsed rail (a project, a status, a shelf): its lead (a project's initial in its color, or an icon), the most
-  // urgent state as the list's own mark, how many. A click lists the group in a popup; a right click opens `menu` (else the same list).
+  // One group in the collapsed rail (a project, a status, a shelf): the Tile composition. Its lead is a project's initial in its hue, an icon,
+  // or the state's mark; beside how many, the most urgent state inside, unless the lead already is it (`urgent: false`).
+  // A click (or Enter) lists the group in a popup; a right click opens `menu` (else the same list).
   // `space`: a project's, so its list also offers to go to it; with no rows a click goes there at once.
-  // `urgent: false`: a status section's lead already is its state.
-  railMark(t, c, id, { lead, rows, tip, on = false, space = null, menu = null, ink = t.dim, urgent = true }) {
+  railTile(c, id, { rows, space = null, menu = null, urgent = true, status = "none", ...look }) {
     const top = urgent ? mostUrgent(rows.map((r) => ({ status: r.status }))) : null;
-    const shown = top === "working" || top === "blocked" || top === "done" || top === "asleep" ? top : null;
-    const list = () => (rows.length ? this.railMenu(tip, rows, space) : space ? run("space.select", { id: space }) : null);
-    const strong = rows.some((r) => r.strong);
-    return h_flex().w_full().h(SIDEBAR.railRow).flex_none().justify_center().items_center().child(
-      v_flex().id(id).w(36).h(40).flex_none().gap(3).items_center().justify_center().rounded(6).cursor_pointer().tooltip(tooltip({ label: tip }))
-        .when(on, (el) => el.bg(c.w12))
-        .when(!on, (el) => el.hover((s) => s.bg(alpha(t.foreground, TINT.row))))
-        .when(strong, (el) => el.border_1().border_color(alpha(t.accent, TINT.ring)))
-        .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
-        .on_click(list)
-        .on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); (menu ?? list)(); })
-        .child(lead)
-        .when(rows.length > 0, (el) => el.child(h_flex().h(12).gap(3).items_center().text_size(10.5).text_color(top === "blocked" ? t.blocked : ink)
-          .when(Boolean(shown), (el2) => el2.child(mark(c, { status: shown, size: "sm" })))
-          .child(div().child(String(rows.length))))));
-  }
-
-  // A project's initial, no square: its color says which.
-  railInitial(name, fill) {
-    return div().h(16).flex().items_center().text_size(14).font_semibold().text_color(fill).child(name?.[0]?.toUpperCase() ?? "?");
-  }
-
-  railIcon(t, icon) {
-    return h_flex().h(16).items_center().child(svg(`mods/kanso-chrome/icons/${icon}.svg`).size(14).flex_none().text_color(t.muted));
+    const shown = top === "working" || top === "blocked" || top === "done" || top === "asleep" ? top : status;
+    const list = () => (rows.length ? this.railMenu(look.label, rows, space) : space ? run("space.select", { id: space }) : null);
+    return tile({ ...look, status: shown, count: rows.length, marked: urgent, strong: rows.some((r) => r.strong) })(id, c, {
+      onClick: list,
+      onPress: (_e, cx) => cx.stop_propagation(),
+      onMenu: (_e, cx) => { cx.stop_propagation(); (menu ?? list)(); },
+    });
   }
 
   // What the popup needs of a row: it draws in its own view, from its props.
@@ -2232,8 +2216,8 @@ export default class Spaces extends View {
     const { c, sections } = this.agentsCtx(t, sp, ctx);
     return sections.map((s) => {
       const rows = s.entries.filter((e) => !e.lines.length).map((e) => this.railRow(e.a, e.a.space_name || null, ctx.now));
-      const lead = s.id === "other" ? this.railIcon(t, "layers") : h_flex().h(G.lg).items_center().child(statusMark(c, s.id));
-      return item(this.railMark(t, c, `rail-section-${s.id}`, { lead, rows, tip: s.label, ink: s.id === "blocked" ? t.blocked : t.dim, urgent: false }), SIDEBAR.railRow);
+      const lead = s.id === "other" ? { icon: "lu-layers" } : { status: s.id };
+      return item(this.railTile(c, `rail-section-${s.id}`, { ...lead, rows, label: s.label, urgent: false }), SIDEBAR.railRow);
     });
   }
 
@@ -2242,25 +2226,26 @@ export default class Spaces extends View {
     if (!this.threads) return [];
     const c = tokens(t);
     const sections = threadSections(this.threadRows(ctx), { order: this.threadOrder, group: this.threadGroup, now: ctx.now, since: this.since ?? {} });
-    const icons = { pinned: "pin", snoozed: "clock", settled: "check" };
+    const icons = { pinned: "lu-pin", snoozed: "lu-clock", settled: "lu-check" };
     return sections.map((s) => {
       const p = s.project ? ctx.project(s.project) : null;
       const w = s.project ? sp.find((x) => x.id === s.project) : null;
       const list = s.rows.map(({ a }) => this.railRow(a, p ? null : ctx.project(a.space)?.name ?? null, ctx.now));
-      const lead = p ? this.railInitial(p.name, p.fill) : this.railIcon(t, icons[s.id] ?? "message-square");
-      return item(this.railMark(t, c, `rail-thread-${s.id}`, { lead, rows: list, tip: p?.name ?? s.label ?? "Conversations", on: Boolean(w?.active), space: w?.id ?? null, menu: w ? () => this.menu(w) : null }), SIDEBAR.railRow);
+      const lead = p ? { initial: initialOf(p.name), tone: p.tone } : { icon: icons[s.id] ?? "lu-message-square" };
+      return item(this.railTile(c, `rail-thread-${s.id}`, { ...lead, rows: list, label: p?.name ?? s.label ?? "Conversations", open: Boolean(w?.active), space: w?.id ?? null, menu: w ? () => this.menu(w) : null }), SIDEBAR.railRow);
     });
   }
 
-  // The three views; collapsed, the rail's column of icons.
-  viewSwitch(t, sp, collapsed = false) {
-    const asks = sp.some((s) => s.status === "blocked");
-    const tipOf = (key) => tooltip({ label: VIEWS[key].label, chord: boundChord(`kanso-spaces.view-${key}`) });
-    const items = Object.keys(VIEWS).map((key) => ({ key, label: VIEWS[key].label, icon: collapsed ? VIEWS[key].icon : null, dot: asks && key === "agents", tip: tipOf(key) }));
-    const pick = (view, cx) => { this.setView(view, cx); cx.notify(); };
-    return collapsed
-      ? segmented("rail-view", items, this.view, pick, tokens(t), { collapsed }).self_center().mt(4)
-      : segmented("spaces-view", items, this.view, pick, tokens(t)).mx(18).mt(4).mb(14);
+  // The three views, the View switch composition: a track open; collapsed, the current view's button and its menu.
+  // Each tooltip has the view's key; Status carries the dot while someone needs you.
+  switchViews(t, sp, collapsed = false) {
+    const tips = Object.fromEntries(Object.entries(VIEWS).map(([key, label]) => [key, tooltip({ label, chord: boundChord(`kanso-spaces.view-${key}`) })]));
+    const pick = (view, cx) => { this.viewMenu = false; this.setView(view, cx); cx.notify(); };
+    const open = (next, cx) => { this.viewMenu = next; cx.notify(); };
+    // The menu belongs to the rail: opening the sidebar shuts it for good.
+    if (!collapsed) this.viewMenu = false;
+    const look = { view: this.view, column: collapsed, open: this.viewMenu === true, asks: sp.some((s) => s.status === "blocked"), tips };
+    return viewSwitch(look)(collapsed ? "rail-view" : "spaces-view", tokens(t), collapsed ? { onChange: pick, onOpen: open } : { onChange: pick });
   }
 
   threadsView(t, sp, ps, ctx) {
@@ -2473,7 +2458,7 @@ export default class Spaces extends View {
       // A pane held in the strip and let go here goes back where it was.
       .on_mouse_up("left", dropStripDrag)
       .child(header("spaces-header", { collapsed }, this.tools(tokens(t), view, collapsed)))
-      .when(switchShown, (el) => el.child(this.viewSwitch(t, sp, collapsed)))
+      .when(switchShown, (el) => el.child(this.switchViews(t, sp, collapsed)))
       .when(shown("sidebar.needs", queue.rows.length > 0 || this.needsEmpty, map), (el) => el.child(queueControl(t, queue, collapsed, this.needsEmpty && !queue.rows.length, (cx) => this.toggleNeeds(cx))))
       .child(this.needsOpen && shown("sidebar.needs", true, map) ? this.needsList(t, queue, read.now) : this.list(t, collapsed, view, [
         ...(!collapsed ? this.returnRows(t, active) : []),

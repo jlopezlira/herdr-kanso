@@ -217,6 +217,8 @@
 .kanso-rail__row{height:var(--k-h-header);display:flex;align-items:center;justify-content:center;flex:none}
 .kanso-rail__tile{width:var(--k-rail-tile);height:var(--k-h-header);border-radius:var(--k-r-control);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:var(--k-sp-hair);flex:none}
 .kanso-rail__tile.kanso-control--on{background:var(--wash-12)}
+.kanso-rail__tile.kanso-rail__tile--strong{box-shadow:inset 0 0 0 var(--k-w-line) color-mix(in srgb,var(--accent) 50%,transparent)}
+.kanso-rail__count{display:flex;align-items:center;gap:var(--k-sp-hair)}
 .kanso-rail__tile .kanso-content__actions{display:flex;align-items:center;gap:var(--k-sp-hair);height:var(--k-ic-inline);font-size:var(--k-fs-meta);color:var(--dim);line-height:1}
 .kanso-rail__tile .kanso-content__actions .kanso-mark{width:var(--k-rail-mark);height:var(--k-rail-mark)}
 .kanso-rail__footer{margin-top:auto;display:flex;flex-direction:column;align-items:center;gap:var(--k-sp-hair);padding:var(--k-sp-2) 0 var(--k-sp-3)}

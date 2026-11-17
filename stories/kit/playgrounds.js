@@ -1,6 +1,8 @@
 // Pages whose story is built from Storybook controls instead of drawn states.
 import sprite from '../proto-sprite.svg?raw';
-import { activity, activityMenu, paneFolds, paneHeader, panelHeaderForms, panelLooks, paneReaches, paneStates, noticeHomes, noticePlaces, noticeStates, systemMessage, toastStack, heldChord, keyboard, keyboardExplorer, keyboards, keyboardSystems, keyNames, shortcutRowStates, channelSettings, channels, computerItem, computerItemStates, failureMenu, header, panelDoors, sidebarFooter, tabBarStates, tile, toolbar, views, viewSwitch } from './compositions.js';
+import { activity, activityMenu, paneFolds, paneHeader, panelHeaderForms, panelLooks, paneReaches, paneStates, noticeHomes, noticePlaces, noticeStates, systemMessage, toastStack, heldChord, keyboard, keyboardExplorer, keyboards, keyboardSystems, keyNames, shortcutRowStates, channelSettings, channels, computerItem, computerItemStates, failureMenu, header, panelDoors, sidebarFooter, tabBarStates, toolbar } from './compositions.js';
+import { tile } from './tile.js';
+import { views, viewSwitch } from './view-switch.js';
 import { projectRow } from './project-row.js';
 import { computerRow, computerStates } from './computer-row.js';
 import { section } from './section.js';
@@ -334,18 +336,21 @@ export const playgrounds = {
     markup: ({ add, ...args }) => inSidebar(section({ ...args, add: add || null })),
   },
   'Compositions/Sidebar/View switch': {
-    args: { view: 'spaces', column: false },
-    argTypes: { view: radioArg('view', views.map((item) => item.key)), column: boolArg('column') },
+    args: { view: 'spaces', column: false, open: false, asks: false },
+    argTypes: { view: radioArg('view', views.map((item) => item.key)), column: boolArg('column'), open: boolArg('menu', { if: { arg: 'column' } }), asks: boolArg('someone needs you') },
     markup: (args) => (args.column ? inRail : inSidebar)(viewSwitch(args)),
   },
   'Compositions/Sidebar/Tile': {
-    args: { initial: 'A', tone: 'teal', status: 'blocked', count: 4, open: false },
+    args: { initial: 'A', tone: 'teal', status: 'blocked', count: 4, open: false, label: 'kansō', icon: '', marked: false, strong: false },
     argTypes: {
       initial: textArg('initial'),
       tone: select('tone', ['', 'teal', 'yellow', 'blue', 'violet', 'green', 'red']),
-      status: select('mark', ['none', 'blocked', 'working', 'done', 'idle']),
+      status: select('mark', ['none', 'blocked', 'working', 'done', 'idle', 'asleep']),
       count: numberArg('count', 0),
       open: boolArg('open'),
+      label: textArg('label'),
+      icon: select('icon', ['', 'lu-pin', 'lu-clock', 'lu-check', 'lu-layers', 'lu-message-square']),
+      ...flags('marked', 'strong'),
     },
     markup: (args) => inRail(tile(args)),
   },

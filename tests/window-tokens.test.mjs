@@ -52,9 +52,9 @@ test("The active project's pill in the list and its tile in the rail wear wash-1
   const row = chain("row");
   const list = view.list(KIT_NIGHT, false, "spaces", [{ el: row, h: 32, mark: { kind: "space", at: 0, h: 32 } }]);
   assert.equal(arg(withId(list, "pill-space"), "bg"), c.w12);
-  const tile = (on) => withId(view.railMark(KIT_NIGHT, c, "space-s1", { lead: chain("lead"), rows: [], tip: "kanso", on }), "space-s1");
+  const tile = (open) => find(view.railTile(c, "space-s1", { initial: "K", tone: "teal", rows: [], label: "kanso", open }), (el) => el.tag === "space-s1");
   assert.equal(arg(tile(true), "bg"), c.w12);
-  assert.equal(all(tile(false), (el) => calls(el, "bg").length > 0).length, 0);
+  assert.equal(calls(tile(false), "bg").length, 0);
 });
 
 test("Every chosen tab, alone and as the gliding pill, wears wash-12; a tab on a track is raised", async () => {
