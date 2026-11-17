@@ -493,8 +493,8 @@ test("cached reviews show while GitHub is still being asked, and a failed ask ke
   });
   failed.panel.refresh(cx); await drain();
   assert.equal(failed.panel.inbox.needs[0].title, "Cached");
-  assert.equal(failed.panel.note.what, "Could not keep pull requests");
-  assert.match(failed.panel.note.why, /gh died/);
+  assert.equal(failed.panel.note.text, "Could not keep pull requests");
+  assert.match(failed.panel.note.source, /gh died/);
 });
 
 test("a removed project no longer takes a repository slot", async (t) => {

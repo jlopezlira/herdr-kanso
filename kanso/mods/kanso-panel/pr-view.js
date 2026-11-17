@@ -10,7 +10,8 @@ import { section } from "./ui-section.js";
 import { ageOf, footLine } from "./pr-poll.js";
 import { aliasText, machineTitle } from "./pure.js";
 import { verdictCard, VIEW } from "./pr-body.js";
-import { failNote } from "./lib.js";
+import { failureBlock } from "./kit.js";
+import { dot } from "./ui-dot.js";
 
 const ICON = "mods/kanso-chrome/icons/";
 
@@ -153,7 +154,7 @@ function heroTop(panel, c, view) {
   return scopedColumn(scope)
     .when(Boolean(panel.pr?.title), (el) => el.child(div().w_full().max_h(VIEW.titleMax).overflow_hidden().text_size(VIEW.title).line_height(1.3).font_medium().text_color(c.text).child(panel.pr.title)))
     .child(h_flex().gap(G.sm).items_center()
-      .child(div().size(VIEW.dot).flex_none().rounded_full().bg(ink))
+      .child(dot(c, ink))
       .child(div().text_size(T.card).font_medium().text_color(ink).child(view.text)))
     .when(Boolean(view.note), (el) => el.child(div().text_size(T.value).text_color(c.muted).child(view.note)))
     .child(view.dimmed ? body.opacity(VIEW.stale) : body);
@@ -163,7 +164,7 @@ function heroTop(panel, c, view) {
 export function heroPieces(panel, c) {
   const view = panel.view();
   const veil = (el) => view.dimmed ? el.opacity(VIEW.stale) : el;
-  const note = panel.note ? [["remark", veil(failNote("remark", panel.note, c))]] : [];
+  const note = panel.note ? [["remark", veil(failureBlock(panel.note)("remark", c))]] : [];
   const foot = footnote(panel, c);
   const tail = foot ? [["foot", foot.id("foot")]] : [];
   return [
@@ -187,7 +188,7 @@ export function drawEmpty(panel, c) {
     .child(panel.waiting(c, view.text, null, action))
     .when(Boolean(card), (el) => el.child(card))
     .when(view.details, (el) => el.child(fold(panel, c, view)))
-    .when(Boolean(panel.note), (el) => el.child(failNote("pr-view-note", panel.note, c)))
+    .when(Boolean(panel.note), (el) => el.child(failureBlock(panel.note)("pr-view-note", c)))
     .when(Boolean(foot), (el) => el.child(foot));
 }
 

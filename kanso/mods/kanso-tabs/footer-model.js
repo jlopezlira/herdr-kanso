@@ -34,7 +34,7 @@ export const footerHeight = (rows, refusedPx = 0) => PAD.top + rows * H.line + P
 export const railHeight = (rows) => PAD.top + rows * CHROME_SQUARE + (rows - 1) * PAD.railGap + PAD.railBottom;
 
 /** A refused update's failure block: our words, the tool's, and Update to try again. */
-export const refusalBlock = (why, retry = null) => ({ what: "kansō didn't update", why, fixes: [{ label: "Update", onClick: retry }] });
+export const refusalBlock = (why) => ({ text: "kansō didn't update", source: why, fix: "Update" });
 
 /** The chord bound to kansō settings, or null. `bindings`: Herdr's keys(). */
 export const settingsChord = (bindings) => bindings.find((binding) => binding.action === KANSO_SETTINGS)?.keys ?? null;

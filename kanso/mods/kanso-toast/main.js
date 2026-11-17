@@ -9,6 +9,7 @@ import { sorted, admit, marked, keep } from "./stack.js";
 import { leadOf, tipOf, fixOf, commandOf } from "./toast-model.js";
 import { G, T, ICON_ROW, glyphOf, tokens } from "./ui.js";
 import { mark } from "./ui-mark.js";
+import { dot } from "./ui-dot.js";
 import { button } from "./ui-button.js";
 
 const KEY = "kanso.toasts";
@@ -19,7 +20,7 @@ const LEADS = {
   mark: (c) => mark(c, { status: "blocked" }),
   image: (_c, { icon }) => image(icon).w(ICON_ROW).h(ICON_ROW).flex_none(),
   glyph: (c, { icon, tone }) => svg(glyphOf(icon)).size(ICON_ROW).flex_none().text_color(c[tone]),
-  dot: (c, { tone }) => div().size(G.sm).rounded_full().flex_none().bg(c[tone]),
+  dot: (c, { tone }) => dot(c, tone),
 };
 const lead = (c, p) => {
   const found = leadOf(p);

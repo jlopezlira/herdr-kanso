@@ -8,7 +8,9 @@ import { fileApi } from "./platform-files.js";
 import { div } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import { exec, hc, panes, terminals, machines, home, run, theme, appHome, readTextFile, shared } from "herdr";
-import { tilde, said, failNote } from "./lib.js";
+import { tilde, said } from "./lib.js";
+import { failureBlock } from "./kit.js";
+import { dot } from "./ui-dot.js";
 import { aliasText, machineTitle, tryOr } from "./pure.js";
 import { parseProcesses, etimeSecs } from "./procs.js";
 import { STOP_LOOP, systemApi } from "./platform-system.js";
@@ -437,7 +439,7 @@ export class Ports {
         .child(div().text_size(10).text_color(c.dim).child(series?.first ?? ""))
         .child(h_flex().gap(G.xs).items_center()
           .child(div().text_size(10).text_color(c.dim).child("Servers"))
-          .when(anyLoose, (el) => el.child(div().size(5).ml(G.sm).rounded_full().bg(c.yellow)).child(div().text_size(10).text_color(c.dim).child(NO_PANE))))
+          .when(anyLoose, (el) => el.child(dot(c, c.yellow).ml(G.sm)).child(div().text_size(10).text_color(c.dim).child(NO_PANE))))
         .child(div().text_size(10).text_color(c.dim).child(series?.last ?? "")));
   }
 
@@ -515,6 +517,6 @@ export class Ports {
           .child(header)
           .children(shareRows(this, c, "Only counts and sizes: no ports, folders, projects or commands. The post opens with the image in it."))
           .child(body)
-          .when(Boolean(this.note), (el) => el.child(failNote("pt-note", this.note, c))));
+          .when(Boolean(this.note), (el) => el.child(failureBlock(this.note)("pt-note", c))));
   }
 }

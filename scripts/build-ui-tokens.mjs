@@ -16,6 +16,7 @@ const PICK = {
   ICON_ROW: "k-ic-row",
   ICON_INLINE: "k-ic-inline",
   ICON_CHROME: "k-ic-chrome",
+  ICON_EMPTY: "k-ic-empty",
   CHROME_SQUARE: "k-h-pane",
   DRAG_START: "k-drag-start",
   GLINT: { run: "k-glint-run", wide: "k-glint-w1", mid: "k-glint-w2", narrow: "k-glint-w3" },
@@ -25,7 +26,7 @@ const PICK = {
   PANE: { edge: "k-edge-w", gap: "k-pane-gap", minW: "k-pane-min-w", minH: "k-pane-min-h", pills: "k-w-pills" },
   KEY: { x: "k-keycap-x", text: "k-keycap-text", unit: "k-help-key", gap: "k-help-key-gap" },
   DIALOG: { prompt: "k-dialog-prompt", pad: "k-dialog-paged-pad", settingsW: "k-settings-w", settingsH: "k-settings-tall" },
-  PR: { title: "k-pr-title", titleMax: "k-pr-title-max", dot: "k-pr-dot", fold: "k-pr-body-fold" },
+  PR: { title: "k-pr-title", titleMax: "k-pr-title-max", fold: "k-pr-body-fold" },
   HEATMAP_GAP: "k-heatmap-gap",
   DOJO_CELL: "k-dojo-cell",
 };

@@ -1,6 +1,6 @@
 // Kanso's panel kit, the base every piece uses: sizes, colours and timing, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
 // Kept byte for byte by `npm run sync:share`: edit kanso-panel/ui.js. Each piece is its own ui-<piece>.js.
-import { shared } from "herdr";
+import { shared, settings } from "herdr";
 
 // Sizes generated from kanso/tokens.json by npm run build:ui-tokens.
 export const G = { hair: 2, xs: 4, sm: 8, md: 12, lg: 16, xl: 24 };
@@ -12,6 +12,7 @@ export const ICON = 15;
 export const ICON_ROW = 14;
 export const ICON_INLINE = 12;
 export const ICON_CHROME = 17;
+export const ICON_EMPTY = 20;
 export const CHROME_SQUARE = 34;
 export const DRAG_START = 4;
 export const GLINT = { run: 240, wide: 44, mid: 26, narrow: 12 };
@@ -21,7 +22,7 @@ export const SIDEBAR = { w: 256, narrow: 240, min: 120, railRow: 46, guideX: 13,
 export const PANE = { edge: 28, gap: 6, minW: 140, minH: 90, pills: 110 };
 export const KEY = { x: 5, text: 10.5, unit: 40, gap: 5 };
 export const DIALOG = { prompt: 420, pad: 20, settingsW: 860, settingsH: 680 };
-export const PR = { title: 17, titleMax: 44, dot: 8, fold: 150 };
+export const PR = { title: 17, titleMax: 44, fold: 150 };
 export const HEATMAP_GAP = 3;
 export const DOJO_CELL = 30;
 export const SPIN = 900;
@@ -40,11 +41,12 @@ export const INK = { faint: "#8a867d", fallback: "#888888", dojoFur: "#e8963a", 
 /** A second press within this long confirms what cannot be undone. */
 export const ARM_MS = 4000;
 export const BREATH = { from: 0.35, to: 0.8, period: 1800 };
-export const PULSE = { from: 0.35, to: 1, period: 2400 };
 // A native loop: it keeps going behind other windows, where a still mark reads as a stalled agent.
 export const breathe = (el, policy = BREATH) => el.loop("opacity", policy);
 // A native loop redraws the whole window about 30 times a second, so on battery motion steps instead of gliding.
 export const onBattery = () => shared("kanso.battery") === true;
+/** The terminal's own mono family: a tool's words are drawn in it. */
+export const monoFont = () => settings().font_family ?? "JetBrains Mono";
 export const ICONS = "mods/kanso-chrome/icons/";
 /** A name in kanso-chrome's icons, or a path. */
 export const glyphOf = (icon) => (icon.includes("/") ? icon : `${ICONS}${icon}.svg`);
@@ -72,7 +74,7 @@ const TONE = {
   red: "blocked", blocked: "blocked",
   yellow: "working", working: "working",
   green: "done", done: "done",
-  violet: "violet", dim: "dim", muted: "muted", fg: "text",
+  violet: "violet", dim: "dim", muted: "muted", fg: "text", accent: "accent",
   blue: "blue", teal: "teal",
 };
 export const toneColor = (c, tone) => c[TONE[tone] ?? "dim"];

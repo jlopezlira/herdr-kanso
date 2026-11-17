@@ -47,7 +47,7 @@ const first = (m) => [m[1]];
 const shares = (m) => (m[1].match(/(?<![\w.])\d*\.?\d+(?![\w.])/g) ?? []).filter((n) => Number(n) !== 0 && Number(n) !== 1);
 export const LOOKS = [
   { pattern: /\+\s*("[0-9a-f]{2}")/gi, values: first, what: "hex-alpha wash", use: "c.w4, c.w7, c.w12, c.w14, CLEAR or alpha() with TINT" },
-  { pattern: /\.opacity\s*\(((?:[^()]|\([^()]*\))*)\)/g, values: shares, what: "opacity", use: "OPACITY, BEAT, BREATH or PULSE" },
+  { pattern: /\.opacity\s*\(((?:[^()]|\([^()]*\))*)\)/g, values: shares, what: "opacity", use: "OPACITY, BEAT or BREATH" },
   { pattern: /\bduration\s*:\s*(\d+)/g, values: first, what: "duration", use: "EASE or GLIDE" },
 ];
 

@@ -7,7 +7,8 @@ import { fileApi } from "./platform-files.js";
 import { View, div } from "gpui-kit";
 import { v_flex, h_flex, Button, Popover } from "gpui-base";
 import { exec, appHome, home, theme, nextCommand, readTextFile, writeTextFile, layout, machines, shared, setShared } from "herdr";
-import { G, H, OPACITY, PULSE, breathe, tokens } from "./ui.js";
+import { G, H, OPACITY, breathe, tokens } from "./ui.js";
+import { mark } from "./ui-mark.js";
 import { quietLink, iconButton } from "./ui-button.js";
 import { field, TextField } from "./ui-field.js";
 import { menu } from "./ui-menu.js";
@@ -750,7 +751,7 @@ export default class TokenSpend extends View {
   live(c, sessions) {
     return v_flex().w_full()
       .child(h_flex().w_full().items_center().gap(G.sm).pb(G.sm)
-        .child(breathe(div().size(6).flex_none().rounded_full().bg(c.accent), PULSE))
+        .child(mark(c, { status: "working", size: "sm" }))
         .child(div().text_size(15).text_color(c.text).child("Active now")))
       .children(sessions.map((s, index) => fadedButton(Button.new(`ins-live-${index}`).w_full().cursor_pointer())
         .accessibility_label(`${s.title}, ${s.usdText}`)

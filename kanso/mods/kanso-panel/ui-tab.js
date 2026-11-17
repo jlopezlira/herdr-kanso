@@ -5,6 +5,7 @@ import { h_flex, v_flex, Button } from "gpui-base";
 import { G, H, R, T, ICON_ROW, ICONS, CLEAR } from "./ui.js";
 import { armedLook } from "./ui-button.js";
 import { field } from "./ui-field.js";
+import { dot as drawDot } from "./ui-dot.js";
 import { mark } from "./ui-mark.js";
 import { PENDING, pendingDot } from "./ui-state.js";
 
@@ -45,7 +46,7 @@ export function tabItem(id, item, c, { on = false, disabled = false, collapsed =
   const armed = Boolean(item.armed) && !disabled;
   const ink = inkOf(c, { on, disabled, armed });
   const ground = groundOf(c, { on, track, armed, held: Boolean(item.held), fill });
-  const dot = div().size(G.sm).flex_none().rounded_full().bg(c.blocked);
+  const dot = drawDot(c, "blocked");
   return Button.new(id).items_center().justify_center().gap(G.xs).rounded(R.control)
     .border_2().border_color(CLEAR).focus((s) => s.border_color(c.accent))
     .text_color(ink)

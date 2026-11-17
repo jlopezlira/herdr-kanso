@@ -16,7 +16,7 @@ import { G, H, T, OPACITY, tokens, breathe } from "./ui.js";
 import { button, quietLink, iconButton } from "./ui-button.js";
 import { row } from "./ui-row.js";
 import { skeleton } from "./ui-skeleton.js";
-import { stateEmpty } from "./ui-state.js";
+import { emptyState } from "./kit.js";
 import { programIcon, givenNames, nameOf } from "./marks.js";
 import { deliver, isAgent, sendKey, waitingNote } from "./deliver.js";
 import { openPath, toPng } from "./share.js";
@@ -528,7 +528,7 @@ export class Look {
   }
 
   empty(c) {
-    return v_flex().flex_1().w_full().justify_center().child(stateEmpty("look-empty", "eye", this.emptyLine(), c));
+    return v_flex().flex_1().w_full().justify_center().child(emptyState({ icon: "eye", text: this.emptyLine() })("look-empty", c));
   }
 
   drawing(c) {

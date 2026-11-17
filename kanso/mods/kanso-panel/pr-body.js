@@ -1,11 +1,11 @@
 // The card under the pull request verdict: the log, the comment, or the rows that state is about.
 import { div } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
-import { G, R, T, PR, PAGE, OPACITY, toneColor } from "./ui.js";
-import { monoFont } from "./lib.js";
+import { G, R, T, PR, PAGE, OPACITY, monoFont, toneColor } from "./ui.js";
 import { mark } from "./ui-mark.js";
+import { avatar } from "./ui-avatar.js";
 
-export const VIEW = { title: PR.title, titleMax: PR.titleMax, dot: PR.dot, stale: OPACITY.away, meta: PAGE.note };
+export const VIEW = { title: PR.title, titleMax: PR.titleMax, stale: OPACITY.away, meta: PAGE.note };
 
 const mono = () => monoFont();
 const WORD = { fail: "failed", pending: "running", unknown: "unknown", pass: "passed", skipped: "skipped" };
@@ -38,7 +38,7 @@ function commentCard(c, body) {
   const where = `${body.path || ""}${body.line ? `:${body.line}` : ""}`;
   return shell(c, cardBody()
     .child(cardHeading()
-      .child(div().size(G.lg).flex_none().rounded_full().bg(c.subtle).flex().items_center().justify_center().text_size(T.body).font_medium().text_color(c.text).child(body.letter || "?"))
+      .child(avatar(c, { initial: body.letter || "?", size: "sm" }))
       .child(div().flex_none().text_size(T.value).font_medium().text_color(c.text).child(body.author || ""))
       .when(Boolean(where), (el) => el.child(faced(div().min_w(0).truncate().text_size(T.body).text_color(c.dim).child(where)))))
     .when(Boolean(body.text), (el) => el.child(div().w_full().text_size(T.card).line_height(1.45).text_color(c.text).child(body.text))));

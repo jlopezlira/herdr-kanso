@@ -1,4 +1,4 @@
-import { spawnAndNotify, commandOk, tilde, pool, said, failNote } from "./lib.js";
+import { spawnAndNotify, commandOk, tilde, pool, said } from "./lib.js";
 import { sizedPage, pageBones, skeletonStack, skeletonMetrics, heroStack, heroHeading, metricValue, metricStats, skeletonBars } from "./ui-page.js";
 import { localService } from "./platform-host.js";
 import { paths } from "./platform-paths.js";
@@ -17,7 +17,8 @@ import { Armed, button, quietLink, iconButton } from "./ui-button.js";
 import { row } from "./ui-row.js";
 import { section } from "./ui-section.js";
 import { ghost } from "./ui-skeleton.js";
-import { stateEmpty } from "./ui-state.js";
+import { emptyState, failureBlock } from "./kit.js";
+import { dot } from "./ui-dot.js";
 import { aliasText, machineTitle, range, reduceSeries, MONTHS } from "./pure.js";
 import { worktreesMemory } from "./panel-state.js";
 
@@ -663,7 +664,7 @@ export class Worktrees {
           .child(div().text_size(12).text_color(armed ? c.red : c.dim)
             .child(armed ? "Merged branches go too; the others stay." : "Nothing uncommitted, every commit on a branch, idle a day.")))
         .when(Boolean(this.notice), (el) => el.child(div().text_size(12).text_color(c.muted).child(this.notice)))
-        .when(Boolean(this.note), (el) => el.child(failNote("wt-note", this.note, c))));
+        .when(Boolean(this.note), (el) => el.child(failureBlock(this.note)("wt-note", c))));
   }
 
   row(w, c) {
@@ -770,7 +771,7 @@ export class Worktrees {
           .tooltip(`${p.label}: ${fmtSize(p.kb)}`))))
       .child(v_flex().w_full().gap(6)
         .children(parts.map((p) => h_flex().w_full().items_center().gap(G.sm)
-          .child(div().size(8).flex_none().rounded_full().bg(color[p.key]))
+          .child(dot(c, color[p.key]))
           .child(div().flex_1().min_w(0).truncate().text_size(12.5).text_color(c.text).child(p.label))
           .child(div().text_size(11).text_color(c.dim).child(`${p.count}`))
           .child(div().w(64).flex_none().text_right().text_size(13).font_light().text_color(c.text).child(fmtSize(p.kb) || "0 KB"))
@@ -789,7 +790,7 @@ export class Worktrees {
   freed(c, narrow) {
     const h = this.hist;
     if (!h) return v_flex().w_full().child(section(c, "Freed"))
-      .child(this.storeNote ? failNote("wt-store", this.storeNote, c) : this.freedBones(c, narrow));
+      .child(this.storeNote ? failureBlock(this.storeNote)("wt-store", c) : this.freedBones(c, narrow));
     const freedBars = this.bars(c, h.freedByDay, "Freed each day", 96, "fills as you remove")
       , diskBars = this.bars(c, h.diskByDay, "In worktrees each day", 56, "a bar per day with a scan");
     const stats = [
@@ -864,8 +865,8 @@ export class Worktrees {
     const shown = this.allRepos ? groups : groups.slice(0, REPOS);
     const body = !scanned && this.phase ? this.skeleton(c, narrow)
       : !scanned ? (this.note
-        ? failNote("wt-failed", this.note, c, [{ label: "Refresh", onClick: (cx) => { if (!this.working) this.refresh(cx); } }])
-        : stateEmpty("wt-empty", "git-fork", "No worktrees besides your checkouts", c))
+        ? failureBlock({ ...this.note, fix: "Refresh" })("wt-failed", c, { onClick: (cx) => { if (!this.working) this.refresh(cx); } })
+        : emptyState({ icon: "git-fork", text: "No worktrees besides your checkouts" })("wt-empty", c))
         : this.page(c, narrow, groups, shown);
     return sizedPage.call(this, v_flex().id("kanso-worktrees").size_full().min_h(0).bg(c.canvas).text_color(c.text).overflow_y_scrollbar(), narrow, (column) => column
           .child(this.header(c, narrow))

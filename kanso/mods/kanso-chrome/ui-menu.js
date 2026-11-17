@@ -43,7 +43,6 @@ const grouped = (items) => items.reduce((lines, line) => {
   if (!line.loading) return [...lines, line];
   return lines[end]?.bones ? lines.map((kept, i) => (i === end ? { bones: kept.bones + 1 } : kept)) : [...lines, { bones: 1 }];
 }, []);
-const failed = (id, { text, source = null, fixes = [] }, c) => stateBlock(id, { mark: mark(c, { status: "blocked" }), what: text, why: source, fixes }, c);
 
 const lookOf = (c, { armed, selected, disabled }) => {
   if (disabled) return { fill: null, ink: c.dim, hover: null, press: null };
@@ -85,7 +84,7 @@ const finder = (id, { field: label, text }, c) => div().p(G.xs).child(field(id, 
 function entry(id, line, c) {
   if (line.separator) return menuSeparator(c);
   if (line.field) return finder(id, line, c);
-  if (line.failure) return failed(id, line.failure, c);
+  if (line.failure) return stateBlock(id, c, line.failure);
   if (line.heading) return menuHeading(line.heading, c, line.mark);
   if (line.scroll) return run(id, line, c);
   if (line.bones) return bones(line.bones, c);
@@ -95,7 +94,7 @@ function entry(id, line, c) {
 const linePx = (line) => {
   if (line.separator) return 2 * G.xs + RULE;
   if (line.field) return 2 * G.xs + H.control;
-  if (line.failure) return stateBlockPx({ why: line.failure.source, fixes: line.failure.fixes });
+  if (line.failure) return stateBlockPx(line.failure);
   if (line.heading) return H.icon;
   if (line.scroll) return line.scroll.slice(0, line.rows ?? RUN_ROWS).reduce((sum, item) => sum + linePx(item), 0);
   return line.second ? TWO_LINES_PX : ITEM_PX;
@@ -114,7 +113,7 @@ function drawn(id, lines, c) {
 export const menuHeight = ({ title = null, items = [] }) => 2 * G.xs + (title ? H.icon : 0) + items.reduce((sum, line) => sum + linePx(line), 0);
 
 /** The Menu inside a frame its host draws (a popup Herdr frames): its heading and items, full width. `items`: an item (see menuItem),
- * { heading, mark }, { loading: true }, { failure: { text, source, fixes } }, { field, text }, { scroll: items, rows, handle } or { separator: true }. */
+ * { heading, mark }, { loading: true }, { failure: { text, source, fix, onClick } }, { field, text }, { scroll: items, rows, handle } or { separator: true }. */
 export const menuList = (id, { title = null, items = [] }, c) => v_flex().id(id).w_full().p(G.xs).bg(c.popover)
   .when(Boolean(title), (el) => el.child(menuHeading(title, c)))
   .children(drawn(id, items, c));
