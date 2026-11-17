@@ -577,15 +577,18 @@ export const playgrounds = {
     markup: tooltip,
   },
   'Primitives/Card': {
-    args: { author: 'sam', image: '', age: '1h', body: 'Batches of 50, flushed every 2 s.', loading: false },
+    args: { author: 'sam', image: '', age: '1h', body: 'Batches of 50, flushed every 2 s.', loading: false, avatar: true, where: '', step: '' },
     argTypes: {
       author: textArg('Author'),
       image: textArg('Image URL'),
       age: textArg('Age'),
       body: textArg('Body'),
       loading: boolArg('Loading'),
+      avatar: boolArg('Avatar'),
+      where: textArg('Where (path:line)'),
+      step: textArg('Step'),
     },
-    markup: (args) => `<div class="kanso-panel">${card(args)}</div>`,
+    markup: ({ avatar: face, ...args }) => `<div class="kanso-panel">${card({ ...args, initial: face ? args.author : '' })}</div>`,
   },
   'Panels/Dojo': {
     ...statedPages['Panels/Dojo'],

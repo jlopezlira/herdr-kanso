@@ -7,6 +7,8 @@ import { toast as drawToast } from "./ui-toast.js";
 import { skeletonOf as drawSkeleton } from "./ui-skeleton.js";
 import { figure } from "./ui-metric.js";
 import { diffText, facts, plus } from "./ui-facts.js";
+import { card as drawCard } from "./ui-card.js";
+import { code as drawCode } from "./ui-code.js";
 
 // Facts as words, as the Storybook writes them.
 export { diffText, facts, plus };
@@ -79,4 +81,15 @@ export const skeletonOf = ({ shape, count }) => (id, c, more = {}) => {
 export const metric = ({ value, unit = "", facts = "", loading = false, tone = "", tip = "" }) => (id, c, more = {}) => {
   given(more);
   return figure(id, c, { value, unit, facts, loading, tone, tip });
+};
+
+// `content`: kit pieces drawn in place of the prose body.
+export const card = ({ content = [], ...props }) => (id, c, more = {}) => {
+  given(more);
+  return drawCard(id, c, { ...props, content: drawn(id, c, "content", content) });
+};
+
+export const code = (props) => (id, c, more = {}) => {
+  given(more);
+  return drawCode(id, c, props);
 };

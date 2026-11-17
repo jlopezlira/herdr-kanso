@@ -604,9 +604,9 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     a conflict when the file on disk changed; "Source" edits the whole file).
     Over 1 MiB stays a view. `blocks.js` splits and joins the blocks.
     kanso-tabs watches `data/kanso-open` (`markdown-handler.sh install`).
-    The markdown-panel mod is that copy, by sync:share); `lib.js` shares
-    `codeState` (an `EditorState`, read-only when the file is not text)
-    and `showPanel` (a block in `panel-body`). A panel
+    The markdown-panel mod is that copy, by sync:share); the kit's `ui-code.js`
+    gives `sourceState` (an `EditorState`, read-only when the file is not text)
+    and `lib.js` gives `showPanel` (a block in `panel-body`). A panel
     exists only while `kanso-tabs` shows it. A remote re-read runs only while it is shown and the window is in front.
     `ports.js` lists TCP listeners (`lsof -F pcn`) with their folder
     (`lsof -d cwd`), age and parent chain (`ps`); a listener under a

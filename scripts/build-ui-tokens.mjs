@@ -30,7 +30,10 @@ const PICK = {
   SKELETON: { text: "k-skeleton-text", meta: "k-skeleton-meta" },
   HEATMAP_GAP: "k-heatmap-gap",
   DOJO_CELL: "k-dojo-cell",
+  CODE: { line: "k-lh-line", gutter: "k-h-pane" },
 };
+// Line heights, as a share of the font size.
+const LEADINGS = { LH: { body: "k-lh-body" } };
 // Durations in milliseconds.
 const TIMING = { SPIN: "k-spin-ms", GLINT_MS: "k-glint-ms", GLINT_STAGGER: "k-glint-stagger", DOTS_MS: "k-dots-ms" };
 // Transitions: a duration and an easing.
@@ -104,7 +107,7 @@ export function block(tokens) {
   const of = share(tokens);
   const motion = Object.entries(MOTION).map(([name, pick]) => `export const ${name} = { duration: ${duration(pick.duration)}, easing: ${ease(pick.easing)} };`);
   const beats = `export const BEAT = { ${Object.entries(BEATS).map(([key, pick]) => `${key}: { from: ${of(pick.from)}, to: 1, period: ${duration(pick.period)} }`).join(", ")} };`;
-  return [START, ...constants(PICK, px(tokens)), ...constants(TIMING, duration), ...motion, ...constants(EASINGS, ease), beats, ...constants(SHARES, of),
+  return [START, ...constants(PICK, px(tokens)), ...constants(LEADINGS, reader("")(tokens)), ...constants(TIMING, duration), ...motion, ...constants(EASINGS, ease), beats, ...constants(SHARES, of),
     washes(tokens), constant("INK", INK, ink(tokens)), END].join("\n");
 }
 

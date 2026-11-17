@@ -409,7 +409,7 @@ test("preview chooses a picture, markdown or text, and re-reads a remote file on
       window, layout,
       readTextFile: async (path) => { reads.push(path); return "hello"; },
       isMarkdown: (path) => /\.md$/.test(path),
-      codeState: () => ({ release() {}, value() { return ""; }, set_value() {} }),
+      sourceState: () => ({ release() {}, value() { return ""; }, set_value() {} }),
       theme: () => ({}),
       div: node, svg: node, image: node, h_flex: node, v_flex: node, Editor: { new: node },
       exec: (cmd, args) => {

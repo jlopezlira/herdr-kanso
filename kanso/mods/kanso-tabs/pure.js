@@ -5,6 +5,18 @@ export const range = (n, from = 0) => Array.from({ length: Math.max(0, n) }, (_,
 
 export const extOf = (path) => (/\.([^./\\]+)$/.exec(String(path)) ?? [])[1]?.toLowerCase() ?? "";
 
+const HUNK = /^@@ -(\d+)(?:,\d+)? \+(\d+)/;
+const STEPS = { "-": { old: 1, next: 0, from: "old" }, "+": { old: 0, next: 1, from: "next" }, " ": { old: 1, next: 1, from: "next" } };
+// A diff numbers its lines from its hunk headers: a deleted line by the old file, the others by the new one.
+// The kit's code piece numbers its diffs with it, in the app and in the Storybook.
+export const diffNumbers = (lines, first) => lines.reduce(({ at, numbers }, source) => {
+  const head = HUNK.exec(source);
+  if (head) return { at: { old: Number(head[1]), next: Number(head[2]) }, numbers: [...numbers, undefined] };
+  const step = STEPS[source[0]];
+  if (!step) return { at, numbers: [...numbers, undefined] };
+  return { at: { old: at.old + step.old, next: at.next + step.next }, numbers: [...numbers, at[step.from]] };
+}, { at: { old: first, next: first }, numbers: [] }).numbers;
+
 export const tryOr = (fn, fallback = null) => {
   try { return fn(); } catch { return fallback; }
 };

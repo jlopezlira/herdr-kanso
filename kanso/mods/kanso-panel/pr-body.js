@@ -1,77 +1,25 @@
-// The card under the pull request verdict: the log, the comment, or the rows that state is about.
+// What the pull request verdict shows under it: the log, the comment, the checks, or the lines that state is about.
 import { div } from "gpui-kit";
-import { v_flex, h_flex } from "gpui-base";
-import { G, R, T, PR, PAGE, OPACITY, monoFont, toneColor } from "./ui.js";
-import { mark } from "./ui-mark.js";
-import { avatar } from "./ui-avatar.js";
+import { v_flex } from "gpui-base";
+import { G, T } from "./ui.js";
+import { card, code, row } from "./kit.js";
 
-export const VIEW = { title: PR.title, titleMax: PR.titleMax, stale: OPACITY.away, meta: PAGE.note };
-
-const mono = () => monoFont();
 const WORD = { fail: "failed", pending: "running", unknown: "unknown", pass: "passed", skipped: "skipped" };
 
-function faced(el) {
-  const font = mono();
-  return font ? el.font_family(font) : el;
-}
+const rows = (list, facts) => card({ content: (list ?? []).map((check) => row({ name: check.name || "Check", ...facts(check) })) });
 
-function shell(c, inner) {
-  return v_flex().w_full().p(G.md).gap(G.sm).rounded(R.card).bg(c.canvas).child(inner);
-}
+const PIECES = {
+  log: (body) => card({ author: body.job || "Check", initial: "", step: body.step, age: body.elapsed, content: body.lines?.length ? [code({ text: body.lines.join("\n"), kind: "log" })] : [] }),
+  comment: (body) => card({ author: body.author, initial: body.letter, where: `${body.path || ""}${body.line ? `:${body.line}` : ""}`, body: body.text }),
+  running: (body) => rows(body.rows, (check) => ({ mark: "working", detail: check.workflow || null, meta: check.elapsed || null })),
+  checks: (body) => rows(body.rows, (check) => ({ meta: WORD[check.state] || null })),
+};
 
-function rows(c, lines) {
-  return v_flex().w_full().gap(G.xs).children((lines ?? []).filter((line) => line != null && line !== "").map((line) => div().text_size(T.value).text_color(c.muted).child(line)));
-}
+const lines = (c, list) => v_flex().w_full().gap(G.xs).children(list.filter((line) => line != null && line !== "").map((line) => div().text_size(T.value).text_color(c.muted).child(line)));
+const TEXTS = { note: (body) => [body.text], commits: (body) => body.lines ?? [], lines: (body) => body.lines ?? [] };
 
-function logCard(c, body) {
-  const took = body.elapsed ? div().flex_none().text_size(T.body).text_color(c.dim).child(body.elapsed) : null;
-  return shell(c, cardBody()
-    .child(cardHeading()
-      .child(div().flex_none().text_size(T.value).font_medium().text_color(c.text).child(body.job || "Check"))
-      .when(Boolean(body.step), (el) => el.child(div().flex_none().text_size(T.body).text_color(c.dim).child("›")).child(div().min_w(0).truncate().text_size(T.value).text_color(c.muted).child(body.step)))
-      .child(div().flex_1())
-      .when(Boolean(took), (el) => el.child(took)))
-    .when(Boolean(body.lines?.length), (el) => el.child(faced(v_flex().w_full().gap(G.xs).children(body.lines.map((line) => div().text_size(T.body).text_color(toneColor(c, line.tone)).child(line.text || " ")))))));
-}
-
-function commentCard(c, body) {
-  const where = `${body.path || ""}${body.line ? `:${body.line}` : ""}`;
-  return shell(c, cardBody()
-    .child(cardHeading()
-      .child(avatar(c, { initial: body.letter || "?", size: "sm" }))
-      .child(div().flex_none().text_size(T.value).font_medium().text_color(c.text).child(body.author || ""))
-      .when(Boolean(where), (el) => el.child(faced(div().min_w(0).truncate().text_size(T.body).text_color(c.dim).child(where)))))
-    .when(Boolean(body.text), (el) => el.child(div().w_full().text_size(T.card).line_height(1.45).text_color(c.text).child(body.text))));
-}
-
-const runningMark = (c) => mark(c, { status: "working", size: "sm" });
-
-function runningCard(c, body) {
-  return shell(c, v_flex().w_full().gap(G.sm).children((body.rows ?? []).map((row) => h_flex().w_full().items_center().gap(G.sm)
-    .child(runningMark(c))
-    .child(checkName(c, row))
-    .when(Boolean(row.workflow), (el) => el.child(div().min_w(0).truncate().text_size(T.body).text_color(c.dim).child(row.workflow)))
-    .child(div().flex_1())
-    .when(Boolean(row.elapsed), (el) => el.child(div().flex_none().text_size(T.body).text_color(c.dim).child(row.elapsed))))));
-}
-
-function checkCard(c, body) {
-  return v_flex().w_full().gap(G.xs).children((body.rows ?? []).map((row) => h_flex().w_full().items_center().gap(G.sm)
-    .child(checkName(c, row))
-    .child(div().flex_none().text_size(T.body).text_color(c.dim).child(WORD[row.state] || ""))));
-}
-
-export function verdictCard(c, body) {
-  if (!body) return null;
-  if (body.kind === "note") return div().text_size(T.value).text_color(c.muted).child(body.text || "");
-  if (body.kind === "commits" || body.kind === "lines") return rows(c, body.lines);
-  if (body.kind === "checks") return checkCard(c, body);
-  if (body.kind === "log") return logCard(c, body);
-  if (body.kind === "comment") return commentCard(c, body);
-  if (body.kind === "running") return runningCard(c, body);
+export function verdictBody(c, body) {
+  if (Object.hasOwn(PIECES, body?.kind ?? "")) return PIECES[body.kind](body)("pr-body", c);
+  if (Object.hasOwn(TEXTS, body?.kind ?? "")) return lines(c, TEXTS[body.kind](body));
   return null;
 }
-
-const checkName = (c, row) => div().min_w(0).truncate().text_size(T.value).text_color(c.text).child(row.name || "Check");
-const cardBody = () => v_flex().w_full().gap(G.sm);
-const cardHeading = () => h_flex().w_full().items_center().gap(G.sm);
