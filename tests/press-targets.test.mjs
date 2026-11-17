@@ -2,18 +2,11 @@
 // is one Tab cannot reach and Enter and Space cannot press. The ones left belong to compositions not yet shared; the baseline only shrinks.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readdirSync } from "node:fs";
 import { repoText } from "./helpers.mjs";
-import { SHARED } from "../scripts/sync-share.mjs";
+import { outsideKit } from "./mod-sources.mjs";
 
-const MODS = "kanso/mods/";
 const BASELINE = "tests/press-targets-baseline.json";
-const COPIES = new Set(SHARED.flatMap(({ copies }) => copies));
-// Every mod source but the kit (kit.js and its ui-*.js), and no shared copy: its source is read once.
-const sources = () => [
-  ...readdirSync(new URL(`../${MODS}`, import.meta.url), { recursive: true }).map((p) => `${MODS}${String(p).split("\\").join("/")}`),
-  "markdown-panel/mods/markdown-panel/main.js",
-].filter((file) => file.endsWith(".js") && !COPIES.has(file) && !/\/(?:ui(-[\w-]+)?|kit)\.js$/.test(file)).sort();
+const sources = () => outsideKit().sort();
 
 // The source with every comment, string and template blanked to spaces, so brackets and words are code only; lines keep their numbers.
 export function codeOnly(text) {
