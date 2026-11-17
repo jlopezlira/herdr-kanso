@@ -186,7 +186,7 @@
   {"file":"kanso/mods/kanso-panel/pr.js","line":".child(div().truncate().text_size(13).text_color(c.text).when(on, (e) => e.font_medium()).child(name))","value":13},
   {"file":"kanso/mods/kanso-panel/pr.js","line":".when(this.outside, (el) => el.child(div().text_size(12).text_color(c.dim).child(\"This pane is not in a repository.\")))","value":12},
   {"file":"kanso/mods/kanso-panel/pr.js","line":"? div().text_size(12).text_color(c.dim).child(\"Nothing waiting on you.\")","value":12},
-  {"file":"kanso/mods/kanso-panel/pr.js","line":".when(Boolean(this.wait || this.inbox?.limitedUntil), (el) => el.child(div().text_size(12).text_color(c.dim).child(this.wait || limitLine(this.inbox.limitedUntil))))","value":12},
+  {"file":"kanso/mods/kanso-panel/pr.js","line":".when(Boolean(this.wait || this.inbox?.limitedUntil), (el) => el.child(div().text_size(12).text_color(c.dim).child(this.wait || limitLine(this.inbox.limitedUntil)))), c);","value":12},
   {"file":"kanso/mods/kanso-panel/pr.js","line":".child(v_flex().w_full().max_w(1080).child(el))));","value":1080},
   {"file":"kanso/mods/kanso-panel/preview.js","line":"return v_flex().id(\"preview\").track_focus(this.handle).size_full().min_h(0).bg(t.background).text_color(t.foreground).text_size(13)","value":13},
   {"file":"kanso/mods/kanso-panel/preview.js","line":".child(h_flex().h(42).flex_none().px(10).gap(6).items_center().border_b(1).border_color(t.border)","value":42},
