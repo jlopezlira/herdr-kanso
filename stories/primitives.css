@@ -1678,7 +1678,7 @@
 .kanso-skeleton.kanso-skeleton--tab{width:var(--k-w-tab-skeleton);height:var(--k-h-bar);border-radius:var(--k-r-control)}
 .kanso-skeleton.kanso-skeleton--tab.kanso-skeleton--short{width:var(--k-w-tab-skeleton-short)}
 .kanso-markdown__grid.kanso-markdown__grid--three{grid-template-columns:repeat(3,1fr)}
-.kanso-segmented .kanso-control--on.kanso-control--accent{background:var(--accent);color:var(--accentfg);box-shadow:none}
+.kanso-segmented>span.kanso-control--on.kanso-control--accent{background:var(--accent);color:var(--accentfg);box-shadow:none}
 .kanso-layout__detail{margin-top:var(--k-sp-hair)}
 .kanso-layout__detail.kanso-layout__detail--stacked{margin-top:var(--k-sp-1)}
 .kanso-annotation.kanso-annotation--faded{opacity:.6}
