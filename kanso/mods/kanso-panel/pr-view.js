@@ -1,19 +1,18 @@
 // The pull request page: the verdict, its one action, and the fold under it.
 import { scopedColumn } from "./ui-page.js";
-import { div, svg } from "gpui-kit";
+import { div } from "gpui-kit";
 import { shared } from "herdr";
-import { v_flex, h_flex, Button } from "gpui-base";
-import { G, H, R, T, PR, PAGE, OPACITY, toneColor } from "./ui.js";
+import { v_flex, h_flex } from "gpui-base";
+import { G, R, T, PR, PAGE, OPACITY, toneColor } from "./ui.js";
 import { button, quietLink } from "./ui-button.js";
 import { row } from "./ui-row.js";
 import { section } from "./ui-section.js";
-import { diffText, failureBlock } from "./kit.js";
+import { diffText, failureBlock, row as kitRow } from "./kit.js";
 import { ageOf, footLine } from "./pr-poll.js";
 import { aliasText, machineTitle } from "./pure.js";
 import { verdictBody } from "./pr-body.js";
 import { dot } from "./ui-dot.js";
 
-const ICON = "mods/kanso-chrome/icons/";
 
 export function footOf(panel) {
   return footLine({ wait: panel.wait, stale: Boolean(panel.stale), at: panel.stale?.at, now: Date.now() });
@@ -99,13 +98,8 @@ function writeRow(panel, c, writes) {
 function detailsButton(panel, c, view) {
   const on = panel.detailsOn();
   const label = view.id === "none" || view.id === "base" ? "Other open pull requests" : "Details";
-  return Button.new("pr-details").w_full().h(H.compact).gap(G.sm).items_center().cursor_pointer()
-    .accessibility_label(label)
-    .on_click((_e, cx) => panel.setDetails(cx))
-    .child(svg(`${ICON}chevron-${on ? "down" : "right"}.svg`).size(PAGE.note).text_color(c.muted))
-    .child(div().flex_none().text_size(T.value).text_color(c.muted).child(label))
-    .child(div().flex_1())
-    .child(div().min_w(0).truncate().text_size(T.value).text_color(c.dim).child(view.detailsNote ?? ""));
+  // The kit's row: Tab reaches it, Enter and Space open or close the details.
+  return kitRow({ icon: on ? "chevron-down" : "chevron-right", name: label, meta: view.detailsNote || null, dimmed: true })("pr-details", c, { onClick: (cx) => panel.setDetails(cx) });
 }
 
 function detailParts(panel, c, view) {

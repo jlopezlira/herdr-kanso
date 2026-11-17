@@ -17,7 +17,7 @@ import { Armed, button, quietLink, iconButton } from "./ui-button.js";
 import { row } from "./ui-row.js";
 import { factList } from "./ui-facts.js";
 import { section } from "./ui-section.js";
-import { emptyState, failureBlock, metric, skeletonOf, tooltip } from "./kit.js";
+import { emptyState, explainButton, failureBlock, metric, skeletonOf, tooltip } from "./kit.js";
 import { dot } from "./ui-dot.js";
 import { aliasText, machineTitle, range, reduceSeries, MONTHS } from "./pure.js";
 import { worktreesMemory } from "./panel-state.js";
@@ -296,6 +296,12 @@ export class Worktrees {
     this.width = 368; this.done = false;
     this.share = new Share("kanso-panel");
     this.store = new WorktreeStore(); this.stored = false; this.known = new Map(); this.hist = null;
+    // The agent Explain names: the first installed, as `ask` starts it.
+    this.agent = null;
+    cx.spawn(async (cx) => {
+      this.agent = (await knownAgents({ on: null }).catch(() => [])).find((a) => a.installed)?.name ?? null;
+      cx.notify();
+    });
     // What the last scan kept shows at once; the scan then checks it all again.
     cx.spawn(async (cx) => {
       try {
@@ -678,8 +684,9 @@ export class Worktrees {
         .child(h_flex().flex_wrap().gap_x(G.lg)
           .when(s === "broken", (el) => el.child(quietLink(`wt-repair-${w.path}`, this.working === w.path ? "Repairing…" : "Repair the link",
             (cx) => this.repair(w.path, cx), c, { color: c.text, disabled: Boolean(this.working) })))
-          .when(!w.missing && s !== "broken", (el) => el.child(quietLink(`wt-explain-${w.path}`, "Explain it", () => this.ask(`Explain ${name(w.path)}`, w.path,
-            explainPrompt(this.item(w.path) ?? w, this.groups.find((g) => g.repo === w.repo)?.base)), c, { color: c.text })))
+          .when(!w.missing && s !== "broken", (el) => el.child(explainButton({ agent: this.agent ?? "an agent", size: "sm" })(`wt-explain-${w.path}`, c, {
+            onClick: () => this.ask(`Explain ${name(w.path)}`, w.path, explainPrompt(this.item(w.path) ?? w, this.groups.find((g) => g.repo === w.repo)?.base)),
+          })))
           .when(!w.missing, (el) => el.child(quietLink(`wt-open-${w.path}`, "Open in a new tab", () => run("tab.new", { folder: w.path }), c)))
           .when(!blocked, (el) => el.child(this.armed.link(`wt-rm-${w.path}`, busy ? "Removing…" : "Remove", "remove",
             `one:${w.path}`, (cx) => this.remove(w.path, cx), c, { color: c.text, disabled: Boolean(this.working) })))));

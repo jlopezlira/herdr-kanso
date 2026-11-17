@@ -10,12 +10,12 @@ import { bring, machineOf, copyFailure, drawablePath, remoteDue, ArmPoll, pollSt
 // they are about. Herdr tells no mod about a click on a terminal's link, so it reads what the agent
 // printed: its screen, and the conversation on disk, from the byte it stored last time.
 import { div, image } from "gpui-kit";
-import { v_flex, h_flex, Button } from "gpui-base";
+import { v_flex, h_flex } from "gpui-base";
 import { hc, focused, panes, terminals, theme, appHome, home, shared, setShared, watchFolder, openOverlay, window, layout } from "herdr";
-import { G, H, T, OPACITY, tokens } from "./ui.js";
+import { G, H, T, tokens } from "./ui.js";
 import { button, quietLink, iconButton } from "./ui-button.js";
 import { row } from "./ui-row.js";
-import { emptyState, skeletonOf } from "./kit.js";
+import { button as kitButton, emptyState, skeletonOf } from "./kit.js";
 import { programIcon, givenNames, nameOf } from "./marks.js";
 import { deliver, isAgent, sendKey, waitingNote } from "./deliver.js";
 import { openPath, toPng } from "./share.js";
@@ -504,11 +504,8 @@ export class Look {
   dot(item, c) {
     const on = this.selected?.path === item.path;
     const color = item.color || c.accent;
-    return Button.new(`look-dot-${keyOf(item.path)}`).size(H.compact).flex_none().items_center().justify_center().cursor_pointer()
-      .accessibility_label(item.name)
-      .when(!on, (el) => el.hover((s) => s.opacity(OPACITY.thumb)))
-      .on_click((_e, cx) => this.select(item, cx, true))
-      .child(div().size(G.sm).rounded_full().border_1().border_color(on ? color : c.muted).when(on, (el) => el.bg(color)));
+    const face = div().size(G.sm).rounded_full().border_1().border_color(on ? color : c.muted).when(on, (el) => el.bg(color));
+    return kitButton({ label: item.name, kind: "icon", size: "compact", content: [face] })(`look-dot-${keyOf(item.path)}`, c, { onClick: (cx) => this.select(item, cx, true) });
   }
 
   dots(list, c) {

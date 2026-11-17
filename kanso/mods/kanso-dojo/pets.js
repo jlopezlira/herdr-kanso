@@ -12,7 +12,8 @@ import { div, image } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import { appHome, home } from "herdr";
 import { parseOr } from "./pure.js";
-import { G, CLEAR, TINT, alpha } from "./ui.js";
+import { G, W } from "./ui.js";
+import { button } from "./kit.js";
 import { hachi, hachiInk } from "./mascot.js";
 import { hachiPixels } from "./mascot-pixels.js";
 import { Store } from "./store.js";
@@ -198,14 +199,13 @@ export class Companion {
   grid(t, c, onChoose = () => {}) {
     const tile = (p) => {
       const on = p.id === this.id;
-      return v_flex().id(`pet-${p.id}`).w(104).gap(4).p(8).items_center().rounded(10).cursor_pointer()
-        .border_1().border_color(on ? c.accent : CLEAR).bg(on ? alpha(c.accent, TINT.key) : CLEAR)
-        .hover((s) => s.bg(alpha(c.text, TINT.hover)))
-        .on_click((_e, cx) => { this.choose(p.id); onChoose(p, cx); cx.notify(); })
+      const face = v_flex().w(W.petTile).gap(G.xs).p(G.sm).items_center()
         .child(h_flex().h(84).items_end().justify_center()
           .child(p.sheet ? petFrame(p, "idle", { scale: 0.4, still: true, small: true }) : hachi(t, { mood: "calm", px: 5 })))
         .child(div().w_full().text_center().truncate().text_size(12).font_medium().text_color(on ? c.text : c.muted).child(p.name))
         .child(div().w_full().text_center().truncate().text_size(10.5).text_color(c.dim).child(p.from ?? (p.sheet ? "yours" : "Kanso")));
+      // The kit's button with the pet as its face: Tab reaches it, Enter and Space choose it, the chosen one is filled.
+      return button({ label: p.name, kind: "quiet", active: on, content: [face] })(`pet-${p.id}`, c, { onClick: (cx) => { this.choose(p.id); onChoose(p, cx); cx.notify(); } });
     };
     const coming = this.bringing ? AGENT_PETS.filter((a) => !this.pets.some((p) => p.id === a.id)).length : 0;
     const note = this.error ?? (coming ? `Bringing ${coming} more\u2026` : null);

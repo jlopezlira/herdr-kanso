@@ -1,19 +1,19 @@
 import { spawnAndNotify, commandOk, location, key, tilde, said } from "./lib.js";
-import { detailRow, detailColumn, pageSize, pageBones, listBones } from "./ui-page.js";
+import { pageSize, pageBones, listBones } from "./ui-page.js";
 import { drawHero, drawEmpty, footOf, listedRow, prRow, heroPieces } from "./pr-view.js";
 import { localService } from "./platform-host.js";
 import { openApi } from "./platform-open.js";
 // Kanso's pull request panel, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
 // One of the kanso-panel mod's panels: it exists only while shown.
 import { div, svg } from "gpui-kit";
-import { v_flex, h_flex, Button, Popover, TextView, ScrollHandle } from "gpui-base";
+import { v_flex, h_flex, Popover, TextView, ScrollHandle } from "gpui-base";
 import { exec, notify, run, theme, setShared, shared, window, layout, focused, panes, terminals, props } from "herdr";
 import { walkLayout } from "./layout.js";
-import { G, T, PR, OPACITY, TINT, alpha, tokens } from "./ui.js";
+import { G, T, PR, TINT, alpha, tokens } from "./ui.js";
 import { Armed, button, quietLink, iconButton } from "./ui-button.js";
 import { TextField } from "./ui-field.js";
 import { menu } from "./ui-menu.js";
-import { failureBlock, skeletonOf, diffText, facts, code, tooltip } from "./kit.js";
+import { failureBlock, skeletonOf, diffText, facts, code, tooltip, row as kitRow } from "./kit.js";
 import { dot } from "./ui-dot.js";
 import { section } from "./ui-section.js";
 import { segmented } from "./ui-tab.js";
@@ -1037,27 +1037,21 @@ export class PullRequest {
     const note = checksNote(summaryOf(checks));
     return v_flex().w_full()
       .child(section(c, "Checks", note))
-      .children(shown.map((ch, i) => listButton(Button.new(`pr-check-${i}`).w_full().py(7).cursor_pointer(), i, c)
-        .on_click(() => { if (ch.url) openUrl(ch.url); })
-        .child(detailRow(detailColumn()
-            .child(div().truncate().text_size(13).text_color(c.text).child(ch.name))
-            .when(Boolean(ch.workflow), (el) => el.child(div().truncate().text_size(11).text_color(c.dim).child(ch.workflow))))
-          .child(div().text_size(12).text_color(c[CHECK_WORDS[ch.state].color]).child(CHECK_WORDS[ch.state].label)))))
+      .children(shown.map((ch, i) => kitRow({ name: ch.name, second: ch.workflow || null, meta: { text: CHECK_WORDS[ch.state].label, tone: CHECK_WORDS[ch.state].color } })(`pr-check-${i}`, c, {
+        onClick: () => { if (ch.url) openUrl(ch.url); },
+      })))
       .when(sorted.length > 5, (el) => el.child(h_flex().pt(G.sm).child(quietLink("pr-checks-more", open ? "Show fewer" : `Show ${sorted.length - 5} more`, (cx) => { this.expanded = { ...this.expanded, checks: !open }; cx.notify(); }, c))));
   }
 
   discussion(c) {
     return v_flex().w_full()
       .child(section(c, "Unresolved threads", String(this.threads.length)))
-      .children(this.threads.map((th, i) => listButton(Button.new(`pr-thread-${i}`).w_full().py(8).cursor_pointer(), i, c)
-        .on_click(() => { if (th.url) openUrl(th.url); })
-        .child(v_flex().w_full().gap(3)
-          .child(div().w_full().text_size(13).line_height(1.45).text_color(c.text).child(th.body.length > 240 ? th.body.slice(0, 240) + "…" : th.body))
-          .child(h_flex().w_full().flex_wrap().gap_x(G.md)
-            .child(div().text_size(11).text_color(c.dim).child(`${th.path}${th.line ? `:${th.line}` : ""}`))
-            .child(div().text_size(11).text_color(c.dim).child(th.author))
-            .when(th.replies > 0, (el) => el.child(div().text_size(11).text_color(c.dim).child(`${th.replies} repl${th.replies > 1 ? "ies" : "y"}`)))
-            .when(th.outdated, (el) => el.child(div().text_size(11).text_color(c.dim).child("outdated")))))));
+      .children(this.threads.map((th, i) => {
+        const body = th.body.length > 240 ? th.body.slice(0, 240) + "…" : th.body;
+        const second = [`${th.path}${th.line ? `:${th.line}` : ""}`, th.author, th.replies > 0 ? `${th.replies} repl${th.replies > 1 ? "ies" : "y"}` : null, th.outdated ? "outdated" : null];
+        // One line of the thread on the row; its first 240 characters in the tooltip.
+        return kitRow({ name: body, second })(`pr-thread-${i}`, c, { onClick: () => { if (th.url) openUrl(th.url); } }).tooltip(tooltip({ label: body }));
+      }));
   }
 
   // A line is cut at MAX_DIFF characters too: a minified file's one line stays cheap to draw.
@@ -1098,12 +1092,9 @@ export class PullRequest {
         const all = f.path.split("/"), parts = all.slice(0, -1), name = all.at(-1), on = this.openFile === f.path;
         const mark = { ADDED: "added", DELETED: "deleted", RENAMED: "renamed" }[f.changeType] ?? "";
         return v_flex().w_full().when(i > 0, (el) => el.border_t(1).border_color(c.border))
-          .child(Button.new(`pr-file-${i}`).w_full().py(7).cursor_pointer().hover((s) => s.opacity(OPACITY.hover))
-            .on_click((_e, cx) => this.pickFile(f.path, cx))
-            .child(detailRow(detailColumn()
-                .child(div().truncate().text_size(13).text_color(c.text).when(on, (e) => e.font_medium()).child(name))
-                .when(parts.length > 0 || Boolean(mark), (el) => el.child(div().truncate().text_size(11).text_color(c.dim).child([parts.join("/"), mark].filter(Boolean).join(" · ")))))
-              .child(div().text_size(11).text_color(c.dim).child(diffText({ add: f.additions, del: f.deletions })))))
+          .child(kitRow({ name, second: [parts.join("/"), mark].filter(Boolean).join(" · ") || null, meta: diffText({ add: f.additions, del: f.deletions }), current: on })(`pr-file-${i}`, c, {
+            onClick: (cx) => this.pickFile(f.path, cx),
+          }))
           .when(on, (el) => el.child(this.fileDiff(c, f.path)));
       }))
       .when(files.length > FILE_ROWS, (el) => el.child(h_flex().pt(G.sm).child(quietLink("pr-files-more", open ? "Show fewer" : `Show ${files.length - FILE_ROWS} more`, (cx) => { this.expanded = { ...this.expanded, files: !open }; cx.notify(); }, c))))
@@ -1222,4 +1213,3 @@ export class PullRequest {
   }
 }
 
-const listButton = (button, index, c) => button.when(index > 0, (el) => el.border_t(1).border_color(c.border)).hover((style) => style.opacity(OPACITY.hover));

@@ -5,9 +5,9 @@ import { v_flex, h_flex } from "gpui-base";
 import { theme, props, closeOverlay, appHome, settings } from "herdr";
 import { focusOn } from "./pure.js";
 import { Lit } from "./lit.js";
-import { G, DOJO_CELL, OPACITY, TINT, CLEAR, alpha, tokens } from "./ui.js";
-import { button, iconButton } from "./ui-button.js";
-import { metric, tooltip } from "./kit.js";
+import { G, DOJO_CELL, TINT, CLEAR, alpha, tokens } from "./ui.js";
+import { iconButton, button as drawButton } from "./ui-button.js";
+import { button, metric, row, tooltip } from "./kit.js";
 import { Store } from "./store.js";
 import { Share } from "./share.js";
 import { dojoShare } from "./card.js";
@@ -219,13 +219,13 @@ export default class Dojo extends View {
   // The pet, at its reaction; a click chooses another.
   petView(t, c, now) {
     const asleep = this.mood() === "sleep";
-    return v_flex().id("dojo-pet").gap(6).cursor_pointer().tooltip(tooltip({ label: "Choose your pet" }))
-      .hover((s) => s.opacity(OPACITY.pet))
-      .on_click((_e, cx) => { this.toggleChooser(cx); cx.notify(); })
+    const face = v_flex().gap(G.xs)
       .child(h_flex().h(128).gap(G.md).items_end()
         .child(this.pal.face(t, this.reaction(now).state, { now, since: this.reaction(now).since, mood: this.mood() }))
         .child(div().pb(4).text_size(11).text_color(c.dim).child(asleep ? "z z" : "")))
       .child(div().text_size(11.5).text_color(this.choosing ? c.accent : c.dim).child(this.pal.pet.name));
+    return button({ label: "Choose your pet", kind: "quiet", active: this.choosing, content: [face] })("dojo-pet", c, { onClick: (cx) => { this.toggleChooser(cx); cx.notify(); } })
+      .tooltip(tooltip({ label: "Choose your pet" }));
   }
 
   // Every pet: a click and it is the dōjō's.
@@ -253,16 +253,12 @@ export default class Dojo extends View {
       .child(div().text_size(strong ? 26 : 16).font_semibold().text_color(strong ? c.accent : c.text).child(String(value)));
     const levelRow = (L) => {
       const on = L.n === lv.n, b = this.bests[L.n];
-      return h_flex().id(`level-${L.n}`).h(30).px(10).gap(G.sm).items_center().rounded(7).cursor_pointer()
-        .bg(on ? alpha(c.accent, TINT.bound) : CLEAR).border_1().border_color(on ? c.accent : CLEAR)
-        .hover((s) => s.bg(alpha(c.text, TINT.hover)))
-        .on_click((_e, cx) => { if (!this.round) { this.setLevel(L.n); cx.notify(); } else { this.say = "Finish the round first, or End round."; cx.notify(); } })
-        .child(div().w(14).text_size(11).font_semibold().text_color(on ? c.accent : c.dim).child(String(L.n)))
-        .child(div().flex_1().text_size(12.5).text_color(on ? c.text : c.muted).child(L.name))
-        .child(div().text_size(11).text_color(c.dim).child(b != null ? String(b) : ""));
+      return row({ letter: String(L.n), name: L.name, meta: b != null ? String(b) : null, selected: on, current: on, dimmed: !on })(`level-${L.n}`, c, {
+        onClick: (cx) => { if (!this.round) { this.setLevel(L.n); cx.notify(); } else { this.say = "Finish the round first, or End round."; cx.notify(); } },
+      });
     };
     // A press here never reaches the board behind it.
-    const press = (id, text, act, o = { kind: "tonal" }) => button(id, text, (cx) => { act(); cx.notify(); }, c, o)
+    const press = (id, text, act, o = { kind: "tonal" }) => drawButton(id, text, (cx) => { act(); cx.notify(); }, c, o)
       .on_mouse_down("left", (_e, cx) => cx.stop_propagation());
     // A new element each place it shows: an element can have one parent, and the result shows it beside the header's.
     const leave = (id) => press(id, "Leave the dōjō", () => closeOverlay(props()?.overlay));

@@ -1338,6 +1338,8 @@
 .kanso-button:is(.kanso-button--solid,.kanso-button--tonal,.kanso-button--quiet).kanso-button--sm{height:var(--k-h-compact);padding:0 var(--k-sp-2);font-size:var(--k-fs-meta)}
 .kanso-button:is(.kanso-button--solid,.kanso-button--tonal) :is(.kanso-icon,.kanso-icon--program){width:var(--k-ic-row);height:var(--k-ic-row)}
 .kanso-button--tonal .kanso-icon--program{width:var(--k-ic-inline);height:var(--k-ic-inline)}
+/* A drawn face: the button takes its content's size, a picture with its name or a key's tile. */
+.kanso-button.kanso-button--drawn:not(.kanso-button--icon){display:inline-flex;flex-direction:column;align-items:center;height:auto;padding:var(--k-sp-2);border-radius:var(--k-r-control)}
 .kanso-button--icon{display:grid;place-items:center;flex:none;width:var(--k-h-icon);height:var(--k-h-icon);border-radius:var(--k-r-control);color:var(--muted)}
 .kanso-button--icon .kanso-icon{width:var(--k-ic-control);height:var(--k-ic-control)}
 .kanso-button--icon.kanso-button--sm{width:var(--k-h-badge);height:var(--k-h-badge)}

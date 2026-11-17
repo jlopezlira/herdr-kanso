@@ -28,7 +28,7 @@ const osArg = radioArg('computer', keyboardSystems);
 
 export const playgrounds = {
   'Primitives/Button': {
-    args: { label: 'Create', kind: 'solid', size: 'md', icon: 'none', disabled: false, armed: false, verb: '', active: false, spin: false },
+    args: { label: 'Create', kind: 'solid', size: 'md', icon: 'none', disabled: false, armed: false, verb: '', active: false, spin: false, face: false },
     argTypes: {
       label: textArg('label'),
       kind: select('kind', Object.keys(kinds)),
@@ -37,8 +37,10 @@ export const playgrounds = {
       ...flags('disabled', 'armed'),
       verb: textArg('verb', { if: { arg: 'armed' } }),
       ...flags('active', 'spin'),
+      face: boolArg('Drawn face (content)'),
     },
-    markup: button,
+    // Proposed: a face the caller draws, such as a pet's picture and name in the dōjō or a panel's key tile in Settings; the label is what it says.
+    markup: ({ face, ...args }) => button({ ...args, content: face ? `${mark({ status: 'idle' })}<span class="kanso-content__text">${escape(args.label)}</span><span class="kanso-content__secondary">Kanso</span>` : '' }),
   },
   'Primitives/Avatar': {
     args: { initial: 'S', image: '', size: 'md', tone: '' },

@@ -5,7 +5,7 @@ import { fileApi } from "./platform-files.js";
 // Spend, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
 // QuickJS runs every step under a time limit, so nothing heavy happens here.
 import { View, div } from "gpui-kit";
-import { v_flex, h_flex, Button, Popover } from "gpui-base";
+import { v_flex, h_flex, Popover } from "gpui-base";
 import { exec, appHome, home, theme, nextCommand, readTextFile, writeTextFile, layout, machines, shared, setShared } from "herdr";
 import { G, H, OPACITY, breathe, tokens } from "./ui.js";
 import { mark } from "./ui-mark.js";
@@ -13,7 +13,7 @@ import { quietLink, iconButton } from "./ui-button.js";
 import { field, TextField } from "./ui-field.js";
 import { menu } from "./ui-menu.js";
 import { section } from "./ui-section.js";
-import { metric, skeletonOf, tooltip } from "./kit.js";
+import { button as kitButton, metric, row, skeletonOf, tooltip } from "./kit.js";
 import { factList } from "./ui-facts.js";
 import { segmented } from "./ui-tab.js";
 import { toggleSwitch } from "./ui-toggle.js";
@@ -570,10 +570,8 @@ export default class TokenSpend extends View {
     const allLabel = field === "project" ? "All projects" : "All models";
     const shown = value === "all" ? allLabel : (facet.find((entry) => entry.value === value)?.label ?? projectName(value));
     const id = `ins-menu-${field}`;
-    const trigger = fadedButton(Button.new(`${id}-trigger`).h(H.compact).gap(6).items_center().cursor_pointer())
-      .accessibility_label(`${field === "project" ? "Project" : "Model"}: ${shown}`)
-      .child(div().max_w(170).truncate().text_size(12).text_color(value === "all" ? c.muted : c.text).child(shown))
-      .child(div().text_size(10).text_color(c.dim).child("⌄"));
+    // The kit's quiet button with the menu's caret: Tab reaches it, Enter and Space open the menu.
+    const trigger = kitButton({ label: shown, kind: "quiet", small: true, icon: "lu-chevron-down", spoken: `${field === "project" ? "Project" : "Model"}: ${shown}`, color: value === "all" ? c.muted : c.text })(`${id}-trigger`, c);
     const popover = Popover.new(id).trigger(trigger)
       .open(this.openMenu === id)
       .on_open_change((open, cx) => {
@@ -652,12 +650,10 @@ export default class TokenSpend extends View {
       .when(items.length === 0, (el) => el.child(div().text_size(12).text_color(c.dim).child("Nothing here in this period.")))
       .children(shown.map((item, index) => {
         const active = selected === item.value;
-        return fadedButton(Button.new(`ins-${field}-${index}`).w_full().py(7).cursor_pointer())
-          .accessibility_label(`${item.name}, ${item.usdText}`)
-          .on_click((_event, cx) => this.openDetail(field, item, cx))
-          .child(metricLine(c, item.name, item.tokensText, item.usdText, {
-            color: active || selected === "all" ? c.text : c.muted, tip: item.detail, medium: active,
-          }));
+        const line = row({ name: item.name, detail: item.tokensText, meta: item.usdText, current: active, dimmed: !active && selected !== "all" })(`ins-${field}-${index}`, c, {
+          onClick: (cx) => this.openDetail(field, item, cx),
+        }).accessibility_label(`${item.name}, ${item.usdText}`);
+        return item.detail ? line.tooltip(tooltip({ label: item.detail })) : line;
       }))
       .when(items.length > LIST_ROWS, (el) => el.child(h_flex().pt(G.sm)
         .child(quietLink(`ins-${field}-more`, open ? "Show fewer" : `Show ${items.length - LIST_ROWS} more`, (cx) => {
@@ -737,19 +733,14 @@ export default class TokenSpend extends View {
       .child(h_flex().w_full().items_center().gap(G.sm).pb(G.sm)
         .child(mark(c, { status: "working", size: "sm" }))
         .child(div().text_size(15).text_color(c.text).child("Active now")))
-      .children(sessions.map((s, index) => fadedButton(Button.new(`ins-live-${index}`).w_full().cursor_pointer())
-        .accessibility_label(`${s.title}, ${s.usdText}`)
-        .on_click((_event, cx) => this.openDetail("task", s.detail, cx))
-        .child(h_flex().w_full().items_center().gap(G.lg).py(G.sm)
-        .when(index > 0, (el) => el.border_t(1).border_color(c.border))
-        .child(v_flex().flex_1().min_w(0).gap(3)
-          .child(h_flex().w_full().gap(G.sm).items_end()
-            .when(Boolean(s.ticket), (el) => el.child(div().flex_none().text_size(12).font_medium().text_color(c.muted).child(s.ticket)))
-            .child(div().flex_1().min_w(0).truncate().text_size(13).text_color(c.text).tooltip(tooltip({ label: s.tip })).child(s.title)))
-          .child(h_flex().w_full().flex_wrap().gap_x(G.md).children(s.meta.map((part) => div().text_size(11).text_color(c.dim).whitespace_nowrap().child(part)))))
-        .child(v_flex().items_end().gap(2).flex_none()
-          .child(div().text_size(17).font_light().text_color(c.text).child(s.usdText))
-          .child(div().text_size(11).text_color(c.dim).child(s.tokensText))))));
+      .children(sessions.map((s, index) => this.taskRow(`ins-live-${index}`, s, c)));
+  }
+
+  // A task or a live session: the kit's row, its ticket beside the title, its facts and tokens under it, its cost at the end; a press opens its detail.
+  taskRow(id, task, c) {
+    return row({ name: task.title, detail: task.ticket || null, meta: task.usdText, second: [...task.meta, task.tokensText] })(id, c, {
+      onClick: (cx) => this.openDetail("task", task.detail, cx),
+    }).accessibility_label(`${task.title}, ${task.usdText}`).tooltip(tooltip({ label: task.tip }));
   }
 
   tasks(c, data) {
@@ -759,19 +750,7 @@ export default class TokenSpend extends View {
       .child(h_flex().w_full().items_end().justify_between().pb(G.md)
         .child(div().text_size(15).text_color(c.text).child("Tasks"))
         .child(div().text_size(12).text_color(c.dim).child(data.tasksNote)))
-      .children(shown.map((task, index) => fadedButton(Button.new(`ins-task-${index}`).w_full().py(G.md).cursor_pointer()
-        .border_t(1).border_color(c.border))
-        .accessibility_label(`${task.title}, ${task.usdText}`)
-        .on_click((_event, cx) => this.openDetail("task", task.detail, cx))
-        .child(h_flex().w_full().items_center().gap(G.lg)
-          .child(v_flex().flex_1().min_w(0).gap(4)
-            .child(h_flex().w_full().gap(G.sm).items_end()
-              .when(Boolean(task.ticket), (el) => el.child(div().flex_none().text_size(12).font_medium().text_color(c.muted).child(task.ticket)))
-              .child(div().flex_1().min_w(0).truncate().text_size(13).text_color(c.text).tooltip(tooltip({ label: task.tip })).child(task.title)))
-            .child(h_flex().w_full().flex_wrap().gap_x(G.md).children(task.meta.map((part) => div().text_size(11).text_color(c.dim).whitespace_nowrap().child(part)))))
-          .child(v_flex().items_end().gap(2).flex_none()
-            .child(div().text_size(17).font_light().text_color(c.text).child(task.usdText))
-            .child(div().text_size(11).text_color(c.dim).child(task.tokensText))))))
+      .children(shown.map((task, index) => this.taskRow(`ins-task-${index}`, task, c)))
       .when(data.tasks.length > TASK_ROWS, (el) => el.child(h_flex().pt(G.md).border_t(1).border_color(c.border)
         .child(quietLink("ins-tasks-more", open ? "Show fewer" : `Show ${data.tasks.length - TASK_ROWS} more`, (cx) => {
           this.expanded = { ...this.expanded, tasks: !open };
@@ -780,5 +759,4 @@ export default class TokenSpend extends View {
   }
 }
 
-const fadedButton = (button) => button.hover((style) => style.opacity(OPACITY.hover)).focus((style) => style.opacity(OPACITY.hover));
 const separatedRow = (row, c, index) => row.when(index > 0, (el) => el.border_t(1).border_color(c.border));
