@@ -1,6 +1,10 @@
 import { elements, escapeMarkup as escape, frame } from './storybook-markup.mjs';
 import { THEMES, colour, contrast } from './tokens.mjs';
-import { asleep, computerRow, header, projectRow, section, sidebarFooter, tile, viewSwitch } from '../stories/kit/compositions.js';
+import { header, sidebarFooter, tile, viewSwitch } from '../stories/kit/compositions.js';
+import { projectRow } from '../stories/kit/project-row.js';
+import { computerRow } from '../stories/kit/computer-row.js';
+import { section } from '../stories/kit/section.js';
+import { asleep } from '../stories/kit/asleep.js';
 import { sessionRow } from '../stories/kit/session-row.js';
 import { button, dawn as dawnSky, mark, marks, row, stack, windowControls } from '../stories/kit/pieces.js';
 import { sampleSidebar, sessionTools } from '../stories/kit/samples.js';
@@ -92,12 +96,24 @@ export function kitRecords(records) {
     ['Session row', 'Tree', inSidebar(stack({ variant: 'rows' }, sessionRow({ name: 'Atlas' }), sessionRow({ program: 'p-codex', name: 'Juno', status: 'idle', depth: 2, guides: [null, 'tee'] }), sessionRow({ program: 'p-codex', name: 'Iris', status: 'done', depth: 2, guides: [null, 'end'] }))), 'Each sub-session hangs from its parent.'],
     ['Project row', 'At rest', inSidebar(projectRow({ name: 'kansō', folder: 'herdr-kanso', branch: 'main', sync: '↓12' })), 'Name, folder, branch and sync.'],
     ['Project row', 'Folded', inSidebar(projectRow({ name: 'kansō', folder: 'herdr-kanso', branch: 'main', count: 3 })), 'The most urgent mark and how many.'],
+    ['Project row', 'Under the pointer', inSidebar(projectRow({ name: 'kansō', folder: 'herdr-kanso', branch: 'main', sync: { text: '↓12', tip: 'Pull 12 from origin/main', label: 'Pull' }, hover: true })), '+ and ⋯ under the pointer; ↓ pulls on one press.'],
+    ['Project row', 'Pulling', inSidebar(projectRow({ name: 'kansō', folder: 'herdr-kanso', branch: 'main', sync: '↓12', pending: true })), 'It breathes until git answers.'],
+    ['Project row', 'Worktree', inSidebar(stack({ variant: 'rows' }, projectRow({ name: 'kansō', branch: 'main' }), projectRow({ name: 'fix-toast', tree: 'end', dimmed: true }))), 'Under its checkout, on the guide.'],
+    ['Project row', 'Folder not found', inSidebar(projectRow({ name: 'search', dimmed: true, missing: true })), 'Locate finds where it went.'],
+    ['Project row', 'Dragged over', inSidebar(projectRow({ name: 'kansō', drop: 'after' })), 'Where the dragged project lands.'],
     ['Computer row', 'This computer', inSidebar(computerRow({ name: 'light', remote: false })), 'This computer first.'],
     ['Computer row', 'Off', inSidebar(computerRow({ name: 'dark', state: 'off' })), 'A choice, not a failure.'],
     ['Computer row', 'Unreachable', inSidebar(computerRow({ name: 'devbox', state: 'unreachable' })), 'Refresh as its button.'],
+    ['Computer row', 'Needs login', inSidebar(computerRow({ name: 'devbox', state: 'login' })), 'Sign in as its button.'],
+    ['Computer row', 'Turning on', inSidebar(computerRow({ name: 'dark', pending: true })), 'It breathes until hc answers.'],
+    ['Computer row', 'Under the pointer', inSidebar(computerRow({ name: 'dark', hover: true, sync: 'Sync dark: synced 2m ago' })), 'Turn off and +; Sync stays out while it is on.'],
+    ['Computer row', 'Keyboard on a tool', inSidebar(computerRow({ name: 'dark', hover: true, lit: 'lu-plus' })), 'Each tool is a stop after the row; Enter presses it.'],
     ['Asleep', 'Folded', inSidebar(asleep({ names: ['site', 'dojo'] })), 'One folded line, its count.'],
     ['Asleep', 'Open', inSidebar(asleep({ names: ['site', 'dojo'], open: true })), 'The names dim, Wake at the right.'],
     ['Section', 'Default', inSidebar(section({ title: 'Needs you', status: 'blocked' })), 'A heading in Status and Threads.'],
+    ['Asleep', 'A sleeping tab', inSidebar(asleep({ names: ['Atlas'], title: 'review', open: true, selected: 0 })), 'Named by its tab; the keyboard on a row.'],
+    ['Section', 'A project\'s conversations', inSidebar(section({ title: 'kansō', add: 'New conversation in kansō', hover: true })), '+ under the pointer starts one there.'],
+    ['Section', 'Folded', inSidebar(section({ title: 'Idle', count: 2 })), 'How many, once it is folded.'],
     ['View switch', 'Row', inSidebar(viewSwitch()), 'Sidebar open: the three views by name.'],
     ['View switch', 'Column', inRail(viewSwitch({ column: true })), 'Sidebar collapsed: the three views as icons.'],
     ['Tile', 'Project', inRail(tile({ initial: 'A', status: 'blocked', count: 4, open: true })), 'A project in the rail.'],

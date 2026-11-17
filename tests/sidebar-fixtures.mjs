@@ -9,19 +9,28 @@ const forget = (record) => Object.keys(record).forEach((key) => delete record[ke
 // Elements that keep their ids, words, tooltips, icons, border lines and handlers: `on_x:id`, and `on_x:button:id` for a mouse button.
 export function recorder() {
   const ids = [], texts = [], tips = [], icons = [], handlers = {}, lines = {};
+  // A row's drop line: a child in the accent at its top (above) or its bottom (below).
+  const drops = new WeakMap();
   const node = () => {
     let id = null;
+    const edge = { top: false, bottom: false, accent: false };
     const keep = (prop, args) => {
       if (!id) return;
       handlers[`${prop}:${id}`] = args.at(-1);
       if (args.length > 1) handlers[`${prop}:${args[0]}:${id}`] = args.at(-1);
     };
+    const lineOf = (kid) => {
+      const at = drops.get(kid);
+      if (id && at?.accent && at.top !== at.bottom) lines[id] = at.top ? "above" : "below";
+    };
     const onCall = {
       id: (value) => { id = value; ids.push(value); },
-      child: strings(texts),
+      child: (value) => { strings(texts)(value); lineOf(value); },
+      children: (list) => { [list].flat().forEach(lineOf); },
       tooltip: strings(tips),
-      border_t: () => { if (id) lines[id] = "above"; },
-      border_b: () => { if (id) lines[id] = "below"; },
+      top_0: () => { edge.top = true; },
+      bottom_0: () => { edge.bottom = true; },
+      bg: (value) => { if (value === SIDEBAR_THEME.accent) edge.accent = true; },
     };
     const proxy = new Proxy(() => {}, {
       get(_target, prop) {
@@ -33,6 +42,7 @@ export function recorder() {
       },
       apply: () => proxy,
     });
+    drops.set(proxy, edge);
     return proxy;
   };
   const named = { new: (value) => (value ? node().id(value) : node()) };

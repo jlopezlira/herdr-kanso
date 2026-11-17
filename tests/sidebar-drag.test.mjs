@@ -82,7 +82,7 @@ test("a worktree drawn under its checkout neither starts a drag nor takes a drop
   assert.deepEqual(moves(d.runs), []);
   d.press("wt");
   d.release("wt");
-  assert.deepEqual(clone(d.runs.filter(([cmd]) => cmd === "space.select")), [["space.select", { id: "other" }], ["space.select", { id: "wt" }]], "its click still selects it");
+  assert.deepEqual(clone(d.runs.filter(([cmd]) => cmd === "space.select")), [["space.select", { id: "wt" }]], "its click still selects it; a press let go on another row selects neither");
 });
 
 test("a project released anywhere else is let go", async () => {

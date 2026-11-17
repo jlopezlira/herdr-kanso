@@ -14,10 +14,18 @@ import { tipText } from "./ui-tooltip.js";
 // Facts as words, as the Storybook writes them.
 export { diffText, facts, plus };
 
+// A composition's children: the Storybook joins their markup, the app keeps the pieces, each drawn where the list places it.
+export const list = (...children) => children.flat(Infinity).filter((child) => child !== null && child !== undefined && child !== false);
+// A label made of words and values, such as a name inside an action's title.
+export const phrase = (...parts) => parts.join(" ");
+// A tool: its icon and the label its tooltip reads.
+export const icon = (name, label) => ({ icon: name, label });
+
 const EVENTS = {
   onPress: (el, fn) => el.on_mouse_down("left", fn),
   onRelease: (el, fn) => el.on_mouse_up("left", fn),
   onMenu: (el, fn) => el.on_mouse_down("right", fn),
+  onMove: (el, fn) => el.on_mouse_move(fn),
 };
 const HANDLERS = ["on", "onClick", "onHover", "onKey", "focusHandle", ...Object.keys(EVENTS)];
 const appIcon = (icon) => (typeof icon === "string" ? icon.replace(/^lu-/, "") : icon);
@@ -35,23 +43,26 @@ const given = (more) => {
 
 const wired = (on) => (tool) => (tool && on[keyOf(tool)] ? { ...tool, onClick: on[keyOf(tool)] } : tool);
 
-const withHandlers = (id, raw, actions, action) => {
+// A detail fact with a `label` is a press, wired by that label as a tool is.
+const pressFact = (part) => typeof part === "object" && Boolean(part.label);
+const withHandlers = (id, raw, actions, action, detail) => {
   const on = Object.fromEntries(Object.entries(raw).map(([key, fn]) => [appIcon(key), fn]));
   const own = parts(actions).map(withIcon);
   const lone = withIcon(action);
-  const missing = Object.keys(on).filter((key) => ![...own, lone].some((tool) => tool && keyOf(tool) === key));
+  const facts = parts(detail).map(withIcon);
+  const presses = [...own, lone, ...facts.filter(pressFact)];
+  const missing = Object.keys(on).filter((key) => !presses.some((tool) => tool && keyOf(tool) === key));
   if (missing.length) throw new Error(`kit: ${id} has no tool ${missing.join(", ")}`);
-  return { actions: own.map(wired(on)), action: wired(on)(lone) };
+  return { actions: own.map(wired(on)), action: wired(on)(lone), detail: facts.map((part) => (pressFact(part) ? wired(on)(part) : part)) };
 };
 
 export const row = ({ icon, flag, detail, action, actions, start, tools, ...props }) => (id, c, more = {}) => {
-  const { on = {}, onPress, onRelease, onMenu, ...handlers } = given(more);
+  const { on = {}, onPress, onRelease, onMenu, onMove, ...handlers } = given(more);
   const drawnRow = drawRow(id, c, {
-    ...props, ...handlers, ...withHandlers(id, on, actions, action), icon: appIcon(icon), flag: appIcon(flag),
-    detail: Array.isArray(detail) ? detail.map(withIcon) : withIcon(detail),
+    ...props, ...handlers, ...withHandlers(id, on, actions, action, detail), icon: iconOf(icon), flag: appIcon(flag),
     start: drawn(id, c, "start", start), tools: drawn(id, c, "tools", tools),
   });
-  return Object.entries({ onPress, onRelease, onMenu }).filter(([, fn]) => fn).reduce((el, [name, fn]) => EVENTS[name](el, fn), drawnRow);
+  return Object.entries({ onPress, onRelease, onMenu, onMove }).filter(([, fn]) => fn).reduce((el, [name, fn]) => EVENTS[name](el, fn), drawnRow);
 };
 
 // `icon: "none"` is the Storybook's no icon; app-only props, such as `color`, pass through as the row's do.

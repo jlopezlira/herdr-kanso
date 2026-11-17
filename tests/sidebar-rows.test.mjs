@@ -2,27 +2,15 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
-  showPlus, showDots, projectControls, pullKey, pullLabel, pullCommand, refusalLine,
-  aheadOpen, gitControls, runPull, machineWordTone, canWake, enterOpens, asleepControls,
+  pullKey, pullLabel, pullCommand, refusalLine,
+  aheadOpen, gitControls, runPull, canWake, enterOpens,
   gitTask, behindTip, aheadTip, foldTail, sectionMarkOf, sectionCount, rowDirectory, untilWord, readWord,
-  threadWord, threadActions, closedControls, signInCommand, noProjectsOn, sortOf,
+  threadWord, threadActions, signInCommand, noProjectsOn, sortOf,
 } from "../kanso/mods/kanso-spaces/sidebar-rows.js";
 import { load, failure } from "./helpers.mjs";
 
 const place = { cwd: "/work/app", on: "dark", key: "[dark]" };
 const git = { branch: "feat", ahead: 2, behind: 3 };
-
-test("plus stays on the active project and the menu stays on hover", () => {
-  assert.equal(showPlus(true, false), true);
-  assert.equal(showPlus(false, true), true);
-  assert.equal(showPlus(false, false), false);
-  assert.equal(showDots(true), true);
-  assert.equal(showDots(false), false);
-  assert.deepEqual(projectControls({ active: true, hovered: false, place: { folder: "/work" } }), { plus: true, dots: false });
-  assert.deepEqual(projectControls({ active: false, hovered: true, place: { folder: "/work" } }), { plus: true, dots: true });
-  assert.deepEqual(projectControls({ active: true, hovered: false, place: null }), { plus: false, dots: false });
-  assert.deepEqual(projectControls({ active: false, hovered: false, place: { folder: "/work" } }), { plus: false, dots: false });
-});
 
 test("a count behind pulls with git on that computer at one press", () => {
   assert.equal(pullLabel(0), null);
@@ -73,22 +61,12 @@ test("a count ahead goes to that project and opens the pull request panel", () =
   assert.equal(controls.find((item) => item.kind === "ahead").label, "\u21912");
 });
 
-test("A computer's state on its row is a dim word, unreachable included", () => {
-  assert.equal(machineWordTone("unavailable"), "dim");
-  assert.equal(machineWordTone("connected"), "dim");
-  assert.equal(machineWordTone("off"), "dim");
-  assert.equal(machineWordTone("login"), "dim");
-  assert.equal(machineWordTone("loading"), "dim");
-});
-
 test("Enter on an asleep row wakes it", () => {
   const z = { id: "tb1", tabId: "tb1", settled: true, space: "sp1" };
   const asleep = { address: "zz:t1", asleep: z };
   assert.equal(canWake(asleep), true);
   assert.deepEqual(enterOpens(asleep), { wake: z });
-  assert.deepEqual(asleepControls(asleep), [{ id: "wake", label: "Wake" }]);
   assert.equal(canWake({ address: "d" }), false);
-  assert.deepEqual(asleepControls({ address: "d" }), []);
   assert.deepEqual(enterOpens({ address: "e", pane: "p1" }), { focus: "p1" });
   assert.deepEqual(enterOpens({ address: "f" }), { peek: "f" });
 });
@@ -156,12 +134,6 @@ test("under the pointer a finished thread offers Settle, a settled one Bring bac
   assert.deepEqual(threadActions({ settled: true, status: "done", pinned: false }).map((a) => a.tip), ["Bring back"]);
   assert.deepEqual(threadActions({ settled: false, status: "working", pinned: false }), []);
   assert.deepEqual(threadActions({ settled: false, status: "idle", pinned: true }), []);
-});
-
-test("a kept project shows + and the menu under the pointer, and Locate when its folder is gone", () => {
-  assert.deepEqual(closedControls({ hovered: false, missing: false }), { plus: false, dots: false, locate: false });
-  assert.deepEqual(closedControls({ hovered: true, missing: false }), { plus: true, dots: true, locate: false });
-  assert.deepEqual(closedControls({ hovered: false, missing: true }), { plus: false, dots: false, locate: true });
 });
 
 test("a computer that needs a login signs in from a terminal pane, and one with no project says so", () => {

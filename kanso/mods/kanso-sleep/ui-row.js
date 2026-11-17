@@ -29,11 +29,16 @@ const alone = (onClick) => onClick && ((cx) => { cx.stop_propagation(); onClick(
 const factOf = (part) => (typeof part === "object" ? part : { text: part });
 const tipped = (el, id, tip) => (tip ? el.id(id).tooltip(tip) : el);
 const textOf = (c, id, { text, tone, tip }) => tipped(div().min_w(0).truncate().when(Boolean(tone), (el) => el.text_color(toneColor(c, tone))).child(String(text)), id, tip);
-const fact = (c, id) => (part, i) => (typeof part === "string" ? div().flex_none().child(part)
-  : h_flex().flex_none().items_center().gap(G.xs)
+// A fact with a `label` is a press: a quiet small button showing its text, its tip saying what it does.
+const pressFact = (c, id, { text, tip, label, onClick }) => held(button(id, String(text), alone(onClick), c, { kind: "quiet", size: "sm", tip: tip || label }));
+const fact = (c, id) => (part, i) => {
+  if (typeof part === "string") return div().flex_none().child(part);
+  if (part.label) return pressFact(c, `${id}-${i}`, part);
+  return h_flex().flex_none().items_center().gap(G.xs)
     .when(Boolean(part.icon), (el) => el.child(glyph(part.icon, ICON_INLINE, c.dim)))
     .when(Boolean(part.tone), (el) => el.child(dot(c, part.tone)))
-    .child(textOf(c, `${id}-${i}`, part)));
+    .child(textOf(c, `${id}-${i}`, part));
+};
 
 const detailOf = (c, id, detail) => {
   const facts = [detail ?? []].flat().filter(Boolean);
@@ -91,11 +96,11 @@ const nameOf = (id, c, { name, heading, title, ink, glint, wrap }) => (glint ? g
   .child(name));
 
 // Meta and flag give way to the tools while they show.
-const asideOf = (c, { meta, flag, dimmed }) => {
-  const { text, tone } = meta ? factOf(meta) : {};
+const asideOf = (id, c, { meta, flag, dimmed }) => {
+  const { text, tone, tip } = meta ? factOf(meta) : {};
   const ink = tone ? toneColor(c, tone) : dimmed ? c.muted : c.dim;
   return [
-    meta ? div().flex_none().whitespace_nowrap().text_size(T.body).text_color(ink).child(String(text)) : null,
+    meta ? tipped(div().flex_none().whitespace_nowrap().text_size(T.body).text_color(ink).child(String(text)), `${id}-meta`, tip) : null,
     flag ? glyph(flag, ICON_ROW, c.dim) : null,
   ];
 };
@@ -167,7 +172,7 @@ export function row(id, c, {
     nameOf(`${id}-name`, c, { name, heading, title, ink, glint, wrap }),
     detailOf(c, id, detail),
     div().flex_1(),
-    ...(shown && actions.length ? [] : asideOf(c, { meta, flag, dimmed })),
+    ...(shown && actions.length ? [] : asideOf(id, c, { meta, flag, dimmed })),
     ...controlsOf(id, c, { actions: shown ? actions : [], count, action, tools, keys }),
     pending ? pendingDot(`${id}-pending`, c) : null,
     mark(c, { status }),

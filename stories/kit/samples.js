@@ -1,5 +1,9 @@
 // Sample sidebar content for the stories: the rows and tiles of each view, drawn with the compositions.
-import { asleep, computerRow, panelBack, panelClose, panelRefresh, projectRow, section, sidebar, tile } from './compositions.js';
+import { panelBack, panelClose, panelRefresh, sidebar, tile } from './compositions.js';
+import { projectRow } from './project-row.js';
+import { computerRow } from './computer-row.js';
+import { section } from './section.js';
+import { asleep } from './asleep.js';
 import { sessionRow } from './session-row.js';
 import { button, glyph, menu, stack, statusItem } from './pieces.js';
 import keyFile from '../../kanso/keys.json' with { type: 'json' };

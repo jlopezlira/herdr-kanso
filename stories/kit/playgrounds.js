@@ -1,6 +1,10 @@
 // Pages whose story is built from Storybook controls instead of drawn states.
 import sprite from '../proto-sprite.svg?raw';
-import { activity, activityMenu, asleep, paneFolds, paneHeader, panelHeaderForms, panelLooks, paneReaches, paneStates, noticeHomes, noticePlaces, noticeStates, systemMessage, toastStack, heldChord, keyboard, keyboardExplorer, keyboards, keyboardSystems, keyNames, shortcutRowStates, channelSettings, channels, computerItem, computerItemStates, computerRow, computerStates, failureMenu, header, panelDoors, projectRow, section, sidebarFooter, tabBarStates, tile, toolbar, views, viewSwitch } from './compositions.js';
+import { activity, activityMenu, paneFolds, paneHeader, panelHeaderForms, panelLooks, paneReaches, paneStates, noticeHomes, noticePlaces, noticeStates, systemMessage, toastStack, heldChord, keyboard, keyboardExplorer, keyboards, keyboardSystems, keyNames, shortcutRowStates, channelSettings, channels, computerItem, computerItemStates, failureMenu, header, panelDoors, sidebarFooter, tabBarStates, tile, toolbar, views, viewSwitch } from './compositions.js';
+import { projectRow } from './project-row.js';
+import { computerRow, computerStates } from './computer-row.js';
+import { section } from './section.js';
+import { asleep } from './asleep.js';
 import { sessionRow } from './session-row.js';
 import { avatar, avatarSizes, button, card, chip, code, dawn, dialog, emptyState, escape, failureBlock, input, keycapStates, keyHint, kinds, levels, mark, markdown, marks, markSizes, menu, metric, row, rowDepths, sides, skeletonOf, skeletonShapes, stack, statePatterns, tabs, thumbnail, toast, toggle, tooltip, windowControls } from './pieces.js';
 import { barWidths, inBar } from './frames.js';
@@ -291,7 +295,7 @@ export const playgrounds = {
       drop: drop === 'none' ? null : drop, guides: guide === 'none' ? [] : [null, guide], commandsTip: args.commands ? sessionCommandsTip : null, placeTip: args.place || null })),
   },
   'Compositions/Sidebar/Project row': {
-    args: { name: 'kansō', folder: 'herdr-kanso', branch: 'main', sync: '↓12', open: false, status: 'blocked', count: 0, hover: false, focus: false },
+    args: { name: 'kansō', folder: 'herdr-kanso', branch: 'main', sync: '↓12', open: false, status: 'blocked', count: 0, hover: false, focus: false, tree: 'none', dimmed: false, pending: false, missing: false, drop: 'none' },
     argTypes: {
       name: textArg('name'),
       folder: textArg('folder'),
@@ -300,28 +304,38 @@ export const playgrounds = {
       open: boolArg('open'),
       ...foldedArgs,
       ...flags('hover', 'focus'),
+      tree: select('worktree guide', ['none', 'tee', 'end']),
+      dimmed: boolArg('dimmed'),
+      pending: boolArg('pulling'),
+      missing: boolArg('folder not found'),
+      drop: select('drop line', ['none', 'before', 'after']),
     },
-    markup: (args) => inSidebar(projectRow(args)),
+    markup: ({ tree, drop, sync, ...args }) => inSidebar(projectRow({ ...args, tree: tree === 'none' ? null : tree, drop: drop === 'none' ? null : drop,
+      sync: sync ? { text: sync, tip: 'Pull from origin/main', label: 'Pull' } : null })),
   },
   'Compositions/Sidebar/Computer row': {
-    args: { name: 'dark', remote: true, state: 'on', status: 'blocked', count: 0, hover: false, focus: false },
+    args: { name: 'dark', remote: true, state: 'on', status: 'blocked', count: 0, hover: false, focus: false, pending: false, word: '', sync: '', lit: '' },
     argTypes: {
       ...computerArgs,
       state: select('state', computerStates),
       ...foldedArgs,
       ...flags('hover', 'focus'),
+      pending: boolArg('turning on'),
+      word: textArg('word'),
+      sync: textArg('sync on, its tip'),
+      lit: select('keyboard on tool', ['', 'lu-power', 'lu-plus', 'lu-arrow-right-left', 'lu-refresh-cw', 'lu-key']),
     },
-    markup: (args) => inSidebar(computerRow(args)),
+    markup: ({ word, sync, lit, ...args }) => inSidebar(computerRow({ ...args, word: word || null, sync: sync || null, lit: lit || null })),
   },
   'Compositions/Sidebar/Asleep': {
-    args: { names: ['site', 'dojo'], open: false },
-    argTypes: { names: { name: 'names', control: { type: 'object' } }, open: boolArg('open') },
+    args: { names: ['site', 'dojo'], open: false, title: 'Asleep', focus: false, selected: -1 },
+    argTypes: { names: { name: 'names', control: { type: 'object' } }, open: boolArg('open'), title: textArg('title'), focus: boolArg('focus'), selected: numberArg('keyboard on row', -1) },
     markup: (args) => inSidebar(asleep(args)),
   },
   'Compositions/Sidebar/Section': {
-    args: { title: 'Needs you', status: 'blocked', count: 0 },
-    argTypes: { title: textArg('title'), status: select('mark', ['none', 'blocked']), count: numberArg('count', 0) },
-    markup: (args) => inSidebar(section(args)),
+    args: { title: 'Needs you', status: 'blocked', count: 0, add: '', hover: false, focus: false },
+    argTypes: { title: textArg('title'), status: select('mark', ['none', 'blocked', 'asleep']), count: numberArg('count', 0), add: textArg('+ label'), ...flags('hover', 'focus') },
+    markup: ({ add, ...args }) => inSidebar(section({ ...args, add: add || null })),
   },
   'Compositions/Sidebar/View switch': {
     args: { view: 'spaces', column: false },
