@@ -6,7 +6,7 @@ import { load, gpuiHost, calls, KIT_NIGHT } from "./helpers.mjs";
 import { sharedFile } from "../scripts/sync-share.mjs";
 
 const MODS = new URL("../kanso/mods/", import.meta.url);
-// A sized, round, filled shape with nothing inside it: a dot drawn by hand.
+// A sized, round, filled shape with nothing inside it, read across lines: a dot drawn by hand.
 const HAND_DOT = /\.size\([^()]*\)(?:\.flex_none\(\))?\.rounded_full\(\)(?:\.flex_none\(\))?\.bg\((?:[^()]|\([^()]*\))*\)(?!\s*\.(?:flex|child|text))/g;
 
 const arg = (el, name) => calls(el, name)[0]?.[1];
@@ -25,6 +25,9 @@ test("A dot takes a kit tone or a colour, at the medium size unless it is a smal
 
 test("No mod draws a dot by hand: every one outside the kit is the kit's dot or mark", () => {
   const found = readdirSync(MODS, { recursive: true }).filter((path) => path.endsWith(".js") && !sharedFile(path.split("/").at(-1)))
-    .flatMap((path) => readFileSync(new URL(path, MODS), "utf8").split("\n").flatMap((line, i) => (line.match(HAND_DOT) ? [`${path}:${i + 1}`] : [])));
+    .flatMap((path) => {
+      const source = readFileSync(new URL(path, MODS), "utf8");
+      return [...source.matchAll(HAND_DOT)].map((m) => `${path}:${source.slice(0, m.index).split("\n").length}`);
+    });
   assert.deepEqual(found, []);
 });
