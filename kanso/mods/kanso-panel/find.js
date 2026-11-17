@@ -152,7 +152,7 @@ function placeFocus(acc, row) {
   return { at: acc.at + row.focus, found: true };
 }
 
-import { MONTHS } from "./ports-model.js";
+import { MONTHS } from "./pure.js";
 
 export function dayKey(ms) {
   const d = dateOf(ms);

@@ -17,7 +17,7 @@ import { Armed, button, quietLink, iconButton } from "./ui-button.js";
 import { section } from "./ui-section.js";
 import { ghost } from "./ui-skeleton.js";
 import { stateEmpty } from "./ui-state.js";
-import { aliasText, machineTitle, range, reduceSeries } from "./pure.js";
+import { aliasText, machineTitle, range, reduceSeries, MONTHS } from "./pure.js";
 import { worktreesMemory } from "./panel-state.js";
 
 const TEMP = ["/private/tmp", "/tmp"];
@@ -169,7 +169,6 @@ export function lastDays(byDay, now = Date.now(), n = 30) {
 
 const best = (byDay) => Object.entries(byDay ?? {}).reduce((b, [day, kb]) => (kb > (b?.kb ?? 0) ? { day, kb } : b), null);
 
-import { MONTHS } from "./ports-model.js";
 export const shortDate = (ms) => { const d = new Date(ms); return `${MONTHS[d.getMonth()]} ${d.getDate()}`; };
 const splitSize = (kb) => { const [n, u] = fmtSize(kb).split(" "); return { big: n || "0", small: u || "KB" }; };
 

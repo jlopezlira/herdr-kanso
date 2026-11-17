@@ -1,9 +1,8 @@
 // hjkl dōjō's share card, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
 import { postText } from "./share.js";
 import { LEVELS } from "./dojo.js";
-import { range, plural } from "./pure.js";
+import { range, plural, dayWord } from "./pure.js";
 
-const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const DAY = 86_400_000;
 const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
@@ -37,7 +36,7 @@ export function dojoShare(totals, now = Date.now(), figure = null) {
     title: "hjkl dōjō",
     subtitle: "the vim game inside kansō, a layout for the Herdr terminal",
     figure,
-    right: since ? `since ${MONTHS[since.getMonth()]} ${since.getDate()}` : "",
+    right: since ? `since ${dayWord(since)}` : "",
     hero: {
       big: String(best.score), small: "points",
       label: lv ? `my best round of vim, ten targets, level ${lv.n}: ${lv.name}` : "my best round of vim, ten targets",

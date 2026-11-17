@@ -14,7 +14,7 @@ import { quietLink, iconButton } from "./ui-button.js";
 import { section } from "./ui-section.js";
 import { ghost } from "./ui-skeleton.js";
 import { segmented } from "./ui-tab.js";
-import { range, tryOrAsync, mapSeries } from "./pure.js";
+import { range, tryOrAsync, mapSeries, MONTHS } from "./pure.js";
 import { shippedMemory } from "./panel-state.js";
 import { failure, said, failNote } from "./lib.js";
 
@@ -27,7 +27,6 @@ const REPO_ROWS = 8;
 const CELL_GAP = 3;
 export const PERIODS = ["day", "week", "month", "year"];
 const PERIOD_NAMES = { day: "Day", week: "Week", month: "Month", year: "Year" };
-import { MONTHS } from "./ports-model.js";
 const FULL_MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
