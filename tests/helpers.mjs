@@ -148,6 +148,12 @@ export async function exec(command, args, options = {}) {
   }
 }
 
+// A host whose shared state lives in `state` and whose layout is `tree()`, each read as a copy.
+export const layoutHost = (state, tree, run) => ({
+  shared: (key) => clone(state[key] ?? null), setShared: (key, value) => { state[key] = clone(value); },
+  layout: () => clone(tree()), window: () => ({ platform: "macos" }), run,
+});
+
 // git in `cwd` as a test user, with `config` first; a failing git fails the test.
 export const gitOk = (...config) => async (cwd, ...args) => {
   const r = await exec("git", ["-c", "core.autocrlf=false", "-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false", ...config, ...args], { cwd });
