@@ -1666,7 +1666,7 @@
 .kanso-field.kanso-field--rename{flex:1;min-width:0;font-size:var(--k-fs-name);font-weight:var(--k-fw-medium)}
 .kanso-field.kanso-field--strong{font-weight:var(--k-fw-strong)}
 .kanso-field.kanso-field--top{margin:0 0 var(--k-sp-2)}
-.kanso-sidebar--slice.kanso-sidebar--flush{padding-top:0}
+.kanso-sidebar--slice.kanso-sidebar--titled{padding-top:0}
 .kanso-sidebar--slice.kanso-sidebar--band{padding:0 var(--k-sp-2) var(--k-sp-1)}
 .kanso-project.kanso-project--flush{margin-top:0}
 .kanso-status-bar--rest.kanso-status-bar--flush{padding:0}
