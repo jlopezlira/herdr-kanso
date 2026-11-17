@@ -4,6 +4,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { readdirSync, readFileSync } from "node:fs";
+import { posix } from "node:path";
 import { fileURLToPath } from "node:url";
 import { load, gpuiHost } from "./helpers.mjs";
 import * as storybookKit from "../stories/kit/pieces.js";
@@ -101,7 +102,18 @@ const kitOf = (sources) => {
   return kit;
 };
 
-const storybookPieces = (source) => new Map([...kitOf([source])].filter(([name, piece]) => piece.kind === "function" && !HELPERS.has(name)));
+// What the Storybook kit imports from another file by name, such as the app's facts it re-exports: each name with that file's own entry.
+const imported = (source, get) => new Map([...source.matchAll(/^import\s*\{([^}]*)\}\s*from\s*["'](\.[^"']+)["']/gm)].flatMap(([, names, from]) => {
+  const other = get(posix.join(posix.dirname(STORYBOOK), from));
+  const found = other ? exportsOf(other) : new Map();
+  return topLevel(names).map((spec) => spec.split(/\s+as\s+/).map((part) => part.trim())).filter(([name]) => found.has(name)).map(([name, as = name]) => [as, found.get(name)]);
+}));
+const storybookPieces = (source, get = (path) => read(path)) => {
+  const kit = kitOf([source]);
+  const from = imported(source, get);
+  for (const [name, entry] of exportsOf(source)) if (entry.kind === "alias" && !kit.has(name) && from.get(entry.target)?.kind === "function") kit.set(name, from.get(entry.target));
+  return new Map([...kit].filter(([name, piece]) => piece.kind === "function" && !HELPERS.has(name)));
+};
 
 const minus = (a, b) => a.filter((item) => !b.includes(item));
 const factsOf = (list) => [
@@ -168,7 +180,7 @@ const baseline = () => {
   const commit = ["origin/develop", "develop", "HEAD"].map((ref) => { try { return git("merge-base", "HEAD", ref).trim(); } catch { return null; } }).find(Boolean);
   assert.ok(commit, "git finds no commit to compare the list with");
   const list = shown(commit, LIST), source = shown(commit, STORYBOOK);
-  return { commit, list: list && JSON.parse(list), storybook: source ? storybookPieces(source) : new Map() };
+  return { commit, list: list && JSON.parse(list), storybook: source ? storybookPieces(source, (path) => shown(commit, path)) : new Map() };
 };
 
 const kits = () => ({
@@ -182,7 +194,7 @@ test("The app kit has every Storybook piece with the same prop names, except the
   const base = baseline();
   const source = shown(PREVIEW, STORYBOOK);
   if (!source) t.diagnostic(`${PREVIEW} is not here: the waiting props are not checked against it`);
-  const { gap, differences, errors } = compare({ storybook, app, list, base, preview: source && storybookPieces(source) });
+  const { gap, differences, errors } = compare({ storybook, app, list, base, preview: source && storybookPieces(source, (path) => shown(PREVIEW, path)) });
   t.diagnostic(`Storybook pieces (${storybook.size}), app kit files: ${appFiles().join(", ")}, compared with ${base.commit.slice(0, 7)}`);
   t.diagnostic(`Missing from the app kit (${gap.length}): ${gap.join(", ")}`);
   t.diagnostic(`Named differently: ${Object.entries(list.renamed ?? {}).map(([name, as]) => `${name} → ${as}`).join(", ")}`);

@@ -12,7 +12,7 @@ import { G, tokens } from "./ui.js";
 import { Armed, quietLink, iconButton } from "./ui-button.js";
 import { field, TextField } from "./ui-field.js";
 import { row } from "./ui-row.js";
-import { skeletonOf } from "./kit.js";
+import { metric, skeletonOf } from "./kit.js";
 import { afterMount, parseOr } from "./pure.js";
 import { pageFrame } from "./page.js";
 import { Front } from "./front.js";
@@ -435,9 +435,7 @@ export default class Containers extends View {
     const hero = v_flex().gap(G.md)
       .when(!remote, (el) => el.child(v_flex().gap(4)
         .child(div().text_size(12.5).text_color(c.dim).child("Docker uses of this computer's memory"))
-        .child(h_flex().items_end().gap(G.md).flex_wrap()
-          .child(div().text_size(48).line_height(1).font_light().text_color(c.text).child(typeof this.held === "number" ? size(this.held) : "–"))
-          .when(Boolean(this.limit), (el2) => el2.child(div().pb(6).text_size(13).text_color(c.dim).child(`can grow to ${size(this.limit)}`))))))
+        .child(metric({ value: typeof this.held === "number" ? size(this.held) : "–", unit: this.limit ? `can grow to ${size(this.limit)}` : "" })("ct-metric", c))))
       .when(remote, (el) => el.child(div().text_size(12.5).text_color(c.yellow)
         .child(`Docker context ${this.context?.name}: these containers run on ${this.context?.host}, not this computer.`)))
       .child(h_flex().items_center().gap(G.md).flex_wrap()

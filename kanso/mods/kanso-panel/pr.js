@@ -13,7 +13,7 @@ import { G, T, PR, OPACITY, TINT, alpha, monoFont, tokens } from "./ui.js";
 import { Armed, button, quietLink, iconButton } from "./ui-button.js";
 import { TextField } from "./ui-field.js";
 import { menu } from "./ui-menu.js";
-import { failureBlock, skeletonOf } from "./kit.js";
+import { failureBlock, skeletonOf, diffText, facts } from "./kit.js";
 import { dot } from "./ui-dot.js";
 import { section } from "./ui-section.js";
 import { segmented } from "./ui-tab.js";
@@ -1096,7 +1096,7 @@ export class PullRequest {
     const pr = this.pr, files = pr.files ?? [], open = this.expanded.files;
     const shown = open ? files : files.slice(0, FILE_ROWS);
     return v_flex().w_full()
-      .child(section(c, "Files", `${pr.changedFiles} · +${pr.additions} −${pr.deletions}`))
+      .child(section(c, "Files", facts(String(pr.changedFiles), diffText({ add: pr.additions, del: pr.deletions }))))
       .children(shown.map((f, i) => {
         const all = f.path.split("/"), parts = all.slice(0, -1), name = all.at(-1), on = this.openFile === f.path;
         const mark = { ADDED: "added", DELETED: "deleted", RENAMED: "renamed" }[f.changeType] ?? "";
@@ -1106,7 +1106,7 @@ export class PullRequest {
             .child(detailRow(detailColumn()
                 .child(div().truncate().text_size(13).text_color(c.text).when(on, (e) => e.font_medium()).child(name))
                 .when(parts.length > 0 || Boolean(mark), (el) => el.child(div().truncate().text_size(11).text_color(c.dim).child([parts.join("/"), mark].filter(Boolean).join(" · ")))))
-              .child(div().text_size(11).text_color(c.dim).child(`+${f.additions} −${f.deletions}`))))
+              .child(div().text_size(11).text_color(c.dim).child(diffText({ add: f.additions, del: f.deletions })))))
           .when(on, (el) => el.child(this.diffView(c, f.path)));
       }))
       .when(files.length > FILE_ROWS, (el) => el.child(h_flex().pt(G.sm).child(quietLink("pr-files-more", open ? "Show fewer" : `Show ${files.length - FILE_ROWS} more`, (cx) => { this.expanded = { ...this.expanded, files: !open }; cx.notify(); }, c))))

@@ -1,5 +1,5 @@
 import { spawnAndNotify, commandOk, tilde, pool, said } from "./lib.js";
-import { sizedPage, heroStack, heroHeading, metricValue, metricStats } from "./ui-page.js";
+import { sizedPage, heroStack, heroHeading } from "./ui-page.js";
 import { localService } from "./platform-host.js";
 import { paths } from "./platform-paths.js";
 import { fileApi } from "./platform-files.js";
@@ -15,8 +15,9 @@ import { WorktreeStore } from "./worktrees-store.js";
 import { G, OPACITY, tokens } from "./ui.js";
 import { Armed, button, quietLink, iconButton } from "./ui-button.js";
 import { row } from "./ui-row.js";
+import { factList } from "./ui-facts.js";
 import { section } from "./ui-section.js";
-import { emptyState, failureBlock, skeletonOf } from "./kit.js";
+import { emptyState, failureBlock, metric, skeletonOf } from "./kit.js";
 import { dot } from "./ui-dot.js";
 import { aliasText, machineTitle, range, reduceSeries, MONTHS } from "./pure.js";
 import { worktreesMemory } from "./panel-state.js";
@@ -642,11 +643,8 @@ export class Worktrees {
       : plan.length ? `${freed ? `${fmtSize(freed)} of it` : `${plan.length} of them`} can go without losing anything.` : "Nothing can go without losing work.";
     return heroStack(heroHeading()
         .child(div().text_size(15).text_color(c.muted).child(here ? `On ${machineTitle("", "", here)}` : "On this computer"))
-        .child(metricValue()
-          .child(div().text_size(narrow ? 48 : 72).line_height(1).font_light().text_color(c.text).child(measured ? fmtSize(total) : String(live.length)))
-          .child(div().pb(narrow ? 6 : 10).text_size(13).text_color(c.dim).child(measured ? "in worktrees" : "worktrees")))
+        .child(metric({ value: measured ? fmtSize(total) : String(live.length), unit: measured ? "in worktrees" : "worktrees", facts: factList(stats) })("wt-metric", c))
         .child(div().text_size(15).text_color(c.dim).child(gist)))
-      .child(metricStats(stats, c, narrow))
       .child(v_flex().w_full().gap(G.sm)
         .child(h_flex().w_full().flex_wrap().gap_x(G.lg).gap_y(G.sm).items_center()
           .child(primary)
@@ -782,23 +780,14 @@ export class Worktrees {
       .child(this.storeNote ? failureBlock(this.storeNote)("wt-store", c) : this.freedBones(c));
     const freedBars = this.bars(c, h.freedByDay, "Freed each day", 96, "fills as you remove")
       , diskBars = this.bars(c, h.diskByDay, "In worktrees each day", 56, "a bar per day with a scan");
-    const stats = [
-      ...cleanedStats(h),
-    ];
     const outside = h.kb - h.kanso;
     return v_flex().w_full().gap(G.lg)
       .child(section(c, "Freed", h.since ? `since ${shortDate(h.since)}` : ""))
       .child(v_flex().gap(G.xs)
-        .child(metricValue()
-          .child(div().text_size(narrow ? 36 : 48).line_height(1).font_light().text_color(c.text).child(fmtSize(h.kb) || "0 KB"))
-          .child(div().pb(narrow ? 4 : 7).text_size(13).text_color(c.dim).child("of disk freed")))
+        .child(metric({ value: fmtSize(h.kb) || "0 KB", unit: "of disk freed", facts: h.kb > 0 || h.records + h.orphans > 0 ? factList(cleanedStats(h)) : "" })("wt-freed", c))
         .child(div().text_size(12).text_color(c.dim).child(!h.kb
           ? "Nothing freed yet. Every scan is kept: what Clean up, Remove or anything else frees adds up here."
           : outside > 0 ? `${fmtSize(h.kanso) || "0 KB"} here, ${fmtSize(outside)} removed outside the panel since a scan saw them.` : "All of it from this panel.")))
-      .when(h.kb > 0 || h.records + h.orphans > 0, (el) => el.child(h_flex().w_full().flex_wrap().gap_x(narrow ? G.xl : 48).gap_y(G.md)
-        .children(stats.map((s) => h_flex().items_end().gap(6)
-          .child(div().text_size(narrow ? 20 : 24).line_height(1).font_light().text_color(c.text).child(s.value))
-          .child(div().pb(2).text_size(12).text_color(c.dim).child(s.unit))))))
       .child(freedBars)
       .child(diskBars);
   }

@@ -5,6 +5,11 @@ import { menu as drawMenu } from "./ui-menu.js";
 import { stateEmpty, stateLine, stateBlock } from "./ui-state.js";
 import { toast as drawToast } from "./ui-toast.js";
 import { skeletonOf as drawSkeleton } from "./ui-skeleton.js";
+import { figure } from "./ui-metric.js";
+import { diffText, facts, plus } from "./ui-facts.js";
+
+// Facts as words, as the Storybook writes them.
+export { diffText, facts, plus };
 
 const EVENTS = {
   onPress: (el, fn) => el.on_mouse_down("left", fn),
@@ -68,4 +73,10 @@ export const toast = ({ icon = "none", ...props }) => pattern(drawToast)({ ...pr
 export const skeletonOf = ({ shape, count }) => (id, c, more = {}) => {
   given(more);
   return drawSkeleton(id, c, { shape, count });
+};
+
+// The one number: its unit beside it, its facts (separated by |) on a quiet line under it. App only: `tone` and `tip` for the value.
+export const metric = ({ value, unit = "", facts = "", loading = false, tone = "", tip = "" }) => (id, c, more = {}) => {
+  given(more);
+  return figure(id, c, { value, unit, facts, loading, tone, tip });
 };
