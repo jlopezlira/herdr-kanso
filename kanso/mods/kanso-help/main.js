@@ -15,7 +15,6 @@ import { glyphs } from "./marks.js";
 import { TICK_MS, Companion } from "./pets.js";
 import { ROWS, MODIFIERS, CAP, layer, LIST_LAYER, LIST_SHIFT, describe } from "./keymap.js";
 
-// kansō help and kansō settings: one window size, so going from one to the other feels like a page.
 const PAGES = [
   { key: "keys", label: "Keyboard" },
   { key: "dojo", label: "hjkl dōjō" },

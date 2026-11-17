@@ -71,7 +71,7 @@ const rightToo = (line) => ({ ...line, onSecondaryClick: line.onClick });
 // An item's look without its act: a popup measured before it opens.
 const sketch = (label, _act, { keep: _keep, ...look } = {}) => ({ ...look, label });
 const RAIL_MENU_ROWS = 10; // a rail popup shows this many rows; the rest scroll
-const CHILD_PAD = SIDEBAR.guideX + ELBOW.w + 6 - 8; // icon starts 6px after the elbow, inside the 8px row padding
+const CHILD_PAD = SIDEBAR.guideX + ELBOW.w + SIDEBAR.elbowGap - G.sm; // the icon starts past the elbow, inside the row's padding
 // Every height is known before anything is drawn, so a scan (`laidOut`) finds where each pill goes.
 const item = (el, h = null, mark = null) => ({ el, h, mark });
 const spaceMark = (h) => ({ kind: "space", at: 0, h });

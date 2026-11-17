@@ -9,7 +9,6 @@ import { statusMark, duration } from "./agents.js";
 // A row with what the agent did is two lines; the header and the rest, one.
 const heightOf = (row) => (row.did ? H.two : H.line);
 
-
 // An error has no glyph; the sidebar draws the blocked disc for a failed agent.
 const lead = (c, mark) => (mark === "pr"
   ? svg("mods/kanso-chrome/icons/git-pull-request.svg").size(ICON).flex_none().text_color(c.muted)
