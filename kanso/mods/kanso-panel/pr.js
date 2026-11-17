@@ -807,13 +807,15 @@ export class PullRequest {
     const create = !finished && this.none && Boolean(this.branch) && !this.isBase();
     // Rows are numbered down the page, across the groups.
     const firsts = groups.map((_, g) => groups.slice(0, g).reduce((n, [, rows]) => n + rows.length, 0));
-    return v_flex().w_full().gap(G.xl)
+    return this.withNote(v_flex().w_full().gap(G.xl)
       .children(groups.map(([title, rows], g) => v_flex().w_full().gap(2)
         .child(section(c, title, String(rows.length)))
         .children(rows.map((p, k) => listedRow(this, c, p, firsts[g] + k, { finished })))))
-      .when(create && this.canCreate(), (el) => el.child(h_flex().child(quietLink("pr-create-list", this.busy === "Create" ? "Opening GitHub…" : "Create on GitHub", (cx) => this.createPr(cx), c, { color: c.text, disabled: Boolean(this.busy) }))))
-      .when(Boolean(this.note), (el) => el.child(failureBlock(this.note)("pr-note", c)));
+      .when(create && this.canCreate(), (el) => el.child(h_flex().child(quietLink("pr-create-list", this.busy === "Create" ? "Opening GitHub…" : "Create on GitHub", (cx) => this.createPr(cx), c, { color: c.text, disabled: Boolean(this.busy) })))), c);
   }
+
+  // The last write's failure, under the page.
+  withNote(page, c) { return page.when(Boolean(this.note), (el) => el.child(failureBlock(this.note)("pr-note", c))); }
 
   reviewCount() { return this.inbox?.needs?.length ?? 0; }
 
@@ -1145,7 +1147,7 @@ export class PullRequest {
       const meta = [`#${item.number}`, item.author && mine.has(String(item.author).toLowerCase()) ? "you" : item.author, item.updatedAt ? ago(item.updatedAt) : "", isNew(item) ? "new" : ""].filter(Boolean).join(" · ");
       return prRow(`pr-in-${i}`, c, item, { meta, state: this.inboxState(item), onClick: (cx) => this.openInboxItem(item, cx) });
     };
-    return v_flex().w_full().gap(G.lg)
+    return this.withNote(v_flex().w_full().gap(G.lg)
       .child(segmented("pr-inbox", [{ key: "needs", label: "Needs you" }, { key: "yours", label: "Yours" }], tab, (key, cx) => { this.inboxTab = key; cx.notify(); }, c))
       .when(this.outside, (el) => el.child(div().text_size(12).text_color(c.dim).child("This pane is not in a repository.")))
       .child(!groups.length
@@ -1153,8 +1155,7 @@ export class PullRequest {
         : v_flex().w_full().gap(G.xl).children(groups.map((group, g) => v_flex().w_full().gap(2)
           .child(section(c, group.title, String(group.rows.length)))
           .children(group.rows.map((item, k) => row(item, firsts[g] + k))))))
-      .when(Boolean(this.wait || this.inbox?.limitedUntil), (el) => el.child(div().text_size(12).text_color(c.dim).child(this.wait || limitLine(this.inbox.limitedUntil))))
-      .when(Boolean(this.note), (el) => el.child(failureBlock(this.note)("pr-note", c)));
+      .when(Boolean(this.wait || this.inbox?.limitedUntil), (el) => el.child(div().text_size(12).text_color(c.dim).child(this.wait || limitLine(this.inbox.limitedUntil)))), c);
   }
 
   body(c, narrow) {

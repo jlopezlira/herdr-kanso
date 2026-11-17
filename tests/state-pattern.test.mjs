@@ -19,6 +19,7 @@ const cantReach = { text: "Can't reach dark", fix: "Refresh", detail: "ssh: conn
 const arg = (el, name) => calls(el, name)[0]?.[1];
 const holding = (el, words) => find(el, (kid) => calls(kid, "child").some((call) => call[1] === words));
 
+const press = (button) => arg(button, "on_click")({}, {});
 const buttons = (el) => [...(calls(el, "accessibility_label").length ? [el] : []), ...el.kids.flatMap(buttons)];
 
 test("Empty is the view's icon dim at its token, one muted sentence, 24 above and below, and no action unless one is given", async () => {
@@ -39,7 +40,7 @@ test("Empty is the view's icon dim at its token, one muted sentence, 24 above an
   const [action] = buttons(one);
   assert.equal(arg(action, "accessibility_label"), "Create");
   assert.equal(arg(action, "bg"), c.subtle, "the one action is tonal");
-  arg(action, "on_click")({}, {});
+  press(action);
   assert.equal(made, 1);
 });
 
@@ -64,7 +65,7 @@ test("A failure block is a blocked edge, the mark and our words, the source's wo
   const [fix, ...rest] = buttons(block);
   assert.equal(rest.length, 0, "one fix");
   assert.equal(arg(fix, "bg"), c.primary, "the fix is solid");
-  arg(fix, "on_click")({}, {});
+  press(fix);
   assert.equal(fixed, 1);
 });
 
@@ -114,7 +115,7 @@ test("A failure on a line is the mark, our words and one small quiet fix, with t
   const [fix] = buttons(line);
   assert.equal(arg(fix, "h"), H.compact);
   assert.equal(calls(fix, "bg").length, 0, "the fix is quiet");
-  arg(fix, "on_click")({}, {});
+  press(fix);
   assert.equal(fixed, 1);
 });
 
