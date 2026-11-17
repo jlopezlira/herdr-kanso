@@ -1,4 +1,5 @@
 // Whether each conversation's process still runs: how many `ps` the sidebar takes to know, on a fake clock.
+import { loadSpaces } from "./mod-fixtures.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { load, clone } from "./helpers.mjs";
@@ -25,7 +26,7 @@ async function sidebar({ latency = 0, active = true, collapsed = false, view = "
     h.most = Math.max(h.most, h.inFlight);
     return new Promise((resolve) => h.waiting.push({ due: h.clock + latency, done: () => { h.inFlight -= 1; resolve(answer(args)); } }));
   };
-  const { Spaces } = await load("kanso-spaces/main.js", ["Spaces"], {
+  const { Spaces } = await loadSpaces({
     Date: { now: () => h.clock }, exec,
     window: () => ({ active: h.active, platform: "macos" }),
     shared: (k) => (k === "sidebar.collapsed" ? h.collapsed : null), setShared: () => {},

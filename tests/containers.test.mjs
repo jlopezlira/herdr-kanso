@@ -1,7 +1,8 @@
 // Containers: what Docker says, read into rows, and which Kanso project each is for.
+import { loadContainers } from "./mod-fixtures.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { load, clone } from "./helpers.mjs";
+import { load, clone, failure, success } from "./helpers.mjs";
 
 const model = () => load("kanso-containers/model.js", ["parseContainers", "hostPorts", "health", "projectOf", "byProject", "parseImages", "imageRows",
   "parseImageIds", "contextOf", "sizeMB", "memMB", "parseStats", "vmPids", "dockerVms", "dockerHeld", "since", "size", "daemonDown", "OTHER"]);
@@ -162,9 +163,9 @@ test("a stack started from a file no search finds still gets its controls, from 
 
 test("the panel draws every part with each element in one place", async () => {
   const { singleUse } = await import("./helpers.mjs");
-  const host = { ...singleUse(), theme: () => ({}), exec: async () => ({ code: 1, stdout: "", stderr: "" }), run: () => {}, spaces: () => [], panes: () => [],
+  const host = { ...singleUse(), theme: () => ({}), exec: async () => (failure("")), run: () => {}, spaces: () => [], panes: () => [],
     home: () => "/Users/me", shared: () => null, setShared: () => {}, InputState: { new: () => ({ on() {}, value: () => "", set_value() {}, release() {}, focus() {} }) } };
-  const { Containers } = await load("kanso-containers/main.js", ["Containers"], host);
+  const { Containers } = await loadContainers(host);
   const m = await model();
   const view = new Containers();
   view.init({}, { timer: { every: () => ({ cancel() {} }), after() {} }, spawn: () => {}, notify() {} });
@@ -188,10 +189,10 @@ async function openPanel() {
   f.host.exec = async (command, args = [], options) => {
     if (command !== "docker") return exec(command, args, options);
     await exec(command, args, options);
-    if (docker.down) return { code: 1, stdout: "", stderr: "Cannot connect to the Docker daemon. Is the docker daemon running?" };
-    if (docker.failing.has(args[0])) return { code: 1, stdout: "", stderr: "unexpected error" };
+    if (docker.down) return failure("Cannot connect to the Docker daemon. Is the docker daemon running?");
+    if (docker.failing.has(args[0])) return failure("unexpected error");
     const out = { ps: docker.ps.join("\n"), images: docker.images, info: "8000000000", context: "desktop-linux\tunix:///var/run/docker.sock" }[args[0]] ?? "";
-    return { code: 0, stdout: out, stderr: "" };
+    return success(out);
   };
   f.host.run = () => null;
   const { Containers } = await loadMod("kanso-containers/main.js", ["Containers"], f.host);

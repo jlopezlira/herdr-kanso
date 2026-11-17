@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import { writeFileSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { load, context, exec, nativePlatform, temporary, clone, gpuiHost } from "./helpers.mjs";
-import { test, dropChild, trackedSpawn, quote, windowsOnly, updater, fixture, version, small, tree, stages, hostFor } from "./update-harness.mjs";
+import { load, context, exec, nativePlatform, temporary, clone, gpuiHost, success, failure } from "./helpers.mjs";
+import { test, dropChild, trackedSpawn, quote, windowsOnly, updater, fixture, version, small, tree, stages, hostFor, startUpdater } from "./update-harness.mjs";
 
 test("Kanso's newest release comes from the vX.Y.Z tags, not from Herdr", async () => {
   const { newestTag, compareVersions } = await updater();
@@ -93,7 +93,7 @@ test("The tab bar looks for releases; the footer reads what it found", async () 
     appHome: () => "/nowhere", shared: (k) => store[k], setShared: (k, v) => { store[k] = v; },
     notify: (n) => { toasts.push(n); return "1"; }, readTextFile: async () => '{ "version": "1.3.1" }',
     layout: () => null, run: () => null,
-    exec: async (command) => { if (command === "git") asked++; return command === "git" ? { code: 0, stdout: "x\trefs/tags/v1.4.0\n", stderr: "" } : { code: 1, stdout: "", stderr: "" }; },
+    exec: async (command) => { if (command === "git") asked++; return command === "git" ? success("x\trefs/tags/v1.4.0\n") : failure(""); },
   };
   const { Updater } = await updater(host);
   const tabs = new Updater(), footer = new Updater();
@@ -123,7 +123,7 @@ test("With automatic checks off neither copy polls, and a Check from settings st
     appHome: () => "/nowhere", shared: (k) => store[k], setShared: (k, v) => { store[k] = v; },
     notify() {}, readTextFile: async () => '{ "version": "1.3.1" }',
     layout: () => null, run: () => null,
-    exec: async (command) => { if (command === "git") asked++; return { code: 0, stdout: "x\trefs/tags/v1.4.0\n", stderr: "" }; },
+    exec: async (command) => { if (command === "git") asked++; return success("x\trefs/tags/v1.4.0\n"); },
   };
   const { Updater } = await updater(host);
   const tabs = new Updater(), footer = new Updater();
@@ -148,7 +148,7 @@ test("Kanso looks for releases on every start, every few minutes, and when asked
     appHome: () => "/nowhere", shared: (k) => store[k], setShared: (k, v) => { store[k] = v; },
     notify: (n) => { toasts.push(n); return "1"; }, readTextFile: async () => '{ "version": "1.3.1" }',
     layout: () => null, run: () => null,
-    exec: async (command) => { if (command === "git") asked++; return command === "git" && !offline ? { code: 0, stdout: tags, stderr: "" } : { code: 128, stdout: "", stderr: "offline" }; },
+    exec: async (command) => { if (command === "git") asked++; return command === "git" && !offline ? success(tags) : failure("offline", 128); },
   };
   const { Updater } = await updater(host);
   const u = new Updater();
@@ -182,7 +182,7 @@ test("Automatic update checks can be disabled while manual checks still work", a
     appHome: () => "/nowhere", shared: (k) => store[k], setShared: (k, v) => { store[k] = v; },
     notify() {}, readTextFile: async () => '{ "version": "1.3.1" }',
     layout: () => null, run: () => null,
-    exec: async (command) => { if (command === "git") asked++; return { code: 0, stdout: "x\trefs/tags/v1.3.1\n", stderr: "" }; },
+    exec: async (command) => { if (command === "git") asked++; return success("x\trefs/tags/v1.3.1\n"); },
   };
   const { Updater } = await updater(host);
   const u = new Updater();
@@ -204,9 +204,7 @@ test("The footer is as tall as the rows it shows, and a size an older kansō set
   for (const [px, why] of [[228, "3.9.1's taller footer"], [120, "the footer with Add computer under Settings"]]) {
     const f = await fixture(t);
     f.footer.size = { px };
-    const { cx, drain } = context();
-    cx.timer = { every() {} };
-    f.updater.start(cx); await drain();
+    const { cx, drain } = await startUpdater(f);
     assert.deepEqual(f.resizes, [88], `${why} comes back to Update and Settings`);
   }
   const { footerPx } = await updater({ shared: () => null });
@@ -222,9 +220,7 @@ test("The footer is as tall as the rows it shows, and a size an older kansō set
 
 test("A refused update makes room for its block in the open footer, and gives it back in the rail", async (t) => {
   const f = await fixture(t);
-  const { cx, drain } = context();
-  cx.timer = { every() {} };
-  f.updater.start(cx); await drain();
+  const { cx, drain } = await startUpdater(f);
   assert.deepEqual(f.resizes, [88], "Update and Settings");
   f.updater.refuse("the download failed");
   f.updater.fit();

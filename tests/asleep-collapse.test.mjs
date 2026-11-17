@@ -1,4 +1,5 @@
 // A project or tab that is asleep is one quiet row until a click; waking it opens the usual group.
+import { loadSpaces } from "./mod-fixtures.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { load, clone } from "./helpers.mjs";
@@ -44,7 +45,7 @@ function ready(view, extra = {}) {
 async function draw({ spaces = () => [], agents = () => [], panes = () => [], terminals = () => [], collapsed = false } = {}) {
   const { node, handlers, ids, clear } = recorder();
   const shared = (k) => (k === "kanso.registry" ? registry : k === "sidebar.collapsed" ? collapsed : null);
-  const { Spaces } = await load("kanso-spaces/main.js", ["Spaces"], {
+  const { Spaces } = await loadSpaces({
     div: node, svg: node, image: node, h_flex: node, v_flex: node, Button: { new: node }, Popover: { new: node },
     theme: () => theme, shared, setShared: () => {}, spaces, panes, agents, terminals, machines: () => [],
     run: () => {}, home: () => "/Users/me", openOverlay: () => {}, props: () => ({}),

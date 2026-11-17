@@ -1,7 +1,7 @@
 // The avatar: a round initial on a wash at three token sizes, a picture over it, and a host's hue.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { load, chain, gpuiHost, numberArguments } from "./helpers.mjs";
+import { load, chain, gpuiHost, numberArguments, calls, one } from "./helpers.mjs";
 import { avatarSizes } from "../stories/kit/pieces.js";
 
 const host = () => ({ ...gpuiHost(), image: (path) => { const el = chain("image"); el.calls.push(["image", path]); return el; } });
@@ -9,13 +9,6 @@ const kit = async () => ({
   ...await load("kanso-panel/ui.js", ["tokens", "mix", "G", "H", "T"], host()),
   ...await load("kanso-panel/ui-avatar.js", ["avatar", "AVATAR_SIZES"], host()),
 });
-
-const calls = (el, name) => el.calls.filter((call) => call[0] === name);
-const one = (el, name) => {
-  const found = calls(el, name);
-  assert.equal(found.length, 1, name);
-  return found[0][1];
-};
 
 const night = { foreground: "#d8d4cb", background: "#1b1b19", dim: "#6b6862", muted: "#949086", blocked: "#ca938b", working: "#c4b07e", done: "#98ad8f", ansi4: "#93a3b5", ansi5: "#ad9cab" };
 

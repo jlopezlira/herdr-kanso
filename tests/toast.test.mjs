@@ -1,4 +1,5 @@
 // kanso-toast: a toast already on screen is not shown again, and the stack keeps the newest three.
+import { loadToast } from "./mod-fixtures.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { load, clone } from "./helpers.mjs";
@@ -14,7 +15,7 @@ async function screen(clock = null) {
     closeOverlay: (id) => closed.push(id),
     ...(clock ? { Date: { now: () => clock.now } } : {}),
   };
-  const { Toast } = await load("kanso-toast/main.js", ["Toast"], host);
+  const { Toast } = await loadToast(host);
   const post = (overlay, n) => {
     current.props = { overlay, ...n };
     const t = new Toast();
@@ -109,7 +110,7 @@ async function drawn(notification) {
     calls.push([kind, "new", arg]);
     return el;
   };
-  const { Toast } = await load("kanso-toast/main.js", ["Toast"], {
+  const { Toast } = await loadToast({
     div: () => node("div"), image: (path) => node("image", path), svg: (path) => node("svg", path), h_flex: () => node("row"),
     Button: { new: (id) => node("button", id) },
     run: (name, args) => ran.push([name, args]), shared: () => undefined, setShared: () => {}, closeOverlay: (id) => closed.push(id),

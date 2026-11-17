@@ -4,7 +4,7 @@ import { execFile, execFileSync, spawn } from "node:child_process";
 import { cp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { load, context, exec, nativePlatform, nativeWindow, temporary, clone, until } from "./helpers.mjs";
+import { load, context, exec, nativePlatform, nativeWindow, temporary, clone, until, failure, success } from "./helpers.mjs";
 
 const names = ["Updater", "newestTag", "compareVersions", "mergeKeys", "SOURCE", "footerPx", "HOLD", "INSTALL_SCRIPT", "RECOVER", "LAUNCH", "updateHost", "windowsInstallScript", "windowsLaunchScript", "windowsRecoverScript", "sameVolume"];
 export const repo = new URL("../kanso/", import.meta.url);
@@ -204,8 +204,8 @@ export async function fixture(t, { layoutChanged = true, homeName = "O'Brien hom
       writeTextFile: async (p, text) => { await writeFile(p, text); return null; },
       window: nativeWindow,
       exec: async (command, args, options) => {
-        if (closed) return { code: 1, stdout: "", stderr: "" };
-        if (command === "git") return { code: 0, stdout: "x\trefs/tags/v1.0.0\ny\trefs/tags/v1.1.0\n", stderr: "" };
+        if (closed) return failure("");
+        if (command === "git") return success("x\trefs/tags/v1.0.0\ny\trefs/tags/v1.1.0\n");
         if (ctl.abandon && pauses(command, args)) { ctl.stuck += 1; return new Promise(() => {}); }
         if (ctl.holdCurl && fetches(command)) { ctl.held += 1; await gate.promise; }
         return exec(command, args, { ...options, limit: ctl.limit });
@@ -385,9 +385,7 @@ export const sweepTest = ({ sabotage = false, first, last = 60, kills, end = nul
 // The first window's install, killed after its `stop`-th step and never heard from again: its
 // copy is replaced by the swap, so nothing in that window recovers it.
 export async function killed(t, f, stop) {
-  const { cx, drain } = context();
-  cx.timer = { every() {} };
-  f.updater.start(cx); await drain();
+  const { cx, drain } = await startUpdater(f);
   process.env.KANSO_UPDATE_STOP = String(stop);
   t.after(() => { delete process.env.KANSO_UPDATE_STOP; });
   await f.flag("slow");
@@ -415,3 +413,16 @@ export async function hostFor(platform) {
   const host = loaded.updateHost(platform, rawExec, async (path, text) => { await writeFile(path, text); return null; }, loaded);
   return { ...loaded, host };
 }
+
+export const updateContext = () => {
+  const tasks = context();
+  tasks.cx.timer = { every() {} };
+  return tasks;
+};
+
+export const startUpdater = async (f) => {
+  const tasks = updateContext();
+  f.updater.start(tasks.cx);
+  await tasks.drain();
+  return tasks;
+};

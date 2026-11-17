@@ -1,3 +1,4 @@
+import { loadStore, loadKdb } from "./mod-fixtures.mjs";
 import { fileApi } from "../kanso/mods/kanso-panel/platform-files.js";
 // The left nav's one database: identity by conversation, holds that say whether they held,
 // a migration that happens once or not at all.
@@ -5,7 +6,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
-import { databaseTimer, load, clone, temporary, exec } from "./helpers.mjs";
+import { databaseTimer, load, clone, temporary, exec, failure } from "./helpers.mjs";
 
 const seen = (conversation, given, space, pos, status = "idle", terminal = "t1") => ({ conversation, given, space, pos, status, terminal, tab: `tb-${space}`, title: null });
 
@@ -54,8 +55,8 @@ test("a conversation moved to a project stays after it leaves", async (t) => {
 test("a database that failed to open is tried again", async (t) => {
   const dir = await temporary(t);
   let fail = true;
-  const flaky = async (c, a, o) => (fail && c === "sqlite3" && a[0] === "-version" ? { code: 1, stdout: "", stderr: "no" } : exec(c, a, o));
-  const { Kdb } = await load("kanso-spaces/kdb.js", ["Kdb"], { exec: flaky, appHome: () => dir });
+  const flaky = async (c, a, o) => (fail && c === "sqlite3" && a[0] === "-version" ? failure("no") : exec(c, a, o));
+  const { Kdb } = await loadKdb({ exec: flaky, appHome: () => dir });
   const db = new Kdb(databaseTimer, join(dir, "kanso"));
   await assert.rejects(db.open(), /Install sqlite3/);
   fail = false;
@@ -74,8 +75,8 @@ async function legacy(dir) {
   return { panel };
 }
 async function storeIn(t, dir, run = exec, host = {}) {
-  const { Store } = await load("kanso-spaces/store.js", ["Store"], { exec: run, appHome: () => dir, ...host });
-  const { Kdb } = await load("kanso-spaces/kdb.js", ["Kdb"], { exec: run, appHome: () => dir, ...host });
+  const { Store } = await loadStore({ exec: run, appHome: () => dir, ...host });
+  const { Kdb } = await loadKdb({ exec: run, appHome: () => dir, ...host });
   const db = new Kdb(databaseTimer, join(dir, "kanso"));
   return { store: new Store(db, dir), db };
 }
@@ -110,7 +111,7 @@ test("an old file that can't be read now stops the migration until it can, never
   const dir = await temporary(t);
   await legacy(dir);
   let locked = true;
-  const run = async (c, a, o) => (locked && c === "sqlite3" && a.includes("-readonly") ? { code: 5, stdout: "", stderr: "database is locked" } : exec(c, a, o));
+  const run = async (c, a, o) => (locked && c === "sqlite3" && a.includes("-readonly") ? failure("database is locked", 5) : exec(c, a, o));
   const { store, db } = await storeIn(t, dir, run);
   await assert.rejects(store.open(), /could not be read: database is locked/);
   assert.equal(await db.migrated(), false);

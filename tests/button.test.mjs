@@ -1,21 +1,9 @@
 // One button in four kinds: its box from the tokens, its washes, focus and off.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { load, chain, gpuiHost } from "./helpers.mjs";
+import { load, gpuiHost, calls, one, styled } from "./helpers.mjs";
 
 const kit = async () => ({ ...await load("kanso-panel/ui.js", ["mix", "WASH", "tokens", "G", "H", "R", "T", "ICON", "ICON_ROW", "ICON_INLINE"], gpuiHost()), ...await load("kanso-panel/ui-button.js", ["button", "quietLink", "iconButton"], gpuiHost()) });
-
-const calls = (el, name) => el.calls.filter((call) => call[0] === name);
-const one = (el, name) => {
-  const found = calls(el, name);
-  assert.equal(found.length, 1, name);
-  return found[0][1];
-};
-const styled = (el, name) => {
-  const style = chain();
-  one(el, name)(style);
-  return style.calls;
-};
 
 const night = { background: "#1b1b19", foreground: "#d8d4cb", hover: "#232321", selected: "#2b2b28", solid: "#d8d4cb", solid_foreground: "#161615", accent: "#da627d", accent_foreground: "#161615", dim: "#6b6860", muted: "#949086" };
 const day = { background: "#f4f1eb", foreground: "#3c3934", hover: "#ebe6de", selected: "#e0dbd2", solid: "#3c3934", solid_foreground: "#f4f1eb", accent: "#b8405e", accent_foreground: "#f4f1eb", dim: "#a19c92", muted: "#7a756c" };

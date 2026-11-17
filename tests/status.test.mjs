@@ -1,4 +1,5 @@
 // What the status bar says, and where each click goes.
+import { loadSpaces, loadWorkspaceStatus, loadQuestionOf } from "./mod-fixtures.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { clone, load } from "./helpers.mjs";
@@ -8,7 +9,7 @@ const row = (address, status, extra = {}) => ({ address, status, pane: `pane-${a
 const reading = (free, at = now, extra = {}) => JSON.stringify({ v: 1, at, machine: { freePct: free }, limits: { lowFreePct: 20 }, ...extra });
 
 test("A question is what the agent said, or a title that says more than its name", async () => {
-  const { questionOf } = await load("kanso-status/model.js", ["questionOf"]);
+  const { questionOf } = await loadQuestionOf();
   const ask = (msg, title, name = "Fury") => questionOf({ msg, title, name, program: { key: "claude", name: "Claude" } });
   assert.equal(ask("Which file?\n\n  the rest", "Other"), "Which file?");
   assert.equal(ask("  a   long   line  ", null), "a long line");
@@ -156,7 +157,7 @@ const at = (texts, word) => texts.indexOf(word);
 
 test("One waiting off screen: the bar names who waits and what they ask, then low memory, the working count and the palette", async () => {
   const ui = bar();
-  const { WorkspaceStatus } = await load("kanso-status/main.js", ["WorkspaceStatus"], ui.host);
+  const { WorkspaceStatus } = await loadWorkspaceStatus(ui.host);
   ui.state.agents = [
     { address: "a", status: "blocked", title: "ignored title", program: { key: "claude", name: "Claude" } },
     { address: "c", status: "working", title: "Busy" },
@@ -202,7 +203,7 @@ test("One waiting off screen: the bar names who waits and what they ask, then lo
 
 test("Several waiting: the bar names the oldest and how many more wait", async () => {
   const ui = bar();
-  const { WorkspaceStatus } = await load("kanso-status/main.js", ["WorkspaceStatus"], ui.host);
+  const { WorkspaceStatus } = await loadWorkspaceStatus(ui.host);
   ui.state.shared["kanso.needs-you"] = { rows: ["a", "b", "c"].map((address) => row(address, "blocked")) };
   new WorkspaceStatus().render();
   assert.ok(ui.texts.includes("a"));
@@ -213,7 +214,7 @@ test("Several waiting: the bar names the oldest and how many more wait", async (
 
 test("A title stands in for an empty question, and a quiet bar keeps only the palette", async () => {
   const ui = bar();
-  const { WorkspaceStatus } = await load("kanso-status/main.js", ["WorkspaceStatus"], ui.host);
+  const { WorkspaceStatus } = await loadWorkspaceStatus(ui.host);
   ui.state.agents = [{ address: "a", status: "blocked", title: "Add the countdown?", program: { key: "claude", name: "Claude" } }];
   ui.state.terminals = [{ address: "a", report: { msg: "" } }];
   ui.state.shared["kanso.needs-you"] = { rows: [{ address: "a", pane: "p", status: "blocked", name: "Fury", project: "kanso" }] };
@@ -234,7 +235,7 @@ test("A title stands in for an empty question, and a quiet bar keeps only the pa
 
 test("Sessions at work: the bar shows the working mark and how many, and shown always it counts zero", async () => {
   const ui = bar();
-  const { WorkspaceStatus } = await load("kanso-status/main.js", ["WorkspaceStatus"], ui.host);
+  const { WorkspaceStatus } = await loadWorkspaceStatus(ui.host);
   ui.state.agents = [{ address: "a", status: "working" }, { address: "b", status: "working" }, { address: "c", status: "idle" }];
   const view = new WorkspaceStatus();
   view.render();
@@ -255,7 +256,7 @@ test("Sessions at work: the bar shows the working mark and how many, and shown a
 
 test("Low memory stand-in: the bar says how much is free while it is low, and nothing once it recovers", async () => {
   const ui = bar();
-  const { WorkspaceStatus } = await load("kanso-status/main.js", ["WorkspaceStatus"], ui.host);
+  const { WorkspaceStatus } = await loadWorkspaceStatus(ui.host);
   const view = new WorkspaceStatus();
   view.memoryText = reading(8, Date.now());
   view.render();
@@ -271,7 +272,7 @@ test("Low memory stand-in: the bar says how much is free while it is low, and no
 
 test("Visible home stand-in: with the sidebar open the computer is not repeated; folded, the bar names it without a branch", async () => {
   const ui = bar();
-  const { WorkspaceStatus } = await load("kanso-status/main.js", ["WorkspaceStatus"], ui.host);
+  const { WorkspaceStatus } = await loadWorkspaceStatus(ui.host);
   ui.state.props = { side: "left" };
   ui.state.spaces = [{ active: true, branch: "develop" }];
   const view = new WorkspaceStatus();
@@ -295,7 +296,7 @@ test("Visible home stand-in: with the sidebar open the computer is not repeated;
 test("A computer that is connecting is drawn at the pending opacity with its breathing dot", async () => {
   const ui = bar();
   const { PENDING } = await load("kanso-status/ui-state.js", ["PENDING"], ui.host);
-  const { WorkspaceStatus } = await load("kanso-status/main.js", ["WorkspaceStatus"], ui.host);
+  const { WorkspaceStatus } = await loadWorkspaceStatus(ui.host);
   ui.state.props = { side: "left" };
   ui.state.shared["sidebar.collapsed"] = true;
   ui.state.spaces = [{ active: true, machine: "devbox" }];
@@ -315,7 +316,7 @@ test("A computer that is connecting is drawn at the pending opacity with its bre
 
 test("Low memory keeps its blocked colour under the pointer; an item without a state turns foreground", async () => {
   const ui = bar();
-  const { WorkspaceStatus } = await load("kanso-status/main.js", ["WorkspaceStatus"], ui.host);
+  const { WorkspaceStatus } = await loadWorkspaceStatus(ui.host);
   ui.state.agents = [{ address: "a", status: "working" }];
   const view = new WorkspaceStatus();
   view.memoryText = reading(8, Date.now());
@@ -328,7 +329,7 @@ test("Low memory keeps its blocked colour under the pointer; an item without a s
 
 test("An unreachable computer is a failure line whose Refresh is the only computer button, even with the sidebar open", async () => {
   const ui = bar();
-  const { WorkspaceStatus } = await load("kanso-status/main.js", ["WorkspaceStatus"], ui.host);
+  const { WorkspaceStatus } = await loadWorkspaceStatus(ui.host);
   ui.state.props = { side: "left" };
   ui.state.spaces = [{ active: true, machine: "devbox", branch: "feat/status-attention" }];
   ui.state.machines = [{ name: "devbox", layout: "unavailable" }];
@@ -346,7 +347,7 @@ test("An unreachable computer is a failure line whose Refresh is the only comput
 
 test("Hidden computer, working count and palette stay hidden, and Windows names its palette chord", async () => {
   const ui = bar();
-  const { WorkspaceStatus } = await load("kanso-status/main.js", ["WorkspaceStatus"], ui.host);
+  const { WorkspaceStatus } = await loadWorkspaceStatus(ui.host);
   ui.state.platform = "windows";
   ui.state.agents = [{ address: "a", status: "working" }];
   const view = new WorkspaceStatus();
@@ -364,7 +365,7 @@ test("Hidden computer, working count and palette stay hidden, and Windows names 
 test("The right side reads the guard file on a timer and does not start a process", async () => {
   const ui = bar();
   const { MEMORY_MS } = await load("kanso-status/model.js", ["MEMORY_MS"]);
-  const { WorkspaceStatus } = await load("kanso-status/main.js", ["WorkspaceStatus"], ui.host);
+  const { WorkspaceStatus } = await loadWorkspaceStatus(ui.host);
   const pending = [], timers = [];
   let notes = 0;
   const cx = {
@@ -401,7 +402,7 @@ test("The right side reads the guard file on a timer and does not start a proces
 
 test("An unreachable computer's Refresh is the sidebar's", async () => {
   const called = [];
-  const { Spaces } = await load("kanso-spaces/main.js", ["Spaces"], {
+  const { Spaces } = await loadSpaces({
     agents: () => [], terminals: () => [], spaces: () => [], machines: () => [], panes: () => [],
     props: () => ({}), theme: () => ({}), shared: () => undefined, setShared: () => {},
     run: () => {}, home: () => "/Users/person", window: () => ({ platform: "macos" }),

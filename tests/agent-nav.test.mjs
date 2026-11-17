@@ -1,4 +1,5 @@
 // Moving between agents by keyboard: the sidebar's row above or below, and back and forward through the agents visited.
+import { loadSpaces, loadDescribe } from "./mod-fixtures.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -19,7 +20,7 @@ async function sidebar(agents, { collapsed = false, folded = [], view = "spaces"
     });
     return proxy;
   };
-  const { Spaces } = await load("kanso-spaces/main.js", ["Spaces"], {
+  const { Spaces } = await loadSpaces({
     div: node, image: node, h_flex: node, v_flex: node, svg: node,
     Popover: { new: node }, Toggle: { new: node }, Button: { new: node }, Input: { new: node },
     theme: () => ({ foreground: "#fff", muted: "#888", dim: "#666", chrome: "#111", hover: "#222", input: "#333", ansi2: "#0f0", blocked: "#c44", border: "#333", raised: "#222", accent: "#09f" }),
@@ -183,7 +184,7 @@ test("The four keys are bound on macOS and Windows, and Help and the Keys page n
   const mac = keys("keys.json"), win = keys("keys.windows.json");
   assert.deepEqual(["cmd-shift-up", "cmd-shift-down", "cmd-shift-left", "cmd-shift-right"].map((k) => mac[k]), actions);
   assert.deepEqual(["ctrl-shift-up", "ctrl-shift-down", "ctrl-shift-left", "ctrl-shift-right"].map((k) => win[k]), actions);
-  const { describe } = await load("kanso-help/keymap.js", ["describe"]);
+  const { describe } = await loadDescribe();
   assert.deepEqual(clone(actions.map(describe)), ["Agent above", "Agent below", "Back through the agents visited", "Forward through the agents visited"]);
   const { GROUPS } = await load("kanso-settings/actions.js", ["GROUPS"]);
   const rows = GROUPS.flatMap((g) => g.actions).filter((r) => actions.includes(r.action));

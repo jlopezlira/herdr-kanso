@@ -1,3 +1,4 @@
+import { loadDirectory, loadFiles } from "./mod-fixtures.mjs";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { mkdir, writeFile, symlink } from "node:fs/promises";
@@ -15,7 +16,7 @@ test("Files preserves newline names, dotfiles and symlinks", { skip: process.pla
   await mkdir(join(root, "directory")); await mkdir(join(root, ".git"));
   await symlink("directory", join(root, "link"));
   await symlink("missing", join(root, "dangling"));
-  const { directory } = await load("kanso-panel/files.js", ["directory"], { exec, window: nativeWindow });
+  const { directory } = await loadDirectory({ exec, window: nativeWindow });
   const entries = Object.fromEntries((await directory(root, null)).map(({ name, dir }) => [name, dir]));
   assert.deepEqual(entries, {
     "first\nsecond.txt": false, "tabs\tand\\slashes.txt": false, ".hidden": false,
@@ -29,7 +30,7 @@ test("Files falls back to the shell listing when find cannot run", { skip: proce
   const root = await temporary(t);
   await writeFile(join(root, "file.txt"), ""); await mkdir(join(root, "directory"));
   const calls = [];
-  const { directory } = await load("kanso-panel/files.js", ["directory"], { window: () => ({ platform: "macos" }),
+  const { directory } = await loadDirectory({ window: () => ({ platform: "macos" }),
     exec: async (command, args, options) => { calls.push(command); if (command === "find") throw new Error("not installed"); return exec(command, args, options); } });
   const entries = Object.fromEntries((await directory(root, null)).map(({ name, dir }) => [name, dir]));
   assert.deepEqual(entries, { "file.txt": false, directory: true });
@@ -39,7 +40,7 @@ test("Files falls back to the shell listing when find cannot run", { skip: proce
 test("Files marks the entry past the cap as a folder when it is one", async (t) => {
   const root = await temporary(t);
   for (let i = 0; i < 600; i++) await mkdir(join(root, `dir-${i}`));
-  const { directory } = await load("kanso-panel/files.js", ["directory"], { exec, window: nativeWindow });
+  const { directory } = await loadDirectory({ exec, window: nativeWindow });
   const entries = await directory(root, null);
   assert.equal(entries.length, 501);
   assert.ok(entries.every((entry) => entry.dir));
@@ -83,7 +84,7 @@ test("Files virtual rows use list-level handlers for open, expand and context me
     } });
     return proxy;
   }
-  const { Files } = await load("kanso-panel/files.js", ["Files"], {
+  const { Files } = await loadFiles({
     div: element, svg: element, h_flex: element, v_flex: element,
     Scrollbar: { vertical: element }, theme: () => ({}), key: () => "fixture",
     isMarkdown: (path) => /\.md$/.test(path),

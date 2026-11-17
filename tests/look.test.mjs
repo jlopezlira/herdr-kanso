@@ -1,3 +1,4 @@
+import { loadLook, loadPanelKdb, loadShareImages } from "./mod-fixtures.mjs";
 import assert from "node:assert/strict";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { mkdir, readdir, readFile, rename, stat, unlink, writeFile } from "node:fs/promises";
@@ -6,7 +7,7 @@ import { join, posix } from "node:path";
 import { fileApi } from "../kanso/mods/kanso-panel/platform-files.js";
 import { paths } from "../kanso/mods/kanso-panel/platform-paths.js";
 import test from "node:test";
-import { databaseTimer, load, clone, context, singleUse, exec as run, nativeWindow, nativePlatform, until } from "./helpers.mjs";
+import { databaseTimer, load, clone, context, singleUse, exec as run, nativeWindow, nativePlatform, until, failure, success } from "./helpers.mjs";
 
 const dirs = [];
 process.on("exit", () => { for (const d of dirs) rmSync(d, { recursive: true, force: true }); });
@@ -113,23 +114,23 @@ async function panel({ screen = OUTPUT, files = ["/repo/tests/shot.png", "/repo/
     exec: async (cmd, args = [], options) => {
       calls.push([cmd, ...args]);
       if (options?.on) ons.push([cmd, options.on, ...args]);
-      if (options?.on && (cmd === "pwsh" || cmd === "powershell")) return { code: 127, stdout: "", stderr: "" };
+      if (options?.on && (cmd === "pwsh" || cmd === "powershell")) return failure("", 127);
       const name = cmd.startsWith("/usr/bin/") ? cmd.slice("/usr/bin/".length) : cmd;
       if (options?.on && cmd === "uname") return { code: 0, stdout: "Darwin\n" };
       if (options?.on && name === "stat") return { code: 0, stdout: world.statText };
       if (name === "stat") {
         const info = await stat(args.at(-1)).catch(() => null);
-        if (info) return { code: 0, stdout: `${info.size} ${Math.floor(info.mtimeMs / 1000)}\n`, stderr: "" };
+        if (info) return success(`${info.size} ${Math.floor(info.mtimeMs / 1000)}\n`);
       }
       if (cmd === "mv") {
         await rename(args.at(-2), args.at(-1));
-        return { code: 0, stdout: "", stderr: "" };
+        return success("");
       }
       if (options?.on && name === "base64") return { code: 0, stdout: "AQIDBA==\n" };
       if (name === "base64" && args[0] === "-D") {
         const text = await readFile(args[2], "utf8");
         await writeFile(args[4], Buffer.from(String(text).replace(/\s/g, ""), "base64"));
-        return { code: 0, stdout: "", stderr: "" };
+        return success("");
       }
       if (options?.on && cmd === "sh" && String(args[1]).includes("printf %s")) return { code: 0, stdout: "/home/light\n" };
       if (cmd === "sqlite3") return run(cmd, args, options);
@@ -151,8 +152,8 @@ async function panel({ screen = OUTPUT, files = ["/repo/tests/shot.png", "/repo/
       return cmd === "cp" ? copy(args) : { code: 0, stdout: "" };
     },
   };
-  const { Look } = await load("kanso-panel/look.js", ["Look"], host);
-  const { Kdb } = await load("kanso-panel/kdb.js", ["Kdb"], host);
+  const { Look } = await loadLook(host);
+  const { Kdb } = await loadPanelKdb(host);
   const { cx, drain } = context();
   cx.timer = { every() {}, after() {} };
   const look = new Look(new Kdb(databaseTimer));
@@ -398,8 +399,8 @@ test("Look draws a HEIC with sips or ImageMagick and a PDF's first page with Qui
     return { calls, host: { exec, window: () => ({ platform }) } };
   };
   const mac = run("macos"), linux = run("linux");
-  const onMac = await load("kanso-panel/share.js", ["toPng", "firstPage"], mac.host);
-  const onLinux = await load("kanso-panel/share.js", ["toPng", "firstPage"], linux.host);
+  const onMac = await loadShareImages(mac.host);
+  const onLinux = await loadShareImages(linux.host);
   assert.equal(await onMac.toPng("/r/a.heic", "/app/k.png"), true);
   assert.deepEqual(clone(mac.calls[0]), ["sips", "-s", "format", "png", "/r/a.heic", "--out", "/app/k.png"]);
   assert.equal(await onLinux.toPng("/r/a.heic", "/app/k.png"), true);

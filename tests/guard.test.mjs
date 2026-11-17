@@ -1,6 +1,7 @@
+import { loadMemory, loadStaleAgents, loadPorts } from "./mod-fixtures.mjs";
 import assert from "node:assert/strict";
 import test from "node:test";
-import { clone, load } from "./helpers.mjs";
+import { clone, load, success } from "./helpers.mjs";
 
 const model = () => load("kanso-guard/model.js", ["STALE_MS", "size", "span", "clock", "parseNow", "agentsMB", "agentMeta", "limitsNote", "freeSeries", "agentSparks", "sparkFor", "digestHistory"]);
 
@@ -120,11 +121,11 @@ test("Memory starts the guard detached for an action and reads its files again",
   const host = {
     appHome: () => "/app",
     readTextFile: async (path) => files[path] ?? null,
-    exec: async (command, args) => { calls.push([command, ...args]); return { code: 0, stdout: "", stderr: "" }; },
+    exec: async (command, args) => { calls.push([command, ...args]); return success(""); },
     layout: () => ({ id: "root", children: [{ id: "memory", type: "block", content: { mod: "kanso-guard" } }] }),
     nextCommand: async () => { throw new Error("no commands here"); },
   };
-  const { Memory } = await load("kanso-guard/main.js", ["Memory"], host);
+  const { Memory } = await loadMemory(host);
   const pending = [];
   const cx = {
     notify() {},
@@ -254,7 +255,7 @@ test("guard panel: agents grouped, estimate, batch progress", async () => {
 });
 
 test("guard panel: stale agents to close, oldest first, never the focused one", async () => {
-  const m = await load("kanso-guard/model.js", ["staleAgents"]);
+  const m = await loadStaleAgents();
   const agents = [
     { pid: 1, kind: "claude", status: "idle", idleMin: 5000, terminal: "t1" },
     { pid: 2, kind: "claude", status: "idle", idleMin: 9000, terminal: "t2" },
@@ -379,7 +380,7 @@ test("Ports stops a server through the guard, detached, and by itself without it
     Date: class extends Date { constructor(...a) { super(...(a.length ? a : [NOW])); } static now() { return NOW; } },
     appHome: () => "/app", home: () => "/h", theme: () => ({}), panes: () => [], terminals: () => [],
     readTextFile: async (path) => files[path] ?? null,
-    exec: async (command, args) => { calls.push([command, ...args]); return { code: 0, stdout: "", stderr: "" }; },
+    exec: async (command, args) => { calls.push([command, ...args]); return success(""); },
   };
   const { Ports, STOP_LOOP } = await load("kanso-panel/ports.js", ["Ports", "STOP_LOOP"], host);
   const pending = [], timers = [];
@@ -455,9 +456,9 @@ test("Memory reports a failed Turn on and ignores earlier install attempts", asy
 });
 
 test("Windows Turn on launches hidden and keeps the installer ancestry alive until capture", async () => {
-  const calls = [], { Memory } = await load("kanso-guard/main.js", ["Memory"], {
+  const calls = [], { Memory } = await loadMemory({
     window: () => ({ platform: "windows" }), appHome: () => "C:\\Herdr Home", readTextFile: async () => '{"node":"C:\\\\Node JS\\\\node.exe"}',
-    exec: async (command, args) => { calls.push([command, args]); return { code: 0, stdout: "", stderr: "" }; },
+    exec: async (command, args) => { calls.push([command, args]); return success(""); },
   });
   const pending = [], cx = { notify() {}, spawn: (fn) => pending.push(fn(cx)), timer: { after() {} } };
   const view = new Memory();
@@ -497,14 +498,14 @@ test("Memory hides the restart without an identified window and omits actions fo
   const agent = { ...data.agents[1], closeable: false, recyclable: false };
   view.agentRow({}, agent, 0, { limit: 900, action: false, reason: true });
   assert.ok(!ids.some((id) => /guard-(?:recycle|close)-/.test(id)));
-  const { staleAgents } = await load("kanso-guard/model.js", ["staleAgents"]);
+  const { staleAgents } = await loadStaleAgents();
   assert.equal(staleAgents([{ ...agent, idleMin: 9000 }]).length, 0);
 });
 
 test("Windows server rows retain the reason their working directory is unavailable", async () => {
-  const { Ports } = await load("kanso-panel/ports.js", ["Ports"], {
+  const { Ports } = await loadPorts({
     window: () => ({ platform: "windows" }), home: () => "C:\\Users\\JJ", appHome: () => "C:\\Herdr",
-    exec: async (_command, args) => ({ code: 0, stdout: args.at(-1).includes("Get-NetTCPConnection") ? '[{"pid":50,"port":3000}]' : '[{"pid":50,"ppid":7,"command":"node server.js","name":"node.exe"}]', stderr: "" }),
+    exec: async (_command, args) => (success(args.at(-1).includes("Get-NetTCPConnection") ? '[{"pid":50,"port":3000}]' : '[{"pid":50,"ppid":7,"command":"node server.js","name":"node.exe"}]')),
   });
   const view = new Ports();
   view.shells = async () => new Map([[7, "t1"]]);

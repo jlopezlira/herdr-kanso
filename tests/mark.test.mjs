@@ -1,7 +1,7 @@
 // The state mark: every status and size the Storybook draws, from the tokens, and nothing for any other status.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { load, chain, gpuiHost, numberArguments } from "./helpers.mjs";
+import { load, chain, gpuiHost, numberArguments, calls, one } from "./helpers.mjs";
 import { marks, markSizes } from "../stories/kit/pieces.js";
 
 const host = () => ({ ...gpuiHost(), svg: (path) => { const el = chain("svg"); el.calls.push(["svg", path]); return el; } });
@@ -9,13 +9,6 @@ const kit = async () => ({
   ...await load("kanso-panel/ui.js", ["tokens", "ICON", "ICON_ROW", "ICON_INLINE", "SPIN"], host()),
   ...await load("kanso-panel/ui-mark.js", ["mark", "MARK_SIZES"], host()),
 });
-
-const calls = (el, name) => el.calls.filter((call) => call[0] === name);
-const one = (el, name) => {
-  const found = calls(el, name);
-  assert.equal(found.length, 1, name);
-  return found[0][1];
-};
 
 const night = { foreground: "#d8d4cb", background: "#1b1b19", chrome: "#161615", working: "#c4b07e", blocked: "#ca938b", done: "#98ad8f", idle: "#a3a09a", dim: "#6b6862", muted: "#949086" };
 const ICONS = "mods/kanso-chrome/icons/";

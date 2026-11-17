@@ -1,4 +1,5 @@
 // A Markdown file in the side panel, edited where it reads: blocks that give
+import { loadMarkdownDoc } from "./mod-fixtures.mjs";
 // the file back byte for byte, tables as cells, links, and saving that never
 // overwrites a change made on disk meanwhile.
 import test from "node:test";
@@ -90,7 +91,7 @@ async function fixture(initial) {
     states.push(s); return s;
   };
   const blocks = await load("kanso-panel/blocks.js", ["parseBlocks", "joinBlocks", "headingOf", "headingLine", "parseTable", "tableLines"]);
-  const { MarkdownDoc } = await load("kanso-panel/doc.js", ["MarkdownDoc"], {
+  const { MarkdownDoc } = await loadMarkdownDoc({
     ...blocks,
     readTextFile: async () => disk.text,
     writeTextFile: async (_p, text, expected) => { if (expected !== disk.text) throw new Error("stale"); disk.text = text; return null; },
@@ -162,7 +163,7 @@ test("a change on disk while you edit is never overwritten: you choose", async (
 });
 
 test("a file on another computer can be edited", async () => {
-  const { MarkdownDoc } = await load("kanso-panel/doc.js", ["MarkdownDoc"]);
+  const { MarkdownDoc } = await loadMarkdownDoc();
   const doc = new MarkdownDoc("/x.md", "server");
   doc.saved = doc.text = "x";
   assert.equal(doc.canEdit, true);
@@ -219,7 +220,7 @@ test("a file over 1 MiB stays a view and a remote note does not save while you t
 
 test("an edit you leave comes back when you open the file again", async () => {
   const disk = { text: "One.\n" };
-  const { MarkdownDoc } = await load("kanso-panel/doc.js", ["MarkdownDoc"], {
+  const { MarkdownDoc } = await loadMarkdownDoc({
     readTextFile: async () => disk.text,
     writeTextFile: async (_p, text, expected) => { if (expected !== disk.text) throw new Error("stale"); disk.text = text; return null; },
     TextareaState: { new: (o) => { let v = o?.value ?? ""; const on = {}; return { value: () => v, set_value: (x) => { v = x; }, on: (n, f) => { on[n] = f; }, type(x, cx) { v = x; on.change?.({}, cx); }, set_auto_grow() {}, focus() {}, release() {} }; } },

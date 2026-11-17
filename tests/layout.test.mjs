@@ -1,6 +1,7 @@
+import { loadSpaces, loadStrip, loadTabs, loadTabPanels } from "./mod-fixtures.mjs";
 import assert from "node:assert/strict";
 import test from "node:test";
-import { clone, context, load } from "./helpers.mjs";
+import { clone, load } from "./helpers.mjs";
 
 async function layoutFixture() {
   const nodes = [{ id: "strip-col-a", type: "column", size: { weight: 1 }, children: [
@@ -18,7 +19,7 @@ async function layoutFixture() {
     layout: () => clone(tree), window: () => ({ platform: "macos" }), theme: () => ({ accent: "#000000", background: "#ffffff" }),
     run: (command, args) => { if (command === "layout.set") writes.push(clone(args.layout)); },
   };
-  const { Strip } = await load("kanso-strip/main.js", ["Strip"], host);
+  const { Strip } = await loadStrip(host);
   const strip = new Strip(); strip.sets = [];
   const flush = () => { while (writes.length) tree = writes.shift(); };
   strip.apply(clone(nodes)); flush();
@@ -100,7 +101,7 @@ for (const [file, name, write] of writers) {
 
 test("kanso-strip/main.js never writes another layout's tree", async () => {
   const f = foreignLayout();
-  const { Strip } = await load("kanso-strip/main.js", ["Strip"], f.host);
+  const { Strip } = await loadStrip(f.host);
   const strip = new Strip(); strip.sets = [];
   const nodes = [{ id: "strip-col-a", type: "column", size: { weight: 1 }, children: [
     { id: "strip-a", type: "block", size: { weight: 1 }, content: { terminal: "a" } },
@@ -132,7 +133,7 @@ for (const file of helpers) {
 // Herdr draws a resize handle between any two nodes of the row, so a pane has a left handle only when a node stands before it.
 test("The first pane has no left resize handle beside the sidebar's edge, and every pane after it keeps one", async () => {
   const f = await layoutFixture();
-  const { Strip } = await load("kanso-strip/main.js", ["Strip"], f.host);
+  const { Strip } = await loadStrip(f.host);
   const strip = new Strip();
   strip.row = (st) => st.cols.map((_c, ci) => ({ ci }));
   strip.shownCols = (st) => st.cols.map((_c, ci) => ci);
@@ -160,7 +161,7 @@ test("kanso-tabs opens and closes a custom panel from kanso.panels through commi
   f.host.setShared("kanso.panels", [
     { id: "workflow", label: "Workflow", icon: "mods/herdr-workflow/icon.svg", mod: "herdr-workflow", props: { tab: "state" } },
   ]);
-  const { Tabs } = await load("kanso-tabs/main.js", ["Tabs"], f.host);
+  const { Tabs } = await loadTabs(f.host);
   const tabs = new Tabs();
   tabs.mount("workflow"); f.flush();
   const panelBody = () => f.body().children.find((node) => node.id === "panel-body");
@@ -175,7 +176,7 @@ test("kanso-tabs opens and closes a custom panel from kanso.panels through commi
 
 test("kanso-tabs.look opens Look on the path its name carries, since Herdr gives a mod command no arguments", async () => {
   const f = await layoutFixture();
-  const { Tabs } = await load("kanso-tabs/main.js", ["Tabs"], f.host);
+  const { Tabs } = await loadTabs(f.host);
   const tabs = new Tabs();
   const shown = () => f.body().children.find((node) => node.id === "panel-body").children;
   tabs.command("look /repo/shots/home page.png"); f.flush();
@@ -214,7 +215,7 @@ test("kanso-tabs shows its panels in the order you drag them, without the ones y
 
 test("kanso-tabs.memory opens Memory and a second call leaves it open", async () => {
   const f = await layoutFixture();
-  const { Tabs } = await load("kanso-tabs/main.js", ["Tabs"], f.host);
+  const { Tabs } = await loadTabs(f.host);
   const tabs = new Tabs();
   const panelBody = () => f.body().children.find((node) => node.id === "panel-body");
   tabs.command("memory"); f.flush();
@@ -226,7 +227,7 @@ test("kanso-tabs.memory opens Memory and a second call leaves it open", async ()
 test("kanso-tabs.sim toggles the Simulator panel", async () => {
   const f = await layoutFixture();
   f.host.setShared("kanso.sim.tools", { ios: true });
-  const { Tabs } = await load("kanso-tabs/main.js", ["Tabs"], f.host);
+  const { Tabs } = await loadTabs(f.host);
   const tabs = new Tabs();
   const panelBody = () => f.body().children.find((node) => node.id === "panel-body");
   tabs.command("sim"); f.flush();
@@ -237,7 +238,7 @@ test("kanso-tabs.sim toggles the Simulator panel", async () => {
 
 test("Simulator is absent without native tools, present with either, and hidden like any panel", async () => {
   const f = await layoutFixture();
-  const { Tabs, panelList } = await load("kanso-tabs/main.js", ["Tabs", "panelList"], f.host);
+  const { Tabs, panelList } = await loadTabPanels(f.host);
   const tabs = new Tabs();
   const listed = () => panelList().find((panel) => panel.id === "sim");
   assert.equal(listed(), undefined);
@@ -255,7 +256,7 @@ test("Simulator is absent without native tools, present with either, and hidden 
 });
 
 test("kanso-tabs closes a panel Kanso no longer has (Specs)", async () => {
-  const { Tabs } = await load("kanso-tabs/main.js", ["Tabs"], { shared: () => undefined });
+  const { Tabs } = await loadTabs({ shared: () => undefined });
   const tabs = new Tabs();
   const mounted = [];
   tabs.mount = (id) => mounted.push(id);
@@ -271,7 +272,7 @@ test("kanso-tabs closes a panel Kanso no longer has (Specs)", async () => {
 // Parse a single PowerShell literal independently of the production escaper.
 
 test("kanso-tabs remounts a panel kept from the separate token-spend mod as Kanso's Spend", async () => {
-  const { Tabs } = await load("kanso-tabs/main.js", ["Tabs"], { shared: () => undefined });
+  const { Tabs } = await loadTabs({ shared: () => undefined });
   const tabs = new Tabs();
   const mounted = [];
   tabs.mount = (id) => mounted.push(id);
@@ -302,7 +303,7 @@ test("kanso-spaces passes an explicit machine to space.new for local, remote, an
     { id: "sp-local", name: "local", folder: "/home", machine: null, active: activeMachine === null, tabs: [] },
     { id: "odin/sp1", name: "remote", folder: "/srv", machine: "odin", active: activeMachine === "odin", tabs: [] },
   ];
-  const { Spaces } = await load("kanso-spaces/main.js", ["Spaces"], {
+  const { Spaces } = await loadSpaces({
     div: node, svg: node, image: node, h_flex: node, v_flex: node,
     Popover: { new: node }, Toggle: { new: node }, Button: { new: (id) => { const el = node(); return id ? el.id(id) : el; } },
     ORDERS: { updated: "Updated" }, DEFAULT_ORDER: "updated", NAME_LABEL: "kanso.name", PIN_LABEL: "kanso.pin",
@@ -347,7 +348,7 @@ test("kanso-spaces passes an explicit machine to space.new for local, remote, an
 
 test("an agent moved to another project shows there, and only there, whatever space its terminal is in", async () => {
   const node = () => new Proxy(() => {}, { get: (_t, k) => (k === "then" ? undefined : () => node()), apply: () => node() });
-  const { Spaces } = await load("kanso-spaces/main.js", ["Spaces"], {
+  const { Spaces } = await loadSpaces({
     div: node, svg: node, image: node, h_flex: node, v_flex: node, Popover: { new: node },
     orderSessions: (l) => l, terminals: () => [], shared: () => null, setShared: () => {}, spaces: () => [], panes: () => [], agents: () => [],
   });
@@ -363,7 +364,7 @@ test("an agent moved to another project shows there, and only there, whatever sp
 
 test("the latest project choice wins, whichever key it was made under, and a clearing is a choice too", async () => {
   const node = () => new Proxy(() => {}, { get: (_t, k) => (k === "then" ? undefined : () => node()), apply: () => node() });
-  const { Spaces } = await load("kanso-spaces/main.js", ["Spaces"], {
+  const { Spaces } = await loadSpaces({
     div: node, svg: node, image: node, h_flex: node, v_flex: node, Popover: { new: node },
     orderSessions: (l) => l, terminals: () => [], shared: () => null, setShared: () => {}, spaces: () => [], panes: () => [], agents: () => [],
   });
@@ -421,7 +422,7 @@ test("A layout write keeps the sidebar shown", async () => {
 
 test("The tab bar brings a hidden sidebar back once, and again after the next hiding", async () => {
   const folds = [];
-  const { Tabs } = await load("kanso-tabs/main.js", ["Tabs"], { setShared: (key, value) => folds.push([key, value]), shared: () => null, layout: () => null, window: () => ({ platform: "macos" }), run: () => {} });
+  const { Tabs } = await loadTabs({ setShared: (key, value) => folds.push([key, value]), shared: () => null, layout: () => null, window: () => ({ platform: "macos" }), run: () => {} });
   const tabs = new Tabs();
   const hidden = kansoTree({ hidden: true }), shown = kansoTree({});
   for (const tree of [hidden, hidden, shown, hidden]) tabs.keepRail(tree);

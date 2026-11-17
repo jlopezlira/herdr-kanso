@@ -1,7 +1,8 @@
 // Ports on every connected computer: each listed under its own, acted on there, and one out of reach never holds up this one.
+import { loadPorts } from "./mod-fixtures.mjs";
 import assert from "node:assert/strict";
 import test from "node:test";
-import { clone, load } from "./helpers.mjs";
+import { clone, success, failure } from "./helpers.mjs";
 
 // Fake elements that keep their children, so a test reads the texts in the order the panel shows them.
 const NODE = Symbol("node");
@@ -27,14 +28,14 @@ const COMPUTERS = {
   light: { home: "/home/jj", listen: "p200\ncnode\nn*:5173\n", cwd: "p200\nfcwd\nn/home/jj/site\n", ps: "  200     1   02:00 node vite\n" },
 };
 
-const ok = (stdout) => ({ code: 0, stdout, stderr: "" });
+const ok = (stdout) => (success(stdout));
 
 // `answer(command, args, on)` may answer for a computer first; `clock.t` is the panel's time.
 function computers({ unreachable = null, held = null, answer = () => null, names = ["light"], terms = [] } = {}) {
   const calls = [], ids = [], opened = [], pending = [], timers = [], clock = { t: 1_800_000_000_000 }, off = new Set([unreachable].filter(Boolean));
   const unix = (command, args, on) => {
     const m = COMPUTERS[on ?? ""];
-    if (command === "pwsh" || command === "powershell") return { code: 127, stdout: "", stderr: "not found" };
+    if (command === "pwsh" || command === "powershell") return failure("not found", 127);
     if (command === "uname") return ok("Darwin\n");
     if (command === "sh" && args.some((a) => a.includes("$HOME"))) return ok(m.home);
     if (command === "lsof") return ok(args.includes("cwd") ? m.cwd : m.listen);
@@ -46,7 +47,7 @@ function computers({ unreachable = null, held = null, answer = () => null, names
     appHome: () => "/app", home: () => "/h", theme: () => ({}), readTextFile: async () => null, terminals: () => terms,
     machines: () => [{ name: null, layout: "ready" }, ...names.map((name) => ({ name, layout: "ready" }))],
     shared: (key) => (key === "kanso.alias" ? { "": "dark" } : undefined),
-    hc: async (args) => (args[0] === "machine" ? ok(JSON.stringify({ machines: [{ name: "light", target: "jj@light.local", state: "connected" }] })) : { code: 1, stdout: "", stderr: "" }),
+    hc: async (args) => (args[0] === "machine" ? ok(JSON.stringify({ machines: [{ name: "light", target: "jj@light.local", state: "connected" }] })) : failure("")),
     exec: async (command, args, options = {}) => {
       calls.push([command, ...args, options.on ?? null]);
       if (options.on && off.has(options.on)) throw new Error("light is unreachable");
@@ -68,12 +69,21 @@ function computers({ unreachable = null, held = null, answer = () => null, names
   return { host, cx, calls, ids, opened, pending, drain, clock, on, off, wait, timers };
 }
 
-test("Ports lists this computer's servers and another computer's, each under its computer's name, this one first", async () => {
-  const f = computers();
-  const { Ports } = await load("kanso-panel/ports.js", ["Ports"], f.host);
+const portsView = async (f) => {
+  const { Ports } = await loadPorts(f.host);
   const view = new Ports();
   view.init(f.cx);
+  return view;
+};
+const listedPorts = async (f) => {
+  const view = await portsView(f);
   await f.drain();
+  return view;
+};
+
+test("Ports lists this computer's servers and another computer's, each under its computer's name, this one first", async () => {
+  const f = computers();
+  const view = await listedPorts(f);
   assert.deepEqual(clone(view.list.map((s) => [s.pid, s.ports, s.machine ?? null])), [[100, [3000], null]]);
   assert.deepEqual(clone(view.remote.light.list.map((s) => [s.pid, s.ports, s.machine, s.cwd])), [[200, [5173], "light", "/home/jj/site"]]);
   assert.ok(f.calls.some((c) => c[0] === "lsof" && c.at(-1) === "light"), "light's own listening sockets are asked of light");
@@ -87,10 +97,7 @@ test("Ports lists this computer's servers and another computer's, each under its
 
 test("Stop and Open on another computer's server act on that computer", async () => {
   const f = computers();
-  const { Ports } = await load("kanso-panel/ports.js", ["Ports"], f.host);
-  const view = new Ports();
-  view.init(f.cx);
-  await f.drain();
+  const view = await listedPorts(f);
   const row = view.remote.light.list[0];
   f.calls.length = 0;
   view.stop([row], f.cx);
@@ -107,7 +114,7 @@ test("A computer out of reach is one quiet line and this computer's list does no
   let release;
   const held = new Promise((resolve) => { release = resolve; });
   const slow = computers({ held });
-  const { Ports } = await load("kanso-panel/ports.js", ["Ports"], slow.host);
+  const { Ports } = await loadPorts(slow.host);
   const waiting = new Ports();
   waiting.init(slow.cx);
   const [remote, local] = slow.pending.splice(0);
@@ -117,7 +124,7 @@ test("A computer out of reach is one quiet line and this computer's list does no
   await remote;
 
   const f = computers({ unreachable: "light" });
-  const loaded = await load("kanso-panel/ports.js", ["Ports"], f.host);
+  const loaded = await loadPorts(f.host);
   const view = new loaded.Ports();
   view.init(f.cx);
   await f.drain();
@@ -132,10 +139,7 @@ test("A computer out of reach is one quiet line and this computer's list does no
 
 test("Another computer is read once a minute at rest, at once when asked", async () => {
   const f = computers();
-  const { Ports } = await load("kanso-panel/ports.js", ["Ports"], f.host);
-  const view = new Ports();
-  view.init(f.cx);
-  await f.drain();
+  const view = await listedPorts(f);
   const asked = () => f.on("light").filter((c) => c[0] === "lsof" && c.includes("-iTCP")).length;
   assert.equal(asked(), 1);
   view.refresh(f.cx);
@@ -149,10 +153,7 @@ test("Another computer is read once a minute at rest, at once when asked", async
 test("At rest another computer costs three calls a minute: its terminals' pids and its platform are asked once", async () => {
   const f = computers({ terms: [{ address: "light/t1", state: "live" }, { address: "t9", state: "live", pid: 1 }],
     answer: (command, args) => (command === "hc" ? ok(JSON.stringify({ pid: 7 })) : null) });
-  const { Ports } = await load("kanso-panel/ports.js", ["Ports"], f.host);
-  const view = new Ports();
-  view.init(f.cx);
-  await f.drain();
+  const view = await listedPorts(f);
   const hcGets = f.calls.filter((c) => c[0] === "hc");
   assert.deepEqual(clone(hcGets), [["hc", "get", "light/t1", "--json", null]], "light's terminal is asked once, this computer's already has its pid");
   assert.equal(f.on("light").filter((c) => ["pwsh", "powershell", "uname"].includes(c[0])).length, 3, "one probe: pwsh, powershell, uname");
@@ -168,7 +169,7 @@ test("Each Herdr command about another computer's terminal gives up after the re
   const seen = [];
   const f = computers({ terms: [{ address: "light/t1", state: "live" }],
     answer: (command, _args, _on, options) => { if (command === "hc") { seen.push(options.timeout); return ok("{}"); } return null; } });
-  const { Ports } = await load("kanso-panel/ports.js", ["Ports"], f.host);
+  const { Ports } = await loadPorts(f.host);
   new Ports().init(f.cx);
   await f.drain();
   assert.deepEqual(seen, [12000]);
@@ -176,10 +177,7 @@ test("Each Herdr command about another computer's terminal gives up after the re
 
 test("A computer that keeps failing is asked after 1, 2, 4 minutes, up to 10; Read again asks at once", async () => {
   const f = computers({ unreachable: "light" });
-  const { Ports } = await load("kanso-panel/ports.js", ["Ports"], f.host);
-  const view = new Ports();
-  view.init(f.cx);
-  await f.drain();
+  const view = await listedPorts(f);
   const tries = () => f.on("light").filter((c) => c[0] === "pwsh").length;
   const tick = async (ms) => { f.clock.t += ms; view.refresh(f.cx); await f.drain(); return tries(); };
   assert.equal(tries(), 1);
@@ -202,9 +200,7 @@ test("While one read of a computer runs, no second one starts", async () => {
   let release;
   const held = new Promise((resolve) => { release = resolve; });
   const f = computers({ held });
-  const { Ports } = await load("kanso-panel/ports.js", ["Ports"], f.host);
-  const view = new Ports();
-  view.init(f.cx);
+  const view = await portsView(f);
   view.refresh(f.cx, { now: true });
   view.refresh(f.cx, { now: true });
   release();
@@ -215,10 +211,7 @@ test("While one read of a computer runs, no second one starts", async () => {
 test("Stop on another computer leaves a pid alone when it is no longer the server its row showed", async () => {
   let recycled = false;
   const f = computers({ answer: (command, _args, on) => (on === "light" && command === "ps" && recycled ? ok("  200     1   00:03 node other\n") : null) });
-  const { Ports } = await load("kanso-panel/ports.js", ["Ports"], f.host);
-  const view = new Ports();
-  view.init(f.cx);
-  await f.drain();
+  const view = await listedPorts(f);
   const row = view.remote.light.list[0];
   recycled = true;
   f.clock.t += 40_000;
@@ -242,10 +235,7 @@ test("A Windows computer lists its terminals' servers and stops them with taskki
       if (command === "pwsh" && script.includes("$HOME")) return ok("C:\\Users\\jj");
       return ok("");
     } });
-  const { Ports } = await load("kanso-panel/ports.js", ["Ports"], f.host);
-  const view = new Ports();
-  view.init(f.cx);
-  await f.drain();
+  const view = await listedPorts(f);
   assert.deepEqual(clone(view.remote.win.list.map((s) => [s.pid, s.ports, s.owner, s.machine])), [[300, [8080], "win/t2", "win"]], "only the one its terminal runs");
   view.stop([view.remote.win.list[0]], f.cx);
   await f.drain();
@@ -256,13 +246,10 @@ test("A Linux computer without lsof says so on its line instead of unreachable",
   const f = computers({ answer: (command, _args, on) => {
     if (on !== "light") return null;
     if (command === "uname") return ok("Linux\n");
-    if (command === "lsof") return { code: 127, stdout: "", stderr: "sh: 1: lsof: not found" };
+    if (command === "lsof") return failure("sh: 1: lsof: not found", 127);
     return null;
   } });
-  const { Ports } = await load("kanso-panel/ports.js", ["Ports"], f.host);
-  const view = new Ports();
-  view.init(f.cx);
-  await f.drain();
+  const view = await listedPorts(f);
   const texts = textsOf(view.render(f.cx));
   assert.ok(texts.includes("light · lsof is not installed"));
   assert.ok(texts.includes(":3000"));
@@ -270,10 +257,7 @@ test("A Linux computer without lsof says so on its line instead of unreachable",
 
 test("Stop pressed while another computer is being read waits for that read, then stops", async () => {
   const f = computers();
-  const { Ports } = await load("kanso-panel/ports.js", ["Ports"], f.host);
-  const view = new Ports();
-  view.init(f.cx);
-  await f.drain();
+  const view = await listedPorts(f);
   const row = view.remote.light.list[0];
   view.remote = { light: { ...view.remote.light, reading: f.clock.t } };
   view.stop([row], f.cx);
@@ -289,10 +273,7 @@ test("Stop pressed while another computer is being read waits for that read, the
 
 test("Stop on a computer that does not answer says why in one line and keeps its rows", async () => {
   const f = computers();
-  const { Ports } = await load("kanso-panel/ports.js", ["Ports"], f.host);
-  const view = new Ports();
-  view.init(f.cx);
-  await f.drain();
+  const view = await listedPorts(f);
   f.off.add("light");
   view.stop([view.remote.light.list[0]], f.cx);
   await f.drain();
@@ -305,10 +286,7 @@ test("Stop on a computer that does not answer says why in one line and keeps its
 
 test("Stop pressed while a read never ends gives up after a while and says so", async () => {
   const f = computers();
-  const { Ports } = await load("kanso-panel/ports.js", ["Ports"], f.host);
-  const view = new Ports();
-  view.init(f.cx);
-  await f.drain();
+  const view = await listedPorts(f);
   const row = view.remote.light.list[0];
   view.remote = { light: { ...view.remote.light, reading: f.clock.t } };
   view.stop([row], f.cx);
@@ -320,10 +298,7 @@ test("Stop pressed while a read never ends gives up after a while and says so", 
 
 test("A terminal Herdr gives no pid for is not asked again until it goes", async () => {
   const f = computers({ terms: [{ address: "light/t1", state: "live" }], answer: (command) => (command === "hc" ? ok("{}") : null) });
-  const { Ports } = await load("kanso-panel/ports.js", ["Ports"], f.host);
-  const view = new Ports();
-  view.init(f.cx);
-  await f.drain();
+  const view = await listedPorts(f);
   f.clock.t += 60_000;
   view.refresh(f.cx);
   await f.drain();
@@ -333,10 +308,7 @@ test("A terminal Herdr gives no pid for is not asked again until it goes", async
 test("A computer's not-stopped line shows even with no rows left and goes with its next good read", async () => {
   let gone = false;
   const f = computers({ answer: (command, args, on) => (on === "light" && gone && command === "lsof" && args.includes("-iTCP") ? ok("") : null) });
-  const { Ports } = await load("kanso-panel/ports.js", ["Ports"], f.host);
-  const view = new Ports();
-  view.init(f.cx);
-  await f.drain();
+  const view = await listedPorts(f);
   gone = true;
   view.stop([view.remote.light.list[0]], f.cx);
   await f.drain();

@@ -1,10 +1,11 @@
+import { loadTabs, loadSimulator, loadSimulatorApi } from "./mod-fixtures.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile, readdir } from "node:fs/promises";
-import { load, clone, singleUse, tape } from "./helpers.mjs";
+import { load, clone, singleUse, tape, success, failure } from "./helpers.mjs";
 import * as model from "../kanso/mods/kanso-sim/model.js";
 
-const good = (stdout = "") => ({ code: 0, stdout, stderr: "" });
+const good = (stdout = "") => (success(stdout));
 const DEVELOPER = "/Applications/Xcode Test.app/Contents/Developer";
 const SIMCTL = `${DEVELOPER}/usr/bin/simctl`;
 const apple = { devices: { "com.apple.CoreSimulator.SimRuntime.iOS-18-0": [
@@ -163,7 +164,7 @@ test("Tab availability probes once per panel-list rebuild and a deadline ignores
   const store = {}, commands = [], timers = [], pending = [];
   let settle;
   const answer = new Promise((resolve) => { settle = resolve; });
-  const { Tabs } = await load("kanso-tabs/main.js", ["Tabs"], {
+  const { Tabs } = await loadTabs({
     shared: (key) => store[key], setShared: (key, value) => { store[key] = value; }, home: () => "/home/me",
     window: () => ({ platform: "macos" }), exists: async (path) => path === SIMCTL,
     exec: async (cmd) => { commands.push(cmd); return cmd === "xcode-select" ? answer : good("\n\n\n"); },
@@ -193,7 +194,7 @@ test("SDK folders follow environment precedence and platform defaults", async ()
 test("Tool discovery ignores iOS away from macOS and finds an SDK with adb", async () => {
   const commands = [];
   const run = async (cmd, args) => { commands.push([cmd, args]); return good(cmd === "xcode-select" ? DEVELOPER : "/missing\n/sdk\n\n"); };
-  const { simulatorApi } = await load("kanso-panel/platform-simulator.js", ["simulatorApi"]);
+  const { simulatorApi } = await loadSimulatorApi();
   const present = async (path) => path === "/sdk/platform-tools/adb";
   const tools = await simulatorApi("linux", run, present).probe("/home/me");
   assert.deepEqual(clone(tools), { ios: null, adb: "/sdk/platform-tools/adb", emulator: null });
@@ -204,8 +205,8 @@ test("Tool discovery ignores iOS away from macOS and finds an SDK with adb", asy
 });
 
 test("A Mac without Xcode or simctl has no iOS and never invokes the install launcher", async () => {
-  const { simulatorApi } = await load("kanso-panel/platform-simulator.js", ["simulatorApi"]);
-  for (const selected of [{ code: 1, stdout: "", stderr: "No developer directory" }, good("/Library/Developer/CommandLineTools\n")]) {
+  const { simulatorApi } = await loadSimulatorApi();
+  for (const selected of [failure("No developer directory"), good("/Library/Developer/CommandLineTools\n")]) {
     const commands = [];
     const run = async (cmd, args) => { commands.push([cmd, args]); return cmd === "xcode-select" ? selected : good("\n\n\n"); };
     const tools = await simulatorApi("macos", run, async () => false).probe("/home/me");
@@ -232,7 +233,7 @@ test("iOS listing, start and capture execute the discovered simctl directly", as
 test("Android capture writes binary output through the platform command service", async () => {
   const commands = [];
   const run = async (...args) => { commands.push(args); return good(); };
-  const { simulatorApi } = await load("kanso-panel/platform-simulator.js", ["simulatorApi"]);
+  const { simulatorApi } = await loadSimulatorApi();
   await simulatorApi("linux", run).capture("/sdk with space/adb", "usb", "/data/frame.png");
   const [cmd, args, options] = commands[0];
   assert.equal(cmd, "sh"); assert.match(args[1], /exec-out screencap -p/);
@@ -246,7 +247,7 @@ test("Android capture writes binary output through the platform command service"
 
 test("Emulator startup detaches the SDK's process on every platform", async () => {
   const commands = [];
-  const { simulatorApi } = await load("kanso-panel/platform-simulator.js", ["simulatorApi"]);
+  const { simulatorApi } = await loadSimulatorApi();
   const run = async (...args) => { commands.push(args); return good(); };
   await simulatorApi("macos", run).start("/sdk/emulator", "Pixel");
   assert.match(commands[0][1][1], /nohup.*&$/);
@@ -294,7 +295,7 @@ async function viewFixture({ active = true, hidden = false, capture, deviceRead,
     if (cmd === "emulator") return good("Pixel\n");
     return good();
   };
-  const { Simulator } = await load("kanso-sim/main.js", ["Simulator"], {
+  const { Simulator } = await loadSimulator({
     ...ui, Input: ui.Input ?? { new: ui.div }, image: ui.div, exec: run, home: () => "/home/me", appHome: () => "/app", theme: () => ({}), spaces: () => [],
     window: () => ({ platform: "linux", active: state.active }), layout: () => ({ id: "panel", hidden: state.hidden, children: [{ id: "sim" }] }),
     shared: (key) => store[key], setShared: (key, value) => { store[key] = value; },

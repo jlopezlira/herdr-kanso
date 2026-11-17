@@ -1,4 +1,5 @@
 // The switch: one size, the knob's end, and the rows that keep it.
+import { loadSettings, loadTokenSpend } from "./mod-fixtures.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { load, chain, gpuiHost as host } from "./helpers.mjs";
@@ -147,7 +148,7 @@ test("Settings and Spend keep each switch on its row and flip the same way", asy
     home: () => "/tmp",
     InputState: { new: () => ({ value() { return ""; }, on() {} }) },
   };
-  const { Settings } = await load("kanso-settings/main.js", ["Settings"], desk);
+  const { Settings } = await loadSettings(desk);
   const settings = new Settings();
   settings.init({}, { focus_handle() { return { focus() {} }; }, spawn() {}, notify() {} });
   settings.news = { entries: [], error: null, from: null };
@@ -180,7 +181,7 @@ test("Settings and Spend keep each switch on its row and flip the same way", asy
   assert.equal(JSON.stringify(written.at(-1)), JSON.stringify(["kanso.update", { autoCheck: false }]));
   assert.ok(find(news, "check-kanso-update"));
 
-  const { TokenSpend } = await load("kanso-spend/main.js", ["TokenSpend"], desk);
+  const { TokenSpend } = await loadTokenSpend(desk);
   const spend = new TokenSpend();
   spend.settings = { sources: [{ id: "pi", label: "Pi", enabled: true, roots: "~/.pi" }], pricesPath: "/tmp/prices.json" };
   spend.planInputs = [];

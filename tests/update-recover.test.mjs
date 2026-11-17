@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { context, until } from "./helpers.mjs";
-import { test, fixture, staged, pending, holder, took, version, updated, stages, killed, chromeIn } from "./update-harness.mjs";
+import { until } from "./helpers.mjs";
+import { test, fixture, staged, pending, holder, took, version, updated, stages, killed, chromeIn, updateContext } from "./update-harness.mjs";
 
 test("A window that starts while another recovers, which then dies, recovers itself", async (t) => {
   const f = await fixture(t);
@@ -11,8 +11,7 @@ test("A window that starts while another recovers, which then dies, recovers its
   const other = await holder(t, f);
   took(other, "the other recoverer holds the lock");
   const w = await f.window(); // no install of its own to follow
-  const { cx, drain } = context();
-  cx.timer = { every() {} };
+  const { cx, drain } = updateContext();
   w.updater.start(cx);
   await new Promise((r) => setTimeout(r, 300));
   assert.equal(await version(f.home), "1.1.0", "left alone while another holds the lock");

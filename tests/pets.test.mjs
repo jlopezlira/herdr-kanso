@@ -1,4 +1,5 @@
 // The dōjō's pets: Codex Pets read from ~/.codex/pets, and installed from codex-pets.net when chosen.
+import { loadHelp } from "./mod-fixtures.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { mkdir, writeFile, readFile, stat } from "node:fs/promises";
@@ -152,7 +153,7 @@ test("kansō help's dōjō page shows your pet, and every pet to choose from the
   const ui = singleUse(), images = [];
   const image = (path) => { images.push(path); return ui.div(); };
   const { petOf } = await pets();
-  const { Help } = await load("kanso-help/main.js", ["Help"], {
+  const { Help } = await loadHelp({
     ...ui, image, exec, appHome: () => "/app", home: () => "/home", keys: () => ({}), run: () => {}, openOverlay: () => {},
     theme: () => ({ foreground: "#fff", accent: "#f80", dim: "#666", muted: "#888", border: "#333" }),
     props: () => ({ overlay: "ov", page: "dojo" }), closeOverlay: () => {},

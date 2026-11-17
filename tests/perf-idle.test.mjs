@@ -1,7 +1,7 @@
 // Idle budgets: timers that used to redraw or read when nothing had changed.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { databaseTimer, temporary, until } from "./helpers.mjs";
+import { databaseTimer, temporary, until, success } from "./helpers.mjs";
 import { fixture, loadMod } from "./perf-harness.mjs";
 
 const gitOf = (f) => f.state.processes.filter((p) => p.command === "git");
@@ -86,8 +86,8 @@ function armLook(f) {
   f.state.bytes = 40;
   f.state.mtime = 1_700_000_000;
   f.host.exec = async (command, args = [], options) => {
-    if (command === "stat" || command === "/usr/bin/stat") return { code: 0, stdout: `${f.state.bytes} ${f.state.mtime}\n`, stderr: "" };
-    if (command === "ps" && args[0] === "-o") return { code: 0, stdout: "00:01\n", stderr: "" };
+    if (command === "stat" || command === "/usr/bin/stat") return success(`${f.state.bytes} ${f.state.mtime}\n`);
+    if (command === "ps" && args[0] === "-o") return success("00:01\n");
     return exec(command, args, options);
   };
   f.host.readTextFile = async (file) => String(file).includes(".claude/sessions/200.json")

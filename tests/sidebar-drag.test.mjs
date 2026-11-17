@@ -1,7 +1,8 @@
 // Dragging a project row in the sidebar: where it shows it lands, and where it moves.
+import { loadSpaces } from "./mod-fixtures.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { load, clone } from "./helpers.mjs";
+import { clone } from "./helpers.mjs";
 
 const theme = { foreground: "#fff", muted: "#888", dim: "#666", blocked: "#c44", input: "#222", accent: "#09f", chrome: "#111", hover: "#222", ansi2: "#0f0", border: "#333", popover: "#111", selected: "#222" };
 
@@ -31,7 +32,7 @@ const space = (id, extra = {}) => ({ id, name: id, folder: `/Users/me/${id}`, ma
 async function draw(list, extra = {}) {
   const { node, handlers, lines, clear } = recorder();
   const runs = [];
-  const { Spaces } = await load("kanso-spaces/main.js", ["Spaces"], {
+  const { Spaces } = await loadSpaces({
     div: node, svg: node, image: node, h_flex: node, v_flex: node, Button: { new: node }, Popover: { new: node },
     theme: () => theme, shared: () => null, setShared: () => {}, spaces: () => list, panes: () => [], agents: () => [], terminals: () => [], machines: () => [{ name: null, layout: "ready" }, { name: "m2", layout: "ready" }],
     run: (cmd, args) => runs.push([cmd, args]), home: () => "/Users/me", openOverlay: () => {}, props: () => ({}),

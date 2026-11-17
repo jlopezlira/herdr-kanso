@@ -1,11 +1,12 @@
 // Each computer keeps its own spend ledger. Sync only adds the others.
+import { loadTokenSpend } from "./mod-fixtures.mjs";
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { copyFile, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 import { promisify } from "node:util";
-import { load, temporary } from "./helpers.mjs";
+import { temporary } from "./helpers.mjs";
 
 const runFile = promisify(execFile);
 const { exchange } = await import("../kanso/mods/kanso-spend/sync-probe.mjs");
@@ -304,7 +305,7 @@ test("Paths are built with the other computer's path API", async () => {
 
 test("Spend exchanges at once when the sidebar changes Sync, and not on other renders", async () => {
   let kick = 1;
-  const { TokenSpend } = await load("kanso-spend/main.js", ["TokenSpend"], { shared: (key) => (key === "kanso.sync.kick" ? kick : null) });
+  const { TokenSpend } = await loadTokenSpend({ shared: (key) => (key === "kanso.sync.kick" ? kick : null) });
   const view = new TokenSpend();
   const forced = [];
   view.syncKick = kick;

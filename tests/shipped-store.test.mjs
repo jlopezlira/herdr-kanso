@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { databaseTimer, load, exec, temporary, clone, nativeWindow } from "./helpers.mjs";
+import { databaseTimer, load, exec, temporary, clone, nativeWindow, success } from "./helpers.mjs";
 
 const names = ["Store", "repoName", "parseLog", "insertCommits", "machineFile", "readMachineFile", "weekOf", "weeklyStats", "WEEK0"];
 const store = (host = {}) => load("kanso-panel/shipped-store.js", names, host);
@@ -61,11 +61,11 @@ async function setup(t, { otherMachine = null } = {}) {
     writeTextFile: async (p, text) => { await mkdir(join(p, ".."), { recursive: true }); await writeFile(p, text); return null; },
     exec: async (command, args, options) => {
       if (command !== "gh") return exec(command, args, options);
-      if (args[1].startsWith("gists?")) return { code: 0, stdout: gist ? `${gist.id}\n` : "", stderr: "" };
+      if (args[1].startsWith("gists?")) return success(gist ? `${gist.id}\n` : "");
       const body = JSON.parse(await readFile(args[args.indexOf("--input") + 1], "utf8"));
       sent.push({ method: args[args.indexOf("-X") + 1], body });
       gist = { id: gist?.id ?? "new", files: { ...(gist?.files ?? {}), ...Object.fromEntries(Object.entries(body.files).map(([k, v]) => [k, { content: v.content }])) } };
-      return { code: 0, stdout: JSON.stringify(gist), stderr: "" };
+      return success(JSON.stringify(gist));
     },
   };
   const mod = await store(host);

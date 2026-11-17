@@ -1,19 +1,12 @@
 // The chip: a count on a wash, or quiet as dim text, and a tone that colours either.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { load, gpuiHost, numberArguments } from "./helpers.mjs";
+import { load, gpuiHost, numberArguments, calls, one } from "./helpers.mjs";
 
 const kit = async () => ({
   ...await load("kanso-panel/ui.js", ["tokens", "toneColor", "G", "H", "R", "T"], gpuiHost()),
   ...await load("kanso-panel/ui-chip.js", ["chip"], gpuiHost()),
 });
-
-const calls = (el, name) => el.calls.filter((call) => call[0] === name);
-const one = (el, name) => {
-  const found = calls(el, name);
-  assert.equal(found.length, 1, name);
-  return found[0][1];
-};
 
 const night = { foreground: "#d8d4cb", background: "#1b1b19", dim: "#6b6862", muted: "#949086", blocked: "#ca938b", working: "#c4b07e", done: "#98ad8f" };
 const day = { foreground: "#2a2723", background: "#ebe8e2", dim: "#9a958c", muted: "#7a756c", blocked: "#9a6e68", working: "#8f7d52", done: "#6d7d62" };

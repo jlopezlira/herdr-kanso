@@ -1,7 +1,8 @@
 // What the pull request panel asks, and what it keeps when GitHub does not answer.
+import { loadPullRequest, loadAuthTiming } from "./mod-fixtures.mjs";
 import assert from "node:assert/strict";
 import test from "node:test";
-import { load, context, tape, singleUse } from "./helpers.mjs";
+import { load, context, tape, singleUse, failure, success } from "./helpers.mjs";
 
 const TONE = { dim: "dim", muted: "muted", text: "text", border: "border", red: "red", yellow: "yellow", green: "green" };
 
@@ -52,9 +53,7 @@ test("a timed-out sign-in check is not kept", async () => {
   const { LATE } = await load("kanso-panel/pure.js", ["LATE"], {});
   const { readyProviders } = await load("kanso-panel/pr-providers.js", ["readyProviders"], {});
   assert.equal(await readyProviders(async () => LATE), null);
-  const signedOut = await readyProviders(async () => ({
-    code: 1, stdout: "", stderr: "You are not logged into any GitHub hosts. To log in, run: gh auth login",
-  }));
+  const signedOut = await readyProviders(async () => (failure("You are not logged into any GitHub hosts. To log in, run: gh auth login")));
   assert.equal(signedOut.length, 0);
 });
 
@@ -100,7 +99,7 @@ function pull(over = {}) {
 }
 
 async function openPanel(exec, host = {}) {
-  const { PullRequest } = await load("kanso-panel/pr.js", ["PullRequest"], {
+  const { PullRequest } = await loadPullRequest({
     exec, key: () => "repo", location: () => ({ cwd: "/repo", on: null }), ...host,
   });
   const panel = new PullRequest();
@@ -115,14 +114,14 @@ test("at rest one open pull request is one view, and a running check does not ad
   const calls = [];
   const exec = async (command, args, options) => {
     calls.push({ command, args: [...args], timeout: options?.timeout });
-    if (command === "git") return { code: 0, stdout: gitOut(args), stderr: "" };
-    if (args[0] === "auth") return { code: 1, stdout: "", stderr: "You are not logged into any GitHub hosts. To log in, run: gh auth login" };
-    if (args[1] === "list") return { code: 0, stdout: "[]", stderr: "" };
-    if (args[1] === "view") return { code: 0, stdout: JSON.stringify(current), stderr: "" };
-    if (args[1] === "user") return { code: 0, stdout: "me\n", stderr: "" };
-    if (args[1] === "graphql") return { code: 0, stdout: THREADS, stderr: "" };
-    if (args.includes("viewerPermission")) return { code: 0, stdout: "WRITE\n", stderr: "" };
-    return { code: 1, stdout: "", stderr: "offline" };
+    if (command === "git") return success(gitOut(args));
+    if (args[0] === "auth") return failure("You are not logged into any GitHub hosts. To log in, run: gh auth login");
+    if (args[1] === "list") return success("[]");
+    if (args[1] === "view") return success(JSON.stringify(current));
+    if (args[1] === "user") return success("me\n");
+    if (args[1] === "graphql") return success(THREADS);
+    if (args.includes("viewerPermission")) return success("WRITE\n");
+    return failure("offline");
   };
   const { panel, cx, drain } = await openPanel(exec);
   panel.refresh(cx); await drain();
@@ -167,18 +166,18 @@ test("at rest one open pull request is one view, and a running check does not ad
 });
 
 test("permission is kept for the repository, and the account is checked at most every 10 minutes", async () => {
-  const { AUTH_MS } = await load("kanso-panel/pr-poll.js", ["AUTH_MS"], {});
+  const { AUTH_MS } = await loadAuthTiming();
   let url = "https://github.com/o/here/pull/7";
   let permissions = 0;
   let auths = 0;
   const exec = async (command, args) => {
-    if (command === "git") return { code: 0, stdout: gitOut(args), stderr: "" };
-    if (args[0] === "auth") { auths += 1; return { code: 1, stdout: "", stderr: "You are not logged into any GitHub hosts. To log in, run: gh auth login" }; }
-    if (args.includes("viewerPermission")) { permissions += 1; return { code: 0, stdout: "WRITE\n", stderr: "" }; }
-    if (args[1] === "view") return { code: 0, stdout: JSON.stringify(pull({ url })), stderr: "" };
-    if (args[1] === "graphql") return { code: 0, stdout: THREADS, stderr: "" };
-    if (args[1] === "user") return { code: 0, stdout: "me\n", stderr: "" };
-    return { code: 1, stdout: "", stderr: "offline" };
+    if (command === "git") return success(gitOut(args));
+    if (args[0] === "auth") { auths += 1; return failure("You are not logged into any GitHub hosts. To log in, run: gh auth login"); }
+    if (args.includes("viewerPermission")) { permissions += 1; return success("WRITE\n"); }
+    if (args[1] === "view") return success(JSON.stringify(pull({ url })));
+    if (args[1] === "graphql") return success(THREADS);
+    if (args[1] === "user") return success("me\n");
+    return failure("offline");
   };
   const { panel, cx, drain } = await openPanel(exec);
   panel.refresh(cx); await drain();
@@ -200,10 +199,10 @@ test("a limit from GitHub holds the panel, including a manual refresh", async ()
   const calls = [];
   const exec = async (command, args) => {
     calls.push([command, ...(args ?? [])].join(" "));
-    if (command === "git") return { code: 0, stdout: gitOut(args), stderr: "" };
-    if (args[0] === "auth") return { code: 1, stdout: "", stderr: "You are not logged into any GitHub hosts. To log in, run: gh auth login" };
-    if (args[1] === "view") return { code: 0, stdout: JSON.stringify(pull()), stderr: "" };
-    return { code: 1, stdout: "", stderr: "offline" };
+    if (command === "git") return success(gitOut(args));
+    if (args[0] === "auth") return failure("You are not logged into any GitHub hosts. To log in, run: gh auth login");
+    if (args[1] === "view") return success(JSON.stringify(pull()));
+    return failure("offline");
   };
   const { panel, cx, drain } = await openPanel(exec);
   panel.context = "repo";
@@ -229,13 +228,13 @@ test("a missed answer keeps the last pull request, with its age and Retry", asyn
   const shown = tape();
   const ui = singleUse();
   const exec = async (command, args) => {
-    if (command === "git") return { code: 0, stdout: gitOut(args), stderr: "" };
-    if (args[0] === "auth") return { code: 1, stdout: "", stderr: "You are not logged into any GitHub hosts. To log in, run: gh auth login" };
-    if (args[1] === "view") return fail ? { code: 1, stdout: "", stderr: "HTTP 500" } : { code: 0, stdout: JSON.stringify(pull()), stderr: "" };
-    if (args[1] === "graphql") return { code: 0, stdout: THREADS, stderr: "" };
-    if (args[1] === "user") return { code: 0, stdout: "me\n", stderr: "" };
-    if (args.includes("viewerPermission")) return { code: 0, stdout: "WRITE\n", stderr: "" };
-    return { code: 1, stdout: "", stderr: "offline" };
+    if (command === "git") return success(gitOut(args));
+    if (args[0] === "auth") return failure("You are not logged into any GitHub hosts. To log in, run: gh auth login");
+    if (args[1] === "view") return fail ? failure("HTTP 500") : success(JSON.stringify(pull()));
+    if (args[1] === "graphql") return success(THREADS);
+    if (args[1] === "user") return success("me\n");
+    if (args.includes("viewerPermission")) return success("WRITE\n");
+    return failure("offline");
   };
   const { panel, cx, drain } = await openPanel(exec, {
     ...ui, ...shown.host,
@@ -270,14 +269,14 @@ test("a read that never answers still finishes, and the last pull request stays"
     timer: { after(_ms, fn) { timers.push(fn); }, every() {} },
   };
   const exec = async (command, args) => {
-    if (command === "git") return { code: 0, stdout: gitOut(args), stderr: "" };
-    if (args[0] === "auth") return { code: 1, stdout: "", stderr: "You are not logged into any GitHub hosts. To log in, run: gh auth login" };
+    if (command === "git") return success(gitOut(args));
+    if (args[0] === "auth") return failure("You are not logged into any GitHub hosts. To log in, run: gh auth login");
     if (args[1] === "view" && hang) { hung += 1; return new Promise(() => {}); }
-    if (args[1] === "view") return { code: 0, stdout: JSON.stringify(pull()), stderr: "" };
-    if (args[1] === "graphql") return { code: 0, stdout: THREADS, stderr: "" };
-    if (args[1] === "user") return { code: 0, stdout: "me\n", stderr: "" };
-    if (args.includes("viewerPermission")) return { code: 0, stdout: "WRITE\n", stderr: "" };
-    return { code: 1, stdout: "", stderr: "offline" };
+    if (args[1] === "view") return success(JSON.stringify(pull()));
+    if (args[1] === "graphql") return success(THREADS);
+    if (args[1] === "user") return success("me\n");
+    if (args.includes("viewerPermission")) return success("WRITE\n");
+    return failure("offline");
   };
   const { panel } = await openPanel(exec);
   const first = context();
@@ -318,13 +317,13 @@ test("the timer returns while the window is behind or the panel is hidden, and r
   const views = [];
   const exec = async (command, args) => {
     if (command === "gh" && args[0] === "pr" && args[1] === "view") views.push(args[2] ?? "");
-    if (command === "git") return { code: 0, stdout: gitOut(args), stderr: "" };
-    if (args[0] === "auth") return { code: 1, stdout: "", stderr: "You are not logged into any GitHub hosts. To log in, run: gh auth login" };
-    if (args[1] === "view") return { code: 0, stdout: JSON.stringify(pull()), stderr: "" };
-    if (args[1] === "graphql") return { code: 0, stdout: THREADS, stderr: "" };
-    if (args[1] === "user") return { code: 0, stdout: "me\n", stderr: "" };
-    if (args.includes("viewerPermission")) return { code: 0, stdout: "WRITE\n", stderr: "" };
-    return { code: 1, stdout: "", stderr: "offline" };
+    if (command === "git") return success(gitOut(args));
+    if (args[0] === "auth") return failure("You are not logged into any GitHub hosts. To log in, run: gh auth login");
+    if (args[1] === "view") return success(JSON.stringify(pull()));
+    if (args[1] === "graphql") return success(THREADS);
+    if (args[1] === "user") return success("me\n");
+    if (args.includes("viewerPermission")) return success("WRITE\n");
+    return failure("offline");
   };
   const pending = [];
   const after = [];
@@ -335,7 +334,7 @@ test("the timer returns while the window is behind or the panel is hidden, and r
     timer: { every(_ms, fn) { tick = fn; }, after(_ms, fn) { after.push(fn); } },
   };
   const drain = async () => { while (pending.length) await pending.shift(); };
-  const { PullRequest } = await load("kanso-panel/pr.js", ["PullRequest"], {
+  const { PullRequest } = await loadPullRequest({
     exec,
     key: () => "repo",
     location: () => ({ cwd: "/repo", on: null }),
@@ -380,7 +379,7 @@ test("the timer returns while the window is behind or the panel is hidden, and r
 });
 
 test("unseen reviews do not replace the branch's pull request", async () => {
-  const { PullRequest } = await load("kanso-panel/pr.js", ["PullRequest"], {});
+  const { PullRequest } = await loadPullRequest();
   const panel = new PullRequest();
   panel.inboxOpen = null;
   panel.paintInbox({ unseen: 3, needs: [{}, {}, {}], yours: [] }, true);
@@ -417,16 +416,16 @@ test("the unpushed log and the behind count are each read once", async () => {
   const unpushed = await twice(async (command, args) => {
     if (command === "git") {
       const line = args.join(" ");
-      if (line.includes("--show-toplevel")) return { code: 0, stdout: "/repo\n", stderr: "" };
-      if (line.startsWith("branch")) return { code: 0, stdout: "feat\n", stderr: "" };
-      if (line.startsWith("remote")) return { code: 0, stdout: "https://github.com/o/here.git\n", stderr: "" };
-      if (line.startsWith("rev-parse")) return { code: 1, stdout: "", stderr: "no upstream" };
-      if (line.startsWith("log ")) return { code: 0, stdout: "one\n", stderr: "" };
-      return { code: 0, stdout: "", stderr: "" };
+      if (line.includes("--show-toplevel")) return success("/repo\n");
+      if (line.startsWith("branch")) return success("feat\n");
+      if (line.startsWith("remote")) return success("https://github.com/o/here.git\n");
+      if (line.startsWith("rev-parse")) return failure("no upstream");
+      if (line.startsWith("log ")) return success("one\n");
+      return success("");
     }
-    if (args[0] === "auth") return { code: 1, stdout: "", stderr: "You are not logged into any GitHub hosts. To log in, run: gh auth login" };
-    if (args[1] === "view") return { code: 1, stdout: "", stderr: 'no pull requests found for branch "feat"' };
-    return { code: 1, stdout: "", stderr: "offline" };
+    if (args[0] === "auth") return failure("You are not logged into any GitHub hosts. To log in, run: gh auth login");
+    if (args[1] === "view") return failure('no pull requests found for branch "feat"');
+    return failure("offline");
   });
   assert.deepEqual(unpushed.first, { log: 1, behind: 0 });
   assert.deepEqual(unpushed.second, { log: 0, behind: 0 });
@@ -434,20 +433,20 @@ test("the unpushed log and the behind count are each read once", async () => {
   const behind = await twice(async (command, args) => {
     if (command === "git") {
       const line = args.join(" ");
-      if (line.includes("--show-toplevel")) return { code: 0, stdout: "/repo\n", stderr: "" };
-      if (line.startsWith("branch")) return { code: 0, stdout: "feat\n", stderr: "" };
-      if (line.startsWith("remote")) return { code: 0, stdout: "https://github.com/o/here.git\n", stderr: "" };
-      if (line.includes("symbolic-full-name")) return { code: 0, stdout: "refs/remotes/origin/feat\n", stderr: "" };
-      if (line.includes("--left-right")) return { code: 0, stdout: "0\t0\n", stderr: "" };
-      if (line.startsWith("rev-list --count")) return { code: 0, stdout: "4\n", stderr: "" };
-      return { code: 0, stdout: "", stderr: "" };
+      if (line.includes("--show-toplevel")) return success("/repo\n");
+      if (line.startsWith("branch")) return success("feat\n");
+      if (line.startsWith("remote")) return success("https://github.com/o/here.git\n");
+      if (line.includes("symbolic-full-name")) return success("refs/remotes/origin/feat\n");
+      if (line.includes("--left-right")) return success("0\t0\n");
+      if (line.startsWith("rev-list --count")) return success("4\n");
+      return success("");
     }
-    if (args[0] === "auth") return { code: 1, stdout: "", stderr: "You are not logged into any GitHub hosts. To log in, run: gh auth login" };
-    if (args[1] === "view") return { code: 0, stdout: JSON.stringify(behindPr), stderr: "" };
-    if (args[1] === "graphql") return { code: 0, stdout: THREADS, stderr: "" };
-    if (args[1] === "user") return { code: 0, stdout: "me\n", stderr: "" };
-    if (args.includes("viewerPermission")) return { code: 0, stdout: "WRITE\n", stderr: "" };
-    return { code: 1, stdout: "", stderr: "offline" };
+    if (args[0] === "auth") return failure("You are not logged into any GitHub hosts. To log in, run: gh auth login");
+    if (args[1] === "view") return success(JSON.stringify(behindPr));
+    if (args[1] === "graphql") return success(THREADS);
+    if (args[1] === "user") return success("me\n");
+    if (args.includes("viewerPermission")) return success("WRITE\n");
+    return failure("offline");
   });
   assert.deepEqual(behind.first, { log: 0, behind: 1 });
   assert.deepEqual(behind.second, { log: 0, behind: 0 });

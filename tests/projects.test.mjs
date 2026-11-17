@@ -1,15 +1,16 @@
 // Projects: folders you added stay when their last agent closes; worktrees go in Kanso's folder.
+import { loadSpaces, loadKdb } from "./mod-fixtures.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { mkdir, writeFile, stat, realpath, rm } from "node:fs/promises";
 import { join, relative } from "node:path";
-import { databaseTimer, load, clone, temporary, exec, until, elements, watchPopups, watchLines } from "./helpers.mjs";
+import { databaseTimer, load, clone, temporary, exec, until, elements, watchPopups, watchLines, failure } from "./helpers.mjs";
 
 const NAMES = ["placeKey", "keyOfSpace", "keyOfProject", "closedProjects", "shownNames", "startingProjects", "parseWorktreeList", "addWorktree", "worktreesOf", "missingFolders", "folderName", "trimmed"];
 const projects = () => load("kanso-spaces/projects.js", NAMES, { exec });
 const database = async (t) => {
   const dir = await temporary(t);
-  const { Kdb } = await load("kanso-spaces/kdb.js", ["Kdb"], { exec, appHome: () => dir });
+  const { Kdb } = await loadKdb({ exec, appHome: () => dir });
   return new Kdb(databaseTimer, join(dir, "kanso"));
 };
 const git = async (cwd, ...args) => {
@@ -143,7 +144,7 @@ test("the top + adds a project in Projects and starts a conversation in Threads;
   };
   const calls = [], overlays = [];
   const registry = [{ id: "p-fury", name: "fury", folder: "/Users/me/fury", machine: "", agent: "codex", missing: false }];
-  const { Spaces } = await load("kanso-spaces/main.js", ["Spaces"], {
+  const { Spaces } = await loadSpaces({
     div: node, svg: node, image: node, h_flex: node, v_flex: node, Button: { new: (x) => node().id(x) }, Popover: { new: node },
     ORDERS: { updated: "Updated" }, DEFAULT_ORDER: "updated", NAME_LABEL: "kanso.name", PIN_LABEL: "kanso.pin",
     orderSessions: (l) => l, withTerminals: () => [], terminals: () => [], nest: () => [], bySection: () => [],
@@ -180,7 +181,7 @@ test("the top + adds a project in Projects and starts a conversation in Threads;
 });
 
 test("a local folder that is gone marks only this computer's project, never another machine's at the same path", async () => {
-  const { Spaces } = await load("kanso-spaces/main.js", ["Spaces"], {
+  const { Spaces } = await loadSpaces({
     spaces: () => [], home: () => "", shared: () => [], setShared: () => {}, fileApi: () => ({ existing: async () => [] }),
   });
   const list = [{ id: "here", name: "api", folder: "/srv/api", machine: "" }, { id: "odin", name: "api", folder: "/srv/api", machine: "odin" }];
@@ -190,8 +191,8 @@ test("a local folder that is gone marks only this computer's project, never anot
 test("New project with a conversation: the name you give it, its folder, then which agent, asked", async (t) => {
   const dir = await temporary(t);
   const calls = [], closed = [], shared = new Map(), overlays = [];
-  const { Kdb } = await load("kanso-spaces/kdb.js", ["Kdb"], { exec, appHome: () => dir });
-  const { Spaces } = await load("kanso-spaces/main.js", ["Spaces"], {
+  const { Kdb } = await loadKdb({ exec, appHome: () => dir });
+  const { Spaces } = await loadSpaces({
     exec, appHome: () => dir, home: () => "/Users/me", spaces: () => [], machines: () => [],
     props: () => ({ newProject: { start: true }, overlay: "ov1" }), closeOverlay: (id) => closed.push(id),
     shared: (k) => shared.get(k) ?? null, setShared: (k, v) => shared.set(k, v), notify: () => {},
@@ -216,8 +217,8 @@ test("New project with a conversation: the name you give it, its folder, then wh
 test("Remove project takes it out for good, closes its open space, and only then closes the menu", async (t) => {
   const dir = await temporary(t);
   const calls = [], shared = new Map();
-  const { Kdb } = await load("kanso-spaces/kdb.js", ["Kdb"], { exec, appHome: () => dir });
-  const { Spaces } = await load("kanso-spaces/main.js", ["Spaces"], {
+  const { Kdb } = await loadKdb({ exec, appHome: () => dir });
+  const { Spaces } = await loadSpaces({
     exec, appHome: () => dir, home: () => "/Users/me", spaces: () => [], machines: () => [],
     props: () => ({ overlay: "ov1" }), closeOverlay: (id) => calls.push(["close", id]),
     shared: (k) => shared.get(k) ?? null, setShared: (k, v) => shared.set(k, v),
@@ -246,13 +247,13 @@ test("New conversation: nothing lit until the keyboard moves; a project chosen a
     if (k === "on_key_down") return (f) => { keys.push(f); return p; };
     return () => p;
   } }); return p; };
-  const { Spaces } = await load("kanso-spaces/main.js", ["Spaces"], {
+  const { Spaces } = await loadSpaces({
     ...elements(node),
     // Herdr: a scroll handle made during render throws; it belongs in init().
     ScrollHandle: { new: () => { if (rendering) throw new Error("ScrollHandle.new() cannot run during render"); return { scroll_to_item: (i) => scrolled.push(i), release: () => true }; } },
     theme: () => ({ foreground: "#fff", muted: "#888", dim: "#666", border: "#333" }),
     shared: (k) => (k === "kanso.registry" ? registry : null), setShared: () => {},
-    spaces: () => [], home: () => "/Users/me", appHome: () => "/tmp/kanso-none", exec: async () => ({ code: 1, stdout: "", stderr: "" }), props: () => ({ overlay: "ov1", newConversation: true }), closeOverlay: () => {},
+    spaces: () => [], home: () => "/Users/me", appHome: () => "/tmp/kanso-none", exec: async () => (failure("")), props: () => ({ overlay: "ov1", newConversation: true }), closeOverlay: () => {},
     run: (cmd, args) => calls.push([cmd, clone(args ?? null)]), openOverlay: (o) => overlays.push(clone(o.props)),
   });
   const view = Object.assign(new Spaces(), { kdb: { projects: () => new Promise(() => {}) } });
@@ -279,7 +280,7 @@ const blank = () => { const p = new Proxy({}, { get: (_t, k) => (k === "when" ? 
 test("New conversation's menu ends with Add computer, last for the keyboard too, unless it is switched off, and opens tall enough for every row", async () => {
   const menuOf = async (stored, open = 0) => {
     const calls = [], made = [], heights = [];
-    const { Spaces } = await load("kanso-spaces/main.js", ["Spaces"], {
+    const { Spaces } = await loadSpaces({
       ...elements(blank), theme: () => ({ foreground: "#fff", muted: "#888", dim: "#666", border: "#333" }),
       shared: (k) => (k === "kanso.pieces" ? stored : null), setShared: () => {},
       spaces: () => Array.from({ length: open }, (_, i) => ({ id: `sp-${i}`, name: `p${i}`, folder: `/work/p${i}`, machine: null, tabs: [] })),
@@ -307,7 +308,7 @@ test("New conversation's menu ends with Add computer, last for the keyboard too,
 test("which agent: only the ones installed, nothing chosen for you, and one picked starts there", async () => {
   const calls = [], made = [];
   const place = { space: null, folder: "/work/api", machine: "", project: null, name: "api" };
-  const { Spaces } = await load("kanso-spaces/main.js", ["Spaces"], {
+  const { Spaces } = await loadSpaces({
     ...elements(blank), theme: () => ({ foreground: "#fff", muted: "#888", dim: "#666", border: "#333", selected: "#444" }),
     shared: () => null, setShared: () => {}, spaces: () => [], home: () => "/Users/me", props: () => ({ overlay: "ov1", newAgent: place }), closeOverlay: () => {},
     run: (cmd, args) => calls.push([cmd, clone(args ?? null)]),

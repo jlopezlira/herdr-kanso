@@ -1,13 +1,13 @@
 // A covered panel reads once, on the next turn, when it is in front again.
+import { loadFront } from "./mod-fixtures.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { load } from "./helpers.mjs";
 
 const host = (state) => ({ window: () => ({ active: state.active }) });
 
 test("a panel behind the window rests, then reads once when it is in front", async () => {
   const state = { active: false };
-  const { Front } = await load("kanso-panel/front.js", ["Front"], host(state));
+  const { Front } = await loadFront(host(state));
   const timers = [];
   const cx = { timer: { after: (_ms, fn) => { timers.push(fn); return { cancel() {} }; } } };
   const front = new Front();
@@ -35,7 +35,7 @@ test("a panel behind the window rests, then reads once when it is in front", asy
 
 test("in front can mean shown as well as the window", async () => {
   const state = { active: true, hidden: true };
-  const { Front } = await load("kanso-panel/front.js", ["Front"], host(state));
+  const { Front } = await loadFront(host(state));
   const timers = [];
   const cx = { timer: { after: (_ms, fn) => { timers.push(fn); } } };
   const front = new Front(() => state.active && !state.hidden);

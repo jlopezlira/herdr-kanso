@@ -1,10 +1,11 @@
 // The piece registry: one list, one read, and a hidden piece issues no command.
+import { loadSpaces, loadStrip, loadTabPanels, loadSimulatorTools, loadSimulator, loadUpdater } from "./mod-fixtures.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { load } from "./helpers.mjs";
+import { load, failure, success } from "./helpers.mjs";
 import {
   PIECES, GROUPS, STATE_LABEL, STORE, MIGRATED, pieceOf, choice, shown, runs, setPiece,
   migratePieces, loadPieces, pieces, filterPieces, groupsOf, withRoster,
@@ -172,15 +173,15 @@ const TERM = { address: "t1", state: "live", status: "working", pid: 50, foregro
 async function sidebar(map) {
   const store = { [MIGRATED]: true, [STORE]: map };
   const cmds = [];
-  const { Spaces } = await load("kanso-spaces/main.js", ["Spaces"], {
+  const { Spaces } = await loadSpaces({
     shared: (key) => store[key] ?? null,
     setShared: (key, value) => { store[key] = value; },
     window: () => ({ active: true, platform: "macos" }),
     terminals: () => [TERM],
     spaces: () => [], panes: () => [], agents: () => [], machines: () => [],
     home: () => "/tmp",
-    exec: async (cmd) => { cmds.push(cmd); return { code: 1, stdout: "", stderr: "" }; },
-    hc: async () => { cmds.push("hc"); return { code: 0, stdout: "[]", stderr: "" }; },
+    exec: async (cmd) => { cmds.push(cmd); return failure(""); },
+    hc: async () => { cmds.push("hc"); return success("[]"); },
   });
   const pending = [];
   const cx = { notify() {}, spawn(fn) { const task = fn(cx); pending.push(task); return task; } };
@@ -252,11 +253,11 @@ test("sidebar.computers hidden does not list computers", async () => {
 async function digestCmds(map) {
   const store = { [MIGRATED]: true, [STORE]: map };
   const cmds = [];
-  const { Strip } = await load("kanso-strip/main.js", ["Strip"], {
+  const { Strip } = await loadStrip({
     shared: (key) => store[key] ?? null,
     setShared: (key, value) => { store[key] = value; },
     spaces: () => [], panes: () => [],
-    exec: async (cmd) => { cmds.push(cmd); return { code: 1, stdout: "", stderr: "" }; },
+    exec: async (cmd) => { cmds.push(cmd); return failure(""); },
   });
   const view = Object.assign(new Strip(), { digesting: new Set() });
   const pending = [];
@@ -278,7 +279,7 @@ test("header.pr hidden issues no gh command", async () => {
 });
 
 test("a hidden panel is not mounted", async () => {
-  const { TOOLS } = await load("kanso-sim/registration.js", ["TOOLS"]);
+  const { TOOLS } = await loadSimulatorTools();
   const store = { [MIGRATED]: true, [STORE]: {}, [TOOLS]: { ios: true } };
   const { panelList } = await load("kanso-tabs/main.js", ["panelList"], {
     shared: (key) => store[key],
@@ -295,14 +296,14 @@ test("a hidden panel is not mounted", async () => {
 });
 
 test("panel.sim hidden issues no probe and no frame", async () => {
-  const { TOOLS } = await load("kanso-sim/registration.js", ["TOOLS"]);
+  const { TOOLS } = await loadSimulatorTools();
   const store = { [MIGRATED]: true, [STORE]: { "panel.sim": "hide" }, [TOOLS]: { ios: "/simctl" } };
   const commands = [];
   const pending = [];
   const host = {
     shared: (key) => store[key] ?? null,
     setShared: (key, value) => { store[key] = value; },
-    exec: async (cmd) => { commands.push(cmd); return { code: 0, stdout: "", stderr: "" }; },
+    exec: async (cmd) => { commands.push(cmd); return success(""); },
     home: () => "/home/me",
     appHome: () => "/app",
     window: () => ({ platform: "macos", active: true }),
@@ -319,7 +320,7 @@ test("panel.sim hidden issues no probe and no frame", async () => {
     spawn(fn) { const task = fn(cx); pending.push(task); return task; },
   };
   const drain = async () => { while (pending.length) await pending.shift(); };
-  const { Tabs, panelList } = await load("kanso-tabs/main.js", ["Tabs", "panelList"], host);
+  const { Tabs, panelList } = await loadTabPanels(host);
   assert.equal(panelList().find((item) => item.id === "sim").on, false);
   const tabs = new Tabs();
   tabs.probeSimulator(cx);
@@ -338,7 +339,7 @@ test("panel.sim hidden issues no probe and no frame", async () => {
   assert.equal(panelList().some((item) => item.id === "sim"), false, "no tools: not listed");
   store[TOOLS] = { adb: "adb" };
   store[STORE] = {};
-  const { Simulator } = await load("kanso-sim/main.js", ["Simulator"], host);
+  const { Simulator } = await loadSimulator(host);
   const view = new Simulator();
   view.init({}, cx);
   view.devices = [{ id: "android:usb", platform: "android", state: "Booted", target: "usb" }];
@@ -356,7 +357,7 @@ test("panel.sim hidden issues no probe and no frame", async () => {
 test("update.check hidden does not poll, and Check still looks", async () => {
   const store = { [MIGRATED]: true, [STORE]: { "update.check": "hide" }, "kanso.update": { autoCheck: true } };
   let asked = 0;
-  const { Updater } = await load("kanso-chrome/update.js", ["Updater"], {
+  const { Updater } = await loadUpdater({
     appHome: () => "/nowhere",
     shared: (key) => store[key],
     setShared: (key, value) => { store[key] = value; },
@@ -366,7 +367,7 @@ test("update.check hidden does not poll, and Check still looks", async () => {
     run: () => null,
     exec: async (command) => {
       if (command === "git") asked += 1;
-      return { code: 0, stdout: command === "git" ? "x\trefs/tags/v1.4.0\n" : "", stderr: "" };
+      return success(command === "git" ? "x\trefs/tags/v1.4.0\n" : "");
     },
   });
   const pending = [];

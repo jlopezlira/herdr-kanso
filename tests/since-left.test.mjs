@@ -1,3 +1,4 @@
+import { loadSpaces, loadPullRequest, loadSinceLeft, loadAgentRowH, loadRecordPrFacts, loadDuration } from "./mod-fixtures.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { join } from "node:path";
@@ -129,7 +130,7 @@ test("PR observations use only known local project mappings and keep check resul
   const { db } = await database(t);
   await db.run("INSERT INTO projects(id,name,folder,machine,added) VALUES('p1','Kanso','C:\\work\\kanso','',0);");
   await db.run("INSERT INTO pr_repos(id,provider,host,owner,name,project_id) VALUES('r1','github','ghe.example','o','r','p1');");
-  const { recordPrFacts } = await load("kanso-panel/pr-inbox.js", ["recordPrFacts"]);
+  const { recordPrFacts } = await loadRecordPrFacts();
   const pr = { url: "https://ghe.example/o/r/pull/2", number: 2, state: "OPEN", reviewDecision: "REVIEW_REQUIRED", statusCheckRollup: [] };
   await recordPrFacts(db, [pr], 1);
   await recordPrFacts(db, [{ ...pr, reviewDecision: "APPROVED", statusCheckRollup: [{ __typename: "CheckRun", name: "test", status: "COMPLETED", conclusion: "FAILURE" }] }], 2);
@@ -148,7 +149,7 @@ test("the return view expands inline, never focuses a handle, and stays silent w
     const element = button(id);
     return new Proxy(element, { get: (target, key) => key === "on_click" ? (fn) => { clicks.set(id, fn); return target; } : target[key] });
   };
-  const { SinceLeft } = await load("kanso-spaces/since-left.js", ["SinceLeft"], { ...ui });
+  const { SinceLeft } = await loadSinceLeft({ ...ui });
   const view = new SinceLeft(db);
   view.project = project;
   view.rows = Array.from({ length: 4 }, (_, i) => event(i + 1));
@@ -176,7 +177,7 @@ test("a second finished turn is recorded even when both observed states are done
 });
 
 test("a return row is a mark, a name and an age, and one agent keeps its latest state", async () => {
-  const { duration } = await load("kanso-spaces/agents.js", ["duration"]);
+  const { duration } = await loadDuration();
   const now = 10 * 60_000;
   const row = (id, target, kind, text, at) => ({ id, target, kind, text, at });
   const events = [
@@ -206,7 +207,7 @@ test("a return row is a mark, a name and an age, and one agent keeps its latest 
 });
 
 test("more than three agents stay at three rows, the last of them +N", async () => {
-  const { duration } = await load("kanso-spaces/agents.js", ["duration"]);
+  const { duration } = await loadDuration();
   const events = [1, 2, 3, 4].map((id) => ({ id, target: `agent:${id}`, kind: "finished", text: `Agent ${id}`, at: id }));
   const compact = present(events, { now: 10, format: duration });
   assert.equal(compact.count, 4);
@@ -232,7 +233,7 @@ test("the return head shows the count and its dismiss clears the rows", async (t
     } });
     return el;
   };
-  const { SinceLeft } = await load("kanso-spaces/since-left.js", ["SinceLeft"], { div: node, svg: node, h_flex: node, v_flex: node, Button: { new: node } });
+  const { SinceLeft } = await loadSinceLeft({ div: node, svg: node, h_flex: node, v_flex: node, Button: { new: node } });
   const view = new SinceLeft(db);
   view.project = project;
   view.target = "agent:1";
@@ -254,7 +255,7 @@ test("the return head shows the count and its dismiss clears the rows", async (t
 });
 
 test("return tracking holds the initial focus, dismisses on a later target, and retries a failed load silently", async () => {
-  const { SinceLeft } = await load("kanso-spaces/since-left.js", ["SinceLeft"]);
+  const { SinceLeft } = await loadSinceLeft();
   const view = new SinceLeft(null), calls = [];
   let fails = true;
   view.store = {
@@ -285,7 +286,7 @@ test("return tracking holds the initial focus, dismisses on a later target, and 
 
 test("a return row takes you to the agent's pane, the menu that wakes it, or the PR, and a gone one nowhere", async () => {
   const calls = [], commits = [], overlays = [];
-  const { Spaces } = await load("kanso-spaces/main.js", ["Spaces"], {
+  const { Spaces } = await loadSpaces({
     run: (...args) => calls.push(clone(args)), commitLayout: (patch) => commits.push(clone(patch)), openOverlay: (overlay) => overlays.push(clone(overlay)),
   });
   const view = new Spaces();
@@ -315,7 +316,7 @@ test("a first detailed PR read compares against the inbox cache, including a mer
   await db.run("INSERT INTO projects(id,name,folder,machine,added) VALUES('p1','App','C:\\work\\app','',0);");
   await db.run("INSERT INTO pr_repos(id,provider,host,owner,name,project_id) VALUES('r1','github','github.com','o','r','p1');");
   await db.run("INSERT INTO pr_items(url,provider,host,owner,name,number,title,state,review_decision,role,fetched_at) VALUES('https://github.com/o/r/pull/4','github','github.com','o','r',4,'Fix','OPEN','REVIEW_REQUIRED','author',1);");
-  const { recordPrFacts } = await load("kanso-panel/pr-inbox.js", ["recordPrFacts"]);
+  const { recordPrFacts } = await loadRecordPrFacts();
   await recordPrFacts(db, [{ url: "https://github.com/o/r/pull/4", number: 4, state: "MERGED" }], 2);
   assert.equal((await db.read("SELECT text FROM since_events;"))[0].text, "PR #4 merged");
   await recordPrFacts(db, [], 3);
@@ -402,10 +403,10 @@ test("the return signature changes with event facts and project assignment", () 
 });
 
 test("unchanged return polling skips snapshots and sleeping projects never read the log", async () => {
-  const { SinceLeft } = await load("kanso-spaces/since-left.js", ["SinceLeft"]);
+  const { SinceLeft } = await loadSinceLeft();
   const view = new SinceLeft(null), calls = [];
   view.store = { async observe(rows) { if (rows.length) calls.push("observe"); }, async prune() { calls.push("prune"); }, async touchSources() { calls.push("heartbeat"); } };
-  const { Spaces } = await load("kanso-spaces/main.js", ["Spaces"], { agents: () => [], terminals: () => [], focused: () => null, shared: () => null, machines: () => [], home: () => "" });
+  const { Spaces } = await loadSpaces({ agents: () => [], terminals: () => [], focused: () => null, shared: () => null, machines: () => [], home: () => "" });
   const spaces = new Spaces();
   spaces.panel = { agents: new Map() };
   const updates = [];
@@ -460,8 +461,8 @@ test("While you were away is a piece: off, nothing is recorded, read or drawn", 
   const reads = [], runs = [];
   const db = { read: async (sql) => { reads.push(sql); return []; }, run: async (sql) => { runs.push(sql); } };
   const hidden = { "kanso.pieces.migrated": true, "kanso.pieces": { [AWAY_PIECE]: "hide" } };
-  const { Spaces } = await load("kanso-spaces/main.js", ["Spaces"], { shared: (key) => hidden[key], setShared: (key, value) => { hidden[key] = value; } });
-  const { SinceLeft } = await load("kanso-spaces/since-left.js", ["SinceLeft"]);
+  const { Spaces } = await loadSpaces({ shared: (key) => hidden[key], setShared: (key, value) => { hidden[key] = value; } });
+  const { SinceLeft } = await loadSinceLeft();
   const view = new Spaces();
   Object.assign(view, { showAway: false, returnSignature: "x", sinceLeft: Object.assign(new SinceLeft(db), { project: project, rows: [event(1)] }) });
   view.trackReturn([], [], true, 10, cx);
@@ -473,8 +474,8 @@ test("While you were away is a piece: off, nothing is recorded, read or drawn", 
 
 test("a row says who, what happened and what it did; a gone agent's row stays but leads nowhere", async () => {
   const ui = tape();
-  const { SinceLeft } = await load("kanso-spaces/since-left.js", ["SinceLeft"], ui.host);
-  const { agentRowH } = await load("kanso-spaces/agents.js", ["agentRowH"], ui.host);
+  const { SinceLeft } = await loadSinceLeft(ui.host);
+  const { agentRowH } = await loadAgentRowH(ui.host);
   const view = Object.assign(new SinceLeft(null), { project, rows: [
     { id: 1, target: "agent:c1", kind: "finished", text: "Cassian", did: "Fixed the away rows", at: 0 },
     { id: 2, target: "agent:gone", kind: "error", text: "Bodhi", did: null, at: 0 },
@@ -494,7 +495,7 @@ test("with While you were away off, a pull request read records no fact", async 
   await db.run("INSERT INTO projects(id,name,folder,machine,added) VALUES('p1','App','C:\\work\\app','',0);");
   await db.run("INSERT INTO pr_repos(id,provider,host,owner,name,project_id) VALUES('r1','github','github.com','o','r','p1');");
   const observed = async (hidden) => {
-    const { PullRequest } = await load("kanso-panel/pr.js", ["PullRequest"], {
+    const { PullRequest } = await loadPullRequest({
       exec, shared: (key) => (key === "kanso.pieces" ? Object.fromEntries(hidden.map((id) => [id, "hide"])) : null),
     });
     await new PullRequest(db).keepPrFacts([{ url: "https://github.com/o/r/pull/4", number: 4, state: "OPEN" }]);

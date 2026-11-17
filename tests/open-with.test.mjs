@@ -1,6 +1,6 @@
+import { loadOpenWith } from "./mod-fixtures.mjs";
 import assert from "node:assert/strict";
 import test from "node:test";
-import { load } from "./helpers.mjs";
 
 function psLiteral(text) {
   assert.equal(text[0], "'");
@@ -17,7 +17,7 @@ function psLiteral(text) {
 
 test("Windows launch keeps all PowerShell single quotes inside literals", async () => {
   let command;
-  const { OpenWith } = await load("open-with/main.js", ["OpenWith"], {
+  const { OpenWith } = await loadOpenWith({
     exec: async (_program, args) => { command = args.at(-1); return { code: 0 }; },
   });
   const view = new OpenWith(); view.platform = "windows";
@@ -37,7 +37,7 @@ test("Windows launch keeps all PowerShell single quotes inside literals", async 
 
 test("Windows arguments retain spaces, empty strings, quotes and trailing slashes", async () => {
   let command;
-  const { OpenWith } = await load("open-with/main.js", ["OpenWith"], {
+  const { OpenWith } = await loadOpenWith({
     exec: async (_program, args) => { command = args.at(-1); return { code: 0 }; },
   });
   const view = new OpenWith(); view.platform = "windows";

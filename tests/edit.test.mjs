@@ -1,4 +1,5 @@
 // Saving a text file and a Markdown note: one state machine, one draft per path, one remote write.
+import { loadDescribe } from "./mod-fixtures.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
@@ -8,7 +9,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileApi, CHUNK, WRITE_RAW, base64Chunks, windowsCommandLength, writeSteps } from "../kanso/mods/kanso-panel/platform-files.js";
 import { DraftBook, EDIT_LIMIT, beginSave, byteLength, commitText, applied, didSave, draftKey, keepMine, needsSave, opened, overRead, remember, restore, seenDisk, takeTheirs, tooBig, tooLarge, typed, wholeText, word } from "../kanso/mods/kanso-panel/edit.js";
-import { exec, load, nativePlatform } from "./helpers.mjs";
+import { exec, nativePlatform, success, failure } from "./helpers.mjs";
 
 const read = (file) => JSON.parse(readFileSync(new URL(`../kanso/${file}`, import.meta.url), "utf8"));
 
@@ -175,12 +176,12 @@ test("a remote save writes in place, one call when both sides fit", () => {
 test("one save is one remote call when it fits, and a failed step does not touch the target", async () => {
   for (const platform of ["macos", "linux"]) {
     const calls = [];
-    const api = fileApi(platform, async (cmd) => { calls.push(cmd); return { code: 0, stdout: "", stderr: "" }; });
+    const api = fileApi(platform, async (cmd) => { calls.push(cmd); return success(""); });
     await api.write("/repo/a.txt", "hi\n", "old\n");
     assert.deepEqual(calls, ["sh"], platform);
   }
   const winCalls = [];
-  const win = fileApi("windows", async (cmd) => { winCalls.push(cmd); return { code: 0, stdout: "", stderr: "" }; });
+  const win = fileApi("windows", async (cmd) => { winCalls.push(cmd); return success(""); });
   await win.write("/repo/a.txt", "hi\n", "old\n");
   assert.deepEqual(winCalls, ["pwsh"]);
   const dir = await mkdtemp(join(tmpdir(), "kanso-write-"));
@@ -189,7 +190,7 @@ test("one save is one remote call when it fits, and a failed step does not touch
   const calls = [];
   const api = fileApi("macos", async (cmd) => {
     calls.push(cmd);
-    return { code: 1, stdout: "", stderr: "decode failed" };
+    return failure("decode failed");
   });
   await assert.rejects(() => api.write(target, "new\n", "keep"), /decode failed/);
   assert.equal(await readFile(target, "utf8"), "keep");
@@ -198,7 +199,7 @@ test("one save is one remote call when it fits, and a failed step does not touch
   const kept = [];
   const refused = fileApi("linux", async (cmd) => {
     kept.push(cmd);
-    return { code: 3, stdout: "", stderr: "" };
+    return failure("", 3);
   });
   await assert.rejects(() => refused.write("/repo/a.txt", "mine\n", "old\n"), (error) => error.conflict === true);
   assert.deepEqual(kept, ["sh"]);
@@ -207,7 +208,7 @@ test("one save is one remote call when it fits, and a failed step does not touch
   const chunked = fileApi("linux", async (cmd, args) => {
     wiped.push([cmd, args]);
     step += 1;
-    return step === 1 ? { code: 0, stdout: "/tmp/kanso-kept", stderr: "" } : { code: 1, stdout: "", stderr: "decode failed" };
+    return step === 1 ? success("/tmp/kanso-kept") : failure("decode failed");
   });
   await assert.rejects(() => chunked.write("/repo/a.txt", "a".repeat(WRITE_RAW.linux + 1), "b"), /decode failed/);
   const removed = wiped.filter((call) => call[0] === "rm");
@@ -222,7 +223,7 @@ test("a real save keeps the inode, and a 200 KB linux save is 3 calls", async ()
   const linux = fileApi("linux", async (_cmd, args) => {
     linuxCalls.push(args);
     assert.ok(args.every((arg) => Buffer.byteLength(String(arg)) < 131072));
-    return { code: 0, stdout: "", stderr: "" };
+    return success("");
   });
   await linux.write("/repo/wide.txt", `${body}!`, body);
   assert.equal(linuxCalls.length, 3);
@@ -298,6 +299,6 @@ test("Save is Cmd+S on macOS and Linux and Ctrl+S on Windows", async () => {
   assert.equal(win["mod:kanso-panel"]["ctrl-s"], "kanso-panel.save");
   assert.equal(win["mod:kanso-panel"]["cmd-s"], undefined);
   assert.deepEqual(Object.keys(mac), Object.keys(win));
-  const { describe } = await load("kanso-help/keymap.js", ["describe"]);
+  const { describe } = await loadDescribe();
   assert.equal(describe("kanso-panel.save"), "Save the file");
 });

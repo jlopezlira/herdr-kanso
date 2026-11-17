@@ -1,4 +1,5 @@
 // The kit a composition imports: the same pieces under the same name in the Storybook and the app, the app's drawing what its own piece draws.
+import { loadTokens, loadRow, loadMenu } from "./mod-fixtures.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -9,9 +10,9 @@ import * as storybookPieces from "../stories/kit/pieces.js";
 
 const host = () => ({ ...gpuiHost(), svg: (path) => { const el = chain("svg"); el.calls.push(["svg", path]); return el; }, image: (path) => { const el = chain("image"); el.calls.push(["image", path]); return el; } });
 const kits = async () => ({
-  ...await load("kanso-panel/ui.js", ["tokens"], host()),
-  ...await load("kanso-panel/ui-row.js", ["row"], host()),
-  ui: { ...await load("kanso-panel/ui-button.js", ["button"], host()), ...await load("kanso-panel/ui-menu.js", ["menu"], host()) },
+  ...await loadTokens(host()),
+  ...await loadRow(host()),
+  ui: { ...await load("kanso-panel/ui-button.js", ["button"], host()), ...await loadMenu(host()) },
   app: await load("kanso-panel/kit.js", ["row", "button", "menu"], host()),
 });
 const night = { foreground: "#d8d4cb", background: "#1b1b19", hover: "#232321", selected: "#2b2b28", accent: "#da627d", dim: "#6b6862", muted: "#949086", blocked: "#ca938b", working: "#c4b07e", done: "#98ad8f" };

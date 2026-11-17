@@ -1,21 +1,9 @@
 // One tab group (`segmented` is its old name): its box from the tokens, selection by tone, and nothing that moves.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { load, chain, gpuiHost } from "./helpers.mjs";
+import { load, gpuiHost, calls, one, styled } from "./helpers.mjs";
 
 const kit = async () => ({ ...await load("kanso-panel/ui.js", ["tokens", "G", "H", "R", "T"], gpuiHost()), ...await load("kanso-panel/ui-tab.js", ["segmented", "tab"], gpuiHost()) });
-
-const calls = (el, name) => el.calls.filter((call) => call[0] === name);
-const one = (el, name) => {
-  const found = calls(el, name);
-  assert.equal(found.length, 1, name);
-  return found[0][1];
-};
-const styled = (el, name) => {
-  const style = chain();
-  one(el, name)(style);
-  return style.calls;
-};
 
 const night = { background: "#1b1b19", foreground: "#d8d4cb", hover: "#232321", selected: "#2b2b28", raised: "#252523", accent: "#da627d", dim: "#6b6860", muted: "#949086", blocked: "#e06c75" };
 const day = { background: "#f4f1eb", foreground: "#3c3934", hover: "#ebe6de", selected: "#e0dbd2", raised: "#fbf9f5", accent: "#b8405e", dim: "#a19c92", muted: "#7a756c", blocked: "#c0392b" };

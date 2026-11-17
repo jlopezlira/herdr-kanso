@@ -1,14 +1,13 @@
 // The Menu: a heading, items of a control's height with their icon, a separator, and an item that asks twice.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { load, gpuiHost, numberArguments, texts } from "./helpers.mjs";
+import { load, gpuiHost, numberArguments, texts, calls, arg } from "./helpers.mjs";
 
 const kit = async () => ({
   ...await load("kanso-panel/ui.js", ["tokens", "G", "H", "R", "T", "W"], gpuiHost()),
   ...await load("kanso-panel/ui-menu.js", ["menu", "menuHeight"], gpuiHost()),
 });
-const calls = (el, name) => el.calls.filter((call) => call[0] === name);
-const arg = (el, name) => calls(el, name).at(-1)?.[1];
+
 const night = { background: "#1b1b19", foreground: "#d8d4cb", hover: "#232321", selected: "#2b2b28", dim: "#6b6860", muted: "#949086", accent: "#7d9cd4", popover: "#222220", border: "#33332f" };
 
 test("A Menu is a popover 252 wide, 4 inside, radius 8, with its heading dim in the meta size", async () => {

@@ -1,27 +1,17 @@
 // The row: one named item with its facts, mark and tools, in every state its Storybook story shows.
+import { loadRow, loadPendingState } from "./mod-fixtures.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { load, chain, gpuiHost, numberArguments } from "./helpers.mjs";
+import { load, chain, gpuiHost, numberArguments, calls, one, styled } from "./helpers.mjs";
 import { marks, rowDepths } from "../stories/kit/pieces.js";
 
 const host = () => ({ ...gpuiHost(), svg: (path) => { const el = chain("svg"); el.calls.push(["svg", path]); return el; } });
 const kit = async () => ({
   ...await load("kanso-panel/ui.js", ["tokens", "G", "H", "R", "T", "ICON_ROW", "ICON_INLINE", "CLEAR"], host()),
-  ...await load("kanso-panel/ui-state.js", ["PENDING"], host()),
-  ...await load("kanso-panel/ui-row.js", ["row"], host()),
+  ...await loadPendingState(host()),
+  ...await loadRow(host()),
 });
 
-const calls = (el, name) => el.calls.filter((call) => call[0] === name);
-const one = (el, name) => {
-  const found = calls(el, name);
-  assert.equal(found.length, 1, name);
-  return found[0][1];
-};
-const styled = (el, name) => {
-  const style = chain();
-  one(el, name)(style);
-  return style.calls;
-};
 const all = (el) => [el, ...el.kids.flatMap(all)];
 const byTag = (el, tag) => all(el).find((kid) => kid.tag === tag);
 const svgs = (el) => all(el).flatMap((kid) => calls(kid, "svg").map((call) => call[1]));

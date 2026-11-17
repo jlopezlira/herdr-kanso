@@ -1,5 +1,6 @@
 // Shared by the tests: load a mod's real source into a fake Herdr host.
 import { execFile, execFileSync } from "node:child_process";
+import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { access, mkdir, mkdtemp, readFile, readdir, rmdir, rm, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -56,6 +57,22 @@ const herdrModules = (host) => {
 };
 
 export const clone = (value) => JSON.parse(JSON.stringify(value));
+export const success = (stdout) => ({ code: 0, stdout, stderr: "" });
+export const failure = (stderr, code = 1) => ({ code, stdout: "", stderr });
+export const calls = (el, name) => el.calls.filter((call) => call[0] === name);
+export const one = (el, name) => {
+  const found = calls(el, name);
+  assert.equal(found.length, 1, name);
+  return found[0][1];
+};
+export const styled = (el, name) => {
+  const style = chain();
+  one(el, name)(style);
+  return style.calls;
+};
+export const arg = (el, name) => calls(el, name).at(-1)?.[1];
+export const find = (el, test) => (test(el) ? el : el.kids.map((kid) => find(kid, test)).find(Boolean) ?? null);
+export const all = (el, test) => [...(test(el) ? [el] : []), ...el.kids.flatMap((kid) => all(kid, test))];
 export const nativePlatform = ({ darwin: "macos", win32: "windows" })[process.platform] ?? "linux";
 export const nativeWindow = () => ({ platform: nativePlatform });
 const mods = new URL("../kanso/mods/", import.meta.url);
@@ -134,6 +151,13 @@ export function context() {
   const cx = { notify() {}, spawn(fn) { const task = fn(cx); pending.push(task); return task; } };
   return { cx, async drain() { while (pending.length) await pending.shift(); } };
 }
+
+export const refreshedContext = async (view) => {
+  const tasks = context();
+  view.refresh(tasks.cx);
+  await tasks.drain();
+  return tasks;
+};
 
 // GPUI's elements are single-use: one added to a second parent fails the render
 // ("element was already added to a parent"). These fakes fail the same way.

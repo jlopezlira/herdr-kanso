@@ -10,14 +10,14 @@ import { petApi } from "../kanso/mods/kanso-panel/platform-pets.js";
 import { clipboardApi } from "../kanso/mods/kanso-panel/platform-clipboard.js";
 import { fileApi } from "../kanso/mods/kanso-panel/platform-files.js";
 import { openApi } from "../kanso/mods/kanso-panel/platform-open.js";
-import { load, clone } from "./helpers.mjs";
+import { load, clone, success, failure } from "./helpers.mjs";
 
 function stub(answer = () => "") {
   const calls = [];
   const run = async (program, args, options) => {
     calls.push({ program, args, options });
     const value = await answer(program, args, options);
-    return typeof value === "string" ? { code: 0, stdout: value, stderr: "" } : value;
+    return typeof value === "string" ? success(value) : value;
   };
   return { calls, run };
 }
@@ -32,11 +32,11 @@ for (const platform of ["macos", "linux", "windows"]) {
     assert.equal(await api.startTime(42, now), Date.parse(created));
     assert.equal((await api.identity(42, now)).start, Date.parse(created));
     assert.match((await api.memory()).stdout, /42 123 claude/);
-    const empty = processApi(platform, stub(() => windows ? "[]" : { code: 1, stdout: "", stderr: "no such process" }).run);
+    const empty = processApi(platform, stub(() => windows ? "[]" : failure("no such process")).run);
     assert.equal(await empty.exists(42), false);
     assert.equal(await empty.identity(42), null);
     assert.ok(Number.isNaN(await empty.startTime(42)));
-    const denied = processApi(platform, stub(() => ({ code: 1, stdout: "", stderr: "Permission denied" })).run);
+    const denied = processApi(platform, stub(() => (failure("Permission denied"))).run);
     if (windows) await assert.rejects(denied.exists(42), /Permission denied/);
     else assert.equal(await denied.exists(42), null);
   });
@@ -69,7 +69,7 @@ for (const platform of ["macos", "linux", "windows"]) {
       assert.match(r.calls.at(-1).args.at(-1), /'WEBP'/);
       assert.ok(!r.calls.at(-1).args.at(-1).includes("System.Drawing"));
     }
-    const failed = imageApi(platform, stub(() => ({ code: 1, stdout: "", stderr: "missing renderer" })).run);
+    const failed = imageApi(platform, stub(() => (failure("missing renderer"))).run);
     assert.equal(await failed.toPng("image.heic", "out.png"), false);
     assert.equal(await failed.firstPage("file.pdf", 800, "out.png"), false);
   });
@@ -110,7 +110,7 @@ for (const platform of ["macos", "linux", "windows"]) {
     const r = stub(() => windows ? "42" : "com.example.browser"), api = clipboardApi(platform, r.run);
     assert.equal(await api.frontApp(), platform === "linux" ? null : windows ? "42" : "com.example.browser");
     assert.equal((await api.paste(windows ? "42" : "com.example.browser")).state, "ok");
-    const failed = clipboardApi(platform, stub(() => ({ code: 1, stdout: "", stderr: "blocked" })).run);
+    const failed = clipboardApi(platform, stub(() => (failure("blocked"))).run);
     assert.equal((await failed.paste("42")).state, "error");
     if (windows) {
       assert.equal((await api.paste("42; injected")).state, "error");
@@ -153,10 +153,10 @@ test("Windows session recovery verifies process identity before claiming an exis
 
 test("Windows session lookup keeps directory access failures distinct from an absent session", async () => {
   for (const phase of ["lookup", "read"]) {
-    const r = stub((_program, args) => phase === "lookup" || args.at(-1).includes("Get-ChildItem") ? { code: 1, stdout: "", stderr: "Access denied" } : "");
+    const r = stub((_program, args) => phase === "lookup" || args.at(-1).includes("Get-ChildItem") ? failure("Access denied") : "");
     await assert.rejects(processApi("windows", r.run).runningSession("session", "C:\\Users\\me"), /Access denied/);
   }
-  const missing = stub(() => ({ code: 1, stdout: "", stderr: "" }));
+  const missing = stub(() => (failure("")));
   assert.equal(await processApi("windows", missing.run).runningSession("session", "C:\\Users\\me"), null);
 });
 
@@ -199,7 +199,7 @@ test("Windows Markdown waiting records survive inspection errors and remove only
 for (const platform of ["macos", "linux", "windows"]) {
   test(`${platform} host selection scopes remote runners and caches platform detection`, async () => {
     const r = stub((program, args) => args.at(-1).includes("OSVersion")
-      ? platform === "windows" ? "Win32NT\n" : { code: 127, stdout: "", stderr: "command not found" }
+      ? platform === "windows" ? "Win32NT\n" : failure("command not found", 127)
       : program === "uname" ? platform === "macos" ? "Darwin\n" : "Linux\n" : platform === "windows" ? "[]" : "42 1 01:00 node");
     const { serviceOn, localName, localService } = await load("kanso-panel/platform-host.js", ["serviceOn", "localName", "localService"], { exec: r.run, window: () => ({ platform: "macos" }) });
     const remote = await serviceOn(processApi, "remote");
@@ -234,7 +234,7 @@ test("a local exec receives the timeout, and a remote one does too", async () =>
   const seen = [];
   const remote = await serviceFor((_platform, run) => ({ run }), "other", 15000, async (factory) => factory("linux", (cmd, args, options) => {
     seen.push({ cmd, args, options });
-    return { code: 0, stdout: "", stderr: "" };
+    return success("");
   }));
   await remote.run("sqlite3", ["-version"]);
   assert.equal(seen.at(-1).options.timeout, 15000);
@@ -256,8 +256,8 @@ test("Windows repository operations cover discovery, safety probes and metadata 
       if (args.includes("--show-toplevel")) return "C:/repo\n";
       if (args.includes("--porcelain")) return "";
       if (args.includes("--absolute-git-dir")) return "C:/repo/.git/worktrees/feature\n";
-      if (args.includes("symbolic-ref")) return { code: 1, stdout: "", stderr: "" };
-      if (args.includes("--verify") && args.includes("--quiet")) return { code: 1, stdout: "", stderr: "" };
+      if (args.includes("symbolic-ref")) return failure("");
+      if (args.includes("--verify") && args.includes("--quiet")) return failure("");
       if (args.includes("rev-list")) return "0\n";
       if (args.includes("log")) return "1700000000\n";
       return "";
@@ -294,7 +294,7 @@ test("Windows recent Markdown uses clipboard paths without requiring a POSIX she
 });
 
 test("Windows editor discovery keeps executable paths returned by where", async () => {
-  const r = stub((_program, args) => args[0] === "code" ? "C:\\Program Files\\Editor\\code.cmd\r\nC:\\other\\code.cmd\r\n" : { code: 1, stdout: "", stderr: "missing" });
+  const r = stub((_program, args) => args[0] === "code" ? "C:\\Program Files\\Editor\\code.cmd\r\nC:\\other\\code.cmd\r\n" : failure("missing"));
   const found = await openApi("windows", r.run).detectEditors([{ id: "code", cli: ["code", "code-insiders"] }, { id: "missing", cli: ["absent"] }]);
   assert.deepEqual(found, { code: { cli: "C:\\Program Files\\Editor\\code.cmd" } });
   assert.ok(r.calls.every(({ program }) => program === "where"));

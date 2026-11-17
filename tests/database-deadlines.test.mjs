@@ -1,6 +1,7 @@
+import { loadStore, loadKdb } from "./mod-fixtures.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { load, clone, temporary, exec } from "./helpers.mjs";
+import { load, clone, temporary, exec, success } from "./helpers.mjs";
 import { BUSY_MS, CALL_MS, sqliteLimit } from "../kanso/mods/kanso-panel/platform-sqlite.js";
 
 const never = () => new Promise(() => {});
@@ -15,7 +16,7 @@ for (const file of ["kanso-arrange/store.js", "kanso-dojo/store.js", "kanso-help
     const timer = clock();
     let lost = true;
     const name = file.endsWith("kdb.js") ? "Kdb" : "Store";
-    const mod = await load(file, [name], { appHome: () => "/test", exec: () => lost ? never() : { code: 0, stdout: "", stderr: "" } });
+    const mod = await load(file, [name], { appHome: () => "/test", exec: () => lost ? never() : success("") });
     const Constructor = mod[name];
     assert.throws(() => new Constructor(), /view's timer/);
     assert.throws(() => new Constructor({}), /view's timer/);
@@ -32,14 +33,14 @@ for (const file of ["kanso-arrange/store.js", "kanso-dojo/store.js", "kanso-help
 }
 
 test("the left nav Store requires an injected bounded database", async () => {
-  const { Store } = await load("kanso-spaces/store.js", ["Store"], { appHome: () => "/test" });
+  const { Store } = await loadStore({ appHome: () => "/test" });
   assert.throws(() => new Store(), /needs its database/);
   assert.throws(() => new Store({}), /view's timer/);
 });
 
 test("a fake execute that loses the first batch does not block the next read", async (t) => {
   const dir = await temporary(t), timer = clock();
-  const { Kdb } = await load("kanso-spaces/kdb.js", ["Kdb"], { appHome: () => dir, exec });
+  const { Kdb } = await loadKdb({ appHome: () => dir, exec });
   const db = new Kdb(timer);
   await db.open();
   const execute = db.execute.bind(db);
@@ -57,14 +58,14 @@ test("a fake execute that loses the first batch does not block the next read", a
 test("Windows schema creation may take over thirty seconds without a false deadline", async () => {
   const timer = clock(), calls = [], scripts = [];
   let finish;
-  const { Kdb } = await load("kanso-spaces/kdb.js", ["Kdb"], {
+  const { Kdb } = await loadKdb({
     appHome: () => "C:\\slow-create",
     window: () => ({ platform: "windows" }),
     writeTextFile: async (_path, text) => { scripts.push(text); },
     exec: async (command, args, options) => {
       calls.push({ command, args, options });
       if (command === "sqlite3" && args.some((arg) => arg.includes("CREATE TABLE") || arg.startsWith(".read "))) return new Promise((resolve) => { finish = resolve; });
-      return { code: 0, stdout: "", stderr: "" };
+      return success("");
     },
   });
   const db = new Kdb(timer);
@@ -81,7 +82,7 @@ test("Windows schema creation may take over thirty seconds without a false deadl
   assert.match(schemaText, /BEGIN IMMEDIATE;/);
   assert.match(schemaText, /COMMIT;/);
   assert.ok(schema.args.includes(`.timeout ${BUSY_MS}`));
-  finish({ code: 0, stdout: "", stderr: "" });
+  finish(success(""));
   await opening;
   assert.equal(settled, true);
 });

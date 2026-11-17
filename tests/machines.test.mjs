@@ -1,8 +1,9 @@
 // A remote machine can be turned off from the sidebar and back on with the setup that was saved.
+import { loadSpaces, loadKdb } from "./mod-fixtures.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { join } from "node:path";
-import { databaseTimer, load, clone, temporary, exec, context } from "./helpers.mjs";
+import { databaseTimer, load, clone, temporary, exec, context, failure } from "./helpers.mjs";
 
 const record = { name: "dark", target: "dark.example", via: "", session: "", temporary: false };
 const darkKey = JSON.stringify(["dark", "/srv"]);
@@ -155,7 +156,7 @@ async function sidebar(state) {
     });
     return proxy;
   };
-  const { Spaces } = await load("kanso-spaces/main.js", ["Spaces"], {
+  const { Spaces } = await loadSpaces({
     div: node, svg: node, image: node, h_flex: node, v_flex: node,
     Popover: { new: node }, Toggle: { new: (id) => { ids.push(id); return node(); } }, Button: { new: (id) => { ids.push(id); return node(); } },
     theme: () => ({ foreground: "#fff", muted: "#888", dim: "#666", chrome: "#111", hover: "#222", ansi2: "#0f0", blocked: "#c44", border: "#333", raised: "#222", accent: "#09f" }),
@@ -320,7 +321,7 @@ test("loading, unreachable, and needs login each stay on that one row", async ()
 test("turning a machine off stops reading it at once, and turning it on adds the saved setup", async () => {
   const calls = [];
   const db = { parked: [], async parkMachine(row) { this.parked = [clone(row)]; }, async forgetMachine() { this.parked = []; }, async machinesOff() { return this.parked; } };
-  const { Spaces } = await load("kanso-spaces/main.js", ["Spaces"], {
+  const { Spaces } = await loadSpaces({
     hc: async (args) => {
       calls.push(args);
       if (args[0] === "machine" && args[1] === "ls") return { code: 0, stdout: JSON.stringify({ machines: [] }) };
@@ -344,7 +345,7 @@ test("turning a machine off stops reading it at once, and turning it on adds the
   assert.equal(view.due(Date.now(), sp, [], places, true).has(darkKey), false);
   assert.equal(view.due(Date.now(), sp, [], places, true).has(homeKey), true);
   const gitCalls = [];
-  const { Spaces: WithExec } = await load("kanso-spaces/main.js", ["Spaces"], {
+  const { Spaces: WithExec } = await loadSpaces({
     exec: (...args) => { gitCalls.push(args); return { code: 1, stderr: "skipped" }; }, machines: () => [],
   });
   const quiet = Object.assign(new WithExec(), { parked: [record], checked: {}, unsure: new Set(), git: {} });
@@ -370,7 +371,7 @@ test("turning a machine off stops reading it at once, and turning it on adds the
 });
 
 async function parkedView(hc, db) {
-  const { Spaces } = await load("kanso-spaces/main.js", ["Spaces"], { hc, machines: () => [], exec: async () => ({ code: 0, stdout: "" }) });
+  const { Spaces } = await loadSpaces({ hc, machines: () => [], exec: async () => ({ code: 0, stdout: "" }) });
   return Object.assign(new Spaces(), {
     parked: [], machines: [], waking: new Set(), login: new Set(), failed: new Set(), powerBusy: new Set(), hints: {},
     git: {}, at: {}, busy: {}, ready: {}, folded: new Set(), checked: {}, unsure: new Set(), db: () => db,
@@ -414,7 +415,7 @@ test("a remove that cannot be stored keeps the row and offers retry", async () =
 
 test("a remove Herdr refuses puts the machine back", async () => {
   const db = { parked: [], async parkMachine(row) { this.parked = [clone(row)]; }, async forgetMachine() { this.parked = []; } };
-  const view = await parkedView(async () => ({ code: 1, stdout: "", stderr: "still there" }), db);
+  const view = await parkedView(async () => (failure("still there")), db);
   view.machines = [{ ...record, state: "connected" }];
   const { cx, drain } = context();
   view.turnOff("dark", cx);
@@ -426,7 +427,7 @@ test("a remove Herdr refuses puts the machine back", async () => {
 
 test("an off machine is still off after the database is opened again", async (t) => {
   const dir = await temporary(t);
-  const { Kdb } = await load("kanso-spaces/kdb.js", ["Kdb"], { exec, appHome: () => dir });
+  const { Kdb } = await loadKdb({ exec, appHome: () => dir });
   const file = join(dir, "kanso");
   await new Kdb(databaseTimer, file).parkMachine({ name: "dark", target: "dark.example", via: "ssh -J jump", session: "sess", temporary: true });
   assert.deepEqual(clone(await new Kdb(databaseTimer, file).machinesOff()), [{ name: "dark", target: "dark.example", via: "ssh -J jump", session: "sess", temporary: true }]);
@@ -499,7 +500,7 @@ test("Sync on is the normal text tone, off is dim, and one that cannot run is th
 });
 
 async function syncView({ sync = { config: {}, status: {} }, host = {} } = {}) {
-  const { Spaces } = await load("kanso-spaces/main.js", ["Spaces"], { appHome: () => "/app", setShared: () => {}, ...host });
+  const { Spaces } = await loadSpaces({ appHome: () => "/app", setShared: () => {}, ...host });
   return Object.assign(new Spaces(), { sync, machines: [], parked: [] });
 }
 

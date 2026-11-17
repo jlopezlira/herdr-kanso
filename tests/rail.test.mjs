@@ -1,7 +1,8 @@
 // The collapsed sidebar's rail: one mark per group, its popup, and Hide sidebar.
+import { loadSpaces } from "./mod-fixtures.mjs";
 import assert from "node:assert/strict";
 import test from "node:test";
-import { clone, load, elements, watchPopups } from "./helpers.mjs";
+import { clone, elements, watchPopups } from "./helpers.mjs";
 
 // Elements that keep the handlers given to them, by the id they were built with.
 function recorder() {
@@ -25,7 +26,7 @@ function recorder() {
 
 async function spaces(host = {}) {
   const { node, handlers } = recorder();
-  const { Spaces } = await load("kanso-spaces/main.js", ["Spaces"], {
+  const { Spaces } = await loadSpaces({
     ...elements(node), terminals: () => [], spaces: () => [], panes: () => [], agents: () => [], shared: () => null, setShared: () => {},
     theme: () => ({ foreground: "#fff", muted: "#888", dim: "#666", accent: "#09f", border: "#333", popover: "#111", selected: "#222", hover: "#222" }),
     ...host,

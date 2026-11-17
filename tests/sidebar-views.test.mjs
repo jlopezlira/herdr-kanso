@@ -1,4 +1,5 @@
 // The sidebar's rows and its Projects, Status and Threads views draw what the Storybook drawings show.
+import { loadSpaces, loadAgentRowH } from "./mod-fixtures.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { load, clone } from "./helpers.mjs";
@@ -25,7 +26,7 @@ async function sidebar(state) {
     return proxy;
   };
   const field = { on() {}, value: () => state.typed ?? "", set_value() {}, focus() { focused.push(true); }, release() {} };
-  const { Spaces } = await load("kanso-spaces/main.js", ["Spaces"], {
+  const { Spaces } = await loadSpaces({
     div: node, image: node, h_flex: node, v_flex: node,
     svg: (path) => { icons.push(path); return node(); },
     Popover: { new: (x) => node().id(x) }, Toggle: { new: node }, Button: { new: (x) => node().id(x) },
@@ -133,7 +134,7 @@ test("each session row has its own mark and words: a terminal's icon, the time a
 });
 
 test("a sub-session that needs you gets its own line; the others stay on one", async () => {
-  const { agentRowH } = await load("kanso-spaces/agents.js", ["agentRowH"], { div: () => ({}), svg: () => ({}) });
+  const { agentRowH } = await loadAgentRowH({ div: () => ({}), svg: () => ({}) });
   assert.equal(agentRowH({ sub: true }, {}), 28);
   assert.equal(agentRowH({}, { activity: "Allow network access?" }), 50);
   assert.equal(agentRowH({}, { activity: null }), 32, "finished with nothing to say: one line");

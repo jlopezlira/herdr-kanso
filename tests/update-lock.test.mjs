@@ -1,14 +1,12 @@
 import assert from "node:assert/strict";
 import { mkdir, readFile, readdir } from "node:fs/promises";
 import { join } from "node:path";
-import { context, until } from "./helpers.mjs";
-import { windows, test, fixture, updates, staged, pending, holder, took, version, updated } from "./update-harness.mjs";
+import { until } from "./helpers.mjs";
+import { windows, test, fixture, updates, staged, pending, holder, took, version, updated, startUpdater } from "./update-harness.mjs";
 
 test("An install whose owner is alive is left alone, staging and all; once it is gone the lock is free at once", async (t) => {
   const f = await fixture(t);
-  const { cx, drain } = context();
-  cx.timer = { every() {} };
-  f.updater.start(cx); await drain();
+  const { cx, drain } = await startUpdater(f);
 
   const a = await holder(t, f);
   took(a, "the holder takes a free lock");
@@ -29,9 +27,7 @@ test("An install whose owner is alive is left alone, staging and all; once it is
 
 test("An owner that lets go while another waits: the next to take the lock keeps it, and its staging", async (t) => {
   const f = await fixture(t);
-  const { cx, drain } = context();
-  cx.timer = { every() {} };
-  f.updater.start(cx); await drain();
+  const { cx, drain } = await startUpdater(f);
   const a = await holder(t, f);
   assert.equal(await f.updater.install(cx), "busy");
   // A finishes; C takes the lock straight away. Nothing judged A gone, so nothing can undo C.
@@ -54,9 +50,7 @@ test("An install longer than exec's limit runs to the end, and keeps the lock al
   // Herdr kills an exec at 30 s; here sooner, yet above what starting PowerShell alone takes.
   const limit = windows ? 10000 : 1000;
   f.ctl.limit = limit; other.ctl.limit = limit;
-  const { cx, drain } = context();
-  cx.timer = { every() {} };
-  f.updater.start(cx); await drain();
+  const { cx, drain } = await startUpdater(f);
   await f.flag("slow");
   const began = Date.now();
   const first = f.updater.install(cx);
@@ -84,9 +78,7 @@ test("An install longer than exec's limit runs to the end, and keeps the lock al
 
 test("A swap that fails on its last mod puts back every one before it: the old version stays", async (t) => {
   const f = await fixture(t);
-  const { cx, drain } = context();
-  cx.timer = { every() {} };
-  f.updater.start(cx); await drain();
+  const { cx, drain } = await startUpdater(f);
   const keysBefore = await readFile(join(f.home, "keys.json"), "utf8");
   await f.flag("sabotage"); // kanso-chrome, the last mod moved in, cannot be
   await f.updater.install(cx);

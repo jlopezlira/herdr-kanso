@@ -2,13 +2,11 @@ import assert from "node:assert/strict";
 import { readFile, readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { context, until } from "./helpers.mjs";
-import { repo, test, fixture, staged, pending, version, told, updated } from "./update-harness.mjs";
+import { repo, test, fixture, staged, pending, version, told, updated, startUpdater } from "./update-harness.mjs";
 
 test("Updating Kanso swaps its mods, merges its keys and keeps your layout aside", async (t) => {
   const f = await fixture(t);
-  const { cx, drain } = context();
-  cx.timer = { every() {} };
-  f.updater.start(cx); await drain();
+  const { cx, drain } = await startUpdater(f);
   assert.equal(f.updater.installed, "1.0.0");
   assert.equal(f.updater.available(), "1.1.0");
   assert.equal(f.toasts.length, 1);
@@ -60,9 +58,7 @@ test("Updating Kanso swaps its mods, merges its keys and keeps your layout aside
 
 test("A copy that started before version.json arrived stops offering what is installed", async (t) => {
   const f = await fixture(t);
-  const { cx, drain } = context();
-  cx.timer = { every() {} };
-  f.updater.start(cx); await drain();
+  const { cx, drain } = await startUpdater(f);
   assert.equal(f.updater.available(), "1.1.0");
   // The release's files land by another way (a manual install); the copy keeps running.
   await writeFile(join(f.home, "mods/kanso-chrome/version.json"), '{ "version": "1.1.0" }\n');
@@ -74,9 +70,7 @@ test("A copy that started before version.json arrived stops offering what is ins
 
 test("A release that kept the layout leaves yours as it is", async (t) => {
   const f = await fixture(t, { layoutChanged: false });
-  const { cx, drain } = context();
-  cx.timer = { every() {} };
-  f.updater.start(cx); await drain();
+  const { cx, drain } = await startUpdater(f);
   f.footer.size = { px: 240 }; // sized by you
   await f.updater.install(cx);
   assert.equal(f.updater.error, null, f.updater.error);
@@ -87,9 +81,7 @@ test("A release that kept the layout leaves yours as it is", async (t) => {
 
 test("A tag whose files say another version is not installed", async (t) => {
   const f = await fixture(t);
-  const { cx, drain } = context();
-  cx.timer = { every() {} };
-  f.updater.start(cx); await drain();
+  const { cx, drain } = await startUpdater(f);
   f.store["kanso.update"].latest = "1.2.0"; // tagged, but no such tarball
   await f.updater.install(cx);
   assert.ok(f.updater.error);
@@ -108,9 +100,7 @@ test("A tag whose files say another version is not installed", async (t) => {
 
 test("Update from the footer and from the tab bar at once: one installs, the other is told", async (t) => {
   const f = await fixture(t);
-  const { cx, drain } = context();
-  cx.timer = { every() {} };
-  f.updater.start(cx); await drain();
+  const { cx, drain } = await startUpdater(f);
   // The same window: the footer's copy and the tab bar's, one shared state.
   const tabs = new f.Updater(f.source);
   await tabs.readInstalled();

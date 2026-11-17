@@ -1,8 +1,9 @@
 // The update channel: what the shell is given, what the toast says, and the What's new row.
+import { loadUpdater, loadSettings } from "./mod-fixtures.mjs";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { hostInstall } from "../kanso/mods/kanso-chrome/release.js";
-import { context, load, tape } from "./helpers.mjs";
+import { context, tape, success, failure } from "./helpers.mjs";
 
 const listing = [
   "a\trefs/tags/v3.29.0",
@@ -22,7 +23,7 @@ function updaterHost({ store, toasts = [], version = "3.30.0", onExec }) {
     readTextFile: async () => `{"version":"${version}"}`,
     exec: async (command, args) => {
       if (onExec) return onExec(command, args);
-      return command === "git" ? { code: 0, stdout: listing, stderr: "" } : { code: 0, stdout: "", stderr: "" };
+      return command === "git" ? success(listing) : success("");
     },
   };
 }
@@ -31,12 +32,12 @@ test("A prerelease download uses the tag, and the version check wants X.Y.Z", as
   const store = { "kanso.update": { channel: "beta", tag: "3.30.0-beta.1", latest: "3.30.0-beta.2", autoCheck: true } };
   const urls = [];
   const sh = [];
-  const { Updater } = await load("kanso-chrome/update.js", ["Updater"], updaterHost({
+  const { Updater } = await loadUpdater(updaterHost({
     store,
     onExec: async (command, args) => {
-      if (command === "curl") { urls.push(args.at(-1)); return { code: 1, stdout: "", stderr: "" }; }
+      if (command === "curl") { urls.push(args.at(-1)); return failure(""); }
       if (command === "sh") { sh.push(args); return { code: String(args[1]).startsWith("dir=") ? 1 : 0, stdout: "", stderr: "could not start" }; }
-      return { code: 0, stdout: "", stderr: "" };
+      return success("");
     },
   }));
   const updater = new Updater();
@@ -55,7 +56,7 @@ test("A prerelease download uses the tag, and the version check wants X.Y.Z", as
 
 test("A finished install records its tag when version.json is that version", async () => {
   const store = { "kanso.update": { channel: "beta", tag: "3.30.0-beta.1" } };
-  const { Updater } = await load("kanso-chrome/update.js", ["Updater"], updaterHost({ store }));
+  const { Updater } = await loadUpdater(updaterHost({ store }));
   const updater = new Updater();
   updater.installed = "3.30.0";
   const { cx } = context();
@@ -63,7 +64,7 @@ test("A finished install records its tag when version.json is that version", asy
   assert.equal(store["kanso.update"].tag, "3.30.0-beta.2");
 
   const moved = { "kanso.update": { tag: "3.30.0-beta.2" } };
-  const { Updater: Again } = await load("kanso-chrome/update.js", ["Updater"], updaterHost({ store: moved, version: "3.31.0" }));
+  const { Updater: Again } = await loadUpdater(updaterHost({ store: moved, version: "3.31.0" }));
   const next = new Again();
   await next.report(cx, "ok", "", { version: "3.30.0-beta.2" });
   assert.equal(next.installed, "3.31.0");
@@ -74,7 +75,7 @@ test("The toast names the tag, and Stable never offers an older release", async 
   const look = async (state, version) => {
     const store = { "kanso.update": { autoCheck: true, ...state } };
     const toasts = [];
-    const { Updater } = await load("kanso-chrome/update.js", ["Updater"], updaterHost({ store, toasts, version }));
+    const { Updater } = await loadUpdater(updaterHost({ store, toasts, version }));
     const updater = new Updater();
     const { cx } = context();
     await updater.check(cx, true, true);
@@ -98,11 +99,11 @@ test("The toast names the tag, and Stable never offers an older release", async 
 test("Choosing Early looks again, and Stable stays the default until then", async () => {
   const store = { "kanso.update": { autoCheck: true, tag: "3.30.0-beta.2", latest: "3.29.0" } };
   let asked = 0;
-  const { Updater } = await load("kanso-chrome/update.js", ["Updater"], updaterHost({
+  const { Updater } = await loadUpdater(updaterHost({
     store,
     onExec: async (command) => {
-      if (command === "git") { asked += 1; return { code: 0, stdout: listing, stderr: "" }; }
-      return { code: 0, stdout: "", stderr: "" };
+      if (command === "git") { asked += 1; return success(listing); }
+      return success("");
     },
   }));
   const updater = new Updater();
@@ -134,7 +135,7 @@ const colors = () => ({
 async function settingsOf(store) {
   const ui = tape();
   ui.host.Toggle = { new: (id) => ui.host.Button.new(id) };
-  const { Settings } = await load("kanso-settings/main.js", ["Settings"], {
+  const { Settings } = await loadSettings({
     ...ui.host,
     theme: colors,
     props: () => ({}),

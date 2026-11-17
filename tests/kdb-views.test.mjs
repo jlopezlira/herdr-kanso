@@ -1,8 +1,9 @@
 // Every view has its own queue and cache: a view gone mid-call never holds up the next one.
+import { loadKdb } from "./mod-fixtures.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { BUSY_MS, CALL_MS } from "../kanso/mods/kanso-panel/platform-sqlite.js";
-import { databaseTimer, load, clone, temporary, exec } from "./helpers.mjs";
+import { databaseTimer, clone, temporary, exec } from "./helpers.mjs";
 
 const never = () => new Promise(() => {});
 const turn = () => new Promise((resolve) => setImmediate(resolve));
@@ -16,7 +17,7 @@ function within(promise, ms = SETTLE_LIMIT_MS) {
 // lose() makes the next command the one Herdr loses; it resolves once that command was asked for.
 async function views(t) {
   const dir = await temporary(t), calls = [], host = { lost: null };
-  const { Kdb } = await load("kanso-spaces/kdb.js", ["Kdb"], {
+  const { Kdb } = await loadKdb({
     appHome: () => dir,
     exec: (command, args) => {
       calls.push([command, args]);
@@ -74,7 +75,7 @@ async function clocked(t) {
   const waits = [];
   const timer = { after(ms, fn) { waits.push({ ms, fn }); } };
   let hang = false;
-  const { Kdb } = await load("kanso-spaces/kdb.js", ["Kdb"], {
+  const { Kdb } = await loadKdb({
     appHome: () => dir,
     exec: (command, args) => (hang && command === "sqlite3" ? never() : exec(command, args)),
   });

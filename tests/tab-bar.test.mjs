@@ -1,7 +1,7 @@
 // The tab bar as the Storybook draws its tabs: chosen, at rest and waiting, close armed, renaming, dragging, folded, connecting and unreachable.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { load, clone, chain, gpuiHost } from "./helpers.mjs";
+import { load, clone, chain, gpuiHost, calls, arg, find, all } from "./helpers.mjs";
 
 const night = {
   background: "#1b1b19", foreground: "#d8d4cb", hover: "#232321", selected: "#2b2b28", dim: "#6b6860", muted: "#949086",
@@ -32,10 +32,6 @@ async function bar({ tabs = TABS, machine = null, computers = [], panes = [], fa
   return { view, cx, ran, toasts, opened, space, c: tokens(night), W, PENDING };
 }
 
-const calls = (el, name) => el.calls.filter((call) => call[0] === name);
-const arg = (el, name) => calls(el, name).at(-1)?.[1];
-const find = (el, test) => (test(el) ? el : el.kids.map((kid) => find(kid, test)).find(Boolean) ?? null);
-const all = (el, test) => [...(test(el) ? [el] : []), ...el.kids.flatMap((kid) => all(kid, test))];
 const byTag = (root, id) => find(root, (el) => el.tag === id || calls(el, "id").some((call) => call[1] === id));
 const handler = (el, name) => calls(el, name).at(-1)?.at(-1);
 const pressOf = (el, button) => calls(el, "on_mouse_down").find((call) => call[1] === button)?.at(-1);

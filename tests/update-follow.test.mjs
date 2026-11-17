@@ -1,12 +1,10 @@
 import assert from "node:assert/strict";
-import { context, until } from "./helpers.mjs";
-import { test, fixture, staged, pending, version, updated } from "./update-harness.mjs";
+import { until } from "./helpers.mjs";
+import { test, fixture, staged, pending, version, updated, startUpdater } from "./update-harness.mjs";
 
 test("A copy started while another prepares its install waits for it, and the outcome is told once, with its version", async (t) => {
   const f = await fixture(t);
-  const { cx, drain } = context();
-  cx.timer = { every() {} };
-  f.updater.start(cx); await drain();
+  const { cx, drain } = await startUpdater(f);
   f.ctl.holdCurl = true; // the keys and layout downloads wait
   const first = f.updater.install(cx);
   await until(async () => pending(f).length === 1 && f.ctl.held > 0);
@@ -26,9 +24,7 @@ test("A copy started while another prepares its install waits for it, and the ou
 
 test("The copy the swap starts picks up the install's outcome and reports it", async (t) => {
   const f = await fixture(t);
-  const { cx, drain } = context();
-  cx.timer = { every() {} };
-  f.updater.start(cx); await drain();
+  const { cx, drain } = await startUpdater(f);
   await f.flag("slow");
   f.ctl.abandon = true;
   f.updater.install(cx); // replaced mid-install: never heard from again

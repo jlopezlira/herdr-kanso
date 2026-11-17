@@ -1,19 +1,12 @@
 // The key hint: a chord on a thin edge, faint when unset, breathing in the accent while it records.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { load, gpuiHost, numberArguments } from "./helpers.mjs";
+import { load, gpuiHost, numberArguments, calls, one } from "./helpers.mjs";
 
 const kit = async () => ({
   ...await load("kanso-panel/ui.js", ["tokens", "BREATH", "G", "H", "R", "T"], gpuiHost()),
   ...await load("kanso-panel/ui-key-hint.js", ["keyHint"], gpuiHost()),
 });
-
-const calls = (el, name) => el.calls.filter((call) => call[0] === name);
-const one = (el, name) => {
-  const found = calls(el, name);
-  assert.equal(found.length, 1, name);
-  return found[0][1];
-};
 
 const night = { foreground: "#d8d4cb", background: "#1b1b19", border: "#33332f", accent: "#da627d", dim: "#6b6862", muted: "#949086" };
 
