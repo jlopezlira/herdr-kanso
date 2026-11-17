@@ -95,7 +95,7 @@ Top to bottom:
 - **Codex `input_tokens` already includes cached tokens.** Subtract `cached_input_tokens` to get uncached input. Output already includes reasoning tokens; don't add them twice.
 - **Catalog matching.** Sort the catalog longest id first, so `gpt-6-sol-pro` doesn't swallow `gpt-6-sol`.
 - **OpenRouter prices.** Some catalog cache rates differ from Anthropic's own, which is why the first-party table wins for Claude models.
-- **Runtime.** `runtime.json` must point at Node 22.15 or newer: zstd archives need `zlib.createZstdDecompress`, and OpenCode needs `node:sqlite`. `"node"` works when it is on the login PATH.
+- **Runtime.** `runtime.json` must point at Node 22.15 or newer: zstd archives need `zlib.createZstdDecompress`, and OpenCode needs `node:sqlite`. `"node"` works when it is on Herdr's process PATH; when Herdr was launched without that PATH, set the absolute path to Node in `runtime.json`.
 - **The folder name is a constant (`MOD`) at the top of `main.js`.** Asset paths, the data folder and command names all derive from it.
 
 ## Done when
