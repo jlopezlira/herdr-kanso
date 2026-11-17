@@ -176,6 +176,41 @@ export const openedKdb = async (Kdb) => {
   return db;
 };
 
+// A view context whose timers wait in `timers` as [ms, fn] and whose spawned tasks can be awaited; `extra` adds to it.
+export const timedContext = (timers, extra = {}) => {
+  const pending = [];
+  const cx = {
+    notify() {}, ...extra,
+    spawn(fn) { const p = fn(cx); pending.push(p); return { cancel() {} }; },
+    timer: { every: () => ({ cancel() {} }), after: (ms, fn) => { timers.push([ms, fn]); return { cancel() {} }; } },
+  };
+  return { cx, pending, drain: async () => { while (pending.length) await pending.shift(); } };
+};
+
+// Elements that keep their children in order, every id and every word drawn.
+const KIDS = Symbol("kids");
+export const keeping = () => {
+  const ids = [], words = [];
+  const element = () => {
+    const kids = [];
+    const proxy = new Proxy(function el() {}, { get: (_target, method) => {
+      if (method === KIDS) return kids;
+      return (...args) => {
+        if (method === "when" && args[0]) args[1](proxy);
+        if (method === "id") ids.push(args[0]);
+        if (method === "child") kids.push(args[0]);
+        if (method === "child" && typeof args[0] === "string") words.push(args[0]);
+        if (method === "children") kids.push(...args[0]);
+        return proxy;
+      };
+    } });
+    return proxy;
+  };
+  return { element, ids, words };
+};
+// The words under a kept element, in the order they show.
+export const wordsOf = (node) => (typeof node === "string" ? [node] : node?.[KIDS] ? node[KIDS].flatMap(wordsOf) : []);
+
 // A view context whose spawned tasks can be awaited.
 export function context() {
   const pending = [];
