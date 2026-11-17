@@ -1,6 +1,4 @@
 // What the sidebar may paint, and the pull a press runs. Drawing stays next door.
-export const ASLEEP_ROW = 32;
-
 export const showPlus = (active, hovered) => Boolean(active || hovered);
 export const showDots = (hovered) => Boolean(hovered);
 

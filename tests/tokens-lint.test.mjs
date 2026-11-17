@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { loadTokens, read } from "../scripts/tokens.mjs";
 import { UI, withTokens } from "../scripts/build-ui-tokens.mjs";
-import { check, compare, violations } from "../scripts/check-tokens.mjs";
+import { check, compare, named, violations } from "../scripts/check-tokens.mjs";
 
 const tokens = loadTokens();
 
@@ -21,6 +21,21 @@ test("A new literal fails with its file and line; token values and 0 pass", () =
   assert.deepEqual(compare(found, []), [
     `${file}:4: text_size(13) is not a token value in kanso/tokens.json`,
     `${file}:4: gap(10) is not a token value in kanso/tokens.json`,
+  ]);
+});
+
+test("A module-level number passed whole to a linted call fails with its file and line, an imported one too; token names and counts pass", () => {
+  const sizes = { file: "kanso/mods/x/sizes.js", text: "export const VIEW = { title: 17 };\nexport const ROWS = 8;" };
+  const main = { file: "kanso/mods/x/main.js", text: [
+    "import { VIEW, ROWS } from \"./sizes.js\";",
+    "const GAP = 6, EDGE = H.line; // a gap",
+    "div().gap(GAP).h(EDGE).max_h(ROWS * H.line)",
+    "  .h(on ? GAP : G.sm).text_size(VIEW.title)",
+  ].join("\n") };
+  assert.deepEqual(compare(named([sizes, main]), []), [
+    "kanso/mods/x/main.js:3: gap(GAP) passes a module-level number: name its size in kanso/tokens.json",
+    "kanso/mods/x/main.js:4: h(GAP) passes a module-level number: name its size in kanso/tokens.json",
+    "kanso/mods/x/main.js:4: text_size(VIEW.title) passes a module-level number: name its size in kanso/tokens.json",
   ]);
 });
 

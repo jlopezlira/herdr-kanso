@@ -1,11 +1,11 @@
 import { div, svg } from "gpui-kit";
 import { h_flex } from "gpui-base";
 import { run } from "herdr";
-import { G, R, T, tokens } from "./ui.js";
+import { G, H, R, T, tokens } from "./ui.js";
 import { quietLink } from "./ui-button.js";
 import { pendingDot, PENDING } from "./ui-state.js";
 import { commitLayout } from "./layout.js";
-import { ASLEEP_ROW, asleepControls, gitControls, gitTask, pullKey } from "./sidebar-rows.js";
+import { asleepControls, gitControls, gitTask, pullKey } from "./sidebar-rows.js";
 
 const stop = (el, go) => el.cursor_pointer()
   .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
@@ -48,7 +48,7 @@ export function asleepRow(a, pad, t, row, wake, label) {
   const c = tokens(t);
   const controls = asleepControls(a);
   const kbd = Boolean(row.kbd);
-  return flush(h_flex().id(`space-agent-${a.address}`).h(ASLEEP_ROW).flex_none().gap(G.md).items_center().cursor_pointer(), pad, G.md)
+  return flush(h_flex().id(`space-agent-${a.address}`).h(H.line).flex_none().gap(G.md).items_center().cursor_pointer(), pad, G.md)
     .when(kbd, (el) => el.border_1().border_color(t.accent))
     .hover((s) => s.bg(t.foreground + "0c"))
     .on_click((_e, cx) => { cx.stop_propagation(); row.menu(cx); })

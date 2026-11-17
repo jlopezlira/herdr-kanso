@@ -2,7 +2,7 @@
 // Kept byte for byte by `npm run sync:share`: edit kanso-panel/ui-skeleton.js.
 import { div } from "gpui-kit";
 import { h_flex } from "gpui-base";
-import { G, H, R, W, breathe } from "./ui.js";
+import { G, H, R, W, PAGE, breathe } from "./ui.js";
 
 const SK_W = [120, 96, 140, 84, 110, 72];
 // A height is a fixed row with its icon; without one, the py(9) list row the panels already use.
@@ -14,7 +14,7 @@ export function skeleton(c) {
     const base = h_flex().w_full().items_center().gap(G.md);
     return h
       ? base.h(h).flex_none().px(8).child(block(14, 14, 4)).child(name).child(div().flex_1())
-      : base.py(9).child(name).child(div().flex_1()).child(block(40, 11));
+      : base.py(PAGE.skeletonY).child(name).child(div().flex_1()).child(block(40, 11));
   };
   const header = (titleW = 88, titleH = 14) => h_flex().w_full().items_center().justify_between().gap(G.md)
     .child(line(titleW, titleH)).child(block(26, 26, 6));

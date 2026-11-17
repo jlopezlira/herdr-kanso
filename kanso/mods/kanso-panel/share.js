@@ -11,6 +11,7 @@ import { h_flex } from "gpui-base";
 import { exec, home, writeTextFile, notify, theme, appHome } from "herdr";
 import { findAsync, retry, tryOrAsync } from "./pure.js";
 import { button } from "./ui-button.js";
+import { PAGE } from "./ui.js";
 
 export const NETWORKS = {
   x: { name: "X", wait: 4, url: (text) => `https://x.com/intent/post?text=${encodeURIComponent(text)}` },
@@ -288,7 +289,7 @@ export class Share {
     const choice = (key, label, network) => button(`${this.id}-share-${key}`, this.busy === key ? "Making the image…" : label,
       (cx) => this.run(network, make, cx), c, { kind: "tonal", small: true, spoken: label, disabled: this.busy === key });
     return h_flex().w_full().flex_wrap().gap(gap).items_center()
-      .child(div().text_size(12).text_color(c.dim).child("Share to"))
+      .child(div().text_size(PAGE.note).text_color(c.dim).child("Share to"))
       .children(Object.entries(NETWORKS).map(([key, n]) => choice(key, n.name, key)))
       .child(choice("save", "Save image", null))
       .child(div().w_full().text_size(11).text_color(c.dim).child(note));

@@ -100,7 +100,6 @@ function panelContent(id) {
   return custom.props !== undefined ? { mod: custom.mod, props: custom.props } : { mod: custom.mod };
 }
 
-const TAB_H = 26; // inside the 2px padding of the pill, so the pill is 30px
 const CLEAR = "#00000000";
 const GLIDE = { duration: 220, easing: "ease-out" }; // the pill under the chosen tab, as the sidebar's
 // A size reported after layout: the sizes with it, or the same ones when it moved less than half a pixel.
@@ -510,7 +509,7 @@ export default class Tabs extends View {
         .transition("width", { duration: 180, easing: "ease-out" })
         .transition("opacity", { duration: 180, easing: "ease-out" })
         .child(div().pl(6).pr(4).whitespace_nowrap().child(p.label));
-      return h_flex().id(`panel-${p.id}`).h(TAB_H).min_w(TAB_H).px(p.icon ? 5.5 : 4).flex_none().items_center().justify_center().rounded(6)
+      return h_flex().id(`panel-${p.id}`).h(H.icon).min_w(H.icon).px(p.icon ? 5.5 : 4).flex_none().items_center().justify_center().rounded(6)
         .text_size(12).bg(on ? t.foreground + "12" : CLEAR)
         .text_color(on ? t.foreground : t.muted)
         .hover(s => s.bg(target ? t.foreground + "1a" : on ? t.foreground + "12" : t.foreground + "0a").text_color(t.foreground))

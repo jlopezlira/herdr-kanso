@@ -16,7 +16,7 @@ import { openWithPopup } from "./popup.js";
 import { FIND } from "./find-key.js";
 import { rollupState, headerHold, prFacts, prLine } from "./ghchecks.js";
 import { pieces, shown, runs, setPiece, STORE } from "./pieces.js";
-import { G, R, T, W, ICON, OPACITY, CLEAR, DRAG_START, glyphOf, mix, tokens, washes } from "./ui.js";
+import { G, R, T, W, ICON, OPACITY, CLEAR, DRAG_START, CHROME_SQUARE, PANE, glyphOf, mix, tokens, washes } from "./ui.js";
 import { mark } from "./ui-mark.js";
 import { iconButton, Armed } from "./ui-button.js";
 import { menu } from "./ui-menu.js";
@@ -32,8 +32,7 @@ const MIN_W = 0.08; // narrowest a column can be dragged, as a share of the view
 const W_STEPS = [1 / 4, 1 / 3, 1 / 2, 2 / 3, 1];
 const newW = (st) => 1 / (st.n ?? DEFAULT_N);
 // The minimap's slot is 180px and its stepper takes about 60: the pills shrink to the rest, and past a mark's least width they are cut in their own box, so the stepper always shows.
-const PILLS_PX = 110;
-export function pillWidths(cols, budget = PILLS_PX) {
+export function pillWidths(cols, budget = PANE.pills) {
   const raw = cols.map((c) => 6 + (Number(c.w) || 0) * 18);
   const room = budget - cols.length * 2 - Math.max(0, cols.length - 1) * 3;
   const total = raw.reduce((a, b) => a + b, 0);
@@ -42,25 +41,19 @@ export function pillWidths(cols, budget = PILLS_PX) {
 }
 const EPS = 1e-3;
 const KEY = "strip.state";
-const HEADER_H = 34;
 const WHEEL_PX = 600; // trackpad/wheel pixels that slide the view one full width
-const EDGE_W = 28; // the tab at an edge that stands for the panes beyond it
 const WHEEL_STEP = 0.25; // of a view width of wheel travel moves one column
 const MIN_VIEW = 0.2; // pinned columns always leave this much of the view to slide
-const COL_MIN = 140; // px: a column can't be dragged narrower
-const ROW_MIN = 90; // px: a stacked pane can't be dragged shorter
 // Layout writes are throttled: a burst writes its first step at once, then its latest state every WRITE_MS.
 const WRITE_MS = 100;
 const SETTLE = 250; // ms without the dragged sizes changing before the strip adopts them
 
-const GAP = 6; // the soft gutter between panes, in the frame's tone: no lines
-const RADIUS = 8;
 const TAB_BLOCK = {
   id: "main", type: "block", background: "chrome",
   content: { tab: "active", pane: {
-    header: { content: { mod: "kanso-strip" }, reveal: "always", height: HEADER_H, position: "top" },
+    header: { content: { mod: "kanso-strip" }, reveal: "always", height: CHROME_SQUARE, position: "top" },
     background: "background", border: { width: 0, color: "border" }, focus: { width: 0, color: "border" },
-    radius: RADIUS, gap: GAP, lone: false } },
+    radius: R.card, gap: PANE.gap, lone: false } },
 };
 
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
@@ -317,7 +310,7 @@ export default class Strip extends View {
     const takes = Boolean(drag) && drag.pane !== what;
     const drop = takes ? shared("strip.drop") : null;
     // A shared write redraws every mod, so write the last measurement only once the size has rested 120 ms.
-    return div().size_full().rounded_b(RADIUS).bg(t.background).on_size_change((sz, cx) => {
+    return div().size_full().rounded_b(R.card).bg(t.background).on_size_change((sz, cx) => {
       const v = Math.round(sz.width);
       if (!v) return;
       this.measured = v;
@@ -331,7 +324,7 @@ export default class Strip extends View {
       .when(takes, (el) => el.cursor_grabbing()
         .on_mouse_move(() => { const d = shared("strip.drop"); if (d?.to !== what || d.side !== "below") setShared("strip.drop", { to: what, side: "below" }); })
         .on_mouse_up("left", () => dropMove(what, "below")))
-      .when(drop?.to === what && drop.side === "below", (el) => el.child(div().size_full().rounded_b(RADIUS).bg(t.accent + "40")));
+      .when(drop?.to === what && drop.side === "below", (el) => el.child(div().size_full().rounded_b(R.card).bg(t.accent + "40")));
   }
 
   // The drop card stands in for a pane's terminal, which lives on: the whole pane takes the drop, not just its header.
@@ -1097,22 +1090,22 @@ export default class Strip extends View {
   build(st, ps, sorting = false) {
     const byId = new Map(ps.map((p) => [p.pane, p]));
     const weight = (f) => Math.max(1, Math.round(f * 1000));
-    const header = (id) => ({ id: `head-${id}`, type: "block", size: { px: HEADER_H }, content: { mod: "kanso-strip", props: { pane: id, terminal: byId.get(id).terminal, strip: true } } });
+    const header = (id) => ({ id: `head-${id}`, type: "block", size: { px: CHROME_SQUARE }, content: { mod: "kanso-strip", props: { pane: id, terminal: byId.get(id).terminal, strip: true } } });
     const body = (id) => ({ id: `term-${id}`, type: "block", content: sorting ? { mod: "kanso-strip", props: { drop: id } } : { terminal: byId.get(id).terminal } });
-    // A terminal paints square corners, so the ruler doubles as a RADIUS-tall foot drawing the slab's rounded bottom.
-    const ruler = (what) => ({ id: `strip-ruler-${what}`, type: "block", size: { px: RADIUS }, min: RADIUS, max: RADIUS, background: "chrome",
+    // A terminal paints square corners, so the ruler doubles as an R.card-tall foot drawing the slab's rounded bottom.
+    const ruler = (what) => ({ id: `strip-ruler-${what}`, type: "block", size: { px: R.card }, min: R.card, max: R.card, background: "chrome",
       content: { mod: "kanso-strip", props: { ruler: what } } });
     // Every pane keeps a 1px border, clear except the selected one's accent, so moving the selection never shifts a terminal.
     const t = theme();
     const sel = ps.length > 1 && !sorting ? st.focus : null;
     const edgeOf = (id) => ({ width: 1, color: id === sel ? t.accent + "8c" : t.background + "00" });
-    const live = (id, size, min) => ({ id: `strip-${id}`, type: "column", size, min, background: "background", radius: RADIUS,
+    const live = (id, size, min) => ({ id: `strip-${id}`, type: "column", size, min, background: "background", radius: R.card,
       border: edgeOf(id), children: [header(id), body(id), ruler(id)] });
     const share = (c, id) => (c.hs?.[id] ?? 1) / c.panes.reduce((s, k) => s + (c.hs?.[k] ?? 1), 0);
-    const whole = (c) => c.panes.length === 1 ? live(c.panes[0], { weight: weight(c.w) }, COL_MIN)
-      : { id: `strip-col-${c.panes[0]}`, type: "column", gap: GAP, background: "chrome", min: COL_MIN, size: { weight: weight(c.w) },
-        children: c.panes.map((id) => live(id, { weight: weight(share(c, id)) }, ROW_MIN)) };
-    const edge = (ci, side, beyond) => ({ id: `strip-edge-${side}`, type: "block", size: { px: EDGE_W }, min: EDGE_W, max: EDGE_W,
+    const whole = (c) => c.panes.length === 1 ? live(c.panes[0], { weight: weight(c.w) }, PANE.minW)
+      : { id: `strip-col-${c.panes[0]}`, type: "column", gap: PANE.gap, background: "chrome", min: PANE.minW, size: { weight: weight(c.w) },
+        children: c.panes.map((id) => live(id, { weight: weight(share(c, id)) }, PANE.minH)) };
+    const edge = (ci, side, beyond) => ({ id: `strip-edge-${side}`, type: "block", size: { px: PANE.edge }, min: PANE.edge, max: PANE.edge,
       content: { mod: "kanso-strip", props: { edge: st.cols[ci].panes[0], side, count: beyond.length, panes: beyond.flatMap((r) => st.cols[r.ci].panes) } } });
     const row = this.row(st), shown = this.shownCols(st);
     this.shown = new Set(shown);
@@ -1252,7 +1245,7 @@ export default class Strip extends View {
       .on_mouse_up("left", () => { if (shared("strip.drag")) endDrag(); })
       .on_scroll_wheel((ev) => this.wheel(ev, tab, st))
       // Past what fits, the extra marks are cut here, never the stepper.
-      .child(h_flex().id("strip-pills").flex_shrink(1).min_w(0).max_w(PILLS_PX).overflow_hidden().gap(3).items_center().children(pills))
+      .child(h_flex().id("strip-pills").flex_shrink(1).min_w(0).max_w(PANE.pills).overflow_hidden().gap(3).items_center().children(pills))
       .child(div().w(8).flex_none())
       .child(tiny("strip-fewer", "\u2212", "Fewer panes per view", () => this.edit(tab, st, (now) => this.setN(now, n - 1, now.focus))))
       .child(div().id("strip-n").flex_none().text_size(11).text_color(t.muted).tooltip(`${n} per view · click to even out`).cursor_pointer()

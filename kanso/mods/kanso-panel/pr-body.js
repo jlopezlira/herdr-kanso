@@ -1,11 +1,11 @@
 // The card under the pull request verdict: the log, the comment, or the rows that state is about.
 import { div } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
-import { G, R, T, toneColor } from "./ui.js";
+import { G, R, T, PR, PAGE, OPACITY, toneColor } from "./ui.js";
 import { monoFont } from "./lib.js";
 import { mark } from "./ui-mark.js";
 
-export const VIEW = { title: 17, titleMax: 44, dot: 8, stale: 0.55, meta: 12 };
+export const VIEW = { title: PR.title, titleMax: PR.titleMax, dot: PR.dot, stale: OPACITY.away, meta: PAGE.note };
 
 const mono = () => monoFont();
 const WORD = { fail: "failed", pending: "running", unknown: "unknown", pass: "passed", skipped: "skipped" };

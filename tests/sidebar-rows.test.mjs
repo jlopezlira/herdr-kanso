@@ -2,7 +2,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
-  ASLEEP_ROW, showPlus, showDots, projectControls, pullKey, pullLabel, pullCommand, refusalLine,
+  showPlus, showDots, projectControls, pullKey, pullLabel, pullCommand, refusalLine,
   aheadOpen, gitControls, runPull, machineWordTone, canWake, enterOpens, asleepControls,
   gitTask, behindTip, aheadTip, foldTail, sectionMarkOf, sectionCount, rowDirectory, untilWord, readWord,
   threadWord, threadActions, closedControls, signInCommand, noProjectsOn, sortOf, viewChord,
@@ -85,7 +85,6 @@ test("A computer's state on its row is a dim word, unreachable included", () => 
 test("Enter on an asleep row wakes it", () => {
   const z = { id: "tb1", tabId: "tb1", settled: true, space: "sp1" };
   const asleep = { address: "zz:t1", asleep: z };
-  assert.equal(ASLEEP_ROW, 32);
   assert.equal(canWake(asleep), true);
   assert.deepEqual(enterOpens(asleep), { wake: z });
   assert.deepEqual(asleepControls(asleep), [{ id: "wake", label: "Wake" }]);

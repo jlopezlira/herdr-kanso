@@ -1,12 +1,13 @@
 // This is the source copy; `npm run sync:share` copies it into every mod, and a test fails when a copy differs.
 // Motion is native and keeps going behind other windows: a ring that stops when the window loses the keyboard reads as a stalled agent.
 export { onBattery } from "./ui.js";
+import { KEY } from "./ui.js";
 import { div, svg, image } from "gpui-kit";
 import { terminals, window, shared } from "herdr";
 
 export function keycap(t, text, faint = false) {
-  return div().flex_none().h(16).px(5).rounded(4).bg(t.foreground + (faint ? "0c" : "14")).flex().items_center().justify_center()
-    .text_size(10.5).font_medium().text_color(faint ? t.dim : t.foreground).whitespace_nowrap().child(text);
+  return div().flex_none().h(16).px(KEY.x).rounded(4).bg(t.foreground + (faint ? "0c" : "14")).flex().items_center().justify_center()
+    .text_size(KEY.text).font_medium().text_color(faint ? t.dim : t.foreground).whitespace_nowrap().child(text);
 }
 
 export const MAC = { ctrl: "⌃", alt: "⌥", shift: "⇧", cmd: "⌘", fn: "fn" };
