@@ -317,7 +317,8 @@ export const stacks = {
   'toolbar add': { block: 'kanso-toolbar__add', tag: 'span' },
   'toolbar menu': { block: 'kanso-toolbar__menu', tag: 'span' },
   header: { block: 'kanso-header', states: ['collapsed'] },
-  'header title': { block: 'kanso-header__title' },
+  // The lights are the window's own: the row draws their place first, and the app leaves it to Herdr.
+  'header title': { block: 'kanso-header__title', lead: windowControls },
   sidebar: { block: 'kanso-sidebar', tag: 'aside' },
   rows: { block: 'kanso-sidebar__rows' },
   'row group': { block: 'kanso-sidebar__row-group' },
@@ -380,9 +381,9 @@ export const stacks = {
 // `label`: what a focusable stack is called, its tooltip and its spoken name.
 export const stack = ({ variant, on = false, label = '', ...flags }, ...children) => {
   if (!Object.hasOwn(stacks, variant)) throw new Error(`stack: unknown variant "${variant}"`);
-  const { block, tag = 'div', states = [], focusable = false } = stacks[variant];
+  const { block, tag = 'div', states = [], focusable = false, lead = null } = stacks[variant];
   const unknown = Object.keys(flags).find((flag) => !states.includes(flag));
   if (unknown) throw new Error(`stack: variant "${variant}" has no state "${unknown}"`);
   const classes = [block, ...states.filter((state) => flags[state]).map((state) => `${block}--${state}`), on ? 'kanso-control--on' : ''].filter(Boolean).join(' ');
-  return `<${tag} class="${classes}"${focusable ? ' tabindex="0"' : ''}${label ? ` title="${escape(label)}" aria-label="${escape(label)}"` : ''}>${list(children)}</${tag}>`;
+  return `<${tag} class="${classes}"${focusable ? ' tabindex="0"' : ''}${label ? ` title="${escape(label)}" aria-label="${escape(label)}"` : ''}>${lead ? lead() : ''}${list(children)}</${tag}>`;
 };

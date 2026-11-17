@@ -53,8 +53,9 @@ const sort = (id, c, { sorted }, kids, more, wire, context) => sortMenu(id, c, {
 // The header: 8 at its sides; collapsed, the rail's column, centred. Dawn's sky lies behind the rest.
 const header = (id, c, { collapsed }, kids, more) => placed(v_flex().id(id).w_full().flex_none().relative().overflow_hidden().bg(c.chrome).px(G.sm).pb(G.xs)
   .when(collapsed, (el) => el.items_center()), id, c, kids, more, { header: true });
-// The lights' row, as tall as the tab bar: the lights' room, then Dawn Mode's pill at the right.
-const headerTitle = (id, c, _flags, kids, more) => placed(h_flex().w_full().h(H.tabBar).flex_none().items_center().justify_between().pl(G.xs), id, c, kids, more);
+// The lights' row, as tall as the tab bar, Dawn Mode's pill at its right. Herdr draws the lights in this block itself,
+// so the app kit has no windowControls (kit-parity `missing`) and the row lays out only what it holds.
+const headerTitle = (id, c, _flags, kids, more) => placed(h_flex().w_full().h(H.tabBar).flex_none().items_center().justify_end().pl(G.xs), id, c, kids, more);
 
 const STACKS = {
   toolbar: { states: ["column"], draw: toolbar },

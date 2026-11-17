@@ -16,7 +16,8 @@
     "paneName",
     "setting",
     "sleepLabel",
-    "stepper"
+    "stepper",
+    "windowControls"
   ],
   "renamed": {
     "input": "field",

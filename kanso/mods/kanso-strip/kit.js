@@ -126,8 +126,6 @@ export const stack = ({ variant, on = false, label = "", ...flags }, ...children
   return stackOf(id, c, { variant, on, label, ...flags }, list(...children), handlers, (el) => withEvents(el, { onPress, onRelease, onMenu, onMove }), context);
 };
 
-// Herdr draws the window's lights itself: the app's piece only keeps their place in the title row.
-export const windowControls = () => still(() => div().flex_none())();
 // Dawn Mode's sky behind the lights, the Storybook's art in this theme's colours (built from it by build:ui-tokens), at its last frame.
 export const dawn = ({ id = "dawn" } = {}) => still((c) => image(c.dawn.art).absolute().top(0).left(0).w_full().h(DAWN_H))({ id });
 
