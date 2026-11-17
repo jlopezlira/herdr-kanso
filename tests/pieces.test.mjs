@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { load, failure, success } from "./helpers.mjs";
+import { load, failure, success, storeShared } from "./helpers.mjs";
 import {
   PIECES, GROUPS, STATE_LABEL, STORE, MIGRATED, pieceOf, choice, shown, runs, setPiece,
   migratePieces, loadPieces, pieces, filterPieces, groupsOf, withRoster,
@@ -282,8 +282,7 @@ test("a hidden panel is not mounted", async () => {
   const { TOOLS } = await loadSimulatorTools();
   const store = { [MIGRATED]: true, [STORE]: {}, [TOOLS]: { ios: true } };
   const { panelList } = await load("kanso-tabs/main.js", ["panelList"], {
-    shared: (key) => store[key],
-    setShared: (key, value) => { store[key] = value; },
+    ...storeShared(store),
   });
   for (const row of PIECES.filter((piece) => piece.id.startsWith("panel."))) {
     store[STORE] = { [row.id]: "hide" };
@@ -359,8 +358,7 @@ test("update.check hidden does not poll, and Check still looks", async () => {
   let asked = 0;
   const { Updater } = await loadUpdater({
     appHome: () => "/nowhere",
-    shared: (key) => store[key],
-    setShared: (key, value) => { store[key] = value; },
+    ...storeShared(store),
     notify() {},
     readTextFile: async () => '{ "version": "1.3.1" }',
     layout: () => null,

@@ -1,12 +1,16 @@
 import assert from "node:assert/strict";
 import { mkdir, readFile, readdir } from "node:fs/promises";
 import { join } from "node:path";
-import { windows, test, fixture, updates, staged, pending, holder, took, version, updated, startUpdater, started, landed, installing, secondCopy, offered, chromeMain } from "./update-harness.mjs";
+import { windows, test, fixture, updates, staged, pending, holder, took, version, updated, startUpdater, started, landed, installing, secondCopy, offered, chromeMain, installedNew, twoWindows } from "./update-harness.mjs";
+
+// A started window, and a holder elsewhere that took the lock.
+const heldElsewhere = async (t) => {
+  const s = await started(t);
+  return { ...s, a: await holder(t, s.f) };
+};
 
 test("An install whose owner is alive is left alone, staging and all; once it is gone the lock is free at once", async (t) => {
-  const { f, cx, drain } = await started(t);
-
-  const a = await holder(t, f);
+  const { f, cx, a } = await heldElsewhere(t);
   took(a, "the holder takes a free lock");
   await mkdir(join(updates(f.home), "a/src"), { recursive: true }); // its staging
   assert.equal(await f.updater.install(cx), "busy");
@@ -17,14 +21,12 @@ test("An install whose owner is alive is left alone, staging and all; once it is
 
   // Killed, as a crash would: no timeout to wait out, nothing to take back.
   await a.kill();
-  await f.updater.install(cx);
-  await landed(f, f.home);
+  await installedNew(f, cx);
   assert.deepEqual(await staged(f.home), [], "the dead install's staging, swept under the lock (no live one can have any)");
 });
 
 test("An owner that lets go while another waits: the next to take the lock keeps it, and its staging", async (t) => {
-  const { f, cx, drain } = await started(t);
-  const a = await holder(t, f);
+  const { f, cx, a } = await heldElsewhere(t);
   assert.equal(await f.updater.install(cx), "busy");
   // A finishes; C takes the lock straight away. Nothing judged A gone, so nothing can undo C.
   await a.kill();
@@ -35,13 +37,11 @@ test("An owner that lets go while another waits: the next to take the lock keeps
   assert.deepEqual(await staged(f.home), [".kanso-updates/c"]);
   assert.equal((await holder(t, f)).got, false, "C still holds it");
   await c.kill();
-  await f.updater.install(cx);
-  await landed(f, f.home);
+  await installedNew(f, cx);
 });
 
 test("An install longer than exec's limit runs to the end, and keeps the lock all along", async (t) => {
-  const f = await fixture(t);
-  const other = await f.window();
+  const { f, other } = await twoWindows(t);
   // Herdr kills an exec at 30 s; here sooner, yet above what starting PowerShell alone takes.
   const limit = windows ? 10000 : 1000;
   f.ctl.limit = limit; other.ctl.limit = limit;

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFile, readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { context } from "./helpers.mjs";
-import { repo, test, fixture, staged, pending, version, told, updated, started, installed, landed, shippedKeys, chromeMain, secondCopy, offered, installing, errorsTold } from "./update-harness.mjs";
+import { repo, test, fixture, staged, pending, version, told, updated, started, installed, landed, shippedKeys, chromeMain, secondCopy, offered, installing, errorsTold, installedNew, twoWindows } from "./update-harness.mjs";
 
 test("Updating Kanso swaps its mods, merges its keys and keeps your layout aside", async (t) => {
   const { f, cx, drain } = await started(t);
@@ -86,8 +86,7 @@ test("A tag whose files say another version is not installed", async (t) => {
 
   // A failed install holds nothing back: the next one goes ahead.
   f.store["kanso.update"].latest = "1.1.0";
-  await f.updater.install(cx);
-  await landed(f, f.home);
+  await installedNew(f, cx);
   assert.deepEqual(await staged(f.home), []);
 });
 
@@ -108,8 +107,7 @@ test("Update from the footer and from the tab bar at once: one installs, the oth
 });
 
 test("Two windows installing at once share no state, and the lock lets one through", async (t) => {
-  const f = await fixture(t);
-  const other = await f.window();
+  const { f, other } = await twoWindows(t);
   const { cx } = context();
   for (const w of [f, other]) await offered(w);
   await f.flag("slow");

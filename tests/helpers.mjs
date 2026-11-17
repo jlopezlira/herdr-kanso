@@ -212,12 +212,22 @@ export const keeping = () => {
 // The words under a kept element, in the order they show.
 export const wordsOf = (node) => (typeof node === "string" ? [node] : node?.[KIDS] ? node[KIDS].flatMap(wordsOf) : []);
 
+// Herdr's shared state, kept in `store`.
+export const storeShared = (store) => ({ shared: (key) => store[key], setShared: (key, value) => { store[key] = value; } });
+
 // A view context whose spawned tasks can be awaited.
 export function context() {
   const pending = [];
   const cx = { notify() {}, spawn(fn) { const task = fn(cx); pending.push(task); return task; } };
   return { cx, async drain() { while (pending.length) await pending.shift(); } };
 }
+
+// A context whose every() ticks wait in `timers` as { ms, fn }.
+export const tickingContext = (timers) => {
+  const tasks = context();
+  tasks.cx.timer = { every(ms, fn) { timers.push({ ms, fn }); } };
+  return tasks;
+};
 
 export const refreshedContext = async (view) => {
   const tasks = context();

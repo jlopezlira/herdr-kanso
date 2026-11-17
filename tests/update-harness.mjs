@@ -483,6 +483,21 @@ export const settled = async (f, drain) => {
   await until(async () => pending(f).length === 0);
   await drain();
 };
+export const versionFile = async (home) => (await tree(home))["mods/kanso-chrome/version.json"];
+// The one stage an install left, as a path.
+export const stageDir = async (home) => {
+  const [stage] = await stages(home);
+  return join(updates(home), stage);
+};
+// Two windows on one home.
+export const twoWindows = async (t) => {
+  const f = await fixture(t);
+  return { f, other: await f.window() };
+};
+export const installedNew = async (f, cx) => {
+  await f.updater.install(cx);
+  await landed(f, f.home);
+};
 export const chromeMain = (home) => readFile(join(home, "mods/kanso-chrome/main.js"), "utf8");
 export const shippedKeys = async () => JSON.parse(await readFile(new URL("keys.json", repo), "utf8"))["layout:kanso"];
 export const errorsTold = (f) => f.toasts.filter((n) => n.level === "error").length;

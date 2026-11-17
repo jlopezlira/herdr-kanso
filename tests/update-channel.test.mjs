@@ -3,7 +3,7 @@ import { loadUpdater, loadSettings } from "./mod-fixtures.mjs";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { hostInstall } from "../kanso/mods/kanso-chrome/release.js";
-import { context, tape, success, failure } from "./helpers.mjs";
+import { context, tape, success, failure, storeShared, tickingContext } from "./helpers.mjs";
 
 const listing = [
   "a\trefs/tags/v3.29.0",
@@ -17,8 +17,7 @@ function updaterHost({ store, toasts = [], version = "3.30.0", onExec }) {
   return {
     appHome: () => "/app",
     layout: () => null,
-    shared: (key) => store[key],
-    setShared: (key, value) => { store[key] = value; },
+    ...storeShared(store),
     notify: (note) => { toasts.push(note); return String(toasts.length); },
     readTextFile: async () => `{"version":"${version}"}`,
     exec: async (command, args) => {
@@ -28,20 +27,21 @@ function updaterHost({ store, toasts = [], version = "3.30.0", onExec }) {
   };
 }
 
+const updaterWith = async (options) => (await loadUpdater(updaterHost(options))).Updater;
+
 test("A prerelease download uses the tag, and the version check wants X.Y.Z", async () => {
   const store = { "kanso.update": { channel: "beta", tag: "3.30.0-beta.1", latest: "3.30.0-beta.2", autoCheck: true } };
   const urls = [];
   const sh = [];
-  const { Updater } = await loadUpdater(updaterHost({
+  const Updater = await updaterWith({
     store,
     onExec: async (command, args) => {
       if (command === "curl") { urls.push(args.at(-1)); return failure(""); }
       if (command === "sh") { sh.push(args); return { code: String(args[1]).startsWith("dir=") ? 1 : 0, stdout: "", stderr: "could not start" }; }
       return success("");
     },
-  }));
-  const updater = new Updater();
-  updater.installed = "3.30.0";
+  });
+  const updater = Object.assign(new Updater(), { installed: "3.30.0" });
   const { cx } = context();
   await updater.install(cx);
   const spec = hostInstall("3.30.0-beta.2", "3.30.0");
@@ -56,9 +56,8 @@ test("A prerelease download uses the tag, and the version check wants X.Y.Z", as
 
 test("A finished install records its tag when version.json is that version", async () => {
   const store = { "kanso.update": { channel: "beta", tag: "3.30.0-beta.1" } };
-  const { Updater } = await loadUpdater(updaterHost({ store }));
-  const updater = new Updater();
-  updater.installed = "3.30.0";
+  const Updater = await updaterWith({ store });
+  const updater = Object.assign(new Updater(), { installed: "3.30.0" });
   const { cx } = context();
   await updater.report(cx, "ok", "", { version: "3.30.0-beta.2" });
   assert.equal(store["kanso.update"].tag, "3.30.0-beta.2");
@@ -99,17 +98,16 @@ test("The toast names the tag, and Stable never offers an older release", async 
 test("Choosing Early looks again, and Stable stays the default until then", async () => {
   const store = { "kanso.update": { autoCheck: true, tag: "3.30.0-beta.2", latest: "3.29.0" } };
   let asked = 0;
-  const { Updater } = await loadUpdater(updaterHost({
+  const Updater = await updaterWith({
     store,
     onExec: async (command) => {
       if (command === "git") { asked += 1; return success(listing); }
       return success("");
     },
-  }));
+  });
   const updater = new Updater();
   const timers = [];
-  const { cx, drain } = context();
-  cx.timer = { every(ms, fn) { timers.push({ ms, fn }); } };
+  const { cx, drain } = tickingContext(timers);
   updater.start(cx);
   await drain();
   const seen = asked;
@@ -139,8 +137,7 @@ async function settingsOf(store) {
     ...ui.host,
     theme: colors,
     props: () => ({}),
-    shared: (key) => store[key],
-    setShared: (key, value) => { store[key] = value; },
+    ...storeShared(store),
     appHome: () => "/app",
     keys: () => [],
     run: () => {},
