@@ -276,7 +276,7 @@ export default class Strip extends View {
         .hover((h) => h.bg(w?.w12 ?? t.selected))
         .on_click((_e, cx) => { cx.stop_propagation(); show(id); })
         .child(iconOf(info?.program, 12, t.muted))
-        .when(Boolean(d), (el) => el.child(d.absolute().top(-G.hair).right(-G.hair)));
+        .when(Boolean(d), (el) => el.child(d.absolute().top(-G.hair).right(-G.hair).rounded_full().border_1().border_color(c.chrome)));
     };
     const stack = v_flex().id("edge-stack").items_center().gap(5).py(6).px(4)
       .child(div().h(16).text_size(14).text_color(takes ? t.foreground : t.muted).child(chevron))
