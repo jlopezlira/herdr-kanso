@@ -99,10 +99,6 @@ export default class Dojo extends View {
     });
   }
 
-  light(key, cx) {
-    this.capLight.light(key, cx);
-  }
-
   key(e, cx) {
     const k = String(e.key ?? "").toLowerCase(), m = e.modifiers ?? {};
     if (m.platform || m.control || m.alt) return;
@@ -120,7 +116,7 @@ export default class Dojo extends View {
       cx.notify(); return;
     }
     if (!ch || ch.length !== 1) return;
-    this.light(ch.toLowerCase(), cx);
+    this.capLight.light(ch.toLowerCase(), cx);
     const lv = this.level, p = this.pending;
     const step = /^[ftFT]$/.test(p) ? { motion: p + ch }
       : p === "g" ? { motion: ch === "g" ? "gg" : null }
@@ -206,7 +202,7 @@ export default class Dojo extends View {
       return div().w(12).h(24).flex().items_center().justify_center().rounded(3).font_family(mono).text_size(15)
         .bg(here ? c.accent : c.text + "00").text_color(here ? ink : goal ? c.text : c.muted)
         .when(goal && !here, (el) => el.border_2().border_color(c.accent).bg(c.accent + "22"))
-        .child(ch === " " ? " " : ch);
+        .child(ch === " " ? " " : ch);
     }))));
   }
 

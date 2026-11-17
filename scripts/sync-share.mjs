@@ -49,6 +49,8 @@ const COMMON = [
   { source: "kanso/mods/kanso-settings/pages.js", copies: ["kanso/mods/kanso-help/pages.js"] },
   // The shell of a full-page mod view: Memory draws in it, Containers the same.
   { source: "kanso/mods/kanso-guard/page.js", copies: ["kanso/mods/kanso-containers/page.js"] },
+  // One SQLite file under the app's folder: the stores of arrangements and of the dōjō (and help's copy of it).
+  { source: "kanso/mods/kanso-dojo/file-store.js", copies: ["kanso/mods/kanso-help/file-store.js", "kanso/mods/kanso-arrange/file-store.js"] },
   // Lists by keyboard (j/k, gg/G, Enter, Esc), the same in every menu and list.
   { source: "kanso/mods/kanso-menu/listkeys.js", copies: ["kanso/mods/open-with/listkeys.js", "kanso/mods/kanso-spaces/listkeys.js", "kanso/mods/kanso-arrange/listkeys.js"] },
   // Opening a tab from data: arrangements; Sleep reads a few of its words.

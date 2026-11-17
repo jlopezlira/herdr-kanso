@@ -30,8 +30,14 @@ export function memoryWins(data, digest) {
   };
 }
 
+// The card's two reads of the same numbers: the windows, and the longest one in a person's words.
+const winsLong = (data, digest) => {
+  const w = memoryWins(data, digest);
+  return { w, long: longSpan(w.longestMin) };
+};
+
 export function memorySpec(data, digest) {
-  const w = memoryWins(data, digest), long = longSpan(w.longestMin);
+  const { w, long } = winsLong(data, digest);
   const on = w.totalMB ? ` on ${size(w.totalMB)}` : "";
   const stats = [
     { value: String(w.agents), unit: w.agents === 1 ? "agent open" : "agents open" },
@@ -62,8 +68,7 @@ export function memorySpec(data, digest) {
 }
 
 export function memoryText(data, digest) {
-  const w = memoryWins(data, digest);
-  const long = longSpan(w.longestMin);
+  const { w, long } = winsLong(data, digest);
   const parts = [
     `${w.agents} coding ${w.agents === 1 ? "agent" : "agents"} open${w.totalMB ? ` on a ${size(w.totalMB)} computer` : ""}, the oldest for ${long.big} ${long.small}`,
     ...(w.recycles ? [`${w.recycles} ${w.recycles === 1 ? "recycle" : "recycles"} gave back ${size(w.recycledMB)} without losing a conversation`] : []),

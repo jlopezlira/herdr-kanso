@@ -22,7 +22,8 @@ export default class Prompt extends View {
   }
 
   submit() {
-    const p = props(), name = this.text.trim();
+    const p = props();
+    const name = this.text.trim();
     closeOverlay(p.overlay);
     // A mod with no command for it reads the answer from shared state: under `shared`, by this dialog's `token`, so two
     // dialogs answered in a row both keep theirs until read; `text` null when cancelled.

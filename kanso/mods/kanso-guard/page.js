@@ -16,7 +16,8 @@ const pathOf = (node, mod) => {
 
 // Hidden itself, or a stack showing another child than the one below it on the path.
 const covered = (path, at) => {
-  const node = path[at], below = path[at + 1];
+  const node = path[at];
+  const below = path[at + 1];
   return Boolean(node.hidden) || (node.type === "stack" && node.active && below && node.active !== below.id);
 };
 

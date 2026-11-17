@@ -131,7 +131,8 @@ export function sizeMB(mb) {
   const n = num(mb);
   if (n === null) return "–";
   if (n >= 1000) {
-    const gb = n / 1024, word = gb < 10 ? gb.toFixed(1).replace(/\.0$/, "") : Math.round(gb);
+    const gb = n / 1024;
+    const word = gb < 10 ? gb.toFixed(1).replace(/\.0$/, "") : Math.round(gb);
     return `${word} GB`;
   }
   return `${Math.max(0, Math.round(n))} MB`;

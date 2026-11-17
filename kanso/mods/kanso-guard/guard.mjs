@@ -193,8 +193,14 @@ async function terminalOf(pid) {
 
 const exited = (pid) => retry(30, async () => { await sleep(1000); return !host.alive(pid); });
 
+// The agent's Claude session, with the processes read once for both of them.
+const sessionOf = async (pid) => {
+  const procs = await processes();
+  return { procs, s: claudeSession(pid, procs) };
+};
+
 async function recycle(pid, reason, { manual = false, focusOnly = false } = {}) {
-  const procs = await processes(), s = claudeSession(pid, procs);
+  const { procs, s } = await sessionOf(pid);
   if (!s) return skip(pid, "its Claude session record was not found for this process");
   if (s.status !== "idle") return skip(pid, "it is working");
   const { term = null, g = null } = (await terminalOf(pid)) ?? {};
@@ -318,7 +324,7 @@ async function paneOf(term) {
 // It leaves with /exit, so its conversation stays resumable; only Claude agents have an idle state to trust.
 async function closeAgent(pid, why, minIdle = 0) {
   const no = (reason) => skip(pid, reason, "closed");
-  const procs = await processes(), s = claudeSession(pid, procs);
+  const { procs, s } = await sessionOf(pid);
   if (!s) return no("only a Claude agent with its session record can be closed from here");
   if (s.status !== "idle") return no("it is working");
   const idleMin = Math.floor((Date.now() - (s.statusUpdatedAt ?? Date.now())) / MIN);

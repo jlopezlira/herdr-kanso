@@ -1,7 +1,5 @@
-import { Database } from "./platform-database.js";
-import { paths } from "./platform-paths.js";
 // hjkl dōjō, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
-import { appHome } from "herdr";
+import { FileStore } from "./file-store.js";
 
 export const STORE_DIR = "data/kanso-dojo";
 const int = (n) => (Number.isFinite(Number(n)) ? Math.round(Number(n)) : 0);
@@ -26,12 +24,12 @@ export function totalsOf(rows, days) {
   return { ...sum, days: (days ?? []).map((d) => d.day) };
 }
 
-export class Store extends Database {
-  constructor(timer) { super(timer); this.file = paths.join(appHome(), STORE_DIR, "dojo.db"); }
+export class Store extends FileStore {
+  storeFile() { return [STORE_DIR, "dojo.db"]; }
 
   open() {
     return this.opening(async () => {
-      await this.prepare(paths.join(appHome(), STORE_DIR), "Install sqlite3 to keep your rounds.");
+      await this.prepare(this.dir, "Install sqlite3 to keep your rounds.");
       await this.sql(SCHEMA);
     });
   }

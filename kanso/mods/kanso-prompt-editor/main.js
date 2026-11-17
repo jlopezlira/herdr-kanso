@@ -14,13 +14,14 @@ export default class PromptEditor extends View {
     const p = props() ?? {};
     this.text = p.value ?? "";
     this.input = EditorState.new({ value: this.text, language: "plain", soft_wrap: true, line_numbers: false, folding: false });
-    trackText(this.input, (text) => { this.text = text; });
     this.handle = cx.focus_handle();
+    trackText(this.input, (text) => { this.text = text; });
   }
 
   submit() {
     const p = props();
-    closeOverlay(p.overlay); applyRename(p, this.text.trim());
+    closeOverlay(p.overlay);
+    applyRename(p, this.text.trim());
   }
 
   key(e, cx) {

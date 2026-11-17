@@ -88,13 +88,14 @@ export default class Memory extends View {
     }
   }
 
-  wake(cx) {
-    if (this.closed) return; this.awake = true;
-    if (!this.ticker) this.ticker = cx.timer.every(TICK_MS, (tickCx) => {
+  wake(wakeCx) {
+    if (this.closed) return;
+    this.awake = true;
+    if (!this.ticker) this.ticker = wakeCx.timer.every(TICK_MS, (tickCx) => {
       if (hiddenInLayout(MOD)) { this.sleep(); return; }
       this.read(tickCx);
     });
-    this.read(cx);
+    this.read(wakeCx);
   }
 
   // A space switch can bring the page back without a command: wake on the next tick, outside the render pass.
@@ -230,7 +231,8 @@ export default class Memory extends View {
     return v_flex().id("guard-root").size_full().min_h(0).bg(c.canvas).text_color(c.text)
       .overflow_y_scrollbar()
       .on_size_change((s, sizeCx) => {
-        const width = s.width, changed = Math.abs((this.width || 0) - width) >= 1;
+        const width = s.width;
+        const changed = Math.abs((this.width || 0) - width) >= 1;
         this.width = width;
         if (changed) sizeCx.notify();
       })
@@ -337,7 +339,8 @@ export default class Memory extends View {
   }
 
   chart(c) {
-    const height = 96, series = this.digest?.series?.[this.range];
+    const height = 96;
+    const series = this.digest?.series?.[this.range];
     const bars = (series?.bars ?? []).map((bar) => this.chartBar(bar, height, c));
     return v_flex().w_full().gap(G.sm)
       .child(this.chartHead(c, series))

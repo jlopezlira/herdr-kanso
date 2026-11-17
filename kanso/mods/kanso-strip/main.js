@@ -105,7 +105,10 @@ const endDrag = () => { setShared("strip.drop", null); setShared("strip.drag", n
 // Let go on a landing place: the held pane moves there. The ruler's foot ends the drag even with nothing held, as it always has.
 const dropMove = (to, side, end = true) => {
   const d = shared("strip.drag");
-  if (!d) { if (end) endDrag(); return; }
+  if (!d) {
+    if (end) endDrag();
+    return;
+  }
   if (d.pane !== to) setShared("strip.req", { op: "move", pane: d.pane, to, side, n: nonce() });
   endDrag();
 };

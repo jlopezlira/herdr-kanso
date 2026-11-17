@@ -1874,8 +1874,13 @@ export default class Spaces extends View {
       .when(ring, (el) => el.border_1().border_color(t.accent));
   }
 
+  // A computer's two words: its key in the maps, and the name a person reads.
+  machineWords(m) {
+    return { key: m ?? "local", title: this.names.title(m) };
+  }
+
   machineActions(m, phase, hot, t) {
-    const key = m ?? "local", title = this.names.title(m);
+    const { key, title } = this.machineWords(m);
     const button = {
       // Sign in runs the login in a terminal pane; a click on the row still copies its command.
       signin: () => m && this.machineButton(`machine-login:${key}`, `machine-login-${m}`, "key", "Sign in", () => run("terminal.open", signInCommand(m)), t),
@@ -1949,8 +1954,7 @@ export default class Spaces extends View {
   }
 
   machineHead(m, phase, t, c, collapsed, folded, tail = null) {
-    const key = m ?? "local";
-    const title = this.names.title(m);
+    const { key, title } = this.machineWords(m);
     const syncWord = m && phase === "connected" && peerOn(this.sync.config, m) && syncIcon({ name: m, ...this.sync, now: Date.now() }).state === "cannot";
     const word = machineState(phase) || (syncWord ? "Sync can't run" : "");
     const hint = m ? ((this.hints ?? {})[m] ?? "") : "";
@@ -2168,8 +2172,7 @@ export default class Spaces extends View {
   }
 
   agentsView(t, sp, ps, ctx) {
-    const c = tokens(t);
-    const sections = this.statusSections(sp, ctx);
+    const { c, sections } = this.agentsCtx(t, sp, ctx);
     if (!sections.length) return machines().some((m) => m.layout === "loading") ? [item(this.silhouette(t), 3 * 32 + 4)]
       : [item(stateEmpty("agents-empty", "activity", "No agents running", c))];
     const project = this.projectOf(sp, t);
@@ -2313,9 +2316,14 @@ export default class Spaces extends View {
     return this.popup(t, title, items);
   }
 
+  // Both agents views read the same two things: the kit's colours and the sections' rows.
+  agentsCtx(t, sp, ctx) {
+    return { c: tokens(t), sections: this.statusSections(sp, ctx) };
+  }
+
   // Status, collapsed: one mark per section.
   agentsRail(t, sp, ctx) {
-    const c = tokens(t), sections = this.statusSections(sp, ctx);
+    const { c, sections } = this.agentsCtx(t, sp, ctx);
     return sections.map((s) => {
       const rows = s.entries.filter((e) => !e.lines.length).map((e) => this.railRow(e.a, e.a.space_name || null, ctx.now));
       const lead = s.id === "other" ? this.railIcon(t, "layers") : h_flex().h(G.lg).items_center().child(statusMark(c, s.id));

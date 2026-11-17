@@ -1,7 +1,7 @@
-import { Database } from "./platform-database.js";
 import { paths } from "./platform-paths.js";
 // Arrangements, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
 import { appHome, readTextFile } from "herdr";
+import { FileStore } from "./file-store.js";
 import { parseOr } from "./pure.js";
 
 export const STORE_DIR = "data/kanso-arrange";
@@ -41,8 +41,8 @@ export function importSql(text) {
     .join("\n");
 }
 
-export class Store extends Database {
-  constructor(timer) { super(timer); this.dir = paths.join(appHome(), STORE_DIR); this.file = paths.join(this.dir, "arrange.db"); }
+export class Store extends FileStore {
+  storeFile() { return [STORE_DIR, "arrange.db"]; }
 
   open() {
     return this.opening(async () => {
