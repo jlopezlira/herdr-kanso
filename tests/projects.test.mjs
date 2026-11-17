@@ -149,7 +149,7 @@ test("the top + adds a project in Projects and starts a conversation in Threads;
   const view = Object.assign(new Spaces(), mountedState({ shown: new Set(["sp-agile"]) }));
   const addFromTop = () => {
     view.render();
-    handlers["on_click:spaces-tools-add"]({}, { stop_propagation() {}, notify() {} });
+    handlers["on_click:spaces-header-0-0-0"]({}, { stop_propagation() {}, notify() {} });
   };
   addFromTop();
   assert.deepEqual(overlays.at(-1), { kind: "dialog", props: { newProject: { start: false } } }, "in Projects, the top + asks a new project's name and folder");

@@ -140,8 +140,9 @@ const dropOf = (c, drop) => (DROPS[drop] ? DROPS[drop](div().absolute().left_0()
 // A tree row steps in by `level`; any other by its `depth`.
 const leftOf = (level, depth) => (level === null ? indent(depth) : G.sm + G.lg * level);
 
-// A row that acts is a Button: Tab reaches it, Enter and Space press it, a screen reader calls it a button. One a handle already drives stays plain.
-const rootOf = (id, { onClick, focusHandle }) => (onClick && !focusHandle ? Button.new(id).flex() : h_flex().id(id));
+// A row that acts is a Button: Tab reaches it, Enter and Space press it, a screen reader calls it a button; a handle given keeps its focus.
+// One whose keys the caller reads stays plain.
+const rootOf = (id, { onClick, onKey }) => (onClick && !onKey ? Button.new(id).flex() : h_flex().id(id));
 
 const wire = (el, c, { onClick, onHover, onKey, focusHandle }) => el
   .when(Boolean(onClick), (e) => e.cursor_pointer().on_click((_e, cx) => onClick(cx)))
@@ -178,7 +179,7 @@ export function row(id, c, {
     mark(c, { status }),
   ].filter(Boolean));
   // The ring is a border kept clear at rest, so a focus or a pick never moves the content.
-  return wire(rootOf(id, { onClick, focusHandle }).relative().min_w(0).mx(-G.sm).items_center().rounded(R.control)
+  return wire(rootOf(id, { onClick, onKey }).relative().min_w(0).mx(-G.sm).items_center().rounded(R.control)
     .border_2().border_color(ringOf(c, { selected, focus }))
     .pl(leftOf(level, depth) - G.hair).pr(G.sm - G.hair).text_size(T.value).text_color(ink)
     .when(under && !two && !title, (el) => el.py(G.sm - G.hair))

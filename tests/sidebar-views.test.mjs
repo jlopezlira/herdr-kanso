@@ -194,11 +194,11 @@ test("away from its default, the sort stays on the toolbar and keeps working in 
   ];
   for (const [view, own, tip, key, rest, list] of cases) {
     const drawn = await sidebar({ view, own: { ...own, orderOpen: "bar" }, agents: [agent("t1", { status: "working" })], threads: {} });
-    assert.equal(drawn.ids.includes("spaces-tools-sort"), true, view);
+    assert.equal(drawn.ids.includes("spaces-header-0-2"), true, view);
     assert.equal(drawn.tips.includes(tip), true, view);
     const cx = { notify() {} };
     // The menu opens with its heading first, then the view's orders.
-    const back = drawn.handlers[`on_click:spaces-order-menu-${Object.keys(list).indexOf(rest) + 1}`];
+    const back = drawn.handlers[`on_click:spaces-header-0-2-menu-0-${Object.keys(list).indexOf(rest) + 1}`];
     assert.ok(back, `${view}: its default is one press away`);
     back({}, cx);
     assert.equal(drawn.view[key], rest);
@@ -213,28 +213,30 @@ test("the toolbar's Search opens the picker, its sidebar tool folds the sidebar,
   };
   const drawn = await sidebar({ view: "threads", own, agents: [], threads: {} });
   const cx = { notify() {}, stop_propagation() {} };
-  drawn.handlers["on_click:spaces-tools-search"]({}, cx);
-  drawn.handlers["on_click:spaces-tools-sidebar"]({}, cx);
+  drawn.handlers["on_click:spaces-header-0-3"]({}, cx);
+  drawn.handlers["on_click:spaces-header-0-4"]({}, cx);
   // Threads: heading, its two orders, Grouped by project, separator, the Show heading, then the three switches.
-  [3, 6, 7, 8].forEach((at) => drawn.handlers[`on_click:spaces-order-menu-${at}`]({}, cx));
+  [3, 6, 7, 8].forEach((at) => drawn.handlers[`on_click:spaces-header-0-2-menu-0-${at}`]({}, cx));
   assert.deepEqual(drawn.calls, [["mod.open", { name: "picker" }]]);
   assert.deepEqual(hits, [["rail"], ["order", "threadGroup", true], ["shown", "activity", false], ["shown", "away", false], ["shown", "switch", false]]);
 });
 
 test("Sort's menu opened in one form of the sidebar does not come back in the other, nor when the caret folds it away", async () => {
   const shared = (collapsed) => (key) => (key === "sidebar.collapsed" ? collapsed : null);
+  const MENU = "spaces-header-0-2-menu-0";
   const open = await sidebar({ own: { orderOpen: "bar" } });
-  assert.equal(open.ids.includes("spaces-order-menu"), true);
+  assert.equal(open.ids.includes(MENU), true);
   const view = open.view;
   const opened = await sidebar({ own: { orderOpen: "rail", toolsOpen: true }, shared: shared(true) });
-  assert.equal(opened.ids.includes("spaces-order-menu"), true, "in the rail it opens beside the caret");
-  const folded = await sidebar({ own: { orderOpen: "rail", toolsOpen: false }, shared: shared(true) });
-  assert.equal(folded.ids.includes("spaces-order-menu"), false);
-  assert.equal(folded.view.orderOpen, null, "folded away, it is shut for good");
+  assert.equal(opened.ids.includes("spaces-header-0-2-1-menu-0"), true, "in the rail it opens beside the caret");
+  const cx = { notify() {}, stop_propagation() {} };
+  opened.handlers["on_click:spaces-header-0-2-0"]({}, cx);
+  assert.equal(opened.view.orderOpen, null, "the caret folded away, it is shut for good");
   const moved = await sidebar({ own: { orderOpen: "bar", toolsOpen: true }, shared: shared(true) });
-  assert.equal(moved.ids.includes("spaces-order-menu"), false);
-  assert.equal(moved.view.orderOpen, null);
-  open.handlers["on_open_change:spaces-tools-sort-menu"](true, { notify() {} });
+  assert.equal(moved.ids.includes("spaces-header-0-2-1-menu-0"), false, "opened in the bar, it does not come back in the rail");
+  moved.view.foldRail(null);
+  assert.equal(moved.view.orderOpen, null, "folding the sidebar shuts it");
+  open.handlers["on_open_change:spaces-header-0-2"](true, { notify() {} });
   assert.equal(view.orderOpen, "bar", "a press on Sort opens it where it is");
 });
 

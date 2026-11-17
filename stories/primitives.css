@@ -219,6 +219,9 @@
 .kanso-rail__tile.kanso-control--on{background:var(--wash-12)}
 .kanso-rail__tile.kanso-rail__tile--strong{box-shadow:inset 0 0 0 var(--k-w-line) color-mix(in srgb,var(--accent) 50%,transparent)}
 .kanso-rail__count{display:flex;align-items:center;gap:var(--k-sp-hair)}
+/* Proposed: the collapsed view button carries the dot while someone needs you and Status is not on show. */
+.kanso-sidebar__view-button{position:relative;display:flex}
+.kanso-sidebar__view-button::after{content:'';position:absolute;top:var(--k-w-line);right:var(--k-w-line);width:var(--k-ic-dot);height:var(--k-ic-dot);border-radius:50%;background:var(--blocked)}
 .kanso-rail__tile .kanso-content__actions{display:flex;align-items:center;gap:var(--k-sp-hair);height:var(--k-ic-inline);font-size:var(--k-fs-meta);color:var(--dim);line-height:1}
 .kanso-rail__tile .kanso-content__actions .kanso-mark{width:var(--k-rail-mark);height:var(--k-rail-mark)}
 .kanso-rail__footer{margin-top:auto;display:flex;flex-direction:column;align-items:center;gap:var(--k-sp-hair);padding:var(--k-sp-2) 0 var(--k-sp-3)}
@@ -749,6 +752,10 @@
 .kanso-sidebar__list{flex:1;min-height:0;overflow:hidden}
 .kanso-sidebar__group{display:flex;align-items:center;gap:var(--k-sp-2);height:var(--k-h-row);padding:0 var(--k-sp-2);margin-top:var(--k-sp-4);font-size:var(--k-fs-body);font-weight:var(--k-fw-strong);color:var(--muted)}
 .kanso-sidebar__footer{flex:none;padding:var(--k-sp-2) 0 var(--k-sp-4)}
+/* Proposed: Settings holds its menu, open over it; a refused update's block sits under its row. */
+.kanso-sidebar__footer-settings{position:relative;display:flex;flex-direction:column}
+.kanso-sidebar__footer-menu{position:absolute;bottom:calc(100% + var(--k-sp-1));left:0;z-index:1}
+.kanso-sidebar__footer-refusal{margin:var(--k-sp-hair) 0 var(--k-sp-2)}
 .kanso-sidebar__footer-row{display:flex;align-items:center;gap:var(--k-sp-2);height:var(--k-h-pane);padding:0 var(--k-sp-2);font-size:var(--k-fs-name);color:var(--muted)}
 .kanso-sidebar__section .kanso-section__count{color:var(--dim);font-weight:var(--k-fw-regular)}
 .kanso-sidebar__footer,.kanso-sidebar__list{position:relative;z-index:1}
