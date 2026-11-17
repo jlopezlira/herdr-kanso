@@ -377,6 +377,8 @@ export const stacks = {
   'dojo conversation': { block: 'kanso-dojo__conversation' },
   'dojo result keys': { block: 'kanso-dojo__result-keys' },
   'dojo menu': { block: 'kanso-dojo__menu' },
+  // Proposed: a dialog's rows; `scroll`, past six rows the list scrolls (Send).
+  'dialog list': { block: 'kanso-dialog__list', states: ['scroll'] },
 };
 // `label`: what a focusable stack is called, its tooltip and its spoken name.
 export const stack = ({ variant, on = false, label = '', ...flags }, ...children) => {

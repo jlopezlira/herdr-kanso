@@ -2,7 +2,7 @@
 // Kept byte for byte by `npm run sync:share`: edit kanso-panel/ui-stack.js.
 import { h_flex, v_flex, Button, Popover } from "gpui-base";
 import { div } from "gpui-kit";
-import { G, H, R, LINE, SIDEBAR, TINT, CLEAR, alpha } from "./ui.js";
+import { G, H, R, LINE, SIDEBAR, DIALOG, TINT, CLEAR, alpha } from "./ui.js";
 import { dot } from "./ui-dot.js";
 
 // Each child piece drawn with its own id and its stack's handlers; a piece that draws nothing leaves no gap. `context` says where it sits.
@@ -55,6 +55,13 @@ const header = (id, c, { collapsed }, kids, more) => placed(v_flex().id(id).w_fu
 // The lights' row, as tall as the tab bar, Dawn Mode's pill at its right. Herdr draws the lights in this block itself,
 // so the app kit has no windowControls (kit-parity `missing`) and the row lays out only what it holds.
 const headerTitle = (id, c, _flags, kids, more) => placed(h_flex().w_full().h(H.tabBar).flex_none().items_center().justify_end().pl(G.xs), id, c, kids, more);
+// A dialog's rows, one line each, a hairline apart. Proposed: `scroll`, a set height of at most six rows, past it the list scrolls;
+// it keeps the rows' side room, so a ring is not cut.
+const dialogList = (id, c, { scroll = false }, kids) => {
+  const rows = drawn(id, c, kids).map((kid) => kid.flex_none());
+  return v_flex().id(id).flex_none().mt(G.sm).gap(G.hair).children(rows)
+    .when(scroll, (el) => el.h(Math.min(rows.length * (H.line + G.hair) - G.hair, DIALOG.list)).mx(-G.sm).px(G.sm).overflow_y_scrollbar());
+};
 
 const STACKS = {
   toolbar: { states: ["column"], draw: toolbar },
@@ -78,6 +85,7 @@ const STACKS = {
   "footer settings": { draw: withMenu(() => "bottom_left", () => div()) },
   "footer menu": { draw: (id, c, _flags, kids, more, _wire, context) => placed(div(), id, c, kids, more, context) },
   "footer refusal": { draw: (id, c, _flags, kids, more) => placed(div().mt(G.hair).mb(G.sm), id, c, kids, more) },
+  "dialog list": { states: ["scroll"], draw: dialogList },
 };
 
 /** A stack the app draws: `variant` names its layout, `flags` its states, `kids` its child pieces, `more` its handlers;
