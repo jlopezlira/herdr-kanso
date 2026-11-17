@@ -631,7 +631,7 @@ const CLASSES = {
   "press": "kanso-control--pressed",
   "prow": "kanso-row",
   "prow2": "kanso-row--two-lines",
-  "ptr": "kanso-story__pointer",
+  "ptr": "kanso-pointer",
   "q": "kanso-content__note",
   "ql": "kanso-button kanso-button--quiet",
   "qt": "kanso-segmented--tabs",
@@ -1131,7 +1131,7 @@ export function importProto(src) {
   const type = records.find((record) => record.page === "Tokens/Type");
   if (type && why["Tokens/Every value"]?.length) type.notes = [...(type.notes ?? []), ...why["Tokens/Every value"].map((note) => `### ${note.name}\n\n${note.body}`)];
   replaceSource("proto", records);
-  writeFileSync("stories/proto.css", normalizeCss(renameCss(css), { kit: true }));
+  writeFileSync("stories/proto.css", normalizeCss(renameCss(css)));
   writeFileSync("stories/proto-sprite.svg", read("sb-atomic-sprite.svg"));
 }
 

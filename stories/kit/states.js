@@ -1,10 +1,11 @@
 // The pages drawn from named states: each state is a preset of its page's playground, and the catalog draws its record from that preset.
-import { computerItem, edge, toolbar, keyboardSystems, layoutPaused, paletteDoor, panel, panelBack, panelHeader, panelRefresh, pickedKey, shortcutRow, stepperMenu, tabBar } from './compositions.js';
-import { emptyState, failureBlock, keycap, metric, needsItem, row, skeletonOf, stack, statusItem, stepper, tabs } from './pieces.js';
+import { computerItem, dojo, edge, toolbar, keyboard, keyboardExplorer, keyboardSystems, layoutPaused, paletteDoor, panel, panelBack, panelHeader, panelRefresh, pickedKey, shortcutRow, stepperMenu, tabBar } from './compositions.js';
+import { emptyState, phrase, failureBlock, keycap, metric, needsItem, row, skeletonOf, stack, statusItem, stepper, tabs } from './pieces.js';
 import { atWidth, inBar } from './frames.js';
-import { keyLayer, keyLayerMods, samplePanel, samplePanelHeader, sampleAddMenu, sampleSortMenus, statusMenus, statusPanels } from './samples.js';
+import { keyLayer, keyLayerMods, sampleDojo, samplePanel, samplePanelHeader, sampleAddMenu, sampleSortMenus, statusMenus, statusPanels } from './samples.js';
 
 export const layerDefaults = Object.fromEntries(keyboardSystems.map((os) => [`${os}Layer`, keyLayerMods[os][0]]));
+const practiceKey = (key) => key === 'none' ? '' : key;
 const settingsSlice = (markup) => `<div class="kanso-story__slice kanso-story__settings">${markup}</div>`;
 
 const question = 'Run pnpm add react-countdown@2.3?';
@@ -56,6 +57,33 @@ export const panelReads = {
   failed: { body: () => failureBlock(samplePanel.failure) },
   stale: { stale: true, scope: samplePanel.read, body: (content) => content },
 };
+
+// The dōjō from its facts: the level, the bests so far, the phase and what the round shows.
+const sameSpot = (x, y) => (spot) => spot.x === x && spot.y === y;
+const dojoWorld = ({ level, x, y, goalX, goalY, path, hint }) => {
+  const trail = sampleDojo.trail({ x, y }, path);
+  const look = (cx, cy) => ({ current: cx === x && cy === y, goal: cx === goalX && cy === goalY, trail: trail.some(sameSpot(cx, cy)), hint: sameSpot(cx, cy)(trail[0] ?? {}) ? hint : '' });
+  const { w, h } = sampleDojo.grid;
+  return sampleDojo.levels[level - 1].world === 'grid'
+    ? { cells: Array.from({ length: w * h }, (_, index) => look(index % w, Math.floor(index / w))) }
+    : { lines: sampleDojo.lines.map((line, cy) => [...line].map((character, cx) => ({ character, ...look(cx, cy) }))) };
+};
+const dojoProps = ({ level, bests: written, picking, phase, score, time, streak, moves, need, reached, x, y, goalX, goalY, path, pressed, mood, feedback, tone, points, record, summary, share }) => {
+  const bests = sampleDojo.bests(written);
+  const { name } = sampleDojo.levels[level - 1];
+  const hint = path.split(' ')[0];
+  return {
+    header: { title: sampleDojo.title, level, name, share: bests.length > 0, shared: share, end: phase === 'round' ? sampleDojo.end : null, leave: sampleDojo.leave },
+    path: { levels: sampleDojo.levels.map(({ n, name: levelName }, index) => ({ number: n, name: levelName, best: bests[index] ?? '', done: index < bests.length, current: n === level, focus: picking && n === level })), keys: sampleDojo.pathKeys },
+    play: { statistics: { score, time, streak, moves: phase === 'round' ? moves : null, need }, progress: { reached, total: sampleDojo.targets }, world: dojoWorld({ level, x, y, goalX, goalY, path, hint }) },
+    result: phase === 'result' ? { record: { value: points, unit: 'points', record }, summary, keys: sampleDojo.resultKeys(level, level === sampleDojo.levels.length) } : null,
+    pixels: sampleDojo.pixels(mood), sleep: mood === 'sleep' ? sampleDojo.sleep : null, feedback: { text: feedback, tone },
+    marks: sampleDojo.marks(level, pressed, tone === 'missed' ? hint : ''), share: share ? sampleDojo.share : null,
+  };
+};
+const round3 = { level: 3, bests: '88, 104', phase: 'round', score: 45, time: '38s', streak: 2, moves: 2, need: 5, reached: 4, x: 11, y: 3, goalX: 14, goalY: 6, pressed: 'j', feedback: 'This one takes 5 at best.' };
+const best3 = { level: 3, bests: '88, 104, 142', phase: 'result', points: 142, record: 'a new best for level 3 · was 120', summary: '10 targets · 8 in the fewest moves · best streak 5 · 1:12', mood: 'glad', tone: 'success', feedback: 'A new best! Enter to play again, n for the next level.' };
+const firstOpen = 'Make a move to start: 10 targets, in as few moves as you can.';
 
 export const statedPages = {
   'Compositions/Toolbar': {
@@ -193,10 +221,27 @@ export const statedPages = {
       { label: 'Ten beyond', args: { panes: 10 }, caption: 'Every pane keeps its tile.' },
     ],
   },
+  'Compositions/Keyboard': {
+    args: { os: 'mac', ...layerDefaults, key: 'h', hover: 'none', level: 0, pressed: 'none', next: 'none' },
+    markup: ({ os, key, hover, level, pressed, next, ...args }) => level
+      ? keyboard({ os, marks: sampleDojo.marks(level, practiceKey(pressed), practiceKey(next)), inert: true })
+      : keyboardExplorer({ os, layer: keyLayer(os, args[`${os}Layer`]), picked: key, hover }),
+    states: [
+      { label: 'Shortcuts', args: {}, caption: 'The keys of the held modifiers; the picked key is solid.' },
+      { label: 'Practice, level keys', args: { level: 3 }, caption: 'The dōjō draws this keyboard: the level\'s keys in ink, each with its arrow and finger.' },
+      { label: 'Practice, pressed key', args: { level: 3, pressed: 'j' }, caption: 'The key just pressed, in solid ink.' },
+      { label: 'Practice, next key', args: { level: 3, next: 'l' }, caption: 'An accent ring marks the key to press next.' },
+    ],
+  },
   'Compositions/Keyboard/Key': {
-    args: { label: 'H', units: 1, state: 'kanso', hover: false },
+    args: { label: 'H', units: 1, state: 'kanso', hover: false, hint: false, corner: '', finger: '' },
     markup: (args) => stack({ variant: 'keyboard' }, stack({ variant: 'keyboard row' }, keycap(args))),
-    states: [{ label: 'kansō key', args: {}, caption: 'A key that does a kansō action.' }],
+    states: [
+      { label: 'kansō key', args: {}, caption: 'A key that does a kansō action.' },
+      { label: 'Pressed', args: { state: 'lit' }, caption: 'The key just pressed, in solid ink.' },
+      { label: 'Next key', args: { hint: true }, caption: 'An accent ring marks the key to press next.' },
+      { label: 'With a glyph and a finger', args: { corner: '←', finger: 'index' }, caption: 'A glyph in the corner and the finger that presses it, under the key.' },
+    ],
   },
   'Compositions/Keyboard/Picked key': {
     args: { os: 'mac', ...layerDefaults, key: 'h' },
@@ -208,5 +253,26 @@ export const statedPages = {
     markup: ({ chords, ...args }) => settingsSlice(shortcutRow({ ...args, chords: chords.split(',').map((chord) => chord.trim()).filter(Boolean),
       taken: { chord: '⌥⌘J', name: 'Pane below' }, source: 'keys.json: EACCES: permission denied', agent: 'checkout' })),
     states: [{ label: 'Rest', args: {}, caption: 'One action and its keys.' }],
+  },
+  'Panels/Dojo': {
+    args: { level: 1, bests: '', picking: false, phase: 'start', score: 0, time: '0s', streak: 0, moves: 0, need: 0, reached: 0, x: 9, y: 4, goalX: 14, goalY: 4, path: '', pressed: '', mood: 'calm', feedback: firstOpen, tone: 'none', points: 0, record: '', summary: '', share: false },
+    markup: (args) => dojo(dojoProps(args)),
+    states: [
+      { label: 'First open', args: {}, caption: 'One move starts the round.' },
+      { label: 'Picking a level', args: { level: 6, bests: '88, 104, 120', picking: true, x: 0, y: 0, goalX: 15, goalY: 1, feedback: phrase('Level 6, w b e:', sampleDojo.tip(6), 'A move starts.') }, caption: '] moves along the path; the example previews the level.' },
+      { label: 'In a round', args: round3, caption: 'The count against the best; the pressed key lit.' },
+      { label: 'A miss', args: { ...round3, time: '51s', streak: 0, moves: 8, y: 4, path: 'l l l j j', pressed: '', mood: 'sweat', tone: 'missed', feedback: '8 moves; 5 would do. Try l.' }, caption: 'The long way: the count in working, the best path and its first key.' },
+      { label: 'A perfect move', args: { ...round3, score: 78, time: '1:02', streak: 3, moves: 0, need: 4, reached: 7, x: 14, y: 6, goalX: 5, goalY: 2, mood: 'glad', tone: 'success', feedback: '3 in a row in the fewest moves.' }, caption: 'Hachi glad; the edge advances.' },
+      { label: 'A text level', args: { level: 7, bests: '88, 104, 120', phase: 'round', score: 30, time: '22s', streak: 1, moves: 1, need: 2, reached: 2, x: 2, y: 2, goalX: 21, goalY: 2, pressed: 'f', feedback: 'f… now the letter to find.' }, caption: 'f waits for its letter.' },
+      { label: 'Round over', args: { ...best3, bests: '88, 104, 120', points: 112, record: '', summary: '10 targets · 6 in the fewest moves · best streak 3 · 1:20', mood: 'calm', tone: 'none', feedback: 'Enter to play again, n for the next level.' }, caption: 'The round is over; the level keeps its best.' },
+      { label: 'A new best', args: best3, caption: 'The round is over and beat the level\'s best.' },
+      { label: 'Level cleared', args: { level: 4, bests: '88, 104, 142', x: 9, y: 4, goalX: 17, goalY: 4, mood: 'glad', tone: 'success', feedback: phrase('Level 3 done, best 142. Level 4:', sampleDojo.tip(4)) }, caption: 'The next level is current.' },
+      { label: 'All cleared', args: { ...best3, level: 9, bests: '88, 104, 142, 131, 156, 149, 162, 171, 181', points: 181, record: 'all nine levels done', summary: '1,284 points across the path · 41 days practised · longest streak 12', feedback: 'All nine. [ and ] take you back to any level.' }, caption: 'Every level has a best.' },
+      { label: 'Sharing', args: { ...best3, share: true }, caption: 'Scores and practice days only.' },
+      { label: 'Esc once', args: { ...round3, time: '40s', moves: 1, x: 10, pressed: '', tone: 'armed', feedback: 'Press Esc again to leave the dōjō.' }, caption: 'Hachi asks again before leaving.' },
+      { label: 'Stopped', args: { level: 3, bests: '88, 104', goalX: 3, goalY: 1, feedback: 'Round stopped, not counted. Enter to start again.' }, caption: 'The round is not counted.' },
+      { label: 'Asleep', args: { mood: 'sleep', feedback: 'Zzz. Any move wakes me.' }, caption: 'Any move wakes Hachi.' },
+      { label: 'sqlite3 missing', args: { feedback: 'Install sqlite3 to keep your rounds.' }, caption: 'The dōjō plays; rounds are not kept.' },
+    ],
   },
 };
