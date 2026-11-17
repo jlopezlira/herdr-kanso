@@ -720,7 +720,7 @@
 .kanso-keyboard__key--units-1-9{--k-units:1.9}
 .kanso-keyboard__key--units-2-2{--k-units:2.2}
 .kanso-keyboard__key--units-2-4{--k-units:2.4}
-.kanso-keyboard__key--units-5-3{--k-units:5.3}
+.kanso-keyboard__key--units-3-5{--k-units:3.5}
 .kanso-keyboard__key:is(:hover,.kanso-control--hover){box-shadow:inset 0 0 0 var(--k-w-line) var(--accent);transition-duration:var(--k-hover-in);transition-timing-function:var(--k-ease-in)}
 .kanso-keyboard__key:focus-visible{outline:var(--k-sp-hair) solid var(--accent);outline-offset:var(--k-sp-hair)}
 .kanso-keyboard__key.kanso-keyboard__key--bound{background:var(--wash-12);color:var(--fg)}

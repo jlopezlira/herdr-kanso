@@ -171,9 +171,9 @@ const macRows = [
   [['tab', 1.6], ['q'], ['w'], ['e'], ['r'], ['t'], ['y'], ['u'], ['i'], ['o'], ['p'], ['['], [']'], ['\\']],
   [['capslock', 1.9], ['a'], ['s'], ['d'], ['f'], ['g'], ['h'], ['j'], ['k'], ['l'], [';'], ["'"], ['enter', 1.7]],
   [['shift', 2.4], ['z'], ['x'], ['c'], ['v'], ['b'], ['n'], ['m'], [','], ['.'], ['/'], ['shift', 2.2]],
-  [['ctrl', 1.3], ['alt', 1.3], ['cmd', 1.6], ['space', 5.3], ['cmd', 1.6], ['alt', 1.3], ['left'], ['up'], ['down'], ['right']],
+  [['ctrl', 1.3], ['alt', 1.3], ['cmd', 1.6], ['space', 3.5], ['cmd', 1.6], ['alt', 1.3], ['left'], ['up'], ['down'], ['right']],
 ];
-const pcRows = [...macRows.slice(0, 4), [['ctrl', 1.3], ['cmd', 1.3], ['alt', 1.6], ['space', 5.3], ['alt', 1.6], ['ctrl', 1.3], ['left'], ['up'], ['down'], ['right']]];
+const pcRows = [...macRows.slice(0, 4), [['ctrl', 1.3], ['cmd', 1.3], ['alt', 1.6], ['space', 3.5], ['alt', 1.6], ['ctrl', 1.3], ['left'], ['up'], ['down'], ['right']]];
 const arrows = { space: null, left: '←', right: '→', up: '↑', down: '↓' };
 const pcCaps = { ...arrows, backspace: 'Back', tab: 'Tab', capslock: 'Caps', enter: 'Enter', escape: 'Esc', shift: 'Shift', ctrl: 'Ctrl', alt: 'Alt' };
 export const keyboards = {
