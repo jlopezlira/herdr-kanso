@@ -58,6 +58,25 @@ const given = (more) => {
   return Object.fromEntries(Object.entries(more).filter(([, value]) => value !== undefined));
 };
 
+// The first piece given `presses` checks, once drawn, that each name found a drawn target, as `on` checks its tools:
+// a renamed label or icon throws instead of leaving its press unbound. Pieces under it take theirs with `pressOf`.
+// `Symbol.for`: one mark across every copy of the kit, as a composition and its slots may each import their own.
+const TAKEN = Symbol.for("kanso.presses.taken");
+const pressing = (draw) => (id, c, more = {}, context = {}) => {
+  const { presses } = more;
+  if (!presses || presses[TAKEN]) return draw(id, c, more, context);
+  const taken = new Set();
+  const el = draw(id, c, { ...more, presses: { ...presses, [TAKEN]: taken } }, context);
+  const missing = Object.keys(presses).filter((key) => !taken.has(key));
+  if (missing.length) throw new Error(`kit: ${id} has no tool ${missing.join(", ")}`);
+  return el;
+};
+const pressOf = (presses, key) => {
+  const press = presses[key] ?? null;
+  if (press) presses[TAKEN]?.add(key);
+  return press;
+};
+
 const wired = (on) => (tool) => (tool && on[keyOf(tool)] ? { ...tool, onClick: on[keyOf(tool)] } : tool);
 
 // A detail fact with a `label` is a press, wired by that label as a tool is.
@@ -73,22 +92,22 @@ const withHandlers = (id, raw, actions, action, detail) => {
   return { actions: own.map(wired(on)), action: wired(on)(lone), detail: facts.map((part) => (pressFact(part) ? wired(on)(part) : part)) };
 };
 
-export const row = ({ icon, flag, detail, action, actions, start, tools, ...props }) => (id, c, more = {}) => {
-  const { on = {}, presses = {}, onClick = presses[keyOf({ icon, label: props.name })] ?? null, onPress, onRelease, onMenu, onMove, ...handlers } = given(more);
+export const row = ({ icon, flag, detail, action, actions, start, tools, ...props }) => pressing((id, c, more) => {
+  const { on = {}, presses = {}, onClick = pressOf(presses, keyOf({ icon, label: props.name })), onPress, onRelease, onMenu, onMove, ...handlers } = given(more);
   const drawnRow = drawRow(id, c, {
     ...props, ...handlers, onClick, ...withHandlers(id, on, actions, action, detail), icon: iconOf(icon), flag: appIcon(flag),
     start: drawn(id, c, "start", start), tools: drawn(id, c, "tools", tools),
   });
   return withEvents(drawnRow, { onPress, onRelease, onMenu, onMove });
-};
+});
 
 // `icon: "none"` is the Storybook's no icon; app-only props, such as `color`, pass through as the row's do.
 // `content`: kit pieces or elements drawn in place of the icon and label, such as a picture and its name. No `tip` reads the label.
 // `ink`: the stack around it quiets it, as Sort at its default order is dim.
-export const button = ({ label, icon = "none", content = [], tip = "", ...props }) => (id, c, more = {}, { ink = null } = {}) => {
-  const { presses = {}, onClick = presses[keyOf({ icon: iconOf(icon), label })] ?? null } = given(more);
+export const button = ({ label, icon = "none", content = [], tip = "", ...props }) => pressing((id, c, more, { ink = null }) => {
+  const { presses = {}, onClick = pressOf(presses, keyOf({ icon: iconOf(icon), label })) } = given(more);
   return drawButton(id, label, onClick, c, { ...(ink ? { color: c[ink] } : {}), ...props, tip: tip || null, icon: iconOf(icon), content: drawn(id, c, "content", content) });
-};
+});
 
 // Explain to <agent>: the bot icon and the agent named in words; its press starts that agent on the question.
 export const explainButton = ({ agent, size = "md" }) => button({ label: `Explain to ${agent}`, kind: "tonal", size, icon: "lu-bot" });
@@ -121,19 +140,19 @@ export const tabs = ({ items = [], value = null, size = "md", track = false, dis
 // A wrapper that only places other pieces, as the Storybook's: `label` is a focusable one's tooltip and spoken name.
 // A pressable one takes `onClick` itself; any other gives its handlers, `presses` with them, to its children.
 // `context`: what the stack around it says of its place, such as a column.
-export const stack = ({ variant, on = false, label = "", ...flags }, ...children) => (id, c, more = {}, context = {}) => {
+export const stack = ({ variant, on = false, label = "", ...flags }, ...children) => pressing((id, c, more, context) => {
   const { onPress, onRelease, onMenu, onMove, ...handlers } = given(more);
   return stackOf(id, c, { variant, on, label, ...flags }, list(...children), handlers, (el) => withEvents(el, { onPress, onRelease, onMenu, onMove }), context);
-};
+});
 
 // Dawn Mode's sky behind the lights, the Storybook's art in this theme's colours (built from it by build:ui-tokens), at its last frame.
 export const dawn = ({ id = "dawn" } = {}) => still((c) => image(c.dawn.art).absolute().top(0).left(0).w_full().h(DAWN_H))({ id });
 
 // The state patterns and the toast: the one action or fix takes `onClick`.
-const pattern = (draw) => (props) => (id, c, more = {}) => {
-  const { presses = {}, onClick = presses[props.fix || props.action] ?? null } = given(more);
+const pattern = (draw) => (props) => pressing((id, c, more) => {
+  const { presses = {}, onClick = pressOf(presses, props.fix || props.action) } = given(more);
   return draw(id, c, { ...props, onClick });
-};
+});
 export const emptyState = ({ icon = "", text, action = "" }) => pattern(stateEmpty)({ icon: appIcon(icon), text, action });
 export const failureLine = ({ text, fix = "", detail = "" }) => pattern(stateLine)({ text, fix, detail });
 export const failureBlock = ({ text, source = "", fix = "" }) => pattern(stateBlock)({ text, source, fix });

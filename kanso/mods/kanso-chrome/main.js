@@ -110,9 +110,11 @@ export default class WorkspaceChrome extends View {
   footer(collapsed) {
     const update = this.updater?.available() ?? null, busy = Boolean(this.updater?.busy);
     const why = update && !busy ? this.updater.refused() : null;
-    const install = (cx) => this.updater.install(cx);
-    return sidebarFooter({ update: update && updateLabel(update, busy), busy, refused: why ? refusalBlock(why) : null, menu: this.settingsMenu(), collapsed })(
-      "footer", tokens(theme()), { presses: { "refresh-cw": install, Update: install }, onOpen: (open, cx) => this.setMenu(open, cx) });
+    const install = (cx) => this.updater.install(cx), refused = why ? refusalBlock(why) : null;
+    // Only the targets on show: the update's icon while one is offered, the refusal's fix while it shows (not in the rail).
+    const presses = { ...(update ? { "refresh-cw": install } : {}), ...(refused && !collapsed ? { [refused.fix]: install } : {}) };
+    return sidebarFooter({ update: update && updateLabel(update, busy), busy, refused, menu: this.settingsMenu(), collapsed })(
+      "footer", tokens(theme()), { presses, onOpen: (open, cx) => this.setMenu(open, cx) });
   }
 
   render() {

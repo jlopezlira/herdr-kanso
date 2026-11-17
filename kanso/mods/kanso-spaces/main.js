@@ -1777,14 +1777,15 @@ export default class Spaces extends View {
     const form = collapsed ? "rail" : "bar";
     // Folding the caret, or the sidebar, shuts Sort's menu for good.
     const more = (cx) => { this.toolsOpen = !this.toolsOpen; if (!this.toolsOpen) this.orderOpen = null; cx.notify(); };
-    const bar = toolbar({ view, column: collapsed, open: this.toolsOpen === true, sorted: !plain, order: orders[current], sortMenu: this.sortShown(form, collapsed) ? this.sortMenu(view) : null });
+    const open = this.toolsOpen === true;
+    const bar = toolbar({ view, column: collapsed, open, sorted: !plain, order: orders[current], sortMenu: this.sortShown(form, collapsed) ? this.sortMenu(view) : null });
+    // Only the tools on show: a name the Toolbar does not draw throws. Collapsed, Search sits under the open caret.
     return header({ collapsed, title: false, toolbar: bar })("spaces-header", c, {
       presses: {
         plus: () => (view === "spaces" ? this.addProject() : this.newConversationMenu()),
-        search: () => run("mod.open", { name: "picker" }),
         "panel-left": () => this.toggleRail(),
-        "chevron-down": more,
-        "chevron-up": more,
+        ...(!collapsed || open ? { search: () => run("mod.open", { name: "picker" }) } : {}),
+        ...(collapsed ? { [open ? "chevron-up" : "chevron-down"]: more } : {}),
       },
       onOpen: (open, cx) => { this.orderOpen = open ? form : null; cx.notify(); },
     });

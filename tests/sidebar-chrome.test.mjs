@@ -63,15 +63,26 @@ test("Every Toolbar state in the Storybook draws in the app with its tools in th
 test("Each Toolbar tool runs what the app gives under its name, and Sort's menu says when it opens or shuts", async () => {
   const kit = await compositions();
   const hits = [];
-  const presses = Object.fromEntries(["plus", "search", "panel-left", "chevron-down"].map((name) => [name, () => hits.push(name)]));
+  const pressesOf = (...names) => Object.fromEntries(names.map((name) => [name, () => hits.push(name)]));
+  const presses = pressesOf("plus", "search", "panel-left");
   const press = (el) => arg(el, "on_click")({}, cx);
   const row = drawState(kit, {}, { presses, onOpen: (open) => hits.push(open ? "sort" : "shut") });
   ["Add project", "Search", "Hide sidebar", "Sort"].forEach((tip) => press(byTip(row, tip)));
-  press(byTip(drawState(kit, { column: true }, { presses }), "More tools"));
+  press(byTip(drawState(kit, { column: true }, { presses: pressesOf("plus", "panel-left", "chevron-down") }), "More tools"));
   const pop = every(drawState(kit, { menu: true }, { presses, onOpen: (open) => hits.push(open ? "sort" : "shut") })).find((kid) => calls(kid, "content").length);
   assert.equal(calls(arg(pop, "trigger"), "on_click").length, 0, "open, the popover owns the next press");
   arg(pop, "on_open_change")(false, cx);
   assert.deepEqual(hits, ["plus", "search", "panel-left", "sort", "chevron-down", "shut"]);
+});
+
+test("A press named for no drawn target throws, as `on` does for a tool: renaming a label or icon cannot leave its press unbound", async () => {
+  const { toolbar, sidebarFooter, c } = await compositions();
+  const install = () => {};
+  const refused = (fix) => sidebarFooter({ update: "Update kansō", refused: { text: "kansō didn't update", source: "offline", fix } });
+  assert.ok(refused("Update")("f", c, { presses: { "refresh-cw": install, Update: install } }), "every name finds its target");
+  assert.throws(() => refused("Try again")("f", c, { presses: { "refresh-cw": install, Update: install } }), /kit: f has no tool Update/);
+  assert.throws(() => toolbar({ column: true })("t", c, { presses: { plus: install, search: install } }), /kit: t has no tool search/,
+    "collapsed with the caret shut, Search is not drawn");
 });
 
 test("Every Header state in the Storybook draws in the app: the lights' row, Dawn Mode's sky and pill, the Toolbar 40 tall", async () => {
