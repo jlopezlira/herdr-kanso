@@ -7,6 +7,8 @@ import { LIST_LAYER, describe, layer } from '../../kanso/mods/kanso-help/keymap.
 import { GRID, LEVELS, SNIPPETS, gridWorld, move } from '../../kanso/mods/kanso-dojo/dojo.js';
 import { hachiPixels } from '../../kanso/mods/kanso-dojo/mascot-pixels.js';
 
+// A pull request's number as the app shows it.
+export const pullRequest = (number) => `#${number}`;
 const group = (...rows) => stack({ variant: 'row group' }, ...rows);
 export const sampleRows = {
   spaces: () => [
@@ -43,7 +45,7 @@ export const statusMenus = {
     { separator: true }, { icon: 'lu-square', label: 'Stop' }, { separator: true }, { icon: 'lu-plug', label: 'Open Ports' }, ...hide.slice(1)] }),
   containers: () => menu({ title: 'cart-db · exited 1', items: [{ icon: 'lu-power', label: 'Start' }, { icon: 'lu-terminal', label: 'Logs' },
     { separator: true }, { icon: 'lu-x', label: 'Remove' }, { separator: true }, { icon: 'lu-container', label: 'Open Containers' }, ...hide.slice(1)] }),
-  reviews: () => menu({ title: '2 reviews requested', items: [{ icon: 'lu-git-pull-request', label: '#142 Checkout auth flow', hint: 'acme-shop' },
+  reviews: () => menu({ title: '2 reviews requested', items: [{ icon: 'lu-git-pull-request', label: `${pullRequest(142)} Checkout auth flow`, hint: 'acme-shop' },
     { icon: 'lu-git-pull-request', label: '#87 Locale files', hint: 'docs-site' }, ...hide] }),
 };
 export const statusPanels = ({ open = '' } = {}) => [
@@ -90,7 +92,7 @@ export const appNotices = {
 // Two notices already on screen when the story adds one.
 export const sampleNotices = [
   { state: 'done', home: 'agent', text: 'docs finished: Added docs/limits.md and the table' },
-  { state: 'waits', home: 'pr', text: '#142 · test / unit failed' },
+  { state: 'waits', home: 'pr', text: `${pullRequest(142)} · test / unit failed` },
 ];
 
 // A sample panel's content, composed outside the shell: its tool, its section and rows, and the words of its empty, failed and stale reads.

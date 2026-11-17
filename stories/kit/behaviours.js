@@ -308,10 +308,11 @@ export function mountBehaviours(root, { page, state, inlineSurfaces = false, upd
     replay(node) { for (const animation of node.parentElement.getAnimations({ subtree: true })) { animation.cancel(); animation.play(); } },
     annotate(node, event) {
       const point = doc.createElement('button');
-      point.className = 'kanso-simulator__note-point';
+      point.className = 'kanso-simulator__note-point kanso-story__place';
       point.textContent = String(node.querySelectorAll('.kanso-simulator__note-point').length + 1);
-      point.style.cssText = `position:absolute;left:${event.offsetX}px;top:${event.offsetY}px`;
+      Object.assign(point.dataset, { left: event.offsetX, top: event.offsetY });
       node.append(point);
+      applyGeometry(node);
     },
     surface() {}, animate() {},
   };
