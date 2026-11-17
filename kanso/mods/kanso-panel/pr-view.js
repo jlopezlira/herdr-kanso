@@ -7,10 +7,10 @@ import { G, H, R, T, toneColor } from "./ui.js";
 import { button, quietLink } from "./ui-button.js";
 import { row } from "./ui-row.js";
 import { section } from "./ui-section.js";
+import { diffText, failureBlock } from "./kit.js";
 import { ageOf, footLine } from "./pr-poll.js";
 import { aliasText, machineTitle } from "./pure.js";
 import { verdictCard, VIEW } from "./pr-body.js";
-import { failureBlock } from "./kit.js";
 import { dot } from "./ui-dot.js";
 
 const ICON = "mods/kanso-chrome/icons/";
@@ -79,7 +79,7 @@ export function listedRow(panel, c, p, i, { finished = false, id = null } = {}) 
 
 // A pull request in a list: its title, its state and what it changes, then who and when.
 export const prRow = (id, c, p, { meta, state, on = false, onClick }) => row(id, c, {
-  name: p.title, detail: [state, p.additions == null ? null : `+${p.additions} −${p.deletions}`], meta: on ? "Shown" : null, second: meta, current: on, onClick,
+  name: p.title, detail: [state, p.additions == null ? null : diffText({ add: p.additions, del: p.deletions })], meta: on ? "Shown" : null, second: meta, current: on, onClick,
 }).aria_selected(on).accessibility_label(`#${p.number} ${p.title}${on ? ", shown" : ""}`);
 
 function otherPrs(panel, c, titled) {

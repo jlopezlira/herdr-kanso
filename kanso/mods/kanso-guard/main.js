@@ -9,7 +9,8 @@ import { G, T, OPACITY, breathe, tokens } from "./ui.js";
 import { mark } from "./ui-mark.js";
 import { Armed, quietLink, iconButton } from "./ui-button.js";
 import { section } from "./ui-section.js";
-import { skeletonOf } from "./kit.js";
+import { metric, skeletonOf } from "./kit.js";
+import { factList } from "./ui-facts.js";
 import { segmented } from "./ui-tab.js";
 import { Share } from "./share.js";
 import { tryOr, tryOrAsync, afterMount, readCommands, num } from "./pure.js";
@@ -268,7 +269,7 @@ export default class Memory extends View {
   offView(c, state, narrow) {
     const busy = Boolean(this.busy.install);
     return v_flex().w_full().gap(G.md)
-      .child(div().text_size(narrow ? 22 : 28).font_light().text_color(c.muted).child(state === "bad" ? "Unreadable" : "Off"))
+      .child(metric({ value: state === "bad" ? "Unreadable" : "Off", tone: "muted" })("guard-off", c))
       .child(h_flex().gap(G.lg).items_center()
         .child(quietLink("guard-on", busy ? "Turning on…" : "Turn on", (cx) => { if (!busy) this.turnOn(cx); }, c, { color: c.text }))
         .when(state === "bad", (el) => el.child(quietLink("guard-reread", "Read again", (cx) => this.read(cx), c))));
@@ -299,25 +300,17 @@ export default class Memory extends View {
     const totals = this.digest?.totals;
     const windowHot = Boolean(w.oom) || (typeof w.mb === "number" && typeof l.windowMB === "number" && w.mb > l.windowMB);
     const stats = [
-      { value: size(w.pid ? w.mb : undefined), unit: "window", tip: w.oom ? "Its mod runtime ran out of memory" : null, hot: windowHot },
+      { value: size(w.pid ? w.mb : undefined), unit: w.oom ? "window, out of memory" : windowHot ? "window, over its limit" : "window" },
       { value: size(data.core.mb), unit: "core" },
       { value: size(agentsMB(data)), unit: `${data.agents.length} ${data.agents.length === 1 ? "agent" : "agents"}` },
       totals ? { value: String(totals.recycles), unit: totals.recycles === 1 ? "recycle" : "recycles" } : null,
       totals && totals.closed ? { value: String(totals.closed), unit: "closed" } : null,
       totals ? { value: String(totals.restarts), unit: totals.restarts === 1 ? "restart" : "restarts" } : null,
-      totals && totals.freedMB > 0 ? { value: size(totals.freedMB), unit: "freed", tip: totals.since ? `Since ${clock(totals.since)}` : null } : null,
+      totals && totals.freedMB > 0 ? { value: size(totals.freedMB), unit: totals.since ? `freed since ${clock(totals.since)}` : "freed" } : null,
     ].filter(Boolean);
-    const stat = (s) => h_flex().items_end().gap(6)
-      .when(Boolean(s.tip), (el) => el.tooltip(s.tip))
-      .child(div().text_size(narrow ? 22 : 28).line_height(1).font_light().text_color(s.hot ? c.red : c.text).child(s.value))
-      .child(div().pb(3).text_size(12).text_color(c.dim).child(s.unit));
-    const figure = v_flex().gap(G.xs).child(h_flex().flex_wrap().items_end().gap_x(G.md)
-      .child(div().text_size(narrow ? 48 : 72).line_height(1).font_light().text_color(low ? c.red : c.text).child(free === null ? "–" : `${free}%`))
-      .child(div().pb(narrow ? 6 : 10).text_size(13).text_color(c.dim).child(data.paused ? "free · paused" : "free")))
-      .child(div().text_size(15).text_color(c.dim).child([m.totalMB ? `of ${size(m.totalMB)}` : null, swap].filter(Boolean).join(" · ")));
+    const unit = [data.paused ? "free, paused" : "free", m.totalMB ? `of ${size(m.totalMB)}` : null].filter(Boolean).join(" ");
     return v_flex().w_full().gap(G.xl)
-      .child(figure)
-      .child(h_flex().w_full().flex_wrap().gap_x(narrow ? G.xl : 48).gap_y(G.lg).children(stats.map(stat)))
+      .child(metric({ value: free === null ? "–" : `${free}%`, unit: [unit, swap].filter(Boolean).join(" · "), facts: factList(stats), tone: low ? "blocked" : "" })("guard-metric", c))
       .child(h_flex().w_full().flex_wrap().gap_x(G.lg).items_center()
         .when(Boolean(w.pid), (el) => el.child(quietLink("guard-restart", this.busy.restart ? "Restarting the window…" : "Restart window",
           (cx) => { if (!this.busy.restart) this.restartWindow(cx); }, c)))

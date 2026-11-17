@@ -7,6 +7,7 @@ import { focusOn } from "./pure.js";
 import { Lit } from "./lit.js";
 import { G, DOJO_CELL, OPACITY, TINT, CLEAR, alpha, tokens } from "./ui.js";
 import { button, iconButton } from "./ui-button.js";
+import { metric } from "./kit.js";
 import { Store } from "./store.js";
 import { Share } from "./share.js";
 import { dojoShare } from "./card.js";
@@ -268,12 +269,7 @@ export default class Dojo extends View {
     const o = this.over;
     const result = o ? v_flex().gap(G.lg).p(24).rounded(12).bg(alpha(c.accent, TINT.card)).border_1().border_color(alpha(c.accent, TINT.frame))
       .child(div().text_size(13).text_color(c.muted).child(o.kept ? `Level ${lv.n}: ${lv.name}, done` : "Round stopped"))
-      .child(h_flex().gap(G.xl).items_end()
-        .child(v_flex().gap(2).child(div().text_size(44).font_semibold().text_color(c.accent).child(String(o.score))).child(div().text_size(12).text_color(c.dim).child("points")))
-        .child(stat("Targets", `${o.hits} / ${TARGETS}`))
-        .child(stat("Fewest moves", `${o.perfect}`))
-        .child(stat("Best streak", `${o.longest}`))
-        .child(stat("Time", secs(o.ms))))
+      .child(metric({ value: String(o.score), unit: "points", facts: `${o.hits} of ${TARGETS} targets | ${o.perfect} in the fewest moves | best streak ${o.longest} | ${secs(o.ms)}` })("dojo-metric", c))
       .when(this.record, (el) => el.child(div().text_size(15).font_semibold().text_color(c.text).child("A new best for this level.")))
       .child(h_flex().gap(G.md).flex_wrap()
         .child(press("dojo-again", "Play again  ↩", () => this.again(), { kind: "solid" }))

@@ -1,4 +1,4 @@
-import { sizedPage, listBones, heroStack, heroHeading, metricStats } from "./ui-page.js";
+import { sizedPage, listBones, heroStack, heroHeading } from "./ui-page.js";
 import { localService, serviceFor, REMOTE_TIMEOUT } from "./platform-host.js";
 import { paths } from "./platform-paths.js";
 import { processApi } from "./platform-processes.js";
@@ -9,7 +9,7 @@ import { div } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import { exec, hc, panes, terminals, machines, home, run, theme, appHome, readTextFile, shared } from "herdr";
 import { tilde, said } from "./lib.js";
-import { failureBlock } from "./kit.js";
+import { failureBlock, metric } from "./kit.js";
 import { dot } from "./ui-dot.js";
 import { aliasText, machineTitle, tryOr } from "./pure.js";
 import { parseProcesses, etimeSecs } from "./procs.js";
@@ -18,6 +18,7 @@ export { STOP_LOOP };
 import { G, OPACITY, tokens } from "./ui.js";
 import { Armed, button, quietLink, iconButton } from "./ui-button.js";
 import { row } from "./ui-row.js";
+import { factList } from "./ui-facts.js";
 import { section } from "./ui-section.js";
 import { segmented } from "./ui-tab.js";
 import { Share, shareRows } from "./share.js";
@@ -375,18 +376,15 @@ export class Ports {
     const held = list.reduce((t, s) => t + (typeof s.mb === "number" ? s.mb : 0), 0);
     const st = this.digest?.stats;
     const stats = [
-      { value: String(loose.length), unit: NO_PANE, hot: loose.length > 0 },
+      { value: String(loose.length), unit: NO_PANE },
       held > 0 ? { value: size(held), unit: "held now" } : null,
       st ? { value: String(st.openedToday), unit: "opened today" } : null,
-      st ? { value: String(st.stopped), unit: "stopped by you", tip: st.since ? `Since ${clock(st.since)}` : null } : null,
-      st && st.freedMB > 0 ? { value: size(st.freedMB), unit: "given back", tip: st.since ? `Since ${clock(st.since)}` : null } : null,
+      st ? { value: String(st.stopped), unit: st.since ? `stopped by you since ${clock(st.since)}` : "stopped by you" } : null,
+      st && st.freedMB > 0 ? { value: size(st.freedMB), unit: st.since ? `given back since ${clock(st.since)}` : "given back" } : null,
     ].filter(Boolean);
     return heroStack(heroHeading()
         .child(div().text_size(15).text_color(c.muted).child(here ? `Listening on ${machineTitle("", "", here)}` : "Listening on this computer"))
-        .child(h_flex().items_end().gap(G.md)
-          .child(div().text_size(narrow ? 48 : 64).line_height(1).font_light().text_color(c.text).child(String(list.length)))
-          .child(div().pb(narrow ? 6 : 9).text_size(13).text_color(c.dim).child(list.length === 1 ? "server" : "servers"))))
-      .child(metricStats(stats, c, narrow))
+        .child(metric({ value: String(list.length), unit: list.length === 1 ? "server" : "servers", facts: factList(stats) })("pt-metric", c)))
       .when(loose.length > 0, (el) => el.child(h_flex().gap(G.lg).items_center().flex_wrap()
         .child(this.armed.button("pt-stop-all", `Stop ${loose.length} ${NO_PANE}`, `stop ${loose.length}`, "all", (cx) => this.stop(loose, cx), c))
         .child(div().text_size(12).text_color(c.dim).child("The ones in a pane stay."))));

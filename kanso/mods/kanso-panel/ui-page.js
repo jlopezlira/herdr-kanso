@@ -1,6 +1,5 @@
-// Kanso's panel kit: a panel page's frame, size, skeleton and metrics. Apache-2.0.
+// Kanso's panel kit: a panel page's frame, size and skeleton. Apache-2.0.
 // Kept byte for byte by `npm run sync:share`: edit kanso-panel/ui-page.js.
-import { div } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 import { G, PAGE } from "./ui.js";
 import { skeletonOf } from "./ui-skeleton.js";
@@ -10,7 +9,6 @@ const pagePadding = (narrow) => h_flex().flex_none().w_full().justify_center().p
 const pageContent = (narrow, gap = narrow ? 32 : 44) => v_flex().w_full().max_w(PAGE.w).gap(gap);
 export const heroStack = (heading) => v_flex().w_full().gap(G.xl).child(heading);
 export const heroHeading = () => v_flex().gap(G.xs);
-export const metricValue = () => h_flex().flex_wrap().items_end().gap_x(G.md);
 
 export function pageSize({ always = false } = {}) {
   return (size, cx) => {
@@ -26,10 +24,6 @@ export const pageBones = (c, narrow, { body, background = c.canvas, gap } = {}) 
 // A list's first read: three two-line rows.
 export const listBones = (c) => skeletonOf("kanso-skeleton", c, { shape: "two lines", count: 3 });
 
-export const metricStats = (stats, c, narrow) => h_flex().w_full().flex_wrap().gap_x(narrow ? G.xl : 48).gap_y(G.lg)
-  .children(stats.map((stat) => h_flex().items_end().gap(PAGE.unitGap).when(Boolean(stat.tip), (el) => el.tooltip(stat.tip))
-    .child(div().text_size(narrow ? 22 : 28).line_height(1).font_light().text_color(c.text).child(stat.value))
-    .child(div().pb(PAGE.unitY).text_size(PAGE.note).text_color(c.dim).child(stat.unit))));
 
 export const pageBody = (narrow, draw) => pagePadding(narrow).child(draw(pageContent(narrow)));
 export const toolbar = (c) => h_flex().flex_none().px(G.lg).py(G.sm).gap(G.sm).items_center().border_b(1).border_color(c.border);

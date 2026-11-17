@@ -1,5 +1,6 @@
 // What the pull request panel says, and the one action that state can take.
 import { plural } from "./pure.js";
+import { diffText, plus } from "./ui-facts.js";
 import { checkLine, checkSummary, isWriter, jobLabel, mergeReadiness, runIdOf } from "./ghchecks.js";
 
 export const LOG_LINES = 12;
@@ -96,7 +97,7 @@ function peopleOf(pr) {
 function factLine(pr, threads) {
   const commits = Array.isArray(pr.commits) ? pr.commits.length : null;
   return [
-    pr.changedFiles != null ? `${plural(pr.changedFiles, "file", "files")}  +${pr.additions ?? 0} −${pr.deletions ?? 0}` : null,
+    pr.changedFiles != null ? `${plural(pr.changedFiles, "file", "files")}  ${diffText({ add: pr.additions ?? 0, del: pr.deletions ?? 0 })}` : null,
     commits != null ? plural(commits, "commit", "commits") : null,
     threads > 0 ? plural(threads, "thread", "threads") : null,
   ].filter(Boolean).join(" · ");
@@ -135,7 +136,7 @@ function failedShape(scene) {
     body: { kind: "log", job: jobLabel(first), step: group?.step || "", elapsed: elapsed(first.startedAt, first.completedAt, scene.now), lines },
     primary: send,
     quiet: link("pr-log", "Open log on GitHub", "log", first.url || scene.pr.url),
-    more: extra > 0 ? link("pr-more-fail", extra === 1 ? "+1 more" : `+${extra} more`, "failures") : null,
+    more: extra > 0 ? link("pr-more-fail", `${plus(extra)} more`, "failures") : null,
   };
 }
 
@@ -155,7 +156,7 @@ function commentShape(scene) {
     body: card,
     primary: send,
     quiet: link("pr-reply", "Reply on GitHub", "reply", th?.url || scene.pr.url),
-    more: extra > 0 ? link("pr-more-thread", extra === 1 ? "+1 more thread" : `+${extra} more threads`, "details") : null,
+    more: extra > 0 ? link("pr-more-thread", `${plus(extra)} more ${extra === 1 ? "thread" : "threads"}`, "details") : null,
   };
 }
 

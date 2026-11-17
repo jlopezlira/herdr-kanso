@@ -1,4 +1,4 @@
-import { detailColumn, metricStats, pageBody, pageSize, heroStack, heroHeading } from "./ui-page.js";
+import { detailColumn, pageBody, pageSize, heroStack, heroHeading } from "./ui-page.js";
 import { localService, serviceOn } from "./platform-host.js";
 import { paths } from "./platform-paths.js";
 import { fileApi } from "./platform-files.js";
@@ -13,7 +13,8 @@ import { quietLink, iconButton } from "./ui-button.js";
 import { field, TextField } from "./ui-field.js";
 import { menu } from "./ui-menu.js";
 import { section } from "./ui-section.js";
-import { skeletonOf } from "./kit.js";
+import { metric, skeletonOf } from "./kit.js";
+import { factList } from "./ui-facts.js";
 import { segmented } from "./ui-tab.js";
 import { toggleSwitch } from "./ui-toggle.js";
 import { PERIOD_KEY, SPEND_PERIODS, spendPeriod } from "./period.js";
@@ -610,15 +611,12 @@ export default class TokenSpend extends View {
               label: "Next period", disabled: offset >= 0,
             }))
             .when(offset < 0, (row) => row.child(quietLink("ins-now", "Back to now", (cx) => this.setCost({ offset: 0 }, cx), c)))))
-        .child(h_flex().flex_wrap().items_end().gap_x(G.md)
-          .child(div().text_size(narrow ? 48 : 72).line_height(1).font_light().text_color(c.text).tooltip(hero.tip).child(hero.value))
-          .child(div().pb(narrow ? 6 : 10).text_size(13).text_color(c.dim).child("API value")))
+        .child(metric({ value: hero.value, unit: "API value", facts: hero.empty ? "" : factList(hero.stats), tip: hero.tip })("ins-metric", c))
         .when(Boolean(hero.note), (el) => el.child(div().text_size(15).text_color(c.dim).child(hero.note)))
         .when(Boolean(hero.empty), (el) => el.child(div().text_size(15).text_color(c.muted).child(hero.empty)))
         .when(Boolean(hero.plan), (el) => el.child(div().text_size(13).text_color(c.muted).child(hero.plan)))
         .when(Boolean(this.scan?.partial), (el) => el.child(div().text_size(12).text_color(c.dim)
-          .child(`Still reading your history: ${this.scan.processed} of ${this.scan.total} files so far.`))))
-      .when(!hero.empty, (el) => el.child(metricStats(hero.stats, c, narrow)));
+          .child(`Still reading your history: ${this.scan.processed} of ${this.scan.total} files so far.`))));
   }
 
   chart(c, chart) {
@@ -682,13 +680,7 @@ export default class TokenSpend extends View {
         .child(h_flex().w_full().flex_wrap().gap_x(G.md).gap_y(2)
           .children([d.project, d.tools, d.when].filter(Boolean).map((part) => div().text_size(12).text_color(c.dim).child(part)))))
       .child(v_flex().gap(G.xl)
-        .child(h_flex().flex_wrap().items_end().gap_x(G.md)
-          .child(div().text_size(narrow ? 44 : 60).line_height(1).font_light().text_color(c.text).tooltip(`${d.usdExact} at API list price`).child(d.usdText))
-          .child(div().pb(narrow ? 5 : 8).text_size(13).text_color(c.dim).child("API value")))
-        .child(h_flex().w_full().flex_wrap().gap_x(narrow ? G.xl : 40).gap_y(G.lg)
-          .children(d.parts.map((part) => v_flex().gap(4)
-            .child(div().text_size(narrow ? 20 : 24).line_height(1).font_light().text_color(c.text).child(part.value))
-            .child(div().text_size(11).text_color(c.dim).child(part.label))))))
+        .child(metric({ value: d.usdText, unit: "API value", facts: factList(d.parts.map((part) => ({ value: part.value, unit: part.label }))), tip: `${d.usdExact} at API list price` })("ins-task-metric", c)))
       .child(v_flex().w_full()
         .child(section(c, "Models", `${d.models.length}`))
         .children(d.models.map((m, index) => row(m.name, "", m.usdText, m.tokensText, index))))

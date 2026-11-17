@@ -9,15 +9,15 @@ import { exec, theme, shared, setShared, notify } from "herdr";
 import { Store } from "./shipped-store.js";
 import { shippedSpec, shareText } from "./shipped-card.js";
 import { Share, shareRows } from "./share.js";
-import { G, HEATMAP_GAP, TINT, alpha, tokens } from "./ui.js";
+import { G, T, HEATMAP_GAP, TINT, alpha, tokens } from "./ui.js";
 import { quietLink, iconButton } from "./ui-button.js";
 import { section } from "./ui-section.js";
-import { skeletonOf } from "./kit.js";
+import { metric, skeletonOf, failureBlock } from "./kit.js";
+import { factList } from "./ui-facts.js";
 import { segmented } from "./ui-tab.js";
 import { range, tryOrAsync, mapSeries, MONTHS } from "./pure.js";
 import { shippedMemory } from "./panel-state.js";
 import { spawnAndNotify, said } from "./lib.js";
-import { failureBlock } from "./kit.js";
 import { dot } from "./ui-dot.js";
 
 const DAY = 86400000;
@@ -454,18 +454,10 @@ export class Shipped {
     const s = this.summary();
     return v_flex().w_full().gap(G.lg)
       .child(v_flex().w_full().gap(G.xs)
-        .child(h_flex().w_full().flex_wrap().items_end().gap_x(G.md).gap_y(G.xs)
-          .child(div().text_size(narrow ? 40 : 56).line_height(1).font_light().text_color(c.text).child(s.big ?? "…"))
-          .when(Boolean(s.small), (el) => el.child(div().pb(6).text_size(narrow ? 18 : 22).line_height(1).font_light().text_color(c.muted).child(s.small))))
-        .child(h_flex().w_full().flex_wrap().gap_x(G.sm).gap_y(2).items_center()
-          .child(div().text_size(13).text_color(c.muted).child(`${s.label}${s.settled ? "" : ", still adding up"}`))
-          .when(s.delta !== null, (el) => el.child(h_flex().gap(6).items_center()
-            .child(dot(c, s.delta >= 0 ? c.green : c.red))
-            .child(div().text_size(13).text_color(s.delta >= 0 ? c.green : c.red).child(s.deltaText))))))
-      .child(h_flex().w_full().flex_wrap().gap_x(narrow ? G.lg : 32).gap_y(G.lg)
-        .children(s.stats.map((x) => v_flex().gap(4).min_w(64)
-          .child(div().text_size(narrow ? 22 : 28).line_height(1).font_light().text_color(c.text).child(x.value))
-          .child(div().text_size(11).text_color(c.dim).child(x.unit)))))
+        .child(metric({ value: s.big ?? "…", unit: [s.small, `${s.label}${s.settled ? "" : ", still adding up"}`].filter(Boolean).join(" "), facts: factList(s.stats) })("sh-metric", c))
+        .when(s.delta !== null, (el) => el.child(h_flex().gap(6).items_center()
+          .child(dot(c, s.delta >= 0 ? c.green : c.red))
+          .child(div().text_size(T.value).text_color(s.delta >= 0 ? c.green : c.red).child(s.deltaText)))))
       .when(Boolean(s.everText), (el) => el.child(div().text_size(12).text_color(c.muted).child(s.everText)))
       .when(Boolean(s.error), (el) => el.child(failureBlock(s.error)("sh-error", c)));
   }
@@ -484,9 +476,7 @@ export class Shipped {
     };
     return v_flex().w_full().gap(G.md)
       .child(section(c, "Streak", `longest ${fmt(longest.n)} ${longest.n === 1 ? "day" : "days"}`))
-      .child(h_flex().items_end().gap(G.sm)
-        .child(div().text_size(40).line_height(1).font_light().text_color(c.text).child(fmt(current)))
-        .child(div().pb(4).text_size(12).text_color(c.dim).child(current === 1 ? "day in a row" : "days in a row")))
+      .child(metric({ value: fmt(current), unit: current === 1 ? "day in a row" : "days in a row" })("sh-streak", c))
       .child(h_flex().w_full().gap(HEATMAP_GAP).children(weeks.map((w, wi) => {
         const byDay = new Map(w.contributionDays.map((d) => [d.weekday, d]));
         return v_flex().flex_none().gap(HEATMAP_GAP).children([0, 1, 2, 3, 4, 5, 6].map((i) => square(byDay.get(i), `heat-${wi}-${i}`)));
