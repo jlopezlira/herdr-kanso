@@ -5,20 +5,20 @@ import { clone, load } from "./helpers.mjs";
 const pure = () => load("kanso-spaces/pure.js", ["readCommands", "focusOn", "nodeById", "tellsSomething", "dayWord", "sizeMB", "RANGES"]);
 
 // A cx whose timer.after runs are kept, and whose spawn runs the task at once.
-const hostCx = (draws) => {
+const hostCx = () => {
   const starts = [];
+  const draws = { count: 0 };
   const cx = {
     timer: { after: (ms, start) => { starts.push(start); return { cancel() {} }; } },
     spawn: (loop) => { const task = loop(cx); starts.task = task; return { cancel() {} }; },
     notify: () => { draws.count += 1; },
   };
-  return { cx, starts };
+  return { cx, starts, draws };
 };
 
 test("The command reader hands each command over, redraws, and stops when the build is replaced", async () => {
   const { readCommands } = await pure();
-  const draws = { count: 0 };
-  const { cx, starts } = hostCx(draws);
+  const { cx, starts, draws } = hostCx();
   const queue = ["one", "two"];
   const seen = [];
   readCommands(cx, async () => {
@@ -34,8 +34,8 @@ test("The command reader hands each command over, redraws, and stops when the bu
 
 test("The command reader stops at once when its act says false, and never starts on a closed view", async () => {
   const { readCommands } = await pure();
-  const draws = { count: 0 };
-  const { cx, starts } = hostCx(draws);
+  const hosted = hostCx();
+  const { cx, starts } = hosted;
   const queue = ["back", "never"];
   const seen = [];
   readCommands(cx, async () => queue.shift(), (command) => { seen.push(command); return command === "back" ? false : true; });
@@ -44,19 +44,18 @@ test("The command reader stops at once when its act says false, and never starts
   assert.deepEqual(seen, ["back"]);
   assert.deepEqual(queue, ["never"], "the unread command stays for the next view");
 
-  const closedDraws = { count: 0 };
-  const closed = hostCx(closedDraws);
+  const closedHost = hostCx();
   let spawned = 0;
-  const guardedCx = { ...closed.cx, spawn: (loop) => { spawned += 1; return closed.cx.spawn(loop); } };
+  const guardedCx = { ...closedHost.cx, spawn: (loop) => { spawned += 1; return closedHost.cx.spawn(loop); } };
   readCommands(guardedCx, async () => "x", () => {}, { closed: () => true });
-  await closed.starts[0](guardedCx);
+  await closedHost.starts[0](guardedCx);
   assert.equal(spawned, 0, "a view closed before the turn starts never reads");
+  assert.equal(closedHost.draws.count, 0);
 });
 
 test("The command reader's keep takes the task, so a close in time can cancel it", async () => {
   const { readCommands } = await pure();
-  const draws = { count: 0 };
-  const { cx, starts } = hostCx(draws);
+  const { cx, starts } = hostCx();
   const kept = [];
   readCommands(cx, async () => new Promise(() => {}), () => {}, { keep: (task) => kept.push(task) });
   await starts[0](cx);
@@ -97,9 +96,6 @@ test("A day's words, a size a person reads, and the meter panels' three ranges",
   assert.equal(dayWord(new Date(2026, 10, 16, 9, 0)), "Nov 16");
   assert.deepEqual([sizeMB(640), sizeMB(1434), sizeMB(14_500), sizeMB(null)], ["640 MB", "1.4 GB", "14 GB", "–"]);
   const DAY = 86_400_000;
-  assert.deepEqual(clone(RANGES), [
-    { key: "day", label: "24 h", ms: DAY, buckets: 96 },
-    { key: "week", label: "7 days", ms: 7 * DAY, buckets: 84 },
-    { key: "month", label: "30 days", ms: 30 * DAY, buckets: 90 },
-  ]);
+  const asked = clone(RANGES).map(({ key, label, ms, buckets }) => [key, label, ms / DAY, buckets]);
+  assert.deepEqual(asked, [["day", "24 h", 1, 96], ["week", "7 days", 7, 84], ["month", "30 days", 30, 90]]);
 });
