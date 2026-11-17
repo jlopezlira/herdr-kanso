@@ -2,7 +2,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { load, gpuiHost, nodes, texts, themed, KIT_NIGHT, drawingHost } from "./helpers.mjs";
+import { load, gpuiHost, nodes, texts, tipsOf, themed, KIT_NIGHT, drawingHost } from "./helpers.mjs";
 import { sessionRow } from "../stories/kit/session-row.js";
 
 const sidebar = async (ran = []) => {
@@ -13,7 +13,6 @@ const sidebar = async (ran = []) => {
   }, KIT_NIGHT);
 };
 const ids = (el) => nodes(el).flatMap((kid) => kid.calls.filter((call) => call[0] === "id").map((call) => call[1]).concat(kid.tag && kid.tag.includes("-") ? [kid.tag] : []));
-const tips = (el) => nodes(el).flatMap((kid) => kid.calls.filter((call) => call[0] === "tooltip").map((call) => call[1]));
 const handler = (el, name, arg) => el.calls.filter((call) => call[0] === name && (arg === undefined || call[1] === arg)).map((call) => call.at(-1))[0];
 const plain = (value) => JSON.parse(JSON.stringify(value));
 const claude = { icon: "programs/claude.svg", tint: true };
@@ -68,7 +67,7 @@ test("Each thing a session row did by hand still works: click, double-click to r
   handler(el, "on_mouse_down", "right")({}, cx);
   for (const tool of ["space-agent-t1-tool-0", "space-agent-t1-tool-1", "space-agent-t1-tool-2", "space-agent-t1-action"]) handler(nodes(el).find((kid) => kid.tag === tool), "on_click")({}, cx);
   assert.deepEqual(hits.filter((hit) => hit !== "stopped"), ["down", "up", "menu", "settle", "pin", "menu", "refresh"]);
-  assert.deepEqual(tips(el).filter((tip) => ["Settle", "Pin to the top", "More", "Refresh"].includes(tip)).sort(), ["More", "Pin to the top", "Refresh", "Settle"]);
+  assert.deepEqual(tipsOf(el).filter((tip) => ["Settle", "Pin to the top", "More", "Refresh"].includes(tip)).sort(), ["More", "Pin to the top", "Refresh", "Settle"]);
   assert.ok(nodes(el).some((kid) => kid.calls.some((call) => call[0] === "bg" && call[1] === c.accent)), "the drop line shows where it lands");
   const peek = await sidebar(ran);
   handler(peek.agentSession({ address: "t9", status: "idle" }, 0, c, null, {}), "on_click")({}, cx);
@@ -107,7 +106,7 @@ test("Under the pointer a row shows only the tools it can run, and the keyboard'
   assert.ok(texts(ringed).includes("3m"));
   assert.ok(ringed.calls.some((call) => call[0] === "border_color" && call[1] === c.accent), "the ring");
   const menuOnly = agentSession({ ...atlas, status: "idle" }, 1, c, { hovered: true, menu: () => {} }, {});
-  assert.deepEqual(tips(menuOnly).filter((tip) => ["More", "Pin to the top"].includes(tip)), ["More"]);
+  assert.deepEqual(tipsOf(menuOnly).filter((tip) => ["More", "Pin to the top"].includes(tip)), ["More"]);
 });
 
 test("A dozing or unreadable row fades its program's art, and the activity takes its status's tone, as before", async () => {

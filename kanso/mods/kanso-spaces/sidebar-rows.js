@@ -1,10 +1,4 @@
-// What the sidebar may paint, and the pull a press runs. Drawing stays next door.
-export const showPlus = (active, hovered) => Boolean(active || hovered);
-export const showDots = (hovered) => Boolean(hovered);
-
-export function projectControls({ active, hovered, place }) {
-  return { plus: Boolean(place) && showPlus(active, hovered), dots: showDots(hovered) };
-}
+// What the sidebar's rows say and the pull a press runs. Drawing stays in the compositions.
 
 export const pullKey = (folder, on) => `pull:${on ?? ""}:${folder ?? ""}`;
 
@@ -48,9 +42,6 @@ export async function runPull(exec, notify, place) {
   return result;
 }
 
-// A state on the row is a word: the blocked colour is only for an edge and a mark.
-export const machineWordTone = () => "dim";
-
 export const canWake = (row) => Boolean(row?.asleep);
 
 export function enterOpens(row) {
@@ -59,8 +50,6 @@ export function enterOpens(row) {
   if (row?.address) return { peek: row.address };
   return null;
 }
-
-export const asleepControls = (row) => (canWake(row) ? [{ id: "wake", label: "Wake" }] : []);
 
 // The project row's task: its repository when the name differs, the branch, or a detached commit's short id.
 export function gitTask(g, name, tree) {
@@ -126,11 +115,6 @@ export function threadActions({ settled, status, pinned }) {
   if (settled) return [{ id: "unsettle", icon: "undo", tip: "Bring back" }];
   if (status === "working" || status === "blocked" || pinned) return [];
   return [{ id: "settle", icon: "check", tip: "Settle" }];
-}
-
-// A kept project with nothing open: + and the menu under the pointer; a missing folder offers Locate instead of +.
-export function closedControls({ hovered, missing }) {
-  return { plus: Boolean(hovered) && !missing, dots: Boolean(hovered), locate: Boolean(missing) };
 }
 
 export const signInCommand = (name) => ({ argv: ["hc", "machine", "login", name], place: "right" });

@@ -301,11 +301,11 @@ test("kanso-spaces passes an explicit machine to space.new for local, remote, an
   view.render();
 
   const cx = { stop_propagation() {}, notify() {} };
-  handlers["on_click:machine-add-local"]({}, cx);
+  handlers["on_click:machine-local-tool-0"]({}, cx); // this computer: + alone
   handlers["on_click:machine-new-local-action"]({}, cx);
   view.hoverMachine = "odin";
   view.render();
-  handlers["on_click:machine-add-odin"]({}, cx);
+  handlers["on_click:machine-odin-tool-1"]({}, cx); // Turn off, +, Sync
 
   // The top + is no longer a bare space: it adds a project (tests/projects.test.mjs).
   assert.deepEqual(calls, [

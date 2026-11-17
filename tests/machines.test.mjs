@@ -43,7 +43,7 @@ test("a login Herdr asks for is told apart from a missing install", async () => 
 });
 
 test("a machine row names only the states that need a word", async () => {
-  const { machineState, machineTip, machineHot } = await load("kanso-spaces/machines.js", ["machineState", "machineTip", "machineHot"]);
+  const { machineState, machineTip, machineHot, machineStop } = await load("kanso-spaces/machines.js", ["machineState", "machineTip", "machineHot", "machineStop"]);
   assert.equal(machineState("off"), "Off");
   assert.equal(machineState("unavailable"), "Unreachable");
   assert.equal(machineState("login"), "Needs login");
@@ -54,11 +54,16 @@ test("a machine row names only the states that need a word", async () => {
   assert.equal(machineTip("dark", "unavailable", "ssh timed out"), "dark: ssh timed out");
   assert.equal(machineTip("dark", "login", ""), "dark: Needs login");
   assert.equal(machineHot("dark", "dark", false, null), true);
-  assert.equal(machineHot("dark", null, true, "machine-power:dark"), true);
-  assert.equal(machineHot("dark", null, true, "machine-retry:dark"), true);
-  assert.equal(machineHot("dark", null, false, "machine-power:dark"), false);
+  assert.equal(machineStop("dark"), "machine:dark");
+  assert.equal(machineStop(null, "lu-plus"), "machine-lu-plus:local");
+  assert.equal(machineHot("dark", null, true, machineStop("dark")), true, "the keyboard on its row");
+  assert.equal(machineHot("dark", null, true, machineStop("dark", "lu-power")), true, "or on one of its tools");
+  assert.equal(machineHot("dark", null, true, machineStop("dark", "lu-refresh-cw")), true);
+  assert.equal(machineHot("dark", null, false, machineStop("dark", "lu-power")), false);
   assert.equal(machineHot(null, "local", false, null), true);
   assert.equal(machineHot("dark", "local", true, "machine:odin"), false);
+  assert.equal(machineHot("dark", null, true, "machine-lu-power:darker"), false, "another computer's tool");
+  assert.equal(machineHot("dark", null, true, "space:dark"), false);
 });
 
 test("hc machine ls is the live list, without temporary rows", async () => {
@@ -70,19 +75,8 @@ test("hc machine ls is the live list, without temporary rows", async () => {
   assert.deepEqual(clone(listedMachines({ code: 0, stdout: "nope" })), []);
 });
 
-test("a machine that is not connected keeps its one action, in muted", async () => {
-  const { machineVisible, machineInk } = await load("kanso-spaces/machines.js", ["machineVisible", "machineInk"]);
-  const see = (phase, hot) => clone(machineVisible(phase, hot));
-  assert.deepEqual(see("unavailable", false), ["retry"]);
-  assert.deepEqual(see("unavailable", true), ["retry"]);
-  assert.deepEqual(see("off", false), ["power"]);
-  assert.deepEqual(see("off", true), ["power"]);
-  assert.deepEqual(see("login", false), ["signin"]);
-  assert.deepEqual(see("login", true), ["signin"]);
-  assert.deepEqual(see("connected", false), []);
-  assert.deepEqual(see("connected", true), ["power", "plus"]);
-  assert.deepEqual(see("loading", false), []);
-  assert.deepEqual(see("loading", true), []);
+test("a machine that is not connected is drawn in muted", async () => {
+  const { machineInk } = await load("kanso-spaces/machines.js", ["machineInk"]);
   assert.equal(machineInk("off"), "muted");
   assert.equal(machineInk("unavailable"), "muted");
   assert.equal(machineInk("login"), "muted");
@@ -90,21 +84,10 @@ test("a machine that is not connected keeps its one action, in muted", async () 
   assert.equal(machineInk("loading"), "foreground");
 });
 
-test("Sync is kept at rest on a connected remote row while on, and offered on hover while off", async () => {
-  const { machineVisible } = await load("kanso-spaces/machines.js", ["machineVisible"]);
-  const see = (phase, hot, remote, syncing) => clone(machineVisible(phase, hot, remote, syncing));
-  assert.deepEqual(see("connected", false, true, true), ["sync"]);
-  assert.deepEqual(see("connected", false, true, false), []);
-  assert.deepEqual(see("connected", true, true, false), ["power", "plus", "sync"]);
-  assert.deepEqual(see("connected", true, false, true), ["power", "plus"]);
-  assert.deepEqual(see("off", true, true, true), ["power"]);
-  assert.deepEqual(see("loading", true, true, true), []);
-});
-
 test("off hides that machine, and this computer has no switch", async () => {
-  const { isOff, namesOff, heldNames, connectedNames, pollKeys, visibleSpaces, visibleAgents, machinePhase, powerId, machineTitle } = await load(
+  const { isOff, namesOff, heldNames, connectedNames, pollKeys, visibleSpaces, visibleAgents, machinePhase, machineTitle } = await load(
     "kanso-spaces/machines.js",
-    ["isOff", "namesOff", "heldNames", "connectedNames", "pollKeys", "visibleSpaces", "visibleAgents", "machinePhase", "powerId", "machineTitle"],
+    ["isOff", "namesOff", "heldNames", "connectedNames", "pollKeys", "visibleSpaces", "visibleAgents", "machinePhase", "machineTitle"],
   );
   const stored = [record];
   const spaces = [{ id: "home", machine: null }, { id: "app", machine: "dark" }];
@@ -118,8 +101,6 @@ test("off hides that machine, and this computer has no switch", async () => {
   assert.deepEqual(clone(pollKeys([darkKey], heldNames(stored))), [], "still stored, so not read, even once hc lists it connected");
   assert.deepEqual(clone(visibleSpaces(spaces, heldNames(stored)).map((space) => space.id)), ["home"]);
   assert.deepEqual(clone(visibleAgents(agents, heldNames(stored)).map((agent) => agent.address)), ["t1"]);
-  assert.equal(powerId(null), null);
-  assert.equal(powerId("dark"), "machine-power-dark");
   assert.equal(machineTitle(null, "macbook"), "macbook");
   assert.equal(machineTitle(null, ""), "This computer");
   assert.equal(machineTitle("dark", "macbook"), "dark");
@@ -143,7 +124,7 @@ async function sidebar(state) {
   const { node, host, ids, texts, tips } = recorder();
   const { Spaces } = await loadSidebar(host, {
     shared: (key) => (key === "sidebar.collapsed" ? state.collapsed === true : null),
-    spaces: () => state.spaces, machines: () => state.layouts,
+    spaces: () => state.spaces, machines: () => state.layouts, run: state.run ?? (() => {}),
   });
   const view = Object.assign(new Spaces(), mountedState({
     shown: new Set(state.spaces.map((space) => space.id)),
@@ -171,12 +152,16 @@ const turnedOff = async (view) => {
   await tasks.drain();
 };
 
+// A computer row's tools, by what each does: the kit draws them, each named by its tip.
+const TOOLS = { power: /^Turn (off|dark on)$/, retry: /^Refresh$/, login: /^Sign in$/, add: /^New project on dark$/, sync: /^Sync\b/ };
+const tools = (drawn) => drawn.tips.flatMap((tip) => Object.keys(TOOLS).filter((name) => TOOLS[name].test(tip)));
+const tool = (drawn, name) => tools(drawn).includes(name);
 const oneRow = (drawn, name) => drawn.view.nav.filter((row) => row.key === `machine:${name}`).length;
 
 test("each machine state is one row, and this computer has no power button", async () => {
   const alone = await sidebar({ spaces: [local], layouts: [{ name: null, layout: "ready" }] });
   assert.equal(alone.ids.includes("machine-local"), false, "one machine: no header");
-  assert.equal(alone.ids.includes("machine-power-local"), false);
+  assert.equal(alone.tips.includes("Turn macbook on"), false);
 
   const off = await sidebar({
     spaces: [local, remote], layouts: [{ name: null, layout: "ready" }], parked: [record], hostName: "macbook",
@@ -185,8 +170,8 @@ test("each machine state is one row, and this computer has no power button", asy
   assert.equal(off.ids.includes("machine-local"), true);
   assert.equal(off.ids.includes("machine-dark"), true);
   assert.equal(off.ids.filter((id) => id === "machine-dark").length, 1);
-  assert.equal(off.ids.includes("machine-power-dark"), true, "turn on stays on the row");
-  assert.equal(off.ids.includes("machine-power-local"), false);
+  assert.equal(tool(off, "power"), true, "turn on stays on the row");
+  assert.equal(off.tips.includes("Turn macbook on"), false);
   assert.equal(off.ids.includes("space-dark-sp"), false, "its projects are not listed");
   assert.equal(off.texts.includes("macbook"), true);
   assert.equal(off.texts.includes("dark"), true);
@@ -194,20 +179,19 @@ test("each machine state is one row, and this computer has no power button", asy
   assert.equal(off.texts.includes("Unavailable"), false);
 
   const offHover = await sidebar({ ...parkedDark, hover: "dark" });
-  assert.equal(offHover.ids.includes("machine-power-dark"), true);
+  assert.equal(tool(offHover, "power"), true);
   assert.equal(offHover.tips.includes("Turn dark on"), true);
-  assert.equal(offHover.ids.includes("machine-add-dark"), false);
-  assert.equal(offHover.ids.includes("machine-retry-dark"), false);
+  assert.equal(tool(offHover, "add"), false);
+  assert.equal(tool(offHover, "retry"), false);
 
   const keys = await sidebar({ ...parkedDark, kbd: true, navKey: "machine:dark" });
-  assert.equal(keys.ids.includes("machine-power-dark"), true);
-  assert.ok(keys.view.nav.some((row) => row.key === "machine-power:dark"));
+  assert.equal(tool(keys, "power"), true);
 
   const back = await sidebar({ ...connected, hover: "dark" });
   assert.equal(oneRow(back, "dark"), 1);
   assert.equal(back.ids.includes("space-dark-sp"), true, "on: its project is back");
-  assert.equal(back.ids.includes("machine-power-dark"), true);
-  assert.equal(back.ids.includes("machine-add-dark"), true);
+  assert.equal(tool(back, "power"), true);
+  assert.equal(tool(back, "add"), true);
   assert.equal(back.tips.includes("Turn off"), true);
   assert.equal(back.tips.includes("New project on dark"), true);
   assert.equal(back.texts.includes("Off"), false);
@@ -215,17 +199,17 @@ test("each machine state is one row, and this computer has no power button", asy
 
   const onQuiet = await sidebar(connected);
   assert.equal(oneRow(onQuiet, "dark"), 1);
-  assert.equal(onQuiet.ids.includes("machine-power-dark"), false, "turn off waits for hover");
-  assert.equal(onQuiet.ids.includes("machine-add-dark"), false);
+  assert.equal(tool(onQuiet, "power"), false, "turn off waits for hover");
+  assert.equal(tool(onQuiet, "add"), false);
 
   const onKeys = await sidebar({ ...connected, kbd: true, navKey: "machine:dark" });
-  assert.equal(onKeys.ids.includes("machine-power-dark"), true);
-  assert.equal(onKeys.ids.includes("machine-add-dark"), true);
+  assert.equal(tool(onKeys, "power"), true);
+  assert.equal(tool(onKeys, "add"), true);
 
   const rail = await sidebar({ ...parkedDark, collapsed: true, hover: "dark" });
   assert.equal(oneRow(rail, "dark"), 1);
-  assert.equal(rail.ids.includes("machine-power-dark"), false);
-  assert.equal(rail.ids.includes("machine-retry-dark"), false);
+  assert.equal(tool(rail, "power"), false);
+  assert.equal(tool(rail, "retry"), false);
   assert.equal(rail.texts.includes("dark"), false);
   assert.equal(rail.tips.includes("dark: Off"), true);
 });
@@ -240,13 +224,13 @@ test("loading, unreachable, and needs login each stay on that one row", async ()
   assert.equal(loading.ids.includes("space-dark-sp"), false);
   assert.equal(loading.texts.includes("dark"), true);
   assert.equal(loading.tips.includes("Loading"), false);
-  assert.equal(loading.ids.includes("machine-power-dark"), false);
+  assert.equal(tool(loading, "power"), false);
 
   const down = await sidebar({ ...unreachable, hints: { dark: "ssh timed out" }, hover: "dark" });
   assert.equal(oneRow(down, "dark"), 1);
   assert.equal(down.ids.includes("machine-unavailable-dark"), false);
-  assert.equal(down.ids.includes("machine-retry-dark"), true);
-  assert.equal(down.ids.includes("machine-power-dark"), false);
+  assert.equal(tool(down, "retry"), true);
+  assert.equal(tool(down, "power"), false);
   assert.equal(down.texts.includes("Unreachable"), true);
   assert.equal(down.texts.includes("Unavailable"), false);
   assert.equal(down.tips.includes("ssh timed out"), true);
@@ -255,9 +239,9 @@ test("loading, unreachable, and needs login each stay on that one row", async ()
 
   const login = await sidebar({ ...parkedDark, login: new Set(["dark"]), hover: "dark" });
   assert.equal(oneRow(login, "dark"), 1);
-  assert.equal(login.ids.includes("machine-login-dark"), true);
+  assert.equal(tool(login, "login"), true);
   assert.equal(login.ids.includes("machine-login-copy-dark"), false);
-  assert.equal(login.ids.includes("machine-power-dark"), false);
+  assert.equal(tool(login, "power"), false);
   assert.equal(login.texts.includes("Needs login"), true);
   assert.equal(login.texts.includes("Needs a login"), false);
   assert.equal(login.texts.includes("hc machine login dark"), false);
@@ -266,13 +250,13 @@ test("loading, unreachable, and needs login each stay on that one row", async ()
 
   const loginQuiet = await sidebar({ ...parkedDark, login: new Set(["dark"]) });
   assert.equal(oneRow(loginQuiet, "dark"), 1);
-  assert.equal(loginQuiet.ids.includes("machine-login-dark"), true, "Sign in stays on the row");
-  assert.equal(loginQuiet.ids.includes("machine-power-dark"), false);
+  assert.equal(tool(loginQuiet, "login"), true, "Sign in stays on the row");
+  assert.equal(tool(loginQuiet, "power"), false);
 
   const quiet = await sidebar(unreachable);
   assert.equal(oneRow(quiet, "dark"), 1);
-  assert.equal(quiet.ids.includes("machine-retry-dark"), true, "retry stays on the row");
-  assert.equal(quiet.ids.includes("machine-power-dark"), false);
+  assert.equal(tool(quiet, "retry"), true, "retry stays on the row");
+  assert.equal(tool(quiet, "power"), false);
   assert.equal(quiet.texts.includes("Unreachable"), true);
 });
 
@@ -391,59 +375,87 @@ test("an off machine is still off after the database is opened again", async (t)
   ]);
 });
 
-const ACTION = /^machine-(power|retry|login|add|sync)-dark$/;
 const syncOn = { config: { version: 1, peers: { dark: { enabled: true } } }, status: {} };
 
 test("a connected machine's row keeps Sync in sight when it is on or cannot run, and with its hover actions when off", async () => {
   const off = await sidebar(connected);
-  assert.equal(off.ids.includes("machine-sync-dark"), false, "off waits for hover");
+  assert.equal(tool(off, "sync"), false, "off waits for hover");
   const offHover = await sidebar({ ...connected, hover: "dark" });
-  assert.deepEqual(offHover.ids.filter((id) => ACTION.test(id)), ["machine-power-dark", "machine-add-dark", "machine-sync-dark"]);
-  assert.equal(offHover.tips.includes("Sync dark"), true);
+  assert.deepEqual(tools(offHover), ["power", "add", "sync"]);
+  assert.equal(offHover.tips.includes("Sync"), true);
 
   const on = await sidebar({ ...connected, sync: syncOn });
-  assert.equal(on.ids.includes("machine-sync-dark"), true, "on is state: no hover needed");
-  assert.equal(on.ids.includes("machine-power-dark"), false);
+  assert.equal(tool(on, "sync"), true, "on is state: no hover needed");
+  assert.equal(tool(on, "power"), false);
   assert.equal(on.tips.includes("Sync dark"), true);
   const synced = await sidebar({ ...connected, sync: { ...syncOn, status: { dark: { synced_at: new Date(Date.now() - 120_000).toISOString() } } } });
   assert.equal(synced.tips.includes("Sync dark: synced 2 min ago"), true);
   const cannot = await sidebar({ ...connected, sync: { ...syncOn, status: { dark: { reason: "update" } } } });
-  assert.equal(cannot.ids.includes("machine-sync-dark"), true);
+  assert.equal(tool(cannot, "sync"), true);
   assert.equal(cannot.tips.includes("Sync dark: Update kanso there"), true);
   assert.equal(cannot.texts.includes("Update kanso there"), false, "the words stay in the tooltip");
+  assert.equal(cannot.texts.includes("Sync can't run"), true, "the row says it in a word");
 
-  const keys = await sidebar({ ...connected, sync: syncOn, kbd: true, navKey: "machine-sync:dark" });
-  assert.ok(keys.view.nav.some((row) => row.key === "machine-sync:dark"));
-  assert.equal(keys.ids.includes("machine-power-dark"), true, "the keyboard on Sync shows the row's actions");
+  const keys = await sidebar({ ...connected, sync: syncOn, kbd: true, navKey: "machine:dark" });
+  assert.equal(tool(keys, "power"), true, "the keyboard on the row shows its actions");
 
   const rail = await sidebar({ ...connected, sync: syncOn, collapsed: true });
-  assert.equal(rail.ids.includes("machine-sync-dark"), false);
+  assert.equal(tool(rail, "sync"), false);
   const here = await sidebar({ ...connected, sync: { config: { version: 1, peers: { null: { enabled: true } } }, status: {} }, hover: "local" });
-  assert.equal(here.ids.some((id) => id.startsWith("machine-sync")), false, "this computer has none");
+  assert.equal(tool(here, "sync"), false, "this computer has none");
 });
 
 test("off, unreachable, loading and needs login keep their one action, with no Sync", async () => {
   const states = [
-    [{ parked: [record] }, ["machine-power-dark"]],
-    [{ layouts: [{ name: null, layout: "ready" }, { name: "dark", layout: "unavailable" }], live: [{ ...record, state: "unreachable" }] }, ["machine-retry-dark"]],
+    [{ parked: [record] }, ["power"]],
+    [{ layouts: [{ name: null, layout: "ready" }, { name: "dark", layout: "unavailable" }], live: [{ ...record, state: "unreachable" }] }, ["retry"]],
     [{ layouts: [{ name: null, layout: "ready" }, { name: "dark", layout: "loading" }], live: [{ ...record, state: "connected" }], waking: new Set(["dark"]), parked: [record] }, []],
-    [{ parked: [record], login: new Set(["dark"]) }, ["machine-login-dark"]],
+    [{ parked: [record], login: new Set(["dark"]) }, ["login"]],
   ];
   for (const [state, actions] of states) {
     const drawn = await sidebar({ spaces: [local, remote], layouts: [{ name: null, layout: "ready" }], ...state, sync: syncOn, hover: "dark" });
-    assert.deepEqual(drawn.ids.filter((id) => ACTION.test(id)), actions);
+    assert.deepEqual(tools(drawn), actions);
   }
 });
 
-test("Sync on is the normal text tone, off is dim, and one that cannot run is the warning tone", async () => {
-  const theme = { foreground: "#fff", dim: "#666", ansi3: "#fc0" };
-  const tones = {};
-  for (const [state, sync] of [["on", syncOn], ["off", { config: {}, status: {} }], ["cannot", { ...syncOn, status: { dark: { reason: "unreachable" } } }]]) {
-    const view = await syncView({ sync });
-    view.machineButton = (_nav, _id, _icon, _tip, _go, _t, color) => color;
-    tones[state] = view.syncButton("dark", theme);
+// The keyboard on a computer's row, then j to each tool it shows and Enter on it: the stops it walked, and what each Enter ran.
+async function keyWalk(state) {
+  const ran = [];
+  const drawn = await sidebar({ ...state, kbd: true, navKey: "machine:dark", run: (cmd, args) => ran.push([cmd, clone(args)]) });
+  const { view } = drawn;
+  Object.assign(view, { setPower: (m, on) => ran.push(["power", m, on]), retryMachine: (m) => ran.push(["retry", m]), toggleSync: (m) => ran.push(["sync", m]) });
+  const keyCx = { stop_propagation() {}, notify() {} };
+  const stops = [];
+  for (;;) {
+    const before = view.navKey;
+    view.listKeyDown({ key: "j", modifiers: {} }, keyCx);
+    if (view.navKey === before || !view.navKey.startsWith("machine-") || !view.navKey.endsWith(":dark")) break;
+    stops.push(view.navKey);
+    view.render();
+    assert.ok(view.nav.some((n) => n.key === view.navKey), `${view.navKey} stays a stop while the ring is on it`);
+    view.listKeyDown({ key: "enter", modifiers: {} }, keyCx);
   }
-  assert.deepEqual(tones, { on: "#fff", off: "#666", cannot: "#fc0" });
+  return { stops, ran };
+}
+
+test("each tool a computer row shows is its own keyboard stop: j walks to it and Enter runs it, as a press does", async () => {
+  const base = { spaces: [local, remote], layouts: [{ name: null, layout: "ready" }] };
+  const login = ["terminal.open", { argv: ["hc", "machine", "login", "dark"], place: "right" }];
+  // On, Sync on or off: Turn off, New project, then Sync, wherever Sync sits.
+  const onStops = ["machine-lu-power:dark", "machine-lu-plus:dark", "machine-lu-arrow-right-left:dark"];
+  const onRan = [["power", "dark", false], ["space.new", { machine: "dark" }], ["sync", "dark"]];
+  const walks = [
+    ["connected", connected, onStops, onRan],
+    ["needs login", { ...base, parked: [record], login: new Set(["dark"]) }, ["machine-lu-key:dark"], [login]],
+    ["off", { ...base, parked: [record] }, ["machine-lu-power:dark"], [["power", "dark", true]]],
+    ["unreachable", unreachable, ["machine-lu-refresh-cw:dark"], [["retry", "dark"]]],
+    ["sync on", { ...connected, sync: syncOn }, onStops, onRan],
+  ];
+  for (const [name, state, stops, ran] of walks) {
+    const walked = await keyWalk(state);
+    assert.deepEqual(walked.stops, stops, `${name}: a stop per tool, in screen order`);
+    assert.deepEqual(walked.ran, ran, `${name}: Enter runs each tool`);
+  }
 });
 
 async function syncView({ sync = { config: {}, status: {} }, host = {} } = {}) {

@@ -36,8 +36,8 @@ export function armedLabel(label, verb, on, text, { start = false } = {}) {
 }
 
 /** solid: the one primary action; tonal: a wash, no edge; quiet: text only; icon: `label` is its tip. `icon`: a name in kanso-chrome's icons, or a path.
- * `size`: "sm" draws the small form, an icon button at the row's 20 with a 12 glyph; "lg" an icon button at 32 with a 17 glyph. `verb`: the action asks twice; `armed` fills it with the accent and reads "Press again to <verb>". */
-export function button(id, label, onClick, c, { kind = "solid", icon = null, small = false, size = null, disabled = false, spoken = label, verb = null, armed = false, active = false, spin = false, color = null } = {}) {
+ * `tip`: the tooltip, when it says more than the label; `focus`: the keyboard's ring is on it. `size`: "sm" draws the small form, an icon button at the row's 20 with a 12 glyph; "lg" an icon button at 32 with a 17 glyph. `verb`: the action asks twice; `armed` fills it with the accent and reads "Press again to <verb>". */
+export function button(id, label, onClick, c, { kind = "solid", icon = null, small = false, size = null, disabled = false, spoken = label, verb = null, armed = false, active = false, spin = false, color = null, tip = null, focus = false } = {}) {
   const square = kind === "icon", on = armed && !disabled;
   const look = disabled ? { fill: kind === "quiet" ? null : well(c), ink: c.dim }
     : on ? armedLook(c)
@@ -52,10 +52,11 @@ export function button(id, label, onClick, c, { kind = "solid", icon = null, sma
   const glyph = icon ? svg(glyphOf(icon)).size(square ? box.glyph : ICON_ROW).flex_none().text_color(ink) : null;
   // The ring is a border kept clear at rest, so focusing never resizes the box.
   const frame = Button.new(id).h(side).flex_none().items_center().justify_center().gap(G.sm).rounded(R.control)
-    .border_2().border_color(CLEAR).focus((s) => s.border_color(c.accent))
+    .border_2().border_color(focus ? c.accent : CLEAR).focus((s) => s.border_color(c.accent))
     .disabled(disabled)
     .accessibility_label(on && verb ? pressAgain(verb) : spoken)
-    .when(square, (el) => el.w(side).tooltip(spoken))
+    .when(square, (el) => el.w(side).tooltip(tip ?? spoken))
+    .when(!square && Boolean(tip), (el) => el.tooltip(tip))
     .when(!square, (el) => el.px((compact ? G.sm : G.md) - G.hair));
   return withLook(frame, look)
     .when(!disabled && Boolean(onClick), (el) => el.on_click((_e, cx) => onClick(cx)))

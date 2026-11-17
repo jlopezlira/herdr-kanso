@@ -9,6 +9,8 @@ export const list = (...children) => children.flat(Infinity).filter((child) => c
 
 // A label made of words and values, such as a name inside an action's title.
 export const phrase = (...parts) => parts.join(' ');
+// A tool: its icon and the label its tooltip reads.
+export const icon = (name, label) => ({ icon: name, label });
 // A chord: its keys' names joined as the computer writes them, ⌥⌘H or Alt+L.
 export const chord = (join, ...parts) => parts.join(join ?? '');
 
@@ -17,13 +19,14 @@ export const grow = (inner = '') => `<span class="kanso-layout__grow">${inner}</
 // Atoms
 
 export const kinds = { solid: 'kanso-button--solid', tonal: 'kanso-button--tonal', quiet: 'kanso-button--quiet kanso-text--fg', icon: 'kanso-button--icon' };
-export const button = ({ label, kind = 'solid', size = 'md', icon = 'none', disabled = false, verb = '', armed = false, active = false, spin = false, key = '' }) => {
-  const classes = ['kanso-button', kinds[kind], size === 'md' ? '' : `kanso-button--${size}`, disabled ? 'kanso-control--off' : '', armed ? 'kanso-action kanso-action--armed' : '', active ? 'kanso-button--active' : '', spin ? 'kanso-button--spinning' : ''].filter(Boolean).join(' ');
+// `tip`: the tooltip, when it says more than the label; `focus`: the keyboard's ring is on it.
+export const button = ({ label, kind = 'solid', size = 'md', icon = 'none', disabled = false, verb = '', armed = false, active = false, spin = false, key = '', tip = '', focus = false }) => {
+  const classes = ['kanso-button', kinds[kind], size === 'md' ? '' : `kanso-button--${size}`, disabled ? 'kanso-control--off' : '', armed ? 'kanso-action kanso-action--armed' : '', active ? 'kanso-button--active' : '', spin ? 'kanso-button--spinning' : '', focus ? 'kanso-control--focus' : ''].filter(Boolean).join(' ');
   const lead = icon === 'none' ? (spin ? mark({ status: 'working', size: 'sm' }) : '') : iconSvg(icon, 'control');
   const text = kind === 'icon' ? '' : escape(label);
   const again = `Press again to ${escape(verb || label.toLowerCase())}`;
   const inner = armed && kind !== 'icon' ? `<span>${text}</span><span>${again}</span>` : `${lead}${text}${key ? ` ${keyHint({ text: key })}` : ''}`;
-  return `<span class="${classes}" tabindex="0" title="${armed && kind === 'icon' ? again : escape(label)}"${disabled ? ' aria-disabled="true"' : ''}${spin ? ' aria-busy="true"' : ''}>${inner}</span>`;
+  return `<span class="${classes}" tabindex="0" title="${armed && kind === 'icon' ? again : escape(tip || label)}"${disabled ? ' aria-disabled="true"' : ''}${spin ? ' aria-busy="true"' : ''}>${inner}</span>`;
 };
 
 export const windowControls = () => '<span class="kanso-window-controls"><i></i><i></i><i></i></span>';
@@ -144,7 +147,9 @@ export const mark = ({ status, size = 'md' }) => `<svg class="kanso-mark kanso-m
 export const chip = ({ label, quiet = false, pill = false, tone = '' }) => `<span class="kanso-badge${quiet ? ' kanso-badge--quiet' : ''}${pill ? ' kanso-badge--pill' : ''}${tone ? ` kanso-text--${escape(tone)}` : ''}">${escape(String(label))}</span>`;
 // A fact's `tone` colours it and its `tip` names what it holds.
 const marked = ({ tone, tip }, base = '') => `${base || tone ? ` class="${[base, tone && `kanso-text--${escape(tone)}`].filter(Boolean).join(' ')}"` : ''}${tip ? ` title="${escape(tip)}"` : ''}`;
-const fact = (part) => typeof part === 'string' ? `<span>${escape(part)}</span>` : `${part.icon ? `<svg class="kanso-icon kanso-icon--inline"><use href="#${escape(part.icon)}"/></svg>` : ''}<span${marked(part)}>${escape(part.text)}</span>`;
+// A fact with a `label` is a press: a quiet small Button showing its text, its tip saying what it does.
+const fact = (part) => typeof part === 'string' ? `<span>${escape(part)}</span>` : part.label ? button({ label: part.text, kind: 'quiet', size: 'sm', tip: part.tip || part.label })
+  : `${part.icon ? `<svg class="kanso-icon kanso-icon--inline"><use href="#${escape(part.icon)}"/></svg>` : ''}<span${marked(part)}>${escape(part.text)}</span>`;
 const factOf = (part) => (typeof part === 'object' ? part : { text: part });
 const countOf = (count) => (typeof count === 'object' ? `<span${marked(count)}>${chip({ label: count.label })}</span>` : chip({ label: count }));
 const guide = (kind, level) => (kind ? `<span class="kanso-row__guide kanso-row__guide--${escape(kind)} kanso-row__guide--level-${level}"></span>` : '');
@@ -152,7 +157,7 @@ const rowTool = (action) => button({ kind: 'icon', size: 'sm', ...action });
 export const rowDepths = [0, 1, 2];
 // `actions` show on hover or focus and take the meta's place; `action` and the drawn `tools` are always shown; `keys` are the row's key hints, last.
 // The title form is a panel's heading: the name at title size, the second line its scope.
-// `second` and `meta` take facts with a tone, `chip` a tip; `drop` is where a dragged row lands, `wash` a state's ground, `guides` one per depth above it ('tee', 'end', 'pass', or null), under that depth's icon; without them a deeper row hangs from its parent.
+// `second`, `detail` and `meta` take facts with a tone and a tip, a detail fact with a `label` is a press, `chip` takes a tip; `drop` is where a dragged row lands, `wash` a state's ground, `guides` one per depth above it ('tee', 'end', 'pass', or null), under that depth's icon; without them a deeper row hangs from its parent.
 export const row = ({ icon = 'none', tone = '', name, detail, meta, chip: count, flag, mark: status = 'none', second, heading, title, depth = 0, glint, selected, current, dimmed, pending, hover, focus, actions = [], action, start = [], tools = [], keys = [], drop, wash, guides = [] }) => {
   const lines = guides.length ? guides : depth > 1 ? [null, 'pass'] : [];
   const lead = `${lines.map(guide).join('')}${list(start)}${icon === 'none' ? '' : glyph(icon, tone)}`;

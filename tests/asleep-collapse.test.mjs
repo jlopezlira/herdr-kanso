@@ -13,17 +13,22 @@ const sleeperTerms = [shell("t1", "00000000-0000-4000-8000-000000000001", "Ada")
 const registry = [{ id: "p-fury", name: "fury", folder: "/Users/me/fury", machine: "", missing: false }];
 
 async function draw({ spaces = () => [], agents = () => [], panes = () => [], terminals = () => [], collapsed = false } = {}) {
-  const { host, handlers, ids, clear } = recorder();
+  const { host, handlers, ids, texts, icons, clear } = recorder();
   const shared = (k) => (k === "kanso.registry" ? registry : k === "sidebar.collapsed" ? collapsed : null);
   const { Spaces } = await loadSidebar(host, { shared, spaces, panes, agents, terminals, machines: () => [] });
   const view = Object.assign(new Spaces(), mountedState({ shown: new Set(spaces().map((w) => w.id)), threadGroup: true }));
   const render = drawEachTime(view, clear);
-  return { view, handlers, ids, render };
+  return { view, handlers, ids, texts, icons, render };
 }
 const asleepProject = () => draw({ spaces: () => fury([asleepTab]), panes: () => sleepers, terminals: () => sleeperTerms });
 
 const cx = { stop_propagation() {}, notify() {} };
 const has = (ids, id) => ids.includes(id);
+// A press and its release on the row: the project row opens only on a press that began on it.
+const click = (handlers, id) => {
+  handlers[`on_mouse_down:left:${id}`]({ click_count: 1 }, cx);
+  handlers[`on_mouse_up:left:${id}`]({}, cx);
+};
 
 test("a project with nothing awake is one group, and a sleeping tab beside a live agent is its own", async () => {
   const { asleepGroups } = await load("kanso-spaces/roster.js", ["asleepGroups"], {});
@@ -37,16 +42,16 @@ test("a project with nothing awake is one group, and a sleeping tab beside a liv
 });
 
 test("an asleep project renders collapsed, a click shows its agents without showing the project, and waking restores the usual group", async () => {
-  const { view, handlers, ids, render } = await asleepProject();
+  const { view, handlers, ids, texts, icons, render } = await asleepProject();
   const row = "space-sp1";
   assert.equal(has(ids, row), true, "the project keeps its row");
-  assert.equal(has(ids, "asleep-n-project:sp1"), true, "the row carries how many agents sleep");
+  assert.equal(icons.includes("mods/kanso-chrome/icons/moon.svg") && texts.includes("2"), true, "the row carries the moon and how many agents sleep");
   assert.equal(has(ids, "space-agent-zz:t1"), false, "its agents are hidden while it sleeps");
-  handlers[`on_mouse_up:${row}`]({}, cx);
+  click(handlers, row);
   render();
   assert.equal(has(ids, "space-agent-zz:t1"), true, "a click shows the agents");
   assert.equal(has(ids, "space-agent-zz:t2"), true);
-  handlers[`on_mouse_up:${row}`]({}, cx);
+  click(handlers, row);
   render();
   assert.equal(has(ids, "space-agent-zz:t1"), false, "a second click hides them again");
 

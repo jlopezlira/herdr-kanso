@@ -45,9 +45,9 @@ test("an open project draws no chevron, and folded it shows the most urgent mark
   const agents = [agent("t1", { status: "blocked" }), agent("t2", { status: "working" })];
   const open = await sidebar({ agents });
   assert.equal(open.icons.some((p) => p.includes("chevron")), false);
-  assert.equal(open.ids.includes("agents-fold-sp1"), false);
+  assert.equal(open.texts.includes("2"), false, "open, the row draws no count");
   const folded = await sidebar({ agents, agentsFolded: new Set(["sp1"]) });
-  assert.equal(folded.ids.includes("agents-fold-sp1"), true);
+  assert.equal(folded.texts.includes("!"), true, "folded, the most urgent mark: blocked");
   assert.equal(folded.texts.includes("2"), true);
   assert.equal(folded.icons.some((p) => p.includes("chevron")), false);
   assert.equal(folded.ids.includes("space-agent-t1"), false, "its sessions are folded away");
@@ -56,17 +56,17 @@ test("an open project draws no chevron, and folded it shows the most urgent mark
 test("a project under the pointer shows + and the menu, and its counts say what a press does", async () => {
   const git = { [JSON.stringify([null, "/work/app"])]: { name: "herdr-kanso", branch: "main", ahead: 0, behind: 12, upstream: "origin/main", repo: "[null,\"/r\"]", linked: false } };
   const drawn = await sidebar({ git, hoverSpace: "sp1", spaces: [local({ active: false })] });
-  assert.equal(drawn.ids.includes("space-plus-sp1"), true);
+  assert.equal(drawn.ids.includes("space-sp1-tool-0"), true);
   assert.equal(drawn.tips.includes("New agent in app"), true);
-  assert.equal(drawn.ids.includes("space-dots-sp1"), true);
-  assert.equal(drawn.icons.includes("mods/kanso-chrome/icons/ellipsis.svg"), true);
+  assert.equal(drawn.ids.includes("space-sp1-tool-1"), true);
+  assert.equal(drawn.tips.includes("More"), true);
   assert.equal(drawn.texts.includes("herdr-kanso"), true);
   assert.equal(drawn.texts.includes("main"), true);
   assert.equal(drawn.texts.includes("↓12"), true);
   assert.equal(drawn.tips.includes("Pull 12 from origin/main"), true);
   const rest = await sidebar({ git, spaces: [local({ active: false })] });
-  assert.equal(rest.ids.includes("space-plus-sp1"), false);
-  assert.equal(rest.ids.includes("space-dots-sp1"), false);
+  assert.equal(rest.ids.includes("space-sp1-tool-0"), false);
+  assert.equal(rest.ids.includes("space-sp1-tool-1"), false);
 });
 
 test("a detached project shows its commit's short id, and one with no repository its name alone", async () => {
@@ -82,9 +82,9 @@ test("a kept project whose folder is gone says Not found and offers Locate", asy
   const registry = [{ id: "p-gone", name: "search", folder: "/Users/me/search", machine: "", missing: true }];
   const drawn = await sidebar({ registry });
   assert.equal(drawn.texts.includes("Not found"), true);
-  assert.equal(drawn.ids.includes("closed-locate-:/Users/me/search"), true);
+  assert.equal(drawn.ids.includes("closed-project-:/Users/me/search-action"), true);
   assert.equal(drawn.tips.includes("Locate"), true);
-  assert.equal(drawn.ids.includes("closed-plus-:/Users/me/search"), false);
+  assert.equal(drawn.tips.includes("New agent in search"), false);
 });
 
 test("double-clicking a project's name opens the rename dialog, not a field in the row", async () => {
@@ -244,7 +244,8 @@ test("a computer folded shows its most urgent mark and how many projects; connec
   const own = { machines: [{ name: "dark", state: "connected", target: "dark" }] };
   const agents = [agent("dark/t2", { status: "blocked", space: "sp2", tab: "tab2" })];
   const folded = await sidebar({ spaces, layouts, agents, own: { ...own, folded: new Set(["dark"]) } });
-  assert.equal(folded.ids.includes("machine-count-dark"), true);
+  assert.equal(folded.texts.includes("!"), true, "its most urgent mark, the blocked dot");
+  assert.equal(folded.texts.includes("1"), true, "and how many projects");
   assert.equal(folded.ids.includes("space-sp2"), false);
   assert.equal(folded.icons.some((p) => p.includes("chevron")), false);
   const none = await sidebar({ spaces: [local()], layouts, own });

@@ -14,8 +14,8 @@ const STORYBOOK = "stories/kit/pieces.js";
 const PREVIEW = "origin/sb-preview";
 const LIST = "tests/kit-parity.json";
 const PANEL = "kanso/mods/kanso-panel/";
-// Exports of the Storybook kit that draw no piece of their own: they escape text, join children or words, or push siblings apart.
-const HELPERS = new Set(["escape", "list", "phrase", "grow"]);
+// Exports of the Storybook kit that draw no piece of their own: they escape text, join children or words, name a tool, or push siblings apart.
+const HELPERS = new Set(["escape", "list", "phrase", "grow", "icon"]);
 
 const read = (path) => readFileSync(`${root}${path}`, "utf8");
 // kit.js first: a piece a ui file draws is compared by that file's own props.

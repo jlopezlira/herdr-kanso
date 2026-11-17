@@ -86,6 +86,10 @@ const COMMON = [
   { source: "kanso/mods/kanso-panel/front.js", copies: ["kanso/mods/kanso-containers/front.js", "kanso/mods/kanso-sim/front.js"] },
   // Storybook compositions the app draws as they are, each in the mod that draws it.
   { source: "stories/kit/session-row.js", copies: ["kanso/mods/kanso-spaces/session-row.js"] },
+  { source: "stories/kit/project-row.js", copies: ["kanso/mods/kanso-spaces/project-row.js"] },
+  { source: "stories/kit/computer-row.js", copies: ["kanso/mods/kanso-spaces/computer-row.js"] },
+  { source: "stories/kit/section.js", copies: ["kanso/mods/kanso-spaces/section.js"] },
+  { source: "stories/kit/asleep.js", copies: ["kanso/mods/kanso-spaces/asleep.js"] },
   { source: "kanso/mods/kanso-panel/blocks.js", copies: ["markdown-panel/mods/markdown-panel/blocks.js"] },
   { source: "kanso/mods/kanso-tabs/markdown-handler.sh", copies: ["markdown-panel/mods/markdown-panel/markdown-handler.sh"] },
 ];
