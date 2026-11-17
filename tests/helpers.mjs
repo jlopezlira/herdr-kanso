@@ -213,7 +213,7 @@ export const keeping = () => {
 export const wordsOf = (node) => (typeof node === "string" ? [node] : node?.[KIDS] ? node[KIDS].flatMap(wordsOf) : []);
 
 // Herdr's shared state, kept in `store`.
-export const storeShared = (store) => ({ shared: (key) => store[key], setShared: (key, value) => { store[key] = value; } });
+export const storeShared = (store, missing = undefined) => ({ shared: (key) => store[key] ?? missing, setShared: (key, value) => { store[key] = value; } });
 
 // A view context whose spawned tasks can be awaited.
 export function context() {
