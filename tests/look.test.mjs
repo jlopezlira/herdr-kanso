@@ -7,7 +7,7 @@ import { join, posix } from "node:path";
 import { fileApi } from "../kanso/mods/kanso-panel/platform-files.js";
 import { paths } from "../kanso/mods/kanso-panel/platform-paths.js";
 import test from "node:test";
-import { databaseTimer, load, clone, context, singleUse, exec as run, nativeWindow, nativePlatform, until, failure, success, moved } from "./helpers.mjs";
+import { databaseTimer, load, clone, context, singleUse, exec as run, nativeWindow, nativePlatform, until, failure, success, moved, isDecode, decoded } from "./helpers.mjs";
 
 const dirs = [];
 process.on("exit", () => { for (const d of dirs) rmSync(d, { recursive: true, force: true }); });
@@ -152,11 +152,7 @@ async function panel({ screen = OUTPUT, files = ["/repo/tests/shot.png", "/repo/
       }
       if (cmd === "mv") return moved(args);
       if (options?.on && name === "base64") return { code: 0, stdout: "AQIDBA==\n" };
-      if (name === "base64" && args[0] === "-D") {
-        const text = await readFile(args[2], "utf8");
-        await writeFile(args[4], Buffer.from(String(text).replace(/\s/g, ""), "base64"));
-        return success("");
-      }
+      if (isDecode(cmd, args)) return decoded(args);
       if (options?.on && cmd === "sh" && String(args[1]).includes("printf %s")) return { code: 0, stdout: "/home/light\n" };
       if (cmd === "sqlite3") return run(cmd, args, options);
       if (cmd === "mkdir") return fileApi(nativePlatform, run).mkdir(args.at(-1), options);

@@ -1,9 +1,11 @@
-import { loadDirectory, loadFiles } from "./mod-fixtures.mjs";
+import { loadDirectory, listedFiles } from "./mod-fixtures.mjs";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { mkdir, writeFile, symlink } from "node:fs/promises";
 import { join } from "node:path";
 import { load, clone, temporary, exec, nativeWindow } from "./helpers.mjs";
+
+const namesIn = async (directory, root) => Object.fromEntries((await directory(root, null)).map(({ name, dir }) => [name, dir]));
 
 const { insideRoot } = await load("kanso-panel/lib.js", ["insideRoot"]);
 
@@ -17,7 +19,7 @@ test("Files preserves newline names, dotfiles and symlinks", { skip: process.pla
   await symlink("directory", join(root, "link"));
   await symlink("missing", join(root, "dangling"));
   const { directory } = await loadDirectory({ exec, window: nativeWindow });
-  const entries = Object.fromEntries((await directory(root, null)).map(({ name, dir }) => [name, dir]));
+  const entries = await namesIn(directory, root);
   assert.deepEqual(entries, {
     "first\nsecond.txt": false, "tabs\tand\\slashes.txt": false, ".hidden": false,
     "O’Brien.txt": false, directory: true, link: false, dangling: false,
@@ -32,7 +34,7 @@ test("Files falls back to the shell listing when find cannot run", { skip: proce
   const calls = [];
   const { directory } = await loadDirectory({ window: () => ({ platform: "macos" }),
     exec: async (command, args, options) => { calls.push(command); if (command === "find") throw new Error("not installed"); return exec(command, args, options); } });
-  const entries = Object.fromEntries((await directory(root, null)).map(({ name, dir }) => [name, dir]));
+  const entries = await namesIn(directory, root);
   assert.deepEqual(entries, { "file.txt": false, directory: true });
   assert.deepEqual(calls, ["find", "bash"]);
 });
@@ -54,63 +56,37 @@ test("Files reports truncation only above 500 entries", async (t) => {
   });
   const panel = new Files();
   Object.assign(panel, { root, entries: new Map(), folders: new Set(), limited: false });
-  await panel.loadFolder("", root);
-  assert.equal(panel.entries.get("").length, 500);
+  const loadTop = async () => {
+    await panel.loadFolder("", root);
+    return panel.entries.get("").length;
+  };
+  assert.equal(await loadTop(), 500);
   assert.equal(panel.limited, false);
   for (let i = 500; i < 510; i++) await writeFile(join(root, `file-${i}`), "");
   assert.equal((await directory(root, null)).length, 501);
-  await panel.loadFolder("", root);
-  assert.equal(panel.entries.get("").length, 500);
+  assert.equal(await loadTop(), 500);
   assert.equal(panel.limited, true);
 });
 
 test("Files virtual rows use list-level handlers for open, expand and context menu; Markdown opens to read and edit", async () => {
-  let deferred = false, list;
-  function element() {
-    const handlers = {};
-    const target = {
-      handlers,
-      when(condition, callback) { if (condition) callback(proxy); return proxy; },
-    };
-    const proxy = new Proxy(target, { get(object, name) {
-      if (name in object) return object[name];
-      return (...args) => {
-        if (String(name).startsWith("on_")) {
-          assert.equal(deferred, false, "Herdr forbids event registration inside virtual row renderers");
-          handlers[name] = args[0];
-        }
-        return proxy;
-      };
-    } });
-    return proxy;
-  }
-  const { Files } = await loadFiles({
-    div: element, svg: element, h_flex: element, v_flex: element,
-    Scrollbar: { vertical: element }, theme: () => ({}), key: () => "fixture",
-    isMarkdown: (path) => /\.md$/.test(path),
-    v_virtual_list: (_id, count, _height, key, render) => {
-      const el = element(); list = { count, key, render, el }; return el;
-    },
-  });
-  const panel = new Files();
-  Object.assign(panel, { context: "fixture", root: "/repo", folders: new Set(), marks: {},
-    entries: new Map([["", [
-      { name: "directory", dir: true }, { name: "file.txt", dir: false }, { name: "PLAN.md", dir: false },
-      { name: "Dockerfile", dir: false }, { name: "Makefile", dir: false }, { name: ".gitignore", dir: false },
-      { name: ".env.local", dir: false }, { name: "LICENSE", dir: false },
-    ]]]),
-  });
+  let deferred = false;
+  const { panel, list } = await listedFiles([
+    { name: "directory", dir: true }, { name: "file.txt", dir: false }, { name: "PLAN.md", dir: false },
+    { name: "Dockerfile", dir: false }, { name: "Makefile", dir: false }, { name: ".gitignore", dir: false },
+    { name: ".env.local", dir: false }, { name: "LICENSE", dir: false },
+  ], () => assert.equal(deferred, false, "Herdr forbids event registration inside virtual row renderers"));
   const actions = [];
   panel.toggle = (path) => actions.push(["toggle", path]);
   panel.openWith = (path) => actions.push(["openWith", path]);
   panel.read = (path) => actions.push(["read", path]);
   panel.render({});
   deferred = true;
-  assert.equal(list.render({ start: 0, end: list.count }).length, 8);
+  assert.equal(list().render({ start: 0, end: list().count }).length, 8);
   deferred = false;
-  for (let i = 0; i < 8; i += 1) list.el.handlers.on_item_click(list.key(i), {});
-  list.el.handlers.on_item_secondary_click(list.key(0), {}, {});
-  list.el.handlers.on_item_secondary_click(list.key(1), {}, {});
+  const { el, key } = list();
+  for (let i = 0; i < 8; i += 1) el.handlers.on_item_click(key(i), {});
+  el.handlers.on_item_secondary_click(key(0), {}, {});
+  el.handlers.on_item_secondary_click(key(1), {}, {});
   assert.deepEqual(actions, [
     ["toggle", "directory"], ["read", "file.txt"], ["read", "PLAN.md"], ["read", "Dockerfile"],
     ["read", "Makefile"], ["read", ".gitignore"], ["read", ".env.local"], ["read", "LICENSE"],

@@ -67,3 +67,31 @@ export const temporaryKdb = async (...args) => {
   const loaded = await temporaryKdbFile(...args);
   return { ...loaded, db: await openedKdb(loaded.Kdb) };
 };
+
+// Files on /repo with `entries` at its top, drawn through a virtual list; `guard(name)` runs as each handler is registered.
+export const listedFiles = async (entries, guard = () => {}) => {
+  let listed;
+  const element = () => {
+    const handlers = {};
+    const target = { handlers, when(condition, callback) { if (condition) callback(proxy); return proxy; } };
+    const proxy = new Proxy(target, { get(object, name) {
+      if (name in object) return object[name];
+      return (...args) => {
+        if (String(name).startsWith("on_")) {
+          guard(name);
+          handlers[name] = args[0];
+        }
+        return proxy;
+      };
+    } });
+    return proxy;
+  };
+  const { Files } = await loadFiles({
+    div: element, svg: element, h_flex: element, v_flex: element,
+    Scrollbar: { vertical: element }, theme: () => ({}), key: () => "fixture",
+    isMarkdown: (path) => /\.md$/.test(path),
+    v_virtual_list: (_id, count, _height, key, render) => { const el = element(); listed = { count, key, render, el }; return el; },
+  });
+  const panel = Object.assign(new Files(), { context: "fixture", root: "/repo", folders: new Set(), marks: {}, entries: new Map([["", entries]]) });
+  return { panel, list: () => listed };
+};
