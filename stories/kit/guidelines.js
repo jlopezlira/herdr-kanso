@@ -1,4 +1,5 @@
-// Design guidelines per page: principle, rule, detail; extra sections: title, text.
+// Design guidelines per page: principle, rule, detail; extra sections: title, text; and Start page prompts.
+import { ledgerPrompt } from "./ledger.js";
 
 export const guidelines = {
   "Tokens/Colour": [
@@ -306,3 +307,4 @@ export const sections = {
     ["Adding an icon", "This list is the only set. If you need another icon, take it from Lucide ([lucide.dev/icons](https://lucide.dev/icons), version 1.72.0, ISC license). Copy its markup unchanged, add it here with an **lu-** id and the meaning it carries, and only then use it. One name per meaning, never a custom icon."],
   ],
 };
+export const prompts = { "Start/One fact, one home": ledgerPrompt };

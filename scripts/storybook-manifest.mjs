@@ -4,15 +4,19 @@ import { content, featuresFor, statesFor } from '../stories/kit/catalog.js';
 import { promptFor } from '../stories/kit/prompt.js';
 import { rules } from '../stories/kit/rules.js';
 import { FEATURE_LABEL, FEATURE_NOTE } from '../stories/kit/features.js';
-import { guidelines, sections } from '../stories/kit/guidelines.js';
+import { guidelines, prompts, sections } from '../stories/kit/guidelines.js';
 import { statusOf } from "../stories/kit/status.js";
 
 const file = 'storybook-static/manifests/docs.json';
 const manifest = JSON.parse(readFileSync(file, 'utf8'));
 const index = JSON.parse(readFileSync('storybook-static/index.json', 'utf8'));
-for (const entry of Object.values(index.entries).filter((entry) => entry.type === 'docs' && !entry.title.startsWith('Start/'))) {
+for (const entry of Object.values(index.entries).filter((entry) => entry.type === 'docs' && (!entry.title.startsWith('Start/') || prompts[entry.title]))) {
   const doc = { id: entry.id, name: entry.name, path: entry.importPath, title: entry.title };
   manifest.docs[doc.id] = doc;
+  if (prompts[doc.title]) {
+    doc.content = [`# ${doc.title.split("/").at(-1)}`, "## Prompt for agents", "```text\n" + prompts[doc.title] + "\n```"].join("\n\n");
+    continue;
+  }
   const states = statesFor(doc.title);
   const description = descriptions[doc.title.split('/').at(-1)];
   const contexts = [...new Set([...states, ...featuresFor(doc.title)].flatMap((state) => state.context === undefined ? [] : [state.context]))].map(content);
