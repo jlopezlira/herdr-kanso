@@ -10,7 +10,7 @@ import { systemApi } from "./platform-system.js";
 
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex, ScrollHandle } from "gpui-base";
-import { agentSession, agentFold, agentLabel, AGENT_PAD, FLUSH, NESTED, renameTerminal, statusMark, SETTLED_LABEL, SNOOZE_LABEL, UNREAD_LABEL, THREAD_LABEL, settledOf, snoozedUntil, isUnread, woke, backFromSettled, threadSections, snoozePresets, THREAD_ORDERS, STATUS_ORDERS, withTerminals, NAME_LABEL, PIN_LABEL, ORDERS, DEFAULT_ORDER, orderSessions, moved, nest, track, elapsed, activityOf, bySection, duration, trackSteps, stepOf, tasksOf, said, FOLD_MS, pill, sessionHeight, mostUrgent, rowTool } from "./agents.js";
+import { agentSession, agentFold, agentLabel, FLUSH, NESTED, renameTerminal, statusMark, SETTLED_LABEL, SNOOZE_LABEL, UNREAD_LABEL, THREAD_LABEL, settledOf, snoozedUntil, isUnread, woke, backFromSettled, threadSections, snoozePresets, THREAD_ORDERS, STATUS_ORDERS, withTerminals, NAME_LABEL, PIN_LABEL, ORDERS, DEFAULT_ORDER, orderSessions, moved, nest, track, elapsed, activityOf, bySection, duration, trackSteps, stepOf, tasksOf, said, FOLD_MS, pill, sessionHeight, mostUrgent, rowTool } from "./agents.js";
 import { ThreadLocator, findThreads, pidsOf, aliveIn, aliveDue, ALIVE_MS, ALIVE_BEHIND_MS } from "./threads.js";
 import { Panel, sameSeen } from "./panel.js";
 import { Store } from "./store.js";
@@ -22,13 +22,14 @@ import { glyphs } from "./marks.js";
 import { sleepingNow, asleepGroups, nameOf, seenNow, conversationOfThread, shownThread, terminalNames, agentKey, SHOWN_LABEL, PROJECT_LABEL, ID_LABEL } from "./roster.js";
 import { pollable, activePlaces } from "./background.js";
 import { listKey, moveTo } from "./listkeys.js";
-import { commitLayout, setRail, foldSidebar, railWidth, OPEN_MIN, dropStripDrag } from "./layout.js";
+import { commitLayout, setRail, foldSidebar, railWidth, dropStripDrag } from "./layout.js";
 import { afterMount } from "./pure.js";
 import { commandLoop, MachineRead } from "./sidebar.js";
 import { gitTail, asleepRow, openAhead, flush } from "./sidebar-draw.js";
 import { guideBars, climb } from "./guides.js";
-import { projectControls, pullKey, runPull, canWake, enterOpens, machineWordTone, ASLEEP_ROW, sectionMarkOf, sectionCount, rowDirectory, threadWord, threadActions, closedControls, signInCommand, noProjectsOn, sortOf, foldTail, readWord, viewChord } from "./sidebar-rows.js";
-import { breathe, H, G, T, R, W, ICON, GLIDE, OPACITY, TINT, alpha, tokens, washes } from "./ui.js";
+import { projectControls, pullKey, runPull, canWake, enterOpens, machineWordTone, sectionMarkOf, sectionCount, rowDirectory, threadWord, threadActions, closedControls, signInCommand, noProjectsOn, sortOf, foldTail, readWord, viewChord } from "./sidebar-rows.js";
+import { breathe, H, G, T, R, W, ICON, SIDEBAR, GLIDE, OPACITY, TINT, alpha, tokens, washes } from "./ui.js";
+import { ELBOW } from "./ui-row.js";
 import { button, iconButton, Armed } from "./ui-button.js";
 import { dialog } from "./ui-dialog.js";
 import { field, TextField } from "./ui-field.js";
@@ -64,21 +65,13 @@ function placesOf(sp, ps) {
     return [s.id, { on, cwd, key: JSON.stringify([on, cwd]) }];
   }));
 }
-const TREE_ROW = 32;
 const CONV_ROWS = 11; // the conversation picker's projects show this many, then scroll
 // A right click on the item does what a left one does.
 const rightToo = (line) => ({ ...line, onSecondaryClick: line.onClick });
 // An item's look without its act: a popup measured before it opens.
 const sketch = (label, _act, { keep: _keep, ...look } = {}) => ({ ...look, label });
-const RAIL_MARK = 46; // one group in the collapsed rail
 const RAIL_MENU_ROWS = 10; // a rail popup shows this many rows; the rest scroll
-const PLAIN_ROW = 32;
-const GUIDE_X = 13; // under the parent's name, just in from its first letter: 8px row padding + 5
-const ELBOW_W = 11;
-const GUIDE_OVERLAP = 4; // the line reaches up into the row above, so it never breaks
-const ROW_GAP = 1; // between the list's rows, but in Threads
-const CHILD_PAD = GUIDE_X + ELBOW_W + 6 - 8; // icon starts 6px after the elbow, inside the 8px row padding
-const rowHeight = ({ tree }) => (tree ? TREE_ROW : PLAIN_ROW);
+const CHILD_PAD = SIDEBAR.guideX + ELBOW.w + SIDEBAR.elbowGap - G.sm; // the icon starts past the elbow, inside the row's padding
 // Every height is known before anything is drawn, so a scan (`laidOut`) finds where each pill goes.
 const item = (el, h = null, mark = null) => ({ el, h, mark });
 const spaceMark = (h) => ({ kind: "space", at: 0, h });
@@ -98,9 +91,6 @@ const FALLBACK = 60000;
 const PS_GIVE_UP_MS = 10000;
 // Under the 30 s machine look, so a hung list is free before the next one.
 const MACHINE_READ_MS = 20_000;
-const SIDEBAR_W = 256;
-// Dragged narrower, rows keep one line under ONE_LINE_W.
-const ONE_LINE_W = 240;
 
 const VIEWS = {
   spaces: { label: "Projects", icon: "folder" },
@@ -806,16 +796,16 @@ export default class Spaces extends View {
     if (shared("kanso.row") !== 3) {
       setShared("kanso.row", 3);
       setShared("sidebar.collapsed", false);
-      setRail(true, SIDEBAR_W);
+      setRail(true, SIDEBAR.w);
       return;
     }
     // Applied on every start, so older layouts are brought in line.
     if (collapsed) setRail(false, railWidth());
-    else setRail(true, shared("sidebar.width") ?? SIDEBAR_W);
+    else setRail(true, shared("sidebar.width") ?? SIDEBAR.w);
   }
 
   openRail() {
-    const width = shared("sidebar.width") ?? SIDEBAR_W;
+    const width = shared("sidebar.width") ?? SIDEBAR.w;
     setShared("sidebar.collapsed", false);
     setRail(true, width);
   }
@@ -828,14 +818,14 @@ export default class Spaces extends View {
 
   toggleRail() {
     if (shared("sidebar.collapsed") === true) this.openRail();
-    else this.foldRail(this.width >= OPEN_MIN ? this.width : null);
+    else this.foldRail(this.width >= SIDEBAR.min ? this.width : null);
   }
 
-  // Herdr sizes the sidebar as its edge is dragged, never narrower than OPEN_MIN: a drag changes the width and nothing else, only Hide sidebar folds it.
+  // Herdr sizes the sidebar as its edge is dragged, never narrower than SIDEBAR.min: a drag changes the width and nothing else, only Hide sidebar folds it.
   sized(w, cx) {
-    const was = this.width ?? SIDEBAR_W;
+    const was = this.width ?? SIDEBAR.w;
     this.width = w;
-    if ((was < ONE_LINE_W) !== (w < ONE_LINE_W)) cx?.notify();
+    if ((was < SIDEBAR.narrow) !== (w < SIDEBAR.narrow)) cx?.notify();
   }
 
   checkNew(cx) {
@@ -1319,7 +1309,7 @@ export default class Spaces extends View {
     const open = () => openOverlay({ mod: "kanso-spaces", kind: "popup", width: 252, height: 420, at: "pointer", props: { spaceMenu: { key } } });
     const missing = Boolean(project.missing);
     const controls = closedControls({ hovered: this.hoverSpace === key, missing });
-    const row = flush(h_flex().id(`closed-project-${key}`).h(rowHeight({ tree: null })).flex_none().gap(G.sm).items_center().cursor_pointer(), G.sm, G.sm)
+    const row = flush(h_flex().id(`closed-project-${key}`).h(H.line).flex_none().gap(G.sm).items_center().cursor_pointer(), G.sm, G.sm)
       .hover((s) => s.bg(alpha(t.foreground, TINT.row)))
       .on_hover((h, cx) => { if (h ? this.hoverSpace !== key : this.hoverSpace === key) { this.hoverSpace = h ? key : null; cx.notify(); } })
       .when(this.navMark(`closed-project:${key}`, open), (el) => el.border_1().border_color(t.accent))
@@ -1364,7 +1354,7 @@ export default class Spaces extends View {
     ];
   }
 
-  asleepHead(t, c, group, { name = null, pad = AGENT_PAD } = {}) {
+  asleepHead(t, c, group, { name = null, pad = SIDEBAR.agentX } = {}) {
     const open = this.asleepOpenOf(group.id);
     const label = name || group.name || "Asleep";
     const row = flush(h_flex().id(`asleep-group-${group.id}`).h(32).flex_none().gap(G.sm).items_center().cursor_pointer(), pad, G.md)
@@ -1381,7 +1371,7 @@ export default class Spaces extends View {
     const open = this.asleepOpenOf(group.id);
     const id = `asleep-${group.id}`;
     if (!this.unfolded(id, open, ctx.now)) return { els: [], h: 0 };
-    const drawn = group.rows.map((a) => ({ h: ASLEEP_ROW, el: this.asleepLine(a, indent, t) }));
+    const drawn = group.rows.map((a) => ({ h: H.line, el: this.asleepLine(a, indent, t) }));
     const h = drawn.reduce((n, r) => n + r.h + 1, 0);
     return { els: this.foldBox(id, open, drawn.map((r) => r.el), ctx.now), h: Math.max(0, h - 1) };
   }
@@ -1394,7 +1384,7 @@ export default class Spaces extends View {
       const name = list[0].a.space_name || list[0].a.asleep.spaceName;
       const agents = this.asleepAgents(g, t, ctx, FLUSH);
       const box = agents.els.map((el) => ({ focused: false, rh: this.asleepOpenOf(g.id) ? ((this.foldH ?? {})[`asleep-${g.id}`] ?? agents.h) : 0, el }));
-      return [{ focused: false, rh: 32, el: this.asleepHead(t, c, g, { name, pad: AGENT_PAD + FLUSH }) }, ...box];
+      return [{ focused: false, rh: 32, el: this.asleepHead(t, c, g, { name, pad: SIDEBAR.agentX + FLUSH }) }, ...box];
     });
   }
 
@@ -1432,7 +1422,7 @@ export default class Spaces extends View {
 
   asleepLine(a, indent, t) {
     const row = this.navRow(a, this.rowFor(a));
-    return asleepRow(a, AGENT_PAD + indent, t, row, row.wake, agentLabel(a));
+    return asleepRow(a, SIDEBAR.agentX + indent, t, row, row.wake, agentLabel(a));
   }
 
   // A popup's keyboard: j and k or the arrows walk menuActs, Enter runs the lit one, Escape closes.
@@ -1619,7 +1609,7 @@ export default class Spaces extends View {
     const runs = starts.map((i, k) => {
       const span = entries.slice(i, starts[k + 1] ?? entries.length), slab = keys[i] && span.length > 1;
       const rows = span.map((e) => {
-        if (e.a.asleep) return { a: e.a, h: ASLEEP_ROW, el: this.asleepLine(e.a, indent, t) };
+        if (e.a.asleep) return { a: e.a, h: H.line, el: this.asleepLine(e.a, indent, t) };
         const m = this.more(e, ctx);
         return { a: e.a, h: sessionHeight(m), el: agentSession(e.a, indent ? 2 : 1, c, this.navRow(e.a, e.a.pane && !e.lines.length ? this.rowOf(e.a, mine, space) : null), m) };
       });
@@ -1813,7 +1803,7 @@ export default class Spaces extends View {
     const rows = this.ordered(sp, ctx.places);
     const live = machines();
     const draw = (r) => {
-      if (collapsed) return item(this.compact(r, t, c, ctx), RAIL_MARK);
+      if (collapsed) return item(this.compact(r, t, c, ctx), SIDEBAR.railRow);
       const mine = ctx.rowsBy.get(r.w.id) ?? [];
       const split = asleepGroups(mine, { key: r.w.id });
       const whole = split.groups.find((g) => g.whole) ?? null;
@@ -1823,7 +1813,7 @@ export default class Spaces extends View {
       // A breath of space between projects (a worktree stays close to its checkout).
       const gap = r.tree || r === rows[0] ? [] : [item(div().h(10).flex_none(), 10)];
       // The space's row before its agents': the keyboard's path (navMark) goes in screen order.
-      const head = { ...item(this.row(r, t, c, whole ? [] : entries.map((e) => e.a), whole), rowHeight(r), r.w.active ? spaceMark(rowHeight(r)) : null), row: true, tree: Boolean(r.tree) };
+      const head = { ...item(this.row(r, t, c, whole ? [] : entries.map((e) => e.a), whole), H.line, r.w.active ? spaceMark(H.line) : null), row: true, tree: Boolean(r.tree) };
       if (whole) {
         const agents = this.asleepAgents(whole, t, ctx, indent);
         const box = agents.els.map((el) => item(el, this.asleepOpenOf(whole.id) ? ((this.foldH ?? {})[`asleep-${whole.id}`] ?? agents.h) : 0));
@@ -1833,7 +1823,7 @@ export default class Spaces extends View {
       const st = show ? this.stacked(entries, split.live, indent, t, c, r.w.id, ctx) : null;
       const tabs = show ? split.groups.flatMap((g) => {
         const agents = this.asleepAgents(g, t, ctx, indent);
-        return [this.asleepHead(t, c, g, { pad: AGENT_PAD + indent }), ...agents.els];
+        return [this.asleepHead(t, c, g, { pad: SIDEBAR.agentX + indent }), ...agents.els];
       }) : [];
       const inner = [...(st?.out ?? []), ...tabs];
       const box = (inner.length ? this.foldBox(r.w.id, open, inner, ctx.now) : [])
@@ -1841,17 +1831,17 @@ export default class Spaces extends View {
       return [...gap, head, ...box];
     };
     // In order, so a worktree's line climbs just to the line above it.
-    const drawAll = (list) => list.reduce((out, r) => out.concat(draw(r.tree ? { ...r, tree: { ...r.tree, reach: climb(out, ROW_GAP, GUIDE_OVERLAP) } } : r)), []);
+    const drawAll = (list) => list.reduce((out, r) => out.concat(draw(r.tree ? { ...r, tree: { ...r.tree, reach: climb(out, SIDEBAR.gap, G.xs) } } : r)), []);
     const remote = [...new Set([...rows.map((r) => r.w.machine).filter(Boolean), ...(this.machines ?? []).map((row) => row.name), ...(this.parked ?? []).map((row) => row.name)])].filter(Boolean).toSorted();
     const loading = m => {
       const state = live.find(k => k.name === m)?.layout;
       return state === "loading" || (!state && this.machines.some(k => k.name === m && k.state === "connected"))
         || rows.length < sp.length && sp.some(s => (s.machine ?? null) === m && !this.shown.has(s.id));
     };
-    const loadingRow = m => item(this.machineBones(t, collapsed, m), collapsed ? RAIL_MARK : PLAIN_ROW);
+    const loadingRow = m => item(this.machineBones(t, collapsed, m), collapsed ? SIDEBAR.railRow : H.line);
     // Projects you added with no space open, on their machine; each keeps a + to start an agent in it.
     const names = shownNames(ctx.registry);
-    const closed = (m) => (collapsed ? [] : this.closedOn(m, ctx)).flatMap((entry) => [item(div().h(10).flex_none(), 10), item(this.closedRow(t, entry, names), rowHeight({ tree: null }))]);
+    const closed = (m) => (collapsed ? [] : this.closedOn(m, ctx)).flatMap((entry) => [item(div().h(10).flex_none(), 10), item(this.closedRow(t, entry, names), H.line)]);
     const heads = shown("sidebar.computers", true, pieces(shared));
     if (!remote.length || !heads) {
       const shut = [null, ...(heads ? [] : remote)].flatMap((m) => closed(m));
@@ -1963,7 +1953,7 @@ export default class Spaces extends View {
     const pending = phase === "loading" && Boolean(m) && this.waking?.has(m);
     const wash = alpha(t.foreground, TINT.row);
     return (collapsed ? h_flex().rounded(R.card).justify_center() : flush(h_flex(), G.sm, G.sm))
-      .id(`machine-${key}`).h(collapsed ? RAIL_MARK : PLAIN_ROW).flex_none().gap(G.sm).items_center().text_color(ink)
+      .id(`machine-${key}`).h(collapsed ? SIDEBAR.railRow : H.line).flex_none().gap(G.sm).items_center().text_color(ink)
       .when(ring, (el) => el.border_1().border_color(t.accent))
       .when(phase !== "loading", (el) => el.cursor_pointer().hover((s) => s.bg(wash)))
       .on_click((e, cx) => { if (e.click_count === 2) return; go(cx); })
@@ -1990,7 +1980,7 @@ export default class Spaces extends View {
     if (phase === "connected") (this.seenOn ??= {})[m ?? ""] = ctx.now;
     // Folded: the most urgent mark of its sessions and how many projects.
     const tail = folded ? { mark: foldTail(false, mine.flatMap((r) => (ctx.rowsBy.get(r.w.id) ?? []).map((a) => a.status))).mark, count: mine.length + this.closedOn(m, ctx).length } : null;
-    const headItem = item(this.machineHead(m, phase, t, c, collapsed, folded, tail), collapsed ? RAIL_MARK : PLAIN_ROW);
+    const headItem = item(this.machineHead(m, phase, t, c, collapsed, folded, tail), collapsed ? SIDEBAR.railRow : H.line);
     if (phase === "loading" && !collapsed) return [headItem, loadingRow(m)];
     // Unreachable: its projects as last read, dim, with when.
     if (phase === "unavailable" && !collapsed && mine.length) {
@@ -2010,9 +2000,9 @@ export default class Spaces extends View {
   }
 
   // The last child's line stops at the bend.
-  connector({ last, reach = GUIDE_OVERLAP }, t) {
+  connector({ last, reach = G.xs }, t) {
     const line = washes(t)?.w12 ?? t.border;
-    return guideBars(last ? "end" : "tee", { x: GUIDE_X, elbow: ELBOW_W, h: TREE_ROW, reach })
+    return guideBars(last ? "end" : "tee", { x: SIDEBAR.guideX, elbow: ELBOW.w, h: H.line, reach })
       .map((b) => div().absolute().left(b.left + G.sm).top(b.top).w(b.w).h(b.h).bg(line));
   }
 
@@ -2090,7 +2080,7 @@ export default class Spaces extends View {
       on && !mine.some((a) => a.focused));
     const row = flush(v_flex().relative().id(`space-${w.id}`), G.sm, G.sm)
       .when(ring, (el) => el.border_1().border_color(t.accent))
-      .h(rowHeight({ tree }))
+      .h(H.line)
       .flex_none()
       .justify_center()
       .cursor_pointer()
@@ -2177,7 +2167,7 @@ export default class Spaces extends View {
         this.toggleFold(id, !open, cx);
       }, sectionMarkOf(s.id) ? statusMark(c, sectionMarkOf(s.id)) : null, s.label, sectionCount(open, count), t.foreground);
       const laid = this.unfolded(id, open, ctx.now) ? (s.id === "asleep" ? this.asleepStatus(s, t, c, ctx) : s.entries.map((e) => {
-        if (e.a.asleep) return { focused: false, rh: ASLEEP_ROW, el: this.asleepLine(e.a, FLUSH, t) };
+        if (e.a.asleep) return { focused: false, rh: H.line, el: this.asleepLine(e.a, FLUSH, t) };
         const m = this.more(e, ctx, e.lines.length ? null : rowDirectory(project(e.a.space)?.name, machineOf(e.a.address))), rh = sessionHeight(m);
         return { focused: e.a.focused, rh, el: agentSession(e.a, 0, c, this.navRow(e.a, this.rowFor(e.a)), m) };
       })) : [];
@@ -2208,8 +2198,8 @@ export default class Spaces extends View {
 
   machineBones(t, collapsed, m) {
     const { block, line } = skeleton({ border: t.border });
-    if (collapsed) return breathe(h_flex().id(`machine-loading-${m ?? "local"}`).w_full().h(RAIL_MARK).flex_none().justify_center().items_center()).child(block(28, 32, 6));
-    return breathe(h_flex().id(`machine-loading-${m ?? "local"}`).h(PLAIN_ROW).flex_none().px(8).items_center()).child(line(96, 11));
+    if (collapsed) return breathe(h_flex().id(`machine-loading-${m ?? "local"}`).w_full().h(SIDEBAR.railRow).flex_none().justify_center().items_center()).child(block(28, 32, 6));
+    return breathe(h_flex().id(`machine-loading-${m ?? "local"}`).h(H.line).flex_none().px(8).items_center()).child(line(96, 11));
   }
 
   // First read: the kit skeleton at the rows' height.
@@ -2248,7 +2238,7 @@ export default class Spaces extends View {
     const shown = top === "working" || top === "blocked" || top === "done" || top === "asleep" ? top : null;
     const list = () => (rows.length ? this.railMenu(tip, rows, space) : space ? run("space.select", { id: space }) : null);
     const strong = rows.some((r) => r.strong);
-    return h_flex().w_full().h(RAIL_MARK).flex_none().justify_center().items_center().child(
+    return h_flex().w_full().h(SIDEBAR.railRow).flex_none().justify_center().items_center().child(
       v_flex().id(id).w(36).h(40).flex_none().gap(3).items_center().justify_center().rounded(6).cursor_pointer().tooltip(tip)
         .when(on, (el) => el.bg(alpha(t.foreground, TINT.pill)))
         .when(!on, (el) => el.hover((s) => s.bg(alpha(t.foreground, TINT.row))))
@@ -2318,7 +2308,7 @@ export default class Spaces extends View {
     return sections.map((s) => {
       const rows = s.entries.filter((e) => !e.lines.length).map((e) => this.railRow(e.a, e.a.space_name || null, ctx.now));
       const lead = s.id === "other" ? this.railIcon(t, "layers") : h_flex().h(G.lg).items_center().child(statusMark(c, s.id));
-      return item(this.railMark(t, c, `rail-section-${s.id}`, { lead, rows, tip: s.label, ink: s.id === "blocked" ? t.blocked : t.dim, urgent: false }), RAIL_MARK);
+      return item(this.railMark(t, c, `rail-section-${s.id}`, { lead, rows, tip: s.label, ink: s.id === "blocked" ? t.blocked : t.dim, urgent: false }), SIDEBAR.railRow);
     });
   }
 
@@ -2333,7 +2323,7 @@ export default class Spaces extends View {
       const w = s.project ? sp.find((x) => x.id === s.project) : null;
       const list = s.rows.map(({ a }) => this.railRow(a, p ? null : ctx.project(a.space)?.name ?? null, ctx.now));
       const lead = p ? this.railInitial(p.name, p.fill) : this.railIcon(t, icons[s.id] ?? "message-square");
-      return item(this.railMark(t, c, `rail-thread-${s.id}`, { lead, rows: list, tip: p?.name ?? s.label ?? "Conversations", on: Boolean(w?.active), space: w?.id ?? null, menu: w ? () => this.menu(w) : null }), RAIL_MARK);
+      return item(this.railMark(t, c, `rail-thread-${s.id}`, { lead, rows: list, tip: p?.name ?? s.label ?? "Conversations", on: Boolean(w?.active), space: w?.id ?? null, menu: w ? () => this.menu(w) : null }), SIDEBAR.railRow);
     });
   }
 
@@ -2358,7 +2348,7 @@ export default class Spaces extends View {
     const sections = threadSections(rows, { order: this.threadOrder, group: this.threadGroup, now: ctx.now, since: this.since ?? {} });
     // Under its project's header a conversation is nested: indented, the agent's icon as its mark, and no project line.
     const row = ({ a, th }, nested = false) => {
-      if (a.asleep) return { rh: ASLEEP_ROW, el: this.asleepLine(a, nested ? NESTED : FLUSH, t) };
+      if (a.asleep) return { rh: H.line, el: this.asleepLine(a, nested ? NESTED : FLUSH, t) };
       const when = (this.threadOrder === "started" ? th?.began : th?.said ?? th?.at) ?? this.since?.[a.address]?.at;
       const unread = isUnread(a.labels), up = woke(a, ctx.now), settled = Boolean(settledOf(a.labels)) && !backFromSettled(a);
       const unreadable = this.threads[a.address]?.unavailable ?? null;
@@ -2389,7 +2379,7 @@ export default class Spaces extends View {
       const h = drawn.reduce((n, r, k) => n + r.rh + (k ? 6 : 0), 0);
       const a = g.rows[0].a;
       const name = g.name || project(a.space)?.name || a.asleep.spaceName;
-      return [item(this.asleepHead(t, c, g, { name, pad: AGENT_PAD + (nested ? NESTED : FLUSH) }), H.line), ...box.map((el) => item(el, zOpen ? ((this.foldH ?? {})[`asleep-${g.id}`] ?? h) : 0))];
+      return [item(this.asleepHead(t, c, g, { name, pad: SIDEBAR.agentX + (nested ? NESTED : FLUSH) }), H.line), ...box.map((el) => item(el, zOpen ? ((this.foldH ?? {})[`asleep-${g.id}`] ?? h) : 0))];
     };
     return sections.flatMap((s, i) => {
       const split = s.id.startsWith("project-") ? asleepGroups(s.rows, { asleepOf: (r) => r.a.asleep ?? null, key: s.project ?? s.id }) : { live: s.rows, groups: [] };
@@ -2527,7 +2517,7 @@ export default class Spaces extends View {
     if (props()?.machineMenu) return this.computerMenuView(t);
     const collapsed = shared("sidebar.collapsed") === true;
     if (this.sinceLeft) this.sinceLeft.showing = false;
-    this.narrow = !collapsed && (this.width ?? SIDEBAR_W) < ONE_LINE_W;
+    this.narrow = !collapsed && (this.width ?? SIDEBAR.w) < SIDEBAR.narrow;
     // The keyboard left (a click on a pane, say): the ring goes too.
     if (this.kbd && ((!this.needsOpen && collapsed) || !this.handle.is_focused())) { this.kbd = false; if (shared("kanso.list")) setShared("kanso.list", null); }
     this.navNext = [];
@@ -2576,7 +2566,7 @@ export default class Spaces extends View {
 
   // A pill keeps its identity per view, so a change of view places it rather than sliding it across.
   list(t, collapsed, view, items) {
-    const gap = view === "threads" ? 6 : ROW_GAP;
+    const gap = view === "threads" ? 6 : SIDEBAR.gap;
     const { els, space, agent } = laidOut(items, gap);
     const pills = collapsed ? [] : [
       ...(space ? [pill("pill-space", space.y, space.h, alpha(t.foreground, TINT.pill))] : []),

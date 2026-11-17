@@ -8,21 +8,18 @@ import { theme, appHome, home, props, closeOverlay, keys, openOverlay, run } fro
 import { focusOn } from "./pure.js";
 import { Lit } from "./lit.js";
 import { pagedDialog } from "./pages.js";
-import { G, TINT, alpha, tokens } from "./ui.js";
+import { G, DIALOG, KEY, TINT, alpha, tokens } from "./ui.js";
 import { button, quietLink } from "./ui-button.js";
 import { row } from "./ui-row.js";
 import { glyphs } from "./marks.js";
 import { TICK_MS, Companion } from "./pets.js";
 import { ROWS, MODIFIERS, CAP, layer, LIST_LAYER, LIST_SHIFT, describe } from "./keymap.js";
 
-// kansō help and kansō settings: one window size, so going from one to the other feels like a page.
-const DIALOG = { width: 860, height: 680 };
 const PAGES = [
   { key: "keys", label: "Keyboard" },
   { key: "dojo", label: "hjkl dōjō" },
   { key: "guide", label: "Guide" },
 ];
-const U = 40, GAP = 5; // a key's unit and the space between keys
 
 const LIT_MS = 650;
 
@@ -65,7 +62,7 @@ export default class Help extends View {
   }
 
   cap(t, c, [name, w = 1], i, bound) {
-    const width = Math.round(U * w + GAP * (w - 1));
+    const width = Math.round(KEY.unit * w + KEY.gap * (w - 1));
     const isMod = MODIFIERS.includes(name);
     const held = isMod && (this.lists ? name === "shift" && this.mods.includes("shift") : this.mods.includes(name));
     const does = bound.get(name);
@@ -74,7 +71,7 @@ export default class Help extends View {
     const fill = pressed || picked ? c.accent : held ? alpha(c.text, TINT.soft) : does ? alpha(c.accent, TINT.bound) : alpha(c.text, TINT.cell);
     const ink = pressed || picked ? (t.accent_foreground ?? c.canvas) : does || held ? c.text : c.dim;
     const label = (isMod ? modifierLabels(localName()).MOD_GLYPH[name] : CAP[name]) ?? (name.length === 1 ? name.toUpperCase() : name);
-    return div().id(`cap-${name}-${i}`).w(width).h(U).flex_none().rounded(7)
+    return div().id(`cap-${name}-${i}`).w(width).h(KEY.unit).flex_none().rounded(7)
       .border_1().border_color(pressed || picked ? c.accent : does ? alpha(c.accent, TINT.boundLine) : held ? alpha(c.text, TINT.strong) : c.border)
       .bg(fill).flex().items_center().justify_center()
       .text_size(label.length > 1 ? 11 : 13.5).font_medium().text_color(ink)
@@ -111,8 +108,8 @@ export default class Help extends View {
         .child(this.chip(c, "mod-lists", "Lists: j k gg G", this.lists, () => { this.lists = !this.lists; this.mods = []; this.picked = "j"; }))
         .child(div().flex_1())
         .child(div().text_size(12).text_color(c.dim).child(`${layerName} · ${bound.size} ${bound.size === 1 ? "key" : "keys"}`)))
-      .child(v_flex().gap(GAP).p(14).rounded(12).bg(alpha(c.text, TINT.board)).border_1().border_color(c.border).items_center()
-        .children(ROWS.map((row, r) => h_flex().gap(GAP).children(row.map((k, i) => this.cap(t, c, k, `${r}-${i}`, bound))))))
+      .child(v_flex().gap(KEY.gap).p(14).rounded(12).bg(alpha(c.text, TINT.board)).border_1().border_color(c.border).items_center()
+        .children(ROWS.map((row, r) => h_flex().gap(KEY.gap).children(row.map((k, i) => this.cap(t, c, k, `${r}-${i}`, bound))))))
       .child(h_flex().h(44).px(14).gap(G.md).items_center().rounded(10).bg(chosen ? alpha(c.accent, TINT.diff) : alpha(c.text, TINT.chip))
         .child(div().min_w(64).text_size(17).font_semibold().text_color(chosen ? c.text : c.dim).child(chosen ? chordOf(chosen) : glyphs([...this.mods, this.picked].join("-"))))
         .child(div().flex_1().text_size(13.5).text_color(chosen ? c.text : c.dim)
@@ -164,7 +161,7 @@ export default class Help extends View {
     const t = theme(), c = tokens(t);
     const page = this.page === "dojo" ? this.dojoPage(t, c) : this.page === "guide" ? this.guidePage(t, c) : this.keysPage(t, c);
     // The same window as kansō settings, in its place: each leads to the other, so you can always go back.
-    const toSettings = () => { closeOverlay(props()?.overlay); openOverlay({ mod: "kanso-settings", kind: "dialog", width: DIALOG.width, height: DIALOG.height, props: { page: "keys" } }); };
+    const toSettings = () => { closeOverlay(props()?.overlay); openOverlay({ mod: "kanso-settings", kind: "dialog", width: DIALOG.settingsW, height: DIALOG.settingsH, props: { page: "keys" } }); };
     return pagedDialog({
       name: "help", handle: this.handle, onKey: (e, cx) => this.key(e, cx),
       head: h_flex().w_full().items_center().gap(G.md)

@@ -12,7 +12,7 @@ import { div, image } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import { appHome, home } from "herdr";
 import { parseOr } from "./pure.js";
-import { CLEAR, TINT, alpha } from "./ui.js";
+import { G, CLEAR, TINT, alpha } from "./ui.js";
 import { hachi, hachiInk } from "./mascot.js";
 import { hachiPixels } from "./mascot-pixels.js";
 import { Store } from "./store.js";
@@ -209,9 +209,8 @@ export class Companion {
     };
     const coming = this.bringing ? AGENT_PETS.filter((a) => !this.pets.some((p) => p.id === a.id)).length : 0;
     const note = this.error ?? (coming ? `Bringing ${coming} more\u2026` : null);
-    return v_flex().gap(G_NOTE)
+    return v_flex().gap(G.md)
       .child(h_flex().flex_wrap().gap(8).children(this.pets.map(tile)))
       .when(Boolean(note), (el) => el.child(div().text_size(12).text_color(this.error ? c.red ?? c.accent : c.dim).child(note)));
   }
 }
-const G_NOTE = 12;

@@ -100,7 +100,6 @@ function panelContent(id) {
   return custom.props !== undefined ? { mod: custom.mod, props: custom.props } : { mod: custom.mod };
 }
 
-const TAB_H = 26; // inside the 2px padding of the pill, so the pill is 30px
 // A size reported after layout: the sizes with it, or the same ones when it moved less than half a pixel.
 const withSize = (sizes, key, width) => (Math.abs((sizes[key] ?? 0) - width) < 0.5 ? sizes : { ...sizes, [key]: width });
 const closeKey = (tab) => `close-${tab.id}`;
@@ -508,7 +507,7 @@ export default class Tabs extends View {
         .transition("width", EASE)
         .transition("opacity", EASE)
         .child(div().pl(6).pr(4).whitespace_nowrap().child(p.label));
-      return h_flex().id(`panel-${p.id}`).h(TAB_H).min_w(TAB_H).px(p.icon ? 5.5 : 4).flex_none().items_center().justify_center().rounded(6)
+      return h_flex().id(`panel-${p.id}`).h(H.icon).min_w(H.icon).px(p.icon ? 5.5 : 4).flex_none().items_center().justify_center().rounded(6)
         .text_size(12).bg(on ? alpha(t.foreground, TINT.tab) : CLEAR)
         .text_color(on ? t.foreground : t.muted)
         .hover(s => s.bg(alpha(t.foreground, target ? TINT.faint : on ? TINT.tab : TINT.hover)).text_color(t.foreground))

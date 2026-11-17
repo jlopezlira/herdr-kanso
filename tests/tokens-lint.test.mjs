@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { loadTokens, read } from "../scripts/tokens.mjs";
 import { UI, withTokens } from "../scripts/build-ui-tokens.mjs";
-import { check, compare, looks, violations } from "../scripts/check-tokens.mjs";
+import { check, compare, looks, named, violations } from "../scripts/check-tokens.mjs";
 
 const tokens = loadTokens();
 
@@ -22,6 +22,34 @@ test("A new literal fails with its file and line; token values and 0 pass", () =
     `${file}:4: text_size(13) is not a token value in kanso/tokens.json`,
     `${file}:4: gap(10) is not a token value in kanso/tokens.json`,
   ]);
+});
+
+test("A module-level number passed whole to a linted call fails with its file and line, an imported one too; token names and counts pass", () => {
+  const sizes = { file: "kanso/mods/x/sizes.js", text: "export const VIEW = { title: 17 };\nexport const ROWS = 8;" };
+  const main = { file: "kanso/mods/x/main.js", text: [
+    "import { VIEW, ROWS } from \"./sizes.js\";",
+    "const GAP = 6, EDGE = H.line; // a gap",
+    "div().gap(GAP).h(EDGE).max_h(ROWS * H.line)",
+    "  .h(on ? GAP : G.sm).text_size(VIEW.title)",
+  ].join("\n") };
+  assert.deepEqual(compare(named([sizes, main]), []), [
+    "kanso/mods/x/main.js:3: gap(GAP) passes a module-level number: name its size in kanso/tokens.json",
+    "kanso/mods/x/main.js:4: h(GAP) passes a module-level number: name its size in kanso/tokens.json",
+    "kanso/mods/x/main.js:4: text_size(VIEW.title) passes a module-level number: name its size in kanso/tokens.json",
+  ]);
+});
+
+test("A module-level size split over lines, sharing a line with another statement, in an object with named members, or offset from a name still fails; a count does not", () => {
+  const file = "kanso/mods/x/main.js";
+  const sizes = (text) => named([{ file, text }]).map(({ number, value }) => [number, value]);
+  assert.deepEqual(sizes("const GAP =\n  6;\ndiv().gap(GAP);"), [[3, "GAP"]]);
+  assert.deepEqual(sizes("const VIEW = {\n  title: 17, // the title\n  stale: OPACITY.away,\n};\ndiv().text_size(VIEW.title).h(VIEW.stale);"), [[5, "VIEW.title"]]);
+  assert.deepEqual(sizes("const GAP = 6;\ndiv().gap(\n  GAP\n);"), [[2, "GAP"]]);
+  assert.deepEqual(sizes("const GAP = 6; div().gap(GAP);"), [[1, "GAP"]]);
+  assert.deepEqual(sizes("const A = 6; const B = 7;\ndiv().gap(A).gap(B);"), [[2, "A"], [2, "B"]]);
+  assert.deepEqual(sizes("const EDGE = H.line,\n  PAD = 4;\ndiv().p(PAD).h(EDGE);"), [[3, "PAD"]]);
+  assert.deepEqual(sizes("const PAD = GUIDE.x + ELBOW.w + 6 - 8;\nconst LIST = 8 * H.line;\ndiv().pl(PAD).max_h(LIST);"), [[3, "PAD"]]);
+  for (const label of [")", "(", "["]) assert.deepEqual(sizes(`const VIEW = { title: 17, label: "${label}" };\ndiv().text_size(VIEW.title);`), [[2, "VIEW.title"]]);
 });
 
 test("A hex-alpha wash, an opacity share or a duration fails outside ui.js; whole opacities and named ones pass", () => {

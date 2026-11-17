@@ -3,6 +3,7 @@ import { readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { loadTokens, read, writeChanged } from "./tokens.mjs";
 import { SHARED } from "./sync-share.mjs";
+import { START, END } from "./build-ui-tokens.mjs";
 
 export const MODS = "kanso/mods";
 export const BASELINE = "kanso/tokens-baseline.json";
@@ -62,6 +63,57 @@ export const looks = (files) => files.filter(({ file }) => !file.endsWith("/ui.j
     });
 });
 
+// A module-level size passed whole to a linted call hides it: a number, an offset (`GUIDE + 6`) or such an object member; a count (`8 * H.line`) is not one.
+const NUMBER = String.raw`(?<![\w$.])\d*\.?\d+(?![\w$])`;
+const COUNT = new RegExp(String.raw`\s*[*/]\s*${NUMBER}|${NUMBER}\s*\*\s*`, "g");
+const isSize = (init) => /^[\w$.\s+\-*/()]+$/.test(init) && new RegExp(NUMBER).test(init.replace(COUNT, ""));
+const ARGUMENT = new RegExp(`\\.(${[...groupOf.keys()].join("|")})\\(([^()]*)\\)`, "g");
+const STATEMENT = /(?<=^|;[ \t]*)(?:export )?const\s+/gm;
+const withoutTokens = (text) => (text.includes(START) ? text.slice(0, text.indexOf(START)) + text.slice(text.indexOf(END)) : text);
+const uncommented = (text) => text.replace(/\/\/.*$/gm, "").trim();
+const nesting = (ch) => "([{".includes(ch) - ")]}".includes(ch);
+const topLevel = (text) => [...text].reduce(({ depth, parts }, ch) => (ch === "," && !depth
+  ? { depth, parts: [...parts, ""] }
+  : { depth: depth + nesting(ch), parts: [...parts.slice(0, -1), parts.at(-1) + ch] }), { depth: 0, parts: [""] }).parts;
+const LITERAL = /"(?:\\.|[^"\\\n])*"|'(?:\\.|[^'\\\n])*'|`(?:\\[\s\S]|[^`\\])*`|\/\/.*|\/\*[\s\S]*?\*\//g;
+// A statement ends at its first semicolon outside brackets, strings and comments, so another may share its line.
+const bodyAt = (text, from) => {
+  const code = text.slice(from).replace(LITERAL, (literal) => " ".repeat(literal.length));
+  let depth = 0;
+  for (let i = 0; i < code.length; i += 1) {
+    if (code[i] === ";" && !depth) return text.slice(from, from + i);
+    depth += nesting(code[i]);
+  }
+  return text.slice(from);
+};
+const sizesIn = (name, init) => (/^\{[\s\S]*\}$/.test(init)
+  ? topLevel(init.slice(1, -1)).map((member) => /^\s*(\w+)\s*:\s*([\s\S]+)$/.exec(member)).filter((m) => m && isSize(m[2].trim())).map((m) => `${name}.${m[1]}`)
+  : isSize(init) ? [name] : []);
+const declared = (text, exported = false) => {
+  const code = uncommented(withoutTokens(text));
+  return [...code.matchAll(STATEMENT)]
+    .filter((m) => !exported || m[0].startsWith("export "))
+    .flatMap((m) => topLevel(bodyAt(code, m.index + m[0].length)).map((part) => /^\s*([A-Za-z_$][\w$]*)\s*=\s*([\s\S]+)$/.exec(part)).filter(Boolean).flatMap((d) => sizesIn(d[1], d[2].trim())));
+};
+const IMPORT = /^import \{([^}]*)\} from "\.\/([\w.-]+)";/gm;
+
+export function named(files) {
+  const byPath = new Map(files.map(({ file, text }) => [file, text]));
+  const imported = (file, text) => [...text.matchAll(IMPORT)].flatMap(([, list, from]) => {
+    const names = new Set(list.split(",").map((name) => name.trim()));
+    return declared(byPath.get(file.replace(/[^/]+$/, from)) ?? "", true).filter((size) => names.has(size.split(".")[0]));
+  });
+  return files.flatMap(({ file, text }) => {
+    const sizes = new Set([...declared(text), ...imported(file, text)]);
+    const rows = text.split(/\r?\n/);
+    return sizes.size ? [...text.matchAll(ARGUMENT)].flatMap((m) => m[2].split(/[?:]/).map((part) => part.trim()).filter((part) => sizes.has(part))
+      .map((value) => {
+        const number = lineAt(text, m.index);
+        return { file, number, line: rows[number - 1].trim(), value, message: `${m[1]}(${value}) passes a module-level number: name its size in kanso/tokens.json` };
+      })) : [];
+  });
+}
+
 const key = (v) => JSON.stringify([v.file, v.line, v.value]);
 
 export function compare(found, baseline) {
@@ -94,7 +146,7 @@ export function modFiles() {
 
 export const render = (found) => `[\n${found.map(({ file, line, value }) => `  ${JSON.stringify({ file, line, value })}`).join(",\n")}\n]\n`;
 
-const found = (files = modFiles()) => [...violations(files, loadTokens()), ...looks(files)];
+const found = (files = modFiles()) => [...violations(files, loadTokens()), ...looks(files), ...named(files)];
 
 export function check() {
   return compare(found(), JSON.parse(read(BASELINE)));

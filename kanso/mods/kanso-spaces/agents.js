@@ -9,14 +9,13 @@ import { tellsSomething } from "./pure.js";
 import { parseProcesses, etimeMs } from "./procs.js";
 import { oneLine } from "./since-left-model.js";
 import { foldTail } from "./sidebar-rows.js";
-import { GLIDE, H, R } from "./ui.js";
+import { GLIDE, H, R, SIDEBAR, DIALOG } from "./ui.js";
 import { mark, MARK_SIZES } from "./ui-mark.js";
 import { sessionRow } from "./session-row.js";
 import { machineOf } from "./machines.js";
 
 export { NAME_LABEL };
 
-export const AGENT_PAD = 34; // under the space name: 8px row padding, a 22px avatar, the gap
 
 // Native GPUI motion, no per-frame script; fold and pill share the pace so they move together.
 export const FOLD_MS = GLIDE.duration + 40; // rows stay drawn this long after a fold, so the close is seen
@@ -33,7 +32,7 @@ const twoLines = (more) => !more.oneLine && Boolean(more.activity);
 export const sessionHeight = (more = {}) => (twoLines(more) ? H.two : H.line);
 
 // A row flush with the list's 10px inset (the Status and Threads views).
-export const FLUSH = 10 - AGENT_PAD;
+export const FLUSH = 10 - SIDEBAR.agentX;
 // A row nested under its project's name: the Threads view's conversations, indented as a Projects view's agents are.
 export const NESTED = FLUSH + 28;
 // Asleep is one more status: its own section, after the awake ones.
@@ -80,9 +79,8 @@ export function moved(order, address, target, side) {
   return out.toSpliced(side === "after" ? at + 1 : at, 0, address);
 }
 
-export const PROMPT_W = 420;
 export function renameTerminal(terminal, shown, thread = false) {
-  openOverlay({ mod: "kanso-prompt", kind: "dialog", width: PROMPT_W, props: {
+  openOverlay({ mod: "kanso-prompt", kind: "dialog", width: DIALOG.prompt, props: {
     title: thread ? "Rename thread" : "Rename terminal", value: shown ?? "",
     hint: thread ? "Empty: the title its agent gives it" : "Empty: the name the program gives it",
     label: { terminal, key: thread ? THREAD_LABEL : NAME_LABEL } } });

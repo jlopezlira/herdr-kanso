@@ -9,7 +9,7 @@ import { div, svg } from "gpui-kit";
 import { v_flex, h_flex, Button, Popover, TextView, ScrollHandle } from "gpui-base";
 import { exec, notify, run, theme, setShared, shared, window, layout, focused, panes, terminals, props } from "herdr";
 import { walkLayout } from "./layout.js";
-import { G, T, OPACITY, TINT, alpha, breathe, tokens } from "./ui.js";
+import { G, T, PR, OPACITY, TINT, alpha, breathe, tokens } from "./ui.js";
 import { Armed, button, quietLink, iconButton } from "./ui-button.js";
 import { TextField } from "./ui-field.js";
 import { menu } from "./ui-menu.js";
@@ -47,7 +47,6 @@ const DONE_LIMIT = 30;
 const NO_PR = /no (open )?pull requests? found|could not determine current branch/i;
 const MAX_DIFF = 400;
 const FILE_ROWS = 8;
-const BODY_FOLD = 150;
 
 // A pull request's body as Markdown to show: no template comments, no Windows line ends.
 export function cleanBody(text) {
@@ -1003,7 +1002,7 @@ export class PullRequest {
       .child(section(c, "Description"))
       .child(text
         ? div().id("pr-body").w_full().text_size(13).line_height(1.5).text_color(c.text)
-          .when(long && !open, (el) => el.max_h(BODY_FOLD).overflow_hidden())
+          .when(long && !open, (el) => el.max_h(PR.fold).overflow_hidden())
           .child(TextView.markdown("pr-body-md", text).selectable(true).on_link_click((url) => openUrl(url)))
         : div().text_size(13).text_color(c.dim).child("No description."))
       .when(Boolean(text) && long, (el) => el.child(h_flex().pt(G.sm).child(quietLink("pr-body-more", open ? "Show less" : "Show all", toggle, c))));
