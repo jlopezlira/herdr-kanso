@@ -4,10 +4,10 @@ import { exec, home, appHome, shared, setShared, window, theme, layout, spaces }
 import { mkdir, readFile, readdir, unlink } from "fs/promises";
 import { pathApi } from "./platform-paths.js";
 import { checked } from "./platform-command.js";
-import { G, H, R, T, tokens } from "./ui.js";
+import { G, H, T, tokens } from "./ui.js";
 import { quietLink } from "./ui-button.js";
 import { field, TextField } from "./ui-field.js";
-import { skeletonOf } from "./kit.js";
+import { row, skeletonOf } from "./kit.js";
 import { Front } from "./front.js";
 import { TOOLS, PROBE_MS, probeTools } from "./registration.js";
 import { pieces, runs } from "./pieces.js";
@@ -276,13 +276,9 @@ export default class Simulator extends View {
         .child(quietLink("sim-refresh", "Refresh", (next) => { this.readAt = 0; this.tick(next); }, c, { disabled: this.reading })))
       .when(this.devices === null, (el) => el.child(skeletonOf({ shape: "row", count: 2 })("kanso-skeleton-devices", c)))
       .when(Boolean(this.devices), (el) => el.child(v_flex().id("sim-devices").flex_none().max_h(H.control * 5).overflow_y_scrollbar().gap(G.xs)
-        .children((this.devices ?? []).map((item) => h_flex().id(`sim-device-${item.id}`).min_h(H.control).px(G.sm).gap(G.sm).rounded(R.control).items_center().cursor_pointer()
-          .when(item.id === this.selected, (row) => row.bg(c.selected))
-          .hover((row) => row.bg(c.subtle))
-          .on_click((_event, next) => this.pick(item, next))
-          .child(div().flex_1().min_w(0).truncate().text_size(T.value).child(item.name))
-          .child(div().flex_none().text_size(10.5).text_color(c.dim).child(item.runtime ?? "Android"))
-          .child(this.line(this.boot?.id === item.id ? bootState(item, this.boot, Date.now()) ?? item.state : item.state, c))))))
+        .children((this.devices ?? []).map((item) => row({
+          name: item.name, detail: item.runtime ?? "Android", meta: this.boot?.id === item.id ? bootState(item, this.boot, Date.now()) ?? item.state : item.state, current: item.id === this.selected,
+        })(`sim-device-${item.id}`, c, { onClick: (next) => this.pick(item, next) })))))
       .when(Boolean(spaces().find((space) => space.active)?.machine), (el) => el.child(this.line("Devices are on this computer.", c)))
       .when(Boolean(this.tools?.adb && !this.tools.emulator), (el) => el.child(this.line("Android SDK emulator binary is missing.", c)))
       .when(Boolean(this.note), (el) => el.child(this.line(this.note, c)))

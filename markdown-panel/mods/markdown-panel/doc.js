@@ -1,13 +1,13 @@
 import { serviceOn } from "./platform-host.js";
 import { paths } from "./platform-paths.js";
 import { fileApi } from "./platform-files.js";
-import { div, svg, image } from "gpui-kit";
+import { div, image } from "gpui-kit";
 import { v_flex, h_flex, Editor, EditorState, TextView, Textarea, TextareaState } from "gpui-base";
 import { readTextFile, writeTextFile, theme, settings, home, appHome } from "herdr";
 import { parseBlocks, joinBlocks, headingOf, headingLine, parseTable, tableLines } from "./blocks.js";
 import { G, tokens } from "./ui.js";
 import { quietLink, button } from "./ui-button.js";
-import { skeletonOf, tooltip } from "./kit.js";
+import { button as kitButton, skeletonOf, tooltip } from "./kit.js";
 import { bring, appRelative, markdownParts, staleView, bytesLabel, copyFailure, quietError } from "./remote-file.js";
 import { EDIT_LIMIT, drafts, draftKey, remember, opened, restore, seenDisk, typed, beginSave, commitText, applied, word, didFail, keepMine, takeTheirs, tooLarge, wholeText, overRead } from "./edit.js";
 
@@ -407,9 +407,8 @@ export class MarkdownDoc {
     const { head, rows, table } = this.cells;
     const n = head.length;
     const palette = tokens(t), quiet = { kind: "quiet", small: true, color: palette.muted };
-    const icon = (key, tip, action) => div().id(key).size(20).flex_none().flex().items_center().justify_center().rounded(4).cursor_pointer()
-      .text_color(t.dim).hover((s) => s.bg(t.hover).text_color(t.foreground)).tooltip(tooltip({ label: tip })).on_click((_e, cx) => action(cx))
-      .child(svg(`${this.icons}/x.svg`).size(11));
+    // The kit's small icon button: its tip is its label, Tab reaches it, Enter and Space press it.
+    const icon = (key, tip, action) => kitButton({ label: tip, kind: "icon", size: "sm", icon: `${this.icons}/x.svg` })(key, palette, { onClick: action });
     const cell = (s, key, strong) => div().id(key).flex_1().min_w(96).border_r(1).border_color(t.border)
       .child(Textarea.new(s).w_full().px(8).py(5).text_size(12.5).text_color(t.foreground).when(strong, (el) => el.font_semibold()));
     const line = (cells, key, strong, end) => h_flex().id(key).w_full().items_start().border_b(1).border_color(t.border)

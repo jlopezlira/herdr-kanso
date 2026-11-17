@@ -6,7 +6,7 @@ import { computerRow } from '../stories/kit/computer-row.js';
 import { section } from '../stories/kit/section.js';
 import { asleep } from '../stories/kit/asleep.js';
 import { sessionRow } from '../stories/kit/session-row.js';
-import { button, dawn as dawnSky, mark, marks, stack, windowControls } from '../stories/kit/pieces.js';
+import { button, dawn as dawnSky, mark, marks, row, stack, windowControls } from '../stories/kit/pieces.js';
 import { sampleSidebar, sessionTools } from '../stories/kit/samples.js';
 import { statedPages } from '../stories/kit/states.js';
 export { elements } from './storybook-markup.mjs';
@@ -41,6 +41,8 @@ export function kitRecords(records) {
       add(name, label, html, `${label} appearance of the shared ${name.toLowerCase()}.`);
     }
   }
+  add('Row', 'Wrapped', `<div class="kanso-panel">${row({ name: 'This retries forever when the bucket is empty: Retry-After is in seconds, so wait that long once and give up after three tries instead of looping on every 429 the server answers.', second: ['src/api/limits.ts:42', 'mara', '2 replies'], wrap: true })}</div>`,
+    'Proposed. A review thread: its comment wraps, up to 240 characters, over the path, author and replies.');
   const photo = 'https://images.placeholders.dev/96x96';
   const avatar = (size, inner) => `<span class="kanso-avatar kanso-avatar--round${size ? ` kanso-avatar--${size}` : ''}">${inner}</span>`;
   const img = `<img src="${photo}" alt="" loading="lazy" referrerpolicy="no-referrer">`;

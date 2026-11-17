@@ -6,14 +6,14 @@ import { imageApi } from "./platform-images.js";
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import { theme, props, closeOverlay, keys, shared, setShared, readTextFile, writeTextFile, appHome, run } from "herdr";
-import { G, T, TINT, alpha, tokens } from "./ui.js";
+import { G, R, T, W, ICON, TINT, alpha, tokens } from "./ui.js";
 import { avatar, tile } from "./ui-avatar.js";
 import { dot } from "./ui-dot.js";
 import { button, quietLink, iconButton, Armed, pressAgain } from "./ui-button.js";
 import { field, TextField } from "./ui-field.js";
 import { row } from "./ui-row.js";
 import { section } from "./ui-section.js";
-import { skeletonOf, tooltip } from "./kit.js";
+import { button as kitButton, skeletonOf, tooltip } from "./kit.js";
 import { undoLine } from "./ui-state.js";
 import { segmented } from "./ui-tab.js";
 import { toggleSwitch } from "./ui-toggle.js";
@@ -159,13 +159,12 @@ export default class Settings extends View {
     const panels = roster.filter((p) => p && p.on !== false).slice(0, 9);
     const pattern = this.chordsOf(panelRow, group.section, list)[0] ?? null;
     const capturing = this.capture?.row === panelRow || this.capture?.row === gearRow;
-    const tile = (id, icon, label, row, chord, old) => v_flex().id(`bar-${id}`).w(78).flex_none().py(G.sm).gap(6).items_center().rounded(8)
-      .cursor_pointer().hover((s) => s.bg(c.subtle)).tooltip(tooltip({ label, detail: "click, then press the new key" }))
-      .when(this.capture?.row === row, (el) => el.bg(c.subtle))
-      .on_click((_e, cx) => this.startCapture(row, group.section, old, cx))
-      .child(icon ? svg(icon).size(16).text_color(c.muted) : div().size(16).rounded(4).bg(c.subtle))
-      .child(div().w_full().px(4).text_center().truncate().text_size(11.5).text_color(c.text).child(label))
-      .child(chord ? keycap(t, glyphs(chord)) : keycap(t, "No key", true));
+    // Each tile is the kit's button with the panel's icon, name and key as its face: Tab reaches it, Enter and Space start the capture.
+    const tile = (id, icon, label, row, chord, old) => kitButton({ label, kind: "quiet", active: this.capture?.row === row, content: [v_flex().w(W.keyTile).py(G.sm).gap(G.xs).items_center()
+      .child(icon ? svg(icon).size(ICON).text_color(c.muted) : div().size(ICON).rounded(R.sm).bg(c.subtle))
+      .child(div().w_full().px(G.xs).text_center().truncate().text_size(T.body).text_color(c.text).child(label))
+      .child(chord ? keycap(t, glyphs(chord)) : keycap(t, "No key", true))] })(`bar-${id}`, c, { onClick: (cx) => this.startCapture(row, group.section, old, cx) })
+      .tooltip(tooltip({ label, detail: "click, then press the new key" }));
     const gear = this.chordsOf(gearRow, group.section, list)[0] ?? null;
     const tiles = [
       ...panels.map((pnl, i) => tile(pnl.id, pnl.icon, pnl.label, panelRow, pattern ? pattern.replace(/N$/, String(i + 1)) : null, pattern)),

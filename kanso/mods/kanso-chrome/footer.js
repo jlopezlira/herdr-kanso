@@ -1,10 +1,10 @@
 // The sidebar footer: kansō's update row, Settings and its one menu, both at chrome size; in the rail, squares.
 import { svg } from "gpui-kit";
-import { h_flex, v_flex, Popover } from "gpui-base";
-import { G, R, T, ICON_CHROME, CHROME_SQUARE, glyphOf } from "./ui.js";
+import { v_flex, Popover } from "gpui-base";
+import { G, T, ICON_CHROME, glyphOf } from "./ui.js";
 import { row } from "./ui-row.js";
 import { menu } from "./ui-menu.js";
-import { failureBlock, tooltip } from "./kit.js";
+import { button, failureBlock } from "./kit.js";
 import { ROW, PAD, REFUSAL, refusalBlock } from "./footer-model.js";
 
 const inkOf = (c, quiet) => (quiet ? c.muted : c.text);
@@ -17,11 +17,8 @@ const line = (c, { key, icon, name, quiet, onClick }) => flush(row(`footer-${key
   start: [chromeGlyph(icon, inkOf(c, quiet))], name, dimmed: quiet, onClick,
 })).text_size(T.card); // the kit row has no size: the Storybook's row has none either
 
-const square = (c, { key, icon, name, quiet, onClick }) => h_flex().id(`footer-${key}`).size(CHROME_SQUARE).flex_none()
-  .items_center().justify_center().rounded(R.control).cursor_pointer().tooltip(tooltip({ label: name }))
-  .hover((s) => s.bg(c.subtle)).active((s) => s.bg(c.selected))
-  .when(Boolean(onClick), (el) => el.on_click((_e, cx) => onClick(cx)))
-  .child(chromeGlyph(icon, inkOf(c, quiet)));
+// The rail's square is the kit's large icon button: Tab reaches it, Enter and Space press it, its name is its tooltip.
+const square = (c, { key, icon, name, quiet, onClick }) => button({ label: name, kind: "icon", size: "lg", icon, color: inkOf(c, quiet) })(`footer-${key}`, c, { onClick });
 
 const refusal = (c, { why, retry }) => failureBlock(refusalBlock(why))("footer-refused", c, { onClick: retry }).mt(REFUSAL.above).mb(REFUSAL.below);
 

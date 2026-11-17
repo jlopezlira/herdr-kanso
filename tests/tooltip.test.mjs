@@ -1,8 +1,8 @@
 // The tooltip: Herdr's `.tooltip()` takes only a string, so the kit's tooltip is the Storybook's words, its chord read from the key table.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readdirSync } from "node:fs";
 import { load, repoText } from "./helpers.mjs";
+import { outsideKit } from "./mod-sources.mjs";
 import { SHARED } from "../scripts/sync-share.mjs";
 import * as storybook from "../stories/kit/pieces.js";
 
@@ -56,12 +56,7 @@ test("The tooltip takes label, detail and chord, and throws on anything else", a
 });
 
 // Every mod source but the kit (kit.js and its ui-*.js drawing files, which pass on the words a caller made).
-const MODS = "kanso/mods/";
-const COPIES = new Set(SHARED.flatMap(({ copies }) => copies));
-const sources = () => [
-  ...readdirSync(new URL(`../${MODS}`, import.meta.url), { recursive: true }).map((p) => `${MODS}${String(p).split("\\").join("/")}`),
-  "markdown-panel/mods/markdown-panel/main.js",
-].filter((file) => file.endsWith(".js") && !COPIES.has(file) && !/\/(?:ui(-[\w-]+)?|kit)\.js$/.test(file));
+const sources = outsideKit;
 
 test("Outside the kit, every .tooltip( takes the kit's tooltip, never a string written at the call", () => {
   const loose = sources().flatMap((file) => [...repoText(file).matchAll(/\.tooltip\((?!tooltip\()/g)].map((m) => `${file}: ${repoText(file).slice(m.index, m.index + 60)}`));
