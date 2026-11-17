@@ -310,7 +310,7 @@ export const playgrounds = {
       sync: sync ? { text: sync, tip: 'Pull from origin/main', label: 'Pull' } : null })),
   },
   'Compositions/Sidebar/Computer row': {
-    args: { name: 'dark', remote: true, state: 'on', status: 'blocked', count: 0, hover: false, focus: false, pending: false, word: '', sync: '' },
+    args: { name: 'dark', remote: true, state: 'on', status: 'blocked', count: 0, hover: false, focus: false, pending: false, word: '', sync: '', lit: '' },
     argTypes: {
       ...computerArgs,
       state: select('state', computerStates),
@@ -319,8 +319,9 @@ export const playgrounds = {
       pending: boolArg('turning on'),
       word: textArg('word'),
       sync: textArg('sync on, its tip'),
+      lit: select('keyboard on tool', ['', 'lu-power', 'lu-plus', 'lu-arrow-right-left', 'lu-refresh-cw', 'lu-key']),
     },
-    markup: ({ word, sync, ...args }) => inSidebar(computerRow({ ...args, word: word || null, sync: sync || null })),
+    markup: ({ word, sync, lit, ...args }) => inSidebar(computerRow({ ...args, word: word || null, sync: sync || null, lit: lit || null })),
   },
   'Compositions/Sidebar/Asleep': {
     args: { names: ['site', 'dojo'], open: false, title: 'Asleep', focus: false, selected: -1 },

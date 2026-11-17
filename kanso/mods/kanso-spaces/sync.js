@@ -242,7 +242,7 @@ const syncedText = (at, now) => {
 
 const CANNOT = new Map([["update", UPDATE_TEXT], ["unreachable", machineState("unavailable")]]);
 
-// The sidebar's sync icon for a machine; machineVisible decides whether the row shows it.
+// The sidebar's sync icon for a machine; the computer row composition decides whether the row shows it.
 export function syncIcon({ name, config, status, now }) {
   const on = peerOn(config, name);
   const cannot = on ? CANNOT.get(status?.[name]?.reason) : null;

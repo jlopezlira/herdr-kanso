@@ -18,6 +18,8 @@ export { diffText, facts, plus };
 export const list = (...children) => children.flat(Infinity).filter((child) => child !== null && child !== undefined && child !== false);
 // A label made of words and values, such as a name inside an action's title.
 export const phrase = (...parts) => parts.join(" ");
+// A tool: its icon and the label its tooltip reads.
+export const icon = (name, label) => ({ icon: name, label });
 
 const EVENTS = {
   onPress: (el, fn) => el.on_mouse_down("left", fn),

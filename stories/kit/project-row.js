@@ -1,7 +1,5 @@
 // The project row: a project in the sidebar, the row in its heading configuration.
-import { phrase, row } from './kit.js';
-
-const icon = (name, label) => ({ icon: name, label });
+import { icon, phrase, row } from './kit.js';
 
 // `sync`: a fact or facts after the branch; one with a `label` is a press (↑ opens the PR panel, ↓ pulls).
 // `ground`: false where the list draws the current project's ground as a pill that glides; `tree`: a worktree under its checkout, 'tee' or 'end'.

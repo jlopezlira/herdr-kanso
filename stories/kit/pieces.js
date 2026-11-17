@@ -9,6 +9,8 @@ export const list = (...children) => children.flat(Infinity).filter((child) => c
 
 // A label made of words and values, such as a name inside an action's title.
 export const phrase = (...parts) => parts.join(' ');
+// A tool: its icon and the label its tooltip reads.
+export const icon = (name, label) => ({ icon: name, label });
 // A chord: its keys' names joined as the computer writes them, ⌥⌘H or Alt+L.
 export const chord = (join, ...parts) => parts.join(join ?? '');
 
@@ -17,9 +19,9 @@ export const grow = (inner = '') => `<span class="kanso-layout__grow">${inner}</
 // Atoms
 
 export const kinds = { solid: 'kanso-button--solid', tonal: 'kanso-button--tonal', quiet: 'kanso-button--quiet kanso-text--fg', icon: 'kanso-button--icon' };
-// `tip`: the tooltip, when it says more than the label.
-export const button = ({ label, kind = 'solid', size = 'md', icon = 'none', disabled = false, verb = '', armed = false, active = false, spin = false, key = '', tip = '' }) => {
-  const classes = ['kanso-button', kinds[kind], size === 'md' ? '' : `kanso-button--${size}`, disabled ? 'kanso-control--off' : '', armed ? 'kanso-action kanso-action--armed' : '', active ? 'kanso-button--active' : '', spin ? 'kanso-button--spinning' : ''].filter(Boolean).join(' ');
+// `tip`: the tooltip, when it says more than the label; `focus`: the keyboard's ring is on it.
+export const button = ({ label, kind = 'solid', size = 'md', icon = 'none', disabled = false, verb = '', armed = false, active = false, spin = false, key = '', tip = '', focus = false }) => {
+  const classes = ['kanso-button', kinds[kind], size === 'md' ? '' : `kanso-button--${size}`, disabled ? 'kanso-control--off' : '', armed ? 'kanso-action kanso-action--armed' : '', active ? 'kanso-button--active' : '', spin ? 'kanso-button--spinning' : '', focus ? 'kanso-control--focus' : ''].filter(Boolean).join(' ');
   const lead = icon === 'none' ? (spin ? mark({ status: 'working', size: 'sm' }) : '') : iconSvg(icon, 'control');
   const text = kind === 'icon' ? '' : escape(label);
   const again = `Press again to ${escape(verb || label.toLowerCase())}`;

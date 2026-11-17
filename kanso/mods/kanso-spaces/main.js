@@ -26,7 +26,7 @@ import { afterMount } from "./pure.js";
 import { commandLoop, MachineRead } from "./sidebar.js";
 import { gitFacts, openAhead, AHEAD } from "./sidebar-draw.js";
 import { projectRow } from "./project-row.js";
-import { computerRow } from "./computer-row.js";
+import { computerRow, computerTools } from "./computer-row.js";
 import { section } from "./section.js";
 import { asleep } from "./asleep.js";
 import { pullKey, runPull, canWake, enterOpens, sectionMarkOf, sectionCount, rowDirectory, threadWord, threadActions, signInCommand, noProjectsOn, sortOf, foldTail, readWord } from "./sidebar-rows.js";
@@ -43,7 +43,7 @@ import { menuList, menuHeight } from "./ui-menu.js";
 import { toolbar } from "./ui-toolbar.js";
 import { header } from "./ui-sidebar-header.js";
 import { pieces, shown, runs, asksPs, setPiece, pieceOf, STORE } from "./pieces.js";
-import { machineRecord, canRestore, addArgs, rmArgs, loginLine, hcError, needsLogin, heldNames, connectedNames, machinePhase, machineOf, visibleSpaces, visibleAgents, pollKeys, machineState, machineHot, machineTip, machineInk, listedMachines } from "./machines.js";
+import { machineRecord, canRestore, addArgs, rmArgs, loginLine, hcError, needsLogin, heldNames, connectedNames, machinePhase, machineOf, visibleSpaces, visibleAgents, pollKeys, machineState, machineHot, machineStop, machineTip, machineInk, listedMachines } from "./machines.js";
 import { Names } from "./alias.js";
 import { syncIcon, peerOn, withPeer } from "./sync.js";
 import { computerMenuItems } from "./computer-menu.js";
@@ -1896,7 +1896,7 @@ export default class Spaces extends View {
     const hint = m ? ((this.hints ?? {})[m] ?? "") : "";
     const ink = t[machineInk(phase)];
     const go = (cx) => this.openMachine(m, phase, (this.folded ?? new Set()).has(m), cx);
-    const ring = this.navMark(`machine:${key}`, go);
+    const ring = this.navMark(machineStop(m), go);
     return h_flex().rounded(R.card).justify_center().id(`machine-${key}`).h(SIDEBAR.railRow).flex_none().items_center().text_color(ink)
       .when(ring, (el) => el.border_1().border_color(t.accent))
       .when(phase !== "loading", (el) => el.cursor_pointer().hover((s) => s.bg(alpha(t.foreground, TINT.row))))
@@ -1907,6 +1907,7 @@ export default class Spaces extends View {
   }
 
   // A computer: the computer row composition; what is wrong is its one button, its tools show under the pointer or the keyboard.
+  // Each tool it shows is a keyboard stop after the row's, and Enter on one runs its press.
   machineHead(m, phase, t, c, collapsed, folded, tail = null) {
     if (collapsed) return this.machineTile(m, phase, t);
     const { key, title } = this.machineWords(m);
@@ -1914,26 +1915,26 @@ export default class Spaces extends View {
     const sync = syncing ? syncIcon({ name: m, ...this.sync, now: Date.now() }) : null;
     const cannot = sync?.state === "cannot";
     const hint = m ? ((this.hints ?? {})[m] ?? "") : "";
-    const state = COMPUTER_STATE[phase] ?? "on";
     const go = (cx) => this.openMachine(m, phase, folded, cx);
     const acts = {
-      power: (cx) => this.setPower(m, this.phaseOf(m) === "off", cx),
-      plus: () => run("space.new", { machine: m ?? "" }),
-      "refresh-cw": (cx) => this.retryMachine(m, cx),
-      key: () => run("terminal.open", signInCommand(m)),
-      "arrow-right-left": (cx) => this.toggleSync(m, cx),
+      "lu-power": (cx) => this.setPower(m, this.phaseOf(m) === "off", cx),
+      "lu-plus": () => run("space.new", { machine: m ?? "" }),
+      "lu-refresh-cw": (cx) => this.retryMachine(m, cx),
+      "lu-key": () => run("terminal.open", signInCommand(m)),
+      "lu-arrow-right-left": (cx) => this.toggleSync(m, cx),
     };
-    // Loading, it breathes until hc answers, and only Sync, when on, stays out.
-    const pending = phase === "loading";
-    const tools = pending ? [sync && "arrow-right-left"] : [m && "power", "plus", m && "arrow-right-left"];
-    const shown = { on: tools, off: ["power"], unreachable: ["refresh-cw"], login: ["key"] }[state].filter(Boolean);
+    // Loading, it breathes until hc answers.
+    const look = {
+      name: title, remote: Boolean(m), state: COMPUTER_STATE[phase] ?? "on", pending: phase === "loading", sync: sync?.tip ?? null,
+      hover: machineHot(m, this.hoverMachine, this.kbd, this.navKey), focus: this.navMark(machineStop(m), go),
+    };
+    const tools = computerTools(look).map((tool) => tool.icon);
+    const rings = tools.map((name) => this.navMark(machineStop(m, name), acts[name]));
     return computerRow({
-      name: title, remote: Boolean(m), state, pending,
-      word: cannot ? "Sync can't run" : null, tip: hint || (cannot ? sync.tip : null), sync: sync?.tip ?? null,
+      ...look, word: cannot ? "Sync can't run" : null, tip: hint || (cannot ? sync.tip : null), lit: tools[rings.indexOf(true)] ?? null,
       status: tail?.mark ?? "none", count: folded ? (tail?.count ?? 0) : 0,
-      hover: machineHot(m, this.hoverMachine, this.kbd, this.navKey), focus: this.navMark(`machine:${key}`, go),
     })(`machine-${key}`, c, {
-      on: Object.fromEntries(shown.map((name) => [name, acts[name]])),
+      on: Object.fromEntries(tools.map((name) => [name, acts[name]])),
       // One press opens, folds or fixes it; two rename it.
       onPress: (e, cx) => { if (e.click_count === 2) { cx.stop_propagation(); this.names.rename(m); } else go(cx); },
       onMenu: (_e, cx) => { cx.stop_propagation(); this.computerMenu(m, phase); },

@@ -105,6 +105,7 @@ export function kitRecords(records) {
     ['Computer row', 'Needs login', inSidebar(computerRow({ name: 'devbox', state: 'login' })), 'Sign in as its button.'],
     ['Computer row', 'Turning on', inSidebar(computerRow({ name: 'dark', pending: true })), 'It breathes until hc answers.'],
     ['Computer row', 'Under the pointer', inSidebar(computerRow({ name: 'dark', hover: true, sync: 'Sync dark: synced 2m ago' })), 'Turn off and +; Sync stays out while it is on.'],
+    ['Computer row', 'Keyboard on a tool', inSidebar(computerRow({ name: 'dark', hover: true, lit: 'lu-plus' })), 'Each tool is a stop after the row; Enter presses it.'],
     ['Asleep', 'Folded', inSidebar(asleep({ names: ['site', 'dojo'] })), 'One folded line, its count.'],
     ['Asleep', 'Open', inSidebar(asleep({ names: ['site', 'dojo'], open: true })), 'The names dim, Wake at the right.'],
     ['Section', 'Default', inSidebar(section({ title: 'Needs you', status: 'blocked' })), 'A heading in Status and Threads.'],

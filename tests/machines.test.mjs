@@ -43,7 +43,7 @@ test("a login Herdr asks for is told apart from a missing install", async () => 
 });
 
 test("a machine row names only the states that need a word", async () => {
-  const { machineState, machineTip, machineHot } = await load("kanso-spaces/machines.js", ["machineState", "machineTip", "machineHot"]);
+  const { machineState, machineTip, machineHot, machineStop } = await load("kanso-spaces/machines.js", ["machineState", "machineTip", "machineHot", "machineStop"]);
   assert.equal(machineState("off"), "Off");
   assert.equal(machineState("unavailable"), "Unreachable");
   assert.equal(machineState("login"), "Needs login");
@@ -54,11 +54,16 @@ test("a machine row names only the states that need a word", async () => {
   assert.equal(machineTip("dark", "unavailable", "ssh timed out"), "dark: ssh timed out");
   assert.equal(machineTip("dark", "login", ""), "dark: Needs login");
   assert.equal(machineHot("dark", "dark", false, null), true);
-  assert.equal(machineHot("dark", null, true, "machine-power:dark"), true);
-  assert.equal(machineHot("dark", null, true, "machine-retry:dark"), true);
-  assert.equal(machineHot("dark", null, false, "machine-power:dark"), false);
+  assert.equal(machineStop("dark"), "machine:dark");
+  assert.equal(machineStop(null, "lu-plus"), "machine-lu-plus:local");
+  assert.equal(machineHot("dark", null, true, machineStop("dark")), true, "the keyboard on its row");
+  assert.equal(machineHot("dark", null, true, machineStop("dark", "lu-power")), true, "or on one of its tools");
+  assert.equal(machineHot("dark", null, true, machineStop("dark", "lu-refresh-cw")), true);
+  assert.equal(machineHot("dark", null, false, machineStop("dark", "lu-power")), false);
   assert.equal(machineHot(null, "local", false, null), true);
   assert.equal(machineHot("dark", "local", true, "machine:odin"), false);
+  assert.equal(machineHot("dark", null, true, "machine-lu-power:darker"), false, "another computer's tool");
+  assert.equal(machineHot("dark", null, true, "space:dark"), false);
 });
 
 test("hc machine ls is the live list, without temporary rows", async () => {
@@ -70,19 +75,8 @@ test("hc machine ls is the live list, without temporary rows", async () => {
   assert.deepEqual(clone(listedMachines({ code: 0, stdout: "nope" })), []);
 });
 
-test("a machine that is not connected keeps its one action, in muted", async () => {
-  const { machineVisible, machineInk } = await load("kanso-spaces/machines.js", ["machineVisible", "machineInk"]);
-  const see = (phase, hot) => clone(machineVisible(phase, hot));
-  assert.deepEqual(see("unavailable", false), ["retry"]);
-  assert.deepEqual(see("unavailable", true), ["retry"]);
-  assert.deepEqual(see("off", false), ["power"]);
-  assert.deepEqual(see("off", true), ["power"]);
-  assert.deepEqual(see("login", false), ["signin"]);
-  assert.deepEqual(see("login", true), ["signin"]);
-  assert.deepEqual(see("connected", false), []);
-  assert.deepEqual(see("connected", true), ["power", "plus"]);
-  assert.deepEqual(see("loading", false), []);
-  assert.deepEqual(see("loading", true), []);
+test("a machine that is not connected is drawn in muted", async () => {
+  const { machineInk } = await load("kanso-spaces/machines.js", ["machineInk"]);
   assert.equal(machineInk("off"), "muted");
   assert.equal(machineInk("unavailable"), "muted");
   assert.equal(machineInk("login"), "muted");
@@ -90,21 +84,10 @@ test("a machine that is not connected keeps its one action, in muted", async () 
   assert.equal(machineInk("loading"), "foreground");
 });
 
-test("Sync is kept at rest on a connected remote row while on, and offered on hover while off", async () => {
-  const { machineVisible } = await load("kanso-spaces/machines.js", ["machineVisible"]);
-  const see = (phase, hot, remote, syncing) => clone(machineVisible(phase, hot, remote, syncing));
-  assert.deepEqual(see("connected", false, true, true), ["sync"]);
-  assert.deepEqual(see("connected", false, true, false), []);
-  assert.deepEqual(see("connected", true, true, false), ["power", "plus", "sync"]);
-  assert.deepEqual(see("connected", true, false, true), ["power", "plus"]);
-  assert.deepEqual(see("off", true, true, true), ["power"]);
-  assert.deepEqual(see("loading", true, true, true), []);
-});
-
 test("off hides that machine, and this computer has no switch", async () => {
-  const { isOff, namesOff, heldNames, connectedNames, pollKeys, visibleSpaces, visibleAgents, machinePhase, powerId, machineTitle } = await load(
+  const { isOff, namesOff, heldNames, connectedNames, pollKeys, visibleSpaces, visibleAgents, machinePhase, machineTitle } = await load(
     "kanso-spaces/machines.js",
-    ["isOff", "namesOff", "heldNames", "connectedNames", "pollKeys", "visibleSpaces", "visibleAgents", "machinePhase", "powerId", "machineTitle"],
+    ["isOff", "namesOff", "heldNames", "connectedNames", "pollKeys", "visibleSpaces", "visibleAgents", "machinePhase", "machineTitle"],
   );
   const stored = [record];
   const spaces = [{ id: "home", machine: null }, { id: "app", machine: "dark" }];
@@ -118,8 +101,6 @@ test("off hides that machine, and this computer has no switch", async () => {
   assert.deepEqual(clone(pollKeys([darkKey], heldNames(stored))), [], "still stored, so not read, even once hc lists it connected");
   assert.deepEqual(clone(visibleSpaces(spaces, heldNames(stored)).map((space) => space.id)), ["home"]);
   assert.deepEqual(clone(visibleAgents(agents, heldNames(stored)).map((agent) => agent.address)), ["t1"]);
-  assert.equal(powerId(null), null);
-  assert.equal(powerId("dark"), "machine-power-dark");
   assert.equal(machineTitle(null, "macbook"), "macbook");
   assert.equal(machineTitle(null, ""), "This computer");
   assert.equal(machineTitle("dark", "macbook"), "dark");
@@ -143,7 +124,7 @@ async function sidebar(state) {
   const { node, host, ids, texts, tips } = recorder();
   const { Spaces } = await loadSidebar(host, {
     shared: (key) => (key === "sidebar.collapsed" ? state.collapsed === true : null),
-    spaces: () => state.spaces, machines: () => state.layouts,
+    spaces: () => state.spaces, machines: () => state.layouts, run: state.run ?? (() => {}),
   });
   const view = Object.assign(new Spaces(), mountedState({
     shown: new Set(state.spaces.map((space) => space.id)),
@@ -434,6 +415,46 @@ test("off, unreachable, loading and needs login keep their one action, with no S
   for (const [state, actions] of states) {
     const drawn = await sidebar({ spaces: [local, remote], layouts: [{ name: null, layout: "ready" }], ...state, sync: syncOn, hover: "dark" });
     assert.deepEqual(tools(drawn), actions);
+  }
+});
+
+// The keyboard on a computer's row, then j to each tool it shows and Enter on it: the stops it walked, and what each Enter ran.
+async function keyWalk(state) {
+  const ran = [];
+  const drawn = await sidebar({ ...state, kbd: true, navKey: "machine:dark", run: (cmd, args) => ran.push([cmd, clone(args)]) });
+  const { view } = drawn;
+  Object.assign(view, { setPower: (m, on) => ran.push(["power", m, on]), retryMachine: (m) => ran.push(["retry", m]), toggleSync: (m) => ran.push(["sync", m]) });
+  const keyCx = { stop_propagation() {}, notify() {} };
+  const stops = [];
+  for (;;) {
+    const before = view.navKey;
+    view.listKeyDown({ key: "j", modifiers: {} }, keyCx);
+    if (view.navKey === before || !view.navKey.startsWith("machine-") || !view.navKey.endsWith(":dark")) break;
+    stops.push(view.navKey);
+    view.render();
+    assert.ok(view.nav.some((n) => n.key === view.navKey), `${view.navKey} stays a stop while the ring is on it`);
+    view.listKeyDown({ key: "enter", modifiers: {} }, keyCx);
+  }
+  return { stops, ran };
+}
+
+test("each tool a computer row shows is its own keyboard stop: j walks to it and Enter runs it, as a press does", async () => {
+  const base = { spaces: [local, remote], layouts: [{ name: null, layout: "ready" }] };
+  const login = ["terminal.open", { argv: ["hc", "machine", "login", "dark"], place: "right" }];
+  // On, Sync on or off: Turn off, New project, then Sync, wherever Sync sits.
+  const onStops = ["machine-lu-power:dark", "machine-lu-plus:dark", "machine-lu-arrow-right-left:dark"];
+  const onRan = [["power", "dark", false], ["space.new", { machine: "dark" }], ["sync", "dark"]];
+  const walks = [
+    ["connected", connected, onStops, onRan],
+    ["needs login", { ...base, parked: [record], login: new Set(["dark"]) }, ["machine-lu-key:dark"], [login]],
+    ["off", { ...base, parked: [record] }, ["machine-lu-power:dark"], [["power", "dark", true]]],
+    ["unreachable", unreachable, ["machine-lu-refresh-cw:dark"], [["retry", "dark"]]],
+    ["sync on", { ...connected, sync: syncOn }, onStops, onRan],
+  ];
+  for (const [name, state, stops, ran] of walks) {
+    const walked = await keyWalk(state);
+    assert.deepEqual(walked.stops, stops, `${name}: a stop per tool, in screen order`);
+    assert.deepEqual(walked.ran, ran, `${name}: Enter runs each tool`);
   }
 });
 

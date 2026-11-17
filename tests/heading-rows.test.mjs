@@ -9,7 +9,7 @@ const FILES = ["project-row", "computer-row", "section", "asleep"];
 const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 const compositions = async () => themed({
   ...await load("kanso-spaces/project-row.js", ["projectRow"], drawingHost()),
-  ...await load("kanso-spaces/computer-row.js", ["computerRow"], drawingHost()),
+  ...await load("kanso-spaces/computer-row.js", ["computerRow", "computerTools"], drawingHost()),
   ...await load("kanso-spaces/section.js", ["section"], drawingHost()),
   ...await load("kanso-spaces/asleep.js", ["asleep"], drawingHost()),
   ...await load("kanso-panel/ui.js", ["tokens"], drawingHost()),
@@ -48,6 +48,24 @@ test("A computer row shows its Storybook state: Turn on when off, Refresh when u
   assert.deepEqual(shown({ state: "on", sync: "Sync dark: synced 2 min ago" }), ["Sync dark: synced 2 min ago"], "Sync on stays out");
   assert.deepEqual(shown({ state: "on", hover: true, pending: true }), [], "turning on, its tools wait");
   assert.deepEqual(tipsOf(computerRow({ name: "This computer", remote: false, hover: true })("m", c)), ["New project on This computer"], "this computer: + alone");
+});
+
+test("A computer row says which tools it shows, the keyboard's stops, and rings the one the keyboard is on", async () => {
+  const { computerRow, computerTools, c } = await compositions();
+  const stops = (props) => clone(computerTools({ name: "dark", ...props }).map((tool) => tool.icon));
+  assert.deepEqual(stops({ state: "off" }), ["lu-power"]);
+  assert.deepEqual(stops({ state: "unreachable", hover: true }), ["lu-refresh-cw"]);
+  assert.deepEqual(stops({ state: "login", focus: true }), ["lu-key"]);
+  assert.deepEqual(stops({ state: "on" }), [], "on, at rest: none");
+  assert.deepEqual(stops({ state: "on", focus: true }), ["lu-power", "lu-plus", "lu-arrow-right-left"], "the keyboard on it: each tool, in screen order");
+  assert.deepEqual(stops({ state: "on", sync: "Sync dark" }), ["lu-arrow-right-left"], "Sync on stays out");
+  assert.deepEqual(stops({ state: "on", hover: true, sync: "Sync dark" }), ["lu-power", "lu-plus", "lu-arrow-right-left"], "and comes last");
+  assert.deepEqual(stops({ state: "on", hover: true, pending: true }), [], "turning on, its tools wait");
+  assert.deepEqual(stops({ state: "on", hover: true, remote: false }), ["lu-plus"], "this computer: + alone");
+  const ringed = (props) => nodes(computerRow({ name: "dark", hover: true, ...props })("m", c)).filter((kid) => kid.calls.some((call) => call[0] === "border_color" && call[1] === c.accent)).map((kid) => kid.tag);
+  assert.deepEqual(ringed({ lit: "lu-plus" }), ["m-tool-1"], "the keyboard on +");
+  assert.deepEqual(ringed({ state: "login", lit: "lu-key" }), ["m-action"], "the keyboard on Sign in");
+  assert.deepEqual(ringed({}), [], "no ring without the keyboard");
 });
 
 test("A detail fact with a label is a press wired by that label; the kit refuses a handler with no tool", async () => {
