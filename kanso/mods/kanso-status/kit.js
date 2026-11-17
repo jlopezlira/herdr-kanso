@@ -43,7 +43,8 @@ const EVENTS = {
 };
 // `onChange(key, cx)`: a choice among tabs or menu items; `onOpen(open, cx)`: a menu under a button opens or shuts; `onLink(url, cx)`: a link's press in markdown.
 // `presses`: a composition's press targets by name, its icon or else its label; a stack passes them down and each press takes its own.
-const HANDLERS = ["on", "presses", "onClick", "onChange", "onOpen", "onHover", "onKey", "onLink", "focusHandle", ...Object.keys(EVENTS)];
+// `focuses`: by the same names, the focus handles the caller owns, so a target keeps the keyboard while it is drawn in another form.
+const HANDLERS = ["on", "presses", "focuses", "onClick", "onChange", "onOpen", "onHover", "onKey", "onLink", "focusHandle", ...Object.keys(EVENTS)];
 const withEvents = (el, events) => Object.entries(events).filter(([, fn]) => fn).reduce((drawnEl, [name, fn]) => EVENTS[name](drawnEl, fn), el);
 const appIcon = (icon) => (typeof icon === "string" ? icon.replace(/^lu-/, "") : icon);
 const iconOf = (icon) => (icon === "none" ? null : appIcon(icon));
@@ -58,25 +59,26 @@ const given = (more) => {
   return Object.fromEntries(Object.entries(more).filter(([, value]) => value !== undefined));
 };
 
-// The first piece given `presses` checks, once drawn, that each name found a drawn target, as `on` checks its tools:
-// a renamed label or icon throws instead of leaving its press unbound. Pieces under it take theirs with `pressOf`.
+// The first piece given `presses` or `focuses` checks, once drawn, that each name found a drawn target, as `on` checks its tools:
+// a renamed label or icon throws instead of leaving its press or handle unbound. Pieces under it take theirs with `takeOf`.
 // `Symbol.for`: one mark across every copy of the kit, as a composition and its slots may each import their own.
 const noTool = (id, missing) => {
   if (missing.length) throw new Error(`kit: ${id} has no tool ${missing.join(", ")}`);
 };
 const TAKEN = Symbol.for("kanso.presses.taken");
+const NAMED = ["presses", "focuses"];
 const pressing = (draw) => (id, c, more = {}, context = {}) => {
-  const { presses } = more;
-  if (!presses || presses[TAKEN]) return draw(id, c, more, context);
-  const taken = new Set();
-  const el = draw(id, c, { ...more, presses: { ...presses, [TAKEN]: taken } }, context);
-  noTool(id, Object.keys(presses).filter((key) => !taken.has(key)));
+  const fresh = NAMED.filter((name) => more[name] && !more[name][TAKEN]);
+  if (!fresh.length) return draw(id, c, more, context);
+  const marked = Object.fromEntries(fresh.map((name) => [name, { ...more[name], [TAKEN]: new Set() }]));
+  const el = draw(id, c, { ...more, ...marked }, context);
+  noTool(id, Object.values(marked).flatMap((named) => Object.keys(named).filter((key) => named[key] && !named[TAKEN].has(key))));
   return el;
 };
-const pressOf = (presses, key) => {
-  const press = presses[key] ?? null;
-  if (press) presses[TAKEN]?.add(key);
-  return press;
+const takeOf = (named, key) => {
+  const target = named[key] ?? null;
+  if (target) named[TAKEN]?.add(key);
+  return target;
 };
 
 const wired = (on) => (tool) => (tool && on[keyOf(tool)] ? { ...tool, onClick: on[keyOf(tool)] } : tool);
@@ -94,9 +96,10 @@ const withHandlers = (id, raw, actions, action, detail) => {
 };
 
 export const row = ({ icon, flag, detail, action, actions, start, tools, ...props }) => pressing((id, c, more) => {
-  const { on = {}, presses = {}, onClick = pressOf(presses, keyOf({ icon, label: props.name })), onPress, onRelease, onMenu, onMove, ...handlers } = given(more);
+  const key = keyOf({ icon, label: props.name });
+  const { on = {}, presses = {}, focuses = {}, onClick = takeOf(presses, key), focusHandle = takeOf(focuses, key), onPress, onRelease, onMenu, onMove, ...handlers } = given(more);
   const drawnRow = drawRow(id, c, {
-    ...props, ...handlers, onClick, ...withHandlers(id, on, actions, action, detail), icon: iconOf(icon), flag: appIcon(flag),
+    ...props, ...handlers, onClick, focusHandle, ...withHandlers(id, on, actions, action, detail), icon: iconOf(icon), flag: appIcon(flag),
     start: drawn(id, c, "start", start), tools: drawn(id, c, "tools", tools),
   });
   return withEvents(drawnRow, { onPress, onRelease, onMenu, onMove });
@@ -106,8 +109,10 @@ export const row = ({ icon, flag, detail, action, actions, start, tools, ...prop
 // `content`: kit pieces or elements drawn in place of the icon and label, such as a picture and its name. No `tip` reads the label.
 // `ink`: the stack around it quiets it, as Sort at its default order is dim.
 export const button = ({ label, icon = "none", content = [], tip = "", ...props }) => pressing((id, c, more, { ink = null }) => {
-  const { presses = {}, onClick = pressOf(presses, keyOf({ icon: iconOf(icon), label })) } = given(more);
-  return drawButton(id, label, onClick, c, { ...(ink ? { color: c[ink] } : {}), ...props, tip: tip || null, icon: iconOf(icon), content: drawn(id, c, "content", content) });
+  const key = keyOf({ icon: iconOf(icon), label });
+  const { presses = {}, focuses = {}, onClick = takeOf(presses, key), focusHandle = takeOf(focuses, key) } = given(more);
+  const drawnButton = drawButton(id, label, onClick, c, { ...(ink ? { color: c[ink] } : {}), ...props, tip: tip || null, icon: iconOf(icon), content: drawn(id, c, "content", content) });
+  return focusHandle ? drawnButton.track_focus(focusHandle) : drawnButton;
 });
 
 // Explain to <agent>: the bot icon and the agent named in words; its press starts that agent on the question.
@@ -151,7 +156,7 @@ export const dawn = ({ id = "dawn" } = {}) => still((c) => image(c.dawn.art).abs
 
 // The state patterns and the toast: the one action or fix takes `onClick`.
 const pattern = (draw) => (props) => pressing((id, c, more) => {
-  const { presses = {}, onClick = pressOf(presses, props.fix || props.action) } = given(more);
+  const { presses = {}, onClick = takeOf(presses, props.fix || props.action) } = given(more);
   return draw(id, c, { ...props, onClick });
 });
 export const emptyState = ({ icon = "", text, action = "" }) => pattern(stateEmpty)({ icon: appIcon(icon), text, action });

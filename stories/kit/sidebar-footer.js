@@ -9,6 +9,8 @@ const settings = (collapsed, menu) => {
   const own = collapsed ? icon('Settings', 'lu-settings') : row({ icon: 'lu-settings', name: 'Settings' });
   return menu ? stack({ variant: 'footer settings' }, own, stack({ variant: 'footer menu' }, menu)) : own;
 };
+// Its rows, open or in the rail: the update's while one is offered, then Settings'. Herdr fits the footer's height to them.
+export const footerRows = ({ update = null } = {}) => (update ? 2 : 1);
 // `update`: the row's words. Proposed: `busy`, the update runs, so its row is quiet; `refused`, the failure block's words when it did not update,
 // under its row with Update to try again; `collapsed`, the rail's column, where neither words nor the refusal fit.
 export const sidebarFooter = ({ update = null, busy = false, refused = null, menu = null, collapsed = false } = {}) => collapsed

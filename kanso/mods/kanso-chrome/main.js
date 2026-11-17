@@ -35,6 +35,8 @@ export default class WorkspaceChrome extends View {
     if (!props()?.footer) return;
     this.armed = new Armed();
     this.menuOpen = false;
+    // Settings' own focus handle: shut it is a row or a Button, open the menu's trigger, so Escape gives the keyboard back to it.
+    this.settingsFocus = cx.focus_handle();
     this.updater = new Updater();
     this.updater.start(cx, { polls: false });
     // Command names stay kanso-tabs.* for keys bound to them before.
@@ -115,7 +117,7 @@ export default class WorkspaceChrome extends View {
     // and Settings while its menu is shut (open, Herdr's popover owns the next press).
     const presses = { ...(update ? { "refresh-cw": install } : {}), ...(refused && !collapsed ? { [refused.fix]: install } : {}), ...(menu ? {} : { settings: (cx) => this.setMenu(true, cx) }) };
     return sidebarFooter({ update: update && updateLabel(update, busy), busy, refused, menu, collapsed })(
-      "footer", tokens(theme()), { presses, onOpen: (open, cx) => this.setMenu(open, cx) });
+      "footer", tokens(theme()), { presses, focuses: { settings: this.settingsFocus }, onOpen: (open, cx) => this.setMenu(open, cx) });
   }
 
   render() {

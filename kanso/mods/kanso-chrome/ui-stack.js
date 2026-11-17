@@ -5,10 +5,11 @@ import { div } from "gpui-kit";
 import { G, H, R, LINE, SIDEBAR, DIALOG, TINT, CLEAR, alpha } from "./ui.js";
 import { dot } from "./ui-dot.js";
 
-// Each child piece drawn with its own id and its stack's handlers; a piece that draws nothing leaves no gap. `context` says where it sits.
-const drawn = (id, c, kids, more = {}, context = {}) => kids
-  .map((kid, i) => (typeof kid === "function" ? kid(`${id}-${i}`, c, more, context) : kid)).filter(Boolean);
-const placed = (el, id, c, kids, more, context) => el.children(drawn(id, c, kids, more, context));
+// Each child piece drawn with its own id and its stack's handlers; a piece that draws nothing leaves no gap. `context` says where it sits;
+// `slots` names each place, else its index.
+const drawn = (id, c, kids, more = {}, context = {}, slots = []) => kids
+  .map((kid, i) => (typeof kid === "function" ? kid(`${id}-${slots[i] ?? i}`, c, more, context) : kid)).filter(Boolean);
+const placed = (el, id, c, kids, more, context, slots) => el.children(drawn(id, c, kids, more, context, slots));
 
 // A Button whose menu, open, hangs beside it (`anchor`): a press on the Button opens it; once open, Herdr's popover shuts it
 // on a press, outside it or on Escape. `onOpen(open, cx)` says which. Without `onOpen` the pieces are only placed.
@@ -63,6 +64,13 @@ const dialogList = (id, c, { scroll = false }, kids) => {
     .when(scroll, (el) => el.h(Math.min(rows.length * (H.line + G.hair) - G.hair, DIALOG.list)).mx(-G.sm).px(G.sm).overflow_y_scrollbar());
 };
 
+// The footer's room, which Herdr's footer height is fitted to: open, its rows touch between 8 above and 16 below, a refused update's block
+// a hair under its row and 8 above the next; in the rail, its icon Buttons a hair apart above 12.
+export const FOOTER = Object.freeze({ top: G.sm, bottom: G.lg, railBottom: G.md, railGap: G.hair, refusalAbove: G.hair, refusalBelow: G.sm });
+// The Footer composition's pieces by name: kansō's update, its refusal (only under it), then Settings, always last.
+// Each is drawn under its name, so Settings keeps its id as the rows above it come and go.
+const footerSlots = (kids) => (kids.length === 3 ? ["update", "refused", "settings"] : ["update", "settings"].slice(-kids.length));
+
 const STACKS = {
   toolbar: { states: ["column"], draw: toolbar },
   "toolbar add": { draw: (id, c, _flags, kids, more, _wire, context) => placed(h_flex().flex_none(), id, c, kids, more, context) },
@@ -78,13 +86,15 @@ const STACKS = {
   "view menu": { draw: (id, c, _flags, kids, more) => div().pl(G.xs).children(drawn(id, c, kids, more)) },
   // Proposed: the collapsed view button carrying the dot while someone needs you, a hairline in from its corner.
   "view button": { draw: (id, c, _flags, [button], more) => button(id, c, more).relative().child(dot(c, "blocked").absolute().top(LINE).right(LINE)) },
-  // Open, the footer's rows touch, 8 above and 16 below; in the rail, its icon Buttons a hair apart above 12. Both sit at the block's foot.
-  footer: { draw: (id, c, _flags, kids, more) => placed(v_flex().id(id).size_full().justify_end().bg(c.chrome).pt(G.sm).px(G.sm).pb(G.lg), id, c, kids, more) },
-  "rail footer": { draw: (id, c, _flags, kids, more) => placed(v_flex().id(id).size_full().justify_end().items_center().bg(c.chrome).pt(G.sm).pb(G.md).gap(G.hair), id, c, kids, more) },
-  // Proposed: Settings and its menu, which opens over it; a refused update's block, a hair under its row and 8 above the next.
+  // Both sit at the block's foot.
+  footer: { draw: (id, c, _flags, kids, more) => placed(v_flex().id(id).size_full().justify_end().bg(c.chrome).pt(FOOTER.top).px(G.sm).pb(FOOTER.bottom),
+    id, c, kids, more, {}, footerSlots(kids)) },
+  "rail footer": { draw: (id, c, _flags, kids, more) => placed(v_flex().id(id).size_full().justify_end().items_center().bg(c.chrome).pt(FOOTER.top).pb(FOOTER.railBottom)
+    .gap(FOOTER.railGap), id, c, kids, more, {}, footerSlots(kids)) },
+  // Proposed: Settings and its menu, which opens over it; a refused update's block in the footer's room.
   "footer settings": { draw: withMenu(() => "bottom_left", () => div()) },
   "footer menu": { draw: (id, c, _flags, kids, more, _wire, context) => placed(div(), id, c, kids, more, context) },
-  "footer refusal": { draw: (id, c, _flags, kids, more) => placed(div().mt(G.hair).mb(G.sm), id, c, kids, more) },
+  "footer refusal": { draw: (id, c, _flags, kids, more) => placed(div().mt(FOOTER.refusalAbove).mb(FOOTER.refusalBelow), id, c, kids, more) },
   "dialog list": { states: ["scroll"], draw: dialogList },
 };
 

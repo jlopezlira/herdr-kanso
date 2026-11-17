@@ -17,7 +17,7 @@ export const loadWorkspaceChrome = (host) => load("kanso-chrome/main.js", ["Work
 export const mountChrome = async (host) => {
   const { WorkspaceChrome } = await loadWorkspaceChrome(host);
   const view = new WorkspaceChrome();
-  view.init({}, { spawn() {}, timer: { after() {}, every() {} } });
+  view.init({}, { focus_handle: () => ({ focus() {} }), spawn() {}, timer: { after() {}, every() {} } });
   return view;
 };
 export const loadFront = (host) => load("kanso-panel/front.js", ["Front"], host);

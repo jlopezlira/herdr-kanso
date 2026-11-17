@@ -83,6 +83,9 @@ test("A press named for no drawn target throws, as `on` does for a tool: renamin
   assert.throws(() => refused("Try again")("f", c, { presses: { "refresh-cw": install, Update: install } }), /kit: f has no tool Update/);
   assert.throws(() => toolbar({ column: true })("t", c, { presses: { plus: install, search: install } }), /kit: t has no tool search/,
     "collapsed with the caret shut, Search is not drawn");
+  const handle = {};
+  assert.ok(sidebarFooter({ collapsed: true })("f", c, { focuses: { settings: handle } }), "a handle finds its target by the same name");
+  assert.throws(() => sidebarFooter()("f", c, { focuses: { gear: handle } }), /kit: f has no tool gear/, "and a handle named for no target throws too");
 });
 
 test("Every Header state in the Storybook draws in the app: the lights' row, Dawn Mode's sky and pill, the Toolbar 40 tall", async () => {

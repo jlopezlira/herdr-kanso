@@ -123,7 +123,7 @@ test("Keyboard first: Tab reaches each footer target, a kit Button with the focu
   for (const collapsed of [false, true]) {
     const { view, installs, H } = await footer({ shared: { "sidebar.collapsed": collapsed }, updater: { available: () => "3.31.0" } });
     const drawn = view.render();
-    const update = collapsed ? byId(drawn, "footer-0") : holding(drawn, "Update kansō to 3.31.0");
+    const update = collapsed ? byId(drawn, "footer-update") : holding(drawn, "Update kansō to 3.31.0");
     const settings = all(drawn).find((x) => calls(x, "on_click").length && arg(x, "tooltip") === "Settings") ?? holding(drawn, "Settings");
     for (const el of [update, settings]) {
       assert.ok(/^footer-/.test(el.tag), `${el.tag} is a Button: Tab reaches it, Enter and Space press it`);
@@ -136,5 +136,36 @@ test("Keyboard first: Tab reaches each footer target, a kit Button with the focu
       assert.deepEqual(texts(drawn), [], "no names, no refusal block in the rail");
       assert.deepEqual([update, settings].map((el) => [arg(el, "w"), arg(el, "tooltip")]), [[H.line, "Update kansō to 3.31.0"], [H.line, "Settings"]]);
     }
+  }
+});
+
+// Herdr's window, as far as focus goes: a Button tracks the handle it is given, or one keyed by its id that lives only while a Button
+// with that id is drawn frame after frame (a Popover's state is its own); the Popover keeps the handle focused as it opens and focuses it again as it shuts.
+const herdrWindow = () => {
+  let keyed = new Map();
+  const handle = (el) => arg(el, "track_focus") ?? keyed.get(el.tag);
+  return {
+    handle,
+    frame(drawn) {
+      keyed = new Map(all(drawn).filter((x) => /^footer-/.test(x.tag) && !calls(x, "trigger").length).map((x) => [x.tag, keyed.get(x.tag) ?? { id: x.tag }]));
+      return drawn;
+    },
+  };
+};
+
+test("Escape gives the keyboard back to Settings, open and in the rail, so Tab goes on from it", async () => {
+  for (const collapsed of [false, true]) {
+    const { view } = await footer({ shared: { "sidebar.collapsed": collapsed }, updater: { available: () => "3.31.0" } });
+    const herdr = herdrWindow();
+    const settings = (drawn) => all(drawn).find((x) => calls(x, "on_click").length && arg(x, "tooltip") === "Settings") ?? holding(drawn, "Settings");
+    const shut = herdr.frame(view.render());
+    assert.equal(settings(shut).tag, "footer-settings", "Settings keeps its name with the update's row above it");
+    const focused = herdr.handle(settings(shut));
+    press(settings(shut));
+    const open = herdr.frame(view.render());
+    arg(popover(open), "on_open_change")(false, cx());
+    const back = herdr.frame(view.render());
+    assert.equal(view.menuOpen, false);
+    assert.equal(herdr.handle(settings(back)), focused, `${collapsed ? "in the rail" : "open"}, the handle Escape focuses is Settings' own`);
   }
 });
