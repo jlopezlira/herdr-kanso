@@ -139,9 +139,11 @@ for (const platform of ["macos", "linux", "windows"]) {
   });
 }
 
+// A runner that answers by the PowerShell script it is given.
+const scriptStub = (answer) => stub((_program, args) => answer(args.at(-1)));
+
 test("Windows session recovery verifies process identity before claiming an existing conversation", async () => {
-  const r = stub((_program, args) => {
-    const script = args.at(-1);
+  const r = scriptStub((script) => {
     if (script.includes("Get-CimInstance")) return JSON.stringify([{ pid: 42, name: "claude.exe", created: "2026-11-10T00:00:00Z" }]);
     if (script.includes("Get-ChildItem")) return '[{"name":"42.json","dir":false}]';
     if (script.includes("UTF8.GetString")) return '{"sessionId":"session","procStart":"2026-11-10T00:00:00Z"}';
@@ -184,8 +186,7 @@ test("one look reads home, liveness and the session, and Windows does not use sh
 });
 
 test("Windows Markdown waiting records survive inspection errors and remove only departed owners", async () => {
-  const r = stub((_program, args) => {
-    const script = args.at(-1);
+  const r = scriptStub((script) => {
     if (script.includes("Get-ChildItem")) return '[{"name":"42.path","dir":false},{"name":"43.path","dir":false}]';
     if (script.includes("Get-CimInstance")) return '[{"pid":42}]';
     if (script.includes("UTF8.GetString")) return "C:\\Users\\me\\note.md";

@@ -16,7 +16,7 @@ const exists = (p) => stat(p).then(() => true, () => false);
 const drawnImages = async () => {
   const { singleUse } = await import("./helpers.mjs");
   const ui = singleUse(), images = [];
-  return { ui, images, image: (path) => { images.push(path); return ui.div(); } };
+  return { ui, images, image: (path) => { images.push(path); return ui.div(); }, ...await pets() };
 };
 
 test("a pet.json with only its id takes the Codex Pets atlas: nine rows, their frames, 192 x 208 cells", async () => {
@@ -106,8 +106,7 @@ test("the agents' pets are brought into Kanso's folder, never Codex's; one missi
 });
 
 test("the dōjō draws its pet at each reaction, and the chooser with every pet", async () => {
-  const { ui, images, image } = await drawnImages();
-  const { petOf } = await pets();
+  const { ui, images, image, petOf } = await drawnImages();
   const { Dojo } = await load("kanso-dojo/main.js", ["Dojo"], {
     ...ui, image, exec, appHome: () => "/app", home: () => "/home", settings: () => ({}),
     theme: () => ({ foreground: "#fff", accent: "#f80", dim: "#666", muted: "#888", border: "#333", ansi1: "#f00" }),
@@ -154,8 +153,7 @@ test("the dōjō draws its pet at each reaction, and the chooser with every pet"
 });
 
 test("kansō help's dōjō page shows your pet, and every pet to choose from there", async () => {
-  const { ui, images, image } = await drawnImages();
-  const { petOf } = await pets();
+  const { ui, images, image, petOf } = await drawnImages();
   const { Help } = await loadHelp({
     ...ui, image, exec, appHome: () => "/app", home: () => "/home", keys: () => ({}), run: () => {}, openOverlay: () => {},
     theme: () => ({ foreground: "#fff", accent: "#f80", dim: "#666", muted: "#888", border: "#333" }),

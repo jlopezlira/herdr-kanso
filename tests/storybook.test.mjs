@@ -1,9 +1,9 @@
 // Check the Storybook's structure, tokens, public copy, names and icons.
 import assert from "node:assert/strict";
-import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { cpSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import test from "node:test";
+import { inTemporaryDir } from "./helpers.mjs";
 import { expand } from "../scripts/storybook-catalog.mjs";
 import { compositionErrors, lint, storyFiles, structureErrors } from "../scripts/lint-storybook.mjs";
 import { statusOf, statusTags } from "../stories/kit/status.js";
@@ -30,8 +30,7 @@ test("A composition that draws its own markup fails the lint", () => {
   assert.deepEqual(added("export const extra = () => stack({ variant: 'rows' }).replace('div', '<div>');"), ["stories/kit/compositions.js: markup tag in a composition"]);
   assert.deepEqual(added("export const extra = () => stack({ variant: 'rows' }).replace('div', 'div class=x');"), ["stories/kit/compositions.js: class attribute in a composition"]);
   assert.deepEqual(added("export const extra = () => 'kanso-row';"), ["stories/kit/compositions.js: class string in a composition"]);
-  const root = mkdtempSync(join(tmpdir(), "kanso-lint-"));
-  try {
+  inTemporaryDir("kanso-lint-", (root) => {
     for (const dir of ["stories", ".storybook"]) cpSync(dir, join(root, dir), { recursive: true });
     writeFileSync(join(root, "stories/kit/compositions.js"), `${source}export const extra = () => '<span class="kanso-row">';\n`);
     assert.deepEqual(lint(root).filter((error) => error.startsWith("stories/kit/compositions.js")), [
@@ -39,9 +38,7 @@ test("A composition that draws its own markup fails the lint", () => {
       "stories/kit/compositions.js: class attribute in a composition",
       "stories/kit/compositions.js: class string in a composition",
     ]);
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
+  });
 });
 
 test("A composition that treats pieces as strings fails the lint", () => {

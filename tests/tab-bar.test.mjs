@@ -29,6 +29,12 @@ async function bar({ tabs = TABS, machine = null, computers = [], panes = [], fa
   return { view, cx, ran, toasts, opened, space, c: tokens(night), W, PENDING };
 }
 
+// A bar whose three tabs are measured at 100 wide.
+const measuredBar = async () => {
+  const b = await bar();
+  for (const id of ["t1", "t2", "t3"]) b.view.tabW[id] = 100;
+  return b;
+};
 const byTag = (root, id) => find(root, (el) => el.tag === id || calls(el, "id").some((call) => call[1] === id));
 const handler = (el, name) => calls(el, name).at(-1)?.at(-1);
 const pressOf = (el, button) => calls(el, "on_mouse_down").find((call) => call[1] === button)?.at(-1);
@@ -179,8 +185,7 @@ test("Escape restores the name, and a refused rename gives the old name back wit
 });
 
 test("Tabs that do not fit fold behind +N, a Menu of them with their marks; + and Arrange never fold", async () => {
-  const b = await bar();
-  for (const id of ["t1", "t2", "t3"]) b.view.tabW[id] = 100;
+  const b = await measuredBar();
   b.view.barW.area = 100 + 2 * (26 + 8) + 40;
   b.view.moreOpen = true;
   const root = b.view.render(b.cx);
@@ -244,8 +249,7 @@ test("On an unreachable computer the x is drawn but a press closes nothing", asy
 });
 
 test("Folded tabs, +N with its gap, new tab and Arrange fit the bar's width", async () => {
-  const b = await bar();
-  for (const id of ["t1", "t2", "t3"]) b.view.tabW[id] = 100;
+  const b = await measuredBar();
   b.view.barW.more = 30;
   const tools = 2 * (26 + 8);
   for (const area of [306, 308, 340, 420]) {

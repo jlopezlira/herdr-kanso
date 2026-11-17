@@ -4,10 +4,9 @@ import assert from "node:assert/strict";
 import { load, chain, gpuiHost, numberArguments, calls, one, drawingHost, themed } from "./helpers.mjs";
 import { marks, markSizes } from "../stories/kit/pieces.js";
 
-const host = drawingHost;
 const kit = async () => themed({
-  ...await load("kanso-panel/ui.js", ["tokens", "ICON", "ICON_ROW", "ICON_INLINE", "SPIN"], host()),
-  ...await load("kanso-panel/ui-mark.js", ["mark", "MARK_SIZES"], host()),
+  ...await load("kanso-panel/ui.js", ["tokens", "ICON", "ICON_ROW", "ICON_INLINE", "SPIN"], drawingHost()),
+  ...await load("kanso-panel/ui-mark.js", ["mark", "MARK_SIZES"], drawingHost()),
 }, night);
 
 const night = { foreground: "#d8d4cb", background: "#1b1b19", chrome: "#161615", working: "#c4b07e", blocked: "#ca938b", done: "#98ad8f", idle: "#a3a09a", dim: "#6b6862", muted: "#949086" };

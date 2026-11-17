@@ -16,7 +16,7 @@ export function recorder() {
       handlers[`${prop}:${id}`] = args.at(-1);
       if (args.length > 1) handlers[`${prop}:${args[0]}:${id}`] = args.at(-1);
     };
-    const record = {
+    const onCall = {
       id: (value) => { id = value; ids.push(value); },
       child: strings(texts),
       tooltip: strings(tips),
@@ -27,7 +27,7 @@ export function recorder() {
       get(_target, prop) {
         if (prop === "then") return undefined;
         if (prop === "when") return (cond, fn) => (cond ? fn(proxy) : proxy);
-        if (Object.hasOwn(record, prop)) return (...args) => { record[prop](...args); return proxy; };
+        if (Object.hasOwn(onCall, prop)) return (...args) => { onCall[prop](...args); return proxy; };
         if (String(prop).startsWith("on_")) return (...args) => { keep(prop, args); return proxy; };
         return () => proxy;
       },

@@ -113,6 +113,10 @@ async function header({ pane: over = {}, space: room = {}, store: kept = {}, com
   return { view, cx, ran, labels, store, c: tokens(night), mix, OPACITY };
 }
 
+const drawnHeader = async () => {
+  const head = await header();
+  return { head, root: head.view.render() };
+};
 const byTag = (root, tag) => find(root, (el) => el.tag === tag);
 const handler = (el, name) => calls(el, name).at(-1)?.at(-1);
 // ⋯'s Menu is the Popover's content, not a child.
@@ -156,8 +160,7 @@ test("Pinned is a pin after the name, and the header itself is the handle: no gr
 });
 
 test("A press released outside the header never picks the pane up when the pointer comes back", async () => {
-  const head = await header();
-  const root = head.view.render();
+  const { head, root } = await drawnHeader();
   const move = (x) => handler(root, "on_mouse_move")({ position: { x, y: 10 }, local_position: { x, y: 10 }, bounds: { width: 400 } });
   handler(root, "on_hover")(true, head.cx);
   handler(root, "on_mouse_down")({ click_count: 1, position: { x: 10, y: 10 }, modifiers: {} }, head.cx);
@@ -218,8 +221,7 @@ test("GitHub not answering is the failure line with Refresh, and the refresh in 
 });
 
 test("Double-click renames in place, and Enter keeps the new name as the terminal's label", async () => {
-  const head = await header();
-  const root = head.view.render();
+  const { head, root } = await drawnHeader();
   handler(root, "on_mouse_down")({ click_count: 2, position: { x: 0, y: 0 }, modifiers: {} }, head.cx);
   assert.ok(head.view.renaming, "the name is a field in the header");
   head.view.endRename({ terminal: "t1" }, "Claude Code", head.cx, true);

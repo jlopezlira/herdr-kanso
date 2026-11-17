@@ -5,11 +5,10 @@ import assert from "node:assert/strict";
 import { load, chain, gpuiHost, numberArguments, calls, one, styled, themed, KIT_NIGHT, drawingHost } from "./helpers.mjs";
 import { marks, rowDepths } from "../stories/kit/pieces.js";
 
-const host = drawingHost;
 const kit = async () => themed({
-  ...await load("kanso-panel/ui.js", ["tokens", "G", "H", "R", "T", "ICON_ROW", "ICON_INLINE", "CLEAR"], host()),
-  ...await loadPendingState(host()),
-  ...await loadRow(host()),
+  ...await load("kanso-panel/ui.js", ["tokens", "G", "H", "R", "T", "ICON_ROW", "ICON_INLINE", "CLEAR"], drawingHost()),
+  ...await loadPendingState(drawingHost()),
+  ...await loadRow(drawingHost()),
 }, night);
 
 const all = (el) => [el, ...el.kids.flatMap(all)];
@@ -196,7 +195,7 @@ test("The title form is the panel's title line: 40 high, the title size, semibol
 
 test("A tone colours the lead icon, and the drawn start comes before it", async () => {
   const { row, tokens, ICON_ROW } = await kit();
-  const { toneColor } = await load("kanso-panel/ui.js", ["toneColor"], host());
+  const { toneColor } = await load("kanso-panel/ui.js", ["toneColor"], drawingHost());
   const c = tokens(night);
   const grip = chain("grip");
   const el = row("r", c, { icon: "circle-alert", tone: "blocked", name: "Build failed", start: [grip] });

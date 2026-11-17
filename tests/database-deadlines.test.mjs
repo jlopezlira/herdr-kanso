@@ -25,12 +25,17 @@ for (const file of ["kanso-arrange/store.js", "kanso-dojo/store.js", "kanso-help
     const failed = assert.rejects(pending, /did not answer/);
     await drain();
     assert.ok(timer.waits.every((wait) => wait.ms > BUSY_MS));
-    timer.waits.at(-1).fn();
-    await failed;
+    await expire(timer, failed);
     lost = false;
     await db.sql("SELECT 2;");
   });
 }
+
+// The last call's deadline passes, and its failure is in.
+const expire = async (timer, failed) => {
+  timer.waits.at(-1).fn();
+  await failed;
+};
 
 test("the left nav Store requires an injected bounded database", async () => {
   const { Store } = await loadStore({ appHome: () => "/test" });
@@ -50,8 +55,7 @@ test("a fake execute that loses the first batch does not block the next read", a
   const failed = assert.rejects(lost, /did not answer/);
   await drain();
   assert.equal(timer.waits.at(-1).ms, sqliteLimit(["SELECT 1 AS n;", ".print marker:0"]) + BUSY_MS);
-  timer.waits.at(-1).fn();
-  await failed;
+  await expire(timer, failed);
   assert.deepEqual(clone(await db.read("SELECT 2 AS n;")), [{ n: 2 }]);
 });
 
@@ -96,8 +100,7 @@ test("a failed store open clears its readiness so a later open can recover", asy
     const opening = store.open();
     const failed = assert.rejects(opening, /did not answer/);
     await drain();
-    timer.waits.at(-1).fn();
-    await failed;
+    await expire(timer, failed);
     lost = false;
     await store.open();
   }

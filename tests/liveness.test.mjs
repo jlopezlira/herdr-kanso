@@ -64,11 +64,12 @@ const idleOnlyT1 = async () => {
   opened.v.threads = { t1: opened.v.threads.t1 };
   return opened;
 };
-// The hung table answers late, after 202 ended.
-const lateAnswer = async (h) => {
+// The hung table answers late, after 202 ended, and changes nothing.
+const lateAnswerIgnored = async (h, v) => {
   h.live.delete(202);
   h.hung[0]();
   await new Promise((r) => setImmediate(r));
+  assert.deepEqual([...v.alive], [101, 202]);
 };
 
 test("one full process table serves tasks and liveness every ten seconds in front", async () => {
@@ -191,16 +192,14 @@ test("a hung table is abandoned and a late answer cannot replace a newer table",
   const { h, v } = await sidebar({ plan: (n) => n === 0 ? "hang" : null });
   await h.run(10000);
   assert.deepEqual(h.ps.map((x) => x.at), [0, 10000]);
-  await lateAnswer(h);
-  assert.deepEqual([...v.alive], [101, 202]);
+  await lateAnswerIgnored(h, v);
 });
 
 test("a late background table is dropped even before its replacement starts", async () => {
   const { h, v } = await sidebar({ active: false, plan: (n) => n === 1 ? "hang" : null });
   await h.run(39500);
   assert.deepEqual(h.ps.map((x) => x.at), [0, 30000]);
-  await lateAnswer(h);
-  assert.deepEqual([...v.alive], [101, 202]);
+  await lateAnswerIgnored(h, v);
   await h.run(60000);
   assert.deepEqual([...v.alive], [101]);
 });

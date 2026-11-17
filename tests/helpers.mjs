@@ -1,7 +1,7 @@
 // Shared by the tests: load a mod's real source into a fake Herdr host.
 import { execFile, execFileSync } from "node:child_process";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { access, mkdir, mkdtemp, readFile, readdir, rename, rmdir, rm, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
@@ -388,3 +388,12 @@ export async function jsFiles(dir) {
   const nested = await Promise.all(entries.map((e) => (e.isDirectory() ? jsFiles(join(dir, e.name)) : Promise.resolve(e.name.endsWith(".js") ? [join(dir, e.name)] : []))));
   return nested.flat();
 }
+// Runs `use` in a new temporary folder, removed after, whatever happens.
+export const inTemporaryDir = (prefix, use) => {
+  const root = mkdtempSync(join(tmpdir(), prefix));
+  try {
+    return use(root);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+};
