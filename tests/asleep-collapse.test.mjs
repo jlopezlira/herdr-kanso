@@ -1,11 +1,10 @@
 // A project or tab that is asleep is one quiet row until a click; waking it opens the usual group.
-import { drawEachTime, loadSidebar, mountedState, recorder } from "./sidebar-fixtures.mjs";
+import { drawEachTime, loadSidebar, mountedState, recorder, shell } from "./sidebar-fixtures.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { load, clone } from "./helpers.mjs";
 
 // Asleep is Herdr's state: a settled tab, and terminals at their prompt that keep a conversation.
-const shell = (address, resume, name) => ({ address, state: "live", program: { shell: true }, labels: { "kanso.resume": resume, "kanso.name": name } });
 const fury = (tabs) => [{ id: "sp1", name: "fury", folder: "/Users/me/fury", machine: null, active: false, tabs }];
 const asleepTab = { id: "tb", name: "Notes", index: 0, settled: true, settled_at: 1 };
 const sleepers = [{ pane: "p1", tab: "tb", terminal: "t1", cwd: "/Users/me/fury" }, { pane: "p2", tab: "tb", terminal: "t2", cwd: "/Users/me/fury" }];

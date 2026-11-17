@@ -3,7 +3,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { load, chain, gpuiHost, clone } from "./helpers.mjs";
-import { loadSidebar, mountedState } from "./sidebar-fixtures.mjs";
+import { loadSidebar, mountedState, shell } from "./sidebar-fixtures.mjs";
 
 // The drawn tree, each element with its calls and children, so where it sits can be measured.
 const host = () => ({ ...gpuiHost(), svg: (path) => { const el = chain("svg"); el.calls.push(["svg", path]); return el; }, Popover: { new: (id) => chain(id) } });
@@ -15,7 +15,6 @@ const SPACES = [
   { id: "sp2", name: "shield", folder: "/Users/me/shield", machine: null, active: false, tabs: [{ id: "tb2", name: "Main", index: 0 }] },
   { id: "sp3", name: "ops", folder: "/srv/ops", machine: "dark", active: false, tabs: [{ id: "tb3", name: "Main", index: 0 }] },
 ];
-const shell = (address, resume, name) => ({ address, state: "live", program: { shell: true }, labels: { "kanso.resume": resume, "kanso.name": name } });
 const AGENTS = [
   { address: "t0", pane: "p0", tab: "tb0", space: "sp1", space_name: "fury", status: "working", name: "Atlas", seq: 1 },
   { address: "t9", pane: "p9", tab: "tb0", space: "sp1", space_name: "fury", status: "idle", name: "Juno", seq: 2 },
