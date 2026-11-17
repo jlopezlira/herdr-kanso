@@ -221,7 +221,7 @@ export default class TokenSpend extends View {
   run(command, cx, extra = null) {
     if (this.closed || !this.nodeBinary) return;
     if (this.running) {
-      if (command === "configure") this.queuedSources = extra;
+      if (command === "configure") this.queuedSources = { ...(this.queuedSources ?? {}), ...(extra ?? {}) };
       this.queued = { ...this.queued, [command === "configure" ? "snapshot" : command]: true };
       return;
     }
