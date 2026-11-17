@@ -117,8 +117,7 @@ test("Hidden ancestors stop the panel even when its own node is shown", () => {
 });
 
 test("PNG and JPEG headers give the device's actual picture proportions", () => {
-  const png = new Uint8Array(24); png.set([137, 80, 78, 71]); png.set([0, 0, 4, 56, 0, 0, 9, 96], 16);
-  assert.deepEqual(model.pictureSize(png), { width: 1080, height: 2400 });
+  assert.deepEqual(model.pictureSize(phonePng()), { width: 1080, height: 2400 });
   const jpeg = new Uint8Array([255, 216, 255, 224, 0, 4, 0, 0, 255, 192, 0, 17, 8, 9, 96, 4, 56, 3, 0, 0]);
   assert.deepEqual(model.pictureSize(jpeg), { width: 1080, height: 2400 });
   assert.equal(model.pictureSize(new Uint8Array([1, 2, 3])), null);
@@ -162,8 +161,7 @@ test("Simulator availability is simctl or adb on this computer", async () => {
 
 test("Tab availability probes once per panel-list rebuild and a deadline ignores late answers", async () => {
   const store = {}, commands = [], timers = [], pending = [];
-  let settle;
-  const answer = new Promise((resolve) => { settle = resolve; });
+  const { promise: answer, resolve: settle } = Promise.withResolvers();
   const { Tabs } = await loadTabs({
     shared: (key) => store[key], setShared: (key, value) => { store[key] = value; }, home: () => "/home/me",
     window: () => ({ platform: "macos" }), exists: async (path) => path === SIMCTL,
@@ -259,12 +257,11 @@ test("Emulator startup detaches the SDK's process on every platform", async () =
 
 test("The device service reads emulator names without sending emulator commands to phones", async () => {
   const commands = [];
-  const run = async (cmd, args) => {
-    commands.push([cmd, args]);
+  const run = recorded(commands, (cmd, args) => {
     if (cmd === "emulator") return good("Pixel\nTablet\n");
     if (args[0] === "devices") return good("List of devices attached\nemulator-5554 device\nusb device\n");
     return good("Pixel\nOK\n");
-  };
+  });
   const { readDevices } = await load("kanso-sim/devices.js", ["readDevices"]);
   const devices = await readDevices(run, { adb: "adb", emulator: "emulator" });
   assert.equal(devices.length, 3);
@@ -275,10 +272,27 @@ test("The device service reads emulator names without sending emulator commands 
   assert.equal(commands.length, 0);
 });
 
+// A screenshot header: a 1080 by 2400 PNG.
+const phonePng = () => {
+  const png = new Uint8Array(24);
+  png.set([137, 80, 78, 71]);
+  png.set([0, 0, 4, 56, 0, 0, 9, 96], 16);
+  return png;
+};
+// A command runner that keeps each command in `commands` before `answer` answers it.
+const recorded = (commands, answer) => async (cmd, args) => {
+  commands.push([cmd, args]);
+  return answer(cmd, args);
+};
+const tapedFixture = async () => {
+  const screen = tape();
+  return { screen, f: await viewFixture({ ui: screen.host }) };
+};
+
 async function viewFixture({ active = true, hidden = false, capture, deviceRead, ui = singleUse() } = {}) {
   let now = 100000;
   const timers = [], pending = [], commands = [], removed = [], files = new Set(["avd%3APixel-old.png"]);
-  const png = new Uint8Array(24); png.set([137, 80, 78, 71]); png.set([0, 0, 4, 56, 0, 0, 9, 96], 16);
+  const png = phonePng();
   const state = { active, hidden };
   const store = { "kanso.sim.tools": { adb: "adb", emulator: "emulator" } };
   const cx = {
@@ -286,15 +300,14 @@ async function viewFixture({ active = true, hidden = false, capture, deviceRead,
     timer: { after(ms, fn) { const task = { ms, fn, cancelled: false, cancel() { this.cancelled = true; } }; timers.push(task); return task; } },
     spawn(fn) { const task = fn(cx); pending.push(task); return { cancel() {} }; },
   };
-  const run = async (cmd, args) => {
-    commands.push([cmd, args]);
+  const run = recorded(commands, (cmd, args) => {
     if (args.includes("size")) return good("Physical size: 1080x2400");
     if (cmd === "sh") return capture ? capture() : good();
     if (args[0] === "devices") return deviceRead ? deviceRead() : good("emulator-5554 device\n");
     if (args.includes("name")) return good("Pixel\nOK\n");
     if (cmd === "emulator") return good("Pixel\n");
     return good();
-  };
+  });
   const { Simulator } = await loadSimulator({
     ...ui, Input: ui.Input ?? { new: ui.div }, image: ui.div, exec: run, home: () => "/home/me", appHome: () => "/app", theme: () => ({}), spaces: () => [],
     window: () => ({ platform: "linux", active: state.active }), layout: () => ({ id: "panel", hidden: state.hidden, children: [{ id: "sim" }] }),
@@ -387,8 +400,7 @@ test("Keyboard batches and emulator rotation use only the selected Android devic
 });
 
 test("iOS controls act through simctl and expose touch only in Apple's Simulator", async () => {
-  const screen = tape();
-  const f = await viewFixture({ ui: screen.host });
+  const { screen, f } = await tapedFixture();
   f.view.tools = { ios: SIMCTL };
   f.view.devices = ios; f.view.selected = ios[0].id;
   f.view.controls(ios[0], {});
@@ -406,8 +418,7 @@ test("iOS controls act through simctl and expose touch only in Apple's Simulator
 });
 
 test("A missed action answer releases its button and does not accept a late failure", async () => {
-  let settle;
-  const action = new Promise((_resolve, reject) => { settle = reject; });
+  const { promise: action, reject: settle } = Promise.withResolvers();
   const f = await viewFixture();
   f.view.act(() => action, f.cx);
   assert.equal(f.view.acting, true);
@@ -419,8 +430,7 @@ test("A missed action answer releases its button and does not accept a late fail
 });
 
 test("A missed device read releases Refresh and ignores its late list", async () => {
-  let settle;
-  const answer = new Promise((resolve) => { settle = resolve; });
+  const { promise: answer, resolve: settle } = Promise.withResolvers();
   const f = await viewFixture({ deviceRead: () => answer });
   f.view.refresh(f.cx);
   for (let i = 0; i < 5; i += 1) await Promise.resolve();
@@ -434,8 +444,7 @@ test("A missed device read releases Refresh and ignores its late list", async ()
 });
 
 test("Physical Android devices expose keys but no emulator-only control", async () => {
-  const screen = tape();
-  const f = await viewFixture({ ui: screen.host });
+  const { screen, f } = await tapedFixture();
   f.view.controls(phone, {});
   assert.deepEqual([...screen.handlers.keys()], model.CONTROLS.map(([label]) => `sim-${label}`));
 });
