@@ -1,21 +1,20 @@
 // The state mark: every status and size the Storybook draws, from the tokens, and nothing for any other status.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { load, chain, gpuiHost, numberArguments, calls, one } from "./helpers.mjs";
+import { load, chain, gpuiHost, numberArguments, calls, one, drawingHost, themed } from "./helpers.mjs";
 import { marks, markSizes } from "../stories/kit/pieces.js";
 
-const host = () => ({ ...gpuiHost(), svg: (path) => { const el = chain("svg"); el.calls.push(["svg", path]); return el; } });
-const kit = async () => ({
+const host = drawingHost;
+const kit = async () => themed({
   ...await load("kanso-panel/ui.js", ["tokens", "ICON", "ICON_ROW", "ICON_INLINE", "SPIN"], host()),
   ...await load("kanso-panel/ui-mark.js", ["mark", "MARK_SIZES"], host()),
-});
+}, night);
 
 const night = { foreground: "#d8d4cb", background: "#1b1b19", chrome: "#161615", working: "#c4b07e", blocked: "#ca938b", done: "#98ad8f", idle: "#a3a09a", dim: "#6b6862", muted: "#949086" };
 const ICONS = "mods/kanso-chrome/icons/";
 
 test("Each status the Storybook draws has its own ensō art and colour", async () => {
-  const { mark, tokens } = await kit();
-  const c = tokens(night);
+  const { mark, c } = await kit();
   const art = { working: ["working", c.working], done: ["enso", c.done], idle: ["enso-idle", c.idle], asleep: ["moon", c.muted] };
   assert.deepEqual(Object.keys(marks).sort(), [...Object.keys(art), "blocked"].sort());
   for (const [status, [name, color]] of Object.entries(art)) {
@@ -26,8 +25,7 @@ test("Each status the Storybook draws has its own ensō art and colour", async (
 });
 
 test("The working ring turns at the spinner's token pace, and the idle ring is faint", async () => {
-  const { mark, tokens, SPIN } = await kit();
-  const c = tokens(night);
+  const { mark, SPIN, c } = await kit();
   assert.equal(SPIN, 900);
   assert.equal(one(mark(c, { status: "working" }), "spin"), SPIN);
   assert.equal(one(mark(c, { status: "idle" }), "opacity"), 0.7);
@@ -35,8 +33,7 @@ test("The working ring turns at the spinner's token pace, and the idle ring is f
 });
 
 test("A blocked agent is a round dot in the blocked colour with an exclamation mark in the chrome colour", async () => {
-  const { mark, tokens } = await kit();
-  const c = tokens(night);
+  const { mark, c } = await kit();
   const el = mark(c, { status: "blocked" });
   assert.equal(el.tag, "div");
   assert.equal(calls(el, "rounded_full").length, 1);
@@ -47,8 +44,7 @@ test("A blocked agent is a round dot in the blocked colour with an exclamation m
 });
 
 test("Small, medium and large are the inline, row and control icon tokens, and medium is the default", async () => {
-  const { mark, tokens, MARK_SIZES, ICON, ICON_ROW, ICON_INLINE } = await kit();
-  const c = tokens(night);
+  const { mark, MARK_SIZES, ICON, ICON_ROW, ICON_INLINE, c } = await kit();
   assert.deepEqual(Object.keys(MARK_SIZES), Object.keys(markSizes));
   assert.deepEqual({ ...MARK_SIZES }, { sm: ICON_INLINE, md: ICON_ROW, lg: ICON });
   assert.deepEqual([ICON_INLINE, ICON_ROW, ICON], [12, 14, 15]);
@@ -59,8 +55,7 @@ test("Small, medium and large are the inline, row and control icon tokens, and m
 });
 
 test("Any other status draws nothing, so a row without a status keeps no mark", async () => {
-  const { mark, tokens } = await kit();
-  const c = tokens(night);
+  const { mark, c } = await kit();
   for (const status of [null, undefined, "", "none", "unknown", "constructor", "toString"]) assert.equal(mark(c, { status }), null, String(status));
 });
 

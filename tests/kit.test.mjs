@@ -3,19 +3,19 @@ import { loadTokens, loadRow, loadMenu } from "./mod-fixtures.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { load, chain, gpuiHost, nodes, texts, press } from "./helpers.mjs";
+import { load, chain, gpuiHost, nodes, texts, press, themed, KIT_NIGHT, drawingHost } from "./helpers.mjs";
 import { exportedNames } from "../scripts/mod-source.mjs";
 import * as storybookKit from "../stories/kit/kit.js";
 import * as storybookPieces from "../stories/kit/pieces.js";
 
-const host = () => ({ ...gpuiHost(), svg: (path) => { const el = chain("svg"); el.calls.push(["svg", path]); return el; }, image: (path) => { const el = chain("image"); el.calls.push(["image", path]); return el; } });
-const kits = async () => ({
+const host = drawingHost;
+const kits = async () => themed({
   ...await loadTokens(host()),
   ...await loadRow(host()),
   ui: { ...await load("kanso-panel/ui-button.js", ["button"], host()), ...await loadMenu(host()) },
   app: await load("kanso-panel/kit.js", ["row", "button", "menu"], host()),
-});
-const night = { foreground: "#d8d4cb", background: "#1b1b19", hover: "#232321", selected: "#2b2b28", accent: "#da627d", dim: "#6b6862", muted: "#949086", blocked: "#ca938b", working: "#c4b07e", done: "#98ad8f" };
+}, night);
+const night = KIT_NIGHT;
 // A drawing as plain data: handlers compare by kind, since each draw makes new ones.
 const drawn = (el) => ({ tag: el.tag, calls: el.calls.map((call) => call.map((arg) => (typeof arg === "function" ? "handler" : arg?.calls ? "element" : arg))), kids: el.kids.map(drawn) });
 const svgs = (el) => nodes(el).flatMap((kid) => kid.calls.filter((call) => call[0] === "svg").map((call) => call[1]));
@@ -23,15 +23,13 @@ const ids = (el) => nodes(el).flatMap((kid) => kid.calls.filter((call) => call[0
 const tools = [{ icon: "lu-pin", label: "Pin to the top" }, { icon: "lu-ellipsis", label: "More" }];
 
 test("A row from the shared kit draws what the app's row draws with the same props", async () => {
-  const { row, tokens, app } = await kits();
-  const c = tokens(night);
+  const { row, app, c } = await kits();
   const props = { icon: "file", name: "checkout.ts", detail: ["src/api", { icon: "branch", text: "main" }], meta: "4m", mark: "working", depth: 1, current: true, hover: true, chip: 2, actions: [{ icon: "pin", label: "Pin to the top" }] };
   assert.deepEqual(drawn(app.row(props)("r", c)), drawn(row("r", c, props)));
 });
 
 test("A row from the shared kit takes the Storybook's Lucide icon names and draws the app's icons", async () => {
-  const { row, tokens, app } = await kits();
-  const c = tokens(night);
+  const { row, app, c } = await kits();
   const named = (prefix) => ({
     icon: `${prefix}file`, name: "a", flag: `${prefix}pin`, detail: { icon: `${prefix}folder`, text: "src" }, hover: true,
     actions: [{ icon: `${prefix}pin`, label: "Pin" }, { icon: `${prefix}ellipsis`, label: "More" }], action: { kind: "icon", icon: `${prefix}power`, label: "Turn on" },
@@ -57,8 +55,7 @@ test("The app hands a composition's tools their handlers by name, without restat
 });
 
 test("The app gives a shared piece only handlers, each for a tool it has, and a missing one leaves the piece as it is", async () => {
-  const { tokens, app } = await kits();
-  const c = tokens(night);
+  const { app, c } = await kits();
   const atlas = app.row({ name: "Atlas", meta: "4m", hover: true, actions: tools });
   assert.throws(() => atlas("r", c, { meta: "now" }), /only handlers, not meta/);
   assert.throws(() => atlas("r", c, { on: { search: () => {} } }), /r has no tool search/);
@@ -67,8 +64,7 @@ test("The app gives a shared piece only handlers, each for a tool it has, and a 
 });
 
 test("A piece inside a shared row is drawn by that row, with its own id and the same colours", async () => {
-  const { row, tokens, app } = await kits();
-  const c = tokens(night);
+  const { row, app, c } = await kits();
   const el = app.row({ name: "Atlas", start: [app.row({ name: "lead" })], tools: [app.row({ name: "tail" })] })("r", c);
   assert.ok(ids(el).includes("r-start-0") && ids(el).includes("r-tools-0"), ids(el).join(", "));
   const inner = nodes(el).find((kid) => ids(kid)[0] === "r-tools-0");
@@ -76,16 +72,14 @@ test("A piece inside a shared row is drawn by that row, with its own id and the 
 });
 
 test("A shared row takes no piece, one piece or a list of them before its icon and at its end, as the Storybook's row does", async () => {
-  const { row, tokens, app } = await kits();
-  const c = tokens(night);
+  const { row, app, c } = await kits();
   assert.deepEqual(drawn(app.row({ name: "t", title: true, start: null, tools: undefined })("r", c)), drawn(row("r", c, { name: "t", title: true })));
   const single = app.row({ name: "t", start: app.row({ name: "back" }), tools: [[app.row({ name: "a" })], false, app.row({ name: "b" })] })("r", c);
   assert.deepEqual(["r-start-0", "r-tools-0", "r-tools-1"].filter((id) => ids(single).includes(id)), ["r-start-0", "r-tools-0", "r-tools-1"]);
 });
 
 test("A button from the shared kit draws what the app's button draws, its Lucide icon the app's and its press the handler given", async () => {
-  const { tokens, ui, app } = await kits();
-  const c = tokens(night);
+  const { ui, app, c } = await kits();
   const hits = [];
   const onClick = () => hits.push("add");
   const shared = app.button({ label: "Add project", kind: "icon", size: "lg", icon: "lu-plus", active: true })("b", c, { onClick });
@@ -97,15 +91,13 @@ test("A button from the shared kit draws what the app's button draws, its Lucide
 });
 
 test("An app-only prop such as a button's colour passes through the shared kit as the row's do", async () => {
-  const { tokens, ui, app } = await kits();
-  const c = tokens(night);
+  const { ui, app, c } = await kits();
   const props = { kind: "icon", size: "lg", color: c.dim };
   assert.deepEqual(drawn(app.button({ label: "Sort", icon: "lu-arrow-up-down", ...props })("s", c)), drawn(ui.button("s", "Sort", null, c, { icon: "arrow-up-down", ...props })));
 });
 
 test("A menu from the shared kit draws what the app's menu draws, its items' Lucide icons the app's and each item its own press", async () => {
-  const { tokens, ui, app } = await kits();
-  const c = tokens(night);
+  const { ui, app, c } = await kits();
   const pick = () => {};
   const items = (prefix) => [{ heading: "Show" }, { label: "Last update", icon: `${prefix}check`, onClick: pick }, { separator: true }, { label: "Your order" }];
   const shared = app.menu({ title: "Sort", items: items("lu-") })("m", c);

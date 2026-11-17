@@ -1,7 +1,7 @@
 // The key hint: a chord on a thin edge, faint when unset, breathing in the accent while it records.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { load, gpuiHost, numberArguments, calls, one } from "./helpers.mjs";
+import { load, gpuiHost, numberArguments, calls, one, boxOf } from "./helpers.mjs";
 
 const kit = async () => ({
   ...await load("kanso-panel/ui.js", ["tokens", "BREATH", "G", "H", "R", "T"], gpuiHost()),
@@ -15,9 +15,7 @@ test("A key hint is 24 high, 8 inside, radius 4, the meta size in muted on the b
   const c = tokens(night);
   const el = keyHint(c, { text: "⌘↵" });
   assert.deepEqual([H.compact, G.sm, R.sm], [24, 8, 4]);
-  assert.equal(one(el, "h"), H.compact);
-  assert.equal(one(el, "px"), G.sm);
-  assert.equal(one(el, "rounded"), R.sm);
+  assert.deepEqual(boxOf(el, "h", "px", "rounded"), [H.compact, G.sm, R.sm]);
   assert.equal(one(el, "border_color"), c.border);
   assert.equal(one(el, "text_size"), T.body);
   assert.equal(one(el, "text_color"), c.muted);
