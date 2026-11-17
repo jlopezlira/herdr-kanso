@@ -1,12 +1,11 @@
 // The rail's tiles and the view switch: the Storybook's Tile and View switch compositions, copied as they are and drawn by the app kit.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import { load, nodes, texts, tipsOf, svgsOf, themed, calls, arg, chain, KIT_NIGHT, drawingHost } from "./helpers.mjs";
+import { load, nodes, texts, tipsOf, svgsOf, themed, calls, arg, chain, KIT_NIGHT, drawingHost, repoText, sameCopies } from "./helpers.mjs";
 import { loadSidebar, mountedState, recorder } from "./sidebar-fixtures.mjs";
 
 const FILES = ["tile", "view-switch"];
-const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
+const read = repoText;
 const host = () => ({ ...drawingHost(), Popover: { new: (id) => chain(id) } });
 const compositions = async () => themed({
   ...await load("kanso-spaces/tile.js", ["tile"], host()),
@@ -18,7 +17,7 @@ const cx = { stop_propagation() {}, notify() {} };
 const ringOf = (el) => calls(el, "border_color").map((call) => call[1]);
 
 test("The sidebar's copies of the Tile and the View switch are the Storybook's, byte for byte", () => {
-  for (const name of FILES) assert.equal(read(`kanso/mods/kanso-spaces/${name}.js`), read(`stories/kit/${name}.js`), name);
+  sameCopies(FILES);
 });
 
 test("Each Tile state in the Storybook draws in the app: a button with its lead, its count, and the wash, the mark or the ring the story shows", async () => {
