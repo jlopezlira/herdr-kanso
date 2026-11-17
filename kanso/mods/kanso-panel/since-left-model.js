@@ -6,7 +6,6 @@ export { DID_CAP, oneLine };
 export const AWAY_MS = 5 * 60_000;
 export const KEEP_MS = 7 * 86400_000;
 export const EVENT_CAP = 500;
-export const LINE_CAP = 3;
 export const MAINTENANCE_MS = 120_000;
 export const LOG_LIMITS = { cap: EVENT_CAP, keepMs: KEEP_MS };
 export const AWAY_PIECE = "sidebar.away";
@@ -49,14 +48,12 @@ export function digest(events, focus, now) {
     && (pending.has(event.id) || away && event.at > focus.focused_at)));
 }
 
-export function lines(events, expanded = false) {
-  if (expanded || events.length <= LINE_CAP) return events;
-  return [...events.slice(0, LINE_CAP - 1), { more: events.length - LINE_CAP + 1 }];
-}
-
 export const RETURN_LABEL = "While you were away";
-const MARK = { blocked: "blocked", error: "error", finished: "done", pr: "pr" };
-const OUTCOME = { blocked: "Needs you", error: "Failed", finished: "Finished" };
+// Each event as the Activity composition draws it: its icon in the state colour; a failed agent takes the blocked mark.
+const PULL = "lu-git-pull-request";
+const LOOK = { blocked: { icon: "e-blk", tone: "blocked" }, error: { icon: "e-blk", tone: "blocked" }, finished: { icon: "e-done", tone: "done" }, pr: { icon: PULL, tone: null } };
+const PR_LOOK = { approved: { icon: "lu-check", tone: "done" }, "changes requested": { icon: PULL, tone: "blocked" }, "checks failed": { icon: PULL, tone: "blocked" } };
+const OUTCOME = { blocked: "needs you", error: "failed", finished: "finished" };
 const PR_TEXT = /^(PR #\d+)\s+(.+)$/;
 const SPOKEN = /\s+(?:finished|needs you|errored)$/;
 
@@ -75,7 +72,7 @@ export function shownName(agent, seen, term) {
 export function eventLabel(event) {
   const text = String(event?.text ?? "").trim();
   const pr = event?.kind === "pr" ? text.match(PR_TEXT) : null;
-  if (pr) return { name: pr[1], outcome: pr[2].charAt(0).toUpperCase() + pr[2].slice(1) };
+  if (pr) return { name: pr[1], outcome: pr[2] };
   return { name: text.replace(SPOKEN, "").split(" | ")[0].trim() || "Agent", outcome: OUTCOME[event?.kind] ?? null };
 }
 
@@ -89,17 +86,18 @@ export function collapsed(events) {
   return Object.values(kept);
 }
 
+// An event as the Activity composition's: who, what happened, what it did and how long ago, with its icon and tone.
 export function rowOf(event, now, format) {
   const at = Number(event.at);
+  const { name, outcome } = eventLabel(event);
   return {
-    id: event.id, target: event.target, kind: event.kind, mark: MARK[event.kind] ?? null,
-    ...eventLabel(event), did: event.did || null, age: Number.isFinite(at) ? format(Math.max(0, now - at)) : "",
+    id: event.id, target: event.target, ...(PR_LOOK[outcome] ?? LOOK[event.kind] ?? { icon: "none", tone: null }),
+    subject: name, fact: outcome, detail: event.did || null, age: Number.isFinite(at) ? format(Math.max(0, now - at)) : "",
   };
 }
 
-export function present(events, { now = 0, focus = null, expanded = false, format } = {}) {
-  const mine = ordered(collapsed((events ?? []).filter((event) => !focus || event.target !== focus)));
-  return { count: mine.length, rows: lines(mine, expanded).map((row) => (row.more ? { more: row.more } : rowOf(row, now, format))) };
+export function present(events, { now = 0, focus = null, format } = {}) {
+  return ordered(collapsed((events ?? []).filter((event) => !focus || event.target !== focus))).map((row) => rowOf(row, now, format));
 }
 
 export function focusedTarget(events, before, after) {

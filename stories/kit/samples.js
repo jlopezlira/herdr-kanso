@@ -19,6 +19,15 @@ import { hachiPixels } from '../../kanso/mods/kanso-dojo/mascot-pixels.js';
 
 // A pull request's number as the app shows it.
 export const pullRequest = (number) => `#${number}`;
+// What changed while you were away, as the Activity composition takes it.
+export const awayEvents = [
+  { icon: 'lu-git-pull-request', subject: `PR ${pullRequest(166)}`, fact: 'merged', age: '32m' },
+  { icon: 'lu-git-pull-request', tone: 'blocked', subject: `PR ${pullRequest(165)}`, fact: 'checks failed', detail: 'test / unit · Run pnpm test', age: '9m' },
+  { icon: 'lu-moon', subject: 'Orion', fact: 'went to sleep', age: '1h' },
+  { icon: 'e-done', tone: 'done', subject: 'Iris', fact: 'finished', detail: 'Boards 01 to 04 done', age: '12m' },
+  { icon: 'lu-check', tone: 'done', subject: `PR ${pullRequest(164)}`, fact: 'approved', age: '41m' },
+  { icon: 'lu-git-pull-request', subject: `PR ${pullRequest(163)}`, fact: 'merged', age: '2h' },
+];
 const group = (...rows) => stack({ variant: 'row group' }, ...rows);
 // A conversation's own tools under the pointer, and what a session's commands tooltip says.
 export const sessionTools = [{ icon: 'lu-check', label: 'Settle' }];

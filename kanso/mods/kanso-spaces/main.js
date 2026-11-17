@@ -37,7 +37,7 @@ import { ELBOW } from "./ui-row.js";
 import { button, Armed } from "./ui-button.js";
 import { dialog } from "./ui-dialog.js";
 import { field, TextField } from "./ui-field.js";
-import { menu, row, emptyState, skeletonOf, tooltip } from "./kit.js";
+import { menu, emptyState, skeletonOf, tooltip } from "./kit.js";
 import { boundChord } from "./ui-tooltip.js";
 import { menuList, menuHeight } from "./ui-menu.js";
 import { toolbar } from "./toolbar.js";
@@ -889,11 +889,10 @@ export default class Spaces extends View {
     }).catch(() => {});
   }
 
-  returnRows(t, space) {
-    if (!runs("sidebar.away", pieces(shared)) || !space || !this.sinceLeft?.rows.length || this.sinceLeft.project !== projectKey(space)) return [];
-    const view = this.sinceLeft.render(t, projectKey(space), (key, go) => this.navMark(key, go), (row) => this.returnGo(row),
-      (label, count, dismiss) => this.bareHead(t, "since-left", label, count, dismiss));
-    return this.sinceLeft.showing ? [item(view, this.sinceLeft.blockHeight())] : [];
+  // While you were away: the Activity card docked under the list, or nothing.
+  awayCard(t, space) {
+    if (!runs("sidebar.away", pieces(shared)) || !space || !this.sinceLeft?.rows.length || this.sinceLeft.project !== projectKey(space)) return null;
+    return this.sinceLeft.render(t, projectKey(space), (key, go) => this.navMark(key, go), (row) => this.returnGo(row));
   }
 
   returnGo(row) {
@@ -2136,11 +2135,6 @@ export default class Spaces extends View {
     });
   }
 
-  // The heading over what changed while you were away: a heading row, its count and Dismiss.
-  bareHead(t, id, name, count, dismiss) {
-    return row({ name, heading: true, meta: count, tools: [dismiss] })(id, tokens(t));
-  }
-
   // A section: the section composition; a press folds it. `add`: + under the pointer, its label and what it starts.
   sectionHead(c, id, toggle, { title, status = "none", count = null, add = null, hover = false, onHover = null }) {
     return section({ title, status, count: count ?? 0, add: add?.label ?? null, hover })(id, c, {
@@ -2473,11 +2467,11 @@ export default class Spaces extends View {
       .on_mouse_up("left", dropStripDrag)
       .child(this.header(tokens(t), view, collapsed))
       .when(switchShown, (el) => el.child(this.switchViews(t, sp, collapsed)))
-      .when(shown("sidebar.needs", queue.rows.length > 0 || this.needsEmpty, map), (el) => el.child(queueControl(t, queue, collapsed, this.needsEmpty && !queue.rows.length, (cx) => this.toggleNeeds(cx))))
-      .child(this.needsOpen && shown("sidebar.needs", true, map) ? this.needsList(t, queue, read.now) : this.list(t, collapsed, view, [
-        ...(!collapsed ? this.returnRows(t, active) : []),
-        ...(view === "agents" ? (collapsed ? this.agentsRail(t, sp, ctx) : this.agentsView(t, sp, ps, ctx))
-          : view === "threads" ? (collapsed ? this.threadsRail(t, sp, ctx) : this.threadsView(t, sp, ps, ctx)) : this.grouped(t, collapsed, sp, ps, ctx))]));
+      .when(shown("sidebar.needs", queue.rows.length > 0 || this.needsEmpty, map), (el) => el.children([queueControl(t, queue, collapsed, this.needsEmpty && !queue.rows.length, (cx) => this.toggleNeeds(cx))].filter(Boolean)))
+      .children(this.needsOpen && shown("sidebar.needs", true, map) ? [this.needsList(t, queue, read.now)] : [this.list(t, collapsed, view,
+        view === "agents" ? (collapsed ? this.agentsRail(t, sp, ctx) : this.agentsView(t, sp, ps, ctx))
+          : view === "threads" ? (collapsed ? this.threadsRail(t, sp, ctx) : this.threadsView(t, sp, ps, ctx)) : this.grouped(t, collapsed, sp, ps, ctx)),
+        collapsed ? null : this.awayCard(t, active)].filter(Boolean));
     this.nav = this.navNext;
     // The row the ring was on is gone: it stays at the same place in the list.
     if (this.kbd && this.nav.length && !this.nav.some((n) => n.key === this.navKey)) this.navKey = this.nav[Math.min(this.navAt ?? 0, this.nav.length - 1)].key;

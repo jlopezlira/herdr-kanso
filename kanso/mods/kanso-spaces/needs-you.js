@@ -42,7 +42,7 @@ export function waitingQueue(list, terms, excluded = new Set(), previous = [], n
       const was = before.get(a.address), term = byAddress.get(a.address);
       const at = was?.status === a.status ? was.at : term?.status_ms ?? now;
       return { address: a.address, pane: a.pane, space: a.space, tab: a.tab, project: a.space_name,
-        name: a.name || a.title || a.program?.name || a.address, status: a.status, at, seq: a.seq ?? 0 };
+        name: a.name || a.title || a.program?.name || a.address, icon: a.program?.icon ?? null, tint: a.program?.tint ?? null, status: a.status, at, seq: a.seq ?? 0 };
     }).toSorted(order);
 }
 

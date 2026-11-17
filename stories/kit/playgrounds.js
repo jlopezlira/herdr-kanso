@@ -1,6 +1,7 @@
 // Pages whose story is built from Storybook controls instead of drawn states.
 import sprite from '../proto-sprite.svg?raw';
-import { activity, activityMenu, paneFolds, paneHeader, panelHeaderForms, panelLooks, paneReaches, paneStates, noticeHomes, noticePlaces, noticeStates, systemMessage, toastStack, heldChord, keyboard, keyboardExplorer, keyboards, keyboardSystems, keyNames, shortcutRowStates, channelSettings, channels, computerItem, computerItemStates, failureMenu, panelDoors, tabBarStates } from './compositions.js';
+import { activityMenu, paneFolds, paneHeader, panelHeaderForms, panelLooks, paneReaches, paneStates, noticeHomes, noticePlaces, noticeStates, systemMessage, toastStack, heldChord, keyboard, keyboardExplorer, keyboards, keyboardSystems, keyNames, shortcutRowStates, channelSettings, channels, computerItem, computerItemStates, failureMenu, panelDoors, tabBarStates } from './compositions.js';
+import { activity, awayMax } from './activity.js';
 import { sidebarFooter } from './sidebar-footer.js';
 import { tile } from './tile.js';
 import { views, viewSwitch } from './view-switch.js';
@@ -12,7 +13,7 @@ import { sessionRow } from './session-row.js';
 import { avatar, avatarSizes, button, card, chip, code, dawn, dialog, emptyState, escape, failureBlock, input, keycapStates, keyHint, kinds, levels, mark, markdown, marks, markSizes, menu, metric, row, rowDepths, sides, skeletonOf, skeletonShapes, stack, statePatterns, tabs, thumbnail, toast, toggle, tooltip, windowControls } from './pieces.js';
 import { barWidths, inBar } from './frames.js';
 import { edgeSides, layerDefaults, memoryShown, needsShown, panelContents, panelReads, panelRowLooks, statedPages, stepperShown, tabActs } from './states.js';
-import { appNotices, keyLayer, keyLayerMods, pullRequest, sampleDojo, sampleHeader, sampleNotices, samplePanelHeader, sampleRefusal, sampleSettingsMenu, sampleSidebar, sessionCommandsTip, sessionTools, statusMenus } from './samples.js';
+import { appNotices, awayEvents, keyLayer, keyLayerMods, pullRequest, sampleDojo, sampleHeader, sampleNotices, samplePanelHeader, sampleRefusal, sampleSettingsMenu, sampleSidebar, sessionCommandsTip, sessionTools, statusMenus } from './samples.js';
 
 const icons = ['none', ...[...sprite.matchAll(/id="(lu-[^"]+)"/g)].map(([, id]) => id).sort()];
 const frame = (markup) => `<div class="kanso-story"><div class="kanso-story__theme kanso-story__frame kanso-story--free">${markup}</div></div>`;
@@ -444,20 +445,13 @@ export const playgrounds = {
     args: { events: 3, row: 'none', menu: false, docked: false },
     argTypes: {
       events: { name: 'events', control: { type: 'number', min: 0, max: 6 } },
-      row: radioArg('second row', ['none', 'hover', 'focus']),
+      // Proposed: `more`, the keyboard on +N more.
+      row: radioArg('second row', ['none', 'hover', 'focus', 'more']),
       menu: boolArg('right-click menu'),
       docked: boolArg('in the sidebar'),
     },
     markup: ({ events, row: state, menu: open, docked }) => {
-      const all = [
-        { icon: 'lu-git-pull-request', subject: `PR ${pullRequest(166)}`, fact: 'merged', age: '32m' },
-        { icon: 'lu-git-pull-request', tone: 'blocked', subject: `PR ${pullRequest(165)}`, fact: 'checks failed', detail: 'test / unit · Run pnpm test', age: '9m' },
-        { icon: 'lu-moon', subject: 'Orion', fact: 'went to sleep', age: '1h' },
-        { icon: 'e-done', tone: 'done', subject: 'Iris', fact: 'finished', detail: 'Boards 01 to 04 done', age: '12m' },
-        { icon: 'lu-check', tone: 'done', subject: `PR ${pullRequest(164)}`, fact: 'approved', age: '41m' },
-        { icon: 'lu-git-pull-request', subject: `PR ${pullRequest(163)}`, fact: 'merged', age: '2h' },
-      ];
-      const card = activity({ events: all.slice(0, events), hover: state === 'hover' ? 1 : -1, focus: state === 'focus' ? 1 : -1 }) ?? '';
+      const card = activity({ events: awayEvents.slice(0, events), hover: state === 'hover' ? 1 : -1, focus: { focus: 1, more: awayMax }[state] ?? -1 }) ?? '';
       const menu = open && events ? activityMenu() : '';
       return docked ? sampleSidebar({ away: card }) + menu : `<div class="kanso-story__slice">${card}${menu}</div>`;
     },

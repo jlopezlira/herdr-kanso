@@ -2,7 +2,7 @@ import { loadSpaces, loadPullRequest, loadSinceLeft, loadRecordPrFacts, loadDura
 import test from "node:test";
 import assert from "node:assert/strict";
 import { load, clone, exec, singleUse, context, tape, recordingElement } from "./helpers.mjs";
-import { AWAY_MS, KEEP_MS, EVENT_CAP, MAINTENANCE_MS, targetOf, parseTarget, returnSignature, changes, digest, lines, focusedTarget, agentSnapshot, observedAgents, present, RETURN_LABEL, destinationOf, livePlaces, eventLabel, oneLine, awayShown, AWAY_PIECE, DID_CAP } from "../kanso/mods/kanso-spaces/since-left-model.js";
+import { AWAY_MS, KEEP_MS, EVENT_CAP, MAINTENANCE_MS, targetOf, parseTarget, returnSignature, changes, digest, focusedTarget, agentSnapshot, observedAgents, present, RETURN_LABEL, destinationOf, livePlaces, eventLabel, oneLine, awayShown, AWAY_PIECE, DID_CAP } from "../kanso/mods/kanso-spaces/since-left-model.js";
 
 const project = ":C:\\work\\kanso";
 const event = (id, kind = "finished", at = id) => ({ id, project, target: `agent:${id}`, kind, text: `Agent ${id}`, at });
@@ -28,6 +28,11 @@ const appOnGitHub = async (t) => {
   return db;
 };
 const eventCount = async (db) => (await db.read("SELECT COUNT(*) AS n FROM since_events;"))[0].n;
+// The return view's class on a host that keeps the text drawn and each press.
+const taped = async () => {
+  const ui = tape();
+  return { ui, ...await loadSinceLeft(ui.host) };
+};
 // A return view with no database, and the calls its store will keep.
 const detached = async () => {
   const { SinceLeft } = await loadSinceLeft();
@@ -41,16 +46,6 @@ test("return events put blocked, errors, PRs, and finishes first, newest within 
   const rows = digest(events, { focused_at: 0 }, AWAY_MS);
   assert.deepEqual(rows.map((row) => row.id), [5, 2, 4, 3, 6, 1]);
   assert.deepEqual(events.map((row) => row.id), [1, 3, 2, 4, 5, 6]);
-});
-
-test("a return has no more than three lines, including its +N, and expands to all events", () => {
-  for (const count of [0, 1, 2, 3, 4, 15]) {
-    const events = Array.from({ length: count }, (_, i) => event(i + 1));
-    const compact = lines(events);
-    assert.equal(compact.length, Math.min(count, 3));
-    if (count > 3) assert.equal(compact.at(-1).more, count - 2);
-    assert.deepEqual(lines(events, true), events);
-  }
 });
 
 test("five minutes away is the boundary, a first visit and nothing happened stay empty", () => {
@@ -156,27 +151,18 @@ test("PR observations use only known local project mappings and keep check resul
 
 test("the return view expands inline, never focuses a handle, and stays silent while absent", async (t) => {
   const { db } = await database(t);
-  const clicks = new Map(), nav = [];
+  const nav = [];
   const ui = singleUse();
-  const button = ui.Button.new;
-  ui.Button.new = (id) => {
-    const element = button(id);
-    return new Proxy(element, { get: (target, key) => key === "on_click" ? (fn) => { clicks.set(id, fn); return target; } : target[key] });
-  };
   const { SinceLeft } = await loadSinceLeft({ ...ui });
-  const view = Object.assign(new SinceLeft(db), { project, rows: Array.from({ length: 4 }, (_, i) => event(i + 1)) });
+  const view = Object.assign(new SinceLeft(db), { project, rows: Array.from({ length: 6 }, (_, i) => event(i + 1)) });
   const register = (id, go) => { nav.push({ id, go }); return false; };
-  const heads = [];
-  view.render({}, project, register, () => true, (label, count) => { heads.push([label, count]); return {}; });
-  assert.deepEqual(heads, [[RETURN_LABEL, 4]]);
-  assert.equal(nav.length, 3);
-  nav.at(-1).go(cx);
-  assert.equal(view.lineCount(), 4);
-  const rendered = () => { view.render({}, project, register, () => true); return nav.length; };
-  assert.equal(rendered(), 7);
+  const rendered = () => { nav.length = 0; view.render({}, project, register, () => () => {}); return nav.length; };
+  assert.equal(rendered(), 5, "four rows, then +N more: five stops");
+  view.expanded = true;
+  assert.equal(rendered(), 6);
   await view.dismiss(cx);
   assert.equal(view.rows.length, 0);
-  assert.equal(rendered(), 7);
+  assert.equal(view.render({}, project, register, () => () => {}), null);
 });
 
 test("a second finished turn is recorded even when both observed states are done", () => {
@@ -197,53 +183,39 @@ test("a return row is a mark, a name and an age, and one agent keeps its latest 
     row(3, "agent:b", "error", "Implement performance budget CI | herdr-kanso errored", now - 3_600_000),
     row(4, "pr:https://x/pull/12", "pr", "PR #12 approved", now - 60_000),
   ];
-  const shown = present(events, { now, expanded: true, format: duration });
-  assert.equal(shown.count, 3);
-  const by = Object.fromEntries(shown.rows.map((item) => [item.target, item]));
-  assert.deepEqual(shown.rows.map((item) => item.target), ["agent:a", "agent:b", "pr:https://x/pull/12"]);
-  assert.equal(by["agent:a"].mark, "blocked");
-  assert.equal(by["agent:a"].name, "Kylo-ren");
+  const shown = present(events, { now, format: duration });
+  assert.equal(shown.length, 3);
+  const by = Object.fromEntries(shown.map((item) => [item.target, item]));
+  assert.deepEqual(shown.map((item) => item.target), ["agent:a", "agent:b", "pr:https://x/pull/12"]);
+  assert.deepEqual([by["agent:a"].icon, by["agent:a"].tone], ["e-blk", "blocked"]);
+  assert.equal(by["agent:a"].subject, "Kylo-ren");
   assert.equal(by["agent:a"].age, "1m");
-  assert.equal(by["agent:b"].mark, "error");
-  assert.equal(by["agent:b"].name, "Implement performance budget CI");
+  assert.deepEqual([by["agent:b"].icon, by["agent:b"].tone], ["e-blk", "blocked"], "a failed agent takes the blocked mark");
+  assert.equal(by["agent:b"].subject, "Implement performance budget CI");
   assert.equal(by["agent:b"].age, "1h");
-  assert.equal(by["pr:https://x/pull/12"].mark, "pr");
-  assert.equal(by["pr:https://x/pull/12"].name, "PR #12");
-  assert.equal(by["pr:https://x/pull/12"].outcome, "Approved");
+  assert.deepEqual([by["pr:https://x/pull/12"].icon, by["pr:https://x/pull/12"].tone], ["lu-check", "done"]);
+  assert.equal(by["pr:https://x/pull/12"].subject, "PR #12");
+  assert.equal(by["pr:https://x/pull/12"].fact, "approved");
   assert.equal(by["pr:https://x/pull/12"].age, duration(60_000));
-  assert.deepEqual(shown.rows.map((item) => [item.outcome, item.did]), [["Needs you", null], ["Failed", null], ["Approved", null]]);
+  assert.deepEqual(shown.map((item) => [item.fact, item.detail]), [["needs you", null], ["failed", null], ["approved", null]]);
   const away = present(events, { now, focus: "agent:a", format: duration });
-  assert.equal(away.count, 2);
-  assert.equal(away.rows.some((item) => item.target === "agent:a"), false);
+  assert.equal(away.length, 2);
+  assert.equal(away.some((item) => item.target === "agent:a"), false);
 });
 
-test("more than three agents stay at three rows, the last of them +N", async () => {
+test("every event is kept for the card, which shows four and +N more; the one in view leaves", async () => {
   const { duration } = await loadDuration();
-  const events = [1, 2, 3, 4].map((id) => ({ id, target: `agent:${id}`, kind: "finished", text: `Agent ${id}`, at: id }));
-  const compact = present(events, { now: 10, format: duration });
-  assert.equal(compact.count, 4);
-  assert.equal(compact.rows.length, 3);
-  assert.equal(compact.rows.at(-1).more, 2);
-  assert.equal(present(events, { now: 10, format: duration, expanded: true }).rows.length, 4);
-  assert.equal(present(events, { now: 10, focus: "agent:1", format: duration }).rows.length, 3);
+  const events = [1, 2, 3, 4, 5].map((id) => ({ id, target: `agent:${id}`, kind: "finished", text: `Agent ${id}`, at: id }));
+  assert.equal(present(events, { now: 10, format: duration }).length, 5);
+  assert.equal(present(events, { now: 10, focus: "agent:1", format: duration }).length, 4);
+  const { ui, SinceLeft } = await taped();
+  Object.assign(new SinceLeft(null), { project, rows: events }).render({}, project, () => false, () => () => {});
+  assert.ok(ui.texts.includes("+1 more"));
 });
 
-test("the return head shows the count and its dismiss clears the rows", async (t) => {
+test("the return head says While you were away and its × clears the rows", async (t) => {
   const { db } = await database(t);
-  const texts = [], clicks = new Map();
-  const node = (initial = null) => {
-    const self = { id: initial };
-    const record = {
-      id: (value) => { self.id = value; },
-      child: (value) => { if (typeof value === "string" || typeof value === "number") texts.push(String(value)); },
-      on_click: (fn) => { clicks.set(self.id, fn); },
-    };
-    return recordingElement((key, el) => {
-      if (key === "children") return (list) => list;
-      return Object.hasOwn(record, key) ? (value) => { record[key](value); return el; } : undefined;
-    });
-  };
-  const { SinceLeft } = await loadSinceLeft({ div: node, svg: node, h_flex: node, v_flex: node, Button: { new: node } });
+  const { ui, SinceLeft } = await taped();
   const view = new SinceLeft(db);
   view.project = project;
   view.target = "agent:1";
@@ -251,16 +223,14 @@ test("the return head shows the count and its dismiss clears the rows", async (t
     { id: 1, target: "agent:1", kind: "finished", text: "Kylo-ren finished", at: 1 },
     { id: 2, target: "agent:2", kind: "blocked", text: "Implement performance budget CI | herdr-kanso needs you", at: 2 },
   ];
-  const heads = [];
-  view.render({ foreground: "#fff", dim: "#666", muted: "#888", done: "#9a9", blocked: "#c99" }, project, () => false, () => true,
-    (label, count, dismiss) => { heads.push([label, count, dismiss]); return dismiss; });
-  assert.deepEqual(heads.map(([label, count]) => [label, count]), [[RETURN_LABEL, 1]]);
-  assert.equal(texts.includes("Kylo-ren"), false);
-  assert.equal(texts.includes("Kylo-ren finished"), false);
-  assert.ok(texts.includes("Implement performance budget CI"));
-  assert.equal(texts.includes("needs you"), false);
-  assert.equal(texts.includes("finished"), false);
-  await clicks.get("since-dismiss")(null, { ...cx, stop_propagation() {} });
+  view.render({ foreground: "#fff", dim: "#666", muted: "#888", done: "#9a9", blocked: "#c99" }, project, () => false, () => () => {});
+  assert.ok(ui.texts.includes(RETURN_LABEL));
+  assert.equal(ui.texts.includes("Kylo-ren"), false, "the agent in view says it itself");
+  assert.ok(ui.texts.includes("Implement performance budget CI"));
+  assert.ok(ui.texts.includes("needs you"));
+  const cleared = new Promise((resolve) => { view.dismiss = () => SinceLeft.prototype.dismiss.call(view, { notify: resolve }); });
+  ui.handlers.get("since-left-0-action")(null, { ...cx, stop_propagation() {} });
+  await cleared;
   assert.equal(view.rows.length, 0);
 });
 
@@ -430,8 +400,8 @@ test("unchanged return polling skips snapshots and sleeping projects never read 
 
 test("each kind of event says its outcome in words beside the name", () => {
   const outcome = (kind, text = "Cassian") => eventLabel({ kind, text }).outcome;
-  assert.deepEqual(["finished", "blocked", "error"].map((kind) => outcome(kind)), ["Finished", "Needs you", "Failed"]);
-  assert.deepEqual(eventLabel({ kind: "pr", text: "PR #12 changes requested" }), { name: "PR #12", outcome: "Changes requested" });
+  assert.deepEqual(["finished", "blocked", "error"].map((kind) => outcome(kind)), ["finished", "needs you", "failed"]);
+  assert.deepEqual(eventLabel({ kind: "pr", text: "PR #12 changes requested" }), { name: "PR #12", outcome: "changes requested" });
   assert.equal(outcome("unknown"), null);
 });
 
@@ -442,8 +412,8 @@ test("what the agent did is one line, capped, and absent when it said nothing", 
   const long = oneLine("x".repeat(DID_CAP * 2));
   assert.equal(long.length, DID_CAP);
   assert.ok(long.endsWith("\u2026"));
-  const rows = present([{ id: 1, target: "agent:a", kind: "finished", text: "Cassian", at: 0 }], { now: 0, format: String }).rows;
-  assert.equal(rows[0].did, null);
+  const rows = present([{ id: 1, target: "agent:a", kind: "finished", text: "Cassian", at: 0 }], { now: 0, format: String });
+  assert.equal(rows[0].detail, null);
 });
 
 test("what the agent did is kept with the event and outlives the agent's next step", async (t) => {
@@ -455,7 +425,7 @@ test("what the agent did is kept with the event and outlives the agent's next st
   const [row] = await db.read("SELECT kind,text,did FROM since_events;");
   assert.deepEqual(clone(row), { kind: "finished", text: "Cassian", did: "Fixed the away rows" });
   const shown = present(await db.read("SELECT * FROM since_events;"), { now: 4, format: String });
-  assert.deepEqual([shown.rows[0].name, shown.rows[0].outcome, shown.rows[0].did], ["Cassian", "Finished", "Fixed the away rows"]);
+  assert.deepEqual([shown[0].subject, shown[0].fact, shown[0].detail], ["Cassian", "finished", "Fixed the away rows"]);
 });
 
 test("While you were away is a piece: off, nothing is recorded, read or drawn", async (t) => {
@@ -474,25 +444,22 @@ test("While you were away is a piece: off, nothing is recorded, read or drawn", 
   assert.deepEqual([reads, runs], [[], []]);
   assert.equal(view.returnSignature, null);
   assert.deepEqual(clone([view.sinceLeft.project, view.sinceLeft.rows]), [null, []]);
-  assert.equal(view.returnRows({}, { folder: "C:\\work\\kanso" }).length, 0);
+  assert.equal(view.awayCard({}, { folder: "C:\\work\\kanso" }), null);
 });
 
 test("a row says who, what happened and what it did; a gone agent's row stays but leads nowhere", async () => {
-  const ui = tape();
-  const { SinceLeft } = await loadSinceLeft(ui.host);
+  const { ui, SinceLeft } = await taped();
   const view = Object.assign(new SinceLeft(null), { project, rows: [
     { id: 1, target: "agent:c1", kind: "finished", text: "Cassian", did: "Fixed the away rows", at: 0 },
     { id: 2, target: "agent:gone", kind: "error", text: "Bodhi", did: null, at: 0 },
   ] });
   const marked = [], went = [];
   view.render({ foreground: "#fff" }, project, (key) => { marked.push(key); return false; }, (row) => (row.target === "agent:c1" ? () => went.push(row.id) : null));
-  for (const text of ["Cassian", "Finished", "Fixed the away rows", "Bodhi", "Failed"]) assert.ok(ui.texts.includes(text), text);
+  for (const text of ["Cassian", "finished", "Fixed the away rows", "Bodhi", "failed"]) assert.ok(ui.texts.includes(text), text);
   assert.deepEqual(marked, ["since-1"]);
-  assert.equal(ui.handlers.has("since-2"), false);
-  ui.handlers.get("since-1")({}, { notify() {} });
+  assert.equal(ui.handlers.has("since-left-1"), false, "Bodhi's pane is gone: the row does not act");
+  ui.handlers.get("since-left-2")({}, { notify() {} });
   assert.deepEqual(went, [1]);
-  const { H } = await load("kanso-spaces/ui.js", ["H"], ui.host);
-  assert.equal(view.blockHeight(), H.two + H.line + 1, "a two-line row with what it did, a one-line row without");
 });
 
 test("with While you were away off, a pull request read records no fact", async (t) => {
