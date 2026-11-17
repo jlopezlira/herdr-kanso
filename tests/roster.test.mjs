@@ -67,9 +67,11 @@ test("asleep is a status like working, idle or done: its own section in Status, 
   assert.deepEqual(clone(sections.map((s) => [s.id, s.entries.map((x) => x.a.address)])), [["working", ["t1"]], ["done", ["t3"]], ["idle", ["t2"]], ["asleep", ["zz:1"]]]);
 });
 
+// Alice's conversation, read from process 10, and the roster's readers.
+const aliceReads = async () => ({ ...await loadRosterReads(), th: { file: `/h/.claude/projects/-w/${C1}.jsonl`, pid: 10 } });
+
 test("a conversation read from a terminal is its agent's only while that process still runs there", async () => {
-  const { readNow, seenNow } = await loadRosterReads();
-  const th = { file: `/h/.claude/projects/-w/${C1}.jsonl`, pid: 10 };
+  const { readNow, seenNow, th } = await aliceReads();
   assert.equal(readNow(th, { foreground: { pid: 10 } }), true);
   assert.equal(readNow(th, { foreground: { pid: 11 } }), false, "Bob started in Alice's terminal: not Alice's conversation");
   assert.equal(readNow(th, { foreground: null }), false, "nothing runs there now");
@@ -84,8 +86,7 @@ test("a conversation read from a terminal is its agent's only while that process
 });
 
 test("where Herdr's terminal list does not say what runs in front, a reading counts only while its process lives", async () => {
-  const { readNow, seenNow } = await loadRosterReads();
-  const th = { file: `/h/.claude/projects/-w/${C1}.jsonl`, pid: 10 };
+  const { readNow, seenNow, th } = await aliceReads();
   assert.equal(readNow(th, { address: "t1" }, new Set([10])), true, "Alice still runs: hers");
   assert.equal(readNow(th, { address: "t1" }, new Set([11])), false, "Alice ended (Bob runs there now): not Bob's");
   assert.equal(readNow(th, { address: "t1" }, null), false, "not looked yet: no");

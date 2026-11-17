@@ -27,6 +27,14 @@ const priced = (usd) => ({ costs: { hero: { usd, tokens: usd, value: `$${usd}.00
 const on = (id = "odin") => ({ version: 1, peers: { [id]: { enabled: true } } });
 const ready = (name = "odin") => [{ name, layout: "ready" }];
 
+// An app home where kansō Spend is installed.
+const withSpend = async (t) => {
+  const app = await temporary(t);
+  await mkdir(path.join(app, "mods", "kanso-spend"), { recursive: true });
+  await writeFile(path.join(app, "mods", "kanso-spend", "presenter.mjs"), "");
+  return app;
+};
+
 test("A computer keeps the same id", async (t) => {
   let minted = 0;
   const first = sync.identityFrom("", () => { minted += 1; return SELF; }, "2026-11-10T00:00:00.000Z");
@@ -36,9 +44,7 @@ test("A computer keeps the same id", async (t) => {
   assert.equal(again.id, SELF);
   assert.equal(minted, 1);
 
-  const app = await temporary(t);
-  await mkdir(path.join(app, "mods", "kanso-spend"), { recursive: true });
-  await writeFile(path.join(app, "mods", "kanso-spend", "presenter.mjs"), "");
+  const app = await withSpend(t);
   const deps = {
     appHome: app,
     now: "2026-11-10T12:00:00.000Z",
@@ -74,9 +80,7 @@ test("A computer does not take another computer's ledger, or give its own away",
   assert.equal(out.rows.find((row) => row.machine === PEER).body.usd, 4);
   assert.equal(out.rows.find((row) => row.machine === PEER).body.name, "odin");
 
-  const app = await temporary(t);
-  await mkdir(path.join(app, "mods", "kanso-spend"), { recursive: true });
-  await writeFile(path.join(app, "mods", "kanso-spend", "presenter.mjs"), "");
+  const app = await withSpend(t);
   const dir = path.join(app, "data", "kanso-sync");
   await mkdir(dir, { recursive: true });
   await writeFile(path.join(dir, "identity.json"), sync.identityText({ id: PEER, created_at: "t" }));
