@@ -4,18 +4,17 @@ import { systemApi } from "./platform-system.js";
 // Memory, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
 import { View, div } from "gpui-kit";
 import { v_flex, h_flex, Button } from "gpui-base";
-import { appHome, theme, nextCommand, readTextFile, layout } from "herdr";
+import { appHome, theme, nextCommand, readTextFile } from "herdr";
 import { G, T, PULSE, breathe, tokens } from "./ui.js";
 import { Armed, quietLink, iconButton } from "./ui-button.js";
 import { section } from "./ui-section.js";
 import { ghost } from "./ui-skeleton.js";
 import { segmented } from "./ui-tab.js";
 import { Share } from "./share.js";
-import { tryOr, tryOrAsync, afterMount } from "./pure.js";
+import { tryOr, tryOrAsync, afterMount, readCommands, num } from "./pure.js";
+import { hiddenInLayout, pageFrame } from "./page.js";
 import { memorySpec, memoryText } from "./memory-card.js";
 import { RANGES, size, span, clock, parseNow, agentsMB, agentMeta, limitsNote, sparkFor, digestHistory, groupAgents, freedEstimate, parseBatch, staleAgents, idleWords, installError, leaveShowAll } from "./model.js";
-
-const num = (v) => (typeof v === "number" && Number.isFinite(v) ? v : null);
 
 const MOD = "kanso-guard";
 const DATA_DIR = `data/${MOD}`;
@@ -27,26 +26,14 @@ const BUSY_MS = 90_000;
 const AGENT_ROWS = 12;
 const EVENT_ROWS = 15;
 const HEAVY_ROWS = 6;
+const SHARE_NOTE = "Only counts and sizes: no agent names, folders or sessions. The post opens with the image in it.";
 
-// True when the mod's block is in the layout but not on screen (hidden node, or a stack showing another child).
-function hiddenInLayout() {
-  try {
-    const pathTo = (node) => {
-      if (node?.content?.mod === MOD) return [node];
-      for (const child of node?.children ?? []) {
-        const below = pathTo(child);
-        if (below) return [node, ...below];
-      }
-      return null;
-    };
-    const path = pathTo(layout());
-    if (!path) return false;
-    return path.some((node, index) => node.hidden
-      || (node.type === "stack" && node.active && path[index + 1] && node.active !== path[index + 1].id));
-  } catch {
-    return false;
-  }
-}
+// The Node the guard runs under: runtime.json names it, "node" is the fallback.
+const runtimeNode = async () => {
+  const text = await readTextFile(paths.join(appHome(), RUNTIME_FILE)).catch(() => null);
+  const asked = tryOr(() => JSON.parse(text ?? "{}")?.node);
+  return typeof asked === "string" && asked.trim() ? asked.trim() : "node";
+};
 
 export default class Memory extends View {
   init(_props, cx) {
@@ -54,9 +41,7 @@ export default class Memory extends View {
     this.awake = false;
     this.width = 960;
     this.node = null;
-    this.now = null;
-    this.digest = null;
-    this.historyAt = 0;
+    this.forget();
     this.reading = false;
     this.range = "day";
     this.share = new Share(MOD, paths.join(appHome(), DATA_DIR, "share"));
@@ -69,62 +54,73 @@ export default class Memory extends View {
     this.timers = [];
     this.ticker = null;
 
-    if (!hiddenInLayout()) afterMount(cx, (cx) => this.wake(cx));
-
-    afterMount(cx, (cx) => {
-      if (this.closed) return;
-      this.commandTask = cx.spawn(async (commandCx) => {
-        for (;;) {
-          // A replaced build (hot reload, update) stops here.
-          const next = await tryOrAsync(async () => {
-            const command = await nextCommand();
-            commandCx.notify();
-            return { command };
-          });
-          if (!next) break;
-          const name = String(next.command).replace(new RegExp(`^${MOD}\\.`), "");
-          if (name === "refresh") this.check(commandCx);
-          else if (name === "open") this.wake(commandCx);
-          else if (name === "back") {
-            const next = leaveShowAll(this.showAll);
-            if (next === null) return;
-            this.showAll = next;
-            commandCx.notify();
-          }
-        }
-      });
+    if (!hiddenInLayout(MOD)) afterMount(cx, (wakeCx) => this.wake(wakeCx));
+    readCommands(cx, () => nextCommand(), (command, commandCx) => this.command(command, commandCx), {
+      closed: () => this.closed,
+      keep: (task) => { this.commandTask = task; },
     });
   }
 
-  wake(cx) {
-    if (this.closed) return;
-    this.awake = true;
-    if (!this.ticker) {
-      this.ticker = cx.timer.every(TICK_MS, (tickCx) => {
-        if (hiddenInLayout()) { this.sleep(); return; }
-        this.read(tickCx);
-      });
+  // The mod's own commands; a "back" with nothing to leave stops the reader, as a return did before.
+  command(raw, cx) {
+    const name = String(raw).replace(new RegExp(`^${MOD}\\.`), "");
+    if (name === "refresh") this.check(cx);
+    else if (name === "open") this.wake(cx);
+    else if (name === "back") {
+      const next = leaveShowAll(this.showAll);
+      if (next === null) return false;
+      this.showAll = next;
+      cx.notify();
     }
-    this.read(cx);
   }
 
-  sleep() {
-    this.awake = false;
-    for (const handle of [this.ticker, this.batchTimer, ...this.timers]) {
-      try { handle?.cancel(); } catch { /* already gone */ }
-    }
-    this.ticker = null;
-    this.timers = [];
+  // Nothing remembered: the next read starts from the files alone.
+  forget() {
     this.now = null;
     this.digest = null;
     this.historyAt = 0;
   }
 
-  close() {
-    this.closed = true;
-    for (const handle of [this.ticker, this.batchTimer, this.commandTask, ...this.timers]) {
+  // Herdr can hand back a handle that is already gone: a cancel is allowed to fail.
+  cancelAll(handles) {
+    for (const handle of handles) {
       try { handle?.cancel(); } catch { /* already gone */ }
     }
+  }
+
+  wake(wakeCx) {
+    if (this.closed) return;
+    this.awake = true;
+    if (!this.ticker) this.ticker = wakeCx.timer.every(TICK_MS, (tickCx) => {
+      if (hiddenInLayout(MOD)) { this.sleep(); return; }
+      this.read(tickCx);
+    });
+    this.read(wakeCx);
+  }
+
+  // A space switch can bring the page back without a command: wake on the next tick, outside the render pass.
+  wakeOnShow(cx) {
+    if (this.awake || this.closed || this.waking || hiddenInLayout(MOD)) return;
+    this.waking = true;
+    cx.timer.after(0, (wakeCx) => this.woken(wakeCx));
+  }
+
+  woken(wakeCx) {
+    this.waking = false;
+    if (!hiddenInLayout(MOD)) this.wake(wakeCx);
+  }
+
+  sleep() {
+    this.awake = false;
+    this.cancelAll([this.ticker, this.batchTimer, ...this.timers]);
+    this.ticker = null;
+    this.timers = [];
+    this.forget();
+  }
+
+  close() {
+    this.closed = true;
+    this.cancelAll([this.ticker, this.batchTimer, this.commandTask, ...this.timers]);
   }
 
   read(cx) {
@@ -185,11 +181,7 @@ export default class Memory extends View {
     cx.notify();
     cx.spawn(async (actCx) => {
       try {
-        if (!this.node) {
-          const raw = await readTextFile(paths.join(appHome(), RUNTIME_FILE)).catch(() => null);
-          const v = tryOr(() => JSON.parse(raw ?? "{}")?.node);
-          this.node = typeof v === "string" && v.trim() ? v.trim() : "node";
-        }
+        if (!this.node) this.node = await runtimeNode();
         const result = await localService(systemApi).guardRun(this.node, paths.join(appHome(), GUARD_FILE), args, appHome());
         if (result.code !== 0) throw new Error(result.stderr || "Memory could not start");
       } catch (error) {
@@ -199,7 +191,7 @@ export default class Memory extends View {
       if (this.closed || !this.awake) return;
       const timers = [...this.timers, ...[3000, 8000, 20_000].map((ms) => actCx.timer.after(ms, (timerCx) => { this.historyAt = 0; this.read(timerCx); }))];
       const extra = Math.max(0, timers.length - 12);
-      for (const handle of timers.slice(0, extra)) { try { handle?.cancel(); } catch { /* already gone */ } }
+      this.cancelAll(timers.slice(0, extra));
       this.timers = timers.slice(extra);
       actCx.notify();
     });
@@ -228,13 +220,7 @@ export default class Memory extends View {
   reap(cx) { this.act("reap", ["reap"], (data) => !data.helpers, cx); }
 
   render(cx) {
-    if (!this.awake && !this.closed && !this.waking && !hiddenInLayout()) {
-      this.waking = true;
-      cx.timer.after(0, (wakeCx) => {
-        this.waking = false;
-        if (!hiddenInLayout()) this.wake(wakeCx);
-      });
-    }
+    this.wakeOnShow(cx);
     const c = tokens(theme());
     if (!localService(systemApi).memoryGuardAvailable) return v_flex().size_full().p(G.xl).text_size(T.card).text_color(c.muted).child(localService(systemApi).memoryGuardReason);
     const narrow = (this.width || 960) < 560;
@@ -245,17 +231,16 @@ export default class Memory extends View {
     return v_flex().id("guard-root").size_full().min_h(0).bg(c.canvas).text_color(c.text)
       .overflow_y_scrollbar()
       .on_size_change((s, sizeCx) => {
-        const changed = Math.abs((this.width || 0) - s.width) >= 1;
-        this.width = s.width;
+        const width = s.width;
+        const changed = Math.abs((this.width || 0) - width) >= 1;
+        this.width = width;
         if (changed) sizeCx.notify();
       })
-      .child(h_flex().flex_none().w_full().justify_center().px(narrow ? G.lg : 32).py(narrow ? G.lg : 28)
-        .child(v_flex().w_full().max_w(1080).gap(narrow ? 32 : 44)
-          .child(this.header(c, narrow))
-          .when(this.share.open && this.canShare(), (el) => el.child(this.share.row(c, () => this.shareCard(),
-            "Only counts and sizes: no agent names, folders or sessions. The post opens with the image in it.", G.sm)))
-          .when(Boolean(this.actionError), (el) => el.child(div().text_size(T.body).text_color(c.red).child(this.actionError)))
-          .child(body)));
+      .child(pageFrame(narrow, narrow ? 32 : 44, (column) => column
+        .child(this.header(c, narrow))
+        .when(this.share.open && this.canShare(), (el) => el.child(this.share.row(c, () => this.shareCard(), SHARE_NOTE, G.sm)))
+        .when(Boolean(this.actionError), (el) => el.child(div().text_size(T.body).text_color(c.red).child(this.actionError)))
+        .child(body)));
   }
 
   canShare() { return this.now?.state === "ok" && Boolean(this.now.data); }
@@ -276,15 +261,16 @@ export default class Memory extends View {
   }
 
   skeleton(c, narrow) {
-    const { block, row } = ghost(c);
+    const { row, block } = ghost(c);
     const heights = [40, 44, 42, 46, 50, 48, 52, 38, 30, 26, 34, 42, 48, 54, 56, 52, 50, 46, 44, 48, 52, 50, 46, 44];
-    return breathe(v_flex().id("kanso-skeleton").w_full().gap(narrow ? 36 : 48))
+    const bars = heights.map((h) => v_flex().flex_1().min_w(0).justify_end().items_center().child(block(2, h, 1)));
+    const page = breathe(v_flex().id("kanso-skeleton").w_full().gap(narrow ? 36 : 48));
+    return page
       .child(v_flex().gap(G.md)
         .child(block(narrow ? 120 : 170, narrow ? 40 : 58, 6))
         .child(block(190, 11))
         .child(h_flex().gap(narrow ? G.xl : 48).pt(G.md).children([52, 46, 64, 40].map((w) => block(w, narrow ? 18 : 22, 4)))))
-      .child(h_flex().w_full().h(110).items_end()
-        .children(heights.map((h) => v_flex().flex_1().min_w(0).items_center().justify_end().child(block(2, h, 1)))))
+      .child(h_flex().w_full().h(110).items_end().children(bars))
       .child(v_flex().w_full()
         .child(h_flex().pb(G.sm).child(block(70, 12)))
         .children([0, 1, 2, 3, 4].map(row)));
@@ -332,16 +318,17 @@ export default class Memory extends View {
       totals ? { value: String(totals.restarts), unit: totals.restarts === 1 ? "restart" : "restarts" } : null,
       totals && totals.freedMB > 0 ? { value: size(totals.freedMB), unit: "freed", tip: totals.since ? `Since ${clock(totals.since)}` : null } : null,
     ].filter(Boolean);
+    const stat = (s) => h_flex().items_end().gap(6)
+      .when(Boolean(s.tip), (el) => el.tooltip(s.tip))
+      .child(div().text_size(narrow ? 22 : 28).line_height(1).font_light().text_color(s.hot ? c.red : c.text).child(s.value))
+      .child(div().pb(3).text_size(12).text_color(c.dim).child(s.unit));
+    const figure = v_flex().gap(G.xs).child(h_flex().flex_wrap().items_end().gap_x(G.md)
+      .child(div().text_size(narrow ? 48 : 72).line_height(1).font_light().text_color(low ? c.red : c.text).child(free === null ? "–" : `${free}%`))
+      .child(div().pb(narrow ? 6 : 10).text_size(13).text_color(c.dim).child(data.paused ? "free · paused" : "free")))
+      .child(div().text_size(15).text_color(c.dim).child([m.totalMB ? `of ${size(m.totalMB)}` : null, swap].filter(Boolean).join(" · ")));
     return v_flex().w_full().gap(G.xl)
-      .child(v_flex().gap(G.xs)
-        .child(h_flex().flex_wrap().items_end().gap_x(G.md)
-          .child(div().text_size(narrow ? 48 : 72).line_height(1).font_light().text_color(low ? c.red : c.text).child(free === null ? "–" : `${free}%`))
-          .child(div().pb(narrow ? 6 : 10).text_size(13).text_color(c.dim).child(data.paused ? "free · paused" : "free")))
-        .child(div().text_size(15).text_color(c.dim).child([m.totalMB ? `of ${size(m.totalMB)}` : null, swap].filter(Boolean).join(" · "))))
-      .child(h_flex().w_full().flex_wrap().gap_x(narrow ? G.xl : 48).gap_y(G.lg)
-        .children(stats.map((s) => h_flex().items_end().gap(6).when(Boolean(s.tip), (el) => el.tooltip(s.tip))
-          .child(div().text_size(narrow ? 22 : 28).line_height(1).font_light().text_color(s.hot ? c.red : c.text).child(s.value))
-          .child(div().pb(3).text_size(12).text_color(c.dim).child(s.unit)))))
+      .child(figure)
+      .child(h_flex().w_full().flex_wrap().gap_x(narrow ? G.xl : 48).gap_y(G.lg).children(stats.map(stat)))
       .child(h_flex().w_full().flex_wrap().gap_x(G.lg).items_center()
         .when(Boolean(w.pid), (el) => el.child(quietLink("guard-restart", this.busy.restart ? "Restarting the window…" : "Restart window",
           (cx) => { if (!this.busy.restart) this.restartWindow(cx); }, c)))
@@ -352,24 +339,32 @@ export default class Memory extends View {
   }
 
   chart(c) {
-    const series = this.digest?.series?.[this.range];
     const height = 96;
+    const series = this.digest?.series?.[this.range];
+    const bars = (series?.bars ?? []).map((bar) => this.chartBar(bar, height, c));
     return v_flex().w_full().gap(G.sm)
-      .child(h_flex().w_full().items_center().justify_between().gap(G.md).pb(G.xs)
-        .child(segmented("guard-range", RANGES.map((r) => ({ key: r.key, label: r.label })), this.range, (key, cx) => { this.range = key; cx.notify(); }, c))
-        .child(div().text_size(12).text_color(c.dim).child(series?.lowest ? `lowest ${series.lowest}` : "")))
-      .child(h_flex().w_full().h(height + 18).items_end()
-        .children((series?.bars ?? []).map((bar) => v_flex().flex_1().min_w(0).h(height + 18).items_center().justify_end().gap(4)
-          .tooltip(bar.tip)
-          .when(Boolean(bar.mark), (el) => el.child(div().text_size(10).text_color(c.text).whitespace_nowrap().child(bar.value)))
-          .child(div().w(bar.mark ? 3 : 2).flex_none().rounded_t(1)
-            .h(bar.empty ? 1 : Math.max(2, Math.round(bar.ratio * height)))
-            .bg(bar.mark ? c.accent : bar.empty ? c.border : bar.low ? c.red : c.muted)
-            .opacity(bar.mark || bar.empty ? 1 : 0.55)))))
+      .child(this.chartHead(c, series))
+      .child(h_flex().w_full().h(height + 18).items_end().children(bars))
       .child(h_flex().w_full().justify_between()
         .child(div().text_size(10).text_color(c.dim).child(series?.first ?? ""))
         .child(div().text_size(10).text_color(c.dim).child("Free"))
         .child(div().text_size(10).text_color(c.dim).child(series?.last ?? "")));
+  }
+
+  chartHead(c, series) {
+    return h_flex().w_full().items_center().justify_between().gap(G.md).pb(G.xs)
+      .child(segmented("guard-range", RANGES.map((r) => ({ key: r.key, label: r.label })), this.range, (key, cx) => { this.range = key; cx.notify(); }, c))
+      .child(div().text_size(12).text_color(c.dim).child(series?.lowest ? `lowest ${series.lowest}` : ""));
+  }
+
+  chartBar(bar, height, c) {
+    const h = height + 18;
+    return v_flex().flex_1().min_w(0).h(h).items_center().justify_end().gap(4).tooltip(bar.tip)
+      .when(Boolean(bar.mark), (el) => el.child(div().whitespace_nowrap().text_size(10).text_color(c.text).child(bar.value)))
+      .child(div().w(bar.mark ? 3 : 2).flex_none().rounded_t(1)
+        .h(bar.empty ? 1 : Math.max(2, Math.round(bar.ratio * height)))
+        .bg(bar.mark ? c.accent : bar.empty ? c.border : bar.low ? c.red : c.muted)
+        .opacity(bar.mark || bar.empty ? 1 : 0.55));
   }
 
   spark(c, ratios) {
