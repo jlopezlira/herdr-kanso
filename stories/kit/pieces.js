@@ -1,4 +1,5 @@
 // The kit's pieces: every function here returns markup; compositions.js only calls them.
+import { diffText, facts, plus } from '../../kanso/mods/kanso-panel/ui-facts.js';
 
 export const escape = (text) => String(text).replace(/[&<>"]/g, (char) => `&#${char.charCodeAt(0)};`);
 
@@ -238,13 +239,8 @@ export const headerSegment = ({ parts = [], icon = null, tone = null, title = nu
   + `${act ? ' role="button" tabindex="0"' : ''}${title ? ` title="${escape(title)}"` : ''}>${icon ? `<svg class="kanso-icon kanso-icon--inline"><use href="#${escape(icon)}"/></svg>` : ''}`
   + `${parts.filter(Boolean).map(({ text, tone: ink }) => `<span${ink ? ` class="kanso-text--${escape(ink)}"` : ''}>${escape(text)}</span>`).join('')}</span>`;
 export const paneName = ({ name }) => `<span class="kanso-pane-header__name">${escape(name)}</span>`;
-// Lines added and removed, as git says them.
-export const diffText = ({ add = 0, del = 0 }) => `+${Number(add)} −${Number(del)}`;
-// Facts on one line, the way a tooltip lists what was folded away.
-export const facts = (...parts) => parts.filter(Boolean).join(' · ');
-
-// A count of what is folded away, such as +3.
-export const plus = (count) => `+${count}`;
+// Facts as words (diffText, facts, plus): the app's own, so the Storybook and the panels say them the same.
+export { diffText, facts, plus };
 
 // Status bar pieces: each item is a Mark or an icon with its words, in the bar's meta size.
 const inlineIcon = (name) => `<svg class="kanso-icon kanso-icon--inline"><use href="#${escape(name)}"/></svg>`;
