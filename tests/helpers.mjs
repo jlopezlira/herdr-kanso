@@ -11,7 +11,7 @@ import { bannedGlobals } from "../scripts/herdr-api.mjs";
 import { modScript } from "../scripts/mod-source.mjs";
 
 const runFile = promisify(execFile);
-const fileExists = (path) => access(path).then(() => true, () => false);
+export const fileExists = (path) => access(path).then(() => true, () => false);
 const api = JSON.parse(readFileSync(new URL("./herdr-api.json", import.meta.url), "utf8"));
 const declaredNames = (mod) => api.modules[mod] ?? [];
 const HERDR_MODULES = {
@@ -147,6 +147,13 @@ export async function exec(command, args, options = {}) {
     return { code: error.killed ? 137 : error.code, stdout: error.stdout ?? "", stderr: error.stderr ?? String(error) };
   }
 }
+
+// git in `cwd` as a test user, with `config` first; a failing git fails the test.
+export const gitOk = (...config) => async (cwd, ...args) => {
+  const r = await exec("git", ["-c", "core.autocrlf=false", "-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false", ...config, ...args], { cwd });
+  assert.equal(r.code, 0, `git ${args.join(" ")}: ${r.stderr}`);
+  return r.stdout.trim();
+};
 
 export const databaseTimer = { after(ms, fn) { const timer = setTimeout(fn, ms); timer.unref(); return { cancel: () => clearTimeout(timer) }; } };
 

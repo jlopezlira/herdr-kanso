@@ -1,4 +1,5 @@
-import { loadSpaces, loadStrip, loadTabs, loadTabPanels } from "./mod-fixtures.mjs";
+import { loadStrip, loadTabs, loadTabPanels } from "./mod-fixtures.mjs";
+import { loadSidebar, mountedState, recorder } from "./sidebar-fixtures.mjs";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { clone, load } from "./helpers.mjs";
@@ -284,53 +285,29 @@ test("kanso-tabs remounts a panel kept from the separate token-spend mod as Kans
 });
 
 test("kanso-spaces passes an explicit machine to space.new for local, remote, and active spaces", async () => {
-  const clicks = {};
-  const node = () => {
-    let currentId = null;
-    const proxy = new Proxy({}, {
-      get(_target, prop) {
-        if (prop === "id") return (id) => { currentId = id; return proxy; };
-        if (prop === "on_click") return (fn) => { if (currentId) clicks[currentId] = fn; return proxy; };
-        if (prop === "when") return (cond, fn) => (cond ? fn(proxy) : proxy);
-        return () => proxy;
-      },
-    });
-    return proxy;
-  };
+  const { node, host, handlers } = recorder();
   const calls = [];
   let activeMachine = "odin";
   const spList = () => [
     { id: "sp-local", name: "local", folder: "/home", machine: null, active: activeMachine === null, tabs: [] },
     { id: "odin/sp1", name: "remote", folder: "/srv", machine: "odin", active: activeMachine === "odin", tabs: [] },
   ];
-  const { Spaces } = await loadSpaces({
-    div: node, svg: node, image: node, h_flex: node, v_flex: node,
-    Popover: { new: node }, Toggle: { new: node }, Button: { new: (id) => { const el = node(); return id ? el.id(id) : el; } },
-    ORDERS: { updated: "Updated" }, DEFAULT_ORDER: "updated", NAME_LABEL: "kanso.name", PIN_LABEL: "kanso.pin",
-    orderSessions: (l) => l, withTerminals: () => [], terminals: () => [], nest: () => [], bySection: () => [],
-    track: () => null, elapsed: () => null, activityOf: () => null, agentLabel: () => "", duration: () => "", findThreads: async () => ({}),
-    props: () => ({}), FLUSH: -24, STATUS_ORDERS: { latest: "Latest" }, THREAD_ORDERS: { said: "Said" },
-    theme: () => ({ foreground: "#fff", muted: "#888", dim: "#666", chrome: "#111", hover: "#222", ansi2: "#0f0" }),
-    shared: () => null, setShared: () => {},
-    spaces: spList, panes: () => [], agents: () => [],
-    machines: () => [{ name: null, layout: "ready" }, { name: "odin", layout: "ready" }],
-    run: (cmd, args) => calls.push([cmd, clone(args ?? null)]), home: () => "/Users/me",
+  const { Spaces } = await loadSidebar(host, {
+    spaces: spList, machines: () => [{ name: null, layout: "ready" }, { name: "odin", layout: "ready" }],
+    run: (cmd, args) => calls.push([cmd, clone(args ?? null)]),
   });
-  const view = new Spaces();
-  Object.assign(view, {
-    git: {}, shown: new Set(["odin/sp1"]), born: {}, custom: {}, order: "updated",
-    machines: [{ name: "odin", state: "connected", target: "odin.example" }], folded: new Set(), agentsFolded: new Set(),
-    tools: node, sync: { config: {}, status: {} },
-  });
+  const view = Object.assign(new Spaces(), mountedState({
+    shown: new Set(["odin/sp1"]), machines: [{ name: "odin", state: "connected", target: "odin.example" }], tools: node,
+  }));
   view.hoverMachine = "local";
   view.render();
 
   const cx = { stop_propagation() {}, notify() {} };
-  clicks["machine-add-local"]({}, cx);
-  clicks["machine-new-local-action"]({}, cx);
+  handlers["on_click:machine-add-local"]({}, cx);
+  handlers["on_click:machine-new-local-action"]({}, cx);
   view.hoverMachine = "odin";
   view.render();
-  clicks["machine-add-odin"]({}, cx);
+  handlers["on_click:machine-add-odin"]({}, cx);
 
   // The top + is no longer a bare space: it adds a project (tests/projects.test.mjs).
   assert.deepEqual(calls, [
@@ -347,11 +324,7 @@ test("kanso-spaces passes an explicit machine to space.new for local, remote, an
 });
 
 test("an agent moved to another project shows there, and only there, whatever space its terminal is in", async () => {
-  const node = () => new Proxy(() => {}, { get: (_t, k) => (k === "then" ? undefined : () => node()), apply: () => node() });
-  const { Spaces } = await loadSpaces({
-    div: node, svg: node, image: node, h_flex: node, v_flex: node, Popover: { new: node },
-    orderSessions: (l) => l, terminals: () => [], shared: () => null, setShared: () => {}, spaces: () => [], panes: () => [], agents: () => [],
-  });
+  const { Spaces } = await loadSidebar(recorder().host);
   const view = new Spaces();
   Object.assign(view, { order: "updated", custom: {}, termBy: new Map([["t1", { address: "t1", labels: { "kanso.id": "t1-5" } }], ["t2", { address: "t2", labels: {} }]]),
     panel: { agents: new Map([["term:t1-5", { project: "sp-kanso", projectAt: 1 }]]) }, inStripOrder: (l) => l });
@@ -363,11 +336,7 @@ test("an agent moved to another project shows there, and only there, whatever sp
 });
 
 test("the latest project choice wins, whichever key it was made under, and a clearing is a choice too", async () => {
-  const node = () => new Proxy(() => {}, { get: (_t, k) => (k === "then" ? undefined : () => node()), apply: () => node() });
-  const { Spaces } = await loadSpaces({
-    div: node, svg: node, image: node, h_flex: node, v_flex: node, Popover: { new: node },
-    orderSessions: (l) => l, terminals: () => [], shared: () => null, setShared: () => {}, spaces: () => [], panes: () => [], agents: () => [],
-  });
+  const { Spaces } = await loadSidebar(recorder().host);
   const C = "00000000-0000-4000-8000-0000000000aa";
   const view = new Spaces();
   const th = { file: `/h/.claude/projects/-w/${C}.jsonl`, pid: 7 };
