@@ -2,7 +2,7 @@
 // folder only, so the source (the one you edit) is copied into every other
 // mod that uses it. `--check` fails instead when a copy differs.
 import { readFile, writeFile, readdir, rm } from "node:fs/promises";
-import { fileURLToPath } from "node:url";
+import { CHECK, isMain } from "./cli.mjs";
 
 const root = new URL("../", import.meta.url);
 // Each shared file (relative to the repo), and where it is copied.
@@ -112,11 +112,10 @@ async function importedShares() {
 const imported = await importedShares();
 export const SHARED = [...COMMON, ...imported.shared];
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const check = process.argv.includes("--check");
+if (isMain(import.meta.url)) {
   let stale = 0;
   for (const copy of imported.obsolete) {
-    if (check) { console.error(`${copy} is unused: run npm run sync:share`); stale += 1; }
+    if (CHECK) { console.error(`${copy} is unused: run npm run sync:share`); stale += 1; }
     else { await rm(new URL(copy, root)); console.log(`removed unused ${copy}`); }
   }
   for (const { source: from, copies } of SHARED) {
@@ -125,7 +124,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
       const target = new URL(copy, root);
       const current = await readFile(target, "utf8").catch(() => null);
       if (current === source) continue;
-      if (check) { console.error(`${copy} differs from ${from}: run npm run sync:share`); stale += 1; }
+      if (CHECK) { console.error(`${copy} differs from ${from}: run npm run sync:share`); stale += 1; }
       else { await writeFile(target, source); console.log(`copied ${from} to ${copy}`); }
     }
   }

@@ -6,7 +6,7 @@ https://fonts.googleapis.com/css2?family=Geist:wght@500;700&family=Geist+Mono:wg
 <!-- about -->
   Source of og.png, the 1280x640 social preview. Regenerate from site/ with:
     python3 -m http.server 8765 &
-    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --headless=new --hide-scrollbars \
+    <!-- piece: chrome -->
       --virtual-time-budget=5000 --window-size=1280,640 --screenshot=og.png http://localhost:8765/og-card.html
 <!-- glow -->
     content: ""; position: absolute; inset: -200px auto auto -160px; width: 900px; height: 700px;

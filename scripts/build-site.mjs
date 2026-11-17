@@ -2,7 +2,7 @@
 // Usage: npm run build:site [-- --check]
 // Writes each site/<page>.html from site/pages/<page>.html and the layout it names; --check fails when one differs.
 import { readdirSync, readFileSync, writeFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
+import { CHECK, isMain } from "./cli.mjs";
 
 const ROOT = new URL("../", import.meta.url);
 const SOURCES = "site/pages/";
@@ -14,6 +14,8 @@ export const BUILT = PAGES.map((name) => `site/${name}`);
 const generated = (name) => `<!-- Generated from ${SOURCES}${name} by npm run build:site. -->`;
 
 const PIECES = {
+  chrome: ['"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --headless=new --hide-scrollbars \\'],
+  pages: ['<a href="storybook/" target="_blank" rel="noopener">Storybook</a>', '<a href="changelog.html">Changelog</a>'],
   install: [
     "<code data-copy-text>add herdr.dev/layouts/jlopezlira/herdr-kanso--kanso</code>",
     '<button type="button" data-copy><span data-copy-label>Copy</span></button>',
@@ -25,8 +27,7 @@ const NAV = `<header class="nav">
     <a class="brand" href="./"><img src="assets/enso.svg" alt="" width="22" height="22">kansō</a>
     <nav class="nav-links" aria-label="Pages">
       <a href="./#features">Features</a>
-      <a href="storybook/" target="_blank" rel="noopener">Storybook</a>
-      <a href="changelog.html">Changelog</a>
+      <!-- piece: pages -->
       <a href="credits.html">Credits</a>
     </nav>
   </div>
@@ -96,7 +97,7 @@ ${body}  <div class="shot"><img src="shots/hero.png" alt=""></div>
 
 const LAYOUTS = {
   page,
-  doc: (name, { head, main, after }) => page(name, { head, body: `${NAV}<main class="doc">\n\n${main}</main>\n\n`, after }),
+  doc: (name, { head, main, after }) => page(name, { head, body: `${withPieces(NAV)}<main class="doc">\n\n${main}</main>\n\n`, after }),
   card,
 };
 
@@ -115,13 +116,12 @@ export const build = (name) => {
   return LAYOUTS[layout](name, parts);
 };
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const check = process.argv.includes("--check");
+if (isMain(import.meta.url)) {
   const stale = PAGES.filter((name) => read(`site/${name}`) !== build(name));
-  if (check && stale.length) {
+  if (CHECK && stale.length) {
     console.error(`${stale.map((name) => `site/${name}`).join(", ")} differ from site/pages: run npm run build:site`);
     process.exit(1);
   }
-  if (!check) for (const name of stale) writeFileSync(new URL(`site/${name}`, ROOT), build(name));
-  console.log(check ? "site pages match their sources" : `wrote ${stale.length} site pages`);
+  if (!CHECK) for (const name of stale) writeFileSync(new URL(`site/${name}`, ROOT), build(name));
+  console.log(CHECK ? "site pages match their sources" : `wrote ${stale.length} site pages`);
 }
