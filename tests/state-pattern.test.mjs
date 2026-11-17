@@ -154,16 +154,21 @@ test("The title bar draws the window's lights only: no Herdr mark and no name", 
   assert.equal(arg(bar, "bg"), "chrome");
 });
 
-test("A pull is drawn at once: the count gives way to the breathing dot at 80%, and a count at rest is muted, not red", async () => {
-  const { gitTail } = await load("kanso-spaces/sidebar-draw.js", ["gitTail"], { ...gpuiHost(), run: () => {} });
-  const t = { dim: "dim", muted: "muted", ansi1: "red", ansi2: "green", foreground: "#d8d4cb", background: "#1b1b19" };
+test("A pull is drawn at once: the project row breathes at 80% until git answers, and ↓ at rest is a quiet press, not red", async () => {
+  const host = { ...gpuiHost(), run: () => {} };
+  const { gitFacts } = await load("kanso-spaces/sidebar-draw.js", ["gitFacts"], host);
+  const { projectRow } = await load("kanso-spaces/project-row.js", ["projectRow"], host);
+  const { tokens } = await load("kanso-spaces/ui.js", ["tokens"], host);
+  const c = tokens({ dim: "dim", muted: "muted", ansi1: "red", ansi2: "green", foreground: "#d8d4cb", background: "#1b1b19" });
   const place = { cwd: "/work/app", on: null };
-  const rest = gitTail({ name: "app", branch: "main", behind: 12 }, null, "app", t, place, { id: "app", pulling: false, pull: () => {}, open: () => {} });
-  const count = find(rest, (el) => calls(el, "child").some((call) => call[1] === "↓12"));
-  assert.equal(arg(count, "text_color"), "muted");
-  assert.equal(arg(rest, "opacity"), 1);
-  const busy = gitTail({ name: "app", branch: "main", behind: 12 }, null, "app", t, place, { id: "app", pulling: "pull::/work/app", pull: () => {}, open: () => {} });
-  assert.equal(texts(busy).includes("↓12"), false);
-  assert.equal(arg(busy, "opacity"), 0.8);
-  assert.ok(find(busy, (el) => calls(el, "loop").length > 0), "the dot breathes");
+  const draw = (facts) => projectRow({ name: "app", ...facts })("space-app", c, { on: { Pull: () => {} } });
+  const rest = gitFacts({ name: "app", branch: "main", behind: 12 }, null, "app", place, false);
+  assert.deepEqual(JSON.parse(JSON.stringify(rest)), { folder: null, branch: "main", sync: [{ text: "↓12", tip: "Pull 12", label: "Pull" }], pending: false });
+  const count = find(draw(rest), (el) => calls(el, "child").some((call) => call[1] === "↓12"));
+  assert.equal(arg(count, "text_color"), c.muted);
+  const busy = gitFacts({ name: "app", branch: "main", behind: 12 }, null, "app", place, "pull::/work/app");
+  assert.equal(busy.pending, true);
+  const row = draw(busy);
+  assert.equal(arg(row, "opacity"), 0.8);
+  assert.ok(find(row, (el) => calls(el, "loop").length > 0), "the dot breathes");
 });

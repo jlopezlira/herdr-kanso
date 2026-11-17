@@ -20,26 +20,7 @@ export const toolbar = ({ view = 'spaces', column = false, open = false, sorted 
 };
 
 // Sidebar compositions: each one is the Row, Tab, Menu, Avatar, Mark, Chip or Button in its own configuration.
-const icon = (name, label) => ({ icon: name, label });
-
-export const projectRow = ({ name, folder = null, branch = null, sync = null, open = false, status = 'blocked', count = 0, hover = false, focus = false }) => row({
-  name, heading: true, current: open, hover, focus, detail: [folder, branch && { icon: 'lu-git-branch', text: branch }, sync],
-  mark: count ? status : 'none', meta: count || null, actions: [icon('lu-plus', phrase('New agent in', name)), icon('lu-ellipsis', 'More')],
-});
-
-export const computerStates = ['on', 'off', 'unreachable'];
-export const computerRow = ({ name, remote = true, state = 'on', status = 'blocked', count = 0, hover = false, focus = false }) => row({
-  icon: remote ? 'lu-server' : 'lu-monitor', name, heading: true, hover, focus,
-  mark: count && state === 'on' ? status : 'none', meta: { off: 'Off', unreachable: 'Unreachable' }[state] ?? (count || null),
-  action: state === 'off' ? { kind: 'icon', ...icon('lu-power', phrase('Turn', name, 'on')) } : state === 'unreachable' ? { kind: 'icon', ...icon('lu-refresh-cw', 'Refresh') } : null,
-  actions: state === 'on' && remote ? [icon('lu-power', 'Turn off'), icon('lu-plus', phrase('New project on', name)), icon('lu-arrow-right-left', 'Sync')] : [],
-});
-
-export const section = ({ title, status = 'none', count = 0 }) => row({ name: title, heading: true, mark: status, meta: count || null });
-
-export const asleep = ({ names = [], open = false } = {}) => list(row({ name: 'Asleep', heading: true, mark: 'asleep', meta: open ? null : phrase(names.length) }),
-  open ? names.map((name) => row({ name, depth: 1, dimmed: true, action: { label: 'Wake', kind: 'quiet' } })) : null);
-
+// The rows the app draws (session, project, computer, section, asleep) live each in its own file, shared with the app.
 export const views = [
   { key: 'spaces', label: 'Projects', icon: 'lu-folder' },
   { key: 'agents', label: 'Status', icon: 'lu-activity' },

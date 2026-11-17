@@ -1,4 +1,4 @@
 import { componentStory } from '../kit/story.js';
 
-export default { title: "Primitives/Button", tags: [] };
+export default { title: "Primitives/Button", tags: ["In review"] };
 export const Variants = componentStory("Primitives/Button");

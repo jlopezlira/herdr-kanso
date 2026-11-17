@@ -2,14 +2,12 @@ import { paths } from "./platform-paths.js";
 // Added by José Gutiérrez (minimalistic): agents nested under their space. Pure drawing helpers; the
 // fold state lives in main.js.
 import { div } from "gpui-kit";
-import { h_flex } from "gpui-base";
 import { run, openOverlay } from "herdr";
 import { NAME_LABEL } from "./marks.js";
 import { tellsSomething } from "./pure.js";
 import { parseProcesses, etimeMs } from "./procs.js";
 import { oneLine } from "./since-left-model.js";
-import { foldTail } from "./sidebar-rows.js";
-import { GLIDE, H, R, SIDEBAR, DIALOG } from "./ui.js";
+import { GLIDE, H, R, DIALOG } from "./ui.js";
 import { mark, MARK_SIZES } from "./ui-mark.js";
 import { sessionRow } from "./session-row.js";
 import { machineOf } from "./machines.js";
@@ -31,10 +29,6 @@ export function pill(id, y, h, color) {
 const twoLines = (more) => !more.oneLine && Boolean(more.activity);
 export const sessionHeight = (more = {}) => (twoLines(more) ? H.two : H.line);
 
-// A row flush with the list's 10px inset (the Status and Threads views).
-export const FLUSH = 10 - SIDEBAR.agentX;
-// A row nested under its project's name: the Threads view's conversations, indented as a Projects view's agents are.
-export const NESTED = FLUSH + 28;
 // Asleep is one more status: its own section, after the awake ones.
 const RANK = { blocked: 4, done: 3, working: 2, idle: 1, asleep: 0.5 };
 
@@ -313,23 +307,6 @@ export function withTerminals(list, ps, ss) {
 }
 
 export const mostUrgent = (list) => list.reduce((m, a) => ((RANK[a.status] ?? 0) > (RANK[m] ?? 0) ? a.status : m), null);
-
-// A small tool on a row: it lights under the pointer and keeps its press from the row below.
-export const rowTool = (el, t) => el
-  .hover((s) => s.bg(t.hover).text_color(t.foreground))
-  .on_mouse_down("left", (_e, cx) => cx.stop_propagation());
-
-// Open, nothing: the row itself folds. Folded, the most urgent mark and how many; a click unfolds.
-export function agentFold(id, mine, open, onToggle, t, c) {
-  const tail = foldTail(open, mine.map((a) => a.status));
-  if (!tail) return null;
-  // The row selects on mouse up and drags on mouse down: keep both to the toggle.
-  return rowTool(h_flex().id(`agents-fold-${id}`).flex_none().h(20).px(3).gap(4).items_center().rounded(6)
-    .text_size(11.5).text_color(t.dim).cursor_pointer(), t)
-    .on_mouse_up("left", (_e, cx) => { cx.stop_propagation(); onToggle(cx); })
-    .when(Boolean(tail.mark), (el) => el.child(mark(c, { status: tail.mark, size: "sm" })))
-    .child(div().child(String(tail.count)));
-}
 
 const GUIDE_KIND = { "├": "tee", "└": "end", "│": "pass" };
 // The program's own art, or the terminal's icon for a terminal or an unknown program.
