@@ -88,12 +88,12 @@ const groundOf = (c, { current, hover, title, wash }) => {
 };
 
 // A wrapped name runs over as many lines as it needs, such as a review thread's comment.
-// A group's head is in the label type: smaller, strong and muted, over the rows of its group.
-const nameOf = (id, c, { name, heading, group, title, ink, glint, wrap }) => (glint ? glinting(name, c, id) : div().min_w(0).text_color(group ? c.muted : ink)
+// A group's head stands over the rows of its group: strong, in the row's ink, one step up the type scale from a heading.
+const nameOf = (id, c, { name, heading, group, title, ink, glint, wrap }) => (glint ? glinting(name, c, id) : div().min_w(0).text_color(ink)
   .when(wrap, (el) => el.flex_1().line_height(LH.body))
   .when(!wrap, (el) => el.truncate())
   .when(heading || group || title, (el) => el.font_semibold())
-  .when(group, (el) => el.text_size(T.body))
+  .when(group, (el) => el.text_size(T.card))
   .when(title, (el) => el.text_size(T.page))
   .child(name));
 
@@ -107,10 +107,13 @@ const asideOf = (id, c, { meta, flag, dimmed }) => {
   ];
 };
 
-const controlsOf = (id, c, { actions, count, action, tools, keys }) => [
-  actions.length ? h_flex().flex_none().items_center().gap(G.hair).my(-G.xs).children(actions.map(tool(id, c))) : null,
+// A row's tool is an icon Button at H.badge holding an ICON_INLINE glyph: the last thing in the row, it reaches out by the room
+// around its glyph, so the glyph ends on the row's edge as the name starts on it. A mark or a pending dot after it is on the edge itself.
+const TOOL_ROOM = (H.badge - ICON_INLINE) / 2;
+const controlsOf = (id, c, { actions, count, action, tools, keys, last }) => [
+  actions.length ? h_flex().flex_none().items_center().gap(G.hair).my(-G.xs).when(last && !count && !action, (el) => el.mr(-TOOL_ROOM)).children(actions.map(tool(id, c))) : null,
   count ? chipOf(id, c, count) : null,
-  action ? actionOf(id, c, action) : null,
+  action ? actionOf(id, c, action).when(last && action.kind === "icon", (el) => el.mr(-TOOL_ROOM)) : null,
   ...tools,
   ...keys.map((key) => keyHint(c, key)),
 ];
@@ -168,6 +171,7 @@ export function row(id, c, {
   const under = Boolean(second) || verbs.length > 0 || wrap;
   const two = Boolean(second) && !title && !verbs.length && !wrap;
   const height = heightOf({ title, under, two });
+  const marked = mark(c, { status });
   const first = h_flex().w_full().min_w(0).items_center().gap(G.sm).when(wrap, (el) => el.items_start()).when(Boolean(second && title), (el) => el.h(H.row)).children([
     ...start,
     level === null ? null : foldOf(c, open),
@@ -176,9 +180,9 @@ export function row(id, c, {
     detailOf(c, id, detail),
     div().flex_1(),
     ...(shown && actions.length ? [] : asideOf(id, c, { meta, flag, dimmed })),
-    ...controlsOf(id, c, { actions: shown ? actions : [], count, action, tools, keys }),
+    ...controlsOf(id, c, { actions: shown ? actions : [], count, action, tools, keys, last: !tools.length && !keys.length && !pending && !marked }),
     pending ? pendingDot(`${id}-pending`, c) : null,
-    mark(c, { status }),
+    marked,
   ].filter(Boolean));
   // The ring is a border kept clear at rest, so a focus or a pick never moves the content.
   return wire(rootOf(id, { onClick, onKey }).relative().min_w(0).mx(-G.sm).items_center().rounded(R.control)

@@ -26,7 +26,7 @@ async function footer({ shared = {}, ready = null, bindings = [{ action: "kanso-
     updates: () => ({ app: { ready } }), keys: () => bindings, settings: () => ({ font_family: "Mono" }), window: () => ({ platform: "macos" }),
   };
   const view = await mountChrome(host);
-  const kit = await load("kanso-chrome/ui.js", ["H", "G", "T", "SIDEBAR"], host);
+  const kit = await load("kanso-chrome/ui.js", ["H", "G", "T", "SIDEBAR", "PANE"], host);
   view.updater = { available: () => null, busy: false, refused: () => null, install: (context) => installs.push(context), ...updater };
   return { view, ran, overlays, installs, ...kit };
 }
@@ -37,9 +37,10 @@ test("In Stable Mode with nothing to install, the footer is Settings alone: Add 
 });
 
 test("Open, the footer's rows are the kit's rows, 8 above and 16 below at the sidebar's gutter; the rail keeps 12 below, its Buttons a hair apart", async () => {
-  const { view, G, T, SIDEBAR } = await footer();
+  const { view, G, T, SIDEBAR, PANE } = await footer();
   const open = view.render();
-  assert.deepEqual([arg(open, "pt"), arg(open, "px"), arg(open, "pb")], [G.sm, SIDEBAR.gutter, G.lg], "its sides are the list's");
+  assert.deepEqual([arg(open, "pt"), arg(open, "pl"), arg(open, "pr"), arg(open, "pb")], [G.sm, SIDEBAR.gutter, SIDEBAR.gutter - PANE.gap, G.lg],
+    "its sides are the list's: the gutter from each side seen, the work column's padding showing past its right");
   assert.equal(arg(open, "gap"), undefined, "open rows touch");
   const settings = holding(open, "Settings");
   assert.equal(arg(settings, "text_size"), T.value, "the kit's row size, as the Storybook's row");

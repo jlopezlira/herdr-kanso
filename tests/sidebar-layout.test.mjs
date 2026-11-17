@@ -2,8 +2,9 @@
 // a computer opening its own group, and the keyboard walking the rows in the order they are drawn.
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { load, chain, gpuiHost, clone } from "./helpers.mjs";
-import { loadSidebar, mountedState, shell } from "./sidebar-fixtures.mjs";
+import { loadSidebar, mountedState, shell, SIDEBAR_THEME } from "./sidebar-fixtures.mjs";
 
 // The drawn tree, each element with its calls and children, so where it sits can be measured.
 const host = () => ({ ...gpuiHost(), svg: (path) => { const el = chain("svg"); el.calls.push(["svg", path]); return el; }, Popover: { new: (id) => chain(id) } });
@@ -28,15 +29,16 @@ const TERMINALS = [
   shell("t1", "00000000-0000-4000-8000-000000000001", "Ada"),
 ];
 const dark = { name: "dark", target: "dark.example", via: "", session: "", temporary: false, state: "connected" };
+const cold = { name: "cold", target: "cold.example", via: "", session: "", temporary: false };
 
-async function sidebar({ kbd = false, navKey = null } = {}) {
+async function sidebar({ kbd = false, navKey = null, hoverSpace = null, hoverMachine = null } = {}) {
   const { Spaces } = await loadSidebar(host(), {
     spaces: () => SPACES, agents: () => AGENTS, panes: () => PANES, terminals: () => TERMINALS,
-    machines: () => [{ name: null, layout: "ready" }, { name: "dark", layout: "ready" }],
+    machines: () => [{ name: null, layout: "ready" }, { name: "dark", layout: "ready" }, { name: "cold", layout: "ready" }],
   });
   const view = Object.assign(new Spaces(), mountedState({
-    shown: new Set(SPACES.map((w) => w.id)), machines: [dark], asleepOpen: new Set(["sleep:tb"]),
-    kbd, navKey, handle: { is_focused: () => kbd, focus() {} },
+    shown: new Set(SPACES.map((w) => w.id)), machines: [dark], parked: [cold], asleepOpen: new Set(["sleep:tb"]),
+    kbd, navKey, hoverSpace, hoverMachine, handle: { is_focused: () => kbd, focus() {} },
   }));
   return { view, root: view.render() };
 }
@@ -50,7 +52,7 @@ const WIDTH = { border_1: 1, border_2: 2, border_l_1: 1, border_r_1: 1 };
 const last = (el, names, width = (call) => call[1]) => el.calls.filter((call) => names.includes(call[0])).map(width).at(-1) ?? 0;
 const pathOf = (el) => (el.parent ? [...pathOf(el.parent), el] : [el]);
 const own = (el, side, part) => last(el, SIDES[side][part], part === "border" ? (call) => WIDTH[call[0]] : undefined);
-// How far in from the sidebar's side an element's box, and its content, are drawn.
+// How far in from the side of the sidebar's block an element's box, and its content, are drawn.
 const content = (el, side) => pathOf(el).reduce((sum, node) => sum + own(node, side, "margin") + own(node, side, "border") + own(node, side, "pad"), 0);
 const box = (el, side) => (el.parent ? content(el.parent, side) : 0) + own(el, side, "margin");
 // Every element drawn, a Popover's trigger and content too, each knowing what holds it.
@@ -62,53 +64,71 @@ const idOf = (el) => el.calls.find((call) => call[0] === "id")?.[1] ?? (PLAIN.ha
 const byId = (root, id) => nodes(root).find((el) => idOf(el) === id);
 const svgOf = (el) => el.calls.find((call) => call[0] === "svg")?.[1] ?? "";
 // An icon button's glyph sits in the middle of its box.
+const iconButtons = (el) => nodes(el).filter((kid) => kid.kids.some((k) => svgOf(k)) && last(kid, ["w", "size"]));
 const glyphIn = (button, side) => {
   const glyph = button.kids.find((kid) => svgOf(kid));
   return box(button, side) + (last(button, ["w", "size"]) - last(glyph, ["size"])) / 2;
 };
 // The icon button that draws `icon`, in the toolbar.
-const toolbarButton = (root, icon) => nodes(root).find((el) => el.kids.some((kid) => svgOf(kid).endsWith(`/${icon}.svg`)) && last(el, ["w", "size"]));
+const toolbarButton = (root, icon) => iconButtons(root).find((el) => el.kids.some((kid) => svgOf(kid).endsWith(`/${icon}.svg`)));
 // The rows in a list: each reaches out past its parent by its own padding (mx) and keeps a ring clear at rest (border_2).
 const listOf = (root) => nodes(root).find((el) => String(idOf(el)).startsWith("spaces-list-"));
 const rowsIn = (el) => nodes(el).filter((kid) => kid.calls.some((call) => call[0] === "border_2") && kid.calls.some((call) => call[0] === "mx"));
 const rowsOf = (root) => rowsIn(listOf(root));
-// Where rows' content starts and ends, each pair once.
-const edges = (rows) => [...new Set(rows.map((row) => `${content(row, "left")}/${content(row, "right")}`))];
-const px = (value) => Math.round(value);
+// The row's one line: what it draws from its icon or name to its last mark or tool.
+const lineOf = (row) => nodes(row).find((el) => el !== row && el.tag === "h_flex" && el.calls.some((call) => call[0] === "gap"));
+// What the row draws last, and the right edge of its glyph when it is an icon button.
+const lastDrawn = (row) => { let el = lineOf(row); while (el.kids.length && !svgOf(el.kids.at(-1)) && !last(el, ["w", "size"])) el = el.kids.at(-1); return el; };
+const trailingGlyph = (row) => {
+  const end = lastDrawn(row), tool = iconButtons(end).at(-1) ?? end;
+  return iconButtons(row).at(-1) === tool ? glyphIn(tool, "right") : content(row, "right");
+};
 
-test("the toolbar, every row and the footer share one gutter, the same on both sides", async () => {
-  const { G, H, ICON_CHROME, SIDEBAR } = await load("kanso-panel/ui.js", ["G", "H", "ICON_CHROME", "SIDEBAR"], {});
-  const { root } = await sidebar();
+// Herdr's work column pads its left by k-pane-gap in the sidebar's chrome, so the sidebar is seen to end that far past its block.
+const workPad = () => JSON.parse(readFileSync(new URL("../kanso/layouts/kanso.json", import.meta.url), "utf8")).children.find((node) => node.id === "work").padding;
+const seenFrom = (PANE) => ({ left: (x) => x, right: (x) => x + PANE.gap });
+
+test("one gutter from both sides seen: toolbar, rows, the current project's hover tools and pill, a computer's last tool, the footer", async () => {
+  const { G, H, ICON_CHROME, SIDEBAR, PANE, tokens } = await load("kanso-panel/ui.js", ["G", "H", "ICON_CHROME", "SIDEBAR", "PANE", "tokens"], {});
+  assert.equal(workPad(), PANE.gap, "the work column's padding, which shows past the sidebar's block, is k-pane-gap");
+  const seen = seenFrom(PANE);
+  const { root } = await sidebar({ hoverSpace: "sp1", hoverMachine: "dark" });
   const rows = rowsOf(root);
-  assert.ok(rows.length >= 8, "computers, projects, sessions, a sub-session and asleep rows are drawn");
-  const add = toolbarButton(root, "plus"), hide = toolbarButton(root, "panel-left");
+  assert.ok(rows.length >= 9, "computers, projects, sessions, a sub-session and asleep rows are drawn");
   const top = rows.filter((row) => /^(machine|space)-[\w]+$/.test(idOf(row)));
-  const insets = {
-    toolbar: [px(glyphIn(add, "left")), px(glyphIn(hide, "right"))],
-    left: [...new Set(top.map((row) => content(row, "left")))],
-    right: [...new Set(rows.map((row) => content(row, "right")))],
-  };
-  assert.equal(insets.left.length, 1, "computers and projects start on one edge; a session's icon steps in from it by its depth");
-  assert.equal(insets.right.length, 1, "every row's last mark or tool ends on one edge: sessions, sub-sessions and asleep rows too");
-  assert.deepEqual(insets.toolbar, [...insets.left, ...insets.right], "+ draws its icon on the rows' left edge and Hide sidebar on their right edge, to the pixel");
-  assert.deepEqual(insets.left, insets.right, "one gutter, the same on both sides");
-  assert.deepEqual(insets.left, [SIDEBAR.gutter], "that gutter is the token");
-  assert.equal(SIDEBAR.gutter, G.lg, "the Storybook's: the sidebar's sp-2 and the row's own sp-2");
-  assert.equal(px(G.sm + (H.line - ICON_CHROME) / 2), SIDEBAR.gutter, "the toolbar's icon buttons stay where the Storybook puts them");
-  // A row's ground reaches out past the gutter by its own padding; the current project's pill is drawn where that ground is.
-  const pill = byId(root, "pill-space"), project = byId(root, "space-sp1");
-  assert.deepEqual([last(pill, ["left"]), last(pill, ["right"])], [box(project, "left"), box(project, "right")]);
-});
+  const at = (side) => [...new Set(top.map((row) => seen[side](content(row, side))))];
+  assert.deepEqual([at("left"), at("right")], [[SIDEBAR.gutter], [SIDEBAR.gutter]], "computers and projects draw from the gutter to the gutter, from each side seen");
+  assert.deepEqual([...new Set(rows.map((row) => seen.right(content(row, "right"))))], [SIDEBAR.gutter], "every row's content ends on it: sessions, sub-sessions and asleep rows too");
 
-test("the footer's rows sit on the same gutter", async () => {
-  const { G, H, ICON_CHROME, tokens } = await load("kanso-panel/ui.js", ["G", "H", "ICON_CHROME", "tokens"], {});
+  // The current project under the pointer: its name on the gutter, its last hover tool's glyph (…) on the gutter, its ground and pill 8 in.
+  const project = byId(root, "space-sp1"), pill = byId(root, "pill-space");
+  const tools = iconButtons(project);
+  assert.ok(tools.length >= 2, "under the pointer, the current project shows its tools");
+  assert.equal(content(project, "left"), SIDEBAR.gutter, "the name starts on the gutter");
+  assert.equal(seen.right(trailingGlyph(project)), SIDEBAR.gutter, "its last tool's glyph ends on the gutter, not its button's box");
+  const ground = SIDEBAR.gutter - G.sm;
+  assert.deepEqual([box(project, "left"), seen.right(box(project, "right"))], [ground, ground], "the row's ground: as far in from both sides seen");
+  assert.deepEqual([last(pill, ["left"]), seen.right(last(pill, ["right"]))], [ground, ground], "the pill is where that ground is");
+
+  // A computer's last tool, under the pointer (dark) and always out (cold, off: Turn on).
+  for (const id of ["machine-dark", "machine-cold"]) {
+    const computer = byId(root, id);
+    assert.ok(iconButtons(computer).length, `${id} draws a tool`);
+    assert.equal(seen.right(trailingGlyph(computer)), SIDEBAR.gutter, `${id}: its last tool's glyph ends on the gutter`);
+  }
+
+  // The toolbar's icons sit where the Storybook's do, 15.5 in from both sides seen: its 8 and half of a large Button's room.
+  const toolbar = G.sm + (H.line - ICON_CHROME) / 2;
+  const add = toolbarButton(root, "plus"), hide = toolbarButton(root, "panel-left");
+  assert.deepEqual([glyphIn(add, "left"), seen.right(glyphIn(hide, "right"))], [toolbar, toolbar], "+ and Hide sidebar, to the half pixel");
+
+  // The footer's rows: the gutter from both sides seen.
   const { sidebarFooter } = await load("kanso-chrome/sidebar-footer.js", ["sidebarFooter"], host());
   const c = tokens({ foreground: "#ffffff", background: "#000000" });
-  const toolbar = px(G.sm + (H.line - ICON_CHROME) / 2);
   for (const footer of [sidebarFooter({ update: "Update kansō" }), sidebarFooter({ update: "Update kansō", refused: { text: "kansō didn't update", source: "offline" } })]) {
-    const rows = rowsIn(footer("f", c, {}));
-    assert.equal(rows.length, 2, "Update kansō and Settings");
-    assert.deepEqual(edges(rows), [`${toolbar}/${toolbar}`], "on the edges the toolbar's icons are on");
+    const drawn = rowsIn(footer("f", c, {}));
+    assert.equal(drawn.length, 2, "Update kansō and Settings");
+    assert.deepEqual([...new Set(drawn.flatMap((row) => [content(row, "left"), seen.right(content(row, "right"))]))], [SIDEBAR.gutter]);
   }
 });
 
@@ -136,15 +156,18 @@ test("a computer opens its own group: the space above it, the first one too, is 
   assert.deepEqual(["space-sp1", "space-sp3"].map((id) => above[id]), [0, 0], "its first project sits right under it");
 });
 
-test("a computer heads its group: its name in the label type, not a project's", async () => {
+test("a computer heads its group: its name strong, in the foreground, one step up the type scale from a project's", async () => {
   const { T } = await load("kanso-panel/ui.js", ["T"], {});
   const { root } = await sidebar();
   const nameOf = (rowId) => nodes(byId(root, rowId)).find((el) => el.calls.some((call) => call[0] === "truncate"));
-  const look = (rowId) => [last(nameOf(rowId), ["text_size"]) || null, nameOf(rowId).calls.some((call) => call[0] === "font_semibold")];
-  assert.deepEqual(look("machine-dark"), [T.body, true], "a computer: the label type, strong");
-  assert.deepEqual(look("space-sp3"), [null, true], "a project: the row's own type, strong");
+  const size = (rowId) => last(nameOf(rowId), ["text_size"]) || last(byId(root, rowId), ["text_size"]);
+  const strong = (rowId) => nameOf(rowId).calls.some((call) => call[0] === "font_semibold");
   const ink = (rowId) => last(nameOf(rowId), ["text_color"]);
-  assert.notEqual(ink("machine-dark"), ink("space-sp3"), "a computer's name is muted, a project's is not");
+  assert.deepEqual([size("machine-dark"), size("space-sp3")], [T.card, T.value], "a computer at the name size, a project at the row's");
+  assert.ok(size("machine-dark") > size("space-sp3"), "a computer's name is larger than a project's");
+  assert.deepEqual([strong("machine-dark"), strong("space-sp3")], [true, true], "both strong");
+  assert.equal(ink("machine-dark"), SIDEBAR_THEME.foreground, "a computer's name in the foreground");
+  assert.equal(ink("machine-dark"), ink("space-sp3"), "as a project's is");
 });
 
 test("j walks computers, projects, sessions, sub-sessions and asleep rows in the order they are drawn", async () => {
@@ -153,7 +176,7 @@ test("j walks computers, projects, sessions, sub-sessions and asleep rows in the
   const rowOf = (key) => { const [kind, ...rest] = key.split(":"); return ROW[kind]?.(rest.join(":")) ?? null; };
   const drawnOrder = nodes(root).map(idOf).filter(Boolean);
   const walked = clone(view.nav.map((n) => rowOf(n.key)).filter(Boolean));
-  assert.deepEqual(walked, ["machine-local", "space-sp1", "space-agent-t0", "space-agent-t9", "asleep-group-sleep:tb", "space-agent-zz:t1", "space-sp2", "machine-dark", "space-sp3"]);
+  assert.deepEqual(walked, ["machine-local", "space-sp1", "space-agent-t0", "space-agent-t9", "asleep-group-sleep:tb", "space-agent-zz:t1", "space-sp2", "machine-cold", "machine-dark", "space-sp3"]);
   assert.deepEqual(walked, drawnOrder.filter((id) => walked.includes(id)), "the keyboard's path is the screen's order");
   const cx = { stop_propagation() {}, notify() {} };
   const seen = [view.navKey];

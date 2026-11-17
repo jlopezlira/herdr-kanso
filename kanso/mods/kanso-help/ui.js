@@ -20,7 +20,7 @@ export const LINE = 1;
 export const GLINT = { run: 240, wide: 44, mid: 26, narrow: 12 };
 export const SWITCH = { w: 28, h: 16, knob: 12 };
 export const PAGE = { w: 1080, toolbar: 42, toolbarX: 14, note: 12, markdown: 13, unitGap: 6, unitY: 3, findList: 300 };
-export const SIDEBAR = { w: 256, narrow: 240, min: 120, railRow: 46, tile: 36, guideX: 13, agentX: 34, elbowGap: 6, gap: 1, gutter: 16, groupGap: 16, computerGap: 24 };
+export const SIDEBAR = { w: 256, narrow: 240, min: 120, railRow: 46, tile: 36, guideX: 13, agentX: 34, elbowGap: 6, gap: 1, gutter: 16, groupGap: 16, computerGap: 24, threadGap: 6 };
 export const PANE = { edge: 28, gap: 6, minW: 140, minH: 90, pills: 110 };
 export const KEY = { x: 5, text: 10.5, unit: 40, gap: 5 };
 export const DIALOG = { prompt: 420, list: 202, pad: 20, settingsW: 860, settingsH: 680 };
@@ -44,6 +44,10 @@ export const WASHES = { dark: { w4: 0.04, w7: 0.07, w12: 0.12, w14: 0.14 }, ligh
 export const DAWN = { dark: { top: "#262339", star: "#d9d3e6", art: "mods/kanso-chrome/dawn-dark.svg" }, light: { top: "#aeb0d6", star: "#fbf6ea", art: "mods/kanso-chrome/dawn-light.svg" } };
 export const INK = { faint: "#8a867d", fallback: "#888888", dojoFur: "#e8963a", dojoCream: "#f6ece0", dojoInk: "#161615" };
 // End of the generated sizes.
+/** The sidebar is seen to end PANE.gap past its block, where the work column's padding (kanso.json's `work`) shows its chrome;
+ * the Storybook's sidebar meets the work area. Each of its blocks (header, list, footer, the pill) sets `inset` on its `edges`,
+ * the start in full and the end PANE.gap less, so what it draws sits as far from either side seen. */
+export const sidebarSides = (el, inset, [start, end] = ["pl", "pr"]) => el[start](inset)[end](inset - PANE.gap);
 /** A second press within this long confirms what cannot be undone. */
 export const ARM_MS = 4000;
 export const BREATH = { from: 0.35, to: 0.8, period: 1800 };

@@ -32,7 +32,7 @@ import { asleep } from "./asleep.js";
 import { tile } from "./tile.js";
 import { views, viewSwitch } from "./view-switch.js";
 import { pullKey, runPull, canWake, enterOpens, sectionMarkOf, sectionCount, rowDirectory, threadWord, threadActions, signInCommand, noProjectsOn, sortOf, foldTail, readWord } from "./sidebar-rows.js";
-import { H, G, T, R, W, ICON, SIDEBAR, GLIDE, OPACITY, TINT, alpha, tokens } from "./ui.js";
+import { H, G, T, R, W, ICON, SIDEBAR, GLIDE, OPACITY, TINT, alpha, sidebarSides, tokens } from "./ui.js";
 import { ELBOW } from "./ui-row.js";
 import { button, Armed } from "./ui-button.js";
 import { dialog } from "./ui-dialog.js";
@@ -2492,7 +2492,7 @@ export default class Spaces extends View {
 
   // A pill keeps its identity per view, so a change of view places it rather than sliding it across.
   list(t, collapsed, view, items) {
-    const gap = view === "threads" ? G.xs : SIDEBAR.gap;
+    const gap = view === "threads" ? SIDEBAR.threadGap : SIDEBAR.gap;
     const { els, space, agent } = laidOut(items, gap);
     const pills = collapsed ? [] : [
       ...(space ? [pill("pill-space", space.y, space.h, tokens(t).w12)] : []),
@@ -2500,7 +2500,7 @@ export default class Spaces extends View {
     ];
     // Named, so its scroll position survives every redraw (an unnamed one is placed anew and starts at the top).
     // Open, its sides are the sidebar's gutter: each row's ground reaches out past it by the row's own padding, its content stays on it.
-    return v_flex().id(`spaces-list-${collapsed ? "rail" : view}`).relative().flex_1().min_h(0).px(collapsed ? 0 : SIDEBAR.gutter).gap(collapsed ? 0 : gap).pt(collapsed ? G.sm : 0).pb(G.lg).overflow_y_scrollbar().mode(collapsed ? "hover" : "always")
+    return v_flex().id(`spaces-list-${collapsed ? "rail" : view}`).relative().flex_1().min_h(0).when(!collapsed, (el) => sidebarSides(el, SIDEBAR.gutter)).gap(collapsed ? 0 : gap).pt(collapsed ? G.sm : 0).pb(G.lg).overflow_y_scrollbar().mode(collapsed ? "hover" : "always")
       .on_mouse_up("left", (_e, cx) => { this.pressed = null; this.over = null; this.draggedAgent = null; cx.notify(); })
       // Rows keep their height: shrunk to fit, there would be nothing to scroll.
       .children([...pills, ...els.map((el) => el.flex_none())]);

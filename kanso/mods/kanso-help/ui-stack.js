@@ -2,7 +2,7 @@
 // Kept byte for byte by `npm run sync:share`: edit kanso-panel/ui-stack.js.
 import { h_flex, v_flex, Button, Popover } from "gpui-base";
 import { div } from "gpui-kit";
-import { G, H, R, LINE, SIDEBAR, DIALOG, TINT, CLEAR, alpha } from "./ui.js";
+import { G, H, R, LINE, SIDEBAR, DIALOG, TINT, CLEAR, alpha, sidebarSides } from "./ui.js";
 import { dot } from "./ui-dot.js";
 
 // Each child piece drawn with its own id and its stack's handlers; a piece that draws nothing leaves no gap. `context` says where it sits;
@@ -50,9 +50,9 @@ const toolbar = (id, c, { column }, kids, more, _wire, { header = false }) => pl
 // Sort is dim at its default order, and drawn like the other tools once sorted.
 const sortMenu = withMenu(({ column }) => (column ? "left_center" : "top_left"), ({ column }) => (column ? div().pl(G.xs) : div().pt(G.xs)));
 const sort = (id, c, { sorted }, kids, more, wire, context) => sortMenu(id, c, {}, kids, more, wire, { ...context, ink: sorted ? null : "dim" });
-// The header: 8 at its sides; collapsed, the rail's column, centred. Dawn's sky lies behind the rest.
-const header = (id, c, { collapsed }, kids, more) => placed(v_flex().id(id).w_full().flex_none().relative().overflow_hidden().bg(c.chrome).px(G.sm).pb(G.xs)
-  .when(collapsed, (el) => el.items_center()), id, c, kids, more, { header: true });
+// The header: 8 at the sides seen, so the Toolbar's icons sit 15.5 in, as the Storybook's do; collapsed, the rail's column, centred. Dawn's sky lies behind the rest.
+const header = (id, c, { collapsed }, kids, more) => placed(v_flex().id(id).w_full().flex_none().relative().overflow_hidden().bg(c.chrome).pb(G.xs)
+  .when(collapsed, (el) => el.px(G.sm).items_center()).when(!collapsed, (el) => sidebarSides(el, G.sm)), id, c, kids, more, { header: true });
 // The lights' row, as tall as the tab bar, Dawn Mode's pill at its right. Herdr draws the lights in this block itself,
 // so the app kit has no windowControls (kit-parity `missing`) and the row lays out only what it holds.
 const headerTitle = (id, c, _flags, kids, more) => placed(h_flex().w_full().h(H.tabBar).flex_none().items_center().justify_end().pl(G.xs), id, c, kids, more);
@@ -65,7 +65,7 @@ const dialogList = (id, c, { scroll = false }, kids) => {
 };
 
 // The footer's room, which Herdr's footer height is fitted to: open, its rows touch between 8 above and 16 below, on the sidebar's gutter
-// at both sides, as the list's rows are; a refused update's block a hair under its row and 8 above the next; in the rail, its icon Buttons a hair apart above 12.
+// at both sides seen, as the list's rows are; a refused update's block a hair under its row and 8 above the next; in the rail, its icon Buttons a hair apart above 12.
 export const FOOTER = Object.freeze({ top: G.sm, bottom: G.lg, side: SIDEBAR.gutter, railBottom: G.md, railGap: G.hair, refusalAbove: G.hair, refusalBelow: G.sm });
 // The Footer composition's pieces by name: kansō's update, its refusal (only under it), then Settings, always last.
 // Each is drawn under its name, so Settings keeps its id as the rows above it come and go.
@@ -87,7 +87,7 @@ const STACKS = {
   // Proposed: the collapsed view button carrying the dot while someone needs you, a hairline in from its corner.
   "view button": { draw: (id, c, _flags, [button], more) => button(id, c, more).relative().child(dot(c, "blocked").absolute().top(LINE).right(LINE)) },
   // Both sit at the block's foot.
-  footer: { draw: (id, c, _flags, kids, more) => placed(v_flex().id(id).size_full().justify_end().bg(c.chrome).pt(FOOTER.top).px(FOOTER.side).pb(FOOTER.bottom),
+  footer: { draw: (id, c, _flags, kids, more) => placed(sidebarSides(v_flex().id(id).size_full().justify_end().bg(c.chrome).pt(FOOTER.top), FOOTER.side).pb(FOOTER.bottom),
     id, c, kids, more, {}, footerSlots(kids)) },
   "rail footer": { draw: (id, c, _flags, kids, more) => placed(v_flex().id(id).size_full().justify_end().items_center().bg(c.chrome).pt(FOOTER.top).pb(FOOTER.railBottom)
     .gap(FOOTER.railGap), id, c, kids, more, {}, footerSlots(kids)) },
