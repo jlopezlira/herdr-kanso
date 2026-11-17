@@ -1,7 +1,7 @@
 // The prompt of many lines: the dialog piece with one multiline kit field, and its keys.
 import assert from "node:assert/strict";
 import test from "node:test";
-import { load, gpuiHost, chain, clone, nodes, texts, press, KIT_NIGHT } from "./helpers.mjs";
+import { load, gpuiHost, chain, clone, nodes, texts, press, storeShared, KIT_NIGHT } from "./helpers.mjs";
 
 // Herdr's multi-line text state, recording what the view asks of it.
 const textarea = (log) => ({
@@ -21,6 +21,9 @@ const textarea = (log) => ({
   },
 });
 
+// What `init` is given: a focus handle and a timer that keeps what it is asked to run later.
+const opening = (timers) => ({ focus_handle: () => ({}), timer: { after: (ms, fn) => timers.push([ms, fn]) } });
+
 const open = async (p) => {
   const log = [], timers = [];
   const { PromptEditor } = await load("kanso-prompt-editor/main.js", ["PromptEditor"], {
@@ -31,7 +34,7 @@ const open = async (p) => {
     run: (...args) => log.push(["run", ...args]),
   });
   const view = new PromptEditor();
-  view.init(null, { focus_handle: () => ({}), timer: { after: (ms, fn) => timers.push([ms, fn]) } });
+  view.init(null, opening(timers));
   return { view, log, timers };
 };
 
@@ -95,10 +98,10 @@ test("The one-line rename keeps its keys through the shared field: the name chos
       return { ...state, set_selected_range: (range) => log.push(["select", range]) };
     } },
     props: () => p, theme: () => KIT_NIGHT, closeOverlay: (overlay) => log.push(["close", overlay]),
-    shared: (key) => store[key], setShared: (key, value) => { store[key] = value; },
+    ...storeShared(store),
   });
   const view = new Prompt();
-  view.init(null, { focus_handle: () => ({}), timer: { after: (ms, fn) => timers.push([ms, fn]) } });
+  view.init(null, opening(timers));
   assert.deepEqual(clone(log.filter(([kind]) => kind === "select" || kind === "focus")), [["select", { start: 0, end: 3 }], ["focus"]]);
   assert.equal(timers[0][0], 600);
   view.input.state.type("api");

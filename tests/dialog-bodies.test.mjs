@@ -24,32 +24,31 @@ const sendView = async (terms, query = "", seen = []) => {
     ...host(), theme: () => KIT_NIGHT, props: () => ({ overlay: "o1" }), terminals: () => terms, panes: () => [], spaces: () => [], shared: () => null,
     closeOverlay: (overlay) => seen.push(["close", overlay]),
   });
-  const send = Object.assign(new Send(), { from: null, to: "t3", toProject: null, text: "hi", error: null, sending: false, handle: {},
-    query: field(query), box: field("hi", true) });
-  return { send, seen };
+  const send = Object.assign(new Send(), { from: null, to: "t3", toProject: null, text: "hi", error: null, sending: false });
+  return { send: Object.assign(send, { handle: {}, query: field(query), box: field("hi", true) }), seen };
 };
+// Drawn in an object: a drawn element answers every name, `then` too, so it is never awaited bare.
+const sendDrawn = async (terms, query = "") => ({ el: (await sendView(terms, query)).send.render() });
+const listOf = (el, name) => nodes(el).find((kid) => calls(kid, "id").some(([, id]) => id === name));
 
 test("Send's agents are kit rows, a project a heading row, in the kit's dialog list that scrolls past six rows", async () => {
   const { G, H, DIALOG } = await kit();
-  const { send } = await sendView(AGENTS);
-  const el = send.render();
-  const list = nodes(el).find((kid) => calls(kid, "id").some(([, id]) => id === "send-list"));
+  const { el } = await sendDrawn(AGENTS);
+  const list = listOf(el, "send-list");
   assert.ok(list, "the list is the kit's dialog list");
   assert.deepEqual(calls(list, "overflow_y_scrollbar").length, 1);
   assert.equal(arg(list, "h"), Math.min(3 * (H.line + G.hair) - G.hair, DIALOG.list), "three rows high, a hairline apart");
   assert.ok(["to-project-App", "to-t2", "to-t3"].every((id) => byTag(el, id)), "each row a kit button, by the same id as before");
   assert.ok(["App", "Send to all 2", "Nova", "Needs you", "Atlas"].every((word) => texts(el).includes(word)), texts(el).join(" | "));
   const many = Array.from({ length: 9 }, (_, i) => ({ address: `t${i + 10}`, status: "idle", labels: { "kanso.shown": `A${i}`, "kanso.project": "App" } }));
-  const { send: crowded } = await sendView(many);
-  const tall = nodes(crowded.render()).find((kid) => calls(kid, "id").some(([, id]) => id === "send-list"));
+  const tall = listOf((await sendDrawn(many)).el, "send-list");
   assert.equal(arg(tall, "h"), DIALOG.list, "past six rows the list keeps six and scrolls");
   assert.equal(DIALOG.list, 6 * H.line + 5 * G.hair, "the token is six rows and their hairlines");
 });
 
 test("An agent with no program art leads with the terminal's icon, in the muted ink, so every name starts in one place", async () => {
   const { c } = await kit();
-  const { send } = await sendView(AGENTS);
-  const el = send.render();
+  const { el } = await sendDrawn(AGENTS);
   const glyph = nodes(byTag(el, "to-t2")).find((kid) => calls(kid, "svg").some(([, path]) => path.endsWith("terminal.svg")));
   assert.equal(arg(glyph, "text_color"), c.muted);
   const svgs = nodes(byTag(el, "to-t2")).flatMap((kid) => calls(kid, "svg").map(([, path]) => path));
@@ -59,22 +58,22 @@ test("An agent with no program art leads with the terminal's icon, in the muted 
 });
 
 test("No one to send to, or no match, is the kit's empty state with the same words", async () => {
-  const { send: none } = await sendView([]);
-  assert.ok(texts(none.render()).includes("No other agent is running. Start one in a pane, then send."));
-  const { send: nomatch } = await sendView(AGENTS, "zz");
-  const el = nomatch.render();
+  assert.ok(texts((await sendDrawn([])).el).includes("No other agent is running. Start one in a pane, then send."));
+  const { el } = await sendDrawn(AGENTS, "zz");
   assert.ok(texts(el).includes("No agent or project by that name."));
-  const empty = nodes(el).find((kid) => calls(kid, "id").some(([, id]) => id === "send-list"));
+  const empty = listOf(el, "send-list");
   assert.equal(calls(empty, "items_center").length, 1, "centred, as the kit's empty state");
 });
 
-test("Send's keys are as before: a press picks, Cmd+Enter sends, Escape closes", async () => {
+test("Send's keys are as before: a press picks an agent or a project, Cmd+Enter sends, Escape closes", async () => {
   const { send, seen } = await sendView(AGENTS);
   let sent = 0;
   send.send = () => { sent += 1; };
   const el = send.render();
   calls(byTag(el, "to-t2"), "on_click").forEach(([, fn]) => fn({}, cx()));
   assert.equal(send.to, "t2");
+  calls(byTag(el, "to-project-App"), "on_click").forEach(([, fn]) => fn({}, cx()));
+  assert.equal(send.toProject, "App", "a project's heading picks every agent of it");
   keyDown(el, { key: "enter", modifiers: { platform: true } });
   assert.equal(sent, 1, "Cmd+Enter sends");
   keyDown(el, { key: "enter", modifiers: {} });
@@ -96,7 +95,7 @@ test("Sleep lists what keeps its conversation and what will only stop as kit row
     { terminal: "t3", name: "t3", resume: null, running: false, argv: null, cwd: "/repo" },
   ]);
   const el = sleep.render();
-  const list = nodes(el).find((kid) => calls(kid, "id").some(([, id]) => id === "sl"));
+  const list = listOf(el, "sl");
   assert.ok(list, "the kit's dialog list");
   assert.equal(calls(list, "overflow_y_scrollbar").length, 0, "it shows every row");
   const [kept, stops] = ["sl-0", "sl-1"].map((id) => nodes(el).find((kid) => calls(kid, "id").some(([, own]) => own === id)));

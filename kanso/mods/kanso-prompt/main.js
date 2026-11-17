@@ -2,21 +2,21 @@
 // Modified by jlopezlira (Kanso, https://github.com/jlopezlira/herdr-kanso): the same dialog Herdr
 // uses to rename a space or a tab, for what Herdr has no command for: a terminal's name, kept as a
 // label on the terminal in herdr-core.
-import { View } from "gpui-kit";
-import { tokens } from "./ui.js";
 import { TextField } from "./ui-field.js";
-import { applyRename, holdField, renameDialog } from "./rename.js";
-import { props, closeOverlay, theme, shared, setShared } from "herdr";
+import { applyRename, RenameView } from "./rename.js";
+import { props, closeOverlay, shared, setShared } from "herdr";
 
-export default class Prompt extends View {
-  init(_props, cx) {
-    // The name is chosen whole before the field takes the keyboard, so typing replaces it.
-    holdField(this, cx, (value) => {
-      const input = new TextField({ value });
-      if (value) input.set_selected_range({ start: 0, end: value.length });
-      input.on("submit", () => this.submit());
-      return input;
-    });
+export default class Prompt extends RenameView {
+  // The name is chosen whole before the field takes the keyboard, so typing replaces it; Enter answers.
+  makeField(value) {
+    const input = new TextField({ value });
+    if (value) input.set_selected_range({ start: 0, end: value.length });
+    input.on("submit", () => this.submit());
+    return input;
+  }
+
+  labels(p) {
+    return { label: p.field ?? "Name", primary: p.button ?? "Save" };
   }
 
   submit() {
@@ -37,10 +37,5 @@ export default class Prompt extends View {
     const p = props();
     closeOverlay(p.overlay);
     if (p.shared) this.answer(p, null);
-  }
-
-  render() {
-    const p = props() ?? {};
-    return renameDialog(this, tokens(theme()), p, { label: p.field ?? "Name", primary: p.button ?? "Save" });
   }
 }
