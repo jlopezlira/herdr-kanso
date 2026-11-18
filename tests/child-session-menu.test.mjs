@@ -1,7 +1,7 @@
 // A subagent under an agent opens the same Session menu as the agent, with only the rows that act on it.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { loadSidebar, mountedState, recorder } from "./sidebar-fixtures.mjs";
+import { loadSidebar, mountedState, recorder, world } from "./sidebar-fixtures.mjs";
 
 const SPACES = [{ id: "sp1", name: "fury", folder: "/Users/me/fury", machine: null, active: true, tabs: [{ id: "tb0", name: "Main", index: 0, active: true }] }];
 const AGENTS = [
@@ -19,8 +19,7 @@ const VIEWS = ["spaces", "agents"];
 async function sidebar(menu = null) {
   const el = recorder(), opened = [];
   const { Spaces } = await loadSidebar(el.host, {
-    InputState: { new: () => ({ on() {}, value: () => "", focus() {}, release() {} }) },
-    spaces: () => SPACES, agents: () => AGENTS, panes: () => PANES, terminals: () => TERMINALS,
+    ...world(SPACES, AGENTS, PANES, TERMINALS),
     props: () => (menu ? { menu, overlay: "o" } : {}), openOverlay: (o) => opened.push(o.props.menu.address), closeOverlay: () => {},
   });
   const view = Object.assign(new Spaces(), mountedState({ shown: new Set(["sp1"]), armed: { is: () => false }, menuAt: -1 }));
