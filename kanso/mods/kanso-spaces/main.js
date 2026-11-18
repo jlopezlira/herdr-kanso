@@ -32,7 +32,7 @@ import { asleep } from "./asleep.js";
 import { tile } from "./tile.js";
 import { views, viewSwitch } from "./view-switch.js";
 import { pullKey, runPull, canWake, enterOpens, sectionMarkOf, sectionCount, rowDirectory, threadWord, threadActions, signInCommand, noProjectsOn, sortOf, foldTail, readWord } from "./sidebar-rows.js";
-import { H, G, T, R, W, ICON, SIDEBAR, GLIDE, OPACITY, TINT, alpha, tokens } from "./ui.js";
+import { H, G, T, R, W, ICON, SIDEBAR, GLIDE, OPACITY, TINT, alpha, sidebarSides, tokens } from "./ui.js";
 import { ELBOW } from "./ui-row.js";
 import { button, Armed } from "./ui-button.js";
 import { dialog } from "./ui-dialog.js";
@@ -1358,8 +1358,8 @@ export default class Spaces extends View {
     const id = `asleep-${group.id}`;
     if (!this.unfolded(id, open, ctx.now)) return { els: [], h: 0 };
     const drawn = group.rows.map((a) => ({ h: H.line, el: this.asleepLine(a, t) }));
-    const h = drawn.reduce((n, r) => n + r.h + 1, 0);
-    return { els: this.foldBox(id, open, drawn.map((r) => r.el), ctx.now), h: Math.max(0, h - 1) };
+    const h = drawn.reduce((n, r) => n + r.h + SIDEBAR.gap, 0);
+    return { els: this.foldBox(id, open, drawn.map((r) => r.el), ctx.now), h: Math.max(0, h - SIDEBAR.gap) };
   }
 
   asleepStatus(s, t, c, ctx) {
@@ -1368,9 +1368,10 @@ export default class Spaces extends View {
       const g = asleepGroups(list.map((e) => e.a), { key }).groups[0];
       if (!g) return [];
       const name = list[0].a.space_name || list[0].a.asleep.spaceName;
+      const head = { focused: false, rh: H.line, el: this.asleepHead(c, g, name) };
       const agents = this.asleepAgents(g, t, ctx);
       const box = agents.els.map((el) => ({ focused: false, rh: this.asleepOpenOf(g.id) ? ((this.foldH ?? {})[`asleep-${g.id}`] ?? agents.h) : 0, el }));
-      return [{ focused: false, rh: H.line, el: this.asleepHead(c, g, name) }, ...box];
+      return [head, ...box];
     });
   }
 
@@ -1604,15 +1605,15 @@ export default class Spaces extends View {
       });
       return { key: keys[i], rows, slab };
     });
-    // Down the rows: where each starts, 1px apart, a slab's touching, with 1px after it.
+    // Down the rows: where each starts, the list's gap apart, a slab's touching, with the gap after it.
     const { y, focus, focusH } = runs.reduce((acc, run) => {
-      const end = run.rows.reduce((s, r) => ({ y: s.y + r.h + (run.slab ? 0 : 1), focus: r.a.focused ? s.y : s.focus, focusH: r.a.focused ? r.h : s.focusH }), acc);
-      return run.slab ? { ...end, y: end.y + 1 } : end;
+      const end = run.rows.reduce((s, r) => ({ y: s.y + r.h + (run.slab ? 0 : SIDEBAR.gap), focus: r.a.focused ? s.y : s.focus, focusH: r.a.focused ? r.h : s.focusH }), acc);
+      return run.slab ? { ...end, y: end.y + SIDEBAR.gap } : end;
     }, { y: 0, focus: null, focusH: 0 });
     const out = runs.flatMap((run) => (run.slab
       ? [v_flex().id(`stack-${run.key}`).flex_none().mx(-G.sm).px(G.sm).rounded(R.control).bg(alpha(t.foreground, TINT.cell)).children(run.rows.map((r) => r.el))]
       : run.rows.map((r) => r.el)));
-    return { out, h: Math.max(0, y - 1), focus, focusH };
+    return { out, h: Math.max(0, y - SIDEBAR.gap), focus, focusH };
   }
 
   // `directory`: in Status and Threads, the project after the name and the computer when not this one.
@@ -1799,7 +1800,8 @@ export default class Spaces extends View {
     const c = tokens(t);
     const rows = this.ordered(sp, ctx.places);
     const live = machines();
-    const draw = (r) => {
+    // `first`: the first project under its heading, or in the list, sits right under it.
+    const draw = (r, first) => {
       if (collapsed) return item(this.compact(r, t, c, ctx), SIDEBAR.railRow);
       const mine = ctx.rowsBy.get(r.w.id) ?? [];
       const split = asleepGroups(mine, { key: r.w.id });
@@ -1807,8 +1809,8 @@ export default class Spaces extends View {
       const entries = nest(whole ? [] : split.live, ctx.terms);
       const open = !this.agentsFolded.has(r.w.id);
       const indent = r.tree ? CHILD_PAD : 0;
-      // A breath of space between projects (a worktree stays close to its checkout).
-      const gap = r.tree || r === rows[0] ? [] : [item(div().h(10).flex_none(), 10)];
+      // A group's space between projects (a worktree stays close to its checkout).
+      const gap = r.tree || first ? [] : [lift(SIDEBAR.groupGap)];
       // The space's row before its agents': the keyboard's path (navMark) goes in screen order.
       const head = { ...item(this.row(r, t, c, whole ? [] : entries.map((e) => e.a), whole), H.line, r.w.active ? spaceMark(H.line) : null), row: true, tree: Boolean(r.tree) };
       if (whole) {
@@ -1818,16 +1820,17 @@ export default class Spaces extends View {
       }
       const show = this.unfolded(r.w.id, open, ctx.now);
       const st = show ? this.stacked(entries, split.live, indent, t, c, r.w.id, ctx) : null;
+      // Each head before its rows: the keyboard's path goes in screen order.
       const tabs = show ? split.groups.flatMap((g) => {
-        const agents = this.asleepAgents(g, t, ctx);
-        return [this.asleepHead(c, g), ...agents.els];
+        const head = this.asleepHead(c, g);
+        return [head, ...this.asleepAgents(g, t, ctx).els];
       }) : [];
       const inner = [...(st?.out ?? []), ...tabs];
       const box = (inner.length ? this.foldBox(r.w.id, open, inner, ctx.now) : [])
         .map((el) => item(el, open ? ((this.foldH ?? {})[r.w.id] ?? st?.h ?? 0) : 0, open && st?.focus != null ? agentMark(st.focus, st.focusH) : null));
       return [...gap, head, ...box];
     };
-    const drawAll = (list) => list.flatMap(draw);
+    const drawAll = (list) => list.flatMap((r, i) => draw(r, i === 0));
     const remote = [...new Set([...rows.map((r) => r.w.machine).filter(Boolean), ...(this.machines ?? []).map((row) => row.name), ...(this.parked ?? []).map((row) => row.name)])].filter(Boolean).toSorted();
     const loading = m => {
       const state = live.find(k => k.name === m)?.layout;
@@ -1837,7 +1840,7 @@ export default class Spaces extends View {
     const loadingRow = m => item(skeletonOf({ shape: collapsed ? "tile" : "line" })(`machine-loading-${m ?? "local"}`, t), collapsed ? SIDEBAR.railRow : H.line);
     // Projects you added with no space open, on their machine; each keeps a + to start an agent in it.
     const names = shownNames(ctx.registry);
-    const closed = (m) => (collapsed ? [] : this.closedOn(m, ctx)).flatMap((entry) => [item(div().h(10).flex_none(), 10), item(this.closedRow(t, entry, names), H.line)]);
+    const closed = (m) => (collapsed ? [] : this.closedOn(m, ctx)).flatMap((entry) => [lift(SIDEBAR.groupGap), item(this.closedRow(t, entry, names), H.line)]);
     const heads = shown("sidebar.computers", true, pieces(shared));
     if (!remote.length || !heads) {
       const shut = [null, ...(heads ? [] : remote)].flatMap((m) => closed(m));
@@ -1966,17 +1969,19 @@ export default class Spaces extends View {
     if (phase === "connected") (this.seenOn ??= {})[m ?? ""] = ctx.now;
     // Folded: the most urgent mark of its sessions and how many projects.
     const tail = folded ? { mark: foldTail(false, mine.flatMap((r) => (ctx.rowsBy.get(r.w.id) ?? []).map((a) => a.status))).mark, count: mine.length + this.closedOn(m, ctx).length } : null;
-    const headItem = item(this.machineHead(m, phase, t, c, collapsed, folded, tail), collapsed ? SIDEBAR.railRow : H.line);
-    if (phase === "loading" && !collapsed) return [headItem, loadingRow(m)];
+    // Open, every computer opens its own group, the first one too: wider apart than the projects in it.
+    const head = item(this.machineHead(m, phase, t, c, collapsed, folded, tail), collapsed ? SIDEBAR.railRow : H.line);
+    const heads = collapsed ? [head] : [lift(SIDEBAR.computerGap), head];
+    if (phase === "loading" && !collapsed) return [...heads, loadingRow(m)];
     // Unreachable: its projects as last read, dim, with when.
     if (phase === "unavailable" && !collapsed && mine.length) {
       const when = readWord(this.seenOn?.[m ?? ""]);
-      return [headItem, ...draw(mine).map((it) => ({ ...it, el: it.el.opacity(OPACITY.away).when(Boolean(when), (el) => el.tooltip(tooltip({ label: when }))) }))];
+      return [...heads, ...draw(mine).map((it) => ({ ...it, el: it.el.opacity(OPACITY.away).when(Boolean(when), (el) => el.tooltip(tooltip({ label: when }))) }))];
     }
-    if (phase !== "connected" || folded) return [headItem];
+    if (phase !== "connected" || folded) return heads;
     const empty = emptyState({ icon: "folder", text: noProjectsOn(this.names.title(m)), action: "New project" })(`machine-new-${m ?? "local"}`, c, { onClick: () => run("space.new", { machine: m ?? "" }) });
     const kept = this.closedOn(m, ctx).length > 0;
-    return [headItem, ...(mine.length ? draw(mine) : kept ? [] : [loading(m) ? loadingRow(m) : item(empty)]), ...closed(m)];
+    return [...heads, ...(mine.length ? draw(mine) : kept ? [] : [loading(m) ? loadingRow(m) : item(empty)]), ...closed(m)];
   }
 
   pull(place, cx) {
@@ -2006,7 +2011,7 @@ export default class Spaces extends View {
   }
 
   // `gap`: the list's own, so the rows sit as they would in it.
-  foldBox(id, open, rows, now, gap = 1) {
+  foldBox(id, open, rows, now, gap = SIDEBAR.gap) {
     if (!rows.length) return [];
     this.foldH ??= {};
     const mine = this.folding?.id === id;
@@ -2481,14 +2486,15 @@ export default class Spaces extends View {
 
   // A pill keeps its identity per view, so a change of view places it rather than sliding it across.
   list(t, collapsed, view, items) {
-    const gap = view === "threads" ? 6 : SIDEBAR.gap;
+    const gap = view === "threads" ? SIDEBAR.threadGap : SIDEBAR.gap;
     const { els, space, agent } = laidOut(items, gap);
     const pills = collapsed ? [] : [
       ...(space ? [pill("pill-space", space.y, space.h, tokens(t).w12)] : []),
       ...(agent ? [pill(`pill-agent-${view}`, agent.y, agent.h, alpha(t.foreground, TINT.tab))] : []),
     ];
     // Named, so its scroll position survives every redraw (an unnamed one is placed anew and starts at the top).
-    return v_flex().id(`spaces-list-${collapsed ? "rail" : view}`).relative().flex_1().min_h(0).px(collapsed ? 0 : 8).gap(collapsed ? 0 : gap).pt(collapsed ? 6 : 0).pb(14).overflow_y_scrollbar().mode(collapsed ? "hover" : "always")
+    // Open, its sides are the sidebar's gutter: each row's ground reaches out past it by the row's own padding, its content stays on it.
+    return v_flex().id(`spaces-list-${collapsed ? "rail" : view}`).relative().flex_1().min_h(0).when(!collapsed, (el) => sidebarSides(el, SIDEBAR.gutter)).gap(collapsed ? 0 : gap).pt(collapsed ? G.sm : 0).pb(G.lg).overflow_y_scrollbar().mode(collapsed ? "hover" : "always")
       .on_mouse_up("left", (_e, cx) => { this.pressed = null; this.over = null; this.draggedAgent = null; cx.notify(); })
       // Rows keep their height: shrunk to fit, there would be nothing to scroll.
       .children([...pills, ...els.map((el) => el.flex_none())]);

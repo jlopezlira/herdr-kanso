@@ -12,7 +12,7 @@ const compositions = async () => themed({
   ...await load("kanso-spaces/toolbar.js", ["toolbar", "addLabels"], host()),
   ...await load("kanso-chrome/header.js", ["header"], host()),
   ...await load("kanso-chrome/sidebar-footer.js", ["sidebarFooter"], host()),
-  ...await load("kanso-panel/ui.js", ["tokens", "G", "H", "R", "DAWN", "DAWN_H"], host()),
+  ...await load("kanso-panel/ui.js", ["tokens", "G", "H", "R", "PANE", "DAWN", "DAWN_H"], host()),
 }, KIT_NIGHT);
 const tipsOf = (el) => every(el).flatMap((kid) => calls(kid, "tooltip").map((call) => call[1]));
 const byTip = (el, tip) => every(el).find((kid) => calls(kid, "tooltip").some((call) => call[1] === tip)) ?? null;
@@ -90,13 +90,13 @@ test("A press named for no drawn target throws, as `on` does for a tool: renamin
 
 test("Every Header state in the Storybook draws in the app: the lights' row, Dawn Mode's sky and pill, the Toolbar 40 tall", async () => {
   const kit = await compositions();
-  const { header, toolbar, c, G, H, DAWN, DAWN_H } = kit;
+  const { header, toolbar, c, G, H, PANE, DAWN, DAWN_H } = kit;
   const records = kitRecords([]).filter((record) => record.page === "Compositions/Header").map((record) => record.label);
   assert.deepEqual(records, ["Expanded", "Collapsed", "Expanded, Dawn Mode", "Collapsed, Dawn Mode", "Under the title bar"]);
   const draw = (props) => header({ ...props, toolbar: toolbar({ column: Boolean(props.collapsed) }) })("h", c);
   const art = (el) => nodes(el).filter((kid) => calls(kid, "image").length);
   const open = draw({});
-  assert.deepEqual([arg(open, "px"), arg(open, "pb")], [G.sm, G.xs]);
+  assert.deepEqual([arg(open, "pl"), arg(open, "pr"), arg(open, "pb")], [G.sm, G.sm - PANE.gap, G.xs], "8 at the sides seen: the work column's padding shows past its right");
   assert.ok(nodes(open).some((kid) => arg(kid, "h") === H.tabBar), "the lights' row, as tall as the tab bar");
   assert.ok(nodes(open).some((kid) => arg(kid, "h") === H.row && tipsOf(kid).includes("Add project")), "the Toolbar 40 tall");
   assert.deepEqual([art(open).length, texts(open).includes("Dawn Mode")], [0, false], "Stable Mode shows nothing");
@@ -104,11 +104,13 @@ test("Every Header state in the Storybook draws in the app: the lights' row, Daw
   assert.equal(calls(rail, "items_center").length, 1, "collapsed, it centres the column");
   assert.ok(nodes(rail).some((kid) => arg(kid, "pt") === G.hair && tipsOf(kid).includes("Show sidebar")));
   const dawn = draw({ dawn: true });
-  assert.deepEqual(art(dawn).map((kid) => [arg(kid, "image"), arg(kid, "h"), calls(kid, "absolute").length]), [[DAWN.dark.art, DAWN_H, 1]], "the sky lies behind the lights");
+  const layers = ["sky", "night", "glow", "stars", "clouds", "sun", "ring-12", "fade", "horizon"].map((layer) => DAWN.dark.art.replace(/\.svg$/, `-${layer}.svg`));
+  assert.deepEqual(art(dawn).map((kid) => arg(kid, "image")), layers, "the sky lies behind the lights, layer by layer as the Storybook's art paints it");
+  assert.ok(art(dawn).every((kid) => calls(kid, "absolute").length && arg(kid, "h") === DAWN_H), "each layer fills the sky at the sidebar's width");
   const pill = nodes(dawn).find((kid) => calls(kid, "child").some((call) => call[1] === "Dawn Mode"));
   assert.deepEqual([arg(pill, "bg"), arg(pill, "text_color")], [DAWN.dark.top, DAWN.dark.star], "the pill: the night of the sky with light words");
   const dawnRail = draw({ collapsed: true, dawn: true });
-  assert.deepEqual([art(dawnRail).length, texts(dawnRail).includes("Dawn Mode")], [1, false], "collapsed, the sky stays and the pill does not fit");
+  assert.deepEqual([art(dawnRail).length, texts(dawnRail).includes("Dawn Mode")], [9, false], "collapsed, the sky stays, all nine layers, and the pill does not fit");
   assert.equal(art(draw({ dawn: true, art: false })).length, 0, "the sky can be turned off");
   const under = draw({ title: false });
   assert.equal(nodes(under).some((kid) => arg(kid, "h") === H.tabBar), false, "Proposed: under the window's title bar, the Toolbar alone");
@@ -135,15 +137,17 @@ test("The app sidebar draws its header from the composition, the lights left to 
   assert.ok(["Add project", "Search", "Hide sidebar"].every((tip) => drawn.tips.includes(tip)));
 });
 
+const laterCx = { timer: { after: () => ({ cancel() {} }) }, notify() {} };
+
 test("The window's title block draws the Header's lights' row: in Dawn Mode the sky and, open, the pill", async () => {
   const draw = async (shared) => {
     const view = await mountChrome({ ...host(), theme: () => KIT_NIGHT, props: () => ({}), shared: (key) => shared[key] ?? null, setShared() {} });
-    return { el: view.render() }; // wrapped: a drawn element answers every name, `then` too
+    return { el: view.render(laterCx) }; // wrapped: a drawn element answers every name, `then` too
   };
   const { el: stable } = await draw({});
   assert.deepEqual([svgsOf(stable).length, nodes(stable).filter((kid) => calls(kid, "image").length).length, texts(stable)], [0, 0, []], "Stable Mode shows nothing");
   const { el: dawn } = await draw({ "kanso.update": { channel: "beta" } });
-  assert.equal(nodes(dawn).filter((kid) => calls(kid, "image").length).length, 1);
+  assert.equal(nodes(dawn).filter((kid) => calls(kid, "image").length).length, 9, "the sky's nine layers");
   assert.deepEqual(texts(dawn), ["Dawn Mode"]);
   assert.deepEqual(texts((await draw({ "kanso.update": { channel: "beta" }, "sidebar.collapsed": true })).el), [], "collapsed, the pill does not fit");
 });

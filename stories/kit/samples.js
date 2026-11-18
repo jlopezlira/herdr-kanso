@@ -29,18 +29,19 @@ export const awayEvents = [
   { icon: 'lu-git-pull-request', subject: `PR ${pullRequest(163)}`, fact: 'merged', age: '2h' },
 ];
 const group = (...rows) => stack({ variant: 'row group' }, ...rows);
+const computerGroup = (...rows) => stack({ variant: 'row group', computer: true }, ...rows);
 // A conversation's own tools under the pointer, and what a session's commands tooltip says.
 export const sessionTools = [{ icon: 'lu-check', label: 'Settle' }];
 export const sessionCommandsTip = 'npm test · 2m';
 
 export const sampleRows = {
   spaces: () => [
-    group(computerRow({ name: 'light', remote: false })),
+    computerGroup(computerRow({ name: 'light', remote: false })),
     group(projectRow({ name: 'prjct' }), sessionRow({ program: 'lu-terminal', name: 'Orion', status: 'idle' })),
     group(projectRow({ name: 'amtelser' }), sessionRow({ program: 'lu-terminal', name: 'Nova', activity: 'Run npm publish?', time: '2m', status: 'blocked' })),
     group(projectRow({ name: 'kansō', folder: 'herdr-kanso', branch: 'main', sync: '↓12', open: true }), sessionRow({ name: 'Atlas', activity: 'Reviewing step 01', time: '3m' }),
       sessionRow({ name: 'Juno', status: 'idle', depth: 2, current: true }), sessionRow({ program: 'p-codex', name: 'Iris', status: 'done', depth: 2 })),
-    group(projectRow({ name: 'agile' })), group(asleep({ names: ['site', 'dojo'] })), group(computerRow({ name: 'dark', state: 'off' })),
+    group(projectRow({ name: 'agile' })), group(asleep({ names: ['site', 'dojo'] })), computerGroup(computerRow({ name: 'dark', state: 'off' })),
   ],
   agents: () => [
     section({ title: 'Needs you', status: 'blocked' }), sessionRow({ program: 'lu-terminal', name: 'Nova', activity: 'Run npm publish?', time: '2m', place: 'amtelser', status: 'blocked', depth: 0 }),

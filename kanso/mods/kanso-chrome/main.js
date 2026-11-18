@@ -4,14 +4,15 @@ import { systemApi } from "./platform-system.js";
 // Modified by 0OZ: brand bar, solid sidebar footer with Settings, Add machine and an account chip.
 // Modified by José Gutiérrez (minimalistic, 0oz design fork): renamed from oz-chrome.
 // Modified by jlopezlira (Kanso, https://github.com/jlopezlira/herdr-kanso): renamed from mn-chrome; sidebar footer as centred squares when collapsed, one icon set (icons/), a title bar of the lights and, in Dawn Mode, its sky and pill (header.js); an "Update Kanso" row for Kanso's own releases (update.js); Settings opens one menu (sidebar-footer.js).
-import { View } from "gpui-kit";
+import { View, div } from "gpui-kit";
 import { theme, run, props, shared, setShared, updates, keys, nextCommand, openOverlay, appHome, notify } from "herdr";
 import { Updater } from "./update.js";
 import { tryOrAsync, readCommands } from "./pure.js";
 import { loadPieces, pieces, shown } from "./pieces.js";
 import { outOfMemory } from "./notices.js";
 import { glyphs } from "./marks.js";
-import { tokens } from "./ui.js";
+import { tokens, DAWN_W, G, H } from "./ui.js";
+import { DAWN_RING_MS, RING_FRAMES } from "./ui-dawn.js";
 import { Armed } from "./ui-button.js";
 import { menu } from "./kit.js";
 import { channelOf } from "./release.js";
@@ -25,6 +26,8 @@ const openSettings = (page = "pieces") => openOverlay({ mod: "kanso-settings", k
 // The runtime out of memory says so, or, with no room left for the error itself, throws null:
 // a mod then "did not load: Null "null"".
 export const exhausted = (e) => /out of memory|\bNull\b\s*["'“]?null/i.test(String(e));
+
+const DAWN_START_MS = 34;
 
 export default class WorkspaceChrome extends View {
   // Only the footer copy has an Updater (update.js), and it does not poll: the tab bar,
@@ -120,11 +123,28 @@ export default class WorkspaceChrome extends View {
       "footer", tokens(theme()), { presses, focuses: { settings: this.settingsFocus }, onOpen: (open, cx) => this.setMenu(open, cx) });
   }
 
-  render() {
+  render(cx) {
     const collapsed = shared(COLLAPSED) === true;
     if (props()?.footer) return this.footer(collapsed);
     // The title bar: Herdr's own lights, and in Dawn Mode the sky behind them and, open, the pill that says the mode.
     const dawn = channelOf(shared("kanso.update")?.channel) === "beta";
-    return header({ collapsed, dawn })("brand", tokens(theme()));
+    const c = tokens(theme());
+    if (this.brandDawn !== dawn) { this.brandDawn = dawn; cx.timer.after(0, () => run("layout.resize", { id: "brand", px: dawn ? H.tabBar + G.lg : H.tabBar })); }
+    if (!dawn) return header({ collapsed, dawn })("brand", c);
+    if (!this.dawnScheduled) { this.dawnScheduled = true; cx.timer.after(0, (later) => this.rise(later)); }
+    const sky = { width: this.width ?? DAWN_W, run: this.dawnRun ?? 0, rising: Boolean(this.dawnRising), ring: this.dawnRing ?? 0 };
+    return div().id("brand-sky").size_full().relative().on_size_change((size, later) => { this.width = size.width; later.notify(); })
+      .child(header({ collapsed, dawn })("brand", { ...c, dawn: { ...c.dawn, sky } }, { presses: collapsed ? {} : { "Dawn Mode": (later) => this.rise(later) } }));
+  }
+
+  // The sunrise from its first frame: the night, then the Storybook's keyframes, the ring stepping round as its dash moves.
+  rise(cx) {
+    for (const task of this.dawnTasks ?? []) task?.cancel?.();
+    this.dawnRun = (this.dawnRun ?? 0) + 1;
+    this.dawnRising = false;
+    this.dawnRing = 0;
+    this.dawnTasks = [cx.timer.after(DAWN_START_MS, (later) => { this.dawnRising = true; later.notify(); }),
+      ...Array.from({ length: RING_FRAMES }, (_, i) => cx.timer.after(DAWN_RING_MS(i + 1), (later) => { this.dawnRing = i + 1; later.notify(); }))];
+    cx.notify();
   }
 }
