@@ -4,7 +4,7 @@ const todoTools = [{ label: 'Send to a conversation', icon: 'lu-send' }, { label
 const tick = (done) => button({ label: done ? 'Not done' : 'Done', kind: 'icon', size: 'sm', icon: done ? 'lu-circle-check' : 'lu-circle' });
 
 export const todoScopes = ({ project, open, all = false }) => tabs({
-  items: [{ key: 'project', label: phrase(project, open) }, { key: 'all', label: 'All' }], value: all ? 'all' : 'project', size: 'sm', track: true, label: true,
+  items: [{ key: 'project', label: open ? phrase(project, open) : project }, { key: 'all', label: 'All' }], value: all ? 'all' : 'project', size: 'sm', track: true, label: true,
 });
 
 export const todoAdd = ({ draft }) => input({ text: draft, label: 'Add a to-do, #project @when', icon: 'lu-plus' });
