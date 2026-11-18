@@ -36,9 +36,9 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
       per group (project, status, shelf): a project's initial in its color,
       no square (else an icon), under it the most urgent state and count.
       A click lists the group in a popup (click goes; asleep: wake menu).
-  - **Footer** (`kanso-chrome`, `footer: true`), 88 tall, bottom-aligned:
-    - Settings (gear) and Add computer (server icon), kit rows of 32, icon
-      17, text 13.5, muted; 8 above and 16 below.
+  - **Footer** (`kanso-chrome`, `footer: true`), bottom-aligned:
+    - Settings (gear), a kit row of 32, icon 17, text 13.5, muted; 8 above
+      and 16 below. Add computer lives at the end of the + menu.
     - Settings opens one menu: kansō settings (with its key) and Herdr
       settings; while Herdr has an update waiting, "Update Herdr to X",
       pressed twice to restart Herdr into it.
@@ -73,7 +73,7 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     - **Tab bar** (`kanso-tabs`), 48 tall, no line under it. It drags the
       window.
       - Tabs are the kit's tab (`ui-tab.js`), 26 tall with radius 6, 2
-        apart: the name 12.5, trimmed at 170, then a mark only when an
+        apart, 12 inside each side and 8 between its parts: the name 12.5, trimmed at 170, then a mark only when an
         agent in a tab out of view waits for you. No program icon, no
         working or done mark, nothing after a zoomed tab. The chosen tab
         has the `w7` fill, gliding under it, and the rest are `muted` with
@@ -81,6 +81,10 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
         there is more than one tab; on a tab holding an agent the first
         press arms it with the accent for 4 s, "Press again to close
         <name>".
+      - Right-click opens the tab's Menu: its name, Rename, New tab, Sleep
+        it, Close tab (asks twice when agents run in it, "Press again to
+        close 2 agents"), then Hide "Agent state on tabs" and Settings for
+        this.
       - Double-click renames in place, the name selected: Enter or leaving
         keeps it, Escape restores it. On another computer the new name draws
         at 80% with a breathing dot until the tab carries it; refused, the
@@ -91,8 +95,8 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
         marks. While a project on another computer connects, one breathing
         skeleton per known tab; unreachable, the tabs step down to `dim`.
         Both have no + and no Arrange.
-      - After the tabs, 8 apart, a + (26 square) opens the shipped
-        `new-menu`, then Arrange.
+      - After the tabs, 8 apart, a + (26 square) opens the sidebar's + menu,
+        then Arrange.
       - At the right are the panel buttons: Files, Spend, PR,
         Shipped, Worktrees, Ports, Containers, Memory, Look, Simulator, as icons only (15, in a 26 square ghost
         button), and a wash when their panel is open. While the pointer is
@@ -101,7 +105,8 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
         (`transition("width")` and `transition("opacity")`, ease-out, run
         natively), and closes the same way. The open panel's button keeps
         its name showing. No tooltip. Pressing one and letting go on another moves it there.
-        Right-click opens Pieces. Drag writes `kanso.panels.order`. A hidden
+        Right-click opens its Menu: Hide this, Settings for this, then
+        Panels…. Drag writes `kanso.panels.order`. A hidden
         panel is not mounted, and one hidden while open closes. Custom panels
         from `kanso.panels` join the list.
     - **Panes**: an endless canvas (`kanso-strip`). Panes sit side by side
