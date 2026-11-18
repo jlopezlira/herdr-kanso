@@ -145,8 +145,8 @@ const ticked = (label, on) => ({ label, icon: on ? 'lu-check' : undefined });
 const sortShows = [ticked('What each agent is on', true), ticked('While you were away', true), ticked('Projects, Status and Threads', true)];
 const sortMenu = (title, orders, current, extra = []) => menu({ items: [{ heading: title }, ...orders.map((label) => ticked(label, label === current)), ...extra, { separator: true }, { heading: 'Show' }, ...sortShows] });
 // The menu + opens on Status and Threads: a project to start in, then the other ways in, then another computer.
-export const sampleAddMenu = () => menu({ items: [{ heading: 'New conversation in' }, { label: 'kansō' }, { label: 'amtelser' }, { label: 'site', hint: 'dark' },
-  { separator: true }, { label: 'New project with a conversation…', icon: 'lu-folder-plus' }, { label: 'Open a folder, no project…', icon: 'lu-file' }, { label: 'Add computer…', icon: 'lu-server' }] });
+export const sampleAddMenu = ({ resume = null } = {}) => menu({ items: [{ heading: 'New conversation in' }, { label: 'kansō' }, { label: 'amtelser' }, { label: 'site', hint: 'dark' },
+  { separator: true }, ...(resume ? [resume] : []), { label: 'New project with a conversation…', icon: 'lu-folder-plus' }, { label: 'Open a folder, no project…', icon: 'lu-file' }, { label: 'Add computer…', icon: 'lu-server' }] });
 export const sampleSortMenus = {
   spaces: () => sortMenu('Agents, pinned first, then by', ['Last update', 'Needs you first', 'By kind', 'As on screen', 'Your order (drag)'], 'Last update'),
   agents: () => sortMenu('In each section, by', ['Latest change first', 'Longest in its state', 'Project'], 'Latest change first'),

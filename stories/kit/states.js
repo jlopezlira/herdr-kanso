@@ -1,7 +1,7 @@
 // The pages drawn from named states: each state is a preset of its page's playground, and the catalog draws its record from that preset.
 import { computerItem, dojo, edge, toolbar, keyboard, keyboardExplorer, keyboardSystems, layoutPaused, paletteDoor, panel, panelBack, panelHeader, panelRefresh, pickedKey, shortcutRow, stepperMenu, tabBar } from './compositions.js';
 import { emptyState, phrase, failureBlock, keycap, metric, needsItem, row, skeletonOf, stack, statusItem, stepper, tabs } from './pieces.js';
-import { atWidth, inBar } from './frames.js';
+import { atWidth, inBar, toolsRoom } from './frames.js';
 import { keyLayer, keyLayerMods, sampleDojo, samplePanel, samplePanelHeader, sampleAddMenu, sampleSortMenus, statusMenus, statusPanels } from './samples.js';
 
 export const layerDefaults = Object.fromEntries(keyboardSystems.map((os) => [`${os}Layer`, keyLayerMods[os][0]]));
@@ -90,7 +90,7 @@ export const statedPages = {
     args: { view: 'spaces', column: false, open: false, sorted: false, menu: false, add: false },
     markup: ({ menu: shown, add, ...args }) => {
       const bar = toolbar({ ...args, sortMenu: shown ? sampleSortMenus[args.view]() : null, addMenu: add ? sampleAddMenu() : null });
-      return shown || add ? `<div class="kanso-story__tools-room">${bar}</div>` : bar;
+      return shown || add ? toolsRoom(bar) : bar;
     },
     states: [
       { label: 'Projects', args: {}, caption: 'Sidebar open on Projects: + adds a project.' },

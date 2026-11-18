@@ -95,7 +95,7 @@ export const panelHeader = ({ title, form = 'page', start = [], second = null, t
 export const panelRefresh = ({ reading = false } = {}) => button({ label: 'Refresh', kind: 'icon', icon: 'lu-refresh-cw', spin: reading });
 export const panelClose = () => button({ label: 'Close', kind: 'icon', icon: 'lu-x' });
 // A file opened from a panel goes back to its folder's list.
-export const panelBack = () => button({ label: 'Markdown in this folder', kind: 'icon', icon: 'lu-chevron-left' });
+export const panelBack = ({ label = 'Markdown in this folder' } = {}) => button({ label, kind: 'icon', icon: 'lu-chevron-left' });
 
 // Cells
 

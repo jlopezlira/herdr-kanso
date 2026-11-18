@@ -8,6 +8,7 @@ import { computerRow } from '../stories/kit/computer-row.js';
 import { section } from '../stories/kit/section.js';
 import { asleep } from '../stories/kit/asleep.js';
 import { switcher } from '../stories/kit/switcher.js';
+import { proposedPages } from '../stories/kit/proposed.js';
 import { sessionRow } from '../stories/kit/session-row.js';
 import { button, dawn as dawnSky, mark, marks, row, stack, windowControls } from '../stories/kit/pieces.js';
 import { sampleSidebar, sessionTools } from '../stories/kit/samples.js';
@@ -146,6 +147,7 @@ export function kitRecords(records) {
     ['Someone needs you', switcher({ sessions: [fleet[0], { program: 'p-codex', name: 'release notes', place: 'site', status: 'blocked' }, ...fleet.slice(1)] }), 'Proposed. The order stays most recent first; the mark says who asks.'],
     ['Another computer', switcher({ sessions: [...fleet.slice(0, 2), { name: 'nightly tests', place: 'kansō · dark', status: 'working' }, fleet[3]], picked: 2 }), 'Proposed. The computer after the project; landing there opens its project.'],
   ]) results.push({ id: `kit/Switcher/${label}`, source: 'kit', page: 'Compositions/Switcher', label, html: frame(html), caption });
+  for (const [page, states] of Object.entries(proposedPages)) for (const [label, html, caption] of states) results.push({ id: `kit/${page}/${label}`, source: 'kit', page, label, html: frame(html), caption: `Proposed. ${caption}` });
   const choices = elements(byId('proto/components-choosing-the-channel/ChoosingTheChannel/Default'), 'kanso-update');
   const sky = elements(byId('proto/tokens-dawn/TheBand/Default'), 'kanso-dawn--preview')[0];
   const mark = elements(byId('proto/approved-dawn/Reference/12'), 'kanso-settings__piece-choice')[0];
