@@ -285,14 +285,16 @@ test("New conversation's menu ends with Add computer, last for the keyboard too,
   assert.equal(off.height, 8 + 28 + 11 * 32 + 9 + 2 * 32, "and its room goes with it");
 });
 
+// The sidebar as the + menu's popup, with nothing open and nothing kept.
+const agentMenu = (host) => loadSpaces({
+  ...elements(blank), theme: () => ({ foreground: "#fff", muted: "#888", dim: "#666", border: "#333", selected: "#444" }),
+  shared: () => null, setShared: () => {}, spaces: () => [], home: () => "/Users/me", closeOverlay: () => {}, ...host,
+});
+
 test("which agent: only the ones installed, nothing chosen for you, and one picked starts there", async () => {
   const calls = [], made = [];
   const place = { space: null, folder: "/work/api", machine: "", project: null, name: "api" };
-  const { Spaces } = await loadSpaces({
-    ...elements(blank), theme: () => ({ foreground: "#fff", muted: "#888", dim: "#666", border: "#333", selected: "#444" }),
-    shared: () => null, setShared: () => {}, spaces: () => [], home: () => "/Users/me", props: () => ({ overlay: "ov1", newAgent: place }), closeOverlay: () => {},
-    run: (cmd, args) => calls.push([cmd, clone(args ?? null)]),
-  });
+  const { Spaces } = await agentMenu({ props: () => ({ overlay: "ov1", newAgent: place }), run: (cmd, args) => calls.push([cmd, clone(args ?? null)]) });
   const view = Object.assign(new Spaces(), { kdb: { setProjectAgent: async () => {} }, menuAt: -1 });
   view.known = [
     { key: "claude", name: "Claude Code", installed: false, run: ["claude"] },
@@ -317,12 +319,10 @@ test("which agent: only the ones installed, nothing chosen for you, and one pick
 });
 
 test("The + menu is the approved one: where it opens, Terminal with its key, the agents keyed 1 to 9, a new project, the worktrees inside a repository, then Arrange with its key", async () => {
-  const calls = [], made = [], overlays = [];
+  const calls = [], overlays = [];
   const place = { space: "sp-api", folder: "/work/api", machine: "devbox", project: null, name: "api" };
-  const { Spaces } = await loadSpaces({
-    ...elements(blank), theme: () => ({ foreground: "#fff", muted: "#888", dim: "#666", border: "#333", selected: "#444" }),
-    shared: () => null, setShared: () => {}, spaces: () => [], home: () => "/Users/me", props: () => ({ overlay: "ov1", newAgent: place, start: true }), closeOverlay: () => {},
-    run: (cmd, args) => calls.push([cmd, clone(args ?? null)]), openOverlay: (o) => overlays.push(clone(o.props)),
+  const { Spaces } = await agentMenu({
+    props: () => ({ overlay: "ov1", newAgent: place, start: true }), run: (cmd, args) => calls.push([cmd, clone(args ?? null)]), openOverlay: (o) => overlays.push(clone(o.props)),
     keys: () => [{ keys: "cmd-t", action: "tab.new" }, { keys: "cmd-alt-t", action: "kanso-strip.arrange" }],
   });
   const t = { foreground: "#fff", muted: "#888", dim: "#666", border: "#333", selected: "#444" };
