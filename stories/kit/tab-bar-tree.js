@@ -31,7 +31,7 @@ export const tabBarTree = ({ items = [], value = null, folded = 0, panels = [], 
     : tabsTree({ items: items.map((item) => ({ closable: true, ...item })), value, disabled: state === "unreachable", label: true });
   const more = folded && connected ? html`<span class="kanso-tab-bar__more">${buttonTree({ label: `+${folded}`, kind: "quiet" })}</span>` : null;
   const tools = connected ? [door("lu-plus", "New tab", false, tips["New tab"]), arrange ? door("lu-panels-top-left", "Arrange", false, tips.Arrange) : null] : null;
-  const right = connected ? panels.map((item) => door(item.icon, item.label, item.key === panel, tips[item.label])) : null;
+  const right = connected ? panels.map(({ key, icon, label }) => door(icon, label, key === panel, tips[label])) : null;
   const own = help ? door("lu-circle-question-mark", "kansō help", false, tips["kansō help"]) : null;
   const system = windows ? [door("lu-minus", "Minimize"), door("lu-square", "Maximize"), door("lu-x", "Close")] : null;
   return html`<div class="kanso-tab-bar">${tabs}${more}${tools}${growTree()}<span class="kanso-tab-bar__doors">${right}${own}${system}</span></div>`;

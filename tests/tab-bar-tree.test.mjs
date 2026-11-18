@@ -1,14 +1,14 @@
 // The tab bar's tree is the Storybook's markup in every state on its page, and the app draws each tab from the CSS compiled for it.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { compile, indexed, kansoTheme, reachable, read, SHEETS } from "../scripts/css-to-gpui.mjs";
+import { compile, indexed, reachable, read, SHEETS } from "../scripts/css-to-gpui.mjs";
 import { viewOf, stylesFor } from "../kanso/mods/kanso-panel/ui-match.js";
 import { toHtml } from "../stories/kit/tree.js";
 import { statedPages, tabActs } from "../stories/kit/states.js";
 import { panelDoors } from "../stories/kit/compositions.js";
 import { tabBar } from "../stories/kit/tab-bar.js";
 import { tabBarTree } from "../stories/kit/tab-bar-tree.js";
-import { gpuiHost, load, calls, arg } from "./helpers.mjs";
+import { gpuiHost, load, calls, arg, kansoColours } from "./helpers.mjs";
 
 const rules = indexed(reachable(compile(SHEETS.map(read).join("\n")).rules));
 const page = statedPages["Compositions/Tab bar"];
@@ -36,9 +36,7 @@ test("A tab dragged right lands after the last one, in both kits", () => {
 
 test("Each tab in each state is drawn from the CSS compiled for its node", async () => {
   const { tab } = await load("kanso-panel/ui-tab.js", ["tab"], gpuiHost());
-  const { tokens } = await load("kanso-panel/ui.js", ["tokens"]);
-  const theme = kansoTheme();
-  const c = tokens({ ...theme, ...theme.colors });
+  const c = await kansoColours();
   const ink = (value) => (value?.colour === undefined ? value : value.share === undefined ? c[value.colour] : undefined);
   for (const state of page.states.filter(({ args }) => !["renaming", "connecting"].includes(args.tab ?? args.state))) {
     const props = propsOf(state);
@@ -59,9 +57,7 @@ test("Each tab in each state is drawn from the CSS compiled for its node", async
 
 test("A door is the app's icon Button with the size, radius, ink and open wash the compiled CSS gives the Storybook's door", async () => {
   const { button } = await load("kanso-panel/ui-button.js", ["button"], gpuiHost());
-  const { tokens } = await load("kanso-panel/ui.js", ["tokens"]);
-  const theme = kansoTheme();
-  const c = tokens({ ...theme, ...theme.colors });
+  const c = await kansoColours();
   const tree = treeOf({ items: [], value: null, folded: 0, panel: "pr" });
   const doors = viewOf(tree)[0].children.at(-1).children;
   for (const node of doors) {
