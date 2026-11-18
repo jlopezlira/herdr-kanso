@@ -2,23 +2,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { load, gpuiHost, texts, calls, find, CHROME_NIGHT } from "./helpers.mjs";
-
-async function menu({ pane = {}, terminal = {}, machine = null, agent = true, keys = [], parent = null } = {}) {
-  const info = { pane: "p1", tab: "t1", terminal: "T1", cwd: "/work/acme", name: "tests", ...(agent ? { status: "idle", program: { agent: true } } : {}), ...pane };
-  const other = { pane: "p2", tab: "t1", terminal: "T2", status: "idle", program: { agent: true } };
-  const closed = [], opened = [];
-  const host = {
-    ...gpuiHost(), theme: () => CHROME_NIGHT, props: () => ({ target: { pane: "p1", terminal: "T1" }, overlay: "o1" }), keys: () => keys, window: () => ({ platform: "macos" }),
-    panes: () => [info, other], terminals: () => [{ address: "T1", name: "tests", labels: {}, ...(parent ? { parent: parent.address } : {}), ...terminal }, ...(parent ? [parent] : [])], agents: () => (agent ? [{ address: "T1" }] : []),
-    spaces: () => [{ id: "s1", machine, tabs: [{ id: "t1" }] }], shared: () => null, setShared: () => {},
-    run: (cmd) => closed.push(cmd), closeOverlay: () => closed.push("closeOverlay"), openOverlay: (spec) => opened.push(spec),
-  };
-  const { KansoMenu } = await load("kanso-menu/main.js", ["KansoMenu"], host);
-  const view = new KansoMenu();
-  view.init({}, { notify() {}, focus_handle: () => ({ focus() {} }) });
-  return { view, closed };
-}
+import { load, gpuiHost, texts, calls, find } from "./helpers.mjs";
+import { paneMenu as menu } from "./menu-fixtures.mjs";
 
 test("The menu names the pane, then keeps the story's groups in order", async () => {
   const { view } = await menu();
