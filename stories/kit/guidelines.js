@@ -1,5 +1,6 @@
 // Design guidelines per page: principle, rule, detail; extra sections: title, text; and Start page prompts.
 import { ledgerPrompt } from "./ledger.js";
+import { panelGuidelines } from './panel-docs.js';
 
 export const guidelines = {
   "Tokens/Colour": [
@@ -292,6 +293,7 @@ export const guidelines = {
     ["Kokō", "The initial is the avatar.", "A picture from a URL, local or external, is cropped to the circle. When it cannot load, the initial stays."],
     ["Seijaku", "Three sizes.", "sm inside a line of text, md by default, lg on a card or a header."],
   ],
+  ...panelGuidelines,
 };
 const build = "Then run `npm run build:site-tokens`, `npm run build:ui-tokens` and `npm run build:stories`, and `npm run check:tokens` must pass.";
 const adding = (what, rule) => [`Adding ${what}`, `The table is the only set. ${rule} Add it to \`kanso/tokens.json\` with its name, value and use before anything uses it. ${build}`];

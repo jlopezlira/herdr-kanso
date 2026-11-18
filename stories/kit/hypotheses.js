@@ -1,6 +1,7 @@
 // A design hypothesis for each thing the app shows today that a page drops, hides, moves or changes, in the user's terms.
 // Today rests on the running app; every job gets a new home or the hypothesis stops; with no signal yet it is unproven.
 import { pullRequest } from './samples.js';
+import { panelHypotheses } from './panel-docs.js';
 
 export const hypotheses = {
   'Compositions/Toolbar': [
@@ -228,4 +229,5 @@ export const hypotheses = {
       back: 'working and done marks come back on the tab.',
     },
   ],
+  ...panelHypotheses,
 };
