@@ -129,6 +129,7 @@
     "herdr": [
       "agents",
       "appHome",
+      "checking",
       "closeOverlay",
       "commands",
       "exec",
@@ -159,7 +160,9 @@
       "run",
       "sendFeedback",
       "setAgentOrder",
+      "setBadge",
       "setShared",
+      "setWindowTitle",
       "settings",
       "shared",
       "spaces",
