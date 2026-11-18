@@ -76,3 +76,18 @@ test("A node's styles are the same remembered or worked out again, whichever nod
   assert.deepEqual(stylesFor(b, own, hovering(c)), []);
   assert.deepEqual(stylesFor(b, own, hovering(b)), [["h", 4]]);
 });
+
+test("box-shadow: none clears a shadow an earlier rule drew, as the browser does", async () => {
+  const { stylesFor } = await import("../kanso/mods/kanso-panel/ui-match.js");
+  const { draw } = await load("kanso-panel/ui-draw.js", ["draw"], gpuiHost());
+  const { tokens } = await load("kanso-panel/ui.js", ["tokens"]);
+  const own = indexed(compile(".a { box-shadow: 0 0 0 2px var(--accent); } .a.off { box-shadow: none; }").rules);
+  const node = (classes) => ({ tag: "span", attrs: {}, classes, parent: null, children: [] });
+  const ring = (classes) => stylesFor(node(classes), own).filter(([op]) => op === "ring").at(-1);
+  assert.deepEqual(ring(["a"]), ["ring", 2, { colour: "accent" }]);
+  assert.deepEqual(ring(["a", "off"]), ["ring", 0, { colour: null }]);
+  const c = tokens(kansoTheme().colors);
+  const tree = (cls) => [{ tag: "span", attrs: { class: cls }, children: [] }];
+  assert.equal(draw(tree("a"), c, { id: "on", rules: own })[0].kids.length, 1, "the ring drawn");
+  assert.equal(draw(tree("a off"), c, { id: "off", rules: own })[0].kids.length, 0, "no ring");
+});

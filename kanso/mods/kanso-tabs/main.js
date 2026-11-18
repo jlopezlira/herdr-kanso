@@ -118,6 +118,7 @@ export async function takeOpens(dir) {
 export default class Tabs extends View {
   tabW = {};
   barW = {};
+  doorW = {};
   armed = new Armed();
   tabMenu = null;
   panelMenu = null;
@@ -434,6 +435,7 @@ export default class Tabs extends View {
   doorWire(c, p) {
     return (el) => {
       const wired = el
+        .on_size_change((s, cx) => { this.doorW = this.sized(this.doorW, p.id, s.width, cx); })
         .on_mouse_down("left", (_e, cx) => { cx.stop_propagation(); this.dragPanel = p.id; })
         .on_mouse_up("left", (_e, cx) => {
           const from = this.dragPanel;
@@ -509,7 +511,8 @@ export default class Tabs extends View {
     const windows = Boolean(window()?.buttons);
     const doors = connected ? shownPanels : [];
     const tools = connected ? (arrange ? 2 : 1) : 0;
-    const room = this.barW.bar ? tabBarRoom(this.barW.bar, { tools, doors: doors.length + 1 + (windows ? 3 : 0) }) : 0;
+    const fixed = Array.from({ length: 1 + (windows ? 3 : 0) }, () => null);
+    const room = this.barW.bar ? tabBarRoom(this.barW.bar, { tools, doors: [...doors.map((p) => this.doorW[p.id] ?? null), ...fixed] }) : 0;
     const { shown: kept, folded } = connected ? foldTabs({ widths: openTabs.map((tab) => this.tabW[tab.id]), chosen: openTabs.findIndex((tab) => tab.active), room, gap: G.hair, more: (this.barW.more ?? 0) + G.sm })
       : { shown: openTabs.map((_, i) => i), folded: [] };
     const drawn = kept.map((i) => openTabs[i]);
@@ -528,11 +531,11 @@ export default class Tabs extends View {
       ...(connected ? { plus: () => run("kanso-spaces.start") } : {}),
       ...(connected && arrange ? { "panels-top-left": () => openArrange() } : {}),
       ...(windows ? { minus: () => run("window.minimize"), square: () => run("window.maximize"), x: () => run("window.close") } : {}),
-      ...Object.fromEntries(doors.map((p) => [p.id, () => this.mount(now === p.id ? null : p.id)])),
+      ...Object.fromEntries(doors.map((p) => [`panel:${p.id}`, () => this.mount(now === p.id ? null : p.id)])),
     };
     const wires = {
-      ...Object.fromEntries(drawn.map((tab) => [tab.id, this.tabWire(c, tab, { space, ps, connected })])),
-      ...Object.fromEntries(doors.map((p) => [p.id, this.doorWire(c, p)])),
+      ...Object.fromEntries(drawn.map((tab) => [`tab:${tab.id}`, this.tabWire(c, tab, { space, ps, connected })])),
+      ...Object.fromEntries(doors.map((p) => [`panel:${p.id}`, this.doorWire(c, p)])),
       plus: (el) => stop(el).on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); openArrange(); }),
       ...Object.fromEntries(["panels-top-left", "circle-question-mark", "minus", "square", "x"].map((key) => [key, stop])),
       [more]: (el) => el.on_size_change((s, cx) => { this.barW = this.sized(this.barW, "more", s.width, cx); }),

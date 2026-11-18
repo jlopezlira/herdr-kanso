@@ -20,7 +20,7 @@ import { SinceLeft } from "./since-left.js";
 import { REGISTRY, WORKTREES, keyOfSpace, keyOfProject, closedProjects, shownNames, startingProjects, folderName, addWorktree, worktreesOf, missingFolders, trimmed, sameProjects } from "./projects.js";
 import { sleepingNow, asleepGroups, nameOf, seenNow, conversationOfThread, shownThread, terminalNames, agentKey, SHOWN_LABEL, PROJECT_LABEL, ID_LABEL } from "./roster.js";
 import { pollable, activePlaces } from "./background.js";
-import { listKey, moveTo } from "./listkeys.js";
+import { listKey, moveTo, plainKey } from "./listkeys.js";
 import { commitLayout, setRail, foldSidebar, railWidth, dropStripDrag } from "./layout.js";
 import { afterMount } from "./pure.js";
 import { commandLoop, MachineRead } from "./sidebar.js";
@@ -1488,7 +1488,7 @@ export default class Spaces extends View {
   menuKeys(el) {
     return el.track_focus(this.handle)
       .on_key_down((e, cx) => {
-        const digit = /^[1-9]$/.test(e.key) && !e.modifiers?.platform && !e.modifiers?.control ? this.menuDigits?.[Number(e.key) - 1] : null;
+        const digit = /^[1-9]$/.test(e.key) && plainKey(e) ? this.menuDigits?.[Number(e.key) - 1] : null;
         if (digit) { cx.stop_propagation(); digit(cx); return; }
         const { move, gAt } = listKey(e, this.menuG);
         this.menuG = gAt;
@@ -1603,12 +1603,34 @@ export default class Spaces extends View {
       if (ask !== this.agentsAsked || !this.checking) return;
       this.checking = false;
       if (list) { this.known = list; setShared(KNOWN_AGENTS, { ...(shared(KNOWN_AGENTS) ?? {}), [on]: list }); }
-      else if (!this.known) this.agentsFailed = failed;
+      else this.agentsFailed = failed;
       cx.notify();
     };
+    if (on && !shared(KNOWN_AGENTS)?.[""]) {
+      knownAgents({ on: null }).then((list) => { setShared(KNOWN_AGENTS, { ...(shared(KNOWN_AGENTS) ?? {}), "": JSON.parse(JSON.stringify(list)) }); cx.notify(); }).catch(() => {});
+    }
     const deadline = cx.timer.after(MACHINE_READ_MS, () => settle(null, "no answer in time"));
     knownAgents({ on: on || null }).then((list) => { deadline.cancel(); settle(JSON.parse(JSON.stringify(list)), null); })
       .catch((e) => { deadline.cancel(); settle(null, String(e?.message ?? e)); });
+  }
+
+  explainer() {
+    return (shared(KNOWN_AGENTS)?.[""] ?? []).find((a) => a.installed) ?? null;
+  }
+
+  explainAgents(place, agent) {
+    const where = place.machine || "this computer";
+    run("tab.new", { name: `Explain ${where}`, space: place.space ?? spaces().find((w) => w.active)?.id, argv: agent.run,
+      task: `kansō could not list the agents installed on ${where}. The error: ${this.agentsFailed}. Explain why, and how to fix it. Do not change anything.` });
+  }
+
+  agentsFailure(place) {
+    const agent = this.explainer();
+    const at = this.menuActs.length;
+    this.menuActs = [...this.menuActs, (cx) => { this.askAgents(place, cx); cx.notify(); }, ...(agent ? [() => { this.explainAgents(place, agent); closeOverlay(props().overlay); }] : [])];
+    const lit = this.menuAt === at ? "fix" : this.menuAt === at + 1 ? "agent" : null;
+    return { failure: { text: `Can't list agents on ${place.machine || "this computer"}`, source: this.agentsFailed, fix: "Refresh", onClick: this.menuActs[at],
+      agent: agent?.name ?? "", onExplain: agent ? this.menuActs[at + 1] : null, lit } };
   }
 
   newAgentView(t) {
@@ -1623,13 +1645,12 @@ export default class Spaces extends View {
       else startIn(place, a?.run ?? null);
       this.thenClose(project && a ? this.db().setProjectAgent(project.id, a.key) : null);
     };
-    const installed = (this.known ?? []).filter((a) => a.installed).slice(0, 9);
-    this.menuDigits = installed.map((a) => (cx) => { pick(a); cx.notify(); });
+    const installed = (this.known ?? []).filter((a) => a.installed);
+    this.menuDigits = installed.slice(0, 9).map((a) => (cx) => { pick(a); cx.notify(); });
     const where = place.machine ? `${place.machine} \u00b7 ${name}` : name;
     const terminal = item("Terminal", () => pick(null), { icon: "terminal", hint: chordOf("tab.new") || null, keep: true });
-    const agents = this.agentsFailed
-      ? [{ failure: { text: `Can't list agents on ${place.machine || "this computer"}`, source: this.agentsFailed, fix: "Refresh", onClick: (cx) => this.askAgents(place, cx) } }]
-      : this.known ? installed.map((a, i) => item(a.name, () => pick(a), { icon: a.icon ?? null, hint: String(i + 1), keep: true })) : [{ loading: true }, { loading: true }];
+    const rows = this.known ? installed.map((a, i) => item(a.name, () => pick(a), { icon: a.icon ?? null, hint: i < 9 ? String(i + 1) : null, keep: true })) : [];
+    const agents = this.agentsFailed ? [...rows, this.agentsFailure(place)] : this.known ? rows : [{ loading: true }, { loading: true }];
     const newTree = () => item("New worktree\u2026", () => this.worktreeDialog(place), { icon: "git-branch" });
     const ends = () => [
       item("New project", () => this.addProject(), { icon: "folder-plus" }),

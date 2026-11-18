@@ -1,7 +1,7 @@
 import { div, svg } from "gpui-kit";
 import { Button } from "gpui-base";
 import { alpha, glyphOf } from "./ui.js";
-import { viewOf, stylesFor, hovering, changed } from "./ui-match.js";
+import { viewOf, stylesFor, hovering, changed, Answers } from "./ui-match.js";
 
 const ink = (c, value) => {
   if (!value || typeof value !== "object" || !("colour" in value)) return value;
@@ -18,17 +18,35 @@ export const lastOp = (ops, name) => {
 const radiusOf = (ops) => lastOp(ops, "rounded")?.[1] ?? 0;
 const ringOf = (ops, c) => {
   const ring = lastOp(ops, "ring");
-  return ring ? plain().absolute().inset_0().border(ring[1]).border_color(ink(c, ring[2])).rounded(radiusOf(ops)) : null;
+  return ring?.[1] ? plain().absolute().inset_0().border(ring[1]).border_color(ink(c, ring[2])).rounded(radiusOf(ops)) : null;
 };
 
 // `hoverClass` is the Storybook's static hover mark. It is not on the element at rest.
 // `live` is false for a node that is not a control: a hover callback would paint .kanso-control--hover onto it.
-export const lookOf = (node, rules, hoverClass = null, live = true) => {
+const worked = (node, rules, hoverClass, live) => {
   const own = stylesFor(node, rules);
   if (!live) return { own, extra: [] };
   const marked = hoverClass ? { ...node, classes: [...node.classes, hoverClass] } : node;
   return { own, extra: changed(own, stylesFor(marked, rules, hovering(node))) };
 };
+class NodeLooks {
+  constructor() { this.byNode = new WeakMap(); }
+
+  of(node, key, make) {
+    if (!this.byNode.has(node)) this.byNode.set(node, new Answers());
+    return this.byNode.get(node).of(key, make);
+  }
+}
+class Looks {
+  constructor() { this.byRules = new WeakMap(); }
+
+  of(node, rules, key, make) {
+    if (!this.byRules.has(rules)) this.byRules.set(rules, new NodeLooks());
+    return this.byRules.get(rules).of(node, key, make);
+  }
+}
+const looks = new Looks();
+export const lookOf = (node, rules, hoverClass = null, live = true) => looks.of(node, rules, `${live}${hoverClass ?? ""}`, () => worked(node, rules, hoverClass, live));
 export const painted = (el, { own, extra }, c) => {
   const drawn = apply(el, own, c);
   return extra.length ? drawn.hover((style) => apply(style, extra, c)) : drawn;

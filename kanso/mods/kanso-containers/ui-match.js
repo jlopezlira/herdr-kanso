@@ -22,14 +22,15 @@ export const viewOf = (nodes, parent = null) => {
   return views;
 };
 
+const NONE = [];
 const matchCompound = (node, step, state) => {
   if (!node || node.tag === "#text") return false;
   if (step.tag && step.tag !== node.tag) return false;
-  if (!step.classes.every((name) => node.classes.includes(name))) return false;
-  if (!(step.attrs ?? []).every(([name, value]) => (value === null ? name in node.attrs : node.attrs[name] === value))) return false;
-  if (!step.states.every((name) => state(node, name))) return false;
-  if (step.not.some((inner) => matches(node, inner, state))) return false;
-  return step.any.every((list) => list.some((inner) => matches(node, inner, state)));
+  if (!(step.classes ?? NONE).every((name) => node.classes.includes(name))) return false;
+  if (!(step.attrs ?? NONE).every(([name, value]) => (value === null ? name in node.attrs : node.attrs[name] === value))) return false;
+  if (!(step.states ?? NONE).every((name) => state(node, name))) return false;
+  if ((step.not ?? NONE).some((inner) => matches(node, inner, state))) return false;
+  return (step.any ?? NONE).every((list) => list.some((inner) => matches(node, inner, state)));
 };
 
 const siblingsBefore = (el) => {
@@ -81,7 +82,8 @@ class Asked {
 const asked = new Asked();
 export const hovering = (target) => asked.hover(target);
 
-const candidates = (node, rules) => (Array.isArray(rules) ? rules : [...new Set([...rules["*"], ...node.classes.flatMap((name) => rules[name] ?? [])])]);
+const candidates = (node, rules) => (Array.isArray(rules) ? rules
+  : [...new Set([...rules.index["*"], ...node.classes.flatMap((name) => rules.index[name] ?? NONE)])].map((i) => rules.list[i]));
 
 const match = (node, rules, state) => candidates(node, rules)
   .filter((rule) => matches(node, rule.steps, state))

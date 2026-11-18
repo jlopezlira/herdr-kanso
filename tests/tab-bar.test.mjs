@@ -345,3 +345,45 @@ test("The chosen tab's × is a Button: Tab reaches it, Enter and Space press it,
   handler(close, "on_click")({}, b.cx);
   assert.deepEqual(clone(b.ran), [["tab.close", { id: "t1" }]]);
 });
+
+test("A panel tab, a pane standing in and a stale body each draw their state: the doors as Buttons, the open one on the wash; a held pane let go on the bar goes back; a panel read before keeps its body with its time and Retry", async () => {
+  const tree = { id: "root", children: [{ id: "panel", children: [{ id: "panel-body", children: [{ id: "pr" }] }] }] };
+  const b = await bar({ tree, stored: { "strip.drag": { pane: "p1" }, "strip.drop": { at: 1 } } });
+  const root = b.view.render(b.cx);
+  for (const label of ["New tab", "Arrange", "Files", "PR"]) assert.equal(door(root, label).tag.startsWith("tab-bar-"), true, `${label}: a Button`);
+  assert.equal(arg(door(root, "PR"), "bg"), b.c.w12, "the open panel's door");
+  assert.equal(calls(door(root, "Files"), "bg").length, 0, "the others at rest");
+  calls(root, "on_mouse_up").filter((call) => call[1] === "left").forEach((call) => call.at(-1)({}, b.cx));
+  assert.equal(b.store["strip.drag"], null, "the held pane goes back");
+  assert.equal(b.store["strip.drop"], null);
+  const { Files } = await load("kanso-panel/files.js", ["Files"], { ...gpuiHost(), Scrollbar: { vertical: () => chain() }, theme: () => night, key: () => "fixture", v_virtual_list: () => chain(), isMarkdown: () => false });
+  const files = Object.assign(new Files(), { context: "fixture", root: "/repo", folders: new Set(), marks: {}, entries: new Map([["", [{ name: "a.txt", dir: false }]]]), held: { at: Date.now() - 120_000 } });
+  const stale = byTag(files.render({}), "files-stale");
+  assert.ok(stale, "the stale body's line");
+  assert.ok(texts(stale).some((text) => /2 ?m/.test(text)), "how old it is");
+  assert.ok(byTag(stale, "files-retry"), "and Retry");
+});
+
+test("A panel's id is its own: one named lu-notes draws and opens, and one named plus leaves New tab alone", async () => {
+  const tree = { id: "root", children: [{ id: "panel", children: [{ id: "panel-body", children: [] }] }] };
+  const panels = [{ id: "lu-notes", mod: "notes-panel", label: "Custom" }, { id: "plus", mod: "plus-panel", label: "Plus", icon: "mods/plus/icon.svg" }];
+  const b = await bar({ tree, stored: { "kanso.panels": panels } });
+  const root = b.view.render(b.cx);
+  handler(door(root, "Custom"), "on_click")({}, b.cx);
+  assert.equal(b.view.want, "lu-notes");
+  handler(door(b.view.render(b.cx), "New tab"), "on_click")({}, b.cx);
+  assert.deepEqual(clone(b.ran.at(-1)), ["kanso-spaces.start", null], "New tab is still New tab");
+  handler(door(b.view.render(b.cx), "Plus"), "on_click")({}, b.cx);
+  assert.equal(b.view.want, "plus");
+});
+
+test("A door with a long name takes its measured width from the room, so the tabs fold behind +N", async () => {
+  const panels = [{ id: "notes", mod: "notes-panel", label: "A very long detail panel for this project" }];
+  const wide = await bar({ stored: { "kanso.panels": panels } });
+  for (const id of ["t1", "t2", "t3"]) wide.view.tabW[id] = 100;
+  wide.view.barW.bar = ROOM + 28 + 2 + 3 * 100 + 2 * 2;
+  assert.equal(["t1", "t2", "t3"].filter((id) => tab(wide.view.render(wide.cx), id)).length, 3, "before the door is measured, all fit");
+  wide.view.doorW.notes = 205;
+  const root = wide.view.render(wide.cx);
+  assert.ok(["t1", "t2", "t3"].filter((id) => tab(root, id)).length < 3, "measured, the door's width folds a tab");
+});

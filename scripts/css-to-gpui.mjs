@@ -226,7 +226,7 @@ const DECLARATIONS = {
   bottom: (v) => (/%$/.test(v) ? [["bottom", v]] : v === "auto" ? [] : [["bottom", evaluate(v)]]),
   "inset-block": (v) => [["top", evaluate(v)], ["bottom", evaluate(v)]],
   "box-shadow": (v) => {
-    if (v === "none") return [];
+    if (v === "none") return [["ring", 0, { colour: null }]];
     const line = v.match(/^inset 0 (calc\(-1 \* var\(--k-[a-z0-9-]+\)\)|var\(--k-[a-z0-9-]+\)) 0 (var\(--[a-z-]+\))$/);
     if (line) {
       const width = evaluate(line[1]);
@@ -309,12 +309,18 @@ export const reachable = (list, pieces = PIECES) => {
   return list.filter((rule) => reachableSteps(rule.steps, known));
 };
 
-export const indexed = (list) => {
+const FIELDS = ["relation", "tag", "classes", "states", "not", "any", "where", "attrs"];
+const filled = (value) => value !== null && value !== undefined && !(Array.isArray(value) && value.length === 0);
+const compact = (steps) => steps.map((step) => Object.fromEntries(FIELDS.filter((name) => filled(step[name]))
+  .map((name) => [name, name === "not" ? step[name].map(compact) : name === "any" ? step[name].map((list) => list.map(compact)) : step[name]])));
+
+export const indexed = (rules) => {
+  const list = rules.map(({ steps, ops, weight, order }) => ({ steps: compact(steps), ops, weight, order }));
   const index = { "*": [] };
-  for (const rule of list) {
-    for (const key of [keyOf(rule.steps[rule.steps.length - 1])].flat()) (index[key] ??= []).push(rule);
-  }
-  return index;
+  rules.forEach((rule, i) => {
+    for (const key of [keyOf(rule.steps[rule.steps.length - 1])].flat()) (index[key] ??= []).push(i);
+  });
+  return { list, index };
 };
 
 if (isMain(import.meta.url)) {

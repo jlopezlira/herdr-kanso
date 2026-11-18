@@ -33,11 +33,11 @@ test("The track is the Storybook's: 2 around its items on the w4 wash, radius 8,
   }
 });
 
-test("Selection is a tone: on its track the chosen tab is raised in the text colour, the others muted with the w4 wash and the text colour on hover", async () => {
+test("Selection is a tone: on its track the chosen tab is the selection's w12 in the text colour, the others muted with the w4 wash and the text colour on hover", async () => {
   const { segmented, tokens } = await kit();
-  for (const { theme, c } of eachTheme(tokens, night, day)) {
+  for (const { c } of eachTheme(tokens, night, day)) {
     const [chosen, other] = segmented("seg", ITEMS, "day", () => {}, c).kids;
-    assert.equal(arg(chosen, "bg"), theme.raised);
+    assert.equal(arg(chosen, "bg"), c.w12);
     assert.equal(arg(chosen, "selected"), true);
     assert.equal(calls(chosen, "hover").length, 0, "the chosen tab keeps its fill");
     assert.equal(arg(chosen, "text_color"), c.text);

@@ -95,10 +95,11 @@ const tabBarMenu = withMenu(() => "top_left", below);
 const tabBarDoors = (id, c, _flags, kids, more) => placed(box(cssNode(["kanso-tab-bar__doors"], tabBarFace()), c, RULES, id), id, c, kids, more);
 const holder = (id, c, _flags, kids, more, _wire, context) => placed(div(), id, c, kids, more, context);
 
-export const tabBarRoom = (width, { tools = 0, doors = 0 }) => {
+export const tabBarRoom = (width, { tools = 0, doors = [] }) => {
   const bar = tabBarFace(), gap = opOf(bar, "gap"), side = opOf(doorFace(), "w"), doorGap = opOf(cssNode(["kanso-tab-bar__doors"], bar), "gap");
   const pad = stylesFor(bar, RULES).filter(([op]) => op === "px" || op === "pl" || op === "pr").reduce((sum, [op, value]) => ({ ...sum, ...(op === "px" ? { pl: value, pr: value } : { [op]: value }) }), {});
-  return width - (pad.pl ?? 0) - (pad.pr ?? 0) - tools * (side + gap) - 2 * gap - (doors ? doors * side + (doors - 1) * doorGap : 0);
+  const doorsWidth = doors.reduce((sum, door, i) => sum + (door ?? side) + (i ? doorGap : 0), 0);
+  return width - (pad.pl ?? 0) - (pad.pr ?? 0) - tools * (side + gap) - 2 * gap - doorsWidth;
 };
 
 const STACKS = {

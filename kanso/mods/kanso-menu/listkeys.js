@@ -4,9 +4,14 @@
 const GG_MS = 1000; // vim's timeoutlen for the second g of gg
 
 // `gAt`: the time of a pending first g (0: none); the list keeps it and hands it back.
+export const plainKey = (e) => {
+  const m = e?.modifiers ?? {};
+  return !(m.control || m.platform || m.alt || m.function);
+};
+
 export function listKey(e, gAt = 0, now = Date.now()) {
   const m = e?.modifiers ?? {};
-  if (m.control || m.platform || m.alt || m.function) return { move: null, gAt };
+  if (!plainKey(e)) return { move: null, gAt };
   const k = String(e?.key ?? "").toLowerCase();
   const gg = gAt && now - gAt <= GG_MS;
   const move = k === "escape" ? "escape" : k === "enter" ? "enter"

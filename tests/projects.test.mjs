@@ -345,3 +345,60 @@ test("The + menu is the approved one: where it opens, Terminal with its key, the
   const failed = menu({ known: null, agentsFailed: "ssh: connect timed out" });
   assert.equal(failed.lines.some(([text]) => text === "Claude Code"), false);
 });
+
+test("The + menu keeps every installed agent, numbers the first nine, starts one only on a plain digit, and a failed read offers Refresh and Explain on the keyboard", async () => {
+  const calls = [];
+  const store = { "kanso.agents.installed": { "": [{ key: "claude", name: "Claude Code", installed: true, run: ["claude"] }] } };
+  const place = { space: "sp-api", folder: "/work/api", machine: "devbox", project: null, name: "api" };
+  const { Spaces } = await agentMenu({
+    props: () => ({ overlay: "ov1", newAgent: place, start: true }), run: (cmd, args) => calls.push([cmd, clone(args ?? null)]),
+    shared: (key) => store[key] ?? null, keys: () => [],
+  });
+  const t = { foreground: "#fff", muted: "#888", dim: "#666", border: "#333", selected: "#444" };
+  const menu = (state) => {
+    const view = Object.assign(new Spaces(), { kdb: { setProjectAgent: async () => {} }, menuAt: -1, handle: {} }, state);
+    const lines = [];
+    view.menuLine = ((line) => (text, act, opts) => { lines.push([text, opts?.hint ?? null]); return line(text, act, opts); })(view.menuLine.bind(view));
+    const items = [];
+    view.popup = (_t, _title, list) => { items.push(...list); return null; };
+    view.newAgentView(t);
+    const keys = { track_focus() { return keys; }, on_key_down(fn) { keys.press = fn; return keys; } };
+    view.menuKeys(keys);
+    return { view, lines, items, press: (key, modifiers = {}) => keys.press({ key, modifiers }, { stop_propagation() {}, notify() {} }) };
+  };
+  const ten = Array.from({ length: 10 }, (_, i) => ({ key: `a${i + 1}`, name: `Agent ${i + 1}`, installed: true, run: [`a${i + 1}`] }));
+  const many = menu({ known: ten });
+  assert.deepEqual(many.lines.filter(([text]) => text.startsWith("Agent")).map(([text, hint]) => [text, hint]),
+    ten.map((a, i) => [a.name, i < 9 ? String(i + 1) : null]), "ten agents, ten rows, the first nine numbered");
+  many.press("2", { alt: true });
+  many.press("2", { platform: true });
+  assert.deepEqual(calls, [], "a modified digit is not the menu's");
+  many.press("2");
+  assert.deepEqual(calls.at(-1), ["tab.new", { space: "sp-api", folder: "/work/api", argv: ["a2"] }]);
+  calls.length = 0;
+  const known = [{ key: "codex", name: "Codex", installed: true, run: ["codex"] }];
+  const failed = menu({ known, agentsFailed: "ssh: connect timed out" });
+  const failure = failed.items.find((line) => line.failure)?.failure;
+  assert.ok(failed.lines.some(([text]) => text === "Codex"), "the last list stays usable");
+  assert.deepEqual([failure.text, failure.fix, failure.agent], ["Can't list agents on devbox", "Refresh", "Claude Code"]);
+  failed.press("j"); failed.press("j");
+  assert.equal(menu({ known, agentsFailed: "ssh: connect timed out", menuAt: 2 }).items.find((line) => line.failure).failure.lit, "fix", "the keyboard reaches Refresh after the agents");
+  failed.view.menuAt = 3;
+  failed.press("enter");
+  assert.deepEqual(calls.at(-1), ["tab.new", { name: "Explain devbox", space: "sp-api", argv: ["claude"],
+    task: "kansō could not list the agents installed on devbox. The error: ssh: connect timed out. Explain why, and how to fix it. Do not change anything." }], "Enter on Explain asks this computer's agent");
+});
+
+test("A read that fails after an earlier answer keeps that list and says it failed, with its retry", async () => {
+  const store = { "kanso.agents.installed": { devbox: [{ key: "codex", name: "Codex", installed: true, run: ["codex"] }], "": [] } };
+  const place = { space: "sp-api", folder: "/work/api", machine: "devbox", project: null, name: "api" };
+  const { Spaces } = await agentMenu({ shared: (key) => store[key] ?? null, setShared: (key, value) => { store[key] = value; }, knownAgents: async () => { throw new Error("ssh: connect timed out"); } });
+  const view = new Spaces();
+  view.askAgents(place, { notify() {}, timer: { after: () => ({ cancel() {} }) } });
+  assert.equal(view.checking, true);
+  assert.equal(view.known.length, 1, "the last answer at once");
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(view.checking, false);
+  assert.equal(view.agentsFailed, "ssh: connect timed out");
+  assert.equal(view.known.length, 1, "and still shown");
+});

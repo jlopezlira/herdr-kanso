@@ -163,7 +163,7 @@ export const glyph = (icon, tone = "") => still((c) => svg(glyphOf(appIcon(icon)
 export const tabs = ({ items = [], value = null, size = "md", track = false, disabled = false, icon = false, label = false }) => (id, c, more = {}, { bar = false } = {}) => {
   const { onChange = null, onClose = null, wires = {} } = given(more);
   const shown = items.map((item) => ({ ...item, icon: icon ? appIcon(item.icon) : null }));
-  const own = Object.fromEntries(items.map(({ key }) => [key, { onClose: onClose && ((cx) => onClose(key, cx)), wire: wires[key] }]));
+  const own = Object.fromEntries(items.map(({ key }) => [key, { onClose: onClose && ((cx) => onClose(key, cx)), wire: wires[`tab:${key}`] }]));
   return drawTabs(id, shown, value, onChange, c, { size, track, disabled, collapsed: icon && !label, bar, on: own });
 };
 
@@ -191,7 +191,10 @@ const pattern = (draw) => (props) => pressing((id, c, more) => {
 });
 export const emptyState = ({ icon = "", text, action = "" }) => pattern(stateEmpty)({ icon: appIcon(icon), text, action });
 export const failureLine = ({ text, fix = "", detail = "" }) => pattern(stateLine)({ text, fix, detail });
-export const failureBlock = ({ text, source = "", fix = "" }) => pattern(stateBlock)({ text, source, fix });
+export const failureBlock = ({ text, source = "", fix = "", agent = "" }) => pressing((id, c, more) => {
+  const { presses = {}, onClick = takeOf(presses, fix) } = given(more);
+  return stateBlock(id, c, { text, source, fix, onClick, agent, onExplain: agent ? takeOf(presses, `Explain to ${agent}`) : null });
+});
 // A press on the toast or its fix goes home.
 export const toast = ({ icon = "none", ...props }) => pattern(drawToast)({ ...props, icon: iconOf(icon) });
 export const skeletonOf = ({ shape, count }) => (id, c, more = {}) => {
