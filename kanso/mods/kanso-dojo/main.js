@@ -8,6 +8,7 @@ import { Lit } from "./lit.js";
 import { R, G, H, T, DOJO_CELL, TINT, CLEAR, alpha, tokens } from "./ui.js";
 import { iconButton, button as drawButton } from "./ui-button.js";
 import { button, metric, row, tooltip } from "./kit.js";
+import { caption } from "./ui-caption.js";
 import { Store } from "./store.js";
 import { Share } from "./share.js";
 import { dojoShare } from "./card.js";
@@ -213,7 +214,7 @@ export default class Dojo extends View {
         .border_color(lit || hinted ? c.accent : alpha(c.accent, TINT.boundLine)).bg(lit ? c.accent : hinted ? alpha(c.accent, TINT.strong) : alpha(c.accent, TINT.key))
         .flex().items_center().justify_center().text_size(T.card).font_semibold().text_color(lit ? ink : c.text).child(key))
       .child(div().text_size(T.micro).text_color(hinted ? c.accent : c.muted).child(word))
-      .when(Boolean(sub), (el) => el.child(div().text_size(T.micro).text_color(c.dim).child(sub)));
+      .when(Boolean(sub), (el) => el.child(caption(c, sub)));
   }
 
   // The pet, at its reaction; a click chooses another.
