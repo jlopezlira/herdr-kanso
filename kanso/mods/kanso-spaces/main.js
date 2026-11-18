@@ -40,6 +40,7 @@ import { field, TextField } from "./ui-field.js";
 import { menu, emptyState, skeletonOf, tooltip } from "./kit.js";
 import { boundChord } from "./ui-tooltip.js";
 import { menuList, menuHeight } from "./ui-menu.js";
+import { pieceLines, openPieceMenu } from "./piece-lines.js";
 import { toolbar } from "./toolbar.js";
 import { header } from "./header.js";
 import { pieces, shown, runs, asksPs, setPiece, pieceOf, STORE } from "./pieces.js";
@@ -106,6 +107,8 @@ const COMPUTER_STATE = { connected: "on", loading: "on", off: "off", unavailable
 // A project's key: its machine and folder.
 export const projectKey = (w) => `${w?.machine ?? ""}:${w?.folder || home()}`;
 const arrange = (props) => openOverlay({ mod: "kanso-sleep", kind: "dialog", width: 520, props });
+// A folder as ~/ when it is under home.
+const tilde = (path) => { const base = trimmed(home()); return base && paths.within(path, base) ? `~/${paths.relative(base, path)}` : path; };
 const sleepTab = (spaceId, tab) => arrange({ sleep: { scope: "tab", space: spaceId, tab } });
 // A settled tab wakes whole; a terminal asleep in a tab still shown wakes alone.
 const wakeRow = (z) => arrange({ wake: z.settled ? { space: z.space, tab: z.tabId } : { space: z.space, terminal: z.terminal } });
@@ -1299,7 +1302,7 @@ export default class Spaces extends View {
 
   // A popup is as tall as its items; height is only the most.
   menu(w) {
-    openOverlay({ mod: "kanso-spaces", kind: "popup", width: 252, height: 460, at: "pointer", props: { spaceMenu: { id: w.id } } });
+    openOverlay({ mod: "kanso-spaces", kind: "popup", width: W.menu, height: 540, at: "pointer", props: { spaceMenu: { id: w.id } } });
   }
 
   // The projects you added on machine `m` with no space open.
@@ -1423,7 +1426,7 @@ export default class Spaces extends View {
         this.menuG = gAt;
         if (!move) return;
         const acts = this.menuActs ?? [];
-        if (move === "escape") closeOverlay(props().overlay);
+        if (move === "escape") { if (this.sub) { this.sub = null; this.menuAt = -1; } else closeOverlay(props().overlay); }
         else if (move === "enter") acts[this.menuAt]?.(cx);
         else this.menuAt = moveTo(move, this.menuAt, acts.length);
         if (this.menuScroll && this.menuAt < this.menuScroll.count) this.menuScroll.handle.scroll_to_item(this.menuAt);
@@ -1434,6 +1437,11 @@ export default class Spaces extends View {
 
   // A popup's Menu, walked by the keyboard; Herdr draws its frame.
   popup(t, title, items) { return this.menuKeys(menuList("spaces-menu", { title, items }, tokens(t))); }
+
+  // The piece lines every right-click menu ends with, as items the keyboard walks like the rest.
+  pieceItems(item, id) {
+    return pieceLines(id, { named: true }).map((line) => (line.separator ? line : item(line.label, (cx) => line.onClick(cx), { icon: line.icon, selected: line.selected })));
+  }
 
   // A popup's items from the start: the keyboard's list emptied, and the item maker.
   lines() {
@@ -1498,11 +1506,11 @@ export default class Spaces extends View {
     };
     const options = () => openOverlay({ mod: "menu", kind: "popup", width: 200, height: 260, props: { tab: "space", target: { id: w.id } } });
     const remove = (cx) => { this.armed.press("remove", cx, () => this.removeProject(project, w)); };
-    return this.popup(t, null, [
+    return this.popup(t, place?.name ?? w?.name ?? null, [
       ...(asleep.length ? [{ heading: "Asleep" }, ...asleep.map((z) => item(`Wake ${z.tab}`, () => wakeRow(z), { icon: "sun", hint: z.saved ? since(z.saved) : null }))] : []),
       ...(asleep.length > 1 ? [item(`Wake all ${asleep.length}`, () => arrange({ wake: { space: w.id } }), { icon: "undo" })] : []),
       ...(place && !project?.missing ? [item("New conversation\u2026", () => this.newAgentMenu(place), { icon: "plus" }),
-        item("New agent in a worktree\u2026", () => this.worktreeDialog(place), { icon: "git-fork" })] : []),
+        item("New in a worktree\u2026", () => this.worktreeDialog(place), { icon: "git-fork" })] : []),
       ...(trees.length ? [{ heading: "Worktrees" }, { scroll: trees.map((x) => item(x.branch ?? "detached", () => this.openTree(place, x), { icon: "git-branch", hint: where(x.path) })) }] : []),
       ...(active ? [item("Sleep this tab\u2026", () => sleepTab(w.id, active.id), { icon: "moon" })] : []),
       ...(tabs > 1 ? [item("Sleep the project\u2026", () => sleepProject(w.id), { icon: "moon" })] : []),
@@ -1511,6 +1519,7 @@ export default class Spaces extends View {
       ...(project?.missing && !project?.machine ? [item("Locate folder\u2026", locate, { icon: "file", keep: true })] : []),
       // Any project you see can go: one you added (its row too), or an open space you never kept.
       ...(project || w ? [item("Remove project", remove, { icon: "x", keep: true, verb: w ? `remove it and close its ${tabs} tab${tabs === 1 ? "" : "s"}` : "remove it", armed: this.armed.is("remove") })] : []),
+      ...this.pieceItems(item, "sidebar.git"),
     ]);
   }
 
@@ -2156,7 +2165,7 @@ export default class Spaces extends View {
   }
 
   openMenu(a, { title = null, session = null } = {}) {
-    openOverlay({ mod: "kanso-spaces", kind: "popup", width: 252, height: a.asleep ? 170 : 460, at: "pointer",
+    openOverlay({ mod: "kanso-spaces", kind: "popup", width: W.menu, height: a.asleep ? 170 : 460, at: "pointer",
       props: { menu: { address: a.address, view: this.view, title, session, ...(a.asleep ? { asleep: a.asleep, name: a.name } : {}) } } });
   }
 
@@ -2258,7 +2267,8 @@ export default class Spaces extends View {
     const pick = (view, cx) => { this.setView(view, cx); cx.notify(); };
     const open = (next, cx) => { this.viewMenu = next; cx.notify(); };
     const look = { view: this.view, column: collapsed, open: collapsed && this.viewMenu === true, asks: sp.some((s) => s.status === "blocked"), carry: true, tips };
-    return viewSwitch(look)(collapsed ? "rail-view" : "spaces-view", tokens(t), collapsed ? { onChange: pick, onOpen: open } : { onChange: pick });
+    const menu = (_e, cx) => { cx.stop_propagation(); openPieceMenu({ id: "sidebar.switch", title: "Projects, Status, Threads" }); };
+    return viewSwitch(look)(collapsed ? "rail-view" : "spaces-view", tokens(t), collapsed ? { onChange: pick, onOpen: open, onMenu: menu } : { onChange: pick, onMenu: menu });
   }
 
   threadsView(t, sp, ps, ctx) {
@@ -2373,29 +2383,40 @@ export default class Spaces extends View {
     const moveTo = (project) => setShared("kanso.move", [...(Array.isArray(shared("kanso.move")) ? shared("kanso.move") : []).slice(-15), { address: m.address, project, n: Date.now() + Math.random() }]);
     const kill = (cx) => { this.armed.press("close", cx, () => run("terminal.kill", { terminal: m.address })); };
     const others = spaces().filter((w) => !w.machine && w.id !== shownIn);
-    return this.popup(t, null, [
+    const name = this.subjectOf(m, l, a, title);
+    const into = (sub) => () => { this.sub = sub; this.menuAt = -1; };
+    // A picker is its own Menu, named for what it acts on; Escape returns to the first.
+    if (this.sub === "snooze") return this.popup(t, `Snooze ${name}`, snoozePresets(now).map((x) => item(x.label, () => label(m.address, SNOOZE_LABEL, x.until), { hint: x.when })));
+    if (this.sub === "move") {
+      return this.popup(t, `Move ${name} to`, [...others.map((w) => item(w.name, () => moveTo(w.id))),
+        ...(movedTo ? [item(`Back to ${sp?.name ?? "where it runs"}`, () => moveTo(null), { icon: "undo" })] : [])]);
+    }
+    if (this.sub === "copy") {
+      return this.popup(t, "Copy", [
+        ...(p?.cwd ? [item("Folder", copy(p.cwd), { icon: "folder", hint: tilde(p.cwd) })] : []),
+        ...(p?.branch ? [item("Branch", copy(p.branch), { icon: "git-branch", hint: p.branch })] : []),
+        ...(session ? [item("Conversation id", copy(session), { icon: "copy", hint: `${session.slice(0, 4)}\u2026` })] : []),
+      ]);
+    }
+    return this.popup(t, name, [
       ...(p ? [item("Open", () => run("pane.focus", { pane: p.pane }), { icon: "chevron-right" })] : []),
+      item("Rename\u2026", () => renameTerminal(m.address, l[NAME_LABEL] || l[THREAD_LABEL] || title || a?.title || "")),
       item(pinned ? "Unpin" : "Pin to the top", () => this.pinThread({ address: m.address, pin: pinned ? 1 : null }), { icon: "pin" }),
       ...(settled ? [item("Bring back", () => label(m.address, SETTLED_LABEL), { icon: "undo" })] : []),
       ...(!settled && free ? [item("Settle", () => label(m.address, SETTLED_LABEL, `${now}:${k?.turn ?? 0}`), { icon: "check" })] : []),
-      ...(snoozed ? [item("Wake", () => label(m.address, SNOOZE_LABEL), { icon: "clock" })]
-        : [{ heading: "Snooze" }, ...snoozePresets(now).map((x) => item(x.label, () => label(m.address, SNOOZE_LABEL, x.until), { hint: x.when }))]),
+      item(isUnread(l) ? "Mark read" : "Mark unread", () => label(m.address, UNREAD_LABEL, isUnread(l) ? "" : "1")),
+      ...(snoozed ? [item("Wake", () => label(m.address, SNOOZE_LABEL), { icon: "clock" })] : [item("Snooze", into("snooze"), { icon: "clock", hint: "\u203a", keep: true })]),
+      ...(m.address && (others.length || movedTo) ? [item("Move to project", into("move"), { hint: "\u203a", keep: true })] : []),
+      ...(p?.cwd || p?.branch || session ? [item("Copy", into("copy"), { icon: "copy", hint: "\u203a", keep: true })] : []),
       ...(p?.tab && sp && a ? [item("Sleep this agent", () => sleepAgent(sp.id, p.tab, p.pane), { icon: "moon" })] : []),
       ...(p?.tab && sp ? [item("Sleep its tab", () => sleepTab(sp.id, p.tab), { icon: "moon" })] : []),
-      ...((sp?.tabs?.length ?? 0) > 1 ? [item("Sleep its project\u2026", () => sleepProject(sp.id), { icon: "moon" })] : []),
-      item(isUnread(l) ? "Mark read" : "Mark unread", () => label(m.address, UNREAD_LABEL, isUnread(l) ? "" : "1"), { icon: "enso" }),
-      item("Rename\u2026", () => renameTerminal(m.address, l[NAME_LABEL] || l[THREAD_LABEL] || title || a?.title || "")),
-      // Four show, the rest scroll, so the menu's own items stay in view.
-      ...(m.address ? [{ heading: "Move to project" }, { scroll: others.map((w) => item(w.name, () => moveTo(w.id), { icon: "chevron-right" })) },
-        ...(movedTo ? [item("Back to where it runs", () => moveTo(null), { icon: "undo" })] : [])] : []),
-      { separator: true },
-      ...(p?.cwd ? [item("Copy folder", copy(p.cwd), { icon: "copy" })] : []),
-      ...(p?.branch ? [item("Copy branch", copy(p.branch), { icon: "git-branch" })] : []),
-      ...(session ? [item("Copy conversation id", copy(session), { icon: "copy" })] : []),
-      { separator: true },
-      item(a ? "Close agent" : "Close terminal", kill, { icon: "x", keep: !this.armed.is("close"), verb: "close it", armed: this.armed.is("close") }),
+      item(a ? "Close agent" : "Close terminal", kill, { icon: "x", keep: !this.armed.is("close"), verb: `close ${name}`, armed: this.armed.is("close") }),
+      ...this.pieceItems(item, "sidebar.activity"),
     ]);
   }
+
+  // What a menu names: the conversation's title, else the agent's.
+  subjectOf(m, l, a, title) { return l[NAME_LABEL] || l[THREAD_LABEL] || title || a?.title || m.name || "this agent"; }
 
   zzMenuView(t, m) {
     const z = m.asleep;

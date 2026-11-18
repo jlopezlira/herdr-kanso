@@ -9,7 +9,9 @@ const root = new URL("../", import.meta.url);
 const COMMON = [
   { source: "kanso/mods/kanso-panel/share.js", copies: ["kanso/mods/kanso-spend/share.js", "kanso/mods/kanso-guard/share.js", "kanso/mods/kanso-dojo/share.js"] },
   // What can be shown, shown when it has something to say, or hidden. Hide stops the work.
-  { source: "kanso/mods/kanso-settings/pieces.js", copies: ["kanso-spaces", "kanso-strip", "kanso-chrome", "kanso-tabs", "kanso-status", "kanso-panel", "kanso-sim"].map((m) => `kanso/mods/${m}/pieces.js`) },
+  { source: "kanso/mods/kanso-settings/pieces.js", copies: ["kanso-spaces", "kanso-strip", "kanso-chrome", "kanso-tabs", "kanso-status", "kanso-panel", "kanso-sim", "kanso-menu"].map((m) => `kanso/mods/${m}/pieces.js`) },
+  // The lines every right-click menu ends with, and Hide with its Undo.
+  { source: "kanso/mods/kanso-panel/piece-lines.js", copies: ["kanso-spaces", "kanso-strip", "kanso-chrome", "kanso-tabs", "kanso-status", "kanso-menu"].map((m) => `kanso/mods/${m}/piece-lines.js`) },
   // An agent's program icon and name, and the key caps, the same in the tabs, headers, status bar, sidebar and Send.
   { source: "kanso/mods/kanso-spaces/marks.js", copies: ["kanso/mods/kanso-strip/marks.js", "kanso/mods/kanso-status/marks.js", "kanso/mods/kanso-send/marks.js", "kanso/mods/kanso-settings/marks.js", "kanso/mods/kanso-help/marks.js", "kanso/mods/kanso-panel/marks.js", "kanso/mods/kanso-toast/marks.js", "kanso/mods/kanso-chrome/marks.js"] },
   // Text for an agent, delivered the same from Send and from Look.

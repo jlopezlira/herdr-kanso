@@ -9,6 +9,7 @@ import { openWithPopup } from "./popup.js";
 import { tokens } from "./ui.js";
 import { Armed } from "./ui-button.js";
 import { menuList } from "./ui-menu.js";
+import { pieceLines } from "./piece-lines.js";
 
 const nonce = () => Date.now() + Math.random();
 
@@ -81,17 +82,38 @@ export default class KansoMenu extends View {
     it.does();
   }
 
+  // A right-click on a piece of the window: what it does, then the piece lines.
+  pieceView(piece) {
+    const shut = () => closeOverlay(props()?.overlay);
+    return {
+      title: piece.title,
+      lines: [
+        ...piece.actions.map((a) => ({ icon: a.icon, label: a.label, hint: a.hint ?? null, onClick: () => { shut(); run(a.command, a.args); } })),
+        ...pieceLines(piece.id, { named: piece.named, done: shut }),
+      ],
+    };
+  }
+
+  // A pane's menu: its groups, a rule between them.
+  paneView(target) {
+    const { title, groups: sets } = groups(target, this.armed);
+    return {
+      title,
+      lines: sets.flatMap((set, g) => [...(g ? [{ separator: true }] : []),
+        ...set.map((it) => ({ icon: it.icon, label: it.label, hint: shortcut(it.key) || null, checked: it.checked, armed: it.armed, verb: it.verb, onClick: (cx) => this.choose(it, cx) }))]),
+    };
+  }
+
   render() {
-    const { title, groups: sets } = groups(props()?.target ?? {}, this.armed);
-    const list = sets.flat();
-    const lines = sets.flatMap((set, g) => [...(g ? [{ separator: true }] : []),
-      ...set.map((it) => ({ icon: it.icon, label: it.label, hint: shortcut(it.key) || null, checked: it.checked, armed: it.armed, verb: it.verb,
-        selected: list.indexOf(it) === this.at, onClick: (cx) => this.choose(it, cx) }))]);
+    const target = props()?.target ?? {};
+    const { title, lines: drawn } = target.piece ? this.pieceView(target.piece) : this.paneView(target);
+    const list = drawn.filter((line) => line.onClick);
+    const lines = drawn.map((line) => (line.onClick ? { ...line, selected: list.indexOf(line) === this.at } : line));
     return menuList("kanso-menu", { title, items: lines }, tokens(theme())).track_focus(this.handle)
       .on_key_down((e, cx) => {
         const move = this.listed(e);
         if (!move) return;
-        if (move === "enter") this.choose(list[this.at], cx);
+        if (move === "enter") list[this.at]?.onClick(cx);
         else if (move === "escape") closeOverlay(props().overlay);
         else this.at = moveTo(move, this.at, list.length);
         cx.stop_propagation();

@@ -9,6 +9,7 @@ import { theme, run, props, shared, setShared, updates, keys, nextCommand, openO
 import { Updater } from "./update.js";
 import { tryOrAsync, readCommands } from "./pure.js";
 import { loadPieces, pieces, shown } from "./pieces.js";
+import { undoHide } from "./piece-lines.js";
 import { outOfMemory } from "./notices.js";
 import { glyphs } from "./marks.js";
 import { tokens, DAWN_W, G, H } from "./ui.js";
@@ -56,6 +57,7 @@ export default class WorkspaceChrome extends View {
     else if (c === "settings-mods") openSettings("pieces");
     else if (c === "settings-news") openSettings("news");
     else if (c === "restart") this.restart();
+    else if (c === "piece-undo") undoHide();
   }
 
   // Written only when it changes: every mod draws again on a shared write.
