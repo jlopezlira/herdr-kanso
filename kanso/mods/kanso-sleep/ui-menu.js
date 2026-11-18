@@ -68,7 +68,7 @@ export function menuItem(id, { icon = null, picture = null, letter = null, tone 
     .child(lead(c, { picture, letter, tone, dot, icon }, armed ? look.ink : c.muted))
     .child(labelOf(words, second, look.ink, c))
     .when(Boolean(count), (el) => el.child(badge(count, c)))
-    .when(Boolean(hint) && !armed, (el) => el.child(div().flex_none().text_size(T.body).text_color(c.dim).child(hint)))
+    .when(Boolean(hint), (el) => el.child(div().flex_none().text_size(T.body).text_color(armed ? look.ink : c.dim).child(hint)))
     .when(Boolean(status), (el) => el.child(mark(c, { status })))
     .when(checked, (el) => el.child(svg(glyphOf("check")).size(ICON_ROW).flex_none().text_color(c.muted)));
 }

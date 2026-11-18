@@ -9,18 +9,33 @@ const part = (i) => (Array.isArray(catalog.parts[i]) ? catalog.parts[i].map(part
 const record = (id) => catalog.records.find((r) => r.id === id);
 const quotes = (word) => word.replace(/[“”]/g, "\"");
 const decode = (html) => html.replace(/&quot;/g, "\"").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&#39;/g, "'");
-const storyWords = (id) => decode(part(record(id).markup).replace(/<style[\s\S]*?<\/style>/g, "").replace(/<[^>]+>/g, "\n"))
-  .split("\n").map((w) => quotes(w.trim())).filter(Boolean);
-const inOrder = (want, words) => want.reduce((at, w) => {
-  const next = at < 0 ? -1 : words.indexOf(w, at);
-  return next < 0 ? -1 : next + 1;
-}, 0) >= 0;
+const shownAction = (html) => html.replace(/<span class="kanso-action( kanso-action--armed)?"><span>([^<]*)<\/span><span>([^<]*)<\/span><\/span>/g, (_m, armed, rest, press) => (armed ? press : rest));
+const wordsOf = (html) => decode(html.replace(/<[^>]+>/g, "\n")).split("\n").map((w) => quotes(w.trim())).filter(Boolean);
+const blockAt = (html, at) => {
+  const tags = /<div\b|<\/div>/g;
+  tags.lastIndex = at;
+  for (let depth = 0, tag; (tag = tags.exec(html));) {
+    depth += tag[0] === "</div>" ? -1 : 1;
+    if (!depth) return html.slice(at, tags.lastIndex);
+  }
+  return html.slice(at);
+};
+const boardMenus = (id) => {
+  const html = shownAction(part(record(id).markup).replace(/<style[\s\S]*?<\/style>/g, ""));
+  return [...html.matchAll(/<div class="kanso-menu[ "]/g)].map((m) => wordsOf(blockAt(html, m.index)));
+};
 
 const drawnWords = (el) => everyDrawn(el).flatMap((kid) => kid.calls.filter((call) => call[0] === "child" && typeof call[1] === "string").map((call) => call[1]));
 const pressable = (el, label) => everyDrawn(el).find((kid) => calls(kid, "on_click").length && drawnWords(kid).includes(label));
 const press = (el, label) => calls(pressable(el, label), "on_click").at(-1).at(-1)({}, { notify() {}, stop_propagation() {}, timer: { after() {} } });
-const NOW = Date.now();
-const today = (h, m) => { const d = new Date(NOW); d.setHours(h, m, 0, 0); return d.getTime(); };
+const today = (h, m) => new Date(2026, 10, 18, h, m).getTime();
+const NOW = today(14, 2);
+class FrozenDate extends Date {
+  constructor(...at) { super(...(at.length ? at : [NOW])); }
+  static now() { return NOW; }
+}
+const contentOf = (el) => calls(everyDrawn(el).find((kid) => calls(kid, "content").length), "content")[0][1];
+const byId = (el, id) => everyDrawn(el).find((kid) => kid.tag === id || calls(kid, "id").some((call) => call[1] === id));
 const SESSION = "/Users/me/.claude/projects/acme/9f2c1234-0000-4000-8000-000000000001.jsonl";
 const SPACES = [
   { id: "sp1", name: "acme-shop", folder: "/Users/me/acme-shop", machine: null, active: true,
@@ -38,16 +53,16 @@ const terms = (labels = {}) => [{ address: "t0", state: "live", program: { agent
 const PROJECT = { id: "pr1", name: "acme-shop", folder: "/Users/me/acme-shop", machine: "" };
 const TREES = [{ branch: "checkout-v2", path: "/Users/me/.config/herdr-app/data/kanso/worktrees/acme-shop/checkout-v2" }, { branch: "cart-retry", path: "/Users/me/acme-shop-cart" }];
 
-async function sidebarPopup({ popup, open, status = "working", labels = {}, registry = [PROJECT], armed = null, sub = null, spaces = SPACES, known = null, asleep = false }) {
-  const el = recorder(), store = { "kanso.registry": registry };
+async function sidebarPopup({ popup, open, status = "working", labels = {}, registry = [PROJECT], armed = null, sub = null, spaces = SPACES, known = null, asleep = false, moved = null }) {
+  const el = recorder(), store = { "kanso.registry": registry, "kanso.projects": moved };
   const { Spaces } = await loadSidebar(el.host, {
     ...world(spaces, agent(status), PANES.filter((p) => asleep || p.tab !== "tb2"), terms(labels)),
-    appHome: () => "/Users/me/.config/herdr-app", shared: (key) => store[key] ?? null,
+    Date: FrozenDate, appHome: () => "/Users/me/.config/herdr-app", shared: (key) => store[key] ?? null,
     props: () => ({ [popup]: open, overlay: "o", ...(popup === "newAgent" ? { start: true } : {}) }), closeOverlay: () => {},
   });
   const view = Object.assign(new Spaces(), mountedState({ shown: new Set(["sp1"]), armed: { is: (key) => key === armed }, menuAt: -1, sub, trees: TREES, known }));
   view.render();
-  return [...el.texts];
+  return [[...el.texts]];
 }
 
 async function machineSidebar(host = {}) {
@@ -64,29 +79,37 @@ async function machineSidebar(host = {}) {
 const session = (more = {}) => () => sidebarPopup({ popup: "menu", open: { address: "t0", view: "spaces", session: SESSION }, ...more });
 const project = (more = {}) => () => sidebarPopup({ popup: "spaceMenu", open: { id: "sp1" }, ...more });
 const computer = (phase, syncOn = false) => () => sidebarPopup({ popup: "machineMenu", open: { route: "devbox", shown: "devbox", phase, syncOn } });
-const pane = (more = {}) => async () => texts((await paneMenu({ keys: BINDINGS, ...more })).view.render());
+const pane = (more = {}) => async () => [texts((await paneMenu({ keys: BINDINGS, ...more })).view.render())];
 const piece = (id, title) => pane({ target: { piece: { id, title, actions: [] } } });
 const settingsMenu = async (ready = null) => {
   const f = await footer({ ready });
   f.view.menuOpen = true;
   return f;
 };
-const settings = (ready) => async () => drawnWords((await settingsMenu(ready)).view.render());
+const settings = (ready) => async () => [drawnWords(contentOf((await settingsMenu(ready)).view.render()))];
 const tabMenu = (armed, keys = BINDINGS) => async () => {
   const ps = [{ tab: "t1", program: { agent: true } }, { tab: "t1", program: { agent: true } }];
   const b = await tabBar({ panes: ps, keys });
   if (armed) b.view.armed.press("close-t1", b.cx, () => {});
-  return drawnWords(b.view.tabMenuPopover(b.c, chain("trigger"), b.space.tabs[0], { space: b.space, ps }));
+  return [drawnWords(contentOf(b.view.tabMenuPopover(b.c, chain("trigger"), b.space.tabs[0], { space: b.space, ps })))];
 };
 const panelMenu = async () => {
   const b = await tabBar();
-  return drawnWords(b.view.panelMenuPopover(b.c, chain("trigger"), { id: "pr", label: "PR" }));
+  return [drawnWords(contentOf(b.view.panelMenuPopover(b.c, chain("trigger"), { id: "pr", label: "PR" })))];
+};
+const strip = async (segmentMenu) => {
+  const { Strip, tokens } = await load("kanso-strip/main.js", ["Strip", "tokens"], { ...gpuiHost(), Popover: { new: (id) => chain(id) }, theme: () => CHROME_NIGHT, shared: () => null });
+  return { view: Object.assign(new Strip(), { segmentMenu }), c: tokens(CHROME_NIGHT) };
 };
 const headerPr = async () => {
-  const { Strip, tokens } = await load("kanso-strip/main.js", ["Strip", "tokens"], { ...gpuiHost(), Popover: { new: (id) => chain(id) }, theme: () => CHROME_NIGHT, shared: () => null });
-  const view = Object.assign(new Strip(), { segmentMenu: "pr-p1" });
+  const { view, c } = await strip("pr-p1");
   const pr = { kind: "pr", number: "#166", url: "https://github.com/acme/docs/pull/166", verdict: "ready" };
-  return drawnWords(view.digestBar(tokens(CHROME_NIGHT), { pane: "p1", cwd: "/w" }, [pr], { fold: 0, working: false, reading: false, strip: false, does: {} }));
+  return [drawnWords(byId(view.digestBar(c, { pane: "p1", cwd: "/w" }, [pr], { fold: 0, working: false, reading: false, strip: false, does: {} }), "fact-menu-list-pr-p1"))];
+};
+const placeMenu = async () => {
+  const { view, c } = await strip("place-p1");
+  const p = { pane: "p1", cwd: "/Users/me/acme-shop" };
+  return [drawnWords(contentOf(view.factMenu(c, "place-p1", chain("fact"), view.placeMenu(p, { where: { branch: "checkout-v2" } }))))];
 };
 const asleepRow = () => sidebarPopup({ popup: "menu", open: { address: "zz:t5", name: "billing", asleep: { tab: "review", n: 3, saved: today(14, 2), resume: "00000000-0000-4000-8000-000000000005" } } });
 const plusMenu = () => sidebarPopup({ popup: "newAgent", open: { space: "sp1", folder: "/Users/me/acme-shop", machine: "", project: "pr1", name: "acme-shop" },
@@ -96,10 +119,10 @@ const restartArmed = async () => {
   const f = await settingsMenu("0.1.16");
   press(f.view.render(), "Update Herdr to 0.1.16");
   assert.deepEqual(f.ran, [], "the first press only arms");
-  const armed = drawnWords(f.view.render());
+  const armed = drawnWords(contentOf(f.view.render()));
   press(f.view.render(), "Press again to restart Herdr");
   assert.deepEqual(f.ran, [["app.update", undefined]], "the second press restarts Herdr into its update");
-  return armed;
+  return [armed];
 };
 const syncPending = async () => {
   const writes = [];
@@ -137,7 +160,7 @@ const keyboard = async () => {
   assert.ok(lit.length > 0, "the lit row draws its selected ground");
   keyDown("enter");
   assert.ok(menu.closed.includes("pane.split"), "Enter runs the lit row");
-  return texts(menu.view.render());
+  return [texts(menu.view.render())];
 };
 
 const PIECE = (named) => [named ? `Hide “${named}”` : "Hide this", "Settings for this…"];
@@ -151,22 +174,24 @@ const PANE_ROWS = (title, pin, agentRows, back = []) => [title, "Split right", "
   ...agentRows, ...back, "Right-clicks go to the program", "Close pane", "⇧⌘W"];
 const AGENT_ROWS = ["Send to an agent…", "⌥⌘S", "Find in conversation", "⌘F", "Open with…", "Sleep"];
 const TAB_ROWS = (close, hint = []) => ["checkout", "Rename", "New tab", "⌘T", "Sleep checkout…", close, ...hint, ...PIECE("Agent state on tabs")];
-const SETTINGS_ROWS = ["Settings", "Settings", "kansō settings", "⌃⇧,", "Herdr settings"];
-const SNOOZE = ["Snooze checkout", "In 1 hour", "In 3 hours", ...(today(18, 0) > NOW + 3600000 ? ["This evening"] : []), "Tomorrow", "Monday"];
+const PLACE_ROWS = ["Folder and branch", "Copy path", "Copy branch name", "Open with…", ...PIECE()];
+const SETTINGS_ROWS = ["Settings", "kansō settings", "⌃⇧,", "Herdr settings"];
+const SNOOZE = ["Snooze checkout", "In 1 hour", "15:02", "In 3 hours", "17:02", "This evening", "18:00", "Tomorrow", "Thu 9:00", "Monday", "Mon 9:00"];
+
+const PANE_PINNED = pane({ pane: { name: "web" }, machine: "devbox", agent: false, store: { "strip.state": { t1: { cols: [{ panes: ["p1"], pin: true }] } } } });
 
 const CASES = {
   session: { draw: session(), want: SESSION_ROWS() },
   sessionArmed: { draw: session({ armed: "close" }), want: SESSION_ROWS({ close: "Press again to close checkout" }) },
-  snooze: { draw: session({ sub: "snooze" }), want: SNOOZE, hints: true },
+  snooze: { draw: session({ sub: "snooze" }), want: SNOOZE },
   copy: { draw: session({ sub: "copy" }), want: ["Copy", "Folder", "~/acme-shop-checkout", "Branch", "checkout-v2", "Conversation id", "9f2c…"] },
-  move: { draw: session({ sub: "move" }), want: ["Move checkout to", "docs-site", "reports"] },
+  move: { draw: session({ sub: "move", moved: { "9f2c1234-0000-4000-8000-000000000001": "sp1" } }), want: ["Move checkout to", "docs-site", "reports", "Back to acme-shop"] },
   pinned: { draw: session({ labels: { "kanso.pin": "1" } }), want: SESSION_ROWS({ pin: "Unpin" }) },
   settled: { draw: session({ status: "idle", labels: { "kanso.settled": `${NOW}:0` } }), want: SESSION_ROWS({ shelf: ["Bring back"] }) },
   snoozed: { draw: session({ labels: { "kanso.snooze": String(NOW + 3600000) } }), want: SESSION_ROWS({ wake: ["Wake"] }) },
   thread: { draw: session({ status: "idle" }), want: SESSION_ROWS({ shelf: ["Settle"] }) },
   project: { draw: project(), want: PROJECT_ROWS() },
   projectArmed: { draw: project({ armed: "remove" }), want: PROJECT_ROWS({ remove: "Press again to remove, close 3 tabs" }) },
-  projectAsleep: { draw: project({ asleep: true }), want: PROJECT_ROWS({ head: [PROJECT_HEAD[0], "Asleep", "Wake review", "14:02", ...PROJECT_HEAD.slice(1)] }) },
   gone: { draw: project({ spaces: [], registry: [] }), want: ["This project is no longer here."] },
   keep: { draw: project({ registry: [] }), want: PROJECT_ROWS({ extra: ["Keep as a project"] }) },
   missing: { draw: project({ registry: [{ ...PROJECT, missing: true }] }), want: PROJECT_ROWS({ head: [PROJECT_HEAD[0], ...PROJECT_HEAD.slice(3)], extra: ["Locate folder…"] }) },
@@ -181,15 +206,14 @@ const CASES = {
   noMenu: { draw: piece("sidebar.switch", "Projects, Status, Threads"), want: ["Projects, Status, Threads", ...PIECE()] },
   pane: { draw: pane({ pane: { name: "tests" } }), want: PANE_ROWS("tests", "Pin", AGENT_ROWS) },
   paneToProgram: { draw: pane({ terminal: { labels: { "herdr.right-click": "program" } } }), want: PANE_ROWS("tests", "Pin", AGENT_ROWS) },
-  panePinned: { draw: pane({ pane: { name: "web" }, machine: "devbox", agent: false, store: { "strip.state": { t1: { cols: [{ panes: ["p1"], pin: true }] } } } }),
-    want: PANE_ROWS("web · devbox", "Unpin", ["Open with…"]) },
+  panePinned: { draw: PANE_PINNED, want: PANE_ROWS("web · devbox", "Unpin", ["Open with…"]) },
   paneChild: { draw: pane({ parent: { address: "T0", name: "J" } }), want: PANE_ROWS("tests", "Pin", AGENT_ROWS, ["Send back to J"]) },
   keyboard: { draw: keyboard, want: PANE_ROWS("tests", "Pin", AGENT_ROWS) },
-  bars: { draw: async () => [...await tabMenu(false)(), ...await tabMenu(true)(), ...await pane({ pane: { name: "tests" } })()],
-    want: [...TAB_ROWS("Close tab", ["⌘W"]), ...TAB_ROWS("Press again to close 2 agents"), ...PANE_ROWS("tests", "Pin", AGENT_ROWS)] },
+  bars: { draw: async () => [...await tabMenu(false)(), ...await tabMenu(true)(), ...await pane({ pane: { name: "tests" } })(), ...await PANE_PINNED(), ...await placeMenu()],
+    want: [TAB_ROWS("Close tab", ["⌘W"]), TAB_ROWS("Press again to close 2 agents", ["⌘W"]), PANE_ROWS("tests", "Pin", AGENT_ROWS), PANE_ROWS("web · devbox", "Unpin", ["Open with…"]), PLACE_ROWS] },
   plus: { draw: plusMenu, want: ["acme-shop", "Terminal", "Claude Code", "Codex", "New project", "New worktree…", "Open worktree…", "Arrange…"], skip: "the + menu is not a right-click: it belongs to #331" },
   anyPiece: { draw: async () => [...await headerPr(), ...await panelMenu()],
-    want: ["#166", "· ready", "Pull request · #166", "Copy link", "Open the pull request", "Open on GitHub", "Only when needed", ...PIECE(), "PR panel", ...PIECE(), "Panels…"] },
+    want: [["Pull request · #166", "Copy link", "Open the pull request", "Open on GitHub", "Only when needed", ...PIECE()], ["PR panel", ...PIECE(), "Panels…"]] },
   settings: { draw: settings(null), want: SETTINGS_ROWS },
   hostUpdate: { draw: settings("0.1.16"), want: [...SETTINGS_ROWS, "Update Herdr to 0.1.16"] },
   restartArmed: { draw: restartArmed, want: [...SETTINGS_ROWS, "Press again to restart Herdr"] },
@@ -205,7 +229,7 @@ const STATES = [
   ["coverage/spaces/AgentMenu/Snoozed", "snoozed"], ["coverage/spaces/AgentMenu/Thread", "thread"],
   ["proto/approved-sidebar-menus/Reference/6", "project"], ["coverage/spaces/ProjectMenu/Open project", "project"],
   ["proto/approved-sidebar-menus/Reference/7", "projectArmed"], ["coverage/spaces/ProjectMenu/Remove armed", "projectArmed"],
-  ["coverage/spaces/ProjectMenu/Asleep", "projectAsleep", null], ["coverage/spaces/ProjectMenu/Gone", "gone"],
+  ["coverage/spaces/ProjectMenu/Asleep", "asleepRow"], ["coverage/spaces/ProjectMenu/Gone", "gone"],
   ["coverage/spaces/ProjectMenu/Keep", "keep"], ["coverage/spaces/ProjectMenu/Missing folder", "missing"],
   ["proto/approved-sidebar-menus/Reference/8", "computer"], ["coverage/spaces/ComputerMenu/Connected", "computer"],
   ["coverage/spaces/ComputerMenu/Sync on", "computer"], ["coverage/spaces/ComputerMenu/Sync pending", "syncPending"],
@@ -222,27 +246,26 @@ const STATES = [
   ["coverage/chrome/SettingsMenu/Restart armed", "restartArmed"],
 ];
 
-const boardOf = (id, given) => (given !== undefined ? given : record(id).markup !== undefined ? id : record(id).design ?? null);
-const withoutTimes = (words) => words.filter((w) => !/^\d\d:\d\d$|^[A-Z][a-z]{2} \d\d:\d\d$/.test(w));
+const boardOf = (id) => (record(id).markup !== undefined ? id : record(id).design ?? null);
+const menusOf = (want) => (Array.isArray(want[0]) ? want : [want]).map((menu) => menu.map(quotes));
 
 test("The table holds every state on Layouts/Context menus", () => {
   const page = catalog.records.filter((r) => r.page === "Layouts/Context menus" && (r.markup !== undefined || r.gap || r.design)).map((r) => r.id).toSorted();
   assert.deepEqual(STATES.map(([id]) => id).toSorted(), page);
 });
 
-for (const [id, key, given] of STATES) {
-  const { draw, want, skip, hints } = CASES[key];
-  const board = boardOf(id, given);
+for (const [id, key] of STATES) {
+  const { draw, want, skip } = CASES[key];
+  const board = boardOf(id);
   test(`${record(id).label}: the app draws ${board ? "its board's" : "its"} rows in order`, { skip }, async () => {
-    const wanted = want.map(quotes);
-    if (board) assert.ok(inOrder(wanted, storyWords(board)), `the rows are the board's, in its order: ${wanted.join(" | ")}`);
-    const drawn = (await draw()).map(quotes);
-    assert.deepEqual(hints ? withoutTimes(drawn) : drawn, wanted);
+    const wanted = menusOf(want);
+    if (board) for (const menu of wanted) assert.ok(boardMenus(board).some((drawn) => JSON.stringify(drawn) === JSON.stringify(menu)), `the board draws this menu whole: ${menu.join(" | ")}`);
+    assert.deepEqual((await draw()).map((menu) => menu.map(quotes)), wanted);
   });
 }
 
 test("A tab's menu writes no shortcut for New tab or Close tab when neither is bound", async () => {
-  assert.deepEqual(await tabMenu(false, [])(), ["checkout", "Rename", "New tab", "Sleep checkout…", "Close tab", ...PIECE("Agent state on tabs")]);
+  assert.deepEqual(await tabMenu(false, [])(), [["checkout", "Rename", "New tab", "Sleep checkout…", "Close tab", ...PIECE("Agent state on tabs")]]);
 });
 
 const SUBAGENTS = [

@@ -94,14 +94,14 @@ test("An item leads with an app's picture or letter as a tile, a colour dot, or 
   assert.equal(calls(bug.kids.at(-1), "size").length, 1, "a checked item ends with its check");
 });
 
-test("A heading can carry a mark; armed hides the hint; loading and failure keep the menu's place", async () => {
+test("A heading can carry a mark; armed keeps the hint, so the row keeps its shape; loading and failure keep the menu's place", async () => {
   const { el } = await menuOf([
     { heading: "New in api", mark: "working" }, { label: "Close", hint: "⌘W", armed: true }, { loading: true },
     { failure: { text: "Can't read editors", source: "permission denied" } }, { label: "Wake", badge: "Woke" },
   ]);
   const [head, close, bones, failed, wake] = el.kids;
   assert.equal(head.kids.length, 1, "the heading's mark");
-  assert.ok(!texts(close).includes("⌘W"));
+  assert.ok(texts(close).includes("⌘W"));
   assert.equal(arg(bones, "id"), "kanso-skeleton", "loading is the shared skeleton");
   assert.ok(texts(failed).includes("Can't read editors"));
   assert.ok(texts(wake).includes("Woke"));

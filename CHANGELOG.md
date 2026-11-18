@@ -32,6 +32,8 @@ the branch's rules.
 
 ### Changed
 
+- A menu row that asks to be pressed again keeps its shortcut beside it. (#354)
+- Snooze's times read as the clock does, 9:00 rather than 09:00, and This evening shows only its time. (#354)
 - Remove project's second press reads "Press again to remove, close 3 tabs". (#354)
 - An asleep row's right-click menu wakes just that conversation with Wake, its whole tab with Wake all, and opens Status with its Asleep section by Everything asleep…. (#354)
 - Tabs, the panel buttons, the edge rail and the agent highlight are drawn as the Storybook draws them, in both themes. Right-clicking a pane shows its name, then Split, Wider, Pin, Send, Find in conversation, Open with, Sleep, whether right-clicks go to the program, and Close, which asks twice while an agent is in the pane.
