@@ -1,4 +1,4 @@
-// A subagent under an agent opens the same Session menu as the agent, with only the rows that act on it.
+// Each right-click menu in the sidebar keeps the Storybook's order: the thing's actions, the act that ends it, then the piece lines.
 import test from "node:test";
 import assert from "node:assert/strict";
 import { loadSidebar, mountedState, recorder, world } from "./sidebar-fixtures.mjs";
@@ -16,11 +16,11 @@ const TERMINALS = [
 ];
 const VIEWS = ["spaces", "agents"];
 
-async function sidebar(menu = null) {
+async function sidebar(menu = null, popup = "menu") {
   const el = recorder(), opened = [];
   const { Spaces } = await loadSidebar(el.host, {
     ...world(SPACES, AGENTS, PANES, TERMINALS),
-    props: () => (menu ? { menu, overlay: "o" } : {}), openOverlay: (o) => opened.push(o.props.menu.address), closeOverlay: () => {},
+    appHome: () => "/Users/me/.config/herdr-app", props: () => (menu ? { [popup]: menu, overlay: "o" } : {}), openOverlay: (o) => opened.push(o.props.menu.address), closeOverlay: () => {},
   });
   const view = Object.assign(new Spaces(), mountedState({ shown: new Set(["sp1"]), armed: { is: () => false }, menuAt: -1 }));
   return { el, view, opened };
@@ -63,4 +63,12 @@ test("A subagent with no pane of its own is offered Rename, Pin, Settle, Mark re
 test("A subagent in a pane of its own is offered the rows its pane gives, as any agent is", async () => {
   const child = await menuRows("t9");
   for (const row of ["Open", "Copy", "Sleep this agent", "Sleep its tab"]) assert.ok(child.includes(row), `it offers ${row}`);
+});
+
+test("A project's menu lists its worktrees before Rename, as Layouts/Context menus draws it", async () => {
+  const { el, view } = await sidebar({ id: "sp1" }, "spaceMenu");
+  view.trees = [{ branch: "checkout-v2", path: "/Users/me/fury-checkout" }];
+  view.render();
+  const order = ["New conversation…", "New in a worktree…", "Worktrees", "checkout-v2", "Rename…", "Sleep this tab…", "Project options…", "Keep as a project", "Remove project", "Hide “Branch, ahead, behind”", "Settings for this…"];
+  assert.deepEqual(el.texts.filter((text) => order.includes(text)), order);
 });
