@@ -24,6 +24,12 @@ test("Worktrees searches the top folders of your spaces, or the ones you chose",
   assert.ok(!inside("/a/wt", "/a/wt2"));
   const opened = openIn(["/tmp/wt/src", "/a/wt2"]);
   assert.deepEqual(["/private/tmp/wt", "/a/wt", "/a/wt2"].map(opened), [true, false, true], "open: a folder in use is in it");
+  assert.ok(openIn(["\\\\server\\share\\repo"])("\\\\server\\share"), "a network share's root is open with a folder in it in use");
+  assert.ok(openIn(["/a/../tmp/wt"])("/a/../tmp/wt"), "a path with dot segments that lands in /tmp is open with itself in use");
+  const spellings = ["/", "/a", "/a/", "/a/b", "/a/b/", "/a/b/src", "/a/b2", "/A/b", "/tmp/wt", "/private/tmp/wt", "/tmp/wt/src/", "/var/wt", "/private/var/wt/src", "/a/../tmp/wt", "/a/../var/wt/src", "/a/./b/../b/src",
+    "C:\\", "C:\\repo", "c:\\REPO\\src\\", "\\\\server\\share", "\\\\server\\share\\", "\\\\server\\share\\repo", "\\\\server\\share\\repo\\src", "\\\\SERVER\\Share\\repo", "/link/wt", "/target/wt/src", "rel", "rel/src", ""];
+  const differ = spellings.flatMap((used) => spellings.filter((path) => openIn([used])(path) !== inside(path, used)).map((path) => [path, used]));
+  assert.deepEqual(differ, [], "every spelling is open exactly when a folder in use is inside it");
 });
 
 test("Worktrees parses git's worktree list and the probes", async () => {

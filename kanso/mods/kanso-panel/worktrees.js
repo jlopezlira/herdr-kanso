@@ -12,6 +12,7 @@ import { v_flex, h_flex } from "gpui-base";
 import { exec, spaces, panes, home, run, theme, shared, notify, knownAgents } from "herdr";
 import { Share, postText, shareRows } from "./share.js";
 import { WorktreeStore } from "./worktrees-store.js";
+import { inside, openIn } from "./worktrees-model.js";
 import { R, T, G, OPACITY, tokens } from "./ui.js";
 import { Armed, button, quietLink, iconButton } from "./ui-button.js";
 import { row } from "./ui-row.js";
@@ -88,21 +89,6 @@ export function parseProbe(out) {
     return p;
   }, start);
 }
-
-// On macOS git and panes may report /tmp or /private/tmp, so both forms are normalized.
-const real = (p) => paths.canonical(p);
-export const inside = (dir, path) => Boolean(dir) && paths.within(real(path), real(dir));
-
-const ancestors = (folder) => {
-  const parent = paths.dirname(folder);
-  return parent === folder ? [folder] : [folder, ...ancestors(parent)];
-};
-const folded = (path) => real(path).toLowerCase();
-
-export const openIn = (used) => {
-  const holding = new Set(used.flatMap((folder) => ancestors(real(folder))).map(folded));
-  return (path) => holding.has(folded(path)) && used.some((folder) => inside(path, folder));
-};
 
 const foldersInUse = () => [...spaces().filter((s) => !s.machine).map((s) => s.folder), ...panes().map((p) => p.cwd)];
 
