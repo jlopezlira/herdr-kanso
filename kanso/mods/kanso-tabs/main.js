@@ -6,23 +6,24 @@ import { fileApi } from "./platform-files.js";
 // Modified by José Gutiérrez (minimalistic, 0oz design fork): renamed from oz-tabs; a Specs panel button with the pending count and a needs-you dot (sdd.badge).
 // Modified by jlopezlira (Kanso, https://github.com/jlopezlira/herdr-kanso): renamed from mn-tabs; tabs and panel buttons without outlines; side panels mounted on demand (only the open one exists); Spend and Worktrees built in, Specs and Changes dropped; panel buttons are icons with their name on hover, dragged into any order, and hidden from Pieces (right-click one); trackpad scrolling moves one tab per swipe.
 // Modified by Iván Campaña (https://github.com/icampana): layout writers set the tree only when it is Kanso's, so a switch from another layout never saves that layout into kanso.json.
-import { View, div, svg } from "gpui-kit";
-import { h_flex, Popover } from "gpui-base";
+import { View } from "gpui-kit";
+import { Popover } from "gpui-base";
 import { spaces, panes, run, openOverlay, props, theme, window, shared, setShared, layout, appHome, exec, watchFolder, nextCommand, home, machines, notify } from "herdr";
 import { walkLayout, commitLayout, sidebarBack, foldSidebar, dropStripDrag } from "./layout.js";
 import { Updater } from "./update.js";
 import { tryOr, readCommands } from "./pure.js";
 import { openArrange } from "./open.js";
-import { DIALOG, G, H, R, T, W, ICON as ICON_SIZE, CLEAR, EASE, GLIDE, TINT, alpha, tokens } from "./ui.js";
-import { button, iconButton, pressAgain, Armed } from "./ui-button.js";
+import { DIALOG, G, glyphOf, tokens } from "./ui.js";
+import { pressAgain, Armed } from "./ui-button.js";
 import { TextField } from "./ui-field.js";
 import { menu } from "./ui-menu.js";
-import { tabSkeleton } from "./ui-skeleton.js";
-import { tooltip } from "./kit.js";
+import { plus, tooltip } from "./kit.js";
+import { tabBarRoom } from "./ui-stack.js";
+import { tabBar } from "./tab-bar.js";
 import { boundChord } from "./ui-tooltip.js";
-import { tabItem, tabInsertion, tabPill, TAB_NAME_LIMIT } from "./ui-tab.js";
+import { TAB_NAME_LIMIT } from "./ui-tab.js";
 import { pieceLines } from "./piece-lines.js";
-import { tabMark, barState, foldTabs, pillAt, dropSide, renameWaits } from "./tab-bar-model.js";
+import { tabMark, barState, foldTabs, dropSide, renameWaits } from "./tab-bar-model.js";
 import { Kdb, projectKey } from "./kdb.js";
 import { projectOpen, OPEN } from "./panel-state.js";
 import { TOOLS, PROBE_MS, available, probeTools } from "./sim-registration.js";
@@ -58,20 +59,21 @@ export const shownTabs = (tabs) => (tabs ?? []).filter((c) => !c.settled);
 
 // Both shared, so every bar agrees. A panel set to Hide is not mounted.
 const ORDER = "kanso.panels.order";
-const ICON = "mods/kanso-chrome/icons/";
 const openSettings = (page) => openOverlay({ mod: "kanso-settings", kind: "dialog", width: 860, height: 680, props: { page } });
 const BUILTIN = [
-  { id: "files", label: "Files", icon: `${ICON}file.svg` },
-  { id: "insights", label: "Spend", icon: `${ICON}chart-column.svg` },
-  { id: "pr", label: "PR", icon: `${ICON}git-pull-request.svg` },
-  { id: "shipped", label: "Shipped", icon: `${ICON}trophy.svg` },
-  { id: "worktrees", label: "Worktrees", icon: `${ICON}git-fork.svg` },
-  { id: "ports", label: "Ports", icon: `${ICON}plug.svg` },
-  { id: "containers", label: "Containers", icon: `${ICON}container.svg` },
-  { id: "memory", label: "Memory", icon: `${ICON}memory-stick.svg` },
-  { id: "look", label: "Images", icon: `${ICON}eye.svg` },
-  { id: "sim", label: "Simulator", icon: `${ICON}smartphone.svg` },
+  { id: "files", label: "Files", icon: "lu-file" },
+  { id: "insights", label: "Spend", icon: "lu-chart-column" },
+  { id: "pr", label: "PR", icon: "lu-git-pull-request" },
+  { id: "shipped", label: "Shipped", icon: "lu-trophy" },
+  { id: "worktrees", label: "Worktrees", icon: "lu-git-fork" },
+  { id: "ports", label: "Ports", icon: "lu-plug" },
+  { id: "containers", label: "Containers", icon: "lu-container" },
+  { id: "memory", label: "Memory", icon: "lu-memory-stick" },
+  { id: "look", label: "Images", icon: "lu-image" },
+  { id: "sim", label: "Simulator", icon: "lu-smartphone" },
 ];
+// A door's name among the bar's presses: its icon as the app names it, or its label when it has none.
+const doorKey = (p) => (p.icon ? p.icon.replace(/^lu-/, "") : p.label);
 const list = (key) => { const v = shared(key); return Array.isArray(v) ? v.filter((x) => typeof x === "string") : []; };
 const simulatorRoster = () => JSON.stringify([list(ORDER), choice("panel.sim", pieces(shared)), customPanels()]);
 
@@ -410,27 +412,42 @@ export default class Tabs extends View {
     };
   }
 
-  tabBox(c, tab, { space, openTabs, ps, connected, glide, index, count }) {
-    const from = openTabs.findIndex((other) => other.id === this.pressed), to = openTabs.findIndex((other) => other.id === tab.id);
-    const target = this.dropAt === tab.id && from >= 0 && from !== to;
-    const item = tabItem(`tab-${tab.id}`, this.tabLook(tab), c, {
-      on: tab.active, disabled: !connected, size: "md", track: false, index, count, fill: !glide, nameWidth: W.tabLabel,
-      onChange: () => { this.armed.clear(); run("tab.select", { id: tab.id }); },
-      onClose: openTabs.length > 1 ? (cx) => this.closeTab(tab, ps, cx) : null,
-      onPress: (e, cx) => this.pressTab(tab, e, cx),
-    });
-    const wired = connected ? item
-      .on_hover((hovered, cx) => this.hoverTab(tab, hovered, cx))
-      .on_mouse_up("left", () => this.dropTab(tab, space))
-      .on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); this.armed.clear(); this.tabMenu = tab.id; cx.notify(); })
-      .on_key_down((e, cx) => { if (this.renaming?.id === tab.id && e.key === "escape") { cx.stop_propagation(); this.endRename(cx, false); } }) : item;
-    const landing = target ? tabInsertion(c).absolute().top((H.icon - H.badge) / 2) : null;
-    return div().id(`tab-box-${tab.id}`).relative().flex_none()
-      .on_size_change((s, cx) => { this.tabW = this.sized(this.tabW, tab.id, s.width, cx); })
-      .child(this.tabMenu === tab.id ? this.tabMenuPopover(c, wired, tab, { space, ps }) : wired)
-      .when(Boolean(landing), (box) => box.child(dropSide(from, to) === "before" ? landing.left(-G.hair) : landing.right(-G.hair)));
+  // A tab measures itself as it draws; held, it lands where the pointer lets go; its right-click opens its Menu.
+  tabWire(c, tab, { space, ps, connected }) {
+    return (el) => {
+      const sized = el.on_size_change((s, cx) => { this.tabW = this.sized(this.tabW, tab.id, s.width, cx); });
+      const wired = connected ? sized
+        .on_mouse_down("left", (e, cx) => this.pressTab(tab, e, cx))
+        .on_hover((hovered, cx) => this.hoverTab(tab, hovered, cx))
+        .on_mouse_up("left", () => this.dropTab(tab, space))
+        .on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); this.armed.clear(); this.tabMenu = tab.id; cx.notify(); })
+        .on_key_down((e, cx) => { if (this.renaming?.id === tab.id && e.key === "escape") { cx.stop_propagation(); this.endRename(cx, false); } }) : sized;
+      return this.tabMenu === tab.id ? this.tabMenuPopover(c, wired, tab, { space, ps }) : wired;
+    };
   }
 
+  // Where a held tab lands: before the tab under it when it moves left, after it when it moves right, which is before the next one drawn.
+  drops(drawn) {
+    const from = drawn.findIndex((tab) => tab.id === this.pressed), to = drawn.findIndex((tab) => tab.id === this.dropAt);
+    if (from < 0 || to < 0 || from === to) return {};
+    if (dropSide(from, to) === "before") return { [drawn[to].id]: true };
+    return to + 1 < drawn.length ? { [drawn[to + 1].id]: true } : { [drawn[to].id]: "after" };
+  }
+
+  // A panel's door: pressed, it opens or closes its panel; held and let go on another door, it moves there; its right-click opens its Menu.
+  doorWire(c, p) {
+    return (el) => {
+      const wired = el
+        .on_mouse_down("left", (_e, cx) => { cx.stop_propagation(); this.dragPanel = p.id; })
+        .on_mouse_up("left", (_e, cx) => {
+          const from = this.dragPanel;
+          this.dragPanel = null;
+          if (from && from !== p.id) { movePanel(from, p.id); cx.notify(); }
+        })
+        .on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); this.panelMenu = p.id; cx.notify(); });
+      return this.panelMenu === p.id ? this.panelMenuPopover(c, wired, p) : wired;
+    };
+  }
   // Right-click on a panel's button: its name, Hide, Settings, and the whole list of panels.
   panelMenuPopover(c, trigger, panel) {
     const shut = (cx) => { this.panelMenu = null; cx.notify(); };
@@ -462,53 +479,20 @@ export default class Tabs extends View {
       .content(menu(`tab-menu-list-${tab.id}`, { title: tab.name, items }, c));
   }
 
-  // Tabs that do not fit fold behind +N, a Menu of them with their marks; a pick chooses the tab.
-  moreTabs(c, folded) {
-    const pick = (tab) => (cx) => { this.moreOpen = false; run("tab.select", { id: tab.id }); cx.notify(); };
-    const trigger = button("tab-more", `+${folded.length}`, null, c, { kind: "quiet", active: this.moreOpen });
-    const pop = Popover.new("tab-more-menu").trigger(trigger).open(this.moreOpen)
-      .on_open_change((open, cx) => { this.moreOpen = open; cx.notify(); });
-    const items = folded.map((tab) => ({ label: tab.name, mark: tabMark(tab), onClick: pick(tab) }));
-    return div().id("tab-more-box").flex_none().on_size_change((s, cx) => { this.barW = this.sized(this.barW, "more", s.width, cx); })
-      .child(this.moreOpen ? pop.content(menu("tab-more-list", { items }, c)) : pop);
-  }
-
-  // The tabs and +N, then new tab and Arrange. Connecting: a breathing skeleton per known tab; unreachable: the tabs step down, no tools.
-  tabArea(c, { space, openTabs, ps, state, tools }) {
-    const area = h_flex().id("tab-area").flex_1().min_w(0).h_full().items_center().gap(G.sm)
-      .on_size_change((s, cx) => { this.barW = this.sized(this.barW, "area", s.width, cx); });
-    if (state === "connecting") return area.children(Array.from({ length: Math.max(openTabs.length, 1) }, (_, i) => tabSkeleton(`tab-skeleton-${i}`, c, i)));
-    const connected = state === "connected";
-    const room = this.barW.area ? this.barW.area - tools.length * (H.icon + G.sm) : 0;
-    const { shown, folded } = foldTabs({ widths: openTabs.map((tab) => this.tabW[tab.id]), chosen: openTabs.findIndex((tab) => tab.active), room, gap: G.hair, more: (this.barW.more ?? 0) + G.sm });
-    const drawn = shown.map((i) => openTabs[i]);
-    const pill = pillAt(drawn.map((tab) => this.tabW[tab.id]), drawn.findIndex((tab) => tab.active), G.hair);
-    const group = h_flex().flex_none().min_w(0).gap(G.hair).items_center().relative()
-      .when(Boolean(pill), (el) => el.child(tabPill(c).id("tab-pill").absolute().top(0).left(pill.left).w(pill.width).transition("left", GLIDE).transition("width", GLIDE)))
-      .children(drawn.map((tab, index) => this.tabBox(c, tab, { space, openTabs, ps, connected, glide: Boolean(pill), index, count: drawn.length })));
-    return area.child(group)
-      .when(folded.length > 0 && connected, (el) => el.child(this.moreTabs(c, folded.map((i) => openTabs[i]))))
-      .children(tools);
-  }
-
   render(cx) {
     if (!this.arrange && cx && !this.simQueued && this.simSignature !== simulatorRoster()) {
       this.simQueued = true;
       cx.timer.after(0, (next) => { this.simQueued = false; this.probeSimulator(next); });
     }
-    const t = theme();
     const space = spaces().find(p => p.active);
     const openTabs = shownTabs(space?.tabs);
     // Each live-data read copies the whole list: read once per render.
     const ps = panes();
     const tree = layout();
-    const stop = (_e, cx) => cx.stop_propagation();
-    const c = tokens(t);
-    // A press on a tool never starts a window drag.
-    const tool = (id, icon, tip, action) => iconButton(id, icon, tip, action, c).on_mouse_down("left", stop);
-    // Tab widths are measured as they draw: the chosen fill glides to its tab and what does not fit folds.
+    const c = tokens(theme());
     this.tabW = Object.fromEntries(Object.entries(this.tabW).filter(([id]) => openTabs.some((tab) => tab.id === id)));
     const state = barState(space, machines());
+    const connected = state === "connected";
     this.settleRename(openTabs, state);
     const panel = walkLayout(tree, "panel"), body = walkLayout(tree, "panel-body");
     const now = this.openPanel(panel, body);
@@ -519,63 +503,61 @@ export default class Tabs extends View {
     const allPanels = panelList();
     const shownPanels = allPanels.filter((p) => p.on);
     const enabled = shownPanels.map((p) => p.id);
-    // Kanso settings lists the panels from here (it can't import this file).
-    const roster = allPanels.map((p) => ({ id: p.id, label: p.label, icon: p.icon ?? null, on: p.on }));
+    // Kanso settings lists the panels from here (it can't import this file), each icon as a file.
+    const roster = allPanels.map((p) => ({ id: p.id, label: p.label, icon: p.icon ? glyphOf(doorKey(p)) : null, on: p.on }));
     if (JSON.stringify(roster) !== JSON.stringify(shared("kanso.panels.all") ?? null)) setShared("kanso.panels.all", roster);
-    const map = pieces(shared);
-    const tools = state === "connected" ? [
-      tool("tab-new", "plus", "New", () => run("kanso-spaces.new-conversation"))
-        .on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); openArrange(); }),
-      shown("tabs.arrange", true, map) ? tool("tab-arrange", "layers", tooltip({ label: "Arrangements", chord: boundChord("kanso-strip.arrange") }), () => openArrange()) : null,
-    ].filter(Boolean) : [];
+    const arrange = shown("tabs.arrange", true, pieces(shared));
     this.reconcile(space, panel, body, now);
     this.syncPanel(space, now, enabled);
     // A panel turned off while open closes (a file's preview has no button to turn off).
     if (now && now !== "preview" && !enabled.includes(now) && !this.inFlight(now)) this.mount(null);
-    const panelButton = (p, k) => {
-      const on = now === p.id, target = this.dragPanel && this.dragPanel !== p.id;
-      const named = !p.icon || on || this.hoverPanel === p.id;
-      // About 0.57 of the text size a character: the name's box eases open to this width.
-      const wide = Math.ceil(String(p.label).length * T.value * 0.57) + G.md;
-      const name = div().id(`panel-name-${p.id}`).h_full().flex().items_center().overflow_hidden().flex_none()
-        .w(named ? wide : 0).opacity(named ? 1 : 0)
-        .transition("width", EASE)
-        .transition("opacity", EASE)
-        .child(div().pl(G.xs).pr(G.xs).whitespace_nowrap().child(p.label));
-      const button = h_flex().id(`panel-${p.id}`).h(H.icon).min_w(H.icon).px(G.xs).flex_none().items_center().justify_center().rounded(R.control)
-        .text_size(T.value).bg(on ? c.w12 : CLEAR)
-        .text_color(on ? t.foreground : t.muted)
-        .hover(s => s.bg(target ? alpha(t.foreground, TINT.faint) : on ? c.w12 : c.w7).text_color(t.foreground))
-        .on_hover((hovered, cx) => {
-          if (hovered) this.hoverPanel = p.id; else if (this.hoverPanel === p.id) this.hoverPanel = null;
-          cx.notify();
-        })
-        .on_mouse_down("left", (_e, cx) => { cx.stop_propagation(); this.dragPanel = p.id; cx.notify(); })
-        .on_mouse_up("left", (_e, cx) => {
-          const from = this.dragPanel; this.dragPanel = null;
-          if (from && from !== p.id) movePanel(from, p.id);
-          else if (from === p.id) this.mount(on ? null : p.id);
-          cx.notify();
-        })
-        .on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); this.panelMenu = p.id; cx.notify(); })
-        .when(Boolean(p.icon), (el) => el.child(svg(p.icon).size(ICON_SIZE)))
-        .child(name);
-      return this.panelMenu === p.id ? this.panelMenuPopover(c, button, p) : button;
+    const windows = Boolean(window()?.buttons);
+    const doors = connected ? shownPanels : [];
+    const tools = connected ? (arrange ? 2 : 1) : 0;
+    // Tab widths are measured as they draw: what does not fit folds behind +N.
+    const room = this.barW.bar ? tabBarRoom(this.barW.bar, { tools, doors: doors.length + 1 + (windows ? 3 : 0) }) : 0;
+    const { shown: kept, folded } = connected ? foldTabs({ widths: openTabs.map((tab) => this.tabW[tab.id]), chosen: openTabs.findIndex((tab) => tab.active), room, gap: G.hair, more: (this.barW.more ?? 0) + G.sm })
+      : { shown: openTabs.map((_, i) => i), folded: [] };
+    const drawn = kept.map((i) => openTabs[i]);
+    const drops = this.drops(drawn);
+    const items = drawn.map((tab) => ({ ...this.tabLook(tab), closable: openTabs.length > 1, drop: drops[tab.id] ?? false }));
+    const more = plus(folded.length);
+    const stop = (el) => el.on_mouse_down("left", (_e, cx) => cx.stop_propagation());
+    const tips = {
+      "New tab": tooltip({ label: "New tab", chord: boundChord("kanso-spaces.new-conversation") }),
+      Arrange: tooltip({ label: "Arrange", chord: boundChord("kanso-strip.arrange") }),
+      "kansō help": tooltip({ label: "kansō help", chord: boundChord("mod.open:kanso-help") }),
+      ...Object.fromEntries(doors.map((p, i) => [p.label, tooltip({ label: p.label, chord: boundChord(`kanso-tabs.panel-${i + 1}`) })])),
     };
-    // No background and no line of its own: it sits on the frame.
-    return h_flex().id("tab-bar").size_full().min_w(0).px(G.md).gap(G.sm).items_center()
-      .on_size_change(() => this.keepRail(layout()))
-      // A pane held in the strip and let go here goes back where it was.
-      .on_mouse_up("left", dropStripDrag)
-      .on_mouse_up("left", (_e, cx) => { this.pressed = null; this.dropAt = null; this.dragPanel = null; cx.notify(); })
-      // A held tab let go outside the bar lands nowhere.
-      .on_hover((hovered, cx) => { if (!hovered && this.pressed) { this.pressed = null; this.dropAt = null; cx.notify(); } })
-      .on_scroll_wheel(e => this.wheel(e))
-      .child(this.tabArea(c, { space, openTabs, ps, state, tools }))
-      .child(h_flex().flex_none().gap(G.hair).items_center().children(shownPanels.map(panelButton))
-        .child(tool("kanso-help", "circle-question-mark", tooltip({ label: "kansō help", chord: boundChord("mod.open:kanso-help") }), () => run("mod.open", { name: "kanso-help" })).ml(4)))
-      .when(window()?.buttons, el => el.child(tool("minimize", "minus", "Minimize", () => run("window.minimize")))
-        .child(tool("maximize", "square", "Maximize", () => run("window.maximize")))
-        .child(tool("close-window", "x", "Close", () => run("window.close"))));
+    const presses = {
+      "circle-question-mark": () => run("mod.open", { name: "kanso-help" }),
+      ...(connected ? { plus: () => run("kanso-spaces.new-conversation") } : {}),
+      ...(connected && arrange ? { "panels-top-left": () => openArrange() } : {}),
+      ...(windows ? { minus: () => run("window.minimize"), square: () => run("window.maximize"), x: () => run("window.close") } : {}),
+      ...Object.fromEntries(doors.map((p) => [doorKey(p), () => this.mount(now === p.id ? null : p.id)])),
+    };
+    const wires = {
+      ...Object.fromEntries(drawn.map((tab) => [tab.id, this.tabWire(c, tab, { space, ps, connected })])),
+      ...Object.fromEntries(doors.map((p) => [doorKey(p), this.doorWire(c, p)])),
+      // A press on a tool never starts a window drag; a right-click on + opens the arrangements.
+      plus: (el) => stop(el).on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); openArrange(); }),
+      ...Object.fromEntries(["panels-top-left", "circle-question-mark", "minus", "square", "x"].map((key) => [key, stop])),
+      [more]: (el) => el.on_size_change((s, cx) => { this.barW = this.sized(this.barW, "more", s.width, cx); }),
+    };
+    const bar = tabBar({
+      items, value: openTabs.find((tab) => tab.active)?.id ?? null, folded: folded.map((i) => ({ key: openTabs[i].id, label: openTabs[i].name, mark: tabMark(openTabs[i]) })),
+      overflow: this.moreOpen, panels: doors.map((p) => ({ key: p.id, label: p.label, icon: p.icon })), panel: now, state, arrange, help: true, tips, windows,
+    });
+    return bar("tab-bar", c, {
+      presses, wires,
+      onChange: (key, cx) => { this.armed.clear(); this.moreOpen = false; run("tab.select", { id: key }); cx.notify(); },
+      onClose: (key, cx) => { const tab = openTabs.find((other) => other.id === key); if (tab) this.closeTab(tab, ps, cx); },
+      onOpen: (open, cx) => { this.moreOpen = open; cx.notify(); },
+      onSize: (s, cx) => { this.barW = this.sized(this.barW, "bar", s.width, cx); this.keepRail(layout()); },
+      // A pane held in the strip and let go here goes back where it was; a held tab or door let go anywhere else lands nowhere.
+      onRelease: (e, cx) => { dropStripDrag(e, cx); this.pressed = null; this.dropAt = null; this.dragPanel = null; cx.notify(); },
+      onOver: (hovered, cx) => { if (!hovered && this.pressed) { this.pressed = null; this.dropAt = null; cx.notify(); } },
+      onWheel: (e) => this.wheel(e),
+    });
   }
 }

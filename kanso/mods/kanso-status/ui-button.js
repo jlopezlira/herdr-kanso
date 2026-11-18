@@ -43,7 +43,7 @@ export function button(id, label, onClick, c, { kind = "solid", icon = null, sma
   const square = kind === "icon", on = armed && !disabled;
   const look = disabled ? { fill: kind === "quiet" ? null : well(c), ink: c.dim }
     : on ? armedLook(c)
-      : active ? { ...LOOKS[kind](c), fill: c.selected, ink: c.text, hover: c.selected }
+      : active ? { ...LOOKS[kind](c), fill: c.w12, ink: c.text, hover: c.w12, press: c.w12 }
         : LOOKS[kind](c);
   const ink = disabled || on ? look.ink : color ?? (spin ? c.text : look.ink);
   const compact = small || size === "sm";

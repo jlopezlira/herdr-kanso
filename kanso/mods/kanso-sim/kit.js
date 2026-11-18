@@ -4,7 +4,7 @@ import { button as drawButton } from "./ui-button.js";
 import { menu as drawMenu } from "./ui-menu.js";
 import { stateEmpty, stateLine, stateBlock } from "./ui-state.js";
 import { toast as drawToast } from "./ui-toast.js";
-import { skeletonOf as drawSkeleton } from "./ui-skeleton.js";
+import { skeletonOf as drawSkeleton, tabSkeleton as drawTabSkeleton } from "./ui-skeleton.js";
 import { figure } from "./ui-metric.js";
 import { diffText, facts, plus } from "./ui-facts.js";
 import { card as drawCard } from "./ui-card.js";
@@ -39,6 +39,8 @@ export const grow = () => (id, c, more = {}) => {
 };
 
 const EVENTS = {
+  onSize: (el, fn) => el.on_size_change(fn),
+  onOver: (el, fn) => el.on_hover(fn),
   onPress: (el, fn) => el.on_mouse_down("left", fn),
   onRelease: (el, fn) => el.on_mouse_up("left", fn),
   onMenu: (el, fn) => el.on_mouse_down("right", fn),
@@ -48,7 +50,9 @@ const EVENTS = {
 // `onChange(key, cx)`: a choice among tabs or menu items; `onOpen(open, cx)`: a menu under a button opens or shuts; `onLink(url, cx)`: a link's press in markdown.
 // `presses`: a composition's press targets by name, its icon or else its label; a stack passes them down and each press takes its own.
 // `focuses`: by the same names, the focus handles the caller owns, so a target keeps the keyboard while it is drawn in another form.
-const HANDLERS = ["on", "presses", "focuses", "onClick", "onChange", "onOpen", "onHover", "onKey", "onLink", "focusHandle", ...Object.keys(EVENTS)];
+// `wires`: by the same names, or a tab's key, `(el) => el` adding the pointer's own handlers to that target, such as a drag or a right-click menu.
+// `onClose(key, cx)`: a tab's ×. `onSize` and `onOver`: a stack's size once laid out, and the pointer coming and going.
+const HANDLERS = ["on", "presses", "focuses", "wires", "onClick", "onChange", "onClose", "onOpen", "onHover", "onKey", "onLink", "focusHandle", ...Object.keys(EVENTS)];
 const withEvents = (el, events) => Object.entries(events).filter(([, fn]) => fn).reduce((drawnEl, [name, fn]) => EVENTS[name](drawnEl, fn), el);
 const appIcon = (icon) => (typeof icon === "string" ? icon.replace(/^lu-/, "") : icon);
 const iconOf = (icon) => (icon === "none" ? null : appIcon(icon));
@@ -126,10 +130,11 @@ export const row = ({ icon, flag, detail, action, actions, start, tools, ...prop
 // `ink`: the stack around it quiets it, as Sort at its default order is dim; in a `card` it stands at the card's start.
 export const button = ({ label, icon = "none", content = [], tip = "", ...props }) => pressing((id, c, more, { ink = null, card = false }) => {
   const key = keyOf({ icon: iconOf(icon), label });
-  const { presses = {}, focuses = {}, onClick = takeOf(presses, key), focusHandle = takeOf(focuses, key) } = given(more);
+  const { presses = {}, focuses = {}, wires = {}, onClick = takeOf(presses, key), focusHandle = takeOf(focuses, key) } = given(more);
   const drawnButton = drawButton(id, label, onClick, c, { ...(ink ? { color: c[ink] } : {}), ...props, tip: tip || null, icon: iconOf(icon), content: drawn(id, c, "content", content) });
   const placedButton = card ? drawnButton.self_start() : drawnButton;
-  return focusHandle ? placedButton.track_focus(focusHandle) : placedButton;
+  const focused = focusHandle ? placedButton.track_focus(focusHandle) : placedButton;
+  return wires[key] ? wires[key](focused) : focused;
 });
 
 // Explain to <agent>: the bot icon and the agent named in words; its press starts that agent on the question.
@@ -157,19 +162,27 @@ export const mark = ({ status, size = "md" }) => still(drawMark)({ status, size 
 // An icon on its own, at a row's size, in the muted ink or its `tone`.
 export const glyph = (icon, tone = "") => still((c) => svg(glyphOf(appIcon(icon))).size(ICON_ROW).flex_none().text_color(tone ? toneColor(c, tone) : c.muted))();
 
-// `icon` draws each item's icon and `label` its name; icons without names are a column of squares, each name its tip. `onChange(key, cx)` picks one.
-export const tabs = ({ items = [], value = null, size = "md", track = false, disabled = false, icon = false, label = false }) => (id, c, more = {}) => {
-  const { onChange = null } = given(more);
+// `icon` draws each item's icon and `label` its name; icons without names are a column of squares, each name its tip. `onChange(key, cx)` picks one,
+// `onClose(key, cx)` ends the chosen one with its ×, and `wires` by key adds the pointer's handlers to a tab. In the tab bar (`bar`), a name stops at its width.
+export const tabs = ({ items = [], value = null, size = "md", track = false, disabled = false, icon = false, label = false }) => (id, c, more = {}, { bar = false } = {}) => {
+  const { onChange = null, onClose = null, wires = {} } = given(more);
   const shown = items.map((item) => ({ ...item, icon: icon ? appIcon(item.icon) : null }));
-  return drawTabs(id, shown, value, onChange, c, { size, track, disabled, collapsed: icon && !label });
+  const own = Object.fromEntries(items.map(({ key }) => [key, { onClose: onClose && ((cx) => onClose(key, cx)), wire: wires[key] }]));
+  return drawTabs(id, shown, value, onChange, c, { size, track, disabled, collapsed: icon && !label, bar, on: own });
+};
+
+// One breathing tab while the tab bar waits for its computer: the first long, every later one short.
+export const tabSkeleton = () => (id, c, more = {}, { index = 0 } = {}) => {
+  given(more);
+  return drawTabSkeleton(id, c, index);
 };
 
 // A wrapper that only places other pieces, as the Storybook's: `label` is a focusable one's tooltip and spoken name.
 // A pressable one takes `onClick` itself; any other gives its handlers, `presses` with them, to its children.
 // `context`: what the stack around it says of its place, such as a column.
 export const stack = ({ variant, on = false, label = "", ...flags }, ...children) => pressing((id, c, more, context) => {
-  const { onPress, onRelease, onMenu, onMove, onWheel, ...handlers } = given(more);
-  return stackOf(id, c, { variant, on, label, ...flags }, list(...children), handlers, (el) => withEvents(el, { onPress, onRelease, onMenu, onMove, onWheel }), context);
+  const { onPress, onRelease, onMenu, onMove, onWheel, onSize, onOver, ...handlers } = given(more);
+  return stackOf(id, c, { variant, on, label, ...flags }, list(...children), handlers, (el) => withEvents(el, { onPress, onRelease, onMenu, onMove, onWheel, onSize, onOver }), context);
 });
 
 // Dawn Mode's sky behind the lights: the Storybook's art in this theme's colours, layer by layer (built by build:ui-tokens),

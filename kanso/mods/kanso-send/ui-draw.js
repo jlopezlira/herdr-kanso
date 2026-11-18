@@ -9,7 +9,7 @@ const ink = (c, value) => {
   return value.share === undefined ? c[value.colour] : alpha(c[value.colour], value.share);
 };
 
-const lastOp = (ops, name) => {
+export const lastOp = (ops, name) => {
   const found = ops.filter(([op]) => op === name);
   return found.length ? found[found.length - 1] : null;
 };
@@ -21,14 +21,18 @@ const ringOf = (ops, c) => {
 
 // `hoverClass` is the Storybook's static hover mark. It is not on the element at rest.
 // `live` is false for a node that is not a control: a hover callback would paint .kanso-control--hover onto it.
-export const paint = (el, node, c, rules, hoverClass = null, live = true) => {
+// A node's look: its own ops and, for a live one, what its hover changes. A piece drawn often keeps the look and paints it with `painted`.
+export const lookOf = (node, rules, hoverClass = null, live = true) => {
   const own = stylesFor(node, rules);
-  if (!live) return apply(el, own, c);
+  if (!live) return { own, extra: [] };
   const marked = hoverClass ? { ...node, classes: [...node.classes, hoverClass] } : node;
-  const extra = changed(own, stylesFor(marked, rules, hovering(node)));
-  const painted = apply(el, own, c);
-  return extra.length ? painted.hover((style) => apply(style, extra, c)) : painted;
+  return { own, extra: changed(own, stylesFor(marked, rules, hovering(node))) };
 };
+export const painted = (el, { own, extra }, c) => {
+  const drawn = apply(el, own, c);
+  return extra.length ? drawn.hover((style) => apply(style, extra, c)) : drawn;
+};
+export const paint = (el, node, c, rules, hoverClass = null, live = true) => painted(el, lookOf(node, rules, hoverClass, live), c);
 
 const apply = (el, ops, c) => ops.reduce((acc, [op, ...args]) => {
   if (op === "ring") return acc.relative();

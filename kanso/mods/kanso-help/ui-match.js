@@ -53,14 +53,58 @@ export const matches = (node, steps, state) => {
 
 const STATE_CLASS = { hover: "kanso-control--hover", focus: "kanso-control--focus", active: "kanso-control--active" };
 export const atRest = (node, name) => node.classes.includes(STATE_CLASS[name]);
-export const hovering = (target) => (node, name) => atRest(node, name) || (name === "hover" && node === target);
+// The answer for each key asked, made once.
+export class Answers {
+  constructor() { this.known = new Map(); }
+
+  of(key, make) {
+    if (!this.known.has(key)) this.known.set(key, make());
+    return this.known.get(key);
+  }
+}
+
+// What a render already asked: the node each hover state is for, and the answers of each rule set.
+class Asked {
+  constructor() { this.targets = new WeakMap(); this.answers = new WeakMap(); }
+
+  hover(target) {
+    const state = (node, name) => atRest(node, name) || (name === "hover" && node === target);
+    this.targets.set(state, target);
+    return state;
+  }
+
+  targetOf(state) { return this.targets.get(state); }
+
+  answer(rules, key, make) {
+    if (!this.answers.has(rules)) this.answers.set(rules, new Answers());
+    return this.answers.get(rules).of(key, make);
+  }
+}
+const asked = new Asked();
+export const hovering = (target) => asked.hover(target);
 
 const candidates = (node, rules) => (Array.isArray(rules) ? rules : [...new Set([...rules["*"], ...node.classes.flatMap((name) => rules[name] ?? [])])]);
 
-export const stylesFor = (node, rules, state = atRest) => candidates(node, rules)
+const match = (node, rules, state) => candidates(node, rules)
   .filter((rule) => matches(node, rule.steps, state))
   .toSorted((a, b) => a.weight - b.weight || a.order - b.order)
   .flatMap((rule) => rule.ops);
+
+// What a node is to a selector: its tag, classes and attributes, the ones before it and the same of each ancestor.
+const own = (node) => `${node.tag}.${(node.classes ?? []).join(".")}${JSON.stringify(node.attrs ?? {})}`;
+const shapeOf = (node) => (node ? `${shapeOf(node.parent)}>${siblingsBefore(node).map(own).join("+")}~${own(node)}` : "");
+const above = (node, target) => Boolean(node) && (node === target || above(node.parent, target));
+const kindOf = (node, state) => {
+  if (state === atRest) return "rest";
+  const target = asked.targetOf(state);
+  if (!target || above(node.parent, target)) return null;
+  return target === node ? "hovered" : "beside";
+};
+// A render asks the same nodes again and again: the answer for a shape is kept.
+export const stylesFor = (node, rules, state = atRest) => {
+  const kind = kindOf(node, state);
+  return kind ? asked.answer(rules, `${kind}${shapeOf(node)}`, () => match(node, rules, state)) : match(node, rules, state);
+};
 
 const winning = (ops) => ops.reduce((acc, op) => ({ ...acc, [op[0]]: op }), {});
 // Ops whose winning call differs. The hover style sets those, and leaves a colour an !important rule kept.

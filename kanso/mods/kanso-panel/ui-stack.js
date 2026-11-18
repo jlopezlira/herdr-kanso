@@ -5,7 +5,8 @@ import { div } from "gpui-kit";
 import { G, H, R, LINE, PANE, SIDEBAR, DIALOG, TINT, CLEAR, alpha, sidebarSides } from "./ui.js";
 import { dot } from "./ui-dot.js";
 import { RULES } from "./ui-css.js";
-import { paint } from "./ui-draw.js";
+import { paint, lastOp } from "./ui-draw.js";
+import { stylesFor } from "./ui-match.js";
 
 // Each child piece drawn with its own id and its stack's handlers; a piece that draws nothing leaves no gap. `context` says where it sits;
 // `slots` names each place, else its index.
@@ -83,6 +84,22 @@ const statusHalf = (end) => (id, c, _flags, kids, more) => (kids.length ? placed
 const statusMiddle = (id, c, _flags, kids, more) => (kids.length ? placed(paint(h_flex().id(id),
   cssNode(["kanso-status-bar__middle"], statusFace()), c, RULES, null, false).h_full().flex_none(), id, c, kids, more) : null);
 
+const tabBarFace = () => cssNode(["kanso-tab-bar"]);
+const opOf = (node, name) => lastOp(stylesFor(node, RULES), name)?.[1] ?? 0;
+const doorFace = () => ({ ...cssNode(["kanso-button", "kanso-button--icon"], cssNode(["kanso-tab-bar__doors"], tabBarFace())), tag: "span" });
+// The bar's pieces, each told it sits in the bar and its place, so a later skeleton is the short one.
+const tabBar = (id, c, _flags, kids, more) => paint(h_flex().id(id), tabBarFace(), c, RULES, null, false).w_full()
+  .children(kids.map((kid, i) => (typeof kid === "function" ? kid(`${id}-${i}`, c, more, { bar: true, index: i }) : kid)).filter(Boolean));
+const tabBarMenu = withMenu(() => "top_left", () => div().pt(G.xs));
+const tabBarDoors = (id, c, _flags, kids, more) => placed(paint(h_flex().id(id), cssNode(["kanso-tab-bar__doors"], tabBarFace()), c, RULES, null, false), id, c, kids, more);
+
+/** The room the tabs and +N have in a tab bar `width` wide that holds `tools` and `doors` icon Buttons, each laid out as the Storybook's CSS says. */
+export const tabBarRoom = (width, { tools = 0, doors = 0 }) => {
+  const bar = tabBarFace(), gap = opOf(bar, "gap"), side = opOf(doorFace(), "w"), doorGap = opOf(cssNode(["kanso-tab-bar__doors"], bar), "gap");
+  const pad = stylesFor(bar, RULES).filter(([op]) => op === "px" || op === "pl" || op === "pr").reduce((sum, [op, value]) => ({ ...sum, ...(op === "px" ? { pl: value, pr: value } : { [op]: value }) }), {});
+  return width - (pad.pl ?? 0) - (pad.pr ?? 0) - tools * (side + gap) - 2 * gap - (doors ? doors * side + (doors - 1) * doorGap : 0);
+};
+
 const STACKS = {
   toolbar: { states: ["column"], draw: toolbar },
   "toolbar add": { draw: (id, c, _flags, kids, more, _wire, context) => placed(h_flex().flex_none(), id, c, kids, more, context) },
@@ -108,6 +125,11 @@ const STACKS = {
   "footer menu": { draw: (id, c, _flags, kids, more, _wire, context) => placed(div(), id, c, kids, more, context) },
   "footer refusal": { draw: (id, c, _flags, kids, more) => placed(div().mt(FOOTER.refusalAbove).mb(FOOTER.refusalBelow), id, c, kids, more) },
   "dialog list": { states: ["scroll"], draw: dialogList },
+  "tab bar": { draw: tabBar },
+  // +N and, open, the Menu of the folded tabs under it.
+  "tab bar more": { draw: tabBarMenu },
+  "tab bar menu": { draw: (id, c, _flags, kids, more, _wire, context) => placed(div(), id, c, kids, more, context) },
+  "tab bar doors": { draw: tabBarDoors },
   "status bar": { states: ["grid"], draw: statusBar },
   "status bar left": { draw: statusHalf(false) },
   "status bar middle": { draw: statusMiddle },

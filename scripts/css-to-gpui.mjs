@@ -223,6 +223,7 @@ const DECLARATIONS = {
   bottom: (v) => (/%$/.test(v) ? [["bottom", v]] : v === "auto" ? [] : [["bottom", evaluate(v)]]),
   "inset-block": (v) => [["top", evaluate(v)], ["bottom", evaluate(v)]],
   "box-shadow": (v) => {
+    if (v === "none") return [];
     const line = v.match(/^inset 0 (calc\(-1 \* var\(--k-[a-z0-9-]+\)\)|var\(--k-[a-z0-9-]+\)) 0 (var\(--[a-z-]+\))$/);
     if (line) {
       const width = evaluate(line[1]);
@@ -296,7 +297,7 @@ const keyOf = (step) => {
   return inner.length && inner.every((k) => k !== "*") ? inner : "*";
 };
 
-export const PIECES = ["stories/kit/row-tree.js", "stories/kit/status-bar-tree.js"];
+export const PIECES = ["stories/kit/row-tree.js", "stories/kit/status-bar-tree.js", "stories/kit/tab-bar-tree.js"];
 const reachableSteps = (steps, known) => steps.every((step) => step.classes.every((name) => STATE_CLASSES[name] || known(name))
   && step.any.every((list) => list.some((inner) => reachableSteps(inner, known))));
 export const reachable = (list, pieces = PIECES) => {
