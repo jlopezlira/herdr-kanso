@@ -21,7 +21,7 @@
 .kanso-state-line>.kanso-button{margin-left:var(--k-sp-1)}
 
 /* While you were away: a raised card docked at the foot of the list, 12 above the footer. */
-.kanso-away{display:flex;flex-direction:column;padding:var(--k-sp-1);border-radius:var(--k-r-card);background:var(--surface-4);box-shadow:0 0 0 var(--k-w-line) var(--border)}
+.kanso-away{display:flex;flex-direction:column;padding:var(--k-sp-1) var(--k-sp-3);border-radius:var(--k-r-card);background:var(--surface-4);box-shadow:0 0 0 var(--k-w-line) var(--border)}
 .kanso-away>.kanso-button--quiet{align-self:flex-start}
 
 /* Keyboard: the map of one layer beside the picked key. A key is a row tall; a wider key spans its units and the gaps between them. */

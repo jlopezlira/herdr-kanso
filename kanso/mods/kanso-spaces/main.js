@@ -654,11 +654,51 @@ export default class Spaces extends View {
   }
 
   // Rows add themselves as they draw (navMark), in screen order; Esc goes back to the pane you came from.
-  enterList(cx) {
+  // Search opens a field in place of the view switch; the list narrows to what matches, a project kept as context. Esc brings the list back as it was.
+  openFind(cx) {
+    if (shared("sidebar.collapsed") === true) { run("mod.open", { name: "picker" }); return; }
+    if (!this.find) {
+      this.find = new TextField({ placeholder: "Find" });
+      this.find.on("change", (_e, cx) => cx.notify());
+      this.find.on("submit", (_e, cx) => this.enterList(cx, true));
+    }
+    this.finding = true;
+    this.find.focus();
+    cx.notify();
+  }
+
+  closeFind(cx) {
+    this.finding = false;
+    try { this.find?.release(); } catch { /* already gone */ }
+    this.find = null;
+    this.handle.focus();
+    cx.notify();
+  }
+
+  findField(t) {
+    const c = tokens(t);
+    return h_flex().id("spaces-find").flex_none().items_center().px(SIDEBAR.gutter).pb(G.sm)
+      .on_key_down((e, cx) => { if (e.key === "escape") { cx.stop_propagation(); this.closeFind(cx); } })
+      .child(div().flex_1().min_w(0).child(field("spaces-find-field", this.find, c, { icon: "x", iconTip: "Close", onIcon: (cx) => this.closeFind(cx), spoken: "Find" })));
+  }
+
+  // What the sidebar already knows, by name, step, branch or folder; a project that matches keeps all its sessions, one that does not stays for the sessions that do.
+  narrowed(query, sp, ctx) {
+    const has = (...parts) => parts.some((part) => String(part ?? "").toLowerCase().includes(query));
+    const own = new Map(sp.map((w) => [w.id, has(w.name, w.folder, this.git[ctx.places.get(w.id)?.key]?.branch)]));
+    const hit = (a) => has(this.nameOf(a), a.title, a.activity, a.cwd);
+    const rowsBy = new Map(sp.map((w) => [w.id, own.get(w.id) ? ctx.rowsBy.get(w.id) ?? [] : (ctx.rowsBy.get(w.id) ?? []).filter(hit)]));
+    const kept = sp.filter((w) => own.get(w.id) || rowsBy.get(w.id).length);
+    const registry = ctx.registry.filter((p) => has(p.name, p.folder));
+    const all = ctx.all.filter((a) => hit(a) || own.get(this.projectFor(a, ctx)));
+    return { sp: kept, ctx: { ...ctx, rowsBy, registry, all, spaceIds: new Set(kept.map((w) => w.id)) }, none: !kept.length && !registry.length && !all.length };
+  }
+
+  enterList(cx, first = false) {
     if (shared("sidebar.collapsed") === true || !(this.nav ?? []).length) return;
     const f = focused();
     this.listFrom = f?.pane ?? null;
-    const here = this.nav.find((n) => n.here) ?? this.nav[0];
+    const here = (!first && this.nav.find((n) => n.here)) || this.nav[0];
     this.navKey = here.key;
     this.kbd = true;
     this.handle.focus();
@@ -693,7 +733,7 @@ export default class Spaces extends View {
     const { move: listed, gAt } = listKey(e, this.listG);
     this.listG = gAt;
     const move = !listed && plain && k === "l" ? "enter" : listed;
-    if (!move && plain && (k === "/" || e.key_char === "/")) { this.leaveList(cx, false); run("mod.open", { name: "picker" }); cx.stop_propagation?.(); return; }
+    if (!move && plain && (k === "/" || e.key_char === "/")) { this.leaveList(cx, false); this.openFind(cx); cx.stop_propagation?.(); return; }
     if (!move) return;
     cx.stop_propagation?.();
     if (move === "escape") { this.leaveList(cx); return; }
@@ -1804,7 +1844,7 @@ export default class Spaces extends View {
       presses: {
         plus: () => this.startMenu(view),
         "panel-left": () => this.toggleRail(),
-        ...(!collapsed || open ? { search: () => run("mod.open", { name: "picker" }) } : {}),
+        ...(!collapsed || open ? { search: (cx) => (collapsed ? run("mod.open", { name: "picker" }) : this.openFind(cx)) } : {}),
         ...(collapsed ? { [open ? "chevron-up" : "chevron-down"]: more } : {}),
       },
       onOpen: (open, cx) => { this.orderOpen = open ? form : null; cx.notify(); },
@@ -2495,6 +2535,10 @@ export default class Spaces extends View {
     const rowsCtx = { ...read, asleep, spaces: sp, registry: registry(), spaceIds: new Set(sp.map((w) => w.id)), all: this.listed(ps, sp, read.terms).filter((a) => !asleep.dozing.has(a.address)) };
     const ctx = { ...rowsCtx, rowsBy: new Map(sp.map((w) => [w.id, this.spaceRows(w.id, rowsCtx)])), project: this.projectOf(sp, t) };
     const queue = this.refreshNeeds(sp, read.terms, asleep);
+    const finding = Boolean(this.finding && this.find && !collapsed);
+    const query = finding ? this.find.value().trim().toLowerCase() : "";
+    const lens = query ? this.narrowed(query, sp, ctx) : null;
+    const shownSp = lens?.sp ?? sp, shownCtx = lens?.ctx ?? ctx;
     this.seenNow = this.seen(sp, ctx);
     this.seenAt = ctx.now; // when it was seen: a later write of it is no newer
     const root = v_flex().id("spaces-root").track_focus(this.handle).size_full().min_h(0).bg(t.chrome).text_size(T.card)
@@ -2503,11 +2547,13 @@ export default class Spaces extends View {
       // A pane held in the strip and let go here goes back where it was.
       .on_mouse_up("left", dropStripDrag)
       .child(this.header(tokens(t), view, collapsed))
-      .when(switchShown, (el) => el.child(this.switchViews(t, sp, collapsed)))
+      .when(finding, (el) => el.child(this.findField(t)))
+      .when(switchShown && !finding, (el) => el.child(this.switchViews(t, sp, collapsed)))
       .when(shown("sidebar.needs", queue.rows.length > 0 || this.needsEmpty, map), (el) => el.children([queueControl(t, queue, collapsed, this.needsEmpty && !queue.rows.length, (cx) => this.toggleNeeds(cx))].filter(Boolean)))
       .children(this.needsOpen && shown("sidebar.needs", true, map) ? [this.needsList(t, queue, read.now)] : [this.list(t, collapsed, view,
-        view === "agents" ? (collapsed ? this.agentsRail(t, sp, ctx) : this.agentsView(t, sp, ps, ctx))
-          : view === "threads" ? (collapsed ? this.threadsRail(t, sp, ctx) : this.threadsView(t, sp, ps, ctx)) : this.grouped(t, collapsed, sp, ps, ctx)),
+        lens?.none ? [item(emptyState({ icon: "search", text: `No match for \u201c${this.find.value().trim()}\u201d` })("spaces-find-empty", tokens(t)), H.line * 3)]
+          : view === "agents" ? (collapsed ? this.agentsRail(t, shownSp, shownCtx) : this.agentsView(t, shownSp, ps, shownCtx))
+          : view === "threads" ? (collapsed ? this.threadsRail(t, shownSp, shownCtx) : this.threadsView(t, shownSp, ps, shownCtx)) : this.grouped(t, collapsed, shownSp, ps, shownCtx)),
         collapsed ? null : this.awayCard(t, active)].filter(Boolean));
     this.nav = this.navNext;
     // The row the ring was on is gone: it stays at the same place in the list.
