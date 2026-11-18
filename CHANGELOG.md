@@ -104,6 +104,7 @@ the branch's rules.
 
 ### Fixed
 
+- In Projects, a right click on a subagent under an agent opens its Session menu, with the rows that act on it, as it already did in Status and Threads.
 - A working agent's name no longer has dots counting after it; the shimmer across the name stays.
 - The While you were away card's title, rows and +N more, and the sidebar's Find field with its search icon, start on the same line as the sidebar's rows and Settings.
 - The first computer in the sidebar sits right under the view switch, where it left 28 of empty space; the space above a computer stays for the ones after it.
