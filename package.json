@@ -9,6 +9,7 @@
   },
   "scripts": {
     "test": "node --test --test-timeout=180000 --test-force-exit",
+    "pre-pr": "node scripts/pre-pr.mjs",
     "bench": "node benchmarks/macos.mjs",
     "bench:report": "node benchmarks/summarize.mjs",
     "check:version": "node scripts/check-version.mjs",

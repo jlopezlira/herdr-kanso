@@ -31,16 +31,10 @@ jobs:
           cache: npm
       - name: Packages the scripts and tests import
         run: npm ci --ignore-scripts
-      - name: Versioning (version.json, CHANGELOG.md, semantic bumps)
+      - name: Pre-PR checks (version, shared files, built files, repeated code)
         env:
           KANSO_BRANCH: ${{ github.ref_name }}
-        run: npm run check:version
-      - name: Shared files
-        run: npm run sync:share -- --check
-      - name: Built files
-        run: npm run build:site -- --check && npm run build:issue-forms -- --check
-      - name: Repeated code
-        run: npm run check:dupes
+        run: npm run pre-pr -- --checks-only
       - name: sqlite3 on Linux
         if: runner.os == 'Linux'
         run: command -v sqlite3 || (sudo apt-get update -qq && sudo apt-get install -y -qq sqlite3)
