@@ -1,4 +1,4 @@
-// The computer row: this computer or a remote one in the sidebar, the row in its heading configuration.
+// The computer row: this computer or a remote one in the sidebar, the row in its heading configuration, heading the group of its projects (Proposed).
 import { icon, phrase, row } from './kit.js';
 
 export const computerStates = ['on', 'off', 'unreachable', 'login'];
@@ -30,7 +30,7 @@ export const computerRow = ({ name, remote = true, state = 'on', status = 'block
   const { action, actions } = toolsOf({ name, remote, state, pending, sync });
   const ring = (tool) => (tool?.icon === lit ? { ...tool, focus: true } : tool);
   return row({
-    icon: remote ? 'lu-server' : 'lu-monitor', name, heading: true, hover, focus, pending,
+    icon: remote ? 'lu-server' : 'lu-monitor', name, heading: true, group: true, hover, focus, pending,
     mark: count && state === 'on' ? status : 'none', meta: said ? { text: said, tip } : count || null,
     action: action && { kind: 'icon', ...ring(action) }, actions: actions.map(ring),
   });

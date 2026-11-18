@@ -80,7 +80,7 @@ test("The view switch, the palette, the tab bar's tools and the strip's stepper 
   const uses = {
     "kanso/mods/kanso-spaces/main.js": ["boundChord(`kanso-spaces.view-${key}`)"],
     "kanso/mods/kanso-status/main.js": ["boundChord(PALETTE_COMMAND)"],
-    "kanso/mods/kanso-tabs/main.js": ['boundChord("kanso-strip.arrange")', 'boundChord("mod.open:kanso-help")', "boundChord(KANSO_SETTINGS)"],
+    "kanso/mods/kanso-tabs/main.js": ['boundChord("kanso-strip.arrange")', 'boundChord("mod.open:kanso-help")'],
     "kanso/mods/kanso-strip/main.js": ['boundChord("kanso-strip.fewer")', 'boundChord("kanso-strip.more")', 'boundChord("kanso-strip.fit")'],
     "kanso/mods/kanso-spaces/needs-you-view.js": ["boundChord(NEXT_NEEDS)"],
   };

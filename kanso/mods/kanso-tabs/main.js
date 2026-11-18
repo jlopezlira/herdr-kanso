@@ -20,7 +20,6 @@ import { menu } from "./ui-menu.js";
 import { tabSkeleton } from "./ui-skeleton.js";
 import { tooltip } from "./kit.js";
 import { boundChord } from "./ui-tooltip.js";
-import { KANSO_SETTINGS } from "./footer-model.js";
 import { tabItem, tabInsertion, tabPill, TAB_NAME_LIMIT } from "./ui-tab.js";
 import { tabMark, barState, foldTabs, pillAt, dropSide, renameWaits } from "./tab-bar-model.js";
 import { Kdb, projectKey } from "./kdb.js";
@@ -490,7 +489,6 @@ export default class Tabs extends View {
     const roster = allPanels.map((p) => ({ id: p.id, label: p.label, icon: p.icon ?? null, on: p.on }));
     if (JSON.stringify(roster) !== JSON.stringify(shared("kanso.panels.all") ?? null)) setShared("kanso.panels.all", roster);
     const map = pieces(shared);
-    const update = this.updater?.available() ?? null;
     const tools = state === "connected" ? [
       tool("tab-new", "plus", "New", () => openOverlay({ mod: "new-menu", kind: "popup", width: 250, height: 512 }))
         .on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); openArrange(); }),
@@ -540,10 +538,7 @@ export default class Tabs extends View {
       .on_scroll_wheel(e => this.wheel(e))
       .child(this.tabArea(c, { space, openTabs, ps, state, tools }))
       .child(h_flex().flex_none().gap(2).items_center().children(shownPanels.map(panelButton))
-        // Help and settings, alike and side by side: not panels, never dragged nor turned off.
-        .child(tool("kanso-help", "circle-question-mark", tooltip({ label: "kansō help", chord: boundChord("mod.open:kanso-help") }), () => run("mod.open", { name: "kanso-help" })).ml(4))
-        .child(tool("kanso-settings", "settings", tooltip(update ? { label: `kansō ${update} is available` } : { label: "kansō settings", chord: boundChord(KANSO_SETTINGS) }),
-          () => openSettings(update ? "news" : "pieces"))))
+        .child(tool("kanso-help", "circle-question-mark", tooltip({ label: "kansō help", chord: boundChord("mod.open:kanso-help") }), () => run("mod.open", { name: "kanso-help" })).ml(4)))
       .when(window()?.buttons, el => el.child(tool("minimize", "minus", "Minimize", () => run("window.minimize")))
         .child(tool("maximize", "square", "Maximize", () => run("window.maximize")))
         .child(tool("close-window", "x", "Close", () => run("window.close"))));

@@ -26,7 +26,7 @@ async function footer({ shared = {}, ready = null, bindings = [{ action: "kanso-
     updates: () => ({ app: { ready } }), keys: () => bindings, settings: () => ({ font_family: "Mono" }), window: () => ({ platform: "macos" }),
   };
   const view = await mountChrome(host);
-  const kit = await load("kanso-chrome/ui.js", ["H", "G", "T"], host);
+  const kit = await load("kanso-chrome/ui.js", ["H", "G", "T", "SIDEBAR", "PANE"], host);
   view.updater = { available: () => null, busy: false, refused: () => null, install: (context) => installs.push(context), ...updater };
   return { view, ran, overlays, installs, ...kit };
 }
@@ -36,16 +36,18 @@ test("In Stable Mode with nothing to install, the footer is Settings alone: Add 
   assert.deepEqual(texts(view.render()), ["Settings"]);
 });
 
-test("Open, the footer's rows are the kit's rows, 8 above and 16 below at the sidebar's gutter; the rail keeps 12 below, its Buttons a hair apart", async () => {
-  const { view, G, T } = await footer();
+test("Open, the footer's rows are the kit's rows at the sidebar's gutter, Settings on the status bar's line; the rail too, its Buttons a hair apart", async () => {
+  const { view, G, H, T, SIDEBAR, PANE } = await footer();
+  const onStatusLine = PANE.gap + (H.bar - H.line) / 2;
   const open = view.render();
-  assert.deepEqual([arg(open, "pt"), arg(open, "px"), arg(open, "pb")], [G.sm, G.sm, G.lg]);
+  assert.deepEqual([arg(open, "pt"), arg(open, "pl"), arg(open, "pr"), arg(open, "pb")], [G.sm, SIDEBAR.gutter, SIDEBAR.gutter - PANE.gap, onStatusLine],
+    "its sides are the list's: the gutter from each side seen, the work column's padding showing past its right");
   assert.equal(arg(open, "gap"), undefined, "open rows touch");
   const settings = holding(open, "Settings");
   assert.equal(arg(settings, "text_size"), T.value, "the kit's row size, as the Storybook's row");
   const rail = await footer({ shared: { "sidebar.collapsed": true } });
   const squares = rail.view.render();
-  assert.deepEqual([arg(squares, "pt"), arg(squares, "pb"), arg(squares, "gap")], [G.sm, G.md, G.hair]);
+  assert.deepEqual([arg(squares, "pt"), arg(squares, "pb"), arg(squares, "gap")], [G.sm, onStatusLine, G.hair]);
 });
 
 test("A kansō update is a row on top, in the foreground, and a press installs it", async () => {

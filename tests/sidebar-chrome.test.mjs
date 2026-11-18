@@ -12,7 +12,7 @@ const compositions = async () => themed({
   ...await load("kanso-spaces/toolbar.js", ["toolbar", "addLabels"], host()),
   ...await load("kanso-chrome/header.js", ["header"], host()),
   ...await load("kanso-chrome/sidebar-footer.js", ["sidebarFooter"], host()),
-  ...await load("kanso-panel/ui.js", ["tokens", "G", "H", "R", "DAWN", "DAWN_H"], host()),
+  ...await load("kanso-panel/ui.js", ["tokens", "G", "H", "R", "PANE", "DAWN", "DAWN_H"], host()),
 }, KIT_NIGHT);
 const tipsOf = (el) => every(el).flatMap((kid) => calls(kid, "tooltip").map((call) => call[1]));
 const byTip = (el, tip) => every(el).find((kid) => calls(kid, "tooltip").some((call) => call[1] === tip)) ?? null;
@@ -90,13 +90,13 @@ test("A press named for no drawn target throws, as `on` does for a tool: renamin
 
 test("Every Header state in the Storybook draws in the app: the lights' row, Dawn Mode's sky and pill, the Toolbar 40 tall", async () => {
   const kit = await compositions();
-  const { header, toolbar, c, G, H, DAWN, DAWN_H } = kit;
+  const { header, toolbar, c, G, H, PANE, DAWN, DAWN_H } = kit;
   const records = kitRecords([]).filter((record) => record.page === "Compositions/Header").map((record) => record.label);
   assert.deepEqual(records, ["Expanded", "Collapsed", "Expanded, Dawn Mode", "Collapsed, Dawn Mode", "Under the title bar"]);
   const draw = (props) => header({ ...props, toolbar: toolbar({ column: Boolean(props.collapsed) }) })("h", c);
   const art = (el) => nodes(el).filter((kid) => calls(kid, "image").length);
   const open = draw({});
-  assert.deepEqual([arg(open, "px"), arg(open, "pb")], [G.sm, G.xs]);
+  assert.deepEqual([arg(open, "pl"), arg(open, "pr"), arg(open, "pb")], [G.sm, G.sm - PANE.gap, G.xs], "8 at the sides seen: the work column's padding shows past its right");
   assert.ok(nodes(open).some((kid) => arg(kid, "h") === H.tabBar), "the lights' row, as tall as the tab bar");
   assert.ok(nodes(open).some((kid) => arg(kid, "h") === H.row && tipsOf(kid).includes("Add project")), "the Toolbar 40 tall");
   assert.deepEqual([art(open).length, texts(open).includes("Dawn Mode")], [0, false], "Stable Mode shows nothing");
