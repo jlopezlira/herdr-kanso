@@ -1,4 +1,4 @@
-// Kanso's panel kit: the glint, lit windows crossing a working name; on battery the name stands still. Apache-2.0.
+// Apache-2.0.
 // Kept byte for byte by `npm run sync:share`: edit kanso-panel/ui-glint.js.
 import { div } from "gpui-kit";
 import { h_flex } from "gpui-base";

@@ -1,4 +1,3 @@
-// The glint: a working name lit by windows that cross it, and on battery the name still.
 import test from "node:test";
 import assert from "node:assert/strict";
 import { load, chain, gpuiHost, numberArguments, nodes, themed, KIT_NIGHT } from "./helpers.mjs";
