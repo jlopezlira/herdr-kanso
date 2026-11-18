@@ -35,7 +35,6 @@ export const LH = { body: 1.5 };
 export const SPIN = 900;
 export const GLINT_MS = 2200;
 export const GLINT_STAGGER = 160;
-export const DOTS_MS = 380;
 export const EASE = { duration: 180, easing: "ease-out" };
 export const GLIDE = { duration: 220, easing: "ease-out" };
 export const GLINT_EASE = "linear";
