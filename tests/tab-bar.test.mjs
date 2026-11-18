@@ -94,7 +94,7 @@ test("Chosen, at rest and waiting each draw their own state: the quiet fill, mut
   const b = await bar();
   const root = b.view.render(b.cx);
   const [chosen, rest, waiting] = ["t1", "t2", "t3"].map((id) => tab(root, id));
-  assert.equal(arg(chosen, "bg"), b.c.w7, "the chosen tab wears its own quiet fill, wash-7 as the Storybook's");
+  assert.equal(arg(chosen, "bg"), b.c.w12, "the chosen tab wears its own fill, the selection's wash-12");
   assert.equal(arg(chosen, "text_color"), b.c.text);
   assert.equal(arg(chosen, "selected"), true);
   assert.ok(part(chosen, "t1", "close"), "the chosen tab ends with ×");
@@ -119,7 +119,7 @@ test("Measured, the chosen tab keeps its own fill: nothing glides under it", asy
   const root = b.view.render(b.cx);
   assert.equal(byTag(root, "tab-pill"), null);
   assert.equal(all(root, (el) => calls(el, "transition").length > 0).length, 0);
-  assert.equal(arg(tab(root, "t1"), "bg"), b.c.w7);
+  assert.equal(arg(tab(root, "t1"), "bg"), b.c.w12);
 });
 
 test("A click chooses a tab, and a press dragged onto another holds it on the pressed wash, draws the accent where it lands and moves it there", async () => {

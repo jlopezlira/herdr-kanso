@@ -1439,7 +1439,7 @@
 .kanso-tabs--lg .kanso-tabs__tab--icon{width:var(--k-h-control)}
 .kanso-tabs__tab svg{width:var(--k-ic-row);height:var(--k-ic-row);flex:none}
 .kanso-tabs__tab:is(:hover,.kanso-control--hover){background:var(--wash-4);color:var(--fg)}
-.kanso-tabs__tab.kanso-tabs__tab--on{background:var(--wash-7);color:var(--fg)}
+.kanso-tabs__tab.kanso-tabs__tab--on{background:var(--wash-12);color:var(--fg)}
 .kanso-tabs--track .kanso-tabs__tab.kanso-tabs__tab--on{background:var(--surface-4)}
 .kanso-tabs__tab:is(:focus-visible,.kanso-control--focus){outline:var(--k-w-focus) solid var(--accent);outline-offset:var(--k-w-line)}
 .kanso-tabs.kanso-control--off .kanso-tabs__tab{color:var(--dim);cursor:default}
