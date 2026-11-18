@@ -206,9 +206,9 @@
   --k-guide-x: 13px;
   --k-sidebar-agent-x: 34px;
   --k-sidebar-elbow-gap: 6px;
-  --k-sidebar-row-gap: 1px;
+  --k-sidebar-row-gap: 0px;
   --k-sidebar-gutter: 16px;
-  --k-sidebar-group-gap: 8px;
+  --k-sidebar-group-gap: 12px;
   --k-sidebar-computer-gap: 16px;
   --k-sidebar-thread-gap: 6px;
   --k-keycap-x: 5px;

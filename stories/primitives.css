@@ -758,8 +758,8 @@
 .kanso-sidebar__header{height:var(--k-h-tab-bar);flex:none;display:flex;align-items:center;justify-content:space-between;padding:0 var(--k-sp-2) 0 var(--k-sp-1)}
 .kanso-sidebar__tools{height:var(--k-h-header);flex:none;display:flex;align-items:center}
 .kanso-sidebar__list{flex:1;min-height:0;overflow:hidden}
-.kanso-sidebar__group{display:flex;align-items:center;gap:var(--k-sp-2);height:var(--k-h-row);padding:0 var(--k-sp-2);margin-top:var(--k-sp-4);font-size:var(--k-fs-body);font-weight:var(--k-fw-strong);color:var(--muted)}
-.kanso-sidebar__footer{flex:none;padding:var(--k-sp-2) 0 calc(var(--k-pane-gap) + (var(--k-h-bar) - var(--k-h-row)) / 2)}
+.kanso-sidebar__group{display:flex;align-items:center;gap:var(--k-sp-2);height:var(--k-h-row);padding:0 var(--k-sp-2);margin-top:var(--k-sidebar-group-gap);font-size:var(--k-fs-body);font-weight:var(--k-fw-strong);color:var(--muted)}
+.kanso-sidebar__footer{flex:none;padding:var(--k-sp-2) 0 var(--k-sp-3)}
 /* Proposed: Settings holds its menu, open over it; a refused update's block sits under its row. */
 .kanso-sidebar__footer-settings{position:relative;display:flex;flex-direction:column}
 .kanso-sidebar__footer-menu{position:absolute;bottom:calc(100% + var(--k-sp-1));left:0;z-index:1}
@@ -872,6 +872,7 @@
 :is(.kanso-sidebar__rows,.kanso-sidebar__footer):has(.kanso-row){padding-inline:calc(var(--k-sidebar-gutter) - var(--k-sp-2))}
 .kanso-sidebar__row-group+.kanso-sidebar__row-group{margin-top:var(--k-sidebar-group-gap)}
 .kanso-sidebar__row-group.kanso-sidebar__row-group--computer{margin-top:var(--k-sidebar-computer-gap)}
+.kanso-sidebar__row.kanso-project{margin-top:0}
 .kanso-sidebar__row{height:var(--k-h-row);display:flex;align-items:center;gap:var(--k-sp-2);padding:0 var(--k-sp-2);border-radius:var(--k-r-control);box-sizing:border-box;font-size:var(--k-fs-name);color:var(--muted);position:relative;font-variant-numeric:tabular-nums}
 .kanso-sidebar__row .kanso-row__name{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:var(--k-fw-medium)}
 .kanso-sidebar__row.kanso-project .kanso-row__name{font-weight:var(--k-fw-strong);flex:none;max-width:60%}
