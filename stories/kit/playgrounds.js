@@ -1,6 +1,6 @@
 // Pages whose story is built from Storybook controls instead of drawn states.
 import sprite from '../proto-sprite.svg?raw';
-import { activity, activityMenu, paneFolds, paneHeader, panelHeaderForms, panelLooks, paneReaches, paneStates, noticeHomes, noticePlaces, noticeStates, systemMessage, toastStack, heldChord, keyboard, keyboardExplorer, keyboards, keyboardSystems, keyNames, shortcutRowStates, channelSettings, channels, computerItem, computerItemStates, failureMenu, panelDoors, tabBarStates } from './compositions.js';
+import { activity, activityMenu, paneFolds, paneHeader, panelHeaderForms, panelLooks, paneReaches, paneStates, noticeHomes, noticePlaces, noticeStates, systemMessage, toastStack, heldChord, keyboard, keyboardExplorer, keyboards, keyboardSystems, keyNames, shortcutRowStates, channelSettings, channels, failureMenu, panelDoors, tabBarStates } from './compositions.js';
 import { sidebarFooter } from './sidebar-footer.js';
 import { tile } from './tile.js';
 import { views, viewSwitch } from './view-switch.js';
@@ -9,10 +9,11 @@ import { computerRow, computerStates } from './computer-row.js';
 import { section } from './section.js';
 import { asleep } from './asleep.js';
 import { sessionRow } from './session-row.js';
+import { computerItem, computerItemStates } from './status-bar.js';
 import { avatar, avatarSizes, button, card, chip, code, dawn, dialog, emptyState, escape, failureBlock, input, keycapStates, keyHint, kinds, levels, mark, markdown, marks, markSizes, menu, metric, row, rowDepths, sides, skeletonOf, skeletonShapes, stack, statePatterns, tabs, thumbnail, toast, toggle, tooltip, windowControls } from './pieces.js';
 import { barWidths, inBar } from './frames.js';
 import { edgeSides, layerDefaults, memoryShown, needsShown, panelContents, panelReads, panelRowLooks, statedPages, stepperShown, tabActs } from './states.js';
-import { appNotices, keyLayer, keyLayerMods, pullRequest, sampleDojo, sampleHeader, sampleNotices, samplePanelHeader, sampleRefusal, sampleSettingsMenu, sampleSidebar, sessionCommandsTip, sessionTools, statusMenus } from './samples.js';
+import { appNotices, keyLayer, keyLayerMods, pullRequest, sampleDojo, sampleHeader, sampleNotices, samplePanelHeader, sampleRefusal, sampleSettingsMenu, sampleSidebar, sessionCommandsTip, sessionTools, statusMenus, unreachable } from './samples.js';
 
 const icons = ['none', ...[...sprite.matchAll(/id="(lu-[^"]+)"/g)].map(([, id]) => id).sort()];
 const frame = (markup) => `<div class="kanso-story"><div class="kanso-story__theme kanso-story__frame kanso-story--free">${markup}</div></div>`;
@@ -434,6 +435,7 @@ export const playgrounds = {
       computer: select('computer', ['none', ...computerItemStates]),
       paused: boolArg('layout paused'),
       stepper: radioArg('panes per view', stepperShown, { if: { arg: 'paused', truthy: false } }),
+      minimap: boolArg('minimap', { if: { arg: 'paused', truthy: false } }),
       needs: radioArg('needs you', Object.keys(needsShown)),
       memory: radioArg('memory low', Object.keys(memoryShown)),
       panels: boolArg('servers, containers, reviews'),
@@ -472,9 +474,9 @@ export const playgrounds = {
       const at = (place, markup) => `<p class="kanso-story__caption">${place}</p>${markup}`;
       const slice = (...parts) => `<div class="kanso-story__slice">${parts.join('')}</div>`;
       const panel = (markup) => `<div class="kanso-panel kanso-story__panel">${markup}</div>`;
-      const source = 'ssh: connect to host dark port 22: Operation timed out';
+      const source = unreachable('dark');
       return {
-        failure: () => at('Status bar', inBar(520, { left: [computerItem({ name: 'dark', state: 'unreachable' })] }))
+        failure: () => at('Status bar', inBar(520, { left: [computerItem({ name: 'dark', state: 'unreachable', detail: source })] }))
           + at('Sidebar', slice(computerRow({ name: 'dark', state: 'unreachable' }), open ? failureMenu({ source, fixes: ['Refresh', 'Sign in…'], agent: 'Atlas' }) : ''))
           + at('Panel', panel(failureBlock({ text: "Can't list worktrees on dark", source: 'git worktree list: timed out after 30 s', fix: 'Refresh', agent: 'Atlas' })))
           + at('Toast', toast({ level: 'error', icon: 'none', title: "Couldn't pull checkout", action: 'Retry' })),

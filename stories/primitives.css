@@ -576,6 +576,14 @@
 .kanso-status-bar__stepper>.kanso-button{display:none;transition:opacity var(--k-hover-ms) var(--k-hover-ease) var(--k-hover-delay),display 0s allow-discrete var(--k-hover-delay)}
 .kanso-status-bar__stepper:is(:hover,:focus-within,.kanso-control--hover,.kanso-status-bar__item--open)>.kanso-button{display:grid}
 .kanso-status-bar__value{min-width:1ch;text-align:center;color:var(--fg)}
+/* Proposed: the minimap, switched on in kansō settings: a Button per column before panes per view; the column in front in the foreground, one in view or pinned muted, the rest dim. */
+.kanso-status-bar__columns{display:flex;align-items:center;gap:var(--k-sp-hair);max-width:var(--k-w-pills);overflow:hidden;margin-right:var(--k-sp-2)}
+.kanso-status-bar__columns>.kanso-button.kanso-button--drawn{padding:0;border:var(--k-w-focus) solid transparent}
+.kanso-status-bar__column{display:flex;flex-direction:column;justify-content:center;gap:var(--k-w-line);height:var(--k-ic-row);padding:0 var(--k-w-line)}
+.kanso-status-bar__pane{display:block;height:var(--k-sp-1);border-radius:var(--k-r-full);background:var(--dim)}
+.kanso-status-bar__column--stacked>.kanso-status-bar__pane{height:var(--k-sp-hair)}
+.kanso-status-bar__pane.kanso-status-bar__pane--seen{background:var(--muted)}
+.kanso-status-bar__pane.kanso-status-bar__pane--current{background:var(--fg)}
 .kanso-status-bar__item.kanso-status-bar__item--open{anchor-name:--kanso-status-item;margin:0 calc(-1 * var(--k-sp-1));padding:var(--k-sp-hair) var(--k-sp-1);border-radius:var(--k-r-sm);background:var(--wash-12)}
 .kanso-status-bar__popup{position:absolute;bottom:calc(anchor(--kanso-status-item top) + var(--k-sp-1));right:anchor(--kanso-status-item right);z-index:1}
 

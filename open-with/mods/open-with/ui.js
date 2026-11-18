@@ -18,6 +18,7 @@ export const DRAG_START = 4;
 export const DAWN_H = 56;
 export const DAWN_W = 256;
 export const LINE = 1;
+export const FOCUS = 2;
 export const GLINT = { run: 240, wide: 44, mid: 26, narrow: 12 };
 export const SWITCH = { w: 28, h: 16, knob: 12 };
 export const PAGE = { w: 1080, toolbar: 42, toolbarX: 14, note: 12, markdown: 13, unitGap: 6, unitY: 3, findList: 300 };

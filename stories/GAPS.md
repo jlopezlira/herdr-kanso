@@ -6,9 +6,9 @@ These features exist in the app and stay available; they await a design.
 
 | Module | State | Source |
 | --- | --- | --- |
-| Compositions/Edges | Strip Navigation · Column controls | kanso/mods/kanso-strip/main.js:1276 |
-| Compositions/Edges | Strip Navigation · Layout paused | kanso/mods/kanso-strip/main.js:1238 |
-| Compositions/Edges | Strip Navigation · Narrow | kanso/mods/kanso-strip/main.js:1275 |
+| Compositions/Edges | Strip Navigation · Column controls | kanso/mods/kanso-strip/main.js:1244 |
+| Compositions/Edges | Strip Navigation · Layout paused | kanso/mods/kanso-strip/main.js:1220 |
+| Compositions/Edges | Strip Navigation · Narrow | kanso/mods/kanso-strip/main.js:39 |
 | Compositions/Keyboard | Help · Keyboard focus | kanso/mods/kanso-help/main.js:31 |
 | Compositions/Keyboard | Keyboard Explorer · Combined modifiers | kanso/mods/kanso-help/main.js:74 |
 | Compositions/Keyboard | Keyboard Explorer · Physical press | kanso/mods/kanso-help/main.js:60 |
@@ -25,14 +25,14 @@ These features exist in the app and stay available; they await a design.
 | Compositions/Notifications | Action Notice · 5 · fatal: Not possible to fast-forward, aborting. | kanso/mods/kanso-spaces/sidebar-rows.js:49 |
 | Compositions/Pane header | Pane Tools · Close armed | kanso/mods/kanso-strip/main.js:450 |
 | Compositions/Pane header | Pane Tools · Hover | kanso/mods/kanso-strip/header-model.js:56 |
-| Compositions/Pane header | Pane Tools · Keyboard | kanso/mods/kanso-strip/main.js:548 |
+| Compositions/Pane header | Pane Tools · Keyboard | kanso/mods/kanso-strip/main.js:552 |
 | Compositions/Pane header | Pane Tools · No project | kanso/mods/kanso-strip/header-model.js:86 |
 | Compositions/Pane header | Pane Tools · Pinned | kanso/mods/kanso-strip/header-model.js:70 |
 | Compositions/Pane header | Pane Tools · Terminal | kanso/mods/kanso-strip/header-model.js:94 |
 | Compositions/Pane header | Pane Tools · Working | kanso/mods/kanso-strip/header-model.js:110 |
-| Compositions/Status bar | Status Stand In · Low memory | kanso/mods/kanso-status/main.js:77 |
-| Compositions/Status bar | Status Stand In · Several waiting | kanso/mods/kanso-status/main.js:76 |
-| Compositions/Status bar | Status Stand In · Visible home | kanso/mods/kanso-status/model.js:56 |
+| Compositions/Status bar | Status Stand In · Low memory | kanso/mods/kanso-status/main.js:70 |
+| Compositions/Status bar | Status Stand In · Several waiting | kanso/mods/kanso-status/main.js:69 |
+| Compositions/Status bar | Status Stand In · Visible home | kanso/mods/kanso-status/model.js:53 |
 | Compositions/Tab bar | Panel Toolbar · Capability absent | kanso/mods/kanso-tabs/main.js:78 |
 | Compositions/Tab bar | Panel Toolbar · Custom panel | kanso/mods/kanso-tabs/main.js:508 |
 | Compositions/Tab bar | Panel Toolbar · Reordering | kanso/mods/kanso-tabs/main.js:524 |

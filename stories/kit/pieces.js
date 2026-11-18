@@ -283,8 +283,12 @@ export const statePatterns = ['failure', 'empty', 'pending', 'loading'];
 export const needsItem = ({ name, question = '', more = 0 }) => `<span class="kanso-status-bar__item kanso-status-bar__needs">${mark({ status: 'blocked', size: 'sm' })}<span class="kanso-status-bar__name">${escape(name)}</span>`
   + `${question ? `<span class="kanso-status-bar__question">${escape(question)}</span>` : ''}${more ? `<span class="kanso-status-bar__more">${plus(more)}</span>` : ''}</span>`;
 
-// Panes per view: the number at rest, − and + on hover; its keys are in the tooltips.
-export const stepper = ({ value = 2, open = false, hover = false } = {}) => `<span class="kanso-status-bar__item kanso-status-bar__stepper${open ? ' kanso-status-bar__item--open' : ''}${hover ? ' kanso-control--hover' : ''}">${button({ label: 'Fewer panes per view ⌘⇧−', kind: 'icon', size: 'sm', icon: 'lu-minus' })}`
+// Proposed: the minimap, switched on in kansō settings: a Button per column; each pane a line in its tone (`current`, `seen`, else out of view), `width` hairlines long.
+const columnPanes = ({ width, panes }) => `<span class="kanso-status-bar__column${panes.length > 1 ? ' kanso-status-bar__column--stacked' : ''}">`
+  + `${panes.map((tone) => `<i class="kanso-status-bar__pane kanso-status-bar__pane--${escape(tone)}" data-width="calc(var(--k-w-line) * ${Number(width)})"></i>`).join('')}</span>`;
+const minimap = (columns) => (columns.length ? `<span class="kanso-status-bar__columns">${columns.map((column, i) => button({ label: `Column ${i + 1}`, kind: 'quiet', size: 'sm', content: columnPanes(column) })).join('')}</span>` : '');
+// Panes per view: the number at rest, − and + on hover; its keys are in the tooltips. Proposed: `columns`, the minimap before it.
+export const stepper = ({ value = 2, open = false, hover = false, columns = [] } = {}) => `<span class="kanso-status-bar__item kanso-status-bar__stepper${open ? ' kanso-status-bar__item--open' : ''}${hover ? ' kanso-control--hover' : ''}">${minimap(columns)}${button({ label: 'Fewer panes per view ⌘⇧−', kind: 'icon', size: 'sm', icon: 'lu-minus' })}`
   + `<span class="kanso-status-bar__value" title="${Number(value)} per view · scroll to change, click to even out">${Number(value)}</span>${button({ label: 'More panes per view ⌘⇧=', kind: 'icon', size: 'sm', icon: 'lu-plus' })}</span>`;
 
 export const tabSkeleton = () => '<span class="kanso-skeleton kanso-skeleton--breathing kanso-tab-bar__skeleton"></span>';

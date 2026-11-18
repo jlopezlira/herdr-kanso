@@ -1,9 +1,11 @@
-// Kanso's panel kit: a status bar item, its mark or icon with its words, and the item of an agent waiting for you. Apache-2.0.
+// Kanso's panel kit: a status bar item, its mark or icon with its words, the item of an agent waiting for you, and panes per view. Apache-2.0.
 // Kept byte for byte by `npm run sync:share`: edit kanso-panel/ui-status.js.
 import { div, svg } from "gpui-kit";
-import { h_flex } from "gpui-base";
-import { G, R, W, ICON_INLINE, glyphOf, toneColor } from "./ui.js";
+import { h_flex, v_flex } from "gpui-base";
+import { G, R, W, LINE, FOCUS, PANE, CLEAR, ICON_ROW, ICON_INLINE, glyphOf, toneColor } from "./ui.js";
 import { mark } from "./ui-mark.js";
+import { button } from "./ui-button.js";
+import { tipText } from "./ui-tooltip.js";
 import { PENDING, pendingDot } from "./ui-state.js";
 
 const leadOf = (c, status, icon) => {
@@ -44,3 +46,35 @@ export const needsItem = (id, c, { name, question = null, more = 0, tip = null, 
   .child(div().flex_none().font_medium().text_color(c.text).child(name))
   .when(Boolean(question), (el) => el.child(div().max_w(W.question).min_w(0).truncate().child(question)))
   .when(more > 0, (el) => el.child(div().flex_none().text_color(c.dim).child(`+${more}`)));
+
+// The minimap's room: each column's Button keeps its ring clear around a hairline of side room, a hair from the next.
+export const COLUMN = Object.freeze({ side: LINE + FOCUS, gap: G.hair });
+// A pane's line: the one in front in the foreground, one in view or pinned muted, the rest dim.
+const PANE_INK = { current: "text", seen: "muted" };
+const focused = (el, handle) => (handle ? el.track_focus(handle) : el);
+const columnButton = (id, c, { width, panes }, i, onChange) => button(`${id}-column-${i}`, `Column ${i + 1}`, onChange && ((cx) => onChange(i, cx)), c, {
+  kind: "quiet",
+  content: [v_flex().h(ICON_ROW).px(LINE).gap(LINE).justify_center()
+    .children(panes.map((tone) => div().w(width).h(panes.length > 1 ? G.hair : G.xs).rounded_full().bg(c[PANE_INK[tone] ?? "dim"])))],
+});
+
+/** Panes per view: the number, which evens out on a press, between − and +. Their glyphs are clear unless `hover` (the pointer or the keyboard
+ * is on it) or `open`, so nothing moves. `chords`: the key table's chords for fewer, more and fit. Proposed: `columns`, the minimap before it,
+ * a Button per column, each `{ width, panes }` with a tone per pane. `on`: the presses `minus`, `plus`, `value` and `column(i, cx)`,
+ * `hover(over, cx)`, and `focuses`, the handles of minus, plus and value. */
+export const stepper = (id, c, { value = 2, open = false, hover = false, columns = [], chords = {} }, on = {}) => {
+  const { minus = null, plus = null, value: even = null, column = null, hover: onHover = null, focuses = {} } = on;
+  const shown = hover || open;
+  const tool = (icon, label, chord, onClick) => focused(button(`${id}-${icon}`, label, onClick, c,
+    { kind: "icon", icon, size: "sm", tip: tipText({ label, chord }), color: shown ? null : CLEAR }), focuses[icon]);
+  const number = button(`${id}-value`, String(value), even, c, { kind: "quiet", content: [div().text_color(c.text).child(String(value))],
+    tip: tipText({ label: `${value} per view`, chord: chords.fit, detail: "scroll to change, click to even out" }) });
+  return h_flex().id(id).flex_none().items_center().gap(G.hair)
+    .when(open, (el) => washable(el).bg(c.w12))
+    .when(Boolean(onHover), (el) => el.on_hover((over, cx) => onHover(over, cx)))
+    .when(columns.length > 0, (el) => el.child(h_flex().id(`${id}-columns`).min_w(0).max_w(PANE.pills).overflow_hidden().items_center().gap(COLUMN.gap).mr(G.sm)
+      .children(columns.map((col, i) => columnButton(id, c, col, i, column)))))
+    .child(tool("minus", "Fewer panes per view", chords.fewer, minus))
+    .child(focused(number, focuses.value))
+    .child(tool("plus", "More panes per view", chords.more, plus));
+};

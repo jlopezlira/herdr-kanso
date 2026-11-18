@@ -434,11 +434,14 @@ test("Send reaches any agent of any model by the name and project Kanso gives it
 
 test("the minimap's pills fit their slot whatever the columns, so the stepper always shows", async () => {
   const { pillWidths } = await load("kanso-strip/main.js", ["pillWidths"]);
-  const span = (ws) => ws.reduce((a, b) => a + b + 2, 0) + (ws.length - 1) * 3;
+  const { COLUMN } = await load("kanso-panel/ui-status.js", ["COLUMN"]);
+  const { PANE } = await load("kanso-panel/ui.js", ["PANE"]);
+  const span = (ws) => ws.reduce((sum, w) => sum + w, 0) + ws.length * 2 * COLUMN.side + Math.max(0, ws.length - 1) * COLUMN.gap;
   assert.deepEqual(clone(pillWidths([{ w: 0.5 }, { w: 0.5 }])), [15, 15], "few columns keep their size");
   const six = pillWidths(Array.from({ length: 6 }, () => ({ w: 1 })));
-  assert.ok(span(six) <= 110, `six full-width columns fit (${span(six)}px)`);
+  assert.ok(span(six) <= PANE.pills, `six full-width columns fit (${span(six)}px)`);
   assert.ok(six.every((w) => w === six[0]), "and stay alike");
   const many = pillWidths(Array.from({ length: 30 }, () => ({ w: 1 })));
   assert.ok(many.every((w) => w >= 3), "never thinner than a mark");
+  assert.ok(span(many) > PANE.pills, "past the slot they are cut in their own box");
 });
