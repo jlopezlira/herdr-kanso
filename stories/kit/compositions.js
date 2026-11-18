@@ -2,7 +2,7 @@
 import { button, chord, diffText, dojoCell, dojoCharacter, dojoFeedback, dojoLevel, dojoProgress, dojoRecord, dojoStatistics, dojoSummary, dojoTitle, facts, headerSegment, input, keyLegend, paneName, setting, sleepLabel, toggle, failureBlock, failureLine, glyph, grow, keycap, keyPicked, list, mark, mascot, menu, phrase, pieceLines, plus, row, stack, statusItem, tabSkeleton, tabs, toast } from './kit.js';
 
 // Sidebar compositions: each one is the Row, Tab, Menu, Avatar, Mark, Chip or Button in its own configuration.
-// The rows the app draws (session, project, computer, section, asleep), the tile, the view switch, the toolbar, the header and the footer live each in its own file, shared with the app.
+// The rows the app draws (session, project, computer, section, asleep), the tile, the view switch, the toolbar, the header, the footer and the Activity card live each in its own file, shared with the app.
 
 // Status bar compositions: a computer stands in for its sidebar row; the rest are the bar's Menus and Buttons.
 export const computerItemStates = ['on', 'unreachable', 'pending'];
@@ -19,11 +19,7 @@ export const layoutPaused = () => failureLine({ text: 'Layout paused', fix: 'Res
 // A failing row's right-click Menu: the source's words, the fixes, Explain, then the piece lines.
 export const failureMenu = ({ source, fixes = [], agent = null }) => menu({ title: source, items: [...fixes.map((label) => ({ label })), ...(agent ? [{ icon: 'lu-bot', label: phrase('Explain to', agent) }] : []), ...pieceLines] });
 
-// While you were away: what nothing in view says, four rows then +N more; nothing new takes no space.
-const awayRow = (hover, focus) => ({ icon: lead, tone = null, subject, fact: what, detail = null, age }, index) => row({ icon: lead, tone, name: subject, detail: what, second: detail, meta: age, hover: index === hover, focus: index === focus });
-export const activity = ({ events = [], max = 4, hover = -1, focus = -1 } = {}) => events.length ? stack({ variant: 'away' },
-  row({ name: 'While you were away', heading: true, action: { label: 'Dismiss these', kind: 'icon', icon: 'lu-x' } }),
-  events.slice(0, max).map(awayRow(hover, focus)), events.length > max ? button({ label: phrase(plus(events.length - max), 'more'), kind: 'quiet', size: 'sm' }) : null) : null;
+// While you were away's right-click Menu; the card itself is the Activity composition, in its own file.
 export const activityMenu = () => menu({ title: 'While you were away', items: [{ icon: 'lu-x', label: 'Dismiss these' }, ...pieceLines] });
 
 // Edges: the panes past each side, one icon Button per pane, the panes of one column grouped; a click goes there, the name is the tooltip.

@@ -72,49 +72,62 @@ const NAMED = ["presses", "focuses"];
 const pressing = (draw) => (id, c, more = {}, context = {}) => {
   const fresh = NAMED.filter((name) => more[name] && !more[name][TAKEN]);
   if (!fresh.length) return draw(id, c, more, context);
-  const marked = Object.fromEntries(fresh.map((name) => [name, { ...more[name], [TAKEN]: new Set() }]));
+  // Named as the Storybook names them ("lu-x") or as the app does ("x").
+  const marked = Object.fromEntries(fresh.map((name) => [name, { ...Object.fromEntries(Object.entries(more[name]).map(([key, value]) => [appIcon(key), value])), [TAKEN]: new Set() }]));
   const el = draw(id, c, { ...more, ...marked }, context);
   noTool(id, Object.values(marked).flatMap((named) => Object.keys(named).filter((key) => named[key] && !named[TAKEN].has(key))));
   return el;
 };
+// A name several targets share, such as rows with one icon, takes a list: one press each, in drawing order (null for one that does not act);
+// each turn taken is marked beside the name.
 const takeOf = (named, key) => {
-  const target = named[key] ?? null;
-  if (target) named[TAKEN]?.add(key);
-  return target;
+  const given = named[key] ?? null;
+  if (given) named[TAKEN]?.add(key);
+  if (!Array.isArray(given)) return given;
+  const turn = [...(named[TAKEN] ?? [])].filter((mark) => mark.startsWith(`${key}\u0000`)).length;
+  named[TAKEN]?.add(`${key}\u0000${turn}`);
+  return given[turn] ?? null;
 };
 
 const wired = (on) => (tool) => (tool && on[keyOf(tool)] ? { ...tool, onClick: on[keyOf(tool)] } : tool);
 
 // A detail fact with a `label` is a press, wired by that label as a tool is.
 const pressFact = (part) => typeof part === "object" && Boolean(part.label);
-const withHandlers = (id, raw, actions, action, detail) => {
-  const on = Object.fromEntries(Object.entries(raw).map(([key, fn]) => [appIcon(key), fn]));
+// A tool not given in `on` takes its press from the `presses` a stack passes down, by the same name.
+const withHandlers = (id, raw, actions, action, detail, presses) => {
   const own = parts(actions).map(withIcon);
   const lone = withIcon(action);
+  const handed = Object.fromEntries([...own, lone].filter(Boolean).map(keyOf).filter((key) => !raw[key] && presses[key]).map((key) => [key, takeOf(presses, key)]));
+  const on = Object.fromEntries(Object.entries({ ...raw, ...handed }).map(([key, fn]) => [appIcon(key), fn]));
   const facts = parts(detail).map(withIcon);
-  const presses = [...own, lone, ...facts.filter(pressFact)];
-  noTool(id, Object.keys(on).filter((key) => !presses.some((tool) => tool && keyOf(tool) === key)));
+  const targets = [...own, lone, ...facts.filter(pressFact)];
+  noTool(id, Object.keys(on).filter((key) => !targets.some((tool) => tool && keyOf(tool) === key)));
   return { actions: own.map(wired(on)), action: wired(on)(lone), detail: facts.map((part) => (pressFact(part) ? wired(on)(part) : part)) };
 };
+
+// The Storybook's mark symbols as a row's icon are the app's marks, drawn in the icon's place.
+const MARK_ICONS = { "e-work": "working", "e-blk": "blocked", "e-done": "done", "e-idle": "idle" };
 
 export const row = ({ icon, flag, detail, action, actions, start, tools, ...props }) => pressing((id, c, more) => {
   const key = keyOf({ icon, label: props.name });
   const { on = {}, presses = {}, focuses = {}, onClick = takeOf(presses, key), focusHandle = takeOf(focuses, key), onPress, onRelease, onMenu, onMove, ...handlers } = given(more);
+  const status = MARK_ICONS[icon];
   const drawnRow = drawRow(id, c, {
-    ...props, ...handlers, onClick, focusHandle, ...withHandlers(id, on, actions, action, detail), icon: iconOf(icon), flag: appIcon(flag),
-    start: drawn(id, c, "start", start), tools: drawn(id, c, "tools", tools),
+    ...props, ...handlers, onClick, focusHandle, ...withHandlers(id, on, actions, action, detail, presses), icon: status ? null : iconOf(icon), flag: appIcon(flag),
+    start: [...drawn(id, c, "start", start), ...(status ? [drawMark(c, { status })] : [])], tools: drawn(id, c, "tools", tools),
   });
   return withEvents(drawnRow, { onPress, onRelease, onMenu, onMove });
 });
 
 // `icon: "none"` is the Storybook's no icon; app-only props, such as `color`, pass through as the row's do.
 // `content`: kit pieces or elements drawn in place of the icon and label, such as a picture and its name. No `tip` reads the label.
-// `ink`: the stack around it quiets it, as Sort at its default order is dim.
-export const button = ({ label, icon = "none", content = [], tip = "", ...props }) => pressing((id, c, more, { ink = null }) => {
+// `ink`: the stack around it quiets it, as Sort at its default order is dim; in a `card` it stands at the card's start.
+export const button = ({ label, icon = "none", content = [], tip = "", ...props }) => pressing((id, c, more, { ink = null, card = false }) => {
   const key = keyOf({ icon: iconOf(icon), label });
   const { presses = {}, focuses = {}, onClick = takeOf(presses, key), focusHandle = takeOf(focuses, key) } = given(more);
   const drawnButton = drawButton(id, label, onClick, c, { ...(ink ? { color: c[ink] } : {}), ...props, tip: tip || null, icon: iconOf(icon), content: drawn(id, c, "content", content) });
-  return focusHandle ? drawnButton.track_focus(focusHandle) : drawnButton;
+  const placedButton = card ? drawnButton.self_start() : drawnButton;
+  return focusHandle ? placedButton.track_focus(focusHandle) : placedButton;
 });
 
 // Explain to <agent>: the bot icon and the agent named in words; its press starts that agent on the question.

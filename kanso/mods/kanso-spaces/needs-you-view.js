@@ -1,9 +1,9 @@
-import { div } from "gpui-kit";
-import { v_flex, h_flex } from "gpui-base";
-import { G, H, R, T, tokens } from "./ui.js";
-import { quietLink } from "./ui-button.js";
-import { skeletonOf, tooltip } from "./kit.js";
+import { h_flex, v_flex } from "gpui-base";
+import { G, SIDEBAR, tokens } from "./ui.js";
+import { button, emptyState, failureBlock, skeletonOf, tooltip } from "./kit.js";
+import { sessionRow } from "./session-row.js";
 import { boundChord } from "./ui-tooltip.js";
+import { programOf } from "./agents.js";
 import { waitingReason, queueMessage } from "./needs-you.js";
 
 // The key that goes to the next agent that needs you, named in the count's tooltip.
@@ -15,30 +15,32 @@ export function queueLabel(queue, collapsed, empty) {
   return `Needs you · ${queue.rows.length}`;
 }
 
+// The count: a quiet Button that opens and shuts the queue; its tooltip names the next key.
 export function queueControl(t, queue, collapsed, empty, toggle) {
   const count = queue.rows.length;
-  if (!count && !empty) return div();
-  const c = tokens(t), spoken = `Needs you: ${count}`;
-  return h_flex().flex_none().px(G.sm).child(quietLink("needs-you-count", queueLabel(queue, collapsed, empty), toggle, c,
-    { label: spoken, color: count ? c.text : c.dim }).tooltip(tooltip({ label: spoken, chord: boundChord(NEXT_NEEDS) })));
+  if (!count && !empty) return null;
+  const spoken = `Needs you: ${count}`;
+  return h_flex().flex_none().px(G.sm).child(button({ label: queueLabel(queue, collapsed, empty), kind: "quiet", size: "sm", spoken,
+    tip: tooltip({ label: spoken, chord: boundChord(NEXT_NEEDS) }) })("needs-you-count", tokens(t), { onClick: toggle }));
 }
+
+// Each waiting agent is its session row, the project after the name; then the queue's state: loading, unavailable or empty.
+const sessionOf = (row, age, selected) => sessionRow({ program: programOf({ program: row.icon && { icon: row.icon, tint: row.tint } }), name: row.name,
+  activity: waitingReason(row), time: age(row), place: row.project, status: row.status, depth: 0, selected, pinnable: false, menu: false });
+const STATES = {
+  loading: () => skeletonOf({ shape: "row" }),
+  unavailable: (queue) => failureBlock({ text: queueMessage(queue.state) }),
+  ready: (queue) => (queue.rows.length ? null : emptyState({ text: queueMessage(queue.state) })),
+};
 
 export function queueList(t, queue, rowFor, age, scroll = null) {
   const c = tokens(t);
-  const line = (text, color) => div().text_size(T.body).text_color(color).child(text);
-  return v_flex().id("needs-you-list").flex_1().min_h(0).px(G.sm).gap(G.xs).overflow_y_scrollbar()
+  const state = STATES[queue.state]?.(queue);
+  return v_flex().id("needs-you-list").flex_1().min_h(0).px(G.sm).gap(SIDEBAR.gap).overflow_y_scrollbar()
     .when(Boolean(scroll), (el) => el.track_scroll(scroll))
     .children(queue.rows.map((row) => {
       const { selected, go } = rowFor(row);
-      return quietLink(`needs-you-${row.address}`, "", go, c, { label: `${row.project}, ${row.name}, ${waitingReason(row)}` })
-        .h_auto().min_h(H.control).w_full().px(G.sm).py(G.xs).rounded(R.control)
-        .when(selected, (el) => el.bg(c.selected))
-        .child(v_flex().min_w(0).gap(G.xs)
-          .child(div().truncate().text_size(T.value).text_color(c.text).child(row.name))
-          .child(div().truncate().text_size(10.5).text_color(c.dim).child(row.project))
-          .child(h_flex().gap(G.sm).child(line(waitingReason(row), c.muted)).child(line(age(row), c.dim))));
+      return sessionOf(row, age, selected)(`needs-you-${row.address}`, c, { onClick: go });
     }))
-    .when(queue.state === "loading", (el) => el.child(skeletonOf({ shape: "row" })("needs-you-loading", c)))
-    .when(queue.state === "unavailable" || (!queue.rows.length && queue.state === "ready"),
-      (el) => el.child(line(queueMessage(queue.state), c.dim)));
+    .when(Boolean(state), (el) => el.child(state(`needs-you-${queue.state}`, c)));
 }

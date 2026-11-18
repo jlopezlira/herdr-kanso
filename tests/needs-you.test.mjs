@@ -11,7 +11,7 @@ const terminal = (address, status_ms = 1, extra = {}) => ({ address, status_ms, 
 const addresses = (rows) => rows.map((row) => row.address);
 
 const MODES = ["spaces", "agents", "threads"];
-const waitingNotFinished = (texts) => assert.deepEqual(["Waiting for you", "Finished"].map((word) => texts.includes(word)), [true, false]);
+const waitingNotFinished = (texts) => assert.deepEqual(["Waiting for you", "finished"].map((word) => texts.includes(word)), [true, false]);
 
 test("Only an agent waiting on you is listed, oldest first across projects", () => {
   const rows = waitingQueue([agent("new"), agent("finished", "done"), agent("old", "blocked", { space_name: "Other" })],
