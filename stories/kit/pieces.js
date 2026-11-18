@@ -107,7 +107,7 @@ export const input = ({ text: value = '', label: placeholder, icon = 'none', err
   const editable = !disabled && !loading && !choose;
   const enter = multiline ? '' : ` onkeydown="if (event.key === 'Enter') event.preventDefault()"`;
   const cap = ` onbeforeinput="if (event.inputType.startsWith('insert') && this.innerText.length >= ${limit}) event.preventDefault()"`;
-  const text = `<div class="kanso-field__editor" role="textbox" aria-label="${escape(placeholder)}" aria-multiline="${Boolean(multiline)}" contenteditable="${editable}"${editable ? ' tabindex="0"' : ''}${enter}${cap}>${selected ? `<span class="kanso-field__selection">${escape(value.slice(0, limit))}</span>` : escape(value.slice(0, limit))}</div>`;
+  const text = `<div class="kanso-field__editor" role="textbox" aria-label="${escape(placeholder)}" aria-multiline="${multiline}" contenteditable="${editable}"${editable ? ' tabindex="0"' : ''}${enter}${cap}>${selected ? `<span class="kanso-field__selection">${escape(value.slice(0, limit))}</span>` : escape(value.slice(0, limit))}</div>`;
   const iconTool = icon === 'none' ? '' : `<span class="kanso-button kanso-button--icon" tabindex="0"><svg class="kanso-icon kanso-icon--row"><use href="#${icon}"/></svg></span>`;
   const wordTool = value || choose ? button({ label: word, kind: 'tonal', size: 'sm' }) : '';
   const action = rename ? '' : word ? wordTool : iconTool;
@@ -193,7 +193,7 @@ const menuItem = (item) => {
 };
 // A `field` finds in the menu.
 const menuEntry = (item) => item.separator ? '<div class="kanso-menu__separator"></div>'
-  : item.field ? `<div class="kanso-menu__field">${input({ label: item.field, icon: 'lu-search' })}</div>`
+  : item.field ? `<div class="kanso-menu__field">${input({ label: item.field, icon: 'lu-search', multiline: false })}</div>`
   : item.failure ? failureBlock(item.failure)
   : item.heading ? menuHeading(item.heading, item.mark)
   : menuItem(item);
@@ -251,8 +251,9 @@ export const rowDepths = [0, 1, 2];
 // The `hero` form heads a page's subject (a PR's title): the name at section size, wrapping, its verdict as the second line.
 // `verbs` are a line of quiet word actions under it; `strong` puts the name in ink (unread, new); `late` puts the meta in the blocked tone.
 // A picked row may add a `reason` { text, tone } that wraps and a mono `path`; `number` leads dim (#44); a file's git `letter` takes the icon's place; a tree row sits at its `level`, a folder `open` or not.
+// `apart` puts a dot between the facts of the second line, as the panels' rows do.
 // `second`, `detail` and `meta` take facts with a tone and a tip, a detail fact with a `label` is a press, `chip` takes a tip; `drop` is where a dragged row lands, `wash` a state's ground, `guides` one per depth above it ('tee', 'end', 'pass', or null), under that depth's icon; without them a deeper row hangs from its parent.
-export const row = ({ icon = 'none', tone = '', name, detail, meta, chip: count, flag, mark: status = 'none', second, heading, group, title, hero, depth = 0, glint, wrap, names, nameInk, strong, late, selected, current, dimmed, pending, hover, focus, actions = [], action, verbs = [], start = [], tools = [], keys = [], drop, wash, guides = [], letter, level, open, number, reason, path }) => {
+export const row = ({ icon = 'none', tone = '', name, detail, meta, chip: count, flag, mark: status = 'none', second, heading, group, title, hero, depth = 0, glint, wrap, names, nameInk, strong, late, selected, current, dimmed, pending, hover, focus, actions = [], action, verbs = [], start = [], tools = [], keys = [], drop, wash, guides = [], letter, level, open, number, reason, path, apart }) => {
   const lines = guides.length ? guides : depth > 1 ? [null, 'pass'] : [];
   const slot = letter ? fileLetter(letter) : icon === 'none' ? '' : glyph(icon, tone);
   const lead = `${lines.map(guide).join('')}${list(start)}${level === undefined ? '' : fold(open)}${slot}${number ? `<span class="kanso-row__number">${escape(number)}</span>` : ''}`;
@@ -267,7 +268,7 @@ export const row = ({ icon = 'none', tone = '', name, detail, meta, chip: count,
   const states = [twoLines && 'kanso-row--two-lines', level !== undefined && `kanso-row--nested kanso-row--level-${Number(level)}`, strong && 'kanso-row--strong', heading && 'kanso-row--heading', group && 'kanso-row--group', title && 'kanso-row--title', hero && 'kanso-row--hero', depth && `kanso-row--depth-${depth}`, selected && 'kanso-control--selected', current && 'kanso-row--selected',
     dimmed && 'kanso-control--dim', pending && 'kanso-state-line--pending', hover && 'kanso-control--hover', focus && 'kanso-control--focus',
     drop && `kanso-row--drop-${drop}`, wash && `kanso-row--wash-${wash}`, lines.length && 'kanso-row--tree', wrap && 'kanso-row--wrap', names && 'kanso-row--names', names && nameInk && `kanso-row--ink-${nameInk}`].filter(Boolean).map((name) => ` ${name}`).join('');
-  const under = `${second ? `<div class="kanso-content__secondary">${typeof second === 'string' ? escape(second) : [].concat(second).filter(Boolean).map(fact).join(names ? '' : '<span>·</span>')}</div>` : ''}${reason ? sentence(reason) : ''}`
+  const under = `${second ? `<div class="kanso-content__secondary">${typeof second === 'string' ? escape(second) : [].concat(second).filter(Boolean).map(fact).join(apart ? '<span>·</span>' : '')}</div>` : ''}${reason ? sentence(reason) : ''}`
     + `${path ? `<div class="kanso-row__path">${escape(path)}</div>` : ''}${verbs.length ? `<div class="kanso-content__actions">${verbs.map(rowVerb).join('')}</div>` : ''}`;
   return twoLines
     ? `<div class="kanso-row${states}" tabindex="0"><div class="kanso-content__primary">${lead}${label}${tail}</div>${under}</div>`

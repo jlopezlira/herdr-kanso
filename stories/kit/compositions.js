@@ -53,9 +53,9 @@ export const panel = ({ look = 'panel', stale = false, header = null } = {}, ...
 };
 // Panel header: the Row in its title form, only the title required. A page heads a dashboard; a bar heads a document or a tool, compact over a rule.
 export const panelHeaderForms = ['page', 'bar'];
-export const panelHeader = ({ title, form = 'page', start = [], second = null, tools = [] }) => {
+export const panelHeader = ({ title, form = 'page', start = [], second = null, tools = [], apart = false }) => {
   if (!panelHeaderForms.includes(form)) throw new Error(phrase('panelHeader: unknown form', form));
-  return stack({ variant: 'panel header', bar: form === 'bar' }, row({ start, name: title, title: true, second, tools }));
+  return stack({ variant: 'panel header', bar: form === 'bar' }, row({ start, name: title, title: true, second, tools, apart }));
 };
 // The tools a panel may end with: Refresh, spinning while it reads, and Close where the panel closes.
 export const panelRefresh = ({ reading = false } = {}) => button({ label: 'Refresh', kind: 'icon', icon: 'lu-refresh-cw', spin: reading });
@@ -220,7 +220,7 @@ export const dojo = ({ header, path, play, result, pixels, sleep, feedback, mark
     keyboard({ marks, inert: true }))),
   share ? stack({ variant: 'dojo menu' }, menu(share)) : null);
 
-const labelled = (label, field) => [row({ name: label, heading: true }), input(field)];
+const labelled = (label, field) => [row({ name: label, heading: true }), input({ multiline: false, ...field })];
 export const newWorktree = ({ project, branch, place = null, making = false, failure = null, agent }) => dialog({
   title: phrase('New worktree in', project),
   body: list(labelled('Branch', { text: branch, label: 'Branch name', focus: !failure, error: Boolean(failure) }), failure ? failureBlock({ ...failure, agent }) : null),

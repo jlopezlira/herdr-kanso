@@ -48,7 +48,7 @@
     "metric": { "storybook": ["second", "size", "small"], "app": ["tip"] },
     "needsItem": { "app": ["onClick", "tip"] },
     "keycap": { "storybook": ["corner", "finger", "hint", "hover", "inert", "label", "state", "units"] },
-    "row": { "storybook": ["hero", "late", "number", "path", "reason", "strong"], "app": ["focusHandle", "onClick", "onHover", "onKey"] },
+    "row": { "storybook": ["apart", "hero", "late", "number", "path", "reason", "strong"], "app": ["focusHandle", "onClick", "onHover", "onKey"] },
     "statusItem": { "app": ["onClick", "tip"] },
     "stepper": { "app": ["chords"] },
     "toast": { "app": ["onClick"] },

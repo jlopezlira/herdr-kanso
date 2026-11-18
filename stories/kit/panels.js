@@ -1,6 +1,10 @@
 // The panels: each one only calls pieces and compositions with its own props and draws no markup.
-import { band, bars, button, chord, device, deviceScreen, dialog, facts, keyHint, mark, markdown, menu, metric, note, pieceLines, emptyState, excerpt, failureBlock, input, list, phrase, picture, pin, release, row, setting, skeletonOf, stack, tabs, toggle, windowMap, code, explainButton, sentence, well, delta, heatmap, shareCard, thumbnail, grow } from './kit.js';
-import { channelSettings, keyboardExplorer, newWorktree, notice, panel, panelBack, panelClose, panelHeader, panelRefresh, shortcutRow } from './compositions.js';
+import { band, bars, button, chord, device, deviceScreen, dialog, facts, keyHint, mark, markdown, menu, metric, note, pieceLines, emptyState, excerpt, failureBlock, input as kitInput, list, phrase, picture, pin, release, row as kitRow, setting, skeletonOf, stack, tabs, toggle, windowMap, code, explainButton, sentence, well, delta, heatmap, shareCard, thumbnail, grow } from './kit.js';
+import { channelSettings, keyboardExplorer, newWorktree, notice, panel, panelBack, panelClose, panelHeader as kitPanelHeader, panelRefresh, shortcutRow } from './compositions.js';
+
+const row = (props) => kitRow({ apart: true, ...props });
+const input = (props) => kitInput({ multiline: false, ...props });
+const panelHeader = (props) => kitPanelHeader({ apart: true, ...props });
 
 // Settings: one window, its four pages as Tabs beside the title; Esc closes it.
 export const settingsPages = [{ key: 'pieces', label: 'What shows' }, { key: 'keys', label: 'Keys' }, { key: 'news', label: 'What’s new' }, { key: 'credits', label: 'Credits' }];

@@ -52,7 +52,7 @@ test("Every imported panel state has a canvas, specification and usable symbol r
     assert.equal(withoutRepeats(state.html), state.html, `${state.id}: a frame is drawn twice`);
     if (state.label.endsWith(', Before')) assert.match(state.caption, /previous design/);
   }
-  assert.ok(count >= 24, `Expected the hand-drawn states the kit does not draw yet, found ${count}`);
+  assert.ok(count >= 45, `Expected the hand-drawn states the kit does not draw yet, found ${count}`);
 });
 
 test("A panel import keeps the guidelines already written in the Storybook", () => {
