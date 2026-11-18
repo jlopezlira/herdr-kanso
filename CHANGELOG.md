@@ -22,10 +22,6 @@ in version.json, which the stable updater offers. Versions follow
 [Keep a Changelog](https://keepachangelog.com). `npm run check:version` checks
 the branch's rules.
 
-### Fixed
-
-- Cmd+1 to Cmd+9 choose the tabs the tab bar shows, counted without the ones asleep. A number past the last tab does nothing, instead of stacking a "tab.select failed" notice for each press. On Windows, Ctrl+1 to Ctrl+9. (#331)
-
 ## [Unreleased]
 
 ### Added
@@ -35,7 +31,7 @@ the branch's rules.
 
 ### Changed
 
-- The tab bar follows the Storybook. The chosen tab keeps a quiet fill of its own instead of a pill that glides under it, and tabs are a little wider, with room around the name. The panel doors stay icons, their names and keys in the tooltip, and Images takes the image icon. New tab and Arrange say their keys in their tooltips, and Arrange takes the panels icon. On a computer that cannot be reached, the panel doors give way as + and Arrange do. The open door and every other button that is on take the same wash. Tab groups in Settings, Spend, Memory, Ports, Shipped and pull requests take the same tab. (#331, #233)
+- The tab bar follows the Storybook. The chosen tab wears the selection's wash itself, as the active project does, instead of a pill that glides under it, and tabs are a little wider, with room around the name. The panel doors stay icons, their names and keys in the tooltip, and Images takes the image icon. New tab and Arrange say their keys in their tooltips, and Arrange takes the panels icon. On a computer that cannot be reached, the panel doors give way as + and Arrange do. The open door and every other button that is on take the same wash. Tab groups in Settings, Spend, Memory, Ports, Shipped and pull requests take the same tab. (#331, #233)
 - Tabs, the panel buttons, the edge rail and the agent highlight are drawn as the Storybook draws them, in both themes. Right-clicking a pane shows its name, then Split, Wider, Pin, Send, Find in conversation, Open with, Sleep, whether right-clicks go to the program, and Close, which asks twice while an agent is in the pane.
 - Every size comes from one scale, in the app, the Storybook and the site: text 11, 12, 13, 14, 16 and 20 with no half pixels, icons 12, 16, 18 and 20, and heights in steps of 4 (a row 32, a two-line row 52, a bar and an icon button 28, a control 32, a pane header 36). A view switch and every other tab track is its tab's height and 2 either side.
 - The sidebar's rows read the same in the app and the Storybook: every name is 14, a computer or project strong and a session medium, in the foreground while it works, waits for you or is open, muted when idle, dim when it is a sub-session or asleep; the leading icon is muted; a two-line session puts its time after what it is doing, "Run npm publish? · 2m"; a project or computer keeps its whole name while its folder and branch give way; the footer rows and the While you were away card use the same ink and ground.
@@ -109,6 +105,7 @@ the branch's rules.
 
 ### Fixed
 
+- Cmd+1 to Cmd+9 choose the tabs the tab bar shows, counted without the ones asleep. A number past the last tab does nothing, instead of stacking a "tab.select failed" notice for each press. On Windows, Ctrl+1 to Ctrl+9. (#331)
 - A working agent's name no longer has dots counting after it; the shimmer across the name stays.
 - The While you were away card's title, rows and +N more, and the sidebar's Find field with its search icon, start on the same line as the sidebar's rows and Settings.
 - The first computer in the sidebar sits right under the view switch, where it left 28 of empty space; the space above a computer stays for the ones after it.
