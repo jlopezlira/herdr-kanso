@@ -2,8 +2,10 @@
 // Kept byte for byte by `npm run sync:share`: edit kanso-panel/ui-stack.js.
 import { h_flex, v_flex, Button, Popover } from "gpui-base";
 import { div } from "gpui-kit";
-import { G, H, R, T, LINE, PANE, SIDEBAR, DIALOG, TINT, CLEAR, alpha, sidebarSides } from "./ui.js";
+import { G, H, R, LINE, PANE, SIDEBAR, DIALOG, TINT, CLEAR, alpha, sidebarSides } from "./ui.js";
 import { dot } from "./ui-dot.js";
+import { RULES } from "./ui-css.js";
+import { paint } from "./ui-draw.js";
 
 // Each child piece drawn with its own id and its stack's handlers; a piece that draws nothing leaves no gap. `context` says where it sits;
 // `slots` names each place, else its index.
@@ -72,13 +74,15 @@ export const FOOTER = Object.freeze({ top: G.sm, bottom: ON_STATUS_LINE, side: S
 // Each is drawn under its name, so Settings keeps its id as the rows above it come and go.
 const footerSlots = (kids) => (kids.length === 3 ? ["update", "refused", "settings"] : ["update", "settings"].slice(-kids.length));
 
-// The status bar's parts: the halves fold their own items, 16 apart and 12 from the edges, the middle holds panes per view.
-// The app draws each part in its own block, so a part with nothing to hold takes no room, and the middle alone is centred.
-const statusBar = (id, c, _flags, kids, more) => placed(h_flex().id(id).size_full().items_center().justify_center().text_size(T.body).text_color(c.muted),
+const cssNode = (classes, parent = null) => ({ tag: "div", attrs: {}, classes, parent, children: [] });
+const statusFace = () => cssNode(["kanso-status-bar", "kanso-status-bar--grid"]);
+// The row and its three tracks stand in for grid-template-columns, which gpui cannot draw.
+const statusBar = (id, c, _flags, kids, more) => placed(paint(h_flex().id(id), statusFace(), c, RULES, null, false).flex().w_full(),
   id, c, kids, more, {}, ["left", "middle", "right"]);
-const statusHalf = (end) => (id, c, _flags, kids, more) => (kids.length ? placed(h_flex().id(id).h_full().flex_1().min_w(0).overflow_hidden().items_center()
-  .gap(G.lg).px(G.md).when(end, (el) => el.justify_end()), id, c, kids, more) : null);
-const statusMiddle = (id, c, _flags, kids, more) => (kids.length ? placed(h_flex().id(id).h_full().flex_none().items_center().justify_center().gap(G.md), id, c, kids, more) : null);
+const statusHalf = (end) => (id, c, _flags, kids, more) => (kids.length ? placed(paint(h_flex().id(id),
+  cssNode([end ? "kanso-status-bar__right" : "kanso-status-bar__left"], statusFace()), c, RULES, null, false).h_full().flex_1(), id, c, kids, more) : null);
+const statusMiddle = (id, c, _flags, kids, more) => (kids.length ? placed(paint(h_flex().id(id),
+  cssNode(["kanso-status-bar__middle"], statusFace()), c, RULES, null, false).h_full().flex_none(), id, c, kids, more) : null);
 
 const STACKS = {
   toolbar: { states: ["column"], draw: toolbar },

@@ -162,3 +162,24 @@ test("Panes per view is buttons the keyboard reaches, and a press named for noth
   assert.throws(() => paletteDoor({ tip: "Command palette" })("palette", c, { presses: { search: () => {} } }), /no tool search/);
   assert.throws(() => statusItem({ text: "Memory" })("memory", c, { tone: "blocked" }), /handlers/);
 });
+
+test("The bar is drawn from the Storybook CSS, and its three tracks stand in for the grid columns", async () => {
+  const { statusBar, statusItem, stepper, c } = await compositions();
+  const { G, H } = await load("kanso-panel/ui.js", ["G", "H"], popoverHost());
+  const el = statusBar({ left: [statusItem({ text: "devbox" })], middle: stepper({ value: 2 }), right: [statusItem({ text: "1" })] })("bar", c);
+  assert.equal(arg(el, "h"), H.bar);
+  assert.ok(calls(el, "whitespace_nowrap").length, "the bar keeps its figures on one line");
+  assert.equal(calls(el, "w_full").length, 1);
+  assert.equal(calls(el, "size_full").length, 0);
+  assert.equal(el.calls.filter(([name]) => name === "grid" || name === "flex").at(-1)[0], "flex");
+  const left = byId(el, "bar-left");
+  const middle = byId(el, "bar-middle");
+  const right = byId(el, "bar-right");
+  assert.equal(calls(left, "flex_1").length, 1);
+  assert.equal(arg(left, "gap"), G.lg);
+  assert.equal(arg(left, "px"), G.md);
+  assert.equal(calls(right, "justify_end").length, 1);
+  assert.equal(calls(middle, "flex_none").length, 1);
+  assert.equal(calls(middle, "flex_1").length, 0);
+  assert.equal(arg(middle, "gap"), G.md);
+});
