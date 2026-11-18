@@ -62,10 +62,11 @@ export class SinceLeft {
 
   async dismiss(cx) {
     if (!this.rows.length) return;
-    await this.store.dismiss(this.project, Math.max(...this.rows.map((row) => row.id)));
+    const through = Math.max(...this.rows.map((row) => row.id));
     this.rows = [];
     this.expanded = false;
     cx.notify();
+    await this.store.dismiss(this.project, through);
   }
 
   viewOf(now = Date.now()) {

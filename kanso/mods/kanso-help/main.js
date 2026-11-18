@@ -8,7 +8,7 @@ import { theme, appHome, home, props, closeOverlay, keys, openOverlay, run } fro
 import { focusOn } from "./pure.js";
 import { Lit } from "./lit.js";
 import { pagedDialog } from "./pages.js";
-import { R, T, G, DIALOG, KEY, TINT, alpha, tokens } from "./ui.js";
+import { R, T, G, DIALOG, ICON_CHROME, KEY, TINT, alpha, tokens } from "./ui.js";
 import { button, quietLink } from "./ui-button.js";
 import { row } from "./ui-row.js";
 import { glyphs } from "./marks.js";
@@ -165,7 +165,7 @@ export default class Help extends View {
     return pagedDialog({
       name: "help", handle: this.handle, onKey: (e, cx) => this.key(e, cx),
       head: h_flex().w_full().items_center().gap(G.md)
-        .child(svg("mods/kanso-chrome/icons/circle-question-mark.svg").size(17).text_color(c.accent))
+        .child(svg("mods/kanso-chrome/icons/circle-question-mark.svg").size(ICON_CHROME).text_color(c.accent))
         .child(div().flex_1().text_size(T.title).font_semibold().child("kansō help"))
         .child(quietLink("help-settings", "Settings", toSettings, c, { color: c.accent }))
         .child(div().text_size(T.micro).text_color(t.dim).child("Esc")),

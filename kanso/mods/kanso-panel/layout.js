@@ -83,7 +83,7 @@ function paintRail(tree, rail) {
   const kids = tree.children ?? [];
   const at = kids.findIndex((n) => n.id === "sidebar");
   if (at < 0) return tree;
-  return { ...tree, resizable: rail.open, children: kids.with(at, { ...kids[at], min: rail.min, hidden: false }) };
+  return { ...tree, resizable: true, children: kids.with(at, { ...kids[at], min: rail.min, hidden: false }) };
 }
 
 // The collapsed rail is as wide as the macOS traffic lights need, so they never spill over the tab bar.
@@ -96,12 +96,12 @@ const writePainted = (tree) => {
 };
 
 export function setRail(open, width) {
-  const min = open ? SIDEBAR.min : railWidth();
+  const min = railWidth();
   rememberLayout({ rail: { open, min } });
   const tree = layout();
   const sidebar = (tree?.children ?? []).find((n) => n.id === "sidebar");
   if (!sidebar) return;
-  if (tree.resizable !== open || sidebar.min !== min || sidebar.hidden) writePainted(tree);
+  if (tree.resizable !== true || sidebar.min !== min || sidebar.hidden) writePainted(tree);
   run("layout.resize", { id: "sidebar", px: width });
 }
 

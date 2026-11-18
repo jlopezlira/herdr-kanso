@@ -152,10 +152,11 @@ test("the top + adds a project in Projects and starts a conversation in Threads;
     handlers["on_click:spaces-header-0-0-0"]({}, { stop_propagation() {}, notify() {} });
   };
   addFromTop();
-  assert.deepEqual(overlays.at(-1), { kind: "dialog", props: { newProject: { start: false } } }, "in Projects, the top + asks a new project's name and folder");
+  const startHere = { kind: "popup", props: { newAgent: { folder: "/Users/me/agile", machine: "", name: "agile", project: null, space: "sp-agile" }, start: true } };
+  assert.deepEqual(overlays.at(-1), startHere, "in Projects, the top + opens the open project's menu, which goes on to New project and Arrange");
   view.view = "threads";
   addFromTop();
-  assert.deepEqual(overlays.at(-1), { kind: "popup", props: { newConversation: true } }, "in Threads, it asks which project the conversation is in");
+  assert.deepEqual(overlays.at(-1), startHere, "in Threads it is the same menu");
   view.view = "spaces";
   view.render();
   assert.equal(handlers[`on_click:closed-project-:/Users/me/fury-tool-0`], undefined, "at rest a kept project shows only its name");
@@ -276,12 +277,12 @@ test("New conversation's menu ends with Add computer, last for the keyboard too,
   assert.deepEqual(made, ["New project with a conversation\u2026", "Open a folder, no project\u2026", "Add computer\u2026"]);
   view.menuActs.at(-1)({});
   assert.deepEqual(calls, [["mod.open", { name: "machine-add" }]], "the last row the keyboard reaches opens Add computer");
-  assert.equal(height, 8 + 26 + 0 + 9 + 3 * 30, "no project: 4 at each edge, the title, the line and three items");
-  assert.equal((await menuOf(null, 12)).height, 8 + 26 + 11 * 30 + 9 + 3 * 30, "a long run stops at 11 items and Add computer still fits under it");
+  assert.equal(height, 8 + 28 + 0 + 9 + 3 * 32, "no project: 4 at each edge, the title, the line and three items");
+  assert.equal((await menuOf(null, 12)).height, 8 + 28 + 11 * 32 + 9 + 3 * 32, "a long run stops at 11 items and Add computer still fits under it");
   const off = await menuOf({ "footer.machine": "hide" }, 12);
   assert.deepEqual(off.made.slice(-2), ["New project with a conversation\u2026", "Open a folder, no project\u2026"], "switched off in kansō settings, it is left out");
   assert.ok(!off.made.includes("Add computer\u2026"));
-  assert.equal(off.height, 8 + 26 + 11 * 30 + 9 + 2 * 30, "and its room goes with it");
+  assert.equal(off.height, 8 + 28 + 11 * 32 + 9 + 2 * 32, "and its room goes with it");
 });
 
 test("which agent: only the ones installed, nothing chosen for you, and one picked starts there", async () => {

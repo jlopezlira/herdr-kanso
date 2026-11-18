@@ -38,14 +38,24 @@ test("the rail's list scrolls to the row the keyboard picks, past the ten that s
   assert.equal(scrolled.at(-1), 11, "the twelfth row is brought into view");
 });
 
-test("dragging the sidebar edge changes its width and never folds it or changes what it remembers", async () => {
-  const state = { "sidebar.collapsed": false, "sidebar.width": 256 }, runs = [];
-  const { view } = await spaces({
-    shared: (k) => clone(state[k] ?? null), setShared: (k, v) => { state[k] = clone(v); }, run: (cmd, args) => runs.push([cmd, args]),
-  });
+test("dragging the sidebar edge changes its width, folds it to the rail past the minimum, and opens the rail dragged wide enough", async () => {
+  const state = { "sidebar.collapsed": false, "sidebar.width": 256 }, sizes = [];
+  let tree = { id: "root", resizable: true, children: [{ id: "sidebar", min: 76 }, { id: "strip-map" }] };
+  const host = layoutHost(state, () => tree, (command, args) => { if (command === "layout.set") tree = clone(args.layout); if (command === "layout.resize") sizes.push(args.px); });
+  const { view } = await spaces(host);
   const cx = { notify() {} };
+  view.settleUntil = 0;
   for (const w of [256, 220, 180, 160, 140, 120, 120, 300, 385]) view.sized(w, cx);
-  assert.deepEqual([state["sidebar.collapsed"], state["sidebar.width"], runs.length, view.width], [false, 256, 0, 385]);
+  assert.deepEqual([state["sidebar.collapsed"], state["sidebar.width"], sizes.length, view.width], [false, 256, 0, 385], "wide enough, a drag changes the width and nothing else");
+  view.sized(100, cx);
+  assert.deepEqual([state["sidebar.collapsed"], state["sidebar.width"], sizes.at(-1)], [true, 256, 76], "past the minimum it folds, remembering the width it had");
+  view.sized(200, cx);
+  assert.equal(state["sidebar.collapsed"], true, "the sizes while the fold lands are not a drag");
+  view.settleUntil = 0;
+  view.sized(90, cx);
+  assert.equal(state["sidebar.collapsed"], true, "the rail dragged a little stays the rail");
+  view.sized(200, cx);
+  assert.deepEqual([state["sidebar.collapsed"], state["sidebar.width"], sizes.at(-1)], [false, 200, 200], "dragged to the minimum or wider it opens there");
 });
 
 test("kanso-spaces.sidebar folds an open sidebar to the rail and opens a folded one", async () => {

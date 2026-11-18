@@ -68,8 +68,7 @@ const dialogList = (id, c, { scroll = false }, kids) => {
 
 // The footer's room, which Herdr's footer height is fitted to: open, its rows touch between 8 above and 16 below, on the sidebar's gutter
 // at both sides seen, as the list's rows are; a refused update's block a hair under its row and 8 above the next; in the rail, its icon Buttons a hair apart above 12.
-const ON_STATUS_LINE = PANE.gap + (H.bar - H.line) / 2;
-export const FOOTER = Object.freeze({ top: G.sm, bottom: ON_STATUS_LINE, side: SIDEBAR.gutter, railBottom: ON_STATUS_LINE, railGap: G.hair, refusalAbove: G.hair, refusalBelow: G.sm });
+export const FOOTER = Object.freeze({ top: G.sm, bottom: G.md, side: SIDEBAR.gutter, railBottom: G.md, railGap: G.hair, refusalAbove: G.hair, refusalBelow: G.sm });
 // The Footer composition's pieces by name: kansō's update, its refusal (only under it), then Settings, always last.
 // Each is drawn under its name, so Settings keeps its id as the rows above it come and go.
 const footerSlots = (kids) => (kids.length === 3 ? ["update", "refused", "settings"] : ["update", "settings"].slice(-kids.length));
@@ -115,8 +114,8 @@ const STACKS = {
   "status bar right": { draw: statusHalf(true) },
   // The menu of the open item, beside the bar. The story anchors it to that item.
   "status bar popup": { draw: (id, c, _flags, kids, more) => placed(div().id(id), id, c, kids, more) },
-  // While you were away: a raised card docked at the foot of the sidebar, 8 in from its sides and 12 above the footer; a button in it stands at its start.
-  away: { draw: (id, c, _flags, kids, more) => placed(v_flex().id(id).flex_none().mx(G.sm).mb(G.md).p(G.xs).rounded(R.card).bg(c.popover)
+  // While you were away: a raised card docked at the foot of the sidebar, 8 in from its sides, its rows 12 in from its edge, and 12 above the footer; a button in it stands at its start.
+  away: { draw: (id, c, _flags, kids, more) => placed(v_flex().id(id).flex_none().mx(G.sm).mb(G.md).px(G.md - LINE).py(G.xs - LINE).rounded(R.card).bg(c.raised)
     .border_1().border_color(c.border), id, c, kids, more, { card: true }) },
 };
 

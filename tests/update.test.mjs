@@ -194,29 +194,29 @@ test("The footer is as tall as the rows it shows, and a size an older kansō set
     const f = await fixture(t);
     f.footer.size = { px };
     const { cx, drain } = await startUpdater(f);
-    assert.deepEqual(f.resizes, [75], `${why} comes back to Update and Settings`);
+    assert.deepEqual(f.resizes, [84], `${why} comes back to Update and Settings`);
   }
   const { footerPx } = await updater({ shared: () => null });
   const { stateBlockPx } = await load("kanso-chrome/ui-state.js", ["stateBlockPx"], gpuiHost());
-  assert.equal(footerPx(null), 43, "Settings alone: 8 above, 32, and 3 below, so it sits on the status bar's line");
-  assert.equal(footerPx("3.31.0"), 75, "an update is a row on top");
-  assert.equal(footerPx(null, "words"), 43, "a refusal shows only under an update row");
+  assert.equal(footerPx(null), 52, "Settings alone: 8 above, 32, and 12 below");
+  assert.equal(footerPx("3.31.0"), 84, "an update is a row on top");
+  assert.equal(footerPx(null, "words"), 52, "a refusal shows only under an update row");
   const block = Math.ceil(stateBlockPx({ source: "words", fix: "Update" }, 2));
-  assert.equal(footerPx("3.31.0", "words"), 75 + 2 + block + 8, "the kit's block with our words on two lines, a hair under its row and 8 above the next");
-  assert.equal(footerPx("3.31.0", "words", false), 77, "in the rail two of the kit's large icon buttons (32) a hair apart, 8 above and 3 below on the status bar's line, and no block");
-  assert.equal(footerPx(null, null, false), 43, "one square");
+  assert.equal(footerPx("3.31.0", "words"), 84 + 2 + block + 8, "the kit's block with our words on two lines, a hair under its row and 8 above the next");
+  assert.equal(footerPx("3.31.0", "words", false), 86, "in the rail two of the kit's large icon buttons (32) a hair apart, 8 above and 12 below, and no block");
+  assert.equal(footerPx(null, null, false), 52, "one square");
 });
 
 test("A refused update makes room for its block in the open footer, and gives it back in the rail", async (t) => {
   const f = await fixture(t);
   const { cx, drain } = await startUpdater(f);
-  assert.deepEqual(f.resizes, [75], "Update and Settings");
+  assert.deepEqual(f.resizes, [84], "Update and Settings");
   f.updater.refuse("the download failed");
   f.updater.fit();
-  assert.ok(f.resizes.at(-1) > 75, "the block fits under the update row");
+  assert.ok(f.resizes.at(-1) > 84, "the block fits under the update row");
   f.store["sidebar.collapsed"] = true;
   f.updater.fit();
-  assert.equal(f.resizes.at(-1), 77, "the rail fits its squares and draws no block");
+  assert.equal(f.resizes.at(-1), 86, "the rail fits its squares and draws no block");
 });
 
 test("A refused update keeps the tool's words for the footer, and an update that lands clears them", async (t) => {

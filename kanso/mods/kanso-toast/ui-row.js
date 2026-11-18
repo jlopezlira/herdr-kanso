@@ -2,7 +2,7 @@
 // Kept byte for byte by `npm run sync:share`: edit kanso-panel/ui-row.js.
 import { div, svg, image } from "gpui-kit";
 import { h_flex, v_flex, Button } from "gpui-base";
-import { G, H, LH, R, T, ICON_ROW, ICON_INLINE, CLEAR, OPACITY, alpha, glyphOf, toneColor } from "./ui.js";
+import { G, H, LH, R, T, W, ICON_ROW, ICON_INLINE, CLEAR, OPACITY, alpha, glyphOf, toneColor } from "./ui.js";
 import { button } from "./ui-button.js";
 import { chip } from "./ui-chip.js";
 import { dot } from "./ui-dot.js";
@@ -40,17 +40,19 @@ const fact = (c, id) => (part, i) => {
     .child(textOf(c, `${id}-${i}`, part));
 };
 
-const detailOf = (c, id, detail) => {
+const detailOf = (c, id, detail, names) => {
   const facts = [detail ?? []].flat().filter(Boolean);
-  return facts.length ? h_flex().min_w(0).overflow_hidden().items_center().gap(G.sm).whitespace_nowrap().text_color(c.dim).children(facts.map(fact(c, `${id}-detail`))) : null;
+  return facts.length ? h_flex().min_w(0).overflow_hidden().items_center().gap(G.sm).whitespace_nowrap().text_color(c.dim).when(names, (el) => el.text_size(T.body)).children(facts.map(fact(c, `${id}-detail`))) : null;
 };
 
 // The second line: a string, or facts in a row where the first one gives way.
-const secondOf = (c, id, second) => {
+// A sidebar row's facts are told apart by a dot, the way the story reads "Run npm publish? · 2m".
+const secondOf = (c, id, second, names) => {
   const line = div().w_full().min_w(0).text_size(T.body).text_color(c.dim);
   if (typeof second === "string") return line.truncate().child(second);
-  return h_flex().w_full().min_w(0).items_center().gap(G.sm).whitespace_nowrap().text_size(T.body).text_color(c.dim)
-    .children(second.filter(Boolean).map((part, i) => textOf(c, `${id}-second-${i}`, factOf(part)).when(i > 0, (el) => el.flex_none())));
+  const parts = second.filter(Boolean).map((part, i) => textOf(c, `${id}-second-${i}`, factOf(part)).when(i > 0, (el) => el.flex_none()));
+  const told = names ? parts.flatMap((part, i) => (i ? [div().flex_none().text_color(c.dim).child("\u00b7"), part] : [part])) : parts;
+  return h_flex().w_full().min_w(0).items_center().gap(names ? G.xs : G.sm).whitespace_nowrap().text_size(T.body).text_color(c.dim).children(told);
 };
 
 // A file's git `letter` takes the icon's slot; modified keeps the slot empty so names align.
@@ -89,11 +91,14 @@ const groundOf = (c, { current, hover, title, wash }) => {
 
 // A wrapped name runs over as many lines as it needs, such as a review thread's comment.
 // A group's head stands over the rows of its group: strong, in the row's ink, one step up the type scale from a heading.
-const nameOf = (id, c, { name, heading, group, title, ink, glint, wrap }) => (glint ? glinting(name, c, id) : div().min_w(0).text_color(ink)
+// In the sidebar (`names`) every name is the name size: a head strong, a session medium, in the ink its state gives it.
+const nameOf = (id, c, { name, heading, group, title, ink, glint, wrap, names }) => (glint ? glinting(name, c, id) : div().min_w(0).text_color(ink)
   .when(wrap, (el) => el.flex_1().line_height(LH.body))
   .when(!wrap, (el) => el.truncate())
   .when(heading || group || title, (el) => el.font_semibold())
-  .when(group, (el) => el.text_size(T.card))
+  .when(names && !(heading || group || title), (el) => el.font_medium())
+  .when(group || names, (el) => el.text_size(T.card))
+  .when(names && (heading || group), (el) => el.flex_none().max_w(W.buttonLabel))
   .when(title, (el) => el.text_size(T.page))
   .child(name));
 
@@ -162,10 +167,11 @@ const wire = (el, c, { onClick, onHover, onKey, focusHandle }) => el
 export function row(id, c, {
   icon = null, tone = null, letter = null, level = null, open = null, name, detail = null, meta = null, chip: count = null, flag = null, mark: status = "none", second = null, heading = false, group = false, title = false,
   depth = 0, selected = false, current = false, dimmed = false, pending = false, hover = false, focus = false, actions = [], action = null, verbs = [], start = [], tools = [], keys = [],
-  glint = false, wrap = false, drop = null, wash = null, guides = [],
+  glint = false, wrap = false, drop = null, wash = null, guides = [], names = false, nameInk = null,
   onClick = null, onHover = null, onKey = null, focusHandle = null,
 } = {}) {
   const ink = dimmed ? c.muted : c.text;
+  const nameColour = names && nameInk ? { fg: c.text, muted: c.muted, dim: c.dim }[nameInk] : ink;
   const shown = hover || focus;
   const ground = groundOf(c, { current, hover, title, wash });
   const under = Boolean(second) || verbs.length > 0 || wrap;
@@ -175,9 +181,9 @@ export function row(id, c, {
   const first = h_flex().w_full().min_w(0).items_center().gap(G.sm).when(wrap, (el) => el.items_start()).when(Boolean(second && title), (el) => el.h(H.row)).children([
     ...start,
     level === null ? null : foldOf(c, open),
-    slotOf(c, { letter, icon, tone, ink, dimmed }),
-    nameOf(`${id}-name`, c, { name, heading, group, title, ink, glint, wrap }),
-    detailOf(c, id, detail),
+    slotOf(c, { letter, icon, tone, ink: names ? c.muted : ink, dimmed }),
+    nameOf(`${id}-name`, c, { name, heading, group, title, ink: nameColour, glint, wrap, names }),
+    detailOf(c, id, detail, names),
     div().flex_1(),
     ...(shown && actions.length ? [] : asideOf(id, c, { meta, flag, dimmed })),
     ...controlsOf(id, c, { actions: shown ? actions : [], count, action, tools, keys, last: !tools.length && !keys.length && !pending && !marked }),
@@ -187,13 +193,13 @@ export function row(id, c, {
   // The ring is a border kept clear at rest, so a focus or a pick never moves the content.
   return wire(rootOf(id, { onClick, onKey }).relative().min_w(0).mx(-G.sm).items_center().rounded(R.control)
     .border_2().border_color(ringOf(c, { selected, focus }))
-    .pl(leftOf(level, depth) - G.hair).pr(G.sm - G.hair).text_size(T.value).text_color(ink)
+    .pl(leftOf(level, depth) - G.hair).pr(G.sm - G.hair).text_size(names ? T.card : T.value).text_color(ink)
     .when(under && !two && !title, (el) => el.py(G.sm - G.hair))
     .when(Boolean(height), (el) => el.h(height))
     .when(Boolean(ground), (el) => el.bg(ground))
     .when(!title, (el) => el.hover((s) => s.bg(current ? c.selected : c.subtle)).active((s) => s.bg(c.selected)))
     .when(pending, (el) => el.opacity(PENDING))
     .children([...guidesOf(c, depth, guides), dropOf(c, drop)].filter(Boolean))
-    .child(under ? v_flex().w_full().min_w(0).gap(two ? G.xs : G.sm).child(first)
-      .children([second ? secondOf(c, id, second) : null, verbsOf(id, c, verbs)].filter(Boolean)) : first), c, { onClick, onHover, onKey, focusHandle });
+    .child(under ? v_flex().w_full().min_w(0).gap(two && !names ? G.xs : G.sm).child(first)
+      .children([second ? secondOf(c, id, second, names) : null, verbsOf(id, c, verbs)].filter(Boolean)) : first), c, { onClick, onHover, onKey, focusHandle });
 }

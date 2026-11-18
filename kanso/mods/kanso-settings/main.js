@@ -6,7 +6,7 @@ import { imageApi } from "./platform-images.js";
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import { theme, props, closeOverlay, keys, shared, setShared, readTextFile, writeTextFile, appHome, run } from "herdr";
-import { G, R, T, W, ICON, TINT, alpha, tokens } from "./ui.js";
+import { G, R, T, W, ICON, ICON_CHROME, TINT, alpha, tokens } from "./ui.js";
 import { avatar, tile } from "./ui-avatar.js";
 import { dot } from "./ui-dot.js";
 import { button, quietLink, iconButton, Armed, pressAgain } from "./ui-button.js";
@@ -356,7 +356,7 @@ export default class Settings extends View {
       onTab: (key, cx) => { this.page = key; if (key === "credits") this.readAvatars(cx); this.undo = null; this.capture = null; this.conflict = null; this.message = null; this.armed.clear(); cx.notify(); },
       onKey: (e, cx) => this.key(e, cx),
       head: h_flex().w_full().items_center().gap(G.md)
-        .child(svg("mods/kanso-chrome/icons/settings.svg").size(17).text_color(c.accent))
+        .child(svg("mods/kanso-chrome/icons/settings.svg").size(ICON_CHROME).text_color(c.accent))
         .child(div().flex_1().text_size(T.title).font_semibold().child("kansō settings"))
         .when(Boolean(this.shown()), (el) => el.child(div().text_size(T.body).text_color(t.dim).child(this.shown())))
         .child(quietLink("settings-help", "Help", () => { closeOverlay(p.overlay); run("mod.open", { name: "kanso-help" }); }, c, { color: c.accent }))

@@ -213,7 +213,7 @@
 .kanso-rail__views span{width:var(--k-h-icon);height:var(--k-h-icon);border-radius:var(--k-r-control);display:grid;place-items:center;color:var(--muted)}
 .kanso-rail__views .kanso-control--on{background:var(--surface-4);box-shadow:inset 0 0 0 var(--k-w-line) var(--border);color:var(--fg)}
 .kanso-rail__separator{width:var(--k-h-compact);height:var(--k-w-line);margin:0 auto;background:color-mix(in srgb,var(--border) 50%,transparent);flex:none}
-.kanso-rail__list{padding-top:var(--k-sp-2);display:flex;flex-direction:column;gap:var(--k-sp-1)}
+.kanso-rail__list{padding-top:var(--k-sp-2);display:flex;flex-direction:column;gap:var(--k-sp-2)}
 .kanso-rail__row{height:var(--k-h-header);display:flex;align-items:center;justify-content:center;flex:none}
 .kanso-rail__tile{width:var(--k-rail-tile);height:var(--k-h-header);border-radius:var(--k-r-control);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:var(--k-sp-hair);flex:none}
 .kanso-rail__tile.kanso-control--on{background:var(--wash-12)}
@@ -225,7 +225,7 @@
 .kanso-rail__tile .kanso-content__actions{display:flex;align-items:center;gap:var(--k-sp-hair);height:var(--k-ic-inline);font-size:var(--k-fs-meta);color:var(--dim);line-height:1}
 .kanso-rail__tile .kanso-content__actions .kanso-mark{width:var(--k-rail-mark);height:var(--k-rail-mark)}
 .kanso-rail__footer{margin-top:auto;display:flex;flex-direction:column;align-items:center;gap:var(--k-sp-hair);padding:var(--k-sp-2) 0 var(--k-sp-3)}
-.kanso-rail__footer>span{width:var(--k-h-pane);height:var(--k-h-pane);display:grid;place-items:center;color:var(--muted);border-radius:var(--k-r-control)}
+.kanso-rail__footer>span{width:var(--k-h-control);height:var(--k-h-control);display:grid;place-items:center;color:var(--muted);border-radius:var(--k-r-control)}
 .kanso-rail{anchor-name:--kanso-rail}
 
 /* Arrangement */
@@ -758,8 +758,8 @@
 .kanso-sidebar__header{height:var(--k-h-tab-bar);flex:none;display:flex;align-items:center;justify-content:space-between;padding:0 var(--k-sp-2) 0 var(--k-sp-1)}
 .kanso-sidebar__tools{height:var(--k-h-header);flex:none;display:flex;align-items:center}
 .kanso-sidebar__list{flex:1;min-height:0;overflow:hidden}
-.kanso-sidebar__group{display:flex;align-items:center;gap:var(--k-sp-2);height:var(--k-h-row);padding:0 var(--k-sp-2);margin-top:var(--k-sp-4);font-size:var(--k-fs-body);font-weight:var(--k-fw-strong);color:var(--muted)}
-.kanso-sidebar__footer{flex:none;padding:var(--k-sp-2) 0 calc(var(--k-pane-gap) + (var(--k-h-bar) - var(--k-h-row)) / 2)}
+.kanso-sidebar__group{display:flex;align-items:center;gap:var(--k-sp-2);height:var(--k-h-row);padding:0 var(--k-sp-2);margin-top:var(--k-sidebar-group-gap);font-size:var(--k-fs-body);font-weight:var(--k-fw-strong);color:var(--muted)}
+.kanso-sidebar__footer{flex:none;padding:var(--k-sp-2) 0 var(--k-sp-3)}
 /* Proposed: Settings holds its menu, open over it; a refused update's block sits under its row. */
 .kanso-sidebar__footer-settings{position:relative;display:flex;flex-direction:column}
 .kanso-sidebar__footer-menu{position:absolute;bottom:calc(100% + var(--k-sp-1));left:0;z-index:1}
@@ -872,6 +872,7 @@
 :is(.kanso-sidebar__rows,.kanso-sidebar__footer):has(.kanso-row){padding-inline:calc(var(--k-sidebar-gutter) - var(--k-sp-2))}
 .kanso-sidebar__row-group+.kanso-sidebar__row-group{margin-top:var(--k-sidebar-group-gap)}
 .kanso-sidebar__row-group.kanso-sidebar__row-group--computer{margin-top:var(--k-sidebar-computer-gap)}
+.kanso-sidebar__row.kanso-project{margin-top:0}
 .kanso-sidebar__row{height:var(--k-h-row);display:flex;align-items:center;gap:var(--k-sp-2);padding:0 var(--k-sp-2);border-radius:var(--k-r-control);box-sizing:border-box;font-size:var(--k-fs-name);color:var(--muted);position:relative;font-variant-numeric:tabular-nums}
 .kanso-sidebar__row .kanso-row__name{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:var(--k-fw-medium)}
 .kanso-sidebar__row.kanso-project .kanso-row__name{font-weight:var(--k-fw-strong);flex:none;max-width:60%}
@@ -879,6 +880,7 @@
 .kanso-sidebar__row .kanso-button--quiet{font-size:var(--k-fs-body);color:var(--muted);flex:none}
 .kanso-sidebar__row .kanso-button--quiet.kanso-text--fg{color:var(--fg)}
 .kanso-sidebar__row.kanso-control--on{background:var(--wash-7)}
+.kanso-sidebar__row.kanso-project.kanso-control--on{background:var(--wash-12)}
 .kanso-sidebar__row>svg{flex:none}
 .kanso-sidebar__row>.kanso-mark{width:var(--k-ic-row);height:var(--k-ic-row)}
 .kanso-sidebar__row .kanso-row__task{flex:0 1 auto;min-width:0;font-size:var(--k-fs-meta);line-height:var(--k-h-row);color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -1303,6 +1305,16 @@
 .kanso-row--wrap .kanso-row__name{flex:1;line-height:var(--k-lh-body);overflow-wrap:anywhere}
 .kanso-row--heading .kanso-row__name{font-weight:var(--k-fw-strong);color:var(--fg)}
 .kanso-row--group .kanso-row__name{font-size:var(--k-fs-name);font-weight:var(--k-fw-strong);color:var(--fg)}
+.kanso-row--names{font-size:var(--k-fs-name)}
+.kanso-row--names .kanso-row__name{font-size:var(--k-fs-name);font-weight:var(--k-fw-medium)}
+.kanso-row--names:is(.kanso-row--heading,.kanso-row--group) .kanso-row__name{font-weight:var(--k-fw-strong)}
+.kanso-row--names:is(.kanso-row--heading,.kanso-row--group) .kanso-row__name{flex:none;max-width:var(--k-w-button-label)}
+.kanso-row--names.kanso-row--ink-fg .kanso-row__name{color:var(--fg)}
+.kanso-row--names.kanso-row--ink-muted .kanso-row__name{color:var(--muted)}
+.kanso-row--names.kanso-row--ink-dim .kanso-row__name{color:var(--dim)}
+.kanso-row--names :is(.kanso-content__primary,.kanso-row)>.kanso-icon--row{color:var(--muted)}
+.kanso-row--names.kanso-row--two-lines .kanso-content__secondary{gap:var(--k-sp-1);margin-top:var(--k-sp-2);font-size:var(--k-fs-meta)}
+.kanso-row--names .kanso-content__secondary>*+*::before{content:"\00b7";margin-right:var(--k-sp-1);color:var(--dim)}
 /* Row, title form: a panel's heading, the name at title size and the scope under it; it is not a choice, so no wash. */
 .kanso-row--title,.kanso-row--title .kanso-content__primary{height:var(--k-h-header);align-items:center}
 .kanso-row--title.kanso-row--two-lines{height:auto;padding-block:0}

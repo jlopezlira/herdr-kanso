@@ -156,15 +156,14 @@ test("a computer opens its own group: the space above it, the first one too, is 
   assert.deepEqual(["space-sp1", "space-sp3"].map((id) => above[id]), [0, 0], "its first project sits right under it");
 });
 
-test("a computer heads its group: its name strong, in the foreground, one step up the type scale from a project's", async () => {
+test("a computer heads its group: its name strong, in the foreground, at the name size as a project's is", async () => {
   const { T } = await load("kanso-panel/ui.js", ["T"], {});
   const { root } = await sidebar();
   const nameOf = (rowId) => nodes(byId(root, rowId)).find((el) => el.calls.some((call) => call[0] === "truncate"));
   const size = (rowId) => last(nameOf(rowId), ["text_size"]) || last(byId(root, rowId), ["text_size"]);
   const strong = (rowId) => nameOf(rowId).calls.some((call) => call[0] === "font_semibold");
   const ink = (rowId) => last(nameOf(rowId), ["text_color"]);
-  assert.deepEqual([size("machine-dark"), size("space-sp3")], [T.card, T.value], "a computer at the name size, a project at the row's");
-  assert.ok(size("machine-dark") > size("space-sp3"), "a computer's name is larger than a project's");
+  assert.deepEqual([size("machine-dark"), size("space-sp3")], [T.card, T.card], "a computer and a project, both at the name size");
   assert.deepEqual([strong("machine-dark"), strong("space-sp3")], [true, true], "both strong");
   assert.equal(ink("machine-dark"), SIDEBAR_THEME.foreground, "a computer's name in the foreground");
   assert.equal(ink("machine-dark"), ink("space-sp3"), "as a project's is");

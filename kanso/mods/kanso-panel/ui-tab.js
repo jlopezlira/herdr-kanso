@@ -42,7 +42,7 @@ const nameOf = (id, item, c, nameWidth) => (item.editing
  * `editing` the TextField renaming it in place. `onClose`: the chosen tab ends with ×. `onPress`: a left press, before the tab keeps it from the window.
  * `fill`: false when the group's pill draws the chosen fill. `nameWidth`: the name trims past it. */
 export function tabItem(id, item, c, { on = false, disabled = false, collapsed = false, track = true, size = "lg", index = 0, count = 1, onChange = null, onClose = null, onPress = null, fill = true, nameWidth = null } = {}) {
-  const side = TAB[size] ?? TAB.lg, inner = track ? side - 2 * G.hair : side;
+  const side = TAB[size] ?? TAB.lg, inner = collapsed && track ? side - 2 * G.hair : side;
   const pad = track ? G.sm - G.hair : G.md - G.hair, gap = track ? G.xs : G.sm;
   const armed = Boolean(item.armed) && !disabled;
   const ink = inkOf(c, { on, disabled, armed });
@@ -77,7 +77,7 @@ export const tabInsertion = (c) => div().w(G.hair).h(H.badge).flex_none().rounde
 export const tabPill = (c, size = "md") => div().h(TAB[size] ?? TAB.lg).rounded(R.control).bg(c.w12);
 
 /** One tab group: the chosen tab is a quiet fill (raised on a track), never a weight, so nothing moves. Items: { key, label, icon, dot, tip, drop } and tabItem's states;
- * `drop` draws where a dragged tab lands, before it. `size`: sm 24, md 26, lg 30, the track's thickness, or each tab's without one. Collapsed: a column of icons, each label its tip. */
+ * `drop` draws where a dragged tab lands, before it. `size`: sm 24, md 28, lg 32, each tab's height; a track is that and its padding thick. Collapsed: a column of icons, each label its tip. */
 export function tab(id, items, value, onChange, c, { disabled = false, spoken = null, collapsed = false, track = true, size = "lg" } = {}) {
   const side = TAB[size] ?? TAB.lg;
   const seg = (item, index) => [
@@ -86,7 +86,7 @@ export function tab(id, items, value, onChange, c, { disabled = false, spoken = 
   ];
   return (collapsed ? v_flex() : h_flex()).id(id).gap(G.hair).flex_none()
     .when(track, (el) => el.p(G.hair).rounded(R.card).bg(c.w4))
-    .when(track && !collapsed, (el) => el.h(side))
+    .when(track && !collapsed, (el) => el.h(side + 2 * G.hair))
     .when(Boolean(spoken), (el) => el.accessibility_label(spoken))
     .children(items.flatMap(seg).filter(Boolean));
 }
