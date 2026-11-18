@@ -124,10 +124,12 @@ const statusMenus = async () => {
   const { WorkspaceStatus } = await loadWorkspaceStatus({
     ...gpuiHost(), Popover: { new: (id) => chain(id) }, theme: () => CHROME_NIGHT, props: () => ({}), keys: () => BINDINGS, window: () => ({ platform: "macos" }),
     spaces: () => [{ id: "s1", active: true, machine: "devbox", tabs: [] }], machines: () => [{ name: "devbox", layout: "unavailable" }],
-    agents: () => [{ address: "a1", status: "working" }], terminals: () => [], shared: (key) => (key === "sidebar.collapsed" ? true : null),
+    agents: () => [{ address: "a1", status: "working" }], terminals: () => [],
+    shared: (key) => ({ "sidebar.collapsed": true, "kanso.needs-you": { rows: [{ address: "a2", pane: "p2", status: "blocked", name: "cart-ui" }] } })[key] ?? null,
     openOverlay: (o) => opened.push(clone(o.props.target)), appHome: () => "/app", readTextFile: async () => null,
   });
-  const root = new WorkspaceStatus().render();
+  const view = Object.assign(new WorkspaceStatus(), { memoryText: JSON.stringify({ v: 1, at: Date.now(), machine: { freePct: 8 }, limits: { lowFreePct: 20 } }) });
+  const root = view.render();
   everyDrawn(root).flatMap((kid) => calls(kid, "on_mouse_down").filter((call) => call[1] === "right")).forEach((call) => call.at(-1)({}, { stop_propagation() {} }));
   return Object.fromEntries(await Promise.all(opened.map(async (target) => [target.piece.title, (await pane({ target })())[0]])));
 };
@@ -202,8 +204,9 @@ const AGENT_ROWS = ["Send to an agent…", "⌥⌘S", "Find in conversation", "�
 const TAB_ROWS = (close, hint = []) => ["checkout", "Rename", "New tab", "⌘T", "Sleep checkout…", close, ...hint, ...PIECE("Agent state on tabs")];
 const PLACE_ROWS = ["Folder and branch", "Copy path", "Copy branch name", "Open with…", ...PIECE()];
 const NEEDED = "Only when needed";
+const MORE_ROWS = ["tests", "Pin", "Sleep this agent", "Send to another agent", "Open with…", "Split down", "Zoom", NEEDED, ...PIECE()];
 const DIGEST_ROWS = ["Files and commits", "Open the diff", "Push 2 commits…", NEEDED, ...PIECE()];
-const STATUS_ROWS = { computer: ["devbox", "Refresh", NEEDED, ...PIECE()], agents: ["Agents at work", "Show them", "⌃⌥S", NEEDED, ...PIECE()], palette: ["Command palette key", ...PIECE()] };
+const STATUS_ROWS = { needs: ["Needs you", "Go to cart-ui", "⌘J"], memory: ["Memory low", "Open Memory"], computer: ["devbox", "Refresh", NEEDED, ...PIECE()], agents: ["Agents at work", "Show them", "⌃⌥S", NEEDED, ...PIECE()], palette: ["Command palette key", ...PIECE()] };
 const SETTINGS_ROWS = ["Settings", "kansō settings", "⌃⇧,", "Herdr settings"];
 const SNOOZE = ["Snooze checkout", "In 1 hour", "15:02", "In 3 hours", "17:02", "This evening", "18:00", "Tomorrow", "Thu 9:00", "Monday", "Mon 9:00"];
 
@@ -239,10 +242,10 @@ const CASES = {
   panePinned: { draw: PANE_PINNED, want: PANE_ROWS("web · devbox", "Unpin", ["Open with…"]) },
   paneChild: { draw: pane({ parent: { address: "T0", name: "J" } }), want: PANE_ROWS("tests", "Pin", AGENT_ROWS, ["Send back to J"]) },
   keyboard: { draw: keyboard, want: PANE_ROWS("tests", "Pin", AGENT_ROWS) },
-  bars: { draw: async () => [...await tabMenu(false)(), ...await tabMenu(true)(), ...await pane({ pane: { name: "tests" } })(), ...await PANE_PINNED(), ...await placeMenu(), ...await digestMenu(),
-    ...await statusMenu("devbox")(), ...await statusMenu("Agents at work")(), ...await statusMenu("Command palette key")()],
-  want: [TAB_ROWS("Close tab", ["⌘W"]), TAB_ROWS("Press again to close 2 agents", ["⌘W"]), PANE_ROWS("tests", "Pin", AGENT_ROWS), PANE_ROWS("web · devbox", "Unpin", ["Open with…"]), PLACE_ROWS, DIGEST_ROWS,
-    STATUS_ROWS.computer, STATUS_ROWS.agents, STATUS_ROWS.palette] },
+  bars: { draw: async () => [...await tabMenu(false)(), ...await tabMenu(true)(), ...await pane({ pane: { name: "tests" } })(), ...await headerMore(), ...await PANE_PINNED(), ...await placeMenu(), ...await digestMenu(),
+    ...await statusMenu("Needs you")(), ...await statusMenu("devbox")(), ...await statusMenu("Memory low")(), ...await statusMenu("Agents at work")(), ...await statusMenu("Command palette key")()],
+  want: [TAB_ROWS("Close tab", ["⌘W"]), TAB_ROWS("Press again to close 2 agents", ["⌘W"]), PANE_ROWS("tests", "Pin", AGENT_ROWS), MORE_ROWS, PANE_ROWS("web · devbox", "Unpin", ["Open with…"]), PLACE_ROWS, DIGEST_ROWS,
+    STATUS_ROWS.needs, STATUS_ROWS.computer, STATUS_ROWS.memory, STATUS_ROWS.agents, STATUS_ROWS.palette] },
   plus: { draw: plusMenu, want: ["acme-shop", "Terminal", "Claude Code", "Codex", "New project", "New worktree…", "Open worktree…", "Arrange…"], skip: "the + menu is not a right-click: it belongs to #331" },
   anyPiece: { draw: async () => [...await headerPr(), ...await panelMenu()],
     want: [["Pull request · #166", "Copy link", "Open the pull request", "Open on GitHub", "Only when needed", ...PIECE()], ["PR panel", ...PIECE(), "Panels…"]] },
@@ -303,10 +306,6 @@ test("A pane whose Close is pressed once keeps every row and Close's key, as the
   const drawn = texts(menu.view.render());
   assert.deepEqual(drawn, PANE_ROWS("tests", "Pin", AGENT_ROWS).map((word) => (word === "Close pane" ? "Press again to close tests" : word)));
   assert.ok(!menu.closed.includes("pane.close"), "the first press only arms");
-});
-
-test("The header's ⋯ opens its own menu: the pane's moves, Zoom and the header's piece lines", async () => {
-  assert.deepEqual(await headerMore(), [["tests", "Pin", "Sleep this agent", "Send to another agent", "Open with…", "Split down", "Zoom", NEEDED, ...PIECE()]]);
 });
 
 test("A tab's menu writes no shortcut for New tab or Close tab when neither is bound", async () => {
