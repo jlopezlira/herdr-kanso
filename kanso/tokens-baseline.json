@@ -223,11 +223,5 @@
   {"file":"kanso/mods/kanso-spend/main.js","line":".child(div().text_size(12).line_height(1.5).text_color(c.muted)","value":12},
   {"file":"kanso/mods/kanso-spend/main.js","line":".child(div().text_size(12).line_height(1.5).text_color(c.muted)","value":12},
   {"file":"kanso/mods/kanso-spend/main.js","line":".child(div().text_size(12).text_color(c.dim).child(data.tasksNote)))","value":12},
-  {"file":"kanso/mods/kanso-strip/main.js","line":"const stack = v_flex().id(\"edge-stack\").items_center().gap(5).py(6).px(4)","value":5},
-  {"file":"kanso/mods/kanso-strip/main.js","line":"const stack = v_flex().id(\"edge-stack\").items_center().gap(5).py(6).px(4)","value":6},
-  {"file":"kanso/mods/kanso-strip/main.js","line":".child(div().h(16).text_size(14).text_color(takes ? t.foreground : t.muted).child(chevron))","value":14},
-  {"file":"kanso/mods/kanso-strip/main.js","line":".when(ids.length > MAX_TILES, (el) => el.child(div().text_size(10).text_color(t.dim).child(`+${ids.length - MAX_TILES}`)));","value":10},
-  {"file":"kanso/mods/kanso-strip/main.js","line":".child(div().w_full().px(12).truncate().text_center().text_size(13).when(strong, (el) => el.font_medium())","value":13},
-  {"file":"kanso/mods/kanso-tabs/main.js","line":".child(div().pl(6).pr(4).whitespace_nowrap().child(p.label));","value":6},
-  {"file":"kanso/mods/kanso-tabs/main.js","line":".text_size(12).bg(on ? alpha(t.foreground, TINT.tab) : CLEAR)","value":12}
+  {"file":"kanso/mods/kanso-strip/main.js","line":"const stack = v_flex().id(\"edge-stack\").items_center().gap(G.hair).py(6).px(4)","value":6}
 ]

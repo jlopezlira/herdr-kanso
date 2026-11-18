@@ -407,7 +407,7 @@ export default class Spaces extends View {
   // Opens at the height its Menu draws.
   newConversationMenu() {
     const height = menuHeight(this.conversationLines(sketch, () => {}));
-    openOverlay({ mod: "kanso-spaces", kind: "popup", width: 280, height, at: "pointer", props: { newConversation: true } });
+    openOverlay({ mod: "kanso-spaces", kind: "popup", width: W.menu, height, at: "pointer", props: { newConversation: true } });
   }
 
   // Every project: the open ones (each space), then the ones you added that have none open.
@@ -1501,11 +1501,11 @@ export default class Spaces extends View {
     return this.popup(t, null, [
       ...(asleep.length ? [{ heading: "Asleep" }, ...asleep.map((z) => item(`Wake ${z.tab}`, () => wakeRow(z), { icon: "sun", hint: z.saved ? since(z.saved) : null }))] : []),
       ...(asleep.length > 1 ? [item(`Wake all ${asleep.length}`, () => arrange({ wake: { space: w.id } }), { icon: "undo" })] : []),
-      ...(place && !project?.missing ? [item("New agent\u2026", () => this.newAgentMenu(place), { icon: "plus" }),
+      ...(place && !project?.missing ? [item("New conversation\u2026", () => this.newAgentMenu(place), { icon: "plus" }),
         item("New agent in a worktree\u2026", () => this.worktreeDialog(place), { icon: "git-fork" })] : []),
       ...(trees.length ? [{ heading: "Worktrees" }, { scroll: trees.map((x) => item(x.branch ?? "detached", () => this.openTree(place, x), { icon: "git-branch", hint: where(x.path) })) }] : []),
       ...(active ? [item("Sleep this tab\u2026", () => sleepTab(w.id, active.id), { icon: "moon" })] : []),
-      ...(tabs > 1 ? [item("Sleep the whole project\u2026", () => sleepProject(w.id), { icon: "moon" })] : []),
+      ...(tabs > 1 ? [item("Sleep the project\u2026", () => sleepProject(w.id), { icon: "moon" })] : []),
       ...(w ? [item("Project options\u2026", options, { icon: "settings" })] : []),
       ...(keepable ? [item("Keep as a project", keep, { icon: "pin", keep: true })] : []),
       ...(project?.missing && !project?.machine ? [item("Locate folder\u2026", locate, { icon: "file", keep: true })] : []),
@@ -2196,7 +2196,7 @@ export default class Spaces extends View {
 
   railMenu(title, rows, space = null) {
     const height = menuHeight(this.railLines(sketch, { title, rows, space }));
-    openOverlay({ mod: "kanso-spaces", kind: "popup", width: 260, height, at: "pointer", props: { railMenu: { title, rows, space } } });
+    openOverlay({ mod: "kanso-spaces", kind: "popup", width: W.menu, height, at: "pointer", props: { railMenu: { title, rows, space } } });
   }
 
   // The rail's list of one group, each row with its state, in a run that scrolls; then the way to its project.
@@ -2490,7 +2490,7 @@ export default class Spaces extends View {
     const { els, space, agent } = laidOut(items, gap);
     const pills = collapsed ? [] : [
       ...(space ? [pill("pill-space", space.y, space.h, tokens(t).w12)] : []),
-      ...(agent ? [pill(`pill-agent-${view}`, agent.y, agent.h, alpha(t.foreground, TINT.tab))] : []),
+      ...(agent ? [pill(`pill-agent-${view}`, agent.y, agent.h, tokens(t).w7)] : []),
     ];
     // Named, so its scroll position survives every redraw (an unnamed one is placed anew and starts at the top).
     // Open, its sides are the sidebar's gutter: each row's ground reaches out past it by the row's own padding, its content stays on it.

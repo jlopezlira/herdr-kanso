@@ -43,15 +43,16 @@ const nameOf = (id, item, c, nameWidth) => (item.editing
  * `fill`: false when the group's pill draws the chosen fill. `nameWidth`: the name trims past it. */
 export function tabItem(id, item, c, { on = false, disabled = false, collapsed = false, track = true, size = "lg", index = 0, count = 1, onChange = null, onClose = null, onPress = null, fill = true, nameWidth = null } = {}) {
   const side = TAB[size] ?? TAB.lg, inner = track ? side - 2 * G.hair : side;
+  const pad = track ? G.sm - G.hair : G.md - G.hair, gap = track ? G.xs : G.sm;
   const armed = Boolean(item.armed) && !disabled;
   const ink = inkOf(c, { on, disabled, armed });
   const ground = groundOf(c, { on, track, armed, held: Boolean(item.held), fill });
   const dot = drawDot(c, "blocked");
-  return Button.new(id).items_center().justify_center().gap(G.xs).rounded(R.control)
+  return Button.new(id).items_center().justify_center().gap(gap).rounded(R.control)
     .border_2().border_color(CLEAR).focus((s) => s.border_color(c.accent))
     .text_color(ink)
     .when(collapsed, (el) => el.relative().size(inner).flex_none().tooltip(item.label))
-    .when(!collapsed, (el) => el.h(inner).px(G.sm - G.hair).when(track, (b) => b.flex_1()).when(Boolean(item.tip), (b) => b.tooltip(item.tip)))
+    .when(!collapsed, (el) => el.h(inner).px(pad).when(track, (b) => b.flex_1()).when(Boolean(item.tip), (b) => b.tooltip(item.tip)))
     .selected(on)
     .disabled(disabled)
     .set_position(index + 1, count)

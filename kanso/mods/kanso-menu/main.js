@@ -2,14 +2,18 @@
 // Apache-2.0; derived from Herdr's shipped `menu` mod.
 // In the strip Herdr's menu gets the block id ("term-<pane>"), so pane commands fail: this menu resolves the real pane.
 import { View } from "gpui-kit";
-import { run, props, closeOverlay, openOverlay, theme, terminals, panes, shared, setShared, keys } from "herdr";
+import { run, props, closeOverlay, openOverlay, theme, terminals, panes, spaces, agents, shared, setShared, keys } from "herdr";
 import { listKey, moveTo } from "./listkeys.js";
 import { focusOn } from "./pure.js";
 import { openWithPopup } from "./popup.js";
 import { tokens } from "./ui.js";
+import { Armed } from "./ui-button.js";
 import { menuList } from "./ui-menu.js";
 
-function items(tg) {
+const nonce = () => Date.now() + Math.random();
+
+// The story's order: the pane's own moves, then what it can do with its agent, then the program's right click, then Close.
+function groups(tg, armed) {
   const ps = panes();
   const pane = ps.find((p) => p.pane === tg.pane)?.pane
     ?? ps.find((p) => p.terminal && p.terminal === tg.terminal)?.pane
@@ -20,24 +24,37 @@ function items(tg) {
   const toProgram = term?.labels?.["herdr.right-click"] === "program";
   const info = ps.find((p) => p.pane === pane);
   const pinned = Boolean(shared("strip.state")?.[info?.tab]?.cols?.find((c) => c.panes?.includes(pane))?.pin);
+  const agent = Boolean(info?.program?.agent || info?.status);
+  const canSend = agent && Boolean(info?.terminal) && ps.some((p) => p.pane !== pane && p.terminal && (p.program?.agent || p.status));
+  const space = spaces().find((s) => s.tabs.some((t) => t.id === info?.tab));
+  const canSleep = Boolean(info?.terminal && info?.tab && agents().some((x) => x.address === info.terminal));
+  const name = info?.name || term?.name || "Terminal";
+  const title = space?.machine ? `${name} \u00b7 ${space.machine}` : name;
   // A split first tells the strip where the new pane goes.
-  const split = (label, dir, icon, key) => [label, () => {
+  const split = (label, dir, icon, key) => ({ label, icon, key, does: () => {
     setShared("strip.intent", { dir, from: pane, at: Date.now() });
     run("pane.split", { pane, direction: dir === "down" ? "down" : "right" });
-  }, icon, key];
-  return [
-    split("Split right", "right", "columns-2", "kanso-strip.new-right"),
-    split("Split left", "left", "columns-2", "kanso-strip.new-left"),
-    split("Split down", "down", "rows-2", "kanso-strip.new-down"),
-    ["Wider or narrower", () => setShared("strip.req", { op: "width", pane, n: Date.now() + Math.random() }), "move-horizontal", "kanso-strip.width"],
-    [pinned ? "Unpin pane" : "Pin pane", () => setShared("strip.req", { op: "pin", pane, n: Date.now() + Math.random() }), "pin", "kanso-strip.pin"],
-    ...(term ? [[toProgram ? "Use Herdr right-click menu" : "Send right-clicks to pane",
-      () => run("terminal.right_click", { terminal: term.address, to: toProgram ? "menu" : "program" }), "panel-left", null]] : []),
-    ...(parent ? [[`Send back to ${parent.name || parent.address}`, () => run("terminal.park", { terminal: term.address }), "chevron-right", null]] : []),
-    ...(info?.cwd ? [["Open with…", () => openWithPopup(info), "external-link", "mod.open:open-with"]] : []),
-    ...(info?.terminal ? [["Send to an agent…", () => openOverlay({ mod: "kanso-send", kind: "dialog", width: 520, props: { pane } }), "send", "kanso-strip.send"]] : []),
-    ["Close pane", () => run("pane.close", { pane }), "x", "kanso-strip.close"],
-  ];
+  } });
+  const close = { label: "Close pane", icon: "x", key: "kanso-strip.close", verb: `close ${name}`, arms: agent, does: () => run("pane.close", { pane }) };
+  return { title, armedKey: close.arms ? "close" : null, groups: [
+    [
+      split("Split right", "right", "columns-2", "kanso-strip.new-right"),
+      split("Split down", "down", "rows-2", "kanso-strip.new-down"),
+      split("Split left", "left", "columns-2", "kanso-strip.new-left"),
+      { label: "Wider or narrower", icon: "move-horizontal", key: "kanso-strip.width", does: () => setShared("strip.req", { op: "width", pane, n: nonce() }) },
+      { label: pinned ? "Unpin" : "Pin", icon: "pin", key: "kanso-strip.pin", does: () => setShared("strip.req", { op: "pin", pane, n: nonce() }) },
+    ],
+    [
+      ...(canSend ? [{ label: "Send to an agent\u2026", icon: "send", key: "kanso-strip.send", does: () => openOverlay({ mod: "kanso-send", kind: "dialog", width: 520, props: { pane } }) }] : []),
+      ...(agent ? [{ label: "Find in conversation", icon: "search", key: "kanso-strip.find", does: () => { run("pane.focus", { pane }); run("kanso-strip.find"); } }] : []),
+      ...(info?.cwd ? [{ label: "Open with\u2026", icon: "external-link", key: "mod.open:open-with", does: () => openWithPopup(info) }] : []),
+      ...(canSleep && space ? [{ label: "Sleep", icon: "moon", does: () => openOverlay({ mod: "kanso-sleep", kind: "dialog", width: 520, props: { sleep: { scope: "agent", space: space.id, tab: info.tab, pane: info.pane } } }) }] : []),
+      ...(parent ? [{ label: `Send back to ${parent.name || parent.address}`, icon: "chevron-right", does: () => run("terminal.park", { terminal: term.address }) }] : []),
+    ],
+    ...(term ? [[{ label: "Right-clicks go to the program", checked: toProgram,
+      does: () => run("terminal.right_click", { terminal: term.address, to: toProgram ? "menu" : "program" }) }]] : []),
+    [{ ...close, armed: Boolean(close.arms) && armed.is("close") }],
+  ].filter((group) => group.length) };
 }
 
 const shortcut = (action) => (action ? keys().find((b) => b.action === action)?.keys ?? "" : "");
@@ -46,6 +63,7 @@ export default class KansoMenu extends View {
   init(_props, cx) {
     this.at = -1; // nothing chosen for you: j or the down arrow lights the first
     this.handle = focusOn(cx);
+    this.armed = new Armed();
   }
 
   // The pending g (for gg) is kept on the view between keys.
@@ -55,24 +73,25 @@ export default class KansoMenu extends View {
     return nav.move;
   }
 
-  choose(i) {
-    const it = items(props()?.target ?? {})[i];
+  // Close asks twice while an agent is in the pane: the first press arms it and keeps the menu open.
+  choose(it, cx) {
     if (!it) return;
+    if (it.arms) { this.armed.press("close", cx, () => { closeOverlay(props()?.overlay); it.does(); }); return; }
     closeOverlay(props()?.overlay);
-    it[1]();
+    it.does();
   }
 
   render() {
-    const list = items(props()?.target ?? {});
-    // A line before the first move, before Open with and before Close.
-    const ruled = (it, i) => i > 0 && (i === 3 || it[0] === "Open with…" || it[0] === "Close pane");
-    const lines = list.flatMap((it, i) => [...(ruled(it, i) ? [{ separator: true }] : []),
-      { icon: it[2], label: it[0], hint: shortcut(it[3]) || null, selected: i === this.at, onClick: () => this.choose(i) }]);
-    return menuList("kanso-menu", { items: lines }, tokens(theme())).track_focus(this.handle)
+    const { title, groups: sets } = groups(props()?.target ?? {}, this.armed);
+    const list = sets.flat();
+    const lines = sets.flatMap((set, g) => [...(g ? [{ separator: true }] : []),
+      ...set.map((it) => ({ icon: it.icon, label: it.label, hint: shortcut(it.key) || null, checked: it.checked, armed: it.armed, verb: it.verb,
+        selected: list.indexOf(it) === this.at, onClick: (cx) => this.choose(it, cx) }))]);
+    return menuList("kanso-menu", { title, items: lines }, tokens(theme())).track_focus(this.handle)
       .on_key_down((e, cx) => {
         const move = this.listed(e);
         if (!move) return;
-        if (move === "enter") this.choose(this.at);
+        if (move === "enter") this.choose(list[this.at], cx);
         else if (move === "escape") closeOverlay(props().overlay);
         else this.at = moveTo(move, this.at, list.length);
         cx.stop_propagation();

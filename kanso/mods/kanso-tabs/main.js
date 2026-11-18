@@ -13,7 +13,7 @@ import { walkLayout, commitLayout, sidebarBack, foldSidebar, dropStripDrag } fro
 import { Updater } from "./update.js";
 import { tryOr, readCommands } from "./pure.js";
 import { openArrange } from "./open.js";
-import { G, H, W, CLEAR, EASE, GLIDE, TINT, alpha, tokens } from "./ui.js";
+import { G, H, R, T, W, ICON as ICON_SIZE, CLEAR, EASE, GLIDE, TINT, alpha, tokens } from "./ui.js";
 import { button, iconButton, pressAgain, Armed } from "./ui-button.js";
 import { TextField } from "./ui-field.js";
 import { menu } from "./ui-menu.js";
@@ -501,17 +501,17 @@ export default class Tabs extends View {
     const panelButton = (p, k) => {
       const on = now === p.id, target = this.dragPanel && this.dragPanel !== p.id;
       const named = !p.icon || on || this.hoverPanel === p.id;
-      // 6.8 px a character at size 12: the name's box eases open to this width.
-      const wide = Math.ceil(String(p.label).length * 6.8) + 10;
+      // About 0.57 of the text size a character: the name's box eases open to this width.
+      const wide = Math.ceil(String(p.label).length * T.value * 0.57) + G.md;
       const name = div().id(`panel-name-${p.id}`).h_full().flex().items_center().overflow_hidden().flex_none()
         .w(named ? wide : 0).opacity(named ? 1 : 0)
         .transition("width", EASE)
         .transition("opacity", EASE)
-        .child(div().pl(6).pr(4).whitespace_nowrap().child(p.label));
-      return h_flex().id(`panel-${p.id}`).h(H.icon).min_w(H.icon).px(p.icon ? 5.5 : 4).flex_none().items_center().justify_center().rounded(6)
-        .text_size(12).bg(on ? alpha(t.foreground, TINT.tab) : CLEAR)
+        .child(div().pl(G.xs).pr(G.xs).whitespace_nowrap().child(p.label));
+      return h_flex().id(`panel-${p.id}`).h(H.icon).min_w(H.icon).px(G.xs).flex_none().items_center().justify_center().rounded(R.control)
+        .text_size(T.value).bg(on ? c.w12 : CLEAR)
         .text_color(on ? t.foreground : t.muted)
-        .hover(s => s.bg(alpha(t.foreground, target ? TINT.faint : on ? TINT.tab : TINT.hover)).text_color(t.foreground))
+        .hover(s => s.bg(target ? alpha(t.foreground, TINT.faint) : on ? c.w12 : c.w7).text_color(t.foreground))
         .on_hover((hovered, cx) => {
           if (hovered) this.hoverPanel = p.id; else if (this.hoverPanel === p.id) this.hoverPanel = null;
           cx.notify();
@@ -524,11 +524,11 @@ export default class Tabs extends View {
           cx.notify();
         })
         .on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); openSettings("pieces"); })
-        .when(Boolean(p.icon), (el) => el.child(svg(p.icon).size(15)))
+        .when(Boolean(p.icon), (el) => el.child(svg(p.icon).size(ICON_SIZE)))
         .child(name);
     };
     // No background and no line of its own: it sits on the frame.
-    return h_flex().id("tab-bar").size_full().min_w(0).px(12).gap(2).items_center()
+    return h_flex().id("tab-bar").size_full().min_w(0).px(G.md).gap(G.sm).items_center()
       .on_size_change(() => this.keepRail(layout()))
       // A pane held in the strip and let go here goes back where it was.
       .on_mouse_up("left", dropStripDrag)
@@ -537,7 +537,7 @@ export default class Tabs extends View {
       .on_hover((hovered, cx) => { if (!hovered && this.pressed) { this.pressed = null; this.dropAt = null; cx.notify(); } })
       .on_scroll_wheel(e => this.wheel(e))
       .child(this.tabArea(c, { space, openTabs, ps, state, tools }))
-      .child(h_flex().flex_none().gap(2).items_center().children(shownPanels.map(panelButton))
+      .child(h_flex().flex_none().gap(G.hair).items_center().children(shownPanels.map(panelButton))
         .child(tool("kanso-help", "circle-question-mark", tooltip({ label: "kansō help", chord: boundChord("mod.open:kanso-help") }), () => run("mod.open", { name: "kanso-help" })).ml(4)))
       .when(window()?.buttons, el => el.child(tool("minimize", "minus", "Minimize", () => run("window.minimize")))
         .child(tool("maximize", "square", "Maximize", () => run("window.maximize")))

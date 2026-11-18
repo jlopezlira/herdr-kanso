@@ -16,7 +16,7 @@ import { openWithPopup } from "./popup.js";
 import { FIND } from "./find-key.js";
 import { rollupState, headerHold, prFacts, prLine } from "./ghchecks.js";
 import { pieces, shown, runs, setPiece, STORE } from "./pieces.js";
-import { G, R, T, W, ICON, OPACITY, TINT, CLEAR, DRAG_START, CHROME_SQUARE, PANE, alpha, glyphOf, mix, tokens, washes } from "./ui.js";
+import { G, R, T, W, ICON, ICON_CHROME, OPACITY, TINT, CLEAR, DRAG_START, CHROME_SQUARE, PANE, alpha, glyphOf, mix, tokens, washes } from "./ui.js";
 import { mark } from "./ui-mark.js";
 import { iconButton, Armed } from "./ui-button.js";
 import { menu } from "./ui-menu.js";
@@ -276,17 +276,17 @@ export default class Strip extends View {
     const MAX_TILES = 8;
     const tile = (id) => {
       const info = byId.get(id), d = corner(info?.status);
-      return div().id(`edge-tile-${id}`).relative().size(20).flex_none().rounded(6).bg(w?.w7 ?? t.hover)
-        .flex().items_center().justify_center()
-        .hover((h) => h.bg(w?.w12 ?? t.selected))
+      return div().id(`edge-tile-${id}`).relative().size(20).flex_none().rounded(R.control).bg(w?.w7 ?? t.hover)
+        .border_1().border_color(CLEAR).flex().items_center().justify_center()
+        .hover((h) => h.bg(c.selected).border_color(c.border))
         .on_click((_e, cx) => { cx.stop_propagation(); show(id); })
         .child(iconOf(info?.program, 12, t.muted))
         .when(Boolean(d), (el) => el.child(d.absolute().top(-G.hair).right(-G.hair).rounded_full().border_1().border_color(c.chrome)));
     };
-    const stack = v_flex().id("edge-stack").items_center().gap(5).py(6).px(4)
-      .child(div().h(16).text_size(14).text_color(takes ? t.foreground : t.muted).child(chevron))
+    const stack = v_flex().id("edge-stack").items_center().gap(G.hair).py(6).px(4)
+      .child(div().h(16).text_size(T.card).text_color(takes ? t.foreground : t.muted).child(chevron))
       .children(ids.slice(0, MAX_TILES).map(tile))
-      .when(ids.length > MAX_TILES, (el) => el.child(div().text_size(10).text_color(t.dim).child(`+${ids.length - MAX_TILES}`)));
+      .when(ids.length > MAX_TILES, (el) => el.child(div().text_size(T.micro).text_color(t.dim).child(`+${ids.length - MAX_TILES}`)));
     const item = (id) => {
       const info = byId.get(id), prog = info?.program;
       return {
@@ -297,7 +297,7 @@ export default class Strip extends View {
     const card = menu("edge-menu", { title: `${ids.length === 1 ? "One pane" : `${ids.length} panes`} beyond the ${left ? "left" : "right"} edge`, items: ids.map(item) }, c);
     return v_flex().id("edge").size_full().items_center().justify_center().bg(t.chrome).cursor_pointer()
       .hover((h) => h.bg(takes ? alpha(t.accent, TINT.strong) : t.hover))
-      .when(takes, (el) => el.bg(alpha(t.accent, TINT.bound)).cursor_grabbing())
+      .when(takes, (el) => el.bg(alpha(t.accent, TINT.strong)).cursor_grabbing())
       .on_mouse_up("left", () => dropMove(p.edge, left ? "after" : "before", false))
       .on_click(() => show(p.edge))
       .on_scroll_wheel((e) => { const d = wheelDelta(e); if (d) postScroll(d / WHEEL_PX); })
@@ -341,9 +341,9 @@ export default class Strip extends View {
     const mine = drag?.pane === id;
     const drop = !mine ? shared("strip.drop") : null;
     const side = drop?.to === id ? drop.side : null;
-    const label = (info, strong) => v_flex().flex_1().size_full().min_w(0).min_h(0).items_center().justify_center().gap(8)
-      .child(iconOf(info?.program, 22, strong ? t.foreground : t.muted))
-      .child(div().w_full().px(12).truncate().text_center().text_size(13).when(strong, (el) => el.font_medium())
+    const label = (info, strong) => v_flex().flex_1().size_full().min_w(0).min_h(0).items_center().justify_center().gap(G.sm)
+      .child(iconOf(info?.program, ICON_CHROME, strong ? t.foreground : t.muted))
+      .child(div().w_full().px(G.md).truncate().text_center().text_size(T.card).when(strong, (el) => el.font_medium())
         .text_color(strong ? t.foreground : t.muted).child(nameOf(info, given)));
     const across = side === "before" || side === "after";
     const first = side === "before" || side === "above";
