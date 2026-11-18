@@ -171,14 +171,16 @@ export class PullRequest {
     if (next.read) this.refresh(cx);
   }
 
-  comeForward(cx) {
-    if (this.waking || !this.pollNow(false).read) return;
+  readWanted() { return Boolean(this.asking) || this.pollNow(false).read || key() !== this.context; }
+
+  readSoon(cx) {
+    if (this.waking || !this.readWanted()) return;
     this.waking = true;
-    // A read started inside render can be lost; the timer runs it on the next turn.
     const wake = (wakeCx) => {
       this.waking = false;
-      if (!this.pollNow(false).read) return;
-      this.refresh(wakeCx);
+      const wanted = this.readWanted();
+      this.asking = false;
+      if (wanted) this.refresh(wakeCx);
     };
     if (cx.timer?.after) cx.timer.after(0, wake);
     else wake(cx);
@@ -1162,7 +1164,7 @@ export class PullRequest {
     this.selected = null;
     this.jumpUrl = null;
     this.keptUrl = null;
-    this.refresh(cx);
+    this.asking = true;
   }
 
   // The named check sits inside Details, so the fold is open before this render builds it.
@@ -1196,9 +1198,8 @@ export class PullRequest {
   }
 
   render(cx) {
-    this.comeForward(cx);
     this.noteAsk(cx);
-    if (key() !== this.context) this.refresh(cx);
+    this.readSoon(cx);
     this.openAsked(cx);
     const c = tokens(theme());
     const narrow = (this.width || 368) < 560;

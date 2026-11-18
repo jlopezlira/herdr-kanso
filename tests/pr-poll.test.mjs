@@ -2,7 +2,7 @@
 import { loadPullRequest, loadAuthTiming } from "./mod-fixtures.mjs";
 import assert from "node:assert/strict";
 import test from "node:test";
-import { load, context, tape, singleUse, failure, success } from "./helpers.mjs";
+import { load, context, tape, singleUse, failure, success, KIT_NIGHT } from "./helpers.mjs";
 import { blankPanel, refreshAgain, openInbox, SIGNED_OUT, PASSED } from "./pr-fixtures.mjs";
 
 const TONE = { dim: "dim", muted: "muted", text: "text", border: "border", red: "red", yellow: "yellow", green: "green" };
@@ -232,16 +232,24 @@ test("a limit from GitHub holds the panel, including a manual refresh", async ()
   assert.equal(panel.pr.number, 7);
 });
 
-test("a missed answer keeps the last pull request, with its age and Retry", async () => {
-  let fail = false;
+const readDrawn = async (exec, host = {}) => {
   const shown = tape();
   const ui = singleUse();
-  const { panel, cx, drain } = await readPanel(branchExec(undefined, { view: () => fail ? failure("HTTP 500") : success(JSON.stringify(pull())) }), {
-    ...ui, ...shown.host,
-    Popover: ui.Button, Input: ui.Button,
-    InputState: { new: () => ({ on() {}, value() { return ""; } }) },
-    TextView: { markdown: () => shown.host.div() },
-  });
+  return {
+    shown,
+    ...await readPanel(exec, {
+      ...ui, ...shown.host,
+      Popover: ui.Button, Input: ui.Button,
+      InputState: { new: () => ({ on() {}, value() { return ""; } }) },
+      TextView: { markdown: () => shown.host.div() },
+      ...host,
+    }),
+  };
+};
+
+test("a missed answer keeps the last pull request, with its age and Retry", async () => {
+  let fail = false;
+  const { shown, panel, cx, drain } = await readDrawn(branchExec(undefined, { view: () => fail ? failure("HTTP 500") : success(JSON.stringify(pull())) }));
   const fresh = panel.freshAt;
   assert.equal(panel.pr.number, 7);
   fail = true;
@@ -253,6 +261,35 @@ test("a missed answer keeps the last pull request, with its age and Retry", asyn
   panel.hero(TONE);
   assert.ok(shown.texts.includes("Retry"));
   assert.equal(shown.texts.some((text) => /rereads|Read from GitHub/.test(String(text))), false);
+});
+
+test("a folder change seen while the panel is drawn starts its read on the next turn, where Herdr keeps it", async () => {
+  let folder = "/repo";
+  let drawing = false;
+  const started = [];
+  const exec = branchExec((command, args) => {
+    started.push([command, ...args].join(" "));
+    if (drawing) return new Promise(() => {});
+  });
+  const after = [];
+  const { panel, cx, drain } = await readDrawn(exec, { key: () => folder, theme: () => KIT_NIGHT, ScrollHandle: { new: () => ({}) }, props: () => ({}) });
+  cx.timer = { after(_ms, fn) { after.push(fn); }, every() {} };
+  const viewed = () => started.filter((line) => line.startsWith("gh pr view")).length;
+  const seen = started.length;
+  assert.equal(viewed(), 1);
+
+  folder = "/other";
+  drawing = true;
+  panel.render(cx);
+  panel.render(cx);
+  drawing = false;
+  assert.equal(started.length, seen);
+  assert.equal(after.length, 1);
+
+  after[0](cx);
+  await drain();
+  assert.equal(viewed(), 2);
+  assert.equal(panel.context, "/other");
 });
 
 test("a read that never answers still finishes, and the last pull request stays", async () => {
@@ -324,7 +361,7 @@ test("the timer returns while the window is behind or the panel is hidden, and r
   const queued = after.length;
   const staysAway = async () => {
     tick(cx);
-    panel.comeForward(cx);
+    panel.readSoon(cx);
     await drain();
     assert.equal(views.length, seen);
     assert.equal(panel.away, true);
@@ -339,7 +376,7 @@ test("the timer returns while the window is behind or the panel is hidden, and r
   await staysAway();
 
   hidden = false;
-  panel.comeForward(cx);
+  panel.readSoon(cx);
   assert.equal(after.length, queued + 1);
   after.at(-1)(cx);
   await drain();

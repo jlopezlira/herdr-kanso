@@ -104,6 +104,7 @@ the branch's rules.
 
 ### Fixed
 
+- The pull requests panel no longer starts its read from inside its own draw when the folder in front changes or a pane asks for a section; the read starts on the next turn, as it already does when the window comes forward. (#338)
 - A working agent's name no longer has dots counting after it; the shimmer across the name stays.
 - The While you were away card's title, rows and +N more, and the sidebar's Find field with its search icon, start on the same line as the sidebar's rows and Settings.
 - The first computer in the sidebar sits right under the view switch, where it left 28 of empty space; the space above a computer stays for the ones after it.
