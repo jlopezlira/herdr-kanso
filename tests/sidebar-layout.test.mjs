@@ -130,6 +130,10 @@ test("one gutter from both sides seen: toolbar, rows, the current project's hove
     assert.equal(drawn.length, 2, "Update kansō and Settings");
     assert.deepEqual([...new Set(drawn.flatMap((row) => [content(row, "left"), seen.right(content(row, "right"))]))], [SIDEBAR.gutter]);
   }
+
+  const { activity } = await load("kanso-spaces/activity.js", ["activity"], host());
+  const away = activity({ events: [{ icon: "e-done", subject: "Kylo-ren", fact: "finished", age: "4m" }] })("since-left", c, {});
+  assert.deepEqual([...new Set(rowsIn(away).map((row) => content(row, "left")))], [SIDEBAR.gutter], "While you were away: its heading and rows start on the gutter, as Settings does");
 });
 
 // The room above each row in the list: the spacers since the row before it (the list's top for the first); every row is also the list's 1 px gap apart.
