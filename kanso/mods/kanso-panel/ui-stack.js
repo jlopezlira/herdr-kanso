@@ -2,7 +2,7 @@
 // Kept byte for byte by `npm run sync:share`: edit kanso-panel/ui-stack.js.
 import { h_flex, v_flex, Button, Popover } from "gpui-base";
 import { div } from "gpui-kit";
-import { G, H, R, LINE, SIDEBAR, DIALOG, TINT, CLEAR, alpha, sidebarSides } from "./ui.js";
+import { G, H, R, LINE, PANE, SIDEBAR, DIALOG, TINT, CLEAR, alpha, sidebarSides } from "./ui.js";
 import { dot } from "./ui-dot.js";
 
 // Each child piece drawn with its own id and its stack's handlers; a piece that draws nothing leaves no gap. `context` says where it sits;
@@ -66,7 +66,8 @@ const dialogList = (id, c, { scroll = false }, kids) => {
 
 // The footer's room, which Herdr's footer height is fitted to: open, its rows touch between 8 above and 16 below, on the sidebar's gutter
 // at both sides seen, as the list's rows are; a refused update's block a hair under its row and 8 above the next; in the rail, its icon Buttons a hair apart above 12.
-export const FOOTER = Object.freeze({ top: G.sm, bottom: G.lg, side: SIDEBAR.gutter, railBottom: G.md, railGap: G.hair, refusalAbove: G.hair, refusalBelow: G.sm });
+const ON_STATUS_LINE = PANE.gap + (H.bar - H.line) / 2;
+export const FOOTER = Object.freeze({ top: G.sm, bottom: ON_STATUS_LINE, side: SIDEBAR.gutter, railBottom: ON_STATUS_LINE, railGap: G.hair, refusalAbove: G.hair, refusalBelow: G.sm });
 // The Footer composition's pieces by name: kansō's update, its refusal (only under it), then Settings, always last.
 // Each is drawn under its name, so Settings keeps its id as the rows above it come and go.
 const footerSlots = (kids) => (kids.length === 3 ? ["update", "refused", "settings"] : ["update", "settings"].slice(-kids.length));

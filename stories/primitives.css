@@ -751,7 +751,7 @@
 .kanso-sidebar__tools{height:var(--k-h-header);flex:none;display:flex;align-items:center}
 .kanso-sidebar__list{flex:1;min-height:0;overflow:hidden}
 .kanso-sidebar__group{display:flex;align-items:center;gap:var(--k-sp-2);height:var(--k-h-row);padding:0 var(--k-sp-2);margin-top:var(--k-sp-4);font-size:var(--k-fs-body);font-weight:var(--k-fw-strong);color:var(--muted)}
-.kanso-sidebar__footer{flex:none;padding:var(--k-sp-2) 0 var(--k-sp-4)}
+.kanso-sidebar__footer{flex:none;padding:var(--k-sp-2) 0 calc(var(--k-pane-gap) + (var(--k-h-bar) - var(--k-h-row)) / 2)}
 /* Proposed: Settings holds its menu, open over it; a refused update's block sits under its row. */
 .kanso-sidebar__footer-settings{position:relative;display:flex;flex-direction:column}
 .kanso-sidebar__footer-menu{position:absolute;bottom:calc(100% + var(--k-sp-1));left:0;z-index:1}
