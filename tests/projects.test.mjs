@@ -301,8 +301,8 @@ test("which agent: only the ones installed, nothing chosen for you, and one pick
   ];
   watchLines(view, made);
   view.newAgentView({ foreground: "#fff", muted: "#888", dim: "#666", border: "#333", selected: "#444" });
-  assert.deepEqual(made.slice(0, 3), ["Codex", "pi", "Terminal"], "Claude Code is not installed here: not offered");
-  view.menuActs[0]({});
+  assert.deepEqual(made.slice(0, 3), ["Terminal", "Codex", "pi"], "Terminal first, then the agents; Claude Code is not installed here: not offered");
+  view.menuActs[1]({});
   assert.deepEqual(calls, [["space.new", { folder: "/work/api", machine: "", argv: ["codex"] }]]);
 
   // A worktree just made: the agent chosen starts in its own tab there, named by its branch.
@@ -311,7 +311,36 @@ test("which agent: only the ones installed, nothing chosen for you, and one pick
   const tree = Object.assign(new Spaces(), { kdb: view.kdb, menuAt: -1, known: view.known });
   watchLines(tree, made);
   tree.newAgentView({ foreground: "#fff", muted: "#888", dim: "#666", border: "#333", selected: "#444" });
-  assert.ok(!made.includes("In a new worktree\u2026"), "no worktree in a worktree");
-  tree.menuActs[1]({});
+  assert.ok(!made.includes("New worktree\u2026"), "no worktree in a worktree");
+  tree.menuActs[2]({});
   assert.deepEqual(calls, [["space.new", { folder: "/work/api", machine: "" }], ["tab.new", { folder: "/kanso/worktrees/api/feat-x", name: "feat-x", argv: ["pi"] }]]);
+});
+
+test("The + menu is the approved one: where it opens, Terminal with its key, the agents keyed 1 to 9, a new project, the worktrees inside a repository, then Arrange with its key", async () => {
+  const calls = [], made = [], overlays = [];
+  const place = { space: "sp-api", folder: "/work/api", machine: "devbox", project: null, name: "api" };
+  const { Spaces } = await loadSpaces({
+    ...elements(blank), theme: () => ({ foreground: "#fff", muted: "#888", dim: "#666", border: "#333", selected: "#444" }),
+    shared: () => null, setShared: () => {}, spaces: () => [], home: () => "/Users/me", props: () => ({ overlay: "ov1", newAgent: place, start: true }), closeOverlay: () => {},
+    run: (cmd, args) => calls.push([cmd, clone(args ?? null)]), openOverlay: (o) => overlays.push(clone(o.props)),
+    keys: () => [{ keys: "cmd-t", action: "tab.new" }, { keys: "cmd-alt-t", action: "kanso-strip.arrange" }],
+  });
+  const t = { foreground: "#fff", muted: "#888", dim: "#666", border: "#333", selected: "#444" };
+  const menu = (state) => {
+    const view = Object.assign(new Spaces(), { kdb: { setProjectAgent: async () => {} }, menuAt: -1 }, state);
+    const lines = [];
+    view.menuLine = ((line) => (text, act, opts) => { lines.push([text, opts?.hint ?? null]); return line(text, act, opts); })(view.menuLine.bind(view));
+    const drawn = view.newAgentView(t);
+    return { view, lines, drawn };
+  };
+  const known = [{ key: "claude", name: "Claude Code", installed: true, run: ["claude"] }, { key: "codex", name: "Codex", installed: true, run: ["codex"] }];
+  const { view, lines } = menu({ known, repo: true, trees: [{ path: "/work/api-feat", branch: "feat" }] });
+  assert.deepEqual(lines.map(([text]) => text), ["Terminal", "Claude Code", "Codex", "New project", "New worktree\u2026", "Open worktree\u2026", "Arrange\u2026"]);
+  assert.deepEqual(lines.map(([, hint]) => hint), ["⌘T", "1", "2", null, null, null, "⌥⌘T"]);
+  view.menuDigits[1]({ notify() {} });
+  assert.deepEqual(calls, [["space.select", { id: "sp-api" }], ["tab.new", { space: "sp-api", folder: "/work/api", argv: ["codex"] }]], "2 starts the second agent");
+  assert.equal(menu({ known, repo: false }).lines.some(([text]) => text.includes("worktree")), false, "outside a repository: no worktree rows");
+  assert.deepEqual(menu({ known: null }).lines.map(([text]) => text), ["Terminal", "New project", "Arrange\u2026"], "the first time no agent is offered until the computer answers");
+  const failed = menu({ known: null, agentsFailed: "ssh: connect timed out" });
+  assert.equal(failed.lines.some(([text]) => text === "Claude Code"), false);
 });

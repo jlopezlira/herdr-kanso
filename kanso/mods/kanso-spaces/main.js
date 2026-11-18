@@ -97,6 +97,8 @@ const FALLBACK = 60000;
 const PS_GIVE_UP_MS = 10000;
 // Under the 30 s machine look, so a hung list is free before the next one.
 const MACHINE_READ_MS = 20_000;
+// The agents last found installed, by computer ("" is this one): the + menu draws them at once while it asks again.
+const KNOWN_AGENTS = "kanso.agents.installed";
 
 // The views' names, by key, as the view switch says them.
 const VIEWS = Object.fromEntries(views.map(({ key, label }) => [key, label]));
@@ -180,7 +182,7 @@ export default class Spaces extends View {
     this.clock = cx.timer;
     this.settleUntil = Date.now() + SETTLE;
     // Opened as a row's right-click menu (props().menu): nothing else to run.
-    if (props()?.menu || props()?.railMenu || props()?.spaceMenu || props()?.newAgent || props()?.worktree || props()?.newConversation || props()?.newProject || props()?.machineMenu) {
+    if (props()?.menu || props()?.railMenu || props()?.spaceMenu || props()?.newAgent || props()?.trees || props()?.worktree || props()?.newConversation || props()?.newProject || props()?.machineMenu) {
       // Nothing is chosen for you: no row lit until the keyboard moves.
       this.armed = new Armed(); this.menuAt = -1; this.handle = cx.focus_handle();
       // A scroll handle is state: made here, never during render (Herdr refuses it there).
@@ -304,7 +306,11 @@ export default class Spaces extends View {
     }
     this.handle.focus();
     if (p.newAgent) {
-      knownAgents({ on: p.newAgent.machine || null }).then((list) => { this.known = list; cx.notify(); }).catch(() => { this.known = []; cx.notify(); });
+      this.askAgents(p.newAgent, cx);
+      // The worktree rows show only inside a repository: git's list of them says it is one.
+      if (p.start && p.newAgent.folder && !p.newAgent.tree) {
+        worktreesOf(p.newAgent.folder, p.newAgent.machine || null).then((list) => { this.repo = list.length > 0; this.trees = list.filter((x) => !x.main && !x.prunable); cx.notify(); });
+      }
     }
     const place = p.spaceMenu ? this.menuPlace(p.spaceMenu) : null;
     // A worktree whose folder was deleted (prunable) is only git's note of it: not listed.
@@ -529,6 +535,8 @@ export default class Spaces extends View {
     else if (c === "add-project") this.addProject();
     else if (c === "add-project-start") this.addProject(true);
     else if (c === "new-conversation") this.newConversationMenu();
+    // The tab bar's +: the same menu as the toolbar's.
+    else if (c === "start") this.startMenu(this.shownView());
     else if (c === "open-folder") pickFolder({ prompt: "Open" }).then((folder) => folder && run("space.new", { folder, machine: "" })).catch(() => {});
     else if (c === "list-up" || c === "list-down") {
       if (this.kbd) this.listKeyDown({ key: c === "list-up" ? "up" : "down", modifiers: {} }, cx);
@@ -1483,6 +1491,8 @@ export default class Spaces extends View {
   menuKeys(el) {
     return el.track_focus(this.handle)
       .on_key_down((e, cx) => {
+        const digit = /^[1-9]$/.test(e.key) && !e.modifiers?.platform && !e.modifiers?.control ? this.menuDigits?.[Number(e.key) - 1] : null;
+        if (digit) { cx.stop_propagation(); digit(cx); return; }
         const { move, gAt } = listKey(e, this.menuG);
         this.menuG = gAt;
         if (!move) return;
@@ -1585,13 +1595,32 @@ export default class Spaces extends View {
     ]);
   }
 
-  // Every + ends here: which agent of the ones installed (or a shell), none chosen for you; the one used last
-  // in the project says so. `place.tree`: a worktree just made, where the agent starts in its own tab.
+  // The agents installed on the place's computer: the last answer at once while it is asked again, once per open; no answer in time is said in their place.
+  askAgents(place, cx) {
+    const on = place.machine || "";
+    const kept = shared(KNOWN_AGENTS)?.[on];
+    this.known = Array.isArray(kept) ? kept : null;
+    this.agentsFailed = null;
+    this.checking = true;
+    const ask = this.agentsAsked = (this.agentsAsked ?? 0) + 1;
+    const settle = (list, failed) => {
+      if (ask !== this.agentsAsked || !this.checking) return;
+      this.checking = false;
+      if (list) { this.known = list; setShared(KNOWN_AGENTS, { ...(shared(KNOWN_AGENTS) ?? {}), [on]: list }); }
+      else if (!this.known) this.agentsFailed = failed;
+      cx.notify();
+    };
+    const deadline = cx.timer.after(MACHINE_READ_MS, () => settle(null, "no answer in time"));
+    knownAgents({ on: on || null }).then((list) => { deadline.cancel(); settle(JSON.parse(JSON.stringify(list)), null); })
+      .catch((e) => { deadline.cancel(); settle(null, String(e?.message ?? e)); });
+  }
+
+  // Every + ends here, one menu: where the tab opens, a Terminal, the agents installed (keyed 1 to 9, none chosen for you), then from the toolbar's
+  // and the tab bar's + a new project, a new or open worktree inside a repository, and Arrange. `place.tree`: a worktree just made, where it starts in its own tab.
   newAgentView(t) {
-    const place = props().newAgent;
+    const place = props().newAgent, start = Boolean(props().start);
     const project = registry().find((p) => p.id === place.project) ?? null;
-    const title = `New in ${place.tree?.branch ?? place.name ?? "this project"}`;
-    if (!this.known) return this.popup(t, title, [{ loading: true }, { loading: true }]);
+    const name = place.tree?.branch ?? place.name ?? "this project";
     const item = this.lines();
     const pick = (a) => {
       if (this.starting) return; // a second click while the first is written starts nothing
@@ -1600,13 +1629,39 @@ export default class Spaces extends View {
       else startIn(place, a?.run ?? null);
       this.thenClose(project && a ? this.db().setProjectAgent(project.id, a.key) : null);
     };
-    return this.popup(t, title, [
-      ...this.known.filter((a) => a.installed).map((a) => item(a.name, () => pick(a), { hint: a.key === project?.agent ? "last" : null, keep: true })),
-      item("Terminal", () => pick(null), { keep: true }),
-      ...(place.tree ? [] : [{ separator: true }, item("In a new worktree\u2026", () => this.worktreeDialog(place), { icon: "git-fork" })]),
-      ...(props().start ? [{ separator: true }, item("New project\u2026", () => this.addProject(), { icon: "folder-plus" }),
-        item("Arrange\u2026", () => run("kanso-strip.arrange"), { icon: "layers", hint: chordOf("kanso-strip.arrange") })] : []),
+    const installed = (this.known ?? []).filter((a) => a.installed).slice(0, 9);
+    this.menuDigits = installed.map((a) => (cx) => { pick(a); cx.notify(); });
+    const where = place.machine ? `${place.machine} \u00b7 ${name}` : name;
+    const terminal = item("Terminal", () => pick(null), { icon: "terminal", hint: chordOf("tab.new") || null, keep: true });
+    const agents = this.agentsFailed
+      ? [{ failure: { text: `Can't list agents on ${place.machine || "this computer"}`, source: this.agentsFailed, fix: "Refresh", onClick: (cx) => this.askAgents(place, cx) } }]
+      : this.known ? installed.map((a, i) => item(a.name, () => pick(a), { icon: a.icon ?? null, hint: String(i + 1), keep: true })) : [{ loading: true }, { loading: true }];
+    const newTree = () => item("New worktree\u2026", () => this.worktreeDialog(place), { icon: "git-branch" });
+    const ends = () => [
+      item("New project", () => this.addProject(), { icon: "folder-plus" }),
+      ...(this.repo ? [newTree(), ...(this.trees?.length ? [item("Open worktree\u2026", () => this.treesMenu(place, this.trees), { icon: "git-fork" })] : [])] : []),
+      { separator: true },
+      item("Arrange\u2026", () => run("kanso-strip.arrange"), { icon: "panels-top-left", hint: chordOf("kanso-strip.arrange") || null }),
+    ];
+    const rest = start ? ends() : place.tree ? [] : [newTree()];
+    return this.popup(t, null, [
+      { heading: where, mark: this.checking && this.known ? "working" : null },
+      terminal,
+      { separator: true },
+      ...agents,
+      ...(rest.length ? [{ separator: true }, ...rest] : []),
     ]);
+  }
+
+  // Open worktree…: the project's other worktrees; one chosen opens where it already runs, or a shell there.
+  treesMenu(place, trees) {
+    openOverlay({ mod: "kanso-spaces", kind: "popup", width: W.menu, height: 300, at: "pointer", props: { trees: { place, trees } } });
+  }
+
+  treesView(t) {
+    const { place, trees } = props().trees;
+    const item = this.lines();
+    return this.popup(t, `Worktrees of ${place.name ?? "this project"}`, trees.map((x) => item(x.branch ?? "detached", () => this.openTree(place, x), { icon: "git-branch" })));
   }
 
   makeWorktree(cx) {
@@ -2516,6 +2571,7 @@ export default class Spaces extends View {
     if (props()?.railMenu) return this.railMenuView(t);
     if (props()?.spaceMenu) return this.spaceMenuView(t);
     if (props()?.newAgent) return this.newAgentView(t);
+    if (props()?.trees) return this.treesView(t);
     if (props()?.newConversation) return this.newConversationView(t);
     if (props()?.newProject) return this.newProjectView(t);
     if (props()?.worktree) return this.worktreeView(t);

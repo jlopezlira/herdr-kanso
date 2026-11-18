@@ -526,14 +526,14 @@ export default class Tabs extends View {
     const more = plus(folded.length);
     const stop = (el) => el.on_mouse_down("left", (_e, cx) => cx.stop_propagation());
     const tips = {
-      "New tab": tooltip({ label: "New tab", chord: boundChord("kanso-spaces.new-conversation") }),
+      "New tab": tooltip({ label: "New tab", chord: boundChord("kanso-spaces.start") }),
       Arrange: tooltip({ label: "Arrange", chord: boundChord("kanso-strip.arrange") }),
       "kansō help": tooltip({ label: "kansō help", chord: boundChord("mod.open:kanso-help") }),
       ...Object.fromEntries(doors.map((p, i) => [p.label, tooltip({ label: p.label, chord: boundChord(`kanso-tabs.panel-${i + 1}`) })])),
     };
     const presses = {
       "circle-question-mark": () => run("mod.open", { name: "kanso-help" }),
-      ...(connected ? { plus: () => run("kanso-spaces.new-conversation") } : {}),
+      ...(connected ? { plus: () => run("kanso-spaces.start") } : {}),
       ...(connected && arrange ? { "panels-top-left": () => openArrange() } : {}),
       ...(windows ? { minus: () => run("window.minimize"), square: () => run("window.maximize"), x: () => run("window.close") } : {}),
       ...Object.fromEntries(doors.map((p) => [doorKey(p), () => this.mount(now === p.id ? null : p.id)])),
