@@ -285,8 +285,9 @@ test("New conversation's menu ends with Add computer, last for the keyboard too,
   assert.equal(off.height, 8 + 28 + 11 * 32 + 9 + 2 * 32, "and its room goes with it");
 });
 
+const AGENT_THEME = { foreground: "#fff", muted: "#888", dim: "#666", border: "#333", selected: "#444" };
 const agentMenu = (host) => loadSpaces({
-  ...elements(blank), theme: () => ({ foreground: "#fff", muted: "#888", dim: "#666", border: "#333", selected: "#444" }),
+  ...elements(blank), theme: () => (AGENT_THEME),
   shared: () => null, setShared: () => {}, spaces: () => [], home: () => "/Users/me", closeOverlay: () => {}, ...host,
 });
 
@@ -301,7 +302,7 @@ test("which agent: only the ones installed, nothing chosen for you, and one pick
     { key: "pi", name: "pi", installed: true, run: ["pi"] },
   ];
   watchLines(view, made);
-  view.newAgentView({ foreground: "#fff", muted: "#888", dim: "#666", border: "#333", selected: "#444" });
+  view.newAgentView(AGENT_THEME);
   assert.deepEqual(made.slice(0, 3), ["Terminal", "Codex", "pi"], "Terminal first, then the agents; Claude Code is not installed here: not offered");
   view.menuActs[1]({});
   assert.deepEqual(calls, [["space.new", { folder: "/work/api", machine: "", argv: ["codex"] }]]);
@@ -311,27 +312,32 @@ test("which agent: only the ones installed, nothing chosen for you, and one pick
   place.tree = { folder: "/kanso/worktrees/api/feat-x", branch: "feat-x" };
   const tree = Object.assign(new Spaces(), { kdb: view.kdb, menuAt: -1, known: view.known });
   watchLines(tree, made);
-  tree.newAgentView({ foreground: "#fff", muted: "#888", dim: "#666", border: "#333", selected: "#444" });
+  tree.newAgentView(AGENT_THEME);
   assert.ok(!made.includes("New worktree\u2026"), "no worktree in a worktree");
   tree.menuActs[2]({});
   assert.deepEqual(calls, [["space.new", { folder: "/work/api", machine: "" }], ["tab.new", { folder: "/kanso/worktrees/api/feat-x", name: "feat-x", argv: ["pi"] }]]);
 });
 
+const devbox = () => ({ space: "sp-api", folder: "/work/api", machine: "devbox", project: null, name: "api" });
+const plusMenu = (Spaces, state) => {
+  const view = Object.assign(new Spaces(), { kdb: { setProjectAgent: async () => {} }, menuAt: -1, handle: {} }, state);
+  const lines = [], items = [];
+  view.menuLine = ((line) => (text, act, opts) => { lines.push([text, opts?.hint ?? null]); return line(text, act, opts); })(view.menuLine.bind(view));
+  view.popup = (_t, _title, list) => { items.push(...list); return null; };
+  view.newAgentView(AGENT_THEME);
+  const keys = { track_focus() { return keys; }, on_key_down(fn) { keys.press = fn; return keys; } };
+  view.menuKeys(keys);
+  return { view, lines, items, press: (key, modifiers = {}) => keys.press({ key, modifiers }, { stop_propagation() {}, notify() {} }) };
+};
+
 test("The + menu is the approved one: where it opens, Terminal with its key, the agents keyed 1 to 9, a new project, the worktrees inside a repository, then Arrange with its key", async () => {
   const calls = [], overlays = [];
-  const place = { space: "sp-api", folder: "/work/api", machine: "devbox", project: null, name: "api" };
+  const place = devbox();
   const { Spaces } = await agentMenu({
     props: () => ({ overlay: "ov1", newAgent: place, start: true }), run: (cmd, args) => calls.push([cmd, clone(args ?? null)]), openOverlay: (o) => overlays.push(clone({ height: o.height, props: o.props })),
     keys: () => [{ keys: "cmd-t", action: "tab.new" }, { keys: "cmd-alt-t", action: "kanso-strip.arrange" }],
   });
-  const t = { foreground: "#fff", muted: "#888", dim: "#666", border: "#333", selected: "#444" };
-  const menu = (state) => {
-    const view = Object.assign(new Spaces(), { kdb: { setProjectAgent: async () => {} }, menuAt: -1 }, state);
-    const lines = [];
-    view.menuLine = ((line) => (text, act, opts) => { lines.push([text, opts?.hint ?? null]); return line(text, act, opts); })(view.menuLine.bind(view));
-    const drawn = view.newAgentView(t);
-    return { view, lines, drawn };
-  };
+  const menu = (state) => plusMenu(Spaces, state);
   const known = [{ key: "claude", name: "Claude Code", installed: true, run: ["claude"] }, { key: "codex", name: "Codex", installed: true, run: ["codex"] }];
   const { view, lines } = menu({ known, repo: true, trees: [{ path: "/work/api-feat", branch: "feat" }] });
   assert.deepEqual(lines.map(([text]) => text), ["Terminal", "Claude Code", "Codex", "New project", "New worktree\u2026", "Open worktree\u2026", "Arrange\u2026"]);
@@ -349,23 +355,11 @@ test("The + menu is the approved one: where it opens, Terminal with its key, the
 test("The + menu keeps every installed agent, numbers the first nine, starts one only on a plain digit, and a failed read offers Refresh and Explain on the keyboard", async () => {
   const calls = [];
   const store = { "kanso.agents.installed": { "": [{ key: "claude", name: "Claude Code", installed: true, run: ["claude"] }] } };
-  const place = { space: "sp-api", folder: "/work/api", machine: "devbox", project: null, name: "api" };
   const { Spaces } = await agentMenu({
-    props: () => ({ overlay: "ov1", newAgent: place, start: true }), run: (cmd, args) => calls.push([cmd, clone(args ?? null)]),
+    props: () => ({ overlay: "ov1", newAgent: devbox(), start: true }), run: (cmd, args) => calls.push([cmd, clone(args ?? null)]),
     shared: (key) => store[key] ?? null, keys: () => [],
   });
-  const t = { foreground: "#fff", muted: "#888", dim: "#666", border: "#333", selected: "#444" };
-  const menu = (state) => {
-    const view = Object.assign(new Spaces(), { kdb: { setProjectAgent: async () => {} }, menuAt: -1, handle: {} }, state);
-    const lines = [];
-    view.menuLine = ((line) => (text, act, opts) => { lines.push([text, opts?.hint ?? null]); return line(text, act, opts); })(view.menuLine.bind(view));
-    const items = [];
-    view.popup = (_t, _title, list) => { items.push(...list); return null; };
-    view.newAgentView(t);
-    const keys = { track_focus() { return keys; }, on_key_down(fn) { keys.press = fn; return keys; } };
-    view.menuKeys(keys);
-    return { view, lines, items, press: (key, modifiers = {}) => keys.press({ key, modifiers }, { stop_propagation() {}, notify() {} }) };
-  };
+  const menu = (state) => plusMenu(Spaces, state);
   const ten = Array.from({ length: 10 }, (_, i) => ({ key: `a${i + 1}`, name: `Agent ${i + 1}`, installed: true, run: [`a${i + 1}`] }));
   const many = menu({ known: ten });
   assert.deepEqual(many.lines.filter(([text]) => text.startsWith("Agent")).map(([text, hint]) => [text, hint]),
@@ -391,7 +385,7 @@ test("The + menu keeps every installed agent, numbers the first nine, starts one
 
 test("A read that fails after an earlier answer keeps that list and says it failed, with its retry", async () => {
   const store = { "kanso.agents.installed": { devbox: [{ key: "codex", name: "Codex", installed: true, run: ["codex"] }], "": [] } };
-  const place = { space: "sp-api", folder: "/work/api", machine: "devbox", project: null, name: "api" };
+  const place = devbox();
   const { Spaces } = await agentMenu({ shared: (key) => store[key] ?? null, setShared: (key, value) => { store[key] = value; }, knownAgents: async () => { throw new Error("ssh: connect timed out"); } });
   const view = new Spaces();
   view.askAgents(place, { notify() {}, timer: { after: () => ({ cancel() {} }) } });

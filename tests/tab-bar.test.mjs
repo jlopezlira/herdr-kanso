@@ -44,6 +44,11 @@ const tab = (root, id) => byTag(root, tabId(id));
 const part = (root, id, name) => byTag(root, `${tabId(id)}-${name}`);
 const door = (root, label) => find(root, (el) => calls(el, "tooltip").some((call) => String(call[1]).startsWith(label)) && calls(el, "accessibility_label").some((call) => call[1] === label));
 const press = { click_count: 1 };
+const withPanel = (open) => ({ id: "root", children: [{ id: "panel", children: [{ id: "panel-body", children: open ? [{ id: open }] : [] }] }] });
+const panelsBar = async (panels) => {
+  const b = await bar({ tree: withPanel(null), stored: { "kanso.panels": panels } });
+  return { b, root: b.view.render(b.cx) };
+};
 const ROOM = 2 * 12 + 2 * (28 + 8) + 2 * 8 + 10 * 28 + 9 * 2;
 
 test("A tab out of view whose agent waits carries the blocked mark; working, done and the chosen tab carry none", async () => {
@@ -265,7 +270,7 @@ test("Folded tabs and +N with its gap fit the room the bar leaves beside new tab
 });
 
 test("The panel doors: each one a door at rest, the open one on the active wash, held and let go on another it moves there, its right-click opens its menu, and kansō help after them", async () => {
-  const tree = { id: "root", children: [{ id: "panel", children: [{ id: "panel-body", children: [{ id: "pr" }] }] }] };
+  const tree = withPanel("pr");
   const b = await bar({ tree });
   const root = b.view.render(b.cx);
   const labels = ["Files", "Spend", "PR", "Shipped", "Worktrees", "Ports", "Containers", "Memory", "Images", "kansō help"];
@@ -315,11 +320,9 @@ test("Cmd+1 to Cmd+9 are kansō's own keys and choose the tabs the bar shows: pa
 });
 
 test("Two custom panels with one icon each open their own panel, and a custom panel with no icon shows its name", async () => {
-  const tree = { id: "root", children: [{ id: "panel", children: [{ id: "panel-body", children: [] }] }] };
   const icon = "mods/custom/icon.svg";
   const panels = [{ id: "a", mod: "a-panel", label: "Alpha", icon }, { id: "b", mod: "b-panel", label: "Beta", icon }, { id: "notes", mod: "notes-panel", label: "Notes" }];
-  const b = await bar({ tree, stored: { "kanso.panels": panels } });
-  const root = b.view.render(b.cx);
+  const { b, root } = await panelsBar(panels);
   handler(door(root, "Alpha"), "on_click")({}, b.cx);
   assert.equal(b.view.want, "a", "Alpha opens Alpha");
   handler(door(b.view.render(b.cx), "Beta"), "on_click")({}, b.cx);
@@ -347,7 +350,7 @@ test("The chosen tab's × is a Button: Tab reaches it, Enter and Space press it,
 });
 
 test("A panel tab, a pane standing in and a stale body each draw their state: the doors as Buttons, the open one on the wash; a held pane let go on the bar goes back; a panel read before keeps its body with its time and Retry", async () => {
-  const tree = { id: "root", children: [{ id: "panel", children: [{ id: "panel-body", children: [{ id: "pr" }] }] }] };
+  const tree = withPanel("pr");
   const b = await bar({ tree, stored: { "strip.drag": { pane: "p1" }, "strip.drop": { at: 1 } } });
   const root = b.view.render(b.cx);
   for (const label of ["New tab", "Arrange", "Files", "PR"]) assert.equal(door(root, label).tag.startsWith("tab-bar-"), true, `${label}: a Button`);
@@ -365,10 +368,8 @@ test("A panel tab, a pane standing in and a stale body each draw their state: th
 });
 
 test("A panel's id is its own: one named lu-notes draws and opens, and one named plus leaves New tab alone", async () => {
-  const tree = { id: "root", children: [{ id: "panel", children: [{ id: "panel-body", children: [] }] }] };
   const panels = [{ id: "lu-notes", mod: "notes-panel", label: "Custom" }, { id: "plus", mod: "plus-panel", label: "Plus", icon: "mods/plus/icon.svg" }];
-  const b = await bar({ tree, stored: { "kanso.panels": panels } });
-  const root = b.view.render(b.cx);
+  const { b, root } = await panelsBar(panels);
   handler(door(root, "Custom"), "on_click")({}, b.cx);
   assert.equal(b.view.want, "lu-notes");
   handler(door(b.view.render(b.cx), "New tab"), "on_click")({}, b.cx);
