@@ -15,6 +15,7 @@ import { TextField } from "./ui-field.js";
 import { menu } from "./ui-menu.js";
 import { failureBlock, skeletonOf, diffText, facts, code, tooltip, row as kitRow } from "./kit.js";
 import { dot } from "./ui-dot.js";
+import { caption } from "./ui-caption.js";
 import { section } from "./ui-section.js";
 import { segmented } from "./ui-tab.js";
 import { aliasText, machineTitle, tryOr, tryOrAsync, bounded } from "./pure.js";
@@ -1008,7 +1009,7 @@ export class PullRequest {
     const person = (login, sub, color) => h_flex().gap(G.xs).items_center()
       .when(Boolean(color), (el) => el.child(dot(c, color)))
       .child(div().text_size(T.card).text_color(c.text).child(login))
-      .when(Boolean(sub), (el) => el.child(div().text_size(T.micro).text_color(c.dim).child(sub)));
+      .when(Boolean(sub), (el) => el.child(caption(c, sub)));
     const assignees = (pr.assignees ?? []).map((a) => person(a.login));
     const mine = this.viewer && (pr.assignees ?? []).some((a) => a.login === this.viewer);
     const outcome = { APPROVED: ["approved", c.green], CHANGES_REQUESTED: ["changes", c.red], COMMENTED: ["commented", null], DISMISSED: ["dismissed", null] };
