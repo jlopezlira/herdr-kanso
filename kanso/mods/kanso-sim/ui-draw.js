@@ -9,6 +9,9 @@ const ink = (c, value) => {
   return value.share === undefined ? c[value.colour] : alpha(c[value.colour], value.share);
 };
 
+// The one bare element the drawings start from.
+const plain = () => div();
+
 export const lastOp = (ops, name) => {
   const found = ops.filter(([op]) => op === name);
   return found.length ? found[found.length - 1] : null;
@@ -16,7 +19,7 @@ export const lastOp = (ops, name) => {
 const radiusOf = (ops) => lastOp(ops, "rounded")?.[1] ?? 0;
 const ringOf = (ops, c) => {
   const ring = lastOp(ops, "ring");
-  return ring ? div().absolute().inset_0().border(ring[1]).border_color(ink(c, ring[2])).rounded(radiusOf(ops)) : null;
+  return ring ? plain().absolute().inset_0().border(ring[1]).border_color(ink(c, ring[2])).rounded(radiusOf(ops)) : null;
 };
 
 // `hoverClass` is the Storybook's static hover mark. It is not on the element at rest.
@@ -33,6 +36,11 @@ export const painted = (el, { own, extra }, c) => {
   return extra.length ? drawn.hover((style) => apply(style, extra, c)) : drawn;
 };
 export const paint = (el, node, c, rules, hoverClass = null, live = true) => painted(el, lookOf(node, rules, hoverClass, live), c);
+// A node drawn as the element its look makes, flex or not as its CSS says, with `id` when it has handlers; `live` takes its hover.
+export const box = (node, c, rules, id = null, live = false) => {
+  const el = plain();
+  return painted(id ? el.id(id) : el, lookOf(node, rules, null, live), c);
+};
 
 const apply = (el, ops, c) => ops.reduce((acc, [op, ...args]) => {
   if (op === "ring") return acc.relative();
@@ -50,7 +58,7 @@ export const draw = (tree, c, { id, rules, presses = {} }) => {
     const key = `${id}-${path}`;
     const press = presses[node.attrs.title];
     const hovered = stylesFor(node, rules, hovering(node)).slice(own.length);
-    const base = apply(press ? Button.new(key).on_click(press) : div().id(key), own, c);
+    const base = apply(press ? Button.new(key).on_click(press) : plain().id(key), own, c);
     const withHover = hovered.length ? base.hover((style) => apply(style, hovered, c)) : base;
     const el = node.attrs.title ? withHover.tooltip(node.attrs.title) : withHover;
     return el.children([...node.children.map((child, i) => make(child, `${path}-${i}`)), ringOf(own, c)].filter(Boolean));

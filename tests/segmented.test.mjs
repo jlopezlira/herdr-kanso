@@ -119,7 +119,7 @@ test("A dot marks an unselected item; collapsed, the items are square icons with
   assert.equal(open.kids[1].kids.at(-1).calls.some((call) => call[0] === "bg" && call[1] === c.blocked), true);
   assert.equal(segmented("v", items, "agents", () => {}, c).kids[1].kids.some((kid) => kid.calls.some((call) => call[0] === "bg" && call[1] === c.blocked)), false, "no dot on the chosen item");
   const rail = segmented("v", items, "spaces", () => {}, c, { collapsed: true });
-  assert.equal(rail.tag, "v_flex");
+  assert.equal(calls(rail, "flex_col").length, 1, "a column");
   for (const [i, item] of rail.kids.entries()) {
     assert.equal(arg(item, "w"), H.control);
     assert.equal(arg(item, "h"), H.control);
