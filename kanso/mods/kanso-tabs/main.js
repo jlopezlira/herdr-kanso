@@ -13,7 +13,7 @@ import { walkLayout, commitLayout, sidebarBack, foldSidebar, dropStripDrag } fro
 import { Updater } from "./update.js";
 import { tryOr, readCommands } from "./pure.js";
 import { openArrange } from "./open.js";
-import { G, H, W, CLEAR, EASE, GLIDE, TINT, alpha, tokens } from "./ui.js";
+import { DIALOG, G, H, R, T, W, ICON as ICON_SIZE, CLEAR, EASE, GLIDE, TINT, alpha, tokens } from "./ui.js";
 import { button, iconButton, pressAgain, Armed } from "./ui-button.js";
 import { TextField } from "./ui-field.js";
 import { menu } from "./ui-menu.js";
@@ -21,6 +21,7 @@ import { tabSkeleton } from "./ui-skeleton.js";
 import { tooltip } from "./kit.js";
 import { boundChord } from "./ui-tooltip.js";
 import { tabItem, tabInsertion, tabPill, TAB_NAME_LIMIT } from "./ui-tab.js";
+import { pieceLines } from "./piece-lines.js";
 import { tabMark, barState, foldTabs, pillAt, dropSide, renameWaits } from "./tab-bar-model.js";
 import { Kdb, projectKey } from "./kdb.js";
 import { projectOpen, OPEN } from "./panel-state.js";
@@ -117,6 +118,8 @@ export default class Tabs extends View {
   tabW = {};
   barW = {};
   armed = new Armed();
+  tabMenu = null;
+  panelMenu = null;
   dropAt = null;
   renaming = null;
   renamed = null;
@@ -400,7 +403,7 @@ export default class Tabs extends View {
     const armed = tab.active && this.armed.is(closeKey(tab));
     const waiting = this.renamed?.id === tab.id;
     return {
-      key: tab.id, label: waiting ? this.renamed.name : tab.name, mark: tabMark(tab), armed, pending: waiting,
+      key: tab.id, label: waiting ? this.renamed.name : tab.name, mark: shown("tabs.state", true, pieces(shared)) ? tabMark(tab) : null, armed, pending: waiting,
       tip: armed ? pressAgain(`close ${tab.name}`) : null,
       held: this.pressed === tab.id && Boolean(this.dropAt) && this.dropAt !== tab.id,
       editing: this.renaming?.id === tab.id ? this.renaming.text : null,
@@ -419,13 +422,44 @@ export default class Tabs extends View {
     const wired = connected ? item
       .on_hover((hovered, cx) => this.hoverTab(tab, hovered, cx))
       .on_mouse_up("left", () => this.dropTab(tab, space))
-      .on_mouse_down("right", () => openOverlay({ mod: "menu", kind: "popup", width: 200, props: { tab: "tab", target: { id: tab.id, space: space.id } } }))
+      .on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); this.armed.clear(); this.tabMenu = tab.id; cx.notify(); })
       .on_key_down((e, cx) => { if (this.renaming?.id === tab.id && e.key === "escape") { cx.stop_propagation(); this.endRename(cx, false); } }) : item;
     const landing = target ? tabInsertion(c).absolute().top((H.icon - H.badge) / 2) : null;
     return div().id(`tab-box-${tab.id}`).relative().flex_none()
       .on_size_change((s, cx) => { this.tabW = this.sized(this.tabW, tab.id, s.width, cx); })
-      .child(wired)
+      .child(this.tabMenu === tab.id ? this.tabMenuPopover(c, wired, tab, { space, ps }) : wired)
       .when(Boolean(landing), (box) => box.child(dropSide(from, to) === "before" ? landing.left(-G.hair) : landing.right(-G.hair)));
+  }
+
+  // Right-click on a panel's button: its name, Hide, Settings, and the whole list of panels.
+  panelMenuPopover(c, trigger, panel) {
+    const shut = (cx) => { this.panelMenu = null; cx.notify(); };
+    const items = [
+      ...pieceLines(`panel.${panel.id}`, { done: shut }).slice(1),
+      { separator: true },
+      { label: "Panels\u2026", onClick: (cx) => { shut(cx); openSettings("pieces"); } },
+    ];
+    return Popover.new(`panel-menu-${panel.id}`).trigger(trigger).open(true).on_open_change((open, cx) => { if (!open) shut(cx); })
+      .content(menu(`panel-menu-list-${panel.id}`, { title: `${panel.label} panel`, items }, c));
+  }
+
+  // Right-click: its name, Rename, New tab, Sleep, Close (twice with agents in it), then the piece lines.
+  tabMenuPopover(c, trigger, tab, { space, ps }) {
+    const shut = (cx) => { this.tabMenu = null; cx.notify(); };
+    const agents = ps.filter((p) => p.tab === tab.id && p.program?.agent).length;
+    const verb = `close ${agents} agent${agents === 1 ? "" : "s"}`;
+    const armed = agents > 0 && this.armed.is(closeKey(tab));
+    const items = [
+      { icon: "pencil", label: "Rename", onClick: (cx) => { shut(cx); this.startRename(tab, cx); } },
+      { icon: "plus", label: "New tab", hint: boundChord("tab.new") || null, onClick: (cx) => { shut(cx); run("tab.new", { space: space.id }); } },
+      { icon: "moon", label: `Sleep ${tab.name}\u2026`, onClick: (cx) => { shut(cx); openOverlay({ mod: "kanso-sleep", kind: "dialog", width: DIALOG.wide, props: { sleep: { scope: "tab", space: space.id, tab: tab.id } } }); } },
+      { separator: true },
+      { icon: "x", label: "Close tab", hint: boundChord("tab.close") || null, armed, verb: agents ? verb : null,
+        onClick: (cx) => (agents ? this.armed.press(closeKey(tab), cx, () => { shut(cx); run("tab.close", { id: tab.id }); }) : (shut(cx), run("tab.close", { id: tab.id }))) },
+      ...pieceLines("tabs.state", { named: true, done: shut }),
+    ];
+    return Popover.new(`tab-menu-${tab.id}`).trigger(trigger).open(true).on_open_change((open, cx) => { if (!open) shut(cx); })
+      .content(menu(`tab-menu-list-${tab.id}`, { title: tab.name, items }, c));
   }
 
   // Tabs that do not fit fold behind +N, a Menu of them with their marks; a pick chooses the tab.
@@ -490,7 +524,7 @@ export default class Tabs extends View {
     if (JSON.stringify(roster) !== JSON.stringify(shared("kanso.panels.all") ?? null)) setShared("kanso.panels.all", roster);
     const map = pieces(shared);
     const tools = state === "connected" ? [
-      tool("tab-new", "plus", "New", () => openOverlay({ mod: "new-menu", kind: "popup", width: 250, height: 512 }))
+      tool("tab-new", "plus", "New", () => run("kanso-spaces.new-conversation"))
         .on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); openArrange(); }),
       shown("tabs.arrange", true, map) ? tool("tab-arrange", "layers", tooltip({ label: "Arrangements", chord: boundChord("kanso-strip.arrange") }), () => openArrange()) : null,
     ].filter(Boolean) : [];
@@ -501,17 +535,17 @@ export default class Tabs extends View {
     const panelButton = (p, k) => {
       const on = now === p.id, target = this.dragPanel && this.dragPanel !== p.id;
       const named = !p.icon || on || this.hoverPanel === p.id;
-      // 6.8 px a character at size 12: the name's box eases open to this width.
-      const wide = Math.ceil(String(p.label).length * 6.8) + 10;
+      // About 0.57 of the text size a character: the name's box eases open to this width.
+      const wide = Math.ceil(String(p.label).length * T.value * 0.57) + G.md;
       const name = div().id(`panel-name-${p.id}`).h_full().flex().items_center().overflow_hidden().flex_none()
         .w(named ? wide : 0).opacity(named ? 1 : 0)
         .transition("width", EASE)
         .transition("opacity", EASE)
-        .child(div().pl(6).pr(4).whitespace_nowrap().child(p.label));
-      return h_flex().id(`panel-${p.id}`).h(H.icon).min_w(H.icon).px(p.icon ? 5.5 : 4).flex_none().items_center().justify_center().rounded(6)
-        .text_size(12).bg(on ? alpha(t.foreground, TINT.tab) : CLEAR)
+        .child(div().pl(G.xs).pr(G.xs).whitespace_nowrap().child(p.label));
+      const button = h_flex().id(`panel-${p.id}`).h(H.icon).min_w(H.icon).px(G.xs).flex_none().items_center().justify_center().rounded(R.control)
+        .text_size(T.value).bg(on ? c.w12 : CLEAR)
         .text_color(on ? t.foreground : t.muted)
-        .hover(s => s.bg(alpha(t.foreground, target ? TINT.faint : on ? TINT.tab : TINT.hover)).text_color(t.foreground))
+        .hover(s => s.bg(target ? alpha(t.foreground, TINT.faint) : on ? c.w12 : c.w7).text_color(t.foreground))
         .on_hover((hovered, cx) => {
           if (hovered) this.hoverPanel = p.id; else if (this.hoverPanel === p.id) this.hoverPanel = null;
           cx.notify();
@@ -523,12 +557,13 @@ export default class Tabs extends View {
           else if (from === p.id) this.mount(on ? null : p.id);
           cx.notify();
         })
-        .on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); openSettings("pieces"); })
-        .when(Boolean(p.icon), (el) => el.child(svg(p.icon).size(15)))
+        .on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); this.panelMenu = p.id; cx.notify(); })
+        .when(Boolean(p.icon), (el) => el.child(svg(p.icon).size(ICON_SIZE)))
         .child(name);
+      return this.panelMenu === p.id ? this.panelMenuPopover(c, button, p) : button;
     };
     // No background and no line of its own: it sits on the frame.
-    return h_flex().id("tab-bar").size_full().min_w(0).px(12).gap(2).items_center()
+    return h_flex().id("tab-bar").size_full().min_w(0).px(G.md).gap(G.sm).items_center()
       .on_size_change(() => this.keepRail(layout()))
       // A pane held in the strip and let go here goes back where it was.
       .on_mouse_up("left", dropStripDrag)
@@ -537,7 +572,7 @@ export default class Tabs extends View {
       .on_hover((hovered, cx) => { if (!hovered && this.pressed) { this.pressed = null; this.dropAt = null; cx.notify(); } })
       .on_scroll_wheel(e => this.wheel(e))
       .child(this.tabArea(c, { space, openTabs, ps, state, tools }))
-      .child(h_flex().flex_none().gap(2).items_center().children(shownPanels.map(panelButton))
+      .child(h_flex().flex_none().gap(G.hair).items_center().children(shownPanels.map(panelButton))
         .child(tool("kanso-help", "circle-question-mark", tooltip({ label: "kansō help", chord: boundChord("mod.open:kanso-help") }), () => run("mod.open", { name: "kanso-help" })).ml(4)))
       .when(window()?.buttons, el => el.child(tool("minimize", "minus", "Minimize", () => run("window.minimize")))
         .child(tool("maximize", "square", "Maximize", () => run("window.maximize")))

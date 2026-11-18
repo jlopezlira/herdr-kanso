@@ -297,7 +297,7 @@ export class Find {
 
   cell(item, c) {
     if (item.kind === "day") {
-      return div().w_full().px(G.md).pt(G.sm).pb(G.xs).text_size(10.5).text_color(c.dim).child(item.label);
+      return div().w_full().px(G.md).pt(G.sm).pb(G.xs).text_size(T.micro).text_color(c.dim).child(item.label);
     }
     const turn = this.state.turns[item.hit.turn];
     const on = item.index === this.at;
@@ -359,7 +359,7 @@ export class Find {
     if (this.open) return this.reading(c);
     if (laid.items.length) return this.listBox(c, laid);
     if (showSkel) return div().w_full().p(G.sm).child(skeletonOf({ shape: "line", count: 2 })("kanso-skeleton", c));
-    return div().px(G.md).py(G.sm).text_size(10.5).text_color(c.dim).child(this.unavailable ?? "This conversation is no longer there.");
+    return div().px(G.md).py(G.sm).text_size(T.micro).text_color(c.dim).child(this.unavailable ?? "This conversation is no longer there.");
   }
 
   render(cx) {
@@ -397,6 +397,6 @@ export class Find {
 }
 
 const turnMeta = (turn, c) => [
-  div().text_size(10.5).text_color(c.muted).child(whoOf(turn)),
-  div().text_size(10.5).text_color(c.dim).child(whenLabel(turn?.at)),
+  div().text_size(T.micro).text_color(c.muted).child(whoOf(turn)),
+  div().text_size(T.micro).text_color(c.dim).child(whenLabel(turn?.at)),
 ];

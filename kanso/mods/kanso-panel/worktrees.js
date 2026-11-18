@@ -12,7 +12,7 @@ import { v_flex, h_flex } from "gpui-base";
 import { exec, spaces, panes, home, run, theme, shared, notify, knownAgents } from "herdr";
 import { Share, postText, shareRows } from "./share.js";
 import { WorktreeStore } from "./worktrees-store.js";
-import { G, OPACITY, tokens } from "./ui.js";
+import { R, T, G, OPACITY, tokens } from "./ui.js";
 import { Armed, button, quietLink, iconButton } from "./ui-button.js";
 import { row } from "./ui-row.js";
 import { factList } from "./ui-facts.js";
@@ -613,7 +613,7 @@ export class Worktrees {
     return h_flex().w_full().items_center().justify_between().gap(G.md)
       .child(div().truncate().text_size(narrow ? 17 : 20).text_color(c.text).child("Worktrees"))
       .child(h_flex().gap(G.xs).items_center().flex_none()
-        .when(Boolean(this.phase), (el) => el.child(div().pr(G.xs).text_size(11).text_color(c.dim).child(this.phase)))
+        .when(Boolean(this.phase), (el) => el.child(div().pr(G.xs).text_size(T.micro).text_color(c.dim).child(this.phase)))
         .child(iconButton("wt-share", "share", "Share", (cx) => this.share.toggle(cx), c))
         .child(iconButton("wt-refresh", "refresh-cw", "Scan again", (cx) => { if (!this.working) this.refresh(cx); }, c, { spin: scanning })));
   }
@@ -648,15 +648,15 @@ export class Worktrees {
     const gist = !this.done ? "Clean up waits for the scan to finish."
       : plan.length ? `${freed ? `${fmtSize(freed)} of it` : `${plan.length} of them`} can go without losing anything.` : "Nothing can go without losing work.";
     return heroStack(heroHeading()
-        .child(div().text_size(15).text_color(c.muted).child(here ? `On ${machineTitle("", "", here)}` : "On this computer"))
+        .child(div().text_size(T.title).text_color(c.muted).child(here ? `On ${machineTitle("", "", here)}` : "On this computer"))
         .child(metric({ value: measured ? fmtSize(total) : String(live.length), unit: measured ? "in worktrees" : "worktrees", facts: factList(stats) })("wt-metric", c))
-        .child(div().text_size(15).text_color(c.dim).child(gist)))
+        .child(div().text_size(T.title).text_color(c.dim).child(gist)))
       .child(v_flex().w_full().gap(G.sm)
         .child(h_flex().w_full().flex_wrap().gap_x(G.lg).gap_y(G.sm).items_center()
           .child(primary)
-          .child(div().text_size(12).text_color(armed ? c.red : c.dim)
+          .child(div().text_size(T.body).text_color(armed ? c.red : c.dim)
             .child(armed ? "Merged branches go too; the others stay." : "Nothing uncommitted, every commit on a branch, idle a day.")))
-        .when(Boolean(this.notice), (el) => el.child(div().text_size(12).text_color(c.muted).child(this.notice)))
+        .when(Boolean(this.notice), (el) => el.child(div().text_size(T.body).text_color(c.muted).child(this.notice)))
         .when(Boolean(this.note), (el) => el.child(failureBlock(this.note)("wt-note", c))));
   }
 
@@ -679,8 +679,8 @@ export class Worktrees {
     return v_flex().w_full()
       .child(button)
       .child(v_flex().w_full().px(G.md).pt(G.xs).pb(G.md).gap(G.sm)
-        .child(div().w_full().text_size(12).line_height(1.45).text_color(loses ? c.red : c.muted).child(blocked || text))
-        .child(div().w_full().truncate().text_size(11).text_color(c.dim).child(tilde(w.path)))
+        .child(div().w_full().text_size(T.body).line_height(1.45).text_color(loses ? c.red : c.muted).child(blocked || text))
+        .child(div().w_full().truncate().text_size(T.micro).text_color(c.dim).child(tilde(w.path)))
         .child(h_flex().flex_wrap().gap_x(G.lg)
           .when(s === "broken", (el) => el.child(quietLink(`wt-repair-${w.path}`, this.working === w.path ? "Repairing…" : "Repair the link",
             (cx) => this.repair(w.path, cx), c, { color: c.text, disabled: Boolean(this.working) })))
@@ -699,12 +699,12 @@ export class Worktrees {
     const size = items.reduce((n, w) => n + (w.size ?? 0), 0), many = items.filter(removable);
     const key = `group:${id}`, armed = this.armed.is(key), lost = losses(many);
     const note = [`${shown.length || missing.length}`, fmtSize(size)].filter(Boolean).join(" · ");
-    return v_flex().w_full().gap(2)
+    return v_flex().w_full().gap(G.hair)
       .child(h_flex().w_full().items_end().justify_between().gap(G.md).pb(G.sm)
-        .child(v_flex().flex_1().min_w(0).gap(2)
-          .child(div().w_full().truncate().text_size(15).text_color(c.text).child(title))
-          .child(div().w_full().truncate().text_size(11.5).text_color(c.dim).child(where)))
-        .child(div().flex_none().text_size(12).text_color(c.dim).child(note)))
+        .child(v_flex().flex_1().min_w(0).gap(G.hair)
+          .child(div().w_full().truncate().text_size(T.title).text_color(c.text).child(title))
+          .child(div().w_full().truncate().text_size(T.body).text_color(c.dim).child(where)))
+        .child(div().flex_none().text_size(T.body).text_color(c.dim).child(note)))
       .children(rows.map((w) => this.row(w, c)))
       .child(h_flex().w_full().flex_wrap().gap_x(G.lg).px(G.md).pt(G.xs)
         .when(shown.length > ROWS, (el) => el.child(quietLink(`wt-more-${id}`, open ? "Show fewer" : `Show ${shown.length - ROWS} more`,
@@ -714,7 +714,7 @@ export class Worktrees {
         .when(many.length > 1 && this.done, (el) => el.child(this.armed.link(`wt-all-${id}`, `Remove all ${many.length}`, `remove ${many.length}`,
           key, (cx) => { this.markOpen(); this.removeAll(items.map((w) => this.item(w.path)).filter((w) => w && removable(w)), cx); }, c, { disabled: Boolean(this.working) }))))
       // Below the actions, so arming moves none of them.
-      .when(armed, (el) => el.child(div().w_full().px(G.md).pt(G.xs).text_size(12).line_height(1.45).text_color(lost === "Nothing is lost." ? c.muted : c.red)
+      .when(armed, (el) => el.child(div().w_full().px(G.md).pt(G.xs).text_size(T.body).line_height(1.45).text_color(lost === "Nothing is lost." ? c.muted : c.red)
         .child(`${lost} Branches stay unless merged. Anything open in Herdr, locked or in use today stays.`)));
   }
 
@@ -727,22 +727,22 @@ export class Worktrees {
     const days = lastDays(byDay), top = Math.max(0, ...days.map((d) => d.kb));
     return v_flex().w_full().gap(G.sm)
       .child(h_flex().w_full().items_end().justify_between()
-        .child(div().text_size(12).text_color(c.muted).child(title))
-        .child(div().text_size(11).text_color(c.dim).child(top ? `top ${fmtSize(top)}` : empty)))
+        .child(div().text_size(T.body).text_color(c.muted).child(title))
+        .child(div().text_size(T.micro).text_color(c.dim).child(top ? `top ${fmtSize(top)}` : empty)))
       .child(h_flex().w_full().items_end()
         .children(days.map((d) => {
           const peak = top > 0 && d.kb === top;
-          return v_flex().flex_1().min_w(0).h(height + 18).items_center().justify_end().gap(4)
+          return v_flex().flex_1().min_w(0).h(height + 18).items_center().justify_end().gap(G.xs)
             .tooltip(tooltip({ label: shortDate(d.at), detail: d.kb ? fmtSize(d.kb) : "nothing" }))
-            .when(peak, (e) => e.child(div().text_size(10).text_color(c.text).whitespace_nowrap().child(fmtSize(d.kb))))
+            .when(peak, (e) => e.child(div().text_size(T.micro).text_color(c.text).whitespace_nowrap().child(fmtSize(d.kb))))
             .child(div().w(peak ? 3 : 2).flex_none().rounded_t(1)
               .h(d.kb ? Math.max(3, Math.round((d.kb / top) * height)) : 1)
               .bg(peak ? c.accent : d.kb ? c.muted : c.border)
               .opacity(peak || !d.kb ? 1 : OPACITY.quiet));
         })))
       .child(h_flex().w_full().justify_between()
-        .child(div().text_size(10).text_color(c.dim).child(shortDate(days[0].at)))
-        .child(div().text_size(10).text_color(c.dim).child("Today")));
+        .child(div().text_size(T.micro).text_color(c.dim).child(shortDate(days[0].at)))
+        .child(div().text_size(T.micro).text_color(c.dim).child("Today")));
   }
 
   space(c) {
@@ -757,23 +757,23 @@ export class Worktrees {
     const most = repos[0]?.kb ?? 1;
     return v_flex().w_full().gap(G.lg)
       .child(section(c, "Where the space is", fmtSize(total)))
-      .child(h_flex().w_full().h(10).rounded(5).overflow_hidden().gap(2)
+      .child(h_flex().w_full().h(10).rounded(R.sm).overflow_hidden().gap(G.hair)
         .children(parts.filter((p) => p.kb > 0).map((p) => div().h_full().w(pct(p.kb)).flex_shrink_0().bg(color[p.key]).opacity(p.key === "checking" ? 1 : OPACITY.part)
           .tooltip(tooltip({ label: p.label, detail: fmtSize(p.kb) })))))
       .child(v_flex().w_full().gap(6)
         .children(parts.map((p) => h_flex().w_full().items_center().gap(G.sm)
           .child(dot(c, color[p.key]))
-          .child(div().flex_1().min_w(0).truncate().text_size(12.5).text_color(c.text).child(p.label))
-          .child(div().text_size(11).text_color(c.dim).child(`${p.count}`))
-          .child(div().w(64).flex_none().text_right().text_size(13).font_light().text_color(c.text).child(fmtSize(p.kb) || "0 KB"))
-          .child(div().w(36).flex_none().text_right().text_size(11).text_color(c.dim).child(`${Math.round((p.kb / total) * 100)}%`)))))
+          .child(div().flex_1().min_w(0).truncate().text_size(T.value).text_color(c.text).child(p.label))
+          .child(div().text_size(T.micro).text_color(c.dim).child(`${p.count}`))
+          .child(div().w(64).flex_none().text_right().text_size(T.card).font_light().text_color(c.text).child(fmtSize(p.kb) || "0 KB"))
+          .child(div().w(36).flex_none().text_right().text_size(T.micro).text_color(c.dim).child(`${Math.round((p.kb / total) * 100)}%`)))))
       .when(repos.length > 1, (el) => el.child(v_flex().w_full().gap(G.sm).pt(G.sm)
-        .child(div().text_size(12).text_color(c.muted).child("The repositories that take the most"))
-        .children(repos.map((r) => v_flex().w_full().gap(4)
+        .child(div().text_size(T.body).text_color(c.muted).child("The repositories that take the most"))
+        .children(repos.map((r) => v_flex().w_full().gap(G.xs)
           .child(h_flex().w_full().items_end().gap(G.sm)
-            .child(div().flex_1().min_w(0).truncate().text_size(12.5).text_color(c.text).child(r.name))
-            .child(div().text_size(11).text_color(c.dim).child(`${r.count}`))
-            .child(div().w(64).flex_none().text_right().text_size(13).font_light().text_color(c.text).child(fmtSize(r.kb))))
+            .child(div().flex_1().min_w(0).truncate().text_size(T.value).text_color(c.text).child(r.name))
+            .child(div().text_size(T.micro).text_color(c.dim).child(`${r.count}`))
+            .child(div().w(64).flex_none().text_right().text_size(T.card).font_light().text_color(c.text).child(fmtSize(r.kb))))
           .child(div().w_full().h(4).rounded(2).bg(c.border)
             .child(div().h_full().w(`${Math.max(1, (r.kb / most) * 100).toFixed(2)}%`).rounded(2).bg(c.muted)))))));
   }
@@ -789,7 +789,7 @@ export class Worktrees {
       .child(section(c, "Freed", h.since ? `since ${shortDate(h.since)}` : ""))
       .child(v_flex().gap(G.xs)
         .child(metric({ value: fmtSize(h.kb) || "0 KB", unit: "of disk freed", facts: h.kb > 0 || h.records + h.orphans > 0 ? factList(cleanedStats(h)) : "" })("wt-freed", c))
-        .child(div().text_size(12).text_color(c.dim).child(!h.kb
+        .child(div().text_size(T.body).text_color(c.dim).child(!h.kb
           ? "Nothing freed yet. Every scan is kept: what Clean up, Remove or anything else frees adds up here."
           : outside > 0 ? `${fmtSize(h.kanso) || "0 KB"} here, ${fmtSize(outside)} removed outside the panel since a scan saw them.` : "All of it from this panel.")))
       .child(freedBars)
@@ -802,7 +802,7 @@ export class Worktrees {
     const baseOf = (w) => this.groups.find((g) => g.repo === w.repo)?.base;
     return v_flex().w_full()
       .child(section(c, "Ask your agent", "in a new tab"))
-      .child(div().text_size(12).text_color(c.dim).pb(G.xs)
+      .child(div().text_size(T.body).text_color(c.dim).pb(G.xs)
         .child(`${look.length} would lose work if removed. Your agent can find out what that work is and whether it already lives somewhere else.`))
       .child(h_flex().w_full().flex_wrap().gap_x(G.lg).gap_y(G.xs)
         .child(quietLink("wt-review", `Review the ${look.length} that need a look`, () => this.ask("Worktrees review", home(), reviewPrompt(look, baseOf)), c, { color: c.text })));
@@ -833,7 +833,7 @@ export class Worktrees {
       .when(groups.length > REPOS, (el) => el.child(h_flex().child(quietLink("wt-repos", this.allRepos ? "Show fewer repositories" : `Show ${groups.length - REPOS} more repositories`,
         (cx) => { this.allRepos = !this.allRepos; cx.notify(); }, c))))
       .when(this.orphans.length > 0, (el) => el.child(this.group("orphans", "Left behind", "Folders of worktrees whose repository moved or was deleted", this.orphans, c)))
-      .when(Boolean(this.scannedAt), (el) => el.child(div().text_size(10.5).text_color(c.dim)
+      .when(Boolean(this.scannedAt), (el) => el.child(div().text_size(T.micro).text_color(c.dim)
         .child(`Scanned ${new Date(this.scannedAt).toTimeString().slice(0, 5)}.`)));
   }
 

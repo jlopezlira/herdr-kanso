@@ -8,7 +8,7 @@ import { theme, appHome, home, props, closeOverlay, keys, openOverlay, run } fro
 import { focusOn } from "./pure.js";
 import { Lit } from "./lit.js";
 import { pagedDialog } from "./pages.js";
-import { G, DIALOG, KEY, TINT, alpha, tokens } from "./ui.js";
+import { R, T, G, DIALOG, KEY, TINT, alpha, tokens } from "./ui.js";
 import { button, quietLink } from "./ui-button.js";
 import { row } from "./ui-row.js";
 import { glyphs } from "./marks.js";
@@ -71,7 +71,7 @@ export default class Help extends View {
     const fill = pressed || picked ? c.accent : held ? alpha(c.text, TINT.soft) : does ? alpha(c.accent, TINT.bound) : alpha(c.text, TINT.cell);
     const ink = pressed || picked ? (t.accent_foreground ?? c.canvas) : does || held ? c.text : c.dim;
     const label = (isMod ? modifierLabels(localName()).MOD_GLYPH[name] : CAP[name]) ?? (name.length === 1 ? name.toUpperCase() : name);
-    return div().id(`cap-${name}-${i}`).w(width).h(KEY.unit).flex_none().rounded(7)
+    return div().id(`cap-${name}-${i}`).w(width).h(KEY.unit).flex_none().rounded(R.control)
       .border_1().border_color(pressed || picked ? c.accent : does ? alpha(c.accent, TINT.boundLine) : held ? alpha(c.text, TINT.strong) : c.border)
       .bg(fill).flex().items_center().justify_center()
       .text_size(label.length > 1 ? 11 : 13.5).font_medium().text_color(ink)
@@ -85,9 +85,9 @@ export default class Help extends View {
   }
 
   chip(c, id, text, on, act) {
-    return div().id(id).h(28).px(12).flex().items_center().rounded(7).cursor_pointer()
+    return div().id(id).h(28).px(G.md).flex().items_center().rounded(R.control).cursor_pointer()
       .border_1().border_color(on ? c.accent : c.border).bg(on ? alpha(c.accent, TINT.bound) : alpha(c.text, TINT.chip))
-      .text_size(12.5).font_medium().text_color(on ? c.text : c.muted)
+      .text_size(T.value).font_medium().text_color(on ? c.text : c.muted)
       .hover((s) => s.border_color(c.accent))
       .on_click((_e, cx) => { act(); cx.notify(); })
       .child(text);
@@ -107,12 +107,12 @@ export default class Help extends View {
         .child(div().w(G.sm))
         .child(this.chip(c, "mod-lists", "Lists: j k gg G", this.lists, () => { this.lists = !this.lists; this.mods = []; this.picked = "j"; }))
         .child(div().flex_1())
-        .child(div().text_size(12).text_color(c.dim).child(`${layerName} · ${bound.size} ${bound.size === 1 ? "key" : "keys"}`)))
+        .child(div().text_size(T.body).text_color(c.dim).child(`${layerName} · ${bound.size} ${bound.size === 1 ? "key" : "keys"}`)))
       .child(v_flex().gap(KEY.gap).p(14).rounded(12).bg(alpha(c.text, TINT.board)).border_1().border_color(c.border).items_center()
         .children(ROWS.map((row, r) => h_flex().gap(KEY.gap).children(row.map((k, i) => this.cap(t, c, k, `${r}-${i}`, bound))))))
-      .child(h_flex().h(44).px(14).gap(G.md).items_center().rounded(10).bg(chosen ? alpha(c.accent, TINT.diff) : alpha(c.text, TINT.chip))
+      .child(h_flex().h(44).px(14).gap(G.md).items_center().rounded(R.card).bg(chosen ? alpha(c.accent, TINT.diff) : alpha(c.text, TINT.chip))
         .child(div().min_w(64).text_size(17).font_semibold().text_color(chosen ? c.text : c.dim).child(chosen ? chordOf(chosen) : glyphs([...this.mods, this.picked].join("-"))))
-        .child(div().flex_1().text_size(13.5).text_color(chosen ? c.text : c.dim)
+        .child(div().flex_1().text_size(T.card).text_color(chosen ? c.text : c.dim)
           .child(chosen ? describe(chosen.action) : "Nothing on this key here. Press a key, or pick one.")))
       .child(v_flex()
         .children(list.map(([key, d]) => row(`row-${key}`, c, {
@@ -134,23 +134,23 @@ export default class Help extends View {
       .child(h_flex().gap(G.xl).items_center()
       .child(h_flex().w(150).h(150).flex_none().items_center().justify_center().child(this.pal.face(t, this.petState(), { since: this.hello, scale: 0.7, mood: "glad", px: 9 })))
       .child(v_flex().flex_1().gap(G.md)
-        .child(div().text_size(20).font_semibold().text_color(c.text).child("hjkl dōjō"))
-        .child(div().text_size(13).line_height(1.55).text_color(c.muted).child("Practice vim's moves until your fingers know them. Nine levels, from h and l alone to w b e, f t and gg G on real lines of code; rounds of ten targets, points for the fewest moves, a streak, and a hint when you stop to think."))
-        .child(div().text_size(13).line_height(1.55).text_color(c.muted).child(pet.sheet
+        .child(div().text_size(T.page).font_semibold().text_color(c.text).child("hjkl dōjō"))
+        .child(div().text_size(T.value).line_height(1.55).text_color(c.muted).child("Practice vim's moves until your fingers know them. Nine levels, from h and l alone to w b e, f t and gg G on real lines of code; rounds of ten targets, points for the fewest moves, a streak, and a hint when you stop to think."))
+        .child(div().text_size(T.value).line_height(1.55).text_color(c.muted).child(pet.sheet
           ? `${pet.name} keeps you company, still until you earn it: a jump for a target in the fewest moves, a wave for a streak or a round won, a slump for a key that is no move or the long way round.`
           : "Hachi, the dōjō's shiba, keeps you company: tongue out on a streak or a new best, sweating when you go the long way, asleep if you leave it alone."))
         .child(h_flex().pt(G.sm).gap(G.md).items_center()
           .child(button("enter-dojo", "Enter the dōjō", () => this.enterDojo(), c))
-          .child(div().text_size(11.5).text_color(c.dim).child("or press Enter")))))
+          .child(div().text_size(T.body).text_color(c.dim).child("or press Enter")))))
       .child(v_flex().gap(G.md)
-        .child(div().text_size(14).font_semibold().text_color(c.text).child("Your pet"))
+        .child(div().text_size(T.card).font_semibold().text_color(c.text).child("Your pet"))
         .child(this.pal.grid(t, c)));
   }
 
   block(c, title, lines) {
     return v_flex().gap(6)
-      .child(div().text_size(14).font_semibold().text_color(c.text).child(title))
-      .children(lines.map((l) => div().text_size(12.8).line_height(1.55).text_color(c.muted).child(l)));
+      .child(div().text_size(T.card).font_semibold().text_color(c.text).child(title))
+      .children(lines.map((l) => div().text_size(T.value).line_height(1.55).text_color(c.muted).child(l)));
   }
 
   guidePage(t, c) {
@@ -166,9 +166,9 @@ export default class Help extends View {
       name: "help", handle: this.handle, onKey: (e, cx) => this.key(e, cx),
       head: h_flex().w_full().items_center().gap(G.md)
         .child(svg("mods/kanso-chrome/icons/circle-question-mark.svg").size(17).text_color(c.accent))
-        .child(div().flex_1().text_size(15).font_semibold().child("kansō help"))
+        .child(div().flex_1().text_size(T.title).font_semibold().child("kansō help"))
         .child(quietLink("help-settings", "Settings", toSettings, c, { color: c.accent }))
-        .child(div().text_size(11).text_color(t.dim).child("Esc")),
+        .child(div().text_size(T.micro).text_color(t.dim).child("Esc")),
       tabs: PAGES, tab: this.page, page, t, c,
       onTab: (key, cx) => { this.page = key; if (key === "dojo") { this.hello = Date.now(); this.pal.bring(cx); } cx.notify(); },
     });

@@ -10,14 +10,19 @@ import { computerItem, paletteDoor, statusBar } from "./status-bar.js";
 import { boundChord } from "./ui-tooltip.js";
 import { afterMount, aliasText, tryOrAsync } from "./pure.js";
 import { paths } from "./platform-paths.js";
-import { MEMORY_MS, PALETTE_COMMAND, computerOf, computerShown, waitingItem, questionOf, memoryLow, workingItem } from "./model.js";
+import { MEMORY_MS, NEEDS_COMMAND, STATUS_COMMAND, PALETTE_COMMAND, computerOf, computerShown, waitingItem, questionOf, memoryLow, workingItem } from "./model.js";
 import { pieces, shown } from "./pieces.js";
+import { openPieceMenu } from "./piece-lines.js";
 
 const GUARD_NOW = ["data", "kanso-guard", "now.json"];
 const SIDEBAR_COLLAPSED = "sidebar.collapsed";
 const go = (command) => () => run(command);
 // The items on show, each a kit piece with the name its press takes and the command that press runs, if any.
-const item = (piece, name = null, command = null) => ({ piece, name, command });
+const item = (piece, name = null, command = null, menu = null) => ({ piece: menu ? onMenu(piece, menu) : piece, name, command });
+// A right click opens the piece's menu at the pointer.
+function onMenu(piece, menu) {
+  return (...drawn) => piece(...drawn).on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); openPieceMenu(menu); });
+}
 const pressesOf = (items) => Object.fromEntries(items.filter(({ command }) => command).map(({ name, command }) => [name, go(command)]));
 
 export default class WorkspaceStatus extends View {
@@ -64,12 +69,17 @@ export default class WorkspaceStatus extends View {
     const needs = waitingItem(rows, questions);
     const low = right ? memoryLow(this.memoryText) : null;
     const working = workingItem(list);
-    const lefts = computerShown(computer, shared(SIDEBAR_COLLAPSED)) ? [item(computerItem(computer), "Refresh", computer.command)] : [];
+    const lefts = computerShown(computer, shared(SIDEBAR_COLLAPSED)) ? [item(computerItem(computer), "Refresh", computer.command,
+      { id: "status.computer", title: computer.name, actions: computer.command ? [{ icon: "refresh-cw", label: "Refresh", command: computer.command }] : [] })] : [];
     const rights = [
-      needs && item(needsItem({ name: needs.name, question: needs.question ?? "", more: needs.more, tip: needs.tooltip }), "blocked", needs.command),
-      low && item(statusItem({ text: low.words, tone: low.tone, tip: low.tooltip }), low.words, low.command),
-      right && shown("status.agents", working.count > 0, map) && item(statusItem({ mark: working.mark, text: working.words, tip: working.tooltip }), working.mark, working.command),
-      right && shown("status.palette", true, map) && item(paletteDoor({ tip: tooltip({ label: "Command palette", chord: boundChord(PALETTE_COMMAND) }) }), "command", PALETTE_COMMAND),
+      needs && item(needsItem({ name: needs.name, question: needs.question ?? "", more: needs.more, tip: needs.tooltip }), "blocked", needs.command,
+        { title: "Needs you", actions: [{ label: `Go to ${needs.name}`, hint: boundChord(NEEDS_COMMAND) || null, command: needs.command }] }),
+      low && item(statusItem({ text: low.words, tone: low.tone, tip: low.tooltip }), low.words, low.command,
+        { title: "Memory low", actions: [{ icon: "memory-stick", label: "Open Memory", command: low.command }] }),
+      right && shown("status.agents", working.count > 0, map) && item(statusItem({ mark: working.mark, text: working.words, tip: working.tooltip }), working.mark, working.command,
+        { id: "status.agents", title: "Agents at work", actions: [{ label: "Show them", hint: boundChord(STATUS_COMMAND) || null, command: working.command }] }),
+      right && shown("status.palette", true, map) && item(paletteDoor({ tip: tooltip({ label: "Command palette", chord: boundChord(PALETTE_COMMAND) }) }), "command", PALETTE_COMMAND,
+        { id: "status.palette", title: "Command palette key" }),
     ].filter(Boolean);
     return statusBar({ left: lefts.map(({ piece }) => piece), right: rights.map(({ piece }) => piece) })("status", tokens(theme()), { presses: pressesOf([...lefts, ...rights]) });
   }

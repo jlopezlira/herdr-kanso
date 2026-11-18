@@ -34,6 +34,7 @@ export const PIECES = [
   piece("status.agents", "Agents at work", "Status bar", THREE, "needed", "draw"),
   piece("strip.minimap", "Minimap", "Status bar", SHOW, "show", "draw"),
   piece("status.palette", "Command palette", "Status bar", SHOW, "show", "draw"),
+  piece("tabs.state", "Agent state on tabs", "Tab bar and panels", SHOW, "show", "draw"),
   piece("tabs.arrange", "Arrangements", "Tab bar and panels", SHOW, "show", "draw"),
   ...PANELS.map(([id, label, job = null]) => piece(`panel.${id}`, label, "Tab bar and panels", SHOW, "show", "work", job)),
   piece("toast.update", "kansō update", "Notifications", SHOW, "show", "draw"),

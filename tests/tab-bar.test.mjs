@@ -221,7 +221,10 @@ test("Connecting draws one breathing skeleton per known tab; unreachable steps t
 test("A right-click opens the tab's menu and the wheel still moves one tab", async () => {
   const b = await bar();
   pressOf(tab(b.view.render(b.cx), "t2"), "right")(press, b.cx);
-  assert.deepEqual(clone(b.opened[0].props), { tab: "tab", target: { id: "t2", space: "s1" } });
+  assert.equal(b.view.tabMenu, "t2");
+  const popover = byTag(b.view.render(b.cx), "tab-menu-t2");
+  const words = texts(arg(popover, "content"));
+  for (const row of ["cart-ui", "Rename", "New tab", "Sleep cart-ui…", "Close tab", "Hide “Agent state on tabs”", "Settings for this…"]) assert.ok(words.includes(row), row);
   b.view.wheel({ delta_lines: { y: 1 } });
   assert.equal(b.ran.at(-1)[0], "tab.prev");
 });

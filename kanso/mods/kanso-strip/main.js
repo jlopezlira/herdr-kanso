@@ -16,7 +16,7 @@ import { openWithPopup } from "./popup.js";
 import { FIND } from "./find-key.js";
 import { rollupState, headerHold, prFacts, prLine } from "./ghchecks.js";
 import { pieces, shown, runs, setPiece, STORE } from "./pieces.js";
-import { G, R, T, W, ICON, OPACITY, TINT, CLEAR, DRAG_START, CHROME_SQUARE, PANE, alpha, glyphOf, mix, tokens, washes } from "./ui.js";
+import { DIALOG, G, R, T, W, ICON, ICON_CHROME, OPACITY, TINT, CLEAR, DRAG_START, CHROME_SQUARE, PANE, alpha, glyphOf, mix, tokens, washes } from "./ui.js";
 import { mark } from "./ui-mark.js";
 import { iconButton, Armed } from "./ui-button.js";
 import { menu } from "./ui-menu.js";
@@ -27,6 +27,7 @@ import { layoutPaused, statusBar } from "./status-bar.js";
 import { COLUMN } from "./ui-status.js";
 import { boundChord } from "./ui-tooltip.js";
 import { headerSegment } from "./ui-header.js";
+import { pieceLines } from "./piece-lines.js";
 import { NAME_LIMIT, ENTRIES, DIGEST_PIECES, PIECE_GROUP, shownAt, foldFor, headerWidths, headerTools, hoverTools, menuEntries, placeOf, paneLabel, headerMark, prTitle } from "./header-model.js";
 
 // Panes the view holds at once (st.n, 1 to 8): a new column takes 1/n of the view.
@@ -203,7 +204,7 @@ export function digestSegments(d, { working = false, map = null } = {}) {
     tip: `${words(d.ahead, "commit", "commits")} not on GitHub${read}`, open: { panel: "pr", section: "push" },
   } : null;
   const pr = prOn && openPr ? {
-    kind: "pr", number: `#${openPr.number}`, numberTone: "muted",
+    kind: "pr", number: `#${openPr.number}`, numberTone: "muted", url: openPr.url ?? null,
     verdict: line?.text ?? null, verdictTone: line?.tone ?? null, tone: line?.tone ?? null,
     tip: line?.text ?? `Pull request #${openPr.number}`,
     open: { panel: "pr", section: line?.section ?? null, check: line?.check ?? null },
@@ -220,10 +221,10 @@ export function digestOpen(segment, cwd) {
   return { panel: "pr", section: open.section ?? null, check: open.check ?? null };
 }
 
-const openSend = (p) => openOverlay({ mod: "kanso-send", kind: "dialog", width: 520, props: { pane: p.pane } });
+const openSend = (p) => openOverlay({ mod: "kanso-send", kind: "dialog", width: DIALOG.wide, props: { pane: p.pane } });
 const openSleep = (p) => {
   const space = spaces().find((s) => s.tabs.some((t) => t.id === p.tab));
-  if (space) openOverlay({ mod: "kanso-sleep", kind: "dialog", width: 520, props: { sleep: { scope: "agent", space: space.id, tab: p.tab, pane: p.pane } } });
+  if (space) openOverlay({ mod: "kanso-sleep", kind: "dialog", width: DIALOG.wide, props: { sleep: { scope: "agent", space: space.id, tab: p.tab, pane: p.pane } } });
 };
 
 export default class Strip extends View {
@@ -233,6 +234,7 @@ export default class Strip extends View {
     if (this.kind === "head") {
       this.hovered = false;
       this.moreOpen = false;
+      this.segmentMenu = null; // the header fact whose right-click Menu is open
       this.renaming = null; // the inline name field while renaming
       this.press = null; // where a press that may become a drag started
       this.width = null;
@@ -276,17 +278,17 @@ export default class Strip extends View {
     const MAX_TILES = 8;
     const tile = (id) => {
       const info = byId.get(id), d = corner(info?.status);
-      return div().id(`edge-tile-${id}`).relative().size(20).flex_none().rounded(6).bg(w?.w7 ?? t.hover)
-        .flex().items_center().justify_center()
-        .hover((h) => h.bg(w?.w12 ?? t.selected))
+      return div().id(`edge-tile-${id}`).relative().size(20).flex_none().rounded(R.control).bg(w?.w7 ?? t.hover)
+        .border_1().border_color(CLEAR).flex().items_center().justify_center()
+        .hover((h) => h.bg(c.selected).border_color(c.border))
         .on_click((_e, cx) => { cx.stop_propagation(); show(id); })
         .child(iconOf(info?.program, 12, t.muted))
         .when(Boolean(d), (el) => el.child(d.absolute().top(-G.hair).right(-G.hair).rounded_full().border_1().border_color(c.chrome)));
     };
-    const stack = v_flex().id("edge-stack").items_center().gap(5).py(6).px(4)
-      .child(div().h(16).text_size(14).text_color(takes ? t.foreground : t.muted).child(chevron))
+    const stack = v_flex().id("edge-stack").items_center().gap(G.hair).py(6).px(4)
+      .child(div().h(16).text_size(T.card).text_color(takes ? t.foreground : t.muted).child(chevron))
       .children(ids.slice(0, MAX_TILES).map(tile))
-      .when(ids.length > MAX_TILES, (el) => el.child(div().text_size(10).text_color(t.dim).child(`+${ids.length - MAX_TILES}`)));
+      .when(ids.length > MAX_TILES, (el) => el.child(div().text_size(T.micro).text_color(t.dim).child(`+${ids.length - MAX_TILES}`)));
     const item = (id) => {
       const info = byId.get(id), prog = info?.program;
       return {
@@ -297,7 +299,7 @@ export default class Strip extends View {
     const card = menu("edge-menu", { title: `${ids.length === 1 ? "One pane" : `${ids.length} panes`} beyond the ${left ? "left" : "right"} edge`, items: ids.map(item) }, c);
     return v_flex().id("edge").size_full().items_center().justify_center().bg(t.chrome).cursor_pointer()
       .hover((h) => h.bg(takes ? alpha(t.accent, TINT.strong) : t.hover))
-      .when(takes, (el) => el.bg(alpha(t.accent, TINT.bound)).cursor_grabbing())
+      .when(takes, (el) => el.bg(alpha(t.accent, TINT.strong)).cursor_grabbing())
       .on_mouse_up("left", () => dropMove(p.edge, left ? "after" : "before", false))
       .on_click(() => show(p.edge))
       .on_scroll_wheel((e) => { const d = wheelDelta(e); if (d) postScroll(d / WHEEL_PX); })
@@ -341,9 +343,9 @@ export default class Strip extends View {
     const mine = drag?.pane === id;
     const drop = !mine ? shared("strip.drop") : null;
     const side = drop?.to === id ? drop.side : null;
-    const label = (info, strong) => v_flex().flex_1().size_full().min_w(0).min_h(0).items_center().justify_center().gap(8)
-      .child(iconOf(info?.program, 22, strong ? t.foreground : t.muted))
-      .child(div().w_full().px(12).truncate().text_center().text_size(13).when(strong, (el) => el.font_medium())
+    const label = (info, strong) => v_flex().flex_1().size_full().min_w(0).min_h(0).items_center().justify_center().gap(G.sm)
+      .child(iconOf(info?.program, ICON_CHROME, strong ? t.foreground : t.muted))
+      .child(div().w_full().px(G.md).truncate().text_center().text_size(T.card).when(strong, (el) => el.font_medium())
         .text_color(strong ? t.foreground : t.muted).child(nameOf(info, given)));
     const across = side === "before" || side === "after";
     const first = side === "before" || side === "above";
@@ -484,6 +486,25 @@ export default class Strip extends View {
         .child(this.more(c, pane, { name, entries, does })));
   }
 
+  // Folder and branch share one Menu: copy either, or open the folder with an editor.
+  placeMenu(p, f) {
+    return { title: "Folder and branch", piece: "header.place", actions: [
+      ...(p.cwd ? [{ icon: "copy", label: "Copy path", act: (cx) => cx.write_to_clipboard?.(p.cwd) }] : []),
+      ...(f.where.branch ? [{ icon: "copy", label: "Copy branch name", act: (cx) => cx.write_to_clipboard?.(f.where.branch) }] : []),
+      ...(p.cwd ? [{ icon: "external-link", label: "Open with\u2026", act: () => openWithPopup(p) }] : []),
+    ] };
+  }
+
+  // A right-click on a header fact opens its Menu in place: what it does, then the piece lines.
+  factMenu(c, id, fact, { title, actions, piece }) {
+    const shut = (cx) => { this.segmentMenu = null; cx.notify(); };
+    const trigger = fact.on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); this.segmentMenu = id; cx.notify(); });
+    if (this.segmentMenu !== id) return trigger;
+    const items = [...actions.map((a) => ({ ...a, onClick: (cx) => { a.act(cx); shut(cx); } })), ...pieceLines(piece, { done: shut })];
+    return Popover.new(`fact-menu-${id}`).trigger(trigger).open(true).anchor("top_left").on_open_change((open, cx) => { if (!open) shut(cx); })
+      .content(menu(`fact-menu-list-${id}`, { title, items }, c));
+  }
+
   // The digest: files, commits not on GitHub, then the pull request, or the failure line in its place; a refresh in flight is pending.
   digestBar(c, p, segments, { fold, working, reading, strip, does }) {
     const pane = p.pane;
@@ -496,11 +517,16 @@ export default class Strip extends View {
     const tone = working ? "dim" : null;
     const piece = (seg) => {
       if (seg.kind === "failure") return failureLine({ text: seg.text, fix: "Refresh", detail: seg.tip })(`digest-failure-${pane}`, c, { onClick: does.refresh });
-      if (seg.kind === "pr") return shownAt(fold, "PR") ? headerSegment(`digest-pr-${pane}`, { act: open(seg), title: prTitle(segments, fold),
-        parts: [{ text: seg.number, tone: "muted" }, shownAt(fold, "verdict word") && seg.verdict ? { text: `· ${seg.verdict}`, tone: seg.verdictTone } : null] }, c) : null;
+      if (seg.kind === "pr") return shownAt(fold, "PR") ? this.factMenu(c, `pr-${pane}`, headerSegment(`digest-pr-${pane}`, { act: open(seg), title: prTitle(segments, fold),
+        parts: [{ text: seg.number, tone: "muted" }, shownAt(fold, "verdict word") && seg.verdict ? { text: `· ${seg.verdict}`, tone: seg.verdictTone } : null] }, c),
+        { title: `Pull request \u00b7 ${seg.number}`, piece: "header.pr", actions: [
+          ...(seg.url ? [{ icon: "copy", label: "Copy link", act: (cx) => cx.write_to_clipboard?.(seg.url) }] : []),
+          { icon: "external-link", label: "Open the pull request", act: open(seg) }] }) : null;
       const step = seg.kind === "files" ? "files" : "commits";
-      return shownAt(fold, step) ? headerSegment(`digest-${seg.kind}-${pane}`, { act: open(seg), tone, title: seg.tip,
-        parts: [{ text: seg.count }, seg.diff ? { text: seg.diff, tone: seg.diffTone } : null] }, c) : null;
+      return shownAt(fold, step) ? this.factMenu(c, `${seg.kind}-${pane}`, headerSegment(`digest-${seg.kind}-${pane}`, { act: open(seg), tone, title: seg.tip,
+        parts: [{ text: seg.count }, seg.diff ? { text: seg.diff, tone: seg.diffTone } : null] }, c),
+        { title: "Files and commits", piece: "header.digest", actions: [
+          { label: seg.kind === "files" ? "Open the diff" : `Push ${seg.count}\u2026`, act: open(seg) }] }) : null;
     };
     return h_flex().id(`digest-${pane}`).flex_shrink(1).min_w(0).overflow_hidden().gap(G.sm).items_center().text_size(T.body).text_color(c.muted)
       .when(reading, (el) => el.opacity(PENDING))
@@ -630,8 +656,8 @@ export default class Strip extends View {
     return this.headEvents(row, p, f, does)
       .child(programIcon(p.program, ICON, c.muted) ?? svg(glyphOf("terminal")).size(ICON).flex_none().text_color(c.muted))
       .child(this.headName(c, pane, f.name))
-      .when(Boolean(f.where.folder) && shownAt(f.fold, "folder"), (el) => el.child(headerSegment(`ph-folder-${pane}`, { icon: "folder", parts: [{ text: shortFolder(f.where.folder) }] }, c)))
-      .when(Boolean(f.where.branch) && shownAt(f.fold, "branch"), (el) => el.child(headerSegment(`ph-branch-${pane}`, { icon: "git-branch", parts: [{ text: f.where.branch }] }, c)))
+      .when(Boolean(f.where.folder) && shownAt(f.fold, "folder"), (el) => el.child(this.factMenu(c, `folder-${pane}`, headerSegment(`ph-folder-${pane}`, { icon: "folder", parts: [{ text: shortFolder(f.where.folder) }] }, c), this.placeMenu(p, f))))
+      .when(Boolean(f.where.branch) && shownAt(f.fold, "branch"), (el) => el.child(this.factMenu(c, `branch-${pane}`, headerSegment(`ph-branch-${pane}`, { icon: "git-branch", parts: [{ text: f.where.branch }] }, c), this.placeMenu(p, f))))
       .when(f.segments.length > 0, (el) => el.child(this.digestBar(c, p, f.segments, { fold: f.fold, working: p.status === "working", reading: Boolean(f.record?.reading), strip: f.strip, does })))
       .when(f.pinned, (el) => el.child(headerSegment(`ph-pinned-${pane}`, { icon: "pin", tone: "dim", title: "Pinned" }, c)))
       .child(div().flex_1())

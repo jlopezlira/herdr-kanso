@@ -9,7 +9,7 @@ import { div, svg } from "gpui-kit";
 import { v_flex, h_flex, Popover, TextView, ScrollHandle } from "gpui-base";
 import { exec, notify, run, theme, setShared, shared, window, layout, focused, panes, terminals, props } from "herdr";
 import { walkLayout } from "./layout.js";
-import { G, T, PR, TINT, alpha, tokens } from "./ui.js";
+import { R, G, T, PR, TINT, alpha, tokens } from "./ui.js";
 import { Armed, button, quietLink, iconButton } from "./ui-button.js";
 import { TextField } from "./ui-field.js";
 import { menu } from "./ui-menu.js";
@@ -780,14 +780,14 @@ export class PullRequest {
   }
 
   listPage(c) {
-    const held = this.wait ? div().text_size(12).text_color(c.dim).child(this.wait) : null;
+    const held = this.wait ? div().text_size(T.body).text_color(c.dim).child(this.wait) : null;
     const beside = (rows) => held ? v_flex().w_full().gap(G.lg).child(held).child(rows) : rows;
     const closed = this.closedPrs === null
-      ? (this.closedLoading ? this.closedBones(c) : div().text_size(12).text_color(c.dim).child(this.wait || "GitHub could not be read."))
-      : !this.closedPrs.length ? beside(div().text_size(12).text_color(c.dim).child("Nothing closed yet."))
+      ? (this.closedLoading ? this.closedBones(c) : div().text_size(T.body).text_color(c.dim).child(this.wait || "GitHub could not be read."))
+      : !this.closedPrs.length ? beside(div().text_size(T.body).text_color(c.dim).child("Nothing closed yet."))
         : beside(this.openPage(c, this.closedPrs));
     const open = !this.openPrs.length
-      ? div().text_size(12).text_color(c.dim).child(this.wait || "Nothing open.")
+      ? div().text_size(T.body).text_color(c.dim).child(this.wait || "Nothing open.")
       : beside(this.openPage(c));
     return v_flex().w_full().gap(G.lg).child(this.tabs(c)).child(this.tab === "closed" ? closed : open);
   }
@@ -806,7 +806,7 @@ export class PullRequest {
     // Rows are numbered down the page, across the groups.
     const firsts = groups.map((_, g) => groups.slice(0, g).reduce((n, [, rows]) => n + rows.length, 0));
     return this.withNote(v_flex().w_full().gap(G.xl)
-      .children(groups.map(([title, rows], g) => v_flex().w_full().gap(2)
+      .children(groups.map(([title, rows], g) => v_flex().w_full().gap(G.hair)
         .child(section(c, title, String(rows.length)))
         .children(rows.map((p, k) => listedRow(this, c, p, firsts[g] + k, { finished })))))
       .when(create && this.canCreate(), (el) => el.child(h_flex().child(quietLink("pr-create-list", this.busy === "Create" ? "Opening GitHub…" : "Create on GitHub", (cx) => this.createPr(cx), c, { color: c.text, disabled: Boolean(this.busy) })))), c);
@@ -863,7 +863,7 @@ export class PullRequest {
   waiting(c, title, detail, action) {
     return v_flex().w_full().gap(G.sm)
       .child(div().text_size(T.card).text_color(c.muted).child(title))
-      .when(Boolean(detail), (el) => el.child(div().text_size(12).text_color(c.dim).child(detail)))
+      .when(Boolean(detail), (el) => el.child(div().text_size(T.body).text_color(c.dim).child(detail)))
       .when(Boolean(action), (el) => el.child(h_flex().pt(G.xs).child(action)));
   }
 
@@ -990,25 +990,25 @@ export class PullRequest {
     return v_flex().w_full()
       .child(section(c, "Description"))
       .child(text
-        ? div().id("pr-body").w_full().text_size(13).line_height(1.5).text_color(c.text)
+        ? div().id("pr-body").w_full().text_size(T.card).line_height(1.5).text_color(c.text)
           .when(long && !open, (el) => el.max_h(PR.fold).overflow_hidden())
           .child(TextView.markdown("pr-body-md", text).selectable(true).on_link_click((url) => openUrl(url)))
-        : div().text_size(13).text_color(c.dim).child("No description."))
+        : div().text_size(T.value).text_color(c.dim).child("No description."))
       .when(Boolean(text) && long, (el) => el.child(h_flex().pt(G.sm).child(quietLink("pr-body-more", open ? "Show less" : "Show all", toggle, c))));
   }
 
   people(c) {
     const pr = this.pr, open = pr.state === "OPEN";
     const metaRow = (label, values, picker, extra) => h_flex().w_full().min_h(28).gap(G.md).items_center()
-      .child(div().w(76).flex_none().text_size(12).text_color(c.dim).child(label))
+      .child(div().w(76).flex_none().text_size(T.body).text_color(c.dim).child(label))
       .child(h_flex().flex_1().min_w(0).flex_wrap().gap(6).items_center()
-        .children(values.length ? values : [div().text_size(13).text_color(c.dim).child("None")])
+        .children(values.length ? values : [div().text_size(T.value).text_color(c.dim).child("None")])
         .when(Boolean(extra), (el) => el.child(extra)))
       .when(Boolean(picker), (el) => el.child(picker));
-    const person = (login, sub, color) => h_flex().gap(4).items_center()
+    const person = (login, sub, color) => h_flex().gap(G.xs).items_center()
       .when(Boolean(color), (el) => el.child(dot(c, color)))
-      .child(div().text_size(13).text_color(c.text).child(login))
-      .when(Boolean(sub), (el) => el.child(div().text_size(11).text_color(c.dim).child(sub)));
+      .child(div().text_size(T.card).text_color(c.text).child(login))
+      .when(Boolean(sub), (el) => el.child(div().text_size(T.micro).text_color(c.dim).child(sub)));
     const assignees = (pr.assignees ?? []).map((a) => person(a.login));
     const mine = this.viewer && (pr.assignees ?? []).some((a) => a.login === this.viewer);
     const outcome = { APPROVED: ["approved", c.green], CHANGES_REQUESTED: ["changes", c.red], COMMENTED: ["commented", null], DISMISSED: ["dismissed", null] };
@@ -1016,9 +1016,9 @@ export class PullRequest {
     const asked = (pr.reviewRequests ?? []).map((r) => person(r.login ?? r.name ?? r.slug, r.login ? "requested" : "team · requested", c.yellow));
     const labels = (pr.labels ?? []).map((l) => {
       const color = labelColor(l.color) ?? c.dim;
-      return h_flex().h(22).px(8).gap(5).items_center().rounded(6).bg(alpha(color, TINT.soft))
+      return h_flex().h(22).px(G.sm).gap(5).items_center().rounded(R.control).bg(alpha(color, TINT.soft))
         .child(dot(c, color))
-        .child(div().max_w(160).truncate().text_size(11.5).text_color(c.text).child(l.name));
+        .child(div().max_w(160).truncate().text_size(T.body).text_color(c.text).child(l.name));
     });
     const decision = { APPROVED: "Approved", CHANGES_REQUESTED: "Changes requested", REVIEW_REQUIRED: "Review required" }[pr.reviewDecision] ?? "";
     return v_flex().w_full()
@@ -1098,7 +1098,7 @@ export class PullRequest {
           .when(on, (el) => el.child(this.fileDiff(c, f.path)));
       }))
       .when(files.length > FILE_ROWS, (el) => el.child(h_flex().pt(G.sm).child(quietLink("pr-files-more", open ? "Show fewer" : `Show ${files.length - FILE_ROWS} more`, (cx) => { this.expanded = { ...this.expanded, files: !open }; cx.notify(); }, c))))
-      .when(files.length < pr.changedFiles, (el) => el.child(div().pt(G.sm).text_size(11).text_color(c.dim).child(`GitHub lists the first ${files.length} of ${pr.changedFiles} files.`)));
+      .when(files.length < pr.changedFiles, (el) => el.child(div().pt(G.sm).text_size(T.micro).text_color(c.dim).child(`GitHub lists the first ${files.length} of ${pr.changedFiles} files.`)));
   }
 
   inboxState(item) {
@@ -1123,13 +1123,13 @@ export class PullRequest {
     };
     return this.withNote(v_flex().w_full().gap(G.lg)
       .child(segmented("pr-inbox", [{ key: "needs", label: "Needs you" }, { key: "yours", label: "Yours" }], tab, (key, cx) => { this.inboxTab = key; cx.notify(); }, c))
-      .when(this.outside, (el) => el.child(div().text_size(12).text_color(c.dim).child("This pane is not in a repository.")))
+      .when(this.outside, (el) => el.child(div().text_size(T.body).text_color(c.dim).child("This pane is not in a repository.")))
       .child(!groups.length
-        ? div().text_size(12).text_color(c.dim).child("Nothing waiting on you.")
-        : v_flex().w_full().gap(G.xl).children(groups.map((group, g) => v_flex().w_full().gap(2)
+        ? div().text_size(T.body).text_color(c.dim).child("Nothing waiting on you.")
+        : v_flex().w_full().gap(G.xl).children(groups.map((group, g) => v_flex().w_full().gap(G.hair)
           .child(section(c, group.title, String(group.rows.length)))
           .children(group.rows.map((item, k) => row(item, firsts[g] + k))))))
-      .when(Boolean(this.wait || this.inbox?.limitedUntil), (el) => el.child(div().text_size(12).text_color(c.dim).child(this.wait || limitLine(this.inbox.limitedUntil)))), c);
+      .when(Boolean(this.wait || this.inbox?.limitedUntil), (el) => el.child(div().text_size(T.body).text_color(c.dim).child(this.wait || limitLine(this.inbox.limitedUntil)))), c);
   }
 
   body(c, narrow) {
