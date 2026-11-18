@@ -38,7 +38,7 @@ import { button, Armed } from "./ui-button.js";
 import { dialog } from "./ui-dialog.js";
 import { field, TextField } from "./ui-field.js";
 import { menu, emptyState, skeletonOf, tooltip } from "./kit.js";
-import { boundChord } from "./ui-tooltip.js";
+import { boundChord, chordOf } from "./ui-tooltip.js";
 import { menuList, menuHeight } from "./ui-menu.js";
 import { pieceLines, openPieceMenu } from "./piece-lines.js";
 import { toolbar } from "./toolbar.js";
@@ -456,9 +456,17 @@ export default class Spaces extends View {
     return this.popup(t, title, items);
   }
 
-  // A project's + : asks which agent, of the ones installed.
-  newAgentMenu(place) {
-    openOverlay({ mod: "kanso-spaces", kind: "popup", width: 252, height: 300, at: "pointer", props: { newAgent: place } });
+  // A project's + : asks which agent, of the ones installed. `start`: the sidebar's own +, whose menu goes on to New project and Arrange.
+  newAgentMenu(place, start = false) {
+    openOverlay({ mod: "kanso-spaces", kind: "popup", width: W.menu, height: start ? 400 : 300, at: "pointer", props: { newAgent: place, ...(start ? { start } : {}) } });
+  }
+
+  // The toolbar's +, one menu in every view: the open project's agents and Terminal, then a new project, then Arrange. With no project open it asks which.
+  startMenu(view) {
+    const open = spaces().find((w) => w.active);
+    if (open) this.newAgentMenu(placeOfSpace(open), true);
+    else if (view === "spaces") this.addProject();
+    else this.newConversationMenu();
   }
 
   inFront() {
@@ -1511,6 +1519,7 @@ export default class Spaces extends View {
       ...(asleep.length > 1 ? [item(`Wake all ${asleep.length}`, () => arrange({ wake: { space: w.id } }), { icon: "undo" })] : []),
       ...(place && !project?.missing ? [item("New conversation\u2026", () => this.newAgentMenu(place), { icon: "plus" }),
         item("New in a worktree\u2026", () => this.worktreeDialog(place), { icon: "git-fork" })] : []),
+      ...(w ? [item("Rename\u2026", () => run("space.rename", { id: w.id }), { icon: "pencil" })] : []),
       ...(trees.length ? [{ heading: "Worktrees" }, { scroll: trees.map((x) => item(x.branch ?? "detached", () => this.openTree(place, x), { icon: "git-branch", hint: where(x.path) })) }] : []),
       ...(active ? [item("Sleep this tab\u2026", () => sleepTab(w.id, active.id), { icon: "moon" })] : []),
       ...(tabs > 1 ? [item("Sleep the project\u2026", () => sleepProject(w.id), { icon: "moon" })] : []),
@@ -1542,6 +1551,8 @@ export default class Spaces extends View {
       ...this.known.filter((a) => a.installed).map((a) => item(a.name, () => pick(a), { hint: a.key === project?.agent ? "last" : null, keep: true })),
       item("Terminal", () => pick(null), { keep: true }),
       ...(place.tree ? [] : [{ separator: true }, item("In a new worktree\u2026", () => this.worktreeDialog(place), { icon: "git-fork" })]),
+      ...(props().start ? [{ separator: true }, item("New project\u2026", () => this.addProject(), { icon: "folder-plus" }),
+        item("Arrange\u2026", () => run("kanso-strip.arrange"), { icon: "layers", hint: chordOf("kanso-strip.arrange") })] : []),
     ]);
   }
 
@@ -1791,7 +1802,7 @@ export default class Spaces extends View {
     // Only the tools on show: a name the Toolbar does not draw throws. Collapsed, Search sits under the open caret.
     return header({ collapsed, title: false, toolbar: bar })("spaces-header", c, {
       presses: {
-        plus: () => (view === "spaces" ? this.addProject() : this.newConversationMenu()),
+        plus: () => this.startMenu(view),
         "panel-left": () => this.toggleRail(),
         ...(!collapsed || open ? { search: () => run("mod.open", { name: "picker" }) } : {}),
         ...(collapsed ? { [open ? "chevron-up" : "chevron-down"]: more } : {}),

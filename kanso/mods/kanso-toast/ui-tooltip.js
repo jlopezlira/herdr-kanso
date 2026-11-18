@@ -22,6 +22,9 @@ export function glyphs(chord, platform = window()?.platform ?? "macos") {
 /** The chord the key table binds to `action` ("cmd-shift-p"), or "" when none does. */
 export const boundChord = (action, bindings = keys()) => bindings.find((binding) => binding.action === action)?.keys ?? "";
 
+/** The chord an action is bound to, written as this computer writes it: the hint beside a menu row. */
+export const chordOf = (action, platform) => glyphs(boundChord(action), platform);
+
 /** The Storybook's tooltip as words: the label, the chord as this computer writes it, then the detail after a dot. */
 export const tipText = ({ label, detail = "", chord = "" }, platform) => [String(label ?? ""), chord ? glyphs(chord, platform) : "", detail ? `· ${detail}` : ""]
   .filter(Boolean).join(" ");

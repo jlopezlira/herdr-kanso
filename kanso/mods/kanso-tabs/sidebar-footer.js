@@ -6,7 +6,7 @@ export const updateIcon = 'lu-refresh-cw';
 const icon = (label, name) => button({ label, kind: 'icon', size: 'lg', icon: name });
 // Proposed: `menu`, Settings' menu, drawn, open over it; shut, Settings is its row or Button alone.
 const settings = (collapsed, menu) => {
-  const own = collapsed ? icon('Settings', 'lu-settings') : row({ icon: 'lu-settings', name: 'Settings' });
+  const own = collapsed ? icon('Settings', 'lu-settings') : row({ icon: 'lu-settings', name: 'Settings', names: true, nameInk: 'muted' });
   return menu ? stack({ variant: 'footer settings' }, own, stack({ variant: 'footer menu' }, menu)) : own;
 };
 // Its rows, open or in the rail: the update's while one is offered, then Settings'. Herdr fits the footer's height to them.
@@ -15,5 +15,5 @@ export const footerRows = ({ update = null } = {}) => (update ? 2 : 1);
 // under its row with Update to try again; `collapsed`, the rail's column, where neither words nor the refusal fit.
 export const sidebarFooter = ({ update = null, busy = false, refused = null, menu = null, collapsed = false } = {}) => collapsed
   ? stack({ variant: 'rail footer' }, update ? icon(update, updateIcon) : null, settings(true, menu))
-  : stack({ variant: 'footer' }, update ? row({ icon: updateIcon, name: update, dimmed: busy }) : null,
+  : stack({ variant: 'footer' }, update ? row({ icon: updateIcon, name: update, dimmed: busy, names: true, nameInk: busy ? 'dim' : 'muted' }) : null,
     update && refused && !busy ? stack({ variant: 'footer refusal' }, failureBlock(refused)) : null, settings(false, menu));

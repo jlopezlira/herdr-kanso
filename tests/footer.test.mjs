@@ -44,7 +44,7 @@ test("Open, the footer's rows are the kit's rows at the sidebar's gutter, Settin
     "its sides are the list's: the gutter from each side seen, the work column's padding showing past its right");
   assert.equal(arg(open, "gap"), undefined, "open rows touch");
   const settings = holding(open, "Settings");
-  assert.equal(arg(settings, "text_size"), T.value, "the kit's row size, as the Storybook's row");
+  assert.equal(arg(settings, "text_size"), T.card, "the name size, as the sidebar's rows");
   const rail = await footer({ shared: { "sidebar.collapsed": true } });
   const squares = rail.view.render();
   assert.deepEqual([arg(squares, "pt"), arg(squares, "pb"), arg(squares, "gap")], [G.sm, room, G.hair]);

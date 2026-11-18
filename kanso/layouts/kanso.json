@@ -84,7 +84,7 @@
                           "mod": "kanso-strip"
                         },
                         "reveal": "always",
-                        "height": 34,
+                        "height": 36,
                         "position": "top"
                       },
                       "background": "background",
@@ -127,7 +127,7 @@
           "id": "status-row",
           "type": "row",
           "size": {
-            "px": 26
+            "px": 28
           },
           "resizable": false,
           "children": [

@@ -121,7 +121,7 @@ test("each session row has its own mark and words: a terminal's icon, the time a
 test("a sub-session that needs you gets its own line; the others stay on one", async () => {
   const { sessionHeight } = await loadSessionHeight({ div: () => ({}), svg: () => ({}) });
   assert.equal(sessionHeight({}), 32, "a sub-session is the row's one line, as in its Storybook story");
-  assert.equal(sessionHeight({ activity: "Allow network access?" }), 50);
+  assert.equal(sessionHeight({ activity: "Allow network access?" }), 52);
   assert.equal(sessionHeight({ activity: null }), 32, "finished with nothing to say: one line");
 });
 

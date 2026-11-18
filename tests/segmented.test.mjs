@@ -14,11 +14,11 @@ const plain = (a) => a === null || (typeof a !== "object" && typeof a !== "funct
 const sizing = (el) => el.calls.filter((call) => !TONE.has(call[0])).map((call) => call.filter(plain));
 const box = (el) => JSON.stringify([sizing(el), el.kids.map(sizing)]);
 
-test("The track is 30 high on the w4 wash, radius 8, 2 inside; each item radius 6 with 8 inside", async () => {
+test("The track is its item and 2 either side high on the w4 wash, radius 8; each item radius 6 with 8 inside", async () => {
   const { segmented, tokens, G, H, R } = await kit();
   for (const c of [night, day].map(tokens)) {
     const el = segmented("seg", ITEMS, "day", () => {}, c);
-    assert.equal(one(el, "h"), H.control);
+    assert.equal(one(el, "h"), H.control + 2 * G.hair);
     assert.equal(one(el, "p"), G.hair);
     assert.equal(one(el, "gap"), G.hair);
     assert.equal(one(el, "rounded"), R.card);
@@ -62,14 +62,14 @@ test("Without a track the chosen tab is the w12 wash, the group has no ground, a
   }
 });
 
-test("Sizes: sm 24, md 26 and lg 30, the default, are the track's thickness, and segmented is the same component", async () => {
+test("Sizes: sm 24, md 28 and lg 32, the default, are each item's height, the track adds its padding, and segmented is the same component", async () => {
   const { tab, segmented, tokens, G, H } = await kit();
   const c = tokens(day);
   assert.equal(segmented, tab);
   for (const [size, side] of [["sm", H.compact], ["md", H.icon], ["lg", H.control], [undefined, H.control]]) {
     const el = tab("t", ITEMS, "day", () => {}, c, { size });
-    assert.equal(one(el, "h"), side);
-    for (const item of el.kids) assert.equal(one(item, "h"), side - 2 * G.hair);
+    assert.equal(one(el, "h"), side + 2 * G.hair);
+    for (const item of el.kids) assert.equal(one(item, "h"), side);
   }
 });
 

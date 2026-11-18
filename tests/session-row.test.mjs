@@ -81,7 +81,7 @@ test("A session row is the Storybook composition drawn by the app kit, one line 
   assert.equal(handler(one, "h"), sessionHeight({}));
   assert.equal(handler(two, "h"), sessionHeight({ activity: "Run npm publish?" }));
   assert.deepEqual([sessionHeight({}), sessionHeight({ activity: "x" })], [H.line, H.two]);
-  assert.deepEqual(texts(two), ["Atlas", "2m", "!", "Run npm publish?"], "name, time, the blocked mark, the question");
+  assert.deepEqual(texts(two), ["Atlas", "!", "Run npm publish?", "\u00b7", "2m"], "name, the blocked mark, the question and the time told apart by a dot");
   assert.ok(typeof sessionRow({ name: "Atlas" }) === "string", "the same composition draws the Storybook's markup");
 });
 

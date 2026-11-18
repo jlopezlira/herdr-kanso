@@ -46,7 +46,7 @@ test("Small, medium and large are the inline, row and control icon tokens, and m
   const { mark, MARK_SIZES, ICON, ICON_ROW, ICON_INLINE, c } = await kit();
   assert.deepEqual(Object.keys(MARK_SIZES), Object.keys(markSizes));
   assert.deepEqual({ ...MARK_SIZES }, { sm: ICON_INLINE, md: ICON_ROW, lg: ICON });
-  assert.deepEqual([ICON_INLINE, ICON_ROW, ICON], [12, 14, 15]);
+  assert.deepEqual([ICON_INLINE, ICON_ROW, ICON], [12, 16, 16]);
   for (const status of Object.keys(marks)) {
     for (const [size, side] of Object.entries(MARK_SIZES)) assert.equal(one(mark(c, { status, size }), "size"), side, `${status} ${size}`);
     assert.equal(one(mark(c, { status }), "size"), ICON_ROW, status);

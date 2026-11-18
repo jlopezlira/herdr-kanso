@@ -1,5 +1,5 @@
 import { h_flex, v_flex } from "gpui-base";
-import { G, SIDEBAR, tokens } from "./ui.js";
+import { SIDEBAR, sidebarSides, tokens } from "./ui.js";
 import { button, emptyState, failureBlock, skeletonOf, tooltip } from "./kit.js";
 import { sessionRow } from "./session-row.js";
 import { boundChord } from "./ui-tooltip.js";
@@ -20,7 +20,7 @@ export function queueControl(t, queue, collapsed, empty, toggle) {
   const count = queue.rows.length;
   if (!count && !empty) return null;
   const spoken = `Needs you: ${count}`;
-  return h_flex().flex_none().px(G.sm).child(button({ label: queueLabel(queue, collapsed, empty), kind: "quiet", size: "sm", spoken,
+  return sidebarSides(h_flex().flex_none(), SIDEBAR.gutter).child(button({ label: queueLabel(queue, collapsed, empty), kind: "quiet", size: "sm", spoken,
     tip: tooltip({ label: spoken, chord: boundChord(NEXT_NEEDS) }) })("needs-you-count", tokens(t), { onClick: toggle }));
 }
 
@@ -36,7 +36,7 @@ const STATES = {
 export function queueList(t, queue, rowFor, age, scroll = null) {
   const c = tokens(t);
   const state = STATES[queue.state]?.(queue);
-  return v_flex().id("needs-you-list").flex_1().min_h(0).px(G.sm).gap(SIDEBAR.gap).overflow_y_scrollbar()
+  return sidebarSides(v_flex().id("needs-you-list").flex_1().min_h(0), SIDEBAR.gutter).gap(SIDEBAR.gap).overflow_y_scrollbar()
     .when(Boolean(scroll), (el) => el.track_scroll(scroll))
     .children(queue.rows.map((row) => {
       const { selected, go } = rowFor(row);

@@ -202,7 +202,7 @@ test("A row that acts is the kit's Button with the ring: the dōjō's levels, Si
 
 // Each target the issue named, and the kit call that draws it now; the hand helpers they had are gone.
 const DRAWN = {
-  "kanso/mods/kanso-chrome/sidebar-footer.js": ["button({ label, kind: 'icon', size: 'lg', icon: name })", "row({ icon: 'lu-settings', name: 'Settings' })"],
+  "kanso/mods/kanso-chrome/sidebar-footer.js": ["button({ label, kind: 'icon', size: 'lg', icon: name })", "row({ icon: 'lu-settings', name: 'Settings', names: true, nameInk: 'muted' })"],
   "kanso/mods/kanso-dojo/main.js": ['button({ label: "Choose your pet", kind: "quiet"', 'row({ letter: String(L.n), name: L.name'],
   "kanso/mods/kanso-dojo/pets.js": ['button({ label: p.name, kind: "quiet", active: on, content: [face] })(`pet-${p.id}`'],
   "kanso/mods/kanso-panel/doc.js": ['kitButton({ label: tip, kind: "icon", size: "sm"'],

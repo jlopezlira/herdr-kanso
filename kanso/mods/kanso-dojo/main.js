@@ -197,7 +197,7 @@ export default class Dojo extends View {
 
   text(c, ink) {
     const mono = settings()?.font_family ?? "JetBrains Mono";
-    return v_flex().gap(G.xs).children(this.world.lines.map((line, y) => h_flex().h(26).items_center().children([...(line.length ? line : " ")].map((ch, x) => {
+    return v_flex().gap(G.xs).children(this.world.lines.map((line, y) => h_flex().h(H.icon).items_center().children([...(line.length ? line : " ")].map((ch, x) => {
       const { goal, here } = this.cellMark(x, y);
       return div().w(12).h(24).flex().items_center().justify_center().rounded(R.sm).font_family(mono).text_size(T.title)
         .bg(here ? c.accent : CLEAR).text_color(here ? ink : goal ? c.text : c.muted)

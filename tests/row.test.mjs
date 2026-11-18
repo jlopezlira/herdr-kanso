@@ -54,7 +54,7 @@ test("Each depth steps in by the lead icon and its gap, and depth two draws its 
   const { row, G, ICON_ROW, c } = await kit();
   const pads = rowDepths.map((depth) => one(row("r", c, { name: "Juno", depth }), "pl") + G.hair);
   assert.deepEqual(pads, [G.sm, G.sm * 2 + ICON_ROW, G.sm * 3 + ICON_ROW * 2]);
-  assert.deepEqual(pads, [8, 30, 52]);
+  assert.deepEqual(pads, [8, 32, 56]);
   const deep = row("r", c, { name: "Juno", depth: 2 });
   const guide = deep.kids.find((kid) => calls(kid, "absolute").length);
   assert.equal(one(guide, "left"), G.sm * 2 + ICON_ROW * 1.5);
