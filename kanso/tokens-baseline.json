@@ -192,7 +192,6 @@
   {"file":"kanso/mods/kanso-spaces/main.js","line":"const label = (text) => div().text_size(12).text_color(t.muted).child(text);","value":12},
   {"file":"kanso/mods/kanso-spaces/main.js","line":".child(div().flex_1().min_w(0).truncate().text_size(13).text_color(this.projectFolder ? t.foreground : t.dim).child(shown))","value":13},
   {"file":"kanso/mods/kanso-spaces/main.js","line":"const root = v_flex().id(\"spaces-root\").track_focus(this.handle).size_full().min_h(0).bg(t.chrome).text_size(13)","value":13},
-  {"file":"kanso/mods/kanso-spaces/needs-you-view.js","line":".child(div().truncate().text_size(10.5).text_color(c.dim).child(row.project))","value":10.5},
   {"file":"kanso/mods/kanso-spend/main.js","line":".child(div().flex_1().min_w(0).truncate().text_size(13).text_color(color).when(medium, (el) => el.font_medium()).when(Boolean(tip), (el) => el.tooltip(tooltip({ label: tip }))).child(name))","value":13},
   {"file":"kanso/mods/kanso-spend/main.js","line":".child(div().min_w(64).text_right().text_size(15).font_light().text_color(c.text).child(value));","value":64},
   {"file":"kanso/mods/kanso-spend/main.js","line":".child(v_flex().flex_1().min_w(0).gap(1)","value":1},
