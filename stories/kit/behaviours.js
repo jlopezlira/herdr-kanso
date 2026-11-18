@@ -143,7 +143,8 @@ export function mountBehaviours(root, { page, state, inlineSurfaces = false, upd
         editor = doc.createElement('span');
         editor.className = 'kanso-field__editor';
         const moved = [...field.childNodes].filter((child) => child.nodeType === 3 || (child.nodeType === 1 && !child.matches('svg,[tabindex],.kanso-button--icon,.kanso-search__count')));
-        field.insertBefore(editor, [...field.children].find((child) => !child.matches('svg')) ?? null);
+        const sidebarFind = field.matches(':is(.kanso-sidebar,.kanso-sidebar--slice)>.kanso-field');
+        field.insertBefore(editor, sidebarFind ? [...field.children].find((child) => !child.matches('svg')) ?? null : field.firstChild);
         editor.append(...moved);
       }
       if (!editor.matches('input,textarea')) {
