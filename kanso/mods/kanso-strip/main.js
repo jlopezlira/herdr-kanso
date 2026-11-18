@@ -518,6 +518,8 @@ export default class Strip extends View {
       commitLayout({ panel: { id: to.panel, type: "block", content: { mod: "kanso-panel", props: { ...to, at: Date.now() } } } });
     };
     const tone = working ? "dim" : null;
+    const digest = segments.filter((seg) => seg.kind === "files" || seg.kind === "commits")
+      .map((seg) => ({ label: seg.kind === "files" ? "Open the diff" : `Push ${seg.count}\u2026`, act: open(seg) }));
     const piece = (seg) => {
       if (seg.kind === "failure") return failureLine({ text: seg.text, fix: "Refresh", detail: seg.tip })(`digest-failure-${pane}`, c, { onClick: does.refresh });
       if (seg.kind === "pr") return shownAt(fold, "PR") ? this.factMenu(c, `pr-${pane}`, headerSegment(`digest-pr-${pane}`, { act: open(seg), title: prTitle(segments, fold),
@@ -529,8 +531,7 @@ export default class Strip extends View {
       const step = seg.kind === "files" ? "files" : "commits";
       return shownAt(fold, step) ? this.factMenu(c, `${seg.kind}-${pane}`, headerSegment(`digest-${seg.kind}-${pane}`, { act: open(seg), tone, title: seg.tip,
         parts: [{ text: seg.count }, seg.diff ? { text: seg.diff, tone: seg.diffTone } : null] }, c),
-        { title: "Files and commits", piece: "header.digest", actions: [
-          { label: seg.kind === "files" ? "Open the diff" : `Push ${seg.count}\u2026`, act: open(seg) }] }) : null;
+        { title: "Files and commits", piece: "header.digest", actions: digest }) : null;
     };
     return h_flex().id(`digest-${pane}`).flex_shrink(1).min_w(0).overflow_hidden().gap(G.sm).items_center().text_size(T.body).text_color(c.muted)
       .when(reading, (el) => el.opacity(PENDING))

@@ -14,7 +14,7 @@ test("A piece with a needed state ends its menu with Only when needed, Hide this
   const { pieceLines } = await lines();
   const words = pieceLines("status.agents").filter((line) => line.label).map((line) => line.label);
   assert.deepEqual(clone(words), ["Only when needed", "Hide this", "Settings for this…"]);
-  assert.deepEqual(clone(pieceLines("status.computer").filter((line) => line.label).map((line) => line.label)), ["Hide this", "Settings for this…"]);
+  assert.deepEqual(clone(pieceLines("status.palette").filter((line) => line.label).map((line) => line.label)), ["Hide this", "Settings for this…"]);
   assert.equal(pieceLines("tabs.state", { named: true }).find((line) => /^Hide/.test(line.label)).label, "Hide “Agent state on tabs”");
 });
 

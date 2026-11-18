@@ -32,6 +32,8 @@ the branch's rules.
 
 ### Changed
 
+- The status bar's computer can be set to show only when needed, which is how it already showed by default. (#354)
+- A pane header's files and commits share one right-click menu, with Open the diff and Push. (#354)
 - A menu row that asks to be pressed again keeps its shortcut beside it. (#354)
 - Snooze's times read as the clock does, 9:00 rather than 09:00, and This evening shows only its time. (#354)
 - Remove project's second press reads "Press again to remove, close 3 tabs". (#354)
@@ -109,6 +111,7 @@ the branch's rules.
 
 ### Fixed
 
+- The status bar's Needs you and Agents at work menus write their shortcuts in key glyphs. (#354)
 - A tab's right-click menu writes New tab and Close tab's shortcuts in key glyphs. (#354)
 - In Projects, a right click on a subagent under an agent opens its Session menu, with the rows that act on it, as it already did in Status and Threads. (#354)
 - A project's right-click menu lists its worktrees before Rename. (#354)
