@@ -355,8 +355,7 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     wide at 35%, 60% and full) that slide across it and back while their
     copy of the text slides the other way (`.loop` on `left`, linear, 2.2
     to 3.2 s, its own pace per agent), so a glint passes over the letters
-    in place; after it three dots count (`.frames`, "", ".", "..", "...",
-    380 ms). Nothing in the row is laid out again. A row waiting on you sits on
+    in place. Nothing in the row is laid out again. A row waiting on you sits on
     `blocked` at 8%; the focused one on `foreground` at 7%. 10px between
     projects. Asleep rows are 32 tall: dim moon and name, Wake when it
     can. A click opens the menu; Enter wakes. Second line: full ink waiting, quiet working, dim
