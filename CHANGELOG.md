@@ -22,6 +22,10 @@ in version.json, which the stable updater offers. Versions follow
 [Keep a Changelog](https://keepachangelog.com). `npm run check:version` checks
 the branch's rules.
 
+### Fixed
+
+- Cmd+1 to Cmd+9 choose the tabs the tab bar shows, counted without the ones asleep. A number past the last tab does nothing, instead of stacking a "tab.select failed" notice for each press. On Windows, Ctrl+1 to Ctrl+9. (#331)
+
 ## [Unreleased]
 
 ### Added

@@ -1,7 +1,7 @@
 // The tab bar as the Storybook draws its tabs: chosen, at rest and waiting, close armed, renaming, dragging, folded, connecting and unreachable.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { load, clone, chain, gpuiHost, calls, arg, find, all, CHROME_NIGHT, fieldWith, texts } from "./helpers.mjs";
+import { load, clone, chain, gpuiHost, calls, arg, find, all, CHROME_NIGHT, fieldWith, texts, repoText } from "./helpers.mjs";
 
 const night = CHROME_NIGHT;
 const model = () => load("kanso-tabs/tab-bar-model.js", ["tabMark", "barState", "foldTabs", "dropSide", "renameWaits"]);
@@ -297,4 +297,22 @@ test("A panel whose tool is absent is not offered, a custom panel has its own do
   assert.ok(door(drawn, "Simulator"), "with Xcode, the Simulator's door");
   assert.equal(door(drawn, "Arrange"), null, "Arrange hidden is not drawn");
   assert.ok(door(drawn, "New tab"));
+});
+
+test("Cmd+1 to Cmd+9 are kansō's own keys and choose the tabs the bar shows: past the last one, or where only a sleeping tab is, nothing runs and nothing is said", async () => {
+  const keymaps = { "kanso/keys.json": "cmd", "kanso/keys.windows.json": "ctrl" };
+  for (const [file, mod] of Object.entries(keymaps)) {
+    const section = JSON.parse(repoText(file))["layout:kanso"];
+    for (const n of [1, 2, 3, 4, 5, 6, 7, 8, 9]) assert.equal(section[`${mod}-${n}`], `kanso-tabs.tab-${n}`, `${file} ${mod}-${n}`);
+  }
+  const asleep = { id: "t0", index: 1, name: "slept", active: false, settled: true };
+  const b = await bar({ tabs: [asleep, ...TABS.map((tab) => ({ ...tab, index: tab.index + 1 }))] });
+  b.view.command("tab-2");
+  assert.deepEqual(clone(b.ran), [["tab.select", { id: "t2" }]], "the second tab the bar shows, not the second Herdr holds");
+  b.ran.length = 0;
+  for (const n of [4, 5, 6]) b.view.command(`tab-${n}`);
+  assert.deepEqual(b.ran, [], "no tab there: nothing runs");
+  const gone = await bar({ fails: "tab.select" });
+  gone.view.command("tab-1");
+  assert.deepEqual(gone.toasts, [], "a tab gone before Herdr chose it says nothing");
 });

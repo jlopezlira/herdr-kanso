@@ -92,7 +92,7 @@ test("A chord reads as glyphs on macOS and as names elsewhere", async () => {
 // ones macOS keeps for itself: Kanso's keys never give either another
 // meaning. Where Kanso takes one of Herdr's, it is the same command done
 // the strip's way (a split, going to or swapping a pane, close, zoom as the
-// width, a space that is there, the sidebar hidden to its rail), or Find in the conversation, which falls
+// width, a space or a tab that is there, the sidebar hidden to its rail), or Find in the conversation, which falls
 // back to the terminal's own. Everything else is a chord of Kanso's own.
 const SAME_AS_HERDR = {
   "pane.split": /^kanso-strip\.new-(right|down)$/,
@@ -101,6 +101,7 @@ const SAME_AS_HERDR = {
   "pane.swap": /^(kanso-strip\.(move|vim-move)-(left|right|up|down)|terminal)$/,
   "pane.zoom": /^kanso-strip\.width$/,
   "space.select": /^kanso-spaces\.space-\d$/,
+  "tab.select": /^kanso-tabs\.tab-\d$/,
   "app.settings": /^kanso-spend\.settings$/,
   "app.help": /^mod\.open:kanso-help$/,
   "terminal.search": /^kanso-strip\.find$/,
@@ -149,7 +150,7 @@ test("Windows takes Herdr keys for the same intent, except the named agent navig
       } else {
         assert.match(action, SAME_AS_HERDR[original.split(":")[0]] ?? /^$/, key);
         const direction = original.split(":")[1];
-        if (direction && /^(pane\.go|pane\.swap|pane\.split|space\.select)/.test(original)) assert.ok(action.endsWith(`-${direction}`), `${key}: same direction or space`);
+        if (direction && /^(pane\.go|pane\.swap|pane\.split|space\.select|tab\.select)/.test(original)) assert.ok(action.endsWith(`-${direction}`), `${key}: same direction or space`);
       }
     }
   }

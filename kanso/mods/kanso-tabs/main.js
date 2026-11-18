@@ -56,6 +56,8 @@ function customPanels() {
 
 // A settled tab (put to sleep, say) is not on the bar.
 export const shownTabs = (tabs) => (tabs ?? []).filter((c) => !c.settled);
+// A tab gone before Herdr chose it is nothing to tell: the bar draws what is left.
+const chooseTab = (id) => tryOr(() => run("tab.select", { id }));
 
 // Both shared, so every bar agrees. A panel set to Hide is not mounted.
 const ORDER = "kanso.panels.order";
@@ -189,8 +191,8 @@ export default class Tabs extends View {
     const look = /^(?:look|gallery)(?:[\s:]+([\s\S]+))?$/.exec(name);
     if (look) this.show("look", look[1]?.trim() ? { panel: "look", path: look[1].trim(), at: Date.now() } : { panel: "look" });
     else if (tab) {
-      const tabs = spaces().find((s) => s.active)?.tabs ?? [];
-      if (Number(tab[1]) <= tabs.length) run("tab.select", { index: Number(tab[1]) });
+      const shown = shownTabs(spaces().find((s) => s.active)?.tabs)[Number(tab[1]) - 1];
+      if (shown) chooseTab(shown.id);
     } else if (name === "memory") {
       const tree = layout();
       if (this.openPanel(walkLayout(tree, "panel"), walkLayout(tree, "panel-body")) !== "memory") this.mount("memory");
@@ -550,7 +552,7 @@ export default class Tabs extends View {
     });
     return bar("tab-bar", c, {
       presses, wires,
-      onChange: (key, cx) => { this.armed.clear(); this.moreOpen = false; run("tab.select", { id: key }); cx.notify(); },
+      onChange: (key, cx) => { this.armed.clear(); this.moreOpen = false; chooseTab(key); cx.notify(); },
       onClose: (key, cx) => { const tab = openTabs.find((other) => other.id === key); if (tab) this.closeTab(tab, ps, cx); },
       onOpen: (open, cx) => { this.moreOpen = open; cx.notify(); },
       onSize: (s, cx) => { this.barW = this.sized(this.barW, "bar", s.width, cx); this.keepRail(layout()); },
