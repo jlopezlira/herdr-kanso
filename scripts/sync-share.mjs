@@ -95,6 +95,7 @@ const COMMON = [
   { source: "stories/kit/toolbar.js", copies: ["kanso/mods/kanso-spaces/toolbar.js"] },
   { source: "stories/kit/header.js", copies: ["kanso/mods/kanso-spaces/header.js", "kanso/mods/kanso-chrome/header.js"] },
   { source: "stories/kit/sidebar-footer.js", copies: ["kanso/mods/kanso-chrome/sidebar-footer.js", "kanso/mods/kanso-tabs/sidebar-footer.js"] },
+  { source: "stories/kit/status-bar.js", copies: ["kanso/mods/kanso-status/status-bar.js", "kanso/mods/kanso-strip/status-bar.js"] },
   { source: "stories/kit/activity.js", copies: ["kanso/mods/kanso-spaces/activity.js"] },
   { source: "kanso/mods/kanso-panel/blocks.js", copies: ["markdown-panel/mods/markdown-panel/blocks.js"] },
   { source: "kanso/mods/kanso-tabs/markdown-handler.sh", copies: ["markdown-panel/mods/markdown-panel/markdown-handler.sh"] },

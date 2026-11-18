@@ -10,7 +10,7 @@ import { computerRow } from './computer-row.js';
 import { section } from './section.js';
 import { asleep } from './asleep.js';
 import { sessionRow } from './session-row.js';
-import { button, glyph, menu, stack, statusItem } from './pieces.js';
+import { button, glyph, menu, phrase, stack, statusItem } from './pieces.js';
 import keyFile from '../../kanso/keys.json' with { type: 'json' };
 import windowsKeyFile from '../../kanso/keys.windows.json' with { type: 'json' };
 import { LIST_LAYER, describe, layer } from '../../kanso/mods/kanso-help/keymap.js';
@@ -70,7 +70,12 @@ export const sampleSidebar = ({ view = 'spaces', switcher = true, menu: open = f
   header: sampleHeader({ collapsed, dawn, art, view }), rows: sampleRows[view](), tiles: sampleTiles[view](),
   switcher: switcher ? viewSwitch({ view, column: collapsed, open }) : null, footer: sidebarFooter({ collapsed }) });
 
-// Sample status bar content: what each panel item holds when its Menu opens.
+// Sample status bar content: the source's words when a computer can't be reached, the palette's tooltip, the minimap's columns,
+// and what each panel item holds when its Menu opens.
+export const unreachable = (name) => phrase('ssh: connect to host', name, 'port 22: Operation timed out');
+export const paletteTip = 'Command palette ⌘⇧P';
+// Each column's width in hairlines and its panes' tones: one in view, the one in front (its second pane focused), one pinned, two out of view.
+export const sampleColumns = [{ width: 15, panes: ['seen'] }, { width: 21, panes: ['seen', 'current'] }, { width: 9, panes: ['seen'] }, { width: 15, panes: ['away'] }, { width: 15, panes: ['away'] }];
 const hide = [{ separator: true }, { icon: 'lu-eye-off', label: 'Hide this' }];
 export const statusMenus = {
   servers: () => menu({ title: ':5173 vite · no pane', items: [{ icon: 'lu-external-link', label: 'Open in the browser' }, { icon: 'lu-copy', label: 'Copy localhost:5173' },

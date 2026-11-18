@@ -18,6 +18,7 @@ import { chip as drawChip } from "./ui-chip.js";
 import { mark as drawMark } from "./ui-mark.js";
 import { tab as drawTabs } from "./ui-tab.js";
 import { stackOf } from "./ui-stack.js";
+import { statusItem as drawStatusItem, needsItem as drawNeedsItem, stepper as drawStepper } from "./ui-status.js";
 import { div, svg, image } from "gpui-kit";
 import { Button } from "gpui-base";
 import { DAWN_H, ICON_ROW, glyphOf, toneColor } from "./ui.js";
@@ -42,6 +43,7 @@ const EVENTS = {
   onRelease: (el, fn) => el.on_mouse_up("left", fn),
   onMenu: (el, fn) => el.on_mouse_down("right", fn),
   onMove: (el, fn) => el.on_mouse_move(fn),
+  onWheel: (el, fn) => el.on_scroll_wheel(fn),
 };
 // `onChange(key, cx)`: a choice among tabs or menu items; `onOpen(open, cx)`: a menu under a button opens or shuts; `onLink(url, cx)`: a link's press in markdown.
 // `presses`: a composition's press targets by name, its icon or else its label; a stack passes them down and each press takes its own.
@@ -166,8 +168,8 @@ export const tabs = ({ items = [], value = null, size = "md", track = false, dis
 // A pressable one takes `onClick` itself; any other gives its handlers, `presses` with them, to its children.
 // `context`: what the stack around it says of its place, such as a column.
 export const stack = ({ variant, on = false, label = "", ...flags }, ...children) => pressing((id, c, more, context) => {
-  const { onPress, onRelease, onMenu, onMove, ...handlers } = given(more);
-  return stackOf(id, c, { variant, on, label, ...flags }, list(...children), handlers, (el) => withEvents(el, { onPress, onRelease, onMenu, onMove }), context);
+  const { onPress, onRelease, onMenu, onMove, onWheel, ...handlers } = given(more);
+  return stackOf(id, c, { variant, on, label, ...flags }, list(...children), handlers, (el) => withEvents(el, { onPress, onRelease, onMenu, onMove, onWheel }), context);
 });
 
 // Dawn Mode's sky behind the lights: the Storybook's art in this theme's colours, layer by layer (built by build:ui-tokens),
@@ -229,6 +231,25 @@ export const markdownBlock = ({ source = "", state = "rest", content = [] }) => 
   const { onLink = null, onPress = null } = given(more);
   return drawMarkdownBlock(id, c, { source, state, content: drawn(id, c, "content", content) }, { onLink, onPress });
 };
+
+// The status bar's items: a press is named by the item's icon, else its mark, else its words; Needs you's by its mark. App only: `tip`.
+const statusPress = (key, draw) => pressing((id, c, more) => {
+  const { presses = {}, onClick = takeOf(presses, key) } = given(more);
+  return draw(id, c, onClick);
+});
+export const statusItem = ({ icon = "", mark = "", text = "", tone = "", pending = false, open = false, tip = "" }) => statusPress(icon ? appIcon(icon) : mark || text,
+  (id, c, onClick) => drawStatusItem(id, c, { icon: icon ? appIcon(icon) : null, mark: mark || null, text, tone: tone || null, pending, open, tip: tip || null, onClick }));
+export const needsItem = ({ name, question = "", more = 0, tip = "" }) => statusPress("blocked",
+  (id, c, onClick) => drawNeedsItem(id, c, { name, question: question || null, more, tip: tip || null, onClick }));
+
+// Panes per view: `presses` and `focuses` by minus and plus, and the number's handle as value; `onClick` evens out, `onChange(i, cx)` goes to column i.
+// App only: `chords`, the key table's chords for fewer, more and fit. Proposed: `columns`, the minimap.
+export const stepper = ({ value = 2, open = false, hover = false, columns = [], chords = {} }) => pressing((id, c, more) => {
+  const { presses = {}, focuses = {}, onClick = null, onChange = null, onHover = null } = given(more);
+  const handles = Object.fromEntries(["minus", "plus", "value"].map((key) => [key, takeOf(focuses, key)]));
+  return drawStepper(id, c, { value, open, hover, columns, chords },
+    { minus: takeOf(presses, "minus"), plus: takeOf(presses, "plus"), value: onClick, column: onChange, hover: onHover, focuses: handles });
+});
 
 // Herdr's `.tooltip()` takes only a string, so the tooltip is its words: `.tooltip(tooltip({ label, detail, chord }))`.
 // `chord` is the key table's chord ("cmd-shift-p", from ui-tooltip.js `boundChord`), written as this computer writes it. Anything else throws.

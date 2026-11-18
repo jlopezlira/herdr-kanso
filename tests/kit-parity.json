@@ -16,7 +16,6 @@
     "paneName",
     "setting",
     "sleepLabel",
-    "stepper",
     "windowControls"
   ],
   "renamed": {
@@ -37,6 +36,7 @@
     "keycap": { "storybook": ["corner", "finger", "hint", "hover", "inert", "label", "state", "units"] },
     "row": { "app": ["focusHandle", "onClick", "onHover", "onKey"] },
     "statusItem": { "app": ["onClick", "tip"] },
+    "stepper": { "app": ["chords"] },
     "toast": { "app": ["onClick"] },
     "toggle": { "storybook": ["checked"] },
     "tooltip": { "storybook": ["icon", "open", "side"] }

@@ -1,20 +1,11 @@
 // The kit's compositions: each one only calls pieces with its own props and draws no markup.
-import { button, chord, diffText, dojoCell, dojoCharacter, dojoFeedback, dojoLevel, dojoProgress, dojoRecord, dojoStatistics, dojoSummary, dojoTitle, facts, headerSegment, input, keyLegend, paneName, setting, sleepLabel, toggle, failureBlock, failureLine, glyph, grow, keycap, keyPicked, list, mark, mascot, menu, phrase, pieceLines, plus, row, stack, statusItem, tabSkeleton, tabs, toast } from './kit.js';
+import { button, chord, diffText, dojoCell, dojoCharacter, dojoFeedback, dojoLevel, dojoProgress, dojoRecord, dojoStatistics, dojoSummary, dojoTitle, facts, headerSegment, input, keyLegend, paneName, setting, sleepLabel, toggle, failureBlock, failureLine, glyph, grow, keycap, keyPicked, list, mark, mascot, menu, phrase, pieceLines, plus, row, stack, tabSkeleton, tabs, toast } from './kit.js';
 
 // Sidebar compositions: each one is the Row, Tab, Menu, Avatar, Mark, Chip or Button in its own configuration.
 // The rows the app draws (session, project, computer, section, asleep), the tile, the view switch, the toolbar, the header, the footer and the Activity card live each in its own file, shared with the app.
 
-// Status bar compositions: a computer stands in for its sidebar row; the rest are the bar's Menus and Buttons.
-export const computerItemStates = ['on', 'unreachable', 'pending'];
-// Unreachable is said in words with Refresh; folded, the name gives way to its icon.
-export const computerItem = ({ name, remote = true, state = 'on', folded = false }) => state === 'unreachable'
-  ? failureLine({ text: phrase("Can't reach", name), fix: 'Refresh', detail: phrase('ssh: connect to host', name, 'port 22: Operation timed out') })
-  : statusItem({ icon: remote ? 'lu-server' : 'lu-monitor', text: folded ? null : name, pending: state === 'pending' });
-
+// Status bar compositions the app does not draw yet; the bar, its items and its Buttons live in status-bar.js, shared with the app.
 export const stepperMenu = () => menu({ title: 'Panes per view', items: [{ icon: 'lu-move-horizontal', label: 'Even out', hint: '⌘⇧0' }, ...pieceLines] });
-// The command palette's only pointer door; its key is in the tooltip.
-export const paletteDoor = () => button({ label: 'Command palette ⌘⇧P', kind: 'icon', size: 'sm', icon: 'lu-command' });
-export const layoutPaused = () => failureLine({ text: 'Layout paused', fix: 'Resume', detail: 'layout write refused 3 times' });
 
 // A failing row's right-click Menu: the source's words, the fixes, Explain, then the piece lines.
 export const failureMenu = ({ source, fixes = [], agent = null }) => menu({ title: source, items: [...fixes.map((label) => ({ label })), ...(agent ? [{ icon: 'lu-bot', label: phrase('Explain to', agent) }] : []), ...pieceLines] });
@@ -85,10 +76,6 @@ export const channelSettings = ({ channel = 'stable', art = true } = {}) => list
 export const sidebar = ({ collapsed = false, header = null, switcher = null, rows = [], tiles = [], away = null, footer = null } = {}) => collapsed
   ? stack({ variant: 'rail' }, header, switcher, stack({ variant: 'rail list' }, tiles), footer)
   : stack({ variant: 'sidebar' }, header, switcher, stack({ variant: 'rows' }, rows), away, footer);
-
-// Two halves around the fixed slot of panes per view; each half folds its own items.
-export const statusBar = ({ left = [], middle = null, right = [], popup = null } = {}) => stack({ variant: 'status bar', grid: true },
-  stack({ variant: 'status bar left' }, left), stack({ variant: 'status bar middle' }, middle), stack({ variant: 'status bar right' }, right), popup ? stack({ variant: 'status bar popup' }, popup) : null);
 
 // Keyboards by computer: the rows, each key's width in keys, and what each key is called; a chord joins its parts with join.
 const modifierKeys = ['ctrl', 'alt', 'shift', 'cmd'];

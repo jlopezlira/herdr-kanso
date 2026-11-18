@@ -37,21 +37,20 @@ export function waitingItem(rows, questions = {}) {
   };
 }
 
+// The Computer item's props, and where its Refresh goes when the computer can't be reached.
 export function computerOf(space, layouts, alias = "") {
   const remote = space?.machine ? String(space.machine) : "";
   const name = machineTitle(remote, "", alias);
-  const icon = remote ? "server" : "monitor";
   const layout = remote ? (layouts ?? []).find((row) => row?.name === remote)?.layout : null;
-  // A failure on the bar's line: the mark, our words, Refresh.
   if (remote && layout === "unavailable") {
     const words = `Can't reach ${name}`;
-    return { icon, words, command: `kanso-spaces.retry-machine:${remote}`, tooltip: words, fix: "Refresh", pending: false };
+    return { name, remote: true, state: "unreachable", detail: words, command: `kanso-spaces.retry-machine:${remote}` };
   }
-  return { icon, words: name, command: null, tooltip: null, pending: layout === "loading" };
+  return { name, remote: Boolean(remote), state: layout === "loading" ? "pending" : "on", detail: null, command: null };
 }
 
 // A stand-in for the sidebar's computer row: only while that row is out of sight, or the computer can't be reached.
-export const computerShown = (computer, collapsed) => Boolean(computer) && (collapsed === true || Boolean(computer.fix));
+export const computerShown = (computer, collapsed) => Boolean(computer) && (collapsed === true || computer.state === "unreachable");
 
 export function workingItem(agents) {
   const count = (Array.isArray(agents) ? agents : []).filter((agent) => agent?.status === "working").length;

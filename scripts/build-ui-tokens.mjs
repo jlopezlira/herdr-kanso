@@ -23,6 +23,7 @@ const PICK = {
   DAWN_H: "k-dawn-h",
   DAWN_W: "k-dawn-w",
   LINE: "k-w-line",
+  FOCUS: "k-w-focus",
   GLINT: { run: "k-glint-run", wide: "k-glint-w1", mid: "k-glint-w2", narrow: "k-glint-w3" },
   SWITCH: { w: "k-sw-w", h: "k-sw-h", knob: "k-sw-knob" },
   PAGE: { w: "k-w-page", toolbar: "k-h-file-toolbar", toolbarX: "k-file-toolbar-x", note: "k-note-text", markdown: "k-markdown-text", unitGap: "k-metric-unit-gap", unitY: "k-metric-unit-y", findList: "k-h-find-list" },
