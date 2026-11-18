@@ -27,14 +27,14 @@ const minimap = (columns) => (columns.length ? html`<span class="kanso-status-ba
 export const stepperTree = ({ value = 2, open = false, hover = false, columns = [] } = {}) => {
   const classes = ["kanso-status-bar__item", "kanso-status-bar__stepper", open && "kanso-status-bar__item--open", hover && "kanso-control--hover"].filter(Boolean).join(" ");
   const shown = `${Number(value)} per view · scroll to change, click to even out`;
-  return html`<span class="${classes}">${minimap(columns)}${buttonTree({ label: "Fewer panes per view ⌘⇧−", kind: "icon", size: "sm", icon: "lu-minus" })}<span class="kanso-status-bar__value" title="${shown}">${Number(value)}</span>${buttonTree({ label: "More panes per view ⌘⇧=", kind: "icon", size: "sm", icon: "lu-plus" })}</span>`;
+  return html`<span class="${classes}">${minimap(columns)}${buttonTree({ label: "Fewer panes per view ⇧⌘−", kind: "icon", size: "sm", icon: "lu-minus" })}<span class="kanso-status-bar__value" title="${shown}">${Number(value)}</span>${buttonTree({ label: "More panes per view ⇧⌘=", kind: "icon", size: "sm", icon: "lu-plus" })}</span>`;
 };
 
 export const computerItemTree = ({ name, remote = true, state = "on", folded = false, detail = null }) => (state === "unreachable"
   ? failureLineTree({ text: `Can't reach ${name}`, fix: "Refresh", detail })
   : statusItemTree({ icon: remote ? "lu-server" : "lu-monitor", text: folded ? null : name, pending: state === "pending" }));
 
-export const paletteDoorTree = () => buttonTree({ label: "Command palette ⌘⇧P", kind: "icon", size: "sm", icon: "lu-command" });
+export const paletteDoorTree = () => buttonTree({ label: "Command palette ⇧⌘P", kind: "icon", size: "sm", icon: "lu-command" });
 export const layoutPausedTree = ({ detail = null } = {}) => failureLineTree({ text: "Layout paused", fix: "Resume", detail });
 
 const halves = { left: "kanso-status-bar__left", middle: "kanso-status-bar__middle", right: "kanso-status-bar__right" };

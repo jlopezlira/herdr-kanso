@@ -42,7 +42,7 @@ const drawBar = (kit, args, handlers = {}) => {
   const { statusBar, computerItem, paletteDoor, layoutPaused, needsItem, statusItem, stepper, menu, c } = kit;
   const menuOpen = !args.paused && args.stepper === "menu";
   const popup = menuOpen
-    ? menu({ title: "Panes per view", items: [{ icon: "lu-move-horizontal", label: "Even out", hint: "⌘⇧0" }, ...pieceLines] })
+    ? menu({ title: "Panes per view", items: [{ icon: "lu-move-horizontal", label: "Even out", hint: "⇧⌘0" }, ...pieceLines] })
     : args.panels && args.open !== "none" ? menu(panelMenus[args.open]) : null;
   const needs = args.needs === "none" ? null : needsItem({ name: "cart-ui", question: args.needs === "folded" ? "" : question, more: 1 });
   const memory = args.memory === "none" ? null : statusItem({ text: args.memory === "folded" ? "8% free" : "Memory 8% free", tone: "blocked" });
@@ -78,7 +78,7 @@ test("Every status bar state in the Storybook draws in the app with the same wor
   assert.deepEqual(Object.keys(drawn), ["At rest", "Panes per view menu", "Layout paused", "Minimap", "Sidebar folded", "Unreachable", "Needs you", "Servers, containers and reviews", "Servers open", "Containers open", "Reviews open", "Everything, 1200", "Everything, 1040", "Everything, 760", "Everything, 520"]);
   see("At rest", "Command palette", "2 per view");
   skip("At rest", "cart-ui", "Layout paused");
-  see("Panes per view menu", "Even out", "Panes per view", "⌘⇧0");
+  see("Panes per view menu", "Even out", "Panes per view", "⇧⌘0");
   see("Layout paused", "Layout paused", "Resume", "layout write refused 3 times");
   see("Minimap", "Column 1", "Column 5");
   see("Sidebar folded", "devbox");

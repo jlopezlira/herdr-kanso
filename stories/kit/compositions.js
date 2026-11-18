@@ -5,7 +5,7 @@ import { button, chord, diffText, dojoCell, dojoCharacter, dojoFeedback, dojoLev
 // The rows the app draws (session, project, computer, section, asleep), the tile, the view switch, the toolbar, the header, the footer and the Activity card live each in its own file, shared with the app.
 
 // Status bar compositions the app does not draw yet; the bar, its items and its Buttons live in status-bar.js, shared with the app.
-export const stepperMenu = () => menu({ title: 'Panes per view', items: [{ icon: 'lu-move-horizontal', label: 'Even out', hint: '⌘⇧0' }, ...pieceLines] });
+export const stepperMenu = () => menu({ title: 'Panes per view', items: [{ icon: 'lu-move-horizontal', label: 'Even out', hint: '⇧⌘0' }, ...pieceLines] });
 
 // A failing row's right-click Menu: the source's words, the fixes, Explain, then the piece lines.
 export const failureMenu = ({ source, fixes = [], agent = null }) => menu({ title: source, items: [...fixes.map((label) => ({ label })), ...(agent ? [{ icon: 'lu-bot', label: phrase('Explain to', agent) }] : []), ...pieceLines] });
