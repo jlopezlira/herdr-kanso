@@ -27,6 +27,10 @@ jobs:
         with:
           fetch-depth: 0 # tags: the version check compares against the last release
       - uses: ./.github/actions/node
+        with:
+          cache: npm
+      - name: Packages the scripts and tests import
+        run: npm ci --ignore-scripts
       - name: Versioning (version.json, CHANGELOG.md, semantic bumps)
         env:
           KANSO_BRANCH: ${{ github.ref_name }}
