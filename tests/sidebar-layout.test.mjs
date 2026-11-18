@@ -145,14 +145,13 @@ const roomAbove = (root) => {
   }));
 };
 
-test("a computer opens its own group: the space above it, the first one too, is wider than between projects", async () => {
+test("a computer after the first opens its own group, wider apart than the projects in it; the first sits right under the switch", async () => {
   const { SIDEBAR } = await load("kanso-panel/ui.js", ["SIDEBAR"], {});
   const { root } = await sidebar();
   const above = roomAbove(root);
-  const computers = ["machine-local", "machine-dark"].map((id) => above[id]);
-  assert.ok(Math.min(...computers) > above["space-sp2"], "a computer stands further apart than a project");
-  assert.equal(new Set(computers).size, 1, "the same above every computer, the first one under the toolbar too");
-  assert.deepEqual([computers[0], above["space-sp2"]], [SIDEBAR.computerGap, SIDEBAR.groupGap], "from the tokens");
+  assert.equal(above["machine-local"], 0, "the first computer has no room above it");
+  assert.ok(above["machine-dark"] > above["space-sp2"], "another computer stands further apart than a project");
+  assert.deepEqual([above["machine-dark"], above["space-sp2"]], [SIDEBAR.computerGap, SIDEBAR.groupGap], "from the tokens");
   assert.deepEqual(["space-sp1", "space-sp3"].map((id) => above[id]), [0, 0], "its first project sits right under it");
 });
 

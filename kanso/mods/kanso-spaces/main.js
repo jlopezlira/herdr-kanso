@@ -1920,7 +1920,7 @@ export default class Spaces extends View {
       return loading(null) && !rows.length && !shut.length ? [loadingRow(null)] : [...drawAll(rows), ...shut];
     }
     const block = { t, c, collapsed, rows, draw: drawAll, closed, loading, loadingRow, ctx, layouts: live };
-    return [null, ...remote].flatMap((m) => this.machineBlock(m, block));
+    return [null, ...remote].flatMap((m, i) => this.machineBlock(m, block, i === 0));
   }
 
   // A computer's two words: its key in the maps, and the name a person reads.
@@ -2034,7 +2034,7 @@ export default class Spaces extends View {
     });
   }
 
-  machineBlock(m, block) {
+  machineBlock(m, block, first = false) {
     const { t, c, collapsed, rows, draw, closed, loading, loadingRow, ctx, layouts } = block;
     const phase = this.phaseOf(m, layouts);
     const folded = phase === "connected" && (this.folded ?? new Set()).has(m);
@@ -2042,9 +2042,9 @@ export default class Spaces extends View {
     if (phase === "connected") (this.seenOn ??= {})[m ?? ""] = ctx.now;
     // Folded: the most urgent mark of its sessions and how many projects.
     const tail = folded ? { mark: foldTail(false, mine.flatMap((r) => (ctx.rowsBy.get(r.w.id) ?? []).map((a) => a.status))).mark, count: mine.length + this.closedOn(m, ctx).length } : null;
-    // Open, every computer opens its own group, the first one too: wider apart than the projects in it.
+    // Open, each computer after the first opens its own group, wider apart than the projects in it; the first sits right under the switch.
     const head = item(this.machineHead(m, phase, t, c, collapsed, folded, tail), collapsed ? SIDEBAR.railRow : H.line);
-    const heads = collapsed ? [head] : [lift(SIDEBAR.computerGap), head];
+    const heads = collapsed || first ? [head] : [lift(SIDEBAR.computerGap), head];
     if (phase === "loading" && !collapsed) return [...heads, loadingRow(m)];
     // Unreachable: its projects as last read, dim, with when.
     if (phase === "unavailable" && !collapsed && mine.length) {
