@@ -494,6 +494,7 @@ export const playgrounds = {
       folded: { name: 'folded tabs', control: { type: 'number', min: 0, max: 5 } },
       overflow: boolArg('folded menu open', { if: { arg: 'folded' } }),
       help: boolArg('kansō help'),
+      custom: boolArg('a custom panel with no icon'),
       windows: boolArg('Windows and Linux'),
     },
   },

@@ -1,4 +1,4 @@
-// Kanso's panel kit: the tab group, laid out and coloured by the Storybook's CSS. Apache-2.0.
+// Kanso's panel kit: the tab group. Apache-2.0.
 // Kept byte for byte by `npm run sync:share`: edit kanso-panel/ui-tab.js.
 import { svg } from "gpui-kit";
 import { Button } from "gpui-base";
@@ -20,7 +20,6 @@ const listNode = ({ size, track, disabled, bar }) => node(["kanso-tabs", size !=
 const tabNode = (list, { on, square, armed, pending, held }) => node(["kanso-tabs__tab", on && "kanso-tabs__tab--on", square && "kanso-tabs__tab--icon",
   armed && "kanso-action--armed", pending && "kanso-state-line--pending", held && "kanso-control--held"], list);
 
-// A group and each of its tabs look the same every time their states are the same: each look is worked out once.
 const known = new Answers();
 const tabLooks = (group, states) => known.of(JSON.stringify([group, states]), () => {
   const tab = tabNode(listNode(group), states);
@@ -35,7 +34,10 @@ const tabLooks = (group, states) => known.of(JSON.stringify([group, states]), ()
 const glyph = (icon, looks, c) => painted(svg(glyphOf(icon)), looks.glyph, c);
 
 // The press stays on the ×: the tab under it is not chosen. A tab that is off draws its × and does nothing.
-const closeGlyph = (id, c, looks, onClose, disabled) => box(looks.nodes.close, c, RULES, `${id}-close`, !disabled)
+const closeGlyph = (id, c, looks, label, onClose, disabled) => painted(Button.new(`${id}-close`), lookOf(looks.nodes.close, RULES, null, !disabled), c)
+  .m(-FOCUS).border(FOCUS).border_color(CLEAR).focus((s) => s.border_color(c.accent))
+  .disabled(disabled)
+  .accessibility_label(`Close ${label}`)
   .when(!disabled, (el) => el.on_mouse_down("left", (_e, cx) => cx.stop_propagation()).on_click((_e, cx) => { cx.stop_propagation(); onClose(cx); }))
   .child(glyph("x", looks, c));
 
@@ -44,16 +46,12 @@ const nameOf = (id, item, c, looks) => (item.editing
     .on_mouse_down("left", (_e, cx) => cx.stop_propagation()).on_click((_e, cx) => cx.stop_propagation())
   : box(looks.nodes.label, c, RULES).child(item.label));
 
-/** One tab. `item`: { key, label, icon, dot, tip, mark, pending, held, armed, editing, closable }; `dot` marks it while unselected, `mark` is a status drawn after the name,
- * `editing` the TextField renaming it in place. `group`: its group's size, track, disabled and bar. `onClose`: the chosen tab ends with ×.
- * `onPress`: a left press, before the tab keeps it from the window. */
 export function tabItem(id, item, c, { group, on = false, square = false, index = 0, count = 1, onChange = null, onClose = null, onPress = null } = {}) {
   const { disabled } = group;
   const armed = Boolean(item.armed) && !disabled;
   const states = { on, square, armed, pending: Boolean(item.pending), held: Boolean(item.held), live: !disabled && !on && !armed && !item.held };
   const looks = tabLooks(group, states);
   const dot = (item.dot || (square && item.mark === "blocked")) && !on;
-  // The ring is a border kept clear at rest, inside the Storybook's padding, so focusing never resizes the box.
   return painted(Button.new(id), looks.tab, c)
     .when(looks.inset > 0, (el) => el.px(looks.inset - FOCUS))
     .border(FOCUS).border_color(CLEAR).focus((s) => s.border_color(c.accent))
@@ -71,12 +69,9 @@ export function tabItem(id, item, c, { group, on = false, square = false, index 
     .when(Boolean(item.pending), (el) => el.child(pendingDot(`${id}-pending`, c)))
     .when(Boolean(item.mark) && !square, (el) => el.child(mark(c, { status: item.mark })))
     .when(dot, (el) => el.child(box(looks.nodes.dot, c, RULES)))
-    .when(on && Boolean(item.closable && onClose) && !square && !item.editing, (el) => el.child(closeGlyph(id, c, looks, onClose, disabled)));
+    .when(on && Boolean(item.closable && onClose) && !square && !item.editing, (el) => el.child(closeGlyph(id, c, looks, item.label, onClose, disabled)));
 }
 
-/** One tab group: the chosen tab is a quiet fill (raised on a track), never a weight, so nothing moves. Items: { key, label, icon, dot, tip, drop } and tabItem's states;
- * `drop` draws where a dragged tab lands, before it, or after it when "after". `size`: sm 24, md 28, lg 32, each tab's height. Collapsed: a column of icons, each label its tip.
- * `bar`: the group sits in the tab bar. `on`: each tab's own handlers by its key, `onClose`, `onPress`, and `wire(el)`, the pointer's handlers on it. */
 export function tab(id, items, value, onChange, c, { disabled = false, spoken = null, collapsed = false, track = true, size = "lg", bar = false, on = {} } = {}) {
   const group = { size, track, disabled, bar };
   const seg = (item, index) => {

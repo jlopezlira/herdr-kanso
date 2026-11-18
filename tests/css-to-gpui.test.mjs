@@ -63,3 +63,16 @@ test("Who needs you is drawn from the compiled rules", async () => {
   }
   assert.ok(drawn.kids[1].calls.some(([name, value]) => name === "font_weight" && value === 500));
 });
+
+test("A node's styles are the same remembered or worked out again, whichever node is hovered", async () => {
+  const { stylesFor, hovering } = await import("../kanso/mods/kanso-panel/ui-match.js");
+  const own = indexed(compile(".a:hover + .b { width: 10px; } .b:hover { height: 4px; }").rules);
+  const parent = { tag: "div", attrs: {}, classes: [], parent: null };
+  const a = { tag: "span", attrs: {}, classes: ["a"], parent }, b = { tag: "span", attrs: {}, classes: ["b"], parent }, c = { tag: "span", attrs: {}, classes: ["c"], parent };
+  parent.children = [a, b, c];
+  const fresh = (node, target) => { const state = hovering(target); return stylesFor(node, own, (n, name) => state(n, name)); };
+  for (const target of [a, c, b, a, c]) assert.deepEqual(stylesFor(b, own, hovering(target)), fresh(b, target), `hovering ${target.classes[0]}`);
+  assert.deepEqual(stylesFor(b, own, hovering(a)), [["w", 10]]);
+  assert.deepEqual(stylesFor(b, own, hovering(c)), []);
+  assert.deepEqual(stylesFor(b, own, hovering(b)), [["h", 4]]);
+});

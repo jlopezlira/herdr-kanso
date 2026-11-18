@@ -418,7 +418,6 @@ export const inTemporaryDir = (prefix, use) => {
   }
 };
 
-// The kit's colours in kansō's own theme, as the app draws them.
 export const kansoColours = async () => {
   const { tokens } = await load("kanso-panel/ui.js", ["tokens"]);
   const theme = JSON.parse(readFileSync(new URL("../kanso/themes/kanso.json", import.meta.url), "utf8"));

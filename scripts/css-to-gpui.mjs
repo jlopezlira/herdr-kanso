@@ -56,7 +56,7 @@ export const SHEETS = ["stories/proto.css", "stories/primitives.css", "stories/c
 class Unsupported extends Error {}
 
 const compound = (text) => {
-  const node = { tag: null, classes: [], states: [], not: [], any: [], attrs: [] };
+  const node = { tag: null, classes: [], states: [], not: [], any: [], where: [], attrs: [] };
   const tag = text.match(/^[a-z][a-z0-9]*/i);
   if (tag) node.tag = tag[0].toLowerCase();
   const token = /\.([a-z0-9_-]+)|:(is|where|not)\(|:([a-z-]+)|(\*)|\[([a-z-]+)(?:="([^"]*)")?\]/gi;
@@ -78,7 +78,10 @@ const compound = (text) => {
       }
       const list = splitTop(text.slice(at, end - 1), ",").map(parseSelector);
       if (m[2] === "not") node.not.push(...list);
-      else node.any.push(list);
+      else {
+        if (m[2] === "where") node.where.push(node.any.length);
+        node.any.push(list);
+      }
       at = end;
     } else if (m[5]) {
       node.attrs.push([m[5], m[6] ?? null]);
@@ -239,7 +242,7 @@ DECLARATIONS.flex = (v) => [[FLEX[v] ?? (() => { throw new Unsupported(`flex ${v
 
 const specificity = (steps) => steps.reduce((sum, step) => sum
   + (step.tag ? 1 : 0) + 100 * (step.classes.length + step.states.length)
-  + step.any.reduce((most, list) => most + Math.max(...list.map(specificity)), 0)
+  + step.any.reduce((most, list, i) => most + (step.where.includes(i) ? 0 : Math.max(...list.map(specificity))), 0)
   + step.not.reduce((most, inner) => most + specificity(inner), 0), 0);
 // An !important declaration beats every ordinary one, then specificity decides among them.
 const IMPORTANT = 1_000_000;

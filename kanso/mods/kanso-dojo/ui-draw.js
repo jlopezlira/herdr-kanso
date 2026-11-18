@@ -9,7 +9,6 @@ const ink = (c, value) => {
   return value.share === undefined ? c[value.colour] : alpha(c[value.colour], value.share);
 };
 
-// The one bare element the drawings start from.
 const plain = () => div();
 
 export const lastOp = (ops, name) => {
@@ -24,7 +23,6 @@ const ringOf = (ops, c) => {
 
 // `hoverClass` is the Storybook's static hover mark. It is not on the element at rest.
 // `live` is false for a node that is not a control: a hover callback would paint .kanso-control--hover onto it.
-// A node's look: its own ops and, for a live one, what its hover changes. A piece drawn often keeps the look and paints it with `painted`.
 export const lookOf = (node, rules, hoverClass = null, live = true) => {
   const own = stylesFor(node, rules);
   if (!live) return { own, extra: [] };
@@ -36,7 +34,6 @@ export const painted = (el, { own, extra }, c) => {
   return extra.length ? drawn.hover((style) => apply(style, extra, c)) : drawn;
 };
 export const paint = (el, node, c, rules, hoverClass = null, live = true) => painted(el, lookOf(node, rules, hoverClass, live), c);
-// A node drawn as the element its look makes, flex or not as its CSS says, with `id` when it has handlers; `live` takes its hover.
 export const box = (node, c, rules, id = null, live = false) => {
   const el = plain();
   return painted(id ? el.id(id) : el, lookOf(node, rules, null, live), c);

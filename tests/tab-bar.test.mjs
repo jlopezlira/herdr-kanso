@@ -38,15 +38,12 @@ const measuredBar = async () => {
 };
 const byTag = (root, id) => find(root, (el) => el.tag === id || calls(el, "id").some((call) => call[1] === id));
 const handler = (el, name) => calls(el, name).at(-1)?.at(-1);
-// Every handler a press reaches on the element, as Herdr runs them all.
 const pressOf = (el, button) => (...args) => calls(el, "on_mouse_down").filter((call) => call[1] === button).forEach((call) => call.at(-1)(...args));
 const tabId = (id) => `tab-bar-0-${id}`;
 const tab = (root, id) => byTag(root, tabId(id));
 const part = (root, id, name) => byTag(root, `${tabId(id)}-${name}`);
 const door = (root, label) => find(root, (el) => calls(el, "tooltip").some((call) => String(call[1]).startsWith(label)) && calls(el, "accessibility_label").some((call) => call[1] === label));
 const press = { click_count: 1 };
-// What the Storybook's CSS leaves around the tabs: the bar's 12 at each side, new tab and Arrange, the two gaps around the room between,
-// and nine panel doors with kansō help's, each 28 wide and 2 apart.
 const ROOM = 2 * 12 + 2 * (28 + 8) + 2 * 8 + 10 * 28 + 9 * 2;
 
 test("A tab out of view whose agent waits carries the blocked mark; working, done and the chosen tab carry none", async () => {
@@ -315,4 +312,36 @@ test("Cmd+1 to Cmd+9 are kansō's own keys and choose the tabs the bar shows: pa
   const gone = await bar({ fails: "tab.select" });
   gone.view.command("tab-1");
   assert.deepEqual(gone.toasts, [], "a tab gone before Herdr chose it says nothing");
+});
+
+test("Two custom panels with one icon each open their own panel, and a custom panel with no icon shows its name", async () => {
+  const tree = { id: "root", children: [{ id: "panel", children: [{ id: "panel-body", children: [] }] }] };
+  const icon = "mods/custom/icon.svg";
+  const panels = [{ id: "a", mod: "a-panel", label: "Alpha", icon }, { id: "b", mod: "b-panel", label: "Beta", icon }, { id: "notes", mod: "notes-panel", label: "Notes" }];
+  const b = await bar({ tree, stored: { "kanso.panels": panels } });
+  const root = b.view.render(b.cx);
+  handler(door(root, "Alpha"), "on_click")({}, b.cx);
+  assert.equal(b.view.want, "a", "Alpha opens Alpha");
+  handler(door(b.view.render(b.cx), "Beta"), "on_click")({}, b.cx);
+  assert.equal(b.view.want, "b", "Beta opens Beta");
+  pressOf(door(b.view.render(b.cx), "Alpha"), "right")(press, b.cx);
+  assert.equal(b.view.panelMenu, "a", "Alpha's right-click is Alpha's menu");
+  const notes = door(b.view.render(b.cx), "Notes");
+  assert.ok(texts(notes).includes("Notes"), "its name, drawn");
+  handler(notes, "on_click")({}, b.cx);
+  assert.equal(b.view.want, "notes");
+});
+
+test("The chosen tab's × is a Button: Tab reaches it, Enter and Space press it, it has the focus ring, and it keeps the Storybook's 16", async () => {
+  const b = await bar();
+  const close = part(b.view.render(b.cx), "t1", "close");
+  assert.equal(close.tag, `${tabId("t1")}-close`, "a Button, not a bare element");
+  assert.equal(arg(close, "accessibility_label"), "Close checkout");
+  assert.equal(arg(close, "border"), 2);
+  assert.equal(arg(close, "border_color"), "#00000000", "the ring is clear at rest");
+  assert.equal(calls(close, "focus").length, 1, "and the accent under the keyboard");
+  assert.equal(arg(close, "m"), -2, "the ring takes no room of its own");
+  assert.equal(arg(close, "w"), 16);
+  handler(close, "on_click")({}, b.cx);
+  assert.deepEqual(clone(b.ran), [["tab.close", { id: "t1" }]]);
 });

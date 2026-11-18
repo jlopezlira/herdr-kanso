@@ -50,8 +50,6 @@ const EVENTS = {
 // `onChange(key, cx)`: a choice among tabs or menu items; `onOpen(open, cx)`: a menu under a button opens or shuts; `onLink(url, cx)`: a link's press in markdown.
 // `presses`: a composition's press targets by name, its icon or else its label; a stack passes them down and each press takes its own.
 // `focuses`: by the same names, the focus handles the caller owns, so a target keeps the keyboard while it is drawn in another form.
-// `wires`: by the same names, or a tab's key, `(el) => el` adding the pointer's own handlers to that target, such as a drag or a right-click menu.
-// `onClose(key, cx)`: a tab's ×. `onSize` and `onOver`: a stack's size once laid out, and the pointer coming and going.
 const HANDLERS = ["on", "presses", "focuses", "wires", "onClick", "onChange", "onClose", "onOpen", "onHover", "onKey", "onLink", "focusHandle", ...Object.keys(EVENTS)];
 const withEvents = (el, events) => Object.entries(events).filter(([, fn]) => fn).reduce((drawnEl, [name, fn]) => EVENTS[name](drawnEl, fn), el);
 const appIcon = (icon) => (typeof icon === "string" ? icon.replace(/^lu-/, "") : icon);
@@ -128,10 +126,10 @@ export const row = ({ icon, flag, detail, action, actions, start, tools, ...prop
 // `icon: "none"` is the Storybook's no icon; app-only props, such as `color`, pass through as the row's do.
 // `content`: kit pieces or elements drawn in place of the icon and label, such as a picture and its name. No `tip` reads the label.
 // `ink`: the stack around it quiets it, as Sort at its default order is dim; in a `card` it stands at the card's start.
-export const button = ({ label, icon = "none", content = [], tip = "", ...props }) => pressing((id, c, more, { ink = null, card = false }) => {
-  const key = keyOf({ icon: iconOf(icon), label });
+export const button = ({ label, icon = "none", content = [], tip = "", name = "", ...props }) => pressing((id, c, more, { ink = null, card = false }) => {
+  const key = name || keyOf({ icon: iconOf(icon), label });
   const { presses = {}, focuses = {}, wires = {}, onClick = takeOf(presses, key), focusHandle = takeOf(focuses, key) } = given(more);
-  const drawnButton = drawButton(id, label, onClick, c, { ...(ink ? { color: c[ink] } : {}), ...props, tip: tip || null, icon: iconOf(icon), content: drawn(id, c, "content", content) });
+  const drawnButton = drawButton(id, label, onClick, c, { ...(ink ? { color: c[ink] } : {}), ...props, name, tip: tip || null, icon: iconOf(icon), content: drawn(id, c, "content", content) });
   const placedButton = card ? drawnButton.self_start() : drawnButton;
   const focused = focusHandle ? placedButton.track_focus(focusHandle) : placedButton;
   return wires[key] ? wires[key](focused) : focused;
@@ -162,8 +160,6 @@ export const mark = ({ status, size = "md" }) => still(drawMark)({ status, size 
 // An icon on its own, at a row's size, in the muted ink or its `tone`.
 export const glyph = (icon, tone = "") => still((c) => svg(glyphOf(appIcon(icon))).size(ICON_ROW).flex_none().text_color(tone ? toneColor(c, tone) : c.muted))();
 
-// `icon` draws each item's icon and `label` its name; icons without names are a column of squares, each name its tip. `onChange(key, cx)` picks one,
-// `onClose(key, cx)` ends the chosen one with its ×, and `wires` by key adds the pointer's handlers to a tab. In the tab bar (`bar`), a name stops at its width.
 export const tabs = ({ items = [], value = null, size = "md", track = false, disabled = false, icon = false, label = false }) => (id, c, more = {}, { bar = false } = {}) => {
   const { onChange = null, onClose = null, wires = {} } = given(more);
   const shown = items.map((item) => ({ ...item, icon: icon ? appIcon(item.icon) : null }));
@@ -171,7 +167,6 @@ export const tabs = ({ items = [], value = null, size = "md", track = false, dis
   return drawTabs(id, shown, value, onChange, c, { size, track, disabled, collapsed: icon && !label, bar, on: own });
 };
 
-// One breathing tab while the tab bar waits for its computer: the first long, every later one short.
 export const tabSkeleton = () => (id, c, more = {}, { index = 0 } = {}) => {
   given(more);
   return drawTabSkeleton(id, c, index);

@@ -1,4 +1,3 @@
-// The tabs and the tab bar as one tree: the same marks the Storybook writes, so the app takes their layout and colour from its CSS.
 import { html } from "./tree.js";
 import { buttonTree, glyphTree, growTree, markTree } from "./row-tree.js";
 
@@ -22,7 +21,7 @@ export const tabsTree = ({ items = [], value = null, size = "md", track = false,
   return disabled ? html`<div class="${classes}" role="tablist" aria-disabled="true">${tabs}</div>` : html`<div class="${classes}" role="tablist">${tabs}</div>`;
 };
 
-const door = (icon, label, active = false, tip = "") => buttonTree({ label, kind: "icon", icon, active, tip });
+const door = (icon, label, active = false, tip = "") => buttonTree({ label, kind: icon ? "icon" : "quiet", icon: icon || "none", active, tip });
 const skeleton = () => html`<span class="kanso-skeleton kanso-skeleton--breathing kanso-tab-bar__skeleton"></span>`;
 
 export const tabBarTree = ({ items = [], value = null, folded = 0, panels = [], panel = null, state = "connected", arrange = true, help = false, tips = {}, windows = false } = {}) => {

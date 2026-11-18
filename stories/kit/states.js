@@ -189,9 +189,9 @@ export const statedPages = {
     ],
   },
   'Compositions/Tab bar': {
-    args: { width: 1040, value: 'checkout', tab: 'at rest', panel: 'none', state: 'connected', folded: 0, overflow: false, help: false, windows: false },
-    markup: ({ width, value, tab, folded, overflow, ...args }) => {
-      const bar = atWidth(width, tabBar({ ...args, panels: panelDoors, value, overflow, items: tabActs[tab](tabItems(value)), folded: foldedTabs.slice(0, folded).map((label) => ({ label })) }));
+    args: { width: 1040, value: 'checkout', tab: 'at rest', panel: 'none', state: 'connected', folded: 0, overflow: false, help: false, custom: false, windows: false },
+    markup: ({ width, value, tab, folded, overflow, custom, ...args }) => {
+      const bar = atWidth(width, tabBar({ ...args, panels: custom ? [...panelDoors, { key: 'notes', label: 'Notes' }] : panelDoors, value, overflow, items: tabActs[tab](tabItems(value)), folded: foldedTabs.slice(0, folded).map((label) => ({ label })) }));
       return overflow && folded ? `<div class="kanso-story__menu-room">${bar}</div>` : bar;
     },
     states: [
@@ -207,6 +207,7 @@ export const statedPages = {
       { label: 'Unreachable', args: { width: 520, state: 'unreachable' }, caption: 'The tabs step down; no + and no doors.' },
       { label: 'Windows and Linux', args: { windows: true }, caption: 'The window buttons after the doors, in the same button.' },
       { label: 'kansō help', args: { help: true }, caption: 'Proposed. kansō help\'s door after the panels\'.' },
+      { label: 'Custom panel, no icon', args: { custom: true }, caption: 'Proposed. A panel with no icon of its own shows its name.' },
     ],
   },
   'Compositions/Edges': {

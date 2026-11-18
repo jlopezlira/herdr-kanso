@@ -97,7 +97,6 @@ const FALLBACK = 60000;
 const PS_GIVE_UP_MS = 10000;
 // Under the 30 s machine look, so a hung list is free before the next one.
 const MACHINE_READ_MS = 20_000;
-// The agents last found installed, by computer ("" is this one): the + menu draws them at once while it asks again.
 const KNOWN_AGENTS = "kanso.agents.installed";
 
 // The views' names, by key, as the view switch says them.
@@ -307,7 +306,6 @@ export default class Spaces extends View {
     this.handle.focus();
     if (p.newAgent) {
       this.askAgents(p.newAgent, cx);
-      // The worktree rows show only inside a repository: git's list of them says it is one.
       if (p.start && p.newAgent.folder && !p.newAgent.tree) {
         worktreesOf(p.newAgent.folder, p.newAgent.machine || null).then((list) => { this.repo = list.length > 0; this.trees = list.filter((x) => !x.main && !x.prunable); cx.notify(); });
       }
@@ -535,7 +533,6 @@ export default class Spaces extends View {
     else if (c === "add-project") this.addProject();
     else if (c === "add-project-start") this.addProject(true);
     else if (c === "new-conversation") this.newConversationMenu();
-    // The tab bar's +: the same menu as the toolbar's.
     else if (c === "start") this.startMenu(this.shownView());
     else if (c === "open-folder") pickFolder({ prompt: "Open" }).then((folder) => folder && run("space.new", { folder, machine: "" })).catch(() => {});
     else if (c === "list-up" || c === "list-down") {
@@ -1595,7 +1592,6 @@ export default class Spaces extends View {
     ]);
   }
 
-  // The agents installed on the place's computer: the last answer at once while it is asked again, once per open; no answer in time is said in their place.
   askAgents(place, cx) {
     const on = place.machine || "";
     const kept = shared(KNOWN_AGENTS)?.[on];
@@ -1615,8 +1611,6 @@ export default class Spaces extends View {
       .catch((e) => { deadline.cancel(); settle(null, String(e?.message ?? e)); });
   }
 
-  // Every + ends here, one menu: where the tab opens, a Terminal, the agents installed (keyed 1 to 9, none chosen for you), then from the toolbar's
-  // and the tab bar's + a new project, a new or open worktree inside a repository, and Arrange. `place.tree`: a worktree just made, where it starts in its own tab.
   newAgentView(t) {
     const place = props().newAgent, start = Boolean(props().start);
     const project = registry().find((p) => p.id === place.project) ?? null;
@@ -1653,16 +1647,21 @@ export default class Spaces extends View {
     ]);
   }
 
-  // Open worktree…: the project's other worktrees; one chosen opens where it already runs, or a shell there.
+  treesLines(place, trees, item) {
+    return { title: `Worktrees of ${place.name ?? "this project"}`, items: trees.map((x) => item(x.branch ?? "detached", () => this.openTree(place, x), { icon: "git-branch" })) };
+  }
+
   treesMenu(place, trees) {
-    openOverlay({ mod: "kanso-spaces", kind: "popup", width: W.menu, height: 300, at: "pointer", props: { trees: { place, trees } } });
+    const height = menuHeight(this.treesLines(place, trees, sketch));
+    openOverlay({ mod: "kanso-spaces", kind: "popup", width: W.menu, height, at: "pointer", props: { trees: { place, trees } } });
   }
 
   treesView(t) {
     const { place, trees } = props().trees;
-    const item = this.lines();
-    return this.popup(t, `Worktrees of ${place.name ?? "this project"}`, trees.map((x) => item(x.branch ?? "detached", () => this.openTree(place, x), { icon: "git-branch" })));
+    const { title, items } = this.treesLines(place, trees, this.lines());
+    return this.popup(t, title, items);
   }
+
 
   makeWorktree(cx) {
     if (this.making) return;

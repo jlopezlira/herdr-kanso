@@ -56,7 +56,6 @@ function customPanels() {
 
 // A settled tab (put to sleep, say) is not on the bar.
 export const shownTabs = (tabs) => (tabs ?? []).filter((c) => !c.settled);
-// A tab gone before Herdr chose it is nothing to tell: the bar draws what is left.
 const chooseTab = (id) => tryOr(() => run("tab.select", { id }));
 
 // Both shared, so every bar agrees. A panel set to Hide is not mounted.
@@ -74,8 +73,6 @@ const BUILTIN = [
   { id: "look", label: "Images", icon: "lu-image" },
   { id: "sim", label: "Simulator", icon: "lu-smartphone" },
 ];
-// A door's name among the bar's presses: its icon as the app names it, or its label when it has none.
-const doorKey = (p) => (p.icon ? p.icon.replace(/^lu-/, "") : p.label);
 const list = (key) => { const v = shared(key); return Array.isArray(v) ? v.filter((x) => typeof x === "string") : []; };
 const simulatorRoster = () => JSON.stringify([list(ORDER), choice("panel.sim", pieces(shared)), customPanels()]);
 
@@ -414,7 +411,6 @@ export default class Tabs extends View {
     };
   }
 
-  // A tab measures itself as it draws; held, it lands where the pointer lets go; its right-click opens its Menu.
   tabWire(c, tab, { space, ps, connected }) {
     return (el) => {
       const sized = el.on_size_change((s, cx) => { this.tabW = this.sized(this.tabW, tab.id, s.width, cx); });
@@ -428,7 +424,6 @@ export default class Tabs extends View {
     };
   }
 
-  // Where a held tab lands: before the tab under it when it moves left, after it when it moves right, which is before the next one drawn.
   drops(drawn) {
     const from = drawn.findIndex((tab) => tab.id === this.pressed), to = drawn.findIndex((tab) => tab.id === this.dropAt);
     if (from < 0 || to < 0 || from === to) return {};
@@ -436,7 +431,6 @@ export default class Tabs extends View {
     return to + 1 < drawn.length ? { [drawn[to + 1].id]: true } : { [drawn[to].id]: "after" };
   }
 
-  // A panel's door: pressed, it opens or closes its panel; held and let go on another door, it moves there; its right-click opens its Menu.
   doorWire(c, p) {
     return (el) => {
       const wired = el
@@ -505,8 +499,7 @@ export default class Tabs extends View {
     const allPanels = panelList();
     const shownPanels = allPanels.filter((p) => p.on);
     const enabled = shownPanels.map((p) => p.id);
-    // Kanso settings lists the panels from here (it can't import this file), each icon as a file.
-    const roster = allPanels.map((p) => ({ id: p.id, label: p.label, icon: p.icon ? glyphOf(doorKey(p)) : null, on: p.on }));
+    const roster = allPanels.map((p) => ({ id: p.id, label: p.label, icon: p.icon ? glyphOf(p.icon.replace(/^lu-/, "")) : null, on: p.on }));
     if (JSON.stringify(roster) !== JSON.stringify(shared("kanso.panels.all") ?? null)) setShared("kanso.panels.all", roster);
     const arrange = shown("tabs.arrange", true, pieces(shared));
     this.reconcile(space, panel, body, now);
@@ -516,7 +509,6 @@ export default class Tabs extends View {
     const windows = Boolean(window()?.buttons);
     const doors = connected ? shownPanels : [];
     const tools = connected ? (arrange ? 2 : 1) : 0;
-    // Tab widths are measured as they draw: what does not fit folds behind +N.
     const room = this.barW.bar ? tabBarRoom(this.barW.bar, { tools, doors: doors.length + 1 + (windows ? 3 : 0) }) : 0;
     const { shown: kept, folded } = connected ? foldTabs({ widths: openTabs.map((tab) => this.tabW[tab.id]), chosen: openTabs.findIndex((tab) => tab.active), room, gap: G.hair, more: (this.barW.more ?? 0) + G.sm })
       : { shown: openTabs.map((_, i) => i), folded: [] };
@@ -536,12 +528,11 @@ export default class Tabs extends View {
       ...(connected ? { plus: () => run("kanso-spaces.start") } : {}),
       ...(connected && arrange ? { "panels-top-left": () => openArrange() } : {}),
       ...(windows ? { minus: () => run("window.minimize"), square: () => run("window.maximize"), x: () => run("window.close") } : {}),
-      ...Object.fromEntries(doors.map((p) => [doorKey(p), () => this.mount(now === p.id ? null : p.id)])),
+      ...Object.fromEntries(doors.map((p) => [p.id, () => this.mount(now === p.id ? null : p.id)])),
     };
     const wires = {
       ...Object.fromEntries(drawn.map((tab) => [tab.id, this.tabWire(c, tab, { space, ps, connected })])),
-      ...Object.fromEntries(doors.map((p) => [doorKey(p), this.doorWire(c, p)])),
-      // A press on a tool never starts a window drag; a right-click on + opens the arrangements.
+      ...Object.fromEntries(doors.map((p) => [p.id, this.doorWire(c, p)])),
       plus: (el) => stop(el).on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); openArrange(); }),
       ...Object.fromEntries(["panels-top-left", "circle-question-mark", "minus", "square", "x"].map((key) => [key, stop])),
       [more]: (el) => el.on_size_change((s, cx) => { this.barW = this.sized(this.barW, "more", s.width, cx); }),
@@ -556,7 +547,6 @@ export default class Tabs extends View {
       onClose: (key, cx) => { const tab = openTabs.find((other) => other.id === key); if (tab) this.closeTab(tab, ps, cx); },
       onOpen: (open, cx) => { this.moreOpen = open; cx.notify(); },
       onSize: (s, cx) => { this.barW = this.sized(this.barW, "bar", s.width, cx); this.keepRail(layout()); },
-      // A pane held in the strip and let go here goes back where it was; a held tab or door let go anywhere else lands nowhere.
       onRelease: (e, cx) => { dropStripDrag(e, cx); this.pressed = null; this.dropAt = null; this.dragPanel = null; cx.notify(); },
       onOver: (hovered, cx) => { if (!hovered && this.pressed) { this.pressed = null; this.dropAt = null; cx.notify(); } },
       onWheel: (e) => this.wheel(e),

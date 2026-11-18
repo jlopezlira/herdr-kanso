@@ -285,7 +285,6 @@ test("New conversation's menu ends with Add computer, last for the keyboard too,
   assert.equal(off.height, 8 + 28 + 11 * 32 + 9 + 2 * 32, "and its room goes with it");
 });
 
-// The sidebar as the + menu's popup, with nothing open and nothing kept.
 const agentMenu = (host) => loadSpaces({
   ...elements(blank), theme: () => ({ foreground: "#fff", muted: "#888", dim: "#666", border: "#333", selected: "#444" }),
   shared: () => null, setShared: () => {}, spaces: () => [], home: () => "/Users/me", closeOverlay: () => {}, ...host,
@@ -322,7 +321,7 @@ test("The + menu is the approved one: where it opens, Terminal with its key, the
   const calls = [], overlays = [];
   const place = { space: "sp-api", folder: "/work/api", machine: "devbox", project: null, name: "api" };
   const { Spaces } = await agentMenu({
-    props: () => ({ overlay: "ov1", newAgent: place, start: true }), run: (cmd, args) => calls.push([cmd, clone(args ?? null)]), openOverlay: (o) => overlays.push(clone(o.props)),
+    props: () => ({ overlay: "ov1", newAgent: place, start: true }), run: (cmd, args) => calls.push([cmd, clone(args ?? null)]), openOverlay: (o) => overlays.push(clone({ height: o.height, props: o.props })),
     keys: () => [{ keys: "cmd-t", action: "tab.new" }, { keys: "cmd-alt-t", action: "kanso-strip.arrange" }],
   });
   const t = { foreground: "#fff", muted: "#888", dim: "#666", border: "#333", selected: "#444" };
@@ -337,6 +336,8 @@ test("The + menu is the approved one: where it opens, Terminal with its key, the
   const { view, lines } = menu({ known, repo: true, trees: [{ path: "/work/api-feat", branch: "feat" }] });
   assert.deepEqual(lines.map(([text]) => text), ["Terminal", "Claude Code", "Codex", "New project", "New worktree\u2026", "Open worktree\u2026", "Arrange\u2026"]);
   assert.deepEqual(lines.map(([, hint]) => hint), ["⌘T", "1", "2", null, null, null, "⌥⌘T"]);
+  view.menuActs[5]({});
+  assert.deepEqual(overlays.at(-1), { height: 4 + 28 + 32 + 4, props: { trees: { place, trees: [{ path: "/work/api-feat", branch: "feat" }] } } }, "Open worktree… lists the others, as tall as its menu draws");
   view.menuDigits[1]({ notify() {} });
   assert.deepEqual(calls, [["space.select", { id: "sp-api" }], ["tab.new", { space: "sp-api", folder: "/work/api", argv: ["codex"] }]], "2 starts the second agent");
   assert.equal(menu({ known, repo: false }).lines.some(([text]) => text.includes("worktree")), false, "outside a repository: no worktree rows");

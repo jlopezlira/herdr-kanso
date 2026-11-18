@@ -38,7 +38,6 @@ const railTile = (id, c, { on, strong, label }, kids, { onClick = null }, wire) 
 
 // Open, the track across the sidebar's gutter. Collapsed (`onOpen`), the current view's button; open, its menu beside it.
 // The button and its menu are a Button with its menu, as Sort's and Settings' are.
-// A menu's room beside its Button: nothing of its own, or a gap under it.
 const bare = () => div();
 const below = () => div().pt(G.xs);
 const viewMenu = withMenu(() => "left_center", bare);
@@ -90,15 +89,12 @@ const statusMiddle = (id, c, _flags, kids, more) => (kids.length ? placed(box(
 const tabBarFace = () => cssNode(["kanso-tab-bar"]);
 const opOf = (node, name) => lastOp(stylesFor(node, RULES), name)?.[1] ?? 0;
 const doorFace = () => ({ ...cssNode(["kanso-button", "kanso-button--icon"], cssNode(["kanso-tab-bar__doors"], tabBarFace())), tag: "span" });
-// The bar's pieces, each told it sits in the bar and its place, so a later skeleton is the short one.
 const tabBar = (id, c, _flags, kids, more) => box(tabBarFace(), c, RULES, id).w_full()
   .children(kids.map((kid, i) => (typeof kid === "function" ? kid(`${id}-${i}`, c, more, { bar: true, index: i }) : kid)).filter(Boolean));
 const tabBarMenu = withMenu(() => "top_left", below);
 const tabBarDoors = (id, c, _flags, kids, more) => placed(box(cssNode(["kanso-tab-bar__doors"], tabBarFace()), c, RULES, id), id, c, kids, more);
-// A menu's own stack: it only holds the menu.
 const holder = (id, c, _flags, kids, more, _wire, context) => placed(div(), id, c, kids, more, context);
 
-/** The room the tabs and +N have in a tab bar `width` wide that holds `tools` and `doors` icon Buttons, each laid out as the Storybook's CSS says. */
 export const tabBarRoom = (width, { tools = 0, doors = 0 }) => {
   const bar = tabBarFace(), gap = opOf(bar, "gap"), side = opOf(doorFace(), "w"), doorGap = opOf(cssNode(["kanso-tab-bar__doors"], bar), "gap");
   const pad = stylesFor(bar, RULES).filter(([op]) => op === "px" || op === "pl" || op === "pr").reduce((sum, [op, value]) => ({ ...sum, ...(op === "px" ? { pl: value, pr: value } : { [op]: value }) }), {});
@@ -131,7 +127,6 @@ const STACKS = {
   "footer refusal": { draw: (id, c, _flags, kids, more) => placed(div().mt(FOOTER.refusalAbove).mb(FOOTER.refusalBelow), id, c, kids, more) },
   "dialog list": { states: ["scroll"], draw: dialogList },
   "tab bar": { draw: tabBar },
-  // +N and, open, the Menu of the folded tabs under it.
   "tab bar more": { draw: tabBarMenu },
   "tab bar menu": { draw: holder },
   "tab bar doors": { draw: tabBarDoors },

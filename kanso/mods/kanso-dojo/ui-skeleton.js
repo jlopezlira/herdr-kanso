@@ -3,6 +3,8 @@
 import { div } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 import { G, H, R, W, SIDEBAR, SKELETON, ICON_ROW, breathe } from "./ui.js";
+import { RULES } from "./ui-css.js";
+import { box } from "./ui-draw.js";
 
 // Widths in G.xs, as the Storybook's: the lines take theirs in turn.
 const LINES = [30, 24, 35, 21, 27.5, 18];
@@ -36,5 +38,13 @@ const SHAPES = {
 export const skeletonOf = (id, c, { shape, count = 1 }) => breathe(v_flex().id(id).w_full())
   .children(Array.from({ length: ONCE.includes(shape) ? 1 : count }, (_, i) => SHAPES[shape](c, i)));
 
+const barSkeletons = (count) => {
+  const bar = { tag: "div", attrs: {}, classes: ["kanso-tab-bar"], parent: null, get children() { return kids; } };
+  const kids = Array.from({ length: count }, () => ({ tag: "span", attrs: {}, classes: ["kanso-skeleton", "kanso-skeleton--breathing", "kanso-tab-bar__skeleton"], parent: bar, children: [] }));
+  return kids;
+};
 /** One breathing tab while a tab bar waits for its computer: the first long, every later one short. */
-export const tabSkeleton = (id, c, index) => breathe(div().id(id).w(index ? W.tabSkeletonShort : W.tabSkeleton).h(H.icon).flex_none().rounded(R.control).bg(c.border));
+export const tabSkeleton = (id, c, index) => {
+  const skeletons = barSkeletons(Math.min(index, 1) + 1);
+  return breathe(box(skeletons[skeletons.length - 1], c, RULES, id));
+};

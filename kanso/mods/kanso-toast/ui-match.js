@@ -53,7 +53,6 @@ export const matches = (node, steps, state) => {
 
 const STATE_CLASS = { hover: "kanso-control--hover", focus: "kanso-control--focus", active: "kanso-control--active" };
 export const atRest = (node, name) => node.classes.includes(STATE_CLASS[name]);
-// The answer for each key asked, made once.
 export class Answers {
   constructor() { this.known = new Map(); }
 
@@ -63,7 +62,6 @@ export class Answers {
   }
 }
 
-// What a render already asked: the node each hover state is for, and the answers of each rule set.
 class Asked {
   constructor() { this.targets = new WeakMap(); this.answers = new WeakMap(); }
 
@@ -90,17 +88,12 @@ const match = (node, rules, state) => candidates(node, rules)
   .toSorted((a, b) => a.weight - b.weight || a.order - b.order)
   .flatMap((rule) => rule.ops);
 
-// What a node is to a selector: its tag, classes and attributes, the ones before it and the same of each ancestor.
 const own = (node) => `${node.tag}.${(node.classes ?? []).join(".")}${JSON.stringify(node.attrs ?? {})}`;
 const shapeOf = (node) => (node ? `${shapeOf(node.parent)}>${siblingsBefore(node).map(own).join("+")}~${own(node)}` : "");
-const above = (node, target) => Boolean(node) && (node === target || above(node.parent, target));
 const kindOf = (node, state) => {
   if (state === atRest) return "rest";
-  const target = asked.targetOf(state);
-  if (!target || above(node.parent, target)) return null;
-  return target === node ? "hovered" : "beside";
+  return asked.targetOf(state) === node ? "hovered" : null;
 };
-// A render asks the same nodes again and again: the answer for a shape is kept.
 export const stylesFor = (node, rules, state = atRest) => {
   const kind = kindOf(node, state);
   return kind ? asked.answer(rules, `${kind}${shapeOf(node)}`, () => match(node, rules, state)) : match(node, rules, state);
