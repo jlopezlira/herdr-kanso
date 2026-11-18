@@ -28,10 +28,13 @@ import { COLUMN } from "./ui-status.js";
 import { boundChord } from "./ui-tooltip.js";
 import { headerSegment } from "./ui-header.js";
 import { pieceLines } from "./piece-lines.js";
+import { localService } from "./platform-host.js";
+import { openApi } from "./platform-open.js";
 import { NAME_LIMIT, ENTRIES, DIGEST_PIECES, PIECE_GROUP, shownAt, foldFor, headerWidths, headerTools, hoverTools, menuEntries, placeOf, paneLabel, headerMark, prTitle } from "./header-model.js";
 
 // Panes the view holds at once (st.n, 1 to 8): a new column takes 1/n of the view.
 const N_MAX = 8;
+const openUrl = (url) => localService(openApi).open(url).catch(() => { });
 const DEFAULT_N = 2;
 const MIN_W = 0.08; // narrowest a column can be dragged, as a share of the view
 const W_STEPS = [1 / 4, 1 / 3, 1 / 2, 2 / 3, 1];
@@ -521,7 +524,8 @@ export default class Strip extends View {
         parts: [{ text: seg.number, tone: "muted" }, shownAt(fold, "verdict word") && seg.verdict ? { text: `· ${seg.verdict}`, tone: seg.verdictTone } : null] }, c),
         { title: `Pull request \u00b7 ${seg.number}`, piece: "header.pr", actions: [
           ...(seg.url ? [{ icon: "copy", label: "Copy link", act: (cx) => cx.write_to_clipboard?.(seg.url) }] : []),
-          { icon: "external-link", label: "Open the pull request", act: open(seg) }] }) : null;
+          { icon: "git-pull-request", label: "Open the pull request", act: open(seg) },
+          ...(seg.url ? [{ icon: "external-link", label: "Open on GitHub", act: () => openUrl(seg.url) }] : [])] }) : null;
       const step = seg.kind === "files" ? "files" : "commits";
       return shownAt(fold, step) ? this.factMenu(c, `${seg.kind}-${pane}`, headerSegment(`digest-${seg.kind}-${pane}`, { act: open(seg), tone, title: seg.tip,
         parts: [{ text: seg.count }, seg.diff ? { text: seg.diff, tone: seg.diffTone } : null] }, c),

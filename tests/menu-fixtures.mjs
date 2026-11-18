@@ -1,5 +1,11 @@
 // Shared by the menu tests: the pane menu and the tab bar, each drawn by its real view against a fake Herdr.
+import { readFileSync } from "node:fs";
 import { load, clone, chain, gpuiHost, CHROME_NIGHT, fieldWith } from "./helpers.mjs";
+
+// kansō's key table, and Herdr's own keys for a new tab and closing one, as Herdr hands them to a mod.
+const TABLE = JSON.parse(readFileSync(new URL("../kanso/keys.json", import.meta.url), "utf8"));
+export const BINDINGS = [...Object.entries(TABLE).flatMap(([section, keys]) => Object.entries(keys).map(([chord, action]) => ({ section, keys: chord, action }))),
+  { section: "app", keys: "cmd-t", action: "tab.new" }, { section: "app", keys: "cmd-w", action: "tab.close" }];
 
 // The pane menu, as Herdr mounts it for a right-click on pane p1; `target.piece` draws a piece's menu instead.
 export async function paneMenu({ pane = {}, terminal = {}, machine = null, agent = true, keys = [], parent = null, target = { pane: "p1", terminal: "T1" }, store = {} } = {}) {
@@ -25,13 +31,13 @@ export const TABS = [
 ];
 
 // One bar, drawn by the real view against a fake Herdr; `space.tabs` is what Herdr reports now.
-export async function tabBar({ tabs = TABS, machine = null, computers = [], panes = [], fails = null } = {}) {
+export async function tabBar({ tabs = TABS, machine = null, computers = [], panes = [], fails = null, keys = [] } = {}) {
   const store = {}, ran = [], toasts = [], opened = [];
   const space = { id: "s1", active: true, machine, tabs: clone(tabs) };
   const host = {
     ...gpuiHost(), Popover: { new: (id) => chain(id) },
     InputState: { new: fieldWith },
-    theme: () => CHROME_NIGHT, spaces: () => [space], panes: () => panes, machines: () => computers,
+    theme: () => CHROME_NIGHT, spaces: () => [space], panes: () => panes, machines: () => computers, keys: () => keys, window: () => ({ platform: "macos" }),
     layout: () => null, home: () => "/home/me", shared: (key) => store[key] ?? null, setShared: (key, value) => { store[key] = value; },
     run: (cmd, args) => { if (cmd === fails) throw new Error("refused"); ran.push([cmd, args]); }, notify: (note) => { toasts.push(note); }, openOverlay: (spec) => { opened.push(spec); },
   };

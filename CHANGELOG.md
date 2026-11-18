@@ -26,11 +26,14 @@ the branch's rules.
 
 ### Added
 
+- A pull request's right-click menu in a pane's header offers Open on GitHub beside Open the pull request.
 - Settings in the sidebar footer opens one menu: kansō settings, with its key, and Herdr settings. When Herdr has an update waiting, the menu offers it as a third row; the first press arms it and the second restarts Herdr into it. (#241)
 - Cmd+Shift+Up and Cmd+Shift+Down go to the agent above or below in the sidebar, across tabs and projects; Cmd+Shift+Left and Cmd+Shift+Right go back and forward through the agents you visited, as in a browser. On Windows, Ctrl+Shift with the arrows.
 
 ### Changed
 
+- Remove project's second press reads "Press again to remove, close 3 tabs".
+- An asleep row's right-click menu wakes just that conversation with Wake, its whole tab with Wake all, and opens Status with its Asleep section by Everything asleep….
 - Tabs, the panel buttons, the edge rail and the agent highlight are drawn as the Storybook draws them, in both themes. Right-clicking a pane shows its name, then Split, Wider, Pin, Send, Find in conversation, Open with, Sleep, whether right-clicks go to the program, and Close, which asks twice while an agent is in the pane.
 - Every size comes from one scale, in the app, the Storybook and the site: text 11, 12, 13, 14, 16 and 20 with no half pixels, icons 12, 16, 18 and 20, and heights in steps of 4 (a row 32, a two-line row 52, a bar and an icon button 28, a control 32, a pane header 36). A view switch and every other tab track is its tab's height and 2 either side.
 - The sidebar's rows read the same in the app and the Storybook: every name is 14, a computer or project strong and a session medium, in the foreground while it works, waits for you or is open, muted when idle, dim when it is a sub-session or asleep; the leading icon is muted; a two-line session puts its time after what it is doing, "Run npm publish? · 2m"; a project or computer keeps its whole name while its folder and branch give way; the footer rows and the While you were away card use the same ink and ground.
@@ -104,6 +107,7 @@ the branch's rules.
 
 ### Fixed
 
+- A tab's right-click menu writes New tab and Close tab's shortcuts in key glyphs.
 - In Projects, a right click on a subagent under an agent opens its Session menu, with the rows that act on it, as it already did in Status and Threads.
 - A project's right-click menu lists its worktrees before Rename.
 - A pane's right-click menu opens as tall as its rows, so its last rows and Close are no longer cut off at the bottom, and each row's shortcut is written in key glyphs, with room between it and the row's name.
