@@ -142,10 +142,10 @@ export function mountBehaviours(root, { page, state, inlineSurfaces = false, upd
       if (!editor) {
         editor = doc.createElement('span');
         editor.className = 'kanso-field__editor';
-        for (const child of [...field.childNodes]) {
-          if (child.nodeType === 3 || (child.nodeType === 1 && !child.matches('svg,[tabindex],.kanso-button--icon,.kanso-search__count'))) editor.append(child);
-        }
-        field.prepend(editor);
+        const moved = [...field.childNodes].filter((child) => child.nodeType === 3 || (child.nodeType === 1 && !child.matches('svg,[tabindex],.kanso-button--icon,.kanso-search__count')));
+        const sidebarFind = field.matches(':is(.kanso-sidebar,.kanso-sidebar--slice)>.kanso-field');
+        field.insertBefore(editor, sidebarFind ? [...field.children].find((child) => !child.matches('svg')) ?? null : field.firstChild);
+        editor.append(...moved);
       }
       if (!editor.matches('input,textarea')) {
         editor.contentEditable = disabled(field) ? 'false' : 'true';

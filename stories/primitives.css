@@ -1374,6 +1374,8 @@
 .kanso-button--quiet{font-size:var(--k-fs-body);color:var(--muted);white-space:nowrap}
 .kanso-button:is(.kanso-button--solid,.kanso-button--tonal,.kanso-button--quiet.kanso-button--sm),:is(.kanso-actions,.kanso-state-block__actions,.kanso-row--two-lines .kanso-content__secondary)>.kanso-button--quiet{display:inline-flex;align-items:center;justify-content:center;gap:var(--k-sp-2);flex:none;box-sizing:border-box;height:var(--k-h-control);padding:0 var(--k-sp-3);margin:0;border-radius:var(--k-r-control);font-size:var(--k-fs-body);font-weight:var(--k-fw-medium);line-height:1;white-space:nowrap}
 .kanso-button:is(.kanso-button--solid,.kanso-button--tonal,.kanso-button--quiet).kanso-button--sm{height:var(--k-h-compact);padding:0 var(--k-sp-2);font-size:var(--k-fs-meta)}
+.kanso-button.kanso-button--flush:not(.kanso-button--icon,.kanso-button--drawn){margin-left:calc(-1 * var(--k-sp-3))}
+.kanso-button.kanso-button--flush.kanso-button--sm:not(.kanso-button--icon,.kanso-button--drawn){margin-left:calc(-1 * var(--k-sp-2))}
 .kanso-button:is(.kanso-button--solid,.kanso-button--tonal) :is(.kanso-icon,.kanso-icon--program){width:var(--k-ic-row);height:var(--k-ic-row)}
 .kanso-button--tonal .kanso-icon--program{width:var(--k-ic-inline);height:var(--k-ic-inline)}
 /* Proposed, a trimmed label: cut at its widest, such as a menu's chosen project. */
