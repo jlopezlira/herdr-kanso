@@ -1,8 +1,8 @@
 // Kanso's panel kit: the text field and the text it edits. Apache-2.0.
 // Kept byte for byte by `npm run sync:share`: edit kanso-panel/ui-field.js.
-import { div } from "gpui-kit";
+import { div, svg } from "gpui-kit";
 import { h_flex, v_flex, Input, InputState, Textarea, TextareaState } from "gpui-base";
-import { G, H, R, T, CLEAR, well } from "./ui.js";
+import { G, H, R, T, LINE, ICON_ROW, CLEAR, glyphOf, well } from "./ui.js";
 import { iconButton } from "./ui-button.js";
 
 /** The most lines a multi-line field grows to before it scrolls. */
@@ -43,7 +43,7 @@ export class TextField {
 
 /** One text field. `text` is a TextField; `icon` adds a trailing icon button, `iconTip` its name.
  * `inline`: rename in place, a badge tall inside the line it renames, with no action. */
-export function field(id, text, c, { label = null, icon = null, onIcon = null, iconTip = label, error = false, disabled = false, spoken = label, inline = false } = {}) {
+export function field(id, text, c, { label = null, icon = null, onIcon = null, iconTip = label, error = false, disabled = false, spoken = label, inline = false, lead = null } = {}) {
   const multi = text.multiline && !inline;
   const radius = inline ? R.sm : R.control;
   const inset = inline ? G.xs : G.md;
@@ -55,7 +55,8 @@ export function field(id, text, c, { label = null, icon = null, onIcon = null, i
     .when(!disabled && !error, (el) => el.hover((s) => s.border_color(c.muted)))
     .when(multi, (el) => el.min_h(H.control * 2 + G.md).items_stretch())
     .when(!multi, (el) => el.h(inline ? H.badge : H.control))
-    .child(editor.text_size(T.value).pl(inset).when(!icon || inline, (el) => el.pr(inset)).when(multi, (el) => el.py(G.sm))
+    .when(Boolean(lead) && !inline, (el) => el.pl(G.sm - LINE).gap(G.sm).child(svg(glyphOf(lead)).size(ICON_ROW).flex_none().text_color(c.muted)))
+    .child(editor.text_size(T.value).when(!lead || inline, (el) => el.pl(inset)).when(!icon || inline, (el) => el.pr(inset)).when(multi, (el) => el.py(G.sm))
       .when(Boolean(spoken), (el) => el.accessibility_label(spoken)))
     .when(Boolean(icon) && !inline, (el) => el.gap(G.sm).pr(G.xs)
       .child(iconButton(`${id}-icon`, icon, iconTip ?? icon, onIcon, c, { small: true, disabled })));

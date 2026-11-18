@@ -104,7 +104,7 @@ the branch's rules.
 
 ### Fixed
 
-- The While you were away card's title and rows start on the same line as the sidebar's rows and Settings.
+- The While you were away card's title, rows and +N more, and the sidebar's Find field with its search icon, start on the same line as the sidebar's rows and Settings.
 - The first computer in the sidebar sits right under the view switch, where it left 28 of empty space; the space above a computer stays for the ones after it.
 - Dragging the sidebar's edge narrower than 120 folds it to the rail, and dragging the rail's edge out to 120 or more opens it at that width. The × on While you were away closes the card at once instead of waiting for the database.
 - In Dawn Mode the sky fills the top of the sidebar, behind the window's lights, at any sidebar width, and rises as it does in the design: the night fades, the sun comes up with its glow, the clouds and its ring. Pressing the Dawn Mode pill plays the sunrise again.

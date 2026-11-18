@@ -680,9 +680,9 @@ export default class Spaces extends View {
 
   findField(t) {
     const c = tokens(t);
-    return h_flex().id("spaces-find").flex_none().items_center().px(SIDEBAR.gutter).pb(G.sm)
+    return h_flex().id("spaces-find").flex_none().items_center().pl(G.sm).pr(SIDEBAR.gutter).pb(G.sm)
       .on_key_down((e, cx) => { if (e.key === "escape") { cx.stop_propagation(); this.closeFind(cx); } })
-      .child(div().flex_1().min_w(0).child(field("spaces-find-field", this.find, c, { icon: "x", iconTip: "Close", onIcon: (cx) => this.closeFind(cx), spoken: "Find" })));
+      .child(div().flex_1().min_w(0).child(field("spaces-find-field", this.find, c, { lead: "search", icon: "x", iconTip: "Close", onIcon: (cx) => this.closeFind(cx), spoken: "Find" })));
   }
 
   // What the sidebar already knows, by name, step, branch or folder; a project that matches keeps all its sessions, one that does not stays for the sessions that do.
