@@ -11,7 +11,7 @@ import { boundChord, hintOf } from "./ui-tooltip.js";
 import { afterMount, aliasText, tryOrAsync } from "./pure.js";
 import { paths } from "./platform-paths.js";
 import { MEMORY_MS, NEEDS_COMMAND, STATUS_COMMAND, PALETTE_COMMAND, computerOf, computerShown, waitingItem, questionOf, memoryLow, workingItem } from "./model.js";
-import { pieces, shown } from "./pieces.js";
+import { pieces, shown, choice } from "./pieces.js";
 import { openPieceMenu } from "./piece-lines.js";
 
 const GUARD_NOW = ["data", "kanso-guard", "now.json"];
@@ -54,7 +54,8 @@ export default class WorkspaceStatus extends View {
     const left = side !== "right", right = side !== "left";
     const map = pieces(shared);
     const space = left ? spaces().find((s) => s.active) : null;
-    const computer = left ? computerOf(space, machines(), aliasText(shared("kanso.alias"), space?.machine || "")) : null;
+    const computer = left && choice("status.computer", map) !== "hide"
+      ? computerOf(space, machines(), aliasText(shared("kanso.alias"), space?.machine || "")) : null;
     const list = right ? agents() : [];
     const byAgent = new Map(list.map((agent) => [agent.address, agent]));
     const byTerm = new Map((right ? terminals() : []).map((term) => [term.address, term]));
@@ -72,11 +73,11 @@ export default class WorkspaceStatus extends View {
       { id: "status.computer", title: computer.name, actions: computer.command ? [{ icon: "refresh-cw", label: "Refresh", command: computer.command }] : [] })] : [];
     const rights = [
       needs && item(needsItem({ name: needs.name, question: needs.question ?? "", more: needs.more, tip: needs.tooltip }), "blocked", needs.command,
-        { title: "Needs you", actions: [{ label: `Go to ${needs.name}`, hint: hintOf(NEEDS_COMMAND), command: needs.command }] }),
+        { title: "Needs you", actions: [{ label: `Go to ${needs.name}`, hint: hintOf(NEEDS_COMMAND), mark: "blocked", command: needs.command }] }),
       low && item(statusItem({ text: low.words, tone: low.tone, tip: low.tooltip }), low.words, low.command,
         { title: "Memory low", actions: [{ icon: "memory-stick", label: "Open Memory", command: low.command }] }),
       right && shown("status.agents", working.count > 0, map) && item(statusItem({ mark: working.mark, text: working.words, tip: working.tooltip }), working.mark, working.command,
-        { id: "status.agents", title: "Agents at work", actions: [{ label: "Show them", hint: hintOf(STATUS_COMMAND), command: working.command }] }),
+        { id: "status.agents", title: "Agents at work", actions: [{ label: "Show them", hint: hintOf(STATUS_COMMAND), mark: working.mark, command: working.command }] }),
       right && shown("status.palette", true, map) && item(paletteDoor({ tip: tooltip({ label: "Command palette", chord: boundChord(PALETTE_COMMAND) }) }), "command", PALETTE_COMMAND,
         { id: "status.palette", title: "Command palette key" }),
     ].filter(Boolean);

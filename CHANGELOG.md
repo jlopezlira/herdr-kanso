@@ -32,6 +32,7 @@ the branch's rules.
 
 ### Changed
 
+- Right-click menus show the icons and marks they are designed with: the project menu's rows, Panels…, Open the diff and Push, and the status bar's Needs you and Agents at work. (#354)
 - The status bar's computer can be set to show only when needed, which is how it already showed by default. (#354)
 - A pane header's files and commits share one right-click menu, with Open the diff and Push. (#354)
 - A menu row that asks to be pressed again keeps its shortcut beside it. (#354)

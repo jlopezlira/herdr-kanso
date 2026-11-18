@@ -1571,13 +1571,13 @@ export default class Spaces extends View {
     return this.popup(t, place?.name ?? w?.name ?? null, [
       ...(asleep.length ? [{ heading: "Asleep" }, ...asleep.map((z) => item(`Wake ${z.tab}`, () => wakeRow(z), { icon: "sun", hint: z.saved ? since(z.saved) : null }))] : []),
       ...(asleep.length > 1 ? [item(`Wake all ${asleep.length}`, () => arrange({ wake: { space: w.id } }), { icon: "undo" })] : []),
-      ...(place && !project?.missing ? [item("New conversation\u2026", () => this.newAgentMenu(place), { icon: "plus" }),
-        item("New in a worktree\u2026", () => this.worktreeDialog(place), { icon: "git-fork" })] : []),
+      ...(place && !project?.missing ? [item("New conversation\u2026", () => this.newAgentMenu(place)),
+        item("New in a worktree\u2026", () => this.worktreeDialog(place), { icon: "git-branch" })] : []),
       ...(trees.length ? [{ heading: "Worktrees" }, { scroll: trees.map((x) => item(x.branch ?? "detached", () => this.openTree(place, x), { icon: "git-branch", hint: where(x.path) })) }] : []),
-      ...(w ? [item("Rename\u2026", () => run("space.rename", { id: w.id }), { icon: "pencil" })] : []),
+      ...(w ? [item("Rename\u2026", () => run("space.rename", { id: w.id }))] : []),
       ...(active ? [item("Sleep this tab\u2026", () => sleepTab(w.id, active.id), { icon: "moon" })] : []),
       ...(tabs > 1 ? [item("Sleep the project\u2026", () => sleepProject(w.id), { icon: "moon" })] : []),
-      ...(w ? [item("Project options\u2026", options, { icon: "settings" })] : []),
+      ...(w ? [item("Project options\u2026", options)] : []),
       ...(keepable ? [item("Keep as a project", keep, { icon: "pin", keep: true })] : []),
       ...(project?.missing && !project?.machine ? [item("Locate folder\u2026", locate, { icon: "file", keep: true })] : []),
       // Any project you see can go: one you added (its row too), or an open space you never kept.

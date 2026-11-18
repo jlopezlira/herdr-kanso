@@ -437,7 +437,7 @@ export default class Tabs extends View {
     const items = [
       ...pieceLines(`panel.${panel.id}`, { done: shut }).slice(1),
       { separator: true },
-      { label: "Panels\u2026", onClick: (cx) => { shut(cx); openSettings("pieces"); } },
+      { icon: "panels-top-left", label: "Panels\u2026", onClick: (cx) => { shut(cx); openSettings("pieces"); } },
     ];
     return Popover.new(`panel-menu-${panel.id}`).trigger(trigger).open(true).on_open_change((open, cx) => { if (!open) shut(cx); })
       .content(menu(`panel-menu-list-${panel.id}`, { title: `${panel.label} panel`, items }, c));

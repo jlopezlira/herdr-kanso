@@ -519,7 +519,7 @@ export default class Strip extends View {
     };
     const tone = working ? "dim" : null;
     const digest = segments.filter((seg) => seg.kind === "files" || seg.kind === "commits")
-      .map((seg) => ({ label: seg.kind === "files" ? "Open the diff" : `Push ${seg.count}\u2026`, act: open(seg) }));
+      .map((seg) => (seg.kind === "files" ? { icon: "file", label: "Open the diff", act: open(seg) } : { icon: "git-pull-request", label: `Push ${seg.count}\u2026`, act: open(seg) }));
     const piece = (seg) => {
       if (seg.kind === "failure") return failureLine({ text: seg.text, fix: "Refresh", detail: seg.tip })(`digest-failure-${pane}`, c, { onClick: does.refresh });
       if (seg.kind === "pr") return shownAt(fold, "PR") ? this.factMenu(c, `pr-${pane}`, headerSegment(`digest-pr-${pane}`, { act: open(seg), title: prTitle(segments, fold),

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { load, gpuiHost, chain, clone, calls, context, texts, everyDrawn, CHROME_NIGHT } from "./helpers.mjs";
+import { load, popoverHost, chain, clone, calls, context, texts, everyDrawn, CHROME_NIGHT } from "./helpers.mjs";
 import { loadSidebar, mountedState, recorder, world, shell } from "./sidebar-fixtures.mjs";
 import { loadWorkspaceStatus } from "./mod-fixtures.mjs";
 import { paneMenu, tabBar, footer, BINDINGS } from "./menu-fixtures.mjs";
@@ -21,11 +21,19 @@ const blockAt = (html, at) => {
   }
   return html.slice(at);
 };
+const MARK_ART = { "e-work": "working", "e-blk": "blocked" };
+const boardIcons = (html) => [...html.matchAll(/<use href="#([^"]+)"/g)].map(([, name]) => MARK_ART[name] ?? name.replace(/^lu-/, ""));
 const boardMenus = (id) => {
   const html = shownAction(part(record(id).markup).replace(/<style[\s\S]*?<\/style>/g, ""));
-  return [...html.matchAll(/<div class="(?:[^"]*\s)?kanso-menu(?:\s[^"]*)?"/g)].map((m) => wordsOf(blockAt(html, m.index)));
+  return [...html.matchAll(/<div class="(?:[^"]*\s)?kanso-menu(?:\s[^"]*)?"/g)].map((m) => blockAt(html, m.index)).map((block) => ({ words: wordsOf(block), icons: boardIcons(block) }));
 };
 
+const iconName = (path) => path.split("/").at(-1).replace(/\.svg$/, "");
+const blockedDot = (kid) => calls(kid, "rounded_full").length > 0 && calls(kid, "child").some((call) => call[1] === "!");
+const menuOf = (el) => ({
+  words: everyDrawn(el).filter((kid) => !blockedDot(kid)).flatMap((kid) => kid.calls.filter((call) => call[0] === "child" && typeof call[1] === "string").map((call) => call[1])),
+  icons: everyDrawn(el).flatMap((kid) => (blockedDot(kid) ? ["blocked"] : calls(kid, "svg").map((call) => iconName(call[1])))),
+});
 const drawnWords = (el) => everyDrawn(el).flatMap((kid) => kid.calls.filter((call) => call[0] === "child" && typeof call[1] === "string").map((call) => call[1]));
 const pressable = (el, label) => everyDrawn(el).find((kid) => calls(kid, "on_click").length && drawnWords(kid).includes(label));
 const press = (el, label) => calls(pressable(el, label), "on_click").at(-1).at(-1)({}, { notify() {}, stop_propagation() {}, timer: { after() {} } });
@@ -63,7 +71,7 @@ async function sidebarPopup({ popup, open, status = "working", labels = {}, regi
   });
   const view = Object.assign(new Spaces(), mountedState({ shown: new Set(["sp1"]), armed: { is: (key) => key === armed }, menuAt: -1, sub, trees: TREES, known }));
   view.render();
-  return [[...el.texts]];
+  return [{ words: [...el.texts], icons: el.icons.map(iconName) }];
 }
 
 async function machineSidebar(host = {}) {
@@ -80,49 +88,49 @@ async function machineSidebar(host = {}) {
 const session = (more = {}) => () => sidebarPopup({ popup: "menu", open: { address: "t0", view: "spaces", session: SESSION }, ...more });
 const project = (more = {}) => () => sidebarPopup({ popup: "spaceMenu", open: { id: "sp1" }, ...more });
 const computer = (phase, syncOn = false) => () => sidebarPopup({ popup: "machineMenu", open: { route: "devbox", shown: "devbox", phase, syncOn } });
-const pane = (more = {}) => async () => [texts((await paneMenu({ keys: BINDINGS, ...more })).view.render())];
+const pane = (more = {}) => async () => [menuOf((await paneMenu({ keys: BINDINGS, ...more })).view.render())];
 const piece = (id, title) => pane({ target: { piece: { id, title, actions: [] } } });
 const settingsMenu = async (ready = null) => {
   const f = await footer({ ready });
   f.view.menuOpen = true;
   return f;
 };
-const settings = (ready) => async () => [drawnWords(contentOf((await settingsMenu(ready)).view.render()))];
+const settings = (ready) => async () => [menuOf(contentOf((await settingsMenu(ready)).view.render()))];
 const tabMenu = (armed, keys = BINDINGS) => async () => {
   const ps = [{ tab: "t1", program: { agent: true } }, { tab: "t1", program: { agent: true } }];
   const b = await tabBar({ panes: ps, keys });
   if (armed) b.view.armed.press("close-t1", b.cx, () => {});
-  return [drawnWords(contentOf(b.view.tabMenuPopover(b.c, chain("trigger"), b.space.tabs[0], { space: b.space, ps })))];
+  return [menuOf(contentOf(b.view.tabMenuPopover(b.c, chain("trigger"), b.space.tabs[0], { space: b.space, ps })))];
 };
 const panelMenu = async () => {
   const b = await tabBar();
-  return [drawnWords(contentOf(b.view.panelMenuPopover(b.c, chain("trigger"), { id: "pr", label: "PR" })))];
+  return [menuOf(contentOf(b.view.panelMenuPopover(b.c, chain("trigger"), { id: "pr", label: "PR" })))];
 };
 const strip = async (segmentMenu) => {
-  const { Strip, tokens } = await load("kanso-strip/main.js", ["Strip", "tokens"], { ...gpuiHost(), Popover: { new: (id) => chain(id) }, theme: () => CHROME_NIGHT, shared: () => null });
+  const { Strip, tokens } = await load("kanso-strip/main.js", ["Strip", "tokens"], { ...popoverHost(), theme: () => CHROME_NIGHT, shared: () => null });
   return { view: Object.assign(new Strip(), { segmentMenu }), c: tokens(CHROME_NIGHT) };
 };
 const headerPr = async () => {
   const { view, c } = await strip("pr-p1");
   const pr = { kind: "pr", number: "#166", url: "https://github.com/acme/docs/pull/166", verdict: "ready" };
-  return [drawnWords(byId(view.digestBar(c, { pane: "p1", cwd: "/w" }, [pr], { fold: 0, working: false, reading: false, strip: false, does: {} }), "fact-menu-list-pr-p1"))];
+  return [menuOf(byId(view.digestBar(c, { pane: "p1", cwd: "/w" }, [pr], { fold: 0, working: false, reading: false, strip: false, does: {} }), "fact-menu-list-pr-p1"))];
 };
 const digestMenu = async () => {
   const { view, c } = await strip("files-p1");
   const segments = [{ kind: "files", count: "2 files", diff: "+18 −2" }, { kind: "commits", count: "2 commits" }];
-  return [drawnWords(byId(view.digestBar(c, { pane: "p1", cwd: "/w" }, segments, { fold: 0, working: false, reading: false, strip: false, does: {} }), "fact-menu-list-files-p1"))];
+  return [menuOf(byId(view.digestBar(c, { pane: "p1", cwd: "/w" }, segments, { fold: 0, working: false, reading: false, strip: false, does: {} }), "fact-menu-list-files-p1"))];
 };
 const headerMore = async () => {
   const { view, c } = await strip(null);
   const { menuEntries } = await load("kanso-strip/header-model.js", ["menuEntries"]);
   view.moreOpen = true;
   const entries = menuEntries({ strip: true, pinned: false, zoomed: false, tools: { sleep: "menu", send: "menu" }, fold: 0, canOpen: true });
-  return [drawnWords(contentOf(view.more(c, "p1", { name: "tests", entries, does: {} })))];
+  return [menuOf(contentOf(view.more(c, "p1", { name: "tests", entries, does: {} })))];
 };
 const statusMenus = async () => {
   const opened = [];
   const { WorkspaceStatus } = await loadWorkspaceStatus({
-    ...gpuiHost(), Popover: { new: (id) => chain(id) }, theme: () => CHROME_NIGHT, props: () => ({}), keys: () => BINDINGS, window: () => ({ platform: "macos" }),
+    ...popoverHost(), theme: () => CHROME_NIGHT, props: () => ({}), keys: () => BINDINGS, window: () => ({ platform: "macos" }),
     spaces: () => [{ id: "s1", active: true, machine: "devbox", tabs: [] }], machines: () => [{ name: "devbox", layout: "unavailable" }],
     agents: () => [{ address: "a1", status: "working" }], terminals: () => [],
     shared: (key) => ({ "sidebar.collapsed": true, "kanso.needs-you": { rows: [{ address: "a2", pane: "p2", status: "blocked", name: "cart-ui" }] } })[key] ?? null,
@@ -137,7 +145,7 @@ const statusMenu = (title) => async () => [(await statusMenus())[title]];
 const placeMenu = async () => {
   const { view, c } = await strip("place-p1");
   const p = { pane: "p1", cwd: "/Users/me/acme-shop" };
-  return [drawnWords(contentOf(view.factMenu(c, "place-p1", chain("fact"), view.placeMenu(p, { where: { branch: "checkout-v2" } }))))];
+  return [menuOf(contentOf(view.factMenu(c, "place-p1", chain("fact"), view.placeMenu(p, { where: { branch: "checkout-v2" } }))))];
 };
 const asleepRow = () => sidebarPopup({ popup: "menu", open: { address: "zz:t5", name: "billing", asleep: { tab: "review", n: 3, saved: today(14, 2), resume: "00000000-0000-4000-8000-000000000005" } } });
 const plusMenu = () => sidebarPopup({ popup: "newAgent", open: { space: "sp1", folder: "/Users/me/acme-shop", machine: "", project: "pr1", name: "acme-shop" },
@@ -147,7 +155,7 @@ const restartArmed = async () => {
   const f = await settingsMenu("0.1.16");
   press(f.view.render(), "Update Herdr to 0.1.16");
   assert.deepEqual(f.ran, [], "the first press only arms");
-  const armed = drawnWords(contentOf(f.view.render()));
+  const armed = menuOf(contentOf(f.view.render()));
   press(f.view.render(), "Press again to restart Herdr");
   assert.deepEqual(f.ran, [["app.update", undefined]], "the second press restarts Herdr into its update");
   return [armed];
@@ -188,7 +196,7 @@ const keyboard = async () => {
   assert.ok(lit.length > 0, "the lit row draws its selected ground");
   keyDown("enter");
   assert.ok(menu.closed.includes("pane.split"), "Enter runs the lit row");
-  return [texts(menu.view.render())];
+  return [menuOf(menu.view.render())];
 };
 
 const PIECE = (named) => [named ? `Hide “${named}”` : "Hide this", "Settings for this…"];
@@ -210,7 +218,7 @@ const STATUS_ROWS = { needs: ["Needs you", "Go to cart-ui", "⌘J"], memory: ["M
 const SETTINGS_ROWS = ["Settings", "kansō settings", "⌃⇧,", "Herdr settings"];
 const SNOOZE = ["Snooze checkout", "In 1 hour", "15:02", "In 3 hours", "17:02", "This evening", "18:00", "Tomorrow", "Thu 9:00", "Monday", "Mon 9:00"];
 
-const PANE_PINNED = pane({ pane: { name: "web" }, machine: "devbox", agent: false, store: { "strip.state": { t1: { cols: [{ panes: ["p1"], pin: true }] } } } });
+const PANE_PINNED = pane({ pane: { name: "web" }, machine: "devbox", agent: false, terminal: { labels: { "herdr.right-click": "program" } }, store: { "strip.state": { t1: { cols: [{ panes: ["p1"], pin: true }] } } } });
 
 const CASES = {
   session: { draw: session(), want: SESSION_ROWS() },
@@ -238,7 +246,7 @@ const CASES = {
   asleepRow: { draw: asleepRow, want: ["billing, asleep since 14:02", "Wake", "Wake all 3 in review", "Copy conversation id", "Everything asleep…"] },
   noMenu: { draw: piece("sidebar.switch", "Projects, Status, Threads"), want: ["Projects, Status, Threads", ...PIECE()] },
   pane: { draw: pane({ pane: { name: "tests" } }), want: PANE_ROWS("tests", "Pin", AGENT_ROWS) },
-  paneToProgram: { draw: pane({ terminal: { labels: { "herdr.right-click": "program" } } }), want: PANE_ROWS("tests", "Pin", AGENT_ROWS) },
+  paneToProgram: { draw: PANE_PINNED, want: PANE_ROWS("web · devbox", "Unpin", ["Open with…"]) },
   panePinned: { draw: PANE_PINNED, want: PANE_ROWS("web · devbox", "Unpin", ["Open with…"]) },
   paneChild: { draw: pane({ parent: { address: "T0", name: "J" } }), want: PANE_ROWS("tests", "Pin", AGENT_ROWS, ["Send back to J"]) },
   keyboard: { draw: keyboard, want: PANE_ROWS("tests", "Pin", AGENT_ROWS) },
@@ -294,8 +302,14 @@ for (const [id, keys] of STATES) for (const key of [keys].flat()) {
   const board = own ? null : boardOf(id);
   test(`${record(id).label}${own ? ", the project's own rows" : ""}: the app draws ${board ? "its board's" : "its"} rows in order`, { skip }, async () => {
     const wanted = menusOf(want);
-    if (board) for (const menu of wanted) assert.ok(boardMenus(board).some((drawn) => JSON.stringify(drawn) === JSON.stringify(menu)), `the board draws this menu whole: ${menu.join(" | ")}`);
-    assert.deepEqual((await draw()).map((menu) => menu.map(quotes)), wanted);
+    const drawn = await draw();
+    assert.deepEqual(drawn.map((menu) => menu.words.map(quotes)), wanted);
+    if (!board) return;
+    for (const [i, menu] of wanted.entries()) {
+      const same = boardMenus(board).find((one) => JSON.stringify(one.words) === JSON.stringify(menu));
+      assert.ok(same, `the board draws this menu whole: ${menu.join(" | ")}`);
+      assert.deepEqual(drawn[i].icons, same.icons, `${menu[0]}: the board's icons and marks, in order`);
+    }
   });
 }
 
@@ -306,10 +320,15 @@ test("A pane whose Close is pressed once keeps every row and Close's key, as the
   const drawn = texts(menu.view.render());
   assert.deepEqual(drawn, PANE_ROWS("tests", "Pin", AGENT_ROWS).map((word) => (word === "Close pane" ? "Press again to close tests" : word)));
   assert.ok(!menu.closed.includes("pane.close"), "the first press only arms");
+  const light = boardMenus("proto/approved-bars-menus/Reference/1").at(-1).words;
+  assert.equal(light[0], "tests", "the Light example is the bars board's last menu");
+  assert.ok(light.every((word, i) => drawn.indexOf(word) > (i ? drawn.indexOf(light[i - 1]) : -1)), `the Light example's rows come in the app's order: ${light.join(" | ")}`);
+  const [label, key] = light.slice(-2);
+  assert.deepEqual(drawn.slice(drawn.indexOf(label), drawn.indexOf(label) + 2), [label, key], "the armed row and its key are the Light example's");
 });
 
 test("A tab's menu writes no shortcut for New tab or Close tab when neither is bound", async () => {
-  assert.deepEqual(await tabMenu(false, [])(), [["checkout", "Rename", "New tab", "Sleep checkout…", "Close tab", ...PIECE("Agent state on tabs")]]);
+  assert.deepEqual((await tabMenu(false, [])()).map((menu) => menu.words), [["checkout", "Rename", "New tab", "Sleep checkout…", "Close tab", ...PIECE("Agent state on tabs")]]);
 });
 
 const SUBAGENTS = [

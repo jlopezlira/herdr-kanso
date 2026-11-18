@@ -87,7 +87,7 @@ export default class KansoMenu extends View {
     return {
       title: piece.title,
       lines: [
-        ...piece.actions.map((a) => ({ icon: a.icon, label: a.label, hint: a.hint ?? null, onClick: () => { shut(); run(a.command, a.args); } })),
+        ...piece.actions.map((a) => ({ icon: a.icon, label: a.label, hint: a.hint ?? null, mark: a.mark ?? null, onClick: () => { shut(); run(a.command, a.args); } })),
         ...pieceLines(piece.id, { named: piece.named, done: shut }),
       ],
     };
