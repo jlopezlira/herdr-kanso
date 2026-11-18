@@ -111,6 +111,9 @@ const STACKS = {
   "status bar right": { draw: statusHalf(true) },
   // The menu of the open item, beside the bar. The story anchors it to that item.
   "status bar popup": { draw: (id, c, _flags, kids, more) => placed(div().id(id), id, c, kids, more) },
+  // While you were away: a raised card docked at the foot of the sidebar, 8 in from its sides and 12 above the footer; a button in it stands at its start.
+  away: { draw: (id, c, _flags, kids, more) => placed(v_flex().id(id).flex_none().mx(G.sm).mb(G.md).p(G.xs).rounded(R.card).bg(c.popover)
+    .border_1().border_color(c.border), id, c, kids, more, { card: true }) },
 };
 
 /** A stack the app draws: `variant` names its layout, `flags` its states, `kids` its child pieces, `more` its handlers;

@@ -9,7 +9,8 @@ import { section } from '../stories/kit/section.js';
 import { asleep } from '../stories/kit/asleep.js';
 import { sessionRow } from '../stories/kit/session-row.js';
 import { button, dawn as dawnSky, dialog, input, mark, markdownBlock, marks, row, stack, thumbnail, windowControls } from '../stories/kit/pieces.js';
-import { sampleHeader, sampleRefusal, sampleSettingsMenu, sampleSidebar, sessionTools } from '../stories/kit/samples.js';
+import { awayEvents, sampleHeader, sampleRefusal, sampleSettingsMenu, sampleSidebar, sessionTools } from '../stories/kit/samples.js';
+import { activity, awayMax } from '../stories/kit/activity.js';
 import { statedPages } from '../stories/kit/states.js';
 export { elements } from './storybook-markup.mjs';
 
@@ -90,6 +91,8 @@ export function kitRecords(records) {
     ['kit/Header/Dawn collapsed', 'Collapsed, Dawn Mode', sampleHeader({ collapsed: true, dawn: true }), 'The dawn behind the lights, centred on the rail.'],
     ['kit/Header/Under the title bar', 'Under the title bar', sampleHeader({ title: false }), 'Proposed. The lights\' row is the window\'s own block above: the header holds the Toolbar alone.'],
   ]) if (html) results.push({ id, source: 'kit', page: 'Compositions/Header', label, html: frame(html), caption });
+  results.push({ id: 'kit/Activity/Keyboard on more', source: 'kit', page: 'Compositions/Activity', label: 'Keyboard on +N more', html: frame(`<div class="kanso-story__slice">${activity({ events: awayEvents, focus: awayMax })}</div>`),
+    caption: 'Proposed. The keyboard\'s ring on +N more, the list\'s last stop; Enter shows the rest.' });
   const inSidebar = (html) => stack({ variant: 'sidebar frame' }, html), inRail = (html) => stack({ variant: 'rail frame' }, html);
   const atlas = { name: 'Atlas', activity: 'Reviewing step 01', time: '3m' }, juno = { name: 'Juno', status: 'idle', depth: 2 }, iris = { program: 'p-codex', name: 'Iris', status: 'done', depth: 2 };
   for (const [page, label, html, caption, id] of [

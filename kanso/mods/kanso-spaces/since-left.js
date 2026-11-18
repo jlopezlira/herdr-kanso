@@ -1,25 +1,14 @@
-import { div, svg } from "gpui-kit";
-import { h_flex, v_flex } from "gpui-base";
-import { G, H, R, T, ICON, SIDEBAR, TINT, alpha, tokens } from "./ui.js";
-import { iconButton } from "./ui-button.js";
-import { present, RETURN_LABEL, focusedTarget, MAINTENANCE_MS } from "./since-left-model.js";
+import { tokens } from "./ui.js";
+import { phrase, plus } from "./kit.js";
+import { activity, awayMax } from "./activity.js";
+import { present, focusedTarget, MAINTENANCE_MS } from "./since-left-model.js";
 import { SinceStore } from "./since-left-store.js";
-import { statusMark, duration } from "./agents.js";
-
-// A row with what the agent did is two lines; the header and the rest, one.
-const heightOf = (row) => (row.did ? H.two : H.line);
-
-// An error has no glyph; the sidebar draws the blocked disc for a failed agent.
-const lead = (c, mark) => (mark === "pr"
-  ? svg("mods/kanso-chrome/icons/git-pull-request.svg").size(ICON).flex_none().text_color(c.muted)
-  : statusMark(c, mark === "error" ? "blocked" : mark));
+import { duration } from "./agents.js";
 
 export class SinceLeft {
   constructor(db) {
     this.store = new SinceStore(db);
     this.clear();
-    this.heights = [];
-    this.headed = false;
   }
 
   // Nothing shown any more: the list starts empty again.
@@ -80,48 +69,27 @@ export class SinceLeft {
   }
 
   viewOf(now = Date.now()) {
-    return { now, focus: this.target ?? null, expanded: this.expanded, format: duration };
+    return { now, focus: this.target ?? null, format: duration };
   }
 
-  lineCount() { return present(this.rows, this.viewOf()).rows.length; }
-
-  blockHeight() {
-    if (!this.heights.length) return 0;
-    const items = [...this.heights, ...(this.headed ? [H.line] : [])];
-    return items.reduce((sum, h) => sum + h, 0) + (items.length - 1) * SIDEBAR.gap;
-  }
-
-  dismissControl(c) {
-    return iconButton("since-dismiss", "x", "Dismiss", (cx) => { cx.stop_propagation(); return this.dismiss(cx).catch(() => {}); }, c);
-  }
-
-  line(t, c, row, nav, reach) {
-    const id = `since-${row.id ?? "more"}`;
-    const to = row.more ? null : reach(row);
-    const go = row.more ? (cx) => { this.expanded = true; cx.notify(); } : to && ((cx) => { to(); this.dismiss(cx).catch(() => {}); });
-    const selected = go ? nav(id, go) : false;
-    const top = h_flex().gap(G.sm).min_w(0).items_center()
-      .child(div().min_w(0).truncate().text_size(row.more ? T.body : T.card).text_color(row.more || !go ? t.dim : t.foreground)
-        .when(!row.more, (el) => el.font_medium()).child(row.more ? `+${row.more}` : row.name))
-      .when(Boolean(row.outcome), (el) => el.child(div().flex_none().text_size(T.body).text_color(t.muted).child(row.outcome)))
-      .child(div().flex_1())
-      .when(Boolean(row.age), (el) => el.child(div().flex_none().text_size(T.body).text_color(t.dim).child(row.age)));
-    return h_flex().id(id).h(heightOf(row)).w_full().flex_none().pl(SIDEBAR.agentX).pr(G.md).gap(G.md).min_w(0).items_center().rounded(R.card)
-      .when(Boolean(go), (el) => el.cursor_pointer().hover((s) => s.bg(alpha(t.foreground, TINT.row))).on_click((_e, cx) => go(cx)))
-      .when(selected, (el) => el.border_1().border_color(t.accent))
-      .when(!row.more, (el) => el.child(lead(c, row.mark)))
-      .child(v_flex().flex_1().min_w(0).justify_center().child(top)
-        .when(Boolean(row.did), (el) => el.child(div().min_w(0).truncate().text_size(T.body).text_color(t.dim).child(row.did))));
-  }
-
-  render(t, project, nav, reach, head = null) {
-    const shown = present(this.rows, this.viewOf());
-    this.showing = project === this.project && shown.count > 0;
-    this.heights = this.showing ? shown.rows.map(heightOf) : [];
-    this.headed = Boolean(head) && this.showing;
-    if (!this.showing) return div();
-    const c = tokens(t);
-    const body = shown.rows.map((row) => this.line(t, c, row, nav, reach));
-    return v_flex().w_full().gap(SIDEBAR.gap).children(head ? [head(RETURN_LABEL, shown.count, this.dismissControl(c)), ...body] : body);
+  // The Activity card, or nothing: each row the keyboard can reach is one of the list's stops (`nav`), in screen order;
+  // a press goes where it happened (`reach`) and drops the rows, × dismisses them all, +N more (the last stop) shows the rest.
+  render(t, project, nav, reach) {
+    const events = present(this.rows, this.viewOf());
+    this.showing = project === this.project && events.length > 0;
+    if (!this.showing) return null;
+    const max = this.expanded ? events.length : awayMax;
+    const goes = events.slice(0, max).map((row) => {
+      const to = reach(row);
+      return to && ((cx) => { to(); this.dismiss(cx).catch(() => {}); });
+    });
+    const more = events.length > max ? (cx) => { this.expanded = true; cx.notify(); } : null;
+    const rings = [...goes.map((go, i) => Boolean(go) && nav(`since-${events[i].id}`, go)), Boolean(more) && nav("since-more", more)];
+    const presses = goes.reduce((acc, go, i) => ({ ...acc, [events[i].icon]: [...(acc[events[i].icon] ?? []), go] }), {
+      "lu-x": (cx) => this.dismiss(cx).catch(() => {}),
+      ...(more ? { [phrase(plus(events.length - max), "more")]: more } : {}),
+    });
+    const focus = rings.indexOf(true);
+    return activity({ events, max, focus })("since-left", tokens(t), { presses });
   }
 }
