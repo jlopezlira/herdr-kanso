@@ -38,7 +38,9 @@ const STATE_CLASS = { hover: "kanso-control--hover", focus: "kanso-control--focu
 export const atRest = (node, name) => node.classes.includes(STATE_CLASS[name]);
 export const hovering = (target) => (node, name) => atRest(node, name) || (name === "hover" && node === target);
 
-export const stylesFor = (node, rules, state = atRest) => rules
+const candidates = (node, rules) => (Array.isArray(rules) ? rules : [...new Set([...rules["*"], ...node.classes.flatMap((name) => rules[name] ?? [])])]);
+
+export const stylesFor = (node, rules, state = atRest) => candidates(node, rules)
   .filter((rule) => matches(node, rule.steps, state))
   .sort((a, b) => a.weight - b.weight || a.order - b.order)
   .flatMap((rule) => rule.ops);

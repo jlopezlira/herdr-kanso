@@ -187,7 +187,7 @@ const DECLARATIONS = {
   "pointer-events": () => [],
   "box-sizing": () => [],
   "font-variant-numeric": () => [],
-  "max-width": (v) => (/%$/.test(v) ? [["max_w_pct", Number.parseFloat(v)]] : [["max_w", evaluate(v)]]),
+  "max-width": (v) => (/%$/.test(v) ? [["max_w", v]] : [["max_w", evaluate(v)]]),
   "min-height": (v) => [["min_h", evaluate(v)]],
   "max-height": (v) => [["max_h", evaluate(v)]],
   visibility: (v) => [[v === "hidden" ? "invisible" : "visible"]],
@@ -205,8 +205,8 @@ const DECLARATIONS = {
   position: (v) => [[v === "absolute" ? "absolute" : "relative"]],
   left: (v) => [["left", evaluate(v)]],
   right: (v) => [["right", evaluate(v)]],
-  top: (v) => (/%$/.test(v) ? [["top_pct", Number.parseFloat(v)]] : [["top", evaluate(v)]]),
-  bottom: (v) => (/%$/.test(v) ? [["bottom_pct", Number.parseFloat(v)]] : v === "auto" ? [] : [["bottom", evaluate(v)]]),
+  top: (v) => (/%$/.test(v) ? [["top", v]] : [["top", evaluate(v)]]),
+  bottom: (v) => (/%$/.test(v) ? [["bottom", v]] : v === "auto" ? [] : [["bottom", evaluate(v)]]),
   "inset-block": (v) => [["top", evaluate(v)], ["bottom", evaluate(v)]],
   "box-shadow": (v) => {
     const line = v.match(/^inset 0 (calc\(-1 \* var\(--k-[a-z0-9-]+\)\)|var\(--k-[a-z0-9-]+\)) 0 (var\(--[a-z-]+\))$/);
@@ -266,12 +266,35 @@ export const compile = (css) => {
 };
 
 
+const keyOf = (step) => {
+  if (step.classes.length) return step.classes[0];
+  const inner = step.any.flat().map((steps) => keyOf(steps[steps.length - 1]));
+  return inner.length && inner.every((k) => k !== "*") ? inner : "*";
+};
+
+export const PIECES = ["stories/kit/row-tree.js"];
+const reachableSteps = (steps, known) => steps.every((step) => step.classes.every((name) => STATE_CLASSES[name] || known(name))
+  && step.any.every((list) => list.some((inner) => reachableSteps(inner, known))));
+export const reachable = (list, pieces = PIECES) => {
+  const universe = new Set(pieces.flatMap((file) => [...read(file).matchAll(/kanso-[a-z0-9_-]+/g)].map((m) => m[0])));
+  const known = (name) => universe.has(name) || [...universe].some((u) => u.endsWith("-") && name.startsWith(u));
+  return list.filter((rule) => reachableSteps(rule.steps, known));
+};
+
+export const indexed = (list) => {
+  const index = { "*": [] };
+  for (const rule of list) {
+    for (const key of [keyOf(rule.steps[rule.steps.length - 1])].flat()) (index[key] ??= []).push(rule);
+  }
+  return index;
+};
+
 if (isMain(import.meta.url)) {
   const only = process.argv[2];
   const { rules: compiled, skipped } = compile(SHEETS.map(read).join("\n"));
   const picked = only ? compiled.filter((rule) => rule.selector.includes(only)) : compiled;
   const missed = only ? skipped.filter((rule) => rule.selector.includes(only)) : skipped;
-  writeFileSync(new URL("kanso/mods/kanso-panel/ui-css.js", root), `export const RULES = ${JSON.stringify(picked)};\n`);
+  writeFileSync(new URL("kanso/mods/kanso-panel/ui-css.js", root), `export const RULES = ${JSON.stringify(indexed(reachable(picked)))};\n`);
   console.log(`${picked.length} rules compiled, ${missed.length} not yet`);
   for (const rule of missed) console.log(`  not yet: ${rule.selector}  (${rule.reason})`);
 }
