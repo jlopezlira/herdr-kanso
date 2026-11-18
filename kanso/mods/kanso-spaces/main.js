@@ -32,7 +32,7 @@ import { asleep } from "./asleep.js";
 import { tile } from "./tile.js";
 import { views, viewSwitch } from "./view-switch.js";
 import { pullKey, runPull, canWake, enterOpens, sectionMarkOf, sectionCount, rowDirectory, threadWord, threadActions, signInCommand, noProjectsOn, sortOf, foldTail, readWord } from "./sidebar-rows.js";
-import { H, G, T, R, W, ICON, SIDEBAR, GLIDE, OPACITY, TINT, alpha, sidebarSides, tokens } from "./ui.js";
+import { DIALOG, H, G, T, R, W, ICON, SIDEBAR, GLIDE, OPACITY, TINT, alpha, sidebarSides, tokens } from "./ui.js";
 import { ELBOW } from "./ui-row.js";
 import { button, Armed } from "./ui-button.js";
 import { dialog } from "./ui-dialog.js";
@@ -106,7 +106,7 @@ const initialOf = (name) => (name?.[0] ?? "?").toUpperCase();
 const COMPUTER_STATE = { connected: "on", loading: "on", off: "off", unavailable: "unreachable", login: "login" };
 // A project's key: its machine and folder.
 export const projectKey = (w) => `${w?.machine ?? ""}:${w?.folder || home()}`;
-const arrange = (props) => openOverlay({ mod: "kanso-sleep", kind: "dialog", width: 520, props });
+const arrange = (props) => openOverlay({ mod: "kanso-sleep", kind: "dialog", width: DIALOG.wide, props });
 // A folder as ~/ when it is under home.
 const tilde = (path) => { const base = trimmed(home()); return base && paths.within(path, base) ? `~/${paths.relative(base, path)}` : path; };
 const sleepTab = (spaceId, tab) => arrange({ sleep: { scope: "tab", space: spaceId, tab } });
@@ -351,7 +351,7 @@ export default class Spaces extends View {
 
   // A project's name and folder, asked in a dialog; `start`: a conversation begins in it once made.
   addProject(start = false) {
-    openOverlay({ mod: "kanso-spaces", kind: "dialog", width: 460, props: { newProject: { start } } });
+    openOverlay({ mod: "kanso-spaces", kind: "dialog", width: DIALOG.sidebar, props: { newProject: { start } } });
   }
 
   // The click's context ends with the click: the dialog redraws from its own spawned one.
@@ -1468,7 +1468,7 @@ export default class Spaces extends View {
   }
 
   worktreeDialog(place) {
-    openOverlay({ mod: "kanso-spaces", kind: "dialog", width: 440, props: { worktree: place } });
+    openOverlay({ mod: "kanso-spaces", kind: "dialog", width: DIALOG.worktree, props: { worktree: place } });
   }
 
 

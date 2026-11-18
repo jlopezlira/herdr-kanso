@@ -6,7 +6,7 @@ import { run, props, closeOverlay, openOverlay, theme, terminals, panes, spaces,
 import { listKey, moveTo } from "./listkeys.js";
 import { focusOn } from "./pure.js";
 import { openWithPopup } from "./popup.js";
-import { tokens } from "./ui.js";
+import { DIALOG, tokens } from "./ui.js";
 import { Armed } from "./ui-button.js";
 import { menuList } from "./ui-menu.js";
 import { pieceLines } from "./piece-lines.js";
@@ -46,10 +46,10 @@ function groups(tg, armed) {
       { label: pinned ? "Unpin" : "Pin", icon: "pin", key: "kanso-strip.pin", does: () => setShared("strip.req", { op: "pin", pane, n: nonce() }) },
     ],
     [
-      ...(canSend ? [{ label: "Send to an agent\u2026", icon: "send", key: "kanso-strip.send", does: () => openOverlay({ mod: "kanso-send", kind: "dialog", width: 520, props: { pane } }) }] : []),
+      ...(canSend ? [{ label: "Send to an agent\u2026", icon: "send", key: "kanso-strip.send", does: () => openOverlay({ mod: "kanso-send", kind: "dialog", width: DIALOG.wide, props: { pane } }) }] : []),
       ...(agent ? [{ label: "Find in conversation", icon: "search", key: "kanso-strip.find", does: () => { run("pane.focus", { pane }); run("kanso-strip.find"); } }] : []),
       ...(info?.cwd ? [{ label: "Open with\u2026", icon: "external-link", key: "mod.open:open-with", does: () => openWithPopup(info) }] : []),
-      ...(canSleep && space ? [{ label: "Sleep", icon: "moon", does: () => openOverlay({ mod: "kanso-sleep", kind: "dialog", width: 520, props: { sleep: { scope: "agent", space: space.id, tab: info.tab, pane: info.pane } } }) }] : []),
+      ...(canSleep && space ? [{ label: "Sleep", icon: "moon", does: () => openOverlay({ mod: "kanso-sleep", kind: "dialog", width: DIALOG.wide, props: { sleep: { scope: "agent", space: space.id, tab: info.tab, pane: info.pane } } }) }] : []),
       ...(parent ? [{ label: `Send back to ${parent.name || parent.address}`, icon: "chevron-right", does: () => run("terminal.park", { terminal: term.address }) }] : []),
     ],
     ...(term ? [[{ label: "Right-clicks go to the program", checked: toProgram,

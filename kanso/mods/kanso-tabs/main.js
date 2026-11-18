@@ -13,7 +13,7 @@ import { walkLayout, commitLayout, sidebarBack, foldSidebar, dropStripDrag } fro
 import { Updater } from "./update.js";
 import { tryOr, readCommands } from "./pure.js";
 import { openArrange } from "./open.js";
-import { G, H, R, T, W, ICON as ICON_SIZE, CLEAR, EASE, GLIDE, TINT, alpha, tokens } from "./ui.js";
+import { DIALOG, G, H, R, T, W, ICON as ICON_SIZE, CLEAR, EASE, GLIDE, TINT, alpha, tokens } from "./ui.js";
 import { button, iconButton, pressAgain, Armed } from "./ui-button.js";
 import { TextField } from "./ui-field.js";
 import { menu } from "./ui-menu.js";
@@ -452,7 +452,7 @@ export default class Tabs extends View {
     const items = [
       { icon: "pencil", label: "Rename", onClick: (cx) => { shut(cx); this.startRename(tab, cx); } },
       { icon: "plus", label: "New tab", hint: boundChord("tab.new") || null, onClick: (cx) => { shut(cx); run("tab.new", { space: space.id }); } },
-      { icon: "moon", label: `Sleep ${tab.name}\u2026`, onClick: (cx) => { shut(cx); openOverlay({ mod: "kanso-sleep", kind: "dialog", width: 520, props: { sleep: { scope: "tab", space: space.id, tab: tab.id } } }); } },
+      { icon: "moon", label: `Sleep ${tab.name}\u2026`, onClick: (cx) => { shut(cx); openOverlay({ mod: "kanso-sleep", kind: "dialog", width: DIALOG.wide, props: { sleep: { scope: "tab", space: space.id, tab: tab.id } } }); } },
       { separator: true },
       { icon: "x", label: "Close tab", hint: boundChord("tab.close") || null, armed, verb: agents ? verb : null,
         onClick: (cx) => (agents ? this.armed.press(closeKey(tab), cx, () => { shut(cx); run("tab.close", { id: tab.id }); }) : (shut(cx), run("tab.close", { id: tab.id }))) },
