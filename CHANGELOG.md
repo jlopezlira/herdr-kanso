@@ -105,7 +105,7 @@ the branch's rules.
 ### Fixed
 
 - In Projects, a right click on a subagent under an agent opens its Session menu, with the rows that act on it, as it already did in Status and Threads.
-- A project's right-click menu lists its worktrees before Rename, as the other menus put the thing's own rows first.
+- A project's right-click menu lists its worktrees before Rename.
 - A pane's right-click menu opens as tall as its rows, so its last rows and Close are no longer cut off at the bottom, and each row's shortcut is written in key glyphs, with room between it and the row's name.
 - A working agent's name no longer has dots counting after it; the shimmer across the name stays.
 - The While you were away card's title, rows and +N more, and the sidebar's Find field with its search icon, start on the same line as the sidebar's rows and Settings.
