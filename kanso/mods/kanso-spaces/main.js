@@ -390,13 +390,13 @@ export default class Spaces extends View {
     const start = Boolean(props().newProject?.start);
     const shown = this.projectFolder ? this.projectFolder.replace(trimmed(home()), "~") : "No folder chosen";
     const c = tokens(t);
-    const label = (text) => div().text_size(12).text_color(t.muted).child(text);
+    const label = (text) => div().text_size(T.body).text_color(t.muted).child(text);
     return dialog("project-dialog", c, {
       title: start ? "New project with a conversation" : "New project",
       body: [
         label("Folder"),
         h_flex().gap(8).items_center()
-          .child(div().flex_1().min_w(0).truncate().text_size(13).text_color(this.projectFolder ? t.foreground : t.dim).child(shown))
+          .child(div().flex_1().min_w(0).truncate().text_size(T.value).text_color(this.projectFolder ? t.foreground : t.dim).child(shown))
           .child(button("project-choose", this.projectFolder ? "Change\u2026" : "Choose\u2026", (cx) => this.chooseProjectFolder(cx), c, { kind: "tonal" })),
         field("project-name", this.projectName, c, { label: "Name" }).pt(G.sm),
       ],
@@ -2486,7 +2486,7 @@ export default class Spaces extends View {
     const queue = this.refreshNeeds(sp, read.terms, asleep);
     this.seenNow = this.seen(sp, ctx);
     this.seenAt = ctx.now; // when it was seen: a later write of it is no newer
-    const root = v_flex().id("spaces-root").track_focus(this.handle).size_full().min_h(0).bg(t.chrome).text_size(13)
+    const root = v_flex().id("spaces-root").track_focus(this.handle).size_full().min_h(0).bg(t.chrome).text_size(T.card)
       .on_key_down((e, cx) => this.listKeyDown(e, cx))
       .on_size_change((size, cx) => this.sized(size.width, cx))
       // A pane held in the strip and let go here goes back where it was.

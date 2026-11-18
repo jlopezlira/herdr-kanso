@@ -13,7 +13,7 @@ import { imageApi } from "./platform-images.js";
 import { kindOf } from "./kinds.js";
 import { MarkdownDoc, tildePath, readingLines, conflictBar, textIo, readWhole } from "./doc.js";
 import { drafts, draftKey, remember, restore, seenDisk, typed, opened, beginSave, commitText, applied, word, needsSave, didFail, EDIT_LIMIT, keepMine, takeTheirs, tooLarge } from "./edit.js";
-import { tokens } from "./ui.js";
+import { G, T, tokens } from "./ui.js";
 import { quietLink, iconButton, Armed } from "./ui-button.js";
 import { tryOrAsync, extOf, afterMount } from "./pure.js";
 import { fileMemory } from "./panel-state.js";
@@ -346,31 +346,31 @@ export class Preview {
     const t = theme(), c = tokens(t);
     const editing = this.doc ? this.doc.snapshot() : this.edit;
     const mark = this.doc ? "" : word(this.edit);
-    return v_flex().id("preview").track_focus(this.handle).size_full().min_h(0).bg(t.background).text_color(t.foreground).text_size(13)
+    return v_flex().id("preview").track_focus(this.handle).size_full().min_h(0).bg(t.background).text_color(t.foreground).text_size(T.card)
       .on_key_down((e, cx) => { this.doc?.key(e, cx); })
       .child(h_flex().h(42).flex_none().px(10).gap(6).items_center().border_b(1).border_color(t.border)
         .when(Boolean(this.back), (el) => el.child(iconButton("preview-back", "chevron-left", BACK[this.back], (cx) => this.goBack(cx), c)))
         .child(v_flex().flex_1().min_w(0).pl(this.back ? 0 : 4)
-          .child(div().truncate().font_semibold().text_size(13).child(nameOf(this.path)))
-          .child(div().truncate().text_size(11).text_color(t.dim).child(`${tildePath(folderOf(this.path), this.on)}${this.pixels ? ` · ${this.pixels.width} × ${this.pixels.height}` : ""}${(this.held ?? this.doc?.held) ? ` · ${asOf((this.held ?? this.doc.held).at, Date.now())}` : ""}`)))
+          .child(div().truncate().font_semibold().text_size(T.card).child(nameOf(this.path)))
+          .child(div().truncate().text_size(T.micro).text_color(t.dim).child(`${tildePath(folderOf(this.path), this.on)}${this.pixels ? ` · ${this.pixels.width} × ${this.pixels.height}` : ""}${(this.held ?? this.doc?.held) ? ` · ${asOf((this.held ?? this.doc.held).at, Date.now())}` : ""}`)))
         .children(this.doc ? this.doc.controls(t, "preview") : [])
-        .when(Boolean(mark), (el) => el.child(div().text_size(11.5).text_color(t.dim).child(mark)))
+        .when(Boolean(mark), (el) => el.child(div().text_size(T.body).text_color(t.dim).child(mark)))
         .when(needsSave(editing), (el) => el.child(quietLink("preview-save", "Save", (cx) => this.save(cx), c)))
         .child(iconButton("preview-open-with", "external-link", "Open with…", () => this.openWith(), c))
         .when(this.dirty(), (el) => el.child(this.ask.link("preview-discard", "Discard", "discard", this.path, (cx) => this.discard(cx), c)))
         .when(!this.dirty(), (el) => el.child(iconButton("preview-refresh", "refresh-cw", this.held || this.doc?.held ? "Retry" : "Read again", (cx) => this.load(cx), c)))
         .child(iconButton("preview-close", "x", "Close", (cx) => this.leave(cx, () => { previewKeys.unbind(this); showPanel(null); }), c)))
       .child(this.doc ? this.doc.body(t, "preview-md")
-        : this.edit?.big ? div().p(12).text_color(t.dim).child("Too large to edit")
+        : this.edit?.big ? div().p(G.md).text_color(t.dim).child("Too large to edit")
         : this.code ? v_flex().flex_1().min_h(0)
           .when(this.edit?.phase === "conflict", (el) => el.child(conflictBar("preview-code", t, (cx) => this.keepCode(cx), (cx) => this.takeCode(cx))))
           .child(Editor.new(this.code).flex_1().min_h(0))
-        : this.error ? div().p(12).text_color(t.dim).child(this.error)
-        : this.picture?.deferred ? v_flex().id("preview-hold").flex_1().min_h(0).items_center().justify_center().gap(8)
+        : this.error ? div().p(G.md).text_color(t.dim).child(this.error)
+        : this.picture?.deferred ? v_flex().id("preview-hold").flex_1().min_h(0).items_center().justify_center().gap(G.sm)
           .child(div().font_semibold().child(nameOf(this.path)))
-          .child(div().text_size(12).text_color(t.dim).child(bytesLabel(this.picture.size)))
+          .child(div().text_size(T.body).text_color(t.dim).child(bytesLabel(this.picture.size)))
           .child(quietLink("preview-load", "Load", (cx) => this.loadPicture(cx, true), c))
-        : this.picture?.image ? v_flex().id("preview-picture").flex_1().min_h(0).p(16).items_center().justify_center().child(image(this.picture.image).w_full())
+        : this.picture?.image ? v_flex().id("preview-picture").flex_1().min_h(0).p(G.lg).items_center().justify_center().child(image(this.picture.image).w_full())
         : this.path ? readingLines(t) : div().flex_1());
   }
 }

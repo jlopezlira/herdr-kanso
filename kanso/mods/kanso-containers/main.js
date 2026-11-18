@@ -8,7 +8,7 @@ import { systemApi } from "./platform-system.js";
 import { View, div } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import { exec, run, spaces, panes, home, theme, shared, setShared, readTextFile } from "herdr";
-import { G, tokens } from "./ui.js";
+import { T, G, tokens } from "./ui.js";
 import { Armed, quietLink, iconButton } from "./ui-button.js";
 import { field, TextField } from "./ui-field.js";
 import { row } from "./ui-row.js";
@@ -276,10 +276,10 @@ export default class Containers extends View {
 
   detailsView(k, c) {
     const d = this.details.get(k.id.slice(0, 12));
-    if (!d) return div().pl(15).text_size(11.5).text_color(c.dim).child("No details from Docker.");
+    if (!d) return div().pl(15).text_size(T.body).text_color(c.dim).child("No details from Docker.");
     const line = (label, text) => h_flex().w_full().gap(G.sm).items_start()
-      .child(div().w(64).flex_none().text_size(11).text_color(c.dim).child(label))
-      .child(div().flex_1().min_w(0).text_size(11.5).text_color(c.muted).child(text));
+      .child(div().w(64).flex_none().text_size(T.micro).text_color(c.dim).child(label))
+      .child(div().flex_1().min_w(0).text_size(T.body).text_color(c.muted).child(text));
     const mounts = d.mounts.map((m) => `${m.type === "volume" ? m.name?.slice(0, 24) : m.source} → ${m.dest}`);
     return v_flex().w_full().pl(15).pt(G.xs).gap(3)
       .when(k.ports.length > 0, (el) => el.child(line("Ports", k.ports.map((p) => `${p.port} → ${p.inside}/${p.proto}`).join(", "))))
@@ -344,11 +344,11 @@ export default class Containers extends View {
   group(g, c) {
     const stopped = g.containers.filter((k) => k.health !== "running" && k.health !== "busy");
     const running = g.containers.filter((k) => k.health === "running" || k.health === "busy");
-    return v_flex().w_full().gap(4)
+    return v_flex().w_full().gap(G.xs)
       .child(h_flex().w_full().flex_wrap().items_end().justify_between().gap_x(G.md).gap_y(G.xs).pb(G.xs)
-        .child(div().min_w(0).flex_shrink(1).truncate().text_size(15).text_color(g.project === OTHER ? c.muted : c.text).child(g.project))
+        .child(div().min_w(0).flex_shrink(1).truncate().text_size(T.title).text_color(g.project === OTHER ? c.muted : c.text).child(g.project))
         .child(h_flex().flex_none().gap(G.md).items_center()
-          .when(g.containers.length > 0, (el) => el.child(div().text_size(12).text_color(c.dim).child(`${g.running} of ${g.containers.length} running`)))
+          .when(g.containers.length > 0, (el) => el.child(div().text_size(T.body).text_color(c.dim).child(`${g.running} of ${g.containers.length} running`)))
           .when(stopped.length > 1, (el) => el.child(quietLink(`ct-start-all-${g.project}`, "Start all", (cx) => this.containers("start", stopped, cx), c)))
           .when(running.length > 1, (el) => el.child(quietLink(`ct-stop-all-${g.project}`, "Stop all", (cx) => this.containers("stop", running, cx), c)))))
       .children(g.stacks.map((s) => this.stackRow(s, c)))
@@ -358,14 +358,14 @@ export default class Containers extends View {
   head(id, title, note, open, c) {
     return h_flex().w_full().items_end().justify_between().gap(G.md).pb(G.xs)
       .child(quietLink(`ct-${id}`, `${open ? "Hide" : "Show"} ${title}`, (cx) => { this.show = { ...this.show, [id]: !open }; cx.notify(); }, c, { color: c.text }))
-      .child(div().min_w(0).truncate().text_size(12).text_color(c.dim).child(note));
+      .child(div().min_w(0).truncate().text_size(T.body).text_color(c.dim).child(note));
   }
 
   imagesView(c) {
     const unused = this.images.filter((i) => i.unused);
     const total = this.images.reduce((t, i) => t + i.mb, 0), spare = unused.reduce((t, i) => t + i.mb, 0);
     const open = this.show.images, name = this.pull.value().trim();
-    return v_flex().w_full().gap(4)
+    return v_flex().w_full().gap(G.xs)
       .child(this.head("images", "images", `${this.images.length} · ${size(total)}${spare > 0 ? ` · ${size(spare)} unused` : ""}`, open, c))
       // Pull is always here: a new image is one line away.
       .child(h_flex().w_full().gap(G.sm).items_center()
@@ -404,7 +404,7 @@ export default class Containers extends View {
 
   volumesView(c) {
     const unused = this.volumes.filter((v) => v.unused), open = this.show.volumes;
-    return v_flex().w_full().gap(4)
+    return v_flex().w_full().gap(G.xs)
       .child(this.head("volumes", "volumes", `${this.volumes.length}${unused.length ? ` · ${unused.length} unused` : ""}`, open, c))
       .when(unused.length > 0, (el) => el.child(h_flex()
         .child(this.armed.link("ct-vrm", `Remove ${unused.length} unused volume${unused.length === 1 ? "" : "s"}`, "delete their data for good",
@@ -416,15 +416,15 @@ export default class Containers extends View {
     const cache = this.spare["Build Cache"] ?? 0;
     if (cache < 1) return null;
     return h_flex().w_full().items_center().justify_between().gap(G.md)
-      .child(div().text_size(12.5).text_color(c.muted).child(`Build cache: ${size(cache)} you can get back`))
+      .child(div().text_size(T.value).text_color(c.muted).child(`Build cache: ${size(cache)} you can get back`))
       .child(this.armed.link("ct-cache", "Clear", "clear", "cache", (cx) => this.act(["builder", "prune", "-f"], cx, { what: "clear the build cache" }), c, { color: c.text }));
   }
 
   body(c) {
-    if (this.state === "missing") return div().text_size(13).text_color(c.dim).child("Docker is not installed on this computer.");
+    if (this.state === "missing") return div().text_size(T.value).text_color(c.dim).child("Docker is not installed on this computer.");
     if (this.state === "down") {
       return v_flex().gap(G.sm)
-        .child(div().text_size(13).text_color(c.muted).child("Docker isn't running."))
+        .child(div().text_size(T.value).text_color(c.muted).child("Docker isn't running."))
         .child(h_flex().child(quietLink("ct-open-docker", "Open Docker", (cx) => this.openDocker(cx), c, { color: c.text })));
     }
     if (this.groups === null) return skeletonOf({ shape: "two lines", count: 3 })("kanso-skeleton", c);
@@ -433,20 +433,20 @@ export default class Containers extends View {
     const remote = Boolean(this.context?.remote);
     // What Docker costs this computer comes first: its VM keeps memory even with nothing running.
     const hero = v_flex().gap(G.md)
-      .when(!remote, (el) => el.child(v_flex().gap(4)
-        .child(div().text_size(12.5).text_color(c.dim).child("Docker uses of this computer's memory"))
+      .when(!remote, (el) => el.child(v_flex().gap(G.xs)
+        .child(div().text_size(T.value).text_color(c.dim).child("Docker uses of this computer's memory"))
         .child(metric({ value: typeof this.held === "number" ? size(this.held) : "–", unit: this.limit ? `can grow to ${size(this.limit)}` : "" })("ct-metric", c))))
-      .when(remote, (el) => el.child(div().text_size(12.5).text_color(c.yellow)
+      .when(remote, (el) => el.child(div().text_size(T.value).text_color(c.yellow)
         .child(`Docker context ${this.context?.name}: these containers run on ${this.context?.host}, not this computer.`)))
       .child(h_flex().items_center().gap(G.md).flex_wrap()
-        .child(div().text_size(13).text_color(c.text).child(`${running} running`))
-        .child(div().text_size(13).text_color(c.dim).child(`${all.length - running} stopped`))
+        .child(div().text_size(T.card).text_color(c.text).child(`${running} running`))
+        .child(div().text_size(T.value).text_color(c.dim).child(`${all.length - running} stopped`))
         .when(!remote, (el) => el.child(this.armed.link("ct-quit", running ? `Quit Docker (stops ${running})` : "Quit Docker", "quit Docker",
           "quit", (cx) => this.quitDocker(cx), c))));
     const space = this.spaceView(c);
     return v_flex().w_full().gap(32)
       .child(hero)
-      .when(this.groups.length === 0, (el) => el.child(div().text_size(13).text_color(c.dim).child("No containers. Pull an image and run it below, or a project's compose file shows here to bring up.")))
+      .when(this.groups.length === 0, (el) => el.child(div().text_size(T.value).text_color(c.dim).child("No containers. Pull an image and run it below, or a project's compose file shows here to bring up.")))
       .children(this.groups.map((g) => this.group(g, c)))
       .child(this.imagesView(c))
       .when(this.volumes.length > 0, (el) => el.child(this.volumesView(c)))
@@ -464,7 +464,7 @@ export default class Containers extends View {
       .child(pageFrame(narrow, narrow ? 28 : 40, (column) => column
         .child(header)
         .child(this.body(c))
-        .when(Boolean(this.error), (el) => el.child(div().text_size(12).text_color(c.red).child(this.error ?? "")))
-        .when(Boolean(this.note), (el) => el.child(div().text_size(12).text_color(this.note === "Starting Docker…" ? c.dim : c.red).child(this.note ?? "")))));
+        .when(Boolean(this.error), (el) => el.child(div().text_size(T.value).text_color(c.red).child(this.error ?? "")))
+        .when(Boolean(this.note), (el) => el.child(div().text_size(T.body).text_color(this.note === "Starting Docker…" ? c.dim : c.red).child(this.note ?? "")))));
   }
 }

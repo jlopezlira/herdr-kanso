@@ -5,7 +5,7 @@ import { v_flex, h_flex } from "gpui-base";
 import { theme, props, closeOverlay, appHome, settings } from "herdr";
 import { focusOn } from "./pure.js";
 import { Lit } from "./lit.js";
-import { G, H, T, DOJO_CELL, TINT, CLEAR, alpha, tokens } from "./ui.js";
+import { R, G, H, T, DOJO_CELL, TINT, CLEAR, alpha, tokens } from "./ui.js";
 import { iconButton, button as drawButton } from "./ui-button.js";
 import { button, metric, row, tooltip } from "./kit.js";
 import { Store } from "./store.js";
@@ -191,15 +191,15 @@ export default class Dojo extends View {
     const { w, h } = this.world;
     return v_flex().gap(3).children(Array.from({ length: h }, (_, y) => h_flex().gap(3).children(Array.from({ length: w }, (_, x) => {
       const { here, goal } = this.cellMark(x, y);
-      return div().size(DOJO_CELL).rounded(5).bg(here ? c.accent : alpha(c.text, TINT.cell)).when(goal && !here, (el) => el.border_2().border_color(c.accent));
+      return div().size(DOJO_CELL).rounded(R.sm).bg(here ? c.accent : alpha(c.text, TINT.cell)).when(goal && !here, (el) => el.border_2().border_color(c.accent));
     }))));
   }
 
   text(c, ink) {
     const mono = settings()?.font_family ?? "JetBrains Mono";
-    return v_flex().gap(4).children(this.world.lines.map((line, y) => h_flex().h(26).items_center().children([...(line.length ? line : " ")].map((ch, x) => {
+    return v_flex().gap(G.xs).children(this.world.lines.map((line, y) => h_flex().h(26).items_center().children([...(line.length ? line : " ")].map((ch, x) => {
       const { goal, here } = this.cellMark(x, y);
-      return div().w(12).h(24).flex().items_center().justify_center().rounded(3).font_family(mono).text_size(15)
+      return div().w(12).h(24).flex().items_center().justify_center().rounded(R.sm).font_family(mono).text_size(T.title)
         .bg(here ? c.accent : CLEAR).text_color(here ? ink : goal ? c.text : c.muted)
         .when(goal && !here, (el) => el.border_2().border_color(c.accent).bg(alpha(c.accent, TINT.goal)))
         .child(ch === " " ? " " : ch);
@@ -209,11 +209,11 @@ export default class Dojo extends View {
   cap(c, ink, key, word, hinted, sub = null) {
     const lit = this.capLight.on(key.toLowerCase());
     return v_flex().gap(3).items_center()
-      .child(div().h(38).min_w(38).px(8).rounded(7).border_1()
+      .child(div().h(38).min_w(38).px(G.sm).rounded(R.control).border_1()
         .border_color(lit || hinted ? c.accent : alpha(c.accent, TINT.boundLine)).bg(lit ? c.accent : hinted ? alpha(c.accent, TINT.strong) : alpha(c.accent, TINT.key))
-        .flex().items_center().justify_center().text_size(14).font_semibold().text_color(lit ? ink : c.text).child(key))
-      .child(div().text_size(11).text_color(hinted ? c.accent : c.muted).child(word))
-      .when(Boolean(sub), (el) => el.child(div().text_size(9.5).text_color(c.dim).child(sub)));
+        .flex().items_center().justify_center().text_size(T.card).font_semibold().text_color(lit ? ink : c.text).child(key))
+      .child(div().text_size(T.micro).text_color(hinted ? c.accent : c.muted).child(word))
+      .when(Boolean(sub), (el) => el.child(div().text_size(T.micro).text_color(c.dim).child(sub)));
   }
 
   // The pet, at its reaction; a click chooses another.
@@ -248,8 +248,8 @@ export default class Dojo extends View {
     const keysRow = h_flex().gap(G.md).flex_wrap().items_start()
       .children(lv.motions.map((m) => this.cap(c, ink, m, words[m] ?? m, hintBase === m, FINGER[m]?.[1] ?? null)))
       .when(Boolean(lv.counts), (el) => el.child(this.cap(c, ink, "2-9", "then a key", /^[1-9]/.test(hint ?? ""))));
-    const stat = (label, value, strong = false) => v_flex().gap(2)
-      .child(div().text_size(10.5).text_color(c.dim).child(label))
+    const stat = (label, value, strong = false) => v_flex().gap(G.hair)
+      .child(div().text_size(T.micro).text_color(c.dim).child(label))
       .child(div().text_size(strong ? 26 : 16).font_semibold().text_color(strong ? c.accent : c.text).child(String(value)));
     const levelRow = (L) => {
       const on = L.n === lv.n, b = this.bests[L.n];
@@ -263,20 +263,20 @@ export default class Dojo extends View {
     // A new element each place it shows: an element can have one parent, and the result shows it beside the header's.
     const leave = (id) => press(id, "Leave the dōjō", () => closeOverlay(props()?.overlay));
     const o = this.over;
-    const result = o ? v_flex().gap(G.lg).p(24).rounded(12).bg(alpha(c.accent, TINT.card)).border_1().border_color(alpha(c.accent, TINT.frame))
-      .child(div().text_size(13).text_color(c.muted).child(o.kept ? `Level ${lv.n}: ${lv.name}, done` : "Round stopped"))
+    const result = o ? v_flex().gap(G.lg).p(G.xl).rounded(12).bg(alpha(c.accent, TINT.card)).border_1().border_color(alpha(c.accent, TINT.frame))
+      .child(div().text_size(T.value).text_color(c.muted).child(o.kept ? `Level ${lv.n}: ${lv.name}, done` : "Round stopped"))
       .child(metric({ value: String(o.score), unit: "points", facts: `${o.hits} of ${TARGETS} targets | ${o.perfect} in the fewest moves | best streak ${o.longest} | ${secs(o.ms)}` })("dojo-metric", c))
-      .when(this.record, (el) => el.child(div().text_size(15).font_semibold().text_color(c.text).child("A new best for this level.")))
+      .when(this.record, (el) => el.child(div().text_size(T.title).font_semibold().text_color(c.text).child("A new best for this level.")))
       .child(h_flex().gap(G.md).flex_wrap()
         .child(press("dojo-again", "Play again  ↩", () => this.again(), { kind: "solid" }))
         .when(lv.n < LEVELS.length, (el) => el.child(press("dojo-next", `Next level: ${LEVELS[lv.n].name}  n`, () => this.setLevel(lv.n + 1))))
         .child(leave("dojo-leave-result"))) : null;
     return v_flex().id("kanso-dojo").track_focus(this.handle).size_full().min_h(0).bg(t.popover).text_color(t.foreground)
       .on_key_down((e, cx) => this.key(e, cx))
-      .child(h_flex().h(44).px(16).gap(G.md).items_center().border_b_1().border_color(c.border)
+      .child(h_flex().h(44).px(G.lg).gap(G.md).items_center().border_b_1().border_color(c.border)
         .child(svg("mods/kanso-chrome/icons/enso.svg").size(16).text_color(c.accent))
-        .child(div().text_size(14).font_semibold().child("hjkl dōjō"))
-        .child(div().text_size(12).text_color(c.dim).child(`level ${lv.n} · ${lv.name}`))
+        .child(div().text_size(T.card).font_semibold().child("hjkl dōjō"))
+        .child(div().text_size(T.body).text_color(c.dim).child(`level ${lv.n} · ${lv.name}`))
         .child(div().flex_1())
         .when(this.totals.rounds > 0, (el) => el.child(div().on_mouse_down("left", (_e, cx) => cx.stop_propagation())
           .child(iconButton("dojo-share", "share", "Share", (cx) => this.share.toggle(cx), c, { active: this.share.open }))))
@@ -292,19 +292,19 @@ export default class Dojo extends View {
           .child(h_flex().gap(G.lg)
             .child(stat("Streak", r ? r.streak : 0))
             .child(stat("Best", best ?? "–")))
-          .child(v_flex().gap(2).children(LEVELS.map(levelRow))))
+          .child(v_flex().gap(G.hair).children(LEVELS.map(levelRow))))
         .child(this.choosing ? this.chooser(t, c, press) : v_flex().flex_1().min_w(0).gap(G.lg)
           .when(this.share.open && this.totals.rounds > 0, (el) => el.child(this.share.row(c, async () => ({ ...dojoShare(this.totals, Date.now(), await this.pal.figure(theme(), this.share.workDir).catch(() => null)), name: "dojo", title: "hjkl dōjō" }),
             "Your best round, targets, days practiced and levels: nothing else. The post opens with the image in it.", G.sm)))
-          .child(div().text_size(12.8).line_height(1.5).text_color(c.muted).child(lv.tip))
+          .child(div().text_size(T.value).line_height(1.5).text_color(c.muted).child(lv.tip))
           .when(Boolean(result), (el) => el.child(result))
           .when(!result, (el) => el.child(div().p(14).rounded(12).bg(alpha(c.text, TINT.board)).border_1().border_color(c.border)
             .child(lv.world === "grid" ? this.grid(c, ink) : this.text(c, ink))))
           .child(h_flex().gap(6).items_center()
             .children(Array.from({ length: TARGETS }, (_, i) => div().h(6).flex_1().rounded_full().bg(i < done ? c.accent : alpha(c.text, TINT.pill))))
-            .child(div().pl(G.sm).text_size(12).text_color(c.muted).child(`${done} / ${TARGETS}`)))
-          .child(h_flex().min_h(40).px(14).py(10).rounded(10).bg(alpha(c.accent, TINT.pill)).items_center()
-            .child(div().text_size(13).line_height(1.45).text_color(c.text).child(this.line())))
+            .child(div().pl(G.sm).text_size(T.body).text_color(c.muted).child(`${done} / ${TARGETS}`)))
+          .child(h_flex().min_h(40).px(14).py(10).rounded(R.card).bg(alpha(c.accent, TINT.pill)).items_center()
+            .child(div().text_size(T.card).line_height(1.45).text_color(c.text).child(this.line())))
           .child(keysRow)));
   }
 }
