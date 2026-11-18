@@ -31,8 +31,9 @@ const TERMINALS = [
 const dark = { name: "dark", target: "dark.example", via: "", session: "", temporary: false, state: "connected" };
 const cold = { name: "cold", target: "cold.example", via: "", session: "", temporary: false };
 
-async function sidebar({ kbd = false, navKey = null, hoverSpace = null, hoverMachine = null } = {}) {
+async function sidebar({ kbd = false, navKey = null, hoverSpace = null, hoverMachine = null, before = () => {} } = {}) {
   const { Spaces } = await loadSidebar(host(), {
+    InputState: { new: () => ({ on() {}, value: () => "", focus() {}, release() {} }) },
     spaces: () => SPACES, agents: () => AGENTS, panes: () => PANES, terminals: () => TERMINALS,
     machines: () => [{ name: null, layout: "ready" }, { name: "dark", layout: "ready" }, { name: "cold", layout: "ready" }],
   });
@@ -40,6 +41,7 @@ async function sidebar({ kbd = false, navKey = null, hoverSpace = null, hoverMac
     shown: new Set(SPACES.map((w) => w.id)), machines: [dark], parked: [cold], asleepOpen: new Set(["sleep:tb"]),
     kbd, navKey, hoverSpace, hoverMachine, handle: { is_focused: () => kbd, focus() {} },
   }));
+  before(view);
   return { view, root: view.render() };
 }
 
@@ -130,6 +132,17 @@ test("one gutter from both sides seen: toolbar, rows, the current project's hove
     assert.equal(drawn.length, 2, "Update kansō and Settings");
     assert.deepEqual([...new Set(drawn.flatMap((row) => [content(row, "left"), seen.right(content(row, "right"))]))], [SIDEBAR.gutter]);
   }
+
+  const { activity } = await load("kanso-spaces/activity.js", ["activity"], host());
+  const away = activity({ events: Array(6).fill({ icon: "e-done", subject: "Kylo-ren", fact: "finished", age: "4m" }) })("since-left", c, {});
+  assert.deepEqual([...new Set(rowsIn(away).map((row) => content(row, "left")))], [SIDEBAR.gutter], "While you were away: its heading and rows start on the gutter, as Settings does");
+  const more = nodes(away).find((el) => el.calls.some((call) => call[0] === "self_start"));
+  assert.equal(content(more, "left"), SIDEBAR.gutter, "+N more: its label starts on the gutter, its ground reaching out as a row's does");
+
+  const finding = await sidebar({ before: (view) => view.openFind({ notify() {} }) });
+  const search = nodes(byId(finding.root, "spaces-find")).find((el) => svgOf(el).endsWith("/search.svg"));
+  assert.ok(search, "Find draws its search icon");
+  assert.equal(box(search, "left"), SIDEBAR.gutter, "Find: its search icon starts on the gutter");
 });
 
 // The room above each row in the list: the spacers since the row before it (the list's top for the first); every row is also the list's 1 px gap apart.
