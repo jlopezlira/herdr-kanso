@@ -96,6 +96,7 @@ the branch's rules.
 
 ### Fixed
 
+- In Dawn Mode the sky fills the top of the sidebar, behind the window's lights, at any sidebar width, and rises as it does in the design: the night fades, the sun comes up with its glow, the clouds and its ring. Pressing the Dawn Mode pill plays the sunrise again.
 - Spend keeps every source toggle made during a scan instead of dropping earlier changes.
 - In the sidebar, every row now lights up on hover across the full width, with the same rounded corners: projects, computers, sessions, asleep rows and the footer, where the session rows were cut square and the others stopped short of the edge.
 - A long computer name on the status bar trims with an ellipsis instead of keeping its full width.
