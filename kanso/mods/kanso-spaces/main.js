@@ -75,6 +75,8 @@ const sketch = (label, _act, { keep: _keep, ...look } = {}) => ({ ...look, label
 const RAIL_MENU_ROWS = 10; // a rail popup shows this many rows; the rest scroll
 const CHILD_PAD = SIDEBAR.guideX + ELBOW.w + SIDEBAR.elbowGap - G.sm; // the icon starts past the elbow, inside the row's padding
 // Every height is known before anything is drawn, so a scan (`laidOut`) finds where each pill goes.
+// How long after the sidebar folds or opens its sizes are the layout landing, not a drag.
+const SETTLE = 1000;
 const item = (el, h = null, mark = null) => ({ el, h, mark });
 // The space above a later section.
 const lift = (h) => item(div().h(h).flex_none(), h);
@@ -176,6 +178,7 @@ export default class Spaces extends View {
 
   init(_props, cx) {
     this.clock = cx.timer;
+    this.settleUntil = Date.now() + SETTLE;
     // Opened as a row's right-click menu (props().menu): nothing else to run.
     if (props()?.menu || props()?.railMenu || props()?.spaceMenu || props()?.newAgent || props()?.worktree || props()?.newConversation || props()?.newProject || props()?.machineMenu) {
       // Nothing is chosen for you: no row lit until the keyboard moves.
@@ -857,16 +860,20 @@ export default class Spaces extends View {
     this.orderOpen = null;
   }
 
-  openRail() {
+  // A width the sidebar was dragged to opens it there; the Show sidebar tool opens it as you left it.
+  openRail(dragged = null) {
     this.shutMenus();
-    const width = shared("sidebar.width") ?? SIDEBAR.w;
+    const width = dragged != null ? Math.round(dragged) : shared("sidebar.width") ?? SIDEBAR.w;
+    this.settleUntil = Date.now() + SETTLE;
     setShared("sidebar.collapsed", false);
+    if (dragged != null) setShared("sidebar.width", width);
     setRail(true, width);
   }
 
   // Remembers how wide you left it open (`width`, when known), to open it the same width.
   foldRail(width) {
     this.shutMenus();
+    this.settleUntil = Date.now() + SETTLE;
     if (width != null) setShared("sidebar.width", Math.round(width));
     foldSidebar();
   }
@@ -876,10 +883,16 @@ export default class Spaces extends View {
     else this.foldRail(this.width >= SIDEBAR.min ? this.width : null);
   }
 
-  // Herdr sizes the sidebar as its edge is dragged, never narrower than SIDEBAR.min: a drag changes the width and nothing else, only Hide sidebar folds it.
+  // Herdr sizes the sidebar as its edge is dragged: past SIDEBAR.min narrower it folds to the rail, and the rail dragged to SIDEBAR.min or wider opens.
+  // The sizes while a fold or an open is still landing, and before the first draw settles, are not a drag.
   sized(w, cx) {
     const was = this.width ?? SIDEBAR.w;
     this.width = w;
+    if (w > 0 && Date.now() >= (this.settleUntil ?? 0)) {
+      const folded = shared("sidebar.collapsed") === true;
+      if (folded && w >= SIDEBAR.min) { this.openRail(w); return; }
+      if (!folded && w < SIDEBAR.min) { this.foldRail(null); return; }
+    }
     if ((was < SIDEBAR.narrow) !== (w < SIDEBAR.narrow)) cx?.notify();
   }
 

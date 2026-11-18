@@ -89,7 +89,7 @@ for (const [file, name, write] of writers) {
     if (intent.panel) {
       assert.deepEqual(f.panel().children, [intent.panel]);
     } else {
-      assert.equal(f.host.layout().resizable, intent.rail.open);
+      assert.equal(f.host.layout().resizable, true);
       assert.equal(f.host.layout().children[0].min, intent.rail.min);
     }
   });
@@ -371,7 +371,7 @@ test("Folding a hidden sidebar shows it at the rail's width, marked collapsed", 
   assert.equal(state["sidebar.collapsed"], true);
   assert.deepEqual(sent, ["layout.set", "layout.resize"]);
   assert.deepEqual(clone(tree.children[0]), { id: "sidebar", hidden: false, min: 76, size: { px: 76 } });
-  assert.equal(tree.resizable, false);
+  assert.equal(tree.resizable, true, "the rail's edge drags too, to open it");
   sent.length = 0;
   foldSidebar();
   assert.deepEqual(sent, ["layout.resize"], "a shown rail is not set again");

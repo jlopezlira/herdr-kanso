@@ -104,6 +104,7 @@ the branch's rules.
 
 ### Fixed
 
+- Dragging the sidebar's edge narrower than 120 folds it to the rail, and dragging the rail's edge out to 120 or more opens it at that width. The × on While you were away closes the card at once instead of waiting for the database.
 - In Dawn Mode the sky fills the top of the sidebar, behind the window's lights, at any sidebar width, and rises as it does in the design: the night fades, the sun comes up with its glow, the clouds and its ring. Pressing the Dawn Mode pill plays the sunrise again.
 - Spend keeps every source toggle made during a scan instead of dropping earlier changes.
 - In the sidebar, every row now lights up on hover across the full width, with the same rounded corners: projects, computers, sessions, asleep rows and the footer, where the session rows were cut square and the others stopped short of the edge.
