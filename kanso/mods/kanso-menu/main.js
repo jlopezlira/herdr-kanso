@@ -10,7 +10,7 @@ import { DIALOG, tokens } from "./ui.js";
 import { Armed } from "./ui-button.js";
 import { menuList } from "./ui-menu.js";
 import { pieceLines } from "./piece-lines.js";
-import { boundChord, chordOf } from "./ui-tooltip.js";
+import { hintOf } from "./ui-tooltip.js";
 
 const nonce = () => Date.now() + Math.random();
 
@@ -59,8 +59,6 @@ function groups(tg, armed) {
   ].filter((group) => group.length) };
 }
 
-const shortcut = (action) => (action && boundChord(action) ? chordOf(action) : null);
-
 export default class KansoMenu extends View {
   init(_props, cx) {
     this.at = -1; // nothing chosen for you: j or the down arrow lights the first
@@ -101,7 +99,7 @@ export default class KansoMenu extends View {
     return {
       title,
       lines: sets.flatMap((set, g) => [...(g ? [{ separator: true }] : []),
-        ...set.map((it) => ({ icon: it.icon, label: it.label, hint: shortcut(it.key), checked: it.checked, armed: it.armed, verb: it.verb, onClick: (cx) => this.choose(it, cx) }))]),
+        ...set.map((it) => ({ icon: it.icon, label: it.label, hint: hintOf(it.key), checked: it.checked, armed: it.armed, verb: it.verb, onClick: (cx) => this.choose(it, cx) }))]),
     };
   }
 

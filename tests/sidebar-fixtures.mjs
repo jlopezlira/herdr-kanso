@@ -68,7 +68,6 @@ export const loadSidebar = (elements, over = {}) => loadSpaces({
   run: () => {}, home: () => "/Users/me", props: () => ({}), openOverlay: () => {}, ...over,
 });
 
-// A computer's projects, agents, panes and terminals, with a Find field that holds nothing.
 export const world = (spaces, agents, panes, terminals) => ({
   InputState: { new: () => ({ on() {}, value: () => "", focus() {}, release() {} }) },
   spaces: () => spaces, agents: () => agents, panes: () => panes, terminals: () => terminals,

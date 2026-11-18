@@ -1,13 +1,11 @@
-// Shared by the menu tests: the pane menu and the tab bar, each drawn by its real view against a fake Herdr.
 import { readFileSync } from "node:fs";
 import { load, clone, chain, gpuiHost, CHROME_NIGHT, fieldWith } from "./helpers.mjs";
+import { mountChrome } from "./mod-fixtures.mjs";
 
-// kansō's key table, and Herdr's own keys for a new tab and closing one, as Herdr hands them to a mod.
 const TABLE = JSON.parse(readFileSync(new URL("../kanso/keys.json", import.meta.url), "utf8"));
 export const BINDINGS = [...Object.entries(TABLE).flatMap(([section, keys]) => Object.entries(keys).map(([chord, action]) => ({ section, keys: chord, action }))),
   { section: "app", keys: "cmd-t", action: "tab.new" }, { section: "app", keys: "cmd-w", action: "tab.close" }];
 
-// The pane menu, as Herdr mounts it for a right-click on pane p1; `target.piece` draws a piece's menu instead.
 export async function paneMenu({ pane = {}, terminal = {}, machine = null, agent = true, keys = [], parent = null, target = { pane: "p1", terminal: "T1" }, store = {} } = {}) {
   const info = { pane: "p1", tab: "t1", terminal: "T1", cwd: "/work/acme", name: "tests", ...(agent ? { status: "idle", program: { agent: true } } : {}), ...pane };
   const other = { pane: "p2", tab: "t1", terminal: "T2", status: "idle", program: { agent: true } };
@@ -30,7 +28,6 @@ export const TABS = [
   { id: "t3", index: 3, name: "tests", active: false, status: "done" },
 ];
 
-// One bar, drawn by the real view against a fake Herdr; `space.tabs` is what Herdr reports now.
 export async function tabBar({ tabs = TABS, machine = null, computers = [], panes = [], fails = null, keys = [] } = {}) {
   const store = {}, ran = [], toasts = [], opened = [];
   const space = { id: "s1", active: true, machine, tabs: clone(tabs) };
@@ -46,4 +43,21 @@ export async function tabBar({ tabs = TABS, machine = null, computers = [], pane
   const view = new Tabs();
   const cx = { stop_propagation() {}, notify() {}, timer: { after() {} } };
   return { view, cx, ran, toasts, opened, space, c: tokens(CHROME_NIGHT), W, PENDING };
+}
+
+export const FOOTER_NIGHT = { background: "#1b1b19", foreground: "#d8d4cb", chrome: "#161615", hover: "#232321", selected: "#2b2b28", dim: "#6b6860", muted: "#949086", blocked: "#d5674f", accent: "#c9a46a" };
+
+export async function footer({ shared = {}, ready = null, bindings = [{ action: "kanso-tabs.settings", keys: "ctrl-shift-," }], updater = {} } = {}) {
+  const ran = [], overlays = [], installs = [];
+  const host = {
+    ...gpuiHost(),
+    Popover: { new: (id) => chain(id) },
+    theme: () => FOOTER_NIGHT, props: () => ({ footer: true }), shared: (key) => shared[key] ?? null, setShared: () => {},
+    run: (name, args) => { ran.push([name, args]); }, openOverlay: (spec) => { overlays.push(spec); return "o"; },
+    updates: () => ({ app: { ready } }), keys: () => bindings, settings: () => ({ font_family: "Mono" }), window: () => ({ platform: "macos" }),
+  };
+  const view = await mountChrome(host);
+  const kit = await load("kanso-chrome/ui.js", ["H", "G", "T", "SIDEBAR", "PANE"], host);
+  view.updater = { available: () => null, busy: false, refused: () => null, install: (context) => installs.push(context), ...updater };
+  return { view, ran, overlays, installs, ...kit };
 }
