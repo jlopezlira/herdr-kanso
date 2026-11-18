@@ -24,7 +24,7 @@ test("Each composition is the kit row with its own props: the app draws what a h
   const { projectRow, computerRow, section, asleep, kit, c } = await compositions();
   const same = (piece, props) => assert.deepEqual(drawn(piece("r", c)), drawn(kit.row(props)("r", c)));
   same(section({ title: "Needs you", status: "blocked" }), { name: "Needs you", heading: true, mark: "blocked", meta: null, hover: false, focus: false, actions: [] });
-  same(computerRow({ name: "dark", state: "unreachable" }), { icon: "lu-server", name: "dark", heading: true, hover: false, focus: false, pending: false, mark: "none",
+  same(computerRow({ name: "dark", state: "unreachable" }), { icon: "lu-server", name: "dark", heading: true, group: true, hover: false, focus: false, pending: false, mark: "none",
     meta: { text: "Unreachable", tip: null }, action: { kind: "icon", icon: "lu-refresh-cw", label: "Refresh" }, actions: [] });
   const [head, ...rows] = asleep({ names: ["site", "dojo"], open: true });
   assert.equal(rows.length, 2, "open, a row per sleeper under the heading");

@@ -1,16 +1,14 @@
 // The status bar's tree is the Storybook's markup, and its gpui ops come from that CSS.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import { compile, indexed, reachable, SHEETS } from "../scripts/css-to-gpui.mjs";
+import { compile, indexed, kansoTheme, reachable, read, SHEETS } from "../scripts/css-to-gpui.mjs";
 import { viewOf, stylesFor, changed } from "../kanso/mods/kanso-panel/ui-match.js";
 import { toHtml } from "../stories/kit/tree.js";
 import { statusItem, needsItem, stepper, failureLine } from "../stories/kit/pieces.js";
-import { computerItem, paletteDoor, layoutPaused, statusBar } from "../stories/kit/compositions.js";
+import { computerItem, paletteDoor, layoutPaused, statusBar } from "../stories/kit/status-bar.js";
 import { statusItemTree, needsItemTree, stepperTree, failureLineTree, computerItemTree, paletteDoorTree, layoutPausedTree, statusBarTree } from "../stories/kit/status-bar-tree.js";
 import { gpuiHost, load } from "./helpers.mjs";
 
-const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 const compiled = compile(SHEETS.map(read).join("\n"));
 const rules = indexed(reachable(compiled.rules));
 
@@ -20,12 +18,13 @@ test("The status bar tree is the Storybook's markup", () => {
   same(statusItemTree({ mark: "working", text: "2", pending: true }), statusItem({ mark: "working", text: "2", pending: true }));
   same(needsItemTree({ name: "cart-ui", question: "Which layout?", more: 1 }), needsItem({ name: "cart-ui", question: "Which layout?", more: 1 }));
   same(stepperTree({ value: 2, hover: true }), stepper({ value: 2, hover: true }));
+  same(stepperTree({ value: 2, columns: [{ width: 15, panes: ["seen", "current"] }] }), stepper({ value: 2, columns: [{ width: 15, panes: ["seen", "current"] }] }));
   same(failureLineTree({ text: "Layout paused", fix: "Resume", detail: "layout write refused 3 times" }), failureLine({ text: "Layout paused", fix: "Resume", detail: "layout write refused 3 times" }));
   same(computerItemTree({ name: "devbox", state: "unreachable" }), computerItem({ name: "devbox", state: "unreachable" }));
   same(computerItemTree({ name: "This computer", remote: false, folded: true }), computerItem({ name: "This computer", remote: false, folded: true }));
-  same(paletteDoorTree(), paletteDoor());
+  same(paletteDoorTree(), paletteDoor({ tip: "Command palette ⌘⇧P" }));
   same(layoutPausedTree(), layoutPaused());
-  same(statusBarTree({ left: [statusItemTree({ icon: "lu-monitor", text: "devbox" })], middle: stepperTree({ value: 2 }), right: [paletteDoorTree()] }), statusBar({ left: [statusItem({ icon: "lu-monitor", text: "devbox" })], middle: stepper({ value: 2 }), right: [paletteDoor()] }));
+  same(statusBarTree({ left: [statusItemTree({ icon: "lu-monitor", text: "devbox" })], middle: stepperTree({ value: 2 }), right: [paletteDoorTree()] }), statusBar({ left: [statusItem({ icon: "lu-monitor", text: "devbox" })], middle: stepper({ value: 2 }), right: [paletteDoor({ tip: "Command palette ⌘⇧P" })] }));
 });
 
 test("The compiler turns the bar's alignment, width and hairline into gpui, and leaves its columns and the stepper's ch", () => {
@@ -53,8 +52,8 @@ test("A status colour marked important keeps its ink under the item's hover", ()
 
 test("Who needs you is drawn from the compiled rules", async () => {
   const { draw } = await load("kanso-panel/ui-draw.js", ["draw"], gpuiHost());
+  const theme = kansoTheme();
   const { tokens } = await load("kanso-panel/ui.js", ["tokens"]);
-  const theme = JSON.parse(read("kanso/themes/kanso.json"));
   const tree = needsItemTree({ name: "cart-ui", question: "Which layout?", more: 1 });
   const [drawn] = draw(tree, tokens({ ...theme, ...theme.colors }), { id: "needs", rules });
   const node = viewOf(tree)[0];

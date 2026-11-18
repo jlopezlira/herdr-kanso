@@ -22,7 +22,9 @@ import { iconButton, Armed } from "./ui-button.js";
 import { menu } from "./ui-menu.js";
 import { field, TextField } from "./ui-field.js";
 import { pendingDot, PENDING } from "./ui-state.js";
-import { failureLine, tooltip } from "./kit.js";
+import { failureLine, stepper } from "./kit.js";
+import { layoutPaused, statusBar } from "./status-bar.js";
+import { COLUMN } from "./ui-status.js";
 import { boundChord } from "./ui-tooltip.js";
 import { headerSegment } from "./ui-header.js";
 import { NAME_LIMIT, ENTRIES, DIGEST_PIECES, PIECE_GROUP, shownAt, foldFor, headerWidths, headerTools, hoverTools, menuEntries, placeOf, paneLabel, headerMark, prTitle } from "./header-model.js";
@@ -36,7 +38,7 @@ const newW = (st) => 1 / (st.n ?? DEFAULT_N);
 // The minimap's slot is 180px and its stepper takes about 60: the pills shrink to the rest, and past a mark's least width they are cut in their own box, so the stepper always shows.
 export function pillWidths(cols, budget = PANE.pills) {
   const raw = cols.map((c) => 6 + (Number(c.w) || 0) * 18);
-  const room = budget - cols.length * 2 - Math.max(0, cols.length - 1) * 3;
+  const room = budget - cols.length * 2 * COLUMN.side - Math.max(0, cols.length - 1) * COLUMN.gap;
   const total = raw.reduce((a, b) => a + b, 0);
   const scale = total > room ? Math.max(0, room) / total : 1;
   return raw.map((w) => Math.max(3, scale < 1 ? Math.floor(w * scale) : Math.round(w)));
@@ -237,6 +239,8 @@ export default class Strip extends View {
       this.armed = new Armed();
     }
     if (this.kind !== "controller") return;
+    // Panes per view shows its − and + while the keyboard is on one of its Buttons, so each keeps a handle.
+    this.stepperFocus = { minus: cx.focus_handle(), plus: cx.focus_handle(), value: cx.focus_handle() };
 
     this.state = JSON.parse(JSON.stringify(shared(KEY) ?? {}));
     this.saved = JSON.stringify(this.state);
@@ -1203,14 +1207,17 @@ export default class Strip extends View {
     return st;
   }
 
+  // A failed layout write stops the strip; it writes again on its own after 10 s, or at once on Resume.
+  resume() { this.halted = 0; this.sets = []; this.applied = null; }
+
   render() {
     if (this.kind === "edge") return this.renderEdge();
     if (this.kind === "ruler") return this.renderRuler();
     if (this.kind === "drop") return this.renderDrop();
     if (this.kind === "head") return this.renderHead();
     const t = theme();
-    if (this.halted && Date.now() - this.halted > 10000) { this.halted = 0; this.sets = []; this.applied = null; }
-    if (this.halted) return h_flex().size_full().justify_center().items_center().text_size(11).text_color(t.blocked).child("Strip paused");
+    if (this.halted && Date.now() - this.halted > 10000) this.resume();
+    if (this.halted) return statusBar({ middle: layoutPaused() })("strip-map", tokens(t), { presses: { Resume: () => { this.resume(); this.dirty = true; } } });
 
     const tab = this.tab();
     const ps = tab ? panes().filter((p) => p.tab === tab) : [];
@@ -1224,32 +1231,24 @@ export default class Strip extends View {
     const st = key !== this.lastKey || this.pendingFocus || !this.state[tab] ? this.refresh(tab, ps, key, drag) : this.state[tab];
 
     const at = this.where(st, st.focus);
-    const widths = pillWidths(st.cols);
-    const pills = st.cols.map((c, i) => {
-      const tone = at?.ci === i ? t.foreground : c.pin || this.shown?.has(i) ? t.muted : t.dim;
-      const w = widths[i], k = c.panes.length;
-      return v_flex().id(`strip-mark-${i}`).h(14).px(1).gap(1).flex_none().justify_center().cursor_pointer()
-        .on_click(() => { this.edit(tab, st, (now) => this.focusOn(now, c.panes[0], ps)); this.dirty = true; })
-        .children(c.panes.map((id, r) => div().id(`strip-cell-${id}`).w(w).h(k > 1 ? 2 : 4).rounded_full()
-          .bg(at?.ci === i && at?.ri !== r ? t.muted : tone)));
-    });
     // The minimap can be turned off in Kanso settings; the model above still runs.
     if (!shown("strip.minimap", true, pieces(shared))) return div();
+    const widths = pillWidths(st.cols);
+    const tone = (ci, ri, pin) => (at?.ci === ci && at?.ri === ri ? "current" : at?.ci === ci || pin || this.shown?.has(ci) ? "seen" : "away");
+    const columns = st.cols.map((col, i) => ({ width: widths[i], panes: col.panes.map((_id, r) => tone(i, r, col.pin)) }));
     const n = st.n ?? DEFAULT_N;
-    const tiny = (id, label, tip, action) => div().id(id).size(16).flex_none().flex().items_center().justify_center().rounded(6)
-      .text_size(11).text_color(t.dim).cursor_pointer().tooltip(tooltip(tip))
-      .hover((h) => h.bg(alpha(t.foreground, TINT.tab)).text_color(t.foreground))
-      .on_click(() => { action(); this.dirty = true; })
-      .child(label);
-    return h_flex().id("strip-map").size_full().gap(3).justify_center().items_center()
-      .on_mouse_up("left", () => { if (shared("strip.drag")) endDrag(); })
-      .on_scroll_wheel((ev) => this.wheel(ev, tab, st))
-      // Past what fits, the extra marks are cut here, never the stepper.
-      .child(h_flex().id("strip-pills").flex_shrink(1).min_w(0).max_w(PANE.pills).overflow_hidden().gap(3).items_center().children(pills))
-      .child(div().w(8).flex_none())
-      .child(tiny("strip-fewer", "\u2212", { label: "Fewer panes per view", chord: boundChord("kanso-strip.fewer") }, () => this.edit(tab, st, (now) => this.setN(now, n - 1, now.focus))))
-      .child(div().id("strip-n").flex_none().text_size(11).text_color(t.muted).tooltip(tooltip({ label: `${n} per view`, chord: boundChord("kanso-strip.fit"), detail: "click to even out" })).cursor_pointer()
-        .on_click(() => { this.edit(tab, st, (now) => this.fit(now, now.focus)); this.dirty = true; }).child(String(n)))
-      .child(tiny("strip-more", "+", { label: "More panes per view", chord: boundChord("kanso-strip.more") }, () => this.edit(tab, st, (now) => this.setN(now, n + 1, now.focus))));
+    const act = (change) => () => { this.edit(tab, st, change); this.dirty = true; };
+    const chords = { fewer: boundChord("kanso-strip.fewer"), more: boundChord("kanso-strip.more"), fit: boundChord("kanso-strip.fit") };
+    const hover = Boolean(this.overStepper) || Object.values(this.stepperFocus).some((handle) => handle.is_focused());
+    // Past what fits, the extra marks are cut in their own box, never the stepper.
+    return statusBar({ middle: stepper({ value: n, hover, columns, chords }) })("strip-map", tokens(t), {
+      presses: { minus: act((now) => this.setN(now, n - 1, now.focus)), plus: act((now) => this.setN(now, n + 1, now.focus)) },
+      focuses: this.stepperFocus,
+      onClick: act((now) => this.fit(now, now.focus)),
+      onChange: (i) => act((now) => this.focusOn(now, st.cols[i].panes[0], ps))(),
+      onHover: (over, cx) => { if (this.overStepper !== over) { this.overStepper = over; cx.notify(); } },
+      onWheel: (ev) => this.wheel(ev, tab, st),
+      onRelease: () => { if (shared("strip.drag")) endDrag(); },
+    });
   }
 }

@@ -1,12 +1,15 @@
-// Kanso's panel kit: a status bar item, its mark or icon with its words, and the item of an agent waiting for you. Apache-2.0.
+// Kanso's panel kit: a status bar item, its mark or icon with its words, the item of an agent waiting for you, and panes per view. Apache-2.0.
 // Kept byte for byte by `npm run sync:share`: edit kanso-panel/ui-status.js.
 import { div, svg } from "gpui-kit";
-import { h_flex } from "gpui-base";
-import { glyphOf } from "./ui.js";
+import { h_flex, v_flex } from "gpui-base";
+import { G, LINE, FOCUS, glyphOf } from "./ui.js";
 import { mark } from "./ui-mark.js";
+import { button } from "./ui-button.js";
+import { tipText } from "./ui-tooltip.js";
 import { pendingDot } from "./ui-state.js";
 import { RULES } from "./ui-css.js";
 import { paint } from "./ui-draw.js";
+import { stylesFor } from "./ui-match.js";
 
 const node = (classes, parent = null) => ({ tag: "span", attrs: {}, classes, parent, children: [] });
 // The item's rules are written on the bar, so the node sits in one while the app draws the item.
@@ -36,4 +39,44 @@ export const needsItem = (id, c, { name, question = null, more = 0, tip = null, 
     .child(paint(div(), node(["kanso-status-bar__name"], item), c, RULES).child(name))
     .when(Boolean(question), (el) => el.child(paint(div(), node(["kanso-status-bar__question"], item), c, RULES).child(question)))
     .when(more > 0, (el) => el.child(paint(div(), node(["kanso-status-bar__more"], item), c, RULES).child(`+${more}`)));
+};
+
+// The minimap's room: each column's Button keeps its ring clear around a hairline of side room, a hair from the next.
+export const COLUMN = Object.freeze({ side: LINE + FOCUS, gap: G.hair });
+const focused = (el, handle) => (handle ? el.track_focus(handle) : el);
+// The cascade's display: hidden at rest, grid when the stepper is hovered or open.
+const toolDisplay = (parent) => {
+  const ops = stylesFor(node(["kanso-button"], parent), RULES).filter(([op]) => op === "hidden" || op === "grid");
+  return ops.length ? ops[ops.length - 1][0] : null;
+};
+const withDisplay = (el, parent) => {
+  const op = toolDisplay(parent);
+  return op ? el[op]() : el;
+};
+const columnFace = (c, columnsNode, { width, panes }) => {
+  const column = node(["kanso-status-bar__column", ...(panes.length > 1 ? ["kanso-status-bar__column--stacked"] : [])], columnsNode);
+  const pane = (tone) => paint(div().w(width), node(["kanso-status-bar__pane", `kanso-status-bar__pane--${tone}`], column), c, RULES);
+  return paint(v_flex(), column, c, RULES).children(panes.map(pane));
+};
+
+/** Panes per view: the number, which evens out on a press, between − and +. The glyphs stay hidden unless `hover` (the pointer or the keyboard
+ * is on it) or `open`. `chords`: the key table's chords for fewer, more and fit. Proposed: `columns`, the minimap before it,
+ * a Button per column, each `{ width, panes }` with a tone per pane. `on`: the presses `minus`, `plus`, `value` and `column(i, cx)`,
+ * `hover(over, cx)`, and `focuses`, the handles of minus, plus and value. */
+export const stepper = (id, c, { value = 2, open = false, hover = false, columns = [], chords = {} }, on = {}) => {
+  const { minus = null, plus = null, value: even = null, column = null, hover: onHover = null, focuses = {} } = on;
+  const item = inBar(["kanso-status-bar__item", "kanso-status-bar__stepper", open ? "kanso-status-bar__item--open" : "", hover ? "kanso-control--hover" : ""].filter(Boolean));
+  const columnsNode = node(["kanso-status-bar__columns"], item);
+  const tool = (icon, label, chord, onClick) => focused(withDisplay(button(`${id}-${icon}`, label, onClick, c,
+    { kind: "icon", icon, size: "sm", tip: tipText({ label, chord }) }), item), focuses[icon]);
+  // min-width: 1ch is not drawn: gpui has no ch.
+  const number = button(`${id}-value`, String(value), even, c, { kind: "quiet", content: [paint(div(), node(["kanso-status-bar__value"], item), c, RULES).child(String(value))],
+    tip: tipText({ label: `${value} per view`, chord: chords.fit, detail: "scroll to change, click to even out" }) });
+  return paint(h_flex().id(id), item, c, RULES)
+    .when(Boolean(onHover), (el) => el.on_hover((over, cx) => onHover(over, cx)))
+    .when(columns.length > 0, (el) => el.child(paint(h_flex().id(`${id}-columns`), columnsNode, c, RULES)
+      .children(columns.map((col, i) => button(`${id}-column-${i}`, `Column ${i + 1}`, column && ((cx) => column(i, cx)), c, { kind: "quiet", content: [columnFace(c, columnsNode, col)] })))))
+    .child(tool("minus", "Fewer panes per view", chords.fewer, minus))
+    .child(focused(number, focuses.value))
+    .child(tool("plus", "More panes per view", chords.more, plus));
 };

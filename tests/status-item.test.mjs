@@ -2,7 +2,7 @@
 import { loadPendingState } from "./mod-fixtures.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { load, gpuiHost, chain, numberArguments, calls, arg } from "./helpers.mjs";
+import { load, gpuiHost, chain, numberArguments, calls, arg, nodes } from "./helpers.mjs";
 
 const kit = async () => ({
   ...await load("kanso-panel/ui.js", ["tokens", "toneColor", "G", "R", "W", "ICON_INLINE"], gpuiHost()),
@@ -11,6 +11,7 @@ const kit = async () => ({
 });
 
 const first = (el, name) => calls(el, name)[0]?.slice(1);
+const nodesOf = (el, id) => nodes(el).find((kid) => kid.tag === id || kid.calls.some((call) => call[0] === "id" && call[1] === id));
 const kids = (el) => el.kids;
 const hoverOf = (el) => {
   const style = chain();
@@ -103,4 +104,43 @@ test("Needs you is the blocked mark, the name, the question trimmed to its width
 
 test("The status pieces' code has no number of pixels: every size comes from the tokens", () => {
   assert.deepEqual(numberArguments("kanso-panel/ui-status.js"), []);
+});
+
+test("Panes per view take their row, their number and their columns from the compiled rules", async () => {
+  const { stepper, tokens, G, PANE } = {
+    ...await load("kanso-panel/ui.js", ["tokens", "G", "PANE"], gpuiHost()),
+    ...await load("kanso-panel/ui-status.js", ["stepper"], gpuiHost()),
+  };
+  const c = tokens({ ...night, hover: "#232321" });
+  const rest = stepper("panes", c, { value: 2 });
+  const minus = nodesOf(rest, "panes-minus");
+  const value = nodesOf(rest, "panes-value");
+  assert.equal(arg(rest, "gap"), G.hair);
+  assert.equal(calls(rest, "flex_none").length, 1);
+  assert.equal(calls(rest, "bg").length, 0);
+  assert.equal(calls(minus, "hidden").length, 1);
+  assert.equal(calls(minus, "grid").length, 0, "the glyphs stay hidden until hover or open");
+  const face = value.kids[0];
+  assert.equal(calls(face, "text_center").length, 1, "the number is centred");
+  assert.deepEqual(first(face, "text_color"), [c.text]);
+  assert.equal(calls(face, "min_w").length, 0, "1ch is not drawn");
+  const hot = stepper("panes", c, { value: 2, hover: true });
+  assert.equal(calls(nodesOf(hot, "panes-minus"), "grid").length, 1);
+  assert.equal(calls(nodesOf(hot, "panes-minus"), "hidden").length, 0);
+  assert.deepEqual(first(hot, "bg"), [c.subtle]);
+  const open = stepper("panes", c, { value: 2, open: true });
+  assert.deepEqual(first(open, "bg"), [c.w12]);
+  const columns = [{ width: 15, panes: ["seen"] }, { width: 9, panes: ["seen", "current"] }];
+  const map = stepper("panes", c, { value: 2, columns });
+  const slot = nodesOf(map, "panes-columns");
+  assert.equal(arg(slot, "max_w"), PANE.pills);
+  assert.equal(calls(slot, "overflow_hidden").length, 1);
+  assert.equal(arg(slot, "mr"), G.sm);
+  const marks = nodes(slot).filter((el) => calls(el, "w").length);
+  assert.deepEqual(marks.map((el) => arg(el, "w")), [15, 9, 9]);
+  assert.deepEqual(first(marks[0], "bg"), [c.dim]);
+  assert.deepEqual(marks[0].calls.filter(([name]) => name === "bg").at(-1), ["bg", c.muted]);
+  assert.deepEqual(marks[2].calls.filter(([name]) => name === "bg").at(-1), ["bg", c.text]);
+  assert.equal(arg(marks[2], "h"), G.hair, "a stacked pane is a hair");
+  assert.equal(arg(marks[0], "rounded"), 999);
 });

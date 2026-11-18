@@ -1,9 +1,26 @@
-export const viewOf = (nodes, parent = null) => nodes.filter((node) => node.tag !== "#text" || node.text.trim()).map((node) => {
-  if (node.tag === "#text") return { tag: "#text", text: node.text, parent };
-  const view = { tag: node.tag, attrs: node.attrs, classes: (node.attrs.class ?? "").split(/\s+/).filter(Boolean), parent };
-  view.children = viewOf(node.children, view);
+// Children point at this view, so the list is read after the view exists.
+const elementView = (node, parent, siblingsOf) => {
+  const view = {
+    tag: node.tag,
+    attrs: node.attrs,
+    classes: (node.attrs.class ?? "").split(/\s+/).filter(Boolean),
+    parent,
+    get siblings() { return parent ? undefined : siblingsOf(); },
+    get children() { return kids; },
+  };
+  const kids = viewOf(node.children, view);
   return view;
-}).map((view, _, all) => (view.parent ? view : Object.assign(view, { siblings: all })));
+};
+
+const textView = (node, parent, siblingsOf) => ({
+  tag: "#text", text: node.text, parent, get siblings() { return parent ? undefined : siblingsOf(); },
+});
+
+export const viewOf = (nodes, parent = null) => {
+  const views = nodes.filter((node) => node.tag !== "#text" || node.text.trim())
+    .map((node) => (node.tag === "#text" ? textView(node, parent, () => views) : elementView(node, parent, () => views)));
+  return views;
+};
 
 const matchCompound = (node, step, state) => {
   if (!node || node.tag === "#text") return false;
@@ -28,8 +45,8 @@ export const matches = (node, steps, state) => {
     const before = siblingsBefore(el);
     if (steps[i].relation === "next") return walk(before[before.length - 1], i - 1);
     if (steps[i].relation === "after") return before.some((sib) => walk(sib, i - 1));
-    for (let up = el.parent; up; up = up.parent) if (walk(up, i - 1)) return true;
-    return false;
+    const ancestor = (up) => Boolean(up) && (walk(up, i - 1) || ancestor(up.parent));
+    return ancestor(el.parent);
   };
   return walk(node, steps.length - 1);
 };
@@ -42,7 +59,7 @@ const candidates = (node, rules) => (Array.isArray(rules) ? rules : [...new Set(
 
 export const stylesFor = (node, rules, state = atRest) => candidates(node, rules)
   .filter((rule) => matches(node, rule.steps, state))
-  .sort((a, b) => a.weight - b.weight || a.order - b.order)
+  .toSorted((a, b) => a.weight - b.weight || a.order - b.order)
   .flatMap((rule) => rule.ops);
 
 const winning = (ops) => ops.reduce((acc, op) => ({ ...acc, [op[0]]: op }), {});

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { chromium } from "playwright";
-import { compile, read, SHEETS } from "./css-to-gpui.mjs";
+import { compile, kansoTheme, read, SHEETS } from "./css-to-gpui.mjs";
 import { viewOf, stylesFor, unsupportedFor } from "../kanso/mods/kanso-panel/ui-match.js";
 import { toHtml } from "../stories/kit/tree.js";
 
@@ -88,7 +88,7 @@ if (process.argv[1] === new URL(import.meta.url).pathname) {
   const { rowTree } = await import("../stories/kit/row-tree.js");
   const { load } = await import("../tests/helpers.mjs");
   const { tokens } = await load("kanso-panel/ui.js", ["tokens"]);
-  const theme = JSON.parse(read("kanso/themes/kanso.json"));
+  const theme = kansoTheme();
   const c = tokens({ ...theme, ...theme.colors });
   const project = { icon: "lu-folder", name: "kansō", detail: ["herdr-kanso", { icon: "lu-git-branch", text: "29a4feb" }], actions: [{ icon: "lu-plus", label: "New" }, { icon: "lu-ellipsis", label: "More" }] };
   const CASES = {

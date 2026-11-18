@@ -10,7 +10,7 @@ import { computerRow } from './computer-row.js';
 import { section } from './section.js';
 import { asleep } from './asleep.js';
 import { sessionRow } from './session-row.js';
-import { button, glyph, menu, stack, statusItem } from './pieces.js';
+import { button, glyph, menu, phrase, stack, statusItem } from './pieces.js';
 import keyFile from '../../kanso/keys.json' with { type: 'json' };
 import windowsKeyFile from '../../kanso/keys.windows.json' with { type: 'json' };
 import { LIST_LAYER, describe, layer } from '../../kanso/mods/kanso-help/keymap.js';
@@ -20,18 +20,19 @@ import { hachiPixels } from '../../kanso/mods/kanso-dojo/mascot-pixels.js';
 // A pull request's number as the app shows it.
 export const pullRequest = (number) => `#${number}`;
 const group = (...rows) => stack({ variant: 'row group' }, ...rows);
+const computerGroup = (...rows) => stack({ variant: 'row group', computer: true }, ...rows);
 // A conversation's own tools under the pointer, and what a session's commands tooltip says.
 export const sessionTools = [{ icon: 'lu-check', label: 'Settle' }];
 export const sessionCommandsTip = 'npm test · 2m';
 
 export const sampleRows = {
   spaces: () => [
-    group(computerRow({ name: 'light', remote: false })),
+    computerGroup(computerRow({ name: 'light', remote: false })),
     group(projectRow({ name: 'prjct' }), sessionRow({ program: 'lu-terminal', name: 'Orion', status: 'idle' })),
     group(projectRow({ name: 'amtelser' }), sessionRow({ program: 'lu-terminal', name: 'Nova', activity: 'Run npm publish?', time: '2m', status: 'blocked' })),
     group(projectRow({ name: 'kansō', folder: 'herdr-kanso', branch: 'main', sync: '↓12', open: true }), sessionRow({ name: 'Atlas', activity: 'Reviewing step 01', time: '3m' }),
       sessionRow({ name: 'Juno', status: 'idle', depth: 2, current: true }), sessionRow({ program: 'p-codex', name: 'Iris', status: 'done', depth: 2 })),
-    group(projectRow({ name: 'agile' })), group(asleep({ names: ['site', 'dojo'] })), group(computerRow({ name: 'dark', state: 'off' })),
+    group(projectRow({ name: 'agile' })), group(asleep({ names: ['site', 'dojo'] })), computerGroup(computerRow({ name: 'dark', state: 'off' })),
   ],
   agents: () => [
     section({ title: 'Needs you', status: 'blocked' }), sessionRow({ program: 'lu-terminal', name: 'Nova', activity: 'Run npm publish?', time: '2m', place: 'amtelser', status: 'blocked', depth: 0 }),
@@ -60,7 +61,12 @@ export const sampleSidebar = ({ view = 'spaces', switcher = true, menu: open = f
   header: sampleHeader({ collapsed, dawn, art, view }), rows: sampleRows[view](), tiles: sampleTiles[view](),
   switcher: switcher ? viewSwitch({ view, column: collapsed, open }) : null, footer: sidebarFooter({ collapsed }) });
 
-// Sample status bar content: what each panel item holds when its Menu opens.
+// Sample status bar content: the source's words when a computer can't be reached, the palette's tooltip, the minimap's columns,
+// and what each panel item holds when its Menu opens.
+export const unreachable = (name) => phrase('ssh: connect to host', name, 'port 22: Operation timed out');
+export const paletteTip = 'Command palette ⌘⇧P';
+// Each column's width in hairlines and its panes' tones: one in view, the one in front (its second pane focused), one pinned, two out of view.
+export const sampleColumns = [{ width: 15, panes: ['seen'] }, { width: 21, panes: ['seen', 'current'] }, { width: 9, panes: ['seen'] }, { width: 15, panes: ['away'] }, { width: 15, panes: ['away'] }];
 const hide = [{ separator: true }, { icon: 'lu-eye-off', label: 'Hide this' }];
 export const statusMenus = {
   servers: () => menu({ title: ':5173 vite · no pane', items: [{ icon: 'lu-external-link', label: 'Open in the browser' }, { icon: 'lu-copy', label: 'Copy localhost:5173' },

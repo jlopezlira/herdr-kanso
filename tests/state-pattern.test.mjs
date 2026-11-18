@@ -148,7 +148,7 @@ test("The title bar draws the window's lights only: no Herdr mark and no name", 
     window: () => ({ platform: "macos" }),
   };
   const { WorkspaceChrome } = await loadWorkspaceChrome(host);
-  const bar = new WorkspaceChrome().render();
+  const bar = new WorkspaceChrome().render({ timer: { after: () => ({ cancel() {} }) }, notify() {} });
   assert.deepEqual(drawn, []);
   assert.deepEqual(texts(bar), []);
   assert.equal(arg(bar, "bg"), "chrome");

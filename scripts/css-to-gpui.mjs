@@ -5,6 +5,7 @@ import { isMain } from "./cli.mjs";
 
 const root = new URL("../", import.meta.url);
 export const read = (path) => readFileSync(new URL(path, root), "utf8");
+export const kansoTheme = () => JSON.parse(read("kanso/themes/kanso.json"));
 
 const SIZES = Object.fromEntries([...read("site/tokens.css").matchAll(/--(k-[a-z0-9-]+):\s*(-?[\d.]+)px;/g)].map(([, name, value]) => [name, Number(value)]));
 const TIMES = Object.fromEntries([...read("site/tokens.css").matchAll(/--(k-[a-z0-9-]+):\s*(-?[\d.]+)ms;/g)].map(([, name, value]) => [name, Number(value)]));

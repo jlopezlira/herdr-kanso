@@ -576,6 +576,14 @@
 .kanso-status-bar__stepper>.kanso-button{display:none;transition:opacity var(--k-hover-ms) var(--k-hover-ease) var(--k-hover-delay),display 0s allow-discrete var(--k-hover-delay)}
 .kanso-status-bar__stepper:is(:hover,:focus-within,.kanso-control--hover,.kanso-status-bar__item--open)>.kanso-button{display:grid}
 .kanso-status-bar__value{min-width:1ch;text-align:center;color:var(--fg)}
+/* Proposed: the minimap, switched on in kansō settings: a Button per column before panes per view; the column in front in the foreground, one in view or pinned muted, the rest dim. */
+.kanso-status-bar__columns{display:flex;align-items:center;gap:var(--k-sp-hair);max-width:var(--k-w-pills);overflow:hidden;margin-right:var(--k-sp-2)}
+.kanso-status-bar__columns>.kanso-button.kanso-button--drawn{padding:0;border:var(--k-w-focus) solid transparent}
+.kanso-status-bar__column{display:flex;flex-direction:column;justify-content:center;gap:var(--k-w-line);height:var(--k-ic-row);padding:0 var(--k-w-line)}
+.kanso-status-bar__pane{display:block;height:var(--k-sp-1);border-radius:var(--k-r-full);background:var(--dim)}
+.kanso-status-bar__column--stacked>.kanso-status-bar__pane{height:var(--k-sp-hair)}
+.kanso-status-bar__pane.kanso-status-bar__pane--seen{background:var(--muted)}
+.kanso-status-bar__pane.kanso-status-bar__pane--current{background:var(--fg)}
 .kanso-status-bar__item.kanso-status-bar__item--open{anchor-name:--kanso-status-item;margin:0 calc(-1 * var(--k-sp-1));padding:var(--k-sp-hair) var(--k-sp-1);border-radius:var(--k-r-sm);background:var(--wash-12)}
 .kanso-status-bar__popup{position:absolute;bottom:calc(anchor(--kanso-status-item top) + var(--k-sp-1));right:anchor(--kanso-status-item right);z-index:1}
 
@@ -751,7 +759,7 @@
 .kanso-sidebar__tools{height:var(--k-h-header);flex:none;display:flex;align-items:center}
 .kanso-sidebar__list{flex:1;min-height:0;overflow:hidden}
 .kanso-sidebar__group{display:flex;align-items:center;gap:var(--k-sp-2);height:var(--k-h-row);padding:0 var(--k-sp-2);margin-top:var(--k-sp-4);font-size:var(--k-fs-body);font-weight:var(--k-fw-strong);color:var(--muted)}
-.kanso-sidebar__footer{flex:none;padding:var(--k-sp-2) 0 var(--k-sp-4)}
+.kanso-sidebar__footer{flex:none;padding:var(--k-sp-2) 0 calc(var(--k-pane-gap) + (var(--k-h-bar) - var(--k-h-row)) / 2)}
 /* Proposed: Settings holds its menu, open over it; a refused update's block sits under its row. */
 .kanso-sidebar__footer-settings{position:relative;display:flex;flex-direction:column}
 .kanso-sidebar__footer-menu{position:absolute;bottom:calc(100% + var(--k-sp-1));left:0;z-index:1}
@@ -860,7 +868,10 @@
 .kanso-sidebar__title{height:var(--k-h-tab-bar);flex:none;display:flex;align-items:center;padding-left:var(--k-sp-1)}
 .kanso-sidebar__actions{height:var(--k-h-header);flex:none;display:flex;align-items:center;gap:var(--k-sp-2)}
 .kanso-sidebar__rows{flex:1;min-height:0;display:flex;flex-direction:column;padding-top:var(--k-sp-1)}
-.kanso-sidebar__row-group+.kanso-sidebar__row-group{margin-top:var(--k-sp-4)}
+/* The kit's rows reach out past what holds them by their own padding; in the sidebar's list and footer they keep their content on its gutter. */
+:is(.kanso-sidebar__rows,.kanso-sidebar__footer):has(.kanso-row){padding-inline:calc(var(--k-sidebar-gutter) - var(--k-sp-2))}
+.kanso-sidebar__row-group+.kanso-sidebar__row-group{margin-top:var(--k-sidebar-group-gap)}
+.kanso-sidebar__row-group.kanso-sidebar__row-group--computer{margin-top:var(--k-sidebar-computer-gap)}
 .kanso-sidebar__row{height:var(--k-h-row);display:flex;align-items:center;gap:var(--k-sp-2);padding:0 var(--k-sp-2);border-radius:var(--k-r-control);box-sizing:border-box;font-size:var(--k-fs-name);color:var(--muted);position:relative;font-variant-numeric:tabular-nums}
 .kanso-sidebar__row .kanso-row__name{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:var(--k-fw-medium)}
 .kanso-sidebar__row.kanso-project .kanso-row__name{font-weight:var(--k-fw-strong);flex:none;max-width:60%}
@@ -1291,6 +1302,7 @@
 .kanso-row--wrap :is(.kanso-content__primary,.kanso-row__name){align-items:flex-start;white-space:normal}
 .kanso-row--wrap .kanso-row__name{flex:1;line-height:var(--k-lh-body);overflow-wrap:anywhere}
 .kanso-row--heading .kanso-row__name{font-weight:var(--k-fw-strong);color:var(--fg)}
+.kanso-row--group .kanso-row__name{font-size:var(--k-fs-name);font-weight:var(--k-fw-strong);color:var(--fg)}
 /* Row, title form: a panel's heading, the name at title size and the scope under it; it is not a choice, so no wash. */
 .kanso-row--title,.kanso-row--title .kanso-content__primary{height:var(--k-h-header);align-items:center}
 .kanso-row--title.kanso-row--two-lines{height:auto;padding-block:0}
@@ -1360,6 +1372,8 @@
 .kanso-button--icon .kanso-icon{width:var(--k-ic-control);height:var(--k-ic-control)}
 .kanso-button--icon.kanso-button--sm{width:var(--k-h-badge);height:var(--k-h-badge)}
 .kanso-button--icon.kanso-button--sm svg{width:var(--k-ic-inline);height:var(--k-ic-inline)}
+/* Last in a row, a row's tool reaches out by the room around its glyph, so the glyph ends on the row's edge as the name starts on it. */
+:is(.kanso-row,.kanso-row>.kanso-content__primary)>:is(.kanso-row__actions,.kanso-button--icon.kanso-button--sm):last-child{margin-right:calc((var(--k-ic-inline) - var(--k-h-badge)) / 2)}
 .kanso-button--icon.kanso-button--lg{width:var(--k-h-row);height:var(--k-h-row)}
 .kanso-button--icon.kanso-button--lg svg{width:var(--k-ic-chrome);height:var(--k-ic-chrome)}
 .kanso-button--count{padding:var(--k-sp-hair) var(--k-sp-1);border-radius:var(--k-r-sm)}

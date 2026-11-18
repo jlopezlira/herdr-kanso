@@ -165,9 +165,10 @@ const rowTool = (action) => button({ kind: 'icon', size: 'sm', ...action });
 export const rowDepths = [0, 1, 2];
 // `actions` show on hover or focus and take the meta's place; `action` and the drawn `tools` are always shown; `keys` are the row's key hints, last.
 // The title form is a panel's heading: the name at title size, the second line its scope.
+// Proposed: `group` makes a heading the head of a group, its name strong in the foreground one step up the type scale (a computer over its projects).
 // Proposed: `wrap` lets the name run over as many lines as it needs, such as a review thread's comment, instead of one truncated line.
 // `second`, `detail` and `meta` take facts with a tone and a tip, a detail fact with a `label` is a press, `chip` takes a tip; `drop` is where a dragged row lands, `wash` a state's ground, `guides` one per depth above it ('tee', 'end', 'pass', or null), under that depth's icon; without them a deeper row hangs from its parent.
-export const row = ({ icon = 'none', tone = '', name, detail, meta, chip: count, flag, mark: status = 'none', second, heading, title, depth = 0, glint, wrap, selected, current, dimmed, pending, hover, focus, actions = [], action, start = [], tools = [], keys = [], drop, wash, guides = [] }) => {
+export const row = ({ icon = 'none', tone = '', name, detail, meta, chip: count, flag, mark: status = 'none', second, heading, group, title, depth = 0, glint, wrap, selected, current, dimmed, pending, hover, focus, actions = [], action, start = [], tools = [], keys = [], drop, wash, guides = [] }) => {
   const lines = guides.length ? guides : depth > 1 ? [null, 'pass'] : [];
   const lead = `${lines.map(guide).join('')}${list(start)}${icon === 'none' ? '' : glyph(icon, tone)}`;
   const label = `<span class="kanso-row__name${glint ? ' kanso-text--glint' : ''}">${escape(name)}</span>`;
@@ -176,7 +177,7 @@ export const row = ({ icon = 'none', tone = '', name, detail, meta, chip: count,
     + `${meta ? `<span${marked(factOf(meta), 'kanso-row__meta')}>${escape(factOf(meta).text)}</span>` : ''}${flag ? `<span class="kanso-row__flag">${glyph(flag)}</span>` : ''}`
     + `${actions.length ? `<span class="kanso-row__actions">${actions.map(rowTool).join('')}</span>` : ''}${count ? countOf(count) : ''}${action ? button({ size: 'sm', ...action }) : ''}${list(tools)}${keys.map(keyHint).join('')}`
     + `${pending ? '<span class="kanso-state-line__pending-dot"></span>' : ''}${!status || status === 'none' ? '' : mark({ status })}`;
-  const states = [second && 'kanso-row--two-lines', heading && 'kanso-row--heading', title && 'kanso-row--title', depth && `kanso-row--depth-${depth}`, selected && 'kanso-control--selected', current && 'kanso-row--selected',
+  const states = [second && 'kanso-row--two-lines', heading && 'kanso-row--heading', group && 'kanso-row--group', title && 'kanso-row--title', depth && `kanso-row--depth-${depth}`, selected && 'kanso-control--selected', current && 'kanso-row--selected',
     dimmed && 'kanso-control--dim', pending && 'kanso-state-line--pending', hover && 'kanso-control--hover', focus && 'kanso-control--focus',
     drop && `kanso-row--drop-${drop}`, wash && `kanso-row--wash-${wash}`, lines.length && 'kanso-row--tree', wrap && 'kanso-row--wrap'].filter(Boolean).map((name) => ` ${name}`).join('');
   return second
@@ -282,8 +283,12 @@ export const statePatterns = ['failure', 'empty', 'pending', 'loading'];
 export const needsItem = ({ name, question = '', more = 0 }) => `<span class="kanso-status-bar__item kanso-status-bar__needs">${mark({ status: 'blocked', size: 'sm' })}<span class="kanso-status-bar__name">${escape(name)}</span>`
   + `${question ? `<span class="kanso-status-bar__question">${escape(question)}</span>` : ''}${more ? `<span class="kanso-status-bar__more">${plus(more)}</span>` : ''}</span>`;
 
-// Panes per view: the number at rest, − and + on hover; its keys are in the tooltips.
-export const stepper = ({ value = 2, open = false, hover = false } = {}) => `<span class="kanso-status-bar__item kanso-status-bar__stepper${open ? ' kanso-status-bar__item--open' : ''}${hover ? ' kanso-control--hover' : ''}">${button({ label: 'Fewer panes per view ⌘⇧−', kind: 'icon', size: 'sm', icon: 'lu-minus' })}`
+// Proposed: the minimap, switched on in kansō settings: a Button per column; each pane a line in its tone (`current`, `seen`, else out of view), `width` hairlines long.
+const columnPanes = ({ width, panes }) => `<span class="kanso-status-bar__column${panes.length > 1 ? ' kanso-status-bar__column--stacked' : ''}">`
+  + `${panes.map((tone) => `<i class="kanso-status-bar__pane kanso-status-bar__pane--${escape(tone)}" data-width="calc(var(--k-w-line) * ${Number(width)})"></i>`).join('')}</span>`;
+const minimap = (columns) => (columns.length ? `<span class="kanso-status-bar__columns">${columns.map((column, i) => button({ label: `Column ${i + 1}`, kind: 'quiet', size: 'sm', content: columnPanes(column) })).join('')}</span>` : '');
+// Panes per view: the number at rest, − and + on hover; its keys are in the tooltips. Proposed: `columns`, the minimap before it.
+export const stepper = ({ value = 2, open = false, hover = false, columns = [] } = {}) => `<span class="kanso-status-bar__item kanso-status-bar__stepper${open ? ' kanso-status-bar__item--open' : ''}${hover ? ' kanso-control--hover' : ''}">${minimap(columns)}${button({ label: 'Fewer panes per view ⌘⇧−', kind: 'icon', size: 'sm', icon: 'lu-minus' })}`
   + `<span class="kanso-status-bar__value" title="${Number(value)} per view · scroll to change, click to even out">${Number(value)}</span>${button({ label: 'More panes per view ⌘⇧=', kind: 'icon', size: 'sm', icon: 'lu-plus' })}</span>`;
 
 export const tabSkeleton = () => '<span class="kanso-skeleton kanso-skeleton--breathing kanso-tab-bar__skeleton"></span>';
@@ -321,7 +326,8 @@ export const stacks = {
   'header title': { block: 'kanso-header__title', lead: windowControls },
   sidebar: { block: 'kanso-sidebar', tag: 'aside' },
   rows: { block: 'kanso-sidebar__rows' },
-  'row group': { block: 'kanso-sidebar__row-group' },
+  // Proposed: `computer`, a computer's group, wider apart from the group above it than projects are.
+  'row group': { block: 'kanso-sidebar__row-group', states: ['computer'] },
   'view switch': { block: 'kanso-sidebar__view-switch' },
   'view menu': { block: 'kanso-sidebar__view-menu' },
   // Proposed: the collapsed view button carrying the dot while someone needs you.

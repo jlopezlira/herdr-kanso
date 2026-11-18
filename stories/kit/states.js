@@ -1,9 +1,10 @@
 // The pages drawn from named states: each state is a preset of its page's playground, and the catalog draws its record from that preset.
-import { computerItem, dojo, edge, keyboard, keyboardExplorer, keyboardSystems, layoutPaused, paletteDoor, panel, panelBack, panelHeader, panelRefresh, pickedKey, shortcutRow, stepperMenu, tabBar } from './compositions.js';
+import { dojo, edge, keyboard, keyboardExplorer, keyboardSystems, panel, panelBack, panelHeader, panelRefresh, pickedKey, shortcutRow, stepperMenu, tabBar } from './compositions.js';
+import { computerItem, layoutPaused, paletteDoor } from './status-bar.js';
 import { emptyState, phrase, failureBlock, keycap, metric, needsItem, row, skeletonOf, stack, statusItem, stepper, tabs } from './pieces.js';
 import { atWidth, inBar } from './frames.js';
 import { toolbar } from './toolbar.js';
-import { keyLayer, keyLayerMods, sampleDojo, samplePanel, samplePanelHeader, sampleAddMenu, sampleSortMenus, statusMenus, statusPanels } from './samples.js';
+import { keyLayer, keyLayerMods, paletteTip, sampleColumns, sampleDojo, samplePanel, samplePanelHeader, sampleAddMenu, sampleSortMenus, statusMenus, statusPanels, unreachable } from './samples.js';
 
 export const layerDefaults = Object.fromEntries(keyboardSystems.map((os) => [`${os}Layer`, keyLayerMods[os][0]]));
 const practiceKey = (key) => key === 'none' ? '' : key;
@@ -14,13 +15,13 @@ export const needsShown = { none: null, question: needsItem({ name: 'cart-ui', q
 export const memoryShown = { none: null, word: statusItem({ text: 'Memory 8% free', tone: 'blocked' }), folded: statusItem({ text: '8% free', tone: 'blocked' }) };
 export const stepperShown = ['rest', 'hover', 'menu'];
 
-const statusBar = ({ width, computer, paused, stepper: middle, needs, memory, panels, open }) => {
+const statusBar = ({ width, computer, paused, stepper: middle, minimap, needs, memory, panels, open }) => {
   const menuOpen = !paused && middle === 'menu';
   const popup = menuOpen ? stepperMenu() : panels && open !== 'none' ? statusMenus[open]() : '';
   const bar = inBar(width, {
-    left: computer === 'none' ? [] : [computerItem({ name: 'devbox', state: computer })],
-    middle: paused ? layoutPaused() : stepper({ hover: middle === 'hover', open: menuOpen }),
-    right: [needsShown[needs], memoryShown[memory], ...(panels ? statusPanels({ open }) : []), paletteDoor()].filter(Boolean),
+    left: computer === 'none' ? [] : [computerItem({ name: 'devbox', state: computer, detail: unreachable('devbox') })],
+    middle: paused ? layoutPaused({ detail: 'layout write refused 3 times' }) : stepper({ hover: middle === 'hover', open: menuOpen, columns: minimap ? sampleColumns : [] }),
+    right: [needsShown[needs], memoryShown[memory], ...(panels ? statusPanels({ open }) : []), paletteDoor({ tip: paletteTip })].filter(Boolean),
     popup,
   });
   return popup ? `<div class="kanso-story__popup-room">${bar}</div>` : bar;
@@ -148,7 +149,7 @@ export const statedPages = {
   },
   'Compositions/Status bar/Computer item': {
     args: { name: 'devbox', remote: true, state: 'on', folded: false },
-    markup: (args) => inBar(520, { left: [computerItem(args)] }),
+    markup: (args) => inBar(520, { left: [computerItem({ ...args, detail: unreachable(args.name) })] }),
     states: [
       { label: 'Out of sight', args: {}, caption: 'Only while its sidebar row is out of sight.' },
       { label: 'Folded', args: { folded: true }, caption: 'The computer becomes its icon.' },
@@ -166,12 +167,13 @@ export const statedPages = {
     ],
   },
   'Compositions/Status bar': {
-    args: { width: 1040, computer: 'none', paused: false, stepper: 'rest', needs: 'question', memory: 'none', panels: false, open: 'none' },
+    args: { width: 1040, computer: 'none', paused: false, stepper: 'rest', minimap: false, needs: 'question', memory: 'none', panels: false, open: 'none' },
     markup: statusBar,
     states: [
       { label: 'At rest', args: { needs: 'none' }, caption: 'Nothing to say; panes per view keeps its slot.' },
       { label: 'Panes per view menu', args: { needs: 'none', stepper: 'menu' }, caption: 'Right-click: Even out, then the piece lines.' },
       { label: 'Layout paused', args: { needs: 'none', paused: true }, caption: 'The strip stopped after a failure; it resumes alone after 10 s.' },
+      { label: 'Minimap', args: { needs: 'none', minimap: true }, caption: 'Proposed. Switched on in kansō settings: one mark per column before panes per view, the one in front brightest; a click goes to it.' },
       { label: 'Sidebar folded', args: { computer: 'on' }, caption: 'The focused project is on devbox.' },
       { label: 'Unreachable', args: { computer: 'unreachable', needs: 'none' }, caption: "devbox can't be reached and its row is out of sight." },
       { label: 'Needs you', args: {}, caption: 'While the waiting row is out of view.' },
