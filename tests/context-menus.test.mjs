@@ -22,17 +22,35 @@ const blockAt = (html, at) => {
   return html.slice(at);
 };
 const MARK_ART = { "e-work": "working", "e-blk": "blocked" };
-const boardIcons = (html) => [...html.matchAll(/<use href="#([^"]+)"/g)].map(([, name]) => MARK_ART[name] ?? name.replace(/^lu-/, ""));
+const artName = (href) => MARK_ART[href] ?? href.replace(/^lu-/, "");
+const row = ({ lead = "", label = "", hint = "", trail = [] }) => [lead, quotes(label), hint, trail.join(",")].join(" | ");
+const boardRow = (html) => {
+  const parts = [...html.matchAll(/<use href="#([^"]+)"|<span class="kanso-menu__hint">([^<]*)<\/span>|>([^<>]+)(?=<)/g)];
+  const at = parts.findIndex(([, , , text]) => text?.trim());
+  const art = (list) => list.filter(([, href]) => href).map(([, href]) => artName(href));
+  return row({ lead: art(parts.slice(0, Math.max(at, 0)))[0] ?? "", label: decode(parts[at]?.[3]?.trim() ?? ""),
+    hint: parts.find(([, , hint]) => hint !== undefined)?.[2] ?? "", trail: art(parts.slice(at + 1)) });
+};
+const boardRows = (block) => [...block.matchAll(/<div class="kanso-menu__(heading|item)[^"]*"[^>]*>([\s\S]*?)<\/div>/g)]
+  .map(([, kind, inner]) => (kind === "heading" ? row({ label: decode(inner.replace(/<[^>]+>/g, "").trim()) }) : boardRow(`>${inner}<`)));
 const boardMenus = (id) => {
   const html = shownAction(part(record(id).markup).replace(/<style[\s\S]*?<\/style>/g, ""));
-  return [...html.matchAll(/<div class="(?:[^"]*\s)?kanso-menu(?:\s[^"]*)?"/g)].map((m) => blockAt(html, m.index)).map((block) => ({ words: wordsOf(block), icons: boardIcons(block) }));
+  return [...html.matchAll(/<div class="(?:[^"]*\s)?kanso-menu(?:\s[^"]*)?"/g)].map((m) => blockAt(html, m.index)).map((block) => ({ words: wordsOf(block), rows: boardRows(block) }));
 };
 
 const iconName = (path) => path.split("/").at(-1).replace(/\.svg$/, "");
 const blockedDot = (kid) => calls(kid, "rounded_full").length > 0 && calls(kid, "child").some((call) => call[1] === "!");
+const ownWords = (kid) => kid.calls.filter((call) => call[0] === "child" && typeof call[1] === "string").map((call) => call[1]);
+const artOf = (kid) => (blockedDot(kid) ? "blocked" : calls(kid, "svg").map((call) => iconName(call[1]))[0] ?? "");
+const itemRow = (item) => {
+  const [lead, label, ...rest] = item.kids;
+  return row({ lead: artOf(lead), label: drawnWords(label).join(" "), hint: rest.filter((kid) => !artOf(kid)).flatMap(drawnWords).join(" "), trail: rest.map(artOf).filter(Boolean) });
+};
+const rowsOf = (el) => (calls(el, "accessibility_label").length ? [itemRow(el)]
+  : [...ownWords(el).map((label) => row({ label })), ...[...el.kids, ...calls(el, "content").map((call) => call[1])].flatMap(rowsOf)]);
 const menuOf = (el) => ({
-  words: everyDrawn(el).filter((kid) => !blockedDot(kid)).flatMap((kid) => kid.calls.filter((call) => call[0] === "child" && typeof call[1] === "string").map((call) => call[1])),
-  icons: everyDrawn(el).flatMap((kid) => (blockedDot(kid) ? ["blocked"] : calls(kid, "svg").map((call) => iconName(call[1])))),
+  words: everyDrawn(el).filter((kid) => !blockedDot(kid)).flatMap(ownWords),
+  rows: rowsOf(el),
 });
 const drawnWords = (el) => everyDrawn(el).flatMap((kid) => kid.calls.filter((call) => call[0] === "child" && typeof call[1] === "string").map((call) => call[1]));
 const pressable = (el, label) => everyDrawn(el).find((kid) => calls(kid, "on_click").length && drawnWords(kid).includes(label));
@@ -63,15 +81,14 @@ const PROJECT = { id: "pr1", name: "acme-shop", folder: "/Users/me/acme-shop", m
 const TREES = [{ branch: "checkout-v2", path: "/Users/me/.config/herdr-app/data/kanso/worktrees/acme-shop/checkout-v2" }, { branch: "cart-retry", path: "/Users/me/acme-shop-cart" }];
 
 async function sidebarPopup({ popup, open, status = "working", labels = {}, registry = [PROJECT], armed = null, sub = null, spaces = SPACES, known = null, asleep = false, moved = null }) {
-  const el = recorder(), store = { "kanso.registry": registry, "kanso.projects": moved };
-  const { Spaces } = await loadSidebar(el.host, {
+  const store = { "kanso.registry": registry, "kanso.projects": moved };
+  const { Spaces } = await loadSidebar({ ...popoverHost(), Scrollbar: { vertical: () => chain() } }, {
     ...world(spaces, agent(status), PANES.filter((p) => asleep || p.tab !== "tb2"), terms(labels)),
     Date: FrozenDate, appHome: () => "/Users/me/.config/herdr-app", shared: (key) => store[key] ?? null,
     props: () => ({ [popup]: open, overlay: "o", ...(popup === "newAgent" ? { start: true } : {}) }), closeOverlay: () => {},
   });
   const view = Object.assign(new Spaces(), mountedState({ shown: new Set(["sp1"]), armed: { is: (key) => key === armed }, menuAt: -1, sub, trees: TREES, known }));
-  view.render();
-  return [{ words: [...el.texts], icons: el.icons.map(iconName) }];
+  return [menuOf(view.render())];
 }
 
 async function machineSidebar(host = {}) {
@@ -308,7 +325,7 @@ for (const [id, keys] of STATES) for (const key of [keys].flat()) {
     for (const [i, menu] of wanted.entries()) {
       const same = boardMenus(board).find((one) => JSON.stringify(one.words) === JSON.stringify(menu));
       assert.ok(same, `the board draws this menu whole: ${menu.join(" | ")}`);
-      assert.deepEqual(drawn[i].icons, same.icons, `${menu[0]}: the board's icons and marks, in order`);
+      assert.deepEqual(drawn[i].rows, same.rows, `${menu[0]}: each row's art, label and key, as the board draws them`);
     }
   });
 }
