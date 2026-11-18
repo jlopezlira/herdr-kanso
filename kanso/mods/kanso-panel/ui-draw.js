@@ -1,7 +1,7 @@
 import { div, svg } from "gpui-kit";
 import { Button } from "gpui-base";
 import { alpha, glyphOf } from "./ui.js";
-import { viewOf, stylesFor, hovering } from "./ui-match.js";
+import { viewOf, stylesFor, hovering, changed } from "./ui-match.js";
 
 const ink = (c, value) => {
   if (!value || typeof value !== "object" || !("colour" in value)) return value;
@@ -13,6 +13,15 @@ const radiusOf = (ops) => ops.filter(([op]) => op === "rounded").pop()?.[1] ?? 0
 const ringOf = (ops, c) => {
   const ring = ops.filter(([op]) => op === "ring").pop();
   return ring ? div().absolute().inset_0().border(ring[1]).border_color(ink(c, ring[2])).rounded(radiusOf(ops)) : null;
+};
+
+// `hoverClass` is the Storybook's static hover mark. It is not on the element at rest.
+export const paint = (el, node, c, rules, hoverClass = null) => {
+  const own = stylesFor(node, rules);
+  const marked = hoverClass ? { ...node, classes: [...node.classes, hoverClass] } : node;
+  const extra = changed(own, stylesFor(marked, rules, hovering(node)));
+  const painted = apply(el, own, c);
+  return extra.length ? painted.hover((style) => apply(style, extra, c)) : painted;
 };
 
 const apply = (el, ops, c) => ops.reduce((acc, [op, ...args]) => {

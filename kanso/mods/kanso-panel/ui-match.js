@@ -45,6 +45,15 @@ export const stylesFor = (node, rules, state = atRest) => candidates(node, rules
   .sort((a, b) => a.weight - b.weight || a.order - b.order)
   .flatMap((rule) => rule.ops);
 
+const winning = (ops) => ops.reduce((acc, op) => ({ ...acc, [op[0]]: op }), {});
+// Ops whose winning call differs. The hover style sets those, and leaves a colour an !important rule kept.
+export const changed = (rest, hover) => {
+  const before = winning(rest);
+  const after = winning(hover);
+  const order = hover.reduce((acc, op) => (acc.includes(op[0]) ? acc : [...acc, op[0]]), []);
+  return order.filter((name) => JSON.stringify(before[name]) !== JSON.stringify(after[name])).map((name) => after[name]);
+};
+
 export const unsupportedFor = (node, skipped) => skipped.filter((miss) => (miss.steps
   ? matches(node, miss.steps, atRest) || matches(node, miss.steps, hovering(node))
   : miss.subject.length && miss.subject.every((name) => node.classes.includes(name))));

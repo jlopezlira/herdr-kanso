@@ -1,12 +1,8 @@
 #!/usr/bin/env node
-import { readFileSync } from "node:fs";
 import { chromium } from "playwright";
-import { compile, SHEETS } from "./css-to-gpui.mjs";
+import { compile, read, SHEETS } from "./css-to-gpui.mjs";
 import { viewOf, stylesFor, unsupportedFor } from "../kanso/mods/kanso-panel/ui-match.js";
 import { toHtml } from "../stories/kit/tree.js";
-
-const root = new URL("../", import.meta.url);
-const read = (path) => readFileSync(new URL(path, root), "utf8");
 
 const PROPS = {
   w: ["width", (v) => `${v}px`], h: ["height", (v) => `${v}px`], gap: ["column-gap", (v) => `${v}px`],
@@ -15,7 +11,7 @@ const PROPS = {
   mx: [["margin-left", "margin-right"], (v) => `${v}px`], my: [["margin-top", "margin-bottom"], (v) => `${v}px`],
   ml: ["margin-left", (v) => `${v}px`], mr: ["margin-right", (v) => `${v}px`], mt: ["margin-top", (v) => `${v}px`], mb: ["margin-bottom", (v) => `${v}px`],
   rounded: ["border-top-left-radius", (v) => `${v}px`], text_size: ["font-size", (v) => `${v}px`], font_weight: ["font-weight", String],
-  min_w: ["min-width", (v) => `${v}px`],
+  min_w: ["min-width", (v) => `${v}px`], max_w: ["max-width", (v) => `${v}px`],
 };
 
 const hex = (rgb) => {
@@ -41,6 +37,7 @@ const inherited = (node, rules, op) => {
 const expected = (ops) => {
   const out = {};
   for (const [op, value] of ops) {
+    if (op === "w_auto") { delete out.width; continue; }
     const entry = PROPS[op];
     if (!entry || typeof value !== "number") continue;
     for (const prop of [entry[0]].flat()) out[prop] = entry[1](value);
@@ -109,6 +106,21 @@ if (process.argv[1] === new URL(import.meta.url).pathname) {
     if (result.untranslated) { failed = true; console.log(`row, ${name}: untranslated`, result.untranslated); continue; }
     if (result.differences.length) { failed = true; console.log(`row, ${name}:`, result.differences); continue; }
     console.log(`row, ${name}: every element matches the Storybook`);
+  }
+  const { statusItemTree, needsItemTree, failureLineTree, paletteDoorTree, computerItemTree } = await import("../stories/kit/status-bar-tree.js");
+  const status = {
+    "an item": () => statusItemTree({ icon: "lu-monitor", text: "devbox" }),
+    "who needs you": () => needsItemTree({ name: "cart-ui", question: "Which layout?", more: 1 }),
+    "layout paused": () => failureLineTree({ text: "Layout paused", fix: "Resume", detail: "layout write refused 3 times" }),
+    "a computer you cannot reach": () => computerItemTree({ name: "devbox", state: "unreachable" }),
+    "this computer": () => computerItemTree({ name: "This computer", remote: false }),
+    "the command palette": () => paletteDoorTree(),
+  };
+  for (const [name, tree] of Object.entries(status)) {
+    const result = await checkPiece(tree(), c);
+    if (result.untranslated) { failed = true; console.log(`status, ${name}: untranslated`, result.untranslated); continue; }
+    if (result.differences.length) { failed = true; console.log(`status, ${name}:`, result.differences); continue; }
+    console.log(`status, ${name}: every element matches the Storybook`);
   }
   if (failed) process.exit(1);
 }

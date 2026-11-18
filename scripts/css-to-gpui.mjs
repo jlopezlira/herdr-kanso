@@ -4,9 +4,10 @@ import postcss from "postcss";
 import { isMain } from "./cli.mjs";
 
 const root = new URL("../", import.meta.url);
-const read = (path) => readFileSync(new URL(path, root), "utf8");
+export const read = (path) => readFileSync(new URL(path, root), "utf8");
 
 const SIZES = Object.fromEntries([...read("site/tokens.css").matchAll(/--(k-[a-z0-9-]+):\s*(-?[\d.]+)px;/g)].map(([, name, value]) => [name, Number(value)]));
+const TIMES = Object.fromEntries([...read("site/tokens.css").matchAll(/--(k-[a-z0-9-]+):\s*(-?[\d.]+)ms;/g)].map(([, name, value]) => [name, Number(value)]));
 const NUMBERS = Object.fromEntries([...read("site/tokens.css").matchAll(/--(k-[a-z0-9-]+):\s*(-?[\d.]+);/g)].map(([, name, value]) => [name, Number(value)]));
 
 const COLOURS = {
@@ -35,14 +36,16 @@ const splitTop = (text, sep) => {
   return parts.map((part) => part.trim()).filter(Boolean);
 };
 
+const declarationsOf = (rule) => rule.nodes.filter((node) => node.type === "decl").map((decl) => [decl.prop, decl.value, Boolean(decl.important)]);
+
 const rules = (css) => {
   const found = [];
   postcss.parse(css).walkRules((rule) => {
     if (rule.parent.type === "atrule") {
-      found.push({ selectors: rule.selectors, declarations: rule.nodes.filter((node) => node.type === "decl").map((decl) => [decl.prop, decl.value]), atRule: `@${rule.parent.name} ${rule.parent.params}` });
+      found.push({ selectors: rule.selectors, declarations: declarationsOf(rule), atRule: `@${rule.parent.name} ${rule.parent.params}` });
       return;
     }
-    found.push({ selectors: rule.selectors, declarations: rule.nodes.filter((node) => node.type === "decl").map((decl) => [decl.prop, decl.value]) });
+    found.push({ selectors: rule.selectors, declarations: declarationsOf(rule) });
   });
   return found;
 };
@@ -158,11 +161,11 @@ const DECLARATIONS = {
   "margin-right": (v) => [["mr", evaluate(v)]],
   "margin-block": (v) => { const [a, b = a] = splitTop(v, " ").map(evaluate); return [["mt", a], ["mb", b]]; },
   height: (v) => (v === "auto" ? [] : [["h", evaluate(v)]]),
-  width: (v) => [["w", evaluate(v)]],
+  width: (v) => (v === "auto" ? [["w_auto"]] : [["w", evaluate(v)]]),
   "inline-size": (v) => [["w", evaluate(v)]],
   "block-size": (v) => [["h", evaluate(v)]],
   "min-width": (v) => [["min_w", evaluate(v)]],
-  "border-radius": (v) => [["rounded", evaluate(v)]],
+  "border-radius": (v) => (v === "50%" ? [["rounded_full"]] : [["rounded", evaluate(v)]]),
   background: (v) => [["bg", colour(v)]],
   "background-color": (v) => [["bg", colour(v)]],
   color: (v) => [["text_color", colour(v)]],
@@ -170,6 +173,11 @@ const DECLARATIONS = {
   "font-weight": (v) => [["font_weight", evaluate(v)]],
   "line-height": (v) => [["line_height", evaluate(v)]],
   "white-space": (v) => [[v === "nowrap" ? "whitespace_nowrap" : "whitespace_normal"]],
+  "text-align": (v) => {
+    const op = { left: "text_left", start: "text_left", center: "text_center", right: "text_right", end: "text_right" }[v];
+    if (!op) throw new Unsupported(`text-align ${v}`);
+    return [[op]];
+  },
   overflow: (v) => [[v === "hidden" ? "overflow_hidden" : "overflow_visible"]],
   "text-overflow": (v) => (v === "ellipsis" ? [["text_ellipsis"]] : []),
   flex: (v) => [[{ none: "flex_none", 1: "flex_1", "1 1 100%": "flex_1" }[v] ?? (() => { throw new Unsupported(`flex ${v}`); })()]],
@@ -182,6 +190,11 @@ const DECLARATIONS = {
   "outline-offset": () => [],
   "overflow-wrap": () => [],
   transition: () => [],
+  animation: (v) => {
+    const spin = v.match(/^spin\s+var\(--(k-[a-z0-9-]+)\)/);
+    const ms = spin ? TIMES[spin[1]] : undefined;
+    return ms === undefined ? [] : [["spin", ms]];
+  },
   cursor: () => [],
   "user-select": () => [],
   "pointer-events": () => [],
@@ -210,9 +223,13 @@ const DECLARATIONS = {
   "inset-block": (v) => [["top", evaluate(v)], ["bottom", evaluate(v)]],
   "box-shadow": (v) => {
     const line = v.match(/^inset 0 (calc\(-1 \* var\(--k-[a-z0-9-]+\)\)|var\(--k-[a-z0-9-]+\)) 0 (var\(--[a-z-]+\))$/);
-    if (!line) throw new Unsupported(`box-shadow ${v}`);
-    const width = evaluate(line[1]);
-    return [[width < 0 ? "border_b" : "border_t", Math.abs(width)], ["border_color", colour(line[2])]];
+    if (line) {
+      const width = evaluate(line[1]);
+      return [[width < 0 ? "border_b" : "border_t", Math.abs(width)], ["border_color", colour(line[2])]];
+    }
+    const ring = v.match(/^0 0 0 (var\(--k-[a-z0-9-]+\)|[0-9.]+px) (var\(--[a-z-]+\))$/);
+    if (ring) return [["ring", evaluate(ring[1]), colour(ring[2])]];
+    throw new Unsupported(`box-shadow ${v}`);
   },
 };
 const FLEX = { none: "flex_none", 1: "flex_1", "1 1 100%": "flex_1", "0 1 auto": "flex_initial", auto: "flex_auto" };
@@ -222,6 +239,8 @@ const specificity = (steps) => steps.reduce((sum, step) => sum
   + (step.tag ? 1 : 0) + 100 * (step.classes.length + step.states.length)
   + step.any.reduce((most, list) => most + Math.max(...list.map(specificity)), 0)
   + step.not.reduce((most, inner) => most + specificity(inner), 0), 0);
+// An !important declaration beats every ordinary one, then specificity decides among them.
+const IMPORTANT = 1_000_000;
 
 const MOTION = new Set(["transition", "transition-duration", "transition-timing-function", "transition-delay", "animation", "animation-duration", "animation-delay", "animation-name", "opacity", "translate", "transform"]);
 
@@ -233,6 +252,10 @@ const subject = (selector) => {
 export const compile = (css) => {
   const out = [], skipped = [];
   const miss = (selector, reason, steps = null) => skipped.push({ selector, reason, steps, subject: subject(selector) });
+  const refused = (error) => {
+    if (!(error instanceof Unsupported)) throw error;
+    return error.message;
+  };
   for (const { selectors, declarations, atRule } of rules(css)) {
     for (const one of selectors) {
       if (atRule) {
@@ -244,22 +267,22 @@ export const compile = (css) => {
       try {
         steps = parseSelector(one);
       } catch (error) {
-        if (!(error instanceof Unsupported)) throw error;
-        miss(one, error.message);
+        miss(one, refused(error));
         continue;
       }
-      const ops = [];
-      for (const [name, value] of declarations) {
+      const buckets = [[], []];
+      for (const [name, value, important] of declarations) {
         try {
           const make = DECLARATIONS[name];
           if (!make) throw new Unsupported(`property ${name}`);
-          ops.push(...make(value));
+          buckets[important ? 1 : 0].push(...make(value));
         } catch (error) {
-          if (!(error instanceof Unsupported)) throw error;
-          miss(one, error.message, steps);
+          miss(one, refused(error), steps);
         }
       }
-      out.push({ selector: one, steps, ops, weight: specificity(steps), order: out.length });
+      const weight = specificity(steps);
+      if (!buckets[0].length && !buckets[1].length) out.push({ selector: one, steps, ops: [], weight, order: out.length });
+      buckets.forEach((ops, layer) => { if (ops.length) out.push({ selector: one, steps, ops, weight: weight + layer * IMPORTANT, order: out.length }); });
     }
   }
   return { rules: out, skipped };
@@ -272,7 +295,7 @@ const keyOf = (step) => {
   return inner.length && inner.every((k) => k !== "*") ? inner : "*";
 };
 
-export const PIECES = ["stories/kit/row-tree.js"];
+export const PIECES = ["stories/kit/row-tree.js", "stories/kit/status-bar-tree.js"];
 const reachableSteps = (steps, known) => steps.every((step) => step.classes.every((name) => STATE_CLASSES[name] || known(name))
   && step.any.every((list) => list.some((inner) => reachableSteps(inner, known))));
 export const reachable = (list, pieces = PIECES) => {
