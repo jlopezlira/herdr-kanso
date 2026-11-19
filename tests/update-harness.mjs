@@ -126,6 +126,33 @@ async function writeChecker(root, { record = false } = {}) {
 }
 export const windowsOnly = (name, fn) => test(name, { skip: !windows && "Unix has no Windows file lock, read-only attribute, or curl.exe beside powershell.exe" }, fn);
 
+export function heldFile(t, file, release) {
+  const child = trackedSpawn(t, "powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", [
+    "$ErrorActionPreference = 'Stop'",
+    `$s = [IO.File]::Open(${quote(file)}, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::None)`,
+    "[Console]::Out.WriteLine('held')",
+    "[Console]::Out.Flush()",
+    `while (-not (Test-Path -LiteralPath ${quote(release)})) { Start-Sleep -Milliseconds 50 }`,
+    "$s.Dispose()",
+  ].join("; ")], { windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
+  const ended = new Promise((resolve) => child.once("exit", resolve));
+  const open = () => writeFile(release, "go").catch(() => {});
+  const stop = async () => {
+    await open();
+    const finished = await Promise.race([ended.then(() => true), new Promise((resolve) => setTimeout(() => resolve(false), 2000))]);
+    if (!finished) dropChild(child);
+    await Promise.race([ended, new Promise((resolve) => setTimeout(resolve, 2000))]);
+    dropChild(child);
+  };
+  t.after(stop);
+  const held = new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`step lock, file ${file}`)), 15000);
+    child.stdout.once("data", () => { clearTimeout(timer); resolve(); });
+    child.once("exit", (code) => { clearTimeout(timer); reject(new Error(`step lock exited ${code}, file ${file}`)); });
+  });
+  return { held, open, stop };
+}
+
 export async function updater(host) {
   return load("kanso-chrome/update.js", names, host);
 }

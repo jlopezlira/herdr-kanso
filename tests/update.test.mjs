@@ -1,9 +1,8 @@
 import assert from "node:assert/strict";
-import { writeFileSync } from "node:fs";
-import { readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { load, context, exec, nativePlatform, temporary, clone, gpuiHost, success, failure, storeShared, tickingContext } from "./helpers.mjs";
-import { test, dropChild, trackedSpawn, quote, windowsOnly, updater, fixture, version, small, tree, stages, hostFor, startUpdater, versionFile } from "./update-harness.mjs";
+import { test, dropChild, trackedSpawn, quote, windowsOnly, heldFile, updater, fixture, version, small, tree, stages, hostFor, startUpdater, versionFile } from "./update-harness.mjs";
 
 test("Kanso's newest release comes from the vX.Y.Z tags, not from Herdr", async () => {
   const { newestTag, compareVersions } = await updater();
@@ -329,7 +328,18 @@ test("The Windows updater script keeps the same contract and PowerShell 5.1", as
   const launch = windowsLaunchScript(dir, "op", join(dir, "op.ps1"));
   assert.match(launch, /Start-Process .* -WindowStyle Hidden -PassThru/, "step launch, file shell execute: the worker inherits no handle");
   assert.equal(/UseShellExecute|RedirectStandard/.test(launch), false, "step launch, file no pipe passed on");
-  assert.match(windowsRecoverScript(home, dir, join(dir, "recover.ps1")), /FileShare\]::None/);
+  const recoverScript = windowsRecoverScript(home, dir, join(dir, "recover.ps1"));
+  assert.match(recoverScript, /FileShare\]::None/);
+  const settleAt = recoverScript.indexOf("function Settle");
+  const recoverAt = recoverScript.indexOf("function Recover-Stages");
+  const settleBody = recoverScript.slice(settleAt, recoverAt);
+  assert.equal(settleBody.includes("Remove-Item -LiteralPath $script:st -Recurse"), false, "step stage, file one delete is not the end");
+  assert.match(settleBody, /Remove-Tree/, "step stage, file removed after a held handle");
+  const stagesBody = recoverScript.slice(recoverAt, recoverScript.indexOf("function From-B64"));
+  const settleCall = stagesBody.indexOf("if (-not (Settle))");
+  assert.ok(settleCall > 0, "step listing, file settle");
+  assert.equal(stagesBody.slice(settleCall).includes("$d.FullName"), false, "step listing, file not held across the delete");
+  assert.match(stagesBody, /\$names \+= \[string\]\$d\.FullName/, "step listing, file copied before the delete");
   const held = host.holdArgs(join(dir, "lock"));
   assert.deepEqual([...held.commands], ["pwsh", "powershell"]);
   const heldArgs = [...held.args];
@@ -366,34 +376,13 @@ windowsOnly("A file in use is retried, then the update is undone and the file is
   const s = await small(t);
   const home = await s.fresh("in-use");
   const locked = join(home, "mods", "kanso-chrome", "main.js");
-  const release = join(s.root, "release-lock");
-  const child = trackedSpawn(t, "powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", [
-    "$ErrorActionPreference = 'Stop'",
-    `$s = [IO.File]::Open(${quote(locked)}, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::None)`,
-    "[Console]::Out.WriteLine('held')",
-    "[Console]::Out.Flush()",
-    `while (-not (Test-Path -LiteralPath ${quote(release)})) { Start-Sleep -Milliseconds 100 }`,
-    "$s.Dispose()",
-  ].join("; ")], { windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
-  const ended = new Promise((resolve) => child.once("exit", resolve));
-  const releaseLock = async () => {
-    try { writeFileSync(release, "go"); } catch { /* the tree is already gone */ }
-    const finished = await Promise.race([ended.then(() => true), new Promise((resolve) => setTimeout(() => resolve(false), 2000))]);
-    if (!finished) dropChild(child);
-    await Promise.race([ended, new Promise((resolve) => setTimeout(resolve, 2000))]);
-    dropChild(child);
-  };
-  t.after(releaseLock);
-  await new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error(`step lock, file ${locked}`)), 15000);
-    child.stdout.once("data", () => { clearTimeout(timer); resolve(); });
-    child.once("exit", (code) => { clearTimeout(timer); reject(new Error(`step lock exited ${code}, file ${locked}`)); });
-  });
+  const lock = heldFile(t, locked, join(s.root, "release-lock"));
+  await lock.held;
   const how = await s.run(home, 0, { env: { KANSO_UPDATE_RETRY_MS: "600" } });
   assert.match(how, /could not put kanso-chrome in place/, how);
   assert.ok(how.includes("kanso-chrome"), how);
   assert.equal(await readFile(join(home, "mods/kanso-chrome/version.json"), "utf8"), '{ "version": "1.0.0" }\n', how);
-  await releaseLock();
+  await lock.stop();
 });
 
 windowsOnly("A read-only file is still updated", async (t) => {
@@ -404,6 +393,38 @@ windowsOnly("A read-only file is still updated", async (t) => {
   assert.equal(marked.code, 0, `step readonly, file ${file}: ${marked.stderr}`);
   assert.equal(await s.run(home, 0), "ok", `step install, file ${file}`);
   assert.equal(await versionFile(home), '{ "version": "1.1.0" }\n');
+});
+
+windowsOnly("A file still open in an update that stopped does not stop recovery once it closes", async (t) => {
+  const root = await temporary(t);
+  const home = join(root, "home");
+  const dir = join(home, ".kanso-updates");
+  const stage = join(dir, "op");
+  await mkdir(stage, { recursive: true });
+  await writeFile(join(stage, "slots"), "");
+  const locked = join(stage, "leftover.txt");
+  await writeFile(locked, "open\n");
+  const blocked = join(root, "blocked");
+  const lock = heldFile(t, locked, join(root, "release"));
+  await lock.held;
+  const { host } = await hostFor("windows");
+  const pending = host.recover(home, dir, { env: { ...process.env, KANSO_UPDATE_BLOCKED: blocked, KANSO_UPDATE_RETRY_MS: "8000" } });
+  const marked = await Promise.race([
+    (async () => {
+      const deadline = Date.now() + 20000;
+      while (Date.now() < deadline) {
+        try { await readFile(blocked); return true; } catch { /* not yet */ }
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+      return false;
+    })(),
+    pending.then(() => false),
+  ]);
+  assert.equal(marked, true, "recovery gave up while the file was still open");
+  await lock.open();
+  const result = await pending;
+  assert.equal(result.code, 0, result.stderr);
+  assert.equal((await readdir(dir)).includes("op"), false, result.stderr);
 });
 
 windowsOnly("A missing curl.exe stops before a download and names the tool", async (t) => {
