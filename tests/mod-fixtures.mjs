@@ -1,6 +1,6 @@
 // Named loaders for production modules used by multiple tests.
 import { join } from "node:path";
-import { databaseTimer, exec, load, openedKdb, temporary } from "./helpers.mjs";
+import { chain, databaseTimer, exec, gpuiHost, load, openedKdb, temporary } from "./helpers.mjs";
 
 export const loadSpaces = (host) => load("kanso-spaces/main.js", ["Spaces"], host);
 export const loadDescribe = (host) => load("kanso-help/keymap.js", ["describe"], host);
@@ -102,3 +102,12 @@ export const listedFiles = async (entries, guard = () => {}) => {
   const panel = Object.assign(new Files(), { context: "fixture", root: "/repo", folders: new Set(), marks: {}, entries: new Map([["", entries]]) });
   return { panel, list: () => listed };
 };
+
+export const STRIP_NIGHT = { foreground: "#d8d4cb", background: "#1b1b19", hover: "#232321", selected: "#2b2b28", accent: "#da627d", dim: "#6b6862", muted: "#949086", chrome: "#141413" };
+export const loadStripWith = (props, panes, store) => load("kanso-strip/main.js", ["Strip"], {
+  ...gpuiHost(), svg: (path) => { const el = chain("svg"); el.calls.push(["svg", path]); return el; },
+  image: (path) => { const el = chain("image"); el.calls.push(["image", path]); return el; }, Popover: { new: (id) => chain(id) }, HoverCard: { new: (id) => chain(id) },
+  theme: () => STRIP_NIGHT, props: () => props, panes: () => panes, agents: () => [], focused: () => null,
+  spaces: () => [], machines: () => [], home: () => "/home/me", terminals: () => [], shared: (key) => store[key] ?? null, setShared: (key, value) => { store[key] = value; },
+  run: () => {}, hc: async () => ({ code: 0 }), openOverlay: () => {},
+});

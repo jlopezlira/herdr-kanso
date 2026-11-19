@@ -28,21 +28,22 @@ export const TABS = [
   { id: "t3", index: 3, name: "tests", active: false, status: "done" },
 ];
 
-export async function tabBar({ tabs = TABS, machine = null, computers = [], panes = [], fails = null, keys = [] } = {}) {
-  const store = {}, ran = [], toasts = [], opened = [];
+export async function tabBar({ tabs = TABS, machine = null, computers = [], panes = [], fails = null, keys = [], stored = {}, tree = null } = {}) {
+  const store = { ...stored }, ran = [], toasts = [], opened = [];
   const space = { id: "s1", active: true, machine, tabs: clone(tabs) };
   const host = {
     ...popoverHost(),
     InputState: { new: fieldWith },
     theme: () => CHROME_NIGHT, spaces: () => [space], panes: () => panes, machines: () => computers, keys: () => keys, window: () => ({ platform: "macos" }),
-    layout: () => null, home: () => "/home/me", shared: (key) => store[key] ?? null, setShared: (key, value) => { store[key] = value; },
+    layout: () => tree, home: () => "/home/me", shared: (key) => store[key] ?? null, setShared: (key, value) => { store[key] = value; },
     run: (cmd, args) => { if (cmd === fails) throw new Error("refused"); ran.push([cmd, args]); }, notify: (note) => { toasts.push(note); }, openOverlay: (spec) => { opened.push(spec); },
   };
-  const { Tabs, tokens, W } = await load("kanso-tabs/main.js", ["Tabs", "tokens", "W"], host);
+  const { Tabs, tokens } = await load("kanso-tabs/main.js", ["Tabs", "tokens"], host);
+  const { W } = await load("kanso-tabs/ui.js", ["W"], gpuiHost());
   const { PENDING } = await load("kanso-tabs/ui-state.js", ["PENDING"], gpuiHost());
   const view = new Tabs();
   const cx = { stop_propagation() {}, notify() {}, timer: { after() {} } };
-  return { view, cx, ran, toasts, opened, space, c: tokens(CHROME_NIGHT), W, PENDING };
+  return { view, cx, ran, toasts, opened, space, store, c: tokens(CHROME_NIGHT), W, PENDING };
 }
 
 export const FOOTER_NIGHT = { background: "#1b1b19", foreground: "#d8d4cb", chrome: "#161615", hover: "#232321", selected: "#2b2b28", dim: "#6b6860", muted: "#949086", blocked: "#d5674f", accent: "#c9a46a" };

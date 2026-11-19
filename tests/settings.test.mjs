@@ -101,6 +101,7 @@ const SAME_AS_HERDR = {
   "pane.swap": /^(kanso-strip\.(move|vim-move)-(left|right|up|down)|terminal)$/,
   "pane.zoom": /^kanso-strip\.width$/,
   "space.select": /^kanso-spaces\.space-\d$/,
+  "tab.select": /^kanso-tabs\.tab-\d$/,
   "app.settings": /^kanso-spend\.settings$/,
   "app.help": /^mod\.open:kanso-help$/,
   "terminal.search": /^kanso-strip\.find$/,
@@ -149,7 +150,7 @@ test("Windows takes Herdr keys for the same intent, except the named agent navig
       } else {
         assert.match(action, SAME_AS_HERDR[original.split(":")[0]] ?? /^$/, key);
         const direction = original.split(":")[1];
-        if (direction && /^(pane\.go|pane\.swap|pane\.split|space\.select)/.test(original)) assert.ok(action.endsWith(`-${direction}`), `${key}: same direction or space`);
+        if (direction && /^(pane\.go|pane\.swap|pane\.split|space\.select|tab\.select)/.test(original)) assert.ok(action.endsWith(`-${direction}`), `${key}: same direction or space`);
       }
     }
   }

@@ -1,92 +1,80 @@
 // Kanso's panel kit: the tab group. Apache-2.0.
 // Kept byte for byte by `npm run sync:share`: edit kanso-panel/ui-tab.js.
-import { div, svg } from "gpui-kit";
-import { h_flex, v_flex, Button } from "gpui-base";
-import { G, H, R, T, ICON_ROW, ICONS, CLEAR } from "./ui.js";
-import { armedLook } from "./ui-button.js";
+import { svg } from "gpui-kit";
+import { Button } from "gpui-base";
+import { FOCUS, CLEAR, glyphOf } from "./ui.js";
 import { field } from "./ui-field.js";
-import { dot as drawDot } from "./ui-dot.js";
 import { mark } from "./ui-mark.js";
-import { PENDING, pendingDot } from "./ui-state.js";
+import { pendingDot } from "./ui-state.js";
+import { RULES, TAB_LOOKS } from "./ui-css.js";
+import { TAB_PARTS, tabParts, tabKey, tabStates } from "./ui-tab-shapes.js";
+import { lookOf, painted, lastOp, boxOf } from "./ui-draw.js";
+import { Answers } from "./ui-match.js";
 
-const TAB = { sm: H.compact, md: H.icon, lg: H.control };
 /** The most characters a tab's name holds. */
 export const TAB_NAME_LIMIT = 64;
 
-const groundOf = (c, { on, track, armed, held, fill }) => {
-  if (armed) return armedLook(c).fill;
-  if (held) return c.selected;
-  if (!on || !fill) return null;
-  return track ? c.raised : c.w12;
-};
+const known = new Answers();
+const tabLooks = (group, states) => known.of(tabKey(group, states), () => {
+  const kept = TAB_LOOKS.tabs[tabKey(group, states)];
+  const shapes = kept ? null : tabParts(group, states);
+  const parts = Object.fromEntries(TAB_PARTS.map((part, i) => [part, kept ? TAB_LOOKS.looks[kept[i]] : lookOf(shapes[part][0], RULES, null, shapes[part][1])]));
+  const inset = lastOp(parts.tab.own, "px")?.[1] ?? 0;
+  const ringed = inset > 0 ? { ...parts.tab, own: parts.tab.own.map((op) => (op[0] === "px" ? ["px", inset - FOCUS] : op)) } : parts.tab;
+  return { ...parts, tab: ringed };
+});
 
-const inkOf = (c, { on, disabled, armed }) => {
-  if (disabled) return c.dim;
-  if (armed) return c.accentText;
-  return on ? c.text : c.muted;
-};
+const glyph = (icon, looks, c) => painted(svg(glyphOf(icon)), looks.glyph, c);
 
 // The press stays on the ×: the tab under it is not chosen. A tab that is off draws its × and does nothing.
-const closeGlyph = (id, ink, c, onClose, disabled) => div().id(`${id}-close`).flex_none().text_color(ink)
-  .when(!disabled, (el) => el.hover((s) => s.text_color(c.text))
-    .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
-    .on_click((_e, cx) => { cx.stop_propagation(); onClose(cx); }))
-  .child(svg(`${ICONS}x.svg`).size(ICON_ROW));
+const closeGlyph = (id, c, looks, label, onClose, disabled) => painted(Button.new(`${id}-close`), looks.close, c)
+  .m(-FOCUS).border(FOCUS).border_color(CLEAR).focus((s) => s.border_color(c.accent))
+  .disabled(disabled)
+  .accessibility_label(`Close ${label}`)
+  .when(!disabled, (el) => el.on_mouse_down("left", (_e, cx) => cx.stop_propagation()).on_click((_e, cx) => { cx.stop_propagation(); onClose(cx); }))
+  .child(glyph("x", looks, c));
 
-const nameOf = (id, item, c, nameWidth) => (item.editing
-  ? div().id(`${id}-rename`).min_w(0).on_mouse_down("left", (_e, cx) => cx.stop_propagation()).on_click((_e, cx) => cx.stop_propagation())
-    .child(field(`${id}-name`, item.editing, c, { inline: true, spoken: item.label }))
-  : div().whitespace_nowrap().text_size(T.value).when(Boolean(nameWidth), (el) => el.min_w(0).max_w(nameWidth).truncate()).child(item.label));
+const nameOf = (id, item, c, looks) => (item.editing
+  ? field(`${id}-name`, item.editing, c, { inline: true, spoken: item.label }).min_w(0)
+    .on_mouse_down("left", (_e, cx) => cx.stop_propagation()).on_click((_e, cx) => cx.stop_propagation())
+  : boxOf(looks.label, c).child(item.label));
 
-/** One tab. `item`: { key, label, icon, dot, tip, mark, pending, held, armed, editing }; `dot` marks it while unselected, `mark` is a status drawn after the name,
- * `editing` the TextField renaming it in place. `onClose`: the chosen tab ends with ×. `onPress`: a left press, before the tab keeps it from the window.
- * `fill`: false when the group's pill draws the chosen fill. `nameWidth`: the name trims past it. */
-export function tabItem(id, item, c, { on = false, disabled = false, collapsed = false, track = true, size = "lg", index = 0, count = 1, onChange = null, onClose = null, onPress = null, fill = true, nameWidth = null } = {}) {
-  const side = TAB[size] ?? TAB.lg, inner = collapsed && track ? side - 2 * G.hair : side;
-  const pad = track ? G.sm - G.hair : G.md - G.hair, gap = track ? G.xs : G.sm;
+export function tabItem(id, item, c, { group, on = false, square = false, index = 0, count = 1, onChange = null, onClose = null, onPress = null } = {}) {
+  const { disabled } = group;
   const armed = Boolean(item.armed) && !disabled;
-  const ink = inkOf(c, { on, disabled, armed });
-  const ground = groundOf(c, { on, track, armed, held: Boolean(item.held), fill });
-  const dot = drawDot(c, "blocked");
-  return Button.new(id).items_center().justify_center().gap(gap).rounded(R.control)
-    .border_2().border_color(CLEAR).focus((s) => s.border_color(c.accent))
-    .text_color(ink)
-    .when(collapsed, (el) => el.relative().size(inner).flex_none().tooltip(item.label))
-    .when(!collapsed, (el) => el.h(inner).px(pad).when(track, (b) => b.flex_1()).when(Boolean(item.tip), (b) => b.tooltip(item.tip)))
+  const states = { on, square, armed, pending: Boolean(item.pending), held: Boolean(item.held), live: !disabled && !on && !armed && !item.held };
+  const looks = tabLooks(group, states);
+  const dot = (item.dot || (square && item.mark === "blocked")) && !on;
+  return painted(Button.new(id), looks.tab, c)
+    .border(FOCUS).border_color(CLEAR).focus((s) => s.border_color(c.accent))
     .selected(on)
     .disabled(disabled)
     .set_position(index + 1, count)
     .accessibility_label(item.label)
-    .when(Boolean(ground), (el) => el.bg(ground))
-    .when(Boolean(item.pending), (el) => el.opacity(PENDING))
-    .when(!disabled, (el) => el.cursor_pointer().when(!on && !armed && !item.held, (b) => b.hover((s) => s.bg(c.w4).text_color(c.text)))
+    .when(square, (el) => el.tooltip(item.label))
+    .when(!square && Boolean(item.tip), (el) => el.tooltip(item.tip))
+    .when(!disabled, (el) => el.cursor_pointer()
       .on_mouse_down("left", (e, cx) => { cx.stop_propagation(); onPress?.(e, cx); })
       .on_click((_e, cx) => { if (!on) onChange?.(item.key, cx); }))
-    .when(Boolean(item.icon), (el) => el.child(svg(`${ICONS}${item.icon}.svg`).size(ICON_ROW).flex_none().text_color(ink)))
-    .when(!collapsed, (el) => el.child(nameOf(id, item, c, nameWidth)))
+    .when(Boolean(item.icon), (el) => el.child(glyph(item.icon, looks, c)))
+    .when(!square || !item.icon, (el) => el.child(nameOf(id, item, c, looks)))
     .when(Boolean(item.pending), (el) => el.child(pendingDot(`${id}-pending`, c)))
-    .when(Boolean(item.mark) && !collapsed, (el) => el.child(mark(c, { status: item.mark })))
-    .when(Boolean(item.dot) && !on, (el) => el.child(collapsed ? dot.absolute().top(G.hair).right(G.hair) : dot))
-    .when(on && Boolean(onClose) && !item.editing && !collapsed, (el) => el.child(closeGlyph(id, armed ? ink : c.dim, c, onClose, disabled)));
+    .when(Boolean(item.mark) && !square, (el) => el.child(mark(c, { status: item.mark })))
+    .when(dot, (el) => el.child(boxOf(looks.dot, c)))
+    .when(on && Boolean(item.closable && onClose) && !square && !item.editing, (el) => el.child(closeGlyph(id, c, looks, item.label, onClose, disabled)));
 }
 
-/** Where a dragged tab lands: the accent bar between two tabs. */
-export const tabInsertion = (c) => div().w(G.hair).h(H.badge).flex_none().rounded(R.sm).bg(c.accent);
-
-/** The chosen fill on its own, for a group that slides it under the chosen tab. */
-export const tabPill = (c, size = "md") => div().h(TAB[size] ?? TAB.lg).rounded(R.control).bg(c.w12);
-
-/** One tab group: the chosen tab is a quiet fill (raised on a track), never a weight, so nothing moves. Items: { key, label, icon, dot, tip, drop } and tabItem's states;
- * `drop` draws where a dragged tab lands, before it. `size`: sm 24, md 28, lg 32, each tab's height; a track is that and its padding thick. Collapsed: a column of icons, each label its tip. */
-export function tab(id, items, value, onChange, c, { disabled = false, spoken = null, collapsed = false, track = true, size = "lg" } = {}) {
-  const side = TAB[size] ?? TAB.lg;
-  const seg = (item, index) => [
-    item.drop ? tabInsertion(c) : null,
-    tabItem(`${id}-${item.key}`, item, c, { on: value === item.key, disabled, collapsed, track, size, index, count: items.length, onChange }),
-  ];
-  return (collapsed ? v_flex() : h_flex()).id(id).gap(G.hair).flex_none()
-    .when(track, (el) => el.p(G.hair).rounded(R.card).bg(c.w4))
-    .when(track && !collapsed, (el) => el.h(side + 2 * G.hair))
+export function tab(id, items, value, onChange, c, { disabled = false, spoken = null, collapsed = false, track = true, size = "lg", bar = false, on = {} } = {}) {
+  const group = { size, track, disabled, bar };
+  const base = tabLooks(group, tabStates(group, []));
+  const seg = (item, index) => {
+    const own = on[item.key] ?? {};
+    const drawn = tabItem(`${id}-${item.key}`, item, c, { group, on: value === item.key, square: collapsed, index, count: items.length, onChange, onClose: own.onClose, onPress: own.onPress });
+    const wired = own.wire ? own.wire(drawn) : drawn;
+    const landing = item.drop ? boxOf(base.insertion, c) : null;
+    return item.drop === "after" ? [wired, landing] : [landing, wired];
+  };
+  return boxOf(base.list, c, id).when(collapsed, (el) => el.flex_col())
     .when(Boolean(spoken), (el) => el.accessibility_label(spoken))
     .children(items.flatMap(seg).filter(Boolean));
 }

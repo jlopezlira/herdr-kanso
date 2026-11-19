@@ -138,8 +138,7 @@ test("Panes per view take their row, their number and their columns from the com
   assert.equal(arg(slot, "mr"), G.sm);
   const marks = nodes(slot).filter((el) => calls(el, "w").length);
   assert.deepEqual(marks.map((el) => arg(el, "w")), [15, 9, 9]);
-  assert.deepEqual(first(marks[0], "bg"), [c.dim]);
-  assert.deepEqual(marks[0].calls.filter(([name]) => name === "bg").at(-1), ["bg", c.muted]);
+  assert.deepEqual(marks[0].calls.filter(([name]) => name === "bg"), [["bg", c.muted]], "only the winning wash is painted");
   assert.deepEqual(marks[2].calls.filter(([name]) => name === "bg").at(-1), ["bg", c.text]);
   assert.equal(arg(marks[2], "h"), G.hair, "a stacked pane is a hair");
   assert.equal(arg(marks[0], "rounded"), 999);

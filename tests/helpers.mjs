@@ -430,3 +430,9 @@ export const inTemporaryDir = (prefix, use) => {
     rmSync(root, { recursive: true, force: true });
   }
 };
+
+export const kansoColours = async () => {
+  const { tokens } = await load("kanso-panel/ui.js", ["tokens"]);
+  const theme = JSON.parse(readFileSync(new URL("../kanso/themes/kanso.json", import.meta.url), "utf8"));
+  return tokens({ ...theme, ...theme.colors });
+};
