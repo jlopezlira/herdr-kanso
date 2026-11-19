@@ -498,7 +498,7 @@ windowsOnly("A failed parent creation names that create, not a rename of the liv
   assert.equal(await readFile(join(live, "main.js"), "utf8"), "old\n");
 });
 
-windowsOnly("A sharing failure keeps a destination rollback did not create", async (t) => {
+windowsOnly("A destination another writer fills while rollback waits stops the move and keeps both sides", async (t) => {
   const made = await recoverHome(t);
   const stage = join(made.dir, "op", "src", "kanso", "mods");
   const live = join(made.home, "mods", "kanso-chrome");
@@ -514,12 +514,15 @@ windowsOnly("A sharing failure keeps a destination rollback did not create", asy
   assert.equal(watched.saw, "sharing", watched.text());
   await mkdir(dest, { recursive: true });
   await writeFile(kept, "prior\n");
-  const code = await watched.exited;
   await lock.open();
-  assert.equal(code, 1, watched.text());
+  assert.equal(await watched.exited, 1, watched.text());
+  assert.deepEqual(await readdir(live), ["held.txt"], watched.text());
+  assert.equal(await readFile(join(live, "held.txt"), "utf8"), "open\n", watched.text());
+  assert.deepEqual(await readdir(dest), ["kept.txt"], watched.text());
   assert.equal(await readFile(kept, "utf8"), "prior\n", watched.text());
-  const line = watched.text().split(/\r?\n/).find((row) => row.startsWith(`keep ${dest} `));
-  assert.ok(line && line.slice(`keep ${dest} `.length).trim(), watched.text());
+  const prefix = `move ${live} ${dest} `;
+  const line = watched.text().split(/\r?\n/).find((row) => row.startsWith(prefix));
+  assert.ok(line && line.slice(prefix.length).trim(), watched.text());
 });
 
 windowsOnly("A permanent denial of a rollback delete stops at once and names that delete", async (t) => {
