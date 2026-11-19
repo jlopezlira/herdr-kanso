@@ -5,7 +5,10 @@ import { load, nodes, texts, svgsOf, themed, calls, arg, KIT_NIGHT, popoverHost 
 import { loadSidebar, mountedState, recorder } from "./sidebar-fixtures.mjs";
 import { mountChrome } from "./mod-fixtures.mjs";
 import { statedPages } from "../stories/kit/states.js";
+import { readFileSync } from "node:fs";
 import { kitRecords } from "../scripts/storybook-kit.mjs";
+import { buttonTree } from "../stories/kit/row-tree.js";
+import { toHtml } from "../stories/kit/tree.js";
 
 const compositions = async () => themed({
   kit: await load("kanso-panel/kit.js", ["menu", "stack"], host()),
@@ -222,15 +225,30 @@ test("No hand-drawn toolbar, header or footer is left, and the stacks draw no li
   assert.deepEqual(numberArguments("kanso-panel/ui-stack.js"), []);
 });
 
-test("The Storybook's update states are all Proposed: a running update turns its icon and takes no press, in the row and in the rail", () => {
+test("The Storybook's footer: a running update is its own state, only the stage and the ending are Proposed", () => {
   const states = Object.fromEntries(kitRecords([]).filter((record) => record.page === "Primitives/Footer" || record.page === "Compositions/Sidebar/Footer").map((record) => [record.label, record]));
-  const running = ["Updating", "Updating, its stage", "Collapsed, updating"];
-  for (const label of running) {
-    assert.match(states[label].caption, /^Proposed/, `${label} is captioned Proposed`);
+  for (const label of ["Updating", "Collapsed, updating"]) {
+    assert.doesNotMatch(states[label].caption, /Proposed/, `${label} is the fix, not a proposal`);
     assert.match(states[label].html, /kanso-icon--spinning|kanso-button--spinning/, `${label} turns its icon`);
   }
+  for (const label of ["Updating, its stage", "Refused"]) assert.match(states[label].caption, /^Proposed/, `${label} is captioned Proposed`);
   assert.match(states.Updating.html, /kanso-row--busy[^>]*aria-busy="true"/, "the row is busy and out of the keyboard's way");
   assert.doesNotMatch(states.Updating.html, /kanso-row--busy[^>]*tabindex/, "it takes no tab stop, so no ring can stay on it");
-  assert.match(states["Collapsed, updating"].html, /kanso-control--off/, "the rail's Button is disabled");
   assert.doesNotMatch(states.Update.html, /kanso-icon--spinning|kanso-row--busy/, "an update on offer is still");
+  assert.match(states.Refused.html, /Explain to Atlas/, "the refusal block offers Explain");
+});
+
+test("A disabled Storybook Button takes no tab stop, so Tab skips the rail's running update", () => {
+  const rail = kitRecords([]).find((record) => record.label === "Collapsed, updating").html;
+  const running = rail.match(/<span class="kanso-button[^"]*kanso-button--spinning[^"]*"[^>]*>/)[0];
+  assert.match(running, /aria-disabled="true"/);
+  assert.doesNotMatch(running, /tabindex/);
+  assert.match(rail, /<span class="kanso-button[^"]*"[^>]*tabindex="0"[^>]*title="Settings"/, "Settings beside it stays a tab stop");
+  assert.doesNotMatch(toHtml(buttonTree({ label: "Save", disabled: true })), /tabindex/);
+});
+
+test("The footer page's design text says the mark turns while updating, not that it does not", () => {
+  const design = readFileSync(new URL("../stories/catalog.json", import.meta.url), "utf8");
+  assert.match(design, /the row reads \\"Updating kansō\\" in muted, its icon turning, taking no press until it lands/);
+  assert.doesNotMatch(design, /no spinner, quiet until it lands/);
 });

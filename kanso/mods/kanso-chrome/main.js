@@ -5,7 +5,7 @@ import { systemApi } from "./platform-system.js";
 // Modified by José Gutiérrez (minimalistic, 0oz design fork): renamed from oz-chrome.
 // Modified by jlopezlira (Kanso, https://github.com/jlopezlira/herdr-kanso): renamed from mn-chrome; sidebar footer as centred squares when collapsed, one icon set (icons/), a title bar of the lights and, in Dawn Mode, its sky and pill (header.js); an "Update Kanso" row for Kanso's own releases (update.js); Settings opens one menu (sidebar-footer.js).
 import { View, div } from "gpui-kit";
-import { theme, run, props, shared, setShared, updates, keys, nextCommand, openOverlay, appHome, notify } from "herdr";
+import { theme, run, props, shared, setShared, updates, keys, nextCommand, openOverlay, appHome, notify, knownAgents } from "herdr";
 import { Updater } from "./update.js";
 import { tryOrAsync, readCommands } from "./pure.js";
 import { loadPieces, pieces, shown } from "./pieces.js";
@@ -17,7 +17,7 @@ import { DAWN_RING_MS, RING_FRAMES } from "./ui-dawn.js";
 import { Armed } from "./ui-button.js";
 import { menu } from "./kit.js";
 import { channelOf } from "./release.js";
-import { ITEM, COLLAPSED, refusalBlock, settingsChord, settingsEntries, updateLabel } from "./footer-model.js";
+import { ITEM, COLLAPSED, explainRefusal, refusalBlock, settingsChord, settingsEntries, updateLabel } from "./footer-model.js";
 import { header } from "./header.js";
 import { sidebarFooter } from "./sidebar-footer.js";
 
@@ -43,6 +43,11 @@ export default class WorkspaceChrome extends View {
     this.settingsFocus = cx.focus_handle();
     this.updater = new Updater();
     this.updater.start(cx, { polls: false });
+    this.explainer = null;
+    cx.spawn(async (later) => {
+      this.explainer = (await knownAgents({ on: null }).catch(() => [])).find((agent) => agent.installed) ?? null;
+      later.notify();
+    });
     // Command names stay kanso-tabs.* for keys bound to them before.
     readCommands(cx, () => nextCommand(), (c, cx) => this.command(c, cx));
     cx.timer.every(SAMPLE_MS, (cx) => this.watch(cx));
@@ -117,12 +122,17 @@ export default class WorkspaceChrome extends View {
   footer(collapsed) {
     const update = this.updater?.available() ?? null, busy = Boolean(this.updater?.busy);
     const why = update && !busy ? this.updater.refused() : null;
-    const install = (cx) => this.updater.install(cx), refused = why ? refusalBlock(why) : null, menu = this.settingsMenu();
+    const install = (cx) => this.updater.install(cx), refused = why ? refusalBlock(why, this.explainer?.name ?? "an agent") : null, menu = this.settingsMenu();
     // Only the targets on show: the update's icon while one is offered, the refusal's fix while it shows (not in the rail),
     // and Settings while its menu is shut (open, Herdr's popover owns the next press).
-    const presses = { ...(update ? { "refresh-cw": install } : {}), ...(refused && !collapsed ? { [refused.fix]: install } : {}), ...(menu ? {} : { settings: (cx) => this.setMenu(true, cx) }) };
+    const presses = { ...(update ? { "refresh-cw": install } : {}), ...(refused && !collapsed ? { [refused.fix]: install, [`Explain to ${refused.agent}`]: () => this.explain(why) } : {}), ...(menu ? {} : { settings: (cx) => this.setMenu(true, cx) }) };
     return sidebarFooter({ update: update && updateLabel(update, busy), busy, refused, menu, collapsed })(
       "footer", tokens(theme()), { presses, focuses: { settings: this.settingsFocus }, onOpen: (open, cx) => this.setMenu(open, cx) });
+  }
+
+  explain(why) {
+    if (!this.explainer) { notify({ title: "Could not start the agent", body: "no agent is installed", level: "error" }); return; }
+    run("tab.new", { name: "Explain the update", folder: appHome(), argv: this.explainer.run, task: explainRefusal(why) });
   }
 
   render(cx) {

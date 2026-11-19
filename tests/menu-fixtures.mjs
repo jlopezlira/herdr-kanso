@@ -49,9 +49,10 @@ export async function tabBar({ tabs = TABS, machine = null, computers = [], pane
 export const FOOTER_NIGHT = { background: "#1b1b19", foreground: "#d8d4cb", chrome: "#161615", hover: "#232321", selected: "#2b2b28", dim: "#6b6860", muted: "#949086", blocked: "#d5674f", accent: "#c9a46a" };
 
 export async function footer({ shared = {}, ready = null, bindings = [{ action: "kanso-tabs.settings", keys: "ctrl-shift-," }], updater = {} } = {}) {
-  const ran = [], overlays = [], installs = [];
+  const ran = [], overlays = [], installs = [], notices = [];
   const host = {
     ...popoverHost(),
+    appHome: () => "/home/me/.config/herdr-app", notify: (notice) => { notices.push(notice); }, knownAgents: async () => [],
     theme: () => FOOTER_NIGHT, props: () => ({ footer: true }), shared: (key) => shared[key] ?? null, setShared: () => {},
     run: (name, args) => { ran.push([name, args]); }, openOverlay: (spec) => { overlays.push(spec); return "o"; },
     updates: () => ({ app: { ready } }), keys: () => bindings, settings: () => ({ font_family: "Mono" }), window: () => ({ platform: "macos" }),
@@ -59,5 +60,5 @@ export async function footer({ shared = {}, ready = null, bindings = [{ action: 
   const view = await mountChrome(host);
   const kit = await load("kanso-chrome/ui.js", ["H", "G", "T", "SIDEBAR", "PANE", "SPIN"], host);
   view.updater = { available: () => null, busy: false, refused: () => null, install: (context) => installs.push(context), ...updater };
-  return { view, ran, overlays, installs, ...kit };
+  return { view, ran, overlays, installs, notices, ...kit };
 }

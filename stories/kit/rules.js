@@ -44,7 +44,7 @@ export const rules = {
     "Double-click renames; the alias is kept by kansō and carried by Sync.",
   ],
   "Compositions/Sidebar/Footer": [
-    "Update is one press: Updating kansō until it lands; refused, the failure block with Update and Explain.",
+    "Update is one press: Updating kansō, its icon turning, until it lands; refused, the failure block with Update and Explain.",
     "Add computer lives in the + menu.",
   ],
   "Compositions/Sidebar/Project row": [

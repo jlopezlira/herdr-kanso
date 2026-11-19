@@ -163,16 +163,16 @@ const wire = (el, c, { onClick, onHover, onKey, focusHandle }) => el
   .when(Boolean(focusHandle), (e) => e.track_focus(focusHandle))
   .when(Boolean(onClick || focusHandle), (e) => e.focus((s) => s.border_color(c.accent)));
 
-// `busy`: its work runs, so its icon turns and the row takes no press; `start`, `tools`: drawn elements before the icon and always at the end; `actions`: tools shown with `hover` or `focus`; `keys`: key hint props.
+// `start`, `tools`: drawn elements before the icon and always at the end; `actions`: tools shown with `hover` or `focus`; `keys`: key hint props.
 // `level` makes it a tree row, `open` its folder's fold; `verbs`: quiet word actions on a line under it.
 // `group`: a heading that heads a group, such as a computer over its projects; `wrap`: the name wraps instead of one truncated line; `drop`: where a dragged row lands; `wash`: a state's ground; `guides`: one per level.
 export function row(id, c, {
   icon = null, tone = null, letter = null, level = null, open = null, name, detail = null, meta = null, chip: count = null, flag = null, mark: status = "none", second = null, heading = false, group = false, title = false,
-  depth = 0, selected = false, current = false, dimmed = false, busy = false, pending = false, hover = false, focus = false, actions = [], action = null, verbs = [], start = [], tools = [], keys = [],
+  depth = 0, selected = false, current = false, dimmed = false, busy = false, pending = false, hover: hovering = false, focus: focusing = false, actions = [], action = null, verbs = [], start = [], tools = [], keys = [],
   glint = false, wrap = false, drop = null, wash = null, guides = [], names = false, nameInk = null,
-  onClick: pressed = null, onHover = null, onKey = null, focusHandle: handle = null,
+  onClick: pressed = null, onHover: hovered = null, onKey: keyed = null, focusHandle: handle = null,
 } = {}) {
-  const [onClick, focusHandle] = busy ? [null, null] : [pressed, handle];
+  const [onClick, onHover, onKey, focusHandle, hover, focus] = busy ? [null, null, null, null, false, false] : [pressed, hovered, keyed, handle, hovering, focusing];
   const ink = dimmed ? c.muted : c.text;
   const nameColour = names && nameInk ? { fg: c.text, muted: c.muted, dim: c.dim }[nameInk] : ink;
   const shown = hover || focus;

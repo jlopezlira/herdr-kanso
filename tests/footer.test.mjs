@@ -71,15 +71,28 @@ test("In the rail, an update that runs is the icon Button turning and disabled",
   assert.deepEqual(all(update).flatMap((x) => calls(x, "spin")).map((call) => call[1]), [SPIN]);
 });
 
-test("A refused update keeps its row and shows the tool's words under it, with Update to try again", async () => {
+test("A refused update keeps its row and shows the tool's words under it, with Update to try again and Explain to the agent", async () => {
   const why = "git ls-remote: Could not resolve host: github.com";
-  const { view, installs, G } = await footer({ updater: { available: () => "3.31.0", refused: () => why } });
+  const { view, installs, ran, G } = await footer({ updater: { available: () => "3.31.0", refused: () => why } });
+  view.explainer = { name: "Claude Code", run: ["claude"] };
   const drawn = view.render();
-  assert.deepEqual(texts(drawn), ["Update kansō to 3.31.0", "!", "kansō didn't update", why, "Update", "Settings"], "the blocked mark, our words, the tool's words, the fix");
+  assert.deepEqual(texts(drawn), ["Update kansō to 3.31.0", "!", "kansō didn't update", why, "Update", "Explain to Claude Code", "Settings"], "the blocked mark, our words, the tool's words, the fix, Explain");
   const block = all(drawn).find((x) => calls(x, "mt").length);
   assert.deepEqual([arg(block, "mt"), arg(block, "mb")], [G.hair, G.sm], "a hair under its row, 8 above Settings");
   press(holding(block, "Update"));
   assert.equal(installs.length, 1);
+  assert.equal(ran.length, 0, "Update asks nothing of the agent");
+  press(holding(block, "Explain to Claude Code"));
+  assert.deepEqual(JSON.parse(JSON.stringify(ran)), [["tab.new", { name: "Explain the update", folder: "/home/me/.config/herdr-app", argv: ["claude"], task: `kansō could not update itself. The tool said: ${why}\nExplain in plain words what went wrong and how to fix it.` }]]);
+  assert.equal(installs.length, 1, "and Explain does not install");
+});
+
+test("With no agent installed, Explain names an agent and says so instead of starting one", async () => {
+  const why = "offline";
+  const { view, ran, notices } = await footer({ updater: { available: () => "3.31.0", refused: () => why } });
+  const block = all(view.render()).find((x) => calls(x, "mt").length);
+  press(holding(block, "Explain to an agent"));
+  assert.deepEqual([ran.length, notices.map((notice) => notice.title)], [0, ["Could not start the agent"]]);
 });
 
 test("Settings opens one menu: kansō settings with its key, and Herdr settings; choosing shuts it", async () => {

@@ -197,6 +197,16 @@ test("A busy row turns its icon at the spinner's pace and takes no press, so no 
   assert.equal(one(busy, "border_color"), CLEAR, "its border stays clear");
 });
 
+test("A busy row registers no click, hover, key or focus handler and draws no ring, whatever its caller passes", async () => {
+  const { row, CLEAR, c } = await kit();
+  const given = { name: "Updating kansō", busy: true, focus: true, hover: true, actions: [{ icon: "pin", label: "Pin", onClick: () => {} }], onClick: () => {}, onHover: () => {}, onKey: () => {}, focusHandle: { is_focused: () => true } };
+  const busy = row("r", c, given);
+  for (const name of ["on_click", "cursor_pointer", "on_hover", "on_key_down", "track_focus", "focus", "hover", "active"]) assert.equal(calls(busy, name).length, 0, `busy, no ${name}`);
+  assert.equal(one(busy, "border_color"), CLEAR, "no ring, though focus was passed");
+  assert.equal(byTag(busy, "r-tool-0"), undefined, "no tool shows for a hover or focus it ignores");
+  assert.equal(calls(row("r", c, { ...given, busy: false }), "on_hover").length, 1, "the same props on a row at rest are wired");
+});
+
 test("The row's code has no number of pixels: every size comes from the tokens", () => {
   assert.deepEqual(numberArguments("kanso-panel/ui-row.js"), []);
 });
