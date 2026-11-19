@@ -6,7 +6,7 @@ import { View } from "gpui-kit";
 import { spaces, panes, terminals, shared, hc, run, props, closeOverlay, theme, home } from "herdr";
 import { isClaude, promptEmpty, asksToExit, RESUME_LABEL, isSessionId, resumeLine, asleepTerminal } from "./resume.js";
 import { tilde, describe, spaceBeside } from "./tabkit.js";
-import { focusOn } from "./pure.js";
+import { focusOn, bounded } from "./pure.js";
 import { tokens } from "./ui.js";
 import { dialog, statusNotes } from "./ui-dialog.js";
 import { skeletonOf, row, stack } from "./kit.js";
@@ -50,7 +50,6 @@ export function sleepPlan(scope, space, ids, reads, all) {
   };
 }
 
-// Each settled tab comes back and is shown; each asleep terminal in it is cleared first (the claim), then resumed.
 export function wakePlan(space, ids, terminal, ps, terms) {
   const tabs = (space?.tabs ?? []).filter((t) => ids.includes(t.id));
   const term = new Map(terms.map((k) => [k.address, k]));
@@ -58,49 +57,122 @@ export function wakePlan(space, ids, terminal, ps, terms) {
   return {
     commands: [...tabs.filter((t) => t.settled).map((t) => ["tab.unsettle", { id: t.id }]),
       ...(space && !space.active ? [["space.select", { id: space.id }]] : []), ...(tabs[0] ? [["tab.select", { id: tabs[0].id }]] : [])],
-    hc: asleep.flatMap((t) => [labelArgs(t), ["send", t, resumeLine(term.get(t).labels[RESUME_LABEL])]]),
+    sessions: asleep.map((t) => {
+      const record = term.get(t);
+      return {
+        name: record.labels?.["kanso.name"] || record.title || t,
+        resume: ["send", t, resumeLine(record.labels[RESUME_LABEL])],
+        clear: labelArgs(t),
+      };
+    }),
   };
+}
+
+const wakeFailure = (rows) => `${rows.map((row) => row.note).join("; ")}.`;
+
+const ending = (trace) => trace.filter((row) => row.step === "/exit" || row.step === "Enter");
+const mayClear = (trace) => ending(trace).every((row) => row.outcome === "refused");
+const unconfirmed = (name, detail) => `${name}'s exit was not confirmed: ${detail}`;
+const unreadable = (name, step) => `${name}'s ${step} could not be read`;
+
+async function exitOne(cx, agent) {
+  const kept = await host(cx, labelArgs(agent.terminal, agent.resume));
+  if (kept.outcome !== "ok") return said(agent.name, kept);
+  const why = await leave(cx, agent);
+  if (!why) return null;
+  if (!mayClear(why.trace)) return unconfirmed(agent.name, why.detail);
+  const back = await host(cx, labelArgs(agent.terminal));
+  return back.outcome === "ok" ? why.text : `${why.text}; ${said(agent.name, back)}`;
+}
+
+async function wakeOne(cx, session) {
+  const resumed = await host(cx, session.resume);
+  if (resumed.outcome === "unanswered") return { note: `${session.name}'s send was not confirmed` };
+  if (resumed.outcome === "refused") return { note: `${session.name} did not come back` };
+  const cleared = await host(cx, session.clear);
+  if (cleared.outcome === "ok") return null;
+  if (cleared.outcome === "unanswered") return { note: `${session.name} is awake, but the label was not confirmed` };
+  return { note: `${session.name} is awake, but still looks asleep` };
 }
 
 // One look at a Claude on its way out: what to press, or why it could not leave. st: { pid, name, at, sent, last }.
 export function exitStep(st, x, screen, now) {
   if (atPrompt(x)) return { done: true };
   if (x && x.foreground?.pid !== st.pid) return { fail: `${st.name}'s terminal changed` };
+  if (x == null || screen == null) return { unknown: true };
+  if (st.sent != null && now - st.sent > EXIT_MS) return { fail: `${st.name} did not exit` };
   if (st.sent == null) {
     if (promptEmpty(screen)) return { act: "exit", st: { ...st, sent: now, last: now } };
     return now - st.at > CLEAR_MS ? { fail: `${st.name}'s prompt could not be cleared` } : { st };
   }
   if (asksToExit(screen)) return { act: "enter", st };
-  if (now - st.sent > EXIT_MS) return { fail: `${st.name} did not exit` };
   if (promptEmpty(screen) && now - st.last > RESEND_MS) return { act: "exit", st: { ...st, last: now } };
   return { st };
 }
 
 const PRESS = { exit: (t) => ["send", t, "/exit"], enter: (t) => ["keys", t, "enter"] };
-const ok = async (args) => (await hc(args).catch(() => null))?.code === 0;
+const CALL_MS = 30_000;
+const stepOf = (args) => {
+  if (args[0] === "keys" && args[2] === "enter") return "Enter";
+  if (args[0] === "keys" && args[2] === "ctrl+c") return "Ctrl+C";
+  if (args[0] === "send" && String(args[2] ?? "").startsWith("/exit")) return "/exit";
+  if (args[0] === "file") return "read";
+  return args[0];
+};
 const parsed = (r) => { try { return r?.code === 0 ? JSON.parse(r.stdout) : null; } catch { return null; } };
-const json = async (args) => parsed(await hc(args).catch(() => null));
-const screenOf = async (t) => { const r = await hc(["read", t]).catch(() => null); return r?.code === 0 ? r.stdout : null; };
+const host = async (cx, args) => {
+  const step = stepOf(args);
+  const result = await bounded(hc(args).then((value) => value, () => ({ rejected: true })), cx?.timer, CALL_MS);
+  if (result?.late) return { outcome: "unanswered", step };
+  if (result?.rejected || result?.code !== 0) return { outcome: "refused", step };
+  return { outcome: "ok", step, result };
+};
+const detail = (call) => `${call.step} ${call.outcome === "unanswered" ? "did not answer" : "was refused"}`;
+const said = (name, call) => `${name}'s ${detail(call)}`;
 const machineOf = (address) => (String(address).includes("/") ? String(address).split("/")[0] : null);
 
 // Claude's own record of a process: ~/.claude/sessions/<pid>.json, on the terminal's computer.
-function sessionOf(terminal, pid) {
+async function sessionOf(cx, terminal, pid) {
   const machine = machineOf(terminal), rel = [".claude", "sessions", `${pid}.json`];
-  return json(machine ? ["file", "read", "--on", machine, rel.join("/")] : ["file", "read", paths.join(home(), ...rel)]);
+  const args = machine ? ["file", "read", "--on", machine, rel.join("/")] : ["file", "read", paths.join(home(), ...rel)];
+  return host(cx, args);
 }
 
 // Ends a Claude the way you would: its draft cleared, /exit, yes when it asks. Null once its shell is back, else why not.
 async function leave(cx, { terminal, pid, name }) {
-  if (!(await ok(["keys", terminal, "ctrl+c"]))) return `${name} could not be reached`;
-  const look = async (st) => {
-    await cx.sleep(TICK_MS);
-    const step = exitStep(st, await json(["get", terminal, "--json"]), await screenOf(terminal), Date.now());
-    if (step.done) return null;
-    if (step.fail) return step.fail;
-    if (step.act) await hc(PRESS[step.act](terminal)).catch(() => null);
-    return look(step.st);
+  const now = () => (typeof cx.now === "function" ? cx.now() : Date.now());
+  const sent = async (trace, args) => {
+    const call = await host(cx, args);
+    return { call, trace: [...trace, { step: stepOf(args), outcome: call.outcome }] };
   };
-  return look({ pid, name, at: Date.now(), sent: null, last: null });
+  const stop = (trace, call, words) => ({ trace, text: `${name}: ${words ?? detail(call)}`, detail: words ?? detail(call) });
+  const opened = await sent([], ["keys", terminal, "ctrl+c"]);
+  if (opened.call.outcome !== "ok") return stop(opened.trace, opened.call);
+  const look = async (st, trace) => {
+    await cx.sleep(TICK_MS);
+    const got = await host(cx, ["get", terminal, "--json"]);
+    if (got.outcome !== "ok") return stop(trace, got);
+    const record = parsed(got.result);
+    if (record == null) return stop(trace, got, "get could not be read");
+    const screen = await host(cx, ["read", terminal]);
+    if (screen.outcome !== "ok") return stop(trace, screen);
+    const step = exitStep(st, record, screen.result?.stdout ?? "", now());
+    if (step.done) return null;
+    if (step.unknown) return stop(trace, got, "get could not be read");
+    if (step.fail) return { trace, text: step.fail, detail: step.fail };
+    if (!step.act) return look(step.st ?? st, trace);
+    if (step.act === "enter") {
+      const again = await host(cx, ["get", terminal, "--json"]);
+      if (again.outcome !== "ok") return stop(trace, again);
+      const fresh = parsed(again.result);
+      if (fresh == null) return stop(trace, again, "get could not be read");
+      if (atPrompt(fresh)) return null;
+    }
+    const pressed = await sent(trace, PRESS[step.act](terminal));
+    if (pressed.call.outcome !== "ok") return stop(pressed.trace, pressed.call);
+    return look(step.st, pressed.trace);
+  };
+  return look({ pid, name, at: now(), sent: null, last: null }, opened.trace);
 }
 
 export default class Sleep extends View {
@@ -126,14 +198,21 @@ export default class Sleep extends View {
   async read(cx) {
     const ids = this.tabIds(), only = this.order.scope === "agent" ? this.order.pane : null;
     const mine = panes().filter((p) => p.terminal && ids.includes(p.tab) && (!only || p.pane === only));
-    const recs = new Map(await Promise.all(mine.map(async (p) => [p.terminal, await json(["get", p.terminal, "--json"])])));
+    const looked = await Promise.all(mine.map(async (p) => [p.terminal, await host(cx, ["get", p.terminal, "--json"])]));
+    const recs = new Map(looked.map(([terminal, got]) => [terminal, got.outcome === "ok" ? parsed(got.result) : null]));
     const names = shared("kanso.names") ?? {};
     this.reads = await Promise.all(mine.map(async (p) => {
-      const x = recs.get(p.terminal), fg = x?.foreground;
+      const got = looked.find(([terminal]) => terminal === p.terminal)?.[1];
+      const record = got?.outcome === "ok" ? parsed(got.result) : null;
+      const x = record, fg = x?.foreground;
       const claude = Boolean(fg?.pid) && isClaude(fg.argv);
-      const ses = claude ? await sessionOf(p.terminal, fg.pid) : null;
+      const file = claude ? await sessionOf(cx, p.terminal, fg.pid) : null;
+      const ses = file?.outcome === "ok" ? parsed(file.result) : null;
       const name = names[p.terminal] || x?.labels?.["kanso.name"] || ses?.name || x?.title || p.terminal;
-      const problem = !x ? `${p.terminal} could not be read`
+      const problem = got?.outcome !== "ok" ? said(p.terminal, got)
+        : record == null ? unreadable(p.terminal, "get")
+        : claude && file?.outcome !== "ok" ? said(name, file)
+        : claude && ses == null ? unreadable(name, "read")
         : claude && (!isSessionId(ses?.sessionId) || ses.pid !== fg.pid) ? `${name}'s conversation was not found, so it could not wake on it`
         : only && !claude ? "only a Claude agent can sleep on its own; this pane runs something else" : null;
       return { terminal: p.terminal, name, pid: fg?.pid ?? null, argv: fg?.argv ?? null, cwd: fg?.cwd ?? p.cwd ?? null,
@@ -145,37 +224,54 @@ export default class Sleep extends View {
     cx.notify();
   }
 
-  // A failed exit takes its label back and nothing settles: the dialog says why.
   async sleep(cx) {
     if (this.busy || this.error || !this.reads) return;
     const plan = sleepPlan(this.order.scope, this.space, this.tabIds(), this.reads, spaces());
-    this.busy = "Going to sleep"; cx.notify();
-    const failed = (await Promise.all(plan.exits.map(async (r) => {
-      if (!(await ok(labelArgs(r.terminal, r.resume)))) return `${r.name}'s conversation could not be kept`;
-      const why = await leave(cx, r);
-      if (why) await hc(labelArgs(r.terminal)).catch(() => null);
-      return why;
-    }))).filter(Boolean);
-    this.busy = null;
-    if (failed.length) { this.error = `It can't sleep: ${failed.join("; ")}.`; cx.notify(); return; }
-    await Promise.all(plan.interrupts.map((t) => hc(["interrupt", t]).catch(() => null)));
-    for (const [cmd, args] of plan.after) run(cmd, args);
-    closeOverlay(props()?.overlay);
+    this.busy = "Going to sleep";
+    cx.notify();
+    const say = (why) => {
+      if (!why.length) return false;
+      this.error = `It can't sleep: ${why.join("; ")}.`;
+      return true;
+    };
+    try {
+      const failed = (await Promise.all(plan.exits.map((r) => exitOne(cx, r)))).filter(Boolean);
+      if (say(failed)) return;
+      const stopped = (await Promise.all(plan.interrupts.map(async (t) => {
+        const outcome = await host(cx, ["interrupt", t]);
+        if (outcome.outcome === "ok") return null;
+        const name = this.reads.find((r) => r.terminal === t)?.name ?? t;
+        return outcome.outcome === "refused" ? `${name} could not be stopped` : said(name, outcome);
+      }))).filter(Boolean);
+      if (say(stopped)) return;
+      for (const [cmd, args] of plan.after) run(cmd, args);
+      closeOverlay(props()?.overlay);
+    } finally {
+      this.busy = null;
+      cx.notify();
+    }
   }
 
   // A whole project wakes only its tabs that hold an asleep terminal: a tab you settled yourself stays away.
   wake(cx, { tab, terminal }) {
+    if (this.busy) return;
     const ps = panes(), terms = terminals(), term = new Map(terms.map((k) => [k.address, k]));
     const asleepTabs = new Set(ps.filter((p) => asleepTerminal(term.get(p.terminal))).map((p) => p.tab));
     const ids = tab ? [tab] : terminal ? [ps.find((p) => p.terminal === terminal)?.tab].filter(Boolean)
       : (this.space?.tabs ?? []).map((t) => t.id).filter((id) => asleepTabs.has(id));
     const plan = wakePlan(this.space, ids, terminal ?? null, ps, terms);
-    if (!plan.hc.length && !plan.commands.some(([cmd]) => cmd === "tab.unsettle")) { this.error = "That is no longer asleep."; return; }
-    for (const [cmd, args] of plan.commands) run(cmd, args);
+    if (!plan.sessions.length && !plan.commands.some(([cmd]) => cmd === "tab.unsettle")) { this.error = "That is no longer asleep."; return; }
     this.busy = "Waking";
-    cx.spawn(async () => {
-      for (const args of plan.hc) await hc(args).catch(() => null);
-      closeOverlay(props()?.overlay);
+    for (const [cmd, args] of plan.commands) run(cmd, args);
+    cx.spawn(async (task) => {
+      try {
+        const failed = (await Promise.all(plan.sessions.map((session) => wakeOne(task, session)))).filter(Boolean);
+        if (!failed.length) { closeOverlay(props()?.overlay); return; }
+        this.error = wakeFailure(failed);
+      } finally {
+        this.busy = null;
+        task.notify();
+      }
     });
   }
 
