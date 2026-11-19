@@ -127,7 +127,7 @@ export default class Arrange extends View {
   listed(e) {
     const { move, gAt } = listKey(e, this.listG);
     this.listG = gAt;
-    return move;
+    return move === "enter" && !this.handle.is_focused() ? null : move;
   }
 
   render() {
@@ -195,7 +195,7 @@ export default class Arrange extends View {
       onPrimary: (cx) => this.startSave(cx), onCancel: () => closeOverlay(p.overlay),
       onKey: (e, cx) => {
         const move = this.listed(e);
-        if (!move || (move === "enter" && !this.handle.is_focused())) return;
+        if (!move) return;
         const order = this.order ?? [];
         if (move === "enter") { if (!this.busy && order[this.at ?? 0]) this.open(order[this.at ?? 0], cx); }
         else if (move !== "pending") this.at = moveTo(move, this.at ?? 0, order.length);

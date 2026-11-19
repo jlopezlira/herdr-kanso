@@ -18,7 +18,7 @@ export async function paneMenu({ pane = {}, terminal = {}, machine = null, agent
   };
   const { KansoMenu } = await load("kanso-menu/main.js", ["KansoMenu"], host);
   const view = new KansoMenu();
-  view.init({}, { notify() {}, focus_handle: () => ({ focus() {} }) });
+  view.init({}, { notify() {}, focus_handle: () => ({ focus() {}, is_focused: () => true }) });
   return { view, closed, opened };
 }
 

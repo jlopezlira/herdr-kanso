@@ -71,7 +71,7 @@ export default class KansoMenu extends View {
   listed(e) {
     const nav = listKey(e, this.listG);
     this.listG = nav.gAt;
-    return nav.move;
+    return nav.move === "enter" && !this.handle.is_focused() ? null : nav.move;
   }
 
   // Close asks twice while an agent is in the pane: the first press arms it and keeps the menu open.
@@ -112,7 +112,7 @@ export default class KansoMenu extends View {
     return menuList("kanso-menu", { title, items: lines }, tokens(theme())).track_focus(this.handle)
       .on_key_down((e, cx) => {
         const move = this.listed(e);
-        if (!move || (move === "enter" && !this.handle.is_focused())) return;
+        if (!move) return;
         if (move === "enter") list[this.at]?.onClick(cx);
         else if (move === "escape") closeOverlay(props().overlay);
         else this.at = moveTo(move, this.at, list.length);
