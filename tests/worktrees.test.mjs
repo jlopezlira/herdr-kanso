@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { mkdir, rm, writeFile, realpath } from "node:fs/promises";
-import { existsSync } from "node:fs";
-import { join, basename, dirname } from "node:path";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, basename } from "node:path";
 import { load, context, temporary, clone, exec, failure, gitOk, fileExists as exists } from "./helpers.mjs";
 
 const names = ["Worktrees", "removable", "losses", "lastDays", "spaceBy", "freedSpec", "freedText", "explainPrompt", "reviewPrompt", "rootsFor", "parseDiscovery", "basesFrom", "parseWorktrees", "parseProbe", "stateOf", "safe", "consequence", "fmtSize", "fmtAge", "inside", "openIn"];
@@ -33,21 +34,26 @@ test("Worktrees searches the top folders of your spaces, or the ones you chose",
 });
 
 test("Worktrees searches this computer only for its own panes, never for a pane on another machine", async () => {
-  const far = dirname(process.execPath);
-  assert.ok(existsSync(far), "the remote pane's folder exists here too");
-  const { Worktrees, inside } = await worktrees({
-    spaces: () => [
-      { folder: "/Users/me/Apps/web", machine: null, tabs: [{ id: "t1" }] },
-      { folder: "/srv", machine: "box", tabs: [{ id: "box/t2" }] },
-    ],
-    panes: () => [{ tab: "t1", cwd: "/Volumes/w/repo" }, { tab: "box/t2", cwd: far }],
-  });
-  const panel = new Worktrees();
-  panel.tempDirs = ["/fixture-temp"];
-  const { roots, search } = panel.roots();
-  assert.deepEqual(clone(roots), ["/Users/me/Apps", "/Volumes/w/repo"], "this computer's space and pane are searched");
-  assert.ok(!["/Users/me/Apps", "/Volumes/w/repo", "/fixture-temp", "/tmp", "/private/tmp"].some((root) => inside(root, far)), "the remote folder lies outside every root and temp folder");
-  assert.ok(!search.some((root) => inside(root, far) || inside(far, root)), "a folder open on another machine is not searched here");
+  const far = mkdtempSync(join(tmpdir(), "kanso-far-"));
+  try {
+    const { Worktrees, inside } = await worktrees({
+      home: () => "/fixture-home",
+      spaces: () => [
+        { folder: "/fixture-home/Apps/web", machine: null, tabs: [{ id: "t1" }] },
+        { folder: "/fixture-home/srv", machine: "box", tabs: [{ id: "box/t2" }] },
+      ],
+      panes: () => [{ tab: "t1", cwd: "/fixture-home/panes/repo" }, { tab: "box/t2", cwd: far }],
+    });
+    const panel = new Worktrees();
+    panel.tempDirs = ["/fixture-temp"];
+    const { roots, search } = panel.roots();
+    const locations = [...roots, ...search];
+    assert.deepEqual(clone(roots), ["/fixture-home/Apps", "/fixture-home/panes"], "this computer's space and pane are searched");
+    assert.ok(locations.every((root) => !inside(root, far) && !inside(far, root)), "the remote folder lies outside every root and every search location");
+    assert.ok(!search.some((root) => inside(root, far) || inside(far, root)), "a folder open on another machine is not searched here");
+  } finally {
+    rmSync(far, { recursive: true, force: true });
+  }
 });
 
 const windowsPane = {
