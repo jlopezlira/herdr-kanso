@@ -13,6 +13,7 @@ const CMD_ENTER = { key: "enter", modifiers: { platform: true } };
 const TARGETS = {
   agent: { to: "t1", terms: [agent("t1", "Nova")], panes: [{ pane: "p1", terminal: "t1", status: "idle", program: { agent: true } }] },
   shell: { to: "t1", terms: [{ address: "t1", state: "live", program: { name: "zsh", shell: true }, labels: { "kanso.shown": "Nova", "kanso.project": "App" } }], panes: [{ pane: "p1", terminal: "t1", program: { name: "zsh", shell: true } }] },
+  blocked: { to: "t1", terms: [{ ...agent("t1", "Nova"), status: "blocked" }], panes: [{ pane: "p1", terminal: "t1", status: "blocked", program: { agent: true } }] },
   gone: { to: "t1", terms: [], panes: [] },
   remote: { to: "box/t9", terms: [], panes: [{ pane: "p9", terminal: "box/t9", status: "idle", program: { agent: true } }] },
 };
@@ -42,7 +43,8 @@ test("What Send shows and what a press sends come from one place, whatever the s
       const { send, sent } = await opened(c);
       const chose = { to: send.to, toProject: send.toProject };
       const el = renders(send);
-      const named = clone(send.state().recipients.map((x) => x.terminal));
+      const state = send.state();
+      const named = clone(state.recipients.map((x) => x.terminal)), waits = state.waiting.length > 0;
       const { cx, pending } = timedContext([], { stop_propagation() {} });
       keyDown(el, CMD_ENTER, cx);
       while (pending.length) await pending.shift();
@@ -53,7 +55,9 @@ test("What Send shows and what a press sends come from one place, whatever the s
       if (c.target === "shell" && c.snapshots && !c.project) assert.ok(texts(byTag(el, "to-t1")).includes("zsh"), "the shell stays chosen and says what it is");
       if (!c.snapshots) assert.equal(texts(el).some((word) => word === NO_MATCH || word === NO_AGENT), false, "an unread roster is never no match or no agent");
       if (!c.snapshots && !nodes(el).some((kid) => String(kid.tag).startsWith("to-"))) assert.ok(texts(el).includes(UNKNOWN));
-      assert.equal(last(primaryOf(el), "disabled"), !named.length, "Send is on exactly when a press would send");
+      assert.equal(last(primaryOf(el), "disabled"), !named.length && !waits, "Send is on exactly when a press sends or says who waits");
+      if (!named.length && waits) assert.match(send.error, /waiting on (?:its|their) own question/, "a press that sends nothing says why");
+      if (c.target === "blocked") assert.equal(named.includes("t1"), false, "an agent waiting on its own question gets nothing");
       assert.deepEqual({ to: send.to, toProject: send.toProject }, chose, "the choice is the user's");
     });
   }
@@ -69,6 +73,10 @@ test("The model gives the rows, their states and the recipients without drawing 
   assert.deepEqual([gone.chosen.state, gone.recipients.length], ["gone", 0]);
   const remote = sendState({ terms: OTHER.terms, computers: [{ name: "box", layout: "unavailable" }], to: "box/t9" });
   assert.deepEqual(clone([remote.chosen.state, remote.recipients.map((x) => x.terminal)]), ["unreachable", ["box/t9"]]);
+  const asking = { ...agent("t1", "Nova"), status: "blocked" };
+  const single = sendState({ terms: [asking], to: "t1" }), all = sendState({ terms: [asking], toProject: "App" });
+  assert.deepEqual(clone([single.recipients.length, single.waiting.map((x) => x.terminal), all.recipients.length, all.waiting.map((x) => x.terminal)]), [0, ["t1"], 0, ["t1"]],
+    "waiting on its own question is its own outcome, for one agent and for a project whose agents all wait");
   const searched = sendState({ terms: [agent("t1", "Nova"), agent("t2", "Atlas")], toProject: "App", query: "Nova" });
   assert.deepEqual(clone(searched.recipients.map((x) => x.terminal)), ["t1"], "a project sends to the agents shown for it");
 });

@@ -53,7 +53,7 @@ export function sendState({ terms = [], ps = [], spaces = [], computers = [], fr
   const picked = toProject ? groups.find((g) => g.project === toProject) ?? null : null;
   const shown = chosen && rows.includes(chosen) ? chosen : null;
   const recipients = toProject ? picked?.recipients ?? [] : shown && sendable(shown) && shown.status !== "blocked" ? [shown] : [];
-  const waiting = toProject ? picked?.waiting ?? [] : [];
+  const waiting = toProject ? picked?.waiting ?? [] : shown && sendable(shown) && shown.status === "blocked" ? [shown] : [];
   const empty = rows.length ? null : !known ? "unknown" : q ? "no match" : "none";
   return { known, groups, chosen, recipients, waiting, empty, label: toProject ? `Send to ${toProject}  ⌘↩` : "Send  ⌘↩" };
 }

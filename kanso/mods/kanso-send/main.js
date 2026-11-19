@@ -3,7 +3,7 @@
 import { View } from "gpui-kit";
 import { panes, spaces, terminals, machines, shared, setShared, run, props, closeOverlay, theme } from "herdr";
 import { givenNames, nameOf } from "./marks.js";
-import { deliver, sendKey, NOT_CONFIRMED, MAY_HAVE_ARRIVED } from "./deliver.js";
+import { deliver, sendKey, waitingNote, NOT_CONFIRMED, MAY_HAVE_ARRIVED } from "./deliver.js";
 import { sendState, targetsOf } from "./send-model.js";
 import { shortFolder } from "./folder.js";
 import { tokens } from "./ui.js";
@@ -53,7 +53,8 @@ export default class Send extends View {
 
   send(cx, { recipients: ready, waiting }) {
     const text = this.text.trim();
-    if (!text || !ready.length || this.sending) return;
+    if (!text || this.sending || (!ready.length && !waiting.length)) return;
+    if (!ready.length) { this.error = waitingNote(waiting.map((x) => x.name)); cx.notify(); return; }
     const sender = this.from?.terminal ? terminals().find((k) => k.address === this.from.terminal)?.labels?.["kanso.shown"] || nameOf(this.from, givenNames()) : "you";
     this.sending = true; this.error = null; this.unsure = []; cx.notify();
     cx.spawn(async (cx) => {
@@ -95,7 +96,7 @@ export default class Send extends View {
       meta: meta(q), mark: q.status, current: !this.toProject && q.terminal === this.to,
     })(`to-${q.terminal}`, c, { onClick: (cx) => this.pick(cx, () => { this.to = q.terminal; this.toProject = null; }) });
     const from = this.from ? `From ${name(this.from)}${this.from.cwd ? `, in ${shortFolder(this.from.cwd)}` : ""}` : "";
-    const ready = state.recipients.length > 0 && Boolean(this.text.trim());
+    const ready = (state.recipients.length > 0 || state.waiting.length > 0) && Boolean(this.text.trim());
     const rows = state.groups.flatMap((g) => [head(g), ...g.agents.map(agent)]);
     const empty = { unknown: "Can't see the agents right now.", "no match": "No agent or project by that name.", none: "No other agent is running. Start one in a pane, then send." }[state.empty];
     const close = () => closeOverlay(p.overlay);
