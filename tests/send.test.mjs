@@ -66,10 +66,11 @@ test("A batch says who got it, who refused and who did not confirm; a send that 
   assert.deepEqual(["t-nova", "t-atlas", "t-vega", "t-lyra"].map((t) => texts(byTag(el, `to-${t}`)).includes("Not confirmed")), [false, true, true, false]);
   const sends = () => asked.filter(([verb]) => verb === "send").length;
   const before = sends();
-  send.send(cx, [{ project: "App", agents: [{ terminal: "t-atlas", name: "Atlas", status: "idle" }] }]);
+  const atlas = [{ project: "App", agents: [{ terminal: "t-atlas", name: "Atlas", status: "idle" }] }];
+  send.send(cx, atlas);
   assert.equal(sends(), before, "the first press only arms");
   assert.match(last(primaryOf(send.render()), "accessibility_label"), /^Press again to send/);
-  send.send(cx, [{ project: "App", agents: [{ terminal: "t-atlas", name: "Atlas", status: "idle" }] }]);
+  send.send(cx, atlas);
   assert.equal(sends(), before + 1, "the second sends");
 });
 

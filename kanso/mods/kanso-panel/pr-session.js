@@ -509,7 +509,7 @@ export class FolderSession {
   deliverTo(cx, send) {
     return this.perform("Send", cx, { failure: "Not sent", done: "Sent to the agent" }, async (task) => {
       const sent = await send(task);
-      if (sent.unconfirmed) throw Object.assign(new Error(MAY_HAVE_ARRIVED), { title: NOT_CONFIRMED });
+      if (sent.unconfirmed) throw { title: NOT_CONFIRMED, message: MAY_HAVE_ARRIVED };
       if (sent.code !== 0) throw new Error(String(sent.stderr || sent.stdout || "could not send").split("\n")[0]);
     }, (next) => next.notify());
   }

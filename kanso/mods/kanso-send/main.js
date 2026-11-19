@@ -18,7 +18,7 @@ export function targetsOf(all, from, last) {
   return i > 0 ? [list[i], ...list.toSpliced(i, 1)] : list;
 }
 
-const machineOf = (address) => (String(address).includes("/") ? String(address).split("/")[0] : null);
+const machineOf = (address) => /^([^/]+)\//.exec(String(address))?.[1] ?? null;
 export const unreachable = (address, computers = []) => {
   const at = machineOf(address);
   const layout = at ? computers.find((m) => m?.name === at)?.layout : "ready";
@@ -65,7 +65,7 @@ export default class Send extends View {
     this.query.on("change", (_e, cx) => cx.notify());
     this.text = draftFor(this.from, shared("kanso.digest")?.[p.pane]);
     this.box = new TextField({ value: this.text }, { multiline: true });
-    this.box.on("change", (_e, cx) => this.pick(cx, { text: this.box.value() }));
+    this.box.on("change", (_e, cx) => this.pick(cx, () => { this.text = this.box.value(); }));
     this.box.focus();
     cx.timer.after(400, () => this.box.focus());
     this.handle = cx.focus_handle();
@@ -75,8 +75,10 @@ export default class Send extends View {
     this.error = null;
   }
 
-  pick(cx, change) {
-    Object.assign(this, change, { error: null, again: false });
+  pick(cx, choose) {
+    choose();
+    this.error = null;
+    this.again = false;
     cx.notify();
   }
 
@@ -127,7 +129,7 @@ export default class Send extends View {
     const head = (g) => {
       const on = this.toProject === g.project;
       return row({ name: g.project, heading: true, current: on, meta: on ? `All ${g.agents.length}` : g.agents.length > 1 ? `Send to all ${g.agents.length}` : null })(
-        `to-project-${g.project}`, c, { onClick: (cx) => this.pick(cx, { toProject: on ? null : g.project }) });
+        `to-project-${g.project}`, c, { onClick: (cx) => this.pick(cx, () => { this.toProject = on ? null : g.project; }) });
     };
     // A program with no art of its own takes the terminal's, so every name starts at the same place.
     const agent = (q) => row({
@@ -135,7 +137,7 @@ export default class Send extends View {
       meta: this.unsure.includes(q.terminal) ? { text: NOT_CONFIRMED, tone: "blocked" } : q.away ? { text: "Unreachable", tone: "blocked" }
         : q.status === "blocked" ? { text: "Needs you", tone: "blocked" } : null,
       mark: q.status, current: !this.toProject && q.terminal === this.to,
-    })(`to-${q.terminal}`, c, { onClick: (cx) => this.pick(cx, { to: q.terminal, toProject: null }) });
+    })(`to-${q.terminal}`, c, { onClick: (cx) => this.pick(cx, () => { this.to = q.terminal; this.toProject = null; }) });
     const from = this.from ? `From ${name(this.from)}${this.from.cwd ? `, in ${shortFolder(this.from.cwd)}` : ""}` : "";
     const ready = Boolean(this.toProject || list.some((q) => q.terminal === this.to)) && Boolean(this.text.trim());
     const rows = groups.flatMap((g) => [head(g), ...g.agents.map(agent)]);
