@@ -211,10 +211,8 @@ export function since(c) {
 export const size = (mb) => (mb >= 1000 ? `${(mb / 1000).toFixed(1)} GB` : mb >= 1 ? `${Math.round(mb)} MB` : `${Math.max(1, Math.round(mb * 1000))} kB`);
 
 // Docker answered, but its daemon is not there.
-export const daemonDown = (r) => {
-  const text = `${r?.stderr ?? ""}${r?.stdout ?? ""}`;
-  return Boolean(r) && r.code !== 0 && !/permission denied/i.test(text) && /Cannot connect|Is the docker daemon running|error during connect|docker\.sock/i.test(text);
-};
+const STOPPED = [/Is the docker daemon running\?/i, /pipe\/docker_engine[^\n]*The system cannot find the file specified/i];
+export const daemonDown = (r) => Boolean(r) && r.code !== 0 && STOPPED.some((said) => said.test(`${r.stderr ?? ""}${r.stdout ?? ""}`));
 export const failed = (r) => Boolean(r) && r.code !== 0;
 export const notInstalled = (error) => /^cannot run docker: .*\(os error 2\)\s*$/.test(String(error?.message ?? error));
 

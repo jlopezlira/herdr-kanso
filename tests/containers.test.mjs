@@ -377,6 +377,49 @@ test("Only Docker missing says Docker is not installed; any other failure says w
   }
 });
 
+test("A read that fails after Docker was missing says what failed, not that Docker is missing", async () => {
+  const { f, view, docker, words } = await openPanel({ drawn: true });
+  for (const error of ["cannot run docker: No such file or directory (os error 2)", "cannot run docker: Permission denied (os error 13)"]) {
+    docker.rejects = new Error(error);
+    view.refresh(f.cx, true, true); await f.settle();
+  }
+  assert.equal(words().includes("Docker is not installed on this computer."), false);
+  assert.ok(words().includes("Can't read Docker"));
+});
+
+test("Docker back after being down shows no volumes it has not listed again", async () => {
+  const { f, view, docker, words } = await openPanel({ drawn: true });
+  docker.down = true;
+  view.refresh(f.cx, true, true); await f.settle();
+  docker.down = false; docker.failing.add("volume");
+  view.refresh(f.cx, true, true); await f.settle();
+  assert.equal(words().includes("Show volumes"), false);
+});
+
+test("Only a stopped daemon is Docker down: a refused Windows pipe keeps the containers", async () => {
+  const { f, view, docker, words } = await openPanel({ drawn: true });
+  docker.psResult = failure("error during connect: open //./pipe/docker_engine: Access is denied.");
+  view.refresh(f.cx, true, true); await f.settle();
+  assert.equal(view.groups.length, 1);
+  assert.equal(words().includes("Docker isn't running."), false);
+  docker.psResult = failure("error during connect: this error may indicate that the docker daemon is not running: open //./pipe/docker_engine: The system cannot find the file specified.");
+  view.refresh(f.cx, true, true); await f.settle();
+  assert.ok(words().includes("Docker isn't running."), "no pipe at all is Docker down");
+});
+
+test("This computer's own reads behind Containers stop before the panel gives up on them", async () => {
+  const { f } = await openPanel();
+  const reads = f.state.processes.filter((p) => ["ps", "find", "lsof"].includes(p.command));
+  assert.ok(reads.length > 0);
+  assert.ok(reads.every((p) => p.options?.timeout < 15_000), JSON.stringify(reads.map((p) => [p.command, p.options])));
+});
+
+test("Volumes and images whose users Docker did not say are not offered for removal", async () => {
+  const { words } = await openPanel({ drawn: true, failing: ["inspect"] });
+  assert.equal(words().includes("Remove 1 unused volume"), false, JSON.stringify(words()));
+  assert.equal(words().some((text) => text.startsWith("Remove unused images")), false);
+});
+
 test("A failure stays said until that same list is read again, and a list never read shows no count", async () => {
   const { f, view, docker, words, asked } = await openPanel({ drawn: true });
   docker.failing.add("volume");

@@ -9,7 +9,7 @@ import { quietLink } from "./ui-button.js";
 import { field, TextField } from "./ui-field.js";
 import { row, skeletonOf } from "./kit.js";
 import { Front } from "./front.js";
-import { TOOLS, PROBE_MS, probeTools } from "./registration.js";
+import { TOOLS, PROBE_MS, probeTools, toolRecord } from "./registration.js";
 import { pieces, runs } from "./pieces.js";
 import { iosCommand } from "./ios.js";
 import { adbCommand, readDevices, startDevice, deviceSize, captureDevice } from "./devices.js";
@@ -17,7 +17,6 @@ import { BEAT_MS, FRAME_MS, BOOT_MS, FrameLoop, TextBatch, canStart, canRotate, 
 
 const PICKED = "kanso.sim.picked";
 const failure = (error) => String(error?.message ?? error).split(/\r?\n/)[0];
-const recordOf = (tools) => (tools && typeof tools === "object" && !("state" in tools) && !("unknown" in tools) ? tools : null);
 const fileKey = (id) => encodeURIComponent(id).replace(/\*/g, "%2A");
 
 export default class Simulator extends View {
@@ -25,7 +24,7 @@ export default class Simulator extends View {
     this.platform = window()?.platform ?? "macos";
     this.paths = pathApi(this.platform);
     this.directory = this.paths.join(appHome(), "data", "kanso-sim");
-    this.tools = recordOf(shared(TOOLS));
+    this.tools = toolRecord(shared(TOOLS));
     this.devices = null; this.error = null; this.note = null;
     this.selected = shared(PICKED) ?? null; this.boot = null;
     this.loop = new FrameLoop(); this.batch = new TextBatch();
@@ -63,7 +62,7 @@ export default class Simulator extends View {
       if (this.loop.late(Date.now())) cx.notify();
       this.schedule(cx, 1000); return;
     }
-    if (!this.devices || Date.now() - this.readAt >= (this.boot ? 1000 : 5000)) { this.refresh(cx); return; }
+    if (Date.now() - this.readAt >= (this.boot ? 1000 : 5000)) { this.refresh(cx); return; }
     const device = this.current(), key = device?.state === "Booted" ? device.id : null;
     if (!this.loop.ready(Date.now(), true, key)) { this.schedule(cx); return; }
     this.frame(device, cx);
@@ -72,14 +71,14 @@ export default class Simulator extends View {
   refresh(cx) {
     if (this.reading || !this.inFront()) return;
     this.reading = true;
+    cx.notify();
     this.readToken = (this.readToken ?? 0) + 1;
     const token = this.readToken;
     this.deadline?.cancel();
     this.deadline = cx.timer.after(PROBE_MS + FRAME_MS, (next) => {
       if (this.readToken !== token || !this.reading) return;
-      this.readToken = this.readToken + 1;
-      this.note = "Devices did not answer."; this.devices ??= []; this.reading = false; this.readAt = Date.now();
-      next.notify(); this.schedule(next, 0);
+      this.note = "Devices did not answer.";
+      next.notify();
     });
     this.soon(cx, async (next) => {
       try {
@@ -93,7 +92,7 @@ export default class Simulator extends View {
         const status = bootState(devices.find((device) => device.id === this.boot?.id), this.boot, Date.now());
         if (status === "Start timed out.") this.error = status;
         if (!status || status === "Start timed out.") this.boot = null;
-      } catch (error) { if (token === this.readToken) { this.note = failure(error); this.devices ??= []; } }
+      } catch (error) { if (token === this.readToken) this.note = failure(error); }
       finally {
         if (token === this.readToken) {
           this.reading = false; this.readAt = Date.now(); this.deadline?.cancel();
