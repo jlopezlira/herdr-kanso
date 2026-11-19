@@ -12,6 +12,7 @@ import { field, TextField } from "./ui-field.js";
 import { row, stack, emptyState } from "./kit.js";
 
 const LAST = "kanso.send.last";
+const UNSEEN = "Can't see the agents right now.";
 
 export function draftFor(p, digest) {
   if (!p?.cwd) return "Review the latest changes.";
@@ -51,10 +52,17 @@ export default class Send extends View {
       to: this.to, toProject: this.toProject, query, last: shared(LAST), nameOf: (q) => nameOf(q, given) });
   }
 
+  press(cx, drawn) {
+    const now = this.state();
+    const aim = (state) => JSON.stringify([state.recipients, state.waiting].map((list) => list.map((x) => x.terminal)));
+    if (aim(now) !== aim(drawn)) { cx.notify(); return; }
+    this.send(cx, now);
+  }
+
   send(cx, { recipients: ready, waiting }) {
     const text = this.text.trim();
     if (!text || this.sending || (!ready.length && !waiting.length)) return;
-    if (!ready.length) { this.error = waitingNote(waiting.map((x) => x.name)); cx.notify(); return; }
+    if (!ready.length) { this.error = waitingNote(waiting.map((x) => x.label)); cx.notify(); return; }
     const sender = this.from?.terminal ? terminals().find((k) => k.address === this.from.terminal)?.labels?.["kanso.shown"] || nameOf(this.from, givenNames()) : "you";
     this.sending = true; this.error = null; this.unsure = []; cx.notify();
     cx.spawn(async (cx) => {
@@ -63,9 +71,9 @@ export default class Send extends View {
       const unsure = results.filter(({ r }) => r.unconfirmed), refused = results.filter(({ r }) => r.code !== 0 && !r.unconfirmed);
       this.unsure = unsure.map(({ x }) => x.terminal);
       const said = [
-        refused.length ? `Not sent to ${refused.map(({ x, r }) => `${x.name} (${(r.stderr || r.stdout || "hc send failed").trim()})`).join(", ")}.` : "",
-        unsure.length ? `${NOT_CONFIRMED} for ${unsure.map(({ x }) => x.name).join(", ")}: ${MAY_HAVE_ARRIVED}.` : "",
-        waiting.length ? `${waiting.map((x) => x.name).join(", ")} waited on ${waiting.length === 1 ? "its" : "their"} own question and got nothing.` : "",
+        refused.length ? `Not sent to ${refused.map(({ x, r }) => `${x.label} (${(r.stderr || r.stdout || "hc send failed").trim()})`).join(", ")}.` : "",
+        unsure.length ? `${NOT_CONFIRMED} for ${unsure.map(({ x }) => x.label).join(", ")}: ${MAY_HAVE_ARRIVED}.` : "",
+        waiting.length ? `${waiting.map((x) => x.label).join(", ")} waited on ${waiting.length === 1 ? "its" : "their"} own question and got nothing.` : "",
       ].filter(Boolean).join(" ");
       if (refused.length || unsure.length) { this.error = said; cx.notify(); return; }
       if (said) { this.error = `Sent. ${said}`; cx.notify(); return; }
@@ -92,13 +100,13 @@ export default class Send extends View {
             : q.status === "blocked" ? { text: "Needs you", tone: "blocked" } : null);
     // A program with no art of its own takes the terminal's, so every name starts at the same place.
     const agent = (q) => row({
-      icon: q.program?.icon ? q.program : "terminal", tone: "muted", name: q.name, detail: q.pane?.branch ?? null,
+      icon: q.program?.icon ? q.program : "terminal", tone: "muted", name: q.label, detail: q.pane?.branch ?? null,
       meta: meta(q), mark: q.status, current: !this.toProject && q.terminal === this.to,
     })(`to-${q.terminal}`, c, { onClick: (cx) => this.pick(cx, () => { this.to = q.terminal; this.toProject = null; }) });
     const from = this.from ? `From ${name(this.from)}${this.from.cwd ? `, in ${shortFolder(this.from.cwd)}` : ""}` : "";
     const ready = (state.recipients.length > 0 || state.waiting.length > 0) && Boolean(this.text.trim());
     const rows = state.groups.flatMap((g) => [head(g), ...g.agents.map(agent)]);
-    const empty = { unknown: "Can't see the agents right now.", "no match": "No agent or project by that name.", none: "No other agent is running. Start one in a pane, then send." }[state.empty];
+    const empty = { unknown: UNSEEN, "no match": "No agent or project by that name.", none: "No other agent is running. Start one in a pane, then send." }[state.empty];
     const close = () => closeOverlay(p.overlay);
     return dialog("kanso-send", c, {
       title: "Send to an agent", scope: from,
@@ -107,11 +115,12 @@ export default class Send extends View {
         (rows.length ? stack({ variant: "dialog list", scroll: true }, rows) : emptyState({ text: empty }))("send-list", c),
         field("send-message", this.box, c, { label: "Message" }),
       ],
-      notes: [{ text: this.error ?? "Pasted into its terminal and sent with Enter, as if you typed it there.", tone: this.error ? "error" : "dim" }],
+      notes: [{ text: this.error ?? "Pasted into its terminal and sent with Enter, as if you typed it there.", tone: this.error ? "error" : "dim" },
+        ...(rows.length && !state.complete ? [{ text: UNSEEN, tone: "dim" }] : [])],
       secondary: "Cancel", primary: state.label,
       state: this.sending ? "loading" : ready ? "default" : "disabled",
-      onCancel: close, onPrimary: (cx) => this.send(cx, state), focusHandle: this.handle,
-      onKey: (e, cx) => { if (sendKey(e)) { this.send(cx, state); cx.stop_propagation(); } },
+      onCancel: close, onPrimary: (cx) => this.press(cx, state), focusHandle: this.handle,
+      onKey: (e, cx) => { if (sendKey(e)) { this.press(cx, state); cx.stop_propagation(); } },
     });
   }
 }

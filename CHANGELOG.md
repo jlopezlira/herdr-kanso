@@ -28,6 +28,7 @@ the branch's rules.
 
 - Worktrees no longer looks on this computer for a folder that is open only on another machine, and on Windows a folder in the temp folder no longer makes it search all of AppData. When it cannot tell where the temp folder is, it searches only the folders you chose instead of guessing.
 - Send lists every agent it knows, one on another computer included, and keeps the agent you chose until you choose another, saying on its row when it cannot be reached. After a send it names who refused it and who did not confirm in time: a send that did not confirm may have arrived. Send, Images and the pull request panel never wait longer than Herdr does for a send.
+- Send sends only to what it shows when you press: if an agent became a shell, left or appeared since the dialog was drawn, it redraws first and sends nothing. A terminal any record calls a shell is never sent to, "No other agent is running" is said only when every computer could be read, and two agents with one name are told apart by branch or address on their rows and in what Send says after.
 
 ## [3.31.0] - 2026-11-19
 
