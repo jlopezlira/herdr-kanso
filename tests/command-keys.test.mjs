@@ -1,6 +1,7 @@
 // Keys from keys.json reach a view's nextCommand loop even when the view was just mounted or reloaded.
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { fixture, loadMod } from "./perf-harness.mjs";
 
 // Herdr loses a host call started in the turn a reloaded view mounts: it never settles and its command goes nowhere.
@@ -21,8 +22,9 @@ function commands(f) {
   return keys;
 }
 
-async function mount(file, name, props, key, ready = () => {}) {
+async function mount(file, name, props, key, ready = () => {}, prepare = () => {}) {
   const f = fixture();
+  prepare(f);
   const keys = commands(f);
   const mod = await loadMod(file, [name], f.host);
   const view = new mod[name]();
@@ -51,6 +53,36 @@ test("the strip, the tab bar and the sidebar footer take their keys right after 
     assert.ok(pressed, `${name} listens for its keys once it is on screen`);
     assert.equal(keys.reads, 2, `${name} acts on the key and waits for the next one`);
   }
+});
+
+const TAB_BAR = ["kanso-tabs.", "kanso-strip.arrange", "mod.open:kanso-help"];
+const recording = (ran) => (f) => {
+  f.projects[0].tabs = Array.from({ length: 9 }, (_, i) => ({ id: `tab0-${i + 1}`, name: `t${i + 1}`, active: i === 0 }));
+  f.host.run = (command, args) => { ran.push([command, JSON.parse(JSON.stringify(args ?? null))]); };
+  f.host.openOverlay = (spec) => { ran.push(["overlay", spec.mod]); };
+};
+
+test("Every Command chord of the tab bar in kanso/keys.json goes through the keymap to its handler: Cmd+1 to Cmd+9 across nine tabs, Simulator, Arrange and kansō help", async () => {
+  const keymap = JSON.parse(readFileSync(new URL("../kanso/keys.json", import.meta.url), "utf8"))["layout:kanso"];
+  const chords = Object.entries(keymap).filter(([chord, action]) => chord.startsWith("cmd-") && TAB_BAR.some((owned) => action.startsWith(owned)));
+  assert.deepEqual(chords.map(([chord]) => chord), ["cmd-alt-t", ...Array.from({ length: 9 }, (_, i) => `cmd-${i + 1}`), "cmd-shift-s", "cmd-shift-/"]);
+  const ran = [], arranged = [];
+  const tabs = await mount("kanso-tabs/main.js", "Tabs", {}, keymap["cmd-1"], () => {}, recording(ran));
+  assert.ok(tabs.pressed, "cmd-1 reaches the bar");
+  assert.deepEqual(ran.filter(([command]) => command === "tab.select"), [["tab.select", { id: "tab0-1" }]], "cmd-1");
+  const strip = await mount("kanso-strip/main.js", "Strip", {}, keymap["cmd-alt-t"], () => {}, recording(arranged));
+  assert.ok(strip.pressed, "cmd-alt-t reaches the strip");
+  assert.deepEqual(arranged.filter(([command]) => command === "overlay"), [["overlay", "kanso-arrange"]], "cmd-alt-t opens Arrangements, as the Arrange door does");
+  for (let n = 2; n <= 9; n += 1) {
+    ran.length = 0;
+    assert.ok(await tabs.keys.press(keymap[`cmd-${n}`]), `cmd-${n} reaches the bar`);
+    assert.deepEqual(ran, [["tab.select", { id: `tab0-${n}` }]], `cmd-${n}`);
+  }
+  tabs.f.shared.set("kanso.sim.tools", { ios: "/usr/bin/simctl" });
+  assert.ok(await tabs.keys.press(keymap["cmd-shift-s"]));
+  assert.equal(tabs.view.want, "sim", "Cmd+Shift+S opens Simulator");
+  const [verb, name] = keymap["cmd-shift-/"].split(":");
+  assert.deepEqual([verb, { name }], ["mod.open", { name: "kanso-help" }], "Cmd+Shift+/ is Herdr's own mod.open of kansō help, what its door runs");
 });
 
 test("Back leaves Memory's full list right after a reload", async () => {

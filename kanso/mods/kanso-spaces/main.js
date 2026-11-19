@@ -1526,8 +1526,8 @@ export default class Spaces extends View {
         if (digit) { cx.stop_propagation(); digit(cx); return; }
         const { move, gAt } = listKey(e, this.menuG);
         this.menuG = gAt;
-        if (!move) return;
         const acts = this.menuActs ?? [];
+        if (!move || (move === "enter" && !acts[this.menuAt])) return;
         if (move === "escape") { if (this.sub) { this.sub = null; this.menuAt = -1; } else closeOverlay(props().overlay); }
         else if (move === "enter") acts[this.menuAt]?.(cx);
         else this.menuAt = moveTo(move, this.menuAt, acts.length);

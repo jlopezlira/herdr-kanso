@@ -23,10 +23,11 @@ import { tabBar } from "./tab-bar.js";
 import { boundChord, hintOf } from "./ui-tooltip.js";
 import { TAB_NAME_LIMIT } from "./ui-tab.js";
 import { pieceLines } from "./piece-lines.js";
-import { tabMark, barState, foldTabs, dropSide, renameWaits } from "./tab-bar-model.js";
+import { tabMark, barState, foldTabs, renameWaits, landing, heldOn, dropMarks } from "./tab-bar-model.js";
 import { Kdb, projectKey } from "./kdb.js";
 import { projectOpen, OPEN } from "./panel-state.js";
-import { TOOLS, PROBE_MS, available, probeTools } from "./sim-registration.js";
+import { TOOLS, PROBE_MS, probeTools } from "./sim-registration.js";
+import { commandsOn, machineKey, offered } from "./panel-tools.js";
 import { pieces, runs, shown, setPiece, STORE, choice } from "./pieces.js";
 
 function storedObject(key) {
@@ -78,18 +79,25 @@ const simulatorRoster = () => JSON.stringify([list(ORDER), choice("panel.sim", p
 
 // Panels you never placed keep their catalog place after the ones you dragged.
 // Simulator is not listed on a computer with neither Xcode nor the Android SDK.
-function panelList() {
-  const map = pieces(shared);
-  const all = [...BUILTIN, ...customPanels().map((p) => ({ id: p.id, label: p.label ?? p.id, icon: p.icon }))].filter((p) => p.id !== "sim" || available(shared(TOOLS)));
+function roster() {
+  const all = [...BUILTIN, ...customPanels().map((p) => ({ id: p.id, label: p.label ?? p.id, icon: p.icon }))];
   const order = list(ORDER);
   const rank = new Map(all.map((p, i) => [p.id, order.includes(p.id) ? order.indexOf(p.id) : order.length + i]));
-  return all.toSorted((a, b) => rank.get(a.id) - rank.get(b.id)).map((p) => ({ ...p, on: runs(`panel.${p.id}`, map) }));
+  return all.toSorted((a, b) => rank.get(a.id) - rank.get(b.id));
 }
 
-function movePanel(from, to) {
-  const ids = panelList().map((p) => p.id), i = ids.indexOf(from), j = ids.indexOf(to);
+function panelList(commands) {
+  const map = pieces(shared);
+  return roster().filter((p) => offered(p.id, { sim: shared(TOOLS), commands })).map((p) => ({ ...p, on: runs(`panel.${p.id}`, map) }));
+}
+
+const drawnPanels = (all) => all.filter((p) => p.on);
+
+function movePanel(from, to, commands) {
+  const seen = drawnPanels(panelList(commands)).map((p) => p.id), i = seen.indexOf(from), j = seen.indexOf(to);
   if (i < 0 || j < 0 || i === j) return;
-  setShared(ORDER, ids.toSpliced(i, 1).toSpliced(j, 0, from));
+  const moved = seen.toSpliced(i, 1).toSpliced(j, 0, from);
+  setShared(ORDER, roster().map((p) => (seen.includes(p.id) ? moved[seen.indexOf(p.id)] : p.id)));
 }
 
 function setPanelOn(id, on) {
@@ -126,11 +134,12 @@ export default class Tabs extends View {
   renaming = null;
   renamed = null;
   moreOpen = false;
+  asked = new Set();
+  answers = {};
+  here = "";
 
   init(_props, cx) {
-    this.pressed = null;
-    this.dragPanel = null;
-    this.hoverPanel = null;
+    this.endDrags();
     // Opened as the Panels popup: this copy draws the list, not the bar.
     const given = tryOr(() => props()); // null on a host without props
     this.arrange = Boolean(given?.arrange);
@@ -182,6 +191,21 @@ export default class Tabs extends View {
     });
   }
 
+  commandsHere() {
+    return this.answers[this.here];
+  }
+
+  askCommands(cx, machine) {
+    if (this.arrange || !cx || this.asked.has(machine)) return;
+    this.asked = new Set([...this.asked, machine]);
+    cx.timer.after(0, (next) => next.spawn(async () => {
+      const commands = await commandsOn(machine);
+      if (!commands) return;
+      this.answers = { ...this.answers, [machine]: commands };
+      next.notify();
+    }));
+  }
+
   command(name) {
     const tab = /^tab-(\d)$/.exec(name), panel = /^panel-(\d)$/.exec(name);
     // Herdr passes a mod command no arguments, so the path rides in its name: `herdr-app do 'kanso-tabs.look <path>'`.
@@ -195,8 +219,8 @@ export default class Tabs extends View {
       const tree = layout();
       if (this.openPanel(walkLayout(tree, "panel"), walkLayout(tree, "panel-body")) !== "memory") this.mount("memory");
     } else if (name === "sim" || panel) {
-      const id = panel ? panelList().filter((x) => x.on)[Number(panel[1]) - 1]?.id : "sim";
-      if (!id || !panelList().some((item) => item.id === id && item.on)) return;
+      const id = panel ? panelList(this.commandsHere()).filter((x) => x.on)[Number(panel[1]) - 1]?.id : "sim";
+      if (!id || !panelList(this.commandsHere()).some((item) => item.id === id && item.on)) return;
       const tree = layout(), now = this.openPanel(walkLayout(tree, "panel"), walkLayout(tree, "panel-body"));
       this.mount(now === id ? null : id);
     }
@@ -386,12 +410,17 @@ export default class Tabs extends View {
   }
 
   // While a tab is held, the one under the pointer is where it lands.
-  hoverTab(tab, hovered, cx) {
-    if (!this.pressed) return;
-    const next = hovered ? tab.id : (this.dropAt === tab.id ? null : this.dropAt);
-    if (next === this.dropAt) return;
-    this.dropAt = next;
-    cx.notify();
+  landed(from, at, id, hovered, cx) {
+    const next = from ? landing(at, id, hovered) : at;
+    if (next !== at) cx.notify();
+    return next;
+  }
+
+  endDrags() {
+    this.pressed = null;
+    this.dropAt = null;
+    this.dragPanel = null;
+    this.dropPanel = null;
   }
 
   dropTab(tab, space) {
@@ -407,7 +436,7 @@ export default class Tabs extends View {
     return {
       key: tab.id, label: waiting ? this.renamed.name : tab.name, mark: shown("tabs.state", true, pieces(shared)) ? tabMark(tab) : null, armed, pending: waiting,
       tip: armed ? pressAgain(`close ${tab.name}`) : null,
-      held: this.pressed === tab.id && Boolean(this.dropAt) && this.dropAt !== tab.id,
+      held: heldOn(tab.id, this.pressed, this.dropAt),
       editing: this.renaming?.id === tab.id ? this.renaming.text : null,
     };
   }
@@ -417,7 +446,7 @@ export default class Tabs extends View {
       const sized = el.on_size_change((s, cx) => { this.tabW = this.sized(this.tabW, tab.id, s.width, cx); });
       const wired = connected ? sized
         .on_mouse_down("left", (e, cx) => this.pressTab(tab, e, cx))
-        .on_hover((hovered, cx) => this.hoverTab(tab, hovered, cx))
+        .on_hover((hovered, cx) => { this.dropAt = this.landed(this.pressed, this.dropAt, tab.id, hovered, cx); })
         .on_mouse_up("left", () => this.dropTab(tab, space))
         .on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); this.armed.clear(); this.tabMenu = tab.id; cx.notify(); })
         .on_key_down((e, cx) => { if (this.renaming?.id === tab.id && e.key === "escape") { cx.stop_propagation(); this.endRename(cx, false); } }) : sized;
@@ -425,22 +454,18 @@ export default class Tabs extends View {
     };
   }
 
-  drops(drawn) {
-    const from = drawn.findIndex((tab) => tab.id === this.pressed), to = drawn.findIndex((tab) => tab.id === this.dropAt);
-    if (from < 0 || to < 0 || from === to) return {};
-    if (dropSide(from, to) === "before") return { [drawn[to].id]: true };
-    return to + 1 < drawn.length ? { [drawn[to + 1].id]: true } : { [drawn[to].id]: "after" };
-  }
-
   doorWire(c, p) {
     return (el) => {
       const wired = el
         .on_size_change((s, cx) => { this.doorW = this.sized(this.doorW, p.id, s.width, cx); })
         .on_mouse_down("left", (_e, cx) => { cx.stop_propagation(); this.dragPanel = p.id; })
+        .on_hover((hovered, cx) => { this.dropPanel = this.landed(this.dragPanel, this.dropPanel, p.id, hovered, cx); })
         .on_mouse_up("left", (_e, cx) => {
           const from = this.dragPanel;
           this.dragPanel = null;
-          if (from && from !== p.id) { movePanel(from, p.id); cx.notify(); }
+          this.dropPanel = null;
+          if (from && from !== p.id) movePanel(from, p.id, this.commandsHere());
+          cx.notify();
         })
         .on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); this.panelMenu = p.id; cx.notify(); });
       return this.panelMenu === p.id ? this.panelMenuPopover(c, wired, p) : wired;
@@ -483,6 +508,8 @@ export default class Tabs extends View {
       cx.timer.after(0, (next) => { this.simQueued = false; this.probeSimulator(next); });
     }
     const space = spaces().find(p => p.active);
+    this.here = machineKey(space);
+    this.askCommands(cx, this.here);
     const openTabs = shownTabs(space?.tabs);
     // Each live-data read copies the whole list: read once per render.
     const ps = panes();
@@ -498,8 +525,8 @@ export default class Tabs extends View {
       const project = tryOr(() => projectKey(space, home()));
       if (project && project !== this.project) this.openRow = undefined;
     }
-    const allPanels = panelList();
-    const shownPanels = allPanels.filter((p) => p.on);
+    const allPanels = panelList(this.commandsHere());
+    const shownPanels = drawnPanels(allPanels);
     const enabled = shownPanels.map((p) => p.id);
     const roster = allPanels.map((p) => ({ id: p.id, label: p.label, icon: p.icon ? glyphOf(p.icon.replace(/^lu-/, "")) : null, on: p.on }));
     if (JSON.stringify(roster) !== JSON.stringify(shared("kanso.panels.all") ?? null)) setShared("kanso.panels.all", roster);
@@ -516,7 +543,8 @@ export default class Tabs extends View {
     const { shown: kept, folded } = connected ? foldTabs({ widths: openTabs.map((tab) => this.tabW[tab.id]), chosen: openTabs.findIndex((tab) => tab.active), room, gap: G.hair, more: (this.barW.more ?? 0) + G.sm })
       : { shown: openTabs.map((_, i) => i), folded: [] };
     const drawn = kept.map((i) => openTabs[i]);
-    const drops = this.drops(drawn);
+    const drops = dropMarks(drawn.map((tab) => tab.id), this.pressed, this.dropAt);
+    const doorDrops = dropMarks(doors.map((p) => p.id), this.dragPanel, this.dropPanel);
     const items = drawn.map((tab) => ({ ...this.tabLook(tab), closable: openTabs.length > 1, drop: drops[tab.id] ?? false }));
     const more = plus(folded.length);
     const stop = (el) => el.on_mouse_down("left", (_e, cx) => cx.stop_propagation());
@@ -542,7 +570,8 @@ export default class Tabs extends View {
     };
     const bar = tabBar({
       items, value: openTabs.find((tab) => tab.active)?.id ?? null, folded: folded.map((i) => ({ key: openTabs[i].id, label: openTabs[i].name, mark: tabMark(openTabs[i]) })),
-      overflow: this.moreOpen, panels: doors.map((p) => ({ key: p.id, label: p.label, icon: p.icon })), panel: now, state, arrange, help: true, tips, windows,
+      overflow: this.moreOpen, panel: now,
+      panels: doors.map((p) => ({ key: p.id, label: p.label, icon: p.icon, held: heldOn(p.id, this.dragPanel, this.dropPanel), drop: doorDrops[p.id] ?? false })), state, arrange, help: true, tips, windows,
     });
     return bar("tab-bar", c, {
       presses, wires,
@@ -550,8 +579,8 @@ export default class Tabs extends View {
       onClose: (key, cx) => { const tab = openTabs.find((other) => other.id === key); if (tab) this.closeTab(tab, ps, cx); },
       onOpen: (open, cx) => { this.moreOpen = open; cx.notify(); },
       onSize: (s, cx) => { this.barW = this.sized(this.barW, "bar", s.width, cx); this.keepRail(layout()); },
-      onRelease: (e, cx) => { dropStripDrag(e, cx); this.pressed = null; this.dropAt = null; this.dragPanel = null; cx.notify(); },
-      onOver: (hovered, cx) => { if (!hovered && this.pressed) { this.pressed = null; this.dropAt = null; cx.notify(); } },
+      onRelease: (e, cx) => { dropStripDrag(e, cx); this.endDrags(); cx.notify(); },
+      onOver: (hovered, cx) => { if (!hovered && (this.pressed || this.dragPanel)) { this.endDrags(); cx.notify(); } },
       onWheel: (e) => this.wheel(e),
     });
   }

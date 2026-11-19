@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { compile, indexed, reachable, read, SHEETS } from "../scripts/css-to-gpui.mjs";
 import { viewOf, stylesFor } from "../kanso/mods/kanso-panel/ui-match.js";
 import { toHtml } from "../stories/kit/tree.js";
-import { statedPages, tabActs } from "../stories/kit/states.js";
+import { doorActs, statedPages, tabActs } from "../stories/kit/states.js";
 import { panelDoors } from "../stories/kit/compositions.js";
 import { tabBar } from "../stories/kit/tab-bar.js";
 import { tabBarTree } from "../stories/kit/tab-bar-tree.js";
@@ -13,22 +13,54 @@ const rules = indexed(reachable(compile(SHEETS.map(read).join("\n")).rules));
 const page = statedPages["Compositions/Tab bar"];
 const tabItems = (value) => [{ key: "checkout", label: "checkout" }, { key: "cart-ui", label: "cart-ui", mark: value === "cart-ui" ? "" : "blocked" }, { key: "tests", label: "tests" }];
 const propsOf = ({ args }) => {
-  const { value, tab, folded, state, panel, windows, help, custom } = { ...page.args, ...args };
-  return { items: tabActs[tab](tabItems(value)), value, folded, state, panel, windows, help, panels: custom ? [...panelDoors, { key: "notes", label: "Notes" }] : panelDoors };
+  const { value, tab, door, folded, overflow, state, panel, windows, help, custom } = { ...page.args, ...args };
+  return { items: tabActs[tab](tabItems(value)), value, overflow, state, panel, windows, help,
+    folded: Array.from({ length: folded }, (_, i) => ({ key: `f${i}`, label: `f${i}` })), panels: doorActs[door](custom ? [...panelDoors, { key: "notes", label: "Notes" }] : panelDoors) };
 };
-const storyOf = ({ items, value, folded, state, panel, windows, help, panels = panelDoors }) => tabBar({ items, value, state, panel, windows, help, panels,
-  folded: Array.from({ length: folded }, (_, i) => ({ key: `f${i}`, label: `f${i}` })) }).replace(/ onclick="[^"]*"/g, "")
+const storyOf = ({ folded = [], panels = panelDoors, ...props }) => tabBar({ ...props, folded, panels }).replace(/ onclick="[^"]*"/g, "")
   .replace(/<div class="kanso-field kanso-field--inline">.*?<\/div><\/div>/, '<div class="kanso-field kanso-field--inline"></div>');
 const treeOf = (props) => tabBarTree({ panels: panelDoors, ...props });
+const appButton = async () => ({ ...(await load("kanso-panel/ui-button.js", ["button"], gpuiHost())), c: await kansoColours() });
 
-test("Every state on the Tab bar page is the same markup as the Storybook's, the field renaming a tab being the Field's own", () => {
+test("Every state on the Tab bar page is the same markup as the Storybook's, with the folded menu open where the story opens it, the field renaming a tab being the Field's own", () => {
   assert.ok(page.states.some(({ args }) => args.tab === "renaming"));
+  assert.ok(page.states.some(({ args }) => args.overflow && args.folded), "a state opens the folded menu");
   for (const state of page.states) assert.equal(toHtml(treeOf(propsOf(state))), storyOf(propsOf(state)), state.label);
+});
+
+test("The app always shows kansō help's door: every state on the page with it is the story with that door and nothing else changed", () => {
+  for (const state of page.states) {
+    const props = { ...propsOf(state), help: true };
+    const story = storyOf(props);
+    assert.equal(toHtml(treeOf(props)), story, state.label);
+    if (props.state === "connecting" || props.state === "unreachable" || propsOf(state).help) continue;
+    assert.equal(story.replace(/<span class="kanso-button kanso-button--icon[^"]*" tabindex="0" title="kansō help">.*?<\/span>/, ""), storyOf(propsOf(state)), `${state.label}: only the door`);
+  }
+});
+
+test("A door being dragged is held on the pressed wash with the accent bar where it lands, as the compiled CSS draws it", () => {
+  const dragging = page.states.find(({ label }) => label === "Dragging a door");
+  const doors = viewOf(treeOf(propsOf(dragging)))[0].children.at(-1).children;
+  const held = doors.find((node) => node.classes.includes("kanso-control--held"));
+  assert.equal(held.attrs.title, "Ports");
+  assert.ok(held.classes.includes("kanso-control"), "the modifier sits on its block");
+  const bar = doors.findIndex((node) => node.classes.includes("kanso-tab-bar__insertion"));
+  assert.equal(doors[bar + 1].attrs.title, "Spend", "the bar lands before Spend");
+});
+
+test("A held door and an open door being dragged take the same wash in the app as in the compiled CSS: the open door keeps its own", async () => {
+  const { button, c } = await appButton();
+  for (const open of [false, true]) {
+    const [node] = viewOf(treeOf({ items: [], panels: [{ key: "ports", label: "Ports", icon: "lu-plug", held: true }], panel: open ? "ports" : null }))[0].children.at(-1).children;
+    const want = c[Object.fromEntries(stylesFor(node, rules)).bg.colour];
+    assert.equal(want, open ? c.w12 : c.selected, open ? "active over held" : "held");
+    assert.equal(arg(button("d", "Ports", () => {}, c, { kind: "icon", icon: "plug", held: true, active: open }), "bg"), want, open ? "active and held" : "held");
+  }
 });
 
 test("A tab dragged right lands after the last one, in both kits", () => {
   const items = [{ key: "a", label: "a" }, { key: "b", label: "b", drop: "after" }];
-  assert.equal(toHtml(treeOf({ items, value: "a" })), storyOf({ items, value: "a", folded: 0 }));
+  assert.equal(toHtml(treeOf({ items, value: "a" })), storyOf({ items, value: "a" }));
   assert.match(toHtml(treeOf({ items, value: "a" })), /<\/span><i class="kanso-tabs__insertion"><\/i><\/div>/);
 });
 
@@ -69,8 +101,7 @@ test("Connecting draws a skeleton per known tab at the size the compiled CSS giv
 });
 
 test("A door is the app's icon Button with the size, radius, ink and open wash the compiled CSS gives the Storybook's door", async () => {
-  const { button } = await load("kanso-panel/ui-button.js", ["button"], gpuiHost());
-  const c = await kansoColours();
+  const { button, c } = await appButton();
   const tree = treeOf({ items: [], value: null, folded: 0, panel: "pr" });
   const doors = viewOf(tree)[0].children.at(-1).children;
   for (const node of doors) {

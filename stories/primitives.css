@@ -149,6 +149,7 @@
 .kanso-tab-bar__skeleton+.kanso-tab-bar__skeleton{width:var(--k-w-tab-skeleton-short)}
 .kanso-tab-bar__more{position:relative}
 .kanso-tab-bar__menu{position:absolute;top:calc(100% + var(--k-sp-1));left:0;z-index:1}
+.kanso-control.kanso-control--held{background-color:var(--selected)}
 
 /* Credit */
 .kanso-credit{display:flex;align-items:center;gap:var(--k-sp-2);height:var(--k-h-row2);margin:0 calc(-1 * var(--k-sp-2));padding:0 var(--k-sp-2);border-radius:var(--k-r-control)}
