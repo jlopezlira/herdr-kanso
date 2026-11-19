@@ -45,10 +45,10 @@ export default class WorkspaceChrome extends View {
     this.updater = new Updater();
     this.updater.start(cx, { polls: false });
     this.explainer = null;
-    cx.spawn(async (later) => {
+    cx.timer.after(0, (later) => later.spawn(async (again) => {
       this.explainer = await findExplainer();
-      later.notify();
-    });
+      again.notify();
+    }));
     // Command names stay kanso-tabs.* for keys bound to them before.
     readCommands(cx, () => nextCommand(), (c, cx) => this.command(c, cx));
     cx.timer.every(SAMPLE_MS, (cx) => this.watch(cx));

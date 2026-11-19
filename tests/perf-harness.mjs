@@ -106,7 +106,7 @@ export function fixture({ dir = "/fixture", blocked = false, quiet = null, worki
     readTextFile: (file) => { state.reads.push({ file, at: state.now }); return blocked ? pending() : Promise.resolve(""); },
     watchFolder: (file) => { state.watches.push(file); return pending(); }, nextCommand: pending,
     layout: () => ({ id: "root", children: [{ id: "sidebar" }, { id: "work-body", children: [{ id: "main", content: { tab: "active" } }, { id: "panel-body", hidden: state.panelHidden !== false, children: [] }] }, { id: "strip-map" }] }),
-    run() {}, openOverlay() {}, closeOverlay() {}, notify() {}, setAgentOrder() {}, fetch: async () => ({ ok: false, status: 503 }),
+    run() {}, openOverlay() {}, closeOverlay() {}, notify() {}, knownAgents: async () => [], setAgentOrder() {}, fetch: async () => ({ ok: false, status: 503 }),
   };
   const unfinished = () => `performance harness has ${state.inFlight} unfinished host calls (${state.flights.join(", ")})`;
   const settle = async () => {
