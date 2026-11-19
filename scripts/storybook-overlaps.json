@@ -757,7 +757,8 @@
     "page": "Compositions/Tab bar",
     "states": {
       "Available": "proto/approved-bars-panels/Reference/1",
-      "Opened": "proto/approved-bars-panels/Reference/1"
+      "Opened": "proto/approved-bars-panels/Reference/1",
+      "Reordering": "kit/Tab bar/Dragging a door"
     }
   },
   "chrome/RuntimeNotice": {
