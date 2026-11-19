@@ -1,7 +1,6 @@
 // The status bar: two halves around panes per view. A computer stands in for its sidebar row; the rest are the bar's items and Buttons.
 import { button, failureLine, phrase, stack, statusItem } from './kit.js';
 
-export const computerItemStates = ['on', 'unreachable', 'pending'];
 // Unreachable is said in words with Refresh, `detail` the source's words; folded, the name gives way to its icon.
 export const computerItem = ({ name, remote = true, state = 'on', folded = false, detail = null }) => state === 'unreachable'
   ? failureLine({ text: phrase("Can't reach", name), fix: 'Refresh', detail })

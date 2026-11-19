@@ -2,7 +2,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { load, gpuiHost as host } from "./helpers.mjs";
+import { load, arg, gpuiHost as host } from "./helpers.mjs";
 import { ROOT, loadTokens, colour, contrast, THEME_FILES as THEMES } from "../scripts/tokens.mjs";
 import { WASH_TOKENS } from "../scripts/build-ui-tokens.mjs";
 
@@ -51,4 +51,11 @@ test("In the light theme the strip's tiles and the tree guides stand out from th
   const short = ["w7", "w12"].map((name) => ({ name, ratio: contrast(over(fg, chrome, share("light", name)), chrome) }))
     .filter(({ ratio }) => Number(ratio.toFixed(2)) < 1.19).map(({ name, ratio }) => `${name} on chrome: ${ratio.toFixed(3)}:1`);
   assert.deepEqual(short, []);
+});
+
+test("A key cap's wash is the foreground at the kit's tints, however the theme writes its foreground", async () => {
+  const { keycap } = await load("kanso-spaces/marks.js", ["keycap"], host());
+  const wash = (foreground, faint) => arg(keycap({ foreground, dim: "#6b6862" }, "K", faint), "bg");
+  assert.deepEqual([wash("#d8d4cb", false), wash("#d8d4cb", true)], ["#d8d4cb14", "#d8d4cb0c"], "the washes it has always had");
+  assert.deepEqual([wash("#d8d4cbff", false), wash("#d8d4cbff", true)], ["#d8d4cb14", "#d8d4cb0c"], "a foreground with its own alpha keeps one");
 });

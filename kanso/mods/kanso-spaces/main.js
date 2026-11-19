@@ -8,7 +8,7 @@ import { systemApi } from "./platform-system.js";
 // Modified by jlopezlira (Kanso, https://github.com/jlopezlira/herdr-kanso): renamed from mn-spaces; a fixed 76px rail when collapsed (resizable only when open), space avatars in the theme's hues, a breathing dot instead of a spinner, background polling slowed when the window is behind.
 // Modified by Iván Campaña (https://github.com/icampana): layout writers set the tree only when it is Kanso's, so a switch from another layout never saves that layout into kanso.json.
 
-import { View, div, svg } from "gpui-kit";
+import { View, div } from "gpui-kit";
 import { v_flex, h_flex, ScrollHandle } from "gpui-base";
 import { agentSession, agentLabel, renameTerminal, SETTLED_LABEL, SNOOZE_LABEL, UNREAD_LABEL, THREAD_LABEL, settledOf, snoozedUntil, isUnread, woke, backFromSettled, threadSections, snoozePresets, THREAD_ORDERS, STATUS_ORDERS, withTerminals, NAME_LABEL, PIN_LABEL, ORDERS, DEFAULT_ORDER, orderSessions, moved, nest, track, elapsed, activityOf, bySection, duration, trackSteps, stepOf, tasksOf, said, FOLD_MS, pill, sessionHeight, mostUrgent } from "./agents.js";
 import { ThreadLocator, findThreads, pidsOf, aliveIn, aliveDue, ALIVE_MS, ALIVE_BEHIND_MS } from "./threads.js";
@@ -32,7 +32,7 @@ import { asleep } from "./asleep.js";
 import { tile } from "./tile.js";
 import { views, viewSwitch } from "./view-switch.js";
 import { pullKey, runPull, canWake, enterOpens, sectionMarkOf, sectionCount, rowDirectory, threadWord, threadActions, signInCommand, noProjectsOn, sortOf, foldTail, readWord } from "./sidebar-rows.js";
-import { DIALOG, H, G, T, R, W, ICON, SIDEBAR, GLIDE, OPACITY, TINT, alpha, sidebarSides, tokens } from "./ui.js";
+import { DIALOG, H, G, T, R, W, SIDEBAR, GLIDE, OPACITY, TINT, alpha, sidebarSides, tokens } from "./ui.js";
 import { ELBOW } from "./ui-row.js";
 import { button, Armed } from "./ui-button.js";
 import { dialog } from "./ui-dialog.js";
@@ -44,7 +44,7 @@ import { pieceLines, openPieceMenu } from "./piece-lines.js";
 import { toolbar } from "./toolbar.js";
 import { header } from "./header.js";
 import { pieces, shown, runs, asksPs, setPiece, pieceOf, STORE } from "./pieces.js";
-import { machineRecord, canRestore, addArgs, rmArgs, loginLine, hcError, needsLogin, heldNames, connectedNames, machinePhase, machineOf, visibleSpaces, visibleAgents, pollKeys, machineState, machineHot, machineStop, machineTip, machineInk, listedMachines } from "./machines.js";
+import { machineRecord, canRestore, addArgs, rmArgs, loginLine, hcError, needsLogin, heldNames, connectedNames, machinePhase, machineOf, visibleSpaces, visibleAgents, pollKeys, machineState, machineHot, machineStop, machineTip, listedMachines } from "./machines.js";
 import { Names } from "./alias.js";
 import { syncIcon, peerOn, withPeer } from "./sync.js";
 import { computerMenuItems } from "./computer-menu.js";
@@ -2081,25 +2081,21 @@ export default class Spaces extends View {
   }
 
   // Collapsed, a computer is its icon on the rail, its name and state in the tooltip.
-  machineTile(m, phase, t) {
+  machineTile(m, phase, c) {
     const { key, title } = this.machineWords(m);
     const hint = m ? ((this.hints ?? {})[m] ?? "") : "";
-    const ink = t[machineInk(phase)];
     const go = (cx) => this.openMachine(m, phase, (this.folded ?? new Set()).has(m), cx);
-    const ring = this.navMark(machineStop(m), go);
-    return h_flex().rounded(R.card).justify_center().id(`machine-${key}`).h(SIDEBAR.railRow).flex_none().items_center().text_color(ink)
-      .when(ring, (el) => el.border_1().border_color(t.accent))
-      .when(phase !== "loading", (el) => el.cursor_pointer().hover((s) => s.bg(alpha(t.foreground, TINT.row))))
-      .on_click((_e, cx) => go(cx))
-      .on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); this.computerMenu(m, phase); })
-      .tooltip(tooltip({ label: machineTip(title, phase, hint) }))
-      .child(svg(`mods/kanso-chrome/icons/${m ? "server" : "monitor"}.svg`).size(ICON).flex_none().text_color(phase === "connected" ? t.muted : ink));
+    this.navMark(machineStop(m), go);
+    return tile({ icon: m ? "lu-server" : "lu-monitor", label: machineTip(title, phase, hint) })(`machine-${key}`, c, {
+      onClick: go,
+      onMenu: (_e, cx) => { cx.stop_propagation(); this.computerMenu(m, phase); },
+    });
   }
 
   // A computer: the computer row composition; what is wrong is its one button, its tools show under the pointer or the keyboard.
   // Each tool it shows is a keyboard stop after the row's, and Enter on one runs its press.
   machineHead(m, phase, t, c, collapsed, folded, tail = null) {
-    if (collapsed) return this.machineTile(m, phase, t);
+    if (collapsed) return this.machineTile(m, phase, c);
     const { key, title } = this.machineWords(m);
     const syncing = Boolean(m) && phase === "connected" && peerOn(this.sync.config, m);
     const sync = syncing ? syncIcon({ name: m, ...this.sync, now: Date.now() }) : null;

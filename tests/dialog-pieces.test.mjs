@@ -7,19 +7,19 @@ const timerCx = () => {
   return { timers, cx: { timer: { after: (ms, fn) => { timers.push([ms, fn]); return { cancel() {} }; } } } }; };
 const rest = () => new Promise((resolve) => setTimeout(resolve, 2));
 
-test("A pressed key lights its cap, and only its own timer darkens it", async () => {
-  const { Lit } = await load("kanso-dojo/lit.js", ["Lit"]);
+test("A pressed key lights its cap for the one time Help and the dōjō share, and only its own timer darkens it", async () => {
+  const { Lit, LIT_MS } = await load("kanso-dojo/lit.js", ["Lit", "LIT_MS"]);
   const { cx, timers } = timerCx();
   let draws = 0;
   const notifyCx = { notify: () => { draws += 1; } };
-  const cap = new Lit(600);
+  const cap = new Lit();
   assert.equal(cap.lit, null);
 
   cap.light("h", cx);
   assert.equal(cap.on("h"), true);
   assert.equal(cap.on("j"), false);
   assert.equal(timers.length, 1);
-  assert.equal(timers[0][0], 600, "the dōjō's own light time");
+  assert.deepEqual([timers[0][0], LIT_MS], [650, 650], "the key light's token");
 
   await rest();
   cap.light("j", cx);

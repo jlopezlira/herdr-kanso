@@ -1,8 +1,8 @@
-import { loadGuideSections, loadHelp } from "./mod-fixtures.mjs";
+import { loadGuideSections, loadHelp, keyDown } from "./mod-fixtures.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { load, clone, tape } from "./helpers.mjs";
+import { load, clone, tape, drawingHost, keyboard, calls, KIT_NIGHT } from "./helpers.mjs";
 
 const bindingsOf = (platform) => Object.entries(JSON.parse(readFileSync(new URL(`../kanso/keys${platform === "windows" ? ".windows" : ""}.json`, import.meta.url), "utf8")))
   .flatMap(([section, map]) => Object.entries(map).map(([keys, action]) => ({ section, keys, action })));
@@ -41,15 +41,14 @@ test("An unbound Guide action leaves a complete sentence with no chord", async (
   assert.doesNotMatch(text, /\(\)|undefined|null|Ctrl\+|Alt\+/);
 });
 
-// Help opened on `platform` with these bindings and folders, drawing on a tape.
-async function openHelp(platform, bindings, { folder = "/actual/config", userHome = "/users/jo" } = {}) {
-  const ui = tape();
+// Help opened on `platform` with these bindings and folders, drawing on a tape; `keyboard.onPage` says whether the page itself holds the keyboard.
+async function openHelp(platform, bindings, { folder = "/actual/config", userHome = "/users/jo", ui = tape(), keyboard: held = { onPage: true } } = {}) {
   const { Help } = await loadHelp({
     ...ui.host, window: () => ({ platform }), keys: () => bindings, appHome: () => folder, home: () => userHome, props: () => ({}),
     Companion: class { load() {} },
   });
   const help = new Help();
-  help.init({}, { focus_handle: () => ({ focus() {} }), timer: { every() {} } });
+  help.init({}, { focus_handle: () => ({ focus() { held.onPage = true; }, is_focused: () => held.onPage }), timer: { every() {} } });
   return { ui, help };
 }
 
@@ -123,4 +122,95 @@ test("Help's key list is a row per key, the action then its chord as a key hint,
   assert.ok(id, "a key row is drawn");
   ui.handlers.get(id)({}, { notify() {} });
   assert.equal(help.picked, id.slice("row-".length));
+});
+
+// Help drawn whole, as the app draws it; `held.onPage` says whether the page itself holds the keyboard.
+const drawnHelp = async () => {
+  const held = { onPage: true };
+  const { help } = await openHelp("macos", bindingsOf("macos"), { ui: { host: { ...drawingHost(), theme: () => KIT_NIGHT } }, keyboard: held });
+  return { help, held };
+};
+
+const PRESS = [
+  ["keys", "escape", [], false, "close", true], ["guide", "escape", [], true, "close", true],
+  ["keys", "j", [], false, "pick", true], ["keys", "j", [], true, "pick", true],
+  ["keys", "enter", [], false, "pick", true], ["keys", "space", [], false, "pick", true],
+  ["keys", "enter", [], true, null, false], ["keys", "space", [], true, null, false], ["keys", "space", ["shift"], true, null, false],
+  ["keys", "enter", ["cmd"], true, "pick", true],
+  ["keys", "tab", [], false, "pick", false], ["keys", "tab", ["shift"], false, "pick", false], ["keys", "tab", ["ctrl"], false, "pick", true],
+  ["keys", "tab", [], true, null, false], ["keys", "tab", ["shift"], true, null, false],
+  ["keys", "shift", [], false, null, false], ["keys", "platform", [], false, null, false],
+  ["dojo", "enter", [], false, "dojo", true], ["dojo", "enter", [], true, null, false], ["dojo", "j", [], false, null, false],
+  ["guide", "enter", [], false, null, false], ["guide", "j", [], false, null, false],
+];
+
+test("A key on Help closes it, enters the dōjō, shows that key, or is left to the control that holds the keyboard", async () => {
+  const { keyPress, keyName } = await load("kanso-help/main.js", ["keyPress", "keyName"], tape().host);
+  for (const [page, key, mods, onControl, does, stop] of PRESS) {
+    assert.deepEqual(clone(keyPress({ page, key, mods, onControl })), { does, stop }, `${page}, ${[...mods, key].join("-")}, ${onControl ? "on a control" : "on the page"}`);
+  }
+  assert.deepEqual(["Return", " ", "J", "Tab", undefined].map(keyName), ["enter", "space", "j", "tab", ""]);
+});
+
+test("Tab reaches every chip, key and row of Help's keyboard, each with the kit's ring, and Enter and Space press it while every other key still shows itself", async () => {
+  const { help, held } = await drawnHelp();
+  const cx = { notify() {}, timer: { after() {} } };
+  const walk = () => {
+    const keys = keyboard(help.render());
+    return { keys, to: (id) => { held.onPage = false; for (let n = 0; n < keys.stops.length; n += 1) if (keys.tab().tag === id) return keys.stops.find((stop) => stop.tag === id); return assert.fail(`Tab never reaches ${id}`); } };
+  };
+  const first = walk();
+  const tags = first.keys.stops.map((stop) => stop.tag);
+  for (const id of ["mod-ctrl", "mod-alt", "mod-shift", "mod-cmd", "mod-lists", "cap-j-2-7", "cap-shift-3-0", "cap-space-4-3", "cap-enter-2-12", "row-h"]) assert.ok(tags.includes(id), `${id} is a Tab stop`);
+  assert.equal(tags.filter((tag) => tag.startsWith("cap-")).length, 63, "every key of the board");
+  for (const id of ["mod-shift", "cap-j-2-7", "row-h"]) assert.ok(calls(first.to(id), "focus").length > 0, `${id}: its ring`);
+
+  for (const key of ["enter", "space"]) {
+    help.mods = ["cmd", "alt"]; help.picked = "h";
+    const chip = walk();
+    chip.to("mod-shift");
+    chip.keys.key(key, cx);
+    assert.deepEqual(clone(help.mods), ["alt", "shift", "cmd"], `${key} on the Shift chip holds Shift`);
+    assert.equal(help.picked, "h", `${key} went to the chip, not to the board`);
+    const cap = walk();
+    cap.to("cap-j-2-7");
+    cap.keys.key(key, cx);
+    assert.equal(help.picked, "j", `${key} on the J key picks it`);
+    const mod = walk();
+    mod.to("cap-shift-3-0");
+    mod.keys.key(key, cx);
+    assert.deepEqual(clone(help.mods), ["alt", "cmd"], `${key} on the Shift key lets Shift go`);
+    const lists = walk();
+    lists.to("mod-lists");
+    lists.keys.key(key, cx);
+    assert.deepEqual([help.lists, clone(help.mods), help.picked], [true, [], "j"], `${key} on Lists shows the list keys`);
+    const row = walk();
+    row.to("row-g");
+    row.keys.key(key, cx);
+    assert.equal(help.picked, "g", `${key} on a row picks its key`);
+    help.lists = false;
+  }
+
+  const letter = walk();
+  letter.to("cap-j-2-7");
+  letter.keys.key("k", cx);
+  assert.equal(help.picked, "k", "with a key focused, any other key still shows itself");
+});
+
+test("With the keyboard on Help's page every key shows itself, Tab too, and a pointer press gives the keyboard back to the page", async () => {
+  const { help, held } = await drawnHelp();
+  const lit = [];
+  const press = (key) => {
+    const stopped = [];
+    keyDown(help.render(), { key, modifiers: {} }, { notify() {}, stop_propagation: () => stopped.push(key), timer: { after: (ms) => lit.push(ms) } });
+    return stopped.length > 0;
+  };
+  assert.deepEqual([press("enter"), help.picked], [true, "enter"]);
+  assert.deepEqual([press(" "), help.picked], [true, "space"]);
+  assert.deepEqual([press("tab"), help.picked], [false, "tab"], "Tab shows itself and still moves the keyboard on");
+  held.onPage = false;
+  assert.deepEqual([press("enter"), press(" "), press("tab"), help.picked], [false, false, false, "tab"], "on a control they are the control's");
+  calls(help.render(), "on_mouse_up").forEach(([, , release]) => release({}, {}));
+  assert.equal(held.onPage, true);
+  assert.deepEqual([press(" "), help.picked], [true, "space"], "after a pointer press Space shows itself again");
 });

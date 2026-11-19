@@ -59,6 +59,7 @@
   --k-hover-delay: 100ms;
   --k-hover-ease: cubic-bezier(.4,0,.2,1);
   --k-arm-ms: 4000ms;
+  --k-key-lit-ms: 650ms;
   --k-glint-ms: 2200ms;
   --k-glint-run: 240px;
   --k-glint-w1: 44px;

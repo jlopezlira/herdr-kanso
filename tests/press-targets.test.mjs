@@ -138,8 +138,8 @@ test("The scan finds a bare press with its file and line, through .when, and pas
 
 test("The press targets this baseline started from are drawn by the kit now", () => {
   const baseline = JSON.parse(repoText(BASELINE));
-  for (const file of ["kanso/mods/kanso-chrome/main.js", "kanso/mods/kanso-chrome/sidebar-footer.js", "kanso/mods/kanso-dojo/main.js", "kanso/mods/kanso-dojo/pets.js", "kanso/mods/kanso-panel/doc.js",
-    "kanso/mods/kanso-settings/main.js", "kanso/mods/kanso-sim/main.js"]) {
+  for (const file of ["kanso/mods/kanso-chrome/main.js", "kanso/mods/kanso-chrome/sidebar-footer.js", "kanso/mods/kanso-dojo/main.js", "kanso/mods/kanso-dojo/pets.js", "kanso/mods/kanso-help/main.js", "kanso/mods/kanso-panel/doc.js",
+    "kanso/mods/kanso-settings/main.js", "kanso/mods/kanso-sim/main.js", "kanso/mods/kanso-spaces/main.js"]) {
     assert.equal(baseline[file], undefined, `${file} is listed`);
   }
 });

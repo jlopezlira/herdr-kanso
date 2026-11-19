@@ -8,8 +8,9 @@ import { theme, appHome, home, props, closeOverlay, keys, openOverlay, run } fro
 import { focusOn } from "./pure.js";
 import { Lit } from "./lit.js";
 import { pagedDialog } from "./pages.js";
-import { R, T, G, DIALOG, ICON_CHROME, KEY, TINT, alpha, tokens } from "./ui.js";
+import { R, T, G, DIALOG, FOCUS, ICON_CHROME, KEY, TINT, alpha, tokens } from "./ui.js";
 import { button, quietLink } from "./ui-button.js";
+import { button as kitButton } from "./kit.js";
 import { row } from "./ui-row.js";
 import { glyphs } from "./marks.js";
 import { TICK_MS, Companion } from "./pets.js";
@@ -21,7 +22,23 @@ const PAGES = [
   { key: "guide", label: "Guide" },
 ];
 
-const LIT_MS = 650;
+const HELD = ["shift", "control", "alt", "platform", "meta", "cmd", "ctrl", "option", "command"];
+const OWN = ["tab", "enter", "space"];
+const NAMED = { return: "enter", " ": "space" };
+
+export const keyName = (key) => {
+  const k = String(key ?? "").toLowerCase();
+  return NAMED[k] ?? k;
+};
+
+export function keyPress({ page, key, mods = [], onControl = false }) {
+  const plain = mods.every((m) => m === "shift");
+  if (key === "escape") return { does: "close", stop: true };
+  if (onControl && plain && OWN.includes(key)) return { does: null, stop: false };
+  if (page === "dojo" && key === "enter") return { does: "dojo", stop: true };
+  if (page !== "keys" || HELD.includes(key)) return { does: null, stop: false };
+  return { does: "pick", stop: !(plain && key === "tab") };
+}
 
 const modsOf = (m = {}) => MODIFIERS.filter((k) => (k === "cmd" ? m.platform : k === "ctrl" ? m.control : m[k]));
 
@@ -39,21 +56,24 @@ export default class Help extends View {
     this.mods = localName() === "windows" ? ["alt"] : ["cmd", "alt"]; // the layer shown first: the vim panes
     this.lists = false;
     this.picked = "h";
-    this.capLight = new Lit(LIT_MS);
+    this.capLight = new Lit();
   }
 
   key(e, cx) {
-    const k = String(e.key ?? "").toLowerCase();
-    if (k === "escape") { closeOverlay(props()?.overlay); cx.stop_propagation(); return; }
-    const mods = modsOf(e.modifiers);
-    if (this.page === "dojo" && k === "enter") { this.enterDojo(); cx.stop_propagation(); return; }
-    if (this.page !== "keys") return;
-    if (["shift", "control", "alt", "platform", "meta", "cmd", "ctrl", "option", "command"].includes(k)) return;
-    const key = k === "return" ? "enter" : k === " " ? "space" : k;
+    const key = keyName(e.key), mods = modsOf(e.modifiers);
+    const { does, stop } = keyPress({ page: this.page, key, mods, onControl: !this.handle.is_focused() });
+    if (stop) cx.stop_propagation();
+    if (does === "close") closeOverlay(props()?.overlay);
+    if (does === "dojo") this.enterDojo();
+    if (does !== "pick") return;
     if (mods.length) { this.mods = mods; this.lists = false; }
     this.picked = key;
     this.capLight.light(key, cx);
-    cx.stop_propagation(); cx.notify();
+    cx.notify();
+  }
+
+  target(id, c, label, face, act) {
+    return kitButton({ label, kind: "quiet", content: [face] })(id, c, { onClick: (cx) => { act(); cx.notify(); } }).m(-FOCUS);
   }
 
   shown() {
@@ -71,26 +91,30 @@ export default class Help extends View {
     const fill = pressed || picked ? c.accent : held ? alpha(c.text, TINT.soft) : does ? alpha(c.accent, TINT.bound) : alpha(c.text, TINT.cell);
     const ink = pressed || picked ? (t.accent_foreground ?? c.canvas) : does || held ? c.text : c.dim;
     const label = (isMod ? modifierLabels(localName()).MOD_GLYPH[name] : CAP[name]) ?? (name.length === 1 ? name.toUpperCase() : name);
-    return div().id(`cap-${name}-${i}`).w(width).h(KEY.unit).flex_none().rounded(R.control)
+    const face = div().id(`cap-face-${name}-${i}`).w(width).h(KEY.unit).flex_none().rounded(R.control)
       .border_1().border_color(pressed || picked ? c.accent : does ? alpha(c.accent, TINT.boundLine) : held ? alpha(c.text, TINT.strong) : c.border)
       .bg(fill).flex().items_center().justify_center()
       .text_size(label.length > 1 ? 11 : 13.5).font_medium().text_color(ink)
-      .cursor_pointer().hover((s) => s.border_color(c.accent))
-      .on_click((_e, cx) => {
-        if (isMod) { this.lists = false; this.mods = this.mods.includes(name) ? this.mods.filter((m) => m !== name) : MODIFIERS.filter((m) => m === name || this.mods.includes(m)); }
-        else this.picked = name;
-        cx.notify();
-      })
+      .hover((s) => s.border_color(c.accent))
       .child(label);
+    return this.target(`cap-${name}-${i}`, c, label || name, face, () => {
+      if (isMod) this.hold(name);
+      else this.picked = name;
+    });
+  }
+
+  hold(name) {
+    this.lists = false;
+    this.mods = this.mods.includes(name) ? this.mods.filter((m) => m !== name) : MODIFIERS.filter((m) => m === name || this.mods.includes(m));
   }
 
   chip(c, id, text, on, act) {
-    return div().id(id).h(28).px(G.md).flex().items_center().rounded(R.control).cursor_pointer()
+    const face = div().id(`${id}-face`).h(28).px(G.md).flex().items_center().rounded(R.control)
       .border_1().border_color(on ? c.accent : c.border).bg(on ? alpha(c.accent, TINT.bound) : alpha(c.text, TINT.chip))
       .text_size(T.value).font_medium().text_color(on ? c.text : c.muted)
       .hover((s) => s.border_color(c.accent))
-      .on_click((_e, cx) => { act(); cx.notify(); })
       .child(text);
+    return this.target(id, c, text, face, act);
   }
 
   keysPage(t, c) {
@@ -102,8 +126,7 @@ export default class Help extends View {
     const chordOf = (d) => (this.lists ? d.chord.split(" ").map((x) => glyphs(x)).join(" ") : glyphs(d.chord));
     return v_flex().gap(G.lg)
       .child(h_flex().gap(G.sm).items_center().flex_wrap()
-        .children(MODIFIERS.map((m) => this.chip(c, `mod-${m}`, join ? MOD_WORD[m] : `${MOD_GLYPH[m]} ${MOD_WORD[m]}`, !this.lists && this.mods.includes(m),
-          () => { this.lists = false; this.mods = this.mods.includes(m) ? this.mods.filter((x) => x !== m) : MODIFIERS.filter((x) => x === m || this.mods.includes(x)); })))
+        .children(MODIFIERS.map((m) => this.chip(c, `mod-${m}`, join ? MOD_WORD[m] : `${MOD_GLYPH[m]} ${MOD_WORD[m]}`, !this.lists && this.mods.includes(m), () => this.hold(m))))
         .child(div().w(G.sm))
         .child(this.chip(c, "mod-lists", "Lists: j k gg G", this.lists, () => { this.lists = !this.lists; this.mods = []; this.picked = "j"; }))
         .child(div().flex_1())
@@ -171,6 +194,6 @@ export default class Help extends View {
         .child(div().text_size(T.micro).text_color(t.dim).child("Esc")),
       tabs: PAGES, tab: this.page, page, t, c,
       onTab: (key, cx) => { this.page = key; if (key === "dojo") { this.hello = Date.now(); this.pal.bring(cx); } cx.notify(); },
-    });
+    }).on_mouse_up("left", () => this.handle.focus());
   }
 }

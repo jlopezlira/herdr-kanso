@@ -1,7 +1,6 @@
 // The computer row: this computer or a remote one in the sidebar, the row in its heading configuration, heading the group of its projects (Proposed).
 import { icon, phrase, row } from './kit.js';
 
-export const computerStates = ['on', 'off', 'unreachable', 'login'];
 const words = { off: 'Off', unreachable: 'Unreachable', login: 'Needs login' };
 // What is wrong has one button: Turn on, Refresh, or Sign in.
 const fixes = { off: (name) => icon('lu-power', phrase('Turn', name, 'on')), unreachable: () => icon('lu-refresh-cw', 'Refresh'), login: () => icon('lu-key', 'Sign in') };

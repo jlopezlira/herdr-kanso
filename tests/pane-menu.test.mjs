@@ -1,8 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { load, gpuiHost, texts, calls, find } from "./helpers.mjs";
+import { load, clone, gpuiHost, texts, calls, find } from "./helpers.mjs";
 import { paneMenu as menu } from "./menu-fixtures.mjs";
+import { loadStripWith } from "./mod-fixtures.mjs";
 
 test("The menu names the pane, then keeps its groups in order", async () => {
   const { view } = await menu();
@@ -59,4 +60,26 @@ test("Each row's key hint is its chord in glyphs, as the kit writes it, not the 
   assert.equal(hint("Wider or narrower"), "\u21e7\u2318\u21a9");
   assert.equal(hint("Split left"), "\u2325\u21e7\u2318D");
   assert.equal(hint("Sleep"), null);
+});
+
+test("Sleep and Send each open one overlay, the same from the pane's menu and from its header", async () => {
+  const { sendOverlay, sleepOverlay } = await load("kanso-strip/launch.js", ["sendOverlay", "sleepOverlay"], gpuiHost());
+  const send = clone(sendOverlay({ pane: "p1" })), sleep = clone(sleepOverlay({ space: "s1", tab: "t1", pane: "p1" }));
+  assert.deepEqual(send, { mod: "kanso-send", kind: "dialog", width: 480, props: { pane: "p1" } });
+  assert.deepEqual(sleep, { mod: "kanso-sleep", kind: "dialog", width: 480, props: { sleep: { scope: "agent", space: "s1", tab: "t1", pane: "p1" } } });
+
+  const fromMenu = await menu();
+  const item = (label) => find(fromMenu.view.render(), (el) => calls(el, "accessibility_label").some((call) => call[1] === label));
+  for (const label of ["Send to an agent\u2026", "Sleep"]) calls(item(label), "on_click").at(-1)[1]({}, { notify() {} });
+  assert.deepEqual(clone(fromMenu.opened), [send, sleep]);
+
+  const opened = [];
+  const agent = { tab: "t1", status: "idle", program: { agent: true } };
+  const { Strip } = await loadStripWith({ pane: "p1" }, [{ ...agent, pane: "p1", terminal: "T1", focused: true }, { ...agent, pane: "p2", terminal: "T2" }], {},
+    { spaces: () => [{ id: "s1", tabs: [{ id: "t1" }] }], agents: () => [{ address: "T1" }], openOverlay: (spec) => opened.push(spec) });
+  const head = new Strip();
+  head.init({}, {});
+  const root = head.render();
+  for (const tag of ["ph-send-p1", "ph-sleep-p1"]) calls(find(root, (el) => el.tag === tag), "on_click").at(-1)[1]({}, { stop_propagation() {}, notify() {} });
+  assert.deepEqual(clone(opened), [send, sleep]);
 });
