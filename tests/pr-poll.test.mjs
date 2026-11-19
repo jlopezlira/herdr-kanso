@@ -2,7 +2,7 @@
 import { loadPullRequest, loadAuthTiming } from "./mod-fixtures.mjs";
 import assert from "node:assert/strict";
 import test from "node:test";
-import { load, context, tape, singleUse, failure, success, KIT_NIGHT } from "./helpers.mjs";
+import { load, context, tape, singleUse, failure, success, KIT_NIGHT, storeShared } from "./helpers.mjs";
 import { blankPanel, refreshAgain, openInbox, SIGNED_OUT, PASSED } from "./pr-fixtures.mjs";
 
 const TONE = { dim: "dim", muted: "muted", text: "text", border: "border", red: "red", yellow: "yellow", green: "green" };
@@ -296,14 +296,18 @@ const drawnQuiet = (turn) => {
   assert.equal(turn.after.length, 1);
 };
 
+const nextTurn = async (turn) => {
+  turn.after[0](turn.cx);
+  await turn.drain();
+};
+
 test("a folder change seen while the panel is drawn starts its read on the next turn, where Herdr keeps it", async () => {
   let folder = "/repo";
   const turn = await drawnRead({ key: () => folder, props: () => ({}) });
   assert.equal(turn.viewed(), 1);
   folder = "/other";
   drawnQuiet(turn);
-  turn.after[0](turn.cx);
-  await turn.drain();
+  await nextTurn(turn);
   assert.equal(turn.viewed(), 2);
   assert.equal(turn.panel.context, "/other");
 });
@@ -316,10 +320,41 @@ test("a pane asking for the push section while the panel is drawn starts its rea
   drawnQuiet(turn);
   assert.equal(turn.panel.section, "push");
   assert.equal(turn.panel.selected, null);
-  turn.after[0](turn.cx);
-  await turn.drain();
+  await nextTurn(turn);
   assert.equal(turn.viewed(), views + 1);
   assert.equal(turn.panel.loading, false);
+});
+
+test("a folder change clears the previous pull request on that draw, and the fold it opens belongs to the new folder", async () => {
+  let folder = "/repo";
+  let asked = null;
+  const store = { "kanso.alias": { remote1: "remote1" } };
+  const turn = await drawnRead({
+    key: () => folder,
+    location: () => ({ cwd: folder, on: folder === "/repo" ? "remote1" : null }),
+    props: () => asked,
+    ...storeShared(store),
+  });
+  assert.equal(turn.panel.pr.number, 7);
+  folder = "/other";
+  asked = { section: "checks", at: 2 };
+  turn.shown.texts.length = 0;
+  turn.draw();
+  const frame = turn.shown.texts.join("\n");
+  assert.equal(turn.startedDuring(), turn.seen);
+  assert.equal(turn.panel.context, "/other");
+  assert.equal(turn.panel.pr, null);
+  assert.equal(turn.panel.branch, null);
+  assert.equal(turn.panel.home, null);
+  assert.equal(frame.includes("#7"), false);
+  assert.equal(frame.includes("Branch"), false);
+  assert.equal(frame.includes("feat \u2192 main"), false);
+  assert.equal(frame.includes("remote1"), false);
+  assert.equal(frame.includes("here"), false);
+  assert.equal(JSON.stringify(store["kanso.pr.details"]), JSON.stringify({ "/other": true }));
+  await nextTurn(turn);
+  assert.equal(turn.viewed(), 2);
+  assert.equal(turn.panel.context, "/other");
 });
 
 test("a read that never answers still finishes, and the last pull request stays", async () => {

@@ -171,15 +171,41 @@ export class PullRequest {
     if (next.read) this.refresh(cx);
   }
 
-  readWanted() { return Boolean(this.asking) || this.pollNow(false).read || key() !== this.context; }
+  readWanted() { return Boolean(this.asking) || this.moved || this.pollNow(false).read || key() !== this.context; }
+
+  showFolder() {
+    if (this.loading) return;
+    const context = key();
+    if (context === this.context) return;
+    const { cwd, on } = location();
+    this.context = context; this.root = null; this.branch = null; this.pr = null; this.threads = []; this.diffs = null;
+    this.openFile = null; this.error = null; this.note = null; this.none = false; this.armed.clear(); this.picker = null;
+    this.openPrs = []; this.selected = this.jumpUrl ?? (this.section === "push" ? null : this.keptUrl) ?? null; this.remembered = !this.jumpUrl && this.section !== "push" && Boolean(this.keptUrl);
+    this.home = null; this.branchUrl = null; this.outside = false;
+    this.missing = null; this.pushed = false; this.behind = false; this.base = undefined;
+    this.listing = false; this.tab = "open"; this.closedPrs = null;
+    this.inboxOn = false; this.inbox = null; this.inboxOpen = this.jumpUrl ? false : null; this.inboxTab = "needs"; this.inboxForce = false;
+    this.jumpUrl = null;
+    this.permission = null; this.permissionRepo = null;
+    this.threadsFor = null; this.stale = null; this.wait = null; this.freshAt = null;
+    this.listed = false; this.openedList = false; this.host = null;
+    this.aheadCount = 0; this.behindCount = 0; this.subjects = []; this.subjectsFor = null; this.baseBehind = null; this.baseBehindFor = null;
+    this.forgetLog();
+    this.sendShown = false; this.sendFor = null; this.listingOthers = false;
+    this.cwd = cwd ?? null; this.on = on ?? null;
+    this.loading = true;
+    this.moved = true;
+  }
 
   readSoon(cx) {
+    this.showFolder();
     if (this.waking || !this.readWanted()) return;
     this.waking = true;
     const wake = (wakeCx) => {
       this.waking = false;
       const wanted = this.readWanted();
       this.asking = false;
+      if (!wanted) this.moved = false;
       if (wanted) this.refresh(wakeCx);
     };
     if (cx.timer?.after) cx.timer.after(0, wake);
@@ -274,26 +300,12 @@ export class PullRequest {
   }
 
   refresh(cx) {
-    if (this.loading) return;
+    if (this.loading && !this.moved) return;
     this.away = false;
+    if (!this.loading) this.showFolder();
+    this.moved = false;
     const { cwd, on } = location(), context = key();
-    if (context !== this.context) {
-      this.context = context; this.root = null; this.branch = null; this.pr = null; this.threads = []; this.diffs = null;
-      this.openFile = null; this.error = null; this.note = null; this.none = false; this.armed.clear(); this.picker = null;
-      this.openPrs = []; this.selected = this.jumpUrl ?? (this.section === "push" ? null : this.keptUrl) ?? null; this.remembered = !this.jumpUrl && this.section !== "push" && Boolean(this.keptUrl);
-      this.home = null; this.branchUrl = null; this.outside = false;
-      this.missing = null; this.pushed = false; this.behind = false; this.base = undefined;
-      this.listing = false; this.tab = "open"; this.closedPrs = null;
-      this.inboxOn = false; this.inbox = null; this.inboxOpen = this.jumpUrl ? false : null; this.inboxTab = "needs"; this.inboxForce = false;
-      this.jumpUrl = null;
-      this.permission = null; this.permissionRepo = null;
-      this.threadsFor = null; this.stale = null; this.wait = null; this.freshAt = null;
-      this.listed = false; this.openedList = false; this.host = null;
-      this.aheadCount = 0; this.behindCount = 0; this.subjects = []; this.subjectsFor = null; this.baseBehind = null; this.baseBehindFor = null;
-      this.forgetLog();
-      this.sendShown = false; this.sendFor = null; this.listingOthers = false;
-    }
-    if (!cwd) return;
+    if (!cwd) { this.loading = false; return; }
     this.keptUrl = null;
     this.cwd = cwd; this.on = on;
     this.loading = true;

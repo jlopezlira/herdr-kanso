@@ -117,7 +117,7 @@ the branch's rules.
 - While kansō updates, the update row in the sidebar footer turns its icon, takes no press, and no longer keeps a thick border around it. (#404)
 - Cmd+1 to Cmd+9 choose the tabs the tab bar shows, counted without the ones asleep. A number past the last tab does nothing, instead of stacking a "tab.select failed" notice for each press. On Windows, Ctrl+1 to Ctrl+9. (#331)
 - The Pull requests panel no longer stops on "cx is no longer valid" after listing pull requests, and a rejected inbox step no longer stops Refresh or leaves its "Could not keep pull requests" note after a later read succeeds. (#338)
-- The pull requests panel no longer starts its read from inside its own draw when the folder in front changes or a pane asks for a section; the read starts on the next turn, as it already does when the window comes forward. (#338)
+- The pull requests panel no longer starts its read from inside its own draw when the folder in front changes or a pane asks for the push section; the read starts on the next turn, as it already does when the window comes forward. (#338)
 - The status bar's Needs you and Agents at work menus write their shortcuts in key glyphs. (#354)
 - A tab's right-click menu writes New tab and Close tab's shortcuts in key glyphs. (#354)
 - In Projects, a right click on a subagent under an agent opens its Session menu, with the rows that act on it, as it already did in Status and Threads. (#354)
