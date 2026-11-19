@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, realpath, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { load, context, exec, nativePlatform, temporary, clone, gpuiHost, success, failure, storeShared, tickingContext } from "./helpers.mjs";
 import { test, dropChild, trackedSpawn, quote, windowsOnly, heldFile, updater, fixture, version, small, tree, stages, hostFor, startUpdater, versionFile } from "./update-harness.mjs";
@@ -323,12 +323,13 @@ test("The Windows updater script keeps the same contract and PowerShell 5.1", as
   assert.match(script, /Require-Tool 'tar'/);
   const curlAt = script.indexOf("Require-Tool 'curl'");
   const tarAt = script.indexOf("Require-Tool 'tar'");
-  const srcAt = script.indexOf("New-Item -ItemType Directory -Force -Path $srcDir");
+  const srcAt = script.indexOf("New-Dir $srcDir");
   assert.ok(curlAt > 0 && tarAt > curlAt && srcAt > tarAt, "step tools, file before download");
   const launch = windowsLaunchScript(dir, "op", join(dir, "op.ps1"));
   assert.match(launch, /Start-Process .* -WindowStyle Hidden -PassThru/, "step launch, file shell execute: the worker inherits no handle");
   assert.equal(/UseShellExecute|RedirectStandard/.test(launch), false, "step launch, file no pipe passed on");
   const recoverScript = windowsRecoverScript(home, dir, join(dir, "recover.ps1"));
+  for (const made of [script, recoverScript]) assert.equal(made.includes("New-Item -ItemType Directory"), false, "step create, file a failed create is not ignored");
   assert.match(recoverScript, /FileShare\]::None/);
   assert.match(recoverScript, /function Report-Op/);
   assert.match(recoverScript, /\$Op \+ ' ' \+ \$Path/);
@@ -378,6 +379,19 @@ test("A home path with a space and an apostrophe installs", async (t) => {
   assert.equal(await versionFile(home), '{ "version": "1.1.0" }\n');
 });
 
+windowsOnly("A home folder that cannot be created stops the install and names that create", async (t) => {
+  const s = await small(t);
+  const home = await s.fresh("themes-file");
+  const themes = join(home, "themes");
+  await rm(themes, { recursive: true });
+  await writeFile(themes, "not a directory\n");
+  const before = await tree(home);
+  const how = await s.run(home, 0);
+  assert.ok(how.startsWith(`failed: create ${themes} `), how);
+  assert.deepEqual(await tree(home), before, how);
+  assert.deepEqual(await stages(home), [], how);
+});
+
 windowsOnly("A file in use is retried, then the update is undone and the file is named", async (t) => {
   const s = await small(t);
   const home = await s.fresh("in-use");
@@ -402,7 +416,7 @@ windowsOnly("A read-only file is still updated", async (t) => {
 });
 
 const recoverHome = async (t) => {
-  const root = await temporary(t);
+  const root = await realpath(await temporary(t));
   const home = join(root, "home");
   const dir = join(home, ".kanso-updates");
   return { root, home, dir };
@@ -413,28 +427,35 @@ const recoverNow = async (home, dir, env = {}) => {
   return host.recover(home, dir, { env: { ...process.env, KANSO_UPDATE_RETRY_MS: "8000", ...env } });
 };
 
+const within = (promise, limit, late) => {
+  let timer;
+  const deadline = new Promise((resolve) => { timer = setTimeout(() => resolve(late()), limit); });
+  return Promise.race([promise, deadline]).finally(() => clearTimeout(timer));
+};
+
 const watchRecover = async (t, home, dir, file, ready) => {
   const { windowsRecoverScript } = await hostFor("windows");
   await writeFile(file, `\uFEFF${windowsRecoverScript(home, dir, file)}`);
   const child = trackedSpawn(t, "powershell.exe", ["-NoProfile", "-NonInteractive", "-File", file], {
     windowsHide: true,
-    stdio: ["ignore", "pipe", "pipe"],
+    stdio: ["ignore", "ignore", "pipe"],
     env: { ...process.env, KANSO_UPDATE_RETRY_MS: "8000" },
   });
+  t.after(() => dropChild(child));
   let err = "";
   child.stderr.on("data", (chunk) => { err += chunk; });
-  const exited = new Promise((resolve) => child.once("exit", (code) => resolve(code)));
-  const saw = await Promise.race([
-    (async () => {
-      const deadline = Date.now() + 20000;
-      while (Date.now() < deadline) {
-        if (ready(() => err)) return "sharing";
-        await new Promise((resolve) => setTimeout(resolve, 50));
-      }
-      return err;
-    })(),
-    exited.then((code) => `exited ${code} ${err}`),
-  ]);
+  const ended = new Promise((resolve) => child.once("exit", (code) => resolve(code)));
+  let watching = true;
+  const seen = (async () => {
+    while (watching && !ready(() => err)) await new Promise((resolve) => setTimeout(resolve, 50));
+    return "sharing";
+  })();
+  const saw = await within(Promise.race([seen, ended.then((code) => `exited ${code} ${err}`)]), 20000, () => `still waiting after 20000 ms: ${err}`);
+  watching = false;
+  const exited = () => within(ended, 30000, () => {
+    dropChild(child);
+    return `still running after 30000 ms: ${err}`;
+  });
   return { saw, exited, text: () => err };
 };
 
@@ -459,7 +480,7 @@ windowsOnly("A file still open in an update that stopped does not stop recovery 
   const watched = await watchRecover(t, home, dir, join(dir, "recover.ps1"), (text) => text().includes("sharing delete") && text().includes("leftover.txt"));
   assert.equal(watched.saw, "sharing", watched.text());
   await lock.open();
-  assert.equal(await watched.exited, 0, watched.text());
+  assert.equal(await watched.exited(), 0, watched.text());
   assert.equal((await readdir(dir)).includes("op"), false, watched.text());
 });
 
@@ -481,21 +502,25 @@ windowsOnly("A permanent denial of a recovery rename stops at once and keeps the
   assert.equal(await readFile(prior, "utf8"), "prior\n");
 });
 
-windowsOnly("A failed parent creation names that create, not a rename of the live mod", async (t) => {
-  const made = await recoverHome(t);
-  const live = join(made.home, "mods", "kanso-chrome");
-  const stage = join(made.dir, "op");
-  const parent = join(stage, "src", "kanso", "mods");
-  await mkdir(live, { recursive: true });
-  await writeFile(join(live, "main.js"), "old\n");
-  await mkdir(stage, { recursive: true });
-  await writeFile(join(stage, "src"), "not a directory\n");
-  await writeFile(join(stage, "slots"), "1 kanso-chrome\n");
-  const began = Date.now();
-  const result = await recoverNow(made.home, made.dir);
-  expectStop(result, "create", parent, began);
-  assert.equal(result.stderr.includes(`rename ${live}`), false, result.stderr);
-  assert.equal(await readFile(join(live, "main.js"), "utf8"), "old\n");
+windowsOnly("A failed parent creation names that create, not a rename of the live mod, whether the parent or a folder above it is a file", async (t) => {
+  for (const blocker of [["src"], ["src", "kanso", "mods"]]) {
+    const made = await recoverHome(t);
+    const live = join(made.home, "mods", "kanso-chrome");
+    const stage = join(made.dir, "op");
+    const parent = join(stage, "src", "kanso", "mods");
+    const file = join(stage, ...blocker);
+    await mkdir(live, { recursive: true });
+    await writeFile(join(live, "main.js"), "old\n");
+    await mkdir(join(file, ".."), { recursive: true });
+    await writeFile(file, "not a directory\n");
+    await writeFile(join(stage, "slots"), "1 kanso-chrome\n");
+    const began = Date.now();
+    const result = await recoverNow(made.home, made.dir);
+    expectStop(result, "create", parent, began);
+    assert.equal(result.stderr.includes(`rename ${live}`), false, result.stderr);
+    assert.deepEqual(await readdir(live), ["main.js"], result.stderr);
+    assert.equal(await readFile(join(live, "main.js"), "utf8"), "old\n");
+  }
 });
 
 windowsOnly("A destination another writer fills while rollback waits stops the move and keeps both sides", async (t) => {
@@ -515,7 +540,7 @@ windowsOnly("A destination another writer fills while rollback waits stops the m
   await mkdir(dest, { recursive: true });
   await writeFile(kept, "prior\n");
   await lock.open();
-  assert.equal(await watched.exited, 1, watched.text());
+  assert.equal(await watched.exited(), 1, watched.text());
   assert.deepEqual(await readdir(live), ["held.txt"], watched.text());
   assert.equal(await readFile(join(live, "held.txt"), "utf8"), "open\n", watched.text());
   assert.deepEqual(await readdir(dest), ["kept.txt"], watched.text());
