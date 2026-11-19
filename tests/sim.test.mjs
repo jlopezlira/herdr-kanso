@@ -224,6 +224,16 @@ test("A Simulator lookup past its deadline looks at nothing more, and an Xcode t
   assert.equal(blank.door(), true, "an empty answer keeps the door");
 });
 
+test("An expired lookup starts nothing, and an Xcode that answers nothing still lets Android be found", async () => {
+  const { simulatorApi } = await loadSimulatorApi();
+  const started = [];
+  const run = async (cmd) => { started.push(cmd); return good(cmd === "xcode-select" ? "" : "\n\n\n"); };
+  await simulatorApi("macos", run, async () => false).probe("/home/me", () => false).catch(() => null);
+  assert.deepEqual(started, [], "nothing runs once the deadline has passed");
+  const tools = await simulatorApi("macos", run, async (path) => path === "/home/me/Library/Android/sdk/platform-tools/adb").probe("/home/me");
+  assert.deepEqual(clone(tools), { ios: null, adb: "/home/me/Library/Android/sdk/platform-tools/adb", emulator: null });
+});
+
 test("Moving panels while the Simulator lookup runs does not start a second one", async () => {
   const { promise } = Promise.withResolvers();
   let calls = 0;

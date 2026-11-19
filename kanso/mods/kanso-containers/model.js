@@ -137,9 +137,10 @@ export function imageUsedBy(image, containers) {
 
 // `docker context inspect`: "name\thost". Not a unix socket: the containers are on another machine.
 export function contextOf(text) {
-  const [name, host] = String(text ?? "").trim().split(TAB);
-  const here = /^(unix|npipe):\/\//.test(host ?? "");
-  return name ? { name, host: host ?? "", local: here, remote: Boolean(host) && !here } : null;
+  const [first = "", second = ""] = String(text ?? "").split(/\r?\n/)[0].split(TAB);
+  const name = first.trim(), host = second.trim();
+  const here = /^unix:\/\/\/\S/.test(host) || /^npipe:\/\/\/\/\.\/pipe\/\S/.test(host);
+  return name ? { name, host, local: here, remote: Boolean(host) && !here && !host.startsWith("unix://") } : null;
 }
 
 const words = (s) => String(s ?? "").toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
@@ -251,7 +252,20 @@ export function dockerHeld(text, vms = new Set()) {
 
 export const okRead = (data) => ({ state: "ok", data });
 export const failedRead = (reason, text = reason) => ({ state: "failed", reason, text });
-export const readOf = (result, reason) => (!result ? null : result.code === 0 ? okRead(result.stdout) : failedRead(reason(result), `${result.stderr ?? ""}${result.stdout ?? ""}`));
+export const CAP_BYTES = 8 * 1024 * 1024;
+export const INCOMPLETE = "Docker's answer was incomplete.";
+const bytesOf = (text) => (text.length * 4 < CAP_BYTES ? text.length : [...text].reduce((n, ch) => n + (ch.codePointAt(0) < 0x80 ? 1 : ch.codePointAt(0) < 0x800 ? 2 : ch.codePointAt(0) < 0x10000 ? 3 : 4), 0));
+const ROWS = {
+  context: (f) => Boolean(f[0]?.trim()),
+  containers: (f) => f.length >= 5 && Boolean(f[0]),
+  images: (f) => f.length >= 5 && Boolean(f[0]),
+  volumes: (f) => f.length === 2 && Boolean(f[0]) && Boolean(f[1]),
+  details: (f) => parseInspect(f.join(TAB)).values().next().value?.decoded === true,
+};
+export const whole = (kind, text) => bytesOf(String(text ?? "")) < CAP_BYTES && (!ROWS[kind] || lines(text).every((l) => ROWS[kind](l.split(TAB))));
+export const readOf = (result, reason, kind = null) => (!result ? null
+  : result.code === 0 && whole(kind, result.stdout) ? okRead(result.stdout)
+    : failedRead(result.code === 0 ? INCOMPLETE : reason(result), `${result.stderr ?? ""}${result.stdout ?? ""}`));
 
 const ORDER = ["read", "containers", "context", "details", "images", "volumes", "disk", "stats", "limit", "memory", "attribution", "files"];
 const DAEMON = ["containers", "images", "volumes", "stats", "limit"];
@@ -261,27 +275,32 @@ const latest = (reads, n, key) => reads[key]?.at === n ? reads[key] : null;
 
 export const containerKey = (list) => list.map((c) => `${c.id}:${c.state}`).toSorted().join(",");
 export const idKey = (list) => list.map((c) => c.id).toSorted().join(",");
+export const active = (c) => ["running", "busy"].includes(health(c));
 const CLEANED = ["volumes", "images", "disk"];
 
 const recordsFor = (found, inspected) => {
   const records = inspected == null ? new Map() : parseInspect(inspected.text);
-  return { records, whole: Boolean(found) && inspected?.set === containerKey(found) && found.every((c) => records.get(c.id.slice(0, 12))?.decoded) };
+  const covers = (list) => Boolean(found) && inspected?.set === containerKey(found) && list.every((c) => records.get(c.id.slice(0, 12))?.decoded);
+  return { records, whole: covers(found ?? []), covers };
 };
 const usersOf = (found, records) => found.map((c) => { const d = records.get(c.id.slice(0, 12)); return { ...c, imageId: d?.imageId ?? null, mounts: d?.mounts ?? [] }; });
 
 export function cleanupOf({ context, containers, details, volumes = null, images = null, disk = null }) {
-  const engine = contextOf(context), found = parseContainers(containers), { records, whole } = recordsFor(found, details);
-  if (!engine || !whole) return null;
+  const engine = contextOf(context), found = parseContainers(containers), { records, whole: recorded } = recordsFor(found, details);
+  if (!engine || !recorded) return null;
   const users = usersOf(found, records);
   return {
-    context: engine.name,
+    engine: { name: engine.name, host: engine.host },
     volumes: volumes === null ? null : volumeRows(volumes, users).filter((v) => v.unused).map((v) => v.name),
     images: images === null ? null : imageRows(parseImages(images), [{ containers: users }]).filter((i) => i.unused).map((i) => ({ id: i.id, tags: i.tags })),
     disk: disk === null ? null : reclaimable(disk)["Build Cache"] ?? 0,
   };
 }
 
-export const sameTargets = (drawn, proven) => JSON.stringify(drawn ?? null) === JSON.stringify(proven ?? null);
+export const targetOf = (kind, engine, items) => ({ kind, engine, items, key: `clean:${kind}:${JSON.stringify([engine, items])}` });
+export const proves = (target, proven) => Boolean(proven) && proven.engine.name === target.engine.name && proven.engine.host === target.engine.host
+  && JSON.stringify(narrow(target, proven[target.kind])) === JSON.stringify(target.items);
+const narrow = (target, items) => (Array.isArray(items) && Array.isArray(target.items) ? items.filter((x) => target.items.some((y) => JSON.stringify(y) === JSON.stringify(x))) : items);
 
 export function settle(previous, { n, reads, thrown = null }) {
   const before = previous?.reads ?? {};
@@ -289,11 +308,10 @@ export function settle(previous, { n, reads, thrown = null }) {
     ...all, [key]: { ...read, data: isOk(read) ? read.data : all[key]?.data, at: n },
   }), before);
   const context = isOk(merged.context) ? contextOf(merged.context.data) : null, was = isOk(before.context) ? contextOf(before.context.data) : null;
-  const ps = latest(merged, n, "containers");
-  const missing = ps?.state === "failed" && notInstalled(ps.text);
+  const missing = ["containers", "context"].some((key) => latest(merged, n, key)?.state === "failed" && notInstalled(merged[key].text));
   const down = Boolean(context?.local) && DAEMON.some((key) => latest(merged, n, key)?.state === "failed" && stoppedText(merged[key].text));
   const moved = Boolean(context && was) && (context.name !== was.name || context.host !== was.host);
-  const kept = missing ? ["containers"] : down ? ["containers", "context"] : moved ? Object.keys(reads).filter((key) => reads[key]) : null;
+  const kept = missing ? ["containers", "context"] : down ? ["containers", "context"] : moved ? Object.keys(reads).filter((key) => reads[key]) : null;
   const all = kept ? Object.fromEntries(kept.filter((key) => merged[key]?.at === n).map((key) => [key, { ...merged[key], data: isOk(reads[key]) ? reads[key].data : undefined }])) : merged;
   const now = (key) => isOk(latest(all, n, key));
   const set = now("containers") ? containerKey(parseContainers(all.containers.data)) : null;
@@ -308,11 +326,12 @@ export function settle(previous, { n, reads, thrown = null }) {
   return { n, reads: all, proof, thrown: thrown ? { reason: thrown, at: n } : null, cause: missing ? "missing" : down ? "down" : null };
 }
 
-const verbsOf = (k, { fresh, remote }) => {
-  const on = k.health === "running" || k.health === "busy";
+const verbsOf = (k, { fresh, remote, described }) => {
+  const on = active(k);
   return {
     toggle: fresh ? (on ? "stop" : "start") : null, restart: fresh && on, remove: fresh && !on,
-    shell: fresh && k.health === "running", open: !remote && on ? k.ports.find(isWeb) ?? null : null, copy: remote ? [] : k.ports.slice(0, 3),
+    shell: fresh && k.health === "running", logs: fresh, details: fresh && described,
+    open: fresh && !remote && on ? k.ports.find(isWeb) ?? null : null, copy: fresh && !remote ? k.ports.slice(0, 3) : [],
   };
 };
 
@@ -321,25 +340,37 @@ export function panelOf(snapshot, { projects = [], names = new Map(), pulling = 
   const now = (key) => isOk(latest(reads, n, key));
   const stale = (key) => reads[key]?.state === "failed";
   const context = isOk(reads.context) ? contextOf(reads.context.data) : null, local = Boolean(context?.local), remote = Boolean(context?.remote);
+  const engine = context ? { name: context.name, host: context.host } : null;
   const found = reads.containers?.data == null ? null : parseContainers(reads.containers.data);
-  const { records } = recordsFor(found, reads.details?.data);
+  const { records, covers } = recordsFor(found, reads.details?.data);
   const users = usersOf(found ?? [], records);
   const files = reads.files?.data == null ? [] : composeFiles(reads.files.data);
-  const fresh = now("containers");
+  const fresh = now("containers") && Boolean(engine);
   const thrown = snapshot?.thrown?.at === n ? snapshot.thrown : null;
-  const runningRecorded = Boolean(found) && found.filter((c) => health(c) === "running").every((c) => records.get(c.id.slice(0, 12))?.decoded) && reads.details?.data?.set === containerKey(found);
-  const localProven = !thrown && fresh && local && runningRecorded;
+  const busyNow = (found ?? []).filter(active);
+  const localProven = !thrown && fresh && local && !stale("details") && covers(busyNow);
+  const memNow = isOk(reads.stats) ? parseStats(reads.stats.data) : new Map();
+  const described = (k) => !stale("details") && Boolean(records.get(k.id.slice(0, 12))?.decoded);
+  const stacksFresh = fresh && !stale("files");
   const groups = found ? byProject(users, projects, remote ? [] : knownStacks(files, users, names), names).map((g) => {
-    const stopped = g.containers.filter((k) => k.health !== "running" && k.health !== "busy"), running = g.containers.filter((k) => k.health === "running" || k.health === "busy");
+    const stopped = g.containers.filter((k) => !active(k)), running = g.containers.filter(active);
     return {
-      ...g, count: fresh ? { running: g.running, total: g.containers.length } : null,
+      ...g, count: fresh ? { running: running.length, total: g.containers.length } : null,
       startAll: fresh && stopped.length > 1 ? stopped : [], stopAll: fresh && running.length > 1 ? running : [],
-      containers: g.containers.map((k) => ({ ...k, stale: !fresh, verbs: verbsOf(k, { fresh, remote }) })),
+      stacks: g.stacks.map((st) => ({ ...st, stale: !stacksFresh, count: stacksFresh ? { running: st.running, total: st.total } : null,
+        verbs: stacksFresh ? { up: true, rebuild: true, down: st.total > 0 } : { up: false, rebuild: false, down: false } })),
+      containers: g.containers.map((k) => ({ ...k, stale: !fresh, mem: fresh && k.health === "running" ? memNow.get(k.id.slice(0, 12)) ?? null : null, verbs: verbsOf(k, { fresh, remote, described: described(k) }) })),
     };
   }) : null;
-  const provenList = (kind) => (proof[kind] && reads.context?.data != null && found ? cleanupOf({ context: reads.context.data, containers: reads.containers.data, details: reads.details?.data, [kind]: reads[kind].data }) : null);
+  const provenList = (kind) => (proof[kind] && engine && found ? cleanupOf({ context: reads.context.data, containers: reads.containers.data, details: reads.details?.data, [kind]: reads[kind].data }) : null);
   const cleanup = { volumes: provenList("volumes")?.volumes ?? [], images: provenList("images")?.images ?? [], disk: provenList("disk")?.disk ?? 0 };
-  const unusedImages = new Set(cleanup.images.map((i) => i.id)), unusedVolumes = new Set(cleanup.volumes);
+  const targets = {
+    volumes: cleanup.volumes.length ? targetOf("volumes", engine, cleanup.volumes) : null,
+    images: cleanup.images.length ? targetOf("images", engine, cleanup.images) : null,
+    disk: cleanup.disk >= 1 ? targetOf("disk", engine, cleanup.disk) : null,
+  };
+  const imageTarget = new Map(cleanup.images.map((i) => [i.id, targetOf("images", engine, [i])]));
+  const unusedVolumes = new Set(cleanup.volumes);
   const imageList = reads.images?.data != null && groups ? imageRows(parseImages(reads.images.data), groups) : null;
   const volumeList = reads.volumes?.data != null && found ? volumeRows(reads.volumes.data, users) : null;
   const memory = isOk(reads.memory) ? reads.memory.data : null, attribution = isOk(reads.attribution) ? reads.attribution.data : null;
@@ -347,24 +378,24 @@ export function panelOf(snapshot, { projects = [], names = new Map(), pulling = 
     ...Object.entries(reads).filter(([, read]) => read.state === "failed").map(([key, read]) => ({ key, reason: read.reason, at: read.at }))];
   const newest = faults.toSorted((a, b) => b.at - a.at || ORDER.indexOf(a.key) - ORDER.indexOf(b.key))[0];
   const state = snapshot?.cause ?? (thrown || reads.containers?.state === "failed" ? "failed" : found ? "ok" : "reading");
-  const running = found ? found.filter((k) => health(k) === "running").length : 0;
+  const running = busyNow.length;
+  const imagesFresh = fresh && !stale("images");
   return {
-    state, message: snapshot?.cause ? null : newest?.reason ?? null, context, local, remote, groups,
+    state, message: snapshot?.cause ? null : newest?.reason ?? null, context, engine, local, remote, groups,
     empty: fresh && found.length === 0,
     counts: fresh ? { running, stopped: found.length - running } : null,
-    images: imageList && imageList.map((i) => ({ ...i, stale: stale("images"), unused: unusedImages.has(i.id), known: proof.images != null })),
-    imagesSummary: imageList && !stale("images") ? { count: imageList.length, mb: imageList.reduce((t, i) => t + i.mb, 0), spare: imageList.filter((i) => unusedImages.has(i.id)).reduce((t, i) => t + i.mb, 0) } : null,
-    volumes: volumeList && volumeList.map((v) => ({ ...v, stale: stale("volumes"), unused: unusedVolumes.has(v.name), known: proof.volumes != null })),
+    images: imageList && imageList.map((i) => ({ ...i, stale: !imagesFresh, unused: imageTarget.has(i.id), known: proof.images != null, target: imageTarget.get(i.id) ?? null, run: imagesFresh })),
+    imagesSummary: imageList && !stale("images") ? { count: imageList.length, mb: imageList.reduce((t, i) => t + i.mb, 0), spare: imageList.filter((i) => imageTarget.has(i.id)).reduce((t, i) => t + i.mb, 0) } : null,
+    volumes: volumeList && volumeList.map((v) => ({ ...v, stale: stale("volumes") || !fresh, unused: unusedVolumes.has(v.name), known: proof.volumes != null })),
     volumesSummary: volumeList && !stale("volumes") ? { count: volumeList.length, unused: cleanup.volumes.length } : null,
-    cleanup,
-    mem: reads.stats?.data != null ? parseStats(reads.stats.data) : new Map(),
+    cleanup, targets, keys: new Set([...Object.values(targets).filter(Boolean), ...imageTarget.values()].map((t) => t.key)),
     limit: reads.limit?.data != null && Number(reads.limit.data) > 0 ? Number(reads.limit.data) / 1e6 : null,
     held: localProven && memory && attribution?.state === "ok" ? dockerHeld(memory, dockerVms(attribution.values)) : null,
     unattributed: local && attribution?.state === "unavailable",
     details: records, imagesText: dataOf(reads.images) ?? "", pulling,
     can: {
-      cleanImages: cleanup.images.length > 0, cleanVolumes: cleanup.volumes.length > 0, clearCache: cleanup.disk >= 1,
-      quit: localProven, memory: localProven, open: snapshot?.cause === "down",
+      cleanImages: Boolean(targets.images), cleanVolumes: Boolean(targets.volumes), clearCache: Boolean(targets.disk),
+      quit: localProven, memory: localProven, open: snapshot?.cause === "down", pull: Boolean(engine),
     },
   };
 }

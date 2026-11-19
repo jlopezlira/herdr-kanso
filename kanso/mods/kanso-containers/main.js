@@ -18,7 +18,7 @@ import { pageFrame } from "./page.js";
 import { Front } from "./front.js";
 import {
   PS_FORMAT, IMAGES_FORMAT, STATS_FORMAT, INSPECT_FORMAT, CONTEXT_FORMAT, VOLUMES_FORMAT, COMPOSE_FILES, OTHER,
-  parseContainers, contextOf, vmPids, lookIn, urlOf, since, size, failed, okRead, failedRead, readOf, settle, panelOf, cleanupOf, sameTargets, containerKey, idKey,
+  parseContainers, contextOf, vmPids, lookIn, urlOf, since, size, failed, okRead, failedRead, readOf, settle, panelOf, cleanupOf, proves, containerKey, idKey,
 } from "./model.js";
 
 // Read while the panel is open; a closed panel is unmounted, so nothing runs behind it.
@@ -54,7 +54,7 @@ const CLEANING = {
   images: (list) => ["rmi", ...list.flatMap((i) => (i.tags.length ? i.tags : [i.id]))],
   disk: () => ["builder", "prune", "-f"],
 };
-const every = (list) => list;
+const onEngine = (name, argv) => (argv[0] === "docker" ? ["docker", "--context", name, ...argv.slice(1)] : argv);
 const UNATTRIBUTED = "Docker VM memory attribution requires a Herdr API on Windows.";
 const fail = (e) => ({ code: 1, stdout: "", stderr: String(e?.message ?? e) });
 const firstLine = (r) => (r.stderr || r.stdout || "").trim().split("\n")[0];
@@ -148,46 +148,53 @@ export default class Containers extends View {
     cx.spawn(async (cx) => {
       const ask = (args) => within(cx.timer, docker(args));
       try {
-        const sameContext = before.context?.state === "ok" && !all;
-        const [ps, ctx] = await Promise.all([within(cx.timer, docker(["ps", "-a", "--format", PS_FORMAT])),
-          sameContext ? null : ask(["context", "inspect", "--format", CONTEXT_FORMAT])]);
-        take({ containers: readOf(ps, said), context: readOf(ctx, said) });
-        if (ps.code !== 0) return;
-        const found = parseContainers(ps.stdout), earlier = before.containers?.data == null ? null : parseContainers(before.containers.data);
-        this.projects = kansoProjects();
+        const earlier = before.containers?.data == null ? null : parseContainers(before.containers.data);
         this.reads = this.reads + 1;
         const plan = readPlan(this.reads);
         const whole = all || !earlier;
+        const inspectContext = () => ask(["context", "inspect", "--format", CONTEXT_FORMAT]);
+        const cached = before.context?.state === "ok" && !all ? contextOf(before.context.data) : null;
+        const [config, first] = await Promise.all([whole || plan.stored ? bounded(currentContext(), cx.timer, CALL_MS).then((v) => (v?.late ? null : v)) : null, cached ? null : inspectContext()]);
+        const moved = config !== null && before.config?.data != null && config !== before.config.data;
+        const known = moved ? null : cached;
+        const ctx = first ?? (known ? null : await inspectContext());
+        take({ config: config === null ? null : okRead(config), context: readOf(ctx, said, "context") });
+        const engine = known ?? (this.got.context?.state === "ok" ? contextOf(ctx.stdout) : null);
+        if (!engine) return;
+        const on = (args) => ask(["--context", engine.name, ...args]);
+        const ps = await on(["ps", "-a", "--format", PS_FORMAT]);
+        take({ containers: readOf(ps, said, "containers") });
+        if (this.got.containers.state !== "ok") return;
+        const found = parseContainers(ps.stdout);
+        this.projects = kansoProjects();
         const set = containerKey(found), ids = idKey(found);
         const inspected = before.details?.state === "ok" ? before.details.data : null;
         const covered = inspected?.set === set;
-        const config = whole || plan.stored ? await bounded(currentContext(), cx.timer, CALL_MS).then((v) => (v?.late ? null : v)) : null;
-        const moved = config !== null && before.config?.data != null && config !== before.config.data;
         const fixed = whole || moved || before.limit?.state !== "ok";
         const stored = whole || now || ids !== idKey(earlier) || plan.stored || Boolean(this.pulling);
         const usage = whole || plan.stats;
         const { deep, shallow } = lookIn(this.projects.flatMap((p) => p.folders).slice(0, 24), home());
         const named = (depth, list) => within(cx.timer, strict(fileApi).walk(list, { depth: Number(depth), names: COMPOSE_FILES }).then((paths) => ({ code: 0, stdout: paths.join("\n") })));
-        const [im, info, ps2, ins, ctx2, vols, df, files] = await Promise.all([
-          stored ? ask(["images", "--no-trunc", "--format", IMAGES_FORMAT]) : null,
-          fixed ? ask(["info", "--format", "{{.MemTotal}}"]) : null,
+        const [im, info, ps2, ins, vols, df, files] = await Promise.all([
+          stored ? on(["images", "--no-trunc", "--format", IMAGES_FORMAT]) : null,
+          fixed ? on(["info", "--format", "{{.MemTotal}}"]) : null,
           usage ? within(cx.timer, timed(processApi).memory()) : null,
-          !found.length ? { code: 0, stdout: "" } : covered && !whole ? null : ask(["inspect", "--format", INSPECT_FORMAT, ...found.map((c) => c.id)]),
-          moved && !ctx ? ask(["context", "inspect", "--format", CONTEXT_FORMAT]) : null,
-          stored ? ask(["volume", "ls", "--format", VOLUMES_FORMAT]) : null,
-          stored ? ask(["system", "df", "--format", "{{json .}}"]) : null,
+          !found.length ? { code: 0, stdout: "" } : covered && !whole ? null : on(["inspect", "--format", INSPECT_FORMAT, ...found.map((c) => c.id)]),
+          stored ? on(["volume", "ls", "--format", VOLUMES_FORMAT]) : null,
+          stored ? on(["system", "df", "--format", "{{json .}}"]) : null,
           lookFiles(plan, again) && deep.length ? Promise.all([named("2", deep), shallow.length ? named("1", shallow) : { code: 0, stdout: "" }])
             .then((both) => both.find(failed) ?? { code: 0, stdout: both.map((r) => r.stdout ?? "").join("\n") }) : null]);
+        const details = readOf(ins, said, "details");
         take({
-          config: config === null ? null : okRead(config), images: readOf(im, said), limit: readOf(info, said), memory: readOf(ps2, firstLine),
-          details: ins && (ins.code === 0 ? okRead({ set, text: ins.stdout }) : failedRead(said(ins))),
-          context: this.got.context ?? readOf(ctx2, said), volumes: readOf(vols, said), disk: readOf(df, said), files: readOf(files, firstLine),
+          images: readOf(im, said, "images"), limit: readOf(info, said), memory: readOf(ps2, firstLine),
+          details: details && (details.state === "ok" ? okRead({ set, text: ins.stdout }) : details),
+          volumes: readOf(vols, said, "volumes"), disk: readOf(df, said), files: readOf(files, firstLine),
         });
         if (im?.code === 0 && this.pulling) this.pulling = im.stdout === this.pulling.seen && this.pulling.left > 1 ? { ...this.pulling, left: this.pulling.left - 1 } : null;
         const openFiles = ps2?.code === 0 ? await bounded(timed(processApi).openFiles(vmPids(ps2.stdout)).catch(unread), cx.timer, CALL_MS)
           .then((r) => (r?.late ? unread(firstLine(r)) : r)) : null;
         take({ attribution: openFiles && (openFiles.state === "error" ? failedRead(openFiles.reason) : okRead(openFiles)) });
-        take({ stats: usage ? readOf(await ask(["stats", "--no-stream", "--format", STATS_FORMAT]), said) : null });
+        take({ stats: usage ? readOf(await on(["stats", "--no-stream", "--format", STATS_FORMAT]), said) : null });
       } catch (e) {
         this.thrown = String(e?.message ?? e);
       } finally {
@@ -209,6 +216,7 @@ export default class Containers extends View {
       this.snapshot = settle(this.snapshot, { n, reads: {}, thrown: String(e?.message ?? e) });
       this.panel = panelOf(this.snapshot, { projects: this.projects });
     }
+    if (this.armed.key?.startsWith("clean:") && !this.panel.keys.has(this.armed.key)) this.armed.clear();
   }
 
   derive() {
@@ -246,41 +254,40 @@ export default class Containers extends View {
     });
   }
 
-  clean(kind, pick, what, cx) {
-    const drawn = pick(this.panel.cleanup[kind]), engine = this.panel.context?.name;
-    this.hold([`clean:${kind}`], cx, async (cx) => {
-      const proven = await this.prove(kind, cx);
-      const targets = proven && pick(proven[kind]);
-      if (!proven || proven.context !== engine || !sameTargets(drawn, targets)) { this.refresh(cx, true, true); return; }
-      const r = await within(cx.timer, docker(["--context", proven.context, ...CLEANING[kind](targets)], ACT_MS), ACT_MS);
+  clean(target, what, cx) {
+    const items = Array.isArray(target.items) ? target.items.map((x) => x.id ?? x) : [];
+    this.hold([`clean:${target.kind}`, ...items], cx, async (cx) => {
+      const proven = await this.prove(target.kind, target.engine.name, cx);
+      if (!proves(target, proven)) { this.armed.clear(); this.refresh(cx, true, true); return; }
+      const r = await within(cx.timer, docker(["--context", target.engine.name, ...CLEANING[target.kind](target.items)], ACT_MS), ACT_MS);
       this.error = r.code === 0 ? null : `${what} failed: ${firstLine(r)}`;
     });
   }
 
-  async prove(kind, cx) {
+  async prove(kind, name, cx) {
     const ask = (args) => within(cx.timer, docker(args));
-    const ctx = await ask(["context", "inspect", "--format", CONTEXT_FORMAT]);
-    const engine = ctx.code === 0 ? contextOf(ctx.stdout)?.name : null;
-    if (!engine) return null;
-    const on = (args) => ask(["--context", engine, ...args]);
+    const on = (args) => ask(["--context", name, ...args]);
+    const ctx = await ask(["context", "inspect", "--format", CONTEXT_FORMAT, name]);
+    if (readOf(ctx, said, "context").state !== "ok") return null;
     const ps = await on(["ps", "-a", "--format", PS_FORMAT]);
-    if (ps.code !== 0) return null;
+    if (readOf(ps, said, "containers").state !== "ok") return null;
     const found = parseContainers(ps.stdout);
     const [ins, list] = await Promise.all([found.length ? on(["inspect", "--format", INSPECT_FORMAT, ...found.map((c) => c.id)]) : { code: 0, stdout: "" }, on(LISTING[kind])]);
-    if (ins.code !== 0 || list.code !== 0) return null;
+    if (readOf(ins, said, "details").state !== "ok" || readOf(list, said, kind).state !== "ok") return null;
     return cleanupOf({ context: ctx.stdout, containers: ps.stdout, details: { set: containerKey(found), text: ins.stdout }, [kind]: list.stdout });
   }
 
   containers(verb, list, cx) {
-    const free = list.filter((c) => !this.busy.has(c.id));
-    if (free.length) this.act([verb, ...free.map((c) => c.id)], cx, { ids: free.map((c) => c.id) });
+    const free = list.filter((c) => !this.busy.has(c.id)), name = this.panel.engine?.name;
+    if (free.length && name) this.act(["--context", name, verb, ...free.map((c) => c.id)], cx, { ids: free.map((c) => c.id), what: verb });
   }
 
   pullImage() {
     const name = this.pull.value().trim();
     // A name, never an option: docker would take "-…" as one.
-    if (!name || /\s/.test(name) || name.startsWith("-")) return;
-    inTab(`pull ${name}`, ["docker", "pull", name]);
+    const engine = this.panel.engine?.name;
+    if (!engine || !name || /\s/.test(name) || name.startsWith("-")) return;
+    inTab(`pull ${name}`, onEngine(engine, ["docker", "pull", name]));
     this.pulling = { seen: this.panel.imagesText, left: PULL_READS };
     this.pull.set_value("");
   }
@@ -309,7 +316,9 @@ export default class Containers extends View {
     const name = f.name.value().trim(), port = f.port.value().trim();
     if (port && !/^\d+(:\d+)?$/.test(port)) { this.error = "Port: a number, or host:container like 8080:80."; cx.notify(); return; }
     if (name && !/^[a-zA-Z0-9][a-zA-Z0-9_.-]*$/.test(name)) { this.error = "Name: letters, digits, _ . or -, starting with a letter or digit."; cx.notify(); return; }
-    const args = ["run", "-d", ...(name ? ["--name", name] : []), ...(port ? ["-p", port.includes(":") ? port : `${port}:${port}`] : []), f.target];
+    const engine = this.panel.engine?.name;
+    if (!engine) return;
+    const args = ["--context", engine, "run", "-d", ...(name ? ["--name", name] : []), ...(port ? ["-p", port.includes(":") ? port : `${port}:${port}`] : []), f.target];
     this.closeRun();
     this.act(args, cx, { what: "run" });
   }
@@ -317,8 +326,9 @@ export default class Containers extends View {
   // In the stack's folder with no -f, so Compose reads its file and override as it would itself;
   // under the project name a running stack has, so Down and Up reach the same containers.
   stack(s, verb) {
-    const args = { up: ["up", "-d"], down: ["down"], rebuild: ["up", "-d", "--build"] }[verb];
-    inTab(`${s.name} ${verb}`, ["docker", "compose", ...(s.compose ? ["-p", s.compose] : []), ...(s.files ?? []).flatMap((f) => ["-f", f]), ...args], s.dir);
+    const args = { up: ["up", "-d"], down: ["down"], rebuild: ["up", "-d", "--build"] }[verb], engine = this.panel.engine?.name;
+    if (!engine || !s.verbs[verb]) return;
+    inTab(`${s.name} ${verb}`, ["docker", "--context", engine, "compose", ...(s.compose ? ["-p", s.compose] : []), ...(s.files ?? []).flatMap((f) => ["-f", f]), ...args], s.dir);
   }
 
   // Docker Desktop's own command, else asked to quit like any app: the VM ends and its memory comes back.
@@ -356,8 +366,7 @@ export default class Containers extends View {
   }
 
   row(k, c) {
-    const busy = this.busy.has(k.id), open = this.opened.has(k.id), { verbs: can } = k;
-    const mem = this.panel.mem.get(k.id.slice(0, 12));
+    const busy = this.busy.has(k.id), open = this.opened.has(k.id) && k.verbs.details, { verbs: can, mem } = k, engine = this.panel.engine?.name;
     const tone = HEALTH_TONES[k.health];
     const act = (verb) => (cx) => { if (!busy) this.containers(verb, [k], cx); };
     const verbs = [
@@ -365,9 +374,9 @@ export default class Containers extends View {
       can.toggle ? { label: busy ? "Working…" : can.toggle === "stop" ? "Stop" : "Start", onClick: act(can.toggle), color: c.text, disabled: busy } : null,
       can.restart ? { label: "Restart", onClick: act("restart"), disabled: busy } : null,
       can.open ? { label: "Open", onClick: (cx) => cx.open_url(urlOf(can.open)) } : null,
-      can.shell ? { label: "Shell", onClick: () => inTab(`shell ${k.service ?? k.name}`, localService(systemApi).containerShell(k.name, this.details.get(k.id.slice(0, 12))?.platform)) } : null,
-      { label: "Logs", onClick: () => inTab(`logs ${k.service ?? k.name}`, ["docker", "logs", "-f", "--tail", "200", k.name]) },
-      { label: open ? "Less" : "Details", onClick: (cx) => { this.opened = open ? new Set([...this.opened].filter((x) => x !== k.id)) : new Set([...this.opened, k.id]); cx.notify(); } },
+      can.shell ? { label: "Shell", onClick: () => inTab(`shell ${k.service ?? k.name}`, onEngine(engine, localService(systemApi).containerShell(k.name, this.details.get(k.id.slice(0, 12))?.platform))) } : null,
+      can.logs ? { label: "Logs", onClick: () => inTab(`logs ${k.service ?? k.name}`, ["docker", "--context", engine, "logs", "-f", "--tail", "200", k.name]) } : null,
+      can.details ? { label: open ? "Less" : "Details", onClick: (cx) => { this.opened = open ? new Set([...this.opened].filter((x) => x !== k.id)) : new Set([...this.opened, k.id]); cx.notify(); } } : null,
       can.remove ? this.armed.verb("Remove", "remove", `rm:${k.id}`, (cx) => this.containers("rm", [k], cx), { disabled: busy }) : null,
     ].filter(Boolean);
     return v_flex().w_full()
@@ -383,15 +392,15 @@ export default class Containers extends View {
   }
 
   stackRow(s, c) {
-    const state = s.total === 0 ? "not started" : `${s.running} of ${s.total} running`;
+    const state = !s.count ? null : s.count.total === 0 ? "not started" : `${s.count.running} of ${s.count.total} running`;
     const id = `${s.dir}:${s.compose ?? ""}`;
     return row(`ct-stack-${id}`, c, {
-      name: s.compose && s.compose !== s.name ? s.compose : s.name,
-      detail: [{ text: "compose", tip: s.file }, state],
+      name: s.compose && s.compose !== s.name ? s.compose : s.name, dimmed: s.stale,
+      detail: [{ text: "compose", tip: s.file }, state].filter(Boolean),
       verbs: [
-        { label: s.running ? "Up again" : "Up", onClick: () => this.stack(s, "up"), color: c.text },
-        { label: "Rebuild", onClick: () => this.stack(s, "rebuild") },
-        s.total > 0 ? this.armed.verb("Down", "take it down", `down:${id}`, () => this.stack(s, "down")) : null,
+        s.verbs.up ? { label: s.count?.running ? "Up again" : "Up", onClick: () => this.stack(s, "up"), color: c.text } : null,
+        s.verbs.rebuild ? { label: "Rebuild", onClick: () => this.stack(s, "rebuild") } : null,
+        s.verbs.down ? this.armed.verb("Down", "take it down", `down:${id}`, () => this.stack(s, "down")) : null,
       ].filter(Boolean),
     });
   }
@@ -415,29 +424,28 @@ export default class Containers extends View {
   }
 
   imagesView(c) {
-    const { imagesSummary: summary, cleanup } = this.panel, open = this.show.images, name = this.pull.value().trim();
+    const { imagesSummary: summary, targets, can } = this.panel, open = this.show.images, name = this.pull.value().trim();
     const spare = summary?.spare ?? 0;
     return v_flex().w_full().gap(G.xs)
       .child(this.head("images", "images", summary ? `${summary.count} · ${size(summary.mb)}${spare > 0 ? ` · ${size(spare)} unused` : ""}` : "", open, c))
       .child(h_flex().w_full().gap(G.sm).items_center()
         .child(field("ct-pull-image", this.pull, c).flex_1().min_w(0))
-        .child(quietLink("ct-pull", "Pull", () => this.pullImage(), c, { color: name ? c.text : c.border, disabled: !name })))
-      .when(cleanup.images.length > 0, (el) => el.child(h_flex()
-        .child(this.armed.link("ct-rmi", `Remove unused images (${size(spare)})`, `remove ${cleanup.images.length}`,
-          "rmi", (cx) => this.clean("images", every, "remove images", cx), c))))
+        .child(quietLink("ct-pull", "Pull", () => this.pullImage(), c, { color: name && can.pull ? c.text : c.border, disabled: !name || !can.pull })))
+      .when(Boolean(targets.images), (el) => el.child(h_flex()
+        .child(this.armed.link("ct-rmi", `Remove unused images (${size(spare)})`, `remove ${targets.images?.items.length}`,
+          targets.images?.key, (cx) => this.clean(targets.images, "remove images", cx), c))))
       .when(open && Boolean(this.panel.images), (el) => el.children(this.images.map((i) => this.imageRow(i, c))));
   }
 
   imageRow(i, c) {
     const form = this.runFor?.id === i.id ? this.runFor : null;
-    const only = (list) => list.filter((x) => x.id === i.id);
     return v_flex().w_full()
       .child(row(`ct-image-${i.id}`, c, {
-        name: i.name, dimmed: i.stale || i.unused, meta: size(i.mb), pending: this.busy.has("clean:images"),
+        name: i.name, dimmed: i.stale || i.unused, meta: size(i.mb), pending: this.busy.has(i.id),
         second: !i.known ? i.age : i.unused ? `unused · ${i.age}` : `${i.projects.join(", ")} · ${i.users.join(", ")}`,
         verbs: [
-          { label: form ? "Cancel" : "Run…", onClick: (cx) => this.openRun(i, cx), color: c.text },
-          i.unused ? this.armed.verb("Remove", "remove", `rmi:${i.id}`, (cx) => this.clean("images", only, "remove image", cx)) : null,
+          i.run ? { label: form ? "Cancel" : "Run…", onClick: (cx) => this.openRun(i, cx), color: c.text } : null,
+          i.target ? this.armed.verb("Remove", "remove", i.target.key, (cx) => this.clean(i.target, "remove image", cx)) : null,
         ].filter(Boolean),
       }))
       .when(Boolean(form), (el) => el.child(h_flex().w_full().gap(G.sm).items_center()
@@ -448,19 +456,19 @@ export default class Containers extends View {
 
   volumeRow(v, c) {
     return row(`ct-volume-${v.name}`, c, {
-      name: v.anonymous ? v.name.slice(0, 12) : v.name, dimmed: v.stale || v.unused,
+      name: v.anonymous ? v.name.slice(0, 12) : v.name, dimmed: v.stale || v.unused, pending: this.busy.has(v.name),
       detail: v.anonymous ? { text: "anonymous", tip: v.name } : null,
       second: !v.known ? "" : v.unused ? "unused" : v.users.join(", "),
     });
   }
 
   volumesView(c) {
-    const { volumesSummary: summary, cleanup } = this.panel, open = this.show.volumes, unused = cleanup.volumes.length;
+    const { volumesSummary: summary, targets } = this.panel, open = this.show.volumes, unused = targets.volumes?.items.length ?? 0;
     return v_flex().w_full().gap(G.xs)
       .child(this.head("volumes", "volumes", summary ? `${summary.count}${unused ? ` · ${unused} unused` : ""}` : "", open, c))
       .when(unused > 0, (el) => el.child(h_flex()
         .child(this.armed.link("ct-vrm", `Remove ${unused} unused volume${unused === 1 ? "" : "s"}`, "delete their data for good",
-          "vrm", (cx) => this.clean("volumes", every, "remove volumes", cx), c))))
+          targets.volumes?.key, (cx) => this.clean(targets.volumes, "remove volumes", cx), c))))
       .when(open, (el) => el.children(this.volumes.map((v) => this.volumeRow(v, c))));
   }
 
@@ -469,7 +477,7 @@ export default class Containers extends View {
     if (!this.panel.can.clearCache) return null;
     return h_flex().w_full().items_center().justify_between().gap(G.md)
       .child(div().text_size(T.value).text_color(c.muted).child(`Build cache: ${size(cache)} you can get back`))
-      .child(this.armed.link("ct-cache", "Clear", "clear", "cache", (cx) => this.clean("disk", every, "clear the build cache", cx), c, { color: c.text }));
+      .child(this.armed.link("ct-cache", "Clear", "clear", this.panel.targets.disk.key, (cx) => this.clean(this.panel.targets.disk, "clear the build cache", cx), c, { color: c.text }));
   }
 
   body(c) {

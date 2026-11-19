@@ -22,12 +22,13 @@ export function simulatorApi(platform, run, present = exists) {
   };
   const probe = async (home, alive = () => true) => {
     const live = (value) => { if (!alive()) throw new Error("expired"); return value; };
+    live();
     const [env, selected] = live(await Promise.all([
       environment(),
       platform === "macos" ? run("xcode-select", ["-p"], { timeout: 1500 }) : null,
     ]));
     if (selected && selected.code !== 0 && !NO_DEVELOPER.test(`${selected.stderr ?? ""}${selected.stdout ?? ""}`)) throw new Error(`xcode-select: ${(selected.stderr || selected.stdout || "").trim()}`);
-    if (selected?.code === 0 && !selected.stdout.trim()) throw new Error("xcode-select: no answer");
+    const blank = selected?.code === 0 && !selected.stdout.trim();
     const developer = selected?.code === 0 ? selected.stdout.trim() : "";
     const simctl = developer ? api.join(developer, "usr", "bin", "simctl") : null;
     const ios = simctl && live(await present(simctl)) ? simctl : null;
@@ -38,7 +39,9 @@ export function simulatorApi(platform, run, present = exists) {
       const adb = api.join(root, "platform-tools", `adb${exe}`), emulator = api.join(root, "emulator", `emulator${exe}`);
       return live(await present(adb)) ? { adb, emulator: live(await present(emulator)) ? emulator : null } : find(index + 1);
     };
-    return { ios, ...await find(0) };
+    const android = await find(0);
+    if (blank && !android.adb) throw new Error("xcode-select: no answer");
+    return { ios, ...android };
   };
   const capture = (adb, serial, file) => platform === "windows"
     ? powershell(run, `$p=[Diagnostics.ProcessStartInfo]::new(); $p.FileName=${psQuote(adb)}; $p.Arguments=${psQuote(["-s", serial, "exec-out", "screencap", "-p"].map(windowsArg).join(" "))}; $p.UseShellExecute=$false; $p.RedirectStandardOutput=$true; $child=[Diagnostics.Process]::Start($p); $file=[IO.File]::Create(${psQuote(file)}); try { $child.StandardOutput.BaseStream.CopyTo($file) } finally { $file.Dispose() }; $child.WaitForExit(); exit $child.ExitCode`, { timeout: 8000 })

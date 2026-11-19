@@ -6,11 +6,15 @@ import { load, clone, failure, success, gpuiHost, texts, find, calls } from "./h
 
 const model = () => load("kanso-containers/model.js", ["parseContainers", "hostPorts", "health", "projectOf", "byProject", "parseImages", "imageRows",
   "parseImageIds", "contextOf", "sizeMB", "memMB", "parseStats", "vmPids", "dockerVms", "dockerHeld", "since", "size", "daemonDown", "OTHER",
-  "okRead", "failedRead", "settle", "panelOf"]);
+  "okRead", "failedRead", "settle", "panelOf", "readOf", "containerKey", "CAP_BYTES", "INCOMPLETE"]);
 const row = (...f) => f.join("\t");
 const LOCAL = "desktop-linux\tunix:///var/run/docker.sock";
+const CONTEXT = "{{.Name}}\t{{.Endpoints.docker.Host}}";
 const STOPPED = "Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?";
 const mismatches = (cases) => cases.filter(([, got, want]) => JSON.stringify(got) !== JSON.stringify(want)).map(([name, got]) => [name, got]);
+const DESTRUCTIVE = ["rm", "rmi", "prune", "stop", "kill", "down"];
+const SPARE_IMAGE = row("sha256:9999bbbb9999", "pg", "16", "400MB", "1 day ago");
+const CACHE = '{"Type":"Build Cache","Reclaimable":"1.2GB (100%)"}';
 const webRow = (state = "running") => row("aa11aa11aa11", "web-1", state, "Up 2 hours", "web", "", "", "", "", "");
 const withWeb = async () => { const m = await model(); return { m, ps: m.okRead(webRow()) }; };
 const inspected = (ids) => ids.map((id) => row(id, "sha256:1111aaaa2222", "[]", "no", "{}", "[]", "", "linux")).join("\n");
@@ -177,23 +181,28 @@ test("the panel draws every part with each element in one place", async () => {
   const view = new Containers();
   view.init({}, { timer: { every: () => ({ cancel() {} }), after() {} }, spawn: () => {}, notify() {} });
   const ids = m.parseContainers(PS).map((c) => c.id);
-  const snapshot = m.settle(null, { n: 1, reads: { context: m.okRead(LOCAL), containers: m.okRead(PS), details: m.okRead({ set: "", text: inspected(ids) }), limit: m.okRead("4000000000"),
-    images: m.okRead(row("sha256:1111aaaa2222", "pg", "16", "400MB", "1 day ago")), volumes: m.okRead("pgdata\tlocal"), disk: m.okRead("") } });
-  const panel = m.panelOf(snapshot, { projects: PROJECTS });
-  view.panel = { ...panel, held: 600, spare: { "Build Cache": 1200 } };
+  const snapshot = m.settle(null, { n: 1, reads: { context: m.okRead(LOCAL), containers: m.okRead(PS), details: m.okRead({ set: m.containerKey(m.parseContainers(PS)), text: inspected(ids) }),
+    limit: m.okRead("4000000000"), images: m.okRead(SPARE_IMAGE), volumes: m.okRead("pgdata\tlocal"), disk: m.okRead(CACHE) } });
+  view.panel = m.panelOf(snapshot, { projects: PROJECTS });
   Object.assign(view, { show: { images: true, volumes: true }, opened: new Set(ids), error: "x", note: "y" });
-  assert.doesNotThrow(() => view.render());
+  const { Containers: Drawn } = await loadContainers({ ...host, ...gpuiHost() });
+  const shown = new Drawn();
+  shown.init({}, { timer: { every: () => ({ cancel() {} }), after() {} }, spawn: () => {}, notify() {} });
+  Object.assign(shown, { panel: view.panel, show: view.show, opened: view.opened });
+  const drawn = texts(shown.render());
+  assert.deepEqual(["Remove unused images (400 MB)", "Remove 1 unused volume", "Build cache: 1.2 GB you can get back", "Quit Docker (stops 2)", "Logs", "Less", "Run…", "Remove"]
+    .filter((label) => !drawn.includes(label)), [], "every control is drawn");
   view.panel = m.panelOf(m.settle(null, { n: 1, reads: { context: m.okRead(LOCAL), containers: m.failedRead("Docker said: stopped", STOPPED) } }));
   assert.equal(view.panel.state, "down");
   assert.doesNotThrow(() => view.render());
 });
 
 // The panel open and nothing changing: Docker answers as a fixed engine, every command counted.
-async function openPanel({ hung = false, drawn = false, failing = [], inspect = inspected(["aa11aa11aa11"]) } = {}) {
+async function openPanel({ hung = false, drawn = false, failing = [], inspect = inspected(["aa11aa11aa11"]), images = null, disk = "" } = {}) {
   const { fixture, loadMod } = await import("./perf-harness.mjs");
   const f = fixture();
-  const docker = { ps: [webRow()], images: row("sha256:1111aaaa2222", "web", "latest", "100MB", "2 days ago"), down: false,
-    failing: new Set(failing), inspect, partialFind: false, config: JSON.stringify({ currentContext: "desktop-linux" }), volumes: "pgdata\tlocal", hung, rejects: null, broken: false };
+  const docker = { ps: [webRow()], images: images ?? row("sha256:1111aaaa2222", "web", "latest", "100MB", "2 days ago"), down: false,
+    failing: new Set(failing), inspect, disk, partialFind: false, config: JSON.stringify({ currentContext: "desktop-linux" }), volumes: "pgdata\tlocal", hung, rejects: null, broken: false };
   if (drawn) Object.assign(f.host, gpuiHost());
   const spaces = f.host.spaces;
   f.host.spaces = () => { if (docker.broken) throw new Error("spaces are not ready"); return spaces(); };
@@ -211,7 +220,7 @@ async function openPanel({ hung = false, drawn = false, failing = [], inspect = 
     if (docker.down && verb !== "context") return failure(STOPPED);
     if (docker.failing.has(verb)) return failure("unexpected error");
     if (verb === "ps" && docker.psResult) return docker.psResult;
-    const out = { inspect: docker.inspect, ps: docker.ps.join("\n"), images: docker.images, info: "8000000000", context: docker.context ?? LOCAL, volume: docker.volumes }[verb] ?? "";
+    const out = { inspect: docker.inspect, system: docker.disk, ps: docker.ps.join("\n"), images: docker.images, info: "8000000000", context: docker.context ?? LOCAL, volume: docker.volumes }[verb] ?? "";
     return success(out);
   };
   f.host.run = () => null;
@@ -220,17 +229,16 @@ async function openPanel({ hung = false, drawn = false, failing = [], inspect = 
   view.init({}, f.cx);
   await f.settle();
   await f.advance(0);
-  const asked = (verb) => f.state.processes.filter((p) => (verb === "find" ? p.command === "find" : p.command === "docker" && p.args.join(" ").startsWith(verb))).length;
+  const plain = (args) => (args[0] === "--context" ? args.slice(2) : args);
+  const asked = (verb) => f.state.processes.filter((p) => (verb === "find" ? p.command === "find" : p.command === "docker" && plain(p.args).join(" ").startsWith(verb))).length;
   const fresh = () => { f.state.processes.length = 0; };
   const words = () => texts(view.render(f.cx));
   const again = async () => { view.refresh(f.cx, true, true); await f.settle(); };
   const lose = async () => { docker.psResult = failure("host unavailable"); await again(); };
-  const press = async (tag) => {
-    const click = () => calls(find(view.render(f.cx), (el) => el.tag === tag), "on_click").at(-1).at(-1)({}, f.cx);
-    click(); click(); await f.settle();
-  };
-  const removed = () => f.state.processes.filter((p) => p.command === "docker" && p.args[0] === "--context" && ["rm", "rmi", "prune"].some((verb) => p.args.includes(verb))).map((p) => p.args.join(" "));
-  return { f, view, docker, asked, fresh, words, again, lose, press, removed };
+  const click = (tag) => calls(find(view.render(f.cx), (el) => el.tag === tag), "on_click").at(-1).at(-1)({}, f.cx);
+  const press = async (tag) => { click(tag); click(tag); await f.settle(); };
+  const removed = () => f.state.processes.filter((p) => p.command === "docker" && p.args.some((arg) => DESTRUCTIVE.includes(arg))).map((p) => p.args.join(" "));
+  return { f, view, docker, asked, fresh, words, again, lose, click, press, removed };
 }
 
 test("the Containers panel at rest asks Docker only what can change by itself in a minute", async () => {
@@ -274,7 +282,7 @@ test("a memory limit or context Docker failed to give is asked again on the next
   assert.equal(view.failure(), "Docker said: unexpected error");
   fresh();
   await f.advance(5000);
-  assert.deepEqual([asked("info"), asked("context inspect")], [1, 1], "asked again 5 seconds later");
+  assert.deepEqual([asked("info"), asked("context inspect")], [0, 1], "the context is asked again 5 seconds later, and no engine is asked while it is unknown");
   docker.failing = new Set();
   fresh();
   await f.advance(5000);
@@ -548,6 +556,111 @@ test("A cleanup press proves again on the context it read and removes only what 
   assert.deepEqual(mismatches(cases), []);
 });
 
+test("A confirmed cleanup removes only on the engine and the targets that were armed", async () => {
+  const confirmed = async (between) => {
+    const { docker, click, removed, again, f } = await openPanel({ drawn: true });
+    click("ct-vrm");
+    await between(docker, again);
+    click("ct-vrm"); await f.settle();
+    return removed();
+  };
+  const cases = [
+    ["nothing changed", await confirmed(async () => {}), ["--context desktop-linux volume rm pgdata"]],
+    ["the same name now points at another endpoint", await confirmed(async (docker) => { docker.context = "desktop-linux\tssh://prod"; }), []],
+    ["a refresh drew another unused volume", await confirmed(async (docker, again) => { docker.volumes = "different\tlocal"; await again(); }), []],
+  ];
+  assert.deepEqual(mismatches(cases), []);
+});
+
+test("Every read the panel draws from, and every command it runs, names the context it read", async () => {
+  const { f } = await openPanel({ drawn: true });
+  const unnamed = f.state.processes.filter((p) => p.command === "docker" && p.args[0] !== "--context" && p.args.join(" ") !== `context inspect --format ${CONTEXT}`);
+  assert.deepEqual(unnamed.map((p) => p.args.join(" ")), []);
+});
+
+test("Every cleanup press and Quit run exactly the command that was proved, and nothing else", async () => {
+  const pressed = async (tag, options = {}) => {
+    const { press, removed, view } = await openPanel({ drawn: true, images: [row("sha256:1111aaaa2222", "web", "latest", "100MB", "2 days ago"), SPARE_IMAGE].join("\n"), disk: CACHE, ...options });
+    view.show = { images: true, volumes: true };
+    await press(tag);
+    return removed();
+  };
+  const cases = [
+    ["remove unused volumes", await pressed("ct-vrm"), ["--context desktop-linux volume rm pgdata"]],
+    ["remove unused images", await pressed("ct-rmi"), ["--context desktop-linux rmi pg:16"]],
+    ["remove one image", await pressed("ct-image-9999bbbb9999-verb-1"), ["--context desktop-linux rmi pg:16"]],
+    ["clear the build cache", await pressed("ct-cache"), ["--context desktop-linux builder prune -f"]],
+    ["quit Docker", await pressed("ct-quit"), ["desktop stop"]],
+  ];
+  assert.deepEqual(mismatches(cases), []);
+});
+
+test("Only the rows a removal targets show it pending", async () => {
+  const { view, docker, click, f } = await openPanel({ drawn: true, images: [row("sha256:1111aaaa2222", "web", "latest", "100MB", "2 days ago"), SPARE_IMAGE].join("\n") });
+  view.show = { ...view.show, images: true };
+  click("ct-image-9999bbbb9999-verb-1");
+  docker.hung = true;
+  click("ct-image-9999bbbb9999-verb-1"); await f.settle();
+  const pending = (id) => Boolean(find(view.render(f.cx), (el) => calls(el, "id").some(([, tag]) => tag === `ct-image-${id}-pending`)));
+  assert.deepEqual([pending("9999bbbb9999"), pending("1111aaaa2222")], [true, false]);
+});
+
+test("Anything incomplete is a failure: a read at Herdr's output cap, a cut row, a context without a name or a local endpoint", async () => {
+  const m = await model();
+  const read = (kind, stdout) => m.readOf({ code: 0, stdout, stderr: "" }, () => "failed", kind).state;
+  const reads = [
+    ["a full inspect record", read("details", inspected(["aa11aa11aa11"])), "ok"],
+    ["an inspect answer at the cap", read("details", inspected(["aa11aa11aa11"]).padEnd(m.CAP_BYTES, " ")), "failed"],
+    ["a container row with three fields", read("containers", "aa11\tweb-1\trunning"), "failed"],
+    ["a volume name without its driver", read("volumes", "pgdata\tlocal\npgda"), "failed"],
+    ["an image row cut short", read("images", "sha256:9999\tpg\t16"), "failed"],
+  ];
+  assert.deepEqual(mismatches(reads), []);
+  const place = (text) => { const context = m.contextOf(text); return context && [context.name, context.local]; };
+  const contexts = [
+    ["no name, a socket", place("\tunix:///docker.sock"), null],
+    ["a name, no endpoint", place("work"), ["work", false]],
+    ["a bare unix scheme", place("work\tunix://"), ["work", false]],
+    ["a pipe on another computer", place("work\tnpipe:////server/pipe/docker_engine"), ["work", false]],
+    ["this computer's pipe", place("work\tnpipe:////./pipe/docker_engine"), ["work", true]],
+    ["this computer's socket", place(LOCAL), ["desktop-linux", true]],
+  ];
+  assert.deepEqual(mismatches(contexts), []);
+});
+
+test("A failed inspect takes Quit and memory away, and a paused or restarting container counts as running", async () => {
+  const { m, ps } = await withWeb();
+  const set = m.containerKey(m.parseContainers(ps.data)), good = { context: m.okRead(LOCAL), containers: ps, details: m.okRead({ set, text: inspected(["aa11aa11aa11"]) }) };
+  const once = m.settle(null, { n: 1, reads: good });
+  const failedAfter = m.panelOf(m.settle(once, { n: 2, reads: { ...good, details: m.failedRead("Docker said: unexpected error") } }));
+  assert.deepEqual([failedAfter.can.quit, failedAfter.can.memory], [false, false]);
+  const paused = m.okRead(webRow("paused"));
+  const busy = m.panelOf(m.settle(null, { n: 1, reads: { context: m.okRead(LOCAL), containers: paused, details: m.okRead({ set: m.containerKey(m.parseContainers(paused.data)), text: "" }) } }));
+  assert.deepEqual(clone([busy.counts, busy.can.quit, busy.groups[0].containers[0].verbs.toggle]), [{ running: 1, stopped: 0 }, false, "stop"]);
+});
+
+test("A row from a list that failed is marked stale and offers nothing that acts on Docker", async () => {
+  const m = await model();
+  const app = m.okRead(row("aa11aa11aa11", "app-web-1", "running", "Up 2 hours", "web", "", "app", "/p/app", "web", "/p/app/compose.yaml"));
+  const files = m.okRead("/p/app/compose.yaml"), images = m.okRead(SPARE_IMAGE), stats = m.okRead("aa11aa11aa11\t10MiB / 1GiB");
+  const good = { context: m.okRead(LOCAL), containers: app, files, images, stats, details: m.okRead({ set: m.containerKey(m.parseContainers(app.data)), text: inspected(["aa11aa11aa11"]) }) };
+  const lost = m.failedRead("Docker said: unexpected error");
+  const after = (next) => {
+    const panel = m.panelOf(m.settle(m.settle(null, { n: 1, reads: good }), { n: 2, reads: next }), { projects: [{ name: "app", folders: ["/p/app"] }] });
+    const [stack] = panel.groups.flatMap((g) => g.stacks), [k] = panel.groups.flatMap((g) => g.containers);
+    return [stack.stale, stack.verbs.down, Boolean(stack.count), k.verbs.logs, k.verbs.details, k.mem !== null, panel.images[0].run];
+  };
+  const cases = [
+    ["everything read again", after({ containers: app }), [false, true, true, true, true, true, true]],
+    ["the container list failed", after({ containers: lost }), [true, false, false, false, false, false, false]],
+    ["compose file discovery failed", after({ containers: app, files: lost }), [true, false, false, true, true, true, true]],
+    ["inspect failed", after({ containers: app, details: lost }), [false, true, true, true, false, true, true]],
+    ["stats failed", after({ containers: app, stats: lost }), [false, true, true, true, true, false, true]],
+    ["images failed", after({ containers: app, images: lost }), [false, true, true, true, true, true, false]],
+  ];
+  assert.deepEqual(mismatches(cases), []);
+});
+
 test("A second inspect that fails takes cleanup away, though the containers are the same", async () => {
   const { docker, again, words } = await openPanel({ drawn: true });
   docker.failing.add("inspect");
@@ -631,7 +744,7 @@ test("Every Docker command ends inside the view's deadline: reads, and actions t
   view.containers("stop", [web], f.cx);
   assert.ok(view.busy.has(web.id));
   view.containers("stop", [web], f.cx);
-  assert.equal(f.state.processes.filter((p) => p.args[0] === "stop").length, 1, "a row being changed is not asked twice");
+  assert.equal(f.state.processes.filter((p) => p.args.includes("stop")).length, 1, "a row being changed is not asked twice");
   await f.advance(60_000);
   assert.equal(view.busy.has(web.id), false, "a stop that never answers frees its row");
   assert.ok(words().includes("stop failed: timed out"));
