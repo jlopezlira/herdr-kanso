@@ -24,9 +24,9 @@ test("The status bar tree is the Storybook's markup", () => {
   same(failureLineTree({ text: "Layout paused", fix: "Resume", detail: "layout write refused 3 times" }), failureLine({ text: "Layout paused", fix: "Resume", detail: "layout write refused 3 times" }));
   same(computerItemTree({ name: "devbox", state: "unreachable" }), computerItem({ name: "devbox", state: "unreachable" }));
   same(computerItemTree({ name: "This computer", remote: false, folded: true }), computerItem({ name: "This computer", remote: false, folded: true }));
-  same(paletteDoorTree(), paletteDoor({ tip: "Command palette ⌘⇧P" }));
+  same(paletteDoorTree(), paletteDoor({ tip: "Command palette ⇧⌘P" }));
   same(layoutPausedTree(), layoutPaused());
-  same(statusBarTree({ left: [statusItemTree({ icon: "lu-monitor", text: "devbox" })], middle: stepperTree({ value: 2 }), right: [paletteDoorTree()] }), statusBar({ left: [statusItem({ icon: "lu-monitor", text: "devbox" })], middle: stepper({ value: 2 }), right: [paletteDoor({ tip: "Command palette ⌘⇧P" })] }));
+  same(statusBarTree({ left: [statusItemTree({ icon: "lu-monitor", text: "devbox" })], middle: stepperTree({ value: 2 }), right: [paletteDoorTree()] }), statusBar({ left: [statusItem({ icon: "lu-monitor", text: "devbox" })], middle: stepper({ value: 2 }), right: [paletteDoor({ tip: "Command palette ⇧⌘P" })] }));
 });
 
 test("The compiler turns the bar's alignment, width and hairline into gpui, and leaves its columns and the stepper's ch", () => {

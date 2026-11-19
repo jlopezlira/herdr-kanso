@@ -1,35 +1,11 @@
 // The tab bar as the Storybook draws its tabs: chosen, at rest and waiting, close armed, renaming, dragging, folded, connecting and unreachable.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { load, clone, chain, gpuiHost, calls, arg, find, all, CHROME_NIGHT, fieldWith, texts, repoText } from "./helpers.mjs";
+import { load, clone, chain, gpuiHost, calls, arg, find, all, CHROME_NIGHT, texts, repoText } from "./helpers.mjs";
+import { TABS, tabBar as bar } from "./menu-fixtures.mjs";
 
 const night = CHROME_NIGHT;
 const model = () => load("kanso-tabs/tab-bar-model.js", ["tabMark", "barState", "foldTabs", "dropSide", "renameWaits"]);
-const TABS = [
-  { id: "t1", index: 1, name: "checkout", active: true, status: "working" },
-  { id: "t2", index: 2, name: "cart-ui", active: false, status: "blocked" },
-  { id: "t3", index: 3, name: "tests", active: false, status: "done" },
-];
-
-// One bar, drawn by the real view against a fake Herdr; `space.tabs` is what Herdr reports now.
-async function bar({ tabs = TABS, machine = null, computers = [], panes = [], fails = null, stored = {}, tree = null } = {}) {
-  const store = { ...stored }, ran = [], toasts = [], opened = [];
-  const space = { id: "s1", active: true, machine, tabs: clone(tabs) };
-  const host = {
-    ...gpuiHost(), Popover: { new: (id) => chain(id) },
-    InputState: { new: fieldWith },
-    theme: () => night, spaces: () => [space], panes: () => panes, machines: () => computers,
-    layout: () => tree, home: () => "/home/me", shared: (key) => store[key] ?? null, setShared: (key, value) => { store[key] = value; },
-    run: (cmd, args) => { if (cmd === fails) throw new Error("refused"); ran.push([cmd, args]); }, notify: (note) => { toasts.push(note); }, openOverlay: (spec) => { opened.push(spec); },
-  };
-  const { Tabs, tokens } = await load("kanso-tabs/main.js", ["Tabs", "tokens"], host);
-  const { W } = await load("kanso-tabs/ui.js", ["W"], gpuiHost());
-  const { PENDING } = await load("kanso-tabs/ui-state.js", ["PENDING"], gpuiHost());
-  const view = new Tabs();
-  const cx = { stop_propagation() {}, notify() {}, timer: { after() {} } };
-  return { view, cx, ran, toasts, opened, space, store, c: tokens(night), W, PENDING };
-}
-
 // A bar whose three tabs are measured at 100 wide.
 const measuredBar = async () => {
   const b = await bar();
