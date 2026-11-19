@@ -2,7 +2,7 @@ import { temporaryKdb, loadPullRequest, loadPanelKdb, loadGroupInbox, loadAuthTi
 import assert from "node:assert/strict";
 import test from "node:test";
 import { join } from "node:path";
-import { databaseTimer, load, context, exec as realExec, success, failure, clone as plain, refreshedContext } from "./helpers.mjs";
+import { databaseTimer, load, context, callContext, exec as realExec, success, failure, clone as plain, refreshedContext } from "./helpers.mjs";
 import { blankPanel, refreshAgain, openInbox, SIGNED_OUT } from "./pr-fixtures.mjs";
 
 const AUTH = "github.com\n  Logged in to github.com account jj (keyring)\n  - Active account: true\n  - Token: gho_secret\n";
@@ -165,7 +165,13 @@ async function database(t, ...projects) {
   return { dir, db, file: join(dir, "data/kanso/kanso.db") };
 }
 
-async function panelFor(t, { gh, git, dir }) {
+const cachedReview = async (t) => {
+  const { dir, db } = await database(t, ERES_PROJECT);
+  await db.run(eresItem("Cached"));
+  return { dir, db };
+};
+
+async function panelFor(t, { gh, git, dir, host: more = {}, state }) {
   const ui = recorder(), calls = [];
   const exec = async (command, args, options) => {
     const hosted = command === "env" && args?.[1] === "gh";
@@ -176,10 +182,10 @@ async function panelFor(t, { gh, git, dir }) {
     if (command === "gh" || hosted) return gh(forwarded, hosted ? args[0] : "");
     return failure("");
   };
-  const host = { ...ui, exec, appHome: () => dir, home: () => "/Users/x", key: () => "repo", location: () => ({ cwd: "/work/herdr-kanso", on: null }) };
+  const host = { ...ui, exec, appHome: () => dir, home: () => "/Users/x", key: () => "repo", location: () => ({ cwd: "/work/herdr-kanso", on: null }), ...more };
   const { PullRequest } = await loadPullRequest(host);
   const { Kdb } = await loadPanelKdb(host);
-  return { panel: blankPanel(PullRequest, new Kdb(databaseTimer)), calls, ui };
+  return { panel: blankPanel(PullRequest, new Kdb(databaseTimer), state), calls, ui };
 }
 
 const focused = { number: 4, title: "Focused", url: "https://github.com/jlopezlira/herdr-kanso/pull/4", state: "OPEN", author: { login: "jj" }, headRefName: "feat", baseRefName: "main", updatedAt: "2026-11-01T00:00:00Z", files: [], additions: 1, deletions: 1, changedFiles: 1, body: "Short." };
@@ -461,8 +467,7 @@ test("past 20 repositories, a listed one drops its stale review and an unlisted 
 });
 
 test("cached reviews show while GitHub is still being asked, and a failed ask keeps them", async (t) => {
-  const { dir, db } = await database(t, ERES_PROJECT);
-  await db.run(eresItem("Cached"));
+  const { dir, db } = await cachedReview(t);
   let release;
   const gate = new Promise((resolve) => { release = resolve; });
   let hit;
@@ -546,4 +551,38 @@ test("signing out brings back copy, open, and the repository list", async (t) =>
   assert.equal(out.includes("pr-copy"), true);
   assert.equal(out.includes("pr-web"), true);
   assert.equal(out.includes("pr-switch"), true);
+});
+
+test("the inbox reads every account after the call that asked has returned, with no stale context", async (t) => {
+  const { dir } = await database(t, ERES_PROJECT);
+  const asked = { number: 149, title: "Asked for", url: ERES_URL, author: { login: "ada" }, repository: { nameWithOwner: "amtelser/eres-admin-app" }, updatedAt: "2026-11-09T00:00:00Z", isDraft: false };
+  const { panel } = await panelFor(t, {
+    dir, git: gitAt(ERES),
+    gh: signedIn((args) => (args[0] === "search" && args.includes("--review-requested=@me") ? success(JSON.stringify([asked])) : undefined)),
+  });
+  const { cx, end, drain } = callContext();
+  panel.refresh(cx);
+  end();
+  await drain();
+  assert.equal(panel.note, null, panel.note?.source);
+  assert.equal(panel.error, null);
+  assert.equal(panel.pr.title, "Focused");
+  assert.equal(panel.inbox.needs[0].title, "Asked for");
+});
+
+test("a rejected inbox step shows its card and leaves Refresh working", async (t) => {
+  const { dir, db } = await cachedReview(t);
+  const { panel, calls } = await panelFor(t, {
+    dir, git: gitAt(ERES), gh: signedIn(),
+    host: { setShared() { throw new Error("shared state is closed"); } },
+    state: { context: "repo", pr: focused, inboxOpen: false },
+  });
+  const { cx, drain } = context();
+  panel.refresh(cx); await drain();
+  assert.equal(panel.loading, false, "a rejected step releases the refresh");
+  assert.equal(panel.note.text, "Could not keep pull requests");
+  assert.match(panel.note.source, /shared state is closed/);
+  const before = calls.length;
+  panel.again(cx); await drain();
+  assert.ok(calls.length > before, "Refresh asks again");
 });
