@@ -113,12 +113,13 @@ export const loadStripWith = (props, panes, store) => load("kanso-strip/main.js"
 });
 
 export const byTag = (el, tag) => nodes(el).find((kid) => kid.tag === tag);
+export const keyDown = (el, e, cx = { notify() {}, stop_propagation() {}, spawn() {} }) => el.calls.filter((call) => call[0] === "on_key_down").forEach(([, handler]) => handler(e, cx));
 export const dialogHost = () => ({ ...drawingHost(), Textarea: { new: () => chain("textarea") }, Input: { new: () => chain("input") } });
 const typed = (value, multiline = false) => ({ value: () => value, state: {}, multiline, focused: false });
 export async function openedSend(host, { from = null, to = null, text = "hi", query = "" } = {}) {
   const { Send } = await load("kanso-send/main.js", ["Send"], {
     ...dialogHost(), theme: () => KIT_NIGHT, props: () => ({ overlay: "o1" }), terminals: () => [], panes: () => [], spaces: () => [], machines: () => [],
-    shared: () => null, setShared() {}, closeOverlay() {}, ...host,
+    shared: () => null, setShared() {}, closeOverlay() {}, run() {}, ...host,
   });
   return Object.assign(new Send(), { from, to, toProject: null, text, error: null, sending: false, unsure: [], handle: {}, query: typed(query), box: typed(text, true) });
 }

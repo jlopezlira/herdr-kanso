@@ -78,7 +78,8 @@ test("The digest of a real repository: uncommitted files, lines and commits on t
 });
 
 test("Send to an agent lists every other agent, the last one you sent to first, and drafts where the work is", async () => {
-  const { targetsOf, draftFor } = await load("kanso-send/main.js", ["targetsOf", "draftFor"], { home: () => HOME });
+  const { draftFor } = await load("kanso-send/main.js", ["draftFor"], { home: () => HOME });
+  const { targetsOf } = await load("kanso-send/send-model.js", ["targetsOf"], {});
   const p = (pane, terminal, agent, status = null) => ({ pane, terminal, status, program: { agent } });
   const all = [p("p1", "t1", true, "done"), p("p2", "t2", false), p("p3", "t3", true, "working"), p("p4", "t4", true, "idle"), { pane: "p5", terminal: null, mod: "x" }];
   assert.deepEqual(clone(targetsOf(all, "p1", null).map((q) => q.pane)), ["p3", "p4"], "not itself, not a shell, not a mod pane");
@@ -418,7 +419,7 @@ test("The sidebar keeps its state in the left nav's database: prefs moved from l
 });
 
 test("Send reaches any agent of any model by the name and project Kanso gives it, grouped by project, yours first", async () => {
-  const { everyone } = await load("kanso-send/main.js", ["everyone"], {});
+  const { everyone } = await load("kanso-send/send-model.js", ["everyone"], {});
   const terms = [
     { address: "t5g", state: "live", status: "working", labels: { "kanso.shown": "morpheus", "kanso.project": "herdr-kanso" } },
     { address: "t5t", state: "live", status: "done", agent: "qwen-code", labels: { "kanso.shown": "qb2", "kanso.project": "herdr-kanso" } },

@@ -3,7 +3,8 @@
 import { View } from "gpui-kit";
 import { panes, spaces, terminals, machines, shared, setShared, run, props, closeOverlay, theme } from "herdr";
 import { givenNames, nameOf } from "./marks.js";
-import { deliver, isAgent, sendKey, waitingNote, NOT_CONFIRMED, MAY_HAVE_ARRIVED } from "./deliver.js";
+import { deliver, sendKey, NOT_CONFIRMED, MAY_HAVE_ARRIVED } from "./deliver.js";
+import { sendState, targetsOf } from "./send-model.js";
 import { shortFolder } from "./folder.js";
 import { tokens } from "./ui.js";
 import { dialog } from "./ui-dialog.js";
@@ -11,44 +12,6 @@ import { field, TextField } from "./ui-field.js";
 import { row, stack, emptyState } from "./kit.js";
 
 const LAST = "kanso.send.last";
-
-export function targetsOf(all, from, last) {
-  const list = all.filter((p) => p.pane !== from && p.terminal && isAgent(p));
-  const i = list.findIndex((p) => p.terminal === last);
-  return i > 0 ? [list[i], ...list.toSpliced(i, 1)] : list;
-}
-
-const machineOf = (address) => /^([^/]+)\//.exec(String(address))?.[1] ?? null;
-export const unreachable = (address, computers = []) => {
-  const at = machineOf(address);
-  const layout = at ? computers.find((m) => m?.name === at)?.layout : "ready";
-  return !layout || layout === "unavailable";
-};
-
-// `nameOf(pane)` and `projectOf(pane)` name one Kanso has not labelled yet.
-export function everyone(terms, ps, { from = null, last = null, query = "", nameOf = () => null, projectOf = () => null, computers = [], keep = null } = {}) {
-  const paneOf = new Map(ps.filter((p) => p.terminal).map((p) => [p.terminal, p]));
-  const mine = from ? terms.find((k) => k.address === from)?.labels?.["kanso.project"] ?? projectOf(paneOf.get(from)) : null;
-  const q = query.trim().toLowerCase();
-  const known = new Set(terms.map((k) => k.address));
-  const all = [...terms, ...[...paneOf.keys()].filter((address) => !known.has(address)).map((address) => ({ address }))]
-    .filter((k) => k.address !== from && (!k.state || k.state === "live") && isAgent(k, paneOf.get(k.address)))
-    .map((k) => {
-      const pane = paneOf.get(k.address) ?? null;
-      return { terminal: k.address, pane, status: k.status ?? pane?.status ?? null, program: k.program ?? pane?.program ?? null,
-        name: k.labels?.["kanso.shown"] || (pane ? nameOf(pane) : null) || k.address,
-        project: k.labels?.["kanso.project"] || (pane ? projectOf(pane) : null) || "Other", away: unreachable(k.address, computers) };
-    });
-  const kept = keep && !all.some((x) => x.terminal === keep)
-    ? [{ terminal: keep, pane: null, status: null, program: null, name: keep, project: "Other", away: unreachable(keep, computers), unknown: true }] : [];
-  const list = [...all, ...kept].filter((x) => !q || x.name.toLowerCase().includes(q) || x.project.toLowerCase().includes(q));
-  const order = [...new Set([mine, ...list.map((x) => x.project).toSorted((a, b) => a.localeCompare(b))].filter((p) => p && list.some((x) => x.project === p)))];
-  return order.map((project) => {
-    const group = list.filter((x) => x.project === project);
-    const i = group.findIndex((x) => x.terminal === last);
-    return { project, agents: i > 0 ? [group[i], ...group.toSpliced(i, 1)] : group };
-  });
-}
 
 export function draftFor(p, digest) {
   if (!p?.cwd) return "Review the latest changes.";
@@ -61,8 +24,8 @@ export default class Send extends View {
   init(_props, cx) {
     const p = props() ?? {};
     this.from = panes().find((q) => q.pane === p.pane) ?? null;
-    this.to = targetsOf(panes(), p.pane, shared(LAST))[0]?.terminal ?? null;
     this.toProject = null;
+    this.to = targetsOf(panes(), p.pane, shared(LAST))[0]?.terminal ?? this.state("").groups[0]?.recipients[0]?.terminal ?? null;
     this.query = new TextField({ placeholder: "Find an agent or a project" });
     this.query.on("change", (_e, cx) => cx.notify());
     this.text = draftFor(this.from, shared("kanso.digest")?.[p.pane]);
@@ -82,13 +45,15 @@ export default class Send extends View {
     cx.notify();
   }
 
-  send(cx, everything) {
+  state(query = this.query?.value() ?? "") {
+    const given = givenNames();
+    return sendState({ terms: terminals(), ps: panes(), spaces: spaces(), computers: machines(), from: this.from?.terminal ?? null,
+      to: this.to, toProject: this.toProject, query, last: shared(LAST), nameOf: (q) => nameOf(q, given) });
+  }
+
+  send(cx, { recipients: ready, waiting }) {
     const text = this.text.trim();
-    const all = everything.flatMap((g) => g.agents);
-    const targets = this.toProject ? (everything.find((g) => g.project === this.toProject)?.agents ?? []) : all.filter((x) => x.terminal === this.to);
-    if (!text || !targets.length || this.sending) return;
-    const waiting = targets.filter((x) => x.status === "blocked"), ready = targets.filter((x) => x.status !== "blocked");
-    if (!ready.length) { this.error = waitingNote(waiting.map((x) => x.name)); cx.notify(); return; }
+    if (!text || !ready.length || this.sending) return;
     const sender = this.from?.terminal ? terminals().find((k) => k.address === this.from.terminal)?.labels?.["kanso.shown"] || nameOf(this.from, givenNames()) : "you";
     this.sending = true; this.error = null; this.unsure = []; cx.notify();
     cx.spawn(async (cx) => {
@@ -112,45 +77,40 @@ export default class Send extends View {
   render() {
     const c = tokens(theme());
     const p = props() ?? {};
-    const given = givenNames(), sp = spaces();
-    const name = (q) => nameOf(q, given);
-    const spaceOf = (q) => sp.find((s) => s.tabs.some((x) => x.id === q.tab));
-    const terms = terminals(), ps = panes();
-    const roster = (query) => everyone(terms, ps, { from: this.from?.terminal ?? null, last: shared(LAST), query,
-      nameOf: name, projectOf: (q) => spaceOf(q)?.name ?? null, computers: machines(), keep: this.toProject ? null : this.to });
-    if (this.to === null && !this.toProject) this.to = roster(this.query.value()).flatMap((g) => g.agents)[0]?.terminal ?? null;
-    const groups = roster(this.query.value()), everything = roster("");
-    const list = groups.flatMap((g) => g.agents);
-    const unknown = !terms.length && !ps.length;
+    const name = (q) => nameOf(q, givenNames());
+    const state = this.state();
     const head = (g) => {
-      const on = this.toProject === g.project;
-      return row({ name: g.project, heading: true, current: on, meta: on ? `All ${g.agents.length}` : g.agents.length > 1 ? `Send to all ${g.agents.length}` : null })(
+      const on = this.toProject === g.project, n = g.recipients.length;
+      return row({ name: g.project, heading: true, current: on, meta: on ? `All ${n}` : n > 1 ? `Send to all ${n}` : null })(
         `to-project-${g.project}`, c, { onClick: (cx) => this.pick(cx, () => { this.toProject = on ? null : g.project; }) });
     };
+    const meta = (q) => (this.unsure.includes(q.terminal) ? { text: NOT_CONFIRMED, tone: "blocked" }
+      : q.state === "unreachable" ? { text: "Unreachable", tone: "blocked" }
+        : q.state === "gone" || q.state === "unknown" ? { text: "Unknown", tone: "blocked" }
+          : q.state === "shell" ? { text: q.program?.name || "Unknown", tone: "blocked" }
+            : q.status === "blocked" ? { text: "Needs you", tone: "blocked" } : null);
     // A program with no art of its own takes the terminal's, so every name starts at the same place.
     const agent = (q) => row({
       icon: q.program?.icon ? q.program : "terminal", tone: "muted", name: q.name, detail: q.pane?.branch ?? null,
-      meta: this.unsure.includes(q.terminal) ? { text: NOT_CONFIRMED, tone: "blocked" } : q.away ? { text: "Unreachable", tone: "blocked" }
-        : q.unknown ? { text: "Unknown", tone: "blocked" } : q.status === "blocked" ? { text: "Needs you", tone: "blocked" } : null,
-      mark: q.status, current: !this.toProject && q.terminal === this.to,
+      meta: meta(q), mark: q.status, current: !this.toProject && q.terminal === this.to,
     })(`to-${q.terminal}`, c, { onClick: (cx) => this.pick(cx, () => { this.to = q.terminal; this.toProject = null; }) });
     const from = this.from ? `From ${name(this.from)}${this.from.cwd ? `, in ${shortFolder(this.from.cwd)}` : ""}` : "";
-    const ready = Boolean(this.toProject || this.to) && Boolean(this.text.trim());
-    const rows = groups.flatMap((g) => [head(g), ...g.agents.map(agent)]);
+    const ready = state.recipients.length > 0 && Boolean(this.text.trim());
+    const rows = state.groups.flatMap((g) => [head(g), ...g.agents.map(agent)]);
+    const empty = { unknown: "Can't see the agents right now.", "no match": "No agent or project by that name.", none: "No other agent is running. Start one in a pane, then send." }[state.empty];
     const close = () => closeOverlay(p.overlay);
     return dialog("kanso-send", c, {
       title: "Send to an agent", scope: from,
       body: [
         field("send-to", this.query, c, { label: "To" }),
-        (rows.length ? stack({ variant: "dialog list", scroll: true }, rows)
-          : emptyState({ text: this.query.value().trim() ? "No agent or project by that name." : unknown ? "Can't see the agents right now." : "No other agent is running. Start one in a pane, then send." }))("send-list", c),
+        (rows.length ? stack({ variant: "dialog list", scroll: true }, rows) : emptyState({ text: empty }))("send-list", c),
         field("send-message", this.box, c, { label: "Message" }),
       ],
       notes: [{ text: this.error ?? "Pasted into its terminal and sent with Enter, as if you typed it there.", tone: this.error ? "error" : "dim" }],
-      secondary: "Cancel", primary: this.toProject ? `Send to ${this.toProject}  ⌘↩` : "Send  ⌘↩",
+      secondary: "Cancel", primary: state.label,
       state: this.sending ? "loading" : ready ? "default" : "disabled",
-      onCancel: close, onPrimary: (cx) => this.send(cx, everything), focusHandle: this.handle,
-      onKey: (e, cx) => { if (sendKey(e)) { this.send(cx, everything); cx.stop_propagation(); } },
+      onCancel: close, onPrimary: (cx) => this.send(cx, state), focusHandle: this.handle,
+      onKey: (e, cx) => { if (sendKey(e)) { this.send(cx, state); cx.stop_propagation(); } },
     });
   }
 }

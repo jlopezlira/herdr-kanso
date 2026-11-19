@@ -2,11 +2,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { load, nodes, texts, calls, arg, clone, repoText, KIT_NIGHT } from "./helpers.mjs";
-import { byTag, dialogHost, openedSend } from "./mod-fixtures.mjs";
+import { byTag, dialogHost, keyDown, openedSend } from "./mod-fixtures.mjs";
 
 const host = dialogHost;
 const cx = () => ({ notify() {}, stop_propagation() {}, spawn() {} });
-const keyDown = (el, e) => calls(el, "on_key_down").forEach(([, handler]) => handler(e, cx()));
 
 const kit = async () => {
   const ui = await load("kanso-panel/ui.js", ["tokens", "G", "H", "DIALOG"], host());
@@ -32,7 +31,7 @@ test("Send's agents are kit rows, a project a heading row, in the kit's dialog l
   assert.deepEqual(calls(list, "overflow_y_scrollbar").length, 1);
   assert.equal(arg(list, "h"), Math.min(3 * (H.line + G.hair) - G.hair, DIALOG.list), "three rows high, a hairline apart");
   assert.ok(["to-project-App", "to-t2", "to-t3"].every((id) => byTag(el, id)), "each row a kit button, by the same id as before");
-  assert.ok(["App", "Send to all 2", "Nova", "Needs you", "Atlas"].every((word) => texts(el).includes(word)), texts(el).join(" | "));
+  assert.ok(["App", "Nova", "Needs you", "Atlas"].every((word) => texts(el).includes(word)), texts(el).join(" | "));
   const many = Array.from({ length: 9 }, (_, i) => ({ address: `t${i + 10}`, status: "idle", labels: { "kanso.shown": `A${i}`, "kanso.project": "App" } }));
   const tall = listOf((await sendDrawn(many)).el, "send-list");
   assert.equal(arg(tall, "h"), DIALOG.list, "past six rows the list keeps six and scrolls");
