@@ -263,6 +263,24 @@ test("a missed answer keeps the last pull request, with its age and Retry", asyn
   assert.equal(shown.texts.some((text) => /rereads|Read from GitHub/.test(String(text))), false);
 });
 
+const night = {
+  theme: () => KIT_NIGHT,
+  ScrollHandle: { new: () => ({ scroll_to_item() {} }) },
+};
+
+const folderView = (read, extra) => ({
+  key: read,
+  location: () => ({ cwd: read(), on: null }),
+  ...night,
+  ...extra,
+});
+
+const zeroTimers = (cx) => {
+  const after = [];
+  cx.timer = { after(ms, fn) { after.push({ ms, fn }); }, every() {} };
+  return () => { after.filter((item) => item.ms === 0).forEach((item) => item.fn(cx)); };
+};
+
 const drawnRead = async (host) => {
   let drawing = false;
   const started = [];
@@ -271,11 +289,7 @@ const drawnRead = async (host) => {
     started.push([command, ...args].join(" "));
     if (drawing) return new Promise(() => {});
   });
-  const opened = await readDrawn(exec, {
-    theme: () => KIT_NIGHT,
-    ScrollHandle: { new: () => ({ scroll_to_item() {} }) },
-    ...host,
-  });
+  const opened = await readDrawn(exec, { ...night, ...host });
   opened.cx.timer = { after(_ms, fn) { after.push(fn); }, every() {} };
   const viewed = () => started.filter((line) => line.startsWith("gh pr view")).length;
   return {
@@ -392,6 +406,102 @@ test("a folder change during Refresh clears that pull request before the read fi
   await turn.drain();
   assert.equal(turn.panel.context, "/other");
   assert.equal(store["kanso.pr.details"]["/repo"], undefined);
+});
+
+const gate = () => {
+  let release;
+  const promise = new Promise((resolve) => { release = resolve; });
+  return { promise, release };
+};
+
+const parked = (cx) => {
+  const tasks = [];
+  const skip = new Set();
+  const spawn = cx.spawn.bind(cx);
+  cx.spawn = (fn) => {
+    const task = spawn(fn);
+    tasks.push(task);
+    return task;
+  };
+  return {
+    tasks,
+    hold(task) { skip.add(task); },
+    async settle() {
+      const done = new Set();
+      for (let guard = 0; guard < 30; guard += 1) {
+        const pending = tasks.filter((task) => !skip.has(task) && !done.has(task));
+        if (!pending.length) return;
+        await Promise.all(pending);
+        pending.forEach((task) => done.add(task));
+      }
+    },
+  };
+};
+
+test("a late Details list does not replace a newer list of the same folder", async () => {
+  let folder = "/repo";
+  const lists = [];
+  const { panel, cx } = await readDrawn(branchExec(async (command, args) => {
+    if (command !== "gh" || args[1] !== "list") return;
+    const held = gate();
+    lists.push(held);
+    return held.promise;
+  }), folderView(() => folder, { props: () => null }));
+  const bag = parked(cx);
+  const fire = zeroTimers(cx);
+  panel.setDetails(cx, true);
+  bag.hold(bag.tasks.at(-1));
+  folder = "/B";
+  panel.render(cx);
+  folder = "/repo";
+  panel.render(cx);
+  fire();
+  await bag.settle();
+  panel.setDetails(cx, true);
+  lists[1].release(success(JSON.stringify([{ number: 2, title: "current", updatedAt: "2026-11-12T00:00:00Z" }])));
+  await bag.settle();
+  lists[0].release(success(JSON.stringify([{ number: 1, title: "obsolete", updatedAt: "2026-11-10T00:00:00Z" }])));
+  await lists[0].promise;
+  await bag.settle();
+  assert.equal(panel.openPrs.length, 1);
+  assert.equal(String(panel.openPrs[0].title), "current");
+});
+
+const heldRoots = async (releaseFirst) => {
+  let folder = "/repo";
+  let asked = null;
+  const looked = [];
+  let hold = null;
+  let watch = false;
+  const { panel, cx, drain } = await readDrawn(branchExec(async (command, args) => {
+    if (!watch || command !== "git" || !args.includes("--show-toplevel")) return;
+    const started = folder;
+    looked.push(started);
+    if (!hold) return success(`${started}\n`);
+    const pending = hold;
+    hold = null;
+    return pending.promise.then(() => success(`${started}\n`));
+  }), folderView(() => folder, { props: () => asked }));
+  const fire = zeroTimers(cx);
+  watch = true;
+  const held = gate();
+  hold = held;
+  panel.again(cx);
+  folder = "/B";
+  panel.render(cx);
+  folder = "/C";
+  asked = { section: "push", at: 4 };
+  panel.render(cx);
+  const finish = async () => { held.release(); await drain(); };
+  if (releaseFirst) { await finish(); fire(); }
+  else { fire(); await finish(); }
+  await drain();
+  assert.deepEqual(looked, ["/repo", "/C"]);
+};
+
+test("a queued folder change and a push ask are one read of the latest folder, either order", async () => {
+  await heldRoots(true);
+  await heldRoots(false);
 });
 
 test("two folder changes before the wake are one read of the latest folder", async () => {

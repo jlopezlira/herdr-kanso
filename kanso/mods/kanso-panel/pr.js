@@ -264,7 +264,7 @@ export class PullRequest {
     this.error = { title: "Can't read GitHub", detail: line };
   }
 
-  takeOpen(open, context, gen = this.gen ?? 0) {
+  takeOpen(open, context, gen) {
     if (open?.code !== 0 || !this.holds(gen, context)) return false;
     const sorted = tryOr(() => JSON.parse(open.stdout).toSorted((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt)));
     if (sorted === null) return false;
@@ -309,8 +309,9 @@ export class PullRequest {
     this.showFolder();
     const { cwd, on } = location(), context = key();
     const gen = this.gen ?? 0;
-    if (!cwd) { this.queued = false; return; }
+    if (!cwd) { this.queued = false; this.asking = false; return; }
     this.queued = false;
+    this.asking = false;
     this.keptUrl = null;
     this.cwd = cwd; this.on = on;
     this.loading = true;
@@ -400,9 +401,10 @@ export class PullRequest {
     const stamp = this.view().logKey;
     if (!logDue({ facing: this.facing(), key: stamp, have: this.logFor ?? null })) return;
     this.forgetLog(stamp);
+    const gen = this.gen ?? 0, context = this.context;
     cx.spawn(this.tracked(async (cx) => {
       const r = await this.gh(["run", "view", stamp, "--log-failed"]).catch(() => null);
-      if (this.logFor !== stamp) return;
+      if (!this.holds(gen, context) || this.logFor !== stamp) return;
       if (r?.code === 0) this.failedLog = r.stdout ?? "";
       cx.notify();
     }));
@@ -579,17 +581,18 @@ export class PullRequest {
   loadClosed(cx) {
     if (this.closedLoading || !this.root || this.wait) return;
     this.closedLoading = true;
-    cx.spawn(this.contextTask(async (cx, context) => {
+    this.closedGen = this.gen ?? 0;
+    cx.spawn(this.contextTask(async (cx, context, gen) => {
       try {
         const r = await this.gh(["pr", "list", "--state", "closed", "--limit", String(DONE_LIMIT), "--json", DONE]);
-        if (r?.code === 0 && key() === context) {
+        if (r?.code === 0 && this.holds(gen, context)) {
           const rows = JSON.parse(r.stdout);
           const when = (p) => Date.parse(p.mergedAt || p.closedAt || p.updatedAt) || 0;
           await this.keepPrFacts(rows);
-          this.closedPrs = rows.toSorted((a, b) => when(b) - when(a));
+          if (this.holds(gen, context)) this.closedPrs = rows.toSorted((a, b) => when(b) - when(a));
         }
       } catch { }
-      finally { this.closedLoading = false; cx.notify(); }
+      finally { if (this.closedGen === gen) this.closedLoading = false; cx.notify(); }
     }));
   }
 
@@ -621,8 +624,8 @@ export class PullRequest {
   }
 
   contextTask(work) {
-    const context = this.context;
-    return this.tracked((cx) => work(cx, context));
+    const context = this.context, gen = this.gen ?? 0;
+    return this.tracked((cx) => work(cx, context, gen));
   }
 
   act(label, args, cx, run = (a) => this.gh(a)) {
@@ -680,19 +683,19 @@ export class PullRequest {
     this.candidates = null; this.pickerError = null; this.truncated = false;
     if (open) {
       this.search.focus();
-      const repo = this.repo(), context = this.context;
+      const repo = this.repo(), context = this.context, gen = this.gen ?? 0;
       cx.spawn(this.tracked(async (cx) => {
         try {
           const q = kind === "labels" ? LABELS : PEOPLE;
           const r = await this.gh(["api", "graphql", "-f", `query=${q}`, "-F", `o=${repo.o}`, "-F", `r=${repo.r}`]);
           commandOk(r);
-          if (this.context !== context || this.picker !== kind) return;
+          if (!this.holds(gen, context) || this.picker !== kind) return;
           const data = JSON.parse(r.stdout).data;
           if (data?.viewer?.login) this.viewer = data.viewer.login;
           const list = kind === "labels" ? data.repository.labels : data.repository.assignableUsers;
           this.truncated = Boolean(list.pageInfo?.hasNextPage);
           this.candidates = list.nodes;
-        } catch (e) { this.pickerError = String(e?.message ?? e); }
+        } catch (e) { if (this.holds(gen, context)) this.pickerError = String(e?.message ?? e); }
         cx.notify();
       }));
     }
@@ -1010,9 +1013,10 @@ export class PullRequest {
   loadOthers(cx) {
     if (this.listingOthers || this.listed || this.wait || !this.root) return;
     this.listingOthers = true;
-    cx.spawn(this.contextTask(async (cx, context) => {
-      try { this.takeOpen(await this.gh(openListArgs()).catch(() => null), context); }
-      finally { this.listingOthers = false; cx.notify(); }
+    this.listingGen = this.gen ?? 0;
+    cx.spawn(this.contextTask(async (cx, context, gen) => {
+      try { this.takeOpen(await this.gh(openListArgs()).catch(() => null), context, gen); }
+      finally { if (this.listingGen === gen) this.listingOthers = false; cx.notify(); }
     }));
   }
 
@@ -1100,15 +1104,16 @@ export class PullRequest {
   pickFile(path, cx) {
     this.openFile = this.openFile === path ? null : path;
     if (this.openFile && !this.diffs && this.pr) {
-      const url = this.pr.url, context = this.context;
+      const url = this.pr.url, context = this.context, gen = this.gen ?? 0;
       this.diffLoading = true;
+      this.diffGen = gen;
       cx.spawn(this.tracked(async (cx) => {
         try {
           const r = await this.gh(["pr", "diff", url, "--color", "never"]);
           if (r.code !== 0) throw new Error((r.stderr || r.stdout).trim());
-          if (this.context === context && this.pr?.url === url) this.diffs = splitDiff(r.stdout);
-        } catch (e) { this.note = said("Could not read the diff", String(e?.message ?? e).split("\n")[0]); }
-        finally { this.diffLoading = false; cx.notify(); }
+          if (this.holds(gen, context) && this.pr?.url === url) this.diffs = splitDiff(r.stdout);
+        } catch (e) { if (this.holds(gen, context)) this.note = said("Could not read the diff", String(e?.message ?? e).split("\n")[0]); }
+        finally { if (this.diffGen === gen) this.diffLoading = false; cx.notify(); }
       }));
     }
     cx.notify();
