@@ -23,7 +23,9 @@ export const footerHeight = (rows, refusedPx = 0) => FOOTER.top + rows * H.line 
 export const railHeight = (rows) => FOOTER.top + rows * H.line + (rows - 1) * FOOTER.railGap + FOOTER.railBottom;
 
 /** A refused update's failure block: our words, the tool's, and Update to try again. */
-export const refusalBlock = (why) => ({ text: "kansō didn't update", source: why, fix: "Update" });
+export const refusalBlock = (why, agent = "") => ({ text: "kansō didn't update", source: why, fix: "Update", agent });
+
+export const explainRefusal = (why) => `kansō could not update itself. The tool said: ${why}\nExplain in plain words what went wrong and how to fix it.`;
 
 /** The chord bound to kansō settings, or null. `bindings`: Herdr's keys(). */
 export const settingsChord = (bindings) => bindings.find((binding) => binding.action === KANSO_SETTINGS)?.keys ?? null;
