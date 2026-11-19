@@ -53,11 +53,11 @@
     "toast": { "app": ["onClick"] },
     "toggle": { "storybook": ["checked", "focus", "hover", "pressed"] },
     "tooltip": { "storybook": ["icon", "open", "side"] },
-    "avatar": { "storybook": ["round"] },
+    "avatar": { "storybook": ["loading", "round"] },
     "well": { "storybook": ["heading"] },
     "code": { "storybook": ["comment"] },
     "markdownBlock": { "storybook": ["cell", "shot"] },
-    "markdown": { "storybook": ["cell", "shot", "view"] },
+    "markdown": { "storybook": ["added", "cell", "shot", "view"] },
     "thumbnail": { "storybook": ["focus"] }
   }
 }
