@@ -103,7 +103,7 @@ const filesPanel = ({ view = 'changed', repository = true, scope = null, stale =
 export const files = ({ menu: path = null, ...props }) => withBeside(filesPanel(props), path ? fileMenu(path) : null);
 
 const shareTargets = ['Post to X', 'Post to LinkedIn', 'Post to Bluesky'];
-const shareItem = (making) => (label) => (label === making ? { label: 'Making the image…', mark: 'working' } : { label, disabled: Boolean(making) });
+const shareItem = (making) => (label) => (label === making ? { label, second: 'Making the image…', mark: 'working' } : { label, disabled: Boolean(making) });
 export const shareMenu = ({ leaves, making = null }) => {
   const item = shareItem(making);
   return menu({ title: leaves, items: [...shareTargets.map(item), { separator: true }, item('Save image')] });
@@ -502,10 +502,10 @@ const simScreens = {
   blank: () => emptyState({ icon: 'lu-image', text: 'No picture from the device' }),
   still: () => emptyState({ icon: 'lu-smartphone', text: 'Off' }),
 };
-const simHeader = ({ groups, scope, reading }) => (groups
+const simHeader = ({ groups, scope, reading, retrying = false }) => (groups
   ? panelHeader({ title: 'Devices', tools: [panelBack('Back to the device'), panelRefresh({ reading }), panelClose()] })
-  : panelHeader({ title: 'Simulator', second: scope, tools: pinTools.device({ frozen: false, reading }) }));
-const simBody = ({ groups = null, scope, shows = 'picture', controls = null, acting = null, url, invalid = null, retry = null, said = [], reading = false, failure = null, empty = null, ...look }) => list(said.map(dimLine),
+  : panelHeader({ title: 'Simulator', second: scope, tools: pinTools.device({ frozen: false, reading: reading || retrying }) }));
+const simBody = ({ groups = null, scope, shows = 'picture', controls = null, acting = null, url, invalid = null, retry = null, retrying = false, said = [], reading = false, failure = null, empty = null, ...look }) => list(said.map(dimLine),
   textOr({ reading, failure, empty }, () => (groups ? groups.map(deviceGroup) : simScreens[shows](look))),
   retry ? line(quietAct(retry)) : null, controls ? deviceControls[controls]({ acting, url, invalid }) : null);
 export const simulator = ({ look = 'panel', ...props }) => panel({ look, header: simHeader(props) }, simBody(props));

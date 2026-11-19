@@ -31,6 +31,7 @@ const tidy = (text) => text.replace(/\s+/g, " ").replace(/[’‘]/g, "'").repla
 const labelOf = (node) => tidy(node.textContent) || tidy(node.getAttribute("aria-label") ?? node.getAttribute("title") ?? "");
 const carries = (node, selector) => node.matches(selector) || Boolean(node.querySelector(selector));
 const labelsOf = (nodes) => [...new Set(nodes.map(labelOf).filter(Boolean))];
+const namesOf = (nodes) => [...new Set(nodes.map((node) => (node.querySelector(".kanso-row__name, .kanso-menu__label") ?? node).textContent.replace(/\s+/g, " ").trim()).filter(Boolean))];
 const wordsOf = (document) => [...document.querySelectorAll("[aria-label], [title]")].map((node) => node.getAttribute("aria-label") ?? node.getAttribute("title"));
 
 export const factsOf = (html) => {
@@ -44,10 +45,13 @@ export const factsOf = (html) => {
     for (const mark of Object.keys(MARKS)) if (found.some((node) => carries(node, MARKS[mark]))) marks.add(`${kind}.${mark}`);
   }
   const acts = [...document.querySelectorAll(ACTIONS)];
+  const lines = [...document.querySelectorAll(`${ITEMS.rows}, ${ITEMS.items}`)];
   return {
     marks: [...marks], counts, actions: labelsOf(acts),
     held: labelsOf(acts.filter((node) => node.matches(MARKS.disabled))),
     chosen: labelsOf(acts.filter((node) => node.matches(CHOSEN))),
+    picked: namesOf(lines.filter((node) => node.matches(CHOSEN))),
+    waits: namesOf(lines.filter((node) => carries(node, MARKS.waiting))),
     text: `${document.body.textContent} ${wordsOf(document).join(" ")}`.replace(/\s+/g, " "),
   };
 };
@@ -56,7 +60,7 @@ const LISTS = [["action", "actions"], ["held", "held"], ["chosen", "chosen"]];
 export const together = (facts) => ({
   marks: [...new Set(facts.flatMap(({ marks }) => marks))],
   counts: Object.fromEntries(facts.flatMap(({ counts }) => Object.keys(counts)).map((kind) => [kind, Math.max(...facts.map(({ counts }) => counts[kind] ?? 0))])),
-  ...Object.fromEntries(LISTS.map(([, key]) => [key, [...new Set(facts.flatMap((fact) => fact[key]))]])),
+  ...Object.fromEntries([...LISTS.map(([, key]) => key), "picked", "waits"].map((key) => [key, [...new Set(facts.flatMap((fact) => fact[key]))]])),
   text: facts.map(({ text }) => text).join(" "),
 });
 const namedIn = (drawn, renamed) => (label) => drawn.includes(label) || (renamed[label] ?? []).some((other) => drawn.includes(other));

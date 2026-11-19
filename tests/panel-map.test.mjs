@@ -5,7 +5,7 @@ import { panelPages } from "../stories/kit/panel-states.js";
 import { factsOf, lossOf, together } from "./panel-facts.mjs";
 
 const map = JSON.parse(readFileSync(new URL("./panel-map.json", import.meta.url), "utf8"));
-const CEILING = { sample: 45, pointer: 82, redraw: 139, unruled: 1 };
+const CEILING = { sample: 41, pointer: 82, redraw: 139 };
 const REACHED = ["selected", "tabs.selected", "groups.selected", "rows.selected"];
 const kitFacts = (target) => {
   const [page, ...label] = target.split("/");
@@ -23,7 +23,8 @@ const gives = (item, before, facts) => {
     count: () => what === "tabs" && (facts.counts.tabs ?? 0) >= before.counts.tabs,
   }[kind]?.() ?? false;
 };
-const judged = ({ page, state, kit, reach = {}, says = [], holds = [], free = [], differs = {}, ...before }) => {
+const sameSet = (wanted, drawn) => !wanted || (wanted.length === drawn.length && wanted.every((name) => drawn.includes(name)));
+const judged = ({ page, state, kit, reach = {}, says = [], omits = [], holds = [], free = [], picks = null, pending = null, differs = {}, ...before }) => {
   const own = together(kit.map(kitFacts));
   const lost = lossOf(before, own, map.renamed);
   const credited = Object.entries(reach).flatMap(([target, items]) => items.map((item) => [target, item]));
@@ -35,6 +36,8 @@ const judged = ({ page, state, kit, reach = {}, says = [], holds = [], free = []
     unsaid: says.filter((words) => !own.text.includes(words)).map(name),
     unheld: holds.filter((label) => !own.held.includes(label)).map(name),
     unfree: free.filter((label) => own.held.includes(label) || !own.actions.includes(label)).map(name),
+    said: omits.filter((words) => own.text.includes(words)).map(name),
+    moved: [sameSet(picks, own.picked) ? null : `picked ${own.picked.join(", ")}`, sameSet(pending, own.waits) ? null : `waiting ${own.waits.join(", ")}`].filter(Boolean).map(name),
   };
 };
 
@@ -47,6 +50,8 @@ test("Every state develop drew on a panel page keeps its marks, its actions, wha
   assert.deepEqual(every("unsaid"), [], "the kit state no longer says what set the state apart");
   assert.deepEqual(every("unheld"), [], "a control the operation blocks is free");
   assert.deepEqual(every("unfree"), [], "a control the operation leaves alone is held or gone");
+  assert.deepEqual(every("said"), [], "the kit state says what the state rules out");
+  assert.deepEqual(every("moved"), [], "the chosen or the waiting mark is on another row");
 });
 
 test("The listed differences never grow, and each has a reason", () => {

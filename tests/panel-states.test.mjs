@@ -93,7 +93,7 @@ test("Each state develop drew that had no drawing of its own says what set it ap
     ["Panels/Shipped", "When you ship and Computers, open", /Commits per hour.*15:00 · 50 commits/],
     ["Panels/Simulator", "The picture stalled", /as of 12s ago·emulator not answering.*Reconnect/],
     ["Panels/Simulator", "A URL with no scheme", /Enter a URL with a scheme, such as acme-shop:\/\/checkout\./],
-    ["Panels/Spend", "History, nothing that period", /HistoryNo usage this period/],
+    ["Panels/Spend", "History, nothing that period", /HistoryNo usage in November/],
   ];
   for (const [page, view, words] of restored) assert.match(said(drawn(page, view)), words, view);
   assert.ok(drawn("Panels/Preview", "Markdown, a new block at the end").querySelector(".kanso-markdown > :last-child[class*='--editing'], .kanso-markdown > :last-child [contenteditable]"));
