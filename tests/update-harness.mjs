@@ -134,31 +134,74 @@ async function writeChecker(root, { record = false } = {}) {
 }
 export const windowsOnly = (name, fn) => test(name, { skip: !windows && "Unix has no Windows file lock, read-only attribute, or curl.exe beside powershell.exe" }, fn);
 
-export function heldFile(t, file, release, share = "None") {
+function heldProcess(t, file, release, open, close) {
   const child = trackedSpawn(t, "powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", [
     "$ErrorActionPreference = 'Stop'",
-    `$s = [IO.File]::Open(${quote(file)}, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::${share})`,
+    open,
     "[Console]::Out.WriteLine('held')",
     "[Console]::Out.Flush()",
     `while (-not (Test-Path -LiteralPath ${quote(release)})) { Start-Sleep -Milliseconds 50 }`,
-    "$s.Dispose()",
+    close,
   ].join("; ")], { windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
   const ended = new Promise((resolve) => child.once("exit", resolve));
-  const open = () => writeFile(release, "go").catch(() => {});
+  const releaseLock = () => writeFile(release, "go").catch(() => {});
   const stop = async () => {
-    await open();
+    await releaseLock();
     const finished = await Promise.race([ended.then(() => true), new Promise((resolve) => setTimeout(() => resolve(false), 2000))]);
     if (!finished) dropChild(child);
     await Promise.race([ended, new Promise((resolve) => setTimeout(resolve, 2000))]);
     dropChild(child);
   };
   t.after(stop);
+  child.stderr.resume();
   const held = new Promise((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error(`step lock, file ${file}`)), 15000);
     child.stdout.once("data", () => { clearTimeout(timer); resolve(); });
     child.once("exit", (code) => { clearTimeout(timer); reject(new Error(`step lock exited ${code}, file ${file}`)); });
   });
-  return { held, open, stop };
+  return { held, open: releaseLock, stop };
+}
+
+export function heldFile(t, file, release, share = "None") {
+  return heldProcess(
+    t,
+    file,
+    release,
+    `$s = [IO.File]::Open(${quote(file)}, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::${share})`,
+    "$s.Dispose()",
+  );
+}
+
+const directoryHoldType = [
+  "using System;",
+  "using System.ComponentModel;",
+  "using System.Runtime.InteropServices;",
+  "public class KansoDirHold {",
+  "[DllImport(\"kernel32.dll\", SetLastError=true, CharSet=CharSet.Unicode)]",
+  "public static extern IntPtr CreateFile(string name, uint access, uint share, IntPtr security, uint disposition, uint flags, IntPtr template);",
+  "[DllImport(\"kernel32.dll\", SetLastError=true)]",
+  "public static extern bool CloseHandle(IntPtr handle);",
+  "public static IntPtr Open(string path) {",
+  "const uint FILE_LIST_DIRECTORY = 1;",
+  "const uint FILE_SHARE_READ = 1;",
+  "const uint FILE_SHARE_WRITE = 2;",
+  "const uint OPEN_EXISTING = 3;",
+  "const uint FILE_FLAG_BACKUP_SEMANTICS = 0x02000000;",
+  "var handle = CreateFile(path, FILE_LIST_DIRECTORY, FILE_SHARE_READ | FILE_SHARE_WRITE, IntPtr.Zero, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, IntPtr.Zero);",
+  "if (handle == new IntPtr(-1)) throw new Win32Exception(Marshal.GetLastWin32Error());",
+  "return handle;",
+  "}",
+  "}",
+].join("");
+
+export function heldDirectory(t, file, release) {
+  return heldProcess(
+    t,
+    file,
+    release,
+    `Add-Type -TypeDefinition '${directoryHoldType}'; $h = [KansoDirHold]::Open(${quote(file)})`,
+    "[void][KansoDirHold]::CloseHandle($h)",
+  );
 }
 
 export async function updater(host) {

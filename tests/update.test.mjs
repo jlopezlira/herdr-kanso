@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { mkdir, readFile, readdir, realpath, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { load, context, exec, nativePlatform, temporary, clone, gpuiHost, success, failure, storeShared, tickingContext } from "./helpers.mjs";
-import { test, dropChild, trackedSpawn, quote, windowsOnly, heldFile, updater, fixture, version, small, tree, stages, hostFor, startUpdater, versionFile } from "./update-harness.mjs";
+import { test, dropChild, trackedSpawn, quote, windowsOnly, heldFile, heldDirectory, updater, fixture, version, small, tree, stages, hostFor, startUpdater, versionFile } from "./update-harness.mjs";
 
 test("Kanso's newest release comes from the vX.Y.Z tags, not from Herdr", async () => {
   const { newestTag, compareVersions } = await updater();
@@ -533,7 +533,7 @@ windowsOnly("A destination another writer fills while rollback waits stops the m
   await mkdir(live, { recursive: true });
   await writeFile(join(live, "held.txt"), "open\n");
   await writeFile(join(made.dir, "op", "slots"), "0 kanso-chrome\n");
-  const lock = heldFile(t, join(live, "held.txt"), join(made.root, "release"));
+  const lock = heldDirectory(t, live, join(made.root, "release"));
   await lock.held;
   const watched = await watchRecover(t, made.home, made.dir, join(made.root, "recover-share.ps1"), (text) => text().includes("sharing rename") && text().includes(live));
   assert.equal(watched.saw, "sharing", watched.text());
