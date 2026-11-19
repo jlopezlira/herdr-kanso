@@ -22,6 +22,12 @@ in version.json, which the stable updater offers. Versions follow
 [Keep a Changelog](https://keepachangelog.com). `npm run check:version` checks
 the branch's rules.
 
+## [Unreleased]
+
+### Fixed
+
+- Worktrees no longer looks on this computer for a folder that is open only on another machine, and on Windows a folder in the temp folder no longer makes it search all of AppData. When it cannot tell where the temp folder is, it searches only the folders you chose instead of guessing.
+
 ## [3.31.0] - 2026-11-19
 
 ### Added
