@@ -337,7 +337,7 @@ test("The Windows updater script keeps the same contract and PowerShell 5.1", as
   const removeAt = recoverScript.indexOf("function Remove-Tree");
   const settleAt = recoverScript.indexOf("function Settle");
   assert.equal(recoverScript.slice(removeAt, settleAt).includes("Start-Sleep"), false, "step stage, file a denial does not wait");
-  const listedAt = recoverScript.indexOf("$dirs = @(Get-ChildItem");
+  const listedAt = recoverScript.indexOf("$dirs = @([IO.Directory]::GetDirectories($dir))");
   const holdAt = recoverScript.indexOf("$taken = Hold");
   assert.ok(listedAt > 0 && holdAt > listedAt);
   assert.match(recoverScript.slice(listedAt, holdAt), /\$dirs = \$null/, "step listing, file released before recovery");
@@ -346,11 +346,6 @@ test("The Windows updater script keeps the same contract and PowerShell 5.1", as
   const shareAt = tryBody.indexOf("if (-not (Test-Sharing $_)) { return $false }");
   const unlockAt = tryBody.indexOf("Unlock-Tree");
   assert.ok(shareAt >= 0 && unlockAt > shareAt, "step rollback, file a denial does not retry");
-  const recoverLines = recoverScript.split("\n");
-  recoverLines.forEach((line, index) => {
-    if (!/\bexit 1\b/.test(line) && !/exit \$taken/.test(line)) return;
-    assert.match(recoverLines.slice(Math.max(0, index - 8), index).join("\n"), /Note |Report-Op/, line);
-  });
   const held = host.holdArgs(join(dir, "lock"));
   assert.deepEqual([...held.commands], ["pwsh", "powershell"]);
   const heldArgs = [...held.args];
@@ -420,8 +415,10 @@ const recoverNow = async (home, dir, env = {}) => {
 
 const expectStop = (result, op, path, began) => {
   assert.equal(result.code, 1, result.stderr);
-  assert.match(result.stderr, new RegExp(`^${op} `), result.stderr);
-  assert.ok(result.stderr.includes(path), result.stderr);
+  const prefix = `${op} ${path} `;
+  const line = result.stderr.split(/\r?\n/).find((row) => row.startsWith(prefix));
+  assert.ok(line, result.stderr);
+  assert.ok(line.slice(prefix.length).trim(), line);
   assert.ok(Date.now() - began < 7000, `waited ${Date.now() - began}: ${result.stderr}`);
 };
 
@@ -462,18 +459,22 @@ windowsOnly("A file still open in an update that stopped does not stop recovery 
   assert.equal((await readdir(dir)).includes("op"), false, err);
 });
 
-windowsOnly("A permanent denial of a rollback rename stops at once and names that rename", async (t) => {
-  await stopCase(t, "rename", async (hook) => {
-    const made = await recoverHome(hook);
-    const live = join(made.home, "mods", "kanso-chrome");
-    const stage = join(made.dir, "op");
-    await mkdir(live, { recursive: true });
-    await writeFile(join(live, "main.js"), "old\n");
-    await mkdir(stage, { recursive: true });
-    await writeFile(join(stage, "src"), "not a directory\n");
-    await writeFile(join(stage, "slots"), "1 kanso-chrome\n");
-    return { ...made, path: live };
-  });
+windowsOnly("A permanent denial of a recovery rename stops at once and keeps the source and the prior destination", async (t) => {
+  const made = await recoverHome(t);
+  const stage = join(made.dir, "op");
+  const source = join(stage, "old", "kanso.json");
+  const prior = join(made.home, "layouts", "kanso.json.old-stamp");
+  await mkdir(source, { recursive: true });
+  await writeFile(join(source, "main.js"), "old\n");
+  await mkdir(join(made.home, "layouts"), { recursive: true });
+  await writeFile(prior, "prior\n");
+  await writeFile(join(stage, "stamp"), "stamp\n");
+  await writeFile(join(stage, "committed"), "1\n");
+  await writeFile(join(stage, "slots"), "");
+  const began = Date.now();
+  expectStop(await recoverNow(made.home, made.dir), "rename", source, began);
+  assert.equal(await readFile(join(source, "main.js"), "utf8"), "old\n");
+  assert.equal(await readFile(prior, "utf8"), "prior\n");
 });
 
 windowsOnly("A permanent denial of a rollback delete stops at once and names that delete", async (t) => {
@@ -532,6 +533,15 @@ windowsOnly("Every recovery exit of 1 names the operation, the path and the erro
     await writeFile(join(made.dir, "op", "slots"), "1 kanso-chrome\n");
     return { ...made, path };
   });
+  const { root, home } = await recoverHome(t);
+  const updates = join(home, ".kanso-updates");
+  await mkdir(home, { recursive: true });
+  await writeFile(updates, "not a directory\n");
+  const file = join(root, "recover.ps1");
+  const { windowsRecoverScript } = await hostFor("windows");
+  await writeFile(file, `\uFEFF${windowsRecoverScript(home, updates, file)}`);
+  const began = Date.now();
+  expectStop(await exec("powershell.exe", ["-NoProfile", "-NonInteractive", "-File", file], { limit: 20000 }), "recover", updates, began);
 });
 
 windowsOnly("A missing curl.exe stops before a download and names the tool", async (t) => {
