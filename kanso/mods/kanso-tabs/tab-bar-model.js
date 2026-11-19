@@ -30,5 +30,16 @@ export function foldTabs({ widths, chosen, room, gap, more }) {
 /** A tab dragged onto another lands in its place: before it when it moves left, after it when it moves right. */
 export const dropSide = (from, to) => (from > to ? "before" : "after");
 
+export const landing = (at, id, hovered) => (hovered ? id : at === id ? null : at);
+
+export const heldOn = (id, from, at) => id === from && Boolean(at) && at !== id;
+
+export function dropMarks(ids, from, at) {
+  const i = ids.indexOf(from), j = ids.indexOf(at);
+  if (i < 0 || j < 0 || i === j) return {};
+  if (dropSide(i, j) === "before") return { [ids[j]]: true };
+  return j + 1 < ids.length ? { [ids[j + 1]]: true } : { [ids[j]]: "after" };
+}
+
 /** A rename waits until the tab carries the new name; "" asks Herdr for its own name, which nothing can wait for. */
 export const renameWaits = (rename, tabs) => Boolean(rename?.name) && tabs.some((tab) => tab.id === rename.id && tab.name !== rename.name);
