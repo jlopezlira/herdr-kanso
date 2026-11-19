@@ -469,7 +469,7 @@ export default class Spaces extends View {
     const failure = () => ({ failure: { text: `Can't list agents on ${place.machine || "this computer"}`, source: "-", fix: "Refresh", agent: "-" } });
     const run = (item) => Array.from({ length: RUN_ROWS }, () => item(""));
     const settled = (state) => menuHeight(this.agentLines(place, { start, repo: start, trees: start ? [place] : [], item: sketch, ...state }));
-    const height = Math.max(settled({ pending: true }), settled({ failure }), settled({ agents: run }));
+    const height = Math.max(settled({ pending: true }), settled({ failure }), settled({ agents: run }), settled({ agents: run, failure }));
     openOverlay({ mod: "kanso-spaces", kind: "popup", width: W.menu, height, at: "pointer", props: { newAgent: place, height, ...(start ? { start } : {}) } });
   }
 
@@ -477,7 +477,7 @@ export default class Spaces extends View {
     const name = place.tree?.branch ?? place.name ?? "this project";
     const head = [{ heading: place.machine ? `${place.machine} \u00b7 ${name}` : name, mark: this.checking && this.known ? "working" : null },
       item("Terminal", () => this.pickAgent(place, null), { icon: "terminal", hint: chordOf("tab.new") || null, keep: true }), { separator: true }];
-    const rows = !failure && agents ? agents(item) : [];
+    const rows = agents ? agents(item) : [];
     const failed = failure ? [failure()] : [];
     const newTree = () => item("New worktree\u2026", () => this.worktreeDialog(place), { icon: "git-branch" });
     const rest = start ? [item("New project", () => this.addProject(), { icon: "folder-plus" }),
@@ -486,8 +486,9 @@ export default class Spaces extends View {
       : place.tree ? [] : [newTree()];
     const ends = rest.length ? [{ separator: true }, ...rest] : [];
     const row = menuHeight({ items: [sketch("")] }) - menuHeight({ items: [] });
-    const fit = Math.max(1, Math.floor((room - menuHeight({ items: [...head, ...ends] })) / row));
-    const middle = failure ? failed : pending && !agents ? [{ loading: true }, { loading: true }] : rows.length ? [{ scroll: rows, rows: Math.min(rows.length, fit), handle: this.agentScroll }] : [];
+    const fit = Math.max(1, Math.floor((room - menuHeight({ items: [...head, ...failed, ...ends] })) / row));
+    const listed = rows.length ? [{ scroll: rows, rows: Math.min(rows.length, fit), handle: this.agentScroll }] : !failure && pending && !agents ? [{ loading: true }, { loading: true }] : [];
+    const middle = [...listed, ...failed];
     return { items: [...head, ...middle, ...ends], count: rows.length };
   }
 
@@ -1671,7 +1672,7 @@ export default class Spaces extends View {
 
   newAgentView(t) {
     const place = props().newAgent, start = Boolean(props().start);
-    const installed = this.agentsFailed ? [] : (this.known ?? []).filter((a) => a.installed);
+    const installed = (this.known ?? []).filter((a) => a.installed);
     this.menuDigits = installed.slice(0, 9).map((a) => (cx) => { this.pickAgent(place, a); cx.notify(); });
     const agents = this.known ? (item) => installed.map((a, i) => item(a.name, () => this.pickAgent(place, a), { icon: a.icon ?? null, hint: i < 9 ? String(i + 1) : null, keep: true })) : null;
     const lines = this.agentLines(place, { start, agents, pending: this.checking, failure: this.agentsFailed ? () => this.agentsFailure(place) : null, repo: this.repo, trees: this.trees,

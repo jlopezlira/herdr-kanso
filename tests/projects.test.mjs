@@ -387,12 +387,15 @@ test("The + menu keeps every installed agent, numbers the first nine, starts one
   const known = [{ key: "codex", name: "Codex", installed: true, run: ["codex"] }];
   const failed = menu({ known, agentsFailed: "ssh: connect timed out" });
   const failure = failed.items.find((line) => line.failure)?.failure;
-  assert.equal(failed.lines.some(([text]) => text === "Codex"), false, "the failure stands in the agents' place, as the board draws it");
+  assert.ok(failed.lines.some(([text]) => text === "Codex"), "the last list stays usable");
+  assert.equal(failed.items.find((line) => line.scroll)?.scroll.length, 1, "its row drawn, before the failure");
   assert.equal(failed.items.filter((line) => line.loading).length, 0, "and no loading rows once the read is over");
   assert.deepEqual([failure.text, failure.fix, failure.agent], ["Can't list agents on devbox", "Refresh", "Claude Code"]);
   failed.press("j"); failed.press("j");
-  assert.equal(menu({ known, agentsFailed: "ssh: connect timed out", menuAt: 1 }).items.find((line) => line.failure).failure.lit, "fix", "the keyboard reaches Refresh after Terminal");
-  failed.view.menuAt = 2;
+  assert.equal(menu({ known, agentsFailed: "ssh: connect timed out", menuAt: 2 }).items.find((line) => line.failure).failure.lit, "fix", "the keyboard reaches Refresh after the agents");
+  failed.press("1");
+  assert.deepEqual(calls.at(-1), ["tab.new", { space: "sp-api", folder: "/work/api", argv: ["codex"] }], "1 still starts the agent last found");
+  failed.view.menuAt = 3;
   failed.press("enter");
   assert.deepEqual(calls.at(-1), ["tab.new", { name: "Explain devbox", argv: ["claude"],
     task: "kansō could not list the agents installed on devbox. The error: ssh: connect timed out. Explain why, and how to fix it. Do not change anything.", space: "sp-home" }],
@@ -424,14 +427,17 @@ test("Explain is this computer's: with no local space it opens one here, a refus
 test("A read that fails after an earlier answer keeps that list and says it failed, with its retry", async () => {
   const store = { "kanso.agents.installed": { devbox: [{ key: "codex", name: "Codex", installed: true, run: ["codex"] }], "": [] } };
   const place = devbox();
-  const { Spaces } = await agentMenu({ shared: (key) => store[key] ?? null, setShared: (key, value) => { store[key] = value; }, knownAgents: async () => { throw new Error("ssh: connect timed out"); } });
+  const { Spaces } = await agentMenu({ shared: (key) => store[key] ?? null, setShared: (key, value) => { store[key] = value; }, knownAgents: async () => { throw new Error("ssh: connect timed out"); },
+    props: () => ({ overlay: "ov1", newAgent: place, start: true }), keys: () => [] });
   const view = new Spaces();
   view.askAgents(place, { notify() {}, timer: { after: () => ({ cancel() {} }) } });
   assert.equal(view.checking, true);
   assert.equal(view.known.length, 1, "the last answer at once");
   await settledRead(view);
   assert.equal(view.agentsFailed, "ssh: connect timed out");
-  assert.equal(view.known.length, 1, "and still shown");
+  const shown = plusMenu(Spaces, { known: view.known, agentsFailed: view.agentsFailed });
+  assert.deepEqual(shown.items.find((line) => line.scroll)?.scroll.map((row) => row.label), ["Codex"], "and still drawn");
+  assert.ok(shown.items.some((line) => line.failure), "with the failure after it");
 });
 
 test("Ten agents fit the + popup: they scroll in the kit's run within its height, and the keyboard's row stays in view", async () => {
