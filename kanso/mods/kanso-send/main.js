@@ -3,7 +3,7 @@
 import { View } from "gpui-kit";
 import { panes, spaces, terminals, shared, setShared, run, props, closeOverlay, theme } from "herdr";
 import { givenNames, nameOf } from "./marks.js";
-import { deliver, isAgent, sendKey, waitingNote } from "./deliver.js";
+import { deliver, isAgent, sendKey, waitingNote, UNCONFIRMED } from "./deliver.js";
 import { shortFolder } from "./folder.js";
 import { tokens } from "./ui.js";
 import { dialog } from "./ui-dialog.js";
@@ -24,7 +24,7 @@ export function everyone(terms, ps, { from = null, last = null, query = "", name
   const mine = from ? terms.find((k) => k.address === from)?.labels?.["kanso.project"] ?? projectOf(paneOf.get(from)) : null;
   const q = query.trim().toLowerCase();
   const list = terms
-    .filter((k) => k.address !== from && !String(k.address).includes("/") && (!k.state || k.state === "live") && isAgent(k, paneOf.get(k.address)))
+    .filter((k) => k.address !== from && (!k.state || k.state === "live") && isAgent(k, paneOf.get(k.address)))
     .map((k) => {
       const pane = paneOf.get(k.address) ?? null;
       return { terminal: k.address, pane, status: k.status ?? pane?.status ?? null, program: k.program ?? pane?.program ?? null,
@@ -62,6 +62,7 @@ export default class Send extends View {
     cx.timer.after(400, () => this.box.focus());
     this.handle = cx.focus_handle();
     this.sending = false;
+    this.missed = [];
     this.error = null;
   }
 
@@ -73,13 +74,20 @@ export default class Send extends View {
     const waiting = targets.filter((x) => x.status === "blocked"), ready = targets.filter((x) => x.status !== "blocked");
     if (!ready.length) { this.error = waitingNote(waiting.map((x) => x.name)); cx.notify(); return; }
     const sender = this.from?.terminal ? terminals().find((k) => k.address === this.from.terminal)?.labels?.["kanso.shown"] || nameOf(this.from, givenNames()) : "you";
-    this.sending = true; this.error = null; cx.notify();
+    this.sending = true; this.error = null; this.missed = []; cx.notify();
     cx.spawn(async (cx) => {
-      const results = await Promise.all(ready.map(async (x) => ({ x, r: await deliver(x.terminal, text, sender) })));
+      const results = await Promise.all(ready.map(async (x) => {
+        try {
+          return { x, r: await deliver(x.terminal, text, sender, cx.timer) };
+        } catch {
+          return { x, r: { code: 1, stdout: "", stderr: UNCONFIRMED, late: true } };
+        }
+      }));
       this.sending = false;
-      const failed = results.filter(({ r }) => r.code !== 0);
+      this.missed = results.filter(({ r }) => r?.late).map(({ x }) => x.terminal);
+      const failed = results.filter(({ r }) => r?.code !== 0);
       const skipped = waiting.length ? ` ${waiting.map((x) => x.name).join(", ")} waited on ${waiting.length === 1 ? "its" : "their"} own question and got nothing.` : "";
-      if (failed.length) { this.error = `Not sent to ${failed.map(({ x, r }) => `${x.name} (${(r.stderr || r.stdout || "hc send failed").trim()})`).join(", ")}.${skipped}`; cx.notify(); return; }
+      if (failed.length) { this.error = `Not sent to ${failed.map(({ x, r }) => `${x.name} (${(r?.stderr || r?.stdout || "hc send failed").trim()})`).join(", ")}.${skipped}`; cx.notify(); return; }
       if (skipped) { this.error = `Sent.${skipped}`; cx.notify(); return; }
       if (!this.toProject) setShared(LAST, ready[0].terminal);
       closeOverlay(props().overlay);
@@ -107,7 +115,7 @@ export default class Send extends View {
     // A program with no art of its own takes the terminal's, so every name starts at the same place.
     const agent = (q) => row({
       icon: q.program?.icon ? q.program : "terminal", tone: "muted", name: q.name, detail: q.pane?.branch ?? null,
-      meta: q.status === "blocked" ? { text: "Needs you", tone: "blocked" } : null, mark: q.status, current: !this.toProject && q.terminal === this.to,
+      meta: (this.missed ?? []).includes(q.terminal) ? { text: "Delivery did not confirm", tone: "blocked" } : q.status === "blocked" ? { text: "Needs you", tone: "blocked" } : null, mark: q.status, current: !this.toProject && q.terminal === this.to,
     })(`to-${q.terminal}`, c, { onClick: (cx) => { this.to = q.terminal; this.toProject = null; this.error = null; cx.notify(); } });
     const from = this.from ? `From ${name(this.from)}${this.from.cwd ? `, in ${shortFolder(this.from.cwd)}` : ""}` : "";
     const ready = Boolean(this.toProject || this.to) && Boolean(this.text.trim());

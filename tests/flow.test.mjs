@@ -427,7 +427,7 @@ test("Send reaches any agent of any model by the name and project Kanso gives it
     { address: "box/t1", state: "live", status: "idle", labels: {} },
   ];
   const groups = clone(everyone(terms, [], { from: "t5g" }));
-  assert.deepEqual(groups.map((g) => [g.project, g.agents.map((x) => x.name)]), [["herdr-kanso", ["qb2"]], ["fluenty", ["Lead"]]], "a shell and another machine's are not agents to send to");
+  assert.deepEqual(groups.map((g) => [g.project, g.agents.map((x) => x.name)]), [["herdr-kanso", ["qb2"]], ["fluenty", ["Lead"]], ["Other", ["box/t1"]]], "a shell is not an agent to send to; one on another computer is");
   assert.deepEqual(clone(everyone(terms, [], { from: "t5g", query: "flu" })).map((g) => g.project), ["fluenty"], "found by project");
   assert.deepEqual(clone(everyone(terms, [], { from: "t5g", query: "qb" })).map((g) => g.agents.map((x) => x.terminal)), [["t5t"]], "found by name");
 });

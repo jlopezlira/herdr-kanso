@@ -22,6 +22,12 @@ in version.json, which the stable updater offers. Versions follow
 [Keep a Changelog](https://keepachangelog.com). `npm run check:version` checks
 the branch's rules.
 
+## [Unreleased]
+
+### Fixed
+
+- Send lists an agent on another computer and keeps that agent selected. A send that does not confirm names who it did not reach, and Send can be used again.
+
 ## [3.31.0] - 2026-11-19
 
 ### Added
