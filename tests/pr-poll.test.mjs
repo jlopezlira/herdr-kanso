@@ -290,14 +290,18 @@ const drawnRead = async (host) => {
   };
 };
 
+const drawnQuiet = (turn) => {
+  turn.draw();
+  assert.equal(turn.startedDuring(), turn.seen);
+  assert.equal(turn.after.length, 1);
+};
+
 test("a folder change seen while the panel is drawn starts its read on the next turn, where Herdr keeps it", async () => {
   let folder = "/repo";
   const turn = await drawnRead({ key: () => folder, props: () => ({}) });
   assert.equal(turn.viewed(), 1);
   folder = "/other";
-  turn.draw();
-  assert.equal(turn.startedDuring(), turn.seen);
-  assert.equal(turn.after.length, 1);
+  drawnQuiet(turn);
   turn.after[0](turn.cx);
   await turn.drain();
   assert.equal(turn.viewed(), 2);
@@ -309,9 +313,7 @@ test("a pane asking for the push section while the panel is drawn starts its rea
   const turn = await drawnRead({ key: () => "/repo", props: () => asked });
   const views = turn.viewed();
   asked = { section: "push", at: 1 };
-  turn.draw();
-  assert.equal(turn.startedDuring(), turn.seen);
-  assert.equal(turn.after.length, 1);
+  drawnQuiet(turn);
   assert.equal(turn.panel.section, "push");
   assert.equal(turn.panel.selected, null);
   turn.after[0](turn.cx);
