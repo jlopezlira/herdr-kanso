@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { mkdir, rm, writeFile, realpath } from "node:fs/promises";
 import { existsSync } from "node:fs";
-import { join, basename } from "node:path";
+import { join, basename, dirname } from "node:path";
 import { load, context, temporary, clone, exec, failure, gitOk, fileExists as exists } from "./helpers.mjs";
 
 const names = ["Worktrees", "removable", "losses", "lastDays", "spaceBy", "freedSpec", "freedText", "explainPrompt", "reviewPrompt", "rootsFor", "parseDiscovery", "basesFrom", "parseWorktrees", "parseProbe", "stateOf", "safe", "consequence", "fmtSize", "fmtAge", "inside", "openIn"];
@@ -33,7 +33,8 @@ test("Worktrees searches the top folders of your spaces, or the ones you chose",
 });
 
 test("Worktrees searches this computer only for its own panes, never for a pane on another machine", async () => {
-  const far = "/opt/far";
+  const far = dirname(process.execPath);
+  assert.ok(existsSync(far), "the remote pane's folder exists here too");
   const { Worktrees, inside } = await worktrees({
     spaces: () => [
       { folder: "/Users/me/Apps/web", machine: null, tabs: [{ id: "t1" }] },
@@ -42,9 +43,10 @@ test("Worktrees searches this computer only for its own panes, never for a pane 
     panes: () => [{ tab: "t1", cwd: "/Volumes/w/repo" }, { tab: "box/t2", cwd: far }],
   });
   const panel = new Worktrees();
-  panel.tempDirs = ["/private/tmp", "/tmp"];
+  panel.tempDirs = ["/fixture-temp"];
   const { roots, search } = panel.roots();
   assert.deepEqual(clone(roots), ["/Users/me/Apps", "/Volumes/w/repo"], "this computer's space and pane are searched");
+  assert.ok(!["/Users/me/Apps", "/Volumes/w/repo", "/fixture-temp", "/tmp", "/private/tmp"].some((root) => inside(root, far)), "the remote folder lies outside every root and temp folder");
   assert.ok(!search.some((root) => inside(root, far) || inside(far, root)), "a folder open on another machine is not searched here");
 });
 
@@ -81,6 +83,22 @@ test("Worktrees searches nothing it was not asked to when it cannot tell where t
   settings["kanso.worktrees.roots"] = ["D:\\src"];
   panel.tempDirs = null;
   assert.deepEqual(clone(panel.roots()), { roots: ["D:\\src"], search: ["D:\\src"] }, "the folders you chose are still searched");
+});
+
+test("A temp folder lookup that fails, answers nothing or is refused infers no root, on every platform", async () => {
+  const { rootsFor } = await worktrees();
+  const { systemApi } = await load("kanso-panel/platform-system.js", ["systemApi"]);
+  const lookups = { "exit 1": async () => failure(""), "an empty answer": async () => ({ code: 0, stdout: "  ", stderr: "" }), "a refusal": async () => { throw new Error("cannot run sh"); } };
+  for (const platform of ["macos", "linux", "windows"]) {
+    for (const [label, run] of Object.entries(lookups)) {
+      const temp = await systemApi(platform, run).temporary();
+      assert.equal(temp, null, `${platform}, ${label}: unknown`);
+      assert.deepEqual(clone(rootsFor(["/home/me/cache/tmp/task"], "/home/me", null, temp)), [], `${platform}, ${label}: no root from a pane under an unknown temp folder`);
+    }
+  }
+  const mac = await systemApi("macos", async () => ({ code: 0, stdout: "/home/me/cache/tmp", stderr: "" })).temporary();
+  assert.deepEqual(clone(mac), ["/private/tmp", "/tmp", "/home/me/cache/tmp"], "an answer keeps the defaults beside it");
+  assert.deepEqual(clone(rootsFor(["/home/me/cache/tmp/task", "/home/me/Apps/a"], "/home/me", null, mac)), ["/home/me/Apps"], "and its folder is never widened into a root");
 });
 
 test("Worktrees parses git's worktree list and the probes", async () => {
