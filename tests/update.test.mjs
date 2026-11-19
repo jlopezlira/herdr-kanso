@@ -525,21 +525,44 @@ windowsOnly("A destination another writer fills while rollback waits stops the m
   assert.ok(line && line.slice(prefix.length).trim(), watched.text());
 });
 
-windowsOnly("A permanent denial of a rollback delete stops at once and names that delete", async (t) => {
-  await stopCase(t, "delete", async (hook) => {
-    const made = await recoverHome(hook);
-    const live = join(made.home, "keys.json");
-    await mkdir(live, { recursive: true });
-    const stage = join(made.dir, "op");
-    const odd = "\\\\?\\" + live + "\\denied.";
-    const created = await exec("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", `[IO.File]::WriteAllText(${quote(odd)}, 'x')`]);
-    assert.equal(created.code, 0, created.stderr);
-    await mkdir(join(stage, "old"), { recursive: true });
-    await writeFile(join(stage, "old", "keys.json"), "backup\n");
-    await writeFile(join(stage, "keys.json"), "new\n");
-    await writeFile(join(stage, "slots"), "1 keys\n");
-    return { ...made, path: live };
-  });
+windowsOnly("A live file recovery does not own stops rollback and is left in place", async (t) => {
+  const made = await recoverHome(t);
+  const live = join(made.home, "keys.json");
+  const backup = join(made.dir, "op", "old", "keys.json");
+  const staged = join(made.dir, "op", "keys.json");
+  const journal = join(made.dir, "op", "slots");
+  await mkdir(join(made.dir, "op", "old"), { recursive: true });
+  await writeFile(live, "user edits\n");
+  await writeFile(backup, "backup\n");
+  await writeFile(staged, "staged\n");
+  await writeFile(journal, "1 keys\n");
+  const check = async () => {
+    const started = Date.now();
+    const result = await recoverNow(made.home, made.dir);
+    expectStop(result, "undo", live, started);
+    const line = result.stderr.split(/\r?\n/).find((row) => row.startsWith(`undo ${live} `));
+    assert.ok(line.includes(backup) && line.includes(staged), result.stderr);
+  };
+  await check();
+  await check();
+  assert.equal(await readFile(live, "utf8"), "user edits\n");
+  assert.equal(await readFile(backup, "utf8"), "backup\n");
+  assert.equal(await readFile(staged, "utf8"), "staged\n");
+  assert.equal(await readFile(journal, "utf8"), "1 keys\n");
+});
+
+windowsOnly("A permanent denial of stage cleanup stops at once and names that delete", async (t) => {
+  const made = await recoverHome(t);
+  const slots = join(made.dir, "op", "slots");
+  const stage = join(made.dir, "op");
+  await mkdir(stage, { recursive: true });
+  await writeFile(slots, "\n");
+  const odd = "\\\\?\\" + stage + "\\denied.";
+  const created = await exec("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", `[IO.File]::WriteAllText(${quote(odd)}, 'kept')`]);
+  assert.equal(created.code, 0, created.stderr);
+  const began = Date.now();
+  expectStop(await recoverNow(made.home, made.dir), "delete", stage, began);
+  assert.equal((await readdir(made.dir)).includes("op"), true);
 });
 
 const stopCase = async (t, op, build, env) => {
