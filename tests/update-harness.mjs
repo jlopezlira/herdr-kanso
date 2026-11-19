@@ -126,10 +126,10 @@ async function writeChecker(root, { record = false } = {}) {
 }
 export const windowsOnly = (name, fn) => test(name, { skip: !windows && "Unix has no Windows file lock, read-only attribute, or curl.exe beside powershell.exe" }, fn);
 
-export function heldFile(t, file, release) {
+export function heldFile(t, file, release, share = "None") {
   const child = trackedSpawn(t, "powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", [
     "$ErrorActionPreference = 'Stop'",
-    `$s = [IO.File]::Open(${quote(file)}, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::None)`,
+    `$s = [IO.File]::Open(${quote(file)}, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::${share})`,
     "[Console]::Out.WriteLine('held')",
     "[Console]::Out.Flush()",
     `while (-not (Test-Path -LiteralPath ${quote(release)})) { Start-Sleep -Milliseconds 50 }`,

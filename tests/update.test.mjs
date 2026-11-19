@@ -341,6 +341,16 @@ test("The Windows updater script keeps the same contract and PowerShell 5.1", as
   const holdAt = recoverScript.indexOf("$taken = Hold");
   assert.ok(listedAt > 0 && holdAt > listedAt);
   assert.match(recoverScript.slice(listedAt, holdAt), /\$dirs = \$null/, "step listing, file released before recovery");
+  const tryAt = recoverScript.indexOf("function Try-Move");
+  const tryBody = recoverScript.slice(tryAt, recoverScript.indexOf("function Step"));
+  const shareAt = tryBody.indexOf("if (-not (Test-Sharing $_)) { return $false }");
+  const unlockAt = tryBody.indexOf("Unlock-Tree");
+  assert.ok(shareAt >= 0 && unlockAt > shareAt, "step rollback, file a denial does not retry");
+  const recoverLines = recoverScript.split("\n");
+  recoverLines.forEach((line, index) => {
+    if (!/\bexit 1\b/.test(line) && !/exit \$taken/.test(line)) return;
+    assert.match(recoverLines.slice(Math.max(0, index - 8), index).join("\n"), /Note |Report-Op/, line);
+  });
   const held = host.holdArgs(join(dir, "lock"));
   assert.deepEqual([...held.commands], ["pwsh", "powershell"]);
   const heldArgs = [...held.args];
@@ -403,6 +413,18 @@ const recoverHome = async (t) => {
   return { root, home, dir };
 };
 
+const recoverNow = async (home, dir, env = {}) => {
+  const { host } = await hostFor("windows");
+  return host.recover(home, dir, { env: { ...process.env, KANSO_UPDATE_RETRY_MS: "8000", ...env } });
+};
+
+const expectStop = (result, op, path, began) => {
+  assert.equal(result.code, 1, result.stderr);
+  assert.match(result.stderr, new RegExp(`^${op} `), result.stderr);
+  assert.ok(result.stderr.includes(path), result.stderr);
+  assert.ok(Date.now() - began < 7000, `waited ${Date.now() - began}: ${result.stderr}`);
+};
+
 windowsOnly("A file still open in an update that stopped does not stop recovery once it closes", async (t) => {
   const { root, home, dir } = await recoverHome(t);
   const stage = join(dir, "op");
@@ -412,42 +434,104 @@ windowsOnly("A file still open in an update that stopped does not stop recovery 
   await writeFile(locked, "open\n");
   const lock = heldFile(t, locked, join(root, "release"));
   await lock.held;
-  const { host } = await hostFor("windows");
-  const pending = host.recover(home, dir, { env: { ...process.env, KANSO_UPDATE_RETRY_MS: "8000" } });
-  const early = await Promise.race([
-    pending.then((result) => result),
-    new Promise((resolve) => setTimeout(() => resolve("waiting"), 500)),
+  const { windowsRecoverScript } = await hostFor("windows");
+  const file = join(dir, "recover.ps1");
+  await writeFile(file, `\uFEFF${windowsRecoverScript(home, dir, file)}`);
+  const child = trackedSpawn(t, "powershell.exe", ["-NoProfile", "-NonInteractive", "-File", file], {
+    windowsHide: true,
+    stdio: ["ignore", "pipe", "pipe"],
+    env: { ...process.env, KANSO_UPDATE_RETRY_MS: "8000" },
+  });
+  let err = "";
+  child.stderr.on("data", (chunk) => { err += chunk; });
+  const exited = new Promise((resolve) => child.once("exit", (code) => resolve(code)));
+  const saw = await Promise.race([
+    (async () => {
+      const deadline = Date.now() + 20000;
+      while (Date.now() < deadline) {
+        if (err.includes("sharing delete") && err.includes("leftover.txt")) return "sharing";
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+      return err;
+    })(),
+    exited.then((code) => `exited ${code} ${err}`),
   ]);
-  assert.equal(early, "waiting", early.stderr);
+  assert.equal(saw, "sharing", saw);
   await lock.open();
-  const result = await pending;
-  assert.equal(result.code, 0, result.stderr);
-  assert.equal((await readdir(dir)).includes("op"), false, result.stderr);
+  assert.equal(await exited, 0, err);
+  assert.equal((await readdir(dir)).includes("op"), false, err);
 });
 
-windowsOnly("A permanent denial fails at once and names the delete", async (t) => {
-  const { home, dir } = await recoverHome(t);
-  const { windowsRecoverScript } = await hostFor("windows");
-  const script = windowsRecoverScript(home, dir, join(dir, "recover.ps1"));
-  const cut = script.indexOf("try {\n  if (-not (Test-Path -LiteralPath $dir)) { Remove-Self; exit 0 }");
-  assert.ok(cut > 0, "step probe, file recover script");
-  const probe = `${script.slice(0, cut)}
-$env:KANSO_UPDATE_RETRY_MS = '8000'
-$sw = [Diagnostics.Stopwatch]::StartNew()
-try {
-  Invoke-Op 'delete' 'C:\denied' { throw (New-Object System.UnauthorizedAccessException 'Access to the path is denied.') }
-  exit 0
-} catch {
-  if ($sw.ElapsedMilliseconds -ge 1500) { exit 3 }
-  exit 1
-}
-`;
-  await mkdir(dir, { recursive: true });
-  const file = join(dir, "probe.ps1");
-  await writeFile(file, probe);
-  const result = await exec("powershell.exe", ["-NoProfile", "-NonInteractive", "-File", file], { limit: 20000 });
-  assert.equal(result.code, 1, result.stderr);
-  assert.match(result.stderr, /delete C:\\denied Access to the path is denied/);
+windowsOnly("A permanent denial of a rollback rename stops at once and names that rename", async (t) => {
+  await stopCase(t, "rename", async (hook) => {
+    const made = await recoverHome(hook);
+    const live = join(made.home, "mods", "kanso-chrome");
+    const stage = join(made.dir, "op");
+    await mkdir(live, { recursive: true });
+    await writeFile(join(live, "main.js"), "old\n");
+    await mkdir(stage, { recursive: true });
+    await writeFile(join(stage, "src"), "not a directory\n");
+    await writeFile(join(stage, "slots"), "1 kanso-chrome\n");
+    return { ...made, path: live };
+  });
+});
+
+windowsOnly("A permanent denial of a rollback delete stops at once and names that delete", async (t) => {
+  await stopCase(t, "delete", async (hook) => {
+    const made = await recoverHome(hook);
+    const live = join(made.home, "keys.json");
+    await mkdir(live, { recursive: true });
+    const stage = join(made.dir, "op");
+    const odd = "\\\\?\\" + live + "\\denied.";
+    const created = await exec("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", `[IO.File]::WriteAllText(${quote(odd)}, 'x')`]);
+    assert.equal(created.code, 0, created.stderr);
+    await mkdir(join(stage, "old"), { recursive: true });
+    await writeFile(join(stage, "old", "keys.json"), "backup\n");
+    await writeFile(join(stage, "keys.json"), "new\n");
+    await writeFile(join(stage, "slots"), "1 keys\n");
+    return { ...made, path: live };
+  });
+});
+
+const stopCase = async (t, op, build, env) => {
+  const made = await build(t);
+  const began = Date.now();
+  expectStop(await recoverNow(made.home, made.dir, env), op, made.path, began);
+};
+
+windowsOnly("Every recovery exit of 1 names the operation, the path and the error", async (t) => {
+  await stopCase(t, "lock", async (hook) => {
+    const made = await recoverHome(hook);
+    const path = join(made.dir, "lock");
+    await mkdir(join(made.dir, "op"), { recursive: true });
+    await mkdir(path);
+    return { ...made, path };
+  });
+  await stopCase(t, "read", async (hook) => {
+    const made = await recoverHome(hook);
+    const path = join(made.dir, "op", "slots");
+    await mkdir(path, { recursive: true });
+    return { ...made, path };
+  });
+  await stopCase(t, "write", async (hook) => {
+    const made = await recoverHome(hook);
+    const stage = join(made.dir, "op");
+    const path = join(stage, "slots");
+    await mkdir(stage, { recursive: true });
+    await writeFile(path, "0 keys\n");
+    await writeFile(join(made.dir, "op", "keys.json"), "new\n");
+    const lock = heldFile(hook, path, join(made.root, "release"), "Read");
+    await lock.held;
+    hook.after(() => lock.open());
+    return { ...made, path };
+  }, { KANSO_UPDATE_RETRY_MS: "0" });
+  await stopCase(t, "undo", async (hook) => {
+    const made = await recoverHome(hook);
+    const path = join(made.home, "mods", "kanso-chrome");
+    await mkdir(join(made.dir, "op"), { recursive: true });
+    await writeFile(join(made.dir, "op", "slots"), "1 kanso-chrome\n");
+    return { ...made, path };
+  });
 });
 
 windowsOnly("A missing curl.exe stops before a download and names the tool", async (t) => {
