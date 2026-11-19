@@ -1,13 +1,11 @@
 // Send's and Sleep's bodies inside the dialog piece: kit rows in the kit's dialog list, the kit's empty state, and the keys they had.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { load, drawingHost, chain, nodes, texts, calls, arg, clone, repoText, KIT_NIGHT } from "./helpers.mjs";
+import { load, nodes, texts, calls, arg, clone, repoText, KIT_NIGHT } from "./helpers.mjs";
+import { byTag, dialogHost, keyDown, openedSend } from "./mod-fixtures.mjs";
 
-const host = () => ({ ...drawingHost(), Textarea: { new: () => chain("textarea") }, Input: { new: () => chain("input") } });
-const field = (value, multiline = false) => ({ value: () => value, state: {}, multiline, focused: false });
+const host = dialogHost;
 const cx = () => ({ notify() {}, stop_propagation() {}, spawn() {} });
-const byTag = (el, tag) => nodes(el).find((kid) => kid.tag === tag);
-const keyDown = (el, e) => calls(el, "on_key_down").forEach(([, handler]) => handler(e, cx()));
 
 const kit = async () => {
   const ui = await load("kanso-panel/ui.js", ["tokens", "G", "H", "DIALOG"], host());
@@ -18,16 +16,11 @@ const AGENTS = [
   { address: "t2", status: "blocked", labels: { "kanso.shown": "Nova", "kanso.project": "App" } },
   { address: "t3", status: "working", program: { icon: "mods/x/claude.svg", tint: true }, labels: { "kanso.shown": "Atlas", "kanso.project": "App" } },
 ];
-const sendView = async (terms, query = "", seen = []) => {
-  const { Send } = await load("kanso-send/main.js", ["Send"], {
-    ...host(), theme: () => KIT_NIGHT, props: () => ({ overlay: "o1" }), terminals: () => terms, panes: () => [], spaces: () => [], shared: () => null,
-    closeOverlay: (overlay) => seen.push(["close", overlay]),
-  });
-  const send = Object.assign(new Send(), { from: null, to: "t3", toProject: null, text: "hi", error: null, sending: false });
-  return { send: Object.assign(send, { handle: {}, query: field(query), box: field("hi", true) }), seen };
-};
+const sendView = async (terms, query = "", seen = [], to = "t3") => ({
+  send: await openedSend({ terminals: () => terms, closeOverlay: (overlay) => seen.push(["close", overlay]) }, { to, query }), seen,
+});
 // Drawn in an object: a drawn element answers every name, `then` too, so it is never awaited bare.
-const sendDrawn = async (terms, query = "") => ({ el: (await sendView(terms, query)).send.render() });
+const sendDrawn = async (terms, query = "", to = "t3") => ({ el: (await sendView(terms, query, [], to)).send.render() });
 const listOf = (el, name) => nodes(el).find((kid) => calls(kid, "id").some(([, id]) => id === name));
 
 test("Send's agents are kit rows, a project a heading row, in the kit's dialog list that scrolls past six rows", async () => {
@@ -38,7 +31,7 @@ test("Send's agents are kit rows, a project a heading row, in the kit's dialog l
   assert.deepEqual(calls(list, "overflow_y_scrollbar").length, 1);
   assert.equal(arg(list, "h"), Math.min(3 * (H.line + G.hair) - G.hair, DIALOG.list), "three rows high, a hairline apart");
   assert.ok(["to-project-App", "to-t2", "to-t3"].every((id) => byTag(el, id)), "each row a kit button, by the same id as before");
-  assert.ok(["App", "Send to all 2", "Nova", "Needs you", "Atlas"].every((word) => texts(el).includes(word)), texts(el).join(" | "));
+  assert.ok(["App", "Nova", "Needs you", "Atlas"].every((word) => texts(el).includes(word)), texts(el).join(" | "));
   const many = Array.from({ length: 9 }, (_, i) => ({ address: `t${i + 10}`, status: "idle", labels: { "kanso.shown": `A${i}`, "kanso.project": "App" } }));
   const tall = listOf((await sendDrawn(many)).el, "send-list");
   assert.equal(arg(tall, "h"), DIALOG.list, "past six rows the list keeps six and scrolls");
@@ -57,7 +50,8 @@ test("An agent with no program art leads with the terminal's icon, in the muted 
 });
 
 test("No one to send to, or no match, is the kit's empty state with the same words", async () => {
-  assert.ok(texts((await sendDrawn([])).el).includes("No other agent is running. Start one in a pane, then send."));
+  assert.ok(texts((await sendDrawn([{ address: "t9", state: "live" }], "", null)).el).includes("No other agent is running. Start one in a pane, then send."), "a roster read with no agent in it");
+  assert.ok(texts((await sendDrawn([], "", null)).el).includes("Can't see the agents right now."), "a roster not read yet is not an empty one");
   const { el } = await sendDrawn(AGENTS, "zz");
   assert.ok(texts(el).includes("No agent or project by that name."));
   const empty = listOf(el, "send-list");

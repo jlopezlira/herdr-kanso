@@ -27,6 +27,7 @@ the branch's rules.
 ### Fixed
 
 - Worktrees no longer looks on this computer for a folder that is open only on another machine, and on Windows a folder in the temp folder no longer makes it search all of AppData. When it cannot tell where the temp folder is, it searches only the folders you chose instead of guessing.
+- Send lists every agent it knows, one on another computer included, and keeps the agent you chose until you choose another, saying on its row when it cannot be reached. After a send it names who refused it and who did not confirm in time: a send that did not confirm may have arrived. Send, Images and the pull request panel never wait longer than Herdr does for a send.
 
 ## [3.31.0] - 2026-11-19
 

@@ -493,7 +493,7 @@ export class PullRequest {
     if (!step.deliver) return;
     const address = this.frontAgent()?.address;
     if (!address) { this.session.note = said("Not sent: no agent in front"); cx.notify(); return; }
-    if (this.session.deliverTo(cx, () => deliver(address, text, "you"))) this.session.sendShown = false;
+    if (this.session.deliverTo(cx, (task) => deliver(task.timer, address, text, "you"))) this.session.sendShown = false;
   }
 
   openChecks(cx) { this.session.expanded = { ...this.session.expanded, checks: true }; this.setDetails(cx, true); }
