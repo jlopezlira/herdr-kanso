@@ -372,42 +372,45 @@ test("Without Docker the Containers door is not offered, without gh the PR door 
   assert.equal(docker.store["kanso.panels.all"].some((p) => p.id === "containers"), false, "and kansō settings does not list it either");
 });
 
-test("The probe asks each tool its version: only a tool not found is absent; a timeout or another failure leaves it unknown, and its door offered", async () => {
+test("The computer is asked whether each tool exists: command -v through the shell, where.exe on Windows; only a clean not-found hides a door", async () => {
   const { probeCommands, offered } = await load("kanso-tabs/panel-tools.js", ["probeCommands", "offered"]);
   const asked = [];
-  const run = async (command, args) => {
-    asked.push([command, ...args]);
-    if (command === "docker") throw Object.assign(new Error("spawn docker ENOENT"), { code: "ENOENT" });
-    return { code: 0, stdout: "gh version 2", stderr: "" };
+  const answer = (codes) => async (command, args) => { asked.push([command, ...args]); return { code: codes[args.at(-1)], stdout: "", stderr: "" }; };
+  assert.deepEqual(clone(await probeCommands(answer({ docker: 1, gh: 0 }), "macos")), { docker: false, gh: true }, "found shows, not found hides");
+  assert.deepEqual(asked.map(([command, , script]) => [command, script]), [["sh", 'command -v "$1" >/dev/null 2>&1 || exit 1'], ["sh", 'command -v "$1" >/dev/null 2>&1 || exit 1']]);
+  assert.deepEqual(asked.map((call) => call.at(-1)), ["docker", "gh"]);
+  asked.length = 0;
+  assert.deepEqual(clone(await probeCommands(answer({ docker: 0, gh: 1 }), "windows")), { docker: true, gh: false });
+  assert.deepEqual(asked, [["where.exe", "docker"], ["where.exe", "gh"]]);
+  const unknown = {
+    "a chdir ENOENT that names the tool": (command) => Object.assign(new Error(`chdir /gone before starting ${command} failed`), { code: "ENOENT", path: "/gone", syscall: "chdir" }),
+    "a spawn failure": () => Object.assign(new Error("spawn sh ENOENT"), { code: "ENOENT", path: "sh", syscall: "spawn sh" }),
+    "a timeout": () => new Error("command timed out after 1500 ms"),
+    "a plain error naming the tool": (command) => new Error(`${command}: command not found`),
   };
-  assert.deepEqual(clone(await probeCommands(run)), { docker: false, gh: true });
-  assert.deepEqual(asked, [["docker", "--version"], ["gh", "--version"]]);
-  assert.deepEqual(clone(await probeCommands(async () => ({ code: 127, stdout: "", stderr: "sh: gh: not found" }))), { docker: false, gh: false }, "the shell's command not found");
-  const timedOut = await probeCommands(async (command) => {
-    if (command === "docker") throw new Error("command timed out after 1500 ms");
-    return { code: 0, stdout: "", stderr: "" };
-  });
-  assert.deepEqual(clone(timedOut), { docker: null, gh: true }, "a timeout is not an answer");
-  assert.equal(offered("containers", { commands: timedOut }), true, "and Containers stays offered");
-  const failing = await probeCommands(async () => ({ code: 1, stdout: "", stderr: "permission denied" }));
-  assert.deepEqual(clone(failing), { docker: null, gh: null }, "nor is another failure");
-  const elsewhere = await probeCommands(async () => { throw new Error("working directory not found"); });
-  assert.deepEqual(clone(elsewhere), { docker: null, gh: null }, "something else missing is not the tool missing");
-  assert.equal(offered("pr", { commands: elsewhere }), true);
-  const cwd = await probeCommands(async () => { throw Object.assign(new Error("chdir /gone ENOENT"), { code: "ENOENT", path: "/gone" }); });
-  assert.deepEqual(clone(cwd), { docker: null, gh: null }, "an ENOENT that is not the spawn of the tool");
+  for (const [label, failure] of Object.entries(unknown)) {
+    const probed = await probeCommands(async (_command, args) => { throw failure(args.at(-1)); }, "macos");
+    assert.deepEqual(clone(probed), { docker: null, gh: null }, label);
+    assert.equal(offered("containers", { commands: probed }) && offered("pr", { commands: probed }), true, `${label}: both doors stay offered`);
+  }
+  for (const code of [2, 126, 127, 9009]) assert.deepEqual(clone(await probeCommands(async () => ({ code, stdout: "", stderr: "" }), "macos")), { docker: null, gh: null }, `exit ${code}`);
 });
 
-test("Moving doors while a tool is absent keeps its saved slot, first or between the moved doors, and its door comes back there", async () => {
-  for (const [order, kept, label] of [[["pr", "files", "ports", "insights"], ["pr", "ports", "files", "insights"], "first"], [["files", "pr", "ports", "insights"], ["ports", "pr", "files", "insights"], "second"]]) {
-    const b = await bar({ stored: { "kanso.panels.order": order, "kanso.panels.commands": { docker: true, gh: false } } });
-    assert.equal(door(b.view.render(b.cx), "PR"), null);
+test("Moving the drawn doors keeps the slot of a door gh's absence or Settings hides, first or between the moved doors, and it comes back there", async () => {
+  const absent = { hidden: { "kanso.panels.commands": { docker: true, gh: false } }, shown: { "kanso.panels.commands": { docker: true, gh: true } } };
+  const hidden = { hidden: { "kanso.pieces": { "panel.pr": "hide" } }, shown: { "kanso.pieces": {} } };
+  for (const [why, order, kept, label] of [[absent, ["pr", "files", "ports", "insights"], ["pr", "ports", "files", "insights"], "gh absent, first"],
+    [absent, ["files", "pr", "ports", "insights"], ["ports", "pr", "files", "insights"], "gh absent, second"],
+    [hidden, ["files", "pr", "ports", "insights"], ["ports", "pr", "files", "insights"], "hidden in Settings, second"]]) {
+    const b = await bar({ stored: { "kanso.panels.order": order, ...why.hidden } });
+    assert.equal(door(b.view.render(b.cx), "PR"), null, label);
     pressOf(door(b.view.render(b.cx), "Ports"), "left")(press, b.cx);
     handler(door(b.view.render(b.cx), "Files"), "on_mouse_up")({}, b.cx);
-    assert.deepEqual(clone(b.store["kanso.panels.order"]).slice(0, 4), kept, `PR keeps its ${label} slot`);
-    b.store["kanso.panels.commands"] = { docker: true, gh: true };
-    b.view.render(b.cx);
-    assert.deepEqual(clone(b.store["kanso.panels.all"]).map((p) => p.id).slice(0, 4), kept, `gh back: PR is ${label} again`);
+    assert.deepEqual(clone(b.store["kanso.panels.order"]).slice(0, 4), kept, `${label}: PR keeps its slot`);
+    Object.assign(b.store, why.shown);
+    const root = b.view.render(b.cx);
+    assert.deepEqual(clone(b.store["kanso.panels.all"]).map((p) => p.id).slice(0, 4), kept, `${label}: PR comes back there`);
+    assert.ok(door(root, "PR"), `${label}: and is drawn`);
   }
 });
 

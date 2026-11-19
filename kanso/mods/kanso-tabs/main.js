@@ -91,8 +91,10 @@ function panelList() {
   return roster().filter((p) => offered(p.id, { sim: shared(TOOLS), commands: shared(COMMANDS) })).map((p) => ({ ...p, on: runs(`panel.${p.id}`, map) }));
 }
 
+const drawnPanels = (all) => all.filter((p) => p.on);
+
 function movePanel(from, to) {
-  const seen = panelList().map((p) => p.id), i = seen.indexOf(from), j = seen.indexOf(to);
+  const seen = drawnPanels(panelList()).map((p) => p.id), i = seen.indexOf(from), j = seen.indexOf(to);
   if (i < 0 || j < 0 || i === j) return;
   const moved = seen.toSpliced(i, 1).toSpliced(j, 0, from);
   setShared(ORDER, roster().map((p) => (seen.includes(p.id) ? moved[seen.indexOf(p.id)] : p.id)));
@@ -189,7 +191,7 @@ export default class Tabs extends View {
 
   probeCommands(cx) {
     cx.spawn(async () => {
-      const commands = await probeCommands(exec);
+      const commands = await probeCommands(exec, window()?.platform ?? "macos");
       if (JSON.stringify(commands) === JSON.stringify(shared(COMMANDS) ?? null)) return;
       setShared(COMMANDS, commands);
       cx.notify();
@@ -514,7 +516,7 @@ export default class Tabs extends View {
       if (project && project !== this.project) this.openRow = undefined;
     }
     const allPanels = panelList();
-    const shownPanels = allPanels.filter((p) => p.on);
+    const shownPanels = drawnPanels(allPanels);
     const enabled = shownPanels.map((p) => p.id);
     const roster = allPanels.map((p) => ({ id: p.id, label: p.label, icon: p.icon ? glyphOf(p.icon.replace(/^lu-/, "")) : null, on: p.on }));
     if (JSON.stringify(roster) !== JSON.stringify(shared("kanso.panels.all") ?? null)) setShared("kanso.panels.all", roster);
