@@ -4,7 +4,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { load, chain, gpuiHost, clone } from "./helpers.mjs";
-import { loadSidebar, mountedState, shell, SIDEBAR_THEME } from "./sidebar-fixtures.mjs";
+import { loadSidebar, mountedState, shell, SIDEBAR_THEME, world } from "./sidebar-fixtures.mjs";
 
 // The drawn tree, each element with its calls and children, so where it sits can be measured.
 const host = () => ({ ...gpuiHost(), svg: (path) => { const el = chain("svg"); el.calls.push(["svg", path]); return el; }, Popover: { new: (id) => chain(id) } });
@@ -33,8 +33,7 @@ const cold = { name: "cold", target: "cold.example", via: "", session: "", tempo
 
 async function sidebar({ kbd = false, navKey = null, hoverSpace = null, hoverMachine = null, before = () => {} } = {}) {
   const { Spaces } = await loadSidebar(host(), {
-    InputState: { new: () => ({ on() {}, value: () => "", focus() {}, release() {} }) },
-    spaces: () => SPACES, agents: () => AGENTS, panes: () => PANES, terminals: () => TERMINALS,
+    ...world(SPACES, AGENTS, PANES, TERMINALS),
     machines: () => [{ name: null, layout: "ready" }, { name: "dark", layout: "ready" }, { name: "cold", layout: "ready" }],
   });
   const view = Object.assign(new Spaces(), mountedState({

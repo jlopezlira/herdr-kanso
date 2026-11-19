@@ -19,7 +19,7 @@ import { TextField } from "./ui-field.js";
 import { menu } from "./ui-menu.js";
 import { tabSkeleton } from "./ui-skeleton.js";
 import { tooltip } from "./kit.js";
-import { boundChord } from "./ui-tooltip.js";
+import { boundChord, hintOf } from "./ui-tooltip.js";
 import { tabItem, tabInsertion, tabPill, TAB_NAME_LIMIT } from "./ui-tab.js";
 import { pieceLines } from "./piece-lines.js";
 import { tabMark, barState, foldTabs, pillAt, dropSide, renameWaits } from "./tab-bar-model.js";
@@ -437,7 +437,7 @@ export default class Tabs extends View {
     const items = [
       ...pieceLines(`panel.${panel.id}`, { done: shut }).slice(1),
       { separator: true },
-      { label: "Panels\u2026", onClick: (cx) => { shut(cx); openSettings("pieces"); } },
+      { icon: "panels-top-left", label: "Panels\u2026", onClick: (cx) => { shut(cx); openSettings("pieces"); } },
     ];
     return Popover.new(`panel-menu-${panel.id}`).trigger(trigger).open(true).on_open_change((open, cx) => { if (!open) shut(cx); })
       .content(menu(`panel-menu-list-${panel.id}`, { title: `${panel.label} panel`, items }, c));
@@ -451,10 +451,10 @@ export default class Tabs extends View {
     const armed = agents > 0 && this.armed.is(closeKey(tab));
     const items = [
       { icon: "pencil", label: "Rename", onClick: (cx) => { shut(cx); this.startRename(tab, cx); } },
-      { icon: "plus", label: "New tab", hint: boundChord("tab.new") || null, onClick: (cx) => { shut(cx); run("tab.new", { space: space.id }); } },
+      { icon: "plus", label: "New tab", hint: hintOf("tab.new"), onClick: (cx) => { shut(cx); run("tab.new", { space: space.id }); } },
       { icon: "moon", label: `Sleep ${tab.name}\u2026`, onClick: (cx) => { shut(cx); openOverlay({ mod: "kanso-sleep", kind: "dialog", width: DIALOG.wide, props: { sleep: { scope: "tab", space: space.id, tab: tab.id } } }); } },
       { separator: true },
-      { icon: "x", label: "Close tab", hint: boundChord("tab.close") || null, armed, verb: agents ? verb : null,
+      { icon: "x", label: "Close tab", hint: hintOf("tab.close"), armed, verb: agents ? verb : null,
         onClick: (cx) => (agents ? this.armed.press(closeKey(tab), cx, () => { shut(cx); run("tab.close", { id: tab.id }); }) : (shut(cx), run("tab.close", { id: tab.id }))) },
       ...pieceLines("tabs.state", { named: true, done: shut }),
     ];

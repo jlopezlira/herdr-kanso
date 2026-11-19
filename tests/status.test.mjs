@@ -342,6 +342,20 @@ test("Hidden computer, working count and palette stay hidden, and Windows names 
   assert.equal(ui.texts.includes("This computer"), false);
 });
 
+test("A hidden computer is not read: no machine list while Hide is chosen, and one read once it shows", async () => {
+  const ui = bar();
+  let reads = 0;
+  ui.host.machines = () => { reads += 1; return []; };
+  const { WorkspaceStatus } = await loadWorkspaceStatus(ui.host);
+  Object.assign(ui.state, { props: { side: "left" }, spaces: [{ id: "s1", active: true, machine: "devbox", tabs: [] }] });
+  ui.state.shared["kanso.pieces"] = { "status.computer": "hide" };
+  new WorkspaceStatus().render();
+  assert.equal(reads, 0);
+  ui.state.shared["kanso.pieces"] = {};
+  new WorkspaceStatus().render();
+  assert.equal(reads, 1);
+});
+
 test("The right side reads the guard file on a timer and does not start a process", async () => {
   const ui = bar();
   const { MEMORY_MS } = await load("kanso-status/model.js", ["MEMORY_MS"]);

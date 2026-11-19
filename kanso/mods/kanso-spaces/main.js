@@ -515,6 +515,7 @@ export default class Spaces extends View {
     const space = /^space-(\d)$/.exec(c), view = /^view-(spaces|agents|threads)$/.exec(c);
     if (space) { const i = Number(space[1]); if (i >= 1 && i <= spaces().length) run("space.select", { index: i }); }
     else if (view) { this.setView(view[1], cx); cx.notify(); }
+    else if (c === "asleep") this.showAsleep(cx);
     else if (c === "needs-you.next") this.nextNeeds(cx);
     else if (c === "agent-up" || c === "agent-down") this.besideAgent(c === "agent-up" ? -1 : 1);
     else if (c === "agent-back" || c === "agent-forward") this.stepAgent(c === "agent-back" ? -1 : 1, cx);
@@ -1570,17 +1571,17 @@ export default class Spaces extends View {
     return this.popup(t, place?.name ?? w?.name ?? null, [
       ...(asleep.length ? [{ heading: "Asleep" }, ...asleep.map((z) => item(`Wake ${z.tab}`, () => wakeRow(z), { icon: "sun", hint: z.saved ? since(z.saved) : null }))] : []),
       ...(asleep.length > 1 ? [item(`Wake all ${asleep.length}`, () => arrange({ wake: { space: w.id } }), { icon: "undo" })] : []),
-      ...(place && !project?.missing ? [item("New conversation\u2026", () => this.newAgentMenu(place), { icon: "plus" }),
-        item("New in a worktree\u2026", () => this.worktreeDialog(place), { icon: "git-fork" })] : []),
-      ...(w ? [item("Rename\u2026", () => run("space.rename", { id: w.id }), { icon: "pencil" })] : []),
+      ...(place && !project?.missing ? [item("New conversation\u2026", () => this.newAgentMenu(place)),
+        item("New in a worktree\u2026", () => this.worktreeDialog(place), { icon: "git-branch" })] : []),
       ...(trees.length ? [{ heading: "Worktrees" }, { scroll: trees.map((x) => item(x.branch ?? "detached", () => this.openTree(place, x), { icon: "git-branch", hint: where(x.path) })) }] : []),
+      ...(w ? [item("Rename\u2026", () => run("space.rename", { id: w.id }))] : []),
       ...(active ? [item("Sleep this tab\u2026", () => sleepTab(w.id, active.id), { icon: "moon" })] : []),
       ...(tabs > 1 ? [item("Sleep the project\u2026", () => sleepProject(w.id), { icon: "moon" })] : []),
-      ...(w ? [item("Project options\u2026", options, { icon: "settings" })] : []),
+      ...(w ? [item("Project options\u2026", options)] : []),
       ...(keepable ? [item("Keep as a project", keep, { icon: "pin", keep: true })] : []),
       ...(project?.missing && !project?.machine ? [item("Locate folder\u2026", locate, { icon: "file", keep: true })] : []),
       // Any project you see can go: one you added (its row too), or an open space you never kept.
-      ...(project || w ? [item("Remove project", remove, { icon: "x", keep: true, verb: w ? `remove it and close its ${tabs} tab${tabs === 1 ? "" : "s"}` : "remove it", armed: this.armed.is("remove") })] : []),
+      ...(project || w ? [item("Remove project", remove, { icon: "x", keep: true, verb: w ? `remove, close ${tabs} tab${tabs === 1 ? "" : "s"}` : "remove it", armed: this.armed.is("remove") })] : []),
       ...this.pieceItems(item, "sidebar.git"),
     ]);
   }
@@ -1674,7 +1675,7 @@ export default class Spaces extends View {
       const rows = span.map((e) => {
         if (e.a.asleep) return { a: e.a, h: H.line, el: this.asleepLine(e.a, t) };
         const m = this.more(e, ctx);
-        return { a: e.a, h: sessionHeight(m), el: agentSession(e.a, indent ? 2 : 1, c, this.navRow(e.a, e.a.pane && !e.lines.length ? this.rowOf(e.a, mine, space) : null), m) };
+        return { a: e.a, h: sessionHeight(m), el: agentSession(e.a, indent ? 2 : 1, c, this.navRow(e.a, e.lines.length ? this.rowFor(e.a) : e.a.pane ? this.rowOf(e.a, mine, space) : null), m) };
       });
       return { key: keys[i], rows, slab };
     });
@@ -1791,6 +1792,13 @@ export default class Spaces extends View {
     this.viewMenu = false;
     this.panel.set("spaces.view", view);
     if (view === "threads" && cx) this.refreshThreads(cx);
+  }
+
+  showAsleep(cx) {
+    this.setView("agents", cx);
+    this.sectionsFolded.delete("asleep");
+    this.panel.set("spaces.sections", [...this.sectionsFolded]);
+    cx.notify();
   }
 
   checkAlive(cx, now = Date.now(), active = window().active) {
@@ -2229,8 +2237,9 @@ export default class Spaces extends View {
   }
 
   openMenu(a, { title = null, session = null } = {}) {
-    openOverlay({ mod: "kanso-spaces", kind: "popup", width: W.menu, height: a.asleep ? 170 : 460, at: "pointer",
-      props: { menu: { address: a.address, view: this.view, title, session, ...(a.asleep ? { asleep: a.asleep, name: a.name } : {}) } } });
+    if (a.asleep) { this.openAsleepMenu({ address: a.address, asleep: a.asleep, name: a.name }); return; }
+    openOverlay({ mod: "kanso-spaces", kind: "popup", width: W.menu, height: 460, at: "pointer",
+      props: { menu: { address: a.address, view: this.view, title, session } } });
   }
 
   rowFor(a, actions = null, extra = {}) {
@@ -2286,7 +2295,7 @@ export default class Spaces extends View {
   // A click goes to the row; an asleep one opens its wake menu.
   railMenuView(t) {
     const m = props().railMenu;
-    const to = (r) => (r.asleep ? () => { closeOverlay(props().overlay); openOverlay({ mod: "kanso-spaces", kind: "popup", width: 252, height: 170, at: "pointer", props: { menu: { address: r.address, asleep: r.asleep, name: r.name } } }); }
+    const to = (r) => (r.asleep ? () => { closeOverlay(props().overlay); this.openAsleepMenu({ address: r.address, asleep: r.asleep, name: r.name }); }
       : () => { closeOverlay(props().overlay); r.pane ? run("pane.focus", { pane: r.pane }) : run("terminal.peek", { terminal: r.address }); });
     // The keyboard brings the row it lights into view.
     this.menuScroll = this.convScroll ? { handle: this.convScroll, count: m.rows.length } : null;
@@ -2483,12 +2492,23 @@ export default class Spaces extends View {
   subjectOf(m, l, a, title) { return l[NAME_LABEL] || l[THREAD_LABEL] || title || a?.title || m.name || "this agent"; }
 
   zzMenuView(t, m) {
+    const { title, items } = this.zzLines(this.lines(), m);
+    return this.popup(t, title, items);
+  }
+
+  zzLines(item, m) {
     const z = m.asleep;
-    const item = this.lines();
-    return this.popup(t, z.saved ? `${m.name}, asleep since ${since(z.saved)}` : `${m.name}, asleep`, [
-      item(z.n > 1 ? `Wake it and ${z.n - 1} more of ${z.tab}` : "Wake", () => wakeRow(z), { icon: "sun" }),
+    return { title: z.saved ? `${m.name}, asleep since ${since(z.saved)}` : `${m.name}, asleep`, items: [
+      item("Wake", () => arrange({ wake: { space: z.space, terminal: z.terminal } }), { icon: "sun" }),
+      ...(z.n > 1 ? [item(`Wake all ${z.n} in ${z.tab}`, () => wakeRow(z), { icon: "sun" })] : []),
       item("Copy conversation id", (cx) => cx.write_to_clipboard?.(z.resume), { icon: "copy" }),
-    ]);
+      { separator: true },
+      item("Everything asleep\u2026", () => run("kanso-spaces.asleep"), { icon: "moon" }),
+    ] };
+  }
+
+  openAsleepMenu(menu) {
+    openOverlay({ mod: "kanso-spaces", kind: "popup", width: W.menu, height: menuHeight(this.zzLines(sketch, menu)), at: "pointer", props: { menu } });
   }
 
   // Kept in shared "space.colors" so every window agrees; a gone space gives its hue up.

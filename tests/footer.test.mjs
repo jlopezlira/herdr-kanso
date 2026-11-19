@@ -1,10 +1,10 @@
 // The sidebar footer: the Storybook's Footer composition, drawn by kanso-chrome with kansō's update in each mode, its refusal, Settings and its one menu, Herdr's update, and the rail.
-import { mountChrome } from "./mod-fixtures.mjs";
+import { footer, FOOTER_NIGHT } from "./menu-fixtures.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { load, chain, gpuiHost, calls, everyDrawn as all } from "./helpers.mjs";
+import { calls, everyDrawn as all } from "./helpers.mjs";
 
-const night = { background: "#1b1b19", foreground: "#d8d4cb", chrome: "#161615", hover: "#232321", selected: "#2b2b28", dim: "#6b6860", muted: "#949086", blocked: "#d5674f", accent: "#c9a46a" };
+const night = FOOTER_NIGHT;
 
 const arg = (el, name) => calls(el, name)[0]?.[1];
 const texts = (el) => all(el).flatMap((x) => calls(x, "child").map((call) => call[1]).filter((v) => typeof v === "string"));
@@ -14,22 +14,6 @@ const popover = (el) => all(el).find((x) => calls(x, "trigger").length) ?? null;
 
 const cx = () => ({ notified: 0, notify() { this.notified += 1; }, timer: { after() {} }, stop_propagation() {} });
 const press = (el, context = cx()) => { arg(el, "on_click")({}, context); return context; };
-
-// Mounted as Herdr mounts it, with nothing run; the updater is then a stand-in.
-async function footer({ shared = {}, ready = null, bindings = [{ action: "kanso-tabs.settings", keys: "ctrl-shift-," }], updater = {} } = {}) {
-  const ran = [], overlays = [], installs = [];
-  const host = {
-    ...gpuiHost(),
-    Popover: { new: (id) => chain(id) },
-    theme: () => night, props: () => ({ footer: true }), shared: (key) => shared[key] ?? null, setShared: () => {},
-    run: (name, args) => { ran.push([name, args]); }, openOverlay: (spec) => { overlays.push(spec); return "o"; },
-    updates: () => ({ app: { ready } }), keys: () => bindings, settings: () => ({ font_family: "Mono" }), window: () => ({ platform: "macos" }),
-  };
-  const view = await mountChrome(host);
-  const kit = await load("kanso-chrome/ui.js", ["H", "G", "T", "SIDEBAR", "PANE"], host);
-  view.updater = { available: () => null, busy: false, refused: () => null, install: (context) => installs.push(context), ...updater };
-  return { view, ran, overlays, installs, ...kit };
-}
 
 test("In Stable Mode with nothing to install, the footer is Settings alone: Add computer lives in +", async () => {
   const { view } = await footer();
