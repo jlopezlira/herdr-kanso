@@ -142,10 +142,10 @@ if (process.argv[1] === new URL(import.meta.url).pathname) {
     "close armed": { items: [{ ...tabs[0], armed: true }, ...tabs.slice(1)], value: "checkout", panels: doors },
     "renamed, waiting": { items: [{ ...tabs[0], label: "api-limits", pending: true }, ...tabs.slice(1)], value: "checkout", panels: doors },
     "dragging": { items: [tabs[0], { ...tabs[1], drop: true }, { ...tabs[2], held: true }], value: "checkout", panels: doors },
-    "folded": { items: tabs, value: "checkout", folded: 5, panels: doors },
+    "folded": { items: tabs, value: "checkout", folded: Array.from({ length: 5 }, (_, i) => ({ label: `f${i}` })), panels: doors },
     "unreachable": { items: tabs, value: "checkout", state: "unreachable" },
     "windows and linux": { items: tabs, value: "checkout", panels: doors, windows: true },
-  };
+    "dragging a door": { items: tabs, value: "checkout", panels: [{ ...doors[0], drop: true }, { ...doors[1], held: true }] },  };
   for (const [name, props] of Object.entries(bar)) {
     const result = await checkPiece(tabBarTree(props), c);
     if (result.untranslated) { failed = true; console.log(`tab bar, ${name}: untranslated`, result.untranslated); continue; }

@@ -39,6 +39,10 @@ export const tabActs = {
   dragging: ([first, second, third]) => [first, { ...second, drop: true }, { ...third, held: true }],
   'long name': ([first, second, third]) => [first, second, { ...third, label: 'retry-after-header-for-cart-and-checkout' }],
 };
+export const doorActs = {
+  'at rest': (doors) => doors,
+  dragging: (doors) => doors.map((door) => ({ ...door, drop: door.key === 'spend', held: door.key === 'ports' })),
+};
 const foldedTabs = ['perf', 'web', 'e2e', 'storybook', 'seed-data'];
 
 const edgeColumns = (panes, stacked) => stacked && panes.length > 1 ? [panes.slice(0, 2), ...panes.slice(2).map((pane) => [pane])] : panes.map((pane) => [pane]);
@@ -191,9 +195,10 @@ export const statedPages = {
     ],
   },
   'Compositions/Tab bar': {
-    args: { width: 1040, value: 'checkout', tab: 'at rest', panel: 'none', state: 'connected', folded: 0, overflow: false, help: false, custom: false, windows: false },
-    markup: ({ width, value, tab, folded, overflow, custom, ...args }) => {
-      const bar = atWidth(width, tabBar({ ...args, panels: custom ? [...panelDoors, { key: 'notes', label: 'Notes' }] : panelDoors, value, overflow, items: tabActs[tab](tabItems(value)), folded: foldedTabs.slice(0, folded).map((label) => ({ label })) }));
+    args: { width: 1040, value: 'checkout', tab: 'at rest', door: 'at rest', panel: 'none', state: 'connected', folded: 0, overflow: false, help: false, custom: false, windows: false },
+    markup: ({ width, value, tab, door, folded, overflow, custom, ...args }) => {
+      const panels = doorActs[door](custom ? [...panelDoors, { key: 'notes', label: 'Notes' }] : panelDoors);
+      const bar = atWidth(width, tabBar({ ...args, panels, value, overflow, items: tabActs[tab](tabItems(value)), folded: foldedTabs.slice(0, folded).map((label) => ({ label })) }));
       return overflow && folded ? `<div class="kanso-story__menu-room">${bar}</div>` : bar;
     },
     states: [
@@ -208,8 +213,8 @@ export const statedPages = {
       { label: 'Connecting', args: { width: 520, state: 'connecting' }, caption: 'A project on devbox: one breathing skeleton per known tab.' },
       { label: 'Unreachable', args: { width: 520, state: 'unreachable' }, caption: 'The tabs step down; no + and no doors.' },
       { label: 'Windows and Linux', args: { windows: true }, caption: 'The window buttons after the doors, in the same button.' },
-      { label: 'kansō help', args: { help: true }, caption: 'Proposed. kansō help\'s door after the panels\'.' },
-      { label: 'Custom panel, no icon', args: { custom: true }, caption: 'Proposed. A panel with no icon of its own shows its name.' },
+      { label: 'Dragging a door', args: { panel: 'pr', door: 'dragging' }, caption: 'The held door on the pressed wash; the accent bar where it lands.' },
+      { label: 'kansō help', args: { help: true }, caption: 'Proposed. kansō help\'s door after the panels\'.' },      { label: 'Custom panel, no icon', args: { custom: true }, caption: 'Proposed. A panel with no icon of its own shows its name.' },
     ],
   },
   'Compositions/Edges': {

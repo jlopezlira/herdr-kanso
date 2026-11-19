@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { mkdir, readFile, readdir, realpath, rm, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { join, win32 } from "node:path";
 import { load, context, exec, nativePlatform, temporary, clone, gpuiHost, success, failure, storeShared, tickingContext } from "./helpers.mjs";
-import { test, dropChild, trackedSpawn, quote, windowsOnly, heldFile, updater, fixture, version, small, tree, stages, hostFor, startUpdater, versionFile } from "./update-harness.mjs";
+import { test, dropChild, trackedSpawn, quote, windowsOnly, heldFile, heldDirectory, updater, fixture, version, small, tree, stages, hostFor, startUpdater, versionFile } from "./update-harness.mjs";
 
 test("Kanso's newest release comes from the vX.Y.Z tags, not from Herdr", async () => {
   const { newestTag, compareVersions } = await updater();
@@ -459,14 +459,49 @@ const watchRecover = async (t, home, dir, file, ready) => {
   return { saw, exited, text: () => err };
 };
 
+const expectQuick = (result, began) => assert.ok(Date.now() - began < 7000, `waited ${Date.now() - began}: ${result.stderr}`);
+
 const expectStop = (result, op, path, began) => {
   assert.equal(result.code, 1, result.stderr);
   const prefix = `${op} ${path} `;
   const line = result.stderr.split(/\r?\n/).find((row) => row.startsWith(prefix));
   assert.ok(line, result.stderr);
   assert.ok(line.slice(prefix.length).trim(), line);
-  assert.ok(Date.now() - began < 7000, `waited ${Date.now() - began}: ${result.stderr}`);
+  expectQuick(result, began);
 };
+
+const namesWithin = (row, op, folder, reason) => {
+  const head = `${op} `;
+  const tail = ` ${reason}`;
+  if (!reason.trim() || !row.startsWith(head) || !row.endsWith(tail)) return false;
+  const path = row.slice(head.length, row.length - tail.length);
+  const rel = win32.relative(folder, path);
+  return win32.isAbsolute(path) && !win32.isAbsolute(rel) && rel.split(win32.sep)[0] !== "..";
+};
+
+const expectStopWithin = (result, op, folder, reason, began) => {
+  assert.equal(result.code, 1, result.stderr);
+  const line = result.stderr.split(/\r?\n/).find((row) => row.startsWith(`${op} `));
+  assert.ok(line && namesWithin(line, op, folder, reason), result.stderr);
+  expectQuick(result, began);
+};
+
+const deniedReason = async () => {
+  const said = await exec("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", "(New-Object ComponentModel.Win32Exception 5).Message"]);
+  assert.equal(said.code, 0, said.stderr);
+  return said.stdout.trim();
+};
+
+test("A stop inside the stage names the stage or a path in it, then why", () => {
+  const stage = "C:\\tmp\\op";
+  const why = "Access is denied.";
+  for (const row of [`delete ${stage} ${why}`, `delete ${stage}\\slots ${why}`, `delete C:\\TMP\\OP\\slots ${why}`]) {
+    assert.equal(namesWithin(row, "delete", stage, why), true, row);
+  }
+  for (const row of [`delete C:\\tmp\\op backup\\slots ${why}`, `delete ${stage}\\slot name`, `delete ${stage}\\slots `, `delete C:\\tmp\\op2 ${why}`, `delete C:\\tmp ${why}`, `rename ${stage}\\slots ${why}`]) {
+    assert.equal(namesWithin(row, "delete", stage, why), false, row);
+  }
+});
 
 windowsOnly("A file still open in an update that stopped does not stop recovery once it closes", async (t) => {
   const { root, home, dir } = await recoverHome(t);
@@ -533,7 +568,7 @@ windowsOnly("A destination another writer fills while rollback waits stops the m
   await mkdir(live, { recursive: true });
   await writeFile(join(live, "held.txt"), "open\n");
   await writeFile(join(made.dir, "op", "slots"), "0 kanso-chrome\n");
-  const lock = heldFile(t, join(live, "held.txt"), join(made.root, "release"));
+  const lock = heldDirectory(t, live, join(made.root, "release"));
   await lock.held;
   const watched = await watchRecover(t, made.home, made.dir, join(made.root, "recover-share.ps1"), (text) => text().includes("sharing rename") && text().includes(live));
   assert.equal(watched.saw, "sharing", watched.text());
@@ -582,11 +617,14 @@ windowsOnly("A permanent denial of stage cleanup stops at once and names that de
   const stage = join(made.dir, "op");
   await mkdir(stage, { recursive: true });
   await writeFile(slots, "\n");
-  const odd = "\\\\?\\" + stage + "\\denied.";
-  const created = await exec("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", `[IO.File]::WriteAllText(${quote(odd)}, 'kept')`]);
-  assert.equal(created.code, 0, created.stderr);
+  t.after(() => exec("icacls", [made.dir, "/remove:d", "*S-1-1-0"]));
+  for (const rule of ["*S-1-1-0:(DC)", "*S-1-1-0:(CI)(IO)(D)"]) {
+    const denied = await exec("icacls", [made.dir, "/deny", rule]);
+    assert.equal(denied.code, 0, denied.stderr || denied.stdout);
+  }
+  const why = await deniedReason();
   const began = Date.now();
-  expectStop(await recoverNow(made.home, made.dir), "delete", stage, began);
+  expectStopWithin(await recoverNow(made.home, made.dir), "delete", stage, why, began);
   assert.equal((await readdir(made.dir)).includes("op"), true);
 });
 

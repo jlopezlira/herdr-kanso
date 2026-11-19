@@ -42,7 +42,7 @@
   "props": {
     "button": { "storybook": ["hover", "key", "label", "pressed"], "app": ["color", "small", "spoken"] },
     "dialog": { "storybook": ["label", "note", "placeholder", "size", "tone", "tools", "value"], "app": ["focusHandle", "held", "onCancel", "onKey", "onPrimary"] },
-    "input": { "storybook": ["action", "choose", "count", "focus", "hover", "limit", "loading", "multiline", "selected", "text", "tools"], "app": ["iconTip", "onIcon", "spoken"] },
+    "input": { "storybook": ["action", "choose", "count", "focus", "held", "hover", "limit", "loading", "multiline", "selected", "text", "tools"], "app": ["iconTip", "onIcon", "spoken"] },
     "keyHint": { "app": ["font"] },
     "metric": { "storybook": ["second", "size", "small"], "app": ["tip"] },
     "needsItem": { "app": ["onClick", "tip"] },

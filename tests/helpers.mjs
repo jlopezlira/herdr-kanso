@@ -141,9 +141,21 @@ export const psMissing = (() => {
   try { execFileSync("ps", ["-p", String(process.pid), "-o", "comm="], { stdio: "pipe" }); return false; } catch { return "ps can't see processes here"; }
 })();
 
+const removeTree = async (dir) => {
+  for (let tries = 1; ; tries += 1) {
+    try {
+      return await rm(dir, { recursive: true, force: true });
+    } catch (error) {
+      if (tries === 20) throw error;
+      await new Promise((resolve) => setTimeout(resolve, tries * 100));
+    }
+  }
+};
+const afterTheOtherCleanups = (t, fn) => t.after(() => t.after(fn));
+
 export async function temporary(t) {
   const dir = await mkdtemp(join(tmpdir(), "kanso-test-"));
-  t.after(() => rm(dir, { recursive: true, force: true, maxRetries: 20, retryDelay: 100 }));
+  afterTheOtherCleanups(t, () => removeTree(dir));
   return dir;
 }
 
@@ -353,6 +365,31 @@ export const nodes = (el) => [el, ...el.kids.flatMap(nodes)];
 export const svgsOf = (el) => nodes(el).flatMap((kid) => kid.calls.filter((call) => call[0] === "svg").map((call) => call[1]));
 export const tipsOf = (el) => nodes(el).flatMap((kid) => kid.calls.filter((call) => call[0] === "tooltip").map((call) => call[1]));
 export const texts = (el) => nodes(el).flatMap((kid) => kid.calls.filter((call) => call[0] === "child" && typeof call[1] === "string").map((call) => call[1]));
+const BARE = new Set([undefined, "div", "h_flex", "v_flex", "svg", "image"]);
+const hung = (el) => el.calls.filter((call) => call[0] === "trigger" || call[0] === "content").map((call) => call[1]);
+const placed = (el, parent = null) => [[el, parent], ...[...el.kids, ...hung(el)].flatMap((kid) => placed(kid, el))];
+const last = (el, name) => el.calls.findLast((call) => call[0] === name)?.[1];
+const control = (el) => !BARE.has(el.tag) && hung(el).length === 0;
+const tabStop = (el) => (last(el, "tab_stop") ?? (control(el) || last(el, "tab_index") !== undefined)) && !last(el, "disabled");
+export function keyboard(root) {
+  const parents = new Map(placed(root));
+  const stops = [...parents.keys()].filter(tabStop).map((el, i) => [el, i]).toSorted(([a, i], [b, j]) => (last(a, "tab_index") ?? 0) - (last(b, "tab_index") ?? 0) || i - j).map(([el]) => el);
+  const path = (el) => (el ? [el, ...path(parents.get(el))] : []);
+  let at = -1;
+  return {
+    stops,
+    tab: () => { at = (at + 1) % stops.length; return stops[at]; },
+    key: (name, cx) => {
+      let stopped = false;
+      const routed = { ...cx, stop_propagation: () => { stopped = true; } };
+      for (const el of path(stops[at])) {
+        for (const [, handler] of el.calls.filter((call) => call[0] === "on_key_down")) if (!stopped) handler({ key: name, modifiers: {} }, routed);
+        if (stopped) return;
+      }
+      if (name === "enter" || name === "space") stops[at].calls.filter((call) => call[0] === "on_click").forEach(([, handler]) => handler({}, routed));
+    },
+  };
+}
 export const press = (el, id) => {
   const tool = nodes(el).find((kid) => kid.tag === id);
   tool.calls.filter((call) => call[0] === "on_click").forEach(([, handler]) => handler({}, { stop_propagation: () => {} }));

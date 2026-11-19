@@ -4,7 +4,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { mkdir, writeFile, realpath, rm } from "node:fs/promises";
 import { join, relative } from "node:path";
-import { load, clone, temporary, exec, until, elements, watchPopups, watchLines, failure, context, gitOk, fileExists as exists, gpuiHost } from "./helpers.mjs";
+import { load, clone, temporary, exec, until, elements, watchPopups, watchLines, failure, context, gitOk, fileExists as exists, gpuiHost, popoverHost, keyboard, texts, calls as calls_ } from "./helpers.mjs";
 import { loadSidebar, mountedState, recorder } from "./sidebar-fixtures.mjs";
 
 const NAMES = ["placeKey", "keyOfSpace", "keyOfProject", "closedProjects", "shownNames", "startingProjects", "parseWorktreeList", "addWorktree", "worktreesOf", "missingFolders", "folderName", "trimmed"];
@@ -340,15 +340,20 @@ const plusMenu = (Spaces, state) => {
   return { view, lines, items, scrolled, press: (key, modifiers = {}) => keys.press({ key, modifiers }, { stop_propagation() {}, notify() {} }) };
 };
 
+const TWO_AGENTS = [{ key: "claude", name: "Claude Code", installed: true, run: ["claude"] }, { key: "codex", name: "Codex", installed: true, run: ["codex"] }];
+const startMenu = async (host) => {
+  const calls = [], overlays = [], place = devbox();
+  const { Spaces } = await agentMenu({ props: () => ({ overlay: "ov1", newAgent: place, start: true }), run: (cmd, args) => calls.push([cmd, clone(args ?? null)]), ...host(overlays) });
+  return { calls, overlays, place, Spaces };
+};
+
 test("The + menu is the approved one: where it opens, Terminal with its key, the agents keyed 1 to 9, a new project, the worktrees inside a repository, then Arrange with its key", async () => {
-  const calls = [], overlays = [];
-  const place = devbox();
-  const { Spaces } = await agentMenu({
-    props: () => ({ overlay: "ov1", newAgent: place, start: true }), run: (cmd, args) => calls.push([cmd, clone(args ?? null)]), openOverlay: (o) => overlays.push(clone({ height: o.height, props: o.props })),
+  const { calls, overlays, place, Spaces } = await startMenu((made) => ({
+    openOverlay: (o) => made.push(clone({ height: o.height, props: o.props })),
     keys: () => [{ keys: "cmd-t", action: "tab.new" }, { keys: "cmd-alt-t", action: "kanso-strip.arrange" }],
-  });
+  }));
   const menu = (state) => plusMenu(Spaces, state);
-  const known = [{ key: "claude", name: "Claude Code", installed: true, run: ["claude"] }, { key: "codex", name: "Codex", installed: true, run: ["codex"] }];
+  const known = TWO_AGENTS;
   const { view, lines } = menu({ known, repo: true, trees: [{ path: "/work/api-feat", branch: "feat" }] });
   assert.deepEqual(lines.map(([text]) => text), ["Terminal", "Claude Code", "Codex", "New project", "New worktree\u2026", "Open worktree\u2026", "Arrange\u2026"]);
   assert.deepEqual(lines.map(([, hint]) => hint), ["⌘T", "1", "2", null, null, null, "⌥⌘T"]);
@@ -360,6 +365,34 @@ test("The + menu is the approved one: where it opens, Terminal with its key, the
   assert.deepEqual(menu({ known: null }).lines.map(([text]) => text), ["Terminal", "New project", "Arrange\u2026"], "the first time no agent is offered until the computer answers");
   const failed = menu({ known: null, agentsFailed: "ssh: connect timed out" });
   assert.equal(failed.lines.some(([text]) => text === "Claude Code"), false);
+});
+
+test("Tab walks every row of the New tab + menu in order, each with its focus wash, and Enter and Space each run it", async () => {
+  const { calls, overlays, Spaces } = await startMenu((made) => ({
+    ...popoverHost(), keys: () => [], openOverlay: (o) => made.push(Object.keys(o.props ?? {})[0]),
+    spaces: () => [{ id: "sp-api", machine: "devbox", active: true, tabs: [] }],
+  }));
+  const view = Object.assign(new Spaces(), { kdb: { setProjectAgent: async () => {} }, menuAt: -1, handle: {}, agentScroll: { scroll_to_item() {} }, known: TWO_AGENTS, repo: true, trees: [{ path: "/work/api-feat", branch: "feat" }] });
+  view.addProject = () => calls.push(["add project"]);
+  view.worktreeDialog = () => calls.push(["new worktree"]);
+  const keys = keyboard(view.newAgentView(AGENT_THEME));
+  const rows = [
+    ["Terminal", ["tab.new", { space: "sp-api", folder: "/work/api" }]], ["Claude Code", ["tab.new", { space: "sp-api", folder: "/work/api", argv: ["claude"] }]],
+    ["Codex", ["tab.new", { space: "sp-api", folder: "/work/api", argv: ["codex"] }]], ["New project", ["add project"]], ["New worktree…", ["new worktree"]],
+    ["Open worktree…", "trees"], ["Arrange…", ["kanso-strip.arrange", null]],
+  ];
+  assert.equal(keys.stops.length, rows.length, "every row and nothing else takes the keyboard");
+  for (const [label, effect] of rows) {
+    const stop = keys.tab();
+    assert.ok(texts(stop).includes(label), label);
+    assert.ok(calls_(stop, "focus").length > 0, `${label}: its focus wash`);
+    for (const key of ["enter", "space"]) {
+      calls.length = 0; overlays.length = 0; view.starting = false;
+      keys.key(key, { notify() {} });
+      if (typeof effect === "string") assert.equal(overlays.at(-1), effect, `${label}, ${key}`);
+      else assert.deepEqual(calls.at(-1), effect, `${label}, ${key}`);
+    }
+  }
 });
 
 test("The + menu keeps every installed agent, numbers the first nine, starts one only on a plain digit, and a failed read offers Refresh and Explain on the keyboard", async () => {

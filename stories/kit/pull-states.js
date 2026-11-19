@@ -8,6 +8,6 @@ export const { cut: filesCut, moreChecks, ...detailsShown } = detailSample;
 export const detailed = (extra = {}) => openedPull(verdicts.failed, { acts: failedActs, scope: samplePull.branch, details: { ...detailsShown, open: true, ...extra } });
 export const person = (checked, extra = {}) => ({ name, second }) => ({ label: name, second, checked: checked.includes(name), ...extra });
 export const { people, labels, notes } = samplePullPages;
-export const picker = (title, items) => ({ ...detailed(), picker: { title, items: [{ field: 'Find' }, ...items] } });
+export const picker = (title, items, typed = null) => ({ ...detailed(), picker: { title, items: [{ field: 'Find', text: typed }, ...items] } });
 export const reviewers = (checked) => people.slice(0, 3).map(person(checked));
 export const pageOf = (page, { file, facts: said, ...rest }, extra = {}) => ({ page, file, facts: said, back: samplePull.number, ...rest, ...extra });

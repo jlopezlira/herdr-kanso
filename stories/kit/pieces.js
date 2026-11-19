@@ -1,6 +1,7 @@
 // The kit's pieces: every function here returns markup; compositions.js only calls them.
 import { diffText, facts, plus } from '../../kanso/mods/kanso-panel/ui-facts.js';
 import { diffNumbers, markdownBlocks } from '../../kanso/mods/kanso-spaces/pure.js';
+import { buttonClasses, kinds } from './row-tree.js';
 
 export const escape = (text) => String(text).replace(/[&<>"]/g, (char) => `&#${char.charCodeAt(0)};`);
 
@@ -19,13 +20,13 @@ export const dot = (tone) => `<i class="kanso-dot kanso-dot--${escape(tone)}"></
 
 // Atoms
 
-export const kinds = { solid: 'kanso-button--solid', tonal: 'kanso-button--tonal', quiet: 'kanso-button--quiet kanso-text--fg', icon: 'kanso-button--icon' };
+export { kinds };
 // `content`: markup drawn in place of the icon and label, such as a picture with its name; `label` is then what the button says.
 // Proposed: `truncate` cuts a long label at --k-w-button-label, such as a menu's chosen project, so the button never grows past it.
 // `tip`: the tooltip, when it says more than the label; `focus`: the keyboard's ring is on it.
 const liveStates = ({ hover, focus, pressed }) => [hover && 'kanso-control--hover', focus && 'kanso-control--focus', pressed && 'kanso-control--active'].filter(Boolean);
-export const button = ({ label, kind = 'solid', size = 'md', icon = 'none', disabled = false, verb = '', armed = false, active = false, spin = false, key = '', tip = '', hover = false, focus = false, pressed = false, content = '', truncate = false, flush = false, name = '' }) => {
-  const classes = ['kanso-button', kinds[kind], size === 'md' ? '' : `kanso-button--${size}`, disabled ? 'kanso-control--off' : '', armed ? 'kanso-action kanso-action--armed' : '', active ? 'kanso-button--active' : '', spin ? 'kanso-button--spinning' : '', ...liveStates({ hover, focus, pressed }), content ? 'kanso-button--drawn' : '', flush ? 'kanso-button--flush' : '', truncate ? 'kanso-button--truncate' : ''].filter(Boolean).join(' ');
+export const button = ({ label, kind = 'solid', size = 'md', icon = 'none', disabled = false, verb = '', armed = false, active = false, spin = false, key = '', tip = '', hover = false, focus = false, held = false, pressed = false, content = '', truncate = false, flush = false, name = '' }) => {
+  const classes = [buttonClasses({ kind, size, disabled, armed, active, spin, focus, held, drawn: Boolean(content), flush, truncate }), ...liveStates({ hover, pressed })].join(' ');
   const lead = icon === 'none' ? (spin ? mark({ status: 'working', size: 'sm' }) : '') : iconSvg(icon, 'control');
   const text = kind === 'icon' ? '' : truncate ? `<span class="kanso-button__label">${escape(label)}</span>` : escape(label);
   const again = `Press again to ${escape(verb || label.toLowerCase())}`;
@@ -98,13 +99,13 @@ export const dialog = ({ title, label = title, tools = '', size = 'md', scope, v
     + (primary || secondary ? `<div class="kanso-dialog__footer">${secondary ? action(secondary, 'default', 'quiet') : ''}${primary ? action(primary, state, kind) : ''}</div>` : '') + '</div>';
 };
 
-export const input = ({ text: value = '', label: placeholder, icon = 'none', error, disabled, multiline, inline: rename, selected, loading, limit = 80, lead = 'none', count = null, tools = [], action: word = '', choose = false, focus = false, hover = false }) => {
+export const input = ({ text: value = '', label: placeholder, icon = 'none', error, disabled, multiline, inline: rename, selected, loading, limit = 80, lead = 'none', count = null, tools = [], action: word = '', held = false, choose = false, focus = false, hover = false }) => {
   const editable = !disabled && !loading && !choose;
   const enter = multiline ? '' : ` onkeydown="if (event.key === 'Enter') event.preventDefault()"`;
   const cap = ` onbeforeinput="if (event.inputType.startsWith('insert') && this.innerText.length >= ${limit}) event.preventDefault()"`;
   const text = `<div class="kanso-field__editor" role="textbox" aria-label="${escape(placeholder)}" aria-multiline="${multiline}" contenteditable="${editable}"${editable ? ' tabindex="0"' : ''}${enter}${cap}>${selected ? `<span class="kanso-field__selection">${escape(value.slice(0, limit))}</span>` : escape(value.slice(0, limit))}</div>`;
   const iconTool = icon === 'none' ? '' : `<span class="kanso-button kanso-button--icon" tabindex="0"><svg class="kanso-icon kanso-icon--row"><use href="#${icon}"/></svg></span>`;
-  const wordTool = value || choose ? button({ label: word, kind: 'tonal', size: 'sm' }) : '';
+  const wordTool = value || choose ? button({ label: word, kind: 'tonal', size: 'sm', disabled: held }) : '';
   const action = rename ? '' : word ? wordTool : iconTool;
   const classes = `kanso-field${multiline ? ' kanso-field--multiline' : ''}${rename ? ' kanso-field--inline' : ''}${loading ? ' kanso-skeleton--shape' : `${error ? ' kanso-field--invalid' : ''}${disabled ? ' kanso-control--off' : ''}${focus ? ' kanso-control--focus' : ''}${hover ? ' kanso-control--hover' : ''}`}`;
   const after = `${count === null ? '' : `<span class="kanso-field__count">${escape(count)}</span>`}${list(tools)}`;
@@ -170,7 +171,9 @@ const menuHeading = (text, status) => `<div class="kanso-menu__heading">${status
 const menuLead = (item) => item.picture || item.letter ? avatar({ initial: item.letter ?? '', image: item.picture, size: 'sm', tone: item.tone, round: false })
   : item.dot ? `<span class="kanso-menu__spacer">${dot(item.dot)}</span>` : item.icon ? glyph(item.icon) : '<span class="kanso-menu__spacer"></span>';
 const menuLabel = (label, second) => grow(second ? `<span class="kanso-menu__label">${label}</span><span class="kanso-menu__second">${escape(second)}</span>` : label);
+const menuWaiting = () => '<div class="kanso-menu__item" role="menuitem" aria-busy="true" aria-label="Loading"><span class="kanso-menu__spacer"></span><span class="kanso-skeleton kanso-skeleton--line kanso-skeleton--breathing"></span></div>';
 const menuItem = (item) => {
+  if (item.loading) return menuWaiting();
   const classes = `kanso-menu__item${item.second ? ' kanso-menu__item--two-lines' : ''}${item.armed ? ' kanso-action--armed' : item.selected ? ' kanso-control--selected' : item.hover ? ' kanso-control--hover' : ''}${item.disabled ? ' kanso-control--off' : ''}`;
   const label = item.armed ? `Press again to ${escape(item.verb || String(item.label ?? '').toLowerCase())}` : escape(item.label ?? '');
   return `<div class="${classes}" role="menuitem" tabindex="${item.disabled ? -1 : 0}"${item.disabled ? ' aria-disabled="true"' : ''}${item.checked === undefined ? '' : ` aria-checked="${item.checked}"`}>${menuLead(item)}${menuLabel(label, item.second)}`
@@ -178,7 +181,7 @@ const menuItem = (item) => {
     + (item.hint ? `<span class="kanso-menu__hint">${escape(item.hint)}</span>` : '') + (item.mark ? mark({ status: item.mark }) : '') + (item.checked ? glyph('lu-check') : '') + '</div>';
 };
 const menuEntry = (item) => item.separator ? '<div class="kanso-menu__separator"></div>'
-  : item.field ? `<div class="kanso-menu__field">${input({ label: item.field, icon: 'lu-search', multiline: false })}</div>`
+  : item.field ? `<div class="kanso-menu__field">${input({ label: item.field, text: item.text || undefined, focus: Boolean(item.text), icon: 'lu-search', multiline: false })}</div>`
   : item.failure ? failureBlock(item.failure)
   : item.heading ? menuHeading(item.heading, item.mark)
   : menuItem(item);
@@ -282,8 +285,8 @@ export const tabs = ({ items, value, size, track, disabled, icon, label: named }
 const percent = (value) => `${Number(value)}%`;
 const placed = ([x, y], content) => `<foreignObject class="kanso-annotation__spot" x="${percent(x)}" y="${percent(y)}">${content}</foreignObject>`;
 const ringed = ([x, y, width, height], content) => `<foreignObject class="kanso-annotation__area" x="${percent(x)}" y="${percent(y)}" width="${percent(width)}" height="${percent(height)}"><span class="kanso-annotation__region">${content}</span></foreignObject>`;
-export const pin = ({ n = '', at, region, pending = false }) => {
-  const badge = `<span class="kanso-annotation${pending ? ' kanso-annotation--inactive' : ''}">${escape(String(n))}</span>`;
+export const pin = ({ n = '', at, region, pending = false, hover = false, chosen = false }) => {
+  const badge = `<span class="kanso-annotation${pending ? ' kanso-annotation--inactive' : ''}${hover ? ' kanso-annotation--hover' : ''}${chosen ? ' kanso-annotation--selected' : ''}">${escape(String(n))}</span>`;
   return region ? ringed(region, badge) : at ? placed(at, badge) : badge;
 };
 export const note = ({ text = '', at = [0, 0], typing = false }) => placed(at, `<div class="kanso-annotation__note">${text ? escape(text) : '<span class="kanso-text--dim">Note</span>'}${typing ? '<span class="kanso-caret"></span>' : ''}</div>`);
@@ -391,11 +394,11 @@ export const windowMap = ({ picked = null, hover = null } = {}) => `<div class="
 
 const releaseDots = { newer: '', here: ' kanso-update__timeline-dot--current', older: ' kanso-update__timeline-dot--small' };
 const changeLines = (changes) => changes.map(({ kind, text }, index) => `<div class="kanso-update__change"><span>${kind === changes[index - 1]?.kind ? '' : escape(kind)}</span><span>${escape(text)}</span></div>`).join('');
-export const release = ({ version, date = null, node = 'newer', action = null, changes = [] }) => {
+export const release = ({ version, date = null, node = 'newer', action = null, busy = false, changes = [] }) => {
   const when = date ? `<span class="kanso-update__timeline-date">${escape(date)}</span>` : '';
   const heading = node === 'older'
     ? `<div class="kanso-update__fold">Older<span class="kanso-update__timeline-date">${escape(version)}</span>${inlineIcon('lu-chevron-right')}</div>`
-    : `<div class="kanso-update__timeline-heading"><span class="kanso-update__version-name">${escape(version)}</span>${when}${node === 'here' ? chip({ label: 'you are here' }) : ''}${action ? button({ label: action }) : ''}</div>`;
+    : `<div class="kanso-update__timeline-heading"><span class="kanso-update__version-name">${escape(version)}</span>${when}${node === 'here' ? chip({ label: 'you are here' }) : ''}${action ? button({ label: action, disabled: busy, spin: busy }) : ''}</div>`;
   return `<div class="kanso-update__timeline-release kanso-update__timeline-release--${node}"><span class="kanso-update__timeline-dot${releaseDots[node]}"></span>${heading}${changeLines(changes)}</div>`;
 };
 
@@ -421,10 +424,10 @@ const shareBlocks = {
   list: ({ title, rows }) => `${shareLine(title)}${list(rows.map(({ name, detail, value, unit }) => row({ name, detail, meta: [value, unit].filter(Boolean).join(' ') })))}`,
 };
 const shareBlock = (block) => `<div class="kanso-share__block">${shareBlocks[block.kind](block)}</div>`;
-export const shareCard = ({ title, subtitle = '', right = '', hero = {}, stats = [], note: said = '', blocks = [] }) => `<div class="kanso-share">${shareLine(title, right)}${subtitle ? sentence({ text: subtitle, tone: 'muted' }) : ''}`
+export const shareCard = ({ title, subtitle = '', right = '', hero = {}, stats = [], note: said = '', blocks = [], address = '' }) => `<div class="kanso-share">${shareLine(title, right)}${subtitle ? sentence({ text: subtitle, tone: 'muted' }) : ''}`
   + `${metric({ value: hero.big ?? '—', small: hero.small, unit: hero.unit })}${hero.label ? sentence({ text: hero.label, tone: 'muted' }) : ''}${hero.delta?.text ? delta(hero.delta) : ''}`
   + `${stats.length ? `<div class="kanso-panel__statistics">${stats.map(shareStat).join('')}</div>` : ''}${said ? sentence({ text: said, tone: 'muted' }) : ''}${blocks.map(shareBlock).join('')}`
-  + `<div class="kanso-share__footer">${mark({ status: 'done', size: 'sm' })}kansō for Herdr</div></div>`;
+  + `<div class="kanso-share__footer">${mark({ status: 'done', size: 'sm' })}kansō for Herdr${address ? `${grow()}<span>${escape(address)}</span>` : ''}</div></div>`;
 
 export const tabSkeleton = () => '<span class="kanso-skeleton kanso-skeleton--breathing kanso-tab-bar__skeleton"></span>';
 
@@ -493,6 +496,7 @@ export const stacks = {
   'tab bar more': { block: 'kanso-tab-bar__more', tag: 'span' },
   'tab bar menu': { block: 'kanso-tab-bar__menu', tag: 'span' },
   'tab bar doors': { block: 'kanso-tab-bar__doors', tag: 'span' },
+  'tab bar insertion': { block: 'kanso-tab-bar__insertion', tag: 'i' },
   away: { block: 'kanso-away', tag: 'section' },
   keyboard: { block: 'kanso-keyboard' },
   'keyboard row': { block: 'kanso-keyboard__row' },

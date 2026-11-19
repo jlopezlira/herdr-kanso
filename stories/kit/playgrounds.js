@@ -14,7 +14,7 @@ import { sessionRow } from './session-row.js';
 import { computerItem, computerItemStates } from './status-bar.js';
 import { avatar, avatarSizes, button, card, chip, code, dawn, dialog, emptyState, escape, failureBlock, input, keycapStates, keyHint, kinds, levels, mark, markdown, marks, markSizes, menu, metric, row, rowDepths, sides, skeletonOf, skeletonShapes, stack, statePatterns, tabs, thumbnail, toast, toggle, tooltip, windowControls } from './pieces.js';
 import { barWidths, inBar } from './frames.js';
-import { edgeSides, layerDefaults, memoryShown, needsShown, panelContents, panelReads, panelRowLooks, statedPages, stepperShown, tabActs } from './states.js';
+import { doorActs, edgeSides, layerDefaults, memoryShown, needsShown, panelContents, panelReads, panelRowLooks, statedPages, stepperShown, tabActs } from './states.js';
 import { appNotices, awayEvents, keyLayer, keyLayerMods, pullRequest, sampleDojo, sampleHeader, sampleNotices, samplePanelHeader, sampleRefusal, sampleSettingsMenu, sampleSidebar, sessionCommandsTip, sessionTools, statusMenus, unreachable } from './samples.js';
 import { panelPlaygrounds } from './panel-states.js';
 
@@ -490,12 +490,12 @@ export const playgrounds = {
       width: radioArg('width', barWidths.slice(1)),
       value: radioArg('chosen tab', ['checkout', 'cart-ui', 'tests']),
       tab: select('a tab', Object.keys(tabActs)),
+      door: select('a door', Object.keys(doorActs)),
       panel: select('open door', ['none', ...panelDoors.map((item) => item.key)]),
       state: radioArg('computer', tabBarStates),
       folded: { name: 'folded tabs', control: { type: 'number', min: 0, max: 5 } },
       overflow: boolArg('folded menu open', { if: { arg: 'folded' } }),
-      help: boolArg('kansō help'),
-      custom: boolArg('a custom panel with no icon'),
+      help: boolArg('kansō help'),      custom: boolArg('a custom panel with no icon'),
       windows: boolArg('Windows and Linux'),
     },
   },

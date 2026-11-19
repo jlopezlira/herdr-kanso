@@ -93,11 +93,33 @@ test("Each state develop drew that had no drawing of its own says what set it ap
     ["Panels/Shipped", "When you ship and Computers, open", /Commits per hour.*15:00 · 50 commits/],
     ["Panels/Simulator", "The picture stalled", /as of 12s ago·emulator not answering.*Reconnect/],
     ["Panels/Simulator", "A URL with no scheme", /Enter a URL with a scheme, such as acme-shop:\/\/checkout\./],
-    ["Panels/Spend", "History, nothing that period", /HistoryNo usage this period/],
+    ["Panels/Spend", "History, nothing that period", /HistoryNo usage in November/],
   ];
   for (const [page, view, words] of restored) assert.match(said(drawn(page, view)), words, view);
   assert.ok(drawn("Panels/Preview", "Markdown, a new block at the end").querySelector(".kanso-markdown > :last-child[class*='--editing'], .kanso-markdown > :last-child [contenteditable]"));
   assert.ok(drawn("Panels/Simulator", "A URL with no scheme").querySelector(".kanso-field--invalid"));
+});
+
+test("Three notes keep the chosen point and Clear, the disk split its five verdicts, the calendar both streaks", () => {
+  const notes = drawn("Panels/Pins", "Three notes: one under the pointer, one chosen");
+  assert.deepEqual(texts(notes, ".kanso-annotation__layer .kanso-annotation"), ["1", "2", "3"]);
+  assert.deepEqual(texts(notes, ".kanso-annotation__layer .kanso-annotation--hover, .kanso-annotation__layer .kanso-annotation--selected"), ["2", "3"]);
+  assert.match(notes.querySelector(".kanso-row--selected").textContent, /^3/);
+  assert.deepEqual(texts(notes, ".kanso-button--solid, .kanso-button--quiet"), ["Send to checkout", "Clear 3 pins"]);
+  const split = texts(drawn("Panels/Worktrees", "Where the space is: every verdict"), ".kanso-row").filter((row) => row.includes("%"));
+  assert.deepEqual(split, ["Can go, losing nothing · 31.1 GB · 45%", "Need a look · 2380 MB · 16%", "In use or open · 2310 MB · 13%", "Left behind · 1520 MB · 21%", "Still checking · 1120 MB · 5%"]);
+  const streak = drawn("Panels/Shipped", "The streak, clicked");
+  assert.match(streak.body.textContent, /Streaklongest 28 days12days in a row/);
+  assert.ok(streak.querySelector(".kanso-metric + .kanso-days, .kanso-row--heading ~ .kanso-days"));
+});
+
+test("The reviewer picker keeps the typed filter and both pending changes, and the first open waits", () => {
+  const picking = drawn("Panels/PR", "Reviewers: three clicks, no waiting").querySelector(".kanso-menu");
+  assert.equal(picking.querySelector(".kanso-menu__field .kanso-field__editor").textContent, "s");
+  assert.deepEqual(texts(picking, ".kanso-menu__item:has(.kanso-mark--working) .kanso-menu__label"), ["sam", "stan"]);
+  const first = drawn("Panels/PR", "Picker, the first open").querySelector(".kanso-menu");
+  assert.equal(first.querySelectorAll('.kanso-menu__item[aria-busy="true"] .kanso-skeleton').length, 2);
+  assert.deepEqual(texts(drawn("Panels/PR", "Assign people"), '.kanso-menu__item[aria-checked="true"] .kanso-menu__label'), ["jj"]);
 });
 
 test("Every state the map names on a panel page is a kit state there", () => {

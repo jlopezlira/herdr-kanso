@@ -113,11 +113,12 @@ const shortcutNotes = {
   taken: (taken) => phrase(taken.chord, 'already does', taken.name, '· Esc keeps yours'),
   'no digit': () => 'Press a key with a digit from 1 to 9: N takes its place.',
 };
+const resetKey = { label: 'Reset', kind: 'quiet' };
 export const shortcutRow = ({ name, chords = [], state = 'rest', taken = null, hover = false, source = null, agent = null }) => list(
   row({ name, hover, current: ['selected', 'capture', 'no digit', 'taken'].includes(state), keys: shortcutKeys({ chords, state, taken }),
     meta: ['capture', 'no digit'].includes(state) ? 'Esc keeps · ⌫ removes' : null,
     second: shortcutNotes[state]?.(taken) ?? null,
-    action: { changed: { label: 'Reset', kind: 'quiet' }, taken: { label: 'Take it', kind: 'quiet', armed: true, verb: 'take it' } }[state] ?? null }),
+    action: { changed: resetKey, unbound: resetKey, taken: { label: 'Take it', kind: 'quiet', armed: true, verb: 'take it' } }[state] ?? null }),
   state === 'failed' ? failureBlock({ text: phrase('Couldn\'t save', chords[0], 'for', name), source, fix: 'Change', agent }) : null);
 
 export const panelDoors = [
