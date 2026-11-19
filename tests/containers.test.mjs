@@ -195,6 +195,8 @@ async function openPanel({ hung = false, drawn = false, failing = [], inspect = 
   if (drawn) Object.assign(f.host, gpuiHost());
   const spaces = f.host.spaces;
   f.host.spaces = () => { if (docker.broken) throw new Error("spaces are not ready"); return spaces(); };
+  const sharedValue = f.host.shared;
+  f.host.shared = (key) => { if (docker.namesFailed && key.startsWith("kanso.containers.names.")) throw new Error("names unavailable"); return sharedValue(key); };
   f.host.readTextFile = async (file) => (String(file).endsWith(".docker/config.json") ? docker.config : "");
   const exec = f.host.exec;
   f.host.exec = async (command, args = [], options) => {
@@ -206,7 +208,7 @@ async function openPanel({ hung = false, drawn = false, failing = [], inspect = 
     if (docker.down && args[0] !== "context") return failure(STOPPED);
     if (docker.failing.has(args[0])) return failure("unexpected error");
     if (args[0] === "ps" && docker.psResult) return docker.psResult;
-    const out = { inspect: docker.inspect, ps: docker.ps.join("\n"), images: docker.images, info: "8000000000", context: "desktop-linux\tunix:///var/run/docker.sock", volume: docker.volumes }[args[0]] ?? "";
+    const out = { inspect: docker.inspect, ps: docker.ps.join("\n"), images: docker.images, info: "8000000000", context: docker.context ?? LOCAL, volume: docker.volumes }[args[0]] ?? "";
     return success(out);
   };
   f.host.run = () => null;
@@ -526,6 +528,24 @@ test("Compose files found while part of the tree could not be read are a failure
   docker.partialFind = true;
   await again();
   assert.ok(words().some((text) => text.includes("Permission denied")));
+});
+
+test("Starting Docker is said until the next read that finds containers", async () => {
+  const { view, f, words, again } = await openPanel({ drawn: true });
+  view.openDocker(f.cx); await f.settle();
+  await again();
+  assert.ok(words().includes("1 running"));
+  assert.equal(words().includes("Starting Docker…"), false);
+});
+
+test("A saved project name that cannot be read is a failure of that read, and Refresh comes back", async () => {
+  const { docker, view, words, again } = await openPanel({ drawn: true });
+  docker.namesFailed = true;
+  docker.context = "other\tunix:///var/run/docker.sock";
+  await again();
+  assert.equal(view.reading, false);
+  assert.ok(words().includes("names unavailable"));
+  assert.equal(words().includes("Remove 1 unused volume"), false);
 });
 
 test("A failure stays said until that same list is read again, and a list never read shows no count", async () => {

@@ -186,14 +186,24 @@ export default class Containers extends View {
       } catch (e) {
         this.thrown = String(e?.message ?? e);
       } finally {
-        this.snapshot = settle(this.snapshot, { n, reads: this.got, thrown: this.thrown });
-        this.panel = this.derive();
+        this.conclude(n);
         this.reading = false;
         const next = this.queued;
         this.queued = null;
         if (next) this.read(cx, next); else cx.notify();
       }
     });
+  }
+
+  conclude(n) {
+    this.snapshot = settle(this.snapshot, { n, reads: this.got, thrown: this.thrown });
+    if (this.got.containers?.state === "ok") this.note = null;
+    try {
+      this.panel = this.derive();
+    } catch (e) {
+      this.snapshot = settle(this.snapshot, { n, reads: {}, thrown: String(e?.message ?? e) });
+      this.panel = panelOf(this.snapshot, { projects: this.projects });
+    }
   }
 
   derive() {
