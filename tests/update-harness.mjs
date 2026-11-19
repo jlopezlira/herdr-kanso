@@ -9,9 +9,17 @@ import { load, context, exec, nativePlatform, nativeWindow, temporary, clone, un
 const names = ["Updater", "newestTag", "compareVersions", "mergeKeys", "SOURCE", "footerPx", "HOLD", "INSTALL_SCRIPT", "RECOVER", "LAUNCH", "updateHost", "windowsInstallScript", "windowsLaunchScript", "windowsRecoverScript", "sameVolume"];
 export const repo = new URL("../kanso/", import.meta.url);
 export const windows = process.platform === "win32";
+const timed = (name, fn) => async (t) => {
+  const began = performance.now();
+  try {
+    return await fn(t);
+  } finally {
+    console.log(`${name}: body ${Math.round(performance.now() - began)} ms`);
+  }
+};
 export const test = (name, options, fn) => typeof options === "function"
-  ? nodeTest(name, { timeout: 60_000 }, options)
-  : nodeTest(name, { timeout: 60_000, ...options }, fn);
+  ? nodeTest(name, { timeout: 60_000 }, timed(name, options))
+  : nodeTest(name, { timeout: 60_000, ...options }, timed(name, fn));
 const livePids = new Map();
 const taskkill = (pid) => {
   try { execFileSync("taskkill", ["/PID", String(pid), "/T", "/F"], { stdio: "ignore", windowsHide: true }); } catch { /* already gone */ }

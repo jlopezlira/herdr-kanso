@@ -141,9 +141,21 @@ export const psMissing = (() => {
   try { execFileSync("ps", ["-p", String(process.pid), "-o", "comm="], { stdio: "pipe" }); return false; } catch { return "ps can't see processes here"; }
 })();
 
+const removeTree = async (dir) => {
+  for (let tries = 1; ; tries += 1) {
+    try {
+      return await rm(dir, { recursive: true, force: true });
+    } catch (error) {
+      if (tries === 20) throw error;
+      await new Promise((resolve) => setTimeout(resolve, tries * 100));
+    }
+  }
+};
+const afterTheOtherCleanups = (t, fn) => t.after(() => t.after(fn));
+
 export async function temporary(t) {
   const dir = await mkdtemp(join(tmpdir(), "kanso-test-"));
-  t.after(() => rm(dir, { recursive: true, force: true, maxRetries: 20, retryDelay: 100 }));
+  afterTheOtherCleanups(t, () => removeTree(dir));
   return dir;
 }
 
