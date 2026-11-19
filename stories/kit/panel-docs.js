@@ -1,4 +1,3 @@
-// The panels' design guidelines and hypotheses, on the same templates as every page.
 
 export const panelGuidelines = {
   'Panels/Spend': [
@@ -130,7 +129,6 @@ export const panelGuidelines = {
   ],
 };
 
-// The Markdown window and Preview share the changed-on-disk band.
 const changedOnDisk = {
   change: 'The conflict bar becomes a band that says when the file changed, with Overwrite and Reload, and Undo after Overwrite.',
   today: 'a bar in blocked ink, The file changed on disk while you edited it., with Keep mine and Take the file’s; nothing after the choice.',

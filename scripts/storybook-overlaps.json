@@ -504,7 +504,7 @@
     "page": "Panels/Spend",
     "states": {
       "Period bars": "kit/Panels/Spend/History open",
-      "Task bars": "kit/Panels/Spend/A project’s History",
+      "Task bars": "kit/Panels/Spend/A task’s History",
       "Empty bars": "kit/Panels/Spend/History, nothing that period"
     }
   },
