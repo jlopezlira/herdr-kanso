@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { chromium } from "playwright";
-import { compile, kansoTheme, read, SHEETS } from "./css-to-gpui.mjs";
+import { compile, read, SHEETS } from "./css-to-gpui.mjs";
 import { viewOf, stylesFor, unsupportedFor } from "../kanso/mods/kanso-panel/ui-match.js";
 import { toHtml } from "../stories/kit/tree.js";
 
@@ -86,10 +86,8 @@ export const checkPiece = async (tree, c) => {
 
 if (process.argv[1] === new URL(import.meta.url).pathname) {
   const { rowTree } = await import("../stories/kit/row-tree.js");
-  const { load } = await import("../tests/helpers.mjs");
-  const { tokens } = await load("kanso-panel/ui.js", ["tokens"]);
-  const theme = kansoTheme();
-  const c = tokens({ ...theme, ...theme.colors });
+  const { kansoColours } = await import("../tests/helpers.mjs");
+  const c = await kansoColours();
   const project = { icon: "lu-folder", name: "kansō", detail: ["herdr-kanso", { icon: "lu-git-branch", text: "29a4feb" }], actions: [{ icon: "lu-plus", label: "New" }, { icon: "lu-ellipsis", label: "More" }] };
   const CASES = {
     "at rest": project,
@@ -121,6 +119,38 @@ if (process.argv[1] === new URL(import.meta.url).pathname) {
     if (result.untranslated) { failed = true; console.log(`status, ${name}: untranslated`, result.untranslated); continue; }
     if (result.differences.length) { failed = true; console.log(`status, ${name}:`, result.differences); continue; }
     console.log(`status, ${name}: every element matches the Storybook`);
+  }
+  const { tabBarTree, tabsTree } = await import("../stories/kit/tab-bar-tree.js");
+  const views = [{ key: "spaces", label: "Projects", icon: "lu-folder" }, { key: "agents", label: "Status", icon: "lu-activity", dot: true }, { key: "threads", label: "Threads", icon: "lu-message-square" }];
+  const primitive = {
+    "on a track, large": { items: views, value: "spaces", size: "lg", track: true, label: true },
+    "small, with icons": { items: views, value: "spaces", size: "sm", icon: true, label: true },
+    "icons alone, a dot on one": { items: views, value: "spaces", icon: true },
+    "off": { items: views, value: "spaces", disabled: true, label: true },
+  };
+  for (const [name, props] of Object.entries(primitive)) {
+    const result = await checkPiece(tabsTree(props), c);
+    if (result.untranslated) { failed = true; console.log(`tab, ${name}: untranslated`, result.untranslated); continue; }
+    if (result.differences.length) { failed = true; console.log(`tab, ${name}:`, result.differences); continue; }
+    console.log(`tab, ${name}: every element matches the Storybook`);
+  }
+  const doors = [{ key: "files", label: "Files", icon: "lu-file" }, { key: "pr", label: "PR", icon: "lu-git-pull-request" }];
+  const tabs = [{ key: "checkout", label: "checkout" }, { key: "cart-ui", label: "cart-ui", mark: "blocked" }, { key: "tests", label: "tests" }];
+  const bar = {
+    "at rest": { items: tabs, value: "checkout", panels: doors, help: true },
+    "panel open": { items: tabs, value: "checkout", panels: doors, panel: "pr" },
+    "close armed": { items: [{ ...tabs[0], armed: true }, ...tabs.slice(1)], value: "checkout", panels: doors },
+    "renamed, waiting": { items: [{ ...tabs[0], label: "api-limits", pending: true }, ...tabs.slice(1)], value: "checkout", panels: doors },
+    "dragging": { items: [tabs[0], { ...tabs[1], drop: true }, { ...tabs[2], held: true }], value: "checkout", panels: doors },
+    "folded": { items: tabs, value: "checkout", folded: 5, panels: doors },
+    "unreachable": { items: tabs, value: "checkout", state: "unreachable" },
+    "windows and linux": { items: tabs, value: "checkout", panels: doors, windows: true },
+  };
+  for (const [name, props] of Object.entries(bar)) {
+    const result = await checkPiece(tabBarTree(props), c);
+    if (result.untranslated) { failed = true; console.log(`tab bar, ${name}: untranslated`, result.untranslated); continue; }
+    if (result.differences.length) { failed = true; console.log(`tab bar, ${name}:`, result.differences); continue; }
+    console.log(`tab bar, ${name}: every element matches the Storybook`);
   }
   if (failed) process.exit(1);
 }

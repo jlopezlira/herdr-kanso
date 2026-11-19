@@ -20,9 +20,9 @@ import { SinceLeft } from "./since-left.js";
 import { REGISTRY, WORKTREES, keyOfSpace, keyOfProject, closedProjects, shownNames, startingProjects, folderName, addWorktree, worktreesOf, missingFolders, trimmed, sameProjects } from "./projects.js";
 import { sleepingNow, asleepGroups, nameOf, seenNow, conversationOfThread, shownThread, terminalNames, agentKey, SHOWN_LABEL, PROJECT_LABEL, ID_LABEL } from "./roster.js";
 import { pollable, activePlaces } from "./background.js";
-import { listKey, moveTo } from "./listkeys.js";
+import { listKey, moveTo, plainKey } from "./listkeys.js";
 import { commitLayout, setRail, foldSidebar, railWidth, dropStripDrag } from "./layout.js";
-import { afterMount } from "./pure.js";
+import { afterMount, tryOr } from "./pure.js";
 import { commandLoop, MachineRead } from "./sidebar.js";
 import { gitFacts, openAhead, AHEAD } from "./sidebar-draw.js";
 import { projectRow } from "./project-row.js";
@@ -39,7 +39,7 @@ import { dialog } from "./ui-dialog.js";
 import { field, TextField } from "./ui-field.js";
 import { menu, emptyState, skeletonOf, tooltip } from "./kit.js";
 import { boundChord, chordOf } from "./ui-tooltip.js";
-import { menuList, menuHeight } from "./ui-menu.js";
+import { menuList, menuHeight, RUN_ROWS } from "./ui-menu.js";
 import { pieceLines, openPieceMenu } from "./piece-lines.js";
 import { toolbar } from "./toolbar.js";
 import { header } from "./header.js";
@@ -97,6 +97,7 @@ const FALLBACK = 60000;
 const PS_GIVE_UP_MS = 10000;
 // Under the 30 s machine look, so a hung list is free before the next one.
 const MACHINE_READ_MS = 20_000;
+const KNOWN_AGENTS = "kanso.agents.installed";
 
 // The views' names, by key, as the view switch says them.
 const VIEWS = Object.fromEntries(views.map(({ key, label }) => [key, label]));
@@ -180,11 +181,12 @@ export default class Spaces extends View {
     this.clock = cx.timer;
     this.settleUntil = Date.now() + SETTLE;
     // Opened as a row's right-click menu (props().menu): nothing else to run.
-    if (props()?.menu || props()?.railMenu || props()?.spaceMenu || props()?.newAgent || props()?.worktree || props()?.newConversation || props()?.newProject || props()?.machineMenu) {
+    if (props()?.menu || props()?.railMenu || props()?.spaceMenu || props()?.newAgent || props()?.trees || props()?.worktree || props()?.newConversation || props()?.newProject || props()?.machineMenu) {
       // Nothing is chosen for you: no row lit until the keyboard moves.
       this.armed = new Armed(); this.menuAt = -1; this.handle = cx.focus_handle();
       // A scroll handle is state: made here, never during render (Herdr refuses it there).
       if (props()?.newConversation || props()?.railMenu) this.convScroll = ScrollHandle.new();
+      if (props()?.newAgent) this.agentScroll = ScrollHandle.new();
       this.openPopup(cx); return;
     }
     this.loadNames().catch(() => {});
@@ -304,7 +306,10 @@ export default class Spaces extends View {
     }
     this.handle.focus();
     if (p.newAgent) {
-      knownAgents({ on: p.newAgent.machine || null }).then((list) => { this.known = list; cx.notify(); }).catch(() => { this.known = []; cx.notify(); });
+      this.askAgents(p.newAgent, cx);
+      if (p.start && p.newAgent.folder && !p.newAgent.tree) {
+        worktreesOf(p.newAgent.folder, p.newAgent.machine || null).then((list) => { this.repo = list.length > 0; this.trees = list.filter((x) => !x.main && !x.prunable); cx.notify(); });
+      }
     }
     const place = p.spaceMenu ? this.menuPlace(p.spaceMenu) : null;
     // A worktree whose folder was deleted (prunable) is only git's note of it: not listed.
@@ -314,7 +319,7 @@ export default class Spaces extends View {
   }
 
   close() {
-    try { this.branch?.release(); this.projectName?.release(); this.convScroll?.release(); } catch { /* already gone */ }
+    try { this.branch?.release(); this.projectName?.release(); this.convScroll?.release(); this.agentScroll?.release(); } catch { /* already gone */ }
   }
 
   menuPlace(m) {
@@ -455,13 +460,45 @@ export default class Spaces extends View {
     // A project chosen, then which agent, in its own menu: nothing is started for you.
     const start = (place) => { closeOverlay(props().overlay); this.newAgentMenu(place); };
     const { title, items } = this.conversationLines(this.lines(), start);
-    this.menuScroll = this.convScroll ? { handle: this.convScroll, count: items[0].scroll.length } : null;
+    this.menuScroll = this.convScroll ? { handle: this.convScroll, count: items[0].scroll.length, from: 0 } : null;
     return this.popup(t, title, items);
   }
 
   // A project's + : asks which agent, of the ones installed. `start`: the sidebar's own +, whose menu goes on to New project and Arrange.
   newAgentMenu(place, start = false) {
-    openOverlay({ mod: "kanso-spaces", kind: "popup", width: W.menu, height: start ? 400 : 300, at: "pointer", props: { newAgent: place, ...(start ? { start } : {}) } });
+    const failure = () => ({ failure: { text: `Can't list agents on ${place.machine || "this computer"}`, source: "-", fix: "Refresh", agent: "-" } });
+    const run = (item) => Array.from({ length: RUN_ROWS }, () => item(""));
+    const settled = (state) => menuHeight(this.agentLines(place, { start, repo: start, trees: start ? [place] : [], item: sketch, ...state }));
+    const height = Math.max(settled({ pending: true }), settled({ failure }), settled({ agents: run }), settled({ agents: run, failure }));
+    openOverlay({ mod: "kanso-spaces", kind: "popup", width: W.menu, height, at: "pointer", props: { newAgent: place, height, ...(start ? { start } : {}) } });
+  }
+
+  agentLines(place, { start, agents = null, pending = false, failure = null, repo, trees, item, room = Infinity }) {
+    const name = place.tree?.branch ?? place.name ?? "this project";
+    const head = [{ heading: place.machine ? `${place.machine} \u00b7 ${name}` : name, mark: this.checking && this.known ? "working" : null },
+      item("Terminal", () => this.pickAgent(place, null), { icon: "terminal", hint: chordOf("tab.new") || null, keep: true }), { separator: true }];
+    const rows = agents ? agents(item) : [];
+    const failed = failure ? [failure()] : [];
+    const newTree = () => item("New worktree\u2026", () => this.worktreeDialog(place), { icon: "git-branch" });
+    const rest = start ? [item("New project", () => this.addProject(), { icon: "folder-plus" }),
+      ...(repo ? [newTree(), ...(trees?.length ? [item("Open worktree\u2026", () => this.treesMenu(place, this.trees), { icon: "git-fork" })] : [])] : []),
+      { separator: true }, item("Arrange\u2026", () => run("kanso-strip.arrange"), { icon: "panels-top-left", hint: chordOf("kanso-strip.arrange") || null })]
+      : place.tree ? [] : [newTree()];
+    const ends = rest.length ? [{ separator: true }, ...rest] : [];
+    const row = menuHeight({ items: [sketch("")] }) - menuHeight({ items: [] });
+    const fit = Math.max(1, Math.floor((room - menuHeight({ items: [...head, ...failed, ...ends] })) / row));
+    const listed = rows.length ? [{ scroll: rows, rows: Math.min(rows.length, fit), handle: this.agentScroll }] : !failure && pending && !agents ? [{ loading: true }, { loading: true }] : [];
+    const middle = [...listed, ...failed];
+    return { items: [...head, ...middle, ...ends], count: rows.length };
+  }
+
+  pickAgent(place, a) {
+    if (this.starting) return;
+    this.starting = true;
+    const project = registry().find((p) => p.id === place.project) ?? null;
+    if (place.tree) openAt(place, place.tree.folder, a?.run ?? null, place.tree.branch);
+    else startIn(place, a?.run ?? null);
+    this.thenClose(project && a ? this.db().setProjectAgent(project.id, a.key) : null);
   }
 
   // The toolbar's +, one menu in every view: the open project's agents and Terminal, then a new project, then Arrange. With no project open it asks which.
@@ -515,6 +552,7 @@ export default class Spaces extends View {
     const space = /^space-(\d)$/.exec(c), view = /^view-(spaces|agents|threads)$/.exec(c);
     if (space) { const i = Number(space[1]); if (i >= 1 && i <= spaces().length) run("space.select", { index: i }); }
     else if (view) { this.setView(view[1], cx); cx.notify(); }
+    else if (c === "asleep") this.showAsleep(cx);
     else if (c === "needs-you.next") this.nextNeeds(cx);
     else if (c === "agent-up" || c === "agent-down") this.besideAgent(c === "agent-up" ? -1 : 1);
     else if (c === "agent-back" || c === "agent-forward") this.stepAgent(c === "agent-back" ? -1 : 1, cx);
@@ -529,6 +567,7 @@ export default class Spaces extends View {
     else if (c === "add-project") this.addProject();
     else if (c === "add-project-start") this.addProject(true);
     else if (c === "new-conversation") this.newConversationMenu();
+    else if (c === "start") this.startMenu(this.shownView());
     else if (c === "open-folder") pickFolder({ prompt: "Open" }).then((folder) => folder && run("space.new", { folder, machine: "" })).catch(() => {});
     else if (c === "list-up" || c === "list-down") {
       if (this.kbd) this.listKeyDown({ key: c === "list-up" ? "up" : "down", modifiers: {} }, cx);
@@ -1483,6 +1522,8 @@ export default class Spaces extends View {
   menuKeys(el) {
     return el.track_focus(this.handle)
       .on_key_down((e, cx) => {
+        const digit = /^[1-9]$/.test(e.key) && plainKey(e) && !e.modifiers?.shift ? this.menuDigits?.[Number(e.key) - 1] : null;
+        if (digit) { cx.stop_propagation(); digit(cx); return; }
         const { move, gAt } = listKey(e, this.menuG);
         this.menuG = gAt;
         if (!move) return;
@@ -1490,7 +1531,8 @@ export default class Spaces extends View {
         if (move === "escape") { if (this.sub) { this.sub = null; this.menuAt = -1; } else closeOverlay(props().overlay); }
         else if (move === "enter") acts[this.menuAt]?.(cx);
         else this.menuAt = moveTo(move, this.menuAt, acts.length);
-        if (this.menuScroll && this.menuAt < this.menuScroll.count) this.menuScroll.handle.scroll_to_item(this.menuAt);
+        const inRun = this.menuScroll ? this.menuAt - this.menuScroll.from : -1;
+        if (inRun >= 0 && inRun < this.menuScroll.count) this.menuScroll.handle.scroll_to_item(inRun);
         cx.stop_propagation();
         cx.notify();
       });
@@ -1570,44 +1612,93 @@ export default class Spaces extends View {
     return this.popup(t, place?.name ?? w?.name ?? null, [
       ...(asleep.length ? [{ heading: "Asleep" }, ...asleep.map((z) => item(`Wake ${z.tab}`, () => wakeRow(z), { icon: "sun", hint: z.saved ? since(z.saved) : null }))] : []),
       ...(asleep.length > 1 ? [item(`Wake all ${asleep.length}`, () => arrange({ wake: { space: w.id } }), { icon: "undo" })] : []),
-      ...(place && !project?.missing ? [item("New conversation\u2026", () => this.newAgentMenu(place), { icon: "plus" }),
-        item("New in a worktree\u2026", () => this.worktreeDialog(place), { icon: "git-fork" })] : []),
-      ...(w ? [item("Rename\u2026", () => run("space.rename", { id: w.id }), { icon: "pencil" })] : []),
+      ...(place && !project?.missing ? [item("New conversation\u2026", () => this.newAgentMenu(place)),
+        item("New in a worktree\u2026", () => this.worktreeDialog(place), { icon: "git-branch" })] : []),
       ...(trees.length ? [{ heading: "Worktrees" }, { scroll: trees.map((x) => item(x.branch ?? "detached", () => this.openTree(place, x), { icon: "git-branch", hint: where(x.path) })) }] : []),
+      ...(w ? [item("Rename\u2026", () => run("space.rename", { id: w.id }))] : []),
       ...(active ? [item("Sleep this tab\u2026", () => sleepTab(w.id, active.id), { icon: "moon" })] : []),
       ...(tabs > 1 ? [item("Sleep the project\u2026", () => sleepProject(w.id), { icon: "moon" })] : []),
-      ...(w ? [item("Project options\u2026", options, { icon: "settings" })] : []),
+      ...(w ? [item("Project options\u2026", options)] : []),
       ...(keepable ? [item("Keep as a project", keep, { icon: "pin", keep: true })] : []),
       ...(project?.missing && !project?.machine ? [item("Locate folder\u2026", locate, { icon: "file", keep: true })] : []),
       // Any project you see can go: one you added (its row too), or an open space you never kept.
-      ...(project || w ? [item("Remove project", remove, { icon: "x", keep: true, verb: w ? `remove it and close its ${tabs} tab${tabs === 1 ? "" : "s"}` : "remove it", armed: this.armed.is("remove") })] : []),
+      ...(project || w ? [item("Remove project", remove, { icon: "x", keep: true, verb: w ? `remove, close ${tabs} tab${tabs === 1 ? "" : "s"}` : "remove it", armed: this.armed.is("remove") })] : []),
       ...this.pieceItems(item, "sidebar.git"),
     ]);
   }
 
-  // Every + ends here: which agent of the ones installed (or a shell), none chosen for you; the one used last
-  // in the project says so. `place.tree`: a worktree just made, where the agent starts in its own tab.
-  newAgentView(t) {
-    const place = props().newAgent;
-    const project = registry().find((p) => p.id === place.project) ?? null;
-    const title = `New in ${place.tree?.branch ?? place.name ?? "this project"}`;
-    if (!this.known) return this.popup(t, title, [{ loading: true }, { loading: true }]);
-    const item = this.lines();
-    const pick = (a) => {
-      if (this.starting) return; // a second click while the first is written starts nothing
-      this.starting = true;
-      if (place.tree) openAt(place, place.tree.folder, a?.run ?? null, place.tree.branch);
-      else startIn(place, a?.run ?? null);
-      this.thenClose(project && a ? this.db().setProjectAgent(project.id, a.key) : null);
+  askAgents(place, cx) {
+    const on = place.machine || "";
+    const kept = shared(KNOWN_AGENTS)?.[on];
+    this.known = Array.isArray(kept) ? kept : null;
+    this.agentsFailed = null;
+    this.checking = true;
+    const ask = this.agentsAsked = (this.agentsAsked ?? 0) + 1;
+    const settle = (list, failed) => {
+      if (ask !== this.agentsAsked || !this.checking) return;
+      this.checking = false;
+      if (list) { this.known = list; setShared(KNOWN_AGENTS, { ...(shared(KNOWN_AGENTS) ?? {}), [on]: list }); }
+      else this.agentsFailed = failed;
+      cx.notify();
     };
-    return this.popup(t, title, [
-      ...this.known.filter((a) => a.installed).map((a) => item(a.name, () => pick(a), { hint: a.key === project?.agent ? "last" : null, keep: true })),
-      item("Terminal", () => pick(null), { keep: true }),
-      ...(place.tree ? [] : [{ separator: true }, item("In a new worktree\u2026", () => this.worktreeDialog(place), { icon: "git-fork" })]),
-      ...(props().start ? [{ separator: true }, item("New project\u2026", () => this.addProject(), { icon: "folder-plus" }),
-        item("Arrange\u2026", () => run("kanso-strip.arrange"), { icon: "layers", hint: chordOf("kanso-strip.arrange") })] : []),
-    ]);
+    if (on && !shared(KNOWN_AGENTS)?.[""]) {
+      knownAgents({ on: null }).then((list) => { setShared(KNOWN_AGENTS, { ...(shared(KNOWN_AGENTS) ?? {}), "": JSON.parse(JSON.stringify(list)) }); cx.notify(); }).catch(() => {});
+    }
+    const deadline = cx.timer.after(MACHINE_READ_MS, () => settle(null, "no answer in time"));
+    knownAgents({ on: on || null }).then((list) => { deadline.cancel(); settle(JSON.parse(JSON.stringify(list)), null); })
+      .catch((e) => { deadline.cancel(); settle(null, String(e?.message ?? e)); });
   }
+
+  explainer() {
+    return (shared(KNOWN_AGENTS)?.[""] ?? []).find((a) => a.installed) ?? null;
+  }
+
+  explainAgents(place, agent) {
+    const where = place.machine || "this computer";
+    const ask = { name: `Explain ${where}`, argv: agent.run, task: `kansō could not list the agents installed on ${where}. The error: ${this.agentsFailed}. Explain why, and how to fix it. Do not change anything.` };
+    const local = spaces().filter((w) => !w.machine);
+    const here = local.find((w) => w.active) ?? local[0];
+    tryOr(() => (here ? run("tab.new", { ...ask, space: here.id }) : run("space.new", { ...ask, machine: "", folder: home() })));
+  }
+
+  agentsFailure(place) {
+    const agent = this.explainer();
+    const at = this.menuActs.length;
+    this.menuActs = [...this.menuActs, (cx) => { this.askAgents(place, cx); cx.notify(); }, ...(agent ? [() => { this.explainAgents(place, agent); closeOverlay(props().overlay); }] : [])];
+    const lit = this.menuAt === at ? "fix" : this.menuAt === at + 1 ? "agent" : null;
+    return { failure: { text: `Can't list agents on ${place.machine || "this computer"}`, source: this.agentsFailed, fix: "Refresh", onClick: this.menuActs[at],
+      agent: agent?.name ?? "", onExplain: agent ? this.menuActs[at + 1] : null, lit } };
+  }
+
+  newAgentView(t) {
+    const place = props().newAgent, start = Boolean(props().start);
+    const installed = (this.known ?? []).filter((a) => a.installed);
+    this.menuDigits = installed.slice(0, 9).map((a) => (cx) => { this.pickAgent(place, a); cx.notify(); });
+    const agents = this.known ? (item) => installed.map((a, i) => item(a.name, () => this.pickAgent(place, a), { icon: a.icon ?? null, hint: i < 9 ? String(i + 1) : null, keep: true })) : null;
+    const lines = this.agentLines(place, { start, agents, pending: this.checking, failure: this.agentsFailed ? () => this.agentsFailure(place) : null, repo: this.repo, trees: this.trees,
+      item: this.lines(), room: props().height ?? Infinity });
+    this.menuScroll = lines.count ? { handle: this.agentScroll, count: lines.count, from: 1 } : null;
+    return this.popup(t, null, lines.items);
+  }
+
+
+
+
+  treesLines(place, trees, item) {
+    return { title: `Worktrees of ${place.name ?? "this project"}`, items: trees.map((x) => item(x.branch ?? "detached", () => this.openTree(place, x), { icon: "git-branch" })) };
+  }
+
+  treesMenu(place, trees) {
+    const height = menuHeight(this.treesLines(place, trees, sketch));
+    openOverlay({ mod: "kanso-spaces", kind: "popup", width: W.menu, height, at: "pointer", props: { trees: { place, trees } } });
+  }
+
+  treesView(t) {
+    const { place, trees } = props().trees;
+    const { title, items } = this.treesLines(place, trees, this.lines());
+    return this.popup(t, title, items);
+  }
+
 
   makeWorktree(cx) {
     if (this.making) return;
@@ -1674,7 +1765,7 @@ export default class Spaces extends View {
       const rows = span.map((e) => {
         if (e.a.asleep) return { a: e.a, h: H.line, el: this.asleepLine(e.a, t) };
         const m = this.more(e, ctx);
-        return { a: e.a, h: sessionHeight(m), el: agentSession(e.a, indent ? 2 : 1, c, this.navRow(e.a, e.a.pane && !e.lines.length ? this.rowOf(e.a, mine, space) : null), m) };
+        return { a: e.a, h: sessionHeight(m), el: agentSession(e.a, indent ? 2 : 1, c, this.navRow(e.a, e.lines.length ? this.rowFor(e.a) : e.a.pane ? this.rowOf(e.a, mine, space) : null), m) };
       });
       return { key: keys[i], rows, slab };
     });
@@ -1791,6 +1882,13 @@ export default class Spaces extends View {
     this.viewMenu = false;
     this.panel.set("spaces.view", view);
     if (view === "threads" && cx) this.refreshThreads(cx);
+  }
+
+  showAsleep(cx) {
+    this.setView("agents", cx);
+    this.sectionsFolded.delete("asleep");
+    this.panel.set("spaces.sections", [...this.sectionsFolded]);
+    cx.notify();
   }
 
   checkAlive(cx, now = Date.now(), active = window().active) {
@@ -2229,8 +2327,9 @@ export default class Spaces extends View {
   }
 
   openMenu(a, { title = null, session = null } = {}) {
-    openOverlay({ mod: "kanso-spaces", kind: "popup", width: W.menu, height: a.asleep ? 170 : 460, at: "pointer",
-      props: { menu: { address: a.address, view: this.view, title, session, ...(a.asleep ? { asleep: a.asleep, name: a.name } : {}) } } });
+    if (a.asleep) { this.openAsleepMenu({ address: a.address, asleep: a.asleep, name: a.name }); return; }
+    openOverlay({ mod: "kanso-spaces", kind: "popup", width: W.menu, height: 460, at: "pointer",
+      props: { menu: { address: a.address, view: this.view, title, session } } });
   }
 
   rowFor(a, actions = null, extra = {}) {
@@ -2286,10 +2385,10 @@ export default class Spaces extends View {
   // A click goes to the row; an asleep one opens its wake menu.
   railMenuView(t) {
     const m = props().railMenu;
-    const to = (r) => (r.asleep ? () => { closeOverlay(props().overlay); openOverlay({ mod: "kanso-spaces", kind: "popup", width: 252, height: 170, at: "pointer", props: { menu: { address: r.address, asleep: r.asleep, name: r.name } } }); }
+    const to = (r) => (r.asleep ? () => { closeOverlay(props().overlay); this.openAsleepMenu({ address: r.address, asleep: r.asleep, name: r.name }); }
       : () => { closeOverlay(props().overlay); r.pane ? run("pane.focus", { pane: r.pane }) : run("terminal.peek", { terminal: r.address }); });
     // The keyboard brings the row it lights into view.
-    this.menuScroll = this.convScroll ? { handle: this.convScroll, count: m.rows.length } : null;
+    this.menuScroll = this.convScroll ? { handle: this.convScroll, count: m.rows.length, from: 0 } : null;
     const { title, items } = this.railLines(this.lines(), m, to);
     return this.popup(t, title, items);
   }
@@ -2483,12 +2582,23 @@ export default class Spaces extends View {
   subjectOf(m, l, a, title) { return l[NAME_LABEL] || l[THREAD_LABEL] || title || a?.title || m.name || "this agent"; }
 
   zzMenuView(t, m) {
+    const { title, items } = this.zzLines(this.lines(), m);
+    return this.popup(t, title, items);
+  }
+
+  zzLines(item, m) {
     const z = m.asleep;
-    const item = this.lines();
-    return this.popup(t, z.saved ? `${m.name}, asleep since ${since(z.saved)}` : `${m.name}, asleep`, [
-      item(z.n > 1 ? `Wake it and ${z.n - 1} more of ${z.tab}` : "Wake", () => wakeRow(z), { icon: "sun" }),
+    return { title: z.saved ? `${m.name}, asleep since ${since(z.saved)}` : `${m.name}, asleep`, items: [
+      item("Wake", () => arrange({ wake: { space: z.space, terminal: z.terminal } }), { icon: "sun" }),
+      ...(z.n > 1 ? [item(`Wake all ${z.n} in ${z.tab}`, () => wakeRow(z), { icon: "sun" })] : []),
       item("Copy conversation id", (cx) => cx.write_to_clipboard?.(z.resume), { icon: "copy" }),
-    ]);
+      { separator: true },
+      item("Everything asleep\u2026", () => run("kanso-spaces.asleep"), { icon: "moon" }),
+    ] };
+  }
+
+  openAsleepMenu(menu) {
+    openOverlay({ mod: "kanso-spaces", kind: "popup", width: W.menu, height: menuHeight(this.zzLines(sketch, menu)), at: "pointer", props: { menu } });
   }
 
   // Kept in shared "space.colors" so every window agrees; a gone space gives its hue up.
@@ -2516,6 +2626,7 @@ export default class Spaces extends View {
     if (props()?.railMenu) return this.railMenuView(t);
     if (props()?.spaceMenu) return this.spaceMenuView(t);
     if (props()?.newAgent) return this.newAgentView(t);
+    if (props()?.trees) return this.treesView(t);
     if (props()?.newConversation) return this.newConversationView(t);
     if (props()?.newProject) return this.newProjectView(t);
     if (props()?.worktree) return this.worktreeView(t);

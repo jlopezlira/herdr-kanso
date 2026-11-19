@@ -8,7 +8,7 @@ import { computerRow } from '../stories/kit/computer-row.js';
 import { section } from '../stories/kit/section.js';
 import { asleep } from '../stories/kit/asleep.js';
 import { sessionRow } from '../stories/kit/session-row.js';
-import { button, dawn as dawnSky, dialog, input, mark, markdownBlock, marks, row, stack, thumbnail, windowControls } from '../stories/kit/pieces.js';
+import { button, dawn as dawnSky, dialog, input, mark, markdownBlock, marks, row, stack, thumbnail, toast, windowControls } from '../stories/kit/pieces.js';
 import { awayEvents, sampleHeader, sampleRefusal, sampleSettingsMenu, sampleSidebar, sessionTools } from '../stories/kit/samples.js';
 import { activity, awayMax } from '../stories/kit/activity.js';
 import { statedPages } from '../stories/kit/states.js';
@@ -149,11 +149,14 @@ export function kitRecords(records) {
     ['Tile', 'Unread', inRail(tile({ initial: 'A', status: 'done', count: 2, strong: true, label: 'kansō' })), 'Something inside is unread or woke: a ring.'],
     ['Footer', 'Default', inSidebar(sidebarFooter()), 'Settings.'],
     ['Footer', 'Update', inSidebar(sidebarFooter({ update: 'Update kansō to 3.31.0' })), 'An update adds a row on top.'],
-    ['Footer', 'Updating', inSidebar(sidebarFooter({ update: 'Updating kansō', busy: true })), 'Proposed. Pressed, the row says so and stays quiet until it lands.'],
-    ['Footer', 'Refused', inSidebar(sidebarFooter({ update: 'Update kansō to 3.31.0', refused: sampleRefusal })), 'Proposed. The tool\'s words under the row, with Update to try again.'],
+    ['Footer', 'Updating', inSidebar(sidebarFooter({ update: 'Updating kansō', busy: true })), 'While it updates, the row says so, its icon turns, and it takes no press until it lands or is refused.'],
+    ['Footer', 'Updating, its stage', inSidebar(sidebarFooter({ update: 'Downloading kansō', busy: true })), 'Proposed, an option. The row names the stage (Downloading, Installing); the update does not report stages today.'],
+    ['Footer', 'Refused', inSidebar(sidebarFooter({ update: 'Update kansō to 3.31.0', refused: sampleRefusal })), 'The tool\'s words under the row, with Update to try again and Explain.'],
+    ['Footer', 'Updated', inSidebar(toast({ level: 'success', icon: 'lu-refresh-cw', title: 'kansō updated to 3.31.0' }) + sidebarFooter()), 'When it lands, the row goes and the toast says kansō updated.'],
     ['Footer', 'Settings menu', inSidebar(sidebarFooter({ menu: sampleSettingsMenu() })), 'Proposed. Settings opens one menu: kansō settings with its key, and Herdr settings.'],
     ['Footer', 'Collapsed', inRail(sidebarFooter({ collapsed: true })), 'Proposed. In the rail, Settings is an icon Button.'],
     ['Footer', 'Collapsed, update', inRail(sidebarFooter({ collapsed: true, update: 'Update kansō to 3.31.0' })), 'Proposed. The update is an icon Button above it, its words in the tooltip.'],
+    ['Footer', 'Collapsed, updating', inRail(sidebarFooter({ collapsed: true, update: 'Updating kansō', busy: true })), 'While it updates, the icon Button turns and is disabled, its words in the tooltip.'],
     ['Sidebar', 'Open', sampleSidebar(), 'Header, views, rows and footer.'],
     ['Sidebar', 'Collapsed', sampleSidebar({ collapsed: true }), 'The rail.'],
     ['Sidebar', 'Dawn', sampleSidebar({ dawn: true }), 'Open, in Dawn Mode.'],

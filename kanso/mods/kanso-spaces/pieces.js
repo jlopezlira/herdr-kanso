@@ -30,7 +30,7 @@ export const PIECES = [
   piece("header.place", "Folder and branch", "Pane header", SHOW, "show", "draw"),
   piece("header.digest", "Files and commits", "Pane header", THREE, "needed", "work", "git"),
   piece("header.pr", "PR", "Pane header", THREE, "needed", "work", "gh"),
-  piece("status.computer", "Computer", "Status bar", SHOW, "show", "draw"),
+  piece("status.computer", "Computer", "Status bar", THREE, "needed", "draw"),
   piece("status.agents", "Agents at work", "Status bar", THREE, "needed", "draw"),
   piece("strip.minimap", "Minimap", "Status bar", SHOW, "show", "draw"),
   piece("status.palette", "Command palette", "Status bar", SHOW, "show", "draw"),

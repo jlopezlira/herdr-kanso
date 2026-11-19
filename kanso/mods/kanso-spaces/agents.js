@@ -281,7 +281,7 @@ export function threadSections(rows, { order = "said", group = false, now = Date
 export function snoozePresets(now) {
   const d = new Date(now);
   const at = (days, h) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + days, h, 0, 0, 0).getTime();
-  const hhmm = (ms) => new Date(ms).toTimeString().slice(0, 5);
+  const hhmm = (ms) => new Date(ms).toTimeString().slice(0, 5).replace(/^0/, "");
   const toMonday = ((8 - d.getDay()) % 7) || 7;
   const out = [
     { id: "1h", label: "In 1 hour", until: now + 3600000 },
@@ -290,7 +290,8 @@ export function snoozePresets(now) {
     { id: "tomorrow", label: "Tomorrow", until: at(1, 9) },
     { id: "monday", label: "Monday", until: at(toMonday, 9) },
   ];
-  return out.map((p) => ({ ...p, when: p.id.endsWith("h") ? hhmm(p.until) : `${new Date(p.until).toDateString().slice(0, 3)} ${hhmm(p.until)}` }));
+  const day = (ms) => `${new Date(ms).toDateString().slice(0, 3)} ${hhmm(ms)}`;
+  return out.map((p) => ({ ...p, when: p.id === "tomorrow" || p.id === "monday" ? day(p.until) : hhmm(p.until) }));
 }
 
 // With no status, a blank of the same width so the rows line up.

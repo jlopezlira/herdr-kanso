@@ -208,7 +208,11 @@ export class PullRequest {
     this.selected = null; this.pr = null; this.error = null; this.none = false; this.missing = null;
   }
 
-  bind(cx) { this.bound = cx; return cx; }
+  tracked(work) {
+    return (cx, ...rest) => { this.bound = cx; return work(cx, ...rest); };
+  }
+
+  start(cx, work) { spawnAndNotify(cx, this.tracked(work)); }
 
   launch(command, args, options = {}) {
     return bounded(exec(command, args, { ...options, timeout: options.timeout ?? CALL_MS }), this.bound?.timer, CALL_MS);
@@ -272,7 +276,6 @@ export class PullRequest {
   refresh(cx) {
     if (this.loading) return;
     this.away = false;
-    this.bind(cx);
     const { cwd, on } = location(), context = key();
     if (context !== this.context) {
       this.context = context; this.root = null; this.branch = null; this.pr = null; this.threads = []; this.diffs = null;
@@ -295,8 +298,8 @@ export class PullRequest {
     this.cwd = cwd; this.on = on;
     this.loading = true;
     const want = this.selected;
-    cx.spawn(async (cx) => {
-      const inbox = this.syncInbox(context);
+    cx.spawn(this.tracked(async (cx) => {
+      const inbox = this.syncInbox(context).catch((e) => { if (key() === context) this.inboxFailure(e); });
       const failed = (e) => { if (key() === context) this.keepLast(e?.message ?? e); };
       const read = async () => {
         const top = await this.git(["rev-parse", "--show-toplevel"], cwd, on);
@@ -350,15 +353,18 @@ export class PullRequest {
         } else if (key() === context) { this.subjects = []; this.subjectsFor = null; }
         return open;
       };
-      const open = await read().catch((e) => { failed(e); return null; });
-      if (open) await open;
-      await inbox;
-      const follow = (this.selected !== want || this.openedList) && !this.wait && key() === context;
-      this.openedList = false;
-      this.loading = false; this.loadedAt = Date.now(); cx.notify();
+      const follow = await (async () => {
+        const open = await read().catch((e) => { failed(e); return null; });
+        if (open) await open;
+        await inbox;
+        return (this.selected !== want || this.openedList) && !this.wait && key() === context;
+      })().finally(() => {
+        this.openedList = false;
+        this.loading = false; this.loadedAt = Date.now(); cx.notify();
+      });
       if (follow) this.refresh(cx);
       else if (!this.wait) this.readLog(cx);
-    });
+    }));
   }
 
   facing() {
@@ -370,13 +376,12 @@ export class PullRequest {
     const stamp = this.view().logKey;
     if (!logDue({ facing: this.facing(), key: stamp, have: this.logFor ?? null })) return;
     this.forgetLog(stamp);
-    this.bind(cx);
-    cx.spawn(async (cx) => {
+    cx.spawn(this.tracked(async (cx) => {
       const r = await this.gh(["run", "view", stamp, "--log-failed"]).catch(() => null);
       if (this.logFor !== stamp) return;
       if (r?.code === 0) this.failedLog = r.stdout ?? "";
       cx.notify();
-    });
+    }));
   }
 
   // The account, not the focused folder. Absent unless a provider is installed and signed in here.
@@ -409,6 +414,7 @@ export class PullRequest {
     }
     if (key() !== context) return;
     this.paintInbox(model, true);
+    if (!model.writeError) this.retireInboxNote();
     if (this.inboxOpen === false) await this.noteSeen(this.pr?.url);
   }
 
@@ -416,7 +422,7 @@ export class PullRequest {
     this.inbox = model;
     this.inboxOn = true;
     if (decide) this.inboxOpen = stayOnBranch(this.inboxOpen);
-    if (model.writeError) this.note = said("Could not keep pull requests", model.writeError);
+    if (model.writeError) this.inboxFailure(model.writeError);
   }
 
   async noteSeen(url) {
@@ -548,7 +554,6 @@ export class PullRequest {
 
   loadClosed(cx) {
     if (this.closedLoading || !this.root || this.wait) return;
-    this.bind(cx);
     this.closedLoading = true;
     cx.spawn(this.contextTask(async (cx, context) => {
       try {
@@ -578,7 +583,12 @@ export class PullRequest {
     this.loadedAt = 0; this.refresh(cx); cx.notify();
   }
 
-  inboxFailure(error) { this.note = said("Could not keep pull requests", String(error?.message ?? error).split("\n")[0]); }
+  inboxFailure(error) { this.inboxNote = this.note = said("Could not keep pull requests", String(error?.message ?? error).split("\n")[0]); }
+
+  retireInboxNote() {
+    if (this.note === this.inboxNote) this.note = null;
+    this.inboxNote = null;
+  }
 
   finishAction(cx) { this.busy = null; cx.notify(); }
 
@@ -588,14 +598,13 @@ export class PullRequest {
 
   contextTask(work) {
     const context = this.context;
-    return (cx) => work(cx, context);
+    return this.tracked((cx) => work(cx, context));
   }
 
   act(label, args, cx, run = (a) => this.gh(a)) {
     if (this.busy) return;
-    this.bind(cx);
     this.busy = label; this.note = null; this.armed.clear();
-    spawnAndNotify(cx, async (cx) => {
+    this.start(cx, async (cx) => {
       try {
         const r = await run(args);
         commandOk(r);
@@ -606,9 +615,8 @@ export class PullRequest {
 
   mergeNow(cx) {
     const pr = this.pr;
-    this.bind(cx);
     this.busy = "Merge"; this.note = null;
-    spawnAndNotify(cx, async (cx) => {
+    this.start(cx, async (cx) => {
       try {
         const { o, r: name } = this.repo();
         const repo = await this.gh(["repo", "view", `${o}/${name}`, "--json", "squashMergeAllowed,mergeCommitAllowed,rebaseMergeAllowed"]);
@@ -624,9 +632,8 @@ export class PullRequest {
 
   createPr(cx) {
     if (this.busy) return;
-    this.bind(cx);
     this.busy = "Create"; this.note = null;
-    spawnAndNotify(cx, async (cx) => {
+    this.start(cx, async (cx) => {
       try {
         const now = await this.readPushed(this.root, this.on);
         if (!now || now.state === "late") throw new Error("It took too long to answer.");
@@ -644,14 +651,13 @@ export class PullRequest {
   }
 
   openPicker(kind, open, cx) {
-    this.bind(cx);
     this.picker = open ? kind : null;
     this.query = ""; this.search.set_value("");
     this.candidates = null; this.pickerError = null; this.truncated = false;
     if (open) {
       this.search.focus();
       const repo = this.repo(), context = this.context;
-      cx.spawn(async (cx) => {
+      cx.spawn(this.tracked(async (cx) => {
         try {
           const q = kind === "labels" ? LABELS : PEOPLE;
           const r = await this.gh(["api", "graphql", "-f", `query=${q}`, "-F", `o=${repo.o}`, "-F", `r=${repo.r}`]);
@@ -664,7 +670,7 @@ export class PullRequest {
           this.candidates = list.nodes;
         } catch (e) { this.pickerError = String(e?.message ?? e); }
         cx.notify();
-      });
+      }));
     }
     cx.notify();
   }
@@ -678,7 +684,6 @@ export class PullRequest {
 
   toggle(kind, name, on, cx) {
     if (this.pending) return;
-    this.bind(cx);
     const { o, r } = this.repo(), n = this.pr.number;
     const call = {
       labels: on ? ["-X", "DELETE", `repos/${o}/${r}/issues/${n}/labels/${encodeURIComponent(name)}`] : ["-X", "POST", `repos/${o}/${r}/issues/${n}/labels`, "-f", `labels[]=${name}`],
@@ -689,7 +694,7 @@ export class PullRequest {
     const failed = { labels: on ? `Could not take ${name} off` : `Could not put ${name} on`, assignees: on ? `Could not unassign ${name}` : `Could not assign ${name}`, reviewers: on ? `Could not take back the request to ${name}` : `Could not ask ${name} for a review` }[kind];
     const why = { labels: "Changing labels needs triage access on this repository.", assignees: "Assigning needs triage access on this repository.", reviewers: "Asking for a review needs write access on this repository." }[kind];
     this.pending = name;
-    spawnAndNotify(cx, async (cx) => {
+    this.start(cx, async (cx) => {
       try {
         commandOk(await this.gh(["api", ...call, "--silent"]));
         // Reflect it at once; the reread below confirms it.
@@ -931,8 +936,8 @@ export class PullRequest {
     if (!step.deliver) return;
     const address = this.frontAgent()?.address;
     if (!address) { this.note = said("Not sent: no agent in front"); cx.notify(); return; }
-    this.busy = "Send"; this.sendShown = false; this.note = null; this.bind(cx);
-    spawnAndNotify(cx, async (cx) => {
+    this.busy = "Send"; this.sendShown = false; this.note = null;
+    this.start(cx, async (cx) => {
       try {
         const sent = await deliver(address, text, "you");
         if (sent?.code !== 0) this.note = said("Not sent", String(sent?.stderr || sent?.stdout || "could not send").split("\n")[0]);
@@ -980,7 +985,7 @@ export class PullRequest {
 
   loadOthers(cx) {
     if (this.listingOthers || this.listed || this.wait || !this.root) return;
-    this.listingOthers = true; this.bind(cx);
+    this.listingOthers = true;
     cx.spawn(this.contextTask(async (cx, context) => {
       try { this.takeOpen(await this.gh(openListArgs()).catch(() => null), context); }
       finally { this.listingOthers = false; cx.notify(); }
@@ -1069,19 +1074,18 @@ export class PullRequest {
   }
 
   pickFile(path, cx) {
-    this.bind(cx);
     this.openFile = this.openFile === path ? null : path;
     if (this.openFile && !this.diffs && this.pr) {
       const url = this.pr.url, context = this.context;
       this.diffLoading = true;
-      cx.spawn(async (cx) => {
+      cx.spawn(this.tracked(async (cx) => {
         try {
           const r = await this.gh(["pr", "diff", url, "--color", "never"]);
           if (r.code !== 0) throw new Error((r.stderr || r.stdout).trim());
           if (this.context === context && this.pr?.url === url) this.diffs = splitDiff(r.stdout);
         } catch (e) { this.note = said("Could not read the diff", String(e?.message ?? e).split("\n")[0]); }
         finally { this.diffLoading = false; cx.notify(); }
-      });
+      }));
     }
     cx.notify();
   }

@@ -6,7 +6,7 @@ import { load, chain, numberArguments, calls, one, styled, themed, KIT_NIGHT, dr
 import { marks, rowDepths } from "../stories/kit/pieces.js";
 
 const kit = async () => themed({
-  ...await load("kanso-panel/ui.js", ["tokens", "G", "H", "R", "T", "ICON_ROW", "ICON_INLINE", "CLEAR"], drawingHost()),
+  ...await load("kanso-panel/ui.js", ["tokens", "G", "H", "R", "T", "ICON_ROW", "ICON_INLINE", "CLEAR", "SPIN"], drawingHost()),
   ...await loadPendingState(drawingHost()),
   ...await loadRow(drawingHost()),
 }, night);
@@ -184,6 +184,51 @@ test("The row takes its click, hover, keyboard and focus from the caller, wires 
   assert.deepEqual(styled(pressable, "focus"), [["border_color", c.accent]]);
   const bare = row("r", c, { name: "Juno" });
   for (const name of ["on_click", "cursor_pointer", "on_hover", "on_key_down", "track_focus", "focus"]) assert.equal(calls(bare, name).length, 0, name);
+});
+
+test("A busy row turns its icon at the spinner's pace and takes no press, so no ring is left on it", async () => {
+  const { row, SPIN, CLEAR, c } = await kit();
+  const idle = row("r", c, { icon: "refresh-cw", name: "Updating kansō", onClick: () => {}, focusHandle: { is_focused: () => false } });
+  const busy = row("r", c, { icon: "refresh-cw", name: "Updating kansō", busy: true, onClick: () => {}, focusHandle: { is_focused: () => false } });
+  assert.equal(all(idle).filter((el) => calls(el, "spin").length).length, 0, "at rest the icon is still");
+  assert.deepEqual(all(busy).flatMap((el) => calls(el, "spin")).map((call) => call[1]), [SPIN], "busy, the icon turns once per spin token");
+  for (const name of ["on_click", "cursor_pointer", "track_focus", "focus", "hover", "active"]) assert.equal(calls(busy, name).length, 0, `busy, no ${name}`);
+  assert.equal(busy.tag, "h_flex", "no Button for the keyboard to keep, so no ring can stay after a press");
+  assert.equal(one(busy, "border_color"), CLEAR, "its border stays clear");
+});
+
+test("A busy row registers no click, hover, key or focus handler and draws no ring, whatever its caller passes", async () => {
+  const { row, CLEAR, c } = await kit();
+  const given = { name: "Updating kansō", busy: true, focus: true, hover: true, actions: [{ icon: "pin", label: "Pin", onClick: () => {} }], onClick: () => {}, onHover: () => {}, onKey: () => {}, focusHandle: { is_focused: () => true } };
+  const busy = row("r", c, given);
+  for (const name of ["on_click", "cursor_pointer", "on_hover", "on_key_down", "track_focus", "focus", "hover", "active"]) assert.equal(calls(busy, name).length, 0, `busy, no ${name}`);
+  assert.equal(one(busy, "border_color"), CLEAR, "no ring, though focus was passed");
+  assert.equal(byTag(busy, "r-tool-0"), undefined, "no tool shows for a hover or focus it ignores");
+  assert.equal(calls(row("r", c, { ...given, busy: false }), "on_hover").length, 1, "the same props on a row at rest are wired");
+});
+
+test("A busy row is inert in its children too: no action to press, no verb, no tool, and a selected one keeps no accent border", async () => {
+  const { row, CLEAR, c } = await kit();
+  const hits = [];
+  const given = { name: "Updating kansō", busy: true, selected: true, action: { label: "Retry", onClick: () => hits.push("retry") }, verbs: [{ label: "Undo", onClick: () => hits.push("undo") }], actions: [{ icon: "pin", label: "Pin", onClick: () => hits.push("pin") }], hover: true };
+  const busy = row("r", c, given);
+  assert.equal(one(busy, "border_color"), CLEAR, "a selection leaves no accent on a row that is busy");
+  assert.equal(all(busy).some((el) => /-action$|-verb-\d+$|-tool-\d+$/.test(el.tag ?? "")), false, "none of its children are drawn");
+  assert.deepEqual(texts(busy), ["Updating kansō"]);
+  assert.equal(one(row("r", c, { ...given, busy: false }), "border_color"), c.accent, "the same props on a row at rest show the selection");
+  assert.deepEqual(hits, []);
+});
+
+test("A busy row keeps an actionable detail's text without its action, and takes no press in its start slot", async () => {
+  const { row, c } = await kit();
+  const { button } = await load("kanso-panel/ui-button.js", ["button"], drawingHost());
+  const hits = [];
+  const given = { name: "Updating kansō", detail: [{ text: "Retry", label: "Retry", onClick: () => hits.push("detail") }, "3.31.0"], start: [button("r-start", "Go", () => hits.push("start"), c, {})] };
+  const busy = row("r", c, { ...given, busy: true });
+  assert.deepEqual(texts(busy), ["Updating kansō", "Retry", "3.31.0"], "the detail's words stay");
+  assert.equal(all(busy).some((el) => calls(el, "on_click").length), false, "and nothing in the row can be pressed");
+  const idle = row("r", c, given);
+  assert.deepEqual(all(idle).filter((el) => calls(el, "on_click").length).length, 2, "the same props on a row at rest press: the detail and the start");
 });
 
 test("The row's code has no number of pixels: every size comes from the tokens", () => {

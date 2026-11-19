@@ -15,7 +15,6 @@ if command -v flatpak >/dev/null 2>&1; then
   flatpak list --app --columns=application 2>/dev/null | awk '{ printf "flatpak\\t%s\\t\\n", $1 }'
 fi`;
 
-// macOS: each app's own icon as a 64 px PNG, made once.
 const ICON = `
 out=$1; shift; mkdir -p "$out"
 while [ $# -gt 1 ]; do

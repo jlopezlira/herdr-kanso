@@ -3,7 +3,7 @@ import { loadTokens, loadRow, loadMenu } from "./mod-fixtures.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { load, nodes, texts, press, themed, KIT_NIGHT, drawingHost, drawn } from "./helpers.mjs";
+import { load, nodes, texts, press, themed, KIT_NIGHT, drawingHost, drawn, gpuiHost } from "./helpers.mjs";
 import { exportedNames } from "../scripts/mod-source.mjs";
 import * as storybookKit from "../stories/kit/kit.js";
 import * as storybookPieces from "../stories/kit/pieces.js";
@@ -149,4 +149,14 @@ test("The Storybook's shared kit is its pieces, and the app's has only Storybook
   assert.deepEqual(app.filter((name) => !storybook.includes(name)), [], "the app's shared kit exports only Storybook pieces");
   const gap = storybook.filter((name) => !app.includes(name));
   t.diagnostic(`In the app's shared kit (${app.length}): ${app.join(", ")}; not yet (${gap.length}): ${gap.join(", ")}`);
+});
+
+test("A Button's name reaches its press as written, even when it reads like an icon", async () => {
+  const { button } = await load("kanso-panel/kit.js", ["button"], gpuiHost());
+  const { tokens } = await load("kanso-panel/ui.js", ["tokens"]);
+  const pressed = [];
+  const drawn = button({ name: "lu-notes", label: "Notes", kind: "quiet" })("custom", tokens({}), { presses: { "lu-notes": () => pressed.push("notes") } });
+  drawn.calls.find(([op]) => op === "on_click").at(-1)({}, {});
+  assert.deepEqual(pressed, ["notes"]);
+  assert.throws(() => button({ name: "lu-notes", label: "Notes", kind: "quiet" })("custom", tokens({}), { presses: { notes: () => {} } }), /has no tool notes/, "a name is not rewritten into another");
 });

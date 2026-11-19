@@ -9,9 +9,11 @@ import { systemApi } from "./platform-system.js";
 // Removing a worktree keeps its branch; only uncommitted changes and commits no branch, tag or remote holds can be lost.
 import { div } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
-import { exec, spaces, panes, home, run, theme, shared, notify, knownAgents } from "herdr";
+import { exec, spaces, panes, home, run, theme, shared, notify } from "herdr";
+import { explainWith, findExplainer } from "./explain.js";
 import { Share, postText, shareRows } from "./share.js";
 import { WorktreeStore } from "./worktrees-store.js";
+import { inside, openIn } from "./worktrees-model.js";
 import { R, T, G, OPACITY, tokens } from "./ui.js";
 import { Armed, button, quietLink, iconButton } from "./ui-button.js";
 import { row } from "./ui-row.js";
@@ -89,9 +91,7 @@ export function parseProbe(out) {
   }, start);
 }
 
-// On macOS git and panes may report /tmp or /private/tmp, so both forms are normalized.
-const real = (p) => paths.canonical(p);
-export const inside = (dir, path) => Boolean(dir) && paths.within(real(path), real(dir));
+const foldersInUse = () => [...spaces().filter((s) => !s.machine).map((s) => s.folder), ...panes().map((p) => p.cwd)];
 
 // The order of the checks decides the state.
 export function stateOf(w) {
@@ -299,7 +299,7 @@ export class Worktrees {
     // The one agent Explain names and starts: the first installed, looked up once.
     this.explainer = null;
     cx.spawn(async (cx) => {
-      this.explainer = (await knownAgents({ on: null }).catch(() => [])).find((a) => a.installed) ?? null;
+      this.explainer = await findExplainer();
       cx.notify();
     });
     // What the last scan kept shows at once; the scan then checks it all again.
@@ -364,17 +364,19 @@ export class Worktrees {
   }
 
   roots() {
-    const folders = [...spaces().filter((s) => !s.machine).map((s) => s.folder), ...panes().map((p) => p.cwd)];
-    const chosen = shared("kanso.worktrees.roots"), roots = rootsFor(folders, home(), chosen);
+    const chosen = shared("kanso.worktrees.roots"), roots = rootsFor(foldersInUse(), home(), chosen);
     return { roots, search: roots.length && Array.isArray(chosen) && chosen.length ? roots : [...roots, ...(this.tempDirs ?? TEMP)] };
   }
 
   // Runs on every draw, so only a row whose answer changed is replaced.
   markOpen() {
-    const used = [...spaces().filter((s) => !s.machine).map((s) => s.folder), ...panes().map((p) => p.cwd)].filter(Boolean);
-    const mark = (w) => { const open = used.some((u) => inside(w.path, u)); return w.open === open ? w : { ...w, open }; };
+    const used = foldersInUse().filter(Boolean), seen = used.join("\0");
+    if (seen === this.marked?.seen && this.groups === this.marked.groups && this.orphans === this.marked.orphans) return;
+    const opened = openIn(used);
+    const mark = (w) => { const open = opened(w.path); return w.open === open ? w : { ...w, open }; };
     this.groups = mapGroups(this.groups, mark);
     this.orphans = mapSame(this.orphans, mark);
+    this.marked = { seen, groups: this.groups, orphans: this.orphans };
   }
 
   refresh(cx) {
@@ -719,8 +721,7 @@ export class Worktrees {
   }
 
   ask(title, folder, prompt) {
-    if (!this.explainer) { notify({ title: "Could not start the agent", body: "no agent is installed", level: "error" }); return; }
-    run("tab.new", { name: title, space: spaces().find((s) => s.active)?.id, folder, argv: this.explainer.run, task: prompt });
+    explainWith(this.explainer, { name: title, space: spaces().find((s) => s.active)?.id, folder, task: prompt });
   }
 
   bars(c, byDay, title, height, empty) {

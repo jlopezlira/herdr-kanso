@@ -57,19 +57,19 @@ test("The active project's pill in the list and its tile in the rail wear wash-1
   assert.equal(calls(tile(false), "bg").length, 0);
 });
 
-test("Every chosen tab, alone and as the gliding pill, wears wash-12; a tab on a track is raised", async () => {
-  const { tabItem, tabPill } = await load("kanso-panel/ui-tab.js", ["tabItem", "tabPill"], gpuiHost());
+test("A chosen tab wears the selection's wash-12, as the active project and the focused pane header do, on a track too", async () => {
+  const { tab } = await load("kanso-panel/ui-tab.js", ["tab"], gpuiHost());
   const c = (await load("kanso-panel/ui.js", ["tokens"], gpuiHost())).tokens(KIT_NIGHT);
-  const item = (on, track = false) => tabItem("t", { key: "a", label: "checkout" }, c, { on, track, size: "md" });
-  assert.equal(arg(item(true), "bg"), c.w12);
-  assert.equal(arg(tabPill(c), "bg"), c.w12);
-  assert.equal(calls(item(false), "bg").length, 0);
-  assert.equal(arg(item(true, true), "bg"), c.raised);
+  const items = [{ key: "a", label: "checkout" }, { key: "b", label: "tests" }];
+  const [chosen, other] = tab("t", items, "a", null, c, { track: false, size: "md" }).kids;
+  assert.equal(arg(chosen, "bg"), c.w12);
+  assert.equal(calls(other, "bg").length, 0);
+  assert.equal(arg(tab("t", items, "a", null, c, { track: true, size: "md" }).kids[0], "bg"), c.w12);
 });
 
 test("The Storybook draws the active project, its rail tile and the chosen tab with wash-12", () => {
   const css = repoText("stories/primitives.css");
-  for (const selector of [".kanso-project.kanso-control--on", ".kanso-rail__tile.kanso-control--on", ".kanso-tab.kanso-control--on", ".kanso-tab--rest.kanso-control--on"]) {
+  for (const selector of [".kanso-project.kanso-control--on", ".kanso-rail__tile.kanso-control--on", ".kanso-tab.kanso-control--on", ".kanso-tab--rest.kanso-control--on", ".kanso-tabs__tab.kanso-tabs__tab--on"]) {
     const rule = new RegExp(`${selector.replace(/[.-]/g, (ch) => `\\${ch}`)}\\{background:([^;}]+)`).exec(css);
     assert.equal(rule?.[1], "var(--wash-12)", selector);
   }
