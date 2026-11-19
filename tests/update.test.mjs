@@ -582,9 +582,11 @@ windowsOnly("A permanent denial of stage cleanup stops at once and names that de
   const stage = join(made.dir, "op");
   await mkdir(stage, { recursive: true });
   await writeFile(slots, "\n");
-  const odd = "\\\\?\\" + stage + "\\denied.";
-  const created = await exec("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", `[IO.File]::WriteAllText(${quote(odd)}, 'kept')`]);
-  assert.equal(created.code, 0, created.stderr);
+  t.after(() => exec("icacls", [made.dir, "/remove:d", "*S-1-1-0"]));
+  for (const rule of ["*S-1-1-0:(DC)", "*S-1-1-0:(CI)(IO)(D)"]) {
+    const denied = await exec("icacls", [made.dir, "/deny", rule]);
+    assert.equal(denied.code, 0, denied.stderr || denied.stdout);
+  }
   const began = Date.now();
   expectStop(await recoverNow(made.home, made.dir), "delete", stage, began);
   assert.equal((await readdir(made.dir)).includes("op"), true);
