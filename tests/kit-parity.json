@@ -28,7 +28,6 @@
   "props": {
     "button": { "storybook": ["key", "label"], "app": ["color", "small", "spoken"] },
     "dialog": { "storybook": ["note", "placeholder", "tone", "value"], "app": ["focusHandle", "held", "onCancel", "onKey", "onPrimary"] },
-    "failureBlock": { "storybook": ["agent"] },
     "input": { "storybook": ["limit", "loading", "multiline", "selected", "text"], "app": ["iconTip", "onIcon", "spoken"] },
     "keyHint": { "app": ["font"] },
     "metric": { "app": ["tip", "tone"] },

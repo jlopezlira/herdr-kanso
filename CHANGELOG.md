@@ -32,6 +32,8 @@ the branch's rules.
 
 ### Changed
 
+- The tab bar follows the Storybook. The chosen tab wears the selection's wash itself, as the active project does, instead of a pill that glides under it, and tabs are a little wider, with room around the name. The panel doors stay icons, their names and keys in the tooltip, and Images takes the image icon. New tab and Arrange say their keys in their tooltips, and Arrange takes the panels icon. On a computer that cannot be reached, the panel doors give way as + and Arrange do. The open door and every other button that is on take the same wash, as does the chosen choice in Settings, Spend and the other panels' switches. A panel with no icon of its own shows its name, and a panel's door opens that panel whatever its icon or name. Tab groups in Settings, Spend, Memory, Ports, Shipped and pull requests take the same tab. (#331, #233)
+- The + on the tab bar opens the same menu as the sidebar's +, laid out as approved: where the tab opens (with the computer when it is not this one), Terminal with its key, every agent installed, the first nine numbered (press the number, with no other key, to start one), New project, New worktree… and Open worktree… inside a repository, and Arrange… last with its key. The agents last found show at once while the computer is asked again; when it does not answer, the menu says so, with Refresh and, when an agent is installed on this computer, Explain to that agent, which opens on this computer and tells it which computer failed and how. Both are reachable by the keyboard, and the agents scroll inside the menu when there are more than fit. (#233)
 - Right-click menus show the icons and marks they are designed with: the project menu's rows, Panels…, Open the diff and Push, and the status bar's Needs you and Agents at work. (#354)
 - The status bar's computer can be set to show only when needed, which is how it already showed by default. (#354)
 - A pane header's files and commits share one right-click menu, with Open the diff and Push. (#354)
@@ -113,6 +115,8 @@ the branch's rules.
 ### Fixed
 
 - While kansō updates, the update row in the sidebar footer turns its icon, takes no press, and no longer keeps a thick border around it. (#404)
+- Cmd+1 to Cmd+9 choose the tabs the tab bar shows, counted without the ones asleep. A number past the last tab does nothing, instead of stacking a "tab.select failed" notice for each press. On Windows, Ctrl+1 to Ctrl+9. (#331)
+- The Pull requests panel no longer stops on "cx is no longer valid" after listing pull requests, and a rejected inbox step no longer stops Refresh or leaves its "Could not keep pull requests" note after a later read succeeds. (#338)
 - The status bar's Needs you and Agents at work menus write their shortcuts in key glyphs. (#354)
 - A tab's right-click menu writes New tab and Close tab's shortcuts in key glyphs. (#354)
 - In Projects, a right click on a subagent under an agent opens its Session menu, with the rows that act on it, as it already did in Status and Threads. (#354)

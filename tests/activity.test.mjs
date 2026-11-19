@@ -135,7 +135,7 @@ test("The kit: rows sharing an icon take a list of presses in drawing order, a m
   assert.deepEqual(hits, ["x", "a", "c"]);
   assert.equal(byTag(drawnStack, "s-2"), null, "null: the row does not act");
   assert.ok(svgsOf(drawnStack).filter((path) => path.endsWith("enso.svg")).length === 3, "e-done is the app's done mark");
-  assert.throws(() => stack({ variant: "away" }, row({ name: "A" }))("s", c, { presses: { "lu-x": () => {} } }), /has no tool x/);
+  assert.throws(() => stack({ variant: "away" }, row({ name: "A" }))("s", c, { presses: { "lu-x": () => {} } }), /has no tool lu-x/);
   assert.throws(() => row({ name: "A" })("r", c, { max: 4 }), /only handlers, not max/);
 });
 

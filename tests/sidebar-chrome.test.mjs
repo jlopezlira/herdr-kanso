@@ -45,7 +45,7 @@ test("Every Toolbar state in the Storybook draws in the app with its tools in th
     const pop = every(drawn[label]).find((kid) => calls(kid, "content").length);
     assert.equal(arg(pop, "anchor"), "top_left", `${label}: it hangs under Sort`);
     assert.equal(arg(arg(pop, "content"), "pt"), G.xs);
-    assert.equal(arg(arg(pop, "trigger"), "bg"), c.selected, "Sort is selected while its menu is open");
+    assert.equal(arg(arg(pop, "trigger"), "bg"), c.w12, "Sort is active, on wash-12, while its menu is open");
   }
   assert.deepEqual(texts(drawn["+ menu"]).slice(0, 1), ["Agents, pinned first, then by"], "+ holds the menu it is given, under it");
   const column = drawn.Collapsed;

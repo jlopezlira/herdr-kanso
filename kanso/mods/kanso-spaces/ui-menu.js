@@ -14,7 +14,7 @@ const RULE = 1;
 const ITEM_PX = H.control;
 const TWO_LINES_PX = H.control + G.md;
 // A scroll run shows this many items unless it says.
-const RUN_ROWS = 4;
+export const RUN_ROWS = 4;
 
 // A heading wraps; its `mark` sits at its right, the state of what it names.
 export const menuHeading = (title, c, status = null) => div().min_h(H.icon).flex().items_center().px(G.sm).py(G.xs).text_size(T.body).text_color(c.dim).child(title)

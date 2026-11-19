@@ -22,14 +22,15 @@ export const viewOf = (nodes, parent = null) => {
   return views;
 };
 
+const NONE = [];
 const matchCompound = (node, step, state) => {
   if (!node || node.tag === "#text") return false;
   if (step.tag && step.tag !== node.tag) return false;
-  if (!step.classes.every((name) => node.classes.includes(name))) return false;
-  if (!(step.attrs ?? []).every(([name, value]) => (value === null ? name in node.attrs : node.attrs[name] === value))) return false;
-  if (!step.states.every((name) => state(node, name))) return false;
-  if (step.not.some((inner) => matches(node, inner, state))) return false;
-  return step.any.every((list) => list.some((inner) => matches(node, inner, state)));
+  if (!(step.classes ?? NONE).every((name) => node.classes.includes(name))) return false;
+  if (!(step.attrs ?? NONE).every(([name, value]) => (value === null ? name in node.attrs : node.attrs[name] === value))) return false;
+  if (!(step.states ?? NONE).every((name) => state(node, name))) return false;
+  if ((step.not ?? NONE).some((list) => list.some((inner) => matches(node, inner, state)))) return false;
+  return (step.any ?? NONE).every((list) => list.some((inner) => matches(node, inner, state)));
 };
 
 const siblingsBefore = (el) => {
@@ -53,14 +54,58 @@ export const matches = (node, steps, state) => {
 
 const STATE_CLASS = { hover: "kanso-control--hover", focus: "kanso-control--focus", active: "kanso-control--active" };
 export const atRest = (node, name) => node.classes.includes(STATE_CLASS[name]);
-export const hovering = (target) => (node, name) => atRest(node, name) || (name === "hover" && node === target);
+export class Answers {
+  constructor() { this.known = new Map(); }
 
-const candidates = (node, rules) => (Array.isArray(rules) ? rules : [...new Set([...rules["*"], ...node.classes.flatMap((name) => rules[name] ?? [])])]);
+  of(key, make) {
+    if (!this.known.has(key)) this.known.set(key, make());
+    return this.known.get(key);
+  }
+}
 
-export const stylesFor = (node, rules, state = atRest) => candidates(node, rules)
+class Asked {
+  constructor() { this.targets = new WeakMap(); this.answers = new WeakMap(); }
+
+  hover(target) {
+    const state = (node, name) => atRest(node, name) || (name === "hover" && node === target);
+    this.targets.set(state, target);
+    return state;
+  }
+
+  targetOf(state) { return this.targets.get(state); }
+
+  answer(rules, key, make) {
+    if (!this.answers.has(rules)) this.answers.set(rules, new Answers());
+    return this.answers.get(rules).of(key, make);
+  }
+}
+const asked = new Asked();
+export const hovering = (target) => asked.hover(target);
+export const remembered = (rules, key, make) => asked.answer(rules, key, make);
+
+const candidates = (node, rules) => (Array.isArray(rules) ? rules
+  : [...new Set([...rules.index["*"], ...(rules.index[`tag:${node.tag}`] ?? NONE), ...node.classes.flatMap((name) => rules.index[name] ?? NONE)])].map((i) => rules.list[i]));
+
+const match = (node, rules, state) => candidates(node, rules)
   .filter((rule) => matches(node, rule.steps, state))
   .toSorted((a, b) => a.weight - b.weight || a.order - b.order)
   .flatMap((rule) => rule.ops);
+
+const own = (node) => `${node.tag}.${(node.classes ?? []).join(".")}${JSON.stringify(node.attrs ?? {})}`;
+export const shapeOf = (node) => (node ? `${shapeOf(node.parent)}>${siblingsBefore(node).map(own).join("+")}~${own(node)}` : "");
+const kindOf = (node, state) => {
+  if (state === atRest) return "rest";
+  return asked.targetOf(state) === node ? "hovered" : null;
+};
+export const stylesFor = (node, rules, state = atRest) => {
+  const kind = kindOf(node, state);
+  return kind ? asked.answer(rules, `${kind}${shapeOf(node)}`, () => match(node, rules, state)) : match(node, rules, state);
+};
+
+export const collapse = (ops) => {
+  const last = Object.fromEntries(ops.map(([op], i) => [op, i]));
+  return ops.filter(([op], i) => last[op] === i);
+};
 
 const winning = (ops) => ops.reduce((acc, op) => ({ ...acc, [op[0]]: op }), {});
 // Ops whose winning call differs. The hover style sets those, and leaves a colour an !important rule kept.

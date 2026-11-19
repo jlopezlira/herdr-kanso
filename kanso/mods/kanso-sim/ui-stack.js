@@ -5,7 +5,8 @@ import { div } from "gpui-kit";
 import { G, H, R, LINE, PANE, SIDEBAR, DIALOG, TINT, CLEAR, alpha, sidebarSides } from "./ui.js";
 import { dot } from "./ui-dot.js";
 import { RULES } from "./ui-css.js";
-import { paint } from "./ui-draw.js";
+import { box, lastOp } from "./ui-draw.js";
+import { stylesFor } from "./ui-match.js";
 
 // Each child piece drawn with its own id and its stack's handlers; a piece that draws nothing leaves no gap. `context` says where it sits;
 // `slots` names each place, else its index.
@@ -37,7 +38,9 @@ const railTile = (id, c, { on, strong, label }, kids, { onClick = null }, wire) 
 
 // Open, the track across the sidebar's gutter. Collapsed (`onOpen`), the current view's button; open, its menu beside it.
 // The button and its menu are a Button with its menu, as Sort's and Settings' are.
-const viewMenu = withMenu(() => "left_center", () => div());
+const bare = () => div();
+const below = () => div().pt(G.xs);
+const viewMenu = withMenu(() => "left_center", bare);
 const viewSwitch = (id, c, flags, kids, more, wire, context) => {
   const { onChange = null, onOpen = null } = more;
   if (!onOpen) return kids[0](`${id}-tabs`, c, { onChange }).mx(G.sm).mt(G.xs).mb(G.sm);
@@ -50,7 +53,7 @@ const toolbar = (id, c, { column }, kids, more, _wire, { header = false }) => pl
   .when(header && !column, (el) => el.h(H.row)).when(header && column, (el) => el.pt(G.hair))
   .on_mouse_down("left", (_e, cx) => cx.stop_propagation()), id, c, kids, more, { column });
 // Sort is dim at its default order, and drawn like the other tools once sorted.
-const sortMenu = withMenu(({ column }) => (column ? "left_center" : "top_left"), ({ column }) => (column ? div().pl(G.xs) : div().pt(G.xs)));
+const sortMenu = withMenu(({ column }) => (column ? "left_center" : "top_left"), ({ column }) => (column ? div().pl(G.xs) : below()));
 const sort = (id, c, { sorted }, kids, more, wire, context) => sortMenu(id, c, {}, kids, more, wire, { ...context, ink: sorted ? null : "dim" });
 // The header: 8 at the sides seen, so the Toolbar's icons sit 15.5 in, as the Storybook's do; collapsed, the rail's column, centred. Dawn's sky lies behind the rest.
 const header = (id, c, { collapsed }, kids, more) => placed(v_flex().id(id).w_full().flex_none().relative().overflow_hidden().bg(c.chrome).pb(G.xs)
@@ -76,12 +79,28 @@ const footerSlots = (kids) => (kids.length === 3 ? ["update", "refused", "settin
 const cssNode = (classes, parent = null) => ({ tag: "div", attrs: {}, classes, parent, children: [] });
 const statusFace = () => cssNode(["kanso-status-bar", "kanso-status-bar--grid"]);
 // The row and its three tracks stand in for grid-template-columns, which gpui cannot draw.
-const statusBar = (id, c, _flags, kids, more) => placed(paint(h_flex().id(id), statusFace(), c, RULES, null, false).flex().w_full(),
+const statusBar = (id, c, _flags, kids, more) => placed(box(statusFace(), c, RULES, id).flex().w_full(),
   id, c, kids, more, {}, ["left", "middle", "right"]);
-const statusHalf = (end) => (id, c, _flags, kids, more) => (kids.length ? placed(paint(h_flex().id(id),
-  cssNode([end ? "kanso-status-bar__right" : "kanso-status-bar__left"], statusFace()), c, RULES, null, false).h_full().flex_1(), id, c, kids, more) : null);
-const statusMiddle = (id, c, _flags, kids, more) => (kids.length ? placed(paint(h_flex().id(id),
-  cssNode(["kanso-status-bar__middle"], statusFace()), c, RULES, null, false).h_full().flex_none(), id, c, kids, more) : null);
+const statusHalf = (end) => (id, c, _flags, kids, more) => (kids.length ? placed(box(
+  cssNode([end ? "kanso-status-bar__right" : "kanso-status-bar__left"], statusFace()), c, RULES, id).h_full().flex_1(), id, c, kids, more) : null);
+const statusMiddle = (id, c, _flags, kids, more) => (kids.length ? placed(box(
+  cssNode(["kanso-status-bar__middle"], statusFace()), c, RULES, id).h_full().flex_none(), id, c, kids, more) : null);
+
+const tabBarFace = () => cssNode(["kanso-tab-bar"]);
+const opOf = (node, name) => lastOp(stylesFor(node, RULES), name)?.[1] ?? 0;
+const doorFace = () => ({ ...cssNode(["kanso-button", "kanso-button--icon"], cssNode(["kanso-tab-bar__doors"], tabBarFace())), tag: "span" });
+const tabBar = (id, c, _flags, kids, more) => box(tabBarFace(), c, RULES, id).w_full()
+  .children(kids.map((kid, i) => (typeof kid === "function" ? kid(`${id}-${i}`, c, more, { bar: true, index: i }) : kid)).filter(Boolean));
+const tabBarMenu = withMenu(() => "top_left", below);
+const tabBarDoors = (id, c, _flags, kids, more) => placed(box(cssNode(["kanso-tab-bar__doors"], tabBarFace()), c, RULES, id), id, c, kids, more);
+const holder = (id, c, _flags, kids, more, _wire, context) => placed(div(), id, c, kids, more, context);
+
+export const tabBarRoom = (width, { tools = 0, doors = [] }) => {
+  const bar = tabBarFace(), gap = opOf(bar, "gap"), side = opOf(doorFace(), "w"), doorGap = opOf(cssNode(["kanso-tab-bar__doors"], bar), "gap");
+  const pad = stylesFor(bar, RULES).filter(([op]) => op === "px" || op === "pl" || op === "pr").reduce((sum, [op, value]) => ({ ...sum, ...(op === "px" ? { pl: value, pr: value } : { [op]: value }) }), {});
+  const doorsWidth = doors.reduce((sum, door, i) => sum + (door ?? side) + (i ? doorGap : 0), 0);
+  return width - (pad.pl ?? 0) - (pad.pr ?? 0) - tools * (side + gap) - 2 * gap - doorsWidth;
+};
 
 const STACKS = {
   toolbar: { states: ["column"], draw: toolbar },
@@ -89,7 +108,7 @@ const STACKS = {
   "toolbar sort": { states: ["sorted"], draw: sort },
   "toolbar group": { states: ["open"], draw: (id, c, { open }, kids, more, _wire, context) => placed(v_flex().id(id).flex_none().items_center().gap(G.xs).rounded(R.card)
     .when(open, (el) => el.bg(c.w4)), id, c, kids, more, context) },
-  "toolbar menu": { draw: (id, c, _flags, kids, more, _wire, context) => placed(div(), id, c, kids, more, context) },
+  "toolbar menu": { draw: holder },
   header: { states: ["collapsed"], draw: header },
   "header title": { draw: headerTitle },
   "rail tile": { states: ["strong"], draw: railTile, pressable: true },
@@ -104,10 +123,14 @@ const STACKS = {
   "rail footer": { draw: (id, c, _flags, kids, more) => placed(v_flex().id(id).size_full().justify_end().items_center().bg(c.chrome).pt(FOOTER.top).pb(FOOTER.railBottom)
     .gap(FOOTER.railGap), id, c, kids, more, {}, footerSlots(kids)) },
   // Proposed: Settings and its menu, which opens over it; a refused update's block in the footer's room.
-  "footer settings": { draw: withMenu(() => "bottom_left", () => div()) },
-  "footer menu": { draw: (id, c, _flags, kids, more, _wire, context) => placed(div(), id, c, kids, more, context) },
+  "footer settings": { draw: withMenu(() => "bottom_left", bare) },
+  "footer menu": { draw: holder },
   "footer refusal": { draw: (id, c, _flags, kids, more) => placed(div().mt(FOOTER.refusalAbove).mb(FOOTER.refusalBelow), id, c, kids, more) },
   "dialog list": { states: ["scroll"], draw: dialogList },
+  "tab bar": { draw: tabBar },
+  "tab bar more": { draw: tabBarMenu },
+  "tab bar menu": { draw: holder },
+  "tab bar doors": { draw: tabBarDoors },
   "status bar": { states: ["grid"], draw: statusBar },
   "status bar left": { draw: statusHalf(false) },
   "status bar middle": { draw: statusMiddle },
