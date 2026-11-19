@@ -354,17 +354,27 @@ export const svgsOf = (el) => nodes(el).flatMap((kid) => kid.calls.filter((call)
 export const tipsOf = (el) => nodes(el).flatMap((kid) => kid.calls.filter((call) => call[0] === "tooltip").map((call) => call[1]));
 export const texts = (el) => nodes(el).flatMap((kid) => kid.calls.filter((call) => call[0] === "child" && typeof call[1] === "string").map((call) => call[1]));
 const BARE = new Set([undefined, "div", "h_flex", "v_flex", "svg", "image"]);
-const held = (el) => el.calls.filter((call) => call[0] === "trigger" || call[0] === "content").map((call) => call[1]);
-const inOrder = (el) => [el, ...el.kids.flatMap(inOrder), ...held(el).flatMap(inOrder)];
-const focusable = (el) => !BARE.has(el.tag) && held(el).length === 0 && !el.calls.some((call) => call[0] === "disabled" && call[1]);
+const hung = (el) => el.calls.filter((call) => call[0] === "trigger" || call[0] === "content").map((call) => call[1]);
+const placed = (el, parent = null) => [[el, parent], ...[...el.kids, ...hung(el)].flatMap((kid) => placed(kid, el))];
+const last = (el, name) => el.calls.findLast((call) => call[0] === name)?.[1];
+const control = (el) => !BARE.has(el.tag) && hung(el).length === 0;
+const tabStop = (el) => (last(el, "tab_stop") ?? (control(el) || last(el, "tab_index") !== undefined)) && !last(el, "disabled");
 export function keyboard(root) {
-  const stops = inOrder(root).filter(focusable);
+  const parents = new Map(placed(root));
+  const stops = [...parents.keys()].filter(tabStop).map((el, i) => [el, i]).toSorted(([a, i], [b, j]) => (last(a, "tab_index") ?? 0) - (last(b, "tab_index") ?? 0) || i - j).map(([el]) => el);
+  const path = (el) => (el ? [el, ...path(parents.get(el))] : []);
   let at = -1;
   return {
     stops,
     tab: () => { at = (at + 1) % stops.length; return stops[at]; },
     key: (name, cx) => {
-      if (name === "enter" || name === "space") stops[at].calls.filter((call) => call[0] === "on_click").forEach(([, handler]) => handler({}, cx));
+      let stopped = false;
+      const routed = { ...cx, stop_propagation: () => { stopped = true; } };
+      for (const el of path(stops[at])) {
+        for (const [, handler] of el.calls.filter((call) => call[0] === "on_key_down")) if (!stopped) handler({ key: name, modifiers: {} }, routed);
+        if (stopped) return;
+      }
+      if (name === "enter" || name === "space") stops[at].calls.filter((call) => call[0] === "on_click").forEach(([, handler]) => handler({}, routed));
     },
   };
 }

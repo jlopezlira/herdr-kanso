@@ -7,13 +7,13 @@ import { TABS, tabBar as bar } from "./menu-fixtures.mjs";
 const night = CHROME_NIGHT;
 const model = () => load("kanso-tabs/tab-bar-model.js", ["tabMark", "barState", "foldTabs", "dropSide", "renameWaits"]);
 // A bar whose three tabs are measured at 100 wide.
-const measuredBar = async () => {
-  const b = await bar();
+const measuredBar = async (options = {}) => {
+  const b = await bar(options);
   for (const id of ["t1", "t2", "t3"]) b.view.tabW[id] = 100;
   return b;
 };
-const twoFolded = async () => {
-  const b = await measuredBar();
+const twoFolded = async (options = {}) => {
+  const b = await measuredBar(options);
   b.view.barW.bar = ROOM + 100 + 40;
   return b;
 };
@@ -391,17 +391,24 @@ test("The probe asks each tool its version: only a tool not found is absent; a t
   assert.equal(offered("containers", { commands: timedOut }), true, "and Containers stays offered");
   const failing = await probeCommands(async () => ({ code: 1, stdout: "", stderr: "permission denied" }));
   assert.deepEqual(clone(failing), { docker: null, gh: null }, "nor is another failure");
+  const elsewhere = await probeCommands(async () => { throw new Error("working directory not found"); });
+  assert.deepEqual(clone(elsewhere), { docker: null, gh: null }, "something else missing is not the tool missing");
+  assert.equal(offered("pr", { commands: elsewhere }), true);
+  const cwd = await probeCommands(async () => { throw Object.assign(new Error("chdir /gone ENOENT"), { code: "ENOENT", path: "/gone" }); });
+  assert.deepEqual(clone(cwd), { docker: null, gh: null }, "an ENOENT that is not the spawn of the tool");
 });
 
-test("Moving doors while a tool is absent keeps its saved place, and its door comes back there", async () => {
-  const b = await bar({ stored: { "kanso.panels.order": ["pr", "files", "ports", "insights"], "kanso.panels.commands": { docker: true, gh: false } } });
-  assert.equal(door(b.view.render(b.cx), "PR"), null);
-  pressOf(door(b.view.render(b.cx), "Ports"), "left")(press, b.cx);
-  handler(door(b.view.render(b.cx), "Files"), "on_mouse_up")({}, b.cx);
-  assert.deepEqual(clone(b.store["kanso.panels.order"]).slice(0, 4), ["pr", "ports", "files", "insights"], "PR keeps first place");
-  b.store["kanso.panels.commands"] = { docker: true, gh: true };
-  b.view.render(b.cx);
-  assert.deepEqual(clone(b.store["kanso.panels.all"]).map((p) => p.id).slice(0, 4), ["pr", "ports", "files", "insights"], "gh back: PR is first again");
+test("Moving doors while a tool is absent keeps its saved slot, first or between the moved doors, and its door comes back there", async () => {
+  for (const [order, kept, label] of [[["pr", "files", "ports", "insights"], ["pr", "ports", "files", "insights"], "first"], [["files", "pr", "ports", "insights"], ["ports", "pr", "files", "insights"], "second"]]) {
+    const b = await bar({ stored: { "kanso.panels.order": order, "kanso.panels.commands": { docker: true, gh: false } } });
+    assert.equal(door(b.view.render(b.cx), "PR"), null);
+    pressOf(door(b.view.render(b.cx), "Ports"), "left")(press, b.cx);
+    handler(door(b.view.render(b.cx), "Files"), "on_mouse_up")({}, b.cx);
+    assert.deepEqual(clone(b.store["kanso.panels.order"]).slice(0, 4), kept, `PR keeps its ${label} slot`);
+    b.store["kanso.panels.commands"] = { docker: true, gh: true };
+    b.view.render(b.cx);
+    assert.deepEqual(clone(b.store["kanso.panels.all"]).map((p) => p.id).slice(0, 4), kept, `gh back: PR is ${label} again`);
+  }
 });
 
 test("A door being dragged is held on the pressed wash with the accent bar where it lands, as the Storybook's Dragging a door", async () => {
@@ -421,30 +428,43 @@ test("A door being dragged is held on the pressed wash with the accent bar where
   assert.equal(all(after, (el) => calls(el, "bg").some((call) => call[1] === b.c.accent)).length, 0, "and no bar is left");
 });
 
-test("Tab walks every target of the tab bar in order, each with its focus ring, and Enter and Space each press it", async () => {
-  const b = await bar({ tree: withPanel(null) });
-  const keys = keyboard(b.view.render(b.cx));
-  const doors = ["Files", "Spend", "PR", "Shipped", "Worktrees", "Ports", "Containers", "Memory", "Images"];
-  const panels = ["files", "insights", "pr", "shipped", "worktrees", "ports", "containers", "memory", "look"];
-  const effects = [
-    ["checkout", () => []], ["Close checkout", () => [["tab.close", { id: "t1" }]]],
-    ["cart-ui", () => [["tab.select", { id: "t2" }]]], ["tests", () => [["tab.select", { id: "t3" }]]],
-    ["New tab", () => [["kanso-spaces.start", null]]], ["Arrange", () => ({ opened: "kanso-arrange" })],
-    ...doors.map((label, i) => [label, () => ({ want: panels[i] })]),
-    ["kansō help", () => [["mod.open", { name: "kanso-help" }]]],
-  ];
-  assert.equal(keys.stops.length, effects.length, "nothing else takes the keyboard");
-  for (const [label, effect] of effects) {
+const DOORS = [["Files", "files"], ["Spend", "insights"], ["PR", "pr"], ["Shipped", "shipped"], ["Worktrees", "worktrees"], ["Ports", "ports"], ["Containers", "containers"], ["Memory", "memory"], ["Images", "look"]]
+  .map(([label, want]) => [label, { want }]);
+const TOOLS = [["New tab", [["kanso-spaces.start", null]]], ["Arrange", { opened: "kanso-arrange" }]];
+const CHOSEN = [["checkout", []], ["Close checkout", [["tab.close", { id: "t1" }]]]];
+const HELP = ["kansō help", [["mod.open", { name: "kanso-help" }]]];
+const walk = (b, root, effects) => {
+  const keys = keyboard(root);
+  assert.deepEqual(keys.stops.map((stop) => arg(stop, "accessibility_label") ?? texts(stop)[0]), effects.map(([label]) => label), "Tab reaches these, in this order, and nothing else");
+  for (const [label, want] of effects) {
     const stop = keys.tab();
-    assert.equal(arg(stop, "accessibility_label"), label);
     assert.ok(calls(stop, "focus").length > 0, `${label}: its ring`);
     for (const key of ["enter", "space"]) {
-      b.ran.length = 0; b.opened.length = 0; b.view.want = undefined;
+      b.ran.length = 0; b.opened.length = 0; b.view.want = undefined; b.view.moreOpen = false;
       keys.key(key, b.cx);
-      const want = effect();
       if (Array.isArray(want)) assert.deepEqual(clone(b.ran), want, `${label}, ${key}`);
       else if (want.opened) assert.equal(b.opened.at(-1)?.mod, want.opened, `${label}, ${key}`);
+      else if (want.more) assert.equal(b.view.moreOpen, true, `${label}, ${key}`);
       else assert.equal(b.view.want, want.want, `${label}, ${key}`);
     }
   }
+};
+
+test("Tab walks every target of the tab bar in order, each with its focus ring, and Enter and Space each press it", async () => {
+  const b = await bar({ tree: withPanel(null) });
+  walk(b, b.view.render(b.cx), [...CHOSEN, ["cart-ui", [["tab.select", { id: "t2" }]]], ["tests", [["tab.select", { id: "t3" }]]], ...TOOLS, ...DOORS, HELP]);
+});
+
+test("Where the window has its own buttons, Tab reaches Minimize, Maximize and Close after the doors, and Enter and Space press them", async () => {
+  const b = await bar({ tree: withPanel(null), buttons: true });
+  walk(b, b.view.render(b.cx), [...CHOSEN, ["cart-ui", [["tab.select", { id: "t2" }]]], ["tests", [["tab.select", { id: "t3" }]]], ...TOOLS, ...DOORS, HELP,
+    ["Minimize", [["window.minimize", null]]], ["Maximize", [["window.maximize", null]]], ["Close", [["window.close", null]]]]);
+});
+
+test("With tabs folded, Tab reaches +N, which Enter and Space open, then the folded tabs' rows, which Enter and Space choose", async () => {
+  const b = await twoFolded({ tree: withPanel(null) });
+  walk(b, b.view.render(b.cx), [...CHOSEN, ["+2", { more: true }], ...TOOLS, ...DOORS, HELP]);
+  b.view.moreOpen = true;
+  const open = b.view.render(b.cx);
+  walk(b, open, [...CHOSEN, ["+2", []], ["cart-ui", [["tab.select", { id: "t2" }]]], ["tests", [["tab.select", { id: "t3" }]]], ...TOOLS, ...DOORS, HELP]);
 });

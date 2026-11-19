@@ -92,9 +92,10 @@ function panelList() {
 }
 
 function movePanel(from, to) {
-  const ids = roster().map((p) => p.id), i = ids.indexOf(from), j = ids.indexOf(to);
+  const seen = panelList().map((p) => p.id), i = seen.indexOf(from), j = seen.indexOf(to);
   if (i < 0 || j < 0 || i === j) return;
-  setShared(ORDER, ids.toSpliced(i, 1).toSpliced(j, 0, from));
+  const moved = seen.toSpliced(i, 1).toSpliced(j, 0, from);
+  setShared(ORDER, roster().map((p) => (seen.includes(p.id) ? moved[seen.indexOf(p.id)] : p.id)));
 }
 
 function setPanelOn(id, on) {
