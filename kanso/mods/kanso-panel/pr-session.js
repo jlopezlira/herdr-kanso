@@ -452,9 +452,11 @@ export class FolderSession {
 
   shows(target) { return this.live() && this.pr?.url === target.pr?.url; }
 
-  tell(message, target) {
-    if (this.shows(target)) { notify(message); return; }
-    notify({ ...message, body: [target.place, message.body].filter(Boolean).join(". ") });
+  outcome(target, message, local = {}) {
+    if (!this.shows(target)) { notify({ ...message, body: [target.place, message.body].filter(Boolean).join(". ") }); return; }
+    if (local.note) { this.note = local.note; return; }
+    const patched = local.patch ? tryOr(() => { local.patch(); return true; }, false) : false;
+    if (!patched || !local.quiet) notify(message);
   }
 
   reread(cx) {
@@ -468,13 +470,11 @@ export class FolderSession {
     const target = this.target();
     this.busy = label; this.note = null;
     this.start(cx, async (cx) => {
-      try {
-        await work(cx);
-        if (words.loud || !this.shows(target)) this.tell({ title: words.done, body: words.body, level: "success" }, target);
-      } catch (e) {
-        this.note = said(words.failure, e?.message ?? e);
-        if (!this.shows(target)) this.tell({ title: words.failure, body: String(e?.message ?? e), level: "error" }, target);
-      } finally { this.busy = null; after(cx); }
+      const failed = await work(cx).then(() => null, (e) => String(e?.message ?? e));
+      this.busy = null;
+      if (failed === null) this.outcome(target, { title: words.done, body: words.body, level: "success" });
+      else this.outcome(target, { title: words.failure, body: failed, level: "error" }, { note: said(words.failure, failed) });
+      after(cx);
     });
     return true;
   }
@@ -487,7 +487,7 @@ export class FolderSession {
   mergeNow(cx) {
     const pr = this.pr;
     if (!pr) return;
-    this.perform("Merge", cx, { failure: "Merge failed", done: `Merged #${pr.number}`, body: pr.title, loud: true }, async (task) => {
+    this.perform("Merge", cx, { failure: "Merge failed", done: `Merged #${pr.number}`, body: pr.title }, async (task) => {
       const { o, r: name } = repoOf(pr.url);
       const repo = await this.gh(task, ["repo", "view", `${o}/${name}`, "--json", "squashMergeAllowed,mergeCommitAllowed,rebaseMergeAllowed"]);
       const allowed = repo.code === 0 ? JSON.parse(repo.stdout) : {};
@@ -526,12 +526,11 @@ export class FolderSession {
     const why = { labels: "Changing labels needs triage access on this repository.", assignees: "Assigning needs triage access on this repository.", reviewers: "Asking for a review needs write access on this repository." }[kind];
     this.pending = name;
     this.start(cx, async (cx) => {
-      try {
-        commandOk(await this.gh(cx, ["api", ...call, "--silent"]));
-        if (kind !== "labels" || !this.shows(target)) this.tell({ title: done, level: "success" }, target);
-        if (this.pr?.url === target.pr.url) this.pr = changed(this.pr, kind, name, on, this.candidates);
-      } catch (e) { this.tell({ title: failed, body: `${String(e?.message ?? e)} ${why}`, level: "error" }, target); }
-      finally { this.pending = null; this.reread(cx); }
+      const refused = await this.gh(cx, ["api", ...call, "--silent"]).then(commandOk).then(() => null, (e) => String(e?.message ?? e));
+      this.pending = null;
+      if (refused === null) this.outcome(target, { title: done, level: "success" }, { patch: () => { this.pr = changed(this.pr, kind, name, on, this.candidates); }, quiet: kind === "labels" });
+      else this.outcome(target, { title: failed, body: `${refused} ${why}`, level: "error" });
+      this.reread(cx);
     });
   }
 }

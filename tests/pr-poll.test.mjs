@@ -535,8 +535,7 @@ const twoFolders = async (hold, host = {}, own = () => undefined) => {
   const toasts = [];
   const exec = eachFolder((command, args, options) => {
     calls.push({ command, line: [command, ...args].join(" "), cwd: options?.cwd });
-    if (own(command, args)) return own(command, args);
-    if (!arm || !hold(command, args)) return undefined;
+    if (!arm || !hold(command, args)) return own(command, args);
     const pending = { ...gate(), cwd: options?.cwd, tasks: [] };
     held.push(pending);
     return pending.promise;
@@ -758,7 +757,7 @@ test("two overlapping tasks in one folder each keep their own deadline: Create o
   await owned.tasks.get(1);
   assert.deepEqual(calls.filter((call) => call.line.startsWith("gh pr create")).map((call) => call.cwd), ["/repo"]);
   assert.equal(panel.session.note, null, String(panel.session.note?.detail ?? panel.session.note));
-  assert.deepEqual(toasts, []);
+  assert.deepEqual(toasts.map((toast) => [toast.title, toast.level]), [["Opened GitHub to create the pull request", "success"]]);
 });
 
 test("a label sent for one pull request reports once, naming that pull request and folder, after another is chosen and the folder changes", async () => {
@@ -771,6 +770,70 @@ test("a label sent for one pull request reports once, naming that pull request a
   await run.move("/B");
   await run.release(0, success(""));
   assert.deepEqual(run.toasts.map((toast) => [toast.title, toast.level, toast.body]), [["Put bug on", "success", "#7 in repo"]]);
+});
+
+const EIGHT = "https://github.com/o/here/pull/8";
+const writes = (command, args) => command === "hc" || command === "git" ? ["send", "push", "pull"].includes(args[0]) : ["merge", "create", "ready", "close", "reopen"].includes(args[1]) || args.includes("-X");
+const sentCases = {
+  merge: { begin: heldCases.merge.begin, hold: heldCases.merge.hold, proceed: success("{}") },
+  create: { begin: heldCases.create.begin, hold: heldCases.create.hold, proceed: success("refs/remotes/origin/feat\n") },
+  ...Object.fromEntries(["push", "pull", "update", "ready", "draft", "close", "reopen"].map((name) => [name, heldCases[name]])),
+  send: heldCases.send,
+  ...Object.fromEntries(["labels", "assignees", "reviewers"].map((kind) => [kind, { kind, hold: heldCases.labels.hold, begin: (panel, cx) => panel.toggle(kind, "bea", false, cx) }])),
+};
+const holds = (pr, kind) => Boolean(kind && [...(pr?.labels ?? []).map((l) => l.name), ...(pr?.assignees ?? []).map((a) => a.login), ...(pr?.reviewRequests ?? []).map((r) => r.login)].includes("bea"));
+
+const sentOutcome = async (name, spec, place, ok) => {
+  const answer = ok ? success("") : failure("rejected");
+  const shownPr = (over) => success(JSON.stringify(pull({ labels: [], assignees: [], reviewRequests: [], ...over })));
+  const own = (command, args) => {
+    if (args[1] === "view" && args.includes(EIGHT)) return shownPr({ number: 8, url: EIGHT, title: "next" });
+    if (args[1] === "view" && !args.includes("--jq") && command === "gh" && args[0] === "pr") return shownPr();
+    if (args.includes("--left-right")) return success("0\t0\n");
+    return writes(command, args) ? answer : undefined;
+  };
+  const run = await twoFolders(spec.hold, spec.host, own);
+  run.begin(spec.begin);
+  const a = run.panel.session;
+  const label = `${name} ${place} ${ok ? "success" : "failure"}`;
+  assert.equal(run.held.length, 1, label);
+  if (place === "other pull request") {
+    run.panel.choose({ url: EIGHT, number: 8 }, run.cx);
+    await run.move("/repo");
+    assert.equal(a.pr?.number, 8, label);
+  }
+  if (place === "other folder") await run.move("/B");
+  const seen = [];
+  const notify = run.cx.notify.bind(run.cx);
+  run.cx.notify = () => { seen.push([a.pr, run.panel.session.pr]); notify(); };
+  const from = run.toasts.length;
+  await run.release(0, spec.proceed ?? answer);
+  const told = run.toasts.slice(from);
+  const shown = place === "shown";
+  const patched = seen.some(([target]) => holds(target, spec.kind));
+  if (!shown) {
+    assert.deepEqual(told.map((toast) => [toast.level, toast.body.startsWith("#7 in repo")]), [[ok ? "success" : "error", true]], label);
+    assert.equal(a.note, null, label);
+    assert.equal(run.panel.session.note, null, label);
+    assert.equal(seen.some((pair) => pair.some((pr) => holds(pr, spec.kind))), false, `${label}: no patch`);
+    return;
+  }
+  const inline = !ok && !spec.kind;
+  assert.equal(told.length + (a.note ? 1 : 0) + (patched && told.length === 0 ? 1 : 0), 1, label);
+  assert.equal(Boolean(a.note), inline, label);
+  if (inline) assert.equal(a.note.source, "rejected", label);
+  if (told.length) assert.equal(told[0].level, ok ? "success" : "error", label);
+  if (told.length) assert.equal(String(told[0].body ?? "").includes("#7 in repo"), false, label);
+  assert.equal(patched, ok && Boolean(spec.kind), `${label}: patch`);
+};
+
+test("every sent action's outcome goes by its captured target: one attributed outcome, and no note or patch on a pull request that is not its target", async () => {
+  for (const [name, spec] of Object.entries(sentCases)) {
+    for (const place of ["shown", "other pull request", "other folder"]) {
+      await sentOutcome(name, spec, place, true);
+      await sentOutcome(name, spec, place, false);
+    }
+  }
 });
 
 test("Details shows its rows loading while the open list is out, and says nothing else is open only once it answers", async () => {
