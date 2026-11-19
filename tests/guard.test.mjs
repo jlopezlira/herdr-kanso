@@ -1,7 +1,7 @@
-import { loadMemory, loadStaleAgents, loadPorts } from "./mod-fixtures.mjs";
+import { loadMemory, loadStaleAgents, loadPorts, memoryPage, byTag } from "./mod-fixtures.mjs";
 import assert from "node:assert/strict";
 import test from "node:test";
-import { clone, load, success, timedContext, keeping } from "./helpers.mjs";
+import { arg, clone, find, load, press, success, texts, timedContext, keeping } from "./helpers.mjs";
 
 const model = () => load("kanso-guard/model.js", ["STALE_MS", "size", "span", "clock", "parseNow", "agentsMB", "agentMeta", "limitsNote", "freeSeries", "agentSparks", "sparkFor", "digestHistory"]);
 
@@ -499,4 +499,21 @@ test("Windows server rows retain the reason their working directory is unavailab
   assert.equal(rows.length, 1);
   assert.equal(rows[0].cwd, null);
   assert.match(rows[0].cwdReason, /Herdr API on Windows/);
+});
+
+test("Memory reads again with Refresh: its tool says when the guard last checked and is off while it checks, an unreadable file offers Refresh, and a failed action is the failure block", async () => {
+  const { parseNow, clock } = await model();
+  const now = parseNow(JSON.stringify(sample(Date.now() - 30_000)));
+  const pages = [await memoryPage({ now }), await memoryPage({ now, busy: { check: { at: Date.now() } } })];
+  const tools = pages.map((page) => byTag(page.render({}), "guard-refresh"));
+  assert.deepEqual(tools.map((el) => [arg(el, "tooltip"), arg(el, "disabled")]), [[`Refresh · checked ${clock(now.data.at)}`, false], ["Checking…", true]]);
+
+  const reads = [];
+  const unreadable = (await memoryPage({ now: { state: "bad", data: null }, read: () => reads.push("read") })).render({});
+  assert.deepEqual(texts(byTag(unreadable, "guard-reread")), ["Refresh"]);
+  press(unreadable, "guard-reread");
+  assert.deepEqual(reads, ["read"]);
+
+  const refused = (await memoryPage({ now, actionError: "Access is denied" })).render({});
+  assert.deepEqual(texts(find(refused, (el) => arg(el, "id") === "guard-failed")).filter((words) => words !== "!"), ["Access is denied"]);
 });

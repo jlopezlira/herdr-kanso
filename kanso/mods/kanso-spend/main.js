@@ -1,11 +1,11 @@
-import { detailColumn, pageBody, pageSize, heroStack, heroHeading } from "./ui-page.js";
+import { detailColumn, detailRow, scrollPage, pageHeader, pageSections, refreshTool, failedRead, moreLink, barChart, chartColumn, chartRoom, heroStack, heroHeading } from "./ui-page.js";
 import { localService, serviceOn } from "./platform-host.js";
 import { paths } from "./platform-paths.js";
 import { fileApi } from "./platform-files.js";
 // Spend, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
 // QuickJS runs every step under a time limit, so nothing heavy happens here.
 import { View, div } from "gpui-kit";
-import { v_flex, h_flex, Popover } from "gpui-base";
+import { v_flex, h_flex, Popover, ScrollHandle } from "gpui-base";
 import { exec, appHome, home, theme, nextCommand, readTextFile, writeTextFile, layout, machines, shared, setShared } from "herdr";
 import { T, G, H, OPACITY, breathe, tokens } from "./ui.js";
 import { mark } from "./ui-mark.js";
@@ -13,13 +13,14 @@ import { quietLink, iconButton } from "./ui-button.js";
 import { field, TextField } from "./ui-field.js";
 import { menu } from "./ui-menu.js";
 import { section } from "./ui-section.js";
-import { button as kitButton, metric, row, skeletonOf, tooltip } from "./kit.js";
+import { button as kitButton, failureBlock, metric, row, skeletonOf, tooltip } from "./kit.js";
 import { factList } from "./ui-facts.js";
 import { segmented } from "./ui-tab.js";
 import { toggleSwitch } from "./ui-toggle.js";
 import { PERIOD_KEY, SPEND_PERIODS, spendPeriod } from "./period.js";
 import { Share, shareRows } from "./share.js";
 import { spendSpec, spendText } from "./spend-card.js";
+import { readFailure, allChoice, chooserOptions, chooserKey } from "./spend-model.js";
 import { clock, tryOr, tryOrAsync, afterMount } from "./pure.js";
 import { powerOf } from "./sync-power.js";
 import { Kdb } from "./kdb.js";
@@ -89,8 +90,7 @@ function formatTime(iso) {
 }
 
 function metricLine(c, name, tokensText, value, { color = c.text, tip = "", medium = false } = {}) {
-  return h_flex().w_full().items_end().gap(G.md)
-    .child(div().flex_1().min_w(0).truncate().text_size(T.card).text_color(color).when(medium, (el) => el.font_medium()).when(Boolean(tip), (el) => el.tooltip(tooltip({ label: tip }))).child(name))
+  return detailRow(div().flex_1().min_w(0).truncate().text_size(T.card).text_color(color).when(medium, (el) => el.font_medium()).when(Boolean(tip), (el) => el.tooltip(tooltip({ label: tip }))).child(name))
     .child(div().text_size(T.micro).text_color(c.dim).child(tokensText))
     .child(div().min_w(64).text_right().text_size(T.title).font_light().text_color(c.text).child(value));
 }
@@ -122,6 +122,10 @@ export default class TokenSpend extends View {
     this.settingsNote = null;
     this.openMenu = null;
     this.menuOptions = null;
+    this.menuAt = -1;
+    this.menuG = 0;
+    this.chooserFocus = { project: cx.focus_handle(), model: cx.focus_handle() };
+    this.chooserScroll = ScrollHandle.new();
     this.syncHolds = [];
     this.syncStored = [];
     this.db = new Kdb(cx.timer);
@@ -206,6 +210,7 @@ export default class TokenSpend extends View {
   close() {
     this.closed = true;
     this.generation += 1;
+    tryOr(() => this.chooserScroll?.release());
     for (const handle of [this.task, this.watchdog, this.continueTimer, this.ticker, this.commandTask, this.runtimeTask]) {
       try { handle?.cancel(); } catch { /* already gone */ }
     }
@@ -460,14 +465,16 @@ export default class TokenSpend extends View {
     const top = this.stack[this.stack.length - 1];
     const body = this.page === "settings" ? this.settingsView(c)
       : top?.kind === "task" ? this.taskView(c, top.task, narrow)
-      : this.costs?.hero ? this.costsView(c, narrow, top) : this.waitingView(c, narrow);
-    return v_flex().id("spend-root").size_full().min_h(0).bg(c.canvas).text_color(c.text)
-      .overflow_y_scrollbar()
-      .on_size_change(pageSize.call(this, { always: true }))
-      .child(pageBody(narrow, (column) => column
-          .child(this.header(c, narrow))
-          .children(shareRows(this, c, "Only the totals and the days: no project, task or session names. The post opens with the image in it."))
-          .child(body)));
+      : this.costs?.hero ? this.costsView(c, narrow, top) : this.waitingView(c);
+    return scrollPage.call(this, "spend-root", c, narrow, (column) => column
+      .child(this.header(c, narrow))
+      .children(shareRows(this, c, "Only the totals and the days: no project, task or session names. The post opens with the image in it."))
+      .child(body), { always: true });
+  }
+
+  failure(c, id, loaded) {
+    const failed = readFailure(this, loaded);
+    return failed ? failureBlock(failedRead(failed))(id, c, { onClick: (cx) => this.run("snapshot", cx) }) : null;
   }
 
   // Only the unfiltered totals are shared, so a filter or a detail view hides it.
@@ -485,36 +492,25 @@ export default class TokenSpend extends View {
     const updated = this.scan?.lastScanAt ? `Updated ${formatTime(this.scan.lastScanAt)}` : "";
     const reading = this.running !== "prepare" && busy && this.scan?.partial
       ? `Reading sessions, ${this.scan.processed} of ${this.scan.total}` : "";
-    const tip = busy ? "Updating…" : updated ? `Refresh · ${updated}` : "Refresh";
     const top = this.stack[this.stack.length - 1];
     const inner = this.page === "settings" || Boolean(top);
     const title = this.page === "settings" ? "Settings" : top ? top.label : "Spend";
     const crumb = this.page === "settings" ? "" : top ? ({ project: "Project", model: "Model", task: "Task" })[top.kind] : "";
-    return h_flex().w_full().items_center().justify_between().gap(G.md)
-      .child(h_flex().flex_1().min_w(0).items_center().gap(G.sm)
-        .when(inner, (el) => el.child(iconButton("spend-back", "chevron-left", "Back", (cx) => this.back(cx), c)))
-        .child(v_flex().flex_1().min_w(0).gap(1)
-          .when(Boolean(crumb), (el) => el.child(div().text_size(T.micro).text_color(c.dim).child(crumb)))
-          .child(div().truncate().text_size(inner ? (narrow ? 15 : 17) : (narrow ? 17 : 20)).text_color(c.text).tooltip(tooltip({ label: title })).child(title))))
-      .child(h_flex().gap(G.xs).items_center().flex_none()
-        .when(Boolean(reading), (el) => el.child(div().pr(G.xs).text_size(T.micro).text_color(c.dim).child(reading)))
-        .when(this.canShare(), (el) => el.child(iconButton("spend-share", "share", "Share", (cx) => this.share.toggle(cx), c, { active: this.share.open })))
-        .child(iconButton("spend-refresh", "refresh-cw", tip, (cx) => this.run("snapshot", cx), c, { spin: busy, disabled: busy }))
-        .when(this.page !== "settings", (el) => el.child(iconButton("spend-settings", "settings", "Settings", (cx) => this.openSettings(cx), c))));
+    const heading = h_flex().flex_1().min_w(0).items_center().gap(G.sm)
+      .when(inner, (el) => el.child(iconButton("spend-back", "chevron-left", "Back", (cx) => this.back(cx), c)))
+      .child(v_flex().flex_1().min_w(0).gap(1)
+        .when(Boolean(crumb), (el) => el.child(div().text_size(T.micro).text_color(c.dim).child(crumb)))
+        .child(div().truncate().text_size(inner ? (narrow ? 15 : 17) : (narrow ? 17 : 20)).text_color(c.text).tooltip(tooltip({ label: title })).child(title)));
+    return pageHeader(heading, [
+      reading ? div().pr(G.xs).text_size(T.micro).text_color(c.dim).child(reading) : null,
+      this.canShare() ? iconButton("spend-share", "share", "Share", (cx) => this.share.toggle(cx), c, { active: this.share.open }) : null,
+      refreshTool("spend-refresh", c, { busy, working: "Updating…", stamp: updated }, (cx) => this.run("snapshot", cx)),
+      this.page === "settings" ? null : iconButton("spend-settings", "settings", "Settings", (cx) => this.openSettings(cx), c),
+    ]);
   }
 
-  waitingView(c, narrow) {
-    const failed = this.runtimeError || (this.error && !this.running);
-    if (!failed) return skeletonOf({ shape: "two lines", count: 3 })("kanso-skeleton", c);
-    const scan = this.scan;
-    const title = failed ? "Spend could not read your sessions." : "Adding up your sessions";
-    const detail = failed ? (this.runtimeError || this.error)
-      : scan?.partial ? `First read: ${scan.processed} of ${scan.total} files. This happens once.` : "This takes a second.";
-    return v_flex().w_full().gap(G.sm)
-      .child(div().text_size(T.title).text_color(failed ? c.red : c.muted).child(title))
-      .child(div().text_size(T.body).text_color(c.dim).child(detail))
-      .when(Boolean(failed) && !this.runtimeError, (el) => el.child(h_flex().pt(G.xs)
-        .child(quietLink("spend-retry", "Try again", (cx) => this.run("snapshot", cx), c))));
+  waitingView(c) {
+    return this.failure(c, "spend-failed", false) ?? skeletonOf({ shape: "two lines", count: 3 })("kanso-skeleton", c);
   }
 
   costsView(c, narrow, top = null) {
@@ -524,12 +520,10 @@ export default class TokenSpend extends View {
       top?.kind === "model" ? null : this.list(c, "Models", `${data.modelCount} models`, data.models, "model"),
     ].filter(Boolean);
     const wide = (this.width || 960) >= 860;
-    return v_flex().w_full().gap(narrow ? 36 : 48)
+    const failed = this.failure(c, "spend-stale", true);
+    return pageSections(narrow)
       .opacity(this.running === "prepare" ? OPACITY.away : 1)
-      .when(Boolean(this.error) && !this.running, (el) => el.child(h_flex().w_full().gap(G.md).items_center()
-        .child(div().flex_1().min_w(0).text_size(T.value).text_color(c.red).truncate().tooltip(tooltip({ label: this.error }))
-          .child(`Last update failed: ${this.error}`))
-        .child(quietLink("spend-retry-inline", "Try again", (cx) => this.run("snapshot", cx), c))))
+      .when(Boolean(failed), (el) => el.child(failed))
       .child(this.controls(c, Boolean(top)))
       .child(this.hero(c, data.hero, narrow))
       .when(!top && (data.machines?.length ?? 0) > 1, (el) => el.child(this.machineSplit(c, data.machines)))
@@ -542,7 +536,7 @@ export default class TokenSpend extends View {
         .when(!top && Array.isArray(data.live) && data.live.length > 0, (live) => live.child(this.live(c, data.live)))
         .child(wide
           ? h_flex().w_full().gap(56).items_start().children(lists.map((list) => div().flex_1().min_w(0).max_w(lists.length === 1 ? 560 : 10_000).child(list)))
-          : v_flex().w_full().gap(narrow ? 36 : 48).children(lists))
+          : pageSections(narrow).children(lists))
         .child(this.tasks(c, data)))
       .child(v_flex().w_full().gap(G.hair).children(data.footnote.map((line) => div().text_size(T.micro).text_color(c.dim).child(line))));
   }
@@ -567,34 +561,41 @@ export default class TokenSpend extends View {
   menu(field, c) {
     const value = this.cost[field];
     const facet = this.costs.facets?.[field] ?? [];
-    const allLabel = field === "project" ? "All projects" : "All models";
-    const shown = value === "all" ? allLabel : (facet.find((entry) => entry.value === value)?.label ?? projectName(value));
+    const shown = value === "all" ? allChoice(field) : (facet.find((entry) => entry.value === value)?.label ?? projectName(value));
     const id = `ins-menu-${field}`;
     // The kit's quiet button with the menu's caret: Tab reaches it, Enter and Space open the menu.
     const trigger = kitButton({ label: shown, kind: "quiet", small: true, icon: "lu-chevron-down", truncate: true, spoken: `${field === "project" ? "Project" : "Model"}: ${shown}`, color: value === "all" ? c.muted : c.text })(`${id}-trigger`, c);
-    const popover = Popover.new(id).trigger(trigger)
+    const focus = this.chooserFocus[field];
+    const popover = Popover.new(id).trigger(trigger).track_focus(focus)
       .open(this.openMenu === id)
       .on_open_change((open, cx) => {
         this.openMenu = open ? id : null;
         // Options are built in this event, never in the render pass.
-        this.menuOptions = open ? [
-          { value: "all", label: allLabel, detail: "", meta: "" },
-          ...facet.map((entry) => ({
-            value: entry.value,
-            label: entry.label,
-            detail: entry.detail ?? (field === "project" ? entry.value : ""),
-            meta: entry.meta,
-          })),
-        ] : null;
+        this.menuOptions = open ? chooserOptions(field, facet) : null;
+        this.menuAt = open ? this.menuOptions.findIndex((option) => option.value === value) : -1;
+        this.menuG = 0;
+        if (open) focus.focus();
         cx.notify();
       });
     if (this.openMenu === id && this.menuOptions) {
       const choose = (option) => (cx) => { this.openMenu = null; this.menuOptions = null; this.setCost({ [field]: option.value }, cx); };
-      popover.content(menu(`${id}-options`, { items: [{ scroll: this.menuOptions.map((option) => ({
-        label: option.label, second: option.detail || null, hint: option.meta || null, selected: option.value === value, onClick: choose(option),
-      })), rows: CHOOSER_ROWS }] }, c));
+      popover.content(menu(`${id}-options`, { items: [{ scroll: this.menuOptions.map((option, at) => ({
+        label: option.label, second: option.detail || null, hint: option.meta || null, selected: at === this.menuAt, onClick: choose(option),
+      })), rows: CHOOSER_ROWS, handle: this.chooserScroll }] }, c).track_focus(focus).on_key_down((e, cx) => this.chooserKeyDown(e, cx, choose)));
     }
     return popover;
+  }
+
+  chooserKeyDown(e, cx, choose) {
+    const step = chooserKey(e, { at: this.menuAt, gAt: this.menuG, count: this.menuOptions.length });
+    this.menuG = step.gAt;
+    if (!step.handled) return;
+    cx.stop_propagation();
+    const lit = this.menuOptions[step.at];
+    if (step.does === "choose" && lit) { choose(lit)(cx); return; }
+    if (step.does === "close") { this.openMenu = null; this.menuOptions = null; }
+    if (step.does === "move") { this.menuAt = step.at; this.chooserScroll.scroll_to_item(step.at); }
+    cx.notify();
   }
 
   hero(c, hero, narrow) {
@@ -619,19 +620,14 @@ export default class TokenSpend extends View {
 
   chart(c, chart) {
     const height = 132;
-    return v_flex().w_full().gap(G.sm)
-      .child(h_flex().w_full().items_end()
-        .children(chart.bars.map((bar) => v_flex().flex_1().min_w(0).h(height + 18).items_center().justify_end().gap(G.xs)
-          .tooltip(tooltip({ label: bar.tip }))
-          .when(bar.peak, (el) => el.child(div().text_size(T.micro).text_color(c.text).whitespace_nowrap().child(bar.value)))
-          .child(div().w(bar.peak ? 3 : 2).flex_none().rounded_t(1)
-            .h(bar.ratio > 0 ? Math.max(3, Math.round(bar.ratio * height)) : 1)
-            .bg(bar.peak ? c.accent : bar.ratio > 0 ? c.muted : c.border)
-            .opacity(bar.peak || bar.ratio === 0 ? 1 : OPACITY.quiet)))))
-      .child(h_flex().w_full().justify_between()
-        .child(div().text_size(T.micro).text_color(c.dim).child(chart.first))
-        .child(div().text_size(T.micro).text_color(c.dim).child(chart.title))
-        .child(div().text_size(T.micro).text_color(c.dim).child(chart.last)));
+    return barChart(c, {
+      columns: chart.bars.map((bar) => chartColumn(c, { tip: bar.tip, marked: Boolean(bar.peak), value: bar.value }, chartRoom(height))
+        .child(div().w(bar.peak ? 3 : 2).flex_none().rounded_t(1)
+          .h(bar.ratio > 0 ? Math.max(3, Math.round(bar.ratio * height)) : 1)
+          .bg(bar.peak ? c.accent : bar.ratio > 0 ? c.muted : c.border)
+          .opacity(bar.peak || bar.ratio === 0 ? 1 : OPACITY.quiet))),
+      axis: [chart.first, chart.title, chart.last],
+    });
   }
 
   machineSplit(c, rows) {
@@ -655,11 +651,10 @@ export default class TokenSpend extends View {
         }).accessibility_label(`${item.name}, ${item.usdText}`);
         return item.detail ? line.tooltip(tooltip({ label: item.detail })) : line;
       }))
-      .when(items.length > LIST_ROWS, (el) => el.child(h_flex().pt(G.sm)
-        .child(quietLink(`ins-${field}-more`, open ? "Show fewer" : `Show ${items.length - LIST_ROWS} more`, (cx) => {
-          this.expanded = { ...this.expanded, [field]: !open };
-          cx.notify();
-        }, c))));
+      .when(items.length > LIST_ROWS, (el) => el.child(moreLink(`ins-${field}-more`, c, { open, hidden: items.length - LIST_ROWS }, (cx) => {
+        this.expanded = { ...this.expanded, [field]: !open };
+        cx.notify();
+      })));
   }
 
   taskView(c, d, narrow) {
@@ -751,11 +746,10 @@ export default class TokenSpend extends View {
         .child(div().text_size(T.title).text_color(c.text).child("Tasks"))
         .child(div().text_size(T.body).text_color(c.dim).child(data.tasksNote)))
       .children(shown.map((task, index) => this.taskRow(`ins-task-${index}`, task, c)))
-      .when(data.tasks.length > TASK_ROWS, (el) => el.child(h_flex().pt(G.md).border_t(1).border_color(c.border)
-        .child(quietLink("ins-tasks-more", open ? "Show fewer" : `Show ${data.tasks.length - TASK_ROWS} more`, (cx) => {
-          this.expanded = { ...this.expanded, tasks: !open };
-          cx.notify();
-        }, c))));
+      .when(data.tasks.length > TASK_ROWS, (el) => el.child(moreLink("ins-tasks-more", c, { open, hidden: data.tasks.length - TASK_ROWS, ruled: true }, (cx) => {
+        this.expanded = { ...this.expanded, tasks: !open };
+        cx.notify();
+      })));
   }
 }
 

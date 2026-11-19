@@ -3,7 +3,9 @@ import test from "node:test";
 import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { exec, temporary } from "./helpers.mjs";
+import { arg, calls, exec, find, press, temporary, texts } from "./helpers.mjs";
+import { keyDown, spendPage } from "./mod-fixtures.mjs";
+import { chooserKey, readFailure } from "../kanso/mods/kanso-spend/spend-model.js";
 
 const presenter = fileURLToPath(new URL("../kanso/mods/kanso-spend/presenter.mjs", import.meta.url));
 
@@ -73,4 +75,52 @@ test("Spend moves a store.json from before into SQLite once", async (t) => {
   const db = new DatabaseSync(join(old, "spend.db"), { readOnly: true });
   try { assert.equal(db.prepare("SELECT COUNT(*) n FROM files").get().n, Object.keys(legacy.files).length); }
   finally { db.close(); }
+});
+
+test("A read that failed shows the tool's words with Refresh; without Node there is nothing to refresh, and while it reads nothing is said yet", async () => {
+  const said = "token-spend: store is locked", unread = "Spend could not read your sessions.";
+  const shown = (state, loaded) => { const failed = readFailure(state, loaded); return failed && [failed.text, failed.source, failed.retry]; };
+  assert.deepEqual([{}, { error: said, running: "snapshot" }].flatMap((state) => [shown(state, false), shown(state, true)]), [null, null, null, null]);
+  assert.deepEqual([shown({ error: said }, false), shown({ error: said }, true)], [[unread, said, true], ["Last update failed", said, true]]);
+  assert.deepEqual(shown({ runtimeError: "runtime.json needs a node path." }, false), [unread, "runtime.json needs a node path.", false]);
+
+  const ran = [];
+  const page = await spendPage({ error: said, run: (command) => ran.push(command) });
+  const failed = page.render({});
+  assert.deepEqual(texts(find(failed, (el) => arg(el, "id") === "spend-failed")).filter((words) => words !== "!"), [unread, said, "Refresh"]);
+  press(failed, "spend-failed-fix");
+  assert.deepEqual(ran, ["snapshot"]);
+  const reading = Object.assign(page, { running: "snapshot" }).render({});
+  assert.equal(texts(reading).includes(unread), false);
+  assert.equal(arg(find(reading, (el) => el.tag === "spend-refresh"), "disabled"), true, "Refresh is off while it reads");
+});
+
+test("The project and model chooser walks its options with the list keys: j and k, gg and G, Home and End, Enter and Escape", async () => {
+  const key = (name, modifiers = {}) => ({ key: name, modifiers });
+  const step = (e, at, gAt = 0) => chooserKey(e, { at, gAt, count: 4 }, 1000);
+  assert.deepEqual(["j", "down", "k", "up", "end", "home"].map((name) => step(key(name), 1).at), [2, 2, 0, 0, 3, 0]);
+  assert.equal(step(key("g", { shift: true }), 1).at, 3);
+  const waiting = step(key("g"), 2);
+  assert.deepEqual([waiting.does, waiting.at, step(key("g"), 2, waiting.gAt).at], [null, 2, 0], "one g waits for the second");
+  assert.deepEqual([key("enter"), key("escape")].map((e) => step(e, 2).does), ["choose", "close"]);
+  assert.deepEqual([key("x"), key("j", { platform: true })].map((e) => step(e, 1).handled), [false, false], "another key and a Command chord are left alone");
+
+  const facets = { project: [{ value: "/work/kanso", label: "kanso", meta: "$3.00" }, { value: "/work/site", label: "site", meta: "$1.00" }] };
+  const page = await spendPage({ costs: { facets }, setCost(patch) { this.cost = { ...this.cost, ...patch }; } });
+  const cx = { notify() {}, stop_propagation() {} };
+  const chooser = () => page.menu("project", {});
+  arg(chooser(), "on_open_change")(true, cx);
+  const list = () => arg(chooser(), "content");
+  const lit = () => texts(find(list(), (el) => arg(el, "selected") === true))[0];
+  assert.equal(lit(), "All projects", "it opens on the current choice");
+  keyDown(list(), key("j"), cx);
+  assert.equal(lit(), "kanso");
+  keyDown(list(), key("g", { shift: true }), cx);
+  assert.equal(lit(), "site");
+  keyDown(list(), key("k"), cx);
+  keyDown(list(), key("enter"), cx);
+  assert.deepEqual([page.cost.project, page.openMenu], ["/work/kanso", null], "Enter chooses the lit one and shuts the chooser");
+  arg(chooser(), "on_open_change")(true, cx);
+  keyDown(list(), key("escape"), cx);
+  assert.equal(calls(chooser(), "content").length, 0, "Escape shuts it");
 });
