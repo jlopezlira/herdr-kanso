@@ -1,8 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { load, chain, gpuiHost, svgsOf as svgs } from "./helpers.mjs";
+import { svgsOf as svgs } from "./helpers.mjs";
+import { loadStripWith, STRIP_NIGHT } from "./mod-fixtures.mjs";
 
-const night = { foreground: "#d8d4cb", background: "#1b1b19", hover: "#232321", selected: "#2b2b28", accent: "#da627d", dim: "#6b6862", muted: "#949086", chrome: "#141413" };
+const night = STRIP_NIGHT;
 const program = (name, icon) => ({ agent: true, shell: false, name, icon, tint: true });
 const PANES = [
   { pane: "p1", terminal: "t1", title: "tests", status: "working", program: program("Claude Code", "mods/kanso-chrome/icons/claude.svg") },
@@ -13,13 +14,7 @@ const texts = (el) => all(el).flatMap((kid) => kid.calls.filter((call) => call[0
 const bg = (el) => all(el).flatMap((kid) => kid.calls.filter((call) => call[0] === "bg").map((call) => call[1]));
 
 const strip = async (props, store) => {
-  const { Strip } = await load("kanso-strip/main.js", ["Strip"], {
-    ...gpuiHost(), svg: (path) => { const el = chain("svg"); el.calls.push(["svg", path]); return el; }, image: () => chain("image"),
-    Popover: { new: (id) => chain(id) }, HoverCard: { new: (id) => chain(id) },
-    theme: () => night, props: () => props, panes: () => PANES, agents: () => [], focused: () => null,
-    spaces: () => [], machines: () => [], home: () => "/home/me", terminals: () => [], shared: (key) => store[key] ?? null, setShared: (key, value) => { store[key] = value; },
-    run: () => {}, hc: async () => ({ code: 0 }), openOverlay: () => {},
-  });
+  const { Strip } = await loadStripWith(props, PANES, store);
   const view = new Strip();
   view.init({}, { timer: { after: () => ({ cancel() {} }) } });
   return { root: view.render() };

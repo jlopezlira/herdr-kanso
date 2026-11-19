@@ -320,6 +320,8 @@ test("which agent: only the ones installed, nothing chosen for you, and one pick
   assert.deepEqual(calls, [["space.new", { folder: "/work/api", machine: "" }], ["tab.new", { folder: "/kanso/worktrees/api/feat-x", name: "feat-x", argv: ["pi"] }]]);
 });
 
+const claudeHere = () => ({ "kanso.agents.installed": { "": [{ key: "claude", name: "Claude Code", installed: true, run: ["claude"] }] } });
+const tenAgents = () => Array.from({ length: 10 }, (_, i) => ({ key: `a${i + 1}`, name: `Agent ${i + 1}`, installed: true, run: [`a${i + 1}`] }));
 const devbox = () => ({ space: "sp-api", folder: "/work/api", machine: "devbox", project: null, name: "api" });
 const plusMenu = (Spaces, state) => {
   const scrolled = [];
@@ -357,14 +359,14 @@ test("The + menu is the approved one: where it opens, Terminal with its key, the
 
 test("The + menu keeps every installed agent, numbers the first nine, starts one only on a plain digit, and a failed read offers Refresh and Explain on the keyboard", async () => {
   const calls = [];
-  const store = { "kanso.agents.installed": { "": [{ key: "claude", name: "Claude Code", installed: true, run: ["claude"] }] } };
+  const store = claudeHere();
   const { Spaces } = await agentMenu({
     props: () => ({ overlay: "ov1", newAgent: devbox(), start: true }), run: (cmd, args) => calls.push([cmd, clone(args ?? null)]),
     shared: (key) => store[key] ?? null, keys: () => [],
     spaces: () => [{ id: "sp-api", machine: "devbox", active: true, tabs: [] }, { id: "sp-home", machine: null, active: false, tabs: [] }],
   });
   const menu = (state) => plusMenu(Spaces, state);
-  const ten = Array.from({ length: 10 }, (_, i) => ({ key: `a${i + 1}`, name: `Agent ${i + 1}`, installed: true, run: [`a${i + 1}`] }));
+  const ten = tenAgents();
   const many = menu({ known: ten });
   assert.deepEqual(many.lines.filter(([text]) => text.startsWith("Agent")).map(([text, hint]) => [text, hint]),
     ten.map((a, i) => [a.name, i < 9 ? String(i + 1) : null]), "ten agents, ten rows, the first nine numbered");
@@ -393,7 +395,7 @@ test("The + menu keeps every installed agent, numbers the first nine, starts one
 
 test("Explain is this computer's: with no local space it opens one here, a refusal says nothing, and with no agent installed here it is not offered", async () => {
   const calls = [];
-  const store = { "kanso.agents.installed": { "": [{ key: "claude", name: "Claude Code", installed: true, run: ["claude"] }] } };
+  const store = claudeHere();
   const host = (run) => agentMenu({
     props: () => ({ overlay: "ov1", newAgent: devbox(), start: true }), run, shared: (key) => store[key] ?? null, keys: () => [],
     spaces: () => [{ id: "sp-api", machine: "devbox", active: true, tabs: [] }], home: () => "/Users/me",
@@ -429,7 +431,7 @@ test("A read that fails after an earlier answer keeps that list and says it fail
 
 test("Ten agents fit the + popup: they scroll in the kit's run within its height, and the keyboard's row stays in view", async () => {
   const { menuHeight } = await load("kanso-spaces/ui-menu.js", ["menuHeight"], gpuiHost());
-  const ten = Array.from({ length: 10 }, (_, i) => ({ key: `a${i + 1}`, name: `Agent ${i + 1}`, installed: true, run: [`a${i + 1}`] }));
+  const ten = tenAgents();
   for (const height of [400, 300]) {
     const { Spaces } = await agentMenu({ props: () => ({ overlay: "ov1", newAgent: devbox(), start: true, height }), keys: () => [] });
     const menu = plusMenu(Spaces, { known: ten, repo: true, trees: [devbox()] });

@@ -8,8 +8,10 @@ import { statusItem, needsItem, stepper, failureLine } from "../stories/kit/piec
 import { computerItem, paletteDoor, layoutPaused, statusBar } from "../stories/kit/status-bar.js";
 import { statusItemTree, needsItemTree, stepperTree, failureLineTree, computerItemTree, paletteDoorTree, layoutPausedTree, statusBarTree } from "../stories/kit/status-bar-tree.js";
 import { gpuiHost, load } from "./helpers.mjs";
+import { drawnTabs, tabParts, tabKey, TAB_PARTS as PARTS } from "../kanso/mods/kanso-panel/ui-tab-shapes.js";
 
 const compiled = compile(SHEETS.map(read).join("\n"));
+const drawKit = () => load("kanso-panel/ui-draw.js", ["lookOf"], gpuiHost());
 const rules = indexed(reachable(compiled.rules));
 
 test("The status bar tree is the Storybook's markup", () => {
@@ -107,7 +109,7 @@ test("Specificity as CSS counts it: an attribute as a class, :where() as nothing
 });
 
 test("A look is worked out again when a node's classes change", async () => {
-  const { lookOf } = await load("kanso-panel/ui-draw.js", ["lookOf"], gpuiHost());
+  const { lookOf } = await drawKit();
   const own = indexed(compile(".a { width: 5px; } .b { width: 7px; }").rules);
   const node = { tag: "span", attrs: {}, classes: ["a"], parent: null, children: [] };
   assert.equal(JSON.stringify(lookOf(node, own, null, false).own), JSON.stringify([["w", 5]]));
@@ -118,16 +120,13 @@ test("A look is worked out again when a node's classes change", async () => {
 test("ui-css.js is what the compiler writes, and each tab look it keeps is the one matching the rules gives", async () => {
   const { uiCss, tabLooksTable } = await import("../scripts/css-to-gpui.mjs");
   assert.equal(read("kanso/mods/kanso-panel/ui-css.js"), await uiCss(compile(SHEETS.map(read).join("\n")).rules), "run node scripts/css-to-gpui.mjs");
-  const { stylesFor, hovering, changed, collapse } = await import("../kanso/mods/kanso-panel/ui-match.js");
-  const { drawnTabs, tabParts, tabKey, TAB_PARTS } = await import("../kanso/mods/kanso-panel/ui-tab-shapes.js");
+  const { lookOf } = await drawKit();
   const table = await tabLooksTable(rules);
   for (const [group, states] of drawnTabs()) {
     const parts = tabParts(group, states);
-    TAB_PARTS.forEach((part, i) => {
+    PARTS.forEach((part, i) => {
       const [node, live] = parts[part];
-      const own = collapse(stylesFor(node, rules));
-      const want = { own, extra: live ? changed(own, stylesFor(node, rules, hovering(node))) : [] };
-      assert.deepEqual(table.looks[table.tabs[tabKey(group, states)][i]], want, `${tabKey(group, states)} ${part}`);
+      assert.equal(JSON.stringify(table.looks[table.tabs[tabKey(group, states)][i]]), JSON.stringify(lookOf(node, rules, null, live)), `${tabKey(group, states)} ${part}`);
     });
   }
 });
