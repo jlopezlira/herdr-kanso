@@ -16,6 +16,7 @@ import { avatar, avatarSizes, button, card, chip, code, dawn, dialog, emptyState
 import { barWidths, inBar } from './frames.js';
 import { doorActs, edgeSides, layerDefaults, memoryShown, needsShown, panelContents, panelReads, panelRowLooks, statedPages, stepperShown, tabActs } from './states.js';
 import { appNotices, awayEvents, keyLayer, keyLayerMods, pullRequest, sampleDojo, sampleHeader, sampleNotices, samplePanelHeader, sampleRefusal, sampleSettingsMenu, sampleSidebar, sessionCommandsTip, sessionTools, statusMenus, unreachable } from './samples.js';
+import { panelPlaygrounds } from './panel-states.js';
 
 const icons = ['none', ...[...sprite.matchAll(/id="(lu-[^"]+)"/g)].map(([, id]) => id).sort()];
 const frame = (markup) => `<div class="kanso-story"><div class="kanso-story__theme kanso-story__frame kanso-story--free">${markup}</div></div>`;
@@ -648,6 +649,7 @@ export const playgrounds = {
       share: boolArg('share menu'),
     },
   },
+  ...panelPlaygrounds,
 };
 
 export const playgroundStory = ({ args, argTypes, markup }) => ({

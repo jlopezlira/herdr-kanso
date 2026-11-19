@@ -6,6 +6,8 @@ import { emptyState, phrase, failureBlock, keycap, metric, needsItem, row, skele
 import { atWidth, inBar } from './frames.js';
 import { toolbar } from './toolbar.js';
 import { keyLayer, keyLayerMods, paletteTip, sampleColumns, sampleDojo, samplePanel, samplePanelHeader, sampleAddMenu, sampleSortMenus, statusMenus, statusPanels, unreachable } from './samples.js';
+import { panelPages } from './panel-states.js';
+import { piecePages } from './piece-states.js';
 
 export const layerDefaults = Object.fromEntries(keyboardSystems.map((os) => [`${os}Layer`, keyLayerMods[os][0]]));
 const practiceKey = (key) => key === 'none' ? '' : key;
@@ -287,4 +289,6 @@ export const statedPages = {
       { label: 'sqlite3 missing', args: { feedback: 'Install sqlite3 to keep your rounds.' }, caption: 'The dōjō plays; rounds are not kept.' },
     ],
   },
+  ...piecePages,
+  ...panelPages,
 };

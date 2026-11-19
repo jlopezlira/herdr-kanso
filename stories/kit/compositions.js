@@ -1,5 +1,5 @@
 // The kit's compositions: each one only calls pieces with its own props and draws no markup.
-import { button, chord, diffText, dojoCell, dojoCharacter, dojoFeedback, dojoLevel, dojoProgress, dojoRecord, dojoStatistics, dojoSummary, dojoTitle, facts, headerSegment, input, keyLegend, paneName, setting, sleepLabel, toggle, failureBlock, failureLine, glyph, grow, keycap, keyPicked, list, mark, mascot, menu, phrase, pieceLines, plus, row, stack, tabs, toast } from './kit.js';
+import { button, chord, dialog, diffText, dojoCell, dojoCharacter, dojoFeedback, dojoLevel, dojoProgress, dojoRecord, dojoStatistics, dojoSummary, dojoTitle, facts, headerSegment, input, keyLegend, paneName, setting, sleepLabel, toggle, failureBlock, failureLine, glyph, grow, keycap, keyPicked, list, mark, mascot, menu, phrase, pieceLines, plus, row, sentence, stack, tabs, toast } from './kit.js';
 
 // Sidebar compositions: each one is the Row, Tab, Menu, Avatar, Mark, Chip or Button in its own configuration.
 // The rows the app draws (session, project, computer, section, asleep), the tile, the view switch, the toolbar, the header, the footer and the Activity card live each in its own file, shared with the app.
@@ -32,15 +32,15 @@ export const panel = ({ look = 'panel', stale = false, header = null } = {}, ...
 };
 // Panel header: the Row in its title form, only the title required. A page heads a dashboard; a bar heads a document or a tool, compact over a rule.
 export const panelHeaderForms = ['page', 'bar'];
-export const panelHeader = ({ title, form = 'page', start = [], second = null, tools = [] }) => {
+export const panelHeader = ({ title, form = 'page', start = [], second = null, tools = [], apart = false }) => {
   if (!panelHeaderForms.includes(form)) throw new Error(phrase('panelHeader: unknown form', form));
-  return stack({ variant: 'panel header', bar: form === 'bar' }, row({ start, name: title, title: true, second, tools }));
+  return stack({ variant: 'panel header', bar: form === 'bar' }, row({ start, name: title, title: true, second, tools, apart }));
 };
 // The tools a panel may end with: Refresh, spinning while it reads, and Close where the panel closes.
 export const panelRefresh = ({ reading = false } = {}) => button({ label: 'Refresh', kind: 'icon', icon: 'lu-refresh-cw', spin: reading });
 export const panelClose = () => button({ label: 'Close', kind: 'icon', icon: 'lu-x' });
 // A file opened from a panel goes back to its folder's list.
-export const panelBack = () => button({ label: 'Markdown in this folder', kind: 'icon', icon: 'lu-chevron-left' });
+export const panelBack = (label = 'Markdown in this folder') => button({ label, kind: 'icon', icon: 'lu-chevron-left' });
 
 // Cells
 
@@ -100,18 +100,25 @@ export const pickedKey = ({ os = 'mac', layer, picked }) => keyPicked({ chord: p
 export const keyboardExplorer = ({ os = 'mac', layer, picked, hover = null }) => stack({ variant: 'keyboard layout' }, keyboard({ os, layer, picked, hover }), pickedKey({ os, layer, picked }));
 
 // Shortcut row: what a key does and its chords. A click captures on the row; Reset brings back what kansō ships.
-export const shortcutRowStates = ['rest', 'selected', 'changed', 'unbound', 'capture', 'taken', 'failed'];
+export const shortcutRowStates = ['rest', 'selected', 'changed', 'unbound', 'capture', 'no digit', 'taken', 'failed'];
 // Each state's keys, built only for that state: a row at rest needs no taken chord.
+const recordingKeys = (chords) => (chords.length ? chords.map((text) => ({ text, recording: true })) : [{ text: 'New key', recording: true }]);
 const shortcutKeys = ({ chords, state, taken }) => ({
   unbound: () => [{ text: 'No key', faint: true }],
-  capture: () => chords.length ? chords.map((text) => ({ text, recording: true })) : [{ text: 'New key', recording: true }],
+  capture: () => recordingKeys(chords),
+  'no digit': () => recordingKeys(chords),
   taken: () => [{ text: taken.chord, recording: true }],
 }[state] ?? (() => chords.map((text) => ({ text }))))();
+const shortcutNotes = {
+  taken: (taken) => phrase(taken.chord, 'already does', taken.name, '· Esc keeps yours'),
+  'no digit': () => 'Press a key with a digit from 1 to 9: N takes its place.',
+};
+const resetKey = { label: 'Reset', kind: 'quiet' };
 export const shortcutRow = ({ name, chords = [], state = 'rest', taken = null, hover = false, source = null, agent = null }) => list(
-  row({ name, hover, current: ['selected', 'capture', 'taken'].includes(state), keys: shortcutKeys({ chords, state, taken }),
-    meta: state === 'capture' ? 'Esc keeps · ⌫ removes' : null,
-    second: state === 'taken' ? phrase(taken.chord, 'already does', taken.name, '· Esc keeps yours') : null,
-    action: { changed: { label: 'Reset', kind: 'quiet' }, taken: { label: 'Take it', kind: 'quiet', armed: true, verb: 'take it' } }[state] ?? null }),
+  row({ name, hover, current: ['selected', 'capture', 'no digit', 'taken'].includes(state), keys: shortcutKeys({ chords, state, taken }),
+    meta: ['capture', 'no digit'].includes(state) ? 'Esc keeps · ⌫ removes' : null,
+    second: shortcutNotes[state]?.(taken) ?? null,
+    action: { changed: resetKey, unbound: resetKey, taken: { label: 'Take it', kind: 'quiet', armed: true, verb: 'take it' } }[state] ?? null }),
   state === 'failed' ? failureBlock({ text: phrase('Couldn\'t save', chords[0], 'for', name), source, fix: 'Change', agent }) : null);
 
 export const panelDoors = [
@@ -198,3 +205,12 @@ export const dojo = ({ header, path, play, result, pixels, sleep, feedback, mark
     stack({ variant: 'dojo conversation' }, mascot({ pixels }), sleep ? sleepLabel({ text: sleep }) : null, dojoFeedback(feedback)),
     keyboard({ marks, inert: true }))),
   share ? stack({ variant: 'dojo menu' }, menu(share)) : null);
+
+const labelled = (label, field) => [row({ name: label, heading: true }), input({ multiline: false, ...field })];
+const underBranch = ({ place, refused }) => (refused ? sentence({ text: refused, tone: 'blocked' }) : place ? sentence({ text: place }) : null);
+const launchChoice = ({ opens, ...under }) => [underBranch(under), opens ? tabs({ ...opens, size: 'md', icon: true, label: true }) : null];
+export const newWorktree = ({ project, branch, place = null, opens = null, making = false, failure = null, refused = null, agent }) => dialog({
+  title: phrase('New worktree in', project),
+  body: list(labelled('Branch', { text: branch, label: 'Branch name', focus: !failure, error: Boolean(failure || refused) }), failure ? failureBlock({ ...failure, agent }) : launchChoice({ place, opens, refused })),
+  secondary: 'Cancel', primary: failure ? null : 'Create', state: making ? 'loading' : branch ? 'default' : 'disabled',
+});

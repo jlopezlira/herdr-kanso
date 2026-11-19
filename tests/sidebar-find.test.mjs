@@ -24,7 +24,7 @@ test("The Storybook's sidebar Find keeps its search icon first once mounted, on 
   assert.deepEqual([...new Set(finds.map(({ first }) => first.querySelector("use")?.getAttribute("href")))], ["#lu-search"], "the search icon stays the field's first child");
   assert.deepEqual([...new Set(finds.map(({ inset }) => inset))], [SIDEBAR.gutter - G.sm], "from the rows' ground to the gutter");
 
-  const conversation = statesFor("Panels/Find").find(({ label }) => label === "ConversationFind · Empty query");
-  const [field] = mounted("Panels/Find", conversation, ".kanso-field");
-  assert.deepEqual([...field.children].slice(0, 2).map((child) => child.getAttribute("role") ?? child.querySelector("use")?.getAttribute("href")), ["textbox", "#lu-search"], "a field outside the sidebar keeps its editor before its icon, as before");
+  const reply = statesFor("Panels/PR").find(({ label }) => label === "Opened: the verdict and what it rests on");
+  const [field] = mounted("Panels/PR", reply, ".kanso-field");
+  assert.deepEqual([...field.children].slice(0, 2).map((child) => child.querySelector("use")?.getAttribute("href") ?? child.getAttribute("role")), ["textbox", "#lu-send"], "a field outside the sidebar keeps its editor before its icon, as before");
 });

@@ -2,110 +2,110 @@
   "containers/ContainerList": {
     "page": "Panels/Containers",
     "states": {
-      "Running": "panels/containers/ContainersAtRestNow/Default",
-      "Loading": "panels/containers/ContainersFirstRead/Default",
-      "Empty": "panels/containers/ContainersEmptyWithAStackAProjectCanBringUp/Default",
-      "Daemon off": "panels/containers/ContainersDockerNotRunning/Default",
-      "Starting Docker": "panels/containers/ContainersStartingDocker/Default",
-      "Read failed": "panels/containers/ContainersAReadFailed/Default",
-      "Remote": "panels/containers/ContainersDockerOnAnotherMachineAContext/Default",
-      "Action failed": "panels/containers/ContainersDownAndQuitArmedARemovalRefusedOnItsRowNotInAProject/Default",
+      "Running": "kit/Panels/Containers/At rest: one exited, two running, one project not started",
+      "Loading": "kit/Panels/Containers/First read",
+      "Empty": "kit/Panels/Containers/No containers",
+      "Daemon off": "kit/Panels/Containers/Docker not running",
+      "Starting Docker": "kit/Panels/Containers/Starting Docker",
+      "Read failed": "kit/Panels/Containers/A read failed",
+      "Remote": "kit/Panels/Containers/Docker on another machine (a context)",
+      "Action failed": "kit/Panels/Containers/A removal refused, on its row",
       "Tool absent": "panels/containers/ContainerListToolabsent/Default"
     }
   },
   "containers/ContainerRow": {
     "page": "Panels/Containers",
     "states": {
-      "Running selected": "panels/containers/ContainersRunningSelectedDetailsOpen/Default",
-      "Stopped": "panels/containers/ContainersRestOneExitedTwoRunningOneProjectNotStarted/Default",
-      "Failed": "panels/containers/ContainersDownAndQuitArmedARemovalRefusedOnItsRowNotInAProject/Default",
-      "Remove armed": "panels/containers/ContainersDownAndQuitArmedARemovalRefusedOnItsRowNotInAProject/Default",
-      "Details": "panels/containers/ContainersRunningSelectedDetailsOpen/Default",
-      "Pending": "panels/containers/ContainerRowPending/Default",
-      "Details absent": "panels/containers/ContainerRowDetailsabsent/Default"
+      "Running selected": "kit/Panels/Containers/A running container picked",
+      "Stopped": "kit/Panels/Containers/Not in a project, Remove armed",
+      "Failed": "kit/Panels/Containers/An exited container picked",
+      "Remove armed": "kit/Panels/Containers/Not in a project, Remove armed",
+      "Details": "kit/Panels/Containers/Details open",
+      "Pending": "kit/Panels/Containers/Working on a container",
+      "Details absent": "kit/Panels/Containers/No details from Docker"
     }
   },
   "containers/ComposeProject": {
     "page": "Panels/Containers",
     "states": {
-      "Not started": "panels/containers/ContainersEmptyWithAStackAProjectCanBringUp/Default",
-      "Running": "panels/containers/ContainersRestOneExitedTwoRunningOneProjectNotStarted/Default",
-      "Down armed": "panels/containers/ContainersDownAndQuitArmedARemovalRefusedOnItsRowNotInAProject/Default",
-      "Bulk controls": "panels/containers/ContainersRestOneExitedTwoRunningOneProjectNotStarted/Default"
+      "Not started": "kit/Panels/Containers/Empty, with a stack a project can bring up",
+      "Running": "kit/Panels/Containers/Pointer on acme-shop",
+      "Down armed": "kit/Panels/Containers/Down armed",
+      "Bulk controls": "kit/Panels/Containers/Pointer on acme-shop"
     }
   },
   "containers/ContainerDisk": {
     "page": "Panels/Containers",
     "states": {
-      "Images": "panels/containers/ContainersDiskOpenPullAnImagesRunFormVolumesBuildCache/Default",
-      "Unused image": "panels/containers/ContainersDiskOpenPullAnImagesRunFormVolumesBuildCache/Default",
-      "Run image": "panels/containers/ContainersDiskOpenPullAnImagesRunFormVolumesBuildCache/Default",
-      "Volumes": "panels/containers/ContainersDiskOpenPullAnImagesRunFormVolumesBuildCache/Default",
-      "Cache": "panels/containers/ContainersDiskOpenPullAnImagesRunFormVolumesBuildCache/Default",
-      "Quit armed": "panels/containers/ContainersDownAndQuitArmedARemovalRefusedOnItsRowNotInAProject/Default",
-      "Invalid name": "panels/containers/ContainerDiskInvalidname/Default",
-      "Invalid port": "panels/containers/ContainerDiskInvalidport/Default",
-      "Prune armed": "panels/containers/ContainerDiskPrunearmed/Default"
+      "Images": "kit/Panels/Containers/Disk open",
+      "Unused image": "kit/Panels/Containers/Remove an unused image, armed",
+      "Run image": "kit/Panels/Containers/Run an image",
+      "Volumes": "kit/Panels/Containers/Disk open",
+      "Cache": "kit/Panels/Containers/Disk open",
+      "Quit armed": "kit/Panels/Containers/Quit armed",
+      "Invalid name": "kit/Panels/Containers/Run, a name refused",
+      "Invalid port": "kit/Panels/Containers/Run, a port refused",
+      "Prune armed": "kit/Panels/Containers/Remove unused volumes, armed"
     }
   },
   "guard/Memory": {
     "page": "Panels/Memory",
     "states": {
-      "Normal": "panels/memory/MemoryAtRestNow/Default",
-      "Low": "panels/memory/MemoryLowTheWindowPastItsLimit/Default",
-      "Loading": "panels/memory/MemoryFirstRead/Default",
-      "Off": "panels/memory/MemoryGuardOff/Default",
-      "Unreadable": "panels/memory/MemoryStaleTheGuardStoppedAnswering/Default",
-      "Installing": "panels/memory/MemoryTurnOnPending/Default",
-      "Install failed": "panels/memory/MemoryTurnOnRefusedInTheInstallersWords/Default",
-      "Working set": "panels/memory/MemoryWindowsTheGuardReadsTheWorkingSet/Default",
-      "Paused": "panels/memory/Memory/Paused",
-      "Stopped": "panels/memory/Memory/Stopped",
+      "Normal": "kit/Panels/Memory/At rest: guard on, one session past the limit, one needing you",
+      "Low": "kit/Panels/Memory/Low: the window past its limit",
+      "Loading": "kit/Panels/Memory/First read",
+      "Off": "kit/Panels/Memory/Guard off",
+      "Unreadable": "kit/Panels/Memory/Unreadable",
+      "Installing": "kit/Panels/Memory/Turning on",
+      "Install failed": "kit/Panels/Memory/Turn on refused",
+      "Working set": "kit/Panels/Memory/Windows: the working set",
+      "Paused": "kit/Panels/Memory/Guard paused",
+      "Stopped": "kit/Panels/Memory/Guard stopped answering",
       "Unsupported": "panels/memory/Memory/Unsupported"
     }
   },
   "guard/MemoryAgent": {
     "page": "Panels/Memory",
     "states": {
-      "Idle selected": "panels/memory/MemoryRestGuardOnOneAgentNeedsYouOnePastTheLimit/Default",
-      "Over limit": "panels/memory/MemoryRestGuardOnOneAgentNeedsYouOnePastTheLimit/Default",
-      "Needs user": "panels/memory/MemoryRestGuardOnOneAgentNeedsYouOnePastTheLimit/Default",
-      "Focused idle": "panels/memory/MemoryOnlyTheAgentYouAreOnIsIdleNoBulkRecycle/Default",
-      "Recycle armed": "panels/memory/MemoryRecycledOneRefusedOnItsRowAnAgentArmed/Default",
-      "Pending": "panels/memory/MemoryRecycle3IdleTwoConfirmedOnePending/Default",
-      "Cannot recycle": "panels/memory/MemoryAgent/Cannot recycle",
-      "Close armed": "panels/memory/MemoryAgent/Close armed",
-      "More": "panels/memory/MemoryAgent/More",
-      "No agents": "panels/memory/MemoryAgent/No agents",
-      "Working": "panels/memory/MemoryAgent/Working"
+      "Idle selected": "kit/Panels/Memory/Pointer on docs",
+      "Over limit": "kit/Panels/Memory/At rest: guard on, one session past the limit, one needing you",
+      "Needs user": "kit/Panels/Memory/At rest: guard on, one session past the limit, one needing you",
+      "Focused idle": "kit/Panels/Memory/Only the session you are on is idle",
+      "Recycle armed": "kit/Panels/Memory/Recycled, one refused on its row",
+      "Pending": "kit/Panels/Memory/Recycling three: two done, one pending",
+      "Cannot recycle": "kit/Panels/Memory/A session that cannot be recycled",
+      "Close armed": "kit/Panels/Memory/Close armed",
+      "More": "kit/Panels/Memory/More sessions than fit",
+      "No agents": "kit/Panels/Memory/No sessions",
+      "Working": "kit/Panels/Memory/A working session picked"
     }
   },
   "guard/MemoryRecovery": {
     "page": "Panels/Memory",
     "states": {
-      "Batch running": "panels/memory/MemoryRecycle3IdleTwoConfirmedOnePending/Default",
-      "Batch completed": "panels/memory/MemoryRecycledOneRefusedOnItsRowAnAgentArmed/Default",
-      "Batch refused": "panels/memory/MemoryRecycledOneRefusedOnItsRowAnAgentArmed/Default",
-      "Focused skipped": "panels/memory/MemoryOnlyTheAgentYouAreOnIsIdleNoBulkRecycle/Default",
-      "Hung helpers": "panels/memory/MemoryRecovery/Hung helpers",
-      "Recovery failed": "panels/memory/MemoryRecovery/Recovery failed",
-      "Restart window": "panels/memory/MemoryRecovery/Restart window"
+      "Batch running": "kit/Panels/Memory/Recycling three: two done, one pending",
+      "Batch completed": "kit/Panels/Memory/Recycled, one refused on its row",
+      "Batch refused": "kit/Panels/Memory/Recycled, one refused on its row",
+      "Focused skipped": "kit/Panels/Memory/Only the session you are on is idle",
+      "Hung helpers": "kit/Panels/Memory/End hung helpers, armed",
+      "Recovery failed": "kit/Panels/Memory/Restarting the window refused",
+      "Restart window": "kit/Panels/Memory/Herdr picked, past its limit"
     }
   },
   "guard/MemoryHistory": {
     "page": "Panels/Memory",
     "states": {
-      "History": "panels/memory/MemoryHistoryOpenFreeOverTimeThenWhatTheGuardDid/Default",
-      "Refusal event": "panels/memory/MemoryHistoryOpenFreeOverTimeThenWhatTheGuardDid/Default",
-      "Share": "panels/memory/MemoryHistory/Share"
+      "History": "kit/Panels/Memory/History open",
+      "Refusal event": "kit/Panels/Memory/History open",
+      "Share": "kit/Panels/Memory/Share from the header"
     }
   },
   "guard/MemoryChart": {
     "page": "Panels/Memory",
     "states": {
-      "Free memory": "panels/memory/MemoryHistoryOpenFreeOverTimeThenWhatTheGuardDid/Default",
-      "Empty": "panels/memory/MemoryChart/Empty",
-      "Process spark": "panels/memory/MemoryChart/Process spark"
+      "Free memory": "kit/Panels/Memory/History open",
+      "Empty": "kit/Panels/Memory/History, nothing recorded yet",
+      "Process spark": "kit/Panels/Memory/Its memory over time"
     }
   },
   "guard/SystemNotice": {
@@ -124,466 +124,466 @@
   "panel/Files": {
     "page": "Panels/Files",
     "states": {
-      "Tree": "panels/files/FilesAtRestNow/Default",
-      "Changed": "panels/files/FilesChangedOpenedFromTheDigest/Default",
-      "Loading": "panels/files/FilesFirstRead/Default",
-      "No changes": "panels/files/FilesNothingChanged/Default",
-      "No folder": "panels/files/FilesNoFolderForThisPane/Default",
-      "Read failed": "panels/files/FilesErrorTheFoldersOwnWords/Default",
-      "Stale": "panels/files/FilesStaleDevboxStoppedAnswering/Default",
-      "Keyboard": "panels/files/FilesRightClickARow/Default",
-      "No files": "panels/files/FilesNofiles/Default",
-      "Limit": "panels/files/FilesLimit/Default"
+      "Tree": "kit/Panels/Files/All files, with marks",
+      "Changed": "kit/Panels/Files/Changed, opened from the digest",
+      "Loading": "kit/Panels/Files/First read",
+      "No changes": "kit/Panels/Files/Nothing changed",
+      "No folder": "kit/Panels/Files/No folder for this pane",
+      "Read failed": "kit/Panels/Files/The folder can’t be read",
+      "Stale": "kit/Panels/Files/Stale: devbox stopped answering",
+      "Keyboard": "kit/Panels/Files/All files, with marks",
+      "No files": "kit/Panels/Files/An empty folder",
+      "Limit": "kit/Panels/Files/All files, with marks"
     }
   },
   "panel/Preview": {
     "page": "Panels/Preview",
     "states": {
-      "Edited": "panels/preview/PreviewTextEditedSaveAppears/Default",
-      "Saving": "panels/preview/PreviewTextSavingThenSaved/Default",
-      "Saved": "panels/preview/PreviewTextSavingThenSaved/Default",
-      "Remote unavailable": "panels/preview/PreviewTextTheComputerIsGoneItSavesOnItsOwnWhenItIsBack/Default",
-      "Too large": "panels/preview/PreviewTextOver1MBReadOnly/Default",
-      "Binary": "panels/preview/PreviewTextBinary/Default",
-      "Gone": "panels/preview/PreviewTextGoneFromDisk/Default",
-      "Conflict resolved": "panels/preview/PreviewTextAfterOverwriteOrReloadOneUndoNoQuestionBefore/Default",
-      "Loading": "panels/preview/FeaturePreview/Loading",
-      "Picture failed": "panels/preview/FeaturePreview/Picture failed",
-      "Read failed": "panels/preview/FeaturePreview/Read failed",
-      "Save failed": "panels/preview/FeaturePreview/Save failed"
+      "Edited": "kit/Panels/Preview/Edited: Save appears",
+      "Saving": "kit/Panels/Preview/Saving",
+      "Saved": "kit/Panels/Preview/Saved",
+      "Remote unavailable": "kit/Panels/Preview/The computer is gone",
+      "Too large": "kit/Panels/Preview/Over 1 MB: read only",
+      "Binary": "kit/Panels/Preview/Binary",
+      "Gone": "kit/Panels/Preview/Gone from disk",
+      "Conflict resolved": "kit/Panels/Preview/After Overwrite or Reload",
+      "Loading": "kit/Panels/Preview/First read",
+      "Picture failed": "kit/Panels/Preview/A picture that can’t be shown",
+      "Read failed": "kit/Panels/Preview/Can’t read",
+      "Save failed": "kit/Panels/Preview/Couldn’t save"
     }
   },
   "panel/MarkdownEditing": {
     "page": "Panels/Preview",
     "states": {
-      "Block editing": "panels/preview/PreviewMarkdownAClickEditsThatBlock/Default",
-      "Source": "panels/preview/PreviewMarkdownSource/Default",
-      "Table editing": "panels/preview/PreviewMarkdownATableCellByCell/Default",
-      "Image loading": "panels/preview/PreviewPicturesLoading/Default",
-      "Image deferred": "panels/preview/PreviewPicturesOnAnotherComputerOver2MBLoad/Default",
-      "Read": "panels/preview/PreviewMarkdownFormatted/Default",
-      "Editing": "panels/preview/PreviewMarkdownAClickEditsThatBlock/Default",
-      "Conflict": "panels/preview/PreviewTextChangedOnDiskWhileEdited/Default",
-      "Append": "panels/preview/FeatureMarkdownEditing/Append",
-      "Image failed": "panels/preview/FeatureMarkdownEditing/Image failed",
-      "Loading": "panels/preview/FeatureMarkdownEditing/Loading",
-      "Save failed": "panels/preview/FeatureMarkdownEditing/Save failed",
-      "Saving": "panels/preview/FeatureMarkdownEditing/Saving",
-      "Stale": "panels/preview/FeatureMarkdownEditing/Stale"
+      "Block editing": "kit/Panels/Preview/Markdown, a click edits that block",
+      "Source": "kit/Panels/Preview/Markdown, Source",
+      "Table editing": "kit/Panels/Preview/Markdown, a table cell by cell",
+      "Image loading": "kit/Panels/Preview/A picture inside a note, loading",
+      "Image deferred": "kit/Panels/Preview/A picture inside a note",
+      "Read": "kit/Panels/Preview/Markdown, formatted",
+      "Editing": "kit/Panels/Preview/Markdown, a click edits that block",
+      "Conflict": "kit/Panels/Preview/Changed on disk while edited",
+      "Append": "kit/Panels/Preview/Markdown, a new block at the end",
+      "Image failed": "kit/Panels/Preview/A picture inside a note, can’t be shown",
+      "Loading": "kit/Panels/Preview/First read",
+      "Save failed": "kit/Panels/Preview/Couldn’t save",
+      "Saving": "kit/Panels/Preview/Saving",
+      "Stale": "kit/Panels/Preview/The computer is gone"
     }
   },
   "panel/ConversationFind": {
     "page": "Panels/Find",
     "states": {
-      "Selected match": "proto/components-find-in-the-conversation/FindInTheConversation/Default",
-      "Full turn": "proto/components-find-in-the-conversation/FindInTheConversation/Default",
-      "Empty query": "panels/find/ConversationFindEmptyquery/Default",
-      "Loading": "panels/find/ConversationFindLoading/Default",
-      "No matches": "panels/find/ConversationFindNomatches/Default",
-      "Stale": "panels/find/ConversationFindStale/Default",
-      "Unavailable": "panels/find/ConversationFindUnavailable/Default"
+      "Selected match": "kit/Panels/Find/Matches",
+      "Full turn": "kit/Panels/Find/One turn open",
+      "Empty query": "kit/Panels/Find/Empty",
+      "Loading": "kit/Panels/Find/Reading the conversation",
+      "No matches": "kit/Panels/Find/No matches",
+      "Stale": "kit/Panels/Find/Conversation cleared, searching again",
+      "Unavailable": "kit/Panels/Find/The conversation file is gone"
     }
   },
   "panel/Images": {
     "page": "Panels/Images",
     "states": {
-      "Loading": "panels/images/ImagesLoadingThePicturePinnedToOneAgent/Default",
-      "No agent": "panels/images/ImagesNoAgentInFocus/Default",
-      "No pictures": "panels/images/ImagesEmpty/Default",
-      "Deferred": "panels/images/ImagesAnotherComputerNotBroughtOverYet/Default",
-      "Pinned": "panels/images/ImagesLoadingThePicturePinnedToOneAgent/Default",
-      "Kept annotations": "panels/images/ImagesTwoNotesReadyToSend/Default",
-      "Sent": "panels/images/ImagesItsAgentWaitsOnYouSent/Default",
-      "Blocked": "panels/images/ImagesItsAgentWaitsOnYouSent/Default",
-      "Read failed": "panels/images/ImagesAReadFailed/Default",
-      "Stale": "panels/images/ImagesAnotherComputerUnreachable/Default",
-      "Sending": "panels/images/ImagesSending/Default",
-      "Send failed": "panels/images/ImagesSendfailed/Default",
-      "No conversation": "panels/images/ImagesNoconversation/Default",
-      "Wrong file type": "panels/images/ImagesWrongfiletype/Default"
+      "Loading": "kit/Panels/Images/Loading the picture",
+      "No agent": "kit/Panels/Images/No agent in focus",
+      "No pictures": "kit/Panels/Images/No pictures in this conversation",
+      "Deferred": "kit/Panels/Images/Another computer: not brought over yet",
+      "Pinned": "kit/Panels/Images/Kept to checkout",
+      "Kept annotations": "kit/Panels/Images/At rest: two notes, ready to send",
+      "Sent": "kit/Panels/Images/Sent",
+      "Blocked": "kit/Panels/Images/Its agent waits on you",
+      "Read failed": "kit/Panels/Images/A read failed",
+      "Stale": "kit/Panels/Images/Another computer, unreachable",
+      "Sending": "kit/Panels/Images/Sending",
+      "Send failed": "kit/Panels/Images/Not sent",
+      "No conversation": "kit/Panels/Images/No conversation",
+      "Wrong file type": "kit/Panels/Images/Not a picture"
     }
   },
   "panel/Ports": {
     "page": "Panels/Ports",
     "states": {
-      "No pane": "panels/ports/PortsRestTwoWithNoPaneTwoInPanes/Default",
-      "In pane": "panels/ports/PortsInAPaneSelectedAStopRefusedOnItsRow/Default",
-      "Stop armed": "panels/ports/PortsArmedOneStopPending/Default",
-      "Stopping": "panels/ports/PortsArmedOneStopPending/Default",
-      "Loading": "panels/ports/PortsFirstRead/Default",
-      "Empty": "panels/ports/PortsEmpty/Default",
-      "Read failed": "panels/ports/PortsAReadFailed/Default",
-      "Remote stale": "panels/ports/FeatureComputers/Unreachable",
-      "Force stop": "panels/ports/PortsForcestop/Default",
-      "Bulk stop": "panels/ports/PortsBulkstop/Default"
+      "No pane": "kit/Panels/Ports/At rest: two with no pane, two in panes",
+      "In pane": "kit/Panels/Ports/A pane’s server picked",
+      "Stop armed": "kit/Panels/Ports/Stop armed",
+      "Stopping": "kit/Panels/Ports/Stopping",
+      "Loading": "kit/Panels/Ports/First read",
+      "Empty": "kit/Panels/Ports/Empty",
+      "Read failed": "kit/Panels/Ports/A read failed",
+      "Remote stale": "kit/Panels/Ports/Another computer, unreachable",
+      "Force stop": "kit/Panels/Ports/Force stop, armed",
+      "Bulk stop": "kit/Panels/Ports/Stop every one, armed"
     }
   },
   "panel/PortHistory": {
     "page": "Panels/Ports",
     "states": {
-      "Chart": "panels/ports/PortsHistoryOpenShareFromTheHeader/Default",
-      "History groups": "panels/ports/PortsHistoryOpenShareFromTheHeader/Default",
-      "Guard off": "panels/ports/PortHistoryGuardoff/Default",
-      "Unreadable": "panels/ports/PortHistoryUnreadable/Default",
-      "History stopped": "panels/ports/PortHistoryHistorystopped/Default"
+      "Chart": "kit/Panels/Ports/History open",
+      "History groups": "kit/Panels/Ports/History open",
+      "Guard off": "kit/Panels/Ports/History off",
+      "Unreadable": "kit/Panels/Ports/History unreadable",
+      "History stopped": "kit/Panels/Ports/History stopped"
     }
   },
   "panel/PullRequest": {
     "page": "Panels/PR",
     "states": {
-      "Ready": "panels/pr/PRAtRestNow/Default",
-      "Merging": "panels/pr/PRActionsMerging/Default",
-      "Draft": "panels/pr/PRVerdictDraftTheAuthorsChoiceNotAFault/Default",
-      "Conflicts": "panels/pr/PRVerdictConflictsTheFiles/Default",
-      "Failed log": "panels/pr/PRActionsFullLogAPageReadAlready/Default",
-      "Behind base": "panels/pr/PRVerdictBehindItsBaseTheCommitsItLacks/Default",
-      "Running checks": "panels/pr/PRVerdictChecksRunningAWaitNothingToExplain/Default",
-      "Unknown checks": "panels/pr/PRVerdictGitHubStillDecidingNothingMore/Default",
-      "Review required": "panels/pr/PRVerdictReviewRequiredWhoWasAsked/Default",
-      "Merged": "panels/pr/PRListItsPullRequestWasMerged/Default",
-      "Agent blocked": "panels/pr/PRActionsItsAgentWaitsOnYou/Default",
-      "Stale": "panels/pr/PRActionsThatComputerUnreachable/Default",
-      "Write failed": "panels/pr/PRActionsMergeRefused/Default",
-      "Changes requested": "panels/pr/PullRequestChangesrequested/Default",
-      "Closed": "panels/pr/PullRequestClosed/Default",
-      "Merge armed": "panels/pr/PullRequestMergearmed/Default",
-      "No agent": "panels/pr/PullRequestNoagent/Default",
-      "Send preview": "panels/pr/PullRequestSendpreview/Default"
+      "Ready": "kit/Panels/PR/Ready to merge",
+      "Merging": "kit/Panels/PR/Merging",
+      "Draft": "kit/Panels/PR/Draft: the author’s choice, not a fault",
+      "Conflicts": "kit/Panels/PR/Conflicts: the files",
+      "Failed log": "kit/Panels/PR/Full log: a page",
+      "Behind base": "kit/Panels/PR/Behind its base: the commits it lacks",
+      "Running checks": "kit/Panels/PR/Checks running: a wait",
+      "Unknown checks": "kit/Panels/PR/GitHub still deciding",
+      "Review required": "kit/Panels/PR/Review required: who was asked",
+      "Merged": "kit/Panels/PR/Its pull request was merged",
+      "Agent blocked": "kit/Panels/PR/Its agent waits on you",
+      "Stale": "kit/Panels/PR/That computer unreachable",
+      "Write failed": "kit/Panels/PR/Merge refused",
+      "Changes requested": "kit/Panels/PR/Changes requested: Reply on GitHub",
+      "Closed": "kit/Panels/PR/Closed: Reopen",
+      "Merge armed": "kit/Panels/PR/Merge armed",
+      "No agent": "kit/Panels/PR/Conflicts, no agent",
+      "Send preview": "kit/Panels/PR/Send to the agent: the message first"
     }
   },
   "panel/PullRequestContext": {
     "page": "Panels/PR",
     "states": {
-      "No repository": "panels/pr/PRListThePaneInFrontIsNotInGitTheListIsThePanel/Default",
-      "CLI absent": "panels/pr/PRListGitHubCLINotInstalled/Default",
-      "Sign in": "panels/pr/PRListNotSignedInToGitHub/Default",
-      "Default branch": "panels/pr/PRListTheDefaultBranchNoBranchRow/Default",
-      "No pull request": "panels/pr/PRListABranchWithNoPullRequestItsRowComesFirst/Default",
-      "Loading": "panels/pr/PRListFirstRead/Default",
-      "Read failed": "panels/pr/PRListGitHubNotAnswering/Default",
-      "Rate limited": "panels/pr/PRListRateLimited/Default",
-      "Create pending": "panels/pr/PRListCreateAPullRequestInThePanel/Default",
-      "Behind GitHub": "panels/pr/PullRequestContextBehindGitHub/Default",
-      "Detached": "panels/pr/PullRequestContextDetached/Default",
-      "No remote": "panels/pr/PullRequestContextNoremote/Default",
-      "Unpushed": "panels/pr/PullRequestContextUnpushed/Default",
-      "Unsupported remote": "panels/pr/PullRequestContextUnsupportedremote/Default"
+      "No repository": "kit/Panels/PR/At rest: what waits on you, then each project",
+      "CLI absent": "kit/Panels/PR/GitHub CLI not installed",
+      "Sign in": "kit/Panels/PR/Not signed in to GitHub",
+      "Default branch": "kit/Panels/PR/The default branch: no branch row",
+      "No pull request": "kit/Panels/PR/A branch with no pull request: its row first",
+      "Loading": "kit/Panels/PR/First read",
+      "Read failed": "kit/Panels/PR/GitHub not answering",
+      "Rate limited": "kit/Panels/PR/Rate limited",
+      "Create pending": "kit/Panels/PR/Create a pull request, in the panel",
+      "Behind GitHub": "kit/Panels/PR/The pane in front is on devbox: Pull",
+      "Detached": "kit/Panels/PR/No branch checked out",
+      "No remote": "kit/Panels/PR/No remote",
+      "Unpushed": "kit/Panels/PR/A branch not on GitHub: Push",
+      "Unsupported remote": "kit/Panels/PR/Not a GitHub remote"
     }
   },
   "panel/PullRequestList": {
     "page": "Panels/PR",
     "states": {
-      "Open": "panels/pr/PRListThePaneInFrontIsNotInGitTheListIsThePanel/Default",
-      "Nothing open": "panels/pr/PRListNothingOpenAnywhere/Default",
-      "Inbox empty": "panels/pr/PRListAskedOfYouOpenedFromTheList/Default",
-      "Closed": "panels/pr/PullRequestListClosed/Default",
-      "Loading closed": "panels/pr/PullRequestListLoadingclosed/Default",
-      "Nothing closed": "panels/pr/PullRequestListNothingclosed/Default",
-      "More": "panels/pr/PullRequestListMore/Default",
-      "Persist failed": "panels/pr/PullRequestListPersistfailed/Default"
+      "Open": "kit/Panels/PR/At rest: what waits on you, then each project",
+      "Nothing open": "kit/Panels/PR/Nothing open anywhere",
+      "Inbox empty": "kit/Panels/PR/Nothing open, a branch without one",
+      "Closed": "kit/Panels/PR/Closed",
+      "Loading closed": "kit/Panels/PR/Closed, being read",
+      "Nothing closed": "kit/Panels/PR/Nothing closed yet",
+      "More": "kit/Panels/PR/Other open pull requests",
+      "Persist failed": "kit/Panels/PR/Couldn’t keep pull requests"
     }
   },
   "panel/PullRequestDetails": {
     "page": "Panels/PR",
     "states": {
-      "Description": "panels/pr/PRDetailsDetailsOpen/Default",
-      "People and labels": "panels/pr/PRDetailsDetailsOpen/Default",
-      "Threads": "panels/pr/PRConversationTheConversationInViewUnderTheVerdict/Default",
-      "Files": "panels/pr/PRDiffAFilesDiff/Default",
-      "No text diff": "panels/pr/PRDiffDiffReadingAndNoText/Default",
-      "Diff loading": "panels/pr/PRDiffDiffReadingAndNoText/Default",
-      "Truncated": "panels/pr/PRLongDiffALongDiffScrolledToLine400/Default",
-      "Copied link": "panels/pr/PullRequestDetailsCopiedlink/Default",
-      "Diff failed": "panels/pr/PullRequestDetailsDifffailed/Default",
-      "More checks": "panels/pr/PullRequestDetailsMorechecks/Default",
-      "No description": "panels/pr/PullRequestDetailsNodescription/Default",
-      "No people": "panels/pr/PullRequestDetailsNopeople/Default"
+      "Description": "kit/Panels/PR/Details open",
+      "People and labels": "kit/Panels/PR/Details open",
+      "Threads": "kit/Panels/PR/The conversation, under the verdict",
+      "Files": "kit/Panels/PR/A file’s diff",
+      "No text diff": "kit/Panels/PR/No text diff",
+      "Diff loading": "kit/Panels/PR/Diff: reading",
+      "Truncated": "kit/Panels/PR/A long diff, 400 lines at a time",
+      "Copied link": "kit/Panels/PR/Link copied",
+      "Diff failed": "kit/Panels/PR/The diff could not be read",
+      "More checks": "kit/Panels/PR/More checks",
+      "No description": "kit/Panels/PR/No description",
+      "No people": "kit/Panels/PR/Nobody assigned"
     }
   },
   "panel/PullRequestPicker": {
     "page": "Panels/PR",
     "states": {
-      "Labels": "panels/pr/PRDetailsLabelsStraightFromTheLocalStore/Default",
-      "Reviewers": "panels/pr/PRDetailsReviewersThreeClicksNoWaiting/Default",
-      "Pending": "panels/pr/PRDetailsReviewersThreeClicksNoWaiting/Default",
-      "Loading": "panels/pr/PRDetailsTheVeryFirstOpenTheSkeletonOnceEver/Default",
-      "No match": "panels/pr/PRDetailsNoMatchOffline/Default",
-      "Failed": "panels/pr/PRDetailsOneRefusedTheOthersUntouched/Default",
-      "Assignees": "panels/pr/PullRequestPickerAssignees/Default",
-      "Empty": "panels/pr/PullRequestPickerEmpty/Default",
-      "Truncated": "panels/pr/PullRequestPickerTruncated/Default"
+      "Labels": "kit/Panels/PR/Labels, from the local store",
+      "Reviewers": "kit/Panels/PR/Reviewers: three clicks, no waiting",
+      "Pending": "kit/Panels/PR/Reviewers: three clicks, no waiting",
+      "Loading": "kit/Panels/PR/Picker, the first open",
+      "No match": "kit/Panels/PR/Picker, no match",
+      "Failed": "kit/Panels/PR/Reviewers: one refused, the others untouched",
+      "Assignees": "kit/Panels/PR/Assign people",
+      "Empty": "kit/Panels/PR/No labels",
+      "Truncated": "kit/Panels/PR/More people than listed"
     }
   },
   "panel/VerdictBody": {
     "page": "Panels/PR",
     "states": {
-      "Commits": "panels/pr/PRVerdictBehindItsBaseTheCommitsItLacks/Default",
-      "Checks": "panels/pr/PRVerdictReviewRequiredWhoWasAsked/Default",
-      "Log": "panels/pr/PRActionsFullLogAPageReadAlready/Default",
-      "Comment": "panels/pr/PRConversationTheConversationInViewUnderTheVerdict/Default",
-      "Running": "panels/pr/PRVerdictChecksRunningAWaitNothingToExplain/Default",
-      "No body": "panels/pr/VerdictBodyNobody/Default",
-      "Note": "panels/pr/VerdictBodyNote/Default"
+      "Commits": "kit/Panels/PR/Behind its base: the commits it lacks",
+      "Checks": "kit/Panels/PR/Checks that did not finish",
+      "Log": "kit/Panels/PR/Full log: a page",
+      "Comment": "kit/Panels/PR/The conversation, under the verdict",
+      "Running": "kit/Panels/PR/Checks running: a wait",
+      "No body": "kit/Panels/PR/Closed: Reopen",
+      "Note": "kit/Panels/PR/Ready to merge"
     }
   },
   "panel/WorktreeVerdict": {
     "page": "Panels/Worktrees",
     "states": {
-      "Changes": "panels/worktrees/WorktreesARowPickedRemoveArmed/Default",
-      "Broken": "panels/worktrees/WorktreesItsRepositoryMovedRepair/Default",
-      "Open": "panels/worktrees/WorktreesInATabGoToItInstead/Default",
-      "Checking": "panels/worktrees/WorktreesCheckingAgainTheLastScanKept/Default",
-      "Detached": "panels/worktrees/FeatureWorktreeVerdict/Detached",
-      "Locked": "panels/worktrees/FeatureWorktreeVerdict/Locked",
-      "Lost": "panels/worktrees/FeatureWorktreeVerdict/Lost",
-      "Merged": "panels/worktrees/FeatureWorktreeVerdict/Merged",
-      "Missing": "panels/worktrees/FeatureWorktreeVerdict/Missing",
-      "Orphan": "panels/worktrees/FeatureWorktreeVerdict/Orphan",
-      "Recent": "panels/worktrees/FeatureWorktreeVerdict/Recent",
-      "Replaced": "panels/worktrees/FeatureWorktreeVerdict/Replaced",
-      "Unmerged": "panels/worktrees/FeatureWorktreeVerdict/Unmerged"
+      "Changes": "kit/Panels/Worktrees/A row picked, Remove armed",
+      "Broken": "kit/Panels/Worktrees/Its repository moved: repair",
+      "Open": "kit/Panels/Worktrees/In a tab: go to it instead",
+      "Checking": "kit/Panels/Worktrees/Still checking",
+      "Detached": "kit/Panels/Worktrees/Detached: its commits are on branches",
+      "Locked": "kit/Panels/Worktrees/Locked",
+      "Lost": "kit/Panels/Worktrees/Commits only here",
+      "Merged": "kit/Panels/Worktrees/Merged: its branch goes too",
+      "Missing": "kit/Panels/Worktrees/Folder gone: only the record",
+      "Orphan": "kit/Panels/Worktrees/Left behind: its repository moved",
+      "Recent": "kit/Panels/Worktrees/In use today",
+      "Replaced": "kit/Panels/Worktrees/Folder reused: only the record",
+      "Unmerged": "kit/Panels/Worktrees/Not merged: its branch stays"
     }
   },
   "panel/Worktrees": {
     "page": "Panels/Worktrees",
     "states": {
-      "Loading": "panels/worktrees/WorktreesFirstScan/Default",
-      "Scanning": "panels/worktrees/WorktreesCheckingAgainTheLastScanKept/Default",
-      "Empty": "panels/worktrees/WorktreesNone/Default",
-      "Scan failed": "panels/worktrees/WorktreesTheScanFailed/Default",
-      "Remove armed": "panels/worktrees/WorktreesARowPickedRemoveArmed/Default",
-      "Remove failed": "panels/worktrees/WorktreesARemovalRefused/Default",
-      "Clean up armed": "panels/worktrees/WorktreesCleanUpArmed/Default",
-      "Group actions": "panels/worktrees/WorktreesRemoveAllInAGroupArmed/Default",
-      "Needs review": "panels/worktrees/WorktreesARowPickedRemoveArmed/Default",
-      "Remote stale": "panels/worktrees/WorktreesOnAnotherComputerThenUnreachable/Default",
-      "History failed": "panels/worktrees/FeatureWorktrees/History failed",
-      "Notice": "panels/worktrees/FeatureWorktrees/Notice",
-      "Removing": "panels/worktrees/FeatureWorktrees/Removing"
+      "Loading": "kit/Panels/Worktrees/First scan",
+      "Scanning": "kit/Panels/Worktrees/Checking again, the last scan kept",
+      "Empty": "kit/Panels/Worktrees/None",
+      "Scan failed": "kit/Panels/Worktrees/The scan failed",
+      "Remove armed": "kit/Panels/Worktrees/A row picked, Remove armed",
+      "Remove failed": "kit/Panels/Worktrees/A removal refused",
+      "Clean up armed": "kit/Panels/Worktrees/Clean up armed",
+      "Group actions": "kit/Panels/Worktrees/Remove all in a group, armed",
+      "Needs review": "kit/Panels/Worktrees/At rest: 2.4 GB in 9 worktrees",
+      "Remote stale": "kit/Panels/Worktrees/On another computer, then unreachable",
+      "History failed": "kit/Panels/Worktrees/History can’t be read",
+      "Notice": "kit/Panels/Worktrees/Notice: Freed",
+      "Removing": "kit/Panels/Worktrees/Removing one"
     }
   },
   "panel/WorktreeHistory": {
     "page": "Panels/Worktrees",
     "states": {
-      "Disk split": "panels/worktrees/FeatureWorktreeHistory/Disk split",
-      "Freed": "panels/worktrees/FeatureWorktreeHistory/Freed",
-      "History loading": "panels/worktrees/FeatureWorktreeHistory/History loading",
-      "No history": "panels/worktrees/FeatureWorktreeHistory/No history",
-      "Repository split": "panels/worktrees/FeatureWorktreeHistory/Repository split"
+      "Disk split": "kit/Panels/Worktrees/Where the space is: every verdict",
+      "Freed": "kit/Panels/Worktrees/Freed, open",
+      "History loading": "kit/Panels/Worktrees/History loading",
+      "No history": "kit/Panels/Worktrees/Nothing freed yet",
+      "Repository split": "kit/Panels/Worktrees/At rest: 2.4 GB in 9 worktrees"
     }
   },
   "panel/Shipped": {
     "page": "Panels/Shipped",
     "states": {
-      "Loading": "panels/shipped/ShippedFirstRead/Default",
-      "Adding up": "panels/shipped/ShippedStillAddingUp/Default",
-      "Sync failed": "panels/shipped/ShippedGitHubNotAnswering/Default",
-      "Empty period": "panels/shipped/ShippedNothingInThisPeriod/Default",
-      "Records": "panels/shipped/ShippedThisWeek/Default",
-      "Past period": "panels/shipped/ShippedPastperiod/Default",
-      "No records": "panels/shipped/ShippedNorecords/Default",
-      "Repositories": "panels/shipped/ShippedRepositories/Default",
-      "Rhythm": "panels/shipped/ShippedRhythm/Default",
-      "Updating": "panels/shipped/ShippedUpdating/Default"
+      "Loading": "kit/Panels/Shipped/First read",
+      "Adding up": "kit/Panels/Shipped/Still adding up",
+      "Sync failed": "kit/Panels/Shipped/Adding up stopped",
+      "Empty period": "kit/Panels/Shipped/Nothing in this period",
+      "Records": "kit/Panels/Shipped/Records, open",
+      "Past period": "kit/Panels/Shipped/A past period",
+      "No records": "kit/Panels/Shipped/No records yet",
+      "Repositories": "kit/Panels/Shipped/Every repository",
+      "Rhythm": "kit/Panels/Shipped/When you ship and Computers, open",
+      "Updating": "kit/Panels/Shipped/Updating"
     }
   },
   "panel/Share": {
     "page": "Panels/Share",
     "states": {
-      "Menu": "panels/share/ShareClosedOpenAPostPendingTheDojo/Default",
-      "Post ready": "panels/share/ShareClosedOpenAPostPendingTheDojo/Default",
-      "Making": "panels/share/ShareMaking/Default",
-      "Failed": "panels/share/ShareFailed/Default",
-      "Saved": "panels/share/ShareSaved/Default",
-      "Clipboard fallback": "panels/share/ShareClipboardfallback/Default",
-      "Attach fallback": "panels/share/ShareAttachfallback/Default"
+      "Menu": "kit/Panels/Share/Open: what leaves, then where",
+      "Post ready": "kit/Panels/Share/Notice: In the post",
+      "Making": "kit/Panels/Share/Making the image",
+      "Failed": "kit/Panels/Share/The image could not be made",
+      "Saved": "kit/Panels/Share/Notice: Saved",
+      "Clipboard fallback": "kit/Panels/Share/Notice: Paste it",
+      "Attach fallback": "kit/Panels/Share/Notice: Attach it"
     }
   },
   "panel/ShareCard": {
     "page": "Panels/Share",
     "states": {
-      "Ports": "panels/share/ShareCardPorts/Default",
-      "Memory": "panels/share/ShareCardMemory/Default",
-      "Spend": "panels/share/ShareCardSpend/Default",
-      "Dōjō": "panels/share/ShareCardDj/Default",
-      "Shipped": "panels/share/ShareCardShipped/Default"
+      "Ports": "kit/Panels/Share/Card: Ports",
+      "Memory": "kit/Panels/Share/Card: Memory",
+      "Spend": "kit/Panels/Share/Card: Spend",
+      "Dōjō": "kit/Panels/Share/Card: the dōjō",
+      "Shipped": "kit/Panels/Share/Card: Shipped"
     }
   },
   "panel/CodeLimits": {
     "page": "Panels/Preview",
     "states": {
-      "Truncated code": "panels/preview/FeatureCodeLimits/Truncated code",
-      "Truncated markdown": "panels/preview/FeatureCodeLimits/Truncated markdown"
+      "Truncated code": "kit/Panels/Preview/Over 1 MB: read only",
+      "Truncated markdown": "kit/Panels/Preview/Markdown, cut at 1 MB"
     }
   },
   "sim/Devices": {
     "page": "Panels/Simulator",
     "states": {
-      "Loading": "panels/simulator/SimulatorFirstRead/Default",
-      "Off": "panels/simulator/SimulatorOff/Default",
-      "Starting": "panels/simulator/SimulatorBooting/Default",
-      "Booted": "panels/simulator/SimulatorDevicesTheListReplacesTheScreen/Default",
-      "Read failed": "panels/simulator/SimulatorError/Default",
-      "Empty": "panels/simulator/FeatureDevices/Empty",
-      "Emulator binary missing": "panels/simulator/FeatureDevices/Emulator binary missing",
-      "Offline": "panels/simulator/FeatureDevices/Offline",
-      "Remote project": "panels/simulator/FeatureDevices/Remote project",
-      "Start timed out": "panels/simulator/FeatureDevices/Start timed out",
-      "Unauthorized": "panels/simulator/FeatureDevices/Unauthorized"
+      "Loading": "kit/Panels/Simulator/First read",
+      "Off": "kit/Panels/Simulator/Off",
+      "Starting": "kit/Panels/Simulator/Starting",
+      "Booted": "kit/Panels/Simulator/Devices: the list replaces the screen",
+      "Read failed": "kit/Panels/Simulator/Can’t read the devices",
+      "Empty": "kit/Panels/Simulator/No devices",
+      "Emulator binary missing": "kit/Panels/Simulator/Emulator missing",
+      "Offline": "kit/Panels/Simulator/Offline",
+      "Remote project": "kit/Panels/Simulator/Another computer’s project",
+      "Start timed out": "kit/Panels/Simulator/Start timed out",
+      "Unauthorized": "kit/Panels/Simulator/Unauthorized"
     }
   },
   "sim/DeviceControls": {
     "page": "Panels/Simulator",
     "states": {
-      "iOS": "panels/simulator/SimulatorIOSThePicture/Default",
-      "Android device": "panels/simulator/SimulatorAndroidTouchKeysTheDevicesButtons/Default",
-      "Android emulator": "panels/simulator/SimulatorAndroidTouchKeysTheDevicesButtons/Default",
-      "Command failed": "panels/simulator/SimulatorError/Default",
-      "Acting": "panels/simulator/FeatureDeviceControls/Acting",
-      "URL invalid": "panels/simulator/FeatureDeviceControls/URL invalid"
+      "iOS": "kit/Panels/Simulator/iOS: the picture",
+      "Android device": "kit/Panels/Simulator/A connected Android phone",
+      "Android emulator": "kit/Panels/Simulator/Android: touch, keys, the device’s buttons",
+      "Command failed": "kit/Panels/Simulator/A command failed",
+      "Acting": "kit/Panels/Simulator/A command running",
+      "URL invalid": "kit/Panels/Simulator/A URL with no scheme"
     }
   },
   "sim/PictureState": {
     "page": "Panels/Simulator",
     "states": {
-      "First frame": "panels/simulator/SimulatorFirstRead/Default",
-      "Stale frame": "panels/simulator/SimulatorThePictureStalled/Default",
-      "Touch": "panels/simulator/SimulatorAndroidTouchKeysTheDevicesButtons/Default",
-      "Key focus": "panels/simulator/FeaturePictureState/Key focus",
-      "No picture": "panels/simulator/FeaturePictureState/No picture"
+      "First frame": "kit/Panels/Simulator/The first frame",
+      "Stale frame": "kit/Panels/Simulator/The picture stalled",
+      "Touch": "kit/Panels/Simulator/Android: touch, keys, the device’s buttons",
+      "Key focus": "kit/Panels/Simulator/Keys go to the device",
+      "No picture": "kit/Panels/Simulator/No picture from the device"
     }
   },
   "spend/Spend": {
     "page": "Panels/Spend",
     "states": {
-      "Period": "panels/spend/SpendAtRestNow/Default",
-      "Loading": "panels/spend/SpendFirstRead/Default",
-      "Empty": "panels/spend/SpendEmptyNothingThisMonth/Default",
-      "Read failed": "panels/spend/SpendAReadFailedNothingKept/Default",
-      "Remote totals": "panels/spend/SpendSeveralComputersEachOnesSessionsSummed/Default",
-      "Active sessions": "panels/spend/SpendActivesessions/Default",
-      "Filter active": "panels/spend/SpendFilteractive/Default",
-      "Filter picker": "panels/spend/SpendFilterpicker/Default",
-      "Partial scan": "panels/spend/SpendPartialscan/Default",
-      "Past period": "panels/spend/SpendPastperiod/Default",
-      "Refresh failed": "panels/spend/SpendRefreshfailed/Default",
-      "Remote unavailable": "panels/spend/SpendRemoteunavailable/Default",
-      "Runtime absent": "panels/spend/SpendRuntimeabsent/Default"
+      "Period": "kit/Panels/Spend/At rest: the month per plan, then today",
+      "Loading": "kit/Panels/Spend/First read",
+      "Empty": "kit/Panels/Spend/Empty",
+      "Read failed": "kit/Panels/Spend/A read failed, nothing kept",
+      "Remote totals": "kit/Panels/Spend/Several computers, summed",
+      "Active sessions": "kit/Panels/Spend/Active now",
+      "Filter active": "kit/Panels/Spend/Showing one project",
+      "Filter picker": "kit/Panels/Spend/Choosing a project",
+      "Partial scan": "kit/Panels/Spend/Still reading the history",
+      "Past period": "kit/Panels/Spend/A past period",
+      "Refresh failed": "kit/Panels/Spend/A refresh failed: the last read stays",
+      "Remote unavailable": "kit/Panels/Spend/A computer not answering",
+      "Runtime absent": "kit/Panels/Spend/Spend can’t run"
     }
   },
   "spend/SpendBreakdown": {
     "page": "Panels/Spend",
     "states": {
-      "Task detail": "panels/spend/SpendATaskOpenedFromItsRow/Default",
-      "Project detail": "panels/spend/SpendAProjectOpenedFromItsRow/Default",
-      "Projects": "panels/spend/SpendBreakdownProjects/Default",
-      "Models": "panels/spend/SpendBreakdownModels/Default",
-      "Tasks": "panels/spend/SpendBreakdownTasks/Default",
-      "Sessions": "panels/spend/SpendBreakdownSessions/Default",
-      "Model detail": "panels/spend/SpendBreakdownModeldetail/Default",
-      "More": "panels/spend/SpendBreakdownMore/Default"
+      "Task detail": "kit/Panels/Spend/A task opened from its row",
+      "Project detail": "kit/Panels/Spend/A project opened from its row",
+      "Projects": "kit/Panels/Spend/Pointer on a project",
+      "Models": "kit/Panels/Spend/Models",
+      "Tasks": "kit/Panels/Spend/Tasks",
+      "Sessions": "kit/Panels/Spend/A task opened from its row",
+      "Model detail": "kit/Panels/Spend/A model opened from its row",
+      "More": "kit/Panels/Spend/More than fit"
     }
   },
   "spend/SpendSettings": {
     "page": "Panels/Spend",
     "states": {
-      "Sources": "panels/spend/SpendSettingsSourcesAndPlansDetected/Default",
-      "Plan saved": "panels/spend/SpendAPlanCorrectedInPlace/Default",
-      "Plans": "panels/spend/SpendSettingsPlans/Default",
-      "Plan added": "panels/spend/SpendSettingsPlanadded/Default",
-      "Plan invalid": "panels/spend/SpendSettingsPlaninvalid/Default",
-      "Settings failed": "panels/spend/SpendSettingsSettingsfailed/Default",
-      "Sources loading": "panels/spend/SpendSettingsSourcesloading/Default",
-      "Sources pending": "panels/spend/SpendSettingsSourcespending/Default",
-      "Prices": "panels/spend/SpendSettingsPrices/Default",
-      "Update policy": "panels/spend/SpendSettingsUpdatepolicy/Default",
-      "Share": "panels/spend/SpendSettingsShare/Default"
+      "Sources": "kit/Panels/Spend/Settings: sources and plans, detected",
+      "Plan saved": "kit/Panels/Spend/A plan corrected in place",
+      "Plans": "kit/Panels/Spend/Settings: sources and plans, detected",
+      "Plan added": "kit/Panels/Spend/A plan added",
+      "Plan invalid": "kit/Panels/Spend/A price refused",
+      "Settings failed": "kit/Panels/Spend/Plans not saved",
+      "Sources loading": "kit/Panels/Spend/Sources loading",
+      "Sources pending": "kit/Panels/Spend/A source just switched",
+      "Prices": "kit/Panels/Spend/Settings: sources and plans, detected",
+      "Update policy": "kit/Panels/Spend/Settings: sources and plans, detected",
+      "Share": "kit/Panels/Spend/Share from the header"
     }
   },
   "spend/SpendChart": {
     "page": "Panels/Spend",
     "states": {
-      "Period bars": "panels/spend/FeatureSpendHistory/Period bars",
-      "Task bars": "panels/spend/FeatureSpendHistory/Task bars",
-      "Empty bars": "panels/spend/FeatureSpendHistory/Empty bars"
+      "Period bars": "kit/Panels/Spend/History open",
+      "Task bars": "kit/Panels/Spend/A task’s History",
+      "Empty bars": "kit/Panels/Spend/History, nothing that period"
     }
   },
   "settings/Pieces": {
     "page": "Panels/Settings",
     "states": {
-      "Sidebar": "proto/components-settings-tabs/SettingsWhatShows/Default",
-      "Pane header": "proto/components-settings-tabs/SettingsWhatShows/Default",
-      "Status bar": "proto/components-settings-tabs/SettingsWhatShows/Default",
-      "Tab bar and panels": "proto/components-settings-tabs/SettingsWhatShows/Default",
-      "Notifications": "proto/components-settings-tabs/SettingsWhatShows/Default",
-      "Background": "proto/components-settings-tabs/SettingsWhatShows/Default",
-      "Changed": "panels/settings/Pieces/Changed",
-      "Custom panel": "panels/settings/Pieces/Custom panel",
-      "No matches": "panels/settings/Pieces/No matches"
+      "Sidebar": "kit/Panels/Settings/Sidebar picked",
+      "Pane header": "kit/Panels/Settings/Pane header picked",
+      "Status bar": "kit/Panels/Settings/Status bar picked",
+      "Tab bar and panels": "kit/Panels/Settings/Panels picked",
+      "Notifications": "kit/Panels/Settings/Notifications picked",
+      "Background": "kit/Panels/Settings/Behind the scenes picked",
+      "Changed": "kit/Panels/Settings/Changed",
+      "Custom panel": "kit/Panels/Settings/Panels in order",
+      "No matches": "kit/Panels/Settings/Find, nothing"
     }
   },
   "settings/Bindings": {
     "page": "Panels/Settings",
     "states": {
-      "Panels": "proto/components-settings-tabs/Keys/Default",
-      "Sidebar": "proto/components-settings-tabs/Keys/Default",
-      "Panes": "proto/components-settings-tabs/Keys/Default",
-      "Vim keys": "proto/components-settings-tabs/Keys/Default",
-      "Moving along the strip": "proto/components-settings-tabs/Keys/Default",
-      "Capture": "panels/settings/Bindings/Capture",
-      "Changed": "panels/settings/Bindings/Changed",
-      "Conflict armed": "panels/settings/Bindings/Conflict armed",
-      "Family capture": "panels/settings/Bindings/Family capture",
-      "Invalid family": "panels/settings/Bindings/Invalid family",
-      "Memory, while its panel has the keyboard": "panels/settings/Bindings/Memory, while its panel has the keyboard",
-      "Preview, while it has the keyboard": "panels/settings/Bindings/Preview, while it has the keyboard",
-      "Spend, while its panel has the keyboard": "panels/settings/Bindings/Spend, while its panel has the keyboard",
-      "Unbound": "panels/settings/Bindings/Unbound",
-      "Write failed": "panels/settings/Bindings/Write failed"
+      "Panels": "kit/Panels/Settings/Panels",
+      "Sidebar": "kit/Panels/Settings/Sidebar",
+      "Panes": "kit/Panels/Settings/Panes",
+      "Vim keys": "kit/Panels/Settings/Vim keys",
+      "Moving along the strip": "kit/Panels/Settings/Moving along the strip",
+      "Capture": "kit/Panels/Settings/Key, capture",
+      "Changed": "kit/Panels/Settings/Key, changed",
+      "Conflict armed": "kit/Panels/Settings/Key, taken",
+      "Family capture": "kit/Panels/Settings/Numbered keys, capture",
+      "Invalid family": "kit/Panels/Settings/Numbered keys, no digit",
+      "Memory, while its panel has the keyboard": "kit/Panels/Settings/Spend, Preview, Memory",
+      "Preview, while it has the keyboard": "kit/Panels/Settings/Spend, Preview, Memory",
+      "Spend, while its panel has the keyboard": "kit/Panels/Settings/Spend, Preview, Memory",
+      "Unbound": "kit/Panels/Settings/Key, unbound",
+      "Write failed": "kit/Panels/Settings/Key, not saved"
     }
   },
   "settings/ReleaseControls": {
     "page": "Panels/Settings",
     "states": {
-      "Cached": "panels/settings/ReleaseControls/Cached",
-      "Checking": "panels/settings/ReleaseControls/Checking",
-      "Checks off": "panels/settings/ReleaseControls/Checks off",
-      "Current": "panels/settings/ReleaseControls/Current",
-      "Early": "panels/settings/ReleaseControls/Early",
-      "Installing": "panels/settings/ReleaseControls/Installing",
-      "Loading": "panels/settings/ReleaseControls/Loading",
-      "Read failed": "panels/settings/ReleaseControls/Read failed",
-      "Stable": "panels/settings/ReleaseControls/Stable",
-      "Update ready": "panels/settings/ReleaseControls/Update ready"
+      "Cached": "kit/Panels/Settings/GitHub not answering",
+      "Checking": "kit/Panels/Settings/Checking",
+      "Checks off": "kit/Panels/Settings/Checks off",
+      "Current": "kit/Panels/Settings/Up to date",
+      "Early": "kit/Panels/Settings/Dawn Mode",
+      "Installing": "kit/Panels/Settings/Updating",
+      "Loading": "kit/Panels/Settings/First read",
+      "Read failed": "kit/Panels/Settings/Nothing kept",
+      "Stable": "kit/Panels/Settings/Back on Stable Mode",
+      "Update ready": "kit/Panels/Settings/A newer release"
     }
   },
   "settings/CreditsLoading": {
     "page": "Panels/Settings",
     "states": {
-      "Avatars pending": "panels/settings/CreditsLoading/Avatars pending",
-      "Avatars unavailable": "panels/settings/CreditsLoading/Avatars unavailable"
+      "Avatars pending": "kit/Panels/Settings/Credits, avatars loading",
+      "Avatars unavailable": "kit/Panels/Settings/Credits, avatars unavailable"
     }
   },
   "markdown-panel/MarkdownFiles": {
     "page": "Panels/Markdown",
     "states": {
-      "Folder": "proto/components-markdown-window/MarkdownWindow/Default",
-      "Empty": "panels/markdown/FeatureMarkdownFiles/Empty",
-      "Keyboard": "panels/markdown/FeatureMarkdownFiles/Keyboard",
-      "Loading": "panels/markdown/FeatureMarkdownFiles/Loading",
-      "Recent": "panels/markdown/FeatureMarkdownFiles/Recent",
-      "Remote": "panels/markdown/FeatureMarkdownFiles/Remote",
-      "Review waiting": "panels/markdown/FeatureMarkdownFiles/Review waiting"
+      "Folder": "kit/Panels/Markdown/The folder only",
+      "Empty": "kit/Panels/Markdown/Empty",
+      "Keyboard": "kit/Panels/Markdown/Keyboard on a row",
+      "Loading": "kit/Panels/Markdown/Looking",
+      "Recent": "kit/Panels/Markdown/No file: the list",
+      "Remote": "kit/Panels/Markdown/On another computer",
+      "Review waiting": "kit/Panels/Markdown/No file: the list"
     }
   },
   "markdown-panel/MarkdownReview": {
     "page": "Panels/Markdown",
     "states": {
-      "Another review": "panels/markdown/FeatureMarkdownReview/Another review",
-      "Marker failed": "panels/markdown/FeatureMarkdownReview/Marker failed",
-      "Review": "panels/markdown/FeatureMarkdownReview/Review",
-      "Save failed": "panels/markdown/FeatureMarkdownReview/Save failed",
-      "Saving": "panels/markdown/FeatureMarkdownReview/Saving"
+      "Another review": "kit/Panels/Markdown/Another review waits",
+      "Marker failed": "kit/Panels/Markdown/Done could not tell the agent",
+      "Review": "kit/Panels/Markdown/Review: an agent waits",
+      "Save failed": "kit/Panels/Markdown/Couldn’t save",
+      "Saving": "kit/Panels/Markdown/Editing a block"
     }
   },
   "spaces/Sidebar": {
@@ -672,31 +672,31 @@
   "panel/HistoryChart/Ports": {
     "page": "Panels/Ports",
     "states": {
-      "Ports": "panels/ports/PortsHistoryOpenShareFromTheHeader/Default"
+      "Ports": "kit/Panels/Ports/History open"
     }
   },
   "panel/HistoryChart/Disk freed": {
     "page": "Panels/Worktrees",
     "states": {
-      "Disk freed": "panels/worktrees/FeatureHistoryChart/Disk freed"
+      "Disk freed": "kit/Panels/Worktrees/Freed, open"
     }
   },
   "panel/HistoryChart/Disk held": {
     "page": "Panels/Worktrees",
     "states": {
-      "Disk held": "panels/worktrees/FeatureHistoryChart/Disk held"
+      "Disk held": "kit/Panels/Worktrees/On disk each day"
     }
   },
   "panel/HistoryChart/Shipping hours": {
     "page": "Panels/Shipped",
     "states": {
-      "Shipping hours": "panels/shipped/HistoryChartShipping hoursShippinghours/Default"
+      "Shipping hours": "kit/Panels/Shipped/When you ship and Computers, open"
     }
   },
   "panel/HistoryChart/Shipped days": {
     "page": "Panels/Shipped",
     "states": {
-      "Shipped days": "panels/shipped/HistoryChartShipped daysShippeddays/Default"
+      "Shipped days": "kit/Panels/Shipped/The streak, clicked"
     }
   },
   "dojo/Practice": {
