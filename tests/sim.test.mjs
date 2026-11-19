@@ -159,27 +159,114 @@ test("Simulator availability is simctl or adb on this computer", async () => {
   for (const tools of [{ ios: true }, { adb: "/sdk/adb" }, { ios: true, adb: "/sdk/adb" }]) assert.equal(available(tools), true);
 });
 
-test("Tab availability probes once per panel-list rebuild and a deadline ignores late answers", async () => {
-  const store = {}, commands = [], timers = [], pending = [];
+const probing = async (host) => {
+  const store = {}, timers = [], pending = [];
+  const { Tabs } = await loadTabs({ shared: (key) => store[key], setShared: (key, value) => { store[key] = value; }, home: () => "/home/me", window: () => ({ platform: "macos" }), ...host });
+  const { offered } = await load("kanso-tabs/panel-tools.js", ["offered"]);
+  const { toolRecord } = await load("kanso-sim/registration.js", ["toolRecord"]);
+  const cx = { notify() {}, timer: { after(ms, fn) { const task = { ms, fn, cancel() {} }; timers.push(task); return task; } }, spawn(fn) { pending.push(fn(cx)); } };
+  return { tabs: new Tabs(), store, timers, pending, cx, door: () => offered("sim", { sim: store["kanso.sim.tools"] }), toolRecord };
+};
+
+test("Tab availability probes once per panel-list rebuild; a missed deadline is unknown, keeps the door and is asked again", async () => {
+  const commands = [];
   const { promise: answer, resolve: settle } = Promise.withResolvers();
-  const { Tabs } = await loadTabs({
-    shared: (key) => store[key], setShared: (key, value) => { store[key] = value; }, home: () => "/home/me",
-    window: () => ({ platform: "macos" }), exists: async (path) => path === SIMCTL,
-    exec: async (cmd) => { commands.push(cmd); return cmd === "xcode-select" ? answer : good("\n\n\n"); },
+  const { tabs, store, timers, pending, cx, door } = await probing({
+    exists: async (path) => path === SIMCTL, exec: async (cmd) => { commands.push(cmd); return cmd === "xcode-select" ? answer : good("\n\n\n"); },
   });
-  const cx = { notify() {}, timer: { after(_ms, fn) { const task = { fn, cancel() {} }; timers.push(task); return task; } }, spawn(fn) { pending.push(fn(cx)); } };
-  const tabs = new Tabs();
   tabs.probeSimulator(cx); tabs.probeSimulator(cx);
   assert.equal(commands.filter((cmd) => cmd === "xcode-select").length, 1);
-  timers[0].fn();
-  assert.deepEqual(clone(store["kanso.sim.tools"]), {});
+  timers.shift().fn(cx);
+  assert.equal(door(), true, "a probe that missed its deadline does not hide the door");
   settle(good(DEVELOPER)); await Promise.all(pending);
-  assert.deepEqual(clone(store["kanso.sim.tools"]), {}, "a missed startup deadline does not publish a stale capability");
-  store["kanso.panels.order"] = ["sim", "files"];
+  assert.equal(store["kanso.sim.tools"].ios, undefined, "the late answer is ignored");
+  tabs.probeSimulator(cx);
+  assert.equal(commands.filter((cmd) => cmd === "xcode-select").length, 1, "not asked again at once");
+  timers.splice(0).forEach((timer) => timer.fn(cx));
   tabs.probeSimulator(cx); await Promise.all(pending);
-  assert.equal(commands.filter((cmd) => cmd === "xcode-select").length, 2);
+  assert.equal(commands.filter((cmd) => cmd === "xcode-select").length, 2, "asked again after the wait");
   assert.equal(store["kanso.sim.tools"].ios, SIMCTL);
   assert.equal(store["kanso.pieces"], undefined, "the probe never writes the piece");
+});
+
+test("A Simulator lookup that fails keeps the door and is no list of tools, so the Simulator looks for itself", async () => {
+  const { tabs, store, timers, pending, cx, door, toolRecord } = await probing({
+    exists: async () => { throw new Error("read failed"); }, exec: async () => { throw new Error("the command was lost"); },
+  });
+  tabs.probeSimulator(cx); await Promise.all(pending);
+  assert.equal(door(), true, "a lookup that failed does not hide the door");
+  assert.equal(toolRecord(store["kanso.sim.tools"]), null, "and is no record of tools another reader may use");
+  assert.ok(timers.some((timer) => timer.ms === 30_000), "it is asked again later");
+  for (const marker of [store["kanso.sim.tools"], { state: "unknown" }, { unknown: true }]) {
+    const { Simulator } = await loadSimulator({ shared: () => marker, setShared() {}, home: () => "/home/me", appHome: () => "/app", window: () => ({ platform: "macos" }),
+      InputState: { new: () => ({ on() {}, value: () => "", release() {} }) } });
+    const view = new Simulator(); view.init({}, { focus_handle: () => ({ release() {} }), timer: { after() { return { cancel() {} }; } } });
+    assert.equal(view.tools, null, `${JSON.stringify(marker)} leaves the Simulator to look for its tools`);
+  }
+});
+
+test("Xcode that cannot say where it is is not Xcode missing", async () => {
+  const { tabs, pending, cx, door } = await probing({ exists: async () => false, exec: async (cmd) => (cmd === "xcode-select" ? failure("Permission denied") : good("\n\n\n")) });
+  tabs.probeSimulator(cx); await Promise.all(pending);
+  assert.equal(door(), true);
+});
+
+test("Moving panels while the Simulator lookup runs does not start a second one", async () => {
+  const { promise } = Promise.withResolvers();
+  let calls = 0;
+  const f = await probing({ exists: async () => false, exec: async (cmd) => { if (cmd === "xcode-select") { calls += 1; return promise; } return good(); } });
+  f.tabs.probeSimulator(f.cx);
+  f.store["kanso.panels.order"] = ["sim"];
+  f.tabs.probeSimulator(f.cx);
+  assert.equal(calls, 1);
+});
+
+test("A Simulator lookup that never answers does not stop the bar from asking again", async () => {
+  let calls = 0;
+  const { tabs, timers, cx, door } = await probing({ exists: async () => false, exec: async (cmd) => { if (cmd === "xcode-select") calls += 1; return new Promise(() => {}); } });
+  tabs.probeSimulator(cx);
+  timers.find((timer) => timer.ms === 7000).fn(cx);
+  assert.equal(door(), true, "unknown keeps the door");
+  timers.find((timer) => timer.ms === 30_000).fn(cx);
+  tabs.probeSimulator(cx);
+  assert.equal(calls, 2, "the lost lookup does not hold the next one back");
+});
+
+test("The Simulator says No devices only after a read that found none: never on a failed first look, nor after a failure that follows an empty list", async () => {
+  let bad = true;
+  const f = await viewFixture({ capture: () => { throw new Error("host unavailable"); }, deviceRead: () => { if (bad) throw new Error("host unavailable"); return good(""); } });
+  f.view.tools = null; f.view.devices = null; f.view.line = (text) => text;
+  const answers = [];
+  for (const failing of [true, false, true]) {
+    bad = failing;
+    if (!failing) f.view.tools = { adb: "adb" };
+    await f.read();
+    answers.push([f.view.note, f.view.screen({})]);
+  }
+  assert.deepEqual(answers.map(([note, screen]) => [note, screen === "No devices."]), [["host unavailable", false], [null, true], ["host unavailable", false]]);
+});
+
+test("Refresh in the Simulator redraws as it starts, before any device answers", async () => {
+  const { promise } = Promise.withResolvers();
+  const f = await viewFixture({ deviceRead: () => promise });
+  let paints = 0;
+  f.cx.notify = () => { paints += 1; };
+  f.view.refresh(f.cx);
+  assert.ok(paints > 0);
+});
+
+test("A Simulator that said no is asked again when you come back to a space", async () => {
+  let installed = false;
+  const { tabs, pending, cx, door } = await probing({
+    exists: async (path) => installed && path === SIMCTL, exec: async (cmd) => (cmd === "xcode-select" ? good(DEVELOPER) : good("\n\n\n")),
+  });
+  tabs.probeSimulator(cx); await Promise.all(pending.splice(0));
+  tabs.askCommands(cx, { id: "a", machine: null });
+  assert.equal(door(), false, "no simctl, no door");
+  installed = true;
+  tabs.askCommands(cx, { id: "b", machine: null });
+  tabs.probeSimulator(cx); await Promise.all(pending.splice(0));
+  assert.equal(door(), true, "installed later, it shows on the next visit");
 });
 
 test("SDK folders follow environment precedence and platform defaults", async () => {
@@ -322,6 +409,7 @@ async function viewFixture({ active = true, hidden = false, capture, deviceRead,
     view, cx, state, timers, commands, removed, advance(ms) { now += ms; },
     setPicture(width, height) { const data = new DataView(png.buffer); data.setUint32(16, width); data.setUint32(20, height); },
     async drain() { while (pending.length) await pending.shift(); },
+    async read() { view.refresh(cx); while (pending.length) await pending.shift(); },
   };
 }
 
@@ -429,18 +517,29 @@ test("A missed action answer releases its button and does not accept a late fail
   assert.equal(f.view.error, "Command did not answer.");
 });
 
-test("A missed device read releases Refresh and ignores its late list", async () => {
+test("A device read past its deadline is said at once, gives Refresh back, and its late answer changes nothing", async () => {
   const { promise: answer, resolve: settle } = Promise.withResolvers();
   const f = await viewFixture({ deviceRead: () => answer });
   f.view.refresh(f.cx);
   for (let i = 0; i < 5; i += 1) await Promise.resolve();
-  assert.equal(f.view.reading, true);
   f.view.deadline.fn(f.cx);
-  assert.equal(f.view.reading, false);
   assert.equal(f.view.note, "Devices did not answer.");
+  assert.equal(f.view.reading, false, "Refresh is back");
+  const commands = f.commands.length;
   settle(good("")); await f.drain();
-  assert.equal(f.view.current().id, emulator.id);
+  assert.equal(f.commands.length, commands, "the lost read asks nothing more");
+  assert.equal(f.view.current().id, emulator.id, "and does not replace the list");
   assert.equal(f.view.note, "Devices did not answer.");
+});
+
+test("A lost device answer never keeps Refresh off", async () => {
+  const f = await viewFixture({ deviceRead: () => new Promise(() => {}) });
+  f.view.refresh(f.cx);
+  for (let i = 0; i < 10; i += 1) await Promise.resolve();
+  f.view.deadline.fn(f.cx);
+  f.advance(120_000); f.view.tick(f.cx);
+  assert.equal(f.view.reading, true, "a new read has started");
+  assert.ok(f.view.readToken > 1);
 });
 
 test("Physical Android devices expose keys but no emulator-only control", async () => {

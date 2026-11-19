@@ -359,32 +359,62 @@ test("A door with a long name takes its measured width from the room, so the tab
 });
 
 const asking = async (exec, options = {}) => {
-  const calls = [], pending = [];
+  const calls = [], pending = [], waiting = [];
   const b = await bar({ ...options, exec: async (command, args, opts = {}) => { calls.push([command, args.at(-1), opts.on ?? null]); return exec(command, args, opts); } });
-  const cx = { ...b.cx, timer: { after: (ms, fn) => { if (!ms) fn(cx); return { cancel() {} }; } }, spawn: (fn) => { pending.push(fn(cx)); } };
+  const cx = { ...b.cx, timer: { after: (ms, fn) => { if (ms) waiting.push(fn); else fn(cx); return { cancel() {} }; } }, spawn: (fn) => { pending.push(fn(cx)); } };
   const drawn = async () => {
     b.view.render(cx);
     while (pending.length) await pending.shift();
     return ["Containers", "PR"].filter((label) => door(b.view.render(cx), label));
   };
-  return { b, cx, drawn, lookups: () => calls.filter(([, tool]) => tool === "docker" || tool === "gh"), forget: () => { calls.length = 0; } };
+  const later = () => waiting.splice(0).forEach((fn) => fn(cx));
+  return { b, cx, drawn, later, lookups: () => calls.filter(([, tool]) => tool === "docker" || tool === "gh").toSorted(), forget: () => { calls.length = 0; } };
 };
 const installed = (tools) => async (_command, args) => ({ code: tools.includes(args.at(-1)) ? 0 : 1, stdout: "", stderr: "" });
 
-test("The bar asks the active space's own computer: a remote Windows devbox through where.exe on devbox, this Mac through the shell, each answer kept for its computer", async () => {
+test("Each door asks the computer its panel reads: Containers this computer's Docker on any space, PR the space's own gh, each answer kept for its computer", async () => {
   const exec = async (command, args, options = {}) => (options.on === "devbox"
-    ? { code: 0, stdout: command === "where.exe" ? `C:\\bin\\${args[0]}.exe` : "Win32NT\n", stderr: "" } : { code: 1, stdout: "", stderr: "" });
+    ? { code: args.at(-1) === "docker" ? 1 : 0, stdout: command === "where.exe" ? `C:\\bin\\${args[0]}.exe` : "Win32NT\n", stderr: "" }
+    : { code: args.at(-1) === "docker" ? 0 : 1, stdout: "", stderr: "" });
   const { b, drawn, lookups, forget } = await asking(exec, { machine: "devbox", computers: [{ name: "devbox", layout: "ready" }] });
-  assert.deepEqual(await drawn(), ["Containers", "PR"], "devbox has both: both offered");
-  assert.deepEqual(lookups(), [["where.exe", "docker", "devbox"], ["where.exe", "gh", "devbox"]], "asked on devbox, as Windows");
+  assert.deepEqual(await drawn(), ["Containers", "PR"], "Docker only on this Mac, gh only on devbox: both offered on devbox");
+  assert.deepEqual(lookups(), [["sh", "docker", null], ["where.exe", "gh", "devbox"]], "Docker asked here, gh on devbox as Windows");
   b.space.machine = null;
   forget();
-  assert.deepEqual(await drawn(), [], "this Mac has neither: both hidden");
-  assert.deepEqual(lookups(), [["sh", "docker", null], ["sh", "gh", null]], "asked here, through the shell");
+  assert.deepEqual(await drawn(), ["Containers"], "on this Mac: its Docker, no gh");
+  assert.deepEqual(lookups(), [["sh", "gh", null]], "only gh is new here");
   b.space.machine = "devbox";
   forget();
   assert.deepEqual(await drawn(), ["Containers", "PR"], "back on devbox: offered again");
-  assert.deepEqual(lookups(), [], "from devbox's answer, without asking again in the same bar");
+  assert.deepEqual(lookups(), [], "from the answers kept, without asking again in the same bar");
+});
+
+test("A lookup that fails keeps the door and is asked again later, without asking at rest before then", async () => {
+  let reachable = false;
+  const exec = async (command, args) => { if (!reachable) throw new Error("machine unreachable"); return { code: 0, stdout: "", stderr: "" }; };
+  const { drawn, lookups, forget, later } = await asking(exec);
+  assert.deepEqual(await drawn(), ["Containers", "PR"], "unknown: both stay");
+  forget();
+  assert.deepEqual(await drawn(), ["Containers", "PR"]);
+  assert.deepEqual(lookups(), [], "not asked again on every draw");
+  reachable = true;
+  later();
+  assert.deepEqual(await drawn(), ["Containers", "PR"]);
+  assert.deepEqual(lookups(), [["sh", "docker", null], ["sh", "gh", null]], "asked again once the wait is over");
+});
+
+test("A tool installed after the bar said no shows its door when the space is visited again", async () => {
+  const tools = [];
+  const { b, drawn, lookups, forget } = await asking((command, args) => installed(tools)(command, args));
+  assert.deepEqual(await drawn(), [], "neither yet");
+  tools.push("docker");
+  forget();
+  assert.deepEqual(await drawn(), [], "the same space at rest: not asked again");
+  assert.deepEqual(lookups(), []);
+  b.space.id = "s2";
+  await drawn();
+  b.space.id = "s1";
+  assert.deepEqual(await drawn(), ["Containers"], "visited again: Docker installed since shows its door");
 });
 
 test("Without Docker the Containers door is not offered, without gh the PR door is not, and both stay until the computer answers", async () => {
@@ -409,14 +439,16 @@ test("A new bar asks again whatever was saved: tools installed since show their 
 });
 
 test("The computer is asked whether each tool exists: command -v through the shell, where.exe on Windows; only a clean not-found hides a door", async () => {
-  const { probeCommands, offered } = await load("kanso-tabs/panel-tools.js", ["probeCommands", "offered"]);
+  const { probeCommand, offered } = await load("kanso-tabs/panel-tools.js", ["probeCommand", "offered"]);
   const asked = [];
   const answer = (codes) => async (command, args) => { asked.push([command, ...args]); return { code: codes[args.at(-1)], stdout: "", stderr: "" }; };
-  assert.deepEqual(clone(await probeCommands(answer({ docker: 1, gh: 0 }), "macos")), { docker: false, gh: true }, "found shows, not found hides");
+  const probe = async (run, platform) => Object.fromEntries(await Promise.all(["docker", "gh"].map(async (tool) => [tool, await probeCommand(run, platform, tool)])));
+  const keyed = (found) => ({ commands: { "\tdocker": found.docker, "\tgh": found.gh } });
+  assert.deepEqual(await probe(answer({ docker: 1, gh: 0 }), "macos"), { docker: false, gh: true }, "found shows, not found hides");
   assert.deepEqual(asked.map(([command, , script]) => [command, script]), [["sh", 'command -v "$1" >/dev/null 2>&1 || exit 1'], ["sh", 'command -v "$1" >/dev/null 2>&1 || exit 1']]);
   assert.deepEqual(asked.map((call) => call.at(-1)), ["docker", "gh"]);
   asked.length = 0;
-  assert.deepEqual(clone(await probeCommands(answer({ docker: 0, gh: 1 }), "windows")), { docker: true, gh: false });
+  assert.deepEqual(await probe(answer({ docker: 0, gh: 1 }), "windows"), { docker: true, gh: false });
   assert.deepEqual(asked, [["where.exe", "docker"], ["where.exe", "gh"]]);
   const unknown = {
     "a chdir ENOENT that names the tool": (command) => Object.assign(new Error(`chdir /gone before starting ${command} failed`), { code: "ENOENT", path: "/gone", syscall: "chdir" }),
@@ -425,11 +457,11 @@ test("The computer is asked whether each tool exists: command -v through the she
     "a plain error naming the tool": (command) => new Error(`${command}: command not found`),
   };
   for (const [label, failure] of Object.entries(unknown)) {
-    const probed = await probeCommands(async (_command, args) => { throw failure(args.at(-1)); }, "macos");
-    assert.deepEqual(clone(probed), { docker: null, gh: null }, label);
-    assert.equal(offered("containers", { commands: probed }) && offered("pr", { commands: probed }), true, `${label}: both doors stay offered`);
+    const probed = await probe(async (_command, args) => { throw failure(args.at(-1)); }, "macos");
+    assert.deepEqual(probed, { docker: null, gh: null }, label);
+    assert.equal(offered("containers", keyed(probed)) && offered("pr", keyed(probed)), true, `${label}: both doors stay offered`);
   }
-  for (const code of [2, 126, 127, 9009]) assert.deepEqual(clone(await probeCommands(async () => ({ code, stdout: "", stderr: "" }), "macos")), { docker: null, gh: null }, `exit ${code}`);
+  for (const code of [2, 126, 127, 9009]) assert.deepEqual(await probe(async () => ({ code, stdout: "", stderr: "" }), "macos"), { docker: null, gh: null }, `exit ${code}`);
 });
 
 test("Moving the drawn doors keeps the slot of a door gh's absence or Settings hides, first or between the moved doors, and it comes back there", async () => {
