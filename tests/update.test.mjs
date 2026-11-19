@@ -459,13 +459,15 @@ const watchRecover = async (t, home, dir, file, ready) => {
   return { saw, exited, text: () => err };
 };
 
+const expectQuick = (result, began) => assert.ok(Date.now() - began < 7000, `waited ${Date.now() - began}: ${result.stderr}`);
+
 const expectStop = (result, op, path, began) => {
   assert.equal(result.code, 1, result.stderr);
   const prefix = `${op} ${path} `;
   const line = result.stderr.split(/\r?\n/).find((row) => row.startsWith(prefix));
   assert.ok(line, result.stderr);
   assert.ok(line.slice(prefix.length).trim(), line);
-  assert.ok(Date.now() - began < 7000, `waited ${Date.now() - began}: ${result.stderr}`);
+  expectQuick(result, began);
 };
 
 const namesWithin = (row, op, folder, reason) => {
@@ -481,7 +483,7 @@ const expectStopWithin = (result, op, folder, reason, began) => {
   assert.equal(result.code, 1, result.stderr);
   const line = result.stderr.split(/\r?\n/).find((row) => row.startsWith(`${op} `));
   assert.ok(line && namesWithin(line, op, folder, reason), result.stderr);
-  assert.ok(Date.now() - began < 7000, `waited ${Date.now() - began}: ${result.stderr}`);
+  expectQuick(result, began);
 };
 
 const deniedReason = async () => {
