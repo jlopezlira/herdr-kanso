@@ -387,7 +387,8 @@ windowsOnly("A home folder that cannot be created stops the install and names th
   await writeFile(themes, "not a directory\n");
   const before = await tree(home);
   const how = await s.run(home, 0);
-  assert.ok(how.startsWith(`failed: create ${themes} `), how);
+  const prefix = `failed: ${stopPrefix("create", themes)}`;
+  assert.ok(how.startsWith(prefix) && hasReason(how, prefix), `expected ${prefix}<why>, got ${how}`);
   assert.deepEqual(await tree(home), before, how);
   assert.deepEqual(await stages(home), [], how);
 });
