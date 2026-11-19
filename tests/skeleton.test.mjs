@@ -143,9 +143,9 @@ test("the side panels show the shared skeleton before they are ready and while t
   const { PullRequest } = await loadPullRequest(host);
   const pr = new PullRequest();
   assertSkeleton(framed(pr));
-  Object.assign(pr, { tab: "closed", closedPrs: null, closedLoading: true, openPrs: [] });
+  Object.assign(pr, { tab: "closed", closedPrs: null, flight: { closed: 0 }, openPrs: [] });
   assertSkeleton(pr.listPage(c));
-  Object.assign(pr, { diffLoading: true, diffs: null });
+  Object.assign(pr, { flight: { diff: 0 }, diffs: null });
   assertSkeleton(pr.fileDiff(c, "a.js"));
   Object.assign(pr, { picker: "labels", pr: { author: { login: "me" } }, candidates: null, query: "", pickerError: null, search: {}, pending: null, truncated: false });
   assertSkeleton(pr.pickerFor("labels", c));

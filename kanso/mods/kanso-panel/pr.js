@@ -186,9 +186,7 @@ export class PullRequest {
 
   release(name, gen) {
     if (this.flight?.[name] !== gen) return false;
-    const next = { ...this.flight };
-    delete next[name];
-    this.flight = next;
+    this.flight = Object.fromEntries(Object.entries(this.flight).filter(([key]) => key !== name));
     if (name === "loading") this.loading = false;
     if (name === "busy") this.busy = null;
     if (name === "pending") this.pending = null;
