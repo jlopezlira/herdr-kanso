@@ -23,12 +23,12 @@ const blockAt = (html, at) => {
 };
 const MARK_ART = { "e-work": "working", "e-blk": "blocked" };
 const artName = (href) => MARK_ART[href] ?? href.replace(/^lu-/, "");
-const row = ({ lead = "", label = "", hint = "", trail = [] }) => [lead, quotes(label), hint, trail.join(",")].join(" | ");
+const row = ({ lead = [], label = "", hint = "", trail = [] }) => [lead.join(","), quotes(label), hint, trail.join(",")].join(" | ");
 const boardRow = (html) => {
   const parts = [...html.matchAll(/<use href="#([^"]+)"|<span class="kanso-menu__hint">([^<]*)<\/span>|>([^<>]+)(?=<)/g)];
   const at = parts.findIndex(([, , , text]) => text?.trim());
   const art = (list) => list.filter(([, href]) => href).map(([, href]) => artName(href));
-  return row({ lead: art(parts.slice(0, Math.max(at, 0)))[0] ?? "", label: decode(parts[at]?.[3]?.trim() ?? ""),
+  return row({ lead: art(parts.slice(0, Math.max(at, 0))), label: decode(parts[at]?.[3]?.trim() ?? ""),
     hint: parts.find(([, , hint]) => hint !== undefined)?.[2] ?? "", trail: art(parts.slice(at + 1)) });
 };
 const boardRows = (block) => [...block.matchAll(/<div class="kanso-menu__(heading|item)[^"]*"[^>]*>([\s\S]*?)<\/div>/g)]
@@ -41,10 +41,10 @@ const boardMenus = (id) => {
 const iconName = (path) => path.split("/").at(-1).replace(/\.svg$/, "");
 const blockedDot = (kid) => calls(kid, "rounded_full").length > 0 && calls(kid, "child").some((call) => call[1] === "!");
 const ownWords = (kid) => kid.calls.filter((call) => call[0] === "child" && typeof call[1] === "string").map((call) => call[1]);
-const artOf = (kid) => (blockedDot(kid) ? "blocked" : calls(kid, "svg").map((call) => iconName(call[1]))[0] ?? "");
+const artOf = (el) => everyDrawn(el).flatMap((kid) => (blockedDot(kid) ? ["blocked"] : calls(kid, "svg").map((call) => iconName(call[1]))));
 const itemRow = (item) => {
   const [lead, label, ...rest] = item.kids;
-  return row({ lead: artOf(lead), label: drawnWords(label).join(" "), hint: rest.filter((kid) => !artOf(kid)).flatMap(drawnWords).join(" "), trail: rest.map(artOf).filter(Boolean) });
+  return row({ lead: artOf(lead), label: drawnWords(label).join(" "), hint: rest.filter((kid) => !artOf(kid).length).flatMap(drawnWords).join(" "), trail: rest.flatMap(artOf) });
 };
 const rowsOf = (el) => (calls(el, "accessibility_label").length ? [itemRow(el)]
   : [...ownWords(el).map((label) => row({ label })), ...[...el.kids, ...calls(el, "content").map((call) => call[1])].flatMap(rowsOf)]);
