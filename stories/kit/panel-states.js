@@ -1,7 +1,10 @@
 // The panels' named states: each one a preset of its panel's props, the catalog draws its record from it.
+import { github } from './github.js';
+import { githubViews } from './github-states.js';
 import { containers, conversationFind, files, markdownWindow, memory, ports, settings, spend, preview, pulls, worktrees, pinPanel, shipped, sharing, simulator, images } from './panels.js';
 import { phrase } from './kit.js';
 import { keyLayer, sampleScreens, sampleShot } from './samples.js';
+import { verdicts, refusals, talkSample, answers, events, detailSample, reviewSample, openedPull, failedActs, talked, filesCut, moreChecks, detailsShown, detailed, person, people, labels, notes, picker, reviewers, pageOf } from './pull-states.js';
 import { sampleContainers, sampleDisk, sampleMemory, sampleMemoryNotices, sampleAreas, sampleFiles, sampleFilesFailures, sampleFind, samplePlainTree, samplePortHistory, samplePorts, sampleTree, sampleCustomPanel, sampleFound, sampleHerdrKeys, sampleHidden, sampleKeyGroups, sampleMaintainers, sampleMarkdown, samplePlaces, sampleReleases, sampleSpend, sampleWorktrees, sampleWorktreeNotices, sampleShipped, sampleShippedCard, sampleShippedNotices, sampleShare, sampleTaken, samplePreview, samplePull, samplePullPages, samplePulls, samplePins, sampleSimulator, sampleImages } from './panel-samples.js';
 
 // A notice's state: the panel at rest with the notice beside it.
@@ -427,17 +430,6 @@ const [acmeShop, ...otherProjects] = pullProjects;
 const askedGroup = { name: 'Asked of you', pulls: asked };
 const listed = (extra = {}) => ({ groups: [askedGroup, ...pullProjects], ...extra });
 const withBranch = (branch, extra = {}) => ({ groups: [askedGroup, { ...acmeShop, branch }, ...otherProjects], ...extra });
-const { verdicts, refusals, thread: talkSample, answers, events, details: detailSample, review: reviewSample } = samplePull;
-const openedPull = (verdict = verdicts.failed, extra = {}) => ({ page: 'pr', number: verdict.number ?? samplePull.number, title: verdict.title ?? samplePull.title, agent: verdict.agent ?? samplePull.agent, verdict, details: { summary: detailSample.summary }, ...extra });
-const failedActs = ['explain', 'log', 'github'];
-const talked = (extra = {}) => openedPull(verdicts.failed, { acts: failedActs, talk: { thread: talkSample, ...extra } });
-const { cut: filesCut, moreChecks, ...detailsShown } = detailSample;
-const detailed = (extra = {}) => openedPull(verdicts.failed, { acts: failedActs, scope: samplePull.branch, details: { ...detailsShown, open: true, ...extra } });
-const person = (checked, extra = {}) => ({ name, second }) => ({ label: name, second, checked: checked.includes(name), ...extra });
-const { people, labels, notes } = samplePullPages;
-const picker = (title, items) => ({ ...detailed(), picker: { title, items: [{ field: 'Find' }, ...items] } });
-const reviewers = (checked) => people.slice(0, 3).map(person(checked));
-const pageOf = (page, { file, facts: said, ...rest }, extra = {}) => ({ page, file, facts: said, back: samplePull.number, ...rest, ...extra });
 export const pullsViews = {
   'At rest: what waits on you, then each project': [listed(), 'Asked of you first, then each project’s open ones; each row ends on its state, in its tone.'],
   'A branch with no pull request: its row first': [withBranch(branches.none), 'The branch in front leads its project, with Create pull request.'],
@@ -598,6 +590,6 @@ export const imagesViews = {
   'No agent in focus': [{ empty: sampleImages.noAgent }, 'One quiet line.'],
   'Narrow, 300': [onPicture({ look: 'narrow' }), 'The picture fits; the notes wrap.'],
 };
-const panels = { 'Panels/Settings': [settingsViews, settings], 'Panels/Find': [findViews, conversationFind], 'Panels/Files': [filesViews, files], 'Panels/Ports': [portsViews, ports], 'Panels/Markdown': [markdownViews, markdownWindow], 'Panels/Containers': [containersViews, containers], 'Panels/Memory': [memoryViews, memory], 'Panels/Spend': [spendViews, spend], 'Panels/Worktrees': [worktreesViews, worktrees], 'Panels/Shipped': [shippedViews, shipped], 'Panels/Share': [shareViews, sharing], 'Panels/Images': [imagesViews, images], 'Panels/Preview': [previewViews, preview], 'Panels/PR': [pullsViews, pulls], 'Panels/Pins': [pinsViews, pinPanel], 'Panels/Simulator': [simulatorViews, simulator] };
+const panels = { 'Panels/Settings': [settingsViews, settings], 'Panels/Find': [findViews, conversationFind], 'Panels/Files': [filesViews, files], 'Panels/Ports': [portsViews, ports], 'Panels/Markdown': [markdownViews, markdownWindow], 'Panels/Containers': [containersViews, containers], 'Panels/Memory': [memoryViews, memory], 'Panels/Spend': [spendViews, spend], 'Panels/Worktrees': [worktreesViews, worktrees], 'Panels/Shipped': [shippedViews, shipped], 'Panels/Share': [shareViews, sharing], 'Panels/Images': [imagesViews, images], 'Panels/Preview': [previewViews, preview], 'Panels/PR': [pullsViews, pulls], 'Panels/GitHub': [githubViews, github], 'Panels/Pins': [pinsViews, pinPanel], 'Panels/Simulator': [simulatorViews, simulator] };
 export const panelPages = Object.fromEntries(Object.entries(panels).map(([page, [views, draw]]) => [page, stated(views, draw)]));
 export const panelPlaygrounds = Object.fromEntries(Object.entries(panels).map(([page, [views]]) => [page, { ...panelPages[page], argTypes: control(views) }]));

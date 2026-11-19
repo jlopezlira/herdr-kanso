@@ -63,6 +63,7 @@ export const descriptions = {
   Files: 'The current pane’s changed files and repository tree.',
   Preview: 'A file reader for text, Markdown and pictures beside the current pane.',
   PR: 'Pull requests with checks, reviews, diffs and conversation.',
+  GitHub: 'The pull request board of the folder in front, from any folder, and every action GitHub offers on one.',
   Worktrees: 'Repository checkouts to open, create, repair or remove.',
   Shipped: 'Contribution totals for a chosen period, with a share card.',
   Ports: 'Listening services and the panes that own them.',
