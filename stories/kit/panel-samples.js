@@ -38,7 +38,7 @@ export const sampleKeyGroups = {
     action('Move the pane left', ['⌥⇧⌘H']), action('Move the pane down', ['⌥⇧⌘J']), action('Move the pane up', ['⌥⇧⌘K']), action('Move the pane right', ['⌥⇧⌘L'])],
   'Moving along the strip': [action('Go to a column', ['⌘1…9']), action('First column', ['⌘⇧[']), action('Last column', ['⌘⇧]']), action('Bring the pane into view', ['⌥⌘C']),
     action('Slide left', ['⌥⌘,']), action('Slide right', ['⌥⌘.']), action('Fewer panes in view', ['⌥⌘-']), action('More panes in view', ['⌥⌘=']), action('Even the columns out', ['⌥⌘0'])],
-  'Spend, Preview, Memory': [action('Spend: read again', ['⌘R']), action('Spend’s settings', ['⌘,']), action('Preview: save the file', ['⌘S']), action('Memory: check now', ['⌘R']), action('Memory: show fewer', ['Esc'])],
+  'Spend, Preview, Memory': [action('Spend: read again', ['⌘R']), action('Spend’s settings', ['⌘,']), action('Spend: back', ['Esc']), action('Preview: save the file', ['⌘S']), action('Memory: check now', ['⌘R']), action('Memory: show fewer', ['Esc'])],
   'Every list and menu': [action('Down and up', ['j', 'k']), action('First and last', ['gg', 'G']), action('Open', ['Enter']), action('Find', ['/'])],
 };
 export const sampleHerdrKeys = 31;
@@ -276,6 +276,7 @@ export const sampleSpend = {
   early: plan('24×', 'Claude Max 20x · too early to say', 'on pace: $322 in 2 days, about $4,800 by November 30', 'dim'),
   periods: [{ key: 'day', label: 'Today' }, { key: 'month', label: 'Month' }, { key: '30d', label: '30 days' }, { key: 'year', label: 'Year' }, { key: 'all', label: 'All time' }],
   today: { value: '$41.20', unit: 'today', said: ['14 tasks', '$2.94 a task', '9.1M tokens'] },
+  nothing: { value: '$0.00', unit: 'today', said: ['0 tasks', '0 tokens'] },
   past: { value: '$824.00', unit: 'October', said: ['212 tasks', '$3.89 a task', '140M tokens'] },
   lists: {
     projects: [spent('acme-shop', '$28.40', '6.2M tokens · ~/acme-shop'), spent('docs-site', '$9.10', '2.1M tokens · ~/docs-site'), spent('reports', '$3.70', '0.8M tokens · ~/reports')],
@@ -430,7 +431,7 @@ export const samplePull = {
     permission: { number: `${pullRequest(575)}`, title: 'Recycle the mod runtime before it runs out of memory', text: 'No permission to merge', tone: 'dim', lines: [['You', 'read; merging needs write'], ['Can merge', 'ogulcan and mira, who approved']] },
     unfinished: { text: '3 checks did not finish', tone: 'blocked', lines: [['deploy / preview', 'cancelled by a newer push'], ['test / e2e', 'timed out after 30 min'], ['build / docs', 'waiting for approval to run']] },
     waits: { number: `${pullRequest(143)}`, title: 'Show the retry time in the cart', text: 'test / e2e failed · cart-ui needs you first', tone: 'blocked', log: '✘ cart.spec.ts:18 shows the wait\n  Expected "Try again in 2 s"\n  Received "Try again in NaN s"' },
-    changes: { number: '#42', title: 'Make webhook delivery safe to retry', agent: 'webhooks', text: 'Changes requested', tone: 'blocked' },
+    changes: { number: '#42', title: 'Make webhook delivery safe to retry', agent: 'webhooks', text: 'Changes requested', tone: 'blocked', lines: [['sam', 'src/webhooks/deliver.ts:6'], ['Cover a timeout after the receiver accepts the event.']], threads: '+1 more thread' },
     closed: { text: 'Closed', tone: 'dim' },
   },
   refusals: {
@@ -452,7 +453,7 @@ export const samplePull = {
     agentAnswer: 'Covered in 9c2d1e4: a timeout after acceptance now retries with the same idempotency key, and deliver.test.ts checks that the receiver sees it once.',
     answered: 'webhooks answered 14:21',
   },
-  events: { approved: { name: 'sam approved', meta: '1h' }, comment: said('sam', '1h', 'Fine once test / unit passes.'), mine: { name: 'You approved, with 2 line comments', meta: 'now' }, resolved: { name: 'Resolved: lee', detail: 'limits.ts:12' }, offline: 'GitHub not answering. 1 reply waits.' },
+  events: { approved: { name: 'sam approved', meta: '1h' }, comment: said('sam', '1h', 'Fine once test / unit passes.'), mine: { name: 'You approved, with 2 line comments', detail: 'sending to GitHub', meta: 'now', pending: true }, resolved: { name: 'Resolved: lee', detail: 'limits.ts:12' }, offline: 'Read 14:02 · GitHub not answering. 1 reply waits.' },
   details: {
     summary: '5 checks · 3 people · 3 files',
     description: `Limits POST /checkout per customer with a token bucket: 40 a minute on Free, 400 on Pro. An empty bucket answers 429 with Retry-After.\n\nThe bucket lives in memory for now; ${pullRequest(140)} moves it to Redis.`,
@@ -463,7 +464,7 @@ export const samplePull = {
     moreChecks: 'Show 3 more',
   },
   review: { number: '#44', title: 'Batch webhook retries', text: 'Review required · asked of you', tone: 'working', count: '2 line comments', draft: 'Batching looks right. Two notes on the backoff inline.', changed: [{ letter: 'M', name: 'retry.ts', folder: 'src/webhooks', stat: '+52 −9' }, { letter: 'A', name: 'batch.test.ts', folder: 'src/webhooks', stat: '+12' }] },
-  message: { to: 'Message to checkout', text: 'sam  src/api/checkout.ts:42\nHandle an empty bucket before decrementing the token count.\nhttps://github.com/acme/shop/pull/142' },
+  message: { text: 'sam  src/webhooks/deliver.ts:6\nCover a timeout after the receiver accepts the event.\nhttps://github.com/acme/relay/pull/42' },
   remote: { computer: 'devbox', stale: 'devbox unreachable · Read 14:02' },
 };
 export const samplePullPages = {
@@ -480,6 +481,7 @@ export const samplePullPages = {
   log: { file: 'test / unit', facts: `${pullRequest(142)} · Run pnpm test · 1m 48s · 38 lines`, text: { kind: 'log', first: 1, text: ' RUN  v3.2.0 /work/acme-shop\n ✓ src/api/checkout.test.ts (9 tests) 41ms\n ✓ src/api/plans.test.ts (6 tests) 12ms\n FAIL  src/api/limits.test.ts > refills after 2 s\nAssertionError: expected 39 to be 40\n ❯ src/api/limits.test.ts:42:18\n    40|   vi.advanceTimersByTime(2000)\n    41|   const b = bucket("c1")\n  > 42|   expect(b.tokens).toBe(40)\n Test Files  1 failed | 11 passed (12)\n      Tests  1 failed | 47 passed (48)\n##[error]Process completed with exit code 1.' } },
   refused: { text: 'Could not create it', source: 'gh: GraphQL: No commits between main and rate-limit', fix: 'Create on GitHub' },
   create: { facts: 'acme-shop · rate-limit → main · 4 commits', title: 'Rate limit checkout per customer', body: 'Limits POST /checkout per customer with a token bucket.' },
+  me: { name: 'jj', second: 'JJ' },
   people: [{ name: 'sam', second: 'Sam Ortiz' }, { name: 'sloane', second: 'Sloane Park' }, { name: 'stan', second: 'Stan Ruiz' }, { name: 'lee', second: 'Lee Chen' }],
   labels: [{ name: 'api', dot: 'blue' }, { name: 'rate-limit', dot: 'violet' }, { name: 'bug', second: 'Something isn’t working', dot: 'blocked' }, { name: 'docs', dot: 'working' }],
   notes: { first: 'First 100 of 132', none: 'Nobody with access matches', offline: 'GitHub not answering. 2 changes wait.', noLabels: 'This repository has no labels', truncated: 'More people have access than are listed here' },
@@ -632,7 +634,7 @@ export const sampleShipped = {
 };
 const { week: shipWeek, records: shipBests, rhythm: shipRhythm } = sampleShipped;
 export const sampleShippedCard = {
-  title: 'Shipped', right: shipWeek.label, stats: shipWeek.counts, note: shipWeek.ever,
+  title: 'Shipped', subtitle: '@jordan', right: shipWeek.label, stats: [...shipWeek.counts, { value: '340', unit: 'contributions' }, { value: '11', unit: 'repositories this week' }], note: shipWeek.ever, address: 'github.com/jlopezlira/herdr-kanso',
   hero: { big: shipWeek.hero.value, small: shipWeek.hero.small, unit: shipWeek.hero.unit, delta: shipWeek.delta },
   blocks: [
     { kind: 'streak', title: 'Streak', right: shipBests.streak.longest, n: shipBests.streak.value, unit: shipBests.streak.unit, days: shipWeek.days },
@@ -663,6 +665,8 @@ export const sampleShare = {
     Saved: { state: 'done', home: 'memory', text: 'Memory image saved', detail: 'Downloads/kanso-memory-2026-11-12.png' },
   },
   failed: { state: 'failed', home: 'memory', text: 'The image could not be made', detail: 'Install Chrome, Chromium or rsvg-convert to make the image.' },
+  unmade: { text: 'The image could not be made', source: 'Install Chrome, Chromium or rsvg-convert to make the image.', fix: 'Save image' },
+  address: 'github.com/jlopezlira/herdr-kanso',
   cards: {
     Ports: {
       title: 'Ports', right: 'last 30 days', note: '1.6 GB of memory given back',
@@ -701,7 +705,7 @@ export const sampleSimulator = {
     { name: 'iOS', devices: [simDevice('iPhone 16 Pro', 'iOS 18.2', 'On', true), simDevice('iPhone SE (3rd generation)', 'iOS 18.2', 'Off'), simDevice('iPad Air 11-inch (M2)', 'iPadOS 18.2', 'Off')] },
     { name: 'Android', devices: [simDevice('Pixel 8', 'Android 15', 'On'), simDevice('Pixel 4 API 30', 'x86 image on arm', 'Off')] },
   ],
-  scopes: { iphone: ['iPhone 16 Pro'], pixel: ['Pixel 8'], off: ['iPhone SE', 'off'], starting: ['iPhone SE', 'starting… 42s'], stalled: ['Pixel 8', 'as of 12s ago', 'emulator not answering'], offline: ['Pixel 8', 'offline'], image: ['Pixel 4 API 30', 'off'], unauthorized: ['R58M123', 'unauthorized'] },
+  scopes: { iphone: ['iPhone 16 Pro'], booted: ['iPhone 16 Pro', 'iOS 18.2', 'booted'], pixel: ['Pixel 8'], off: ['iPhone SE', 'off'], starting: ['iPhone SE', 'starting… 42s'], stalled: ['Pixel 8', 'as of 12s ago', 'emulator not answering', 'trying again'], offline: ['Pixel 8', 'offline'], image: ['Pixel 4 API 30', 'off'], unauthorized: ['R58M123', 'unauthorized'] },
   said: { remote: 'Devices are on this computer.', noEmulator: 'Android SDK emulator binary is missing.' },
   touch: [72, 41],
   narrow: [{ label: 'Trail runner', value: '$64' }, { label: 'Socks ×2', value: '$12' }],

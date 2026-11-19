@@ -16,8 +16,10 @@ const possessive = (name) => chord(null, name, '’s');
 const heading = (name, extra = {}) => row({ name, heading: true, ...extra });
 
 const orderTools = [{ label: 'Move up', icon: 'lu-chevron-up' }, { label: 'Move down', icon: 'lu-chevron-down' }];
+const showChoice = [{ key: 'always', label: 'Always' }, { key: 'needed', label: 'When needed' }];
 const pieceRow = ({ name, on = true, when = null, where = null, order = false, selected = false, pending = false }) => row({
-  name, detail: where, meta: on ? when : null, dimmed: !on, current: selected, pending, actions: order ? orderTools : [], tools: [toggle({ checked: on, label: name })],
+  name, detail: where, meta: on ? when : null, dimmed: !on, current: selected, pending, actions: order ? orderTools : [],
+  tools: [on && when ? tabs({ items: showChoice, value: 'needed', size: 'sm' }) : null, toggle({ checked: on, label: name })],
 });
 const hiddenRow = (hover) => ([name, where]) => row({ name, hover: hover === name, detail: hover === name ? where : null, action: hover === name ? { label: 'Show', kind: 'quiet' } : null });
 const hiddenList = ({ hidden, hover }) => list(heading('Hidden by you', { action: hidden.length ? { label: 'Show all', kind: 'quiet' } : null }),
@@ -43,10 +45,11 @@ const herdrKeys = (count) => row({ name: 'Herdr’s keys', chip: phrase(count), 
 export const settingsKeys = ({ query = null, os, layer, picked, groups = {}, herdr = 0, open = null, practice = null }) => list(findField(query), keyboardExplorer({ os, layer, picked }),
   open ? list(Object.entries(groups).map(groupBlock(open, practice)), herdrKeys(herdr)) : stack({ variant: 'columns' }, Object.entries(groups).map(groupBlock(open, practice)), herdrKeys(herdr)));
 
-const checks = ({ auto = true, checking = false }) => setting({ label: 'Check for kansō updates', control: toggle({ checked: auto, label: 'Check for kansō updates' }),
-  link: button({ label: checking ? 'Checking…' : 'Check for updates', kind: 'quiet', size: 'sm', spin: checking }) });
+const checkSchedule = { on: 'Checks on start and every few minutes; an update is only installed when you choose.', off: 'Checks only when you ask; an update is only installed when you choose.' };
+const checks = ({ auto = true, checking = false }) => setting({ label: 'Check for kansō updates', control: toggle({ checked: auto, label: 'Check for kansō updates' }), note: auto ? checkSchedule.on : checkSchedule.off,
+  link: button({ label: checking ? 'Checking…' : 'Check for updates', kind: 'quiet', size: 'sm', spin: checking, disabled: checking }) });
 const releases = ({ newer, installed, older, installing = false, unfolded = [] }) => stack({ variant: 'timeline' },
-  newer ? release({ ...newer, node: 'newer', action: phrase(installing ? 'Updating to' : 'Update to', newer.version) }) : null,
+  newer ? release({ ...newer, node: 'newer', busy: installing, action: phrase(installing ? 'Updating to' : 'Update to', newer.version) }) : null,
   release({ ...installed, node: 'here', changes: [] }),
   unfolded.length ? unfolded.map((item) => release({ ...item, node: 'newer' })) : release({ version: phrase(older.from, 'to', older.to), node: 'older' }));
 const stale = ({ read }) => setting({ label: phrase('Read', read, '· GitHub not answering'), control: button({ label: 'Refresh', kind: 'quiet', size: 'sm' }) });
@@ -161,7 +164,7 @@ export const ports = ({ share = false, entry = null, ...props }) => withBeside(c
 const documentTools = {
   source: ({ doc }) => button({ label: doc.view === 'source' ? 'Formatted' : 'Source', kind: 'icon', icon: 'lu-code', active: doc.view === 'source' }),
   refresh: ({ shot }) => panelRefresh({ reading: shot?.state === 'loading' }),
-  done: () => button({ label: 'Done', size: 'sm' }),
+  done: ({ saving = false }) => button({ label: 'Done', size: 'sm', disabled: saving, spin: saving }),
   save: ({ saving = false }) => button({ label: saving ? 'Saving…' : 'Save', size: 'sm', spin: saving, disabled: saving }),
   discard: ({ discarding = false }) => button({ label: 'Discard', kind: 'icon', icon: 'lu-undo', armed: discarding }),
   'open with': () => button({ label: 'Open with…', kind: 'icon', icon: 'lu-external-link' }),
@@ -196,10 +199,11 @@ const healthVerbs = {
   failed: () => [{ label: 'Logs', kind: 'solid' }, { label: 'Start' }],
   stopped: () => [{ label: 'Start' }, { label: 'Logs' }],
 };
+const changesIt = ['Stop', 'Restart', 'Start', 'Remove'];
 const containerVerbs = (item, { details, armed, pending, local }) => [
   ...healthVerbs[item.health]({ web: item.web && local }), { label: details ? 'Less' : 'Details' },
   item.health === 'running' ? null : { label: 'Remove', armed, verb: 'remove' },
-].filter(Boolean).map((verb) => ({ ...verb, disabled: pending }));
+].filter(Boolean).map((verb) => ({ ...verb, disabled: pending && changesIt.includes(verb.label) }));
 const detailRows = (said) => (said.length ? said.map(([name, value]) => row({ name, detail: value, depth: 1 })) : row({ name: 'No details from Docker', depth: 1, dimmed: true }));
 const eachPicked = (picked, draw) => (item) => draw(item, item.name === picked);
 const containerRow = ({ picked, details, said = [], armed, pending, refused, narrow, local }) => eachPicked(picked, (item, open, status = healthMarks[item.health]) => list(refusable({ open, refused: details ? null : refused }, {
@@ -271,11 +275,12 @@ const sessionVerbs = (item, { armed, unrecyclable }) => kept(
   item.state === 'idle' && !unrecyclable ? { label: 'Recycle' } : null,
   item.state === 'working' ? null : { label: 'Close', armed, verb: 'close' });
 const sessionMeta = (item, done) => done ?? (item.over ? { text: item.size, tone: 'working' } : item.size);
+const sessionMarks = { blocked: 'blocked', working: 'working' };
 const sessionRow = ({ picked, armed, refused, spark, unrecyclable, batch }) => {
   const done = Object.fromEntries(batch?.done ?? []);
   return eachPicked(picked, (item, open) => list(row({
     name: item.name, meta: sessionMeta(item, done[item.name]), current: open, pending: item.name === batch?.current,
-    mark: item.state === 'blocked' ? 'blocked' : 'none',
+    mark: sessionMarks[item.state] ?? 'none',
     second: open ? facts(...item.said, unrecyclable) : null,
     verbs: open ? sessionVerbs(item, { armed, unrecyclable }) : [],
   }), open && spark ? bars(spark) : null, open && refused ? failureBlock(refused) : null));
@@ -337,7 +342,7 @@ const taskBody = ({ where, prompt, value, parts, models, sessions, count, projec
   historyBars(past), quiet({ label: phrase('Open', project) }));
 const sourceRow = ({ name, where, on, pending = false }) => row({ name, detail: where, dimmed: !on, pending, tools: [toggle({ checked: on, label: name })] });
 const planRow = (edit) => (item) => (item.name === edit?.name
-  ? row({ name: item.name, second: edit.said, pending: edit.pending, actions: [{ label: 'Remove plan', icon: 'lu-x' }], tools: [input({ label: 'A month', text: edit.cost, focus: !edit.pending, error: edit.error })] })
+  ? row({ name: 'Plan', second: edit.said, pending: edit.pending, actions: [{ label: 'Remove plan', icon: 'lu-x' }], tools: [input({ label: 'Plan name', text: item.name }), input({ label: 'A month', text: edit.cost, focus: !edit.pending, error: edit.error })] })
   : row({ name: item.name, meta: item.cost, second: item.said }));
 const newPlan = ({ name, cost, error = false }) => stack({ variant: 'line' }, input({ label: 'ChatGPT Pro, Claude Max…', text: name, focus: !name }), input({ label: '200', text: cost, focus: Boolean(name), error }));
 const spendSettings = ({ sources = null, absent, owned, edit = null, added = null, refused = null, unsaved = null, prices, updates }) => list(
@@ -400,7 +405,7 @@ const thread = ({ where, snippet, first, replies = [], answer = null, agentAnswe
   line(quietAct('Resolve'), typing || agentAnswer ? null : explainButton({ agent, size: 'sm' }), explained ? row({ name: explained, dimmed: true }) : null));
 const conversation = ({ thread: talk = null, resolved = null, approved = null, said = null, agent, ...state }) => list(heading('Conversation'),
   resolved ? row({ icon: 'lu-check', name: resolved.name, detail: resolved.detail, action: { label: 'Undo', kind: 'quiet' } }) : null,
-  talk ? thread(talk, { agent, ...state }) : null, approved ? row({ icon: 'lu-check', name: approved.name, meta: approved.meta, dimmed: true }) : null,
+  talk ? thread(talk, { agent, ...state }) : null, approved ? row({ icon: 'lu-check', name: approved.name, detail: approved.detail, meta: approved.meta, pending: approved.pending, dimmed: true }) : null,
   said ? well({}, comment(0)(said)) : null, field({ label: 'Comment' }));
 const review = ({ changed, count, draft }) => list(heading('Files'), changed.map(fileRow(null)), heading('Your review', { meta: count }),
   stack({ variant: 'column' }, field({ label: 'Review', text: draft, multiline: true }), line(tonalAct('Approve'), quietAct('Request changes'), quietAct('Comment'))));
@@ -413,12 +418,12 @@ const detailsBody = ({ description = null, people = [], checks = [], files = [],
   heading('Files'), files.map(fileRow(null)), diffFailed ? failureBlock(diffFailed) : null, cut ? list(quietAct(cut.more), dimLine(cut.note)) : null);
 const detailsFold = ({ summary, open = false, ...body }) => list(row({ level: 0, open, name: 'Details', meta: open ? null : summary }), open ? detailsBody(body) : null);
 const othersBlock = ({ label, pulls }) => list(heading(label), pulls.map(pullRow(null)), quietAct('Open the list'));
-const verdictTitle = (name, { text, tone }) => row({ hero: true, name, second: { text, tone } });
-const pullBody = ({ title, verdict, acts = [], agent, armed = false, refused = null, sent = null, review: asked = null, message = null, talk = null, others = null, details = null, closing = true, reading = false }) => (reading
+const verdictTitle = (name, { text, tone, facts: said = null }) => row({ hero: true, name, second: [{ text, tone }, said] });
+const pullBody = ({ title, verdict, acts = [], agent, armed = false, threads = null, refused = null, sent = null, review: asked = null, message = null, talk = null, others = null, details = null, closing = true, reading = false }) => (reading
   ? list(verdictTitle(title, verdict), skeletonOf({ shape: 'line', count: 3 }))
   : list(verdictTitle(title, verdict), verdictBody(verdict),
-    acts.length ? line(acts.map((act) => pullActs[act]({ agent, armed }))) : null, refused ? failureBlock(refused) : null, sent ? line(dimLine(sent), quietAct('Full log')) : null,
-    message ? stack({ variant: 'column' }, row({ name: message.to, strong: true }), markdown({ source: message.text })) : null,
+    acts.length ? line(acts.map((act) => pullActs[act]({ agent, armed })), armed ? quietAct('Cancel') : null, threads ? quietAct(threads) : null) : null, refused ? failureBlock(refused) : null, sent ? line(dimLine(sent), quietAct('Full log')) : null,
+    message ? stack({ variant: 'column' }, row({ name: phrase('Message to', agent), strong: true }), markdown({ source: message.text })) : null,
     asked ? review(asked) : null, talk ? conversation({ agent, ...talk }) : null, others ? othersBlock(others) : null,
     details ? detailsFold(details) : null, closing ? line(quietAct('Back to draft'), quietAct('Close')) : null));
 
@@ -452,7 +457,7 @@ const pullPanel = ({ page = 'list', look = 'panel', stale = false, ...props }) =
 export const pulls = ({ picker = null, ...props }) => (picker ? stack({ variant: 'columns' }, pullPanel(props), menu(picker)) : pullPanel(props));
 
 const pinMarks = (pins = []) => pins.flatMap(({ n, at, region, text, writing, hover, chosen }) => [pin({ n, at, region, hover, chosen, pending: !text }), writing ? note({ text, at: writing, typing: true }) : null]);
-const pinRow = ({ n, text, hover = false, chosen = false }) => row({ start: [pin({ n, pending: !text })], name: text || 'No note yet', dimmed: !text, hover, current: chosen, tools: hover ? [button({ label: 'Remove', kind: 'icon', icon: 'lu-x' })] : [] });
+const pinRow = (waits) => ({ n, text, hover = false, chosen = false }) => row({ start: [pin({ n, pending: !text })], name: text || 'No note yet', dimmed: !text, hover, current: chosen, pending: waits, tools: hover ? [button({ label: 'Remove', kind: 'icon', icon: 'lu-x' })] : [] });
 const sendLabel = (agent) => (agent ? phrase('Send to', agent) : 'Send to…');
 const sentLine = ({ sent, open = null }) => list(dimLine(sent), open ? line(tonalAct(open)) : null);
 const clearPins = (count) => (count ? quietAct(count === 1 ? 'Clear the pin' : phrase('Clear', count, 'pins')) : null);
@@ -461,7 +466,7 @@ const pinSend = ({ agent = null, sent = null, open = null, refused = null, sendi
   if (refused) return list(failureBlock(refused), line(clearPins(count)));
   return line(button({ label: sending ? 'Sending…' : sendLabel(agent), size: 'sm', spin: sending, disabled: sending }), keyHint({ text: '⌘↩', faint: true }), clearPins(count));
 };
-const pinNotes = ({ pins, send }) => list(pins.map(pinRow), pinSend({ ...send, count: pins.length }));
+const pinNotes = ({ pins, send }) => list(pins.map(pinRow(Boolean(send.sending))), pinSend({ ...send, count: pins.length }));
 const pictureFile = ({ name, folder }) => row({ name, detail: folder, action: { label: 'Open', kind: 'quiet' } });
 const pinTools = {
   device: ({ frozen, reading = false }) => [button({ label: 'Pin', kind: 'icon', icon: 'lu-map-pin', active: frozen }), button({ label: 'Device', kind: 'icon', icon: 'lu-smartphone' }), panelRefresh({ reading }), panelClose()],
@@ -479,12 +484,12 @@ export const pinPanel = ({ on = 'device', title, scope, frozen = true, pins: pla
 const deviceKeys = {
   ios: [['Appearance light', 'lu-sun'], ['Appearance dark', 'lu-moon'], ['Shut down', 'lu-power']],
   android: [['Back', 'lu-chevron-left'], ['Home', 'lu-house'], ['Recents', 'lu-square'], ['Power', 'lu-lock'], ['Volume up', 'lu-volume-2'], ['Volume down', 'lu-volume-1']],
-  emulator: [['Rotate', 'lu-rotate-ccw'], ['Shut down', 'lu-power']],
+  emulator: [['Keyboard', 'lu-keyboard'], ['Rotate', 'lu-rotate-ccw'], ['Shut down', 'lu-power']],
 };
 const deviceKey = (acting) => ([label, icon]) => button({ label, kind: 'icon', icon, spin: label === acting, disabled: Boolean(acting) });
 const deviceButtons = (keys, acting) => stack({ variant: 'device tools' }, keys.map(deviceKey(acting)));
 const deviceControls = {
-  ios: ({ acting, url, invalid }) => list(deviceButtons(deviceKeys.ios, acting), line(tonalAct('Open in Simulator')), input({ label: 'URL', text: url, action: 'Open a URL', error: Boolean(invalid) }), invalid ? sentence({ text: invalid, tone: 'blocked' }) : null),
+  ios: ({ acting, url, invalid }) => list(deviceButtons(deviceKeys.ios, acting), line(button({ label: 'Open in Simulator', kind: 'tonal', size: 'sm', disabled: Boolean(acting) })), input({ label: 'URL', text: url, action: 'Open a URL', held: Boolean(acting || invalid), error: Boolean(invalid) }), invalid ? sentence({ text: invalid, tone: 'blocked' }) : null),
   android: ({ acting }) => deviceButtons(deviceKeys.android, acting),
   emulator: ({ acting }) => deviceButtons([...deviceKeys.android, ...deviceKeys.emulator], acting),
 };
@@ -519,11 +524,11 @@ const worktreeRow = ({ picked, armed, busy, refused, agent, reach }) => eachPick
   second: worktreeFacts(item, { open, busy: working && item.kind !== 'broken' }), reason: open && !refused ? item.reason : null, path: open && !refused ? item.path : null,
   verbs: open && !refused ? verbsByKind[item.kind ?? 'removable'].map((key) => worktreeVerbs[key](item, { agent, armed, busy: working })).map(within(reach)) : [],
 }));
-const groupVerbs = ({ more = 0, all = 0, prune = null }, armed) => stack({ variant: 'line' },
-  more ? quiet({ label: phrase('Show', more, 'more') }) : null, prune ? quiet({ label: prune }) : null,
-  all > 1 ? quiet({ label: phrase('Remove all', all), armed, verb: phrase('remove', all) }) : null);
-const repoBlock = ({ armed, each }) => (group) => list(heading(group.name, { meta: group.size }), group.rows.map(each),
-  groupVerbs(group, group.name === armed), group.name === armed ? sentence(group.losses) : null);
+const groupVerbs = ({ more = 0, all = 0, prune = null }, { armed, waits }) => stack({ variant: 'line' },
+  more ? quiet({ label: phrase('Show', more, 'more') }) : null, prune ? quiet({ label: prune, disabled: waits }) : null,
+  all > 1 ? quiet({ label: phrase('Remove all', all), armed, verb: phrase('remove', all), disabled: waits }) : null);
+const repoBlock = ({ armed, each, waits }) => (group) => list(heading(group.name, { meta: group.size }), group.rows.map(each),
+  groupVerbs(group, { armed: group.name === armed, waits }), group.name === armed ? sentence(group.losses) : null);
 const cleanUp = ({ count, size }, { armed, cleaning, ready }) => button({ label: cleaning ? 'Removing…' : phrase('Clean up', count, '·', size), size: 'sm', armed, verb: phrase('remove', count), disabled: cleaning || !ready });
 const verdictShare = ([name, share]) => row({ name, meta: share });
 const worktreeHero = ({ total, plan = null, review = true, armed = null, cleaning = false, ready = true, pointer = false, space = [], split = [], agent, look }) => list(
@@ -533,8 +538,8 @@ const worktreeHero = ({ total, plan = null, review = true, armed = null, cleanin
   armed === 'all' ? sentence({ text: plan.names }) : null);
 const worktreesShown = ({ reading = false, failure = null, repos = [], many = [], hidden = 0, left = null, freed = null, stayed = null, note = null, armed = null, picked = null, busy = null, refused = null, agent = 'checkout', reach = true, ...hero }) => {
   if (!repos.length && !left) return emptyState({ icon: 'lu-git-fork', text: 'No worktrees besides your checkouts' });
-  const block = repoBlock({ armed, each: worktreeRow({ picked, armed: armed === 'row', busy, refused, agent, reach }) });
-  return list(worktreeHero({ ...hero, armed, agent, ready: hero.ready !== false && reach }), stayed ? row({ name: stayed, dimmed: true }) : null, note ? failureBlock(note) : null,
+  const block = repoBlock({ armed, waits: Boolean(busy), each: worktreeRow({ picked, armed: armed === 'row', busy, refused, agent, reach }) });
+  return list(worktreeHero({ ...hero, armed, agent, ready: hero.ready !== false && reach && !busy }), stayed ? row({ name: stayed, dimmed: true }) : null, note ? failureBlock(note) : null,
     [...repos, ...many].map(block), hidden ? quiet({ label: phrase('Show', hidden, 'more repositories') }) : null, left ? block(left) : null, freed ? history(freed) : null);
 };
 const worktreesBody = (body) => unread(body) ?? worktreesShown(body);
@@ -567,13 +572,13 @@ const shippedBody = ({ best = null, repos = null, rest, expanded = false, pointe
 const shippedPanel = ({ label, period, periods, past = false, gate = null, scope = null, stale = false, reading = false, empty = null, look = 'panel', ...body }) => panel({ look, stale, header: panelHeader({
   title: 'Shipped', second: scope ?? label, tools: [shareButton({ disabled: reading || Boolean(gate) }), panelRefresh({ reading: reading || stale || Boolean(body.phase) })],
 }) }, gate ? emptyState(gate) : list(periodLine({ periods, period, past }), waiting({ reading }) ?? (empty ? emptyState(empty) : shippedBody(body))));
-export const shipped = ({ share = null, card = null, notice: said = null, ...props }) => withBeside(shippedPanel(props),
-  share ? shareMenu({ leaves: share }) : card ? shareCard(card) : said ? notice(said) : null);
+export const shipped = ({ share = null, making = null, card = null, notice: said = null, ...props }) => withBeside(shippedPanel(props),
+  share ? shareMenu({ leaves: share, making }) : card ? shareCard(card) : said ? notice(said) : null);
 
 const headerTools = { refresh: () => panelRefresh(), settings: () => settingsTool() };
 const sharer = ({ title, tools = [], open }) => panel({ header: panelHeader({ title, tools: [shareButton({ active: open }), ...tools.map((key) => headerTools[key]())] }) });
-export const sharing = ({ title, tools, leaves, open = false, making = null, notice: said = null, card = null }) => {
-  const beside = list(open ? shareMenu({ leaves, making }) : null, said ? notice(said) : null, card ? shareCard(card) : null);
+export const sharing = ({ title, tools, leaves, open = false, making = null, notice: said = null, failure = null, card = null }) => {
+  const beside = list(open ? shareMenu({ leaves, making }) : null, failure ? failureBlock(failure) : null, said ? notice(said) : null, card ? shareCard(card) : null);
   return withBeside(sharer({ title, tools, open }), beside ? stack({ variant: 'column' }, beside) : null);
 };
 

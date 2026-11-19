@@ -99,13 +99,13 @@ export const dialog = ({ title, label = title, tools = '', size = 'md', scope, v
     + (primary || secondary ? `<div class="kanso-dialog__footer">${secondary ? action(secondary, 'default', 'quiet') : ''}${primary ? action(primary, state, kind) : ''}</div>` : '') + '</div>';
 };
 
-export const input = ({ text: value = '', label: placeholder, icon = 'none', error, disabled, multiline, inline: rename, selected, loading, limit = 80, lead = 'none', count = null, tools = [], action: word = '', choose = false, focus = false, hover = false }) => {
+export const input = ({ text: value = '', label: placeholder, icon = 'none', error, disabled, multiline, inline: rename, selected, loading, limit = 80, lead = 'none', count = null, tools = [], action: word = '', held = false, choose = false, focus = false, hover = false }) => {
   const editable = !disabled && !loading && !choose;
   const enter = multiline ? '' : ` onkeydown="if (event.key === 'Enter') event.preventDefault()"`;
   const cap = ` onbeforeinput="if (event.inputType.startsWith('insert') && this.innerText.length >= ${limit}) event.preventDefault()"`;
   const text = `<div class="kanso-field__editor" role="textbox" aria-label="${escape(placeholder)}" aria-multiline="${multiline}" contenteditable="${editable}"${editable ? ' tabindex="0"' : ''}${enter}${cap}>${selected ? `<span class="kanso-field__selection">${escape(value.slice(0, limit))}</span>` : escape(value.slice(0, limit))}</div>`;
   const iconTool = icon === 'none' ? '' : `<span class="kanso-button kanso-button--icon" tabindex="0"><svg class="kanso-icon kanso-icon--row"><use href="#${icon}"/></svg></span>`;
-  const wordTool = value || choose ? button({ label: word, kind: 'tonal', size: 'sm' }) : '';
+  const wordTool = value || choose ? button({ label: word, kind: 'tonal', size: 'sm', disabled: held }) : '';
   const action = rename ? '' : word ? wordTool : iconTool;
   const classes = `kanso-field${multiline ? ' kanso-field--multiline' : ''}${rename ? ' kanso-field--inline' : ''}${loading ? ' kanso-skeleton--shape' : `${error ? ' kanso-field--invalid' : ''}${disabled ? ' kanso-control--off' : ''}${focus ? ' kanso-control--focus' : ''}${hover ? ' kanso-control--hover' : ''}`}`;
   const after = `${count === null ? '' : `<span class="kanso-field__count">${escape(count)}</span>`}${list(tools)}`;
@@ -171,7 +171,9 @@ const menuHeading = (text, status) => `<div class="kanso-menu__heading">${status
 const menuLead = (item) => item.picture || item.letter ? avatar({ initial: item.letter ?? '', image: item.picture, size: 'sm', tone: item.tone, round: false })
   : item.dot ? `<span class="kanso-menu__spacer">${dot(item.dot)}</span>` : item.icon ? glyph(item.icon) : '<span class="kanso-menu__spacer"></span>';
 const menuLabel = (label, second) => grow(second ? `<span class="kanso-menu__label">${label}</span><span class="kanso-menu__second">${escape(second)}</span>` : label);
+const menuWaiting = () => '<div class="kanso-menu__item" role="menuitem" aria-busy="true" aria-label="Loading"><span class="kanso-menu__spacer"></span><span class="kanso-skeleton kanso-skeleton--line kanso-skeleton--breathing"></span></div>';
 const menuItem = (item) => {
+  if (item.loading) return menuWaiting();
   const classes = `kanso-menu__item${item.second ? ' kanso-menu__item--two-lines' : ''}${item.armed ? ' kanso-action--armed' : item.selected ? ' kanso-control--selected' : item.hover ? ' kanso-control--hover' : ''}${item.disabled ? ' kanso-control--off' : ''}`;
   const label = item.armed ? `Press again to ${escape(item.verb || String(item.label ?? '').toLowerCase())}` : escape(item.label ?? '');
   return `<div class="${classes}" role="menuitem" tabindex="${item.disabled ? -1 : 0}"${item.disabled ? ' aria-disabled="true"' : ''}${item.checked === undefined ? '' : ` aria-checked="${item.checked}"`}>${menuLead(item)}${menuLabel(label, item.second)}`
@@ -179,7 +181,7 @@ const menuItem = (item) => {
     + (item.hint ? `<span class="kanso-menu__hint">${escape(item.hint)}</span>` : '') + (item.mark ? mark({ status: item.mark }) : '') + (item.checked ? glyph('lu-check') : '') + '</div>';
 };
 const menuEntry = (item) => item.separator ? '<div class="kanso-menu__separator"></div>'
-  : item.field ? `<div class="kanso-menu__field">${input({ label: item.field, icon: 'lu-search', multiline: false })}</div>`
+  : item.field ? `<div class="kanso-menu__field">${input({ label: item.field, text: item.text || undefined, focus: Boolean(item.text), icon: 'lu-search', multiline: false })}</div>`
   : item.failure ? failureBlock(item.failure)
   : item.heading ? menuHeading(item.heading, item.mark)
   : menuItem(item);
@@ -392,11 +394,11 @@ export const windowMap = ({ picked = null, hover = null } = {}) => `<div class="
 
 const releaseDots = { newer: '', here: ' kanso-update__timeline-dot--current', older: ' kanso-update__timeline-dot--small' };
 const changeLines = (changes) => changes.map(({ kind, text }, index) => `<div class="kanso-update__change"><span>${kind === changes[index - 1]?.kind ? '' : escape(kind)}</span><span>${escape(text)}</span></div>`).join('');
-export const release = ({ version, date = null, node = 'newer', action = null, changes = [] }) => {
+export const release = ({ version, date = null, node = 'newer', action = null, busy = false, changes = [] }) => {
   const when = date ? `<span class="kanso-update__timeline-date">${escape(date)}</span>` : '';
   const heading = node === 'older'
     ? `<div class="kanso-update__fold">Older<span class="kanso-update__timeline-date">${escape(version)}</span>${inlineIcon('lu-chevron-right')}</div>`
-    : `<div class="kanso-update__timeline-heading"><span class="kanso-update__version-name">${escape(version)}</span>${when}${node === 'here' ? chip({ label: 'you are here' }) : ''}${action ? button({ label: action }) : ''}</div>`;
+    : `<div class="kanso-update__timeline-heading"><span class="kanso-update__version-name">${escape(version)}</span>${when}${node === 'here' ? chip({ label: 'you are here' }) : ''}${action ? button({ label: action, disabled: busy, spin: busy }) : ''}</div>`;
   return `<div class="kanso-update__timeline-release kanso-update__timeline-release--${node}"><span class="kanso-update__timeline-dot${releaseDots[node]}"></span>${heading}${changeLines(changes)}</div>`;
 };
 
@@ -422,10 +424,10 @@ const shareBlocks = {
   list: ({ title, rows }) => `${shareLine(title)}${list(rows.map(({ name, detail, value, unit }) => row({ name, detail, meta: [value, unit].filter(Boolean).join(' ') })))}`,
 };
 const shareBlock = (block) => `<div class="kanso-share__block">${shareBlocks[block.kind](block)}</div>`;
-export const shareCard = ({ title, subtitle = '', right = '', hero = {}, stats = [], note: said = '', blocks = [] }) => `<div class="kanso-share">${shareLine(title, right)}${subtitle ? sentence({ text: subtitle, tone: 'muted' }) : ''}`
+export const shareCard = ({ title, subtitle = '', right = '', hero = {}, stats = [], note: said = '', blocks = [], address = '' }) => `<div class="kanso-share">${shareLine(title, right)}${subtitle ? sentence({ text: subtitle, tone: 'muted' }) : ''}`
   + `${metric({ value: hero.big ?? '—', small: hero.small, unit: hero.unit })}${hero.label ? sentence({ text: hero.label, tone: 'muted' }) : ''}${hero.delta?.text ? delta(hero.delta) : ''}`
   + `${stats.length ? `<div class="kanso-panel__statistics">${stats.map(shareStat).join('')}</div>` : ''}${said ? sentence({ text: said, tone: 'muted' }) : ''}${blocks.map(shareBlock).join('')}`
-  + `<div class="kanso-share__footer">${mark({ status: 'done', size: 'sm' })}kansō for Herdr</div></div>`;
+  + `<div class="kanso-share__footer">${mark({ status: 'done', size: 'sm' })}kansō for Herdr${address ? `${grow()}<span>${escape(address)}</span>` : ''}</div></div>`;
 
 export const tabSkeleton = () => '<span class="kanso-skeleton kanso-skeleton--breathing kanso-tab-bar__skeleton"></span>';
 

@@ -79,7 +79,7 @@ export const filesViews = {
   'On another computer': [changes({ files: remote, scope: computer }), 'The computer’s name is the only scope line.'],
   'Stale: devbox stopped answering': [changes({ files: remote, scope: 'Read 14:02 · devbox unreachable · next try 14:03', stale: true }), 'The last read stays, stepped down, with when it was read and the next try.'],
   'Unreachable before the first read': [{ repository: false, scope: computer, failure: sampleFilesFailures.unreachable }, 'Nothing read yet: the computer’s words and Refresh.'],
-  'Narrow, 300': [changes({ look: 'narrow', files: { named, unchanged: ['rate-limit-buckets.ts'], also } }), 'The title steps down; the folder truncates before the name.'],
+  'Narrow, 300': [changes({ look: 'narrow', picked: 'limits.ts', files: { named, unchanged: ['rate-limit-buckets.ts'], also } }), 'The title steps down; the folder truncates before the name.'],
 };
 const { noPane, inPanes } = samplePorts;
 const served = (extra) => ({ servers: { noPane, inPanes }, history: { open: false }, ...extra });
@@ -125,6 +125,7 @@ export const markdownViews = {
   'After Overwrite': [plan({ band: { text: 'Saved over the 14:06 text', actions: [{ label: 'Undo', kind: 'quiet' }] } }), 'Undo, on that line, until the next change.'],
   "Couldn’t save": [plan({ said: [waits, 'Edited'], tools: ['done'], refused: sampleMarkdown.failures.save }), 'The write was refused: its words, Save again, and Explain to the agent.'],
   'Review: an agent waits': [plan({ said: [waits, 'Edited'], tools: ['done'] }), 'md-review waits on this file: Done is the one primary, and tells the agent.'],
+  'Review, saving before Done': [plan({ said: [waits, 'Saving…'], tools: ['done'], saving: true }), 'Done flushes the last edit first: the agent still waits, Saving… is said under the name and Done waits for the write.'],
   'Another review waits': [plan({ said: [waits], tools: ['done'], also: 'release.md also waits for your review' }), 'Done shows the next review waiting, or closes.'],
   'Done could not tell the agent': [plan({ said: [waits], refused: sampleMarkdown.failures.told }), 'Done stays; a second press tries again.'],
   'No file: the list': [listing({ groups: sampleMarkdown.groups }), 'Reviews waiting first, then what this terminal mentioned, then the folder’s own.'],
@@ -243,7 +244,7 @@ export const spendViews = {
   'Showing one project': [home({ showing: sampleSpend.showing }), 'A project or a model chosen: one dim line says so, with Show everything.'],
   'Active now': [home({ live: sampleSpend.live }), 'Sessions running now come first, breathing; each opens its task.'],
   'History open': [home(daysOpen()), 'The period a bar a day, the peak with its value; each bar says its date, cost and tokens.'],
-  'History, nothing that period': [home(daysOpen(sampleSpend.quiet)), 'Every day empty; each still says its date and $0.00.'],
+  'History, nothing that period': [home({ ...daysOpen(sampleSpend.quiet), number: sampleSpend.nothing, lists: null }), 'Nothing used: the number is $0.00, no project is listed, and every day still says its date and $0.00.'],
   'A project opened from its row': [openedFrom('project'), 'Its period, its number and facts, then its models and tasks.'],
   'A project’s History': [openedFrom('project', daysOpen(sampleSpend.project.days)), 'The project’s days, each with its own cost.'],
   'A model opened from its row': [openedFrom('model'), 'Its period, its number and facts, then its projects and tasks.'],
@@ -299,7 +300,7 @@ export const worktreesViews = {
   'Folder gone: only the record': [picking('missing'), 'Only git’s record goes.'],
   'Folder reused: only the record': [picking('replaced'), 'Its folder stays as it is; only the record goes.'],
   'Left behind: its repository moved': [picking('orphan'), 'Git cannot say what it holds: deleting it loses whatever is there.'],
-  'Removing one': [atRest({ busy: 'old-cart' }), 'The row breathes and says so.'],
+  'Removing one': [atRest({ busy: 'old-cart', picked: 'old-cart' }), 'The row breathes and says Removing…; Clean up, Remove all and Prune wait for it.'],
   'A removal refused': [picking('unmerged', { refused: sampleWorktrees.refused }), 'git’s words under the row, Remove again, and Explain.'],
   'Changed since you looked: it stays': [atRest({ stayed: sampleWorktrees.stayed }), 'Checked again right before it goes; one quiet line says why it stayed.'],
   'Clean up armed': [atRest({ armed: 'all' }), 'It asks again and names what goes.'],
@@ -351,19 +352,20 @@ export const shippedViews = {
   'GitHub not answering': [shipping({ stale: true, scope: sampleShipped.offline }), 'The last read stays, stepped down, with when it tries again.'],
   'Narrow, 300': [shipping({ look: 'narrow' }), 'The number and the rows stay; the facts wrap.'],
   'Share: what leaves, then where': [shipping({ share: sampleShipped.leaves }), 'Totals only, no names.'],
+  'Share: the image being made': [shipping({ share: sampleShipped.leaves, making: sampleShare.network }), 'The place picked says Making the image…; the others wait for it.'],
   'The card it makes': [shipping({ card: sampleShippedCard }), 'Totals, the streak, the records and the hours; never a repository or a computer. 1200 wide, shown at half.'],
   ...noticesOf(sampleShippedNotices, shipping),
 };
 const { panels: sharers, network } = sampleShare;
 const menuOpen = (key, extra = {}) => ({ ...sharers[key], open: true, ...extra });
-const cardOf = (name) => [{ title: sampleShare.cards[name].title, card: sampleShare.cards[name] }, 'Shown at half of its 1200 width; light or dark as the theme.'];
+const cardOf = (name) => [{ title: sampleShare.cards[name].title, card: { ...sampleShare.cards[name], address: sampleShare.address } }, 'Shown at half of its 1200 width; light or dark as the theme.'];
 export const shareViews = {
   'Closed: the icon in the header': [sharers.memory, 'Share shows only when there is something to share.'],
   'Open: what leaves, then where': [menuOpen('memory'), 'The menu’s first line says what leaves; Post to X, LinkedIn or Bluesky, then Save image.'],
   'Spend: totals and days only': [menuOpen('spend'), 'The same menu; its first line is Spend’s.'],
   'The dōjō: after a round': [menuOpen('dojo'), 'Scores and practice days only.'],
   'Making the image': [menuOpen('spend', { making: network }), 'The row says so; the others wait until the image is made.'],
-  'The image could not be made': [menuOpen('memory', { notice: sampleShare.failed }), 'The menu stays; the notice says what to install, and a row tries again.'],
+  'The image could not be made': [menuOpen('memory', { failure: sampleShare.unmade }), 'The menu stays; under it the renderer says what is missing and what to install, and Save image or a row tries again.'],
   ...noticesOf(sampleShare.notices, (extra) => ({ ...sharers.memory, ...extra })),
   'Card: Shipped': cardOf('Shipped'),
   'Card: Spend': cardOf('Spend'),
@@ -436,7 +438,7 @@ const { cut: filesCut, moreChecks, ...detailsShown } = detailSample;
 const detailed = (extra = {}) => openedPull(verdicts.failed, { acts: failedActs, scope: samplePull.branch, details: { ...detailsShown, open: true, ...extra } });
 const person = (checked, extra = {}) => ({ name, second }) => ({ label: name, second, checked: checked.includes(name), ...extra });
 const { people, labels, notes } = samplePullPages;
-const picker = (title, items) => ({ ...detailed(), picker: { title, items: [{ field: 'Find' }, ...items] } });
+const picker = (title, items, typed = null) => ({ ...detailed(), picker: { title, items: [{ field: 'Find', text: typed }, ...items] } });
 const reviewers = (checked) => people.slice(0, 3).map(person(checked));
 const pageOf = (page, { file, facts: said, ...rest }, extra = {}) => ({ page, file, facts: said, back: samplePull.number, ...rest, ...extra });
 export const pullsViews = {
@@ -479,10 +481,10 @@ export const pullsViews = {
   'Its agent waits on you': [openedPull(verdicts.waits, { acts: ['log', 'github'] }), 'No Explain: the agent waits on you first.'],
   'Explained, one press': [openedPull(verdicts.failed, { sent: samplePull.sent, acts: ['github'] }), 'The press is said, with the time.'],
   'Explain refused': [openedPull(verdicts.changes, { refused: refusals.explain }), 'hc’s words, and Explain again.'],
-  'Changes requested: Reply on GitHub': [openedPull(verdicts.changes, { acts: ['explain', 'reply'], talk: { said: events.comment } }), 'The request, Explain, and Reply on GitHub.'],
-  'Send to the agent: the message first': [openedPull(verdicts.changes, { acts: ['send'], message: samplePull.message }), 'What goes to the agent shows before Send.'],
+  'Changes requested: Reply on GitHub': [openedPull(verdicts.changes, { acts: ['explain', 'reply'], threads: verdicts.changes.threads, talk: { said: events.comment } }), 'The request with who asked and on which line, Explain, Reply on GitHub, and the way to the other threads.'],
+  'Send to the agent: the message first': [openedPull(verdicts.changes, { acts: ['send', 'explain', 'reply'], threads: verdicts.changes.threads, message: samplePull.message }), 'What goes to the agent shows before Send, under the name of the one agent it goes to.'],
   'Ready to merge': [openedPull(verdicts.ready, { acts: ['merge'] }), 'Merge, the one act.'],
-  'Merge armed': [openedPull(verdicts.ready, { acts: ['merge'], armed: true }), 'Merge asks again.'],
+  'Merge armed': [openedPull(verdicts.ready, { acts: ['merge'], armed: true }), 'Merge asks again, with what it rests on above it; Cancel lets go.'],
   Merging: [openedPull(verdicts.ready, { acts: ['merging'] }), 'Merging… until GitHub answers.'],
   'Merge refused': [openedPull(verdicts.ready, { refused: refusals.merge }), 'gh’s words, Squash and merge, and Explain.'],
   'Closed: Reopen': [openedPull(verdicts.closed, { acts: ['reopen'] }), 'Reopen, the one act.'],
@@ -506,13 +508,13 @@ export const pullsViews = {
   'More checks': [detailed({ moreChecks }), 'Five checks, then Show 3 more.'],
   'Files cut off': [detailed({ cut: filesCut }), 'Show 92 more, and what GitHub lists.'],
   'The diff could not be read': [detailed({ diffFailed: refusals.diff }), 'gh’s words under the files, and Refresh.'],
-  'Reviewers: three clicks, no waiting': [picker('Request a review', reviewers(['sam', 'stan']).map((item) => (item.label === 'stan' ? { ...item, mark: 'working' } : item))), 'Each click is kept at once; a pending one breathes.'],
+  'Reviewers: three clicks, no waiting': [picker('Request a review', reviewers(['sam', 'stan']).map((item) => (item.checked ? { ...item, mark: 'working' } : item)), 's'), 'The filter typed stays; each click is kept at once, and both pending ones breathe.'],
   'Reviewers: one refused, the others untouched': [picker('Request a review', [...reviewers(['sam']).slice(0, 2), { failure: refusals.reviewer }, ...reviewers(['stan']).slice(2)]), 'The refusal under its person; the rest stay.'],
-  'Labels, from the local store': [picker('Change labels', [...labels.map(({ name, second, dot }) => ({ label: name, second, dot, checked: name !== 'docs' })), { label: notes.first, disabled: true }]), 'The labels at once, with a dot each; the first 100.'],
+  'Labels, from the local store': [picker('Change labels', [...labels.map(({ name, second, dot }) => ({ label: name, second, dot, checked: name !== 'docs', mark: name === 'rate-limit' ? 'working' : null })), { label: notes.first, disabled: true }]), 'The labels at once, with a dot each; the one just checked breathes until GitHub has it; the first 100.'],
   'Picker, the first open': [picker('Request a review', [{ loading: true }, { loading: true }]), 'The skeleton, once ever.'],
   'Picker, no match': [picker('Request a review', [{ label: notes.none, disabled: true }]), 'One quiet line.'],
   'Picker, offline: changes wait': [picker('Request a review', [...people.slice(1, 3).map(person(['sloane', 'stan'], { mark: 'working' })), { label: notes.offline, disabled: true }]), 'The changes wait and say so once.'],
-  'Assign people': [picker('Assign people', people.map(person(['jj']))), 'The people with access.'],
+  'Assign people': [picker('Assign people', [samplePullPages.me, ...people].map(person(['jj']))), 'The people with access, the one assigned checked.'],
   'No labels': [picker('Change labels', [{ label: notes.noLabels, disabled: true }]), 'One quiet line.'],
   'More people than listed': [picker('Request a review', [...people.slice(0, 2).map(person(['sam'])), { label: notes.truncated, disabled: true }, { label: 'Open on GitHub', icon: 'lu-external-link' }]), 'Open on GitHub for the rest.'],
   'A file’s diff': [pageOf('file', samplePullPages.diff), 'Numbered lines, added and deleted in their wash, hunks named.'],
@@ -535,6 +537,7 @@ const pinsViews = {
   'Sent: live again': [onDevice(scopes.live, [], { frozen: false, send: { sent: pinsSent, open: 'Open in Simulator' } }), 'Proposed: the list was the message; the pins clear and the picture is live again.'],
   'No agent in front: the picker': [onDevice(scopes.frozen, iosPins.slice(0, 2), { send: {}, agents: pinAgents }), 'Proposed: with no pane in front, Send to… opens the agents to pick from.'],
   'Three notes: one under the pointer, one chosen': [onDevice(scopes.frozen, samplePins.three), 'Each note is a numbered point on the picture and a row under it: the one under the pointer is ringed on both, the chosen one stands out, and Send names the agent in front, with Clear beside it.'],
+  'Sending three notes: the rows wait': [onDevice(scopes.frozen, samplePins.three, { send: { sending: true } }), 'Send is pressed: each note’s row waits, the points stay where they are, and Sending… stands where Send was until the agent has them.'],
   'Kept from before, not sent': [onDevice(scopes.kept, [iosPins[0], { ...iosPins[1], hover: true }]), 'Proposed: unsent pins stay per agent and picture; × on hover removes one.'],
   'Images: the same pins, no tool': [{ on: 'picture', title: 'Images', scope: scopes.images, image: sampleShot, file: pinFile, pins, send: toCheckout }, 'Pins are always on in Images: the same marks, list and Send.'],
   'Images: sending': [{ on: 'picture', title: 'Images', scope: scopes.images, image: sampleShot, file: pinFile, pins: placedPins, send: { sending: true } }, 'Sending… until hc answers, as Images does today.'],
@@ -560,12 +563,12 @@ const simulatorViews = {
   Starting: [{ scope: simScopes.starting, shows: 'waiting' }, 'The frame breathes and the scope counts down.'],
   'Start timed out': [{ scope: simScopes.off, failure: simFailures.start }, 'The Failure block with Start again and Explain.'],
   'The first frame': [onIphone({ shows: 'waiting' }), 'On, before its first picture: the frame breathes, the buttons are there.'],
-  'The picture stalled': [onEmulator({ scope: simScopes.stalled, state: 'stalled', retry: 'Reconnect' }), 'The last picture stepped down; the scope says how old it is and that the emulator is not answering, with Reconnect.'],
-  'No picture from the device': [onIphone({ shows: 'blank' }), 'The device answers without a picture; its buttons stay.'],
+  'The picture stalled': [onEmulator({ scope: simScopes.stalled, state: 'stalled', retry: 'Reconnect', reading: true }), 'The last picture stepped down; the scope says how old it is, that the emulator is not answering and that it keeps trying, Refresh turning; Reconnect asks now.'],
+  'No picture from the device': [onIphone({ scope: simScopes.booted, shows: 'blank' }), 'The device answers without a picture; its buttons stay.'],
   'A command failed': [{ scope: simScopes.pixel, failure: simFailures.command }, 'The Failure block in the tool’s words, Refresh and Explain.'],
-  'A command running': [onIphone({ acting: 'Appearance dark' }), 'The pressed button spins; the others wait for it.'],
+  'A command running': [onIphone({ scope: simScopes.booted, url, acting: 'Appearance dark' }), 'The pressed button spins; every other command, Open in Simulator and Open a URL wait for it.'],
   'A URL typed': [onIphone({ url }), 'Open a URL comes with the text; Enter does the same.'],
-  'A URL with no scheme': [onIphone(sampleSimulator.bare), 'A URL with no scheme is not opened: the field is marked and one line says what it needs; the other controls stay.'],
+  'A URL with no scheme': [onIphone({ scope: simScopes.booted, ...sampleSimulator.bare }), 'A URL with no scheme is not opened: the field is marked and one line says what it needs; the other controls stay.'],
   'A URL that did not open': [onIphone({ url, failure: simFailures.url }), 'simctl’s words in the Failure block; the URL stays in its field.'],
   Offline: [{ scope: simScopes.offline, shows: 'still' }, 'A device adb sees but cannot reach says so in the scope; no Boot.'],
   Unauthorized: [{ scope: simScopes.unauthorized, shows: 'still' }, 'A phone that has not allowed this computer says so in the scope.'],

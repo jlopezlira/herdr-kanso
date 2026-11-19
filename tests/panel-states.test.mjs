@@ -113,6 +113,15 @@ test("Three notes keep the chosen point and Clear, the disk split its five verdi
   assert.ok(streak.querySelector(".kanso-metric + .kanso-days, .kanso-row--heading ~ .kanso-days"));
 });
 
+test("The reviewer picker keeps the typed filter and both pending changes, and the first open waits", () => {
+  const picking = drawn("Panels/PR", "Reviewers: three clicks, no waiting").querySelector(".kanso-menu");
+  assert.equal(picking.querySelector(".kanso-menu__field .kanso-field__editor").textContent, "s");
+  assert.deepEqual(texts(picking, ".kanso-menu__item:has(.kanso-mark--working) .kanso-menu__label"), ["sam", "stan"]);
+  const first = drawn("Panels/PR", "Picker, the first open").querySelector(".kanso-menu");
+  assert.equal(first.querySelectorAll('.kanso-menu__item[aria-busy="true"] .kanso-skeleton').length, 2);
+  assert.deepEqual(texts(drawn("Panels/PR", "Assign people"), '.kanso-menu__item[aria-checked="true"] .kanso-menu__label'), ["jj"]);
+});
+
 test("Every state the map names on a panel page is a kit state there", () => {
   const plans = JSON.parse(readFileSync(new URL("../scripts/storybook-overlaps.json", import.meta.url), "utf8"));
   const named = Object.values(plans).flatMap(({ states }) => Object.values(states)).map((target) => target.split("/"))
