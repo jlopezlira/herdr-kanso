@@ -22,13 +22,23 @@ in version.json, which the stable updater offers. Versions follow
 [Keep a Changelog](https://keepachangelog.com). `npm run check:version` checks
 the branch's rules.
 
-## [Unreleased]
+## [3.31.0] - 2026-11-19
 
 ### Added
 
 - A pull request's right-click menu in a pane's header offers Open on GitHub beside Open the pull request. (#354)
 - Settings in the sidebar footer opens one menu: kansō settings, with its key, and Herdr settings. When Herdr has an update waiting, the menu offers it as a third row; the first press arms it and the second restarts Herdr into it. (#241)
 - Cmd+Shift+Up and Cmd+Shift+Down go to the agent above or below in the sidebar, across tabs and projects; Cmd+Shift+Left and Cmd+Shift+Right go back and forward through the agents you visited, as in a browser. On Windows, Ctrl+Shift with the arrows.
+- Storybook coverage for every app module, with selectable interaction, loading, empty, failure and recovery states built from the shared kit.
+- Storybook coverage stories use the kit's classes, so they draw with the real styles, and their captions no longer carry a design name.
+- Panel stories show each panel once instead of twice.
+- Overlapping coverage features reference their designed component states; features awaiting a simplified experience are listed under Prompt for agents and in Features to redesign.
+- Storybook includes 290 panel states with reference comparisons, specifications and usage guidelines under Panels.
+- Storybook holds kansō's whole design, by level: the philosophy, then tokens, compositions, components and whole-window layouts, each page with the reasons behind it and a prompt for agents, in the theme you choose; published with the site at /storybook. The values live in kanso/tokens.json. (#175)
+- Every piece can be shown, shown only when it has something to say, or hidden. Hiding it stops the work behind it. Settings opens on that list.
+- Any file that is not a picture opens from Files into Preview. Any text file up to 1 MB can be edited, on this computer or another, and saved with Save or Cmd+S (Ctrl+S on Windows). A bigger or binary one stays a view. A Markdown file on another computer can be edited too: Save, that key, or leaving the file writes it, and it does not save while you type. On this computer a Markdown file still saves after a pause. An edit you have not saved comes back when you open the file again, and Read again asks before it discards it.
+- kansō installs and updates on Windows the same way it does on macOS and Linux. The installer and the updater use Windows PowerShell, and the download uses the curl and tar that ship with Windows. The Windows keymap is merged on Windows. A file that is in use is retried, then the update is undone and the file is named; a read-only file is updated. The update runs with no console window.
+- A computer can be given a name. Right-click its row and choose Rename, or double-click the name. The name shows on every computer, and clearing it brings back the name it had.
 
 ### Changed
 
@@ -112,6 +122,33 @@ the branch's rules.
 - Images shows a strip of thumbnails in place of the circles: the picture on screen in its thumbnail, ringed in the accent and breathing while it loads, and each other picture as a square in its own colour. Markdown in Preview, the Markdown panel and Find's reading view is drawn by the kit as the Storybook draws it: blocks in the body's size, the block under the pointer on a wash, and the block being edited as a raised field with the accent ring. (#324)
 - The sidebar's toolbar, header and footer are drawn as the Storybook draws them. In Dawn Mode the dawn sky sits behind the window's lights and, with the sidebar open, a Dawn Mode pill sits at the right of the title bar. Sort's tooltip names the order in use. The footer's rows line up with the sidebar's rows; Tab now reaches Settings, Enter or Space opens its menu, and Escape shuts it with Settings still holding the keyboard. Collapsed, the view button carries the Status dot while someone needs you and Status is not on show, and its tooltip says so. A view's key now shuts the collapsed view menu. (#327)
 - Send, Sleep and the prompt of many lines are drawn by the kit as the Storybook draws them. Send lists its agents and projects as the kit's rows, six at most before the list scrolls, an agent with no icon of its own shows the terminal's, and no agent or no match reads as the kit's empty state. Sleep lists what keeps its conversation and what will only stop as rows, the folder beside what stops. The prompt of many lines is the kit's dialog with one text field that has the keyboard as it opens, Cancel beside Save; Enter still writes a new line and Escape still closes it. (#325)
+- Storybook follows Start, Tokens, Primitives, Compositions, Panels and Layouts, with one page per component, searchable state variants, shared kit fragments and copyable implementation prompts. Imports regenerate the same structure, and tests enforce its organisation and account for every existing feature state.
+- Storybook classes use descriptive kanso-prefixed BEM names, enforced when importing and testing the component kit.
+- The pull request panel opens on what stops it (the failing step and its last log lines, or the review comment), with one action. Send to the agent in front replaces Explain it, Address feedback and Resolve conflicts. A branch with no pull request no longer shows the newest open one. Description, people, labels, files and checks sit behind Details. Squash and merge and Close still ask for a second press. The line that explained how often it rereads is gone.
+- A pane header keeps files, commits and the pull request while the agent works. Files opens the diff, commits opens the unpushed work, and the pull request opens on the check or review it names. Sleep and Send stay on the pane you are in once it has finished, and a pane that is waiting on you has no Send.
+- Needs you stays out of the sidebar until you choose it. A finished agent is not listed there.
+- On the project you are in, + stays visible. On the others it shows when you point at the row.
+- The panels' sizes come from kanso/tokens.json, and CI rejects a size, space, radius or height in a mod that is not a token value; kanso/tokens-baseline.json lists today's exceptions and can only shrink. Nothing on screen changes. (#177)
+- Every button in the panels, dialogs, pane headers and tab bar is one button in four kinds: solid for the one main action, tonal, quiet text and icon, 30 high or 24 on a line. In a dialog Cancel is quiet and comes before the main action. Pointing washes it, pressing deepens it, focus draws an accent ring without moving anything, and an unavailable one stays flat and dim. (#178)
+- Every text field in the panels and dialogs is one field: 30 high, a 1 px edge on the canvas, a label above it, a multi-line kind that grows with its text, and an error edge in the blocked colour. Pointing darkens the edge, and focus draws an accent ring around it without moving anything. (#179)
+- Every choice between a few options is one segmented control, and every on/off is one switch. The segmented control is 30 high on a faint track; the chosen option is a deeper wash, never bolder, so nothing moves. It replaces the page tabs in Settings and kansō help, the period and range tabs in Spend, Memory, Ports and Shipped, the Open/Closed and inbox tabs in the pull request panel, and the sidebar's view switch, open or collapsed. The switch is 28 by 16 and solid when on. Both wash on hover, draw the accent ring on focus, and go dim when unavailable. (#180)
+- An action that cannot be undone asks twice the same way everywhere: the same button, menu row or row action fills with the accent and reads "Press again to <verb>" for 4 seconds, in a box already wide enough for both, so nothing moves. Removing a worktree, project, arrangement, container, image or volume, compose down, clearing the build cache, discarding unsaved changes, squash and merge, closing a pull request, stopping or force stopping a server, quitting Docker, ending hung helpers and closing an agent or terminal still ask twice. Push, pull, update the branch, ready for review, back to draft, reopen, recycle, restart the window and leaving the dōjō act on one press; Esc leaves the dōjō at once. Reset all in Settings acts at once and offers Undo. (#181)
+- A count behind the branch pulls at one press, then says Pulling… until git answers. A count ahead goes to that project and opens the pull request panel.
+- While you were away sits at the top of Projects, as it does on Status and Threads.
+- A waiting agent's line is in full ink. A working one is quieter. A finished one is dim.
+- An unreachable computer says Unreachable in the blocked color, and Retry stays on the row.
+- An asleep row shows Wake. Enter wakes it. A click opens its menu.
+- Simulator is kansō's own panel. It uses only Xcode's and Android's tools and installs nothing. The iOS screen is a view: touch it in Apple's Simulator. Android keeps touch and keys, with Rotate for emulators.
+- A finished agent's row shows what it last said. Files, commits and the pull request stay on the pane header.
+- An update no longer puts a dot on the settings gear, or beside "Update kansō to …" and "Settings · update ready". The row and the one notice per version stay.
+- What a waiting agent asks is the same sentence on its row and on the status bar, and it stops at 200 characters.
+- When memory is low, the notice says "Memory N% free", the same words as the status bar.
+- Asleep rows wake from the row or its menu. There is no separate list with Undo, Retry and Forget.
+- While you were away no longer lists sleeps.
+- Wake starts `claude --resume` on the agent's conversation in the same terminal. Options such as `--model` are not carried over.
+- Sleeps from before this update are not offered to wake: run `claude --resume <id>` in its folder.
+- Ports says "no pane" for a server no pane is running. Containers no longer counts failed ones above the rows that already say so.
+- The site's pages use kansō's own type scale, spacing, radii and colours from kanso/tokens.json, in dark and light. Muted text in the light theme is darker, and field edges are darker in both themes, so they read on every surface. (#176)
 
 ### Fixed
 
@@ -157,52 +194,6 @@ the branch's rules.
 - Storybook shows Edge and Minimap slot as separate pieces, with the edges around an empty pane and the minimap in its own frame.
 - Storybook documentation and captions read on their own without prototype references; imported text strips those references on regeneration.
 - Storybook uses one token spacing rhythm for matching pairs of elements in rows, controls, blocks and containers.
-
-### Added
-
-- Storybook coverage for every app module, with selectable interaction, loading, empty, failure and recovery states built from the shared kit.
-- Storybook coverage stories use the kit's classes, so they draw with the real styles, and their captions no longer carry a design name.
-- Panel stories show each panel once instead of twice.
-- Overlapping coverage features reference their designed component states; features awaiting a simplified experience are listed under Prompt for agents and in Features to redesign.
-- Storybook includes 290 panel states with reference comparisons, specifications and usage guidelines under Panels.
-- Storybook holds kansō's whole design, by level: the philosophy, then tokens, compositions, components and whole-window layouts, each page with the reasons behind it and a prompt for agents, in the theme you choose; published with the site at /storybook. The values live in kanso/tokens.json. (#175)
-- Every piece can be shown, shown only when it has something to say, or hidden. Hiding it stops the work behind it. Settings opens on that list.
-- Any file that is not a picture opens from Files into Preview. Any text file up to 1 MB can be edited, on this computer or another, and saved with Save or Cmd+S (Ctrl+S on Windows). A bigger or binary one stays a view. A Markdown file on another computer can be edited too: Save, that key, or leaving the file writes it, and it does not save while you type. On this computer a Markdown file still saves after a pause. An edit you have not saved comes back when you open the file again, and Read again asks before it discards it.
-- kansō installs and updates on Windows the same way it does on macOS and Linux. The installer and the updater use Windows PowerShell, and the download uses the curl and tar that ship with Windows. The Windows keymap is merged on Windows. A file that is in use is retried, then the update is undone and the file is named; a read-only file is updated. The update runs with no console window.
-- A computer can be given a name. Right-click its row and choose Rename, or double-click the name. The name shows on every computer, and clearing it brings back the name it had.
-
-### Changed
-
-- Storybook follows Start, Tokens, Primitives, Compositions, Panels and Layouts, with one page per component, searchable state variants, shared kit fragments and copyable implementation prompts. Imports regenerate the same structure, and tests enforce its organisation and account for every existing feature state.
-- Storybook classes use descriptive kanso-prefixed BEM names, enforced when importing and testing the component kit.
-- The pull request panel opens on what stops it (the failing step and its last log lines, or the review comment), with one action. Send to the agent in front replaces Explain it, Address feedback and Resolve conflicts. A branch with no pull request no longer shows the newest open one. Description, people, labels, files and checks sit behind Details. Squash and merge and Close still ask for a second press. The line that explained how often it rereads is gone.
-- A pane header keeps files, commits and the pull request while the agent works. Files opens the diff, commits opens the unpushed work, and the pull request opens on the check or review it names. Sleep and Send stay on the pane you are in once it has finished, and a pane that is waiting on you has no Send.
-- Needs you stays out of the sidebar until you choose it. A finished agent is not listed there.
-- On the project you are in, + stays visible. On the others it shows when you point at the row.
-- The panels' sizes come from kanso/tokens.json, and CI rejects a size, space, radius or height in a mod that is not a token value; kanso/tokens-baseline.json lists today's exceptions and can only shrink. Nothing on screen changes. (#177)
-- Every button in the panels, dialogs, pane headers and tab bar is one button in four kinds: solid for the one main action, tonal, quiet text and icon, 30 high or 24 on a line. In a dialog Cancel is quiet and comes before the main action. Pointing washes it, pressing deepens it, focus draws an accent ring without moving anything, and an unavailable one stays flat and dim. (#178)
-- Every text field in the panels and dialogs is one field: 30 high, a 1 px edge on the canvas, a label above it, a multi-line kind that grows with its text, and an error edge in the blocked colour. Pointing darkens the edge, and focus draws an accent ring around it without moving anything. (#179)
-- Every choice between a few options is one segmented control, and every on/off is one switch. The segmented control is 30 high on a faint track; the chosen option is a deeper wash, never bolder, so nothing moves. It replaces the page tabs in Settings and kansō help, the period and range tabs in Spend, Memory, Ports and Shipped, the Open/Closed and inbox tabs in the pull request panel, and the sidebar's view switch, open or collapsed. The switch is 28 by 16 and solid when on. Both wash on hover, draw the accent ring on focus, and go dim when unavailable. (#180)
-- An action that cannot be undone asks twice the same way everywhere: the same button, menu row or row action fills with the accent and reads "Press again to <verb>" for 4 seconds, in a box already wide enough for both, so nothing moves. Removing a worktree, project, arrangement, container, image or volume, compose down, clearing the build cache, discarding unsaved changes, squash and merge, closing a pull request, stopping or force stopping a server, quitting Docker, ending hung helpers and closing an agent or terminal still ask twice. Push, pull, update the branch, ready for review, back to draft, reopen, recycle, restart the window and leaving the dōjō act on one press; Esc leaves the dōjō at once. Reset all in Settings acts at once and offers Undo. (#181)
-- A count behind the branch pulls at one press, then says Pulling… until git answers. A count ahead goes to that project and opens the pull request panel.
-- While you were away sits at the top of Projects, as it does on Status and Threads.
-- A waiting agent's line is in full ink. A working one is quieter. A finished one is dim.
-- An unreachable computer says Unreachable in the blocked color, and Retry stays on the row.
-- An asleep row shows Wake. Enter wakes it. A click opens its menu.
-- Simulator is kansō's own panel. It uses only Xcode's and Android's tools and installs nothing. The iOS screen is a view: touch it in Apple's Simulator. Android keeps touch and keys, with Rotate for emulators.
-- A finished agent's row shows what it last said. Files, commits and the pull request stay on the pane header.
-- An update no longer puts a dot on the settings gear, or beside "Update kansō to …" and "Settings · update ready". The row and the one notice per version stay.
-- What a waiting agent asks is the same sentence on its row and on the status bar, and it stops at 200 characters.
-- When memory is low, the notice says "Memory N% free", the same words as the status bar.
-- Asleep rows wake from the row or its menu. There is no separate list with Undo, Retry and Forget.
-- While you were away no longer lists sleeps.
-- Wake starts `claude --resume` on the agent's conversation in the same terminal. Options such as `--model` are not carried over.
-- Sleeps from before this update are not offered to wake: run `claude --resume <id>` in its folder.
-- Ports says "no pane" for a server no pane is running. Containers no longer counts failed ones above the rows that already say so.
-- The site's pages use kansō's own type scale, spacing, radii and colours from kanso/tokens.json, in dark and light. Muted text in the light theme is darker, and field edges are darker in both themes, so they read on every surface. (#176)
-
-### Fixed
-
 - Storybook: a quiet button has no hover wash, everything in an action row is 30 high, rows in a list keep 2 px apart, a state line keeps 12 px before its button, the skeleton shows on both grounds under a real panel header, the thumbnail strip shows pictures, and a failure block is one block.
 - Sleep no longer gets stuck going to sleep or waking. If an agent does not exit, nothing is put away and the Sleep dialog says why.
 - A long conversation wakes: Wake no longer stops an agent that takes a while to load it.
