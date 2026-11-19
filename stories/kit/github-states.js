@@ -1,4 +1,3 @@
-// The GitHub board's states: a folder of repositories first, then a pull request opened from its block, then each action as it goes. Every one is a proposal.
 import { pullRequest } from './samples.js';
 import { sampleAreas, sampleHidden, samplePull, samplePullPages } from './panel-samples.js';
 import { sampleActions, sampleGithub } from './github-samples.js';

@@ -1,4 +1,3 @@
-// What the pull request pages share: pull request 142 opened on a verdict, its details, its pickers and its pages, as props of the panel.
 import { samplePull, samplePullPages } from './panel-samples.js';
 
 export const { verdicts, refusals, thread: talkSample, answers, events, details: detailSample, review: reviewSample } = samplePull;

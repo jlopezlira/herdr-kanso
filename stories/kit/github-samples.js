@@ -1,4 +1,3 @@
-// Sample data the GitHub board shows: a folder holding four repositories, what waits on you in each, and what each action says as it goes.
 import { pullRequest } from './samples.js';
 import { samplePull, samplePulls } from './panel-samples.js';
 
@@ -54,7 +53,6 @@ export const sampleGithub = {
 
 const refusal = (text, source, fix) => ({ text, source, fix });
 
-// Each action as it goes: the one line that stands where it was pressed, pending at once, then confirmed with its Undo, or refused with GitHub's words.
 export const sampleActions = {
   approve: { name: 'Approve', said: `You approved ${pullRequest(44)}`, undo: 'dismisses the review', refused: refusal('Couldn’t approve', 'gh: HTTP 504: Gateway Timeout', 'Approve') },
   request: { name: 'Request changes', said: `You asked for changes on ${pullRequest(44)}`, undo: 'dismisses the review', refused: refusal('Couldn’t request changes', 'gh: HTTP 422: Review body is too long', 'Request changes') },
