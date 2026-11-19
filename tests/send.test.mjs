@@ -8,6 +8,7 @@ const pane = (id, terminal) => ({ pane: id, terminal, status: "idle", program: {
 const press = (el, tag, cx = { notify() {} }) => calls(byTag(el, tag), "on_click").forEach(([, fn]) => fn({}, cx));
 const primaryOf = (el) => byTag(el, "kanso-send-primary");
 const last = (el, name) => calls(el, name).at(-1)?.[1];
+const NO_AGENT = "No other agent is running. Start one in a pane, then send.";
 const renders = (send, times = 3) => Array.from({ length: times }, () => send.render()).at(-1);
 const fire = async (timers, pending, at) => {
   timers.filter(([ms]) => ms === at).forEach(([, fn]) => fn());
@@ -24,7 +25,7 @@ test("Every agent the app knows stays listed: one on another computer is chosen,
   assert.equal(send.to, "box/t9", "the chosen agent is kept, not swapped for another");
   assert.ok(byTag(el, "to-box/t9"), "an agent known only by its pane is listed");
   assert.ok(texts(byTag(el, "to-box/t9")).includes("Unreachable"), "and says its computer cannot be reached");
-  assert.equal(texts(el).includes("No other agent is running. Start one in a pane, then send."), false);
+  assert.equal(texts(el).includes(NO_AGENT), false);
   assert.equal(texts(byTag(el, "to-far/t8")).includes("Unreachable"), false);
   press(el, "to-far/t8");
   assert.equal(send.to, "far/t8");
@@ -47,7 +48,7 @@ test("A roster not read yet is never drawn as no agent running, and the chosen a
   const none = await openedSend({});
   const el = renders(none);
   assert.ok(texts(el).includes("Can't see the agents right now."));
-  assert.equal(texts(el).includes("No other agent is running. Start one in a pane, then send."), false);
+  assert.equal(texts(el).includes(NO_AGENT), false);
   const chosen = await openedSend({}, { to: "box/t9" });
   assert.ok(byTag(renders(chosen), "to-box/t9"));
   assert.equal(chosen.to, "box/t9");

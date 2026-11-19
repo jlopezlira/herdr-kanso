@@ -28,6 +28,13 @@ const pinNote = ({ look, cx, say }, note) => {
   say(note);
   look.render(cx);
 };
+const sendPinned = async (shown, note) => {
+  shown.look.ask(SHOT, shown.cx);
+  await shown.drain();
+  pinNote(shown, note);
+  shown.look.send(shown.cx);
+  await shown.drain();
+};
 // A panel whose copies wait until each is let go.
 const heldPanel = async () => {
   const held = [];
@@ -312,12 +319,8 @@ test("Look sends nothing to an agent waiting on its own question", async () => {
 
 test("Look says a send Herdr stopped at its time limit is not confirmed, never not sent, and Send works again", async () => {
   const shown = await panel({ sending: async () => { throw new Error("hc took longer than 30 s and was stopped"); } });
-  const { look, cx, drain } = shown;
-  look.ask(SHOT, cx);
-  await drain();
-  pinNote(shown, "crop it");
-  look.send(cx);
-  await drain();
+  const { look } = shown;
+  await sendPinned(shown, "crop it");
   assert.equal(look.note.text, "Not confirmed: it may have arrived, so look at the agent before sending again.");
   assert.equal(look.note.error, true);
   assert.equal(look.sending, false);
@@ -326,14 +329,10 @@ test("Look says a send Herdr stopped at its time limit is not confirmed, never n
 
 test("Look never takes a shell as the one to send to: it would run the note", async () => {
   const shown = await panel({ focus: "t2" });
-  const { look, cx, drain, calls } = shown;
+  const { look, cx, calls } = shown;
   assert.equal(look.agent(), null, "a shell in focus is no recipient");
   assert.equal(calls.some((c) => c[1] === "read"), false, "and its screen is not read");
-  look.ask(SHOT, cx);
-  await drain();
-  pinNote(shown, "crop it");
-  look.send(cx);
-  await drain();
+  await sendPinned(shown, "crop it");
   assert.equal(calls.some((c) => c[1] === "send"), false, "nothing pasted into the shell");
   look.follow = "t1";
   look.tick(cx);
