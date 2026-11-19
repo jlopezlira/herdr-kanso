@@ -61,7 +61,7 @@ test("No one to send to, or no match, is the kit's empty state with the same wor
 test("Send's keys are as before: a press picks an agent or a project, Cmd+Enter sends, Escape closes", async () => {
   const { send, seen } = await sendView(AGENTS);
   let sent = 0;
-  send.send = () => { sent += 1; };
+  send.press = () => { sent += 1; };
   const el = send.render();
   calls(byTag(el, "to-t2"), "on_click").forEach(([, fn]) => fn({}, cx()));
   assert.equal(send.to, "t2");
