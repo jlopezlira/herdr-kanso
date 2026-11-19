@@ -280,6 +280,7 @@ const drawnRead = async (host) => {
   const viewed = () => started.filter((line) => line.startsWith("gh pr view")).length;
   return {
     ...opened, after, viewed, seen: started.length,
+    roots: () => started.filter((line) => line.includes("rev-parse --show-toplevel")).length,
     draw() {
       drawing = true;
       opened.panel.render(opened.cx);
@@ -329,34 +330,88 @@ test("a pane asking for the push section while the panel is drawn starts its rea
   assert.equal(turn.panel.loading, false);
 });
 
-test("a folder change clears the previous pull request on that draw, and the fold it opens belongs to the new folder", async () => {
-  let folder = "/repo";
-  let asked = null;
-  const store = { "kanso.alias": { remote1: "remote1" } };
-  const turn = await drawnRead({
-    key: () => folder,
-    location: () => ({ cwd: folder, on: folder === "/repo" ? "remote1" : null }),
-    props: () => asked,
-    ...storeShared(store),
-  });
-  assert.equal(turn.panel.pr.number, 7);
-  folder = "/other";
-  asked = { section: "checks", at: 2 };
-  turn.shown.texts.length = 0;
-  turn.draw();
+const cleared = (turn, store, folder) => {
   const frame = turn.shown.texts.join("\n");
-  assert.equal(turn.startedDuring(), turn.seen);
-  assert.equal(turn.panel.context, "/other");
+  assert.equal(turn.panel.context, folder);
   assert.equal(turn.panel.pr, null);
   assert.equal(turn.panel.branch, null);
   assert.equal(turn.panel.home, null);
   assert.equal(frame.includes("#7"), false);
   assert.equal(frame.includes("Branch"), false);
   assert.equal(frame.includes("feat \u2192 main"), false);
-  assert.equal(frame.includes("remote1"), false);
   assert.equal(frame.includes("here"), false);
-  assert.equal(JSON.stringify(store["kanso.pr.details"]), JSON.stringify({ "/other": true }));
+  assert.equal(JSON.stringify(store["kanso.pr.details"]), JSON.stringify({ [folder]: true }));
+};
+
+const openFolder = async (store, on = null) => {
+  let folder = "/repo";
+  let asked = null;
+  const turn = await drawnRead({
+    key: () => folder,
+    location: () => ({ cwd: folder, on: folder === "/repo" ? on : null }),
+    props: () => asked,
+    ...storeShared(store),
+  });
+  return {
+    turn,
+    move(next, ask) {
+      folder = next;
+      if (ask !== undefined) asked = ask;
+      turn.shown.texts.length = 0;
+      turn.draw();
+    },
+  };
+};
+
+const blankFolder = async () => {
+  const store = {};
+  return { store, ...(await openFolder(store)) };
+};
+
+const still = (turn, move, folder, ask) => {
+  const seen = turn.startedDuring();
+  move(folder, ask);
+  assert.equal(turn.startedDuring(), seen);
+};
+
+test("a folder change clears the previous pull request on that draw, and the fold it opens belongs to the new folder", async () => {
+  const store = { "kanso.alias": { remote1: "remote1" } };
+  const { turn, move } = await openFolder(store, "remote1");
+  assert.equal(turn.panel.pr.number, 7);
+  still(turn, move, "/other", { section: "checks", at: 2 });
+  assert.equal(turn.shown.texts.join("\n").includes("remote1"), false);
+  cleared(turn, store, "/other");
   await readOther(turn);
+});
+
+test("a folder change during Refresh clears that pull request before the read finishes, and the fold belongs to the new folder", async () => {
+  const { store, turn, move } = await blankFolder();
+  turn.panel.again(turn.cx);
+  still(turn, move, "/other", { section: "checks", at: 2 });
+  cleared(turn, store, "/other");
+  await turn.drain();
+  assert.equal(turn.panel.context, "/other");
+  assert.equal(store["kanso.pr.details"]["/repo"], undefined);
+});
+
+test("two folder changes before the wake are one read of the latest folder", async () => {
+  const { store, turn, move } = await blankFolder();
+  const roots = turn.roots();
+  move("/B");
+  move("/C", { section: "checks", at: 3 });
+  assert.equal(turn.roots(), roots);
+  cleared(turn, store, "/C");
+  await nextTurn(turn);
+  assert.equal(turn.panel.context, "/C");
+  assert.equal(turn.roots(), roots + 1);
+  const pending = turn.after.length;
+  turn.draw();
+  if (turn.after.length > pending) {
+    turn.after[pending](turn.cx);
+    await turn.drain();
+  }
+  assert.equal(turn.roots(), roots + 1);
+  assert.equal(turn.panel.context, "/C");
 });
 
 test("a read that never answers still finishes, and the last pull request stays", async () => {

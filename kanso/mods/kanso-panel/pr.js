@@ -171,10 +171,11 @@ export class PullRequest {
     if (next.read) this.refresh(cx);
   }
 
-  readWanted() { return Boolean(this.asking) || this.moved || this.pollNow(false).read || key() !== this.context; }
+  readWanted() { return Boolean(this.asking) || this.queued || this.pollNow(false).read || key() !== this.context; }
+
+  holds(gen, context) { return (this.gen ?? 0) === gen && key() === context; }
 
   showFolder() {
-    if (this.loading) return;
     const context = key();
     if (context === this.context) return;
     const { cwd, on } = location();
@@ -193,8 +194,8 @@ export class PullRequest {
     this.forgetLog();
     this.sendShown = false; this.sendFor = null; this.listingOthers = false;
     this.cwd = cwd ?? null; this.on = on ?? null;
-    this.loading = true;
-    this.moved = true;
+    this.gen = (this.gen ?? 0) + 1;
+    this.queued = true;
   }
 
   readSoon(cx) {
@@ -203,10 +204,9 @@ export class PullRequest {
     this.waking = true;
     const wake = (wakeCx) => {
       this.waking = false;
-      const wanted = this.readWanted();
+      const ask = this.asking;
       this.asking = false;
-      if (!wanted) this.moved = false;
-      if (wanted) this.refresh(wakeCx);
+      if (this.queued || ask || this.pollNow(false).read || key() !== this.context) this.refresh(wakeCx);
     };
     if (cx.timer?.after) cx.timer.after(0, wake);
     else wake(cx);
@@ -264,8 +264,8 @@ export class PullRequest {
     this.error = { title: "Can't read GitHub", detail: line };
   }
 
-  takeOpen(open, context) {
-    if (open?.code !== 0 || key() !== context) return false;
+  takeOpen(open, context, gen = this.gen ?? 0) {
+    if (open?.code !== 0 || !this.holds(gen, context)) return false;
     const sorted = tryOr(() => JSON.parse(open.stdout).toSorted((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt)));
     if (sorted === null) return false;
     this.openPrs = sorted;
@@ -300,29 +300,36 @@ export class PullRequest {
   }
 
   refresh(cx) {
-    if (this.loading && !this.moved) return;
+    if (this.loading) {
+      if (key() !== this.context) this.showFolder();
+      if ((this.gen ?? 0) !== this.running) this.queued = true;
+      return;
+    }
     this.away = false;
-    if (!this.loading) this.showFolder();
-    this.moved = false;
+    this.showFolder();
     const { cwd, on } = location(), context = key();
-    if (!cwd) { this.loading = false; return; }
+    const gen = this.gen ?? 0;
+    if (!cwd) { this.queued = false; return; }
+    this.queued = false;
     this.keptUrl = null;
     this.cwd = cwd; this.on = on;
     this.loading = true;
+    this.running = gen;
+    const mine = () => this.holds(gen, context);
     const want = this.selected;
     cx.spawn(this.tracked(async (cx) => {
-      const inbox = this.syncInbox(context).catch((e) => { if (key() === context) this.inboxFailure(e); });
-      const failed = (e) => { if (key() === context) this.keepLast(e?.message ?? e); };
+      const inbox = this.syncInbox(context, gen).catch((e) => { if (mine()) this.inboxFailure(e); });
+      const failed = (e) => { if (mine()) this.keepLast(e?.message ?? e); };
       const read = async () => {
         const top = await this.git(["rev-parse", "--show-toplevel"], cwd, on);
-        if (key() !== context) return null;
+        if (!mine()) return null;
         if (top?.late) { this.keepLast(); return null; }
         // Not a repository is a place, not a failure: a quiet placeholder, no retry.
         if (top.code !== 0) {
           this.outside = true; this.missing = null; this.error = null; this.none = false; this.openPrs = [];
           this.stale = null; this.wait = null;
           if (!this.selected) { this.pr = null; this.freshAt = null; return null; }
-          try { await this.readShown(context, this.selected, null); }
+          try { await this.readShown(context, this.selected, null, gen); }
           catch (e) { failed(e); }
           return null;
         }
@@ -333,7 +340,7 @@ export class PullRequest {
           this.git(["remote", "get-url", "origin"], this.root, on).catch(() => null),
           this.readPushed(this.root, on),
         ]);
-        if (key() !== context) return null;
+        if (!mine()) return null;
         if (!branch || branch.late || remote?.late || pushed?.state === "late") { this.keepLast(); return null; }
         this.branch = branch.stdout.trim() || null;
         this.pushed = pushed?.state === "pushed"; this.behind = pushed?.state === "behind";
@@ -343,7 +350,7 @@ export class PullRequest {
         this.home = /github\.com[:/]([^/]+\/[^/\s]+?)(?:\.git)?\s*$/.exec(remoteUrl)?.[1] ?? null;
         this.host = parseRemote(remoteUrl.trim())?.host ?? null;
         const waited = await this.heldByGitHub(Date.now());
-        if (key() !== context) return null;
+        if (!mine()) return null;
         if (waited) {
           this.wait = waited;
           if (this.pr) this.error = null;
@@ -353,29 +360,34 @@ export class PullRequest {
         if (this.listing && this.tab === "closed") this.loadClosed(cx);
         // Awaited below so the read never outlives this refresh.
         const open = this.listing ? this.gh(openListArgs()).catch(() => null) : null;
-        try { await this.readShown(context, want, open); }
-        catch (e) { if (this.remembered) this.dropRemembered(); else failed(e); }
-        if (key() === context && !this.pr && pushed?.state === "unpushed") {
+        try { await this.readShown(context, want, open, gen); }
+        catch (e) { if (!mine()) return null; if (this.remembered) this.dropRemembered(); else failed(e); }
+        if (mine() && !this.pr && pushed?.state === "unpushed") {
           const stamp = `${this.branch ?? ""}\0${pushed.ahead ?? 0}`;
           if (this.subjectsFor !== stamp) {
             this.subjectsFor = stamp;
             const log = await this.git(["log", "-5", "--format=%s"], this.root, on).catch(() => null);
-            if (key() === context && this.subjectsFor === stamp && log?.code === 0) this.subjects = String(log.stdout ?? "").split("\n").filter(Boolean);
+            if (mine() && this.subjectsFor === stamp && log?.code === 0) this.subjects = String(log.stdout ?? "").split("\n").filter(Boolean);
           }
-        } else if (key() === context) { this.subjects = []; this.subjectsFor = null; }
+        } else if (mine()) { this.subjects = []; this.subjectsFor = null; }
         return open;
       };
       const follow = await (async () => {
         const open = await read().catch((e) => { failed(e); return null; });
         if (open) await open;
         await inbox;
-        return (this.selected !== want || this.openedList) && !this.wait && key() === context;
+        return mine() && (this.selected !== want || this.openedList) && !this.wait;
       })().finally(() => {
         this.openedList = false;
-        this.loading = false; this.loadedAt = Date.now(); cx.notify();
+        if (this.running === gen) {
+          this.loading = false;
+          if (mine()) this.loadedAt = Date.now();
+        }
+        cx.notify();
       });
       if (follow) this.refresh(cx);
-      else if (!this.wait) this.readLog(cx);
+      else if (this.queued && !this.loading) this.refresh(cx);
+      else if (mine() && !this.wait) this.readLog(cx);
     }));
   }
 
@@ -397,14 +409,16 @@ export class PullRequest {
   }
 
   // The account, not the focused folder. Absent unless a provider is installed and signed in here.
-  async syncInbox(context) {
+  async syncInbox(context, gen = this.gen ?? 0) {
     const ready = await this.account(Date.now());
-    if (ready == null || key() !== context) return;
+    if (ready == null || !this.holds(gen, context)) return;
     if (!ready.length) { this.inboxOn = false; this.inbox = null; this.inboxOpen = null; return; }
+    const fail = (e) => { if (this.holds(gen, context)) this.inboxFailure(e); };
     if (!this.inboxDb) {
       try { await this.db.open(); this.inboxDb = this.db; }
       catch (e) {
-        this.inboxFailure(e);
+        fail(e);
+        if (!this.holds(gen, context)) return;
         this.inboxOn = false; this.inboxOpen = null;
         return;
       }
@@ -415,16 +429,11 @@ export class PullRequest {
       const soFar = await prev;
       return [...soFar, await refreshInbox({
         db: this.inboxDb, run: (command, args, options) => this.launch(command, args, options ?? {}), provider, session, force, shown: true, facts: keepsFacts(),
-        onCache: (cached, pending) => { if (key() === context) this.paintInbox(cached, !pending || cached.needs.length > 0 || cached.yours.length > 0); },
+        onCache: (cached, pending) => { if (this.holds(gen, context)) this.paintInbox(cached, !pending || cached.needs.length > 0 || cached.yours.length > 0); },
       })];
     }, Promise.resolve([])).then(mergeInbox).catch((e) => e);
-    if (model instanceof Error) {
-      const e = model;
-      if (key() !== context) return;
-      this.inboxFailure(e);
-      return;
-    }
-    if (key() !== context) return;
+    if (model instanceof Error) { fail(model); return; }
+    if (!this.holds(gen, context)) return;
     this.paintInbox(model, true);
     if (!model.writeError) this.retireInboxNote();
     if (this.inboxOpen === false) await this.noteSeen(this.pr?.url);
@@ -470,15 +479,16 @@ export class PullRequest {
     return tryOrAsync(() => recordPrFacts(this.inboxDb ??= this.db, items));
   }
 
-  async readShown(context, want, list) {
+  async readShown(context, want, list, gen = this.gen ?? 0) {
     const asked = await tryOrAsync(async () => ({ view: await this.gh(["pr", "view", ...(want ? [want] : []), "--json", FIELDS]) }));
+    if (!this.holds(gen, context)) return;
     if (!asked) {
       if (this.remembered) { this.dropRemembered(); return; }
       if (this.pr) { this.keepLast("The GitHub CLI is not installed."); return; }
       this.missing = null; this.error = { title: "GitHub CLI not installed", detail: null, cli: true }; this.pr = null; return;
     }
     // A click picked another one while this read was out: drop it, the finally reads again.
-    if (key() !== context || this.selected !== want) return;
+    if (this.selected !== want) return;
     const missing = ghMissing(asked.view);
     if (missing) {
       if (this.remembered) { this.dropRemembered(); return; }
@@ -486,7 +496,7 @@ export class PullRequest {
       this.stale = null; this.freshAt = null; return;
     }
     this.missing = null;
-    if (list) this.takeOpen(await list, context);
+    if (list) this.takeOpen(await list, context, gen);
     await this.keepPrFacts([
       ...(asked.view.code === 0 ? [JSON.parse(asked.view.stdout)] : []),
       ...(this.openPrs ?? []).map((pr) => ({ ...pr, state: "OPEN" })),
@@ -496,15 +506,16 @@ export class PullRequest {
     const branchHasNone = !want && (asked.view.code !== 0 ? NO_PR.test(asked.view.stderr || asked.view.stdout) : done(asked.view));
     if (branchHasNone && this.branch && this.base === undefined) {
       const b = await this.gh(["repo", "view", "--json", "defaultBranchRef", "--jq", ".defaultBranchRef.name"]).catch(() => null);
-      if (b?.code === 0 && key() === context) this.base = b.stdout.trim() || null;
+      if (b?.code === 0 && this.holds(gen, context)) this.base = b.stdout.trim() || null;
     }
     if (branchHasNone) {
-      if (key() !== context || this.selected !== want) return;
+      if (!this.holds(gen, context) || this.selected !== want) return;
       this.none = true; this.pr = null; this.error = null; this.stale = null; this.freshAt = null;
       this.branchUrl = null; this.threads = []; return;
     }
     const view = asked.view;
     if (view.code !== 0) {
+      if (!this.holds(gen, context)) return;
       if (this.remembered) { this.dropRemembered(); return; }
       const why = (view.stderr || view.stdout).trim();
       if (NO_PR.test(why)) { this.none = true; this.pr = null; this.error = null; this.stale = null; this.freshAt = null; }
@@ -512,6 +523,7 @@ export class PullRequest {
       return;
     }
     const pr = JSON.parse(view.stdout);
+    if (!this.holds(gen, context)) return;
     if (this.remembered && !prMemory({ url: pr.url }, () => (pr.state === "OPEN" ? "open" : "closed"))) { this.dropRemembered(); return; }
     this.remembered = false;
     if (this.pr?.url !== pr.url) {
@@ -528,7 +540,7 @@ export class PullRequest {
     if (this.threadsFor && !String(this.threadsFor).startsWith(`${pr.url}\0`)) { this.threads = []; this.threadsFor = null; }
     if (repo && needsThreads(this.threadsFor, pr.url, pr.updatedAt)) {
       const gql = await this.gh(["api", "graphql", "-f", `query=${THREADS}`, "-F", `o=${repo.o}`, "-F", `r=${repo.r}`, "-F", `n=${pr.number}`]).catch(() => null);
-      const nodes = gql?.code === 0 && key() === context && this.pr?.url === pr.url
+      const nodes = gql?.code === 0 && this.holds(gen, context) && this.pr?.url === pr.url
         ? tryOr(() => JSON.parse(gql.stdout)?.data?.repository?.pullRequest?.reviewThreads?.nodes, null) : null;
       if (nodes) {
         this.threads = nodes.filter((n) => !n.isResolved).map((n) => {
@@ -540,7 +552,7 @@ export class PullRequest {
     }
     if (!this.viewer) {
       const me = await this.gh(["api", "user", "--jq", ".login"]).catch(() => null);
-      if (me?.code === 0 && key() === context) this.viewer = me.stdout.trim();
+      if (me?.code === 0 && this.holds(gen, context)) this.viewer = me.stdout.trim();
     }
     const place = this.repo();
     const repoKey = place ? `${place.o}/${place.r}` : null;
@@ -549,7 +561,7 @@ export class PullRequest {
       if (place && pr.state === "OPEN") {
         const perm = await this.gh(["repo", "view", repoKey, "--json", "viewerPermission", "--jq", ".viewerPermission"]).catch(() => null);
         const value = perm?.code === 0 ? perm.stdout.trim() : "";
-        if (value && key() === context && this.pr?.url === pr.url) this.permission = value;
+        if (value && this.holds(gen, context) && this.pr?.url === pr.url) this.permission = value;
       }
     }
     const behindStamp = `${pr.url}\0${pr.updatedAt ?? ""}`;
@@ -559,9 +571,9 @@ export class PullRequest {
         const base = pr.baseRefName || "main";
         const counted = await this.git(["rev-list", "--count", `HEAD..origin/${base}`], this.root, this.on).catch(() => null);
         const n = Number(String(counted?.stdout ?? "").trim());
-        if (key() === context && this.pr?.url === pr.url && this.baseBehindFor === behindStamp) this.baseBehind = counted?.code === 0 && Number.isInteger(n) && n > 0 ? n : null;
+        if (this.holds(gen, context) && this.pr?.url === pr.url && this.baseBehindFor === behindStamp) this.baseBehind = counted?.code === 0 && Number.isInteger(n) && n > 0 ? n : null;
       }
-    } else if (key() === context && this.pr?.url === pr.url) { this.baseBehind = null; this.baseBehindFor = null; }
+    } else if (this.holds(gen, context) && this.pr?.url === pr.url) { this.baseBehind = null; this.baseBehindFor = null; }
   }
 
   loadClosed(cx) {
@@ -920,7 +932,7 @@ export class PullRequest {
     if (this.none && this.behind) return "behind";
     if (this.none && !this.pushed) return "unpushed";
     if (this.none) return "none";
-    if (this.loading || !this.context) return "loading";
+    if (this.loading || this.queued || !this.context) return "loading";
     return "folder";
   }
 
