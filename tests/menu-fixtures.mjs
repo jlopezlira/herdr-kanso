@@ -56,7 +56,7 @@ export async function footer({ shared = {}, ready = null, bindings = [{ action: 
     updates: () => ({ app: { ready } }), keys: () => bindings, settings: () => ({ font_family: "Mono" }), window: () => ({ platform: "macos" }),
   };
   const view = await mountChrome(host);
-  const kit = await load("kanso-chrome/ui.js", ["H", "G", "T", "SIDEBAR", "PANE"], host);
+  const kit = await load("kanso-chrome/ui.js", ["H", "G", "T", "SIDEBAR", "PANE", "SPIN"], host);
   view.updater = { available: () => null, busy: false, refused: () => null, install: (context) => installs.push(context), ...updater };
   return { view, ran, overlays, installs, ...kit };
 }

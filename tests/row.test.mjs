@@ -6,7 +6,7 @@ import { load, chain, numberArguments, calls, one, styled, themed, KIT_NIGHT, dr
 import { marks, rowDepths } from "../stories/kit/pieces.js";
 
 const kit = async () => themed({
-  ...await load("kanso-panel/ui.js", ["tokens", "G", "H", "R", "T", "ICON_ROW", "ICON_INLINE", "CLEAR"], drawingHost()),
+  ...await load("kanso-panel/ui.js", ["tokens", "G", "H", "R", "T", "ICON_ROW", "ICON_INLINE", "CLEAR", "SPIN"], drawingHost()),
   ...await loadPendingState(drawingHost()),
   ...await loadRow(drawingHost()),
 }, night);
@@ -184,6 +184,17 @@ test("The row takes its click, hover, keyboard and focus from the caller, wires 
   assert.deepEqual(styled(pressable, "focus"), [["border_color", c.accent]]);
   const bare = row("r", c, { name: "Juno" });
   for (const name of ["on_click", "cursor_pointer", "on_hover", "on_key_down", "track_focus", "focus"]) assert.equal(calls(bare, name).length, 0, name);
+});
+
+test("A busy row turns its icon at the spinner's pace and takes no press, so no ring is left on it", async () => {
+  const { row, SPIN, CLEAR, c } = await kit();
+  const idle = row("r", c, { icon: "refresh-cw", name: "Updating kansō", onClick: () => {}, focusHandle: { is_focused: () => false } });
+  const busy = row("r", c, { icon: "refresh-cw", name: "Updating kansō", busy: true, onClick: () => {}, focusHandle: { is_focused: () => false } });
+  assert.equal(all(idle).filter((el) => calls(el, "spin").length).length, 0, "at rest the icon is still");
+  assert.deepEqual(all(busy).flatMap((el) => calls(el, "spin")).map((call) => call[1]), [SPIN], "busy, the icon turns once per spin token");
+  for (const name of ["on_click", "cursor_pointer", "track_focus", "focus", "hover", "active"]) assert.equal(calls(busy, name).length, 0, `busy, no ${name}`);
+  assert.equal(busy.tag, "h_flex", "no Button for the keyboard to keep, so no ring can stay after a press");
+  assert.equal(one(busy, "border_color"), CLEAR, "its border stays clear");
 });
 
 test("The row's code has no number of pixels: every size comes from the tokens", () => {

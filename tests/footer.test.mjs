@@ -56,6 +56,21 @@ test("A pressed update says Updating kansō at once and stays quiet until it lan
   assert.equal(arg(all(drawn).find((x) => texts(x)[0] === "Updating kansō" && calls(x, "text_color").length), "text_color"), night.muted);
 });
 
+test("While it updates, the row is quiet and its icon turns: nothing to press and keep a ring on", async () => {
+  const { view, installs, SPIN } = await footer({ updater: { available: () => "3.31.0", busy: true } });
+  const updating = all(view.render()).find((x) => calls(x, "border_color").length && texts(x).includes("Updating kansō"));
+  for (const name of ["on_click", "focus", "track_focus"]) assert.equal(all(updating).some((x) => calls(x, name).length), false, `no ${name}`);
+  assert.deepEqual(all(updating).flatMap((x) => calls(x, "spin")).map((call) => call[1]), [SPIN], "its refresh icon turns at the kit's pace");
+  assert.equal(installs.length, 0);
+});
+
+test("In the rail, an update that runs is the icon Button turning and disabled", async () => {
+  const { view, SPIN } = await footer({ shared: { "sidebar.collapsed": true }, updater: { available: () => "3.31.0", busy: true } });
+  const update = byId(view.render(), "footer-update");
+  assert.equal(arg(update, "disabled"), true);
+  assert.deepEqual(all(update).flatMap((x) => calls(x, "spin")).map((call) => call[1]), [SPIN]);
+});
+
 test("A refused update keeps its row and shows the tool's words under it, with Update to try again", async () => {
   const why = "git ls-remote: Could not resolve host: github.com";
   const { view, installs, G } = await footer({ updater: { available: () => "3.31.0", refused: () => why } });

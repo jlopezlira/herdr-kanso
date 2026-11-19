@@ -1299,6 +1299,8 @@
 .kanso-row--two-lines .kanso-content__actions{display:flex;flex-wrap:wrap;align-items:center;gap:var(--k-sp-2);margin-top:var(--k-sp-2)}
 .kanso-row:is(:hover,.kanso-control--hover){background:var(--hover)}
 .kanso-row:is(:focus-visible,.kanso-control--focus){outline:var(--k-w-focus) solid var(--accent);outline-offset:calc(-1 * var(--k-w-focus))}
+.kanso-row.kanso-row--busy{cursor:default}
+.kanso-row.kanso-row--busy:is(:hover,.kanso-control--hover,:active,.kanso-control--active){background-color:transparent}
 .kanso-row__name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .kanso-row--wrap{height:auto;align-items:flex-start;padding-block:var(--k-sp-2)}
 .kanso-row--wrap :is(.kanso-content__primary,.kanso-row__name){align-items:flex-start;white-space:normal}

@@ -2,7 +2,7 @@
 // Kept byte for byte by `npm run sync:share`: edit kanso-panel/ui-row.js.
 import { div, svg, image } from "gpui-kit";
 import { h_flex, v_flex, Button } from "gpui-base";
-import { G, H, LH, R, T, W, ICON_ROW, ICON_INLINE, CLEAR, OPACITY, alpha, glyphOf, toneColor } from "./ui.js";
+import { G, H, LH, R, T, W, ICON_ROW, ICON_INLINE, CLEAR, OPACITY, SPIN, alpha, glyphOf, toneColor } from "./ui.js";
 import { button } from "./ui-button.js";
 import { chip } from "./ui-chip.js";
 import { dot } from "./ui-dot.js";
@@ -63,9 +63,11 @@ const letterOf = (c, letter) => div().w(ICON_ROW).flex_none().text_center().text
 // A tree row leads with its fold: a folder's chevron, `open` or not, or an empty slot for a file.
 const foldOf = (c, open) => div().w(ICON_INLINE).flex_none().flex().items_center().justify_center()
   .when(open !== null, (el) => el.child(glyph(open ? "chevron-down" : "chevron-right", ICON_INLINE, c.dim)));
-const slotOf = (c, { letter, icon, tone, ink, dimmed }) => {
+const slotOf = (c, { letter, icon, tone, ink, dimmed, busy }) => {
   if (letter) return letterOf(c, letter);
-  return icon ? leadOf(icon, tone ? toneColor(c, tone) : ink, dimmed) : null;
+  if (!icon) return null;
+  const lead = leadOf(icon, tone ? toneColor(c, tone) : ink, dimmed);
+  return busy ? lead.spin(SPIN) : lead;
 };
 
 const chipOf = (id, c, count) => {
@@ -161,15 +163,16 @@ const wire = (el, c, { onClick, onHover, onKey, focusHandle }) => el
   .when(Boolean(focusHandle), (e) => e.track_focus(focusHandle))
   .when(Boolean(onClick || focusHandle), (e) => e.focus((s) => s.border_color(c.accent)));
 
-// `start`, `tools`: drawn elements before the icon and always at the end; `actions`: tools shown with `hover` or `focus`; `keys`: key hint props.
+// `busy`: its work runs, so its icon turns and the row takes no press; `start`, `tools`: drawn elements before the icon and always at the end; `actions`: tools shown with `hover` or `focus`; `keys`: key hint props.
 // `level` makes it a tree row, `open` its folder's fold; `verbs`: quiet word actions on a line under it.
 // `group`: a heading that heads a group, such as a computer over its projects; `wrap`: the name wraps instead of one truncated line; `drop`: where a dragged row lands; `wash`: a state's ground; `guides`: one per level.
 export function row(id, c, {
   icon = null, tone = null, letter = null, level = null, open = null, name, detail = null, meta = null, chip: count = null, flag = null, mark: status = "none", second = null, heading = false, group = false, title = false,
-  depth = 0, selected = false, current = false, dimmed = false, pending = false, hover = false, focus = false, actions = [], action = null, verbs = [], start = [], tools = [], keys = [],
+  depth = 0, selected = false, current = false, dimmed = false, busy = false, pending = false, hover = false, focus = false, actions = [], action = null, verbs = [], start = [], tools = [], keys = [],
   glint = false, wrap = false, drop = null, wash = null, guides = [], names = false, nameInk = null,
-  onClick = null, onHover = null, onKey = null, focusHandle = null,
+  onClick: pressed = null, onHover = null, onKey = null, focusHandle: handle = null,
 } = {}) {
+  const [onClick, focusHandle] = busy ? [null, null] : [pressed, handle];
   const ink = dimmed ? c.muted : c.text;
   const nameColour = names && nameInk ? { fg: c.text, muted: c.muted, dim: c.dim }[nameInk] : ink;
   const shown = hover || focus;
@@ -181,7 +184,7 @@ export function row(id, c, {
   const first = h_flex().w_full().min_w(0).items_center().gap(G.sm).when(wrap, (el) => el.items_start()).when(Boolean(second && title), (el) => el.h(H.row)).children([
     ...start,
     level === null ? null : foldOf(c, open),
-    slotOf(c, { letter, icon, tone, ink: names ? c.muted : ink, dimmed }),
+    slotOf(c, { letter, icon, tone, ink: names ? c.muted : ink, dimmed, busy }),
     nameOf(`${id}-name`, c, { name, heading, group, title, ink: nameColour, glint, wrap, names }),
     detailOf(c, id, detail, names),
     div().flex_1(),
@@ -197,7 +200,7 @@ export function row(id, c, {
     .when(under && !two && !title, (el) => el.py(G.sm - G.hair))
     .when(Boolean(height), (el) => el.h(height))
     .when(Boolean(ground), (el) => el.bg(ground))
-    .when(!title, (el) => el.hover((s) => s.bg(current ? c.selected : c.subtle)).active((s) => s.bg(c.selected)))
+    .when(!title && !busy, (el) => el.hover((s) => s.bg(current ? c.selected : c.subtle)).active((s) => s.bg(c.selected)))
     .when(pending, (el) => el.opacity(PENDING))
     .children([...guidesOf(c, depth, guides), dropOf(c, drop)].filter(Boolean))
     .child(under ? v_flex().w_full().min_w(0).gap(two && !names ? G.xs : G.sm).child(first)

@@ -221,3 +221,16 @@ test("No hand-drawn toolbar, header or footer is left, and the stacks draw no li
   for (const word of ["./footer.js", "chromeGlyph", "div().size_full()"]) assert.equal(chrome.includes(word), false, word);
   assert.deepEqual(numberArguments("kanso-panel/ui-stack.js"), []);
 });
+
+test("The Storybook's update states are all Proposed: a running update turns its icon and takes no press, in the row and in the rail", () => {
+  const states = Object.fromEntries(kitRecords([]).filter((record) => record.page === "Primitives/Footer" || record.page === "Compositions/Sidebar/Footer").map((record) => [record.label, record]));
+  const running = ["Updating", "Updating, its stage", "Collapsed, updating"];
+  for (const label of running) {
+    assert.match(states[label].caption, /^Proposed/, `${label} is captioned Proposed`);
+    assert.match(states[label].html, /kanso-icon--spinning|kanso-button--spinning/, `${label} turns its icon`);
+  }
+  assert.match(states.Updating.html, /kanso-row--busy[^>]*aria-busy="true"/, "the row is busy and out of the keyboard's way");
+  assert.doesNotMatch(states.Updating.html, /kanso-row--busy[^>]*tabindex/, "it takes no tab stop, so no ring can stay on it");
+  assert.match(states["Collapsed, updating"].html, /kanso-control--off/, "the rail's Button is disabled");
+  assert.doesNotMatch(states.Update.html, /kanso-icon--spinning|kanso-row--busy/, "an update on offer is still");
+});
