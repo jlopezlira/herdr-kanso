@@ -86,16 +86,15 @@ function roster() {
   return all.toSorted((a, b) => rank.get(a.id) - rank.get(b.id));
 }
 
-function panelList(answers = {}) {
+function panelList(commands) {
   const map = pieces(shared);
-  const commands = answers[machineKey(spaces().find((s) => s.active))];
   return roster().filter((p) => offered(p.id, { sim: shared(TOOLS), commands })).map((p) => ({ ...p, on: runs(`panel.${p.id}`, map) }));
 }
 
 const drawnPanels = (all) => all.filter((p) => p.on);
 
-function movePanel(from, to, answers) {
-  const seen = drawnPanels(panelList(answers)).map((p) => p.id), i = seen.indexOf(from), j = seen.indexOf(to);
+function movePanel(from, to, commands) {
+  const seen = drawnPanels(panelList(commands)).map((p) => p.id), i = seen.indexOf(from), j = seen.indexOf(to);
   if (i < 0 || j < 0 || i === j) return;
   const moved = seen.toSpliced(i, 1).toSpliced(j, 0, from);
   setShared(ORDER, roster().map((p) => (seen.includes(p.id) ? moved[seen.indexOf(p.id)] : p.id)));
@@ -137,6 +136,7 @@ export default class Tabs extends View {
   moreOpen = false;
   asked = new Set();
   answers = {};
+  here = "";
 
   init(_props, cx) {
     this.endDrags();
@@ -191,6 +191,10 @@ export default class Tabs extends View {
     });
   }
 
+  commandsHere() {
+    return this.answers[this.here];
+  }
+
   askCommands(cx, machine) {
     if (this.arrange || !cx || this.asked.has(machine)) return;
     this.asked = new Set([...this.asked, machine]);
@@ -215,8 +219,8 @@ export default class Tabs extends View {
       const tree = layout();
       if (this.openPanel(walkLayout(tree, "panel"), walkLayout(tree, "panel-body")) !== "memory") this.mount("memory");
     } else if (name === "sim" || panel) {
-      const id = panel ? panelList(this.answers).filter((x) => x.on)[Number(panel[1]) - 1]?.id : "sim";
-      if (!id || !panelList(this.answers).some((item) => item.id === id && item.on)) return;
+      const id = panel ? panelList(this.commandsHere()).filter((x) => x.on)[Number(panel[1]) - 1]?.id : "sim";
+      if (!id || !panelList(this.commandsHere()).some((item) => item.id === id && item.on)) return;
       const tree = layout(), now = this.openPanel(walkLayout(tree, "panel"), walkLayout(tree, "panel-body"));
       this.mount(now === id ? null : id);
     }
@@ -460,7 +464,7 @@ export default class Tabs extends View {
           const from = this.dragPanel;
           this.dragPanel = null;
           this.dropPanel = null;
-          if (from && from !== p.id) movePanel(from, p.id, this.answers);
+          if (from && from !== p.id) movePanel(from, p.id, this.commandsHere());
           cx.notify();
         })
         .on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); this.panelMenu = p.id; cx.notify(); });
@@ -504,7 +508,8 @@ export default class Tabs extends View {
       cx.timer.after(0, (next) => { this.simQueued = false; this.probeSimulator(next); });
     }
     const space = spaces().find(p => p.active);
-    this.askCommands(cx, machineKey(space));
+    this.here = machineKey(space);
+    this.askCommands(cx, this.here);
     const openTabs = shownTabs(space?.tabs);
     // Each live-data read copies the whole list: read once per render.
     const ps = panes();
@@ -520,7 +525,7 @@ export default class Tabs extends View {
       const project = tryOr(() => projectKey(space, home()));
       if (project && project !== this.project) this.openRow = undefined;
     }
-    const allPanels = panelList(this.answers);
+    const allPanels = panelList(this.commandsHere());
     const shownPanels = drawnPanels(allPanels);
     const enabled = shownPanels.map((p) => p.id);
     const roster = allPanels.map((p) => ({ id: p.id, label: p.label, icon: p.icon ? glyphOf(p.icon.replace(/^lu-/, "")) : null, on: p.on }));
