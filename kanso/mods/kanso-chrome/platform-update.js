@@ -164,7 +164,7 @@ const LIB = [
   "  $rootFrom = [IO.Path]::GetPathRoot([IO.Path]::GetFullPath($From))",
   "  $parent = Split-Path -Parent $To",
   "  if ($parent -and -not (Test-Path -LiteralPath $parent)) {",
-  "    try { New-Item -ItemType Directory -Force -Path $parent | Out-Null } catch { Report-Op 'create' $parent $_; throw }",
+  "    try { [void][IO.Directory]::CreateDirectory($parent) } catch { Report-Op 'create' $parent $_; throw }",
   "  }",
   "  $rootTo = [IO.Path]::GetPathRoot([IO.Path]::GetFullPath($(if ($parent) { $parent } else { $To })))",
   "  if ($rootFrom.ToUpperInvariant() -ne $rootTo.ToUpperInvariant()) { throw ('another drive ' + $From) }",

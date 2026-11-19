@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, realpath, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { load, context, exec, nativePlatform, temporary, clone, gpuiHost, success, failure, storeShared, tickingContext } from "./helpers.mjs";
 import { test, dropChild, trackedSpawn, quote, windowsOnly, heldFile, updater, fixture, version, small, tree, stages, hostFor, startUpdater, versionFile } from "./update-harness.mjs";
@@ -402,7 +402,7 @@ windowsOnly("A read-only file is still updated", async (t) => {
 });
 
 const recoverHome = async (t) => {
-  const root = await temporary(t);
+  const root = await realpath(await temporary(t));
   const home = join(root, "home");
   const dir = join(home, ".kanso-updates");
   return { root, home, dir };
