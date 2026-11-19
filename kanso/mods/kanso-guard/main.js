@@ -54,7 +54,7 @@ export default class Memory extends View {
     this.node = null;
     this.forget();
     this.reading = false;
-    this.again = false;
+    this.refreshing = false;
     this.range = "day";
     this.share = new Share(MOD, paths.join(appHome(), DATA_DIR, "share"));
     this.batch = null;
@@ -124,7 +124,7 @@ export default class Memory extends View {
 
   sleep() {
     this.awake = false;
-    this.again = false;
+    this.refreshing = false;
     this.cancelAll([this.ticker, this.batchTimer, ...this.timers]);
     this.ticker = null;
     this.timers = [];
@@ -136,10 +136,11 @@ export default class Memory extends View {
     this.cancelAll([this.ticker, this.batchTimer, this.commandTask, ...this.timers]);
   }
 
-  // A press always reads: one already under way is followed by another.
   refresh(cx) {
-    if (this.reading) this.again = true;
-    else this.read(cx);
+    if (this.refreshing) return;
+    this.refreshing = true;
+    cx.notify();
+    this.read(cx);
   }
 
   read(cx) {
@@ -161,11 +162,10 @@ export default class Memory extends View {
       const batch = await tryOrAsync(async () => parseBatch(await readTextFile(paths.join(dir, "batch.json"))), null);
       const installing = this.busy.install;
       const installFailure = installing ? installError(await tryOrAsync(() => readTextFile(paths.join(dir, "install.json"))), installing.at) : null;
-      this.reading = false;
-      const again = this.again;
-      this.again = false;
-      if (this.closed || !this.awake) return;
       const before = this.picture();
+      this.reading = false;
+      this.refreshing = false;
+      if (this.closed || !this.awake) return;
       this.now = now;
       this.digest = digest;
       this.batch = batch && batch.at !== this.batchSeen ? batch : null;
@@ -175,12 +175,11 @@ export default class Memory extends View {
       try { this.batchTimer?.cancel(); } catch { /* already gone */ }
       this.batchTimer = this.batch && !this.batch.finished ? readCx.timer.after(4000, (timerCx) => { this.batchTimer = null; this.read(timerCx); }) : null;
       if (this.picture() !== before) readCx.notify();
-      if (again) this.read(readCx);
     });
   }
 
   picture() {
-    return JSON.stringify([this.now, this.digest, this.batch, this.actionError, this.busy]);
+    return JSON.stringify([this.now, this.digest, this.batch, this.actionError, this.busy, this.refreshing]);
   }
 
   settle() {
@@ -283,8 +282,8 @@ export default class Memory extends View {
       .child(metric({ value: state === "bad" ? "Unreadable" : "Off", tone: "muted" })("guard-off", c))
       .child(h_flex().gap(G.lg).items_center()
         .child(quietLink("guard-on", busy ? "Turning on…" : "Turn on", (cx) => { if (!busy) this.turnOn(cx); }, c, { color: c.text }))
-        .when(inline, (el) => el.child(quietLink("guard-reread", "Refresh", (cx) => this.refresh(cx), c))))
-      .when(Boolean(failure), (el) => el.child(failureBlock(failure)("guard-unreadable", c, { onClick: (cx) => this.refresh(cx) })));
+        .when(Boolean(inline), (el) => el.child(quietLink("guard-reread", "Refresh", (cx) => this.refresh(cx), c, { disabled: !inline.enabled }))))
+      .when(Boolean(failure), (el) => el.child(failureBlock(failure)("guard-unreadable", c)));
   }
 
   mainView(c, narrow) {

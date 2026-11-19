@@ -3,7 +3,7 @@ import test from "node:test";
 import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { arg, calls, exec, find, press, temporary, texts } from "./helpers.mjs";
+import { arg, calls, exec, find, temporary, texts, timedContext } from "./helpers.mjs";
 import { keyDown, spendPage } from "./mod-fixtures.mjs";
 import { chooserKey, readPlan } from "../kanso/mods/kanso-spend/spend-model.js";
 
@@ -92,21 +92,23 @@ test("What Refresh can do is decided once: a read in step shows the failure and 
   assert.deepEqual(plan({}, false), [null, false], "Node not found yet: nothing to refresh");
 });
 
-test("A failed read shows the tool's words with Refresh on the page it was pressed from: home, waiting, Settings, a project and a task", async () => {
+test("The header Refresh with the collector failing shows the tool's words with Refresh on the page it was pressed from: waiting, home, Settings, a project and a task", async () => {
   const pages = { waiting: {}, home: { costs: bare }, settings: { costs: bare, page: "settings" }, "settings before its first read": { page: "settings" },
     project: { costs: bare, stack: [{ kind: "project", label: "kanso", value: "/work/kanso", prevCost: {} }] }, task: { costs: bare, stack: [{ kind: "task", label: "Tidy", task: detail }] } };
+  const collector = async () => ({ code: 1, stdout: "", stderr: said });
   for (const [name, fields] of Object.entries(pages)) {
-    const ran = [];
-    const page = await spendPage({ nodeBinary: "node", error: said, run: (command) => ran.push(command), ...fields });
-    const drawn = page.render({});
+    const { cx, drain } = timedContext([]);
+    const page = await spendPage({ nodeBinary: "node", awake: false, ...fields }, { exec: collector });
+    const header = () => find(page.render(cx), (el) => el.tag === "spend-refresh");
+    assert.equal(arg(header(), "disabled"), false, name);
+    arg(header(), "on_click")({}, cx);
+    assert.equal(arg(header(), "disabled"), true, `${name}: Refresh is off while it reads`);
+    assert.equal(failureOn(page.render(cx)) ?? null, null, `${name}: nothing is said while it reads`);
+    await drain();
+    const drawn = page.render(cx);
     assert.deepEqual(texts(failureOn(drawn)).filter((words) => words !== "!"), [fields.costs ? "Last update failed" : unread, said, "Refresh"], name);
     assert.equal(find(drawn, (el) => arg(el, "id") === "kanso-skeleton") ?? null, null, `${name}: no skeleton beside a failure`);
-    press(drawn, "spend-failed-fix");
-    assert.deepEqual(ran, ["snapshot"], `${name}: Refresh reads`);
-    assert.equal(arg(find(drawn, (el) => el.tag === "spend-refresh"), "disabled"), false, name);
-    const reading = Object.assign(page, { running: "snapshot" }).render({});
-    assert.equal(failureOn(reading) ?? null, null, `${name}: nothing is said while it reads`);
-    assert.equal(arg(find(reading, (el) => el.tag === "spend-refresh"), "disabled"), true, `${name}: Refresh is off while it reads`);
+    assert.equal(arg(find(drawn, (el) => el.tag === "spend-refresh"), "disabled"), false, `${name}: Refresh is on again`);
   }
 });
 

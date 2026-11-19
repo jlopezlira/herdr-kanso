@@ -511,21 +511,23 @@ const unreadNow = async (reading) => {
 };
 const failureOf = (drawn) => find(drawn, (el) => arg(el, "id") === "guard-unreadable");
 const said = (el) => texts(el).filter((words) => words !== "!");
+const reread = (page) => byTag(page.render({}), "guard-reread");
 
 test("Memory keeps the words of a file it could not read; an absent file is Off, and a file that is not Memory's is Unreadable without a failure", async () => {
   const refused = await unreadNow(async () => { throw new Error("Permission denied"); });
   assert.deepEqual([refused.now.state, refused.now.why], ["bad", "Permission denied"]);
-  assert.deepEqual(said(failureOf(refused.render({}))), ["Memory could not be read", "Permission denied", "Refresh"]);
-  assert.equal(byTag(refused.render({}), "guard-reread") ?? null, null, "one Refresh, in the failure");
+  assert.deepEqual(said(failureOf(refused.render({}))), ["Memory could not be read", "Permission denied"]);
+  assert.deepEqual(texts(reread(refused)), ["Refresh"], "one Refresh, in the line of the page");
   assert.equal((await unreadNow(async () => null)).now.state, "off");
   const garbled = await unreadNow(async () => "{nope");
   assert.equal(failureOf(garbled.render({})) ?? null, null);
-  assert.deepEqual(texts(byTag(garbled.render({}), "guard-reread")), ["Refresh"]);
+  assert.deepEqual(texts(reread(garbled)), ["Refresh"]);
 });
 
-test("Memory's header Refresh is on only while no action runs, and a press of an unreadable page's Refresh always reads, now or right after the read under way", async () => {
+test("Memory's header Refresh is on only while no action runs, and the unreadable page's Refresh is off from its press until the read ends", async () => {
   assert.deepEqual([{}, { check: {} }, { install: {} }, { "recycle:22": {}, check: {} }].map((busy) => refreshPlan({ now: null, busy }).header), [
     { enabled: true, busy: false }, { enabled: false, busy: true }, { enabled: false, busy: false }, { enabled: false, busy: true }]);
+  assert.deepEqual([[{ state: "ok" }, false], [{ state: "bad" }, false], [{ state: "bad" }, true]].map(([now, refreshing]) => refreshPlan({ now, refreshing }).inline), [null, { enabled: true }, { enabled: false }]);
   const { parseNow, clock } = await model();
   const now = parseNow(JSON.stringify(sample(Date.now() - 30_000)));
   const pages = await Promise.all([{}, { check: { at: Date.now() } }, { "recycle:22": { at: Date.now() } }].map((busy) => memoryPage({ now, busy })));
@@ -534,17 +536,19 @@ test("Memory's header Refresh is on only while no action runs, and a press of an
 
   const files = [];
   const release = [];
-  const { cx, drain } = timedContext([]);
-  const page = await memoryPage({ now: { state: "bad", data: null } }, { readTextFile: (file) => (file.endsWith("now.json") ? new Promise((resolve) => { files.push(file); release.push(() => resolve(null)); }) : Promise.resolve(null)) });
-  page.read(cx);
+  const redraws = [];
+  const { cx, drain } = timedContext([], { notify: () => redraws.push("redraw") });
+  const page = await memoryPage({ now: { state: "bad", data: null, why: "Permission denied" } }, { readTextFile: (file) => (file.endsWith("now.json") ? new Promise((resolve) => { files.push(file); release.push(() => resolve("{nope")); }) : Promise.resolve(null)) });
+  assert.equal(arg(reread(page), "disabled"), false);
+  const pressed = reread(page);
+  pressed.calls.filter((call) => call[0] === "on_click").forEach(([, handler]) => handler({}, cx));
+  assert.deepEqual([files.length, redraws.length, arg(reread(page), "disabled")], [1, 1, true], "pressed: it reads, redraws at once and is off");
+  reread(page).calls.filter((call) => call[0] === "on_click").forEach(([, handler]) => handler({}, cx));
   page.refresh(cx);
-  assert.equal(files.length, 1, "a read is under way");
-  release.shift()();
-  await new Promise((resolve) => setTimeout(resolve, 0));
-  assert.equal(files.length, 2, "the press read again once the first answered");
+  assert.equal(files.length, 1, "a second press does nothing");
   release.shift()();
   await drain();
-  assert.equal(files.length, 2);
+  assert.deepEqual([files.length, arg(reread(page), "disabled"), redraws.length], [1, false, 2], "the read ended: redrawn and on again");
 });
 
 test("Memory says an action that failed in the failure block", async () => {

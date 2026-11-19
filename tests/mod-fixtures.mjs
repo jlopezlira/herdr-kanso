@@ -72,7 +72,7 @@ export const spendPage = async (fields = {}, host = {}) => {
   const { TokenSpend } = await loadTokenSpend(pageHost(host));
   const handle = { focus() {}, scroll_to_item() {} };
   return Object.assign(new TokenSpend(), onScreen, { costs: null, scan: null, error: null, runtimeError: null, running: null, page: "home", stack: [], settings: null, planInputs: [], queuedSources: null, expanded: {}, syncHolds: [],
-    cost: { period: "day", offset: 0, project: "all", model: "all" }, nodeBinary: null, openMenu: null, menuOptions: null, menuAt: -1, menuG: 0, chooserFocus: { project: handle, model: handle }, chooserScroll: handle }, fields);
+    cost: { period: "day", offset: 0, project: "all", model: "all" }, nodeBinary: null, generation: 0, queued: { snapshot: false, prepare: false }, openMenu: null, menuOptions: null, menuAt: -1, menuG: 0, chooserFocus: { project: handle, model: handle }, chooserScroll: handle }, fields);
 };
 
 // kdb.js in its own temporary folder: `names` are more of its exports, `wrap` watches its commands, and `fresh()` is a new view of a database file there, as after a restart.

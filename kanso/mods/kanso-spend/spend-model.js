@@ -3,8 +3,6 @@ import { listKey, moveTo } from "./listkeys.js";
 const UNREAD = "Spend could not read your sessions.";
 const STALE = "Last update failed";
 
-// The failure to draw on whatever page is open, and whether Refresh can read: with no runtime to run there is nothing to refresh,
-// so the header Refresh is off and the failure offers none; the page's other actions stay.
 export function readPlan({ nodeBinary = null, runtimeError = null, error = null, running = null }, loaded) {
   const refresh = { enabled: Boolean(nodeBinary) && !running, busy: Boolean(running) };
   if (!nodeBinary && runtimeError) return { failure: { text: UNREAD, source: runtimeError }, refresh };
