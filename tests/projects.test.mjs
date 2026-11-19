@@ -322,6 +322,11 @@ test("which agent: only the ones installed, nothing chosen for you, and one pick
 
 const claudeHere = () => ({ "kanso.agents.installed": { "": [{ key: "claude", name: "Claude Code", installed: true, run: ["claude"] }] } });
 const tenAgents = () => Array.from({ length: 10 }, (_, i) => ({ key: `a${i + 1}`, name: `Agent ${i + 1}`, installed: true, run: [`a${i + 1}`] }));
+const settledRead = async (view) => {
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(view.checking, false, "the read is over");
+};
+const menuKit = () => load("kanso-spaces/ui-menu.js", ["menuHeight"], gpuiHost());
 const devbox = () => ({ space: "sp-api", folder: "/work/api", machine: "devbox", project: null, name: "api" });
 const plusMenu = (Spaces, state) => {
   const scrolled = [];
@@ -382,11 +387,12 @@ test("The + menu keeps every installed agent, numbers the first nine, starts one
   const known = [{ key: "codex", name: "Codex", installed: true, run: ["codex"] }];
   const failed = menu({ known, agentsFailed: "ssh: connect timed out" });
   const failure = failed.items.find((line) => line.failure)?.failure;
-  assert.ok(failed.lines.some(([text]) => text === "Codex"), "the last list stays usable");
+  assert.equal(failed.lines.some(([text]) => text === "Codex"), false, "the failure stands in the agents' place, as the board draws it");
+  assert.equal(failed.items.filter((line) => line.loading).length, 0, "and no loading rows once the read is over");
   assert.deepEqual([failure.text, failure.fix, failure.agent], ["Can't list agents on devbox", "Refresh", "Claude Code"]);
   failed.press("j"); failed.press("j");
-  assert.equal(menu({ known, agentsFailed: "ssh: connect timed out", menuAt: 2 }).items.find((line) => line.failure).failure.lit, "fix", "the keyboard reaches Refresh after the agents");
-  failed.view.menuAt = 3;
+  assert.equal(menu({ known, agentsFailed: "ssh: connect timed out", menuAt: 1 }).items.find((line) => line.failure).failure.lit, "fix", "the keyboard reaches Refresh after Terminal");
+  failed.view.menuAt = 2;
   failed.press("enter");
   assert.deepEqual(calls.at(-1), ["tab.new", { name: "Explain devbox", argv: ["claude"],
     task: "kansō could not list the agents installed on devbox. The error: ssh: connect timed out. Explain why, and how to fix it. Do not change anything.", space: "sp-home" }],
@@ -423,14 +429,13 @@ test("A read that fails after an earlier answer keeps that list and says it fail
   view.askAgents(place, { notify() {}, timer: { after: () => ({ cancel() {} }) } });
   assert.equal(view.checking, true);
   assert.equal(view.known.length, 1, "the last answer at once");
-  await new Promise((resolve) => setTimeout(resolve, 0));
-  assert.equal(view.checking, false);
+  await settledRead(view);
   assert.equal(view.agentsFailed, "ssh: connect timed out");
   assert.equal(view.known.length, 1, "and still shown");
 });
 
 test("Ten agents fit the + popup: they scroll in the kit's run within its height, and the keyboard's row stays in view", async () => {
-  const { menuHeight } = await load("kanso-spaces/ui-menu.js", ["menuHeight"], gpuiHost());
+  const { menuHeight } = await menuKit();
   const ten = tenAgents();
   for (const height of [400, 300]) {
     const { Spaces } = await agentMenu({ props: () => ({ overlay: "ov1", newAgent: devbox(), start: true, height }), keys: () => [] });
@@ -442,4 +447,49 @@ test("Ten agents fit the + popup: they scroll in the kit's run within its height
     for (let i = 0; i < 7; i += 1) menu.press("j");
     assert.equal(menu.scrolled.at(-1), 5, "the sixth agent brought into view");
   }
+});
+
+test("The + popup opens tall enough for everything it can settle into: loading, the failure with its actions, or the agents' run, with the footer in reach", async () => {
+  const { menuHeight } = await menuKit();
+  for (const cached of [undefined, [], tenAgents().slice(0, 1), tenAgents()]) {
+    for (const start of [true, false]) {
+      const store = claudeHere();
+      store["kanso.agents.installed"].devbox = cached;
+      const frame = {};
+      const { Spaces } = await agentMenu({ shared: (key) => store[key] ?? null, openOverlay: (o) => Object.assign(frame, o), props: () => frame.props, keys: () => [] });
+      new Spaces().newAgentMenu(devbox(), start);
+      const states = { loading: { known: null, checking: true }, failed: { known: cached ?? null, agentsFailed: "ssh: connect timed out" }, none: { known: [] }, ten: { known: tenAgents() } };
+      for (const [name, state] of Object.entries(states)) {
+        const shown = plusMenu(Spaces, { repo: start, trees: start ? [devbox()] : [], ...state });
+        const label = `cached ${cached?.length ?? "none"}, ${start ? "toolbar" : "project"} +, ${name}`;
+        assert.ok(menuHeight({ items: shown.items }) <= frame.height, `${label}: ${menuHeight({ items: shown.items })} drawn in ${frame.height}`);
+        const run = shown.items.find((line) => line.scroll);
+        if (name === "ten") assert.ok(run.rows >= 1 && run.scroll.length === 10, `${label}: every agent in a run that shows`);
+      }
+    }
+  }
+});
+
+test("A read that failed and is over shows the failure, not loading rows", async () => {
+  const store = claudeHere();
+  const { Spaces } = await agentMenu({ shared: (key) => store[key] ?? null, setShared: (key, value) => { store[key] = value; }, knownAgents: async ({ on }) => { if (on) throw new Error("timed out"); return []; },
+    props: () => ({ overlay: "ov1", newAgent: devbox(), start: true }), keys: () => [] });
+  const view = new Spaces();
+  view.askAgents(devbox(), { notify() {}, timer: { after: () => ({ cancel() {} }) } });
+  await settledRead(view);
+  const shown = plusMenu(Spaces, { known: view.known, agentsFailed: view.agentsFailed, checking: view.checking });
+  assert.equal(shown.items.filter((line) => line.loading).length, 0);
+  assert.ok(shown.items.some((line) => line.failure));
+});
+
+test("The + popup lets go of the scroll handle it made", async () => {
+  const counted = { made: 0, released: 0 };
+  const { Spaces } = await agentMenu({
+    props: () => ({ overlay: "ov1", newAgent: devbox(), start: true }), keys: () => [], knownAgents: async () => [], exec: async () => ({ code: 0, stdout: "" }),
+    ScrollHandle: { new: () => { counted.made += 1; return { release() { counted.released += 1; } }; } },
+  });
+  const view = new Spaces();
+  view.init({}, { notify() {}, timer: { after: () => ({ cancel() {} }) }, focus_handle: () => ({ focus() {} }) });
+  view.close();
+  assert.deepEqual(counted, { made: 1, released: 1 });
 });

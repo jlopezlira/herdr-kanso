@@ -39,7 +39,7 @@ import { dialog } from "./ui-dialog.js";
 import { field, TextField } from "./ui-field.js";
 import { menu, emptyState, skeletonOf, tooltip } from "./kit.js";
 import { boundChord, chordOf } from "./ui-tooltip.js";
-import { menuList, menuHeight } from "./ui-menu.js";
+import { menuList, menuHeight, RUN_ROWS } from "./ui-menu.js";
 import { pieceLines, openPieceMenu } from "./piece-lines.js";
 import { toolbar } from "./toolbar.js";
 import { header } from "./header.js";
@@ -319,7 +319,7 @@ export default class Spaces extends View {
   }
 
   close() {
-    try { this.branch?.release(); this.projectName?.release(); this.convScroll?.release(); } catch { /* already gone */ }
+    try { this.branch?.release(); this.projectName?.release(); this.convScroll?.release(); this.agentScroll?.release(); } catch { /* already gone */ }
   }
 
   menuPlace(m) {
@@ -466,18 +466,18 @@ export default class Spaces extends View {
 
   // A project's + : asks which agent, of the ones installed. `start`: the sidebar's own +, whose menu goes on to New project and Arrange.
   newAgentMenu(place, start = false) {
-    const kept = shared(KNOWN_AGENTS)?.[place.machine || ""];
-    const agents = Array.isArray(kept) ? (item) => kept.filter((a) => a.installed).map((a) => item(a.name)) : null;
-    const { items } = this.agentLines(place, { start, agents, repo: start, trees: start ? [place] : [], item: sketch });
-    const height = menuHeight({ items });
+    const failure = () => ({ failure: { text: `Can't list agents on ${place.machine || "this computer"}`, source: "-", fix: "Refresh", agent: "-" } });
+    const run = (item) => Array.from({ length: RUN_ROWS }, () => item(""));
+    const settled = (state) => menuHeight(this.agentLines(place, { start, repo: start, trees: start ? [place] : [], item: sketch, ...state }));
+    const height = Math.max(settled({ pending: true }), settled({ failure }), settled({ agents: run }));
     openOverlay({ mod: "kanso-spaces", kind: "popup", width: W.menu, height, at: "pointer", props: { newAgent: place, height, ...(start ? { start } : {}) } });
   }
 
-  agentLines(place, { start, agents, failure = null, repo, trees, item, room = Infinity }) {
+  agentLines(place, { start, agents = null, pending = false, failure = null, repo, trees, item, room = Infinity }) {
     const name = place.tree?.branch ?? place.name ?? "this project";
     const head = [{ heading: place.machine ? `${place.machine} \u00b7 ${name}` : name, mark: this.checking && this.known ? "working" : null },
       item("Terminal", () => this.pickAgent(place, null), { icon: "terminal", hint: chordOf("tab.new") || null, keep: true }), { separator: true }];
-    const rows = agents ? agents(item) : null;
+    const rows = !failure && agents ? agents(item) : [];
     const failed = failure ? [failure()] : [];
     const newTree = () => item("New worktree\u2026", () => this.worktreeDialog(place), { icon: "git-branch" });
     const rest = start ? [item("New project", () => this.addProject(), { icon: "folder-plus" }),
@@ -486,9 +486,9 @@ export default class Spaces extends View {
       : place.tree ? [] : [newTree()];
     const ends = rest.length ? [{ separator: true }, ...rest] : [];
     const row = menuHeight({ items: [sketch("")] }) - menuHeight({ items: [] });
-    const fit = Math.max(1, Math.floor((room - menuHeight({ items: [...head, ...failed, ...ends] })) / row));
-    const run = !rows ? [{ loading: true }, { loading: true }] : rows.length ? [{ scroll: rows, rows: Math.min(rows.length, fit), handle: this.agentScroll }] : [];
-    return { items: [...head, ...run, ...failed, ...ends], count: rows?.length ?? 0 };
+    const fit = Math.max(1, Math.floor((room - menuHeight({ items: [...head, ...ends] })) / row));
+    const middle = failure ? failed : pending && !agents ? [{ loading: true }, { loading: true }] : rows.length ? [{ scroll: rows, rows: Math.min(rows.length, fit), handle: this.agentScroll }] : [];
+    return { items: [...head, ...middle, ...ends], count: rows.length };
   }
 
   pickAgent(place, a) {
@@ -1671,14 +1671,15 @@ export default class Spaces extends View {
 
   newAgentView(t) {
     const place = props().newAgent, start = Boolean(props().start);
-    const installed = (this.known ?? []).filter((a) => a.installed);
+    const installed = this.agentsFailed ? [] : (this.known ?? []).filter((a) => a.installed);
     this.menuDigits = installed.slice(0, 9).map((a) => (cx) => { this.pickAgent(place, a); cx.notify(); });
     const agents = this.known ? (item) => installed.map((a, i) => item(a.name, () => this.pickAgent(place, a), { icon: a.icon ?? null, hint: i < 9 ? String(i + 1) : null, keep: true })) : null;
-    const lines = this.agentLines(place, { start, agents, failure: this.agentsFailed ? () => this.agentsFailure(place) : null, repo: this.repo, trees: this.trees,
+    const lines = this.agentLines(place, { start, agents, pending: this.checking, failure: this.agentsFailed ? () => this.agentsFailure(place) : null, repo: this.repo, trees: this.trees,
       item: this.lines(), room: props().height ?? Infinity });
     this.menuScroll = lines.count ? { handle: this.agentScroll, count: lines.count, from: 1 } : null;
     return this.popup(t, null, lines.items);
   }
+
 
 
 
