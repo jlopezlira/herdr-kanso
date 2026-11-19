@@ -1,4 +1,3 @@
-// The card and code pieces: every state, drawn from the tokens, and the PR panel's cards drawn through them.
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";

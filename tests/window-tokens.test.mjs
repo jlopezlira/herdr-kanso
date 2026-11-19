@@ -1,4 +1,3 @@
-// The window's sizes come from the layout tokens, and the selection wash, wash-12, marks the active project and the chosen tab.
 import test from "node:test";
 import assert from "node:assert/strict";
 import { load, gpuiHost, chain, calls, arg, find, all, repoText, KIT_NIGHT } from "./helpers.mjs";

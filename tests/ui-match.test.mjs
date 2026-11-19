@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { stylesFor, changed, hovering } from "../kanso/mods/kanso-panel/ui-match.js";
+import { stylesFor, changed, hovering, viewOf } from "../kanso/mods/kanso-panel/ui-match.js";
 import { RULES, TAB_LOOKS } from "../kanso/mods/kanso-panel/ui-css.js";
 import { drawnTabs, tabParts, tabKey, TAB_PARTS as PARTS } from "../kanso/mods/kanso-panel/ui-tab-shapes.js";
 import { gpuiHost, load, repoText } from "./helpers.mjs";
@@ -72,4 +72,37 @@ test("Each tab look ui-css.js keeps is the one matching its rules gives", async 
       assert.equal(JSON.stringify(TAB_LOOKS.looks[TAB_LOOKS.tabs[tabKey(group, states)][i]]), JSON.stringify(lookOf(node, RULES, null, live)), `${tabKey(group, states)} ${part}`);
     });
   }
+});
+
+test("Who needs you is drawn from the rules: each op its node matches is a draw call, and the name is at weight 500", async () => {
+  const { draw } = await drawKit();
+  const theme = kansoTheme();
+  const { tokens } = await load("kanso-panel/ui.js", ["tokens"]);
+  const span = (cls, text) => ({ tag: "span", attrs: { class: cls }, children: [{ tag: "#text", text }] });
+  const tree = [{ tag: "span", attrs: { class: "kanso-status-bar__item kanso-status-bar__needs" }, children: [
+    { tag: "svg", attrs: { class: "kanso-mark kanso-mark--blocked kanso-icon--inline" }, children: [{ tag: "use", attrs: { href: "#e-blk" }, children: [] }] },
+    span("kanso-status-bar__name", "cart-ui"), span("kanso-status-bar__question", "Which layout?"), span("kanso-status-bar__more", "+1"),
+  ] }];
+  assert.deepEqual(stylesFor(viewOf(tree)[0], RULES).map(([op]) => op), ["flex_initial", "min_w"]);
+  const [drawn] = draw(tree, tokens({ ...theme, ...theme.colors }), { id: "needs", rules: RULES });
+  for (const op of ["flex_initial", "min_w"]) assert.ok(drawn.calls.some(([name]) => name === op), op);
+  assert.ok(drawn.kids[1].calls.some(([name, value]) => name === "font_weight" && value === 500));
+});
+
+test("Matching and precedence: an attribute, a negation, a zero-weight alternative and nested alternatives", () => {
+  const span = (classes, attrs = {}) => ({ tag: "span", attrs, classes, parent: null, children: [] });
+  const width = (rules, node) => stylesFor(node, rules).filter(([op]) => op === "w").at(-1)?.[1];
+  const titled = { list: [{ steps: [{ attrs: [["title", null]] }], ops: [["w", 1]], weight: 100, order: 0 }, { steps: [{ tag: "span" }], ops: [["w", 2]], weight: 1, order: 1 }],
+    index: { "*": [0], "tag:span": [1] } };
+  const negated = { list: [{ steps: [{ not: [[[{ classes: ["x"] }], [{ classes: ["y"] }]]] }], ops: [["w", 1]], weight: 100, order: 0 }, { steps: [{ classes: ["a"] }], ops: [["w", 2]], weight: 100, order: 1 }],
+    index: { "*": [0], a: [1] } };
+  const where = { list: [{ steps: [{ any: [[[{ classes: ["a"] }]]], where: [0] }], ops: [["w", 1]], weight: 0, order: 0 }, { steps: [{ tag: "span" }], ops: [["w", 2]], weight: 1, order: 1 }],
+    index: { "*": [], a: [0], "tag:span": [1] } };
+  const nested = { list: [{ steps: [{ any: [[[{ any: [[[{ classes: ["a"] }], [{ classes: ["b"] }]]] }], [{ classes: ["c"] }]]] }], ops: [["w", 5]], weight: 100, order: 0 }],
+    index: { "*": [], a: [0], b: [0], c: [0] } };
+  assert.equal(width(titled, span([], { title: "x" })), 1, "an attribute weighs as a class, over a tag");
+  assert.equal(width(negated, span(["a"])), 2, "a negation as heavy as its class: the later rule wins");
+  assert.equal(width(where, span(["a"])), 2, "a zero-weight alternative loses to a tag");
+  assert.equal(width(nested, span(["a"])), 5, "a nested alternative matches");
+  assert.equal(width(nested, span(["c"])), 5, "the outer alternative matches");
 });

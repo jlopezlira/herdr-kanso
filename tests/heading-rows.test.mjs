@@ -1,4 +1,3 @@
-// The sidebar's project, computer, section and asleep rows: compositions drawn by the app kit.
 import test from "node:test";
 import assert from "node:assert/strict";
 import { load, nodes, texts, tipsOf, themed, KIT_NIGHT, drawingHost, drawn, clone, repoText } from "./helpers.mjs";

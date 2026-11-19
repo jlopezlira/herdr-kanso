@@ -1,4 +1,3 @@
-// The pane's right-click menu: its title, the groups in order, a check for the program's right click, and Close that asks twice with an agent.
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";

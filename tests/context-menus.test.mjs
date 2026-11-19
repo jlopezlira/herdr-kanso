@@ -4,12 +4,23 @@ import { load, popoverHost, chain, clone, calls, context, texts, everyDrawn, CHR
 import { loadSidebar, mountedState, recorder, world, shell } from "./sidebar-fixtures.mjs";
 import { loadWorkspaceStatus } from "./mod-fixtures.mjs";
 import { paneMenu, tabBar, footer, BINDINGS } from "./menu-fixtures.mjs";
+import ROWS from "./fixtures/context-menu-rows.json" with { type: "json" };
 
 const quotes = (word) => word.replace(/[“”]/g, "\"");
+const row = ({ lead = [], label = "", hint = "", trail = [] }) => [lead.join(","), quotes(label), hint, trail.join(",")].join(" | ");
+const iconName = (path) => path.split("/").at(-1).replace(/\.svg$/, "");
 const blockedDot = (kid) => calls(kid, "rounded_full").length > 0 && calls(kid, "child").some((call) => call[1] === "!");
 const ownWords = (kid) => kid.calls.filter((call) => call[0] === "child" && typeof call[1] === "string").map((call) => call[1]);
+const artOf = (el) => everyDrawn(el).flatMap((kid) => (blockedDot(kid) ? ["blocked"] : calls(kid, "svg").map((call) => iconName(call[1]))));
+const itemRow = (item) => {
+  const [lead, label, ...rest] = item.kids;
+  return row({ lead: artOf(lead), label: drawnWords(label).join(" "), hint: rest.filter((kid) => !artOf(kid).length).flatMap(drawnWords).join(" "), trail: rest.flatMap(artOf) });
+};
+const rowsOf = (el) => (calls(el, "accessibility_label").length ? [itemRow(el)]
+  : [...ownWords(el).map((label) => row({ label })), ...[...el.kids, ...calls(el, "content").map((call) => call[1])].flatMap(rowsOf)]);
 const menuOf = (el) => ({
   words: everyDrawn(el).filter((kid) => !blockedDot(kid)).flatMap(ownWords),
+  rows: rowsOf(el),
 });
 const drawnWords = (el) => everyDrawn(el).flatMap((kid) => kid.calls.filter((call) => call[0] === "child" && typeof call[1] === "string").map((call) => call[1]));
 const pressable = (el, label) => everyDrawn(el).find((kid) => calls(kid, "on_click").length && drawnWords(kid).includes(label));
@@ -242,7 +253,9 @@ const menusOf = (want) => (Array.isArray(want[0]) ? want : [want]).map((menu) =>
 
 for (const [key, { draw, want, skip, own }] of Object.entries(CASES)) {
   test(`${key}${own ? ", the project's own rows" : ""}: the app draws its rows in order`, { skip }, async () => {
-    assert.deepEqual((await draw()).map((menu) => menu.words.map(quotes)), menusOf(want));
+    const drawn = await draw();
+    assert.deepEqual(drawn.map((menu) => menu.words.map(quotes)), menusOf(want));
+    assert.deepEqual(drawn.map((menu) => menu.rows), ROWS[key], "each row's leading art, label, key hint and trailing art, in order");
   });
 }
 

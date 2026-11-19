@@ -1,4 +1,3 @@
-// The sidebar's session row composition, with what the sidebar knows and does.
 import test from "node:test";
 import assert from "node:assert/strict";
 import { load, gpuiHost, nodes, texts, tipsOf, themed, KIT_NIGHT, drawingHost } from "./helpers.mjs";

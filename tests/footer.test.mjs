@@ -1,4 +1,3 @@
-// The sidebar footer: the Footer composition, drawn by kanso-chrome with kansō's update in each mode, its refusal, Settings and its one menu, Herdr's update, and the rail.
 import { footer, FOOTER_NIGHT } from "./menu-fixtures.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";

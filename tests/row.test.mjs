@@ -1,9 +1,7 @@
-// The row: one named item with its facts, mark and tools, in every state.
 import { loadRow, loadPendingState } from "./mod-fixtures.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { load, chain, numberArguments, calls, one, styled, themed, KIT_NIGHT, drawingHost, svgsOf as svgs } from "./helpers.mjs";
-const STATUSES = ["working", "blocked", "done", "idle", "asleep"];
+import { load, chain, numberArguments, calls, one, styled, themed, KIT_NIGHT, drawingHost, svgsOf as svgs, STATUSES } from "./helpers.mjs";
 const rowDepths = [0, 1, 2];
 
 const kit = async () => themed({

@@ -1,4 +1,3 @@
-// The rail's tiles and the view switch: the Tile and View switch compositions, drawn by the app kit.
 import test from "node:test";
 import assert from "node:assert/strict";
 import { load, nodes, texts, tipsOf, svgsOf, themed, calls, arg, KIT_NIGHT, popoverHost as host, blockedDots, repoText as read } from "./helpers.mjs";

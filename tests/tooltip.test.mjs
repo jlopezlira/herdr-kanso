@@ -1,4 +1,3 @@
-// The tooltip: Herdr's `.tooltip()` takes only a string, so the kit's tooltip is words, its chord read from the key table.
 import test from "node:test";
 import assert from "node:assert/strict";
 import { load, repoText } from "./helpers.mjs";

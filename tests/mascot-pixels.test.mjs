@@ -1,4 +1,3 @@
-// Hachi's pixel map: pure, so every mod draws the same one.
 import { loadHachiPixels } from "./mod-fixtures.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";

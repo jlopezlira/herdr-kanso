@@ -1,4 +1,3 @@
-// The metric and the facts as words: the app kit draws them, and every panel that shows a number calls them.
 import test from "node:test";
 import assert from "node:assert/strict";
 import { load, calls, one, nodes, texts, themed, KIT_NIGHT, drawingHost, repoText } from "./helpers.mjs";

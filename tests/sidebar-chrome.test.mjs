@@ -1,4 +1,3 @@
-// The sidebar's Toolbar, Header and Footer: compositions drawn by the app kit, state by state.
 import test from "node:test";
 import assert from "node:assert/strict";
 import { load, nodes, texts, svgsOf, themed, calls, arg, KIT_NIGHT, popoverHost as host, everyDrawn as every, blockedDots, repoText, numberArguments } from "./helpers.mjs";

@@ -1,4 +1,3 @@
-// The status bar's states: compositions drawn by the app kit.
 import test from "node:test";
 import assert from "node:assert/strict";
 import { load, texts, calls, arg, themed, chain, KIT_NIGHT, popoverHost, everyDrawn as every, repoText } from "./helpers.mjs";

@@ -1,4 +1,3 @@
-// The thumbnail and markdown pieces: every state, drawn from the tokens, and the panels drawn through them.
 import test from "node:test";
 import assert from "node:assert/strict";
 import { load, nodes, calls, one, arg, chain, themed, KIT_NIGHT, drawingHost, numberArguments, repoText } from "./helpers.mjs";

@@ -1,8 +1,6 @@
-// The state mark: every status and size, from the tokens, and nothing for any other status.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { load, numberArguments, calls, one, drawingHost, themed } from "./helpers.mjs";
-const STATUSES = ["working", "blocked", "done", "idle", "asleep"];
+import { load, numberArguments, calls, one, drawingHost, themed, STATUSES } from "./helpers.mjs";
 
 const kit = async () => themed({
   ...await load("kanso-panel/ui.js", ["tokens", "ICON", "ICON_ROW", "ICON_INLINE", "SPIN"], drawingHost()),

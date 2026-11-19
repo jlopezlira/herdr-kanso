@@ -1,4 +1,3 @@
-// The sidebar's rows and its Projects, Status and Threads views draw what they show.
 import { loadSessionHeight } from "./mod-fixtures.mjs";
 import { loadSidebar, mountedState, recorder } from "./sidebar-fixtures.mjs";
 import test from "node:test";

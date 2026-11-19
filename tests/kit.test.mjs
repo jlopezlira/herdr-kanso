@@ -1,4 +1,3 @@
-// The kit a composition imports: the app's drawing what its own piece draws.
 import { loadTokens, loadRow, loadMenu } from "./mod-fixtures.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";

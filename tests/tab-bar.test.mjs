@@ -1,4 +1,3 @@
-// The tab bar's tabs: chosen, at rest and waiting, close armed, renaming, dragging, folded, connecting and unreachable.
 import test from "node:test";
 import assert from "node:assert/strict";
 import { load, clone, chain, gpuiHost, calls, arg, find, all, CHROME_NIGHT, texts, repoText, keyboard } from "./helpers.mjs";
