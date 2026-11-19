@@ -45,10 +45,8 @@ export default class WorkspaceChrome extends View {
     this.updater = new Updater();
     this.updater.start(cx, { polls: false });
     this.explainer = null;
-    cx.timer.after(0, (later) => later.spawn(async (again) => {
-      this.explainer = await findExplainer();
-      again.notify();
-    }));
+    this.lookup = null;
+    cx.timer.after(0, (later) => this.look(later));
     // Command names stay kanso-tabs.* for keys bound to them before.
     readCommands(cx, () => nextCommand(), (c, cx) => this.command(c, cx));
     cx.timer.every(SAMPLE_MS, (cx) => this.watch(cx));
@@ -126,13 +124,23 @@ export default class WorkspaceChrome extends View {
     const install = (cx) => this.updater.install(cx), refused = why ? refusalBlock(why, this.explainer?.name ?? "an agent") : null, menu = this.settingsMenu();
     // Only the targets on show: the update's icon while one is offered, the refusal's fix while it shows (not in the rail),
     // and Settings while its menu is shut (open, Herdr's popover owns the next press).
-    const presses = { ...(update ? { "refresh-cw": install } : {}), ...(refused && !collapsed ? { [refused.fix]: install, [`Explain to ${refused.agent}`]: () => this.explain(why) } : {}), ...(menu ? {} : { settings: (cx) => this.setMenu(true, cx) }) };
+    const presses = { ...(update ? { "refresh-cw": install } : {}), ...(refused && !collapsed ? { [refused.fix]: install, [`Explain to ${refused.agent}`]: (cx) => this.explain(why, cx) } : {}), ...(menu ? {} : { settings: (cx) => this.setMenu(true, cx) }) };
     return sidebarFooter({ update: update && updateLabel(update, busy), busy, refused, menu, collapsed })(
       "footer", tokens(theme()), { presses, focuses: { settings: this.settingsFocus }, onOpen: (open, cx) => this.setMenu(open, cx) });
   }
 
-  explain(why) {
-    explainWith(this.explainer, { name: "Explain the update", folder: appHome(), task: explainRefusal(why) });
+  look(cx) {
+    this.lookup ??= findExplainer().then((agent) => {
+      this.explainer = agent;
+      cx.notify();
+      return agent;
+    });
+    return this.lookup;
+  }
+
+  async explain(why, cx) {
+    const agent = this.explainer ?? await this.look(cx);
+    explainWith(agent, { name: "Explain the update", folder: appHome(), task: explainRefusal(why) });
   }
 
   render(cx) {

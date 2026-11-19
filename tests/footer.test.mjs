@@ -92,7 +92,24 @@ test("With no agent installed, Explain names an agent and says so instead of sta
   const { view, ran, notices } = await footer({ updater: { available: () => "3.31.0", refused: () => why } });
   const block = all(view.render()).find((x) => calls(x, "mt").length);
   press(holding(block, "Explain to an agent"));
+  await view.lookup;
+  await Promise.resolve();
   assert.deepEqual([ran.length, notices.map((notice) => notice.title)], [0, ["Could not start the agent"]]);
+});
+
+test("Explain pressed while the agent lookup is pending waits for it: one tab opens, and no false absence is reported", async () => {
+  let found;
+  const { view, ran, notices, lookups } = await footer({ updater: { available: () => "3.31.0", refused: () => "offline" }, agents: () => new Promise((resolve) => { found = resolve; }) });
+  const block = all(view.render()).find((x) => calls(x, "mt").length);
+  press(holding(block, "Explain to an agent"));
+  await Promise.resolve();
+  assert.deepEqual([ran.length, notices.length, lookups.length], [0, 0, 1], "nothing yet, and nothing said");
+  found([{ name: "Atlas", installed: true, run: ["atlas"] }]);
+  await view.lookup;
+  await Promise.resolve();
+  assert.deepEqual(JSON.parse(JSON.stringify([ran.map((call) => [call[0], call[1].argv]), notices.length])), [[["tab.new", ["atlas"]]], 0]);
+  press(holding(all(view.render()).find((x) => calls(x, "mt").length), "Explain to Atlas"));
+  assert.deepEqual([ran.length, lookups.length], [2, 1], "a second press opens a second tab with no second lookup");
 });
 
 test("Settings opens one menu: kansō settings with its key, and Herdr settings; choosing shuts it", async () => {

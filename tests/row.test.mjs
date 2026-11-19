@@ -207,6 +207,18 @@ test("A busy row registers no click, hover, key or focus handler and draws no ri
   assert.equal(calls(row("r", c, { ...given, busy: false }), "on_hover").length, 1, "the same props on a row at rest are wired");
 });
 
+test("A busy row is inert in its children too: no action to press, no verb, no tool, and a selected one keeps no accent border", async () => {
+  const { row, CLEAR, c } = await kit();
+  const hits = [];
+  const given = { name: "Updating kansō", busy: true, selected: true, action: { label: "Retry", onClick: () => hits.push("retry") }, verbs: [{ label: "Undo", onClick: () => hits.push("undo") }], actions: [{ icon: "pin", label: "Pin", onClick: () => hits.push("pin") }], hover: true };
+  const busy = row("r", c, given);
+  assert.equal(one(busy, "border_color"), CLEAR, "a selection leaves no accent on a row that is busy");
+  assert.equal(all(busy).some((el) => /-action$|-verb-\d+$|-tool-\d+$/.test(el.tag ?? "")), false, "none of its children are drawn");
+  assert.deepEqual(texts(busy), ["Updating kansō"]);
+  assert.equal(one(row("r", c, { ...given, busy: false }), "border_color"), c.accent, "the same props on a row at rest show the selection");
+  assert.deepEqual(hits, []);
+});
+
 test("The row's code has no number of pixels: every size comes from the tokens", () => {
   assert.deepEqual(numberArguments("kanso-panel/ui-row.js"), []);
 });

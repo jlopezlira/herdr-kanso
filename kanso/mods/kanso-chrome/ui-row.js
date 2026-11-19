@@ -166,13 +166,12 @@ const wire = (el, c, { onClick, onHover, onKey, focusHandle }) => el
 // `start`, `tools`: drawn elements before the icon and always at the end; `actions`: tools shown with `hover` or `focus`; `keys`: key hint props.
 // `level` makes it a tree row, `open` its folder's fold; `verbs`: quiet word actions on a line under it.
 // `group`: a heading that heads a group, such as a computer over its projects; `wrap`: the name wraps instead of one truncated line; `drop`: where a dragged row lands; `wash`: a state's ground; `guides`: one per level.
-export function row(id, c, {
+function drawRow(id, c, {
   icon = null, tone = null, letter = null, level = null, open = null, name, detail = null, meta = null, chip: count = null, flag = null, mark: status = "none", second = null, heading = false, group = false, title = false,
-  depth = 0, selected = false, current = false, dimmed = false, busy = false, pending = false, hover: hovering = false, focus: focusing = false, actions = [], action = null, verbs = [], start = [], tools = [], keys = [],
+  depth = 0, selected = false, current = false, dimmed = false, busy = false, pending = false, hover = false, focus = false, actions = [], action = null, verbs = [], start = [], tools = [], keys = [],
   glint = false, wrap = false, drop = null, wash = null, guides = [], names = false, nameInk = null,
-  onClick: pressed = null, onHover: hovered = null, onKey: keyed = null, focusHandle: handle = null,
+  onClick = null, onHover = null, onKey = null, focusHandle = null,
 } = {}) {
-  const [onClick, onHover, onKey, focusHandle, hover, focus] = busy ? [null, null, null, null, false, false] : [pressed, hovered, keyed, handle, hovering, focusing];
   const ink = dimmed ? c.muted : c.text;
   const nameColour = names && nameInk ? { fg: c.text, muted: c.muted, dim: c.dim }[nameInk] : ink;
   const shown = hover || focus;
@@ -206,3 +205,10 @@ export function row(id, c, {
     .child(under ? v_flex().w_full().min_w(0).gap(two && !names ? G.xs : G.sm).child(first)
       .children([second ? secondOf(c, id, second, names) : null, verbsOf(id, c, verbs)].filter(Boolean)) : first), c, { onClick, onHover, onKey, focusHandle });
 }
+
+const INERT = Object.freeze({
+  onClick: null, onHover: null, onKey: null, focusHandle: null, hover: false, focus: false, selected: false,
+  actions: Object.freeze([]), action: null, verbs: Object.freeze([]), tools: Object.freeze([]),
+});
+
+export const row = (id, c, props = {}) => drawRow(id, c, props.busy ? { ...props, ...INERT } : props);
