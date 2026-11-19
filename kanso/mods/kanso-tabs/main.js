@@ -187,10 +187,10 @@ export default class Tabs extends View {
       setShared(TOOLS, tools); done.notify();
       if (tools.state) done.timer.after(RETRY_MS, () => { if (this.simProbe === probe) this.simSignature = null; });
     };
-    const deadline = cx.timer.after(PROBE_MS, (late) => finish(UNKNOWN_TOOLS, late));
+    const deadline = cx.timer.after(PROBE_MS, (late) => { this.simRunning = false; finish(UNKNOWN_TOOLS, late); });
     cx.spawn(async (task) => {
       const tools = await probeTools(window()?.platform ?? "macos", home(), exec).catch(() => FAILED_TOOLS);
-      this.simRunning = false;
+      if (this.simProbe === probe) this.simRunning = false;
       deadline.cancel(); finish(tools, task); task.notify();
     });
   }

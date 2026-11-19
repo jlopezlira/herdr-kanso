@@ -221,13 +221,29 @@ test("Moving panels while the Simulator lookup runs does not start a second one"
   assert.equal(calls, 1);
 });
 
-test("A Simulator whose first look failed never says No devices", async () => {
-  const f = await viewFixture({ capture: () => { throw new Error("host unavailable"); } });
-  f.view.tools = null; f.view.devices = null;
-  f.view.refresh(f.cx); await f.drain();
-  assert.equal(f.view.note, "host unavailable");
-  f.view.line = (text) => text;
-  assert.notEqual(f.view.screen({}), "No devices.");
+test("A Simulator lookup that never answers does not stop the bar from asking again", async () => {
+  let calls = 0;
+  const { tabs, timers, cx, door } = await probing({ exists: async () => false, exec: async (cmd) => { if (cmd === "xcode-select") calls += 1; return new Promise(() => {}); } });
+  tabs.probeSimulator(cx);
+  timers.find((timer) => timer.ms === 7000).fn(cx);
+  assert.equal(door(), true, "unknown keeps the door");
+  timers.find((timer) => timer.ms === 30_000).fn(cx);
+  tabs.probeSimulator(cx);
+  assert.equal(calls, 2, "the lost lookup does not hold the next one back");
+});
+
+test("The Simulator says No devices only after a read that found none: never on a failed first look, nor after a failure that follows an empty list", async () => {
+  let bad = true;
+  const f = await viewFixture({ capture: () => { throw new Error("host unavailable"); }, deviceRead: () => { if (bad) throw new Error("host unavailable"); return good(""); } });
+  f.view.tools = null; f.view.devices = null; f.view.line = (text) => text;
+  const answers = [];
+  for (const failing of [true, false, true]) {
+    bad = failing;
+    if (!failing) f.view.tools = { adb: "adb" };
+    await f.read();
+    answers.push([f.view.note, f.view.screen({})]);
+  }
+  assert.deepEqual(answers.map(([note, screen]) => [note, screen === "No devices."]), [["host unavailable", false], [null, true], ["host unavailable", false]]);
 });
 
 test("Refresh in the Simulator redraws as it starts, before any device answers", async () => {
@@ -393,6 +409,7 @@ async function viewFixture({ active = true, hidden = false, capture, deviceRead,
     view, cx, state, timers, commands, removed, advance(ms) { now += ms; },
     setPicture(width, height) { const data = new DataView(png.buffer); data.setUint32(16, width); data.setUint32(20, height); },
     async drain() { while (pending.length) await pending.shift(); },
+    async read() { view.refresh(cx); while (pending.length) await pending.shift(); },
   };
 }
 
@@ -500,18 +517,29 @@ test("A missed action answer releases its button and does not accept a late fail
   assert.equal(f.view.error, "Command did not answer.");
 });
 
-test("A device read past its deadline is said at once, keeps Refresh off until it ends, and its answer is used", async () => {
+test("A device read past its deadline is said at once, gives Refresh back, and its late answer changes nothing", async () => {
   const { promise: answer, resolve: settle } = Promise.withResolvers();
   const f = await viewFixture({ deviceRead: () => answer });
   f.view.refresh(f.cx);
   for (let i = 0; i < 5; i += 1) await Promise.resolve();
   f.view.deadline.fn(f.cx);
   assert.equal(f.view.note, "Devices did not answer.");
-  assert.equal(f.view.reading, true, "no second read starts while the first is still asking");
+  assert.equal(f.view.reading, false, "Refresh is back");
+  const commands = f.commands.length;
   settle(good("")); await f.drain();
-  assert.equal(f.view.reading, false);
-  assert.deepEqual(clone(f.view.devices.map((device) => [device.name, device.state])), [["Pixel", "Off"]], "the answer that came is the newest list");
-  assert.equal(f.view.note, null);
+  assert.equal(f.commands.length, commands, "the lost read asks nothing more");
+  assert.equal(f.view.current().id, emulator.id, "and does not replace the list");
+  assert.equal(f.view.note, "Devices did not answer.");
+});
+
+test("A lost device answer never keeps Refresh off", async () => {
+  const f = await viewFixture({ deviceRead: () => new Promise(() => {}) });
+  f.view.refresh(f.cx);
+  for (let i = 0; i < 10; i += 1) await Promise.resolve();
+  f.view.deadline.fn(f.cx);
+  f.advance(120_000); f.view.tick(f.cx);
+  assert.equal(f.view.reading, true, "a new read has started");
+  assert.ok(f.view.readToken > 1);
 });
 
 test("Physical Android devices expose keys but no emulator-only control", async () => {

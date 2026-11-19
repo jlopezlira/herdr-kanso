@@ -201,9 +201,11 @@ test("spend, settings, memory and containers load as the shared skeleton", async
 
   const { Containers } = await loadContainers(host);
   const containers = new Containers();
-  Object.assign(containers, { state: "reading", groups: null, width: 368, reading: false, error: null, note: null, faults: new Map(), have: new Set() });
+  const { panelOf, settle, okRead, failedRead } = await load("kanso-containers/model.js", ["panelOf", "settle", "okRead", "failedRead"]);
+  Object.assign(containers, { panel: panelOf(null), width: 368, reading: false, error: null, note: null });
   assertSkeleton(containers.render());
-  containers.state = "down";
+  containers.panel = panelOf(settle(null, { n: 1, reads: { context: okRead("desktop-linux\tunix:///var/run/docker.sock"),
+    containers: failedRead("Docker said: stopped", "Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?") } }));
   assert.equal(walk(containers.render()).texts.includes("Docker isn't running."), true);
 });
 

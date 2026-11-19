@@ -25,7 +25,7 @@ export default class Simulator extends View {
     this.paths = pathApi(this.platform);
     this.directory = this.paths.join(appHome(), "data", "kanso-sim");
     this.tools = toolRecord(shared(TOOLS));
-    this.devices = null; this.error = null; this.note = null;
+    this.devices = null; this.devicesRead = "unknown"; this.error = null; this.note = null;
     this.selected = shared(PICKED) ?? null; this.boot = null;
     this.loop = new FrameLoop(); this.batch = new TextBatch();
     this.front = new Front(() => this.inFront());
@@ -77,8 +77,9 @@ export default class Simulator extends View {
     this.deadline?.cancel();
     this.deadline = cx.timer.after(PROBE_MS + FRAME_MS, (next) => {
       if (this.readToken !== token || !this.reading) return;
-      this.note = "Devices did not answer.";
-      next.notify();
+      this.readToken = this.readToken + 1;
+      this.note = "Devices did not answer."; this.devicesRead = "failed"; this.reading = false; this.readAt = Date.now();
+      next.notify(); this.schedule(next, 0);
     });
     this.soon(cx, async (next) => {
       try {
@@ -87,12 +88,12 @@ export default class Simulator extends View {
         this.tools = tools;
         const devices = await readDevices(exec, tools, () => this.inFront() && token === this.readToken);
         if (!this.inFront() || token !== this.readToken) return;
-        this.devices = devices; this.note = null;
+        this.devices = devices; this.devicesRead = "ok"; this.note = null;
         if (!devices.some((device) => device.id === this.selected)) this.selected = devices.find((device) => device.state === "Booted")?.id ?? devices[0]?.id ?? null;
         const status = bootState(devices.find((device) => device.id === this.boot?.id), this.boot, Date.now());
         if (status === "Start timed out.") this.error = status;
         if (!status || status === "Start timed out.") this.boot = null;
-      } catch (error) { if (token === this.readToken) this.note = failure(error); }
+      } catch (error) { if (token === this.readToken) { this.note = failure(error); this.devicesRead = "failed"; } }
       finally {
         if (token === this.readToken) {
           this.reading = false; this.readAt = Date.now(); this.deadline?.cancel();
@@ -254,7 +255,10 @@ export default class Simulator extends View {
   screen(c) {
     const device = this.current(), frame = this.loop.last, fitted = fitPicture(frame, this.bounds);
     if (this.devices === null) return this.loading(c);
-    if (device?.state !== "Booted") return this.line(bootState(device, this.boot, Date.now()) ?? (device ? "Off" : "No devices."), c);
+    if (device?.state !== "Booted") {
+      const said = bootState(device, this.boot, Date.now()) ?? (device ? "Off" : this.devicesRead === "ok" ? "No devices." : null);
+      return said ? this.line(said, c) : div();
+    }
     if (fitted) return div().id("sim-picture").w(fitted.width).h(fitted.height).flex_none().overflow_hidden()
       .on_mouse_down("left", (event, cx) => this.touch(event, cx, true))
       .on_mouse_up("left", (event, cx) => this.touch(event, cx, false))

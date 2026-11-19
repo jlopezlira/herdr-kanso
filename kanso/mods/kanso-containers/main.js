@@ -18,8 +18,7 @@ import { pageFrame } from "./page.js";
 import { Front } from "./front.js";
 import {
   PS_FORMAT, IMAGES_FORMAT, STATS_FORMAT, INSPECT_FORMAT, CONTEXT_FORMAT, VOLUMES_FORMAT, COMPOSE_FILES, OTHER,
-  parseContainers, parseInspect, contextOf, parseImages, parseStats, vmPids, dockerVms, dockerHeld, byProject, imageRows,
-  volumeRows, reclaimable, composeFiles, knownStacks, lookIn, isWeb, urlOf, since, size, daemonDown, notInstalled, failed,
+  parseContainers, contextOf, vmPids, lookIn, isWeb, urlOf, since, size, failed, okRead, failedRead, readOf, settle, panelOf,
 } from "./model.js";
 
 // Read while the panel is open; a closed panel is unmounted, so nothing runs behind it.
@@ -46,11 +45,14 @@ const savedNames = (key) => { const v = shared(key); return new Map(v && typeof 
 const CALL_MS = 15_000, ACT_MS = 60_000, PROCESS_GRACE_MS = 1_000;
 const limitOf = (ms) => ms - PROCESS_GRACE_MS;
 const docker = (args, ms = CALL_MS) => exec("docker", args, { timeout: limitOf(ms) });
-const timed = (factory, ms = CALL_MS) => localService((platform, run, write) =>
-  factory(platform, (command, args, options = {}) => run(command, args, { ...options, timeout: Math.min(options.timeout ?? Infinity, limitOf(ms)) }), write));
+const timedRun = (run, ms) => (command, args, options = {}) => run(command, args, { ...options, timeout: Math.min(options.timeout ?? Infinity, limitOf(ms)) });
+const wholeRun = (run) => (command, args, options) => run(command, args, options).then((r) => (r.code === 0 ? r : Promise.reject(new Error(firstLine(r)))));
+const timed = (factory, ms = CALL_MS) => localService((platform, run, write) => factory(platform, timedRun(run, ms), write));
+const strict = (factory) => localService((platform, run, write) => factory(platform, wholeRun(timedRun(run, CALL_MS)), write));
+const lookFiles = (plan, again) => plan.files || again;
+const UNATTRIBUTED = "Docker VM memory attribution requires a Herdr API on Windows.";
 const fail = (e) => ({ code: 1, stdout: "", stderr: String(e?.message ?? e) });
 const firstLine = (r) => (r.stderr || r.stdout || "").trim().split("\n")[0];
-const MISSING = Object.freeze({ missing: true });
 const DOCKER = "docker";
 const said = (r) => `Docker said: ${firstLine(r)}`;
 const within = (timer, promise, ms = CALL_MS) => bounded(promise.catch(fail), timer, ms);
@@ -70,12 +72,10 @@ function kansoProjects() {
 
 export default class Containers extends View {
   init(_props, cx) {
-    this.groups = null;       // [{ project, containers, stacks, running }], null until first read
-    this.images = []; this.volumes = []; this.spare = {}; this.files = [];
-    this.state = "reading";   // reading, ok, down (no daemon), missing (no docker)
+    this.snapshot = null;
+    this.panel = panelOf(null);
+    this.projects = [];
     this.note = null;
-    this.faults = new Map();
-    this.have = new Set();
     this.error = null;        // what the last action could not do, until the next action
     this.busy = new Set();    // container ids being changed
     this.reading = false;
@@ -84,15 +84,9 @@ export default class Containers extends View {
     this.opened = new Set();  // containers showing their details
     this.armed = new Armed();
     this.width = 368;
-    this.mem = new Map(); this.details = new Map();
-    this.held = null; this.limit = null; this.context = null; this.unattributed = false;
-    this.known = null;        // what the last read saw, null until Docker answered: read everything then
-    this.imagesText = ""; this.volumesText = "";
     this.pulling = null;      // a pull in a tab: images read each time until they change
     this.reads = 0;
     this.front = new Front();
-    this.names = new Map();   // compose folder -> [{ name, files }] seen there, so Up after Down uses them
-    this.namesKey = null;     // the Docker context they belong to
     this.pull = new TextField({ placeholder: "postgres:17, redis, nginx:alpine…" });
     this.pull.on("change", (_e, cx) => cx.notify());
     this.pull.on("submit", () => this.pullImage());
@@ -131,119 +125,89 @@ export default class Containers extends View {
     if (!this.reading) this.refresh(cx, true, true);
   }
 
-  listed(source) {
-    return this.have.has(source) && !this.faults.has(source);
-  }
-
-  decided(source) {
-    return this.listed(source) && this.known?.containers != null;
-  }
-
-  failure() {
-    return [...this.faults.values()].at(-1) ?? null;
-  }
-
-  record(source, result, reason) {
-    if (!result) return;
-    this.faults.delete(source);
-    if (result.code !== 0) this.faults.set(source, reason);
-  }
+  get state() { return this.panel.state; }
+  get groups() { return this.panel.groups; }
+  get volumes() { return this.panel.volumes ?? []; }
+  get images() { return this.panel.images ?? []; }
+  get context() { return this.panel.context; }
+  get limit() { return this.panel.limit; }
+  get details() { return this.panel.details; }
+  failure() { return this.panel.message; }
 
   read(cx, { now, all, again }) {
     this.reading = true;
     cx.notify();
-    const gone = (state) => {
-      this.state = state; this.groups = null; this.known = null; this.faults = new Map(); this.have = new Set();
-      this.images = []; this.volumes = []; this.imagesText = ""; this.volumesText = ""; this.spare = {}; this.mem = new Map(); this.details = new Map(); this.held = null;
-    };
+    const n = (this.snapshot?.n ?? 0) + 1, got = {}, before = this.snapshot?.reads ?? {};
+    let thrown = null;
     cx.spawn(async (cx) => {
       const ask = (args) => within(cx.timer, docker(args));
       try {
-        const ps = await bounded(docker(["ps", "-a", "--format", PS_FORMAT]).catch((e) => (notInstalled(e) ? MISSING : fail(e))), cx.timer, CALL_MS);
-        if (ps.missing || daemonDown(ps)) { gone(ps.missing ? "missing" : "down"); return; }
-        this.record("containers", ps, said(ps));
-        if (ps.code !== 0) { this.state = "failed"; return; }
-        const found = parseContainers(ps.stdout);
-        const projects = kansoProjects();
+        const sameContext = before.context?.state === "ok" && !all;
+        const [ps, ctx] = await Promise.all([within(cx.timer, docker(["ps", "-a", "--format", PS_FORMAT])),
+          sameContext ? null : ask(["context", "inspect", "--format", CONTEXT_FORMAT])]);
+        got.containers = readOf(ps, said); got.context = readOf(ctx, said);
+        if (ps.code !== 0) return;
+        const found = parseContainers(ps.stdout), earlier = before.containers?.data == null ? null : parseContainers(before.containers.data);
+        this.projects = kansoProjects();
         this.reads = this.reads + 1;
         const plan = readPlan(this.reads);
-        const lookFiles = plan.files || again;
-        // First read, Read again, coming forward, or Docker back after being down: everything.
-        const whole = all || !this.known;
+        const whole = all || !earlier;
         const set = containerKey(found), ids = idKey(found);
-        const changed = set !== this.known?.containers;
+        const inspected = before.details?.state === "ok" ? before.details.data : null;
+        const covered = inspected?.set === set;
         const config = whole || plan.stored ? await bounded(currentContext(), cx.timer, CALL_MS).then((v) => (v?.late ? null : v)) : null;
-        const fixed = whole || !this.known.fixed || (config !== null && config !== this.known.config);
-        const stored = whole || now || ids !== this.known?.ids || plan.stored || Boolean(this.pulling);
+        const moved = config !== null && before.config?.data != null && config !== before.config.data;
+        const fixed = whole || moved || before.limit?.state !== "ok";
+        const stored = whole || now || ids !== idKey(earlier) || plan.stored || Boolean(this.pulling);
         const usage = whole || plan.stats;
-        const { deep, shallow } = lookIn(projects.flatMap((p) => p.folders).slice(0, 24), home());
-        const named = (depth, list) => within(cx.timer, timed(fileApi).walk(list, { depth: Number(depth), names: COMPOSE_FILES }).then((paths) => ({ code: 0, stdout: paths.join("\n") })));
-        const [im, info, ps2, ins, ctx, vols, df, files] = await Promise.all([
+        const { deep, shallow } = lookIn(this.projects.flatMap((p) => p.folders).slice(0, 24), home());
+        const named = (depth, list) => within(cx.timer, strict(fileApi).walk(list, { depth: Number(depth), names: COMPOSE_FILES }).then((paths) => ({ code: 0, stdout: paths.join("\n") })));
+        const [im, info, ps2, ins, ctx2, vols, df, files] = await Promise.all([
           stored ? ask(["images", "--no-trunc", "--format", IMAGES_FORMAT]) : null,
           fixed ? ask(["info", "--format", "{{.MemTotal}}"]) : null,
           usage ? within(cx.timer, timed(processApi).memory()) : null,
-          !found.length ? { code: 0, stdout: "" } : whole || changed ? ask(["inspect", "--format", INSPECT_FORMAT, ...found.map((c) => c.id)]) : null,
-          fixed ? ask(["context", "inspect", "--format", CONTEXT_FORMAT]) : null,
+          !found.length ? { code: 0, stdout: "" } : covered && !whole ? null : ask(["inspect", "--format", INSPECT_FORMAT, ...found.map((c) => c.id)]),
+          moved && !ctx ? ask(["context", "inspect", "--format", CONTEXT_FORMAT]) : null,
           stored ? ask(["volume", "ls", "--format", VOLUMES_FORMAT]) : null,
           stored ? ask(["system", "df", "--format", "{{json .}}"]) : null,
-          lookFiles && deep.length ? Promise.all([named("2", deep), shallow.length ? named("1", shallow) : { code: 0, stdout: "" }])
+          lookFiles(plan, again) && deep.length ? Promise.all([named("2", deep), shallow.length ? named("1", shallow) : { code: 0, stdout: "" }])
             .then((both) => both.find(failed) ?? { code: 0, stdout: both.map((r) => r.stdout ?? "").join("\n") }) : null]);
-        const vms = ps2?.code === 0 ? vmPids(ps2.stdout) : [];
-        const openFiles = ps2 ? await bounded(timed(processApi).openFiles(vms).catch(unread), cx.timer, CALL_MS)
-          .then((r) => (r?.late ? unread(firstLine(r)) : r)) : null;
-        const owned = dockerVms(openFiles?.values ?? []);
-        const st = usage ? await ask(["stats", "--no-stream", "--format", STATS_FORMAT]) : null;
-        // Docker quit while this read went on: say so rather than show what ran before.
-        if ([im, info, st, vols].some(daemonDown)) { gone("down"); return; }
-        if (ctx?.code === 0) this.context = contextOf(ctx.stdout);
-        if (info?.code === 0) this.limit = Number(info.stdout) > 0 ? Number(info.stdout) / 1e6 : null;
-        // Docker on another machine: what this computer holds says nothing about it.
-        if (ps2) this.held = ps2.code === 0 && openFiles.state === "ok" && !this.context?.remote ? dockerHeld(ps2.stdout, owned) : null;
-        if (openFiles) this.unattributed = openFiles.state === "unavailable";
-        if (st?.code === 0) this.mem = parseStats(st.stdout);
-        if (files?.code === 0) this.files = composeFiles(files.stdout);
-        if (ins?.code === 0) this.details = parseInspect(ins.stdout);
-        // A failed limit or context is asked again on the next read.
-        this.known = { containers: !ins || ins.code === 0 ? set : null, ids, fixed: fixed ? info.code === 0 && ctx.code === 0 : this.known?.fixed ?? false,
-          config: config ?? this.known?.config ?? null };
-        const withDetails = found.map((c) => { const d = this.details.get(c.id.slice(0, 12)); return { ...c, imageId: d?.imageId ?? null, mounts: d?.mounts ?? [] }; });
-        const key = namesKey(this.context);
-        if (key !== this.namesKey) { this.namesKey = key; this.names = savedNames(key); }
-        const fresh = [...new Set(withDetails.filter((c) => c.dir && c.compose).map((c) => c.dir))].map((d) => {
-          const now = withDetails.filter((c) => c.dir === d && c.compose).map((c) => ({ name: c.compose, files: c.files ?? [] }));
-          const merged = [...(this.names.get(d) ?? []).filter((k) => !now.some((x) => x.name === k.name)), ...now];
-          return [d, merged.filter((k, i) => merged.findIndex((x) => x.name === k.name) === i)];
+        Object.assign(got, {
+          config: config === null ? null : okRead(config), images: readOf(im, said), limit: readOf(info, said), memory: readOf(ps2, firstLine),
+          details: ins && (ins.code === 0 ? okRead({ set, text: ins.stdout }) : failedRead(said(ins))),
+          context: got.context ?? readOf(ctx2, said), volumes: readOf(vols, said), disk: readOf(df, said), files: readOf(files, firstLine),
         });
-        if (fresh.length) {
-          this.names = new Map([...this.names, ...fresh]);
-          if (JSON.stringify(Object.fromEntries(this.names)) !== JSON.stringify(shared(key) ?? {})) setShared(key, Object.fromEntries(this.names));
-        }
-        const groups = byProject(withDetails, projects, this.context?.remote ? [] : knownStacks(this.files, withDetails, this.names), this.names);
-        this.groups = groups;
-        if (im?.code === 0) {
-          if (this.pulling) this.pulling = im.stdout === this.pulling.seen && this.pulling.left > 1 ? { ...this.pulling, left: this.pulling.left - 1 } : null;
-          this.imagesText = im.stdout;
-        }
-        if (vols?.code === 0) this.volumesText = vols.stdout;
-        this.images = imageRows(parseImages(this.imagesText), groups);
-        this.volumes = volumeRows(this.volumesText, groups.flatMap((g) => g.containers));
-        if (df?.code === 0) this.spare = reclaimable(df.stdout);
-        const inventories = { images: im, volumes: vols, disk: df, stats: st };
-        Object.entries({ ...inventories, limit: info, details: ins, context: ctx }).forEach(([source, r]) => this.record(source, r, r && said(r)));
-        Object.entries({ memory: ps2, files }).forEach(([source, r]) => this.record(source, r, r && firstLine(r)));
-        this.record("attribution", openFiles && { code: openFiles.state === "error" ? 1 : 0 }, openFiles?.reason);
-        this.record("read", { code: 0 });
-        this.have = new Set([...this.have, ...Object.keys(inventories).filter((source) => inventories[source]?.code === 0)]);
-        this.state = "ok"; this.note = this.unattributed && !this.context?.remote ? "Docker VM memory attribution requires a Herdr API on Windows." : null;
+        if (im?.code === 0 && this.pulling) this.pulling = im.stdout === this.pulling.seen && this.pulling.left > 1 ? { ...this.pulling, left: this.pulling.left - 1 } : null;
+        const openFiles = ps2?.code === 0 ? await bounded(timed(processApi).openFiles(vmPids(ps2.stdout)).catch(unread), cx.timer, CALL_MS)
+          .then((r) => (r?.late ? unread(firstLine(r)) : r)) : null;
+        got.attribution = openFiles && (openFiles.state === "error" ? failedRead(openFiles.reason) : okRead(openFiles));
+        got.stats = usage ? readOf(await ask(["stats", "--no-stream", "--format", STATS_FORMAT]), said) : null;
       } catch (e) {
-        this.record("read", { code: 1 }, String(e?.message ?? e));
+        thrown = String(e?.message ?? e);
       } finally {
+        this.snapshot = settle(this.snapshot, { n, reads: got, thrown });
+        this.panel = this.derive();
         this.reading = false;
         const next = this.queued;
         this.queued = null;
         if (next) this.read(cx, next); else cx.notify();
       }
     });
+  }
+
+  derive() {
+    const reads = this.snapshot?.reads ?? {};
+    const key = namesKey(reads.context?.state === "ok" ? contextOf(reads.context.data) : null);
+    const names = savedNames(key);
+    const found = reads.containers?.data == null ? [] : parseContainers(reads.containers.data);
+    const fresh = [...new Set(found.filter((c) => c.dir && c.compose).map((c) => c.dir))].map((d) => {
+      const now = found.filter((c) => c.dir === d && c.compose).map((c) => ({ name: c.compose, files: c.files ?? [] }));
+      const merged = [...(names.get(d) ?? []).filter((k) => !now.some((x) => x.name === k.name)), ...now];
+      return [d, merged.filter((k, i) => merged.findIndex((x) => x.name === k.name) === i)];
+    });
+    const all = new Map([...names, ...fresh]);
+    if (fresh.length && JSON.stringify(Object.fromEntries(all)) !== JSON.stringify(shared(key) ?? {})) setShared(key, Object.fromEntries(all));
+    return panelOf(this.snapshot, { projects: this.projects, names: all });
   }
 
   // Short `docker` commands; `ids` are rows to dim until Docker has made the change.
@@ -276,7 +240,7 @@ export default class Containers extends View {
     // A name, never an option: docker would take "-…" as one.
     if (!name || /\s/.test(name) || name.startsWith("-")) return;
     inTab(`pull ${name}`, ["docker", "pull", name]);
-    this.pulling = { seen: this.imagesText, left: PULL_READS };
+    this.pulling = { seen: this.panel.imagesText, left: PULL_READS };
     this.pull.set_value("");
   }
 
@@ -359,7 +323,7 @@ export default class Containers extends View {
   row(k, c) {
     const busy = this.busy.has(k.id), on = k.health === "running" || k.health === "busy";
     const open = this.opened.has(k.id);
-    const mem = this.mem.get(k.id.slice(0, 12));
+    const mem = this.panel.mem.get(k.id.slice(0, 12));
     const remote = Boolean(this.context?.remote);
     const web = !remote && on ? k.ports.find(isWeb) : null;
     const tone = HEALTH_TONES[k.health];
@@ -421,11 +385,11 @@ export default class Containers extends View {
   }
 
   imagesView(c) {
-    const decided = this.decided("images"), unused = decided ? this.images.filter((i) => i.unused) : [];
+    const decided = this.panel.can.cleanImages, unused = decided ? this.images.filter((i) => i.unused) : [], listed = this.panel.images !== null;
     const total = this.images.reduce((t, i) => t + i.mb, 0), spare = unused.reduce((t, i) => t + i.mb, 0);
     const open = this.show.images, name = this.pull.value().trim();
     return v_flex().w_full().gap(G.xs)
-      .child(this.head("images", "images", this.have.has("images") ? `${this.images.length} · ${size(total)}${spare > 0 ? ` · ${size(spare)} unused` : ""}` : "", open, c))
+      .child(this.head("images", "images", listed ? `${this.images.length} · ${size(total)}${spare > 0 ? ` · ${size(spare)} unused` : ""}` : "", open, c))
       // Pull is always here: a new image is one line away.
       .child(h_flex().w_full().gap(G.sm).items_center()
         .child(field("ct-pull-image", this.pull, c).flex_1().min_w(0))
@@ -433,7 +397,7 @@ export default class Containers extends View {
       .when(unused.length > 0, (el) => el.child(h_flex()
         .child(this.armed.link("ct-rmi", `Remove unused images (${size(spare)})`, `remove ${unused.length}`,
           "rmi", (cx) => this.act(["rmi", ...unused.flatMap((i) => i.tags)], cx, { ids: unused.map((i) => i.id), what: "remove images" }), c))))
-      .when(open && this.have.has("images"), (el) => el.children(this.images.map((i) => this.imageRow(i, c, decided))));
+      .when(open && listed, (el) => el.children(this.images.map((i) => this.imageRow(i, c, decided))));
   }
 
   imageRow(i, c, decided) {
@@ -462,7 +426,7 @@ export default class Containers extends View {
   }
 
   volumesView(c) {
-    const decided = this.decided("volumes"), unused = decided ? this.volumes.filter((v) => v.unused) : [], open = this.show.volumes;
+    const decided = this.panel.can.cleanVolumes, unused = decided ? this.volumes.filter((v) => v.unused) : [], open = this.show.volumes;
     return v_flex().w_full().gap(G.xs)
       .child(this.head("volumes", "volumes", `${this.volumes.length}${unused.length ? ` · ${unused.length} unused` : ""}`, open, c))
       .when(unused.length > 0, (el) => el.child(h_flex()
@@ -472,22 +436,23 @@ export default class Containers extends View {
   }
 
   spaceView(c) {
-    const cache = this.spare["Build Cache"] ?? 0;
-    if (cache < 1 || !this.listed("disk")) return null;
+    const cache = this.panel.spare["Build Cache"] ?? 0;
+    if (cache < 1 || !this.panel.can.clearCache) return null;
     return h_flex().w_full().items_center().justify_between().gap(G.md)
       .child(div().text_size(T.value).text_color(c.muted).child(`Build cache: ${size(cache)} you can get back`))
       .child(this.armed.link("ct-cache", "Clear", "clear", "cache", (cx) => this.act(["builder", "prune", "-f"], cx, { ids: ["build-cache"], what: "clear the build cache" }), c, { color: c.text }));
   }
 
   body(c) {
-    if (this.state === "missing") return div().text_size(T.value).text_color(c.dim).child("Docker is not installed on this computer.");
-    if (this.state === "down") {
+    const { state, message, can } = this.panel;
+    if (state === "missing") return div().text_size(T.value).text_color(c.dim).child("Docker is not installed on this computer.");
+    if (state === "down") {
       return v_flex().gap(G.sm)
         .child(div().text_size(T.value).text_color(c.muted).child("Docker isn't running."))
         .child(h_flex().child(quietLink("ct-open-docker", "Open Docker", (cx) => this.openDocker(cx), c, { color: c.text })));
     }
-    if (this.groups === null && this.failure()) {
-      return failureBlock({ text: "Can't read Docker", source: this.failure(), fix: this.reading ? "" : "Read again" })("ct-failed", c, { onClick: (cx) => this.retry(cx) });
+    if (this.groups === null && message) {
+      return failureBlock({ text: "Can't read Docker", source: message, fix: this.reading ? "" : "Read again" })("ct-failed", c, { onClick: (cx) => this.retry(cx) });
     }
     if (this.groups === null) return skeletonOf({ shape: "two lines", count: 3 })("kanso-skeleton", c);
     const all = this.groups.flatMap((g) => g.containers);
@@ -495,15 +460,15 @@ export default class Containers extends View {
     const remote = Boolean(this.context?.remote);
     // What Docker costs this computer comes first: its VM keeps memory even with nothing running.
     const hero = v_flex().gap(G.md)
-      .when(!remote, (el) => el.child(v_flex().gap(G.xs)
+      .when(can.memory, (el) => el.child(v_flex().gap(G.xs)
         .child(div().text_size(T.value).text_color(c.dim).child("Docker uses of this computer's memory"))
-        .child(metric({ value: typeof this.held === "number" ? size(this.held) : "–", unit: this.limit ? `can grow to ${size(this.limit)}` : "" })("ct-metric", c))))
+        .child(metric({ value: typeof this.panel.held === "number" ? size(this.panel.held) : "–", unit: this.limit ? `can grow to ${size(this.limit)}` : "" })("ct-metric", c))))
       .when(remote, (el) => el.child(div().text_size(T.value).text_color(c.yellow)
         .child(`Docker context ${this.context?.name}: these containers run on ${this.context?.host}, not this computer.`)))
       .child(h_flex().items_center().gap(G.md).flex_wrap()
         .child(div().text_size(T.card).text_color(c.text).child(`${running} running`))
         .child(div().text_size(T.value).text_color(c.dim).child(`${all.length - running} stopped`))
-        .when(!remote, (el) => el.child(this.armed.link("ct-quit", running ? `Quit Docker (stops ${running})` : "Quit Docker", "quit Docker",
+        .when(can.quit, (el) => el.child(this.armed.link("ct-quit", running ? `Quit Docker (stops ${running})` : "Quit Docker", "quit Docker",
           "quit", (cx) => this.quitDocker(cx), c))));
     const space = this.spaceView(c);
     return v_flex().w_full().gap(32)
@@ -511,7 +476,7 @@ export default class Containers extends View {
       .when(this.groups.length === 0, (el) => el.child(div().text_size(T.value).text_color(c.dim).child("No containers. Pull an image and run it below, or a project's compose file shows here to bring up.")))
       .children(this.groups.map((g) => this.group(g, c)))
       .child(this.imagesView(c))
-      .when(this.have.has("volumes") && this.volumes.length > 0, (el) => el.child(this.volumesView(c)))
+      .when(this.volumes.length > 0, (el) => el.child(this.volumesView(c)))
       .when(Boolean(space), (el) => el.child(space));
   }
 
@@ -527,7 +492,7 @@ export default class Containers extends View {
         .child(header)
         .child(this.body(c))
         .when(Boolean(this.error), (el) => el.child(div().text_size(T.value).text_color(c.red).child(this.error ?? "")))
-        .children([this.groups === null ? null : this.failure(), this.note].filter(Boolean)
+        .children([this.groups === null ? null : this.panel.message, this.panel.unattributed ? UNATTRIBUTED : null, this.note].filter(Boolean)
           .map((text) => div().text_size(T.body).text_color(text === "Starting Docker…" ? c.dim : c.red).child(text)))));
   }
 }
