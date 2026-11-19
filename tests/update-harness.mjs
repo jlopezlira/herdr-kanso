@@ -365,11 +365,13 @@ export const stages = async (home) => (await readdir(updates(home), { withFileTy
 // Recovery, run as a copy that starts would, must end at one whole install, change nothing run
 // again, leave nothing staged, and let the next install through.
 export async function recovered(s, home, at) {
-  assert.equal((await s.recover(home)).code, 0, `recovery after ${at}`);
+  const first = await s.recover(home);
+  assert.equal(first.code, 0, [`recovery after ${at}`, first.stderr].filter(Boolean).join("\n"));
   const once = await tree(home);
   const end = JSON.stringify(once) === JSON.stringify(s.before) ? "old" : JSON.stringify(once) === JSON.stringify(s.after) ? "new" : null;
   assert.ok(end, `after ${at}, recovery left neither install whole`);
-  assert.equal((await s.recover(home)).code, 0);
+  const again = await s.recover(home);
+  assert.equal(again.code, 0, [`a second recovery after ${at}`, again.stderr].filter(Boolean).join("\n"));
   assert.deepEqual(await tree(home), once, `a second recovery after ${at} changed something`);
   assert.deepEqual(await stages(home), [], `nothing staged left after ${at}`);
   assert.equal(await s.run(home, 0, { from: end === "old" ? "1.0.0" : "1.1.0" }), "ok", `the next install after ${at}`);

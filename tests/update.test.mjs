@@ -330,16 +330,17 @@ test("The Windows updater script keeps the same contract and PowerShell 5.1", as
   assert.equal(/UseShellExecute|RedirectStandard/.test(launch), false, "step launch, file no pipe passed on");
   const recoverScript = windowsRecoverScript(home, dir, join(dir, "recover.ps1"));
   assert.match(recoverScript, /FileShare\]::None/);
+  assert.match(recoverScript, /function Report-Op/);
+  assert.match(recoverScript, /\$Op \+ ' ' \+ \$Path/);
+  assert.match(recoverScript, /if \(Wait-Sharing \$_ \$deadline\) \{ continue \}/);
+  assert.equal(recoverScript.includes("KANSO_UPDATE_BLOCKED"), false);
+  const removeAt = recoverScript.indexOf("function Remove-Tree");
   const settleAt = recoverScript.indexOf("function Settle");
-  const recoverAt = recoverScript.indexOf("function Recover-Stages");
-  const settleBody = recoverScript.slice(settleAt, recoverAt);
-  assert.equal(settleBody.includes("Remove-Item -LiteralPath $script:st -Recurse"), false, "step stage, file one delete is not the end");
-  assert.match(settleBody, /Remove-Tree/, "step stage, file removed after a held handle");
-  const stagesBody = recoverScript.slice(recoverAt, recoverScript.indexOf("function From-B64"));
-  const settleCall = stagesBody.indexOf("if (-not (Settle))");
-  assert.ok(settleCall > 0, "step listing, file settle");
-  assert.equal(stagesBody.slice(settleCall).includes("$d.FullName"), false, "step listing, file not held across the delete");
-  assert.match(stagesBody, /\$names \+= \[string\]\$d\.FullName/, "step listing, file copied before the delete");
+  assert.equal(recoverScript.slice(removeAt, settleAt).includes("Start-Sleep"), false, "step stage, file a denial does not wait");
+  const listedAt = recoverScript.indexOf("$dirs = @(Get-ChildItem");
+  const holdAt = recoverScript.indexOf("$taken = Hold");
+  assert.ok(listedAt > 0 && holdAt > listedAt);
+  assert.match(recoverScript.slice(listedAt, holdAt), /\$dirs = \$null/, "step listing, file released before recovery");
   const held = host.holdArgs(join(dir, "lock"));
   assert.deepEqual([...held.commands], ["pwsh", "powershell"]);
   const heldArgs = [...held.args];
@@ -395,36 +396,58 @@ windowsOnly("A read-only file is still updated", async (t) => {
   assert.equal(await versionFile(home), '{ "version": "1.1.0" }\n');
 });
 
-windowsOnly("A file still open in an update that stopped does not stop recovery once it closes", async (t) => {
+const recoverHome = async (t) => {
   const root = await temporary(t);
   const home = join(root, "home");
   const dir = join(home, ".kanso-updates");
+  return { root, home, dir };
+};
+
+windowsOnly("A file still open in an update that stopped does not stop recovery once it closes", async (t) => {
+  const { root, home, dir } = await recoverHome(t);
   const stage = join(dir, "op");
   await mkdir(stage, { recursive: true });
   await writeFile(join(stage, "slots"), "");
   const locked = join(stage, "leftover.txt");
   await writeFile(locked, "open\n");
-  const blocked = join(root, "blocked");
   const lock = heldFile(t, locked, join(root, "release"));
   await lock.held;
   const { host } = await hostFor("windows");
-  const pending = host.recover(home, dir, { env: { ...process.env, KANSO_UPDATE_BLOCKED: blocked, KANSO_UPDATE_RETRY_MS: "8000" } });
-  const marked = await Promise.race([
-    (async () => {
-      const deadline = Date.now() + 20000;
-      while (Date.now() < deadline) {
-        try { await readFile(blocked); return true; } catch { /* not yet */ }
-        await new Promise((resolve) => setTimeout(resolve, 50));
-      }
-      return false;
-    })(),
-    pending.then(() => false),
+  const pending = host.recover(home, dir, { env: { ...process.env, KANSO_UPDATE_RETRY_MS: "8000" } });
+  const early = await Promise.race([
+    pending.then((result) => result),
+    new Promise((resolve) => setTimeout(() => resolve("waiting"), 500)),
   ]);
-  assert.equal(marked, true, "recovery gave up while the file was still open");
+  assert.equal(early, "waiting", early.stderr);
   await lock.open();
   const result = await pending;
   assert.equal(result.code, 0, result.stderr);
   assert.equal((await readdir(dir)).includes("op"), false, result.stderr);
+});
+
+windowsOnly("A permanent denial fails at once and names the delete", async (t) => {
+  const { home, dir } = await recoverHome(t);
+  const { windowsRecoverScript } = await hostFor("windows");
+  const script = windowsRecoverScript(home, dir, join(dir, "recover.ps1"));
+  const cut = script.indexOf("try {\n  if (-not (Test-Path -LiteralPath $dir)) { Remove-Self; exit 0 }");
+  assert.ok(cut > 0, "step probe, file recover script");
+  const probe = `${script.slice(0, cut)}
+$env:KANSO_UPDATE_RETRY_MS = '8000'
+$sw = [Diagnostics.Stopwatch]::StartNew()
+try {
+  Invoke-Op 'delete' 'C:\denied' { throw (New-Object System.UnauthorizedAccessException 'Access to the path is denied.') }
+  exit 0
+} catch {
+  if ($sw.ElapsedMilliseconds -ge 1500) { exit 3 }
+  exit 1
+}
+`;
+  await mkdir(dir, { recursive: true });
+  const file = join(dir, "probe.ps1");
+  await writeFile(file, probe);
+  const result = await exec("powershell.exe", ["-NoProfile", "-NonInteractive", "-File", file], { limit: 20000 });
+  assert.equal(result.code, 1, result.stderr);
+  assert.match(result.stderr, /delete C:\\denied Access to the path is denied/);
 });
 
 windowsOnly("A missing curl.exe stops before a download and names the tool", async (t) => {
