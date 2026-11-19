@@ -22,6 +22,7 @@ const pressOf = (el, button) => (...args) => calls(el, "on_mouse_down").filter((
 const tabId = (id) => `tab-bar-0-${id}`;
 const tab = (root, id) => byTag(root, tabId(id));
 const part = (root, id, name) => byTag(root, `${tabId(id)}-${name}`);
+const doorBox = (root, label) => door(root, label)?.parent;
 const door = (root, label) => find(root, (el) => calls(el, "tooltip").some((call) => String(call[1]).startsWith(label)) && calls(el, "accessibility_label").some((call) => call[1] === label));
 const press = { click_count: 1 };
 const withPanel = (open) => ({ id: "root", children: [{ id: "panel", children: [{ id: "panel-body", children: open ? [{ id: open }] : [] }] }] });
@@ -114,7 +115,7 @@ test("A click chooses a tab, and a press dragged onto another holds it on the pr
   const root = b.view.render(b.cx);
   assert.equal(arg(tab(root, "t3"), "bg"), b.c.selected, "the held tab");
   const list = byTag(root, "tab-bar-0");
-  const before = list.kids[list.kids.indexOf(tab(root, "t2")) - 1];
+  const before = list.kids[list.kids.indexOf(tab(root, "t2").parent) - 1];
   assert.equal(arg(before, "bg"), b.c.accent, "the accent bar where it lands, before the tab it moves left of");
   handler(tab(root, "t2"), "on_mouse_up")({}, b.cx);
   assert.deepEqual(clone(b.ran), [["tab.move", { id: "t3", index: 2 }]]);
@@ -257,10 +258,10 @@ test("The panel doors: each one a door at rest, the open one on the active wash,
   assert.equal(arg(door(root, "PR"), "bg"), b.c.w12, "the open door");
   assert.equal(calls(door(root, "Files"), "bg").length, 0, "a closed door paints nothing");
   assert.match(arg(door(root, "kansō help"), "tooltip"), /^kansō help/);
-  pressOf(door(root, "Files"), "left")(press, b.cx);
-  handler(door(root, "Ports"), "on_mouse_up")({}, b.cx);
+  pressOf(doorBox(root, "Files"), "left")(press, b.cx);
+  handler(doorBox(root, "Ports"), "on_mouse_up")({}, b.cx);
   assert.deepEqual(clone(b.store["kanso.panels.order"]).slice(0, 6), ["insights", "pr", "shipped", "worktrees", "ports", "files"]);
-  pressOf(door(b.view.render(b.cx), "Shipped"), "right")(press, b.cx);
+  pressOf(doorBox(b.view.render(b.cx), "Shipped"), "right")(press, b.cx);
   const menu = byTag(b.view.render(b.cx), "panel-menu-shipped");
   assert.ok(texts(arg(menu, "content")).includes("Panels\u2026"));
   handler(door(root, "kansō help"), "on_click")({}, b.cx);
@@ -306,7 +307,7 @@ test("Two custom panels with one icon each open their own panel, and a custom pa
   assert.equal(b.view.want, "a", "Alpha opens Alpha");
   handler(door(b.view.render(b.cx), "Beta"), "on_click")({}, b.cx);
   assert.equal(b.view.want, "b", "Beta opens Beta");
-  pressOf(door(b.view.render(b.cx), "Alpha"), "right")(press, b.cx);
+  pressOf(doorBox(b.view.render(b.cx), "Alpha"), "right")(press, b.cx);
   assert.equal(b.view.panelMenu, "a", "Alpha's right-click is Alpha's menu");
   const notes = door(b.view.render(b.cx), "Notes");
   assert.ok(texts(notes).includes("Notes"), "its name, drawn");
@@ -329,8 +330,7 @@ test("The chosen tab's × is a Button: Tab reaches it, Enter and Space press it,
 });
 
 test("A panel tab draws its state: each door a Button, the open panel's on the selection's wash, the others at rest", async () => {
-  const b = await bar({ tree: withPanel("pr") });
-  const root = b.view.render(b.cx);
+  const { b, root } = await prOpen();
   for (const label of ["New tab", "Arrange", "Files", "PR"]) assert.equal(door(root, label).tag.startsWith("tab-bar-"), true, `${label}: a Button`);
   assert.equal(arg(door(root, "PR"), "bg"), b.c.w12, "the open panel's door");
   assert.equal(calls(door(root, "Files"), "bg").length, 0, "the others at rest");
@@ -472,8 +472,8 @@ test("Moving the drawn doors keeps the slot of a door gh's absence or Settings h
     [hidden, ["files", "pr", "ports", "insights"], ["ports", "pr", "files", "insights"], "hidden in Settings, second"]]) {
     const { b, cx, drawn } = await asking(why.hidden[0], { stored: { "kanso.panels.order": order, ...why.hidden[1] } });
     assert.equal((await drawn()).includes("PR"), false, label);
-    pressOf(door(b.view.render(cx), "Ports"), "left")(press, cx);
-    handler(door(b.view.render(cx), "Files"), "on_mouse_up")({}, cx);
+    pressOf(doorBox(b.view.render(cx), "Ports"), "left")(press, cx);
+    handler(doorBox(b.view.render(cx), "Files"), "on_mouse_up")({}, cx);
     assert.deepEqual(clone(b.store["kanso.panels.order"]).slice(0, 4), kept, `${label}: PR keeps its slot`);
     const back = await asking(why.shown[0], { stored: { ...b.store, ...why.shown[1] } });
     assert.ok((await back.drawn()).includes("PR"), `${label}: PR is drawn again`);
@@ -481,17 +481,63 @@ test("Moving the drawn doors keeps the slot of a door gh's absence or Settings h
   }
 });
 
+const prOpen = async () => {
+  const b = await bar({ tree: withPanel("pr") });
+  return { b, root: b.view.render(b.cx) };
+};
+const LISTENERS = ["on_size_change", "on_hover", "on_mouse_down", "on_mouse_up"];
+const DOORS_SHOWN = ["Files", "Spend", "PR", "Ports", "New tab", "Arrange"];
+
+test("Every door, New tab and Arrange is the kit button with its hover wash and nothing else at rest; a door's drag, menu and size are measured around it", async () => {
+  const b = await bar({ tree: withPanel(null) });
+  const root = b.view.render(b.cx);
+  for (const label of DOORS_SHOWN) {
+    const el = door(root, label);
+    const wash = chain();
+    calls(el, "hover").at(-1)[1](wash);
+    assert.deepEqual(calls(wash, "bg").map((call) => call[1]), [b.c.subtle], `${label}: the kit's wash under the pointer`);
+    assert.deepEqual(LISTENERS.filter((name) => name !== "on_mouse_down" && calls(el, name).length), [], `${label}: no drag or size listener on the button`);
+  }
+  for (const label of ["Files", "Spend", "PR", "Ports"]) {
+    assert.deepEqual(LISTENERS.filter((name) => !calls(doorBox(root, label), name).length), [], `${label}: its box measures it and carries the drag`);
+    assert.equal(calls(door(root, label), "on_mouse_down").length, 0, `${label}: the button itself takes no press but its click`);
+  }
+});
+
+test("A door shows its name beside its icon under the pointer and while its panel is open, as before", async () => {
+  const { b, root } = await prOpen();
+  assert.ok(texts(door(root, "PR")).includes("PR"), "the open panel's door is named");
+  assert.equal(texts(door(root, "Files")).includes("Files"), false, "a door at rest is its icon");
+  handler(doorBox(root, "Files"), "on_hover")(true, b.cx);
+  assert.ok(texts(door(b.view.render(b.cx), "Files")).includes("Files"), "under the pointer it is named");
+  handler(doorBox(b.view.render(b.cx), "Files"), "on_hover")(false, b.cx);
+  assert.equal(texts(door(b.view.render(b.cx), "Files")).includes("Files"), false, "and the name goes when the pointer leaves");
+});
+
+test("Every tab draws its name in a box that is measured and never shrinks under it, the chosen one's × after the name", async () => {
+  const b = await bar({ tabs: [...TABS, { id: "t4", index: 4, name: "4", active: false }] });
+  const root = b.view.render(b.cx);
+  for (const { id, name } of [...TABS, { id: "t4", name: "4" }]) {
+    const box = tab(root, id).parent;
+    assert.ok(texts(tab(root, id)).includes(name), `${id}: its name is drawn`);
+    assert.ok(calls(box, "flex_none").length && calls(box, "on_size_change").length, `${id}: its box keeps its width and is measured`);
+    assert.equal(calls(tab(root, id), "on_size_change").length, 0, `${id}: the measure is not on the button, where it never arrives`);
+  }
+  const chosen = tab(root, "t1"), kids = chosen.kids;
+  assert.ok(kids.indexOf(part(root, "t1", "close")) > kids.findIndex((kid) => texts(kid).includes("checkout")), "the × comes after the name");
+});
+
 test("A door being dragged is held on the pressed wash with the accent bar where it lands", async () => {
   const b = await bar({ tree: withPanel("pr") });
-  pressOf(door(b.view.render(b.cx), "Ports"), "left")(press, b.cx);
-  handler(door(b.view.render(b.cx), "Spend"), "on_hover")(true, b.cx);
+  pressOf(doorBox(b.view.render(b.cx), "Ports"), "left")(press, b.cx);
+  handler(doorBox(b.view.render(b.cx), "Spend"), "on_hover")(true, b.cx);
   const root = b.view.render(b.cx);
   assert.equal(arg(door(root, "Ports"), "bg"), b.c.selected, "held");
   assert.equal(arg(door(root, "PR"), "bg"), b.c.w12, "the open door keeps its wash");
-  const spend = door(root, "Spend"), row = spend.parent.kids, mark = row[row.indexOf(spend) - 1];
+  const spend = doorBox(root, "Spend"), row = spend.parent.kids, mark = row[row.indexOf(spend) - 1];
   assert.equal(arg(mark, "bg"), b.c.accent, "the accent bar before Spend");
   assert.equal(calls(mark, "on_click").length, 0, "the bar is no press");
-  handler(door(root, "Spend"), "on_mouse_up")({}, b.cx);
+  handler(doorBox(root, "Spend"), "on_mouse_up")({}, b.cx);
   assert.deepEqual(clone(b.store["kanso.panels.order"]).slice(0, 3), ["files", "ports", "insights"]);
   const after = b.view.render(b.cx);
   assert.equal(calls(door(after, "Ports"), "bg").length, 0, "let go, nothing is held");

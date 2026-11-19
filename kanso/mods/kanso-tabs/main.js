@@ -6,7 +6,7 @@ import { fileApi } from "./platform-files.js";
 // Modified by José Gutiérrez (minimalistic, 0oz design fork): renamed from oz-tabs; a Specs panel button with the pending count and a needs-you dot (sdd.badge).
 // Modified by jlopezlira (Kanso, https://github.com/jlopezlira/herdr-kanso): renamed from mn-tabs; tabs and panel buttons without outlines; side panels mounted on demand (only the open one exists); Spend and Worktrees built in, Specs and Changes dropped; panel buttons are icons with their name on hover, dragged into any order, and hidden from Pieces (right-click one); trackpad scrolling moves one tab per swipe.
 // Modified by Iván Campaña (https://github.com/icampana): layout writers set the tree only when it is Kanso's, so a switch from another layout never saves that layout into kanso.json.
-import { View } from "gpui-kit";
+import { View, div } from "gpui-kit";
 import { Popover } from "gpui-base";
 import { spaces, panes, run, openOverlay, props, theme, window, shared, setShared, layout, appHome, exec, watchFolder, nextCommand, home, machines, notify } from "herdr";
 import { walkLayout, commitLayout, sidebarBack, foldSidebar, dropStripDrag } from "./layout.js";
@@ -115,6 +115,7 @@ function panelContent(id) {
 // A size reported after layout: the sizes with it, or the same ones when it moved less than half a pixel.
 const withSize = (sizes, key, width) => (Math.abs((sizes[key] ?? 0) - width) < 0.5 ? sizes : { ...sizes, [key]: width });
 const closeKey = (tab) => `close-${tab.id}`;
+const measured = (id, onSize) => (el) => div().id(id).flex_none().on_size_change(onSize).child(el);
 
 // Reads and removes the paths waiting in the inbox; returns the newest.
 export async function takeOpens(dir) {
@@ -127,6 +128,7 @@ export default class Tabs extends View {
   tabW = {};
   barW = {};
   doorW = {};
+  hoverPanel = null;
   armed = new Armed();
   tabMenu = null;
   panelMenu = null;
@@ -457,24 +459,27 @@ export default class Tabs extends View {
   }
 
   tabWire(c, tab, { space, ps, connected }) {
+    const box = measured(`tab-box-${tab.id}`, (s, cx) => { this.tabW = this.sized(this.tabW, tab.id, s.width, cx); });
     return (el) => {
-      const sized = el.on_size_change((s, cx) => { this.tabW = this.sized(this.tabW, tab.id, s.width, cx); });
-      const wired = connected ? sized
+      const wired = connected ? el
         .on_mouse_down("left", (e, cx) => this.pressTab(tab, e, cx))
         .on_hover((hovered, cx) => { this.dropAt = this.landed(this.pressed, this.dropAt, tab.id, hovered, cx); })
         .on_mouse_up("left", () => this.dropTab(tab, space))
         .on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); this.armed.clear(); this.tabMenu = tab.id; cx.notify(); })
-        .on_key_down((e, cx) => { if (this.renaming?.id === tab.id && e.key === "escape") { cx.stop_propagation(); this.endRename(cx, false); } }) : sized;
-      return this.tabMenu === tab.id ? this.tabMenuPopover(c, wired, tab, { space, ps }) : wired;
+        .on_key_down((e, cx) => { if (this.renaming?.id === tab.id && e.key === "escape") { cx.stop_propagation(); this.endRename(cx, false); } }) : el;
+      return box(this.tabMenu === tab.id ? this.tabMenuPopover(c, wired, tab, { space, ps }) : wired);
     };
   }
 
   doorWire(c, p) {
     return (el) => {
-      const wired = el
-        .on_size_change((s, cx) => { this.doorW = this.sized(this.doorW, p.id, s.width, cx); })
+      const wired = measured(`door-box-${p.id}`, (s, cx) => { this.doorW = this.sized(this.doorW, p.id, s.width, cx); })(el)
         .on_mouse_down("left", (_e, cx) => { cx.stop_propagation(); this.dragPanel = p.id; })
-        .on_hover((hovered, cx) => { this.dropPanel = this.landed(this.dragPanel, this.dropPanel, p.id, hovered, cx); })
+        .on_hover((hovered, cx) => {
+          this.hoverPanel = hovered ? p.id : this.hoverPanel === p.id ? null : this.hoverPanel;
+          this.dropPanel = this.landed(this.dragPanel, this.dropPanel, p.id, hovered, cx);
+          cx.notify();
+        })
         .on_mouse_up("left", (_e, cx) => {
           const from = this.dragPanel;
           this.dragPanel = null;
@@ -581,12 +586,12 @@ export default class Tabs extends View {
       ...Object.fromEntries(doors.map((p) => [`panel:${p.id}`, this.doorWire(c, p)])),
       plus: (el) => stop(el).on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); openArrange(); }),
       ...Object.fromEntries(["panels-top-left", "circle-question-mark", "minus", "square", "x"].map((key) => [key, stop])),
-      [more]: (el) => el.on_size_change((s, cx) => { this.barW = this.sized(this.barW, "more", s.width, cx); }),
+      [more]: measured("tab-bar-more-box", (s, cx) => { this.barW = this.sized(this.barW, "more", s.width, cx); }),
     };
     const bar = tabBar({
       items, value: openTabs.find((tab) => tab.active)?.id ?? null, folded: folded.map((i) => ({ key: openTabs[i].id, label: openTabs[i].name, mark: tabMark(openTabs[i]) })),
       overflow: this.moreOpen, panel: now,
-      panels: doors.map((p) => ({ key: p.id, label: p.label, icon: p.icon, held: heldOn(p.id, this.dragPanel, this.dropPanel), drop: doorDrops[p.id] ?? false })), state, arrange, help: true, tips, windows,
+      panels: doors.map((p) => ({ key: p.id, label: p.label, icon: p.icon, named: !p.icon || now === p.id || this.hoverPanel === p.id, held: heldOn(p.id, this.dragPanel, this.dropPanel), drop: doorDrops[p.id] ?? false })), state, arrange, help: true, tips, windows,
     });
     return bar("tab-bar", c, {
       presses, wires,
