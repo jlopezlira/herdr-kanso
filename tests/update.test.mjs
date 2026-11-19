@@ -332,7 +332,7 @@ test("The Windows updater script keeps the same contract and PowerShell 5.1", as
   for (const made of [script, recoverScript]) assert.equal(made.includes("New-Item -ItemType Directory"), false, "step create, file a failed create is not ignored");
   assert.match(recoverScript, /FileShare\]::None/);
   assert.match(recoverScript, /function Report-Op/);
-  assert.match(recoverScript, /\$Op \+ ' ' \+ \$Path/);
+  assert.match(recoverScript, /\$Op \+ ' "' \+ \(\$Paths -join '" "'\) \+ '": ' \+ \$Reason/);
   assert.match(recoverScript, /if \(Wait-Sharing \$_ \$deadline\) \{ continue \}/);
   assert.equal(recoverScript.includes("KANSO_UPDATE_BLOCKED"), false);
   const removeAt = recoverScript.indexOf("function Remove-Tree");
@@ -459,26 +459,53 @@ const watchRecover = async (t, home, dir, file, ready) => {
   return { saw, exited, text: () => err };
 };
 
-const stopLine = (text, op, paths) => text.split(/\r?\n/).find((row) => paths.some((path) => {
-  const prefix = `${op} ${path} `;
-  return row.slice(0, prefix.length).toLowerCase() === prefix.toLowerCase() && row.slice(prefix.length).trim() !== "";
-}));
+const stopPrefix = (op, ...paths) => `${op} "${paths.join('" "')}": `;
 
-const expectStop = (result, op, paths, began) => {
-  const expected = `expected a line "${op} <${paths.join(" | ")}> <why>" in stderr:\n${result.stderr}`;
+const lines = (text) => text.split(/\r?\n/);
+
+const hasReason = (row, prefix) => row.slice(prefix.length).trim() !== "";
+
+const namesStop = (text, prefix) => {
+  const row = lines(text).find((line) => line.startsWith(prefix));
+  return Boolean(row) && hasReason(row, prefix);
+};
+
+const namesStopIn = (text, op, paths) => {
+  const row = lines(text).find((line) => line.startsWith(`${op} `)) ?? "";
+  const prefix = paths.map((path) => stopPrefix(op, path)).find((each) => row.slice(0, each.length).toLowerCase() === each.toLowerCase());
+  return Boolean(prefix) && hasReason(row, prefix);
+};
+
+const expectNamed = (result, named, prefixes, began) => {
+  const expected = `expected ${prefixes.map((prefix) => `${prefix}<why>`).join(" or ")} in stderr:\n${result.stderr}`;
   assert.equal(result.code, 1, expected);
-  assert.ok(stopLine(result.stderr, op, paths), expected);
+  assert.ok(named, expected);
   assert.ok(Date.now() - began < 7000, `waited ${Date.now() - began} ms, ${expected}`);
 };
 
-test("A stop names one of the expected paths in any case, then why", () => {
+const expectStop = (result, op, path, began) => expectNamed(result, namesStop(result.stderr, stopPrefix(op, path)), [stopPrefix(op, path)], began);
+
+const expectStopIn = (result, op, paths, began) => expectNamed(result, namesStopIn(result.stderr, op, paths), paths.map((path) => stopPrefix(op, path)), began);
+
+test("A stop line names its operation and quoted path exactly, then why", () => {
+  const path = "C:\\tmp\\op\\old";
+  const prefix = stopPrefix("rename", path);
+  assert.equal(namesStop(`sharing ${prefix}in use\n${prefix}Access is denied.`, prefix), true);
+  for (const text of [`RENAME "${path}": Access is denied.`, `rename "C:\\TMP\\OP\\OLD": Access is denied.`, `${prefix}\n${prefix}Access is denied.`, `rename ${path} Access is denied.`]) {
+    assert.equal(namesStop(text, prefix), false, text);
+  }
+});
+
+test("A stage cleanup stop names the stage or its journal in any case, then why", () => {
   const stage = "C:\\tmp\\op";
   const paths = [stage, `${stage}\\slots`];
-  for (const row of [`delete ${stage} Access is denied`, `delete ${stage}\\slots Access is denied.`, "delete C:\\TMP\\OP\\SLOTS Access is denied."]) {
-    assert.equal(stopLine(row, "delete", paths), row);
+  for (const text of [`delete "${stage}": Access is denied`, `delete "${stage}\\slots": Access is denied.`, `delete "C:\\TMP\\OP\\SLOTS": Access is denied.`, `sharing delete "${stage}\\slots": in use\ndelete "${stage}": Access is denied.`]) {
+    assert.equal(namesStopIn(text, "delete", paths), true, text);
   }
-  for (const row of [`delete ${stage}\\slot name`, `delete ${stage}\\slots `, `delete ${stage}\\other Access is denied.`, "delete C:\\tmp\\op2 Access is denied.", "delete C:\\tmp Access is denied.", `rename ${stage}\\slots Access is denied.`]) {
-    assert.equal(stopLine(row, "delete", paths), undefined, row);
+  const wrong = [`delete "${stage} backup\\slots": Access is denied.`, `delete "${stage}2": Access is denied.`, `delete "${stage}\\other": Access is denied.`, `delete "${stage}\\slots": `, `delete "${stage}\\slots":`, `delete ${stage}\\slots Access is denied.`];
+  const rescued = wrong.map((row) => `${row}\ndelete "${stage}": Access is denied.`);
+  for (const text of [...wrong, ...rescued, `DELETE "${stage}\\slots": Access is denied.`, `rename "${stage}\\slots": Access is denied.`]) {
+    assert.equal(namesStopIn(text, "delete", paths), false, text);
   }
 });
 
@@ -511,7 +538,7 @@ windowsOnly("A permanent denial of a recovery rename stops at once and keeps the
   await writeFile(join(stage, "committed"), "1\n");
   await writeFile(join(stage, "slots"), "");
   const began = Date.now();
-  expectStop(await recoverNow(made.home, made.dir), "rename", [source], began);
+  expectStop(await recoverNow(made.home, made.dir), "rename", source, began);
   assert.equal(await readFile(join(source, "main.js"), "utf8"), "old\n");
   assert.equal(await readFile(prior, "utf8"), "prior\n");
 });
@@ -530,8 +557,8 @@ windowsOnly("A failed parent creation names that create, not a rename of the liv
     await writeFile(join(stage, "slots"), "1 kanso-chrome\n");
     const began = Date.now();
     const result = await recoverNow(made.home, made.dir);
-    expectStop(result, "create", [parent], began);
-    assert.equal(result.stderr.includes(`rename ${live}`), false, result.stderr);
+    expectStop(result, "create", parent, began);
+    assert.equal(result.stderr.includes(`rename "${live}"`), false, result.stderr);
     assert.deepEqual(await readdir(live), ["main.js"], result.stderr);
     assert.equal(await readFile(join(live, "main.js"), "utf8"), "old\n");
   }
@@ -559,9 +586,7 @@ windowsOnly("A destination another writer fills while rollback waits stops the m
   assert.equal(await readFile(join(live, "held.txt"), "utf8"), "open\n", watched.text());
   assert.deepEqual(await readdir(dest), ["kept.txt"], watched.text());
   assert.equal(await readFile(kept, "utf8"), "prior\n", watched.text());
-  const prefix = `move ${live} ${dest} `;
-  const line = watched.text().split(/\r?\n/).find((row) => row.startsWith(prefix));
-  assert.ok(line && line.slice(prefix.length).trim(), watched.text());
+  assert.ok(namesStop(watched.text(), stopPrefix("move", live, dest)), `expected ${stopPrefix("move", live, dest)}<why> in stderr:\n${watched.text()}`);
 });
 
 windowsOnly("A live file recovery does not own stops rollback and is left in place", async (t) => {
@@ -578,8 +603,8 @@ windowsOnly("A live file recovery does not own stops rollback and is left in pla
   const check = async () => {
     const started = Date.now();
     const result = await recoverNow(made.home, made.dir);
-    expectStop(result, "undo", [live], started);
-    const line = stopLine(result.stderr, "undo", [live]);
+    expectStop(result, "undo", live, started);
+    const line = lines(result.stderr).find((row) => row.startsWith(stopPrefix("undo", live)));
     assert.ok(line.includes(backup) && line.includes(staged), result.stderr);
   };
   await check();
@@ -602,14 +627,14 @@ windowsOnly("A permanent denial of stage cleanup stops at once and names that de
     assert.equal(denied.code, 0, denied.stderr || denied.stdout);
   }
   const began = Date.now();
-  expectStop(await recoverNow(made.home, made.dir), "delete", [stage, slots], began);
+  expectStopIn(await recoverNow(made.home, made.dir), "delete", [stage, slots], began);
   assert.equal((await readdir(made.dir)).includes("op"), true);
 });
 
 const stopCase = async (t, op, build, env) => {
   const made = await build(t);
   const began = Date.now();
-  expectStop(await recoverNow(made.home, made.dir, env), op, [made.path], began);
+  expectStop(await recoverNow(made.home, made.dir, env), op, made.path, began);
 };
 
 windowsOnly("Every recovery exit of 1 names the operation, the path and the error", async (t) => {
@@ -653,7 +678,7 @@ windowsOnly("Every recovery exit of 1 names the operation, the path and the erro
   const { windowsRecoverScript } = await hostFor("windows");
   await writeFile(file, `\uFEFF${windowsRecoverScript(home, updates, file)}`);
   const began = Date.now();
-  expectStop(await exec("powershell.exe", ["-NoProfile", "-NonInteractive", "-File", file], { limit: 20000 }), "recover", [updates], began);
+  expectStop(await exec("powershell.exe", ["-NoProfile", "-NonInteractive", "-File", file], { limit: 20000 }), "recover", updates, began);
 });
 
 windowsOnly("A missing curl.exe stops before a download and names the tool", async (t) => {
