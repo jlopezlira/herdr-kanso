@@ -6,7 +6,7 @@ import { load, clone, failure, success, gpuiHost, texts, find, calls } from "./h
 
 const model = () => load("kanso-containers/model.js", ["parseContainers", "hostPorts", "health", "projectOf", "byProject", "parseImages", "imageRows",
   "parseImageIds", "contextOf", "sizeMB", "memMB", "parseStats", "vmPids", "dockerVms", "dockerHeld", "since", "size", "daemonDown", "OTHER",
-  "okRead", "failedRead", "settle", "panelOf", "readOf", "containerKey", "CAP_BYTES", "INCOMPLETE"]);
+  "okRead", "failedRead", "settle", "panelOf", "readOf", "containerKey", "CAP_BYTES", "INCOMPLETE", "ENDPOINT_MS"]);
 const row = (...f) => f.join("\t");
 const LOCAL = "desktop-linux\tunix:///var/run/docker.sock";
 const CONTEXT = "{{.Name}}\t{{.Endpoints.docker.Host}}";
@@ -202,7 +202,7 @@ async function openPanel({ hung = false, drawn = false, failing = [], inspect = 
   const { fixture, loadMod } = await import("./perf-harness.mjs");
   const f = fixture();
   const docker = { ps: [webRow()], images: images ?? row("sha256:1111aaaa2222", "web", "latest", "100MB", "2 days ago"), down: false,
-    failing: new Set(failing), inspect, disk, partialFind: false, config: JSON.stringify({ currentContext: "desktop-linux" }), volumes: "pgdata\tlocal", hung, rejects: null, broken: false };
+    failing: new Set(failing), inspect, disk, partialFind: false, engines: { "desktop-linux": LOCAL }, config: JSON.stringify({ currentContext: "desktop-linux" }), volumes: "pgdata\tlocal", hung, rejects: null, broken: false };
   if (drawn) Object.assign(f.host, gpuiHost());
   const spaces = f.host.spaces;
   f.host.spaces = () => { if (docker.broken) throw new Error("spaces are not ready"); return spaces(); };
@@ -220,7 +220,10 @@ async function openPanel({ hung = false, drawn = false, failing = [], inspect = 
     if (docker.down && verb !== "context") return failure(STOPPED);
     if (docker.failing.has(verb)) return failure("unexpected error");
     if (verb === "ps" && docker.psResult) return docker.psResult;
-    const out = { inspect: docker.inspect, system: docker.disk, ps: docker.ps.join("\n"), images: docker.images, info: "8000000000", context: docker.context ?? LOCAL, volume: docker.volumes }[verb] ?? "";
+    const named = verb === "context" ? args[4] : undefined;
+    if (named !== undefined && !(named in docker.engines)) return failure(`context "${named}" does not exist`);
+    const current = named !== undefined ? docker.engines[named] : docker.context ?? LOCAL;
+    const out = { inspect: docker.inspect, system: docker.disk, ps: docker.ps.join("\n"), images: docker.images, info: "8000000000", context: current, volume: docker.volumes }[verb] ?? "";
     return success(out);
   };
   f.host.run = () => null;
@@ -252,7 +255,7 @@ test("the Containers panel at rest asks Docker only what can change by itself in
   assert.ok(counts.ps <= 12, `docker ps ${counts.ps} times; budget 12`);
   assert.ok(counts.stats <= 4, `docker stats ${counts.stats} times; budget 4`);
   for (const verb of ["images", "volume ls", "system df"]) assert.ok(counts[verb] <= 1, `docker ${verb} ${counts[verb]} times; budget 1`);
-  assert.deepEqual([counts.info, counts["context inspect"], counts.inspect], [0, 0, 0], "no memory limit, context or details when nothing changed");
+  assert.deepEqual([counts.info, counts["context inspect"], counts.inspect], [0, 1, 0], "no memory limit or details when nothing changed, and the context's endpoint once a minute");
 });
 
 test("a container stopped or added outside kansō shows within 5 seconds, its details read only then", async () => {
@@ -297,7 +300,7 @@ test("another Docker context chosen outside kansō is read within a minute, with
   const { f, docker, asked, fresh } = await openPanel();
   fresh();
   await f.advance(60_000);
-  assert.equal(asked("context inspect"), 0, "the same context: not asked");
+  assert.equal(asked("context inspect"), 1, "the same context: its endpoint once a minute");
   docker.config = JSON.stringify({ currentContext: "colima" });
   fresh();
   await f.advance(60_000);
@@ -536,7 +539,7 @@ test("The panel draws removal, Quit and this computer's memory only from a read 
     ["no inspect record", await shown({ inspect: "" }), [false, false, false]],
     ["an inspect record cut inside its mounts", await shown({ inspect: 'aa11aa11aa11\tsha256:1111aaaa2222\t[{"Type":"volume"' }), [false, false, false]],
     ["volumes failed", await shown({ failing: ["volume"] }), [false, true, true]],
-    ["a context name with no endpoint", await shown({ context: "other" }), [true, false, false]],
+    ["a context name with no endpoint", await shown({ context: "other\t" }), [true, false, false]],
   ];
   assert.deepEqual(mismatches(cases), []);
 });
@@ -551,7 +554,7 @@ test("A cleanup press proves again on the context it read and removes only what 
   const cases = [
     ["nothing changed", await pressed(async () => {}), [["--context desktop-linux volume rm pgdata"], true]],
     ["the volume was removed outside between ticks", await pressed(async (docker, f) => { docker.volumes = ""; await f.advance(5000); }), [[], false]],
-    ["another context became current", await pressed(async (docker) => { docker.context = "other\tunix:///var/run/docker.sock"; }), [[], true]],
+    ["the armed context was removed", await pressed(async (docker) => { delete docker.engines["desktop-linux"]; }), [[], true]],
   ];
   assert.deepEqual(mismatches(cases), []);
 });
@@ -566,7 +569,8 @@ test("A confirmed cleanup removes only on the engine and the targets that were a
   };
   const cases = [
     ["nothing changed", await confirmed(async () => {}), ["--context desktop-linux volume rm pgdata"]],
-    ["the same name now points at another endpoint", await confirmed(async (docker) => { docker.context = "desktop-linux\tssh://prod"; }), []],
+    ["the same name now points at another endpoint", await confirmed(async (docker) => { docker.engines["desktop-linux"] = "desktop-linux\tssh://prod"; }), []],
+    ["another context became current; the armed one is unchanged", await confirmed(async (docker) => { docker.context = "other\tunix:///var/run/docker.sock"; }), ["--context desktop-linux volume rm pgdata"]],
     ["a refresh drew another unused volume", await confirmed(async (docker, again) => { docker.volumes = "different\tlocal"; await again(); }), []],
   ];
   assert.deepEqual(mismatches(cases), []);
@@ -595,14 +599,16 @@ test("Every cleanup press and Quit run exactly the command that was proved, and 
   assert.deepEqual(mismatches(cases), []);
 });
 
-test("Only the rows a removal targets show it pending", async () => {
+test("Only the rows a removal targets show it pending, never another image or a volume with the same name", async () => {
   const { view, docker, click, f } = await openPanel({ drawn: true, images: [row("sha256:1111aaaa2222", "web", "latest", "100MB", "2 days ago"), SPARE_IMAGE].join("\n") });
-  view.show = { ...view.show, images: true };
+  docker.volumes = "9999bbbb9999\tlocal";
+  await f.advance(60_000);
+  view.show = { images: true, volumes: true };
   click("ct-image-9999bbbb9999-verb-1");
   docker.hung = true;
   click("ct-image-9999bbbb9999-verb-1"); await f.settle();
-  const pending = (id) => Boolean(find(view.render(f.cx), (el) => calls(el, "id").some(([, tag]) => tag === `ct-image-${id}-pending`)));
-  assert.deepEqual([pending("9999bbbb9999"), pending("1111aaaa2222")], [true, false]);
+  const pending = (tag) => Boolean(find(view.render(f.cx), (el) => calls(el, "id").some(([, id]) => id === tag)));
+  assert.deepEqual(["ct-image-9999bbbb9999-pending", "ct-image-1111aaaa2222-pending", "ct-volume-9999bbbb9999-pending"].map(pending), [true, false, false]);
 });
 
 test("Anything incomplete is a failure: a read at Herdr's output cap, a cut row, a context without a name or a local endpoint", async () => {
@@ -612,6 +618,9 @@ test("Anything incomplete is a failure: a read at Herdr's output cap, a cut row,
     ["a full inspect record", read("details", inspected(["aa11aa11aa11"])), "ok"],
     ["an inspect answer at the cap", read("details", inspected(["aa11aa11aa11"]).padEnd(m.CAP_BYTES, " ")), "failed"],
     ["a container row with three fields", read("containers", "aa11\tweb-1\trunning"), "failed"],
+    ["a container row that ends after its image", read("containers", "aa11\tweb-1\trunning\tUp 2 hours\tweb"), "failed"],
+    ["a full container row", read("containers", webRow()), "ok"],
+    ["disk use with a broken line", read("disk", `${CACHE}\n{"Type":"Images"`), "failed"],
     ["a volume name without its driver", read("volumes", "pgdata\tlocal\npgda"), "failed"],
     ["an image row cut short", read("images", "sha256:9999\tpg\t16"), "failed"],
   ];
@@ -659,6 +668,43 @@ test("A row from a list that failed is marked stale and offers nothing that acts
     ["images failed", after({ containers: app, images: lost }), [false, true, true, true, true, true, false]],
   ];
   assert.deepEqual(mismatches(cases), []);
+});
+
+test("A Run form runs only while the model allows it, on the engine it opened on", async () => {
+  const opened = async (between) => {
+    const { view, docker, click, again, removed, f, words } = await openPanel({ drawn: true, images: SPARE_IMAGE });
+    view.show = { ...view.show, images: true };
+    click("ct-image-9999bbbb9999-verb-0");
+    await between(docker, again);
+    const button = words().includes("Run");
+    view.runImage(f.cx); await f.settle();
+    return [button, f.state.processes.filter((p) => p.args.includes("run")).map((p) => p.args.join(" ")), removed()];
+  };
+  const cases = [
+    ["nothing changed", await opened(async () => {}), [true, ["--context desktop-linux run -d pg:16"], []]],
+    ["images could not be read", await opened(async (docker, again) => { docker.failing.add("images"); await again(); }), [false, [], []]],
+    ["the containers could not be read", await opened(async (docker, again) => { docker.psResult = failure("host unavailable"); await again(); }), [false, [], []]],
+    ["another engine became current", await opened(async (docker, again) => { docker.context = "other\tunix:///other.sock"; docker.engines.other = docker.context; await again(); }), [false, [], []]],
+  ];
+  assert.deepEqual(mismatches(cases), []);
+});
+
+test("A Compose stack counts paused and restarting services as running, like the header", async () => {
+  const m = await model();
+  const paused = m.okRead(row("aa11aa11aa11", "app-web-1", "paused", "Up 2 hours (Paused)", "web", "", "app", "/p/app", "web", "/p/app/compose.yaml"));
+  const panel = m.panelOf(m.settle(null, { n: 1, reads: { context: m.okRead(LOCAL), containers: paused, files: m.okRead("/p/app/compose.yaml") } }), { projects: [{ name: "app", folders: ["/p/app"] }] });
+  assert.deepEqual(clone([panel.counts.running, panel.groups[0].stacks[0].count]), [1, { running: 1, total: 1 }]);
+});
+
+test("Quit and this computer's memory need an endpoint read in the last minute, and Quit reads it again before it acts", async () => {
+  const { m, ps } = await withWeb();
+  const reads = { context: m.okRead(LOCAL), containers: ps, details: m.okRead({ set: m.containerKey(m.parseContainers(ps.data)), text: inspected(["aa11aa11aa11"]) }) };
+  const at = (age) => clone(m.panelOf(m.settle(null, { n: 1, reads, time: 1_000 }), { now: 1_000 + age }).can);
+  assert.deepEqual([at(0).quit, at(0).memory, at(m.ENDPOINT_MS).quit, at(m.ENDPOINT_MS).memory], [true, true, false, false]);
+  const { docker, press, removed } = await openPanel({ drawn: true });
+  docker.engines["desktop-linux"] = "desktop-linux\ttcp://builder:2376";
+  await press("ct-quit");
+  assert.deepEqual(removed(), [], "an endpoint that is no longer this computer's is not quit");
 });
 
 test("A second inspect that fails takes cleanup away, though the containers are the same", async () => {
@@ -742,11 +788,11 @@ test("Every Docker command ends inside the view's deadline: reads, and actions t
   docker.hung = true;
   const [web] = view.groups[0].containers;
   view.containers("stop", [web], f.cx);
-  assert.ok(view.busy.has(web.id));
+  assert.ok(view.busy.has(`containers:${web.id}`));
   view.containers("stop", [web], f.cx);
   assert.equal(f.state.processes.filter((p) => p.args.includes("stop")).length, 1, "a row being changed is not asked twice");
   await f.advance(60_000);
-  assert.equal(view.busy.has(web.id), false, "a stop that never answers frees its row");
+  assert.equal(view.busy.has(`containers:${web.id}`), false, "a stop that never answers frees its row");
   assert.ok(words().includes("stop failed: timed out"));
 });
 

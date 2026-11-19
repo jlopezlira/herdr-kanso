@@ -187,7 +187,7 @@ export function byProject(containers, projects, stacks = [], names = new Map()) 
         const mine = of.filter((c) => (c.compose ?? null) === compose);
         // The files it was started with (-f), so Up and Rebuild keep its configuration.
         const files = mine.find((c) => c.files?.length)?.files ?? known.find((k) => k.name === compose)?.files ?? [];
-        return { ...s, compose, files, total: mine.length, running: mine.filter((c) => c.health === "running").length };
+        return { ...s, compose, files, total: mine.length, running: mine.filter(active).length };
       });
     });
     return { project, containers: list, stacks: own, running: list.filter((c) => c.health === "running").length };
@@ -255,14 +255,17 @@ export const failedRead = (reason, text = reason) => ({ state: "failed", reason,
 export const CAP_BYTES = 8 * 1024 * 1024;
 export const INCOMPLETE = "Docker's answer was incomplete.";
 const bytesOf = (text) => (text.length * 4 < CAP_BYTES ? text.length : [...text].reduce((n, ch) => n + (ch.codePointAt(0) < 0x80 ? 1 : ch.codePointAt(0) < 0x800 ? 2 : ch.codePointAt(0) < 0x10000 ? 3 : 4), 0));
+const fieldsOf = (format) => format.split(TAB).length;
 const ROWS = {
-  context: (f) => Boolean(f[0]?.trim()),
-  containers: (f) => f.length >= 5 && Boolean(f[0]),
-  images: (f) => f.length >= 5 && Boolean(f[0]),
-  volumes: (f) => f.length === 2 && Boolean(f[0]) && Boolean(f[1]),
-  details: (f) => parseInspect(f.join(TAB)).values().next().value?.decoded === true,
+  context: (f) => f.length === fieldsOf(CONTEXT_FORMAT) && Boolean(f[0].trim()),
+  containers: (f) => f.length === fieldsOf(PS_FORMAT) && Boolean(f[0]),
+  images: (f) => f.length === fieldsOf(IMAGES_FORMAT) && Boolean(f[0]),
+  volumes: (f) => f.length === fieldsOf(VOLUMES_FORMAT) && Boolean(f[0]) && Boolean(f[1]),
+  details: (f) => f.length === fieldsOf(INSPECT_FORMAT) && parseInspect(f.join(TAB)).values().next().value?.decoded === true,
+  disk: (f) => parses(f.join(TAB)),
 };
-export const whole = (kind, text) => bytesOf(String(text ?? "")) < CAP_BYTES && (!ROWS[kind] || lines(text).every((l) => ROWS[kind](l.split(TAB))));
+const rawLines = (text) => String(text ?? "").split("\n").map((l) => l.replace(/\r$/, "")).filter((l) => l.trim());
+export const whole = (kind, text) => bytesOf(String(text ?? "")) < CAP_BYTES && (!ROWS[kind] || rawLines(text).every((l) => ROWS[kind](l.split(TAB))));
 export const readOf = (result, reason, kind = null) => (!result ? null
   : result.code === 0 && whole(kind, result.stdout) ? okRead(result.stdout)
     : failedRead(result.code === 0 ? INCOMPLETE : reason(result), `${result.stderr ?? ""}${result.stdout ?? ""}`));
@@ -302,10 +305,10 @@ export const proves = (target, proven) => Boolean(proven) && proven.engine.name 
   && JSON.stringify(narrow(target, proven[target.kind])) === JSON.stringify(target.items);
 const narrow = (target, items) => (Array.isArray(items) && Array.isArray(target.items) ? items.filter((x) => target.items.some((y) => JSON.stringify(y) === JSON.stringify(x))) : items);
 
-export function settle(previous, { n, reads, thrown = null }) {
+export function settle(previous, { n, reads, thrown = null, time = 0 }) {
   const before = previous?.reads ?? {};
   const merged = Object.entries(reads).filter(([, read]) => read).reduce((all, [key, read]) => ({
-    ...all, [key]: { ...read, data: isOk(read) ? read.data : all[key]?.data, at: n },
+    ...all, [key]: { ...read, data: isOk(read) ? read.data : all[key]?.data, at: n, time },
   }), before);
   const context = isOk(merged.context) ? contextOf(merged.context.data) : null, was = isOk(before.context) ? contextOf(before.context.data) : null;
   const missing = ["containers", "context"].some((key) => latest(merged, n, key)?.state === "failed" && notInstalled(merged[key].text));
@@ -335,7 +338,9 @@ const verbsOf = (k, { fresh, remote, described }) => {
   };
 };
 
-export function panelOf(snapshot, { projects = [], names = new Map(), pulling = false } = {}) {
+export const ENDPOINT_MS = 60_000;
+
+export function panelOf(snapshot, { projects = [], names = new Map(), pulling = false, now: clock = 0 } = {}) {
   const reads = snapshot?.reads ?? {}, n = snapshot?.n ?? 0, proof = snapshot?.proof ?? {};
   const now = (key) => isOk(latest(reads, n, key));
   const stale = (key) => reads[key]?.state === "failed";
@@ -348,7 +353,8 @@ export function panelOf(snapshot, { projects = [], names = new Map(), pulling = 
   const fresh = now("containers") && Boolean(engine);
   const thrown = snapshot?.thrown?.at === n ? snapshot.thrown : null;
   const busyNow = (found ?? []).filter(active);
-  const localProven = !thrown && fresh && local && !stale("details") && covers(busyNow);
+  const recent = isOk(reads.context) && clock - (reads.context.time ?? 0) < ENDPOINT_MS;
+  const localProven = !thrown && fresh && local && recent && !stale("details") && covers(busyNow);
   const memNow = isOk(reads.stats) ? parseStats(reads.stats.data) : new Map();
   const described = (k) => !stale("details") && Boolean(records.get(k.id.slice(0, 12))?.decoded);
   const stacksFresh = fresh && !stale("files");

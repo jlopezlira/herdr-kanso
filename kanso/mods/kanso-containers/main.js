@@ -157,9 +157,9 @@ export default class Containers extends View {
         const [config, first] = await Promise.all([whole || plan.stored ? bounded(currentContext(), cx.timer, CALL_MS).then((v) => (v?.late ? null : v)) : null, cached ? null : inspectContext()]);
         const moved = config !== null && before.config?.data != null && config !== before.config.data;
         const known = moved ? null : cached;
-        const ctx = first ?? (known ? null : await inspectContext());
+        const ctx = first ?? (!known ? await inspectContext() : plan.stored ? await ask(["context", "inspect", "--format", CONTEXT_FORMAT, known.name]) : null);
         take({ config: config === null ? null : okRead(config), context: readOf(ctx, said, "context") });
-        const engine = known ?? (this.got.context?.state === "ok" ? contextOf(ctx.stdout) : null);
+        const engine = !ctx ? known : this.got.context?.state === "ok" ? contextOf(ctx.stdout) : null;
         if (!engine) return;
         const on = (args) => ask(["--context", engine.name, ...args]);
         const ps = await on(["ps", "-a", "--format", PS_FORMAT]);
@@ -188,7 +188,7 @@ export default class Containers extends View {
         take({
           images: readOf(im, said, "images"), limit: readOf(info, said), memory: readOf(ps2, firstLine),
           details: details && (details.state === "ok" ? okRead({ set, text: ins.stdout }) : details),
-          volumes: readOf(vols, said, "volumes"), disk: readOf(df, said), files: readOf(files, firstLine),
+          volumes: readOf(vols, said, "volumes"), disk: readOf(df, said, "disk"), files: readOf(files, firstLine),
         });
         if (im?.code === 0 && this.pulling) this.pulling = im.stdout === this.pulling.seen && this.pulling.left > 1 ? { ...this.pulling, left: this.pulling.left - 1 } : null;
         const openFiles = ps2?.code === 0 ? await bounded(timed(processApi).openFiles(vmPids(ps2.stdout)).catch(unread), cx.timer, CALL_MS)
@@ -208,7 +208,7 @@ export default class Containers extends View {
   }
 
   conclude(n) {
-    this.snapshot = settle(this.snapshot, { n, reads: this.got, thrown: this.thrown });
+    this.snapshot = settle(this.snapshot, { n, reads: this.got, thrown: this.thrown, time: Date.now() });
     if (this.got.containers?.state === "ok") this.note = null;
     try {
       this.panel = this.derive();
@@ -231,7 +231,7 @@ export default class Containers extends View {
     });
     const all = new Map([...names, ...fresh]);
     if (fresh.length && JSON.stringify(Object.fromEntries(all)) !== JSON.stringify(shared(key) ?? {})) setShared(key, Object.fromEntries(all));
-    return panelOf(this.snapshot, { projects: this.projects, names: all });
+    return panelOf(this.snapshot, { projects: this.projects, names: all, now: Date.now() });
   }
 
   // Short `docker` commands; `ids` are rows to dim until Docker has made the change.
@@ -255,7 +255,7 @@ export default class Containers extends View {
   }
 
   clean(target, what, cx) {
-    const items = Array.isArray(target.items) ? target.items.map((x) => x.id ?? x) : [];
+    const items = Array.isArray(target.items) ? target.items.map((x) => `${target.kind}:${x.id ?? x}`) : [];
     this.hold([`clean:${target.kind}`, ...items], cx, async (cx) => {
       const proven = await this.prove(target.kind, target.engine.name, cx);
       if (!proves(target, proven)) { this.armed.clear(); this.refresh(cx, true, true); return; }
@@ -278,8 +278,8 @@ export default class Containers extends View {
   }
 
   containers(verb, list, cx) {
-    const free = list.filter((c) => !this.busy.has(c.id)), name = this.panel.engine?.name;
-    if (free.length && name) this.act(["--context", name, verb, ...free.map((c) => c.id)], cx, { ids: free.map((c) => c.id), what: verb });
+    const free = list.filter((c) => !this.busy.has(`containers:${c.id}`)), name = this.panel.engine?.name;
+    if (free.length && name) this.act(["--context", name, verb, ...free.map((c) => c.id)], cx, { ids: free.map((c) => `containers:${c.id}`), what: verb });
   }
 
   pullImage() {
@@ -305,9 +305,14 @@ export default class Containers extends View {
     const name = new TextField({ placeholder: `name (${base})` }), port = new TextField({ placeholder: "port, e.g. 8080:80" });
     name.on("submit", (_e, cx) => this.runImage(cx));
     port.on("submit", (_e, cx) => this.runImage(cx));
-    this.runFor = { id: image.id, target: image.tags[0] ?? image.id, name, port };
+    this.runFor = { id: image.id, target: image.tags[0] ?? image.id, engine: this.panel.engine, name, port };
     name.focus();
     cx.notify();
+  }
+
+  runnable(f) {
+    const now = this.panel.engine;
+    return Boolean(f?.engine && now && f.engine.name === now.name && f.engine.host === now.host && this.panel.images?.find((i) => i.id === f.id)?.run);
   }
 
   runImage(cx) {
@@ -316,9 +321,8 @@ export default class Containers extends View {
     const name = f.name.value().trim(), port = f.port.value().trim();
     if (port && !/^\d+(:\d+)?$/.test(port)) { this.error = "Port: a number, or host:container like 8080:80."; cx.notify(); return; }
     if (name && !/^[a-zA-Z0-9][a-zA-Z0-9_.-]*$/.test(name)) { this.error = "Name: letters, digits, _ . or -, starting with a letter or digit."; cx.notify(); return; }
-    const engine = this.panel.engine?.name;
-    if (!engine) return;
-    const args = ["--context", engine, "run", "-d", ...(name ? ["--name", name] : []), ...(port ? ["-p", port.includes(":") ? port : `${port}:${port}`] : []), f.target];
+    if (!this.runnable(f)) return;
+    const args = ["--context", f.engine.name, "run", "-d", ...(name ? ["--name", name] : []), ...(port ? ["-p", port.includes(":") ? port : `${port}:${port}`] : []), f.target];
     this.closeRun();
     this.act(args, cx, { what: "run" });
   }
@@ -333,7 +337,10 @@ export default class Containers extends View {
 
   // Docker Desktop's own command, else asked to quit like any app: the VM ends and its memory comes back.
   quitDocker(cx) {
+    const name = this.panel.engine?.name;
     this.hold([DOCKER], cx, async (cx) => {
+      const where = name ? await within(cx.timer, docker(["context", "inspect", "--format", CONTEXT_FORMAT, name])) : null;
+      if (!where || readOf(where, said, "context").state !== "ok" || !contextOf(where.stdout)?.local) { this.refresh(cx, true, true); return; }
       const r = await within(cx.timer, docker(["desktop", "stop"], ACT_MS), ACT_MS);
       const q = r.code === 0 ? r : await within(cx.timer, timed(systemApi, ACT_MS).stopDocker(), ACT_MS);
       this.error = q.code === 0 ? null : `Docker did not quit: ${firstLine(q)}`;
@@ -366,7 +373,7 @@ export default class Containers extends View {
   }
 
   row(k, c) {
-    const busy = this.busy.has(k.id), open = this.opened.has(k.id) && k.verbs.details, { verbs: can, mem } = k, engine = this.panel.engine?.name;
+    const busy = this.busy.has(`containers:${k.id}`), open = this.opened.has(k.id) && k.verbs.details, { verbs: can, mem } = k, engine = this.panel.engine?.name;
     const tone = HEALTH_TONES[k.health];
     const act = (verb) => (cx) => { if (!busy) this.containers(verb, [k], cx); };
     const verbs = [
@@ -441,7 +448,7 @@ export default class Containers extends View {
     const form = this.runFor?.id === i.id ? this.runFor : null;
     return v_flex().w_full()
       .child(row(`ct-image-${i.id}`, c, {
-        name: i.name, dimmed: i.stale || i.unused, meta: size(i.mb), pending: this.busy.has(i.id),
+        name: i.name, dimmed: i.stale || i.unused, meta: size(i.mb), pending: this.busy.has(`images:${i.id}`),
         second: !i.known ? i.age : i.unused ? `unused · ${i.age}` : `${i.projects.join(", ")} · ${i.users.join(", ")}`,
         verbs: [
           i.run ? { label: form ? "Cancel" : "Run…", onClick: (cx) => this.openRun(i, cx), color: c.text } : null,
@@ -451,12 +458,12 @@ export default class Containers extends View {
       .when(Boolean(form), (el) => el.child(h_flex().w_full().gap(G.sm).items_center()
         .child(field(`ct-run-name-${i.id}`, form.name, c).flex_1().min_w(0))
         .child(field(`ct-run-port-${i.id}`, form.port, c).flex_1().min_w(0))
-        .child(quietLink(`ct-run-go-${i.id}`, "Run", (cx) => this.runImage(cx), c, { color: c.text }))));
+        .when(this.runnable(form), (el) => el.child(quietLink(`ct-run-go-${i.id}`, "Run", (cx) => this.runImage(cx), c, { color: c.text })))));
   }
 
   volumeRow(v, c) {
     return row(`ct-volume-${v.name}`, c, {
-      name: v.anonymous ? v.name.slice(0, 12) : v.name, dimmed: v.stale || v.unused, pending: this.busy.has(v.name),
+      name: v.anonymous ? v.name.slice(0, 12) : v.name, dimmed: v.stale || v.unused, pending: this.busy.has(`volumes:${v.name}`),
       detail: v.anonymous ? { text: "anonymous", tip: v.name } : null,
       second: !v.known ? "" : v.unused ? "unused" : v.users.join(", "),
     });
