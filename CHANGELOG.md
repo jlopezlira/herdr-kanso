@@ -115,6 +115,7 @@ the branch's rules.
 ### Fixed
 
 - Cmd+1 to Cmd+9 choose the tabs the tab bar shows, counted without the ones asleep. A number past the last tab does nothing, instead of stacking a "tab.select failed" notice for each press. On Windows, Ctrl+1 to Ctrl+9. (#331)
+- The Pull requests panel no longer stops on "cx is no longer valid" after listing pull requests, and a rejected inbox step no longer stops Refresh or leaves its "Could not keep pull requests" note after a later read succeeds. (#338)
 - The status bar's Needs you and Agents at work menus write their shortcuts in key glyphs. (#354)
 - A tab's right-click menu writes New tab and Close tab's shortcuts in key glyphs. (#354)
 - In Projects, a right click on a subagent under an agent opens its Session menu, with the rows that act on it, as it already did in Status and Threads. (#354)
