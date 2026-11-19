@@ -17,7 +17,7 @@ import { button, quietLink, iconButton } from "./ui-button.js";
 import { row } from "./ui-row.js";
 import { emptyState, skeletonOf, thumbnail } from "./kit.js";
 import { programIcon, givenNames, nameOf } from "./marks.js";
-import { deliver, isAgent, sendKey, waitingNote } from "./deliver.js";
+import { deliver, isAgent, sendKey, waitingNote, NOT_CONFIRMED, MAY_HAVE_ARRIVED } from "./deliver.js";
 import { openPath, toPng } from "./share.js";
 import { mentions, resolvePath, itemOf, shows, arrived, pinFrom, aboutMessage, noted, keyOf, colorOf, indexRows } from "./look-model.js";
 import { walkLayout } from "./layout.js";
@@ -478,7 +478,7 @@ export class Look {
     const picture = this.shown?.path === item.path ? this.shown.picture : undefined;
     this.sending = true; cx.notify();
     cx.spawn(async (cx) => {
-      const r = await deliver(address, aboutMessage(item, pins, picture), "you");
+      const r = await deliver(cx.timer, address, aboutMessage(item, pins, picture), "you");
       this.sending = false;
       if (r.code === 0) {
         this.kept.delete(key);
@@ -486,7 +486,7 @@ export class Look {
         if (this.asking?.path === item.path && this.asking?.who === address) this.asking = null;
         this.note = { text: `Sent to ${name}.` };
       }
-      else this.note = { error: true, text: `Not sent: ${(r.stderr || r.stdout || "hc send failed").trim()}` };
+      else this.note = { error: true, text: r.unconfirmed ? `${NOT_CONFIRMED}: ${MAY_HAVE_ARRIVED}.` : `Not sent: ${(r.stderr || r.stdout || "hc send failed").trim()}` };
       cx.notify();
     });
   }
