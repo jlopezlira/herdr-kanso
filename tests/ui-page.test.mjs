@@ -29,11 +29,11 @@ test("Reading a panel again is Refresh, with when it was last read; while it rea
   const stamp = "checked 14:00", checking = { busy: true, working: "Checking…", stamp };
   assert.deepEqual([{}, { stamp }, checking].map(refreshTip), ["Refresh", "Refresh · checked 14:00", "Checking…"]);
   const pressed = [];
-  const [idle, busy] = [{ stamp }, checking].map((state) => refreshTool("page-refresh", tokens(KIT_NIGHT), state, () => pressed.push(state)));
-  assert.deepEqual([idle, busy].map((tool) => [one(tool, "tooltip"), one(tool, "disabled")]), [["Refresh · checked 14:00", false], ["Checking…", true]]);
-  press(idle, "page-refresh");
-  press(busy, "page-refresh");
-  assert.equal(pressed.length, 1, "a press while it reads starts nothing");
+  const states = [{ stamp }, checking, { stamp, enabled: false }];
+  const [idle, busy, off] = states.map((state) => refreshTool("page-refresh", tokens(KIT_NIGHT), state, () => pressed.push(state)));
+  assert.deepEqual([idle, busy, off].map((tool) => [one(tool, "tooltip"), one(tool, "disabled")]), [["Refresh · checked 14:00", false], ["Checking…", true], ["Refresh · checked 14:00", true]]);
+  [idle, busy, off].forEach((tool) => press(tool, "page-refresh"));
+  assert.equal(pressed.length, 1, "a press on a Refresh that is off starts nothing");
 });
 
 test("Memory and Spend draw in the kit's page frame: one scrolling column that follows its width, with no frame or width test of their own", async () => {

@@ -45,15 +45,13 @@ export function scrollPage(id, c, narrow, draw, sizing) {
   return sizedPage.call(this, pageFrame(c).id(id).overflow_y_scrollbar(), narrow, draw, sizing);
 }
 
-export const pageTitle = (c, narrow, words) => div().text_size(narrow ? 17 : T.page).text_color(c.text).child(words);
 export const pageHeader = (title, tools) => h_flex().w_full().items_center().justify_between().gap(G.md).child(title)
   .child(h_flex().gap(G.xs).items_center().flex_none().children(tools.filter(Boolean)));
 export const pageSections = (narrow) => v_flex().w_full().gap(narrow ? 36 : 48);
 
-export const REFRESH = "Refresh";
+const REFRESH = "Refresh";
 export const refreshTip = ({ busy = false, working = "", stamp = "" }) => (busy ? working : [REFRESH, stamp].filter(Boolean).join(" · "));
-export const refreshTool = (id, c, { busy = false, working = "", stamp = "" }, onClick) => iconButton(id, "refresh-cw", refreshTip({ busy, working, stamp }), onClick, c, { spin: busy, disabled: busy });
-export const failedRead = ({ text, source = "", retry = true }) => ({ text, source: String(source ?? ""), fix: retry ? REFRESH : "" });
+export const refreshTool = (id, c, { busy = false, enabled = true, working = "", stamp = "" }, onClick) => iconButton(id, "refresh-cw", refreshTip({ busy, working, stamp }), onClick, c, { spin: busy, disabled: busy || !enabled });
 
 export const moreLink = (id, c, { open, hidden, ruled = false }, onClick) => h_flex().pt(ruled ? G.md : G.sm)
   .when(ruled, (el) => el.border_t(1).border_color(c.border))

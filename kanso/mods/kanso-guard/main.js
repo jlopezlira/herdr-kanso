@@ -15,9 +15,9 @@ import { segmented } from "./ui-tab.js";
 import { Share } from "./share.js";
 import { tryOr, tryOrAsync, afterMount, readCommands, num } from "./pure.js";
 import { hiddenInLayout } from "./page.js";
-import { REFRESH, scrollPage, pageHeader, pageTitle, pageSections, refreshTool, moreLink, barChart, chartColumn, chartRoom } from "./ui-page.js";
+import { scrollPage, pageHeader, pageSections, refreshTool, moreLink, barChart, chartColumn, chartRoom } from "./ui-page.js";
 import { memorySpec, memoryText } from "./memory-card.js";
-import { RANGES, size, span, clock, parseNow, agentsMB, agentMeta, limitsNote, sparkFor, digestHistory, groupAgents, freedEstimate, parseBatch, staleAgents, idleWords, installError, leaveShowAll } from "./model.js";
+import { RANGES, size, span, clock, parseNow, agentsMB, agentMeta, limitsNote, sparkFor, digestHistory, groupAgents, freedEstimate, parseBatch, staleAgents, idleWords, installError, leaveShowAll, unreadable, refreshPlan } from "./model.js";
 
 const MOD = "kanso-guard";
 const DATA_DIR = `data/${MOD}`;
@@ -38,6 +38,14 @@ const runtimeNode = async () => {
   return typeof asked === "string" && asked.trim() ? asked.trim() : "node";
 };
 
+const readNow = async (file) => {
+  try {
+    return parseNow(await readTextFile(file));
+  } catch (error) {
+    return unreadable(error);
+  }
+};
+
 export default class Memory extends View {
   init(_props, cx) {
     this.closed = false;
@@ -46,6 +54,7 @@ export default class Memory extends View {
     this.node = null;
     this.forget();
     this.reading = false;
+    this.again = false;
     this.range = "day";
     this.share = new Share(MOD, paths.join(appHome(), DATA_DIR, "share"));
     this.batch = null;
@@ -115,6 +124,7 @@ export default class Memory extends View {
 
   sleep() {
     this.awake = false;
+    this.again = false;
     this.cancelAll([this.ticker, this.batchTimer, ...this.timers]);
     this.ticker = null;
     this.timers = [];
@@ -126,12 +136,18 @@ export default class Memory extends View {
     this.cancelAll([this.ticker, this.batchTimer, this.commandTask, ...this.timers]);
   }
 
+  // A press always reads: one already under way is followed by another.
+  refresh(cx) {
+    if (this.reading) this.again = true;
+    else this.read(cx);
+  }
+
   read(cx) {
     if (this.closed || !this.awake || this.reading) return;
     this.reading = true;
     cx.spawn(async (readCx) => {
       const dir = paths.join(appHome(), DATA_DIR);
-      const now = await tryOrAsync(async () => parseNow(await readTextFile(paths.join(dir, "now.json"))), { state: "bad", data: null });
+      const now = await readNow(paths.join(dir, "now.json"));
       const last = this.digest;
       // A history.json that can't be read keeps the last digest.
       const fresh = now.data && (!last || Date.now() - this.historyAt >= HISTORY_MS)
@@ -146,6 +162,8 @@ export default class Memory extends View {
       const installing = this.busy.install;
       const installFailure = installing ? installError(await tryOrAsync(() => readTextFile(paths.join(dir, "install.json"))), installing.at) : null;
       this.reading = false;
+      const again = this.again;
+      this.again = false;
       if (this.closed || !this.awake) return;
       const before = this.picture();
       this.now = now;
@@ -157,6 +175,7 @@ export default class Memory extends View {
       try { this.batchTimer?.cancel(); } catch { /* already gone */ }
       this.batchTimer = this.batch && !this.batch.finished ? readCx.timer.after(4000, (timerCx) => { this.batchTimer = null; this.read(timerCx); }) : null;
       if (this.picture() !== before) readCx.notify();
+      if (again) this.read(readCx);
     });
   }
 
@@ -246,9 +265,10 @@ export default class Memory extends View {
 
   header(c, narrow) {
     const at = this.now?.data?.at;
-    return pageHeader(pageTitle(c, narrow, this.now?.data?.metric === "working set" ? "Memory · working set" : "Memory"), [
+    const { header } = refreshPlan(this);
+    return pageHeader(div().text_size(narrow ? 17 : T.page).text_color(c.text).child(this.now?.data?.metric === "working set" ? "Memory · working set" : "Memory"), [
       this.canShare() ? iconButton("guard-share", "share", "Share", (cx) => this.share.toggle(cx), c, { active: this.share.open }) : null,
-      refreshTool("guard-refresh", c, { busy: Boolean(this.busy.check), working: "Checking…", stamp: at ? `checked ${clock(at)}` : "" }, (cx) => this.check(cx)),
+      refreshTool("guard-refresh", c, { ...header, working: "Checking…", stamp: at ? `checked ${clock(at)}` : "" }, (cx) => this.check(cx)),
     ]);
   }
 
@@ -258,11 +278,13 @@ export default class Memory extends View {
 
   offView(c, state, narrow) {
     const busy = Boolean(this.busy.install);
+    const { failure, inline } = refreshPlan(this);
     return v_flex().w_full().gap(G.md)
       .child(metric({ value: state === "bad" ? "Unreadable" : "Off", tone: "muted" })("guard-off", c))
       .child(h_flex().gap(G.lg).items_center()
         .child(quietLink("guard-on", busy ? "Turning on…" : "Turn on", (cx) => { if (!busy) this.turnOn(cx); }, c, { color: c.text }))
-        .when(state === "bad", (el) => el.child(quietLink("guard-reread", REFRESH, (cx) => this.read(cx), c))));
+        .when(inline, (el) => el.child(quietLink("guard-reread", "Refresh", (cx) => this.refresh(cx), c))))
+      .when(Boolean(failure), (el) => el.child(failureBlock(failure)("guard-unreadable", c, { onClick: (cx) => this.refresh(cx) })));
   }
 
   mainView(c, narrow) {

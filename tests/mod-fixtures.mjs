@@ -63,7 +63,7 @@ export const loadTokenSpend = (host) => load("kanso-spend/main.js", ["TokenSpend
 export const loadToast = (host) => load("kanso-toast/main.js", ["Toast"], host);
 
 const pageHost = (host) => ({ ...popoverHost(), theme: () => KIT_NIGHT, appHome: () => "/app", home: () => "/home/me", ...host });
-const onScreen = { awake: true, width: 960, share: { open: false }, busy: {} };
+const onScreen = { awake: true, width: 960, share: { open: false }, busy: {}, reading: false, again: false };
 export const memoryPage = async (fields = {}, host = {}) => {
   const { Memory, Armed } = await load("kanso-guard/main.js", ["Memory", "Armed"], pageHost(host));
   return Object.assign(new Memory(), onScreen, { now: null, digest: null, range: "day", batch: null, showAll: false, armed: new Armed(), actionError: null }, fields);
@@ -71,8 +71,8 @@ export const memoryPage = async (fields = {}, host = {}) => {
 export const spendPage = async (fields = {}, host = {}) => {
   const { TokenSpend } = await loadTokenSpend(pageHost(host));
   const handle = { focus() {}, scroll_to_item() {} };
-  return Object.assign(new TokenSpend(), onScreen, { costs: null, scan: null, error: null, runtimeError: null, running: null, page: "home", stack: [], expanded: {}, syncHolds: [],
-    cost: { period: "day", offset: 0, project: "all", model: "all" }, openMenu: null, menuOptions: null, chooserFocus: { project: handle, model: handle }, chooserScroll: handle }, fields);
+  return Object.assign(new TokenSpend(), onScreen, { costs: null, scan: null, error: null, runtimeError: null, running: null, page: "home", stack: [], settings: null, planInputs: [], queuedSources: null, expanded: {}, syncHolds: [],
+    cost: { period: "day", offset: 0, project: "all", model: "all" }, nodeBinary: null, openMenu: null, menuOptions: null, menuAt: -1, menuG: 0, chooserFocus: { project: handle, model: handle }, chooserScroll: handle }, fields);
 };
 
 // kdb.js in its own temporary folder: `names` are more of its exports, `wrap` watches its commands, and `fresh()` is a new view of a database file there, as after a restart.

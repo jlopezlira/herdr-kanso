@@ -1,4 +1,4 @@
-import { detailColumn, detailRow, scrollPage, pageHeader, pageSections, refreshTool, failedRead, moreLink, barChart, chartColumn, chartRoom, heroStack, heroHeading } from "./ui-page.js";
+import { detailColumn, detailRow, scrollPage, pageHeader, pageSections, refreshTool, moreLink, barChart, chartColumn, chartRoom, heroStack, heroHeading } from "./ui-page.js";
 import { localService, serviceOn } from "./platform-host.js";
 import { paths } from "./platform-paths.js";
 import { fileApi } from "./platform-files.js";
@@ -20,7 +20,7 @@ import { toggleSwitch } from "./ui-toggle.js";
 import { PERIOD_KEY, SPEND_PERIODS, spendPeriod } from "./period.js";
 import { Share, shareRows } from "./share.js";
 import { spendSpec, spendText } from "./spend-card.js";
-import { readFailure, allChoice, chooserOptions, chooserKey } from "./spend-model.js";
+import { readPlan, allChoice, chooserOptions, chooserKey } from "./spend-model.js";
 import { clock, tryOr, tryOrAsync, afterMount } from "./pure.js";
 import { powerOf } from "./sync-power.js";
 import { Kdb } from "./kdb.js";
@@ -210,7 +210,7 @@ export default class TokenSpend extends View {
   close() {
     this.closed = true;
     this.generation += 1;
-    tryOr(() => this.chooserScroll?.release());
+    for (const handle of [this.chooserScroll, ...Object.values(this.chooserFocus ?? {})]) tryOr(() => handle.release());
     for (const handle of [this.task, this.watchdog, this.continueTimer, this.ticker, this.commandTask, this.runtimeTask]) {
       try { handle?.cancel(); } catch { /* already gone */ }
     }
@@ -466,16 +466,15 @@ export default class TokenSpend extends View {
     const body = this.page === "settings" ? this.settingsView(c)
       : top?.kind === "task" ? this.taskView(c, top.task, narrow)
       : this.costs?.hero ? this.costsView(c, narrow, top) : this.waitingView(c);
+    const { failure } = this.plan();
     return scrollPage.call(this, "spend-root", c, narrow, (column) => column
       .child(this.header(c, narrow))
       .children(shareRows(this, c, "Only the totals and the days: no project, task or session names. The post opens with the image in it."))
-      .child(body), { always: true });
+      .when(Boolean(failure), (el) => el.child(failureBlock(failure)("spend-failed", c, { onClick: (cx) => this.run("snapshot", cx) })))
+      .when(Boolean(body), (el) => el.child(body)), { always: true });
   }
 
-  failure(c, id, loaded) {
-    const failed = readFailure(this, loaded);
-    return failed ? failureBlock(failedRead(failed))(id, c, { onClick: (cx) => this.run("snapshot", cx) }) : null;
-  }
+  plan() { return readPlan(this, Boolean(this.costs?.hero)); }
 
   // Only the unfiltered totals are shared, so a filter or a detail view hides it.
   canShare() {
@@ -504,13 +503,13 @@ export default class TokenSpend extends View {
     return pageHeader(heading, [
       reading ? div().pr(G.xs).text_size(T.micro).text_color(c.dim).child(reading) : null,
       this.canShare() ? iconButton("spend-share", "share", "Share", (cx) => this.share.toggle(cx), c, { active: this.share.open }) : null,
-      refreshTool("spend-refresh", c, { busy, working: "Updating…", stamp: updated }, (cx) => this.run("snapshot", cx)),
+      refreshTool("spend-refresh", c, { ...this.plan().refresh, working: "Updating…", stamp: updated }, (cx) => this.run("snapshot", cx)),
       this.page === "settings" ? null : iconButton("spend-settings", "settings", "Settings", (cx) => this.openSettings(cx), c),
     ]);
   }
 
   waitingView(c) {
-    return this.failure(c, "spend-failed", false) ?? skeletonOf({ shape: "two lines", count: 3 })("kanso-skeleton", c);
+    return this.plan().failure ? null : skeletonOf({ shape: "two lines", count: 3 })("kanso-skeleton", c);
   }
 
   costsView(c, narrow, top = null) {
@@ -520,10 +519,8 @@ export default class TokenSpend extends View {
       top?.kind === "model" ? null : this.list(c, "Models", `${data.modelCount} models`, data.models, "model"),
     ].filter(Boolean);
     const wide = (this.width || 960) >= 860;
-    const failed = this.failure(c, "spend-stale", true);
     return pageSections(narrow)
       .opacity(this.running === "prepare" ? OPACITY.away : 1)
-      .when(Boolean(failed), (el) => el.child(failed))
       .child(this.controls(c, Boolean(top)))
       .child(this.hero(c, data.hero, narrow))
       .when(!top && (data.machines?.length ?? 0) > 1, (el) => el.child(this.machineSplit(c, data.machines)))
@@ -574,7 +571,7 @@ export default class TokenSpend extends View {
         this.menuOptions = open ? chooserOptions(field, facet) : null;
         this.menuAt = open ? this.menuOptions.findIndex((option) => option.value === value) : -1;
         this.menuG = 0;
-        if (open) focus.focus();
+        if (open) { focus.focus(); this.chooserScroll.scroll_to_item(Math.max(0, this.menuAt)); }
         cx.notify();
       });
     if (this.openMenu === id && this.menuOptions) {
@@ -691,7 +688,7 @@ export default class TokenSpend extends View {
     return v_flex().w_full().gap(44)
       .child(v_flex().w_full()
         .child(heading("Sources", "Where Spend reads your sessions. Turning one off removes it from every number."))
-        .when(!s, (el) => el.child(skeletonOf({ shape: "line", count: 3 })("kanso-skeleton", c)))
+        .when(!s && !this.plan().failure, (el) => el.child(skeletonOf({ shape: "line", count: 3 })("kanso-skeleton", c)))
         .children((s?.sources ?? []).map((source, index) => separatedRow(h_flex().w_full().items_center().gap(G.md).py(G.sm), c, index)
           .child(detailColumn()
             .child(div().text_size(T.value).text_color(source.enabled ? c.text : c.muted).child(source.label))

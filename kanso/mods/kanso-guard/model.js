@@ -38,6 +38,20 @@ export function parseNow(text, now = Date.now()) {
   return { state: now - data.at > STALE_MS ? "stale" : "ok", data };
 }
 
+export const unreadable = (error) => ({ state: "bad", data: null, why: String(error?.message ?? error ?? "").trim() });
+
+// What the page's reading state allows: the failure to draw (an absent file is Off, not a failure), the Refresh in an unreadable page's line,
+// and the header Refresh, which starts a check only while no action runs.
+export function refreshPlan({ now, busy = {} }) {
+  const bad = now?.state === "bad";
+  const words = bad ? now.why ?? "" : "";
+  return {
+    failure: words ? { text: "Memory could not be read", source: words, fix: "Refresh" } : null,
+    inline: bad && !words,
+    header: { enabled: Object.keys(busy).length === 0, busy: Boolean(busy.check) },
+  };
+}
+
 export const agentsMB = (data) => (data?.agents ?? []).reduce((sum, a) => sum + (num(a.mb) ?? 0), 0);
 
 export function agentMeta(a) {

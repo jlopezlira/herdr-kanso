@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { arg, calls, exec, find, press, temporary, texts } from "./helpers.mjs";
 import { keyDown, spendPage } from "./mod-fixtures.mjs";
-import { chooserKey, readFailure } from "../kanso/mods/kanso-spend/spend-model.js";
+import { chooserKey, readPlan } from "../kanso/mods/kanso-spend/spend-model.js";
 
 const presenter = fileURLToPath(new URL("../kanso/mods/kanso-spend/presenter.mjs", import.meta.url));
 
@@ -77,22 +77,46 @@ test("Spend moves a store.json from before into SQLite once", async (t) => {
   finally { db.close(); }
 });
 
-test("A read that failed shows the tool's words with Refresh; without Node there is nothing to refresh, and while it reads nothing is said yet", async () => {
-  const said = "token-spend: store is locked", unread = "Spend could not read your sessions.";
-  const shown = (state, loaded) => { const failed = readFailure(state, loaded); return failed && [failed.text, failed.source, failed.retry]; };
-  assert.deepEqual([{}, { error: said, running: "snapshot" }].flatMap((state) => [shown(state, false), shown(state, true)]), [null, null, null, null]);
-  assert.deepEqual([shown({ error: said }, false), shown({ error: said }, true)], [[unread, said, true], ["Last update failed", said, true]]);
-  assert.deepEqual(shown({ runtimeError: "runtime.json needs a node path." }, false), [unread, "runtime.json needs a node path.", false]);
+const said = "token-spend: store is locked", unread = "Spend could not read your sessions.";
+const bare = { hero: { title: "Today", value: "$0.00", stats: [], tip: "", note: "", empty: "Nothing used today.", plan: "" }, projects: [], models: [], projectCount: 0, modelCount: 0,
+  tasks: [], live: [], facets: {}, footnote: [], machines: [], chart: { bars: [], first: "", title: "", last: "" }, tasksNote: "" };
+const detail = { title: "Tidy", ticket: "", project: "kanso", tools: "", when: "", usdText: "$1", usdExact: "$1.00", parts: [], models: [], sessions: [], sessionCount: 0, projectPath: "/work/kanso" };
+const failureOn = (drawn) => find(drawn, (el) => arg(el, "id") === "spend-failed");
 
-  const ran = [];
-  const page = await spendPage({ error: said, run: (command) => ran.push(command) });
-  const failed = page.render({});
-  assert.deepEqual(texts(find(failed, (el) => arg(el, "id") === "spend-failed")).filter((words) => words !== "!"), [unread, said, "Refresh"]);
-  press(failed, "spend-failed-fix");
-  assert.deepEqual(ran, ["snapshot"]);
-  const reading = Object.assign(page, { running: "snapshot" }).render({});
-  assert.equal(texts(reading).includes(unread), false);
-  assert.equal(arg(find(reading, (el) => el.tag === "spend-refresh"), "disabled"), true, "Refresh is off while it reads");
+test("What Refresh can do is decided once: a read in step shows the failure and Refresh, without Node there is nothing to refresh, and while it reads Refresh is off", () => {
+  const plan = (state, loaded) => { const { failure, refresh } = readPlan(state, loaded); return [failure && [failure.text, failure.source, failure.fix ?? null], refresh.enabled]; };
+  assert.deepEqual(plan({ nodeBinary: "node" }, false), [null, true]);
+  assert.deepEqual(plan({ nodeBinary: "node", error: said, running: "snapshot" }, true), [null, false], "while it reads, nothing is said yet");
+  assert.deepEqual([false, true].map((loaded) => plan({ nodeBinary: "node", error: said }, loaded)), [[[unread, said, "Refresh"], true], [["Last update failed", said, "Refresh"], true]]);
+  assert.deepEqual(plan({ runtimeError: "runtime.json needs a node path." }, false), [[unread, "runtime.json needs a node path.", null], false]);
+  assert.deepEqual(plan({}, false), [null, false], "Node not found yet: nothing to refresh");
+});
+
+test("A failed read shows the tool's words with Refresh on the page it was pressed from: home, waiting, Settings, a project and a task", async () => {
+  const pages = { waiting: {}, home: { costs: bare }, settings: { costs: bare, page: "settings" }, "settings before its first read": { page: "settings" },
+    project: { costs: bare, stack: [{ kind: "project", label: "kanso", value: "/work/kanso", prevCost: {} }] }, task: { costs: bare, stack: [{ kind: "task", label: "Tidy", task: detail }] } };
+  for (const [name, fields] of Object.entries(pages)) {
+    const ran = [];
+    const page = await spendPage({ nodeBinary: "node", error: said, run: (command) => ran.push(command), ...fields });
+    const drawn = page.render({});
+    assert.deepEqual(texts(failureOn(drawn)).filter((words) => words !== "!"), [fields.costs ? "Last update failed" : unread, said, "Refresh"], name);
+    assert.equal(find(drawn, (el) => arg(el, "id") === "kanso-skeleton") ?? null, null, `${name}: no skeleton beside a failure`);
+    press(drawn, "spend-failed-fix");
+    assert.deepEqual(ran, ["snapshot"], `${name}: Refresh reads`);
+    assert.equal(arg(find(drawn, (el) => el.tag === "spend-refresh"), "disabled"), false, name);
+    const reading = Object.assign(page, { running: "snapshot" }).render({});
+    assert.equal(failureOn(reading) ?? null, null, `${name}: nothing is said while it reads`);
+    assert.equal(arg(find(reading, (el) => el.tag === "spend-refresh"), "disabled"), true, `${name}: Refresh is off while it reads`);
+  }
+});
+
+test("With no Node to run, Spend says why without a Refresh that does nothing, and the header Refresh is off", async () => {
+  const page = await spendPage({ runtimeError: "runtime.json needs a node path.", page: "settings" });
+  const drawn = page.render({});
+  assert.deepEqual(texts(failureOn(drawn)).filter((words) => words !== "!"), [unread, "runtime.json needs a node path."]);
+  assert.equal(find(drawn, (el) => el.tag === "spend-failed-fix") ?? null, null);
+  assert.equal(arg(find(drawn, (el) => el.tag === "spend-refresh"), "disabled"), true);
+  assert.equal(arg(find(drawn, (el) => el.tag === "spend-settings") ?? find(drawn, (el) => el.tag === "spend-back"), "disabled") ?? false, false, "the page's own actions stay");
 });
 
 test("The project and model chooser walks its options with the list keys: j and k, gg and G, Home and End, Enter and Escape", async () => {
@@ -124,3 +148,15 @@ test("The project and model chooser walks its options with the list keys: j and 
   keyDown(list(), key("escape"), cx);
   assert.equal(calls(chooser(), "content").length, 0, "Escape shuts it");
 });
+
+test("The chooser shows the lit choice when it opens, and Spend lets go of its handles when it closes", async () => {
+  const facets = { model: Array.from({ length: 12 }, (_, i) => ({ value: `m${i}`, label: `model ${i}`, meta: "" })) };
+  const revealed = [], released = [];
+  const handle = (name) => ({ focus() {}, scroll_to_item: (at) => revealed.push(at), release: () => released.push(name) });
+  const page = await spendPage({ costs: { facets }, cost: { period: "day", offset: 0, project: "all", model: "m9" }, chooserFocus: { project: handle("project"), model: handle("model") }, chooserScroll: handle("scroll") });
+  arg(page.menu("model", {}), "on_open_change")(true, { notify() {} });
+  assert.deepEqual(revealed, [10], "the current choice is the tenth row (after All models), brought into view at once");
+  page.close();
+  assert.deepEqual(released.toSorted(), ["model", "project", "scroll"]);
+});
+
