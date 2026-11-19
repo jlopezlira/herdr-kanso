@@ -100,6 +100,19 @@ test("Each state develop drew that had no drawing of its own says what set it ap
   assert.ok(drawn("Panels/Simulator", "A URL with no scheme").querySelector(".kanso-field--invalid"));
 });
 
+test("Three notes keep the chosen point and Clear, the disk split its five verdicts, the calendar both streaks", () => {
+  const notes = drawn("Panels/Pins", "Three notes: one under the pointer, one chosen");
+  assert.deepEqual(texts(notes, ".kanso-annotation__layer .kanso-annotation"), ["1", "2", "3"]);
+  assert.deepEqual(texts(notes, ".kanso-annotation__layer .kanso-annotation--hover, .kanso-annotation__layer .kanso-annotation--selected"), ["2", "3"]);
+  assert.match(notes.querySelector(".kanso-row--selected").textContent, /^3/);
+  assert.deepEqual(texts(notes, ".kanso-button--solid, .kanso-button--quiet"), ["Send to checkout", "Clear 3 pins"]);
+  const split = texts(drawn("Panels/Worktrees", "Where the space is: every verdict"), ".kanso-row").filter((row) => row.includes("%"));
+  assert.deepEqual(split, ["Can go, losing nothing · 31.1 GB · 45%", "Need a look · 2380 MB · 16%", "In use or open · 2310 MB · 13%", "Left behind · 1520 MB · 21%", "Still checking · 1120 MB · 5%"]);
+  const streak = drawn("Panels/Shipped", "The streak, clicked");
+  assert.match(streak.body.textContent, /Streaklongest 28 days12days in a row/);
+  assert.ok(streak.querySelector(".kanso-metric + .kanso-days, .kanso-row--heading ~ .kanso-days"));
+});
+
 test("Every state the map names on a panel page is a kit state there", () => {
   const plans = JSON.parse(readFileSync(new URL("../scripts/storybook-overlaps.json", import.meta.url), "utf8"));
   const named = Object.values(plans).flatMap(({ states }) => Object.values(states)).map((target) => target.split("/"))

@@ -365,7 +365,7 @@
   "panel/WorktreeHistory": {
     "page": "Panels/Worktrees",
     "states": {
-      "Disk split": "kit/Panels/Worktrees/Pointer on the number",
+      "Disk split": "kit/Panels/Worktrees/Where the space is: every verdict",
       "Freed": "kit/Panels/Worktrees/Freed, open",
       "History loading": "kit/Panels/Worktrees/History loading",
       "No history": "kit/Panels/Worktrees/Nothing freed yet",

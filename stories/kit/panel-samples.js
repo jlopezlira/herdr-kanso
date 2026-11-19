@@ -511,6 +511,7 @@ export const sampleWorktrees = {
   total: { value: '2.4 GB', unit: 'in 9 worktrees', narrow: 'in 9' },
   plan: { count: 3, size: '1.1 GB', names: 'rate-limit-v1, relay-hotfix and one more. Merged branches go too.' },
   space: ['Scanned 14:02', '3 can go, 1.1 GB', '1 needs a look, 380 MB', '1 in use, 310 MB', '1 left behind, 640 MB'],
+  split: [['Can go, losing nothing · 3', '1.1 GB · 45%'], ['Need a look · 2', '380 MB · 16%'], ['In use or open · 2', '310 MB · 13%'], ['Left behind · 1', '520 MB · 21%'], ['Still checking · 1', '120 MB · 5%']],
   repos: [
     repo('acme-shop', '1.6 GB', [open, changes, merged, unmerged], { more: 2, all: 3, losses: loses('Loses 2 uncommitted changes in promo-banner. Merged branches go too.') }),
     repo('relay', '120 MB', [relayHotfix], { losses: kept('Nothing is lost. Merged branches go too.') }),
@@ -563,6 +564,7 @@ export const samplePins = {
   },
   ios: iosNotes,
   typing: [iosNotes[0], iosNotes[1], { ...iosNotes[2], writing: [40, 24] }],
+  three: [iosNotes[0], { ...iosNotes[1], hover: true }, { ...iosNotes[2], chosen: true }],
   android: [pinned(1, 'Search keeps the old query after a result', { region: [5, 15, 90, 7] }), pinned(2, '', { at: [50, 93] }, { writing: [-8, 80] })],
   rotated: [pinned(1, 'Both cards should fit side by side', { at: [36, 92] })],
   stalled: [pinned(1, 'Road runner price should match the list', { at: [70, 39] })],

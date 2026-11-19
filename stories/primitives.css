@@ -1934,3 +1934,5 @@
 :is(.kanso-sentence--blocked,.kanso-row__letter--blocked,.kanso-metric--blocked :is(.kanso-metric__value,.kanso-metric__second)){color:var(--blocked)}
 .kanso-metric--working :is(.kanso-metric__value,.kanso-metric__second){color:var(--working)}
 .kanso-avatar--round.kanso-skeleton{border-radius:50%}
+.kanso-annotation.kanso-annotation--hover{box-shadow:0 0 0 var(--k-sp-1) var(--wash-12)}
+.kanso-annotation.kanso-annotation--selected{box-shadow:0 0 0 var(--k-w-focus) var(--surface-2),0 0 0 calc(var(--k-w-focus) + var(--k-w-line)) var(--fg)}

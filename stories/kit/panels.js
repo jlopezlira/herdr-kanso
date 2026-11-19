@@ -66,7 +66,7 @@ export const credits = ({ places = [], maintainers = [], hover = null, faces = n
 const pageBody = { pieces: whatShows, keys: settingsKeys, news: whatsNew, credits };
 export const settings = ({ page = 'pieces', ...props }) => dialog({
   title: 'kansō settings', size: 'window',
-  tools: [tabs({ items: settingsPages, value: page, size: 'sm', track: true, label: true })],
+  tools: [tabs({ items: settingsPages, value: page, size: 'sm', track: true, label: true }), grow(), button({ label: 'Help', kind: 'quiet', size: 'sm' })],
   body: pageBody[page](props),
 });
 
@@ -153,7 +153,7 @@ const portsShown = ({ servers, picked = null, refused = null, armed = false, sto
 };
 const portsBody = (body) => unread(body) ?? portsShown(body);
 const portsPanel = ({ scope = null, stale = false, look = 'panel', ...body }) => panel({ look, stale, header: panelHeader({
-  title: 'Ports', second: scope, tools: [shareButton(), panelRefresh({ reading: body.reading || stale })],
+  title: 'Ports', second: scope, tools: [shareButton(), panelRefresh({ reading: body.reading || stale }), panelClose()],
 }) }, portsBody({ look, ...body, reach: !stale }));
 const cameFrom = (entry, drawn) => (entry ? stack({ variant: 'column' }, stack({ variant: 'status bar' }, grow(), statusItem({ ...entry, open: true })), drawn) : drawn);
 export const ports = ({ share = false, entry = null, ...props }) => withBeside(cameFrom(entry, portsPanel({ ...props, keyboard: Boolean(entry) })), share ? shareMenu({ leaves: 'Counts and sizes only' }) : null);
@@ -291,17 +291,17 @@ const memoryWait = ({ guard: state, install }) => ({
   turning: () => list(row({ name: 'Turning on the guard…', dimmed: true }), waiting({ reading: true })),
   refused: () => failureBlock(install),
 })[state];
-const memoryShown = ({ free, herdr, helpers = null, sessions = [], more = 0, bulk = null, batch = null, guard = 'on', install = null, rules = [], foot = {}, history: past = { open: false }, picked = null, armed = null, refused = null, reap = null, spark = null, unrecyclable = null, silent = null, why = null, stuck = null, reading = false, failure = null }) => {
+const memoryShown = ({ free, herdr, helpers = null, sessions = [], more = 0, bulk = null, batch = null, guard = 'on', install = null, rules = [], foot = {}, history: past = { open: false }, picked = null, armed = null, refused = null, reap = null, spark = null, unrecyclable = null, silent = null, why = null, stuck = null, all = false, reading = false, failure = null }) => {
   const each = sessionRow({ picked, armed: armed === 'session', refused, spark, unrecyclable, batch });
   return list(silent ? guardLine(silent) : null, freeLine(free), why ? sentence({ text: why }) : null, bulk ? bulkLine(bulk, { low: free.low, armed: armed === 'unused' }) : null,
     herdrRow(herdr, picked === 'Herdr'), stuck ? failureBlock(stuck) : null, helpers ? helpersRow(helpers, armed === 'helpers') : null, reap ? failureBlock(reap) : null,
     batch ? batchLine(batch) : null, sessions.length ? sessions.map(each) : row({ name: 'No agents running', dimmed: true }),
-    more ? button({ label: phrase('Show', more, 'more'), kind: 'quiet', size: 'sm' }) : null,
+    more ? button({ label: phrase('Show', more, 'more'), kind: 'quiet', size: 'sm' }) : null, all ? button({ label: 'Show fewer', kind: 'quiet', size: 'sm' }) : null,
     memoryFoot({ guard: { said: guard === 'paused' ? 'Guard paused' : 'Guard on', rules, ...foot }, past }));
 };
 const memoryBody = (body) => unread(body, 4) ?? memoryWait(body)?.() ?? memoryShown(body);
 const memoryPanel = ({ scope = null, look = 'panel', title = 'Memory', ...body }) => panel({ look, stale: Boolean(body.stale), header: panelHeader({
-  title, second: scope ?? body.stale, tools: [shareButton(), panelRefresh({ reading: body.reading })],
+  title, second: scope ?? body.stale, tools: [shareButton(), panelRefresh({ reading: body.reading }), panelClose()],
 }) }, memoryBody(body));
 export const memory = ({ share = false, notice: said = null, ...props }) => withBeside(memoryPanel(props), share ? shareMenu({ leaves: 'Counts and sizes only' }) : said ? notice(said) : null);
 
@@ -348,7 +348,7 @@ const spendSettings = ({ sources = null, absent, owned, edit = null, added = nul
   heading('Updates'), row({ name: updates.name, second: updates.said }));
 const spendBodies = { home: homeBody, detail: detailBody, task: taskBody, settings: spendSettings };
 const settingsTool = () => button({ label: 'Settings', kind: 'icon', icon: 'lu-settings' });
-const spendTools = ({ page, reading }) => [page === 'home' ? shareButton() : null, page === 'settings' ? null : settingsTool(), panelRefresh({ reading })];
+const spendTools = ({ page, reading }) => [page === 'home' ? shareButton() : null, page === 'settings' ? null : settingsTool(), panelRefresh({ reading }), panelClose()];
 const spendPanel = ({ page = 'home', title = 'Spend', second = null, look = 'panel', reading = false, failure = null, empty = null, ...body }) => panel({ look, header: panelHeader({
   title, second, start: page === 'home' ? [] : [panelBack('Back')], tools: spendTools({ page, reading }),
 }) }, waiting({ reading, failure }, 5) ?? (empty ? emptyState(empty) : spendBodies[page](body)));
@@ -451,19 +451,20 @@ const pullContent = {
 const pullPanel = ({ page = 'list', look = 'panel', stale = false, ...props }) => panel({ look, stale, header: pullPages[page](props) }, pullContent[page](props));
 export const pulls = ({ picker = null, ...props }) => (picker ? stack({ variant: 'columns' }, pullPanel(props), menu(picker)) : pullPanel(props));
 
-const pinMarks = (pins = []) => pins.flatMap(({ n, at, region, text, writing }) => [pin({ n, at, region, pending: !text }), writing ? note({ text, at: writing, typing: true }) : null]);
-const pinRow = ({ n, text, hover = false }) => row({ start: [pin({ n, pending: !text })], name: text || 'No note yet', dimmed: !text, hover, tools: hover ? [button({ label: 'Remove', kind: 'icon', icon: 'lu-x' })] : [] });
+const pinMarks = (pins = []) => pins.flatMap(({ n, at, region, text, writing, hover, chosen }) => [pin({ n, at, region, hover, chosen, pending: !text }), writing ? note({ text, at: writing, typing: true }) : null]);
+const pinRow = ({ n, text, hover = false, chosen = false }) => row({ start: [pin({ n, pending: !text })], name: text || 'No note yet', dimmed: !text, hover, current: chosen, tools: hover ? [button({ label: 'Remove', kind: 'icon', icon: 'lu-x' })] : [] });
 const sendLabel = (agent) => (agent ? phrase('Send to', agent) : 'Send to…');
 const sentLine = ({ sent, open = null }) => list(dimLine(sent), open ? line(tonalAct(open)) : null);
-const pinSend = ({ agent = null, sent = null, open = null, refused = null, sending = false }) => {
+const clearPins = (count) => (count ? quietAct(count === 1 ? 'Clear the pin' : phrase('Clear', count, 'pins')) : null);
+const pinSend = ({ agent = null, sent = null, open = null, refused = null, sending = false, count = 0 }) => {
   if (sent) return sentLine({ sent, open });
-  if (refused) return failureBlock(refused);
-  return line(button({ label: sending ? 'Sending…' : sendLabel(agent), size: 'sm', spin: sending, disabled: sending }), keyHint({ text: '⌘↩', faint: true }));
+  if (refused) return list(failureBlock(refused), line(clearPins(count)));
+  return line(button({ label: sending ? 'Sending…' : sendLabel(agent), size: 'sm', spin: sending, disabled: sending }), keyHint({ text: '⌘↩', faint: true }), clearPins(count));
 };
-const pinNotes = ({ pins, send }) => list(pins.map(pinRow), pinSend(send));
+const pinNotes = ({ pins, send }) => list(pins.map(pinRow), pinSend({ ...send, count: pins.length }));
 const pictureFile = ({ name, folder }) => row({ name, detail: folder, action: { label: 'Open', kind: 'quiet' } });
 const pinTools = {
-  device: ({ frozen, reading = false }) => [button({ label: 'Pin', kind: 'icon', icon: 'lu-map-pin', active: frozen }), button({ label: 'Device', kind: 'icon', icon: 'lu-smartphone' }), panelRefresh({ reading })],
+  device: ({ frozen, reading = false }) => [button({ label: 'Pin', kind: 'icon', icon: 'lu-map-pin', active: frozen }), button({ label: 'Device', kind: 'icon', icon: 'lu-smartphone' }), panelRefresh({ reading }), panelClose()],
   picture: ({ kept = false, reading = false }) => [button({ label: 'Keep to this agent', kind: 'icon', icon: 'lu-lock', active: kept }), panelRefresh({ reading })],
 };
 const pinGround = {
@@ -497,7 +498,7 @@ const simScreens = {
   still: () => emptyState({ icon: 'lu-smartphone', text: 'Off' }),
 };
 const simHeader = ({ groups, scope, reading }) => (groups
-  ? panelHeader({ title: 'Devices', tools: [panelBack('Back to the device'), panelRefresh({ reading })] })
+  ? panelHeader({ title: 'Devices', tools: [panelBack('Back to the device'), panelRefresh({ reading }), panelClose()] })
   : panelHeader({ title: 'Simulator', second: scope, tools: pinTools.device({ frozen: false, reading }) }));
 const simBody = ({ groups = null, scope, shows = 'picture', controls = null, acting = null, url, invalid = null, retry = null, said = [], reading = false, failure = null, empty = null, ...look }) => list(said.map(dimLine),
   textOr({ reading, failure, empty }, () => (groups ? groups.map(deviceGroup) : simScreens[shows](look))),
@@ -524,8 +525,10 @@ const groupVerbs = ({ more = 0, all = 0, prune = null }, armed) => stack({ varia
 const repoBlock = ({ armed, each }) => (group) => list(heading(group.name, { meta: group.size }), group.rows.map(each),
   groupVerbs(group, group.name === armed), group.name === armed ? sentence(group.losses) : null);
 const cleanUp = ({ count, size }, { armed, cleaning, ready }) => button({ label: cleaning ? 'Removing…' : phrase('Clean up', count, '·', size), size: 'sm', armed, verb: phrase('remove', count), disabled: cleaning || !ready });
-const worktreeHero = ({ total, plan = null, review = true, armed = null, cleaning = false, ready = true, pointer = false, space = [], agent, look }) => list(
+const verdictShare = ([name, share]) => row({ name, meta: share });
+const worktreeHero = ({ total, plan = null, review = true, armed = null, cleaning = false, ready = true, pointer = false, space = [], split = [], agent, look }) => list(
   metric({ value: total.value, unit: look === 'narrow' ? total.narrow : total.unit }), pointer ? sentence({ text: facts(...space) }) : null,
+  split.length ? list(heading('Where the space is'), split.map(verdictShare)) : null,
   stack({ variant: 'line' }, plan ? cleanUp(plan, { armed: armed === 'all', cleaning, ready }) : null, review && armed !== 'all' ? explainButton({ agent, size: 'sm' }) : null),
   armed === 'all' ? sentence({ text: plan.names }) : null);
 const worktreesShown = ({ reading = false, failure = null, repos = [], many = [], hidden = 0, left = null, freed = null, stayed = null, note = null, armed = null, picked = null, busy = null, refused = null, agent = 'checkout', reach = true, ...hero }) => {
@@ -537,15 +540,16 @@ const worktreesShown = ({ reading = false, failure = null, repos = [], many = []
 const worktreesBody = (body) => unread(body) ?? worktreesShown(body);
 const newWorktreeTool = () => button({ label: 'New worktree', kind: 'icon', icon: 'lu-plus' });
 const worktreesPanel = ({ phase = null, scope = null, stale = false, look = 'panel', ...body }) => panel({ look, stale, header: panelHeader({
-  title: 'Worktrees', second: scope ?? phase, tools: [newWorktreeTool(), shareButton(), panelRefresh({ reading: Boolean(phase) || stale })],
+  title: 'Worktrees', second: scope ?? phase, tools: [newWorktreeTool(), shareButton({ disabled: Boolean(body.reading || body.failure || !body.repos) }), panelRefresh({ reading: Boolean(phase) || stale }), panelClose()],
 }) }, worktreesBody({ look, reach: !stale, ...body }));
 export const worktrees = ({ share = false, notice: said = null, creating = null, ...props }) => withBeside(worktreesPanel(props),
   share ? shareMenu({ leaves: 'Totals only' }) : said ? notice(said) : creating ? newWorktree(creating) : null);
 
 const periodLine = (when) => stack({ variant: 'line' }, periodTabs(when), stepper(when.past));
 const countLine = (counted) => sentence({ text: facts(...counted.map(({ value, unit }) => phrase(value, unit))) });
-const shippedHero = ({ hero, delta: compared = null, counts: counted, contributions = null, ever = null, days = [], daysSaid = [], calendar = false }, pointer) => list(
-  metric(hero), compared ? delta(compared) : null, countLine(counted), calendar ? heatmap({ days, said: daysSaid }) : null, pointer === 'number' ? sentence({ text: facts(contributions, ever) }) : null);
+const streakOver = ({ longest, value, unit }) => [heading('Streak', { meta: longest }), metric({ value, unit, size: 'sm' })];
+const shippedHero = ({ hero, delta: compared = null, counts: counted, contributions = null, ever = null, days = [], daysSaid = [], calendar = false, records = null }, pointer) => list(
+  metric(hero), compared ? delta(compared) : null, countLine(counted), calendar ? list(records ? streakOver(records.streak) : null, heatmap({ days, said: daysSaid })) : null, pointer === 'number' ? sentence({ text: facts(contributions, ever) }) : null);
 const newMark = { text: 'new', tone: 'accent' };
 const recordRow = ({ name, value, unit, detail, fresh }) => row({ name, detail: fresh ? newMark : null, meta: phrase(value, unit), second: detail });
 const shipRow = (pointer) => ({ name, lines, commits }) => row({ name, meta: lines, hover: name === pointer, second: name === pointer ? commits : null });

@@ -283,8 +283,8 @@ export const tabs = ({ items, value, size, track, disabled, icon, label: named }
 const percent = (value) => `${Number(value)}%`;
 const placed = ([x, y], content) => `<foreignObject class="kanso-annotation__spot" x="${percent(x)}" y="${percent(y)}">${content}</foreignObject>`;
 const ringed = ([x, y, width, height], content) => `<foreignObject class="kanso-annotation__area" x="${percent(x)}" y="${percent(y)}" width="${percent(width)}" height="${percent(height)}"><span class="kanso-annotation__region">${content}</span></foreignObject>`;
-export const pin = ({ n = '', at, region, pending = false }) => {
-  const badge = `<span class="kanso-annotation${pending ? ' kanso-annotation--inactive' : ''}">${escape(String(n))}</span>`;
+export const pin = ({ n = '', at, region, pending = false, hover = false, chosen = false }) => {
+  const badge = `<span class="kanso-annotation${pending ? ' kanso-annotation--inactive' : ''}${hover ? ' kanso-annotation--hover' : ''}${chosen ? ' kanso-annotation--selected' : ''}">${escape(String(n))}</span>`;
   return region ? ringed(region, badge) : at ? placed(at, badge) : badge;
 };
 export const note = ({ text = '', at = [0, 0], typing = false }) => placed(at, `<div class="kanso-annotation__note">${text ? escape(text) : '<span class="kanso-text--dim">Note</span>'}${typing ? '<span class="kanso-caret"></span>' : ''}</div>`);
