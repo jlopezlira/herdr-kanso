@@ -171,7 +171,7 @@ test("Tab availability probes once per panel-list rebuild and a deadline ignores
   const tabs = new Tabs();
   tabs.probeSimulator(cx); tabs.probeSimulator(cx);
   assert.equal(commands.filter((cmd) => cmd === "xcode-select").length, 1);
-  timers[0].fn();
+  timers[0].fn(cx);
   assert.deepEqual(clone(store["kanso.sim.tools"]), {});
   settle(good(DEVELOPER)); await Promise.all(pending);
   assert.deepEqual(clone(store["kanso.sim.tools"]), {}, "a missed startup deadline does not publish a stale capability");

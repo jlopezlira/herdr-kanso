@@ -212,6 +212,8 @@ export const size = (mb) => (mb >= 1000 ? `${(mb / 1000).toFixed(1)} GB` : mb >=
 
 // Docker answered, but its daemon is not there.
 export const daemonDown = (r) => r && r.code !== 0 && /Cannot connect|Is the docker daemon running|error during connect|docker\.sock/i.test(`${r.stderr ?? ""}${r.stdout ?? ""}`);
+export const failed = (r) => Boolean(r) && r.code !== 0;
+export const notInstalled = (error) => error?.code === "ENOENT" || /\bnot found\b|no such file|cannot find|os error 2\b/i.test(String(error?.message ?? error));
 
 // "170.5MiB / 3.828GiB": megabytes used.
 export function memMB(text) {

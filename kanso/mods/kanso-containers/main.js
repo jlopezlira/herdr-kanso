@@ -12,14 +12,14 @@ import { T, G, tokens } from "./ui.js";
 import { Armed, quietLink, iconButton } from "./ui-button.js";
 import { field, TextField } from "./ui-field.js";
 import { row } from "./ui-row.js";
-import { metric, skeletonOf } from "./kit.js";
-import { afterMount, parseOr } from "./pure.js";
+import { metric, skeletonOf, failureBlock } from "./kit.js";
+import { afterMount, parseOr, bounded } from "./pure.js";
 import { pageFrame } from "./page.js";
 import { Front } from "./front.js";
 import {
   PS_FORMAT, IMAGES_FORMAT, STATS_FORMAT, INSPECT_FORMAT, CONTEXT_FORMAT, VOLUMES_FORMAT, COMPOSE_FILES, OTHER,
   parseContainers, parseInspect, contextOf, parseImages, parseStats, vmPids, dockerVms, dockerHeld, byProject, imageRows,
-  volumeRows, reclaimable, composeFiles, knownStacks, lookIn, isWeb, urlOf, since, size, daemonDown,
+  volumeRows, reclaimable, composeFiles, knownStacks, lookIn, isWeb, urlOf, since, size, daemonDown, notInstalled, failed,
 } from "./model.js";
 
 // Read while the panel is open; a closed panel is unmounted, so nothing runs behind it.
@@ -46,6 +46,11 @@ const savedNames = (key) => { const v = shared(key); return new Map(v && typeof 
 const docker = (args) => exec("docker", args);
 const fail = (e) => ({ code: 1, stdout: "", stderr: String(e?.message ?? e) });
 const firstLine = (r) => (r.stderr || r.stdout || "").trim().split("\n")[0];
+const CALL_MS = 15_000;
+const MISSING = Object.freeze({ missing: true });
+const said = (r) => `Docker said: ${firstLine(r)}`;
+const within = (timer, promise) => bounded(promise.catch(fail), timer, CALL_MS);
+const unread = (e) => ({ state: "error", values: [], reason: String(e?.message ?? e) });
 // Long work (pulls, builds, compose) runs in a tab of its own, so you see its progress and it is never cut at 30 s.
 const inTab = (name, argv, folder) => run("terminal.open", { argv, name, place: "tab", ...(folder ? { folder } : {}) });
 
@@ -64,11 +69,12 @@ export default class Containers extends View {
     this.groups = null;       // [{ project, containers, stacks, running }], null until first read
     this.images = []; this.volumes = []; this.spare = {}; this.files = [];
     this.state = "reading";   // reading, ok, down (no daemon), missing (no docker)
-    this.note = null;         // what the last read could not do
+    this.note = null;
+    this.failure = null;
     this.error = null;        // what the last action could not do, until the next action
     this.busy = new Set();    // container ids being changed
     this.reading = false;
-    this.seq = 0;             // the latest read; an older one finishing late is dropped
+    this.queued = null;
     this.show = { images: false, volumes: false };
     this.opened = new Set();  // containers showing their details
     this.armed = new Armed();
@@ -110,19 +116,21 @@ export default class Containers extends View {
       return;
     }
     const back = this.front.woke();
-    const now = soon || back, all = again || back;
+    const ask = { now: soon || back, all: again || back, again };
     this.armTicker(cx);
-    if (this.reading && !now) return;
+    if (!this.reading) { this.read(cx, ask); return; }
+    if (ask.now) this.queued = { now: true, all: ask.all || Boolean(this.queued?.all), again: ask.again || Boolean(this.queued?.again) };
+  }
+
+  read(cx, { now, all, again }) {
     this.reading = true;
-    this.seq = this.seq + 1;
-    const seq = this.seq;
-    const down = () => { this.state = "down"; this.groups = []; this.images = []; this.volumes = []; this.known = null; };
+    const gone = (state) => { this.state = state; this.groups = []; this.images = []; this.volumes = []; this.known = null; this.failure = null; };
     cx.spawn(async (cx) => {
+      const ask = (args) => within(cx.timer, docker(args));
       try {
-        const ps = await docker(["ps", "-a", "--format", PS_FORMAT]);
-        if (seq !== this.seq) return;
-        if (daemonDown(ps)) { down(); return; }
-        if (ps.code !== 0) { this.note = `Docker said: ${firstLine(ps)}`; return; }
+        const ps = await bounded(docker(["ps", "-a", "--format", PS_FORMAT]).catch((e) => (notInstalled(e) ? MISSING : fail(e))), cx.timer, CALL_MS);
+        if (ps.missing || daemonDown(ps)) { gone(ps.missing ? "missing" : "down"); return; }
+        if (ps.code !== 0) { this.failure = said(ps); return; }
         const found = parseContainers(ps.stdout);
         const projects = kansoProjects();
         this.reads = this.reads + 1;
@@ -132,38 +140,37 @@ export default class Containers extends View {
         const whole = all || !this.known;
         const set = containerKey(found), ids = idKey(found);
         const changed = set !== this.known?.containers;
-        const config = whole || plan.stored ? await currentContext() : null;
-        if (seq !== this.seq) return;
+        const config = whole || plan.stored ? await bounded(currentContext(), cx.timer, CALL_MS).then((v) => (v?.late ? null : v)) : null;
         const fixed = whole || !this.known.fixed || (config !== null && config !== this.known.config);
         const stored = whole || now || ids !== this.known?.ids || plan.stored || Boolean(this.pulling);
         const usage = whole || plan.stats;
         const { deep, shallow } = lookIn(projects.flatMap((p) => p.folders).slice(0, 24), home());
-        const named = (depth, list) => localService(fileApi).walk(list, { depth: Number(depth), names: COMPOSE_FILES }).then((paths) => ({ code: 0, stdout: paths.join("\n") })).catch(fail);
+        const named = (depth, list) => within(cx.timer, localService(fileApi).walk(list, { depth: Number(depth), names: COMPOSE_FILES }).then((paths) => ({ code: 0, stdout: paths.join("\n") })));
         const [im, info, ps2, ins, ctx, vols, df, files] = await Promise.all([
-          stored ? docker(["images", "--no-trunc", "--format", IMAGES_FORMAT]).catch(fail) : null,
-          fixed ? docker(["info", "--format", "{{.MemTotal}}"]).catch(fail) : null,
-          usage ? localService(processApi).memory().catch(fail) : null,
-          !found.length ? { code: 0, stdout: "" } : whole || changed ? docker(["inspect", "--format", INSPECT_FORMAT, ...found.map((c) => c.id)]).catch(fail) : null,
-          fixed ? docker(["context", "inspect", "--format", CONTEXT_FORMAT]).catch(fail) : null,
-          stored ? docker(["volume", "ls", "--format", VOLUMES_FORMAT]).catch(fail) : null,
-          stored ? docker(["system", "df", "--format", "{{json .}}"]).catch(fail) : null,
-          lookFiles && deep.length ? Promise.all([named("2", deep), shallow.length ? named("1", shallow) : { stdout: "" }])
-            .then(([a, b]) => ({ code: 0, stdout: `${a.stdout ?? ""}\n${b.stdout ?? ""}` })) : null]);
-        const vms = ps2 ? vmPids(ps2.stdout) : [];
-        const openFiles = ps2 ? await localService(processApi).openFiles(vms).catch(() => ({ state: "error", values: [] })) : null;
+          stored ? ask(["images", "--no-trunc", "--format", IMAGES_FORMAT]) : null,
+          fixed ? ask(["info", "--format", "{{.MemTotal}}"]) : null,
+          usage ? within(cx.timer, localService(processApi).memory()) : null,
+          !found.length ? { code: 0, stdout: "" } : whole || changed ? ask(["inspect", "--format", INSPECT_FORMAT, ...found.map((c) => c.id)]) : null,
+          fixed ? ask(["context", "inspect", "--format", CONTEXT_FORMAT]) : null,
+          stored ? ask(["volume", "ls", "--format", VOLUMES_FORMAT]) : null,
+          stored ? ask(["system", "df", "--format", "{{json .}}"]) : null,
+          lookFiles && deep.length ? Promise.all([named("2", deep), shallow.length ? named("1", shallow) : { code: 0, stdout: "" }])
+            .then((both) => both.find(failed) ?? { code: 0, stdout: both.map((r) => r.stdout ?? "").join("\n") }) : null]);
+        const vms = ps2?.code === 0 ? vmPids(ps2.stdout) : [];
+        const openFiles = ps2 ? await bounded(localService(processApi).openFiles(vms).catch(unread), cx.timer, CALL_MS)
+          .then((r) => (r?.late ? unread(firstLine(r)) : r)) : null;
         const owned = dockerVms(openFiles?.values ?? []);
-        const st = usage ? await docker(["stats", "--no-stream", "--format", STATS_FORMAT]).catch(() => null) : null;
-        if (seq !== this.seq) return;
+        const st = usage ? await ask(["stats", "--no-stream", "--format", STATS_FORMAT]) : null;
         // Docker quit while this read went on: say so rather than show what ran before.
-        if ([im, info, st, vols].some(daemonDown)) { down(); return; }
-        if (ctx) this.context = ctx.code === 0 ? contextOf(ctx.stdout) : null;
-        if (info) this.limit = Number(info.stdout) > 0 ? Number(info.stdout) / 1e6 : null;
+        if ([im, info, st, vols].some(daemonDown)) { gone("down"); return; }
+        if (ctx?.code === 0) this.context = contextOf(ctx.stdout);
+        if (info?.code === 0) this.limit = Number(info.stdout) > 0 ? Number(info.stdout) / 1e6 : null;
         // Docker on another machine: what this computer holds says nothing about it.
         if (ps2) this.held = ps2.code === 0 && openFiles.state === "ok" && !this.context?.remote ? dockerHeld(ps2.stdout, owned) : null;
         if (openFiles) this.unattributed = openFiles.state === "unavailable";
         if (st?.code === 0) this.mem = parseStats(st.stdout);
-        if (files) this.files = composeFiles(files.stdout);
-        if (ins) this.details = ins.code === 0 ? parseInspect(ins.stdout) : new Map();
+        if (files?.code === 0) this.files = composeFiles(files.stdout);
+        if (ins?.code === 0) this.details = parseInspect(ins.stdout);
         // A failed limit or context is asked again on the next read.
         this.known = { containers: !ins || ins.code === 0 ? set : null, ids, fixed: fixed ? info.code === 0 && ctx.code === 0 : this.known?.fixed ?? false,
           config: config ?? this.known?.config ?? null };
@@ -181,18 +188,25 @@ export default class Containers extends View {
         }
         const groups = byProject(withDetails, projects, this.context?.remote ? [] : knownStacks(this.files, withDetails, this.names), this.names);
         this.groups = groups;
-        if (im) {
+        if (im?.code === 0) {
           if (this.pulling) this.pulling = im.stdout === this.pulling.seen && this.pulling.left > 1 ? { ...this.pulling, left: this.pulling.left - 1 } : null;
           this.imagesText = im.stdout;
         }
-        if (vols) this.volumesText = vols.code === 0 ? vols.stdout : "";
+        if (vols?.code === 0) this.volumesText = vols.stdout;
         this.images = imageRows(parseImages(this.imagesText), groups);
         this.volumes = volumeRows(this.volumesText, groups.flatMap((g) => g.containers));
         if (df?.code === 0) this.spare = reclaimable(df.stdout);
+        const docked = [im, info, ins, ctx, vols, df, st].find(failed), host = [ps2, files].find(failed);
+        this.failure = docked ? said(docked) : host ? firstLine(host) : openFiles?.state === "error" ? openFiles.reason : null;
         this.state = "ok"; this.note = this.unattributed && !this.context?.remote ? "Docker VM memory attribution requires a Herdr API on Windows." : null;
-      } catch {
-        if (seq === this.seq) { this.state = "missing"; this.groups = []; this.images = []; this.volumes = []; this.known = null; }
-      } finally { if (seq === this.seq) { this.reading = false; cx.notify(); } }
+      } catch (e) {
+        this.failure = String(e?.message ?? e);
+      } finally {
+        this.reading = false;
+        const next = this.queued;
+        this.queued = null;
+        if (next) this.read(cx, next); else cx.notify();
+      }
     });
   }
 
@@ -427,6 +441,9 @@ export default class Containers extends View {
         .child(div().text_size(T.value).text_color(c.muted).child("Docker isn't running."))
         .child(h_flex().child(quietLink("ct-open-docker", "Open Docker", (cx) => this.openDocker(cx), c, { color: c.text })));
     }
+    if (this.groups === null && this.failure) {
+      return failureBlock({ text: "Can't read Docker", source: this.failure, fix: "Read again" })("ct-failed", c, { onClick: (cx) => { if (!this.reading) this.refresh(cx, true, true); } });
+    }
     if (this.groups === null) return skeletonOf({ shape: "two lines", count: 3 })("kanso-skeleton", c);
     const all = this.groups.flatMap((g) => g.containers);
     const running = all.filter((k) => k.health === "running").length;
@@ -458,13 +475,14 @@ export default class Containers extends View {
     const c = tokens(theme()), narrow = this.width < 560;
     const header = h_flex().w_full().items_center().justify_between().gap(G.md)
       .child(div().text_size(narrow ? 17 : 20).text_color(c.text).child("Containers"))
-      .child(iconButton("ct-refresh", "refresh-cw", "Read again", (cx) => this.refresh(cx, true, true), c, { spin: this.reading }));
+      .child(iconButton("ct-refresh", "refresh-cw", "Read again", (cx) => this.refresh(cx, true, true), c, { spin: this.reading, disabled: this.reading }));
     return v_flex().id("kanso-containers").size_full().min_h(0).bg(c.canvas).text_color(c.text).overflow_y_scrollbar()
       .on_size_change((s, sizeCx) => { if (Math.abs(this.width - s.width) >= 1) { this.width = s.width; sizeCx.notify(); } })
       .child(pageFrame(narrow, narrow ? 28 : 40, (column) => column
         .child(header)
         .child(this.body(c))
         .when(Boolean(this.error), (el) => el.child(div().text_size(T.value).text_color(c.red).child(this.error ?? "")))
-        .when(Boolean(this.note), (el) => el.child(div().text_size(T.body).text_color(this.note === "Starting Docker…" ? c.dim : c.red).child(this.note ?? "")))));
+        .children([this.groups === null ? null : this.failure, this.note].filter(Boolean)
+          .map((text) => div().text_size(T.body).text_color(text === "Starting Docker…" ? c.dim : c.red).child(text)))));
   }
 }
