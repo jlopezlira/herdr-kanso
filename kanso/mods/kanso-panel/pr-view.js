@@ -84,9 +84,11 @@ export const prRow = (id, c, p, { meta, state, on = false, onClick }) => row(id,
 function otherPrs(panel, c, titled) {
   const rows = (panel.session.openPrs ?? []).filter((pr) => pr.url !== panel.session.pr?.url);
   const shown = rows.slice(0, 8);
+  const reading = !rows.length && panel.session.flying("details");
   return v_flex().w_full().gap(G.xs)
     .when(!titled, (el) => el.child(section(c, "Other open pull requests", rows.length ? String(rows.length) : "")))
-    .when(!rows.length && !panel.listingOthers, (el) => el.child(div().text_size(T.value).text_color(c.dim).child("Nothing else open.")))
+    .when(reading, (el) => el.child(panel.rowBones(c)))
+    .when(!rows.length && !reading, (el) => el.child(div().text_size(T.value).text_color(c.dim).child("Nothing else open.")))
     .children(shown.map((pr, i) => listedRow(panel, c, pr, i, { id: `pr-other-${i}` })))
     .when(rows.length > shown.length, (el) => el.child(quietLink("pr-others", "Open the list", (cx) => panel.showOthers(cx), c)));
 }

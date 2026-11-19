@@ -527,7 +527,7 @@ const eachFolder = (own) => {
   };
 };
 
-const twoFolders = async (hold, host = {}) => {
+const twoFolders = async (hold, host = {}, own = () => undefined) => {
   let folder = "/repo";
   let arm = false;
   const held = [];
@@ -535,6 +535,7 @@ const twoFolders = async (hold, host = {}) => {
   const toasts = [];
   const exec = eachFolder((command, args, options) => {
     calls.push({ command, line: [command, ...args].join(" "), cwd: options?.cwd });
+    if (own(command, args)) return own(command, args);
     if (!arm || !hold(command, args)) return undefined;
     const pending = { ...gate(), cwd: options?.cwd, tasks: [] };
     held.push(pending);
@@ -545,6 +546,11 @@ const twoFolders = async (hold, host = {}) => {
   const bag = parked(cx), fire = zeroTimers(cx);
   return {
     panel, cx, held, calls, toasts,
+    holding(start) {
+      arm = true;
+      start();
+      arm = false;
+    },
     begin(start) {
       const from = bag.tasks.length, count = held.length;
       arm = true;
@@ -717,6 +723,64 @@ test("an older folder's Refresh that settles after the next folder asks for its 
   views[1].release(success(JSON.stringify(pull())));
   await until(() => lists.length === 1);
   assert.deepEqual(lists, ["/B"]);
+});
+
+const ownedContexts = () => {
+  const ended = [];
+  const tasks = new Map();
+  const make = (id) => {
+    const live = () => { if (ended.includes(id)) throw new Error(`expired task ${id}`); };
+    const cx = {
+      timer: { after() { live(); }, every() { live(); } },
+      notify() { live(); },
+      spawn(fn) {
+        const own = tasks.size + 1;
+        tasks.set(own, null);
+        const task = Promise.resolve(fn(make(own))).finally(() => { ended.push(own); });
+        tasks.set(own, task);
+        return task;
+      },
+    };
+    return cx;
+  };
+  return { cx: make(0), tasks };
+};
+
+test("two overlapping tasks in one folder each keep their own deadline: Create opens GitHub after Details has finished", async () => {
+  const opened = (command, args) => (command === "gh" && args[1] === "create" ? success("") : undefined);
+  const { panel, held, calls, toasts, holding } = await twoFolders(heldCases.create.hold, {}, opened);
+  const owned = ownedContexts();
+  holding(() => panel.runWrite({ target: "create" }, owned.cx));
+  assert.equal(held.length, 1);
+  panel.setDetails(owned.cx, true);
+  await owned.tasks.get(2);
+  held[0].release(heldCases.create.answer());
+  await owned.tasks.get(1);
+  assert.deepEqual(calls.filter((call) => call.line.startsWith("gh pr create")).map((call) => call.cwd), ["/repo"]);
+  assert.equal(panel.session.note, null, String(panel.session.note?.detail ?? panel.session.note));
+  assert.deepEqual(toasts, []);
+});
+
+test("a label sent for one pull request reports once, naming that pull request and folder, after another is chosen and the folder changes", async () => {
+  const labelOrRoot = (command, args) => heldCases.labels.hold(command, args) || heldCases.refresh.hold(command, args);
+  const run = await twoFolders(labelOrRoot);
+  run.begin((panel, cx) => panel.toggle("labels", "bug", false, cx));
+  assert.equal(run.held.length, 1);
+  run.begin((panel, cx) => panel.choose({ url: "https://github.com/o/r/pull/8", number: 8 }, cx));
+  assert.equal(run.held.length, 2);
+  await run.move("/B");
+  await run.release(0, success(""));
+  assert.deepEqual(run.toasts.map((toast) => [toast.title, toast.level, toast.body]), [["Put bug on", "success", "#7 in repo"]]);
+});
+
+test("Details shows its rows loading while the open list is out, and says nothing else is open only once it answers", async () => {
+  const run = await twoFolders(heldCases.details.hold, storeShared({}));
+  run.begin(heldCases.details.begin);
+  assert.equal(run.held.length, 1);
+  assert.equal(run.panel.session.flying("details"), true);
+  assert.equal(run.frame().text.includes("Nothing else open."), false);
+  await run.release(0, success("[]"));
+  assert.equal(run.frame().text.includes("Nothing else open."), true);
 });
 
 test("two folder changes before the wake are one read of the latest folder", async () => {

@@ -462,8 +462,8 @@ test("each write runs the one command that state names", async () => {
   panel.session.context = "repo";
   panel.session.pr = { number: 4, url: "https://github.com/o/r/pull/4", state: "OPEN" };
   panel.session.root = "/repo";
-  panel.session.gh = async (args) => { gh.push(args); return success(""); };
-  panel.session.git = async (args) => { git.push(args); return success(""); };
+  panel.session.gh = async (_task, args) => { gh.push(args); return success(""); };
+  panel.session.git = async (_task, args) => { git.push(args); return success(""); };
   const { cx, drain } = context();
   const go = async (target, bucket, expected) => {
     gh.length = 0;

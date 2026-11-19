@@ -349,7 +349,7 @@ export class PullRequest {
     const held = this.session.wait ? div().text_size(T.body).text_color(c.dim).child(this.session.wait) : null;
     const beside = (rows) => held ? v_flex().w_full().gap(G.lg).child(held).child(rows) : rows;
     const closed = this.session.closedPrs === null
-      ? (this.session.flying("closed") ? this.closedBones(c) : div().text_size(T.body).text_color(c.dim).child(this.session.wait || "GitHub could not be read."))
+      ? (this.session.flying("closed") ? this.rowBones(c) : div().text_size(T.body).text_color(c.dim).child(this.session.wait || "GitHub could not be read."))
       : !this.session.closedPrs.length ? beside(div().text_size(T.body).text_color(c.dim).child("Nothing closed yet."))
         : beside(this.openPage(c, this.session.closedPrs));
     const open = !this.session.openPrs.length
@@ -418,7 +418,7 @@ export class PullRequest {
     cx.timer.after(1500, (cx) => { if (this.copiedAt === at) { this.copied = null; cx.notify(); } });
   }
 
-  closedBones(c) { return skeletonOf({ shape: "line", count: 3 })("kanso-skeleton", c); }
+  rowBones(c) { return skeletonOf({ shape: "line", count: 3 })("kanso-skeleton", c); }
 
   diffBones(c) { return skeletonOf({ shape: "line", count: 4 })("kanso-skeleton", c); }
 
@@ -502,7 +502,7 @@ export class PullRequest {
 
   runWrite(action, cx) {
     const url = this.session.pr?.url, folder = this.session;
-    const git = (args) => folder.git(args);
+    const git = (task, args) => folder.git(task, args);
     if (action.target === "merge") return this.mergeNow(cx);
     if (action.target === "push") return folder.act("Push", ["push", "-u", "origin", "HEAD"], cx, git);
     if (action.target === "pull") return folder.act("Pull", ["pull", "--ff-only"], cx, git);
