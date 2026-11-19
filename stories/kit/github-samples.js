@@ -47,7 +47,7 @@ export const sampleGithub = {
   failure: { text: 'Can’t read pull requests', source: 'gh: HTTP 401: Bad credentials', fix: 'Refresh', agent: 'checkout' },
   oneFailed: { text: 'Couldn’t read relay', fix: 'Refresh', detail: 'gh: HTTP 502: Bad Gateway' },
   stale: { limited: 'Read 14:02 · GitHub limited until 14:30', silent: 'Read 14:02 · GitHub not answering · next try 14:07', unreachable: 'Read 14:02 · devbox unreachable · next try 14:07' },
-  computer: 'devbox',
+  computer: samplePull.remote.computer,
   switches: ['PR statistics', 'PR checks per repository', 'PR oldest waiting'],
 };
 

@@ -653,7 +653,6 @@ const drafted = {
       believe: 'a block per repository, counted, with its failing checks and its oldest wait, lets the developer decide where to look first without leaving the terminal, because the folder is the unit of work, not the pane.',
       jobs: [['see what needs you', 'the blocks, the ones that need you first'], ['see my own', 'Yours inside each block'], ['know a check is failing', 'the repository’s failing count'], ['know it has waited', 'the repository’s oldest wait'], ['the pane’s own pull request', 'its branch row, leading its block'], ['the closed ones', 'Open the list']],
       wrong: 'blocks are folded by hand every time, or someone asks for the tabs back.',
-      try: 'Dawn Mode first.',
       back: 'the tabs Needs you and Yours, grouped by repository, as today.',
     },
     {
@@ -664,7 +663,6 @@ const drafted = {
       believe: 'each action as one press with its result on one line and Undo where GitHub allows it lets the developer finish a pull request without a browser, because nothing waits on a second window.',
       jobs: [['approve, request changes, comment', 'the review under the verdict, one press each'], ['re-run a failed check', 'Re-run, on the check and on its log'], ['merge', 'Squash and merge, which asks twice'], ['close, reopen', 'Close, and Undo'], ['mark ready', 'Ready for review, and Undo'], ['open a pull request', 'Create pull request, then its own page'], ['reply', 'Reply in the thread, and Undo'], ['ask for reviewers', 'Request a review, and Undo'], ['anything GitHub shows that the panel does not', 'Open on GitHub']],
       wrong: 'someone still opens github.com for the same step, or an Undo undoes something other than what they pressed.',
-      try: 'Dawn Mode first.',
       back: 'Reply and log are links to GitHub, and review and re-run are not offered, as today.',
     },
     {
@@ -675,7 +673,6 @@ const drafted = {
       believe: 'the longest wait, the lines to review and how many are new say more about the queue than its length, because they say what to do first.',
       jobs: [['how long has it waited', 'the longest wait, and its bars'], ['how much is there to read', 'the lines to review'], ['what is new', 'what is new since you looked'], ['what was merged', 'Shipped']],
       wrong: 'nobody unfolds Statistics, or it asks for numbers kansō does not keep.',
-      try: 'Dawn Mode first.',
       back: 'the panel without Statistics.',
     },
   ],
