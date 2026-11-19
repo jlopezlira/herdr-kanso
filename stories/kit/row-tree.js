@@ -11,8 +11,8 @@ export const keyHintTree = ({ text, faint = false, recording = false }) => html`
 export const chipTree = ({ label, quiet = false, pill = false, tone = "" }) => html`<span class="kanso-badge${quiet ? " kanso-badge--quiet" : ""}${pill ? " kanso-badge--pill" : ""}${tone ? ` kanso-text--${tone}` : ""}">${String(label)}</span>`;
 export const growTree = () => html`<span class="kanso-layout__grow"></span>`;
 
-export const buttonTree = ({ label, kind = "solid", size = "md", icon = "none", disabled = false, verb = "", armed = false, active = false, spin = false, key = "", tip = "", focus = false, truncate = false }) => {
-  const classes = ["kanso-button", kinds[kind], size === "md" ? "" : `kanso-button--${size}`, disabled ? "kanso-control--off" : "", armed ? "kanso-action kanso-action--armed" : "", active ? "kanso-button--active" : "", spin ? "kanso-button--spinning" : "", focus ? "kanso-control--focus" : "", truncate ? "kanso-button--truncate" : ""].filter(Boolean).join(" ");
+export const buttonTree = ({ label, kind = "solid", size = "md", icon = "none", disabled = false, verb = "", armed = false, active = false, spin = false, key = "", tip = "", focus = false, held = false, truncate = false }) => {
+  const classes = ["kanso-button", kinds[kind], size === "md" ? "" : `kanso-button--${size}`, disabled ? "kanso-control--off" : "", armed ? "kanso-action kanso-action--armed" : "", active ? "kanso-button--active" : "", spin ? "kanso-button--spinning" : "", focus ? "kanso-control--focus" : "", held ? "kanso-control--held" : "", truncate ? "kanso-button--truncate" : ""].filter(Boolean).join(" ");
   const lead = icon === "none" ? (spin ? markTree({ status: "working", size: "sm" }) : null) : iconTree(icon, "control");
   const text = kind === "icon" ? null : truncate ? html`<span class="kanso-button__label">${label}</span>` : label;
   const again = `Press again to ${verb || label.toLowerCase()}`;

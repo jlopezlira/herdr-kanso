@@ -12,6 +12,11 @@ const measuredBar = async () => {
   for (const id of ["t1", "t2", "t3"]) b.view.tabW[id] = 100;
   return b;
 };
+const twoFolded = async () => {
+  const b = await measuredBar();
+  b.view.barW.bar = ROOM + 100 + 40;
+  return b;
+};
 const byTag = (root, id) => find(root, (el) => el.tag === id || calls(el, "id").some((call) => call[1] === id));
 const handler = (el, name) => calls(el, name).at(-1)?.at(-1);
 const pressOf = (el, button) => (...args) => calls(el, "on_mouse_down").filter((call) => call[1] === button).forEach((call) => call.at(-1)(...args));
@@ -166,8 +171,7 @@ test("Escape restores the name, and a refused rename gives the old name back wit
 });
 
 test("Tabs that do not fit fold behind +N, a Menu of them with their marks; + and Arrange never fold", async () => {
-  const b = await measuredBar();
-  b.view.barW.bar = ROOM + 100 + 40;
+  const b = await twoFolded();
   b.view.moreOpen = true;
   const root = b.view.render(b.cx);
   assert.ok(tab(root, "t1"));
@@ -353,4 +357,90 @@ test("A door with a long name takes its measured width from the room, so the tab
   wide.view.doorW.notes = 205;
   const root = wide.view.render(wide.cx);
   assert.ok(["t1", "t2", "t3"].filter((id) => tab(root, id)).length < 3, "measured, the door's width folds a tab");
+});
+
+test("Without Docker the Containers door is not offered, without gh the PR door is not, and each comes back once its tool is found", async () => {
+  const labels = (root) => ["Containers", "PR"].filter((label) => door(root, label));
+  const docker = await bar({ stored: { "kanso.panels.commands": { docker: false, gh: true } } });
+  assert.deepEqual(labels(docker.view.render(docker.cx)), ["PR"], "no Docker: no Containers");
+  const gh = await bar({ stored: { "kanso.panels.commands": { docker: true, gh: false } } });
+  assert.deepEqual(labels(gh.view.render(gh.cx)), ["Containers"], "no gh: no PR");
+  const both = await bar({ stored: { "kanso.panels.commands": { docker: true, gh: true } } });
+  assert.deepEqual(labels(both.view.render(both.cx)), ["Containers", "PR"]);
+  const unknown = await bar();
+  assert.deepEqual(labels(unknown.view.render(unknown.cx)), ["Containers", "PR"], "before the computer answers, both stay");
+  assert.equal(docker.store["kanso.panels.all"].some((p) => p.id === "containers"), false, "and kansō settings does not list it either");
+});
+
+test("The probe asks each tool its version: a tool missing or failing is absent, one that answers is there", async () => {
+  const { probeCommands } = await load("kanso-tabs/panel-tools.js", ["probeCommands"]);
+  const asked = [];
+  const run = async (command, args) => {
+    asked.push([command, ...args]);
+    if (command === "docker") throw Object.assign(new Error("spawn docker ENOENT"), { code: "ENOENT" });
+    return { code: 0, stdout: "gh version 2", stderr: "" };
+  };
+  assert.deepEqual(clone(await probeCommands(run)), { docker: false, gh: true });
+  assert.deepEqual(asked, [["docker", "--version"], ["gh", "--version"]]);
+  assert.deepEqual(clone(await probeCommands(async () => ({ code: 127, stdout: "", stderr: "not found" }))), { docker: false, gh: false });
+});
+
+test("A door being dragged is held on the pressed wash with the accent bar where it lands, as the Storybook's Dragging a door", async () => {
+  const b = await bar({ tree: withPanel("pr") });
+  pressOf(door(b.view.render(b.cx), "Ports"), "left")(press, b.cx);
+  handler(door(b.view.render(b.cx), "Spend"), "on_hover")(true, b.cx);
+  const root = b.view.render(b.cx);
+  assert.equal(arg(door(root, "Ports"), "bg"), b.c.selected, "held");
+  assert.equal(arg(door(root, "PR"), "bg"), b.c.w12, "the open door keeps its wash");
+  const spend = door(root, "Spend"), row = spend.parent.kids, mark = row[row.indexOf(spend) - 1];
+  assert.equal(arg(mark, "bg"), b.c.accent, "the accent bar before Spend");
+  assert.equal(calls(mark, "on_click").length, 0, "the bar is no press");
+  handler(door(root, "Spend"), "on_mouse_up")({}, b.cx);
+  assert.deepEqual(clone(b.store["kanso.panels.order"]).slice(0, 3), ["files", "ports", "insights"]);
+  const after = b.view.render(b.cx);
+  assert.equal(calls(door(after, "Ports"), "bg").length, 0, "let go, nothing is held");
+  assert.equal(all(after, (el) => calls(el, "bg").some((call) => call[1] === b.c.accent)).length, 0, "and no bar is left");
+});
+
+test("Every press target of the tab bar and its folded menu is a Button in drawing order: Tab reaches it, Enter and Space press it, and it has the focus ring", async () => {
+  const b = await twoFolded();
+  const pressable = (el) => all(el, (kid) => calls(kid, "on_click").length > 0);
+  const root = b.view.render(b.cx);
+  const shut = find(root, (el) => calls(el, "trigger").length > 0 && texts(arg(el, "trigger")).includes("+2"));
+  b.view.moreOpen = true;
+  const pop = find(b.view.render(b.cx), (el) => calls(el, "content").length > 0);
+  const targets = [...pressable(root), ...pressable(arg(shut, "trigger")), ...pressable(arg(pop, "content"))];
+  const named = targets.map((el) => arg(el, "accessibility_label") ?? texts(el)[0]);
+  for (const label of ["checkout", "Close checkout", "+2", "cart-ui", "tests", "New tab", "Arrange", "Files", "Ports", "kansō help"]) assert.ok(named.includes(label), label);
+  for (const el of targets) {
+    assert.ok(!["div", "h_flex", "v_flex", undefined].includes(el.tag), `${named[targets.indexOf(el)]}: a Button`);
+    assert.ok(calls(el, "focus").length > 0, `${named[targets.indexOf(el)]}: its ring under the keyboard`);
+  }
+  const ran = (label) => { b.ran.length = 0; handler(targets[named.indexOf(label)], "on_click")({}, b.cx); return clone(b.ran); };
+  assert.deepEqual(ran("New tab"), [["kanso-spaces.start", null]]);
+  assert.deepEqual(ran("kansō help"), [["mod.open", { name: "kanso-help" }]]);
+  assert.deepEqual(ran("tests"), [["tab.select", { id: "t3" }]], "a folded tab's row");
+  assert.deepEqual(ran("Close checkout"), [["tab.close", { id: "t1" }]]);
+});
+
+test("Every Command shortcut of the tab bar in kanso/keys.json reaches its handler, and the doors' tooltips name them", async () => {
+  const section = JSON.parse(repoText("kanso/keys.json"))["layout:kanso"];
+  const bound = Object.entries(section).filter(([keys]) => keys.startsWith("cmd-"));
+  const own = bound.filter(([, action]) => action.startsWith("kanso-tabs."));
+  assert.deepEqual(own.map(([keys]) => keys), ["cmd-1", "cmd-2", "cmd-3", "cmd-4", "cmd-5", "cmd-6", "cmd-7", "cmd-8", "cmd-9", "cmd-shift-s"]);
+  const keys = bound.map(([chord, action]) => ({ keys: chord, action }));
+  const b = await bar({ keys, tree: withPanel(null), stored: { "kanso.sim.tools": { ios: true } } });
+  for (const [, action] of own.filter(([, action]) => /tab-[1-3]$/.test(action))) {
+    b.ran.length = 0;
+    await b.view.barCommand(action, b.cx);
+    assert.deepEqual(clone(b.ran), [["tab.select", { id: `t${action.at(-1)}` }]], action);
+  }
+  await b.view.barCommand("kanso-tabs.sim", b.cx);
+  assert.equal(b.view.want, "sim", "cmd-shift-s opens Simulator");
+  const root = b.view.render(b.cx);
+  const tipOf = (label) => arg(door(root, label), "tooltip");
+  for (const [label, action] of [["Arrange", "kanso-strip.arrange"], ["kansō help", "mod.open:kanso-help"]]) {
+    assert.ok(bound.some(([, bound]) => bound === action), `${action} is bound to Command`);
+    assert.match(tipOf(label), /⌘/, `${label}'s tooltip names its Command chord`);
+  }
 });

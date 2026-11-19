@@ -39,10 +39,11 @@ export function armedLabel(label, verb, on, text, { start = false } = {}) {
  * `tip`: the tooltip, when it says more than the label; `focus`: the keyboard's ring is on it. `size`: "sm" draws the small form, an icon button at the row's 20 with a 12 glyph; "lg" an icon button at 32 with a 17 glyph. `verb`: the action asks twice; `armed` fills it with the accent and reads "Press again to <verb>".
  * `content`: drawn elements shown in place of the icon and label, such as a picture with its name; the button takes their size, and `label` is what it says.
  * `truncate`: a long label is cut at W.buttonLabel, such as a menu's chosen project, so the button never grows past it. */
-export function button(id, label, onClick, c, { kind = "solid", icon = null, small = false, size = null, disabled = false, spoken = label, verb = null, armed = false, active = false, spin = false, color = null, tip = null, focus = false, content = [], truncate = false, flush = false, name = "" } = {}) {
+export function button(id, label, onClick, c, { kind = "solid", icon = null, small = false, size = null, disabled = false, spoken = label, verb = null, armed = false, active = false, spin = false, color = null, tip = null, focus = false, held = false, content = [], truncate = false, flush = false, name = "" } = {}) {
   const square = kind === "icon", on = armed && !disabled;
   const look = disabled ? { fill: kind === "quiet" ? null : well(c), ink: c.dim }
     : on ? armedLook(c)
+      : held ? { ...LOOKS[kind](c), fill: c.selected, hover: c.selected }
       : active ? { ...LOOKS[kind](c), fill: c.w12, ink: c.text, hover: c.w12, press: c.w12 }
         : LOOKS[kind](c);
   const ink = disabled || on ? look.ink : color ?? (spin ? c.text : look.ink);

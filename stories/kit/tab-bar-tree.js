@@ -21,17 +21,24 @@ export const tabsTree = ({ items = [], value = null, size = "md", track = false,
   return disabled ? html`<div class="${classes}" role="tablist" aria-disabled="true">${tabs}</div>` : html`<div class="${classes}" role="tablist">${tabs}</div>`;
 };
 
-const door = (icon, label, active = false, tip = "") => buttonTree({ label, kind: icon ? "icon" : "quiet", icon: icon || "none", active, tip });
 const skeleton = () => html`<span class="kanso-skeleton kanso-skeleton--breathing kanso-tab-bar__skeleton"></span>`;
+const insertion = () => html`<i class="kanso-tab-bar__insertion"></i>`;
+const menuTree = (items) => html`<div class="kanso-menu kanso-popover" role="menu">${items.map(({ label, mark }) => html`<div class="kanso-menu__item" role="menuitem" tabindex="0"><span class="kanso-menu__spacer"></span><span class="kanso-layout__grow">${label}</span>${mark ? markTree({ status: mark }) : null}</div>`)}</div>`;
 
-export const tabBarTree = ({ items = [], value = null, folded = 0, panels = [], panel = null, state = "connected", arrange = true, help = false, tips = {}, windows = false } = {}) => {
+export const tabBarTree = ({ items = [], value = null, folded = [], overflow = false, panels = [], panel = null, state = "connected", arrange = true, help = false, tips = {}, windows = false, focus = "" } = {}) => {
   const connected = state === "connected";
+  const door = (icon, label, { active = false, held = false } = {}) => buttonTree({ label, kind: icon ? "icon" : "quiet", icon: icon || "none", active, tip: tips[label] ?? "", held, focus: focus === label });
+  const panelDoor = ({ key, icon, label, held, drop }) => {
+    const drawn = door(icon, label, { active: key === panel, held: Boolean(held) });
+    return drop === "after" ? [drawn, insertion()] : drop ? [insertion(), drawn] : [drawn];
+  };
   const tabs = state === "connecting" ? Array.from({ length: Math.max(items.length, 1) }, skeleton)
     : tabsTree({ items: items.map((item) => ({ closable: true, ...item })), value, disabled: state === "unreachable", label: true });
-  const more = folded && connected ? html`<span class="kanso-tab-bar__more">${buttonTree({ label: `+${folded}`, kind: "quiet" })}</span>` : null;
-  const tools = connected ? [door("lu-plus", "New tab", false, tips["New tab"]), arrange ? door("lu-panels-top-left", "Arrange", false, tips.Arrange) : null] : null;
-  const right = connected ? panels.map(({ key, icon, label }) => door(icon, label, key === panel, tips[label])) : null;
-  const own = help ? door("lu-circle-question-mark", "kansō help", false, tips["kansō help"]) : null;
+  const menu = overflow ? html`<span class="kanso-tab-bar__menu">${menuTree(folded)}</span>` : null;
+  const more = folded.length && connected ? html`<span class="kanso-tab-bar__more">${buttonTree({ label: `+${folded.length}`, kind: "quiet", active: overflow })}${menu}</span>` : null;
+  const tools = connected ? [door("lu-plus", "New tab"), arrange ? door("lu-panels-top-left", "Arrange") : null] : null;
+  const right = connected ? panels.flatMap(panelDoor) : null;
+  const own = help ? door("lu-circle-question-mark", "kansō help") : null;
   const system = windows ? [door("lu-minus", "Minimize"), door("lu-square", "Maximize"), door("lu-x", "Close")] : null;
   return html`<div class="kanso-tab-bar">${tabs}${more}${tools}${growTree()}<span class="kanso-tab-bar__doors">${right}${own}${system}</span></div>`;
 };
