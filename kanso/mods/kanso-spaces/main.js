@@ -22,7 +22,7 @@ import { sleepingNow, asleepGroups, nameOf, seenNow, conversationOfThread, shown
 import { pollable, activePlaces } from "./background.js";
 import { listKey, moveTo, plainKey } from "./listkeys.js";
 import { commitLayout, setRail, foldSidebar, railWidth, dropStripDrag } from "./layout.js";
-import { afterMount } from "./pure.js";
+import { afterMount, tryOr } from "./pure.js";
 import { commandLoop, MachineRead } from "./sidebar.js";
 import { gitFacts, openAhead, AHEAD } from "./sidebar-draw.js";
 import { projectRow } from "./project-row.js";
@@ -186,6 +186,7 @@ export default class Spaces extends View {
       this.armed = new Armed(); this.menuAt = -1; this.handle = cx.focus_handle();
       // A scroll handle is state: made here, never during render (Herdr refuses it there).
       if (props()?.newConversation || props()?.railMenu) this.convScroll = ScrollHandle.new();
+      if (props()?.newAgent) this.agentScroll = ScrollHandle.new();
       this.openPopup(cx); return;
     }
     this.loadNames().catch(() => {});
@@ -459,13 +460,44 @@ export default class Spaces extends View {
     // A project chosen, then which agent, in its own menu: nothing is started for you.
     const start = (place) => { closeOverlay(props().overlay); this.newAgentMenu(place); };
     const { title, items } = this.conversationLines(this.lines(), start);
-    this.menuScroll = this.convScroll ? { handle: this.convScroll, count: items[0].scroll.length } : null;
+    this.menuScroll = this.convScroll ? { handle: this.convScroll, count: items[0].scroll.length, from: 0 } : null;
     return this.popup(t, title, items);
   }
 
   // A project's + : asks which agent, of the ones installed. `start`: the sidebar's own +, whose menu goes on to New project and Arrange.
   newAgentMenu(place, start = false) {
-    openOverlay({ mod: "kanso-spaces", kind: "popup", width: W.menu, height: start ? 400 : 300, at: "pointer", props: { newAgent: place, ...(start ? { start } : {}) } });
+    const kept = shared(KNOWN_AGENTS)?.[place.machine || ""];
+    const agents = Array.isArray(kept) ? (item) => kept.filter((a) => a.installed).map((a) => item(a.name)) : null;
+    const { items } = this.agentLines(place, { start, agents, repo: start, trees: start ? [place] : [], item: sketch });
+    const height = menuHeight({ items });
+    openOverlay({ mod: "kanso-spaces", kind: "popup", width: W.menu, height, at: "pointer", props: { newAgent: place, height, ...(start ? { start } : {}) } });
+  }
+
+  agentLines(place, { start, agents, failure = null, repo, trees, item, room = Infinity }) {
+    const name = place.tree?.branch ?? place.name ?? "this project";
+    const head = [{ heading: place.machine ? `${place.machine} \u00b7 ${name}` : name, mark: this.checking && this.known ? "working" : null },
+      item("Terminal", () => this.pickAgent(place, null), { icon: "terminal", hint: chordOf("tab.new") || null, keep: true }), { separator: true }];
+    const rows = agents ? agents(item) : null;
+    const failed = failure ? [failure()] : [];
+    const newTree = () => item("New worktree\u2026", () => this.worktreeDialog(place), { icon: "git-branch" });
+    const rest = start ? [item("New project", () => this.addProject(), { icon: "folder-plus" }),
+      ...(repo ? [newTree(), ...(trees?.length ? [item("Open worktree\u2026", () => this.treesMenu(place, this.trees), { icon: "git-fork" })] : [])] : []),
+      { separator: true }, item("Arrange\u2026", () => run("kanso-strip.arrange"), { icon: "panels-top-left", hint: chordOf("kanso-strip.arrange") || null })]
+      : place.tree ? [] : [newTree()];
+    const ends = rest.length ? [{ separator: true }, ...rest] : [];
+    const row = menuHeight({ items: [sketch("")] }) - menuHeight({ items: [] });
+    const fit = Math.max(1, Math.floor((room - menuHeight({ items: [...head, ...failed, ...ends] })) / row));
+    const run = !rows ? [{ loading: true }, { loading: true }] : rows.length ? [{ scroll: rows, rows: Math.min(rows.length, fit), handle: this.agentScroll }] : [];
+    return { items: [...head, ...run, ...failed, ...ends], count: rows?.length ?? 0 };
+  }
+
+  pickAgent(place, a) {
+    if (this.starting) return;
+    this.starting = true;
+    const project = registry().find((p) => p.id === place.project) ?? null;
+    if (place.tree) openAt(place, place.tree.folder, a?.run ?? null, place.tree.branch);
+    else startIn(place, a?.run ?? null);
+    this.thenClose(project && a ? this.db().setProjectAgent(project.id, a.key) : null);
   }
 
   // The toolbar's +, one menu in every view: the open project's agents and Terminal, then a new project, then Arrange. With no project open it asks which.
@@ -1488,7 +1520,7 @@ export default class Spaces extends View {
   menuKeys(el) {
     return el.track_focus(this.handle)
       .on_key_down((e, cx) => {
-        const digit = /^[1-9]$/.test(e.key) && plainKey(e) ? this.menuDigits?.[Number(e.key) - 1] : null;
+        const digit = /^[1-9]$/.test(e.key) && plainKey(e) && !e.modifiers?.shift ? this.menuDigits?.[Number(e.key) - 1] : null;
         if (digit) { cx.stop_propagation(); digit(cx); return; }
         const { move, gAt } = listKey(e, this.menuG);
         this.menuG = gAt;
@@ -1497,7 +1529,8 @@ export default class Spaces extends View {
         if (move === "escape") { if (this.sub) { this.sub = null; this.menuAt = -1; } else closeOverlay(props().overlay); }
         else if (move === "enter") acts[this.menuAt]?.(cx);
         else this.menuAt = moveTo(move, this.menuAt, acts.length);
-        if (this.menuScroll && this.menuAt < this.menuScroll.count) this.menuScroll.handle.scroll_to_item(this.menuAt);
+        const inRun = this.menuScroll ? this.menuAt - this.menuScroll.from : -1;
+        if (inRun >= 0 && inRun < this.menuScroll.count) this.menuScroll.handle.scroll_to_item(inRun);
         cx.stop_propagation();
         cx.notify();
       });
@@ -1620,8 +1653,10 @@ export default class Spaces extends View {
 
   explainAgents(place, agent) {
     const where = place.machine || "this computer";
-    run("tab.new", { name: `Explain ${where}`, space: place.space ?? spaces().find((w) => w.active)?.id, argv: agent.run,
-      task: `kansō could not list the agents installed on ${where}. The error: ${this.agentsFailed}. Explain why, and how to fix it. Do not change anything.` });
+    const ask = { name: `Explain ${where}`, argv: agent.run, task: `kansō could not list the agents installed on ${where}. The error: ${this.agentsFailed}. Explain why, and how to fix it. Do not change anything.` };
+    const local = spaces().filter((w) => !w.machine);
+    const here = local.find((w) => w.active) ?? local[0];
+    tryOr(() => (here ? run("tab.new", { ...ask, space: here.id }) : run("space.new", { ...ask, machine: "", folder: home() })));
   }
 
   agentsFailure(place) {
@@ -1635,38 +1670,16 @@ export default class Spaces extends View {
 
   newAgentView(t) {
     const place = props().newAgent, start = Boolean(props().start);
-    const project = registry().find((p) => p.id === place.project) ?? null;
-    const name = place.tree?.branch ?? place.name ?? "this project";
-    const item = this.lines();
-    const pick = (a) => {
-      if (this.starting) return; // a second click while the first is written starts nothing
-      this.starting = true;
-      if (place.tree) openAt(place, place.tree.folder, a?.run ?? null, place.tree.branch);
-      else startIn(place, a?.run ?? null);
-      this.thenClose(project && a ? this.db().setProjectAgent(project.id, a.key) : null);
-    };
     const installed = (this.known ?? []).filter((a) => a.installed);
-    this.menuDigits = installed.slice(0, 9).map((a) => (cx) => { pick(a); cx.notify(); });
-    const where = place.machine ? `${place.machine} \u00b7 ${name}` : name;
-    const terminal = item("Terminal", () => pick(null), { icon: "terminal", hint: chordOf("tab.new") || null, keep: true });
-    const rows = this.known ? installed.map((a, i) => item(a.name, () => pick(a), { icon: a.icon ?? null, hint: i < 9 ? String(i + 1) : null, keep: true })) : [];
-    const agents = this.agentsFailed ? [...rows, this.agentsFailure(place)] : this.known ? rows : [{ loading: true }, { loading: true }];
-    const newTree = () => item("New worktree\u2026", () => this.worktreeDialog(place), { icon: "git-branch" });
-    const ends = () => [
-      item("New project", () => this.addProject(), { icon: "folder-plus" }),
-      ...(this.repo ? [newTree(), ...(this.trees?.length ? [item("Open worktree\u2026", () => this.treesMenu(place, this.trees), { icon: "git-fork" })] : [])] : []),
-      { separator: true },
-      item("Arrange\u2026", () => run("kanso-strip.arrange"), { icon: "panels-top-left", hint: chordOf("kanso-strip.arrange") || null }),
-    ];
-    const rest = start ? ends() : place.tree ? [] : [newTree()];
-    return this.popup(t, null, [
-      { heading: where, mark: this.checking && this.known ? "working" : null },
-      terminal,
-      { separator: true },
-      ...agents,
-      ...(rest.length ? [{ separator: true }, ...rest] : []),
-    ]);
+    this.menuDigits = installed.slice(0, 9).map((a) => (cx) => { this.pickAgent(place, a); cx.notify(); });
+    const agents = this.known ? (item) => installed.map((a, i) => item(a.name, () => this.pickAgent(place, a), { icon: a.icon ?? null, hint: i < 9 ? String(i + 1) : null, keep: true })) : null;
+    const lines = this.agentLines(place, { start, agents, failure: this.agentsFailed ? () => this.agentsFailure(place) : null, repo: this.repo, trees: this.trees,
+      item: this.lines(), room: props().height ?? Infinity });
+    this.menuScroll = lines.count ? { handle: this.agentScroll, count: lines.count, from: 1 } : null;
+    return this.popup(t, null, lines.items);
   }
+
+
 
   treesLines(place, trees, item) {
     return { title: `Worktrees of ${place.name ?? "this project"}`, items: trees.map((x) => item(x.branch ?? "detached", () => this.openTree(place, x), { icon: "git-branch" })) };
@@ -2364,7 +2377,7 @@ export default class Spaces extends View {
     const to = (r) => (r.asleep ? () => { closeOverlay(props().overlay); openOverlay({ mod: "kanso-spaces", kind: "popup", width: 252, height: 170, at: "pointer", props: { menu: { address: r.address, asleep: r.asleep, name: r.name } } }); }
       : () => { closeOverlay(props().overlay); r.pane ? run("pane.focus", { pane: r.pane }) : run("terminal.peek", { terminal: r.address }); });
     // The keyboard brings the row it lights into view.
-    this.menuScroll = this.convScroll ? { handle: this.convScroll, count: m.rows.length } : null;
+    this.menuScroll = this.convScroll ? { handle: this.convScroll, count: m.rows.length, from: 0 } : null;
     const { title, items } = this.railLines(this.lines(), m, to);
     return this.popup(t, title, items);
   }

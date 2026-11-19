@@ -4,7 +4,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { mkdir, writeFile, realpath, rm } from "node:fs/promises";
 import { join, relative } from "node:path";
-import { load, clone, temporary, exec, until, elements, watchPopups, watchLines, failure, context, gitOk, fileExists as exists } from "./helpers.mjs";
+import { load, clone, temporary, exec, until, elements, watchPopups, watchLines, failure, context, gitOk, fileExists as exists, gpuiHost } from "./helpers.mjs";
 import { loadSidebar, mountedState, recorder } from "./sidebar-fixtures.mjs";
 
 const NAMES = ["placeKey", "keyOfSpace", "keyOfProject", "closedProjects", "shownNames", "startingProjects", "parseWorktreeList", "addWorktree", "worktreesOf", "missingFolders", "folderName", "trimmed"];
@@ -153,6 +153,8 @@ test("the top + adds a project in Projects and starts a conversation in Threads;
   };
   addFromTop();
   const startHere = { kind: "popup", props: { newAgent: { folder: "/Users/me/agile", machine: "", name: "agile", project: null, space: "sp-agile" }, start: true } };
+  assert.equal(typeof overlays.at(-1).props.height, "number", "opened as tall as its menu draws, which it is told");
+  startHere.props.height = overlays.at(-1).props.height;
   assert.deepEqual(overlays.at(-1), startHere, "in Projects, the top + opens the open project's menu, which goes on to New project and Arrange");
   view.view = "threads";
   addFromTop();
@@ -320,14 +322,15 @@ test("which agent: only the ones installed, nothing chosen for you, and one pick
 
 const devbox = () => ({ space: "sp-api", folder: "/work/api", machine: "devbox", project: null, name: "api" });
 const plusMenu = (Spaces, state) => {
-  const view = Object.assign(new Spaces(), { kdb: { setProjectAgent: async () => {} }, menuAt: -1, handle: {} }, state);
+  const scrolled = [];
+  const view = Object.assign(new Spaces(), { kdb: { setProjectAgent: async () => {} }, menuAt: -1, handle: {}, agentScroll: { scroll_to_item: (i) => scrolled.push(i) } }, state);
   const lines = [], items = [];
   view.menuLine = ((line) => (text, act, opts) => { lines.push([text, opts?.hint ?? null]); return line(text, act, opts); })(view.menuLine.bind(view));
   view.popup = (_t, _title, list) => { items.push(...list); return null; };
   view.newAgentView(AGENT_THEME);
   const keys = { track_focus() { return keys; }, on_key_down(fn) { keys.press = fn; return keys; } };
   view.menuKeys(keys);
-  return { view, lines, items, press: (key, modifiers = {}) => keys.press({ key, modifiers }, { stop_propagation() {}, notify() {} }) };
+  return { view, lines, items, scrolled, press: (key, modifiers = {}) => keys.press({ key, modifiers }, { stop_propagation() {}, notify() {} }) };
 };
 
 test("The + menu is the approved one: where it opens, Terminal with its key, the agents keyed 1 to 9, a new project, the worktrees inside a repository, then Arrange with its key", async () => {
@@ -358,6 +361,7 @@ test("The + menu keeps every installed agent, numbers the first nine, starts one
   const { Spaces } = await agentMenu({
     props: () => ({ overlay: "ov1", newAgent: devbox(), start: true }), run: (cmd, args) => calls.push([cmd, clone(args ?? null)]),
     shared: (key) => store[key] ?? null, keys: () => [],
+    spaces: () => [{ id: "sp-api", machine: "devbox", active: true, tabs: [] }, { id: "sp-home", machine: null, active: false, tabs: [] }],
   });
   const menu = (state) => plusMenu(Spaces, state);
   const ten = Array.from({ length: 10 }, (_, i) => ({ key: `a${i + 1}`, name: `Agent ${i + 1}`, installed: true, run: [`a${i + 1}`] }));
@@ -366,7 +370,10 @@ test("The + menu keeps every installed agent, numbers the first nine, starts one
     ten.map((a, i) => [a.name, i < 9 ? String(i + 1) : null]), "ten agents, ten rows, the first nine numbered");
   many.press("2", { alt: true });
   many.press("2", { platform: true });
-  assert.deepEqual(calls, [], "a modified digit is not the menu's");
+  many.press("2", { shift: true });
+  assert.deepEqual(calls, [], "a digit with Alt, Command or Shift is not the menu's");
+  many.press("g", { shift: true });
+  assert.equal(many.view.menuAt, many.view.menuActs.length - 1, "Shift-G still goes to the last row");
   many.press("2");
   assert.deepEqual(calls.at(-1), ["tab.new", { space: "sp-api", folder: "/work/api", argv: ["a2"] }]);
   calls.length = 0;
@@ -379,8 +386,31 @@ test("The + menu keeps every installed agent, numbers the first nine, starts one
   assert.equal(menu({ known, agentsFailed: "ssh: connect timed out", menuAt: 2 }).items.find((line) => line.failure).failure.lit, "fix", "the keyboard reaches Refresh after the agents");
   failed.view.menuAt = 3;
   failed.press("enter");
-  assert.deepEqual(calls.at(-1), ["tab.new", { name: "Explain devbox", space: "sp-api", argv: ["claude"],
-    task: "kansō could not list the agents installed on devbox. The error: ssh: connect timed out. Explain why, and how to fix it. Do not change anything." }], "Enter on Explain asks this computer's agent");
+  assert.deepEqual(calls.at(-1), ["tab.new", { name: "Explain devbox", argv: ["claude"],
+    task: "kansō could not list the agents installed on devbox. The error: ssh: connect timed out. Explain why, and how to fix it. Do not change anything.", space: "sp-home" }],
+  "Enter on Explain asks this computer's agent, in a space on this computer, never devbox's");
+});
+
+test("Explain is this computer's: with no local space it opens one here, a refusal says nothing, and with no agent installed here it is not offered", async () => {
+  const calls = [];
+  const store = { "kanso.agents.installed": { "": [{ key: "claude", name: "Claude Code", installed: true, run: ["claude"] }] } };
+  const host = (run) => agentMenu({
+    props: () => ({ overlay: "ov1", newAgent: devbox(), start: true }), run, shared: (key) => store[key] ?? null, keys: () => [],
+    spaces: () => [{ id: "sp-api", machine: "devbox", active: true, tabs: [] }], home: () => "/Users/me",
+  });
+  const { Spaces } = await host((cmd, args) => calls.push([cmd, clone(args ?? null)]));
+  const failed = { known: [], agentsFailed: "ssh: connect timed out" };
+  const view = plusMenu(Spaces, failed);
+  view.view.menuActs[2]({});
+  assert.deepEqual(calls.at(-1)?.slice(0, 1), ["space.new"]);
+  assert.deepEqual([calls.at(-1)[1].machine, calls.at(-1)[1].folder, calls.at(-1)[1].argv], ["", "/Users/me", ["claude"]], "a new space on this computer");
+  const { Spaces: Refusing } = await host(() => { throw new Error("refused"); });
+  assert.doesNotThrow(() => plusMenu(Refusing, failed).view.menuActs[2]({}), "a refusal is quiet");
+  store["kanso.agents.installed"][""] = [];
+  const none = plusMenu(Spaces, failed);
+  const failure = none.items.find((line) => line.failure).failure;
+  assert.equal(failure.agent, "", "no agent installed here: no Explain");
+  assert.equal(none.view.menuActs.length, view.view.menuActs.length - 1, "one action fewer: no Explain");
 });
 
 test("A read that fails after an earlier answer keeps that list and says it failed, with its retry", async () => {
@@ -395,4 +425,19 @@ test("A read that fails after an earlier answer keeps that list and says it fail
   assert.equal(view.checking, false);
   assert.equal(view.agentsFailed, "ssh: connect timed out");
   assert.equal(view.known.length, 1, "and still shown");
+});
+
+test("Ten agents fit the + popup: they scroll in the kit's run within its height, and the keyboard's row stays in view", async () => {
+  const { menuHeight } = await load("kanso-spaces/ui-menu.js", ["menuHeight"], gpuiHost());
+  const ten = Array.from({ length: 10 }, (_, i) => ({ key: `a${i + 1}`, name: `Agent ${i + 1}`, installed: true, run: [`a${i + 1}`] }));
+  for (const height of [400, 300]) {
+    const { Spaces } = await agentMenu({ props: () => ({ overlay: "ov1", newAgent: devbox(), start: true, height }), keys: () => [] });
+    const menu = plusMenu(Spaces, { known: ten, repo: true, trees: [devbox()] });
+    assert.ok(menuHeight({ items: menu.items }) <= height, `${height}: drawn within the popup`);
+    const run = menu.items.find((line) => line.scroll);
+    assert.equal(run.scroll.length, 10, "every agent in the run");
+    assert.ok(run.rows < 10, "some scroll");
+    for (let i = 0; i < 7; i += 1) menu.press("j");
+    assert.equal(menu.scrolled.at(-1), 5, "the sixth agent brought into view");
+  }
 });

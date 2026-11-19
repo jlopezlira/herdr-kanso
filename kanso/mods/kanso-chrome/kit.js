@@ -76,15 +76,16 @@ const NAMED = ["presses", "focuses"];
 const pressing = (draw) => (id, c, more = {}, context = {}) => {
   const fresh = NAMED.filter((name) => more[name] && !more[name][TAKEN]);
   if (!fresh.length) return draw(id, c, more, context);
-  // Named as the Storybook names them ("lu-x") or as the app does ("x").
-  const marked = Object.fromEntries(fresh.map((name) => [name, { ...Object.fromEntries(Object.entries(more[name]).map(([key, value]) => [appIcon(key), value])), [TAKEN]: new Set() }]));
+  const marked = Object.fromEntries(fresh.map((name) => [name, { ...more[name], [TAKEN]: new Set() }]));
   const el = draw(id, c, { ...more, ...marked }, context);
   noTool(id, Object.values(marked).flatMap((named) => Object.keys(named).filter((key) => named[key] && !named[TAKEN].has(key))));
   return el;
 };
 // A name several targets share, such as rows with one icon, takes a list: one press each, in drawing order (null for one that does not act);
 // each turn taken is marked beside the name.
-const takeOf = (named, key) => {
+const atKey = (named, key) => (key in named || !(`lu-${key}` in named) ? key : `lu-${key}`);
+const takeOf = (named, wanted) => {
+  const key = atKey(named, wanted);
   const given = named[key] ?? null;
   if (given) named[TAKEN]?.add(key);
   if (!Array.isArray(given)) return given;
@@ -101,7 +102,7 @@ const pressFact = (part) => typeof part === "object" && Boolean(part.label);
 const withHandlers = (id, raw, actions, action, detail, presses) => {
   const own = parts(actions).map(withIcon);
   const lone = withIcon(action);
-  const handed = Object.fromEntries([...own, lone].filter(Boolean).map(keyOf).filter((key) => !raw[key] && presses[key]).map((key) => [key, takeOf(presses, key)]));
+  const handed = Object.fromEntries([...own, lone].filter(Boolean).map(keyOf).filter((key) => !raw[key] && presses[atKey(presses, key)]).map((key) => [key, takeOf(presses, key)]));
   const on = Object.fromEntries(Object.entries({ ...raw, ...handed }).map(([key, fn]) => [appIcon(key), fn]));
   const facts = parts(detail).map(withIcon);
   const targets = [...own, lone, ...facts.filter(pressFact)];

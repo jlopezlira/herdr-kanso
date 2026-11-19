@@ -29,7 +29,7 @@ const matchCompound = (node, step, state) => {
   if (!(step.classes ?? NONE).every((name) => node.classes.includes(name))) return false;
   if (!(step.attrs ?? NONE).every(([name, value]) => (value === null ? name in node.attrs : node.attrs[name] === value))) return false;
   if (!(step.states ?? NONE).every((name) => state(node, name))) return false;
-  if ((step.not ?? NONE).some((inner) => matches(node, inner, state))) return false;
+  if ((step.not ?? NONE).some((list) => list.some((inner) => matches(node, inner, state)))) return false;
   return (step.any ?? NONE).every((list) => list.some((inner) => matches(node, inner, state)));
 };
 
@@ -81,9 +81,10 @@ class Asked {
 }
 const asked = new Asked();
 export const hovering = (target) => asked.hover(target);
+export const remembered = (rules, key, make) => asked.answer(rules, key, make);
 
 const candidates = (node, rules) => (Array.isArray(rules) ? rules
-  : [...new Set([...rules.index["*"], ...node.classes.flatMap((name) => rules.index[name] ?? NONE)])].map((i) => rules.list[i]));
+  : [...new Set([...rules.index["*"], ...(rules.index[`tag:${node.tag}`] ?? NONE), ...node.classes.flatMap((name) => rules.index[name] ?? NONE)])].map((i) => rules.list[i]));
 
 const match = (node, rules, state) => candidates(node, rules)
   .filter((rule) => matches(node, rule.steps, state))
@@ -91,7 +92,7 @@ const match = (node, rules, state) => candidates(node, rules)
   .flatMap((rule) => rule.ops);
 
 const own = (node) => `${node.tag}.${(node.classes ?? []).join(".")}${JSON.stringify(node.attrs ?? {})}`;
-const shapeOf = (node) => (node ? `${shapeOf(node.parent)}>${siblingsBefore(node).map(own).join("+")}~${own(node)}` : "");
+export const shapeOf = (node) => (node ? `${shapeOf(node.parent)}>${siblingsBefore(node).map(own).join("+")}~${own(node)}` : "");
 const kindOf = (node, state) => {
   if (state === atRest) return "rest";
   return asked.targetOf(state) === node ? "hovered" : null;
@@ -99,6 +100,11 @@ const kindOf = (node, state) => {
 export const stylesFor = (node, rules, state = atRest) => {
   const kind = kindOf(node, state);
   return kind ? asked.answer(rules, `${kind}${shapeOf(node)}`, () => match(node, rules, state)) : match(node, rules, state);
+};
+
+export const collapse = (ops) => {
+  const last = Object.fromEntries(ops.map(([op], i) => [op, i]));
+  return ops.filter(([op], i) => last[op] === i);
 };
 
 const winning = (ops) => ops.reduce((acc, op) => ({ ...acc, [op[0]]: op }), {});
