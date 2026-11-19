@@ -102,7 +102,7 @@ export function structureErrors(files, catalog, template) {
 }
 
 // One file per composition the app shares, beside the ones it does not draw yet.
-export const COMPOSITIONS = ['stories/kit/compositions.js', 'stories/kit/session-row.js', 'stories/kit/project-row.js', 'stories/kit/computer-row.js', 'stories/kit/section.js', 'stories/kit/asleep.js', 'stories/kit/tile.js', 'stories/kit/view-switch.js', 'stories/kit/toolbar.js', 'stories/kit/header.js', 'stories/kit/sidebar-footer.js', 'stories/kit/status-bar.js', 'stories/kit/activity.js', 'stories/kit/switcher.js', 'stories/kit/todo.js', 'stories/kit/timeline.js', 'stories/kit/resume.js'];
+export const COMPOSITIONS = ['stories/kit/compositions.js', 'stories/kit/session-row.js', 'stories/kit/project-row.js', 'stories/kit/computer-row.js', 'stories/kit/section.js', 'stories/kit/asleep.js', 'stories/kit/tile.js', 'stories/kit/view-switch.js', 'stories/kit/switcher.js', 'stories/kit/todo.js', 'stories/kit/timeline.js', 'stories/kit/resume.js', 'stories/kit/toolbar.js', 'stories/kit/header.js', 'stories/kit/sidebar-footer.js', 'stories/kit/status-bar.js', 'stories/kit/activity.js'];
 
 // Compositions only call pieces and never treat them as strings, so the app can share the file as it is.
 export function compositionErrors(source, path = 'stories/kit/compositions.js') {
