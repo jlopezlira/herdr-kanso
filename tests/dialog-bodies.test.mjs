@@ -1,10 +1,10 @@
 // Send's and Sleep's bodies inside the dialog piece: kit rows in the kit's dialog list, the kit's empty state, and the keys they had.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { load, drawingHost, chain, nodes, texts, calls, arg, clone, repoText, KIT_NIGHT } from "./helpers.mjs";
+import { load, nodes, texts, calls, arg, clone, repoText, KIT_NIGHT } from "./helpers.mjs";
+import { dialogHost, openedSend } from "./mod-fixtures.mjs";
 
-const host = () => ({ ...drawingHost(), Textarea: { new: () => chain("textarea") }, Input: { new: () => chain("input") } });
-const field = (value, multiline = false) => ({ value: () => value, state: {}, multiline, focused: false });
+const host = dialogHost;
 const cx = () => ({ notify() {}, stop_propagation() {}, spawn() {} });
 const byTag = (el, tag) => nodes(el).find((kid) => kid.tag === tag);
 const keyDown = (el, e) => calls(el, "on_key_down").forEach(([, handler]) => handler(e, cx()));
@@ -18,14 +18,9 @@ const AGENTS = [
   { address: "t2", status: "blocked", labels: { "kanso.shown": "Nova", "kanso.project": "App" } },
   { address: "t3", status: "working", program: { icon: "mods/x/claude.svg", tint: true }, labels: { "kanso.shown": "Atlas", "kanso.project": "App" } },
 ];
-const sendView = async (terms, query = "", seen = []) => {
-  const { Send } = await load("kanso-send/main.js", ["Send"], {
-    ...host(), theme: () => KIT_NIGHT, props: () => ({ overlay: "o1" }), terminals: () => terms, panes: () => [], spaces: () => [], shared: () => null,
-    closeOverlay: (overlay) => seen.push(["close", overlay]),
-  });
-  const send = Object.assign(new Send(), { from: null, to: "t3", toProject: null, text: "hi", error: null, sending: false });
-  return { send: Object.assign(send, { handle: {}, query: field(query), box: field("hi", true) }), seen };
-};
+const sendView = async (terms, query = "", seen = []) => ({
+  send: await openedSend({ terminals: () => terms, closeOverlay: (overlay) => seen.push(["close", overlay]) }, { to: "t3", query }), seen,
+});
 // Drawn in an object: a drawn element answers every name, `then` too, so it is never awaited bare.
 const sendDrawn = async (terms, query = "") => ({ el: (await sendView(terms, query)).send.render() });
 const listOf = (el, name) => nodes(el).find((kid) => calls(kid, "id").some(([, id]) => id === name));

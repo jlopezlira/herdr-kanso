@@ -1,6 +1,7 @@
 import { spawnAndNotify, commandOk, said } from "./lib.js";
 import { exec, notify, setShared, shared } from "herdr";
 import { tryOr, tryOrAsync, bounded } from "./pure.js";
+import { NOT_CONFIRMED, MAY_HAVE_ARRIVED } from "./deliver.js";
 import { isNew, mergeInbox, refreshInbox, seenSql } from "./pr-inbox.js";
 import { prMemory } from "./panel-state.js";
 import { awayShown } from "./since-left-model.js";
@@ -470,10 +471,10 @@ export class FolderSession {
     const target = this.target();
     this.busy = label; this.note = null;
     this.start(cx, async (cx) => {
-      const failed = await work(cx).then(() => null, (e) => String(e?.message ?? e));
+      const failed = await work(cx).then(() => null, (e) => ({ title: e?.title ?? words.failure, body: String(e?.message ?? e) }));
       this.busy = null;
       if (failed === null) this.outcome(target, { title: words.done, body: words.body, level: "success" }, { quiet: !words.loud });
-      else this.outcome(target, { title: words.failure, body: failed, level: "error" }, { note: said(words.failure, failed) });
+      else this.outcome(target, { ...failed, level: "error" }, { note: said(failed.title, failed.body) });
       after(cx);
     });
     return true;
@@ -506,9 +507,10 @@ export class FolderSession {
   }
 
   deliverTo(cx, send) {
-    return this.perform("Send", cx, { failure: "Not sent", done: "Sent to the agent" }, async () => {
-      const sent = await send();
-      if (sent?.code !== 0) throw new Error(String(sent?.stderr || sent?.stdout || "could not send").split("\n")[0]);
+    return this.perform("Send", cx, { failure: "Not sent", done: "Sent to the agent" }, async (task) => {
+      const sent = await send(task);
+      if (sent.unconfirmed) throw Object.assign(new Error(MAY_HAVE_ARRIVED), { title: NOT_CONFIRMED });
+      if (sent.code !== 0) throw new Error(String(sent.stderr || sent.stdout || "could not send").split("\n")[0]);
     }, (next) => next.notify());
   }
 

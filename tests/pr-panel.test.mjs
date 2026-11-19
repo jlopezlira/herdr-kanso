@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
-import { load, context, exec as realExec, singleUse, temporary, success, failure, refreshedContext, gpuiHost, nodes, KIT_NIGHT } from "./helpers.mjs";
+import { load, context, exec as realExec, singleUse, temporary, success, failure, refreshedContext, timedContext, gpuiHost, nodes, KIT_NIGHT } from "./helpers.mjs";
 import { blankPanel, refreshAgain, PASSED } from "./pr-fixtures.mjs";
 
 const url = (n) => `https://github.com/o/here/pull/${n}`;
@@ -51,7 +51,7 @@ test("Send shows the failing log, then hands it to the agent in front", async ()
   panel.session.failedLog = "CI / test\tRun tests\tFAIL no such file\n";
   panel.session.root = "/repo";
   panel.session.cwd = "/repo";
-  const { cx, drain } = context();
+  const { cx, drain } = timedContext([]);
   assert.equal(panel.view().primary.label, "Send to checkout");
   panel.send(cx);
   assert.equal(sent.length, 0);

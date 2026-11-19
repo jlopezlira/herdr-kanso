@@ -404,13 +404,15 @@ test("Look opens what kanso-tabs.look names, as if you picked it, and refuses wh
 
 test("One way to send text to an agent, from Send and from Look", async () => {
   const calls = [];
-  const { deliver, sendKey, waitingNote } = await load("kanso-send/deliver.js", ["deliver", "sendKey", "waitingNote"], {
+  const { deliver: deliverWith, sendKey, waitingNote } = await load("kanso-send/deliver.js", ["deliver", "sendKey", "waitingNote"], {
     hc: async (args) => { calls.push(args); return { code: args[0] === "send" && args[1] === "t9" ? 1 : 0, stderr: "no such terminal" }; },
   });
+  const deliver = (...args) => deliverWith(databaseTimer, ...args);
   assert.equal((await deliver("t1", "hi", "you")).code, 0);
   assert.deepEqual(clone(calls), [["send", "t1", "hi"], ["label", "t1", "kanso.unread=1", "kanso.from=you"]]);
   assert.equal((await deliver("t9", "hi", "you")).code, 1);
   assert.equal(calls.length, 3, "nothing marked when it was not sent");
+  await assert.rejects(deliverWith("t1", "hi", "you"), /timer/, "a caller without a deadline is refused, not sent");
   assert.equal(sendKey({ key: "enter", modifiers: { platform: true } }), true);
   assert.equal(sendKey({ key: "enter", modifiers: {} }), false);
   assert.equal(waitingNote(["a", "b"]), "a, b are waiting on their own question. Answer it first, then send.");

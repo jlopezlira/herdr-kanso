@@ -16,13 +16,21 @@ export const waitingNote = (names) => names.length === 1
   ? `${names[0]} is waiting on its own question. Answer it first, then send.`
   : `${names.join(", ")} are waiting on their own question. Answer it first, then send.`;
 
-export const SEND_MS = 120_000;
-export const UNCONFIRMED = "delivery did not confirm";
+export const SEND_MS = 31_000;
+export const NOT_CONFIRMED = "Not confirmed";
+export const MAY_HAVE_ARRIVED = "it may have arrived, so look at the agent before sending again";
 
-// Pasted into its terminal and sent with Enter, as if typed there, then marked unread and from whom.
-export async function deliver(terminal, text, from, timer) {
-  const sent = await bounded(hc(["send", terminal, text]).catch((e) => ({ code: 1, stderr: String(e?.message ?? e) })), timer, SEND_MS);
-  if (sent?.late) return { code: 1, stdout: "", stderr: UNCONFIRMED, late: true };
-  if (sent?.code === 0) void bounded(hc(["label", terminal, "kanso.unread=1", `kanso.from=${from}`]).catch(() => null), timer, SEND_MS);
+const refused = (reason) => ({ code: 1, stdout: "", stderr: reason });
+const unconfirmed = (reason) => ({ ...refused(reason), unconfirmed: true });
+const outcomeOf = (error) => {
+  const reason = String(error?.message ?? error);
+  return /^cannot run /.test(reason) ? refused(reason) : unconfirmed(reason);
+};
+
+export async function deliver(timer, terminal, text, from) {
+  if (!timer?.after) throw new TypeError("deliver needs a timer for its deadline");
+  const sent = await bounded(hc(["send", terminal, text]).catch(outcomeOf), timer, SEND_MS);
+  if (sent?.late) return unconfirmed(`no answer in ${SEND_MS / 1000} s`);
+  if (sent.code === 0) void bounded(hc(["label", terminal, "kanso.unread=1", `kanso.from=${from}`]).catch(() => null), timer, SEND_MS);
   return sent;
 }

@@ -26,7 +26,7 @@ the branch's rules.
 
 ### Fixed
 
-- Send lists an agent on another computer and keeps that agent selected. A send that does not confirm names who it did not reach, and Send can be used again.
+- Send lists every agent it knows, one on another computer included, keeps the agent you chose, and says on its row when that computer cannot be reached. After a send it names who refused it and who did not confirm in time; a send that did not confirm may have arrived, so sending it again asks for a second press. Send, Images and the pull request panel never wait longer than Herdr does for a send.
 
 ## [3.31.0] - 2026-11-19
 
