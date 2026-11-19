@@ -263,33 +263,61 @@ test("a missed answer keeps the last pull request, with its age and Retry", asyn
   assert.equal(shown.texts.some((text) => /rereads|Read from GitHub/.test(String(text))), false);
 });
 
-test("a folder change seen while the panel is drawn starts its read on the next turn, where Herdr keeps it", async () => {
-  let folder = "/repo";
+const drawnRead = async (host) => {
   let drawing = false;
   const started = [];
+  const after = [];
   const exec = branchExec((command, args) => {
     started.push([command, ...args].join(" "));
     if (drawing) return new Promise(() => {});
   });
-  const after = [];
-  const { panel, cx, drain } = await readDrawn(exec, { key: () => folder, theme: () => KIT_NIGHT, ScrollHandle: { new: () => ({}) }, props: () => ({}) });
-  cx.timer = { after(_ms, fn) { after.push(fn); }, every() {} };
+  const opened = await readDrawn(exec, {
+    theme: () => KIT_NIGHT,
+    ScrollHandle: { new: () => ({ scroll_to_item() {} }) },
+    ...host,
+  });
+  opened.cx.timer = { after(_ms, fn) { after.push(fn); }, every() {} };
   const viewed = () => started.filter((line) => line.startsWith("gh pr view")).length;
-  const seen = started.length;
-  assert.equal(viewed(), 1);
+  return {
+    ...opened, after, viewed, seen: started.length,
+    draw() {
+      drawing = true;
+      opened.panel.render(opened.cx);
+      opened.panel.render(opened.cx);
+      drawing = false;
+    },
+    startedDuring: () => started.length,
+  };
+};
 
+test("a folder change seen while the panel is drawn starts its read on the next turn, where Herdr keeps it", async () => {
+  let folder = "/repo";
+  const turn = await drawnRead({ key: () => folder, props: () => ({}) });
+  assert.equal(turn.viewed(), 1);
   folder = "/other";
-  drawing = true;
-  panel.render(cx);
-  panel.render(cx);
-  drawing = false;
-  assert.equal(started.length, seen);
-  assert.equal(after.length, 1);
+  turn.draw();
+  assert.equal(turn.startedDuring(), turn.seen);
+  assert.equal(turn.after.length, 1);
+  turn.after[0](turn.cx);
+  await turn.drain();
+  assert.equal(turn.viewed(), 2);
+  assert.equal(turn.panel.context, "/other");
+});
 
-  after[0](cx);
-  await drain();
-  assert.equal(viewed(), 2);
-  assert.equal(panel.context, "/other");
+test("a pane asking for the push section while the panel is drawn starts its read on the next turn, where Herdr keeps it", async () => {
+  let asked = null;
+  const turn = await drawnRead({ key: () => "/repo", props: () => asked });
+  const views = turn.viewed();
+  asked = { section: "push", at: 1 };
+  turn.draw();
+  assert.equal(turn.startedDuring(), turn.seen);
+  assert.equal(turn.after.length, 1);
+  assert.equal(turn.panel.section, "push");
+  assert.equal(turn.panel.selected, null);
+  turn.after[0](turn.cx);
+  await turn.drain();
+  assert.equal(turn.viewed(), views + 1);
+  assert.equal(turn.panel.loading, false);
 });
 
 test("a read that never answers still finishes, and the last pull request stays", async () => {
