@@ -9,7 +9,8 @@ import { systemApi } from "./platform-system.js";
 // Removing a worktree keeps its branch; only uncommitted changes and commits no branch, tag or remote holds can be lost.
 import { div } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
-import { exec, spaces, panes, home, run, theme, shared, notify, knownAgents } from "herdr";
+import { exec, spaces, panes, home, run, theme, shared, notify } from "herdr";
+import { explainWith, findExplainer } from "./explain.js";
 import { Share, postText, shareRows } from "./share.js";
 import { WorktreeStore } from "./worktrees-store.js";
 import { inside, openIn } from "./worktrees-model.js";
@@ -298,7 +299,7 @@ export class Worktrees {
     // The one agent Explain names and starts: the first installed, looked up once.
     this.explainer = null;
     cx.spawn(async (cx) => {
-      this.explainer = (await knownAgents({ on: null }).catch(() => [])).find((a) => a.installed) ?? null;
+      this.explainer = await findExplainer();
       cx.notify();
     });
     // What the last scan kept shows at once; the scan then checks it all again.
@@ -720,8 +721,7 @@ export class Worktrees {
   }
 
   ask(title, folder, prompt) {
-    if (!this.explainer) { notify({ title: "Could not start the agent", body: "no agent is installed", level: "error" }); return; }
-    run("tab.new", { name: title, space: spaces().find((s) => s.active)?.id, folder, argv: this.explainer.run, task: prompt });
+    explainWith(this.explainer, { name: title, space: spaces().find((s) => s.active)?.id, folder, task: prompt });
   }
 
   bars(c, byDay, title, height, empty) {

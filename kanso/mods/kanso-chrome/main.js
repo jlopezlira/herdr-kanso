@@ -5,7 +5,8 @@ import { systemApi } from "./platform-system.js";
 // Modified by José Gutiérrez (minimalistic, 0oz design fork): renamed from oz-chrome.
 // Modified by jlopezlira (Kanso, https://github.com/jlopezlira/herdr-kanso): renamed from mn-chrome; sidebar footer as centred squares when collapsed, one icon set (icons/), a title bar of the lights and, in Dawn Mode, its sky and pill (header.js); an "Update Kanso" row for Kanso's own releases (update.js); Settings opens one menu (sidebar-footer.js).
 import { View, div } from "gpui-kit";
-import { theme, run, props, shared, setShared, updates, keys, nextCommand, openOverlay, appHome, notify, knownAgents } from "herdr";
+import { theme, run, props, shared, setShared, updates, keys, nextCommand, openOverlay, appHome, notify } from "herdr";
+import { explainWith, findExplainer } from "./explain.js";
 import { Updater } from "./update.js";
 import { tryOrAsync, readCommands } from "./pure.js";
 import { loadPieces, pieces, shown } from "./pieces.js";
@@ -45,7 +46,7 @@ export default class WorkspaceChrome extends View {
     this.updater.start(cx, { polls: false });
     this.explainer = null;
     cx.spawn(async (later) => {
-      this.explainer = (await knownAgents({ on: null }).catch(() => [])).find((agent) => agent.installed) ?? null;
+      this.explainer = await findExplainer();
       later.notify();
     });
     // Command names stay kanso-tabs.* for keys bound to them before.
@@ -131,8 +132,7 @@ export default class WorkspaceChrome extends View {
   }
 
   explain(why) {
-    if (!this.explainer) { notify({ title: "Could not start the agent", body: "no agent is installed", level: "error" }); return; }
-    run("tab.new", { name: "Explain the update", folder: appHome(), argv: this.explainer.run, task: explainRefusal(why) });
+    explainWith(this.explainer, { name: "Explain the update", folder: appHome(), task: explainRefusal(why) });
   }
 
   render(cx) {
