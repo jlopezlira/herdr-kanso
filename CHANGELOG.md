@@ -114,7 +114,7 @@ the branch's rules.
 
 ### Fixed
 
-- An update that stopped names the file it could not move, remove, read or lock, and waits only when that file is still open. (#405)
+- An update that stopped names the file it could not move, remove, create, read or lock, and leaves a destination it did not create. It waits only when a file is still open. (#405)
 - Cmd+1 to Cmd+9 choose the tabs the tab bar shows, counted without the ones asleep. A number past the last tab does nothing, instead of stacking a "tab.select failed" notice for each press. On Windows, Ctrl+1 to Ctrl+9. (#331)
 - The Pull requests panel no longer stops on "cx is no longer valid" after listing pull requests, and a rejected inbox step no longer stops Refresh or leaves its "Could not keep pull requests" note after a later read succeeds. (#338)
 - The status bar's Needs you and Agents at work menus write their shortcuts in key glyphs. (#354)
