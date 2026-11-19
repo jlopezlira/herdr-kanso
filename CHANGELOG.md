@@ -26,6 +26,7 @@ the branch's rules.
 
 ### Fixed
 
+- Worktrees no longer looks on this computer for a folder that is open only on another machine, and on Windows a folder in the temp folder no longer makes it search all of AppData. When it cannot tell where the temp folder is, it searches only the folders you chose instead of guessing.
 - Containers no longer says Docker is not installed when something else went wrong, and a list Docker failed to give is kept on screen with the failure said instead of emptied. A failure stays said until that list is read again. A first read that never answers ends in a failure with Read again, Read again turns off while a read runs, and a stop, start or remove that never answers frees its row. Containers says Docker isn't running only when Docker on this computer is stopped, keeps the containers when access is refused or a remote Docker cannot be reached, offers to remove unused images or volumes only when it knows what uses them, and shows Quit Docker and this computer's memory only when it knows Docker runs here.
 - The Containers door is offered when this computer has Docker, on any space, since that is the Docker the panel reads. A lookup that failed is asked again, and a tool installed later shows its door when you come back to the space. A Simulator lookup that fails or runs out of time no longer hides its door; it is asked again, and when you come back to a space after it said no. The Simulator says No devices only after a read that found none, and a read that never answers gives Refresh back.
 
