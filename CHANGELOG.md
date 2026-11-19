@@ -26,11 +26,21 @@ the branch's rules.
 
 ### Added
 
+- A pull request's right-click menu in a pane's header offers Open on GitHub beside Open the pull request. (#354)
 - Settings in the sidebar footer opens one menu: kansō settings, with its key, and Herdr settings. When Herdr has an update waiting, the menu offers it as a third row; the first press arms it and the second restarts Herdr into it. (#241)
 - Cmd+Shift+Up and Cmd+Shift+Down go to the agent above or below in the sidebar, across tabs and projects; Cmd+Shift+Left and Cmd+Shift+Right go back and forward through the agents you visited, as in a browser. On Windows, Ctrl+Shift with the arrows.
 
 ### Changed
 
+- The tab bar follows the Storybook. The chosen tab wears the selection's wash itself, as the active project does, instead of a pill that glides under it, and tabs are a little wider, with room around the name. The panel doors stay icons, their names and keys in the tooltip, and Images takes the image icon. New tab and Arrange say their keys in their tooltips, and Arrange takes the panels icon. On a computer that cannot be reached, the panel doors give way as + and Arrange do. The open door and every other button that is on take the same wash, as does the chosen choice in Settings, Spend and the other panels' switches. A panel with no icon of its own shows its name, and a panel's door opens that panel whatever its icon or name. Tab groups in Settings, Spend, Memory, Ports, Shipped and pull requests take the same tab. (#331, #233)
+- The + on the tab bar opens the same menu as the sidebar's +, laid out as approved: where the tab opens (with the computer when it is not this one), Terminal with its key, every agent installed, the first nine numbered (press the number, with no other key, to start one), New project, New worktree… and Open worktree… inside a repository, and Arrange… last with its key. The agents last found show at once while the computer is asked again; when it does not answer, the menu says so, with Refresh and, when an agent is installed on this computer, Explain to that agent, which opens on this computer and tells it which computer failed and how. Both are reachable by the keyboard, and the agents scroll inside the menu when there are more than fit. (#233)
+- Right-click menus show the icons and marks they are designed with: the project menu's rows, Panels…, Open the diff and Push, and the status bar's Needs you and Agents at work. (#354)
+- The status bar's computer can be set to show only when needed, which is how it already showed by default. (#354)
+- A pane header's files and commits share one right-click menu, with Open the diff and Push. (#354)
+- A menu row that asks to be pressed again keeps its shortcut beside it. (#354)
+- Snooze's times read as the clock does, 9:00 rather than 09:00, and This evening shows only its time. (#354)
+- Remove project's second press reads "Press again to remove, close 3 tabs". (#354)
+- An asleep row's right-click menu wakes just that conversation with Wake, its whole tab with Wake all, and opens Status with its Asleep section by Everything asleep…. (#354)
 - Tabs, the panel buttons, the edge rail and the agent highlight are drawn as the Storybook draws them, in both themes. Right-clicking a pane shows its name, then Split, Wider, Pin, Send, Find in conversation, Open with, Sleep, whether right-clicks go to the program, and Close, which asks twice while an agent is in the pane.
 - Every size comes from one scale, in the app, the Storybook and the site: text 11, 12, 13, 14, 16 and 20 with no half pixels, icons 12, 16, 18 and 20, and heights in steps of 4 (a row 32, a two-line row 52, a bar and an icon button 28, a control 32, a pane header 36). A view switch and every other tab track is its tab's height and 2 either side.
 - The sidebar's rows read the same in the app and the Storybook: every name is 14, a computer or project strong and a session medium, in the foreground while it works, waits for you or is open, muted when idle, dim when it is a sub-session or asleep; the leading icon is muted; a two-line session puts its time after what it is doing, "Run npm publish? · 2m"; a project or computer keeps its whole name while its folder and branch give way; the footer rows and the While you were away card use the same ink and ground.
@@ -104,6 +114,14 @@ the branch's rules.
 
 ### Fixed
 
+- Cmd+1 to Cmd+9 choose the tabs the tab bar shows, counted without the ones asleep. A number past the last tab does nothing, instead of stacking a "tab.select failed" notice for each press. On Windows, Ctrl+1 to Ctrl+9. (#331)
+- The Pull requests panel no longer stops on "cx is no longer valid" after listing pull requests, and a rejected inbox step no longer stops Refresh or leaves its "Could not keep pull requests" note after a later read succeeds. (#338)
+- The status bar's Needs you and Agents at work menus write their shortcuts in key glyphs. (#354)
+- A tab's right-click menu writes New tab and Close tab's shortcuts in key glyphs. (#354)
+- In Projects, a right click on a subagent under an agent opens its Session menu, with the rows that act on it, as it already did in Status and Threads. (#354)
+- A project's right-click menu lists its worktrees before Rename. (#354)
+- A pane's right-click menu opens as tall as its rows, so its last rows and Close are no longer cut off at the bottom, and each row's shortcut is written in key glyphs, with room between it and the row's name. (#354)
+- The Worktrees panel draws faster with many worktrees, projects and panes open: it checks which worktrees are open once per change, not on every draw. (#337)
 - A working agent's name no longer has dots counting after it; the shimmer across the name stays.
 - The While you were away card's title, rows and +N more, and the sidebar's Find field with its search icon, start on the same line as the sidebar's rows and Settings.
 - The first computer in the sidebar sits right under the view switch, where it left 28 of empty space; the space above a computer stays for the ones after it.

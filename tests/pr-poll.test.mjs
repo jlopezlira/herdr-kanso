@@ -267,7 +267,6 @@ test("a read that never answers still finishes, and the last pull request stays"
   const { panel } = await readPanel(exec);
   hang = true;
   panel.loading = false;
-  panel.bind(cx);
   panel.refresh(cx);
   for (let i = 0; i < 80 && hung === 0; i += 1) await Promise.resolve();
   assert.equal(hung, 1);

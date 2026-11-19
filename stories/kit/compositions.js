@@ -1,11 +1,11 @@
 // The kit's compositions: each one only calls pieces with its own props and draws no markup.
-import { button, chord, dialog, diffText, dojoCell, dojoCharacter, dojoFeedback, dojoLevel, dojoProgress, dojoRecord, dojoStatistics, dojoSummary, dojoTitle, facts, headerSegment, input, keyLegend, paneName, setting, sleepLabel, toggle, failureBlock, failureLine, glyph, grow, keycap, keyPicked, list, mark, mascot, menu, phrase, pieceLines, plus, row, stack, tabSkeleton, tabs, toast } from './kit.js';
+import { button, chord, dialog, diffText, dojoCell, dojoCharacter, dojoFeedback, dojoLevel, dojoProgress, dojoRecord, dojoStatistics, dojoSummary, dojoTitle, facts, headerSegment, input, keyLegend, paneName, setting, sleepLabel, toggle, failureBlock, failureLine, glyph, grow, keycap, keyPicked, list, mark, mascot, menu, phrase, pieceLines, plus, row, stack, tabs, toast } from './kit.js';
 
 // Sidebar compositions: each one is the Row, Tab, Menu, Avatar, Mark, Chip or Button in its own configuration.
 // The rows the app draws (session, project, computer, section, asleep), the tile, the view switch, the toolbar, the header, the footer and the Activity card live each in its own file, shared with the app.
 
 // Status bar compositions the app does not draw yet; the bar, its items and its Buttons live in status-bar.js, shared with the app.
-export const stepperMenu = () => menu({ title: 'Panes per view', items: [{ icon: 'lu-move-horizontal', label: 'Even out', hint: '⌘⇧0' }, ...pieceLines] });
+export const stepperMenu = () => menu({ title: 'Panes per view', items: [{ icon: 'lu-move-horizontal', label: 'Even out', hint: '⇧⌘0' }, ...pieceLines] });
 
 // A failing row's right-click Menu: the source's words, the fixes, Explain, then the piece lines.
 export const failureMenu = ({ source, fixes = [], agent = null }) => menu({ title: source, items: [...fixes.map((label) => ({ label })), ...(agent ? [{ icon: 'lu-bot', label: phrase('Explain to', agent) }] : []), ...pieceLines] });
@@ -22,27 +22,6 @@ export const edge = ({ side = 'right', columns = [], drop = false, max = 4, over
   const more = folded.length ? stack({ variant: 'edge more' }, button({ label: plus(folded.length), kind: 'quiet', size: 'sm', active: overflow || folded.some((pane) => pane.lit) }),
     overflow ? stack({ variant: 'edge menu', [side]: true }, menu({ items: folded.map(({ program = 'p-claude', name }) => ({ icon: program, label: name })) })) : null) : null;
   return stack({ variant: 'edge', target: drop }, glyph(chevrons[side]), shown.map((panes) => stack({ variant: 'edge column' }, panes.map(paneButton))), more);
-};
-
-// Tab bar: the Tab primitive for the tabs, icon Buttons for everything else.
-export const panelDoors = [
-  { key: 'files', label: 'Files', icon: 'lu-file' }, { key: 'spend', label: 'Spend', icon: 'lu-chart-column' }, { key: 'pr', label: 'PR', icon: 'lu-git-pull-request' },
-  { key: 'shipped', label: 'Shipped', icon: 'lu-trophy' }, { key: 'worktrees', label: 'Worktrees', icon: 'lu-git-fork' }, { key: 'ports', label: 'Ports', icon: 'lu-plug' },
-  { key: 'containers', label: 'Containers', icon: 'lu-container' }, { key: 'memory', label: 'Memory', icon: 'lu-memory-stick' }, { key: 'images', label: 'Images', icon: 'lu-image' },
-];
-const door = (icon, label, active = false) => button({ label, kind: 'icon', icon, active });
-export const tabBarStates = ['connected', 'connecting', 'unreachable'];
-// Folded tabs go behind +N, a Menu with their marks; + and Arrange never fold.
-export const tabBar = ({ items = [], value = null, folded = [], overflow = false, panels = panelDoors, panel = null, state = 'connected', windows = false } = {}) => {
-  const connected = state === 'connected';
-  const tabList = state === 'connecting' ? [tabSkeleton(), tabSkeleton()]
-    : tabs({ items: items.map((item) => ({ closable: true, ...item })), value, size: 'md', disabled: state === 'unreachable', label: true });
-  const more = folded.length && connected ? stack({ variant: 'tab bar more' }, button({ label: plus(folded.length), kind: 'quiet', active: overflow }),
-    overflow ? stack({ variant: 'tab bar menu' }, menu({ items: folded.map((item) => ({ label: item.label, mark: item.mark })) })) : null) : null;
-  const tools = connected ? [door('lu-plus', 'New tab'), door('lu-panels-top-left', 'Arrange')] : null;
-  const right = connected ? panels.map((item) => door(item.icon, item.label, item.key === panel)) : null;
-  const system = windows ? [door('lu-minus', 'Minimize'), door('lu-square', 'Maximize'), door('lu-x', 'Close')] : null;
-  return stack({ variant: 'tab bar' }, tabList, more, tools, grow(), stack({ variant: 'tab bar doors' }, right, system));
 };
 
 // Panel: only the container. Each look is a width; stale steps down all but the header; the header comes drawn, or none.
@@ -140,6 +119,12 @@ export const shortcutRow = ({ name, chords = [], state = 'rest', taken = null, h
     second: shortcutNotes[state]?.(taken) ?? null,
     action: { changed: { label: 'Reset', kind: 'quiet' }, taken: { label: 'Take it', kind: 'quiet', armed: true, verb: 'take it' } }[state] ?? null }),
   state === 'failed' ? failureBlock({ text: phrase('Couldn\'t save', chords[0], 'for', name), source, fix: 'Change', agent }) : null);
+
+export const panelDoors = [
+  { key: 'files', label: 'Files', icon: 'lu-file' }, { key: 'spend', label: 'Spend', icon: 'lu-chart-column' }, { key: 'pr', label: 'PR', icon: 'lu-git-pull-request' },
+  { key: 'shipped', label: 'Shipped', icon: 'lu-trophy' }, { key: 'worktrees', label: 'Worktrees', icon: 'lu-git-fork' }, { key: 'ports', label: 'Ports', icon: 'lu-plug' },
+  { key: 'containers', label: 'Containers', icon: 'lu-container' }, { key: 'memory', label: 'Memory', icon: 'lu-memory-stick' }, { key: 'images', label: 'Images', icon: 'lu-image' },
+];
 
 // Notifications. A notice is a fact with a state and a home; where you are decides whether it is said, and how.
 // The lead is the home's icon in the state's colour; an agent has no icon, so its mark; a failure is always the blocked mark.

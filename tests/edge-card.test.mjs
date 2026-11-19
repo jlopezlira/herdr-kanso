@@ -1,9 +1,9 @@
 // The card over an edge: the panes beyond it as the kit's Menu, each with its agent's mark, a press brings one into view.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { load, chain, gpuiHost, svgsOf as svgs } from "./helpers.mjs";
+import { svgsOf as svgs } from "./helpers.mjs";
+import { loadStripWith } from "./mod-fixtures.mjs";
 
-const night = { foreground: "#d8d4cb", background: "#1b1b19", hover: "#232321", selected: "#2b2b28", accent: "#da627d", dim: "#6b6862", muted: "#949086", chrome: "#141413" };
 const program = (name, icon, tint) => ({ agent: true, shell: false, name, icon, tint });
 const PANES = [
   { pane: "p1", terminal: "t1", title: "checkout", status: "working", program: program("Claude Code", "mods/kanso-chrome/icons/claude.svg", true) },
@@ -12,13 +12,7 @@ const PANES = [
 
 async function edge() {
   const store = {};
-  const { Strip } = await load("kanso-strip/main.js", ["Strip"], {
-    ...gpuiHost(), svg: (path) => { const el = chain("svg"); el.calls.push(["svg", path]); return el; },
-    image: (path) => { const el = chain("image"); el.calls.push(["image", path]); return el; }, Popover: { new: (id) => chain(id) }, HoverCard: { new: (id) => chain(id) },
-    theme: () => night, props: () => ({ edge: "p1", panes: ["p1", "p2"], side: "left" }), panes: () => PANES, agents: () => [], focused: () => null,
-    spaces: () => [], machines: () => [], home: () => "/home/me", terminals: () => [], shared: (key) => store[key] ?? null, setShared: (key, value) => { store[key] = value; },
-    run: () => {}, hc: async () => ({ code: 0 }), openOverlay: () => {},
-  });
+  const { Strip } = await loadStripWith({ edge: "p1", panes: ["p1", "p2"], side: "left" }, PANES, store);
   const view = new Strip();
   view.init({}, {});
   return { view, store };

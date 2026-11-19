@@ -123,7 +123,7 @@ test("quietLink and iconButton are the quiet and icon kinds", async () => {
   assert.equal(one(link.kids.at(-1), "text_color"), c.muted);
   const icon = iconButton("ic", "pin", "Stay on this agent", () => {}, c, { active: true });
   assert.equal(one(icon, "h"), H.icon);
-  assert.equal(one(icon, "bg"), c.selected);
+  assert.equal(one(icon, "bg"), c.w12, "active, the Storybook's wash-12");
   assert.equal(one(icon.kids[0], "size"), ICON);
 });
 

@@ -26,7 +26,7 @@ export const kinds = { solid: 'kanso-button--solid', tonal: 'kanso-button--tonal
 // `tip`: the tooltip, when it says more than the label; `focus`: the keyboard's ring is on it.
 // A control's drawn live state: under the pointer, focused, or held down.
 const liveStates = ({ hover, focus, pressed }) => [hover && 'kanso-control--hover', focus && 'kanso-control--focus', pressed && 'kanso-control--active'].filter(Boolean);
-export const button = ({ label, kind = 'solid', size = 'md', icon = 'none', disabled = false, verb = '', armed = false, active = false, spin = false, key = '', tip = '', hover = false, focus = false, pressed = false, content = '', truncate = false, flush = false }) => {
+export const button = ({ label, kind = 'solid', size = 'md', icon = 'none', disabled = false, verb = '', armed = false, active = false, spin = false, key = '', tip = '', hover = false, focus = false, pressed = false, content = '', truncate = false, flush = false, name = '' }) => {
   const classes = ['kanso-button', kinds[kind], size === 'md' ? '' : `kanso-button--${size}`, disabled ? 'kanso-control--off' : '', armed ? 'kanso-action kanso-action--armed' : '', active ? 'kanso-button--active' : '', spin ? 'kanso-button--spinning' : '', ...liveStates({ hover, focus, pressed }), content ? 'kanso-button--drawn' : '', flush ? 'kanso-button--flush' : '', truncate ? 'kanso-button--truncate' : ''].filter(Boolean).join(' ');
   const lead = icon === 'none' ? (spin ? mark({ status: 'working', size: 'sm' }) : '') : iconSvg(icon, 'control');
   const text = kind === 'icon' ? '' : truncate ? `<span class="kanso-button__label">${escape(label)}</span>` : escape(label);
@@ -299,9 +299,10 @@ export const tabs = ({ items, value, size, track, disabled, icon, label: named }
   const square = icon && !named;
   const states = [on && 'kanso-tabs__tab--on', square && 'kanso-tabs__tab--icon', item.armed && 'kanso-action--armed', item.pending && 'kanso-state-line--pending', item.held && 'kanso-control--held', ...liveStates(item)].filter(Boolean).map((name) => ` ${name}`).join('');
   const name = item.editing ? input({ text: item.label ?? '', label: item.label ?? '', icon: 'none', inline: true, selected: true, limit: tabNameLimit }) : `<span class="kanso-tabs__label">${label}</span>`;
-  return `${item.drop ? '<i class="kanso-tabs__insertion"></i>' : ''}<span class="kanso-tabs__tab${states}" role="tab" aria-selected="${on}" aria-label="${label}" tabindex="0" title="${square ? label : escape(item.tip ?? '')}" onclick="${choose}">`
+  const landing = item.drop ? '<i class="kanso-tabs__insertion"></i>' : '';
+  return `${item.drop === 'after' ? '' : landing}<span class="kanso-tabs__tab${states}" role="tab" aria-selected="${on}" aria-label="${label}" tabindex="0" title="${square ? label : escape(item.tip ?? '')}" onclick="${choose}">`
     + `${icon && item.icon ? glyph(item.icon) : ''}${named || !item.icon ? name : ''}${item.pending ? '<i class="kanso-state-line__pending-dot"></i>' : ''}${item.mark && !square ? mark({ status: item.mark }) : ''}`
-    + `${(item.dot || (square && item.mark === 'blocked')) && !on ? '<i class="kanso-tabs__dot"></i>' : ''}${on && item.closable && !square && !item.editing ? '<svg class="kanso-icon kanso-tabs__close"><use href="#lu-x"/></svg>' : ''}</span>`;
+    + `${(item.dot || (square && item.mark === 'blocked')) && !on ? '<i class="kanso-tabs__dot"></i>' : ''}${on && item.closable && !square && !item.editing ? '<svg class="kanso-icon kanso-tabs__close"><use href="#lu-x"/></svg>' : ''}</span>${item.drop === 'after' ? landing : ''}`;
 }).join('')}</div>`;
 
 // Where a pin, a note or a touch sits over a picture or a screen, in percent of it.
@@ -413,8 +414,8 @@ const columnPanes = ({ width, panes }) => `<span class="kanso-status-bar__column
   + `${panes.map((tone) => `<i class="kanso-status-bar__pane kanso-status-bar__pane--${escape(tone)}" data-width="calc(var(--k-w-line) * ${Number(width)})"></i>`).join('')}</span>`;
 const minimap = (columns) => (columns.length ? `<span class="kanso-status-bar__columns">${columns.map((column, i) => button({ label: `Column ${i + 1}`, kind: 'quiet', size: 'sm', content: columnPanes(column) })).join('')}</span>` : '');
 // Panes per view: the number at rest, − and + on hover; its keys are in the tooltips. Proposed: `columns`, the minimap before it.
-export const stepper = ({ value = 2, open = false, hover = false, columns = [] } = {}) => `<span class="kanso-status-bar__item kanso-status-bar__stepper${open ? ' kanso-status-bar__item--open' : ''}${hover ? ' kanso-control--hover' : ''}">${minimap(columns)}${button({ label: 'Fewer panes per view ⌘⇧−', kind: 'icon', size: 'sm', icon: 'lu-minus' })}`
-  + `<span class="kanso-status-bar__value" title="${Number(value)} per view · scroll to change, click to even out">${Number(value)}</span>${button({ label: 'More panes per view ⌘⇧=', kind: 'icon', size: 'sm', icon: 'lu-plus' })}</span>`;
+export const stepper = ({ value = 2, open = false, hover = false, columns = [] } = {}) => `<span class="kanso-status-bar__item kanso-status-bar__stepper${open ? ' kanso-status-bar__item--open' : ''}${hover ? ' kanso-control--hover' : ''}">${minimap(columns)}${button({ label: 'Fewer panes per view ⇧⌘−', kind: 'icon', size: 'sm', icon: 'lu-minus' })}`
+  + `<span class="kanso-status-bar__value" title="${Number(value)} per view · scroll to change, click to even out">${Number(value)}</span>${button({ label: 'More panes per view ⇧⌘=', kind: 'icon', size: 'sm', icon: 'lu-plus' })}</span>`;
 
 // The window's areas by name, each one pressable; the body is blank, the picked area on.
 export const windowAreas = ['Sidebar', 'Tab bar', 'Pane header', 'Body', 'Panels', 'Notifications', 'Status bar'];

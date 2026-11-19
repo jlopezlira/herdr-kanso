@@ -26,11 +26,6 @@ export function foldTabs({ widths, chosen, room, gap, more }) {
   return { shown, folded: all.filter((i) => !shown.includes(i)) };
 }
 
-/** The chosen fill's place among the drawn tabs, or null until every one is measured. */
-export function pillAt(widths, chosen, gap) {
-  if (chosen < 0 || widths.some((width) => !width)) return null;
-  return { left: widths.slice(0, chosen).reduce((x, width) => x + width + gap, 0), width: widths[chosen] };
-}
 
 /** A tab dragged onto another lands in its place: before it when it moves left, after it when it moves right. */
 export const dropSide = (from, to) => (from > to ? "before" : "after");
