@@ -396,12 +396,8 @@ export const spend = ({ share = false, choosing = null, ...props }) => withBesid
 
 // Preview: a file opened from Files beside the pane; text as numbered code, Markdown formatted, a picture fitted; an edit waits for Save.
 // A file's text, or in its place the skeleton, the refused read or the empty state.
-const textOr = ({ reading = false, failure = null, empty = null }, shown) => {
-  if (reading) return skeletonOf({ shape: 'line', count: 6 });
-  if (failure) return failureBlock(failure);
-  if (empty) return emptyState(empty);
-  return shown();
-};
+export const refusedOrEmpty = ({ failure = null, empty = null }) => (failure ? failureBlock(failure) : empty ? emptyState(empty) : null);
+const textOr = ({ reading = false, failure = null, empty = null }, shown) => (reading ? skeletonOf({ shape: 'line', count: 6 }) : refusedOrEmpty({ failure, empty }) ?? shown());
 const previewContent = ({ doc, shot, text, pins }) => (doc ? markdown(doc) : shot ? picture({ ...shot, pins: pinMarks(pins) }) : code(text));
 const previewBody = ({ doc = null, shot = null, text = null, cut = null, pins = [], send = null, reading, failure, empty, ...props }) => textOr({ reading, failure, empty }, () => documentBody(props, previewContent({ doc, shot, text, pins }), dimLine(cut), send ? pinNotes({ pins, send }) : null));
 export const preview = ({ look = 'panel', stale = false, ...props }) => panel({ look, stale, header: documentHeader({ back: 'Files', ...props }) }, previewBody(props));

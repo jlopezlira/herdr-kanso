@@ -42,7 +42,7 @@ export const sampleGithub = {
     nothingWaits: { icon: 'lu-git-pull-request', text: 'Nothing waits on you' },
     nothingOpen: { icon: 'lu-git-pull-request', text: 'Nothing open in these repositories' },
     noAccess: { icon: 'lu-git-pull-request', text: 'No repository here, and not signed in to GitHub', action: 'Sign in' },
-    signIn: { icon: 'lu-git-pull-request', text: 'Not signed in to GitHub', action: 'Sign in' },
+    signIn: samplePulls.contexts.signIn,
   },
   looking: 'Looking for repositories in this folder',
   failure: { text: 'Can’t read pull requests', source: 'gh: HTTP 401: Bad credentials', fix: 'Refresh', agent: 'checkout' },

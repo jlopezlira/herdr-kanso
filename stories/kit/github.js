@@ -1,7 +1,7 @@
 // The GitHub board: one block per repository of the folder in front, then a pull request opened from its block; each action leaves one line where it was pressed.
-import { bars, code, emptyState, explainButton, failureBlock, failureLine, list, menu, phrase, skeletonOf, stack } from './kit.js';
+import { bars, code, explainButton, failureBlock, failureLine, list, menu, phrase, skeletonOf, stack } from './kit.js';
 import { panel, panelRefresh } from './compositions.js';
-import { branchRow, dimLine, heading, line, panelHeader, pullContent, pullPages, pullRow, quietAct, row, settings } from './panels.js';
+import { branchRow, dimLine, heading, line, panelHeader, pullContent, pullPages, pullRow, quietAct, refusedOrEmpty, row, settings } from './panels.js';
 
 const counted = (word, items) => (items.length ? phrase(word, items.length) : null);
 const factsOf = ({ needs, yours, stale }) => [counted('Needs you', needs), counted('Yours', yours), stale ? { text: stale, tone: 'dim' } : null].filter(Boolean);
@@ -25,8 +25,7 @@ const statistics = ({ summary, oldest, review, fresh, waited, ages, shipped }, o
   open ? list([oldest, review, fresh].map(([name, value]) => row({ name, detail: value })), dimLine(waited), bars(ages), row({ name: shipped, dimmed: true, action: { label: 'Open Shipped', kind: 'quiet' } })) : null);
 
 const boardBody = ({ blocks = [], block: only = null, missing = null, stats = null, statsOpen = false, reading = false, looking = null, failure = null, empty = null, ...state }) => {
-  if (failure) return failureBlock(failure);
-  if (empty) return emptyState(empty);
+  if (failure || empty) return refusedOrEmpty({ failure, empty });
   if (looking) return list(dimLine(looking), skeletonOf({ shape: 'list row', count: 4 }));
   if (reading) return skeletonOf({ shape: 'list row', count: 4 });
   if (only) return single(only, state);
