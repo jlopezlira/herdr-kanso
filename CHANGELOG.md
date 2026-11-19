@@ -26,8 +26,9 @@ the branch's rules.
 
 ### Fixed
 
-- Waking a sleeping conversation brings it back before forgetting it was asleep. If it does not come back, it stays asleep and Wake says so, so you can try again. If it comes back but still looks asleep, Wake says that. Waking several at once names only the ones that did not come back.
-- Sleep no longer puts a tab away when something in it could not be stopped, and names that one.
+- Waking a sleeping conversation brings it back before forgetting it was asleep. If it does not come back, it stays asleep and Wake says so, so you can try again. If it comes back but still looks asleep, Wake says that. Waking several at once names each one that did not come back and each one that came back but still looks asleep.
+- If Wake or Sleep gets no answer, it says that step was not confirmed and keeps what you need to try again. An unreadable terminal is not treated as a finished exit, so its conversation stays available. A cleanup that fails is named with the failure that caused it.
+- Sleep no longer puts a tab away when something in it could not be stopped, and names that one. Pressing Sleep or Wake again while it is working does nothing.
 
 ## [3.31.0] - 2026-11-19
 
