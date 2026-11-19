@@ -137,10 +137,11 @@ export default class Memory extends View {
   }
 
   refresh(cx) {
-    if (this.refreshing) return;
-    this.refreshing = true;
-    cx.notify();
-    this.read(cx);
+    if (!this.refreshing) {
+      this.refreshing = true;
+      cx.notify();
+      this.read(cx);
+    }
   }
 
   read(cx) {
