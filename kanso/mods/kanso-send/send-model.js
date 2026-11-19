@@ -1,0 +1,61 @@
+import { isAgent } from "./deliver.js";
+
+export function targetsOf(all, from, last) {
+  const list = all.filter((p) => p.pane !== from && p.terminal && isAgent(p));
+  const i = list.findIndex((p) => p.terminal === last);
+  return i > 0 ? [list[i], ...list.toSpliced(i, 1)] : list;
+}
+
+const machineOf = (address) => /^([^/]+)\//.exec(String(address))?.[1] ?? null;
+export const unreachable = (address, computers = []) => {
+  const at = machineOf(address);
+  const layout = at ? computers.find((m) => m?.name === at)?.layout : "ready";
+  return !layout || layout === "unavailable";
+};
+
+const firstOf = (list, last) => {
+  const i = list.findIndex((x) => x.terminal === last);
+  return i > 0 ? [list[i], ...list.toSpliced(i, 1)] : list;
+};
+
+export function sendState({ terms = [], ps = [], spaces = [], computers = [], from = null, to = null, toProject = null, query = "", last = null, nameOf = () => null } = {}) {
+  const known = terms.length > 0 || ps.length > 0;
+  const paneOf = new Map(ps.filter((p) => p?.terminal).map((p) => [p.terminal, p]));
+  const projectOf = (pane) => (pane ? spaces.find((s) => (s?.tabs ?? []).some((t) => t?.id === pane.tab))?.name ?? null : null);
+  const termOf = new Map(terms.filter((k) => k?.address).map((k) => [k.address, k]));
+  const rowOf = (k) => {
+    const pane = paneOf.get(k.address) ?? null;
+    const program = k.program ?? pane?.program ?? null;
+    const agent = isAgent(k, pane);
+    return {
+      terminal: k.address, pane, program, status: agent ? k.status ?? pane?.status ?? null : null,
+      name: k.labels?.["kanso.shown"] || (pane ? nameOf(pane) : null) || k.address,
+      project: k.labels?.["kanso.project"] || projectOf(pane) || "Other",
+      state: !agent ? "shell" : unreachable(k.address, computers) ? "unreachable" : "ready",
+    };
+  };
+  const live = [...termOf.values(), ...[...paneOf.keys()].filter((address) => !termOf.has(address)).map((address) => ({ address }))]
+    .filter((k) => k.address !== from && (!k.state || k.state === "live"));
+  const agents = live.filter((k) => isAgent(k, paneOf.get(k.address))).map(rowOf);
+  const missing = (address) => ({ terminal: address, pane: null, program: null, status: null, name: address, project: "Other",
+    state: unreachable(address, computers) ? "unreachable" : known ? "gone" : "unknown" });
+  const chosen = toProject || !to ? null : agents.find((x) => x.terminal === to) ?? (live.some((k) => k.address === to) ? rowOf(live.find((k) => k.address === to)) : missing(to));
+  const q = query.trim().toLowerCase();
+  const rows = [...agents, ...(chosen && !agents.includes(chosen) ? [chosen] : [])]
+    .filter((x) => !q || x.name.toLowerCase().includes(q) || x.project.toLowerCase().includes(q));
+  const mine = from ? termOf.get(from)?.labels?.["kanso.project"] ?? projectOf(paneOf.get(from)) : null;
+  const order = [...new Set([mine, ...rows.map((x) => x.project).toSorted((a, b) => a.localeCompare(b))])].filter((p) => p && rows.some((x) => x.project === p));
+  const sendable = (x) => x.state === "ready" || x.state === "unreachable";
+  const groups = order.map((project) => {
+    const members = firstOf(rows.filter((x) => x.project === project), last);
+    return { project, agents: members, recipients: members.filter((x) => sendable(x) && x.status !== "blocked"), waiting: members.filter((x) => sendable(x) && x.status === "blocked") };
+  });
+  const picked = toProject ? groups.find((g) => g.project === toProject) ?? null : null;
+  const shown = chosen && rows.includes(chosen) ? chosen : null;
+  const recipients = toProject ? picked?.recipients ?? [] : shown && sendable(shown) && shown.status !== "blocked" ? [shown] : [];
+  const waiting = toProject ? picked?.waiting ?? [] : shown && sendable(shown) && shown.status === "blocked" ? [shown] : [];
+  const empty = rows.length ? null : !known ? "unknown" : q ? "no match" : "none";
+  return { known, groups, chosen, recipients, waiting, empty, label: toProject ? `Send to ${toProject}  ⌘↩` : "Send  ⌘↩" };
+}
+
+export const everyone = (terms, ps, options = {}) => sendState({ terms, ps, ...options }).groups;

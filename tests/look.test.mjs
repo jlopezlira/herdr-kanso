@@ -28,6 +28,13 @@ const pinNote = ({ look, cx, say }, note) => {
   say(note);
   look.render(cx);
 };
+const sendPinned = async (shown, note) => {
+  shown.look.ask(SHOT, shown.cx);
+  await shown.drain();
+  pinNote(shown, note);
+  shown.look.send(shown.cx);
+  await shown.drain();
+};
 // A panel whose copies wait until each is let go.
 const heldPanel = async () => {
   const held = [];
@@ -103,7 +110,7 @@ test("A note to the agent names the file and where each pin sits on the picture"
 // The panel in a fake Herdr: agent t1 whose screen shows `screen`, a shell t2, and the files in `files`.
 // `copy(args)`: what cp answers, a promise a test can hold back.
 async function panel({ screen = OUTPUT, files = ["/repo/tests/shot.png", "/repo/images/hero.jpg", "/repo/docs/plan.md"], status = "idle", focus = "t1",
-  copy = async () => ({ code: 0, stdout: "" }), session = null, transcript = "", appHome = "/app", bad = [], remote = null, statText = "4 1700000000\n", drawing = null } = {}) {
+  copy = async () => ({ code: 0, stdout: "" }), session = null, transcript = "", appHome = "/app", bad = [], remote = null, statText = "4 1700000000\n", drawing = null, sending = null } = {}) {
   if (appHome !== "/app") dirs.push(appHome);
   const calls = [], ons = [], store = {};
   const address = remote ? `${remote}/${focus}` : focus;
@@ -130,6 +137,7 @@ async function panel({ screen = OUTPUT, files = ["/repo/tests/shot.png", "/repo/
     watchFolder: async () => { throw new Error("no watch in a test"); },
     hc: async (args) => {
       calls.push(["hc", ...args]);
+      if (args[0] === "send" && sending) return sending(args);
       if (args[0] === "read") return { code: 0, stdout: world.screen };
       if (args[0] === "get") return { code: 0, stdout: JSON.stringify({ address: args[1], foreground: world.session ? { pid: world.session.pid, argv: world.session.argv ?? ["claude"] } : null }) };
       return { code: 0, stdout: "" };
@@ -309,16 +317,22 @@ test("Look sends nothing to an agent waiting on its own question", async () => {
   assert.equal(look.note.text, "web agent is waiting on its own question. Answer it first, then send.");
 });
 
+test("Look says a send Herdr stopped at its time limit is not confirmed, never not sent, and Send works again", async () => {
+  const shown = await panel({ sending: async () => { throw new Error("hc took longer than 30 s and was stopped"); } });
+  const { look } = shown;
+  await sendPinned(shown, "crop it");
+  assert.equal(look.note.text, "Not confirmed: it may have arrived, so look at the agent before sending again.");
+  assert.equal(look.note.error, true);
+  assert.equal(look.sending, false);
+  assert.equal(look.pins.length, 1, "the pins stay, as for any send that did not go");
+});
+
 test("Look never takes a shell as the one to send to: it would run the note", async () => {
   const shown = await panel({ focus: "t2" });
-  const { look, cx, drain, calls } = shown;
+  const { look, cx, calls } = shown;
   assert.equal(look.agent(), null, "a shell in focus is no recipient");
   assert.equal(calls.some((c) => c[1] === "read"), false, "and its screen is not read");
-  look.ask(SHOT, cx);
-  await drain();
-  pinNote(shown, "crop it");
-  look.send(cx);
-  await drain();
+  await sendPinned(shown, "crop it");
   assert.equal(calls.some((c) => c[1] === "send"), false, "nothing pasted into the shell");
   look.follow = "t1";
   look.tick(cx);
@@ -404,13 +418,15 @@ test("Look opens what kanso-tabs.look names, as if you picked it, and refuses wh
 
 test("One way to send text to an agent, from Send and from Look", async () => {
   const calls = [];
-  const { deliver, sendKey, waitingNote } = await load("kanso-send/deliver.js", ["deliver", "sendKey", "waitingNote"], {
+  const { deliver: deliverWith, sendKey, waitingNote } = await load("kanso-send/deliver.js", ["deliver", "sendKey", "waitingNote"], {
     hc: async (args) => { calls.push(args); return { code: args[0] === "send" && args[1] === "t9" ? 1 : 0, stderr: "no such terminal" }; },
   });
+  const deliver = (...args) => deliverWith(databaseTimer, ...args);
   assert.equal((await deliver("t1", "hi", "you")).code, 0);
   assert.deepEqual(clone(calls), [["send", "t1", "hi"], ["label", "t1", "kanso.unread=1", "kanso.from=you"]]);
   assert.equal((await deliver("t9", "hi", "you")).code, 1);
   assert.equal(calls.length, 3, "nothing marked when it was not sent");
+  await assert.rejects(deliverWith("t1", "hi", "you"), /timer/, "a caller without a deadline is refused, not sent");
   assert.equal(sendKey({ key: "enter", modifiers: { platform: true } }), true);
   assert.equal(sendKey({ key: "enter", modifiers: {} }), false);
   assert.equal(waitingNote(["a", "b"]), "a, b are waiting on their own question. Answer it first, then send.");

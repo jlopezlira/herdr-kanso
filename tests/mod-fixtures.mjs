@@ -1,6 +1,6 @@
 // Named loaders for production modules used by multiple tests.
 import { join } from "node:path";
-import { chain, databaseTimer, exec, gpuiHost, load, openedKdb, temporary } from "./helpers.mjs";
+import { chain, databaseTimer, drawingHost, exec, gpuiHost, load, nodes, openedKdb, temporary, KIT_NIGHT } from "./helpers.mjs";
 
 export const loadSpaces = (host) => load("kanso-spaces/main.js", ["Spaces"], host);
 export const loadDescribe = (host) => load("kanso-help/keymap.js", ["describe"], host);
@@ -111,3 +111,15 @@ export const loadStripWith = (props, panes, store) => load("kanso-strip/main.js"
   spaces: () => [], machines: () => [], home: () => "/home/me", terminals: () => [], shared: (key) => store[key] ?? null, setShared: (key, value) => { store[key] = value; },
   run: () => {}, hc: async () => ({ code: 0 }), openOverlay: () => {},
 });
+
+export const byTag = (el, tag) => nodes(el).find((kid) => kid.tag === tag);
+export const keyDown = (el, e, cx = { notify() {}, stop_propagation() {}, spawn() {} }) => el.calls.filter((call) => call[0] === "on_key_down").forEach(([, handler]) => handler(e, cx));
+export const dialogHost = () => ({ ...drawingHost(), Textarea: { new: () => chain("textarea") }, Input: { new: () => chain("input") } });
+const typed = (value, multiline = false) => ({ value: () => value, state: {}, multiline, focused: false });
+export async function openedSend(host, { from = null, to = null, text = "hi", query = "" } = {}) {
+  const { Send } = await load("kanso-send/main.js", ["Send"], {
+    ...dialogHost(), theme: () => KIT_NIGHT, props: () => ({ overlay: "o1" }), terminals: () => [], panes: () => [], spaces: () => [], machines: () => [],
+    shared: () => null, setShared() {}, closeOverlay() {}, run() {}, ...host,
+  });
+  return Object.assign(new Send(), { from, to, toProject: null, text, error: null, sending: false, unsure: [], handle: {}, query: typed(query), box: typed(text, true) });
+}
