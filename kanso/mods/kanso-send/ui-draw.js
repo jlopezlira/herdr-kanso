@@ -32,9 +32,36 @@ const worked = (node, rules, hoverClass, live) => {
   return { own, extra: changed(own, stylesFor(marked, rules, hovering(node))) };
 };
 export const lookOf = (node, rules, hoverClass = null, live = true) => remembered(rules, `look${live}${hoverClass ?? ""}${shapeOf(node)}`, () => worked(node, rules, hoverClass, live));
-export const painted = (el, { own, extra }, c) => {
-  const drawn = apply(el, own, c);
-  return extra.length ? drawn.hover((style) => apply(style, extra, c)) : drawn;
+const stepsOf = (ops, c) => ops.flatMap((entry) => {
+  const [op, ...args] = entry;
+  if (op === "ring") return [["relative", []]];
+  if (op === "shadow" && entry !== lastOp(ops, "shadow")) return [];
+  if (op === "shadow") return !args[0] ? [] : args[0].kind === "ring" ? [["relative", []]] : [[LINES[args[0].kind], [args[0].width]], ["border_color", [ink(c, args[0])]]];
+  return [[op, args.map((arg) => ink(c, arg))]];
+});
+class Plans {
+  constructor() { this.byTheme = new WeakMap(); }
+
+  of(look, c) {
+    if (!this.byTheme.has(c)) this.byTheme.set(c, new PlanOf());
+    return this.byTheme.get(c).of(look, c);
+  }
+}
+class PlanOf {
+  constructor() { this.byLook = new WeakMap(); }
+
+  of(look, c) {
+    if (!this.byLook.has(look)) this.byLook.set(look, { own: stepsOf(look.own, c), extra: stepsOf(look.extra, c) });
+    return this.byLook.get(look);
+  }
+}
+const plans = new Plans();
+const call = (el, [op, args]) => (args.length === 0 ? el[op]() : args.length === 1 ? el[op](args[0]) : el[op](...args));
+const run = (el, steps) => steps.reduce(call, el);
+export const painted = (el, look, c) => {
+  const { own, extra } = plans.of(look, c);
+  const drawn = run(el, own);
+  return extra.length ? drawn.hover((style) => run(style, extra)) : drawn;
 };
 export const paint = (el, node, c, rules, hoverClass = null, live = true) => painted(el, lookOf(node, rules, hoverClass, live), c);
 export const boxOf = (look, c, id = null) => {

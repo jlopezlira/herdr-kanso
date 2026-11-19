@@ -17,11 +17,14 @@ export const tabParts = (group, states) => {
 };
 
 const FLAGS = ["on", "square", "armed", "pending", "held"];
-export const tabStates = ({ disabled }, flags) => {
+const flagged = ({ disabled }, flags) => {
   const states = Object.fromEntries(FLAGS.map((flag) => [flag, flags.includes(flag)]));
-  return { ...states, live: !disabled && !states.on && !states.armed && !states.held };
+  return Object.freeze({ ...states, live: !disabled && !states.on && !states.armed && !states.held });
 };
-export const tabKey = (group, states) => [group.size, group.track, group.disabled, group.bar, ...FLAGS.map((flag) => states[flag])].map((v) => (v === true ? 1 : v === false ? 0 : v)).join("");
+const AT_REST = [flagged({ disabled: false }, []), flagged({ disabled: true }, [])];
+export const tabStates = (group, flags) => (flags.length ? flagged(group, flags) : AT_REST[group.disabled ? 1 : 0]);
+const bit = (v) => (v ? 1 : 0);
+export const tabKey = (group, states) => `${group.size}${bit(group.track)}${bit(group.disabled)}${bit(group.bar)}${bit(states.on)}${bit(states.square)}${bit(states.armed)}${bit(states.pending)}${bit(states.held)}`;
 
 const subsets = (flags) => flags.reduce((all, flag) => [...all, ...all.map((set) => [...set, flag])], [[]]);
 export const drawnTabs = () => [

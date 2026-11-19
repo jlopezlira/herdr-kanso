@@ -19,7 +19,9 @@ const tabLooks = (group, states) => known.of(tabKey(group, states), () => {
   const kept = TAB_LOOKS.tabs[tabKey(group, states)];
   const shapes = kept ? null : tabParts(group, states);
   const parts = Object.fromEntries(TAB_PARTS.map((part, i) => [part, kept ? TAB_LOOKS.looks[kept[i]] : lookOf(shapes[part][0], RULES, null, shapes[part][1])]));
-  return { ...parts, inset: lastOp(parts.tab.own, "px")?.[1] ?? 0 };
+  const inset = lastOp(parts.tab.own, "px")?.[1] ?? 0;
+  const ringed = inset > 0 ? { ...parts.tab, own: parts.tab.own.map((op) => (op[0] === "px" ? ["px", inset - FOCUS] : op)) } : parts.tab;
+  return { ...parts, tab: ringed };
 });
 
 const glyph = (icon, looks, c) => painted(svg(glyphOf(icon)), looks.glyph, c);
@@ -44,7 +46,6 @@ export function tabItem(id, item, c, { group, on = false, square = false, index 
   const looks = tabLooks(group, states);
   const dot = (item.dot || (square && item.mark === "blocked")) && !on;
   return painted(Button.new(id), looks.tab, c)
-    .when(looks.inset > 0, (el) => el.px(looks.inset - FOCUS))
     .border(FOCUS).border_color(CLEAR).focus((s) => s.border_color(c.accent))
     .selected(on)
     .disabled(disabled)
@@ -65,14 +66,15 @@ export function tabItem(id, item, c, { group, on = false, square = false, index 
 
 export function tab(id, items, value, onChange, c, { disabled = false, spoken = null, collapsed = false, track = true, size = "lg", bar = false, on = {} } = {}) {
   const group = { size, track, disabled, bar };
+  const base = tabLooks(group, tabStates(group, []));
   const seg = (item, index) => {
     const own = on[item.key] ?? {};
     const drawn = tabItem(`${id}-${item.key}`, item, c, { group, on: value === item.key, square: collapsed, index, count: items.length, onChange, onClose: own.onClose, onPress: own.onPress });
     const wired = own.wire ? own.wire(drawn) : drawn;
-    const landing = item.drop ? boxOf(tabLooks(group, tabStates(group, [])).insertion, c) : null;
+    const landing = item.drop ? boxOf(base.insertion, c) : null;
     return item.drop === "after" ? [wired, landing] : [landing, wired];
   };
-  return boxOf(tabLooks(group, tabStates(group, [])).list, c, id).when(collapsed, (el) => el.flex_col())
+  return boxOf(base.list, c, id).when(collapsed, (el) => el.flex_col())
     .when(Boolean(spoken), (el) => el.accessibility_label(spoken))
     .children(items.flatMap(seg).filter(Boolean));
 }
