@@ -2,7 +2,7 @@
 import { loadSpaces, temporaryKdbFile } from "./mod-fixtures.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { load, clone, temporary, exec, context, failure, popoverHost, keyboard, calls, arg, tipsOf, svgsOf } from "./helpers.mjs";
+import { load, clone, temporary, exec, context, failure, popoverHost, keyboard, calls, arg, tipsOf, svgsOf, find } from "./helpers.mjs";
 import { loadSidebar, mountedState, recorder } from "./sidebar-fixtures.mjs";
 
 const record = { name: "dark", target: "dark.example", via: "", session: "", temporary: false };
@@ -532,4 +532,17 @@ test("On the rail a computer is a Tile like the projects beside it: Tab reaches 
   }
   calls(walk().tile, "on_mouse_down").find((call) => call[1] === "right")[2]({}, { stop_propagation() {} });
   assert.deepEqual(opened, ["machineMenu"]);
+
+  const rail = find(view.render(), (el) => calls(el, "id").some((call) => call[1] === "machine-dark-row"));
+  assert.ok(rail, "the whole 48px row answers, not only the tile inside it");
+  assert.deepEqual(tipsOf(rail).at(-1), "dark", "its tooltip is over the row");
+  view.folded.clear();
+  calls(rail, "on_click").at(-1)[1]({}, { notify() {} });
+  assert.equal(view.folded.has("dark"), true, "a click beside the tile folds it");
+  opened.length = 0;
+  calls(rail, "on_mouse_down").find((call) => call[1] === "right")[2]({}, { stop_propagation() {} });
+  assert.deepEqual(opened, ["machineMenu"], "a right click beside the tile opens its menu");
+  const stopped = [];
+  calls(walk().tile, "on_click").at(-1)[1]({}, { notify() {}, stop_propagation: () => stopped.push(true) });
+  assert.deepEqual(stopped, [true], "a press on the tile stays on the tile, so the row does not fold it twice");
 });

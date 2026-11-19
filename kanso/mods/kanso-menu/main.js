@@ -112,7 +112,7 @@ export default class KansoMenu extends View {
     return menuList("kanso-menu", { title, items: lines }, tokens(theme())).track_focus(this.handle)
       .on_key_down((e, cx) => {
         const move = this.listed(e);
-        if (!move) return;
+        if (!move || (move === "enter" && !this.handle.is_focused())) return;
         if (move === "enter") list[this.at]?.onClick(cx);
         else if (move === "escape") closeOverlay(props().overlay);
         else this.at = moveTo(move, this.at, list.length);

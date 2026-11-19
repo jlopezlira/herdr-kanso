@@ -273,30 +273,31 @@ export default class Strip extends View {
     const drag = shared("strip.drag");
     const takes = Boolean(drag) && drag.pane !== p.edge; // a held pane can land beyond this edge
     const c = tokens(t);
-    const corner = (st) => (["working", "blocked", "done"].includes(st) ? mark(c, { status: st, size: "sm" }) : null);
+    const paneItem = (id) => {
+      const info = byId.get(id);
+      return { id, info, name: nameOf(info, given), mark: EDGE_MARKS.includes(info?.status) ? info.status : null, show: (cx) => { cx.stop_propagation(); show(id); } };
+    };
     const MAX_TILES = 8;
-    const tile = (id) => {
-      const info = byId.get(id), d = corner(info?.status);
+    const tile = ({ id, info, name, mark: status, show: showPane }) => {
+      const d = status ? mark(c, { status, size: "sm" }) : null;
       const face = div().id(`edge-tile-face-${id}`).relative().size(20).flex_none().rounded(R.control).bg(w?.w7 ?? t.hover)
         .border_1().border_color(CLEAR).flex().items_center().justify_center()
         .hover((h) => h.bg(c.selected).border_color(c.border))
         .child(iconOf(info?.program, 12, t.muted))
         .when(Boolean(d), (el) => el.child(d.absolute().top(-G.hair).right(-G.hair).rounded_full().border_1().border_color(c.chrome)));
-      return button({ label: nameOf(info, given), kind: "quiet", content: [face] })(`edge-tile-${id}`, c, { onClick: (cx) => { cx.stop_propagation(); show(id); } }).m(-FOCUS);
+      return button({ label: name, kind: "quiet", content: [face] })(`edge-tile-${id}`, c, { onClick: showPane }).m(-FOCUS);
     };
+    const items = ids.map(paneItem);
     const stack = v_flex().id("edge-stack").items_center().gap(G.hair).py(6).px(4)
       .child(div().h(16).text_size(T.card).text_color(takes ? t.foreground : t.muted).child(chevron))
-      .children(ids.slice(0, MAX_TILES).map(tile))
+      .children(items.slice(0, MAX_TILES).map(tile))
       .when(ids.length > MAX_TILES, (el) => el.child(div().text_size(T.micro).text_color(t.dim).child(`+${ids.length - MAX_TILES}`)));
-    const item = (id) => {
-      const info = byId.get(id), prog = info?.program;
-      return {
-        ...(prog?.icon ? { [prog.tint ? "icon" : "picture"]: prog.icon } : {}), label: nameOf(info, given),
-        mark: EDGE_MARKS.includes(info?.status) ? info.status : null, onClick: (cx) => { cx.stop_propagation(); show(id); },
-      };
+    const item = ({ info, name, mark: status, show: showPane }) => {
+      const prog = info?.program;
+      return { ...(prog?.icon ? { [prog.tint ? "icon" : "picture"]: prog.icon } : {}), label: name, mark: status, onClick: showPane };
     };
     const beyond = `${ids.length === 1 ? "One pane" : `${ids.length} panes`} beyond the ${left ? "left" : "right"} edge`;
-    const card = menu("edge-menu", { title: beyond, items: ids.map(item) }, c);
+    const card = menu("edge-menu", { title: beyond, items: items.map(item) }, c);
     const hoverCard = HoverCard.new(`edge-card-${p.side}`).anchor(left ? "left_center" : "right_center").open_delay(EDGE_CARD_MS.open).close_delay(EDGE_CARD_MS.close)
       .trigger(stack)
       .content(card);

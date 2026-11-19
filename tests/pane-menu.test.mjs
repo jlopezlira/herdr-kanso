@@ -83,3 +83,17 @@ test("Sleep and Send each open one overlay, the same from the pane's menu and fr
   for (const tag of ["ph-send-p1", "ph-sleep-p1"]) calls(find(root, (el) => el.tag === tag), "on_click").at(-1)[1]({}, { stop_propagation() {}, notify() {} });
   assert.deepEqual(clone(opened), [send, sleep]);
 });
+
+test("In the pane menu Enter runs the highlighted row only when the list holds the keyboard; on a focused row it is that row's", async () => {
+  const { view, closed } = await menu();
+  const keys = (key, stopped) => calls(view.render(), "on_key_down").at(-1)[1]({ key, modifiers: {} }, { notify() {}, stop_propagation: () => stopped.push(key) });
+  const stopped = [];
+  view.handle = { is_focused: () => true };
+  keys("j", []);
+  view.handle = { is_focused: () => false };
+  keys("enter", stopped);
+  assert.deepEqual([closed, stopped], [[], []], "focus on a row: nothing runs, the row's own press goes through");
+  view.handle = { is_focused: () => true };
+  keys("enter", stopped);
+  assert.deepEqual([closed.includes("closeOverlay"), closed.includes("pane.split"), stopped.at(-1)], [true, true, "enter"], "focus on the list: the highlighted Split right runs");
+});

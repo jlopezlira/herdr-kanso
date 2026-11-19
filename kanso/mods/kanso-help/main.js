@@ -22,22 +22,25 @@ const PAGES = [
   { key: "guide", label: "Guide" },
 ];
 
-const HELD = ["shift", "control", "alt", "platform", "meta", "cmd", "ctrl", "option", "command"];
-const OWN = ["tab", "enter", "space"];
+const MODIFIER_KEYS = ["shift", "control", "alt", "platform", "meta", "cmd", "ctrl", "option", "command"];
 const NAMED = { return: "enter", " ": "space" };
+const ACTIVATING = ["enter", "space"];
 
 export const keyName = (key) => {
   const k = String(key ?? "").toLowerCase();
   return NAMED[k] ?? k;
 };
 
-export function keyPress({ page, key, mods = [], onControl = false }) {
-  const plain = mods.every((m) => m === "shift");
-  if (key === "escape") return { does: "close", stop: true };
-  if (onControl && plain && OWN.includes(key)) return { does: null, stop: false };
-  if (page === "dojo" && key === "enter") return { does: "dojo", stop: true };
-  if (page !== "keys" || HELD.includes(key)) return { does: null, stop: false };
-  return { does: "pick", stop: !(plain && key === "tab") };
+export const heldModifiers = (m = {}) => ["shift", "control", "alt", "platform", "function"].filter((name) => m[name]);
+
+export function keyPress({ page, key, held = [], onControl = false }) {
+  const raw = String(key ?? "").toLowerCase(), named = keyName(raw);
+  const reverseTab = raw === "tab" && held.every((m) => m === "shift");
+  if (raw === "escape") return { does: "close", stop: true };
+  if (onControl && (reverseTab || (held.length === 0 && ACTIVATING.includes(named)))) return { does: null, stop: false };
+  if (page === "dojo" && raw === "enter") return { does: "dojo", stop: true };
+  if (page !== "keys" || MODIFIER_KEYS.includes(raw)) return { does: null, stop: false };
+  return { does: "pick", stop: !reverseTab };
 }
 
 const modsOf = (m = {}) => MODIFIERS.filter((k) => (k === "cmd" ? m.platform : k === "ctrl" ? m.control : m[k]));
@@ -61,7 +64,7 @@ export default class Help extends View {
 
   key(e, cx) {
     const key = keyName(e.key), mods = modsOf(e.modifiers);
-    const { does, stop } = keyPress({ page: this.page, key, mods, onControl: !this.handle.is_focused() });
+    const { does, stop } = keyPress({ page: this.page, key: e.key, held: heldModifiers(e.modifiers), onControl: !this.handle.is_focused() });
     if (stop) cx.stop_propagation();
     if (does === "close") closeOverlay(props()?.overlay);
     if (does === "dojo") this.enterDojo();

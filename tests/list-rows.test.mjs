@@ -1,7 +1,7 @@
 // The dialogs' and panels' lists draw each item through the kit row, and every item still does what it did.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { load, tape } from "./helpers.mjs";
+import { load, tape, drawingHost, calls } from "./helpers.mjs";
 
 const night = { foreground: "#d8d4cb", background: "#1b1b19", hover: "#232321", selected: "#2b2b28", accent: "#da627d", dim: "#6b6862", muted: "#949086" };
 const cx = (seen = []) => ({ notify() {}, stop_propagation: () => seen.push("stopped"), open_url: (url) => seen.push(url), timer: { after() {} } });
@@ -68,4 +68,22 @@ test("Settings' shortcuts are rows with their keys as key hints; a press records
   assert.ok(ui.handlers.has(`${id}-action`), "unbound from what ships, it offers Reset");
   ui.handlers.get(id)({}, cx());
   assert.deepEqual(started, [plain.label]);
+});
+
+test("In Arrangements Enter opens the highlighted one only when the list holds the keyboard; on a focused Delete or Save it is that button's", async () => {
+  const { Arrange, Armed } = await load("kanso-arrange/main.js", ["Arrange", "Armed"], { ...drawingHost(), theme: () => night, props: () => ({}), spaces: () => [], panes: () => [] });
+  const arrange = new Arrange();
+  const saved = { name: "Review", from: "/repo", cols: [{ panes: [{ argv: ["claude"], cwd: "/repo" }] }] };
+  const opened = [];
+  const state = { focused: false };
+  Object.assign(arrange, { armed: new Armed(), handle: { is_focused: () => state.focused }, space: { name: "App", folder: "/repo" }, busy: null, error: null, at: 0, others: [], view: "list", list: [saved],
+    open: (a) => opened.push(a.name) });
+  const press = (key) => {
+    const stopped = [];
+    calls(arrange.render(), "on_key_down").forEach(([, handler]) => handler({ key, modifiers: {} }, { notify() {}, stop_propagation: () => stopped.push(key) }));
+    return stopped;
+  };
+  assert.deepEqual([press("enter"), opened], [[], []], "focus on a button: its own press");
+  state.focused = true;
+  assert.deepEqual([press("enter"), opened], [["enter"], ["Review"]], "focus on the list: the highlighted arrangement opens");
 });

@@ -1527,7 +1527,7 @@ export default class Spaces extends View {
         const { move, gAt } = listKey(e, this.menuG);
         this.menuG = gAt;
         const acts = this.menuActs ?? [];
-        if (!move || (move === "enter" && !acts[this.menuAt])) return;
+        if (!move || (move === "enter" && (!this.handle.is_focused() || !acts[this.menuAt]))) return;
         if (move === "escape") { if (this.sub) { this.sub = null; this.menuAt = -1; } else closeOverlay(props().overlay); }
         else if (move === "enter") acts[this.menuAt]?.(cx);
         else this.menuAt = moveTo(move, this.menuAt, acts.length);
@@ -2086,10 +2086,12 @@ export default class Spaces extends View {
     const hint = m ? ((this.hints ?? {})[m] ?? "") : "";
     const go = (cx) => this.openMachine(m, phase, (this.folded ?? new Set()).has(m), cx);
     this.navMark(machineStop(m), go);
-    return tile({ icon: m ? "lu-server" : "lu-monitor", label: machineTip(title, phase, hint) })(`machine-${key}`, c, {
-      onClick: go,
-      onMenu: (_e, cx) => { cx.stop_propagation(); this.computerMenu(m, phase); },
-    });
+    const label = machineTip(title, phase, hint);
+    const menu = (_e, cx) => { cx.stop_propagation(); this.computerMenu(m, phase); };
+    return tile({ icon: m ? "lu-server" : "lu-monitor", label })(`machine-${key}`, c, {
+      onClick: (cx) => { cx.stop_propagation(); go(cx); },
+      onMenu: menu,
+    }).id(`machine-${key}-row`).cursor_pointer().on_click((_e, cx) => go(cx)).on_mouse_down("right", menu).tooltip(tooltip({ label }));
   }
 
   // A computer: the computer row composition; what is wrong is its one button, its tools show under the pointer or the keyboard.
