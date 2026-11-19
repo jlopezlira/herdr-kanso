@@ -164,21 +164,22 @@ const wire = (el, c, { onClick, onHover, onKey, focusHandle }) => el
   .when(Boolean(onClick || focusHandle), (e) => e.focus((s) => s.border_color(c.accent)));
 
 const INERT = Object.freeze({
-  selected: false, hover: false, focus: false, actions: Object.freeze([]), action: null, verbs: Object.freeze([]), tools: Object.freeze([]),
+  selected: false, hover: false, focus: false, actions: Object.freeze([]), action: null, verbs: Object.freeze([]), start: Object.freeze([]), tools: Object.freeze([]),
   onClick: null, onHover: null, onKey: null, focusHandle: null,
 });
+const withoutPress = (detail) => [detail ?? []].flat().filter(Boolean).map((part) => (typeof part === "object" ? { ...part, label: null, onClick: null } : part));
 
 // `start`, `tools`: drawn elements before the icon and always at the end; `actions`: tools shown with `hover` or `focus`; `keys`: key hint props.
 // `level` makes it a tree row, `open` its folder's fold; `verbs`: quiet word actions on a line under it.
 // `group`: a heading that heads a group, such as a computer over its projects; `wrap`: the name wraps instead of one truncated line; `drop`: where a dragged row lands; `wash`: a state's ground; `guides`: one per level.
 export function row(id, c, {
-  icon = null, tone = null, letter = null, level = null, open = null, name, detail = null, meta = null, chip: count = null, flag = null, mark: status = "none", second = null, heading = false, group = false, title = false,
-  depth = 0, selected: picked = false, current = false, dimmed = false, busy = false, pending = false, hover: hovering = false, focus: focusing = false, actions: offered = [], action: offer = null, verbs: said = [], start = [], tools: own = [], keys = [],
+  icon = null, tone = null, letter = null, level = null, open = null, name, detail: told = null, meta = null, chip: count = null, flag = null, mark: status = "none", second = null, heading = false, group = false, title = false,
+  depth = 0, selected: picked = false, current = false, dimmed = false, busy = false, pending = false, hover: hovering = false, focus: focusing = false, actions: offered = [], action: offer = null, verbs: said = [], start: leading = [], tools: own = [], keys = [],
   glint = false, wrap = false, drop = null, wash = null, guides = [], names = false, nameInk = null,
   onClick: pressed = null, onHover: hovered = null, onKey: keyed = null, focusHandle: kept = null,
 } = {}) {
-  const { selected, hover, focus, actions, action, verbs, tools, onClick, onHover, onKey, focusHandle } = busy ? INERT
-    : { selected: picked, hover: hovering, focus: focusing, actions: offered, action: offer, verbs: said, tools: own, onClick: pressed, onHover: hovered, onKey: keyed, focusHandle: kept };
+  const { selected, hover, focus, actions, action, verbs, start, tools, detail, onClick, onHover, onKey, focusHandle } = busy ? { ...INERT, detail: withoutPress(told) }
+    : { selected: picked, hover: hovering, focus: focusing, actions: offered, action: offer, verbs: said, start: leading, tools: own, detail: told, onClick: pressed, onHover: hovered, onKey: keyed, focusHandle: kept };
   const ink = dimmed ? c.muted : c.text;
   const nameColour = names && nameInk ? { fg: c.text, muted: c.muted, dim: c.dim }[nameInk] : ink;
   const shown = hover || focus;

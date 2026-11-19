@@ -219,6 +219,18 @@ test("A busy row is inert in its children too: no action to press, no verb, no t
   assert.deepEqual(hits, []);
 });
 
+test("A busy row keeps an actionable detail's text without its action, and takes no press in its start slot", async () => {
+  const { row, c } = await kit();
+  const { button } = await load("kanso-panel/ui-button.js", ["button"], drawingHost());
+  const hits = [];
+  const given = { name: "Updating kansō", detail: [{ text: "Retry", label: "Retry", onClick: () => hits.push("detail") }, "3.31.0"], start: [button("r-start", "Go", () => hits.push("start"), c, {})] };
+  const busy = row("r", c, { ...given, busy: true });
+  assert.deepEqual(texts(busy), ["Updating kansō", "Retry", "3.31.0"], "the detail's words stay");
+  assert.equal(all(busy).some((el) => calls(el, "on_click").length), false, "and nothing in the row can be pressed");
+  const idle = row("r", c, given);
+  assert.deepEqual(all(idle).filter((el) => calls(el, "on_click").length).length, 2, "the same props on a row at rest press: the detail and the start");
+});
+
 test("The row's code has no number of pixels: every size comes from the tokens", () => {
   assert.deepEqual(numberArguments("kanso-panel/ui-row.js"), []);
 });

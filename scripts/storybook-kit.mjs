@@ -152,7 +152,7 @@ export function kitRecords(records) {
     ['Footer', 'Updating', inSidebar(sidebarFooter({ update: 'Updating kansō', busy: true })), 'While it updates, the row says so, its icon turns, and it takes no press until it lands or is refused.'],
     ['Footer', 'Updating, its stage', inSidebar(sidebarFooter({ update: 'Downloading kansō', busy: true })), 'Proposed, an option. The row names the stage (Downloading, Installing); the update does not report stages today.'],
     ['Footer', 'Refused', inSidebar(sidebarFooter({ update: 'Update kansō to 3.31.0', refused: sampleRefusal })), 'The tool\'s words under the row, with Update to try again and Explain.'],
-    ['Footer', 'Updated', inSidebar(toast({ level: 'success', icon: 'lu-refresh-cw', title: 'kansō updated to 3.31.0' }) + sidebarFooter()), 'Proposed. When it lands, the row goes and the toast says kansō updated.'],
+    ['Footer', 'Updated', inSidebar(toast({ level: 'success', icon: 'lu-refresh-cw', title: 'kansō updated to 3.31.0' }) + sidebarFooter()), 'When it lands, the row goes and the toast says kansō updated.'],
     ['Footer', 'Settings menu', inSidebar(sidebarFooter({ menu: sampleSettingsMenu() })), 'Proposed. Settings opens one menu: kansō settings with its key, and Herdr settings.'],
     ['Footer', 'Collapsed', inRail(sidebarFooter({ collapsed: true })), 'Proposed. In the rail, Settings is an icon Button.'],
     ['Footer', 'Collapsed, update', inRail(sidebarFooter({ collapsed: true, update: 'Update kansō to 3.31.0' })), 'Proposed. The update is an icon Button above it, its words in the tooltip.'],

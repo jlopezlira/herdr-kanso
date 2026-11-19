@@ -46,7 +46,7 @@ export default class WorkspaceChrome extends View {
     this.updater.start(cx, { polls: false });
     this.explainer = null;
     this.lookup = null;
-    cx.timer.after(0, (later) => this.look(later));
+    cx.timer.after(0, (later) => this.known(later));
     // Command names stay kanso-tabs.* for keys bound to them before.
     readCommands(cx, () => nextCommand(), (c, cx) => this.command(c, cx));
     cx.timer.every(SAMPLE_MS, (cx) => this.watch(cx));
@@ -129,18 +129,23 @@ export default class WorkspaceChrome extends View {
       "footer", tokens(theme()), { presses, focuses: { settings: this.settingsFocus }, onOpen: (open, cx) => this.setMenu(open, cx) });
   }
 
-  look(cx) {
+  look() {
     this.lookup ??= findExplainer().then((agent) => {
       this.explainer = agent;
-      cx.notify();
       return agent;
     });
     return this.lookup;
   }
 
-  async explain(why, cx) {
-    const agent = this.explainer ?? await this.look(cx);
-    explainWith(agent, { name: "Explain the update", folder: appHome(), task: explainRefusal(why) });
+  known(later, use = () => {}) {
+    return later.spawn(async (again) => {
+      use(await this.look());
+      again.notify();
+    });
+  }
+
+  explain(why, cx) {
+    cx.timer.after(0, (later) => this.known(later, (agent) => explainWith(agent, { name: "Explain the update", folder: appHome(), task: explainRefusal(why) })));
   }
 
   render(cx) {

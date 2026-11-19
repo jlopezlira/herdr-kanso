@@ -12,8 +12,14 @@ const byId = (el, id) => all(el).find((x) => x.tag === id || arg(x, "id") === id
 const holding = (el, words) => all(el).find((x) => calls(x, "on_click").length && texts(x).includes(words)) ?? null;
 const popover = (el) => all(el).find((x) => calls(x, "trigger").length) ?? null;
 
-const cx = () => ({ notified: 0, notify() { this.notified += 1; }, timer: { after() {} }, stop_propagation() {} });
-const press = (el, context = cx()) => { arg(el, "on_click")({}, context); return context; };
+const cx = () => {
+  const context = { notified: 0, queued: [], expired: false, stop_propagation() {} };
+  const live = () => assert.equal(context.expired, false, "ordinary click context has expired");
+  return Object.assign(context, { notify() { live(); context.notified += 1; }, timer: { after: (ms, fn) => { live(); context.queued.push(fn); } } });
+};
+const later = () => ({ notify() {}, spawn: (body) => body({ notify() {} }) });
+const settle = (context) => Promise.all(context.queued.splice(0).map((fn) => fn(later())));
+const press = (el, context = cx()) => { arg(el, "on_click")({}, context); context.expired = true; return context; };
 const pressInRefusal = (view, words) => press(holding(all(view.render()).find((x) => calls(x, "mt").length), words));
 
 test("In Stable Mode with nothing to install, the footer is Settings alone: Add computer lives in +", async () => {
@@ -74,7 +80,7 @@ test("In the rail, an update that runs is the icon Button turning and disabled",
 
 test("A refused update keeps its row and shows the tool's words under it, with Update to try again and Explain to the agent", async () => {
   const why = "git ls-remote: Could not resolve host: github.com";
-  const { view, installs, ran, G } = await footer({ updater: { available: () => "3.31.0", refused: () => why } });
+  const { view, installs, ran, G } = await footer({ updater: { available: () => "3.31.0", refused: () => why }, agents: async () => [{ name: "Claude Code", installed: true, run: ["claude"] }] });
   view.explainer = { name: "Claude Code", run: ["claude"] };
   const drawn = view.render();
   assert.deepEqual(texts(drawn), ["Update kansō to 3.31.0", "!", "kansō didn't update", why, "Update", "Explain to Claude Code", "Settings"], "the blocked mark, our words, the tool's words, the fix, Explain");
@@ -83,7 +89,7 @@ test("A refused update keeps its row and shows the tool's words under it, with U
   press(holding(block, "Update"));
   assert.equal(installs.length, 1);
   assert.equal(ran.length, 0, "Update asks nothing of the agent");
-  press(holding(block, "Explain to Claude Code"));
+  await settle(press(holding(block, "Explain to Claude Code")));
   assert.deepEqual(JSON.parse(JSON.stringify(ran)), [["tab.new", { name: "Explain the update", folder: "/home/me/.config/herdr-app", argv: ["claude"], task: `kansō could not update itself. The tool said: ${why}\nExplain in plain words what went wrong and how to fix it.` }]]);
   assert.equal(installs.length, 1, "and Explain does not install");
 });
@@ -91,23 +97,22 @@ test("A refused update keeps its row and shows the tool's words under it, with U
 test("With no agent installed, Explain names an agent and says so instead of starting one", async () => {
   const why = "offline";
   const { view, ran, notices } = await footer({ updater: { available: () => "3.31.0", refused: () => why } });
-  pressInRefusal(view, "Explain to an agent");
-  await view.lookup;
-  await Promise.resolve();
+  await settle(pressInRefusal(view, "Explain to an agent"));
   assert.deepEqual([ran.length, notices.map((notice) => notice.title)], [0, ["Could not start the agent"]]);
 });
 
-test("Explain pressed while the agent lookup is pending waits for it: one tab opens, and no false absence is reported", async () => {
+test("Explain pressed first starts the lookup from a timer, never from the click's own context: one tab opens after the click has returned", async () => {
   let found;
   const { view, ran, notices, lookups } = await footer({ updater: { available: () => "3.31.0", refused: () => "offline" }, agents: () => new Promise((resolve) => { found = resolve; }) });
-  pressInRefusal(view, "Explain to an agent");
+  const click = pressInRefusal(view, "Explain to an agent");
+  assert.deepEqual([click.queued.length, lookups.length], [1, 0], "the click only schedules; it looks nothing up itself");
+  const running = settle(click);
   await Promise.resolve();
-  assert.deepEqual([ran.length, notices.length, lookups.length], [0, 0, 1], "nothing yet, and nothing said");
+  assert.deepEqual([ran.length, notices.length, lookups.length], [0, 0, 1], "pending: nothing yet, and nothing said");
   found([{ name: "Atlas", installed: true, run: ["atlas"] }]);
-  await view.lookup;
-  await Promise.resolve();
+  await running;
   assert.deepEqual(JSON.parse(JSON.stringify([ran.map((call) => [call[0], call[1].argv]), notices.length])), [[["tab.new", ["atlas"]]], 0]);
-  pressInRefusal(view, "Explain to Atlas");
+  await settle(pressInRefusal(view, "Explain to Atlas"));
   assert.deepEqual([ran.length, lookups.length], [2, 1], "a second press opens a second tab with no second lookup");
 });
 

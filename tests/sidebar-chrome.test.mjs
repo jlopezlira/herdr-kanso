@@ -224,17 +224,17 @@ test("No hand-drawn toolbar, header or footer is left, and the stacks draw no li
   assert.deepEqual(numberArguments("kanso-panel/ui-stack.js"), []);
 });
 
-test("The Storybook's footer: a running update and a refusal are built, and only the stage and the ending join the earlier proposals", () => {
+test("The Storybook's footer: a running update, a refusal and the landed update are what the app does, and only the stage joins the earlier proposals", () => {
   const records = kitRecords([]).filter((record) => record.page === "Primitives/Footer" || record.page === "Compositions/Sidebar/Footer");
   const states = Object.fromEntries(records.map((record) => [record.label, record]));
-  for (const label of ["Updating", "Collapsed, updating", "Refused"]) assert.doesNotMatch(states[label].caption, /Proposed/, `${label} is the fix, not a proposal`);
+  for (const label of ["Updating", "Collapsed, updating", "Refused", "Updated"]) assert.doesNotMatch(states[label].caption, /Proposed/, `${label} is the fix or today's behavior, not a proposal`);
   for (const label of ["Updating", "Collapsed, updating"]) assert.match(states[label].html, /kanso-icon--spinning|kanso-button--spinning/, `${label} turns its icon`);
   const proposed = records.filter((record) => /^Proposed/.test(record.caption)).map((record) => record.label).sort();
-  assert.deepEqual(proposed, ["Collapsed", "Collapsed, update", "Settings menu", "Updated", "Updating, its stage"], "the three that were Proposed before, the stage and the ending");
-  assert.match(states.Updated.html, /kansō updated to 3\.31\.0/, "the ending's toast says kansō updated");
+  assert.deepEqual(proposed, ["Collapsed", "Collapsed, update", "Settings menu", "Updating, its stage"], "the three that were Proposed before, and the stage");
+  assert.match(states.Updated.html, /kansō updated to 3\.31\.0/, "the landed update's toast says kansō updated");
   assert.doesNotMatch(states.Updated.html, /kanso-row--busy|kanso-state-block/, "and the row is gone");
   for (const file of ["kanso/mods/kanso-chrome/main.js", "kanso/mods/kanso-chrome/footer-model.js", "kanso/mods/kanso-chrome/sidebar-footer.js"]) {
-    assert.doesNotMatch(repoText(file), /Downloading|Installing|updated to/, `${file} builds neither the stage nor the ending`);
+    assert.doesNotMatch(repoText(file), /Downloading|Installing/, `${file} builds no stage`);
   }
   assert.match(states.Updating.html, /kanso-row--busy[^>]*aria-busy="true"/, "the row is busy and out of the keyboard's way");
   assert.doesNotMatch(states.Updating.html, /kanso-row--busy[^>]*tabindex/, "it takes no tab stop, so no ring can stay on it");
