@@ -201,7 +201,7 @@ test("spend, settings, memory and containers load as the shared skeleton", async
 
   const { Containers } = await loadContainers(host);
   const containers = new Containers();
-  Object.assign(containers, { state: "reading", groups: null, width: 368, reading: false, error: null, note: null });
+  Object.assign(containers, { state: "reading", groups: null, width: 368, reading: false, error: null, note: null, faults: new Map(), have: new Set() });
   assertSkeleton(containers.render());
   containers.state = "down";
   assert.equal(walk(containers.render()).texts.includes("Docker isn't running."), true);

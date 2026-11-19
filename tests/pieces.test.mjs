@@ -328,7 +328,7 @@ test("panel.sim hidden issues no probe and no frame", async () => {
   tabs.probeSimulator(cx);
   await drain();
   assert.equal(commands.length, 0, "hidden again: no probe");
-  delete store[TOOLS];
+  store[TOOLS] = { ios: null };
   assert.equal(panelList().some((item) => item.id === "sim"), false, "no tools: not listed");
   store[TOOLS] = { adb: "adb" };
   store[STORE] = {};

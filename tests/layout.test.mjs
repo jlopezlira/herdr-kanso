@@ -248,6 +248,7 @@ test("Simulator is absent without native tools, present with either, and hidden 
   const { Tabs, panelList } = await loadTabPanels(f.host);
   const tabs = new Tabs();
   const listed = () => panelList().find((panel) => panel.id === "sim");
+  f.host.setShared("kanso.sim.tools", { ios: null });
   assert.equal(listed(), undefined);
   assert.deepEqual(pressSim(tabs, f), []);
   for (const tools of [{ ios: true }, { adb: "/sdk/adb" }]) {
