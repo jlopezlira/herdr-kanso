@@ -502,21 +502,25 @@ windowsOnly("A permanent denial of a recovery rename stops at once and keeps the
   assert.equal(await readFile(prior, "utf8"), "prior\n");
 });
 
-windowsOnly("A failed parent creation names that create, not a rename of the live mod", async (t) => {
-  const made = await recoverHome(t);
-  const live = join(made.home, "mods", "kanso-chrome");
-  const stage = join(made.dir, "op");
-  const parent = join(stage, "src", "kanso", "mods");
-  await mkdir(live, { recursive: true });
-  await writeFile(join(live, "main.js"), "old\n");
-  await mkdir(stage, { recursive: true });
-  await writeFile(join(stage, "src"), "not a directory\n");
-  await writeFile(join(stage, "slots"), "1 kanso-chrome\n");
-  const began = Date.now();
-  const result = await recoverNow(made.home, made.dir);
-  expectStop(result, "create", parent, began);
-  assert.equal(result.stderr.includes(`rename ${live}`), false, result.stderr);
-  assert.equal(await readFile(join(live, "main.js"), "utf8"), "old\n");
+windowsOnly("A failed parent creation names that create, not a rename of the live mod, whether the parent or a folder above it is a file", async (t) => {
+  for (const blocker of [["src"], ["src", "kanso", "mods"]]) {
+    const made = await recoverHome(t);
+    const live = join(made.home, "mods", "kanso-chrome");
+    const stage = join(made.dir, "op");
+    const parent = join(stage, "src", "kanso", "mods");
+    const file = join(stage, ...blocker);
+    await mkdir(live, { recursive: true });
+    await writeFile(join(live, "main.js"), "old\n");
+    await mkdir(join(file, ".."), { recursive: true });
+    await writeFile(file, "not a directory\n");
+    await writeFile(join(stage, "slots"), "1 kanso-chrome\n");
+    const began = Date.now();
+    const result = await recoverNow(made.home, made.dir);
+    expectStop(result, "create", parent, began);
+    assert.equal(result.stderr.includes(`rename ${live}`), false, result.stderr);
+    assert.deepEqual(await readdir(live), ["main.js"], result.stderr);
+    assert.equal(await readFile(join(live, "main.js"), "utf8"), "old\n");
+  }
 });
 
 windowsOnly("A destination another writer fills while rollback waits stops the move and keeps both sides", async (t) => {
