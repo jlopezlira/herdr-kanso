@@ -272,6 +272,7 @@ const perDay = (costs) => {
 export const sampleSpend = {
   month: 'November',
   plans: [plan('25×', 'Claude Max 20x', '$5,012 of work for $200'), plan('3.1×', 'ChatGPT Plus', '$62 of work for $20')],
+  unused: [plan('0×', 'Claude Max 20x', '$0 of work for $200', 'dim'), plan('0×', 'ChatGPT Plus', '$0 of work for $20', 'dim')],
   under: plan('0.3×', 'ChatGPT Pro', '$61 of work for $200 · not paying for itself', 'working'),
   early: plan('24×', 'Claude Max 20x · too early to say', 'on pace: $322 in 2 days, about $4,800 by November 30', 'dim'),
   periods: [{ key: 'day', label: 'Today' }, { key: 'month', label: 'Month' }, { key: '30d', label: '30 days' }, { key: 'year', label: 'Year' }, { key: 'all', label: 'All time' }],

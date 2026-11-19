@@ -24,7 +24,7 @@ const gives = (item, before, facts) => {
   }[kind]?.() ?? false;
 };
 const sameSet = (wanted, drawn) => !wanted || (wanted.length === drawn.length && wanted.every((name) => drawn.includes(name)));
-const judged = ({ page, state, kit, reach = {}, says = [], omits = [], holds = [], free = [], picks = null, pending = null, differs = {}, ...before }) => {
+const judged = ({ page, state, kit, reach = {}, says = [], omits = [], holds = [], free = [], selects = [], picks = null, pending = null, differs = {}, ...before }) => {
   const own = together(kit.map(kitFacts));
   const lost = lossOf(before, own, map.renamed);
   const credited = Object.entries(reach).flatMap(([target, items]) => items.map((item) => [target, item]));
@@ -35,6 +35,7 @@ const judged = ({ page, state, kit, reach = {}, says = [], omits = [], holds = [
     stale: [...Object.keys(differs), ...credited.map(([, item]) => item)].filter((item) => !lost.includes(item)).map(name),
     unsaid: says.filter((words) => !own.text.includes(words)).map(name),
     unheld: holds.filter((label) => !own.held.includes(label)).map(name),
+    unselected: selects.filter((label) => !own.chosen.includes(label)).map(name),
     unfree: free.filter((label) => own.held.includes(label) || !own.actions.includes(label)).map(name),
     said: omits.filter((words) => own.text.includes(words)).map(name),
     moved: [sameSet(picks, own.picked) ? null : `picked ${own.picked.join(", ")}`, sameSet(pending, own.waits) ? null : `waiting ${own.waits.join(", ")}`].filter(Boolean).map(name),
@@ -49,6 +50,7 @@ test("Every state develop drew on a panel page keeps its marks, its actions, wha
   assert.deepEqual(every("stale"), [], "drawn in the state itself now: take it off the list");
   assert.deepEqual(every("unsaid"), [], "the kit state no longer says what set the state apart");
   assert.deepEqual(every("unheld"), [], "a control the operation blocks is free");
+  assert.deepEqual(every("unselected"), [], "the control the state has chosen is not chosen");
   assert.deepEqual(every("unfree"), [], "a control the operation leaves alone is held or gone");
   assert.deepEqual(every("said"), [], "the kit state says what the state rules out");
   assert.deepEqual(every("moved"), [], "the chosen or the waiting mark is on another row");

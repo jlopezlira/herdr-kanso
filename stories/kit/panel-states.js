@@ -244,7 +244,7 @@ export const spendViews = {
   'Showing one project': [home({ pointer: 'period', showing: sampleSpend.showing, ...sampleSpend.filtered }), 'A project and a model chosen: both pickers name them, the number and the rows are theirs alone, and one dim line offers Show everything.'],
   'Active now': [home({ live: sampleSpend.live }), 'Sessions running now come first, breathing; each opens its task.'],
   'History open': [home(daysOpen()), 'The period a bar a day, the peak with its value; each bar says its date, cost and tokens.'],
-  'History, nothing that period': [home({ ...daysOpen(sampleSpend.quiet), pointer: 'period', period: 'month', number: sampleSpend.nothing, lists: null }), 'Nothing used in the month: Month is on, the number is $0.00, no project is listed, and each of its days says its date and $0.00.'],
+  'History, nothing that period': [home({ ...daysOpen(sampleSpend.quiet), plans: sampleSpend.unused, pointer: 'period', period: 'month', number: sampleSpend.nothing, lists: null }), 'Nothing used in the month: each plan says $0 of work for its fee, Month is on, the number is $0.00, no project is listed, and each of its days says its date and $0.00.'],
   'A project opened from its row': [openedFrom('project'), 'Its period, its number and facts, then its models and tasks.'],
   'A project’s History': [openedFrom('project', daysOpen(sampleSpend.project.days)), 'The project’s days, each with its own cost.'],
   'A model opened from its row': [openedFrom('model'), 'Its period, its number and facts, then its projects and tasks.'],
