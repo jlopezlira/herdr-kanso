@@ -73,7 +73,7 @@ export const sampleSidebar = ({ view = 'spaces', switcher = true, menu: open = f
 // Sample status bar content: the source's words when a computer can't be reached, the palette's tooltip, the minimap's columns,
 // and what each panel item holds when its Menu opens.
 export const unreachable = (name) => phrase('ssh: connect to host', name, 'port 22: Operation timed out');
-export const paletteTip = 'Command palette ⌘⇧P';
+export const paletteTip = 'Command palette ⇧⌘P';
 // Each column's width in hairlines and its panes' tones: one in view, the one in front (its second pane focused), one pinned, two out of view.
 export const sampleColumns = [{ width: 15, panes: ['seen'] }, { width: 21, panes: ['seen', 'current'] }, { width: 9, panes: ['seen'] }, { width: 15, panes: ['away'] }, { width: 15, panes: ['away'] }];
 const hide = [{ separator: true }, { icon: 'lu-eye-off', label: 'Hide this' }];

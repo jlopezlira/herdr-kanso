@@ -4,7 +4,7 @@ import { button as drawButton } from "./ui-button.js";
 import { menu as drawMenu } from "./ui-menu.js";
 import { stateEmpty, stateLine, stateBlock } from "./ui-state.js";
 import { toast as drawToast } from "./ui-toast.js";
-import { skeletonOf as drawSkeleton } from "./ui-skeleton.js";
+import { skeletonOf as drawSkeleton, tabSkeleton as drawTabSkeleton } from "./ui-skeleton.js";
 import { figure } from "./ui-metric.js";
 import { diffText, facts, plus } from "./ui-facts.js";
 import { card as drawCard } from "./ui-card.js";
@@ -39,6 +39,8 @@ export const grow = () => (id, c, more = {}) => {
 };
 
 const EVENTS = {
+  onSize: (el, fn) => el.on_size_change(fn),
+  onOver: (el, fn) => el.on_hover(fn),
   onPress: (el, fn) => el.on_mouse_down("left", fn),
   onRelease: (el, fn) => el.on_mouse_up("left", fn),
   onMenu: (el, fn) => el.on_mouse_down("right", fn),
@@ -48,7 +50,7 @@ const EVENTS = {
 // `onChange(key, cx)`: a choice among tabs or menu items; `onOpen(open, cx)`: a menu under a button opens or shuts; `onLink(url, cx)`: a link's press in markdown.
 // `presses`: a composition's press targets by name, its icon or else its label; a stack passes them down and each press takes its own.
 // `focuses`: by the same names, the focus handles the caller owns, so a target keeps the keyboard while it is drawn in another form.
-const HANDLERS = ["on", "presses", "focuses", "onClick", "onChange", "onOpen", "onHover", "onKey", "onLink", "focusHandle", ...Object.keys(EVENTS)];
+const HANDLERS = ["on", "presses", "focuses", "wires", "onClick", "onChange", "onClose", "onOpen", "onHover", "onKey", "onLink", "focusHandle", ...Object.keys(EVENTS)];
 const withEvents = (el, events) => Object.entries(events).filter(([, fn]) => fn).reduce((drawnEl, [name, fn]) => EVENTS[name](drawnEl, fn), el);
 const appIcon = (icon) => (typeof icon === "string" ? icon.replace(/^lu-/, "") : icon);
 const iconOf = (icon) => (icon === "none" ? null : appIcon(icon));
@@ -74,15 +76,16 @@ const NAMED = ["presses", "focuses"];
 const pressing = (draw) => (id, c, more = {}, context = {}) => {
   const fresh = NAMED.filter((name) => more[name] && !more[name][TAKEN]);
   if (!fresh.length) return draw(id, c, more, context);
-  // Named as the Storybook names them ("lu-x") or as the app does ("x").
-  const marked = Object.fromEntries(fresh.map((name) => [name, { ...Object.fromEntries(Object.entries(more[name]).map(([key, value]) => [appIcon(key), value])), [TAKEN]: new Set() }]));
+  const marked = Object.fromEntries(fresh.map((name) => [name, { ...more[name], [TAKEN]: new Set() }]));
   const el = draw(id, c, { ...more, ...marked }, context);
   noTool(id, Object.values(marked).flatMap((named) => Object.keys(named).filter((key) => named[key] && !named[TAKEN].has(key))));
   return el;
 };
 // A name several targets share, such as rows with one icon, takes a list: one press each, in drawing order (null for one that does not act);
 // each turn taken is marked beside the name.
-const takeOf = (named, key) => {
+const atKey = (named, key) => (key in named || !(`lu-${key}` in named) ? key : `lu-${key}`);
+const takeOf = (named, wanted) => {
+  const key = atKey(named, wanted);
   const given = named[key] ?? null;
   if (given) named[TAKEN]?.add(key);
   if (!Array.isArray(given)) return given;
@@ -99,7 +102,7 @@ const pressFact = (part) => typeof part === "object" && Boolean(part.label);
 const withHandlers = (id, raw, actions, action, detail, presses) => {
   const own = parts(actions).map(withIcon);
   const lone = withIcon(action);
-  const handed = Object.fromEntries([...own, lone].filter(Boolean).map(keyOf).filter((key) => !raw[key] && presses[key]).map((key) => [key, takeOf(presses, key)]));
+  const handed = Object.fromEntries([...own, lone].filter(Boolean).map(keyOf).filter((key) => !raw[key] && presses[atKey(presses, key)]).map((key) => [key, takeOf(presses, key)]));
   const on = Object.fromEntries(Object.entries({ ...raw, ...handed }).map(([key, fn]) => [appIcon(key), fn]));
   const facts = parts(detail).map(withIcon);
   const targets = [...own, lone, ...facts.filter(pressFact)];
@@ -124,12 +127,13 @@ export const row = ({ icon, flag, detail, action, actions, start, tools, ...prop
 // `icon: "none"` is the Storybook's no icon; app-only props, such as `color`, pass through as the row's do.
 // `content`: kit pieces or elements drawn in place of the icon and label, such as a picture and its name. No `tip` reads the label.
 // `ink`: the stack around it quiets it, as Sort at its default order is dim; in a `card` it stands at the card's start.
-export const button = ({ label, icon = "none", content = [], tip = "", ...props }) => pressing((id, c, more, { ink = null, card = false }) => {
-  const key = keyOf({ icon: iconOf(icon), label });
-  const { presses = {}, focuses = {}, onClick = takeOf(presses, key), focusHandle = takeOf(focuses, key) } = given(more);
-  const drawnButton = drawButton(id, label, onClick, c, { ...(ink ? { color: c[ink] } : {}), ...props, tip: tip || null, icon: iconOf(icon), content: drawn(id, c, "content", content) });
+export const button = ({ label, icon = "none", content = [], tip = "", name = "", ...props }) => pressing((id, c, more, { ink = null, card = false }) => {
+  const key = name || keyOf({ icon: iconOf(icon), label });
+  const { presses = {}, focuses = {}, wires = {}, onClick = takeOf(presses, key), focusHandle = takeOf(focuses, key) } = given(more);
+  const drawnButton = drawButton(id, label, onClick, c, { ...(ink ? { color: c[ink] } : {}), ...props, name, tip: tip || null, icon: iconOf(icon), content: drawn(id, c, "content", content) });
   const placedButton = card ? drawnButton.self_start() : drawnButton;
-  return focusHandle ? placedButton.track_focus(focusHandle) : placedButton;
+  const focused = focusHandle ? placedButton.track_focus(focusHandle) : placedButton;
+  return wires[key] ? wires[key](focused) : focused;
 });
 
 // Explain to <agent>: the bot icon and the agent named in words; its press starts that agent on the question.
@@ -157,19 +161,24 @@ export const mark = ({ status, size = "md" }) => still(drawMark)({ status, size 
 // An icon on its own, at a row's size, in the muted ink or its `tone`.
 export const glyph = (icon, tone = "") => still((c) => svg(glyphOf(appIcon(icon))).size(ICON_ROW).flex_none().text_color(tone ? toneColor(c, tone) : c.muted))();
 
-// `icon` draws each item's icon and `label` its name; icons without names are a column of squares, each name its tip. `onChange(key, cx)` picks one.
-export const tabs = ({ items = [], value = null, size = "md", track = false, disabled = false, icon = false, label = false }) => (id, c, more = {}) => {
-  const { onChange = null } = given(more);
+export const tabs = ({ items = [], value = null, size = "md", track = false, disabled = false, icon = false, label = false }) => (id, c, more = {}, { bar = false } = {}) => {
+  const { onChange = null, onClose = null, wires = {} } = given(more);
   const shown = items.map((item) => ({ ...item, icon: icon ? appIcon(item.icon) : null }));
-  return drawTabs(id, shown, value, onChange, c, { size, track, disabled, collapsed: icon && !label });
+  const own = Object.fromEntries(items.map(({ key }) => [key, { onClose: onClose && ((cx) => onClose(key, cx)), wire: wires[`tab:${key}`] }]));
+  return drawTabs(id, shown, value, onChange, c, { size, track, disabled, collapsed: icon && !label, bar, on: own });
+};
+
+export const tabSkeleton = () => (id, c, more = {}, { index = 0 } = {}) => {
+  given(more);
+  return drawTabSkeleton(id, c, index);
 };
 
 // A wrapper that only places other pieces, as the Storybook's: `label` is a focusable one's tooltip and spoken name.
 // A pressable one takes `onClick` itself; any other gives its handlers, `presses` with them, to its children.
 // `context`: what the stack around it says of its place, such as a column.
 export const stack = ({ variant, on = false, label = "", ...flags }, ...children) => pressing((id, c, more, context) => {
-  const { onPress, onRelease, onMenu, onMove, onWheel, ...handlers } = given(more);
-  return stackOf(id, c, { variant, on, label, ...flags }, list(...children), handlers, (el) => withEvents(el, { onPress, onRelease, onMenu, onMove, onWheel }), context);
+  const { onPress, onRelease, onMenu, onMove, onWheel, onSize, onOver, ...handlers } = given(more);
+  return stackOf(id, c, { variant, on, label, ...flags }, list(...children), handlers, (el) => withEvents(el, { onPress, onRelease, onMenu, onMove, onWheel, onSize, onOver }), context);
 });
 
 // Dawn Mode's sky behind the lights: the Storybook's art in this theme's colours, layer by layer (built by build:ui-tokens),
@@ -183,7 +192,10 @@ const pattern = (draw) => (props) => pressing((id, c, more) => {
 });
 export const emptyState = ({ icon = "", text, action = "" }) => pattern(stateEmpty)({ icon: appIcon(icon), text, action });
 export const failureLine = ({ text, fix = "", detail = "" }) => pattern(stateLine)({ text, fix, detail });
-export const failureBlock = ({ text, source = "", fix = "" }) => pattern(stateBlock)({ text, source, fix });
+export const failureBlock = ({ text, source = "", fix = "", agent = "" }) => pressing((id, c, more) => {
+  const { presses = {}, onClick = takeOf(presses, fix) } = given(more);
+  return stateBlock(id, c, { text, source, fix, onClick, agent, onExplain: agent ? takeOf(presses, `Explain to ${agent}`) : null });
+});
 // A press on the toast or its fix goes home.
 export const toast = ({ icon = "none", ...props }) => pattern(drawToast)({ ...props, icon: iconOf(icon) });
 export const skeletonOf = ({ shape, count }) => (id, c, more = {}) => {

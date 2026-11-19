@@ -28,14 +28,15 @@ export const stateBlockPx = ({ source = "", fix = "" } = {}, lines = 1) => 2 * (
   + (source ? G.xs + EVIDENCE_PX : 0) + (fix ? 2 * G.xs + H.control : 0);
 
 /** Failure, block: a blocked edge; the mark and our words, the source's words in mono at most two lines, then the one solid fix. */
-export function stateBlock(id, c, { text, source = "", fix = "", onClick = null }) {
+export function stateBlock(id, c, { text, source = "", fix = "", onClick = null, agent = "", onExplain = null, lit = null }) {
   return v_flex().id(id).w_full().p(G.md).gap(G.xs).rounded(R.card).border_1().border_color(c.blocked)
     .child(h_flex().w_full().min_w(0).items_center().gap(G.sm).child(mark(c, { status: "blocked" }))
       .child(div().flex_1().min_w(0).text_size(T.card).line_height(LEADING).font_medium().text_color(c.text).child(text)))
     .when(Boolean(source), (el) => el.child(h_flex().w_full().pl(ICON_ROW + G.sm)
       .child(div().w_full().max_h(EVIDENCE_PX).overflow_hidden().font_family(monoFont()).text_size(T.mono).line_height(LEADING).text_color(c.muted).tooltip(source).child(source))))
-    .when(Boolean(fix), (el) => el.child(h_flex().w_full().pl(ICON_ROW + G.sm).pt(G.xs)
-      .child(button(`${id}-fix`, fix, onClick, c, { kind: "solid" }).flex_1())));
+    .when(Boolean(fix || agent), (el) => el.child(h_flex().w_full().pl(ICON_ROW + G.sm).pt(G.xs).gap(G.sm)
+      .when(Boolean(fix), (row) => row.child(button(`${id}-fix`, fix, onClick, c, { kind: "solid", focus: lit === "fix" }).flex_1()))
+      .when(Boolean(agent), (row) => row.child(button(`${id}-explain`, `Explain to ${agent}`, onExplain, c, { kind: "tonal", icon: "bot", focus: lit === "agent" })))));
 }
 
 /** Failure on a line (status bar, pane header, toast): the mark, our words, the one fix as a small quiet button; `detail` is the tooltip. */

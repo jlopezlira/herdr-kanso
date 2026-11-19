@@ -56,7 +56,7 @@ export const SHEETS = ["stories/proto.css", "stories/primitives.css", "stories/c
 class Unsupported extends Error {}
 
 const compound = (text) => {
-  const node = { tag: null, classes: [], states: [], not: [], any: [], attrs: [] };
+  const node = { tag: null, classes: [], states: [], not: [], any: [], where: [], attrs: [] };
   const tag = text.match(/^[a-z][a-z0-9]*/i);
   if (tag) node.tag = tag[0].toLowerCase();
   const token = /\.([a-z0-9_-]+)|:(is|where|not)\(|:([a-z-]+)|(\*)|\[([a-z-]+)(?:="([^"]*)")?\]/gi;
@@ -77,8 +77,11 @@ const compound = (text) => {
         end += 1;
       }
       const list = splitTop(text.slice(at, end - 1), ",").map(parseSelector);
-      if (m[2] === "not") node.not.push(...list);
-      else node.any.push(list);
+      if (m[2] === "not") node.not.push(list);
+      else {
+        if (m[2] === "where") node.where.push(node.any.length);
+        node.any.push(list);
+      }
       at = end;
     } else if (m[5]) {
       node.attrs.push([m[5], m[6] ?? null]);
@@ -223,13 +226,14 @@ const DECLARATIONS = {
   bottom: (v) => (/%$/.test(v) ? [["bottom", v]] : v === "auto" ? [] : [["bottom", evaluate(v)]]),
   "inset-block": (v) => [["top", evaluate(v)], ["bottom", evaluate(v)]],
   "box-shadow": (v) => {
+    if (v === "none") return [["shadow", null]];
     const line = v.match(/^inset 0 (calc\(-1 \* var\(--k-[a-z0-9-]+\)\)|var\(--k-[a-z0-9-]+\)) 0 (var\(--[a-z-]+\))$/);
     if (line) {
       const width = evaluate(line[1]);
-      return [[width < 0 ? "border_b" : "border_t", Math.abs(width)], ["border_color", colour(line[2])]];
+      return [["shadow", { kind: width < 0 ? "bottom" : "top", width: Math.abs(width), ...colour(line[2]) }]];
     }
     const ring = v.match(/^0 0 0 (var\(--k-[a-z0-9-]+\)|[0-9.]+px) (var\(--[a-z-]+\))$/);
-    if (ring) return [["ring", evaluate(ring[1]), colour(ring[2])]];
+    if (ring) return [["shadow", { kind: "ring", width: evaluate(ring[1]), ...colour(ring[2]) }]];
     throw new Unsupported(`box-shadow ${v}`);
   },
 };
@@ -237,9 +241,9 @@ const FLEX = { none: "flex_none", 1: "flex_1", "1 1 100%": "flex_1", "0 1 auto":
 DECLARATIONS.flex = (v) => [[FLEX[v] ?? (() => { throw new Unsupported(`flex ${v}`); })()]];
 
 const specificity = (steps) => steps.reduce((sum, step) => sum
-  + (step.tag ? 1 : 0) + 100 * (step.classes.length + step.states.length)
-  + step.any.reduce((most, list) => most + Math.max(...list.map(specificity)), 0)
-  + step.not.reduce((most, inner) => most + specificity(inner), 0), 0);
+  + (step.tag ? 1 : 0) + 100 * (step.classes.length + step.states.length + step.attrs.length)
+  + step.any.reduce((most, list, i) => most + (step.where.includes(i) ? 0 : Math.max(...list.map(specificity))), 0)
+  + step.not.reduce((most, list) => most + Math.max(...list.map(specificity)), 0), 0);
 // An !important declaration beats every ordinary one, then specificity decides among them.
 const IMPORTANT = 1_000_000;
 
@@ -292,11 +296,12 @@ export const compile = (css) => {
 
 const keyOf = (step) => {
   if (step.classes.length) return step.classes[0];
-  const inner = step.any.flat().map((steps) => keyOf(steps[steps.length - 1]));
-  return inner.length && inner.every((k) => k !== "*") ? inner : "*";
+  const keyed = step.any.map((list) => list.flatMap((steps) => [keyOf(steps[steps.length - 1])].flat(Infinity))).find((keys) => keys.length && keys.every((k) => k !== "*"));
+  if (keyed) return keyed;
+  return step.tag ? `tag:${step.tag}` : "*";
 };
 
-export const PIECES = ["stories/kit/row-tree.js", "stories/kit/status-bar-tree.js"];
+export const PIECES = ["stories/kit/row-tree.js", "stories/kit/status-bar-tree.js", "stories/kit/tab-bar-tree.js"];
 const reachableSteps = (steps, known) => steps.every((step) => step.classes.every((name) => STATE_CLASSES[name] || known(name))
   && step.any.every((list) => list.some((inner) => reachableSteps(inner, known))));
 export const reachable = (list, pieces = PIECES) => {
@@ -305,12 +310,44 @@ export const reachable = (list, pieces = PIECES) => {
   return list.filter((rule) => reachableSteps(rule.steps, known));
 };
 
-export const indexed = (list) => {
+const FIELDS = ["relation", "tag", "classes", "states", "not", "any", "where", "attrs"];
+const filled = (value) => value !== null && value !== undefined && !(Array.isArray(value) && value.length === 0);
+const compact = (steps) => steps.map((step) => Object.fromEntries(FIELDS.filter((name) => filled(step[name]))
+  .map((name) => [name, name === "not" ? step[name].map((list) => list.map(compact)) : name === "any" ? step[name].map((list) => list.map(compact)) : step[name]])));
+
+export const indexed = (all) => {
+  const rules = all.filter(({ ops }) => ops.length);
+  const list = rules.map(({ steps, ops, weight, order }) => ({ steps: compact(steps), ops, weight, order }));
   const index = { "*": [] };
-  for (const rule of list) {
-    for (const key of [keyOf(rule.steps[rule.steps.length - 1])].flat()) (index[key] ??= []).push(rule);
-  }
-  return index;
+  rules.forEach((rule, i) => {
+    for (const key of new Set([keyOf(rule.steps[rule.steps.length - 1])].flat())) (index[key] ??= []).push(i);
+  });
+  return { list, index };
+};
+
+export const tabLooksTable = async (rules) => {
+  const { stylesFor, hovering, changed, collapse } = await import("../kanso/mods/kanso-panel/ui-match.js");
+  const { drawnTabs, tabParts, tabKey, TAB_PARTS } = await import("../kanso/mods/kanso-panel/ui-tab-shapes.js");
+  const lookOf = ([node, live]) => {
+    const own = collapse(stylesFor(node, rules));
+    return { own, extra: live ? changed(own, stylesFor(node, rules, hovering(node))) : [] };
+  };
+  const looks = [], seen = new Map();
+  const at = (look) => {
+    const key = JSON.stringify(look);
+    if (!seen.has(key)) seen.set(key, looks.push(look) - 1);
+    return seen.get(key);
+  };
+  const tabs = Object.fromEntries(drawnTabs().map(([group, states]) => {
+    const parts = tabParts(group, states);
+    return [tabKey(group, states), TAB_PARTS.map((part) => at(lookOf(parts[part])))];
+  }));
+  return { looks, tabs };
+};
+
+export const uiCss = async (picked) => {
+  const rules = indexed(reachable(picked));
+  return `export const RULES = ${JSON.stringify(rules)};\nexport const TAB_LOOKS = ${JSON.stringify(await tabLooksTable(rules))};\n`;
 };
 
 if (isMain(import.meta.url)) {
@@ -318,7 +355,7 @@ if (isMain(import.meta.url)) {
   const { rules: compiled, skipped } = compile(SHEETS.map(read).join("\n"));
   const picked = only ? compiled.filter((rule) => rule.selector.includes(only)) : compiled;
   const missed = only ? skipped.filter((rule) => rule.selector.includes(only)) : skipped;
-  writeFileSync(new URL("kanso/mods/kanso-panel/ui-css.js", root), `export const RULES = ${JSON.stringify(indexed(reachable(picked)))};\n`);
+  writeFileSync(new URL("kanso/mods/kanso-panel/ui-css.js", root), await uiCss(picked));
   console.log(`${picked.length} rules compiled, ${missed.length} not yet`);
   for (const rule of missed) console.log(`  not yet: ${rule.selector}  (${rule.reason})`);
 }

@@ -14,7 +14,7 @@ const RULE = 1;
 const ITEM_PX = H.control;
 const TWO_LINES_PX = H.control + G.md;
 // A scroll run shows this many items unless it says.
-const RUN_ROWS = 4;
+export const RUN_ROWS = 4;
 
 // A heading wraps; its `mark` sits at its right, the state of what it names.
 export const menuHeading = (title, c, status = null) => div().min_h(H.icon).flex().items_center().px(G.sm).py(G.xs).text_size(T.body).text_color(c.dim).child(title)
@@ -68,7 +68,7 @@ export function menuItem(id, { icon = null, picture = null, letter = null, tone 
     .child(lead(c, { picture, letter, tone, dot, icon }, armed ? look.ink : c.muted))
     .child(labelOf(words, second, look.ink, c))
     .when(Boolean(count), (el) => el.child(badge(count, c)))
-    .when(Boolean(hint) && !armed, (el) => el.child(div().flex_none().text_size(T.body).text_color(c.dim).child(hint)))
+    .when(Boolean(hint), (el) => el.child(div().flex_none().text_size(T.body).text_color(c.dim).child(hint)))
     .when(Boolean(status), (el) => el.child(mark(c, { status })))
     .when(checked, (el) => el.child(svg(glyphOf("check")).size(ICON_ROW).flex_none().text_color(c.muted)));
 }

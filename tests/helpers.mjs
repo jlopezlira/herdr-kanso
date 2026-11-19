@@ -234,6 +234,19 @@ export function context() {
   return { cx, async drain() { while (pending.length) await pending.shift(); } };
 }
 
+export function callContext() {
+  const tasks = context();
+  tasks.cx.timer = { after() {} };
+  let over = false;
+  const stale = () => { throw new Error("cx is no longer valid: it was captured during an earlier call and used later. Use cx.spawn or take cx from the callback arguments instead."); };
+  const cx = {
+    get timer() { return { after() { if (over) stale(); } }; },
+    notify() { if (over) stale(); },
+    spawn(fn) { if (over) stale(); return tasks.cx.spawn(fn); },
+  };
+  return { cx, drain: tasks.drain, end() { over = true; } };
+}
+
 // A context whose every() ticks wait in `timers` as { ms, fn }.
 export const tickingContext = (timers) => {
   const tasks = context();
@@ -416,4 +429,10 @@ export const inTemporaryDir = (prefix, use) => {
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
+};
+
+export const kansoColours = async () => {
+  const { tokens } = await load("kanso-panel/ui.js", ["tokens"]);
+  const theme = JSON.parse(readFileSync(new URL("../kanso/themes/kanso.json", import.meta.url), "utf8"));
+  return tokens({ ...theme, ...theme.colors });
 };

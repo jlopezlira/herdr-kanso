@@ -1,6 +1,7 @@
 // Pages whose story is built from Storybook controls instead of drawn states.
 import sprite from '../proto-sprite.svg?raw';
-import { activityMenu, paneFolds, paneHeader, panelHeaderForms, panelLooks, paneReaches, paneStates, noticeHomes, noticePlaces, noticeStates, systemMessage, toastStack, heldChord, keyboard, keyboardExplorer, keyboards, keyboardSystems, keyNames, shortcutRowStates, channelSettings, channels, failureMenu, panelDoors, tabBarStates } from './compositions.js';
+import { activityMenu, paneFolds, paneHeader, panelHeaderForms, panelLooks, paneReaches, paneStates, noticeHomes, noticePlaces, noticeStates, systemMessage, toastStack, heldChord, keyboard, keyboardExplorer, keyboards, keyboardSystems, keyNames, shortcutRowStates, channelSettings, channels, failureMenu, panelDoors } from './compositions.js';
+import { tabBarStates } from './tab-bar.js';
 import { activity, awayMax } from './activity.js';
 import { sidebarFooter } from './sidebar-footer.js';
 import { tile } from './tile.js';
@@ -493,6 +494,8 @@ export const playgrounds = {
       state: radioArg('computer', tabBarStates),
       folded: { name: 'folded tabs', control: { type: 'number', min: 0, max: 5 } },
       overflow: boolArg('folded menu open', { if: { arg: 'folded' } }),
+      help: boolArg('kansō help'),
+      custom: boolArg('a custom panel with no icon'),
       windows: boolArg('Windows and Linux'),
     },
   },
@@ -562,7 +565,7 @@ export const playgrounds = {
       label: true,
     },
     argTypes: {
-      items: { name: 'items', control: { type: 'object' }, description: '{ key, label, icon, mark, dot, tip, closable, armed }' },
+      items: { name: 'items', control: { type: 'object' }, description: '{ key, label, icon, mark, dot, tip, closable, armed, drop } (Proposed: drop "after" lands after the tab)' },
       value: textArg('value'),
       size: select('size', ['sm', 'md', 'lg']),
       ...flags('track', 'disabled', 'icon', 'label'),

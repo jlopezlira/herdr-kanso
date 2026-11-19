@@ -195,10 +195,10 @@ export const hypotheses = {
     },
     {
       change: 'The palette opens from an icon; its key moves to the tooltip.',
-      today: 'the bar spells the key, ⌘⇧P or Ctrl+Shift+P, and a click on it opens the palette; it can be switched off.',
+      today: 'the bar spells the key, ⇧⌘P or Ctrl+Shift+P, and a click on it opens the palette; it can be switched off.',
       why: 'it opens the command palette with a click and teaches its key.',
       question: 'why is this the only key spelled out on the bar?',
-      believe: 'an icon with the key in its tooltip lets people open the palette as before and learn ⌘⇧P the way they learn every other key, with a quieter bar.',
+      believe: 'an icon with the key in its tooltip lets people open the palette as before and learn ⇧⌘P the way they learn every other key, with a quieter bar.',
       jobs: [['open the palette', 'a click on the icon'], ['learn its key', 'the icon\'s tooltip']],
       wrong: 'someone asks where the palette went, or stops opening it.',
       try: 'beta.',
