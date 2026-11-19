@@ -2,11 +2,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { load, nodes, texts, calls, arg, clone, repoText, KIT_NIGHT } from "./helpers.mjs";
-import { dialogHost, openedSend } from "./mod-fixtures.mjs";
+import { byTag, dialogHost, openedSend } from "./mod-fixtures.mjs";
 
 const host = dialogHost;
 const cx = () => ({ notify() {}, stop_propagation() {}, spawn() {} });
-const byTag = (el, tag) => nodes(el).find((kid) => kid.tag === tag);
 const keyDown = (el, e) => calls(el, "on_key_down").forEach(([, handler]) => handler(e, cx()));
 
 const kit = async () => {
@@ -18,11 +17,11 @@ const AGENTS = [
   { address: "t2", status: "blocked", labels: { "kanso.shown": "Nova", "kanso.project": "App" } },
   { address: "t3", status: "working", program: { icon: "mods/x/claude.svg", tint: true }, labels: { "kanso.shown": "Atlas", "kanso.project": "App" } },
 ];
-const sendView = async (terms, query = "", seen = []) => ({
-  send: await openedSend({ terminals: () => terms, closeOverlay: (overlay) => seen.push(["close", overlay]) }, { to: "t3", query }), seen,
+const sendView = async (terms, query = "", seen = [], to = "t3") => ({
+  send: await openedSend({ terminals: () => terms, closeOverlay: (overlay) => seen.push(["close", overlay]) }, { to, query }), seen,
 });
 // Drawn in an object: a drawn element answers every name, `then` too, so it is never awaited bare.
-const sendDrawn = async (terms, query = "") => ({ el: (await sendView(terms, query)).send.render() });
+const sendDrawn = async (terms, query = "", to = "t3") => ({ el: (await sendView(terms, query, [], to)).send.render() });
 const listOf = (el, name) => nodes(el).find((kid) => calls(kid, "id").some(([, id]) => id === name));
 
 test("Send's agents are kit rows, a project a heading row, in the kit's dialog list that scrolls past six rows", async () => {
@@ -52,7 +51,8 @@ test("An agent with no program art leads with the terminal's icon, in the muted 
 });
 
 test("No one to send to, or no match, is the kit's empty state with the same words", async () => {
-  assert.ok(texts((await sendDrawn([])).el).includes("No other agent is running. Start one in a pane, then send."));
+  assert.ok(texts((await sendDrawn([{ address: "t9", state: "live" }], "", null)).el).includes("No other agent is running. Start one in a pane, then send."), "a roster read with no agent in it");
+  assert.ok(texts((await sendDrawn([], "", null)).el).includes("Can't see the agents right now."), "a roster not read yet is not an empty one");
   const { el } = await sendDrawn(AGENTS, "zz");
   assert.ok(texts(el).includes("No agent or project by that name."));
   const empty = listOf(el, "send-list");

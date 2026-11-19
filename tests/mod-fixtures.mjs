@@ -1,6 +1,6 @@
 // Named loaders for production modules used by multiple tests.
 import { join } from "node:path";
-import { chain, databaseTimer, drawingHost, exec, gpuiHost, load, openedKdb, temporary, KIT_NIGHT } from "./helpers.mjs";
+import { chain, databaseTimer, drawingHost, exec, gpuiHost, load, nodes, openedKdb, temporary, KIT_NIGHT } from "./helpers.mjs";
 
 export const loadSpaces = (host) => load("kanso-spaces/main.js", ["Spaces"], host);
 export const loadDescribe = (host) => load("kanso-help/keymap.js", ["describe"], host);
@@ -112,6 +112,7 @@ export const loadStripWith = (props, panes, store) => load("kanso-strip/main.js"
   run: () => {}, hc: async () => ({ code: 0 }), openOverlay: () => {},
 });
 
+export const byTag = (el, tag) => nodes(el).find((kid) => kid.tag === tag);
 export const dialogHost = () => ({ ...drawingHost(), Textarea: { new: () => chain("textarea") }, Input: { new: () => chain("input") } });
 const typed = (value, multiline = false) => ({ value: () => value, state: {}, multiline, focused: false });
 export async function openedSend(host, { from = null, to = null, text = "hi", query = "" } = {}) {
@@ -119,5 +120,5 @@ export async function openedSend(host, { from = null, to = null, text = "hi", qu
     ...dialogHost(), theme: () => KIT_NIGHT, props: () => ({ overlay: "o1" }), terminals: () => [], panes: () => [], spaces: () => [], machines: () => [],
     shared: () => null, setShared() {}, closeOverlay() {}, ...host,
   });
-  return Object.assign(new Send(), { from, to, toProject: null, text, error: null, sending: false, unsure: [], again: false, handle: {}, query: typed(query), box: typed(text, true) });
+  return Object.assign(new Send(), { from, to, toProject: null, text, error: null, sending: false, unsure: [], handle: {}, query: typed(query), box: typed(text, true) });
 }

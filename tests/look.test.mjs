@@ -103,7 +103,7 @@ test("A note to the agent names the file and where each pin sits on the picture"
 // The panel in a fake Herdr: agent t1 whose screen shows `screen`, a shell t2, and the files in `files`.
 // `copy(args)`: what cp answers, a promise a test can hold back.
 async function panel({ screen = OUTPUT, files = ["/repo/tests/shot.png", "/repo/images/hero.jpg", "/repo/docs/plan.md"], status = "idle", focus = "t1",
-  copy = async () => ({ code: 0, stdout: "" }), session = null, transcript = "", appHome = "/app", bad = [], remote = null, statText = "4 1700000000\n", drawing = null } = {}) {
+  copy = async () => ({ code: 0, stdout: "" }), session = null, transcript = "", appHome = "/app", bad = [], remote = null, statText = "4 1700000000\n", drawing = null, sending = null } = {}) {
   if (appHome !== "/app") dirs.push(appHome);
   const calls = [], ons = [], store = {};
   const address = remote ? `${remote}/${focus}` : focus;
@@ -130,6 +130,7 @@ async function panel({ screen = OUTPUT, files = ["/repo/tests/shot.png", "/repo/
     watchFolder: async () => { throw new Error("no watch in a test"); },
     hc: async (args) => {
       calls.push(["hc", ...args]);
+      if (args[0] === "send" && sending) return sending(args);
       if (args[0] === "read") return { code: 0, stdout: world.screen };
       if (args[0] === "get") return { code: 0, stdout: JSON.stringify({ address: args[1], foreground: world.session ? { pid: world.session.pid, argv: world.session.argv ?? ["claude"] } : null }) };
       return { code: 0, stdout: "" };
@@ -307,6 +308,20 @@ test("Look sends nothing to an agent waiting on its own question", async () => {
   await drain();
   assert.equal(calls.some((c) => c[1] === "send"), false);
   assert.equal(look.note.text, "web agent is waiting on its own question. Answer it first, then send.");
+});
+
+test("Look says a send Herdr stopped at its time limit is not confirmed, never not sent, and Send works again", async () => {
+  const shown = await panel({ sending: async () => { throw new Error("hc took longer than 30 s and was stopped"); } });
+  const { look, cx, drain } = shown;
+  look.ask(SHOT, cx);
+  await drain();
+  pinNote(shown, "crop it");
+  look.send(cx);
+  await drain();
+  assert.equal(look.note.text, "Not confirmed: it may have arrived, so look at the agent before sending again.");
+  assert.equal(look.note.error, true);
+  assert.equal(look.sending, false);
+  assert.equal(look.pins.length, 1, "the pins stay, as for any send that did not go");
 });
 
 test("Look never takes a shell as the one to send to: it would run the note", async () => {

@@ -28,14 +28,12 @@ const panelOn = async (exec, host = {}, state = {}) => {
   return { panel, ...await refreshedContext(panel) };
 };
 
-test("Send shows the failing log, then hands it to the agent in front", async () => {
-  const sent = [];
-  let status = "working";
+const sendingPanel = async (hc, agent = { status: "working" }, toasts = []) => {
   const { PullRequest } = await loadPullRequest({
     focused: () => ({ terminal: "t1" }),
-    panes: () => [{ terminal: "t1", status, program: { agent: true, name: "checkout" } }],
-    terminals: () => [{ address: "t1", status, program: { agent: true, name: "checkout" } }],
-    hc: async (args) => { sent.push(args); return success(""); },
+    panes: () => [{ terminal: "t1", status: agent.status, program: { agent: true, name: "checkout" } }],
+    terminals: () => [{ address: "t1", status: agent.status, program: { agent: true, name: "checkout" } }],
+    hc, notify: (toast) => toasts.push(toast),
   });
   const panel = new PullRequest();
   panel.session.pr = {
@@ -51,7 +49,13 @@ test("Send shows the failing log, then hands it to the agent in front", async ()
   panel.session.failedLog = "CI / test\tRun tests\tFAIL no such file\n";
   panel.session.root = "/repo";
   panel.session.cwd = "/repo";
-  const { cx, drain } = timedContext([]);
+  const timers = [];
+  return { panel, timers, toasts, ...timedContext(timers) };
+};
+
+test("Send shows the failing log, then hands it to the agent in front", async () => {
+  const sent = [], agent = { status: "working" };
+  const { panel, cx, drain } = await sendingPanel(async (args) => { sent.push(args); return success(""); }, agent);
   assert.equal(panel.view().primary.label, "Send to checkout");
   panel.send(cx);
   assert.equal(sent.length, 0);
@@ -62,9 +66,24 @@ test("Send shows the failing log, then hands it to the agent in front", async ()
   panel.send(cx);
   await drain();
   assert.deepEqual(JSON.parse(JSON.stringify(sent.filter((args) => args[0] === "send"))), [["send", "t1", shown]]);
-  status = "blocked";
+  agent.status = "blocked";
   assert.match(panel.view().text, /checkout needs you first$/);
   assert.equal(panel.view().primary, null);
+});
+
+test("A send the agent never confirms in time says Not confirmed, never Not sent, and the panel is free again", async () => {
+  const { SEND_MS } = await load("kanso-panel/deliver.js", ["SEND_MS"], { hc: async () => ({}) });
+  const { panel, cx, drain, timers, toasts } = await sendingPanel((args) => (args[0] === "send" ? new Promise(() => {}) : success("")));
+  panel.send(cx);
+  panel.send(cx);
+  assert.equal(panel.session.busy, "Send");
+  timers.filter(([ms]) => ms === SEND_MS).forEach(([, fn]) => fn());
+  await drain();
+  assert.equal(panel.session.busy, null);
+  const said = [panel.session.note?.text, panel.session.note?.source, ...toasts.flatMap((t) => [t.title, t.body])].filter(Boolean).join(" | ");
+  assert.match(said, /Not confirmed/);
+  assert.match(said, /it may have arrived/);
+  assert.doesNotMatch(said, /Not sent/);
 });
 
 test("Sign in opens gh auth login in the space already on screen", async () => {

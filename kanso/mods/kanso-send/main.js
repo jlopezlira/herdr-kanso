@@ -26,20 +26,22 @@ export const unreachable = (address, computers = []) => {
 };
 
 // `nameOf(pane)` and `projectOf(pane)` name one Kanso has not labelled yet.
-export function everyone(terms, ps, { from = null, last = null, query = "", nameOf = () => null, projectOf = () => null, computers = [] } = {}) {
+export function everyone(terms, ps, { from = null, last = null, query = "", nameOf = () => null, projectOf = () => null, computers = [], keep = null } = {}) {
   const paneOf = new Map(ps.filter((p) => p.terminal).map((p) => [p.terminal, p]));
   const mine = from ? terms.find((k) => k.address === from)?.labels?.["kanso.project"] ?? projectOf(paneOf.get(from)) : null;
   const q = query.trim().toLowerCase();
   const known = new Set(terms.map((k) => k.address));
-  const list = [...terms, ...[...paneOf.keys()].filter((address) => !known.has(address)).map((address) => ({ address }))]
+  const all = [...terms, ...[...paneOf.keys()].filter((address) => !known.has(address)).map((address) => ({ address }))]
     .filter((k) => k.address !== from && (!k.state || k.state === "live") && isAgent(k, paneOf.get(k.address)))
     .map((k) => {
       const pane = paneOf.get(k.address) ?? null;
       return { terminal: k.address, pane, status: k.status ?? pane?.status ?? null, program: k.program ?? pane?.program ?? null,
         name: k.labels?.["kanso.shown"] || (pane ? nameOf(pane) : null) || k.address,
         project: k.labels?.["kanso.project"] || (pane ? projectOf(pane) : null) || "Other", away: unreachable(k.address, computers) };
-    })
-    .filter((x) => !q || x.name.toLowerCase().includes(q) || x.project.toLowerCase().includes(q));
+    });
+  const kept = keep && !all.some((x) => x.terminal === keep)
+    ? [{ terminal: keep, pane: null, status: null, program: null, name: keep, project: "Other", away: unreachable(keep, computers), unknown: true }] : [];
+  const list = [...all, ...kept].filter((x) => !q || x.name.toLowerCase().includes(q) || x.project.toLowerCase().includes(q));
   const order = [...new Set([mine, ...list.map((x) => x.project).toSorted((a, b) => a.localeCompare(b))].filter((p) => p && list.some((x) => x.project === p)))];
   return order.map((project) => {
     const group = list.filter((x) => x.project === project);
@@ -71,27 +73,24 @@ export default class Send extends View {
     this.handle = cx.focus_handle();
     this.sending = false;
     this.unsure = [];
-    this.again = false;
     this.error = null;
   }
 
   pick(cx, choose) {
     choose();
     this.error = null;
-    this.again = false;
     cx.notify();
   }
 
-  send(cx, groups) {
+  send(cx, everything) {
     const text = this.text.trim();
-    const all = groups.flatMap((g) => g.agents);
-    const targets = this.toProject ? (groups.find((g) => g.project === this.toProject)?.agents ?? []) : all.filter((x) => x.terminal === this.to);
+    const all = everything.flatMap((g) => g.agents);
+    const targets = this.toProject ? (everything.find((g) => g.project === this.toProject)?.agents ?? []) : all.filter((x) => x.terminal === this.to);
     if (!text || !targets.length || this.sending) return;
     const waiting = targets.filter((x) => x.status === "blocked"), ready = targets.filter((x) => x.status !== "blocked");
     if (!ready.length) { this.error = waitingNote(waiting.map((x) => x.name)); cx.notify(); return; }
-    if (ready.some((x) => this.unsure.includes(x.terminal)) && !this.again) { this.again = true; cx.notify(); return; }
     const sender = this.from?.terminal ? terminals().find((k) => k.address === this.from.terminal)?.labels?.["kanso.shown"] || nameOf(this.from, givenNames()) : "you";
-    this.sending = true; this.error = null; this.again = false; this.unsure = []; cx.notify();
+    this.sending = true; this.error = null; this.unsure = []; cx.notify();
     cx.spawn(async (cx) => {
       const results = await Promise.all(ready.map(async (x) => ({ x, r: await deliver(cx.timer, x.terminal, text, sender) })));
       this.sending = false;
@@ -116,16 +115,13 @@ export default class Send extends View {
     const given = givenNames(), sp = spaces();
     const name = (q) => nameOf(q, given);
     const spaceOf = (q) => sp.find((s) => s.tabs.some((x) => x.id === q.tab));
-    const roster = (query) => everyone(terminals(), panes(), { from: this.from?.terminal ?? null, last: shared(LAST), query,
-      nameOf: name, projectOf: (q) => spaceOf(q)?.name ?? null, computers: machines() });
-    const groups = roster(this.query.value());
+    const terms = terminals(), ps = panes();
+    const roster = (query) => everyone(terms, ps, { from: this.from?.terminal ?? null, last: shared(LAST), query,
+      nameOf: name, projectOf: (q) => spaceOf(q)?.name ?? null, computers: machines(), keep: this.toProject ? null : this.to });
+    if (this.to === null && !this.toProject) this.to = roster(this.query.value()).flatMap((g) => g.agents)[0]?.terminal ?? null;
+    const groups = roster(this.query.value()), everything = roster("");
     const list = groups.flatMap((g) => g.agents);
-    // A search that hides the chosen project drops it, so Send always means what is shown.
-    if (this.toProject && !groups.some((g) => g.project === this.toProject)) this.toProject = null;
-    if (!this.toProject && !list.some((q) => q.terminal === this.to)) {
-      const gone = this.to !== null && !roster("").some((g) => g.agents.some((q) => q.terminal === this.to));
-      this.to = gone ? null : list[0]?.terminal ?? this.to;
-    }
+    const unknown = !terms.length && !ps.length;
     const head = (g) => {
       const on = this.toProject === g.project;
       return row({ name: g.project, heading: true, current: on, meta: on ? `All ${g.agents.length}` : g.agents.length > 1 ? `Send to all ${g.agents.length}` : null })(
@@ -135,11 +131,11 @@ export default class Send extends View {
     const agent = (q) => row({
       icon: q.program?.icon ? q.program : "terminal", tone: "muted", name: q.name, detail: q.pane?.branch ?? null,
       meta: this.unsure.includes(q.terminal) ? { text: NOT_CONFIRMED, tone: "blocked" } : q.away ? { text: "Unreachable", tone: "blocked" }
-        : q.status === "blocked" ? { text: "Needs you", tone: "blocked" } : null,
+        : q.unknown ? { text: "Unknown", tone: "blocked" } : q.status === "blocked" ? { text: "Needs you", tone: "blocked" } : null,
       mark: q.status, current: !this.toProject && q.terminal === this.to,
     })(`to-${q.terminal}`, c, { onClick: (cx) => this.pick(cx, () => { this.to = q.terminal; this.toProject = null; }) });
     const from = this.from ? `From ${name(this.from)}${this.from.cwd ? `, in ${shortFolder(this.from.cwd)}` : ""}` : "";
-    const ready = Boolean(this.toProject || list.some((q) => q.terminal === this.to)) && Boolean(this.text.trim());
+    const ready = Boolean(this.toProject || this.to) && Boolean(this.text.trim());
     const rows = groups.flatMap((g) => [head(g), ...g.agents.map(agent)]);
     const close = () => closeOverlay(p.overlay);
     return dialog("kanso-send", c, {
@@ -147,14 +143,14 @@ export default class Send extends View {
       body: [
         field("send-to", this.query, c, { label: "To" }),
         (rows.length ? stack({ variant: "dialog list", scroll: true }, rows)
-          : emptyState({ text: this.query.value().trim() ? "No agent or project by that name." : "No other agent is running. Start one in a pane, then send." }))("send-list", c),
+          : emptyState({ text: this.query.value().trim() ? "No agent or project by that name." : unknown ? "Can't see the agents right now." : "No other agent is running. Start one in a pane, then send." }))("send-list", c),
         field("send-message", this.box, c, { label: "Message" }),
       ],
       notes: [{ text: this.error ?? "Pasted into its terminal and sent with Enter, as if you typed it there.", tone: this.error ? "error" : "dim" }],
       secondary: "Cancel", primary: this.toProject ? `Send to ${this.toProject}  ⌘↩` : "Send  ⌘↩",
-      state: this.sending ? "loading" : !ready ? "disabled" : this.again ? "armed" : "default",
-      onCancel: close, onPrimary: (cx) => this.send(cx, groups), focusHandle: this.handle,
-      onKey: (e, cx) => { if (sendKey(e)) { this.send(cx, groups); cx.stop_propagation(); } },
+      state: this.sending ? "loading" : ready ? "default" : "disabled",
+      onCancel: close, onPrimary: (cx) => this.send(cx, everything), focusHandle: this.handle,
+      onKey: (e, cx) => { if (sendKey(e)) { this.send(cx, everything); cx.stop_propagation(); } },
     });
   }
 }
