@@ -455,9 +455,8 @@ export class FolderSession {
   outcome(target, message, local = {}) {
     if (!this.shows(target)) { notify({ ...message, body: [target.place, message.body].filter(Boolean).join(". ") }); return; }
     if (local.note) { this.note = local.note; return; }
-    const patched = local.patch ? tryOr(() => { local.patch(); return true; }, false) : false;
-    if (local.quiet && (patched || !local.patch)) return;
-    notify(message);
+    if (local.patch) tryOr(local.patch);
+    if (!local.quiet) notify(message);
   }
 
   reread(cx) {

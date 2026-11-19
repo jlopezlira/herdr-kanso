@@ -783,9 +783,9 @@ const sentCases = {
 };
 const holds = (pr, kind) => Boolean(kind && [...(pr?.labels ?? []).map((l) => l.name), ...(pr?.assignees ?? []).map((a) => a.login), ...(pr?.reviewRequests ?? []).map((r) => r.login)].includes("bea"));
 
-const sentOutcome = async (name, spec, place, ok) => {
+const sentOutcome = async (name, spec, place, ok, broken = false) => {
   const answer = ok ? success("") : failure("rejected");
-  const shownPr = (over) => success(JSON.stringify(pull({ labels: [], assignees: [], reviewRequests: [], ...over })));
+  const shownPr = (over) => success(JSON.stringify(pull({ ...(broken ? {} : { labels: [], assignees: [], reviewRequests: [] }), ...over })));
   const own = (command, args) => {
     if (args[1] === "view" && args.includes(EIGHT)) return shownPr({ number: 8, url: EIGHT, title: "next" });
     if (args[1] === "view" && !args.includes("--jq") && command === "gh" && args[0] === "pr") return shownPr();
@@ -795,7 +795,7 @@ const sentOutcome = async (name, spec, place, ok) => {
   const run = await twoFolders(spec.hold, spec.host, own);
   run.begin(spec.begin);
   const a = run.panel.session;
-  const label = `${name} ${place} ${ok ? "success" : "failure"}`;
+  const label = `${name} ${place} ${ok ? "success" : "failure"}${broken ? " with a patch that throws" : ""}`;
   assert.equal(run.held.length, 1, label);
   if (place === "other pull request") {
     run.panel.choose({ url: EIGHT, number: 8 }, run.cx);
@@ -819,14 +819,14 @@ const sentOutcome = async (name, spec, place, ok) => {
     return;
   }
   const inline = !ok && !spec.kind;
-  const redrawn = ok && !spec.kind && name !== "merge";
+  const redrawn = ok && name !== "merge" && (!spec.kind || (broken && name === "labels"));
   if (ok) assert.equal(told.length, ["merge", "assignees", "reviewers"].includes(name) ? 1 : 0, `${label}: as on develop`);
   assert.equal(told.length + (a.note ? 1 : 0) + (patched && told.length === 0 ? 1 : 0) + (redrawn ? 1 : 0), 1, label);
   assert.equal(Boolean(a.note), inline, label);
   if (inline) assert.equal(a.note.source, "rejected", label);
   if (told.length) assert.equal(told[0].level, ok ? "success" : "error", label);
   if (told.length) assert.equal(String(told[0].body ?? "").includes("#7 in repo"), false, label);
-  assert.equal(patched, ok && Boolean(spec.kind), `${label}: patch`);
+  assert.equal(patched, ok && Boolean(spec.kind) && !broken, `${label}: patch`);
 };
 
 test("every sent action's outcome goes by its captured target: one attributed outcome, and no note or patch on a pull request that is not its target", async () => {
@@ -835,6 +835,7 @@ test("every sent action's outcome goes by its captured target: one attributed ou
       await sentOutcome(name, spec, place, true);
       await sentOutcome(name, spec, place, false);
     }
+    if (spec.kind) await sentOutcome(name, spec, "shown", true, true);
   }
 });
 
