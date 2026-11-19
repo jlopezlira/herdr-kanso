@@ -145,9 +145,7 @@ if (process.argv[1] === new URL(import.meta.url).pathname) {
     "folded": { items: tabs, value: "checkout", folded: Array.from({ length: 5 }, (_, i) => ({ label: `f${i}` })), panels: doors },
     "unreachable": { items: tabs, value: "checkout", state: "unreachable" },
     "windows and linux": { items: tabs, value: "checkout", panels: doors, windows: true },
-    "dragging a door": { items: tabs, value: "checkout", panels: [{ ...doors[0], drop: true }, { ...doors[1], held: true }] },
-    "kansō help, keyboard": { items: tabs, value: "checkout", panels: doors, help: true, focus: "kansō help" },
-  };
+    "dragging a door": { items: tabs, value: "checkout", panels: [{ ...doors[0], drop: true }, { ...doors[1], held: true }] },  };
   for (const [name, props] of Object.entries(bar)) {
     const result = await checkPiece(tabBarTree(props), c);
     if (result.untranslated) { failed = true; console.log(`tab bar, ${name}: untranslated`, result.untranslated); continue; }

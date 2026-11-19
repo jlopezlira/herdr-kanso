@@ -1,6 +1,7 @@
 // The kit's pieces: every function here returns markup; compositions.js only calls them.
 import { diffText, facts, plus } from '../../kanso/mods/kanso-panel/ui-facts.js';
 import { diffNumbers, markdownBlocks } from '../../kanso/mods/kanso-spaces/pure.js';
+import { buttonClasses, kinds } from './row-tree.js';
 
 export const escape = (text) => String(text).replace(/[&<>"]/g, (char) => `&#${char.charCodeAt(0)};`);
 
@@ -18,12 +19,12 @@ export const grow = (inner = '') => `<span class="kanso-layout__grow">${inner}</
 
 // Atoms
 
-export const kinds = { solid: 'kanso-button--solid', tonal: 'kanso-button--tonal', quiet: 'kanso-button--quiet kanso-text--fg', icon: 'kanso-button--icon' };
+export { kinds };
 // `content`: markup drawn in place of the icon and label, such as a picture with its name; `label` is then what the button says.
 // Proposed: `truncate` cuts a long label at --k-w-button-label, such as a menu's chosen project, so the button never grows past it.
 // `tip`: the tooltip, when it says more than the label; `focus`: the keyboard's ring is on it.
 export const button = ({ label, kind = 'solid', size = 'md', icon = 'none', disabled = false, verb = '', armed = false, active = false, spin = false, key = '', tip = '', focus = false, held = false, content = '', truncate = false, flush = false, name = '' }) => {
-  const classes = ['kanso-button', kinds[kind], size === 'md' ? '' : `kanso-button--${size}`, disabled ? 'kanso-control--off' : '', armed ? 'kanso-action kanso-action--armed' : '', active ? 'kanso-button--active' : '', spin ? 'kanso-button--spinning' : '', focus ? 'kanso-control--focus' : '', held ? 'kanso-control--held' : '', content ? 'kanso-button--drawn' : '', flush ? 'kanso-button--flush' : '', truncate ? 'kanso-button--truncate' : ''].filter(Boolean).join(' ');
+  const classes = buttonClasses({ kind, size, disabled, armed, active, spin, focus, held, drawn: Boolean(content), flush, truncate });
   const lead = icon === 'none' ? (spin ? mark({ status: 'working', size: 'sm' }) : '') : iconSvg(icon, 'control');
   const text = kind === 'icon' ? '' : truncate ? `<span class="kanso-button__label">${escape(label)}</span>` : escape(label);
   const again = `Press again to ${escape(verb || label.toLowerCase())}`;

@@ -79,16 +79,20 @@ const simulatorRoster = () => JSON.stringify([list(ORDER), choice("panel.sim", p
 
 // Panels you never placed keep their catalog place after the ones you dragged.
 // Simulator is not listed on a computer with neither Xcode nor the Android SDK.
-function panelList() {
-  const map = pieces(shared);
-  const all = [...BUILTIN, ...customPanels().map((p) => ({ id: p.id, label: p.label ?? p.id, icon: p.icon }))].filter((p) => offered(p.id, { sim: shared(TOOLS), commands: shared(COMMANDS) }));
+function roster() {
+  const all = [...BUILTIN, ...customPanels().map((p) => ({ id: p.id, label: p.label ?? p.id, icon: p.icon }))];
   const order = list(ORDER);
   const rank = new Map(all.map((p, i) => [p.id, order.includes(p.id) ? order.indexOf(p.id) : order.length + i]));
-  return all.toSorted((a, b) => rank.get(a.id) - rank.get(b.id)).map((p) => ({ ...p, on: runs(`panel.${p.id}`, map) }));
+  return all.toSorted((a, b) => rank.get(a.id) - rank.get(b.id));
+}
+
+function panelList() {
+  const map = pieces(shared);
+  return roster().filter((p) => offered(p.id, { sim: shared(TOOLS), commands: shared(COMMANDS) })).map((p) => ({ ...p, on: runs(`panel.${p.id}`, map) }));
 }
 
 function movePanel(from, to) {
-  const ids = panelList().map((p) => p.id), i = ids.indexOf(from), j = ids.indexOf(to);
+  const ids = roster().map((p) => p.id), i = ids.indexOf(from), j = ids.indexOf(to);
   if (i < 0 || j < 0 || i === j) return;
   setShared(ORDER, ids.toSpliced(i, 1).toSpliced(j, 0, from));
 }

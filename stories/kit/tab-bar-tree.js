@@ -25,9 +25,9 @@ const skeleton = () => html`<span class="kanso-skeleton kanso-skeleton--breathin
 const insertion = () => html`<i class="kanso-tab-bar__insertion"></i>`;
 const menuTree = (items) => html`<div class="kanso-menu kanso-popover" role="menu">${items.map(({ label, mark }) => html`<div class="kanso-menu__item" role="menuitem" tabindex="0"><span class="kanso-menu__spacer"></span><span class="kanso-layout__grow">${label}</span>${mark ? markTree({ status: mark }) : null}</div>`)}</div>`;
 
-export const tabBarTree = ({ items = [], value = null, folded = [], overflow = false, panels = [], panel = null, state = "connected", arrange = true, help = false, tips = {}, windows = false, focus = "" } = {}) => {
+export const tabBarTree = ({ items = [], value = null, folded = [], overflow = false, panels = [], panel = null, state = "connected", arrange = true, help = false, tips = {}, windows = false } = {}) => {
   const connected = state === "connected";
-  const door = (icon, label, { active = false, held = false } = {}) => buttonTree({ label, kind: icon ? "icon" : "quiet", icon: icon || "none", active, tip: tips[label] ?? "", held, focus: focus === label });
+  const door = (icon, label, { active = false, held = false } = {}) => buttonTree({ label, kind: icon ? "icon" : "quiet", icon: icon || "none", active, tip: tips[label] ?? "", held });
   const panelDoor = ({ key, icon, label, held, drop }) => {
     const drawn = door(icon, label, { active: key === panel, held: Boolean(held) });
     return drop === "after" ? [drawn, insertion()] : drop ? [insertion(), drawn] : [drawn];

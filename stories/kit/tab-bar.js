@@ -1,9 +1,9 @@
 import { button, grow, menu, plus, stack, tabSkeleton, tabs } from './kit.js';
 
 export const tabBarStates = ['connected', 'connecting', 'unreachable'];
-export const tabBar = ({ items = [], value = null, folded = [], overflow = false, panels = [], panel = null, state = 'connected', arrange = true, help = false, tips = {}, windows = false, focus = '' } = {}) => {
+export const tabBar = ({ items = [], value = null, folded = [], overflow = false, panels = [], panel = null, state = 'connected', arrange = true, help = false, tips = {}, windows = false } = {}) => {
   const connected = state === 'connected';
-  const door = (icon, label, { active = false, name = '', held = false } = {}) => button({ label, kind: icon ? 'icon' : 'quiet', icon: icon || 'none', active, tip: tips[label] ?? '', name, held, focus: focus === label });
+  const door = (icon, label, { active = false, name = '', held = false } = {}) => button({ label, kind: icon ? 'icon' : 'quiet', icon: icon || 'none', active, tip: tips[label] ?? '', name, held });
   const insertion = () => stack({ variant: 'tab bar insertion' });
   const panelDoor = (item) => {
     const drawn = door(item.icon, item.label, { active: item.key === panel, name: `panel:${item.key}`, held: Boolean(item.held) });

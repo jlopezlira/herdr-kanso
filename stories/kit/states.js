@@ -193,7 +193,7 @@ export const statedPages = {
     ],
   },
   'Compositions/Tab bar': {
-    args: { width: 1040, value: 'checkout', tab: 'at rest', door: 'at rest', panel: 'none', state: 'connected', folded: 0, overflow: false, help: false, focus: '', custom: false, windows: false },
+    args: { width: 1040, value: 'checkout', tab: 'at rest', door: 'at rest', panel: 'none', state: 'connected', folded: 0, overflow: false, help: false, custom: false, windows: false },
     markup: ({ width, value, tab, door, folded, overflow, custom, ...args }) => {
       const panels = doorActs[door](custom ? [...panelDoors, { key: 'notes', label: 'Notes' }] : panelDoors);
       const bar = atWidth(width, tabBar({ ...args, panels, value, overflow, items: tabActs[tab](tabItems(value)), folded: foldedTabs.slice(0, folded).map((label) => ({ label })) }));
@@ -212,9 +212,7 @@ export const statedPages = {
       { label: 'Unreachable', args: { width: 520, state: 'unreachable' }, caption: 'The tabs step down; no + and no doors.' },
       { label: 'Windows and Linux', args: { windows: true }, caption: 'The window buttons after the doors, in the same button.' },
       { label: 'Dragging a door', args: { panel: 'pr', door: 'dragging' }, caption: 'The held door on the pressed wash; the accent bar where it lands.' },
-      { label: 'kansō help', args: { help: true }, caption: 'Proposed. kansō help\'s door after the panels\'.' },
-      { label: 'kansō help, keyboard', args: { help: true, focus: 'kansō help' }, caption: 'Proposed. The keyboard\'s ring on kansō help\'s door.' },
-      { label: 'Custom panel, no icon', args: { custom: true }, caption: 'Proposed. A panel with no icon of its own shows its name.' },
+      { label: 'kansō help', args: { help: true }, caption: 'Proposed. kansō help\'s door after the panels\'.' },      { label: 'Custom panel, no icon', args: { custom: true }, caption: 'Proposed. A panel with no icon of its own shows its name.' },
     ],
   },
   'Compositions/Edges': {

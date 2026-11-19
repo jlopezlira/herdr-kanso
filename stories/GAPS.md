@@ -2,7 +2,7 @@
 
 These features exist in the app and stay available; they await a design.
 
-94 feature states await design. Each page lists its own under Not designed yet.
+95 feature states await design. Each page lists its own under Not designed yet.
 
 | Module | State | Source |
 | --- | --- | --- |
@@ -35,6 +35,7 @@ These features exist in the app and stay available; they await a design.
 | Compositions/Status bar | Status Stand In · Visible home | kanso/mods/kanso-status/model.js:56 |
 | Compositions/Tab bar | Panel Toolbar · Capability absent | kanso/mods/kanso-tabs/main.js:78 |
 | Compositions/Tab bar | Panel Toolbar · Custom panel | kanso/mods/kanso-tabs/main.js:508 |
+| Compositions/Tab bar | Panel Toolbar · Settings | kanso/mods/kanso-tabs/main.js:548 |
 | Layouts/Context menus | Settings Menu · Host update | kanso/mods/kanso-chrome/footer-model.js:46 |
 | Layouts/Context menus | Settings Menu · Rest | kanso/mods/kanso-chrome/footer-model.js:43 |
 | Layouts/Context menus | Settings Menu · Restart armed | kanso/mods/kanso-chrome/footer-model.js:46 |

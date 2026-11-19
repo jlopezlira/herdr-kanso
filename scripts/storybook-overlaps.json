@@ -758,8 +758,7 @@
     "states": {
       "Available": "proto/approved-bars-panels/Reference/1",
       "Opened": "proto/approved-bars-panels/Reference/1",
-      "Reordering": "kit/Tab bar/Dragging a door",
-      "Settings": "kit/Tab bar/kansō help, keyboard"
+      "Reordering": "kit/Tab bar/Dragging a door"
     }
   },
   "chrome/RuntimeNotice": {
