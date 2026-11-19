@@ -5,7 +5,7 @@ import { existsSync } from "node:fs";
 import { join, basename } from "node:path";
 import { load, context, temporary, clone, exec, failure, gitOk, fileExists as exists } from "./helpers.mjs";
 
-const names = ["Worktrees", "removable", "losses", "lastDays", "spaceBy", "freedSpec", "freedText", "explainPrompt", "reviewPrompt", "rootsFor", "parseDiscovery", "basesFrom", "parseWorktrees", "parseProbe", "stateOf", "safe", "consequence", "fmtSize", "fmtAge", "inside"];
+const names = ["Worktrees", "removable", "losses", "lastDays", "spaceBy", "freedSpec", "freedText", "explainPrompt", "reviewPrompt", "rootsFor", "parseDiscovery", "basesFrom", "parseWorktrees", "parseProbe", "stateOf", "safe", "consequence", "fmtSize", "fmtAge", "inside", "openIn"];
 const writeTextFile = (path, text) => writeFile(path, text);
 const storeOf = (app) => load("kanso-panel/worktrees-store.js", ["WorktreeStore", "upsertSql", "rowOf", "itemOf"], { exec, appHome: () => app, writeTextFile });
 const worktrees = async (host = {}) => load("kanso-panel/worktrees.js", names, {
@@ -16,12 +16,20 @@ const worktrees = async (host = {}) => load("kanso-panel/worktrees.js", names, {
 const git = gitOk();
 
 test("Worktrees searches the top folders of your spaces, or the ones you chose", async () => {
-  const { rootsFor, inside } = await worktrees();
+  const { rootsFor, inside, openIn } = await worktrees();
   assert.deepEqual(clone(rootsFor(["/Users/me/Apps/acme/web", "/Users/me/Apps/x", "/Users/me", "/Users/me/.config/a", "/Volumes/w/repo", "/private/tmp/x", null], "/Users/me")),
     ["/Users/me/Apps", "/Volumes/w/repo"], "home itself, hidden folders and temp are not roots");
   assert.deepEqual(clone(rootsFor(["/Users/me/Apps/a"], "/Users/me", ["/src", "rel", "/src"])), ["/src"]);
   assert.ok(inside("/private/tmp/wt", "/tmp/wt/src"), "/tmp is /private/tmp");
   assert.ok(!inside("/a/wt", "/a/wt2"));
+  const opened = openIn(["/tmp/wt/src", "/a/wt2"]);
+  assert.deepEqual(["/private/tmp/wt", "/a/wt", "/a/wt2"].map(opened), [true, false, true], "open: a folder in use is in it");
+  assert.ok(openIn(["\\\\server\\share\\repo"])("\\\\server\\share"), "a network share's root is open with a folder in it in use");
+  assert.ok(openIn(["/a/../tmp/wt"])("/a/../tmp/wt"), "a path with dot segments that lands in /tmp is open with itself in use");
+  const spellings = ["/", "/a", "/a/", "/a/b", "/a/b/", "/a/b/src", "/a/b2", "/A/b", "/tmp/wt", "/private/tmp/wt", "/tmp/wt/src/", "/var/wt", "/private/var/wt/src", "/a/../tmp/wt", "/a/../var/wt/src", "/a/./b/../b/src",
+    "C:\\", "C:\\repo", "c:\\REPO\\src\\", "\\\\server\\share", "\\\\server\\share\\", "\\\\server\\share\\repo", "\\\\server\\share\\repo\\src", "\\\\SERVER\\Share\\repo", "/link/wt", "/target/wt/src", "rel", "rel/src", ""];
+  const differ = spellings.flatMap((used) => spellings.filter((path) => openIn([used])(path) !== inside(path, used)).map((path) => [path, used]));
+  assert.deepEqual(differ, [], "every spelling is open exactly when a folder in use is inside it");
 });
 
 test("Worktrees parses git's worktree list and the probes", async () => {
@@ -281,4 +289,26 @@ test("Explain names and starts the one installed agent, looked up once", async (
   opened.ask("Explain web", "/w", "Explain it");
   assert.deepEqual(clone(started), [["tab.new", { name: "Explain web", folder: "/w", argv: ["codex"], task: "Explain it" }]]);
   assert.equal(lookups, 1);
+});
+
+test("Worktrees' first draw with forty folders open costs less than ten draws with none open", async () => {
+  const { fixture, loadMod } = await import("./perf-harness.mjs");
+  const count = (n, make) => Array.from({ length: n }, (_, i) => make(i));
+  const items = count(240, (i) => ({ path: `/Users/me/Apps/repo${i % 12}/.worktrees/tree${i}`, repo: `/Users/me/Apps/repo${i % 12}`, branch: `feat/${i}`, size: 1000 + i, dirty: 0, ahead: 1, only: 0, probed: true, fresh: true }));
+  const folders = count(40, (i) => `/Users/me/Apps/repo${i % 12}/packages/app${i}/src`);
+  const firstDrawMs = async (used) => {
+    const { host, cx } = fixture();
+    const { Worktrees } = await loadMod("kanso-panel/worktrees.js", ["Worktrees"], { ...host, home: () => "/Users/me", spaces: () => [], panes: () => used.map((cwd) => ({ cwd })) });
+    const timed = () => {
+      const panel = new Worktrees();
+      panel.init({ spawn() {}, notify() {} });
+      panel.show(items);
+      const from = performance.now();
+      panel.render(cx);
+      return performance.now() - from;
+    };
+    return Math.min(...count(12, timed));
+  };
+  const [none, open] = [await firstDrawMs([]), await firstDrawMs(folders)];
+  assert.ok(open < none * 10, `the first draw took ${open.toFixed(1)} ms with 40 folders open and ${none.toFixed(1)} ms with none`);
 });
