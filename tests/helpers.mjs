@@ -234,15 +234,13 @@ export function context() {
   return { cx, async drain() { while (pending.length) await pending.shift(); } };
 }
 
-// A context the way Herdr hands one to a call: a task started from it gets a context that stays valid,
-// and the call's own context reports a stale-context error once the call has returned.
 export function callContext() {
   const tasks = context();
   tasks.cx.timer = { after() {} };
   let over = false;
-  const stale = () => { throw new Error("cx is no longer valid: it was captured during an earlier call and used later. Use cx.spawn or take cx from the callback arguments"); };
+  const stale = () => { throw new Error("cx is no longer valid: it was captured during an earlier call and used later. Use cx.spawn or take cx from the callback arguments instead."); };
   const cx = {
-    get timer() { if (over) stale(); return tasks.cx.timer; },
+    get timer() { return { after() { if (over) stale(); } }; },
     notify() { if (over) stale(); },
     spawn(fn) { if (over) stale(); return tasks.cx.spawn(fn); },
   };

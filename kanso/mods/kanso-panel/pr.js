@@ -412,6 +412,7 @@ export class PullRequest {
     }
     if (key() !== context) return;
     this.paintInbox(model, true);
+    if (!model.writeError) this.retireInboxNote();
     if (this.inboxOpen === false) await this.noteSeen(this.pr?.url);
   }
 
@@ -419,7 +420,7 @@ export class PullRequest {
     this.inbox = model;
     this.inboxOn = true;
     if (decide) this.inboxOpen = stayOnBranch(this.inboxOpen);
-    if (model.writeError) this.note = said("Could not keep pull requests", model.writeError);
+    if (model.writeError) this.inboxFailure(model.writeError);
   }
 
   async noteSeen(url) {
@@ -580,7 +581,12 @@ export class PullRequest {
     this.loadedAt = 0; this.refresh(cx); cx.notify();
   }
 
-  inboxFailure(error) { this.note = said("Could not keep pull requests", String(error?.message ?? error).split("\n")[0]); }
+  inboxFailure(error) { this.inboxNote = this.note = said("Could not keep pull requests", String(error?.message ?? error).split("\n")[0]); }
+
+  retireInboxNote() {
+    if (this.note === this.inboxNote) this.note = null;
+    this.inboxNote = null;
+  }
 
   finishAction(cx) { this.busy = null; cx.notify(); }
 

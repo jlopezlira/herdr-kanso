@@ -112,7 +112,7 @@ the branch's rules.
 
 ### Fixed
 
-- The Pull requests panel no longer stops on "cx is no longer valid" after listing pull requests, and Refresh keeps working after a read of them fails. (#338)
+- The Pull requests panel no longer stops on "cx is no longer valid" after listing pull requests, and a rejected inbox step no longer stops Refresh or leaves its "Could not keep pull requests" note after a later read succeeds. (#338)
 - The status bar's Needs you and Agents at work menus write their shortcuts in key glyphs. (#354)
 - A tab's right-click menu writes New tab and Close tab's shortcuts in key glyphs. (#354)
 - In Projects, a right click on a subagent under an agent opens its Session menu, with the rows that act on it, as it already did in Status and Threads. (#354)

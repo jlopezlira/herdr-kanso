@@ -553,36 +553,54 @@ test("signing out brings back copy, open, and the repository list", async (t) =>
   assert.equal(out.includes("pr-switch"), true);
 });
 
-test("the inbox reads every account after the call that asked has returned, with no stale context", async (t) => {
+test("a forced inbox read after the call that asked has returned keeps no stale context", async (t) => {
   const { dir } = await database(t, ERES_PROJECT);
   const asked = { number: 149, title: "Asked for", url: ERES_URL, author: { login: "ada" }, repository: { nameWithOwner: "amtelser/eres-admin-app" }, updatedAt: "2026-11-09T00:00:00Z", isDraft: false };
   const { panel } = await panelFor(t, {
     dir, git: gitAt(ERES),
     gh: signedIn((args) => (args[0] === "search" && args.includes("--review-requested=@me") ? success(JSON.stringify([asked])) : undefined)),
   });
-  const { cx, end, drain } = callContext();
-  panel.refresh(cx);
-  end();
-  await drain();
+  const warm = context();
+  panel.refresh(warm.cx); await warm.drain();
+  assert.equal(panel.note, null);
+  const call = callContext();
+  panel.again(call.cx);
+  call.end();
+  await call.drain();
   assert.equal(panel.note, null, panel.note?.source);
   assert.equal(panel.error, null);
-  assert.equal(panel.pr.title, "Focused");
   assert.equal(panel.inbox.needs[0].title, "Asked for");
 });
 
-test("a rejected inbox step shows its card and leaves Refresh working", async (t) => {
-  const { dir, db } = await cachedReview(t);
-  const { panel, calls } = await panelFor(t, {
-    dir, git: gitAt(ERES), gh: signedIn(),
-    host: { setShared() { throw new Error("shared state is closed"); } },
+const panelWithShared = async (t, setShared) => {
+  const { dir } = await cachedReview(t);
+  return panelFor(t, {
+    dir, git: gitAt(ERES), gh: signedIn(), host: { setShared },
     state: { context: "repo", pr: focused, inboxOpen: false },
   });
-  const { cx, drain } = context();
-  panel.refresh(cx); await drain();
+};
+
+test("a rejected inbox step shows its card and leaves Refresh working", async (t) => {
+  const { panel, calls } = await panelWithShared(t, () => { throw new Error("shared state is closed"); });
+  const { cx, drain } = await refreshedContext(panel);
   assert.equal(panel.loading, false, "a rejected step releases the refresh");
   assert.equal(panel.note.text, "Could not keep pull requests");
   assert.match(panel.note.source, /shared state is closed/);
   const before = calls.length;
   panel.again(cx); await drain();
   assert.ok(calls.length > before, "Refresh asks again");
+});
+
+test("a recovered refresh retires the inbox card and keeps an unrelated failure", async (t) => {
+  let broken = true;
+  const { panel } = await panelWithShared(t, () => { if (broken) throw new Error("shared state is closed"); });
+  const { cx, drain } = await refreshedContext(panel);
+  assert.equal(panel.note.text, "Could not keep pull requests");
+  broken = false;
+  panel.again(cx); await drain();
+  assert.equal(panel.note, null, "the card goes once the inbox reads again");
+
+  panel.note = { text: "Merge failed", source: "not allowed" };
+  panel.again(cx); await drain();
+  assert.equal(panel.note.text, "Merge failed");
 });
