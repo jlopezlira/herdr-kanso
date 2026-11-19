@@ -1,4 +1,4 @@
-import { spawnAndNotify, commandOk, location, key, tilde, said } from "./lib.js";
+import { location, key, tilde, said } from "./lib.js";
 import { pageSize, pageBones, listBones } from "./ui-page.js";
 import { drawHero, drawEmpty, footOf, listedRow, prRow, heroPieces } from "./pr-view.js";
 import { localService } from "./platform-host.js";
@@ -7,7 +7,7 @@ import { openApi } from "./platform-open.js";
 // One of the kanso-panel mod's panels: it exists only while shown.
 import { div, svg } from "gpui-kit";
 import { v_flex, h_flex, Popover, TextView, ScrollHandle } from "gpui-base";
-import { exec, notify, run, theme, setShared, shared, window, layout, focused, panes, terminals, props } from "herdr";
+import { run, theme, setShared, shared, window, layout, focused, panes, terminals, props } from "herdr";
 import { walkLayout } from "./layout.js";
 import { R, G, T, PR, TINT, alpha, tokens } from "./ui.js";
 import { Armed, button, quietLink, iconButton } from "./ui-button.js";
@@ -18,34 +18,19 @@ import { dot } from "./ui-dot.js";
 import { caption } from "./ui-caption.js";
 import { section } from "./ui-section.js";
 import { segmented } from "./ui-tab.js";
-import { aliasText, machineTitle, tryOr, tryOrAsync, bounded } from "./pure.js";
+import { aliasText, machineTitle, tryOrAsync } from "./pure.js";
 import { STATES, checkState, onePerJob, checkSummary, runIdOf, listHold, mergeReadiness } from "./ghchecks.js";
 import { deliver, isAgent } from "./deliver.js";
 import { nameOf, givenNames } from "./marks.js";
 import { verdictOf, failedLog, sendText, sendStep } from "./pr-verdict.js";
 import { readyProviders } from "./pr-providers.js";
-import { groupInbox, inboxLabel, isNew, limitLine, mergeInbox, refreshInbox, seenSql, recordPrFacts } from "./pr-inbox.js";
+import { groupInbox, inboxLabel, isNew, limitLine, recordPrFacts } from "./pr-inbox.js";
 import { prMemory } from "./panel-state.js";
-import { awayShown } from "./since-left-model.js";
-import { pieces } from "./pieces.js";
-import { fetchDue, parseRemote } from "./pr-remote.js";
-import { q } from "./kdb.js";
-import { CALL_MS, TICK_MS, ageOf, authFresh, heldView, logDue, needsPermission, needsThreads, pollFacing, pollTick, readDue, stayOnBranch, threadKey, waitLine } from "./pr-poll.js";
-
-const keepsFacts = () => awayShown(pieces(shared));
+import { TICK_MS, ageOf, authFresh, pollFacing, pollTick, readDue } from "./pr-poll.js";
+import { FolderSession, DONE_LIMIT, keepsFacts, repoOf } from "./pr-session.js";
 
 const ICON = "mods/kanso-chrome/icons/";
 const INBOX_TONES = { Draft: "dim", "Changes requested": "blocked", "Review required": "working", Approved: "done" };
-const FIELDS = "number,title,body,state,isDraft,url,author,baseRefName,headRefName,mergeable,mergeStateStatus,reviewDecision,statusCheckRollup,latestReviews,reviewRequests,assignees,labels,additions,deletions,changedFiles,commits,files,updatedAt,mergedAt,closedAt";
-const THREADS = "query($o:String!,$r:String!,$n:Int!){repository(owner:$o,name:$r){pullRequest(number:$n){reviewThreads(first:100){nodes{isResolved isOutdated path line comments(first:1){totalCount nodes{author{login} body url}}}}}}}";
-// assignableUsers is GitHub's own picker list and, unlike `collaborators`, needs no push access to read.
-const PEOPLE = "query($o:String!,$r:String!){viewer{login} repository(owner:$o,name:$r){assignableUsers(first:100){pageInfo{hasNextPage} nodes{login name}}}}";
-const LABELS = "query($o:String!,$r:String!){repository(owner:$o,name:$r){labels(first:100,orderBy:{field:NAME,direction:ASC}){pageInfo{hasNextPage} nodes{name color description}}}}";
-const OPEN = "number,title,url,isDraft,updatedAt,author,headRefName,baseRefName,reviewDecision,mergeable,mergeStateStatus,statusCheckRollup,additions,deletions";
-const openListArgs = () => ["pr", "list", "--state", "open", "--limit", "100", "--json", OPEN];
-const DONE = "number,title,url,state,updatedAt,mergedAt,closedAt,author,headRefName,baseRefName,additions,deletions";
-const DONE_LIMIT = 30;
-const NO_PR = /no (open )?pull requests? found|could not determine current branch/i;
 const MAX_DIFF = 400;
 const FILE_ROWS = 8;
 
@@ -54,16 +39,6 @@ export function cleanBody(text) {
   return String(text ?? "").replace(/\r\n?/g, "\n").replace(/<!-{2}[\s\S]*?(-{2}>|$)/g, "").replace(/\n{3,}/g, "\n\n").trim();
 }
 export const longBody = (text) => text.split("\n").length > 6 || text.length > 480;
-
-// What gh needs and this repository lacks, from gh's own refusal; null when it is something else.
-export function ghMissing(r) {
-  if (!r || r.code === 0) return null;
-  const why = `${r.stderr ?? ""}\n${r.stdout ?? ""}`;
-  if (/no git remotes found/i.test(why)) return { title: "No remote", detail: null };
-  if (/known GitHub host/i.test(why)) return { title: "No GitHub remote", detail: null };
-  if (/gh auth login|not logged in|HTTP 401|bad credentials/i.test(why)) return { title: "Not signed in to GitHub", detail: null };
-  return null;
-}
 
 const ago = (iso) => ageOf(iso, Date.now());
 const labelColor = (hex) => { const h = String(hex ?? "").replace(/^#/, ""); return /^[0-9a-fA-F]{6}$/.test(h) ? `#${h}` : null; };
@@ -104,20 +79,6 @@ const checksNote = (sum) => [...new Set(STATES.map((s) => CHECK_WORDS[s].verb))]
   .map((verb) => ({ verb, n: STATES.filter((s) => CHECK_WORDS[s].verb === verb).reduce((k, s) => k + sum[s], 0) }))
   .filter(({ n }) => n > 0).map(({ verb, n }) => `${n} ${verb}`).join(" · ");
 
-const FILE_HEAD = /^diff -{2}git a\/.* b\/(.*)$/;
-function splitDiff(text) {
-  const lines = text.split("\n");
-  const heads = lines.flatMap((line, i) => {
-    const head = FILE_HEAD.exec(line);
-    return head ? [{ at: i, name: head[1] }] : [];
-  });
-  return Object.fromEntries(heads.map(({ at, name }, k) => {
-    const body = lines.slice(at + 1, k + 1 < heads.length ? heads[k + 1].at : lines.length);
-    const hunk = body.findIndex((line) => line.startsWith("@@"));
-    return [name, hunk < 0 ? [] : body.slice(hunk)];
-  }));
-}
-
 const PLACED = { draft: "hero", behind: "hero", conflicts: "hero", review: "people", threads: "threads", checks: "checks" };
 
 export function sectionIndex(section, ids) {
@@ -134,17 +95,11 @@ export function checksFirst(checks, name) {
 }
 
 export class PullRequest {
-  static flights = ["loading", "inbox", "checks", "closed", "details", "diff", "busy", "pending"];
-  constructor(db) { this.armed = new Armed(); this.db = db; } // Merge asks for a second press
+  constructor(db) { this.armed = new Armed(); this.db = db; this.session = new FolderSession(this); }
 
   init(cx, props = {}) {
-    this.pr = null; this.threads = []; this.diffs = null; this.openFile = null;
-    this.expanded = { checks: false, files: false, body: false }; this.width = 368;
-    this.openPrs = []; this.selected = null; // a pull request's URL; null: the branch's own
-    this.listing = false; // the page of pull requests instead of the one shown
-    this.tab = "open"; // that page's tab: "open", or "closed" (merged or closed, newest first)
-    this.closedPrs = null;
-    this.picker = null; this.candidates = null; this.query = "";
+    this.width = 368;
+    this.query = "";
     this.search = new TextField({ placeholder: "Search" });
     this.search.on("change", (_e, cx) => { this.query = this.search.value(); cx.notify(); });
     this.section = props.section ?? null;
@@ -162,60 +117,31 @@ export class PullRequest {
   pollNow(due) {
     return pollTick({
       shown: pollFacing(window()?.active, walkLayout(layout(), "panel-body")?.hidden),
-      away: Boolean(this.away), picker: Boolean(this.picker), due,
+      away: Boolean(this.away), picker: Boolean(this.session.picker), due,
     });
   }
 
   onPoll(cx) {
-    const next = this.pollNow(readDue(this.loadedAt, Date.now(), this.checks().some((ch) => ch.state === "pending")));
+    const next = this.pollNow(readDue(this.session.loadedAt, Date.now(), this.checks().some((ch) => ch.state === "pending")));
     this.away = next.away;
     if (next.read) this.refresh(cx);
   }
 
-  readWanted() { return Boolean(this.asking) || this.queued || this.pollNow(false).read || key() !== this.context; }
-
-  holds(gen, context) { return (this.gen ?? 0) === gen && key() === context; }
-
-  claim(name, gen = this.gen ?? 0) {
-    if (!PullRequest.flights.includes(name)) throw new Error(`Unknown flight ${name}`);
-    const held = this.flight?.[name];
-    if (held === gen || (held != null && gen < held)) return null;
-    this.flight = { ...(this.flight ?? {}), [name]: gen };
-    return gen;
-  }
-
-  release(name, gen) {
-    if (this.flight?.[name] !== gen) return false;
-    this.flight = Object.fromEntries(Object.entries(this.flight).filter(([key]) => key !== name));
-    if (name === "loading") this.loading = false;
-    if (name === "busy") this.busy = null;
-    if (name === "pending") this.pending = null;
-    return true;
-  }
-
-  ownsFlight(name) { return this.flight?.[name] === (this.gen ?? 0); }
+  readWanted() { return Boolean(this.session.asking) || this.session.queued || this.pollNow(false).read || key() !== this.session.context; }
 
   showFolder() {
     const context = key();
-    if (context === this.context) return;
+    if (context === this.session.context) return;
     const { cwd, on } = location();
-    this.context = context; this.root = null; this.branch = null; this.pr = null; this.threads = []; this.diffs = null;
-    this.openFile = null; this.error = null; this.note = null; this.none = false; this.armed.clear(); this.picker = null;
-    this.openPrs = []; this.selected = this.jumpUrl ?? (this.section === "push" ? null : this.keptUrl) ?? null; this.remembered = !this.jumpUrl && this.section !== "push" && Boolean(this.keptUrl);
-    this.home = null; this.branchUrl = null; this.outside = false;
-    this.missing = null; this.pushed = false; this.behind = false; this.base = undefined;
-    this.listing = false; this.tab = "open"; this.closedPrs = null;
-    this.inboxOn = false; this.inbox = null; this.inboxOpen = this.jumpUrl ? false : null; this.inboxTab = "needs"; this.inboxForce = false;
+    const push = this.section === "push";
+    this.armed.clear();
+    this.session = new FolderSession(this, {
+      context, cwd: cwd ?? null, on: on ?? null, expanded: this.session.expanded, queued: true,
+      selected: this.jumpUrl ?? (push ? null : this.keptUrl) ?? null,
+      remembered: !this.jumpUrl && !push && Boolean(this.keptUrl),
+      inboxOpen: this.jumpUrl ? false : null,
+    });
     this.jumpUrl = null;
-    this.permission = null; this.permissionRepo = null;
-    this.threadsFor = null; this.stale = null; this.wait = null; this.freshAt = null;
-    this.listed = false; this.openedList = false; this.host = null;
-    this.aheadCount = 0; this.behindCount = 0; this.subjects = []; this.subjectsFor = null; this.baseBehind = null; this.baseBehindFor = null;
-    this.forgetLog();
-    this.sendShown = false; this.sendFor = null;
-    this.cwd = cwd ?? null; this.on = on ?? null;
-    this.gen = (this.gen ?? 0) + 1;
-    this.queued = true;
   }
 
   readSoon(cx) {
@@ -224,9 +150,9 @@ export class PullRequest {
     this.waking = true;
     const wake = (wakeCx) => {
       this.waking = false;
-      const ask = this.asking;
-      this.asking = false;
-      if (this.queued || ask || this.pollNow(false).read || key() !== this.context) this.refresh(wakeCx);
+      const ask = this.session.asking;
+      this.session.asking = false;
+      if (this.session.queued || ask || this.pollNow(false).read || key() !== this.session.context) this.refresh(wakeCx);
     };
     if (cx.timer?.after) cx.timer.after(0, wake);
     else wake(cx);
@@ -234,12 +160,12 @@ export class PullRequest {
 
   // Cached per reading: a draw asks several times, on every shared write anywhere.
   checks() {
-    const pr = this.pr;
+    const pr = this.session.pr;
     if (this.checked?.pr !== pr) this.checked = { pr, list: checksIn(pr?.statusCheckRollup) };
     return this.checked.list;
   }
 
-  saveState() { return this.selected ? { url: this.selected } : null; }
+  saveState() { return this.session.selected ? { url: this.session.selected } : null; }
 
   restoreState(state) {
     const kept = prMemory(state, () => "open");
@@ -248,255 +174,36 @@ export class PullRequest {
     return true;
   }
 
-  // A remembered pull request that has closed, or cannot be read, is dropped for the usual empty panel.
-  dropRemembered() {
-    this.remembered = false;
-    this.selected = null; this.pr = null; this.error = null; this.none = false; this.missing = null;
+  again(cx) {
+    this.session.loadedAt = 0; this.session.inboxForce = true;
+    this.session.forgetLog();
+    this.refresh(cx);
+  }
+  repo() { return repoOf(this.session.pr?.url); }
+  local(url) {
+    if (url && url === this.session.branchUrl) return true; // the branch's own, even from a fork's checkout
+    const m = /github\.com\/([^/]+\/[^/]+)\/pull\//.exec(url ?? "");
+    return Boolean(m && this.session.home && m[1].toLowerCase() === this.session.home.toLowerCase());
   }
 
-  tracked(work) {
-    return (cx, ...rest) => { this.bound = cx; return work(cx, ...rest); };
+  refresh(cx) {
+    this.showFolder();
+    if (this.session.loading) return;
+    this.away = false;
+    if (this.session.read(cx, location())) this.keptUrl = null;
   }
 
-  start(cx, work) { spawnAndNotify(cx, this.tracked(work)); }
-
-  launch(command, args, options = {}) {
-    return bounded(exec(command, args, { ...options, timeout: options.timeout ?? CALL_MS }), this.bound?.timer, CALL_MS);
-  }
-
-  gh(args) { return this.launch("gh", args, { cwd: this.root ?? this.cwd, on: this.on }); }
-
-  git(args, cwd, on = this.on) { return this.launch("git", args, { cwd: cwd ?? this.root ?? this.cwd, on }); }
-
-  // A settled account check is kept for ten minutes. A timeout is asked again.
-  async account(now) {
+  async account(now, run) {
     if (authFresh(this.auth, now)) return this.auth.ready;
-    const ready = await readyProviders((command, args, options) => this.launch(command, args, options ?? {})).catch(() => null);
+    const ready = await readyProviders(run).catch(() => null);
     if (ready == null) return null;
     this.auth = { at: now, ready };
     return ready;
   }
 
-  keepLast(detail) {
-    const held = heldView(Boolean(this.pr), this.freshAt, Date.now());
-    if (held.keep) { this.stale = { at: this.freshAt ?? Date.now() }; this.error = null; return; }
-    const line = String(detail ?? "It took too long to answer.").split("\n")[0] || "It took too long to answer.";
-    this.error = { title: "Can't read GitHub", detail: line };
-  }
-
-  takeOpen(open, context, gen) {
-    if (open?.code !== 0 || !this.holds(gen, context)) return false;
-    const sorted = tryOr(() => JSON.parse(open.stdout).toSorted((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt)));
-    if (sorted === null) return false;
-    this.openPrs = sorted;
-    this.listed = true;
-    return true;
-  }
-
-  async heldByGitHub(now) {
-    if (!this.host || typeof this.db?.read !== "function") return null;
-    try {
-      if (typeof this.db.open === "function") await this.db.open();
-      const rows = await this.db.read(`SELECT retry_at FROM pr_fetches WHERE key=${q(`inbox:github:${this.host}`)}`);
-      const row = rows?.[0] ?? null;
-      return fetchDue(row, now, { force: true }) ? null : waitLine(Number(row.retry_at));
-    } catch { return null; }
-  }
-
-  forgetLog(next = null) {
-    this.logFor = next; this.failedLog = null; this.logParsed = null; this.logParsedFor = null;
-  }
-
-  again(cx) {
-    this.loadedAt = 0; this.inboxForce = true;
-    this.forgetLog();
-    this.refresh(cx);
-  }
-  repo() { const m = /github\.com\/([^/]+)\/([^/]+)\/pull\//.exec(this.pr?.url ?? ""); return m ? { o: m[1], r: m[2] } : null; }
-  local(url) {
-    if (url && url === this.branchUrl) return true; // the branch's own, even from a fork's checkout
-    const m = /github\.com\/([^/]+\/[^/]+)\/pull\//.exec(url ?? "");
-    return Boolean(m && this.home && m[1].toLowerCase() === this.home.toLowerCase());
-  }
-
-  refresh(cx) {
-    if (key() !== this.context) this.showFolder();
-    if (this.ownsFlight("loading")) return;
-    this.away = false;
-    this.showFolder();
-    const { cwd, on } = location(), context = key();
-    if (!cwd) { this.queued = false; this.asking = false; return; }
-    const gen = this.claim("loading");
-    if (gen == null) return;
-    this.queued = false;
-    this.asking = false;
-    this.keptUrl = null;
-    this.cwd = cwd; this.on = on;
-    this.loading = true;
-    const mine = () => this.holds(gen, context);
-    const want = this.selected;
-    cx.spawn(this.tracked(async (cx) => {
-      const inbox = this.syncInbox(context, gen).catch((e) => { if (mine()) this.inboxFailure(e); });
-      const failed = (e) => { if (mine()) this.keepLast(e?.message ?? e); };
-      const read = async () => {
-        const top = await this.git(["rev-parse", "--show-toplevel"], cwd, on);
-        if (!mine()) return null;
-        if (top?.late) { this.keepLast(); return null; }
-        // Not a repository is a place, not a failure: a quiet placeholder, no retry.
-        if (top.code !== 0) {
-          this.outside = true; this.missing = null; this.error = null; this.none = false; this.openPrs = [];
-          this.stale = null; this.wait = null;
-          if (!this.selected) { this.pr = null; this.freshAt = null; return null; }
-          try { await this.readShown(context, this.selected, null, gen); }
-          catch (e) { failed(e); }
-          return null;
-        }
-        this.outside = false;
-        this.root = top.stdout.trim();
-        const [branch, remote, pushed] = await Promise.all([
-          this.git(["branch", "--show-current"], this.root, on).catch(() => null),
-          this.git(["remote", "get-url", "origin"], this.root, on).catch(() => null),
-          this.readPushed(this.root, on),
-        ]);
-        if (!mine()) return null;
-        if (!branch || branch.late || remote?.late || pushed?.state === "late") { this.keepLast(); return null; }
-        this.branch = branch.stdout.trim() || null;
-        this.pushed = pushed?.state === "pushed"; this.behind = pushed?.state === "behind";
-        this.aheadCount = Number.isInteger(pushed?.ahead) ? pushed.ahead : 0;
-        this.behindCount = Number.isInteger(pushed?.behind) ? pushed.behind : 0;
-        const remoteUrl = String(remote?.stdout ?? "");
-        this.home = /github\.com[:/]([^/]+\/[^/\s]+?)(?:\.git)?\s*$/.exec(remoteUrl)?.[1] ?? null;
-        this.host = parseRemote(remoteUrl.trim())?.host ?? null;
-        const waited = await this.heldByGitHub(Date.now());
-        if (!mine()) return null;
-        if (waited) {
-          this.wait = waited;
-          if (this.pr) this.error = null;
-          return null;
-        }
-        this.wait = null;
-        if (this.listing && this.tab === "closed") this.loadClosed(cx);
-        // Awaited below so the read never outlives this refresh.
-        const open = this.listing ? this.gh(openListArgs()).catch(() => null) : null;
-        try { await this.readShown(context, want, open, gen); }
-        catch (e) { if (!mine()) return null; if (this.remembered) this.dropRemembered(); else failed(e); }
-        if (mine() && !this.pr && pushed?.state === "unpushed") {
-          const stamp = `${this.branch ?? ""}\0${pushed.ahead ?? 0}`;
-          if (this.subjectsFor !== stamp) {
-            this.subjectsFor = stamp;
-            const log = await this.git(["log", "-5", "--format=%s"], this.root, on).catch(() => null);
-            if (mine() && this.subjectsFor === stamp && log?.code === 0) this.subjects = String(log.stdout ?? "").split("\n").filter(Boolean);
-          }
-        } else if (mine()) { this.subjects = []; this.subjectsFor = null; }
-        return open;
-      };
-      const follow = await (async () => {
-        const open = await read().catch((e) => { failed(e); return null; });
-        if (open) await open;
-        await inbox;
-        return mine() && (this.selected !== want || this.openedList) && !this.wait;
-      })().finally(() => {
-        this.openedList = false;
-        if (this.release("loading", gen) && mine()) this.loadedAt = Date.now();
-        cx.notify();
-      });
-      if (follow) this.refresh(cx);
-      else if (this.queued && !this.ownsFlight("loading")) this.refresh(cx);
-      else if (mine() && !this.wait) this.readLog(cx);
-    }));
-  }
-
-  facing() {
-    return pollFacing(window()?.active, walkLayout(layout(), "panel-body")?.hidden);
-  }
-
-  readLog(cx) {
-    if (!this.pr) return;
-    const stamp = this.view().logKey;
-    if (!logDue({ facing: this.facing(), key: stamp, have: this.logFor ?? null })) return;
-    const gen = this.claim("checks");
-    if (gen == null) return;
-    this.forgetLog(stamp);
-    const context = this.context;
-    cx.spawn(this.tracked(async (cx) => {
-      try {
-        const r = await this.gh(["run", "view", stamp, "--log-failed"]).catch(() => null);
-        if (!this.holds(gen, context) || this.logFor !== stamp) return;
-        if (r?.code === 0) this.failedLog = r.stdout ?? "";
-      } finally { this.release("checks", gen); cx.notify(); }
-    }));
-  }
-
-  // The account, not the focused folder. Absent unless a provider is installed and signed in here.
-  async syncInbox(context, gen = this.gen ?? 0) {
-    if (this.claim("inbox", gen) == null) return;
-    try { await this.readInbox(context, gen); }
-    finally { this.release("inbox", gen); }
-  }
-
-  async readInbox(context, gen) {
-    const ready = await this.account(Date.now());
-    if (ready == null || !this.holds(gen, context)) return;
-    if (!ready.length) { this.inboxOn = false; this.inbox = null; this.inboxOpen = null; return; }
-    const fail = (e) => { if (this.holds(gen, context)) this.inboxFailure(e); };
-    if (!this.inboxDb) {
-      try { await this.db.open(); this.inboxDb = this.db; }
-      catch (e) {
-        fail(e);
-        if (!this.holds(gen, context)) return;
-        this.inboxOn = false; this.inboxOpen = null;
-        return;
-      }
-    }
-    const force = Boolean(this.inboxForce);
-    this.inboxForce = false;
-    const model = await ready.reduce(async (prev, { provider, session }) => {
-      const soFar = await prev;
-      return [...soFar, await refreshInbox({
-        db: this.inboxDb, run: (command, args, options) => this.launch(command, args, options ?? {}), provider, session, force, shown: true, facts: keepsFacts(),
-        onCache: (cached, pending) => { if (this.holds(gen, context)) this.paintInbox(cached, !pending || cached.needs.length > 0 || cached.yours.length > 0); },
-      })];
-    }, Promise.resolve([])).then(mergeInbox).catch((e) => e);
-    if (model instanceof Error) { fail(model); return; }
-    if (!this.holds(gen, context)) return;
-    this.paintInbox(model, true);
-    if (!model.writeError) this.retireInboxNote();
-    if (this.inboxOpen === false) await this.noteSeen(this.pr?.url);
-  }
-
-  paintInbox(model, decide) {
-    this.inbox = model;
-    this.inboxOn = true;
-    if (decide) this.inboxOpen = stayOnBranch(this.inboxOpen);
-    if (model.writeError) this.inboxFailure(model.writeError);
-  }
-
-  async noteSeen(url) {
-    if (url && this.inboxOpen !== true) setShared("kanso.pr.seen", { url, at: Date.now() });
-    if (!url || this.inboxOpen !== false || !this.inboxDb) return;
-    const now = Date.now();
-    try { await this.inboxDb.run(seenSql(url, now)); }
-    catch (e) { this.inboxFailure(e); return; }
-    const stamp = (item) => item.url === url ? { ...item, seenAt: now } : item;
-    const needs = (this.inbox?.needs ?? []).map(stamp);
-    if (this.inbox) this.inbox = { ...this.inbox, needs, yours: (this.inbox.yours ?? []).map(stamp), unseen: needs.filter(isNew).length };
-  }
-
-  async readPushed(cwd, on) {
-    const [up, counts] = await Promise.all([
-      this.git(["rev-parse", "--symbolic-full-name", "@{u}"], cwd, on).catch(() => null),
-      this.git(["rev-list", "--left-right", "--count", "@{u}...HEAD"], cwd, on).catch(() => null),
-    ]);
-    if (up?.late || counts?.late) return { state: "late", ahead: 0, behind: 0 };
-    const upstream = up?.code === 0 && String(up.stdout ?? "").trim().startsWith("refs/remotes/");
-    if (!upstream) return { state: "unpushed", ahead: 0, behind: 0 };
-    if (counts?.code !== 0) return { state: "unpushed", ahead: 0, behind: 0 };
-    const [behind, ahead] = String(counts.stdout ?? "").trim().split(/\s+/).map(Number);
-    const back = Number.isInteger(behind) ? behind : 0;
-    const fore = Number.isInteger(ahead) ? ahead : 0;
-    if (fore !== 0) return { state: "unpushed", ahead: fore, behind: back };
-    if (back !== 0) return { state: "behind", ahead: 0, behind: back };
-    return { state: "pushed", ahead: 0, behind: 0 };
+  async inboxStore() {
+    if (!this.inboxDb) { await this.db.open(); this.inboxDb = this.db; }
+    return this.inboxDb;
   }
 
   async keepPrFacts(items) {
@@ -504,282 +211,72 @@ export class PullRequest {
     return tryOrAsync(() => recordPrFacts(this.inboxDb ??= this.db, items));
   }
 
-  async readShown(context, want, list, gen = this.gen ?? 0) {
-    const asked = await tryOrAsync(async () => ({ view: await this.gh(["pr", "view", ...(want ? [want] : []), "--json", FIELDS]) }));
-    if (!this.holds(gen, context)) return;
-    if (!asked) {
-      if (this.remembered) { this.dropRemembered(); return; }
-      if (this.pr) { this.keepLast("The GitHub CLI is not installed."); return; }
-      this.missing = null; this.error = { title: "GitHub CLI not installed", detail: null, cli: true }; this.pr = null; return;
-    }
-    // A click picked another one while this read was out: drop it, the finally reads again.
-    if (this.selected !== want) return;
-    const missing = ghMissing(asked.view);
-    if (missing) {
-      if (this.remembered) { this.dropRemembered(); return; }
-      this.missing = missing; this.pr = null; this.none = false; this.error = null; this.openPrs = []; this.branchUrl = null;
-      this.stale = null; this.freshAt = null; return;
-    }
-    this.missing = null;
-    if (list) this.takeOpen(await list, context, gen);
-    await this.keepPrFacts([
-      ...(asked.view.code === 0 ? [JSON.parse(asked.view.stdout)] : []),
-      ...(this.openPrs ?? []).map((pr) => ({ ...pr, state: "OPEN" })),
-    ]);
-    // `gh pr view` also finds the branch's merged or closed one; that counts as none.
-    const done = (v) => tryOr(() => ["MERGED", "CLOSED"].includes(JSON.parse(v.stdout).state), false);
-    const branchHasNone = !want && (asked.view.code !== 0 ? NO_PR.test(asked.view.stderr || asked.view.stdout) : done(asked.view));
-    if (branchHasNone && this.branch && this.base === undefined) {
-      const b = await this.gh(["repo", "view", "--json", "defaultBranchRef", "--jq", ".defaultBranchRef.name"]).catch(() => null);
-      if (b?.code === 0 && this.holds(gen, context)) this.base = b.stdout.trim() || null;
-    }
-    if (branchHasNone) {
-      if (!this.holds(gen, context) || this.selected !== want) return;
-      this.none = true; this.pr = null; this.error = null; this.stale = null; this.freshAt = null;
-      this.branchUrl = null; this.threads = []; return;
-    }
-    const view = asked.view;
-    if (view.code !== 0) {
-      if (!this.holds(gen, context)) return;
-      if (this.remembered) { this.dropRemembered(); return; }
-      const why = (view.stderr || view.stdout).trim();
-      if (NO_PR.test(why)) { this.none = true; this.pr = null; this.error = null; this.stale = null; this.freshAt = null; }
-      else this.keepLast(view.late ? undefined : why);
-      return;
-    }
-    const pr = JSON.parse(view.stdout);
-    if (!this.holds(gen, context)) return;
-    if (this.remembered && !prMemory({ url: pr.url }, () => (pr.state === "OPEN" ? "open" : "closed"))) { this.dropRemembered(); return; }
-    this.remembered = false;
-    if (this.pr?.url !== pr.url) {
-      this.diffs = null; this.openFile = null; this.expanded = { ...this.expanded, body: false };
-      this.forgetLog();
-      this.sendShown = false; this.sendFor = null; this.baseBehind = null; this.baseBehindFor = null;
-    }
-    this.pr = pr; this.none = false; this.error = null;
-    this.freshAt = Date.now(); this.stale = null; this.wait = null;
-    if (!want) this.branchUrl = pr.url;
-    if (!this.home && !want) this.home = /github\.com\/([^/]+\/[^/]+)\/pull\//.exec(pr.url)?.[1] ?? null;
-    await this.noteSeen(pr.url);
-    const repo = this.repo();
-    if (this.threadsFor && !String(this.threadsFor).startsWith(`${pr.url}\0`)) { this.threads = []; this.threadsFor = null; }
-    if (repo && needsThreads(this.threadsFor, pr.url, pr.updatedAt)) {
-      const gql = await this.gh(["api", "graphql", "-f", `query=${THREADS}`, "-F", `o=${repo.o}`, "-F", `r=${repo.r}`, "-F", `n=${pr.number}`]).catch(() => null);
-      const nodes = gql?.code === 0 && this.holds(gen, context) && this.pr?.url === pr.url
-        ? tryOr(() => JSON.parse(gql.stdout)?.data?.repository?.pullRequest?.reviewThreads?.nodes, null) : null;
-      if (nodes) {
-        this.threads = nodes.filter((n) => !n.isResolved).map((n) => {
-          const first = n.comments?.nodes?.[0];
-          return { path: n.path, line: n.line, outdated: n.isOutdated, author: first?.author?.login ?? "", body: (first?.body ?? "").replace(/\r\n?/g, "\n").trim(), url: first?.url, replies: Math.max(0, (n.comments?.totalCount ?? 1) - 1) };
-        });
-        this.threadsFor = threadKey(pr.url, pr.updatedAt);
-      }
-    }
-    if (!this.viewer) {
-      const me = await this.gh(["api", "user", "--jq", ".login"]).catch(() => null);
-      if (me?.code === 0 && this.holds(gen, context)) this.viewer = me.stdout.trim();
-    }
-    const place = this.repo();
-    const repoKey = place ? `${place.o}/${place.r}` : null;
-    if (needsPermission(this.permission, this.permissionRepo, repoKey)) {
-      this.permission = null; this.permissionRepo = repoKey;
-      if (place && pr.state === "OPEN") {
-        const perm = await this.gh(["repo", "view", repoKey, "--json", "viewerPermission", "--jq", ".viewerPermission"]).catch(() => null);
-        const value = perm?.code === 0 ? perm.stdout.trim() : "";
-        if (value && this.holds(gen, context) && this.pr?.url === pr.url) this.permission = value;
-      }
-    }
-    const behindStamp = `${pr.url}\0${pr.updatedAt ?? ""}`;
-    if (String(pr.mergeStateStatus ?? "").toUpperCase() === "BEHIND" && this.root) {
-      if (this.baseBehindFor !== behindStamp) {
-        this.baseBehindFor = behindStamp;
-        const base = pr.baseRefName || "main";
-        const counted = await this.git(["rev-list", "--count", `HEAD..origin/${base}`], this.root, this.on).catch(() => null);
-        const n = Number(String(counted?.stdout ?? "").trim());
-        if (this.holds(gen, context) && this.pr?.url === pr.url && this.baseBehindFor === behindStamp) this.baseBehind = counted?.code === 0 && Number.isInteger(n) && n > 0 ? n : null;
-      }
-    } else if (this.holds(gen, context) && this.pr?.url === pr.url) { this.baseBehind = null; this.baseBehindFor = null; }
+  learnViewer(login, from) { if (login && from === this.session) this.viewer = login; }
+
+  facing() {
+    return pollFacing(window()?.active, walkLayout(layout(), "panel-body")?.hidden);
   }
 
-  loadClosed(cx) {
-    if (!this.root || this.wait) return;
-    const gen = this.claim("closed"); if (gen == null) return;
-    cx.spawn(this.contextTask(async (cx, context) => {
-      try {
-        const r = await this.gh(["pr", "list", "--state", "closed", "--limit", String(DONE_LIMIT), "--json", DONE]);
-        if (r?.code === 0 && this.holds(gen, context)) {
-          const rows = JSON.parse(r.stdout);
-          const when = (p) => Date.parse(p.mergedAt || p.closedAt || p.updatedAt) || 0;
-          await this.keepPrFacts(rows);
-          if (this.holds(gen, context)) this.closedPrs = rows.toSorted((a, b) => when(b) - when(a));
-        }
-      } catch { }
-      finally { this.release("closed", gen); cx.notify(); }
-    }));
-  }
+  readLog(cx) { this.session.readLog(cx); }
+
+  paintInbox(model, decide) { this.session.paintInbox(model, decide); }
+
+  noteSeen(url) { return this.session.noteSeen(url); }
 
   showTab(tab, cx) {
-    this.tab = tab;
-    if (tab === "closed" && this.closedPrs === null && !this.wait) this.loadClosed(cx);
+    this.session.tab = tab;
+    if (tab === "closed" && this.session.closedPrs === null && !this.session.wait) this.session.loadClosed(cx);
     cx.notify();
   }
 
   choose(p, cx) {
-    this.listing = false;
-    if (this.pr?.url === p.url) { cx.notify(); return; }
-    this.selected = p.url === this.branchUrl ? null : p.url; this.pr = null; this.threads = []; this.diffs = null; this.openFile = null;
-    this.none = false; this.error = null; this.note = null; this.armed.clear(); this.picker = null;
-    this.loadedAt = 0; this.refresh(cx); cx.notify();
+    this.session.listing = false;
+    if (this.session.pr?.url === p.url) { cx.notify(); return; }
+    this.session.selected = p.url === this.session.branchUrl ? null : p.url; this.session.pr = null; this.session.threads = []; this.session.diffs = null; this.session.openFile = null;
+    this.session.none = false; this.session.error = null; this.session.note = null; this.armed.clear(); this.session.picker = null;
+    this.session.loadedAt = 0; this.refresh(cx); cx.notify();
   }
 
-  inboxFailure(error) { this.inboxNote = this.note = said("Could not keep pull requests", String(error?.message ?? error).split("\n")[0]); }
+  mergeNow(cx) { this.session.mergeNow(cx); }
 
-  retireInboxNote() {
-    if (this.note === this.inboxNote) this.note = null;
-    this.inboxNote = null;
-  }
-
-  finishAction(cx) { cx.notify(); }
-
-  finishAndRefresh(cx) {
-    this.loadedAt = 0; cx.notify(); this.refresh(cx);
-  }
-
-  contextTask(work) {
-    const context = this.context, gen = this.gen ?? 0;
-    return this.tracked((cx) => work(cx, context, gen));
-  }
-
-  ownBusy(label) {
-    const gen = this.claim("busy");
-    if (gen == null) return null;
-    this.busy = label; this.note = null;
-    return { gen, context: this.context };
-  }
-
-  act(label, args, cx, run = (a) => this.gh(a)) {
-    const owned = this.ownBusy(label);
-    if (!owned) return;
-    this.armed.clear();
-    this.start(cx, async (cx) => {
-      try {
-        const r = await run(args);
-        commandOk(r);
-      } catch (e) { if (this.holds(owned.gen, owned.context)) this.note = said(`${label} failed`, e?.message ?? e); }
-      finally { this.release("busy", owned.gen); this.finishAndRefresh(cx); }
-    });
-  }
-
-  mergeNow(cx) {
-    if (!this.pr) return;
-    const owned = this.ownBusy("Merge");
-    if (!owned) return;
-    const pr = this.pr;
-    this.start(cx, async (cx) => {
-      try {
-        const { o, r: name } = this.repo();
-        const repo = await this.gh(["repo", "view", `${o}/${name}`, "--json", "squashMergeAllowed,mergeCommitAllowed,rebaseMergeAllowed"]);
-        const allowed = repo.code === 0 ? JSON.parse(repo.stdout) : {};
-        const method = allowed.squashMergeAllowed !== false ? "--squash" : allowed.mergeCommitAllowed ? "--merge" : "--rebase";
-        const r = await this.gh(["pr", "merge", pr.url, method]);
-        commandOk(r);
-        notify({ title: `Merged #${pr.number}`, body: pr.title, level: "success" });
-      } catch (e) { if (this.holds(owned.gen, owned.context)) this.note = said("Merge failed", e?.message ?? e); }
-      finally { this.release("busy", owned.gen); this.finishAndRefresh(cx); }
-    });
-  }
-
-  createPr(cx) {
-    const owned = this.ownBusy("Create");
-    if (!owned) return;
-    this.start(cx, async (cx) => {
-      try {
-        const now = await this.readPushed(this.root, this.on);
-        if (!now || now.state === "late") throw new Error("It took too long to answer.");
-        if (now.state !== "pushed") throw new Error(`${now.state === "behind" ? "pull" : "push"} ${this.branch ?? "the branch"} first`);
-        const r = await this.gh(["pr", "create", "--web"]);
-        commandOk(r);
-      } catch (e) { if (this.holds(owned.gen, owned.context)) this.note = said("Could not create it", e?.message ?? e); }
-      finally { this.release("busy", owned.gen); this.finishAction(cx); }
-    });
-  }
+  createPr(cx) { this.session.createPr(cx); }
 
   // terminal.open cannot name a machine; the pane opens in the space already on screen.
   signIn() {
-    run("terminal.open", { argv: ["gh", "auth", "login"], folder: this.root || this.cwd, place: "right" });
+    run("terminal.open", { argv: ["gh", "auth", "login"], folder: this.session.root || this.session.cwd, place: "right" });
   }
 
   openPicker(kind, open, cx) {
-    this.picker = open ? kind : null;
+    this.session.picker = open ? kind : null;
     this.query = ""; this.search.set_value("");
-    this.candidates = null; this.pickerError = null; this.truncated = false;
+    this.session.candidates = null; this.session.pickerError = null; this.session.truncated = false;
     if (open) {
       this.search.focus();
-      const repo = this.repo(), context = this.context, gen = this.gen ?? 0;
-      cx.spawn(this.tracked(async (cx) => {
-        try {
-          const q = kind === "labels" ? LABELS : PEOPLE;
-          const r = await this.gh(["api", "graphql", "-f", `query=${q}`, "-F", `o=${repo.o}`, "-F", `r=${repo.r}`]);
-          commandOk(r);
-          if (!this.holds(gen, context) || this.picker !== kind) return;
-          const data = JSON.parse(r.stdout).data;
-          if (data?.viewer?.login) this.viewer = data.viewer.login;
-          const list = kind === "labels" ? data.repository.labels : data.repository.assignableUsers;
-          this.truncated = Boolean(list.pageInfo?.hasNextPage);
-          this.candidates = list.nodes;
-        } catch (e) { if (this.holds(gen, context)) this.pickerError = String(e?.message ?? e); }
-        cx.notify();
-      }));
+      this.session.readPicker(kind, cx);
     }
     cx.notify();
   }
 
   applied(kind) {
-    const pr = this.pr;
+    const pr = this.session.pr;
     if (kind === "labels") return new Set((pr.labels ?? []).map((l) => l.name));
     if (kind === "assignees") return new Set((pr.assignees ?? []).map((a) => a.login));
     return new Set((pr.reviewRequests ?? []).map((r) => r.login).filter(Boolean));
   }
 
-  toggle(kind, name, on, cx) {
-    if (!this.pr) return;
-    const gen = this.claim("pending");
-    if (gen == null) return;
-    const { o, r } = this.repo(), n = this.pr.number, context = this.context;
-    const call = {
-      labels: on ? ["-X", "DELETE", `repos/${o}/${r}/issues/${n}/labels/${encodeURIComponent(name)}`] : ["-X", "POST", `repos/${o}/${r}/issues/${n}/labels`, "-f", `labels[]=${name}`],
-      assignees: ["-X", on ? "DELETE" : "POST", `repos/${o}/${r}/issues/${n}/assignees`, "-f", `assignees[]=${name}`],
-      reviewers: ["-X", on ? "DELETE" : "POST", `repos/${o}/${r}/pulls/${n}/requested_reviewers`, "-f", `reviewers[]=${name}`],
-    }[kind];
-    const done = { assignees: on ? `Unassigned ${name}` : `Assigned ${name}`, reviewers: on ? `Review request to ${name} taken back` : `Review requested from ${name}` }[kind];
-    const failed = { labels: on ? `Could not take ${name} off` : `Could not put ${name} on`, assignees: on ? `Could not unassign ${name}` : `Could not assign ${name}`, reviewers: on ? `Could not take back the request to ${name}` : `Could not ask ${name} for a review` }[kind];
-    const why = { labels: "Changing labels needs triage access on this repository.", assignees: "Assigning needs triage access on this repository.", reviewers: "Asking for a review needs write access on this repository." }[kind];
-    this.pending = name;
-    this.start(cx, async (cx) => {
-      try {
-        commandOk(await this.gh(["api", ...call, "--silent"]));
-        if (!this.holds(gen, context) || !this.pr) return;
-        const pr = this.pr;
-        if (kind === "labels") this.pr = { ...pr, labels: on ? pr.labels.filter((l) => l.name !== name) : [...pr.labels, (this.candidates ?? []).find((l) => l.name === name) ?? { name }] };
-        if (kind === "assignees") this.pr = { ...pr, assignees: on ? pr.assignees.filter((a) => a.login !== name) : [...pr.assignees, { login: name }] };
-        if (kind === "reviewers") this.pr = { ...pr, reviewRequests: on ? pr.reviewRequests.filter((x) => x.login !== name) : [...pr.reviewRequests, { login: name }] };
-        if (done) notify({ title: done, level: "success" });
-      } catch (e) { notify({ title: failed, body: `${String(e?.message ?? e)} ${why}`, level: "error" }); }
-      finally { this.release("pending", gen); cx.notify(); this.loadedAt = 0; this.refresh(cx); }
-    });
-  }
+  toggle(kind, name, on, cx) { this.session.toggle(kind, name, on, cx); }
 
   pickerFor(kind, c) {
     const id = `pr-pick-${kind}`;
     const label = { labels: "Change labels", assignees: "Assign people", reviewers: "Request a review" }[kind];
     const trigger = button(`${id}-trigger`, label, null, c, { kind: "icon", icon: "plus" });
     const popover = Popover.new(id).trigger(trigger).anchor("top_right")
-      .open(this.picker === kind)
+      .open(this.session.picker === kind)
       .on_open_change((open, cx) => this.openPicker(kind, open, cx));
-    if (this.picker !== kind) return popover;
+    if (this.session.picker !== kind) return popover;
     const applied = this.applied(kind), q = this.query.toLowerCase();
-    const author = this.pr.author?.login;
-    const all = (this.candidates ?? []).filter((x) => kind !== "reviewers" || x.login !== author);
+    const author = this.session.pr.author?.login;
+    const all = (this.session.candidates ?? []).filter((x) => kind !== "reviewers" || x.login !== author);
     const shown = all.filter((x) => !q || [x.name, x.login, x.description].some((v) => String(v ?? "").toLowerCase().includes(q)));
     const empty = { labels: "This repository has no labels.", assignees: "Nobody has access to this repository.", reviewers: "Nobody else has access to this repository." }[kind];
     const noMatch = kind === "labels" ? "No label matches that." : "Nobody with access matches that.";
@@ -790,25 +287,25 @@ export class PullRequest {
       return {
         dot: kind === "labels" ? labelColor(x.color) ?? "dim" : null, label: name,
         second: kind === "labels" ? x.description || null : x.name && x.name !== x.login ? x.name : null,
-        checked: on, hint: this.pending === name ? "\u2026" : null, onClick: (cx) => this.toggle(kind, name, on, cx),
+        checked: on, hint: this.session.pending === name ? "\u2026" : null, onClick: (cx) => this.toggle(kind, name, on, cx),
       };
     };
-    const state = !this.candidates && !this.pickerError ? PICKER_BONES
-      : this.pickerError ? [{ failure: { text: `${read} could not be read`, source: this.pickerError } }]
-      : this.candidates && !shown.length ? [{ heading: q ? noMatch : empty }]
+    const state = !this.session.candidates && !this.session.pickerError ? PICKER_BONES
+      : this.session.pickerError ? [{ failure: { text: `${read} could not be read`, source: this.session.pickerError } }]
+      : this.session.candidates && !shown.length ? [{ heading: q ? noMatch : empty }]
       : [];
     return popover.content(menu(id, { items: [{ field: "Search", text: this.search }, ...state, { scroll: shown.map(item), rows: PICKER_ROWS },
-      ...(this.truncated ? [{ heading: more }] : [])] }, c));
+      ...(this.session.truncated ? [{ heading: more }] : [])] }, c));
   }
 
   openList() {
     const me = this.viewer;
-    return (this.openPrs ?? []).toSorted((a, b) => Number(b.author?.login === me) - Number(a.author?.login === me));
+    return (this.session.openPrs ?? []).toSorted((a, b) => Number(b.author?.login === me) - Number(a.author?.login === me));
   }
 
   rowPermission(p) {
     const m = /github\.com\/([^/]+)\/([^/]+)\/pull\//.exec(p?.url ?? "");
-    return m && this.permissionRepo === `${m[1]}/${m[2]}` ? this.permission : null;
+    return m && this.session.permissionRepo === `${m[1]}/${m[2]}` ? this.session.permission : null;
   }
 
   rowState(p) {
@@ -820,97 +317,97 @@ export class PullRequest {
   }
 
   canSwitch() {
-    return Boolean(this.root) && !this.outside && !this.missing;
+    return Boolean(this.session.root) && !this.session.outside && !this.session.missing;
   }
 
-  isBase() { return Boolean(this.branch) && this.branch === this.base; }
-  canCreate() { return Boolean(this.branch) && this.pushed && !this.isBase(); }
+  isBase() { return Boolean(this.session.branch) && this.session.branch === this.session.base; }
+  canCreate() { return Boolean(this.session.branch) && this.session.pushed && !this.isBase(); }
 
   switchPill(c) {
-    const back = this.listing && this.pr;
-    const counted = this.listed ? `${this.openPrs.length} open` : "Open";
-    const label = this.listing ? (back ? `Back to #${this.pr.number}` : "Back") : counted;
-    const spoken = this.listing ? label : (this.listed ? `${this.openPrs.length} open pull requests` : "Open pull requests");
+    const back = this.session.listing && this.session.pr;
+    const counted = this.session.listed ? `${this.session.openPrs.length} open` : "Open";
+    const label = this.session.listing ? (back ? `Back to #${this.session.pr.number}` : "Back") : counted;
+    const spoken = this.session.listing ? label : (this.session.listed ? `${this.session.openPrs.length} open pull requests` : "Open pull requests");
     return button("pr-switch", label, (cx) => {
-      this.listing = !this.listing;
-      if (!this.listing) { cx.notify(); return; }
-      if (this.loading) this.openedList = true;
+      this.session.listing = !this.session.listing;
+      if (!this.session.listing) { cx.notify(); return; }
+      if (this.session.loading) this.session.openedList = true;
       else this.refresh(cx);
       cx.notify();
-    }, c, { kind: "tonal", small: true, active: this.listing, spoken })
-      .tooltip(tooltip({ label: this.listing ? "Back to the one shown" : "Every open pull request, and the closed ones" }))
-      .when(!this.listing, (el) => el.child(svg(`${ICON}chevron-right.svg`).size(12).text_color(c.muted)));
+    }, c, { kind: "tonal", small: true, active: this.session.listing, spoken })
+      .tooltip(tooltip({ label: this.session.listing ? "Back to the one shown" : "Every open pull request, and the closed ones" }))
+      .when(!this.session.listing, (el) => el.child(svg(`${ICON}chevron-right.svg`).size(12).text_color(c.muted)));
   }
 
   tabs(c) {
-    const closed = this.closedPrs === null ? "Closed" : `Closed ${this.closedPrs.length >= DONE_LIMIT ? `${DONE_LIMIT}+` : this.closedPrs.length}`;
-    const open = this.listed ? `Open ${this.openPrs.length}` : "Open";
-    return segmented("pr-tab", [{ key: "open", label: open }, { key: "closed", label: closed }], this.tab, (id, cx) => this.showTab(id, cx), c);
+    const closed = this.session.closedPrs === null ? "Closed" : `Closed ${this.session.closedPrs.length >= DONE_LIMIT ? `${DONE_LIMIT}+` : this.session.closedPrs.length}`;
+    const open = this.session.listed ? `Open ${this.session.openPrs.length}` : "Open";
+    return segmented("pr-tab", [{ key: "open", label: open }, { key: "closed", label: closed }], this.session.tab, (id, cx) => this.showTab(id, cx), c);
   }
 
   listPage(c) {
-    const held = this.wait ? div().text_size(T.body).text_color(c.dim).child(this.wait) : null;
+    const held = this.session.wait ? div().text_size(T.body).text_color(c.dim).child(this.session.wait) : null;
     const beside = (rows) => held ? v_flex().w_full().gap(G.lg).child(held).child(rows) : rows;
-    const closed = this.closedPrs === null
-      ? (this.ownsFlight("closed") ? this.closedBones(c) : div().text_size(T.body).text_color(c.dim).child(this.wait || "GitHub could not be read."))
-      : !this.closedPrs.length ? beside(div().text_size(T.body).text_color(c.dim).child("Nothing closed yet."))
-        : beside(this.openPage(c, this.closedPrs));
-    const open = !this.openPrs.length
-      ? div().text_size(T.body).text_color(c.dim).child(this.wait || "Nothing open.")
+    const closed = this.session.closedPrs === null
+      ? (this.session.flying("closed") ? this.closedBones(c) : div().text_size(T.body).text_color(c.dim).child(this.session.wait || "GitHub could not be read."))
+      : !this.session.closedPrs.length ? beside(div().text_size(T.body).text_color(c.dim).child("Nothing closed yet."))
+        : beside(this.openPage(c, this.session.closedPrs));
+    const open = !this.session.openPrs.length
+      ? div().text_size(T.body).text_color(c.dim).child(this.session.wait || "Nothing open.")
       : beside(this.openPage(c));
-    return v_flex().w_full().gap(G.lg).child(this.tabs(c)).child(this.tab === "closed" ? closed : open);
+    return v_flex().w_full().gap(G.lg).child(this.tabs(c)).child(this.session.tab === "closed" ? closed : open);
   }
 
   openPage(c, rows = null) {
     const finished = rows !== null;
     const list = finished ? rows : this.openList(), me = this.viewer;
-    const here = (p) => p.url === this.branchUrl || p.headRefName === this.branch;
+    const here = (p) => p.url === this.session.branchUrl || p.headRefName === this.session.branch;
     const mine = (p) => Boolean(me) && p.author?.login === me;
     const groups = [
       ["This branch", list.filter(here)],
       ["Yours", list.filter((p) => !here(p) && mine(p))],
       [me ? "Others" : "Open", list.filter((p) => !here(p) && !mine(p))],
     ].filter(([, rows]) => rows.length);
-    const create = !finished && this.none && Boolean(this.branch) && !this.isBase();
+    const create = !finished && this.session.none && Boolean(this.session.branch) && !this.isBase();
     // Rows are numbered down the page, across the groups.
     const firsts = groups.map((_, g) => groups.slice(0, g).reduce((n, [, rows]) => n + rows.length, 0));
     return this.withNote(v_flex().w_full().gap(G.xl)
       .children(groups.map(([title, rows], g) => v_flex().w_full().gap(G.hair)
         .child(section(c, title, String(rows.length)))
         .children(rows.map((p, k) => listedRow(this, c, p, firsts[g] + k, { finished })))))
-      .when(create && this.canCreate(), (el) => el.child(h_flex().child(quietLink("pr-create-list", this.busy === "Create" ? "Opening GitHub…" : "Create on GitHub", (cx) => this.createPr(cx), c, { color: c.text, disabled: this.ownsFlight("busy") })))), c);
+      .when(create && this.canCreate(), (el) => el.child(h_flex().child(quietLink("pr-create-list", this.session.busy === "Create" ? "Opening GitHub…" : "Create on GitHub", (cx) => this.createPr(cx), c, { color: c.text, disabled: Boolean(this.session.busy) })))), c);
   }
 
   // The last write's failure, under the page.
-  withNote(page, c) { return page.when(Boolean(this.note), (el) => el.child(failureBlock(this.note)("pr-note", c))); }
+  withNote(page, c) { return page.when(Boolean(this.session.note), (el) => el.child(failureBlock(this.session.note)("pr-note", c))); }
 
-  reviewCount() { return this.inbox?.needs?.length ?? 0; }
+  reviewCount() { return this.session.inbox?.needs?.length ?? 0; }
 
   reviewPill(c) {
-    const back = this.inboxOn && this.inboxOpen && this.pr;
-    const label = this.inboxOn && this.inboxOpen ? (back ? `Back to #${this.pr.number}` : "This pane") : `${this.reviewCount()} to review`;
+    const back = this.session.inboxOn && this.session.inboxOpen && this.session.pr;
+    const label = this.session.inboxOn && this.session.inboxOpen ? (back ? `Back to #${this.session.pr.number}` : "This pane") : `${this.reviewCount()} to review`;
     return button("pr-reviews", label, (cx) => {
-      this.inboxOpen = !this.inboxOpen;
-      if (this.inboxOpen) this.inboxTab = this.inboxTab ?? "needs";
-      else this.noteSeen(this.pr?.url);
+      this.session.inboxOpen = !this.session.inboxOpen;
+      if (this.session.inboxOpen) this.session.inboxTab = this.session.inboxTab ?? "needs";
+      else this.noteSeen(this.session.pr?.url);
       cx.notify();
-    }, c, { kind: "tonal", small: true, active: this.inboxOpen })
-      .tooltip(tooltip({ label: this.inboxOpen ? "Back to this pane" : "Reviews and your open pull requests" }));
+    }, c, { kind: "tonal", small: true, active: this.session.inboxOpen })
+      .tooltip(tooltip({ label: this.session.inboxOpen ? "Back to this pane" : "Reviews and your open pull requests" }));
   }
 
   readNote() { return footOf(this).text; }
 
   header(c, narrow) {
-    const pr = this.pr, here = this.inboxOn && this.inboxOpen, pill = (this.listing || this.canSwitch()) && !here;
-    const limited = this.inbox?.limitedUntil;
+    const pr = this.session.pr, here = this.session.inboxOn && this.session.inboxOpen, pill = (this.session.listing || this.canSwitch()) && !here;
+    const limited = this.session.inbox?.limitedUntil;
     const refreshed = this.readNote() ?? (limited ? `limited until ${limitLine(limited).match(/\d{2}:\d{2}/)?.[0]}` : null);
     return h_flex().w_full().items_center().justify_between().gap(G.md)
-      .child(div().truncate().text_size(narrow ? PR.title : T.page).text_color(c.text).child(this.inboxOn || this.listing ? "Pull requests" : "Pull request"))
+      .child(div().truncate().text_size(narrow ? PR.title : T.page).text_color(c.text).child(this.session.inboxOn || this.session.listing ? "Pull requests" : "Pull request"))
       .child(h_flex().gap(G.xs).items_center().flex_none()
-        .when(this.inboxOn, (el) => el.child(this.reviewPill(c)))
+        .when(this.session.inboxOn, (el) => el.child(this.reviewPill(c)))
         .when(pill, (el) => el.child(this.switchPill(c)))
-        .child(iconButton("pr-refresh", "refresh-cw", refreshed ? `Refresh · ${refreshed}` : "Refresh", (cx) => this.again(cx), c, { spin: this.loading }))
-        .when(Boolean(pr?.url) && !this.listing && !here, (el) => el.child(iconButton("pr-copy", this.copied === pr.url ? "check" : "copy", this.copied === pr.url ? "Copied" : "Copy link", (cx) => this.copyUrl(pr.url, cx), c)))
+        .child(iconButton("pr-refresh", "refresh-cw", refreshed ? `Refresh · ${refreshed}` : "Refresh", (cx) => this.again(cx), c, { spin: this.session.loading }))
+        .when(Boolean(pr?.url) && !this.session.listing && !here, (el) => el.child(iconButton("pr-copy", this.copied === pr.url ? "check" : "copy", this.copied === pr.url ? "Copied" : "Copy link", (cx) => this.copyUrl(pr.url, cx), c)))
         .when(Boolean(pr?.url) && !here, (el) => el.child(iconButton("pr-web", "external-link", "Open on GitHub", () => openUrl(pr.url), c))));
   }
 
@@ -937,14 +434,14 @@ export class PullRequest {
   }
 
   place() {
-    return tilde(this.cwd) || "~";
+    return tilde(this.session.cwd) || "~";
   }
 
   parsedLog() {
-    if (this.logParsedFor === this.failedLog) return this.logParsed ?? null;
-    this.logParsedFor = this.failedLog ?? null;
-    this.logParsed = this.failedLog ? failedLog(this.failedLog) : null;
-    return this.logParsed;
+    if (this.session.logParsedFor === this.session.failedLog) return this.session.logParsed ?? null;
+    this.session.logParsedFor = this.session.failedLog ?? null;
+    this.session.logParsed = this.session.failedLog ? failedLog(this.session.failedLog) : null;
+    return this.session.logParsed;
   }
 
   frontAgent() {
@@ -958,28 +455,28 @@ export class PullRequest {
   }
 
   sceneKind() {
-    if (this.pr) return "pr";
-    if (this.outside) return "outside";
-    if (this.error?.cli) return "absent";
-    if (this.missing) return String(this.missing.title ?? "").startsWith("Not signed in") ? "auth" : "missing";
-    if (this.error) return "error";
-    if (this.wait) return "wait";
-    if (this.none && !this.branch) return "detached";
-    if (this.none && this.isBase()) return "base";
-    if (this.none && this.behind) return "behind";
-    if (this.none && !this.pushed) return "unpushed";
-    if (this.none) return "none";
-    if (this.loading || this.queued || !this.context) return "loading";
+    if (this.session.pr) return "pr";
+    if (this.session.outside) return "outside";
+    if (this.session.error?.cli) return "absent";
+    if (this.session.missing) return String(this.session.missing.title ?? "").startsWith("Not signed in") ? "auth" : "missing";
+    if (this.session.error) return "error";
+    if (this.session.wait) return "wait";
+    if (this.session.none && !this.session.branch) return "detached";
+    if (this.session.none && this.isBase()) return "base";
+    if (this.session.none && this.session.behind) return "behind";
+    if (this.session.none && !this.session.pushed) return "unpushed";
+    if (this.session.none) return "none";
+    if (this.session.loading || this.session.queued || !this.session.context) return "loading";
     return "folder";
   }
 
   scene() {
-    const named = aliasText(shared("kanso.alias"), this.on || "");
+    const named = aliasText(shared("kanso.alias"), this.session.on || "");
     return {
-      kind: this.sceneKind(), pr: this.pr, checks: this.pr ? this.checks() : [], threads: this.threads ?? [],
-      permission: this.permission ?? null, agent: this.frontAgent(), stale: Boolean(this.stale), baseBehind: this.baseBehind ?? null,
-      log: this.parsedLog(), now: Date.now(), branch: this.branch, place: this.pr ? "" : this.place(), computer: named ? machineTitle(this.on || "", "", named) : (this.on || ""),
-      title: this.missing?.title, canCreate: this.canCreate(), ahead: this.aheadCount ?? 0, behindCount: this.behindCount ?? 0, subjects: this.subjects ?? [],
+      kind: this.sceneKind(), pr: this.session.pr, checks: this.session.pr ? this.checks() : [], threads: this.session.threads ?? [],
+      permission: this.session.permission ?? null, agent: this.frontAgent(), stale: Boolean(this.session.stale), baseBehind: this.session.baseBehind ?? null,
+      log: this.parsedLog(), now: Date.now(), branch: this.session.branch, place: this.session.pr ? "" : this.place(), computer: named ? machineTitle(this.session.on || "", "", named) : (this.session.on || ""),
+      title: this.session.missing?.title, canCreate: this.canCreate(), ahead: this.session.aheadCount ?? 0, behindCount: this.session.behindCount ?? 0, subjects: this.session.subjects ?? [],
     };
   }
 
@@ -991,45 +488,37 @@ export class PullRequest {
 
   send(cx) {
     const scene = this.scene(), verdict = verdictOf(scene), text = sendText(scene, verdict);
-    const step = sendStep(Boolean(this.sendShown) && this.sendFor === text, text);
-    if (step.show) { this.sendShown = true; this.sendFor = text; cx.notify(); return; }
+    const step = sendStep(Boolean(this.session.sendShown) && this.session.sendFor === text, text);
+    if (step.show) { this.session.sendShown = true; this.session.sendFor = text; cx.notify(); return; }
     if (!step.deliver) return;
     const address = this.frontAgent()?.address;
-    if (!address) { this.note = said("Not sent: no agent in front"); cx.notify(); return; }
-    const owned = this.ownBusy("Send");
-    if (!owned) return;
-    this.sendShown = false;
-    this.start(cx, async (cx) => {
-      try {
-        const sent = await deliver(address, text, "you");
-        if (sent?.code !== 0 && this.holds(owned.gen, owned.context)) this.note = said("Not sent", String(sent?.stderr || sent?.stdout || "could not send").split("\n")[0]);
-      } catch (e) { if (this.holds(owned.gen, owned.context)) this.note = said("Not sent", e?.message ?? e); }
-      finally { this.release("busy", owned.gen); this.finishAction(cx); }
-    });
+    if (!address) { this.session.note = said("Not sent: no agent in front"); cx.notify(); return; }
+    if (this.session.deliverTo(cx, () => deliver(address, text, "you"))) this.session.sendShown = false;
   }
 
-  openChecks(cx) { this.expanded = { ...this.expanded, checks: true }; this.setDetails(cx, true); }
+  openChecks(cx) { this.session.expanded = { ...this.session.expanded, checks: true }; this.setDetails(cx, true); }
 
-  showOthers(cx) { this.listing = true; if (this.loading) this.openedList = true; else this.refresh(cx); cx.notify(); }
+  showOthers(cx) { this.session.listing = true; if (this.session.loading) this.session.openedList = true; else this.refresh(cx); cx.notify(); }
 
   runWrite(action, cx) {
-    const url = this.pr?.url;
+    const url = this.session.pr?.url, folder = this.session;
+    const git = (args) => folder.git(args);
     if (action.target === "merge") return this.mergeNow(cx);
-    if (action.target === "push") return this.act("Push", ["push", "-u", "origin", "HEAD"], cx, (args) => this.git(args));
-    if (action.target === "pull") return this.act("Pull", ["pull", "--ff-only"], cx, (args) => this.git(args));
+    if (action.target === "push") return folder.act("Push", ["push", "-u", "origin", "HEAD"], cx, git);
+    if (action.target === "pull") return folder.act("Pull", ["pull", "--ff-only"], cx, git);
     if (action.target === "update") {
       const place = this.repo();
-      if (!place || !this.pr) return;
-      return this.act("Update", ["api", "-X", "PUT", `repos/${place.o}/${place.r}/pulls/${this.pr.number}/update-branch`], cx);
+      if (!place || !this.session.pr) return;
+      return folder.act("Update", ["api", "-X", "PUT", `repos/${place.o}/${place.r}/pulls/${this.session.pr.number}/update-branch`], cx);
     }
     if (action.target === "create") return this.createPr(cx);
-    if (action.target === "ready") return this.act("Ready", ["pr", "ready", url], cx);
-    if (action.target === "draft") return this.act("Draft", ["pr", "ready", url, "--undo"], cx);
-    if (action.target === "close") return this.act("Close", ["pr", "close", url], cx);
-    if (action.target === "reopen") return this.act("Reopen", ["pr", "reopen", url], cx);
+    if (action.target === "ready") return folder.act("Ready", ["pr", "ready", url], cx);
+    if (action.target === "draft") return folder.act("Draft", ["pr", "ready", url, "--undo"], cx);
+    if (action.target === "close") return folder.act("Close", ["pr", "close", url], cx);
+    if (action.target === "reopen") return folder.act("Reopen", ["pr", "reopen", url], cx);
   }
 
-  detailsKey() { return this.root || this.cwd || ""; }
+  detailsKey() { return this.session.root || this.session.cwd || ""; }
 
   detailsOn() {
     const all = shared("kanso.pr.details");
@@ -1041,22 +530,13 @@ export class PullRequest {
     const id = this.detailsKey();
     const on = open ?? !all[id];
     if (Boolean(all[id]) !== on) setShared("kanso.pr.details", { ...all, [id]: on });
-    if (on) this.loadOthers(cx);
+    if (on) this.session.loadOthers(cx);
     cx.notify();
   }
 
-  loadOthers(cx) {
-    if (this.listed || this.wait || !this.root) return;
-    const gen = this.claim("details"); if (gen == null) return;
-    cx.spawn(this.contextTask(async (cx, context) => {
-      try { this.takeOpen(await this.gh(openListArgs()).catch(() => null), context, gen); }
-      finally { this.release("details", gen); cx.notify(); }
-    }));
-  }
-
   description(c) {
-    const text = cleanBody(this.pr.body), long = longBody(text), open = this.expanded.body;
-    const toggle = (cx) => { this.expanded = { ...this.expanded, body: !open }; cx.notify(); };
+    const text = cleanBody(this.session.pr.body), long = longBody(text), open = this.session.expanded.body;
+    const toggle = (cx) => { this.session.expanded = { ...this.session.expanded, body: !open }; cx.notify(); };
     return v_flex().w_full()
       .child(section(c, "Description"))
       .child(text
@@ -1068,7 +548,7 @@ export class PullRequest {
   }
 
   people(c) {
-    const pr = this.pr, open = pr.state === "OPEN";
+    const pr = this.session.pr, open = pr.state === "OPEN";
     const metaRow = (label, values, picker, extra) => h_flex().w_full().min_h(28).gap(G.md).items_center()
       .child(div().w(76).flex_none().text_size(T.body).text_color(c.dim).child(label))
       .child(h_flex().flex_1().min_w(0).flex_wrap().gap(6).items_center()
@@ -1095,7 +575,7 @@ export class PullRequest {
       .child(section(c, "People and labels", decision))
       .child(v_flex().w_full().gap(G.xs)
         .child(metaRow("Assignees", assignees, open ? this.pickerFor("assignees", c) : null,
-          open && this.viewer && !mine ? quietLink("pr-assign-me", "Assign to me", (cx) => this.toggle("assignees", this.viewer, false, cx), c, { disabled: this.ownsFlight("pending") }) : null))
+          open && this.viewer && !mine ? quietLink("pr-assign-me", "Assign to me", (cx) => this.toggle("assignees", this.viewer, false, cx), c, { disabled: Boolean(this.session.pending) }) : null))
         .child(metaRow("Reviewers", [...reviewed, ...asked], open ? this.pickerFor("reviewers", c) : null))
         .child(metaRow("Labels", labels, open ? this.pickerFor("labels", c) : null)));
   }
@@ -1103,20 +583,20 @@ export class PullRequest {
   checksList(c) {
     const checks = this.checks();
     const sorted = checksFirst(checks.toSorted((a, b) => STATES.indexOf(a.state) - STATES.indexOf(b.state)), this.check);
-    const open = this.expanded.checks, shown = open ? sorted : sorted.slice(0, 5);
+    const open = this.session.expanded.checks, shown = open ? sorted : sorted.slice(0, 5);
     const note = checksNote(summaryOf(checks));
     return v_flex().w_full()
       .child(section(c, "Checks", note))
       .children(shown.map((ch, i) => kitRow({ name: ch.name, second: ch.workflow || null, meta: { text: CHECK_WORDS[ch.state].label, tone: CHECK_WORDS[ch.state].color } })(`pr-check-${i}`, c, {
         onClick: () => { if (ch.url) openUrl(ch.url); },
       })))
-      .when(sorted.length > 5, (el) => el.child(h_flex().pt(G.sm).child(quietLink("pr-checks-more", open ? "Show fewer" : `Show ${sorted.length - 5} more`, (cx) => { this.expanded = { ...this.expanded, checks: !open }; cx.notify(); }, c))));
+      .when(sorted.length > 5, (el) => el.child(h_flex().pt(G.sm).child(quietLink("pr-checks-more", open ? "Show fewer" : `Show ${sorted.length - 5} more`, (cx) => { this.session.expanded = { ...this.session.expanded, checks: !open }; cx.notify(); }, c))));
   }
 
   discussion(c) {
     return v_flex().w_full()
-      .child(section(c, "Unresolved threads", String(this.threads.length)))
-      .children(this.threads.map((th, i) => {
+      .child(section(c, "Unresolved threads", String(this.session.threads.length)))
+      .children(this.session.threads.map((th, i) => {
         const body = th.body.length > 240 ? th.body.slice(0, 240) + "…" : th.body;
         const second = [`${th.path}${th.line ? `:${th.line}` : ""}`, th.author, th.replies > 0 ? `${th.replies} repl${th.replies > 1 ? "ies" : "y"}` : null, th.outdated ? "outdated" : null];
         // The thread's first 240 characters, wrapped over its lines.
@@ -1126,39 +606,28 @@ export class PullRequest {
 
   // A line is cut at MAX_DIFF characters too: a minified file's one line stays cheap to draw.
   fileDiff(c, path) {
-    if (this.ownsFlight("diff") && !this.diffs) return this.diffBones(c);
-    const lines = this.diffs?.[path];
+    if (this.session.flying("diff") && !this.session.diffs) return this.diffBones(c);
+    const lines = this.session.diffs?.[path];
     const note = (text) => div().py(G.xs).text_size(T.body).text_color(c.dim).child(text);
-    if (!lines?.length) return note(this.diffs ? "No text diff for this file." : "");
+    if (!lines?.length) return note(this.session.diffs ? "No text diff for this file." : "");
     return v_flex().w_full().mb(G.sm)
       .child(code({ text: lines.slice(0, MAX_DIFF).map((line) => line.slice(0, MAX_DIFF)).join("\n"), kind: "diff" })("pr-diff", c))
       .when(lines.length > MAX_DIFF, (el) => el.child(note(`The first ${MAX_DIFF} lines; the rest is on GitHub.`).px(G.lg)));
   }
 
   pickFile(path, cx) {
-    this.openFile = this.openFile === path ? null : path;
-    if (this.openFile && !this.diffs && this.pr) {
-      const url = this.pr.url, context = this.context, gen = this.claim("diff");
-      if (gen == null) return;
-      cx.spawn(this.tracked(async (cx) => {
-        try {
-          const r = await this.gh(["pr", "diff", url, "--color", "never"]);
-          if (r.code !== 0) throw new Error((r.stderr || r.stdout).trim());
-          if (this.holds(gen, context) && this.pr?.url === url) this.diffs = splitDiff(r.stdout);
-        } catch (e) { if (this.holds(gen, context)) this.note = said("Could not read the diff", String(e?.message ?? e).split("\n")[0]); }
-        finally { this.release("diff", gen); cx.notify(); }
-      }));
-    }
+    this.session.openFile = this.session.openFile === path ? null : path;
+    if (this.session.openFile && !this.session.diffs) this.session.readDiff(cx);
     cx.notify();
   }
 
   files(c) {
-    const pr = this.pr, files = pr.files ?? [], open = this.expanded.files;
+    const pr = this.session.pr, files = pr.files ?? [], open = this.session.expanded.files;
     const shown = open ? files : files.slice(0, FILE_ROWS);
     return v_flex().w_full()
       .child(section(c, "Files", facts(String(pr.changedFiles), diffText({ add: pr.additions, del: pr.deletions }))))
       .children(shown.map((f, i) => {
-        const all = f.path.split("/"), parts = all.slice(0, -1), name = all.at(-1), on = this.openFile === f.path;
+        const all = f.path.split("/"), parts = all.slice(0, -1), name = all.at(-1), on = this.session.openFile === f.path;
         const mark = { ADDED: "added", DELETED: "deleted", RENAMED: "renamed" }[f.changeType] ?? "";
         return v_flex().w_full().when(i > 0, (el) => el.border_t(1).border_color(c.border))
           .child(kitRow({ name, second: [parts.join("/"), mark].filter(Boolean).join(" · ") || null, meta: diffText({ add: f.additions, del: f.deletions }), current: on })(`pr-file-${i}`, c, {
@@ -1166,7 +635,7 @@ export class PullRequest {
           }))
           .when(on, (el) => el.child(this.fileDiff(c, f.path)));
       }))
-      .when(files.length > FILE_ROWS, (el) => el.child(h_flex().pt(G.sm).child(quietLink("pr-files-more", open ? "Show fewer" : `Show ${files.length - FILE_ROWS} more`, (cx) => { this.expanded = { ...this.expanded, files: !open }; cx.notify(); }, c))))
+      .when(files.length > FILE_ROWS, (el) => el.child(h_flex().pt(G.sm).child(quietLink("pr-files-more", open ? "Show fewer" : `Show ${files.length - FILE_ROWS} more`, (cx) => { this.session.expanded = { ...this.session.expanded, files: !open }; cx.notify(); }, c))))
       .when(files.length < pr.changedFiles, (el) => el.child(div().pt(G.sm).text_size(T.micro).text_color(c.dim).child(`GitHub lists the first ${files.length} of ${pr.changedFiles} files.`)));
   }
 
@@ -1176,45 +645,45 @@ export class PullRequest {
   }
 
   openInboxItem(item, cx) {
-    this.inboxOpen = false;
+    this.session.inboxOpen = false;
     this.choose(item, cx);
   }
 
   inboxPage(c) {
-    const tab = this.inboxTab || "needs";
-    const rows = tab === "yours" ? (this.inbox?.yours ?? []) : (this.inbox?.needs ?? []);
-    const groups = groupInbox(rows, { repos: this.inbox?.repos ?? [], projects: this.inbox?.projects ?? [] });
-    const mine = new Set((this.inbox?.logins ?? [this.inbox?.login]).filter(Boolean).map((name) => name.toLowerCase()));
+    const tab = this.session.inboxTab || "needs";
+    const rows = tab === "yours" ? (this.session.inbox?.yours ?? []) : (this.session.inbox?.needs ?? []);
+    const groups = groupInbox(rows, { repos: this.session.inbox?.repos ?? [], projects: this.session.inbox?.projects ?? [] });
+    const mine = new Set((this.session.inbox?.logins ?? [this.session.inbox?.login]).filter(Boolean).map((name) => name.toLowerCase()));
     const firsts = groups.map((_, g) => groups.slice(0, g).reduce((n, group) => n + group.rows.length, 0));
     const row = (item, i) => {
       const meta = [`#${item.number}`, item.author && mine.has(String(item.author).toLowerCase()) ? "you" : item.author, item.updatedAt ? ago(item.updatedAt) : "", isNew(item) ? "new" : ""].filter(Boolean).join(" · ");
       return prRow(`pr-in-${i}`, c, item, { meta, state: this.inboxState(item), onClick: (cx) => this.openInboxItem(item, cx) });
     };
     return this.withNote(v_flex().w_full().gap(G.lg)
-      .child(segmented("pr-inbox", [{ key: "needs", label: "Needs you" }, { key: "yours", label: "Yours" }], tab, (key, cx) => { this.inboxTab = key; cx.notify(); }, c))
-      .when(this.outside, (el) => el.child(div().text_size(T.body).text_color(c.dim).child("This pane is not in a repository.")))
+      .child(segmented("pr-inbox", [{ key: "needs", label: "Needs you" }, { key: "yours", label: "Yours" }], tab, (key, cx) => { this.session.inboxTab = key; cx.notify(); }, c))
+      .when(this.session.outside, (el) => el.child(div().text_size(T.body).text_color(c.dim).child("This pane is not in a repository.")))
       .child(!groups.length
         ? div().text_size(T.body).text_color(c.dim).child("Nothing waiting on you.")
         : v_flex().w_full().gap(G.xl).children(groups.map((group, g) => v_flex().w_full().gap(G.hair)
           .child(section(c, group.title, String(group.rows.length)))
           .children(group.rows.map((item, k) => row(item, firsts[g] + k))))))
-      .when(Boolean(this.wait || this.inbox?.limitedUntil), (el) => el.child(div().text_size(T.body).text_color(c.dim).child(this.wait || limitLine(this.inbox.limitedUntil)))), c);
+      .when(Boolean(this.session.wait || this.session.inbox?.limitedUntil), (el) => el.child(div().text_size(T.body).text_color(c.dim).child(this.session.wait || limitLine(this.session.inbox.limitedUntil)))), c);
   }
 
   body(c, narrow) {
-    if (this.inboxOn && this.inboxOpen) return this.inboxPage(c);
-    if (this.listing) return this.listPage(c);
+    if (this.session.inboxOn && this.session.inboxOpen) return this.inboxPage(c);
+    if (this.session.listing) return this.listPage(c);
     const kind = this.sceneKind();
     if (kind === "pr") return this.hero(c);
     if (kind === "loading") return listBones(c);
-    if (kind === "wait") return this.waiting(c, this.wait);
-    if (kind === "error") return failureBlock({ text: this.error.title, source: this.error.detail, fix: "Refresh" })("pr-failed", c, { onClick: (cx) => this.again(cx) });
+    if (kind === "wait") return this.waiting(c, this.session.wait);
+    if (kind === "error") return failureBlock({ text: this.session.error.title, source: this.session.error.detail, fix: "Refresh" })("pr-failed", c, { onClick: (cx) => this.again(cx) });
     return drawEmpty(this, c);
   }
 
   nodes(c, narrow) {
     const header = ["header", this.header(c, narrow).id("header")];
-    if ((this.inboxOn && this.inboxOpen) || this.listing || this.sceneKind() !== "pr") return [header, ["body", this.body(c, narrow)]];
+    if ((this.session.inboxOn && this.session.inboxOpen) || this.session.listing || this.sceneKind() !== "pr") return [header, ["body", this.body(c, narrow)]];
     return [header, ...heroPieces(this, c)];
   }
 
@@ -1227,10 +696,10 @@ export class PullRequest {
     this.landed = null;
     this.placed = null;
     if (given.section !== "push") return;
-    this.selected = null;
+    this.session.selected = null;
     this.jumpUrl = null;
     this.keptUrl = null;
-    this.asking = true;
+    this.session.asking = true;
   }
 
   // The named check sits inside Details, so the fold is open before this render builds it.
@@ -1242,21 +711,22 @@ export class PullRequest {
     const mark = `${this.asked ?? ""}:${section}:${id}`;
     if (this.placed === mark) return;
     this.placed = mark;
-    if (section === "checks") this.expanded = { ...this.expanded, checks: true };
+    if (section === "checks") this.session.expanded = { ...this.session.expanded, checks: true };
     if (this.detailsOn()) return;
     const all = shared("kanso.pr.details") ?? {};
     setShared("kanso.pr.details", { ...all, [id]: true });
-    if (cx.timer?.after) cx.timer.after(0, (next) => this.loadOthers(next));
-    else this.loadOthers(cx);
+    const folder = this.session;
+    if (cx.timer?.after) cx.timer.after(0, (next) => folder.loadOthers(next));
+    else folder.loadOthers(cx);
   }
 
   land(ids) {
-    if (!this.pr) return;
-    const mark = `${this.pr.number}:${this.section ?? ""}:${this.check ?? ""}`;
+    if (!this.session.pr) return;
+    const mark = `${this.session.pr.number}:${this.section ?? ""}:${this.check ?? ""}`;
     if (this.landed === mark) return;
     const at = sectionIndex(this.section, ids);
     if (at == null) {
-      if (!this.loading) this.landed = mark;
+      if (!this.session.loading) this.landed = mark;
       return;
     }
     this.landed = mark;
@@ -1270,7 +740,7 @@ export class PullRequest {
     const c = tokens(theme());
     const narrow = (this.width || 368) < 560;
     const nodes = this.nodes(c, narrow);
-    if (this.pr && !(this.inboxOn && this.inboxOpen) && !this.listing && this.sceneKind() === "pr") this.land(nodes.map(([id]) => id));
+    if (this.session.pr && !(this.session.inboxOn && this.session.inboxOpen) && !this.session.listing && this.sceneKind() === "pr") this.land(nodes.map(([id]) => id));
     const padX = narrow ? G.lg : 32;
     const padY = narrow ? G.lg : 28;
     return v_flex().id("kanso-pr").size_full().min_h(0).bg(c.background).text_color(c.text).overflow_y_scrollbar()

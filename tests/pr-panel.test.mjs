@@ -38,7 +38,7 @@ test("Send shows the failing log, then hands it to the agent in front", async ()
     hc: async (args) => { sent.push(args); return success(""); },
   });
   const panel = new PullRequest();
-  panel.pr = {
+  panel.session.pr = {
     number: 42, title: "Ship", url: "https://github.com/o/r/pull/42", state: "OPEN",
     headRefName: "feat", baseRefName: "main", mergeStateStatus: "UNSTABLE", mergeable: "MERGEABLE",
     statusCheckRollup: [{
@@ -46,18 +46,18 @@ test("Send shows the failing log, then hands it to the agent in front", async ()
       detailsUrl: "https://github.com/o/r/actions/runs/99",
     }],
   };
-  panel.threads = [];
-  panel.permission = "WRITE";
-  panel.failedLog = "CI / test\tRun tests\tFAIL no such file\n";
-  panel.root = "/repo";
-  panel.cwd = "/repo";
+  panel.session.threads = [];
+  panel.session.permission = "WRITE";
+  panel.session.failedLog = "CI / test\tRun tests\tFAIL no such file\n";
+  panel.session.root = "/repo";
+  panel.session.cwd = "/repo";
   const { cx, drain } = context();
   assert.equal(panel.view().primary.label, "Send to checkout");
   panel.send(cx);
   assert.equal(sent.length, 0);
-  assert.match(panel.sendFor, /FAIL no such file/);
-  assert.match(panel.sendFor, /https:\/\/github.com\/o\/r\/pull\/42/);
-  const shown = panel.sendFor;
+  assert.match(panel.session.sendFor, /FAIL no such file/);
+  assert.match(panel.session.sendFor, /https:\/\/github.com\/o\/r\/pull\/42/);
+  const shown = panel.session.sendFor;
   panel.send(cx);
   panel.send(cx);
   await drain();
@@ -73,9 +73,7 @@ test("Sign in opens gh auth login in the space already on screen", async () => {
     run: (...args) => runs.push(args),
   });
   const panel = new PullRequest();
-  panel.root = "/repo";
-  panel.cwd = "/repo";
-  panel.on = "mac-2";
+  Object.assign(panel.session, { root: "/repo", cwd: "/repo", on: "mac-2" });
   panel.signIn();
   assert.deepEqual(JSON.parse(JSON.stringify(runs)), [["terminal.open", { argv: ["gh", "auth", "login"], folder: "/repo", place: "right" }]]);
   assert.equal(runs[0][1].on, undefined);
@@ -92,21 +90,21 @@ test("Pull request panel lists the repository's open ones, by anyone, and shows 
     if (listing(args)) return success(JSON.stringify(Object.values(prs)));
     if (args[0] === "pr" && args[1] === "view") return success(JSON.stringify(prs[args[2] === "--json" ? url(1) : args[2]]));
   }, calls));
-  assert.equal(panel.pr.number, 1);
+  assert.equal(panel.session.pr.number, 1);
   assert.equal(calls.some((c) => c.includes("pr list")), false, "the branch's pull request does not ask for every open one");
-  panel.listing = true;
+  panel.session.listing = true;
   await refreshAgain(panel, cx, drain);
-  assert.deepEqual([...panel.openPrs].map((p) => p.number), [3, 2, 1], "every author, newest first");
+  assert.deepEqual([...panel.session.openPrs].map((p) => p.number), [3, 2, 1], "every author, newest first");
   assert.ok(calls.includes(`gh pr list --state open --limit 100 --json ${calls.find((c) => c.startsWith("gh pr list")).split("--json ")[1]}`));
   assert.ok(!calls.some((c) => c.includes("--author")), "not only yours");
-  panel.listing = true; // the page of open ones
+  panel.session.listing = true; // the page of open ones
   panel.choose(prs[url(3)], cx); await drain();
-  assert.equal(panel.pr.number, 3, "someone else's opens too");
-  assert.equal(panel.listing, false, "a pick goes back to the one shown");
-  assert.equal(panel.selected, url(3));
+  assert.equal(panel.session.pr.number, 3, "someone else's opens too");
+  assert.equal(panel.session.listing, false, "a pick goes back to the one shown");
+  assert.equal(panel.session.selected, url(3));
   panel.choose(prs[url(1)], cx); await drain();
-  assert.equal(panel.pr.number, 1);
-  assert.equal(panel.selected, null, "the branch's own follows the branch again");
+  assert.equal(panel.session.pr.number, 1);
+  assert.equal(panel.session.selected, null, "the branch's own follows the branch again");
 });
 
 test("Pull request panel stays empty when the branch has none, and does not stand in another", async () => {
@@ -121,12 +119,12 @@ test("Pull request panel stays empty when the branch has none, and does not stan
       return success(JSON.stringify(prs[args[2]]));
     }
   }));
-  assert.equal(panel.pr, null, "another open pull request does not stand in");
-  assert.equal(panel.none, true);
-  assert.equal(panel.selected, null, "it keeps following the branch");
-  assert.equal(panel.branchUrl, null);
+  assert.equal(panel.session.pr, null, "another open pull request does not stand in");
+  assert.equal(panel.session.none, true);
+  assert.equal(panel.session.selected, null, "it keeps following the branch");
+  assert.equal(panel.session.branchUrl, null);
   panel.choose(prs[url(4)], cx); await drain();
-  assert.equal(panel.pr.number, 4);
+  assert.equal(panel.session.pr.number, 4);
 });
 
 test("Pull request panel skips the branch's merged or closed one", async () => {
@@ -137,9 +135,9 @@ test("Pull request panel skips the branch's merged or closed one", async () => {
         if (args[0] === "pr" && args[1] === "list") return success(JSON.stringify(open));
         if (args[0] === "pr" && args[1] === "view") return success(JSON.stringify(args[2] === "--json" ? done[n] : openOne));
       }));
-      assert.equal(panel.branchUrl, null, `#${n} is not the branch's any more`);
-      assert.equal(panel.pr, null, "a finished one is not shown, and neither is another open one");
-      assert.equal(panel.none, true);
+      assert.equal(panel.session.branchUrl, null, `#${n} is not the branch's any more`);
+      assert.equal(panel.session.pr, null, "a finished one is not shown, and neither is another open one");
+      assert.equal(panel.session.none, true);
         }
   }
 });
@@ -147,12 +145,13 @@ test("Pull request panel skips the branch's merged or closed one", async () => {
 test("Pull request panel shows a quiet placeholder outside a repository, not an error", async () => {
   const exec = async (command) => command === "git" ? failure("not a git repository", 128) : failure("");
   const { panel } = await panelOn(exec, { key: () => "home", location: () => ({ cwd: "/home", on: null }) });
-  assert.equal(panel.outside, true);
-  assert.equal(panel.error, null);
+  assert.equal(panel.session.outside, true);
+  assert.equal(panel.session.error, null);
 });
 
 test("Pull request panel reads the description and folds it only when long", async () => {
-  const { cleanBody, longBody, FIELDS } = await load("kanso-panel/pr.js", ["cleanBody", "longBody", "FIELDS"], {});
+  const { cleanBody, longBody } = await load("kanso-panel/pr.js", ["cleanBody", "longBody"], {});
+  const { FIELDS } = await load("kanso-panel/pr-session.js", ["FIELDS"], {});
   assert.ok(FIELDS.split(",").includes("body"), "gh reads the body");
   assert.equal(cleanBody("## Summary\r\n<!-- template hint -->\r\nFixes it.\r\n\r\n\r\n\r\nDone."), "## Summary\n\nFixes it.\n\nDone.");
   assert.equal(cleanBody("<!-- only a template -->"), "");
@@ -176,18 +175,18 @@ test("Pull request panel keeps finished ones in the list's Closed tab, never as 
       return success(JSON.stringify(pick));
     }
   }, calls), {}, { tab: "open", closedPrs: null });
-  assert.equal(panel.pr, null, "the branch's finished one is not the one it opens on");
-  assert.equal(panel.none, true);
+  assert.equal(panel.session.pr, null, "the branch's finished one is not the one it opens on");
+  assert.equal(panel.session.none, true);
   assert.ok(!calls.some((c) => c.includes("--state closed")), "closed ones are read only when asked for");
   assert.ok(panel.canSwitch(), "the list is there to reach them");
 
-  panel.listing = true;
+  panel.session.listing = true;
   panel.showTab("closed", cx); await drain();
-  assert.deepEqual([...panel.closedPrs].map((p) => p.number), [7, 6], "newest finished first, anyone's");
+  assert.deepEqual([...panel.session.closedPrs].map((p) => p.number), [7, 6], "newest finished first, anyone's");
   panel.choose(closed[0], cx); await drain();
-  assert.equal(panel.pr.number, 6, "a colleague's merged one opens when picked");
-  assert.equal(panel.pr.state, "MERGED");
-  assert.equal(panel.listing, false);
+  assert.equal(panel.session.pr.number, 6, "a colleague's merged one opens when picked");
+  assert.equal(panel.session.pr.state, "MERGED");
+  assert.equal(panel.session.listing, false);
 });
 
 test("Pull request panel offers to create one only where gh can: a branch pushed to a GitHub remote", async (t) => {
@@ -219,7 +218,7 @@ test("Pull request panel offers to create one only where gh can: a branch pushed
     panel.waiting = (c, title, detail, action) => { said = { title, detail }; return waiting(c, title, detail, action); };
     panel.body({}, true);
     const link = ids.includes("pr-create");
-    panel.listing = true; panel.tab = "open"; ids.length = 0;
+    panel.session.listing = true; panel.session.tab = "open"; ids.length = 0;
     await refreshAgain(panel, cx, drain);
     panel.body({}, true);
     return { panel, said, link, listLink: ids.includes("pr-create-list") };
@@ -228,12 +227,12 @@ test("Pull request panel offers to create one only where gh can: a branch pushed
   const plain = join(await temporary(t), "plain");
   await mkdir(plain);
   let r = await show(plain, noPr);
-  assert.equal(r.panel.outside, true);
+  assert.equal(r.panel.session.outside, true);
   assert.equal(r.link, false, "not a repository");
 
   r = await show(await repo("alone"), failure("no git remotes found\n"));
   assert.deepEqual(r.said, { title: "No remote", detail: null });
-  assert.equal(r.panel.error, null, "a missing remote is not a failure");
+  assert.equal(r.panel.session.error, null, "a missing remote is not a failure");
   assert.equal(r.panel.canSwitch(), false);
   assert.equal(r.link, false, "no remote");
 
@@ -250,15 +249,15 @@ test("Pull request panel offers to create one only where gh can: a branch pushed
   assert.equal(r.link, false, "no gh login");
 
   r = await show(github, noPr);
-  assert.equal(r.panel.none, true);
-  assert.equal(r.panel.pushed, false);
+  assert.equal(r.panel.session.none, true);
+  assert.equal(r.panel.session.pushed, false);
   assert.deepEqual(r.said, { title: "Commits not on GitHub", detail: null });
   assert.equal(r.link, false, "branch not pushed");
 
   await git(github, "commit", "-q", "--allow-empty", "-m", "two");
   await git(github, "checkout", "-q", "--detach", "HEAD~1");
   r = await show(github, failure("could not determine current branch: failed to run git: not on any branch\n"));
-  assert.equal(r.panel.branch, null);
+  assert.equal(r.panel.session.branch, null);
   assert.equal(r.said.title, "No branch checked out");
   assert.equal(r.link, false, "detached HEAD");
 
@@ -273,17 +272,17 @@ test("Pull request panel offers to create one only where gh can: a branch pushed
   const notListed = async (view) => assert.equal((await show(github, view, [other])).listLink, false, "nor in the list");
   await push("-u", "origin", "feat");
   r = await show(github, noPr);
-  assert.equal(r.panel.pushed, true);
+  assert.equal(r.panel.session.pushed, true);
   assert.equal(r.said.title, "No pull request for feat");
   assert.equal(r.link, true, "a pushed branch on GitHub keeps the link");
   r = await show(github, noPr, [other]);
-  assert.equal(r.panel.pr, null);
-  assert.equal(r.panel.none, true);
+  assert.equal(r.panel.session.pr, null);
+  assert.equal(r.panel.session.none, true);
   assert.equal(r.listLink, true, "and the list's link");
 
   await git(github, "commit", "-q", "--allow-empty", "-m", "three");
   r = await show(github, noPr);
-  assert.equal(r.panel.pushed, false, "a commit past the upstream is not on GitHub");
+  assert.equal(r.panel.session.pushed, false, "a commit past the upstream is not on GitHub");
   assert.deepEqual(r.said, { title: "1 commit not on GitHub", detail: null });
   assert.equal(r.link, false, "branch ahead of its upstream");
   await notListed(noPr);
@@ -291,8 +290,8 @@ test("Pull request panel offers to create one only where gh can: a branch pushed
   await push("origin", "feat");
   await git(github, "reset", "-q", "--hard", "HEAD~1");
   r = await show(github, noPr);
-  assert.equal(r.panel.pushed, false, "an upstream past HEAD is not this branch on GitHub");
-  assert.equal(r.panel.behind, true);
+  assert.equal(r.panel.session.pushed, false, "an upstream past HEAD is not this branch on GitHub");
+  assert.equal(r.panel.session.behind, true);
   assert.deepEqual(r.said, { title: "1 commit behind GitHub", detail: null });
   assert.equal(r.link, false, "branch behind its upstream");
   await notListed(noPr);
@@ -300,7 +299,7 @@ test("Pull request panel offers to create one only where gh can: a branch pushed
   await git(github, "checkout", "-q", "-b", "main");
   await push("-u", "origin", "main");
   r = await show(github, failure('no pull requests found for branch "main"'));
-  assert.equal(r.panel.pushed, true);
+  assert.equal(r.panel.session.pushed, true);
   assert.deepEqual(r.said, { title: "main is the default branch", detail: null });
   assert.equal(r.link, false, "the default branch");
   await notListed(failure('no pull requests found for branch "main"'));
@@ -327,8 +326,8 @@ async function shownMerge(pr, permission = "WRITE") {
   });
   const panel = blankPanel(PullRequest);
   const { cx, drain } = context();
-  panel.context = "repo";
-  panel.listing = true;
+  panel.session.context = "repo";
+  panel.session.listing = true;
   panel.refresh(cx); await drain();
   panel.hero(TONE, true);
   return { panel, merge: ids.includes("pr-merge") };
@@ -349,8 +348,8 @@ function assertNoMerge(view) {
 function assertHeld(view, text) {
   assert.equal(view.panel.view().text, text);
   assertNoMerge(view);
-  assert.equal(view.panel.rowState(view.panel.openPrs[0], TONE).text, text);
-  assert.equal(/ready/i.test(view.panel.rowState(view.panel.openPrs[0], TONE).text), false);
+  assert.equal(view.panel.rowState(view.panel.session.openPrs[0], TONE).text, text);
+  assert.equal(/ready/i.test(view.panel.rowState(view.panel.session.openPrs[0], TONE).text), false);
 }
 
 test("A clean pull request is ready to merge only for someone who can push", async () => {
@@ -362,12 +361,12 @@ test("A clean pull request is ready to merge only for someone who can push", asy
   assert.equal(yes.panel.view().primary.acts, true);
   assert.equal(canMerge(yes.panel), true);
   assert.equal(yes.merge, true);
-  assert.equal(yes.panel.rowState(yes.panel.openPrs[0], TONE).text, "Ready to merge");
+  assert.equal(yes.panel.rowState(yes.panel.session.openPrs[0], TONE).text, "Ready to merge");
   const no = await shownMerge(pull({ mergeStateStatus: "CLEAN", reviewDecision: "APPROVED" }), "READ");
   assertHeld(no, "No permission to merge");
   const unread = await shownMerge(pull({ mergeStateStatus: "CLEAN" }), "");
   assertNoMerge(unread);
-  assert.equal(unread.panel.rowState(unread.panel.openPrs[0], TONE).text, "Checks passed");
+  assert.equal(unread.panel.rowState(unread.panel.session.openPrs[0], TONE).text, "Checks passed");
 });
 
 test("A pull request with hooks still offers merge when GitHub would", async () => {
@@ -381,7 +380,7 @@ test("An unstable pull request shows the failing checks and no Merge", async () 
   const view = await shownMerge(pull({ mergeStateStatus: "UNSTABLE", statusCheckRollup: failed }));
   assert.equal(view.panel.view().text, "1 check failing");
   assertNoMerge(view);
-  assert.equal(view.panel.rowState(view.panel.openPrs[0], TONE).text, "1 check failing");
+  assert.equal(view.panel.rowState(view.panel.session.openPrs[0], TONE).text, "1 check failing");
 });
 
 test("A pull request behind its base is not offered for merge", async () => {
@@ -460,16 +459,16 @@ test("each write runs the one command that state names", async () => {
     location: () => ({ cwd: null, on: null }), key: () => "repo",
   });
   const panel = new PullRequest();
-  panel.context = "repo";
-  panel.pr = { number: 4, url: "https://github.com/o/r/pull/4", state: "OPEN" };
-  panel.root = "/repo";
-  panel.gh = async (args) => { gh.push(args); return success(""); };
-  panel.git = async (args) => { git.push(args); return success(""); };
+  panel.session.context = "repo";
+  panel.session.pr = { number: 4, url: "https://github.com/o/r/pull/4", state: "OPEN" };
+  panel.session.root = "/repo";
+  panel.session.gh = async (args) => { gh.push(args); return success(""); };
+  panel.session.git = async (args) => { git.push(args); return success(""); };
   const { cx, drain } = context();
   const go = async (target, bucket, expected) => {
     gh.length = 0;
     git.length = 0;
-    panel.busy = null;
+    panel.session.busy = null;
     panel.runWrite({ target, busy: target }, cx);
     await drain();
     assert.deepEqual(JSON.parse(JSON.stringify(bucket)), [expected], target);
@@ -477,18 +476,18 @@ test("each write runs the one command that state names", async () => {
   await go("push", git, ["push", "-u", "origin", "HEAD"]);
   await go("pull", git, ["pull", "--ff-only"]);
   await go("update", gh, ["api", "-X", "PUT", "repos/o/r/pulls/4/update-branch"]);
-  await go("ready", gh, ["pr", "ready", panel.pr.url]);
-  await go("draft", gh, ["pr", "ready", panel.pr.url, "--undo"]);
-  await go("close", gh, ["pr", "close", panel.pr.url]);
-  await go("reopen", gh, ["pr", "reopen", panel.pr.url]);
+  await go("ready", gh, ["pr", "ready", panel.session.pr.url]);
+  await go("draft", gh, ["pr", "ready", panel.session.pr.url, "--undo"]);
+  await go("close", gh, ["pr", "close", panel.session.pr.url]);
+  await go("reopen", gh, ["pr", "reopen", panel.session.pr.url]);
 });
 
 test("a review thread's comment is drawn wrapped on its row, up to 240 characters, not only in a tooltip", async () => {
   const { PullRequest } = await loadPullRequest(gpuiHost());
   const { tokens } = await loadTokens(gpuiHost());
-  const panel = Object.create(PullRequest.prototype);
+  const panel = new PullRequest();
   const body = `${"Retry-After is in seconds; wait once and give up after three tries. ".repeat(5)}`;
-  panel.threads = [{ body, path: "src/api.ts", line: 4, author: "bea", replies: 2, outdated: false, url: "https://github.com/o/r/pull/4#discussion_r1" }];
+  panel.session.threads = [{ body, path: "src/api.ts", line: 4, author: "bea", replies: 2, outdated: false, url: "https://github.com/o/r/pull/4#discussion_r1" }];
   const drawn = nodes(panel.discussion(tokens(KIT_NIGHT)));
   const shown = `${body.slice(0, 240)}…`;
   const comment = drawn.find((el) => el.calls.some(([name, text]) => name === "child" && text === shown));

@@ -2,7 +2,7 @@
 import { loadPullRequest, loadAuthTiming } from "./mod-fixtures.mjs";
 import assert from "node:assert/strict";
 import test from "node:test";
-import { load, context, tape, singleUse, failure, success, KIT_NIGHT, storeShared } from "./helpers.mjs";
+import { load, context, tape, singleUse, failure, success, KIT_NIGHT, storeShared, until } from "./helpers.mjs";
 import { blankPanel, refreshAgain, openInbox, SIGNED_OUT, PASSED } from "./pr-fixtures.mjs";
 
 const TONE = { dim: "dim", muted: "muted", text: "text", border: "border", red: "red", yellow: "yellow", green: "green" };
@@ -136,8 +136,8 @@ const readPanel = async (exec, host) => {
 const viewOnly = (command, args) => command !== "git" && args[0] !== "auth" && args[1] !== "view" ? failure("offline") : undefined;
 
 const keptPull = (panel) => {
-  assert.equal(panel.pr.number, 7);
-  assert.equal(panel.error, null);
+  assert.equal(panel.session.pr.number, 7);
+  assert.equal(panel.session.error, null);
 };
 
 test("at rest one open pull request is one view, and a running check does not add the list", async () => {
@@ -176,11 +176,11 @@ test("at rest one open pull request is one view, and a running check does not ad
   const { readDue, TICK_MS } = await load("kanso-panel/pr-poll.js", ["readDue", "TICK_MS"], {});
   assert.equal(refreshTicks({ pending: true, readDue, tick: TICK_MS }).length, 3);
 
-  panel.listing = true;
+  panel.session.listing = true;
   await again();
   const listed = (state) => calls.filter((call) => call.command === "gh" && call.args[1] === "list" && call.args[3] === state).length;
   assert.equal(listed("open"), 1);
-  panel.tab = "closed";
+  panel.session.tab = "closed";
   await again();
   assert.equal(listed("open"), 1);
   assert.equal(listed("closed"), 1);
@@ -215,21 +215,21 @@ test("a limit from GitHub holds the panel, including a manual refresh", async ()
     return viewOnly(command, args);
   });
   const { panel, cx, drain } = await openPanel(exec);
-  panel.context = "repo";
-  panel.pr = pull();
-  panel.freshAt = Date.now() - 10_000;
+  panel.session.context = "repo";
+  panel.session.pr = pull();
+  panel.session.freshAt = Date.now() - 10_000;
   panel.auth = { at: Date.now(), ready: [] };
   const until = Date.now() + 3_600_000;
   panel.db = { open: async () => {}, read: async () => [{ retry_at: until }] };
   panel.refresh(cx); await drain();
   assert.equal(asked.some((call) => call.includes("pr view")), false);
-  assert.match(panel.wait, /^GitHub asks to wait until \d{2}:\d{2}$/);
+  assert.match(panel.session.wait, /^GitHub asks to wait until \d{2}:\d{2}$/);
   keptPull(panel);
   asked.length = 0;
-  panel.loading = false;
+  panel.session.loading = false;
   panel.again(cx); await drain();
   assert.equal(asked.some((call) => call.startsWith("gh")), false);
-  assert.equal(panel.pr.number, 7);
+  assert.equal(panel.session.pr.number, 7);
 });
 
 const readDrawn = async (exec, host = {}) => {
@@ -250,13 +250,13 @@ const readDrawn = async (exec, host = {}) => {
 test("a missed answer keeps the last pull request, with its age and Retry", async () => {
   let fail = false;
   const { shown, panel, cx, drain } = await readDrawn(branchExec(undefined, { view: () => fail ? failure("HTTP 500") : success(JSON.stringify(pull())) }));
-  const fresh = panel.freshAt;
-  assert.equal(panel.pr.number, 7);
+  const fresh = panel.session.freshAt;
+  assert.equal(panel.session.pr.number, 7);
   fail = true;
   await refreshAgain(panel, cx, drain);
   keptPull(panel);
-  assert.equal(panel.stale.at, fresh);
-  assert.equal(panel.loading, false);
+  assert.equal(panel.session.stale.at, fresh);
+  assert.equal(panel.session.loading, false);
   assert.match(panel.readNote(), /^as of /);
   panel.hero(TONE);
   assert.ok(shown.texts.includes("Retry"));
@@ -319,7 +319,7 @@ const nextTurn = async (turn) => {
 const readOther = async (turn) => {
   await nextTurn(turn);
   assert.equal(turn.viewed(), 2);
-  assert.equal(turn.panel.context, "/other");
+  assert.equal(turn.panel.session.context, "/other");
 };
 
 test("a folder change seen while the panel is drawn starts its read on the next turn, where Herdr keeps it", async () => {
@@ -338,18 +338,18 @@ test("a pane asking for the push section while the panel is drawn starts its rea
   asked = { section: "push", at: 1 };
   drawnQuiet(turn);
   assert.equal(turn.panel.section, "push");
-  assert.equal(turn.panel.selected, null);
+  assert.equal(turn.panel.session.selected, null);
   await nextTurn(turn);
   assert.equal(turn.viewed(), views + 1);
-  assert.equal(turn.panel.loading, false);
+  assert.equal(turn.panel.session.loading, false);
 });
 
 const cleared = (turn, store, folder) => {
   const frame = turn.shown.texts.join("\n");
-  assert.equal(turn.panel.context, folder);
-  assert.equal(turn.panel.pr, null);
-  assert.equal(turn.panel.branch, null);
-  assert.equal(turn.panel.home, null);
+  assert.equal(turn.panel.session.context, folder);
+  assert.equal(turn.panel.session.pr, null);
+  assert.equal(turn.panel.session.branch, null);
+  assert.equal(turn.panel.session.home, null);
   assert.equal(frame.includes("#7"), false);
   assert.equal(frame.includes("Branch"), false);
   assert.equal(frame.includes("feat \u2192 main"), false);
@@ -391,7 +391,7 @@ const still = (turn, move, folder, ask) => {
 test("a folder change clears the previous pull request on that draw, and the fold it opens belongs to the new folder", async () => {
   const store = { "kanso.alias": { remote1: "remote1" } };
   const { turn, move } = await openFolder(store, "remote1");
-  assert.equal(turn.panel.pr.number, 7);
+  assert.equal(turn.panel.session.pr.number, 7);
   still(turn, move, "/other", { section: "checks", at: 2 });
   assert.equal(turn.shown.texts.join("\n").includes("remote1"), false);
   cleared(turn, store, "/other");
@@ -404,7 +404,7 @@ test("a folder change during Refresh clears that pull request before the read fi
   still(turn, move, "/other", { section: "checks", at: 2 });
   cleared(turn, store, "/other");
   await turn.drain();
-  assert.equal(turn.panel.context, "/other");
+  assert.equal(turn.panel.session.context, "/other");
   assert.equal(store["kanso.pr.details"]["/repo"], undefined);
 });
 
@@ -463,8 +463,8 @@ test("a late Details list does not replace a newer list of the same folder", asy
   lists[0].release(success(JSON.stringify([{ number: 1, title: "obsolete", updatedAt: "2026-11-10T00:00:00Z" }])));
   await lists[0].promise;
   await bag.settle();
-  assert.equal(panel.openPrs.length, 1);
-  assert.equal(String(panel.openPrs[0].title), "current");
+  assert.equal(panel.session.openPrs.length, 1);
+  assert.equal(String(panel.session.openPrs[0].title), "current");
 });
 
 const heldRoots = async (releaseFirst) => {
@@ -507,69 +507,204 @@ test("a queued folder change and a push ask are one read of the latest folder, e
 const closedRow = JSON.stringify([{ number: 3, title: "kept", url: "https://github.com/o/here/pull/3", state: "MERGED", updatedAt: "2026-11-12T00:00:00Z", author: { login: "me" }, headRefName: "feat", baseRefName: "main", additions: 0, deletions: 0 }]);
 const failedCheck = { name: "ci", status: "COMPLETED", conclusion: "FAILURE", detailsUrl: "https://github.com/o/here/actions/runs/9" };
 
-const flightCases = {
-  loading: { hold: (command, args) => command === "git" && args.includes("--show-toplevel"), begin: (panel, cx) => panel.again(cx), empty: () => success("/B\n"), answer: () => success("/B\n") },
-  inbox: { hold: (command, args) => command === "gh" && args[0] === "auth", begin: (panel, cx) => { panel.auth = null; panel.again(cx); }, empty: () => failure("logged out"), answer: () => failure("logged out") },
-  checks: { hold: (_command, args) => args[0] === "run" && args[1] === "view", begin: (panel, cx) => { panel.pr.mergeStateStatus = "BLOCKED"; panel.pr.statusCheckRollup = [failedCheck]; panel.permission = "WRITE"; panel.checked = null; panel.readLog(cx); }, empty: () => failure("no log"), answer: () => success("log"), afterFolder: true },
-  closed: { hold: (_command, args) => args[1] === "list" && args.includes("closed"), begin: (panel, cx) => { panel.listing = true; panel.showTab("closed", cx); }, empty: () => success("[]"), answer: () => success(closedRow), afterFolder: true, closed: true },
-  details: { hold: (_command, args) => args[1] === "list" && args.includes("open"), begin: (panel, cx) => panel.setDetails(cx, true), empty: () => success("[]"), answer: () => success(closedRow), afterFolder: true },
-  diff: { hold: (_command, args) => args[1] === "diff", begin: (panel, cx) => panel.pickFile("a.js", cx), empty: () => failure("no diff"), answer: () => success(""), afterFolder: true },
-  busy: { hold: (_command, args) => args.join(" ").includes("squashMergeAllowed"), begin: (panel, cx) => panel.mergeNow(cx), empty: () => failure("no"), answer: () => failure("no"), afterFolder: true },
-  pending: { hold: (_command, args) => args[0] === "api" && args.includes("-X"), begin: (panel, cx) => panel.toggle("labels", "bug", false, cx), empty: () => failure("no"), answer: () => failure("no"), afterFolder: true },
+const AGENT = { terminal: "t1", address: "t1", status: "working", program: { agent: true, name: "checkout" } };
+const BUSY_LABELS = ["Merging…", "Opening GitHub…", "Pushing…", "Pulling…", "Updating…", "Marking ready…", "Returning…", "Closing…", "Reopening…"];
+
+const failing = (panel) => {
+  panel.session.pr = { ...panel.session.pr, mergeStateStatus: "BLOCKED", statusCheckRollup: [failedCheck] };
+  panel.session.permission = "WRITE";
+  panel.checked = null;
 };
 
-const pinNew = (bag, from, pinned) => {
-  for (const task of bag.tasks.slice(from)) { bag.hold(task); pinned.push(task); }
+const eachFolder = (own) => {
+  const base = branchExec();
+  return async (command, args, options) => {
+    const answer = await own(command, args, options);
+    if (answer) return answer;
+    if (command === "git" && args.includes("--show-toplevel")) return success(`${options?.cwd}\n`);
+    if (args.includes("viewerPermission")) return success("WRITE\n");
+    return base(command, args);
+  };
 };
 
-const switchFlight = async (name, spec, oldFirst) => {
+const twoFolders = async (hold, host = {}) => {
   let folder = "/repo";
-  const held = [];
-  const pinned = [];
   let arm = false;
-  const { panel, cx, shown } = await readDrawn(branchExec(async (command, args) => {
-    if (!arm || !spec.hold(command, args)) return;
-    const pending = gate();
+  const held = [];
+  const calls = [];
+  const exec = eachFolder((command, args, options) => {
+    calls.push({ command, line: [command, ...args].join(" "), cwd: options?.cwd });
+    if (!arm || !hold(command, args)) return undefined;
+    const pending = { ...gate(), cwd: options?.cwd, tasks: [] };
     held.push(pending);
     return pending.promise;
-  }), folderView(() => folder, { props: () => null, notify() {} }));
+  });
+  const opened = await readDrawn(exec, folderView(() => folder, { props: () => null, notify() {}, hc: (args) => exec("hc", args, {}), ...host }));
+  const { panel, cx, shown } = opened;
   const bag = parked(cx), fire = zeroTimers(cx);
-  arm = true;
-  const first = bag.tasks.length;
-  spec.begin(panel, cx);
-  pinNew(bag, first, pinned);
-  assert.equal(held.length, 1, name);
-  folder = "/B";
-  panel.render(cx);
-  if (spec.afterFolder) { fire(); await bag.settle(); }
-  const second = bag.tasks.length;
-  spec.begin(panel, cx);
-  pinNew(bag, second, pinned);
-  assert.equal(held.length, 2, name);
-  const letGo = async (item, body, task) => { item.release(body); await task; await bag.settle(); };
-  const frameOf = () => { shown.texts.length = 0; panel.render(cx); return shown.texts.join("\n"); };
-  const steps = oldFirst ? [[0, spec.empty()], [1, spec.answer()]] : [[1, spec.answer()], [0, spec.empty()]];
-  for (const [at, body] of steps) {
-    await letGo(held[at], body, pinned[at]);
-    if (spec.closed && at === 0) assert.equal(frameOf().includes("GitHub could not be read"), false, name);
-  }
-  if (spec.closed) {
-    const frame = frameOf();
-    assert.equal(frame.includes("GitHub could not be read"), false, name);
-    assert.equal(frame.includes("kept"), true, name);
-    assert.equal(String(panel.closedPrs[0].title), "kept");
-  }
-  assert.equal(panel.ownsFlight(name), false, name);
+  return {
+    panel, cx, held, calls,
+    begin(start) {
+      const from = bag.tasks.length, count = held.length;
+      arm = true;
+      start(panel, cx);
+      arm = false;
+      const spawned = bag.tasks.slice(from);
+      spawned.forEach((task) => bag.hold(task));
+      held.slice(count).forEach((pending) => pending.tasks.push(...spawned));
+    },
+    async move(next) {
+      folder = next;
+      panel.render(cx);
+      fire();
+      await bag.settle();
+    },
+    async release(at, body) {
+      held[at].release(body);
+      await Promise.all(held[at].tasks);
+      await bag.settle();
+    },
+    frame() {
+      shown.texts.length = 0;
+      shown.handlers.clear();
+      panel.render(cx);
+      return { text: shown.texts.join("\n"), handlers: shown.handlers };
+    },
+    since: (from) => calls.slice(from),
+  };
 };
 
-test("an older folder's in-flight read does not block the next folder, in either order", async () => {
-  const { panel } = await readDrawn(branchExec(), folderView(() => "/repo", { props: () => null }));
-  const names = [...panel.constructor.flights];
-  assert.deepEqual(names, Object.keys(flightCases));
-  for (const name of names) {
-    await switchFlight(name, flightCases[name], true);
-    await switchFlight(name, flightCases[name], false);
+const notHere = (calls, cwd) => calls.filter((call) => call.cwd === cwd);
+const quiet = () => new Promise((resolve) => { setImmediate(resolve); });
+
+const heldCases = {
+  refresh: { hold: (command, args) => command === "git" && args.includes("--show-toplevel"), begin: (panel, cx) => panel.again(cx), answer: (cwd) => success(`${cwd}\n`) },
+  inbox: { hold: (command, args) => command === "gh" && args[0] === "auth", begin: (panel, cx) => { panel.auth = null; panel.again(cx); }, answer: () => failure(SIGNED_OUT) },
+  log: { hold: (_command, args) => args[0] === "run" && args[1] === "view", begin: (panel, cx) => { failing(panel); panel.readLog(cx); }, answer: () => success("log") },
+  closed: { hold: (_command, args) => args[1] === "list" && args.includes("closed"), begin: (panel, cx) => { panel.session.listing = true; panel.showTab("closed", cx); }, answer: () => success(closedRow), shows: "kept" },
+  details: { hold: (_command, args) => args[1] === "list" && args.includes("open"), begin: (panel, cx) => panel.setDetails(cx, true), answer: () => success(closedRow) },
+  diff: { hold: (_command, args) => args[1] === "diff", begin: (panel, cx) => panel.pickFile("a.js", cx), answer: () => success("") },
+  picker: { hold: (_command, args) => args[1] === "graphql", begin: (panel, cx) => { panel.search = { set_value() {}, focus() {}, value: () => "" }; panel.openPicker("labels", true, cx); }, answer: () => failure("no") },
+  labels: { hold: (_command, args) => args[0] === "api" && args.includes("-X"), begin: (panel, cx) => panel.toggle("labels", "bug", false, cx), answer: () => failure("no") },
+  merge: { hold: (_command, args) => args.join(" ").includes("squashMergeAllowed"), begin: (panel, cx) => panel.runWrite({ target: "merge" }, cx), answer: () => failure("no") },
+  create: { hold: (command, args) => command === "git" && args.includes("--symbolic-full-name"), begin: (panel, cx) => panel.runWrite({ target: "create" }, cx), answer: () => success("refs/remotes/origin/feat\n") },
+  push: { hold: (command, args) => command === "git" && args[0] === "push", begin: (panel, cx) => panel.runWrite({ target: "push" }, cx), answer: () => failure("no") },
+  pull: { hold: (command, args) => command === "git" && args[0] === "pull", begin: (panel, cx) => panel.runWrite({ target: "pull" }, cx), answer: () => failure("no") },
+  update: { hold: (_command, args) => args.join(" ").includes("update-branch"), begin: (panel, cx) => panel.runWrite({ target: "update" }, cx), answer: () => failure("no") },
+  ready: { hold: (_command, args) => args[1] === "ready" && !args.includes("--undo"), begin: (panel, cx) => panel.runWrite({ target: "ready" }, cx), answer: () => failure("no") },
+  draft: { hold: (_command, args) => args[1] === "ready" && args.includes("--undo"), begin: (panel, cx) => panel.runWrite({ target: "draft" }, cx), answer: () => failure("no") },
+  close: { hold: (_command, args) => args[1] === "close", begin: (panel, cx) => panel.runWrite({ target: "close" }, cx), answer: () => failure("no") },
+  reopen: { hold: (_command, args) => args[1] === "reopen", begin: (panel, cx) => panel.runWrite({ target: "reopen" }, cx), answer: () => failure("no") },
+  send: {
+    hold: (command, args) => command === "hc" && args[0] === "send",
+    begin: (panel, cx) => { failing(panel); panel.session.failedLog = "CI / ci\tRun tests\tFAIL no such file\n"; panel.send(cx); panel.send(cx); },
+    answer: () => failure("no"),
+    host: { focused: () => ({ terminal: "t1" }), panes: () => [AGENT], terminals: () => [AGENT] },
+  },
+};
+
+const freeInB = (panel, name) => {
+  assert.equal(panel.session.context, "/B", name);
+  assert.equal(Boolean(panel.session.busy), false, name);
+  assert.equal(Boolean(panel.session.pending), false, name);
+  assert.equal(panel.session.loading, false, name);
+};
+
+const heldInAThenB = async (name, spec, oldFirst) => {
+  const run = await twoFolders(spec.hold, spec.host);
+  const { panel, held } = run;
+  run.begin(spec.begin);
+  assert.equal(held.length, 1, name);
+  assert.notEqual(held[0].cwd, "/B", name);
+  await run.move("/B");
+  const idle = run.frame();
+  freeInB(panel, name);
+  assert.equal(BUSY_LABELS.some((label) => idle.text.includes(label)), false, name);
+  assert.equal(idle.handlers.has("pr-merge"), true, `${name}: B's action is clickable`);
+  run.begin(spec.begin);
+  assert.equal(held.length, 2, `${name}: B asks for itself`);
+  if (held[1].cwd !== undefined) assert.equal(held[1].cwd, "/B", name);
+  for (const at of oldFirst ? [0, 1] : [1, 0]) {
+    await quiet();
+    const before = run.frame().text, from = run.calls.length;
+    await run.release(at, spec.answer(held[at].cwd));
+    if (at === 1) continue;
+    assert.equal(run.frame().text, before, `${name}: A's result is not shown in B`);
+    assert.deepEqual(notHere(run.since(from), "/B"), [], `${name}: A finishes in A`);
   }
+  const last = run.frame().text;
+  assert.equal(last.includes("GitHub could not be read"), false, name);
+  freeInB(panel, name);
+  if (spec.shows) assert.equal(last.includes(spec.shows), true, name);
+};
+
+test("a read or action held in one folder leaves the next folder's frame, buttons and calls its own, in either order", async () => {
+  for (const [name, spec] of Object.entries(heldCases)) {
+    await heldInAThenB(name, spec, true);
+    await heldInAThenB(name, spec, false);
+  }
+});
+
+const createdInA = async () => {
+  const run = await twoFolders(heldCases.create.hold);
+  run.begin(heldCases.create.begin);
+  await run.move("/B");
+  return run;
+};
+
+test("Create on GitHub started in one folder opens GitHub for that folder, never for the folder shown after", async () => {
+  const run = await createdInA();
+  const from = run.calls.length;
+  await run.release(0, heldCases.create.answer());
+  const created = run.since(from).filter((call) => call.line.startsWith("gh pr create"));
+  assert.deepEqual(created.map((call) => call.cwd), ["/repo"]);
+  assert.equal(run.calls.some((call) => call.line.startsWith("gh pr create") && call.cwd === "/B"), false);
+});
+
+test("while Create waits in one folder, the next folder's buttons are enabled and a press runs there", async () => {
+  const run = await createdInA();
+  const { text, handlers } = run.frame();
+  assert.equal(text.includes("Opening GitHub…"), false);
+  const press = handlers.get("pr-merge");
+  assert.equal(typeof press, "function");
+  press(null, run.cx);
+  run.frame().handlers.get("pr-merge")(null, run.cx);
+  const merging = run.frame().text;
+  assert.equal(merging.includes("Merging…"), true);
+  assert.deepEqual(run.calls.filter((call) => call.line.includes("squashMergeAllowed")).map((call) => call.cwd), ["/B"]);
+});
+
+test("an older folder's Refresh that settles after the next folder asks for its list leaves that list to be read", async () => {
+  let folder = "/repo";
+  let holding = false;
+  const views = [];
+  const lists = [];
+  const exec = eachFolder((command, args, options) => {
+    if (command === "gh" && args[1] === "list") lists.push(options?.cwd);
+    if (!holding || command !== "gh" || args[0] !== "pr" || args[1] !== "view") return undefined;
+    const pending = gate();
+    views.push(pending);
+    return pending.promise;
+  });
+  const { panel, cx, shown } = await readDrawn(exec, folderView(() => folder, { props: () => null, notify() {} }));
+  const fire = zeroTimers(cx);
+  holding = true;
+  panel.again(cx);
+  await until(() => views.length === 1);
+  folder = "/B";
+  panel.render(cx);
+  fire();
+  await until(() => views.length === 2);
+  shown.handlers.clear();
+  panel.render(cx);
+  shown.handlers.get("pr-switch")(null, cx);
+  assert.equal(panel.session.listing, true);
+  views[0].release(success(JSON.stringify(pull())));
+  await quiet();
+  assert.deepEqual(lists, []);
+  views[1].release(success(JSON.stringify(pull())));
+  await until(() => lists.length === 1);
+  assert.deepEqual(lists, ["/B"]);
 });
 
 test("two folder changes before the wake are one read of the latest folder", async () => {
@@ -580,7 +715,7 @@ test("two folder changes before the wake are one read of the latest folder", asy
   assert.equal(turn.roots(), roots);
   cleared(turn, store, "/C");
   await nextTurn(turn);
-  assert.equal(turn.panel.context, "/C");
+  assert.equal(turn.panel.session.context, "/C");
   assert.equal(turn.roots(), roots + 1);
   const pending = turn.after.length;
   turn.draw();
@@ -589,7 +724,7 @@ test("two folder changes before the wake are one read of the latest folder", asy
     await turn.drain();
   }
   assert.equal(turn.roots(), roots + 1);
-  assert.equal(turn.panel.context, "/C");
+  assert.equal(turn.panel.session.context, "/C");
 });
 
 test("a read that never answers still finishes, and the last pull request stays", async () => {
@@ -603,13 +738,13 @@ test("a read that never answers still finishes, and the last pull request stays"
   });
   const { panel } = await readPanel(exec);
   hang = true;
-  panel.loading = false;
+  panel.session.loading = false;
   panel.refresh(cx);
   for (let i = 0; i < 80 && hung === 0; i += 1) await Promise.resolve();
   assert.equal(hung, 1);
   for (const fn of [...timers]) fn();
   await drain();
-  assert.equal(panel.loading, false);
+  assert.equal(panel.session.loading, false);
   keptPull(panel);
   assert.match(panel.readNote(), /^as of /);
 });
@@ -686,11 +821,11 @@ test("the timer returns while the window is behind or the panel is hidden, and r
 test("unseen reviews do not replace the branch's pull request", async () => {
   const { PullRequest } = await loadPullRequest();
   const panel = new PullRequest();
-  panel.inboxOpen = null;
+  panel.session.inboxOpen = null;
   panel.paintInbox({ unseen: 3, needs: [{}, {}, {}], yours: [] }, true);
   openInbox(panel);
   panel.paintInbox({ unseen: 0, needs: [], yours: [] }, true);
-  assert.equal(panel.inboxOpen, true);
+  assert.equal(panel.session.inboxOpen, true);
 });
 
 test("the unpushed log and the behind count are each read once", async () => {
@@ -717,7 +852,7 @@ test("the unpushed log and the behind count are each read once", async () => {
   }));
   assert.deepEqual(unpushed.first, { log: 1, behind: 0 });
   assert.deepEqual(unpushed.second, { log: 0, behind: 0 });
-  assert.equal(unpushed.panel.pr, null);
+  assert.equal(unpushed.panel.session.pr, null);
   const behind = await twice(branchExec(undefined, {
     git: gitAnswer((line) => {
       if (line.includes("symbolic-full-name")) return success("refs/remotes/origin/feat\n");
@@ -728,5 +863,5 @@ test("the unpushed log and the behind count are each read once", async () => {
   }));
   assert.deepEqual(behind.first, { log: 0, behind: 1 });
   assert.deepEqual(behind.second, { log: 0, behind: 0 });
-  assert.equal(behind.panel.baseBehind, 4);
+  assert.equal(behind.panel.session.baseBehind, 4);
 });
