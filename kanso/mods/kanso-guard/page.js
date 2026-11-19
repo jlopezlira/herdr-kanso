@@ -1,8 +1,7 @@
 // The shell of a full-page mod view: whether the page is on screen, and the centered column it draws in.
-import { v_flex, h_flex } from "gpui-base";
 import { layout } from "herdr";
-import { G, PAGE } from "./ui.js";
 import { tryOr } from "./pure.js";
+import { pageBody } from "./ui-page.js";
 
 // The path down to the mod's block, or null when it is not in the layout (a pane or overlay copy).
 const pathOf = (node, mod) => {
@@ -29,8 +28,4 @@ export function hiddenInLayout(mod) {
 }
 
 // The page's one wide row: a centered column that never outgrows 1080, `build` fills it.
-export function pageFrame(narrow, gap, build) {
-  const column = v_flex().w_full().max_w(PAGE.w).gap(gap);
-  return h_flex().flex_none().w_full().justify_center().px(narrow ? G.lg : 32).py(narrow ? G.lg : 28)
-    .child(build(column));
-}
+export const pageFrame = (narrow, gap, build) => pageBody(narrow, build, gap);

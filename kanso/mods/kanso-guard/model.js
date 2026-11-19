@@ -38,6 +38,18 @@ export function parseNow(text, now = Date.now()) {
   return { state: now - data.at > STALE_MS ? "stale" : "ok", data };
 }
 
+export const unreadable = (error) => ({ state: "bad", data: null, why: String(error?.message ?? error ?? "").trim() });
+
+export function refreshPlan({ now, busy = {}, refreshing = false }) {
+  const bad = now?.state === "bad";
+  const words = bad ? now.why ?? "" : "";
+  return {
+    failure: words ? { text: "Memory could not be read", source: words } : null,
+    inline: bad ? { enabled: !refreshing } : null,
+    header: { enabled: Object.keys(busy).length === 0, busy: Boolean(busy.check) },
+  };
+}
+
 export const agentsMB = (data) => (data?.agents ?? []).reduce((sum, a) => sum + (num(a.mb) ?? 0), 0);
 
 export function agentMeta(a) {
