@@ -19,6 +19,7 @@ const OPEN = "number,title,url,isDraft,updatedAt,author,headRefName,baseRefName,
 const openListArgs = () => ["pr", "list", "--state", "open", "--limit", "100", "--json", OPEN];
 const DONE = "number,title,url,state,updatedAt,mergedAt,closedAt,author,headRefName,baseRefName,additions,deletions";
 export const DONE_LIMIT = 30;
+const FINISHED = { Push: "Pushed", Pull: "Pulled", Update: "Branch updated", Ready: "Marked ready for review", Draft: "Returned to draft", Close: "Closed", Reopen: "Reopened" };
 const NO_PR = /no (open )?pull requests? found|could not determine current branch/i;
 
 export function ghMissing(r) {
@@ -442,7 +443,15 @@ export class FolderSession {
     }));
   }
 
-  tell(message) { if (this.live()) notify(message); }
+  place(pr) {
+    const folder = String(this.root ?? this.cwd ?? "").split("/").filter(Boolean).at(-1) ?? "this folder";
+    return pr ? `#${pr.number} in ${folder}` : `${this.branch ?? "The branch"} in ${folder}`;
+  }
+
+  tell(message, pr = this.pr) {
+    if (this.live()) { notify(message); return; }
+    notify({ ...message, body: [this.place(pr), message.body].filter(Boolean).join(". ") });
+  }
 
   reread(cx) {
     this.loadedAt = 0;
@@ -450,36 +459,41 @@ export class FolderSession {
     if (this.live()) this.panel.refresh(cx);
   }
 
-  perform(label, cx, failure, work, after) {
+  perform(label, cx, words, work, after) {
     if (this.busy) return false;
+    const pr = this.pr;
     this.busy = label; this.note = null;
     this.start(cx, async (cx) => {
-      try { await work(); }
-      catch (e) { this.note = said(failure, e?.message ?? e); }
-      finally { this.busy = null; after(cx); }
+      try {
+        await work();
+        if (words.loud || !this.live()) this.tell({ title: words.done, body: words.body, level: "success" }, pr);
+      } catch (e) {
+        this.note = said(words.failure, e?.message ?? e);
+        if (!this.live()) this.tell({ title: words.failure, body: String(e?.message ?? e), level: "error" }, pr);
+      } finally { this.busy = null; after(cx); }
     });
     return true;
   }
 
   act(label, args, cx, run = (a) => this.gh(a)) {
-    if (this.perform(label, cx, `${label} failed`, async () => commandOk(await run(args)), (next) => this.reread(next))) this.panel.armed.clear();
+    const words = { failure: `${label} failed`, done: FINISHED[label] };
+    if (this.perform(label, cx, words, async () => commandOk(await run(args)), (next) => this.reread(next))) this.panel.armed.clear();
   }
 
   mergeNow(cx) {
     const pr = this.pr;
     if (!pr) return;
-    this.perform("Merge", cx, "Merge failed", async () => {
+    this.perform("Merge", cx, { failure: "Merge failed", done: `Merged #${pr.number}`, body: pr.title, loud: true }, async () => {
       const { o, r: name } = repoOf(pr.url);
       const repo = await this.gh(["repo", "view", `${o}/${name}`, "--json", "squashMergeAllowed,mergeCommitAllowed,rebaseMergeAllowed"]);
       const allowed = repo.code === 0 ? JSON.parse(repo.stdout) : {};
       const method = allowed.squashMergeAllowed !== false ? "--squash" : allowed.mergeCommitAllowed ? "--merge" : "--rebase";
       commandOk(await this.gh(["pr", "merge", pr.url, method]));
-      this.tell({ title: `Merged #${pr.number}`, body: pr.title, level: "success" });
     }, (next) => this.reread(next));
   }
 
   createPr(cx) {
-    this.perform("Create", cx, "Could not create it", async () => {
+    this.perform("Create", cx, { failure: "Could not create it", done: "Opened GitHub to create the pull request" }, async () => {
       const now = await this.readPushed(this.root, this.on);
       if (!now || now.state === "late") throw new Error("It took too long to answer.");
       if (now.state !== "pushed") throw new Error(`${now.state === "behind" ? "pull" : "push"} ${this.branch ?? "the branch"} first`);
@@ -488,7 +502,7 @@ export class FolderSession {
   }
 
   deliverTo(cx, send) {
-    return this.perform("Send", cx, "Not sent", async () => {
+    return this.perform("Send", cx, { failure: "Not sent", done: "Sent to the agent" }, async () => {
       const sent = await send();
       if (sent?.code !== 0) throw new Error(String(sent?.stderr || sent?.stdout || "could not send").split("\n")[0]);
     }, (next) => next.notify());
@@ -502,7 +516,8 @@ export class FolderSession {
       assignees: ["-X", on ? "DELETE" : "POST", `repos/${o}/${r}/issues/${n}/assignees`, "-f", `assignees[]=${name}`],
       reviewers: ["-X", on ? "DELETE" : "POST", `repos/${o}/${r}/pulls/${n}/requested_reviewers`, "-f", `reviewers[]=${name}`],
     }[kind];
-    const done = { assignees: on ? `Unassigned ${name}` : `Assigned ${name}`, reviewers: on ? `Review request to ${name} taken back` : `Review requested from ${name}` }[kind];
+    const done = { labels: on ? `Took ${name} off` : `Put ${name} on`, assignees: on ? `Unassigned ${name}` : `Assigned ${name}`, reviewers: on ? `Review request to ${name} taken back` : `Review requested from ${name}` }[kind];
+    const asked = this.pr;
     const failed = { labels: on ? `Could not take ${name} off` : `Could not put ${name} on`, assignees: on ? `Could not unassign ${name}` : `Could not assign ${name}`, reviewers: on ? `Could not take back the request to ${name}` : `Could not ask ${name} for a review` }[kind];
     const why = { labels: "Changing labels needs triage access on this repository.", assignees: "Assigning needs triage access on this repository.", reviewers: "Asking for a review needs write access on this repository." }[kind];
     this.pending = name;
@@ -514,8 +529,8 @@ export class FolderSession {
         if (kind === "labels") this.pr = { ...pr, labels: on ? pr.labels.filter((l) => l.name !== name) : [...pr.labels, (this.candidates ?? []).find((l) => l.name === name) ?? { name }] };
         if (kind === "assignees") this.pr = { ...pr, assignees: on ? pr.assignees.filter((a) => a.login !== name) : [...pr.assignees, { login: name }] };
         if (kind === "reviewers") this.pr = { ...pr, reviewRequests: on ? pr.reviewRequests.filter((x) => x.login !== name) : [...pr.reviewRequests, { login: name }] };
-        if (done) this.tell({ title: done, level: "success" });
-      } catch (e) { this.tell({ title: failed, body: `${String(e?.message ?? e)} ${why}`, level: "error" }); }
+        if (kind !== "labels" || !this.live()) this.tell({ title: done, level: "success" }, asked);
+      } catch (e) { this.tell({ title: failed, body: `${String(e?.message ?? e)} ${why}`, level: "error" }, asked); }
       finally { this.pending = null; this.reread(cx); }
     });
   }

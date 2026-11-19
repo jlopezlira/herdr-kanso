@@ -532,6 +532,7 @@ const twoFolders = async (hold, host = {}) => {
   let arm = false;
   const held = [];
   const calls = [];
+  const toasts = [];
   const exec = eachFolder((command, args, options) => {
     calls.push({ command, line: [command, ...args].join(" "), cwd: options?.cwd });
     if (!arm || !hold(command, args)) return undefined;
@@ -539,11 +540,11 @@ const twoFolders = async (hold, host = {}) => {
     held.push(pending);
     return pending.promise;
   });
-  const opened = await readDrawn(exec, folderView(() => folder, { props: () => null, notify() {}, hc: (args) => exec("hc", args, {}), ...host }));
+  const opened = await readDrawn(exec, folderView(() => folder, { props: () => null, notify: (message) => toasts.push(message), hc: (args) => exec("hc", args, {}), ...host }));
   const { panel, cx, shown } = opened;
   const bag = parked(cx), fire = zeroTimers(cx);
   return {
-    panel, cx, held, calls,
+    panel, cx, held, calls, toasts,
     begin(start) {
       const from = bag.tasks.length, count = held.length;
       arm = true;
@@ -603,6 +604,15 @@ const heldCases = {
   },
 };
 
+const SENT = ["labels", "merge", "create", "push", "pull", "update", "ready", "draft", "close", "reopen", "send"];
+
+const toldFor = (toasts, name, asked) => {
+  const said = toasts.map((toast) => `${toast.title} ${toast.body ?? ""}`);
+  if (!SENT.includes(name)) { assert.deepEqual(said, [], `${name}: a read for A says nothing in B`); return; }
+  assert.equal(said.length, 1, `${name}: A's sent action tells its outcome once`);
+  assert.equal(said[0].includes(asked ? `#${asked.number} in repo` : "in repo"), true, `${name}: ${said[0]}`);
+};
+
 const freeInB = (panel, name) => {
   assert.equal(panel.session.context, "/B", name);
   assert.equal(Boolean(panel.session.busy), false, name);
@@ -614,6 +624,7 @@ const heldInAThenB = async (name, spec, oldFirst) => {
   const run = await twoFolders(spec.hold, spec.host);
   const { panel, held } = run;
   run.begin(spec.begin);
+  const asked = panel.session.pr;
   assert.equal(held.length, 1, name);
   assert.notEqual(held[0].cwd, "/B", name);
   await run.move("/B");
@@ -626,9 +637,10 @@ const heldInAThenB = async (name, spec, oldFirst) => {
   if (held[1].cwd !== undefined) assert.equal(held[1].cwd, "/B", name);
   for (const at of oldFirst ? [0, 1] : [1, 0]) {
     await quiet();
-    const before = run.frame().text, from = run.calls.length;
+    const before = run.frame().text, from = run.calls.length, told = run.toasts.length;
     await run.release(at, spec.answer(held[at].cwd));
     if (at === 1) continue;
+    toldFor(run.toasts.slice(told), name, asked);
     assert.equal(run.frame().text, before, `${name}: A's result is not shown in B`);
     assert.deepEqual(notHere(run.since(from), "/B"), [], `${name}: A finishes in A`);
   }
@@ -638,7 +650,7 @@ const heldInAThenB = async (name, spec, oldFirst) => {
   if (spec.shows) assert.equal(last.includes(spec.shows), true, name);
 };
 
-test("a read or action held in one folder leaves the next folder's frame, buttons and calls its own, in either order", async () => {
+test("a read or action held in one folder leaves the next folder's frame, buttons and calls its own, in either order, and an action already sent tells its outcome naming its pull request and folder", async () => {
   for (const [name, spec] of Object.entries(heldCases)) {
     await heldInAThenB(name, spec, true);
     await heldInAThenB(name, spec, false);
