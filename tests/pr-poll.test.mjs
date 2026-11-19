@@ -757,7 +757,7 @@ test("two overlapping tasks in one folder each keep their own deadline: Create o
   await owned.tasks.get(1);
   assert.deepEqual(calls.filter((call) => call.line.startsWith("gh pr create")).map((call) => call.cwd), ["/repo"]);
   assert.equal(panel.session.note, null, String(panel.session.note?.detail ?? panel.session.note));
-  assert.deepEqual(toasts.map((toast) => [toast.title, toast.level]), [["Opened GitHub to create the pull request", "success"]]);
+  assert.deepEqual(toasts, []);
 });
 
 test("a label sent for one pull request reports once, naming that pull request and folder, after another is chosen and the folder changes", async () => {
@@ -819,7 +819,9 @@ const sentOutcome = async (name, spec, place, ok) => {
     return;
   }
   const inline = !ok && !spec.kind;
-  assert.equal(told.length + (a.note ? 1 : 0) + (patched && told.length === 0 ? 1 : 0), 1, label);
+  const redrawn = ok && !spec.kind && name !== "merge";
+  if (ok) assert.equal(told.length, ["merge", "assignees", "reviewers"].includes(name) ? 1 : 0, `${label}: as on develop`);
+  assert.equal(told.length + (a.note ? 1 : 0) + (patched && told.length === 0 ? 1 : 0) + (redrawn ? 1 : 0), 1, label);
   assert.equal(Boolean(a.note), inline, label);
   if (inline) assert.equal(a.note.source, "rejected", label);
   if (told.length) assert.equal(told[0].level, ok ? "success" : "error", label);

@@ -36,7 +36,6 @@ test("Send shows the failing log, then hands it to the agent in front", async ()
     panes: () => [{ terminal: "t1", status, program: { agent: true, name: "checkout" } }],
     terminals: () => [{ address: "t1", status, program: { agent: true, name: "checkout" } }],
     hc: async (args) => { sent.push(args); return success(""); },
-    notify() {},
   });
   const panel = new PullRequest();
   panel.session.pr = {
@@ -457,7 +456,7 @@ test("each write runs the one command that state names", async () => {
   const gh = [];
   const git = [];
   const { PullRequest } = await loadPullRequest({
-    location: () => ({ cwd: null, on: null }), key: () => "repo", notify() {},
+    location: () => ({ cwd: null, on: null }), key: () => "repo",
   });
   const panel = new PullRequest();
   panel.session.context = "repo";

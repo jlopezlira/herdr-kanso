@@ -456,7 +456,8 @@ export class FolderSession {
     if (!this.shows(target)) { notify({ ...message, body: [target.place, message.body].filter(Boolean).join(". ") }); return; }
     if (local.note) { this.note = local.note; return; }
     const patched = local.patch ? tryOr(() => { local.patch(); return true; }, false) : false;
-    if (!patched || !local.quiet) notify(message);
+    if (local.quiet && (patched || !local.patch)) return;
+    notify(message);
   }
 
   reread(cx) {
@@ -472,7 +473,7 @@ export class FolderSession {
     this.start(cx, async (cx) => {
       const failed = await work(cx).then(() => null, (e) => String(e?.message ?? e));
       this.busy = null;
-      if (failed === null) this.outcome(target, { title: words.done, body: words.body, level: "success" });
+      if (failed === null) this.outcome(target, { title: words.done, body: words.body, level: "success" }, { quiet: !words.loud });
       else this.outcome(target, { title: words.failure, body: failed, level: "error" }, { note: said(words.failure, failed) });
       after(cx);
     });
@@ -487,7 +488,7 @@ export class FolderSession {
   mergeNow(cx) {
     const pr = this.pr;
     if (!pr) return;
-    this.perform("Merge", cx, { failure: "Merge failed", done: `Merged #${pr.number}`, body: pr.title }, async (task) => {
+    this.perform("Merge", cx, { failure: "Merge failed", done: `Merged #${pr.number}`, body: pr.title, loud: true }, async (task) => {
       const { o, r: name } = repoOf(pr.url);
       const repo = await this.gh(task, ["repo", "view", `${o}/${name}`, "--json", "squashMergeAllowed,mergeCommitAllowed,rebaseMergeAllowed"]);
       const allowed = repo.code === 0 ? JSON.parse(repo.stdout) : {};
