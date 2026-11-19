@@ -27,7 +27,8 @@ the branch's rules.
 ### Fixed
 
 - Waking a sleeping conversation brings it back before forgetting it was asleep. If it does not come back, it stays asleep and Wake says so, so you can try again. If it comes back but still looks asleep, Wake says that. Waking several at once names each one that did not come back and each one that came back but still looks asleep.
-- If Wake or Sleep gets no answer, it says that step was not confirmed and keeps what you need to try again. An unreadable terminal is not treated as a finished exit, so its conversation stays available. A cleanup that fails is named with the failure that caused it.
+- Sleep deletes a conversation's resume id only when a fresh read shows that same agent still running. If the terminal changed, the agent has already returned to its shell, or Enter was refused, the id stays and Sleep says the exit was not confirmed.
+- A refused step says "was refused". A step that did not answer says "did not answer". That covers the cleanup, the first look at a terminal, and the conversation file. A cleanup that did not answer does not say the asleep mark stayed or went.
 - Sleep no longer puts a tab away when something in it could not be stopped, and names that one. Pressing Sleep or Wake again while it is working does nothing.
 
 ## [3.31.0] - 2026-11-19

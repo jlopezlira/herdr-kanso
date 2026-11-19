@@ -63,10 +63,10 @@ test("a failed exit takes its label back and settles nothing; the dialog says wh
   const { Sleep } = await sleepMod({ hc, spaces: () => [space()], run: (...a) => runs.push(a), props: () => ({}), closeOverlay: () => runs.push(["close"]) });
   const view = Object.assign(new Sleep(), { order: { scope: "tab", tab: "a" }, space: space(), reads: [{ ...reads[0], pid: 9 }, reads[1]], busy: null, error: null });
   await view.sleep({ notify() {}, sleep: async () => {} });
-  assert.deepEqual(clone(calls.filter((a) => a[0] === "label")), [["label", "t1", "kanso.resume=00000000-0000-4000-8000-000000000001"], ["label", "t1", "kanso.resume="]]);
+  assert.deepEqual(clone(calls.filter((a) => a[0] === "label")), [["label", "t1", "kanso.resume=00000000-0000-4000-8000-000000000001"]]);
   assert.equal(calls.some((a) => a[0] === "interrupt"), false, "nothing else stops");
   assert.deepEqual(runs, [], "no tab settles, the dialog stays");
-  assert.equal(view.error, "It can't sleep: Rey's terminal changed.");
+  assert.equal(view.error, "It can't sleep: Rey's exit was not confirmed.");
 });
 
 test("a tab wakes: it comes back and is shown, then each asleep terminal resumes before its asleep mark is cleared", async () => {
@@ -254,9 +254,8 @@ test("A failed cleanup is named with the exit that failed, and an unreadable ter
     return quiet;
   });
   await first.view.sleep(first.cx);
-  assert.match(first.view.error, /Rey's terminal changed/);
-  assert.match(first.view.error, /asleep mark stayed/);
-  assert.equal(cleared(changed).length, 1);
+  assert.match(first.view.error, /exit was not confirmed/);
+  assert.equal(cleared(changed).length, 0);
 
   const unread = [];
   const second = await agentSleep(async (args) => {
@@ -266,7 +265,7 @@ test("A failed cleanup is named with the exit that failed, and an unreadable ter
   });
   await second.view.sleep(second.cx);
   assert.equal(cleared(unread).length, 0);
-  assert.match(second.view.error, /get failed/);
+  assert.match(second.view.error, /exit was not confirmed/);
   assert.doesNotMatch(second.view.error, /did not exit/);
 });
 
@@ -290,7 +289,7 @@ test("A rejected Enter is reported and does not keep asking", async () => {
   });
   const outcome = await Promise.race([asked.view.sleep(asked.cx).then(() => "done"), later(400).then(() => "hung")]);
   assert.equal(outcome, "done");
-  assert.match(asked.view.error, /Enter failed/);
+  assert.match(asked.view.error, /exit was not confirmed/);
 });
 
 test("A wake that never answers finishes and names that send as not confirmed", async () => {
@@ -351,4 +350,99 @@ test("A second Sleep or Wake while the first is working does nothing", async () 
   assert.deepEqual(sends, ["t1"]);
   releaseSend(quiet);
   await waking;
+});
+
+const claude = (pid) => ({ code: 0, stdout: JSON.stringify({ pid: 1, foreground: { pid, argv: ["claude"] } }) });
+const shell = () => ({ code: 0, stdout: JSON.stringify({ pid: 1, foreground: { pid: 1, argv: ["zsh"] } }) });
+const ruled = (line) => `${"\u2500".repeat(12)}\n${line}\n${"\u2500".repeat(12)}`;
+const emptyLabel = (calls) => calls.filter((args) => args[0] === "label" && args[2] === "kanso.resume=");
+const soon = { after(_ms, fn) { setTimeout(fn, 20); } };
+const asked = (sent) => ({ code: 0, stdout: sent ? "Exit and stop tasks?" : ruled("\u276f ") });
+
+function leaving({ onEnter = () => quiet, onGet = () => claude(9), onClear = null } = {}) {
+  let exitSent = false;
+  let entered = false;
+  return async (args) => {
+    if (args[0] === "send") { exitSent = true; return quiet; }
+    if (args[0] === "keys" && args[2] === "enter") { entered = true; return onEnter(); }
+    if (args[0] === "get") return onGet(entered);
+    if (onClear && args[0] === "label" && args[2] === "kanso.resume=") return onClear();
+    if (args[0] === "read") return asked(exitSent);
+    return quiet;
+  };
+}
+
+async function traced(hc) {
+  const calls = [];
+  const held = await agentSleep(async (args) => { calls.push(args); return hc(args); });
+  await held.view.sleep(held.cx);
+  return { calls, error: held.view.error };
+}
+
+function kept(calls, error) {
+  assert.equal(emptyLabel(calls).length, 0);
+  if (error != null) assert.match(error, /exit was not confirmed/);
+}
+
+test("After /exit a changed foreground does not delete the resume id", async () => {
+  let sent = false;
+  const run = await traced(async (args) => {
+    if (args[0] === "send") { sent = true; return quiet; }
+    if (args[0] === "get") return sent ? record(99) : claude(9);
+    if (args[0] === "read") return { code: 0, stdout: ruled("\u276f ") };
+    return quiet;
+  });
+  kept(run.calls, run.error);
+});
+
+test("After /exit a shell that returns before Enter does not delete the resume id", async () => {
+  let gets = 0;
+  const run = await traced(async (args) => {
+    if (args[0] === "get") return ++gets < 3 ? claude(9) : shell();
+    if (args[0] === "read") return { code: 0, stdout: gets < 2 ? ruled("\u276f ") : "Exit and stop tasks?" };
+    if (args[0] === "keys" && args[2] === "enter") return gone;
+    return quiet;
+  });
+  kept(run.calls);
+  assert.equal(run.calls.some((args) => args[2] === "enter"), false);
+});
+
+test("After /exit a refused Enter does not delete the resume id", async () => {
+  const run = await traced(leaving({ onEnter: () => gone, onGet: (entered) => (entered ? gone : claude(9)) }));
+  kept(run.calls, run.error);
+});
+
+test("A cleanup that did not answer does not say the mark stayed or went", async () => {
+  const calls = [];
+  const answer = leaving({ onEnter: () => gone, onClear: () => new Promise(() => {}) });
+  const held = await agentSleep(async (args) => { calls.push(args); return answer(args); });
+  await held.view.sleep({ notify() {}, sleep: async () => {}, timer: soon });
+  assert.match(held.view.error, /label did not answer/);
+  assert.doesNotMatch(held.view.error, /stayed|went/);
+  assert.equal(calls.filter((args) => args[0] === "label" && args[2] === "kanso.resume=").length, 1);
+});
+
+test("An unanswered get and conversation file name the step, and a refused get says refused", async () => {
+  const ask = async (hc) => {
+    const { Sleep } = await load("kanso-sleep/main.js", ["Sleep"], {
+      home: () => "/home/me", hc, spaces: () => [space()], panes: () => [{ terminal: "t1", tab: "a" }],
+      props: () => ({}), run: () => {}, closeOverlay: () => {},
+    });
+    const view = Object.assign(new Sleep(), { order: { scope: "tab", tab: "a" }, space: space(), reads: null, busy: null, error: null });
+    await view.read({ notify() {}, timer: soon, sleep: async () => {} });
+    return view.error;
+  };
+  const hung = () => new Promise(() => {});
+  const missedGet = await ask(async (args) => (args[0] === "get" ? hung() : quiet));
+  assert.match(missedGet, /t1's get did not answer/);
+  assert.doesNotMatch(missedGet, /could not be read/);
+  const refused = await ask(async (args) => (args[0] === "get" ? gone : quiet));
+  assert.match(refused, /t1's get was refused/);
+  const file = await ask(async (args) => {
+    if (args[0] === "get") return claude(9);
+    if (args[0] === "file") return hung();
+    return quiet;
+  });
+  assert.match(file, /read did not answer/);
+  assert.doesNotMatch(file, /was not found/);
 });
