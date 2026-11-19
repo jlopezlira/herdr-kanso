@@ -359,44 +359,54 @@ test("A door with a long name takes its measured width from the room, so the tab
   assert.ok(["t1", "t2", "t3"].filter((id) => tab(root, id)).length < 3, "measured, the door's width folds a tab");
 });
 
-test("The bar asks the active space's own computer: a remote Windows devbox through where.exe on devbox, this Mac through the shell, each answer kept for its computer", async () => {
+const asking = async (exec, options = {}) => {
   const calls = [], pending = [];
-  const exec = async (command, args, options = {}) => {
-    calls.push([command, args.at(-1), options.on ?? null]);
-    if (options.on === "devbox") return { code: 0, stdout: command === "where.exe" ? `C:\\bin\\${args[0]}.exe` : "Win32NT\n", stderr: "" };
-    return { code: 1, stdout: "", stderr: "" };
-  };
-  const b = await bar({ machine: "devbox", computers: [{ name: "devbox", layout: "ready" }], exec });
+  const b = await bar({ ...options, exec: async (command, args, opts = {}) => { calls.push([command, args.at(-1), opts.on ?? null]); return exec(command, args, opts); } });
   const cx = { ...b.cx, timer: { after: (ms, fn) => { if (!ms) fn(cx); return { cancel() {} }; } }, spawn: (fn) => { pending.push(fn(cx)); } };
   const drawn = async () => {
     b.view.render(cx);
     while (pending.length) await pending.shift();
     return ["Containers", "PR"].filter((label) => door(b.view.render(cx), label));
   };
-  const lookups = () => calls.filter(([, tool]) => tool === "docker" || tool === "gh");
+  return { b, cx, drawn, lookups: () => calls.filter(([, tool]) => tool === "docker" || tool === "gh"), forget: () => { calls.length = 0; } };
+};
+const installed = (tools) => async (_command, args) => ({ code: tools.includes(args.at(-1)) ? 0 : 1, stdout: "", stderr: "" });
+
+test("The bar asks the active space's own computer: a remote Windows devbox through where.exe on devbox, this Mac through the shell, each answer kept for its computer", async () => {
+  const exec = async (command, args, options = {}) => (options.on === "devbox"
+    ? { code: 0, stdout: command === "where.exe" ? `C:\\bin\\${args[0]}.exe` : "Win32NT\n", stderr: "" } : { code: 1, stdout: "", stderr: "" });
+  const { b, drawn, lookups, forget } = await asking(exec, { machine: "devbox", computers: [{ name: "devbox", layout: "ready" }] });
   assert.deepEqual(await drawn(), ["Containers", "PR"], "devbox has both: both offered");
   assert.deepEqual(lookups(), [["where.exe", "docker", "devbox"], ["where.exe", "gh", "devbox"]], "asked on devbox, as Windows");
   b.space.machine = null;
-  calls.length = 0;
+  forget();
   assert.deepEqual(await drawn(), [], "this Mac has neither: both hidden");
   assert.deepEqual(lookups(), [["sh", "docker", null], ["sh", "gh", null]], "asked here, through the shell");
   b.space.machine = "devbox";
-  calls.length = 0;
+  forget();
   assert.deepEqual(await drawn(), ["Containers", "PR"], "back on devbox: offered again");
-  assert.deepEqual(lookups(), [], "from devbox's answer, without asking again");
+  assert.deepEqual(lookups(), [], "from devbox's answer, without asking again in the same bar");
 });
 
-test("Without Docker the Containers door is not offered, without gh the PR door is not, and each comes back once its tool is found", async () => {
-  const labels = (root) => ["Containers", "PR"].filter((label) => door(root, label));
-  const docker = await bar({ stored: { "kanso.panels.commands": { "": { docker: false, gh: true } } } });
-  assert.deepEqual(labels(docker.view.render(docker.cx)), ["PR"], "no Docker: no Containers");
-  const gh = await bar({ stored: { "kanso.panels.commands": { "": { docker: true, gh: false } } } });
-  assert.deepEqual(labels(gh.view.render(gh.cx)), ["Containers"], "no gh: no PR");
-  const both = await bar({ stored: { "kanso.panels.commands": { "": { docker: true, gh: true } } } });
-  assert.deepEqual(labels(both.view.render(both.cx)), ["Containers", "PR"]);
-  const unknown = await bar();
-  assert.deepEqual(labels(unknown.view.render(unknown.cx)), ["Containers", "PR"], "before the computer answers, both stay");
-  assert.equal(docker.store["kanso.panels.all"].some((p) => p.id === "containers"), false, "and kansō settings does not list it either");
+test("Without Docker the Containers door is not offered, without gh the PR door is not, and both stay until the computer answers", async () => {
+  assert.deepEqual(await (await asking(installed(["gh"]))).drawn(), ["PR"], "no Docker: no Containers");
+  assert.deepEqual(await (await asking(installed(["docker"]))).drawn(), ["Containers"], "no gh: no PR");
+  assert.deepEqual(await (await asking(installed(["docker", "gh"]))).drawn(), ["Containers", "PR"]);
+  const waiting = await asking(installed([]));
+  assert.deepEqual(["Containers", "PR"].filter((label) => door(waiting.b.view.render(waiting.cx), label)), ["Containers", "PR"], "before the computer answers, both stay");
+  await waiting.drawn();
+  assert.equal(waiting.b.store["kanso.panels.all"].some((p) => p.id === "containers"), false, "and once it says neither, kansō settings does not list it either");
+});
+
+test("A new bar asks again whatever was saved: tools installed since show their doors, tools removed since hide them", async () => {
+  const before = await asking(installed([]));
+  assert.deepEqual(await before.drawn(), [], "neither, then");
+  const after = await asking(installed(["docker", "gh"]), { stored: before.b.store });
+  assert.deepEqual(await after.drawn(), ["Containers", "PR"], "installed since: a fresh bar asks and draws both");
+  assert.equal(after.lookups().length, 2);
+  const removed = await asking(installed([]), { stored: after.b.store });
+  assert.deepEqual(await removed.drawn(), [], "removed since: a fresh bar asks and hides both");
+  assert.equal(removed.lookups().length, 2);
 });
 
 test("The computer is asked whether each tool exists: command -v through the shell, where.exe on Windows; only a clean not-found hides a door", async () => {
@@ -424,20 +434,19 @@ test("The computer is asked whether each tool exists: command -v through the she
 });
 
 test("Moving the drawn doors keeps the slot of a door gh's absence or Settings hides, first or between the moved doors, and it comes back there", async () => {
-  const absent = { hidden: { "kanso.panels.commands": { "": { docker: true, gh: false } } }, shown: { "kanso.panels.commands": { "": { docker: true, gh: true } } } };
-  const hidden = { hidden: { "kanso.pieces": { "panel.pr": "hide" } }, shown: { "kanso.pieces": {} } };
+  const absent = { hidden: [installed(["docker"]), {}], shown: [installed(["docker", "gh"]), {}] };
+  const hidden = { hidden: [installed(["docker", "gh"]), { "kanso.pieces": { "panel.pr": "hide" } }], shown: [installed(["docker", "gh"]), { "kanso.pieces": {} }] };
   for (const [why, order, kept, label] of [[absent, ["pr", "files", "ports", "insights"], ["pr", "ports", "files", "insights"], "gh absent, first"],
     [absent, ["files", "pr", "ports", "insights"], ["ports", "pr", "files", "insights"], "gh absent, second"],
     [hidden, ["files", "pr", "ports", "insights"], ["ports", "pr", "files", "insights"], "hidden in Settings, second"]]) {
-    const b = await bar({ stored: { "kanso.panels.order": order, ...why.hidden } });
-    assert.equal(door(b.view.render(b.cx), "PR"), null, label);
-    pressOf(door(b.view.render(b.cx), "Ports"), "left")(press, b.cx);
-    handler(door(b.view.render(b.cx), "Files"), "on_mouse_up")({}, b.cx);
+    const { b, cx, drawn } = await asking(why.hidden[0], { stored: { "kanso.panels.order": order, ...why.hidden[1] } });
+    assert.equal((await drawn()).includes("PR"), false, label);
+    pressOf(door(b.view.render(cx), "Ports"), "left")(press, cx);
+    handler(door(b.view.render(cx), "Files"), "on_mouse_up")({}, cx);
     assert.deepEqual(clone(b.store["kanso.panels.order"]).slice(0, 4), kept, `${label}: PR keeps its slot`);
-    Object.assign(b.store, why.shown);
-    const root = b.view.render(b.cx);
-    assert.deepEqual(clone(b.store["kanso.panels.all"]).map((p) => p.id).slice(0, 4), kept, `${label}: PR comes back there`);
-    assert.ok(door(root, "PR"), `${label}: and is drawn`);
+    const back = await asking(why.shown[0], { stored: { ...b.store, ...why.shown[1] } });
+    assert.ok((await back.drawn()).includes("PR"), `${label}: PR is drawn again`);
+    assert.deepEqual(clone(back.b.store["kanso.panels.all"]).map((p) => p.id).slice(0, 4), kept, `${label}: PR comes back there`);
   }
 });
 

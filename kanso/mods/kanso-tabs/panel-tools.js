@@ -1,7 +1,6 @@
 import { available } from "./sim-registration.js";
 import { serviceFor } from "./platform-host.js";
 
-export const COMMANDS = "kanso.panels.commands";
 export const NEEDS = Object.freeze({ containers: "docker", pr: "gh" });
 export const LOOKUP_MS = 1500;
 

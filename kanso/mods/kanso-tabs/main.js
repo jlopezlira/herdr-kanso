@@ -27,7 +27,7 @@ import { tabMark, barState, foldTabs, renameWaits, landing, heldOn, dropMarks } 
 import { Kdb, projectKey } from "./kdb.js";
 import { projectOpen, OPEN } from "./panel-state.js";
 import { TOOLS, PROBE_MS, probeTools } from "./sim-registration.js";
-import { COMMANDS, commandsOn, machineKey, offered } from "./panel-tools.js";
+import { commandsOn, machineKey, offered } from "./panel-tools.js";
 import { pieces, runs, shown, setPiece, STORE, choice } from "./pieces.js";
 
 function storedObject(key) {
@@ -86,16 +86,16 @@ function roster() {
   return all.toSorted((a, b) => rank.get(a.id) - rank.get(b.id));
 }
 
-function panelList() {
+function panelList(answers = {}) {
   const map = pieces(shared);
-  const commands = shared(COMMANDS)?.[machineKey(spaces().find((s) => s.active))];
+  const commands = answers[machineKey(spaces().find((s) => s.active))];
   return roster().filter((p) => offered(p.id, { sim: shared(TOOLS), commands })).map((p) => ({ ...p, on: runs(`panel.${p.id}`, map) }));
 }
 
 const drawnPanels = (all) => all.filter((p) => p.on);
 
-function movePanel(from, to) {
-  const seen = drawnPanels(panelList()).map((p) => p.id), i = seen.indexOf(from), j = seen.indexOf(to);
+function movePanel(from, to, answers) {
+  const seen = drawnPanels(panelList(answers)).map((p) => p.id), i = seen.indexOf(from), j = seen.indexOf(to);
   if (i < 0 || j < 0 || i === j) return;
   const moved = seen.toSpliced(i, 1).toSpliced(j, 0, from);
   setShared(ORDER, roster().map((p) => (seen.includes(p.id) ? moved[seen.indexOf(p.id)] : p.id)));
@@ -136,6 +136,7 @@ export default class Tabs extends View {
   renamed = null;
   moreOpen = false;
   asked = new Set();
+  answers = {};
 
   init(_props, cx) {
     this.endDrags();
@@ -191,12 +192,12 @@ export default class Tabs extends View {
   }
 
   askCommands(cx, machine) {
-    if (this.arrange || !cx || this.asked.has(machine) || Object.hasOwn(shared(COMMANDS) ?? {}, machine)) return;
+    if (this.arrange || !cx || this.asked.has(machine)) return;
     this.asked = new Set([...this.asked, machine]);
     cx.timer.after(0, (next) => next.spawn(async () => {
       const commands = await commandsOn(machine);
       if (!commands) return;
-      setShared(COMMANDS, { ...(shared(COMMANDS) ?? {}), [machine]: commands });
+      this.answers = { ...this.answers, [machine]: commands };
       next.notify();
     }));
   }
@@ -214,8 +215,8 @@ export default class Tabs extends View {
       const tree = layout();
       if (this.openPanel(walkLayout(tree, "panel"), walkLayout(tree, "panel-body")) !== "memory") this.mount("memory");
     } else if (name === "sim" || panel) {
-      const id = panel ? panelList().filter((x) => x.on)[Number(panel[1]) - 1]?.id : "sim";
-      if (!id || !panelList().some((item) => item.id === id && item.on)) return;
+      const id = panel ? panelList(this.answers).filter((x) => x.on)[Number(panel[1]) - 1]?.id : "sim";
+      if (!id || !panelList(this.answers).some((item) => item.id === id && item.on)) return;
       const tree = layout(), now = this.openPanel(walkLayout(tree, "panel"), walkLayout(tree, "panel-body"));
       this.mount(now === id ? null : id);
     }
@@ -459,7 +460,7 @@ export default class Tabs extends View {
           const from = this.dragPanel;
           this.dragPanel = null;
           this.dropPanel = null;
-          if (from && from !== p.id) movePanel(from, p.id);
+          if (from && from !== p.id) movePanel(from, p.id, this.answers);
           cx.notify();
         })
         .on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); this.panelMenu = p.id; cx.notify(); });
@@ -519,7 +520,7 @@ export default class Tabs extends View {
       const project = tryOr(() => projectKey(space, home()));
       if (project && project !== this.project) this.openRow = undefined;
     }
-    const allPanels = panelList();
+    const allPanels = panelList(this.answers);
     const shownPanels = drawnPanels(allPanels);
     const enabled = shownPanels.map((p) => p.id);
     const roster = allPanels.map((p) => ({ id: p.id, label: p.label, icon: p.icon ? glyphOf(p.icon.replace(/^lu-/, "")) : null, on: p.on }));
