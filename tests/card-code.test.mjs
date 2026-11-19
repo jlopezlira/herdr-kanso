@@ -1,9 +1,8 @@
-// The card and code pieces: every state their Storybook stories show, drawn from the tokens, and the PR panel's cards drawn through them.
+// The card and code pieces: every state, drawn from the tokens, and the PR panel's cards drawn through them.
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { load, nodes, texts, calls, one, numberArguments, themed, KIT_NIGHT, drawingHost, svgsOf, drawn } from "./helpers.mjs";
-import { card as storyCard, code as storyCode } from "../stories/kit/pieces.js";
 
 const night = { ...KIT_NIGHT, ansi4: "#93a3b5", ansi5: "#ad9cab" };
 const host = () => ({ ...drawingHost(), theme: () => night, settings: () => ({ font_family: "Berkeley Mono" }) });
@@ -30,10 +29,9 @@ test("A card at rest is the author's avatar, name and age over its prose, on the
   assert.equal(one(el, "bg"), c.canvas);
   assert.deepEqual(texts(el), ["s", "sam", "1h", "Batches of 50, flushed every 2 s."], "the avatar's letter first");
   const [header, prose] = el.kids;
-  assert.deepEqual(drawn(header.kids[0]), drawn(avatar(c, { initial: "sam", image: null })), "the Storybook's md avatar of the author");
+  assert.deepEqual(drawn(header.kids[0]), drawn(avatar(c, { initial: "sam", image: null })), "the md avatar of the author");
   assert.equal(one(prose, "line_height"), LH.body);
   assert.equal(one(prose, "text_size"), T.value);
-  assert.match(storyCard({ author: "sam", age: "1h", body: "x" }), /kanso-avatar/);
 });
 
 test("A card loading is one breathing silhouette, two lines high", async () => {
@@ -43,23 +41,19 @@ test("A card loading is one breathing silhouette, two lines high", async () => {
   assert.equal(one(el, "rounded"), R.card);
   assert.equal(calls(el, "loop").length, 1);
   assert.deepEqual(texts(el), []);
-  assert.match(storyCard({ author: "sam", age: "", body: "", loading: true }), /kanso-skeleton--shape/);
 });
 
-test("A card without an avatar, with a step or with a path draws each beside the name, as the Storybook's card does", async () => {
+test("A card without an avatar, with a step or with a path draws each beside the name", async () => {
   const { card, T, c } = await kit();
   const plain = card("k", c, { author: "CI / test", initial: "", body: "x" });
   assert.equal(nodes(plain).some((kid) => calls(kid, "rounded_full").length), false, "no avatar");
-  assert.doesNotMatch(storyCard({ author: "CI / test", initial: "", age: "", body: "x" }), /kanso-avatar/);
   const step = card("k", c, { author: "CI / test", initial: "", step: "Run tests", age: "1m 30s" });
   assert.deepEqual(svgsOf(step), ["mods/kanso-chrome/icons/chevron-right.svg"]);
   assert.deepEqual(texts(step).slice(0, 3), ["CI / test", "Run tests", "1m 30s"]);
-  assert.match(storyCard({ author: "CI / test", initial: "", step: "Run tests", age: "", body: "" }), /lu-chevron-right/);
   const where = card("k", c, { author: "ana", where: "src/api.js:12", body: "Why 50?" });
   const path = nodes(where).find((kid) => calls(kid, "child").some((call) => call[1] === "src/api.js:12"));
   assert.equal(one(path, "font_family"), "Berkeley Mono");
   assert.equal(one(path, "text_size"), T.mono);
-  assert.match(storyCard({ author: "ana", where: "src/api.js:12", age: "", body: "" }), /kanso-text--code/);
 });
 
 test("A card's content takes the prose's place, each piece drawn under the card's id", async () => {
@@ -81,8 +75,6 @@ test("A diff numbers each line from its hunk, deleted lines by the old file, and
   assert.equal(one(el.kids[3], "bg"), alpha(c.done, TINT.diff));
   assert.equal(calls(el.kids[1], "bg").length, 0);
   for (const line of el.kids) assert.equal(one(line, "h"), CODE.line);
-  const story = storyCode({ text: DIFF, kind: "diff", first: 1, line: 0 });
-  assert.deepEqual([...story.matchAll(/kanso-code__number">(\d*)</g)].map((m) => m[1]), ["10", "11", "11", "12", "13"]);
 });
 
 test("A snippet numbers from its first line and puts the highlighted one on the 7% wash; a log has no numbers and marks its failures", async () => {
@@ -91,12 +83,10 @@ test("A snippet numbers from its first line and puts the highlighted one on the 
   assert.deepEqual(numbersOf(snippet), ["11", "12", "13"]);
   assert.equal(one(snippet.kids[1], "bg"), c.w7);
   assert.equal(calls(snippet.kids[0], "bg").length, 0);
-  assert.match(storyCode({ text: "a\nb\nc", kind: "snippet", first: 11, line: 12 }), /kanso-control--on[^<]*<span class="kanso-code__number">12/);
   const log = code("l", c, { text: "ok\nTypeError: boom\nFAIL no", kind: "log" });
   assert.deepEqual(numbersOf(log), ["", "", ""]);
   const tone = (line) => one(line.kids.at(-1), "text_color");
   assert.deepEqual(log.kids.map(tone), [c.text, c.blocked, c.blocked]);
-  assert.equal([...storyCode({ text: "ok\nTypeError: boom\nFAIL no", kind: "log", first: 1, line: 0 }).matchAll(/kanso-text--blocked/g)].length, 2);
 });
 
 test("A source is Herdr's editor in the terminal's mono, read only past its limit, and released by its owner", async () => {

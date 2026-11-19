@@ -1,8 +1,8 @@
-// The state mark: every status and size the Storybook draws, from the tokens, and nothing for any other status.
+// The state mark: every status and size, from the tokens, and nothing for any other status.
 import test from "node:test";
 import assert from "node:assert/strict";
 import { load, numberArguments, calls, one, drawingHost, themed } from "./helpers.mjs";
-import { marks, markSizes } from "../stories/kit/pieces.js";
+const STATUSES = ["working", "blocked", "done", "idle", "asleep"];
 
 const kit = async () => themed({
   ...await load("kanso-panel/ui.js", ["tokens", "ICON", "ICON_ROW", "ICON_INLINE", "SPIN"], drawingHost()),
@@ -12,10 +12,10 @@ const kit = async () => themed({
 const night = { foreground: "#d8d4cb", background: "#1b1b19", chrome: "#161615", working: "#c4b07e", blocked: "#ca938b", done: "#98ad8f", idle: "#a3a09a", dim: "#6b6862", muted: "#949086" };
 const ICONS = "mods/kanso-chrome/icons/";
 
-test("Each status the Storybook draws has its own ensō art and colour", async () => {
+test("Each status has its own ensō art and colour", async () => {
   const { mark, c } = await kit();
   const art = { working: ["working", c.working], done: ["enso", c.done], idle: ["enso-idle", c.idle], asleep: ["moon", c.muted] };
-  assert.deepEqual(Object.keys(marks).sort(), [...Object.keys(art), "blocked"].sort());
+  assert.deepEqual([...STATUSES].sort(), [...Object.keys(art), "blocked"].sort());
   for (const [status, [name, color]] of Object.entries(art)) {
     const el = mark(c, { status });
     assert.equal(one(el, "svg"), `${ICONS}${name}.svg`, status);
@@ -44,10 +44,10 @@ test("A blocked agent is a round dot in the blocked colour with an exclamation m
 
 test("Small, medium and large are the inline, row and control icon tokens, and medium is the default", async () => {
   const { mark, MARK_SIZES, ICON, ICON_ROW, ICON_INLINE, c } = await kit();
-  assert.deepEqual(Object.keys(MARK_SIZES), Object.keys(markSizes));
+  assert.deepEqual(Object.keys(MARK_SIZES), ["sm", "md", "lg"]);
   assert.deepEqual({ ...MARK_SIZES }, { sm: ICON_INLINE, md: ICON_ROW, lg: ICON });
   assert.deepEqual([ICON_INLINE, ICON_ROW, ICON], [12, 16, 16]);
-  for (const status of Object.keys(marks)) {
+  for (const status of STATUSES) {
     for (const [size, side] of Object.entries(MARK_SIZES)) assert.equal(one(mark(c, { status, size }), "size"), side, `${status} ${size}`);
     assert.equal(one(mark(c, { status }), "size"), ICON_ROW, status);
   }

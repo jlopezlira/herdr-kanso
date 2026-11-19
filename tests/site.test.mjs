@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { MIN_CONTRAST, SURFACES, THEMES, colour, contrast, loadTokens, pairs, read } from "../scripts/tokens.mjs";
-import { OUT, UTILITIES, render, renderUtilities, sizeTokens } from "../scripts/build-site-tokens.mjs";
+import { OUT, render, sizeTokens } from "../scripts/build-site-tokens.mjs";
 
 const CSS = ["site/style.css"];
 const PAGES = ["index", "changelog", "credits", "privacy", "terms", "use"].map((p) => `site/${p}.html`);
@@ -42,10 +42,6 @@ test("No token name is declared twice: in the sizes, or in one theme's colours",
   const sizes = sizeTokens(tokens);
   const twice = (list) => list.map((t) => t.name).filter((name, i, names) => names.indexOf(name) !== i);
   assert.deepEqual([sizes, ...THEMES.map((theme) => tokens.colour[theme])].flatMap(twice), []);
-});
-
-test("Storybook token classes match kanso/tokens.json", () => {
-  assert.equal(read(UTILITIES), renderUtilities(loadTokens()), `${UTILITIES} is out of date: run npm run build:site-tokens`);
 });
 
 test("field edges (input) keep 3:1 on every surface in both themes", () => {
@@ -114,11 +110,4 @@ test("site pages and scripts carry no inline styles", () => {
 
 test("every site page loads the tokens before its stylesheet", () => {
   for (const path of PAGES) assert.match(read(path), /href="tokens\.css">\n<link rel="stylesheet" href="style\.css">/, path);
-});
-
-test("every site page's nav links storybook/", () => {
-  for (const path of PAGES) {
-    const nav = /<nav class="nav-links"[\s\S]*?<\/nav>/.exec(read(path))[0];
-    assert.match(nav, /href="storybook\/" target="_blank" rel="noopener">Storybook</, path);
-  }
 });

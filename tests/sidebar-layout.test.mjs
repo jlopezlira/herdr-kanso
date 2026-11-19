@@ -118,7 +118,6 @@ test("one gutter from both sides seen: toolbar, rows, the current project's hove
     assert.equal(seen.right(trailingGlyph(computer)), SIDEBAR.gutter, `${id}: its last tool's glyph ends on the gutter`);
   }
 
-  // The toolbar's icons sit where the Storybook's do, 15.5 in from both sides seen: its 8 and half of a large Button's room.
   const toolbar = G.sm + (H.line - ICON_CHROME) / 2;
   const add = toolbarButton(root, "plus"), hide = toolbarButton(root, "panel-left");
   assert.deepEqual([glyphIn(add, "left"), seen.right(glyphIn(hide, "right"))], [toolbar, toolbar], "+ and Hide sidebar, to the half pixel");

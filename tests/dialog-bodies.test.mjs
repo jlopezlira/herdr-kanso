@@ -2,7 +2,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { load, drawingHost, chain, nodes, texts, calls, arg, clone, repoText, KIT_NIGHT } from "./helpers.mjs";
-import { stack as storyStack } from "../stories/kit/pieces.js";
 
 const host = () => ({ ...drawingHost(), Textarea: { new: () => chain("textarea") }, Input: { new: () => chain("input") } });
 const field = (value, multiline = false) => ({ value: () => value, state: {}, multiline, focused: false });
@@ -115,17 +114,11 @@ test("Sleep keeps its states: the skeleton while it reads, and no list when noth
   assert.ok(texts(el).includes("It can't sleep now: nothing here keeps a conversation to wake on."));
 });
 
-test("Proposed: the dialog list, and its scroll past six rows, in both kits; the app gives the stack only handlers", async () => {
+test("Proposed: the dialog list, and its scroll past six rows; the app gives the stack only handlers", async () => {
   const { stack, row, c } = await kit();
-  assert.match(storyStack({ variant: "dialog list" }, "<i></i>"), /^<div class="kanso-dialog__list"><i><\/i><\/div>$/);
-  assert.match(storyStack({ variant: "dialog list", scroll: true }), /class="kanso-dialog__list kanso-dialog__list--scroll"/);
-  assert.throws(() => storyStack({ variant: "dialog list", wide: true }), /has no state "wide"/);
   assert.throws(() => stack({ variant: "dialog list", wide: true }, row({ name: "a" }))("l", c), /has no state wide/);
   assert.throws(() => stack({ variant: "dialog list" }, row({ name: "a" }))("l", c, { gap: 4 }), /only handlers/);
-  assert.match(repoText("stories/primitives.css"), /\/\* Proposed: a list that scrolls past six rows[^*]*\*\/\n\.kanso-dialog__list\.kanso-dialog__list--scroll\{max-height:var\(--k-h-dialog-list\)/);
-  assert.match(repoText("stories/kit/pieces.js"), /\/\/ Proposed: a dialog's rows; `scroll`[^\n]*\n {2}'dialog list'/);
   assert.match(repoText("kanso/mods/kanso-panel/ui-stack.js"), /Proposed: `scroll`/);
-  assert.match(repoText("scripts/storybook-kit.mjs"), /'Proposed\. Send: /);
 });
 
 test("No hand drawing is left in the three dialogs, and the deleted helpers are gone", () => {

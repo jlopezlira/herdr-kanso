@@ -1,4 +1,4 @@
-// Hachi's pixel map: pure, so the app and the Storybook draw the same one.
+// Hachi's pixel map: pure, so every mod draws the same one.
 import { loadHachiPixels } from "./mod-fixtures.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";

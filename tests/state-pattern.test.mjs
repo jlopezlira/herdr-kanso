@@ -3,7 +3,6 @@ import { loadWorkspaceChrome } from "./mod-fixtures.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { load, chain, gpuiHost, calls, find, texts } from "./helpers.mjs";
-import { samplePanel } from "../stories/kit/samples.js";
 
 const kit = async () => ({
   ...await load("kanso-panel/ui.js", ["tokens", "G", "H", "R", "T", "ICON_ROW", "ICON_EMPTY", "BREATH"], gpuiHost()),
@@ -11,8 +10,8 @@ const kit = async () => ({
   ...await load("kanso-panel/kit.js", ["emptyState", "failureLine", "failureBlock"], gpuiHost()),
 });
 const night = { background: "#1b1b19", foreground: "#d8d4cb", hover: "#232321", selected: "#2b2b28", solid: "#d8d4cb", solid_foreground: "#161615", dim: "#6b6860", muted: "#949086", blocked: "#d5674f" };
-// The Storybook's own props: the panel page's states and the State patterns page.
-const { empty: noWorktrees, failure: { agent, ...cantList } } = samplePanel;
+const noWorktrees = { icon: "lu-git-fork", text: "No worktrees" };
+const cantList = { text: "Can't list worktrees on devbox", source: "git worktree list: timed out after 30 s", fix: "Refresh" };
 const noPullRequests = { icon: "lu-git-pull-request", text: "No pull requests on this branch", action: "Create" };
 const cantReach = { text: "Can't reach dark", fix: "Refresh", detail: "ssh: connect to host dark port 22: Operation timed out" };
 

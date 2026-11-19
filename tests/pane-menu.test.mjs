@@ -1,11 +1,11 @@
-// The pane's right-click menu as the Storybook draws it: its title, the groups in order, a check for the program's right click, and Close that asks twice with an agent.
+// The pane's right-click menu: its title, the groups in order, a check for the program's right click, and Close that asks twice with an agent.
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { load, gpuiHost, texts, calls, find } from "./helpers.mjs";
 import { paneMenu as menu } from "./menu-fixtures.mjs";
 
-test("The menu names the pane, then keeps the story's groups in order", async () => {
+test("The menu names the pane, then keeps its groups in order", async () => {
   const { view } = await menu();
   const words = texts(view.render());
   const at = (label) => words.indexOf(label);

@@ -1,9 +1,7 @@
-// The sidebar's session row: the Storybook's session row composition, with what the sidebar knows and does.
+// The sidebar's session row composition, with what the sidebar knows and does.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { load, gpuiHost, nodes, texts, tipsOf, themed, KIT_NIGHT, drawingHost } from "./helpers.mjs";
-import { sessionRow } from "../stories/kit/session-row.js";
 
 const sidebar = async (ran = []) => {
   const host = { ...drawingHost(), run: (name, args) => ran.push([name, args]), openOverlay: (o) => ran.push(["overlay", o.props.title]) };
@@ -18,11 +16,7 @@ const plain = (value) => JSON.parse(JSON.stringify(value));
 const claude = { icon: "programs/claude.svg", tint: true };
 const atlas = { address: "t1", pane: "p1", status: "working", program: claude, name: "Atlas" };
 
-test("The sidebar's copy of the session row is the Storybook's, byte for byte", () => {
-  assert.equal(readFileSync(new URL("../kanso/mods/kanso-spaces/session-row.js", import.meta.url), "utf8"), readFileSync(new URL("../stories/kit/session-row.js", import.meta.url), "utf8"));
-});
-
-test("A session shows its program, name, activity, how long on this step, time, project, commands and mark, as its story does", async () => {
+test("A session shows its program, name, activity, how long on this step, time, project, commands and mark", async () => {
   const { sessionProps } = await sidebar();
   const props = sessionProps(atlas, 1, { hovered: false }, {
     label: "Atlas", activity: "Reviewing step 01", step: { time: "14m", stuck: true }, time: "20m", directory: "kansō", wordTip: "Can't read it",
@@ -74,7 +68,7 @@ test("Each thing a session row did by hand still works: click, double-click to r
   assert.deepEqual(plain(ran.at(-1)), ["terminal.peek", { terminal: "t9" }]);
 });
 
-test("A session row is the Storybook composition drawn by the app kit, one line or the two-line height the list adds up", async () => {
+test("A session row is the composition drawn by the app kit, one line or the two-line height the list adds up", async () => {
   const { agentSession, sessionHeight, H, c } = await sidebar();
   const one = agentSession({ ...atlas, status: "idle" }, 1, c, null, { label: "Atlas" });
   const two = agentSession({ ...atlas, status: "blocked" }, 1, c, null, { label: "Atlas", activity: "Run npm publish?", time: "2m" });
@@ -82,7 +76,6 @@ test("A session row is the Storybook composition drawn by the app kit, one line 
   assert.equal(handler(two, "h"), sessionHeight({ activity: "Run npm publish?" }));
   assert.deepEqual([sessionHeight({}), sessionHeight({ activity: "x" })], [H.line, H.two]);
   assert.deepEqual(texts(two), ["Atlas", "!", "Run npm publish?", "\u00b7", "2m"], "name, the blocked mark, the question and the time told apart by a dot");
-  assert.ok(typeof sessionRow({ name: "Atlas" }) === "string", "the same composition draws the Storybook's markup");
 });
 
 test("The focused row paints no ground of its own: the list's pill is its ground and glides there; a waiting row keeps its wash only when it is not the focused one", async () => {
@@ -117,7 +110,9 @@ test("A dozing or unreadable row fades its program's art, and the activity takes
   assert.deepEqual(fade(agentSession({ ...atlas, program: art, dozing: true }, 1, c, null, {})), [OPACITY.away]);
   assert.deepEqual(fade(agentSession({ ...atlas, program: art, status: "idle" }, 1, c, null, { quiet: true })), [OPACITY.away]);
   assert.deepEqual(fade(agentSession({ ...atlas, program: art, status: "idle" }, 1, c, null, {})), []);
-  for (const [status, tone] of [["blocked", "fg"], ["working", "muted"], ["asleep", "muted"], ["done", "dim"], ["idle", "dim"]]) {
-    assert.ok(sessionRow({ name: "a", status, activity: "x" }).includes(`kanso-text--${tone}`), status);
+  for (const [status, tone] of [["blocked", "text"], ["working", "muted"], ["asleep", "muted"], ["done", "dim"], ["idle", "dim"]]) {
+    const el = agentSession({ ...atlas, status }, 1, c, null, { label: "Atlas", activity: "x" });
+    const activity = nodes(el).find((kid) => kid.calls.some((call) => call[0] === "child" && call[1] === "x"));
+    assert.deepEqual(activity.calls.filter((call) => call[0] === "text_color").map((call) => call[1]), [c[tone]], status);
   }
 });

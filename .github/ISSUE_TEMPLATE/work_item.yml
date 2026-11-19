@@ -24,7 +24,7 @@ body:
     id: design
     attributes:
       label: Design
-      description: The Storybook page or pages that define it.
+      description: The design that defines it.
     validations:
       required: true
   - type: textarea
@@ -44,7 +44,7 @@ body:
     attributes:
       label: Definition of Ready
       options:
-        - label: The Storybook page is approved and named above
+        - label: The design is approved and named above
           required: true
         - label: The modules to change are named
           required: true
@@ -63,9 +63,9 @@ body:
           required: true
         - label: Every listed feature still works and the pull request shows it
           required: true
-        - label: The screen matches the Storybook page in both themes
+        - label: The screen matches the design in both themes
           required: true
-        - label: "Tests cover the change; npm test and the Storybook lint pass"
+        - label: Tests cover the change and npm test passes
           required: true
         - label: CI is green on macOS, Windows and Linux
           required: true

@@ -9,7 +9,3 @@ node_modules
 .DS_Store
 site/CHANGELOG.md
 
-*storybook.log
-storybook-static
-
-site/storybook/

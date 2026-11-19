@@ -1,13 +1,9 @@
-// The sidebar's Toolbar, Header and Footer: the Storybook's compositions, copied as they are and drawn by the app kit, state by state.
+// The sidebar's Toolbar, Header and Footer: compositions drawn by the app kit, state by state.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { load, nodes, texts, svgsOf, themed, calls, arg, KIT_NIGHT, popoverHost as host, everyDrawn as every, blockedDots, repoText, sameCopies, numberArguments } from "./helpers.mjs";
+import { load, nodes, texts, svgsOf, themed, calls, arg, KIT_NIGHT, popoverHost as host, everyDrawn as every, blockedDots, repoText, numberArguments } from "./helpers.mjs";
 import { loadSidebar, mountedState, recorder } from "./sidebar-fixtures.mjs";
 import { mountChrome } from "./mod-fixtures.mjs";
-import { statedPages } from "../stories/kit/states.js";
-import { kitRecords } from "../scripts/storybook-kit.mjs";
-import { buttonTree } from "../stories/kit/row-tree.js";
-import { toHtml } from "../stories/kit/tree.js";
 
 const compositions = async () => themed({
   kit: await load("kanso-panel/kit.js", ["menu", "stack"], host()),
@@ -22,16 +18,26 @@ const sortMenu = (kit) => kit.menu({ items: [{ heading: "Agents, pinned first, t
 // A Toolbar state's preset, drawn by the app: its menus as the app's Menu.
 const drawState = ({ toolbar, kit, c }, args, handlers = { onOpen() {} }) => toolbar({ ...args, sortMenu: args.menu ? sortMenu(kit) : null, addMenu: args.add ? sortMenu(kit) : null, menu: undefined, add: undefined })("t", c, handlers);
 const cx = { stop_propagation() {}, notify() {} };
+const TOOLBAR = {
+  args: { view: "spaces", column: false, open: false, sorted: false, order: null, menu: false, add: false },
+  states: [
+    { label: "Projects", args: {} },
+    { label: "Status and Threads", args: { view: "agents" } },
+    { label: "+ menu", args: { view: "agents", add: true } },
+    { label: "Sorted", args: { sorted: true } },
+    { label: "Sort names its order", args: { sorted: true, order: "Needs you first" } },
+    { label: "Sort menu, Projects", args: { menu: true } },
+    { label: "Sort menu, Status", args: { view: "agents", menu: true } },
+    { label: "Sort menu, Threads", args: { view: "threads", menu: true } },
+    { label: "Collapsed", args: { column: true } },
+    { label: "Collapsed, tools open", args: { column: true, open: true } },
+  ],
+};
 
-test("The app's copies of the Toolbar, the Header and the Footer are the Storybook's, byte for byte", () => {
-  sameCopies(["toolbar", "header"]);
-  sameCopies(["header", "sidebar-footer"], "kanso-chrome");
-});
-
-test("Every Toolbar state in the Storybook draws in the app with its tools in the story's order", async () => {
+test("Every Toolbar state draws in the app with its tools in order", async () => {
   const kit = await compositions();
   const { c, G, H, R, addLabels } = kit;
-  const page = statedPages["Compositions/Toolbar"];
+  const page = TOOLBAR;
   const drawn = Object.fromEntries(page.states.map(({ label, args }) => [label, drawState(kit, { ...page.args, ...args })]));
   assert.deepEqual(Object.keys(drawn), ["Projects", "Status and Threads", "+ menu", "Sorted", "Sort names its order", "Sort menu, Projects", "Sort menu, Status", "Sort menu, Threads", "Collapsed", "Collapsed, tools open"]);
   const open = drawn.Projects;
@@ -90,11 +96,9 @@ test("A press named for no drawn target throws, as `on` does for a tool: renamin
   assert.throws(() => sidebarFooter()("f", c, { focuses: { gear: handle } }), /kit: f has no tool gear/, "and a handle named for no target throws too");
 });
 
-test("Every Header state in the Storybook draws in the app: the lights' row, Dawn Mode's sky and pill, the Toolbar 40 tall", async () => {
+test("Every Header state draws in the app: the lights' row, Dawn Mode's sky and pill, the Toolbar 40 tall", async () => {
   const kit = await compositions();
   const { header, toolbar, c, G, H, PANE, DAWN, DAWN_H } = kit;
-  const records = kitRecords([]).filter((record) => record.page === "Compositions/Header").map((record) => record.label);
-  assert.deepEqual(records, ["Expanded", "Collapsed", "Expanded, Dawn Mode", "Collapsed, Dawn Mode", "Under the title bar"]);
   const draw = (props) => header({ ...props, toolbar: toolbar({ column: Boolean(props.collapsed) }) })("h", c);
   const art = (el) => nodes(el).filter((kid) => calls(kid, "image").length);
   const open = draw({});
@@ -107,7 +111,7 @@ test("Every Header state in the Storybook draws in the app: the lights' row, Daw
   assert.ok(nodes(rail).some((kid) => arg(kid, "pt") === G.hair && tipsOf(kid).includes("Show sidebar")));
   const dawn = draw({ dawn: true });
   const layers = ["sky", "night", "glow", "stars", "clouds", "sun", "ring-12", "fade", "horizon"].map((layer) => DAWN.dark.art.replace(/\.svg$/, `-${layer}.svg`));
-  assert.deepEqual(art(dawn).map((kid) => arg(kid, "image")), layers, "the sky lies behind the lights, layer by layer as the Storybook's art paints it");
+  assert.deepEqual(art(dawn).map((kid) => arg(kid, "image")), layers, "the sky lies behind the lights, layer by layer as its art paints it");
   assert.ok(art(dawn).every((kid) => calls(kid, "absolute").length && arg(kid, "h") === DAWN_H), "each layer fills the sky at the sidebar's width");
   const pill = nodes(dawn).find((kid) => calls(kid, "child").some((call) => call[1] === "Dawn Mode"));
   assert.deepEqual([arg(pill, "bg"), arg(pill, "text_color")], [DAWN.dark.top, DAWN.dark.star], "the pill: the night of the sky with light words");
@@ -118,13 +122,10 @@ test("Every Header state in the Storybook draws in the app: the lights' row, Daw
   assert.equal(nodes(under).some((kid) => arg(kid, "h") === H.tabBar), false, "Proposed: under the window's title bar, the Toolbar alone");
 });
 
-test("Dawn Mode's art is the Storybook's sky in each theme's colours, written by build:ui-tokens", async () => {
-  const { dawnSvg, dawnArt } = await import("../scripts/build-ui-tokens.mjs");
-  const { loadTokens } = await import("../scripts/tokens.mjs");
-  const tokens = loadTokens(), css = repoText("stories/primitives.css");
+test("Dawn Mode's art is the sky in each theme's colours", async () => {
+  const { dawnArt } = await import("../scripts/build-ui-tokens.mjs");
   for (const theme of ["dark", "light"]) {
     const art = repoText(`kanso/${dawnArt(theme)}`);
-    assert.equal(art, dawnSvg(tokens, theme, css), `${theme}: npm run build:ui-tokens leaves it as it is`);
     assert.equal(/class=|var\(/.test(art), false, "every colour is written in");
     assert.match(art, /<rect opacity="0" fill="#[0-9a-f]{6}"/, "the night has lifted: the last frame");
   }
@@ -176,7 +177,7 @@ test("Collapsed, while someone needs you and Status is not on show, the view but
   const asked = button({ view: "spaces", asks: true });
   assert.equal(dots(asked), 1, "the Status dot, on the view button");
   const dot = nodes(asked).find((kid) => calls(kid, "bg").some((call) => call[1] === c.blocked));
-  assert.deepEqual([arg(dot, "top"), arg(dot, "right"), LINE], [1, 1, 1], "a hairline (k-w-line) in from the corner, as the Storybook's --k-w-line");
+  assert.deepEqual([arg(dot, "top"), arg(dot, "right"), LINE], [1, 1, 1], "a hairline (k-w-line) in from the corner");
   assert.equal(dots(button({ view: "spaces", asks: true, carry: false })), 0, "without carry, the approved button: no dot");
   assert.equal(arg(asked, "accessibility_label"), "Projects · Someone needs you");
   assert.equal(arg(asked, "tooltip"), "Projects · Someone needs you");
@@ -224,29 +225,8 @@ test("No hand-drawn toolbar, header or footer is left, and the stacks draw no li
   assert.deepEqual(numberArguments("kanso-panel/ui-stack.js"), []);
 });
 
-test("The Storybook's footer: a running update, a refusal and the landed update are what the app does, and only the stage joins the earlier proposals", () => {
-  const records = kitRecords([]).filter((record) => record.page === "Primitives/Footer" || record.page === "Compositions/Sidebar/Footer");
-  const states = Object.fromEntries(records.map((record) => [record.label, record]));
-  for (const label of ["Updating", "Collapsed, updating", "Refused", "Updated"]) assert.doesNotMatch(states[label].caption, /Proposed/, `${label} is the fix or today's behavior, not a proposal`);
-  for (const label of ["Updating", "Collapsed, updating"]) assert.match(states[label].html, /kanso-icon--spinning|kanso-button--spinning/, `${label} turns its icon`);
-  const proposed = records.filter((record) => /^Proposed/.test(record.caption)).map((record) => record.label).sort();
-  assert.deepEqual(proposed, ["Collapsed", "Collapsed, update", "Settings menu", "Updating, its stage"], "the three that were Proposed before, and the stage");
-  assert.match(states.Updated.html, /kansō updated to 3\.31\.0/, "the landed update's toast says kansō updated");
-  assert.doesNotMatch(states.Updated.html, /kanso-row--busy|kanso-state-block/, "and the row is gone");
+test("The footer builds no update stage of its own", () => {
   for (const file of ["kanso/mods/kanso-chrome/main.js", "kanso/mods/kanso-chrome/footer-model.js", "kanso/mods/kanso-chrome/sidebar-footer.js"]) {
     assert.doesNotMatch(repoText(file), /Downloading|Installing/, `${file} builds no stage`);
   }
-  assert.match(states.Updating.html, /kanso-row--busy[^>]*aria-busy="true"/, "the row is busy and out of the keyboard's way");
-  assert.doesNotMatch(states.Updating.html, /kanso-row--busy[^>]*tabindex/, "it takes no tab stop, so no ring can stay on it");
-  assert.doesNotMatch(states.Update.html, /kanso-icon--spinning|kanso-row--busy/, "an update on offer is still");
-  assert.match(states.Refused.html, /Explain to Atlas/, "the refusal block offers Explain");
-});
-
-test("A disabled Storybook Button takes no tab stop, so Tab skips the rail's running update", () => {
-  const rail = kitRecords([]).find((record) => record.label === "Collapsed, updating").html;
-  const running = rail.match(/<span class="kanso-button[^"]*kanso-button--spinning[^"]*"[^>]*>/)[0];
-  assert.match(running, /aria-disabled="true"/);
-  assert.doesNotMatch(running, /tabindex/);
-  assert.match(rail, /<span class="kanso-button[^"]*"[^>]*tabindex="0"[^>]*title="Settings"/, "Settings beside it stays a tab stop");
-  assert.doesNotMatch(toHtml(buttonTree({ label: "Save", disabled: true })), /tabindex/);
 });

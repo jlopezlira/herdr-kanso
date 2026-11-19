@@ -1,8 +1,7 @@
-// While you were away and Needs you: the Storybook's Activity composition, Session rows and state patterns, drawn by the app kit.
+// While you were away and Needs you: the Activity composition, Session rows and state patterns, drawn by the app kit.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { load, nodes, texts, svgsOf, themed, calls, KIT_NIGHT, drawingHost as host, drawn, repoText, sameCopies } from "./helpers.mjs";
-import { activity as storyActivity, awayMax } from "../stories/kit/activity.js";
+import { load, nodes, texts, svgsOf, themed, calls, KIT_NIGHT, drawingHost as host, drawn, repoText } from "./helpers.mjs";
 import { present } from "../kanso/mods/kanso-spaces/since-left-model.js";
 
 const MIN = 60_000;
@@ -20,6 +19,7 @@ const project = ":/work/kanso";
 const cx = { stop_propagation() {}, notify() {} };
 const minutes = (ms) => `${Math.round(ms / MIN)}m`;
 
+const { awayMax } = await load("kanso-spaces/activity.js", ["awayMax"], host());
 const kit = async () => themed({
   ...await load("kanso-spaces/activity.js", ["activity"], host()),
   ...await load("kanso-panel/kit.js", ["row", "stack", "button"], host()),
@@ -36,13 +36,7 @@ const sinceLeft = async (count, extra = {}) => {
 const byTag = (el, tag) => nodes(el).find((kid) => kid.tag === tag) ?? null;
 const clicked = (el, tag) => calls(byTag(el, tag), "on_click").forEach(([, fn]) => fn({}, cx));
 
-test("The sidebar's copy of the Activity composition is the Storybook's, byte for byte", () => {
-  sameCopies(["activity"]);
-  assert.match(repoText("scripts/sync-share.mjs"), /source: "stories\/kit\/activity\.js", copies: \["kanso\/mods\/kanso-spaces\/activity\.js"\]/);
-  assert.match(repoText("scripts/lint-storybook.mjs"), /'stories\/kit\/activity\.js'\]/);
-});
-
-test("Every Activity state the Storybook shows is the app's card with the same props: none, a few, past four, all of them, and the keyboard on a row", async () => {
+test("Every Activity state is the app's card with the same props: none, a few, past four, all of them, and the keyboard on a row", async () => {
   const { activity, c } = await kit();
   for (const [count, extra, props] of [
     [0, {}, null],
@@ -54,7 +48,6 @@ test("Every Activity state the Storybook shows is the app's card with the same p
     const card = view.render(KIT_NIGHT, project, () => false, () => () => {});
     if (!props) {
       assert.equal(card, null, "nothing new takes no space");
-      assert.equal(storyActivity({ events: [] }), null);
       continue;
     }
     const events = present(STORED.slice(0, count), { now: NOW, format: minutes });

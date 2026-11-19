@@ -2,7 +2,6 @@ import { loadSpaces, loadContainers, loadFiles, loadPullRequest, loadMemory, loa
 import assert from "node:assert/strict";
 import test from "node:test";
 import { load } from "./helpers.mjs";
-import { skeletonOf as storybookSkeleton, skeletonShapes } from "../stories/kit/pieces.js";
 
 function tape() {
   const make = () => {
@@ -83,11 +82,12 @@ function hostFor(make) {
   };
 }
 
-test("skeletonOf draws each Storybook shape, breathing, as many times as the Storybook does, and the kit takes only handlers", async () => {
+const SHAPES = { row: false, "list row": false, header: true, line: false, "two lines": false, picture: true, metric: true, tile: false, device: true };
+
+test("skeletonOf draws each shape, breathing, once or as many times as asked, and the kit takes only handlers", async () => {
   const make = tape();
   const { skeletonOf } = await load("kanso-panel/kit.js", ["skeletonOf"], hostFor(make));
-  for (const shape of Object.keys(skeletonShapes)) {
-    const once = storybookSkeleton({ shape, count: 3 }) === storybookSkeleton({ shape, count: 1 });
+  for (const [shape, once] of Object.entries(SHAPES)) {
     const el = skeletonOf({ shape, count: 3 })("kanso-skeleton", c);
     assertSkeleton(el);
     assert.equal(el.__node.kids.length, once ? 1 : 3, shape);

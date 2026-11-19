@@ -4,7 +4,6 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { repoText, load, nodes, texts, themed, KIT_NIGHT, drawingHost } from "./helpers.mjs";
 import { loadTokens } from "./mod-fixtures.mjs";
-import * as storybook from "../stories/kit/pieces.js";
 import { outsideKit } from "./mod-sources.mjs";
 
 const BASELINE = "tests/press-targets-baseline.json";
@@ -166,7 +165,6 @@ test("A button with a drawn face is the kit's Button: the face inside, the ring 
   assert.equal(calls(el, "accessibility_label")[0][1], "Shiba", "a screen reader reads its label");
   assert.equal(calls(el, "h").length, 0, "it takes its face's height");
   assert.throws(() => button({ label: "Shiba", content: [face] })("p", c, { tip: "x" }), /only handlers, not tip/);
-  assert.match(storybook.button({ label: "Shiba", kind: "quiet", content: "<b>Shiba</b>" }), /kanso-button--drawn[^>]*tabindex="0"[^>]*><b>Shiba<\/b><\/span>$/);
 });
 
 test("An icon button with a drawn face keeps its square: Look's picture dots", async () => {
@@ -177,7 +175,7 @@ test("An icon button with a drawn face keeps its square: Look's picture dots", a
   assert.equal(calls(el, "tooltip")[0][1], "after.png");
 });
 
-test("Explain to <agent> is the Storybook's: a tonal button with the bot icon and the agent named, pressable from the keyboard", async () => {
+test("Explain to <agent> is a tonal button with the bot icon and the agent named, pressable from the keyboard", async () => {
   const { explainButton, c } = await kit();
   let pressed = 0;
   const el = explainButton({ agent: "Claude Code", size: "sm" })("wt-explain", c, { onClick: () => { pressed += 1; } });
@@ -185,9 +183,6 @@ test("Explain to <agent> is the Storybook's: a tonal button with the bot icon an
   assert.equal(pressed, 1);
   assert.deepEqual(texts(el), ["Explain to Claude Code"]);
   assert.ok(nodes(el).some((n) => calls(n, "svg").some(([, path]) => path.endsWith("bot.svg"))), "the bot icon");
-  const sb = storybook.explainButton({ agent: "Claude Code", size: "sm" });
-  assert.match(sb, /kanso-button--tonal/);
-  assert.match(sb, />Explain to Claude Code<\/span>$/);
   assert.throws(() => explainButton({ agent: "Codex" })("e", c, { label: "x" }), /only handlers/);
 });
 

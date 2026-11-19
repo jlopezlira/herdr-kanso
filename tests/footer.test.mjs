@@ -1,4 +1,4 @@
-// The sidebar footer: the Storybook's Footer composition, drawn by kanso-chrome with kansō's update in each mode, its refusal, Settings and its one menu, Herdr's update, and the rail.
+// The sidebar footer: the Footer composition, drawn by kanso-chrome with kansō's update in each mode, its refusal, Settings and its one menu, Herdr's update, and the rail.
 import { footer, FOOTER_NIGHT } from "./menu-fixtures.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -119,7 +119,7 @@ test("Explain pressed first starts the lookup from a timer, never from the click
 test("Settings opens one menu: kansō settings with its key, and Herdr settings; choosing shuts it", async () => {
   const { view, ran, overlays } = await footer();
   const closed = view.render();
-  assert.equal(popover(closed), null, "shut, Settings is its row alone, as the Storybook draws it");
+  assert.equal(popover(closed), null, "shut, Settings is its row alone");
   press(holding(closed, "Settings"));
   assert.equal(view.menuOpen, true, "a press on Settings, the pointer's or Enter's, opens it");
   const open = view.render();

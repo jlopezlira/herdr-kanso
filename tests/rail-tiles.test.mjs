@@ -1,10 +1,9 @@
-// The rail's tiles and the view switch: the Storybook's Tile and View switch compositions, copied as they are and drawn by the app kit.
+// The rail's tiles and the view switch: the Tile and View switch compositions, drawn by the app kit.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { load, nodes, texts, tipsOf, svgsOf, themed, calls, arg, KIT_NIGHT, popoverHost as host, blockedDots, repoText as read, sameCopies } from "./helpers.mjs";
+import { load, nodes, texts, tipsOf, svgsOf, themed, calls, arg, KIT_NIGHT, popoverHost as host, blockedDots, repoText as read } from "./helpers.mjs";
 import { loadSidebar, mountedState, recorder } from "./sidebar-fixtures.mjs";
 
-const FILES = ["tile", "view-switch"];
 const compositions = async () => themed({
   ...await load("kanso-spaces/tile.js", ["tile"], host()),
   ...await load("kanso-spaces/view-switch.js", ["viewSwitch", "views"], host()),
@@ -14,11 +13,7 @@ const compositions = async () => themed({
 const cx = { stop_propagation() {}, notify() {} };
 const ringOf = (el) => calls(el, "border_color").map((call) => call[1]);
 
-test("The sidebar's copies of the Tile and the View switch are the Storybook's, byte for byte", () => {
-  sameCopies(FILES);
-});
-
-test("Each Tile state in the Storybook draws in the app: a button with its lead, its count, and the wash, the mark or the ring the story shows", async () => {
+test("Each Tile state draws in the app: a button with its lead, its count, and the wash, the mark or the ring", async () => {
   const { tile, c, alpha, TINT, SIDEBAR } = await compositions();
   // The tile sits centred in its row of the rail; the button is the tile.
   const draw = (props) => {
@@ -47,13 +42,13 @@ test("Each Tile state in the Storybook draws in the app: a button with its lead,
   assert.equal(ringOf(urgent)[0], "#00000000", "no ring at rest: a border kept clear, so nothing moves");
 });
 
-test("Each View switch state in the Storybook draws in the app, with no margin of the mod's own", async () => {
+test("Each View switch state draws in the app, with no margin of the mod's own", async () => {
   const { viewSwitch, views, c, G } = await compositions();
   const tips = { spaces: "Projects ⌃⌥P", agents: "Status ⌃⌥S", threads: "Threads ⌃⌥T" };
   const row = viewSwitch({ view: "agents", asks: true, tips })("v", c, { onChange() {} });
   assert.deepEqual(texts(row).filter((text) => views.some((item) => item.label === text)), ["Projects", "Status", "Threads"]);
   assert.deepEqual(tipsOf(row), Object.values(tips), "each tooltip has its view's key");
-  assert.deepEqual([arg(row, "mx"), arg(row, "mt"), arg(row, "mb")], [G.sm, G.xs, G.sm], "the Storybook's margins, from the tokens");
+  assert.deepEqual([arg(row, "mx"), arg(row, "mt"), arg(row, "mb")], [G.sm, G.xs, G.sm], "its margins, from the tokens");
   const dotted = viewSwitch({ view: "spaces", asks: true })("v", c, { onChange() {} });
   const dots = (el) => blockedDots(el, c);
   assert.equal(dots(dotted), 1, "someone needs you: Status carries the dot");
@@ -73,7 +68,7 @@ test("Each View switch state in the Storybook draws in the app, with no margin o
   assert.ok(texts(items[1]).includes("!"), "Status marked while someone needs you");
 });
 
-test("The kit draws a stack only as the Storybook names it, and gives it only handlers", async () => {
+test("The kit draws a stack only as it is named, and gives it only handlers", async () => {
   const { tile, kit, c } = await compositions();
   assert.throws(() => tile({ initial: "A" })("t", c, { color: "#fff" }), /the app gives only handlers, not color/);
   assert.throws(() => kit.stack({ variant: "rail" })("s", c), /has no stack "rail"/);
