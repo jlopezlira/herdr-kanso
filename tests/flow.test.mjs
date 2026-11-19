@@ -82,8 +82,8 @@ test("Send to an agent lists every other agent, the last one you sent to first, 
   const { targetsOf } = await load("kanso-send/send-model.js", ["targetsOf"], {});
   const p = (pane, terminal, agent, status = null) => ({ pane, terminal, status, program: { agent } });
   const all = [p("p1", "t1", true, "done"), p("p2", "t2", false), p("p3", "t3", true, "working"), p("p4", "t4", true, "idle"), { pane: "p5", terminal: null, mod: "x" }];
-  assert.deepEqual(clone(targetsOf(all, "p1", null).map((q) => q.pane)), ["p3", "p4"], "not itself, not a shell, not a mod pane");
-  assert.deepEqual(clone(targetsOf(all, "p1", "t4").map((q) => q.pane)), ["p4", "p3"], "the last one you sent to first");
+  assert.deepEqual(clone(targetsOf(all, "p1", null, []).map((q) => q.pane)), ["p3", "p4"], "not itself, not a shell, not a mod pane");
+  assert.deepEqual(clone(targetsOf(all, "p1", "t4", []).map((q) => q.pane)), ["p4", "p3"], "the last one you sent to first");
   assert.equal(draftFor({ cwd: `${HOME}/Apps/web`, branch: "feat/login" }, { pr: { number: 7 } }),
     "Review the changes on branch feat/login in ~/Apps/web. Its pull request is #7.");
   assert.equal(draftFor({ cwd: `${HOME}/Apps/web`, branch: null }, null), "Review the changes in ~/Apps/web.");

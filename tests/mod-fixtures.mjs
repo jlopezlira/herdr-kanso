@@ -123,3 +123,32 @@ export async function openedSend(host, { from = null, to = null, text = "hi", qu
   });
   return Object.assign(new Send(), { from, to, toProject: null, text, error: null, sending: false, unsure: [], handle: {}, query: typed(query), box: typed(text, true) });
 }
+
+const RECORD = {
+  agent: { status: "idle", program: { agent: true, name: "claude" } },
+  blocked: { status: "blocked", program: { agent: true, name: "claude" } },
+  shell: { program: { name: "zsh", shell: true } },
+  lingering: { status: "idle", program: { name: "zsh", shell: true } },
+  ended: { state: "exited", status: "idle", program: { agent: true, name: "claude" } },
+  missing: null,
+};
+export const RECORD_KINDS = Object.keys(RECORD);
+export const recordsFor = (term, pane, address = "t1", extra = {}, layout = "ready") => ({
+  address,
+  terminals: RECORD[term] ? [{ address, state: "live", labels: {}, ...extra, ...RECORD[term] }] : [],
+  panes: RECORD[pane] ? [{ pane: "p1", terminal: address, ...RECORD[pane] }] : [],
+  machines: [{ name: null, layout: "ready" }, { name: "box", layout }],
+});
+export const classOf = (term, pane, reachable = true) => {
+  const both = [term, pane];
+  if (both.some((kind) => kind === "shell" || kind === "lingering")) return "shell";
+  if (both.includes("ended")) return "gone";
+  if (both.every((kind) => kind === "missing")) return reachable ? "gone" : "unreachable";
+  if (both.includes("blocked")) return "waiting";
+  return reachable ? "ready" : "unreachable";
+};
+export const recordPairs = RECORD_KINDS.flatMap((term) => RECORD_KINDS.map((pane) => [term, pane]));
+const MACHINE_STATES = [["t1", "ready", true], ["box/t1", "ready", true], ["box/t1", "unavailable", false]];
+export const recordCases = MACHINE_STATES.flatMap(([address, layout, canReach]) => recordPairs.map(([term, pane]) => ({
+  term, pane, address, layout, canReach, kind: classOf(term, pane, canReach), at: `${term} + ${pane} at ${address} (${layout})`,
+})));

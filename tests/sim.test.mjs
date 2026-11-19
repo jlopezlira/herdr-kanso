@@ -211,6 +211,29 @@ test("Xcode that cannot say where it is is not Xcode missing", async () => {
   assert.equal(door(), true);
 });
 
+test("A Simulator lookup past its deadline looks at nothing more, and an Xcode that answers nothing is not Xcode missing", async () => {
+  const { promise, resolve } = Promise.withResolvers();
+  const looked = [];
+  const late = await probing({ exec: async (cmd) => (cmd === "xcode-select" ? promise : good("\n\n\n")), exists: async (path) => { looked.push(path); return false; } });
+  late.tabs.probeSimulator(late.cx);
+  late.timers.find((timer) => timer.ms === 7000).fn(late.cx);
+  resolve(good(DEVELOPER)); await Promise.all(late.pending);
+  assert.deepEqual(looked, [], "the expired lookup checks no path");
+  const blank = await probing({ exec: async () => good(""), exists: async () => false });
+  blank.tabs.probeSimulator(blank.cx); await Promise.all(blank.pending);
+  assert.equal(blank.door(), true, "an empty answer keeps the door");
+});
+
+test("An expired lookup starts nothing, and an Xcode that answers nothing still lets Android be found", async () => {
+  const { simulatorApi } = await loadSimulatorApi();
+  const started = [];
+  const run = async (cmd) => { started.push(cmd); return good(cmd === "xcode-select" ? "" : "\n\n\n"); };
+  await simulatorApi("macos", run, async () => false).probe("/home/me", () => false).catch(() => null);
+  assert.deepEqual(started, [], "nothing runs once the deadline has passed");
+  const tools = await simulatorApi("macos", run, async (path) => path === "/home/me/Library/Android/sdk/platform-tools/adb").probe("/home/me");
+  assert.deepEqual(clone(tools), { ios: null, adb: "/home/me/Library/Android/sdk/platform-tools/adb", emulator: null });
+});
+
 test("Moving panels while the Simulator lookup runs does not start a second one", async () => {
   const { promise } = Promise.withResolvers();
   let calls = 0;
