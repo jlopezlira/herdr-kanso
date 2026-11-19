@@ -133,14 +133,22 @@ const RECORD = {
   missing: null,
 };
 export const RECORD_KINDS = Object.keys(RECORD);
-export const recordsFor = (term, pane, address = "t1", extra = {}) => ({
+export const recordsFor = (term, pane, address = "t1", extra = {}, layout = "ready") => ({
+  address,
   terminals: RECORD[term] ? [{ address, state: "live", labels: {}, ...extra, ...RECORD[term] }] : [],
   panes: RECORD[pane] ? [{ pane: "p1", terminal: address, ...RECORD[pane] }] : [],
+  machines: [{ name: null, layout: "ready" }, { name: "box", layout }],
 });
-export const classOf = (term, pane) => {
+export const classOf = (term, pane, reachable = true) => {
   const both = [term, pane];
   if (both.some((kind) => kind === "shell" || kind === "lingering")) return "shell";
-  if (both.includes("ended") || both.every((kind) => kind === "missing")) return "gone";
-  return both.includes("blocked") ? "waiting" : "ready";
+  if (both.includes("ended")) return "gone";
+  if (both.every((kind) => kind === "missing")) return reachable ? "gone" : "unreachable";
+  if (both.includes("blocked")) return "waiting";
+  return reachable ? "ready" : "unreachable";
 };
 export const recordPairs = RECORD_KINDS.flatMap((term) => RECORD_KINDS.map((pane) => [term, pane]));
+const MACHINE_STATES = [["t1", "ready", true], ["box/t1", "ready", true], ["box/t1", "unavailable", false]];
+export const recordCases = MACHINE_STATES.flatMap(([address, layout, canReach]) => recordPairs.map(([term, pane]) => ({
+  term, pane, address, layout, canReach, kind: classOf(term, pane, canReach), at: `${term} + ${pane} at ${address} (${layout})`,
+})));

@@ -26,7 +26,7 @@ export default class Send extends View {
     const p = props() ?? {};
     this.from = panes().find((q) => q.pane === p.pane) ?? null;
     this.toProject = null;
-    this.to = targetsOf(panes(), p.pane, shared(LAST))[0]?.terminal ?? this.state("").groups[0]?.recipients[0]?.terminal ?? null;
+    this.to = targetsOf(panes(), p.pane, shared(LAST), machines())[0]?.terminal ?? this.state("").groups[0]?.recipients[0]?.terminal ?? null;
     this.query = new TextField({ placeholder: "Find an agent or a project" });
     this.query.on("change", (_e, cx) => cx.notify());
     this.text = draftFor(this.from, shared("kanso.digest")?.[p.pane]);

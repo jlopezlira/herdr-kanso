@@ -1,17 +1,10 @@
-import { classify } from "./deliver.js";
+import { classify, reachable } from "./deliver.js";
 
-export function targetsOf(all, from, last) {
-  const list = all.filter((p) => p.pane !== from && p.terminal && classify([p]) === "ready");
+export function targetsOf(all, from, last, computers) {
+  const list = all.filter((p) => p.pane !== from && p.terminal && classify([p], { reachable: reachable(p.terminal, computers) }) === "ready");
   const i = list.findIndex((p) => p.terminal === last);
   return i > 0 ? [list[i], ...list.toSpliced(i, 1)] : list;
 }
-
-const machineOf = (address) => /^([^/]+)\//.exec(String(address))?.[1] ?? null;
-export const unreachable = (address, computers = []) => {
-  const at = machineOf(address);
-  const layout = at ? computers.find((m) => m?.name === at)?.layout : "ready";
-  return !layout || layout === "unavailable";
-};
 
 const settled = (labels, list) => {
   const clash = labels.map((label) => labels.filter((other) => other === label).length > 1);
@@ -42,7 +35,7 @@ export function sendState({ terms = [], ps = [], spaces = [], computers = [], fr
   const termOf = new Map(terms.filter((k) => k?.address).map((k) => [k.address, k]));
   const rowOf = (address) => {
     const k = termOf.get(address) ?? null, pane = paneOf.get(address) ?? null;
-    const state = classify([k, pane], { reachable: !unreachable(address, computers), complete });
+    const state = classify([k, pane], { reachable: reachable(address, computers), complete });
     return {
       terminal: address, pane, state,
       program: [k, pane].find((r) => r?.program && !r.program.agent)?.program ?? k?.program ?? pane?.program ?? null,

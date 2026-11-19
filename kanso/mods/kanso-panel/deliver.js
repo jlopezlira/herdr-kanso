@@ -7,13 +7,22 @@ import { bounded } from "./pure.js";
 const saysShell = (record) => record.program?.shell === true || Boolean(record.program && !record.program.agent && !record.status);
 const saysAgent = (record) => Boolean(record.status || record.program?.agent);
 
-export function classify(records, { reachable = true, complete = true } = {}) {
+const machineOf = (address) => /^([^/]+)\//.exec(String(address))?.[1] ?? null;
+export const reachable = (address, computers) => {
+  if (!Array.isArray(computers)) throw new TypeError("reachable needs the machines snapshot");
+  const at = machineOf(address);
+  const layout = at ? computers.find((m) => m?.name === at)?.layout : "ready";
+  return Boolean(layout) && layout !== "unavailable";
+};
+
+export function classify(records, { reachable: canReach, complete = true }) {
+  if (typeof canReach !== "boolean") throw new TypeError("classify needs the address's reachability");
   const known = records.filter(Boolean);
   if (known.some(saysShell)) return "shell";
   if (known.some((record) => record.state && record.state !== "live")) return "gone";
-  if (!known.some(saysAgent)) return !reachable ? "unreachable" : complete ? "gone" : "unknown";
+  if (!known.some(saysAgent)) return !canReach ? "unreachable" : complete ? "gone" : "unknown";
   if (known.some((record) => record.status === "blocked")) return "waiting";
-  return reachable ? "ready" : "unreachable";
+  return canReach ? "ready" : "unreachable";
 }
 
 // Cmd+Enter (Ctrl+Enter off macOS) sends.

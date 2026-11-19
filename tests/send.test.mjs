@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { load, texts, calls, clone, timedContext } from "./helpers.mjs";
-import { byTag, classOf, keyDown, openedSend, recordPairs, recordsFor } from "./mod-fixtures.mjs";
+import { byTag, keyDown, openedSend, recordCases, recordsFor } from "./mod-fixtures.mjs";
 
 const agent = (address, name, project = "App") => ({ address, state: "live", status: "idle", labels: { "kanso.shown": name, "kanso.project": project } });
 const primaryOf = (el) => byTag(el, "kanso-send-primary");
@@ -95,18 +95,18 @@ test("What Send shows and what a press sends come from one place, whatever the s
 test("One classification for every record pair: anything against delivery wins, and only ready is sent to", async () => {
   const { classify } = await load("kanso-send/deliver.js", ["classify"], { hc: async () => ({}) });
   const { sendState } = await model();
-  for (const [term, pane] of recordPairs) {
-    const records = recordsFor(term, pane);
-    const kind = classOf(term, pane);
-    assert.equal(classify([records.terminals[0], records.panes[0]]), kind, `${term} + ${pane}`);
-    const state = sendState({ terms: [...SOURCE.terms, ...records.terminals], ps: records.panes, from: "t0", to: "t1" });
-    assert.deepEqual(clone([state.chosen.state, state.recipients.length, state.waiting.length]), [kind, kind === "ready" ? 1 : 0, kind === "waiting" ? 1 : 0], `${term} + ${pane} in Send`);
-    const send = await openedSend({ terminals: () => [...SOURCE.terms, ...records.terminals], panes: () => records.panes }, { from: { terminal: "t0", pane: "p0" }, to: "t1" });
+  for (const { term, pane, address, layout, canReach, kind, at } of recordCases) {
+    const records = recordsFor(term, pane, address, {}, layout);
+    assert.equal(classify([records.terminals[0], records.panes[0]], { reachable: canReach }), kind, at);
+    const state = sendState({ terms: [...SOURCE.terms, ...records.terminals], ps: records.panes, computers: records.machines, from: "t0", to: address });
+    assert.deepEqual(clone([state.chosen.state, state.recipients.length, state.waiting.length]), [kind, kind === "ready" ? 1 : 0, kind === "waiting" ? 1 : 0], `${at} in Send`);
+    const send = await openedSend({ terminals: () => [...SOURCE.terms, ...records.terminals], panes: () => records.panes, machines: () => records.machines }, { from: { terminal: "t0", pane: "p0" }, to: address });
     const sent = [];
     send.send = (cx, now) => sent.push(...now.recipients.map((x) => x.terminal));
     keyDown(renders(send), CMD_ENTER);
-    assert.deepEqual(clone(sent), kind === "ready" ? ["t1"] : [], `${term} + ${pane} through the dialog`);
+    assert.deepEqual(clone(sent), kind === "ready" ? [address] : [], `${at} through the dialog`);
   }
+  assert.throws(() => classify([{ status: "idle", program: { agent: true } }], {}), /reachability/, "no caller can leave reachability out");
   assert.equal(classify([{ status: "idle", program: { agent: true } }], { reachable: false }), "unreachable", "unreachable only with no evidence against delivery");
   assert.equal(classify([{ state: "exited", program: { name: "zsh", shell: true } }], { reachable: false }), "shell");
 });
@@ -143,6 +143,18 @@ test("Two agents with one name read apart on their rows and in every sentence ab
   assert.match(send.error, /Not sent to Nova \(t2\) \(refused\)\./);
   assert.match(send.error, /Nova \(t3\) waited on its own question/);
   assert.doesNotMatch(send.error, /Nova \(t1\)/);
+});
+
+test("An agent whose computer goes unavailable before the press gets nothing, and its row says why", async () => {
+  const box = { name: "box", layout: "ready" }, sent = [];
+  const send = await openedSend({ terminals: () => [agent("box/t9", "Far")], machines: () => [box], hc: async (args) => { sent.push(args); return { code: 0, stdout: "", stderr: "" }; } }, { to: "box/t9" });
+  const el = renders(send);
+  box.layout = "unavailable";
+  await pressed(el);
+  assert.equal(sent.length, 0);
+  const now = send.render();
+  assert.ok(texts(byTag(now, "to-box/t9")).includes("Unreachable"));
+  assert.equal(last(primaryOf(now), "disabled"), true);
 });
 
 test("A press compares who gets it as sets: the same agents in another order still send", async () => {

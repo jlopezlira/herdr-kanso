@@ -11,13 +11,13 @@ import { bring, machineOf, copyFailure, drawablePath, remoteDue, ArmPoll, pollSt
 // printed: its screen, and the conversation on disk, from the byte it stored last time.
 import { div, image } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
-import { hc, focused, panes, terminals, theme, appHome, home, shared, setShared, watchFolder, openOverlay, window, layout } from "herdr";
+import { hc, focused, panes, terminals, machines, theme, appHome, home, shared, setShared, watchFolder, openOverlay, window, layout } from "herdr";
 import { G, H, T, tokens } from "./ui.js";
 import { button, quietLink, iconButton } from "./ui-button.js";
 import { row } from "./ui-row.js";
 import { emptyState, skeletonOf, thumbnail } from "./kit.js";
 import { programIcon, givenNames, nameOf } from "./marks.js";
-import { deliver, classify, sendKey, waitingNote, NOT_CONFIRMED, MAY_HAVE_ARRIVED } from "./deliver.js";
+import { deliver, classify, reachable, sendKey, waitingNote, NOT_CONFIRMED, MAY_HAVE_ARRIVED } from "./deliver.js";
 import { openPath, toPng } from "./share.js";
 import { mentions, resolvePath, itemOf, shows, arrived, pinFrom, aboutMessage, noted, keyOf, colorOf, indexRows } from "./look-model.js";
 import { walkLayout } from "./layout.js";
@@ -36,11 +36,12 @@ const KEPT = "kanso.look"; // { follow, pinned }: whose pictures these are, kept
 const NOTE = "kanso.look.note"; // the dialogs' answers, by token: { [token]: { text, at } }, each taken once by the pin that asked
 const EMPTY = "Pictures this agent writes show up here, from its conversation";
 const NO_AGENT = "No agent in focus";
+const kindOf = (address, ...records) => classify(records, { reachable: reachable(address, machines()) });
 // An agent's terminal that still runs, or null: a shell would run the note.
 function live(address) {
   if (!address) return null;
   const term = terminals().find((k) => k.address === address);
-  return ["ready", "waiting"].includes(classify([term, panes().find((q) => q.terminal === address)])) ? address : null;
+  return ["ready", "waiting", "unreachable"].includes(kindOf(address, term, panes().find((q) => q.terminal === address))) ? address : null;
 }
 
 export class Look {
@@ -465,7 +466,7 @@ export class Look {
   who(address) {
     const k = terminals().find((x) => x.address === address);
     const pane = panes().find((q) => q.terminal === address);
-    return { name: k?.labels?.["kanso.shown"] || nameOf(pane ?? { terminal: address }, givenNames()), status: k?.status ?? pane?.status ?? null, pane, kind: classify([k, pane]) };
+    return { name: k?.labels?.["kanso.shown"] || nameOf(pane ?? { terminal: address }, givenNames()), status: k?.status ?? pane?.status ?? null, pane, kind: kindOf(address, k, pane) };
   }
 
   send(cx) {
@@ -474,6 +475,7 @@ export class Look {
     const key = this.pinKey(item.path, address);
     const { name, kind } = address ? this.who(address) : {};
     if (kind === "waiting") { this.note = { error: true, text: waitingNote([name]) }; cx.notify(); return; }
+    if (kind === "unreachable") { this.note = { error: true, text: `Not sent: ${name} is unreachable` }; cx.notify(); return; }
     if (kind !== "ready") { this.note = { error: true, text: "No agent to send to" }; cx.notify(); return; }
     const picture = this.shown?.path === item.path ? this.shown.picture : undefined;
     this.sending = true; cx.notify();

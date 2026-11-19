@@ -7,7 +7,7 @@ import { openApi } from "./platform-open.js";
 // One of the kanso-panel mod's panels: it exists only while shown.
 import { div, svg } from "gpui-kit";
 import { v_flex, h_flex, Popover, TextView, ScrollHandle } from "gpui-base";
-import { run, theme, setShared, shared, window, layout, focused, panes, terminals, props } from "herdr";
+import { run, theme, setShared, shared, window, layout, focused, panes, terminals, machines, props } from "herdr";
 import { walkLayout } from "./layout.js";
 import { R, G, T, PR, TINT, alpha, tokens } from "./ui.js";
 import { Armed, button, quietLink, iconButton } from "./ui-button.js";
@@ -20,7 +20,7 @@ import { section } from "./ui-section.js";
 import { segmented } from "./ui-tab.js";
 import { aliasText, machineTitle, tryOrAsync } from "./pure.js";
 import { STATES, checkState, onePerJob, checkSummary, runIdOf, listHold, mergeReadiness } from "./ghchecks.js";
-import { deliver, classify } from "./deliver.js";
+import { deliver, classify, reachable } from "./deliver.js";
 import { nameOf, givenNames } from "./marks.js";
 import { verdictOf, failedLog, sendText, sendStep } from "./pr-verdict.js";
 import { readyProviders } from "./pr-providers.js";
@@ -450,8 +450,8 @@ export class PullRequest {
     const term = terminals().find((item) => item.address === address) ?? null;
     const pane = panes().find((item) => item.terminal === address) ?? null;
     const info = pane || term || { terminal: address };
-    const kind = classify([term, pane]);
-    return { isAgent: kind === "ready" || kind === "waiting", name: nameOf(info, givenNames()), address, blocked: kind === "waiting" };
+    const kind = classify([term, pane], { reachable: reachable(address, machines()) });
+    return { isAgent: kind === "ready" || kind === "waiting" || kind === "unreachable", name: nameOf(info, givenNames()), address, blocked: kind === "waiting", kind };
   }
 
   sceneKind() {
@@ -491,8 +491,9 @@ export class PullRequest {
     const step = sendStep(Boolean(this.session.sendShown) && this.session.sendFor === text, text);
     if (step.show) { this.session.sendShown = true; this.session.sendFor = text; cx.notify(); return; }
     if (!step.deliver) return;
-    const agent = this.frontAgent(), address = agent?.isAgent && !agent.blocked ? agent.address : null;
+    const agent = this.frontAgent(), address = agent?.kind === "ready" ? agent.address : null;
     if (agent?.blocked) return;
+    if (agent?.kind === "unreachable") { this.session.note = said(`Not sent: ${agent.name} is unreachable`); cx.notify(); return; }
     if (!address) { this.session.note = said("Not sent: no agent in front"); cx.notify(); return; }
     if (this.session.deliverTo(cx, (task) => deliver(task.timer, address, text, "you"))) this.session.sendShown = false;
   }

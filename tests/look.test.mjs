@@ -1,4 +1,4 @@
-import { classOf, loadLook, loadPanelKdb, loadShareImages, recordPairs, recordsFor } from "./mod-fixtures.mjs";
+import { loadLook, loadPanelKdb, loadShareImages, recordCases, recordsFor } from "./mod-fixtures.mjs";
 import assert from "node:assert/strict";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { mkdir, readdir, readFile, stat, unlink, writeFile } from "node:fs/promises";
@@ -126,14 +126,14 @@ async function panel({ screen = OUTPUT, files = ["/repo/tests/shot.png", "/repo/
     panes: remote
       ? [{ pane: "p1", terminal: address, program: { name: "Claude", agent: true } }, { pane: "p2", terminal: "t2", program: { name: "zsh", shell: true } }]
       : [{ pane: "p1", terminal: "t1", program: { name: "Claude", agent: true } }, { pane: "p2", terminal: "t2", program: { name: "zsh", shell: true } }],
-    session,
+    session, machines: remote ? [{ name: remote, layout: "ready" }] : [],
   };
   const sipsPath = (args) => { const at = args.indexOf("--out"); return at > 0 ? args[at - 1] : args.at(-1); };
   const host = {
     ...(drawing ?? { ...singleUse(), image: singleUse().div }),
     openOverlay: (spec) => { calls.push(["openOverlay", spec]); return "o1"; },
     focused: () => ({ terminal: world.focus }), theme: () => ({}), home: () => "/home/me", appHome: () => appHome, window: () => ({ platform: "macos" }),
-    terminals: () => world.terminals, panes: () => world.panes,
+    terminals: () => world.terminals, panes: () => world.panes, machines: () => world.machines,
     shared: (k) => store[k], setShared: (k, v) => { store[k] = clone(v); },
     watchFolder: async () => { throw new Error("no watch in a test"); },
     hc: async (args) => {
@@ -329,14 +329,21 @@ test("Look says a send Herdr stopped at its time limit is not confirmed, never n
 });
 
 test("Images sends a pinned note only to an agent every record agrees on, and says when it waits", async () => {
-  for (const [term, pane] of recordPairs) {
-    const shown = await panel();
-    await sendPinned(shown, "crop it", (world) => Object.assign(world, recordsFor(term, pane, "t1", { cwd: "/repo" })));
-    const kind = classOf(term, pane);
-    assert.equal(shown.calls.some((c) => c[0] === "hc" && c[1] === "send"), kind === "ready", `${term} + ${pane}: sent only when ready`);
-    if (kind === "waiting") assert.match(shown.look.note.text, /waiting on its own question/, `${term} + ${pane}`);
-    if (kind === "shell" || kind === "gone") assert.equal(shown.look.note.text, "No agent to send to", `${term} + ${pane}`);
+  for (const { term, pane, address, layout, kind, at } of recordCases) {
+    const shown = await panel(address.includes("/") ? { remote: "box" } : {});
+    await sendPinned(shown, "crop it", (world) => Object.assign(world, recordsFor(term, pane, address, { cwd: "/repo" }, layout)));
+    assert.equal(shown.calls.some((c) => c[0] === "hc" && c[1] === "send"), kind === "ready", `${at}: sent only when ready`);
+    if (kind === "waiting") assert.match(shown.look.note.text, /waiting on its own question/, at);
+    if (kind === "unreachable") assert.match(shown.look.note.text, /is unreachable$/, at);
+    if (kind === "shell" || kind === "gone") assert.equal(shown.look.note.text, "No agent to send to", at);
   }
+});
+
+test("Images sends nothing to an agent whose computer goes unavailable before the press, and says why", async () => {
+  const shown = await panel({ remote: "box", focus: "t9" });
+  await sendPinned(shown, "crop it", (world) => { world.machines = [{ name: "box", layout: "unavailable" }]; });
+  assert.equal(shown.calls.some((c) => c[0] === "hc" && c[1] === "send"), false);
+  assert.equal(shown.look.note.text, "Not sent: web agent is unreachable");
 });
 
 test("Look never takes a shell as the one to send to: it would run the note", async () => {
