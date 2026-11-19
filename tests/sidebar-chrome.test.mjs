@@ -6,6 +6,8 @@ import { loadSidebar, mountedState, recorder } from "./sidebar-fixtures.mjs";
 import { mountChrome } from "./mod-fixtures.mjs";
 import { statedPages } from "../stories/kit/states.js";
 import { kitRecords } from "../scripts/storybook-kit.mjs";
+import { buttonTree } from "../stories/kit/row-tree.js";
+import { toHtml } from "../stories/kit/tree.js";
 
 const compositions = async () => themed({
   kit: await load("kanso-panel/kit.js", ["menu", "stack"], host()),
@@ -220,4 +222,31 @@ test("No hand-drawn toolbar, header or footer is left, and the stacks draw no li
   for (const word of ["ui-toolbar", "ui-sidebar-header", "sortTip"]) assert.equal(spaces.includes(word), false, word);
   for (const word of ["./footer.js", "chromeGlyph", "div().size_full()"]) assert.equal(chrome.includes(word), false, word);
   assert.deepEqual(numberArguments("kanso-panel/ui-stack.js"), []);
+});
+
+test("The Storybook's footer: a running update, a refusal and the landed update are what the app does, and only the stage joins the earlier proposals", () => {
+  const records = kitRecords([]).filter((record) => record.page === "Primitives/Footer" || record.page === "Compositions/Sidebar/Footer");
+  const states = Object.fromEntries(records.map((record) => [record.label, record]));
+  for (const label of ["Updating", "Collapsed, updating", "Refused", "Updated"]) assert.doesNotMatch(states[label].caption, /Proposed/, `${label} is the fix or today's behavior, not a proposal`);
+  for (const label of ["Updating", "Collapsed, updating"]) assert.match(states[label].html, /kanso-icon--spinning|kanso-button--spinning/, `${label} turns its icon`);
+  const proposed = records.filter((record) => /^Proposed/.test(record.caption)).map((record) => record.label).sort();
+  assert.deepEqual(proposed, ["Collapsed", "Collapsed, update", "Settings menu", "Updating, its stage"], "the three that were Proposed before, and the stage");
+  assert.match(states.Updated.html, /kansō updated to 3\.31\.0/, "the landed update's toast says kansō updated");
+  assert.doesNotMatch(states.Updated.html, /kanso-row--busy|kanso-state-block/, "and the row is gone");
+  for (const file of ["kanso/mods/kanso-chrome/main.js", "kanso/mods/kanso-chrome/footer-model.js", "kanso/mods/kanso-chrome/sidebar-footer.js"]) {
+    assert.doesNotMatch(repoText(file), /Downloading|Installing/, `${file} builds no stage`);
+  }
+  assert.match(states.Updating.html, /kanso-row--busy[^>]*aria-busy="true"/, "the row is busy and out of the keyboard's way");
+  assert.doesNotMatch(states.Updating.html, /kanso-row--busy[^>]*tabindex/, "it takes no tab stop, so no ring can stay on it");
+  assert.doesNotMatch(states.Update.html, /kanso-icon--spinning|kanso-row--busy/, "an update on offer is still");
+  assert.match(states.Refused.html, /Explain to Atlas/, "the refusal block offers Explain");
+});
+
+test("A disabled Storybook Button takes no tab stop, so Tab skips the rail's running update", () => {
+  const rail = kitRecords([]).find((record) => record.label === "Collapsed, updating").html;
+  const running = rail.match(/<span class="kanso-button[^"]*kanso-button--spinning[^"]*"[^>]*>/)[0];
+  assert.match(running, /aria-disabled="true"/);
+  assert.doesNotMatch(running, /tabindex/);
+  assert.match(rail, /<span class="kanso-button[^"]*"[^>]*tabindex="0"[^>]*title="Settings"/, "Settings beside it stays a tab stop");
+  assert.doesNotMatch(toHtml(buttonTree({ label: "Save", disabled: true })), /tabindex/);
 });
