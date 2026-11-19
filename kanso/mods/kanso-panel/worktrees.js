@@ -26,12 +26,14 @@ import { worktreesMemory } from "./panel-state.js";
 
 const TEMP = ["/private/tmp", "/tmp"];
 
-export function rootsFor(folders, homeDir, chosen, temp = []) {
-  if (Array.isArray(chosen) && chosen.some((s) => typeof s === "string" && paths.isAbsolute(s))) {
-    return [...new Set(chosen.filter((s) => typeof s === "string" && paths.isAbsolute(s)))];
-  }
+const absolute = (s) => typeof s === "string" && paths.isAbsolute(s);
+const known = (temp) => Array.isArray(temp) && temp.length > 0 && temp.every(absolute);
+
+export function rootsFor(folders, homeDir, chosen, temp) {
+  if (Array.isArray(chosen) && chosen.some(absolute)) return [...new Set(chosen.filter(absolute))];
+  if (!known(temp) || !absolute(homeDir)) return [];
   const roots = folders.flatMap((f) => {
-    if (typeof f !== "string" || !paths.isAbsolute(f) || [...TEMP, ...temp].some((t) => inside(t, f))) return [];
+    if (!absolute(f) || [...TEMP, ...temp].some((t) => inside(t, f))) return [];
     if (paths.within(f, homeDir)) {
       const top = paths.relative(homeDir, f).split(/[\\/]/)[0];
       return top && !top.startsWith(".") ? [paths.join(homeDir, top)] : [];
@@ -92,7 +94,7 @@ export function parseProbe(out) {
 }
 
 const foldersInUse = () => {
-  const local = spaces().filter((s) => !s.machine), tabs = new Set(local.flatMap((s) => (s.tabs ?? []).map((t) => t.id)));
+  const local = spaces().filter((s) => s.machine === null), tabs = new Set(local.flatMap((s) => (s.tabs ?? []).map((t) => t.id)));
   return [...local.map((s) => s.folder), ...panes().filter((p) => tabs.has(p.tab)).map((p) => p.cwd)];
 };
 
@@ -367,8 +369,8 @@ export class Worktrees {
   }
 
   roots() {
-    const chosen = shared("kanso.worktrees.roots"), temp = this.tempDirs ?? TEMP, roots = rootsFor(foldersInUse(), home(), chosen, temp);
-    return { roots, search: roots.length && Array.isArray(chosen) && chosen.length ? roots : [...roots, ...temp] };
+    const chosen = shared("kanso.worktrees.roots"), temp = this.tempDirs, roots = rootsFor(foldersInUse(), home(), chosen, temp);
+    return { roots, search: roots.length && Array.isArray(chosen) && chosen.length ? roots : [...roots, ...(known(temp) ? temp : [])] };
   }
 
   // Runs on every draw, so only a row whose answer changed is replaced.
@@ -387,7 +389,7 @@ export class Worktrees {
     this.scan = id;
     this.phase = "Finding repositories"; this.note = null; this.picked = this.heldPick === undefined ? null : this.heldPick; this.heldPick = undefined; this.armed.clear(); this.done = false;
     spawnAndNotify(cx, async (cx) => {
-      this.tempDirs = await localService(systemApi).temporary().catch(() => []);
+      this.tempDirs = await localService(systemApi).temporary().catch(() => null);
       const { roots, search } = this.roots();
       try {
         const found = await localService(repositoryApi).discover(search);

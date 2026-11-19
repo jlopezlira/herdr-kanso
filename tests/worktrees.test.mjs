@@ -17,7 +17,7 @@ const git = gitOk();
 
 test("Worktrees searches the top folders of your spaces, or the ones you chose", async () => {
   const { rootsFor, inside, openIn } = await worktrees();
-  assert.deepEqual(clone(rootsFor(["/Users/me/Apps/acme/web", "/Users/me/Apps/x", "/Users/me", "/Users/me/.config/a", "/Volumes/w/repo", "/private/tmp/x", null], "/Users/me")),
+  assert.deepEqual(clone(rootsFor(["/Users/me/Apps/acme/web", "/Users/me/Apps/x", "/Users/me", "/Users/me/.config/a", "/Volumes/w/repo", "/private/tmp/x", null], "/Users/me", null, ["/private/tmp", "/tmp"])),
     ["/Users/me/Apps", "/Volumes/w/repo"], "home itself, hidden folders and temp are not roots");
   assert.deepEqual(clone(rootsFor(["/Users/me/Apps/a"], "/Users/me", ["/src", "rel", "/src"])), ["/src"]);
   assert.ok(inside("/private/tmp/wt", "/tmp/wt/src"), "/tmp is /private/tmp");
@@ -33,19 +33,19 @@ test("Worktrees searches the top folders of your spaces, or the ones you chose",
 });
 
 test("Worktrees searches this computer only for its own panes, never for a pane on another machine", async () => {
-  const here = process.cwd();
+  const far = "/opt/far";
   const { Worktrees, inside } = await worktrees({
     spaces: () => [
       { folder: "/Users/me/Apps/web", machine: null, tabs: [{ id: "t1" }] },
       { folder: "/srv", machine: "box", tabs: [{ id: "box/t2" }] },
     ],
-    panes: () => [{ tab: "t1", cwd: "/Volumes/w/repo" }, { tab: "box/t2", cwd: here }],
+    panes: () => [{ tab: "t1", cwd: "/Volumes/w/repo" }, { tab: "box/t2", cwd: far }],
   });
   const panel = new Worktrees();
   panel.tempDirs = ["/private/tmp", "/tmp"];
   const { roots, search } = panel.roots();
   assert.deepEqual(clone(roots), ["/Users/me/Apps", "/Volumes/w/repo"], "this computer's space and pane are searched");
-  assert.ok(!search.some((root) => inside(root, here) || inside(here, root)), "a folder that exists here but is open on another machine is not searched");
+  assert.ok(!search.some((root) => inside(root, far) || inside(far, root)), "a folder open on another machine is not searched here");
 });
 
 test("Worktrees never searches the system temp folder or the folder above it", async () => {
@@ -61,6 +61,26 @@ test("Worktrees never searches the system temp folder or the folder above it", a
     "on macOS and Linux a pane in /tmp is no root, as before");
   assert.deepEqual(clone(rootsFor(["/var/folders/ab/T/z", "/Users/me/Apps/a"], "/Users/me", null, ["/private/var/folders/ab/T/"])), ["/Users/me/Apps"],
     "on macOS a pane in your own temp folder is no root either: that folder is searched already");
+});
+
+test("Worktrees searches nothing it was not asked to when it cannot tell where the temp folder or home is", async () => {
+  const settings = {};
+  const { Worktrees } = await worktrees({
+    home: () => "C:\\Users\\me", shared: (k) => settings[k] ?? null,
+    spaces: () => [{ folder: "C:\\Users\\me\\Apps\\web", machine: null, tabs: [{ id: "t1" }] }],
+    panes: () => [{ tab: "t1", cwd: "C:\\Users\\me\\AppData\\Local\\Temp\\x" }],
+  });
+  const panel = new Worktrees();
+  const unknown = [undefined, null, [], [""], ["C:\\Users\\me\\AppData\\Local\\Temp\\", ""]];
+  assert.deepEqual(unknown.map((temp) => { panel.tempDirs = temp; return clone(panel.roots()); }), unknown.map(() => ({ roots: [], search: [] })),
+    "a failed, blank or partial temp lookup infers no root");
+  const { Worktrees: Homeless } = await worktrees({ home: () => "", spaces: () => [{ folder: "/Users/me/Apps/web", machine: null, tabs: [{ id: "t1" }] }] });
+  const homeless = new Homeless();
+  homeless.tempDirs = ["/private/tmp", "/tmp"];
+  assert.deepEqual(clone(homeless.roots().roots), [], "without a home folder no root is inferred");
+  settings["kanso.worktrees.roots"] = ["D:\\src"];
+  panel.tempDirs = null;
+  assert.deepEqual(clone(panel.roots()), { roots: ["D:\\src"], search: ["D:\\src"] }, "the folders you chose are still searched");
 });
 
 test("Worktrees parses git's worktree list and the probes", async () => {
