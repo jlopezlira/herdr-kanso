@@ -27,8 +27,8 @@ the branch's rules.
 ### Fixed
 
 - Waking a sleeping conversation brings it back before forgetting it was asleep. If it does not come back, it stays asleep and Wake says so, so you can try again. If it comes back but still looks asleep, Wake says that. Waking several at once names each one that did not come back and each one that came back but still looks asleep.
-- Sleep deletes a conversation's resume id only when a fresh read shows that same agent still running. If the terminal changed, the agent has already returned to its shell, or Enter was refused, the id stays and Sleep says the exit was not confirmed.
-- A refused step says "was refused". A step that did not answer says "did not answer". That covers the cleanup, the first look at a terminal, and the conversation file. A cleanup that did not answer does not say the asleep mark stayed or went.
+- Sleep keeps a conversation's resume id unless every command that can end the agent was refused, or none was sent. An unanswered Enter keeps the id and says "Rey's exit was not confirmed: Enter did not answer." A refused Enter after /exit was delivered keeps the id and says "Enter was refused." A refused /exit, with nothing delivered, clears the id and says "Rey: /exit was refused." A refused Ctrl+C clears the id and says "Rey: Ctrl+C was refused." If the agent did not exit after /exit, the id stays and Sleep says "Rey's exit was not confirmed: Rey did not exit." If the terminal changed after /exit, the id stays and Sleep says "Rey's exit was not confirmed: Rey's terminal changed."
+- A successful look that is not usable says "t2's get could not be read." Sleep sends nothing and settles nothing. A refused step says "was refused". A step that did not answer says "did not answer", including Ctrl+C, Enter, get and read. A cleanup that did not answer does not say the asleep mark stayed or went.
 - Sleep no longer puts a tab away when something in it could not be stopped, and names that one. Pressing Sleep or Wake again while it is working does nothing.
 
 ## [3.31.0] - 2026-11-19

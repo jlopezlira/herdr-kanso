@@ -70,27 +70,19 @@ export function wakePlan(space, ids, terminal, ps, terms) {
 
 const wakeFailure = (rows) => `${rows.map((row) => row.note).join("; ")}.`;
 
-const stillThere = (record, pid) => {
-  const fg = record?.foreground;
-  return Boolean(fg?.pid) && fg.pid === pid && isClaude(fg.argv) && !atPrompt(record);
-};
-
-async function rollback(cx, agent) {
-  const got = await host(cx, ["get", agent.terminal, "--json"]);
-  if (got.outcome !== "ok" || !stillThere(parsed(got.result), agent.pid)) return { proved: false, call: got };
-  return { proved: true, call: await host(cx, labelArgs(agent.terminal)) };
-}
+const ending = (trace) => trace.filter((row) => row.step === "/exit" || row.step === "Enter");
+const mayClear = (trace) => ending(trace).every((row) => row.outcome === "refused");
+const unconfirmed = (name, detail) => `${name}'s exit was not confirmed: ${detail}`;
+const unreadable = (name, step) => `${name}'s ${step} could not be read`;
 
 async function exitOne(cx, agent) {
   const kept = await host(cx, labelArgs(agent.terminal, agent.resume));
   if (kept.outcome !== "ok") return said(agent.name, kept);
   const why = await leave(cx, agent);
   if (!why) return null;
-  if (!why.sent) return `${agent.name}'s exit was not confirmed`;
-  const back = await rollback(cx, agent);
-  if (!back.proved) return `${agent.name}'s exit was not confirmed`;
-  if (back.call.outcome === "ok") return why.text;
-  return `${why.text}; ${said(agent.name, back.call)}`;
+  if (!mayClear(why.trace)) return unconfirmed(agent.name, why.detail);
+  const back = await host(cx, labelArgs(agent.terminal));
+  return back.outcome === "ok" ? why.text : `${why.text}; ${said(agent.name, back)}`;
 }
 
 async function wakeOne(cx, session) {
@@ -120,7 +112,13 @@ export function exitStep(st, x, screen, now) {
 
 const PRESS = { exit: (t) => ["send", t, "/exit"], enter: (t) => ["keys", t, "enter"] };
 const CALL_MS = 30_000;
-const stepOf = (args) => (args[0] === "keys" && args[2] === "enter" ? "Enter" : args[0] === "file" ? "read" : args[0]);
+const stepOf = (args) => {
+  if (args[0] === "keys" && args[2] === "enter") return "Enter";
+  if (args[0] === "keys" && args[2] === "ctrl+c") return "Ctrl+C";
+  if (args[0] === "send" && String(args[2] ?? "").startsWith("/exit")) return "/exit";
+  if (args[0] === "file") return "read";
+  return args[0];
+};
 const parsed = (r) => { try { return r?.code === 0 ? JSON.parse(r.stdout) : null; } catch { return null; } };
 const host = async (cx, args) => {
   const step = stepOf(args);
@@ -129,7 +127,8 @@ const host = async (cx, args) => {
   if (result?.rejected || result?.code !== 0) return { outcome: "refused", step };
   return { outcome: "ok", step, result };
 };
-const said = (name, call) => `${name}'s ${call.step} ${call.outcome === "unanswered" ? "did not answer" : "was refused"}`;
+const detail = (call) => `${call.step} ${call.outcome === "unanswered" ? "did not answer" : "was refused"}`;
+const said = (name, call) => `${name}'s ${detail(call)}`;
 const machineOf = (address) => (String(address).includes("/") ? String(address).split("/")[0] : null);
 
 // Claude's own record of a process: ~/.claude/sessions/<pid>.json, on the terminal's computer.
@@ -141,32 +140,39 @@ async function sessionOf(cx, terminal, pid) {
 
 // Ends a Claude the way you would: its draft cleared, /exit, yes when it asks. Null once its shell is back, else why not.
 async function leave(cx, { terminal, pid, name }) {
-  const opened = await host(cx, ["keys", terminal, "ctrl+c"]);
-  if (opened.outcome === "unanswered") return { sent: false, text: said(name, opened) };
-  if (opened.outcome === "refused") return { sent: false, text: `${name} could not be reached` };
-  const look = async (st) => {
+  const now = () => (typeof cx.now === "function" ? cx.now() : Date.now());
+  const sent = async (trace, args) => {
+    const call = await host(cx, args);
+    return { call, trace: [...trace, { step: stepOf(args), outcome: call.outcome }] };
+  };
+  const stop = (trace, call, words) => ({ trace, text: `${name}: ${words ?? detail(call)}`, detail: words ?? detail(call) });
+  const opened = await sent([], ["keys", terminal, "ctrl+c"]);
+  if (opened.call.outcome !== "ok") return stop(opened.trace, opened.call);
+  const look = async (st, trace) => {
     await cx.sleep(TICK_MS);
     const got = await host(cx, ["get", terminal, "--json"]);
-    if (got.outcome !== "ok") return { sent: st.issued, text: `${name}'s exit was not confirmed` };
-    const read = await host(cx, ["read", terminal]);
-    if (read.outcome !== "ok") return { sent: st.issued, text: `${name}'s exit was not confirmed` };
-    const step = exitStep(st, parsed(got.result), read.result?.stdout ?? "", Date.now());
+    if (got.outcome !== "ok") return stop(trace, got);
+    const record = parsed(got.result);
+    if (record == null) return stop(trace, got, "get could not be read");
+    const screen = await host(cx, ["read", terminal]);
+    if (screen.outcome !== "ok") return stop(trace, screen);
+    const step = exitStep(st, record, screen.result?.stdout ?? "", now());
     if (step.done) return null;
-    if (step.unknown || step.fail) return { sent: st.issued, text: step.fail ?? `${name}'s exit was not confirmed` };
-    if (!step.act) return look(step.st ?? st);
+    if (step.unknown) return stop(trace, got, "get could not be read");
+    if (step.fail) return { trace, text: step.fail, detail: step.fail };
+    if (!step.act) return look(step.st ?? st, trace);
     if (step.act === "enter") {
       const again = await host(cx, ["get", terminal, "--json"]);
-      if (again.outcome !== "ok") return { sent: st.issued, text: `${name}'s exit was not confirmed` };
+      if (again.outcome !== "ok") return stop(trace, again);
       const fresh = parsed(again.result);
+      if (fresh == null) return stop(trace, again, "get could not be read");
       if (atPrompt(fresh)) return null;
-      if (!stillThere(fresh, pid)) return { sent: st.issued, text: `${name}'s exit was not confirmed` };
     }
-    const pressed = await host(cx, PRESS[step.act](terminal));
-    const issued = { ...step.st, issued: true };
-    if (pressed.outcome !== "ok") return { sent: true, text: said(name, pressed) };
-    return look(issued);
+    const pressed = await sent(trace, PRESS[step.act](terminal));
+    if (pressed.call.outcome !== "ok") return stop(pressed.trace, pressed.call);
+    return look(step.st, pressed.trace);
   };
-  return look({ pid, name, at: Date.now(), sent: null, last: null, issued: false });
+  return look({ pid, name, at: now(), sent: null, last: null }, opened.trace);
 }
 
 export default class Sleep extends View {
@@ -197,13 +203,16 @@ export default class Sleep extends View {
     const names = shared("kanso.names") ?? {};
     this.reads = await Promise.all(mine.map(async (p) => {
       const got = looked.find(([terminal]) => terminal === p.terminal)?.[1];
-      const x = recs.get(p.terminal), fg = x?.foreground;
+      const record = got?.outcome === "ok" ? parsed(got.result) : null;
+      const x = record, fg = x?.foreground;
       const claude = Boolean(fg?.pid) && isClaude(fg.argv);
       const file = claude ? await sessionOf(cx, p.terminal, fg.pid) : null;
       const ses = file?.outcome === "ok" ? parsed(file.result) : null;
       const name = names[p.terminal] || x?.labels?.["kanso.name"] || ses?.name || x?.title || p.terminal;
       const problem = got?.outcome !== "ok" ? said(p.terminal, got)
+        : record == null ? unreadable(p.terminal, "get")
         : claude && file?.outcome !== "ok" ? said(name, file)
+        : claude && ses == null ? unreadable(name, "read")
         : claude && (!isSessionId(ses?.sessionId) || ses.pid !== fg.pid) ? `${name}'s conversation was not found, so it could not wake on it`
         : only && !claude ? "only a Claude agent can sleep on its own; this pane runs something else" : null;
       return { terminal: p.terminal, name, pid: fg?.pid ?? null, argv: fg?.argv ?? null, cwd: fg?.cwd ?? p.cwd ?? null,
