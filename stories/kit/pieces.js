@@ -38,9 +38,11 @@ export const windowControls = () => '<span class="kanso-window-controls"><i></i>
 export const dawn = ({ id = 'dawn' } = {}) => `<svg class="kanso-dawn kanso-dawn--rising" viewBox="0 0 256 56" preserveAspectRatio="xMidYMin slice" aria-hidden="true"><defs><linearGradient id="${id}-sky" x1="0" y1="0" x2="0" y2="44" gradientUnits="userSpaceOnUse"><stop class="kanso-dawn__stop kanso-dawn__stop--top" offset="0"/><stop class="kanso-dawn__stop kanso-dawn__stop--mid" offset=".45"/><stop class="kanso-dawn__stop kanso-dawn__stop--low" offset=".8"/><stop class="kanso-dawn__stop kanso-dawn__stop--edge" offset="1"/></linearGradient><radialGradient id="${id}-glow" cx="124" cy="44" r="78" gradientUnits="userSpaceOnUse" gradientTransform="translate(0 15.4) scale(1.65)"><stop class="kanso-dawn__stop kanso-dawn__stop--sun" offset="0"/><stop class="kanso-dawn__stop kanso-dawn__stop--haze" offset=".35"/><stop class="kanso-dawn__stop kanso-dawn__stop--edge-clear" offset="1"/></radialGradient><linearGradient id="${id}-fade" x1="0" y1="44" x2="0" y2="56" gradientUnits="userSpaceOnUse"><stop class="kanso-dawn__stop kanso-dawn__stop--mist" offset="0"/><stop class="kanso-dawn__stop kanso-dawn__stop--chrome-clear" offset="1"/></linearGradient><clipPath id="${id}-clip"><rect x="0" y="0" width="256" height="44"/></clipPath></defs><rect width="256" height="44" fill="url(#${id}-sky)"/><rect class="kanso-dawn__night kanso-dawn__night--top" width="256" height="44"/><g clip-path="url(#${id}-clip)"><rect class="kanso-dawn__glow" width="256" height="44" fill="url(#${id}-glow)"/><g class="kanso-dawn__stars"><circle cx="14" cy="7" r=".7" opacity=".8"/><circle cx="44" cy="13" r=".5" opacity=".55"/><circle cx="212" cy="6" r=".6" opacity=".7"/><circle cx="240" cy="15" r=".5" opacity=".45"/><circle cx="84" cy="5" r=".45" opacity=".5"/></g><g class="kanso-dawn__clouds kanso-dawn__clouds--sun" stroke-linecap="round" fill="none"><path d="M28 31h58" stroke-width="1.6" opacity=".55"/><path d="M52 36h30" stroke-width="1.2" opacity=".5"/><path d="M162 28h64" stroke-width="1.6" opacity=".5"/><path d="M176 34h30" stroke-width="1.2" opacity=".45"/><path d="M6 39h40" stroke-width="1" opacity=".4"/><path d="M214 40h36" stroke-width="1" opacity=".4"/></g><g class="kanso-dawn__sun"><circle class="kanso-dawn__disc" cx="124" cy="44" r="10" opacity=".5"/><circle cx="124" cy="44" r="13" fill="none" stroke-width="2.4" stroke-linecap="round" stroke-dasharray="70 12" transform="rotate(-150 124 44)" class="kanso-dawn__circle kanso-dawn__circle--sun"/></g></g><rect y="44" width="256" height="12" fill="url(#${id}-fade)"/><path class="kanso-dawn__horizon kanso-dawn__horizon--sun" d="M0 44.5H256" stroke-width="1" opacity=".55"/></svg>`;
 
 export const avatarSizes = { sm: ' kanso-avatar--sm', md: '', lg: ' kanso-avatar--lg' };
-export const avatar = ({ initial, image, size, tone, round = true }) => {
+export const avatar = ({ initial = '', image, size, tone, round = true, loading = false }) => {
   const picture = image ? `<img src="${escape(image)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">` : '';
-  return `<span class="kanso-avatar${round ? ' kanso-avatar--round' : ''}${avatarSizes[size] ?? ""}${tone ? ` kanso-text--host-${escape(tone)}` : ""}">${picture}${escape(initial.slice(0, 1))}</span>`;
+  const shape = `kanso-avatar${round ? ' kanso-avatar--round' : ''}${avatarSizes[size] ?? ""}`;
+  if (loading) return `<span class="${shape} kanso-skeleton kanso-skeleton--breathing" aria-label="Avatar loading"></span>`;
+  return `<span class="${shape}${tone ? ` kanso-text--host-${escape(tone)}` : ""}">${picture}${escape(initial.slice(0, 1))}</span>`;
 };
 
 export const well = ({ heading = '' } = {}, ...children) => `<div class="kanso-card">${heading ? `<div class="kanso-card__header"><b>${escape(heading)}</b></div>` : ''}${list(children)}</div>`;
@@ -157,9 +159,10 @@ export const markdownBlock = ({ source, state = 'rest', content = '', cell = nul
   const on = edited ? '' : BLOCK_STATES[state] ?? '';
   return `<div class="kanso-markdown__block${on}"${on.includes('editing') ? ' contenteditable="true"' : ''}>${content || blockOf(source, edited, shot)}</div>`;
 };
-export const markdown = ({ source, block, state, cell = [1, 0], view = 'document', shot = {} }) => view === 'source'
+const withAdded = (blocks, added) => (added === null ? blocks : [...blocks, added]);
+export const markdown = ({ source, block, state, added = null, cell = [1, 0], view = 'document', shot = {} }) => view === 'source'
   ? `<div class="kanso-markdown"><div class="kanso-markdown__source">${escape(source.trim())}</div></div>`
-  : `<div class="kanso-markdown">${markdownBlocks(source).map((one, index) => markdownBlock({ source: one, state: index + 1 === block ? state : 'rest', cell, shot })).join('')}</div>`;
+  : `<div class="kanso-markdown">${withAdded(markdownBlocks(source), added).map((one, index, all) => markdownBlock({ source: one, state: index + 1 === (added === null ? block : all.length) ? state : 'rest', cell, shot })).join('')}</div>`;
 
 export const band = ({ text, actions = [] }) => `<div class="kanso-band" role="status"><span class="kanso-band__text">${escape(text)}</span>${actions.map(button).join('')}</div>`;
 
@@ -406,7 +409,7 @@ export const bars = ({ bars: values = [], peak = null, low = [], part = [], labe
   + `${ticks.length ? `<div class="kanso-bars__ticks">${ticks.map((tick) => `<span>${escape(tick)}</span>`).join('')}</div>` : ''}</div>`;
 export const delta = ({ text, up = true }) => `<div class="kanso-panel__delta">${up ? '↑' : '↓'} ${escape(text)}</div>`;
 export const meter = ({ share: value = 0, label = '' }) => `<svg class="kanso-meter" role="meter" aria-valuemin="0" aria-valuemax="1" aria-valuenow="${Number(value)}"${label ? ` aria-label="${escape(label)}"` : ''}><rect class="kanso-meter__fill" width="${share(value)}%" height="100%"/></svg>`;
-export const heatmap = ({ days = [] }) => `<div class="kanso-days">${days.map((level) => `<span class="kanso-days__day${level === null ? ' kanso-days__day--none' : Number(level) ? ` kanso-days__day--${Number(level)}` : ''}"></span>`).join('')}</div>`;
+export const heatmap = ({ days = [], said = [] }) => `<div class="kanso-days">${days.map((level, day) => `<span class="kanso-days__day${level === null ? ' kanso-days__day--none' : Number(level) ? ` kanso-days__day--${Number(level)}` : ''}"${said[day] ? ` title="${escape(said[day])}"` : ''}></span>`).join('')}</div>`;
 const shareLine = (title, right = '') => `<div class="kanso-share__header">${escape(title)}${right ? `<span>${escape(right)}</span>` : ''}</div>`;
 const shareStat = ({ value, unit }) => `<div><div class="kanso-content__value">${escape(value)}</div><div class="kanso-metric__unit">${escape(unit)}</div></div>`;
 const shareBlocks = {

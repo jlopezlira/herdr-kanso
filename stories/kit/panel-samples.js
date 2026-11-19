@@ -61,7 +61,8 @@ export const samplePlaces = [
   { name: 'kansō', note: 'Source, releases and issues', url: 'github.com/jlopezlira/herdr-kanso' },
   { name: 'Lucide (ISC)', note: 'Toolbar icons', url: 'lucide.dev' },
 ];
-export const sampleMaintainers = ['JJ', 'Iván Campaña', 'Leangseu Kim', 'Johannes Hund'];
+const maker = (name, login) => ({ name, handle: `@${login} on GitHub` });
+export const sampleMaintainers = [maker('JJ', 'jlopezlira'), maker('Iván Campaña', 'icampana'), maker('Leangseu Kim', 'leangseu'), maker('Johannes Hund', 'h0ru5')];
 
 const hit = (who, when, text) => ({ who, when, text });
 export const sampleFind = {
@@ -103,6 +104,9 @@ export const samplePorts = {
   inPanes: [server(':4000', 'tsx', '146 MB', 'tsx watch src/server.ts', '~/acme-shop', '1 h', 'checkout'), server(':5173', 'vite', '182 MB', 'vite --port 5173', '~/acme-shop', '40 min', 'web')],
   remote: { noPane: [server(':8000', 'uvicorn', '96 MB', 'uvicorn app:api --port 8000', '~/billing', '3 h')], inPanes: [server(':5432', 'postgres', '64 MB', 'postgres -D data', '~/billing', '1 d', 'migrate')] },
   computer: sampleFiles.computer,
+  everywhere: { scope: 'All computers', here: 'dark' },
+  light: { name: 'light', count: '1', servers: [server(':5174', 'vite', '160 MB', 'vite --port 5174', '~/docs-site', '20 min', 'docs')] },
+  lightOut: [{ name: 'light', lacks: 'unreachable' }, { name: 'build', lacks: 'lsof is not installed' }],
   entry: { icon: 'lu-plug', text: ':6006 no pane', tone: 'working' },
   refused: { text: 'Couldn’t stop :6006', source: 'kill 48213: still listening on :6006 after SIGTERM', fix: 'Force stop', agent: 'checkout' },
   failure: { text: 'Can’t read ports', source: 'lsof: unknown option -F', fix: 'Refresh', agent: 'checkout' },
@@ -214,7 +218,7 @@ export const sampleMemory = {
     session('i18n', '640 MB', 'working', ['Codex', 'working', 'docs-site']),
   ],
   more: 3,
-  spark: [0.2, 0.3, 0.35, 0.5, 0.45, 0.6, 0.7, 0.65, 0.8, 0.9, 1, 0.95],
+  spark: { bars: [0.2, 0.3, 0.35, 0.5, 0.45, 0.6, 0.7, 0.65, 0.8, 0.9, 1, 0.95], spoken: 'Memory rising from 420 MB to 980 MB' },
   unrecyclable: 'No conversation to resume',
   bulk: { idle: '2 idle', back: 'about 1.7 GB back', heavy: 'Only the 1 over 500 MB', unused: 'Close the 1 not used for 2 days · 720 MB' },
   batch: { done: [['checkout', '1.6 GB → 210 MB'], ['perf', '720 MB → 180 MB']], current: 'docs', said: 'Recycled 2 of 2 · 1.9 GB back' },
@@ -236,6 +240,8 @@ export const sampleMemory = {
   install: { text: 'Couldn’t turn on the memory guard', source: 'launchctl bootstrap: 5: Input/output error', fix: 'Turn on', agent: 'checkout' },
   unreadable: { text: 'Can’t read the memory guard', source: 'guard.json: Unexpected end of JSON input', fix: 'Turn on', agent: 'checkout' },
   stale: 'Stopped at 14:02',
+  stuck: { text: 'Couldn’t restart the window', source: 'The window did not stop; it was not reopened.', fix: 'Restart window', agent: 'checkout' },
+  pausedWhy: '3 restarts in the last hour. Automatic restarts are paused for an hour.',
   silent: 'The guard stopped answering',
   remote: { computer: 'devbox', free: { value: '54%', of: 'free of 32 GB', swap: '0 swap' }, herdr: { size: '320 MB' }, sessions: [session('relay', '1.1 GB', 'working', ['Claude', 'working', 'up 1 d'])] },
 };
@@ -282,7 +288,7 @@ export const sampleSpend = {
   showing: 'Showing acme-shop and claude-opus-5',
   live: [spent('Rate limit checkout per customer', '$3.10', 'acme-shop · claude-opus-5 · 1.2M tok'), spent('Translate the pricing page', '$0.90', 'docs-site · gpt-5-codex · 310K tok')],
   history: perDay([2.25, 12.15, 0, 30.15, 45, 0, 8.1, 18, 0, 4.95, 0, 9.9, 41.2]),
-  quiet: perDay(Array(13).fill(0)),
+  quiet: { ...perDay(Array(13).fill(0)), none: 'No usage this period' },
   partial: 'Still reading your history: 412 of 1,980 files so far.',
   reading: 'Reading sessions · 412 of 1,980',
   project: { days: perDay([0, 8, 0, 21, 30, 0, 6, 12, 0, 0, 0, 7, 28.4]), name: 'acme-shop', value: '$28.40', said: ['8 tasks', '$3.55 a task', '6.2M tokens'], models: [spent('claude-opus-5', '$25.90', '5.8M tokens'), spent('claude-haiku-5', '$2.50', '0.4M tokens')] },
@@ -536,6 +542,7 @@ export const sampleWorktrees = {
     project: 'acme-shop', branch: 'rate-limit-v2', place: '~/.kanso/worktrees/acme-shop/rate-limit-v2', agent: 'checkout',
     opens: { items: [{ key: 'claude', label: 'Claude', icon: 'p-claude' }, { key: 'codex', label: 'Codex', icon: 'p-codex' }, { key: 'terminal', label: 'Terminal' }], value: 'claude' },
   },
+  taken: { branch: 'cart-retry', refused: '\'cart-retry\' is already checked out at ~/acme-shop-cart' },
   remote: { scope: 'Read 13:52 · devbox unreachable · next try 14:04', total: { value: '5.1 GB', unit: 'in 6 worktrees' }, plan: { count: 2, size: '2.2 GB' }, repos: [repo('acme-shop', '3.4 GB', [])] },
 };
 const worktreeNotice = (state, text, detail) => ({ state, home: 'worktrees', text, detail });
@@ -573,6 +580,8 @@ const counted = (...pairs) => pairs.map(([value, unit]) => ({ value, unit }));
 const shipRecord = (name, value, unit, detail, fresh = false) => ({ name, value, unit, detail, fresh });
 const shipHours = [2, 1, 1, 1, 2, 4, 6, 10, 14, 18, 21, 17, 15, 20, 31, 50, 35, 23, 15, 10, 7, 5, 4, 3];
 const shipDays = Array.from({ length: 7 * 26 }, (_, day) => [0, 1, 2, 4, 3, 1, 0, 2, 3, 1, 4][(day * 7 + Math.floor(day / 5)) % 11]);
+const weekdays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const contributionsOn = (level, day) => `${level * 2} contributions on ${weekdays[day % 7]}, week ${Math.floor(day / 7) + 1}`;
 export const sampleShipped = {
   periods: [{ key: 'day', label: 'Day' }, { key: 'week', label: 'Week' }, { key: 'month', label: 'Month' }, { key: 'year', label: 'Year' }],
   week: {
@@ -580,7 +589,7 @@ export const sampleShipped = {
     hero: { value: '+12,480', small: '−3,210', unit: 'lines' }, delta: { text: '18% on last week', up: true },
     counts: counted(['9', 'PRs merged'], ['112', 'commits'], ['6', 'reviews'], ['12', 'days in a row']),
     contributions: '340 contributions this week', ever: '1,204 pull requests merged, +412,300 lines and 9,870 commits in 64 repositories since you joined GitHub in 2014.',
-    best: shipRecord('Best day', '+2,904', 'lines', 'Tue 11 Nov', true), days: shipDays,
+    best: shipRecord('Best day', '+2,904', 'lines', 'Tue 11 Nov', true), days: shipDays, daysSaid: shipDays.map(contributionsOn),
     repos: { count: '11', more: 8, rows: [shipRepo('acme-shop', '+7,120', '−1,840', 61), shipRepo('relay', '+2,980', '−720', 28), shipRepo('billing', '+1,640', '−410', 18)] },
     rest: [shipRepo('docs', '+240', '−80', 4), shipRepo('cli', '+180', '−60', 2), shipRepo('search', '+120', '−40', 2), shipRepo('infra', '+90', '−30', 1), shipRepo('site', '+60', '−20', 1), shipRepo('mobile', '+30', '−10', 1), shipRepo('herdr-kanso', '+12', '−4', 1), shipRepo('notes', '+8', '−2', 1)],
   },
@@ -608,6 +617,7 @@ export const sampleShipped = {
   rhythm: {
     note: 'mostly afternoons', ticks: ['00', '06', '12', '18', '23'], peak: shipHours.indexOf(Math.max(...shipHours)),
     counts: shipHours, hours: shipHours.map((count) => count / Math.max(...shipHours)),
+    said: shipHours.map((count, hour) => `${String(hour).padStart(2, '0')}:00 · ${count} ${count === 1 ? 'commit' : 'commits'}`), spoken: 'Commits per hour',
   },
   computers: { count: '2', rows: [{ name: 'This Mac', lines: '+8,420 −2,100', commits: '72 commits' }, { name: 'devbox', lines: '+4,060 −1,110', commits: '40 commits' }] },
   empty: { label: 'Sun 2 Nov', period: 'day', past: true, empty: { icon: 'lu-trophy', text: 'Nothing shipped' } },
@@ -689,11 +699,12 @@ export const sampleSimulator = {
     { name: 'iOS', devices: [simDevice('iPhone 16 Pro', 'iOS 18.2', 'On', true), simDevice('iPhone SE (3rd generation)', 'iOS 18.2', 'Off'), simDevice('iPad Air 11-inch (M2)', 'iPadOS 18.2', 'Off')] },
     { name: 'Android', devices: [simDevice('Pixel 8', 'Android 15', 'On'), simDevice('Pixel 4 API 30', 'x86 image on arm', 'Off')] },
   ],
-  scopes: { iphone: ['iPhone 16 Pro'], pixel: ['Pixel 8'], off: ['iPhone SE', 'off'], starting: ['iPhone SE', 'starting… 42s'], stalled: ['Pixel 8', 'as of 12s ago'], offline: ['Pixel 8', 'offline'], image: ['Pixel 4 API 30', 'off'], unauthorized: ['R58M123', 'unauthorized'] },
+  scopes: { iphone: ['iPhone 16 Pro'], pixel: ['Pixel 8'], off: ['iPhone SE', 'off'], starting: ['iPhone SE', 'starting… 42s'], stalled: ['Pixel 8', 'as of 12s ago', 'emulator not answering'], offline: ['Pixel 8', 'offline'], image: ['Pixel 4 API 30', 'off'], unauthorized: ['R58M123', 'unauthorized'] },
   said: { remote: 'Devices are on this computer.', noEmulator: 'Android SDK emulator binary is missing.' },
   touch: [72, 41],
   narrow: [{ label: 'Trail runner', value: '$64' }, { label: 'Socks ×2', value: '$12' }],
   url: 'acme-shop://checkout',
+  bare: { url: 'checkout', invalid: 'Enter a URL with a scheme, such as acme-shop://checkout.' },
   failures: {
     command: { text: 'Can’t reach Pixel 8', source: 'adb: device \'emulator-5554\' offline', fix: 'Refresh', agent: 'checkout' },
     start: { text: 'Couldn’t start iPhone SE', source: 'Start timed out.', fix: 'Start', agent: 'checkout' },
@@ -717,45 +728,4 @@ export const sampleImages = {
   empty: { icon: 'lu-eye', text: 'No pictures in this conversation' },
   noAgent: { icon: 'lu-monitor', text: 'No agent in focus' },
   noConversation: { icon: 'lu-eye', text: 'No conversation to read pictures from' },
-};
-
-const level = (n, name, motions, best = '') => ({ n, name, motions, best });
-export const sampleDojo = {
-  levels: [level(1, 'h l', ['h', 'l'], 88), level(2, 'j k', ['j', 'k'], 104), level(3, 'h j k l', ['h', 'j', 'k', 'l'], 142), level(4, '0 $ gg G', ['h', 'j', 'k', 'l', '0', '$', 'g', 'G'], 131),
-    level(5, 'Counts', ['h', 'j', 'k', 'l', '2', '3', '4', '5', '6', '7', '8', '9'], 156), level(6, 'w b e', ['h', 'j', 'k', 'l', 'w', 'b', 'e'], 149), level(7, 'f t', ['h', 'l', 'f', 't', 'F', 'T'], 162),
-    level(8, '0 ^ $', ['h', 'j', 'k', 'l', '0', '^', '$', 'g', 'G'], 171), level(9, 'All of it', ['h', 'j', 'k', 'l', 'w', 'b', 'e', 'f', 't', 'F', 'T', '0', '^', '$', 'g', 'G'], 181)],
-  rows: ['1234567890', 'qwertyuiop', 'asdfghjkl;', 'zxcvbnm,./'],
-  shifted: { 4: '$', 6: '^' },
-  fingers: { h: ['←', 'index'], j: ['↓', 'index'], k: ['↑', 'middle'], l: ['→', 'ring'] },
-  code: ['export default class Strip extends View {', '  init(props, cx) { this.cols = []; }', '  focus(pane) { run("pane.focus", { pane }); }', '  width(col) { return col.w ?? 1 / this.n; }', '}'],
-  said: {
-    start: 'Make a move to start: 10 targets, in as few moves as you can.',
-    best: 'This one takes 5 at best.',
-    fewest: 'In the fewest moves.',
-    streak: '3 in a row in the fewest moves.',
-    long: '8 moves; 5 would do. Try l.',
-    hint: 'Try l.',
-    find: 'f… now the letter to find.',
-    go: 'g… another g for the first line.',
-    count: '5… now h j k or l.',
-    arrow: 'The arrows don’t count in the dōjō: h j k l.',
-    later: 'w comes at level 6. Here: h j k l',
-    sleep: 'Zzz. Any move wakes me.',
-    leave: 'Press Esc again to leave the dōjō.',
-    stopped: 'Round stopped, not counted. Enter to start again.',
-    record: 'A new best! Enter to play again, n for the next level.',
-    again: 'Enter to play again, n for the next level.',
-    unkept: 'This round could not be kept: database is locked',
-    noSqlite: 'Install sqlite3 to keep your rounds.',
-    next: 'Level 3 done, best 142. Level 4: 0 and $ jump to the ends of a row, gg and G to the first and the last row.',
-    words: 'Level 6, w b e: w jumps to the next word, b back to the start of a word, e to the end of one. A move starts.',
-    column: 'Level 2, j k: j goes down (its tail hangs below the line), k goes up. Index on j, middle finger on k.',
-    ends: 'Level 8, 0 ^ $: 0 is the line’s very start, ^ its first letter, $ its end; gg and G the first and last line.',
-    all: 'All nine. [ and ] take you back to any level.',
-  },
-  results: {
-    record: { points: 142, record: 'a new best for level 3 · was 120', facts: ['10 targets', '8 in the fewest moves', 'best streak 5', '1:12'] },
-    kept: { points: 118, facts: ['10 targets', '6 in the fewest moves', 'best streak 3', '1:20'] },
-    all: { points: 181, record: 'all nine levels done', facts: ['1,284 points across the path', '41 days practised', 'longest streak 12'] },
-  },
 };

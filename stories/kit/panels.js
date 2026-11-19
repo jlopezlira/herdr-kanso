@@ -1,4 +1,4 @@
-import { band, bars, button, chord, device, deviceScreen, dialog, facts, keyHint, mark, markdown, menu, metric, note, pieceLines, emptyState, excerpt, failureBlock, input as kitInput, list, phrase, picture, pin, release, row as kitRow, setting, skeletonOf, stack, tabs, toggle, windowMap, code, explainButton, sentence, well, delta, heatmap, shareCard, statusItem, thumbnail, grow } from './kit.js';import { channelSettings, keyboardExplorer, newWorktree, notice, panel, panelBack, panelClose, panelHeader as kitPanelHeader, panelRefresh, shortcutRow } from './compositions.js';
+import { avatar, band, bars, button, chord, device, deviceScreen, dialog, facts, keyHint, mark, markdown, menu, metric, note, pieceLines, emptyState, excerpt, failureBlock, input as kitInput, list, phrase, picture, pin, release, row as kitRow, setting, skeletonOf, stack, tabs, toggle, windowMap, code, explainButton, sentence, well, delta, heatmap, shareCard, statusItem, thumbnail, grow } from './kit.js';import { channelSettings, keyboardExplorer, newWorktree, notice, panel, panelBack, panelClose, panelHeader as kitPanelHeader, panelRefresh, shortcutRow } from './compositions.js';
 
 const row = (props) => kitRow({ apart: true, ...props });
 const input = (props) => kitInput({ multiline: false, ...props });
@@ -57,7 +57,11 @@ export const whatsNew = ({ channel = 'stable', art = true, auto, checking, readi
   reading ? skeletonOf({ shape: 'line', count: 4 }) : failure ? failureBlock(failure) : releases(timeline));
 
 const placeRow = (hover) => ({ name, note, url }) => row({ name, hover: hover === name, detail: hover === name ? note : null, meta: hover === name ? url : null, flag: hover === name ? 'lu-external-link' : null });
-export const credits = ({ places = [], maintainers = [], hover = null }) => list(places.map(placeRow(hover)), row({ name: 'Maintained by', detail: maintainers }));
+const makerRow = (loading) => ({ name, handle }) => row({ start: [avatar({ initial: name, loading })], name, detail: handle, flag: 'lu-external-link' });
+const makers = ({ maintainers, faces }) => (faces
+  ? [row({ name: 'Made by', heading: true }), maintainers.map(makerRow(faces === 'pending'))]
+  : row({ name: 'Maintained by', detail: maintainers.map(({ name }) => name) }));
+export const credits = ({ places = [], maintainers = [], hover = null, faces = null }) => list(places.map(placeRow(hover)), makers({ maintainers, faces }));
 
 const pageBody = { pieces: whatShows, keys: settingsKeys, news: whatsNew, credits };
 export const settings = ({ page = 'pieces', ...props }) => dialog({
@@ -68,10 +72,10 @@ export const settings = ({ page = 'pieces', ...props }) => dialog({
 
 const dayOf = (query, at) => ([day, hits]) => list(row({ name: day, heading: true }), hits.map((item) => excerpt({ ...item, query, current: item === at })));
 const turnOpen = ({ query, at, turn }) => excerpt({ ...at, text: turn, query, lead: button({ label: 'Back', kind: 'icon', icon: 'lu-chevron-left' }) });
-const findBody = ({ agent, query, days = [], at = null, open = false, turn, reading = false, missing = null }) => {
+const findBody = ({ agent, query, days = [], at = null, open = false, turn, reading = false, cleared = false, missing = null }) => {
   if (!query) return null;
   if (missing) return failureBlock({ text: phrase('Can’t read', possessive(agent), 'conversation'), source: missing, fix: 'Refresh', agent });
-  if (reading) return skeletonOf({ shape: 'line', count: 4 });
+  if (reading) return [skeletonOf({ shape: 'line', count: 4 }), cleared ? sentence({ text: 'Conversation cleared · searching again…' }) : null];
   if (!days.length) return emptyState({ icon: 'lu-search', text: phrase('No matches in', possessive(agent), 'conversation') });
   return open ? turnOpen({ query, at, turn }) : days.map(dayOf(query, at));
 };
@@ -104,19 +108,23 @@ export const shareMenu = ({ leaves, making = null }) => {
 const shareButton = ({ disabled = false, active = false } = {}) => button({ label: 'Share', kind: 'icon', icon: 'lu-share', disabled, active });
 const withBeside = (drawn, beside) => (beside ? stack({ variant: 'columns' }, drawn, beside) : drawn);
 
-const stopVerb = ({ armed, stopping, keyboard }) => (stopping ? { label: 'Stopping…', disabled: true } : { label: 'Stop', armed, verb: 'stop', focus: keyboard });
+const stopWord = (force) => (force ? 'Force stop' : 'Stop');
+const stopVerb = ({ armed, stopping, keyboard, force = false }) => (stopping ? { label: 'Stopping…', disabled: true } : { label: stopWord(force), armed, verb: stopWord(force).toLowerCase(), focus: keyboard });
 const browserVerb = (narrow) => ({ label: narrow ? 'Open' : 'Open in the browser' });
 const verbsOf = ({ pane }, { narrow, ...stop }) => (pane
   ? [{ label: phrase('Go to', pane) }, browserVerb(narrow), stopVerb(stop)]
   : [{ ...stopVerb(stop), kind: stop.armed ? 'quiet' : 'solid' }, browserVerb(narrow)]);
-const serverRow = ({ picked, refused, narrow, armed, stopping, reach, keyboard }) => (item) => {
+const serverRow = ({ picked, refused, narrow, armed, stopping, reach, keyboard, force }) => (item) => {
   const open = item.port === picked;
   return refusable({ open, refused }, {
     name: item.port, detail: item.pane ?? item.what, meta: item.size, current: open && !keyboard, selected: open && keyboard,
     second: open && !narrow ? facts(item.command, item.folder, item.age) : null,
-    verbs: open ? verbsOf(item, { narrow, armed, stopping, keyboard }).map(within(reach)) : [],
+    verbs: open ? verbsOf(item, { narrow, armed, stopping, keyboard, force }).map(within(reach)) : [],
   });
 };
+const computerRows = (each) => ({ name, count, servers = [], lacks = null }) => (lacks
+  ? row({ name: facts(name, lacks), dimmed: true })
+  : list(row({ name, heading: true, meta: count }), servers.map(each)));
 const noPaneHeading = ({ count, hover, armed }) => row({ name: 'No pane', heading: true, action: hover ? { label: phrase('Stop', count), kind: 'quiet', armed, verb: 'stop every one' } : null });
 const historyFold = (open, fold = {}) => row({ name: 'History', level: 0, open, ...fold });
 const historyRow = ({ name, ports, when, ran, peak, how }) => row({ name, meta: peak, second: facts(ports, when, ran, how) });
@@ -134,13 +142,14 @@ const historyChart = ({ ranges, range, most, summary, lists, each, ...chart }) =
 const history = ({ open = false, fold = {}, guard = null, reading = false, failure = null, lists = [], each = historyRow, ...chart }) => (open
   ? list(historyFold(true, fold), guard ? guardLine(guard) : null, waiting({ reading, failure }) ?? (guard && !chart.bars ? null : historyChart({ lists, each, ...chart })))
   : historyFold(false, fold));
-const portsShown = ({ servers, picked = null, refused = null, armed = false, stopping = false, keyboard = false, heading = {}, reach = true, look, reading = false, failure = null, unattributed = null, history: past }) => {
+const portsShown = ({ servers, picked = null, refused = null, armed = false, stopping = false, force = false, keyboard = false, heading = {}, reach = true, look, reading = false, failure = null, unattributed = null, here = null, computers = [], history: past }) => {
   const { noPane = [], inPanes = [] } = servers;
-  const each = serverRow({ picked, refused, armed, stopping, reach, keyboard, narrow: look === 'narrow' });
+  const each = serverRow({ picked, refused, armed, stopping, force, reach, keyboard, narrow: look === 'narrow' });
   return list(
+    here ? row({ name: here, heading: true }) : null,
     noPane.length || inPanes.length ? null : emptyState({ icon: 'lu-plug', text: 'No servers listening' }),
     noPane.length ? list(noPaneHeading({ count: noPane.length, ...heading }), noPane.map(each)) : null,
-    inPanes.map(each), unattributed ? setting(unattributed) : null, past ? history(past) : null);
+    inPanes.map(each), computers.map(computerRows(each)), unattributed ? setting(unattributed) : null, past ? history(past) : null);
 };
 const portsBody = (body) => unread(body) ?? portsShown(body);
 const portsPanel = ({ scope = null, stale = false, look = 'panel', ...body }) => panel({ look, stale, header: panelHeader({
@@ -269,7 +278,7 @@ const sessionRow = ({ picked, armed, refused, spark, unrecyclable, batch }) => {
     mark: item.state === 'blocked' ? 'blocked' : 'none',
     second: open ? facts(...item.said, unrecyclable) : null,
     verbs: open ? sessionVerbs(item, { armed, unrecyclable }) : [],
-  }), open && spark ? bars({ bars: spark }) : null, open && refused ? failureBlock(refused) : null));
+  }), open && spark ? bars(spark) : null, open && refused ? failureBlock(refused) : null));
 };
 const batchLine = ({ said, finished }) => row({ name: said, dimmed: true, action: finished ? { label: 'Dismiss', kind: 'quiet' } : null });
 const eventRow = ([name, when, late = false]) => row({ name, meta: late ? { text: when, tone: 'blocked' } : when });
@@ -282,10 +291,10 @@ const memoryWait = ({ guard: state, install }) => ({
   turning: () => list(row({ name: 'Turning on the guard…', dimmed: true }), waiting({ reading: true })),
   refused: () => failureBlock(install),
 })[state];
-const memoryShown = ({ free, herdr, helpers = null, sessions = [], more = 0, bulk = null, batch = null, guard = 'on', install = null, rules = [], foot = {}, history: past = { open: false }, picked = null, armed = null, refused = null, reap = null, spark = null, unrecyclable = null, silent = null, reading = false, failure = null }) => {
+const memoryShown = ({ free, herdr, helpers = null, sessions = [], more = 0, bulk = null, batch = null, guard = 'on', install = null, rules = [], foot = {}, history: past = { open: false }, picked = null, armed = null, refused = null, reap = null, spark = null, unrecyclable = null, silent = null, why = null, stuck = null, reading = false, failure = null }) => {
   const each = sessionRow({ picked, armed: armed === 'session', refused, spark, unrecyclable, batch });
-  return list(silent ? guardLine(silent) : null, freeLine(free), bulk ? bulkLine(bulk, { low: free.low, armed: armed === 'unused' }) : null,
-    herdrRow(herdr, picked === 'Herdr'), helpers ? helpersRow(helpers, armed === 'helpers') : null, reap ? failureBlock(reap) : null,
+  return list(silent ? guardLine(silent) : null, freeLine(free), why ? sentence({ text: why }) : null, bulk ? bulkLine(bulk, { low: free.low, armed: armed === 'unused' }) : null,
+    herdrRow(herdr, picked === 'Herdr'), stuck ? failureBlock(stuck) : null, helpers ? helpersRow(helpers, armed === 'helpers') : null, reap ? failureBlock(reap) : null,
     batch ? batchLine(batch) : null, sessions.length ? sessions.map(each) : row({ name: 'No agents running', dimmed: true }),
     more ? button({ label: phrase('Show', more, 'more'), kind: 'quiet', size: 'sm' }) : null,
     memoryFoot({ guard: { said: guard === 'paused' ? 'Guard paused' : 'Guard on', rules, ...foot }, past }));
@@ -307,7 +316,7 @@ const spendNumber = ({ value, unit, said }, { pointer, choices, ...when }) => li
   pointer === 'period' ? list(stack({ variant: 'line' }, metric({ value, size: 'sm' }), periodTabs(when)), stepper(when.past), stack({ variant: 'line' }, pickers(choices))) : metric({ value, unit, size: 'sm' }),
   pointer === 'number' ? row({ name: facts(...said), dimmed: true }) : null);
 const spendLists = [{ key: 'projects', label: 'Projects' }, { key: 'models', label: 'Models' }, { key: 'tasks', label: 'Tasks' }];
-const historyBars = ({ open = false, ...chart }) => list(historyFold(open), open ? bars(chart) : null);
+const historyBars = ({ open = false, none = null, ...chart }) => list(historyFold(open), open && none ? sentence({ text: none }) : null, open ? bars(chart) : null);
 const moreRows = (more) => (more ? quiet({ label: phrase('Show', more, 'more') }) : null);
 const whereItWent = ({ lists, view = 'projects', pointer, picked, more = 0 }) => list(
   pointer === 'list' ? tabs({ items: spendLists, value: view, size: 'sm' }) : null, costList({ rows: lists[view], picked }), moreRows(more));
@@ -474,7 +483,7 @@ const deviceKeys = {
 const deviceKey = (acting) => ([label, icon]) => button({ label, kind: 'icon', icon, spin: label === acting, disabled: Boolean(acting) });
 const deviceButtons = (keys, acting) => stack({ variant: 'device tools' }, keys.map(deviceKey(acting)));
 const deviceControls = {
-  ios: ({ acting, url }) => list(deviceButtons(deviceKeys.ios, acting), line(tonalAct('Open in Simulator')), input({ label: 'URL', text: url, action: 'Open a URL' })),
+  ios: ({ acting, url, invalid }) => list(deviceButtons(deviceKeys.ios, acting), line(tonalAct('Open in Simulator')), input({ label: 'URL', text: url, action: 'Open a URL', error: Boolean(invalid) }), invalid ? sentence({ text: invalid, tone: 'blocked' }) : null),
   android: ({ acting }) => deviceButtons(deviceKeys.android, acting),
   emulator: ({ acting }) => deviceButtons([...deviceKeys.android, ...deviceKeys.emulator], acting),
 };
@@ -490,9 +499,9 @@ const simScreens = {
 const simHeader = ({ groups, scope, reading }) => (groups
   ? panelHeader({ title: 'Devices', tools: [panelBack('Back to the device'), panelRefresh({ reading })] })
   : panelHeader({ title: 'Simulator', second: scope, tools: pinTools.device({ frozen: false, reading }) }));
-const simBody = ({ groups = null, scope, shows = 'picture', controls = null, acting = null, url, said = [], reading = false, failure = null, empty = null, ...look }) => list(said.map(dimLine),
+const simBody = ({ groups = null, scope, shows = 'picture', controls = null, acting = null, url, invalid = null, retry = null, said = [], reading = false, failure = null, empty = null, ...look }) => list(said.map(dimLine),
   textOr({ reading, failure, empty }, () => (groups ? groups.map(deviceGroup) : simScreens[shows](look))),
-  controls ? deviceControls[controls]({ acting, url }) : null);
+  retry ? line(quietAct(retry)) : null, controls ? deviceControls[controls]({ acting, url, invalid }) : null);
 export const simulator = ({ look = 'panel', ...props }) => panel({ look, header: simHeader(props) }, simBody(props));
 
 const worktreeVerbs = {
@@ -535,17 +544,18 @@ export const worktrees = ({ share = false, notice: said = null, creating = null,
 
 const periodLine = (when) => stack({ variant: 'line' }, periodTabs(when), stepper(when.past));
 const countLine = (counted) => sentence({ text: facts(...counted.map(({ value, unit }) => phrase(value, unit))) });
-const shippedHero = ({ hero, delta: compared = null, counts: counted, contributions = null, ever = null, days = [], calendar = false }, pointer) => list(
-  metric(hero), compared ? delta(compared) : null, countLine(counted), calendar ? heatmap({ days }) : null, pointer === 'number' ? sentence({ text: facts(contributions, ever) }) : null);
+const shippedHero = ({ hero, delta: compared = null, counts: counted, contributions = null, ever = null, days = [], daysSaid = [], calendar = false }, pointer) => list(
+  metric(hero), compared ? delta(compared) : null, countLine(counted), calendar ? heatmap({ days, said: daysSaid }) : null, pointer === 'number' ? sentence({ text: facts(contributions, ever) }) : null);
 const newMark = { text: 'new', tone: 'accent' };
 const recordRow = ({ name, value, unit, detail, fresh }) => row({ name, detail: fresh ? newMark : null, meta: phrase(value, unit), second: detail });
 const shipRow = (pointer) => ({ name, lines, commits }) => row({ name, meta: lines, hover: name === pointer, second: name === pointer ? commits : null });
 const shipRepos = ({ count, rows, more = 0 }, { rest = [], expanded, pointer }) => list(heading('By repository', { meta: count }),
   [...rows, ...(expanded ? rest : [])].map(shipRow(pointer)), expanded ? quiet({ label: 'Show fewer' }) : moreRows(more));
 const footFold = (open, fold, drawn) => list(historyFold(open, fold), open ? drawn() : null);
-const shipFolds = ({ records = null, rhythm = null, computers = null, open = [] }) => list(
+const shipFolds = ({ records = null, unset = null, rhythm = null, computers = null, open = [] }) => list(
+  !records && unset ? sentence({ text: unset }) : null,
   records ? footFold(open.includes('records'), { name: 'Records', meta: records.count }, () => records.rows.map(recordRow)) : null,
-  rhythm ? footFold(open.includes('rhythm'), { name: 'When you ship', meta: rhythm.note }, () => bars({ bars: rhythm.hours, peak: rhythm.peak, ticks: rhythm.ticks, filled: true })) : null,
+  rhythm ? footFold(open.includes('rhythm'), { name: 'When you ship', meta: rhythm.note }, () => bars({ bars: rhythm.hours, peak: rhythm.peak, ticks: rhythm.ticks, said: rhythm.said, spoken: rhythm.spoken, filled: true })) : null,
   computers ? footFold(open.includes('computers'), { name: 'Computers', meta: computers.count }, () => computers.rows.map(({ name, lines, commits }) => row({ name, meta: facts(commits, lines) }))) : null);
 const shippedBody = ({ best = null, repos = null, rest, expanded = false, pointer = null, phase = null, stopped = null, ...shown }) => list(
   shippedHero(shown, pointer), phase ? sentence({ text: phase }) : null, stopped ? failureBlock(stopped) : null,

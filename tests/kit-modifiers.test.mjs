@@ -21,6 +21,12 @@ test("Every kit record mounts with each modifier on its block, except develop's 
   assert.deepEqual(allowed.filter((pair) => !found.has(pair)), [], "no longer drawn: take it off the list");
 });
 
+test("The allowed pairs never grow past the ones develop had when the list was made", () => {
+  const baseline = read("./kit-modifiers-baseline.json");
+  assert.equal(baseline.length, 51);
+  assert.deepEqual(read("./kit-modifiers.json").filter((pair) => !baseline.includes(pair)), [], "an allowance the baseline never had");
+});
+
 test("A modifier without its block is found, and one beside its block is not", () => {
   assert.deepEqual(pairsIn('<i class="kanso-dot kanso-fill--accent"></i>'), ["kanso-dot | kanso-fill"]);
   assert.deepEqual(pairsIn('<i class="kanso-dot kanso-dot--accent"></i><b class="kanso-row__meta kanso-row__meta--late"></b>'), []);

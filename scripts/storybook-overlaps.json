@@ -88,7 +88,7 @@
       "Batch refused": "kit/Panels/Memory/Recycled, one refused on its row",
       "Focused skipped": "kit/Panels/Memory/Only the session you are on is idle",
       "Hung helpers": "kit/Panels/Memory/End hung helpers, armed",
-      "Recovery failed": "kit/Panels/Memory/Ending the helpers refused",
+      "Recovery failed": "kit/Panels/Memory/Restarting the window refused",
       "Restart window": "kit/Panels/Memory/Herdr picked, past its limit"
     }
   },
@@ -164,12 +164,12 @@
       "Read": "kit/Panels/Preview/Markdown, formatted",
       "Editing": "kit/Panels/Preview/Markdown, a click edits that block",
       "Conflict": "kit/Panels/Preview/Changed on disk while edited",
-      "Append": "kit/Panels/Preview/Markdown, a click edits that block",
+      "Append": "kit/Panels/Preview/Markdown, a new block at the end",
       "Image failed": "kit/Panels/Preview/A picture inside a note, can’t be shown",
       "Loading": "kit/Panels/Preview/First read",
       "Save failed": "kit/Panels/Preview/Couldn’t save",
       "Saving": "kit/Panels/Preview/Saving",
-      "Stale": "kit/Panels/Preview/Another computer, not answering"
+      "Stale": "kit/Panels/Preview/The computer is gone"
     }
   },
   "panel/ConversationFind": {
@@ -180,7 +180,7 @@
       "Empty query": "kit/Panels/Find/Empty",
       "Loading": "kit/Panels/Find/Reading the conversation",
       "No matches": "kit/Panels/Find/No matches",
-      "Stale": "kit/Panels/Find/Reading the conversation",
+      "Stale": "kit/Panels/Find/Conversation cleared, searching again",
       "Unavailable": "kit/Panels/Find/The conversation file is gone"
     }
   },
@@ -214,8 +214,8 @@
       "Empty": "kit/Panels/Ports/Empty",
       "Read failed": "kit/Panels/Ports/A read failed",
       "Remote stale": "kit/Panels/Ports/Another computer, unreachable",
-      "Force stop": "kit/Panels/Ports/A stop refused, on its row",
-      "Bulk stop": "kit/Panels/Ports/Stop every one with no pane"
+      "Force stop": "kit/Panels/Ports/Force stop, armed",
+      "Bulk stop": "kit/Panels/Ports/Stop every one, armed"
     }
   },
   "panel/PortHistory": {
@@ -440,7 +440,7 @@
       "Android emulator": "kit/Panels/Simulator/Android: touch, keys, the device’s buttons",
       "Command failed": "kit/Panels/Simulator/A command failed",
       "Acting": "kit/Panels/Simulator/A command running",
-      "URL invalid": "kit/Panels/Simulator/A URL that did not open"
+      "URL invalid": "kit/Panels/Simulator/A URL with no scheme"
     }
   },
   "sim/PictureState": {
@@ -560,8 +560,8 @@
   "settings/CreditsLoading": {
     "page": "Panels/Settings",
     "states": {
-      "Avatars pending": "kit/Panels/Settings/Credits",
-      "Avatars unavailable": "kit/Panels/Settings/Credits"
+      "Avatars pending": "kit/Panels/Settings/Credits, avatars loading",
+      "Avatars unavailable": "kit/Panels/Settings/Credits, avatars unavailable"
     }
   },
   "markdown-panel/MarkdownFiles": {
