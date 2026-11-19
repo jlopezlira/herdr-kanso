@@ -26,8 +26,8 @@ the branch's rules.
 
 ### Fixed
 
-- Containers no longer says Docker is not installed when something else went wrong, and a list Docker failed to give is kept on screen with the failure said instead of emptied. A failure stays said until that list is read again. A first read that never answers ends in a failure with Read again, Read again turns off while a read runs, and a stop, start or remove that never answers frees its row.
-- The Containers door is offered when this computer has Docker, on any space, since that is the Docker the panel reads. A lookup that failed is asked again, and a tool installed later shows its door when you come back to the space. A Simulator lookup that fails or runs out of time no longer hides its door; it is asked again, and when you come back to a space after it said no.
+- Containers no longer says Docker is not installed when something else went wrong, and a list Docker failed to give is kept on screen with the failure said instead of emptied. A failure stays said until that list is read again. A first read that never answers ends in a failure with Read again, Read again turns off while a read runs, and a stop, start or remove that never answers frees its row. Containers says Docker isn't running only when Docker is stopped, keeps the containers when access is refused, and offers to remove unused images or volumes only when it knows what uses them.
+- The Containers door is offered when this computer has Docker, on any space, since that is the Docker the panel reads. A lookup that failed is asked again, and a tool installed later shows its door when you come back to the space. A Simulator lookup that fails or runs out of time no longer hides its door; it is asked again, and when you come back to a space after it said no. The Simulator says No devices only after it has read them.
 
 ## [3.31.0] - 2026-11-19
 
