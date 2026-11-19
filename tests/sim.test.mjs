@@ -211,6 +211,19 @@ test("Xcode that cannot say where it is is not Xcode missing", async () => {
   assert.equal(door(), true);
 });
 
+test("A Simulator lookup past its deadline looks at nothing more, and an Xcode that answers nothing is not Xcode missing", async () => {
+  const { promise, resolve } = Promise.withResolvers();
+  const looked = [];
+  const late = await probing({ exec: async (cmd) => (cmd === "xcode-select" ? promise : good("\n\n\n")), exists: async (path) => { looked.push(path); return false; } });
+  late.tabs.probeSimulator(late.cx);
+  late.timers.find((timer) => timer.ms === 7000).fn(late.cx);
+  resolve(good(DEVELOPER)); await Promise.all(late.pending);
+  assert.deepEqual(looked, [], "the expired lookup checks no path");
+  const blank = await probing({ exec: async () => good(""), exists: async () => false });
+  blank.tabs.probeSimulator(blank.cx); await Promise.all(blank.pending);
+  assert.equal(blank.door(), true, "an empty answer keeps the door");
+});
+
 test("Moving panels while the Simulator lookup runs does not start a second one", async () => {
   const { promise } = Promise.withResolvers();
   let calls = 0;

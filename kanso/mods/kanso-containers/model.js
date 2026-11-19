@@ -78,6 +78,7 @@ export function parseImages(text) {
 }
 
 const json = (text, fallback) => { try { return JSON.parse(text) ?? fallback; } catch { return fallback; } };
+const parses = (text) => { try { JSON.parse(text); return true; } catch { return false; } };
 
 // `docker inspect` with INSPECT_FORMAT: container id (12) -> what it runs on and with. Of its
 // environment only the names are kept: values are often secrets.
@@ -89,6 +90,7 @@ export const parseInspect = (text) => new Map(lines(text).map((l) => l.split(TAB
   env: json(f[5], []).map((e) => String(e).split("=")[0]).filter(Boolean),
   created: f[6] ?? null,
   platform: f[7] || "linux",
+  decoded: f.length >= 8 && [f[2], f[4], f[5]].every(parses),
 }]));
 export const parseImageIds = (text) => new Map([...parseInspect(text)].map(([id, d]) => [id, d.imageId]));
 
@@ -136,7 +138,8 @@ export function imageUsedBy(image, containers) {
 // `docker context inspect`: "name\thost". Not a unix socket: the containers are on another machine.
 export function contextOf(text) {
   const [name, host] = String(text ?? "").trim().split(TAB);
-  return name ? { name, host: host ?? "", remote: Boolean(host) && !host.startsWith("unix://") && !host.startsWith("npipe://") } : null;
+  const here = /^(unix|npipe):\/\//.test(host ?? "");
+  return name ? { name, host: host ?? "", local: here, remote: Boolean(host) && !here } : null;
 }
 
 const words = (s) => String(s ?? "").toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
@@ -256,52 +259,112 @@ const isOk = (read) => read?.state === "ok";
 const dataOf = (read) => read?.data;
 const latest = (reads, n, key) => reads[key]?.at === n ? reads[key] : null;
 
+export const containerKey = (list) => list.map((c) => `${c.id}:${c.state}`).toSorted().join(",");
+export const idKey = (list) => list.map((c) => c.id).toSorted().join(",");
+const CLEANED = ["volumes", "images", "disk"];
+
+const recordsFor = (found, inspected) => {
+  const records = inspected == null ? new Map() : parseInspect(inspected.text);
+  return { records, whole: Boolean(found) && inspected?.set === containerKey(found) && found.every((c) => records.get(c.id.slice(0, 12))?.decoded) };
+};
+const usersOf = (found, records) => found.map((c) => { const d = records.get(c.id.slice(0, 12)); return { ...c, imageId: d?.imageId ?? null, mounts: d?.mounts ?? [] }; });
+
+export function cleanupOf({ context, containers, details, volumes = null, images = null, disk = null }) {
+  const engine = contextOf(context), found = parseContainers(containers), { records, whole } = recordsFor(found, details);
+  if (!engine || !whole) return null;
+  const users = usersOf(found, records);
+  return {
+    context: engine.name,
+    volumes: volumes === null ? null : volumeRows(volumes, users).filter((v) => v.unused).map((v) => v.name),
+    images: images === null ? null : imageRows(parseImages(images), [{ containers: users }]).filter((i) => i.unused).map((i) => ({ id: i.id, tags: i.tags })),
+    disk: disk === null ? null : reclaimable(disk)["Build Cache"] ?? 0,
+  };
+}
+
+export const sameTargets = (drawn, proven) => JSON.stringify(drawn ?? null) === JSON.stringify(proven ?? null);
+
 export function settle(previous, { n, reads, thrown = null }) {
   const before = previous?.reads ?? {};
   const merged = Object.entries(reads).filter(([, read]) => read).reduce((all, [key, read]) => ({
     ...all, [key]: { ...read, data: isOk(read) ? read.data : all[key]?.data, at: n },
   }), before);
   const context = isOk(merged.context) ? contextOf(merged.context.data) : null, was = isOk(before.context) ? contextOf(before.context.data) : null;
-  const local = Boolean(context) && !context.remote;
   const ps = latest(merged, n, "containers");
   const missing = ps?.state === "failed" && notInstalled(ps.text);
-  const down = local && DAEMON.some((key) => latest(merged, n, key)?.state === "failed" && stoppedText(merged[key].text));
+  const down = Boolean(context?.local) && DAEMON.some((key) => latest(merged, n, key)?.state === "failed" && stoppedText(merged[key].text));
   const moved = Boolean(context && was) && (context.name !== was.name || context.host !== was.host);
   const kept = missing ? ["containers"] : down ? ["containers", "context"] : moved ? Object.keys(reads).filter((key) => reads[key]) : null;
   const all = kept ? Object.fromEntries(kept.filter((key) => merged[key]?.at === n).map((key) => [key, { ...merged[key], data: isOk(reads[key]) ? reads[key].data : undefined }])) : merged;
-  return { n, reads: all, thrown: thrown ? { reason: thrown, at: n } : null, cause: missing ? "missing" : down ? "down" : null };
+  const now = (key) => isOk(latest(all, n, key));
+  const set = now("containers") ? containerKey(parseContainers(all.containers.data)) : null;
+  const quiet = !thrown && !Object.values(reads).some((read) => read?.state === "failed");
+  const proving = !thrown && !missing && !down && now("context") && now("containers") && now("details")
+    && Boolean(cleanupOf({ context: all.context.data, containers: all.containers.data, details: all.details.data }));
+  const proof = Object.fromEntries(CLEANED.map((kind) => {
+    const held = previous?.proof?.[kind];
+    if (proving && now(kind)) return [kind, { set, text: all[kind].data }];
+    return [kind, held && !kept && quiet && set === held.set && all[kind]?.data === held.text ? held : null];
+  }));
+  return { n, reads: all, proof, thrown: thrown ? { reason: thrown, at: n } : null, cause: missing ? "missing" : down ? "down" : null };
 }
 
+const verbsOf = (k, { fresh, remote }) => {
+  const on = k.health === "running" || k.health === "busy";
+  return {
+    toggle: fresh ? (on ? "stop" : "start") : null, restart: fresh && on, remove: fresh && !on,
+    shell: fresh && k.health === "running", open: !remote && on ? k.ports.find(isWeb) ?? null : null, copy: remote ? [] : k.ports.slice(0, 3),
+  };
+};
+
 export function panelOf(snapshot, { projects = [], names = new Map(), pulling = false } = {}) {
-  const reads = snapshot?.reads ?? {}, n = snapshot?.n ?? 0;
-  const context = isOk(reads.context) ? contextOf(reads.context.data) : null, local = Boolean(context) && !context.remote;
+  const reads = snapshot?.reads ?? {}, n = snapshot?.n ?? 0, proof = snapshot?.proof ?? {};
+  const now = (key) => isOk(latest(reads, n, key));
+  const stale = (key) => reads[key]?.state === "failed";
+  const context = isOk(reads.context) ? contextOf(reads.context.data) : null, local = Boolean(context?.local), remote = Boolean(context?.remote);
   const found = reads.containers?.data == null ? null : parseContainers(reads.containers.data);
-  const details = reads.details?.data == null ? new Map() : parseInspect(reads.details.data.text);
-  const recorded = Boolean(found) && found.every((c) => details.has(c.id.slice(0, 12)));
-  const withDetails = (found ?? []).map((c) => { const d = details.get(c.id.slice(0, 12)); return { ...c, imageId: d?.imageId ?? null, mounts: d?.mounts ?? [] }; });
+  const { records } = recordsFor(found, reads.details?.data);
+  const users = usersOf(found ?? [], records);
   const files = reads.files?.data == null ? [] : composeFiles(reads.files.data);
-  const groups = found ? byProject(withDetails, projects, context?.remote ? [] : knownStacks(files, withDetails, names), names) : null;
+  const fresh = now("containers");
   const thrown = snapshot?.thrown?.at === n ? snapshot.thrown : null;
-  const psNow = latest(reads, n, "containers");
-  const proven = !thrown && isOk(psNow) && Boolean(context) && recorded;
-  const localProven = !thrown && isOk(psNow) && local;
+  const runningRecorded = Boolean(found) && found.filter((c) => health(c) === "running").every((c) => records.get(c.id.slice(0, 12))?.decoded) && reads.details?.data?.set === containerKey(found);
+  const localProven = !thrown && fresh && local && runningRecorded;
+  const groups = found ? byProject(users, projects, remote ? [] : knownStacks(files, users, names), names).map((g) => {
+    const stopped = g.containers.filter((k) => k.health !== "running" && k.health !== "busy"), running = g.containers.filter((k) => k.health === "running" || k.health === "busy");
+    return {
+      ...g, count: fresh ? { running: g.running, total: g.containers.length } : null,
+      startAll: fresh && stopped.length > 1 ? stopped : [], stopAll: fresh && running.length > 1 ? running : [],
+      containers: g.containers.map((k) => ({ ...k, stale: !fresh, verbs: verbsOf(k, { fresh, remote }) })),
+    };
+  }) : null;
+  const provenList = (kind) => (proof[kind] && reads.context?.data != null && found ? cleanupOf({ context: reads.context.data, containers: reads.containers.data, details: reads.details?.data, [kind]: reads[kind].data }) : null);
+  const cleanup = { volumes: provenList("volumes")?.volumes ?? [], images: provenList("images")?.images ?? [], disk: provenList("disk")?.disk ?? 0 };
+  const unusedImages = new Set(cleanup.images.map((i) => i.id)), unusedVolumes = new Set(cleanup.volumes);
+  const imageList = reads.images?.data != null && groups ? imageRows(parseImages(reads.images.data), groups) : null;
+  const volumeList = reads.volumes?.data != null && found ? volumeRows(reads.volumes.data, users) : null;
   const memory = isOk(reads.memory) ? reads.memory.data : null, attribution = isOk(reads.attribution) ? reads.attribution.data : null;
   const faults = [...(thrown ? [{ key: "read", reason: thrown.reason, at: thrown.at }] : []),
     ...Object.entries(reads).filter(([, read]) => read.state === "failed").map(([key, read]) => ({ key, reason: read.reason, at: read.at }))];
   const newest = faults.toSorted((a, b) => b.at - a.at || ORDER.indexOf(a.key) - ORDER.indexOf(b.key))[0];
   const state = snapshot?.cause ?? (thrown || reads.containers?.state === "failed" ? "failed" : found ? "ok" : "reading");
-  const listed = (key) => reads[key]?.data != null;
-  const sure = (key) => proven && isOk(reads[key]);
+  const running = found ? found.filter((k) => health(k) === "running").length : 0;
   return {
-    state, message: snapshot?.cause ? null : newest?.reason ?? null, context, local, groups,
-    images: listed("images") && groups ? imageRows(parseImages(reads.images.data), groups) : null,
-    volumes: listed("volumes") && groups ? volumeRows(reads.volumes.data, groups.flatMap((g) => g.containers)) : null,
-    spare: listed("disk") ? reclaimable(reads.disk.data) : {},
-    mem: listed("stats") ? parseStats(reads.stats.data) : new Map(),
-    limit: listed("limit") && Number(reads.limit.data) > 0 ? Number(reads.limit.data) / 1e6 : null,
-    held: local && memory && attribution?.state === "ok" ? dockerHeld(memory, dockerVms(attribution.values)) : null,
+    state, message: snapshot?.cause ? null : newest?.reason ?? null, context, local, remote, groups,
+    empty: fresh && found.length === 0,
+    counts: fresh ? { running, stopped: found.length - running } : null,
+    images: imageList && imageList.map((i) => ({ ...i, stale: stale("images"), unused: unusedImages.has(i.id), known: proof.images != null })),
+    imagesSummary: imageList && !stale("images") ? { count: imageList.length, mb: imageList.reduce((t, i) => t + i.mb, 0), spare: imageList.filter((i) => unusedImages.has(i.id)).reduce((t, i) => t + i.mb, 0) } : null,
+    volumes: volumeList && volumeList.map((v) => ({ ...v, stale: stale("volumes"), unused: unusedVolumes.has(v.name), known: proof.volumes != null })),
+    volumesSummary: volumeList && !stale("volumes") ? { count: volumeList.length, unused: cleanup.volumes.length } : null,
+    cleanup,
+    mem: reads.stats?.data != null ? parseStats(reads.stats.data) : new Map(),
+    limit: reads.limit?.data != null && Number(reads.limit.data) > 0 ? Number(reads.limit.data) / 1e6 : null,
+    held: localProven && memory && attribution?.state === "ok" ? dockerHeld(memory, dockerVms(attribution.values)) : null,
     unattributed: local && attribution?.state === "unavailable",
-    details, imagesText: dataOf(reads.images) ?? "", pulling,
-    can: { cleanImages: sure("images"), cleanVolumes: sure("volumes"), clearCache: sure("disk"), quit: localProven, memory: localProven },
+    details: records, imagesText: dataOf(reads.images) ?? "", pulling,
+    can: {
+      cleanImages: cleanup.images.length > 0, cleanVolumes: cleanup.volumes.length > 0, clearCache: cleanup.disk >= 1,
+      quit: localProven, memory: localProven, open: snapshot?.cause === "down",
+    },
   };
 }
