@@ -2,6 +2,7 @@ import { exists } from "fs/promises";
 import { pathApi } from "./platform-paths.js";
 import { checked, powershell, psQuote, windowsArg } from "./platform-command.js";
 
+const NO_DEVELOPER = /unable to get active developer directory|no developer directory/i;
 export const SDK_ENV = ["ANDROID_HOME", "ANDROID_SDK_ROOT", "LOCALAPPDATA"];
 export function sdkRoots(platform, home, env) {
   const api = pathApi(platform);
@@ -21,18 +22,19 @@ export function simulatorApi(platform, run, present = exists) {
   };
   const probe = async (home) => {
     const [env, selected] = await Promise.all([
-      environment().catch(() => ({})),
-      platform === "macos" ? run("xcode-select", ["-p"], { timeout: 1500 }).catch(() => null) : null,
+      environment(),
+      platform === "macos" ? run("xcode-select", ["-p"], { timeout: 1500 }) : null,
     ]);
+    if (selected && selected.code !== 0 && !NO_DEVELOPER.test(`${selected.stderr ?? ""}${selected.stdout ?? ""}`)) throw new Error(`xcode-select: ${(selected.stderr || selected.stdout || "").trim()}`);
     const developer = selected?.code === 0 ? selected.stdout.trim() : "";
     const simctl = developer ? api.join(developer, "usr", "bin", "simctl") : null;
-    const ios = simctl && await present(simctl).catch(() => false) ? simctl : null;
+    const ios = simctl && await present(simctl) ? simctl : null;
     const roots = sdkRoots(platform, home, env);
     const find = async (index) => {
       const root = roots[index];
       if (!root) return {};
       const adb = api.join(root, "platform-tools", `adb${exe}`), emulator = api.join(root, "emulator", `emulator${exe}`);
-      return await present(adb).catch(() => false) ? { adb, emulator: await present(emulator).catch(() => false) ? emulator : null } : find(index + 1);
+      return await present(adb) ? { adb, emulator: await present(emulator) ? emulator : null } : find(index + 1);
     };
     return { ios, ...await find(0) };
   };

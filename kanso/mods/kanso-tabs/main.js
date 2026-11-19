@@ -11,7 +11,7 @@ import { Popover } from "gpui-base";
 import { spaces, panes, run, openOverlay, props, theme, window, shared, setShared, layout, appHome, exec, watchFolder, nextCommand, home, machines, notify } from "herdr";
 import { walkLayout, commitLayout, sidebarBack, foldSidebar, dropStripDrag } from "./layout.js";
 import { Updater } from "./update.js";
-import { tryOr, readCommands } from "./pure.js";
+import { tryOr, readCommands, bounded } from "./pure.js";
 import { openArrange } from "./open.js";
 import { DIALOG, G, glyphOf, tokens } from "./ui.js";
 import { pressAgain, Armed } from "./ui-button.js";
@@ -26,8 +26,8 @@ import { pieceLines } from "./piece-lines.js";
 import { tabMark, barState, foldTabs, renameWaits, landing, heldOn, dropMarks } from "./tab-bar-model.js";
 import { Kdb, projectKey } from "./kdb.js";
 import { projectOpen, OPEN } from "./panel-state.js";
-import { TOOLS, PROBE_MS, probeTools } from "./sim-registration.js";
-import { commandsOn, machineKey, offered } from "./panel-tools.js";
+import { TOOLS, PROBE_MS, probeTools, available, UNKNOWN_TOOLS, FAILED_TOOLS } from "./sim-registration.js";
+import { commandOn, machineKey, offered, toolsFor, toolKey, withoutNegatives, forgetting, ASK_MS, RETRY_MS } from "./panel-tools.js";
 import { pieces, runs, shown, setPiece, STORE, choice } from "./pieces.js";
 
 function storedObject(key) {
@@ -86,15 +86,15 @@ function roster() {
   return all.toSorted((a, b) => rank.get(a.id) - rank.get(b.id));
 }
 
-function panelList(commands) {
+function panelList(tools) {
   const map = pieces(shared);
-  return roster().filter((p) => offered(p.id, { sim: shared(TOOLS), commands })).map((p) => ({ ...p, on: runs(`panel.${p.id}`, map) }));
+  return roster().filter((p) => offered(p.id, { sim: shared(TOOLS), ...tools })).map((p) => ({ ...p, on: runs(`panel.${p.id}`, map) }));
 }
 
 const drawnPanels = (all) => all.filter((p) => p.on);
 
-function movePanel(from, to, commands) {
-  const seen = drawnPanels(panelList(commands)).map((p) => p.id), i = seen.indexOf(from), j = seen.indexOf(to);
+function movePanel(from, to, tools) {
+  const seen = drawnPanels(panelList(tools)).map((p) => p.id), i = seen.indexOf(from), j = seen.indexOf(to);
   if (i < 0 || j < 0 || i === j) return;
   const moved = seen.toSpliced(i, 1).toSpliced(j, 0, from);
   setShared(ORDER, roster().map((p) => (seen.includes(p.id) ? moved[seen.indexOf(p.id)] : p.id)));
@@ -134,9 +134,10 @@ export default class Tabs extends View {
   renaming = null;
   renamed = null;
   moreOpen = false;
-  asked = new Set();
+  asking = new Set();
   answers = {};
   here = "";
+  visit = null;
 
   init(_props, cx) {
     this.endDrags();
@@ -173,36 +174,50 @@ export default class Tabs extends View {
 
   probeSimulator(cx) {
     const signature = simulatorRoster();
-    if (this.simSignature === signature) return;
+    if (this.simSignature === signature || this.simRunning) return;
     this.simSignature = signature;
     if (!runs("panel.sim", pieces(shared))) return;
+    this.simRunning = true;
     this.simProbe = (this.simProbe ?? 0) + 1;
     this.simSettled = false;
     const probe = this.simProbe;
-    const finish = (tools) => {
+    const finish = (tools, done) => {
       if (this.simProbe !== probe || this.simSettled) return;
       this.simSettled = true;
-      setShared(TOOLS, tools); cx.notify();
+      setShared(TOOLS, tools); done.notify();
+      if (tools.state) done.timer.after(RETRY_MS, () => { if (this.simProbe === probe) this.simSignature = null; });
     };
-    const deadline = cx.timer.after(PROBE_MS, () => finish({}));
-    cx.spawn(async () => {
-      const tools = await probeTools(window()?.platform ?? "macos", home(), exec).catch(() => ({}));
-      deadline.cancel(); finish(tools);
+    const deadline = cx.timer.after(PROBE_MS, (late) => { this.simRunning = false; finish(UNKNOWN_TOOLS, late); });
+    cx.spawn(async (task) => {
+      const tools = await probeTools(window()?.platform ?? "macos", home(), exec).catch(() => FAILED_TOOLS);
+      if (this.simProbe === probe) this.simRunning = false;
+      deadline.cancel(); finish(tools, task); task.notify();
     });
   }
 
   commandsHere() {
-    return this.answers[this.here];
+    return { commands: this.answers, machine: this.here };
   }
 
-  askCommands(cx, machine) {
-    if (this.arrange || !cx || this.asked.has(machine)) return;
-    this.asked = new Set([...this.asked, machine]);
-    cx.timer.after(0, (next) => next.spawn(async () => {
-      const commands = await commandsOn(machine);
-      if (!commands) return;
-      this.answers = { ...this.answers, [machine]: commands };
-      next.notify();
+  askCommands(cx, space) {
+    if (this.arrange || !cx) return;
+    const visit = `${space?.id ?? ""}\t${this.here}`;
+    if (visit !== this.visit) {
+      this.visit = visit; this.answers = withoutNegatives(this.answers);
+      if (this.simSettled && !available(shared(TOOLS))) this.simSignature = null;
+    }
+    const tools = toolsFor(this.here).filter((tool) => !this.asking.has(toolKey(tool)) && !(toolKey(tool) in this.answers));
+    if (!tools.length) return;
+    const keys = tools.map(toolKey);
+    this.asking = new Set([...this.asking, ...keys]);
+    cx.timer.after(0, (next) => next.spawn(async (task) => {
+      const found = await Promise.all(tools.map((tool) => bounded(commandOn(tool), task.timer, ASK_MS)));
+      const answers = keys.map((key, i) => [key, typeof found[i] === "boolean" ? found[i] : null]);
+      this.answers = { ...this.answers, ...Object.fromEntries(answers) };
+      this.asking = new Set([...this.asking].filter((key) => !keys.includes(key)));
+      const failed = answers.filter(([, answer]) => answer === null).map(([key]) => key);
+      if (failed.length) task.timer.after(RETRY_MS, () => { this.answers = forgetting(this.answers, failed); });
+      task.notify();
     }));
   }
 
@@ -503,13 +518,13 @@ export default class Tabs extends View {
   }
 
   render(cx) {
+    const space = spaces().find(p => p.active);
+    this.here = machineKey(space);
+    this.askCommands(cx, space);
     if (!this.arrange && cx && !this.simQueued && this.simSignature !== simulatorRoster()) {
       this.simQueued = true;
       cx.timer.after(0, (next) => { this.simQueued = false; this.probeSimulator(next); });
     }
-    const space = spaces().find(p => p.active);
-    this.here = machineKey(space);
-    this.askCommands(cx, this.here);
     const openTabs = shownTabs(space?.tabs);
     // Each live-data read copies the whole list: read once per render.
     const ps = panes();

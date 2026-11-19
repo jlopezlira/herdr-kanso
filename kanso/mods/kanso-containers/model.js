@@ -211,7 +211,11 @@ export function since(c) {
 export const size = (mb) => (mb >= 1000 ? `${(mb / 1000).toFixed(1)} GB` : mb >= 1 ? `${Math.round(mb)} MB` : `${Math.max(1, Math.round(mb * 1000))} kB`);
 
 // Docker answered, but its daemon is not there.
-export const daemonDown = (r) => r && r.code !== 0 && /Cannot connect|Is the docker daemon running|error during connect|docker\.sock/i.test(`${r.stderr ?? ""}${r.stdout ?? ""}`);
+const STOPPED = [/Cannot connect to the Docker daemon at unix:\/\/\S+\s+Is the docker daemon running\?/i, /open \/\/\.\/pipe\/\S+: The system cannot find the file specified/i];
+export const stoppedText = (text) => STOPPED.some((said) => said.test(String(text ?? "")));
+export const daemonDown = (r) => Boolean(r) && r.code !== 0 && stoppedText(`${r.stderr ?? ""}${r.stdout ?? ""}`);
+export const failed = (r) => Boolean(r) && r.code !== 0;
+export const notInstalled = (error) => /^cannot run docker: .*\(os error 2\)\s*$/.test(String(error?.message ?? error));
 
 // "170.5MiB / 3.828GiB": megabytes used.
 export function memMB(text) {
@@ -240,4 +244,64 @@ export function dockerVms(text) {
 export function dockerHeld(text, vms = new Set()) {
   return procs(text).filter((p) => /\/Docker\.app\/|com\.docker\./.test(p.comm) || (VM.test(p.comm) && vms.has(p.pid)))
     .reduce((t, p) => t + p.kb / 1024, 0);
+}
+
+export const okRead = (data) => ({ state: "ok", data });
+export const failedRead = (reason, text = reason) => ({ state: "failed", reason, text });
+export const readOf = (result, reason) => (!result ? null : result.code === 0 ? okRead(result.stdout) : failedRead(reason(result), `${result.stderr ?? ""}${result.stdout ?? ""}`));
+
+const ORDER = ["read", "containers", "context", "details", "images", "volumes", "disk", "stats", "limit", "memory", "attribution", "files"];
+const DAEMON = ["containers", "images", "volumes", "stats", "limit"];
+const isOk = (read) => read?.state === "ok";
+const dataOf = (read) => read?.data;
+const latest = (reads, n, key) => reads[key]?.at === n ? reads[key] : null;
+
+export function settle(previous, { n, reads, thrown = null }) {
+  const before = previous?.reads ?? {};
+  const merged = Object.entries(reads).filter(([, read]) => read).reduce((all, [key, read]) => ({
+    ...all, [key]: { ...read, data: isOk(read) ? read.data : all[key]?.data, at: n },
+  }), before);
+  const context = isOk(merged.context) ? contextOf(merged.context.data) : null, was = isOk(before.context) ? contextOf(before.context.data) : null;
+  const local = Boolean(context) && !context.remote;
+  const ps = latest(merged, n, "containers");
+  const missing = ps?.state === "failed" && notInstalled(ps.text);
+  const down = local && DAEMON.some((key) => latest(merged, n, key)?.state === "failed" && stoppedText(merged[key].text));
+  const moved = Boolean(context && was) && (context.name !== was.name || context.host !== was.host);
+  const kept = missing ? ["containers"] : down ? ["containers", "context"] : moved ? Object.keys(reads).filter((key) => reads[key]) : null;
+  const all = kept ? Object.fromEntries(kept.filter((key) => merged[key]?.at === n).map((key) => [key, { ...merged[key], data: isOk(reads[key]) ? reads[key].data : undefined }])) : merged;
+  return { n, reads: all, thrown: thrown ? { reason: thrown, at: n } : null, cause: missing ? "missing" : down ? "down" : null };
+}
+
+export function panelOf(snapshot, { projects = [], names = new Map(), pulling = false } = {}) {
+  const reads = snapshot?.reads ?? {}, n = snapshot?.n ?? 0;
+  const context = isOk(reads.context) ? contextOf(reads.context.data) : null, local = Boolean(context) && !context.remote;
+  const found = reads.containers?.data == null ? null : parseContainers(reads.containers.data);
+  const details = reads.details?.data == null ? new Map() : parseInspect(reads.details.data.text);
+  const recorded = Boolean(found) && found.every((c) => details.has(c.id.slice(0, 12)));
+  const withDetails = (found ?? []).map((c) => { const d = details.get(c.id.slice(0, 12)); return { ...c, imageId: d?.imageId ?? null, mounts: d?.mounts ?? [] }; });
+  const files = reads.files?.data == null ? [] : composeFiles(reads.files.data);
+  const groups = found ? byProject(withDetails, projects, context?.remote ? [] : knownStacks(files, withDetails, names), names) : null;
+  const thrown = snapshot?.thrown?.at === n ? snapshot.thrown : null;
+  const psNow = latest(reads, n, "containers");
+  const proven = !thrown && isOk(psNow) && Boolean(context) && recorded;
+  const localProven = !thrown && isOk(psNow) && local;
+  const memory = isOk(reads.memory) ? reads.memory.data : null, attribution = isOk(reads.attribution) ? reads.attribution.data : null;
+  const faults = [...(thrown ? [{ key: "read", reason: thrown.reason, at: thrown.at }] : []),
+    ...Object.entries(reads).filter(([, read]) => read.state === "failed").map(([key, read]) => ({ key, reason: read.reason, at: read.at }))];
+  const newest = faults.toSorted((a, b) => b.at - a.at || ORDER.indexOf(a.key) - ORDER.indexOf(b.key))[0];
+  const state = snapshot?.cause ?? (thrown || reads.containers?.state === "failed" ? "failed" : found ? "ok" : "reading");
+  const listed = (key) => reads[key]?.data != null;
+  const sure = (key) => proven && isOk(reads[key]);
+  return {
+    state, message: snapshot?.cause ? null : newest?.reason ?? null, context, local, groups,
+    images: listed("images") && groups ? imageRows(parseImages(reads.images.data), groups) : null,
+    volumes: listed("volumes") && groups ? volumeRows(reads.volumes.data, groups.flatMap((g) => g.containers)) : null,
+    spare: listed("disk") ? reclaimable(reads.disk.data) : {},
+    mem: listed("stats") ? parseStats(reads.stats.data) : new Map(),
+    limit: listed("limit") && Number(reads.limit.data) > 0 ? Number(reads.limit.data) / 1e6 : null,
+    held: local && memory && attribution?.state === "ok" ? dockerHeld(memory, dockerVms(attribution.values)) : null,
+    unattributed: local && attribution?.state === "unavailable",
+    details, imagesText: dataOf(reads.images) ?? "", pulling,
+    can: { cleanImages: sure("images"), cleanVolumes: sure("volumes"), clearCache: sure("disk"), quit: localProven, memory: localProven },
+  };
 }
