@@ -1828,7 +1828,6 @@
 .kanso-days{display:grid;grid-auto-flow:column;grid-template-rows:repeat(7,var(--k-sp-2));grid-auto-columns:var(--k-sp-2);gap:var(--k-sp-1)}
 .kanso-days__day{border-radius:var(--k-sp-hair);background:var(--wash-7)}
 .kanso-days__day.kanso-days__day--none{background:transparent}
-.kanso-days__day.kanso-days__day--4{background:var(--fg)}
 .kanso-markdown__code{margin:0 0 var(--k-sp-2);padding:var(--k-sp-2);border-radius:var(--k-r-control);background:var(--surface-1);font:var(--k-fs-mono)/var(--k-lh-code) var(--mono);color:var(--muted);white-space:pre;overflow-x:auto}
 .kanso-markdown__actions{display:flex;align-items:center;gap:var(--k-sp-2);margin-bottom:var(--k-sp-2)}
 .kanso-band__text{flex:1 1 100%;min-width:0}
@@ -1918,7 +1917,7 @@
 .kanso-annotation__spot{width:var(--k-annotation-size);height:var(--k-annotation-size);transform:translate(calc(-1 * var(--k-sp-2)),calc(-1 * var(--k-sp-2)))}
 .kanso-annotation__area>.kanso-annotation__region{position:static;display:block;height:100%}
 .kanso-annotation__area .kanso-annotation{margin:calc(-1 * var(--k-sp-2)) 0 0 calc(-1 * var(--k-sp-2))}
-.kanso-days__day:is(.kanso-days__day--1,.kanso-days__day--2,.kanso-days__day--3){background:var(--fg)}
+.kanso-days__day:is(.kanso-days__day--1,.kanso-days__day--2,.kanso-days__day--3,.kanso-days__day--4){background:var(--fg)}
 .kanso-days__day.kanso-days__day--1{opacity:var(--k-op-beat-working)}
 .kanso-days__day.kanso-days__day--2{opacity:var(--k-op-beat-blocked)}
 .kanso-days__day.kanso-days__day--3{opacity:var(--k-op-idle)}

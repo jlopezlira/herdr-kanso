@@ -406,7 +406,7 @@ export const bars = ({ bars: values = [], peak = null, low = [], part = [], labe
   + `${ticks.length ? `<div class="kanso-bars__ticks">${ticks.map((tick) => `<span>${escape(tick)}</span>`).join('')}</div>` : ''}</div>`;
 export const delta = ({ text, up = true }) => `<div class="kanso-panel__delta">${up ? '↑' : '↓'} ${escape(text)}</div>`;
 export const meter = ({ share: value = 0, label = '' }) => `<svg class="kanso-meter" role="meter" aria-valuemin="0" aria-valuemax="1" aria-valuenow="${Number(value)}"${label ? ` aria-label="${escape(label)}"` : ''}><rect class="kanso-meter__fill" width="${share(value)}%" height="100%"/></svg>`;
-export const heatmap = ({ days = [] }) => `<div class="kanso-days">${days.map((level) => `<span class="kanso-days__day${level === null ? ' kanso-days__day--none' : ` kanso-days__day--${Number(level)}`}"></span>`).join('')}</div>`;
+export const heatmap = ({ days = [] }) => `<div class="kanso-days">${days.map((level) => `<span class="kanso-days__day${level === null ? ' kanso-days__day--none' : Number(level) ? ` kanso-days__day--${Number(level)}` : ''}"></span>`).join('')}</div>`;
 const shareLine = (title, right = '') => `<div class="kanso-share__header">${escape(title)}${right ? `<span>${escape(right)}</span>` : ''}</div>`;
 const shareStat = ({ value, unit }) => `<div><div class="kanso-content__value">${escape(value)}</div><div class="kanso-metric__unit">${escape(unit)}</div></div>`;
 const shareBlocks = {

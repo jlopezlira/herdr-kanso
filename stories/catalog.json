@@ -20310,7 +20310,7 @@
   "A thin track and its filled share.",
   [20306],
   "<div class=\"kanso-days\">",
-  "<span class=\"kanso-days__day kanso-days__day--0\">",
+  "<span class=\"kanso-days__day\">",
   [20309,1378],
   "<span class=\"kanso-days__day kanso-days__day--2\">",
   [20311,1378],
