@@ -504,6 +504,74 @@ test("a queued folder change and a push ask are one read of the latest folder, e
   await heldRoots(false);
 });
 
+const closedRow = JSON.stringify([{ number: 3, title: "kept", url: "https://github.com/o/here/pull/3", state: "MERGED", updatedAt: "2026-11-12T00:00:00Z", author: { login: "me" }, headRefName: "feat", baseRefName: "main", additions: 0, deletions: 0 }]);
+const failedCheck = { name: "ci", status: "COMPLETED", conclusion: "FAILURE", detailsUrl: "https://github.com/o/here/actions/runs/9" };
+
+const flightCases = {
+  loading: { hold: (command, args) => command === "git" && args.includes("--show-toplevel"), begin: (panel, cx) => panel.again(cx), empty: () => success("/B\n"), answer: () => success("/B\n") },
+  inbox: { hold: (command, args) => command === "gh" && args[0] === "auth", begin: (panel, cx) => { panel.auth = null; panel.again(cx); }, empty: () => failure("logged out"), answer: () => failure("logged out") },
+  checks: { hold: (_command, args) => args[0] === "run" && args[1] === "view", begin: (panel, cx) => { panel.pr.mergeStateStatus = "BLOCKED"; panel.pr.statusCheckRollup = [failedCheck]; panel.permission = "WRITE"; panel.checked = null; panel.readLog(cx); }, empty: () => failure("no log"), answer: () => success("log"), afterFolder: true },
+  closed: { hold: (_command, args) => args[1] === "list" && args.includes("closed"), begin: (panel, cx) => { panel.listing = true; panel.showTab("closed", cx); }, empty: () => success("[]"), answer: () => success(closedRow), afterFolder: true, closed: true },
+  details: { hold: (_command, args) => args[1] === "list" && args.includes("open"), begin: (panel, cx) => panel.setDetails(cx, true), empty: () => success("[]"), answer: () => success(closedRow), afterFolder: true },
+  diff: { hold: (_command, args) => args[1] === "diff", begin: (panel, cx) => panel.pickFile("a.js", cx), empty: () => failure("no diff"), answer: () => success(""), afterFolder: true },
+  busy: { hold: (_command, args) => args.join(" ").includes("squashMergeAllowed"), begin: (panel, cx) => panel.mergeNow(cx), empty: () => failure("no"), answer: () => failure("no"), afterFolder: true },
+  pending: { hold: (_command, args) => args[0] === "api" && args.includes("-X"), begin: (panel, cx) => panel.toggle("labels", "bug", false, cx), empty: () => failure("no"), answer: () => failure("no"), afterFolder: true },
+};
+
+const pinNew = (bag, from, pinned) => {
+  for (const task of bag.tasks.slice(from)) { bag.hold(task); pinned.push(task); }
+};
+
+const switchFlight = async (name, spec, oldFirst) => {
+  let folder = "/repo";
+  const held = [];
+  const pinned = [];
+  let arm = false;
+  const { panel, cx, shown } = await readDrawn(branchExec(async (command, args) => {
+    if (!arm || !spec.hold(command, args)) return;
+    const pending = gate();
+    held.push(pending);
+    return pending.promise;
+  }), folderView(() => folder, { props: () => null, notify() {} }));
+  const bag = parked(cx), fire = zeroTimers(cx);
+  arm = true;
+  const first = bag.tasks.length;
+  spec.begin(panel, cx);
+  pinNew(bag, first, pinned);
+  assert.equal(held.length, 1, name);
+  folder = "/B";
+  panel.render(cx);
+  if (spec.afterFolder) { fire(); await bag.settle(); }
+  const second = bag.tasks.length;
+  spec.begin(panel, cx);
+  pinNew(bag, second, pinned);
+  assert.equal(held.length, 2, name);
+  const letGo = async (item, body, task) => { item.release(body); await task; await bag.settle(); };
+  const frameOf = () => { shown.texts.length = 0; panel.render(cx); return shown.texts.join("\n"); };
+  const steps = oldFirst ? [[0, spec.empty()], [1, spec.answer()]] : [[1, spec.answer()], [0, spec.empty()]];
+  for (const [at, body] of steps) {
+    await letGo(held[at], body, pinned[at]);
+    if (spec.closed && at === 0) assert.equal(frameOf().includes("GitHub could not be read"), false, name);
+  }
+  if (spec.closed) {
+    const frame = frameOf();
+    assert.equal(frame.includes("GitHub could not be read"), false, name);
+    assert.equal(frame.includes("kept"), true, name);
+    assert.equal(String(panel.closedPrs[0].title), "kept");
+  }
+  assert.equal(panel.ownsFlight(name), false, name);
+};
+
+test("an older folder's in-flight read does not block the next folder, in either order", async () => {
+  const { panel } = await readDrawn(branchExec(), folderView(() => "/repo", { props: () => null }));
+  const names = [...panel.constructor.flights];
+  assert.deepEqual(names, Object.keys(flightCases));
+  for (const name of names) {
+    await switchFlight(name, flightCases[name], true);
+    await switchFlight(name, flightCases[name], false);
+  }
+});
+
 test("two folder changes before the wake are one read of the latest folder", async () => {
   const { store, turn, move } = await blankFolder();
   const roots = turn.roots();

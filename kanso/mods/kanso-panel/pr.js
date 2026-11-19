@@ -134,6 +134,7 @@ export function checksFirst(checks, name) {
 }
 
 export class PullRequest {
+  static flights = ["loading", "inbox", "checks", "closed", "details", "diff", "busy", "pending"];
   constructor(db) { this.armed = new Armed(); this.db = db; } // Merge asks for a second press
 
   init(cx, props = {}) {
@@ -142,7 +143,7 @@ export class PullRequest {
     this.openPrs = []; this.selected = null; // a pull request's URL; null: the branch's own
     this.listing = false; // the page of pull requests instead of the one shown
     this.tab = "open"; // that page's tab: "open", or "closed" (merged or closed, newest first)
-    this.closedPrs = null; this.closedLoading = false;
+    this.closedPrs = null;
     this.picker = null; this.candidates = null; this.query = "";
     this.search = new TextField({ placeholder: "Search" });
     this.search.on("change", (_e, cx) => { this.query = this.search.value(); cx.notify(); });
@@ -175,6 +176,27 @@ export class PullRequest {
 
   holds(gen, context) { return (this.gen ?? 0) === gen && key() === context; }
 
+  claim(name, gen = this.gen ?? 0) {
+    if (!PullRequest.flights.includes(name)) throw new Error(`Unknown flight ${name}`);
+    const held = this.flight?.[name];
+    if (held === gen || (held != null && gen < held)) return null;
+    this.flight = { ...(this.flight ?? {}), [name]: gen };
+    return gen;
+  }
+
+  release(name, gen) {
+    if (this.flight?.[name] !== gen) return false;
+    const next = { ...this.flight };
+    delete next[name];
+    this.flight = next;
+    if (name === "loading") this.loading = false;
+    if (name === "busy") this.busy = null;
+    if (name === "pending") this.pending = null;
+    return true;
+  }
+
+  ownsFlight(name) { return this.flight?.[name] === (this.gen ?? 0); }
+
   showFolder() {
     const context = key();
     if (context === this.context) return;
@@ -192,7 +214,7 @@ export class PullRequest {
     this.listed = false; this.openedList = false; this.host = null;
     this.aheadCount = 0; this.behindCount = 0; this.subjects = []; this.subjectsFor = null; this.baseBehind = null; this.baseBehindFor = null;
     this.forgetLog();
-    this.sendShown = false; this.sendFor = null; this.listingOthers = false;
+    this.sendShown = false; this.sendFor = null;
     this.cwd = cwd ?? null; this.on = on ?? null;
     this.gen = (this.gen ?? 0) + 1;
     this.queued = true;
@@ -300,22 +322,19 @@ export class PullRequest {
   }
 
   refresh(cx) {
-    if (this.loading) {
-      if (key() !== this.context) this.showFolder();
-      if ((this.gen ?? 0) !== this.running) this.queued = true;
-      return;
-    }
+    if (key() !== this.context) this.showFolder();
+    if (this.ownsFlight("loading")) return;
     this.away = false;
     this.showFolder();
     const { cwd, on } = location(), context = key();
-    const gen = this.gen ?? 0;
     if (!cwd) { this.queued = false; this.asking = false; return; }
+    const gen = this.claim("loading");
+    if (gen == null) return;
     this.queued = false;
     this.asking = false;
     this.keptUrl = null;
     this.cwd = cwd; this.on = on;
     this.loading = true;
-    this.running = gen;
     const mine = () => this.holds(gen, context);
     const want = this.selected;
     cx.spawn(this.tracked(async (cx) => {
@@ -380,14 +399,11 @@ export class PullRequest {
         return mine() && (this.selected !== want || this.openedList) && !this.wait;
       })().finally(() => {
         this.openedList = false;
-        if (this.running === gen) {
-          this.loading = false;
-          if (mine()) this.loadedAt = Date.now();
-        }
+        if (this.release("loading", gen) && mine()) this.loadedAt = Date.now();
         cx.notify();
       });
       if (follow) this.refresh(cx);
-      else if (this.queued && !this.loading) this.refresh(cx);
+      else if (this.queued && !this.ownsFlight("loading")) this.refresh(cx);
       else if (mine() && !this.wait) this.readLog(cx);
     }));
   }
@@ -400,18 +416,27 @@ export class PullRequest {
     if (!this.pr) return;
     const stamp = this.view().logKey;
     if (!logDue({ facing: this.facing(), key: stamp, have: this.logFor ?? null })) return;
+    const gen = this.claim("checks");
+    if (gen == null) return;
     this.forgetLog(stamp);
-    const gen = this.gen ?? 0, context = this.context;
+    const context = this.context;
     cx.spawn(this.tracked(async (cx) => {
-      const r = await this.gh(["run", "view", stamp, "--log-failed"]).catch(() => null);
-      if (!this.holds(gen, context) || this.logFor !== stamp) return;
-      if (r?.code === 0) this.failedLog = r.stdout ?? "";
-      cx.notify();
+      try {
+        const r = await this.gh(["run", "view", stamp, "--log-failed"]).catch(() => null);
+        if (!this.holds(gen, context) || this.logFor !== stamp) return;
+        if (r?.code === 0) this.failedLog = r.stdout ?? "";
+      } finally { this.release("checks", gen); cx.notify(); }
     }));
   }
 
   // The account, not the focused folder. Absent unless a provider is installed and signed in here.
   async syncInbox(context, gen = this.gen ?? 0) {
+    if (this.claim("inbox", gen) == null) return;
+    try { await this.readInbox(context, gen); }
+    finally { this.release("inbox", gen); }
+  }
+
+  async readInbox(context, gen) {
     const ready = await this.account(Date.now());
     if (ready == null || !this.holds(gen, context)) return;
     if (!ready.length) { this.inboxOn = false; this.inbox = null; this.inboxOpen = null; return; }
@@ -579,10 +604,9 @@ export class PullRequest {
   }
 
   loadClosed(cx) {
-    if (this.closedLoading || !this.root || this.wait) return;
-    this.closedLoading = true;
-    this.closedGen = this.gen ?? 0;
-    cx.spawn(this.contextTask(async (cx, context, gen) => {
+    if (!this.root || this.wait) return;
+    const gen = this.claim("closed"); if (gen == null) return;
+    cx.spawn(this.contextTask(async (cx, context) => {
       try {
         const r = await this.gh(["pr", "list", "--state", "closed", "--limit", String(DONE_LIMIT), "--json", DONE]);
         if (r?.code === 0 && this.holds(gen, context)) {
@@ -592,7 +616,7 @@ export class PullRequest {
           if (this.holds(gen, context)) this.closedPrs = rows.toSorted((a, b) => when(b) - when(a));
         }
       } catch { }
-      finally { if (this.closedGen === gen) this.closedLoading = false; cx.notify(); }
+      finally { this.release("closed", gen); cx.notify(); }
     }));
   }
 
@@ -617,10 +641,10 @@ export class PullRequest {
     this.inboxNote = null;
   }
 
-  finishAction(cx) { this.busy = null; cx.notify(); }
+  finishAction(cx) { cx.notify(); }
 
   finishAndRefresh(cx) {
-    this.busy = null; this.loadedAt = 0; cx.notify(); this.refresh(cx);
+    this.loadedAt = 0; cx.notify(); this.refresh(cx);
   }
 
   contextTask(work) {
@@ -628,21 +652,31 @@ export class PullRequest {
     return this.tracked((cx) => work(cx, context, gen));
   }
 
+  ownBusy(label) {
+    const gen = this.claim("busy");
+    if (gen == null) return null;
+    this.busy = label; this.note = null;
+    return { gen, context: this.context };
+  }
+
   act(label, args, cx, run = (a) => this.gh(a)) {
-    if (this.busy) return;
-    this.busy = label; this.note = null; this.armed.clear();
+    const owned = this.ownBusy(label);
+    if (!owned) return;
+    this.armed.clear();
     this.start(cx, async (cx) => {
       try {
         const r = await run(args);
         commandOk(r);
-      } catch (e) { this.note = said(`${label} failed`, e?.message ?? e); }
-      finally { this.finishAndRefresh(cx); }
+      } catch (e) { if (this.holds(owned.gen, owned.context)) this.note = said(`${label} failed`, e?.message ?? e); }
+      finally { this.release("busy", owned.gen); this.finishAndRefresh(cx); }
     });
   }
 
   mergeNow(cx) {
+    if (!this.pr) return;
+    const owned = this.ownBusy("Merge");
+    if (!owned) return;
     const pr = this.pr;
-    this.busy = "Merge"; this.note = null;
     this.start(cx, async (cx) => {
       try {
         const { o, r: name } = this.repo();
@@ -652,14 +686,14 @@ export class PullRequest {
         const r = await this.gh(["pr", "merge", pr.url, method]);
         commandOk(r);
         notify({ title: `Merged #${pr.number}`, body: pr.title, level: "success" });
-      } catch (e) { this.note = said("Merge failed", e?.message ?? e); }
-      finally { this.finishAndRefresh(cx); }
+      } catch (e) { if (this.holds(owned.gen, owned.context)) this.note = said("Merge failed", e?.message ?? e); }
+      finally { this.release("busy", owned.gen); this.finishAndRefresh(cx); }
     });
   }
 
   createPr(cx) {
-    if (this.busy) return;
-    this.busy = "Create"; this.note = null;
+    const owned = this.ownBusy("Create");
+    if (!owned) return;
     this.start(cx, async (cx) => {
       try {
         const now = await this.readPushed(this.root, this.on);
@@ -667,8 +701,8 @@ export class PullRequest {
         if (now.state !== "pushed") throw new Error(`${now.state === "behind" ? "pull" : "push"} ${this.branch ?? "the branch"} first`);
         const r = await this.gh(["pr", "create", "--web"]);
         commandOk(r);
-      } catch (e) { this.note = said("Could not create it", e?.message ?? e); }
-      finally { this.finishAction(cx); }
+      } catch (e) { if (this.holds(owned.gen, owned.context)) this.note = said("Could not create it", e?.message ?? e); }
+      finally { this.release("busy", owned.gen); this.finishAction(cx); }
     });
   }
 
@@ -710,8 +744,10 @@ export class PullRequest {
   }
 
   toggle(kind, name, on, cx) {
-    if (this.pending) return;
-    const { o, r } = this.repo(), n = this.pr.number;
+    if (!this.pr) return;
+    const gen = this.claim("pending");
+    if (gen == null) return;
+    const { o, r } = this.repo(), n = this.pr.number, context = this.context;
     const call = {
       labels: on ? ["-X", "DELETE", `repos/${o}/${r}/issues/${n}/labels/${encodeURIComponent(name)}`] : ["-X", "POST", `repos/${o}/${r}/issues/${n}/labels`, "-f", `labels[]=${name}`],
       assignees: ["-X", on ? "DELETE" : "POST", `repos/${o}/${r}/issues/${n}/assignees`, "-f", `assignees[]=${name}`],
@@ -724,14 +760,14 @@ export class PullRequest {
     this.start(cx, async (cx) => {
       try {
         commandOk(await this.gh(["api", ...call, "--silent"]));
-        // Reflect it at once; the reread below confirms it.
+        if (!this.holds(gen, context) || !this.pr) return;
         const pr = this.pr;
         if (kind === "labels") this.pr = { ...pr, labels: on ? pr.labels.filter((l) => l.name !== name) : [...pr.labels, (this.candidates ?? []).find((l) => l.name === name) ?? { name }] };
         if (kind === "assignees") this.pr = { ...pr, assignees: on ? pr.assignees.filter((a) => a.login !== name) : [...pr.assignees, { login: name }] };
         if (kind === "reviewers") this.pr = { ...pr, reviewRequests: on ? pr.reviewRequests.filter((x) => x.login !== name) : [...pr.reviewRequests, { login: name }] };
         if (done) notify({ title: done, level: "success" });
       } catch (e) { notify({ title: failed, body: `${String(e?.message ?? e)} ${why}`, level: "error" }); }
-      finally { this.pending = null; cx.notify(); this.loadedAt = 0; this.refresh(cx); }
+      finally { this.release("pending", gen); cx.notify(); this.loadedAt = 0; this.refresh(cx); }
     });
   }
 
@@ -818,7 +854,7 @@ export class PullRequest {
     const held = this.wait ? div().text_size(T.body).text_color(c.dim).child(this.wait) : null;
     const beside = (rows) => held ? v_flex().w_full().gap(G.lg).child(held).child(rows) : rows;
     const closed = this.closedPrs === null
-      ? (this.closedLoading ? this.closedBones(c) : div().text_size(T.body).text_color(c.dim).child(this.wait || "GitHub could not be read."))
+      ? (this.ownsFlight("closed") ? this.closedBones(c) : div().text_size(T.body).text_color(c.dim).child(this.wait || "GitHub could not be read."))
       : !this.closedPrs.length ? beside(div().text_size(T.body).text_color(c.dim).child("Nothing closed yet."))
         : beside(this.openPage(c, this.closedPrs));
     const open = !this.openPrs.length
@@ -844,7 +880,7 @@ export class PullRequest {
       .children(groups.map(([title, rows], g) => v_flex().w_full().gap(G.hair)
         .child(section(c, title, String(rows.length)))
         .children(rows.map((p, k) => listedRow(this, c, p, firsts[g] + k, { finished })))))
-      .when(create && this.canCreate(), (el) => el.child(h_flex().child(quietLink("pr-create-list", this.busy === "Create" ? "Opening GitHub…" : "Create on GitHub", (cx) => this.createPr(cx), c, { color: c.text, disabled: Boolean(this.busy) })))), c);
+      .when(create && this.canCreate(), (el) => el.child(h_flex().child(quietLink("pr-create-list", this.busy === "Create" ? "Opening GitHub…" : "Create on GitHub", (cx) => this.createPr(cx), c, { color: c.text, disabled: this.ownsFlight("busy") })))), c);
   }
 
   // The last write's failure, under the page.
@@ -956,20 +992,21 @@ export class PullRequest {
   hero(c) { return drawHero(this, c); }
 
   send(cx) {
-    if (this.busy) return;
     const scene = this.scene(), verdict = verdictOf(scene), text = sendText(scene, verdict);
     const step = sendStep(Boolean(this.sendShown) && this.sendFor === text, text);
     if (step.show) { this.sendShown = true; this.sendFor = text; cx.notify(); return; }
     if (!step.deliver) return;
     const address = this.frontAgent()?.address;
     if (!address) { this.note = said("Not sent: no agent in front"); cx.notify(); return; }
-    this.busy = "Send"; this.sendShown = false; this.note = null;
+    const owned = this.ownBusy("Send");
+    if (!owned) return;
+    this.sendShown = false;
     this.start(cx, async (cx) => {
       try {
         const sent = await deliver(address, text, "you");
-        if (sent?.code !== 0) this.note = said("Not sent", String(sent?.stderr || sent?.stdout || "could not send").split("\n")[0]);
-      } catch (e) { this.note = said("Not sent", e?.message ?? e); }
-      finally { this.finishAction(cx); }
+        if (sent?.code !== 0 && this.holds(owned.gen, owned.context)) this.note = said("Not sent", String(sent?.stderr || sent?.stdout || "could not send").split("\n")[0]);
+      } catch (e) { if (this.holds(owned.gen, owned.context)) this.note = said("Not sent", e?.message ?? e); }
+      finally { this.release("busy", owned.gen); this.finishAction(cx); }
     });
   }
 
@@ -1011,12 +1048,11 @@ export class PullRequest {
   }
 
   loadOthers(cx) {
-    if (this.listingOthers || this.listed || this.wait || !this.root) return;
-    this.listingOthers = true;
-    this.listingGen = this.gen ?? 0;
-    cx.spawn(this.contextTask(async (cx, context, gen) => {
+    if (this.listed || this.wait || !this.root) return;
+    const gen = this.claim("details"); if (gen == null) return;
+    cx.spawn(this.contextTask(async (cx, context) => {
       try { this.takeOpen(await this.gh(openListArgs()).catch(() => null), context, gen); }
-      finally { if (this.listingGen === gen) this.listingOthers = false; cx.notify(); }
+      finally { this.release("details", gen); cx.notify(); }
     }));
   }
 
@@ -1061,7 +1097,7 @@ export class PullRequest {
       .child(section(c, "People and labels", decision))
       .child(v_flex().w_full().gap(G.xs)
         .child(metaRow("Assignees", assignees, open ? this.pickerFor("assignees", c) : null,
-          open && this.viewer && !mine ? quietLink("pr-assign-me", "Assign to me", (cx) => this.toggle("assignees", this.viewer, false, cx), c, { disabled: Boolean(this.pending) }) : null))
+          open && this.viewer && !mine ? quietLink("pr-assign-me", "Assign to me", (cx) => this.toggle("assignees", this.viewer, false, cx), c, { disabled: this.ownsFlight("pending") }) : null))
         .child(metaRow("Reviewers", [...reviewed, ...asked], open ? this.pickerFor("reviewers", c) : null))
         .child(metaRow("Labels", labels, open ? this.pickerFor("labels", c) : null)));
   }
@@ -1092,7 +1128,7 @@ export class PullRequest {
 
   // A line is cut at MAX_DIFF characters too: a minified file's one line stays cheap to draw.
   fileDiff(c, path) {
-    if (this.diffLoading && !this.diffs) return this.diffBones(c);
+    if (this.ownsFlight("diff") && !this.diffs) return this.diffBones(c);
     const lines = this.diffs?.[path];
     const note = (text) => div().py(G.xs).text_size(T.body).text_color(c.dim).child(text);
     if (!lines?.length) return note(this.diffs ? "No text diff for this file." : "");
@@ -1104,16 +1140,15 @@ export class PullRequest {
   pickFile(path, cx) {
     this.openFile = this.openFile === path ? null : path;
     if (this.openFile && !this.diffs && this.pr) {
-      const url = this.pr.url, context = this.context, gen = this.gen ?? 0;
-      this.diffLoading = true;
-      this.diffGen = gen;
+      const url = this.pr.url, context = this.context, gen = this.claim("diff");
+      if (gen == null) return;
       cx.spawn(this.tracked(async (cx) => {
         try {
           const r = await this.gh(["pr", "diff", url, "--color", "never"]);
           if (r.code !== 0) throw new Error((r.stderr || r.stdout).trim());
           if (this.holds(gen, context) && this.pr?.url === url) this.diffs = splitDiff(r.stdout);
         } catch (e) { if (this.holds(gen, context)) this.note = said("Could not read the diff", String(e?.message ?? e).split("\n")[0]); }
-        finally { if (this.diffGen === gen) this.diffLoading = false; cx.notify(); }
+        finally { this.release("diff", gen); cx.notify(); }
       }));
     }
     cx.notify();
