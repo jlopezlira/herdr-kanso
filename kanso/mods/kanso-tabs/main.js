@@ -27,7 +27,7 @@ import { tabMark, barState, foldTabs, renameWaits, landing, heldOn, dropMarks } 
 import { Kdb, projectKey } from "./kdb.js";
 import { projectOpen, OPEN } from "./panel-state.js";
 import { TOOLS, PROBE_MS, probeTools } from "./sim-registration.js";
-import { COMMANDS, probeCommands, offered } from "./panel-tools.js";
+import { COMMANDS, commandsOn, machineKey, offered } from "./panel-tools.js";
 import { pieces, runs, shown, setPiece, STORE, choice } from "./pieces.js";
 
 function storedObject(key) {
@@ -88,7 +88,8 @@ function roster() {
 
 function panelList() {
   const map = pieces(shared);
-  return roster().filter((p) => offered(p.id, { sim: shared(TOOLS), commands: shared(COMMANDS) })).map((p) => ({ ...p, on: runs(`panel.${p.id}`, map) }));
+  const commands = shared(COMMANDS)?.[machineKey(spaces().find((s) => s.active))];
+  return roster().filter((p) => offered(p.id, { sim: shared(TOOLS), commands })).map((p) => ({ ...p, on: runs(`panel.${p.id}`, map) }));
 }
 
 const drawnPanels = (all) => all.filter((p) => p.on);
@@ -134,6 +135,7 @@ export default class Tabs extends View {
   renaming = null;
   renamed = null;
   moreOpen = false;
+  asked = new Set();
 
   init(_props, cx) {
     this.endDrags();
@@ -151,7 +153,6 @@ export default class Tabs extends View {
       this.updater = new Updater();
       this.updater.start(cx);
       cx.timer.after(0, (next) => this.probeSimulator(next));
-      cx.timer.after(0, (next) => this.probeCommands(next));
       readCommands(cx, () => nextCommand(), (c, cx) => this.barCommand(c, cx));
     }
   }
@@ -189,13 +190,15 @@ export default class Tabs extends View {
     });
   }
 
-  probeCommands(cx) {
-    cx.spawn(async () => {
-      const commands = await probeCommands(exec, window()?.platform ?? "macos");
-      if (JSON.stringify(commands) === JSON.stringify(shared(COMMANDS) ?? null)) return;
-      setShared(COMMANDS, commands);
-      cx.notify();
-    });
+  askCommands(cx, machine) {
+    if (this.arrange || !cx || this.asked.has(machine) || Object.hasOwn(shared(COMMANDS) ?? {}, machine)) return;
+    this.asked = new Set([...this.asked, machine]);
+    cx.timer.after(0, (next) => next.spawn(async () => {
+      const commands = await commandsOn(machine);
+      if (!commands) return;
+      setShared(COMMANDS, { ...(shared(COMMANDS) ?? {}), [machine]: commands });
+      next.notify();
+    }));
   }
 
   command(name) {
@@ -500,6 +503,7 @@ export default class Tabs extends View {
       cx.timer.after(0, (next) => { this.simQueued = false; this.probeSimulator(next); });
     }
     const space = spaces().find(p => p.active);
+    this.askCommands(cx, machineKey(space));
     const openTabs = shownTabs(space?.tabs);
     // Each live-data read copies the whole list: read once per render.
     const ps = panes();

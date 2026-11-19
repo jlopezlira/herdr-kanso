@@ -359,13 +359,40 @@ test("A door with a long name takes its measured width from the room, so the tab
   assert.ok(["t1", "t2", "t3"].filter((id) => tab(root, id)).length < 3, "measured, the door's width folds a tab");
 });
 
+test("The bar asks the active space's own computer: a remote Windows devbox through where.exe on devbox, this Mac through the shell, each answer kept for its computer", async () => {
+  const calls = [], pending = [];
+  const exec = async (command, args, options = {}) => {
+    calls.push([command, args.at(-1), options.on ?? null]);
+    if (options.on === "devbox") return { code: 0, stdout: command === "where.exe" ? `C:\\bin\\${args[0]}.exe` : "Win32NT\n", stderr: "" };
+    return { code: 1, stdout: "", stderr: "" };
+  };
+  const b = await bar({ machine: "devbox", computers: [{ name: "devbox", layout: "ready" }], exec });
+  const cx = { ...b.cx, timer: { after: (ms, fn) => { if (!ms) fn(cx); return { cancel() {} }; } }, spawn: (fn) => { pending.push(fn(cx)); } };
+  const drawn = async () => {
+    b.view.render(cx);
+    while (pending.length) await pending.shift();
+    return ["Containers", "PR"].filter((label) => door(b.view.render(cx), label));
+  };
+  const lookups = () => calls.filter(([, tool]) => tool === "docker" || tool === "gh");
+  assert.deepEqual(await drawn(), ["Containers", "PR"], "devbox has both: both offered");
+  assert.deepEqual(lookups(), [["where.exe", "docker", "devbox"], ["where.exe", "gh", "devbox"]], "asked on devbox, as Windows");
+  b.space.machine = null;
+  calls.length = 0;
+  assert.deepEqual(await drawn(), [], "this Mac has neither: both hidden");
+  assert.deepEqual(lookups(), [["sh", "docker", null], ["sh", "gh", null]], "asked here, through the shell");
+  b.space.machine = "devbox";
+  calls.length = 0;
+  assert.deepEqual(await drawn(), ["Containers", "PR"], "back on devbox: offered again");
+  assert.deepEqual(lookups(), [], "from devbox's answer, without asking again");
+});
+
 test("Without Docker the Containers door is not offered, without gh the PR door is not, and each comes back once its tool is found", async () => {
   const labels = (root) => ["Containers", "PR"].filter((label) => door(root, label));
-  const docker = await bar({ stored: { "kanso.panels.commands": { docker: false, gh: true } } });
+  const docker = await bar({ stored: { "kanso.panels.commands": { "": { docker: false, gh: true } } } });
   assert.deepEqual(labels(docker.view.render(docker.cx)), ["PR"], "no Docker: no Containers");
-  const gh = await bar({ stored: { "kanso.panels.commands": { docker: true, gh: false } } });
+  const gh = await bar({ stored: { "kanso.panels.commands": { "": { docker: true, gh: false } } } });
   assert.deepEqual(labels(gh.view.render(gh.cx)), ["Containers"], "no gh: no PR");
-  const both = await bar({ stored: { "kanso.panels.commands": { docker: true, gh: true } } });
+  const both = await bar({ stored: { "kanso.panels.commands": { "": { docker: true, gh: true } } } });
   assert.deepEqual(labels(both.view.render(both.cx)), ["Containers", "PR"]);
   const unknown = await bar();
   assert.deepEqual(labels(unknown.view.render(unknown.cx)), ["Containers", "PR"], "before the computer answers, both stay");
@@ -397,7 +424,7 @@ test("The computer is asked whether each tool exists: command -v through the she
 });
 
 test("Moving the drawn doors keeps the slot of a door gh's absence or Settings hides, first or between the moved doors, and it comes back there", async () => {
-  const absent = { hidden: { "kanso.panels.commands": { docker: true, gh: false } }, shown: { "kanso.panels.commands": { docker: true, gh: true } } };
+  const absent = { hidden: { "kanso.panels.commands": { "": { docker: true, gh: false } } }, shown: { "kanso.panels.commands": { "": { docker: true, gh: true } } } };
   const hidden = { hidden: { "kanso.pieces": { "panel.pr": "hide" } }, shown: { "kanso.pieces": {} } };
   for (const [why, order, kept, label] of [[absent, ["pr", "files", "ports", "insights"], ["pr", "ports", "files", "insights"], "gh absent, first"],
     [absent, ["files", "pr", "ports", "insights"], ["ports", "pr", "files", "insights"], "gh absent, second"],

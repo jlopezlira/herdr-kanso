@@ -28,11 +28,11 @@ export const TABS = [
   { id: "t3", index: 3, name: "tests", active: false, status: "done" },
 ];
 
-export async function tabBar({ tabs = TABS, machine = null, computers = [], panes = [], fails = null, keys = [], stored = {}, tree = null, buttons = false } = {}) {
+export async function tabBar({ tabs = TABS, machine = null, computers = [], panes = [], fails = null, keys = [], stored = {}, tree = null, buttons = false, exec = null } = {}) {
   const store = { ...stored }, ran = [], toasts = [], opened = [];
   const space = { id: "s1", active: true, machine, tabs: clone(tabs) };
   const host = {
-    ...popoverHost(),
+    ...popoverHost(), ...(exec ? { exec } : {}),
     InputState: { new: fieldWith },
     theme: () => CHROME_NIGHT, spaces: () => [space], panes: () => panes, machines: () => computers, keys: () => keys, window: () => ({ platform: buttons ? "windows" : "macos", buttons }),
     layout: () => tree, home: () => "/home/me", shared: (key) => store[key] ?? null, setShared: (key, value) => { store[key] = value; },
