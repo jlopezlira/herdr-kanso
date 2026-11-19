@@ -159,7 +159,7 @@ test("Simulator availability is simctl or adb on this computer", async () => {
   for (const tools of [{ ios: true }, { adb: "/sdk/adb" }, { ios: true, adb: "/sdk/adb" }]) assert.equal(available(tools), true);
 });
 
-test("Tab availability probes once per panel-list rebuild and a deadline ignores late answers", async () => {
+test("Tab availability probes once per panel-list rebuild; a missed deadline is unknown, keeps the door and is asked again", async () => {
   const store = {}, commands = [], timers = [], pending = [];
   const { promise: answer, resolve: settle } = Promise.withResolvers();
   const { Tabs } = await loadTabs({
@@ -167,17 +167,20 @@ test("Tab availability probes once per panel-list rebuild and a deadline ignores
     window: () => ({ platform: "macos" }), exists: async (path) => path === SIMCTL,
     exec: async (cmd) => { commands.push(cmd); return cmd === "xcode-select" ? answer : good("\n\n\n"); },
   });
-  const cx = { notify() {}, timer: { after(_ms, fn) { const task = { fn, cancel() {} }; timers.push(task); return task; } }, spawn(fn) { pending.push(fn(cx)); } };
+  const { offered } = await load("kanso-tabs/panel-tools.js", ["offered"]);
+  const cx = { notify() {}, timer: { after(ms, fn) { const task = { ms, fn, cancel() {} }; timers.push(task); return task; } }, spawn(fn) { pending.push(fn(cx)); } };
   const tabs = new Tabs();
   tabs.probeSimulator(cx); tabs.probeSimulator(cx);
   assert.equal(commands.filter((cmd) => cmd === "xcode-select").length, 1);
-  timers[0].fn(cx);
-  assert.deepEqual(clone(store["kanso.sim.tools"]), {});
+  timers.shift().fn(cx);
+  assert.equal(offered("sim", { sim: store["kanso.sim.tools"] }), true, "a probe that missed its deadline does not hide the door");
   settle(good(DEVELOPER)); await Promise.all(pending);
-  assert.deepEqual(clone(store["kanso.sim.tools"]), {}, "a missed startup deadline does not publish a stale capability");
-  store["kanso.panels.order"] = ["sim", "files"];
+  assert.equal(store["kanso.sim.tools"].ios, undefined, "the late answer is ignored");
+  tabs.probeSimulator(cx);
+  assert.equal(commands.filter((cmd) => cmd === "xcode-select").length, 1, "not asked again at once");
+  timers.splice(0).forEach((timer) => timer.fn(cx));
   tabs.probeSimulator(cx); await Promise.all(pending);
-  assert.equal(commands.filter((cmd) => cmd === "xcode-select").length, 2);
+  assert.equal(commands.filter((cmd) => cmd === "xcode-select").length, 2, "asked again after the wait");
   assert.equal(store["kanso.sim.tools"].ios, SIMCTL);
   assert.equal(store["kanso.pieces"], undefined, "the probe never writes the piece");
 });

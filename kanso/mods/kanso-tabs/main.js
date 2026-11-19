@@ -27,7 +27,7 @@ import { tabMark, barState, foldTabs, renameWaits, landing, heldOn, dropMarks } 
 import { Kdb, projectKey } from "./kdb.js";
 import { projectOpen, OPEN } from "./panel-state.js";
 import { TOOLS, PROBE_MS, probeTools } from "./sim-registration.js";
-import { commandOn, machineKey, offered, toolsFor, toolKey, withoutNegatives, forgetting, ASK_MS, RETRY_MS } from "./panel-tools.js";
+import { commandOn, machineKey, offered, toolsFor, toolKey, withoutNegatives, forgetting, ASK_MS, RETRY_MS, UNKNOWN_TOOLS } from "./panel-tools.js";
 import { pieces, runs, shown, setPiece, STORE, choice } from "./pieces.js";
 
 function storedObject(key) {
@@ -183,11 +183,12 @@ export default class Tabs extends View {
     const finish = (tools, done) => {
       if (this.simProbe !== probe || this.simSettled) return;
       this.simSettled = true;
-      setShared(TOOLS, tools); done.notify();
+      setShared(TOOLS, tools ?? UNKNOWN_TOOLS); done.notify();
+      if (!tools) done.timer.after(RETRY_MS, () => { if (this.simProbe === probe) this.simSignature = null; });
     };
-    const deadline = cx.timer.after(PROBE_MS, (late) => finish({}, late));
+    const deadline = cx.timer.after(PROBE_MS, (late) => finish(null, late));
     cx.spawn(async (task) => {
-      const tools = await probeTools(window()?.platform ?? "macos", home(), exec).catch(() => ({}));
+      const tools = await probeTools(window()?.platform ?? "macos", home(), exec).catch(() => null);
       deadline.cancel(); finish(tools, task);
     });
   }
