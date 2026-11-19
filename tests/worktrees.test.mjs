@@ -48,12 +48,14 @@ test("Worktrees searches this computer only for its own panes, never for a pane 
   assert.ok(!search.some((root) => inside(root, far) || inside(far, root)), "a folder open on another machine is not searched here");
 });
 
+const windowsPane = {
+  home: () => "C:\\Users\\me",
+  spaces: () => [{ folder: "C:\\Users\\me\\Apps\\web", machine: null, tabs: [{ id: "t1" }] }],
+  panes: () => [{ tab: "t1", cwd: "C:\\Users\\me\\AppData\\Local\\Temp\\x" }],
+};
+
 test("Worktrees never searches the system temp folder or the folder above it", async () => {
-  const { Worktrees, rootsFor } = await worktrees({
-    home: () => "C:\\Users\\me",
-    spaces: () => [{ folder: "C:\\Users\\me\\Apps\\web", machine: null, tabs: [{ id: "t1" }] }],
-    panes: () => [{ tab: "t1", cwd: "C:\\Users\\me\\AppData\\Local\\Temp\\x" }],
-  });
+  const { Worktrees, rootsFor } = await worktrees(windowsPane);
   const panel = new Worktrees();
   panel.tempDirs = ["C:\\Users\\me\\AppData\\Local\\Temp\\"];
   assert.deepEqual(clone(panel.roots().roots), ["C:\\Users\\me\\Apps"], "on Windows a pane in the temp folder makes no AppData root");
@@ -66,9 +68,7 @@ test("Worktrees never searches the system temp folder or the folder above it", a
 test("Worktrees searches nothing it was not asked to when it cannot tell where the temp folder or home is", async () => {
   const settings = {};
   const { Worktrees } = await worktrees({
-    home: () => "C:\\Users\\me", shared: (k) => settings[k] ?? null,
-    spaces: () => [{ folder: "C:\\Users\\me\\Apps\\web", machine: null, tabs: [{ id: "t1" }] }],
-    panes: () => [{ tab: "t1", cwd: "C:\\Users\\me\\AppData\\Local\\Temp\\x" }],
+    ...windowsPane, shared: (k) => settings[k] ?? null,
   });
   const panel = new Worktrees();
   const unknown = [undefined, null, [], [""], ["C:\\Users\\me\\AppData\\Local\\Temp\\", ""]];
