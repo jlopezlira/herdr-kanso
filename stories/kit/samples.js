@@ -64,7 +64,7 @@ export const sampleTiles = {
 export const sampleHeader = ({ collapsed = false, dawn = false, art = true, title = true, view = 'spaces', open = false } = {}) => header({ collapsed, dawn, art, title, toolbar: toolbar({ view, column: collapsed, open }) });
 // The footer's Settings menu, and an update the tool refused.
 export const sampleSettingsMenu = () => menu({ title: 'Settings', items: [{ icon: 'lu-sliders-vertical', label: 'kansō settings', hint: '⌃⇧,' }, { icon: 'lu-panels-top-left', label: 'Herdr settings' }] });
-export const sampleRefusal = { text: 'kansō didn\'t update', source: 'git ls-remote: Could not resolve host: github.com', fix: 'Update' };
+export const sampleRefusal = { text: 'kansō didn\'t update', source: 'git ls-remote: Could not resolve host: github.com', fix: 'Update', agent: 'Atlas' };
 // `switcher: false` hides the view switch; `menu`, collapsed, opens its menu.
 export const sampleSidebar = ({ view = 'spaces', switcher = true, menu: open = false, collapsed = false, dawn = false, art = true, ...args } = {}) => sidebar({ ...args, collapsed,
   header: sampleHeader({ collapsed, dawn, art, view }), rows: sampleRows[view](), tiles: sampleTiles[view](),
