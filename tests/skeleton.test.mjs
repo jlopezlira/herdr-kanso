@@ -143,11 +143,12 @@ test("the side panels show the shared skeleton before they are ready and while t
   const { PullRequest } = await loadPullRequest(host);
   const pr = new PullRequest();
   assertSkeleton(framed(pr));
-  Object.assign(pr, { tab: "closed", closedPrs: null, closedLoading: true, openPrs: [] });
+  Object.assign(pr.session, { tab: "closed", closedPrs: null, flights: ["closed"], openPrs: [] });
   assertSkeleton(pr.listPage(c));
-  Object.assign(pr, { diffLoading: true, diffs: null });
+  Object.assign(pr.session, { flights: ["diff"], diffs: null });
   assertSkeleton(pr.fileDiff(c, "a.js"));
-  Object.assign(pr, { picker: "labels", pr: { author: { login: "me" } }, candidates: null, query: "", pickerError: null, search: {}, pending: null, truncated: false });
+  Object.assign(pr, { query: "", search: {} });
+  Object.assign(pr.session, { picker: "labels", pr: { author: { login: "me" } }, candidates: null, pickerError: null, pending: null, truncated: false });
   assertSkeleton(pr.pickerFor("labels", c));
 
   const { Worktrees } = await load("kanso-panel/worktrees.js", ["Worktrees"], host);

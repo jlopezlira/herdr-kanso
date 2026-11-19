@@ -243,8 +243,8 @@ test("a signed-out GitHub is absent: no inbox, no line, no link", async (t) => {
   const { panel, calls, ui } = await shownPanel(t, dir, {}, gh);
   panel.header(tone, false);
   panel.body(tone, true);
-  assert.equal(panel.inboxOn, false);
-  assert.equal(panel.pr.number, 4, "the focused page stays");
+  assert.equal(panel.session.inboxOn, false);
+  assert.equal(panel.session.pr.number, 4, "the focused page stays");
   assert.equal(calls.some((call) => call.includes("search")), false);
   assert.equal(ui.ids.some((id) => /inbox|reviews|login/.test(id)), false);
   assert.equal(ui.texts.some((text) => /not logged|not installed|Needs you|glab/.test(text)), false);
@@ -259,8 +259,8 @@ test("gh missing is absent too", async (t) => {
   const { panel, ui } = await panelFor(t, { dir, gh, git: () => (failure("not a git repository", 128)) });
   await refreshedContext(panel);
   panel.body(tone, true);
-  assert.equal(panel.outside, true);
-  assert.equal(panel.inboxOn, false);
+  assert.equal(panel.session.outside, true);
+  assert.equal(panel.session.inboxOn, false);
   assert.equal(ui.ids.some((id) => /inbox|login/.test(id)), false);
   assert.equal(ui.texts.some((text) => /not installed|Needs you/.test(text)), false);
 });
@@ -278,10 +278,10 @@ test("Needs you groups another project apart from the focused one, and skips the
     if (args[0] === "api") return success("jj\n");
   }));
   assert.equal(calls.some((call) => call.startsWith("gh search") || call.includes(" -R ")), false, "fresh cache skips the network");
-  assert.equal(panel.inboxOpen, false, "an unseen review stays on this branch");
-  assert.equal(panel.inboxTab, "needs");
+  assert.equal(panel.session.inboxOpen, false, "an unseen review stays on this branch");
+  assert.equal(panel.session.inboxTab, "needs");
   const { groupInbox } = await loadGroupInbox();
-  const needs = groupInbox(panel.inbox.needs, panel.inbox);
+  const needs = groupInbox(panel.session.inbox.needs, panel.session.inbox);
   assert.deepEqual(plain(needs.map((group) => group.title)), ["eres-admin-app"]);
   assert.equal(needs[0].rows[0].title, "Review me");
   assert.notEqual(eres.row.folder, kanso.row.folder);
@@ -296,8 +296,8 @@ test("Needs you groups another project apart from the focused one, and skips the
   assert.equal(stored.stdout.includes("gho_secret"), false);
   assert.equal(stored.stdout.includes("signed in"), true);
 
-  panel.inboxTab = "yours";
-  const yours = groupInbox(panel.inbox.yours, panel.inbox);
+  panel.session.inboxTab = "yours";
+  const yours = groupInbox(panel.session.inbox.yours, panel.session.inbox);
   assert.deepEqual(plain(yours.map((group) => group.title)), ["herdr-kanso"]);
 });
 
@@ -313,8 +313,8 @@ test("a review search missed still shows from the project list, at most 20 repos
   assert.equal(listed.length, 20);
   assert.equal(listed.includes("acme/repo-21"), false);
   assert.equal(listed.includes("acme/repo-09"), true);
-  assert.equal(panel.inbox.needs.some((item) => item.title === "From the repo" && item.draft), true);
-  assert.equal(panel.inboxOpen, false, "the review stays behind the pill");
+  assert.equal(panel.session.inbox.needs.some((item) => item.title === "From the repo" && item.draft), true);
+  assert.equal(panel.session.inboxOpen, false, "the review stays behind the pill");
 });
 
 test("a rate limit keeps the cache and is not asked again until it resets", async (t) => {
@@ -328,14 +328,14 @@ test("a rate limit keeps the cache and is not asked again until it resets", asyn
     if (args[1] === "view") views += 1;
   }));
   assert.equal(searches, 1);
-  assert.equal(panel.inbox.needs[0].title, "Kept");
-  assert.equal(panel.inbox.limitedUntil, reset * 1000);
+  assert.equal(panel.session.inbox.needs[0].title, "Kept");
+  assert.equal(panel.session.inbox.limitedUntil, reset * 1000);
   panel.inboxPage(tone);
   assert.ok(ui.texts.some((text) => /GitHub (is limiting requests|asks to wait) until \d{2}:\d{2}/.test(text)));
   const row = await rows(file, "SELECT retry_at FROM pr_fetches WHERE key='inbox:github:github.com';");
   assert.equal(row[0].retry_at, reset * 1000);
   const seen = views;
-  panel.inboxForce = true;
+  panel.session.inboxForce = true;
   await refreshAgain(panel, cx, drain);
   assert.equal(searches, 1, "manual refresh waits out the limit");
   assert.equal(views, seen, "the panel's own poll waits too");
@@ -347,14 +347,14 @@ test("a seen review opens today's pull request; an unseen one stays on the branc
   await db.run(`INSERT INTO pr_items(${ITEM_COLUMNS},seen_at) VALUES('https://github.com/amtelser/eres-admin-app/pull/3','github','github.com','amtelser','eres-admin-app',3,'Seen','OPEN',0,'ada','reviewer','2026-11-01T00:00:00Z',1,${seenAt});`);
   await markFresh(db);
   const { panel, ui, cx, drain } = await shownPanel(t, dir, ERES, signedIn());
-  assert.equal(panel.inboxOpen, false);
-  assert.equal(panel.pr.number, 4);
+  assert.equal(panel.session.inboxOpen, false);
+  assert.equal(panel.session.pr.number, 4);
 
   await db.run("UPDATE pr_items SET seen_at=NULL, updated_at='2099-01-01T00:00:00Z';");
-  panel.context = null;
+  panel.session.context = null;
   await refreshAgain(panel, cx, drain);
-  assert.equal(panel.inboxOpen, false);
-  assert.equal(panel.pr.number, 4, "the branch stays in front");
+  assert.equal(panel.session.inboxOpen, false);
+  assert.equal(panel.session.pr.number, 4, "the branch stays in front");
   assert.equal(panel.reviewCount(), 1);
   ui.texts.length = 0;
   panel.header(tone, false);
@@ -367,8 +367,8 @@ test("a failed read does not mark the review seen", async (t) => {
   const { panel, cx, drain } = await shownPanel(t, dir, ERES, signedIn((args) => {
     if (args[1] === "view" && args[2] === ERES_URL) return failure("HTTP 500");
   }));
-  assert.equal(panel.inboxOpen, false);
-  panel.openInboxItem(panel.inbox.needs[0], cx);
+  assert.equal(panel.session.inboxOpen, false);
+  panel.openInboxItem(panel.session.inbox.needs[0], cx);
   await drain();
   const row = await rows(file, "SELECT seen_at FROM pr_items;");
   assert.equal(row[0].seen_at, null);
@@ -436,11 +436,11 @@ test("each signed-in host is read as its own account", async (t) => {
   assert.equal(searched("ghe.example.com"), true);
   assert.equal(calls.some((call) => call.includes(" -R ghe.example.com/acme/ent ") && call.endsWith("GH_HOST=ghe.example.com")), true);
   const titled = (list, title) => list.some((item) => item.title === title);
-  assert.equal(titled(panel.inbox.needs, "For ent"), true);
-  assert.equal(titled(panel.inbox.needs, "For jj"), false);
-  assert.equal(titled(panel.inbox.yours, "Mine on github"), true);
-  assert.deepEqual(plain(panel.inbox.logins).toSorted(), ["ent", "jj"]);
-  panel.inboxTab = "yours";
+  assert.equal(titled(panel.session.inbox.needs, "For ent"), true);
+  assert.equal(titled(panel.session.inbox.needs, "For jj"), false);
+  assert.equal(titled(panel.session.inbox.yours, "Mine on github"), true);
+  assert.deepEqual(plain(panel.session.inbox.logins).toSorted(), ["ent", "jj"]);
+  panel.session.inboxTab = "yours";
   panel.inboxPage(tone);
   assert.ok(ui.texts.some((text) => text.includes(" · you")));
 });
@@ -456,7 +456,7 @@ test("past 20 repositories, a listed one drops its stale review and an unlisted 
   }));
   const left = await rows(file, "SELECT name FROM pr_items ORDER BY name;");
   assert.deepEqual(left.map((row) => row.name), ["repo-21"]);
-  const needs = (title) => panel.inbox.needs.some((item) => item.title === title);
+  const needs = (title) => panel.session.inbox.needs.some((item) => item.title === title);
   assert.equal(needs("Stale one"), false);
   assert.equal(needs("Stale last"), true);
   const fetch = await rows(file, "SELECT fetched_at FROM pr_fetches WHERE key='inbox:github:github.com';");
@@ -482,8 +482,8 @@ test("cached reviews show while GitHub is still being asked, and a failed ask ke
   const { cx, drain } = context();
   panel.refresh(cx);
   await opened;
-  assert.equal(panel.inboxOn, true);
-  assert.equal(panel.inbox.needs[0].title, "Cached");
+  assert.equal(panel.session.inboxOn, true);
+  assert.equal(panel.session.inbox.needs[0].title, "Cached");
   release();
   await drain();
 
@@ -497,9 +497,9 @@ test("cached reviews show while GitHub is still being asked, and a failed ask ke
     }),
   });
   failed.panel.refresh(cx); await drain();
-  assert.equal(failed.panel.inbox.needs[0].title, "Cached");
-  assert.equal(failed.panel.note.text, "Could not keep pull requests");
-  assert.match(failed.panel.note.source, /gh died/);
+  assert.equal(failed.panel.session.inbox.needs[0].title, "Cached");
+  assert.equal(failed.panel.session.note.text, "Could not keep pull requests");
+  assert.match(failed.panel.session.note.source, /gh died/);
 });
 
 test("a removed project no longer takes a repository slot", async (t) => {
@@ -515,7 +515,7 @@ test("a removed project no longer takes a repository slot", async (t) => {
   const repos = await rows(file, "SELECT name FROM pr_repos ORDER BY name;");
   assert.equal(repos.some((row) => row.name === "repo-01"), false);
   assert.equal(repos.some((row) => row.name === "repo-21"), true);
-  assert.equal(panel.inboxOn, true);
+  assert.equal(panel.session.inboxOn, true);
 });
 
 test("signing out brings back copy, open, and the repository list", async (t) => {
@@ -538,15 +538,15 @@ test("signing out brings back copy, open, and the repository list", async (t) =>
   assert.equal(ui.ids.includes("pr-web"), false);
   assert.equal(ui.ids.includes("pr-switch"), false);
   signed = false;
-  panel.inboxOpen = false;
+  panel.session.inboxOpen = false;
   const waiting = await headerIds();
-  assert.equal(panel.inboxOn, true, "signing out waits for the next account check");
+  assert.equal(panel.session.inboxOn, true, "signing out waits for the next account check");
   assert.equal(waiting.includes("pr-reviews"), true);
   const { AUTH_MS } = await loadAuthTiming();
   panel.auth.at = Date.now() - AUTH_MS - 1;
   const out = await headerIds();
-  assert.equal(panel.inboxOn, false);
-  assert.equal(panel.inboxOpen, null);
+  assert.equal(panel.session.inboxOn, false);
+  assert.equal(panel.session.inboxOpen, null);
   assert.equal(out.includes("pr-reviews"), false);
   assert.equal(out.includes("pr-copy"), true);
   assert.equal(out.includes("pr-web"), true);
@@ -562,14 +562,14 @@ test("a forced inbox read after the call that asked has returned keeps no stale 
   });
   const warm = context();
   panel.refresh(warm.cx); await warm.drain();
-  assert.equal(panel.note, null);
+  assert.equal(panel.session.note, null);
   const call = callContext();
   panel.again(call.cx);
   call.end();
   await call.drain();
-  assert.equal(panel.note, null, panel.note?.source);
-  assert.equal(panel.error, null);
-  assert.equal(panel.inbox.needs[0].title, "Asked for");
+  assert.equal(panel.session.note, null, panel.session.note?.source);
+  assert.equal(panel.session.error, null);
+  assert.equal(panel.session.inbox.needs[0].title, "Asked for");
 });
 
 const panelWithShared = async (t, setShared) => {
@@ -583,9 +583,9 @@ const panelWithShared = async (t, setShared) => {
 test("a rejected inbox step shows its card and leaves Refresh working", async (t) => {
   const { panel, calls } = await panelWithShared(t, () => { throw new Error("shared state is closed"); });
   const { cx, drain } = await refreshedContext(panel);
-  assert.equal(panel.loading, false, "a rejected step releases the refresh");
-  assert.equal(panel.note.text, "Could not keep pull requests");
-  assert.match(panel.note.source, /shared state is closed/);
+  assert.equal(panel.session.loading, false, "a rejected step releases the refresh");
+  assert.equal(panel.session.note.text, "Could not keep pull requests");
+  assert.match(panel.session.note.source, /shared state is closed/);
   const before = calls.length;
   panel.again(cx); await drain();
   assert.ok(calls.length > before, "Refresh asks again");
@@ -595,12 +595,12 @@ test("a recovered refresh retires the inbox card and keeps an unrelated failure"
   let broken = true;
   const { panel } = await panelWithShared(t, () => { if (broken) throw new Error("shared state is closed"); });
   const { cx, drain } = await refreshedContext(panel);
-  assert.equal(panel.note.text, "Could not keep pull requests");
+  assert.equal(panel.session.note.text, "Could not keep pull requests");
   broken = false;
   panel.again(cx); await drain();
-  assert.equal(panel.note, null, "the card goes once the inbox reads again");
+  assert.equal(panel.session.note, null, "the card goes once the inbox reads again");
 
-  panel.note = { text: "Merge failed", source: "not allowed" };
+  panel.session.note = { text: "Merge failed", source: "not allowed" };
   panel.again(cx); await drain();
-  assert.equal(panel.note.text, "Merge failed");
+  assert.equal(panel.session.note.text, "Merge failed");
 });

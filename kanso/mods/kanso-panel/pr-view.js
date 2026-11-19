@@ -15,33 +15,33 @@ import { dot } from "./ui-dot.js";
 
 
 export function footOf(panel) {
-  return footLine({ wait: panel.wait, stale: Boolean(panel.stale), at: panel.stale?.at, now: Date.now() });
+  return footLine({ wait: panel.session.wait, stale: Boolean(panel.session.stale), at: panel.session.stale?.at, now: Date.now() });
 }
 
 function scopeText(panel) {
-  const repo = (panel.home ?? "").split("/").filter(Boolean).at(-1) || panel.repo()?.r || "";
-  const flow = panel.pr ? `${panel.pr.headRefName} → ${panel.pr.baseRefName}` : (panel.branch || "");
-  const named = aliasText(shared("kanso.alias"), panel.on || "");
-  const computer = named ? machineTitle(panel.on || "", "", named) : (panel.on || "");
+  const repo = (panel.session.home ?? "").split("/").filter(Boolean).at(-1) || panel.repo()?.r || "";
+  const flow = panel.session.pr ? `${panel.session.pr.headRefName} → ${panel.session.pr.baseRefName}` : (panel.session.branch || "");
+  const named = aliasText(shared("kanso.alias"), panel.session.on || "");
+  const computer = named ? machineTitle(panel.session.on || "", "", named) : (panel.session.on || "");
   if (!repo && !computer) return "";
   return [computer, repo, flow].filter(Boolean).join(" · ");
 }
 
 function scopeRow(panel, c) {
   const text = scopeText(panel);
-  if (!text && !panel.pr) return null;
+  if (!text && !panel.session.pr) return null;
   return h_flex().w_full().items_center().justify_between().gap(G.md)
     .child(div().min_w(0).truncate().text_size(PAGE.note).text_color(c.dim).child(text))
-    .when(Boolean(panel.pr), (el) => el.child(div().flex_none().text_size(PAGE.note).text_color(c.dim).child(`#${panel.pr.number}`)));
+    .when(Boolean(panel.session.pr), (el) => el.child(div().flex_none().text_size(PAGE.note).text_color(c.dim).child(`#${panel.session.pr.number}`)));
 }
 
 function actionLabel(panel, action) {
-  return panel.busy === action.busy ? action.busyLabel || action.label : action.label;
+  return panel.session.busy === action.busy ? action.busyLabel || action.label : action.label;
 }
 
 // What cannot be undone asks twice.
 function asks(panel, action) {
-  const disabled = !action?.acts || Boolean(panel.busy);
+  const disabled = !action?.acts || Boolean(panel.session.busy);
   return action?.armed ? { disabled, verb: action.verb, armed: !disabled && panel.armed.is(action.target) } : { disabled };
 }
 
@@ -54,7 +54,7 @@ function quietAction(panel, c, action) {
 }
 
 function onAction(panel, action, cx) {
-  if (!action?.acts || panel.busy) return;
+  if (!action?.acts || panel.session.busy) return;
   if (action.target === "send") return panel.send(cx);
   if (action.target === "failures") return panel.openChecks(cx);
   if (action.target === "details") return panel.setDetails(cx, true);
@@ -66,7 +66,7 @@ function onAction(panel, action, cx) {
 }
 
 export function listedRow(panel, c, p, i, { finished = false, id = null } = {}) {
-  const on = p.url === panel.pr?.url;
+  const on = p.url === panel.session.pr?.url;
   const state = !finished ? panel.rowState(p)
     : p.state === "MERGED" ? { text: "Merged", tone: "violet" } : { text: "Closed without merging", tone: "blocked" };
   const when = !finished ? `updated ${ageOf(p.updatedAt, Date.now())}`
@@ -82,11 +82,13 @@ export const prRow = (id, c, p, { meta, state, on = false, onClick }) => row(id,
 }).aria_selected(on).accessibility_label(`#${p.number} ${p.title}${on ? ", shown" : ""}`);
 
 function otherPrs(panel, c, titled) {
-  const rows = (panel.openPrs ?? []).filter((pr) => pr.url !== panel.pr?.url);
+  const rows = (panel.session.openPrs ?? []).filter((pr) => pr.url !== panel.session.pr?.url);
   const shown = rows.slice(0, 8);
+  const reading = !rows.length && panel.session.flying("details");
   return v_flex().w_full().gap(G.xs)
     .when(!titled, (el) => el.child(section(c, "Other open pull requests", rows.length ? String(rows.length) : "")))
-    .when(!rows.length && !panel.listingOthers, (el) => el.child(div().text_size(T.value).text_color(c.dim).child("Nothing else open.")))
+    .when(reading, (el) => el.child(panel.rowBones(c)))
+    .when(!rows.length && !reading, (el) => el.child(div().text_size(T.value).text_color(c.dim).child("Nothing else open.")))
     .children(shown.map((pr, i) => listedRow(panel, c, pr, i, { id: `pr-other-${i}` })))
     .when(rows.length > shown.length, (el) => el.child(quietLink("pr-others", "Open the list", (cx) => panel.showOthers(cx), c)));
 }
@@ -105,9 +107,9 @@ function detailsButton(panel, c, view) {
 function detailParts(panel, c, view) {
   if (!view.details) return [];
   const on = panel.detailsOn();
-  const open = on && Boolean(panel.pr);
+  const open = on && Boolean(panel.session.pr);
   const checks = open && panel.checks().length > 0 ? [["checks", panel.checksList(c).id("checks")]] : [];
-  const threads = open && panel.threads.length > 0 ? [["threads", panel.discussion(c).id("threads")]] : [];
+  const threads = open && panel.session.threads.length > 0 ? [["threads", panel.discussion(c).id("threads")]] : [];
   const writes = open && view.writes?.length ? [["writes", writeRow(panel, c, view.writes).id("writes")]] : [];
   const rest = open ? [
     ["description", panel.description(c).id("description")],
@@ -134,7 +136,7 @@ function footnote(panel, c) {
 
 function heroTop(panel, c, view) {
   const { scope, card } = viewParts(panel, c, view);
-  const preview = panel.sendShown && panel.sendFor ? String(panel.sendFor).split("\n") : null;
+  const preview = panel.session.sendShown && panel.session.sendFor ? String(panel.session.sendFor).split("\n") : null;
   const ink = toneColor(c, view.tone);
   const body = v_flex().w_full().gap(G.lg)
     .when(Boolean(view.facts), (el) => el.child(div().text_size(T.value).text_color(c.muted).child(view.facts)))
@@ -146,7 +148,7 @@ function heroTop(panel, c, view) {
       .when(Boolean(view.primary), (row) => row.child(actionButton(panel, c, view.primary)))
       .when(Boolean(view.quiet), (row) => row.child(quietAction(panel, c, view.quiet))));
   return scopedColumn(scope)
-    .when(Boolean(panel.pr?.title), (el) => el.child(div().w_full().max_h(PR.titleMax).overflow_hidden().text_size(PR.title).line_height(1.3).font_medium().text_color(c.text).child(panel.pr.title)))
+    .when(Boolean(panel.session.pr?.title), (el) => el.child(div().w_full().max_h(PR.titleMax).overflow_hidden().text_size(PR.title).line_height(1.3).font_medium().text_color(c.text).child(panel.session.pr.title)))
     .child(h_flex().gap(G.sm).items_center()
       .child(dot(c, ink))
       .child(div().text_size(T.card).font_medium().text_color(ink).child(view.text)))
@@ -158,7 +160,7 @@ function heroTop(panel, c, view) {
 export function heroPieces(panel, c) {
   const view = panel.view();
   const veil = (el) => view.dimmed ? el.opacity(OPACITY.away) : el;
-  const note = panel.note ? [["remark", veil(failureBlock(panel.note)("remark", c))]] : [];
+  const note = panel.session.note ? [["remark", veil(failureBlock(panel.session.note)("remark", c))]] : [];
   const foot = footnote(panel, c);
   const tail = foot ? [["foot", foot.id("foot")]] : [];
   return [
@@ -182,7 +184,7 @@ export function drawEmpty(panel, c) {
     .child(panel.waiting(c, view.text, null, action))
     .when(Boolean(card), (el) => el.child(card))
     .when(view.details, (el) => el.child(fold(panel, c, view)))
-    .when(Boolean(panel.note), (el) => el.child(failureBlock(panel.note)("pr-view-note", c)))
+    .when(Boolean(panel.session.note), (el) => el.child(failureBlock(panel.session.note)("pr-view-note", c)))
     .when(Boolean(foot), (el) => el.child(foot));
 }
 

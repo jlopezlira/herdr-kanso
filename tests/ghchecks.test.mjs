@@ -8,7 +8,7 @@ const run = (status, conclusion = "", name) => ({ __typename: "CheckRun", status
 const commit = (state, context) => ({ __typename: "StatusContext", state, ...(context ? { context } : {}) });
 
 // A pull request panel that never ran its constructor: only its methods.
-const barePanel = async () => Object.create((await loadPullRequest()).PullRequest.prototype);
+const barePanel = async () => new (await loadPullRequest()).PullRequest();
 
 test("A check run reads by its status, then its conclusion", async () => {
   const { checkState } = await loadCheckState();
@@ -123,8 +123,8 @@ test("The header's digest and the PR panel agree on the same checks", async () =
 
 test("A list row keeps the check words while permission is unread", async () => {
   const panel = await barePanel();
-  panel.permission = null;
-  panel.permissionRepo = "o/r";
+  panel.session.permission = null;
+  panel.session.permissionRepo = "o/r";
   const colors = { dim: "dim", muted: "muted", red: "red", yellow: "yellow", green: "green", violet: "violet", blocked: "red", working: "yellow", done: "green" };
   const pass = [run("COMPLETED", "SUCCESS", "ci")];
   const fail = [run("COMPLETED", "FAILURE", "ci")];
@@ -134,9 +134,9 @@ test("A list row keeps the check words while permission is unread", async () => 
   assert.equal(row({ mergeStateStatus: "CLEAN" }), "Checks passed");
   assert.equal(row({ mergeStateStatus: "CLEAN", reviewDecision: "APPROVED" }), "Approved");
   assert.equal(row({ mergeStateStatus: "CLEAN" }, fail), "1 check failing");
-  panel.permission = "WRITE";
+  panel.session.permission = "WRITE";
   assert.equal(row({ mergeStateStatus: "CLEAN" }), "Ready to merge");
-  panel.permission = null;
+  panel.session.permission = null;
   assert.equal(row({ mergeStateStatus: "CLEAN", reviewDecision: "REVIEW_REQUIRED" }), "Review required");
   assert.equal(row({ mergeStateStatus: "CLEAN" }).includes("Checking"), false);
   assert.equal(row({ mergeStateStatus: "CLEAN", reviewDecision: "APPROVED" }), "Approved", "an approval still reads after a required review");
