@@ -22,6 +22,13 @@ in version.json, which the stable updater offers. Versions follow
 [Keep a Changelog](https://keepachangelog.com). `npm run check:version` checks
 the branch's rules.
 
+## [Unreleased]
+
+### Fixed
+
+- Waking a sleeping conversation brings it back before forgetting it was asleep. If it does not come back, it stays asleep and Wake says so, so you can try again. If it comes back but still looks asleep, Wake says that. Waking several at once names only the ones that did not come back.
+- Sleep no longer puts a tab away when something in it could not be stopped, and names that one.
+
 ## [3.31.0] - 2026-11-19
 
 ### Added

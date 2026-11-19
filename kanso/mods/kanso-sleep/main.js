@@ -50,7 +50,6 @@ export function sleepPlan(scope, space, ids, reads, all) {
   };
 }
 
-// Each settled tab comes back and is shown; each asleep terminal in it is cleared first (the claim), then resumed.
 export function wakePlan(space, ids, terminal, ps, terms) {
   const tabs = (space?.tabs ?? []).filter((t) => ids.includes(t.id));
   const term = new Map(terms.map((k) => [k.address, k]));
@@ -58,9 +57,20 @@ export function wakePlan(space, ids, terminal, ps, terms) {
   return {
     commands: [...tabs.filter((t) => t.settled).map((t) => ["tab.unsettle", { id: t.id }]),
       ...(space && !space.active ? [["space.select", { id: space.id }]] : []), ...(tabs[0] ? [["tab.select", { id: tabs[0].id }]] : [])],
-    hc: asleep.flatMap((t) => [labelArgs(t), ["send", t, resumeLine(term.get(t).labels[RESUME_LABEL])]]),
+    sessions: asleep.map((t) => {
+      const record = term.get(t);
+      return {
+        name: record.labels?.["kanso.name"] || record.title || t,
+        resume: ["send", t, resumeLine(record.labels[RESUME_LABEL])],
+        clear: labelArgs(t),
+      };
+    }),
   };
 }
+
+const wakeFailure = (rows) => `${rows.map((row) => (row.resumed
+  ? `${row.name} is awake, but still looks asleep`
+  : `${row.name} did not come back`)).join("; ")}.`;
 
 // One look at a Claude on its way out: what to press, or why it could not leave. st: { pid, name, at, sent, last }.
 export function exitStep(st, x, screen, now) {
@@ -157,8 +167,18 @@ export default class Sleep extends View {
       return why;
     }))).filter(Boolean);
     this.busy = null;
-    if (failed.length) { this.error = `It can't sleep: ${failed.join("; ")}.`; cx.notify(); return; }
-    await Promise.all(plan.interrupts.map((t) => hc(["interrupt", t]).catch(() => null)));
+    const say = (why) => {
+      if (!why.length) return false;
+      this.error = `It can't sleep: ${why.join("; ")}.`;
+      cx.notify();
+      return true;
+    };
+    if (say(failed)) return;
+    const missed = (await Promise.all(plan.interrupts.map(async (t) => {
+      const stopped = await hc(["interrupt", t]).catch(() => null);
+      return stopped?.code === 0 ? null : (this.reads.find((r) => r.terminal === t)?.name ?? t);
+    }))).filter(Boolean);
+    if (say(missed.map((name) => `${name} could not be stopped`))) return;
     for (const [cmd, args] of plan.after) run(cmd, args);
     closeOverlay(props()?.overlay);
   }
@@ -170,12 +190,20 @@ export default class Sleep extends View {
     const ids = tab ? [tab] : terminal ? [ps.find((p) => p.terminal === terminal)?.tab].filter(Boolean)
       : (this.space?.tabs ?? []).map((t) => t.id).filter((id) => asleepTabs.has(id));
     const plan = wakePlan(this.space, ids, terminal ?? null, ps, terms);
-    if (!plan.hc.length && !plan.commands.some(([cmd]) => cmd === "tab.unsettle")) { this.error = "That is no longer asleep."; return; }
+    if (!plan.sessions.length && !plan.commands.some(([cmd]) => cmd === "tab.unsettle")) { this.error = "That is no longer asleep."; return; }
     for (const [cmd, args] of plan.commands) run(cmd, args);
     this.busy = "Waking";
-    cx.spawn(async () => {
-      for (const args of plan.hc) await hc(args).catch(() => null);
-      closeOverlay(props()?.overlay);
+    cx.spawn(async (task) => {
+      const failed = (await Promise.all(plan.sessions.map(async (session) => {
+        const resumed = await hc(session.resume).catch(() => null);
+        if (resumed?.code !== 0) return { name: session.name, resumed: false };
+        const cleared = await hc(session.clear).catch(() => null);
+        return cleared?.code === 0 ? null : { name: session.name, resumed: true };
+      }))).filter(Boolean);
+      this.busy = null;
+      if (!failed.length) { closeOverlay(props()?.overlay); return; }
+      this.error = wakeFailure(failed);
+      task.notify();
     });
   }
 
