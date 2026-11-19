@@ -301,15 +301,19 @@ const nextTurn = async (turn) => {
   await turn.drain();
 };
 
+const readOther = async (turn) => {
+  await nextTurn(turn);
+  assert.equal(turn.viewed(), 2);
+  assert.equal(turn.panel.context, "/other");
+};
+
 test("a folder change seen while the panel is drawn starts its read on the next turn, where Herdr keeps it", async () => {
   let folder = "/repo";
   const turn = await drawnRead({ key: () => folder, props: () => ({}) });
   assert.equal(turn.viewed(), 1);
   folder = "/other";
   drawnQuiet(turn);
-  await nextTurn(turn);
-  assert.equal(turn.viewed(), 2);
-  assert.equal(turn.panel.context, "/other");
+  await readOther(turn);
 });
 
 test("a pane asking for the push section while the panel is drawn starts its read on the next turn, where Herdr keeps it", async () => {
@@ -352,9 +356,7 @@ test("a folder change clears the previous pull request on that draw, and the fol
   assert.equal(frame.includes("remote1"), false);
   assert.equal(frame.includes("here"), false);
   assert.equal(JSON.stringify(store["kanso.pr.details"]), JSON.stringify({ "/other": true }));
-  await nextTurn(turn);
-  assert.equal(turn.viewed(), 2);
-  assert.equal(turn.panel.context, "/other");
+  await readOther(turn);
 });
 
 test("a read that never answers still finishes, and the last pull request stays", async () => {
