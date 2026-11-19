@@ -206,9 +206,10 @@ export const dojo = ({ header, path, play, result, pixels, sleep, feedback, mark
   share ? stack({ variant: 'dojo menu' }, menu(share)) : null);
 
 const labelled = (label, field) => [row({ name: label, heading: true }), input({ multiline: false, ...field })];
-const launchChoice = ({ place, opens }) => [place ? sentence({ text: place }) : null, opens ? tabs({ ...opens, size: 'md', icon: true, label: true }) : null];
-export const newWorktree = ({ project, branch, place = null, opens = null, making = false, failure = null, agent }) => dialog({
+const underBranch = ({ place, refused }) => (refused ? sentence({ text: refused, tone: 'blocked' }) : place ? sentence({ text: place }) : null);
+const launchChoice = ({ opens, ...under }) => [underBranch(under), opens ? tabs({ ...opens, size: 'md', icon: true, label: true }) : null];
+export const newWorktree = ({ project, branch, place = null, opens = null, making = false, failure = null, refused = null, agent }) => dialog({
   title: phrase('New worktree in', project),
-  body: list(labelled('Branch', { text: branch, label: 'Branch name', focus: !failure, error: Boolean(failure) }), failure ? failureBlock({ ...failure, agent }) : launchChoice({ place, opens })),
+  body: list(labelled('Branch', { text: branch, label: 'Branch name', focus: !failure, error: Boolean(failure || refused) }), failure ? failureBlock({ ...failure, agent }) : launchChoice({ place, opens, refused })),
   secondary: 'Cancel', primary: failure ? null : 'Create', state: making ? 'loading' : branch ? 'default' : 'disabled',
 });

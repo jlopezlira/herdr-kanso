@@ -18,8 +18,8 @@ export const buttonTree = ({ label, kind = "solid", size = "md", icon = "none", 
   const again = `Press again to ${verb || label.toLowerCase()}`;
   const inner = armed && kind !== "icon" ? html`<span>${text}</span><span>${again}</span>` : [lead, text, key ? [" ", keyHintTree({ text: key })] : null];
   const title = armed && kind === "icon" ? again : tip || label;
-  if (disabled && spin) return html`<span class="${classes}" tabindex="0" title="${title}" aria-disabled="true" aria-busy="true">${inner}</span>`;
-  if (disabled) return html`<span class="${classes}" tabindex="0" title="${title}" aria-disabled="true">${inner}</span>`;
+  if (disabled && spin) return html`<span class="${classes}" title="${title}" aria-disabled="true" aria-busy="true">${inner}</span>`;
+  if (disabled) return html`<span class="${classes}" title="${title}" aria-disabled="true">${inner}</span>`;
   if (spin) return html`<span class="${classes}" tabindex="0" title="${title}" aria-busy="true">${inner}</span>`;
   return html`<span class="${classes}" tabindex="0" title="${title}">${inner}</span>`;
 };
