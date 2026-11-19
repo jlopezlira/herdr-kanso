@@ -102,7 +102,7 @@ export const samplePorts = {
   noPane: [server(':6006', 'storybook', '388 MB', 'storybook dev -p 6006', '~/acme-shop-cart', '2 h'), server(':3001', 'next', '214 MB', 'next dev -p 3001', '~/acme-shop-docs', '5 h')],
   inPanes: [server(':4000', 'tsx', '146 MB', 'tsx watch src/server.ts', '~/acme-shop', '1 h', 'checkout'), server(':5173', 'vite', '182 MB', 'vite --port 5173', '~/acme-shop', '40 min', 'web')],
   remote: { noPane: [server(':8000', 'uvicorn', '96 MB', 'uvicorn app:api --port 8000', '~/billing', '3 h')], inPanes: [server(':5432', 'postgres', '64 MB', 'postgres -D data', '~/billing', '1 d', 'migrate')] },
-  computer: 'devbox',
+  computer: sampleFiles.computer,
   entry: { icon: 'lu-plug', text: ':6006 no pane', tone: 'working' },
   refused: { text: 'Couldn’t stop :6006', source: 'kill 48213: still listening on :6006 after SIGTERM', fix: 'Force stop', agent: 'checkout' },
   failure: { text: 'Can’t read ports', source: 'lsof: unknown option -F', fix: 'Refresh', agent: 'checkout' },
@@ -532,7 +532,10 @@ export const sampleWorktrees = {
   unread: { text: 'Can’t read the history', source: 'SQLITE_READONLY: attempt to write a readonly database', fix: 'Refresh', agent: 'checkout' },
   noSqlite: { text: 'Can’t keep the history', source: 'sqlite3 not found: install it to keep what was freed', fix: 'Refresh', agent: 'checkout' },
   stayed: 'old-cart changed since you looked, so it stays. Its row shows it as it is now.',
-  creating: { project: 'acme-shop', branch: 'rate-limit-v2', place: '~/.kanso/worktrees/acme-shop/rate-limit-v2', agent: 'checkout' },
+  creating: {
+    project: 'acme-shop', branch: 'rate-limit-v2', place: '~/.kanso/worktrees/acme-shop/rate-limit-v2', agent: 'checkout',
+    opens: { items: [{ key: 'claude', label: 'Claude', icon: 'p-claude' }, { key: 'codex', label: 'Codex', icon: 'p-codex' }, { key: 'terminal', label: 'Terminal' }], value: 'claude' },
+  },
   remote: { scope: 'Read 13:52 · devbox unreachable · next try 14:04', total: { value: '5.1 GB', unit: 'in 6 worktrees' }, plan: { count: 2, size: '2.2 GB' }, repos: [repo('acme-shop', '3.4 GB', [])] },
 };
 const worktreeNotice = (state, text, detail) => ({ state, home: 'worktrees', text, detail });
@@ -558,7 +561,7 @@ export const samplePins = {
   stalled: [pinned(1, 'Road runner price should match the list', { at: [70, 39] })],
   file: { name: 'checkout-429.png', folder: '~/acme-shop/shots · 14:07' },
   agents: [{ name: 'checkout', project: 'acme-shop' }, { name: 'docs', project: 'acme-shop' }, { name: 'i18n', project: 'docs-site' }],
-  sent: 'Sent to checkout 14:07',
+  sent: samplePull.sent,
   refusals: {
     send: { text: 'Couldn’t send to checkout', source: 'hc send: checkout is not running', fix: 'Send' },
     copy: { text: 'Couldn’t copy to devbox', source: 'scp: devbox: Connection timed out', fix: 'Send' },

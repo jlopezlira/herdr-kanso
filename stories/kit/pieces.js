@@ -15,7 +15,7 @@ export const icon = (name, label) => ({ icon: name, label });
 export const chord = (join, ...parts) => parts.join(join ?? '');
 
 export const grow = (inner = '') => `<span class="kanso-layout__grow">${inner}</span>`;
-export const dot = (tone) => `<i class="kanso-dot kanso-fill--${escape(tone)}"></i>`;
+export const dot = (tone) => `<i class="kanso-dot kanso-dot--${escape(tone)}"></i>`;
 
 // Atoms
 
@@ -55,7 +55,7 @@ const highlight = (line) => {
   let html = '', at = 0;
   for (const match of line.matchAll(syntax)) {
     const tone = match[1] ? 'string' : match[2] ? 'number' : 'keyword';
-    html += `${escape(line.slice(at, match.index))}<span class="kanso-code__token--${tone}">${escape(match[0])}</span>`;
+    html += `${escape(line.slice(at, match.index))}<span class="kanso-code__token kanso-code__token--${tone}">${escape(match[0])}</span>`;
     at = match.index + match[0].length;
   }
   return html + escape(line.slice(at));
@@ -119,7 +119,7 @@ export const excerpt = ({ who, when = '', where = '', text, query = '', lead = '
 const inline = (text) => escape(text).replace(/`([^`]+)`/g, '<code>$1</code>').replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>');
 const tableActions = () => `<div class="kanso-markdown__actions">${['Add row', 'Add column', 'Done'].map((label) => button({ label, kind: 'quiet', size: 'sm' })).join('')}</div>`;
 const remover = (what, shown = true) => `<td class="kanso-markdown__remover kanso-markdown__remover--${what}">${shown ? button({ label: `Remove this ${what}`, kind: 'icon', size: 'sm', icon: 'lu-x' }) : ''}</td>`;
-const cellOf = (text, tag, focus) => `<${tag}${focus ? ' class="kanso-control--focus" contenteditable="true"' : ''}>${inline(text.trim())}</${tag}>`;
+const cellOf = (text, tag, focus) => `<${tag}${focus ? ' class="kanso-markdown__cell kanso-markdown__cell--focus" contenteditable="true"' : ''}>${inline(text.trim())}</${tag}>`;
 const rowCells = (row) => row.trim().split('|').slice(1, -1);
 const cells = (row, tag, at, cell) => `<tr>${rowCells(row).map((text, column) => cellOf(text, tag, cell?.[0] === at && cell?.[1] === column)).join('')}${cell ? remover('row', at > 0) : ''}</tr>`;
 const columnRemovers = (head) => {
@@ -184,9 +184,8 @@ export const menu = ({ title, items }) => `<div class="kanso-menu kanso-popover"
 export const metric = ({ value, unit, small = '', second = '', facts = '', loading = false, size = 'md', tone = '' }) => {
   const piece = (text, element) => `<span class="${element}${loading ? ' kanso-skeleton--shape kanso-skeleton--text' : ''}">${escape(text)}</span>`;
   const list = facts.split('|').map((fact) => fact.trim()).filter(Boolean);
-  const ink = tone ? ` kanso-text--${escape(tone)}` : '';
-  const beside = second ? `<span class="kanso-metric__beside">${piece(unit, 'kanso-metric__unit')}${piece(second, `kanso-metric__second${ink}`)}</span>` : unit ? piece(unit, 'kanso-metric__unit') : '';
-  return `<div class="kanso-metric${size === 'sm' ? ' kanso-metric--sm' : ''}${second ? ' kanso-metric--beside' : ''}">${piece(value, `kanso-metric__value${ink}`)}${small ? piece(small, 'kanso-metric__small') : ''}${beside}</div>`
+  const beside = second ? `<span class="kanso-metric__beside">${piece(unit, 'kanso-metric__unit')}${piece(second, 'kanso-metric__second')}</span>` : unit ? piece(unit, 'kanso-metric__unit') : '';
+  return `<div class="kanso-metric${size === 'sm' ? ' kanso-metric--sm' : ''}${second ? ' kanso-metric--beside' : ''}${tone ? ` kanso-metric--${escape(tone)}` : ''}">${piece(value, 'kanso-metric__value')}${small ? piece(small, 'kanso-metric__small') : ''}${beside}</div>`
     + (list.length ? `<div class="kanso-panel__facts">${list.map((fact) => loading ? `<span class="kanso-skeleton--shape kanso-skeleton--text">${escape(fact)}</span>` : `<span>${escape(fact)}</span>`).join('')}</div>` : '');
 };
 
@@ -213,9 +212,9 @@ const guide = (kind, level) => (kind ? `<span class="kanso-row__guide kanso-row_
 const detailFact = (part) => `${part.tone ? dot(part.tone) : ''}${fact(part)}`;
 const rowTool = (action) => button({ kind: 'icon', size: 'sm', ...action });
 const letterTones = { A: 'dim', D: 'dim', U: 'blocked', M: '' };
-const fileLetter = (letter) => `<span class="kanso-row__letter${letterTones[letter] ? ` kanso-text--${letterTones[letter]}` : ''}">${letter === 'M' ? '' : escape(letter)}</span>`;
+const fileLetter = (letter) => `<span class="kanso-row__letter${letterTones[letter] ? ` kanso-row__letter--${letterTones[letter]}` : ''}">${letter === 'M' ? '' : escape(letter)}</span>`;
 const fold = (open) => `<span class="kanso-row__fold">${open === undefined ? '' : inlineIcon(open ? 'lu-chevron-down' : 'lu-chevron-right')}</span>`;
-export const sentence = ({ text, tone = 'dim' }) => `<div class="kanso-sentence kanso-text--${escape(tone)}">${escape(text)}</div>`;
+export const sentence = ({ text, tone = 'dim' }) => `<div class="kanso-sentence kanso-sentence--${escape(tone)}">${escape(text)}</div>`;
 const rowVerb = (verb) => verb.agent ? explainButton({ agent: verb.agent, size: 'sm' }) : button({ kind: 'quiet', size: 'sm', ...verb });
 export const rowDepths = [0, 1, 2];
 // `actions` show on hover or focus and take the meta's place; `action` and the drawn `tools` are always shown; `keys` are the row's key hints, last.
@@ -293,8 +292,8 @@ export const deviceStates = ['on', 'off', 'booting', 'stalled'];
 export const device = ({ state = 'on', frozen, focus, touch, rotated, narrow, pins = [] }, screen = '') => {
   const shape = `${rotated ? ' kanso-simulator--rotated' : ''}${narrow ? ' kanso-simulator--narrow' : ''}`;
   if (state === 'off') return `<div class="kanso-simulator__frame">${button({ label: 'Boot' })}</div>`;
-  if (state === 'booting') return `<div class="kanso-simulator__frame kanso-simulator__frame--booting kanso-skeleton--breathing" aria-busy="true"></div>`;
-  const states = `${shape}${frozen ? ' kanso-simulator--frozen' : ''}${focus ? ' kanso-control--focus' : ''}${state === 'stalled' ? ' kanso-simulator--stalled' : ''}`;
+  if (state === 'booting') return `<div class="kanso-simulator__frame kanso-simulator__frame--booting kanso-skeleton kanso-skeleton--breathing" aria-busy="true"></div>`;
+  const states = `${shape}${frozen ? ' kanso-simulator--frozen' : ''}${focus ? ' kanso-simulator--focus' : ''}${state === 'stalled' ? ' kanso-simulator--stalled' : ''}`;
   return `<div class="kanso-simulator${states}"><div class="kanso-simulator__screen">${screen}</div>${touch ? pinLayer([pin({ at: touch, pending: true })], ' kanso-annotation__layer--touch') : ''}${pinLayer(pins)}</div>`;
 };
 export const pictureStates = ['shown', 'loading', 'held'];
@@ -384,7 +383,7 @@ export const windowAreas = ['Sidebar', 'Tab bar', 'Pane header', 'Body', 'Panels
 const areaClass = (name) => name.toLowerCase().replace(/ /g, '-');
 export const windowMap = ({ picked = null, hover = null } = {}) => `<div class="kanso-settings__window-map">${windowAreas.map((name) => name === 'Body'
   ? `<span class="kanso-settings__area kanso-settings__area--body"></span>`
-  : `<span class="kanso-settings__area kanso-settings__area--${areaClass(name)}${name === picked ? ' kanso-control--on' : ''}${name === hover ? ' kanso-control--hover' : ''}" role="button" tabindex="0" aria-pressed="${name === picked}">${escape(name)}</span>`).join('')}</div>`;
+  : `<span class="kanso-settings__area kanso-settings__area--${areaClass(name)}${name === picked ? ' kanso-settings__area--on' : ''}${name === hover ? ' kanso-settings__area--hover' : ''}" role="button" tabindex="0" aria-pressed="${name === picked}">${escape(name)}</span>`).join('')}</div>`;
 
 const releaseDots = { newer: '', here: ' kanso-update__timeline-dot--current', older: ' kanso-update__timeline-dot--small' };
 const changeLines = (changes) => changes.map(({ kind, text }, index) => `<div class="kanso-update__change"><span>${kind === changes[index - 1]?.kind ? '' : escape(kind)}</span><span>${escape(text)}</span></div>`).join('');

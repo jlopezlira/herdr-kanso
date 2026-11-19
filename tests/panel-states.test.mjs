@@ -8,6 +8,7 @@ const drawn = (page, view) => {
   assert.ok(panelPages[page].states.some(({ label }) => label === view), `${page} has no state named ${view}`);
   return new JSDOM(panelPages[page].markup({ view })).window.document;
 };
+const eachSpend = (views, check) => Object.entries(views).forEach(([view, expected]) => check(drawn("Panels/Spend", view), expected, view));
 const texts = (document, selector) => [...document.querySelectorAll(selector)].map((node) => node.textContent);
 
 test("Spend draws every period selected, with that period's total and rows", () => {
@@ -18,12 +19,11 @@ test("Spend draws every period selected, with that period's total and rows", () 
     Year: ["Year", "$9,888.00", "$6,816.00"],
     "All time": ["All time", "$14,832.00", "$10,224.00"],
   };
-  for (const [view, [segment, total, project]] of Object.entries(periods)) {
-    const document = drawn("Panels/Spend", view);
+  eachSpend(periods, (document, [segment, total, project], view) => {
     assert.deepEqual(texts(document, ".kanso-tabs__tab--on"), [segment], view);
     assert.deepEqual(texts(document, ".kanso-metric--sm .kanso-metric__value"), [total], view);
     assert.equal(texts(document, ".kanso-row").find((row) => row.startsWith("acme-shop")), `acme-shop${project}`, view);
-  }
+  });
 });
 
 test("Spend history says what each day cost, on the whole panel, a project and a task", () => {
@@ -33,8 +33,7 @@ test("Spend history says what each day cost, on the whole panel, a project and a
     "A task’s History": ["Nov 5 · $20.00 · 480,000 tokens", "$20.00"],
     "History, nothing that period": ["Nov 5 · $0.00 · 0 tokens", null],
   };
-  for (const [view, [peakDay, peak]] of Object.entries(scopes)) {
-    const document = drawn("Panels/Spend", view);
+  eachSpend(scopes, (document, [peakDay, peak], view) => {
     const days = [...document.querySelectorAll(".kanso-bars__slot")];
     assert.equal(document.querySelector(".kanso-bars__plot").getAttribute("aria-label"), "API value per day", view);
     assert.equal(days.length, 13, view);
@@ -42,7 +41,14 @@ test("Spend history says what each day cost, on the whole panel, a project and a
     assert.equal(days[2].getAttribute("aria-label"), "Nov 3 · $0.00 · 0 tokens", view);
     assert.ok(days.every((day) => day.querySelector("title").textContent === day.getAttribute("aria-label")), view);
     assert.equal(document.querySelector(".kanso-bars__label")?.textContent ?? null, peak, view);
-  }
+  });
+});
+
+test("New worktree offers what opens in it, Claude, Codex or Terminal, after the path", () => {
+  const dialog = drawn("Panels/Worktrees", "New worktree from here").querySelector(".kanso-dialog");
+  assert.deepEqual(texts(dialog, ".kanso-tabs__tab"), ["Claude", "Codex", "Terminal"]);
+  assert.deepEqual(texts(dialog, ".kanso-tabs__tab--on"), ["Claude"]);
+  assert.match(dialog.textContent, /rate-limit-v2~\/\.kanso\/worktrees\/acme-shop\/rate-limit-v2ClaudeCodexTerminalCancelCreate$/);
 });
 
 test("Ports opened from the status bar selects the row and puts focus on Stop, before any stop", () => {

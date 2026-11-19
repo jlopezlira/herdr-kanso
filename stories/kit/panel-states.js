@@ -311,7 +311,7 @@ export const worktreesViews = {
   'History can’t be read': [freedOpen({ failure: sampleWorktrees.unread }), 'The store’s words under the fold; the list stays.'],
   'No sqlite3': [freedOpen({ failure: sampleWorktrees.noSqlite }), 'What to install; the list stays.'],
   'Share from the header': [atRest({ share: true }), 'Totals only leave.'],
-  'New worktree from here': [atRest({ creating: sampleWorktrees.creating }), 'The New worktree dialog, on the repository picked.'],
+  'New worktree from here': [atRest({ creating: sampleWorktrees.creating }), 'The New worktree dialog, on the repository picked: the branch, where it goes, and what opens in it, Claude, Codex or Terminal.'],
   'Creating, on devbox': [atRest({ creating: { ...sampleWorktrees.creating, project: 'acme-shop on devbox', making: true } }), 'Create is pressed: the dialog waits while the worktree is made on that computer.'],
   ...noticesOf(sampleWorktreeNotices, atRest),
 };

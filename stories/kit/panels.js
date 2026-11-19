@@ -5,6 +5,7 @@ const input = (props) => kitInput({ multiline: false, ...props });
 const panelHeader = (props) => kitPanelHeader({ apart: true, ...props });
 const waiting = ({ reading = false, failure = null, empty = null }, count = 3, shape = 'list row') => (failure ? failureBlock(failure) : reading ? skeletonOf({ shape, count }) : empty ? emptyState(empty) : null);
 const refusable = ({ open, refused }, props) => list(row(props), open && refused ? failureBlock(refused) : null);
+const kept = (...items) => items.filter(Boolean);
 const within = (reach) => (verb) => ({ ...verb, disabled: verb.disabled || !reach });
 const unread = ({ reading, failure }, count) => waiting({ reading, failure }, count);
 
@@ -192,23 +193,19 @@ const containerVerbs = (item, { details, armed, pending, local }) => [
 ].filter(Boolean).map((verb) => ({ ...verb, disabled: pending }));
 const detailRows = (said) => (said.length ? said.map(([name, value]) => row({ name, detail: value, depth: 1 })) : row({ name: 'No details from Docker', depth: 1, dimmed: true }));
 const eachPicked = (picked, draw) => (item) => draw(item, item.name === picked);
-const containerRow = ({ picked, details, said = [], armed, pending, refused, narrow, local }) => eachPicked(picked, (item, open) => {
-  const status = healthMarks[item.health];
-  return list(row({
-    name: item.name, meta: item.meta, late: item.health === 'failed', current: open, pending: open && pending,
-    start: status ? [mark({ status, size: 'sm' })] : [],
-    second: open ? facts(narrow ? null : item.image, item.ports, item.age) : null,
-    verbs: open ? containerVerbs(item, { details, armed, pending, local }) : [],
-  }), open && details ? detailRows(said) : null, open && refused ? failureBlock(refused) : null);
-});
+const containerRow = ({ picked, details, said = [], armed, pending, refused, narrow, local }) => eachPicked(picked, (item, open, status = healthMarks[item.health]) => list(refusable({ open, refused: details ? null : refused }, {
+  name: item.name, meta: item.meta, late: item.health === 'failed', current: open, pending: open && pending,
+  start: status ? [mark({ status, size: 'sm' })] : [],
+  second: open ? facts(narrow ? null : item.image, item.ports, item.age) : null,
+  verbs: open ? containerVerbs(item, { details, armed, pending, local }) : [],
+}), open && details ? [detailRows(said), refused ? failureBlock(refused) : null] : null));
 const bulkVerbs = (containers) => {
   const running = containers.filter(({ health }) => health === 'running').length;
   return [running > 1 ? { label: 'Stop all' } : null, containers.length - running > 1 ? { label: 'Start all' } : null];
 };
-const projectVerbs = ({ containers }, armed) => [
+const projectVerbs = ({ containers }, armed) => kept(
   { label: containers.length ? 'Up again' : 'Up' }, { label: 'Rebuild' },
-  containers.length ? { label: 'Down', armed, verb: 'take it down' } : null, ...bulkVerbs(containers),
-].filter(Boolean);
+  containers.length ? { label: 'Down', armed, verb: 'take it down' } : null, ...bulkVerbs(containers));
 const projectBlock = ({ hover, down, each }) => (project) => {
   const pointed = project.name === hover || project.name === down;
   return list(row({
@@ -261,10 +258,9 @@ const herdrRow = ({ size, window: held, core, limit, over = false }, open) => ro
   verbs: open ? [{ label: 'Restart window', kind: over ? 'solid' : undefined }] : [],
 });
 const helpersRow = ({ count, size }, armed) => row({ name: phrase(count, 'hung helpers'), meta: size, action: { label: 'End', kind: 'quiet', armed, verb: phrase('end', count) } });
-const sessionVerbs = (item, { armed, unrecyclable }) => [
+const sessionVerbs = (item, { armed, unrecyclable }) => kept(
   item.state === 'idle' && !unrecyclable ? { label: 'Recycle' } : null,
-  item.state === 'working' ? null : { label: 'Close', armed, verb: 'close' },
-].filter(Boolean);
+  item.state === 'working' ? null : { label: 'Close', armed, verb: 'close' });
 const sessionMeta = (item, done) => done ?? (item.over ? { text: item.size, tone: 'working' } : item.size);
 const sessionRow = ({ picked, armed, refused, spark, unrecyclable, batch }) => {
   const done = Object.fromEntries(batch?.done ?? []);
@@ -508,14 +504,11 @@ const worktreeVerbs = {
 };
 const verbsByKind = { open: ['go', 'explain'], held: ['open', 'explain'], broken: ['repair', 'open'], record: ['remove'], removable: ['open', 'explain', 'remove'] };
 const worktreeFacts = ({ verdict, age }, { open, busy }) => (busy ? [{ text: 'Removing…' }] : open || verdict.tone ? [verdict, age] : null);
-const worktreeRow = ({ picked, armed, busy, refused, agent, reach }) => eachPicked(picked, (item, open) => {
-  const working = item.name === busy;
-  return refusable({ open, refused }, {
-    name: item.name, detail: item.branch, meta: item.size, current: open, pending: working,
-    second: worktreeFacts(item, { open, busy: working && item.kind !== 'broken' }), reason: open && !refused ? item.reason : null, path: open && !refused ? item.path : null,
-    verbs: open && !refused ? verbsByKind[item.kind ?? 'removable'].map((key) => worktreeVerbs[key](item, { agent, armed, busy: working })).map(within(reach)) : [],
-  });
-});
+const worktreeRow = ({ picked, armed, busy, refused, agent, reach }) => eachPicked(picked, (item, open, working = item.name === busy) => refusable({ open, refused }, {
+  name: item.name, detail: item.branch, meta: item.size, current: open, pending: working,
+  second: worktreeFacts(item, { open, busy: working && item.kind !== 'broken' }), reason: open && !refused ? item.reason : null, path: open && !refused ? item.path : null,
+  verbs: open && !refused ? verbsByKind[item.kind ?? 'removable'].map((key) => worktreeVerbs[key](item, { agent, armed, busy: working })).map(within(reach)) : [],
+}));
 const groupVerbs = ({ more = 0, all = 0, prune = null }, armed) => stack({ variant: 'line' },
   more ? quiet({ label: phrase('Show', more, 'more') }) : null, prune ? quiet({ label: prune }) : null,
   all > 1 ? quiet({ label: phrase('Remove all', all), armed, verb: phrase('remove', all) }) : null);
