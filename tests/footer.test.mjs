@@ -14,6 +14,7 @@ const popover = (el) => all(el).find((x) => calls(x, "trigger").length) ?? null;
 
 const cx = () => ({ notified: 0, notify() { this.notified += 1; }, timer: { after() {} }, stop_propagation() {} });
 const press = (el, context = cx()) => { arg(el, "on_click")({}, context); return context; };
+const pressInRefusal = (view, words) => press(holding(all(view.render()).find((x) => calls(x, "mt").length), words));
 
 test("In Stable Mode with nothing to install, the footer is Settings alone: Add computer lives in +", async () => {
   const { view } = await footer();
@@ -90,8 +91,7 @@ test("A refused update keeps its row and shows the tool's words under it, with U
 test("With no agent installed, Explain names an agent and says so instead of starting one", async () => {
   const why = "offline";
   const { view, ran, notices } = await footer({ updater: { available: () => "3.31.0", refused: () => why } });
-  const block = all(view.render()).find((x) => calls(x, "mt").length);
-  press(holding(block, "Explain to an agent"));
+  pressInRefusal(view, "Explain to an agent");
   await view.lookup;
   await Promise.resolve();
   assert.deepEqual([ran.length, notices.map((notice) => notice.title)], [0, ["Could not start the agent"]]);
@@ -100,15 +100,14 @@ test("With no agent installed, Explain names an agent and says so instead of sta
 test("Explain pressed while the agent lookup is pending waits for it: one tab opens, and no false absence is reported", async () => {
   let found;
   const { view, ran, notices, lookups } = await footer({ updater: { available: () => "3.31.0", refused: () => "offline" }, agents: () => new Promise((resolve) => { found = resolve; }) });
-  const block = all(view.render()).find((x) => calls(x, "mt").length);
-  press(holding(block, "Explain to an agent"));
+  pressInRefusal(view, "Explain to an agent");
   await Promise.resolve();
   assert.deepEqual([ran.length, notices.length, lookups.length], [0, 0, 1], "nothing yet, and nothing said");
   found([{ name: "Atlas", installed: true, run: ["atlas"] }]);
   await view.lookup;
   await Promise.resolve();
   assert.deepEqual(JSON.parse(JSON.stringify([ran.map((call) => [call[0], call[1].argv]), notices.length])), [[["tab.new", ["atlas"]]], 0]);
-  press(holding(all(view.render()).find((x) => calls(x, "mt").length), "Explain to Atlas"));
+  pressInRefusal(view, "Explain to Atlas");
   assert.deepEqual([ran.length, lookups.length], [2, 1], "a second press opens a second tab with no second lookup");
 });
 
