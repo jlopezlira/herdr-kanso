@@ -1,21 +1,17 @@
-// The panels' named states: each one a preset of its panel's props, the catalog draws its record from it.
 import { github } from './github.js';
 import { githubViews } from './github-states.js';
 import { containers, conversationFind, files, markdownWindow, memory, ports, settings, spend, preview, pulls, worktrees, pinPanel, shipped, sharing, simulator, images } from './panels.js';
 import { phrase } from './kit.js';
 import { keyLayer, sampleScreens, sampleShot } from './samples.js';
 import { verdicts, refusals, talkSample, answers, events, detailSample, reviewSample, openedPull, failedActs, talked, filesCut, moreChecks, detailsShown, detailed, person, people, labels, notes, picker, reviewers, pageOf } from './pull-states.js';
-import { sampleContainers, sampleDisk, sampleMemory, sampleMemoryNotices, sampleAreas, sampleFiles, sampleFilesFailures, sampleFind, samplePlainTree, samplePortHistory, samplePorts, sampleTree, sampleCustomPanel, sampleFound, sampleHerdrKeys, sampleHidden, sampleKeyGroups, sampleMaintainers, sampleMarkdown, samplePlaces, sampleReleases, sampleSpend, sampleWorktrees, sampleWorktreeNotices, sampleShipped, sampleShippedCard, sampleShippedNotices, sampleShare, sampleTaken, samplePreview, samplePull, samplePullPages, samplePulls, samplePins, sampleSimulator, sampleImages } from './panel-samples.js';
+import { sampleContainers, sampleDisk, sampleMemory, sampleMemoryNotices, sampleAreas, sampleFiles, sampleFilesFailures, sampleFind, samplePlainTree, samplePortHistory, samplePorts, sampleTree, sampleCustomPanel, sampleFound, sampleHerdrKeys, sampleHidden, sampleKeyGroups, sampleMaintainers, sampleMarkdown, samplePlaces, sampleReleases, sampleSpend, sampleSpendSpans,sampleWorktrees, sampleWorktreeNotices, sampleShipped, sampleShippedCard, sampleShippedNotices, sampleShare, sampleTaken, samplePreview, samplePull, samplePullPages, samplePulls, samplePins, sampleSimulator, sampleImages } from './panel-samples.js';
 
-// A notice's state: the panel at rest with the notice beside it.
 const noticesOf = (notices, draw) => Object.fromEntries(Object.entries(notices).map(([name, said]) => [phrase('Notice:', name), [draw({ notice: said }), 'On screen a toast; away, the computer’s notification with the same words.']]));
 
-// Settings: each page with its samples, then each state as what changes on it.
 const shows = (extra) => ({ page: 'pieces', hidden: sampleHidden, areas: sampleAreas, ...extra });
 const picked = (area, extra = {}) => shows({ view: 'area', area, ...extra });
 const withPanel = { ...sampleAreas, Panels: { ...sampleAreas.Panels, pieces: [...sampleAreas.Panels.pieces, sampleCustomPanel] } };
 const keys = (extra) => ({ page: 'keys', os: 'mac', layer: keyLayer('mac', 'alt cmd'), picked: 'h', groups: sampleKeyGroups, herdr: sampleHerdrKeys, practice: 'Vim keys', ...extra });
-// An open group: its rows at rest, the first one in the given state.
 const opened = (group, first = {}) => keys({ open: group, groups: { ...sampleKeyGroups, [group]: sampleKeyGroups[group].map((item, index) => (index ? item : { ...item, ...first })) } });
 const news = (extra) => ({ page: 'news', newer: sampleReleases.newer, installed: sampleReleases.installed, older: sampleReleases.older, ...extra });
 const credits = (extra) => ({ page: 'credits', places: samplePlaces, maintainers: sampleMaintainers, ...extra });
@@ -56,7 +52,6 @@ export const settingsViews = {
   'A place under the pointer': [credits({ hover: 'Herdr' }), 'What it is, and the open mark.'],
 };
 
-// Find in the conversation: the query typed, then what the read gives back.
 const finding = (extra) => ({ agent: sampleFind.agent, query: sampleFind.query, count: '', ...extra });
 const second = sampleFind.days[0][1][1];
 export const findViews = {
@@ -67,7 +62,6 @@ export const findViews = {
   'No matches': [finding({ query: 'countdown hook' }), 'Nothing found: the empty state, the count left empty.'],
   'The conversation file is gone': [finding({ missing: sampleFind.missing }), 'The file cannot be read: its path, Refresh, and Explain to the agent.'],
 };
-// Files: Changed with what the agent named, All files as the tree, then each read that is not the list.
 const { named, unchanged, also, shell, remote, computer } = sampleFiles;
 const changes = (extra) => ({ view: 'changed', files: { named, unchanged, also }, ...extra });
 const tree = (extra) => ({ view: 'all', tree: sampleTree, ...extra });
@@ -87,7 +81,6 @@ export const filesViews = {
   'Unreachable before the first read': [{ repository: false, scope: computer, failure: sampleFilesFailures.unreachable }, 'Nothing read yet: the computer’s words and Refresh.'],
   'Narrow, 300': [changes({ look: 'narrow', files: { named, unchanged: ['rate-limit-buckets.ts'], also } }), 'The title steps down; the folder truncates before the name.'],
 };
-// Ports: the four servers at rest, History folded; each state is what the pointer, a stop or a read changes.
 const { noPane, inPanes } = samplePorts;
 const served = (extra) => ({ servers: { noPane, inPanes }, history: { open: false }, ...extra });
 const pastOpen = (extra = {}) => ({ open: true, ...samplePortHistory, ...extra });
@@ -97,6 +90,7 @@ export const portsViews = {
   'A pane’s server picked': [served({ picked: ':4000' }), 'Go to its pane first, then Open in the browser and Stop, all quiet.'],
   'Stop armed': [served({ picked: ':6006', armed: true }), 'Stop asks again for 4 s.'],
   Stopping: [served({ picked: ':6006', stopping: true }), 'The signal is sent; the row waits for the port to close.'],
+  'From the status bar: the row is selected and Stop has focus': [served({ picked: ':6006', entry: samplePorts.entry }), 'Its item in the status bar opens the panel on the server with no pane: the row selected, Stop ready for the keyboard.'],
   'A stop refused, on its row': [served({ picked: ':6006', refused: samplePorts.refused }), 'The kill’s own words, Force stop, and Explain to the agent.'],
   'Stop every one with no pane': [served({ heading: { hover: true } }), 'On the No pane heading, Stop 2; the ones in a pane stay.'],
   'Stop every one, armed': [served({ heading: { hover: true, armed: true } }), 'It asks again before it stops them.'],
@@ -113,7 +107,6 @@ export const portsViews = {
   'A read failed': [served({ failure: samplePorts.failure }), 'lsof’s own words, Refresh, and Explain to the agent.'],
   'Narrow, 300': [served({ look: 'narrow', picked: ':6006' }), 'The command folds away; Open in the browser becomes Open.'],
 };
-// Markdown: plan.md as cart-ui wrote it; each state is what the pointer, an edit, a review or a read changes.
 const openFile = ({ file, folder, source }, { doc = {}, ...extra } = {}) => ({ file, folder, ...extra, doc: { source, ...doc } });
 const plan = (extra) => openFile(sampleMarkdown.plan, extra);
 const waits = phrase(sampleMarkdown.agent, 'waits for your review');
@@ -140,7 +133,6 @@ export const markdownViews = {
   'Another computer, not answering': [openFile(sampleMarkdown.runbook, { said: ['Read 14:02', 'devbox not answering'], stale: true }), 'The last read stays, stepped down, with when it was read.'],
   'Too large to edit': [openFile(sampleMarkdown.events, { said: ['612 KB, read only'], tools: ['refresh'] }), 'Past 400,000 characters it reads only.'],
 };
-// Containers: Docker's cost, acme-shop and docs-site, buildkit in no project; each state is what the pointer, an armed press or a read changes.
 const { cost, projects, loose, details: said } = sampleContainers;
 const docked = (extra) => ({ cost, projects, loose, ...extra });
 const diskOpen = (extra = {}) => docked({ disk: { ...sampleDisk, ...extra } });
@@ -178,7 +170,6 @@ export const containersViews = {
   'Memory not attributed': [docked({ unattributed: sampleContainers.unattributed }), 'On Windows the VM’s memory cannot be read yet: it says so.'],
   'Narrow, 300': [running({ look: 'narrow' }), 'The image hides; the words wrap.'],
 };
-// Memory: 31% free, Herdr, two hung helpers, five sessions; each state is what the pointer, a recycle, the guard or a read changes.
 const { free, herdr, helpers, sessions, guard: rules, bulk, batch } = sampleMemory;
 const held = (extra) => ({ free, herdr, helpers, sessions, rules, ...extra });
 const docs = (extra) => held({ picked: 'docs', ...extra });
@@ -213,26 +204,29 @@ export const memoryViews = {
   'Turn on refused': [{ guard: 'refused', install: sampleMemory.install }, 'The installer’s words, Turn on, and Explain to the agent.'],
   'Unreadable': [{ failure: sampleMemory.unreadable }, 'What the guard wrote could not be read: its words and Turn on.'],
   'First read': [{ reading: true }, 'The skeleton, once.'],
-  'Windows: the working set': [held({ title: 'Memory · working set' }), 'On Windows the guard reads the working set; the title says so.'],
+  'Windows: the working set': [held({ title: 'Memory · working set', free: { ...free, swap: sampleMemory.pageFile, hover: true } }), 'On Windows the guard reads the working set; the title says so, and the page file stands where swap does.'],
   'On another computer': [{ ...sampleMemory.remote, rules, scope: sampleMemory.remote.computer }, 'The focused project’s computer, read by its own guard.'],
   'Narrow, 300': [docs({ look: 'narrow' }), 'The words wrap.'],
   ...noticesOf(sampleMemoryNotices, held),
 };
-// Spend: November, two plans, $41.20 today over three projects; each state is what the pointer, a period, a row or a read changes.
 const { month, plans, periods, today, lists, choices, history: chart } = sampleSpend;
 const home = (extra) => ({ second: month, plans, number: today, periods, period: 'day', choices, lists, ...extra });
-const daysOpen = (extra = {}) => ({ history: { open: true, ...chart, ...extra } });
+const daysOpen = (days = chart) => ({ history: { open: true, ...days } });
+const spanned = periods.filter(({ key }) => sampleSpendSpans[key]).map(({ key, label }) => [label, [home({ pointer: 'period', period: key, ...sampleSpendSpans[key] }), `${label} is on in the switch; the number and where it went are that period’s.`]]);
 const openedFrom = (kind, extra = {}) => {
-  const { name, value, said, ...rest } = sampleSpend[kind];
+  const { name, value, said, days, ...rest } = sampleSpend[kind];
   const named = { models: 'Models', projects: 'Projects' };
   return { page: 'detail', title: name, periods, period: 'day', value, said, lists: [...Object.entries(rest).map(([key, rows]) => ({ name: named[key], count: phrase(rows.length), rows })), { name: 'Tasks', count: phrase(lists.tasks.length), rows: lists.tasks }], ...extra };
 };
+const { days: taskDays, ...task } = sampleSpend.task;
+const taskOpened = (extra) => ({ page: 'task', title: 'Task', ...task, project: 'acme-shop', ...extra });
 const { sources, absent, owned, prices, updates } = sampleSpend;
 const settled = (extra) => ({ page: 'settings', title: 'Settings', second: 'Spend', sources, absent, owned, prices, updates, ...extra });
 const { corrected, invalid } = sampleSpend;
 export const spendViews = {
   'At rest: the month per plan, then today': [home({}), 'Each plan’s multiple for the month, then today’s number, then where it went.'],
   'Pointer on today': [home({ pointer: 'period' }), 'The switch takes the word’s place, with the arrows and the project and model pickers.'],
+  ...Object.fromEntries(spanned),
   'A past period': [home({ pointer: 'period', period: 'month', past: true, number: sampleSpend.past }), 'October: the next arrow and Back to now return to this month.'],
   'Pointer on the number': [home({ pointer: 'number' }), 'Its tasks, what a task costs and its tokens.'],
   'Pointer on a project': [home({ pointer: 'list', picked: 'acme-shop' }), 'Projects, Models and Tasks switch the list; the picked row says its tokens and folder.'],
@@ -242,12 +236,13 @@ export const spendViews = {
   'Choosing a project': [{ ...home({ pointer: 'period' }), choosing: sampleSpend.chooser }, 'Each project with its folder and cost.'],
   'Showing one project': [home({ showing: sampleSpend.showing }), 'A project or a model chosen: one dim line says so, with Show everything.'],
   'Active now': [home({ live: sampleSpend.live }), 'Sessions running now come first, breathing; each opens its task.'],
-  'History open': [home(daysOpen()), 'The period a bar a day, the peak with its value.'],
-  'History, nothing that period': [home(daysOpen({ bars: chart.bars.map(() => 0), peak: null, labels: [] })), 'Every day empty.'],
+  'History open': [home(daysOpen()), 'The period a bar a day, the peak with its value; each bar says its date, cost and tokens.'],
+  'History, nothing that period': [home(daysOpen(sampleSpend.quiet)), 'Every day empty; each still says its date and $0.00.'],
   'A project opened from its row': [openedFrom('project'), 'Its period, its number and facts, then its models and tasks.'],
-  'A project’s History': [openedFrom('project', daysOpen()), 'The project’s days.'],
+  'A project’s History': [openedFrom('project', daysOpen(sampleSpend.project.days)), 'The project’s days, each with its own cost.'],
   'A model opened from its row': [openedFrom('model'), 'Its period, its number and facts, then its projects and tasks.'],
-  'A task opened from its row': [{ page: 'task', title: 'Task', ...sampleSpend.task, project: 'acme-shop' }, 'The prompt, its cost and parts, then its models and sessions, and Open acme-shop.'],
+  'A task’s History': [taskOpened(daysOpen(taskDays)), 'The task’s days, each with its own cost.'],
+  'A task opened from its row': [taskOpened({}),'The prompt, its cost and parts, then its models and sessions, and Open acme-shop.'],
   'Under 1×: not paying for itself': [home({ plans: [plans[0], sampleSpend.under] }), 'The multiple and its sentence in working.'],
   'Too early to say: the pace instead': [home({ second: 'November 2', plans: [sampleSpend.early] }), 'Before the 7th, the pace in dim.'],
   'No plan: plain cost': [home({ plans: [], plain: sampleSpend.plain, number: null, lists: null }), 'API keys are paid as used; each program’s cost.'],
@@ -272,10 +267,8 @@ export const spendViews = {
   'Narrow, 300': [home({ look: 'narrow' }), 'The plans and the number stay; the rows truncate.'],
 };
 
-// Worktrees: 2.4 GB in 9 worktrees; each state is what a scan, a pick, an armed verb or the history changes.
 const { verdicts: treeVerdicts, freed: freedDays, held: heldDays } = sampleWorktrees;
 const atRest = (extra) => ({ total: sampleWorktrees.total, plan: sampleWorktrees.plan, space: sampleWorktrees.space, repos: sampleWorktrees.repos, left: sampleWorktrees.left, freed: { fold: freedDays.fold }, ...extra });
-// One verdict picked, first in acme-shop; a folder left behind is picked where it is.
 const [acme, ...otherRepos] = sampleWorktrees.repos;
 const leading = (item) => ({ repos: [{ ...acme, rows: [item, ...acme.rows.filter(({ name }) => name !== item.name).slice(0, 3)] }, ...otherRepos] });
 const picking = (key, extra = {}) => atRest({ ...(key === 'orphan' ? {} : leading(treeVerdicts[key])), picked: treeVerdicts[key].name, ...extra });
@@ -321,10 +314,10 @@ export const worktreesViews = {
   'History can’t be read': [freedOpen({ failure: sampleWorktrees.unread }), 'The store’s words under the fold; the list stays.'],
   'No sqlite3': [freedOpen({ failure: sampleWorktrees.noSqlite }), 'What to install; the list stays.'],
   'Share from the header': [atRest({ share: true }), 'Totals only leave.'],
-  'New worktree from here': [atRest({ creating: sampleWorktrees.creating }), 'The New worktree dialog, on the repository picked.'],
+  'New worktree from here': [atRest({ creating: sampleWorktrees.creating }), 'The New worktree dialog, on the repository picked: the branch, where it goes, and what opens in it, Claude, Codex or Terminal.'],
+  'Creating, on devbox': [atRest({ creating: { ...sampleWorktrees.creating, project: 'acme-shop on devbox', making: true } }), 'Create is pressed: the dialog waits while the worktree is made on that computer.'],
   ...noticesOf(sampleWorktreeNotices, atRest),
 };
-// Shipped: this week; each state is what a period, the pointer, a fold or a read changes.
 const { periods: shipPeriods, week: thisWeek, records: shipRecords, rhythm: shipRhythm, computers: shipComputers } = sampleShipped;
 const shipping = (extra) => ({ periods: shipPeriods, ...thisWeek, records: shipRecords, rhythm: shipRhythm, computers: shipComputers, ...extra });
 const shipFirst = { periods: shipPeriods, period: thisWeek.period, label: thisWeek.label };
@@ -353,7 +346,6 @@ export const shippedViews = {
   'The card it makes': [shipping({ card: sampleShippedCard }), 'Totals, the streak, the records and the hours; never a repository or a computer. 1200 wide, shown at half.'],
   ...noticesOf(sampleShippedNotices, shipping),
 };
-// Share: Memory, Spend and the dōjō; each state is what opening, a row, the image or its result changes.
 const { panels: sharers, network } = sampleShare;
 const menuOpen = (key, extra = {}) => ({ ...sharers[key], open: true, ...extra });
 const cardOf = (name) => [{ title: sampleShare.cards[name].title, card: sampleShare.cards[name] }, 'Shown at half of its 1200 width; light or dark as the theme.'];
@@ -371,9 +363,7 @@ export const shareViews = {
   'Card: Ports': cardOf('Ports'),
   'Card: the dōjō': cardOf('Dōjō'),
 };
-// Preview: limits.ts as Files opens it, then limits.md; each state is what an edit, a save or a read changes.
 const { code, edit, markdown: note, log, binary, gone, shot, pictured, huge, pins } = samplePreview;
-// The pins once their notes are typed.
 const placedPins = pins.map(({ writing, ...placed }) => placed);
 const shownShot = (state, extra = {}) => ({ file: shot.file, folder: shot.folder, tools: ['open with'], shot: { image: sampleShot, state, action: `Load ${shot.size}` }, ...extra });
 const away = (folder) => `devbox · ${folder}`;
@@ -424,7 +414,6 @@ const stated = (views, draw) => ({
 });
 const control = (views) => ({ view: { name: 'what it shows', control: { type: 'select' }, options: Object.keys(views) } });
 
-// Pull requests: the list, then pull request 142 and its neighbours on each verdict, its conversation, details, pickers and pages.
 const { asked, projects: pullProjects, branches, closed: closedPulls, others, counts, stale: pullStale, contexts, keep } = samplePulls;
 const [acmeShop, ...otherProjects] = pullProjects;
 const askedGroup = { name: 'Asked of you', pulls: asked };
@@ -516,7 +505,6 @@ export const pullsViews = {
   'No text diff': [pageOf('file', samplePullPages.picture), 'A picture or a binary file says so.'],
   'Full log: a page': [pageOf('log', samplePullPages.log, { agent: samplePull.agent }), 'The whole log, failures in their tone, and Explain.'],
 };
-// Pins: the Simulator frozen for pinning on iOS and Android, kept, rotated, stalled, remote, refused and sent; Images with the same pins.
 const { scopes, ios: iosPins, typing, android, rotated, stalled, file: pinFile, agents: pinAgents, sent: pinsSent, refusals: pinRefusals } = samplePins;
 const toCheckout = { agent: 'checkout' };
 const onDevice = (scope, placed, extra = {}) => ({ title: 'Simulator', scope, screen: sampleScreens.ios, pins: placed, send: toCheckout, ...extra });
@@ -536,7 +524,6 @@ const pinsViews = {
   'Copy to devbox refused': [onDevice(scopes.devbox, iosPins.slice(0, 1), { send: { refused: pinRefusals.copy } }), 'Proposed: the copy’s words, the pins kept, and Send again.'],
 };
 
-// Simulator: iOS and Android on their picture with their buttons, the list behind Device, then each state in the screen's place.
 const { groups: deviceGroups, scopes: simScopes, said: simSaid, touch, narrow: narrowLines, url, failures: simFailures, empty: noDevices } = sampleSimulator;
 const onIphone = (extra = {}) => ({ scope: simScopes.iphone, screen: sampleScreens.ios, controls: 'ios', ...extra });
 const onEmulator = (extra = {}) => ({ scope: simScopes.pixel, screen: sampleScreens.android, controls: 'emulator', ...extra });
@@ -566,7 +553,6 @@ const simulatorViews = {
   'Narrow, 300: the device scales': [onIphone({ look: 'narrow', narrow: true, screen: { ...sampleScreens.ios, lines: narrowLines } }), 'The device scales down with the panel.'],
 };
 
-// Images: the first of checkout's three pictures with Preview's two pins; each state is what the pointer, a pin, Send or a read changes.
 const onPicture = (extra) => ({ scope: sampleImages.count, image: sampleShot, file: sampleImages.file, shots: sampleImages.shots, pins: placedPins, send: { agent: sampleImages.agent }, ...extra });
 const agentOnly = { scope: sampleImages.agent };
 export const imagesViews = {

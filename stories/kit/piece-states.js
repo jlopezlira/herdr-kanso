@@ -2,10 +2,8 @@ import { band, bars, button, code, device, deviceScreen, excerpt, heatmap, meter
 import { sampleFind, sampleShare, sampleShipped } from './panel-samples.js';
 import { sampleScreens, sampleShot } from './samples.js';
 
-// A comment's three lines of code, with the one it talks about lit; a found turn from the conversation.
 const sampleSnippet = { text: 'export function bucket(customer) {\n  const plan = planOf(customer);\n  return { plan, tokens: LIMIT[plan] };', kind: 'source', first: 11, line: 12, comment: 0 };
 const [, foundHit] = sampleFind.days[0][1];
-// The three charts one page draws: bars over a run, a meter's share, days in weeks.
 const charts = { bars, meter, heatmap };
 const { rhythm: shipRhythm } = sampleShipped;
 

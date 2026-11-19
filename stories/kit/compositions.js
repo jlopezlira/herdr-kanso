@@ -1,5 +1,5 @@
 // The kit's compositions: each one only calls pieces with its own props and draws no markup.
-import { button, chord, dialog, diffText, dojoCell, dojoCharacter, dojoFeedback, dojoLevel, dojoProgress, dojoRecord, dojoStatistics, dojoSummary, dojoTitle, facts, headerSegment, input, keyLegend, paneName, setting, sleepLabel, toggle, failureBlock, failureLine, glyph, grow, keycap, keyPicked, list, mark, mascot, menu, phrase, pieceLines, plus, row, stack, tabs, toast } from './kit.js';
+import { button, chord, dialog, diffText, dojoCell, dojoCharacter, dojoFeedback, dojoLevel, dojoProgress, dojoRecord, dojoStatistics, dojoSummary, dojoTitle, facts, headerSegment, input, keyLegend, paneName, setting, sleepLabel, toggle, failureBlock, failureLine, glyph, grow, keycap, keyPicked, list, mark, mascot, menu, phrase, pieceLines, plus, row, sentence, stack, tabs, toast } from './kit.js';
 
 // Sidebar compositions: each one is the Row, Tab, Menu, Avatar, Mark, Chip or Button in its own configuration.
 // The rows the app draws (session, project, computer, section, asleep), the tile, the view switch, the toolbar, the header, the footer and the Activity card live each in its own file, shared with the app.
@@ -206,9 +206,9 @@ export const dojo = ({ header, path, play, result, pixels, sleep, feedback, mark
   share ? stack({ variant: 'dojo menu' }, menu(share)) : null);
 
 const labelled = (label, field) => [row({ name: label, heading: true }), input({ multiline: false, ...field })];
-export const newWorktree = ({ project, branch, place = null, making = false, failure = null, agent }) => dialog({
+const launchChoice = ({ place, opens }) => [place ? sentence({ text: place }) : null, opens ? tabs({ ...opens, size: 'md', icon: true, label: true }) : null];
+export const newWorktree = ({ project, branch, place = null, opens = null, making = false, failure = null, agent }) => dialog({
   title: phrase('New worktree in', project),
-  body: list(labelled('Branch', { text: branch, label: 'Branch name', focus: !failure, error: Boolean(failure) }), failure ? failureBlock({ ...failure, agent }) : null),
-  notes: place && !failure ? [{ text: place }] : [],
+  body: list(labelled('Branch', { text: branch, label: 'Branch name', focus: !failure, error: Boolean(failure) }), failure ? failureBlock({ ...failure, agent }) : launchChoice({ place, opens })),
   secondary: 'Cancel', primary: failure ? null : 'Create', state: making ? 'loading' : branch ? 'default' : 'disabled',
 });

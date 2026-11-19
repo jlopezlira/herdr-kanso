@@ -1,4 +1,3 @@
-// The panels' design guidelines and hypotheses, on the same templates as every page.
 
 export const panelGuidelines = {
   'Panels/Spend': [
@@ -137,7 +136,6 @@ export const panelGuidelines = {
   ],
 };
 
-// The Markdown window and Preview share the changed-on-disk band.
 const changedOnDisk = {
   change: 'The conflict bar becomes a band that says when the file changed, with Overwrite and Reload, and Undo after Overwrite.',
   today: 'a bar in blocked ink, The file changed on disk while you edited it., with Keep mine and Take the file’s; nothing after the choice.',
@@ -146,11 +144,13 @@ const changedOnDisk = {
   believe: 'when it changed tells them which text is newer, and Undo lets them take back an Overwrite that dropped the agent’s change.',
   jobs: [['keep mine', 'Overwrite'], ['take the file’s', 'Reload'], ['know when it changed', 'the band’s time'], ['take back an overwrite', 'Undo, on the same band']],
   wrong: 'someone presses Undo expecting their edit back, or misses the band.',
-  try: 'Dawn Mode first.',
   back: 'the blocked bar with Keep mine and Take the file’s returns, and Undo goes.',
 };
 
-export const panelHypotheses = {
+const everyCount = 'every count at a glance.';
+const everyTool = 'every tool in reach at once.';
+const quietLine = 'a quiet line where nothing can be done.';
+const drafted = {
   'Panels/Images': [
     {
       change: 'The title is Images with the count of pictures; the agent is named on Send, the folder comes with the pointer.',
@@ -160,7 +160,6 @@ export const panelHypotheses = {
       believe: 'at Send; it names the agent the pins go to, and the folder is a pointer away.',
       jobs: [['whose pictures', 'Send to checkout'], ['where they are', 'the file row with the pointer'], ['how many', '1 of 3']],
       wrong: 'someone sends to the wrong agent.',
-      try: 'Dawn Mode first.',
       back: 'the agent returns as the title.',
     },
     {
@@ -171,7 +170,6 @@ export const panelHypotheses = {
       believe: 'by what it shows; the strip is there the moment the pointer is on the picture.',
       jobs: [['another picture', 'the strip, or ← →'], ['how many', 'the count under the title']],
       wrong: 'someone hunts for the strip to change pictures.',
-      try: 'Dawn Mode first.',
       back: 'the dots return under the picture.',
     },
     {
@@ -182,7 +180,6 @@ export const panelHypotheses = {
       believe: 'Send; Open belongs to the file, and pins go one at a time more often than all at once.',
       jobs: [['send', 'Send to checkout, ⌘↩'], ['open the file', 'the file row'], ['drop a pin', 'its ×'], ['how to start', 'a click on the picture']],
       wrong: 'someone removes pins one by one to start over.',
-      try: 'Dawn Mode first.',
       back: 'the bar returns with Clear N pins.',
     },
     {
@@ -193,7 +190,6 @@ export const panelHypotheses = {
       believe: 'yes; the note beside the pin keeps both in view, as in Preview and the Simulator.',
       jobs: [['write a note', 'beside its pin'], ['edit it', 'a click on its row']],
       wrong: 'notes get shorter than they were in the dialog.',
-      try: 'Dawn Mode first.',
       back: 'the dialog returns.',
     },
     {
@@ -204,7 +200,6 @@ export const panelHypotheses = {
       believe: 'go to the agent; one press does it, and the pins wait.',
       jobs: [['why no Send', 'the line'], ['answer the agent', 'Go to it'], ['the pins', 'kept']],
       wrong: 'someone wants to send anyway.',
-      try: 'Dawn Mode first.',
       back: 'Send returns and refuses.',
     },
   ],
@@ -217,7 +212,6 @@ export const panelHypotheses = {
       believe: 'yes, when it is the first line of the menu they choose from; the panel does not move.',
       jobs: [['what leaves', 'the menu’s first line'], ['where', 'its rows'], ['keep it', 'Save image']],
       wrong: 'someone shares and is surprised by what the card holds.',
-      try: 'Dawn Mode first.',
       back: 'the row returns in the panel.',
     },
     {
@@ -228,7 +222,6 @@ export const panelHypotheses = {
       believe: 'no; a second press would only queue a second image.',
       jobs: [['how far', 'the pressed row'], ['another network', 'after the notice']],
       wrong: 'someone waits for one network to post to two.',
-      try: 'Dawn Mode first.',
       back: 'the other rows stay pressable.',
     },
   ],
@@ -236,12 +229,11 @@ export const panelHypotheses = {
     {
       change: 'The counts become one dim line under the number; contributions, repositories and the lifetime sentence come with the pointer on the number.',
       today: 'five figures at 28 points under the number (contributions, pull requests merged, commits, reviews, repositories) and a sentence of what you shipped since joining GitHub.',
-      why: 'every count at a glance.',
+      why: everyCount,
       question: 'is the panel opened for the number, or for the counts?',
       believe: 'for the number and how it compares; the counts read as one line, the rest is a pointer away.',
       jobs: [['lines this period', 'the number'], ['merged, commits, reviews', 'the dim line'], ['contributions and since joining', 'the pointer on the number'], ['how many repositories', 'By repository’s count']],
       wrong: 'someone looks for the contributions on every visit.',
-      try: 'Dawn Mode first.',
       back: 'the five figures return under the number.',
     },
     {
@@ -252,7 +244,6 @@ export const panelHypotheses = {
       believe: 'the count; 12 days in a row stays at rest, the calendar is one press away.',
       jobs: [['days in a row', 'the dim line'], ['the longest', 'Records'], ['each day', 'a press on the streak']],
       wrong: 'someone opens the calendar every time.',
-      try: 'Dawn Mode first.',
       back: 'the Streak section returns at rest.',
     },
     {
@@ -263,7 +254,6 @@ export const panelHypotheses = {
       believe: 'a new best; the rest are folds with what they hold on their line, as in Ports, Memory and Spend.',
       jobs: [['a new best', 'its row marked new, and the notice'], ['every best', 'Records'], ['the hours', 'When you ship'], ['each computer', 'Computers']],
       wrong: 'someone opens the same fold every time.',
-      try: 'Dawn Mode first.',
       back: 'the three sections return open.',
     },
     {
@@ -274,7 +264,6 @@ export const panelHypotheses = {
       believe: 'no; the rows are already the largest first and the lines say how much.',
       jobs: [['the largest', 'the first row'], ['lines', 'the row'], ['commits', 'the pointer on the row']],
       wrong: 'someone compares two repositories by eye and misreads them.',
-      try: 'Dawn Mode first.',
       back: 'the commits and the bar return on each row.',
     },
     {
@@ -285,7 +274,6 @@ export const panelHypotheses = {
       believe: 'under the title, as every panel says its scope there.',
       jobs: [['which period', 'the header’s second line'], ['change it', 'the tabs and arrows'], ['back to this one', 'Back to now']],
       wrong: 'someone presses an arrow and misses that the period changed.',
-      try: 'Dawn Mode first.',
       back: 'the name returns between the arrows.',
     },
     {
@@ -296,7 +284,6 @@ export const panelHypotheses = {
       believe: 'one thing: get the CLI or sign in; a press does it.',
       jobs: [['why it is empty', 'the empty state’s line'], ['fix it', 'cli.github.com or Sign in']],
       wrong: 'someone signed in on the terminal is still shown Sign in.',
-      try: 'Dawn Mode first.',
       back: 'the line returns under the number.',
     },
     {
@@ -307,7 +294,6 @@ export const panelHypotheses = {
       believe: 'no; the menu’s first line says what leaves, and the post opens with the card in it.',
       jobs: [['what leaves', 'the menu’s title'], ['where', 'its rows'], ['the card', 'Save image, or the post']],
       wrong: 'someone cancels a post after seeing the card.',
-      try: 'Dawn Mode first.',
       back: 'the row with the card returns.',
     },
   ],
@@ -315,12 +301,11 @@ export const panelHypotheses = {
     {
       change: 'The number with Clean up; the four counts, the sentence and the time of the scan come with the pointer on the number.',
       today: '“On this computer”, the size at 72 points, a sentence of what can go, four counts (worktrees, repositories, need a look, folders gone), Clean up with its caption, and Scanned 14:02 at the foot.',
-      why: 'every count at a glance.',
+      why: everyCount,
       question: 'is the panel opened to clean up, or to read the counts?',
       believe: 'to clean up; the size and Clean up with what it frees answer it, the counts are a pointer away.',
       jobs: [['how much the worktrees take', 'the number'], ['what can go', 'Clean up 3 · 1.1 GB'], ['the counts and the time of the scan', 'the pointer on the number'], ['how many repositories', 'the headings']],
       wrong: 'someone hovers the number every time they open the panel.',
-      try: 'Dawn Mode first.',
       back: 'the four counts return under the number.',
     },
     {
@@ -331,7 +316,6 @@ export const panelHypotheses = {
       believe: 'act on the rows; a heading’s size says which repository takes the most, and the split is a pointer away on the number.',
       jobs: [['by repository', 'the headings, the largest first'], ['by verdict', 'the pointer on the number']],
       wrong: 'someone asks how much needs a look before picking a row.',
-      try: 'Dawn Mode first.',
       back: 'the split returns under the number.',
     },
     {
@@ -342,7 +326,6 @@ export const panelHypotheses = {
       believe: 'the worktrees; the total stays on the line, the days a press away, as in Ports, Memory and Spend.',
       jobs: [['what was freed', 'the fold’s line'], ['each day', 'Freed, open'], ['what the worktrees held', 'On disk'], ['removed outside kansō', 'the counts under the bars']],
       wrong: 'someone opens Freed every time.',
-      try: 'Dawn Mode first.',
       back: 'the Freed section returns at rest.',
     },
     {
@@ -353,7 +336,6 @@ export const panelHypotheses = {
       believe: 'the ones that would lose work or are in use; merged and not merged ones need nothing until picked.',
       jobs: [['work that would be lost', 'the fact in blocked ink'], ['in use, in a tab, broken', 'the fact in working ink'], ['merged or not', 'picked'], ['the branch', 'beside the name'], ['the last commit', 'the age beside the fact']],
       wrong: 'someone picks every row to see whether it is merged.',
-      try: 'Dawn Mode first.',
       back: 'the verdict line returns on every row.',
     },
     {
@@ -364,7 +346,6 @@ export const panelHypotheses = {
       believe: 'both; the kit’s Explain is the one way to ask an agent everywhere.',
       jobs: [['review every one that needs a look', 'Explain beside Clean up'], ['one worktree', 'its Explain']],
       wrong: 'someone cannot find the review of all of them.',
-      try: 'Dawn Mode first.',
       back: 'the section returns.',
     },
     {
@@ -375,7 +356,6 @@ export const panelHypotheses = {
       believe: 'go to it; the fact In a tab says why there is no Remove.',
       jobs: [['why no Remove', 'the fact In a tab'], ['go to it', 'Go to'], ['ask about it', 'Explain to the agent there']],
       wrong: 'someone opens a second tab on the same folder.',
-      try: 'Dawn Mode first.',
       back: 'the sentence and Open in a new tab return.',
     },
     {
@@ -386,7 +366,6 @@ export const panelHypotheses = {
       believe: 'the worktree’s, when it is picked; the repository is known by its name.',
       jobs: [['where the worktree is', 'the picked row’s folder'], ['how many rows', 'Show N more']],
       wrong: 'two repositories share a name.',
-      try: 'Dawn Mode first.',
       back: 'the folder returns under the heading.',
     },
     {
@@ -397,7 +376,6 @@ export const panelHypotheses = {
       believe: 'yes, after cleaning up; the dialog is the same one.',
       jobs: [['a new worktree', '+ or the project row']],
       wrong: '+ is never pressed here.',
-      try: 'Dawn Mode first.',
       back: '+ goes.',
     },
     {
@@ -408,7 +386,6 @@ export const panelHypotheses = {
       believe: 'at the row they pressed; the menu says what leaves before it leaves.',
       jobs: [['git’s words', 'the Failure block'], ['try again', 'Remove in it'], ['ask', 'Explain in it'], ['share', 'the header’s Share']],
       wrong: 'someone misses a failure of Clean up across several rows.',
-      try: 'Dawn Mode first.',
       back: 'the red line returns under the number.',
     },
   ],
@@ -421,7 +398,6 @@ export const panelHypotheses = {
       believe: 'whether each plan pays for itself; a multiple per plan answers it, and the total stays as the period’s number.',
       jobs: [['what the plans cost', 'each plan’s sentence'], ['what they saved', 'the multiple'], ['the period’s API value', 'the number under the plans']],
       wrong: 'someone asks for the single savings figure.',
-      try: 'Dawn Mode first.',
       back: 'the savings sentence returns under the number.',
     },
     {
@@ -432,7 +408,6 @@ export const panelHypotheses = {
       believe: 'the number is read every time and the period rarely changes; the controls are one move away.',
       jobs: [['change the period', 'with the pointer on the number’s word'], ['earlier periods', 'the arrows, Back to now'], ['filter a project or model', 'the pickers under the switch'], ['tasks, per task, tokens', 'with the pointer on the number']],
       wrong: 'someone cannot find the period switch or a filter.',
-      try: 'Dawn Mode first.',
       back: 'the switch and the pickers return at rest.',
     },
     {
@@ -443,7 +418,6 @@ export const panelHypotheses = {
       believe: 'one at a time; projects first, the others one press away.',
       jobs: [['each project’s cost', 'the list at rest'], ['each model’s cost and list price', 'Models, the picked row'], ['tasks', 'Tasks'], ['more rows', 'Show N more']],
       wrong: 'someone switches between Projects and Models to compare them.',
-      try: 'Dawn Mode first.',
       back: 'the three lists return side by side.',
     },
     {
@@ -454,7 +428,6 @@ export const panelHypotheses = {
       believe: 'the number; the shape is asked when the number surprises, as in Ports and Memory.',
       jobs: [['the days and the peak', 'History, open']],
       wrong: 'someone opens History every time.',
-      try: 'Dawn Mode first.',
       back: 'the bars return under the number.',
     },
     {
@@ -465,7 +438,6 @@ export const panelHypotheses = {
       believe: 'no; the price list and its rule belong where prices are set.',
       jobs: [['which price list', 'Settings, Prices'], ['tokens with no price', 'its rule under Prices'], ['set your own prices', 'Open prices.json']],
       wrong: 'someone asks where the prices come from.',
-      try: 'Dawn Mode first.',
       back: 'the footnote returns under the lists.',
     },
     {
@@ -476,7 +448,6 @@ export const panelHypotheses = {
       believe: 'the CLIs already say which plan is in use; correcting one row is less than typing all.',
       jobs: [['a detected plan’s price', 'its row'], ['a plan not detected', 'Add plan'], ['remove a plan', 'the row’s Remove'], ['save', 'Enter, the breathing dot until written']],
       wrong: 'a plan is detected wrong and cannot be corrected.',
-      try: 'Dawn Mode first.',
       back: 'the name and price fields return with Save plans.',
     },
     {
@@ -487,7 +458,6 @@ export const panelHypotheses = {
       believe: 'hand it on; the Failure block offers Explain to the agent, as every panel does, and Share says what leaves as Ports and Memory do.',
       jobs: [['try again', 'Refresh'], ['what failed', 'the block’s words'], ['share', 'the header’s Share menu']],
       wrong: 'someone misses the refresh failure under the block.',
-      try: 'Dawn Mode first.',
       back: 'the red line returns.',
     },
   ],
@@ -500,7 +470,6 @@ export const panelHypotheses = {
       believe: 'whether to free memory and from which session; the free share and each line’s size answer that; the totals are history.',
       jobs: [['how much is free', 'the number'], ['swap', 'with the pointer on the number'], ['window and core', 'Herdr, picked'], ['restart the window', 'Herdr, picked'], ['hung helpers', 'their own line with End'], ['what the guard did', 'History’s summary']],
       wrong: 'someone looks for the totals or Restart window and does not find them.',
-      try: 'Dawn Mode first.',
       back: 'the seven numbers and the two links return at rest.',
     },
     {
@@ -511,7 +480,6 @@ export const panelHypotheses = {
       believe: 'the sizes; amber past the limit and the blocked mark say which can and cannot be recycled, and the picked row says why.',
       jobs: [['which can be recycled', 'amber size, idle on the picked row'], ['which is working', 'the picked row says so'], ['why one cannot', 'the picked row’s reason'], ['recycle or close one', 'its words'], ['all of them', 'Show N more']],
       wrong: 'someone picks rows one by one to find an idle one.',
-      try: 'Dawn Mode first.',
       back: 'the three groups and their counts return.',
     },
     {
@@ -522,7 +490,6 @@ export const panelHypotheses = {
       believe: 'when it is low, and then they are the primary; otherwise the number is where they look.',
       jobs: [['free memory now', 'Recycle all, primary when low'], ['only the heavy ones', 'its word beside it'], ['close what is unused', 'its word, asking again']],
       wrong: 'someone with plenty free looks for Recycle all and does not find it.',
-      try: 'Dawn Mode first.',
       back: 'the bulk words return under the sessions at rest.',
     },
     {
@@ -533,7 +500,6 @@ export const panelHypotheses = {
       believe: 'rarely; History’s summary says what the guard did, and the rules are set once.',
       jobs: [['free over time', 'History, the chart'], ['what the guard did', 'History, Events'], ['what is heaviest', 'History, Heaviest'], ['the limits', 'Guard on']],
       wrong: 'someone opens History every visit, or misses the limits.',
-      try: 'Dawn Mode first.',
       back: 'the chart, Heaviest, Events and the limits line return at rest.',
     },
     {
@@ -544,7 +510,6 @@ export const panelHypotheses = {
       believe: 'turn it on; the empty state or the Failure block offers it, Refresh reads again, and the stale line says when.',
       jobs: [['turn it on', 'Turn on'], ['read again', 'Refresh'], ['why it failed', 'the Failure block'], ['since when', 'the stale line']],
       wrong: 'someone misses that the guard stopped.',
-      try: 'Dawn Mode first.',
       back: 'the large word and the red line return.',
     },
   ],
@@ -557,7 +522,6 @@ export const panelHypotheses = {
       believe: 'one line over the board and one under it keep the eyes on the target, and the keyboard shows where the fingers go.',
       jobs: [['see the score', 'the count over the board'], ['learn the level', 'its tip as the first line'], ['find the keys', 'the keyboard, lit with fingers'], ['pick a level', 'the path, or [ and ]']],
       wrong: 'people miss the best or the tip, or the full keyboard hides the level’s keys.',
-      try: 'Dawn Mode first.',
       back: 'the stats column, the tip over the board and the key words return.',
     },
     {
@@ -568,7 +532,6 @@ export const panelHypotheses = {
       believe: 'the keys keep the hands home, and a second Esc saves a round left by mistake.',
       jobs: [['play again', '↩'], ['next level', 'n'], ['leave', 'Esc, twice in a round'], ['change level', '[ and ]'], ['choose the pet', 'p']],
       wrong: 'people look for the buttons, or the second Esc annoys.',
-      try: 'Dawn Mode first.',
       back: 'the buttons return and Esc leaves at once.',
     },
   ],
@@ -581,7 +544,6 @@ export const panelHypotheses = {
       believe: 'rarely: one device runs for a session, so the list behind Device leaves the picture the room, and the Failure block says what to do next.',
       jobs: [['pick a device', 'Device, then a row'], ['press a device button', 'the icons under the picture'], ['start a device', 'Boot'], ['know why a command failed', 'the Failure block and Explain']],
       wrong: 'people look for the list over the picture, or miss a word button among the icons.',
-      try: 'Dawn Mode first.',
       back: 'the list returns over the picture and the buttons are words again.',
     },
     {
@@ -592,7 +554,6 @@ export const panelHypotheses = {
       believe: 'the stepped-down picture draws the eye and the scope says why.',
       jobs: [['know the picture is old', 'the stepped-down picture'], ['know how old', 'the scope']],
       wrong: 'people act on a stalled picture as if it were live.',
-      try: 'Dawn Mode first.',
       back: 'the age returns under the picture.',
     },
   ],
@@ -605,7 +566,6 @@ export const panelHypotheses = {
       believe: 'a frozen frame with numbered notes says where in one press, as Images already does.',
       jobs: [['point at the running app', 'Pin freezes the frame'], ['go back to using it', 'Pin again or Esc'], ['tell the agent', 'Send to the agent, or ⌘↩'], ['keep pins for later', 'kept per agent and picture']],
       wrong: 'people freeze the frame by mistake and lose touches, or nobody sends from the Simulator.',
-      try: 'Dawn Mode first.',
       back: 'the Simulator has no Pin tool again; Images keeps its pins.',
     },
     {
@@ -616,7 +576,6 @@ export const panelHypotheses = {
       believe: 'the note beside its mark keeps the spot in view, and naming the agent says where it goes before the press.',
       jobs: [['say what is wrong', 'the note beside the pin'], ['point at an area', 'a drag: a region'], ['know where it goes', 'Send to the agent'], ['send with no agent in front', 'Send to… and the picker']],
       wrong: 'notes typed beside the pin cover what they are about, or people miss the dialog’s room for longer notes.',
-      try: 'Dawn Mode first.',
       back: 'the dialog asks the note again and Send drops the name.',
     },
   ],
@@ -625,23 +584,21 @@ export const panelHypotheses = {
     {
       change: 'Read again comes with the pointer, and Discard is an icon that asks again.',
       today: 'the header always shows Read again, or Retry, beside Open with… and Close; an edit adds Discard as a word.',
-      why: 'every tool in reach at once.',
+      why: everyTool,
       question: 'how often is a file read again by hand, now that the folder is watched?',
       believe: 'the watch keeps the text current, so Read again is rare and the pointer reaches it; Discard beside Save stays one press, asked twice.',
       jobs: [['read it again', 'Refresh, on the pointer'], ['retry a failed read', 'Refresh, in the Failure block'], ['drop the edit', 'Discard'], ['another app', 'Open with…']],
       wrong: 'someone looks for Read again with the pointer elsewhere, or presses Discard by mistake.',
-      try: 'Dawn Mode first.',
       back: 'Read again returns at rest and Discard as a word.',
     },
     {
       change: 'A binary file and a file gone are the empty state, and a refused read the Failure block.',
       today: 'one dim line: Binary file: no text preview, This file is no longer available, or Cannot read this file: and the error.',
-      why: 'a quiet line where nothing can be done.',
+      why: quietLine,
       question: 'what does someone do when Preview cannot show the file?',
       believe: 'a binary file is opened with another app, so Open with… sits in the empty state; a refused read wants Refresh and Explain to the agent.',
       jobs: [['open it elsewhere', 'Open with…'], ['know it is gone', 'No longer on disk'], ['read it again', 'Refresh'], ['ask the agent', 'Explain to the agent']],
       wrong: 'someone presses Refresh on a file that cannot change, or misses Open with….',
-      try: 'Dawn Mode first.',
       back: 'the dim lines return.',
     },
     {
@@ -652,7 +609,6 @@ export const panelHypotheses = {
       believe: 'a picture is opened to point at something in it; the pin, one component, says where and the agent in front gets it.',
       jobs: [['point at a spot', 'a click: a numbered pin'], ['point at an area', 'a drag: a region'], ['say what is wrong', 'the note beside it'], ['tell the agent', 'Send to the agent, or ⌘↩'], ['drop a pin', 'its × in the list']],
       wrong: 'pins dropped by a click meant to do something else, or nobody sends from Preview.',
-      try: 'Dawn Mode first.',
       back: 'a picture in Preview has no pins again; Images keeps them.',
     },
   ],
@@ -665,7 +621,6 @@ export const panelHypotheses = {
       believe: 'what waits on you and the branch in front fit one list; the branch row leads its project, so the pane’s pull request is one press away.',
       jobs: [['see what waits on you', 'Asked of you'], ['your open ones', 'each project'], ['the pane’s pull request', 'the branch row'], ['the closed ones', 'Closed'], ['everyone’s', 'Everyone’s in the project']],
       wrong: 'someone opens the panel for the pane’s pull request and has to find its row every time.',
-      try: 'Dawn Mode first.',
       back: 'the panel opens on the pane’s pull request again, with the list behind the header.',
     },
     {
@@ -676,7 +631,6 @@ export const panelHypotheses = {
       believe: 'the branch row says why and offers the step, and the list stays under it.',
       jobs: [['push', 'Push, on the branch row'], ['pull', 'Pull, on the branch row'], ['know why there is none', 'the branch row’s line']],
       wrong: 'someone misses the branch row and looks for the empty state.',
-      try: 'Dawn Mode first.',
       back: 'the empty states return as the whole panel.',
     },
     {
@@ -687,7 +641,6 @@ export const panelHypotheses = {
       believe: 'a short reply, a resolve or a review is quicker here; the agent’s answer fills Reply for you to post.',
       jobs: [['reply', 'Reply, in the thread'], ['resolve', 'Resolve, then Undo'], ['review', 'Your review'], ['comment a line', 'the + in its gutter'], ['the browser', 'Reply on GitHub']],
       wrong: 'replies fail often enough that people go back to GitHub.',
-      try: 'Dawn Mode first.',
       back: 'threads show read only, with Reply on GitHub.',
     },
   ],
@@ -731,12 +684,11 @@ export const panelHypotheses = {
     {
       change: 'Source and Read again come with the pointer, and Done is the one solid button.',
       today: 'the header always shows the saving state, Source, Read again and Close; Done is a small tonal button.',
-      why: 'every tool in reach at once.',
+      why: everyTool,
       question: 'what does someone do in this window other than read and edit the text?',
       believe: 'the text is the visit; Source and Read again are rare and reached by the pointer, and a waiting review has one thing left to do, Done.',
       jobs: [['the whole file as text', 'Source, on the pointer'], ['read it again', 'Refresh, on the pointer'], ['finish the review', 'Done'], ['the saving state', 'the folder line']],
       wrong: 'someone looks for Source with the pointer elsewhere, or misses Done.',
-      try: 'Dawn Mode first.',
       back: 'the header shows Source and Read again at rest and Done is tonal again.',
     },
     {
@@ -747,7 +699,6 @@ export const panelHypotheses = {
       believe: 'Done again and Explain to the agent let them recover in one press; the skeleton and the empty state are drawn the same way in every panel.',
       jobs: [['know the agent was not told', 'the Failure block and its words'], ['try again', 'Done'], ['ask the agent', 'Explain to the agent'], ['open a .md from a terminal', 'Cmd-click, as today, said in the guide']],
       wrong: 'someone no longer finds out that Cmd-click opens a path here.',
-      try: 'Dawn Mode first.',
       back: 'the blocked line and the two sentences return.',
     },
   ],
@@ -760,7 +711,6 @@ export const panelHypotheses = {
       believe: 'held and on disk answer what it costs; the list shows what runs, and the ceiling and Quit are wanted only when the cost is being weighed.',
       jobs: [['what Docker holds', 'the cost line'], ['how much it can take', 'can grow to, with the pointer'], ['quit it', 'Quit Docker, with the pointer, saying what it stops'], ['what runs', 'each project’s count and the rows'], ['the disk', 'on disk, which opens Disk']],
       wrong: 'someone looks for Quit Docker and does not find it, or misses how many are running.',
-      try: 'Dawn Mode first.',
       back: 'the large number, the counts and Quit Docker return at rest.',
     },
     {
@@ -771,7 +721,6 @@ export const panelHypotheses = {
       believe: 'one; the name and its size or how it ended pick the row, and the words by state put the likely one first, such as Logs for a failed one.',
       jobs: [['which one', 'its name'], ['is it well', 'size when running, how it ended in blocked'], ['image, port, age', 'the picked row’s second line'], ['act on it', 'the picked row’s words'], ['its configuration', 'Details, folded in the row'], ['copy its address', 'the port on the second line']],
       wrong: 'someone opens rows one by one to find the image or port they need.',
-      try: 'Dawn Mode first.',
       back: 'the second line, the dot and the words return on every row.',
     },
     {
@@ -782,7 +731,6 @@ export const panelHypotheses = {
       believe: 'the count answers the common visit, is it up; the words are one pointer away on the name.',
       jobs: [['is it up', 'the count'], ['bring it up or down', 'Up, Rebuild, Down on the name'], ['every container at once', 'Stop all or Start all on the name'], ['which file', 'compose.yaml on the name']],
       wrong: 'someone looks for Up on a project that is not started.',
-      try: 'Dawn Mode first.',
       back: 'the compose row and the bulk words return at rest.',
     },
     {
@@ -793,7 +741,6 @@ export const panelHypotheses = {
       believe: 'rarely; on disk on the cost line opens all of it, with what each removal gives back.',
       jobs: [['pull an image', 'Disk, the pull field'], ['run an image', 'Disk, Run…'], ['clear space', 'Disk, each heading’s removal'], ['see the volumes', 'Disk']],
       wrong: 'someone looks for Pull in the list, or never opens Disk.',
-      try: 'Dawn Mode first.',
       back: 'the images, volumes and build cache return under the projects.',
     },
     {
@@ -804,7 +751,6 @@ export const panelHypotheses = {
       believe: 'under the row or field they pressed, with Docker’s words and one action; the context’s name says where the containers are; without Docker there is nothing to do here, so no panel.',
       jobs: [['start Docker', 'the empty state’s Open Docker'], ['why it failed', 'the Failure block, in place'], ['a refused value', 'the marked field and its rule'], ['where they run', 'the context’s name beside the title']],
       wrong: 'someone misses a failure because it is not where they pressed.',
-      try: 'Dawn Mode first.',
       back: 'the lines at the foot and the context sentence return.',
     },
   ],
@@ -817,7 +763,6 @@ export const panelHypotheses = {
       believe: 'port, name and size pick the row; the command and folder confirm it once picked, so the rest can wait for the pointer.',
       jobs: [['which server', 'port and what runs it'], ['how heavy', 'size'], ['command, folder, age', 'the picked row’s second line'], ['stop or open', 'the picked row’s words'], ['the history', 'History, opened']],
       wrong: 'someone stops the wrong server, or opens rows one by one to find one.',
-      try: 'Dawn Mode first.',
       back: 'the second line and the program icon return at rest.',
     },
     {
@@ -828,7 +773,6 @@ export const panelHypotheses = {
       believe: 'the servers of the computer you are working on answer the visit, and one computer read keeps remote use cheap.',
       jobs: [['this project’s servers', 'the list'], ['another computer’s', 'focus a project there'], ['an unreachable computer', 'the stale line']],
       wrong: 'someone looks for a server on another computer and switches projects to find it.',
-      try: 'Dawn Mode first.',
       back: 'each computer gets its section again.',
     },
   ],
@@ -841,7 +785,6 @@ export const panelHypotheses = {
       believe: 'the ones it named, with how much each changed, answer what did it touch before reading any diff; the rest stay one heading below.',
       jobs: [['see what changed', 'Changed, every row with its stat'], ['see what the agent touched', 'its named files first'], ['the whole tree', 'All files']],
       wrong: 'someone opens Also changed first, or the named list misses files the agent changed.',
-      try: 'Dawn Mode first.',
       back: 'Changed lists the changed files only, as today; the transcript read stops.',
     },
     {
@@ -852,7 +795,6 @@ export const panelHypotheses = {
       believe: 'Open the diff and Copy path are as common as Open with, and the pane header already names the folder; the cap reads best inside the folder it cut.',
       jobs: [['open with another app', 'Open with… in the menu'], ['the diff', 'Open the diff, or the stat'], ['the path', 'Copy path'], ['which folder', 'the pane header'], ['the cap', 'a dim row in its folder']],
       wrong: 'someone looks for the folder name in the panel, or misses the one-click Open with.',
-      try: 'Dawn Mode first.',
       back: 'right-click opens Open with again and the header shows the folder.',
     },
   ],
@@ -860,12 +802,11 @@ export const panelHypotheses = {
     {
       change: 'A conversation that cannot be read becomes the Failure block, and no matches the empty state.',
       today: 'one dim line, This conversation is no longer there, under the field; no matches is the count saying No matches and nothing under it.',
-      why: 'a quiet line where nothing can be done.',
+      why: quietLine,
       question: 'when the file is gone, what does someone do next?',
       believe: 'the path, Refresh and Explain to the agent let them recover in one press, and the empty state says plainly that the query found nothing.',
       jobs: [['know the file is gone', 'the Failure block and its path'], ['read it again', 'Refresh'], ['ask the agent', 'Explain to the agent'], ['see nothing matched', 'the empty state']],
       wrong: 'someone presses Refresh and nothing changes, or misses the count’s No matches.',
-      try: 'Dawn Mode first.',
       back: 'the dim line and the count’s No matches return.',
     },
   ],
@@ -878,7 +819,6 @@ export const panelHypotheses = {
       believe: 'opening on Hidden by you answers the common visit in one press, and Find or the map reaches any other piece in one step.',
       jobs: [['bring a piece back', 'Hidden by you, Show'], ['change any piece', 'Find, or Browse the window and its area'], ['Reset all', 'the area’s heading']],
       wrong: 'people browse every area one by one, or search for a piece they could not find.',
-      try: 'Dawn Mode first.',
       back: 'the page lists every group again, as today.',
     },
     {
@@ -889,7 +829,6 @@ export const panelHypotheses = {
       believe: 'on or off is the choice people make; the words say when an on piece shows, and pressing them switches between always and only when needed.',
       jobs: [['show or hide', 'the Switch'], ['only when needed', 'the words beside it']],
       wrong: 'someone looks for When needed and does not find it.',
-      try: 'Dawn Mode first.',
       back: 'the three Tabs come back on each row.',
     },
     {
@@ -900,7 +839,6 @@ export const panelHypotheses = {
       believe: 'one window answers which key does what and lets you change it; two windows linked to each other make you look in both.',
       jobs: [['which key does what', 'Keys, its keyboard and the picked key'], ['the hjkl dōjō', 'its own window, from Practice them in Vim keys'], ['the Guide', 'the site’s docs'], ['the installed version', 'What’s new, you are here'], ['how to close', 'Esc, as in every dialog'], ['⌘⇧/', 'opens Keys']],
       wrong: 'someone presses ⌘⇧/ and looks for help that Keys does not give, or cannot close the window.',
-      try: 'Dawn Mode first.',
       back: 'kansō help returns as its own window, with the links between the two.',
     },
     {
@@ -911,7 +849,6 @@ export const panelHypotheses = {
       believe: 'the keyboard shows whose key is whose, Herdr’s keys is a row that opens Herdr’s settings, and one row says a panel opens with its number.',
       jobs: [['kansō’s or Herdr’s', 'the keyboard’s tones and the Herdr’s keys row'], ['each panel’s key', 'Open or close a panel, ⌥⌘1…9']],
       wrong: 'someone changes a Herdr key here, or cannot find a panel’s key.',
-      try: 'Dawn Mode first.',
       back: 'the two lines and the tiles return.',
     },
     {
@@ -922,8 +859,9 @@ export const panelHypotheses = {
       believe: 'names in one line credit everyone; the kansō row opens the repository, which lists each of them.',
       jobs: [['where it comes from', 'Herdr, kansō and Lucide, each opening its page'], ['who made it', 'Maintained by'], ['a person’s profile', 'the kansō row, then the repository']],
       wrong: 'someone looks for a maintainer’s profile and cannot reach it.',
-      try: 'Dawn Mode first.',
       back: 'each person gets their row and picture again.',
     },
   ],
 };
+const triedInDawn = (hypothesis) => ({ try: 'Dawn Mode first.', ...hypothesis });
+export const panelHypotheses = Object.fromEntries(Object.entries(drafted).map(([page, hypotheses]) => [page, hypotheses.map(triedInDawn)]));

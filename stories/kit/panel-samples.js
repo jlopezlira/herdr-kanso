@@ -1,8 +1,5 @@
-// Sample data the panels show, in the app's words.
 import { pullRequest } from './samples.js';
 
-// Settings · What shows: each area of the window, what hiding one of its pieces stops, and its pieces.
-// `when` is the shown-only-when-needed choice in words; a row without it is shown or hidden.
 const piece = (name, extra = {}) => ({ name, on: true, ...extra });
 export const sampleAreas = {
   Sidebar: {
@@ -29,11 +26,9 @@ export const sampleAreas = {
   'Behind the scenes': { stops: 'Each one is work kansō does while you do not look.', pieces: [piece('Check for updates'), piece('Memory guard', { on: false })] },
 };
 export const sampleHidden = [['Time in its state', 'Sidebar'], ['Minimap', 'Status bar'], ['Command palette key', 'Status bar'], ['Images', 'Panels'], ['Simulator', 'Panels'], ['kansō update', 'Notifications']];
-// A panel another mod registers sits with the built-in ones.
 export const sampleCustomPanel = piece('Project notes');
 export const sampleFound = { query: 'memory', rows: [['Memory low', 'Status bar'], ['Memory', 'Panels'], ['Memory low', 'Notifications'], ['Memory guard', 'Behind the scenes', false]] };
 
-// Settings · Keys: each group of kansō's own keys, its actions and their chords; Herdr's keys are counted, not listed.
 const action = (name, chords) => ({ name, chords });
 export const sampleKeyGroups = {
   Panels: [action('Open or close a panel', ['⌥⌘1…9']), action('Simulator', ['⌥⌘0']), action('kansō settings', ['⌃⇧,'])],
@@ -49,7 +44,6 @@ export const sampleKeyGroups = {
 export const sampleHerdrKeys = 31;
 export const sampleTaken = { chord: '⌘R', name: 'Check now' };
 
-// Settings · What's new: the releases as the changelog says them; the installed one is where you are.
 const release = (version, date, changes = []) => ({ version, date, changes });
 export const sampleReleases = {
   newer: release('3.31.0', 'today · Nov 11', [
@@ -62,7 +56,6 @@ export const sampleReleases = {
   older: { from: '3.29.0', to: '3.27.0' },
 };
 
-// Settings · Credits: where kansō comes from, then who maintains it.
 export const samplePlaces = [
   { name: 'Herdr', note: 'The app kansō runs in', url: 'herdr.dev' },
   { name: 'kansō', note: 'Source, releases and issues', url: 'github.com/jlopezlira/herdr-kanso' },
@@ -70,7 +63,6 @@ export const samplePlaces = [
 ];
 export const sampleMaintainers = ['JJ', 'Iván Campaña', 'Leangseu Kim', 'Johannes Hund'];
 
-// Find in the conversation: checkout's conversation searched for one header; each hit is who, when and its line.
 const hit = (who, when, text) => ({ who, when, text });
 export const sampleFind = {
   agent: 'checkout',
@@ -83,7 +75,6 @@ export const sampleFind = {
   missing: '~/.claude/projects/acme-shop/4f2a.jsonl: no such file',
 };
 
-// Files: what checkout changed in acme-shop; `letter` is git's, modified has none; `stat` opens the diff.
 const changed = (name, folder, stat, letter = 'M') => ({ name, folder, stat, letter });
 export const sampleFiles = {
   named: [changed('limits.ts', 'src/api', '+22', 'A'), changed('checkout.ts', 'src/api', '+14 −3')],
@@ -94,7 +85,6 @@ export const sampleFiles = {
   computer: 'devbox',
   menu: { path: 'src/api/checkout.ts' },
 };
-// The tree as All files draws it: each entry its level; a folder open or not, with its count of changed files.
 const folder = (name, level, open, count = null) => ({ name, level, open, count });
 const file = (name, level, letter = null) => ({ name, level, letter });
 export const sampleTree = [folder('.github', 0, false), folder('docs', 0, false), folder('src', 0, true, '3'), folder('api', 1, true, '3'),
@@ -107,18 +97,17 @@ export const sampleFilesFailures = {
   unreachable: { text: 'Can’t reach devbox', source: 'ssh: connect to host devbox port 22: Operation timed out', fix: 'Refresh' },
 };
 
-// Ports: what listens, with no pane first; a pane's server is named by its pane.
 const server = (port, what, size, command, folder, age, pane = null) => ({ port, what, size, command, folder, age, pane });
 export const samplePorts = {
   noPane: [server(':6006', 'storybook', '388 MB', 'storybook dev -p 6006', '~/acme-shop-cart', '2 h'), server(':3001', 'next', '214 MB', 'next dev -p 3001', '~/acme-shop-docs', '5 h')],
   inPanes: [server(':4000', 'tsx', '146 MB', 'tsx watch src/server.ts', '~/acme-shop', '1 h', 'checkout'), server(':5173', 'vite', '182 MB', 'vite --port 5173', '~/acme-shop', '40 min', 'web')],
   remote: { noPane: [server(':8000', 'uvicorn', '96 MB', 'uvicorn app:api --port 8000', '~/billing', '3 h')], inPanes: [server(':5432', 'postgres', '64 MB', 'postgres -D data', '~/billing', '1 d', 'migrate')] },
-  computer: 'devbox',
+  computer: sampleFiles.computer,
+  entry: { icon: 'lu-plug', text: ':6006 no pane', tone: 'working' },
   refused: { text: 'Couldn’t stop :6006', source: 'kill 48213: still listening on :6006 after SIGTERM', fix: 'Force stop', agent: 'checkout' },
   failure: { text: 'Can’t read ports', source: 'lsof: unknown option -F', fix: 'Refresh', agent: 'checkout' },
   unattributed: { label: 'Some servers cannot be attributed', note: 'Working directories require a Herdr API on Windows.' },
 };
-// Ports · History: servers at once over the range, the part with no pane, then what opened and ended.
 const opened = (name, ports, when, ran, peak, how = null) => ({ name, ports, when, ran, peak, how });
 export const sampleRanges = [{ key: 'day', label: '24 h' }, { key: 'week', label: '7 days' }, { key: 'month', label: '30 days' }];
 export const samplePortHistory = {
@@ -136,7 +125,6 @@ export const samplePortHistory = {
   said: { off: 'No history', bad: 'History unreadable', stale: 'History stopped at 14:02' },
 };
 
-// Markdown: the plan an agent wrote in acme-shop, and the folder's Markdown around it.
 export const sampleMarkdown = {
   plan: { file: 'plan.md', folder: '~/acme-shop/docs', source: `# Rate limit checkout per customer
 
@@ -176,7 +164,6 @@ Deliveries retry 5 times with backoff 1, 2, 4, 8, 16 s. A 410 stops them.` },
   },
 };
 
-// Containers: Docker's cost on this computer, acme-shop's compose project with one exited, a stack not started, one container in no project.
 const container = (name, health, meta, image, ports, age, web = false) => ({ name, health, meta, image, ports, age, web });
 export const sampleContainers = {
   cost: { held: '2.1 GB', limit: '7.8 GB', disk: '4.2 GB on disk', stops: 2 },
@@ -197,7 +184,6 @@ export const sampleContainers = {
   unopened: { text: 'Docker could not be opened from here', source: 'open -a Docker: Unable to find application named Docker', fix: 'Open Docker' },
   unattributed: { label: 'Docker’s memory cannot be attributed', note: 'Docker VM memory attribution requires a Herdr API on Windows.' },
 };
-// Containers · Disk: the images, the volumes and the build cache, each with what it would give back.
 const image = (name, size, users, unused = false) => ({ name, size, users, unused });
 export const sampleDisk = {
   summary: '9 images 4.2 GB · 1.6 GB unused',
@@ -214,10 +200,10 @@ export const sampleDisk = {
   cache: '860 MB',
 };
 
-// Memory: 31% free on a 16 GB Mac, the guard on, five sessions with docs past the guard's limit and cart-ui needing you.
 const session = (name, size, state, said, extra = {}) => ({ name, size, state, said, ...extra });
 export const sampleMemory = {
   free: { value: '31%', of: 'free of 16 GB', swap: '2.4 GB swap' },
+  pageFile: '3.1 GB page file',
   herdr: { size: '1.4 GB', window: '1.1 GB window', core: '210 MB core', limit: 'past its 1.2 GB' },
   helpers: { count: 2, size: '60 MB' },
   sessions: [
@@ -253,7 +239,6 @@ export const sampleMemory = {
   silent: 'The guard stopped answering',
   remote: { computer: 'devbox', free: { value: '54%', of: 'free of 32 GB', swap: '0 swap' }, herdr: { size: '320 MB' }, sessions: [session('relay', '1.1 GB', 'working', ['Claude', 'working', 'up 1 d'])] },
 };
-// The guard's notices in its own words; on screen they are toasts, away the computer's notifications.
 const notice = (state, text, detail) => ({ state, home: 'memory', text, detail });
 export const sampleMemoryNotices = {
   'Recycled': notice('done', 'docs restarted', 'It held 1400 MB; the same conversation goes on in a fresh process (190 MB).'),
@@ -266,15 +251,24 @@ export const sampleMemoryNotices = {
   'Restart loop': notice('failed', 'Herdr keeps outgrowing its limit', 'Automatic restarts are paused for an hour. Open Memory in kansō to see what grows.'),
 };
 
-// Spend: November, two plans that pay for themselves, $41.20 today over three projects; acme-shop's checkout task opened.
 const plan = (value, name, said, tone = '') => ({ value, name, said, tone });
 const spent = (name, cost, said, extra = {}) => ({ name, cost, said, ...extra });
+const dollars = (amount) => `$${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const perDay = (costs) => {
+  const top = Math.max(...costs);
+  const peak = top ? costs.indexOf(top) : null;
+  return {
+    bars: costs.map((cost) => (top ? cost / top : 0)), peak, labels: costs.map((cost, day) => (day === peak ? dollars(cost) : '')),
+    said: costs.map((cost, day) => `Nov ${day + 1} · ${dollars(cost)} · ${Math.round(cost * 24000).toLocaleString('en-US')} tokens`),
+    spoken: 'API value per day', ticks: ['Nov 1', 'Per day', `Nov ${costs.length}`],
+  };
+};
 export const sampleSpend = {
   month: 'November',
   plans: [plan('25×', 'Claude Max 20x', '$5,012 of work for $200'), plan('3.1×', 'ChatGPT Plus', '$62 of work for $20')],
   under: plan('0.3×', 'ChatGPT Pro', '$61 of work for $200 · not paying for itself', 'working'),
   early: plan('24×', 'Claude Max 20x · too early to say', 'on pace: $322 in 2 days, about $4,800 by November 30', 'dim'),
-  periods: [{ key: 'day', label: 'Today' }, { key: 'month', label: 'Month' }, { key: '30d', label: '30 days' }, { key: 'year', label: 'Year' }, { key: 'all', label: 'All' }],
+  periods: [{ key: 'day', label: 'Today' }, { key: 'month', label: 'Month' }, { key: '30d', label: '30 days' }, { key: 'year', label: 'Year' }, { key: 'all', label: 'All time' }],
   today: { value: '$41.20', unit: 'today', said: ['14 tasks', '$2.94 a task', '9.1M tokens'] },
   past: { value: '$824.00', unit: 'October', said: ['212 tasks', '$3.89 a task', '140M tokens'] },
   lists: {
@@ -287,16 +281,18 @@ export const sampleSpend = {
   chooser: [{ label: 'All projects', checked: false }, { label: 'acme-shop', second: '~/acme-shop', hint: '$28.40', checked: true }, { label: 'docs-site', second: '~/docs-site', hint: '$9.10' }, { label: 'reports', second: '~/reports', hint: '$3.70' }],
   showing: 'Showing acme-shop and claude-opus-5',
   live: [spent('Rate limit checkout per customer', '$3.10', 'acme-shop · claude-opus-5 · 1.2M tok'), spent('Translate the pricing page', '$0.90', 'docs-site · gpt-5-codex · 310K tok')],
-  history: { bars: [0.05, 0.27, 0, 0.67, 1, 0, 0.18, 0.4, 0, 0.11, 0, 0.22, 0.92], peak: 4, labels: ['', '', '', '', '$45.00'], ticks: ['Nov 1', 'Per day', 'Nov 13'] },
+  history: perDay([2.25, 12.15, 0, 30.15, 45, 0, 8.1, 18, 0, 4.95, 0, 9.9, 41.2]),
+  quiet: perDay(Array(13).fill(0)),
   partial: 'Still reading your history: 412 of 1,980 files so far.',
   reading: 'Reading sessions · 412 of 1,980',
-  project: { name: 'acme-shop', value: '$28.40', said: ['8 tasks', '$3.55 a task', '6.2M tokens'], models: [spent('claude-opus-5', '$25.90', '5.8M tokens'), spent('claude-haiku-5', '$2.50', '0.4M tokens')] },
+  project: { days: perDay([0, 8, 0, 21, 30, 0, 6, 12, 0, 0, 0, 7, 28.4]), name: 'acme-shop', value: '$28.40', said: ['8 tasks', '$3.55 a task', '6.2M tokens'], models: [spent('claude-opus-5', '$25.90', '5.8M tokens'), spent('claude-haiku-5', '$2.50', '0.4M tokens')] },
   model: { name: 'claude-opus-5', value: '$34.90', said: ['11 tasks', '$3.17 a task', '7.4M tokens'], projects: [spent('acme-shop', '$25.90', '5.8M tokens'), spent('docs-site', '$9.00', '1.6M tokens')] },
   task: {
     where: 'acme-shop · Today, 09:12 – 13:40', prompt: 'Rate limit checkout per customer, 40 a minute, with Retry-After', value: '$12.80',
     parts: ['in 3.1M', 'out 180K', 'cache read 22M', 'cache write 1.4M'],
     models: [spent('claude-opus-5', '$12.10', '25M tokens'), spent('claude-haiku-5', '$0.70', '1.6M tokens')],
     sessions: [spent('checkout', '$9.60', '09:12'), spent('checkout', '$3.20', '12:58')], count: '2',
+    days: perDay([0, 0, 0, 12, 20, 0, 3, 8, 0, 0, 0, 2, 12.8]),
   },
   plain: { value: '$353', unit: 'paid as used in November', programs: [spent('Codex', '$312', 'API key'), spent('Pi', '$41', 'API key')] },
   computers: { count: '2 computers', rows: [spent('This computer', '$3,900', '96M tokens'), spent('devbox', '$1,112', '31M tokens')] },
@@ -318,8 +314,19 @@ export const sampleSpend = {
   invalid: { price: '0', rule: 'A plan needs a name and a price over $0' },
   unsaved: { text: 'Couldn’t save the plans', source: 'prices.json: EACCES: permission denied', fix: 'Save again', agent: 'checkout' },
 };
+const amount = (cost) => Number(cost.slice(1));
+const scaled = (factor) => (item) => ({ ...item, cost: dollars(amount(item.cost) * factor) });
+const over = (factor, unit, said) => ({
+  number: { value: dollars(amount(sampleSpend.today.value) * factor), unit, said },
+  lists: Object.fromEntries(Object.entries(sampleSpend.lists).map(([view, rows]) => [view, rows.map(scaled(factor))])),
+});
+export const sampleSpendSpans = {
+  month: over(20, 'this month', ['280 tasks', '$2.94 a task', '182M tokens']),
+  '30d': over(30, 'over 30 days', ['420 tasks', '$2.94 a task', '273M tokens']),
+  year: over(240, 'this year', ['3,360 tasks', '$2.94 a task', '2.2B tokens']),
+  all: over(360, 'all time', ['5,040 tasks', '$2.94 a task', '3.3B tokens']),
+};
 
-// Preview: limits.ts and limits.md as Files opens them, then the files it cannot edit.
 export const samplePreview = {
   code: { file: 'limits.ts', folder: 'src/api', text: { kind: 'source', first: 1, text: `import { planOf } from "./plans";
 
@@ -369,7 +376,6 @@ The countdown comes from \`Retry-After\`.`,
     picture: { text: 'Can’t show checkout-429.png', source: 'Cannot show this picture', fix: 'Refresh', agent: 'checkout' },
   },
 };
-// Pull requests: what is asked of you, then each project's open ones; pull request 142 opened on its verdict, its conversation, its files and its log.
 const pull = (number, title, state, extra = {}) => ({ number, title, state, ...extra });
 export const samplePulls = {
   asked: [pull('#44', 'Batch webhook retries', 'review'), pull('#91', 'Round tax per line, not per order', 'failing'), pull(`${pullRequest(3127)}`, 'Stream large uploads to disk', 'running')],
@@ -401,7 +407,6 @@ export const samplePulls = {
   },
   keep: { text: 'Could not keep pull requests', source: 'EACCES: permission denied writing the local cache', fix: 'Refresh' },
 };
-// pull request 142 and its neighbours, each on the verdict GitHub gives it.
 const check = (name, state, time = null) => ({ name, state, time });
 const said = (who, when, text, extra = {}) => ({ who, when, text, ...extra });
 export const samplePull = {
@@ -455,7 +460,6 @@ export const samplePull = {
   message: { to: 'Message to checkout', text: 'sam  src/api/checkout.ts:42\nHandle an empty bucket before decrementing the token count.\nhttps://github.com/acme/shop/pull/142' },
   remote: { computer: 'devbox', stale: 'devbox unreachable · Read 14:02' },
 };
-// pull request 142's pages: a file's diff, a long one, a check's log, a new pull request, and the people and labels pickers.
 export const samplePullPages = {
   diff: { file: 'checkout.ts', facts: `${pullRequest(142)} · src/api · +14 −3`, text: { kind: 'diff', first: 18, text: '@@ -18,7 +18,14 @@ checkout(req, res)\n const customer = req.user.id;\n+const b = bucket(customer);\n+if (b.tokens < 1) {\n+  res.set("Retry-After", retryAfter(b));\n+  return res.status(429).end();\n+}\n const cart = await carts.get(customer);\n-await charge(cart);\n+await charge(cart, { key: req.id });\n return res.json({ ok: true });' } },
   commented: { text: 'Round up here, or a client retries a second early', chunks: [
@@ -475,8 +479,6 @@ export const samplePullPages = {
   notes: { first: 'First 100 of 132', none: 'Nobody with access matches', offline: 'GitHub not answering. 2 changes wait.', noLabels: 'This repository has no labels', truncated: 'More people have access than are listed here' },
 };
 
-// Worktrees: 2.4 GB in 9 worktrees over acme-shop, relay and one left behind; promo-banner holds uncommitted work.
-// `verdict` is the row's fact, toned when something is wrong; `reason` is what removing it does; `kind` picks its verbs.
 const tree = (name, size, verdict, extra = {}) => ({ name, size, verdict, path: `~/.kanso/worktrees/acme-shop/${name}`, ...extra });
 const kept = (text) => ({ text });
 const loses = (text) => ({ text, tone: 'blocked' });
@@ -530,10 +532,12 @@ export const sampleWorktrees = {
   unread: { text: 'Can’t read the history', source: 'SQLITE_READONLY: attempt to write a readonly database', fix: 'Refresh', agent: 'checkout' },
   noSqlite: { text: 'Can’t keep the history', source: 'sqlite3 not found: install it to keep what was freed', fix: 'Refresh', agent: 'checkout' },
   stayed: 'old-cart changed since you looked, so it stays. Its row shows it as it is now.',
-  creating: { project: 'acme-shop', branch: 'rate-limit-v2', place: '~/.kanso/worktrees/acme-shop/rate-limit-v2', agent: 'checkout' },
+  creating: {
+    project: 'acme-shop', branch: 'rate-limit-v2', place: '~/.kanso/worktrees/acme-shop/rate-limit-v2', agent: 'checkout',
+    opens: { items: [{ key: 'claude', label: 'Claude', icon: 'p-claude' }, { key: 'codex', label: 'Codex', icon: 'p-codex' }, { key: 'terminal', label: 'Terminal' }], value: 'claude' },
+  },
   remote: { scope: 'Read 13:52 · devbox unreachable · next try 14:04', total: { value: '5.1 GB', unit: 'in 6 worktrees' }, plan: { count: 2, size: '2.2 GB' }, repos: [repo('acme-shop', '3.4 GB', [])] },
 };
-// The worktree notices, on screen as toasts.
 const worktreeNotice = (state, text, detail) => ({ state, home: 'worktrees', text, detail });
 export const sampleWorktreeNotices = {
   Freed: worktreeNotice('done', 'Freed 1.1 GB', '3 removed, 12.4 GB freed so far'),
@@ -541,7 +545,6 @@ export const sampleWorktreeNotices = {
   'No agent': worktreeNotice('failed', 'Could not start the agent', 'no agent is installed'),
 };
 
-// Pins: checkout on a frozen iPhone and acme shop on a Pixel, the notes about them, and an Images picture with the same pins.
 const pinned = (n, text, place, extra = {}) => ({ n, text, ...place, ...extra });
 const iphone = 'iPhone 16 Pro · iOS 18.2';
 const pixel = 'Pixel 8 · Android 15';
@@ -558,14 +561,13 @@ export const samplePins = {
   stalled: [pinned(1, 'Road runner price should match the list', { at: [70, 39] })],
   file: { name: 'checkout-429.png', folder: '~/acme-shop/shots · 14:07' },
   agents: [{ name: 'checkout', project: 'acme-shop' }, { name: 'docs', project: 'acme-shop' }, { name: 'i18n', project: 'docs-site' }],
-  sent: 'Sent to checkout 14:07',
+  sent: samplePull.sent,
   refusals: {
     send: { text: 'Couldn’t send to checkout', source: 'hc send: checkout is not running', fix: 'Send' },
     copy: { text: 'Couldn’t copy to devbox', source: 'scp: devbox: Connection timed out', fix: 'Send' },
   },
 };
 
-// Shipped: this week, +12,480 lines over 11 repositories, a 12-day streak and a new best day; `facts` count the period, `ever` is since joining GitHub.
 const shipRepo = (name, add, del, commits) => ({ name, lines: `${add} ${del}`, commits: `${commits} commits` });
 const counted = (...pairs) => pairs.map(([value, unit]) => ({ value, unit }));
 const shipRecord = (name, value, unit, detail, fresh = false) => ({ name, value, unit, detail, fresh });
@@ -616,7 +618,6 @@ export const sampleShipped = {
   noSqlite: { text: 'Adding up stopped', source: 'sqlite3 not found: install it to keep Shipped’s statistics', fix: 'Refresh' },
   leaves: 'Totals only, no names',
 };
-// The card Share makes of this week: totals, the streak, the records and the hours, never a repository or a computer.
 const { week: shipWeek, records: shipBests, rhythm: shipRhythm } = sampleShipped;
 export const sampleShippedCard = {
   title: 'Shipped', right: shipWeek.label, stats: shipWeek.counts, note: shipWeek.ever,
@@ -631,7 +632,6 @@ export const sampleShippedNotices = {
   'New record': { state: 'done', home: 'shipped', text: 'New record: best day', detail: '+2,904 lines · Tue 11 Nov' },
 };
 
-// Share: each panel's header with its Share icon and what leaves; the image made, then where it went.
 const sharer = (title, leaves, tools = ['refresh']) => ({ title, leaves, tools });
 const sevenDays = ['Wed', 'now'];
 const stat = (value, unit) => ({ value, unit });
@@ -683,7 +683,6 @@ export const sampleShare = {
   },
 };
 
-// Simulator: the devices xcrun simctl and adb list, the facts said under the header, and the refusals in their tools' words.
 const simDevice = (name, runtime, state, picked = false) => ({ name, runtime, state, picked });
 export const sampleSimulator = {
   groups: [
@@ -704,7 +703,6 @@ export const sampleSimulator = {
   empty: { icon: 'lu-smartphone', text: 'No devices' },
 };
 
-// Images: what checkout wrote in acme-shop, the first of three pictures; the pins are Preview's on the same picture.
 export const sampleImages = {
   count: '1 of 3', agent: 'checkout',
   shots: [{ label: 'cart-countdown.png', selected: true }, { label: 'cart-old.png' }, { label: 'checkout-429.png' }],
@@ -721,7 +719,6 @@ export const sampleImages = {
   noConversation: { icon: 'lu-eye', text: 'No conversation to read pictures from' },
 };
 
-// Dōjō: the nine levels and their bests, the keys under the board with their fingers, a code snippet, and the words it says.
 const level = (n, name, motions, best = '') => ({ n, name, motions, best });
 export const sampleDojo = {
   levels: [level(1, 'h l', ['h', 'l'], 88), level(2, 'j k', ['j', 'k'], 104), level(3, 'h j k l', ['h', 'j', 'k', 'l'], 142), level(4, '0 $ gg G', ['h', 'j', 'k', 'l', '0', '$', 'g', 'G'], 131),
