@@ -1,10 +1,8 @@
-// The tooltip: Herdr's `.tooltip()` takes only a string, so the kit's tooltip is the Storybook's words, its chord read from the key table.
 import test from "node:test";
 import assert from "node:assert/strict";
 import { load, repoText } from "./helpers.mjs";
 import { outsideKit } from "./mod-sources.mjs";
 import { SHARED } from "../scripts/sync-share.mjs";
-import * as storybook from "../stories/kit/pieces.js";
 
 const BINDINGS = [
   { section: "app", keys: "cmd-shift-p", action: "app.palette" },
@@ -17,22 +15,17 @@ const kit = async (platform = "macos") => ({
   ...await load("kanso-panel/ui-tooltip.js", ["boundChord"], host(platform)),
 });
 
-// The Storybook tooltip's popover as the words it shows.
-const storybookWords = (props) => storybook.tooltip({ icon: "lu-command", side: "bottom", open: true, ...props })
-  .match(/role="tooltip">(.*)<\/span><\/span>$/)[1].replace(/<[^>]+>/g, "").replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n)));
-
-// The Storybook's playground args for Primitives/Tooltip, and the states its controls give; the app's chord is the key table's.
 const STATES = {
-  "the label alone": { app: { label: "More" }, storybook: { label: "More" } },
-  "with its detail (the playground)": { app: { label: "Adding up", detail: "14 repositories to go" }, storybook: { label: "Adding up", detail: "14 repositories to go" } },
-  "with its chord": { app: { label: "Command palette", chord: "cmd-shift-p" }, storybook: { label: "Command palette", chord: "⇧⌘P" } },
-  "with chord and detail": { app: { label: "2 per view", chord: "cmd-shift-0", detail: "click to even out" }, storybook: { label: "2 per view", chord: "⇧⌘0", detail: "click to even out" } },
+  "the label alone": [{ label: "More" }, "More"],
+  "with its detail": [{ label: "Adding up", detail: "14 repositories to go" }, "Adding up · 14 repositories to go"],
+  "with its chord": [{ label: "Command palette", chord: "cmd-shift-p" }, "Command palette ⇧⌘P"],
+  "with chord and detail": [{ label: "2 per view", chord: "cmd-shift-0", detail: "click to even out" }, "2 per view ⇧⌘0 · click to even out"],
 };
 
-for (const [state, { app, storybook: props }] of Object.entries(STATES)) {
-  test(`Tooltip, ${state}: the app writes the Storybook's words`, async () => {
+for (const [state, [props, words]] of Object.entries(STATES)) {
+  test(`Tooltip, ${state}: the app writes its words`, async () => {
     const { tooltip } = await kit();
-    assert.equal(tooltip(app), storybookWords(props));
+    assert.equal(tooltip(props), words);
   });
 }
 

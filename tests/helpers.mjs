@@ -13,11 +13,8 @@ import { modScript } from "../scripts/mod-source.mjs";
 const runFile = promisify(execFile);
 export const fileExists = (path) => access(path).then(() => true, () => false);
 // A file of this repository as text.
+export const STATUSES = ["working", "blocked", "done", "idle", "asleep"];
 export const repoText = (file) => readFileSync(new URL(`../${file}`, import.meta.url), "utf8");
-// Each Storybook composition a mod draws is copied into it byte for byte.
-export const sameCopies = (names, mod = "kanso-spaces") => {
-  for (const name of names) assert.equal(repoText(`kanso/mods/${mod}/${name}.js`), repoText(`stories/kit/${name}.js`), name);
-};
 // An SVG's shapes as [tag, attributes], the form of tests/fixtures/lucide-icons.json.
 export const svgShapes = (markup) => [...markup.matchAll(/<(path|circle|rect|line|polyline|polygon|ellipse)\b([^>]*?)\s*\/?>/g)]
   .map(([, tag, attrs]) => [tag, Object.fromEntries([...attrs.matchAll(/([\w-]+)="([^"]*)"/g)].map(([, name, value]) => [name, value]))]);

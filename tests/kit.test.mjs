@@ -1,12 +1,7 @@
-// The kit a composition imports: the same pieces under the same name in the Storybook and the app, the app's drawing what its own piece draws.
 import { loadTokens, loadRow, loadMenu } from "./mod-fixtures.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { load, nodes, texts, press, themed, KIT_NIGHT, drawingHost, drawn, gpuiHost } from "./helpers.mjs";
-import { exportedNames } from "../scripts/mod-source.mjs";
-import * as storybookKit from "../stories/kit/kit.js";
-import * as storybookPieces from "../stories/kit/pieces.js";
 
 const host = drawingHost;
 const kits = async () => themed({
@@ -26,7 +21,7 @@ test("A row from the shared kit draws what the app's row draws with the same pro
   assert.deepEqual(drawn(app.row(props)("r", c)), drawn(row("r", c, props)));
 });
 
-test("A row from the shared kit takes the Storybook's Lucide icon names and draws the app's icons", async () => {
+test("A row from the shared kit takes Lucide icon names and draws the app's icons", async () => {
   const { row, app, c } = await kits();
   const named = (prefix) => ({
     icon: `${prefix}file`, name: "a", flag: `${prefix}pin`, detail: { icon: `${prefix}folder`, text: "src" }, hover: true,
@@ -69,7 +64,7 @@ test("A piece inside a shared row is drawn by that row, with its own id and the 
   assert.deepEqual(drawn(inner), drawn(row("r-tools-0", c, { name: "tail" })));
 });
 
-test("A shared row takes no piece, one piece or a list of them before its icon and at its end, as the Storybook's row does", async () => {
+test("A shared row takes no piece, one piece or a list of them before its icon and at its end", async () => {
   const { row, app, c } = await kits();
   assert.deepEqual(drawn(app.row({ name: "t", title: true, start: null, tools: undefined })("r", c)), drawn(row("r", c, { name: "t", title: true })));
   const single = app.row({ name: "t", start: app.row({ name: "back" }), tools: [[app.row({ name: "a" })], false, app.row({ name: "b" })] })("r", c);
@@ -98,7 +93,7 @@ test("A button from the shared kit draws what the app's button draws, its Lucide
   assert.deepEqual(drawn(shared), drawn(ui.button("b", "Add project", onClick, c, { kind: "icon", size: "lg", icon: "plus", active: true })));
   shared.calls.filter((call) => call[0] === "on_click").forEach(([, handler]) => handler({}, {}));
   assert.deepEqual(hits, ["add"]);
-  assert.deepEqual(svgs(app.button({ label: "Wake", kind: "quiet" })("w", c)), [], "no icon is the Storybook's none");
+  assert.deepEqual(svgs(app.button({ label: "Wake", kind: "quiet" })("w", c)), [], "no icon is none");
   assert.throws(() => app.button({ label: "Sort" })("s", c, { label: "Order" }), /only handlers, not label/);
 });
 
@@ -127,28 +122,18 @@ test("A toast from the shared kit draws what the app's toast draws, its Lucide i
   assert.deepEqual(drawn(shared), drawn(ui.toast("t", c, { ...props, icon: "refresh-cw", onClick })));
   press(shared, "t-fix");
   assert.deepEqual(hits, ["home"]);
-  assert.deepEqual(svgs(app.toast({ title: "Saved" })("t", c)), [], "no icon is the Storybook's none: the level's dot");
+  assert.deepEqual(svgs(app.toast({ title: "Saved" })("t", c)), [], "no icon is none: the level's dot");
   assert.throws(() => app.toast({ title: "Saved" })("t", c, { title: "Gone" }), /only handlers, not title/);
 });
 
-test("A toast draws the Storybook's sentence at body size, its second line and its Explain button", async () => {
+test("A toast draws its sentence at body size, its second line and its Explain button", async () => {
   const { app, c } = await kits();
   const { T } = await load("kanso-panel/ui.js", ["T"], host());
   const props = { title: "Failed", body: "Details", explain: "Claude", action: "Retry" };
   const el = app.toast(props)("t", c);
-  assert.ok(storybookPieces.toast(props).includes("Explain to Claude"));
   assert.deepEqual(texts(el), ["Failed", "Details", "Retry", "Explain to Claude"]);
   assert.deepEqual(nodes(el).flatMap((kid) => kid.calls.filter((call) => call[0] === "text_size").map((call) => call[1])).slice(0, 2), [T.value, T.body]);
   assert.ok(svgs(el).some((path) => path.endsWith("bot.svg")));
-});
-
-test("The Storybook's shared kit is its pieces, and the app's has only Storybook pieces", (t) => {
-  assert.deepEqual(Object.keys(storybookKit).sort(), Object.keys(storybookPieces).sort());
-  const app = exportedNames(readFileSync(new URL("../kanso/mods/kanso-panel/kit.js", import.meta.url), "utf8"));
-  const storybook = Object.entries(storybookKit).filter(([, value]) => typeof value === "function").map(([name]) => name);
-  assert.deepEqual(app.filter((name) => !storybook.includes(name)), [], "the app's shared kit exports only Storybook pieces");
-  const gap = storybook.filter((name) => !app.includes(name));
-  t.diagnostic(`In the app's shared kit (${app.length}): ${app.join(", ")}; not yet (${gap.length}): ${gap.join(", ")}`);
 });
 
 test("A Button's name reaches its press as written, even when it reads like an icon", async () => {

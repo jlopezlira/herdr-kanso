@@ -2,7 +2,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { load, chain, gpuiHost, numberArguments, calls, one, themed } from "./helpers.mjs";
-import { avatarSizes } from "../stories/kit/pieces.js";
 
 const host = () => ({ ...gpuiHost(), image: (path) => { const el = chain("image"); el.calls.push(["image", path]); return el; } });
 const kit = async () => themed({
@@ -14,7 +13,7 @@ const night = { foreground: "#d8d4cb", background: "#1b1b19", dim: "#6b6862", mu
 
 test("Small, medium and large are 16, 20 and 32 from the tokens, with the meta size, and the name size when large", async () => {
   const { avatar, AVATAR_SIZES, G, H, T, c } = await kit();
-  assert.deepEqual(Object.keys(AVATAR_SIZES), Object.keys(avatarSizes));
+  assert.deepEqual(Object.keys(AVATAR_SIZES), ["sm", "md", "lg"]);
   const expected = { sm: [G.lg, T.body], md: [H.badge, T.body], lg: [H.line, T.card] };
   assert.deepEqual([G.lg, H.badge, H.line], [16, 20, 32]);
   for (const [size, [side, text]] of Object.entries(expected)) {
@@ -45,7 +44,7 @@ test("With an image, the picture covers the initial, which stays beneath it", as
   for (const name of ["absolute", "inset_0", "size_full", "rounded_full"]) assert.equal(calls(picture, name).length, 1, name);
 });
 
-test("Each host tone the Storybook offers colours the letter", async () => {
+test("Each host tone colours the letter", async () => {
   const { avatar, mix, c } = await kit();
   const hues = { teal: mix(night.ansi4, night.done, 0.5), yellow: night.working, blue: night.ansi4, violet: night.ansi5, green: night.done, red: night.blocked };
   for (const [tone, color] of Object.entries(hues)) assert.equal(one(avatar(c, { initial: "S", tone }), "text_color"), color, tone);

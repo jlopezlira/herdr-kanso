@@ -1,30 +1,26 @@
-// The metric and the facts as words: the app kit draws them with the Storybook's props, and every panel that shows a number calls them.
 import test from "node:test";
 import assert from "node:assert/strict";
 import { load, calls, one, nodes, texts, themed, KIT_NIGHT, drawingHost, repoText } from "./helpers.mjs";
-import * as storybook from "../stories/kit/pieces.js";
 
 const kit = async () => themed({
   ...await load("kanso-panel/ui.js", ["tokens", "G", "R", "T", "CLEAR"], drawingHost()),
   ...await load("kanso-panel/kit.js", ["metric", "diffText", "facts", "plus"], drawingHost()),
 }, KIT_NIGHT);
 
-// The Storybook's metric as its words, in the order it draws them.
-const storybookWords = (props) => [...storybook.metric(props).matchAll(/>([^<>]+)</g)].map((m) => m[1].replace(/&amp;/g, "&"));
 const textOf = (el, words) => nodes(el).find((kid) => calls(kid, "child").some((call) => call[1] === words));
-// The Storybook's playground args for Primitives/Metric, and the states its controls give.
 const SAMPLE = { value: "31%", unit: "free of 16 GB · 2.4 GB swap", facts: "14 tasks | $2.94 a task | 9.1M tokens" };
+const SAMPLE_WORDS = ["31%", "free of 16 GB · 2.4 GB swap", "14 tasks", "$2.94 a task", "9.1M tokens"];
 const STATES = {
-  "the number alone": { value: "142", unit: "" },
-  "with its unit": { value: "2.4 GB", unit: "in 9 worktrees" },
-  "with its facts": SAMPLE,
-  loading: { ...SAMPLE, loading: true },
+  "the number alone": [{ value: "142", unit: "" }, ["142"]],
+  "with its unit": [{ value: "2.4 GB", unit: "in 9 worktrees" }, ["2.4 GB", "in 9 worktrees"]],
+  "with its facts": [SAMPLE, SAMPLE_WORDS],
+  loading: [{ ...SAMPLE, loading: true }, SAMPLE_WORDS],
 };
 
-for (const [state, props] of Object.entries(STATES)) {
-  test(`Metric, ${state}: the app draws the Storybook's words in its order`, async () => {
+for (const [state, [props, words]] of Object.entries(STATES)) {
+  test(`Metric, ${state}: the app draws its words in order`, async () => {
     const { metric, c } = await kit();
-    assert.deepEqual(texts(metric(props)("m", c)), storybookWords(props));
+    assert.deepEqual(texts(metric(props)("m", c)), words);
   });
 }
 
@@ -43,7 +39,7 @@ test("The value is the display size in the text colour, its unit the meta size i
 
 test("Loading keeps each piece's size and draws it as a skeleton shape, its words hidden", async () => {
   const { metric, R, CLEAR, c } = await kit();
-  const el = metric(STATES.loading)("m", c);
+  const el = metric(STATES.loading[0])("m", c);
   for (const words of ["31%", SAMPLE.unit, "14 tasks", "$2.94 a task", "9.1M tokens"]) {
     const piece = textOf(el, words);
     assert.deepEqual([one(piece, "rounded"), one(piece, "bg"), one(piece, "text_color")], [R.sm, c.border, CLEAR], words);
@@ -63,11 +59,11 @@ test("The kit's metric takes only handlers from the app, and throws on anything 
   assert.throws(() => metric(SAMPLE)("m", c, { tone: "blocked" }), /the app gives only handlers, not tone/);
 });
 
-test("diffText, facts and plus write what the Storybook writes", async () => {
+test("diffText, facts and plus write their words", async () => {
   const { diffText, facts, plus } = await kit();
-  for (const counts of [{ add: 14, del: 3 }, { add: 0, del: 0 }, {}, { add: "120", del: 9 }]) assert.equal(diffText(counts), storybook.diffText(counts));
-  for (const parts of [["3 commits", null, "2 files"], [], ["Approved"]]) assert.equal(facts(...parts), storybook.facts(...parts));
-  for (const count of [1, 3, 12]) assert.equal(plus(count), storybook.plus(count));
+  assert.deepEqual([{ add: 14, del: 3 }, { add: 0, del: 0 }, {}, { add: "120", del: 9 }].map(diffText), ["+14 −3", "+0 −0", "+0 −0", "+120 −9"]);
+  assert.deepEqual([["3 commits", null, "2 files"], [], ["Approved"]].map((parts) => facts(...parts)), ["3 commits · 2 files", "", "Approved"]);
+  assert.deepEqual([1, 3, 12].map(plus), ["+1", "+3", "+12"]);
 });
 
 // Each file the PR redraws, and the kit call it now makes.

@@ -12,7 +12,7 @@ import { OUT as SITE_TOKENS } from "./build-site-tokens.mjs";
 const ROOT = new URL("../", import.meta.url);
 const BASELINE_NAME = "kanso/dupes-baseline.json";
 const BASELINE = new URL(BASELINE_NAME, ROOT);
-export const FOLDERS = ["kanso/mods", "stories", "scripts", "site", "tests", ".github"];
+export const FOLDERS = ["kanso/mods", "scripts", "site", "tests", ".github"];
 const CODE = /\.(?:m?js|jsx|css|html|mdx|sh|ps1|ya?ml)$/;
 const COMMENT = /^(?:\/\/|\/\*|\*(?:\s(?!\{)|\/|$)|<!--|# )/;
 const IMPORT = /^import\s[^;]*?(?:from\s*)?["'][^"']+["'];?/gm;

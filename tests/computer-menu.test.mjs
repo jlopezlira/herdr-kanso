@@ -8,7 +8,7 @@ const rows = async () => (await load("kanso-spaces/computer-menu.js", ["computer
 const words = (items) => clone(items).map((row) => (row.separator ? "—" : row.hint ? `${row.label} (${row.hint})` : row.label));
 const TAIL = ["—", "Add computer…", "—", "Hide “Computers”", "Settings for this…"];
 
-test("Another computer, connected, has the Storybook's menu: Rename, Turn off, Sync, New project, Add computer, Hide and Settings", async () => {
+test("Another computer, connected, has its menu: Rename, Turn off, Sync, New project, Add computer, Hide and Settings", async () => {
   const computerMenuItems = await rows();
   assert.deepEqual(words(computerMenuItems({ remote: true, phase: "connected", syncOn: true })), ["Rename…", "Turn off", "Sync (on)", "New project", ...TAIL]);
   assert.deepEqual(words(computerMenuItems({ remote: true, phase: "connected" })).slice(0, 3), ["Rename…", "Turn off", "Sync (off)"]);

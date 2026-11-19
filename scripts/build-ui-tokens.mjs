@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 import { fileURLToPath } from "node:url";
 import { TOKENS, THEMES, colour, loadTokens, read, writeChanged } from "./tokens.mjs";
-import { dawn } from "../stories/kit/pieces.js";
 
 export const UI = "kanso/mods/kanso-panel/ui.js";
 export const START = `// Sizes generated from ${TOKENS} by npm run build:ui-tokens.`;
@@ -106,99 +105,30 @@ const constant = (name, pick, read) => (typeof pick === "string"
   : `export const ${name} = { ${Object.entries(pick).map(([key, token]) => `${key}: ${read(token)}`).join(", ")} };`);
 const constants = (picks, read) => Object.entries(picks).map(([name, pick]) => constant(name, pick, read));
 
-// Dawn Mode's art: the Storybook's sky with each theme's colours written in, at its last frame, as Herdr's image() draws a file.
-export const STYLES = "stories/primitives.css";
 const DAWN_INKS = { top: "dawn-top", star: "dawn-star" };
 export const dawnArt = (theme) => `mods/kanso-chrome/dawn-${theme}.svg`;
-const PAINT = new Set(["fill", "stroke", "stop-color", "stop-opacity", "opacity"]);
-// The still rules of the art's classes: one class, or a class and its modifier; the animated (`--rising`) ones are left out.
-const dawnRules = (css) => new Map([...css.matchAll(/(?:^|[}\n])(?:\.kanso-dawn )?(\.kanso-dawn__[\w-]+(?:\.kanso-dawn__[\w-]+)?)\{([^}]*)\}/g)]
-  .map(([, selector, body]) => [selector.slice(1).split(".").join(" "), body.split(";").map((part) => part.split(":")).filter(([name]) => PAINT.has(name))]));
-export function dawnSvg(tokens, theme, css) {
-  const rules = dawnRules(css), size = px(tokens);
-  const paint = (value) => value.replace(/var\(--([\w-]+)\)/g, (_, name) => colour(tokens, theme, name));
-  return `${dawn().replace(/ class="([^"]*)"/g, (_, classes) => {
-    const own = [...new Set([...classes.split(" "), classes])].flatMap((selector) => rules.get(selector) ?? []);
-    return own.map(([name, value]) => ` ${name}="${paint(value)}"`).join("");
-  }).replace("<svg ", `<svg xmlns="http://www.w3.org/2000/svg" width="${size("k-dawn-w")}" height="${size("k-dawn-h")}" `)}\n`;
-}
-const RING_FRAMES = 12;
-const ART_LAYERS = ["sky", "night", "glow", "stars", "clouds", "sun", "fade", "horizon"];
-export const dawnLayer = (theme, layer) => `mods/kanso-chrome/dawn-${theme}-${layer}.svg`;
-const ringLayer = (i) => `ring-${i}`;
-export const DAWN_LAYERS = [...ART_LAYERS, ...Array.from({ length: RING_FRAMES + 1 }, (_, i) => ringLayer(i))];
-
-const part = (svg, pattern) => {
-  const found = svg.match(pattern);
-  if (!found) throw new Error(`dawn: no ${pattern} in the Storybook's dawn()`);
-  return found[0];
-};
-const DASH = 82;
-export function dawnLayers(tokens, theme, css) {
-  const svg = dawnSvg(tokens, theme, css);
-  const open = part(svg, /<svg [^>]*>/), defs = part(svg, /<defs>[\s\S]*?<\/defs>/);
-  const clip = part(svg, /<g clip-path="[^"]*">/);
-  const drawn = svg.replace(defs, "");
-  const pieces = {
-    sky: part(drawn, /<rect width="256" height="44" fill="url\([^)]*-sky\)"\/>/),
-    night: part(drawn, /<rect [^>]*width="256" height="44"(?![^>]*url)[^>]*\/>/),
-    glow: `${clip}${part(drawn, /<rect [^>]*fill="url\([^)]*-glow\)"\/>/)}</g>`,
-    stars: `${clip}${part(drawn, /<g fill[^>]*>(?:<circle[^>]*\/>)+<\/g>/)}</g>`,
-    clouds: `${clip}${part(drawn, /<g stroke="[^"]*" stroke-linecap="round" fill="none">[\s\S]*?<\/g>/)}</g>`,
-    sun: part(drawn, /<circle [^>]*cx="124" cy="44" r="10"[^>]*\/>/),
-    fade: part(drawn, /<rect y="44" width="256" height="12" fill="url\([^)]*-fade\)"\/>/),
-    horizon: part(drawn, /<path [^>]*d="M0 44\.5H256"[^>]*\/>/),
-  };
-  const ring = part(drawn, /<circle cx="124" cy="44" r="13"[^>]*\/>/);
-  const frames = Object.fromEntries(Array.from({ length: RING_FRAMES + 1 }, (_, i) => [ringLayer(i),
-    ring.replace("/>", ` stroke-dashoffset="${(DASH * (1 - i / RING_FRAMES)).toFixed(2)}"/>`)]));
-  const animated = new Set(["night", "glow", "clouds", "horizon"]);
-  for (const layer of animated) {
-    const at = pieces[layer].startsWith(clip) ? clip.length : 0;
-    const end = pieces[layer].indexOf(">", at);
-    pieces[layer] = pieces[layer].slice(0, at) + pieces[layer].slice(at, end).replace(/ opacity="[^"]*"/, "") + pieces[layer].slice(end);
-  }
-  const close = "</svg>\n";
-  return Object.fromEntries(Object.entries({ ...pieces, ...frames }).map(([layer, body]) => [layer, `${open}${defs}${body}${close}`]));
-}
-
-const EASE_OF = (curve) => ({ "ease-out": "ease-out", "ease-in": "ease-in", "ease-in-out": "ease-in-out", linear: "linear" })[curve]
-  ?? (() => { const [x1, , x2] = curve.match(/[\d.]+/g).map(Number); return x1 < 0.25 ? "ease-out" : x2 < 0.25 ? "ease-in-out" : "ease-in"; })();
-const seconds = (value) => Math.round(Number.parseFloat(value) * (value.endsWith("ms") ? 1 : 1000));
-export function dawnMotion(tokens, css) {
-  const frames = Object.fromEntries([...css.matchAll(/@keyframes (dw\w+)\{(.*?\})\}/g)].map(([, name, body]) => [name, Object.fromEntries([...body.matchAll(/(from|to|\d+%)\{([^}]*)\}/g)].map(([, at, decls]) => [at, Object.fromEntries(decls.split(";").map((d) => d.split(":")))]))]));
-  const rise = px(tokens)("k-dawn-rise");
-  const motion = {};
-  for (const [, layer, name, rest] of css.matchAll(/\.kanso-dawn\.kanso-dawn--rising \.kanso-dawn__(\w+)\{animation:(dw\w+) ([^}]*?) both\}/g)) {
-    const times = rest.match(/[\d.]+m?s/g), curve = rest.replace(/[\d.]+m?s/g, "").trim();
-    const key = frames[name];
-    const opacity = (at) => (key[at]?.opacity === undefined ? 1 : Number(key[at].opacity));
-    motion[layer] = { duration: seconds(times[0]), delay: times[1] ? seconds(times[1]) : 0, easing: EASE_OF(curve),
-      ...(key.from.transform ? { top: { from: rise, to: 0 } } : { opacity: { from: opacity("from"), to: opacity("to") } }),
-      ...(key.from["stroke-dashoffset"] ? { dash: true, opacityBy: Number.parseFloat(Object.keys(key).find((k) => k.endsWith("%"))) / 100 } : {}) };
-  }
-  return `export const DAWN_MOTION = ${JSON.stringify(motion)};`;
-}
+const MOTION_LINE = /^export const DAWN_MOTION = .*;$/m;
 
 export function dawnInks(tokens) {
   const one = (theme) => `{ ${Object.entries(DAWN_INKS).map(([key, name]) => `${key}: ${JSON.stringify(colour(tokens, theme, name))}`).join(", ")}, art: ${JSON.stringify(dawnArt(theme))} }`;
   return `export const DAWN = { ${THEMES.map((theme) => `${theme}: ${one(theme)}`).join(", ")} };`;
 }
 
-export function block(tokens) {
+export function block(tokens, dawnMotion) {
   const duration = ms(tokens);
   const ease = easing(tokens);
   const of = share(tokens);
   const motion = Object.entries(MOTION).map(([name, pick]) => `export const ${name} = { duration: ${duration(pick.duration)}, easing: ${ease(pick.easing)} };`);
   const beats = `export const BEAT = { ${Object.entries(BEATS).map(([key, pick]) => `${key}: { from: ${of(pick.from)}, to: 1, period: ${duration(pick.period)} }`).join(", ")} };`;
   return [START, ...constants(PICK, px(tokens)), ...constants(LEADINGS, reader("")(tokens)), ...constants(TIMING, duration), ...motion, ...constants(EASINGS, ease), beats, ...constants(SHARES, of),
-    washes(tokens), dawnInks(tokens), dawnMotion(tokens, read(STYLES)), constant("INK", INK, ink(tokens)), END].join("\n");
+    washes(tokens), dawnInks(tokens), dawnMotion, constant("INK", INK, ink(tokens)), END].join("\n");
 }
 
 export function withTokens(text, tokens) {
   const from = text.indexOf(START), to = text.indexOf(END);
-  if (from < 0 || to < from) throw new Error(`${UI} has no generated sizes block`);
-  return text.slice(0, from) + block(tokens) + text.slice(to + END.length);
+  const motion = MOTION_LINE.exec(text.slice(from, to));
+  if (from < 0 || to < from || !motion) throw new Error(`${UI} has no generated sizes block`);
+  return text.slice(0, from) + block(tokens, motion[0]) + text.slice(to + END.length);
 }
 
 export const LAYOUT = "kanso/layouts/kanso.json";
@@ -248,8 +178,4 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const tokens = loadTokens();
   writeChanged(UI, withTokens(read(UI), tokens));
   writeChanged(LAYOUT, layoutWithTokens(read(LAYOUT), tokens));
-  for (const theme of THEMES) {
-    writeChanged(`kanso/${dawnArt(theme)}`, dawnSvg(tokens, theme, read(STYLES)));
-    for (const [layer, art] of Object.entries(dawnLayers(tokens, theme, read(STYLES)))) writeChanged(`kanso/${dawnLayer(theme, layer)}`, art);
-  }
 }

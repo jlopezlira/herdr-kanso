@@ -14,7 +14,7 @@ const generated = (name) => `<!-- Generated from ${SOURCES}${name} by npm run bu
 
 const PIECES = {
   chrome: ['"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --headless=new --hide-scrollbars \\'],
-  pages: ['<a href="storybook/" target="_blank" rel="noopener">Storybook</a>', '<a href="changelog.html">Changelog</a>'],
+  pages: ['<a href="changelog.html">Changelog</a>'],
   install: [
     "<code data-copy-text>add herdr.dev/layouts/jlopezlira/herdr-kanso--kanso</code>",
     '<button type="button" data-copy><span data-copy-label>Copy</span></button>',

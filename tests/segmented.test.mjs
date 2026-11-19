@@ -14,7 +14,7 @@ const plain = (a) => a === null || (typeof a !== "object" && typeof a !== "funct
 const sizing = (el) => el.calls.filter((call) => !TONE.has(call[0])).map((call) => call.filter(plain));
 const box = (el) => JSON.stringify([sizing(el), el.kids.map(sizing)]);
 
-test("The track is the Storybook's: 2 around its items on the w4 wash, radius 8, items 4 apart; each item radius 6 with 12 inside, the focus border counted in it", async () => {
+test("The track: 2 around its items on the w4 wash, radius 8, items 4 apart; each item radius 6 with 12 inside, the focus border counted in it", async () => {
   const { segmented, tokens, G, H, R } = await kit();
   for (const c of [night, day].map(tokens)) {
     const el = segmented("seg", ITEMS, "day", () => {}, c);

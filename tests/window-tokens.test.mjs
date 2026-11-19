@@ -1,4 +1,3 @@
-// The window's sizes come from the layout tokens, and the Storybook's selection wash, wash-12, marks the active project and the chosen tab.
 import test from "node:test";
 import assert from "node:assert/strict";
 import { load, gpuiHost, chain, calls, arg, find, all, repoText, KIT_NIGHT } from "./helpers.mjs";
@@ -65,14 +64,6 @@ test("A chosen tab wears the selection's wash-12, as the active project and the 
   assert.equal(arg(chosen, "bg"), c.w12);
   assert.equal(calls(other, "bg").length, 0);
   assert.equal(arg(tab("t", items, "a", null, c, { track: true, size: "md" }).kids[0], "bg"), c.w12);
-});
-
-test("The Storybook draws the active project, its rail tile and the chosen tab with wash-12", () => {
-  const css = repoText("stories/primitives.css");
-  for (const selector of [".kanso-project.kanso-control--on", ".kanso-rail__tile.kanso-control--on", ".kanso-tab.kanso-control--on", ".kanso-tab--rest.kanso-control--on", ".kanso-tabs__tab.kanso-tabs__tab--on"]) {
-    const rule = new RegExp(`${selector.replace(/[.-]/g, (ch) => `\\${ch}`)}\\{background:([^;}]+)`).exec(css);
-    assert.equal(rule?.[1], "var(--wash-12)", selector);
-  }
 });
 
 test("No hand-mixed wash is left on the project's pill and the rail tile", () => {

@@ -1,4 +1,3 @@
-// The tab bar as the Storybook draws its tabs: chosen, at rest and waiting, close armed, renaming, dragging, folded, connecting and unreachable.
 import test from "node:test";
 import assert from "node:assert/strict";
 import { load, clone, chain, gpuiHost, calls, arg, find, all, CHROME_NIGHT, texts, repoText, keyboard } from "./helpers.mjs";
@@ -230,7 +229,7 @@ test("An armed close leaves with its x: choosing another tab, here or by a key, 
 test("On an unreachable computer the x is drawn but a press closes nothing", async () => {
   const b = await bar({ machine: "devbox", computers: [{ name: "devbox", layout: "unavailable" }] });
   const close = part(b.view.render(b.cx), "t1", "close");
-  assert.ok(close, "drawn, as the Storybook draws it");
+  assert.ok(close, "drawn");
   assert.equal(calls(close, "on_click").length, 0);
   assert.equal(calls(close, "hover").length, 0);
   assert.deepEqual(b.ran, []);
@@ -315,7 +314,7 @@ test("Two custom panels with one icon each open their own panel, and a custom pa
   assert.equal(b.view.want, "notes");
 });
 
-test("The chosen tab's × is a Button: Tab reaches it, Enter and Space press it, it has the focus ring, and it keeps the Storybook's 16", async () => {
+test("The chosen tab's × is a Button: Tab reaches it, Enter and Space press it, it has the focus ring, and it keeps its 16", async () => {
   const b = await bar();
   const close = part(b.view.render(b.cx), "t1", "close");
   assert.equal(close.tag, `${tabId("t1")}-close`, "a Button, not a bare element");
@@ -450,7 +449,7 @@ test("Moving the drawn doors keeps the slot of a door gh's absence or Settings h
   }
 });
 
-test("A door being dragged is held on the pressed wash with the accent bar where it lands, as the Storybook's Dragging a door", async () => {
+test("A door being dragged is held on the pressed wash with the accent bar where it lands", async () => {
   const b = await bar({ tree: withPanel("pr") });
   pressOf(door(b.view.render(b.cx), "Ports"), "left")(press, b.cx);
   handler(door(b.view.render(b.cx), "Spend"), "on_hover")(true, b.cx);

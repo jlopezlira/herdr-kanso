@@ -4,40 +4,10 @@ import { load, popoverHost, chain, clone, calls, context, texts, everyDrawn, CHR
 import { loadSidebar, mountedState, recorder, world, shell } from "./sidebar-fixtures.mjs";
 import { loadWorkspaceStatus } from "./mod-fixtures.mjs";
 import { paneMenu, tabBar, footer, BINDINGS } from "./menu-fixtures.mjs";
-import catalog from "../stories/catalog.json" with { type: "json" };
+import ROWS from "./fixtures/context-menu-rows.json" with { type: "json" };
 
-const part = (i) => (Array.isArray(catalog.parts[i]) ? catalog.parts[i].map(part).join("") : catalog.parts[i]);
-const record = (id) => catalog.records.find((r) => r.id === id);
 const quotes = (word) => word.replace(/[“”]/g, "\"");
-const decode = (html) => html.replace(/&quot;/g, "\"").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&#39;/g, "'");
-const shownAction = (html) => html.replace(/<span class="kanso-action( kanso-action--armed)?"><span>([^<]*)<\/span><span>([^<]*)<\/span><\/span>/g, (_m, armed, rest, press) => (armed ? press : rest));
-const wordsOf = (html) => decode(html.replace(/<[^>]+>/g, "\n")).split("\n").map((w) => quotes(w.trim())).filter(Boolean);
-const blockAt = (html, at) => {
-  const tags = /<div\b|<\/div>/g;
-  tags.lastIndex = at;
-  for (let depth = 0, tag; (tag = tags.exec(html));) {
-    depth += tag[0] === "</div>" ? -1 : 1;
-    if (!depth) return html.slice(at, tags.lastIndex);
-  }
-  return html.slice(at);
-};
-const MARK_ART = { "e-work": "working", "e-blk": "blocked" };
-const artName = (href) => MARK_ART[href] ?? href.replace(/^lu-/, "");
 const row = ({ lead = [], label = "", hint = "", trail = [] }) => [lead.join(","), quotes(label), hint, trail.join(",")].join(" | ");
-const boardRow = (html) => {
-  const parts = [...html.matchAll(/<use href="#([^"]+)"|<span class="kanso-menu__hint">([^<]*)<\/span>|>([^<>]+)(?=<)/g)];
-  const at = parts.findIndex(([, , , text]) => text?.trim());
-  const art = (list) => list.filter(([, href]) => href).map(([, href]) => artName(href));
-  return row({ lead: art(parts.slice(0, Math.max(at, 0))), label: decode(parts[at]?.[3]?.trim() ?? ""),
-    hint: parts.find(([, , hint]) => hint !== undefined)?.[2] ?? "", trail: art(parts.slice(at + 1)) });
-};
-const boardRows = (block) => [...block.matchAll(/<div class="kanso-menu__(heading|item)[^"]*"[^>]*>([\s\S]*?)<\/div>/g)]
-  .map(([, kind, inner]) => (kind === "heading" ? row({ label: decode(inner.replace(/<[^>]+>/g, "").trim()) }) : boardRow(`>${inner}<`)));
-const boardMenus = (id) => {
-  const html = shownAction(part(record(id).markup).replace(/<style[\s\S]*?<\/style>/g, ""));
-  return [...html.matchAll(/<div class="(?:[^"]*\s)?kanso-menu(?:\s[^"]*)?"/g)].map((m) => blockAt(html, m.index)).map((block) => ({ words: wordsOf(block), rows: boardRows(block) }));
-};
-
 const iconName = (path) => path.split("/").at(-1).replace(/\.svg$/, "");
 const blockedDot = (kid) => calls(kid, "rounded_full").length > 0 && calls(kid, "child").some((call) => call[1] === "!");
 const ownWords = (kid) => kid.calls.filter((call) => call[0] === "child" && typeof call[1] === "string").map((call) => call[1]);
@@ -279,69 +249,23 @@ const CASES = {
   restartArmed: { draw: restartArmed, want: [...SETTINGS_ROWS, "Press again to restart Herdr"] },
 };
 
-const STATES = [
-  ["proto/approved-sidebar-menus/Reference/1", "session"], ["coverage/spaces/AgentMenu/Agent", "session"],
-  ["proto/approved-sidebar-menus/Reference/2", "sessionArmed"], ["coverage/spaces/AgentMenu/Close armed", "sessionArmed"],
-  ["proto/approved-sidebar-menus/Reference/3", "snooze"], ["coverage/spaces/AgentMenu/Snooze picker", "snooze"],
-  ["proto/approved-sidebar-menus/Reference/4", "copy"], ["coverage/spaces/AgentMenu/Copy picker", "copy"],
-  ["proto/approved-sidebar-menus/Reference/5", "move"], ["coverage/spaces/AgentMenu/Move picker", "move"],
-  ["coverage/spaces/AgentMenu/Pinned", "pinned"], ["coverage/spaces/AgentMenu/Settled", "settled"],
-  ["coverage/spaces/AgentMenu/Snoozed", "snoozed"], ["coverage/spaces/AgentMenu/Thread", "thread"],
-  ["proto/approved-sidebar-menus/Reference/6", "project"], ["coverage/spaces/ProjectMenu/Open project", "project"],
-  ["proto/approved-sidebar-menus/Reference/7", "projectArmed"], ["coverage/spaces/ProjectMenu/Remove armed", "projectArmed"],
-  ["coverage/spaces/ProjectMenu/Asleep", ["projectAsleep", "asleepRow"]], ["coverage/spaces/ProjectMenu/Gone", "gone"],
-  ["coverage/spaces/ProjectMenu/Keep", "keep"], ["coverage/spaces/ProjectMenu/Missing folder", "missing"],
-  ["proto/approved-sidebar-menus/Reference/8", "computer"], ["coverage/spaces/ComputerMenu/Connected", "computer"],
-  ["coverage/spaces/ComputerMenu/Sync on", "computer"], ["coverage/spaces/ComputerMenu/Sync pending", "syncPending"],
-  ["coverage/spaces/ComputerMenu/Sync failed", "syncFailed"], ["coverage/spaces/ComputerMenu/Login", "login"],
-  ["coverage/spaces/ComputerMenu/Off", "off"], ["coverage/spaces/ComputerMenu/Unreachable", "unreachable"],
-  ["coverage/spaces/ComputerMenu/Power failed", "powerFailed"],
-  ["proto/approved-sidebar-menus/Reference/9", "asleepRow"], ["proto/approved-sidebar-menus/Reference/10", "noMenu"],
-  ["proto/approved-bars-menus/Reference/1", "bars"], ["coverage/menu/PaneMenu/Rest", "pane"],
-  ["coverage/menu/PaneMenu/Program menu", "paneToProgram"], ["coverage/menu/PaneMenu/Pinned", "panePinned"],
-  ["coverage/menu/PaneMenu/Child terminal", "paneChild"], ["coverage/menu/PaneMenu/Keyboard", "keyboard"],
-  ["proto/approved-bars-new/Reference/1", "plus"],
-  ["proto/approved-hide/Reference/1", "anyPiece"], ["proto/layouts-right-click-any-piece/RightClickAnyPiece/Default", "anyPiece"],
-  ["coverage/chrome/SettingsMenu/Rest", "settings"], ["coverage/chrome/SettingsMenu/Host update", "hostUpdate"],
-  ["coverage/chrome/SettingsMenu/Restart armed", "restartArmed"],
-];
-
-const boardOf = (id) => (record(id).markup !== undefined ? id : record(id).design ?? null);
 const menusOf = (want) => (Array.isArray(want[0]) ? want : [want]).map((menu) => menu.map(quotes));
 
-test("The table holds every state on Layouts/Context menus", () => {
-  const page = catalog.records.filter((r) => r.page === "Layouts/Context menus" && (r.markup !== undefined || r.gap || r.design)).map((r) => r.id).toSorted();
-  assert.deepEqual(STATES.map(([id]) => id).toSorted(), page);
-});
-
-for (const [id, keys] of STATES) for (const key of [keys].flat()) {
-  const { draw, want, skip, own } = CASES[key];
-  const board = own ? null : boardOf(id);
-  test(`${record(id).label}${own ? ", the project's own rows" : ""}: the app draws ${board ? "its board's" : "its"} rows in order`, { skip }, async () => {
-    const wanted = menusOf(want);
+for (const [key, { draw, want, skip, own }] of Object.entries(CASES)) {
+  test(`${key}${own ? ", the project's own rows" : ""}: the app draws its rows in order`, { skip }, async () => {
     const drawn = await draw();
-    assert.deepEqual(drawn.map((menu) => menu.words.map(quotes)), wanted);
-    if (!board) return;
-    for (const [i, menu] of wanted.entries()) {
-      const same = boardMenus(board).find((one) => JSON.stringify(one.words) === JSON.stringify(menu));
-      assert.ok(same, `the board draws this menu whole: ${menu.join(" | ")}`);
-      assert.deepEqual(drawn[i].rows, same.rows, `${menu[0]}: each row's art, label and key, as the board draws them`);
-    }
+    assert.deepEqual(drawn.map((menu) => menu.words.map(quotes)), menusOf(want));
+    assert.deepEqual(drawn.map((menu) => menu.rows), ROWS[key], "each row's leading art, label, key hint and trailing art, in order");
   });
 }
 
-test("A pane whose Close is pressed once keeps every row and Close's key, as the Light example's armed pane does", async () => {
+test("A pane whose Close is pressed once keeps every row and Close's key", async () => {
   const menu = await paneMenu({ keys: BINDINGS, pane: { name: "tests" } });
   const close = everyDrawn(menu.view.render()).find((kid) => calls(kid, "accessibility_label").some((call) => call[1] === "Close pane"));
   calls(close, "on_click").at(-1).at(-1)({}, { notify() {}, timer: { after() {} } });
   const drawn = texts(menu.view.render());
   assert.deepEqual(drawn, PANE_ROWS("tests", "Pin", AGENT_ROWS).map((word) => (word === "Close pane" ? "Press again to close tests" : word)));
   assert.ok(!menu.closed.includes("pane.close"), "the first press only arms");
-  const light = boardMenus("proto/approved-bars-menus/Reference/1").at(-1).words;
-  assert.equal(light[0], "tests", "the Light example is the bars board's last menu");
-  assert.ok(light.every((word, i) => drawn.indexOf(word) > (i ? drawn.indexOf(light[i - 1]) : -1)), `the Light example's rows come in the app's order: ${light.join(" | ")}`);
-  const [label, key] = light.slice(-2);
-  assert.deepEqual(drawn.slice(drawn.indexOf(label), drawn.indexOf(label) + 2), [label, key], "the armed row and its key are the Light example's");
 });
 
 test("A tab's menu writes no shortcut for New tab or Close tab when neither is bound", async () => {

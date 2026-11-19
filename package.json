@@ -21,25 +21,6 @@
     "build:issue-forms": "node scripts/build-issue-forms.mjs",
     "build:ui-tokens": "node scripts/build-ui-tokens.mjs",
     "check:tokens": "node scripts/check-tokens.mjs",
-    "check:dupes": "node scripts/check-dupes.mjs",
-    "storybook": "storybook dev -p 6006",
-    "build-storybook": "storybook build && node scripts/storybook-manifest.mjs",
-    "build:stories": "node scripts/storybook-catalog.mjs",
-    "lint:storybook": "node scripts/lint-storybook.mjs"
-  },
-  "devDependencies": {
-    "storybook": "^10.6.7",
-    "@storybook/html-vite": "^10.6.7",
-    "@storybook/addon-vitest": "^10.6.7",
-    "@storybook/addon-a11y": "^10.6.7",
-    "@storybook/addon-docs": "^10.6.7",
-    "vitest": "latest",
-    "@vitest/browser-playwright": "latest",
-    "@vitest/coverage-v8": "latest",
-    "playwright": "latest",
-    "postcss": "^8.5.32",
-    "@storybook/addon-mcp": "^10.6.7",
-    "storybook-addon-tag-badges": "3.1.0",
-    "jsdom": "29.1.1"
+    "check:dupes": "node scripts/check-dupes.mjs"
   }
 }

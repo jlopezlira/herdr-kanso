@@ -3,7 +3,6 @@ import { loadToast, loadTokens } from "./mod-fixtures.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { load, clone, nodes, texts, svgsOf, calls, arg, numberArguments, drawingHost, KIT_NIGHT } from "./helpers.mjs";
-import { toast as storybookToast } from "../stories/kit/pieces.js";
 
 // Herdr's side: posting opens a copy of the mod with the notification as its props.
 async function screen(clock = null) {
@@ -191,24 +190,22 @@ test("Pressing the fix word runs the command once and closes the toast", async (
 
 // Each Notice state on the Toast page: the notification Herdr gives, and what both kits draw from the same props.
 const NOTICES = {
-  Failure: [{ level: "error", title: "Couldn't pull checkout", body: "not a fast-forward", action: { name: "x", args: { label: "Retry" } } }, "kanso-mark--blocked"],
-  Information: [{ level: "info", title: "kansō is up to date" }, "kanso-fill--accent"],
-  "Long source": [{ level: "error", title: "Couldn't push feat/checkout-countdown-with-a-very-long-branch-name to origin", body: "remote: rejected" }, "kanso-mark--blocked"],
-  Success: [{ level: "success", title: "Merged #142" }, "#lu-check"],
-  Warning: [{ level: "warning", title: "GitHub is slow to answer" }, "kanso-fill--working"],
-  "With action": [{ level: "success", title: "kansō 3.31.0 is ready", action: { name: "y", args: { label: "Update" } } }, "#lu-check"],
+  Failure: { level: "error", title: "Couldn't pull checkout", body: "not a fast-forward", action: { name: "x", args: { label: "Retry" } } },
+  Information: { level: "info", title: "kansō is up to date" },
+  "Long source": { level: "error", title: "Couldn't push feat/checkout-countdown-with-a-very-long-branch-name to origin", body: "remote: rejected" },
+  Success: { level: "success", title: "Merged #142" },
+  Warning: { level: "warning", title: "GitHub is slow to answer" },
+  "With action": { level: "success", title: "kansō 3.31.0 is ready", action: { name: "y", args: { label: "Update" } } },
 };
 
-test("Each Notice state gives the Storybook's toast and the app's the same props, and both draw its lead, sentence and fix", async () => {
+test("Each Notice state draws its sentence, its detail as the tooltip and its fix", async () => {
   const { toastOf } = await load("kanso-toast/toast-model.js", ["toastOf"]);
-  for (const [state, [notification, lead]] of Object.entries(NOTICES)) {
+  for (const [state, notification] of Object.entries(NOTICES)) {
     const props = clone(toastOf(notification));
-    const markup = storybookToast(props);
-    assert.ok(markup.includes(lead), `${state}: the Storybook draws ${lead}`);
-    assert.ok(markup.includes(`title="${notification.body ?? notification.title}"`), `${state}: the detail is the tooltip`);
     const shown = await drawn(notification);
     assert.deepEqual([shown.words.includes(notification.title), shown.tip], [true, props.detail], state);
-    assert.equal(shown.words.includes(props.action), Boolean(props.action) && markup.includes(`>${props.action}<`), `${state}: the fix in both`);
+    assert.equal(props.detail, notification.body ?? notification.title, `${state}: the detail is the tooltip`);
+    assert.equal(shown.words.includes(props.action), Boolean(props.action), `${state}: the fix`);
   }
 });
 

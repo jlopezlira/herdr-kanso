@@ -87,20 +87,9 @@ const COMMON = [
   { source: "kanso/mods/kanso-panel/remote-file.js", copies: ["markdown-panel/mods/markdown-panel/remote-file.js"] },
   // One wake when a panel that was behind, or hidden, is in front again.
   { source: "kanso/mods/kanso-panel/front.js", copies: ["kanso/mods/kanso-containers/front.js", "kanso/mods/kanso-sim/front.js"] },
-  // Storybook compositions the app draws as they are, each in the mod that draws it.
-  { source: "stories/kit/session-row.js", copies: ["kanso/mods/kanso-spaces/session-row.js"] },
-  { source: "stories/kit/project-row.js", copies: ["kanso/mods/kanso-spaces/project-row.js"] },
-  { source: "stories/kit/computer-row.js", copies: ["kanso/mods/kanso-spaces/computer-row.js"] },
-  { source: "stories/kit/section.js", copies: ["kanso/mods/kanso-spaces/section.js"] },
-  { source: "stories/kit/asleep.js", copies: ["kanso/mods/kanso-spaces/asleep.js"] },
-  { source: "stories/kit/tile.js", copies: ["kanso/mods/kanso-spaces/tile.js"] },
-  { source: "stories/kit/view-switch.js", copies: ["kanso/mods/kanso-spaces/view-switch.js"] },
-  { source: "stories/kit/toolbar.js", copies: ["kanso/mods/kanso-spaces/toolbar.js"] },
-  { source: "stories/kit/header.js", copies: ["kanso/mods/kanso-spaces/header.js", "kanso/mods/kanso-chrome/header.js"] },
-  { source: "stories/kit/sidebar-footer.js", copies: ["kanso/mods/kanso-chrome/sidebar-footer.js", "kanso/mods/kanso-tabs/sidebar-footer.js"] },
-  { source: "stories/kit/status-bar.js", copies: ["kanso/mods/kanso-status/status-bar.js", "kanso/mods/kanso-strip/status-bar.js"] },
-  { source: "stories/kit/activity.js", copies: ["kanso/mods/kanso-spaces/activity.js"] },
-  { source: "stories/kit/tab-bar.js", copies: ["kanso/mods/kanso-tabs/tab-bar.js"] },
+  { source: "kanso/mods/kanso-spaces/header.js", copies: ["kanso/mods/kanso-chrome/header.js"] },
+  { source: "kanso/mods/kanso-chrome/sidebar-footer.js", copies: ["kanso/mods/kanso-tabs/sidebar-footer.js"] },
+  { source: "kanso/mods/kanso-status/status-bar.js", copies: ["kanso/mods/kanso-strip/status-bar.js"] },
   { source: "kanso/mods/kanso-panel/blocks.js", copies: ["markdown-panel/mods/markdown-panel/blocks.js"] },
   { source: "kanso/mods/kanso-tabs/markdown-handler.sh", copies: ["markdown-panel/mods/markdown-panel/markdown-handler.sh"] },
 ];

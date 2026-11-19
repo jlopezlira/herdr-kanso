@@ -1,10 +1,8 @@
-// The sidebar's project, computer, section and asleep rows: the Storybook's compositions, copied as they are and drawn by the app kit.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { load, nodes, texts, tipsOf, themed, KIT_NIGHT, drawingHost, drawn, clone, repoText, sameCopies } from "./helpers.mjs";
+import { load, nodes, texts, tipsOf, themed, KIT_NIGHT, drawingHost, drawn, clone, repoText } from "./helpers.mjs";
 import { loadSidebar, mountedState, recorder } from "./sidebar-fixtures.mjs";
 
-const FILES = ["project-row", "computer-row", "section", "asleep"];
 const read = repoText;
 const compositions = async () => themed({
   ...await load("kanso-spaces/project-row.js", ["projectRow"], drawingHost()),
@@ -15,10 +13,6 @@ const compositions = async () => themed({
   kit: await load("kanso-panel/kit.js", ["row", "list", "phrase"], drawingHost()),
 }, KIT_NIGHT);
 const cx = { stop_propagation() {}, notify() {}, timer: { after() {} } };
-
-test("The sidebar's copies of the project, computer, section and asleep rows are the Storybook's, byte for byte", () => {
-  sameCopies(FILES);
-});
 
 test("Each composition is the kit row with its own props: the app draws what a hand-made kit row with those props draws", async () => {
   const { projectRow, computerRow, section, asleep, kit, c } = await compositions();
@@ -36,7 +30,7 @@ test("Each composition is the kit row with its own props: the app draws what a h
   assert.ok(nodes(worktree).some((kid) => kid.calls.some((call) => call[0] === "svg" && call[1].endsWith("git-branch.svg"))), "a worktree leads with its branch");
 });
 
-test("A computer row shows its Storybook state: Turn on when off, Refresh when unreachable, Sign in for a login, and its tools only when on", async () => {
+test("A computer row shows its state: Turn on when off, Refresh when unreachable, Sign in for a login, and its tools only when on", async () => {
   const { computerRow, c } = await compositions();
   const shown = (props) => tipsOf(computerRow({ name: "dark", ...props })("m", c));
   assert.deepEqual(shown({ state: "off" }), ["Turn dark on"]);

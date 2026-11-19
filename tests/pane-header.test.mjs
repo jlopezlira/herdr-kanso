@@ -1,4 +1,3 @@
-// The pane header as the Storybook draws it: how it folds, its tools and ⋯, each state, the failure line and the refresh pending.
 import test from "node:test";
 import assert from "node:assert/strict";
 import { load, clone, chain, gpuiHost, failure, success, calls, arg, find, all, CHROME_NIGHT, fieldWith, texts } from "./helpers.mjs";

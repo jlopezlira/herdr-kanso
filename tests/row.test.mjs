@@ -1,9 +1,8 @@
-// The row: one named item with its facts, mark and tools, in every state its Storybook story shows.
 import { loadRow, loadPendingState } from "./mod-fixtures.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { load, chain, numberArguments, calls, one, styled, themed, KIT_NIGHT, drawingHost, svgsOf as svgs } from "./helpers.mjs";
-import { marks, rowDepths } from "../stories/kit/pieces.js";
+import { load, chain, numberArguments, calls, one, styled, themed, KIT_NIGHT, drawingHost, svgsOf as svgs, STATUSES } from "./helpers.mjs";
+const rowDepths = [0, 1, 2];
 
 const kit = async () => themed({
   ...await load("kanso-panel/ui.js", ["tokens", "G", "H", "R", "T", "ICON_ROW", "ICON_INLINE", "CLEAR", "SPIN"], drawingHost()),
@@ -103,7 +102,7 @@ test("Two lines put the second fact under the name in the meta size, dim, in the
 test("The mark closes the row in every state the kit draws, and none draws nothing", async () => {
   const { row, c } = await kit();
   const last = (el) => line(el).kids.at(-1);
-  for (const status of Object.keys(marks)) assert.ok(last(row("r", c, { name: "Nova", chip: 2, mark: status })), status);
+  for (const status of STATUSES) assert.ok(last(row("r", c, { name: "Nova", chip: 2, mark: status })), status);
   assert.deepEqual(texts(last(row("r", c, { name: "Nova", chip: 2, mark: "none" }))), ["2"], "with no mark the chip ends the row");
 });
 
