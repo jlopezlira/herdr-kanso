@@ -189,7 +189,7 @@ export default class Tabs extends View {
     };
     const deadline = cx.timer.after(PROBE_MS, (late) => { this.simRunning = false; finish(UNKNOWN_TOOLS, late); });
     cx.spawn(async (task) => {
-      const tools = await probeTools(window()?.platform ?? "macos", home(), exec).catch(() => FAILED_TOOLS);
+      const tools = await probeTools(window()?.platform ?? "macos", home(), exec, () => this.simProbe === probe && !this.simSettled).catch(() => FAILED_TOOLS);
       if (this.simProbe === probe) this.simRunning = false;
       deadline.cancel(); finish(tools, task); task.notify();
     });
