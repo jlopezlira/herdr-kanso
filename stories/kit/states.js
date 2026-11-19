@@ -3,7 +3,7 @@ import { dojo, edge, keyboard, keyboardExplorer, keyboardSystems, panel, panelBa
 import { tabBar } from './tab-bar.js';
 import { computerItem, layoutPaused, paletteDoor } from './status-bar.js';
 import { emptyState, phrase, failureBlock, keycap, metric, needsItem, row, skeletonOf, stack, statusItem, stepper, tabs } from './pieces.js';
-import { atWidth, inBar } from './frames.js';
+import { atWidth, inBar, toolsRoom } from './frames.js';
 import { toolbar } from './toolbar.js';
 import { keyLayer, keyLayerMods, paletteTip, sampleColumns, sampleDojo, samplePanel, samplePanelHeader, sampleAddMenu, sampleSortMenus, statusMenus, statusPanels, unreachable } from './samples.js';
 
@@ -93,7 +93,7 @@ export const statedPages = {
     args: { view: 'spaces', column: false, open: false, sorted: false, order: null, menu: false, add: false },
     markup: ({ menu: shown, add, ...args }) => {
       const bar = toolbar({ ...args, sortMenu: shown ? sampleSortMenus[args.view]() : null, addMenu: add ? sampleAddMenu() : null });
-      return shown || add ? `<div class="kanso-story__tools-room">${bar}</div>` : bar;
+      return shown || add ? toolsRoom(bar) : bar;
     },
     states: [
       { label: 'Projects', args: {}, caption: 'Sidebar open on Projects: + adds a project.' },

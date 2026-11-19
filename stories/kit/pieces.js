@@ -41,10 +41,10 @@ export const avatar = ({ initial, image, size, tone }) => {
   return `<span class="kanso-avatar kanso-avatar--round${avatarSizes[size] ?? ""}${tone ? ` kanso-text--host-${escape(tone)}` : ""}">${picture}${escape(initial.slice(0, 1))}</span>`;
 };
 
-// `initial`: the avatar's letter, none when empty; `where`: a path in mono; `step`: what it was doing; `content`: pieces in place of the prose `body`.
 export const card = ({ author, image, age, body, loading, initial = author, where = '', step = '', content = '' }) => {
   const header = author ? `<div class="kanso-card__header">${initial ? avatar({ initial, image, size: 'md' }) : ''}<b>${escape(author)}</b>${step ? `${iconSvg('lu-chevron-right', 'inline', 'dim')}<span class="kanso-text--muted">${escape(step)}</span>` : ''}${where ? `<span class="kanso-text--dim kanso-text--code">${escape(where)}</span>` : ''}${grow()}<span class="kanso-text--dim">${escape(age)}</span></div>` : '';
-  return `<div class="kanso-card${loading ? ' kanso-skeleton--shape' : ''}">${header}${content || `<div class="kanso-prose">${escape(body)}</div>`}</div>`;
+  const prose = body === undefined ? '' : `<div class="kanso-prose">${escape(body)}</div>`;
+  return `<div class="kanso-card${loading ? ' kanso-skeleton--shape' : ''}">${header}${content}${prose}</div>`;
 };
 
 const syntax = /("[^"\n]*"|'[^'\n]*'|`[^`]*`)|\b(\d+)\b|\b(import|from|export|default|function|const|let|var|return|if|else|for|while|async|await|new|class)\b/g;
@@ -124,6 +124,7 @@ export const menu = ({ title, items }) => {
   const rows = (Array.isArray(items) ? items : []).map((item) => {
     if (item.separator) return '<div class="kanso-menu__separator"></div>';
     if (item.heading) return `<div class="kanso-menu__heading">${escape(item.heading)}</div>`;
+    if (item.note) return `<div class="kanso-menu__note">${item.note}</div>`;
     const lead = item.icon ? glyph(item.icon) : '<span class="kanso-menu__spacer"></span>';
     const classes = `kanso-menu__item${item.armed ? ' kanso-action--armed' : item.selected ? ' kanso-control--selected' : item.hover ? ' kanso-control--hover' : ''}`;
     const label = item.armed ? `Press again to ${escape(item.verb || String(item.label ?? '').toLowerCase())}` : escape(item.label ?? '');

@@ -113,6 +113,24 @@ export const guidelines = {
   "Compositions/Sidebar/Tile": [
     ["Kansō", "A group in the rail.", "An Avatar with the project’s initial, or the state’s Mark, and a quiet Chip with how many."],
   ],
+  "Compositions/Switcher": [
+    ["Yūgen", "Nothing at rest.", "It shows only while ⌃ is held; one tap of ⌃Tab and letting go returns to the session you were in before, with no list seen."],
+    ["Kansō", "One Menu, one fact per row.", "Program, name, place and the mark the session row already has. No model, context or time: they live on the session row."],
+    ["Kokō", "Colour only on who asks.", "The order is most recent first, never by state; a blocked mark is the only colour."],
+    ["Kansō", "Every session one press away.", "Tab and ⇧Tab move, ↑ and ↓ too, Enter or a click lands, Esc closes; on macOS it stays ⌃Tab, since ⌘Tab is the system's."],
+  ],
+  "Panels/To-do": [
+    ["Kansō", "One row, one to-do.", "The circle ticks, the text, then the due time; Send, Edit and Delete only under the pointer or the keyboard."],
+    ["Shizen", "Written where kansō already reads.", "One table in kanso.db through kdb.js, one list per project's main checkout, so its worktrees share it; conversations write the same rows."],
+    ["Kokō", "Colour only on what is late.", "A due time that has passed turns blocked; nothing else is coloured."],
+  ],
+  "Panels/Timeline": [
+    ["Kansō", "One card per prompt.", "The prompt and its time, then how long, tokens, files and commands, then the reply's first sentence."],
+    ["Yūgen", "The turn in progress is live.", "Its time and tokens tick with the working mark; finished turns come from the conversation file."],
+  ],
+  "Compositions/Resume": [
+    ["Kansō", "One list, newest first.", "Every program's past conversations together; the program's icon tells them apart. A pick opens it in its own project."],
+  ],
   "Compositions/Sidebar/Footer": [
     ["Kokō", "Rows with an icon.", "An update when there is one, then Settings. Add computer lives in a computer's menu: the footer configures, it does not create."],
   ],

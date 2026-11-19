@@ -9,3 +9,4 @@ const width = (value) => {
 export const atWidth = (value, markup) => `<div class="kanso-story__bar ${width(value)}">${markup}</div>`;
 export const inStrip = (value, markup) => `<div class="kanso-story__strip ${width(value)}">${markup}</div>`;
 export const inBar = (value, parts) => atWidth(value, statusBar(parts));
+export const toolsRoom = (markup) => `<div class="kanso-story__tools-room">${markup}</div>`;

@@ -94,6 +94,7 @@
 @media (prefers-reduced-motion: reduce) { .kanso-skeleton.kanso-tokens__skeleton, .kanso-tokens__glide i, .kanso-tokens__beat { animation: none; } }
 .kanso-story__gallery { display: flex; flex-direction: column; gap: var(--k-sp-6); padding: var(--k-sp-4); }
 .kanso-story__variant-label { margin: 0 0 var(--k-sp-2); font-size: var(--k-fs-meta); font-weight: var(--k-fw-medium); color: var(--dim); }
+.kanso-story__variant-caption { margin: 0 0 var(--k-sp-2); font-size: var(--k-fs-meta); color: var(--muted); }
 .sbdocs.sbdocs-content { max-width: none; }
 .kanso-story__viewport:has(.kanso-tokens), .kanso-story__viewport:has(.kanso-tokens) :is(.kanso-story, .kanso-story__frame) { width: 100%; }
 .kanso-story--free > .kanso-panel > .kanso-card:first-child { margin-top: 0; }
