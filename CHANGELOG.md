@@ -116,6 +116,7 @@ the branch's rules.
 ### Fixed
 
 - In the + menu, Enter runs a row reached with Tab when no row was chosen with the arrow keys. (#233)
+- An update that stopped names the file it could not move, remove, create, read or lock, and stops without moving into or removing a destination it did not create. A live file it does not own is left in place and named with the backup and the staged copy. It waits only when a file is still open. (#405)
 - While kansō updates, the update row in the sidebar footer turns its icon, takes no press, and no longer keeps a thick border around it. (#404)
 - Cmd+1 to Cmd+9 choose the tabs the tab bar shows, counted without the ones asleep. A number past the last tab does nothing, instead of stacking a "tab.select failed" notice for each press. On Windows, Ctrl+1 to Ctrl+9. (#331)
 - The Pull requests panel no longer stops on "cx is no longer valid" after listing pull requests, and a rejected inbox step no longer stops Refresh or leaves its "Could not keep pull requests" note after a later read succeeds. (#338)
