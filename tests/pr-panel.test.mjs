@@ -1,4 +1,4 @@
-import { loadPullRequest, loadTokens } from "./mod-fixtures.mjs";
+import { classOf, loadPullRequest, loadTokens, recordPairs, recordsFor } from "./mod-fixtures.mjs";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { mkdir } from "node:fs/promises";
@@ -28,11 +28,11 @@ const panelOn = async (exec, host = {}, state = {}) => {
   return { panel, ...await refreshedContext(panel) };
 };
 
-const sendingPanel = async (hc, agent = { status: "working" }, toasts = []) => {
+const sendingPanel = async (hc, agent = { status: "working" }, toasts = [], records = null) => {
   const { PullRequest } = await loadPullRequest({
     focused: () => ({ terminal: "t1" }),
-    panes: () => [{ terminal: "t1", status: agent.status, program: { agent: true, name: "checkout" } }],
-    terminals: () => [{ address: "t1", status: agent.status, program: { agent: true, name: "checkout" } }],
+    panes: () => records?.panes ?? [{ terminal: "t1", status: agent.status, program: { agent: true, name: "checkout" } }],
+    terminals: () => records?.terminals ?? [{ address: "t1", status: agent.status, program: { agent: true, name: "checkout" } }],
     hc, notify: (toast) => toasts.push(toast),
   });
   const panel = new PullRequest();
@@ -84,6 +84,20 @@ test("A send the agent never confirms in time says Not confirmed, never Not sent
   assert.match(said, /Not confirmed/);
   assert.match(said, /it may have arrived/);
   assert.doesNotMatch(said, /Not sent/);
+});
+
+test("The pull request panel sends only to an agent every record agrees on, whatever the terminal and pane say", async () => {
+  for (const [term, pane] of recordPairs) {
+    const sent = [];
+    const { panel, cx, drain } = await sendingPanel(async (args) => { sent.push(args); return success(""); }, undefined, [], recordsFor(term, pane));
+    const kind = classOf(term, pane);
+    const agent = panel.frontAgent();
+    assert.deepEqual([agent.isAgent, agent.blocked], [kind === "ready" || kind === "waiting", kind === "waiting"], `${term} + ${pane}`);
+    panel.send(cx);
+    panel.send(cx);
+    await drain();
+    assert.equal(sent.some(([verb]) => verb === "send"), kind === "ready", `${term} + ${pane}: sent only when ready`);
+  }
 });
 
 test("Sign in opens gh auth login in the space already on screen", async () => {

@@ -17,7 +17,7 @@ import { button, quietLink, iconButton } from "./ui-button.js";
 import { row } from "./ui-row.js";
 import { emptyState, skeletonOf, thumbnail } from "./kit.js";
 import { programIcon, givenNames, nameOf } from "./marks.js";
-import { deliver, isAgent, sendKey, waitingNote, NOT_CONFIRMED, MAY_HAVE_ARRIVED } from "./deliver.js";
+import { deliver, classify, sendKey, waitingNote, NOT_CONFIRMED, MAY_HAVE_ARRIVED } from "./deliver.js";
 import { openPath, toPng } from "./share.js";
 import { mentions, resolvePath, itemOf, shows, arrived, pinFrom, aboutMessage, noted, keyOf, colorOf, indexRows } from "./look-model.js";
 import { walkLayout } from "./layout.js";
@@ -40,7 +40,7 @@ const NO_AGENT = "No agent in focus";
 function live(address) {
   if (!address) return null;
   const term = terminals().find((k) => k.address === address);
-  return term && isAgent(term, panes().find((q) => q.terminal === address)) ? address : null;
+  return ["ready", "waiting"].includes(classify([term, panes().find((q) => q.terminal === address)])) ? address : null;
 }
 
 export class Look {
@@ -465,16 +465,16 @@ export class Look {
   who(address) {
     const k = terminals().find((x) => x.address === address);
     const pane = panes().find((q) => q.terminal === address);
-    return { name: k?.labels?.["kanso.shown"] || nameOf(pane ?? { terminal: address }, givenNames()), status: k?.status ?? pane?.status ?? null, pane };
+    return { name: k?.labels?.["kanso.shown"] || nameOf(pane ?? { terminal: address }, givenNames()), status: k?.status ?? pane?.status ?? null, pane, kind: classify([k, pane]) };
   }
 
   send(cx) {
     const item = this.selected, address = this.agent(), pins = this.pins;
     if (!noted(pins).length || !item || this.sending) return;
     const key = this.pinKey(item.path, address);
-    if (!address) { this.note = { error: true, text: "No agent to send to" }; cx.notify(); return; }
-    const { name, status } = this.who(address);
-    if (status === "blocked") { this.note = { error: true, text: waitingNote([name]) }; cx.notify(); return; }
+    const { name, kind } = address ? this.who(address) : {};
+    if (kind === "waiting") { this.note = { error: true, text: waitingNote([name]) }; cx.notify(); return; }
+    if (kind !== "ready") { this.note = { error: true, text: "No agent to send to" }; cx.notify(); return; }
     const picture = this.shown?.path === item.path ? this.shown.picture : undefined;
     this.sending = true; cx.notify();
     cx.spawn(async (cx) => {

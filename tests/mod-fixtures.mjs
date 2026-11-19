@@ -123,3 +123,24 @@ export async function openedSend(host, { from = null, to = null, text = "hi", qu
   });
   return Object.assign(new Send(), { from, to, toProject: null, text, error: null, sending: false, unsure: [], handle: {}, query: typed(query), box: typed(text, true) });
 }
+
+const RECORD = {
+  agent: { status: "idle", program: { agent: true, name: "claude" } },
+  blocked: { status: "blocked", program: { agent: true, name: "claude" } },
+  shell: { program: { name: "zsh", shell: true } },
+  lingering: { status: "idle", program: { name: "zsh", shell: true } },
+  ended: { state: "exited", status: "idle", program: { agent: true, name: "claude" } },
+  missing: null,
+};
+export const RECORD_KINDS = Object.keys(RECORD);
+export const recordsFor = (term, pane, address = "t1", extra = {}) => ({
+  terminals: RECORD[term] ? [{ address, state: "live", labels: {}, ...extra, ...RECORD[term] }] : [],
+  panes: RECORD[pane] ? [{ pane: "p1", terminal: address, ...RECORD[pane] }] : [],
+});
+export const classOf = (term, pane) => {
+  const both = [term, pane];
+  if (both.some((kind) => kind === "shell" || kind === "lingering")) return "shell";
+  if (both.includes("ended") || both.every((kind) => kind === "missing")) return "gone";
+  return both.includes("blocked") ? "waiting" : "ready";
+};
+export const recordPairs = RECORD_KINDS.flatMap((term) => RECORD_KINDS.map((pane) => [term, pane]));

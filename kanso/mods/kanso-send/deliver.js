@@ -4,9 +4,17 @@
 import { hc } from "herdr";
 import { bounded } from "./pure.js";
 
-// Only an agent takes text: it reports a status or Herdr knows its program as one. A shell would run the text.
-// `infos`: the terminal and its pane, either may be missing.
-export const isAgent = (...infos) => infos.some((x) => Boolean(x?.status || x?.program?.agent));
+const saysShell = (record) => record.program?.shell === true || Boolean(record.program && !record.program.agent && !record.status);
+const saysAgent = (record) => Boolean(record.status || record.program?.agent);
+
+export function classify(records, { reachable = true, complete = true } = {}) {
+  const known = records.filter(Boolean);
+  if (known.some(saysShell)) return "shell";
+  if (known.some((record) => record.state && record.state !== "live")) return "gone";
+  if (!known.some(saysAgent)) return !reachable ? "unreachable" : complete ? "gone" : "unknown";
+  if (known.some((record) => record.status === "blocked")) return "waiting";
+  return reachable ? "ready" : "unreachable";
+}
 
 // Cmd+Enter (Ctrl+Enter off macOS) sends.
 export const sendKey = (e) => e?.key === "enter" && Boolean(e.modifiers?.platform || e.modifiers?.control);

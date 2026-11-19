@@ -54,7 +54,7 @@ export default class Send extends View {
 
   press(cx, drawn) {
     const now = this.state();
-    const aim = (state) => JSON.stringify([state.recipients, state.waiting].map((list) => list.map((x) => x.terminal)));
+    const aim = (state) => JSON.stringify([state.recipients, state.waiting].map((list) => list.map((x) => x.terminal).toSorted()));
     if (aim(now) !== aim(drawn)) { cx.notify(); return; }
     this.send(cx, now);
   }
@@ -100,7 +100,7 @@ export default class Send extends View {
             : q.status === "blocked" ? { text: "Needs you", tone: "blocked" } : null);
     // A program with no art of its own takes the terminal's, so every name starts at the same place.
     const agent = (q) => row({
-      icon: q.program?.icon ? q.program : "terminal", tone: "muted", name: q.label, detail: q.pane?.branch ?? null,
+      icon: q.program?.icon ? q.program : "terminal", tone: "muted", name: q.title, detail: q.pane?.branch ?? null,
       meta: meta(q), mark: q.status, current: !this.toProject && q.terminal === this.to,
     })(`to-${q.terminal}`, c, { onClick: (cx) => this.pick(cx, () => { this.to = q.terminal; this.toProject = null; }) });
     const from = this.from ? `From ${name(this.from)}${this.from.cwd ? `, in ${shortFolder(this.from.cwd)}` : ""}` : "";

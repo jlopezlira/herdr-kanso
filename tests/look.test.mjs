@@ -1,4 +1,4 @@
-import { loadLook, loadPanelKdb, loadShareImages } from "./mod-fixtures.mjs";
+import { classOf, loadLook, loadPanelKdb, loadShareImages, recordPairs, recordsFor } from "./mod-fixtures.mjs";
 import assert from "node:assert/strict";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { mkdir, readdir, readFile, stat, unlink, writeFile } from "node:fs/promises";
@@ -28,10 +28,11 @@ const pinNote = ({ look, cx, say }, note) => {
   say(note);
   look.render(cx);
 };
-const sendPinned = async (shown, note) => {
+const sendPinned = async (shown, note, before = () => {}) => {
   shown.look.ask(SHOT, shown.cx);
   await shown.drain();
   pinNote(shown, note);
+  before(shown.world);
   shown.look.send(shown.cx);
   await shown.drain();
 };
@@ -325,6 +326,17 @@ test("Look says a send Herdr stopped at its time limit is not confirmed, never n
   assert.equal(look.note.error, true);
   assert.equal(look.sending, false);
   assert.equal(look.pins.length, 1, "the pins stay, as for any send that did not go");
+});
+
+test("Images sends a pinned note only to an agent every record agrees on, and says when it waits", async () => {
+  for (const [term, pane] of recordPairs) {
+    const shown = await panel();
+    await sendPinned(shown, "crop it", (world) => Object.assign(world, recordsFor(term, pane, "t1", { cwd: "/repo" })));
+    const kind = classOf(term, pane);
+    assert.equal(shown.calls.some((c) => c[0] === "hc" && c[1] === "send"), kind === "ready", `${term} + ${pane}: sent only when ready`);
+    if (kind === "waiting") assert.match(shown.look.note.text, /waiting on its own question/, `${term} + ${pane}`);
+    if (kind === "shell" || kind === "gone") assert.equal(shown.look.note.text, "No agent to send to", `${term} + ${pane}`);
+  }
 });
 
 test("Look never takes a shell as the one to send to: it would run the note", async () => {
