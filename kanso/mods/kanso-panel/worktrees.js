@@ -26,17 +26,17 @@ import { worktreesMemory } from "./panel-state.js";
 
 const TEMP = ["/private/tmp", "/tmp"];
 
-export function rootsFor(folders, homeDir, chosen) {
+export function rootsFor(folders, homeDir, chosen, temp = []) {
   if (Array.isArray(chosen) && chosen.some((s) => typeof s === "string" && paths.isAbsolute(s))) {
     return [...new Set(chosen.filter((s) => typeof s === "string" && paths.isAbsolute(s)))];
   }
   const roots = folders.flatMap((f) => {
-    if (typeof f !== "string" || !paths.isAbsolute(f)) return [];
+    if (typeof f !== "string" || !paths.isAbsolute(f) || [...TEMP, ...temp].some((t) => inside(t, f))) return [];
     if (paths.within(f, homeDir)) {
       const top = paths.relative(homeDir, f).split(/[\\/]/)[0];
       return top && !top.startsWith(".") ? [paths.join(homeDir, top)] : [];
     }
-    return f !== homeDir && !TEMP.some((t) => paths.within(f, t)) ? [f] : [];
+    return f !== homeDir ? [f] : [];
   });
   return [...new Set(roots)];
 }
@@ -91,7 +91,10 @@ export function parseProbe(out) {
   }, start);
 }
 
-const foldersInUse = () => [...spaces().filter((s) => !s.machine).map((s) => s.folder), ...panes().map((p) => p.cwd)];
+const foldersInUse = () => {
+  const local = spaces().filter((s) => !s.machine), tabs = new Set(local.flatMap((s) => (s.tabs ?? []).map((t) => t.id)));
+  return [...local.map((s) => s.folder), ...panes().filter((p) => tabs.has(p.tab)).map((p) => p.cwd)];
+};
 
 // The order of the checks decides the state.
 export function stateOf(w) {
@@ -364,8 +367,8 @@ export class Worktrees {
   }
 
   roots() {
-    const chosen = shared("kanso.worktrees.roots"), roots = rootsFor(foldersInUse(), home(), chosen);
-    return { roots, search: roots.length && Array.isArray(chosen) && chosen.length ? roots : [...roots, ...(this.tempDirs ?? TEMP)] };
+    const chosen = shared("kanso.worktrees.roots"), temp = this.tempDirs ?? TEMP, roots = rootsFor(foldersInUse(), home(), chosen, temp);
+    return { roots, search: roots.length && Array.isArray(chosen) && chosen.length ? roots : [...roots, ...temp] };
   }
 
   // Runs on every draw, so only a row whose answer changed is replaced.

@@ -32,6 +32,37 @@ test("Worktrees searches the top folders of your spaces, or the ones you chose",
   assert.deepEqual(differ, [], "every spelling is open exactly when a folder in use is inside it");
 });
 
+test("Worktrees searches this computer only for its own panes, never for a pane on another machine", async () => {
+  const here = process.cwd();
+  const { Worktrees, inside } = await worktrees({
+    spaces: () => [
+      { folder: "/Users/me/Apps/web", machine: null, tabs: [{ id: "t1" }] },
+      { folder: "/srv", machine: "box", tabs: [{ id: "box/t2" }] },
+    ],
+    panes: () => [{ tab: "t1", cwd: "/Volumes/w/repo" }, { tab: "box/t2", cwd: here }],
+  });
+  const panel = new Worktrees();
+  panel.tempDirs = ["/private/tmp", "/tmp"];
+  const { roots, search } = panel.roots();
+  assert.deepEqual(clone(roots), ["/Users/me/Apps", "/Volumes/w/repo"], "this computer's space and pane are searched");
+  assert.ok(!search.some((root) => inside(root, here) || inside(here, root)), "a folder that exists here but is open on another machine is not searched");
+});
+
+test("Worktrees never searches the system temp folder or the folder above it", async () => {
+  const { Worktrees, rootsFor } = await worktrees({
+    home: () => "C:\\Users\\me",
+    spaces: () => [{ folder: "C:\\Users\\me\\Apps\\web", machine: null, tabs: [{ id: "t1" }] }],
+    panes: () => [{ tab: "t1", cwd: "C:\\Users\\me\\AppData\\Local\\Temp\\x" }],
+  });
+  const panel = new Worktrees();
+  panel.tempDirs = ["C:\\Users\\me\\AppData\\Local\\Temp\\"];
+  assert.deepEqual(clone(panel.roots().roots), ["C:\\Users\\me\\Apps"], "on Windows a pane in the temp folder makes no AppData root");
+  assert.deepEqual(clone(rootsFor(["/tmp/x", "/private/tmp/y", "/Users/me/Apps/a"], "/Users/me", null, ["/private/tmp", "/tmp"])), ["/Users/me/Apps"],
+    "on macOS and Linux a pane in /tmp is no root, as before");
+  assert.deepEqual(clone(rootsFor(["/var/folders/ab/T/z", "/Users/me/Apps/a"], "/Users/me", null, ["/private/var/folders/ab/T/"])), ["/Users/me/Apps"],
+    "on macOS a pane in your own temp folder is no root either: that folder is searched already");
+});
+
 test("Worktrees parses git's worktree list and the probes", async () => {
   const { parseWorktrees, parseProbe, basesFrom, parseDiscovery } = await worktrees();
   const list = clone(parseWorktrees("worktree /r\0HEAD a\0branch refs/heads/main\0\0worktree /w1\0HEAD b\0detached\0locked\0\0worktree /w2\0HEAD c\0branch refs/heads/feat/x\0prunable gitdir file points to non-existent location\0\0"));
@@ -201,7 +232,7 @@ test("Worktrees finds every kind in a real repository and cleans up the safe one
   const notes = [], settings = { "kanso.worktrees.roots": [root] }, app = join(dir, "app");
   const host = (extra) => worktrees({
     app, home: () => dir, shared: (k) => settings[k] ?? null,
-    spaces: () => [{ folder: repo }], panes: () => [{ cwd: join(open, "src") }], notify: (n) => notes.push(n), ...extra,
+    spaces: () => [{ folder: repo, machine: null, tabs: [{ id: "t1" }] }], panes: () => [{ tab: "t1", cwd: join(open, "src") }], notify: (n) => notes.push(n), ...extra,
   });
   const { cx, drain } = context();
   const { Worktrees, stateOf, removable } = await host();
@@ -298,7 +329,7 @@ test("Worktrees' first draw with forty folders open costs less than ten draws wi
   const folders = count(40, (i) => `/Users/me/Apps/repo${i % 12}/packages/app${i}/src`);
   const firstDrawMs = async (used) => {
     const { host, cx } = fixture();
-    const { Worktrees } = await loadMod("kanso-panel/worktrees.js", ["Worktrees"], { ...host, home: () => "/Users/me", spaces: () => [], panes: () => used.map((cwd) => ({ cwd })) });
+    const { Worktrees } = await loadMod("kanso-panel/worktrees.js", ["Worktrees"], { ...host, home: () => "/Users/me", spaces: () => [{ folder: "", machine: null, tabs: [{ id: "t1" }] }], panes: () => used.map((cwd) => ({ tab: "t1", cwd })) });
     const timed = () => {
       const panel = new Worktrees();
       panel.init({ spawn() {}, notify() {} });
