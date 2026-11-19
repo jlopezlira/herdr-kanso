@@ -83,7 +83,7 @@ export default class Simulator extends View {
     });
     this.soon(cx, async (next) => {
       try {
-        const tools = this.tools ?? await probeTools(this.platform, home(), exec);
+        const tools = this.tools ?? await probeTools(this.platform, home(), exec, () => token === this.readToken);
         if (!this.inFront() || token !== this.readToken) return;
         this.tools = tools;
         const devices = await readDevices(exec, tools, () => this.inFront() && token === this.readToken);

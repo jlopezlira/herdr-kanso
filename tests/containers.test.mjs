@@ -6,11 +6,17 @@ import { load, clone, failure, success, gpuiHost, texts, find, calls } from "./h
 
 const model = () => load("kanso-containers/model.js", ["parseContainers", "hostPorts", "health", "projectOf", "byProject", "parseImages", "imageRows",
   "parseImageIds", "contextOf", "sizeMB", "memMB", "parseStats", "vmPids", "dockerVms", "dockerHeld", "since", "size", "daemonDown", "OTHER",
-  "okRead", "failedRead", "settle", "panelOf"]);
+  "okRead", "failedRead", "settle", "panelOf", "readOf", "containerKey", "CAP_BYTES", "INCOMPLETE", "ENDPOINT_MS"]);
 const row = (...f) => f.join("\t");
 const LOCAL = "desktop-linux\tunix:///var/run/docker.sock";
+const CONTEXT = "{{.Name}}\t{{.Endpoints.docker.Host}}";
 const STOPPED = "Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?";
 const mismatches = (cases) => cases.filter(([, got, want]) => JSON.stringify(got) !== JSON.stringify(want)).map(([name, got]) => [name, got]);
+const DESTRUCTIVE = ["rm", "rmi", "prune", "stop", "kill", "down"];
+const SPARE_IMAGE = row("sha256:9999bbbb9999", "pg", "16", "400MB", "1 day ago");
+const CACHE = '{"Type":"Build Cache","Reclaimable":"1.2GB (100%)"}';
+const webRow = (state = "running") => row("aa11aa11aa11", "web-1", state, "Up 2 hours", "web", "", "", "", "", "");
+const withWeb = async () => { const m = await model(); return { m, ps: m.okRead(webRow()) }; };
 const inspected = (ids) => ids.map((id) => row(id, "sha256:1111aaaa2222", "[]", "no", "{}", "[]", "", "linux")).join("\n");
 const PS = [
   row("8362461c1aa3", "fluenty-wa-ci-pg", "running", "Up 45 hours", "postgres:17-alpine", "127.0.0.1:55432->5432/tcp", "<no value>", "<no value>", "<no value>"),
@@ -75,7 +81,7 @@ test("images: what uses each, the unused ones last to keep and first to remove",
   const onDigest = m.byProject([{ ...m.parseContainers(row("ee55", "job", "running", "Up 1 minute", "alpine", "", "", "", ""))[0], imageId: "feed0000aaaa1111" }], PROJECTS);
   assert.equal(clone(m.imageRows(digest, onDigest))[0].unused, false, "matched by the image id Docker gave the container, whatever name it shows");
   assert.equal(clone([...m.parseImageIds(row("ee55ee55ee55ffff", "sha256:feed0000aaaa1111"))])[0][1], "feed0000aaaa1111");
-  assert.deepEqual(clone(m.contextOf("desktop-linux\tunix:///Users/me/.docker/run/docker.sock")), { name: "desktop-linux", host: "unix:///Users/me/.docker/run/docker.sock", remote: false });
+  assert.deepEqual(clone(m.contextOf("desktop-linux\tunix:///Users/me/.docker/run/docker.sock")), { name: "desktop-linux", host: "unix:///Users/me/.docker/run/docker.sock", local: true, remote: false });
   assert.equal(m.contextOf("prod\tssh://me@server").remote, true, "another machine's Docker is said to be");
   assert.equal(m.sizeMB("1.2GB"), 1200);
   assert.equal(m.size(415), "415 MB");
@@ -175,23 +181,28 @@ test("the panel draws every part with each element in one place", async () => {
   const view = new Containers();
   view.init({}, { timer: { every: () => ({ cancel() {} }), after() {} }, spawn: () => {}, notify() {} });
   const ids = m.parseContainers(PS).map((c) => c.id);
-  const snapshot = m.settle(null, { n: 1, reads: { context: m.okRead(LOCAL), containers: m.okRead(PS), details: m.okRead({ set: "", text: inspected(ids) }), limit: m.okRead("4000000000"),
-    images: m.okRead(row("sha256:1111aaaa2222", "pg", "16", "400MB", "1 day ago")), volumes: m.okRead("pgdata\tlocal"), disk: m.okRead("") } });
-  const panel = m.panelOf(snapshot, { projects: PROJECTS });
-  view.panel = { ...panel, held: 600, spare: { "Build Cache": 1200 } };
+  const snapshot = m.settle(null, { n: 1, reads: { context: m.okRead(LOCAL), containers: m.okRead(PS), details: m.okRead({ set: m.containerKey(m.parseContainers(PS)), text: inspected(ids) }),
+    limit: m.okRead("4000000000"), images: m.okRead(SPARE_IMAGE), volumes: m.okRead("pgdata\tlocal"), disk: m.okRead(CACHE) } });
+  view.panel = m.panelOf(snapshot, { projects: PROJECTS });
   Object.assign(view, { show: { images: true, volumes: true }, opened: new Set(ids), error: "x", note: "y" });
-  assert.doesNotThrow(() => view.render());
+  const { Containers: Drawn } = await loadContainers({ ...host, ...gpuiHost() });
+  const shown = new Drawn();
+  shown.init({}, { timer: { every: () => ({ cancel() {} }), after() {} }, spawn: () => {}, notify() {} });
+  Object.assign(shown, { panel: view.panel, show: view.show, opened: view.opened });
+  const drawn = texts(shown.render());
+  assert.deepEqual(["Remove unused images (400 MB)", "Remove 1 unused volume", "Build cache: 1.2 GB you can get back", "Quit Docker (stops 2)", "Logs", "Less", "Run…", "Remove"]
+    .filter((label) => !drawn.includes(label)), [], "every control is drawn");
   view.panel = m.panelOf(m.settle(null, { n: 1, reads: { context: m.okRead(LOCAL), containers: m.failedRead("Docker said: stopped", STOPPED) } }));
   assert.equal(view.panel.state, "down");
   assert.doesNotThrow(() => view.render());
 });
 
 // The panel open and nothing changing: Docker answers as a fixed engine, every command counted.
-async function openPanel({ hung = false, drawn = false, failing = [], inspect = inspected(["aa11aa11aa11"]) } = {}) {
+async function openPanel({ hung = false, drawn = false, failing = [], inspect = inspected(["aa11aa11aa11"]), images = null, disk = "" } = {}) {
   const { fixture, loadMod } = await import("./perf-harness.mjs");
   const f = fixture();
-  const docker = { ps: [row("aa11aa11aa11", "web-1", "running", "Up 2 hours", "web", "", "", "", "", "")], images: row("sha256:1111aaaa2222", "web", "latest", "100MB", "2 days ago"), down: false,
-    failing: new Set(failing), inspect, partialFind: false, config: JSON.stringify({ currentContext: "desktop-linux" }), volumes: "pgdata\tlocal", hung, rejects: null, broken: false };
+  const docker = { ps: [webRow()], images: images ?? row("sha256:1111aaaa2222", "web", "latest", "100MB", "2 days ago"), down: false,
+    failing: new Set(failing), inspect, disk, partialFind: false, engines: { "desktop-linux": LOCAL }, config: JSON.stringify({ currentContext: "desktop-linux" }), volumes: "pgdata\tlocal", hung, rejects: null, broken: false };
   if (drawn) Object.assign(f.host, gpuiHost());
   const spaces = f.host.spaces;
   f.host.spaces = () => { if (docker.broken) throw new Error("spaces are not ready"); return spaces(); };
@@ -203,12 +214,16 @@ async function openPanel({ hung = false, drawn = false, failing = [], inspect = 
     if (command === "find" && docker.partialFind) return { code: 1, stdout: "/proj/a/compose.yaml\0", stderr: "find: Permission denied" };
     if (command !== "docker") return exec(command, args, options);
     await exec(command, args, options);
+    const [verb] = args[0] === "--context" ? args.slice(2) : args;
     if (docker.hung) return new Promise(() => {});
     if (docker.rejects) throw docker.rejects;
-    if (docker.down && args[0] !== "context") return failure(STOPPED);
-    if (docker.failing.has(args[0])) return failure("unexpected error");
-    if (args[0] === "ps" && docker.psResult) return docker.psResult;
-    const out = { inspect: docker.inspect, ps: docker.ps.join("\n"), images: docker.images, info: "8000000000", context: docker.context ?? LOCAL, volume: docker.volumes }[args[0]] ?? "";
+    if (docker.down && verb !== "context") return failure(STOPPED);
+    if (docker.failing.has(verb)) return failure("unexpected error");
+    if (verb === "ps" && docker.psResult) return docker.psResult;
+    const named = verb === "context" ? args[4] : undefined;
+    if (named !== undefined && !(named in docker.engines)) return failure(`context "${named}" does not exist`);
+    const current = named !== undefined ? docker.engines[named] : docker.context ?? LOCAL;
+    const out = { inspect: docker.inspect, system: docker.disk, ps: docker.ps.join("\n"), images: docker.images, info: "8000000000", context: current, volume: docker.volumes }[verb] ?? "";
     return success(out);
   };
   f.host.run = () => null;
@@ -217,11 +232,16 @@ async function openPanel({ hung = false, drawn = false, failing = [], inspect = 
   view.init({}, f.cx);
   await f.settle();
   await f.advance(0);
-  const asked = (verb) => f.state.processes.filter((p) => (verb === "find" ? p.command === "find" : p.command === "docker" && p.args.join(" ").startsWith(verb))).length;
+  const plain = (args) => (args[0] === "--context" ? args.slice(2) : args);
+  const asked = (verb) => f.state.processes.filter((p) => (verb === "find" ? p.command === "find" : p.command === "docker" && plain(p.args).join(" ").startsWith(verb))).length;
   const fresh = () => { f.state.processes.length = 0; };
   const words = () => texts(view.render(f.cx));
   const again = async () => { view.refresh(f.cx, true, true); await f.settle(); };
-  return { f, view, docker, asked, fresh, words, again };
+  const lose = async () => { docker.psResult = failure("host unavailable"); await again(); };
+  const click = (tag) => calls(find(view.render(f.cx), (el) => el.tag === tag), "on_click").at(-1).at(-1)({}, f.cx);
+  const press = async (tag) => { click(tag); click(tag); await f.settle(); };
+  const removed = () => f.state.processes.filter((p) => p.command === "docker" && p.args.some((arg) => DESTRUCTIVE.includes(arg))).map((p) => p.args.join(" "));
+  return { f, view, docker, asked, fresh, words, again, lose, click, press, removed };
 }
 
 test("the Containers panel at rest asks Docker only what can change by itself in a minute", async () => {
@@ -235,7 +255,7 @@ test("the Containers panel at rest asks Docker only what can change by itself in
   assert.ok(counts.ps <= 12, `docker ps ${counts.ps} times; budget 12`);
   assert.ok(counts.stats <= 4, `docker stats ${counts.stats} times; budget 4`);
   for (const verb of ["images", "volume ls", "system df"]) assert.ok(counts[verb] <= 1, `docker ${verb} ${counts[verb]} times; budget 1`);
-  assert.deepEqual([counts.info, counts["context inspect"], counts.inspect], [0, 0, 0], "no memory limit, context or details when nothing changed");
+  assert.deepEqual([counts.info, counts["context inspect"], counts.inspect], [0, 1, 0], "no memory limit or details when nothing changed, and the context's endpoint once a minute");
 });
 
 test("a container stopped or added outside kansō shows within 5 seconds, its details read only then", async () => {
@@ -265,7 +285,7 @@ test("a memory limit or context Docker failed to give is asked again on the next
   assert.equal(view.failure(), "Docker said: unexpected error");
   fresh();
   await f.advance(5000);
-  assert.deepEqual([asked("info"), asked("context inspect")], [1, 1], "asked again 5 seconds later");
+  assert.deepEqual([asked("info"), asked("context inspect")], [0, 1], "the context is asked again 5 seconds later, and no engine is asked while it is unknown");
   docker.failing = new Set();
   fresh();
   await f.advance(5000);
@@ -280,7 +300,7 @@ test("another Docker context chosen outside kansō is read within a minute, with
   const { f, docker, asked, fresh } = await openPanel();
   fresh();
   await f.advance(60_000);
-  assert.equal(asked("context inspect"), 0, "the same context: not asked");
+  assert.equal(asked("context inspect"), 1, "the same context: its endpoint once a minute");
   docker.config = JSON.stringify({ currentContext: "colima" });
   fresh();
   await f.advance(60_000);
@@ -321,14 +341,14 @@ test("an image made outside kansō shows within a minute; one from a panel actio
   assert.equal(asked("images"), 0, "and the reads stop once it is there");
 });
 
-test("Read again asks everything at once, and Docker coming back reads its memory limit and context again", async () => {
+test("Refresh asks everything at once, and Docker coming back reads its memory limit and context again", async () => {
   const { f, view, docker, asked, fresh } = await openPanel();
   await f.advance(5000);
   fresh();
   view.refresh(f.cx, true, true);
   await f.settle();
-  for (const verb of ["ps", "images", "info", "context inspect", "inspect", "volume ls", "system df", "stats"]) assert.equal(asked(verb), 1, `Read again asks docker ${verb}`);
-  assert.ok(asked("find") > 0, "Read again looks for compose files too");
+  for (const verb of ["ps", "images", "info", "context inspect", "inspect", "volume ls", "system df", "stats"]) assert.equal(asked(verb), 1, `Refresh asks docker ${verb}`);
+  assert.ok(asked("find") > 0, "Refresh looks for compose files too");
   docker.down = true;
   await f.advance(5000);
   assert.equal(view.state, "down");
@@ -440,36 +460,52 @@ test("Volumes and images whose users Docker did not say are not offered for remo
   assert.equal(words().some((text) => text.startsWith("Remove unused images")), false);
 });
 
-test("Containers offers removal, cleanup, Quit and this computer's memory only when the latest read proves each safe", async () => {
+test("Cleanup shows only from a refresh that proved it, stays on later ticks only while nothing changed, and Quit needs this computer's Docker", async () => {
   const m = await model();
-  const id = "aa11aa11aa11", ps = m.okRead(row(id, "web-1", "running", "Up 2 hours", "web", "", "", "", "", ""));
-  const good = { context: m.okRead(LOCAL), containers: ps, details: m.okRead({ set: "", text: inspected([id]) }),
-    images: m.okRead(row("sha256:9999aaaa9999", "pg", "16", "400MB", "1 day ago")), volumes: m.okRead("pgdata\tlocal"), disk: m.okRead("") };
+  const id = "aa11aa11aa11", ps = m.okRead(webRow()), set = `${id}:running`;
+  const proving = { context: m.okRead(LOCAL), containers: ps, details: m.okRead({ set, text: inspected([id]) }),
+    images: m.okRead(row("sha256:9999aaaa9999", "pg", "16", "400MB", "1 day ago")), volumes: m.okRead("pgdata\tlocal"), disk: m.okRead('{"Type":"Build Cache","Reclaimable":"1.2GB (100%)"}') };
   const lost = m.failedRead("Docker said: unexpected error");
   const can = (first, next = null, thrown = null) => {
     const once = m.settle(null, { n: 1, reads: first });
-    return clone(m.panelOf(next || thrown ? m.settle(once, { n: 2, reads: { containers: ps, ...next }, thrown }) : once).can);
+    const { cleanImages, cleanVolumes, clearCache, quit, memory } = m.panelOf(next || thrown ? m.settle(once, { n: 2, reads: { containers: ps, ...next }, thrown }) : once).can;
+    return [cleanImages, cleanVolumes, clearCache, quit, memory];
   };
-  const flags = (cleanImages, cleanVolumes, clearCache, quit, memory) => ({ cleanImages, cleanVolumes, clearCache, quit, memory });
   const cases = [
-    ["everything read", can(good), flags(true, true, true, true, true)],
-    ["context never read", can({ ...good, context: null }), flags(false, false, false, false, false)],
-    ["context failed", can({ ...good, context: lost }), flags(false, false, false, false, false)],
-    ["context on another machine", can({ ...good, context: m.okRead("builder\ttcp://builder:2376") }), flags(true, true, true, false, false)],
-    ["container list failed after a good read", can(good, { containers: lost }), flags(false, false, false, false, false)],
-    ["a container with no inspect record", can({ ...good, details: m.okRead({ set: "", text: "" }) }), flags(false, false, false, true, true)],
-    ["inspect failed", can({ ...good, details: lost }), flags(false, false, false, true, true)],
-    ["volumes failed", can(good, { volumes: lost }), flags(true, false, true, true, true)],
-    ["images failed", can(good, { images: lost }), flags(false, true, true, true, true)],
-    ["disk use failed", can(good, { disk: lost }), flags(true, true, false, true, true)],
-    ["the read threw", can(good, {}, "spaces are not ready"), flags(false, false, false, false, false)],
+    ["a full refresh that proves everything", can(proving), [true, true, true, true, true]],
+    ["context never read", can({ ...proving, context: null }), [false, false, false, false, false]],
+    ["context failed", can({ ...proving, context: lost }), [false, false, false, false, false]],
+    ["a context name with no endpoint", can({ ...proving, context: m.okRead("other") }), [true, true, true, false, false]],
+    ["context on another machine", can({ ...proving, context: m.okRead("builder\ttcp://builder:2376") }), [true, true, true, false, false]],
+    ["a container with no inspect record", can({ ...proving, details: m.okRead({ set, text: "" }) }), [false, false, false, false, false]],
+    ["an inspect record cut inside its mounts", can({ ...proving, details: m.okRead({ set, text: `${id}\tsha256:1111aaaa2222\t[{"Type":"volume"` }) }), [false, false, false, false, false]],
+    ["inspect failed", can({ ...proving, details: lost }), [false, false, false, false, false]],
+    ["a later cheap tick that saw the same containers", can(proving, {}), [true, true, true, true, true]],
+    ["a later tick where a container changed state", can(proving, { containers: m.okRead(webRow("exited")) }), [false, false, false, false, false]],
+    ["a later tick with any fault", can(proving, { images: lost }), [false, false, false, true, true]],
+    ["a later tick that listed other volumes", can(proving, { volumes: m.okRead("other\tlocal") }), [true, false, true, true, true]],
+    ["a later container list that failed", can(proving, { containers: lost }), [false, false, false, false, false]],
+    ["the read threw", can(proving, {}, "spaces are not ready"), [false, false, false, false, false]],
+  ];
+  assert.deepEqual(mismatches(cases), []);
+});
+
+test("No containers, counts and row actions come only from a container list read in this refresh", async () => {
+  const { m, ps } = await withWeb();
+  const after = (...lists) => m.panelOf(lists.reduce((snapshot, containers, i) => m.settle(snapshot, { n: i + 1, reads: { context: m.okRead(LOCAL), containers } }), null));
+  const lost = m.failedRead("Docker said: host unavailable");
+  const shape = (panel) => [panel.empty, panel.counts, panel.groups?.[0]?.containers?.[0]?.stale ?? null, panel.groups?.[0]?.containers?.[0]?.verbs.toggle ?? null];
+  const cases = [
+    ["an empty list", shape(after(m.okRead(""))), [true, { running: 0, stopped: 0 }, null, null]],
+    ["an empty list, then a failed one", shape(after(m.okRead(""), lost)), [false, null, null, null]],
+    ["a list", shape(after(ps)), [false, { running: 1, stopped: 0 }, false, "stop"]],
+    ["a list, then a failed one", shape(after(ps, lost)), [false, null, true, null]],
   ];
   assert.deepEqual(mismatches(cases), []);
 });
 
 test("The newest read alone names a cause: not installed, Docker stopped, or a failure that keeps what was read", async () => {
-  const m = await model();
-  const ps = m.okRead(row("aa11aa11aa11", "web-1", "running", "Up 2 hours", "web", "", "", "", "", ""));
+  const { m, ps } = await withWeb();
   const missing = m.failedRead("Docker said: x", "cannot run docker: No such file or directory (os error 2)");
   const at = (...refreshes) => m.panelOf(refreshes.reduce((snapshot, { reads, thrown }, i) => m.settle(snapshot, { n: i + 1, reads, thrown }), null));
   const cases = [
@@ -490,27 +526,208 @@ test("The newest read alone names a cause: not installed, Docker stopped, or a f
 });
 
 test("The panel draws removal, Quit and this computer's memory only from a read that proves them", async () => {
-  const shown = async (options) => {
-    const { words } = await openPanel({ drawn: true, ...options });
+  const shown = async ({ context, ...options }) => {
+    const { docker, words, again } = await openPanel({ drawn: true, ...options });
+    if (context) { docker.context = context; await again(); }
     const all = words();
     return [all.includes("Remove 1 unused volume"), all.some((text) => text.startsWith("Quit Docker")), all.includes("Docker uses of this computer's memory")];
   };
   const cases = [
     ["everything read", await shown({}), [true, true, true]],
     ["context failed", await shown({ failing: ["context"] }), [false, false, false]],
-    ["inspect failed", await shown({ failing: ["inspect"] }), [false, true, true]],
-    ["no inspect record", await shown({ inspect: "" }), [false, true, true]],
+    ["inspect failed", await shown({ failing: ["inspect"] }), [false, false, false]],
+    ["no inspect record", await shown({ inspect: "" }), [false, false, false]],
+    ["an inspect record cut inside its mounts", await shown({ inspect: 'aa11aa11aa11\tsha256:1111aaaa2222\t[{"Type":"volume"' }), [false, false, false]],
     ["volumes failed", await shown({ failing: ["volume"] }), [false, true, true]],
+    ["a context name with no endpoint", await shown({ context: "other\t" }), [true, false, false]],
   ];
   assert.deepEqual(mismatches(cases), []);
 });
 
+test("A cleanup press proves again on the context it read and removes only what that read proves", async () => {
+  const pressed = async (change) => {
+    const { docker, press, removed, words, f } = await openPanel({ drawn: true });
+    await change(docker, f);
+    await press("ct-vrm");
+    return [removed(), words().includes("Remove 1 unused volume")];
+  };
+  const cases = [
+    ["nothing changed", await pressed(async () => {}), [["--context desktop-linux volume rm pgdata"], true]],
+    ["the volume was removed outside between ticks", await pressed(async (docker, f) => { docker.volumes = ""; await f.advance(5000); }), [[], false]],
+    ["the armed context was removed", await pressed(async (docker) => { delete docker.engines["desktop-linux"]; }), [[], true]],
+  ];
+  assert.deepEqual(mismatches(cases), []);
+});
+
+test("A confirmed cleanup removes only on the engine and the targets that were armed", async () => {
+  const confirmed = async (between) => {
+    const { docker, click, removed, again, f } = await openPanel({ drawn: true });
+    click("ct-vrm");
+    await between(docker, again);
+    click("ct-vrm"); await f.settle();
+    return removed();
+  };
+  const cases = [
+    ["nothing changed", await confirmed(async () => {}), ["--context desktop-linux volume rm pgdata"]],
+    ["the same name now points at another endpoint", await confirmed(async (docker) => { docker.engines["desktop-linux"] = "desktop-linux\tssh://prod"; }), []],
+    ["another context became current; the armed one is unchanged", await confirmed(async (docker) => { docker.context = "other\tunix:///var/run/docker.sock"; }), ["--context desktop-linux volume rm pgdata"]],
+    ["a refresh drew another unused volume", await confirmed(async (docker, again) => { docker.volumes = "different\tlocal"; await again(); }), []],
+  ];
+  assert.deepEqual(mismatches(cases), []);
+});
+
+test("Every read the panel draws from, and every command it runs, names the context it read", async () => {
+  const { f } = await openPanel({ drawn: true });
+  const unnamed = f.state.processes.filter((p) => p.command === "docker" && p.args[0] !== "--context" && p.args.join(" ") !== `context inspect --format ${CONTEXT}`);
+  assert.deepEqual(unnamed.map((p) => p.args.join(" ")), []);
+});
+
+test("Every cleanup press and Quit run exactly the command that was proved, and nothing else", async () => {
+  const pressed = async (tag, options = {}) => {
+    const { press, removed, view } = await openPanel({ drawn: true, images: [row("sha256:1111aaaa2222", "web", "latest", "100MB", "2 days ago"), SPARE_IMAGE].join("\n"), disk: CACHE, ...options });
+    view.show = { images: true, volumes: true };
+    await press(tag);
+    return removed();
+  };
+  const cases = [
+    ["remove unused volumes", await pressed("ct-vrm"), ["--context desktop-linux volume rm pgdata"]],
+    ["remove unused images", await pressed("ct-rmi"), ["--context desktop-linux rmi pg:16"]],
+    ["remove one image", await pressed("ct-image-9999bbbb9999-verb-1"), ["--context desktop-linux rmi pg:16"]],
+    ["clear the build cache", await pressed("ct-cache"), ["--context desktop-linux builder prune -f"]],
+    ["quit Docker", await pressed("ct-quit"), ["desktop stop"]],
+  ];
+  assert.deepEqual(mismatches(cases), []);
+});
+
+test("Only the rows a removal targets show it pending, never another image or a volume with the same name", async () => {
+  const { view, docker, click, f } = await openPanel({ drawn: true, images: [row("sha256:1111aaaa2222", "web", "latest", "100MB", "2 days ago"), SPARE_IMAGE].join("\n") });
+  docker.volumes = "9999bbbb9999\tlocal";
+  await f.advance(60_000);
+  view.show = { images: true, volumes: true };
+  click("ct-image-9999bbbb9999-verb-1");
+  docker.hung = true;
+  click("ct-image-9999bbbb9999-verb-1"); await f.settle();
+  const pending = (tag) => Boolean(find(view.render(f.cx), (el) => calls(el, "id").some(([, id]) => id === tag)));
+  assert.deepEqual(["ct-image-9999bbbb9999-pending", "ct-image-1111aaaa2222-pending", "ct-volume-9999bbbb9999-pending"].map(pending), [true, false, false]);
+});
+
+test("Anything incomplete is a failure: a read at Herdr's output cap, a cut row, a context without a name or a local endpoint", async () => {
+  const m = await model();
+  const read = (kind, stdout) => m.readOf({ code: 0, stdout, stderr: "" }, () => "failed", kind).state;
+  const reads = [
+    ["a full inspect record", read("details", inspected(["aa11aa11aa11"])), "ok"],
+    ["an inspect answer at the cap", read("details", inspected(["aa11aa11aa11"]).padEnd(m.CAP_BYTES, " ")), "failed"],
+    ["a container row with three fields", read("containers", "aa11\tweb-1\trunning"), "failed"],
+    ["a container row that ends after its image", read("containers", "aa11\tweb-1\trunning\tUp 2 hours\tweb"), "failed"],
+    ["a full container row", read("containers", webRow()), "ok"],
+    ["disk use with a broken line", read("disk", `${CACHE}\n{"Type":"Images"`), "failed"],
+    ["a volume name without its driver", read("volumes", "pgdata\tlocal\npgda"), "failed"],
+    ["an image row cut short", read("images", "sha256:9999\tpg\t16"), "failed"],
+  ];
+  assert.deepEqual(mismatches(reads), []);
+  const place = (text) => { const context = m.contextOf(text); return context && [context.name, context.local]; };
+  const contexts = [
+    ["no name, a socket", place("\tunix:///docker.sock"), null],
+    ["a name, no endpoint", place("work"), ["work", false]],
+    ["a bare unix scheme", place("work\tunix://"), ["work", false]],
+    ["a pipe on another computer", place("work\tnpipe:////server/pipe/docker_engine"), ["work", false]],
+    ["this computer's pipe", place("work\tnpipe:////./pipe/docker_engine"), ["work", true]],
+    ["this computer's socket", place(LOCAL), ["desktop-linux", true]],
+  ];
+  assert.deepEqual(mismatches(contexts), []);
+});
+
+test("A failed inspect takes Quit and memory away, and a paused or restarting container counts as running", async () => {
+  const { m, ps } = await withWeb();
+  const set = m.containerKey(m.parseContainers(ps.data)), good = { context: m.okRead(LOCAL), containers: ps, details: m.okRead({ set, text: inspected(["aa11aa11aa11"]) }) };
+  const once = m.settle(null, { n: 1, reads: good });
+  const failedAfter = m.panelOf(m.settle(once, { n: 2, reads: { ...good, details: m.failedRead("Docker said: unexpected error") } }));
+  assert.deepEqual([failedAfter.can.quit, failedAfter.can.memory], [false, false]);
+  const paused = m.okRead(webRow("paused"));
+  const busy = m.panelOf(m.settle(null, { n: 1, reads: { context: m.okRead(LOCAL), containers: paused, details: m.okRead({ set: m.containerKey(m.parseContainers(paused.data)), text: "" }) } }));
+  assert.deepEqual(clone([busy.counts, busy.can.quit, busy.groups[0].containers[0].verbs.toggle]), [{ running: 1, stopped: 0 }, false, "stop"]);
+});
+
+test("A row from a list that failed is marked stale and offers nothing that acts on Docker", async () => {
+  const m = await model();
+  const app = m.okRead(row("aa11aa11aa11", "app-web-1", "running", "Up 2 hours", "web", "", "app", "/p/app", "web", "/p/app/compose.yaml"));
+  const files = m.okRead("/p/app/compose.yaml"), images = m.okRead(SPARE_IMAGE), stats = m.okRead("aa11aa11aa11\t10MiB / 1GiB");
+  const good = { context: m.okRead(LOCAL), containers: app, files, images, stats, details: m.okRead({ set: m.containerKey(m.parseContainers(app.data)), text: inspected(["aa11aa11aa11"]) }) };
+  const lost = m.failedRead("Docker said: unexpected error");
+  const after = (next) => {
+    const panel = m.panelOf(m.settle(m.settle(null, { n: 1, reads: good }), { n: 2, reads: next }), { projects: [{ name: "app", folders: ["/p/app"] }] });
+    const [stack] = panel.groups.flatMap((g) => g.stacks), [k] = panel.groups.flatMap((g) => g.containers);
+    return [stack.stale, stack.verbs.down, Boolean(stack.count), k.verbs.logs, k.verbs.details, k.mem !== null, panel.images[0].run];
+  };
+  const cases = [
+    ["everything read again", after({ containers: app }), [false, true, true, true, true, true, true]],
+    ["the container list failed", after({ containers: lost }), [true, false, false, false, false, false, false]],
+    ["compose file discovery failed", after({ containers: app, files: lost }), [true, false, false, true, true, true, true]],
+    ["inspect failed", after({ containers: app, details: lost }), [false, true, true, true, false, true, true]],
+    ["stats failed", after({ containers: app, stats: lost }), [false, true, true, true, true, false, true]],
+    ["images failed", after({ containers: app, images: lost }), [false, true, true, true, true, true, false]],
+  ];
+  assert.deepEqual(mismatches(cases), []);
+});
+
+test("A Run form runs only while the model allows it, on the engine it opened on", async () => {
+  const opened = async (between) => {
+    const { view, docker, click, again, removed, f, words } = await openPanel({ drawn: true, images: SPARE_IMAGE });
+    view.show = { ...view.show, images: true };
+    click("ct-image-9999bbbb9999-verb-0");
+    await between(docker, again);
+    const button = words().includes("Run");
+    view.runImage(f.cx); await f.settle();
+    return [button, f.state.processes.filter((p) => p.args.includes("run")).map((p) => p.args.join(" ")), removed()];
+  };
+  const cases = [
+    ["nothing changed", await opened(async () => {}), [true, ["--context desktop-linux run -d pg:16"], []]],
+    ["images could not be read", await opened(async (docker, again) => { docker.failing.add("images"); await again(); }), [false, [], []]],
+    ["the containers could not be read", await opened(async (docker, again) => { docker.psResult = failure("host unavailable"); await again(); }), [false, [], []]],
+    ["another engine became current", await opened(async (docker, again) => { docker.context = "other\tunix:///other.sock"; docker.engines.other = docker.context; await again(); }), [false, [], []]],
+  ];
+  assert.deepEqual(mismatches(cases), []);
+});
+
+test("A Compose stack counts paused and restarting services as running, like the header", async () => {
+  const m = await model();
+  const paused = m.okRead(row("aa11aa11aa11", "app-web-1", "paused", "Up 2 hours (Paused)", "web", "", "app", "/p/app", "web", "/p/app/compose.yaml"));
+  const panel = m.panelOf(m.settle(null, { n: 1, reads: { context: m.okRead(LOCAL), containers: paused, files: m.okRead("/p/app/compose.yaml") } }), { projects: [{ name: "app", folders: ["/p/app"] }] });
+  assert.deepEqual(clone([panel.counts.running, panel.groups[0].stacks[0].count]), [1, { running: 1, total: 1 }]);
+});
+
+test("Quit and this computer's memory need an endpoint read in the last minute, and Quit reads it again before it acts", async () => {
+  const { m, ps } = await withWeb();
+  const reads = { context: m.okRead(LOCAL), containers: ps, details: m.okRead({ set: m.containerKey(m.parseContainers(ps.data)), text: inspected(["aa11aa11aa11"]) }) };
+  const at = (age) => clone(m.panelOf(m.settle(null, { n: 1, reads, time: 1_000 }), { now: 1_000 + age }).can);
+  assert.deepEqual([at(0).quit, at(0).memory, at(m.ENDPOINT_MS).quit, at(m.ENDPOINT_MS).memory], [true, true, false, false]);
+  const { docker, press, removed } = await openPanel({ drawn: true });
+  docker.engines["desktop-linux"] = "desktop-linux\ttcp://builder:2376";
+  await press("ct-quit");
+  assert.deepEqual(removed(), [], "an endpoint that is no longer this computer's is not quit");
+});
+
+test("A second inspect that fails takes cleanup away, though the containers are the same", async () => {
+  const { docker, again, words } = await openPanel({ drawn: true });
+  docker.failing.add("inspect");
+  await again();
+  assert.equal(words().includes("Remove 1 unused volume"), false);
+});
+
+test("An empty list followed by a failed one does not still say No containers", async () => {
+  const { docker, words, again, lose } = await openPanel({ drawn: true });
+  docker.ps = [];
+  await again();
+  assert.ok(words().some((text) => text.startsWith("No containers.")));
+  await lose();
+  assert.equal(words().some((text) => text.startsWith("No containers.")), false);
+});
+
 test("A failed container list cannot authorize removing a volume", async () => {
-  const { view, docker, words, again } = await openPanel({ drawn: true });
+  const { view, words, lose } = await openPanel({ drawn: true });
   assert.equal(view.details.size, 1);
   assert.ok(words().includes("Remove 1 unused volume"));
-  docker.psResult = failure("host unavailable");
-  await again();
+  await lose();
   assert.ok(words().includes("Docker said: host unavailable"));
   assert.equal(words().includes("Remove 1 unused volume"), false);
 });
@@ -571,27 +788,27 @@ test("Every Docker command ends inside the view's deadline: reads, and actions t
   docker.hung = true;
   const [web] = view.groups[0].containers;
   view.containers("stop", [web], f.cx);
-  assert.ok(view.busy.has(web.id));
+  assert.ok(view.busy.has(`containers:${web.id}`));
   view.containers("stop", [web], f.cx);
-  assert.equal(f.state.processes.filter((p) => p.args[0] === "stop").length, 1, "a row being changed is not asked twice");
+  assert.equal(f.state.processes.filter((p) => p.args.includes("stop")).length, 1, "a row being changed is not asked twice");
   await f.advance(60_000);
-  assert.equal(view.busy.has(web.id), false, "a stop that never answers frees its row");
+  assert.equal(view.busy.has(`containers:${web.id}`), false, "a stop that never answers frees its row");
   assert.ok(words().includes("stop failed: timed out"));
 });
 
-test("A first read that never answers ends in a failure with Read again inside its deadline, and Read again waits while a read runs", async () => {
+test("A first read that never answers ends in a failure with Refresh inside its deadline, and Refresh waits while a read runs", async () => {
   const { f, view, docker, words } = await openPanel({ hung: true, drawn: true });
   const refresh = () => find(view.render(f.cx), (el) => el.tag === "ct-refresh");
-  assert.equal(calls(refresh(), "disabled").at(-1)?.[1], true, "Read again is off while the read runs");
+  assert.equal(calls(refresh(), "disabled").at(-1)?.[1], true, "Refresh is off while the read runs");
   await f.advance(15_000);
   assert.equal(view.reading, false, "the read has ended at its deadline");
   assert.ok(words().includes("Can't read Docker"), "a failure, not a skeleton");
-  assert.ok(words().includes("Read again"));
-  assert.equal(calls(refresh(), "disabled").at(-1)?.[1], false, "and Read again is on");
+  assert.ok(words().includes("Refresh"));
+  assert.equal(calls(refresh(), "disabled").at(-1)?.[1], false, "and Refresh is on");
   const press = calls(refresh(), "on_click").at(-1).at(-1);
   press({}, f.cx);
-  assert.equal(calls(refresh(), "disabled").at(-1)?.[1], true, "a press turns Read again off at once");
-  assert.equal(words().includes("Read again"), false, "and the failure offers no second retry");
+  assert.equal(calls(refresh(), "disabled").at(-1)?.[1], true, "a press turns Refresh off at once");
+  assert.equal(words().includes("Refresh"), false, "and the failure offers no second retry");
   press({}, f.cx);
   assert.equal(view.queued, null, "a second press while it reads queues nothing");
   await f.advance(15_000);
@@ -599,6 +816,6 @@ test("A first read that never answers ends in a failure with Read again inside i
   const fix = find(view.render(f.cx), (el) => el.tag === "ct-failed-fix");
   calls(fix, "on_click").at(-1).at(-1)({}, f.cx);
   await f.settle();
-  assert.equal(view.groups.length, 1, "Read again reads the containers");
+  assert.equal(view.groups.length, 1, "Refresh reads the containers");
   assert.equal(words().includes("Can't read Docker"), false);
 });
