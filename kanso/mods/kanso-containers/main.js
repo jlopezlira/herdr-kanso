@@ -137,15 +137,16 @@ export default class Containers extends View {
   read(cx, { now, all, again }) {
     this.reading = true;
     cx.notify();
-    const n = (this.snapshot?.n ?? 0) + 1, got = {}, before = this.snapshot?.reads ?? {};
-    let thrown = null;
+    const n = (this.snapshot?.n ?? 0) + 1, before = this.snapshot?.reads ?? {};
+    this.got = {}; this.thrown = null;
+    const take = (reads) => { this.got = { ...this.got, ...reads }; };
     cx.spawn(async (cx) => {
       const ask = (args) => within(cx.timer, docker(args));
       try {
         const sameContext = before.context?.state === "ok" && !all;
         const [ps, ctx] = await Promise.all([within(cx.timer, docker(["ps", "-a", "--format", PS_FORMAT])),
           sameContext ? null : ask(["context", "inspect", "--format", CONTEXT_FORMAT])]);
-        got.containers = readOf(ps, said); got.context = readOf(ctx, said);
+        take({ containers: readOf(ps, said), context: readOf(ctx, said) });
         if (ps.code !== 0) return;
         const found = parseContainers(ps.stdout), earlier = before.containers?.data == null ? null : parseContainers(before.containers.data);
         this.projects = kansoProjects();
@@ -172,20 +173,20 @@ export default class Containers extends View {
           stored ? ask(["system", "df", "--format", "{{json .}}"]) : null,
           lookFiles(plan, again) && deep.length ? Promise.all([named("2", deep), shallow.length ? named("1", shallow) : { code: 0, stdout: "" }])
             .then((both) => both.find(failed) ?? { code: 0, stdout: both.map((r) => r.stdout ?? "").join("\n") }) : null]);
-        Object.assign(got, {
+        take({
           config: config === null ? null : okRead(config), images: readOf(im, said), limit: readOf(info, said), memory: readOf(ps2, firstLine),
           details: ins && (ins.code === 0 ? okRead({ set, text: ins.stdout }) : failedRead(said(ins))),
-          context: got.context ?? readOf(ctx2, said), volumes: readOf(vols, said), disk: readOf(df, said), files: readOf(files, firstLine),
+          context: this.got.context ?? readOf(ctx2, said), volumes: readOf(vols, said), disk: readOf(df, said), files: readOf(files, firstLine),
         });
         if (im?.code === 0 && this.pulling) this.pulling = im.stdout === this.pulling.seen && this.pulling.left > 1 ? { ...this.pulling, left: this.pulling.left - 1 } : null;
         const openFiles = ps2?.code === 0 ? await bounded(timed(processApi).openFiles(vmPids(ps2.stdout)).catch(unread), cx.timer, CALL_MS)
           .then((r) => (r?.late ? unread(firstLine(r)) : r)) : null;
-        got.attribution = openFiles && (openFiles.state === "error" ? failedRead(openFiles.reason) : okRead(openFiles));
-        got.stats = usage ? readOf(await ask(["stats", "--no-stream", "--format", STATS_FORMAT]), said) : null;
+        take({ attribution: openFiles && (openFiles.state === "error" ? failedRead(openFiles.reason) : okRead(openFiles)) });
+        take({ stats: usage ? readOf(await ask(["stats", "--no-stream", "--format", STATS_FORMAT]), said) : null });
       } catch (e) {
-        thrown = String(e?.message ?? e);
+        this.thrown = String(e?.message ?? e);
       } finally {
-        this.snapshot = settle(this.snapshot, { n, reads: got, thrown });
+        this.snapshot = settle(this.snapshot, { n, reads: this.got, thrown: this.thrown });
         this.panel = this.derive();
         this.reading = false;
         const next = this.queued;
