@@ -1,6 +1,6 @@
 import { elements, escapeMarkup as escape, frame } from './storybook-markup.mjs';
 import { THEMES, colour, contrast } from './tokens.mjs';
-import { header, sidebarFooter } from '../stories/kit/compositions.js';
+import { sidebarFooter } from '../stories/kit/sidebar-footer.js';
 import { tile } from '../stories/kit/tile.js';
 import { viewSwitch } from '../stories/kit/view-switch.js';
 import { projectRow } from '../stories/kit/project-row.js';
@@ -10,8 +10,9 @@ import { asleep } from '../stories/kit/asleep.js';
 import { switcher } from '../stories/kit/switcher.js';
 import { proposedPages } from '../stories/kit/proposed.js';
 import { sessionRow } from '../stories/kit/session-row.js';
-import { button, dawn as dawnSky, mark, marks, row, stack, windowControls } from '../stories/kit/pieces.js';
-import { sampleSidebar, sessionTools } from '../stories/kit/samples.js';
+import { button, dawn as dawnSky, dialog, input, mark, markdownBlock, marks, row, stack, thumbnail, windowControls } from '../stories/kit/pieces.js';
+import { awayEvents, sampleHeader, sampleRefusal, sampleSettingsMenu, sampleSidebar, sessionTools } from '../stories/kit/samples.js';
+import { activity, awayMax } from '../stories/kit/activity.js';
 import { statedPages } from '../stories/kit/states.js';
 export { elements } from './storybook-markup.mjs';
 
@@ -47,6 +48,23 @@ export function kitRecords(records) {
   }
   add('Row', 'Wrapped', `<div class="kanso-panel">${row({ name: 'This retries forever when the bucket is empty: Retry-After is in seconds, so wait that long once and give up after three tries instead of looping on every 429 the server answers.', second: ['src/api/limits.ts:42', 'mara', '2 replies'], wrap: true })}</div>`,
     'Proposed. A review thread: its comment wraps, up to 240 characters, over the path, author and replies.');
+  add('Thumbnail', 'Colour, not drawn yet', `<div class="kanso-panel"><div class="kanso-picture__thumbnails">${thumbnail({ label: 'cart-countdown.png', color: 'var(--working)', selected: true })}${thumbnail({ label: 'checkout.png', color: 'var(--accent)' })}${thumbnail({ label: 'receipt.png' })}</div></div>`,
+    'Proposed. Images: a picture not copied for drawing yet shows its own colour; one with none keeps the plain square.');
+  add('Markdown', 'Editing, in its field', `<div class="kanso-panel"><div class="kanso-markdown">${markdownBlock({ source: '# Rate limits' })}${markdownBlock({ state: 'editing', content: input({ text: 'Each customer gets a bucket of requests.', label: 'Write…', icon: 'none', multiline: true, limit: 400 }) })}</div></div>`,
+    'Proposed. The block being edited holds the text field, its Markdown as written, where the formatted block was.');
+  const agents = [row({ name: 'acme-shop', heading: true, meta: 'Send to all 2' }), row({ icon: 'p-claude', tone: 'muted', name: 'tests', detail: 'limits-docs', current: true }),
+    row({ icon: 'p-codex', tone: 'muted', name: 'checkout', meta: { text: 'Needs you', tone: 'blocked' }, mark: 'blocked' })];
+  add('Dialog', 'Send, its rows from the kit', dialog({ title: 'Send to an agent', scope: 'From docs, in ~/acme-shop-docs', secondary: 'Cancel', primary: 'Send  ⌘↩',
+    body: input({ text: '', label: 'To', icon: 'none', limit: 80 }) + stack({ variant: 'dialog list', scroll: true }, agents) + input({ text: 'Review the latest changes.', label: 'Message', icon: 'none', multiline: true, limit: 400 }),
+    notes: [{ text: 'Pasted into its terminal and sent with Enter, as if you typed it there.' }] }),
+  'Proposed. Send: the agents, by project, are kit rows in a dialog list that scrolls past six; a heading row sends to all of a project.');
+  add('Dialog', 'Sleep, what will stop', dialog({ title: 'Sleep acme-shop', secondary: '', primary: 'Sleep',
+    body: stack({ variant: 'dialog list' }, row({ name: 'checkout', meta: 'keeps its conversation' }), row({ name: 'npm run dev', detail: '~/acme-shop', dimmed: true })),
+    notes: [{ text: "Every tab's agents exit and the tabs are put away. Wake brings them back, each agent on its conversation." }, { text: 'npm run dev will stop now.' }] }),
+  'Proposed. Sleep: what keeps its conversation, and what will only stop, dimmed with its folder, as kit rows.');
+  add('Dialog', 'Many lines', dialog({ title: 'Task', secondary: 'Cancel', primary: 'Save',
+    body: input({ text: 'Explain this pull request.\nList the risks.', label: 'Task', icon: 'none', multiline: true, limit: 4000 }), notes: [{ text: 'The new tab starts its agent on this.' }] }),
+  'Proposed. The prompt of many lines: the dialog with one multiline field; Enter writes a new line, Escape and Cancel close it.');
   const photo = 'https://images.placeholders.dev/96x96';
   const avatar = (size, inner) => `<span class="kanso-avatar kanso-avatar--round${size ? ` kanso-avatar--${size}` : ''}">${inner}</span>`;
   const img = `<img src="${photo}" alt="" loading="lazy" referrerpolicy="no-referrer">`;
@@ -69,11 +87,14 @@ export function kitRecords(records) {
   add('Window controls', 'Default', windowControls(), 'The three lights, where the system draws them.');
   add('Dawn', 'Default', dawnSky(), 'The sky of Dawn Mode; the sun rises once on load.');
   for (const [id, label, html, caption] of [
-    ['kit/Header/Open', 'Expanded', header(), 'The lights; + on the left; sort, search and hide on the right.'],
-    ['kit/Header/Collapsed', 'Collapsed', header({ collapsed: true }), 'The lights; + and show stacked in the rail, Sort and Search under a caret.'],
-    ['kit/Header/Dawn', 'Expanded, Dawn Mode', header({ dawn: true }), 'The dawn behind the lights and the tools.'],
-    ['kit/Header/Dawn collapsed', 'Collapsed, Dawn Mode', header({ collapsed: true, dawn: true }), 'The dawn behind the lights, centred on the rail.'],
+    ['kit/Header/Open', 'Expanded', sampleHeader(), 'The lights; + on the left; sort, search and hide on the right.'],
+    ['kit/Header/Collapsed', 'Collapsed', sampleHeader({ collapsed: true }), 'The lights; + and show stacked in the rail, Sort and Search under a caret.'],
+    ['kit/Header/Dawn', 'Expanded, Dawn Mode', sampleHeader({ dawn: true }), 'The dawn behind the lights and the tools.'],
+    ['kit/Header/Dawn collapsed', 'Collapsed, Dawn Mode', sampleHeader({ collapsed: true, dawn: true }), 'The dawn behind the lights, centred on the rail.'],
+    ['kit/Header/Under the title bar', 'Under the title bar', sampleHeader({ title: false }), 'Proposed. The lights\' row is the window\'s own block above: the header holds the Toolbar alone.'],
   ]) if (html) results.push({ id, source: 'kit', page: 'Compositions/Header', label, html: frame(html), caption });
+  results.push({ id: 'kit/Activity/Keyboard on more', source: 'kit', page: 'Compositions/Activity', label: 'Keyboard on +N more', html: frame(`<div class="kanso-story__slice">${activity({ events: awayEvents, focus: awayMax })}</div>`),
+    caption: 'Proposed. The keyboard\'s ring on +N more, the list\'s last stop; Enter shows the rest.' });
   const inSidebar = (html) => stack({ variant: 'sidebar frame' }, html), inRail = (html) => stack({ variant: 'rail frame' }, html);
   const atlas = { name: 'Atlas', activity: 'Reviewing step 01', time: '3m' }, juno = { name: 'Juno', status: 'idle', depth: 2 }, iris = { program: 'p-codex', name: 'Iris', status: 'done', depth: 2 };
   for (const [page, label, html, caption, id] of [
@@ -121,6 +142,7 @@ export function kitRecords(records) {
     ['View switch', 'Row', inSidebar(viewSwitch()), 'Sidebar open: the three views by name.'],
     ['View switch', 'Column', inRail(viewSwitch({ column: true })), 'Sidebar collapsed: the three views as icons.'],
     ['View switch', 'Someone needs you', inSidebar(viewSwitch({ asks: true, tips: { spaces: 'Projects ⌃⌥P', agents: 'Status ⌃⌥S', threads: 'Threads ⌃⌥T' } })), 'Status carries the dot; each view\'s tooltip has its key.'],
+    ['View switch', 'Collapsed, someone needs you', inRail(viewSwitch({ column: true, asks: true, carry: true })), 'Proposed. The view button carries the mark while Status is not the view on show.'],
     ['View switch', 'Menu', inRail(viewSwitch({ column: true, open: true, asks: true })), 'Collapsed, the button opens the three views; Status is marked while someone needs you.'],
     ['Tile', 'Project', inRail(tile({ initial: 'A', status: 'blocked', count: 4, open: true })), 'A project in the rail.'],
     ['Tile', 'Status', inRail(tile({ status: 'working', count: 3 })), 'A state in the rail.'],
@@ -129,6 +151,11 @@ export function kitRecords(records) {
     ['Tile', 'Unread', inRail(tile({ initial: 'A', status: 'done', count: 2, strong: true, label: 'kansō' })), 'Something inside is unread or woke: a ring.'],
     ['Footer', 'Default', inSidebar(sidebarFooter()), 'Settings.'],
     ['Footer', 'Update', inSidebar(sidebarFooter({ update: 'Update kansō to 3.31.0' })), 'An update adds a row on top.'],
+    ['Footer', 'Updating', inSidebar(sidebarFooter({ update: 'Updating kansō', busy: true })), 'Proposed. Pressed, the row says so and stays quiet until it lands.'],
+    ['Footer', 'Refused', inSidebar(sidebarFooter({ update: 'Update kansō to 3.31.0', refused: sampleRefusal })), 'Proposed. The tool\'s words under the row, with Update to try again.'],
+    ['Footer', 'Settings menu', inSidebar(sidebarFooter({ menu: sampleSettingsMenu() })), 'Proposed. Settings opens one menu: kansō settings with its key, and Herdr settings.'],
+    ['Footer', 'Collapsed', inRail(sidebarFooter({ collapsed: true })), 'Proposed. In the rail, Settings is an icon Button.'],
+    ['Footer', 'Collapsed, update', inRail(sidebarFooter({ collapsed: true, update: 'Update kansō to 3.31.0' })), 'Proposed. The update is an icon Button above it, its words in the tooltip.'],
     ['Sidebar', 'Open', sampleSidebar(), 'Header, views, rows and footer.'],
     ['Sidebar', 'Collapsed', sampleSidebar({ collapsed: true }), 'The rail.'],
     ['Sidebar', 'Dawn', sampleSidebar({ dawn: true }), 'Open, in Dawn Mode.'],

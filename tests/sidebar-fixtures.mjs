@@ -68,6 +68,14 @@ export const loadSidebar = (elements, over = {}) => loadSpaces({
   run: () => {}, home: () => "/Users/me", props: () => ({}), openOverlay: () => {}, ...over,
 });
 
+export const world = (spaces, agents, panes, terminals) => ({
+  InputState: { new: () => ({ on() {}, value: () => "", focus() {}, release() {} }) },
+  spaces: () => spaces, agents: () => agents, panes: () => panes, terminals: () => terminals,
+});
+
+// A terminal at its prompt that keeps a conversation: what Herdr calls asleep once its tab is settled.
+export const shell = (address, resume, name) => ({ address, state: "live", program: { shell: true }, labels: { "kanso.resume": resume, "kanso.name": name } });
+
 // What a mounted sidebar holds before its first draw.
 export const mountedState = (extra = {}) => ({
   view: "spaces", git: {}, shown: new Set(), born: {}, custom: {}, order: "updated", statusOrder: "latest", threadOrder: "said", threadGroup: false,

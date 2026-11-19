@@ -11,7 +11,7 @@ const terminal = (address, status_ms = 1, extra = {}) => ({ address, status_ms, 
 const addresses = (rows) => rows.map((row) => row.address);
 
 const MODES = ["spaces", "agents", "threads"];
-const waitingNotFinished = (texts) => assert.deepEqual(["Waiting for you", "Finished"].map((word) => texts.includes(word)), [true, false]);
+const waitingNotFinished = (texts) => assert.deepEqual(["Waiting for you", "finished"].map((word) => texts.includes(word)), [true, false]);
 
 test("Only an agent waiting on you is listed, oldest first across projects", () => {
   const rows = waitingQueue([agent("new"), agent("finished", "done"), agent("old", "blocked", { space_name: "Other" })],
@@ -206,7 +206,7 @@ test("Projects, Status and Threads keep the return digest when Needs you is hidd
   Object.assign(returned, { project: `:${state.spaces[0].folder}`, rows: [{ id: 7, target: "agent:a", text: "Finished while you were away" }] });
   Object.assign(view, {
     sinceLeft: returned, returnPlaces: new Map([["agent:a", "a"]]), custom: {}, order: "updated", assignColors() {}, projectOf: () => null,
-    listed: () => [], seen: () => new Map(), tools: ui.host.div, switchViews: ui.host.div,
+    listed: () => [], seen: () => new Map(), header: ui.host.div, switchViews: ui.host.div,
     agentsView: () => [], threadsView: () => [], grouped: () => [],
   });
   const drawAs = (mode, open) => {

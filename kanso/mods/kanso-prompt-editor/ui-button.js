@@ -39,28 +39,29 @@ export function armedLabel(label, verb, on, text, { start = false } = {}) {
  * `tip`: the tooltip, when it says more than the label; `focus`: the keyboard's ring is on it. `size`: "sm" draws the small form, an icon button at the row's 20 with a 12 glyph; "lg" an icon button at 32 with a 17 glyph. `verb`: the action asks twice; `armed` fills it with the accent and reads "Press again to <verb>".
  * `content`: drawn elements shown in place of the icon and label, such as a picture with its name; the button takes their size, and `label` is what it says.
  * `truncate`: a long label is cut at W.buttonLabel, such as a menu's chosen project, so the button never grows past it. */
-export function button(id, label, onClick, c, { kind = "solid", icon = null, small = false, size = null, disabled = false, spoken = label, verb = null, armed = false, active = false, spin = false, color = null, tip = null, focus = false, content = [], truncate = false } = {}) {
+export function button(id, label, onClick, c, { kind = "solid", icon = null, small = false, size = null, disabled = false, spoken = label, verb = null, armed = false, active = false, spin = false, color = null, tip = null, focus = false, content = [], truncate = false, flush = false, name = "" } = {}) {
   const square = kind === "icon", on = armed && !disabled;
   const look = disabled ? { fill: kind === "quiet" ? null : well(c), ink: c.dim }
     : on ? armedLook(c)
-      : active ? { ...LOOKS[kind](c), fill: c.selected, ink: c.text, hover: c.selected }
+      : active ? { ...LOOKS[kind](c), fill: c.w12, ink: c.text, hover: c.w12, press: c.w12 }
         : LOOKS[kind](c);
   const ink = disabled || on ? look.ink : color ?? (spin ? c.text : look.ink);
   const compact = small || size === "sm";
   const box = SQUARES[size] ?? (small ? SQUARES.compact : SQUARES.md);
   const line = compact ? H.compact : H.control;
+  const inset = compact ? G.sm : G.md;
   const side = square ? box.side : line;
   const text = (words) => div().text_size(compact ? T.body : T.value).font_medium().text_color(ink).when(truncate, (el) => el.max_w(W.buttonLabel).truncate()).child(words);
   const glyph = icon ? svg(glyphOf(icon)).size(square ? box.glyph : ICON_ROW).flex_none().text_color(ink) : null;
   const face = [content].flat().filter(Boolean), drawn = face.length > 0;
   // The ring is a border kept clear at rest, so focusing never resizes the box.
-  const frame = Button.new(id).when(square || !drawn, (el) => el.h(side)).flex_none().items_center().justify_center().gap(G.sm).rounded(R.control)
+  const frame = Button.new(name ? `${id}-${name}` : id).when(square || !drawn, (el) => el.h(side)).flex_none().items_center().justify_center().gap(G.sm).rounded(R.control)
     .border_2().border_color(focus ? c.accent : CLEAR).focus((s) => s.border_color(c.accent))
     .disabled(disabled)
     .accessibility_label(on && verb ? pressAgain(verb) : spoken)
     .when(square, (el) => el.w(side).tooltip(tip ?? spoken))
     .when(!square && Boolean(tip), (el) => el.tooltip(tip))
-    .when(!square && !drawn, (el) => el.px((compact ? G.sm : G.md) - G.hair));
+    .when(!square && !drawn, (el) => el.px(inset - G.hair).when(flush, (e) => e.ml(-inset)));
   const pressed = withLook(frame, look).when(!disabled && Boolean(onClick), (el) => el.on_click((_e, cx) => onClick(cx)));
   if (drawn) return pressed.children(face);
   return pressed

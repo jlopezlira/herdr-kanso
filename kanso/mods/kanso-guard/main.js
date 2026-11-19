@@ -281,7 +281,7 @@ export default class Memory extends View {
     const events = data.events.filter((e) => e.text !== data.window?.reason);
     return v_flex().w_full().gap(narrow ? 36 : 48)
       .when(stale, (el) => el.child(h_flex().w_full().gap(G.lg).items_center()
-        .child(div().text_size(12).text_color(c.red).child(`Stopped at ${clock(data.at)}`))
+        .child(div().text_size(T.value).text_color(c.red).child(`Stopped at ${clock(data.at)}`))
         .child(quietLink("guard-on", this.busy.install ? "Turning on…" : "Turn on", (cx) => { if (!this.busy.install) this.turnOn(cx); }, c, { color: c.text }))))
       .child(v_flex().w_full().gap(narrow ? 36 : 48).opacity(stale ? OPACITY.away : 1)
         .child(this.hero(c, data, narrow))
@@ -289,7 +289,7 @@ export default class Memory extends View {
         .child(this.agents(c, data))
         .when(data.heaviest.length > 0, (el) => el.child(this.heaviest(c, data)))
         .when(events.length > 0, (el) => el.child(this.events(c, { ...data, events })))
-        .child(div().text_size(10.5).text_color(c.dim).child(limitsNote(data.limits))));
+        .child(div().text_size(T.micro).text_color(c.dim).child(limitsNote(data.limits))));
   }
 
   hero(c, data, narrow) {
@@ -328,21 +328,21 @@ export default class Memory extends View {
       .child(this.chartHead(c, series))
       .child(h_flex().w_full().h(height + 18).items_end().children(bars))
       .child(h_flex().w_full().justify_between()
-        .child(div().text_size(10).text_color(c.dim).child(series?.first ?? ""))
-        .child(div().text_size(10).text_color(c.dim).child("Free"))
-        .child(div().text_size(10).text_color(c.dim).child(series?.last ?? "")));
+        .child(div().text_size(T.micro).text_color(c.dim).child(series?.first ?? ""))
+        .child(div().text_size(T.micro).text_color(c.dim).child("Free"))
+        .child(div().text_size(T.micro).text_color(c.dim).child(series?.last ?? "")));
   }
 
   chartHead(c, series) {
     return h_flex().w_full().items_center().justify_between().gap(G.md).pb(G.xs)
       .child(segmented("guard-range", RANGES.map((r) => ({ key: r.key, label: r.label })), this.range, (key, cx) => { this.range = key; cx.notify(); }, c))
-      .child(div().text_size(12).text_color(c.dim).child(series?.lowest ? `lowest ${series.lowest}` : ""));
+      .child(div().text_size(T.body).text_color(c.dim).child(series?.lowest ? `lowest ${series.lowest}` : ""));
   }
 
   chartBar(bar, height, c) {
     const h = height + 18;
-    return v_flex().flex_1().min_w(0).h(h).items_center().justify_end().gap(4).tooltip(tooltip({ label: bar.tip }))
-      .when(Boolean(bar.mark), (el) => el.child(div().whitespace_nowrap().text_size(10).text_color(c.text).child(bar.value)))
+    return v_flex().flex_1().min_w(0).h(h).items_center().justify_end().gap(G.xs).tooltip(tooltip({ label: bar.tip }))
+      .when(Boolean(bar.mark), (el) => el.child(div().whitespace_nowrap().text_size(T.micro).text_color(c.text).child(bar.value)))
       .child(div().w(bar.mark ? 3 : 2).flex_none().rounded_t(1)
         .h(bar.empty ? 1 : Math.max(2, Math.round(bar.ratio * height)))
         .bg(bar.mark ? c.accent : bar.empty ? c.border : bar.low ? c.red : c.muted)
@@ -380,11 +380,11 @@ export default class Memory extends View {
     return v_flex().w_full().gap(G.xl)
       .child(v_flex().w_full().gap(G.sm)
         .child(section(c, "Agents", list.length ? size(agentsMB(data)) : ""))
-        .when(list.length === 0, (el) => el.child(div().text_size(12).text_color(c.dim).child("None running.")))
-        .when(Boolean(counts), (el) => el.child(div().text_size(12).text_color(c.dim).child(counts)))
+        .when(list.length === 0, (el) => el.child(div().text_size(T.body).text_color(c.dim).child("None running.")))
+        .when(Boolean(counts), (el) => el.child(div().text_size(T.body).text_color(c.dim).child(counts)))
         .when(Boolean(this.batch), (el) => el.child(this.batchView(c)))
         .when(!batchBusy && (batchable.length > 0 || stale.length > 0), (el) => el.child(actions))
-        .when(!batchBusy && ready.length > 0 && batchable.length === 0, (el) => el.child(div().text_size(12).text_color(c.dim).child("Only the agent you are on is idle; it is never recycled in bulk."))))
+        .when(!batchBusy && ready.length > 0 && batchable.length === 0, (el) => el.child(div().text_size(T.body).text_color(c.dim).child("Only the agent you are on is idle; it is never recycled in bulk."))))
       .when(ready.length > 0, (el) => el.child(this.group(c, "Ready to recycle", ready, { limit, action: !batchBusy })))
       .when(working.length > 0, (el) => el.child(this.group(c, "Working", working, { limit })))
       .when(other.length > 0, (el) => el.child(this.group(c, "Can't be recycled", other, { limit, reason: true })));
@@ -401,13 +401,13 @@ export default class Memory extends View {
     return v_flex().w_full().gap(G.xs).py(G.sm)
       .child(h_flex().w_full().items_center().gap(G.sm)
         .when(!b.finished, (el) => el.child(mark(c, { status: "working", size: "sm" })))
-        .child(div().flex_1().min_w(0).text_size(13).text_color(c.text).child(head))
+        .child(div().flex_1().min_w(0).text_size(T.card).text_color(c.text).child(head))
         .when(b.finished, (el) => el.child(quietLink("guard-batch-dismiss", "Dismiss", (cx) => { this.batchSeen = b.at; this.batch = null; delete this.busy.batch; cx.notify(); }, c))))
-      .children(b.done.map((d, i) => h_flex().w_full().items_center().gap(G.md).py(2).id(`guard-batch-${i}`)
-        .child(div().flex_1().min_w(0).truncate().text_size(12).text_color(d.ok ? c.muted : c.text).child(d.name ?? d.terminal ?? ""))
-        .child(div().flex_none().text_size(12).text_color(d.ok ? c.dim : c.red).whitespace_nowrap()
+      .children(b.done.map((d, i) => h_flex().w_full().items_center().gap(G.md).py(G.hair).id(`guard-batch-${i}`)
+        .child(div().flex_1().min_w(0).truncate().text_size(T.body).text_color(d.ok ? c.muted : c.text).child(d.name ?? d.terminal ?? ""))
+        .child(div().flex_none().text_size(T.body).text_color(d.ok ? c.dim : c.red).whitespace_nowrap()
           .child(d.ok ? (closing ? `${size(d.beforeMB)} back` : `${size(d.beforeMB)} → ${size(d.afterMB ?? d.beforeMB)}`) : String(d.why ?? "not done")))))
-      .when(Boolean(b.skippedFocused), (el) => el.child(div().text_size(11).text_color(c.dim).child(`The agent you are on (${b.skippedFocused}) was left as it is.`)));
+      .when(Boolean(b.skippedFocused), (el) => el.child(div().text_size(T.micro).text_color(c.dim).child(`The agent you are on (${b.skippedFocused}) was left as it is.`)));
   }
 
   group(c, title, list, { limit, action = false, reason = false }) {
@@ -415,8 +415,8 @@ export default class Memory extends View {
     const shown = open ? list : list.slice(0, AGENT_ROWS);
     return v_flex().w_full()
       .child(h_flex().w_full().items_end().justify_between().pb(G.xs)
-        .child(div().text_size(12).text_color(c.muted).child(title))
-        .child(div().text_size(11.5).text_color(c.dim).child(`${list.length} · ${size(list.reduce((s, a) => s + (a.mb ?? 0), 0))}`)))
+        .child(div().text_size(T.body).text_color(c.muted).child(title))
+        .child(div().text_size(T.body).text_color(c.dim).child(`${list.length} · ${size(list.reduce((s, a) => s + (a.mb ?? 0), 0))}`)))
       .children(shown.map((a, index) => this.agentRow(c, a, index, { limit, action, reason })))
       .when(list.length > AGENT_ROWS, (el) => el.child(h_flex().pt(G.sm)
         .child(quietLink(`guard-more-${title}`, this.showAll ? "Show fewer" : `Show ${list.length - AGENT_ROWS} more`, (cx) => { this.showAll = !this.showAll; cx.notify(); }, c))));
@@ -432,15 +432,15 @@ export default class Memory extends View {
       .child(v_flex().flex_1().min_w(0).gap(3)
         .child(h_flex().w_full().items_center().gap(G.sm)
           .when(a.status === "working", (el) => el.child(mark(c, { status: "working", size: "sm" })))
-          .child(div().flex_1().min_w(0).truncate().text_size(13).text_color(reason ? c.muted : c.text).child(a.name || a.kind || String(a.pid))))
+          .child(div().flex_1().min_w(0).truncate().text_size(T.value).text_color(reason ? c.muted : c.text).child(a.name || a.kind || String(a.pid))))
         .child(h_flex().w_full().flex_wrap().gap_x(G.md)
           .children([...agentMeta(a), ...(a.terminal && a.terminal === this.now?.data?.focused ? ["you are on it"] : [])]
-            .map((part) => div().text_size(11).text_color(c.dim).whitespace_nowrap().child(part))))
-        .when(reason && Boolean(a.why), (el) => el.child(div().text_size(11).text_color(c.dim).child(a.why))))
-      .child(v_flex().flex_none().items_end().gap(2)
+            .map((part) => div().text_size(T.micro).text_color(c.dim).whitespace_nowrap().child(part))))
+        .when(reason && Boolean(a.why), (el) => el.child(div().text_size(T.micro).text_color(c.dim).child(a.why))))
+      .child(v_flex().flex_none().items_end().gap(G.hair)
         .child(h_flex().items_center().gap(G.md)
           .when(Boolean(spark), (el) => el.child(this.spark(c, spark.ratios)))
-          .child(div().text_size(15).font_light().text_color(over ? c.yellow : reason ? c.muted : c.text).whitespace_nowrap().child(size(a.mb))))
+          .child(div().text_size(T.title).font_light().text_color(over ? c.yellow : reason ? c.muted : c.text).whitespace_nowrap().child(size(a.mb))))
         .child(h_flex().gap(G.md).items_center()
           .when(closable || closing, (el) => el.child(this.armed.link(`guard-close-${a.pid}`, closing ? "Closing…" : "Close", "close",
             closeKey, (cx) => this.closeAgent(a, cx), c, { color: c.dim, disabled: closing, label: `Close ${a.name || a.pid}` })))
@@ -452,9 +452,9 @@ export default class Memory extends View {
     return v_flex().w_full().gap(G.xs)
       .child(section(c, "Heaviest", ""))
       .children(data.heaviest.slice(0, HEAVY_ROWS).map((p) => h_flex().w_full().items_end().gap(G.md).py(5)
-        .child(div().flex_1().min_w(0).truncate().text_size(13).text_color(c.muted).child(p.name || String(p.pid)))
-        .child(div().text_size(11).text_color(c.dim).child(typeof p.ageMin === "number" ? `up ${span(p.ageMin)}` : ""))
-        .child(div().min_w(64).text_right().text_size(15).font_light().text_color(c.text).child(size(p.mb)))));
+        .child(div().flex_1().min_w(0).truncate().text_size(T.value).text_color(c.muted).child(p.name || String(p.pid)))
+        .child(div().text_size(T.micro).text_color(c.dim).child(typeof p.ageMin === "number" ? `up ${span(p.ageMin)}` : ""))
+        .child(div().min_w(64).text_right().text_size(T.title).font_light().text_color(c.text).child(size(p.mb)))));
   }
 
   events(c, data) {
@@ -462,7 +462,7 @@ export default class Memory extends View {
     return v_flex().w_full().gap(G.xs)
       .child(section(c, "Events", ""))
       .children(data.events.slice(0, EVENT_ROWS).map((e) => h_flex().w_full().items_start().gap(G.md).py(3)
-        .child(div().w(92).flex_none().text_size(11).text_color(c.dim).child(clock(e.at)))
-        .child(div().flex_1().min_w(0).text_size(12).line_height(1.4).text_color(tone[e.kind] ?? c.muted).child(String(e.text ?? "")))));
+        .child(div().w(92).flex_none().text_size(T.micro).text_color(c.dim).child(clock(e.at)))
+        .child(div().flex_1().min_w(0).text_size(T.body).line_height(1.4).text_color(tone[e.kind] ?? c.muted).child(String(e.text ?? "")))));
   }
 }

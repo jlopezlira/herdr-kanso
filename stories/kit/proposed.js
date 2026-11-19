@@ -1,4 +1,7 @@
-import { activity, panel, panelBack, panelDoors, panelHeader, panelRefresh, tabBar, toolbar } from './compositions.js';
+import { panel, panelBack, panelDoors, panelHeader, panelRefresh } from './compositions.js';
+import { activity } from './activity.js';
+import { tabBar } from './tab-bar.js';
+import { toolbar } from './toolbar.js';
 import { emptyState, facts, failureBlock, glyph, skeletonOf, toast } from './pieces.js';
 import { atWidth, toolsRoom } from './frames.js';
 import { sampleAddMenu, sampleSidebar } from './samples.js';

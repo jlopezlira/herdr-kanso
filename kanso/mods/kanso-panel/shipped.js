@@ -9,7 +9,7 @@ import { exec, theme, shared, setShared, notify } from "herdr";
 import { Store } from "./shipped-store.js";
 import { shippedSpec, shareText } from "./shipped-card.js";
 import { Share, shareRows } from "./share.js";
-import { G, T, HEATMAP_GAP, TINT, alpha, tokens } from "./ui.js";
+import { R, G, T, HEATMAP_GAP, TINT, alpha, tokens } from "./ui.js";
 import { quietLink, iconButton } from "./ui-button.js";
 import { section } from "./ui-section.js";
 import { metric, skeletonOf, failureBlock, tooltip } from "./kit.js";
@@ -406,7 +406,7 @@ export class Shipped {
       .child(segmented("shipped", items, this.kind, (kind, cx) => this.pick(kind, 0, cx), c))
       .child(h_flex().gap(G.xs).items_center()
         .child(iconButton("shipped-prev", "chevron-left", "Previous period", (cx) => this.pick(this.kind, this.offset - 1, cx), c))
-        .child(div().min_w(96).text_center().text_size(12).text_color(c.text).child(periodLabel(this.kind, this.offset)))
+        .child(div().min_w(96).text_center().text_size(T.value).text_color(c.text).child(periodLabel(this.kind, this.offset)))
         .child(iconButton("shipped-next", "chevron-right", "Next period", (cx) => this.pick(this.kind, this.offset + 1, cx), c, { disabled: this.offset >= 0 })));
   }
 
@@ -458,7 +458,7 @@ export class Shipped {
         .when(s.delta !== null, (el) => el.child(h_flex().gap(6).items_center()
           .child(dot(c, s.delta >= 0 ? c.green : c.red))
           .child(div().text_size(T.value).text_color(s.delta >= 0 ? c.green : c.red).child(s.deltaText)))))
-      .when(Boolean(s.everText), (el) => el.child(div().text_size(12).text_color(c.muted).child(s.everText)))
+      .when(Boolean(s.everText), (el) => el.child(div().text_size(T.body).text_color(c.muted).child(s.everText)))
       .when(Boolean(s.error), (el) => el.child(failureBlock(s.error)("sh-error", c)));
   }
 
@@ -492,14 +492,14 @@ export class Shipped {
         const r = this.records[k], t = recordText(k, r), fresh = this.fresh.has(k);
         return h_flex().id(`record-${k}`).w_full().py(10).gap(G.md).items_center()
           .when(i > 0, (el) => el.border_t_1().border_color(c.border))
-          .child(v_flex().flex_1().min_w(0).gap(2)
+          .child(v_flex().flex_1().min_w(0).gap(G.hair)
             .child(h_flex().gap(G.sm).items_center()
-              .child(div().truncate().text_size(13).text_color(c.text).child(RECORD_NAMES[k]))
-              .when(fresh, (el) => el.child(div().flex_none().px(6).py(1).rounded(6).bg(alpha(c.accent, TINT.soft)).text_size(11).text_color(c.accent).child("New record"))))
-            .child(div().truncate().text_size(11.5).text_color(c.dim).child(t.detail)))
+              .child(div().truncate().text_size(T.card).text_color(c.text).child(RECORD_NAMES[k]))
+              .when(fresh, (el) => el.child(div().flex_none().px(6).py(1).rounded(R.control).bg(alpha(c.accent, TINT.soft)).text_size(T.micro).text_color(c.accent).child("New record"))))
+            .child(div().truncate().text_size(T.body).text_color(c.dim).child(t.detail)))
           .child(h_flex().flex_none().items_end().gap(6)
-            .child(div().text_size(20).line_height(1).font_light().text_color(fresh ? c.accent : c.text).child(t.value))
-            .child(div().text_size(11).text_color(c.dim).child(t.unit)));
+            .child(div().text_size(T.page).line_height(1).font_light().text_color(fresh ? c.accent : c.text).child(t.value))
+            .child(div().text_size(T.micro).text_color(c.dim).child(t.unit)));
       }));
   }
 
@@ -509,15 +509,15 @@ export class Shipped {
     const span = this.kind === "day" ? periodRange("week", 0, cur.start) : cur;
     const { byRepo } = this.sumsIn(span.start, span.end);
     const note = this.kind === "day" ? `this week · ${fmt(byRepo.length)}` : fmt(byRepo.length);
-    if (!byRepo.length) return v_flex().w_full().child(section(c, "By repository", "")).child(div().text_size(12).text_color(c.dim).child(this.syncing ? "Adding up…" : "Nothing in this period yet."));
+    if (!byRepo.length) return v_flex().w_full().child(section(c, "By repository", "")).child(div().text_size(T.body).text_color(c.dim).child(this.syncing ? "Adding up…" : "Nothing in this period yet."));
     const top = Math.max(1, ...byRepo.map((r) => r.add + r.del)), rows = this.reposOpen ? byRepo : byRepo.slice(0, REPO_ROWS);
     return v_flex().w_full()
       .child(section(c, "By repository", note))
       .children(rows.map((r, i) => v_flex().w_full().py(G.sm).gap(6)
         .when(i > 0, (el) => el.border_t_1().border_color(c.border))
         .child(h_flex().w_full().flex_wrap().gap_x(G.md).gap_y(2).items_center()
-          .child(div().flex_1().min_w(120).truncate().text_size(13).text_color(c.text).child(r.name))
-          .child(div().flex_none().text_size(12).text_color(c.dim).child(`${fmt(r.commits)} commits · +${fmt(r.add)} −${fmt(r.del)}`)))
+          .child(div().flex_1().min_w(120).truncate().text_size(T.card).text_color(c.text).child(r.name))
+          .child(div().flex_none().text_size(T.body).text_color(c.dim).child(`${fmt(r.commits)} commits · +${fmt(r.add)} −${fmt(r.del)}`)))
         .child(h_flex().w_full().h(4).rounded(2).bg(c.subtle)
           .child(div().h_full().rounded(2).bg(c.accent).w(`${(Math.max(0.02, (r.add + r.del) / top) * 100).toFixed(1)}%`)))))
       .when(byRepo.length > REPO_ROWS, (el) => el.child(h_flex().pt(G.sm).child(quietLink("shipped-repos-more", this.reposOpen ? "Show fewer" : `Show ${byRepo.length - REPO_ROWS} more`,
@@ -527,7 +527,7 @@ export class Shipped {
   status(c) {
     if (this.syncError) return failureBlock({ text: "Adding up stopped", source: this.syncError })("sh-sync", c);
     if (!this.syncing || !this.phase) return null;
-    return div().text_size(12).text_color(this.firstRead ? c.muted : c.dim)
+    return div().text_size(T.body).text_color(this.firstRead ? c.muted : c.dim)
       .child(`${this.firstRead ? "Adding up" : "Updating"}: ${this.phase}.${this.firstRead ? " The first time takes a few minutes; after that only what changed is read." : ""}`);
   }
 
@@ -540,16 +540,16 @@ export class Shipped {
     const hour = (h) => `${String(h).padStart(2, "0")}:00`;
     return v_flex().w_full().gap(G.md)
       .child(section(c, "When you ship", note))
-      .child(h_flex().w_full().h(56).items_end().gap(2).children(r.hours.map((n, h) => div().id(`hour-${h}`).flex_1().min_w(2)
+      .child(h_flex().w_full().h(56).items_end().gap(G.hair).children(r.hours.map((n, h) => div().id(`hour-${h}`).flex_1().min_w(2)
         .h(Math.max(2, Math.round((n / top) * 56))).rounded(2).bg(n ? c.accent + (h === peak ? "ff" : "90") : c.subtle)
         .tooltip(tooltip({ label: `${fmt(n)} ${n === 1 ? "commit" : "commits"} at ${hour(h)}` })))))
-      .child(h_flex().w_full().justify_between().text_size(10.5).text_color(c.dim)
+      .child(h_flex().w_full().justify_between().text_size(T.micro).text_color(c.dim)
         .children(["00", "06", "12", "18", "23"].map((t) => div().child(t))))
       .when(r.machines.length > 0, (el) => el.child(v_flex().w_full().pt(G.sm)
         .children(r.machines.map((m, i) => h_flex().w_full().py(6).gap(G.md).items_center()
           .when(i > 0, (e) => e.border_t_1().border_color(c.border))
-          .child(div().flex_1().min_w(0).truncate().text_size(13).text_color(c.text).child(m.machine))
-          .child(div().flex_none().text_size(12).text_color(c.dim).child(`${fmt(m.n)} commits · +${fmt(m.a)} −${fmt(m.d)}`))))));
+          .child(div().flex_1().min_w(0).truncate().text_size(T.card).text_color(c.text).child(m.machine))
+          .child(div().flex_none().text_size(T.body).text_color(c.dim).child(`${fmt(m.n)} commits · +${fmt(m.a)} −${fmt(m.d)}`))))));
   }
 
   skeleton(c) { return skeletonOf({ shape: "metric" })("kanso-skeleton", c); }

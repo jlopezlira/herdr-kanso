@@ -7,7 +7,7 @@ import { NAME_LABEL } from "./marks.js";
 import { tellsSomething } from "./pure.js";
 import { parseProcesses, etimeMs } from "./procs.js";
 import { oneLine } from "./since-left-model.js";
-import { GLIDE, H, R, DIALOG } from "./ui.js";
+import { G, GLIDE, H, R, DIALOG, SIDEBAR, sidebarSides } from "./ui.js";
 import { mark, MARK_SIZES } from "./ui-mark.js";
 import { sessionRow } from "./session-row.js";
 import { machineOf } from "./machines.js";
@@ -18,9 +18,10 @@ export { NAME_LABEL };
 // Native GPUI motion, no per-frame script; fold and pill share the pace so they move together.
 export const FOLD_MS = GLIDE.duration + 40; // rows stay drawn this long after a fold, so the close is seen
 
-// Drawn before the rows so they sit on top, out to the list's edges as the kit's row is.
+// Drawn before the rows so they sit on top, where a row's ground is: the gutter less the row's own padding from each side seen.
+const GROUND = SIDEBAR.gutter - G.sm;
 export function pill(id, y, h, color) {
-  return div().id(id).absolute().left_0().right_0().top(y).h(h).rounded(R.control).bg(color)
+  return sidebarSides(div().id(id).absolute(), GROUND, ["left", "right"]).top(y).h(h).rounded(R.control).bg(color)
     .transition("top", GLIDE).transition("height", GLIDE);
 }
 
@@ -280,7 +281,7 @@ export function threadSections(rows, { order = "said", group = false, now = Date
 export function snoozePresets(now) {
   const d = new Date(now);
   const at = (days, h) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + days, h, 0, 0, 0).getTime();
-  const hhmm = (ms) => new Date(ms).toTimeString().slice(0, 5);
+  const hhmm = (ms) => new Date(ms).toTimeString().slice(0, 5).replace(/^0/, "");
   const toMonday = ((8 - d.getDay()) % 7) || 7;
   const out = [
     { id: "1h", label: "In 1 hour", until: now + 3600000 },
@@ -289,7 +290,8 @@ export function snoozePresets(now) {
     { id: "tomorrow", label: "Tomorrow", until: at(1, 9) },
     { id: "monday", label: "Monday", until: at(toMonday, 9) },
   ];
-  return out.map((p) => ({ ...p, when: p.id.endsWith("h") ? hhmm(p.until) : `${new Date(p.until).toDateString().slice(0, 3)} ${hhmm(p.until)}` }));
+  const day = (ms) => `${new Date(ms).toDateString().slice(0, 3)} ${hhmm(ms)}`;
+  return out.map((p) => ({ ...p, when: p.id === "tomorrow" || p.id === "monday" ? day(p.until) : hhmm(p.until) }));
 }
 
 // With no status, a blank of the same width so the rows line up.
@@ -310,7 +312,7 @@ export const mostUrgent = (list) => list.reduce((m, a) => ((RANK[a.status] ?? 0)
 
 const GUIDE_KIND = { "├": "tee", "└": "end", "│": "pass" };
 // The program's own art, or the terminal's icon for a terminal or an unknown program.
-const programOf = (a) => (a.program?.icon ? { icon: a.program.icon, tint: a.program.tint } : "terminal");
+export const programOf = (a) => (a.program?.icon ? { icon: a.program.icon, tint: a.program.tint } : "terminal");
 const TASK_TIP = 90;
 const tasksTip = (tasks) => tasks.map((x) => `${x.command.length > TASK_TIP ? `${x.command.slice(0, TASK_TIP - 1)}\u2026` : x.command} \u00b7 ${x.time}`).join("\n");
 

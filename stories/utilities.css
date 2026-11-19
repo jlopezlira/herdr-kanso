@@ -180,7 +180,9 @@
 .kanso-height--strip{block-size:var(--k-h-strip)}
 .kanso-height--pet-picture{block-size:var(--k-h-pet-picture)}
 .kanso-height--pet-stage{block-size:var(--k-h-pet-stage)}
+.kanso-height--append{block-size:var(--k-h-append)}
 .kanso-height--sidebar-footer{block-size:var(--k-h-sidebar-footer)}
 .kanso-height--spaces-min{block-size:var(--k-h-spaces-min)}
 .kanso-height--file-toolbar{block-size:var(--k-h-file-toolbar)}
 .kanso-height--find-list{block-size:var(--k-h-find-list)}
+.kanso-height--dialog-list{block-size:var(--k-h-dialog-list)}

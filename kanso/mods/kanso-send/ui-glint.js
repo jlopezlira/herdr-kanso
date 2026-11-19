@@ -1,10 +1,9 @@
-// Kanso's panel kit: the glint, lit windows crossing a working name while the dots count; on battery only the dots step. Apache-2.0.
+// Apache-2.0.
 // Kept byte for byte by `npm run sync:share`: edit kanso-panel/ui-glint.js.
 import { div } from "gpui-kit";
 import { h_flex } from "gpui-base";
-import { G, GLINT, GLINT_MS, GLINT_STAGGER, GLINT_EASE, DOTS_MS, OPACITY, onBattery } from "./ui.js";
+import { GLINT, GLINT_MS, GLINT_STAGGER, GLINT_EASE, OPACITY, onBattery } from "./ui.js";
 
-const DOTS = ["", ".", "..", "..."];
 // Seven paces, so names side by side do not glint in step.
 const PACES = 7;
 const WINDOWS = [[GLINT.wide, OPACITY.glintFaint], [GLINT.mid, OPACITY.glintMid], [GLINT.narrow, 1]];
@@ -22,5 +21,4 @@ const moving = (text, c, seed) => div().relative().min_w(0).flex_shrink_1().over
   .children(WINDOWS.map(lit(text, c, paceOf(seed))));
 
 export const glint = (text, c, seed = "") => h_flex().min_w(0).items_center()
-  .child(onBattery() ? still(text, c) : moving(text, c, seed))
-  .child(div().w(G.lg).flex_none().text_color(c.muted).frames(DOTS, DOTS_MS));
+  .child(onBattery() ? still(text, c) : moving(text, c, seed));

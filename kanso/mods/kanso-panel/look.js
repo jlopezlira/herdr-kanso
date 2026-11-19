@@ -15,7 +15,7 @@ import { hc, focused, panes, terminals, theme, appHome, home, shared, setShared,
 import { G, H, T, tokens } from "./ui.js";
 import { button, quietLink, iconButton } from "./ui-button.js";
 import { row } from "./ui-row.js";
-import { button as kitButton, emptyState, skeletonOf } from "./kit.js";
+import { emptyState, skeletonOf, thumbnail } from "./kit.js";
 import { programIcon, givenNames, nameOf } from "./marks.js";
 import { deliver, isAgent, sendKey, waitingNote } from "./deliver.js";
 import { openPath, toPng } from "./share.js";
@@ -500,17 +500,16 @@ export class Look {
     }).flex_none();
   }
 
-  // One circle per picture. The one shown is filled with that picture's color.
-  dot(item, c) {
-    const on = this.selected?.path === item.path;
-    const color = item.color || c.accent;
-    const face = div().size(G.sm).rounded_full().border_1().border_color(on ? color : c.muted).when(on, (el) => el.bg(color));
-    return kitButton({ label: item.name, kind: "icon", size: "compact", content: [face] })(`look-dot-${keyOf(item.path)}`, c, { onClick: (cx) => this.select(item, cx, true) });
+  // One thumbnail per picture: the one shown draws its copy, breathing while it is copied; one not drawn shows its own colour.
+  thumbnail(item, c) {
+    const on = this.selected?.path === item.path, shown = on && this.shown?.path === item.path ? this.shown : null;
+    return thumbnail({ image: shown?.image ?? "", label: item.name, selected: on, loading: Boolean(shown?.busy), color: item.color ?? "" })(
+      `look-thumbnail-${keyOf(item.path)}`, c, { onClick: (cx) => this.select(item, cx, true) });
   }
 
-  dots(list, c) {
-    return h_flex().id("look-dots").flex_none().h(H.compact).px(G.lg).gap(G.sm).items_center().overflow_x_scrollbar()
-      .children(list.map((i) => this.dot(i, c)));
+  thumbnails(list, c) {
+    return h_flex().id("look-thumbnails").flex_none().px(G.lg).py(G.sm).gap(G.xs).items_center().overflow_x_scrollbar()
+      .children(list.map((item) => this.thumbnail(item, c)));
   }
 
   picture(c) {
@@ -564,17 +563,17 @@ export class Look {
         .child(programIcon(who?.pane?.program, 15, c.muted) ?? div())
         .child(v_flex().flex_1().min_w(0)
           .child(div().truncate().font_semibold().text_size(T.card).child(who?.name ?? "Images"))
-          .child(div().truncate().text_size(10.5).text_color(c.dim).child([who ? tilde(terminals().find((k) => k.address === address)?.cwd ?? "") : "", this.held ? asOf(this.held.at, Date.now()) : ""].filter(Boolean).join(" · "))))
+          .child(div().truncate().text_size(T.body).text_color(c.dim).child([who ? tilde(terminals().find((k) => k.address === address)?.cwd ?? "") : "", this.held ? asOf(this.held.at, Date.now()) : ""].filter(Boolean).join(" · "))))
         .when(Boolean(address), (el) => el.child(iconButton("look-pin", "pin", this.pinned ? "Follow the pane in focus" : "Stay on this agent",
           (cx) => { this.pinned = this.pinned ? null : address; this.keep(); cx.notify(); }, c, { active: Boolean(this.pinned) })))
         .child(iconButton("look-refresh", "refresh-cw", this.held ? "Retry" : "Read again", (cx) => { this.poll = pollStart(); this.arm = null; this.read(cx); if (item && shows(item) && !this.shown?.deferred) this.draw(item, cx); }, c, { spin: this.reading })))
       .child(v_flex().id("look-view").flex_1().min_h(0).w_full().overflow_hidden().items_center().justify_center().child(this.view(c)))
-      .when(list.length > 0, (el) => el.child(this.dots(list, c)))
+      .when(list.length > 0, (el) => el.child(this.thumbnails(list, c)))
       .when(this.pins.length > 0, (el) => el.child(v_flex().id("look-notes").flex_none().max_h(H.line * NOTE_ROWS).px(G.lg).py(G.sm).overflow_y_scrollbar().border_t(1).border_color(c.border)
         .children(this.pins.map((p, i) => this.noteRow(p, i, c)))))
       .when(Boolean(item), (el) => el.child(h_flex().id("look-bar").flex_none().h(H.control).px(G.lg).gap(G.md).items_center().border_t(1).border_color(c.border)
         .child(div().flex_1().min_w(0).truncate().text_size(T.body).text_color(c.dim).child(tilde(item.path)))
-        .when(Boolean(status), (bar) => bar.child(div().flex_1().min_w(0).truncate().text_size(10.5).text_color(this.note?.error ? c.red : c.dim).child(status)))
+        .when(Boolean(status), (bar) => bar.child(div().flex_1().min_w(0).truncate().text_size(T.body).text_color(this.note?.error ? c.red : c.dim).child(status)))
         .child(button("look-send", this.sending ? "Sending…" : noted(this.pins).length > 1 ? `Send ${noted(this.pins).length}  ⌘↩` : "Send  ⌘↩", (cx) => this.send(cx), c, { small: true, disabled: !ready }))
         .when(Boolean(drawn), (bar) => bar.child(quietLink("look-open", "Open", () => openPath(machine ? paths.join(appHome(), drawn) : drawn), c)))
         .when(this.pins.length > 0, (bar) => bar.child(quietLink("look-unpin", this.pins.length === 1 ? "Clear the pin" : `Clear ${this.pins.length} pins`, (cx) => { this.pins = []; this.kept.delete(this.pinKey(item.path)); this.asking = null; cx.notify(); }, c)))));

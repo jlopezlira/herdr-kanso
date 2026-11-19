@@ -6,8 +6,7 @@ import { exec, hc, readTextFile, home, theme, props, closeOverlay, run, agents, 
 import { tokens, G, H, R, T, ICON, EASE, PAGE } from "./ui.js";
 import { iconButton } from "./ui-button.js";
 import { field, TextField } from "./ui-field.js";
-import { skeletonOf } from "./kit.js";
-import { markdownView } from "./lib.js";
+import { skeletonOf, markdown } from "./kit.js";
 import { tryOr } from "./pure.js";
 import {
   locateConversation, resolveFind, readSlice, freshRead, applySlice, extendIndex, searchIndex,
@@ -15,6 +14,9 @@ import {
 } from "./find.js";
 
 const WAIT = 120;
+// A turn longer than this is shown cut, and says so.
+const MAX_TEXT = 400000;
+const clipped = (text) => (text.length > MAX_TEXT ? `${text.slice(0, MAX_TEXT)}\n\n… (file truncated)` : text);
 
 function hintOf(address) {
   const agent = tryOr(() => agents().find((a) => a.address === address));
@@ -295,7 +297,7 @@ export class Find {
 
   cell(item, c) {
     if (item.kind === "day") {
-      return div().w_full().px(G.md).pt(G.sm).pb(G.xs).text_size(10.5).text_color(c.dim).child(item.label);
+      return div().w_full().px(G.md).pt(G.sm).pb(G.xs).text_size(T.micro).text_color(c.dim).child(item.label);
     }
     const turn = this.state.turns[item.hit.turn];
     const on = item.index === this.at;
@@ -307,16 +309,17 @@ export class Find {
       .child(this.excerpt(this.partsFor(item), c));
   }
 
-  reading(c, t) {
+  reading(c) {
     const hit = this.hits[this.at];
     const turn = this.state.turns[hit?.turn];
-    const text = String(turn?.text ?? "");
+    const text = String(turn?.text ?? ""), turnId = `find-turn-${hit?.turn ?? 0}-${hit?.at ?? 0}`;
     return v_flex().w_full().max_h(PAGE.findList)
       .child(h_flex().px(G.sm).pt(G.xs).items_center()
         .child(iconButton("find-back", "chevron-left", "Back", (cx) => this.back(cx), c))
         .children(turnMeta(turn, c)))
       .child(div().px(G.md).pb(G.xs).child(this.excerpt(hit ? partsOf(text, hit, EXCERPT) : [], c)))
-      .child(markdownView(`find-turn-${hit?.turn ?? 0}-${hit?.at ?? 0}`, text, t).max_h(PAGE.findList));
+      .child(div().id(`${turnId}-scroll`).flex_1().min_h(0).max_h(PAGE.findList).overflow_y_scrollbar().px(G.sm).py(G.sm)
+        .child(markdown({ source: clipped(text) })(turnId, c)));
   }
 
   listBox(c, laid) {
@@ -352,11 +355,11 @@ export class Find {
       }).child(content));
   }
 
-  bodyOf(c, t, laid, showSkel) {
-    if (this.open) return this.reading(c, t);
+  bodyOf(c, laid, showSkel) {
+    if (this.open) return this.reading(c);
     if (laid.items.length) return this.listBox(c, laid);
     if (showSkel) return div().w_full().p(G.sm).child(skeletonOf({ shape: "line", count: 2 })("kanso-skeleton", c));
-    return div().px(G.md).py(G.sm).text_size(10.5).text_color(c.dim).child(this.unavailable ?? "This conversation is no longer there.");
+    return div().px(G.md).py(G.sm).text_size(T.micro).text_color(c.dim).child(this.unavailable ?? "This conversation is no longer there.");
   }
 
   render(cx) {
@@ -378,7 +381,7 @@ export class Find {
       ? layOut(this.hits, this.at, DRAW, (hit) => this.state.turns[hit.turn]?.at)
       : { items: [], focus: 0 };
     const show = this.open || laid.items.length > 0 || showSkel || (this.missing && !blankQuery(this.pending) && !this.loading);
-    const body = this.bodyOf(c, t, laid, showSkel);
+    const body = this.bodyOf(c, laid, showSkel);
     const root = v_flex().id("find").w_full().rounded(R.card).bg(c.canvas).border_1().border_color(c.border)
       .text_color(t.foreground).track_focus(this.handle).on_key_down(onKey)
       .opacity(this.leaving ? 0 : 1).transition("opacity", EASE)
@@ -394,6 +397,6 @@ export class Find {
 }
 
 const turnMeta = (turn, c) => [
-  div().text_size(10.5).text_color(c.muted).child(whoOf(turn)),
-  div().text_size(10.5).text_color(c.dim).child(whenLabel(turn?.at)),
+  div().text_size(T.micro).text_color(c.muted).child(whoOf(turn)),
+  div().text_size(T.micro).text_color(c.dim).child(whenLabel(turn?.at)),
 ];

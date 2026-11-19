@@ -234,6 +234,19 @@ export function context() {
   return { cx, async drain() { while (pending.length) await pending.shift(); } };
 }
 
+export function callContext() {
+  const tasks = context();
+  tasks.cx.timer = { after() {} };
+  let over = false;
+  const stale = () => { throw new Error("cx is no longer valid: it was captured during an earlier call and used later. Use cx.spawn or take cx from the callback arguments instead."); };
+  const cx = {
+    get timer() { return { after() { if (over) stale(); } }; },
+    notify() { if (over) stale(); },
+    spawn(fn) { if (over) stale(); return tasks.cx.spawn(fn); },
+  };
+  return { cx, drain: tasks.drain, end() { over = true; } };
+}
+
 // A context whose every() ticks wait in `timers` as { ms, fn }.
 export const tickingContext = (timers) => {
   const tasks = context();
@@ -381,6 +394,13 @@ export const KIT_NIGHT = { foreground: "#d8d4cb", background: "#1b1b19", hover: 
 // A host whose svg and image elements keep the path they draw.
 const drawnAt = (tag) => (path) => { const el = chain(tag); el.calls.push([tag, path]); return el; };
 export const drawingHost = () => ({ ...gpuiHost(), svg: drawnAt("svg"), image: drawnAt("image") });
+// The same, with Herdr's popover.
+export const popoverHost = () => ({ ...drawingHost(), Popover: { new: (id) => chain(id) } });
+// Every element drawn, with what a popover holds as its trigger and content.
+const heldBy = (el) => el.calls.filter((call) => call[0] === "trigger" || call[0] === "content").map((call) => call[1]);
+export const everyDrawn = (el) => [el, ...[...el.kids, ...heldBy(el)].flatMap(everyDrawn)];
+// How many of the blocked tone's dots an element draws.
+export const blockedDots = (el, c) => nodes(el).filter((kid) => calls(kid, "rounded_full").length && calls(kid, "bg").some((call) => call[1] === c.blocked)).length;
 // The one value each named call set on an element.
 export const boxOf = (el, ...names) => names.map((name) => one(el, name));
 // Herdr's text file reads and writes on the real disk: a missing file reads as null, a write makes its folder.
@@ -409,4 +429,10 @@ export const inTemporaryDir = (prefix, use) => {
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
+};
+
+export const kansoColours = async () => {
+  const { tokens } = await load("kanso-panel/ui.js", ["tokens"]);
+  const theme = JSON.parse(readFileSync(new URL("../kanso/themes/kanso.json", import.meta.url), "utf8"));
+  return tokens({ ...theme, ...theme.colors });
 };

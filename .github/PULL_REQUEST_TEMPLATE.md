@@ -12,7 +12,7 @@ Pull requests target `develop`. A push there publishes the next beta when what k
 <!-- Use one bullet per change a user or reviewer would notice. -->
 
 ## Tests
-<!-- Use one bullet per command run, with its real result (e.g. npm test: passed/failed with counts; npm run check:version; npm run check:mods). Include failures and name the failing tests or checks. -->
+<!-- Paste the lines `npm run pre-pr` ends with, failures included, and name each failing test. Add a bullet for any other command run, such as npm run check:mods. -->
 
 ## Not verified
 <!-- List what was not run or cannot run here and why, including checks only the owner can try on his machine. -->

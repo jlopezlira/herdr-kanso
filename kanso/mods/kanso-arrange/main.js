@@ -6,7 +6,7 @@ import { Store } from "./store.js";
 import { base, tilde, captureTab, describe, summary, projectOf, folderOfKey, openTab } from "./tabkit.js";
 import { listKey, moveTo } from "./listkeys.js";
 import { tryOr, focusOn } from "./pure.js";
-import { G, H, tokens } from "./ui.js";
+import { T, G, H, tokens } from "./ui.js";
 import { Armed } from "./ui-button.js";
 import { dialog, statusNotes } from "./ui-dialog.js";
 import { field, TextField } from "./ui-field.js";
@@ -151,7 +151,7 @@ export default class Arrange extends View {
           field("ar-name", this.name, c, { label: "Name" }),
           cols.length ? v_flex().pt(G.md).gap(G.md).children(cols.map((c, ci) => h_flex().w_full().gap(G.md).items_stretch()
             .child(div().w(2).flex_none().rounded_full().bg(t.border))
-            .child(v_flex().flex_1().min_w(0).gap(4).children(c.panes.map((q, ri) => line(q, `${ci}-${starts[ci] + ri}`)))))) : skeletonOf({ shape: "list row", count: 2 })("kanso-skeleton", c),
+            .child(v_flex().flex_1().min_w(0).gap(G.xs).children(c.panes.map((q, ri) => line(q, `${ci}-${starts[ci] + ri}`)))))) : skeletonOf({ shape: "list row", count: 2 })("kanso-skeleton", c),
         ],
         notes: [...(cols.length ? [{ text: `${cols.length} ${cols.length === 1 ? "column" : "columns"}, left to right` }] : []),
           { text: "Each program is kept with the flags you started it with. A resumed session's id is left out, so each agent starts fresh." },
@@ -183,9 +183,9 @@ export default class Arrange extends View {
       // The list's content in a column that never shrinks: past LIST_ROWS lines it scrolls.
       body: v_flex().id("ar-list").pt(G.hair).max_h(LIST_ROWS * H.line).mx(-G.sm).px(G.sm).overflow_y_scrollbar().child(v_flex().flex_none().w_full()
         .when(this.list === null, (el) => el.child(skeletonOf({ shape: "two lines", count: 3 })("kanso-skeleton", c)))
-        .when(this.list !== null && !list.length && !others.length, (el) => el.child(v_flex().py(6).gap(4)
-          .child(div().text_size(13).text_color(t.muted).child("No arrangement yet."))
-          .child(div().text_size(11.5).line_height(1.45).text_color(t.dim).child("Set up a tab the way you work, with your agents, their flags and your servers, then save it to open it again in one click, in this project or any other."))))
+        .when(this.list !== null && !list.length && !others.length, (el) => el.child(v_flex().py(6).gap(G.xs)
+          .child(div().text_size(T.value).text_color(t.muted).child("No arrangement yet."))
+          .child(div().text_size(T.body).line_height(1.45).text_color(t.dim).child("Set up a tab the way you work, with your agents, their flags and your servers, then save it to open it again in one click, in this project or any other."))))
         .when(list.length > 0 && others.length > 0, (el) => el.child(label("This project")))
         .children(list.map(arrangement))
         .when(others.length > 0, (el) => el.child(label(list.length ? "Other projects, opened here" : "From other projects, opened here")))

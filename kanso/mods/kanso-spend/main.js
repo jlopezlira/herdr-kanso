@@ -7,7 +7,7 @@ import { fileApi } from "./platform-files.js";
 import { View, div } from "gpui-kit";
 import { v_flex, h_flex, Popover } from "gpui-base";
 import { exec, appHome, home, theme, nextCommand, readTextFile, writeTextFile, layout, machines, shared, setShared } from "herdr";
-import { G, H, OPACITY, breathe, tokens } from "./ui.js";
+import { T, G, H, OPACITY, breathe, tokens } from "./ui.js";
 import { mark } from "./ui-mark.js";
 import { quietLink, iconButton } from "./ui-button.js";
 import { field, TextField } from "./ui-field.js";
@@ -90,9 +90,9 @@ function formatTime(iso) {
 
 function metricLine(c, name, tokensText, value, { color = c.text, tip = "", medium = false } = {}) {
   return h_flex().w_full().items_end().gap(G.md)
-    .child(div().flex_1().min_w(0).truncate().text_size(13).text_color(color).when(medium, (el) => el.font_medium()).when(Boolean(tip), (el) => el.tooltip(tooltip({ label: tip }))).child(name))
-    .child(div().text_size(11).text_color(c.dim).child(tokensText))
-    .child(div().min_w(64).text_right().text_size(15).font_light().text_color(c.text).child(value));
+    .child(div().flex_1().min_w(0).truncate().text_size(T.card).text_color(color).when(medium, (el) => el.font_medium()).when(Boolean(tip), (el) => el.tooltip(tooltip({ label: tip }))).child(name))
+    .child(div().text_size(T.micro).text_color(c.dim).child(tokensText))
+    .child(div().min_w(64).text_right().text_size(T.title).font_light().text_color(c.text).child(value));
 }
 
 export default class TokenSpend extends View {
@@ -494,10 +494,10 @@ export default class TokenSpend extends View {
       .child(h_flex().flex_1().min_w(0).items_center().gap(G.sm)
         .when(inner, (el) => el.child(iconButton("spend-back", "chevron-left", "Back", (cx) => this.back(cx), c)))
         .child(v_flex().flex_1().min_w(0).gap(1)
-          .when(Boolean(crumb), (el) => el.child(div().text_size(11).text_color(c.dim).child(crumb)))
+          .when(Boolean(crumb), (el) => el.child(div().text_size(T.micro).text_color(c.dim).child(crumb)))
           .child(div().truncate().text_size(inner ? (narrow ? 15 : 17) : (narrow ? 17 : 20)).text_color(c.text).tooltip(tooltip({ label: title })).child(title))))
       .child(h_flex().gap(G.xs).items_center().flex_none()
-        .when(Boolean(reading), (el) => el.child(div().pr(G.xs).text_size(11).text_color(c.dim).child(reading)))
+        .when(Boolean(reading), (el) => el.child(div().pr(G.xs).text_size(T.micro).text_color(c.dim).child(reading)))
         .when(this.canShare(), (el) => el.child(iconButton("spend-share", "share", "Share", (cx) => this.share.toggle(cx), c, { active: this.share.open })))
         .child(iconButton("spend-refresh", "refresh-cw", tip, (cx) => this.run("snapshot", cx), c, { spin: busy, disabled: busy }))
         .when(this.page !== "settings", (el) => el.child(iconButton("spend-settings", "settings", "Settings", (cx) => this.openSettings(cx), c))));
@@ -511,8 +511,8 @@ export default class TokenSpend extends View {
     const detail = failed ? (this.runtimeError || this.error)
       : scan?.partial ? `First read: ${scan.processed} of ${scan.total} files. This happens once.` : "This takes a second.";
     return v_flex().w_full().gap(G.sm)
-      .child(div().text_size(15).text_color(failed ? c.red : c.muted).child(title))
-      .child(div().text_size(12).text_color(c.dim).child(detail))
+      .child(div().text_size(T.title).text_color(failed ? c.red : c.muted).child(title))
+      .child(div().text_size(T.body).text_color(c.dim).child(detail))
       .when(Boolean(failed) && !this.runtimeError, (el) => el.child(h_flex().pt(G.xs)
         .child(quietLink("spend-retry", "Try again", (cx) => this.run("snapshot", cx), c))));
   }
@@ -527,7 +527,7 @@ export default class TokenSpend extends View {
     return v_flex().w_full().gap(narrow ? 36 : 48)
       .opacity(this.running === "prepare" ? OPACITY.away : 1)
       .when(Boolean(this.error) && !this.running, (el) => el.child(h_flex().w_full().gap(G.md).items_center()
-        .child(div().flex_1().min_w(0).text_size(12).text_color(c.red).truncate().tooltip(tooltip({ label: this.error }))
+        .child(div().flex_1().min_w(0).text_size(T.value).text_color(c.red).truncate().tooltip(tooltip({ label: this.error }))
           .child(`Last update failed: ${this.error}`))
         .child(quietLink("spend-retry-inline", "Try again", (cx) => this.run("snapshot", cx), c))))
       .child(this.controls(c, Boolean(top)))
@@ -535,8 +535,8 @@ export default class TokenSpend extends View {
       .when(!top && (data.machines?.length ?? 0) > 1, (el) => el.child(this.machineSplit(c, data.machines)))
       .when(!top && (this.syncHolds?.length ?? 0) > 0, (el) => el.child(v_flex().w_full().gap(G.xs).pt(G.sm)
         .children(this.syncHolds.map((hold) => h_flex().w_full().items_center().gap(G.md)
-          .child(div().flex_1().min_w(0).truncate().text_size(13).text_color(c.text).child(hold.id))
-          .child(div().text_size(12).text_color(c.muted).child(hold.text))))))
+          .child(div().flex_1().min_w(0).truncate().text_size(T.card).text_color(c.text).child(hold.id))
+          .child(div().text_size(T.body).text_color(c.muted).child(hold.text))))))
       .when(!data.hero.empty, (el) => el
         .child(this.chart(c, data.chart))
         .when(!top && Array.isArray(data.live) && data.live.length > 0, (live) => live.child(this.live(c, data.live)))
@@ -544,7 +544,7 @@ export default class TokenSpend extends View {
           ? h_flex().w_full().gap(56).items_start().children(lists.map((list) => div().flex_1().min_w(0).max_w(lists.length === 1 ? 560 : 10_000).child(list)))
           : v_flex().w_full().gap(narrow ? 36 : 48).children(lists))
         .child(this.tasks(c, data)))
-      .child(v_flex().w_full().gap(2).children(data.footnote.map((line) => div().text_size(10.5).text_color(c.dim).child(line))));
+      .child(v_flex().w_full().gap(G.hair).children(data.footnote.map((line) => div().text_size(T.micro).text_color(c.dim).child(line))));
   }
 
   controls(c, inDetail = false) {
@@ -560,7 +560,7 @@ export default class TokenSpend extends View {
           .child(this.menu("project", c))
           .child(this.menu("model", c)))))
       .when(filtered, (el) => el.child(h_flex().gap(G.md).items_center()
-        .child(div().text_size(12).text_color(c.muted).child(`Showing ${label}`))
+        .child(div().text_size(T.body).text_color(c.muted).child(`Showing ${label}`))
         .child(quietLink("ins-clear", "Show everything", (cx) => this.setCost({ project: "all", model: "all" }, cx), c))));
   }
 
@@ -602,7 +602,7 @@ export default class TokenSpend extends View {
     const stepper = this.cost.period !== "all";
     return heroStack(heroHeading()
         .child(h_flex().gap(G.md).items_center()
-          .child(div().text_size(15).text_color(c.muted).child(hero.title))
+          .child(div().text_size(T.title).text_color(c.muted).child(hero.title))
           .when(stepper, (el) => el
             .child(quietLink("ins-older", "‹", (cx) => this.setCost({ offset: offset - 1 }, cx), c, { label: "Previous period" }))
             .child(quietLink("ins-newer", "›", (cx) => this.setCost({ offset: Math.min(0, offset + 1) }, cx), c, {
@@ -610,10 +610,10 @@ export default class TokenSpend extends View {
             }))
             .when(offset < 0, (row) => row.child(quietLink("ins-now", "Back to now", (cx) => this.setCost({ offset: 0 }, cx), c)))))
         .child(metric({ value: hero.value, unit: "API value", facts: hero.empty ? "" : factList(hero.stats), tip: hero.tip })("ins-metric", c))
-        .when(Boolean(hero.note), (el) => el.child(div().text_size(15).text_color(c.dim).child(hero.note)))
-        .when(Boolean(hero.empty), (el) => el.child(div().text_size(15).text_color(c.muted).child(hero.empty)))
-        .when(Boolean(hero.plan), (el) => el.child(div().text_size(13).text_color(c.muted).child(hero.plan)))
-        .when(Boolean(this.scan?.partial), (el) => el.child(div().text_size(12).text_color(c.dim)
+        .when(Boolean(hero.note), (el) => el.child(div().text_size(T.title).text_color(c.dim).child(hero.note)))
+        .when(Boolean(hero.empty), (el) => el.child(div().text_size(T.title).text_color(c.muted).child(hero.empty)))
+        .when(Boolean(hero.plan), (el) => el.child(div().text_size(T.value).text_color(c.muted).child(hero.plan)))
+        .when(Boolean(this.scan?.partial), (el) => el.child(div().text_size(T.body).text_color(c.dim)
           .child(`Still reading your history: ${this.scan.processed} of ${this.scan.total} files so far.`))));
   }
 
@@ -621,17 +621,17 @@ export default class TokenSpend extends View {
     const height = 132;
     return v_flex().w_full().gap(G.sm)
       .child(h_flex().w_full().items_end()
-        .children(chart.bars.map((bar) => v_flex().flex_1().min_w(0).h(height + 18).items_center().justify_end().gap(4)
+        .children(chart.bars.map((bar) => v_flex().flex_1().min_w(0).h(height + 18).items_center().justify_end().gap(G.xs)
           .tooltip(tooltip({ label: bar.tip }))
-          .when(bar.peak, (el) => el.child(div().text_size(10).text_color(c.text).whitespace_nowrap().child(bar.value)))
+          .when(bar.peak, (el) => el.child(div().text_size(T.micro).text_color(c.text).whitespace_nowrap().child(bar.value)))
           .child(div().w(bar.peak ? 3 : 2).flex_none().rounded_t(1)
             .h(bar.ratio > 0 ? Math.max(3, Math.round(bar.ratio * height)) : 1)
             .bg(bar.peak ? c.accent : bar.ratio > 0 ? c.muted : c.border)
             .opacity(bar.peak || bar.ratio === 0 ? 1 : OPACITY.quiet)))))
       .child(h_flex().w_full().justify_between()
-        .child(div().text_size(10).text_color(c.dim).child(chart.first))
-        .child(div().text_size(10).text_color(c.dim).child(chart.title))
-        .child(div().text_size(10).text_color(c.dim).child(chart.last)));
+        .child(div().text_size(T.micro).text_color(c.dim).child(chart.first))
+        .child(div().text_size(T.micro).text_color(c.dim).child(chart.title))
+        .child(div().text_size(T.micro).text_color(c.dim).child(chart.last)));
   }
 
   machineSplit(c, rows) {
@@ -647,7 +647,7 @@ export default class TokenSpend extends View {
     const shown = open ? items : items.slice(0, LIST_ROWS);
     return v_flex().w_full().gap(G.xs)
       .child(section(c, title, count))
-      .when(items.length === 0, (el) => el.child(div().text_size(12).text_color(c.dim).child("Nothing here in this period.")))
+      .when(items.length === 0, (el) => el.child(div().text_size(T.body).text_color(c.dim).child("Nothing here in this period.")))
       .children(shown.map((item, index) => {
         const active = selected === item.value;
         const line = row({ name: item.name, detail: item.tokensText, meta: item.usdText, current: active, dimmed: !active && selected !== "all" })(`ins-${field}-${index}`, c, {
@@ -665,16 +665,16 @@ export default class TokenSpend extends View {
   taskView(c, d, narrow) {
     const row = (name, sub, usd, tokens, index) => separatedRow(h_flex().w_full().items_end().gap(G.md).py(7), c, index)
       .child(detailColumn()
-        .child(div().truncate().text_size(13).text_color(c.text).child(name))
-        .when(Boolean(sub), (el) => el.child(div().text_size(11).text_color(c.dim).child(sub))))
-      .child(div().text_size(11).text_color(c.dim).child(tokens))
-      .child(div().min_w(64).text_right().text_size(15).font_light().text_color(c.text).child(usd));
+        .child(div().truncate().text_size(T.card).text_color(c.text).child(name))
+        .when(Boolean(sub), (el) => el.child(div().text_size(T.micro).text_color(c.dim).child(sub))))
+      .child(div().text_size(T.micro).text_color(c.dim).child(tokens))
+      .child(div().min_w(64).text_right().text_size(T.title).font_light().text_color(c.text).child(usd));
     return v_flex().w_full().gap(narrow ? 36 : 44)
       .child(v_flex().w_full().gap(G.sm)
-        .when(Boolean(d.ticket), (el) => el.child(div().text_size(12).font_medium().text_color(c.muted).child(d.ticket)))
-        .child(div().w_full().text_size(15).line_height(1.45).text_color(c.text).child(d.title))
+        .when(Boolean(d.ticket), (el) => el.child(div().text_size(T.body).font_medium().text_color(c.muted).child(d.ticket)))
+        .child(div().w_full().text_size(T.title).line_height(1.45).text_color(c.text).child(d.title))
         .child(h_flex().w_full().flex_wrap().gap_x(G.md).gap_y(2)
-          .children([d.project, d.tools, d.when].filter(Boolean).map((part) => div().text_size(12).text_color(c.dim).child(part)))))
+          .children([d.project, d.tools, d.when].filter(Boolean).map((part) => div().text_size(T.body).text_color(c.dim).child(part)))))
       .child(v_flex().gap(G.xl)
         .child(metric({ value: d.usdText, unit: "API value", facts: factList(d.parts.map((part) => ({ value: part.value, unit: part.label }))), tip: `${d.usdExact} at API list price` })("ins-task-metric", c)))
       .child(v_flex().w_full()
@@ -689,9 +689,9 @@ export default class TokenSpend extends View {
 
   settingsView(c) {
     const s = this.settings;
-    const heading = (title, note) => v_flex().w_full().gap(4).pb(G.md)
-      .child(div().text_size(15).text_color(c.text).child(title))
-      .when(Boolean(note), (el) => el.child(div().text_size(12).text_color(c.dim).child(note)));
+    const heading = (title, note) => v_flex().w_full().gap(G.xs).pb(G.md)
+      .child(div().text_size(T.title).text_color(c.text).child(title))
+      .when(Boolean(note), (el) => el.child(div().text_size(T.body).text_color(c.dim).child(note)));
     const busy = this.running === "configure" || (this.running === "snapshot" && this.queuedSources);
     return v_flex().w_full().gap(44)
       .child(v_flex().w_full()
@@ -699,32 +699,32 @@ export default class TokenSpend extends View {
         .when(!s, (el) => el.child(skeletonOf({ shape: "line", count: 3 })("kanso-skeleton", c)))
         .children((s?.sources ?? []).map((source, index) => separatedRow(h_flex().w_full().items_center().gap(G.md).py(G.sm), c, index)
           .child(detailColumn()
-            .child(div().text_size(13).text_color(source.enabled ? c.text : c.muted).child(source.label))
-            .child(div().truncate().text_size(11).text_color(c.dim).tooltip(tooltip({ label: source.roots })).child(source.roots)))
+            .child(div().text_size(T.value).text_color(source.enabled ? c.text : c.muted).child(source.label))
+            .child(div().truncate().text_size(T.micro).text_color(c.dim).tooltip(tooltip({ label: source.roots })).child(source.roots)))
           .child(toggleSwitch(`ins-source-${source.id}`, source.enabled, (next, cx) => this.toggleSource(source.id, next, cx), c, {
             label: `${source.label}: ${source.enabled ? "on" : "off"}`,
           }))))
-        .when(Boolean(busy), (el) => el.child(div().pt(G.sm).text_size(11).text_color(c.dim).child("Updating sources…"))))
+        .when(Boolean(busy), (el) => el.child(div().pt(G.sm).text_size(T.micro).text_color(c.dim).child("Updating sources…"))))
       .child(v_flex().w_full()
         .child(heading("Plans", "What you pay each month. Spend subtracts it from the API value to show what your plans save you."))
-        .children(this.planInputs.map((input, index) => h_flex().w_full().items_center().gap(G.sm).py(4)
+        .children(this.planInputs.map((input, index) => h_flex().w_full().items_center().gap(G.sm).py(G.xs)
           .child(div().flex_1().min_w(0).child(field(`ins-plan-name-${index}`, input.name, c)))
-          .child(div().text_size(12).text_color(c.dim).child("$"))
+          .child(div().text_size(T.body).text_color(c.dim).child("$"))
           .child(div().w(84).flex_none().child(field(`ins-plan-amount-${index}`, input.amount, c)))
-          .child(div().text_size(11).text_color(c.dim).child("/ mo"))
+          .child(div().text_size(T.micro).text_color(c.dim).child("/ mo"))
           .child(iconButton(`ins-plan-remove-${index}`, "x", "Remove plan", (cx) => this.removePlan(index, cx), c))))
         .child(h_flex().w_full().gap(G.lg).items_center().pt(G.sm)
           .child(quietLink("ins-plan-add", "Add plan", (cx) => this.addPlan(cx), c))
           .child(quietLink("ins-plan-save", "Save plans", (cx) => this.savePlans(cx), c))
-          .when(Boolean(this.settingsNote), (el) => el.child(div().text_size(11).text_color(c.dim).child(this.settingsNote)))))
+          .when(Boolean(this.settingsNote), (el) => el.child(div().text_size(T.micro).text_color(c.dim).child(this.settingsNote)))))
       .child(v_flex().w_full()
         .child(heading("Prices", null))
-        .child(div().text_size(12).line_height(1.5).text_color(c.muted)
+        .child(div().text_size(T.body).line_height(1.5).text_color(c.muted)
           .child("Claude models use Anthropic's list prices, Claude Code with its 1-hour cache writes. Other models use the OpenRouter catalog, refreshed once a day; tokens without a list price are left out, not guessed."))
-        .child(div().pt(G.sm).text_size(11).text_color(c.dim).child(`Your own per-model prices: "models" in ${s?.pricesPath ?? `${DATA_DIR}/prices.json`}`)))
+        .child(div().pt(G.sm).text_size(T.micro).text_color(c.dim).child(`Your own per-model prices: "models" in ${s?.pricesPath ?? `${DATA_DIR}/prices.json`}`)))
       .child(v_flex().w_full()
         .child(heading("Updates", null))
-        .child(div().text_size(12).line_height(1.5).text_color(c.muted)
+        .child(div().text_size(T.body).line_height(1.5).text_color(c.muted)
           .child("While this panel is open: every minute, or every 30 seconds while a session is active. Closed, Spend does nothing.")));
   }
 
@@ -732,7 +732,7 @@ export default class TokenSpend extends View {
     return v_flex().w_full()
       .child(h_flex().w_full().items_center().gap(G.sm).pb(G.sm)
         .child(mark(c, { status: "working", size: "sm" }))
-        .child(div().text_size(15).text_color(c.text).child("Active now")))
+        .child(div().text_size(T.title).text_color(c.text).child("Active now")))
       .children(sessions.map((s, index) => this.taskRow(`ins-live-${index}`, s, c)));
   }
 
@@ -748,8 +748,8 @@ export default class TokenSpend extends View {
     const shown = open ? data.tasks : data.tasks.slice(0, TASK_ROWS);
     return v_flex().w_full()
       .child(h_flex().w_full().items_end().justify_between().pb(G.md)
-        .child(div().text_size(15).text_color(c.text).child("Tasks"))
-        .child(div().text_size(12).text_color(c.dim).child(data.tasksNote)))
+        .child(div().text_size(T.title).text_color(c.text).child("Tasks"))
+        .child(div().text_size(T.body).text_color(c.dim).child(data.tasksNote)))
       .children(shown.map((task, index) => this.taskRow(`ins-task-${index}`, task, c)))
       .when(data.tasks.length > TASK_ROWS, (el) => el.child(h_flex().pt(G.md).border_t(1).border_color(c.border)
         .child(quietLink("ins-tasks-more", open ? "Show fewer" : `Show ${data.tasks.length - TASK_ROWS} more`, (cx) => {

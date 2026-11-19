@@ -14,7 +14,7 @@ import { location, key, insideRoot, showPanel } from "./lib.js";
 import { walkLayout } from "./layout.js";
 import { mapSeries } from "./pure.js";
 import { filesMemory } from "./panel-state.js";
-import { G, H, tokens } from "./ui.js";
+import { T, G, H, tokens } from "./ui.js";
 import { quietLink } from "./ui-button.js";
 import { row } from "./ui-row.js";
 import { emptyState, failureBlock, skeletonOf } from "./kit.js";
@@ -287,11 +287,11 @@ export class Files {
     const t = theme();
     const c = tokens(t);
     const items = this.rows();
-    return v_flex().id("files").size_full().min_h(0).bg(t.background).text_color(t.foreground).text_size(13)
-      .child(h_flex().h(42).flex_none().px(14).gap(8).items_center().border_b(1).border_color(t.border)
+    return v_flex().id("files").size_full().min_h(0).bg(t.background).text_color(t.foreground).text_size(T.card)
+      .child(h_flex().h(42).flex_none().px(14).gap(G.sm).items_center().border_b(1).border_color(t.border)
         .child(div().font_semibold().child("Files"))
         .when(Boolean(this.changed), (el) => el.child(quietLink("files-all", "All files", (clickCx) => { this.changed = false; clickCx.notify(); }, c)))
-        .child(div().flex_1().min_w(0).truncate().text_right().text_size(12).text_color(t.dim).child(this.root?.split(/[\\/]/).at(-1) ?? "")))
+        .child(div().flex_1().min_w(0).truncate().text_right().text_size(T.body).text_color(t.dim).child(this.root?.split(/[\\/]/).at(-1) ?? "")))
       .child(v_flex().id("files-tree").flex_1().min_h(0).p(6)
         .when(items.length > 0, (el) => el.child(div().flex_1().min_h(0).relative()
           .child(v_virtual_list("files-rows", items.length, H.line, (i) => items[i].path, (range) => items.slice(range.start, range.end).map((item) => this.row(item, c)))
@@ -307,13 +307,13 @@ export class Files {
               if (item && !item.entry.dir) this.openWith(path);
             }).size_full().px(G.sm))
           .child(Scrollbar.vertical("files-rows").absolute().inset_0())))
-        .when(Boolean(this.held), (el) => el.child(h_flex().id("files-stale").px(8).py(4).gap(8).items_center()
-          .child(div().text_size(12).text_color(t.dim).child(asOf(this.held.at, Date.now())))
+        .when(Boolean(this.held), (el) => el.child(h_flex().id("files-stale").px(G.sm).py(G.xs).gap(G.sm).items_center()
+          .child(div().text_size(T.body).text_color(t.dim).child(asOf(this.held.at, Date.now())))
           .child(quietLink("files-retry", "Retry", (cx) => this.retry(cx), c))))
-        .when(Boolean(this.error), (el) => el.child(div().p(8).child(failureBlock({ text: "Can't list the files", source: this.error, fix: this.on ? "Refresh" : "" })("files-error", c,
+        .when(Boolean(this.error), (el) => el.child(div().p(G.sm).child(failureBlock({ text: "Can't list the files", source: this.error, fix: this.on ? "Refresh" : "" })("files-error", c,
           { onClick: (cx) => this.retry(cx) }))))
         .when(!this.error && this.loading && !this.entries.get("")?.length, el => el.child(this.listBones(t)))
         .when(!this.error && !this.loading && items.length === 0, el => el.child(emptyState({ icon: "file", text: this.changed ? "Nothing changed" : this.root ? "No files" : "No folder" })("files-empty", c)))
-        .when(this.limited, el => el.child(div().p(8).text_size(11).text_color(t.dim).child("File list limited to 500 entries per folder and 5,000 total"))));
+        .when(this.limited, el => el.child(div().p(G.sm).text_size(T.micro).text_color(t.dim).child("File list limited to 500 entries per folder and 5,000 total"))));
   }
 }

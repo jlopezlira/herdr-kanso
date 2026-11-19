@@ -6,7 +6,8 @@ import { sameVolume, updateHost, windowsInstallScript, windowsLaunchScript, wind
 import { exec, readTextFile, appHome, shared, setShared, notify, layout, run, writeTextFile } from "herdr";
 import { tryOr, tryOrAsync, nodeById } from "./pure.js";
 import { stateBlockPx } from "./ui-state.js";
-import { COLLAPSED, REFUSAL_LINES, footerHeight, footerRows, railHeight, refusalBlock } from "./footer-model.js";
+import { COLLAPSED, REFUSAL_LINES, footerHeight, railHeight, refusalBlock } from "./footer-model.js";
+import { footerRows } from "./sidebar-footer.js";
 import { pieces, runs, shown } from "./pieces.js";
 import { channelOf, compareReleases, hostInstall, installedRelease, newestTag, offerRelease, parseRelease } from "./release.js";
 import { alreadyUpdating, checkFailed, installFailed, updateAvailable, updated, upToDate } from "./notices.js";
@@ -43,7 +44,7 @@ const UPDATES = ".kanso-updates";
 const FOOTER = "sidebar-footer";
 const REFUSED_PX = stateBlockPx(refusalBlock("words"), REFUSAL_LINES);
 export const footerPx = (update, refused = null, open = true) => {
-  const rows = footerRows({ update }).length;
+  const rows = footerRows({ update });
   return open ? footerHeight(rows, update && refused ? REFUSED_PX : 0) : railHeight(rows);
 };
 // Every size this sets, now or before the account chip left (84 and 36 a row), so one you sized yourself stays.

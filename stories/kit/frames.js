@@ -1,5 +1,5 @@
 // Story frames shared by the catalog script and the playgrounds: a bar or a strip at one of the kit's widths, each width a frame class on tokens.
-import { statusBar } from './compositions.js';
+import { statusBar } from './status-bar.js';
 
 export const barWidths = [1200, 1040, 760, 520];
 const width = (value) => {

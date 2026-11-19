@@ -213,16 +213,19 @@
 .kanso-rail__views span{width:var(--k-h-icon);height:var(--k-h-icon);border-radius:var(--k-r-control);display:grid;place-items:center;color:var(--muted)}
 .kanso-rail__views .kanso-control--on{background:var(--surface-4);box-shadow:inset 0 0 0 var(--k-w-line) var(--border);color:var(--fg)}
 .kanso-rail__separator{width:var(--k-h-compact);height:var(--k-w-line);margin:0 auto;background:color-mix(in srgb,var(--border) 50%,transparent);flex:none}
-.kanso-rail__list{padding-top:var(--k-sp-2);display:flex;flex-direction:column;gap:var(--k-sp-1)}
+.kanso-rail__list{padding-top:var(--k-sp-2);display:flex;flex-direction:column;gap:var(--k-sp-2)}
 .kanso-rail__row{height:var(--k-h-header);display:flex;align-items:center;justify-content:center;flex:none}
 .kanso-rail__tile{width:var(--k-rail-tile);height:var(--k-h-header);border-radius:var(--k-r-control);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:var(--k-sp-hair);flex:none}
 .kanso-rail__tile.kanso-control--on{background:var(--wash-12)}
 .kanso-rail__tile.kanso-rail__tile--strong{box-shadow:inset 0 0 0 var(--k-w-line) color-mix(in srgb,var(--accent) 50%,transparent)}
 .kanso-rail__count{display:flex;align-items:center;gap:var(--k-sp-hair)}
+/* Proposed: the collapsed view button carries the dot while someone needs you and Status is not on show. */
+.kanso-sidebar__view-button{position:relative;display:flex}
+.kanso-sidebar__view-button::after{content:'';position:absolute;top:var(--k-w-line);right:var(--k-w-line);width:var(--k-ic-dot);height:var(--k-ic-dot);border-radius:50%;background:var(--blocked)}
 .kanso-rail__tile .kanso-content__actions{display:flex;align-items:center;gap:var(--k-sp-hair);height:var(--k-ic-inline);font-size:var(--k-fs-meta);color:var(--dim);line-height:1}
 .kanso-rail__tile .kanso-content__actions .kanso-mark{width:var(--k-rail-mark);height:var(--k-rail-mark)}
 .kanso-rail__footer{margin-top:auto;display:flex;flex-direction:column;align-items:center;gap:var(--k-sp-hair);padding:var(--k-sp-2) 0 var(--k-sp-3)}
-.kanso-rail__footer>span{width:var(--k-h-pane);height:var(--k-h-pane);display:grid;place-items:center;color:var(--muted);border-radius:var(--k-r-control)}
+.kanso-rail__footer>span{width:var(--k-h-control);height:var(--k-h-control);display:grid;place-items:center;color:var(--muted);border-radius:var(--k-r-control)}
 .kanso-rail{anchor-name:--kanso-rail}
 
 /* Arrangement */
@@ -573,6 +576,14 @@
 .kanso-status-bar__stepper>.kanso-button{display:none;transition:opacity var(--k-hover-ms) var(--k-hover-ease) var(--k-hover-delay),display 0s allow-discrete var(--k-hover-delay)}
 .kanso-status-bar__stepper:is(:hover,:focus-within,.kanso-control--hover,.kanso-status-bar__item--open)>.kanso-button{display:grid}
 .kanso-status-bar__value{min-width:1ch;text-align:center;color:var(--fg)}
+/* Proposed: the minimap, switched on in kansō settings: a Button per column before panes per view; the column in front in the foreground, one in view or pinned muted, the rest dim. */
+.kanso-status-bar__columns{display:flex;align-items:center;gap:var(--k-sp-hair);max-width:var(--k-w-pills);overflow:hidden;margin-right:var(--k-sp-2)}
+.kanso-status-bar__columns>.kanso-button.kanso-button--drawn{padding:0;border:var(--k-w-focus) solid transparent}
+.kanso-status-bar__column{display:flex;flex-direction:column;justify-content:center;gap:var(--k-w-line);height:var(--k-ic-row);padding:0 var(--k-w-line)}
+.kanso-status-bar__pane{display:block;height:var(--k-sp-1);border-radius:var(--k-r-full);background:var(--dim)}
+.kanso-status-bar__column--stacked>.kanso-status-bar__pane{height:var(--k-sp-hair)}
+.kanso-status-bar__pane.kanso-status-bar__pane--seen{background:var(--muted)}
+.kanso-status-bar__pane.kanso-status-bar__pane--current{background:var(--fg)}
 .kanso-status-bar__item.kanso-status-bar__item--open{anchor-name:--kanso-status-item;margin:0 calc(-1 * var(--k-sp-1));padding:var(--k-sp-hair) var(--k-sp-1);border-radius:var(--k-r-sm);background:var(--wash-12)}
 .kanso-status-bar__popup{position:absolute;bottom:calc(anchor(--kanso-status-item top) + var(--k-sp-1));right:anchor(--kanso-status-item right);z-index:1}
 
@@ -747,8 +758,12 @@
 .kanso-sidebar__header{height:var(--k-h-tab-bar);flex:none;display:flex;align-items:center;justify-content:space-between;padding:0 var(--k-sp-2) 0 var(--k-sp-1)}
 .kanso-sidebar__tools{height:var(--k-h-header);flex:none;display:flex;align-items:center}
 .kanso-sidebar__list{flex:1;min-height:0;overflow:hidden}
-.kanso-sidebar__group{display:flex;align-items:center;gap:var(--k-sp-2);height:var(--k-h-row);padding:0 var(--k-sp-2);margin-top:var(--k-sp-4);font-size:var(--k-fs-body);font-weight:var(--k-fw-strong);color:var(--muted)}
-.kanso-sidebar__footer{flex:none;padding:var(--k-sp-2) 0 var(--k-sp-4)}
+.kanso-sidebar__group{display:flex;align-items:center;gap:var(--k-sp-2);height:var(--k-h-row);padding:0 var(--k-sp-2);margin-top:var(--k-sidebar-group-gap);font-size:var(--k-fs-body);font-weight:var(--k-fw-strong);color:var(--muted)}
+.kanso-sidebar__footer{flex:none;padding:var(--k-sp-2) 0 var(--k-sp-3)}
+/* Proposed: Settings holds its menu, open over it; a refused update's block sits under its row. */
+.kanso-sidebar__footer-settings{position:relative;display:flex;flex-direction:column}
+.kanso-sidebar__footer-menu{position:absolute;bottom:calc(100% + var(--k-sp-1));left:0;z-index:1}
+.kanso-sidebar__footer-refusal{margin:var(--k-sp-hair) 0 var(--k-sp-2)}
 .kanso-sidebar__footer-row{display:flex;align-items:center;gap:var(--k-sp-2);height:var(--k-h-pane);padding:0 var(--k-sp-2);font-size:var(--k-fs-name);color:var(--muted)}
 .kanso-sidebar__section .kanso-section__count{color:var(--dim);font-weight:var(--k-fw-regular)}
 .kanso-sidebar__footer,.kanso-sidebar__list{position:relative;z-index:1}
@@ -853,7 +868,11 @@
 .kanso-sidebar__title{height:var(--k-h-tab-bar);flex:none;display:flex;align-items:center;padding-left:var(--k-sp-1)}
 .kanso-sidebar__actions{height:var(--k-h-header);flex:none;display:flex;align-items:center;gap:var(--k-sp-2)}
 .kanso-sidebar__rows{flex:1;min-height:0;display:flex;flex-direction:column;padding-top:var(--k-sp-1)}
-.kanso-sidebar__row-group+.kanso-sidebar__row-group{margin-top:var(--k-sp-4)}
+/* The kit's rows reach out past what holds them by their own padding; in the sidebar's list and footer they keep their content on its gutter. */
+:is(.kanso-sidebar__rows,.kanso-sidebar__footer):has(.kanso-row){padding-inline:calc(var(--k-sidebar-gutter) - var(--k-sp-2))}
+.kanso-sidebar__row-group+.kanso-sidebar__row-group{margin-top:var(--k-sidebar-group-gap)}
+.kanso-sidebar__row-group.kanso-sidebar__row-group--computer{margin-top:var(--k-sidebar-computer-gap)}
+.kanso-sidebar__row.kanso-project{margin-top:0}
 .kanso-sidebar__row{height:var(--k-h-row);display:flex;align-items:center;gap:var(--k-sp-2);padding:0 var(--k-sp-2);border-radius:var(--k-r-control);box-sizing:border-box;font-size:var(--k-fs-name);color:var(--muted);position:relative;font-variant-numeric:tabular-nums}
 .kanso-sidebar__row .kanso-row__name{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:var(--k-fw-medium)}
 .kanso-sidebar__row.kanso-project .kanso-row__name{font-weight:var(--k-fw-strong);flex:none;max-width:60%}
@@ -861,6 +880,7 @@
 .kanso-sidebar__row .kanso-button--quiet{font-size:var(--k-fs-body);color:var(--muted);flex:none}
 .kanso-sidebar__row .kanso-button--quiet.kanso-text--fg{color:var(--fg)}
 .kanso-sidebar__row.kanso-control--on{background:var(--wash-7)}
+.kanso-sidebar__row.kanso-project.kanso-control--on{background:var(--wash-12)}
 .kanso-sidebar__row>svg{flex:none}
 .kanso-sidebar__row>.kanso-mark{width:var(--k-ic-row);height:var(--k-ic-row)}
 .kanso-sidebar__row .kanso-row__task{flex:0 1 auto;min-width:0;font-size:var(--k-fs-meta);line-height:var(--k-h-row);color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -1171,6 +1191,8 @@
 .kanso-thumbnail{position:relative;display:inline-block;flex:none;width:var(--k-h-header);height:var(--k-h-header);padding:var(--k-sp-hair);box-sizing:border-box;overflow:hidden;border-radius:var(--k-r-sm);background:var(--surface-4);box-shadow:inset 0 0 0 var(--k-w-line) var(--border)}
 .kanso-thumbnail img{display:block;width:100%;height:100%;object-fit:cover;border-radius:var(--k-r-sm)}
 .kanso-thumbnail--swatch{box-shadow:none}
+/* Proposed: a picture not drawn yet shows its own colour. */
+.kanso-thumbnail--color{background:var(--kanso-color)}
 .kanso-thumbnail:is(:focus-visible,.kanso-control--focus){outline:var(--k-w-focus) solid var(--accent);outline-offset:var(--k-w-line)}
 
 .kanso-switch{display:flex;align-items:center;flex:none;width:var(--k-sw-w);height:var(--k-sw-h);padding:var(--k-sp-hair);box-sizing:border-box;border-radius:var(--k-r-full);background:var(--surface-4);box-shadow:inset 0 0 0 var(--k-w-line) var(--line-strong)}
@@ -1282,6 +1304,17 @@
 .kanso-row--wrap :is(.kanso-content__primary,.kanso-row__name){align-items:flex-start;white-space:normal}
 .kanso-row--wrap .kanso-row__name{flex:1;line-height:var(--k-lh-body);overflow-wrap:anywhere}
 .kanso-row--heading .kanso-row__name{font-weight:var(--k-fw-strong);color:var(--fg)}
+.kanso-row--group .kanso-row__name{font-size:var(--k-fs-name);font-weight:var(--k-fw-strong);color:var(--fg)}
+.kanso-row--names{font-size:var(--k-fs-name)}
+.kanso-row--names .kanso-row__name{font-size:var(--k-fs-name);font-weight:var(--k-fw-medium)}
+.kanso-row--names:is(.kanso-row--heading,.kanso-row--group) .kanso-row__name{font-weight:var(--k-fw-strong)}
+.kanso-row--names:is(.kanso-row--heading,.kanso-row--group) .kanso-row__name{flex:none;max-width:var(--k-w-button-label)}
+.kanso-row--names.kanso-row--ink-fg .kanso-row__name{color:var(--fg)}
+.kanso-row--names.kanso-row--ink-muted .kanso-row__name{color:var(--muted)}
+.kanso-row--names.kanso-row--ink-dim .kanso-row__name{color:var(--dim)}
+.kanso-row--names :is(.kanso-content__primary,.kanso-row)>.kanso-icon--row{color:var(--muted)}
+.kanso-row--names.kanso-row--two-lines .kanso-content__secondary{gap:var(--k-sp-1);margin-top:var(--k-sp-2);font-size:var(--k-fs-meta)}
+.kanso-row--names .kanso-content__secondary>*+*::before{content:"\00b7";margin-right:var(--k-sp-1);color:var(--dim)}
 /* Row, title form: a panel's heading, the name at title size and the scope under it; it is not a choice, so no wash. */
 .kanso-row--title,.kanso-row--title .kanso-content__primary{height:var(--k-h-header);align-items:center}
 .kanso-row--title.kanso-row--two-lines{height:auto;padding-block:0}
@@ -1341,6 +1374,8 @@
 .kanso-button--quiet{font-size:var(--k-fs-body);color:var(--muted);white-space:nowrap}
 .kanso-button:is(.kanso-button--solid,.kanso-button--tonal,.kanso-button--quiet.kanso-button--sm),:is(.kanso-actions,.kanso-state-block__actions,.kanso-row--two-lines .kanso-content__secondary)>.kanso-button--quiet{display:inline-flex;align-items:center;justify-content:center;gap:var(--k-sp-2);flex:none;box-sizing:border-box;height:var(--k-h-control);padding:0 var(--k-sp-3);margin:0;border-radius:var(--k-r-control);font-size:var(--k-fs-body);font-weight:var(--k-fw-medium);line-height:1;white-space:nowrap}
 .kanso-button:is(.kanso-button--solid,.kanso-button--tonal,.kanso-button--quiet).kanso-button--sm{height:var(--k-h-compact);padding:0 var(--k-sp-2);font-size:var(--k-fs-meta)}
+.kanso-button.kanso-button--flush:not(.kanso-button--icon,.kanso-button--drawn){margin-left:calc(-1 * var(--k-sp-3))}
+.kanso-button.kanso-button--flush.kanso-button--sm:not(.kanso-button--icon,.kanso-button--drawn){margin-left:calc(-1 * var(--k-sp-2))}
 .kanso-button:is(.kanso-button--solid,.kanso-button--tonal) :is(.kanso-icon,.kanso-icon--program){width:var(--k-ic-row);height:var(--k-ic-row)}
 .kanso-button--tonal .kanso-icon--program{width:var(--k-ic-inline);height:var(--k-ic-inline)}
 /* Proposed, a trimmed label: cut at its widest, such as a menu's chosen project. */
@@ -1351,6 +1386,8 @@
 .kanso-button--icon .kanso-icon{width:var(--k-ic-control);height:var(--k-ic-control)}
 .kanso-button--icon.kanso-button--sm{width:var(--k-h-badge);height:var(--k-h-badge)}
 .kanso-button--icon.kanso-button--sm svg{width:var(--k-ic-inline);height:var(--k-ic-inline)}
+/* Last in a row, a row's tool reaches out by the room around its glyph, so the glyph ends on the row's edge as the name starts on it. */
+:is(.kanso-row,.kanso-row>.kanso-content__primary)>:is(.kanso-row__actions,.kanso-button--icon.kanso-button--sm):last-child{margin-right:calc((var(--k-ic-inline) - var(--k-h-badge)) / 2)}
 .kanso-button--icon.kanso-button--lg{width:var(--k-h-row);height:var(--k-h-row)}
 .kanso-button--icon.kanso-button--lg svg{width:var(--k-ic-chrome);height:var(--k-ic-chrome)}
 .kanso-button--count{padding:var(--k-sp-hair) var(--k-sp-1);border-radius:var(--k-r-sm)}
@@ -1402,8 +1439,7 @@
 .kanso-tabs--lg .kanso-tabs__tab--icon{width:var(--k-h-control)}
 .kanso-tabs__tab svg{width:var(--k-ic-row);height:var(--k-ic-row);flex:none}
 .kanso-tabs__tab:is(:hover,.kanso-control--hover){background:var(--wash-4);color:var(--fg)}
-.kanso-tabs__tab.kanso-tabs__tab--on{background:var(--wash-7);color:var(--fg)}
-.kanso-tabs--track .kanso-tabs__tab.kanso-tabs__tab--on{background:var(--surface-4)}
+.kanso-tabs__tab.kanso-tabs__tab--on{background:var(--wash-12);color:var(--fg)}
 .kanso-tabs__tab:is(:focus-visible,.kanso-control--focus){outline:var(--k-w-focus) solid var(--accent);outline-offset:var(--k-w-line)}
 .kanso-tabs.kanso-control--off .kanso-tabs__tab{color:var(--dim);cursor:default}
 .kanso-tabs__dot{width:var(--k-sp-2);height:var(--k-sp-2);border-radius:50%;background:var(--blocked);flex:none}
@@ -1594,6 +1630,8 @@
 .kanso-arrangement__column.kanso-arrangement__column--main{flex:1.4}
 .kanso-dialog__note.kanso-dialog__note--lead{margin-top:var(--k-sp-3);color:var(--fg)}
 .kanso-dialog__list.kanso-dialog__list--flush{margin-top:0}
+/* Proposed: a list that scrolls past six rows, keeping its rows' side room so a ring is not cut (Send). */
+.kanso-dialog__list.kanso-dialog__list--scroll{max-height:var(--k-h-dialog-list);overflow-y:auto;margin-inline:calc(-1 * var(--k-sp-2));padding-inline:var(--k-sp-2)}
 .kanso-dialog__group.kanso-dialog__group--stacked{margin-top:var(--k-sp-1)}
 .kanso-toast.kanso-toast--near{margin-top:var(--k-sp-3)}
 .kanso-field.kanso-field--stacked{margin:0 0 var(--k-sp-3)}

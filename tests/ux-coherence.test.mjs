@@ -88,8 +88,8 @@ test("the sidebar and settings confirm through Armed", async () => {
   assert.equal(spaces.includes("confirmClose"), false);
   assert.match(spaces, /this\.armed\.press\("remove"/);
   assert.match(spaces, /this\.armed\.press\("close"/);
-  assert.match(spaces, /verb: w \? `remove it and close its/);
-  assert.match(spaces, /verb: "close it"/);
+  assert.match(spaces, /verb: w \? `remove, close/);
+  assert.ok(spaces.includes("verb: `close ${name}`"));
   const settings = await text("kanso/mods/kanso-settings/main.js");
   assert.match(settings, /new Armed\(\)/);
   assert.match(settings, /pressAgain\("take it"\)/);

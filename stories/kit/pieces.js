@@ -1,6 +1,6 @@
 // The kit's pieces: every function here returns markup; compositions.js only calls them.
 import { diffText, facts, plus } from '../../kanso/mods/kanso-panel/ui-facts.js';
-import { diffNumbers } from '../../kanso/mods/kanso-spaces/pure.js';
+import { diffNumbers, markdownBlocks } from '../../kanso/mods/kanso-spaces/pure.js';
 
 export const escape = (text) => String(text).replace(/[&<>"]/g, (char) => `&#${char.charCodeAt(0)};`);
 
@@ -22,8 +22,8 @@ export const kinds = { solid: 'kanso-button--solid', tonal: 'kanso-button--tonal
 // `content`: markup drawn in place of the icon and label, such as a picture with its name; `label` is then what the button says.
 // Proposed: `truncate` cuts a long label at --k-w-button-label, such as a menu's chosen project, so the button never grows past it.
 // `tip`: the tooltip, when it says more than the label; `focus`: the keyboard's ring is on it.
-export const button = ({ label, kind = 'solid', size = 'md', icon = 'none', disabled = false, verb = '', armed = false, active = false, spin = false, key = '', tip = '', focus = false, content = '', truncate = false }) => {
-  const classes = ['kanso-button', kinds[kind], size === 'md' ? '' : `kanso-button--${size}`, disabled ? 'kanso-control--off' : '', armed ? 'kanso-action kanso-action--armed' : '', active ? 'kanso-button--active' : '', spin ? 'kanso-button--spinning' : '', focus ? 'kanso-control--focus' : '', content ? 'kanso-button--drawn' : '', truncate ? 'kanso-button--truncate' : ''].filter(Boolean).join(' ');
+export const button = ({ label, kind = 'solid', size = 'md', icon = 'none', disabled = false, verb = '', armed = false, active = false, spin = false, key = '', tip = '', focus = false, content = '', truncate = false, flush = false, name = '' }) => {
+  const classes = ['kanso-button', kinds[kind], size === 'md' ? '' : `kanso-button--${size}`, disabled ? 'kanso-control--off' : '', armed ? 'kanso-action kanso-action--armed' : '', active ? 'kanso-button--active' : '', spin ? 'kanso-button--spinning' : '', focus ? 'kanso-control--focus' : '', content ? 'kanso-button--drawn' : '', flush ? 'kanso-button--flush' : '', truncate ? 'kanso-button--truncate' : ''].filter(Boolean).join(' ');
   const lead = icon === 'none' ? (spin ? mark({ status: 'working', size: 'sm' }) : '') : iconSvg(icon, 'control');
   const text = kind === 'icon' ? '' : truncate ? `<span class="kanso-button__label">${escape(label)}</span>` : escape(label);
   const again = `Press again to ${escape(verb || label.toLowerCase())}`;
@@ -89,30 +89,36 @@ export const dialog = ({ title, scope, value, placeholder, body = '', loading, n
     + `<div class="kanso-dialog__footer">${secondary ? action(secondary, 'default', 'quiet') : ''}${action(primary, state, kind)}</div></div>`;
 };
 
-export const input = ({ text: value, label: placeholder, icon, error, disabled, multiline, inline: rename, selected, loading, limit }) => {
+export const input = ({ text: value, label: placeholder, icon, error, disabled, multiline, inline: rename, selected, loading, limit, lead }) => {
   const editable = !disabled && !loading;
   const enter = multiline ? '' : ` onkeydown="if (event.key === 'Enter') event.preventDefault()"`;
   const cap = ` onbeforeinput="if (event.inputType.startsWith('insert') && this.innerText.length >= ${limit}) event.preventDefault()"`;
   const text = `<div class="kanso-field__editor" role="textbox" aria-label="${escape(placeholder)}" aria-multiline="${multiline}" contenteditable="${editable}"${editable ? ' tabindex="0"' : ''}${enter}${cap}>${selected ? `<span class="kanso-field__selection">${escape(value.slice(0, limit))}</span>` : escape(value.slice(0, limit))}</div>`;
   const action = icon === 'none' || rename ? '' : `<span class="kanso-button kanso-button--icon" tabindex="0"><svg class="kanso-icon kanso-icon--row"><use href="#${icon}"/></svg></span>`;
   const classes = `kanso-field${multiline ? ' kanso-field--multiline' : ''}${rename ? ' kanso-field--inline' : ''}${loading ? ' kanso-skeleton--shape' : `${error ? ' kanso-field--invalid' : ''}${disabled ? ' kanso-control--off' : ''}`}`;
-  return `<div class="${classes}"${disabled ? ' aria-disabled="true"' : ''}>${text}${action}</div>`;
+  return `<div class="${classes}"${disabled ? ' aria-disabled="true"' : ''}>${lead && !rename ? iconSvg(lead, 'row') : ''}${text}${action}</div>`;
 };
 
 const inline = (text) => escape(text).replace(/`([^`]+)`/g, '<code>$1</code>').replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>');
 const cells = (row, tag) => `<tr>${row.split('|').slice(1, -1).map((cell) => `<${tag}>${inline(cell.trim())}</${tag}>`).join('')}</tr>`;
-const blocksOf = (source) => source.trim().split(/\n\s*\n/).map((block) => {
+// One block's markup from its Markdown: a heading, a table, a list or a paragraph.
+const blockOf = (block) => {
   const lines = block.split('\n');
   if (block.startsWith('## ')) return `<div class="kanso-markdown__subheading">${inline(block.slice(3))}</div>`;
   if (block.startsWith('# ')) return `<div class="kanso-markdown__heading">${inline(block.slice(2))}</div>`;
   if (lines.every((line) => line.trim().startsWith('|'))) return `<table class="kanso-markdown__table">${lines.filter((line) => !/^\s*\|[\s:|-]+\|\s*$/.test(line)).map((line, index) => cells(line.trim(), index ? 'td' : 'th')).join('')}</table>`;
   if (lines.every((line) => line.startsWith('- '))) return `<ul>${lines.map((line) => `<li>${inline(line.slice(2))}</li>`).join('')}</ul>`;
   return `<p>${lines.map(inline).join(' ')}</p>`;
-});
-export const markdown = ({ source, block, state }) => `<div class="kanso-markdown">${blocksOf(source).map((html, index) => {
-  const on = index + 1 === block ? { hover: ' kanso-row--hover', editing: ' kanso-editor--editing kanso-control--focus' }[state] ?? '' : '';
-  return `<div class="kanso-markdown__block${on}"${on.includes('editing') ? ' contenteditable="true"' : ''}>${html}</div>`;
-}).join('')}</div>`;
+};
+// A block's words: its Markdown drawn, with no padding of their own.
+export const markdownWords = ({ source }) => blockOf(source);
+const BLOCK_STATES = { hover: ' kanso-row--hover', editing: ' kanso-editor--editing kanso-control--focus' };
+// One block of a document: at rest, under the pointer, or being edited. Proposed: `content`, markup drawn in place of its formatted source (the editor's field, a picture).
+export const markdownBlock = ({ source, state = 'rest', content = '' }) => {
+  const on = BLOCK_STATES[state] ?? '';
+  return `<div class="kanso-markdown__block${on}"${state === 'editing' ? ' contenteditable="true"' : ''}>${content || blockOf(source)}</div>`;
+};
+export const markdown = ({ source, block, state }) => `<div class="kanso-markdown">${markdownBlocks(source).map((one, index) => markdownBlock({ source: one, state: index + 1 === block ? state : 'rest' })).join('')}</div>`;
 
 export const menu = ({ title, items }) => {
   const rows = (Array.isArray(items) ? items : []).map((item) => {
@@ -160,9 +166,11 @@ const rowTool = (action) => button({ kind: 'icon', size: 'sm', ...action });
 export const rowDepths = [0, 1, 2];
 // `actions` show on hover or focus and take the meta's place; `action` and the drawn `tools` are always shown; `keys` are the row's key hints, last.
 // The title form is a panel's heading: the name at title size, the second line its scope.
+// Proposed: `group` makes a heading the head of a group, its name strong in the foreground one step up the type scale (a computer over its projects).
+// Proposed: `names` is the sidebar's row: every name at the name size, a head strong and a session medium, in the `nameInk` ('fg', 'muted' or 'dim') its state gives it, the lead icon muted.
 // Proposed: `wrap` lets the name run over as many lines as it needs, such as a review thread's comment, instead of one truncated line.
 // `second`, `detail` and `meta` take facts with a tone and a tip, a detail fact with a `label` is a press, `chip` takes a tip; `drop` is where a dragged row lands, `wash` a state's ground, `guides` one per depth above it ('tee', 'end', 'pass', or null), under that depth's icon; without them a deeper row hangs from its parent.
-export const row = ({ icon = 'none', tone = '', name, detail, meta, chip: count, flag, mark: status = 'none', second, heading, title, depth = 0, glint, wrap, selected, current, dimmed, pending, hover, focus, actions = [], action, start = [], tools = [], keys = [], drop, wash, guides = [] }) => {
+export const row = ({ icon = 'none', tone = '', name, detail, meta, chip: count, flag, mark: status = 'none', second, heading, group, title, depth = 0, glint, wrap, names, nameInk, selected, current, dimmed, pending, hover, focus, actions = [], action, start = [], tools = [], keys = [], drop, wash, guides = [] }) => {
   const lines = guides.length ? guides : depth > 1 ? [null, 'pass'] : [];
   const lead = `${lines.map(guide).join('')}${list(start)}${icon === 'none' ? '' : glyph(icon, tone)}`;
   const label = `<span class="kanso-row__name${glint ? ' kanso-text--glint' : ''}">${escape(name)}</span>`;
@@ -171,9 +179,9 @@ export const row = ({ icon = 'none', tone = '', name, detail, meta, chip: count,
     + `${meta ? `<span${marked(factOf(meta), 'kanso-row__meta')}>${escape(factOf(meta).text)}</span>` : ''}${flag ? `<span class="kanso-row__flag">${glyph(flag)}</span>` : ''}`
     + `${actions.length ? `<span class="kanso-row__actions">${actions.map(rowTool).join('')}</span>` : ''}${count ? countOf(count) : ''}${action ? button({ size: 'sm', ...action }) : ''}${list(tools)}${keys.map(keyHint).join('')}`
     + `${pending ? '<span class="kanso-state-line__pending-dot"></span>' : ''}${!status || status === 'none' ? '' : mark({ status })}`;
-  const states = [second && 'kanso-row--two-lines', heading && 'kanso-row--heading', title && 'kanso-row--title', depth && `kanso-row--depth-${depth}`, selected && 'kanso-control--selected', current && 'kanso-row--selected',
+  const states = [second && 'kanso-row--two-lines', heading && 'kanso-row--heading', group && 'kanso-row--group', title && 'kanso-row--title', depth && `kanso-row--depth-${depth}`, selected && 'kanso-control--selected', current && 'kanso-row--selected',
     dimmed && 'kanso-control--dim', pending && 'kanso-state-line--pending', hover && 'kanso-control--hover', focus && 'kanso-control--focus',
-    drop && `kanso-row--drop-${drop}`, wash && `kanso-row--wash-${wash}`, lines.length && 'kanso-row--tree', wrap && 'kanso-row--wrap'].filter(Boolean).map((name) => ` ${name}`).join('');
+    drop && `kanso-row--drop-${drop}`, wash && `kanso-row--wash-${wash}`, lines.length && 'kanso-row--tree', wrap && 'kanso-row--wrap', names && 'kanso-row--names', names && nameInk && `kanso-row--ink-${nameInk}`].filter(Boolean).map((name) => ` ${name}`).join('');
   return second
     ? `<div class="kanso-row${states}" tabindex="0"><div class="kanso-content__primary">${lead}${label}${tail}</div><div class="kanso-content__secondary">${typeof second === 'string' ? escape(second) : second.filter(Boolean).map(fact).join('')}</div></div>`
     : `<div class="kanso-row${states}" tabindex="0">${lead}${label}${tail}</div>`;
@@ -203,12 +211,14 @@ export const tabs = ({ items, value, size, track, disabled, icon, label: named }
   const square = icon && !named;
   const states = [on && 'kanso-tabs__tab--on', square && 'kanso-tabs__tab--icon', item.armed && 'kanso-action--armed', item.pending && 'kanso-state-line--pending', item.held && 'kanso-control--held'].filter(Boolean).map((name) => ` ${name}`).join('');
   const name = item.editing ? input({ text: item.label ?? '', label: item.label ?? '', icon: 'none', inline: true, selected: true, limit: tabNameLimit }) : `<span class="kanso-tabs__label">${label}</span>`;
-  return `${item.drop ? '<i class="kanso-tabs__insertion"></i>' : ''}<span class="kanso-tabs__tab${states}" role="tab" aria-selected="${on}" aria-label="${label}" tabindex="0" title="${square ? label : escape(item.tip ?? '')}" onclick="${choose}">`
+  const landing = item.drop ? '<i class="kanso-tabs__insertion"></i>' : '';
+  return `${item.drop === 'after' ? '' : landing}<span class="kanso-tabs__tab${states}" role="tab" aria-selected="${on}" aria-label="${label}" tabindex="0" title="${square ? label : escape(item.tip ?? '')}" onclick="${choose}">`
     + `${icon && item.icon ? glyph(item.icon) : ''}${named || !item.icon ? name : ''}${item.pending ? '<i class="kanso-state-line__pending-dot"></i>' : ''}${item.mark && !square ? mark({ status: item.mark }) : ''}`
-    + `${(item.dot || (square && item.mark === 'blocked')) && !on ? '<i class="kanso-tabs__dot"></i>' : ''}${on && item.closable && !square && !item.editing ? '<svg class="kanso-icon kanso-tabs__close"><use href="#lu-x"/></svg>' : ''}</span>`;
+    + `${(item.dot || (square && item.mark === 'blocked')) && !on ? '<i class="kanso-tabs__dot"></i>' : ''}${on && item.closable && !square && !item.editing ? '<svg class="kanso-icon kanso-tabs__close"><use href="#lu-x"/></svg>' : ''}</span>${item.drop === 'after' ? landing : ''}`;
 }).join('')}</div>`;
 
-export const thumbnail = ({ image, label, selected, loading }) => `<span class="kanso-thumbnail${selected ? ' kanso-control--selected' : ''}${loading ? ' kanso-skeleton--shape' : ''}" role="button" aria-pressed="${selected}" aria-label="${escape(label)}" title="${escape(label)}" tabindex="0">${image && !loading ? `<img src="${escape(image)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">` : ''}</span>`;
+// Proposed: `color`, the picture's own colour as its ground while the picture is not drawn.
+export const thumbnail = ({ image, label, selected, loading, color = '' }) => `<span class="kanso-thumbnail${selected ? ' kanso-control--selected' : ''}${loading ? ' kanso-skeleton--shape' : ''}${color && !loading ? ' kanso-thumbnail--color' : ''}"${color ? ` data-color="${escape(color)}"` : ''} role="button" aria-pressed="${selected}" aria-label="${escape(label)}" title="${escape(label)}" tabindex="0">${image && !loading ? `<img src="${escape(image)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">` : ''}</span>`;
 
 export const levels = { error: 'blocked', warning: 'working', success: 'done', info: 'accent' };
 const lead = (level) => level === 'error' ? '<svg class="kanso-mark kanso-mark--blocked" aria-hidden="true"><use href="#e-blk"/></svg>'
@@ -276,9 +286,13 @@ export const statePatterns = ['failure', 'empty', 'pending', 'loading'];
 export const needsItem = ({ name, question = '', more = 0 }) => `<span class="kanso-status-bar__item kanso-status-bar__needs">${mark({ status: 'blocked', size: 'sm' })}<span class="kanso-status-bar__name">${escape(name)}</span>`
   + `${question ? `<span class="kanso-status-bar__question">${escape(question)}</span>` : ''}${more ? `<span class="kanso-status-bar__more">${plus(more)}</span>` : ''}</span>`;
 
-// Panes per view: the number at rest, − and + on hover; its keys are in the tooltips.
-export const stepper = ({ value = 2, open = false, hover = false } = {}) => `<span class="kanso-status-bar__item kanso-status-bar__stepper${open ? ' kanso-status-bar__item--open' : ''}${hover ? ' kanso-control--hover' : ''}">${button({ label: 'Fewer panes per view ⌘⇧−', kind: 'icon', size: 'sm', icon: 'lu-minus' })}`
-  + `<span class="kanso-status-bar__value" title="${Number(value)} per view · scroll to change, click to even out">${Number(value)}</span>${button({ label: 'More panes per view ⌘⇧=', kind: 'icon', size: 'sm', icon: 'lu-plus' })}</span>`;
+// Proposed: the minimap, switched on in kansō settings: a Button per column; each pane a line in its tone (`current`, `seen`, else out of view), `width` hairlines long.
+const columnPanes = ({ width, panes }) => `<span class="kanso-status-bar__column${panes.length > 1 ? ' kanso-status-bar__column--stacked' : ''}">`
+  + `${panes.map((tone) => `<i class="kanso-status-bar__pane kanso-status-bar__pane--${escape(tone)}" data-width="calc(var(--k-w-line) * ${Number(width)})"></i>`).join('')}</span>`;
+const minimap = (columns) => (columns.length ? `<span class="kanso-status-bar__columns">${columns.map((column, i) => button({ label: `Column ${i + 1}`, kind: 'quiet', size: 'sm', content: columnPanes(column) })).join('')}</span>` : '');
+// Panes per view: the number at rest, − and + on hover; its keys are in the tooltips. Proposed: `columns`, the minimap before it.
+export const stepper = ({ value = 2, open = false, hover = false, columns = [] } = {}) => `<span class="kanso-status-bar__item kanso-status-bar__stepper${open ? ' kanso-status-bar__item--open' : ''}${hover ? ' kanso-control--hover' : ''}">${minimap(columns)}${button({ label: 'Fewer panes per view ⇧⌘−', kind: 'icon', size: 'sm', icon: 'lu-minus' })}`
+  + `<span class="kanso-status-bar__value" title="${Number(value)} per view · scroll to change, click to even out">${Number(value)}</span>${button({ label: 'More panes per view ⇧⌘=', kind: 'icon', size: 'sm', icon: 'lu-plus' })}</span>`;
 
 export const tabSkeleton = () => '<span class="kanso-skeleton kanso-skeleton--breathing kanso-tab-bar__skeleton"></span>';
 
@@ -311,13 +325,21 @@ export const stacks = {
   'toolbar add': { block: 'kanso-toolbar__add', tag: 'span' },
   'toolbar menu': { block: 'kanso-toolbar__menu', tag: 'span' },
   header: { block: 'kanso-header', states: ['collapsed'] },
-  'header title': { block: 'kanso-header__title' },
+  // The lights are the window's own: the row draws their place first, and the app leaves it to Herdr.
+  'header title': { block: 'kanso-header__title', lead: windowControls },
   sidebar: { block: 'kanso-sidebar', tag: 'aside' },
   rows: { block: 'kanso-sidebar__rows' },
-  'row group': { block: 'kanso-sidebar__row-group' },
+  // Proposed: `computer`, a computer's group, wider apart from the group above it than projects are.
+  'row group': { block: 'kanso-sidebar__row-group', states: ['computer'] },
   'view switch': { block: 'kanso-sidebar__view-switch' },
   'view menu': { block: 'kanso-sidebar__view-menu' },
+  // Proposed: the collapsed view button carrying the dot while someone needs you.
+  'view button': { block: 'kanso-sidebar__view-button', tag: 'span' },
   footer: { block: 'kanso-sidebar__footer' },
+  // Proposed: Settings and its open menu; a refused update's block under its row.
+  'footer settings': { block: 'kanso-sidebar__footer-settings' },
+  'footer menu': { block: 'kanso-sidebar__footer-menu' },
+  'footer refusal': { block: 'kanso-sidebar__footer-refusal' },
   rail: { block: 'kanso-rail', tag: 'aside' },
   'rail list': { block: 'kanso-rail__list' },
   // Proposed: `strong`, something in the group is unread or woke; `rail count`, a tile's state mark beside its count.
@@ -364,13 +386,15 @@ export const stacks = {
   'dojo conversation': { block: 'kanso-dojo__conversation' },
   'dojo result keys': { block: 'kanso-dojo__result-keys' },
   'dojo menu': { block: 'kanso-dojo__menu' },
+  // Proposed: a dialog's rows; `scroll`, past six rows the list scrolls (Send).
+  'dialog list': { block: 'kanso-dialog__list', states: ['scroll'] },
 };
 // `label`: what a focusable stack is called, its tooltip and its spoken name.
 export const stack = ({ variant, on = false, label = '', ...flags }, ...children) => {
   if (!Object.hasOwn(stacks, variant)) throw new Error(`stack: unknown variant "${variant}"`);
-  const { block, tag = 'div', states = [], focusable = false } = stacks[variant];
+  const { block, tag = 'div', states = [], focusable = false, lead = null } = stacks[variant];
   const unknown = Object.keys(flags).find((flag) => !states.includes(flag));
   if (unknown) throw new Error(`stack: variant "${variant}" has no state "${unknown}"`);
   const classes = [block, ...states.filter((state) => flags[state]).map((state) => `${block}--${state}`), on ? 'kanso-control--on' : ''].filter(Boolean).join(' ');
-  return `<${tag} class="${classes}"${focusable ? ' tabindex="0"' : ''}${label ? ` title="${escape(label)}" aria-label="${escape(label)}"` : ''}>${list(children)}</${tag}>`;
+  return `<${tag} class="${classes}"${focusable ? ' tabindex="0"' : ''}${label ? ` title="${escape(label)}" aria-label="${escape(label)}"` : ''}>${lead ? lead() : ''}${list(children)}</${tag}>`;
 };

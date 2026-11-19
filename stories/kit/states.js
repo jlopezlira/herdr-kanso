@@ -1,8 +1,11 @@
 // The pages drawn from named states: each state is a preset of its page's playground, and the catalog draws its record from that preset.
-import { computerItem, dojo, edge, toolbar, keyboard, keyboardExplorer, keyboardSystems, layoutPaused, paletteDoor, panel, panelBack, panelHeader, panelRefresh, pickedKey, shortcutRow, stepperMenu, tabBar } from './compositions.js';
+import { dojo, edge, keyboard, keyboardExplorer, keyboardSystems, panel, panelBack, panelHeader, panelRefresh, pickedKey, shortcutRow, stepperMenu, panelDoors } from './compositions.js';
+import { tabBar } from './tab-bar.js';
+import { computerItem, layoutPaused, paletteDoor } from './status-bar.js';
 import { emptyState, phrase, failureBlock, keycap, metric, needsItem, row, skeletonOf, stack, statusItem, stepper, tabs } from './pieces.js';
 import { atWidth, inBar, toolsRoom } from './frames.js';
-import { keyLayer, keyLayerMods, sampleDojo, samplePanel, samplePanelHeader, sampleAddMenu, sampleSortMenus, statusMenus, statusPanels } from './samples.js';
+import { toolbar } from './toolbar.js';
+import { keyLayer, keyLayerMods, paletteTip, sampleColumns, sampleDojo, samplePanel, samplePanelHeader, sampleAddMenu, sampleSortMenus, statusMenus, statusPanels, unreachable } from './samples.js';
 
 export const layerDefaults = Object.fromEntries(keyboardSystems.map((os) => [`${os}Layer`, keyLayerMods[os][0]]));
 const practiceKey = (key) => key === 'none' ? '' : key;
@@ -13,13 +16,13 @@ export const needsShown = { none: null, question: needsItem({ name: 'cart-ui', q
 export const memoryShown = { none: null, word: statusItem({ text: 'Memory 8% free', tone: 'blocked' }), folded: statusItem({ text: '8% free', tone: 'blocked' }) };
 export const stepperShown = ['rest', 'hover', 'menu'];
 
-const statusBar = ({ width, computer, paused, stepper: middle, needs, memory, panels, open }) => {
+const statusBar = ({ width, computer, paused, stepper: middle, minimap, needs, memory, panels, open }) => {
   const menuOpen = !paused && middle === 'menu';
   const popup = menuOpen ? stepperMenu() : panels && open !== 'none' ? statusMenus[open]() : '';
   const bar = inBar(width, {
-    left: computer === 'none' ? [] : [computerItem({ name: 'devbox', state: computer })],
-    middle: paused ? layoutPaused() : stepper({ hover: middle === 'hover', open: menuOpen }),
-    right: [needsShown[needs], memoryShown[memory], ...(panels ? statusPanels({ open }) : []), paletteDoor()].filter(Boolean),
+    left: computer === 'none' ? [] : [computerItem({ name: 'devbox', state: computer, detail: unreachable('devbox') })],
+    middle: paused ? layoutPaused({ detail: 'layout write refused 3 times' }) : stepper({ hover: middle === 'hover', open: menuOpen, columns: minimap ? sampleColumns : [] }),
+    right: [needsShown[needs], memoryShown[memory], ...(panels ? statusPanels({ open }) : []), paletteDoor({ tip: paletteTip })].filter(Boolean),
     popup,
   });
   return popup ? `<div class="kanso-story__popup-room">${bar}</div>` : bar;
@@ -87,7 +90,7 @@ const firstOpen = 'Make a move to start: 10 targets, in as few moves as you can.
 
 export const statedPages = {
   'Compositions/Toolbar': {
-    args: { view: 'spaces', column: false, open: false, sorted: false, menu: false, add: false },
+    args: { view: 'spaces', column: false, open: false, sorted: false, order: null, menu: false, add: false },
     markup: ({ menu: shown, add, ...args }) => {
       const bar = toolbar({ ...args, sortMenu: shown ? sampleSortMenus[args.view]() : null, addMenu: add ? sampleAddMenu() : null });
       return shown || add ? toolsRoom(bar) : bar;
@@ -97,6 +100,7 @@ export const statedPages = {
       { label: 'Status and Threads', args: { view: 'agents' }, caption: '+ starts a conversation in a project you pick.' },
       { label: '+ menu', args: { view: 'agents', add: true }, caption: 'After a click on +, on Status and Threads: Add computer… ends it.' },
       { label: 'Sorted', args: { sorted: true }, caption: 'The order is not the default one.' },
+      { label: 'Sort names its order', args: { sorted: true, order: 'Needs you first' }, caption: 'Proposed. Sort\'s tooltip names the order in use.' },
       { label: 'Sort menu, Projects', args: { menu: true }, caption: 'After a click on Sort, on Projects.' },
       { label: 'Sort menu, Status', args: { view: 'agents', menu: true }, caption: 'After a click on Sort, on Status.' },
       { label: 'Sort menu, Threads', args: { view: 'threads', menu: true }, caption: 'After a click on Sort, on Threads.' },
@@ -146,7 +150,7 @@ export const statedPages = {
   },
   'Compositions/Status bar/Computer item': {
     args: { name: 'devbox', remote: true, state: 'on', folded: false },
-    markup: (args) => inBar(520, { left: [computerItem(args)] }),
+    markup: (args) => inBar(520, { left: [computerItem({ ...args, detail: unreachable(args.name) })] }),
     states: [
       { label: 'Out of sight', args: {}, caption: 'Only while its sidebar row is out of sight.' },
       { label: 'Folded', args: { folded: true }, caption: 'The computer becomes its icon.' },
@@ -164,12 +168,13 @@ export const statedPages = {
     ],
   },
   'Compositions/Status bar': {
-    args: { width: 1040, computer: 'none', paused: false, stepper: 'rest', needs: 'question', memory: 'none', panels: false, open: 'none' },
+    args: { width: 1040, computer: 'none', paused: false, stepper: 'rest', minimap: false, needs: 'question', memory: 'none', panels: false, open: 'none' },
     markup: statusBar,
     states: [
       { label: 'At rest', args: { needs: 'none' }, caption: 'Nothing to say; panes per view keeps its slot.' },
       { label: 'Panes per view menu', args: { needs: 'none', stepper: 'menu' }, caption: 'Right-click: Even out, then the piece lines.' },
       { label: 'Layout paused', args: { needs: 'none', paused: true }, caption: 'The strip stopped after a failure; it resumes alone after 10 s.' },
+      { label: 'Minimap', args: { needs: 'none', minimap: true }, caption: 'Proposed. Switched on in kansō settings: one mark per column before panes per view, the one in front brightest; a click goes to it.' },
       { label: 'Sidebar folded', args: { computer: 'on' }, caption: 'The focused project is on devbox.' },
       { label: 'Unreachable', args: { computer: 'unreachable', needs: 'none' }, caption: "devbox can't be reached and its row is out of sight." },
       { label: 'Needs you', args: {}, caption: 'While the waiting row is out of view.' },
@@ -184,9 +189,9 @@ export const statedPages = {
     ],
   },
   'Compositions/Tab bar': {
-    args: { width: 1040, value: 'checkout', tab: 'at rest', panel: 'none', state: 'connected', folded: 0, overflow: false, windows: false },
-    markup: ({ width, value, tab, folded, overflow, ...args }) => {
-      const bar = atWidth(width, tabBar({ ...args, value, overflow, items: tabActs[tab](tabItems(value)), folded: foldedTabs.slice(0, folded).map((label) => ({ label })) }));
+    args: { width: 1040, value: 'checkout', tab: 'at rest', panel: 'none', state: 'connected', folded: 0, overflow: false, help: false, custom: false, windows: false },
+    markup: ({ width, value, tab, folded, overflow, custom, ...args }) => {
+      const bar = atWidth(width, tabBar({ ...args, panels: custom ? [...panelDoors, { key: 'notes', label: 'Notes' }] : panelDoors, value, overflow, items: tabActs[tab](tabItems(value)), folded: foldedTabs.slice(0, folded).map((label) => ({ label })) }));
       return overflow && folded ? `<div class="kanso-story__menu-room">${bar}</div>` : bar;
     },
     states: [
@@ -201,6 +206,8 @@ export const statedPages = {
       { label: 'Connecting', args: { width: 520, state: 'connecting' }, caption: 'A project on devbox: one breathing skeleton per known tab.' },
       { label: 'Unreachable', args: { width: 520, state: 'unreachable' }, caption: 'The tabs step down; no + and no doors.' },
       { label: 'Windows and Linux', args: { windows: true }, caption: 'The window buttons after the doors, in the same button.' },
+      { label: 'kansō help', args: { help: true }, caption: 'Proposed. kansō help\'s door after the panels\'.' },
+      { label: 'Custom panel, no icon', args: { custom: true }, caption: 'Proposed. A panel with no icon of its own shows its name.' },
     ],
   },
   'Compositions/Edges': {

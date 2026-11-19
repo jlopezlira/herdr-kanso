@@ -9,12 +9,13 @@ import { div, svg } from "gpui-kit";
 import { v_flex, h_flex, Popover, TextView, ScrollHandle } from "gpui-base";
 import { exec, notify, run, theme, setShared, shared, window, layout, focused, panes, terminals, props } from "herdr";
 import { walkLayout } from "./layout.js";
-import { G, T, PR, TINT, alpha, tokens } from "./ui.js";
+import { R, G, T, PR, TINT, alpha, tokens } from "./ui.js";
 import { Armed, button, quietLink, iconButton } from "./ui-button.js";
 import { TextField } from "./ui-field.js";
 import { menu } from "./ui-menu.js";
 import { failureBlock, skeletonOf, diffText, facts, code, tooltip, row as kitRow } from "./kit.js";
 import { dot } from "./ui-dot.js";
+import { caption } from "./ui-caption.js";
 import { section } from "./ui-section.js";
 import { segmented } from "./ui-tab.js";
 import { aliasText, machineTitle, tryOr, tryOrAsync, bounded } from "./pure.js";
@@ -205,7 +206,11 @@ export class PullRequest {
     this.selected = null; this.pr = null; this.error = null; this.none = false; this.missing = null;
   }
 
-  bind(cx) { this.bound = cx; return cx; }
+  tracked(work) {
+    return (cx, ...rest) => { this.bound = cx; return work(cx, ...rest); };
+  }
+
+  start(cx, work) { spawnAndNotify(cx, this.tracked(work)); }
 
   launch(command, args, options = {}) {
     return bounded(exec(command, args, { ...options, timeout: options.timeout ?? CALL_MS }), this.bound?.timer, CALL_MS);
@@ -269,7 +274,6 @@ export class PullRequest {
   refresh(cx) {
     if (this.loading) return;
     this.away = false;
-    this.bind(cx);
     const { cwd, on } = location(), context = key();
     if (context !== this.context) {
       this.context = context; this.root = null; this.branch = null; this.pr = null; this.threads = []; this.diffs = null;
@@ -292,8 +296,8 @@ export class PullRequest {
     this.cwd = cwd; this.on = on;
     this.loading = true;
     const want = this.selected;
-    cx.spawn(async (cx) => {
-      const inbox = this.syncInbox(context);
+    cx.spawn(this.tracked(async (cx) => {
+      const inbox = this.syncInbox(context).catch((e) => { if (key() === context) this.inboxFailure(e); });
       const failed = (e) => { if (key() === context) this.keepLast(e?.message ?? e); };
       const read = async () => {
         const top = await this.git(["rev-parse", "--show-toplevel"], cwd, on);
@@ -347,15 +351,18 @@ export class PullRequest {
         } else if (key() === context) { this.subjects = []; this.subjectsFor = null; }
         return open;
       };
-      const open = await read().catch((e) => { failed(e); return null; });
-      if (open) await open;
-      await inbox;
-      const follow = (this.selected !== want || this.openedList) && !this.wait && key() === context;
-      this.openedList = false;
-      this.loading = false; this.loadedAt = Date.now(); cx.notify();
+      const follow = await (async () => {
+        const open = await read().catch((e) => { failed(e); return null; });
+        if (open) await open;
+        await inbox;
+        return (this.selected !== want || this.openedList) && !this.wait && key() === context;
+      })().finally(() => {
+        this.openedList = false;
+        this.loading = false; this.loadedAt = Date.now(); cx.notify();
+      });
       if (follow) this.refresh(cx);
       else if (!this.wait) this.readLog(cx);
-    });
+    }));
   }
 
   facing() {
@@ -367,13 +374,12 @@ export class PullRequest {
     const stamp = this.view().logKey;
     if (!logDue({ facing: this.facing(), key: stamp, have: this.logFor ?? null })) return;
     this.forgetLog(stamp);
-    this.bind(cx);
-    cx.spawn(async (cx) => {
+    cx.spawn(this.tracked(async (cx) => {
       const r = await this.gh(["run", "view", stamp, "--log-failed"]).catch(() => null);
       if (this.logFor !== stamp) return;
       if (r?.code === 0) this.failedLog = r.stdout ?? "";
       cx.notify();
-    });
+    }));
   }
 
   // The account, not the focused folder. Absent unless a provider is installed and signed in here.
@@ -406,6 +412,7 @@ export class PullRequest {
     }
     if (key() !== context) return;
     this.paintInbox(model, true);
+    if (!model.writeError) this.retireInboxNote();
     if (this.inboxOpen === false) await this.noteSeen(this.pr?.url);
   }
 
@@ -413,7 +420,7 @@ export class PullRequest {
     this.inbox = model;
     this.inboxOn = true;
     if (decide) this.inboxOpen = stayOnBranch(this.inboxOpen);
-    if (model.writeError) this.note = said("Could not keep pull requests", model.writeError);
+    if (model.writeError) this.inboxFailure(model.writeError);
   }
 
   async noteSeen(url) {
@@ -545,7 +552,6 @@ export class PullRequest {
 
   loadClosed(cx) {
     if (this.closedLoading || !this.root || this.wait) return;
-    this.bind(cx);
     this.closedLoading = true;
     cx.spawn(this.contextTask(async (cx, context) => {
       try {
@@ -575,7 +581,12 @@ export class PullRequest {
     this.loadedAt = 0; this.refresh(cx); cx.notify();
   }
 
-  inboxFailure(error) { this.note = said("Could not keep pull requests", String(error?.message ?? error).split("\n")[0]); }
+  inboxFailure(error) { this.inboxNote = this.note = said("Could not keep pull requests", String(error?.message ?? error).split("\n")[0]); }
+
+  retireInboxNote() {
+    if (this.note === this.inboxNote) this.note = null;
+    this.inboxNote = null;
+  }
 
   finishAction(cx) { this.busy = null; cx.notify(); }
 
@@ -585,14 +596,13 @@ export class PullRequest {
 
   contextTask(work) {
     const context = this.context;
-    return (cx) => work(cx, context);
+    return this.tracked((cx) => work(cx, context));
   }
 
   act(label, args, cx, run = (a) => this.gh(a)) {
     if (this.busy) return;
-    this.bind(cx);
     this.busy = label; this.note = null; this.armed.clear();
-    spawnAndNotify(cx, async (cx) => {
+    this.start(cx, async (cx) => {
       try {
         const r = await run(args);
         commandOk(r);
@@ -603,9 +613,8 @@ export class PullRequest {
 
   mergeNow(cx) {
     const pr = this.pr;
-    this.bind(cx);
     this.busy = "Merge"; this.note = null;
-    spawnAndNotify(cx, async (cx) => {
+    this.start(cx, async (cx) => {
       try {
         const { o, r: name } = this.repo();
         const repo = await this.gh(["repo", "view", `${o}/${name}`, "--json", "squashMergeAllowed,mergeCommitAllowed,rebaseMergeAllowed"]);
@@ -621,9 +630,8 @@ export class PullRequest {
 
   createPr(cx) {
     if (this.busy) return;
-    this.bind(cx);
     this.busy = "Create"; this.note = null;
-    spawnAndNotify(cx, async (cx) => {
+    this.start(cx, async (cx) => {
       try {
         const now = await this.readPushed(this.root, this.on);
         if (!now || now.state === "late") throw new Error("It took too long to answer.");
@@ -641,14 +649,13 @@ export class PullRequest {
   }
 
   openPicker(kind, open, cx) {
-    this.bind(cx);
     this.picker = open ? kind : null;
     this.query = ""; this.search.set_value("");
     this.candidates = null; this.pickerError = null; this.truncated = false;
     if (open) {
       this.search.focus();
       const repo = this.repo(), context = this.context;
-      cx.spawn(async (cx) => {
+      cx.spawn(this.tracked(async (cx) => {
         try {
           const q = kind === "labels" ? LABELS : PEOPLE;
           const r = await this.gh(["api", "graphql", "-f", `query=${q}`, "-F", `o=${repo.o}`, "-F", `r=${repo.r}`]);
@@ -661,7 +668,7 @@ export class PullRequest {
           this.candidates = list.nodes;
         } catch (e) { this.pickerError = String(e?.message ?? e); }
         cx.notify();
-      });
+      }));
     }
     cx.notify();
   }
@@ -675,7 +682,6 @@ export class PullRequest {
 
   toggle(kind, name, on, cx) {
     if (this.pending) return;
-    this.bind(cx);
     const { o, r } = this.repo(), n = this.pr.number;
     const call = {
       labels: on ? ["-X", "DELETE", `repos/${o}/${r}/issues/${n}/labels/${encodeURIComponent(name)}`] : ["-X", "POST", `repos/${o}/${r}/issues/${n}/labels`, "-f", `labels[]=${name}`],
@@ -686,7 +692,7 @@ export class PullRequest {
     const failed = { labels: on ? `Could not take ${name} off` : `Could not put ${name} on`, assignees: on ? `Could not unassign ${name}` : `Could not assign ${name}`, reviewers: on ? `Could not take back the request to ${name}` : `Could not ask ${name} for a review` }[kind];
     const why = { labels: "Changing labels needs triage access on this repository.", assignees: "Assigning needs triage access on this repository.", reviewers: "Asking for a review needs write access on this repository." }[kind];
     this.pending = name;
-    spawnAndNotify(cx, async (cx) => {
+    this.start(cx, async (cx) => {
       try {
         commandOk(await this.gh(["api", ...call, "--silent"]));
         // Reflect it at once; the reread below confirms it.
@@ -780,14 +786,14 @@ export class PullRequest {
   }
 
   listPage(c) {
-    const held = this.wait ? div().text_size(12).text_color(c.dim).child(this.wait) : null;
+    const held = this.wait ? div().text_size(T.body).text_color(c.dim).child(this.wait) : null;
     const beside = (rows) => held ? v_flex().w_full().gap(G.lg).child(held).child(rows) : rows;
     const closed = this.closedPrs === null
-      ? (this.closedLoading ? this.closedBones(c) : div().text_size(12).text_color(c.dim).child(this.wait || "GitHub could not be read."))
-      : !this.closedPrs.length ? beside(div().text_size(12).text_color(c.dim).child("Nothing closed yet."))
+      ? (this.closedLoading ? this.closedBones(c) : div().text_size(T.body).text_color(c.dim).child(this.wait || "GitHub could not be read."))
+      : !this.closedPrs.length ? beside(div().text_size(T.body).text_color(c.dim).child("Nothing closed yet."))
         : beside(this.openPage(c, this.closedPrs));
     const open = !this.openPrs.length
-      ? div().text_size(12).text_color(c.dim).child(this.wait || "Nothing open.")
+      ? div().text_size(T.body).text_color(c.dim).child(this.wait || "Nothing open.")
       : beside(this.openPage(c));
     return v_flex().w_full().gap(G.lg).child(this.tabs(c)).child(this.tab === "closed" ? closed : open);
   }
@@ -806,7 +812,7 @@ export class PullRequest {
     // Rows are numbered down the page, across the groups.
     const firsts = groups.map((_, g) => groups.slice(0, g).reduce((n, [, rows]) => n + rows.length, 0));
     return this.withNote(v_flex().w_full().gap(G.xl)
-      .children(groups.map(([title, rows], g) => v_flex().w_full().gap(2)
+      .children(groups.map(([title, rows], g) => v_flex().w_full().gap(G.hair)
         .child(section(c, title, String(rows.length)))
         .children(rows.map((p, k) => listedRow(this, c, p, firsts[g] + k, { finished })))))
       .when(create && this.canCreate(), (el) => el.child(h_flex().child(quietLink("pr-create-list", this.busy === "Create" ? "Opening GitHub…" : "Create on GitHub", (cx) => this.createPr(cx), c, { color: c.text, disabled: Boolean(this.busy) })))), c);
@@ -863,7 +869,7 @@ export class PullRequest {
   waiting(c, title, detail, action) {
     return v_flex().w_full().gap(G.sm)
       .child(div().text_size(T.card).text_color(c.muted).child(title))
-      .when(Boolean(detail), (el) => el.child(div().text_size(12).text_color(c.dim).child(detail)))
+      .when(Boolean(detail), (el) => el.child(div().text_size(T.body).text_color(c.dim).child(detail)))
       .when(Boolean(action), (el) => el.child(h_flex().pt(G.xs).child(action)));
   }
 
@@ -928,8 +934,8 @@ export class PullRequest {
     if (!step.deliver) return;
     const address = this.frontAgent()?.address;
     if (!address) { this.note = said("Not sent: no agent in front"); cx.notify(); return; }
-    this.busy = "Send"; this.sendShown = false; this.note = null; this.bind(cx);
-    spawnAndNotify(cx, async (cx) => {
+    this.busy = "Send"; this.sendShown = false; this.note = null;
+    this.start(cx, async (cx) => {
       try {
         const sent = await deliver(address, text, "you");
         if (sent?.code !== 0) this.note = said("Not sent", String(sent?.stderr || sent?.stdout || "could not send").split("\n")[0]);
@@ -977,7 +983,7 @@ export class PullRequest {
 
   loadOthers(cx) {
     if (this.listingOthers || this.listed || this.wait || !this.root) return;
-    this.listingOthers = true; this.bind(cx);
+    this.listingOthers = true;
     cx.spawn(this.contextTask(async (cx, context) => {
       try { this.takeOpen(await this.gh(openListArgs()).catch(() => null), context); }
       finally { this.listingOthers = false; cx.notify(); }
@@ -990,25 +996,25 @@ export class PullRequest {
     return v_flex().w_full()
       .child(section(c, "Description"))
       .child(text
-        ? div().id("pr-body").w_full().text_size(13).line_height(1.5).text_color(c.text)
+        ? div().id("pr-body").w_full().text_size(T.card).line_height(1.5).text_color(c.text)
           .when(long && !open, (el) => el.max_h(PR.fold).overflow_hidden())
           .child(TextView.markdown("pr-body-md", text).selectable(true).on_link_click((url) => openUrl(url)))
-        : div().text_size(13).text_color(c.dim).child("No description."))
+        : div().text_size(T.value).text_color(c.dim).child("No description."))
       .when(Boolean(text) && long, (el) => el.child(h_flex().pt(G.sm).child(quietLink("pr-body-more", open ? "Show less" : "Show all", toggle, c))));
   }
 
   people(c) {
     const pr = this.pr, open = pr.state === "OPEN";
     const metaRow = (label, values, picker, extra) => h_flex().w_full().min_h(28).gap(G.md).items_center()
-      .child(div().w(76).flex_none().text_size(12).text_color(c.dim).child(label))
+      .child(div().w(76).flex_none().text_size(T.body).text_color(c.dim).child(label))
       .child(h_flex().flex_1().min_w(0).flex_wrap().gap(6).items_center()
-        .children(values.length ? values : [div().text_size(13).text_color(c.dim).child("None")])
+        .children(values.length ? values : [div().text_size(T.value).text_color(c.dim).child("None")])
         .when(Boolean(extra), (el) => el.child(extra)))
       .when(Boolean(picker), (el) => el.child(picker));
-    const person = (login, sub, color) => h_flex().gap(4).items_center()
+    const person = (login, sub, color) => h_flex().gap(G.xs).items_center()
       .when(Boolean(color), (el) => el.child(dot(c, color)))
-      .child(div().text_size(13).text_color(c.text).child(login))
-      .when(Boolean(sub), (el) => el.child(div().text_size(11).text_color(c.dim).child(sub)));
+      .child(div().text_size(T.card).text_color(c.text).child(login))
+      .when(Boolean(sub), (el) => el.child(caption(c, sub)));
     const assignees = (pr.assignees ?? []).map((a) => person(a.login));
     const mine = this.viewer && (pr.assignees ?? []).some((a) => a.login === this.viewer);
     const outcome = { APPROVED: ["approved", c.green], CHANGES_REQUESTED: ["changes", c.red], COMMENTED: ["commented", null], DISMISSED: ["dismissed", null] };
@@ -1016,9 +1022,9 @@ export class PullRequest {
     const asked = (pr.reviewRequests ?? []).map((r) => person(r.login ?? r.name ?? r.slug, r.login ? "requested" : "team · requested", c.yellow));
     const labels = (pr.labels ?? []).map((l) => {
       const color = labelColor(l.color) ?? c.dim;
-      return h_flex().h(22).px(8).gap(5).items_center().rounded(6).bg(alpha(color, TINT.soft))
+      return h_flex().h(22).px(G.sm).gap(5).items_center().rounded(R.control).bg(alpha(color, TINT.soft))
         .child(dot(c, color))
-        .child(div().max_w(160).truncate().text_size(11.5).text_color(c.text).child(l.name));
+        .child(div().max_w(160).truncate().text_size(T.body).text_color(c.text).child(l.name));
     });
     const decision = { APPROVED: "Approved", CHANGES_REQUESTED: "Changes requested", REVIEW_REQUIRED: "Review required" }[pr.reviewDecision] ?? "";
     return v_flex().w_full()
@@ -1066,19 +1072,18 @@ export class PullRequest {
   }
 
   pickFile(path, cx) {
-    this.bind(cx);
     this.openFile = this.openFile === path ? null : path;
     if (this.openFile && !this.diffs && this.pr) {
       const url = this.pr.url, context = this.context;
       this.diffLoading = true;
-      cx.spawn(async (cx) => {
+      cx.spawn(this.tracked(async (cx) => {
         try {
           const r = await this.gh(["pr", "diff", url, "--color", "never"]);
           if (r.code !== 0) throw new Error((r.stderr || r.stdout).trim());
           if (this.context === context && this.pr?.url === url) this.diffs = splitDiff(r.stdout);
         } catch (e) { this.note = said("Could not read the diff", String(e?.message ?? e).split("\n")[0]); }
         finally { this.diffLoading = false; cx.notify(); }
-      });
+      }));
     }
     cx.notify();
   }
@@ -1098,7 +1103,7 @@ export class PullRequest {
           .when(on, (el) => el.child(this.fileDiff(c, f.path)));
       }))
       .when(files.length > FILE_ROWS, (el) => el.child(h_flex().pt(G.sm).child(quietLink("pr-files-more", open ? "Show fewer" : `Show ${files.length - FILE_ROWS} more`, (cx) => { this.expanded = { ...this.expanded, files: !open }; cx.notify(); }, c))))
-      .when(files.length < pr.changedFiles, (el) => el.child(div().pt(G.sm).text_size(11).text_color(c.dim).child(`GitHub lists the first ${files.length} of ${pr.changedFiles} files.`)));
+      .when(files.length < pr.changedFiles, (el) => el.child(div().pt(G.sm).text_size(T.micro).text_color(c.dim).child(`GitHub lists the first ${files.length} of ${pr.changedFiles} files.`)));
   }
 
   inboxState(item) {
@@ -1123,13 +1128,13 @@ export class PullRequest {
     };
     return this.withNote(v_flex().w_full().gap(G.lg)
       .child(segmented("pr-inbox", [{ key: "needs", label: "Needs you" }, { key: "yours", label: "Yours" }], tab, (key, cx) => { this.inboxTab = key; cx.notify(); }, c))
-      .when(this.outside, (el) => el.child(div().text_size(12).text_color(c.dim).child("This pane is not in a repository.")))
+      .when(this.outside, (el) => el.child(div().text_size(T.body).text_color(c.dim).child("This pane is not in a repository.")))
       .child(!groups.length
-        ? div().text_size(12).text_color(c.dim).child("Nothing waiting on you.")
-        : v_flex().w_full().gap(G.xl).children(groups.map((group, g) => v_flex().w_full().gap(2)
+        ? div().text_size(T.body).text_color(c.dim).child("Nothing waiting on you.")
+        : v_flex().w_full().gap(G.xl).children(groups.map((group, g) => v_flex().w_full().gap(G.hair)
           .child(section(c, group.title, String(group.rows.length)))
           .children(group.rows.map((item, k) => row(item, firsts[g] + k))))))
-      .when(Boolean(this.wait || this.inbox?.limitedUntil), (el) => el.child(div().text_size(12).text_color(c.dim).child(this.wait || limitLine(this.inbox.limitedUntil)))), c);
+      .when(Boolean(this.wait || this.inbox?.limitedUntil), (el) => el.child(div().text_size(T.body).text_color(c.dim).child(this.wait || limitLine(this.inbox.limitedUntil)))), c);
   }
 
   body(c, narrow) {

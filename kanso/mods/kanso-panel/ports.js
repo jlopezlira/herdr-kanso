@@ -15,7 +15,7 @@ import { aliasText, machineTitle, tryOr } from "./pure.js";
 import { parseProcesses, etimeSecs } from "./procs.js";
 import { STOP_LOOP, systemApi } from "./platform-system.js";
 export { STOP_LOOP };
-import { G, OPACITY, tokens } from "./ui.js";
+import { T, G, OPACITY, tokens } from "./ui.js";
 import { Armed, button, quietLink, iconButton } from "./ui-button.js";
 import { row } from "./ui-row.js";
 import { factList } from "./ui-facts.js";
@@ -383,11 +383,11 @@ export class Ports {
       st && st.freedMB > 0 ? { value: size(st.freedMB), unit: st.since ? `given back since ${clock(st.since)}` : "given back" } : null,
     ].filter(Boolean);
     return heroStack(heroHeading()
-        .child(div().text_size(15).text_color(c.muted).child(here ? `Listening on ${machineTitle("", "", here)}` : "Listening on this computer"))
+        .child(div().text_size(T.title).text_color(c.muted).child(here ? `Listening on ${machineTitle("", "", here)}` : "Listening on this computer"))
         .child(metric({ value: String(list.length), unit: list.length === 1 ? "server" : "servers", facts: factList(stats) })("pt-metric", c)))
       .when(loose.length > 0, (el) => el.child(h_flex().gap(G.lg).items_center().flex_wrap()
         .child(this.armed.button("pt-stop-all", `Stop ${loose.length} ${NO_PANE}`, `stop ${loose.length}`, "all", (cx) => this.stop(loose, cx), c))
-        .child(div().text_size(12).text_color(c.dim).child("The ones in a pane stay."))));
+        .child(div().text_size(T.body).text_color(c.dim).child("The ones in a pane stay."))));
   }
 
   remoteSections(c) {
@@ -395,11 +395,11 @@ export class Ports {
     return machines().filter((m) => m?.name).flatMap((m) => {
       const r = this.remote?.[m.name], title = machineTitle(m.name, "", aliasText(alias, m.name));
       const why = m.layout === "unavailable" ? "unreachable" : r?.why;
-      if (why) return [div().w_full().truncate().text_size(11.5).text_color(c.blocked).child(`${title} · ${why}`)];
-      if (!r?.list?.length) return r?.said ? [div().w_full().truncate().text_size(11.5).text_color(c.blocked).child(`${title} · ${r.said}`)] : [];
-      return [v_flex().w_full().gap(2)
+      if (why) return [div().w_full().truncate().text_size(T.body).text_color(c.blocked).child(`${title} · ${why}`)];
+      if (!r?.list?.length) return r?.said ? [div().w_full().truncate().text_size(T.body).text_color(c.blocked).child(`${title} · ${r.said}`)] : [];
+      return [v_flex().w_full().gap(G.hair)
         .child(section(c, title, String(r.list.length)))
-        .when(Boolean(r.said), (el) => el.child(div().w_full().truncate().text_size(11.5).text_color(c.blocked).child(`${title} · ${r.said}`)))
+        .when(Boolean(r.said), (el) => el.child(div().w_full().truncate().text_size(T.body).text_color(c.blocked).child(`${title} · ${r.said}`)))
         .children(r.list.map((s) => this.row(s, c)))];
     });
   }
@@ -408,7 +408,7 @@ export class Ports {
     const state = this.hist?.state, busy = Boolean(this.busy.install);
     const at = this.hist?.data?.at;
     return h_flex().w_full().gap(G.lg).items_center().flex_wrap()
-      .child(div().text_size(12).text_color(state === "stale" ? c.red : c.dim)
+      .child(div().text_size(T.body).text_color(state === "stale" ? c.red : c.dim)
         .child(state === "stale" ? `History stopped at ${clock(at)}` : state === "bad" ? "History unreadable" : "No history"))
       .child(quietLink("pt-guard-on", busy ? "Turning on…" : "Turn on the guard", (cx) => this.turnOn(cx), c, { color: c.text, disabled: busy }));
   }
@@ -420,24 +420,24 @@ export class Ports {
     return v_flex().w_full().gap(G.sm)
       .child(h_flex().w_full().items_center().justify_between().gap(G.md).pb(G.xs)
         .child(segmented("pt-range", RANGES.map((r) => ({ key: r.key, label: r.label })), this.range, (key, cx) => { this.range = key; cx.notify(); }, c))
-        .child(div().text_size(12).text_color(c.dim).child(series && !series.empty ? `peak ${series.peak} at once` : "")))
+        .child(div().text_size(T.body).text_color(c.dim).child(series && !series.empty ? `peak ${series.peak} at once` : "")))
       .child(h_flex().w_full().h(height + 18).items_end()
         .children((series?.bars ?? []).map((bar) => {
           const total = bar.empty ? 1 : Math.max(2, Math.round(bar.ratio * height));
           const looseH = bar.loose ? Math.min(total, Math.max(2, Math.round(bar.looseRatio * height))) : 0;
-          return v_flex().flex_1().min_w(0).h(height + 18).items_center().justify_end().gap(4).tooltip(tooltip({ label: bar.tip }))
-            .when(Boolean(bar.mark), (el) => el.child(div().text_size(10).text_color(c.text).whitespace_nowrap().child(bar.value)))
+          return v_flex().flex_1().min_w(0).h(height + 18).items_center().justify_end().gap(G.xs).tooltip(tooltip({ label: bar.tip }))
+            .when(Boolean(bar.mark), (el) => el.child(div().text_size(T.micro).text_color(c.text).whitespace_nowrap().child(bar.value)))
             .child(v_flex().w(bar.mark ? 3 : 2).flex_none()
               .when(total - looseH > 0, (el) => el.child(div().w_full().h(total - looseH).rounded_t(1)
                 .bg(bar.mark ? c.accent : bar.empty ? c.border : c.muted).opacity(bar.mark || bar.empty ? 1 : OPACITY.quiet)))
               .when(looseH > 0, (el) => el.child(div().w_full().h(looseH).when(total === looseH, (d) => d.rounded_t(1)).bg(c.yellow))));
         })))
       .child(h_flex().w_full().justify_between().items_center()
-        .child(div().text_size(10).text_color(c.dim).child(series?.first ?? ""))
+        .child(div().text_size(T.micro).text_color(c.dim).child(series?.first ?? ""))
         .child(h_flex().gap(G.xs).items_center()
-          .child(div().text_size(10).text_color(c.dim).child("Servers"))
-          .when(anyLoose, (el) => el.child(dot(c, c.yellow).ml(G.sm)).child(div().text_size(10).text_color(c.dim).child(NO_PANE))))
-        .child(div().text_size(10).text_color(c.dim).child(series?.last ?? "")));
+          .child(div().text_size(T.micro).text_color(c.dim).child("Servers"))
+          .when(anyLoose, (el) => el.child(dot(c, c.yellow).ml(G.sm)).child(div().text_size(T.micro).text_color(c.dim).child(NO_PANE))))
+        .child(div().text_size(T.micro).text_color(c.dim).child(series?.last ?? "")));
   }
 
   history(c) {
@@ -453,17 +453,17 @@ export class Ports {
     const head = tabs.length > 1
       ? h_flex().w_full().items_center().justify_between().gap(G.md).pb(G.sm)
         .child(segmented("pt-list", tabs.map((t) => ({ key: t.key, label: t.label })), tab.key, (key, cx) => { this.tab = key; this.showAll = false; cx.notify(); }, c))
-        .child(div().text_size(12).text_color(c.dim).child(String(tab.rows.length)))
+        .child(div().text_size(T.body).text_color(c.dim).child(String(tab.rows.length)))
       : section(c, tab.label, String(tab.rows.length));
     return v_flex().w_full()
       .child(head)
       .children(shown.map((r) => h_flex().w_full().items_center().gap(G.md).py(G.sm).border_t(1).border_color(c.border)
         .child(v_flex().flex_1().min_w(0).gap(3)
-          .child(div().w_full().truncate().text_size(13).text_color(c.text).child(r.name))
+          .child(div().w_full().truncate().text_size(T.card).text_color(c.text).child(r.name))
           .child(h_flex().w_full().flex_wrap().gap_x(G.md)
-            .children([r.ports, r.opened, r.ran].filter(Boolean).map((part) => div().text_size(11).text_color(c.dim).whitespace_nowrap().child(part)))
-            .when(Boolean(r.how), (el) => el.child(div().text_size(11).text_color(r.loose ? c.yellow : c.dim).whitespace_nowrap().child(r.how)))))
-        .child(div().flex_none().text_size(15).font_light().text_color(c.text).whitespace_nowrap().tooltip(tooltip({ label: "Its largest" })).child(r.peak))))
+            .children([r.ports, r.opened, r.ran].filter(Boolean).map((part) => div().text_size(T.micro).text_color(c.dim).whitespace_nowrap().child(part)))
+            .when(Boolean(r.how), (el) => el.child(div().text_size(T.micro).text_color(r.loose ? c.yellow : c.dim).whitespace_nowrap().child(r.how)))))
+        .child(div().flex_none().text_size(T.title).font_light().text_color(c.text).whitespace_nowrap().tooltip(tooltip({ label: "Its largest" })).child(r.peak))))
       .when(tab.rows.length > LIST_ROWS, (el) => el.child(h_flex().pt(G.sm)
         .child(quietLink("pt-more", this.showAll ? "Show fewer" : `Show ${tab.rows.length - LIST_ROWS} more`, (cx) => { this.showAll = !this.showAll; cx.notify(); }, c))));
   }
@@ -488,7 +488,7 @@ export class Ports {
         .child(this.hero(c, list, narrow))
         .when(state !== undefined && state !== "ok", (el) => el.child(this.guardOff(c)))
         .when(Boolean(this.digest), (el) => el.child(v_flex().w_full().opacity(state === "stale" ? OPACITY.away : 1).child(this.chart(c))))
-        .when(list.length > 0, (el) => el.child(v_flex().w_full().gap(2)
+        .when(list.length > 0, (el) => el.child(v_flex().w_full().gap(G.hair)
           .child(section(c, others.length ? machineTitle("", "", aliasText(shared("kanso.alias"), "")) : "Running", ""))
           .children(list.map((s) => this.row(s, c)))))
         .children(others)

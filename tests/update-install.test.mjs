@@ -12,7 +12,7 @@ test("Updating Kanso swaps its mods, merges its keys and keeps your layout aside
   assert.match(f.toasts[0].title, /kansō 1\.1\.0 is available/);
   assert.equal(f.toasts[0].action.name, "kanso-tabs.update", "the tab bar installs: it is on screen even with the sidebar hidden");
   assert.equal(f.toasts[0].timeout, 30000, "long enough to be seen");
-  assert.deepEqual(f.resizes, [88], "the footer grows a row for it");
+  assert.deepEqual(f.resizes, [84], "the footer grows a row for it");
 
   // Another check does not toast the same version again.
   await f.updater.check(cx, true);
@@ -51,7 +51,7 @@ test("Updating Kanso swaps its mods, merges its keys and keeps your layout aside
   assert.equal(done.level, "success");
   assert.match(done.body, /layouts\/kanso\.json\.old-/);
   assert.deepEqual(pending(f), [], "reported once");
-  assert.deepEqual(f.resizes, [88, 56], "and gives the room back");
+  assert.deepEqual(f.resizes, [84, 52], "and gives the room back");
 });
 
 test("A copy that started before version.json arrived stops offering what is installed", async (t) => {
@@ -69,7 +69,7 @@ test("A release that kept the layout leaves yours as it is", async (t) => {
   const { f, cx } = await started(t, { layoutChanged: false });
   f.footer.size = { px: 240 }; // sized by you
   await installed(f, cx);
-  assert.deepEqual(f.resizes, [88], "a footer you sized is left alone");
+  assert.deepEqual(f.resizes, [84], "a footer you sized is left alone");
   assert.equal(await readFile(join(f.home, "layouts/kanso.json"), "utf8"), '{"root":{"id":"live"}}');
   assert.ok(!(await readdir(join(f.home, "layouts"))).some((n) => n.startsWith("kanso.json.old-")));
 });

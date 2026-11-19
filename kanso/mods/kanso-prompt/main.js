@@ -2,23 +2,21 @@
 // Modified by jlopezlira (Kanso, https://github.com/jlopezlira/herdr-kanso): the same dialog Herdr
 // uses to rename a space or a tab, for what Herdr has no command for: a terminal's name, kept as a
 // label on the terminal in herdr-core.
-import { View } from "gpui-kit";
-import { tokens } from "./ui.js";
-import { dialog } from "./ui-dialog.js";
-import { field, TextField } from "./ui-field.js";
-import { applyRename, trackText } from "./rename.js";
-import { props, closeOverlay, theme, shared, setShared } from "herdr";
+import { TextField } from "./ui-field.js";
+import { applyRename, RenameView } from "./rename.js";
+import { props, closeOverlay, shared, setShared } from "herdr";
 
-export default class Prompt extends View {
-  init(_props, cx) {
-    this.text = props()?.value ?? "";
-    this.input = new TextField({ value: this.text });
-    if (this.text) this.input.set_selected_range({ start: 0, end: this.text.length });
-    trackText(this.input, (text) => { this.text = text; });
-    this.input.on("submit", () => this.submit());
-    this.input.focus();
-    cx.timer.after(600, () => this.input.focus());
-    this.handle = cx.focus_handle();
+export default class Prompt extends RenameView {
+  // The name is chosen whole before the field takes the keyboard, so typing replaces it; Enter answers.
+  makeField(value) {
+    const input = new TextField({ value });
+    if (value) input.set_selected_range({ start: 0, end: value.length });
+    input.on("submit", () => this.submit());
+    return input;
+  }
+
+  labels(p) {
+    return { label: p.field ?? "Name", primary: p.button ?? "Save" };
   }
 
   submit() {
@@ -39,17 +37,5 @@ export default class Prompt extends View {
     const p = props();
     closeOverlay(p.overlay);
     if (p.shared) this.answer(p, null);
-  }
-
-  render() {
-    const p = props() ?? {};
-    const c = tokens(theme());
-    return dialog("prompt", c, {
-      title: (p.title ?? "").replace(/^./, (c) => c.toUpperCase()),
-      body: field("pm-input", this.input, c, { label: p.field ?? "Name" }),
-      notes: p.hint ? [{ text: p.hint }] : [],
-      secondary: "Cancel", primary: p.button ?? "Save",
-      onCancel: () => this.cancel(), onPrimary: () => this.submit(), focusHandle: this.handle,
-    });
   }
 }

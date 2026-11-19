@@ -8,7 +8,7 @@ export const rules = {
     "A release that breaks something says so first in What's new.",
   ],
   "Compositions/Keyboard": [
-    "⌘⇧/ opens Keys in kansō settings.",
+    "⇧⌘/ opens Keys in kansō settings.",
     "Change starts capture on its row; keys.json is written locally and Herdr applies it as it lands.",
   ],
   "Compositions/Notifications": [
@@ -73,7 +73,7 @@ export const rules = {
   "Compositions/Tab bar": [
     "A hidden panel comes back from Panels; hiding unmounts the panel and stops its reads.",
     "Default order: Files, Spend, PR, Shipped, Worktrees, Ports, Containers, Memory, Images, Simulator.",
-    "Settings opens from the footer; ⌘⇧/ still opens Keys.",
+    "Settings opens from the footer; ⇧⌘/ still opens Keys.",
   ],
   "Layouts/Context menus": [
     "Every piece answers a right-click; a hidden piece comes back from there or Settings · Pieces.",

@@ -7,7 +7,7 @@ import { join, posix } from "node:path";
 import { fileApi } from "../kanso/mods/kanso-panel/platform-files.js";
 import { paths } from "../kanso/mods/kanso-panel/platform-paths.js";
 import test from "node:test";
-import { databaseTimer, load, clone, context, singleUse, exec as run, nativeWindow, nativePlatform, until, failure, success, moved, isDecode, decoded } from "./helpers.mjs";
+import { databaseTimer, load, clone, context, singleUse, drawingHost, nodes, calls, arg, exec as run, nativeWindow, nativePlatform, until, failure, success, moved, isDecode, decoded } from "./helpers.mjs";
 
 const dirs = [];
 process.on("exit", () => { for (const d of dirs) rmSync(d, { recursive: true, force: true }); });
@@ -103,7 +103,7 @@ test("A note to the agent names the file and where each pin sits on the picture"
 // The panel in a fake Herdr: agent t1 whose screen shows `screen`, a shell t2, and the files in `files`.
 // `copy(args)`: what cp answers, a promise a test can hold back.
 async function panel({ screen = OUTPUT, files = ["/repo/tests/shot.png", "/repo/images/hero.jpg", "/repo/docs/plan.md"], status = "idle", focus = "t1",
-  copy = async () => ({ code: 0, stdout: "" }), session = null, transcript = "", appHome = "/app", bad = [], remote = null, statText = "4 1700000000\n" } = {}) {
+  copy = async () => ({ code: 0, stdout: "" }), session = null, transcript = "", appHome = "/app", bad = [], remote = null, statText = "4 1700000000\n", drawing = null } = {}) {
   if (appHome !== "/app") dirs.push(appHome);
   const calls = [], ons = [], store = {};
   const address = remote ? `${remote}/${focus}` : focus;
@@ -122,7 +122,7 @@ async function panel({ screen = OUTPUT, files = ["/repo/tests/shot.png", "/repo/
   };
   const sipsPath = (args) => { const at = args.indexOf("--out"); return at > 0 ? args[at - 1] : args.at(-1); };
   const host = {
-    ...singleUse(), image: singleUse().div,
+    ...(drawing ?? { ...singleUse(), image: singleUse().div }),
     openOverlay: (spec) => { calls.push(["openOverlay", spec]); return "o1"; },
     focused: () => ({ terminal: world.focus }), theme: () => ({}), home: () => "/home/me", appHome: () => appHome, window: () => ({ platform: "macos" }),
     terminals: () => world.terminals, panes: () => world.panes,
@@ -434,20 +434,36 @@ test("Look draws a HEIC with sips or ImageMagick and a PDF's first page with Qui
   assert.deepEqual(clone(mac.calls.at(-2)), ["pdftoppm", "-png", "-singlefile", "-f", "1", "-scale-to", "736", "/r/spec.pdf", "/app/k"]);
 });
 
-test("Images keeps the picture big and one circle per picture, the active one in that picture's color", async () => {
-  const { readFile } = await import("node:fs/promises");
+test("Images keeps the picture big and one kit thumbnail per picture: the one shown draws its copy, breathing while it is copied, the others their own colour", async () => {
   const src = await readFile(new URL("../kanso/mods/kanso-panel/look.js", import.meta.url), "utf8");
-  const dots = src.slice(src.indexOf("dots(list, c) {"), src.indexOf("picture(c) {"));
-  assert.match(dots, /h_flex\(\)\.id\("look-dots"\)/, "a row of circles");
-  assert.match(dots, /overflow_x_scrollbar\(\)/, "scrolled sideways when it does not fit");
-  assert.match(src, /item\.color/, "the active circle uses the picture's color");
+  const strip = src.slice(src.indexOf("thumbnails(list, c) {"), src.indexOf("picture(c) {"));
+  assert.match(strip, /h_flex\(\)\.id\("look-thumbnails"\)/, "a strip of thumbnails");
+  assert.match(strip, /overflow_x_scrollbar\(\)/, "scrolled sideways when it does not fit");
   assert.match(src, /Pictures this agent writes show up here, from its conversation"/);
-  assert.doesNotMatch(src, /look-strip|flex_wrap\(\)|thumbnail\(/, "no thumbnail strip and nothing wraps into a grid");
-  const { look, cx, drain } = await panel();
+  assert.doesNotMatch(src, /look-dot|flex_wrap\(\)/, "no circles, and nothing wraps into a grid");
+  const { look, cx, drain } = await panel({ drawing: drawingHost() });
   await drain();
   assert.equal(look.list().length, 2);
   assert.equal(look.list()[0].color, "#c45a3a", "the color is stored on the picture");
-  assert.ok(look.render(cx), "the picture and the circles draw");
+  const thumbs = (el) => nodes(el).filter((kid) => String(kid.tag).startsWith("look-thumbnail-"));
+  const drawn = thumbs(look.render(cx));
+  assert.equal(drawn.length, 2, "one thumbnail per picture");
+  assert.deepEqual(clone(drawn.map((kid) => arg(kid, "accessibility_label"))), clone(look.list().map((item) => item.name)), "each says its picture's name");
+  assert.deepEqual(clone(drawn.map((kid) => arg(kid, "tooltip"))), clone(look.list().map((item) => item.name)), "and the name is its tooltip");
+  const shown = look.selected, at = look.list().findIndex((item) => item.path === shown.path);
+  const faceOf = (kid) => kid.kids[0];
+  assert.ok(look.shown?.image, "the picture shown has its copy");
+  assert.deepEqual(clone(nodes(faceOf(drawn[at])).flatMap((kid) => calls(kid, "image").map((call) => call[1]))), [look.shown.image], "the one shown draws its copy");
+  const other = drawn.find((_, i) => i !== at), otherItem = look.list().find((item) => item.path !== shown.path);
+  assert.equal(nodes(faceOf(other)).some((kid) => calls(kid, "image").length), false, "one not shown draws no picture");
+  assert.equal(otherItem.color, "#c45a3a");
+  assert.equal(arg(faceOf(other), "bg"), otherItem.color, "one not drawn shows its own colour");
+  look.shown = { path: shown.path, busy: true };
+  const busy = thumbs(look.render(cx))[at];
+  assert.equal(calls(faceOf(busy), "loop").length, 1, "breathing while it is copied");
+  calls(thumbs(look.render(cx)).find((kid) => kid.tag === other.tag), "on_click")[0][1]({}, cx);
+  await drain();
+  assert.equal(look.selected.path, otherItem.path, "a press picks it");
 });
 
 test("an index keeps first-seen order and a color, and a full read starts again", async () => {

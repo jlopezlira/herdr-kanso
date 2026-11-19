@@ -1,7 +1,4 @@
 import { paths } from "./platform-paths.js";
-import { PAGE } from "./ui.js";
-import { div } from "gpui-kit";
-import { TextView } from "gpui-base";
 import { spaces, panes, focused, layout, home } from "herdr";
 import { walkLayout, commitLayout } from "./layout.js";
 
@@ -45,15 +42,8 @@ export function location() {
 // A read's context is the folder and the machine, not the space.
 export const key = () => { const { cwd, on } = location(); return JSON.stringify({ cwd, on }); };
 
-const MAX_TEXT = 400000;
 export const ext = (path) => (path.includes(".") ? path.split(".").at(-1).toLowerCase() : "");
 export const isMarkdown = (path) => ["md", "markdown", "mdx"].includes(ext(path));
-
-export function markdownView(id, text, t) {
-  return div().id(`${id}-scroll`).flex_1().min_h(0).overflow_y_scrollbar()
-    .child(div().flex_none().w_full().px(16).py(12).text_size(PAGE.markdown).text_color(t.foreground)
-      .child(TextView.markdown(id, text.length > MAX_TEXT ? text.slice(0, MAX_TEXT) + "\n\n… (file truncated)" : text).selectable(true)));
-}
 
 // With no id the panel is emptied, and Herdr then ends the panel's mod.
 export function showPanel(id, content) {

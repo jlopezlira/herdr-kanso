@@ -9,7 +9,9 @@ const root = new URL("../", import.meta.url);
 const COMMON = [
   { source: "kanso/mods/kanso-panel/share.js", copies: ["kanso/mods/kanso-spend/share.js", "kanso/mods/kanso-guard/share.js", "kanso/mods/kanso-dojo/share.js"] },
   // What can be shown, shown when it has something to say, or hidden. Hide stops the work.
-  { source: "kanso/mods/kanso-settings/pieces.js", copies: ["kanso-spaces", "kanso-strip", "kanso-chrome", "kanso-tabs", "kanso-status", "kanso-panel", "kanso-sim"].map((m) => `kanso/mods/${m}/pieces.js`) },
+  { source: "kanso/mods/kanso-settings/pieces.js", copies: ["kanso-spaces", "kanso-strip", "kanso-chrome", "kanso-tabs", "kanso-status", "kanso-panel", "kanso-sim", "kanso-menu"].map((m) => `kanso/mods/${m}/pieces.js`) },
+  // The lines every right-click menu ends with, and Hide with its Undo.
+  { source: "kanso/mods/kanso-panel/piece-lines.js", copies: ["kanso-spaces", "kanso-strip", "kanso-chrome", "kanso-tabs", "kanso-status", "kanso-menu"].map((m) => `kanso/mods/${m}/piece-lines.js`) },
   // An agent's program icon and name, and the key caps, the same in the tabs, headers, status bar, sidebar and Send.
   { source: "kanso/mods/kanso-spaces/marks.js", copies: ["kanso/mods/kanso-strip/marks.js", "kanso/mods/kanso-status/marks.js", "kanso/mods/kanso-send/marks.js", "kanso/mods/kanso-settings/marks.js", "kanso/mods/kanso-help/marks.js", "kanso/mods/kanso-panel/marks.js", "kanso/mods/kanso-toast/marks.js", "kanso/mods/kanso-chrome/marks.js"] },
   // Text for an agent, delivered the same from Send and from Look.
@@ -41,7 +43,7 @@ const COMMON = [
   { source: "kanso/mods/open-with/popup.js", copies: ["kanso/mods/kanso-menu/popup.js", "kanso/mods/kanso-strip/popup.js"] },
   // The way into the arrangements dialog, from the tab bar and from the strip.
   { source: "kanso/mods/kanso-arrange/open.js", copies: ["kanso/mods/kanso-strip/open.js", "kanso/mods/kanso-tabs/open.js"] },
-  // The answer both rename dialogs give: a terminal's label, or a command with the new name.
+  // The view both rename dialogs are, the one-line and the many-line, and the answer they give: a terminal's label, or a command with the new name.
   { source: "kanso/mods/kanso-prompt/rename.js", copies: ["kanso/mods/kanso-prompt-editor/rename.js"] },
   // A folder's short word, the same in Send and in the strip's pane header.
   { source: "kanso/mods/kanso-send/folder.js", copies: ["kanso/mods/kanso-strip/folder.js"] },
@@ -92,6 +94,12 @@ const COMMON = [
   { source: "stories/kit/asleep.js", copies: ["kanso/mods/kanso-spaces/asleep.js"] },
   { source: "stories/kit/tile.js", copies: ["kanso/mods/kanso-spaces/tile.js"] },
   { source: "stories/kit/view-switch.js", copies: ["kanso/mods/kanso-spaces/view-switch.js"] },
+  { source: "stories/kit/toolbar.js", copies: ["kanso/mods/kanso-spaces/toolbar.js"] },
+  { source: "stories/kit/header.js", copies: ["kanso/mods/kanso-spaces/header.js", "kanso/mods/kanso-chrome/header.js"] },
+  { source: "stories/kit/sidebar-footer.js", copies: ["kanso/mods/kanso-chrome/sidebar-footer.js", "kanso/mods/kanso-tabs/sidebar-footer.js"] },
+  { source: "stories/kit/status-bar.js", copies: ["kanso/mods/kanso-status/status-bar.js", "kanso/mods/kanso-strip/status-bar.js"] },
+  { source: "stories/kit/activity.js", copies: ["kanso/mods/kanso-spaces/activity.js"] },
+  { source: "stories/kit/tab-bar.js", copies: ["kanso/mods/kanso-tabs/tab-bar.js"] },
   { source: "kanso/mods/kanso-panel/blocks.js", copies: ["markdown-panel/mods/markdown-panel/blocks.js"] },
   { source: "kanso/mods/kanso-tabs/markdown-handler.sh", copies: ["markdown-panel/mods/markdown-panel/markdown-handler.sh"] },
 ];

@@ -1,6 +1,9 @@
 // Pages whose story is built from Storybook controls instead of drawn states.
 import sprite from '../proto-sprite.svg?raw';
-import { activity, activityMenu, paneFolds, paneHeader, panelHeaderForms, panelLooks, paneReaches, paneStates, noticeHomes, noticePlaces, noticeStates, systemMessage, toastStack, heldChord, keyboard, keyboardExplorer, keyboards, keyboardSystems, keyNames, shortcutRowStates, channelSettings, channels, computerItem, computerItemStates, failureMenu, header, panelDoors, sidebarFooter, tabBarStates, toolbar } from './compositions.js';
+import { activityMenu, paneFolds, paneHeader, panelHeaderForms, panelLooks, paneReaches, paneStates, noticeHomes, noticePlaces, noticeStates, systemMessage, toastStack, heldChord, keyboard, keyboardExplorer, keyboards, keyboardSystems, keyNames, shortcutRowStates, channelSettings, channels, failureMenu, panelDoors } from './compositions.js';
+import { tabBarStates } from './tab-bar.js';
+import { activity, awayMax } from './activity.js';
+import { sidebarFooter } from './sidebar-footer.js';
 import { tile } from './tile.js';
 import { views, viewSwitch } from './view-switch.js';
 import { projectRow } from './project-row.js';
@@ -8,10 +11,11 @@ import { computerRow, computerStates } from './computer-row.js';
 import { section } from './section.js';
 import { asleep } from './asleep.js';
 import { sessionRow } from './session-row.js';
+import { computerItem, computerItemStates } from './status-bar.js';
 import { avatar, avatarSizes, button, card, chip, code, dawn, dialog, emptyState, escape, failureBlock, input, keycapStates, keyHint, kinds, levels, mark, markdown, marks, markSizes, menu, metric, row, rowDepths, sides, skeletonOf, skeletonShapes, stack, statePatterns, tabs, thumbnail, toast, toggle, tooltip, windowControls } from './pieces.js';
 import { barWidths, inBar } from './frames.js';
 import { edgeSides, layerDefaults, memoryShown, needsShown, panelContents, panelReads, panelRowLooks, statedPages, stepperShown, tabActs } from './states.js';
-import { appNotices, keyLayer, keyLayerMods, pullRequest, sampleDojo, sampleNotices, samplePanelHeader, sampleSidebar, sessionCommandsTip, sessionTools, statusMenus } from './samples.js';
+import { appNotices, awayEvents, keyLayer, keyLayerMods, pullRequest, sampleDojo, sampleHeader, sampleNotices, samplePanelHeader, sampleRefusal, sampleSettingsMenu, sampleSidebar, sessionCommandsTip, sessionTools, statusMenus, unreachable } from './samples.js';
 
 const icons = ['none', ...[...sprite.matchAll(/id="(lu-[^"]+)"/g)].map(([, id]) => id).sort()];
 const frame = (markup) => `<div class="kanso-story"><div class="kanso-story__theme kanso-story__frame kanso-story--free">${markup}</div></div>`;
@@ -168,15 +172,16 @@ export const playgrounds = {
       column: boolArg('collapsed'),
       open: boolArg('tools open', { if: { arg: 'column' } }),
       sorted: boolArg('sorted'),
+      order: textArg('order in use'),
       menu: boolArg('Sort menu'),
       add: boolArg('+ menu'),
     },
   },
   'Compositions/Header': {
-    args: { collapsed: false, dawn: false, art: true },
+    args: { collapsed: false, dawn: false, art: true, title: true },
     argTypes: { collapsed: boolArg('collapsed'), dawn: boolArg('Dawn Mode'),
-      art: boolArg('Dawn sky', { if: { arg: 'dawn' } }) },
-    markup: header,
+      art: boolArg('Dawn sky', { if: { arg: 'dawn' } }), title: boolArg('lights row') },
+    markup: sampleHeader,
   },
   'Compositions/Dawn Mode': {
     args: { channel: 'dawn', art: true, collapsed: false },
@@ -185,7 +190,7 @@ export const playgrounds = {
       art: boolArg('Dawn sky', { if: { arg: 'channel', eq: 'dawn' } }),
       collapsed: boolArg('collapsed'),
     },
-    markup: ({ channel, art, collapsed }) => `<p class="kanso-story__caption">Sidebar header</p>${header({ collapsed, dawn: channel === 'dawn', art })}`
+    markup: ({ channel, art, collapsed }) => `<p class="kanso-story__caption">Sidebar header</p>${sampleHeader({ collapsed, dawn: channel === 'dawn', art })}`
       + `<p class="kanso-story__caption">Settings · Updates</p><div class="kanso-story__slice kanso-story__settings">${channelSettings({ channel, art })}</div>`,
   },
   'Compositions/Notifications': {
@@ -340,8 +345,8 @@ export const playgrounds = {
     markup: ({ add, ...args }) => inSidebar(section({ ...args, add: add || null })),
   },
   'Compositions/Sidebar/View switch': {
-    args: { view: 'spaces', column: false, open: false, asks: false },
-    argTypes: { view: radioArg('view', views.map((item) => item.key)), column: boolArg('column'), open: boolArg('menu', { if: { arg: 'column' } }), asks: boolArg('someone needs you') },
+    args: { view: 'spaces', column: false, open: false, asks: false, carry: false },
+    argTypes: { view: radioArg('view', views.map((item) => item.key)), column: boolArg('column'), open: boolArg('menu', { if: { arg: 'column' } }), asks: boolArg('someone needs you'), carry: boolArg('button carries the dot (Proposed)', { if: { arg: 'column' } }) },
     markup: (args) => (args.column ? inRail : inSidebar)(viewSwitch(args)),
   },
   'Compositions/Sidebar/Tile': {
@@ -359,9 +364,11 @@ export const playgrounds = {
     markup: (args) => inRail(tile(args)),
   },
   'Compositions/Sidebar/Footer': {
-    args: { update: '' },
-    argTypes: { update: textArg('update') },
-    markup: (args) => inSidebar(sidebarFooter(args)),
+    args: { update: '', busy: false, refused: false, menu: false, collapsed: false },
+    argTypes: { update: textArg('update'), busy: boolArg('updating', { if: { arg: 'update' } }), refused: boolArg('refused', { if: { arg: 'update' } }),
+      menu: boolArg('Settings menu'), collapsed: boolArg('collapsed') },
+    markup: ({ update, refused, menu: open, collapsed, ...args }) => (collapsed ? inRail : inSidebar)(sidebarFooter({ ...args, collapsed, update: update || null,
+      refused: refused ? sampleRefusal : null, menu: open ? sampleSettingsMenu() : null })),
   },
   'Compositions/Sidebar': {
     args: { collapsed: false, dawn: false, art: true, view: 'spaces', switcher: true, menu: false },
@@ -430,6 +437,7 @@ export const playgrounds = {
       computer: select('computer', ['none', ...computerItemStates]),
       paused: boolArg('layout paused'),
       stepper: radioArg('panes per view', stepperShown, { if: { arg: 'paused', truthy: false } }),
+      minimap: boolArg('minimap', { if: { arg: 'paused', truthy: false } }),
       needs: radioArg('needs you', Object.keys(needsShown)),
       memory: radioArg('memory low', Object.keys(memoryShown)),
       panels: boolArg('servers, containers, reviews'),
@@ -440,20 +448,13 @@ export const playgrounds = {
     args: { events: 3, row: 'none', menu: false, docked: false },
     argTypes: {
       events: { name: 'events', control: { type: 'number', min: 0, max: 6 } },
-      row: radioArg('second row', ['none', 'hover', 'focus']),
+      // Proposed: `more`, the keyboard on +N more.
+      row: radioArg('second row', ['none', 'hover', 'focus', 'more']),
       menu: boolArg('right-click menu'),
       docked: boolArg('in the sidebar'),
     },
     markup: ({ events, row: state, menu: open, docked }) => {
-      const all = [
-        { icon: 'lu-git-pull-request', subject: `PR ${pullRequest(166)}`, fact: 'merged', age: '32m' },
-        { icon: 'lu-git-pull-request', tone: 'blocked', subject: `PR ${pullRequest(165)}`, fact: 'checks failed', detail: 'test / unit · Run pnpm test', age: '9m' },
-        { icon: 'lu-moon', subject: 'Orion', fact: 'went to sleep', age: '1h' },
-        { icon: 'e-done', tone: 'done', subject: 'Iris', fact: 'finished', detail: 'Boards 01 to 04 done', age: '12m' },
-        { icon: 'lu-check', tone: 'done', subject: `PR ${pullRequest(164)}`, fact: 'approved', age: '41m' },
-        { icon: 'lu-git-pull-request', subject: `PR ${pullRequest(163)}`, fact: 'merged', age: '2h' },
-      ];
-      const card = activity({ events: all.slice(0, events), hover: state === 'hover' ? 1 : -1, focus: state === 'focus' ? 1 : -1 }) ?? '';
+      const card = activity({ events: awayEvents.slice(0, events), hover: state === 'hover' ? 1 : -1, focus: { focus: 1, more: awayMax }[state] ?? -1 }) ?? '';
       const menu = open && events ? activityMenu() : '';
       return docked ? sampleSidebar({ away: card }) + menu : `<div class="kanso-story__slice">${card}${menu}</div>`;
     },
@@ -468,9 +469,9 @@ export const playgrounds = {
       const at = (place, markup) => `<p class="kanso-story__caption">${place}</p>${markup}`;
       const slice = (...parts) => `<div class="kanso-story__slice">${parts.join('')}</div>`;
       const panel = (markup) => `<div class="kanso-panel kanso-story__panel">${markup}</div>`;
-      const source = 'ssh: connect to host dark port 22: Operation timed out';
+      const source = unreachable('dark');
       return {
-        failure: () => at('Status bar', inBar(520, { left: [computerItem({ name: 'dark', state: 'unreachable' })] }))
+        failure: () => at('Status bar', inBar(520, { left: [computerItem({ name: 'dark', state: 'unreachable', detail: source })] }))
           + at('Sidebar', slice(computerRow({ name: 'dark', state: 'unreachable' }), open ? failureMenu({ source, fixes: ['Refresh', 'Sign in…'], agent: 'Atlas' }) : ''))
           + at('Panel', panel(failureBlock({ text: "Can't list worktrees on dark", source: 'git worktree list: timed out after 30 s', fix: 'Refresh', agent: 'Atlas' })))
           + at('Toast', toast({ level: 'error', icon: 'none', title: "Couldn't pull checkout", action: 'Retry' })),
@@ -492,6 +493,8 @@ export const playgrounds = {
       state: radioArg('computer', tabBarStates),
       folded: { name: 'folded tabs', control: { type: 'number', min: 0, max: 5 } },
       overflow: boolArg('folded menu open', { if: { arg: 'folded' } }),
+      help: boolArg('kansō help'),
+      custom: boolArg('a custom panel with no icon'),
       windows: boolArg('Windows and Linux'),
     },
   },
@@ -561,7 +564,7 @@ export const playgrounds = {
       label: true,
     },
     argTypes: {
-      items: { name: 'items', control: { type: 'object' }, description: '{ key, label, icon, mark, dot, tip, closable, armed }' },
+      items: { name: 'items', control: { type: 'object' }, description: '{ key, label, icon, mark, dot, tip, closable, armed, drop } (Proposed: drop "after" lands after the tab)' },
       value: textArg('value'),
       size: select('size', ['sm', 'md', 'lg']),
       ...flags('track', 'disabled', 'icon', 'label'),
@@ -569,11 +572,13 @@ export const playgrounds = {
     markup: tabs,
   },
   'Primitives/Thumbnail': {
-    args: { image: 'https://images.placeholders.dev/120x80', label: 'cart-countdown.png', selected: false, loading: false },
+    args: { image: 'https://images.placeholders.dev/120x80', label: 'cart-countdown.png', selected: false, loading: false, color: '' },
     argTypes: {
       image: textArg('image'),
       label: textArg('label'),
       ...flags('selected', 'loading'),
+      // Proposed: the picture's own colour, its ground until the picture is drawn, as Images shows a picture it has not copied.
+      color: textArg('picture colour', { description: 'Proposed. A CSS colour, such as var(--working); seen with no image.' }),
     },
     markup: thumbnail,
   },

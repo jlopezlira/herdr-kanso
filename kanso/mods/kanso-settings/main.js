@@ -6,7 +6,7 @@ import { imageApi } from "./platform-images.js";
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import { theme, props, closeOverlay, keys, shared, setShared, readTextFile, writeTextFile, appHome, run } from "herdr";
-import { G, R, T, W, ICON, TINT, alpha, tokens } from "./ui.js";
+import { G, R, T, W, ICON, ICON_CHROME, TINT, alpha, tokens } from "./ui.js";
 import { avatar, tile } from "./ui-avatar.js";
 import { dot } from "./ui-dot.js";
 import { button, quietLink, iconButton, Armed, pressAgain } from "./ui-button.js";
@@ -173,9 +173,9 @@ export default class Settings extends View {
     const changed = [panelRow, gearRow].some((row) => JSON.stringify(this.chordsOf(row, group.section, list).toSorted()) !== JSON.stringify(this.shipped(row, group.section).toSorted()));
     return v_flex().w_full().gap(G.sm)
       .child(h_flex().w_full().items_center().pt(G.lg)
-        .child(div().flex_1().text_size(12).text_color(c.dim).child("The tab bar"))
+        .child(div().flex_1().text_size(T.body).text_color(c.dim).child("The tab bar"))
         .when(changed, (el) => el.child(quietLink("reset-bar", "Reset", (cx) => { this.reset(panelRow, group.section, cx); this.reset(gearRow, group.section, cx); }, c))))
-      .child(h_flex().w_full().flex_wrap().gap(2).p(4).rounded(10).bg(c.raised).children(tiles))
+      .child(h_flex().w_full().flex_wrap().gap(G.hair).p(G.xs).rounded(R.card).bg(c.raised).children(tiles))
       .when(capturing, (el) => el.child(this.pressNote(c, this.capture.row === panelRow
         ? "Press the new key with any digit: each panel keeps its number. Esc to keep, Backspace to remove."
         : "Press the new key. Esc to keep, Backspace to remove.")));
@@ -186,7 +186,7 @@ export default class Settings extends View {
     const text = live
       ? `${glyphs(this.conflict.chord)} already does ${[...new Set(this.conflict.taken.map((k) => k.action))].join(", ")}. ${pressAgain("take it")}, Esc to keep yours.`
       : this.message ?? ask;
-    return div().px(G.sm).py(4).text_size(12).line_height(1.45).text_color(live ? c.yellow : this.message ? c.red : c.accent).child(text);
+    return div().px(G.sm).py(G.xs).text_size(T.value).line_height(1.45).text_color(live ? c.yellow : this.message ? c.red : c.accent).child(text);
   }
 
   keysPage(t, c) {
@@ -207,8 +207,8 @@ export default class Settings extends View {
         return capturing ? v_flex().w_full().child(line).child(this.pressNote(c, "Esc to keep, Backspace to remove.")) : line;
       })));
     return v_flex().w_full()
-      .child(div().text_size(12.5).line_height(1.5).text_color(c.muted).child("kansō's own keys. Click one and press the new key."))
-      .child(div().text_size(12).line_height(1.5).text_color(c.dim).child("Panes, tabs and spaces use Herdr's keys, in Herdr's settings."))
+      .child(div().text_size(T.value).line_height(1.5).text_color(c.muted).child("kansō's own keys. Click one and press the new key."))
+      .child(div().text_size(T.body).line_height(1.5).text_color(c.dim).child("Panes, tabs and spaces use Herdr's keys, in Herdr's settings."))
       .children(rows);
   }
 
@@ -293,41 +293,41 @@ export default class Settings extends View {
       const tag = rel === 0 ? "installed" : rel > 0 ? "newer than yours" : null;
       return v_flex().id(`news-${e.version}`).w_full().pt(G.lg).gap(G.xs)
         .child(h_flex().w_full().gap(G.sm).items_baseline()
-          .child(div().text_size(15).font_medium().text_color(c.text).child(e.version))
-          .when(Boolean(e.date), (el) => el.child(div().text_size(11.5).text_color(c.dim).child(e.date)))
+          .child(div().text_size(T.title).font_medium().text_color(c.text).child(e.version))
+          .when(Boolean(e.date), (el) => el.child(div().text_size(T.body).text_color(c.dim).child(e.date)))
           .when(Boolean(tag), (el) => el.child(div().px(6).h(18).rounded_full().bg(alpha(rel === 0 ? c.green : c.accent, TINT.soft)).flex().items_center()
-            .text_size(11).font_medium().text_color(rel === 0 ? c.green : c.accent).child(tag))))
+            .text_size(T.micro).font_medium().text_color(rel === 0 ? c.green : c.accent).child(tag))))
         .children(e.sections.map((s) => v_flex().w_full().pt(G.xs).gap(G.xs)
-          .child(div().text_size(12).text_color(c.dim).child(s.name))
+          .child(div().text_size(T.body).text_color(c.dim).child(s.name))
           .children(s.items.map((item, i) => h_flex().w_full().gap(G.sm).items_start()
             .child(dot(c, "dim", "sm").mt(G.sm))
-            .child(div().flex_1().min_w(0).text_size(12.5).line_height(1.5).text_color(c.muted).child(plain(item)))))));
+            .child(div().flex_1().min_w(0).text_size(T.value).line_height(1.5).text_color(c.muted).child(plain(item)))))));
     };
     const waiting = offerRelease(updateState.latest, have, channel);
     const setChannel = (key, cx) => { setShared("kanso.update", { ...(shared("kanso.update") ?? {}), channel: key }); cx.notify(); };
     return v_flex().w_full()
       .child(h_flex().w_full().gap(G.md).items_center()
-        .child(div().flex_1().text_size(13).text_color(c.text).child("Updates"))
+        .child(div().flex_1().text_size(T.card).text_color(c.text).child("Updates"))
         .child(segmented("updates-channel", UPDATE_CHOICES, channel, setChannel, c)))
       .when(channel === "beta", (el) => el.child(h_flex().id("updates-early").w_full().pt(G.xs).gap(G.xs).items_center().flex_wrap()
-        .child(div().text_size(11.5).text_color(c.dim).child("Early gets changes before they are tested by everyone. If kansō is useful to you, "))
+        .child(div().text_size(T.body).text_color(c.dim).child("Early gets changes before they are tested by everyone. If kansō is useful to you, "))
         .child(quietLink("updates-star", "Star on GitHub", (cx) => cx.open_url(REPO), c))
-        .child(div().text_size(11.5).text_color(c.dim).child(" helps others find it."))))
-      .when(Boolean(stay), (el) => el.child(div().id("updates-stay").pt(G.xs).text_size(11.5).text_color(c.dim).child(stay)))
+        .child(div().text_size(T.body).text_color(c.dim).child(" helps others find it."))))
+      .when(Boolean(stay), (el) => el.child(div().id("updates-stay").pt(G.xs).text_size(T.body).text_color(c.dim).child(stay)))
       .child(h_flex().w_full().pt(G.lg).gap(G.md).items_center()
-        .child(v_flex().flex_1().min_w(0).gap(2)
-          .child(div().text_size(13).text_color(c.text).child("Check for updates automatically"))
-          .child(div().text_size(11.5).text_color(c.dim).child("Checks on start and every few minutes; updates are only installed when you choose.")))
+        .child(v_flex().flex_1().min_w(0).gap(G.hair)
+          .child(div().text_size(T.card).text_color(c.text).child("Check for updates automatically"))
+          .child(div().text_size(T.body).text_color(c.dim).child("Checks on start and every few minutes; updates are only installed when you choose.")))
         .child(toggleSwitch("auto-update-check", autoCheck, (next) => setShared("kanso.update", { ...(shared("kanso.update") ?? {}), autoCheck: next }), c, { label: "Check for updates automatically" })))
       .child(h_flex().w_full().pt(G.sm).items_center()
         .child(
           button("check-kanso-update", "Check for updates", () => run("kanso-tabs.check"), c)))
       .when(entries === null, (el) => el.child(skeletonOf({ shape: "line", count: 4 })("kanso-skeleton", c)))
-      .when(Boolean(waiting), (el) => el.child(h_flex().w_full().gap(G.md).items_center().p(G.md).rounded(8).bg(alpha(c.accent, TINT.faint))
-        .child(div().flex_1().text_size(13).text_color(c.text).child(`kansō ${waiting} is available. You have ${have}.`))
+      .when(Boolean(waiting), (el) => el.child(h_flex().w_full().gap(G.md).items_center().p(G.md).rounded(R.card).bg(alpha(c.accent, TINT.faint))
+        .child(div().flex_1().text_size(T.card).text_color(c.text).child(`kansō ${waiting} is available. You have ${have}.`))
         .child(button("update-kanso", `Update to ${waiting}`, () => { run("kanso-tabs.update"); closeOverlay(props().overlay); }, c))))
-      .when(Boolean(error), (el) => el.child(div().text_size(12.5).text_color(c.red).child(error)))
-      .when(from === "cache", (el) => el.child(div().text_size(11.5).text_color(c.dim).child("GitHub could not be reached; this is the last copy read.")))
+      .when(Boolean(error), (el) => el.child(div().text_size(T.value).text_color(c.red).child(error)))
+      .when(from === "cache", (el) => el.child(div().text_size(T.body).text_color(c.dim).child("GitHub could not be reached; this is the last copy read.")))
       .children((entries ?? []).map(entry));
   }
 
@@ -337,7 +337,7 @@ export default class Settings extends View {
     });
     const heading = (text) => row(`credits-${text}`, c, { name: text, heading: true }).mt(G.lg);
     return v_flex().w_full()
-      .child(div().text_size(12.5).line_height(1.5).text_color(c.muted).child("kansō is a layout for Herdr, made in the open."))
+      .child(div().text_size(T.value).line_height(1.5).text_color(c.muted).child("kansō is a layout for Herdr, made in the open."))
       .child(heading("Where it comes from"))
       // Herdr's mark ships with the app; the ensō is Kanso's.
       .children(PLACES.map((p) => link(p.id, [tile(c, { initial: p.name, image: p.id === "herdr" ? "frame/welcome/herdr.png" : null, size: "lg" })], p.name, p.note, p.url)))
@@ -356,11 +356,11 @@ export default class Settings extends View {
       onTab: (key, cx) => { this.page = key; if (key === "credits") this.readAvatars(cx); this.undo = null; this.capture = null; this.conflict = null; this.message = null; this.armed.clear(); cx.notify(); },
       onKey: (e, cx) => this.key(e, cx),
       head: h_flex().w_full().items_center().gap(G.md)
-        .child(svg("mods/kanso-chrome/icons/settings.svg").size(17).text_color(c.accent))
-        .child(div().flex_1().text_size(15).font_semibold().child("kansō settings"))
-        .when(Boolean(this.shown()), (el) => el.child(div().text_size(12).text_color(t.dim).child(this.shown())))
+        .child(svg("mods/kanso-chrome/icons/settings.svg").size(ICON_CHROME).text_color(c.accent))
+        .child(div().flex_1().text_size(T.title).font_semibold().child("kansō settings"))
+        .when(Boolean(this.shown()), (el) => el.child(div().text_size(T.body).text_color(t.dim).child(this.shown())))
         .child(quietLink("settings-help", "Help", () => { closeOverlay(p.overlay); run("mod.open", { name: "kanso-help" }); }, c, { color: c.accent }))
-        .child(div().text_size(11).text_color(t.dim).child("Esc")),
+        .child(div().text_size(T.micro).text_color(t.dim).child("Esc")),
     });
   }
 }
