@@ -26,8 +26,8 @@ import { pieceLines } from "./piece-lines.js";
 import { tabMark, barState, foldTabs, renameWaits, landing, heldOn, dropMarks } from "./tab-bar-model.js";
 import { Kdb, projectKey } from "./kdb.js";
 import { projectOpen, OPEN } from "./panel-state.js";
-import { TOOLS, PROBE_MS, probeTools } from "./sim-registration.js";
-import { commandOn, machineKey, offered, toolsFor, toolKey, withoutNegatives, forgetting, ASK_MS, RETRY_MS, UNKNOWN_TOOLS } from "./panel-tools.js";
+import { TOOLS, PROBE_MS, probeTools, available } from "./sim-registration.js";
+import { commandOn, machineKey, offered, toolsFor, toolKey, withoutNegatives, forgetting, ASK_MS, RETRY_MS, UNKNOWN_TOOLS, FAILED_TOOLS } from "./panel-tools.js";
 import { pieces, runs, shown, setPiece, STORE, choice } from "./pieces.js";
 
 function storedObject(key) {
@@ -183,12 +183,12 @@ export default class Tabs extends View {
     const finish = (tools, done) => {
       if (this.simProbe !== probe || this.simSettled) return;
       this.simSettled = true;
-      setShared(TOOLS, tools ?? UNKNOWN_TOOLS); done.notify();
-      if (!tools) done.timer.after(RETRY_MS, () => { if (this.simProbe === probe) this.simSignature = null; });
+      setShared(TOOLS, tools); done.notify();
+      if (tools.state) done.timer.after(RETRY_MS, () => { if (this.simProbe === probe) this.simSignature = null; });
     };
-    const deadline = cx.timer.after(PROBE_MS, (late) => finish(null, late));
+    const deadline = cx.timer.after(PROBE_MS, (late) => finish(UNKNOWN_TOOLS, late));
     cx.spawn(async (task) => {
-      const tools = await probeTools(window()?.platform ?? "macos", home(), exec).catch(() => null);
+      const tools = await probeTools(window()?.platform ?? "macos", home(), exec).catch(() => FAILED_TOOLS);
       deadline.cancel(); finish(tools, task);
     });
   }
@@ -200,7 +200,10 @@ export default class Tabs extends View {
   askCommands(cx, space) {
     if (this.arrange || !cx) return;
     const visit = `${space?.id ?? ""}\t${this.here}`;
-    if (visit !== this.visit) { this.visit = visit; this.answers = withoutNegatives(this.answers); }
+    if (visit !== this.visit) {
+      this.visit = visit; this.answers = withoutNegatives(this.answers);
+      if (this.simSettled && !available(shared(TOOLS))) this.simSignature = null;
+    }
     const tools = toolsFor(this.here).filter((tool) => !this.asking.has(toolKey(tool)) && !(toolKey(tool) in this.answers));
     if (!tools.length) return;
     const keys = tools.map(toolKey);
@@ -513,13 +516,13 @@ export default class Tabs extends View {
   }
 
   render(cx) {
+    const space = spaces().find(p => p.active);
+    this.here = machineKey(space);
+    this.askCommands(cx, space);
     if (!this.arrange && cx && !this.simQueued && this.simSignature !== simulatorRoster()) {
       this.simQueued = true;
       cx.timer.after(0, (next) => { this.simQueued = false; this.probeSimulator(next); });
     }
-    const space = spaces().find(p => p.active);
-    this.here = machineKey(space);
-    this.askCommands(cx, space);
     const openTabs = shownTabs(space?.tabs);
     // Each live-data read copies the whole list: read once per render.
     const ps = panes();

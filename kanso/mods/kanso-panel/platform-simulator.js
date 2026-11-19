@@ -21,18 +21,18 @@ export function simulatorApi(platform, run, present = exists) {
   };
   const probe = async (home) => {
     const [env, selected] = await Promise.all([
-      environment().catch(() => ({})),
-      platform === "macos" ? run("xcode-select", ["-p"], { timeout: 1500 }).catch(() => null) : null,
+      environment(),
+      platform === "macos" ? run("xcode-select", ["-p"], { timeout: 1500 }) : null,
     ]);
     const developer = selected?.code === 0 ? selected.stdout.trim() : "";
     const simctl = developer ? api.join(developer, "usr", "bin", "simctl") : null;
-    const ios = simctl && await present(simctl).catch(() => false) ? simctl : null;
+    const ios = simctl && await present(simctl) ? simctl : null;
     const roots = sdkRoots(platform, home, env);
     const find = async (index) => {
       const root = roots[index];
       if (!root) return {};
       const adb = api.join(root, "platform-tools", `adb${exe}`), emulator = api.join(root, "emulator", `emulator${exe}`);
-      return await present(adb).catch(() => false) ? { adb, emulator: await present(emulator).catch(() => false) ? emulator : null } : find(index + 1);
+      return await present(adb) ? { adb, emulator: await present(emulator) ? emulator : null } : find(index + 1);
     };
     return { ios, ...await find(0) };
   };

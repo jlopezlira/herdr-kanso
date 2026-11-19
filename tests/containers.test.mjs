@@ -179,11 +179,11 @@ test("the panel draws every part with each element in one place", async () => {
 });
 
 // The panel open and nothing changing: Docker answers as a fixed engine, every command counted.
-async function openPanel({ hung = false, drawn = false } = {}) {
+async function openPanel({ hung = false, drawn = false, failing = [] } = {}) {
   const { fixture, loadMod } = await import("./perf-harness.mjs");
   const f = fixture();
   const docker = { ps: [row("aa11aa11aa11", "web-1", "running", "Up 2 hours", "web", "", "", "", "", "")], images: row("sha256:1111aaaa2222", "web", "latest", "100MB", "2 days ago"), down: false,
-    failing: new Set(), config: JSON.stringify({ currentContext: "desktop-linux" }), volumes: "pgdata\tlocal", hung, rejects: null, broken: false };
+    failing: new Set(failing), config: JSON.stringify({ currentContext: "desktop-linux" }), volumes: "pgdata\tlocal", hung, rejects: null, broken: false };
   if (drawn) Object.assign(f.host, gpuiHost());
   const spaces = f.host.spaces;
   f.host.spaces = () => { if (docker.broken) throw new Error("spaces are not ready"); return spaces(); };
@@ -196,6 +196,7 @@ async function openPanel({ hung = false, drawn = false } = {}) {
     if (docker.rejects) throw docker.rejects;
     if (docker.down) return failure("Cannot connect to the Docker daemon. Is the docker daemon running?");
     if (docker.failing.has(args[0])) return failure("unexpected error");
+    if (args[0] === "ps" && docker.psResult) return docker.psResult;
     const out = { ps: docker.ps.join("\n"), images: docker.images, info: "8000000000", context: "desktop-linux\tunix:///var/run/docker.sock", volume: docker.volumes }[args[0]] ?? "";
     return success(out);
   };
@@ -249,7 +250,7 @@ test("a memory limit or context Docker failed to give is asked again on the next
   view.refresh(f.cx, true, true);
   await f.settle();
   assert.equal(view.limit, 8000, "the limit read before stays, with the failure said");
-  assert.equal(view.failure, "Docker said: unexpected error");
+  assert.equal(view.failure(), "Docker said: unexpected error");
   fresh();
   await f.advance(5000);
   assert.deepEqual([asked("info"), asked("context inspect")], [1, 1], "asked again 5 seconds later");
@@ -356,10 +357,55 @@ test("Only Docker missing says Docker is not installed; any other failure says w
   view.refresh(f.cx, true, true);
   await f.settle();
   assert.equal(words().includes(missing), false, "a timeout is not a missing Docker");
-  docker.rejects = Object.assign(new Error("spawn docker ENOENT"), { code: "ENOENT", syscall: "spawn docker" });
+  docker.rejects = new Error("cannot run docker: The system cannot find the path specified. (os error 3)");
   view.refresh(f.cx, true, true);
   await f.settle();
-  assert.ok(words().includes(missing), "docker that cannot be found is");
+  assert.equal(words().includes(missing), false, "a folder Herdr cannot start in is not a missing Docker");
+  docker.rejects = null;
+  docker.psResult = failure("permission denied while trying to connect to the Docker daemon socket at unix:///var/run/docker.sock");
+  view.refresh(f.cx, true, true);
+  await f.settle();
+  assert.equal(words().includes("Docker isn't running."), false, "a socket you may not use is not Docker down");
+  assert.equal(view.groups.length, 1, "and the containers read before stay");
+  assert.ok(words().includes("Docker said: permission denied while trying to connect to the Docker daemon socket at unix:///var/run/docker.sock"));
+  docker.psResult = null;
+  for (const text of ["cannot run docker: No such file or directory (os error 2)", "cannot run docker: The system cannot find the file specified. (os error 2)"]) {
+    docker.rejects = new Error(text);
+    view.refresh(f.cx, true, true);
+    await f.settle();
+    assert.ok(words().includes(missing), `Herdr's "${text}" is`);
+  }
+});
+
+test("A failure stays said until that same list is read again, and a list never read shows no count", async () => {
+  const { f, view, docker, words, asked } = await openPanel({ drawn: true });
+  docker.failing.add("volume");
+  view.refresh(f.cx, true, true); await f.settle();
+  const volumeReads = asked("volume");
+  await f.advance(5000);
+  assert.equal(asked("volume"), volumeReads, "the next tick does not read volumes");
+  assert.ok(words().includes("Docker said: unexpected error"), "and the failure is still said");
+  docker.failing.delete("volume");
+  view.refresh(f.cx, true, true); await f.settle();
+  assert.equal(words().includes("Docker said: unexpected error"), false, "volumes read again clear it");
+  const first = await openPanel({ drawn: true, failing: ["images"] });
+  assert.equal(first.words().some((text) => /^0 · /.test(text)), false, "images never listed are not counted as none");
+  assert.ok(first.words().includes("Docker said: unexpected error"));
+});
+
+test("Every Docker command ends inside the view's deadline: reads, and actions that never answer free their row", async () => {
+  const { f, view, docker, words } = await openPanel({ drawn: true });
+  const timeouts = f.state.processes.filter((p) => p.command === "docker").map((p) => p.options?.timeout);
+  assert.ok(timeouts.length > 0 && timeouts.every((ms) => ms > 0 && ms < 15_000), "Docker stops each read before the panel gives up on it");
+  docker.hung = true;
+  const [web] = view.groups[0].containers;
+  view.containers("stop", [web], f.cx);
+  assert.ok(view.busy.has(web.id));
+  view.containers("stop", [web], f.cx);
+  assert.equal(f.state.processes.filter((p) => p.args[0] === "stop").length, 1, "a row being changed is not asked twice");
+  await f.advance(60_000);
+  assert.equal(view.busy.has(web.id), false, "a stop that never answers frees its row");
+  assert.ok(words().includes("stop failed: timed out"));
 });
 
 test("A first read that never answers ends in a failure with Read again inside its deadline, and Read again waits while a read runs", async () => {
@@ -371,6 +417,13 @@ test("A first read that never answers ends in a failure with Read again inside i
   assert.ok(words().includes("Can't read Docker"), "a failure, not a skeleton");
   assert.ok(words().includes("Read again"));
   assert.equal(calls(refresh(), "disabled").at(-1)?.[1], false, "and Read again is on");
+  const press = calls(refresh(), "on_click").at(-1).at(-1);
+  press({}, f.cx);
+  assert.equal(calls(refresh(), "disabled").at(-1)?.[1], true, "a press turns Read again off at once");
+  assert.equal(words().includes("Read again"), false, "and the failure offers no second retry");
+  press({}, f.cx);
+  assert.equal(view.queued, null, "a second press while it reads queues nothing");
+  await f.advance(15_000);
   docker.hung = false;
   const fix = find(view.render(f.cx), (el) => el.tag === "ct-failed-fix");
   calls(fix, "on_click").at(-1).at(-1)({}, f.cx);

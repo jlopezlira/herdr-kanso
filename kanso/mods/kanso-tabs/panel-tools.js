@@ -24,6 +24,8 @@ export const commandOn = ({ machine, command }) => serviceFor((platform, run) =>
 export const forgetting = (answers, keys) => Object.fromEntries(Object.entries(answers).filter(([key, answer]) => answer !== null || !keys.includes(key)));
 export const withoutNegatives = (answers) => Object.fromEntries(Object.entries(answers).filter(([, answer]) => answer === true));
 
-export const UNKNOWN_TOOLS = Object.freeze({ unknown: true });
+export const UNKNOWN_TOOLS = Object.freeze({ state: "unknown" });
+export const FAILED_TOOLS = Object.freeze({ state: "failed" });
+export const simRecord = (tools) => (tools && typeof tools === "object" && !("state" in tools) && !("unknown" in tools) ? tools : null);
 
-export const offered = (id, { sim, commands, machine = "" }) => (id === "sim" ? Boolean(sim?.unknown) || available(sim) : commands?.[toolKey(toolFor(id, machine))] !== false);
+export const offered = (id, { sim, commands, machine = "" }) => (id === "sim" ? !simRecord(sim) || available(sim) : commands?.[toolKey(toolFor(id, machine))] !== false);

@@ -185,6 +185,43 @@ test("Tab availability probes once per panel-list rebuild; a missed deadline is 
   assert.equal(store["kanso.pieces"], undefined, "the probe never writes the piece");
 });
 
+test("A Simulator lookup that fails keeps the door, is not a list of no tools, and the Simulator still looks for itself", async () => {
+  const store = {}, pending = [], timers = [];
+  const { Tabs } = await loadTabs({
+    shared: (key) => store[key], setShared: (key, value) => { store[key] = value; }, home: () => "/home/me",
+    window: () => ({ platform: "macos" }), exists: async () => { throw new Error("read failed"); }, exec: async () => { throw new Error("the command was lost"); },
+  });
+  const { offered, simRecord } = await load("kanso-tabs/panel-tools.js", ["offered", "simRecord"]);
+  const cx = { notify() {}, timer: { after(ms, fn) { const task = { ms, fn, cancel() {} }; timers.push(task); return task; } }, spawn(fn) { pending.push(fn(cx)); } };
+  new Tabs().probeSimulator(cx); await Promise.all(pending);
+  assert.equal(offered("sim", { sim: store["kanso.sim.tools"] }), true, "a lookup that failed does not hide the door");
+  assert.equal(simRecord(store["kanso.sim.tools"]), null, "and is no record of tools another reader may use");
+  assert.ok(timers.some((timer) => timer.ms === 30_000), "it is asked again later");
+});
+
+test("A Simulator that said no is asked again when you come back to a space", async () => {
+  const store = {}, pending = [];
+  let installed = false;
+  const space = (id) => ({ id, active: true, machine: null, tabs: [] });
+  let active = space("a");
+  const { Tabs } = await loadTabs({
+    shared: (key) => store[key], setShared: (key, value) => { store[key] = value; }, home: () => "/home/me", spaces: () => [active],
+    window: () => ({ platform: "macos" }), exists: async (path) => installed && path === SIMCTL,
+    exec: async (cmd) => (cmd === "xcode-select" ? good(DEVELOPER) : good("\n\n\n")),
+  });
+  const { offered } = await load("kanso-tabs/panel-tools.js", ["offered"]);
+  const cx = { notify() {}, timer: { after(ms, fn) { if (ms === 0) fn(cx); return { cancel() {} }; } }, spawn(fn) { pending.push(fn(cx)); } };
+  const tabs = new Tabs();
+  tabs.probeSimulator(cx); await Promise.all(pending.splice(0));
+  tabs.askCommands(cx, active);
+  assert.equal(offered("sim", { sim: store["kanso.sim.tools"] }), false, "no simctl, no door");
+  installed = true;
+  active = space("b");
+  tabs.askCommands(cx, active);
+  tabs.probeSimulator(cx); await Promise.all(pending.splice(0));
+  assert.equal(offered("sim", { sim: store["kanso.sim.tools"] }), true, "installed later, it shows on the next visit");
+});
+
 test("SDK folders follow environment precedence and platform defaults", async () => {
   const { sdkRoots } = await load("kanso-panel/platform-simulator.js", ["sdkRoots"]);
   assert.deepEqual(clone(sdkRoots("macos", "/home/user", { ANDROID_HOME: "/first", ANDROID_SDK_ROOT: "/second" })), ["/first", "/second", "/home/user/Library/Android/sdk"]);

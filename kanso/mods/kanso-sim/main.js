@@ -17,6 +17,7 @@ import { BEAT_MS, FRAME_MS, BOOT_MS, FrameLoop, TextBatch, canStart, canRotate, 
 
 const PICKED = "kanso.sim.picked";
 const failure = (error) => String(error?.message ?? error).split(/\r?\n/)[0];
+const recordOf = (tools) => (tools && typeof tools === "object" && !("state" in tools) && !("unknown" in tools) ? tools : null);
 const fileKey = (id) => encodeURIComponent(id).replace(/\*/g, "%2A");
 
 export default class Simulator extends View {
@@ -24,7 +25,7 @@ export default class Simulator extends View {
     this.platform = window()?.platform ?? "macos";
     this.paths = pathApi(this.platform);
     this.directory = this.paths.join(appHome(), "data", "kanso-sim");
-    this.tools = shared(TOOLS) ?? null;
+    this.tools = recordOf(shared(TOOLS));
     this.devices = null; this.error = null; this.note = null;
     this.selected = shared(PICKED) ?? null; this.boot = null;
     this.loop = new FrameLoop(); this.batch = new TextBatch();
@@ -62,7 +63,7 @@ export default class Simulator extends View {
       if (this.loop.late(Date.now())) cx.notify();
       this.schedule(cx, 1000); return;
     }
-    if (!this.tools || !this.devices || Date.now() - this.readAt >= (this.boot ? 1000 : 5000)) { this.refresh(cx); return; }
+    if (!this.devices || Date.now() - this.readAt >= (this.boot ? 1000 : 5000)) { this.refresh(cx); return; }
     const device = this.current(), key = device?.state === "Booted" ? device.id : null;
     if (!this.loop.ready(Date.now(), true, key)) { this.schedule(cx); return; }
     this.frame(device, cx);

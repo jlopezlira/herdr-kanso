@@ -29,7 +29,7 @@ export const TABS = [
 ];
 
 export async function tabBar({ tabs = TABS, machine = null, computers = [], panes = [], fails = null, keys = [], stored = {}, tree = null, buttons = false, exec = null } = {}) {
-  const store = { ...stored }, ran = [], toasts = [], opened = [];
+  const store = { "kanso.sim.tools": { ios: null }, ...stored }, ran = [], toasts = [], opened = [];
   const space = { id: "s1", active: true, machine, tabs: clone(tabs) };
   const host = {
     ...popoverHost(), ...(exec ? { exec } : {}),
