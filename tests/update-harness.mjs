@@ -126,6 +126,33 @@ async function writeChecker(root, { record = false } = {}) {
 }
 export const windowsOnly = (name, fn) => test(name, { skip: !windows && "Unix has no Windows file lock, read-only attribute, or curl.exe beside powershell.exe" }, fn);
 
+export function heldFile(t, file, release, share = "None") {
+  const child = trackedSpawn(t, "powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", [
+    "$ErrorActionPreference = 'Stop'",
+    `$s = [IO.File]::Open(${quote(file)}, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::${share})`,
+    "[Console]::Out.WriteLine('held')",
+    "[Console]::Out.Flush()",
+    `while (-not (Test-Path -LiteralPath ${quote(release)})) { Start-Sleep -Milliseconds 50 }`,
+    "$s.Dispose()",
+  ].join("; ")], { windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
+  const ended = new Promise((resolve) => child.once("exit", resolve));
+  const open = () => writeFile(release, "go").catch(() => {});
+  const stop = async () => {
+    await open();
+    const finished = await Promise.race([ended.then(() => true), new Promise((resolve) => setTimeout(() => resolve(false), 2000))]);
+    if (!finished) dropChild(child);
+    await Promise.race([ended, new Promise((resolve) => setTimeout(resolve, 2000))]);
+    dropChild(child);
+  };
+  t.after(stop);
+  const held = new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`step lock, file ${file}`)), 15000);
+    child.stdout.once("data", () => { clearTimeout(timer); resolve(); });
+    child.once("exit", (code) => { clearTimeout(timer); reject(new Error(`step lock exited ${code}, file ${file}`)); });
+  });
+  return { held, open, stop };
+}
+
 export async function updater(host) {
   return load("kanso-chrome/update.js", names, host);
 }
@@ -338,11 +365,13 @@ export const stages = async (home) => (await readdir(updates(home), { withFileTy
 // Recovery, run as a copy that starts would, must end at one whole install, change nothing run
 // again, leave nothing staged, and let the next install through.
 export async function recovered(s, home, at) {
-  assert.equal((await s.recover(home)).code, 0, `recovery after ${at}`);
+  const first = await s.recover(home);
+  assert.equal(first.code, 0, [`recovery after ${at}`, first.stderr].filter(Boolean).join("\n"));
   const once = await tree(home);
   const end = JSON.stringify(once) === JSON.stringify(s.before) ? "old" : JSON.stringify(once) === JSON.stringify(s.after) ? "new" : null;
   assert.ok(end, `after ${at}, recovery left neither install whole`);
-  assert.equal((await s.recover(home)).code, 0);
+  const again = await s.recover(home);
+  assert.equal(again.code, 0, [`a second recovery after ${at}`, again.stderr].filter(Boolean).join("\n"));
   assert.deepEqual(await tree(home), once, `a second recovery after ${at} changed something`);
   assert.deepEqual(await stages(home), [], `nothing staged left after ${at}`);
   assert.equal(await s.run(home, 0, { from: end === "old" ? "1.0.0" : "1.1.0" }), "ok", `the next install after ${at}`);
