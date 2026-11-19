@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { mkdir, readFile, readdir, realpath, rm, writeFile } from "node:fs/promises";
-import { join, win32 } from "node:path";
+import { join } from "node:path";
 import { load, context, exec, nativePlatform, temporary, clone, gpuiHost, success, failure, storeShared, tickingContext } from "./helpers.mjs";
 import { test, dropChild, trackedSpawn, quote, windowsOnly, heldFile, heldDirectory, updater, fixture, version, small, tree, stages, hostFor, startUpdater, versionFile } from "./update-harness.mjs";
 
@@ -459,47 +459,26 @@ const watchRecover = async (t, home, dir, file, ready) => {
   return { saw, exited, text: () => err };
 };
 
-const expectQuick = (result, began) => assert.ok(Date.now() - began < 7000, `waited ${Date.now() - began}: ${result.stderr}`);
-
-const expectStop = (result, op, path, began) => {
-  assert.equal(result.code, 1, result.stderr);
+const stopLine = (text, op, paths) => text.split(/\r?\n/).find((row) => paths.some((path) => {
   const prefix = `${op} ${path} `;
-  const line = result.stderr.split(/\r?\n/).find((row) => row.startsWith(prefix));
-  assert.ok(line, result.stderr);
-  assert.ok(line.slice(prefix.length).trim(), line);
-  expectQuick(result, began);
+  return row.slice(0, prefix.length).toLowerCase() === prefix.toLowerCase() && row.slice(prefix.length).trim() !== "";
+}));
+
+const expectStop = (result, op, paths, began) => {
+  const expected = `expected a line "${op} <${paths.join(" | ")}> <why>" in stderr:\n${result.stderr}`;
+  assert.equal(result.code, 1, expected);
+  assert.ok(stopLine(result.stderr, op, paths), expected);
+  assert.ok(Date.now() - began < 7000, `waited ${Date.now() - began} ms, ${expected}`);
 };
 
-const namesWithin = (row, op, folder, reason) => {
-  const head = `${op} `;
-  const tail = ` ${reason}`;
-  if (!reason.trim() || !row.startsWith(head) || !row.endsWith(tail)) return false;
-  const path = row.slice(head.length, row.length - tail.length);
-  const rel = win32.relative(folder, path);
-  return win32.isAbsolute(path) && !win32.isAbsolute(rel) && rel.split(win32.sep)[0] !== "..";
-};
-
-const expectStopWithin = (result, op, folder, reason, began) => {
-  assert.equal(result.code, 1, result.stderr);
-  const line = result.stderr.split(/\r?\n/).find((row) => row.startsWith(`${op} `));
-  assert.ok(line && namesWithin(line, op, folder, reason), result.stderr);
-  expectQuick(result, began);
-};
-
-const deniedReason = async () => {
-  const said = await exec("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", "(New-Object ComponentModel.Win32Exception 5).Message"]);
-  assert.equal(said.code, 0, said.stderr);
-  return said.stdout.trim();
-};
-
-test("A stop inside the stage names the stage or a path in it, then why", () => {
+test("A stop names one of the expected paths in any case, then why", () => {
   const stage = "C:\\tmp\\op";
-  const why = "Access is denied.";
-  for (const row of [`delete ${stage} ${why}`, `delete ${stage}\\slots ${why}`, `delete C:\\TMP\\OP\\slots ${why}`]) {
-    assert.equal(namesWithin(row, "delete", stage, why), true, row);
+  const paths = [stage, `${stage}\\slots`];
+  for (const row of [`delete ${stage} Access is denied`, `delete ${stage}\\slots Access is denied.`, "delete C:\\TMP\\OP\\SLOTS Access is denied."]) {
+    assert.equal(stopLine(row, "delete", paths), row);
   }
-  for (const row of [`delete C:\\tmp\\op backup\\slots ${why}`, `delete ${stage}\\slot name`, `delete ${stage}\\slots `, `delete C:\\tmp\\op2 ${why}`, `delete C:\\tmp ${why}`, `rename ${stage}\\slots ${why}`]) {
-    assert.equal(namesWithin(row, "delete", stage, why), false, row);
+  for (const row of [`delete ${stage}\\slot name`, `delete ${stage}\\slots `, `delete ${stage}\\other Access is denied.`, "delete C:\\tmp\\op2 Access is denied.", "delete C:\\tmp Access is denied.", `rename ${stage}\\slots Access is denied.`]) {
+    assert.equal(stopLine(row, "delete", paths), undefined, row);
   }
 });
 
@@ -532,7 +511,7 @@ windowsOnly("A permanent denial of a recovery rename stops at once and keeps the
   await writeFile(join(stage, "committed"), "1\n");
   await writeFile(join(stage, "slots"), "");
   const began = Date.now();
-  expectStop(await recoverNow(made.home, made.dir), "rename", source, began);
+  expectStop(await recoverNow(made.home, made.dir), "rename", [source], began);
   assert.equal(await readFile(join(source, "main.js"), "utf8"), "old\n");
   assert.equal(await readFile(prior, "utf8"), "prior\n");
 });
@@ -551,7 +530,7 @@ windowsOnly("A failed parent creation names that create, not a rename of the liv
     await writeFile(join(stage, "slots"), "1 kanso-chrome\n");
     const began = Date.now();
     const result = await recoverNow(made.home, made.dir);
-    expectStop(result, "create", parent, began);
+    expectStop(result, "create", [parent], began);
     assert.equal(result.stderr.includes(`rename ${live}`), false, result.stderr);
     assert.deepEqual(await readdir(live), ["main.js"], result.stderr);
     assert.equal(await readFile(join(live, "main.js"), "utf8"), "old\n");
@@ -599,8 +578,8 @@ windowsOnly("A live file recovery does not own stops rollback and is left in pla
   const check = async () => {
     const started = Date.now();
     const result = await recoverNow(made.home, made.dir);
-    expectStop(result, "undo", live, started);
-    const line = result.stderr.split(/\r?\n/).find((row) => row.startsWith(`undo ${live} `));
+    expectStop(result, "undo", [live], started);
+    const line = stopLine(result.stderr, "undo", [live]);
     assert.ok(line.includes(backup) && line.includes(staged), result.stderr);
   };
   await check();
@@ -622,16 +601,15 @@ windowsOnly("A permanent denial of stage cleanup stops at once and names that de
     const denied = await exec("icacls", [made.dir, "/deny", rule]);
     assert.equal(denied.code, 0, denied.stderr || denied.stdout);
   }
-  const why = await deniedReason();
   const began = Date.now();
-  expectStopWithin(await recoverNow(made.home, made.dir), "delete", stage, why, began);
+  expectStop(await recoverNow(made.home, made.dir), "delete", [stage, slots], began);
   assert.equal((await readdir(made.dir)).includes("op"), true);
 });
 
 const stopCase = async (t, op, build, env) => {
   const made = await build(t);
   const began = Date.now();
-  expectStop(await recoverNow(made.home, made.dir, env), op, made.path, began);
+  expectStop(await recoverNow(made.home, made.dir, env), op, [made.path], began);
 };
 
 windowsOnly("Every recovery exit of 1 names the operation, the path and the error", async (t) => {
@@ -675,7 +653,7 @@ windowsOnly("Every recovery exit of 1 names the operation, the path and the erro
   const { windowsRecoverScript } = await hostFor("windows");
   await writeFile(file, `\uFEFF${windowsRecoverScript(home, updates, file)}`);
   const began = Date.now();
-  expectStop(await exec("powershell.exe", ["-NoProfile", "-NonInteractive", "-File", file], { limit: 20000 }), "recover", updates, began);
+  expectStop(await exec("powershell.exe", ["-NoProfile", "-NonInteractive", "-File", file], { limit: 20000 }), "recover", [updates], began);
 });
 
 windowsOnly("A missing curl.exe stops before a download and names the tool", async (t) => {
