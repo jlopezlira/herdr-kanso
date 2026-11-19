@@ -134,6 +134,7 @@ const PRESS = [
   ["keys", "j", [], false, "pick", true], ["keys", "j", [], true, "pick", true],
   ["keys", "enter", [], false, "pick", true], ["keys", "space", [], false, "pick", true], ["keys", "return", [], false, "pick", true],
   ["keys", "enter", [], true, null, false], ["keys", "space", [], true, null, false],
+  ["keys", "return", [], true, "pick", true], ["keys", " ", [], true, "pick", true],
   ["keys", "space", ["shift"], true, "pick", true], ["keys", "enter", ["shift"], true, "pick", true], ["keys", "space", ["function"], true, "pick", true],
   ["keys", "enter", ["platform"], true, "pick", true], ["keys", "space", ["alt"], true, "pick", true],
   ["keys", "tab", [], false, "pick", false], ["keys", "tab", ["shift"], false, "pick", false], ["keys", "tab", ["control"], false, "pick", true], ["keys", "tab", ["function"], true, "pick", true],
@@ -232,7 +233,8 @@ test("With the keyboard on Help's page every key shows itself, Tab too, and a po
   assert.deepEqual([press(" "), help.picked], [true, "space"]);
   assert.deepEqual([press("tab"), help.picked], [false, "tab"], "Tab shows itself and still moves the keyboard on");
   held.onPage = false;
-  assert.deepEqual([press("enter"), press(" "), press("tab"), help.picked], [false, false, false, "tab"], "on a control they are the control's");
+  assert.deepEqual([press("enter"), press("space"), press("tab"), help.picked], [false, false, false, "tab"], "on a control they are the control's");
+  assert.deepEqual([press(" "), help.picked], [true, "space"], "a literal space is not the control's: it shows Space");
   calls(help.render(), "on_mouse_up").forEach(([, , release]) => release({}, {}));
   assert.equal(held.onPage, true);
   assert.deepEqual([press(" "), help.picked], [true, "space"], "after a pointer press Space shows itself again");

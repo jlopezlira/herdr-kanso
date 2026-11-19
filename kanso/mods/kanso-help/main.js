@@ -34,10 +34,10 @@ export const keyName = (key) => {
 export const heldModifiers = (m = {}) => ["shift", "control", "alt", "platform", "function"].filter((name) => m[name]);
 
 export function keyPress({ page, key, held = [], onControl = false }) {
-  const raw = String(key ?? "").toLowerCase(), named = keyName(raw);
+  const raw = String(key ?? "").toLowerCase();
   const reverseTab = raw === "tab" && held.every((m) => m === "shift");
   if (raw === "escape") return { does: "close", stop: true };
-  if (onControl && (reverseTab || (held.length === 0 && ACTIVATING.includes(named)))) return { does: null, stop: false };
+  if (onControl && (reverseTab || (held.length === 0 && ACTIVATING.includes(raw)))) return { does: null, stop: false };
   if (page === "dojo" && raw === "enter") return { does: "dojo", stop: true };
   if (page !== "keys" || MODIFIER_KEYS.includes(raw)) return { does: null, stop: false };
   return { does: "pick", stop: !reverseTab };
