@@ -732,7 +732,7 @@ export default class Strip extends View {
     const known = new Set(st.cols.flatMap((c) => c.panes));
     const fresh = ps.filter((p) => !known.has(p.pane));
     const placed = fresh.length && !st.cols.length
-      ? { ...st, cols: paged([...st.cols, ...fresh.map((p) => ({ panes: [p.pane], w: 1 }))], st.n).cols }
+      ? this.repage({ ...st, cols: [...st.cols, ...fresh.map((p) => ({ panes: [p.pane], w: 1 }))] }, this.focusPane(ps))
       : fresh.reduce((s, p) => {
         const chosen = { ...this.place(s, p.pane), focus: p.pane };
         this.pendingFocus = p.terminal;
@@ -751,9 +751,16 @@ export default class Strip extends View {
       const col = st.cols[at.ci];
       return { ...st, cols: st.cols.with(at.ci, { ...col, panes: col.panes.toSpliced(dir === "down" ? at.ri + 1 : at.ri, 0, id) }) };
     }
-    const opened = this.order({ ...st, cols: st.cols.toSpliced(dir === "left" ? at.ci : at.ci + 1, 0, { panes: [id], w: 1 }) });
-    const { cols, page } = paged(opened.cols, st.n, opened.cols.findIndex((c) => c.panes.includes(id)));
-    return { ...opened, cols, vx: this.start({ ...opened, cols }, page[0]) };
+    return this.repage(this.order({ ...st, cols: st.cols.toSpliced(dir === "left" ? at.ci : at.ci + 1, 0, { panes: [id], w: 1 }) }), id, true);
+  }
+
+  repage(st, id, opened = false) {
+    const at = this.where(st, id)?.ci ?? null;
+    const { cols, page } = paged(st.cols, { n: st.n, view: this.viewW(st), at, opened });
+    const started = page ? { ...st, cols, vx: this.start({ ...st, cols }, page[0]) } : { ...st, cols };
+    if (started.vx !== st.vx) this.dirty = true;
+    const shown = this.clampView(started);
+    return id ? this.reveal(shown, id) : shown;
   }
 
   // `tx` is kept by older builds' state; it goes here.
@@ -927,9 +934,7 @@ export default class Strip extends View {
   setN(st, n, keep) {
     const per = clamp(Math.round(n), 1, N_MAX);
     setShared("strip.n", per);
-    const { cols } = paged(st.cols.map(({ hs: _hs, ...c }) => c), per);
-    const even = this.clampView({ ...st, n: per, cols });
-    return keep ? this.reveal(even, keep) : even;
+    return this.repage({ ...st, n: per, cols: st.cols.map(({ hs: _hs, ...c }) => c) }, keep);
   }
 
   fit(st, keep) { return this.setN(st, st.n ?? DEFAULT_N, keep); }

@@ -7,44 +7,50 @@ const TAB = "t";
 const pane = (id) => ({ pane: id, terminal: `term-${id}`, tab: TAB });
 const col = (w, pin) => ({ panes: [`c${w}`], w, ...(pin ? { pin } : {}) });
 
-const stripWith = async (store = {}) => {
-  const host = layoutHost(store, () => null, () => {});
+const quarters = ["p1", "p2", "p3", "p4"].map((id) => ({ panes: [id], w: 1 / 4 }));
+const pinned = { panes: ["pin"], w: 1 / 4, pin: "left" };
+
+const stripWith = async (store = {}, { tab = null, focused = null } = {}) => {
+  const host = { ...layoutHost(store, () => null, () => {}), focused: () => focused && { pane: focused, terminal: `term-${focused}` }, spaces: () => [{ tabs: [{ id: TAB }] }], theme: () => ({ accent: "#000000" }) };
   const { Strip } = await loadStrip(host);
-  const strip = Object.assign(new Strip(), { state: {} });
-  const ids = [];
+  const strip = Object.assign(new Strip(), { sets: [], state: tab ? { [TAB]: tab } : {} });
+  const ids = tab ? tab.cols.flatMap((c) => c.panes) : [];
   const now = () => strip.state[TAB];
   const widths = () => clone(now().cols.map((c) => c.w));
   const seen = () => clone(strip.shownCols(now()).map((ci) => now().cols[ci].panes[0]));
   const settle = () => strip.commit(TAB, strip.sync(TAB, ids.map(pane)));
-  const open = (dir = "right", from = ids.at(-1)) => {
+  const open = (dir = "right", from = ids.at(-1), id = `p${ids.length + 1}`) => {
     if (ids.length) host.setShared("strip.intent", { dir, from, at: Date.now() + ids.length });
-    ids.push(`p${ids.length + 1}`);
+    ids.push(id);
     settle();
   };
   const close = (id) => { ids.splice(ids.indexOf(id), 1); settle(); };
-  return { strip, host, now, widths, seen, open, close };
+  const shown = () => { strip.refresh(TAB, ids.map(pane), "first", null); return seen(); };
+  return { strip, host, now, widths, seen, open, close, shown, ids };
 };
 
 test("The page a pane opens on is shared evenly, up to the stepper's number, in strip order", async () => {
   const { paged } = await load("kanso-strip/strip-model.js", ["paged"]);
   const cases = [
-    ["one column on its own page", 4, [col(0.3)], 0, [1]],
-    ["the second column halves its page", 4, [col(1), col(1)], 1, [1 / 2, 1 / 2]],
-    ["the third column makes thirds", 4, [col(0.5), col(0.5), col(1)], 2, [1 / 3, 1 / 3, 1 / 3]],
-    ["the fourth column makes quarters", 4, [col(1 / 3), col(1 / 3), col(1 / 3), col(1)], 3, [1 / 4, 1 / 4, 1 / 4, 1 / 4]],
-    ["the fifth column starts the next page whole", 4, [...Array(4).fill(col(1 / 4)), col(0.6)], 4, [1 / 4, 1 / 4, 1 / 4, 1 / 4, 1]],
-    ["the sixth column halves the next page and leaves the first", 4, [col(0.7), col(0.1), col(0.1), col(0.1), col(1), col(1)], 5, [0.7, 0.1, 0.1, 0.1, 1 / 2, 1 / 2]],
-    ["with three a page, the fourth column starts the next page", 3, [...Array(3).fill(col(1 / 3)), col(0.5)], 3, [1 / 3, 1 / 3, 1 / 3, 1]],
-    ["with one a page, every column is whole", 1, [col(1), col(0.5)], 1, [1, 1]],
-    ["a column opened inside a full page shares that page", 2, [col(1 / 2), col(0.4), col(0.9), col(1)], 1, [1 / 2, 1 / 2, 0.9, 1]],
-    ["pinned columns keep their width and are not counted", 2, [col(0.2, "left"), col(1), col(0.6), col(0.3, "right")], 2, [0.2, 1 / 2, 1 / 2, 0.3]],
-    ["the stepper re-pages every column", 2, [col(1 / 4), col(1 / 4), col(1 / 4), col(1 / 4), col(1)], null, [1 / 2, 1 / 2, 1 / 2, 1 / 2, 1]],
-    ["the stepper leaves pinned columns as they are", 3, [col(0.25, "left"), col(0.5), col(0.5)], null, [0.25, 1 / 2, 1 / 2]],
+    ["one column on its own page", 4, 1, [col(0.3)], 0, [1]],
+    ["the second column halves its page", 4, 1, [col(1), col(1)], 1, [1 / 2, 1 / 2]],
+    ["the third column makes thirds", 4, 1, [col(0.5), col(0.5), col(1)], 2, [1 / 3, 1 / 3, 1 / 3]],
+    ["the fourth column makes quarters", 4, 1, [col(1 / 3), col(1 / 3), col(1 / 3), col(1)], 3, [1 / 4, 1 / 4, 1 / 4, 1 / 4]],
+    ["the fifth column starts the next page whole", 4, 1, [...Array(4).fill(col(1 / 4)), col(0.6)], 4, [1 / 4, 1 / 4, 1 / 4, 1 / 4, 1]],
+    ["the sixth column halves the next page and leaves the first", 4, 1, [col(0.7), col(0.1), col(0.1), col(0.1), col(1), col(1)], 5, [0.7, 0.1, 0.1, 0.1, 1 / 2, 1 / 2]],
+    ["with three a page, the fourth column starts the next page", 3, 1, [...Array(3).fill(col(1 / 3)), col(0.5)], 3, [1 / 3, 1 / 3, 1 / 3, 1]],
+    ["with one a page, every column is whole", 1, 1, [col(1), col(0.5)], 1, [1, 1]],
+    ["a column opened inside a full page shares that page and leaves the one pushed past it", 2, 1, [col(1 / 2), col(0.4), col(0.9), col(1)], 1, [1 / 2, 1 / 2, 0.9, 1]],
+    ["pinned columns keep their width, are not counted, and the page shares what they leave", 2, 0.5, [col(0.2, "left"), col(1), col(0.6), col(0.3, "right")], 2, [0.2, 1 / 4, 1 / 4, 0.3]],
+    ["a page opened beside a quarter pin fills the other three quarters", 4, 3 / 4, [col(1 / 4, "left"), ...Array(4).fill(col(1 / 4)), col(1)], 5, [1 / 4, 1 / 4, 1 / 4, 1 / 4, 1 / 4, 3 / 4]],
+    ["the stepper re-pages every column", 2, 1, [col(1 / 4), col(1 / 4), col(1 / 4), col(1 / 4), col(1)], null, [1 / 2, 1 / 2, 1 / 2, 1 / 2, 1]],
+    ["the stepper leaves pinned columns as they are and shares what they leave", 3, 3 / 4, [col(0.25, "left"), col(0.5), col(0.5)], null, [0.25, 3 / 8, 3 / 8]],
   ];
-  for (const [name, n, cols, opened, want] of cases) {
-    assert.deepEqual(clone(paged(cols, n, opened).cols.map((c) => c.w)), want, name);
+  for (const [name, n, view, cols, at, want] of cases) {
+    assert.deepEqual(clone(paged(cols, { n, view, at, opened: at !== null }).cols.map((c) => c.w)), want, name);
   }
-  assert.deepEqual(clone(paged([col(0.2, "left"), col(1), col(1), col(1)], 2, 3).page), [3], "the page a column lands on, by index");
+  assert.deepEqual(clone(paged([col(0.2, "left"), col(1), col(1), col(1)], { n: 2, view: 0.8, at: 3, opened: true }).page), [3], "the page a column lands on, by index");
+  assert.deepEqual(clone(paged([col(1), col(1), col(1)], { n: 2, view: 1, at: 1 }).page), [0, 1], "the page of the focused column when the stepper re-pages");
 });
 
 test("With four a page, panes opened one by one fill the page evenly, then start the next page beside it", async () => {
@@ -109,4 +115,28 @@ test("Closing a pane leaves the other columns' widths as they were", async () =>
   assert.deepEqual(widths(), [1 / 4, 1 / 4, 1 / 4, 1]);
   close("p5");
   assert.deepEqual(widths(), [1 / 4, 1 / 4, 1 / 4]);
+});
+
+test("With a quarter pinned and four a page, a pane opened after the last column fills the three quarters left and is on screen", async () => {
+  const { open, widths, seen } = await stripWith({}, { tab: { n: 4, vx: 0, focus: "p4", cols: [pinned, ...quarters] } });
+  open("right", "p4", "new");
+  assert.deepEqual(widths(), [1 / 4, 1 / 4, 1 / 4, 1 / 4, 1 / 4, 3 / 4]);
+  assert.deepEqual(seen(), ["new"]);
+  open("right", "new", "next");
+  assert.deepEqual(widths(), [1 / 4, 1 / 4, 1 / 4, 1 / 4, 1 / 4, 3 / 8, 3 / 8]);
+  assert.deepEqual(seen(), ["new", "next"]);
+});
+
+test("With a quarter pinned, the stepper shares each page in the three quarters left and shows the focused pane's page", async () => {
+  const { strip, now, widths, seen } = await stripWith({}, { tab: { n: 4, vx: 0, focus: "p4", cols: [pinned, ...quarters, { panes: ["p5"], w: 1 }] } });
+  strip.commit(TAB, strip.setN(now(), 2, "p4"));
+  assert.deepEqual(widths(), [1 / 4, 3 / 8, 3 / 8, 3 / 8, 3 / 8, 3 / 4]);
+  assert.deepEqual(seen(), ["p3", "p4"]);
+});
+
+test("A tab seen for the first time shows the focused pane's page", async () => {
+  const { shown, widths, ids } = await stripWith({ "strip.n": 4 }, { focused: "p5" });
+  ids.push("p1", "p2", "p3", "p4", "p5", "p6");
+  assert.deepEqual(shown(), ["p5", "p6"]);
+  assert.deepEqual(widths(), [1 / 4, 1 / 4, 1 / 4, 1 / 4, 1 / 2, 1 / 2]);
 });

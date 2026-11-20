@@ -1,13 +1,10 @@
-const pagesOf = (cols, n) => cols.reduce((pages, c, ci) => {
-  if (c.pin) return pages;
-  const last = pages.at(-1);
-  return last && last.length < n ? pages.with(-1, [...last, ci]) : [...pages, [ci]];
-}, []);
-
-export const paged = (cols, n, opened = null) => {
-  const pages = pagesOf(cols, n);
-  const page = pages.find((p) => p.includes(opened)) ?? null;
-  const resized = opened === null ? pages : [page ?? []];
-  const share = new Map(resized.flatMap((p) => p.map((ci) => [ci, 1 / p.length])));
+export const paged = (cols, { n, view, at = null, opened = false }) => {
+  const free = cols.flatMap((c, ci) => (c.pin ? [] : [ci]));
+  const pageOf = (k) => Math.floor(k / n);
+  const sizeOf = (p) => Math.min(n, free.length - p * n);
+  const home = free.indexOf(at);
+  const landing = home < 0 ? null : pageOf(home);
+  const share = new Map(free.flatMap((ci, k) => (opened && pageOf(k) !== landing ? [] : [[ci, view / sizeOf(pageOf(k))]])));
+  const page = landing === null ? null : free.slice(landing * n, landing * n + sizeOf(landing));
   return { cols: cols.map((c, ci) => (share.has(ci) ? { ...c, w: share.get(ci) } : c)), page };
 };
