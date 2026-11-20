@@ -182,15 +182,16 @@ test("Collapsed, while someone needs you and Status is not on show, the view but
   assert.equal(arg(asked, "tooltip"), "Projects · Someone needs you");
   assert.equal(dots(button({ view: "spaces" })), 0);
   assert.equal(dots(button({ view: "agents", asks: true })), 0, "on Status, the states say it already");
-  const { drawn, render } = await rail();
+  const { drawn, render } = await rail({ state: { view: "threads", threads: {} } });
   render();
-  assert.ok(drawn.tips.includes("Projects · Someone needs you"), "in the rail, while Projects is on show, its tooltip says someone needs you");
+  assert.ok(drawn.tips.includes("Threads · Someone needs you"), "in the rail, while Threads is on show, its tooltip says someone needs you");
 });
 
 test("A view key shuts the collapsed view menu, as a pick from it does", async () => {
-  const { view, render } = await rail();
+  const { view, render, drawn } = await rail({ state: { view: "threads", threads: {} } });
   view.viewMenu = true;
   render();
+  assert.ok(drawn.ids.some((id) => id.startsWith("rail-view-menu")), "the menu is on screen");
   view.command("view-agents", cx);
   assert.deepEqual([view.view, view.viewMenu], ["agents", false]);
 });
