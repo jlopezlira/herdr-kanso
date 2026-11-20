@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import { mkdir, writeFile, realpath, rm } from "node:fs/promises";
 import { join, relative } from "node:path";
 import { load, clone, temporary, exec, until, elements, watchPopups, watchLines, failure, context, gitOk, fileExists as exists, gpuiHost, popoverHost, keyboard, texts, calls as calls_ } from "./helpers.mjs";
-import { loadSidebar, mountedState, recorder } from "./sidebar-fixtures.mjs";
+import { loadSidebar, mountedState, withParts, recorder } from "./sidebar-fixtures.mjs";
 
 const NAMES = ["placeKey", "keyOfSpace", "keyOfProject", "closedProjects", "shownNames", "startingProjects", "parseWorktreeList", "addWorktree", "worktreesOf", "missingFolders", "folderName", "trimmed"];
 const projects = () => load("kanso-spaces/projects.js", NAMES, { exec });
@@ -146,7 +146,7 @@ test("the top + adds a project in Projects and starts a conversation in Threads;
     openOverlay: (o) => overlays.push(clone({ kind: o.kind, props: o.props })),
     knownAgents: async () => [{ key: "claude", name: "Claude Code", installed: true, run: ["claude"] }, { key: "codex", name: "Codex", installed: true, run: ["codex"] }],
   });
-  const view = Object.assign(new Spaces(), mountedState({ shown: new Set(["sp-agile"]) }));
+  const view = withParts(Object.assign(new Spaces(), mountedState({ shown: new Set(["sp-agile"]) })));
   const addFromTop = () => {
     view.render();
     handlers["on_click:spaces-header-0-0-0"]({}, { stop_propagation() {}, notify() {} });

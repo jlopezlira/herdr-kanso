@@ -168,7 +168,7 @@ export default class Tabs extends View {
   async barCommand(c, cx) {
     const name = String(c).replace(/^kanso-tabs\./, "");
     if (name === "update") this.updater.install(cx);
-    else if (name === "check") { await this.updater.check(cx, true, true); this.updater.fit(); }
+    else if (name === "check") await this.updater.check(cx, true, true);
     else if (name === "settings" || name.startsWith("settings-")) {
       const asked = name.slice(9);
       openSettings(!asked || asked === "mods" ? "pieces" : asked);

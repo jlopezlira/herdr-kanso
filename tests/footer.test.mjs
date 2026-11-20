@@ -1,7 +1,7 @@
 import { footer, FOOTER_NIGHT } from "./menu-fixtures.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { calls, everyDrawn as all } from "./helpers.mjs";
+import { calls, everyDrawn as all, gpuiHost, load, popoverHost } from "./helpers.mjs";
 
 const night = FOOTER_NIGHT;
 
@@ -24,6 +24,23 @@ const pressInRefusal = (view, words) => press(holding(all(view.render()).find((x
 test("In Stable Mode with nothing to install, the footer is Settings alone: Add computer lives in +", async () => {
   const { view } = await footer();
   assert.deepEqual(texts(view.render()), ["Settings"]);
+});
+
+test("The footer is as tall as the rows it shows, and a refused update's block takes room only while open", async () => {
+  const { footerPx } = await load("kanso-spaces/sidebar-footer.js", ["footerPx"], popoverHost());
+  const { stateBlockPx } = await load("kanso-spaces/ui-state.js", ["stateBlockPx"], gpuiHost());
+  assert.equal(footerPx(null), 52, "Settings alone: 8 above, 32, and 12 below");
+  assert.equal(footerPx("3.31.0"), 84, "an update is a row on top");
+  assert.equal(footerPx(null, "words"), 52, "a refusal shows only under an update row");
+  const block = Math.ceil(stateBlockPx({ source: "words", fix: "Update" }, 2));
+  assert.equal(footerPx("3.31.0", "words"), 84 + 2 + block + 8, "the kit's block with our words on two lines, a hair under its row and 8 above the next");
+  assert.equal(footerPx("3.31.0", "words", false), 86, "in the rail two of the kit's large icon buttons (32) a hair apart, 8 above and 12 below, and no block");
+  assert.equal(footerPx(null, null, false), 52, "one square");
+  for (const [shared, updater, px] of [[{}, {}, 52], [{}, { available: () => "3.31.0" }, 84], [{}, { available: () => "3.31.0", refused: () => "words" }, 84 + 2 + block + 8],
+    [{ "sidebar.collapsed": true }, { available: () => "3.31.0", refused: () => "words" }, 86], [{}, { available: () => "3.31.0", busy: true, refused: () => "words" }, 84]]) {
+    const { view } = await footer({ shared, updater });
+    assert.equal(arg(view.render(), "h"), px, JSON.stringify([shared, px]));
+  }
 });
 
 test("Open, the footer's rows are the kit's rows at the sidebar's gutter, Settings with room below; the rail too, its Buttons a hair apart", async () => {
@@ -116,7 +133,7 @@ test("Explain pressed first starts the lookup from a timer, never from the click
 });
 
 test("Settings opens one menu: kansō settings with its key, and Herdr settings; choosing shuts it", async () => {
-  const { view, ran, overlays } = await footer();
+  const { view, ran } = await footer();
   const closed = view.render();
   assert.equal(popover(closed), null, "shut, Settings is its row alone");
   press(holding(closed, "Settings"));
@@ -125,7 +142,8 @@ test("Settings opens one menu: kansō settings with its key, and Herdr settings;
   assert.equal(calls(arg(popover(open), "trigger"), "on_click").length, 0, "open, the popover owns the next press");
   assert.deepEqual(texts(arg(popover(open), "content")), ["Settings", "kansō settings", "⌃⇧,", "Herdr settings"]);
   press(holding(open, "kansō settings"));
-  assert.equal(overlays[0].mod, "kanso-settings");
+  assert.deepEqual(ran, [["kanso-tabs.settings", undefined]], "the tab bar's command opens kansō settings");
+  ran.length = 0;
   assert.equal(view.menuOpen, false, "choosing closes the menu");
   view.menuOpen = true;
   press(holding(view.render(), "Herdr settings"));

@@ -116,8 +116,9 @@ test("a failed local save stays pending and the next read writes it", async () =
     hostName: "macbook",
     phaseOf: () => "connected",
     db: () => ({ saveAlias: () => Promise.reject(new Error("disk")) }),
+    redraw() {},
   });
-  names.take({ notify() {} });
+  names.take({});
   await new Promise((resolve) => setTimeout(resolve, 0));
   assert.equal(names.book[""].pending, 1);
   assert.deepEqual(clone(names.pending()), [{ route: "", name: "Studio", at: 10, pending: 0 }]);

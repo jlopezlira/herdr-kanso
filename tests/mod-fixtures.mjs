@@ -20,6 +20,17 @@ export const mountChrome = async (host) => {
   view.init({}, { focus_handle: () => ({ focus() {} }), spawn() {}, timer: { after() {}, every() {} } });
   return view;
 };
+export const mountFooter = async (host) => {
+  const { SidebarFooter } = await load("kanso-spaces/main.js", ["SidebarFooter"], host);
+  const { COLLAPSED, KANSO_SETTINGS } = await load("kanso-spaces/footer-model.js", ["COLLAPSED", "KANSO_SETTINGS"], host);
+  const { hintOf } = await load("kanso-spaces/ui-tooltip.js", ["hintOf"], host);
+  const look = () => ({ collapsed: host.shared(COLLAPSED) === true, update: host.shared("kanso.update") ?? null, ready: host.updates?.().app.ready ?? null, hint: hintOf(KANSO_SETTINGS) });
+  const view = new SidebarFooter();
+  view.init(look(), { focus_handle: () => ({ focus() {} }), spawn() {}, timer: { after() {}, every() {} } });
+  const draw = view.render.bind(view);
+  view.render = (...args) => { view.update(look()); return draw(...args); };
+  return view;
+};
 export const loadFront = (host) => load("kanso-panel/front.js", ["Front"], host);
 export const loadCheckState = (host) => load("kanso-panel/ghchecks.js", ["checkState"], host);
 export const loadPullRequest = (host) => load("kanso-panel/pr.js", ["PullRequest"], host);
@@ -46,7 +57,7 @@ export const loadPanelState = (host) => load("kanso-panel/panel-state.js", ["pro
 export const loadFindThreads = (host) => load("kanso-spaces/threads.js", ["findThreads"], host);
 export const loadSimulatorTools = (host) => load("kanso-sim/registration.js", ["TOOLS"], host);
 export const loadSimulator = (host) => load("kanso-sim/main.js", ["Simulator"], host);
-export const loadUpdater = (host) => load("kanso-chrome/update.js", ["Updater"], host);
+export const loadUpdater = (host) => load("kanso-tabs/update.js", ["Updater"], host);
 export const loadGroupInbox = (host) => load("kanso-panel/pr-inbox.js", ["groupInbox"], host);
 export const loadAuthTiming = (host) => load("kanso-panel/pr-poll.js", ["AUTH_MS"], host);
 export const loadSleepingNow = (host) => load("kanso-spaces/roster.js", ["sleepingNow"], host);

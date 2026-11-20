@@ -122,7 +122,7 @@ export class Names {
   paint(cx) {
     if (!this.dirty) return;
     this.dirty = false;
-    cx.notify();
+    this.view.redraw(cx);
   }
 
   take(cx) {
@@ -132,7 +132,7 @@ export class Names {
     for (const ask of asks) this.apply(ask);
     this.publish();
     this.dirty = false;
-    cx.notify();
+    this.view.redraw(cx);
   }
 
   apply(ask) {

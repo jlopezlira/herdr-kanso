@@ -5,6 +5,7 @@ import { readFile } from "node:fs/promises";
 import { waitingQueue, nextWaiting, queueState, waitingSignature, sameQueue, waitingReason, queueMessage, NEEDS_YOU, EMPTY_NOTICE_MS } from "../kanso/mods/kanso-spaces/needs-you.js";
 import { modScript } from "../scripts/mod-source.mjs";
 import { load, clone, singleUse, tape } from "./helpers.mjs";
+import { withParts } from "./sidebar-fixtures.mjs";
 
 const agent = (address, status = "blocked", extra = {}) => ({ address, status, pane: `pane-${address}`, space: "project", space_name: "Project", tab: "tab", title: address, seq: 1, ...extra });
 const terminal = (address, status_ms = 1, extra = {}) => ({ address, status_ms, state: "live", ...extra });
@@ -103,11 +104,11 @@ async function controller() {
   return { state, view, cx, ui, sharedState };
 }
 
-const drawStub = (view, ui, extra = {}) => Object.assign(view, {
+const drawStub = (view, ui, extra = {}) => withParts(Object.assign(view, {
   custom: {}, order: "updated", assignColors() {}, projectOf: () => null,
   listed: () => [], seen: () => new Map(), header: ui.host.div, switchViews: ui.host.div,
   agentsView: () => [], threadsView: () => [], grouped: () => [], ...extra,
-});
+}));
 
 test("The command only focuses live agents and publishes the same queue used by the count", async () => {
   const { state, view, cx, sharedState } = await controller();
@@ -214,6 +215,7 @@ test("Projects, Status and Threads keep the return digest when Needs you is hidd
   const drawAs = (mode, open) => {
     Object.assign(view, { view: mode, needsOpen: open });
     ui.texts.length = 0;
+    view.redraw();
     view.render();
   };
   const digestShown = () => {
@@ -241,6 +243,7 @@ test("Projects, Status and Threads keep the return digest when Needs you is hidd
       assert.equal(returned.showing, false, "a hidden digest is not acknowledged");
       assert.ok(!view.nav.some((row) => row.key === "since-7"));
       view.needsOpen = false;
+      view.redraw();
       view.render();
       assert.equal(returned.rows.length, 1);
       assert.equal(returned.showing, true);

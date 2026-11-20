@@ -138,7 +138,6 @@ export const LAYOUT_SIZES = {
   sidebar: { "size.px": "k-w-sidebar", min: "k-w-sidebar-layout-min", max: "k-w-sidebar-max" },
   brand: { "size.px": "k-h-tab-bar" },
   spaces: { min: "k-h-spaces-min" },
-  "sidebar-footer": { "size.px": "k-h-sidebar-footer" },
   work: { padding: "k-pane-gap", gap: "k-sp-1" },
   tabs: { "size.px": "k-h-tab-bar" },
   "work-body": { gap: "k-pane-gap" },

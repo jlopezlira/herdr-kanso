@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { load, nodes, texts, tipsOf, svgsOf, themed, calls, arg, styled, KIT_NIGHT, popoverHost as host, blockedDots, repoText as read } from "./helpers.mjs";
-import { loadSidebar, mountedState, recorder } from "./sidebar-fixtures.mjs";
+import { loadSidebar, mountedState, withParts, recorder } from "./sidebar-fixtures.mjs";
 
 const compositions = async () => themed({
   ...await load("kanso-spaces/tile.js", ["tile"], host()),
@@ -88,7 +88,7 @@ const rail = async (own = {}, stored = {}, spaces = [{ id: "sp1", name: "app", f
     shared: (key) => (key === "sidebar.collapsed" ? true : stored[key] ?? null), spaces: () => spaces, agents: () => agents,
     window: () => ({ platform: "macos", active: true }), openOverlay: (o) => overlays.push(o), run: (cmd) => ran.push(cmd),
   });
-  const view = Object.assign(new Spaces(), mountedState({ shown: new Set(spaces.map((s) => s.id)), ...own }));
+  const view = withParts(Object.assign(new Spaces(), mountedState({ shown: new Set(spaces.map((s) => s.id)), ...own })));
   const render = () => { drawn.clear(); buttons.length = 0; view.render(); };
   render();
   return { view, drawn, buttons, overlays, ran, render };
@@ -138,7 +138,7 @@ test("Open, the views are a track of buttons", async () => {
   const named = open.host.Button;
   open.host.Button = { new: (id) => { buttons.push(id); return named.new(id); } };
   const { Spaces } = await loadSidebar(open.host, { window: () => ({ platform: "macos", active: true }) });
-  Object.assign(new Spaces(), mountedState()).render();
+  withParts(Object.assign(new Spaces(), mountedState())).render();
   assert.deepEqual(buttons.filter((id) => id.startsWith("spaces-view")), ["spaces-view-tabs-spaces", "spaces-view-tabs-agents", "spaces-view-tabs-threads"]);
 });
 

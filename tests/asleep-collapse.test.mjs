@@ -1,5 +1,5 @@
 // A project or tab that is asleep is one quiet row until a click; waking it opens the usual group.
-import { drawEachTime, loadSidebar, mountedState, recorder, shell, SIDEBAR_THEME } from "./sidebar-fixtures.mjs";
+import { drawEachTime, loadSidebar, mountedState, withParts, recorder, shell, SIDEBAR_THEME } from "./sidebar-fixtures.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { load, clone } from "./helpers.mjs";
@@ -16,7 +16,7 @@ async function draw({ spaces = () => [], agents = () => [], panes = () => [], te
   const overlays = [], popup = { now: {} };
   const shared = (k) => (k === "kanso.registry" ? registry : k === "sidebar.collapsed" ? collapsed : null);
   const { Spaces } = await loadSidebar(host, { shared, spaces, panes, agents, terminals, machines: () => [], openOverlay: (o) => overlays.push(o), closeOverlay() {}, props: () => popup.now });
-  const view = Object.assign(new Spaces(), mountedState({ shown: new Set(spaces().map((w) => w.id)), threadGroup: true, view: shown, threads: {} }));
+  const view = withParts(Object.assign(new Spaces(), mountedState({ shown: new Set(spaces().map((w) => w.id)), threadGroup: true, view: shown, threads: {} })));
   const render = drawEachTime(view, clear);
   return { view, handlers, ids, texts, icons, render, overlays, popup };
 }
@@ -86,6 +86,7 @@ test("a sleeping tab inside a live project is one row, and a click shows its age
 test("Status and Threads start an asleep project collapsed", async () => {
   const status = await asleepProject();
   status.view.view = "agents";
+  status.view.redraw();
   status.render();
   assert.equal(has(status.ids, "section-asleep"), true);
   assert.equal(has(status.ids, "asleep-group-project:sp1"), true);
@@ -97,6 +98,7 @@ test("Status and Threads start an asleep project collapsed", async () => {
   const threads = await asleepProject();
   threads.view.view = "threads";
   threads.view.threads = {};
+  threads.view.redraw();
   threads.render();
   assert.equal(has(threads.ids, "space-agent-zz:t1"), false, "a project asleep is closed in Threads too");
   const head = [...threads.ids].find((id) => id.startsWith("thread-project-"));

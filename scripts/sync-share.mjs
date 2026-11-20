@@ -10,7 +10,7 @@ const COMMON = [
   { source: "kanso/mods/kanso-panel/share.js", copies: ["kanso/mods/kanso-spend/share.js", "kanso/mods/kanso-guard/share.js", "kanso/mods/kanso-dojo/share.js"] },
   // What can be shown, shown when it has something to say, or hidden. Hide stops the work.
   { source: "kanso/mods/kanso-settings/pieces.js", copies: ["kanso-spaces", "kanso-strip", "kanso-chrome", "kanso-tabs", "kanso-status", "kanso-panel", "kanso-sim", "kanso-menu"].map((m) => `kanso/mods/${m}/pieces.js`) },
-  { source: "kanso/mods/kanso-panel/explain.js", copies: ["kanso/mods/kanso-chrome/explain.js"] },
+  { source: "kanso/mods/kanso-panel/explain.js", copies: ["kanso/mods/kanso-spaces/explain.js"] },
   // The lines every right-click menu ends with, and Hide with its Undo.
   { source: "kanso/mods/kanso-panel/piece-lines.js", copies: ["kanso-spaces", "kanso-strip", "kanso-chrome", "kanso-tabs", "kanso-status", "kanso-menu"].map((m) => `kanso/mods/${m}/piece-lines.js`) },
   // An agent's program icon and name, and the key caps, the same in the tabs, headers, status bar, sidebar and Send.
@@ -22,12 +22,11 @@ const COMMON = [
   // The layout writers' helpers: what each keeps, and how a write puts it all back.
   // Kanso's own updates: the footer shows the row, the tab bar (always on
   // screen, unlike the sidebar) checks, tells you and installs from the toast.
-  { source: "kanso/mods/kanso-chrome/update.js", copies: ["kanso/mods/kanso-tabs/update.js"] },
-  { source: "kanso/mods/kanso-chrome/notices.js", copies: ["kanso/mods/kanso-tabs/notices.js"] },
-  // The footer's rows and sizes: the footer draws them, the tab bar's updater fits the footer to them.
-  { source: "kanso/mods/kanso-chrome/footer-model.js", copies: ["kanso/mods/kanso-tabs/footer-model.js"] },
+  { source: "kanso/mods/kanso-tabs/update.js", copies: ["kanso/mods/kanso-spaces/update.js"] },
+  { source: "kanso/mods/kanso-chrome/notices.js", copies: ["kanso/mods/kanso-tabs/notices.js", "kanso/mods/kanso-spaces/notices.js"] },
+  { source: "kanso/mods/kanso-spaces/footer-model.js", copies: ["kanso/mods/kanso-chrome/footer-model.js"] },
   // Order of a beta, a release candidate and a stable tag, shared with that updater.
-  { source: "kanso/mods/kanso-chrome/release.js", copies: ["kanso/mods/kanso-tabs/release.js", "kanso/mods/kanso-settings/release.js"] },
+  { source: "kanso/mods/kanso-chrome/release.js", copies: ["kanso/mods/kanso-tabs/release.js", "kanso/mods/kanso-settings/release.js", "kanso/mods/kanso-spaces/release.js"] },
   // A pull request's checks, read one way in the PR panel and the header.
   { source: "kanso/mods/kanso-panel/ghchecks.js", copies: ["kanso/mods/kanso-strip/ghchecks.js"] },
   // The key a second Cmd+F or Ctrl+F uses to select the query in the open bar.
@@ -89,7 +88,6 @@ const COMMON = [
   // One wake when a panel that was behind, or hidden, is in front again.
   { source: "kanso/mods/kanso-panel/front.js", copies: ["kanso/mods/kanso-containers/front.js", "kanso/mods/kanso-sim/front.js"] },
   { source: "kanso/mods/kanso-spaces/header.js", copies: ["kanso/mods/kanso-chrome/header.js"] },
-  { source: "kanso/mods/kanso-chrome/sidebar-footer.js", copies: ["kanso/mods/kanso-tabs/sidebar-footer.js"] },
   { source: "kanso/mods/kanso-status/status-bar.js", copies: ["kanso/mods/kanso-strip/status-bar.js"] },
   { source: "kanso/mods/kanso-panel/blocks.js", copies: ["markdown-panel/mods/markdown-panel/blocks.js"] },
   { source: "kanso/mods/kanso-tabs/markdown-handler.sh", copies: ["markdown-panel/mods/markdown-panel/markdown-handler.sh"] },

@@ -26,7 +26,7 @@ test("No size in kanso.json is a bare number: each one but a weight or a zero ha
 });
 
 test("A size that drifts from its token fails: in the file or in the token", () => {
-  const drifted = layoutText.replace('"px": 156', '"px": 160');
+  const drifted = layoutText.replace('"px": 368', '"px": 372');
   assert.notEqual(layoutWithTokens(drifted, tokens), drifted, "a number changed by hand");
   const moved = structuredClone(tokens);
   moved.layout.find((t) => t.name === "k-w-panel-max").value = "960px";
@@ -36,7 +36,7 @@ test("A size that drifts from its token fails: in the file or in the token", () 
 
 test("The window's new tokens hold the sizes the layout file had", () => {
   const size = px(tokens);
-  assert.deepEqual(["k-h-sidebar-footer", "k-w-panel-min", "k-w-panel-max", "k-w-sidebar-layout-min", "k-w-sidebar-max", "k-h-spaces-min"].map(size), [156, 280, 900, 200, 480, 90]);
+  assert.deepEqual(["k-w-panel-min", "k-w-panel-max", "k-w-sidebar-layout-min", "k-w-sidebar-max", "k-h-spaces-min"].map(size), [280, 900, 200, 480, 90]);
   assert.deepEqual(["k-terminal-x", "k-terminal-y", "k-traffic-x", "k-traffic-y"].map(size), [14, 10, 12, 16]);
 });
 
