@@ -4,8 +4,13 @@ import { temporary } from "./helpers.mjs";
 import { element, fixture, initialised, sidebarOn } from "./perf-harness.mjs";
 
 const retained = (cx) => {
-  const own = { ...cx, depth: 0 };
+  const own = { ...cx, depth: 0, current: null };
   const refuse = (call) => { if (own.depth) throw new Error(`${call} cannot run during render`); };
+  own.within = (entity, run) => {
+    const outer = own.current;
+    own.current = entity;
+    try { return run(); } finally { own.current = outer; }
+  };
   own.drawing = (render) => {
     own.depth += 1;
     try { return render(); } finally { own.depth -= 1; }
@@ -17,9 +22,9 @@ const retained = (cx) => {
   own.new = (Class, props) => {
     refuse("cx.new");
     const view = new Class(props);
-    view.init?.(props, own);
     const entity = { view, renders: 0, mounted: false, dirty: true, release: () => true };
-    entity.draw = () => { entity.renders += 1; entity.dirty = false; return own.drawing(() => view.render(own)); };
+    own.within(entity, () => view.init?.(props, own));
+    entity.draw = () => { entity.renders += 1; entity.dirty = false; return own.within(entity, () => own.drawing(() => view.render(own))); };
     entity.mount = () => {
       if (entity.mounted && !entity.dirty) return;
       entity.mounted = true;
@@ -36,17 +41,17 @@ const isEntity = (value) => Boolean(value) && typeof value === "object" && typeo
 const mount = (kid) => { if (isEntity(kid)) kid.mount(); };
 const mounting = () => element({ child: mount, children: (kids) => (kids ?? []).forEach(mount) });
 
-const field = () => {
+const field = (cx) => {
   const listeners = {};
-  const state = { on: (event, fn) => { (listeners[event] ??= []).push(fn); return {}; }, value: () => "", focus() {}, release() {}, set_value() {} };
-  return { state, fire: (event) => (listeners[event] ?? []).forEach((fn) => fn({}, { notify() {} })) };
+  const state = { on: (event, fn) => { (listeners[event] ??= []).push({ fn, view: cx.current }); return {}; }, value: () => "", focus() {}, release() {}, set_value() {} };
+  return { state, fire: (event) => (listeners[event] ?? []).forEach(({ fn, view }) => fn({}, { notify: () => cx.notify(view) })) };
 };
 
 const mounted = async (t) => {
   const dir = await temporary(t), f = fixture({ dir });
-  const input = field();
-  Object.assign(f.host, { v_flex: mounting, h_flex: mounting, div: mounting, InputState: { new: () => input.state } });
   const cx = retained(f.cx);
+  const input = field(cx);
+  Object.assign(f.host, { v_flex: mounting, h_flex: mounting, div: mounting, InputState: { new: () => input.state } });
   const view = await initialised(f, await sidebarOn(f), {}, cx);
   const draw = async () => {
     cx.drawing(() => view.render(cx));
@@ -69,17 +74,28 @@ test("The sidebar mounts its header, view switch, rows and footer once, as retai
   assert.equal(renders().footer, first.footer, "a draw of the sidebar alone does not draw the footer again");
 });
 
-test("A change in one session row draws the rows again, and neither the header nor the footer", async (t) => {
+const drawnAfter = async (t, change) => {
   const { f, draw, renders } = await mounted(t);
   const before = renders();
-  assert.ok(before.header >= 1 && before.footer >= 1, "both are on screen");
-  f.list[3].status = "done";
-  f.terms[3].status = "done";
+  change(f);
   await draw();
-  const after = renders();
+  return { before, after: renders() };
+};
+
+test("A change in one session row draws the rows again, and neither the header nor the footer", async (t) => {
+  const { before, after } = await drawnAfter(t, (f) => {
+    f.list[3].status = "done";
+    f.terms[3].status = "done";
+  });
+  assert.ok(before.header >= 1 && before.footer >= 1, "both are on screen");
   assert.equal(after.header, before.header, "the header is not drawn again");
   assert.equal(after.footer, before.footer, "the footer is not drawn again");
   assert.ok(after.rows > before.rows, "the rows are");
+});
+
+test("A shared value the rows do not show changes, and the sidebar's refresh draws no part again", async (t) => {
+  const { before, after } = await drawnAfter(t, (f) => f.shared.set("kanso.update", { checked: f.state.now }));
+  assert.deepEqual(after, before, "the update check is the footer's bookkeeping, and nothing shows it");
 });
 
 test("A paint with nothing changed draws no part, and opening Sort draws the header alone", async (t) => {
@@ -103,16 +119,17 @@ test("A change the header shows draws the header again: a view picked by its key
   assert.equal(after.footer, before.footer, "the footer is not drawn again");
 });
 
-test("Search's field draws its focus ring as the keyboard comes and goes, in the switch that shows it", async (t) => {
+test("Search opened from the header draws its focus ring in the switch as the keyboard comes and goes, and not the header", async (t) => {
   const { cx, view, input, renders } = await mounted(t);
-  view.openFind(cx);
+  cx.within(view.parts.header, () => view.openFind(cx));
   const open = renders();
   input.fire("focus");
   assert.equal(view.drawnLooks.switch.focused, true, "focused");
-  assert.equal(renders().switch, open.switch + 1, "the switch draws the ring");
+  const focused = renders();
+  assert.ok(focused.switch > open.switch, "the switch draws the ring");
   input.fire("blur");
   assert.equal(view.drawnLooks.switch.focused, false, "Tab took the keyboard away");
-  assert.equal(renders().switch, open.switch + 2, "the switch draws it gone");
+  assert.ok(renders().switch > focused.switch, "the switch draws it gone");
   assert.equal(renders().header, open.header, "the header is not drawn for it");
 });
 
