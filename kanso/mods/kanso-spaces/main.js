@@ -29,6 +29,8 @@ import { projectRow } from "./project-row.js";
 import { computerRow, computerTools } from "./computer-row.js";
 import { section } from "./section.js";
 import { asleep } from "./asleep.js";
+import { machineReaches, asleepLook, withPending, withoutWaking, AWAY_MENU } from "./row-states.js";
+import { SLEEP_PENDING, SLEEP_WAKING, SLEEP_FAILED, COULD_NOT_SLEEP, failedTerminals, withoutTerminals, RESUME_LABEL, asleepTerminal } from "./resume.js";
 import { tile } from "./tile.js";
 import { views, viewSwitch } from "./view-switch.js";
 import { pullKey, runPull, canWake, enterOpens, sectionMarkOf, sectionCount, rowDirectory, unnamedComputer, threadWord, threadActions, signInCommand, noProjectsOn, sortOf, foldTail, readWord } from "./sidebar-rows.js";
@@ -40,7 +42,7 @@ import { field, TextField } from "./ui-field.js";
 import { menu, emptyState, skeletonOf, tooltip } from "./kit.js";
 import { boundChord, chordOf } from "./ui-tooltip.js";
 import { menuList, menuHeight, RUN_ROWS } from "./ui-menu.js";
-import { pieceLines, openPieceMenu } from "./piece-lines.js";
+import { pieceLines, openPieceMenu, hidePiece } from "./piece-lines.js";
 import { toolbar } from "./toolbar.js";
 import { header } from "./header.js";
 import { pieces, shown, runs, asksPs, setPiece, pieceOf, STORE } from "./pieces.js";
@@ -115,9 +117,16 @@ const tilde = (path) => { const base = trimmed(home()); return base && paths.wit
 const sleepTab = (spaceId, tab) => arrange({ sleep: { scope: "tab", space: spaceId, tab } });
 // A settled tab wakes whole; a terminal asleep in a tab still shown wakes alone.
 const wakeRow = (z) => arrange({ wake: z.settled ? { space: z.space, tab: z.tabId } : { space: z.space, terminal: z.terminal } });
+const reachesRow = (a) => {
+  const id = a.space ?? a.asleep?.space;
+  if (!id) return true;
+  const machine = spaces().find((s) => s.id === id)?.machine;
+  if (!machine) return true;
+  return machineReaches(machines().find((m) => m.name === machine)?.layout);
+};
 const openRow = (a) => {
   const open = enterOpens(a);
-  if (open?.wake) wakeRow(open.wake);
+  if (open?.wake) { if (canWake(a, reachesRow(a))) wakeRow(open.wake); }
   else if (open?.focus) run("pane.focus", { pane: open.focus });
   else if (open?.peek) run("terminal.peek", { terminal: open.peek });
 };
@@ -181,7 +190,7 @@ export default class Spaces extends View {
     this.clock = cx.timer;
     this.settleUntil = Date.now() + SETTLE;
     // Opened as a row's right-click menu (props().menu): nothing else to run.
-    if (props()?.menu || props()?.railMenu || props()?.spaceMenu || props()?.newAgent || props()?.trees || props()?.worktree || props()?.newConversation || props()?.newProject || props()?.machineMenu) {
+    if (props()?.menu || props()?.awayMenu || props()?.railMenu || props()?.spaceMenu || props()?.newAgent || props()?.trees || props()?.worktree || props()?.newConversation || props()?.newProject || props()?.machineMenu) {
       // Nothing is chosen for you: no row lit until the keyboard moves.
       this.armed = new Armed(); this.menuAt = -1; this.handle = cx.focus_handle();
       // A scroll handle is state: made here, never during render (Herdr refuses it there).
@@ -562,6 +571,8 @@ export default class Spaces extends View {
     else if (c.startsWith("sync-machine:") && c.length > "sync-machine:".length) this.toggleSync(c.slice("sync-machine:".length), cx);
     else if (c === "sidebar") this.toggleRail();
     else if (c === "needs-you.list") this.toggleNeeds(cx);
+    else if (c === "away-dismiss") this.sinceLeft?.dismiss(cx);
+    else if (c === "away-off") hidePiece("sidebar.away");
     else if (c === "list") this.enterList(cx);
     // From a popup, which is gone once clicked: the sidebar asks for the folder.
     else if (c === "add-project") this.addProject();
@@ -995,7 +1006,7 @@ export default class Spaces extends View {
   // While you were away: the Activity card docked under the list, or nothing.
   awayCard(t, space) {
     if (!runs("sidebar.away", pieces(shared)) || !space || !this.sinceLeft?.rows.length || this.sinceLeft.project !== projectKey(space)) return null;
-    return this.sinceLeft.render(t, projectKey(space), (key, go) => this.navMark(key, go), (row) => this.returnGo(row));
+    return this.sinceLeft.render(t, projectKey(space), (key, go) => this.navMark(key, go), (row) => this.returnGo(row), (cx) => this.openAwayMenu(cx));
   }
 
   returnGo(row) {
@@ -1485,7 +1496,21 @@ export default class Spaces extends View {
       this.sleepingRows = sleepingNow(sp, ps, terms, kept);
       this.sleepingSignature = signature;
     }
-    return this.sleepingRows;
+    const pending = (shared(SLEEP_PENDING)?.terminals ?? []).filter((id) => !failedTerminals(shared(SLEEP_FAILED)).includes(id));
+    const live = typeof agents === "function" ? agents() : [];
+    return withoutWaking(withPending(this.sleepingRows, live, pending), shared(SLEEP_WAKING)?.terminals ?? []);
+  }
+
+  undoSleep(a) {
+    const address = a.asleep?.terminal ?? a.address;
+    setShared(SLEEP_FAILED, withoutTerminals(shared(SLEEP_FAILED), [address]));
+    const term = terminals().find((k) => k.address === address);
+    if (asleepTerminal(term)) wakeRow({ space: a.space ?? a.asleep?.space, terminal: address, settled: false });
+  }
+
+  forgetAsleep(z) {
+    hc(["label", z.terminal, `${RESUME_LABEL}=`]).catch(() => {});
+    if (z.settled && z.tabId) run("tab.unsettle", { id: z.tabId });
   }
 
   // Asleep rows follow the awake ones, in the panes' order.
@@ -1510,12 +1535,16 @@ export default class Spaces extends View {
 
   seen(sp, ctx) { return seenNow(sp, ctx, this.threads, this.panel?.agents ?? new Map(), (a) => this.nameOf(a), this.since ?? {}); }
 
-  // One sleeping session: the asleep composition's row, dimmed, with Wake; a press opens its menu.
   asleepLine(a, t) {
     const row = this.navRow(a, this.rowFor(a));
-    const [, line] = asleep({ names: [agentLabel(a)], open: true, selected: row.kbd ? 0 : -1 });
+    const look = asleepLook({ reachable: reachesRow(a), failed: Boolean(row.failure), armed: Boolean(row.armed) });
+    const [, line] = asleep({
+      names: [agentLabel(a)], open: true, selected: row.kbd ? 0 : -1, hover: row.hovered ? 0 : -1,
+      wake: look.wake, failure: look.failure, armed: look.armed,
+    });
     const menu = (cx) => { cx.stop_propagation(); row.menu(cx); };
-    return line(`space-agent-${a.address}`, tokens(t), { on: row.wake ? { Wake: row.wake } : {}, onClick: menu, onMenu: (_e, cx) => menu(cx), onHover: row.hover });
+    const on = { ...(row.wake && look.wake ? { Wake: row.wake } : {}), ...(row.undo && look.undo ? { Undo: row.undo } : {}) };
+    return line(`space-agent-${a.address}`, tokens(t), { on, onClick: menu, onMenu: (_e, cx) => menu(cx), onHover: row.hover });
   }
 
   // A popup's keyboard: j and k or the arrows walk menuActs, Enter runs the lit one, Escape closes.
@@ -2333,11 +2362,16 @@ export default class Spaces extends View {
   }
 
   rowFor(a, actions = null, extra = {}) {
+    const address = a.asleep?.terminal ?? a.address;
+    const failed = failedTerminals(shared(SLEEP_FAILED)).includes(address);
     return {
       hovered: this.hoverRow === a.address,
       hover: (h, cx) => { if (h ? this.hoverRow !== a.address : this.hoverRow === a.address) { this.hoverRow = h ? a.address : null; cx.notify(); } },
       menu: () => this.openMenu(a, extra),
-      wake: canWake(a) ? () => wakeRow(a.asleep) : null,
+      wake: canWake(a, reachesRow(a)) ? () => wakeRow(a.asleep) : null,
+      failure: failed ? COULD_NOT_SLEEP : null,
+      undo: failed ? () => this.undoSleep(a) : null,
+      armed: Boolean(a.asleep && this.armed?.is?.(`forget:${address}`)),
       actions,
     };
   }
@@ -2588,13 +2622,34 @@ export default class Spaces extends View {
 
   zzLines(item, m) {
     const z = m.asleep;
+    const reachable = reachesRow(m);
+    const key = `forget:${z.terminal}`;
+    const armed = this.armed?.is?.(key) ?? false;
+    const forget = (cx) => this.armed.press(key, cx, () => this.forgetAsleep(z));
     return { title: z.saved ? `${m.name}, asleep since ${since(z.saved)}` : `${m.name}, asleep`, items: [
-      item("Wake", () => arrange({ wake: { space: z.space, terminal: z.terminal } }), { icon: "sun" }),
-      ...(z.n > 1 ? [item(`Wake all ${z.n} in ${z.tab}`, () => wakeRow(z), { icon: "sun" })] : []),
+      ...(reachable ? [
+        item("Wake", () => arrange({ wake: { space: z.space, terminal: z.terminal } }), { icon: "sun" }),
+        ...(z.n > 1 ? [item(`Wake all ${z.n} in ${z.tab}`, () => wakeRow(z), { icon: "sun" })] : []),
+      ] : []),
       item("Copy conversation id", (cx) => cx.write_to_clipboard?.(z.resume), { icon: "copy" }),
       { separator: true },
+      item("Forget", forget, { icon: "x", keep: true, verb: "forget", armed }),
       item("Everything asleep\u2026", () => run("kanso-spaces.asleep"), { icon: "moon" }),
     ] };
+  }
+
+  openAwayMenu(cx) {
+    cx?.stop_propagation?.();
+    openOverlay({ mod: "kanso-spaces", kind: "popup", width: W.menu, height: menuHeight({ title: "While you were away", items: [{}, {}] }), at: "pointer", props: { awayMenu: true } });
+  }
+
+  awayMenuView(t) {
+    const item = this.lines();
+    const [dismiss, off] = AWAY_MENU;
+    return this.popup(t, "While you were away", [
+      item(dismiss, () => run("kanso-spaces.away-dismiss")),
+      item(off, () => run("kanso-spaces.away-off")),
+    ]);
   }
 
   openAsleepMenu(menu) {
@@ -2622,6 +2677,7 @@ export default class Spaces extends View {
 
   render() {
     const t = theme();
+    if (props()?.awayMenu) return this.awayMenuView(t);
     if (props()?.menu) return this.menuView(t);
     if (props()?.railMenu) return this.railMenuView(t);
     if (props()?.spaceMenu) return this.spaceMenuView(t);

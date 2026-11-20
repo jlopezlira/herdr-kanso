@@ -42,7 +42,7 @@ export async function runPull(exec, notify, place) {
   return result;
 }
 
-export const canWake = (row) => Boolean(row?.asleep);
+export const canWake = (row, reachable = true) => Boolean(row?.asleep) && reachable !== false;
 
 export function enterOpens(row) {
   if (row?.asleep) return { wake: row.asleep };

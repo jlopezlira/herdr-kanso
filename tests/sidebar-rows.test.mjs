@@ -65,6 +65,7 @@ test("Enter on an asleep row wakes it", () => {
   const z = { id: "tb1", tabId: "tb1", settled: true, space: "sp1" };
   const asleep = { address: "zz:t1", asleep: z };
   assert.equal(canWake(asleep), true);
+  assert.equal(canWake(asleep, false), false, "an unreachable computer offers no Wake");
   assert.deepEqual(enterOpens(asleep), { wake: z });
   assert.equal(canWake({ address: "d" }), false);
   assert.deepEqual(enterOpens({ address: "e", pane: "p1" }), { focus: "p1" });

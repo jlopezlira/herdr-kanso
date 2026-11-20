@@ -303,6 +303,7 @@
       "sun | Wake |  | ",
       "sun | Wake all 3 in review |  | ",
       "copy | Copy conversation id |  | ",
+      "x | Forget |  | ",
       "moon | Everything asleep… |  | "
     ]
   ],

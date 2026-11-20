@@ -22,6 +22,13 @@ in version.json, which the stable updater offers. Versions follow
 [Keep a Changelog](https://keepachangelog.com). `npm run check:version` checks
 the branch's rules.
 
+## [Unreleased]
+
+### Fixed
+
+- An asleep row on a computer that cannot be reached no longer offers Wake. Sleep and Wake move the row at once, and a sleep that does not finish shows could not sleep with Undo on the row. Forgetting a slept conversation asks for a second press, and the row shows that. (#231)
+- While you were away keeps a closed pane's last words. A right-click dismisses the summary or switches it off. The summary takes the sidebar's width, including 420. (#231)
+
 ## [3.31.1] - 2026-11-20
 
 ### Changed
