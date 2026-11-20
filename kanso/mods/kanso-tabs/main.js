@@ -519,14 +519,14 @@ export default class Tabs extends View {
     const items = [
       { icon: "pencil", label: "Rename", onClick: (cx) => { shut(cx); this.startRename(tab, cx); } },
       { icon: "plus", label: "New tab", hint: hintOf("tab.new"), onClick: (cx) => { shut(cx); run("tab.new", { space: space.id }); } },
-      { icon: "moon", label: `Sleep ${tab.name}\u2026`, onClick: (cx) => { shut(cx); openOverlay({ mod: "kanso-sleep", kind: "dialog", width: DIALOG.wide, props: { sleep: { scope: "tab", space: space.id, tab: tab.id } } }); } },
+      { icon: "moon", label: `Sleep ${tabName(tab, ps)}\u2026`, onClick: (cx) => { shut(cx); openOverlay({ mod: "kanso-sleep", kind: "dialog", width: DIALOG.wide, props: { sleep: { scope: "tab", space: space.id, tab: tab.id } } }); } },
       { separator: true },
       { icon: "x", label: "Close tab", hint: hintOf("tab.close"), armed, verb: agents ? verb : null,
         onClick: (cx) => (agents ? this.armed.press(closeKey(tab), cx, () => { shut(cx); run("tab.close", { id: tab.id }); }) : (shut(cx), run("tab.close", { id: tab.id }))) },
       ...pieceLines("tabs.state", { named: true, done: shut }),
     ];
     return Popover.new(`tab-menu-${tab.id}`).trigger(trigger).open(true).on_open_change((open, cx) => { if (!open) shut(cx); })
-      .content(menu(`tab-menu-list-${tab.id}`, { title: tab.name, items }, c));
+      .content(menu(`tab-menu-list-${tab.id}`, { title: tabName(tab, ps), items }, c));
   }
 
   render(cx) {
@@ -600,7 +600,7 @@ export default class Tabs extends View {
     const bar = tabBar({
       items, value: openTabs.find((tab) => tab.active)?.id ?? null, folded: folded.map((i) => ({ key: openTabs[i].id, label: tabName(openTabs[i], ps), mark: tabMark(openTabs[i]) })),
       overflow: this.moreOpen, panel: now,
-      panels: doors.map((p) => ({ key: p.id, label: p.label, icon: p.icon, reveal: { shown: now === p.id || this.hoverPanel === p.id, width: nameWidth(p.label) }, held: heldOn(p.id, this.dragPanel, this.dropPanel), drop: doorDrops[p.id] ?? false })), state, arrange, help: true, tips, windows,
+      panels: doors.map((p) => ({ key: p.id, label: p.label, icon: p.icon, reveal: { shown: !p.icon || now === p.id || this.hoverPanel === p.id, width: nameWidth(p.label) }, held: heldOn(p.id, this.dragPanel, this.dropPanel), drop: doorDrops[p.id] ?? false })), state, arrange, help: true, tips, windows,
     });
     return bar("tab-bar", c, {
       presses, wires,

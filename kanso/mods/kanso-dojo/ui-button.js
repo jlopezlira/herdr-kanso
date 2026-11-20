@@ -56,7 +56,8 @@ export function button(id, label, onClick, c, { kind = "solid", icon = null, sma
   const glyph = icon ? svg(glyphOf(icon)).size(square ? box.glyph : ICON_ROW).flex_none().text_color(ink) : null;
   const face = [content].flat().filter(Boolean), drawn = face.length > 0;
   // The ring is a border kept clear at rest, so focusing never resizes the box.
-  const frame = Button.new(name ? `${id}-${name}` : id).when(square || !drawn, (el) => el.h(side)).flex_none().items_center().justify_center().gap(G.sm).rounded(R.control)
+  const key = name ? `${id}-${name}` : id;
+  const frame = Button.new(key).when(square || !drawn, (el) => el.h(side)).flex_none().items_center().justify_center().gap(G.sm).rounded(R.control)
     .border_2().border_color(focus ? c.accent : CLEAR).focus((s) => s.border_color(c.accent))
     .disabled(disabled)
     .accessibility_label(on && verb ? pressAgain(verb) : spoken)
@@ -67,7 +68,7 @@ export function button(id, label, onClick, c, { kind = "solid", icon = null, sma
   if (drawn) return pressed.children(face);
   return pressed
     .when(Boolean(glyph), (el) => el.child(spin ? glyph.spin(SPIN) : glyph))
-    .when(square && Boolean(reveal), (el) => el.child(div().h_full().flex().items_center().overflow_hidden().flex_none()
+    .when(square && Boolean(reveal), (el) => el.child(div().id(`${key}-reveal`).h_full().flex().items_center().overflow_hidden().flex_none()
       .w(reveal.shown ? reveal.width : 0).opacity(reveal.shown ? 1 : 0).transition("width", EASE).transition("opacity", EASE)
       .child(text(label).pl(G.xs).whitespace_nowrap())))
     .when(!square, (el) => el.child(verb ? armedLabel(label, verb, on, text, { start: kind === "quiet" }) : text(label)));

@@ -534,6 +534,7 @@ test("A door named under the pointer loses its name when the bar stops drawing i
 
 const drawnTexts = (el) => everyDrawn(el).flatMap((kid) => kid.calls.filter((call) => call[0] === "child" && typeof call[1] === "string").map((call) => call[1]));
 const drawnBox = (el, id) => everyDrawn(el).find((kid) => calls(kid, "id")[0]?.[1] === id);
+const unnamedCodex = () => bar({ tabs: [TABS[0], { ...TABS[1], name: "2", named: false }, TABS[2]], panes: [{ tab: "t2", program: { name: "Codex", agent: true } }] });
 const report = (el, width, cx) => calls(el, "on_size_change").at(-1)[1]({ width, height: 28 }, cx);
 const measureAll = (b, { barWidth, tab = 100, side = 28 }) => {
   const root = b.view.render(b.cx);
@@ -564,8 +565,30 @@ test("A tab nobody named shows its program, as Herdr's own tab bar does, or Term
   const ps = [{ tab: "t2", program: { name: "zsh" } }, { tab: "t2", program: { name: "Claude", agent: true } }, { tab: "t3", program: { name: "vim" } }];
   assert.deepEqual([{ id: "t1", name: "checkout", named: true }, { id: "t2", name: "2", named: false }, { id: "t3", name: "3", named: false }, { id: "t4", name: "4", named: false }].map((t) => tabName(t, ps)),
     ["checkout", "Claude", "vim", "Terminal"]);
-  const b = await bar({ tabs: [TABS[0], { ...TABS[1], name: "2", named: false }, TABS[2]], panes: [{ tab: "t2", program: { name: "Codex", agent: true } }] });
+  const b = await unnamedCodex();
   assert.ok(texts(tab(b.view.render(b.cx), "t2")).includes("Codex"));
+});
+
+test("A custom panel with no icon is a door as high as the others, its name always shown", async () => {
+  const { root } = await panelsBar([{ id: "notes", mod: "notes-panel", label: "Notes" }]);
+  assert.equal(arg(door(root, "Notes"), "h"), arg(door(root, "Files"), "h"));
+  assert.deepEqual(opened(door(root, "Notes")), [true, 1]);
+});
+
+test("Each door's easing name has an id of its own, so a fold during the ease keeps its motion", async () => {
+  const { root } = await prOpen();
+  for (const [label, key] of [["Files", "files"], ["PR", "pr"], ["Ports", "ports"]]) {
+    assert.match(String(calls(revealOf(door(root, label)), "id")[0]?.[1]), new RegExp(`panel:${key}-reveal$`), label);
+  }
+});
+
+test("A tab nobody named is called by its program in its right-click menu and its Sleep action too", async () => {
+  const b = await unnamedCodex();
+  pressOf(tab(b.view.render(b.cx), "t2"), "right")(press, b.cx);
+  const said = drawnTexts(b.view.render(b.cx));
+  assert.ok(said.includes("Codex"), "the menu's title");
+  assert.ok(said.includes("Sleep Codex\u2026"), "and its Sleep action");
+  assert.equal(said.some((text) => text === "2" || text === "Sleep 2\u2026"), false);
 });
 
 test("Every tab draws its name in a box that is measured and never shrinks under it, the chosen one's × after the name", async () => {
