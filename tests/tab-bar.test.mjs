@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { load, clone, chain, gpuiHost, calls, arg, find, all, CHROME_NIGHT, texts, repoText, keyboard } from "./helpers.mjs";
+import { load, clone, chain, gpuiHost, calls, arg, find, all, everyDrawn, CHROME_NIGHT, texts, repoText, keyboard } from "./helpers.mjs";
 import { TABS, tabBar as bar } from "./menu-fixtures.mjs";
 
 const night = CHROME_NIGHT;
@@ -54,7 +54,8 @@ test("Tabs that fit all show; the rest fold behind +N in order, and the chosen t
   assert.deepEqual(clone(foldTabs({ widths, chosen: 0, room: 600, gap: 2, more: 30 })), { shown: [0, 1, 2, 3, 4], folded: [] });
   assert.deepEqual(clone(foldTabs({ widths, chosen: 0, room: 300, gap: 2, more: 30 })), { shown: [0, 1], folded: [2, 3, 4] });
   assert.deepEqual(clone(foldTabs({ widths, chosen: 4, room: 300, gap: 2, more: 30 })), { shown: [0, 4], folded: [1, 2, 3] });
-  assert.deepEqual(clone(foldTabs({ widths, chosen: 0, room: 0, gap: 2, more: 30 })), { shown: [0, 1, 2, 3, 4], folded: [] }, "before the bar is measured nothing folds");
+  assert.deepEqual(clone(foldTabs({ widths, chosen: 0, room: null, gap: 2, more: 30 })), { shown: [0, 1, 2, 3, 4], folded: [] }, "before the bar is measured nothing folds");
+  assert.deepEqual(clone(foldTabs({ widths, chosen: 0, room: 0, gap: 2, more: 30 })), { shown: [0], folded: [1, 2, 3, 4] }, "a bar measured with no room left folds all but the chosen tab");
   assert.deepEqual(clone(foldTabs({ widths: [100, undefined, 100], chosen: 0, room: 210, gap: 2, more: 30 })).shown, [0, 1, 2], "an unmeasured tab draws to be measured");
 });
 
@@ -101,7 +102,7 @@ test("Measured, the chosen tab keeps its own fill: nothing glides under it", asy
   for (const [id, width] of [["t1", 90], ["t2", 70], ["t3", 60]]) b.view.tabW[id] = width;
   const root = b.view.render(b.cx);
   assert.equal(byTag(root, "tab-pill"), null);
-  assert.equal(all(root, (el) => calls(el, "transition").length > 0).length, 0);
+  assert.equal(all(byTag(root, "tab-bar-0"), (el) => calls(el, "transition").length > 0).length, 0);
   assert.equal(arg(tab(root, "t1"), "bg"), b.c.w12);
 });
 
@@ -504,14 +505,67 @@ test("Every door, New tab and Arrange is the kit button with its hover wash and 
   }
 });
 
-test("A door shows its name beside its icon under the pointer and while its panel is open, as before", async () => {
+const revealOf = (el) => find(el, (kid) => calls(kid, "transition").length > 0);
+const opened = (el) => [arg(revealOf(el), "w") > 0, arg(revealOf(el), "opacity")];
+
+test("A door shows its name beside its icon under the pointer and while its panel is open, easing open inside the same 28-high icon button", async () => {
   const { b, root } = await prOpen();
-  assert.ok(texts(door(root, "PR")).includes("PR"), "the open panel's door is named");
-  assert.equal(texts(door(root, "Files")).includes("Files"), false, "a door at rest is its icon");
+  assert.deepEqual(opened(door(root, "PR")), [true, 1], "the open panel's door is named");
+  assert.deepEqual(opened(door(root, "Files")), [false, 0], "a door at rest is its icon");
+  assert.ok(texts(revealOf(door(root, "Files"))).includes("Files"));
   handler(doorBox(root, "Files"), "on_hover")(true, b.cx);
-  assert.ok(texts(door(b.view.render(b.cx), "Files")).includes("Files"), "under the pointer it is named");
+  const hovered = door(b.view.render(b.cx), "Files");
+  assert.deepEqual(opened(hovered), [true, 1], "under the pointer it is named");
+  assert.deepEqual(clone([arg(hovered, "h"), calls(hovered, "transition").length]), [arg(door(root, "Files"), "h"), 0], "the button keeps its height; only the name eases");
   handler(doorBox(b.view.render(b.cx), "Files"), "on_hover")(false, b.cx);
-  assert.equal(texts(door(b.view.render(b.cx), "Files")).includes("Files"), false, "and the name goes when the pointer leaves");
+  assert.deepEqual(opened(door(b.view.render(b.cx), "Files")), [false, 0], "and the name goes when the pointer leaves");
+});
+
+test("A door named under the pointer loses its name when the bar stops drawing it", async () => {
+  const box = { name: "box", layout: "ready" };
+  const b = await bar({ tree: withPanel(null), machine: "box", computers: [box] });
+  handler(doorBox(b.view.render(b.cx), "Files"), "on_hover")(true, b.cx);
+  assert.deepEqual(opened(door(b.view.render(b.cx), "Files")), [true, 1]);
+  box.layout = "unavailable";
+  assert.equal(door(b.view.render(b.cx), "Files"), null, "the computer is out of reach: no doors");
+  box.layout = "ready";
+  assert.deepEqual(opened(door(b.view.render(b.cx), "Files")), [false, 0], "drawn again, it is at rest");
+});
+
+const drawnTexts = (el) => everyDrawn(el).flatMap((kid) => kid.calls.filter((call) => call[0] === "child" && typeof call[1] === "string").map((call) => call[1]));
+const drawnBox = (el, id) => everyDrawn(el).find((kid) => calls(kid, "id")[0]?.[1] === id);
+const report = (el, width, cx) => calls(el, "on_size_change").at(-1)[1]({ width, height: 28 }, cx);
+const measureAll = (b, { barWidth, tab = 100, side = 28 }) => {
+  const root = b.view.render(b.cx);
+  for (const el of all(root, (kid) => /^tab-box-/.test(String(calls(kid, "id")[0]?.[1])))) report(el, tab, b.cx);
+  for (const el of all(root, (kid) => /^(door|tool)-box-/.test(String(calls(kid, "id")[0]?.[1])))) report(el, side, b.cx);
+  report(root, barWidth, b.cx);
+  return b.view.render(b.cx);
+};
+
+test("Folding takes every width from the drawn controls' own size reports: no room left folds all but the chosen tab, and +N lists the rest", async () => {
+  const b = await bar({ tree: withPanel(null) });
+  const tight = measureAll(b, { barWidth: ROOM });
+  assert.deepEqual(["t1", "t2", "t3"].filter((id) => tab(tight, id)), ["t1"], "measured to the last pixel, the chosen tab stays and the others fold");
+  assert.ok(drawnTexts(tight).includes("+2"));
+  report(drawnBox(tight, "tab-bar-more-box"), 30, b.cx);
+  assert.equal(b.view.barW.more, 30, "+N reports its own width");
+  b.view.moreOpen = true;
+  assert.ok(["cart-ui", "tests"].every((name) => drawnTexts(b.view.render(b.cx)).includes(name)), "+N lists the folded tabs");
+  b.view.moreOpen = false;
+  const roomy = measureAll(b, { barWidth: ROOM + 3 * 100 + 2 * 2 });
+  assert.deepEqual(["t1", "t2", "t3"].filter((id) => tab(roomy, id)), ["t1", "t2", "t3"], "with room for all three, all show");
+  assert.equal(drawnTexts(roomy).includes("+2"), false);
+  assert.deepEqual(Object.keys(b.view.toolW).toSorted(), ["arrange", "plus"], "New tab and Arrange are measured like the doors");
+});
+
+test("A tab nobody named shows its program, as Herdr's own tab bar does, or Terminal; a named tab keeps its name", async () => {
+  const { tabName } = await load("kanso-tabs/tab-bar-model.js", ["tabName"]);
+  const ps = [{ tab: "t2", program: { name: "zsh" } }, { tab: "t2", program: { name: "Claude", agent: true } }, { tab: "t3", program: { name: "vim" } }];
+  assert.deepEqual([{ id: "t1", name: "checkout", named: true }, { id: "t2", name: "2", named: false }, { id: "t3", name: "3", named: false }, { id: "t4", name: "4", named: false }].map((t) => tabName(t, ps)),
+    ["checkout", "Claude", "vim", "Terminal"]);
+  const b = await bar({ tabs: [TABS[0], { ...TABS[1], name: "2", named: false }, TABS[2]], panes: [{ tab: "t2", program: { name: "Codex", agent: true } }] });
+  assert.ok(texts(tab(b.view.render(b.cx), "t2")).includes("Codex"));
 });
 
 test("Every tab draws its name in a box that is measured and never shrinks under it, the chosen one's × after the name", async () => {

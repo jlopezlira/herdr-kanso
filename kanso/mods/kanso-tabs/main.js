@@ -13,7 +13,7 @@ import { walkLayout, commitLayout, sidebarBack, foldSidebar, dropStripDrag } fro
 import { Updater } from "./update.js";
 import { tryOr, readCommands, bounded } from "./pure.js";
 import { openArrange } from "./open.js";
-import { DIALOG, G, glyphOf, tokens } from "./ui.js";
+import { DIALOG, G, T, glyphOf, tokens } from "./ui.js";
 import { pressAgain, Armed } from "./ui-button.js";
 import { TextField } from "./ui-field.js";
 import { menu } from "./ui-menu.js";
@@ -23,7 +23,7 @@ import { tabBar } from "./tab-bar.js";
 import { boundChord, hintOf } from "./ui-tooltip.js";
 import { TAB_NAME_LIMIT } from "./ui-tab.js";
 import { pieceLines } from "./piece-lines.js";
-import { tabMark, barState, foldTabs, renameWaits, landing, heldOn, dropMarks } from "./tab-bar-model.js";
+import { tabMark, tabName, barState, foldTabs, renameWaits, landing, heldOn, dropMarks } from "./tab-bar-model.js";
 import { Kdb, projectKey } from "./kdb.js";
 import { projectOpen, OPEN } from "./panel-state.js";
 import { TOOLS, PROBE_MS, probeTools, available, UNKNOWN_TOOLS, FAILED_TOOLS } from "./sim-registration.js";
@@ -115,6 +115,8 @@ function panelContent(id) {
 // A size reported after layout: the sizes with it, or the same ones when it moved less than half a pixel.
 const withSize = (sizes, key, width) => (Math.abs((sizes[key] ?? 0) - width) < 0.5 ? sizes : { ...sizes, [key]: width });
 const closeKey = (tab) => `close-${tab.id}`;
+const GLYPH_SHARE = 0.57;
+const nameWidth = (label) => Math.ceil(String(label).length * T.value * GLYPH_SHARE) + G.md;
 const measured = (id, onSize) => (el) => div().id(id).flex_none().on_size_change(onSize).child(el);
 
 // Reads and removes the paths waiting in the inbox; returns the newest.
@@ -128,6 +130,7 @@ export default class Tabs extends View {
   tabW = {};
   barW = {};
   doorW = {};
+  toolW = {};
   hoverPanel = null;
   armed = new Armed();
   tabMenu = null;
@@ -446,13 +449,13 @@ export default class Tabs extends View {
   }
 
   // What the tab draws now: its mark, the press that arms it, the rename in place or waiting, the hold while it is dragged.
-  tabLook(tab) {
+  tabLook(tab, ps) {
     // Armed only while its × is there to press again: the chosen tab.
     const armed = tab.active && this.armed.is(closeKey(tab));
     const waiting = this.renamed?.id === tab.id;
     return {
-      key: tab.id, label: waiting ? this.renamed.name : tab.name, mark: shown("tabs.state", true, pieces(shared)) ? tabMark(tab) : null, armed, pending: waiting,
-      tip: armed ? pressAgain(`close ${tab.name}`) : null,
+      key: tab.id, label: waiting ? this.renamed.name : tabName(tab, ps), mark: shown("tabs.state", true, pieces(shared)) ? tabMark(tab) : null, armed, pending: waiting,
+      tip: armed ? pressAgain(`close ${tabName(tab, ps)}`) : null,
       held: heldOn(tab.id, this.pressed, this.dropAt),
       editing: this.renaming?.id === tab.id ? this.renaming.text : null,
     };
@@ -469,6 +472,10 @@ export default class Tabs extends View {
         .on_key_down((e, cx) => { if (this.renaming?.id === tab.id && e.key === "escape") { cx.stop_propagation(); this.endRename(cx, false); } }) : el;
       return box(this.tabMenu === tab.id ? this.tabMenuPopover(c, wired, tab, { space, ps }) : wired);
     };
+  }
+
+  toolBox(key) {
+    return measured(`tool-box-${key}`, (s, cx) => { this.toolW = this.sized(this.toolW, key, s.width, cx); });
   }
 
   doorWire(c, p) {
@@ -557,15 +564,16 @@ export default class Tabs extends View {
     if (now && now !== "preview" && !enabled.includes(now) && !this.inFlight(now)) this.mount(null);
     const windows = Boolean(window()?.buttons);
     const doors = connected ? shownPanels : [];
-    const tools = connected ? (arrange ? 2 : 1) : 0;
+    const tools = connected ? [this.toolW.plus ?? null, ...(arrange ? [this.toolW.arrange ?? null] : [])] : [];
     const fixed = Array.from({ length: 1 + (windows ? 3 : 0) }, () => null);
-    const room = this.barW.bar ? tabBarRoom(this.barW.bar, { tools, doors: [...doors.map((p) => this.doorW[p.id] ?? null), ...fixed] }) : 0;
+    const room = this.barW.bar === undefined ? null : tabBarRoom(this.barW.bar, { tools, doors: [...doors.map((p) => this.doorW[p.id] ?? null), ...fixed] });
+    if (this.hoverPanel && !doors.some((p) => p.id === this.hoverPanel)) this.hoverPanel = null;
     const { shown: kept, folded } = connected ? foldTabs({ widths: openTabs.map((tab) => this.tabW[tab.id]), chosen: openTabs.findIndex((tab) => tab.active), room, gap: G.hair, more: (this.barW.more ?? 0) + G.sm })
       : { shown: openTabs.map((_, i) => i), folded: [] };
     const drawn = kept.map((i) => openTabs[i]);
     const drops = dropMarks(drawn.map((tab) => tab.id), this.pressed, this.dropAt);
     const doorDrops = dropMarks(doors.map((p) => p.id), this.dragPanel, this.dropPanel);
-    const items = drawn.map((tab) => ({ ...this.tabLook(tab), closable: openTabs.length > 1, drop: drops[tab.id] ?? false }));
+    const items = drawn.map((tab) => ({ ...this.tabLook(tab, ps), closable: openTabs.length > 1, drop: drops[tab.id] ?? false }));
     const more = plus(folded.length);
     const stop = (el) => el.on_mouse_down("left", (_e, cx) => cx.stop_propagation());
     const tips = {
@@ -584,14 +592,15 @@ export default class Tabs extends View {
     const wires = {
       ...Object.fromEntries(drawn.map((tab) => [`tab:${tab.id}`, this.tabWire(c, tab, { space, ps, connected })])),
       ...Object.fromEntries(doors.map((p) => [`panel:${p.id}`, this.doorWire(c, p)])),
-      plus: (el) => stop(el).on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); openArrange(); }),
-      ...Object.fromEntries(["panels-top-left", "circle-question-mark", "minus", "square", "x"].map((key) => [key, stop])),
+      plus: (el) => this.toolBox("plus")(stop(el).on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); openArrange(); })),
+      "panels-top-left": (el) => this.toolBox("arrange")(stop(el)),
+      ...Object.fromEntries(["circle-question-mark", "minus", "square", "x"].map((key) => [key, stop])),
       [more]: measured("tab-bar-more-box", (s, cx) => { this.barW = this.sized(this.barW, "more", s.width, cx); }),
     };
     const bar = tabBar({
-      items, value: openTabs.find((tab) => tab.active)?.id ?? null, folded: folded.map((i) => ({ key: openTabs[i].id, label: openTabs[i].name, mark: tabMark(openTabs[i]) })),
+      items, value: openTabs.find((tab) => tab.active)?.id ?? null, folded: folded.map((i) => ({ key: openTabs[i].id, label: tabName(openTabs[i], ps), mark: tabMark(openTabs[i]) })),
       overflow: this.moreOpen, panel: now,
-      panels: doors.map((p) => ({ key: p.id, label: p.label, icon: p.icon, named: !p.icon || now === p.id || this.hoverPanel === p.id, held: heldOn(p.id, this.dragPanel, this.dropPanel), drop: doorDrops[p.id] ?? false })), state, arrange, help: true, tips, windows,
+      panels: doors.map((p) => ({ key: p.id, label: p.label, icon: p.icon, reveal: { shown: now === p.id || this.hoverPanel === p.id, width: nameWidth(p.label) }, held: heldOn(p.id, this.dragPanel, this.dropPanel), drop: doorDrops[p.id] ?? false })), state, arrange, help: true, tips, windows,
     });
     return bar("tab-bar", c, {
       presses, wires,
