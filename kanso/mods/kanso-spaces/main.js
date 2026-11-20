@@ -152,7 +152,7 @@ const registry = () => { const rows = shared(REGISTRY); return Array.isArray(row
 // A sleep's key as a project's (a trailing / never makes two of one place).
 const sameKey = (key) => { const i = String(key).indexOf(":"); return `${key.slice(0, i)}:${trimmed(key.slice(i + 1))}`; };
 const projectAt = (key) => registry().find((p) => keyOfProject(p) === sameKey(key)) ?? null;
-const ROW_SHARED = [REGISTRY, NEEDS_YOU, "strip.state", SLEEP_PENDING, SLEEP_WAKING, SLEEP_FAILED, FORGET_HELD, STORE, KNOWN_AGENTS, "kanso.battery"];
+const ROW_SHARED = [REGISTRY, NEEDS_YOU, "strip.state", SLEEP_PENDING, SLEEP_WAKING, SLEEP_FAILED, FORGET_HELD, STORE, KNOWN_AGENTS, "kanso.battery", "space.colors"];
 const rowInputs = () => ({ spaces: spaces(), panes: panes(), terminals: terminals(), agents: agents(), machines: machines(), focused: focused(), front: window()?.active === true, keys: keys(),
   shared: ROW_SHARED.map((key) => shared(key)) });
 const ROW_STATE = ["hoverRow", "hoverSpace", "hoverHead", "hoverMachine", "pressed", "over", "draggedAgent", "overAgent", "kbd", "navKey", "needsOpen", "needsEmpty", "foldH", "folded",
@@ -419,13 +419,13 @@ export default class Spaces extends View {
 
   rowsShown(now = Date.now()) {
     const fold = this.folding && { ...this.folding, moving: this.unfolded(this.folding.id, false, now) };
-    const { project, expanded } = this.sinceLeft;
-    return JSON.stringify({ ...rowInputs(), own: ROW_STATE.map((key) => listed(this[key])), fold, away: [project, expanded], remembered: listed(this.panel.agents),
-      narrow: narrowAt(this.width), born: Object.entries(this.born).map(([id, at]) => [id, bornBy(at, now)]), minute: Math.floor(now / MINUTE_MS) });
+    return JSON.stringify({ ...rowInputs(), own: ROW_STATE.map((key) => listed(this[key])), fold, away: [this.sinceLeft?.project, this.sinceLeft?.expanded],
+      remembered: listed(this.panel?.agents), ring: Boolean(this.kbd && this.handle.is_focused()), narrow: narrowAt(this.width),
+      born: Object.entries(this.born ?? {}).map(([id, at]) => [id, bornBy(at, now)]), minute: Math.floor(now / MINUTE_MS) });
   }
 
   rowsReplaced() {
-    return [...ROW_REPLACED.map((key) => this[key]), this.names.book, this.sinceLeft.rows];
+    return [...ROW_REPLACED.map((key) => this[key]), this.names.book, this.sinceLeft?.rows];
   }
 
   rowsChanged() {
@@ -2098,8 +2098,9 @@ export default class Spaces extends View {
       try {
         const before = this.threads ?? {};
         const next = await findThreads(list, before, terminals(), this.threadLocator);
+        if (this.threads && Object.keys(before).length === Object.keys(next).length && Object.keys(next).every((id) => next[id] === before[id])) return;
         this.threads = next;
-        if (Object.keys(before).length !== Object.keys(next).length || Object.keys(next).some((id) => next[id] !== before[id])) this.redraw();
+        this.redraw();
       } catch { this.threads ??= {}; }
       finally { this.readingThreads = false; }
     });

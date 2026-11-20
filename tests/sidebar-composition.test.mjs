@@ -99,10 +99,16 @@ test("A shared value the rows do not show changes, and the sidebar's refresh dra
 });
 
 test("A refresh that changes nothing the rows show does not draw them again, and a hover, a press or a fold does", async (t) => {
-  const { cx, view, renders } = await mounted(t);
+  const { f, cx, view, draw, renders } = await mounted(t);
+  await f.advance(3000);
+  await draw();
+  assert.ok(view.threads && Object.keys(view.threads).length > 0, "the conversations are read");
   const rows = () => renders().rows;
   const before = rows();
   view.redraw(cx);
+  view.redraw(cx);
+  view.refreshThreads(cx);
+  await f.settle();
   view.redraw(cx);
   assert.equal(rows(), before, "nothing the rows show changed");
   view.hoverRow = "t2";
