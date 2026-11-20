@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { load, nodes, texts, svgsOf, themed, calls, arg, KIT_NIGHT, popoverHost as host, everyDrawn as every, blockedDots, repoText, numberArguments } from "./helpers.mjs";
-import { loadSidebar, mountedState, recorder } from "./sidebar-fixtures.mjs";
+import { loadSidebar, mountedState, withParts, recorder } from "./sidebar-fixtures.mjs";
 import { mountChrome } from "./mod-fixtures.mjs";
 
 const compositions = async () => themed({
@@ -133,7 +133,7 @@ test("Dawn Mode's art is the sky in each theme's colours", async () => {
 test("The app sidebar draws its header from the composition, the lights left to the window's block above", async () => {
   const drawn = recorder();
   const { Spaces } = await loadSidebar(drawn.host, { window: () => ({ platform: "macos", active: true }) });
-  Object.assign(new Spaces(), mountedState({ order: "attention" })).render();
+  withParts(Object.assign(new Spaces(), mountedState({ order: "attention" }))).render();
   assert.ok(drawn.ids.includes("spaces-header"));
   assert.ok(drawn.tips.includes("Sort: Needs you first"), "Sort's tooltip names the order");
   assert.ok(["Add project", "Search", "Hide sidebar"].every((tip) => drawn.tips.includes(tip)));
@@ -163,7 +163,7 @@ const rail = async (own = {}) => {
     agents: () => [{ address: "t1", pane: "p1", tab: "tab1", space: "sp1", space_name: "app", status: "blocked", program: { agent: true, name: "Claude Code" }, title: "t1", seq: 1 }],
     window: () => ({ platform: "macos", active: true }), openOverlay() {}, run() {},
   });
-  const view = Object.assign(new Spaces(), mountedState({ shown: new Set(["sp1"]), ...own.state }));
+  const view = withParts(Object.assign(new Spaces(), mountedState({ shown: new Set(["sp1"]), ...own.state })));
   return { view, drawn, dots, render: () => { drawn.clear(); view.render(); } };
 };
 
@@ -190,6 +190,7 @@ test("Collapsed, while someone needs you and Status is not on show, the view but
 test("A view key shuts the collapsed view menu, as a pick from it does", async () => {
   const { view, render, drawn } = await rail({ state: { view: "threads", threads: {} } });
   view.viewMenu = true;
+  view.paint();
   render();
   assert.ok(drawn.ids.some((id) => id.startsWith("rail-view-menu")), "the menu is on screen");
   view.command("view-agents", cx);

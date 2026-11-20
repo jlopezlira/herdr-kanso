@@ -71,7 +71,7 @@ test("No tooltip writes a chord by hand: the old hand-written tips and the view 
 
 test("The view switch, the palette, the tab bar's tools and the strip's stepper read their chords from the key table", () => {
   const uses = {
-    "kanso/mods/kanso-spaces/main.js": ["boundChord(`kanso-spaces.view-${key}`)"],
+    "kanso/mods/kanso-spaces/main.js": ["boundChord(`kanso-spaces.view-${key}`, bindings)"],
     "kanso/mods/kanso-status/main.js": ["boundChord(PALETTE_COMMAND)"],
     "kanso/mods/kanso-tabs/main.js": ['boundChord("kanso-strip.arrange")', 'boundChord("mod.open:kanso-help")'],
     "kanso/mods/kanso-strip/main.js": ['boundChord("kanso-strip.fewer")', 'boundChord("kanso-strip.more")', 'boundChord("kanso-strip.fit")'],

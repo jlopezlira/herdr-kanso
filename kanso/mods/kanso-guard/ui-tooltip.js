@@ -20,7 +20,10 @@ export const boundChord = (action, bindings = keys()) => bindings.find((binding)
 
 export const chordOf = (action, platform) => glyphs(boundChord(action), platform);
 
-export const hintOf = (action) => (action && boundChord(action) ? chordOf(action) : null);
+export const hintOf = (action, bindings = keys()) => {
+  const chord = action ? boundChord(action, bindings) : "";
+  return chord ? glyphs(chord) : null;
+};
 
 export const tipText = ({ label, detail = "", chord = "" }, platform) => [String(label ?? ""), chord ? glyphs(chord, platform) : "", detail ? `· ${detail}` : ""]
   .filter(Boolean).join(" ");

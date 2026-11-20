@@ -3,7 +3,7 @@ import { loadSpaces, temporaryKdbFile } from "./mod-fixtures.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { load, clone, temporary, exec, context, failure, popoverHost, keyboard, calls, arg, tipsOf, svgsOf, find } from "./helpers.mjs";
-import { loadSidebar, mountedState, recorder } from "./sidebar-fixtures.mjs";
+import { loadSidebar, mountedState, withParts, recorder } from "./sidebar-fixtures.mjs";
 
 const record = { name: "dark", target: "dark.example", via: "", session: "", temporary: false };
 const darkKey = JSON.stringify(["dark", "/srv"]);
@@ -126,7 +126,7 @@ async function sidebar(state) {
     shared: (key) => (key === "sidebar.collapsed" ? state.collapsed === true : null),
     spaces: () => state.spaces, machines: () => state.layouts, run: state.run ?? (() => {}),
   });
-  const view = Object.assign(new Spaces(), mountedState({
+  const view = withParts(Object.assign(new Spaces(), mountedState({
     shown: new Set(state.spaces.map((space) => space.id)),
     machines: state.live ?? [], parked: state.parked ?? [],
     waking: state.waking ?? new Set(), login: state.login ?? new Set(), failed: state.failed ?? new Set(),
@@ -134,7 +134,7 @@ async function sidebar(state) {
     kbd: state.kbd === true, navKey: state.navKey ?? null,
     handle: { is_focused: () => state.kbd === true, focus() {} },
     hostName: state.hostName ?? "macbook", tools: node, sync: state.sync ?? { config: {}, status: {} },
-  }));
+  })));
   view.render();
   return { view, ids, texts, tips };
 }
@@ -512,7 +512,7 @@ test("On the rail a computer is a Tile like the projects beside it: Tab reaches 
   const { Spaces } = await loadSidebar(popoverHost(), {
     shared: (key) => (key === "sidebar.collapsed" ? true : null), spaces: () => connected.spaces, machines: () => connected.layouts, openOverlay: (overlay) => opened.push(Object.keys(overlay.props)[0]),
   });
-  const view = Object.assign(new Spaces(), mountedState({ shown: new Set(connected.spaces.map((space) => space.id)), machines: connected.live }));
+  const view = withParts(Object.assign(new Spaces(), mountedState({ shown: new Set(connected.spaces.map((space) => space.id)), machines: connected.live })));
   const walk = () => {
     const keys = keyboard(view.render());
     const at = keys.stops.findIndex((stop) => stop.tag === "machine-dark");

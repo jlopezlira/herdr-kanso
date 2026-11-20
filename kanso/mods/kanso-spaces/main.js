@@ -56,10 +56,10 @@ import { createAwake, keepAwake } from "./awake.js";
 import { NEEDS_YOU, EMPTY_NOTICE_MS, waitingSignature, sleepingSignature, sameQueue, waitingQueue, nextWaiting, queueState } from "./needs-you.js";
 import { queueControl, queueList } from "./needs-you-view.js";
 import { Visits, visited, stepped, beside } from "./agent-nav.js";
-import { spaces, machines, panes, agents, terminals, run, openOverlay, closeOverlay, props, exec, hc, theme, shared, setShared, watchFolder, window, nextCommand, focused, home, appHome, pickFolder, knownAgents, notify, updates } from "herdr";
+import { spaces, machines, panes, agents, terminals, run, openOverlay, closeOverlay, props, exec, hc, theme, shared, setShared, watchFolder, window, nextCommand, focused, home, appHome, pickFolder, knownAgents, notify, keys, updates } from "herdr";
 import { sidebarFooter } from "./sidebar-footer.js";
 import { ITEM, COLLAPSED, KANSO_SETTINGS, explainRefusal, refusalBlock, settingsEntries, updateLabel } from "./footer-model.js";
-import { Updater } from "./update.js";
+import { Updater, STATE as UPDATE_STATE } from "./update.js";
 import { explainWith, findExplainer } from "./explain.js";
 
 const PREFS = ["machines.folded", "spaces.agentsFolded", "spaces.order", "spaces.statusOrder", "spaces.threadOrder", "spaces.threadGroup",
@@ -194,11 +194,9 @@ const sidebarPart = (owner) => class SidebarPart extends View {
   render() {
     if (this.look.piece === "header") return owner.header(this.look);
     if (this.look.piece === "switch") return owner.switchPart(this.look);
-    return owner.rows();
+    return owner.rows(this.look);
   }
 };
-
-const openSettings = (page = "pieces") => openOverlay({ mod: "kanso-settings", kind: "dialog", width: DIALOG.settingsW, height: DIALOG.settingsH, props: { page } });
 
 export class SidebarFooter extends View {
   init(look, cx) {
@@ -218,7 +216,7 @@ export class SidebarFooter extends View {
   settingsMenu() {
     if (!this.menuOpen) return null;
     const acts = {
-      [ITEM.kanso]: (cx) => { this.setMenu(false, cx); openSettings(); },
+      [ITEM.kanso]: (cx) => { this.setMenu(false, cx); run(KANSO_SETTINGS); },
       [ITEM.herdr]: (cx) => { this.setMenu(false, cx); run("app.settings"); },
       [ITEM.updateHerdr]: (cx) => this.armed.press(ITEM.updateHerdr, cx, () => run("app.update")),
     };
@@ -382,22 +380,29 @@ export default class Spaces extends View {
   }
 
   looks() {
-    const collapsed = shared(COLLAPSED) === true, map = pieces(shared);
+    const collapsed = shared(COLLAPSED) === true, map = pieces(shared), bindings = keys();
     const switchOn = shown("sidebar.switch", true, map) !== false;
     const view = switchOn ? this.view : "spaces";
+    const finding = Boolean(this.finding && this.find && !collapsed);
+    const orders = { order: this.order, statusOrder: this.statusOrder, threadOrder: this.threadOrder, threadGroup: Boolean(this.threadGroup) };
+    const { latest = null, channel = null, tag = null, refused = null, installs = null } = shared(UPDATE_STATE) ?? {};
     return {
-      header: { piece: "header", view, collapsed, tools: this.toolsOpen === true, sortOpen: this.orderOpen ?? null, order: this.order, statusOrder: this.statusOrder,
-        threadOrder: this.threadOrder, threadGroup: Boolean(this.threadGroup), activity: shown("sidebar.activity", true, map) !== false, away: runs("sidebar.away", map) !== false, switch: switchOn },
-      switch: { piece: "switch", view: this.view, collapsed, finding: Boolean(this.finding && this.find && !collapsed), shown: switchOn && !(collapsed && view === "spaces"),
+      header: { piece: "header", view, collapsed, tools: this.toolsOpen === true, sortOpen: this.orderOpen ?? null, ...orders,
+        activity: shown("sidebar.activity", true, map) !== false, away: runs("sidebar.away", map) !== false, switch: switchOn },
+      switch: { piece: "switch", view: this.view, collapsed, finding, focused: finding && this.find.focused === true, shown: switchOn && !(collapsed && view === "spaces"),
         open: collapsed && this.viewMenu === true, asks: visibleSpaces(spaces(), this.offNames()).some((s) => s.status === "blocked"),
-        chords: Object.fromEntries(Object.keys(VIEWS).map((key) => [key, boundChord(`kanso-spaces.view-${key}`)])) },
-      rows: { piece: "rows", at: this.rowsAt ?? 0 },
-      footer: { collapsed, update: shared("kanso.update") ?? null, ready: updates()?.app?.ready ?? null, hint: hintOf(KANSO_SETTINGS) },
+        chords: Object.fromEntries(Object.keys(VIEWS).map((key) => [key, boundChord(`kanso-spaces.view-${key}`, bindings)])) },
+      rows: { piece: "rows", view, collapsed, ...orders, query: finding ? this.find.value() : null, at: this.rowsAt ?? 0 },
+      footer: { collapsed, update: { latest, channel, tag, refused, installs }, ready: updates()?.app?.ready ?? null, hint: hintOf(KANSO_SETTINGS, bindings) },
     };
   }
 
-  paint() {
+  redraw() {
     this.rowsAt = (this.rowsAt ?? 0) + 1;
+    this.paint();
+  }
+
+  paint() {
     const next = this.looks();
     Object.entries(next).filter(([name, look]) => JSON.stringify(look) !== JSON.stringify(this.drawnLooks?.[name])).forEach(([name, look]) => this.parts[name].set_props(look));
     this.drawnLooks = next;
@@ -823,7 +828,9 @@ export default class Spaces extends View {
     if (!this.find) {
       this.find = new TextField({ placeholder: "Find" });
       this.find.on("change", () => this.paint());
-      this.find.on("submit", (_e, cx) => { this.enterList(cx, true); this.paint(); });
+      this.find.on("focus", () => this.paint());
+      this.find.on("blur", () => this.paint());
+      this.find.on("submit", (_e, cx) => { this.enterList(cx, true); this.redraw(); });
     }
     this.finding = true;
     this.find.focus();
@@ -840,9 +847,8 @@ export default class Spaces extends View {
 
   findField(t) {
     const c = tokens(t);
-    return h_flex().id("spaces-find").flex_none().items_center().pl(G.sm).pr(SIDEBAR.gutter).pb(G.sm)
-      .on_key_down((e, cx) => { if (e.key === "escape") { cx.stop_propagation(); this.closeFind(); } })
-      .child(div().flex_1().min_w(0).child(field("spaces-find-field", this.find, c, { lead: "search", icon: "x", iconTip: "Close", onIcon: () => this.closeFind(), spoken: "Find" })));
+    return stack({ variant: "sidebar find" }, field("spaces-find-field", this.find, c, { lead: "search", icon: "x", iconTip: "Close", onIcon: () => this.closeFind(), spoken: "Find" }))("spaces-find", c)
+      .on_key_down((e, cx) => { if (e.key === "escape") { cx.stop_propagation(); this.closeFind(); } });
   }
 
   // What the sidebar already knows, by name, step, branch or folder; a project that matches keeps all its sessions, one that does not stays for the sessions that do.
@@ -2005,7 +2011,7 @@ export default class Spaces extends View {
   setShown(key, on) {
     if (key === "switch" && !on) this.setView("spaces");
     this.hide({ switch: "sidebar.switch", activity: "sidebar.activity", away: AWAY_PIECE }[key], !on);
-    this.paint();
+    this.redraw();
   }
 
   // Hide stores hide; showing again stores the piece's default.
@@ -2028,7 +2034,7 @@ export default class Spaces extends View {
     this.setView("agents", cx);
     this.sectionsFolded.delete("asleep");
     this.panel.set("spaces.sections", [...this.sectionsFolded]);
-    this.paint();
+    this.redraw();
   }
 
   checkAlive(cx, now = Date.now(), active = window().active) {
@@ -2058,7 +2064,7 @@ export default class Spaces extends View {
         const before = this.threads ?? {};
         const next = await findThreads(list, before, terminals(), this.threadLocator);
         this.threads = next;
-        if (Object.keys(before).length !== Object.keys(next).length || Object.keys(next).some((id) => next[id] !== before[id])) this.paint();
+        if (Object.keys(before).length !== Object.keys(next).length || Object.keys(next).some((id) => next[id] !== before[id])) this.redraw();
       } catch { this.threads ??= {}; }
       finally { this.readingThreads = false; }
     });
@@ -2819,7 +2825,7 @@ export default class Spaces extends View {
     if (props()?.worktree) return this.worktreeView(t);
     if (props()?.machineMenu) return this.computerMenuView(t);
     const { header, switch: views, rows, footer } = this.parts;
-    if (!this.painting) { this.painting = true; this.paintTimer.after(0, () => { this.painting = false; this.paint(); }); }
+    if (!this.painting) { this.painting = true; this.paintTimer.after(0, () => { this.painting = false; this.redraw(); }); }
     return stack({ variant: "sidebar" }, header, views, rows, footer)("spaces-root", tokens(t)).track_focus(this.handle)
       .on_key_down((e, cx) => this.listKeyDown(e, cx))
       .on_size_change((size, cx) => this.sized(size.width, cx))
@@ -2827,9 +2833,8 @@ export default class Spaces extends View {
       .on_mouse_up("left", dropStripDrag);
   }
 
-  rows() {
+  rows({ view, collapsed, query }) {
     const t = theme();
-    const collapsed = shared("sidebar.collapsed") === true;
     if (this.sinceLeft) this.sinceLeft.showing = false;
     this.narrow = !collapsed && (this.width ?? SIDEBAR.w) < SIDEBAR.narrow;
     // The keyboard left (a click on a pane, say): the ring goes too.
@@ -2846,9 +2851,6 @@ export default class Spaces extends View {
     this.showAway = runs("sidebar.away", map);
     this.showTime = shown("sidebar.time", true, map);
     this.showTasks = runs("sidebar.tasks", map);
-    const switchShown = this.showSwitch !== false;
-    // Collapsed, the rail keeps the view you chose: projects as avatars, agents and threads as tiles.
-    const view = switchShown ? this.view : "spaces";
     const read = { terms: terminals(), alive: this.alive, strip: shared("strip.state") ?? {}, places: placesOf(sp, ps), now: Date.now() };
     // Each terminal now: a conversation read from another process in it is not this one's.
     this.termBy = new Map(read.terms.map((k) => [k.address, k]));
@@ -2857,9 +2859,8 @@ export default class Spaces extends View {
     const rowsCtx = { ...read, asleep, spaces: sp, registry: registry(), spaceIds: new Set(sp.map((w) => w.id)), all: this.listed(ps, sp, read.terms).filter((a) => !asleep.dozing.has(a.address)) };
     const ctx = { ...rowsCtx, rowsBy: new Map(sp.map((w) => [w.id, this.spaceRows(w.id, rowsCtx)])), project: this.projectOf(sp, t) };
     const queue = this.refreshNeeds(sp, read.terms, asleep);
-    const finding = Boolean(this.finding && this.find && !collapsed);
-    const query = finding ? this.find.value().trim().toLowerCase() : "";
-    const lens = query ? this.narrowed(query, sp, ctx) : null;
+    const words = (query ?? "").trim();
+    const lens = words ? this.narrowed(words.toLowerCase(), sp, ctx) : null;
     const shownSp = lens?.sp ?? sp, shownCtx = lens?.ctx ?? ctx;
     this.seenNow = this.seen(sp, ctx);
     this.seenAt = ctx.now; // when it was seen: a later write of it is no newer
@@ -2868,7 +2869,7 @@ export default class Spaces extends View {
     const rows = stack({ variant: "sidebar rows" },
       shown("sidebar.needs", queue.rows.length > 0 || this.needsEmpty, map) ? queueControl(t, queue, collapsed, this.needsEmpty && !queue.rows.length, (cx) => this.toggleNeeds(cx)) : null,
       needsListOpen ? [this.needsList(t, queue, read.now)] : [this.list(t, collapsed, view,
-        lens?.none ? [item(emptyState({ icon: "search", text: `No match for \u201c${this.find.value().trim()}\u201d` })("spaces-find-empty", tokens(t)), H.line * 3)]
+        lens?.none ? [item(emptyState({ icon: "search", text: `No match for \u201c${words}\u201d` })("spaces-find-empty", tokens(t)), H.line * 3)]
           : view === "agents" ? (collapsed ? this.agentsRail(t, shownSp, shownCtx) : this.agentsView(t, shownSp, ps, shownCtx))
           : view === "threads" ? (collapsed ? this.threadsRail(t, shownSp, shownCtx) : this.threadsView(t, shownSp, ps, shownCtx)) : this.grouped(t, collapsed, shownSp, ps, shownCtx)),
         collapsed ? null : this.awayCard(t, active)])("spaces-rows", tokens(t));

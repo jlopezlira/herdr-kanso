@@ -1,5 +1,5 @@
 import { loadStrip, loadTabs, loadTabPanels } from "./mod-fixtures.mjs";
-import { loadSidebar, mountedState, recorder } from "./sidebar-fixtures.mjs";
+import { loadSidebar, mountedState, withParts, recorder } from "./sidebar-fixtures.mjs";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { clone, load, layoutHost } from "./helpers.mjs";
@@ -314,9 +314,9 @@ test("kanso-spaces passes an explicit machine to space.new for local, remote, an
     spaces: spList, machines: () => [{ name: null, layout: "ready" }, { name: "odin", layout: "ready" }],
     run: (cmd, args) => calls.push([cmd, clone(args ?? null)]),
   });
-  const view = Object.assign(new Spaces(), mountedState({
+  const view = withParts(Object.assign(new Spaces(), mountedState({
     shown: new Set(["odin/sp1"]), machines: [{ name: "odin", state: "connected", target: "odin.example" }], tools: node,
-  }));
+  })));
   view.hoverMachine = "local";
   view.render();
 

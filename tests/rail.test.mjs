@@ -1,5 +1,5 @@
 // The collapsed sidebar's rail: one mark per group, its popup, and Hide sidebar.
-import { loadSidebar, mountedState, recorder, SIDEBAR_THEME } from "./sidebar-fixtures.mjs";
+import { loadSidebar, mountedState, withParts, recorder, SIDEBAR_THEME } from "./sidebar-fixtures.mjs";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { clone, layoutHost, watchPopups } from "./helpers.mjs";
@@ -76,8 +76,8 @@ test("collapsed on Status or Threads, the rail draws that view's tiles", async (
   const spaces = [{ id: "sp1", name: "app", folder: "/w", machine: null, active: true, tabs: [{ id: "tab1" }] }];
   const agent = (address, status, seq) => ({ address, pane: `p${seq}`, tab: "tab1", space: "sp1", space_name: "app", status, program: { agent: true, name: "Claude Code" }, title: address, seq });
   const { Spaces } = await loadSidebar(host, { shared: (key) => (key === "sidebar.collapsed" ? true : null), spaces: () => spaces, agents: () => [agent("t1", "blocked", 1), agent("t2", "working", 2)] });
-  const view = Object.assign(new Spaces(), mountedState({ shown: new Set(["sp1"]), threads: {}, threadGroup: true }));
-  const tiles = (shown) => { view.view = shown; clear(); view.render(); return ids.filter((id) => /^(space-sp1|rail-section-|rail-thread-)/.test(id)); };
+  const view = withParts(Object.assign(new Spaces(), mountedState({ shown: new Set(["sp1"]), threads: {}, threadGroup: true })));
+  const tiles = (shown) => { view.view = shown; view.redraw(); clear(); view.render(); return ids.filter((id) => /^(space-sp1|rail-section-|rail-thread-)/.test(id)); };
   assert.deepEqual(tiles("agents"), ["rail-section-blocked", "rail-section-working"]);
   assert.deepEqual(tiles("threads"), ["rail-thread-project-sp1"]);
 });
@@ -93,8 +93,8 @@ test("expanded then collapsed, the rail keeps the view, the project you are in a
     const state = { "sidebar.collapsed": false, "sidebar.width": 280 };
     const { host, ids, chosen: picked, clear } = recorder();
     const { Spaces } = await loadSidebar(host, { ...laidOut(state, 76), spaces: () => spaces, agents: () => [agent("t1", "sp1", "blocked", 1), agent("t3", "sp2", "working", 2)] });
-    const view = Object.assign(new Spaces(), mountedState({ shown: new Set(["sp1", "sp2"]), view: shown, ...folds }));
-    const draw = () => { clear(); view.render(); return ids.filter((id) => /^space-agent-|^space-sp|^rail-section-/.test(id)); };
+    const view = withParts(Object.assign(new Spaces(), mountedState({ shown: new Set(["sp1", "sp2"]), view: shown, ...folds })));
+    const draw = () => { view.redraw(); clear(); view.render(); return ids.filter((id) => /^space-agent-|^space-sp|^rail-section-/.test(id)); };
     const open = draw();
     assert.deepEqual([open.includes("space-agent-t1"), open.includes("space-agent-t3")], [true, false], `${shown}: open, the folded group hides its row`);
     view.width = 280;

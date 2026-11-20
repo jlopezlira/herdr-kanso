@@ -17,7 +17,7 @@ export const SOURCE = {
   checker: "herdr-app",
 };
 
-const STATE = "kanso.update";
+export const STATE = "kanso.update";
 // ls-remote costs no GitHub API quota; EVERY keeps copies from asking twice.
 const TICK = 5 * 60 * 1000;
 const EVERY = 4 * 60 * 1000;

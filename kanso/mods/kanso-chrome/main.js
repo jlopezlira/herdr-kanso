@@ -5,7 +5,7 @@ import { systemApi } from "./platform-system.js";
 // Modified by José Gutiérrez (minimalistic, 0oz design fork): renamed from oz-chrome.
 // Modified by jlopezlira (Kanso, https://github.com/jlopezlira/herdr-kanso): renamed from mn-chrome; sidebar footer as centred squares when collapsed, one icon set (icons/), a title bar of the lights and, in Dawn Mode, its sky and pill (header.js); an "Update Kanso" row for Kanso's own releases; Settings opens one menu. The footer now draws in kanso-spaces.
 import { View, div } from "gpui-kit";
-import { theme, run, props, shared, setShared, nextCommand, openOverlay, appHome, notify } from "herdr";
+import { theme, run, props, shared, setShared, nextCommand, appHome, notify } from "herdr";
 import { tryOrAsync, readCommands } from "./pure.js";
 import { loadPieces, pieces, shown } from "./pieces.js";
 import { undoHide } from "./piece-lines.js";
@@ -17,7 +17,7 @@ import { COLLAPSED } from "./footer-model.js";
 import { header } from "./header.js";
 
 const SAMPLE_MS = 120_000;
-const openSettings = (page = "pieces") => openOverlay({ mod: "kanso-settings", kind: "dialog", width: 860, height: 680, props: { page } });
+const TAB_BAR_COMMANDS = new Set(["update", "check", "settings", "settings-mods", "settings-news"]);
 
 // The runtime out of memory says so, or, with no room left for the error itself, throws null:
 // a mod then "did not load: Null "null"".
@@ -38,12 +38,10 @@ export default class WorkspaceChrome extends View {
   }
 
   command(c) {
-    if (c === "update" || c === "check") run(`kanso-tabs.${c}`);
-    else if (c === "settings") openSettings();
-    else if (c === "settings-mods") openSettings("pieces");
-    else if (c === "settings-news") openSettings("news");
-    else if (c === "restart") this.restart();
-    else if (c === "piece-undo") undoHide();
+    const name = String(c).replace(/^kanso-chrome\./, "");
+    if (TAB_BAR_COMMANDS.has(name)) run(`kanso-tabs.${name}`);
+    else if (name === "restart") this.restart();
+    else if (name === "piece-undo") undoHide();
   }
 
   // Written only when it changes: every mod draws again on a shared write.

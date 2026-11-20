@@ -1,5 +1,6 @@
 // Shared by the sidebar tests: elements that record what the sidebar draws, the host it draws in, and its state before a draw.
 import { loadSpaces } from "./mod-fixtures.mjs";
+import { inlineCx } from "./helpers.mjs";
 
 export const SIDEBAR_THEME = { foreground: "#fff", muted: "#888", dim: "#666", chrome: "#111", hover: "#222", input: "#333", ansi2: "#0f0", blocked: "#c44", border: "#333", raised: "#222", accent: "#09f", popover: "#111", selected: "#222" };
 
@@ -86,3 +87,8 @@ export const mountedState = (extra = {}) => ({
   panel: { set() {}, agents: new Map() }, threads: null, tasks: {}, steps: {}, since: {}, foldH: {}, folding: null,
   pressed: null, over: null, alive: null, ...extra,
 });
+
+export const withParts = (view) => {
+  view.mountParts(inlineCx());
+  return view;
+};

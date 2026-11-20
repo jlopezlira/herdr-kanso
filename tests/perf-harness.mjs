@@ -7,12 +7,14 @@ export const PANEL_IDS = ["files", "pr", "preview", "shipped", "worktrees", "por
 const source = process.env.PERF_SOURCE_ROOT ? pathToFileURL(`${process.env.PERF_SOURCE_ROOT}/kanso/mods/`) : undefined;
 export const loadMod = (file, names, host) => load(file, names, host, source);
 
-function element() {
+export function element(on) {
+  const hooks = on && typeof on === "object" ? on : {};
   const proxy = new Proxy({}, { get: (_target, key) => {
     if (key === "then") return undefined;
     if (key === "when") return (condition, apply) => condition ? apply(proxy) : proxy;
     if (key === "value") return () => "";
     if (key === "is_focused") return () => false;
+    if (Object.hasOwn(hooks, key)) return (...args) => { hooks[key](...args); return proxy; };
     return () => proxy;
   } });
   return proxy;

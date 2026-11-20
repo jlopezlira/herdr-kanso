@@ -115,6 +115,7 @@ const STACKS = {
   sidebar: { draw: (id, c, _flags, kids, more) => placed(v_flex().id(id).size_full().min_h(0).bg(c.chrome).text_size(T.card), id, c, kids, more) },
   "sidebar switch": { draw: (id, c, _flags, kids, more) => placed(div().id(id).flex_none(), id, c, kids, more) },
   "sidebar rows": { draw: (id, c, _flags, kids, more) => placed(v_flex().id(id).flex_1().min_h(0), id, c, kids, more) },
+  "sidebar find": { draw: (id, c, _flags, kids, more) => h_flex().id(id).flex_none().items_center().pl(G.sm).pr(SIDEBAR.gutter).pb(G.sm).child(placed(div().flex_1().min_w(0), id, c, kids, more)) },
   header: { states: ["collapsed"], draw: header },
   "header title": { draw: headerTitle },
   "rail tile": { states: ["strong"], draw: railTile, pressable: true },

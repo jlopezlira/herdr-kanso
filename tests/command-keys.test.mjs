@@ -55,6 +55,31 @@ test("the strip, the tab bar and the title bar take their keys right after a rel
   }
 });
 
+test("The title bar acts on its own commands, forwards the tab bar's to it, and an old footer block takes none", async () => {
+  const ran = [];
+  const record = (f) => {
+    f.host.run = (command, args) => { ran.push([command, args ?? null]); };
+    f.shared.set("kanso.pieces.undo", { id: "sidebar.activity", state: "show" });
+    f.shared.set("kanso.pieces", { "sidebar.activity": "hide" });
+  };
+  const brand = await mount("kanso-chrome/main.js", "WorkspaceChrome", {}, "kanso-chrome.piece-undo", () => {}, record);
+  assert.ok(brand.pressed, "the title bar listens");
+  assert.notEqual(brand.f.shared.get("kanso.pieces")?.["sidebar.activity"], "hide", "piece-undo brings the hidden piece back");
+  assert.equal(brand.f.shared.get("kanso.pieces.undo"), null);
+  for (const name of ["update", "check", "settings", "settings-mods", "settings-news"]) {
+    ran.length = 0;
+    assert.ok(await brand.keys.press(`kanso-chrome.${name}`));
+    assert.deepEqual(ran, [[`kanso-tabs.${name}`, null]], `${name} goes to the tab bar, which holds the Updater and opens Settings`);
+  }
+  ran.length = 0;
+  assert.ok(await brand.keys.press("kanso-chrome.restart"));
+  assert.ok(brand.f.state.processes.some((p) => p.command === "sh" && String(p.args[1]).includes("nohup herdr-app")), "restart starts the new window");
+  assert.deepEqual(ran, [["app.quit", null]], "then quits this one");
+  const old = await mount("kanso-chrome/main.js", "WorkspaceChrome", { footer: true }, "kanso-chrome.restart", () => {}, record);
+  assert.equal(old.pressed, false, "a kept footer block reads no command");
+  assert.equal(old.keys.reads, 0);
+});
+
 const TAB_BAR = ["kanso-tabs.", "kanso-strip.arrange", "mod.open:kanso-help"];
 const recording = (ran) => (f) => {
   f.projects[0].tabs = Array.from({ length: 9 }, (_, i) => ({ id: `tab0-${i + 1}`, name: `t${i + 1}`, active: i === 0 }));

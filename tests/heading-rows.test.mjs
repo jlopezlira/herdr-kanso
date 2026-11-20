@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { load, nodes, texts, tipsOf, themed, KIT_NIGHT, drawingHost, drawn, clone, repoText } from "./helpers.mjs";
-import { loadSidebar, mountedState, recorder } from "./sidebar-fixtures.mjs";
+import { loadSidebar, mountedState, withParts, recorder } from "./sidebar-fixtures.mjs";
 
 const read = repoText;
 const compositions = async () => themed({
@@ -82,7 +82,7 @@ async function sidebar(state = {}) {
     shared: () => null, run: (cmd, args) => ran.push([cmd, clone(args ?? null)]), openOverlay: (o) => overlays.push(clone(o.props)),
     window: () => ({ platform: "macos", active: true }),
   });
-  const view = Object.assign(new Spaces(), mountedState({ shown: new Set(spaces.map((s) => s.id)), view: state.view ?? "spaces", hoverSpace: state.hoverSpace ?? null, ...state.own }));
+  const view = withParts(Object.assign(new Spaces(), mountedState({ shown: new Set(spaces.map((s) => s.id)), view: state.view ?? "spaces", hoverSpace: state.hoverSpace ?? null, ...state.own })));
   view.render();
   return { view, ran, overlays, ...drawnNow };
 }

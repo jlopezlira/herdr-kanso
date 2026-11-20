@@ -133,7 +133,7 @@ test("Explain pressed first starts the lookup from a timer, never from the click
 });
 
 test("Settings opens one menu: kansō settings with its key, and Herdr settings; choosing shuts it", async () => {
-  const { view, ran, overlays } = await footer();
+  const { view, ran } = await footer();
   const closed = view.render();
   assert.equal(popover(closed), null, "shut, Settings is its row alone");
   press(holding(closed, "Settings"));
@@ -142,7 +142,8 @@ test("Settings opens one menu: kansō settings with its key, and Herdr settings;
   assert.equal(calls(arg(popover(open), "trigger"), "on_click").length, 0, "open, the popover owns the next press");
   assert.deepEqual(texts(arg(popover(open), "content")), ["Settings", "kansō settings", "⌃⇧,", "Herdr settings"]);
   press(holding(open, "kansō settings"));
-  assert.equal(overlays[0].mod, "kanso-settings");
+  assert.deepEqual(ran, [["kanso-tabs.settings", undefined]], "the tab bar's command opens kansō settings");
+  ran.length = 0;
   assert.equal(view.menuOpen, false, "choosing closes the menu");
   view.menuOpen = true;
   press(holding(view.render(), "Herdr settings"));

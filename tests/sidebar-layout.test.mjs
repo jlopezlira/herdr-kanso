@@ -4,7 +4,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { load, chain, gpuiHost, clone } from "./helpers.mjs";
-import { loadSidebar, mountedState, shell, SIDEBAR_THEME, world } from "./sidebar-fixtures.mjs";
+import { loadSidebar, mountedState, withParts, shell, SIDEBAR_THEME, world } from "./sidebar-fixtures.mjs";
 
 // The drawn tree, each element with its calls and children, so where it sits can be measured.
 const host = () => ({ ...gpuiHost(), svg: (path) => { const el = chain("svg"); el.calls.push(["svg", path]); return el; }, Popover: { new: (id) => chain(id) } });
@@ -36,10 +36,10 @@ async function sidebar({ kbd = false, navKey = null, hoverSpace = null, hoverMac
     ...world(SPACES, AGENTS, PANES, TERMINALS),
     machines: () => [{ name: null, layout: "ready" }, { name: "dark", layout: "ready" }, { name: "cold", layout: "ready" }],
   });
-  const view = Object.assign(new Spaces(), mountedState({
+  const view = withParts(Object.assign(new Spaces(), mountedState({
     shown: new Set(SPACES.map((w) => w.id)), machines: [dark], parked: [cold], asleepOpen: new Set(["sleep:tb"]),
     kbd, navKey, hoverSpace, hoverMachine, handle: { is_focused: () => kbd, focus() {} },
-  }));
+  })));
   before(view);
   return { view, root: view.render() };
 }

@@ -24,7 +24,6 @@ const COMMON = [
   // screen, unlike the sidebar) checks, tells you and installs from the toast.
   { source: "kanso/mods/kanso-tabs/update.js", copies: ["kanso/mods/kanso-spaces/update.js"] },
   { source: "kanso/mods/kanso-chrome/notices.js", copies: ["kanso/mods/kanso-tabs/notices.js", "kanso/mods/kanso-spaces/notices.js"] },
-  // The footer's rows and sizes, and the collapsed key the title bar reads too.
   { source: "kanso/mods/kanso-spaces/footer-model.js", copies: ["kanso/mods/kanso-chrome/footer-model.js"] },
   // Order of a beta, a release candidate and a stable tag, shared with that updater.
   { source: "kanso/mods/kanso-chrome/release.js", copies: ["kanso/mods/kanso-tabs/release.js", "kanso/mods/kanso-settings/release.js", "kanso/mods/kanso-spaces/release.js"] },
