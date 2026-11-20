@@ -24,6 +24,10 @@ the branch's rules.
 
 ## [Unreleased]
 
+### Changed
+
+- The collapsed sidebar on Projects no longer shows the view switch, so its project tiles start right below the tools. On Status and Threads the view button and its menu stay, and the view keys still change view from any rail. (#232)
+
 ### Fixed
 
 - An asleep row on a computer that cannot be reached no longer offers Wake. Sleep and Wake move the row at once, and a sleep that does not finish shows could not sleep with Undo on the row. Forgetting a slept conversation asks for a second press, and the row shows that. (#231)

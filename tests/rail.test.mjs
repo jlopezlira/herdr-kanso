@@ -1,8 +1,13 @@
 // The collapsed sidebar's rail: one mark per group, its popup, and Hide sidebar.
-import { loadSidebar, recorder, SIDEBAR_THEME } from "./sidebar-fixtures.mjs";
+import { loadSidebar, mountedState, recorder, SIDEBAR_THEME } from "./sidebar-fixtures.mjs";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { clone, layoutHost, watchPopups } from "./helpers.mjs";
+
+const laidOut = (state, min, sizes = []) => {
+  let tree = { id: "root", resizable: true, children: [{ id: "sidebar", min }, { id: "strip-map" }] };
+  return layoutHost(state, () => tree, (command, args) => { if (command === "layout.set") tree = clone(args.layout); if (command === "layout.resize") sizes.push(args.px); });
+};
 
 async function spaces(host = {}) {
   const { host: drawn, handlers } = recorder();
@@ -40,9 +45,7 @@ test("the rail's list scrolls to the row the keyboard picks, past the ten that s
 
 test("dragging the sidebar edge changes its width, folds it to the rail past the minimum, and opens the rail dragged wide enough", async () => {
   const state = { "sidebar.collapsed": false, "sidebar.width": 256 }, sizes = [];
-  let tree = { id: "root", resizable: true, children: [{ id: "sidebar", min: 76 }, { id: "strip-map" }] };
-  const host = layoutHost(state, () => tree, (command, args) => { if (command === "layout.set") tree = clone(args.layout); if (command === "layout.resize") sizes.push(args.px); });
-  const { view } = await spaces(host);
+  const { view } = await spaces(laidOut(state, 76, sizes));
   const cx = { notify() {} };
   view.settleUntil = 0;
   for (const w of [256, 220, 180, 160, 140, 120, 120, 300, 385]) view.sized(w, cx);
@@ -60,11 +63,39 @@ test("dragging the sidebar edge changes its width, folds it to the rail past the
 
 test("kanso-spaces.sidebar folds an open sidebar to the rail and opens a folded one", async () => {
   const state = { "sidebar.width": 300 }, sizes = [];
-  let tree = { id: "root", resizable: true, children: [{ id: "sidebar", min: 120 }, { id: "strip-map" }] };
-  const { view } = await spaces(layoutHost(state, () => tree, (command, args) => { if (command === "layout.set") tree = clone(args.layout); if (command === "layout.resize") sizes.push(args.px); }));
+  const { view } = await spaces(laidOut(state, 120, sizes));
   view.width = 280;
   view.command("sidebar");
   assert.deepEqual([state["sidebar.collapsed"], state["sidebar.width"], sizes.at(-1)], [true, 280, 76]);
   view.command("sidebar");
   assert.deepEqual([state["sidebar.collapsed"], sizes.at(-1)], [false, 280]);
+});
+
+test("collapsed on Status or Threads, the rail draws that view's tiles", async () => {
+  const { host, ids, clear } = recorder();
+  const spaces = [{ id: "sp1", name: "app", folder: "/w", machine: null, active: true, tabs: [{ id: "tab1" }] }];
+  const agent = (address, status, seq) => ({ address, pane: `p${seq}`, tab: "tab1", space: "sp1", space_name: "app", status, program: { agent: true, name: "Claude Code" }, title: address, seq });
+  const { Spaces } = await loadSidebar(host, { shared: (key) => (key === "sidebar.collapsed" ? true : null), spaces: () => spaces, agents: () => [agent("t1", "blocked", 1), agent("t2", "working", 2)] });
+  const view = Object.assign(new Spaces(), mountedState({ shown: new Set(["sp1"]), threads: {}, threadGroup: true }));
+  const tiles = (shown) => { view.view = shown; clear(); view.render(); return ids.filter((id) => /^(space-sp1|rail-section-|rail-thread-)/.test(id)); };
+  assert.deepEqual(tiles("agents"), ["rail-section-blocked", "rail-section-working"]);
+  assert.deepEqual(tiles("threads"), ["rail-thread-project-sp1"]);
+});
+
+test("opened and folded again, the rail keeps the view, the selection and what was folded", async () => {
+  const state = { "sidebar.collapsed": true, "sidebar.width": 280 };
+  const { host, clear } = recorder();
+  const spaces = [{ id: "sp1", name: "app", folder: "/w", machine: null, active: true, tabs: [{ id: "tab1" }] }, { id: "sp2", name: "web", folder: "/v", machine: null, active: false, tabs: [] }];
+  const { Spaces } = await loadSidebar(host, { ...laidOut(state, 76), spaces: () => spaces });
+  const view = Object.assign(new Spaces(), mountedState({ shown: new Set(["sp1", "sp2"]), view: "agents", navKey: "t1", sectionsFolded: new Set(["done"]), agentsFolded: new Set(["sp2"]), folded: new Set(["dev"]) }));
+  const kept = () => clone({ view: view.view, navKey: view.navKey, sections: [...view.sectionsFolded], agents: [...view.agentsFolded], computers: [...view.folded] });
+  const before = kept();
+  for (const fold of [false, true]) {
+    view.width = 280;
+    view.command("sidebar");
+    assert.equal(state["sidebar.collapsed"], fold);
+    clear();
+    view.render();
+    assert.deepEqual(kept(), before);
+  }
 });

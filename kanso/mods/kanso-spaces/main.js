@@ -2749,7 +2749,7 @@ export default class Spaces extends View {
       .on_mouse_up("left", dropStripDrag)
       .child(this.header(tokens(t), view, collapsed))
       .when(finding, (el) => el.child(this.findField(t)))
-      .when(switchShown && !finding, (el) => el.child(this.switchViews(t, sp, collapsed)))
+      .when(switchShown && !finding && !(collapsed && view === "spaces"), (el) => el.child(this.switchViews(t, sp, collapsed)))
       .when(shown("sidebar.needs", queue.rows.length > 0 || this.needsEmpty, map), (el) => el.children([queueControl(t, queue, collapsed, this.needsEmpty && !queue.rows.length, (cx) => this.toggleNeeds(cx))].filter(Boolean)))
       .children(needsListOpen ? [this.needsList(t, queue, read.now)] : [this.list(t, collapsed, view,
         lens?.none ? [item(emptyState({ icon: "search", text: `No match for \u201c${this.find.value().trim()}\u201d` })("spaces-find-empty", tokens(t)), H.line * 3)]
