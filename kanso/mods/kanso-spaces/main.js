@@ -212,13 +212,19 @@ class FinishedView extends View {
   }
 }
 
-const sidebarPart = (owner) => class SidebarPart extends FinishedView {
+class LookView extends FinishedView {
   init(look, cx) {
     this.look = look;
     this.clock = cx.timer;
-    if (look.piece === "switch") owner.makeFind();
   }
   update(look) { this.look = look; }
+}
+
+const sidebarPart = (owner) => class SidebarPart extends LookView {
+  init(look, cx) {
+    super.init(look, cx);
+    if (look.piece === "switch") owner.makeFind();
+  }
   draw() {
     if (this.look.piece === "header") return owner.header(this.look);
     if (this.look.piece === "switch") return owner.switchPart(this.look);
@@ -226,10 +232,9 @@ const sidebarPart = (owner) => class SidebarPart extends FinishedView {
   }
 };
 
-export class SidebarFooter extends FinishedView {
+export class SidebarFooter extends LookView {
   init(look, cx) {
-    this.look = look;
-    this.clock = cx.timer;
+    super.init(look, cx);
     this.armed = new Armed();
     this.menuOpen = false;
     this.settingsFocus = cx.focus_handle();
@@ -239,8 +244,6 @@ export class SidebarFooter extends FinishedView {
     this.lookup = null;
     cx.timer.after(0, (later) => this.known(later));
   }
-
-  update(look) { this.look = look; }
 
   settingsMenu() {
     if (!this.menuOpen) return null;
