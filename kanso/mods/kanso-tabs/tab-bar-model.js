@@ -14,11 +14,17 @@ export const barState = (space, machineList) => {
 const spanOf = (widths, gap) => (list) => list.reduce((sum, i) => sum + (widths[i] ?? 0) + gap, -gap);
 
 /** Which tabs show in `room`: all when they fit; else the chosen one and the first that fit beside +N, which takes `more` with its gap, the rest folded in order.
- * An unmeasured tab counts as nothing, so it draws once and is measured. */
+ * An unmeasured tab counts as nothing, so it draws once and is measured; an unmeasured bar (`room` null) folds nothing. */
+export const tabName = (tab, ps = []) => {
+  if (tab.named !== false) return tab.name;
+  const lead = ps.find((p) => p.tab === tab.id && p.program?.agent) ?? ps.find((p) => p.tab === tab.id);
+  return lead?.program?.name ?? "Terminal";
+};
+
 export function foldTabs({ widths, chosen, room, gap, more }) {
   const all = widths.map((_, i) => i);
   const span = spanOf(widths, gap);
-  if (!room || span(all) <= room) return { shown: all, folded: [] };
+  if (room === null || span(all) <= room) return { shown: all, folded: [] };
   const kept = all.filter((i) => i === chosen);
   const others = all.filter((i) => i !== chosen);
   const fits = others.filter((_, n) => span([...kept, ...others.slice(0, n + 1)]) <= room - more);
