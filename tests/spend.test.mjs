@@ -3,7 +3,9 @@ import test from "node:test";
 import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { exec, temporary } from "./helpers.mjs";
+import { arg, calls, exec, find, temporary, texts, timedContext } from "./helpers.mjs";
+import { keyDown, spendPage } from "./mod-fixtures.mjs";
+import { chooserKey, readPlan } from "../kanso/mods/kanso-spend/spend-model.js";
 
 const presenter = fileURLToPath(new URL("../kanso/mods/kanso-spend/presenter.mjs", import.meta.url));
 
@@ -74,3 +76,89 @@ test("Spend moves a store.json from before into SQLite once", async (t) => {
   try { assert.equal(db.prepare("SELECT COUNT(*) n FROM files").get().n, Object.keys(legacy.files).length); }
   finally { db.close(); }
 });
+
+const said = "token-spend: store is locked", unread = "Spend could not read your sessions.";
+const bare = { hero: { title: "Today", value: "$0.00", stats: [], tip: "", note: "", empty: "Nothing used today.", plan: "" }, projects: [], models: [], projectCount: 0, modelCount: 0,
+  tasks: [], live: [], facets: {}, footnote: [], machines: [], chart: { bars: [], first: "", title: "", last: "" }, tasksNote: "" };
+const detail = { title: "Tidy", ticket: "", project: "kanso", tools: "", when: "", usdText: "$1", usdExact: "$1.00", parts: [], models: [], sessions: [], sessionCount: 0, projectPath: "/work/kanso" };
+const failureOn = (drawn) => find(drawn, (el) => arg(el, "id") === "spend-failed");
+
+test("What Refresh can do is decided once: a read in step shows the failure and Refresh, without Node there is nothing to refresh, and while it reads Refresh is off", () => {
+  const plan = (state, loaded) => { const { failure, refresh } = readPlan(state, loaded); return [failure && [failure.text, failure.source, failure.fix ?? null], refresh.enabled]; };
+  assert.deepEqual(plan({ nodeBinary: "node" }, false), [null, true]);
+  assert.deepEqual(plan({ nodeBinary: "node", error: said, running: "snapshot" }, true), [null, false], "while it reads, nothing is said yet");
+  assert.deepEqual([false, true].map((loaded) => plan({ nodeBinary: "node", error: said }, loaded)), [[[unread, said, "Refresh"], true], [["Last update failed", said, "Refresh"], true]]);
+  assert.deepEqual(plan({ runtimeError: "runtime.json needs a node path." }, false), [[unread, "runtime.json needs a node path.", null], false]);
+  assert.deepEqual(plan({}, false), [null, false], "Node not found yet: nothing to refresh");
+});
+
+test("The header Refresh with the collector failing shows the tool's words with Refresh on the page it was pressed from: waiting, home, Settings, a project and a task", async () => {
+  const pages = { waiting: {}, home: { costs: bare }, settings: { costs: bare, page: "settings" }, "settings before its first read": { page: "settings" },
+    project: { costs: bare, stack: [{ kind: "project", label: "kanso", value: "/work/kanso", prevCost: {} }] }, task: { costs: bare, stack: [{ kind: "task", label: "Tidy", task: detail }] } };
+  const collector = async () => ({ code: 1, stdout: "", stderr: said });
+  for (const [name, fields] of Object.entries(pages)) {
+    const { cx, drain } = timedContext([]);
+    const page = await spendPage({ nodeBinary: "node", awake: false, ...fields }, { exec: collector });
+    const header = () => find(page.render(cx), (el) => el.tag === "spend-refresh");
+    assert.equal(arg(header(), "disabled"), false, name);
+    arg(header(), "on_click")({}, cx);
+    assert.equal(arg(header(), "disabled"), true, `${name}: Refresh is off while it reads`);
+    assert.equal(failureOn(page.render(cx)) ?? null, null, `${name}: nothing is said while it reads`);
+    await drain();
+    const drawn = page.render(cx);
+    assert.deepEqual(texts(failureOn(drawn)).filter((words) => words !== "!"), [fields.costs ? "Last update failed" : unread, said, "Refresh"], name);
+    assert.equal(find(drawn, (el) => arg(el, "id") === "kanso-skeleton") ?? null, null, `${name}: no skeleton beside a failure`);
+    assert.equal(arg(find(drawn, (el) => el.tag === "spend-refresh"), "disabled"), false, `${name}: Refresh is on again`);
+  }
+});
+
+test("With no Node to run, Spend says why without a Refresh that does nothing, and the header Refresh is off", async () => {
+  const page = await spendPage({ runtimeError: "runtime.json needs a node path.", page: "settings" });
+  const drawn = page.render({});
+  assert.deepEqual(texts(failureOn(drawn)).filter((words) => words !== "!"), [unread, "runtime.json needs a node path."]);
+  assert.equal(find(drawn, (el) => el.tag === "spend-failed-fix") ?? null, null);
+  assert.equal(arg(find(drawn, (el) => el.tag === "spend-refresh"), "disabled"), true);
+  assert.equal(arg(find(drawn, (el) => el.tag === "spend-settings") ?? find(drawn, (el) => el.tag === "spend-back"), "disabled") ?? false, false, "the page's own actions stay");
+});
+
+test("The project and model chooser walks its options with the list keys: j and k, gg and G, Home and End, Enter and Escape", async () => {
+  const key = (name, modifiers = {}) => ({ key: name, modifiers });
+  const step = (e, at, gAt = 0) => chooserKey(e, { at, gAt, count: 4 }, 1000);
+  assert.deepEqual(["j", "down", "k", "up", "end", "home"].map((name) => step(key(name), 1).at), [2, 2, 0, 0, 3, 0]);
+  assert.equal(step(key("g", { shift: true }), 1).at, 3);
+  const waiting = step(key("g"), 2);
+  assert.deepEqual([waiting.does, waiting.at, step(key("g"), 2, waiting.gAt).at], [null, 2, 0], "one g waits for the second");
+  assert.deepEqual([key("enter"), key("escape")].map((e) => step(e, 2).does), ["choose", "close"]);
+  assert.deepEqual([key("x"), key("j", { platform: true })].map((e) => step(e, 1).handled), [false, false], "another key and a Command chord are left alone");
+
+  const facets = { project: [{ value: "/work/kanso", label: "kanso", meta: "$3.00" }, { value: "/work/site", label: "site", meta: "$1.00" }] };
+  const page = await spendPage({ costs: { facets }, setCost(patch) { this.cost = { ...this.cost, ...patch }; } });
+  const cx = { notify() {}, stop_propagation() {} };
+  const chooser = () => page.menu("project", {});
+  arg(chooser(), "on_open_change")(true, cx);
+  const list = () => arg(chooser(), "content");
+  const lit = () => texts(find(list(), (el) => arg(el, "selected") === true))[0];
+  assert.equal(lit(), "All projects", "it opens on the current choice");
+  keyDown(list(), key("j"), cx);
+  assert.equal(lit(), "kanso");
+  keyDown(list(), key("g", { shift: true }), cx);
+  assert.equal(lit(), "site");
+  keyDown(list(), key("k"), cx);
+  keyDown(list(), key("enter"), cx);
+  assert.deepEqual([page.cost.project, page.openMenu], ["/work/kanso", null], "Enter chooses the lit one and shuts the chooser");
+  arg(chooser(), "on_open_change")(true, cx);
+  keyDown(list(), key("escape"), cx);
+  assert.equal(calls(chooser(), "content").length, 0, "Escape shuts it");
+});
+
+test("The chooser shows the lit choice when it opens, and Spend lets go of its handles when it closes", async () => {
+  const facets = { model: Array.from({ length: 12 }, (_, i) => ({ value: `m${i}`, label: `model ${i}`, meta: "" })) };
+  const revealed = [], released = [];
+  const handle = (name) => ({ focus() {}, scroll_to_item: (at) => revealed.push(at), release: () => released.push(name) });
+  const page = await spendPage({ costs: { facets }, cost: { period: "day", offset: 0, project: "all", model: "m9" }, chooserFocus: { project: handle("project"), model: handle("model") }, chooserScroll: handle("scroll") });
+  arg(page.menu("model", {}), "on_open_change")(true, { notify() {} });
+  assert.deepEqual(revealed, [10], "the current choice is the tenth row (after All models), brought into view at once");
+  page.close();
+  assert.deepEqual(released.toSorted(), ["model", "project", "scroll"]);
+});
+

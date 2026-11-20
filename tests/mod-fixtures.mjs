@@ -1,6 +1,6 @@
 // Named loaders for production modules used by multiple tests.
 import { join } from "node:path";
-import { chain, databaseTimer, drawingHost, exec, gpuiHost, load, nodes, openedKdb, temporary, KIT_NIGHT } from "./helpers.mjs";
+import { chain, databaseTimer, drawingHost, exec, gpuiHost, load, nodes, openedKdb, popoverHost, temporary, KIT_NIGHT } from "./helpers.mjs";
 
 export const loadSpaces = (host) => load("kanso-spaces/main.js", ["Spaces"], host);
 export const loadDescribe = (host) => load("kanso-help/keymap.js", ["describe"], host);
@@ -61,6 +61,19 @@ export const loadRecordPrFacts = (host) => load("kanso-panel/pr-inbox.js", ["rec
 export const loadDuration = (host) => load("kanso-spaces/agents.js", ["duration"], host);
 export const loadTokenSpend = (host) => load("kanso-spend/main.js", ["TokenSpend"], host);
 export const loadToast = (host) => load("kanso-toast/main.js", ["Toast"], host);
+
+const pageHost = (host) => ({ ...popoverHost(), theme: () => KIT_NIGHT, appHome: () => "/app", home: () => "/home/me", ...host });
+const onScreen = { awake: true, width: 960, share: { open: false }, busy: {}, reading: false, again: false };
+export const memoryPage = async (fields = {}, host = {}) => {
+  const { Memory, Armed } = await load("kanso-guard/main.js", ["Memory", "Armed"], pageHost(host));
+  return Object.assign(new Memory(), onScreen, { now: null, digest: null, range: "day", batch: null, showAll: false, armed: new Armed(), actionError: null }, fields);
+};
+export const spendPage = async (fields = {}, host = {}) => {
+  const { TokenSpend } = await loadTokenSpend(pageHost(host));
+  const handle = { focus() {}, scroll_to_item() {} };
+  return Object.assign(new TokenSpend(), onScreen, { costs: null, scan: null, error: null, runtimeError: null, running: null, page: "home", stack: [], settings: null, planInputs: [], queuedSources: null, expanded: {}, syncHolds: [],
+    cost: { period: "day", offset: 0, project: "all", model: "all" }, nodeBinary: null, generation: 0, queued: { snapshot: false, prepare: false }, openMenu: null, menuOptions: null, menuAt: -1, menuG: 0, chooserFocus: { project: handle, model: handle }, chooserScroll: handle }, fields);
+};
 
 // kdb.js in its own temporary folder: `names` are more of its exports, `wrap` watches its commands, and `fresh()` is a new view of a database file there, as after a restart.
 export const temporaryKdbFile = async (t, names = [], wrap = (run) => run) => {
@@ -123,3 +136,32 @@ export async function openedSend(host, { from = null, to = null, text = "hi", qu
   });
   return Object.assign(new Send(), { from, to, toProject: null, text, error: null, sending: false, unsure: [], handle: {}, query: typed(query), box: typed(text, true) });
 }
+
+const RECORD = {
+  agent: { status: "idle", program: { agent: true, name: "claude" } },
+  blocked: { status: "blocked", program: { agent: true, name: "claude" } },
+  shell: { program: { name: "zsh", shell: true } },
+  lingering: { status: "idle", program: { name: "zsh", shell: true } },
+  ended: { state: "exited", status: "idle", program: { agent: true, name: "claude" } },
+  missing: null,
+};
+export const RECORD_KINDS = Object.keys(RECORD);
+export const recordsFor = (term, pane, address = "t1", extra = {}, layout = "ready") => ({
+  address,
+  terminals: RECORD[term] ? [{ address, state: "live", labels: {}, ...extra, ...RECORD[term] }] : [],
+  panes: RECORD[pane] ? [{ pane: "p1", terminal: address, ...RECORD[pane] }] : [],
+  machines: [{ name: null, layout: "ready" }, { name: "box", layout }],
+});
+export const classOf = (term, pane, reachable = true) => {
+  const both = [term, pane];
+  if (both.some((kind) => kind === "shell" || kind === "lingering")) return "shell";
+  if (both.includes("ended")) return "gone";
+  if (both.every((kind) => kind === "missing")) return reachable ? "gone" : "unreachable";
+  if (both.includes("blocked")) return "waiting";
+  return reachable ? "ready" : "unreachable";
+};
+export const recordPairs = RECORD_KINDS.flatMap((term) => RECORD_KINDS.map((pane) => [term, pane]));
+const MACHINE_STATES = [["t1", "ready", true], ["box/t1", "ready", true], ["box/t1", "unavailable", false]];
+export const recordCases = MACHINE_STATES.flatMap(([address, layout, canReach]) => recordPairs.map(([term, pane]) => ({
+  term, pane, address, layout, canReach, kind: classOf(term, pane, canReach), at: `${term} + ${pane} at ${address} (${layout})`,
+})));

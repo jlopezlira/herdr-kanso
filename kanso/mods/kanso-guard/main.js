@@ -9,14 +9,15 @@ import { G, T, OPACITY, breathe, tokens } from "./ui.js";
 import { mark } from "./ui-mark.js";
 import { Armed, quietLink, iconButton } from "./ui-button.js";
 import { section } from "./ui-section.js";
-import { metric, skeletonOf, tooltip } from "./kit.js";
+import { failureBlock, metric, skeletonOf } from "./kit.js";
 import { factList } from "./ui-facts.js";
 import { segmented } from "./ui-tab.js";
 import { Share } from "./share.js";
 import { tryOr, tryOrAsync, afterMount, readCommands, num } from "./pure.js";
-import { hiddenInLayout, pageFrame } from "./page.js";
+import { hiddenInLayout } from "./page.js";
+import { scrollPage, pageHeader, pageSections, refreshTool, moreLink, barChart, chartColumn, chartRoom } from "./ui-page.js";
 import { memorySpec, memoryText } from "./memory-card.js";
-import { RANGES, size, span, clock, parseNow, agentsMB, agentMeta, limitsNote, sparkFor, digestHistory, groupAgents, freedEstimate, parseBatch, staleAgents, idleWords, installError, leaveShowAll } from "./model.js";
+import { RANGES, size, span, clock, parseNow, agentsMB, agentMeta, limitsNote, sparkFor, digestHistory, groupAgents, freedEstimate, parseBatch, staleAgents, idleWords, installError, leaveShowAll, unreadable, refreshPlan } from "./model.js";
 
 const MOD = "kanso-guard";
 const DATA_DIR = `data/${MOD}`;
@@ -37,6 +38,14 @@ const runtimeNode = async () => {
   return typeof asked === "string" && asked.trim() ? asked.trim() : "node";
 };
 
+const readNow = async (file) => {
+  try {
+    return parseNow(await readTextFile(file));
+  } catch (error) {
+    return unreadable(error);
+  }
+};
+
 export default class Memory extends View {
   init(_props, cx) {
     this.closed = false;
@@ -45,6 +54,7 @@ export default class Memory extends View {
     this.node = null;
     this.forget();
     this.reading = false;
+    this.refreshing = false;
     this.range = "day";
     this.share = new Share(MOD, paths.join(appHome(), DATA_DIR, "share"));
     this.batch = null;
@@ -114,6 +124,7 @@ export default class Memory extends View {
 
   sleep() {
     this.awake = false;
+    this.refreshing = false;
     this.cancelAll([this.ticker, this.batchTimer, ...this.timers]);
     this.ticker = null;
     this.timers = [];
@@ -125,12 +136,20 @@ export default class Memory extends View {
     this.cancelAll([this.ticker, this.batchTimer, this.commandTask, ...this.timers]);
   }
 
+  refresh(cx) {
+    if (!this.refreshing) {
+      this.refreshing = true;
+      cx.notify();
+      this.read(cx);
+    }
+  }
+
   read(cx) {
     if (this.closed || !this.awake || this.reading) return;
     this.reading = true;
     cx.spawn(async (readCx) => {
       const dir = paths.join(appHome(), DATA_DIR);
-      const now = await tryOrAsync(async () => parseNow(await readTextFile(paths.join(dir, "now.json"))), { state: "bad", data: null });
+      const now = await readNow(paths.join(dir, "now.json"));
       const last = this.digest;
       // A history.json that can't be read keeps the last digest.
       const fresh = now.data && (!last || Date.now() - this.historyAt >= HISTORY_MS)
@@ -144,9 +163,10 @@ export default class Memory extends View {
       const batch = await tryOrAsync(async () => parseBatch(await readTextFile(paths.join(dir, "batch.json"))), null);
       const installing = this.busy.install;
       const installFailure = installing ? installError(await tryOrAsync(() => readTextFile(paths.join(dir, "install.json"))), installing.at) : null;
-      this.reading = false;
-      if (this.closed || !this.awake) return;
       const before = this.picture();
+      this.reading = false;
+      this.refreshing = false;
+      if (this.closed || !this.awake) return;
       this.now = now;
       this.digest = digest;
       this.batch = batch && batch.at !== this.batchSeen ? batch : null;
@@ -160,7 +180,7 @@ export default class Memory extends View {
   }
 
   picture() {
-    return JSON.stringify([this.now, this.digest, this.batch, this.actionError, this.busy]);
+    return JSON.stringify([this.now, this.digest, this.batch, this.actionError, this.busy, this.refreshing]);
   }
 
   settle() {
@@ -230,19 +250,11 @@ export default class Memory extends View {
     const body = !this.now ? this.skeleton(c)
       : state === "off" || state === "bad" ? this.offView(c, state)
         : this.mainView(c, narrow);
-    return v_flex().id("guard-root").size_full().min_h(0).bg(c.canvas).text_color(c.text)
-      .overflow_y_scrollbar()
-      .on_size_change((s, sizeCx) => {
-        const width = s.width;
-        const changed = Math.abs((this.width || 0) - width) >= 1;
-        this.width = width;
-        if (changed) sizeCx.notify();
-      })
-      .child(pageFrame(narrow, narrow ? 32 : 44, (column) => column
-        .child(this.header(c, narrow))
-        .when(this.share.open && this.canShare(), (el) => el.child(this.share.row(c, () => this.shareCard(), SHARE_NOTE, G.sm)))
-        .when(Boolean(this.actionError), (el) => el.child(div().text_size(T.body).text_color(c.red).child(this.actionError)))
-        .child(body)));
+    return scrollPage.call(this, "guard-root", c, narrow, (column) => column
+      .child(this.header(c, narrow))
+      .when(this.share.open && this.canShare(), (el) => el.child(this.share.row(c, () => this.shareCard(), SHARE_NOTE, G.sm)))
+      .when(Boolean(this.actionError), (el) => el.child(failureBlock({ text: this.actionError })("guard-failed", c)))
+      .child(body), { always: true });
   }
 
   canShare() { return this.now?.state === "ok" && Boolean(this.now.data); }
@@ -252,14 +264,12 @@ export default class Memory extends View {
   }
 
   header(c, narrow) {
-    const busy = Boolean(this.busy.check);
     const at = this.now?.data?.at;
-    const tip = busy ? "Checking…" : at ? `Check now · checked ${clock(at)}` : "Check now";
-    return h_flex().w_full().items_center().justify_between().gap(G.md)
-      .child(div().text_size(narrow ? 17 : 20).text_color(c.text).child(this.now?.data?.metric === "working set" ? "Memory · working set" : "Memory"))
-      .child(h_flex().gap(G.xs).items_center().flex_none()
-        .when(this.canShare(), (el) => el.child(iconButton("guard-share", "share", "Share", (cx) => this.share.toggle(cx), c, { active: this.share.open })))
-        .child(iconButton("guard-refresh", "refresh-cw", tip, (cx) => this.check(cx), c, { spin: busy, disabled: busy })));
+    const { header } = refreshPlan(this);
+    return pageHeader(div().text_size(narrow ? 17 : T.page).text_color(c.text).child(this.now?.data?.metric === "working set" ? "Memory · working set" : "Memory"), [
+      this.canShare() ? iconButton("guard-share", "share", "Share", (cx) => this.share.toggle(cx), c, { active: this.share.open }) : null,
+      refreshTool("guard-refresh", c, { ...header, working: "Checking…", stamp: at ? `checked ${clock(at)}` : "" }, (cx) => this.check(cx)),
+    ]);
   }
 
   skeleton(c) {
@@ -268,22 +278,24 @@ export default class Memory extends View {
 
   offView(c, state, narrow) {
     const busy = Boolean(this.busy.install);
+    const { failure, inline } = refreshPlan(this);
     return v_flex().w_full().gap(G.md)
       .child(metric({ value: state === "bad" ? "Unreadable" : "Off", tone: "muted" })("guard-off", c))
       .child(h_flex().gap(G.lg).items_center()
         .child(quietLink("guard-on", busy ? "Turning on…" : "Turn on", (cx) => { if (!busy) this.turnOn(cx); }, c, { color: c.text }))
-        .when(state === "bad", (el) => el.child(quietLink("guard-reread", "Read again", (cx) => this.read(cx), c))));
+        .when(Boolean(inline), (el) => el.child(quietLink("guard-reread", "Refresh", (cx) => this.refresh(cx), c, { disabled: !inline.enabled }))))
+      .when(Boolean(failure), (el) => el.child(failureBlock(failure)("guard-unreadable", c)));
   }
 
   mainView(c, narrow) {
     const data = this.now.data;
     const stale = this.now.state === "stale";
     const events = data.events.filter((e) => e.text !== data.window?.reason);
-    return v_flex().w_full().gap(narrow ? 36 : 48)
+    return pageSections(narrow)
       .when(stale, (el) => el.child(h_flex().w_full().gap(G.lg).items_center()
         .child(div().text_size(T.value).text_color(c.red).child(`Stopped at ${clock(data.at)}`))
         .child(quietLink("guard-on", this.busy.install ? "Turning on…" : "Turn on", (cx) => { if (!this.busy.install) this.turnOn(cx); }, c, { color: c.text }))))
-      .child(v_flex().w_full().gap(narrow ? 36 : 48).opacity(stale ? OPACITY.away : 1)
+      .child(pageSections(narrow).opacity(stale ? OPACITY.away : 1)
         .child(this.hero(c, data, narrow))
         .child(this.chart(c))
         .child(this.agents(c, data))
@@ -323,14 +335,12 @@ export default class Memory extends View {
   chart(c) {
     const height = 96;
     const series = this.digest?.series?.[this.range];
-    const bars = (series?.bars ?? []).map((bar) => this.chartBar(bar, height, c));
-    return v_flex().w_full().gap(G.sm)
-      .child(this.chartHead(c, series))
-      .child(h_flex().w_full().h(height + 18).items_end().children(bars))
-      .child(h_flex().w_full().justify_between()
-        .child(div().text_size(T.micro).text_color(c.dim).child(series?.first ?? ""))
-        .child(div().text_size(T.micro).text_color(c.dim).child("Free"))
-        .child(div().text_size(T.micro).text_color(c.dim).child(series?.last ?? "")));
+    return barChart(c, {
+      head: this.chartHead(c, series),
+      columns: (series?.bars ?? []).map((bar) => this.chartBar(bar, height, c)),
+      room: chartRoom(height),
+      axis: [series?.first ?? "", "Free", series?.last ?? ""],
+    });
   }
 
   chartHead(c, series) {
@@ -340,9 +350,7 @@ export default class Memory extends View {
   }
 
   chartBar(bar, height, c) {
-    const h = height + 18;
-    return v_flex().flex_1().min_w(0).h(h).items_center().justify_end().gap(G.xs).tooltip(tooltip({ label: bar.tip }))
-      .when(Boolean(bar.mark), (el) => el.child(div().whitespace_nowrap().text_size(T.micro).text_color(c.text).child(bar.value)))
+    return chartColumn(c, { tip: bar.tip, marked: Boolean(bar.mark), value: bar.value }, chartRoom(height))
       .child(div().w(bar.mark ? 3 : 2).flex_none().rounded_t(1)
         .h(bar.empty ? 1 : Math.max(2, Math.round(bar.ratio * height)))
         .bg(bar.mark ? c.accent : bar.empty ? c.border : bar.low ? c.red : c.muted)
@@ -418,8 +426,8 @@ export default class Memory extends View {
         .child(div().text_size(T.body).text_color(c.muted).child(title))
         .child(div().text_size(T.body).text_color(c.dim).child(`${list.length} · ${size(list.reduce((s, a) => s + (a.mb ?? 0), 0))}`)))
       .children(shown.map((a, index) => this.agentRow(c, a, index, { limit, action, reason })))
-      .when(list.length > AGENT_ROWS, (el) => el.child(h_flex().pt(G.sm)
-        .child(quietLink(`guard-more-${title}`, this.showAll ? "Show fewer" : `Show ${list.length - AGENT_ROWS} more`, (cx) => { this.showAll = !this.showAll; cx.notify(); }, c))));
+      .when(list.length > AGENT_ROWS, (el) => el.child(moreLink(`guard-more-${title}`, c, { open: this.showAll, hidden: list.length - AGENT_ROWS },
+        (cx) => { this.showAll = !this.showAll; cx.notify(); })));
   }
 
   agentRow(c, a, index, { limit, action, reason }) {

@@ -1,7 +1,8 @@
-import { loadMemory, loadStaleAgents, loadPorts } from "./mod-fixtures.mjs";
+import { loadMemory, loadStaleAgents, loadPorts, memoryPage, byTag } from "./mod-fixtures.mjs";
+import { refreshPlan } from "../kanso/mods/kanso-guard/model.js";
 import assert from "node:assert/strict";
 import test from "node:test";
-import { clone, load, success, timedContext, keeping } from "./helpers.mjs";
+import { arg, clone, find, load, press, success, texts, timedContext, keeping } from "./helpers.mjs";
 
 const model = () => load("kanso-guard/model.js", ["STALE_MS", "size", "span", "clock", "parseNow", "agentsMB", "agentMeta", "limitsNote", "freeSeries", "agentSparks", "sparkFor", "digestHistory"]);
 
@@ -499,4 +500,59 @@ test("Windows server rows retain the reason their working directory is unavailab
   assert.equal(rows.length, 1);
   assert.equal(rows[0].cwd, null);
   assert.match(rows[0].cwdReason, /Herdr API on Windows/);
+});
+
+const unreadNow = async (reading) => {
+  const { cx, drain } = timedContext([]);
+  const page = await memoryPage({}, { readTextFile: reading });
+  page.read(cx);
+  await drain();
+  return page;
+};
+const failureOf = (drawn) => find(drawn, (el) => arg(el, "id") === "guard-unreadable");
+const said = (el) => texts(el).filter((words) => words !== "!");
+const reread = (page) => byTag(page.render({}), "guard-reread");
+
+test("Memory keeps the words of a file it could not read; an absent file is Off, and a file that is not Memory's is Unreadable without a failure", async () => {
+  const refused = await unreadNow(async () => { throw new Error("Permission denied"); });
+  assert.deepEqual([refused.now.state, refused.now.why], ["bad", "Permission denied"]);
+  assert.deepEqual(said(failureOf(refused.render({}))), ["Memory could not be read", "Permission denied"]);
+  assert.deepEqual(texts(reread(refused)), ["Refresh"], "one Refresh, in the line of the page");
+  assert.equal((await unreadNow(async () => null)).now.state, "off");
+  const garbled = await unreadNow(async () => "{nope");
+  assert.equal(failureOf(garbled.render({})) ?? null, null);
+  assert.deepEqual(texts(reread(garbled)), ["Refresh"]);
+});
+
+test("Memory's header Refresh is on only while no action runs, and the unreadable page's Refresh is off from its press until the read ends", async () => {
+  assert.deepEqual([{}, { check: {} }, { install: {} }, { "recycle:22": {}, check: {} }].map((busy) => refreshPlan({ now: null, busy }).header), [
+    { enabled: true, busy: false }, { enabled: false, busy: true }, { enabled: false, busy: false }, { enabled: false, busy: true }]);
+  assert.deepEqual([[{ state: "ok" }, false], [{ state: "bad" }, false], [{ state: "bad" }, true]].map(([now, refreshing]) => refreshPlan({ now, refreshing }).inline), [null, { enabled: true }, { enabled: false }]);
+  const { parseNow, clock } = await model();
+  const now = parseNow(JSON.stringify(sample(Date.now() - 30_000)));
+  const pages = await Promise.all([{}, { check: { at: Date.now() } }, { "recycle:22": { at: Date.now() } }].map((busy) => memoryPage({ now, busy })));
+  assert.deepEqual(pages.map((page) => { const tool = byTag(page.render({}), "guard-refresh"); return [arg(tool, "tooltip"), arg(tool, "disabled")]; }), [
+    [`Refresh · checked ${clock(now.data.at)}`, false], ["Checking…", true], [`Refresh · checked ${clock(now.data.at)}`, true]]);
+
+  const files = [];
+  const release = [];
+  const redraws = [];
+  const { cx, drain } = timedContext([], { notify: () => redraws.push("redraw") });
+  const page = await memoryPage({ now: { state: "bad", data: null, why: "Permission denied" } }, { readTextFile: (file) => (file.endsWith("now.json") ? new Promise((resolve) => { files.push(file); release.push(() => resolve("{nope")); }) : Promise.resolve(null)) });
+  assert.equal(arg(reread(page), "disabled"), false);
+  const pressed = reread(page);
+  pressed.calls.filter((call) => call[0] === "on_click").forEach(([, handler]) => handler({}, cx));
+  assert.deepEqual([files.length, redraws.length, arg(reread(page), "disabled")], [1, 1, true], "pressed: it reads, redraws at once and is off");
+  reread(page).calls.filter((call) => call[0] === "on_click").forEach(([, handler]) => handler({}, cx));
+  page.refresh(cx);
+  assert.equal(files.length, 1, "a second press does nothing");
+  release.shift()();
+  await drain();
+  assert.deepEqual([files.length, arg(reread(page), "disabled"), redraws.length], [1, false, 2], "the read ended: redrawn and on again");
+});
+
+test("Memory says an action that failed in the failure block", async () => {
+  const { parseNow } = await model();
+  const refused = (await memoryPage({ now: parseNow(JSON.stringify(sample(Date.now() - 30_000))), actionError: "Access is denied" })).render({});
+  assert.deepEqual(said(find(refused, (el) => arg(el, "id") === "guard-failed")), ["Access is denied"]);
 });
