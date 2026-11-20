@@ -1,6 +1,8 @@
+import { loadMemory, loadStaleAgents, loadPorts, memoryPage, byTag } from "./mod-fixtures.mjs";
+import { refreshPlan } from "../kanso/mods/kanso-guard/model.js";
 import assert from "node:assert/strict";
 import test from "node:test";
-import { clone, load } from "./helpers.mjs";
+import { arg, clone, find, load, press, success, texts, timedContext, keeping } from "./helpers.mjs";
 
 const model = () => load("kanso-guard/model.js", ["STALE_MS", "size", "span", "clock", "parseNow", "agentsMB", "agentMeta", "limitsNote", "freeSeries", "agentSparks", "sparkFor", "digestHistory"]);
 
@@ -22,6 +24,16 @@ const sample = (at = NOW - 30_000) => ({
   paused: false,
   events: [{ at: NOW - 2 * HOUR, kind: "reap", text: "ended 3 helpers" }, { at: NOW - HOUR, kind: "recycle", text: "recycled web" }],
 });
+
+const filesAndCalls = (files, calls) => ({
+  readTextFile: async (path) => files[path] ?? null,
+  exec: async (command, args) => { calls.push([command, ...args]); return success(""); },
+});
+// The guard script itself, with its data in a folder of its own unless one is set.
+const guardModule = async () => {
+  process.env.HERDR_APP_HOME ??= (await import("node:fs")).mkdtempSync(`${(await import("node:os")).tmpdir()}/kg-`);
+  return import("../kanso/mods/kanso-guard/guard.mjs");
+};
 
 test("Memory reads the guard's sizes, spans and moments the way a person does", async () => {
   const { size, span, clock } = await model();
@@ -119,22 +131,15 @@ test("Memory starts the guard detached for an action and reads its files again",
   const files = { "/app/data/kanso-guard/now.json": JSON.stringify(sample(Date.now())), "/app/mods/kanso-guard/runtime.json": "{\"node\": \"/opt/node\"}" };
   const host = {
     appHome: () => "/app",
-    readTextFile: async (path) => files[path] ?? null,
-    exec: async (command, args) => { calls.push([command, ...args]); return { code: 0, stdout: "", stderr: "" }; },
+    ...filesAndCalls(files, calls),
     layout: () => ({ id: "root", children: [{ id: "memory", type: "block", content: { mod: "kanso-guard" } }] }),
     nextCommand: async () => { throw new Error("no commands here"); },
   };
-  const { Memory } = await load("kanso-guard/main.js", ["Memory"], host);
-  const pending = [];
-  const cx = {
-    notify() {},
-    spawn(fn) { const p = fn(cx); pending.push(p); return { cancel() {} }; },
-    timer: { every: () => ({ cancel() {} }), after: (ms, fn) => { timers.push([ms, fn]); return { cancel() {} }; } },
-  };
-  const drain = async () => { while (pending.length) await pending.shift(); };
+  const { Memory } = await loadMemory(host);
+  const { cx, pending, drain } = timedContext(timers);
   const view = new Memory();
   view.init({}, cx);
-  assert.deepEqual(timers.map(([ms]) => ms), [0], "nothing is read in init's own turn");
+  assert.deepEqual(timers.map(([ms]) => ms), [0, 0], "nothing is read and no key is awaited in init's own turn");
   timers.shift()[1](cx);
   await drain();
   assert.equal(view.now.state, "ok");
@@ -254,7 +259,7 @@ test("guard panel: agents grouped, estimate, batch progress", async () => {
 });
 
 test("guard panel: stale agents to close, oldest first, never the focused one", async () => {
-  const m = await load("kanso-guard/model.js", ["staleAgents"]);
+  const m = await loadStaleAgents();
   const agents = [
     { pid: 1, kind: "claude", status: "idle", idleMin: 5000, terminal: "t1" },
     { pid: 2, kind: "claude", status: "idle", idleMin: 9000, terminal: "t2" },
@@ -378,17 +383,11 @@ test("Ports stops a server through the guard, detached, and by itself without it
   const host = {
     Date: class extends Date { constructor(...a) { super(...(a.length ? a : [NOW])); } static now() { return NOW; } },
     appHome: () => "/app", home: () => "/h", theme: () => ({}), panes: () => [], terminals: () => [],
-    readTextFile: async (path) => files[path] ?? null,
-    exec: async (command, args) => { calls.push([command, ...args]); return { code: 0, stdout: "", stderr: "" }; },
+    ...filesAndCalls(files, calls),
   };
   const { Ports, STOP_LOOP } = await load("kanso-panel/ports.js", ["Ports", "STOP_LOOP"], host);
-  const pending = [], timers = [];
-  const cx = {
-    notify() {}, sleep: async () => {},
-    spawn(fn) { const p = fn(cx); pending.push(p); return { cancel() {} }; },
-    timer: { every: () => ({ cancel() {} }), after: (ms, fn) => { timers.push(ms); return { cancel() {} }; } },
-  };
-  const drain = async () => { while (pending.length) await pending.shift(); };
+  const timers = [];
+  const { cx, drain } = timedContext(timers, { sleep: async () => {} });
   const view = new Ports();
   view.init(cx);
   await drain();
@@ -404,7 +403,7 @@ test("Ports stops a server through the guard, detached, and by itself without it
   assert.match(a43, /^43@\d+:force$/);
   assert.ok(Math.abs(NOW - 60_000 - Number(a42.slice(3))) < 5000);
   assert.ok(!calls.some((c) => c[0] === "kill"), "no signal of its own");
-  assert.ok(timers.includes(4000), "reads the history again after a few seconds");
+  assert.ok(timers.some(([ms]) => ms === 4000), "reads the history again after a few seconds");
 
   delete files["/app/data/kanso-guard/ports.json"];
   const bare = new Ports();
@@ -418,8 +417,7 @@ test("Ports stops a server through the guard, detached, and by itself without it
 });
 
 test("guard: dev server history (opened, exited, minutes and hours)", async () => {
-  process.env.HERDR_APP_HOME ??= (await import("node:fs")).mkdtempSync(`${(await import("node:os")).tmpdir()}/kg-`);
-  const g = await import("../kanso/mods/kanso-guard/guard.mjs");
+  const g = await guardModule();
   const a = { key: "1@1", pid: 1, ports: [3000], command: "node", args: "next dev", cwd: "/h/p", project: "p", owner: null, mb: 200, startedAt: 1 };
   const b = { ...a, key: "2@2", pid: 2, ports: [5173], owner: "t1", mb: 100 };
   let p = g.updatePorts(null, [a, b], 1_000_000);
@@ -433,8 +431,7 @@ test("guard: dev server history (opened, exited, minutes and hours)", async () =
 });
 
 test("guard: a server missed by one look and back is still running; running ones are never dropped", async () => {
-  process.env.HERDR_APP_HOME ??= (await import("node:fs")).mkdtempSync(`${(await import("node:os")).tmpdir()}/kg-`);
-  const g = await import("../kanso/mods/kanso-guard/guard.mjs");
+  const g = await guardModule();
   const a = { key: "1@1", pid: 1, ports: [3000], command: "node", args: "x", cwd: "/h/p", project: "p", owner: null, mb: 10, startedAt: 1 };
   let p = g.updatePorts(null, [a], 1000);
   p = g.updatePorts(p, [], 2000);
@@ -455,9 +452,9 @@ test("Memory reports a failed Turn on and ignores earlier install attempts", asy
 });
 
 test("Windows Turn on launches hidden and keeps the installer ancestry alive until capture", async () => {
-  const calls = [], { Memory } = await load("kanso-guard/main.js", ["Memory"], {
+  const calls = [], { Memory } = await loadMemory({
     window: () => ({ platform: "windows" }), appHome: () => "C:\\Herdr Home", readTextFile: async () => '{"node":"C:\\\\Node JS\\\\node.exe"}',
-    exec: async (command, args) => { calls.push([command, args]); return { code: 0, stdout: "", stderr: "" }; },
+    exec: async (command, args) => { calls.push([command, args]); return success(""); },
   });
   const pending = [], cx = { notify() {}, spawn: (fn) => pending.push(fn(cx)), timer: { after() {} } };
   const view = new Memory();
@@ -471,19 +468,10 @@ test("Windows Turn on launches hidden and keeps the installer ancestry alive unt
 });
 
 test("Memory hides the restart without an identified window and omits actions for unsupported shells", async () => {
-  const ids = [], texts = [];
-  const element = () => {
-    const proxy = new Proxy({}, { get: (_target, method) => (...args) => {
-      if (method === "when" && args[0]) args[1](proxy);
-      if (method === "id") ids.push(args[0]);
-      if (method === "child" && typeof args[0] === "string") texts.push(args[0]);
-      return proxy;
-    } });
-    return proxy;
-  };
-  const { Memory } = await load("kanso-guard/main.js", ["Memory"], { div: element, v_flex: element, h_flex: element, Button: { new: (id) => { ids.push(id); return element(); } } });
+  const { element, ids, words: texts } = keeping();
+  const { Memory, Armed } = await load("kanso-guard/main.js", ["Memory", "Armed"], { div: element, v_flex: element, h_flex: element, Button: { new: (id) => { ids.push(id); return element(); } } });
   const view = new Memory(), data = sample();
-  Object.assign(view, { busy: {}, armed: { is: () => false }, digest: null, now: { data } });
+  Object.assign(view, { busy: {}, armed: new Armed(), digest: null, now: { data } });
   data.window = { pid: null, mb: 0, reason: "Several windows" };
   data.swapLabel = "page file";
   view.hero({}, data, false);
@@ -497,14 +485,14 @@ test("Memory hides the restart without an identified window and omits actions fo
   const agent = { ...data.agents[1], closeable: false, recyclable: false };
   view.agentRow({}, agent, 0, { limit: 900, action: false, reason: true });
   assert.ok(!ids.some((id) => /guard-(?:recycle|close)-/.test(id)));
-  const { staleAgents } = await load("kanso-guard/model.js", ["staleAgents"]);
+  const { staleAgents } = await loadStaleAgents();
   assert.equal(staleAgents([{ ...agent, idleMin: 9000 }]).length, 0);
 });
 
 test("Windows server rows retain the reason their working directory is unavailable", async () => {
-  const { Ports } = await load("kanso-panel/ports.js", ["Ports"], {
+  const { Ports } = await loadPorts({
     window: () => ({ platform: "windows" }), home: () => "C:\\Users\\JJ", appHome: () => "C:\\Herdr",
-    exec: async (_command, args) => ({ code: 0, stdout: args.at(-1).includes("Get-NetTCPConnection") ? '[{"pid":50,"port":3000}]' : '[{"pid":50,"ppid":7,"command":"node server.js","name":"node.exe"}]', stderr: "" }),
+    exec: async (_command, args) => (success(args.at(-1).includes("Get-NetTCPConnection") ? '[{"pid":50,"port":3000}]' : '[{"pid":50,"ppid":7,"command":"node server.js","name":"node.exe"}]')),
   });
   const view = new Ports();
   view.shells = async () => new Map([[7, "t1"]]);
@@ -512,4 +500,59 @@ test("Windows server rows retain the reason their working directory is unavailab
   assert.equal(rows.length, 1);
   assert.equal(rows[0].cwd, null);
   assert.match(rows[0].cwdReason, /Herdr API on Windows/);
+});
+
+const unreadNow = async (reading) => {
+  const { cx, drain } = timedContext([]);
+  const page = await memoryPage({}, { readTextFile: reading });
+  page.read(cx);
+  await drain();
+  return page;
+};
+const failureOf = (drawn) => find(drawn, (el) => arg(el, "id") === "guard-unreadable");
+const said = (el) => texts(el).filter((words) => words !== "!");
+const reread = (page) => byTag(page.render({}), "guard-reread");
+
+test("Memory keeps the words of a file it could not read; an absent file is Off, and a file that is not Memory's is Unreadable without a failure", async () => {
+  const refused = await unreadNow(async () => { throw new Error("Permission denied"); });
+  assert.deepEqual([refused.now.state, refused.now.why], ["bad", "Permission denied"]);
+  assert.deepEqual(said(failureOf(refused.render({}))), ["Memory could not be read", "Permission denied"]);
+  assert.deepEqual(texts(reread(refused)), ["Refresh"], "one Refresh, in the line of the page");
+  assert.equal((await unreadNow(async () => null)).now.state, "off");
+  const garbled = await unreadNow(async () => "{nope");
+  assert.equal(failureOf(garbled.render({})) ?? null, null);
+  assert.deepEqual(texts(reread(garbled)), ["Refresh"]);
+});
+
+test("Memory's header Refresh is on only while no action runs, and the unreadable page's Refresh is off from its press until the read ends", async () => {
+  assert.deepEqual([{}, { check: {} }, { install: {} }, { "recycle:22": {}, check: {} }].map((busy) => refreshPlan({ now: null, busy }).header), [
+    { enabled: true, busy: false }, { enabled: false, busy: true }, { enabled: false, busy: false }, { enabled: false, busy: true }]);
+  assert.deepEqual([[{ state: "ok" }, false], [{ state: "bad" }, false], [{ state: "bad" }, true]].map(([now, refreshing]) => refreshPlan({ now, refreshing }).inline), [null, { enabled: true }, { enabled: false }]);
+  const { parseNow, clock } = await model();
+  const now = parseNow(JSON.stringify(sample(Date.now() - 30_000)));
+  const pages = await Promise.all([{}, { check: { at: Date.now() } }, { "recycle:22": { at: Date.now() } }].map((busy) => memoryPage({ now, busy })));
+  assert.deepEqual(pages.map((page) => { const tool = byTag(page.render({}), "guard-refresh"); return [arg(tool, "tooltip"), arg(tool, "disabled")]; }), [
+    [`Refresh · checked ${clock(now.data.at)}`, false], ["Checking…", true], [`Refresh · checked ${clock(now.data.at)}`, true]]);
+
+  const files = [];
+  const release = [];
+  const redraws = [];
+  const { cx, drain } = timedContext([], { notify: () => redraws.push("redraw") });
+  const page = await memoryPage({ now: { state: "bad", data: null, why: "Permission denied" } }, { readTextFile: (file) => (file.endsWith("now.json") ? new Promise((resolve) => { files.push(file); release.push(() => resolve("{nope")); }) : Promise.resolve(null)) });
+  assert.equal(arg(reread(page), "disabled"), false);
+  const pressed = reread(page);
+  pressed.calls.filter((call) => call[0] === "on_click").forEach(([, handler]) => handler({}, cx));
+  assert.deepEqual([files.length, redraws.length, arg(reread(page), "disabled")], [1, 1, true], "pressed: it reads, redraws at once and is off");
+  reread(page).calls.filter((call) => call[0] === "on_click").forEach(([, handler]) => handler({}, cx));
+  page.refresh(cx);
+  assert.equal(files.length, 1, "a second press does nothing");
+  release.shift()();
+  await drain();
+  assert.deepEqual([files.length, arg(reread(page), "disabled"), redraws.length], [1, false, 2], "the read ended: redrawn and on again");
+});
+
+test("Memory says an action that failed in the failure block", async () => {
+  const { parseNow } = await model();
+  const refused = (await memoryPage({ now: parseNow(JSON.stringify(sample(Date.now() - 30_000))), actionError: "Access is denied" })).render({});
+  assert.deepEqual(said(find(refused, (el) => arg(el, "id") === "guard-failed")), ["Access is denied"]);
 });

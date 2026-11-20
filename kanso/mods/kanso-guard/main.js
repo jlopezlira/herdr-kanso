@@ -4,14 +4,20 @@ import { systemApi } from "./platform-system.js";
 // Memory, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
 import { View, div } from "gpui-kit";
 import { v_flex, h_flex, Button } from "gpui-base";
-import { appHome, theme, nextCommand, readTextFile, layout } from "herdr";
-import { G, T, PULSE, breathe, Armed, tokens, quietTabs, quietLink, iconButton, section, ghost } from "./ui.js";
+import { appHome, theme, nextCommand, readTextFile } from "herdr";
+import { G, T, OPACITY, breathe, tokens } from "./ui.js";
+import { mark } from "./ui-mark.js";
+import { Armed, quietLink, iconButton } from "./ui-button.js";
+import { section } from "./ui-section.js";
+import { failureBlock, metric, skeletonOf } from "./kit.js";
+import { factList } from "./ui-facts.js";
+import { segmented } from "./ui-tab.js";
 import { Share } from "./share.js";
-import { tryOr, tryOrAsync, afterMount } from "./pure.js";
+import { tryOr, tryOrAsync, afterMount, readCommands, num } from "./pure.js";
+import { hiddenInLayout } from "./page.js";
+import { scrollPage, pageHeader, pageSections, refreshTool, moreLink, barChart, chartColumn, chartRoom } from "./ui-page.js";
 import { memorySpec, memoryText } from "./memory-card.js";
-import { RANGES, size, span, clock, parseNow, agentsMB, agentMeta, limitsNote, sparkFor, digestHistory, groupAgents, freedEstimate, parseBatch, staleAgents, idleWords, installError, leaveShowAll } from "./model.js";
-
-const num = (v) => (typeof v === "number" && Number.isFinite(v) ? v : null);
+import { RANGES, size, span, clock, parseNow, agentsMB, agentMeta, limitsNote, sparkFor, digestHistory, groupAgents, freedEstimate, parseBatch, staleAgents, idleWords, installError, leaveShowAll, unreadable, refreshPlan } from "./model.js";
 
 const MOD = "kanso-guard";
 const DATA_DIR = `data/${MOD}`;
@@ -23,26 +29,22 @@ const BUSY_MS = 90_000;
 const AGENT_ROWS = 12;
 const EVENT_ROWS = 15;
 const HEAVY_ROWS = 6;
+const SHARE_NOTE = "Only counts and sizes: no agent names, folders or sessions. The post opens with the image in it.";
 
-// True when the mod's block is in the layout but not on screen (hidden node, or a stack showing another child).
-function hiddenInLayout() {
+// The Node the guard runs under: runtime.json names it, "node" is the fallback.
+const runtimeNode = async () => {
+  const text = await readTextFile(paths.join(appHome(), RUNTIME_FILE)).catch(() => null);
+  const asked = tryOr(() => JSON.parse(text ?? "{}")?.node);
+  return typeof asked === "string" && asked.trim() ? asked.trim() : "node";
+};
+
+const readNow = async (file) => {
   try {
-    const pathTo = (node) => {
-      if (node?.content?.mod === MOD) return [node];
-      for (const child of node?.children ?? []) {
-        const below = pathTo(child);
-        if (below) return [node, ...below];
-      }
-      return null;
-    };
-    const path = pathTo(layout());
-    if (!path) return false;
-    return path.some((node, index) => node.hidden
-      || (node.type === "stack" && node.active && path[index + 1] && node.active !== path[index + 1].id));
-  } catch {
-    return false;
+    return parseNow(await readTextFile(file));
+  } catch (error) {
+    return unreadable(error);
   }
-}
+};
 
 export default class Memory extends View {
   init(_props, cx) {
@@ -50,10 +52,9 @@ export default class Memory extends View {
     this.awake = false;
     this.width = 960;
     this.node = null;
-    this.now = null;
-    this.digest = null;
-    this.historyAt = 0;
+    this.forget();
     this.reading = false;
+    this.refreshing = false;
     this.range = "day";
     this.share = new Share(MOD, paths.join(appHome(), DATA_DIR, "share"));
     this.batch = null;
@@ -65,58 +66,81 @@ export default class Memory extends View {
     this.timers = [];
     this.ticker = null;
 
-    if (!hiddenInLayout()) afterMount(cx, (cx) => this.wake(cx));
-
-    this.commandTask = cx.spawn(async (commandCx) => {
-      for (;;) {
-        // A replaced build (hot reload, update) stops here.
-        const next = await tryOrAsync(async () => {
-          const command = await nextCommand();
-          commandCx.notify();
-          return { command };
-        });
-        if (!next) break;
-        const name = String(next.command).replace(new RegExp(`^${MOD}\\.`), "");
-        if (name === "refresh") this.check(commandCx);
-        else if (name === "open") this.wake(commandCx);
-        else if (name === "back") {
-          const next = leaveShowAll(this.showAll);
-          if (next === null) return;
-          this.showAll = next;
-          commandCx.notify();
-        }
-      }
+    if (!hiddenInLayout(MOD)) afterMount(cx, (wakeCx) => this.wake(wakeCx));
+    readCommands(cx, () => nextCommand(), (command, commandCx) => this.command(command, commandCx), {
+      closed: () => this.closed,
+      keep: (task) => { this.commandTask = task; },
     });
   }
 
-  wake(cx) {
-    if (this.closed) return;
-    this.awake = true;
-    if (!this.ticker) {
-      this.ticker = cx.timer.every(TICK_MS, (tickCx) => {
-        if (hiddenInLayout()) { this.sleep(); return; }
-        this.read(tickCx);
-      });
+  // The mod's own commands; a "back" with nothing to leave stops the reader, as a return did before.
+  command(raw, cx) {
+    const name = String(raw).replace(new RegExp(`^${MOD}\\.`), "");
+    if (name === "refresh") this.check(cx);
+    else if (name === "open") this.wake(cx);
+    else if (name === "back") {
+      const next = leaveShowAll(this.showAll);
+      if (next === null) return false;
+      this.showAll = next;
+      cx.notify();
     }
-    this.read(cx);
   }
 
-  sleep() {
-    this.awake = false;
-    for (const handle of [this.ticker, this.batchTimer, ...this.timers]) {
-      try { handle?.cancel(); } catch { /* already gone */ }
-    }
-    this.ticker = null;
-    this.timers = [];
+  // Nothing remembered: the next read starts from the files alone.
+  forget() {
     this.now = null;
     this.digest = null;
     this.historyAt = 0;
   }
 
+  // Herdr can hand back a handle that is already gone: a cancel is allowed to fail.
+  cancelAll(handles) {
+    for (const handle of handles) {
+      try { handle?.cancel(); } catch { /* already gone */ }
+    }
+  }
+
+  wake(wakeCx) {
+    if (this.closed) return;
+    this.awake = true;
+    if (!this.ticker) this.ticker = wakeCx.timer.every(TICK_MS, (tickCx) => {
+      if (hiddenInLayout(MOD)) { this.sleep(); return; }
+      this.read(tickCx);
+    });
+    this.read(wakeCx);
+  }
+
+  // A space switch can bring the page back without a command: wake on the next tick, outside the render pass.
+  wakeOnShow(cx) {
+    if (this.awake || this.closed || this.waking || hiddenInLayout(MOD)) return;
+    this.waking = true;
+    cx.timer.after(0, (wakeCx) => this.woken(wakeCx));
+  }
+
+  woken(wakeCx) {
+    this.waking = false;
+    if (!hiddenInLayout(MOD)) this.wake(wakeCx);
+  }
+
+  sleep() {
+    this.awake = false;
+    this.refreshing = false;
+    this.cancelAll([this.ticker, this.batchTimer, ...this.timers]);
+    this.ticker = null;
+    this.timers = [];
+    this.forget();
+  }
+
   close() {
     this.closed = true;
-    for (const handle of [this.ticker, this.batchTimer, this.commandTask, ...this.timers]) {
-      try { handle?.cancel(); } catch { /* already gone */ }
+    this.cancelAll([this.ticker, this.batchTimer, this.commandTask, ...this.timers]);
+  }
+
+  refresh(cx) {
+    if (!this.refreshing) {
+      this.refreshing = true;
+      cx.notify();
+      this.read(cx);
     }
   }
 
@@ -125,7 +149,7 @@ export default class Memory extends View {
     this.reading = true;
     cx.spawn(async (readCx) => {
       const dir = paths.join(appHome(), DATA_DIR);
-      const now = await tryOrAsync(async () => parseNow(await readTextFile(paths.join(dir, "now.json"))), { state: "bad", data: null });
+      const now = await readNow(paths.join(dir, "now.json"));
       const last = this.digest;
       // A history.json that can't be read keeps the last digest.
       const fresh = now.data && (!last || Date.now() - this.historyAt >= HISTORY_MS)
@@ -139,9 +163,10 @@ export default class Memory extends View {
       const batch = await tryOrAsync(async () => parseBatch(await readTextFile(paths.join(dir, "batch.json"))), null);
       const installing = this.busy.install;
       const installFailure = installing ? installError(await tryOrAsync(() => readTextFile(paths.join(dir, "install.json"))), installing.at) : null;
-      this.reading = false;
-      if (this.closed || !this.awake) return;
       const before = this.picture();
+      this.reading = false;
+      this.refreshing = false;
+      if (this.closed || !this.awake) return;
       this.now = now;
       this.digest = digest;
       this.batch = batch && batch.at !== this.batchSeen ? batch : null;
@@ -155,7 +180,7 @@ export default class Memory extends View {
   }
 
   picture() {
-    return JSON.stringify([this.now, this.digest, this.batch, this.actionError, this.busy]);
+    return JSON.stringify([this.now, this.digest, this.batch, this.actionError, this.busy, this.refreshing]);
   }
 
   settle() {
@@ -178,11 +203,7 @@ export default class Memory extends View {
     cx.notify();
     cx.spawn(async (actCx) => {
       try {
-        if (!this.node) {
-          const raw = await readTextFile(paths.join(appHome(), RUNTIME_FILE)).catch(() => null);
-          const v = tryOr(() => JSON.parse(raw ?? "{}")?.node);
-          this.node = typeof v === "string" && v.trim() ? v.trim() : "node";
-        }
+        if (!this.node) this.node = await runtimeNode();
         const result = await localService(systemApi).guardRun(this.node, paths.join(appHome(), GUARD_FILE), args, appHome());
         if (result.code !== 0) throw new Error(result.stderr || "Memory could not start");
       } catch (error) {
@@ -192,7 +213,7 @@ export default class Memory extends View {
       if (this.closed || !this.awake) return;
       const timers = [...this.timers, ...[3000, 8000, 20_000].map((ms) => actCx.timer.after(ms, (timerCx) => { this.historyAt = 0; this.read(timerCx); }))];
       const extra = Math.max(0, timers.length - 12);
-      for (const handle of timers.slice(0, extra)) { try { handle?.cancel(); } catch { /* already gone */ } }
+      this.cancelAll(timers.slice(0, extra));
       this.timers = timers.slice(extra);
       actCx.notify();
     });
@@ -221,34 +242,19 @@ export default class Memory extends View {
   reap(cx) { this.act("reap", ["reap"], (data) => !data.helpers, cx); }
 
   render(cx) {
-    if (!this.awake && !this.closed && !this.waking && !hiddenInLayout()) {
-      this.waking = true;
-      cx.timer.after(0, (wakeCx) => {
-        this.waking = false;
-        if (!hiddenInLayout()) this.wake(wakeCx);
-      });
-    }
+    this.wakeOnShow(cx);
     const c = tokens(theme());
     if (!localService(systemApi).memoryGuardAvailable) return v_flex().size_full().p(G.xl).text_size(T.card).text_color(c.muted).child(localService(systemApi).memoryGuardReason);
     const narrow = (this.width || 960) < 560;
     const state = this.now?.state;
-    const body = !this.now ? this.skeleton(c, narrow)
+    const body = !this.now ? this.skeleton(c)
       : state === "off" || state === "bad" ? this.offView(c, state)
         : this.mainView(c, narrow);
-    return v_flex().id("guard-root").size_full().min_h(0).bg(c.canvas).text_color(c.text)
-      .overflow_y_scrollbar()
-      .on_size_change((s, sizeCx) => {
-        const changed = Math.abs((this.width || 0) - s.width) >= 1;
-        this.width = s.width;
-        if (changed) sizeCx.notify();
-      })
-      .child(h_flex().flex_none().w_full().justify_center().px(narrow ? G.lg : 32).py(narrow ? G.lg : 28)
-        .child(v_flex().w_full().max_w(1080).gap(narrow ? 32 : 44)
-          .child(this.header(c, narrow))
-          .when(this.share.open && this.canShare(), (el) => el.child(this.share.row(c, () => this.shareCard(),
-            "Only counts and sizes: no agent names, folders or sessions. The post opens with the image in it.", G.sm)))
-          .when(Boolean(this.actionError), (el) => el.child(div().text_size(T.body).text_color(c.red).child(this.actionError)))
-          .child(body)));
+    return scrollPage.call(this, "guard-root", c, narrow, (column) => column
+      .child(this.header(c, narrow))
+      .when(this.share.open && this.canShare(), (el) => el.child(this.share.row(c, () => this.shareCard(), SHARE_NOTE, G.sm)))
+      .when(Boolean(this.actionError), (el) => el.child(failureBlock({ text: this.actionError })("guard-failed", c)))
+      .child(body), { always: true });
   }
 
   canShare() { return this.now?.state === "ok" && Boolean(this.now.data); }
@@ -258,55 +264,44 @@ export default class Memory extends View {
   }
 
   header(c, narrow) {
-    const busy = Boolean(this.busy.check);
     const at = this.now?.data?.at;
-    const tip = busy ? "Checking…" : at ? `Check now · checked ${clock(at)}` : "Check now";
-    return h_flex().w_full().items_center().justify_between().gap(G.md)
-      .child(div().text_size(narrow ? 17 : 20).text_color(c.text).child(this.now?.data?.metric === "working set" ? "Memory · working set" : "Memory"))
-      .child(h_flex().gap(G.xs).items_center().flex_none()
-        .when(this.canShare(), (el) => el.child(iconButton("guard-share", "share", "Share", (cx) => this.share.toggle(cx), c, { active: this.share.open })))
-        .child(iconButton("guard-refresh", "refresh", tip, (cx) => this.check(cx), c, { spin: busy, disabled: busy })));
+    const { header } = refreshPlan(this);
+    return pageHeader(div().text_size(narrow ? 17 : T.page).text_color(c.text).child(this.now?.data?.metric === "working set" ? "Memory · working set" : "Memory"), [
+      this.canShare() ? iconButton("guard-share", "share", "Share", (cx) => this.share.toggle(cx), c, { active: this.share.open }) : null,
+      refreshTool("guard-refresh", c, { ...header, working: "Checking…", stamp: at ? `checked ${clock(at)}` : "" }, (cx) => this.check(cx)),
+    ]);
   }
 
-  skeleton(c, narrow) {
-    const { block, row } = ghost(c);
-    const heights = [40, 44, 42, 46, 50, 48, 52, 38, 30, 26, 34, 42, 48, 54, 56, 52, 50, 46, 44, 48, 52, 50, 46, 44];
-    return breathe(v_flex().id("kanso-skeleton").w_full().gap(narrow ? 36 : 48))
-      .child(v_flex().gap(G.md)
-        .child(block(narrow ? 120 : 170, narrow ? 40 : 58, 6))
-        .child(block(190, 11))
-        .child(h_flex().gap(narrow ? G.xl : 48).pt(G.md).children([52, 46, 64, 40].map((w) => block(w, narrow ? 18 : 22, 4)))))
-      .child(h_flex().w_full().h(110).items_end()
-        .children(heights.map((h) => v_flex().flex_1().min_w(0).items_center().justify_end().child(block(2, h, 1)))))
-      .child(v_flex().w_full()
-        .child(h_flex().pb(G.sm).child(block(70, 12)))
-        .children([0, 1, 2, 3, 4].map(row)));
+  skeleton(c) {
+    return v_flex().w_full().gap(G.xl).child(skeletonOf({ shape: "metric" })("kanso-skeleton", c)).child(skeletonOf({ shape: "two lines", count: 3 })("kanso-skeleton-rows", c));
   }
 
   offView(c, state, narrow) {
     const busy = Boolean(this.busy.install);
+    const { failure, inline } = refreshPlan(this);
     return v_flex().w_full().gap(G.md)
-      .child(div().text_size(narrow ? 22 : 28).font_light().text_color(c.muted).child(state === "bad" ? "Unreadable" : "Off"))
+      .child(metric({ value: state === "bad" ? "Unreadable" : "Off", tone: "muted" })("guard-off", c))
       .child(h_flex().gap(G.lg).items_center()
-        .child(quietLink("guard-on", busy ? "Turning on…" : "Turn on", (cx) => { if (!busy) this.turnOn(cx); }, c, { size: 13, color: c.text }))
-        .when(state === "bad", (el) => el.child(quietLink("guard-reread", "Read again", (cx) => this.read(cx), c, { size: 13 }))));
+        .child(quietLink("guard-on", busy ? "Turning on…" : "Turn on", (cx) => { if (!busy) this.turnOn(cx); }, c, { color: c.text }))
+        .when(Boolean(inline), (el) => el.child(quietLink("guard-reread", "Refresh", (cx) => this.refresh(cx), c, { disabled: !inline.enabled }))))
+      .when(Boolean(failure), (el) => el.child(failureBlock(failure)("guard-unreadable", c)));
   }
 
   mainView(c, narrow) {
     const data = this.now.data;
     const stale = this.now.state === "stale";
     const events = data.events.filter((e) => e.text !== data.window?.reason);
-    return v_flex().w_full().gap(narrow ? 36 : 48)
+    return pageSections(narrow)
       .when(stale, (el) => el.child(h_flex().w_full().gap(G.lg).items_center()
-        .child(div().text_size(12).text_color(c.red).child(`Stopped at ${clock(data.at)}`))
+        .child(div().text_size(T.value).text_color(c.red).child(`Stopped at ${clock(data.at)}`))
         .child(quietLink("guard-on", this.busy.install ? "Turning on…" : "Turn on", (cx) => { if (!this.busy.install) this.turnOn(cx); }, c, { color: c.text }))))
-      .child(v_flex().w_full().gap(narrow ? 36 : 48).opacity(stale ? 0.55 : 1)
+      .child(pageSections(narrow).opacity(stale ? OPACITY.away : 1)
         .child(this.hero(c, data, narrow))
         .child(this.chart(c))
         .child(this.agents(c, data))
         .when(data.heaviest.length > 0, (el) => el.child(this.heaviest(c, data)))
         .when(events.length > 0, (el) => el.child(this.events(c, { ...data, events })))
-        .child(div().text_size(10.5).text_color(c.dim).child(limitsNote(data.limits))));
+        .child(div().text_size(T.micro).text_color(c.dim).child(limitsNote(data.limits))));
   }
 
   hero(c, data, narrow) {
@@ -317,59 +312,54 @@ export default class Memory extends View {
     const totals = this.digest?.totals;
     const windowHot = Boolean(w.oom) || (typeof w.mb === "number" && typeof l.windowMB === "number" && w.mb > l.windowMB);
     const stats = [
-      { value: size(w.pid ? w.mb : undefined), unit: "window", tip: w.oom ? "Its mod runtime ran out of memory" : null, hot: windowHot },
+      { value: size(w.pid ? w.mb : undefined), unit: w.oom ? "window, out of memory" : windowHot ? "window, over its limit" : "window" },
       { value: size(data.core.mb), unit: "core" },
       { value: size(agentsMB(data)), unit: `${data.agents.length} ${data.agents.length === 1 ? "agent" : "agents"}` },
       totals ? { value: String(totals.recycles), unit: totals.recycles === 1 ? "recycle" : "recycles" } : null,
       totals && totals.closed ? { value: String(totals.closed), unit: "closed" } : null,
       totals ? { value: String(totals.restarts), unit: totals.restarts === 1 ? "restart" : "restarts" } : null,
-      totals && totals.freedMB > 0 ? { value: size(totals.freedMB), unit: "freed", tip: totals.since ? `Since ${clock(totals.since)}` : null } : null,
+      totals && totals.freedMB > 0 ? { value: size(totals.freedMB), unit: totals.since ? `freed since ${clock(totals.since)}` : "freed" } : null,
     ].filter(Boolean);
-    const armedRestart = this.armed.is("restart");
-    const armedReap = this.armed.is("reap");
+    const unit = [data.paused ? "free, paused" : "free", m.totalMB ? `of ${size(m.totalMB)}` : null].filter(Boolean).join(" ");
     return v_flex().w_full().gap(G.xl)
-      .child(v_flex().gap(G.xs)
-        .child(h_flex().flex_wrap().items_end().gap_x(G.md)
-          .child(div().text_size(narrow ? 48 : 72).line_height(1).font_light().text_color(low ? c.red : c.text).child(free === null ? "–" : `${free}%`))
-          .child(div().pb(narrow ? 6 : 10).text_size(13).text_color(c.dim).child(data.paused ? "free · paused" : "free")))
-        .child(div().text_size(15).text_color(c.dim).child([m.totalMB ? `of ${size(m.totalMB)}` : null, swap].filter(Boolean).join(" · "))))
-      .child(h_flex().w_full().flex_wrap().gap_x(narrow ? G.xl : 48).gap_y(G.lg)
-        .children(stats.map((s) => h_flex().items_end().gap(6).when(Boolean(s.tip), (el) => el.tooltip(s.tip))
-          .child(div().text_size(narrow ? 22 : 28).line_height(1).font_light().text_color(s.hot ? c.red : c.text).child(s.value))
-          .child(div().pb(3).text_size(12).text_color(c.dim).child(s.unit)))))
+      .child(metric({ value: free === null ? "–" : `${free}%`, unit: [unit, swap].filter(Boolean).join(" · "), facts: factList(stats), tone: low ? "blocked" : "" })("guard-metric", c))
       .child(h_flex().w_full().flex_wrap().gap_x(G.lg).items_center()
-        .when(Boolean(w.pid), (el) => el.child(quietLink("guard-restart", this.busy.restart ? "Restarting the window…" : armedRestart ? "Press again to restart the window" : "Restart window",
-          (cx) => { if (!this.busy.restart) this.armed.press("restart", cx, (cx) => this.restartWindow(cx)); }, c, { color: armedRestart ? c.red : c.muted })))
-        .when(data.helpers > 0 || Boolean(this.busy.reap), (el) => el.child(quietLink("guard-reap",
-          this.busy.reap ? "Cleaning up…" : armedReap ? `Press again to end ${data.helpers}` : `Clean up ${data.helpers} hung ${data.helpers === 1 ? "helper" : "helpers"}`,
-          (cx) => { if (!this.busy.reap) this.armed.press("reap", cx, (cx) => this.reap(cx)); }, c, { color: armedReap ? c.red : c.muted }))))
+        .when(Boolean(w.pid), (el) => el.child(quietLink("guard-restart", this.busy.restart ? "Restarting the window…" : "Restart window",
+          (cx) => { if (!this.busy.restart) this.restartWindow(cx); }, c)))
+        .when(data.helpers > 0 || Boolean(this.busy.reap), (el) => el.child(this.armed.link("guard-reap",
+          this.busy.reap ? "Cleaning up…" : `Clean up ${data.helpers} hung ${data.helpers === 1 ? "helper" : "helpers"}`, `end ${data.helpers}`,
+          "reap", (cx) => this.reap(cx), c, { disabled: Boolean(this.busy.reap) }))))
       .when(Boolean(w.reason), (el) => el.child(div().text_size(T.body).text_color(c.muted).child(w.reason)));
   }
 
   chart(c) {
-    const series = this.digest?.series?.[this.range];
     const height = 96;
-    return v_flex().w_full().gap(G.sm)
-      .child(h_flex().w_full().items_center().justify_between().gap(G.md).pb(G.xs)
-        .child(quietTabs("guard-range", RANGES.map((r) => ({ key: r.key, label: r.label })), this.range, (key, cx) => { this.range = key; cx.notify(); }, c))
-        .child(div().text_size(12).text_color(c.dim).child(series?.lowest ? `lowest ${series.lowest}` : "")))
-      .child(h_flex().w_full().h(height + 18).items_end()
-        .children((series?.bars ?? []).map((bar) => v_flex().flex_1().min_w(0).h(height + 18).items_center().justify_end().gap(4)
-          .tooltip(bar.tip)
-          .when(Boolean(bar.mark), (el) => el.child(div().text_size(10).text_color(c.text).whitespace_nowrap().child(bar.value)))
-          .child(div().w(bar.mark ? 3 : 2).flex_none().rounded_t(1)
-            .h(bar.empty ? 1 : Math.max(2, Math.round(bar.ratio * height)))
-            .bg(bar.mark ? c.accent : bar.empty ? c.border : bar.low ? c.red : c.muted)
-            .opacity(bar.mark || bar.empty ? 1 : 0.55)))))
-      .child(h_flex().w_full().justify_between()
-        .child(div().text_size(10).text_color(c.dim).child(series?.first ?? ""))
-        .child(div().text_size(10).text_color(c.dim).child("Free"))
-        .child(div().text_size(10).text_color(c.dim).child(series?.last ?? "")));
+    const series = this.digest?.series?.[this.range];
+    return barChart(c, {
+      head: this.chartHead(c, series),
+      columns: (series?.bars ?? []).map((bar) => this.chartBar(bar, height, c)),
+      room: chartRoom(height),
+      axis: [series?.first ?? "", "Free", series?.last ?? ""],
+    });
+  }
+
+  chartHead(c, series) {
+    return h_flex().w_full().items_center().justify_between().gap(G.md).pb(G.xs)
+      .child(segmented("guard-range", RANGES.map((r) => ({ key: r.key, label: r.label })), this.range, (key, cx) => { this.range = key; cx.notify(); }, c))
+      .child(div().text_size(T.body).text_color(c.dim).child(series?.lowest ? `lowest ${series.lowest}` : ""));
+  }
+
+  chartBar(bar, height, c) {
+    return chartColumn(c, { tip: bar.tip, marked: Boolean(bar.mark), value: bar.value }, chartRoom(height))
+      .child(div().w(bar.mark ? 3 : 2).flex_none().rounded_t(1)
+        .h(bar.empty ? 1 : Math.max(2, Math.round(bar.ratio * height)))
+        .bg(bar.mark ? c.accent : bar.empty ? c.border : bar.low ? c.red : c.muted)
+        .opacity(bar.mark || bar.empty ? 1 : OPACITY.quiet));
   }
 
   spark(c, ratios) {
     return h_flex().h(16).flex_none().items_end().gap(1)
-      .children(ratios.map((r) => div().w(2).flex_none().rounded_t(1).h(r > 0 ? Math.max(2, Math.round(r * 16)) : 1).bg(r > 0 ? c.muted : c.border).opacity(r > 0 ? 0.6 : 1)));
+      .children(ratios.map((r) => div().w(2).flex_none().rounded_t(1).h(r > 0 ? Math.max(2, Math.round(r * 16)) : 1).bg(r > 0 ? c.muted : c.border).opacity(r > 0 ? OPACITY.trace : 1)));
   }
 
   agents(c, data) {
@@ -384,30 +374,25 @@ export default class Memory extends View {
       working.length ? `${working.length} working` : null,
       other.length ? `${other.length} can't be recycled` : null,
     ].filter(Boolean).join(" · ");
-    const armedAll = this.armed.is("all"), armedHeavy = this.armed.is("heavy"), armedStale = this.armed.is("stale");
     const staleMin = num(data.limits.staleIdleMin) ?? 2880;
     const stale = staleAgents(list, staleMin, data.focused);
     const actions = h_flex().w_full().flex_wrap().gap_x(G.xl).gap_y(G.sm).items_center()
       .when(batchable.length > 0, (el) => el.child(quietLink("guard-recycle-all",
-        armedAll ? `Press again to recycle ${batchable.length}` : `Recycle all ${batchable.length} idle · about ${size(freedEstimate(batchable))} back`,
-        (cx) => this.armed.press("all", cx, (cx) => this.recycleAll(0, cx)), c,
-        { color: armedAll ? c.red : c.text, size: 13, label: "Recycle every idle agent" })))
+        `Recycle all ${batchable.length} idle · about ${size(freedEstimate(batchable))} back`,
+        (cx) => this.recycleAll(0, cx), c, { color: c.text, label: "Recycle every idle agent" })))
       .when(heavy.length > 0 && heavy.length < batchable.length, (el) => el.child(quietLink("guard-recycle-heavy",
-        armedHeavy ? `Press again to recycle ${heavy.length}` : `Only the ${heavy.length} over ${size(over)}`,
-        (cx) => this.armed.press("heavy", cx, (cx) => this.recycleAll(over, cx)), c,
-        { color: armedHeavy ? c.red : c.muted, size: 13 })))
-      .when(stale.length > 0, (el) => el.child(quietLink("guard-close-stale",
-        armedStale ? `Press again to close ${stale.length}` : `Close the ${stale.length} not used for ${idleWords(staleMin)} · ${size(stale.reduce((t, a) => t + (a.mb ?? 0), 0))} back`,
-        (cx) => this.armed.press("stale", cx, (cx) => this.closeStale(staleMin, cx)), c,
-        { color: armedStale ? c.red : c.muted, size: 13, label: "Close agents not used for a long time" })));
+        `Only the ${heavy.length} over ${size(over)}`, (cx) => this.recycleAll(over, cx), c)))
+      .when(stale.length > 0, (el) => el.child(this.armed.link("guard-close-stale",
+        `Close the ${stale.length} not used for ${idleWords(staleMin)} · ${size(stale.reduce((t, a) => t + (a.mb ?? 0), 0))} back`, `close ${stale.length}`,
+        "stale", (cx) => this.closeStale(staleMin, cx), c, { label: "Close agents not used for a long time" })));
     return v_flex().w_full().gap(G.xl)
       .child(v_flex().w_full().gap(G.sm)
         .child(section(c, "Agents", list.length ? size(agentsMB(data)) : ""))
-        .when(list.length === 0, (el) => el.child(div().text_size(12).text_color(c.dim).child("None running.")))
-        .when(Boolean(counts), (el) => el.child(div().text_size(12).text_color(c.dim).child(counts)))
+        .when(list.length === 0, (el) => el.child(div().text_size(T.body).text_color(c.dim).child("None running.")))
+        .when(Boolean(counts), (el) => el.child(div().text_size(T.body).text_color(c.dim).child(counts)))
         .when(Boolean(this.batch), (el) => el.child(this.batchView(c)))
         .when(!batchBusy && (batchable.length > 0 || stale.length > 0), (el) => el.child(actions))
-        .when(!batchBusy && ready.length > 0 && batchable.length === 0, (el) => el.child(div().text_size(12).text_color(c.dim).child("Only the agent you are on is idle; it is never recycled in bulk."))))
+        .when(!batchBusy && ready.length > 0 && batchable.length === 0, (el) => el.child(div().text_size(T.body).text_color(c.dim).child("Only the agent you are on is idle; it is never recycled in bulk."))))
       .when(ready.length > 0, (el) => el.child(this.group(c, "Ready to recycle", ready, { limit, action: !batchBusy })))
       .when(working.length > 0, (el) => el.child(this.group(c, "Working", working, { limit })))
       .when(other.length > 0, (el) => el.child(this.group(c, "Can't be recycled", other, { limit, reason: true })));
@@ -423,14 +408,14 @@ export default class Memory extends View {
       : `${closing ? "Closing" : "Recycling"} ${Math.min(b.done.length + 1, b.total)} of ${b.total}${b.current ? ` · ${b.current}` : ""}`;
     return v_flex().w_full().gap(G.xs).py(G.sm)
       .child(h_flex().w_full().items_center().gap(G.sm)
-        .when(!b.finished, (el) => el.child(breathe(div().size(6).flex_none().rounded_full().bg(c.accent), PULSE)))
-        .child(div().flex_1().min_w(0).text_size(13).text_color(c.text).child(head))
-        .when(b.finished, (el) => el.child(quietLink("guard-batch-dismiss", "Dismiss", (cx) => { this.batchSeen = b.at; this.batch = null; delete this.busy.batch; cx.notify(); }, c, { size: 11.5 }))))
-      .children(b.done.map((d, i) => h_flex().w_full().items_center().gap(G.md).py(2).id(`guard-batch-${i}`)
-        .child(div().flex_1().min_w(0).truncate().text_size(12).text_color(d.ok ? c.muted : c.text).child(d.name ?? d.terminal ?? ""))
-        .child(div().flex_none().text_size(12).text_color(d.ok ? c.dim : c.red).whitespace_nowrap()
+        .when(!b.finished, (el) => el.child(mark(c, { status: "working", size: "sm" })))
+        .child(div().flex_1().min_w(0).text_size(T.card).text_color(c.text).child(head))
+        .when(b.finished, (el) => el.child(quietLink("guard-batch-dismiss", "Dismiss", (cx) => { this.batchSeen = b.at; this.batch = null; delete this.busy.batch; cx.notify(); }, c))))
+      .children(b.done.map((d, i) => h_flex().w_full().items_center().gap(G.md).py(G.hair).id(`guard-batch-${i}`)
+        .child(div().flex_1().min_w(0).truncate().text_size(T.body).text_color(d.ok ? c.muted : c.text).child(d.name ?? d.terminal ?? ""))
+        .child(div().flex_none().text_size(T.body).text_color(d.ok ? c.dim : c.red).whitespace_nowrap()
           .child(d.ok ? (closing ? `${size(d.beforeMB)} back` : `${size(d.beforeMB)} → ${size(d.afterMB ?? d.beforeMB)}`) : String(d.why ?? "not done")))))
-      .when(Boolean(b.skippedFocused), (el) => el.child(div().text_size(11).text_color(c.dim).child(`The agent you are on (${b.skippedFocused}) was left as it is.`)));
+      .when(Boolean(b.skippedFocused), (el) => el.child(div().text_size(T.micro).text_color(c.dim).child(`The agent you are on (${b.skippedFocused}) was left as it is.`)));
   }
 
   group(c, title, list, { limit, action = false, reason = false }) {
@@ -438,50 +423,46 @@ export default class Memory extends View {
     const shown = open ? list : list.slice(0, AGENT_ROWS);
     return v_flex().w_full()
       .child(h_flex().w_full().items_end().justify_between().pb(G.xs)
-        .child(div().text_size(12).text_color(c.muted).child(title))
-        .child(div().text_size(11.5).text_color(c.dim).child(`${list.length} · ${size(list.reduce((s, a) => s + (a.mb ?? 0), 0))}`)))
+        .child(div().text_size(T.body).text_color(c.muted).child(title))
+        .child(div().text_size(T.body).text_color(c.dim).child(`${list.length} · ${size(list.reduce((s, a) => s + (a.mb ?? 0), 0))}`)))
       .children(shown.map((a, index) => this.agentRow(c, a, index, { limit, action, reason })))
-      .when(list.length > AGENT_ROWS, (el) => el.child(h_flex().pt(G.sm)
-        .child(quietLink(`guard-more-${title}`, this.showAll ? "Show fewer" : `Show ${list.length - AGENT_ROWS} more`, (cx) => { this.showAll = !this.showAll; cx.notify(); }, c))));
+      .when(list.length > AGENT_ROWS, (el) => el.child(moreLink(`guard-more-${title}`, c, { open: this.showAll, hidden: list.length - AGENT_ROWS },
+        (cx) => { this.showAll = !this.showAll; cx.notify(); })));
   }
 
   agentRow(c, a, index, { limit, action, reason }) {
-    const key = `recycle:${a.pid}`, armed = this.armed.is(key), busy = Boolean(this.busy[key]);
-    const closeKey = `close:${a.pid}`, armedClose = this.armed.is(closeKey), closing = Boolean(this.busy[closeKey]);
+    const busy = Boolean(this.busy[`recycle:${a.pid}`]);
+    const closeKey = `close:${a.pid}`, closing = Boolean(this.busy[closeKey]);
     const closable = a.closeable !== false && a.kind === "claude" && Boolean(a.session) && a.status !== "working" && a.terminal !== this.now?.data?.focused && !(this.busy.batch || (this.batch && !this.batch.finished));
     const spark = sparkFor(this.digest?.sparks, a);
     const over = typeof limit === "number" && typeof a.mb === "number" && a.mb > limit;
     return h_flex().w_full().items_center().gap(G.md).py(G.sm).border_t(1).border_color(c.border)
       .child(v_flex().flex_1().min_w(0).gap(3)
         .child(h_flex().w_full().items_center().gap(G.sm)
-          .when(a.status === "working", (el) => el.child(breathe(div().size(5).flex_none().rounded_full().bg(c.accent), PULSE)))
-          .child(div().flex_1().min_w(0).truncate().text_size(13).text_color(reason ? c.muted : c.text).child(a.name || a.kind || String(a.pid))))
+          .when(a.status === "working", (el) => el.child(mark(c, { status: "working", size: "sm" })))
+          .child(div().flex_1().min_w(0).truncate().text_size(T.value).text_color(reason ? c.muted : c.text).child(a.name || a.kind || String(a.pid))))
         .child(h_flex().w_full().flex_wrap().gap_x(G.md)
           .children([...agentMeta(a), ...(a.terminal && a.terminal === this.now?.data?.focused ? ["you are on it"] : [])]
-            .map((part) => div().text_size(11).text_color(c.dim).whitespace_nowrap().child(part))))
-        .when(reason && Boolean(a.why), (el) => el.child(div().text_size(11).text_color(c.dim).child(a.why))))
-      .child(v_flex().flex_none().items_end().gap(2)
+            .map((part) => div().text_size(T.micro).text_color(c.dim).whitespace_nowrap().child(part))))
+        .when(reason && Boolean(a.why), (el) => el.child(div().text_size(T.micro).text_color(c.dim).child(a.why))))
+      .child(v_flex().flex_none().items_end().gap(G.hair)
         .child(h_flex().items_center().gap(G.md)
           .when(Boolean(spark), (el) => el.child(this.spark(c, spark.ratios)))
-          .child(div().text_size(15).font_light().text_color(over ? c.yellow : reason ? c.muted : c.text).whitespace_nowrap().child(size(a.mb))))
+          .child(div().text_size(T.title).font_light().text_color(over ? c.yellow : reason ? c.muted : c.text).whitespace_nowrap().child(size(a.mb))))
         .child(h_flex().gap(G.md).items_center()
-          .when(closable || closing, (el) => el.child(quietLink(`guard-close-${a.pid}`,
-            closing ? "Closing…" : armedClose ? "Press again to close" : "Close",
-            (cx) => { if (!closing) this.armed.press(closeKey, cx, (cx) => this.closeAgent(a, cx)); }, c,
-            { color: armedClose ? c.red : c.dim, size: 11.5, label: `Close ${a.name || a.pid}` })))
-          .when((action && a.recyclable) || busy, (el) => el.child(quietLink(`guard-recycle-${a.pid}`,
-            busy ? "Recycling…" : armed ? "Press again" : "Recycle",
-            (cx) => { if (!busy) this.armed.press(key, cx, (cx) => this.recycle(a, cx)); }, c,
-            { color: armed ? c.red : c.muted, size: 11.5, label: `Recycle ${a.name || a.pid}` })))));
+          .when(closable || closing, (el) => el.child(this.armed.link(`guard-close-${a.pid}`, closing ? "Closing…" : "Close", "close",
+            closeKey, (cx) => this.closeAgent(a, cx), c, { color: c.dim, disabled: closing, label: `Close ${a.name || a.pid}` })))
+          .when((action && a.recyclable) || busy, (el) => el.child(quietLink(`guard-recycle-${a.pid}`, busy ? "Recycling…" : "Recycle",
+            (cx) => { if (!busy) this.recycle(a, cx); }, c, { label: `Recycle ${a.name || a.pid}` })))));
   }
 
   heaviest(c, data) {
     return v_flex().w_full().gap(G.xs)
       .child(section(c, "Heaviest", ""))
       .children(data.heaviest.slice(0, HEAVY_ROWS).map((p) => h_flex().w_full().items_end().gap(G.md).py(5)
-        .child(div().flex_1().min_w(0).truncate().text_size(13).text_color(c.muted).child(p.name || String(p.pid)))
-        .child(div().text_size(11).text_color(c.dim).child(typeof p.ageMin === "number" ? `up ${span(p.ageMin)}` : ""))
-        .child(div().min_w(64).text_right().text_size(15).font_light().text_color(c.text).child(size(p.mb)))));
+        .child(div().flex_1().min_w(0).truncate().text_size(T.value).text_color(c.muted).child(p.name || String(p.pid)))
+        .child(div().text_size(T.micro).text_color(c.dim).child(typeof p.ageMin === "number" ? `up ${span(p.ageMin)}` : ""))
+        .child(div().min_w(64).text_right().text_size(T.title).font_light().text_color(c.text).child(size(p.mb)))));
   }
 
   events(c, data) {
@@ -489,7 +470,7 @@ export default class Memory extends View {
     return v_flex().w_full().gap(G.xs)
       .child(section(c, "Events", ""))
       .children(data.events.slice(0, EVENT_ROWS).map((e) => h_flex().w_full().items_start().gap(G.md).py(3)
-        .child(div().w(92).flex_none().text_size(11).text_color(c.dim).child(clock(e.at)))
-        .child(div().flex_1().min_w(0).text_size(12).line_height(1.4).text_color(tone[e.kind] ?? c.muted).child(String(e.text ?? "")))));
+        .child(div().w(92).flex_none().text_size(T.micro).text_color(c.dim).child(clock(e.at)))
+        .child(div().flex_1().min_w(0).text_size(T.body).line_height(1.4).text_color(tone[e.kind] ?? c.muted).child(String(e.text ?? "")))));
   }
 }

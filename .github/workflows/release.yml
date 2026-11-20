@@ -1,39 +1,78 @@
 name: Release
 
-# Merging develop into main releases the version in version.json when that
-# tag does not exist yet. Nothing else creates a plain vX.Y.Z tag.
+# One release planned from CHANGELOG.md and published on GitHub: a beta, a release candidate or a stable release.
 on:
-  push:
-    branches: [main]
-
-permissions:
-  contents: write
-
-concurrency:
-  group: release
-  cancel-in-progress: false
+  workflow_call:
+    inputs:
+      kind:
+        description: The release-plan arguments, as beta, stable or rc --prepare.
+        type: string
+        required: true
+      branch:
+        description: The only branch it runs from.
+        type: string
+        required: true
+      ref:
+        description: What to check out, when not the commit that started it.
+        type: string
+        default: ""
+      group:
+        description: "The concurrency group, so that one release of this kind runs at a time."
+        type: string
+        required: true
+      tag:
+        description: "archive: tag a detached commit with the computed version. commit: commit CHANGELOG.md and version.json to the branch and tag it. Empty: gh tags the target."
+        type: string
+        default: ""
+      options:
+        description: More gh release create options.
+        type: string
+        default: ""
 
 jobs:
   release:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+    concurrency:
+      group: ${{ inputs.group }}
+      cancel-in-progress: false
+    env:
+      KANSO_BRANCH: ${{ github.ref_name }}
     steps:
+      - name: Require ${{ inputs.branch }}
+        run: test "$GITHUB_REF_NAME" = "${{ inputs.branch }}"
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
+          ref: ${{ inputs.ref }}
+          fetch-depth: 0 # tags: the plan compares against the last release
+      - uses: ./.github/actions/node
       - name: Check the versioning
-        env:
-          KANSO_BRANCH: ${{ github.ref_name }}
         run: npm run check:version
-      - name: Plan the stable release
+      - name: Plan
         id: plan
-        env:
-          KANSO_BRANCH: ${{ github.ref_name }}
-        run: node scripts/release-plan.mjs stable
-      - name: Publish the stable release
+        run: node scripts/release-plan.mjs ${{ inputs.kind }}
+      - name: Tag as the actor
+        if: steps.plan.outputs.action == 'release' && inputs.tag != ''
+        run: |
+          git config user.name "$GITHUB_ACTOR"
+          git config user.email "$GITHUB_ACTOR_ID+$GITHUB_ACTOR@users.noreply.github.com"
+          echo "RELEASE_TAG=${{ steps.plan.outputs.tag }}" >> "$GITHUB_ENV"
+      - name: Tag the archive
+        if: steps.plan.outputs.action == 'release' && inputs.tag == 'archive'
+        run: |
+          node scripts/release-tag.mjs "$RELEASE_TAG"
+          git push origin "refs/tags/$RELEASE_TAG"
+      - name: Commit and tag
+        if: steps.plan.outputs.action == 'release' && inputs.tag == 'commit'
+        run: |
+          git add CHANGELOG.md kanso/mods/kanso-chrome/version.json
+          if ! git diff --cached --quiet; then
+            git commit -m "Prepare $RELEASE_TAG"
+          fi
+          node scripts/release-tag.mjs "$RELEASE_TAG"
+          git push --atomic origin "HEAD:refs/heads/${{ inputs.branch }}" "refs/tags/$RELEASE_TAG"
+      - name: Publish
         if: steps.plan.outputs.action == 'release'
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "${{ steps.plan.outputs.tag }}" --target "$GITHUB_SHA" --title "${{ steps.plan.outputs.title }}" --notes-file "${{ steps.plan.outputs.notes }}"
+        run: gh release create "${{ steps.plan.outputs.tag }}" ${{ inputs.options }} --title "${{ steps.plan.outputs.title }}" --notes-file "${{ steps.plan.outputs.notes }}"

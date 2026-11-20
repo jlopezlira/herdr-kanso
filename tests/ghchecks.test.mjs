@@ -1,4 +1,5 @@
 // A pull request's checks, read once (ghchecks.js) for the PR panel and the header's digest.
+import { loadCheckState, loadPullRequest } from "./mod-fixtures.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { load } from "./helpers.mjs";
@@ -6,8 +7,11 @@ import { load } from "./helpers.mjs";
 const run = (status, conclusion = "", name) => ({ __typename: "CheckRun", status, conclusion, ...(name ? { name } : {}) });
 const commit = (state, context) => ({ __typename: "StatusContext", state, ...(context ? { context } : {}) });
 
+// A pull request panel that never ran its constructor: only its methods.
+const barePanel = async () => new (await loadPullRequest()).PullRequest();
+
 test("A check run reads by its status, then its conclusion", async () => {
-  const { checkState } = await load("kanso-panel/ghchecks.js", ["checkState"]);
+  const { checkState } = await loadCheckState();
   assert.equal(checkState(run("COMPLETED", "SUCCESS")), "pass");
   assert.equal(checkState(run("COMPLETED", "NEUTRAL")), "pass");
   assert.equal(checkState(run("COMPLETED", "SKIPPED")), "skipped", "its own state, counted as passed");
@@ -18,7 +22,7 @@ test("A check run reads by its status, then its conclusion", async () => {
 });
 
 test("A commit status reads by its state", async () => {
-  const { checkState } = await load("kanso-panel/ghchecks.js", ["checkState"]);
+  const { checkState } = await loadCheckState();
   assert.equal(checkState(commit("SUCCESS")), "pass");
   assert.equal(checkState(commit("FAILURE")), "fail");
   assert.equal(checkState(commit("ERROR")), "fail");
@@ -90,8 +94,7 @@ test("Of the same key the worst is kept, whatever the times say", async () => {
 
 test("The header's digest and the PR panel agree on the same checks", async () => {
   const { checksOf } = await load("kanso-strip/main.js", ["checksOf"]);
-  const { PullRequest } = await load("kanso-panel/pr.js", ["PullRequest"], {});
-  const panel = Object.create(PullRequest.prototype);
+  const panel = await barePanel();
   const colors = { dim: "dim", red: "red", yellow: "yellow", green: "green", violet: "violet" };
   // The panel's row says it in words; the header in one of four.
   const panelSays = (rollup) => {
@@ -113,5 +116,28 @@ test("The header's digest and the PR panel agree on the same checks", async () =
     [run("COMPLETED", "SKIPPED", "a"), run("COMPLETED", "NEUTRAL", "b")],
     [job("CI", "test", "SUCCESS", "2026-11-08T10:00:00Z"), { ...run("QUEUED", "", "test"), workflowName: "CI", startedAt: "0001-01-01T00:00:00Z" }],
   ];
-  for (const rollup of cases) assert.equal(checksOf(rollup), panelSays(rollup), JSON.stringify(rollup));
+  for (const rollup of cases) {
+    assert.equal(checksOf(rollup), panelSays(rollup), JSON.stringify(rollup));
+  }
+});
+
+test("A list row keeps the check words while permission is unread", async () => {
+  const panel = await barePanel();
+  panel.session.permission = null;
+  panel.session.permissionRepo = "o/r";
+  const colors = { dim: "dim", muted: "muted", red: "red", yellow: "yellow", green: "green", violet: "violet", blocked: "red", working: "yellow", done: "green" };
+  const pass = [run("COMPLETED", "SUCCESS", "ci")];
+  const fail = [run("COMPLETED", "FAILURE", "ci")];
+  const row = (over, rollup = pass) => panel.rowState({
+    state: "OPEN", url: "https://github.com/o/r/pull/1", mergeable: "MERGEABLE", statusCheckRollup: rollup, ...over,
+  }, colors).text;
+  assert.equal(row({ mergeStateStatus: "CLEAN" }), "Checks passed");
+  assert.equal(row({ mergeStateStatus: "CLEAN", reviewDecision: "APPROVED" }), "Approved");
+  assert.equal(row({ mergeStateStatus: "CLEAN" }, fail), "1 check failing");
+  panel.session.permission = "WRITE";
+  assert.equal(row({ mergeStateStatus: "CLEAN" }), "Ready to merge");
+  panel.session.permission = null;
+  assert.equal(row({ mergeStateStatus: "CLEAN", reviewDecision: "REVIEW_REQUIRED" }), "Review required");
+  assert.equal(row({ mergeStateStatus: "CLEAN" }).includes("Checking"), false);
+  assert.equal(row({ mergeStateStatus: "CLEAN", reviewDecision: "APPROVED" }), "Approved", "an approval still reads after a required review");
 });

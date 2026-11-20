@@ -1,7 +1,10 @@
 name: CI
 
+# A push to develop publishes vX.Y.Z-beta.N once all three platforms pass, when
+# what kanso installs changed since the last beta of that version or the newest stable tag.
+# A push to main publishes vX.Y.Z the same way: only after all three platforms pass.
+# Pull requests are not run here: run the checks in CONTRIBUTING.md locally before opening one.
 on:
-  pull_request:
   push:
     branches: [main, develop]
 
@@ -10,21 +13,28 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        include:
+          - os: ubuntu-latest
+          - os: macos-latest
+          # Process starts are slow on Windows: its tests run in three shards, each on its own runner.
+          - { os: windows-latest, shard: "1/3" }
+          - { os: windows-latest, shard: "2/3" }
+          - { os: windows-latest, shard: "3/3" }
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0 # tags: the version check compares against the last release
-      - uses: actions/setup-node@v4
+      - uses: ./.github/actions/node
         with:
-          node-version: 22
-      - name: Versioning (version.json, CHANGELOG.md, semantic bumps)
+          cache: npm
+      - name: Packages the scripts and tests import
+        run: npm ci --ignore-scripts
+      - name: Pre-PR checks (version, shared files, built files, repeated code)
         env:
-          KANSO_BRANCH: ${{ github.event_name == 'pull_request' && github.base_ref || github.ref_name }}
-        run: npm run check:version
-      - name: Shared files
-        run: npm run sync:share -- --check
+          KANSO_BRANCH: ${{ github.ref_name }}
+        run: npm run pre-pr -- --checks-only
       - name: sqlite3 on Linux
         if: runner.os == 'Linux'
         run: command -v sqlite3 || (sudo apt-get update -qq && sudo apt-get install -y -qq sqlite3)
@@ -35,15 +45,42 @@ jobs:
           if (-not (Get-Command sqlite3 -ErrorAction SilentlyContinue)) {
             choco install sqlite --yes --no-progress
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            # The tests start sqlite3 hundreds of times: the real one, not Chocolatey's shim in front of it.
+            Add-Content $env:GITHUB_PATH "$env:ChocolateyInstall\lib\SQLite\tools"
           }
       - name: Tests
-        run: npm test
+        timeout-minutes: 20
+        run: npm test${{ matrix.shard && format(' -- --test-shard={0}', matrix.shard) || '' }}
   test:
     needs: platform
-    if: always()
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
+    timeout-minutes: 2
     steps:
       - name: All platforms passed
         env:
           RESULT: ${{ needs.platform.result }}
         run: test "$RESULT" = success
+  beta:
+    needs: platform
+    if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
+    uses: ./.github/workflows/release.yml
+    with:
+      kind: beta
+      branch: develop
+      group: develop-release
+      tag: archive
+      options: --verify-tag --prerelease
+    permissions:
+      contents: write
+  stable:
+    needs: platform
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    uses: ./.github/workflows/release.yml
+    with:
+      kind: stable
+      branch: main
+      group: release
+      options: --target "$GITHUB_SHA"
+    permissions:
+      contents: write

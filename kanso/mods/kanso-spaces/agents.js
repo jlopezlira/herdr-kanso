@@ -1,43 +1,35 @@
 import { paths } from "./platform-paths.js";
 // Added by José Gutiérrez (minimalistic): agents nested under their space. Pure drawing helpers; the
 // fold state lives in main.js.
-import { div, svg } from "gpui-kit";
-import { h_flex, v_flex } from "gpui-base";
+import { div } from "gpui-kit";
 import { run, openOverlay } from "herdr";
-import { stateMark, programIcon, NAME_LABEL, onBattery } from "./marks.js";
+import { NAME_LABEL } from "./marks.js";
+import { tellsSomething } from "./pure.js";
 import { parseProcesses, etimeMs } from "./procs.js";
 import { oneLine } from "./since-left-model.js";
+import { G, GLIDE, H, R, DIALOG, SIDEBAR, sidebarSides } from "./ui.js";
+import { mark, MARK_SIZES } from "./ui-mark.js";
+import { sessionRow } from "./session-row.js";
+import { machineOf } from "./machines.js";
 
 export { NAME_LABEL };
 
-export const AGENT_PAD = 34; // under the space name: 8px row padding, a 22px avatar, the gap
 
 // Native GPUI motion, no per-frame script; fold and pill share the pace so they move together.
-export const FOLD = { duration: 220, easing: "ease-out" };
-export const FOLD_MS = FOLD.duration + 40; // rows stay drawn this long after a fold, so the close is seen
+export const FOLD_MS = GLIDE.duration + 40; // rows stay drawn this long after a fold, so the close is seen
 
-// Drawn before the rows so they sit on top; `inset` is the list's side padding.
-export function pill(id, y, h, color, inset = 8) {
-  return div().id(id).absolute().left(inset).right(inset).top(y).h(h).rounded(8).bg(color)
-    .transition("top", FOLD).transition("height", FOLD);
+// Drawn before the rows so they sit on top, where a row's ground is: the gutter less the row's own padding from each side seen.
+const GROUND = SIDEBAR.gutter - G.sm;
+export function pill(id, y, h, color) {
+  return sidebarSides(div().id(id).absolute(), GROUND, ["left", "right"]).top(y).h(h).rounded(R.control).bg(color)
+    .transition("top", GLIDE).transition("height", GLIDE);
 }
 
-// Must equal the height agentRow draws: lists sum these to place the pill.
-// `more.oneLine`: a narrow sidebar keeps the first line only.
-const twoLines = (more) => !more.oneLine && (Boolean(more.activity) || Boolean(more.project) || Boolean(more.steady));
-export function agentRowH(a, more = {}) {
-  const two = twoLines(more);
-  return two ? (more.roomy ? ROOMY : TWO) : a.sub ? ROW - 4 : ROW;
-}
+// The height the session row draws: lists sum these to place the pill.
+// `more.oneLine`: a narrow sidebar keeps the first line only. A second line only when there is something to say.
+const twoLines = (more) => !more.oneLine && Boolean(more.activity);
+export const sessionHeight = (more = {}) => (twoLines(more) ? H.two : H.line);
 
-export function segmentAt(width, i, n, pad = 3, gap = 2) {
-  const w = (width - 2 * pad - gap * (n - 1)) / n;
-  return { left: pad + i * (w + gap), width: w };
-}
-// A row flush with the list's 10px inset (the Status and Threads views).
-export const FLUSH = 10 - AGENT_PAD;
-// A row nested under its project's name: the Threads view's conversations, indented as a Projects view's agents are.
-export const NESTED = FLUSH + 28;
 // Asleep is one more status: its own section, after the awake ones.
 const RANK = { blocked: 4, done: 3, working: 2, idle: 1, asleep: 0.5 };
 
@@ -82,9 +74,8 @@ export function moved(order, address, target, side) {
   return out.toSpliced(side === "after" ? at + 1 : at, 0, address);
 }
 
-export const PROMPT_W = 420;
 export function renameTerminal(terminal, shown, thread = false) {
-  openOverlay({ mod: "kanso-prompt", kind: "dialog", width: PROMPT_W, props: {
+  openOverlay({ mod: "kanso-prompt", kind: "dialog", width: DIALOG.prompt, props: {
     title: thread ? "Rename thread" : "Rename terminal", value: shown ?? "",
     hint: thread ? "Empty: the title its agent gives it" : "Empty: the name the program gives it",
     label: { terminal, key: thread ? THREAD_LABEL : NAME_LABEL } } });
@@ -102,10 +93,8 @@ export function agentLabel(a) {
 
 // A title that is just a path, a user@host prompt or the program's name tells nothing.
 export function liveTitle(a) {
-  const live = clean(a.title), raw = (a.title ?? "").trim();
-  const telling = live && !/^[~/]|^[A-Za-z]:\\/.test(raw) && !/^[~/]|^[A-Za-z]:\\/.test(live) && !live.includes("@")
-    && live.toLowerCase() !== a.program?.key && live !== a.program?.name;
-  return telling ? live : null;
+  const live = clean(a.title);
+  return tellsSomething(live, (a.title ?? "").trim(), a.program) ? live : null;
 }
 
 export function duration(ms) {
@@ -142,20 +131,10 @@ export function elapsed(a, since, now) {
   return at == null ? null : duration(Math.max(0, now - at));
 }
 
-export function digestLine(d) {
-  if (!d) return null;
-  const parts = [
-    d.files ? (d.add || d.del ? `+${d.add ?? 0} −${d.del ?? 0}` : `${d.files} ${d.files === 1 ? "file" : "files"}`) : null,
-    d.ahead ? `${d.ahead} ${d.ahead === 1 ? "commit" : "commits"}` : null,
-    d.pr?.number ? `PR #${d.pr.number}${d.pr.hold ? `, ${d.pr.hold[0].toLowerCase()}${d.pr.hold.slice(1)}` : d.pr.checks === "failing" ? " failing" : ""}` : null,
-  ].filter((x) => x !== null);
-  return parts.length ? parts.join(" · ") : null;
-}
-
 // `msg` is OSC 7501: Claude Code sends the step it is on while it works, its last words when it finishes.
 export const said = (a) => oneLine(a.msg);
 
-export function activityOf(a, digest) {
+export function activityOf(a) {
   const msg = said(a);
   if (msg) return msg;
   if (a.status === "working" || a.status === "blocked") {
@@ -164,7 +143,6 @@ export function activityOf(a, digest) {
     const same = (x, y) => x.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "") === y.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "");
     return live && !same(live, a.name) ? live : null;
   }
-  if (a.status === "done") return digestLine(digest);
   return null;
 }
 
@@ -222,12 +200,12 @@ export function nest(rows, all = []) {
   ];
   const children = new Map([...Map.groupBy(pairs, ([p]) => p)].map(([p, list]) => [p, list.map(([, k]) => k)]));
   // `path` cuts parent loops; should an address still show twice, only its first place stays.
-  const tree = (a, lines, lead, path) => {
+  const tree = (a, lines, lead, path, first = false) => {
     const kids = (children.get(a.address) ?? []).filter((k) => !path.has(k.address));
     const below = new Set([...path, a.address]);
-    return [{ a, lines }, ...kids.flatMap((k, i) => {
+    return [{ a, lines, first }, ...kids.flatMap((k, i) => {
       const last = i === kids.length - 1;
-      return tree(k, [...lead, last ? "└" : "├"], [...lead, last ? "" : "│"], below);
+      return tree(k, [...lead, last ? "└" : "├"], [...lead, last ? "" : "│"], below, i === 0);
     })];
   };
   const placed = rows.filter((a) => !(a.parent && listed.has(a.parent))).flatMap((a) => tree(a, [], [], new Set()));
@@ -303,7 +281,7 @@ export function threadSections(rows, { order = "said", group = false, now = Date
 export function snoozePresets(now) {
   const d = new Date(now);
   const at = (days, h) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + days, h, 0, 0, 0).getTime();
-  const hhmm = (ms) => new Date(ms).toTimeString().slice(0, 5);
+  const hhmm = (ms) => new Date(ms).toTimeString().slice(0, 5).replace(/^0/, "");
   const toMonday = ((8 - d.getDay()) % 7) || 7;
   const out = [
     { id: "1h", label: "In 1 hour", until: now + 3600000 },
@@ -312,13 +290,13 @@ export function snoozePresets(now) {
     { id: "tomorrow", label: "Tomorrow", until: at(1, 9) },
     { id: "monday", label: "Monday", until: at(toMonday, 9) },
   ];
-  return out.map((p) => ({ ...p, when: p.id.endsWith("h") ? hhmm(p.until) : `${new Date(p.until).toDateString().slice(0, 3)} ${hhmm(p.until)}` }));
+  const day = (ms) => `${new Date(ms).toDateString().slice(0, 3)} ${hhmm(ms)}`;
+  return out.map((p) => ({ ...p, when: p.id === "tomorrow" || p.id === "monday" ? day(p.until) : hhmm(p.until) }));
 }
 
 // With no status, a blank of the same width so the rows line up.
-const ENSO = 15;
-export function statusMark(t, status) {
-  return stateMark(t, status, ENSO, { idle: true }) ?? div().size(ENSO).flex_none();
+export function statusMark(c, status) {
+  return mark(c, { status, size: "lg" }) ?? div().size(MARK_SIZES.lg).flex_none();
 }
 
 // Herdr's agents() lists only programs that report a status; this adds every other terminal.
@@ -332,121 +310,64 @@ export function withTerminals(list, ps, ss) {
 
 export const mostUrgent = (list) => list.reduce((m, a) => ((RANK[a.status] ?? 0) > (RANK[m] ?? 0) ? a.status : m), null);
 
-// Folded, it tells how many agents and the most urgent state, so a blocked agent is never hidden.
-export function agentFold(id, mine, open, onToggle, t) {
-  const top = mostUrgent(mine);
-  return h_flex().id(`agents-fold-${id}`).flex_none().h(20).px(3).gap(4).items_center().rounded(6)
-    .text_size(11).text_color(t.dim).cursor_pointer()
-    .hover((s) => s.bg(t.input).text_color(t.foreground))
-    // The row selects on mouse up and drags on mouse down: keep both to the toggle.
-    .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
-    .on_mouse_up("left", (_e, cx) => { cx.stop_propagation(); onToggle(cx); })
-    .when(!open, (el) => el
-      .when(Boolean(top) && top !== "idle", (el) => el.child(statusMark(t, top)))
-      .child(div().child(String(mine.length))))
-    .child(svg(`mods/kanso-chrome/icons/chevron-${open ? "down" : "right"}.svg`).size(12).flex_none());
-}
+const GUIDE_KIND = { "├": "tee", "└": "end", "│": "pass" };
+// The program's own art, or the terminal's icon for a terminal or an unknown program.
+export const programOf = (a) => (a.program?.icon ? { icon: a.program.icon, tint: a.program.tint } : "terminal");
+const TASK_TIP = 90;
+const tasksTip = (tasks) => tasks.map((x) => `${x.command.length > TASK_TIP ? `${x.command.slice(0, TASK_TIP - 1)}\u2026` : x.command} \u00b7 ${x.time}`).join("\n");
 
-// One column per level, icon-wide, so a sub-agent's icon sits under its parent's name.
-const GUIDE_W = 15, GUIDE_X = 7;
-function guide(l, h, t) {
-  const col = div().relative().w(GUIDE_W).h(h).flex_none();
-  if (!l) return col;
-  const down = l === "└" ? h / 2 + 4 : h + 4;
-  return col.child(div().absolute().left(GUIDE_X).top(-4).w(1).h(down).bg(t.input))
-    .when(l !== "│", (el) => el.child(div().absolute().left(GUIDE_X).top(h / 2).w(GUIDE_W - GUIDE_X + 7).h(1).bg(t.input)));
-}
+// A sub-agent's tree lines (├ └ │), one per depth below `base`, as the row's guides.
+const guidesOf = (base, lines) => (lines.length ? [...Array.from({ length: base }, () => null), ...lines.map((l) => GUIDE_KIND[l] ?? null)] : []);
 
-// Each glint window slides one way while its copy of the text slides the other, so the lit letters stay in place.
-const GLINT = [[44, 0.35], [26, 0.6], [12, 1]];
-const REACH = 240; // past the longest title the row can show
-function shimmer(text, t, address) {
-  if (onBattery()) return h_flex().flex_1().min_w(0).items_center()
-    .child(div().min_w(0).flex_shrink(1).truncate().text_color(t.foreground).child(text))
-    .child(div().w(16).flex_none().text_color(t.muted).frames(["", ".", "..", "..."], 380));
-  const pace = 2200 + ([...address].reduce((n, c) => n + c.charCodeAt(0), 0) % 7) * 160;
-  const lit = ([w, strength]) => div().absolute().top(0).bottom(0).w(w).overflow_hidden().opacity(strength)
-    .loop("left", { from: -w, to: REACH, period: pace, easing: "linear" })
-    .child(div().absolute().top(0).whitespace_nowrap().text_color(t.foreground).child(text)
-      .loop("left", { from: w, to: -REACH, period: pace, easing: "linear" }));
-  return h_flex().flex_1().min_w(0).items_center()
-    .child(div().relative().min_w(0).flex_shrink(1).overflow_hidden()
-      .child(div().truncate().text_color(t.muted).child(text))
-      .children(GLINT.map(lit)))
-    .child(div().w(16).flex_none().text_color(t.muted).frames(["", ".", "..", "..."], 380));
-}
-
-// `more.steady` keeps the second line even with nothing to say, so the list never jumps.
-// Each event has one handler: a second one would replace the first.
-const ROW = 32, TWO = 50, ROOMY = 64;
-export function agentRow(a, indent, t, row, more = {}) {
-  const project = more.project ?? null;
-  const pic = programIcon(a.program, a.sub ? 13 : 15, t.foreground);
-  const zz = a.status === "asleep" || Boolean(a.dozing);
-  const live = !zz && (a.status === "working" || a.status === "blocked" || more.strong);
-  const ink = zz ? t.dim : a.focused || live ? t.foreground : a.sub ? t.dim : t.muted;
-  const machine = a.address.includes("/") ? a.address.split("/")[0] : null;
-  const pinned = a.pin != null, drag = row?.drag;
+// What the session row shows: `base` is the depth of a top-level row in this list, each sub-agent one deeper.
+export function sessionProps(a, base, row, more = {}) {
   const lines = more.lines ?? [];
   const two = twoLines(more);
   const tasks = a.status === "working" ? [] : more.tasks ?? [];
-  const h = agentRowH(a, more);
-  const showPin = Boolean(row?.pin) && (pinned || row.hovered);
-  const actions = row?.hovered ? row.actions ?? [] : [];
-  // The program's icon leads; with a project line and no icon, a blank of its width keeps the names in a column.
-  const lead = pic?.opacity(zz ? 0.45 : a.focused || live ? 1 : 0.75) ?? (project ? div().size(15).flex_none() : null);
-  const top = h_flex().h(two ? 22 : h).gap(10).items_center()
-    // One weight always: a changed weight would reflow the name and make the row jump.
-    .child(a.status === "working" && !zz
-      ? shimmer(more.label ?? agentLabel(a), t, a.address).text_size(13.5).font_medium()
-      : div().flex_1().min_w(0).truncate().text_size(13.5).font_medium().text_color(ink).child(more.label ?? agentLabel(a)))
-    .when(Boolean(machine), (el) => el.child(div().flex_none().text_size(11).text_color(t.dim).child(machine)))
-    .when(showPin, (el) => el.child(div().id(`pin-${a.address}`).size(20).flex_none().rounded(6)
-      .flex().items_center().justify_center().text_color(pinned ? t.foreground : t.dim).tooltip(pinned ? "Unpin" : "Pin to the top")
-      .hover((s) => s.bg(t.input).text_color(t.foreground))
-      .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
-      .on_click((_e, cx) => { cx.stop_propagation(); row.pin(cx); })
-      .child(svg("mods/kanso-chrome/icons/pin.svg").size(12))))
-    .when(Boolean(more.badge) && !actions.length, (el) => el.child(div().flex_none().px(6).h(18).rounded_full().bg(t.accent + "26")
-      .flex().items_center().text_size(11).font_semibold().text_color(t.accent).child(more.badge)))
-    .children(actions.map((x) => div().id(`act-${x.id}-${a.address}`).size(22).flex_none().rounded(6)
-      .flex().items_center().justify_center().text_color(t.muted).tooltip(x.tip)
-      .hover((s) => s.bg(t.input).text_color(t.foreground))
-      .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
-      .on_click((_e, cx) => { cx.stop_propagation(); x.act(cx); })
-      .child(svg(`mods/kanso-chrome/icons/${x.icon}.svg`).size(13))))
-    .when(Boolean(more.time) && !actions.length && !(row?.hovered && row?.pin && !pinned), (el) => el.child(div().flex_none().text_size(11.5).text_color(a.status === "blocked" ? t.blocked : t.dim).child(more.time)))
-    .when(tasks.length > 0, (el) => el.child(div().id(`tasks-${a.address}`).flex_none().h(18).px(6).rounded_full().bg(t.foreground + "12")
-      .flex().items_center().text_size(11).text_color(t.muted).tooltip(tasks.map((x) => `${x.command.length > 90 ? x.command.slice(0, 89) + "\u2026" : x.command} \u00b7 ${x.time}`).join("\n"))
-      .child(String(tasks.length))))
-    .when(Boolean(row?.menu) && Boolean(row?.hovered), (el) => el.child(div().id(`dots-${a.address}`).size(20).flex_none().rounded(6)
-      .flex().items_center().justify_center().text_color(t.dim).tooltip("More")
-      .hover((s) => s.bg(t.input).text_color(t.foreground))
-      .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
-      .on_click((_e, cx) => { cx.stop_propagation(); row.menu(cx); })
-      .child(svg("mods/kanso-chrome/icons/more-vertical.svg").size(13))))
-    .child(statusMark(t, zz ? "asleep" : a.status));
-  const second = h_flex().h(18).mt(more.roomy ? 5 : 2).min_w(0).items_center().text_size(12)
-    .when(Boolean(project), (el) => el.child(div().flex_none().max_w(110).truncate().font_medium().text_color(project.fill).child(project.name)))
-    .when(Boolean(project) && Boolean(more.activity), (el) => el.child(div().flex_none().px(5).text_color(t.dim).child("\u00b7")))
-    .when(Boolean(more.activity), (el) => el.child(div().flex_1().min_w(0).truncate().text_color(more.faint ? t.dim : t.muted).child(more.activity)))
-    .when(Boolean(more.step), (el) => el.child(div().flex_none().pl(5).text_color(more.step.stuck ? t.blocked : t.dim).child(more.step.time)));
-  const body = two ? v_flex().flex_1().min_w(0).justify_center().child(top).child(second) : div().flex_1().min_w(0).child(top);
-  return h_flex().id(`space-agent-${a.address}`).h(h).flex_none().pl(AGENT_PAD + indent).pr(12).gap(12)
-    .items_center().rounded(8).cursor_pointer()
-    .when(Boolean(a.asleep?.quiet), (el) => el.opacity(0.55))
-    // The focused row's wash is the list's pill (main.js), which glides here.
-    .when(a.status === "blocked" && !a.focused, (el) => el.bg(t.blocked + "14"))
-    .when(Boolean(row?.kbd), (el) => el.border_1().border_color(t.accent))
-    .hover((s) => s.bg(t.foreground + "0c"))
-    .on_click((_e, cx) => (a.asleep ? row?.menu?.(cx) : a.pane ? run("pane.focus", { pane: a.pane }) : run("terminal.peek", { terminal: a.address })))
-    .on_mouse_down("left", (e) => { if (e.click_count === 2 && !a.asleep) renameTerminal(a.address, more.label ?? agentLabel(a)); else drag?.down(); })
-    .when(Boolean(drag), (el) => el.on_mouse_up("left", (_e, cx) => drag.up(cx)))
-    .when(Boolean(row?.hover), (el) => el.on_hover((h, cx) => row.hover(h, cx)))
-    .when(Boolean(row?.menu), (el) => el.on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); row.menu(cx); }))
-    .when(drag?.target === "before", (el) => el.border_t(2).border_color(t.accent))
-    .when(drag?.target === "after", (el) => el.border_b(2).border_color(t.accent))
-    .children(lines.map((l) => guide(l, h, t)))
-    .when(Boolean(lead), (el) => el.child(two ? v_flex().h(h).pt(Math.round((h - 45) / 2) + 3).flex_none().child(lead) : lead))
-    .child(body);
+  return {
+    program: programOf(a),
+    name: more.label ?? agentLabel(a),
+    status: a.dozing ? "asleep" : a.status,
+    activity: two ? more.activity : null,
+    step: two ? more.step ?? null : null,
+    time: more.time ?? null,
+    place: more.directory ?? (more.noMachine ? null : machineOf(a.address)),
+    placeTip: more.wordTip ?? null,
+    depth: base + lines.length,
+    guides: guidesOf(base, lines),
+    // The list's pill is the focused row's ground, and it glides there.
+    current: Boolean(a.focused),
+    ground: false,
+    pinned: a.pin != null,
+    pinnable: Boolean(row?.pin),
+    menu: Boolean(row?.menu),
+    commands: tasks.length,
+    commandsTip: tasks.length ? tasksTip(tasks) : null,
+    tools: (row?.actions ?? []).map((x) => ({ icon: x.icon, label: x.tip })),
+    refresh: Boolean(more.refresh),
+    drop: row?.drag?.target ?? null,
+    hover: Boolean(row?.hovered),
+    selected: Boolean(row?.kbd),
+    dimmed: Boolean(more.quiet || a.dozing),
+  };
 }
+
+// What the app does with it: each tool by name, the click, the drag, a double-click to rename and the right-click menu.
+export function sessionHandlers(a, row, more = {}) {
+  const drag = row?.drag;
+  return {
+    on: {
+      ...(row?.pin ? { pin: (cx) => row.pin(cx) } : {}),
+      ...(row?.menu ? { ellipsis: (cx) => row.menu(cx) } : {}),
+      ...(more.refresh ? { "refresh-cw": more.refresh } : {}),
+      ...Object.fromEntries((row?.actions ?? []).map((x) => [x.icon, x.act])),
+    },
+    onClick: () => (a.pane ? run("pane.focus", { pane: a.pane }) : run("terminal.peek", { terminal: a.address })),
+    onHover: row?.hover,
+    onPress: (e) => (e.click_count === 2 ? renameTerminal(a.address, more.label ?? agentLabel(a)) : drag?.down()),
+    onRelease: drag ? (_e, cx) => drag.up(cx) : undefined,
+    onMenu: row?.menu ? (_e, cx) => { cx.stop_propagation(); row.menu(cx); } : undefined,
+  };
+}
+
+export const agentSession = (a, base, c, row, more = {}) => sessionRow(sessionProps(a, base, row, more))(`space-agent-${a.address}`, c, sessionHandlers(a, row, more));

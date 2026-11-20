@@ -1,15 +1,26 @@
+import { detailColumn, detailRow, scrollPage, pageHeader, pageSections, refreshTool, moreLink, barChart, chartColumn, chartRoom, heroStack, heroHeading } from "./ui-page.js";
 import { localService, serviceOn } from "./platform-host.js";
 import { paths } from "./platform-paths.js";
 import { fileApi } from "./platform-files.js";
 // Spend, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
 // QuickJS runs every step under a time limit, so nothing heavy happens here.
 import { View, div } from "gpui-kit";
-import { v_flex, h_flex, Button, Popover, Input, InputState } from "gpui-base";
+import { v_flex, h_flex, Popover, ScrollHandle } from "gpui-base";
 import { exec, appHome, home, theme, nextCommand, readTextFile, writeTextFile, layout, machines, shared, setShared } from "herdr";
-import { G, H, R, T, PULSE, breathe, tokens, toggleSwitch, controlInput, quietTabs, quietLink, iconButton, section, ghost } from "./ui.js";
+import { T, G, H, OPACITY, breathe, tokens } from "./ui.js";
+import { mark } from "./ui-mark.js";
+import { quietLink, iconButton } from "./ui-button.js";
+import { field, TextField } from "./ui-field.js";
+import { menu } from "./ui-menu.js";
+import { section } from "./ui-section.js";
+import { button as kitButton, failureBlock, metric, row, skeletonOf, tooltip } from "./kit.js";
+import { factList } from "./ui-facts.js";
+import { segmented } from "./ui-tab.js";
+import { toggleSwitch } from "./ui-toggle.js";
 import { PERIOD_KEY, SPEND_PERIODS, spendPeriod } from "./period.js";
-import { Share } from "./share.js";
+import { Share, shareRows } from "./share.js";
 import { spendSpec, spendText } from "./spend-card.js";
+import { readPlan, allChoice, chooserOptions, chooserKey } from "./spend-model.js";
 import { clock, tryOr, tryOrAsync, afterMount } from "./pure.js";
 import { powerOf } from "./sync-power.js";
 import { Kdb } from "./kdb.js";
@@ -19,7 +30,8 @@ const MOD = "kanso-spend";
 const RUNTIME_FILE = `mods/${MOD}/runtime.json`;
 const PRESENTER_FILE = `mods/${MOD}/presenter.mjs`;
 const DATA_DIR = `data/${MOD}`;
-const icon = (name) => `mods/${MOD}/icons/${name}.svg`;
+// A project or model chooser shows this many, then scrolls.
+const CHOOSER_ROWS = 8;
 const PAYLOAD_KIND = "kanso-spend-costs";
 const PAYLOAD_VERSION = 1;
 const STEP_TIMEOUT_MS = 35_000;
@@ -73,16 +85,14 @@ function hiddenInLayout() {
 }
 
 function formatTime(iso) {
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return "";
-  return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+  const at = new Date(iso).getTime();
+  return Number.isNaN(at) ? "" : clock(at, at);
 }
 
 function metricLine(c, name, tokensText, value, { color = c.text, tip = "", medium = false } = {}) {
-  return h_flex().w_full().items_end().gap(G.md)
-    .child(div().flex_1().min_w(0).truncate().text_size(13).text_color(color).when(medium, (el) => el.font_medium()).when(Boolean(tip), (el) => el.tooltip(tip)).child(name))
-    .child(div().text_size(11).text_color(c.dim).child(tokensText))
-    .child(div().min_w(64).text_right().text_size(15).font_light().text_color(c.text).child(value));
+  return detailRow(div().flex_1().min_w(0).truncate().text_size(T.card).text_color(color).when(medium, (el) => el.font_medium()).when(Boolean(tip), (el) => el.tooltip(tooltip({ label: tip }))).child(name))
+    .child(div().text_size(T.micro).text_color(c.dim).child(tokensText))
+    .child(div().min_w(64).text_right().text_size(T.title).font_light().text_color(c.text).child(value));
 }
 
 export default class TokenSpend extends View {
@@ -112,9 +122,13 @@ export default class TokenSpend extends View {
     this.settingsNote = null;
     this.openMenu = null;
     this.menuOptions = null;
+    this.menuAt = -1;
+    this.menuG = 0;
+    this.chooserFocus = { project: cx.focus_handle(), model: cx.focus_handle() };
+    this.chooserScroll = ScrollHandle.new();
     this.syncHolds = [];
     this.syncStored = [];
-    this.db = new Kdb();
+    this.db = new Kdb(cx.timer);
     this.syncKick = shared(SYNC_KICK);
 
     this.ticker = null;
@@ -123,21 +137,24 @@ export default class TokenSpend extends View {
     // Herdr starts hidden copies too, so wake only when this one is on screen.
     if (!hiddenInLayout()) afterMount(cx, (cx) => this.wake(cx));
 
-    this.commandTask = cx.spawn(async (commandCx) => {
-      for (;;) {
-        const next = await tryOrAsync(async () => {
-          const command = await nextCommand();
-          commandCx.notify();
-          return { command };
-        });
-        if (!next) break; // a replaced build (hot reload, update) stops here, before acting
-        const { command } = next;
-        const name = String(command).replace(new RegExp(`^${MOD}\\.`), "");
-        if (name === "refresh") this.run("snapshot", commandCx);
-        else if (name === "open") this.wake(commandCx);
-        else if (name === "settings") this.openSettings(commandCx);
-        else if (name === "back") this.back(commandCx);
-      }
+    afterMount(cx, (cx) => {
+      if (this.closed) return;
+      this.commandTask = cx.spawn(async (commandCx) => {
+        for (;;) {
+          const next = await tryOrAsync(async () => {
+            const command = await nextCommand();
+            commandCx.notify();
+            return { command };
+          });
+          if (!next) break; // a replaced build (hot reload, update) stops here, before acting
+          const { command } = next;
+          const name = String(command).replace(new RegExp(`^${MOD}\\.`), "");
+          if (name === "refresh") this.run("snapshot", commandCx);
+          else if (name === "open") this.wake(commandCx);
+          else if (name === "settings") this.openSettings(commandCx);
+          else if (name === "back") this.back(commandCx);
+        }
+      });
     });
   }
 
@@ -193,6 +210,7 @@ export default class TokenSpend extends View {
   close() {
     this.closed = true;
     this.generation += 1;
+    for (const handle of [this.chooserScroll, ...Object.values(this.chooserFocus ?? {})]) tryOr(() => handle.release());
     for (const handle of [this.task, this.watchdog, this.continueTimer, this.ticker, this.commandTask, this.runtimeTask]) {
       try { handle?.cancel(); } catch { /* already gone */ }
     }
@@ -201,14 +219,14 @@ export default class TokenSpend extends View {
   options() {
     const d = new Date();
     const today = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-    return { today, cost: { ...this.cost } };
+    return { today, cost: { ...this.cost }, aliases: shared("kanso.alias") ?? {} };
   }
 
   /** One presenter call at a time; later requests queue, so filters never race a refresh. */
   run(command, cx, extra = null) {
     if (this.closed || !this.nodeBinary) return;
     if (this.running) {
-      if (command === "configure") this.queuedSources = extra;
+      if (command === "configure") this.queuedSources = { ...(this.queuedSources ?? {}), ...(extra ?? {}) };
       this.queued = { ...this.queued, [command === "configure" ? "snapshot" : command]: true };
       return;
     }
@@ -372,16 +390,16 @@ export default class TokenSpend extends View {
     this.settingsNote = null;
     // Inputs need a live host call: build them here, never in render.
     this.planInputs = (this.settings?.plans ?? []).map((plan) => ({
-      name: InputState.new({ value: plan.name, placeholder: "Plan" }),
-      amount: InputState.new({ value: String(plan.usdPerMonth), placeholder: "0" }),
+      name: new TextField({ value: plan.name, placeholder: "Plan" }),
+      amount: new TextField({ value: String(plan.usdPerMonth), placeholder: "0" }),
     }));
     cx.notify();
   }
 
   addPlan(cx) {
     this.planInputs = [...this.planInputs, {
-      name: InputState.new({ placeholder: "ChatGPT Pro, Claude Max…" }),
-      amount: InputState.new({ placeholder: "200" }),
+      name: new TextField({ placeholder: "ChatGPT Pro, Claude Max…" }),
+      amount: new TextField({ placeholder: "200" }),
     }];
     cx.notify();
   }
@@ -447,21 +465,16 @@ export default class TokenSpend extends View {
     const top = this.stack[this.stack.length - 1];
     const body = this.page === "settings" ? this.settingsView(c)
       : top?.kind === "task" ? this.taskView(c, top.task, narrow)
-      : this.costs?.hero ? this.costsView(c, narrow, top) : this.waitingView(c, narrow);
-    return v_flex().id("spend-root").size_full().min_h(0).bg(c.canvas).text_color(c.text)
-      .overflow_y_scrollbar()
-      .on_size_change((size, sizeCx) => {
-        const changed = Math.abs((this.width || 0) - size.width) >= 1;
-        this.width = size.width;
-        if (changed) sizeCx.notify();
-      })
-      .child(h_flex().flex_none().w_full().justify_center().px(narrow ? G.lg : 32).py(narrow ? G.lg : 28)
-        .child(v_flex().w_full().max_w(1080).gap(narrow ? 32 : 44)
-          .child(this.header(c, narrow))
-          .when(this.share.open && this.canShare(), (el) => el.child(this.share.row(c, () => this.shareCard(),
-            "Only the totals and the days: no project, task or session names. The post opens with the image in it.", G.sm)))
-          .child(body)));
+      : this.costs?.hero ? this.costsView(c, narrow, top) : this.waitingView(c);
+    const { failure } = this.plan();
+    return scrollPage.call(this, "spend-root", c, narrow, (column) => column
+      .child(this.header(c, narrow))
+      .children(shareRows(this, c, "Only the totals and the days: no project, task or session names. The post opens with the image in it."))
+      .when(Boolean(failure), (el) => el.child(failureBlock(failure)("spend-failed", c, { onClick: (cx) => this.run("snapshot", cx) })))
+      .when(Boolean(body), (el) => el.child(body)), { always: true });
   }
+
+  plan() { return readPlan(this, Boolean(this.costs?.hero)); }
 
   // Only the unfiltered totals are shared, so a filter or a detail view hides it.
   canShare() {
@@ -478,60 +491,25 @@ export default class TokenSpend extends View {
     const updated = this.scan?.lastScanAt ? `Updated ${formatTime(this.scan.lastScanAt)}` : "";
     const reading = this.running !== "prepare" && busy && this.scan?.partial
       ? `Reading sessions, ${this.scan.processed} of ${this.scan.total}` : "";
-    const tip = busy ? "Updating…" : updated ? `Refresh · ${updated}` : "Refresh";
     const top = this.stack[this.stack.length - 1];
     const inner = this.page === "settings" || Boolean(top);
     const title = this.page === "settings" ? "Settings" : top ? top.label : "Spend";
     const crumb = this.page === "settings" ? "" : top ? ({ project: "Project", model: "Model", task: "Task" })[top.kind] : "";
-    return h_flex().w_full().items_center().justify_between().gap(G.md)
-      .child(h_flex().flex_1().min_w(0).items_center().gap(G.sm)
-        .when(inner, (el) => el.child(iconButton("spend-back", icon("back"), "Back", (cx) => this.back(cx), c)))
-        .child(v_flex().flex_1().min_w(0).gap(1)
-          .when(Boolean(crumb), (el) => el.child(div().text_size(11).text_color(c.dim).child(crumb)))
-          .child(div().truncate().text_size(inner ? (narrow ? 15 : 17) : (narrow ? 17 : 20)).text_color(c.text).tooltip(title).child(title))))
-      .child(h_flex().gap(G.xs).items_center().flex_none()
-        .when(Boolean(reading), (el) => el.child(div().pr(G.xs).text_size(11).text_color(c.dim).child(reading)))
-        .when(this.canShare(), (el) => el.child(iconButton("spend-share", icon("share"), "Share", (cx) => this.share.toggle(cx), c, { active: this.share.open })))
-        .child(iconButton("spend-refresh", icon("refresh"), tip, (cx) => this.run("snapshot", cx), c, { spin: busy, disabled: busy }))
-        .when(this.page !== "settings", (el) => el.child(iconButton("spend-settings", icon("settings"), "Settings", (cx) => this.openSettings(cx), c))));
+    const heading = h_flex().flex_1().min_w(0).items_center().gap(G.sm)
+      .when(inner, (el) => el.child(iconButton("spend-back", "chevron-left", "Back", (cx) => this.back(cx), c)))
+      .child(v_flex().flex_1().min_w(0).gap(1)
+        .when(Boolean(crumb), (el) => el.child(div().text_size(T.micro).text_color(c.dim).child(crumb)))
+        .child(div().truncate().text_size(inner ? (narrow ? 15 : 17) : (narrow ? 17 : 20)).text_color(c.text).tooltip(tooltip({ label: title })).child(title)));
+    return pageHeader(heading, [
+      reading ? div().pr(G.xs).text_size(T.micro).text_color(c.dim).child(reading) : null,
+      this.canShare() ? iconButton("spend-share", "share", "Share", (cx) => this.share.toggle(cx), c, { active: this.share.open }) : null,
+      refreshTool("spend-refresh", c, { ...this.plan().refresh, working: "Updating…", stamp: updated }, (cx) => this.run("snapshot", cx)),
+      this.page === "settings" ? null : iconButton("spend-settings", "settings", "Settings", (cx) => this.openSettings(cx), c),
+    ]);
   }
 
-  sourcesBones(c) {
-    const { line } = ghost(c);
-    return breathe(v_flex().id("kanso-skeleton").w_full())
-      .children([0, 1, 2].map((i) => v_flex().w_full().py(G.sm).gap(2).child(line([100, 80, 120][i], 13)).child(line([180, 160, 140][i], 11))));
-  }
-
-  skeleton(c, narrow) {
-    const { block, line, row } = ghost(c);
-    const heights = [18, 26, 22, 40, 64, 92, 48, 52, 36, 44, 20, 38, 70, 50, 42, 46, 28, 34, 58, 30, 44, 24, 14, 10, 8, 8, 6, 6, 6, 6, 8];
-    return breathe(v_flex().id("kanso-skeleton").w_full().gap(narrow ? 36 : 48))
-      .child(h_flex().w_full().gap(G.lg).items_center()
-        .children([44, 52, 34, 52].map((w) => block(w, 10))))
-      .child(v_flex().gap(G.md)
-        .child(line(110, 12))
-        .child(block(narrow ? 170 : 250, narrow ? 40 : 58, 6))
-        .child(line(170, 11))
-        .child(h_flex().gap(narrow ? G.xl : 48).pt(G.md).children([46, 64, 58].map((w) => block(w, narrow ? 18 : 22, 4)))))
-      .child(h_flex().w_full().h(150).items_end()
-        .children(heights.map((h) => v_flex().flex_1().min_w(0).items_center().justify_end().child(block(2, h, 1)))))
-      .child(v_flex().w_full()
-        .child(h_flex().pb(G.sm).child(line(70, 12)))
-        .children([0, 1, 2, 3, 4].map(row)));
-  }
-
-  waitingView(c, narrow) {
-    const failed = this.runtimeError || (this.error && !this.running);
-    if (!failed) return this.skeleton(c, narrow);
-    const scan = this.scan;
-    const title = failed ? "Spend could not read your sessions." : "Adding up your sessions";
-    const detail = failed ? (this.runtimeError || this.error)
-      : scan?.partial ? `First read: ${scan.processed} of ${scan.total} files. This happens once.` : "This takes a second.";
-    return v_flex().w_full().gap(G.sm)
-      .child(div().text_size(15).text_color(failed ? c.red : c.muted).child(title))
-      .child(div().text_size(12).text_color(c.dim).child(detail))
-      .when(Boolean(failed) && !this.runtimeError, (el) => el.child(h_flex().pt(G.xs)
-        .child(quietLink("spend-retry", "Try again", (cx) => this.run("snapshot", cx), c))));
+  waitingView(c) {
+    return this.plan().failure ? null : skeletonOf({ shape: "two lines", count: 3 })("kanso-skeleton", c);
   }
 
   costsView(c, narrow, top = null) {
@@ -541,27 +519,23 @@ export default class TokenSpend extends View {
       top?.kind === "model" ? null : this.list(c, "Models", `${data.modelCount} models`, data.models, "model"),
     ].filter(Boolean);
     const wide = (this.width || 960) >= 860;
-    return v_flex().w_full().gap(narrow ? 36 : 48)
-      .opacity(this.running === "prepare" ? 0.55 : 1)
-      .when(Boolean(this.error) && !this.running, (el) => el.child(h_flex().w_full().gap(G.md).items_center()
-        .child(div().flex_1().min_w(0).text_size(12).text_color(c.red).truncate().tooltip(this.error)
-          .child(`Last update failed: ${this.error}`))
-        .child(quietLink("spend-retry-inline", "Try again", (cx) => this.run("snapshot", cx), c))))
+    return pageSections(narrow)
+      .opacity(this.running === "prepare" ? OPACITY.away : 1)
       .child(this.controls(c, Boolean(top)))
       .child(this.hero(c, data.hero, narrow))
       .when(!top && (data.machines?.length ?? 0) > 1, (el) => el.child(this.machineSplit(c, data.machines)))
       .when(!top && (this.syncHolds?.length ?? 0) > 0, (el) => el.child(v_flex().w_full().gap(G.xs).pt(G.sm)
         .children(this.syncHolds.map((hold) => h_flex().w_full().items_center().gap(G.md)
-          .child(div().flex_1().min_w(0).truncate().text_size(13).text_color(c.text).child(hold.id))
-          .child(div().text_size(12).text_color(c.muted).child(hold.text))))))
+          .child(div().flex_1().min_w(0).truncate().text_size(T.card).text_color(c.text).child(hold.id))
+          .child(div().text_size(T.body).text_color(c.muted).child(hold.text))))))
       .when(!data.hero.empty, (el) => el
         .child(this.chart(c, data.chart))
         .when(!top && Array.isArray(data.live) && data.live.length > 0, (live) => live.child(this.live(c, data.live)))
         .child(wide
           ? h_flex().w_full().gap(56).items_start().children(lists.map((list) => div().flex_1().min_w(0).max_w(lists.length === 1 ? 560 : 10_000).child(list)))
-          : v_flex().w_full().gap(narrow ? 36 : 48).children(lists))
+          : pageSections(narrow).children(lists))
         .child(this.tasks(c, data)))
-      .child(v_flex().w_full().gap(2).children(data.footnote.map((line) => div().text_size(T.small).text_color(c.dim).child(line))));
+      .child(v_flex().w_full().gap(G.hair).children(data.footnote.map((line) => div().text_size(T.micro).text_color(c.dim).child(line))));
   }
 
   controls(c, inDetail = false) {
@@ -572,112 +546,85 @@ export default class TokenSpend extends View {
     ].filter(Boolean).join(" and ");
     return v_flex().w_full().gap(G.md)
       .child(h_flex().w_full().flex_wrap().gap_x(G.lg).gap_y(G.sm).items_center().justify_between()
-        .child(quietTabs("ins-period", SPEND_PERIODS, this.cost.period, (key, cx) => this.setCost({ period: key, offset: 0 }, cx), c))
+        .child(segmented("ins-period", SPEND_PERIODS, this.cost.period, (key, cx) => this.setCost({ period: key, offset: 0 }, cx), c))
         .when(!inDetail, (row) => row.child(h_flex().gap(G.lg).items_center()
           .child(this.menu("project", c))
           .child(this.menu("model", c)))))
       .when(filtered, (el) => el.child(h_flex().gap(G.md).items_center()
-        .child(div().text_size(12).text_color(c.muted).child(`Showing ${label}`))
+        .child(div().text_size(T.body).text_color(c.muted).child(`Showing ${label}`))
         .child(quietLink("ins-clear", "Show everything", (cx) => this.setCost({ project: "all", model: "all" }, cx), c))));
   }
 
   menu(field, c) {
     const value = this.cost[field];
     const facet = this.costs.facets?.[field] ?? [];
-    const allLabel = field === "project" ? "All projects" : "All models";
-    const shown = value === "all" ? allLabel : (facet.find((entry) => entry.value === value)?.label ?? projectName(value));
+    const shown = value === "all" ? allChoice(field) : (facet.find((entry) => entry.value === value)?.label ?? projectName(value));
     const id = `ins-menu-${field}`;
-    const trigger = Button.new(`${id}-trigger`).h(H.compact).gap(6).items_center().cursor_pointer()
-      .accessibility_label(`${field === "project" ? "Project" : "Model"}: ${shown}`)
-      .hover((style) => style.opacity(0.75))
-      .focus((style) => style.opacity(0.75))
-      .child(div().max_w(170).truncate().text_size(12).text_color(value === "all" ? c.muted : c.text).child(shown))
-      .child(div().text_size(10).text_color(c.dim).child("⌄"));
-    const popover = Popover.new(id).trigger(trigger)
+    // The kit's quiet button with the menu's caret: Tab reaches it, Enter and Space open the menu.
+    const trigger = kitButton({ label: shown, kind: "quiet", small: true, icon: "lu-chevron-down", truncate: true, spoken: `${field === "project" ? "Project" : "Model"}: ${shown}`, color: value === "all" ? c.muted : c.text })(`${id}-trigger`, c);
+    const focus = this.chooserFocus[field];
+    const popover = Popover.new(id).trigger(trigger).track_focus(focus)
       .open(this.openMenu === id)
       .on_open_change((open, cx) => {
         this.openMenu = open ? id : null;
         // Options are built in this event, never in the render pass.
-        this.menuOptions = open ? [
-          { value: "all", label: allLabel, detail: "", meta: "" },
-          ...facet.map((entry) => ({
-            value: entry.value,
-            label: entry.label,
-            detail: entry.detail ?? (field === "project" ? entry.value : ""),
-            meta: entry.meta,
-          })),
-        ] : null;
+        this.menuOptions = open ? chooserOptions(field, facet) : null;
+        this.menuAt = open ? this.menuOptions.findIndex((option) => option.value === value) : -1;
+        this.menuG = 0;
+        if (open) { focus.focus(); this.chooserScroll.scroll_to_item(Math.max(0, this.menuAt)); }
         cx.notify();
       });
     if (this.openMenu === id && this.menuOptions) {
-      popover.content(v_flex().id(`${id}-options`).w(260).max_h(340).overflow_y_scrollbar().p(G.xs).gap(1).rounded(R.card)
-        .bg(c.popover).border_1().border_color(c.border)
-        .children(this.menuOptions.map((option, index) => {
-          const selected = option.value === value;
-          return Button.new(`${id}-option-${index}`).flex_none().w_full().px(8).py(5).gap(G.sm).items_center().rounded(R.control)
-            .cursor_pointer()
-            .selected(selected)
-            .set_position(index + 1, this.menuOptions.length)
-            .when(selected, (el) => el.bg(c.selected))
-            .when(!selected, (el) => el.hover((style) => style.bg(c.subtle)))
-            .focus((style) => style.bg(c.selected))
-            .accessibility_label(option.label)
-            .on_click((_event, cx) => {
-              this.openMenu = null;
-              this.menuOptions = null;
-              this.setCost({ [field]: option.value }, cx);
-            })
-            .child(v_flex().flex_1().min_w(0).gap(1)
-              .child(div().text_size(12).text_color(c.text).truncate().child(option.label))
-              .when(Boolean(option.detail), (el) => el.child(div().text_size(10).text_color(c.dim).truncate().child(option.detail))))
-            .child(div().text_size(11).text_color(c.dim).child(option.meta ?? ""));
-        })));
+      const choose = (option) => (cx) => { this.openMenu = null; this.menuOptions = null; this.setCost({ [field]: option.value }, cx); };
+      popover.content(menu(`${id}-options`, { items: [{ scroll: this.menuOptions.map((option, at) => ({
+        label: option.label, second: option.detail || null, hint: option.meta || null, selected: at === this.menuAt, onClick: choose(option),
+      })), rows: CHOOSER_ROWS, handle: this.chooserScroll }] }, c).track_focus(focus).on_key_down((e, cx) => this.chooserKeyDown(e, cx, choose)));
     }
     return popover;
+  }
+
+  chooserKeyDown(e, cx, choose) {
+    const step = chooserKey(e, { at: this.menuAt, gAt: this.menuG, count: this.menuOptions.length });
+    this.menuG = step.gAt;
+    if (!step.handled) return;
+    cx.stop_propagation();
+    const lit = this.menuOptions[step.at];
+    if (step.does === "choose" && lit) { choose(lit)(cx); return; }
+    if (step.does === "close") { this.openMenu = null; this.menuOptions = null; }
+    if (step.does === "move") { this.menuAt = step.at; this.chooserScroll.scroll_to_item(step.at); }
+    cx.notify();
   }
 
   hero(c, hero, narrow) {
     const offset = this.cost.offset || 0;
     const stepper = this.cost.period !== "all";
-    return v_flex().w_full().gap(G.xl)
-      .child(v_flex().gap(G.xs)
+    return heroStack(heroHeading()
         .child(h_flex().gap(G.md).items_center()
-          .child(div().text_size(15).text_color(c.muted).child(hero.title))
+          .child(div().text_size(T.title).text_color(c.muted).child(hero.title))
           .when(stepper, (el) => el
-            .child(quietLink("ins-older", "‹", (cx) => this.setCost({ offset: offset - 1 }, cx), c, { size: 16, label: "Previous period" }))
+            .child(quietLink("ins-older", "‹", (cx) => this.setCost({ offset: offset - 1 }, cx), c, { label: "Previous period" }))
             .child(quietLink("ins-newer", "›", (cx) => this.setCost({ offset: Math.min(0, offset + 1) }, cx), c, {
-              size: 16, label: "Next period", disabled: offset >= 0,
+              label: "Next period", disabled: offset >= 0,
             }))
             .when(offset < 0, (row) => row.child(quietLink("ins-now", "Back to now", (cx) => this.setCost({ offset: 0 }, cx), c)))))
-        .child(h_flex().flex_wrap().items_end().gap_x(G.md)
-          .child(div().text_size(narrow ? 48 : 72).line_height(1).font_light().text_color(c.text).tooltip(hero.tip).child(hero.value))
-          .child(div().pb(narrow ? 6 : 10).text_size(13).text_color(c.dim).child("API value")))
-        .when(Boolean(hero.note), (el) => el.child(div().text_size(15).text_color(c.dim).child(hero.note)))
-        .when(Boolean(hero.empty), (el) => el.child(div().text_size(15).text_color(c.muted).child(hero.empty)))
-        .when(Boolean(hero.plan), (el) => el.child(div().text_size(13).text_color(c.muted).child(hero.plan)))
-        .when(Boolean(this.scan?.partial), (el) => el.child(div().text_size(12).text_color(c.dim)
-          .child(`Still reading your history: ${this.scan.processed} of ${this.scan.total} files so far.`))))
-      .when(!hero.empty, (el) => el.child(h_flex().w_full().flex_wrap().gap_x(narrow ? G.xl : 48).gap_y(G.lg)
-        .children(hero.stats.map((stat) => h_flex().items_end().gap(6).tooltip(stat.tip)
-          .child(div().text_size(narrow ? 22 : 28).line_height(1).font_light().text_color(c.text).child(stat.value))
-          .child(div().pb(3).text_size(12).text_color(c.dim).child(stat.unit))))));
+        .child(metric({ value: hero.value, unit: "API value", facts: hero.empty ? "" : factList(hero.stats), tip: hero.tip })("ins-metric", c))
+        .when(Boolean(hero.note), (el) => el.child(div().text_size(T.title).text_color(c.dim).child(hero.note)))
+        .when(Boolean(hero.empty), (el) => el.child(div().text_size(T.title).text_color(c.muted).child(hero.empty)))
+        .when(Boolean(hero.plan), (el) => el.child(div().text_size(T.value).text_color(c.muted).child(hero.plan)))
+        .when(Boolean(this.scan?.partial), (el) => el.child(div().text_size(T.body).text_color(c.dim)
+          .child(`Still reading your history: ${this.scan.processed} of ${this.scan.total} files so far.`))));
   }
 
   chart(c, chart) {
     const height = 132;
-    return v_flex().w_full().gap(G.sm)
-      .child(h_flex().w_full().items_end()
-        .children(chart.bars.map((bar) => v_flex().flex_1().min_w(0).h(height + 18).items_center().justify_end().gap(4)
-          .tooltip(bar.tip)
-          .when(bar.peak, (el) => el.child(div().text_size(10).text_color(c.text).whitespace_nowrap().child(bar.value)))
-          .child(div().w(bar.peak ? 3 : 2).flex_none().rounded_t(1)
-            .h(bar.ratio > 0 ? Math.max(3, Math.round(bar.ratio * height)) : 1)
-            .bg(bar.peak ? c.accent : bar.ratio > 0 ? c.muted : c.border)
-            .opacity(bar.peak || bar.ratio === 0 ? 1 : 0.55)))))
-      .child(h_flex().w_full().justify_between()
-        .child(div().text_size(10).text_color(c.dim).child(chart.first))
-        .child(div().text_size(10).text_color(c.dim).child(chart.title))
-        .child(div().text_size(10).text_color(c.dim).child(chart.last)));
+    return barChart(c, {
+      columns: chart.bars.map((bar) => chartColumn(c, { tip: bar.tip, marked: Boolean(bar.peak), value: bar.value }, chartRoom(height))
+        .child(div().w(bar.peak ? 3 : 2).flex_none().rounded_t(1)
+          .h(bar.ratio > 0 ? Math.max(3, Math.round(bar.ratio * height)) : 1)
+          .bg(bar.peak ? c.accent : bar.ratio > 0 ? c.muted : c.border)
+          .opacity(bar.peak || bar.ratio === 0 ? 1 : OPACITY.quiet))),
+      axis: [chart.first, chart.title, chart.last],
+    });
   }
 
   machineSplit(c, rows) {
@@ -693,47 +640,35 @@ export default class TokenSpend extends View {
     const shown = open ? items : items.slice(0, LIST_ROWS);
     return v_flex().w_full().gap(G.xs)
       .child(section(c, title, count))
-      .when(items.length === 0, (el) => el.child(div().text_size(12).text_color(c.dim).child("Nothing here in this period.")))
+      .when(items.length === 0, (el) => el.child(div().text_size(T.body).text_color(c.dim).child("Nothing here in this period.")))
       .children(shown.map((item, index) => {
         const active = selected === item.value;
-        return Button.new(`ins-${field}-${index}`).w_full().py(7).cursor_pointer()
-          .hover((style) => style.opacity(0.75))
-          .focus((style) => style.opacity(0.75))
-          .accessibility_label(`${item.name}, ${item.usdText}`)
-          .on_click((_event, cx) => this.openDetail(field, item, cx))
-          .child(metricLine(c, item.name, item.tokensText, item.usdText, {
-            color: active || selected === "all" ? c.text : c.muted, tip: item.detail, medium: active,
-          }));
+        const line = row({ name: item.name, detail: item.tokensText, meta: item.usdText, current: active, dimmed: !active && selected !== "all" })(`ins-${field}-${index}`, c, {
+          onClick: (cx) => this.openDetail(field, item, cx),
+        }).accessibility_label(`${item.name}, ${item.usdText}`);
+        return item.detail ? line.tooltip(tooltip({ label: item.detail })) : line;
       }))
-      .when(items.length > LIST_ROWS, (el) => el.child(h_flex().pt(G.sm)
-        .child(quietLink(`ins-${field}-more`, open ? "Show fewer" : `Show ${items.length - LIST_ROWS} more`, (cx) => {
-          this.expanded = { ...this.expanded, [field]: !open };
-          cx.notify();
-        }, c))));
+      .when(items.length > LIST_ROWS, (el) => el.child(moreLink(`ins-${field}-more`, c, { open, hidden: items.length - LIST_ROWS }, (cx) => {
+        this.expanded = { ...this.expanded, [field]: !open };
+        cx.notify();
+      })));
   }
 
   taskView(c, d, narrow) {
-    const row = (name, sub, usd, tokens, index) => h_flex().w_full().items_end().gap(G.md).py(7)
-      .when(index > 0, (el) => el.border_t(1).border_color(c.border))
-      .child(v_flex().flex_1().min_w(0).gap(2)
-        .child(div().truncate().text_size(13).text_color(c.text).child(name))
-        .when(Boolean(sub), (el) => el.child(div().text_size(11).text_color(c.dim).child(sub))))
-      .child(div().text_size(11).text_color(c.dim).child(tokens))
-      .child(div().min_w(64).text_right().text_size(15).font_light().text_color(c.text).child(usd));
+    const row = (name, sub, usd, tokens, index) => separatedRow(h_flex().w_full().items_end().gap(G.md).py(7), c, index)
+      .child(detailColumn()
+        .child(div().truncate().text_size(T.card).text_color(c.text).child(name))
+        .when(Boolean(sub), (el) => el.child(div().text_size(T.micro).text_color(c.dim).child(sub))))
+      .child(div().text_size(T.micro).text_color(c.dim).child(tokens))
+      .child(div().min_w(64).text_right().text_size(T.title).font_light().text_color(c.text).child(usd));
     return v_flex().w_full().gap(narrow ? 36 : 44)
       .child(v_flex().w_full().gap(G.sm)
-        .when(Boolean(d.ticket), (el) => el.child(div().text_size(12).font_medium().text_color(c.muted).child(d.ticket)))
-        .child(div().w_full().text_size(15).line_height(1.45).text_color(c.text).child(d.title))
+        .when(Boolean(d.ticket), (el) => el.child(div().text_size(T.body).font_medium().text_color(c.muted).child(d.ticket)))
+        .child(div().w_full().text_size(T.title).line_height(1.45).text_color(c.text).child(d.title))
         .child(h_flex().w_full().flex_wrap().gap_x(G.md).gap_y(2)
-          .children([d.project, d.tools, d.when].filter(Boolean).map((part) => div().text_size(12).text_color(c.dim).child(part)))))
+          .children([d.project, d.tools, d.when].filter(Boolean).map((part) => div().text_size(T.body).text_color(c.dim).child(part)))))
       .child(v_flex().gap(G.xl)
-        .child(h_flex().flex_wrap().items_end().gap_x(G.md)
-          .child(div().text_size(narrow ? 44 : 60).line_height(1).font_light().text_color(c.text).tooltip(`${d.usdExact} at API list price`).child(d.usdText))
-          .child(div().pb(narrow ? 5 : 8).text_size(13).text_color(c.dim).child("API value")))
-        .child(h_flex().w_full().flex_wrap().gap_x(narrow ? G.xl : 40).gap_y(G.lg)
-          .children(d.parts.map((part) => v_flex().gap(4)
-            .child(div().text_size(narrow ? 20 : 24).line_height(1).font_light().text_color(c.text).child(part.value))
-            .child(div().text_size(11).text_color(c.dim).child(part.label))))))
+        .child(metric({ value: d.usdText, unit: "API value", facts: factList(d.parts.map((part) => ({ value: part.value, unit: part.label }))), tip: `${d.usdExact} at API list price` })("ins-task-metric", c)))
       .child(v_flex().w_full()
         .child(section(c, "Models", `${d.models.length}`))
         .children(d.models.map((m, index) => row(m.name, "", m.usdText, m.tokensText, index))))
@@ -746,66 +681,58 @@ export default class TokenSpend extends View {
 
   settingsView(c) {
     const s = this.settings;
-    const heading = (title, note) => v_flex().w_full().gap(4).pb(G.md)
-      .child(div().text_size(15).text_color(c.text).child(title))
-      .when(Boolean(note), (el) => el.child(div().text_size(12).text_color(c.dim).child(note)));
+    const heading = (title, note) => v_flex().w_full().gap(G.xs).pb(G.md)
+      .child(div().text_size(T.title).text_color(c.text).child(title))
+      .when(Boolean(note), (el) => el.child(div().text_size(T.body).text_color(c.dim).child(note)));
     const busy = this.running === "configure" || (this.running === "snapshot" && this.queuedSources);
     return v_flex().w_full().gap(44)
       .child(v_flex().w_full()
         .child(heading("Sources", "Where Spend reads your sessions. Turning one off removes it from every number."))
-        .when(!s, (el) => el.child(this.sourcesBones(c)))
-        .children((s?.sources ?? []).map((source, index) => h_flex().w_full().items_center().gap(G.md).py(G.sm)
-          .when(index > 0, (el) => el.border_t(1).border_color(c.border))
-          .child(v_flex().flex_1().min_w(0).gap(2)
-            .child(div().text_size(13).text_color(source.enabled ? c.text : c.muted).child(source.label))
-            .child(div().truncate().text_size(11).text_color(c.dim).tooltip(source.roots).child(source.roots)))
+        .when(!s && !this.plan().failure, (el) => el.child(skeletonOf({ shape: "line", count: 3 })("kanso-skeleton", c)))
+        .children((s?.sources ?? []).map((source, index) => separatedRow(h_flex().w_full().items_center().gap(G.md).py(G.sm), c, index)
+          .child(detailColumn()
+            .child(div().text_size(T.value).text_color(source.enabled ? c.text : c.muted).child(source.label))
+            .child(div().truncate().text_size(T.micro).text_color(c.dim).tooltip(tooltip({ label: source.roots })).child(source.roots)))
           .child(toggleSwitch(`ins-source-${source.id}`, source.enabled, (next, cx) => this.toggleSource(source.id, next, cx), c, {
             label: `${source.label}: ${source.enabled ? "on" : "off"}`,
           }))))
-        .when(Boolean(busy), (el) => el.child(div().pt(G.sm).text_size(11).text_color(c.dim).child("Updating sources…"))))
+        .when(Boolean(busy), (el) => el.child(div().pt(G.sm).text_size(T.micro).text_color(c.dim).child("Updating sources…"))))
       .child(v_flex().w_full()
         .child(heading("Plans", "What you pay each month. Spend subtracts it from the API value to show what your plans save you."))
-        .children(this.planInputs.map((input, index) => h_flex().w_full().items_center().gap(G.sm).py(4)
-          .child(div().flex_1().min_w(0).child(controlInput(Input.new(input.name).w_full(), c)))
-          .child(div().text_size(12).text_color(c.dim).child("$"))
-          .child(div().w(84).flex_none().child(controlInput(Input.new(input.amount).w_full(), c)))
-          .child(div().text_size(11).text_color(c.dim).child("/ mo"))
-          .child(iconButton(`ins-plan-remove-${index}`, icon("close"), "Remove plan", (cx) => this.removePlan(index, cx), c))))
+        .children(this.planInputs.map((input, index) => h_flex().w_full().items_center().gap(G.sm).py(G.xs)
+          .child(div().flex_1().min_w(0).child(field(`ins-plan-name-${index}`, input.name, c)))
+          .child(div().text_size(T.body).text_color(c.dim).child("$"))
+          .child(div().w(84).flex_none().child(field(`ins-plan-amount-${index}`, input.amount, c)))
+          .child(div().text_size(T.micro).text_color(c.dim).child("/ mo"))
+          .child(iconButton(`ins-plan-remove-${index}`, "x", "Remove plan", (cx) => this.removePlan(index, cx), c))))
         .child(h_flex().w_full().gap(G.lg).items_center().pt(G.sm)
           .child(quietLink("ins-plan-add", "Add plan", (cx) => this.addPlan(cx), c))
           .child(quietLink("ins-plan-save", "Save plans", (cx) => this.savePlans(cx), c))
-          .when(Boolean(this.settingsNote), (el) => el.child(div().text_size(11).text_color(c.dim).child(this.settingsNote)))))
+          .when(Boolean(this.settingsNote), (el) => el.child(div().text_size(T.micro).text_color(c.dim).child(this.settingsNote)))))
       .child(v_flex().w_full()
         .child(heading("Prices", null))
-        .child(div().text_size(12).line_height(1.5).text_color(c.muted)
+        .child(div().text_size(T.body).line_height(1.5).text_color(c.muted)
           .child("Claude models use Anthropic's list prices, Claude Code with its 1-hour cache writes. Other models use the OpenRouter catalog, refreshed once a day; tokens without a list price are left out, not guessed."))
-        .child(div().pt(G.sm).text_size(11).text_color(c.dim).child(`Your own per-model prices: "models" in ${s?.pricesPath ?? `${DATA_DIR}/prices.json`}`)))
+        .child(div().pt(G.sm).text_size(T.micro).text_color(c.dim).child(`Your own per-model prices: "models" in ${s?.pricesPath ?? `${DATA_DIR}/prices.json`}`)))
       .child(v_flex().w_full()
         .child(heading("Updates", null))
-        .child(div().text_size(12).line_height(1.5).text_color(c.muted)
+        .child(div().text_size(T.body).line_height(1.5).text_color(c.muted)
           .child("While this panel is open: every minute, or every 30 seconds while a session is active. Closed, Spend does nothing.")));
   }
 
   live(c, sessions) {
     return v_flex().w_full()
       .child(h_flex().w_full().items_center().gap(G.sm).pb(G.sm)
-        .child(breathe(div().size(6).flex_none().rounded_full().bg(c.accent), PULSE))
-        .child(div().text_size(15).text_color(c.text).child("Active now")))
-      .children(sessions.map((s, index) => Button.new(`ins-live-${index}`).w_full().cursor_pointer()
-        .hover((style) => style.opacity(0.75))
-        .focus((style) => style.opacity(0.75))
-        .accessibility_label(`${s.title}, ${s.usdText}`)
-        .on_click((_event, cx) => this.openDetail("task", s.detail, cx))
-        .child(h_flex().w_full().items_center().gap(G.lg).py(G.sm)
-        .when(index > 0, (el) => el.border_t(1).border_color(c.border))
-        .child(v_flex().flex_1().min_w(0).gap(3)
-          .child(h_flex().w_full().gap(G.sm).items_end()
-            .when(Boolean(s.ticket), (el) => el.child(div().flex_none().text_size(12).font_medium().text_color(c.muted).child(s.ticket)))
-            .child(div().flex_1().min_w(0).truncate().text_size(13).text_color(c.text).tooltip(s.tip).child(s.title)))
-          .child(h_flex().w_full().flex_wrap().gap_x(G.md).children(s.meta.map((part) => div().text_size(11).text_color(c.dim).whitespace_nowrap().child(part)))))
-        .child(v_flex().items_end().gap(2).flex_none()
-          .child(div().text_size(17).font_light().text_color(c.text).child(s.usdText))
-          .child(div().text_size(11).text_color(c.dim).child(s.tokensText))))));
+        .child(mark(c, { status: "working", size: "sm" }))
+        .child(div().text_size(T.title).text_color(c.text).child("Active now")))
+      .children(sessions.map((s, index) => this.taskRow(`ins-live-${index}`, s, c)));
+  }
+
+  // A task or a live session: the kit's row, its ticket beside the title, its facts and tokens under it, its cost at the end; a press opens its detail.
+  taskRow(id, task, c) {
+    return row({ name: task.title, detail: task.ticket || null, meta: task.usdText, second: [...task.meta, task.tokensText] })(id, c, {
+      onClick: (cx) => this.openDetail("task", task.detail, cx),
+    }).accessibility_label(`${task.title}, ${task.usdText}`).tooltip(tooltip({ label: task.tip }));
   }
 
   tasks(c, data) {
@@ -813,27 +740,14 @@ export default class TokenSpend extends View {
     const shown = open ? data.tasks : data.tasks.slice(0, TASK_ROWS);
     return v_flex().w_full()
       .child(h_flex().w_full().items_end().justify_between().pb(G.md)
-        .child(div().text_size(15).text_color(c.text).child("Tasks"))
-        .child(div().text_size(12).text_color(c.dim).child(data.tasksNote)))
-      .children(shown.map((task, index) => Button.new(`ins-task-${index}`).w_full().py(G.md).cursor_pointer()
-        .border_t(1).border_color(c.border)
-        .hover((style) => style.opacity(0.75))
-        .focus((style) => style.opacity(0.75))
-        .accessibility_label(`${task.title}, ${task.usdText}`)
-        .on_click((_event, cx) => this.openDetail("task", task.detail, cx))
-        .child(h_flex().w_full().items_center().gap(G.lg)
-          .child(v_flex().flex_1().min_w(0).gap(4)
-            .child(h_flex().w_full().gap(G.sm).items_end()
-              .when(Boolean(task.ticket), (el) => el.child(div().flex_none().text_size(12).font_medium().text_color(c.muted).child(task.ticket)))
-              .child(div().flex_1().min_w(0).truncate().text_size(13).text_color(c.text).tooltip(task.tip).child(task.title)))
-            .child(h_flex().w_full().flex_wrap().gap_x(G.md).children(task.meta.map((part) => div().text_size(11).text_color(c.dim).whitespace_nowrap().child(part)))))
-          .child(v_flex().items_end().gap(2).flex_none()
-            .child(div().text_size(17).font_light().text_color(c.text).child(task.usdText))
-            .child(div().text_size(11).text_color(c.dim).child(task.tokensText))))))
-      .when(data.tasks.length > TASK_ROWS, (el) => el.child(h_flex().pt(G.md).border_t(1).border_color(c.border)
-        .child(quietLink("ins-tasks-more", open ? "Show fewer" : `Show ${data.tasks.length - TASK_ROWS} more`, (cx) => {
-          this.expanded = { ...this.expanded, tasks: !open };
-          cx.notify();
-        }, c))));
+        .child(div().text_size(T.title).text_color(c.text).child("Tasks"))
+        .child(div().text_size(T.body).text_color(c.dim).child(data.tasksNote)))
+      .children(shown.map((task, index) => this.taskRow(`ins-task-${index}`, task, c)))
+      .when(data.tasks.length > TASK_ROWS, (el) => el.child(moreLink("ins-tasks-more", c, { open, hidden: data.tasks.length - TASK_ROWS, ruled: true }, (cx) => {
+        this.expanded = { ...this.expanded, tasks: !open };
+        cx.notify();
+      })));
   }
 }
+
+const separatedRow = (row, c, index) => row.when(index > 0, (el) => el.border_t(1).border_color(c.border));

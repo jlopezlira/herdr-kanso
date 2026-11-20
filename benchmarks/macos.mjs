@@ -152,7 +152,7 @@ async function native() {
         writeFileSync(join(home, "layouts/benchmark.json"), JSON.stringify({ id: "root", type: "block", content: { mod: "benchmark" } }));
         cpSync(join(root, "benchmarks/native-files.js"), join(mod, "main.js"));
         cpSync(join(root, "kanso/mods/kanso-panel/lib.js"), join(mod, "lib.js"));
-        writeFileSync(join(mod, "context.js"), 'export { codeState, markdownView, isMarkdown, insideRoot } from "./lib.js"; export const key = () => "benchmark"; export const location = () => ({ cwd: "/benchmark", on: null });');
+        writeFileSync(join(mod, "context.js"), 'export { isMarkdown, insideRoot } from "./lib.js"; export const key = () => "benchmark"; export const location = () => ({ cwd: "/benchmark", on: null });');
         writeFileSync(join(mod, "files.js"), source(variant, "kanso/mods/kanso-panel/files.js").replace('from "./lib.js"', 'from "./context.js"'));
         writeFileSync(join(mod, "config.js"), `export const config = ${JSON.stringify({ variant, rows, iteration, warmupMs: 1500, durationMs: quick ? 3000 : 8000 })};`);
         const env = { ...process.env, HERDR_APP_HOME: home };

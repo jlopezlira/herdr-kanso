@@ -12,7 +12,10 @@ import { div, image } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import { appHome, home } from "herdr";
 import { parseOr } from "./pure.js";
-import { hachi, hachiPixels, hachiInk } from "./mascot.js";
+import { G, H, T, W } from "./ui.js";
+import { button } from "./kit.js";
+import { hachi, hachiInk } from "./mascot.js";
+import { hachiPixels } from "./mascot-pixels.js";
 import { Store } from "./store.js";
 
 export const SITE = "https://codex-pets.net";
@@ -117,7 +120,7 @@ export async function bringAgentPets(have = new Set(), list = AGENT_PETS) {
 // Your pet, wherever it shows (the dōjō, and kansō help's way into it): which it is, the ones to choose from,
 // and the agents' pets brought the first time you look at them. The choice is kept in the dōjō's own SQLite.
 export class Companion {
-  constructor(store = new Store()) {
+  constructor(timer, store = new Store(timer)) {
     this.store = store;
     this.pets = [HACHI]; this.id = HACHI.id;
     this.bringing = false; this.brought = false; this.error = null; this.frameKey = null;
@@ -196,20 +199,18 @@ export class Companion {
   grid(t, c, onChoose = () => {}) {
     const tile = (p) => {
       const on = p.id === this.id;
-      return v_flex().id(`pet-${p.id}`).w(104).gap(4).p(8).items_center().rounded(10).cursor_pointer()
-        .border_1().border_color(on ? c.accent : c.text + "00").bg(on ? c.accent + "1c" : c.text + "00")
-        .hover((s) => s.bg(c.text + "0a"))
-        .on_click((_e, cx) => { this.choose(p.id); onChoose(p, cx); cx.notify(); })
-        .child(h_flex().h(84).items_end().justify_center()
+      const face = v_flex().w(W.petTile).gap(G.xs).p(G.sm).items_center()
+        .child(h_flex().h(H.petPicture).items_end().justify_center()
           .child(p.sheet ? petFrame(p, "idle", { scale: 0.4, still: true, small: true }) : hachi(t, { mood: "calm", px: 5 })))
-        .child(div().w_full().text_center().truncate().text_size(12).font_medium().text_color(on ? c.text : c.muted).child(p.name))
-        .child(div().w_full().text_center().truncate().text_size(10.5).text_color(c.dim).child(p.from ?? (p.sheet ? "yours" : "Kanso")));
+        .child(div().w_full().text_center().truncate().text_size(T.body).font_medium().text_color(on ? c.text : c.muted).child(p.name))
+        .child(div().w_full().text_center().truncate().text_size(T.body).text_color(c.dim).child(p.from ?? (p.sheet ? "yours" : "Kanso")));
+      // The kit's button with the pet as its face: Tab reaches it, Enter and Space choose it, the chosen one is filled.
+      return button({ label: p.name, kind: "quiet", active: on, content: [face] })(`pet-${p.id}`, c, { onClick: (cx) => { this.choose(p.id); onChoose(p, cx); cx.notify(); } });
     };
     const coming = this.bringing ? AGENT_PETS.filter((a) => !this.pets.some((p) => p.id === a.id)).length : 0;
     const note = this.error ?? (coming ? `Bringing ${coming} more\u2026` : null);
-    return v_flex().gap(G_NOTE)
+    return v_flex().gap(G.md)
       .child(h_flex().flex_wrap().gap(8).children(this.pets.map(tile)))
       .when(Boolean(note), (el) => el.child(div().text_size(12).text_color(this.error ? c.red ?? c.accent : c.dim).child(note)));
   }
 }
-const G_NOTE = 12;

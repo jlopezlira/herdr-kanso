@@ -31,8 +31,11 @@ test("native filesystem services preserve Unicode names, literal quotes and recu
   assert.equal(await files.test(moved), false);
 });
 
+// A conversation file in its own folder, and the transcript reader for this computer.
+const conversationFile = async (t) => ({ file: join(await temporary(t), "conversation.jsonl"), api: transcriptApi(nativePlatform, exec) });
+
 test("native transcript slices respect UTF-8 byte offsets, CRLF and unfinished lines", async (t) => {
-  const root = await temporary(t), file = join(root, "conversation.jsonl"), api = transcriptApi(nativePlatform, exec);
+  const { file, api } = await conversationFile(t);
   const first = '{"text":"código"}\r\n', second = '{"text":"next"}\n';
   await writeFile(file, first + second.slice(0, -1));
   const slice = await api.slice(file, 0, 8192, 16000);
@@ -49,7 +52,7 @@ test("native transcript slices respect UTF-8 byte offsets, CRLF and unfinished l
 });
 
 test("native transcript scan rejects stale prefixes and resumes after complete lines", async (t) => {
-  const root = await temporary(t), file = join(root, "conversation.jsonl"), api = transcriptApi(nativePlatform, exec);
+  const { file, api } = await conversationFile(t);
   const scan = (from = 0, mark = "") => api.scan(file, from, mark, "(^|[^A-Za-z0-9@+._~/-])[A-Za-z0-9@+._~/-]*\\.(png)([^A-Za-z0-9]|$)", "png", 2000, 100000);
   await writeFile(file, '{"text":"out/first.png"}\n');
   const first = await scan();
@@ -107,11 +110,7 @@ test("native repository service creates, discovers and probes a worktree without
 test("a file copied in slices matches its bytes, including an empty file and one slice", async (t) => {
   const { CHUNK, slices } = await load("kanso-panel/remote-file.js", ["CHUNK", "slices"], { appHome: () => "/app" });
   const root = await temporary(t);
-  // macOS calls base64 -D. /usr/bin is that program; a GNU base64 earlier on PATH is not.
-  const run = nativePlatform === "macos"
-    ? (cmd, args, options) => exec(cmd, args, { ...options, env: { ...process.env, PATH: `/usr/bin:/bin:/usr/sbin:/sbin:${process.env.PATH ?? ""}` } })
-    : exec;
-  const files = fileApi(nativePlatform, run);
+  const files = fileApi(nativePlatform, exec);
   const copy = async (name, bytes) => {
     const source = join(root, name), dest = join(root, `${name}.out`);
     await writeFile(source, bytes);

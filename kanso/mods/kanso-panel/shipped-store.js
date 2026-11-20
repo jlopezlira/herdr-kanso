@@ -1,4 +1,4 @@
-import { sqliteApi } from "./platform-sqlite.js";
+import { Database } from "./platform-database.js";
 import { localService } from "./platform-host.js";
 import { paths } from "./platform-paths.js";
 import { fileApi } from "./platform-files.js";
@@ -8,7 +8,7 @@ import { systemApi } from "./platform-system.js";
 // Statistics only: no messages, file names or code.
 // A repository's week counts the larger of what the machines and GitHub saw.
 import { exec, appHome, home, spaces, panes, writeTextFile } from "herdr";
-import { range, tryOrAsync, mapSeries } from "./pure.js";
+import { range, mapSeries } from "./pure.js";
 
 export const STORE_DIR = "data/kanso-panel";
 const GIST_DESCRIPTION = "Kanso Shipped stats";
@@ -82,37 +82,21 @@ export function weeklyStats(rows) {
   return { repos };
 }
 
-export class Store {
-  constructor() {
+export class Store extends Database {
+  constructor(timer) {
+    super(timer);
     this.dir = paths.join(appHome(), STORE_DIR);
-    this.db = paths.join(this.dir, "shipped.db");
-    this.batches = 0;
+    this.file = paths.join(this.dir, "shipped.db");
   }
 
-  async sql(text, json = false) {
-    const r = await localService(sqliteApi).execute(this.db, text, { json });
-    return json ? (r.stdout.trim() ? JSON.parse(r.stdout) : []) : r.stdout;
-  }
-
-  // Large writes go through a file: an argument can't hold thousands of rows.
   async script(text) {
-    if (!text.trim()) return;
-    const n = this.batches;
-    this.batches = n + 1;
-    const path = paths.join(this.dir, `.batch-${Date.now()}-${n}.sql`);
-    await writeTextFile(path, `BEGIN;\n${text}\nCOMMIT;\n`, null);
-    try {
-      const r = await exec("sqlite3", [this.db, paths.sqliteRead(path)]);
-      if (r.code !== 0) throw new Error((r.stderr || "sqlite3 failed").trim().split("\n")[0]);
-    } finally { await localService(fileApi).remove([path]).catch(() => {}); }
+    if (text.trim()) await this.sql(["BEGIN;", text, "COMMIT;"]);
   }
 
   async open() {
-    const ok = await tryOrAsync(() => exec("sqlite3", ["-version"]));
-    if (ok?.code !== 0) throw new Error("Install sqlite3 to keep Shipped's statistics.");
-    await localService(fileApi).mkdir(this.dir);
+    await this.prepare(this.dir, "Install sqlite3 to keep Shipped's statistics.");
     await this.sql(SCHEMA);
-    await localService(fileApi).remove([paths.join(this.dir, "shipped.json")]).catch(() => {}); // the cache before the database
+    await this.call((platform, run, write) => fileApi(platform, run, write).remove([paths.join(this.dir, "shipped.json")])).catch(() => {}); // the cache before the database
   }
 
   async meta(k) { return (await this.sql(`SELECT v FROM meta WHERE k=${sqlText(k)};`, true))[0]?.v ?? null; }

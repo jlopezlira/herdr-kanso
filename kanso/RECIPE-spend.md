@@ -65,7 +65,7 @@ Top to bottom:
 
 - **`mods/kanso-spend/main.js`** (the view, QuickJS). One `View` class. Its state is the cost options `{period, offset, project, model}`, a navigation stack, `page` (home or settings), the last payload, and a single-flight runner: one presenter call at a time; a request made meanwhile is queued, and a scan wins over a re-price. Every call is `exec(node, [presenter, command, --store, --home, --options JSON])`, where `node` comes from `runtime.json`. A 35 s watchdog per call shows "took too long" instead of hanging.
   - herdr functions: `exec`, `appHome`, `home`, `theme`, `layout`, `machines`, `nextCommand`, `readTextFile`, `writeTextFile`, `shared`.
-  - gpui-base controls: `Button`, `Popover`, `Input`, `InputState`, and `Toggle` (through `ui.js`).
+  - gpui-base controls: `Button`, `Popover`, `Input`, `InputState`, and `Toggle` (through `ui-toggle.js`).
   - Native animation: `svg().spin(900)` for the refresh icon, `.loop("opacity", …)` for the skeleton and the live dot.
   - Commands: `kanso-spend.refresh`, `.open`, `.settings`, `.back`.
 - **`mods/kanso-spend/presenter.mjs`** (Node 22.15+).
@@ -81,7 +81,7 @@ Top to bottom:
   - `labels.mjs`: task titles and tickets, in `labels.json`. Pi sessions reuse pi-usage's cache (`~/.prjct/pi-usage/scan.json`) when it exists.
   - `costs.mjs`: rates, periods, grouping, and all display text.
   - `demo.mjs`: the sample data.
-- **`ui.js`:** the theme token mapping and a few helpers (`toggleSwitch`, `controlInput`).
+- **`ui.js` and `ui-*.js`:** the theme token mapping and the pieces of the panel kit it uses (`ui-toggle.js`, `ui-field.js` and others).
 - **`share.js` and `spend-card.js`:** Share, the same as Shipped's (see `kanso-panel/share.js`, of which this is a byte-for-byte copy; `npm run sync:share`). A share icon in the header, shown only on the home view with no project or model filter; it opens the "Share to" row. `spend-card.js` turns the costs into the card: "Spend" and the period, the total "of AI work at API list price", the rise against the period before (only a rise), tasks, per task, tokens, the project and model counts, the plan note, and the chart's bars by ratio with its first and last labels. No names reach it.
 - **`icons/`:** `refresh`, `settings`, `back`, `close` and `share`, as 24 px stroke-2 line SVGs drawn with `svg()` and tinted by text color.
 - **Network:** one HTTPS GET a day to the OpenRouter catalog. **Programs:** `node` (on another computer too, when Sync is on; no new port). **Files read outside the mod:** the four session folders above and, if present, `~/.prjct/pi-usage/`. **Files written:** under `data/kanso-spend/`, and under `data/kanso-sync/` when Sync is on.
@@ -95,7 +95,7 @@ Top to bottom:
 - **Codex `input_tokens` already includes cached tokens.** Subtract `cached_input_tokens` to get uncached input. Output already includes reasoning tokens; don't add them twice.
 - **Catalog matching.** Sort the catalog longest id first, so `gpt-6-sol-pro` doesn't swallow `gpt-6-sol`.
 - **OpenRouter prices.** Some catalog cache rates differ from Anthropic's own, which is why the first-party table wins for Claude models.
-- **Runtime.** `runtime.json` must point at Node 22.15 or newer: zstd archives need `zlib.createZstdDecompress`, and OpenCode needs `node:sqlite`. `"node"` works when it is on the login PATH.
+- **Runtime.** `runtime.json` must point at Node 22.15 or newer: zstd archives need `zlib.createZstdDecompress`, and OpenCode needs `node:sqlite`. `"node"` works when it is on Herdr's process PATH; when Herdr was launched without that PATH, set the absolute path to Node in `runtime.json`.
 - **The folder name is a constant (`MOD`) at the top of `main.js`.** Asset paths, the data folder and command names all derive from it.
 
 ## Done when

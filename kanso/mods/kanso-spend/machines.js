@@ -115,37 +115,23 @@ export function machineTip(title, phase, hint = "") {
   return word ? `${title}: ${note || word}` : title;
 }
 
-const HOT = ["machine", "machine-power", "machine-retry", "machine-login", "machine-add", "machine-sync"];
+// The keyboard's stops on a computer: its row, `machine:<name>`, and each tool the row shows, `machine-<tool>:<name>`.
+export const machineStop = (name, tool = "") => `machine${tool ? `-${tool}` : ""}:${name ?? "local"}`;
 
+// Under the pointer, or with the keyboard on its row or one of its tools, a computer's tools show.
 export function machineHot(name, hover, kbd, navKey) {
   const key = name ?? "local";
   if (hover === key) return true;
-  if (!kbd) return false;
-  return HOT.some((prefix) => navKey === `${prefix}:${key}`);
-}
-
-// Parked rows keep one action. A connected row shows turn off and + only while hot; a remote one keeps Sync while it is on.
-const PARKED_ACTION = { unavailable: ["retry"], off: ["power"], login: ["copy"] };
-
-export function machineVisible(phase, hot, remote = false, syncing = false) {
-  const parked = PARKED_ACTION[phase];
-  if (parked) return [...parked];
-  if (phase !== "connected") return [];
-  const sync = remote && (hot || syncing) ? ["sync"] : [];
-  return hot ? ["power", "plus", ...sync] : sync;
+  if (!kbd || typeof navKey !== "string") return false;
+  const at = navKey.indexOf(":");
+  return /^machine(-|$)/.test(navKey.slice(0, at)) && navKey.slice(at + 1) === key;
 }
 
 export function machineInk(phase) {
   return phase === "connected" || phase === "loading" ? "foreground" : "muted";
 }
 
-export function powerId(name) {
-  return name ? `machine-power-${name}` : null;
-}
-
-export function machineTitle(name, hostName) {
-  return name || hostName || "This computer";
-}
+export { machineTitle } from "./pure.js";
 
 export function machineOf(address) {
   const text = String(address ?? "");

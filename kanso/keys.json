@@ -40,8 +40,21 @@
     "cmd-shift-=": "kanso-strip.more",
     "cmd-shift-0": "kanso-strip.fit",
     "cmd-j": "kanso-spaces.needs-you.next",
+    "cmd-shift-up": "kanso-spaces.agent-up",
+    "cmd-shift-down": "kanso-spaces.agent-down",
+    "cmd-shift-left": "kanso-spaces.agent-back",
+    "cmd-shift-right": "kanso-spaces.agent-forward",
     "cmd-alt-s": "kanso-strip.send",
     "cmd-alt-t": "kanso-strip.arrange",
+    "cmd-1": "kanso-tabs.tab-1",
+    "cmd-2": "kanso-tabs.tab-2",
+    "cmd-3": "kanso-tabs.tab-3",
+    "cmd-4": "kanso-tabs.tab-4",
+    "cmd-5": "kanso-tabs.tab-5",
+    "cmd-6": "kanso-tabs.tab-6",
+    "cmd-7": "kanso-tabs.tab-7",
+    "cmd-8": "kanso-tabs.tab-8",
+    "cmd-9": "kanso-tabs.tab-9",
     "ctrl-1": "kanso-spaces.space-1",
     "ctrl-2": "kanso-spaces.space-2",
     "ctrl-3": "kanso-spaces.space-3",
@@ -77,6 +90,9 @@
   "mod:kanso-guard": {
     "cmd-r": "kanso-guard.refresh",
     "escape": "kanso-guard.back"
+  },
+  "mod:kanso-panel": {
+    "cmd-s": "kanso-panel.save"
   },
   "terminal": {
     "cmd-f": "kanso-strip.find"

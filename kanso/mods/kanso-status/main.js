@@ -1,16 +1,29 @@
 // Derived from the `workspace-status` mod shipped with Herdr (Apache-2.0, https://github.com/herdrdev/herdr-app).
 // Modified by 0OZ: no background or top border.
 // Modified by José Gutiérrez (minimalistic, 0oz design fork): renamed from oz-status.
-// Modified by jlopezlira (Kanso, https://github.com/jlopezlira/herdr-kanso): renamed from mn-status; one quiet line; who is waiting and what they ask (a click goes there, as Cmd+J); low memory from the guard's file.
-import { View, div, svg } from "gpui-kit";
-import { h_flex } from "gpui-base";
-import { spaces, agents, terminals, machines, theme, run, window, props, shared, appHome, readTextFile } from "herdr";
-import { stateMark } from "./marks.js";
-import { afterMount, tryOrAsync } from "./pure.js";
+// Modified by jlopezlira (Kanso, https://github.com/jlopezlira/herdr-kanso): renamed from mn-status; one quiet line; who is waiting and what they ask (a click goes there, as Cmd+J); low memory from the guard's file; stand-ins that show only while their home is out of sight.
+import { View } from "gpui-kit";
+import { spaces, agents, terminals, machines, theme, run, props, shared, appHome, readTextFile } from "herdr";
+import { tokens } from "./ui.js";
+import { needsItem, statusItem, tooltip } from "./kit.js";
+import { computerItem, paletteDoor, statusBar } from "./status-bar.js";
+import { boundChord, hintOf } from "./ui-tooltip.js";
+import { afterMount, aliasText, tryOrAsync } from "./pure.js";
 import { paths } from "./platform-paths.js";
-import { MEMORY_MS, computerOf, needsItem, questionOf, memoryLow } from "./model.js";
+import { MEMORY_MS, NEEDS_COMMAND, STATUS_COMMAND, PALETTE_COMMAND, computerOf, computerShown, waitingItem, questionOf, memoryLow, workingItem } from "./model.js";
+import { pieces, shown, choice } from "./pieces.js";
+import { openPieceMenu } from "./piece-lines.js";
 
 const GUARD_NOW = ["data", "kanso-guard", "now.json"];
+const SIDEBAR_COLLAPSED = "sidebar.collapsed";
+const go = (command) => () => run(command);
+// The items on show, each a kit piece with the name its press takes and the command that press runs, if any.
+const item = (piece, name = null, command = null, menu = null) => ({ piece: menu ? onMenu(piece, menu) : piece, name, command });
+// A right click opens the piece's menu at the pointer.
+function onMenu(piece, menu) {
+  return (...drawn) => piece(...drawn).on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); openPieceMenu(menu); });
+}
+const pressesOf = (items) => Object.fromEntries(items.filter(({ command }) => command).map(({ name, command }) => [name, go(command)]));
 
 export default class WorkspaceStatus extends View {
   init(_props, cx) {
@@ -36,15 +49,16 @@ export default class WorkspaceStatus extends View {
   }
 
   render() {
-    const t = theme();
     // Two copies share the row (the strip's minimap sits between): side says which half this one draws.
     const side = props()?.side;
     const left = side !== "right", right = side !== "left";
+    const map = pieces(shared);
     const space = left ? spaces().find((s) => s.active) : null;
+    const computer = left && choice("status.computer", map) !== "hide"
+      ? computerOf(space, machines(), aliasText(shared("kanso.alias"), space?.machine || "")) : null;
     const list = right ? agents() : [];
-    const terms = right ? terminals() : [];
     const byAgent = new Map(list.map((agent) => [agent.address, agent]));
-    const byTerm = new Map(terms.map((term) => [term.address, term]));
+    const byTerm = new Map((right ? terminals() : []).map((term) => [term.address, term]));
     const rows = right ? (shared("kanso.needs-you")?.rows ?? []) : [];
     const questions = Object.fromEntries(rows.flatMap((row) => {
       const agent = byAgent.get(row?.address);
@@ -52,36 +66,21 @@ export default class WorkspaceStatus extends View {
         msg: byTerm.get(row.address)?.report?.msg, title: agent?.title, name: row.name, program: agent?.program,
       })]] : [];
     }));
-    const needs = needsItem(rows, questions);
+    const needs = waitingItem(rows, questions);
     const low = right ? memoryLow(this.memoryText) : null;
-    const computer = left ? computerOf(space, machines()) : null;
-    const working = list.filter((agent) => agent.status === "working").length;
-    const chip = (icon, text) => h_flex().gap(6).items_center().min_w(0)
-      .child(svg(`mods/kanso-chrome/icons/${icon}.svg`).size(13).flex_none()).child(div().truncate().child(text));
-    const act = (el, id, tip, command) => el.id(id).cursor_pointer().tooltip(tip)
-      .hover((s) => s.bg(t.foreground + "0a")).on_click(() => run(command));
-    const mac = window()?.platform === "macos";
-    const hidden = new Set(Array.isArray(shared("kanso.hidden")) ? shared("kanso.hidden") : []);
-    const agentsText = list.length === 0 ? "No agents"
-      : working > 0 ? `${working} of ${list.length} working` : `${list.length} ${list.length === 1 ? "agent" : "agents"} idle`;
-    return h_flex().size_full().px(12).gap(18).items_center().text_size(11.5).text_color(t.muted)
-      .when(right && !left, (el) => el.justify_end())
-      .when(left, (el) => el.child(computer.command
-        ? act(chip(computer.icon, computer.words).text_color(t[computer.tone]), "status-computer", computer.tooltip, computer.command)
-        : chip(computer.icon, computer.words))
-        .when(Boolean(space?.branch), (row) => row.child(chip("branch", space.branch))))
-      .when(left && right, (el) => el.child(div().flex_1()))
-      .when(right && needs, (el) => el.child(act(h_flex().gap(6).items_center().min_w(0), "needs-you", needs.tooltip, needs.command)
-        .child(stateMark(t, needs.mark, 12))
-        .child(div().flex_none().font_medium().text_color(t[needs.nameTone]).child(needs.name))
-        .when(needs.question, (row) => row.child(div().max_w(needs.questionWidth).min_w(0).truncate().text_color(t[needs.questionTone]).child(needs.question)))
-        .when(needs.more, (row) => row.child(div().flex_none().text_color(t[needs.moreTone]).child(needs.more)))))
-      .when(right && low, (el) => el.child(act(h_flex().gap(6).items_center().text_color(t[low.tone]), "status-memory", low.tooltip, low.command)
-        .child(low.words)))
-      .when(right && !hidden.has("status.agents"), (el) => el.child(h_flex().gap(6).items_center()
-        .child(stateMark(t, working > 0 ? "working" : "idle", 12, { idle: true }))
-        .child(agentsText)))
-      .when(right && !hidden.has("status.palette"), (el) => el.child(act(div().px(6).py(2).rounded(6), "palette", "Command palette", "app.palette")
-        .child(mac ? "⌘⇧P" : "Ctrl+Shift+P")));
+    const working = workingItem(list);
+    const lefts = computer && shown("status.computer", computerShown(computer, shared(SIDEBAR_COLLAPSED)), map) ? [item(computerItem(computer), "Refresh", computer.command,
+      { id: "status.computer", title: computer.name, actions: computer.command ? [{ icon: "refresh-cw", label: "Refresh", command: computer.command }] : [] })] : [];
+    const rights = [
+      needs && item(needsItem({ name: needs.name, question: needs.question ?? "", more: needs.more, tip: needs.tooltip }), "blocked", needs.command,
+        { title: "Needs you", actions: [{ label: `Go to ${needs.name}`, hint: hintOf(NEEDS_COMMAND), mark: "blocked", command: needs.command }] }),
+      low && item(statusItem({ text: low.words, tone: low.tone, tip: low.tooltip }), low.words, low.command,
+        { title: "Memory low", actions: [{ icon: "memory-stick", label: "Open Memory", command: low.command }] }),
+      right && shown("status.agents", working.count > 0, map) && item(statusItem({ mark: working.mark, text: working.words, tip: working.tooltip }), working.mark, working.command,
+        { id: "status.agents", title: "Agents at work", actions: [{ label: "Show them", hint: hintOf(STATUS_COMMAND), mark: working.mark, command: working.command }] }),
+      right && shown("status.palette", true, map) && item(paletteDoor({ tip: tooltip({ label: "Command palette", chord: boundChord(PALETTE_COMMAND) }) }), "command", PALETTE_COMMAND,
+        { id: "status.palette", title: "Command palette key" }),
+    ].filter(Boolean);
+    return statusBar({ left: lefts.map(({ piece }) => piece), right: rights.map(({ piece }) => piece) })("status", tokens(theme()), { presses: pressesOf([...lefts, ...rights]) });
   }
 }

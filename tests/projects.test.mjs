@@ -1,23 +1,31 @@
 // Projects: folders you added stay when their last agent closes; worktrees go in Kanso's folder.
+import { loadSpaces, temporaryKdbFile } from "./mod-fixtures.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdir, writeFile, stat, realpath, rm } from "node:fs/promises";
+import { mkdir, writeFile, realpath, rm } from "node:fs/promises";
 import { join, relative } from "node:path";
-import { load, clone, temporary, exec } from "./helpers.mjs";
+import { load, clone, temporary, exec, until, elements, watchPopups, watchLines, failure, context, gitOk, fileExists as exists, gpuiHost, popoverHost, keyboard, texts, calls as calls_ } from "./helpers.mjs";
+import { loadSidebar, mountedState, recorder } from "./sidebar-fixtures.mjs";
 
 const NAMES = ["placeKey", "keyOfSpace", "keyOfProject", "closedProjects", "shownNames", "startingProjects", "parseWorktreeList", "addWorktree", "worktreesOf", "missingFolders", "folderName", "trimmed"];
 const projects = () => load("kanso-spaces/projects.js", NAMES, { exec });
-const database = async (t) => {
-  const dir = await temporary(t);
-  const { Kdb } = await load("kanso-spaces/kdb.js", ["Kdb"], { exec, appHome: () => dir });
-  return new Kdb(join(dir, "kanso"));
+const database = async (t) => (await temporaryKdbFile(t)).fresh();
+const git = gitOk("-c", "init.defaultBranch=main");
+
+const recording = (calls, overlays) => ({ run: (cmd, args) => calls.push([cmd, clone(args ?? null)]), openOverlay: (o) => overlays.push(clone(o.props)) });
+
+// Spaces on a database in its own temporary folder: `calls` keeps what it runs, `overlays` what it opens; `host(calls)` adds to its host.
+const projectSpaces = async (t, host) => {
+  const { dir, fresh } = await temporaryKdbFile(t);
+  const calls = [], overlays = [], shared = new Map();
+  const { Spaces } = await loadSpaces({
+    exec, appHome: () => dir, home: () => "/Users/me", spaces: () => [], machines: () => [],
+    shared: (k) => shared.get(k) ?? null, setShared: (k, v) => shared.set(k, v),
+    ...recording(calls, overlays),
+    ...host(calls),
+  });
+  return { Spaces, kdb: fresh(), calls, overlays, shared };
 };
-const git = async (cwd, ...args) => {
-  const r = await exec("git", ["-c", "core.autocrlf=false", "-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false", "-c", "init.defaultBranch=main", ...args], { cwd });
-  assert.equal(r.code, 0, `git ${args.join(" ")}: ${r.stderr}`);
-  return r.stdout.trim();
-};
-const exists = (p) => stat(p).then(() => true, () => false);
 
 test("the spaces open when projects came in become projects; home and duplicates do not", async () => {
   const { startingProjects } = await projects();
@@ -25,12 +33,9 @@ test("the spaces open when projects came in become projects; home and duplicates
     { folder: "/Users/me/Apps/agile/", machine: null }, { folder: "/Users/me/Apps/agile", machine: null },
     { folder: "/Users/me", machine: null }, { folder: "", machine: null }, { folder: "/srv/api", machine: "odin" },
   ];
-  // odin:/Users/me: a space at odin's home, kept under this computer's home.
-  assert.deepEqual(clone(startingProjects(sp, [":/Users/me/Apps/fury", ":/Users/me", "odin:/srv/api", "odin:/srv/web", "odin:/Users/me"], "/Users/me")), [
+  assert.deepEqual(clone(startingProjects(sp, "/Users/me")), [
     { name: "agile", folder: "/Users/me/Apps/agile", machine: "" },
     { name: "api", folder: "/srv/api", machine: "odin" },
-    { name: "fury", folder: "/Users/me/Apps/fury", machine: "" },
-    { name: "web", folder: "/srv/web", machine: "odin" },
   ]);
 });
 
@@ -131,48 +136,36 @@ test("worktree lists are read from git's porcelain", async () => {
 });
 
 test("the top + adds a project in Projects and starts a conversation in Threads; a closed project keeps its row, and its + asks which agent", async () => {
-  const handlers = {};
-  const node = () => {
-    let id = null;
-    const proxy = new Proxy({}, {
-      get(_t, prop) {
-        if (prop === "id") return (x) => { id = x; return proxy; };
-        if (prop === "on_click" || prop === "on_mouse_up") return (...a) => { if (id) handlers[`${prop}:${id}`] = a.at(-1); return proxy; };
-        if (prop === "when") return (cond, fn) => (cond ? fn(proxy) : proxy);
-        return () => proxy;
-      },
-    });
-    return proxy;
-  };
+  const { host, handlers } = recorder();
   const calls = [], overlays = [];
   const registry = [{ id: "p-fury", name: "fury", folder: "/Users/me/fury", machine: "", agent: "codex", missing: false }];
-  const { Spaces } = await load("kanso-spaces/main.js", ["Spaces"], {
-    div: node, svg: node, image: node, h_flex: node, v_flex: node, Button: { new: node }, Popover: { new: node },
-    ORDERS: { updated: "Updated" }, DEFAULT_ORDER: "updated", NAME_LABEL: "kanso.name", PIN_LABEL: "kanso.pin",
-    orderSessions: (l) => l, withTerminals: () => [], terminals: () => [], nest: () => [], bySection: () => [],
-    track: () => null, elapsed: () => null, activityOf: () => null, agentLabel: () => "", duration: () => "", findThreads: async () => ({}),
-    props: () => ({}), FLUSH: -24, STATUS_ORDERS: { latest: "Latest" }, THREAD_ORDERS: { said: "Said" },
-    theme: () => ({ foreground: "#fff", muted: "#888", dim: "#666", chrome: "#111", hover: "#222", ansi2: "#0f0" }),
-    shared: (k) => (k === "kanso.registry" ? registry : null), setShared: () => {},
+  const { Spaces } = await loadSidebar(host, {
+    shared: (k) => (k === "kanso.registry" ? registry : null),
     spaces: () => [{ id: "sp-agile", name: "agile", folder: "/Users/me/agile", machine: null, active: true, tabs: [] }],
-    panes: () => [], agents: () => [], machines: () => [{ name: null, layout: "ready" }],
-    run: (cmd, args) => calls.push([cmd, clone(args ?? null)]), home: () => "/Users/me",
+    run: (cmd, args) => calls.push([cmd, clone(args ?? null)]),
     openOverlay: (o) => overlays.push(clone({ kind: o.kind, props: o.props })),
     knownAgents: async () => [{ key: "claude", name: "Claude Code", installed: true, run: ["claude"] }, { key: "codex", name: "Codex", installed: true, run: ["codex"] }],
   });
-  const view = new Spaces();
-  Object.assign(view, { view: "spaces", git: {}, shown: new Set(["sp-agile"]), born: {}, custom: {}, order: "updated", machines: [], folded: new Set(), agentsFolded: new Set(), orderPicker: node });
-  view.render();
-  handlers["on_click:space-new"]({}, { stop_propagation() {}, notify() {} });
-  assert.deepEqual(overlays.at(-1), { kind: "dialog", props: { newProject: { start: false } } }, "in Projects, the top + asks a new project's name and folder");
+  const view = Object.assign(new Spaces(), mountedState({ shown: new Set(["sp-agile"]) }));
+  const addFromTop = () => {
+    view.render();
+    handlers["on_click:spaces-header-0-0-0"]({}, { stop_propagation() {}, notify() {} });
+  };
+  addFromTop();
+  const startHere = { kind: "popup", props: { newAgent: { folder: "/Users/me/agile", machine: "", name: "agile", project: null, space: "sp-agile" }, start: true } };
+  assert.equal(typeof overlays.at(-1).props.height, "number", "opened as tall as its menu draws, which it is told");
+  startHere.props.height = overlays.at(-1).props.height;
+  assert.deepEqual(overlays.at(-1), startHere, "in Projects, the top + opens the open project's menu, which goes on to New project and Arrange");
   view.view = "threads";
-  view.render();
-  handlers["on_click:space-new"]({}, { stop_propagation() {}, notify() {} });
-  assert.deepEqual(overlays.at(-1), { kind: "popup", props: { newConversation: true } }, "in Threads, it asks which project the conversation is in");
+  addFromTop();
+  assert.deepEqual(overlays.at(-1), startHere, "in Threads it is the same menu");
   view.view = "spaces";
   view.render();
-  const plus = handlers[`on_mouse_up:closed-plus-:/Users/me/fury`];
-  assert.ok(plus, "fury has no space open: it keeps its row, with its +");
+  assert.equal(handlers[`on_click:closed-project-:/Users/me/fury-tool-0`], undefined, "at rest a kept project shows only its name");
+  view.hoverSpace = ":/Users/me/fury";
+  view.render();
+  const plus = handlers[`on_click:closed-project-:/Users/me/fury-tool-0`];
+  assert.ok(plus, "fury has no space open: it keeps its row, with its + under the pointer");
   plus({}, { stop_propagation() {} });
   await new Promise((r) => setTimeout(r, 0));
   assert.deepEqual(calls, [], "nothing starts on its own");
@@ -180,7 +173,7 @@ test("the top + adds a project in Projects and starts a conversation in Threads;
 });
 
 test("a local folder that is gone marks only this computer's project, never another machine's at the same path", async () => {
-  const { Spaces } = await load("kanso-spaces/main.js", ["Spaces"], {
+  const { Spaces } = await loadSpaces({
     spaces: () => [], home: () => "", shared: () => [], setShared: () => {}, fileApi: () => ({ existing: async () => [] }),
   });
   const list = [{ id: "here", name: "api", folder: "/srv/api", machine: "" }, { id: "odin", name: "api", folder: "/srv/api", machine: "odin" }];
@@ -188,18 +181,13 @@ test("a local folder that is gone marks only this computer's project, never anot
 });
 
 test("New project with a conversation: the name you give it, its folder, then which agent, asked", async (t) => {
-  const dir = await temporary(t);
-  const calls = [], closed = [], shared = new Map(), overlays = [];
-  const { Kdb } = await load("kanso-spaces/kdb.js", ["Kdb"], { exec, appHome: () => dir });
-  const { Spaces } = await load("kanso-spaces/main.js", ["Spaces"], {
-    exec, appHome: () => dir, home: () => "/Users/me", spaces: () => [], machines: () => [],
-    props: () => ({ newProject: { start: true }, overlay: "ov1" }), closeOverlay: (id) => closed.push(id),
-    shared: (k) => shared.get(k) ?? null, setShared: (k, v) => shared.set(k, v), notify: () => {},
-    run: (cmd, args) => calls.push([cmd, clone(args ?? null)]), openOverlay: (o) => overlays.push(clone(o.props)),
-  });
+  const closed = [];
+  const { Spaces, kdb, calls, overlays, shared } = await projectSpaces(t, () => ({
+    props: () => ({ newProject: { start: true }, overlay: "ov1" }), closeOverlay: (id) => closed.push(id), notify: () => {},
+  }));
   const view = new Spaces();
-  Object.assign(view, { navStore: { kdb: new Kdb(join(dir, "kanso")) }, projectFolder: "/Users/me/Apps/fury-api", projectName: { value: () => "Fury" } });
-  const { cx, drain } = (await import("./helpers.mjs")).context();
+  Object.assign(view, { navStore: { kdb }, projectFolder: "/Users/me/Apps/fury-api", projectName: { value: () => "Fury" } });
+  const { cx, drain } = context();
   view.createProject(cx);
   await drain();
   assert.deepEqual(calls, [], "no agent is assumed");
@@ -214,20 +202,13 @@ test("New project with a conversation: the name you give it, its folder, then wh
 });
 
 test("Remove project takes it out for good, closes its open space, and only then closes the menu", async (t) => {
-  const dir = await temporary(t);
-  const calls = [], shared = new Map();
-  const { Kdb } = await load("kanso-spaces/kdb.js", ["Kdb"], { exec, appHome: () => dir });
-  const { Spaces } = await load("kanso-spaces/main.js", ["Spaces"], {
-    exec, appHome: () => dir, home: () => "/Users/me", spaces: () => [], machines: () => [],
+  const { Spaces, kdb, calls, shared } = await projectSpaces(t, (calls) => ({
     props: () => ({ overlay: "ov1" }), closeOverlay: (id) => calls.push(["close", id]),
-    shared: (k) => shared.get(k) ?? null, setShared: (k, v) => shared.set(k, v),
-    run: (cmd, args) => calls.push([cmd, clone(args ?? null)]),
-  });
-  const kdb = new Kdb(join(dir, "kanso"));
+  }));
   const { row } = await kdb.addProject({ name: "fury", folder: "/Users/me/fury" });
   const view = Object.assign(new Spaces(), { navStore: { kdb } });
   view.removeProject(row, { id: "sp-fury" });
-  await new Promise((r) => setTimeout(r, 300));
+  await until(() => calls.length === 2);
   assert.deepEqual(calls, [["space.close", { id: "sp-fury" }], ["close", "ov1"]], "the space goes, then the menu");
   assert.deepEqual(clone(await kdb.projects()), []);
   assert.deepEqual(clone(shared.get("kanso.registry") ?? []), [], "every view draws it gone");
@@ -239,71 +220,329 @@ test("New conversation: nothing lit until the keyboard moves; a project chosen a
     { id: "p-a", name: "api", folder: "/work/client-a/api", machine: "", agent: "codex", missing: false },
     { id: "p-b", name: "api", folder: "/work/client-b/api", machine: "", agent: "codex", missing: false },
   ];
-  const keys = [], scrolled = [], items = {};
-  let inRenderer = false, rendering = false;
-  const HANDLERS = ["on_click", "on_mouse_down", "on_mouse_up"];
+  const keys = [], scrolled = [];
+  let rendering = false;
   const node = () => { const p = new Proxy({}, { get: (_t, k) => {
     if (k === "when") return (c, f) => (c ? f(p) : p);
     if (k === "on_key_down") return (f) => { keys.push(f); return p; };
-    if (k === "on_item_click" || k === "on_item_secondary_click") return (f) => { items[k] = f; return p; };
-    // Herdr: a handler registered inside a virtual list's item renderer throws.
-    if (HANDLERS.includes(k) && inRenderer) return () => { throw new Error(`${k} inside an item renderer`); };
     return () => p;
   } }); return p; };
-  const { Spaces } = await load("kanso-spaces/main.js", ["Spaces"], {
-    div: node, svg: node, image: node, h_flex: node, v_flex: node, Popover: { new: node }, Scrollbar: { vertical: node },
-    v_virtual_list: (_id, n, _size, _key, render) => { inRenderer = true; try { render({ start: 0, end: n }); } finally { inRenderer = false; } return node(); },
+  const { Spaces } = await loadSpaces({
+    ...elements(node),
     // Herdr: a scroll handle made during render throws; it belongs in init().
-    VirtualListScrollHandle: { new: () => { if (rendering) throw new Error("VirtualListScrollHandle.new() cannot run during render"); return { scroll_to_item: (i) => scrolled.push(i), release: () => true }; } },
+    ScrollHandle: { new: () => { if (rendering) throw new Error("ScrollHandle.new() cannot run during render"); return { scroll_to_item: (i) => scrolled.push(i), release: () => true }; } },
     theme: () => ({ foreground: "#fff", muted: "#888", dim: "#666", border: "#333" }),
     shared: (k) => (k === "kanso.registry" ? registry : null), setShared: () => {},
-    spaces: () => [], home: () => "/Users/me", appHome: () => "/tmp/kanso-none", exec: async () => ({ code: 1, stdout: "", stderr: "" }), props: () => ({ overlay: "ov1", newConversation: true }), closeOverlay: () => {},
-    run: (cmd, args) => calls.push([cmd, clone(args ?? null)]), openOverlay: (o) => overlays.push(clone(o.props)),
+    spaces: () => [], home: () => "/Users/me", appHome: () => "/tmp/kanso-none", exec: async () => (failure("")), props: () => ({ overlay: "ov1", newConversation: true }), closeOverlay: () => {},
+    ...recording(calls, overlays),
   });
   const view = Object.assign(new Spaces(), { kdb: { projects: () => new Promise(() => {}) } });
   view.init({}, { focus_handle: () => ({ focus() {} }), spawn: () => {}, notify() {} });
+  const shown = watchPopups(view);
   rendering = true;
-  view.newConversationView({ foreground: "#fff", muted: "#888", dim: "#666", border: "#333" });
+  view.newConversationView(MENU_THEME);
   rendering = false;
+  const projects = shown[0][0].scroll;
   assert.equal(view.menuAt, -1, "no row is chosen for you");
+  assert.ok(projects.every((item) => !item.selected), "nothing is lit");
   keys.at(-1)({ key: "down", modifiers: {} }, { stop_propagation() {}, notify() {} });
-  assert.deepEqual(scrolled, [0], "the first j lights the first row, and the list follows");
-  items.on_item_click("conv-p-a", { notify() {} });
+  assert.deepEqual(scrolled, [0], "the first j lights the first row, and the run follows");
+  projects[1].onSecondaryClick({ notify() {} });
+  assert.equal(overlays.at(-1).newAgent.folder, "/work/client-b/api", "a right click on a project asks too");
+  projects[0].onClick({ notify() {} });
   assert.deepEqual(calls, [], "nothing starts on its own");
-  assert.deepEqual([overlays.at(-1).newAgent.folder, overlays.at(-1).newAgent.name], ["/work/client-a/api", "api"], "a click on a row (the list's, by its key) asks which agent, under the project's own name, not the label that tells the two apart");
+  assert.deepEqual([overlays.at(-1).newAgent.folder, overlays.at(-1).newAgent.name], ["/work/client-a/api", "api"], "a click on a project asks which agent, under the project's own name, not the label that tells the two apart");
+});
+
+const MENU_THEME = { foreground: "#fff", muted: "#888", dim: "#666", border: "#333" };
+
+// An element that takes any call and draws nothing; `when` runs its branch.
+const blank = () => { const p = new Proxy({}, { get: (_t, k) => (k === "when" ? (c, f) => (c ? f(p) : p) : () => p) }); return p; };
+
+test("New conversation's menu ends with Add computer, last for the keyboard too, unless it is switched off, and opens tall enough for every row", async () => {
+  const menuOf = async (stored, open = 0) => {
+    const calls = [], made = [], heights = [];
+    const { Spaces } = await loadSpaces({
+      ...elements(blank), theme: () => ({ foreground: "#fff", muted: "#888", dim: "#666", border: "#333" }),
+      shared: (k) => (k === "kanso.pieces" ? stored : null), setShared: () => {},
+      spaces: () => Array.from({ length: open }, (_, i) => ({ id: `sp-${i}`, name: `p${i}`, folder: `/work/p${i}`, machine: null, tabs: [] })),
+      home: () => "/Users/me", props: () => ({ overlay: "ov1", newConversation: true }), closeOverlay: () => {},
+      run: (cmd, args) => calls.push([cmd, clone(args ?? null)]), openOverlay: (o) => heights.push(o.height),
+    });
+    const view = Object.assign(new Spaces(), { menuAt: -1 });
+    watchLines(view, made);
+    view.newConversationView(MENU_THEME);
+    view.newConversationMenu();
+    return { view, calls, made, height: heights.at(-1) };
+  };
+  const { view, calls, made, height } = await menuOf(null);
+  assert.deepEqual(made, ["New project with a conversation\u2026", "Open a folder, no project\u2026", "Add computer\u2026"]);
+  view.menuActs.at(-1)({});
+  assert.deepEqual(calls, [["mod.open", { name: "machine-add" }]], "the last row the keyboard reaches opens Add computer");
+  assert.equal(height, 8 + 28 + 0 + 9 + 3 * 32, "no project: 4 at each edge, the title, the line and three items");
+  assert.equal((await menuOf(null, 12)).height, 8 + 28 + 11 * 32 + 9 + 3 * 32, "a long run stops at 11 items and Add computer still fits under it");
+  const off = await menuOf({ "footer.machine": "hide" }, 12);
+  assert.deepEqual(off.made.slice(-2), ["New project with a conversation\u2026", "Open a folder, no project\u2026"], "switched off in kansō settings, it is left out");
+  assert.ok(!off.made.includes("Add computer\u2026"));
+  assert.equal(off.height, 8 + 28 + 11 * 32 + 9 + 2 * 32, "and its room goes with it");
+});
+
+const AGENT_THEME = { foreground: "#fff", muted: "#888", dim: "#666", border: "#333", selected: "#444" };
+const agentMenu = (host) => loadSpaces({
+  ...elements(blank), theme: () => (AGENT_THEME),
+  shared: () => null, setShared: () => {}, spaces: () => [], home: () => "/Users/me", closeOverlay: () => {}, ...host,
 });
 
 test("which agent: only the ones installed, nothing chosen for you, and one picked starts there", async () => {
   const calls = [], made = [];
-  const node = () => { const p = new Proxy({}, { get: (_t, k) => (k === "when" ? (c, f) => (c ? f(p) : p) : () => p) }); return p; };
   const place = { space: null, folder: "/work/api", machine: "", project: null, name: "api" };
-  const { Spaces } = await load("kanso-spaces/main.js", ["Spaces"], {
-    div: node, svg: node, image: node, h_flex: node, v_flex: node, Popover: { new: node },
-    theme: () => ({ foreground: "#fff", muted: "#888", dim: "#666", border: "#333", selected: "#444" }),
-    shared: () => null, setShared: () => {}, spaces: () => [], home: () => "/Users/me", props: () => ({ overlay: "ov1", newAgent: place }), closeOverlay: () => {},
-    run: (cmd, args) => calls.push([cmd, clone(args ?? null)]),
-  });
+  const { Spaces } = await agentMenu({ props: () => ({ overlay: "ov1", newAgent: place }), run: (cmd, args) => calls.push([cmd, clone(args ?? null)]) });
   const view = Object.assign(new Spaces(), { kdb: { setProjectAgent: async () => {} }, menuAt: -1 });
   view.known = [
     { key: "claude", name: "Claude Code", installed: false, run: ["claude"] },
     { key: "codex", name: "Codex", installed: true, run: ["codex"] },
     { key: "pi", name: "pi", installed: true, run: ["pi"] },
   ];
-  const real = view.menuItem.bind(view);
-  view.menuItem = (t, id, text, act, opts) => { made.push(text); return real(t, id, text, act, opts); };
-  view.newAgentView({ foreground: "#fff", muted: "#888", dim: "#666", border: "#333", selected: "#444" });
-  assert.deepEqual(made.slice(0, 3), ["Codex", "pi", "Terminal"], "Claude Code is not installed here: not offered");
-  view.menuActs[0]({});
+  watchLines(view, made);
+  view.newAgentView(AGENT_THEME);
+  assert.deepEqual(made.slice(0, 3), ["Terminal", "Codex", "pi"], "Terminal first, then the agents; Claude Code is not installed here: not offered");
+  view.menuActs[1]({});
   assert.deepEqual(calls, [["space.new", { folder: "/work/api", machine: "", argv: ["codex"] }]]);
 
   // A worktree just made: the agent chosen starts in its own tab there, named by its branch.
   calls.length = 0; made.length = 0;
   place.tree = { folder: "/kanso/worktrees/api/feat-x", branch: "feat-x" };
   const tree = Object.assign(new Spaces(), { kdb: view.kdb, menuAt: -1, known: view.known });
-  const treeItem = tree.menuItem.bind(tree);
-  tree.menuItem = (t, id, text, act, opts) => { made.push(text); return treeItem(t, id, text, act, opts); };
-  tree.newAgentView({ foreground: "#fff", muted: "#888", dim: "#666", border: "#333", selected: "#444" });
-  assert.ok(!made.includes("In a new worktree\u2026"), "no worktree in a worktree");
-  tree.menuActs[1]({});
+  watchLines(tree, made);
+  tree.newAgentView(AGENT_THEME);
+  assert.ok(!made.includes("New worktree\u2026"), "no worktree in a worktree");
+  tree.menuActs[2]({});
   assert.deepEqual(calls, [["space.new", { folder: "/work/api", machine: "" }], ["tab.new", { folder: "/kanso/worktrees/api/feat-x", name: "feat-x", argv: ["pi"] }]]);
+});
+
+const claudeHere = () => ({ "kanso.agents.installed": { "": [{ key: "claude", name: "Claude Code", installed: true, run: ["claude"] }] } });
+const tenAgents = () => Array.from({ length: 10 }, (_, i) => ({ key: `a${i + 1}`, name: `Agent ${i + 1}`, installed: true, run: [`a${i + 1}`] }));
+const settledRead = async (view) => {
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(view.checking, false, "the read is over");
+};
+const menuKit = () => load("kanso-spaces/ui-menu.js", ["menuHeight"], gpuiHost());
+const devbox = () => ({ space: "sp-api", folder: "/work/api", machine: "devbox", project: null, name: "api" });
+const plusMenu = (Spaces, state) => {
+  const scrolled = [];
+  const view = Object.assign(new Spaces(), { kdb: { setProjectAgent: async () => {} }, menuAt: -1, handle: { is_focused: () => true }, agentScroll: { scroll_to_item: (i) => scrolled.push(i) } }, state);
+  const lines = [], items = [];
+  view.menuLine = ((line) => (text, act, opts) => { lines.push([text, opts?.hint ?? null]); return line(text, act, opts); })(view.menuLine.bind(view));
+  view.popup = (_t, _title, list) => { items.push(...list); return null; };
+  view.newAgentView(AGENT_THEME);
+  const keys = { track_focus() { return keys; }, on_key_down(fn) { keys.press = fn; return keys; } };
+  view.menuKeys(keys);
+  return { view, lines, items, scrolled, press: (key, modifiers = {}) => keys.press({ key, modifiers }, { stop_propagation() {}, notify() {} }) };
+};
+
+const TWO_AGENTS = [{ key: "claude", name: "Claude Code", installed: true, run: ["claude"] }, { key: "codex", name: "Codex", installed: true, run: ["codex"] }];
+const startMenu = async (host) => {
+  const calls = [], overlays = [], place = devbox();
+  const { Spaces } = await agentMenu({ props: () => ({ overlay: "ov1", newAgent: place, start: true }), run: (cmd, args) => calls.push([cmd, clone(args ?? null)]), ...host(overlays) });
+  return { calls, overlays, place, Spaces };
+};
+
+test("The + menu is the approved one: where it opens, Terminal with its key, the agents keyed 1 to 9, a new project, the worktrees inside a repository, then Arrange with its key", async () => {
+  const { calls, overlays, place, Spaces } = await startMenu((made) => ({
+    openOverlay: (o) => made.push(clone({ height: o.height, props: o.props })),
+    keys: () => [{ keys: "cmd-t", action: "tab.new" }, { keys: "cmd-alt-t", action: "kanso-strip.arrange" }],
+  }));
+  const menu = (state) => plusMenu(Spaces, state);
+  const known = TWO_AGENTS;
+  const { view, lines } = menu({ known, repo: true, trees: [{ path: "/work/api-feat", branch: "feat" }] });
+  assert.deepEqual(lines.map(([text]) => text), ["Terminal", "Claude Code", "Codex", "New project", "New worktree\u2026", "Open worktree\u2026", "Arrange\u2026"]);
+  assert.deepEqual(lines.map(([, hint]) => hint), ["⌘T", "1", "2", null, null, null, "⌥⌘T"]);
+  view.menuActs[5]({});
+  assert.deepEqual(overlays.at(-1), { height: 4 + 28 + 32 + 4, props: { trees: { place, trees: [{ path: "/work/api-feat", branch: "feat" }] } } }, "Open worktree… lists the others, as tall as its menu draws");
+  view.menuDigits[1]({ notify() {} });
+  assert.deepEqual(calls, [["space.select", { id: "sp-api" }], ["tab.new", { space: "sp-api", folder: "/work/api", argv: ["codex"] }]], "2 starts the second agent");
+  assert.equal(menu({ known, repo: false }).lines.some(([text]) => text.includes("worktree")), false, "outside a repository: no worktree rows");
+  assert.deepEqual(menu({ known: null }).lines.map(([text]) => text), ["Terminal", "New project", "Arrange\u2026"], "the first time no agent is offered until the computer answers");
+  const failed = menu({ known: null, agentsFailed: "ssh: connect timed out" });
+  assert.equal(failed.lines.some(([text]) => text === "Claude Code"), false);
+});
+
+test("Tab walks every row of the New tab + menu in order, each with its focus wash, and Enter and Space each run it", async () => {
+  const { calls, overlays, Spaces } = await startMenu((made) => ({
+    ...popoverHost(), keys: () => [], openOverlay: (o) => made.push(Object.keys(o.props ?? {})[0]),
+    spaces: () => [{ id: "sp-api", machine: "devbox", active: true, tabs: [] }],
+  }));
+  const view = Object.assign(new Spaces(), { kdb: { setProjectAgent: async () => {} }, menuAt: -1, handle: { is_focused: () => false }, agentScroll: { scroll_to_item() {} }, known: TWO_AGENTS, repo: true, trees: [{ path: "/work/api-feat", branch: "feat" }] });
+  view.addProject = () => calls.push(["add project"]);
+  view.worktreeDialog = () => calls.push(["new worktree"]);
+  const keys = keyboard(view.newAgentView(AGENT_THEME));
+  const rows = [
+    ["Terminal", ["tab.new", { space: "sp-api", folder: "/work/api" }]], ["Claude Code", ["tab.new", { space: "sp-api", folder: "/work/api", argv: ["claude"] }]],
+    ["Codex", ["tab.new", { space: "sp-api", folder: "/work/api", argv: ["codex"] }]], ["New project", ["add project"]], ["New worktree…", ["new worktree"]],
+    ["Open worktree…", "trees"], ["Arrange…", ["kanso-strip.arrange", null]],
+  ];
+  assert.equal(keys.stops.length, rows.length, "every row and nothing else takes the keyboard");
+  for (const [label, effect] of rows) {
+    const stop = keys.tab();
+    assert.ok(texts(stop).includes(label), label);
+    assert.ok(calls_(stop, "focus").length > 0, `${label}: its focus wash`);
+    for (const key of ["enter", "space"]) {
+      calls.length = 0; overlays.length = 0; view.starting = false;
+      keys.key(key, { notify() {} });
+      if (typeof effect === "string") assert.equal(overlays.at(-1), effect, `${label}, ${key}`);
+      else assert.deepEqual(calls.at(-1), effect, `${label}, ${key}`);
+    }
+  }
+});
+
+test("The + menu keeps every installed agent, numbers the first nine, starts one only on a plain digit, and a failed read offers Refresh and Explain on the keyboard", async () => {
+  const calls = [];
+  const store = claudeHere();
+  const { Spaces } = await agentMenu({
+    props: () => ({ overlay: "ov1", newAgent: devbox(), start: true }), run: (cmd, args) => calls.push([cmd, clone(args ?? null)]),
+    shared: (key) => store[key] ?? null, keys: () => [],
+    spaces: () => [{ id: "sp-api", machine: "devbox", active: true, tabs: [] }, { id: "sp-home", machine: null, active: false, tabs: [] }],
+  });
+  const menu = (state) => plusMenu(Spaces, state);
+  const ten = tenAgents();
+  const many = menu({ known: ten });
+  assert.deepEqual(many.lines.filter(([text]) => text.startsWith("Agent")).map(([text, hint]) => [text, hint]),
+    ten.map((a, i) => [a.name, i < 9 ? String(i + 1) : null]), "ten agents, ten rows, the first nine numbered");
+  many.press("2", { alt: true });
+  many.press("2", { platform: true });
+  many.press("2", { shift: true });
+  assert.deepEqual(calls, [], "a digit with Alt, Command or Shift is not the menu's");
+  many.press("g", { shift: true });
+  assert.equal(many.view.menuAt, many.view.menuActs.length - 1, "Shift-G still goes to the last row");
+  many.press("2");
+  assert.deepEqual(calls.at(-1), ["tab.new", { space: "sp-api", folder: "/work/api", argv: ["a2"] }]);
+  calls.length = 0;
+  const known = [{ key: "codex", name: "Codex", installed: true, run: ["codex"] }];
+  const failed = menu({ known, agentsFailed: "ssh: connect timed out" });
+  const failure = failed.items.find((line) => line.failure)?.failure;
+  assert.ok(failed.lines.some(([text]) => text === "Codex"), "the last list stays usable");
+  assert.equal(failed.items.find((line) => line.scroll)?.scroll.length, 1, "its row drawn, before the failure");
+  assert.equal(failed.items.filter((line) => line.loading).length, 0, "and no loading rows once the read is over");
+  assert.deepEqual([failure.text, failure.fix, failure.agent], ["Can't list agents on devbox", "Refresh", "Claude Code"]);
+  failed.press("j"); failed.press("j");
+  assert.equal(menu({ known, agentsFailed: "ssh: connect timed out", menuAt: 2 }).items.find((line) => line.failure).failure.lit, "fix", "the keyboard reaches Refresh after the agents");
+  failed.press("1");
+  assert.deepEqual(calls.at(-1), ["tab.new", { space: "sp-api", folder: "/work/api", argv: ["codex"] }], "1 still starts the agent last found");
+  failed.view.menuAt = 3;
+  failed.press("enter");
+  assert.deepEqual(calls.at(-1), ["tab.new", { name: "Explain devbox", argv: ["claude"],
+    task: "kansō could not list the agents installed on devbox. The error: ssh: connect timed out. Explain why, and how to fix it. Do not change anything.", space: "sp-home" }],
+  "Enter on Explain asks this computer's agent, in a space on this computer, never devbox's");
+});
+
+test("Explain is this computer's: with no local space it opens one here, a refusal says nothing, and with no agent installed here it is not offered", async () => {
+  const calls = [];
+  const store = claudeHere();
+  const host = (run) => agentMenu({
+    props: () => ({ overlay: "ov1", newAgent: devbox(), start: true }), run, shared: (key) => store[key] ?? null, keys: () => [],
+    spaces: () => [{ id: "sp-api", machine: "devbox", active: true, tabs: [] }], home: () => "/Users/me",
+  });
+  const { Spaces } = await host((cmd, args) => calls.push([cmd, clone(args ?? null)]));
+  const failed = { known: [], agentsFailed: "ssh: connect timed out" };
+  const view = plusMenu(Spaces, failed);
+  view.view.menuActs[2]({});
+  assert.deepEqual(calls.at(-1)?.slice(0, 1), ["space.new"]);
+  assert.deepEqual([calls.at(-1)[1].machine, calls.at(-1)[1].folder, calls.at(-1)[1].argv], ["", "/Users/me", ["claude"]], "a new space on this computer");
+  const { Spaces: Refusing } = await host(() => { throw new Error("refused"); });
+  assert.doesNotThrow(() => plusMenu(Refusing, failed).view.menuActs[2]({}), "a refusal is quiet");
+  store["kanso.agents.installed"][""] = [];
+  const none = plusMenu(Spaces, failed);
+  const failure = none.items.find((line) => line.failure).failure;
+  assert.equal(failure.agent, "", "no agent installed here: no Explain");
+  assert.equal(none.view.menuActs.length, view.view.menuActs.length - 1, "one action fewer: no Explain");
+});
+
+test("A read that fails after an earlier answer keeps that list and says it failed, with its retry", async () => {
+  const store = { "kanso.agents.installed": { devbox: [{ key: "codex", name: "Codex", installed: true, run: ["codex"] }], "": [] } };
+  const place = devbox();
+  const { Spaces } = await agentMenu({ shared: (key) => store[key] ?? null, setShared: (key, value) => { store[key] = value; }, knownAgents: async () => { throw new Error("ssh: connect timed out"); },
+    props: () => ({ overlay: "ov1", newAgent: place, start: true }), keys: () => [] });
+  const view = new Spaces();
+  view.askAgents(place, { notify() {}, timer: { after: () => ({ cancel() {} }) } });
+  assert.equal(view.checking, true);
+  assert.equal(view.known.length, 1, "the last answer at once");
+  await settledRead(view);
+  assert.equal(view.agentsFailed, "ssh: connect timed out");
+  const shown = plusMenu(Spaces, { known: view.known, agentsFailed: view.agentsFailed });
+  assert.deepEqual(shown.items.find((line) => line.scroll)?.scroll.map((row) => row.label), ["Codex"], "and still drawn");
+  assert.ok(shown.items.some((line) => line.failure), "with the failure after it");
+});
+
+test("Ten agents fit the + popup: they scroll in the kit's run within its height, and the keyboard's row stays in view", async () => {
+  const { menuHeight } = await menuKit();
+  const ten = tenAgents();
+  for (const height of [400, 300]) {
+    const { Spaces } = await agentMenu({ props: () => ({ overlay: "ov1", newAgent: devbox(), start: true, height }), keys: () => [] });
+    const menu = plusMenu(Spaces, { known: ten, repo: true, trees: [devbox()] });
+    assert.ok(menuHeight({ items: menu.items }) <= height, `${height}: drawn within the popup`);
+    const run = menu.items.find((line) => line.scroll);
+    assert.equal(run.scroll.length, 10, "every agent in the run");
+    assert.ok(run.rows < 10, "some scroll");
+    for (let i = 0; i < 7; i += 1) menu.press("j");
+    assert.equal(menu.scrolled.at(-1), 5, "the sixth agent brought into view");
+  }
+});
+
+test("The + popup opens tall enough for everything it can settle into: loading, the failure with its actions, or the agents' run, with the footer in reach", async () => {
+  const { menuHeight } = await menuKit();
+  for (const cached of [undefined, [], tenAgents().slice(0, 1), tenAgents()]) {
+    for (const start of [true, false]) {
+      const store = claudeHere();
+      store["kanso.agents.installed"].devbox = cached;
+      const frame = {};
+      const { Spaces } = await agentMenu({ shared: (key) => store[key] ?? null, openOverlay: (o) => Object.assign(frame, o), props: () => frame.props, keys: () => [] });
+      new Spaces().newAgentMenu(devbox(), start);
+      const states = { loading: { known: null, checking: true }, failed: { known: cached ?? null, agentsFailed: "ssh: connect timed out" }, none: { known: [] }, ten: { known: tenAgents() } };
+      for (const [name, state] of Object.entries(states)) {
+        const shown = plusMenu(Spaces, { repo: start, trees: start ? [devbox()] : [], ...state });
+        const label = `cached ${cached?.length ?? "none"}, ${start ? "toolbar" : "project"} +, ${name}`;
+        assert.ok(menuHeight({ items: shown.items }) <= frame.height, `${label}: ${menuHeight({ items: shown.items })} drawn in ${frame.height}`);
+        const run = shown.items.find((line) => line.scroll);
+        if (name === "ten") assert.ok(run.rows >= 1 && run.scroll.length === 10, `${label}: every agent in a run that shows`);
+      }
+    }
+  }
+});
+
+test("A read that failed and is over shows the failure, not loading rows", async () => {
+  const store = claudeHere();
+  const { Spaces } = await agentMenu({ shared: (key) => store[key] ?? null, setShared: (key, value) => { store[key] = value; }, knownAgents: async ({ on }) => { if (on) throw new Error("timed out"); return []; },
+    props: () => ({ overlay: "ov1", newAgent: devbox(), start: true }), keys: () => [] });
+  const view = new Spaces();
+  view.askAgents(devbox(), { notify() {}, timer: { after: () => ({ cancel() {} }) } });
+  await settledRead(view);
+  const shown = plusMenu(Spaces, { known: view.known, agentsFailed: view.agentsFailed, checking: view.checking });
+  assert.equal(shown.items.filter((line) => line.loading).length, 0);
+  assert.ok(shown.items.some((line) => line.failure));
+});
+
+test("The + popup lets go of the scroll handle it made", async () => {
+  const counted = { made: 0, released: 0 };
+  const { Spaces } = await agentMenu({
+    props: () => ({ overlay: "ov1", newAgent: devbox(), start: true }), keys: () => [], knownAgents: async () => [], exec: async () => ({ code: 0, stdout: "" }),
+    ScrollHandle: { new: () => { counted.made += 1; return { release() { counted.released += 1; } }; } },
+  });
+  const view = new Spaces();
+  view.init({}, { notify() {}, timer: { after: () => ({ cancel() {} }) }, focus_handle: () => ({ focus() {} }) });
+  view.close();
+  assert.deepEqual(counted, { made: 1, released: 1 });
+});
+
+test("In the + menu Enter runs the highlighted row only when the list holds the keyboard; on a focused row it is that row's", async () => {
+  const { calls, Spaces } = await startMenu((made) => ({ openOverlay: (o) => made.push(Object.keys(o.props ?? {})[0]), keys: () => [] }));
+  const { view, press } = plusMenu(Spaces, { known: TWO_AGENTS, repo: false });
+  view.menuAt = 1;
+  const focused = (on) => { view.handle.is_focused = () => on; };
+  focused(false);
+  calls.length = 0;
+  press("enter");
+  assert.deepEqual(calls, [], "focus on a row: the list's index runs nothing");
+  focused(true);
+  press("enter");
+  assert.deepEqual(calls.at(-1), ["tab.new", { space: "sp-api", folder: "/work/api", argv: ["claude"] }], "focus on the list: the highlighted row runs");
 });

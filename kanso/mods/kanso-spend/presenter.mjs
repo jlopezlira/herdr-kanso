@@ -1,9 +1,7 @@
 #!/usr/bin/env node
 // Node side of Spend: the QuickJS view parses this in one time-limited step, so all values arrive pre-formatted and raw rows never leave Node.
-import { realpathSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { collectSnapshot } from "./collector.mjs";
 import { loadStore, snapshotRows } from "./core/store.mjs";
 import { loadLabels, updateLabels } from "./core/labels.mjs";
@@ -11,7 +9,7 @@ import { deriveCosts, loadCatalog, loadOverrides } from "./core/costs.mjs";
 import { demoData } from "./core/demo.mjs";
 import { existsSync } from "node:fs";
 import { tryOrAsync } from "./pure.js";
-import { ExitError, exitWith } from "./core/util.mjs";
+import { ExitError, parseCommand, unknownCommand, entryPoint, runCommand } from "./core/util.mjs";
 import { attachSync } from "./sync-spend.js";
 
 export const PAYLOAD_KIND = "kanso-spend-costs";
@@ -27,22 +25,6 @@ function usage() {
     "  presenter.mjs snapshot --store <file> --home <dir> [--options <json>]",
     "  presenter.mjs prepare --store <file> [--home <dir>] [--options <json>]",
   ].join("\n");
-}
-
-function parseFlags(argv, index = 1, options = {}) {
-  if (index >= argv.length) return options;
-  const arg = argv[index];
-  if (arg === "--help" || arg === "-h") return parseFlags(argv, index + 1, { ...options, help: true });
-  const match = /^-{2}(store|home|options|sources)(?:=(.*))?$/.exec(arg);
-  if (!match) throw new Error(`unknown argument ${arg}`);
-  const inline = match[2] !== undefined;
-  const value = inline ? match[2] : argv[index + 1];
-  if (value === undefined) throw new Error(`--${match[1]} needs a value`);
-  return parseFlags(argv, index + (inline ? 1 : 2), { ...options, [match[1]]: value });
-}
-
-function parseArgs(argv) {
-  return { command: argv[0], options: parseFlags(argv) };
 }
 
 function parseFlagJson(raw, flag) {
@@ -130,10 +112,10 @@ async function answer(command, viewOptions, scan, costs, settings, storePath) {
 }
 
 export async function run(argv, environment = {}) {
-  const { command, options } = parseArgs(argv);
+  const { command, options } = parseCommand(argv, ["store", "home", "options", "sources"]);
   if (options.help || !command) return { exitCode: 0, stdout: "", stderr: `${usage()}\n` };
   if (!["snapshot", "prepare", "configure"].includes(command)) {
-    return { exitCode: 2, stdout: "", stderr: `unknown command ${command}\n${usage()}\n` };
+    return unknownCommand(command, usage);
   }
   if (!options.store) return { exitCode: 2, stdout: "", stderr: "--store is required\n" };
 
@@ -185,26 +167,4 @@ async function configureSources(storePath, home, sources) {
   return collectSnapshot("configure", { store: storePath, home, config: JSON.stringify(config) });
 }
 
-function isEntryPoint() {
-  const entry = process.argv[1];
-  if (!entry) return false;
-  try {
-    return realpathSync(path.resolve(entry)) === realpathSync(fileURLToPath(import.meta.url));
-  } catch {
-    return false;
-  }
-}
-
-async function main() {
-  try {
-    const result = await run(process.argv.slice(2));
-    if (result.stdout) process.stdout.write(result.stdout);
-    if (result.stderr) process.stderr.write(result.stderr);
-    await exitWith(result.exitCode);
-  } catch (error) {
-    process.stderr.write(`kanso-spend: ${error.message}\n`);
-    await exitWith(error.exitCode ?? 1);
-  }
-}
-
-if (isEntryPoint()) await main();
+if (entryPoint(import.meta.url)) await runCommand(run, "kanso-spend");

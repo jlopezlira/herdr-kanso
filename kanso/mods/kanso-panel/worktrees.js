@@ -1,3 +1,5 @@
+import { spawnAndNotify, commandOk, tilde, pool, said } from "./lib.js";
+import { sizedPage, heroStack, heroHeading } from "./ui-page.js";
 import { localService } from "./platform-host.js";
 import { paths } from "./platform-paths.js";
 import { fileApi } from "./platform-files.js";
@@ -6,28 +8,37 @@ import { systemApi } from "./platform-system.js";
 // Kanso's Worktrees panel, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
 // Removing a worktree keeps its branch; only uncommitted changes and commits no branch, tag or remote holds can be lost.
 import { div } from "gpui-kit";
-import { v_flex, h_flex, Button } from "gpui-base";
-import { exec, spaces, panes, home, run, theme, shared, notify, knownAgents } from "herdr";
-import { Share, postText } from "./share.js";
+import { v_flex, h_flex } from "gpui-base";
+import { exec, spaces, panes, home, run, theme, shared, notify } from "herdr";
+import { explainWith, findExplainer } from "./explain.js";
+import { Share, postText, shareRows } from "./share.js";
 import { WorktreeStore } from "./worktrees-store.js";
-import { tilde, pool } from "./lib.js";
-import { G, PULSE, breathe, Armed, tokens, quietLink, iconButton, section, ghost } from "./ui.js";
-import { range, reduceSeries } from "./pure.js";
+import { inside, openIn } from "./worktrees-model.js";
+import { R, T, G, OPACITY, tokens } from "./ui.js";
+import { Armed, button, quietLink, iconButton } from "./ui-button.js";
+import { row } from "./ui-row.js";
+import { factList } from "./ui-facts.js";
+import { section } from "./ui-section.js";
+import { emptyState, explainButton, failureBlock, metric, skeletonOf, tooltip } from "./kit.js";
+import { dot } from "./ui-dot.js";
+import { aliasText, machineTitle, range, reduceSeries, MONTHS } from "./pure.js";
 import { worktreesMemory } from "./panel-state.js";
 
 const TEMP = ["/private/tmp", "/tmp"];
 
-export function rootsFor(folders, homeDir, chosen) {
-  if (Array.isArray(chosen) && chosen.some((s) => typeof s === "string" && paths.isAbsolute(s))) {
-    return [...new Set(chosen.filter((s) => typeof s === "string" && paths.isAbsolute(s)))];
-  }
+const absolute = (s) => typeof s === "string" && paths.isAbsolute(s);
+const known = (temp) => Array.isArray(temp) && temp.length > 0 && temp.every(absolute);
+
+export function rootsFor(folders, homeDir, chosen, temp) {
+  if (Array.isArray(chosen) && chosen.some(absolute)) return [...new Set(chosen.filter(absolute))];
+  if (!known(temp) || !absolute(homeDir)) return [];
   const roots = folders.flatMap((f) => {
-    if (typeof f !== "string" || !paths.isAbsolute(f)) return [];
+    if (!absolute(f) || [...TEMP, ...temp].some((t) => inside(t, f))) return [];
     if (paths.within(f, homeDir)) {
       const top = paths.relative(homeDir, f).split(/[\\/]/)[0];
       return top && !top.startsWith(".") ? [paths.join(homeDir, top)] : [];
     }
-    return f !== homeDir && !TEMP.some((t) => paths.within(f, t)) ? [f] : [];
+    return f !== homeDir ? [f] : [];
   });
   return [...new Set(roots)];
 }
@@ -82,9 +93,10 @@ export function parseProbe(out) {
   }, start);
 }
 
-// On macOS git and panes may report /tmp or /private/tmp, so both forms are normalized.
-const real = (p) => paths.canonical(p);
-export const inside = (dir, path) => Boolean(dir) && paths.within(real(path), real(dir));
+const foldersInUse = () => {
+  const local = spaces().filter((s) => s.machine === null), tabs = new Set(local.flatMap((s) => (s.tabs ?? []).map((t) => t.id)));
+  return [...local.map((s) => s.folder), ...panes().filter((p) => tabs.has(p.tab)).map((p) => p.cwd)];
+};
 
 // The order of the checks decides the state.
 export function stateOf(w) {
@@ -164,7 +176,6 @@ export function lastDays(byDay, now = Date.now(), n = 30) {
 
 const best = (byDay) => Object.entries(byDay ?? {}).reduce((b, [day, kb]) => (kb > (b?.kb ?? 0) ? { day, kb } : b), null);
 
-const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 export const shortDate = (ms) => { const d = new Date(ms); return `${MONTHS[d.getMonth()]} ${d.getDate()}`; };
 const splitSize = (kb) => { const [n, u] = fmtSize(kb).split(" "); return { big: n || "0", small: u || "KB" }; };
 
@@ -174,9 +185,7 @@ export function freedSpec(h, current, at = Date.now()) {
   const freed = (h?.kb ?? 0) > 0, days = lastDays(freed ? h.freedByDay : h?.diskByDay, at);
   const size = splitSize(freed ? h.kb : current?.size ?? 0), top = best(freed ? h.freedByDay : h?.diskByDay);
   const stats = freed ? [
-    { value: String(h.worktrees), unit: h.worktrees === 1 ? "worktree removed" : "worktrees removed" },
-    { value: String(h.branches), unit: h.branches === 1 ? "merged branch deleted" : "merged branches deleted" },
-    { value: String(h.records + h.orphans), unit: "leftovers cleared" },
+    ...cleanedStats(h),
   ] : [
     { value: String(current?.worktrees ?? 0), unit: "worktrees" },
     { value: fmtSize(current?.canGoSize) || "0 KB", unit: "can go, losing nothing" },
@@ -292,6 +301,12 @@ export class Worktrees {
     this.width = 368; this.done = false;
     this.share = new Share("kanso-panel");
     this.store = new WorktreeStore(); this.stored = false; this.known = new Map(); this.hist = null;
+    // The one agent Explain names and starts: the first installed, looked up once.
+    this.explainer = null;
+    cx.spawn(async (cx) => {
+      this.explainer = await findExplainer();
+      cx.notify();
+    });
     // What the last scan kept shows at once; the scan then checks it all again.
     cx.spawn(async (cx) => {
       try {
@@ -301,7 +316,7 @@ export class Worktrees {
         if (!this.groups.length && !this.orphans.length) this.show(items);
         this.hist = await this.store.history();
         this.stored = true;
-      } catch (e) { this.storeNote = String(e?.message ?? e); }
+      } catch (e) { this.storeNote = said("Can't read the history", e?.message ?? e); }
       finally { this.refresh(cx); }
     });
   }
@@ -343,7 +358,7 @@ export class Worktrees {
     try {
       for (const [w, got] of pairs) await this.store.removed(w, got);
       this.hist = await this.store.history();
-    } catch (e) { this.note = `The history could not be saved: ${String(e?.message ?? e)}`; }
+    } catch (e) { this.note = said("The history could not be saved", e?.message ?? e); }
   }
 
   // A scan or a batch changes many rows a second: draw at most four times a second.
@@ -354,25 +369,27 @@ export class Worktrees {
   }
 
   roots() {
-    const folders = [...spaces().filter((s) => !s.machine).map((s) => s.folder), ...panes().map((p) => p.cwd)];
-    const chosen = shared("kanso.worktrees.roots"), roots = rootsFor(folders, home(), chosen);
-    return { roots, search: roots.length && Array.isArray(chosen) && chosen.length ? roots : [...roots, ...(this.tempDirs ?? TEMP)] };
+    const chosen = shared("kanso.worktrees.roots"), temp = this.tempDirs, roots = rootsFor(foldersInUse(), home(), chosen, temp);
+    return { roots, search: roots.length && Array.isArray(chosen) && chosen.length ? roots : [...roots, ...(known(temp) ? temp : [])] };
   }
 
   // Runs on every draw, so only a row whose answer changed is replaced.
   markOpen() {
-    const used = [...spaces().filter((s) => !s.machine).map((s) => s.folder), ...panes().map((p) => p.cwd)].filter(Boolean);
-    const mark = (w) => { const open = used.some((u) => inside(w.path, u)); return w.open === open ? w : { ...w, open }; };
+    const used = foldersInUse().filter(Boolean), seen = used.join("\0");
+    if (seen === this.marked?.seen && this.groups === this.marked.groups && this.orphans === this.marked.orphans) return;
+    const opened = openIn(used);
+    const mark = (w) => { const open = opened(w.path); return w.open === open ? w : { ...w, open }; };
     this.groups = mapGroups(this.groups, mark);
     this.orphans = mapSame(this.orphans, mark);
+    this.marked = { seen, groups: this.groups, orphans: this.orphans };
   }
 
   refresh(cx) {
     const id = this.scan + 1;
     this.scan = id;
     this.phase = "Finding repositories"; this.note = null; this.picked = this.heldPick === undefined ? null : this.heldPick; this.heldPick = undefined; this.armed.clear(); this.done = false;
-    cx.spawn(async (cx) => {
-      this.tempDirs = await localService(systemApi).temporary().catch(() => []);
+    spawnAndNotify(cx, async (cx) => {
+      this.tempDirs = await localService(systemApi).temporary().catch(() => null);
       const { roots, search } = this.roots();
       try {
         const found = await localService(repositoryApi).discover(search);
@@ -421,14 +438,13 @@ export class Worktrees {
         });
         if (id !== this.scan) return;
         this.phase = "Saving";
-        try { await this.keep(new Set(repos), search); } catch (e) { this.note = `The history could not be saved: ${String(e?.message ?? e)}`; }
+        try { await this.keep(new Set(repos), search); } catch (e) { this.note = said("The history could not be saved", e?.message ?? e); }
         if (id !== this.scan) return;
         this.phase = null; this.done = true; this.scannedAt = Date.now();
       } catch (e) {
-        if (id === this.scan) { this.phase = null; this.note = `Scan failed: ${e}`; }
+        if (id === this.scan) { this.phase = null; this.note = said("Can't scan for worktrees", e?.message ?? e); }
       } finally { if (id === this.scan) cx.notify(); }
     });
-    cx.notify();
   }
 
   apply(path, p) {
@@ -440,19 +456,17 @@ export class Worktrees {
     const w = this.item(keyOf(target));
     if (this.working || !w) return;
     this.working = w.path; this.note = null;
-    cx.spawn(async (cx) => {
+    spawnAndNotify(cx, async (cx) => {
       try {
         const r = await exec("git", ["worktree", "repair", w.path], { cwd: w.repo });
-        if (r.code !== 0) throw new Error((r.stderr || r.stdout).trim().split("\n")[0]);
-        const g = this.groups.find((g) => g.repo === w.repo);
-        const p = parseProbe((await localService(repositoryApi).probe(w.path, idleMinutes(), g?.bases ?? [])).stdout);
+        commandOk(r);
+        const p = await this.probeWorktree(w);
         this.apply(w.path, p);
         if (p.broken) throw new Error("git still can't read it");
         notify({ title: `Repaired ${name(w.path)}`, body: "It is linked to its repository again.", level: "success" });
-      } catch (e) { this.note = `${name(w.path)}: ${String(e?.message ?? e)}`; }
-      finally { this.working = null; cx.notify(); }
+      } catch (e) { this.note = said(`Can't repair ${name(w.path)}`, e?.message ?? e); }
+      finally { this.finishWork(cx); }
     });
-    cx.notify();
   }
 
   async removeOne(w) {
@@ -493,8 +507,7 @@ export class Worktrees {
       const r = { code: (w.replaced ? exists : !exists) ? 0 : 1 };
       return r.code === 0 ? this.item(path) : null;
     }
-    const g = this.groups.find((g) => g.repo === w.repo);
-    const p = parseProbe((await localService(repositoryApi).probe(w.path, idleMinutes(), g?.bases ?? [])).stdout);
+    const p = await this.probeWorktree(w);
     this.apply(path, p);
     this.markOpen();
     const now = this.item(path);
@@ -507,7 +520,7 @@ export class Worktrees {
     if (!w || w.open || w.locked || this.working || !w.fresh) return;
     this.working = w.path; this.armed.clear(); this.note = null; this.notice = null;
     const before = { dirty: w.dirty ?? 0, only: w.only ?? 0 };
-    cx.spawn(async (cx) => {
+    spawnAndNotify(cx, async (cx) => {
       try {
         const now = await this.still(w.path, (x) => removable(x) && (x.dirty ?? 0) <= before.dirty && (x.only ?? 0) <= before.only);
         if (!now) {
@@ -517,17 +530,16 @@ export class Worktrees {
         const got = await this.removeOne(now);
         this.drop(now); await this.credit([[now, got]]);
         if (got.kb) notify({ title: `Freed ${fmtSize(got.kb)}`, body: this.hist?.kb ? `${fmtSize(this.hist.kb)} freed so far` : undefined, level: "success" });
-      } catch (e) { this.note = `${name(w.path)}: ${String(e.message ?? e)}`; }
-      finally { this.working = null; cx.notify(); }
+      } catch (e) { this.note = said(`Can't remove ${name(w.path)}`, e.message ?? e); }
+      finally { this.finishWork(cx); }
     });
-    cx.notify();
   }
 
   prune(targets, cx) {
     const missing = targets.map((t) => this.item(keyOf(t))).filter(Boolean);
     if (!missing.length || this.working) return;
     this.working = missing[0].repo; this.note = null;
-    cx.spawn(async (cx) => {
+    spawnAndNotify(cx, async (cx) => {
       try {
         for (const w of missing.filter((w) => w.replaced)) await this.removeOne(w);
         const plain = missing.find((w) => !w.replaced);
@@ -535,11 +547,12 @@ export class Worktrees {
         for (const w of missing) this.drop(w);
         await this.credit(missing.map((w) => [w, { records: 1 }]));
       }
-      catch (e) { this.note = `${name(missing[0].repo)}: ${String(e.message ?? e)}`; }
-      finally { this.working = null; cx.notify(); }
+      catch (e) { this.note = said(`Can't prune ${name(missing[0].repo)}`, e.message ?? e); }
+      finally { this.finishWork(cx); }
     });
-    cx.notify();
   }
+
+  finishWork(cx) { this.working = null; cx.notify(); }
 
   plan() {
     return this.groups.flatMap((g) => g.items.filter(safe));
@@ -555,7 +568,7 @@ export class Worktrees {
     const paths = targets.map(keyOf);
     if (!paths.length || this.working) return;
     this.working = "all"; this.batch = new Set(paths); this.armed.clear(); this.note = null; this.notice = null;
-    cx.spawn(async (cx) => {
+    spawnAndNotify(cx, async (cx) => {
       // `pruned`: repositories already pruned; their other missing rows go with it.
       const { done, kept, failed, got } = await reduceSeries(paths, async (t, path) => {
         this.phase = `Removing ${t.done + t.kept + t.failed.length + 1} of ${paths.length}`;
@@ -575,31 +588,30 @@ export class Worktrees {
       }, { done: 0, kept: 0, failed: [], got: [], pruned: new Set() });
       await this.credit(got);
       this.phase = null; this.working = null; this.batch = null;
-      if (failed.length) this.note = `${failed.length} not removed. ${failed[0]}`;
+      if (failed.length) this.note = said(`${failed.length} not removed`, failed[0]);
       if (kept) this.notice = `${kept} ${kept === 1 ? "stays: it" : "stay: they"} changed since the scan (new work, in use, or git can no longer read ${kept === 1 ? "it" : "them"}). ${kept === 1 ? "Its row shows" : "Their rows show"} what changed.`;
       const kb = got.reduce((n, [, e]) => n + (e.kb ?? 0), 0), total = this.hist?.kb ?? 0;
       notify({ title: kb ? `Freed ${fmtSize(kb)}` : `Removed ${done} ${done === 1 ? "worktree" : "worktrees"}`,
         body: `${done} removed${total ? `, ${fmtSize(total)} freed so far` : ""}`, level: failed.length ? "warning" : "success" });
       cx.notify();
     });
-    cx.notify();
   }
 
-  verdict(w, c) {
+  verdict(w) {
     const s = stateOf(w), n = (k, one, many) => `${w[k]} ${w[k] === 1 ? one : many}`;
     return {
-      checking: { text: "Checking", color: c.dim },
-      missing: { text: "Folder gone", color: c.dim },
-      orphan: { text: "Its repository moved or was deleted", color: c.dim },
-      open: { text: "Open in Herdr", color: c.yellow },
-      locked: { text: "Locked", color: c.dim },
-      changes: { text: n("dirty", "uncommitted change", "uncommitted changes"), color: c.red },
-      lost: { text: `${n("only", "commit", "commits")} only here`, color: c.red },
-      broken: { text: "Its repository moved: repair the link", color: c.yellow },
-      recent: { text: "In use today", color: c.yellow, pulse: true },
-      merged: { text: "Merged", color: c.green },
-      detached: { text: "Detached, its commits are on branches", color: c.green, quiet: true },
-      unmerged: { text: w.ahead > 0 ? `Not merged, ${n("ahead", "commit", "commits")} stay on its branch` : "Not merged, stays on its branch", color: c.green, quiet: true },
+      checking: { text: "Checking", tone: "dim" },
+      missing: { text: "Folder gone", tone: "dim" },
+      orphan: { text: "Its repository moved or was deleted", tone: "dim" },
+      open: { text: "Open in Herdr", tone: "working" },
+      locked: { text: "Locked", tone: "dim" },
+      changes: { text: n("dirty", "uncommitted change", "uncommitted changes"), tone: "blocked" },
+      lost: { text: `${n("only", "commit", "commits")} only here`, tone: "blocked" },
+      broken: { text: "Its repository moved: repair the link", tone: "working" },
+      recent: { text: "In use today", tone: "working" },
+      merged: { text: "Merged", tone: "done" },
+      detached: { text: "Detached, its commits are on branches", tone: "done" },
+      unmerged: { text: w.ahead > 0 ? `Not merged, ${n("ahead", "commit", "commits")} stay on its branch` : "Not merged, stays on its branch", tone: "done" },
     }[s];
   }
 
@@ -608,38 +620,20 @@ export class Worktrees {
     return h_flex().w_full().items_center().justify_between().gap(G.md)
       .child(div().truncate().text_size(narrow ? 17 : 20).text_color(c.text).child("Worktrees"))
       .child(h_flex().gap(G.xs).items_center().flex_none()
-        .when(Boolean(this.phase), (el) => el.child(div().pr(G.xs).text_size(11).text_color(c.dim).child(this.phase)))
+        .when(Boolean(this.phase), (el) => el.child(div().pr(G.xs).text_size(T.micro).text_color(c.dim).child(this.phase)))
         .child(iconButton("wt-share", "share", "Share", (cx) => this.share.toggle(cx), c))
-        .child(iconButton("wt-refresh", "refresh", "Scan again", (cx) => { if (!this.working) this.refresh(cx); }, c, { spin: scanning })));
+        .child(iconButton("wt-refresh", "refresh-cw", "Scan again", (cx) => { if (!this.working) this.refresh(cx); }, c, { spin: scanning })));
   }
 
-  freedBones(c, narrow) {
-    const { block, line } = ghost(c);
-    const heights = [28, 50, 36, 72, 40, 60, 24, 44, 32];
-    return breathe(v_flex().id("kanso-skeleton").w_full().gap(G.lg))
-      .child(h_flex().items_end().gap(G.md).child(block(narrow ? 90 : 120, narrow ? 36 : 48, 6)).child(line(80, 13)))
-      .child(line(200, 12))
-      .child(h_flex().w_full().h(96).items_end()
-        .children(heights.map((h) => v_flex().flex_1().min_w(0).items_center().justify_end().child(block(2, h, 1)))));
+  freedBones(c) { return skeletonOf({ shape: "line", count: 4 })("kanso-skeleton", c); }
+
+  async probeWorktree(w) {
+    const group = this.groups.find((item) => item.repo === w.repo);
+    return parseProbe((await localService(repositoryApi).probe(w.path, idleMinutes(), group?.bases ?? [])).stdout);
   }
 
-  bones(c, narrow = true) {
-    const { header } = ghost(c);
-    const pad = narrow ? G.lg : 32;
-    return v_flex().size_full().min_h(0).bg(c.canvas).text_color(c.text)
-      .child(h_flex().flex_none().w_full().justify_center().px(pad).py(narrow ? G.lg : 28)
-        .child(v_flex().w_full().max_w(1080).gap(narrow ? 32 : 44)
-          .child(header(narrow ? 110 : 140, narrow ? 17 : 20))
-          .child(this.skeleton(c, narrow))));
-  }
-
-  skeleton(c, narrow) {
-    const { block, row } = ghost(c);
-    return breathe(v_flex().id("kanso-skeleton").w_full().gap(narrow ? 36 : 48))
-      .child(v_flex().gap(G.md).child(block(110, 12)).child(block(narrow ? 150 : 220, narrow ? 40 : 58, 6)).child(block(200, 11))
-        .child(h_flex().gap(narrow ? G.xl : 48).pt(G.md).children([30, 46, 40, 30].map((w) => block(w, narrow ? 18 : 22, 4)))))
-      .child(v_flex().w_full().child(h_flex().pb(G.sm).child(block(90, 12))).children([0, 1, 2, 3].map(row)))
-      .child(v_flex().w_full().child(h_flex().pb(G.sm).child(block(70, 12))).children([0, 1, 2].map(row)));
+  skeleton(c) {
+    return v_flex().w_full().gap(G.xl).child(skeletonOf({ shape: "metric" })("kanso-skeleton", c)).child(skeletonOf({ shape: "line", count: 2 })("kanso-skeleton-lines", c));
   }
 
   hero(c, narrow) {
@@ -647,6 +641,7 @@ export class Worktrees {
     const measured = [...live, ...this.orphans].some((w) => w.size);
     const total = [...live, ...this.orphans].reduce((n, w) => n + (w.size ?? 0), 0);
     const plan = this.plan(), freed = plan.reduce((n, w) => n + (w.size ?? 0), 0);
+    const here = aliasText(shared("kanso.alias"), "");
     const look = live.filter((w) => needsLook(w)).length;
     const gone = all.filter((w) => w.missing).length;
     const stats = [
@@ -656,56 +651,33 @@ export class Worktrees {
       { value: String(gone), unit: gone === 1 ? "folder gone" : "folders gone" },
     ];
     const armed = this.armed.is("all"), busy = this.working === "all", can = plan.length > 0 && !this.working && this.done;
-    const primary = Button.new("wt-clean").h(30).px(14).flex_none().items_center().rounded(6)
-      .disabled(!can)
-      .bg(can ? (armed ? c.red : c.primary) : c.subtle)
-      .when(can, (el) => el.cursor_pointer().hover((s) => s.opacity(0.85)))
-      .on_click((_e, cx) => { if (can) this.armed.press("all", cx, (cx) => this.cleanUp(cx)); })
-      .child(div().text_size(12).font_medium().text_color(can ? c.primaryText : c.dim)
-        .child(busy ? "Removing…" : armed ? `Press again to remove ${plan.length}` : `Clean up ${plan.length}`));
+    const primary = this.armed.button("wt-clean", busy ? "Removing…" : `Clean up ${plan.length}`, `remove ${plan.length}`, "all", (cx) => this.cleanUp(cx), c, { disabled: !can });
     const gist = !this.done ? "Clean up waits for the scan to finish."
       : plan.length ? `${freed ? `${fmtSize(freed)} of it` : `${plan.length} of them`} can go without losing anything.` : "Nothing can go without losing work.";
-    return v_flex().w_full().gap(G.xl)
-      .child(v_flex().gap(G.xs)
-        .child(div().text_size(15).text_color(c.muted).child("On this computer"))
-        .child(h_flex().flex_wrap().items_end().gap_x(G.md)
-          .child(div().text_size(narrow ? 48 : 72).line_height(1).font_light().text_color(c.text).child(measured ? fmtSize(total) : String(live.length)))
-          .child(div().pb(narrow ? 6 : 10).text_size(13).text_color(c.dim).child(measured ? "in worktrees" : "worktrees")))
-        .child(div().text_size(15).text_color(c.dim).child(gist)))
-      .child(h_flex().w_full().flex_wrap().gap_x(narrow ? G.xl : 48).gap_y(G.lg)
-        .children(stats.map((s) => h_flex().items_end().gap(6)
-          .child(div().text_size(narrow ? 22 : 28).line_height(1).font_light().text_color(c.text).child(s.value))
-          .child(div().pb(3).text_size(12).text_color(c.dim).child(s.unit)))))
+    return heroStack(heroHeading()
+        .child(div().text_size(T.title).text_color(c.muted).child(here ? `On ${machineTitle("", "", here)}` : "On this computer"))
+        .child(metric({ value: measured ? fmtSize(total) : String(live.length), unit: measured ? "in worktrees" : "worktrees", facts: factList(stats) })("wt-metric", c))
+        .child(div().text_size(T.title).text_color(c.dim).child(gist)))
       .child(v_flex().w_full().gap(G.sm)
         .child(h_flex().w_full().flex_wrap().gap_x(G.lg).gap_y(G.sm).items_center()
           .child(primary)
-          .child(div().text_size(12).text_color(armed ? c.red : c.dim)
+          .child(div().text_size(T.body).text_color(armed ? c.red : c.dim)
             .child(armed ? "Merged branches go too; the others stay." : "Nothing uncommitted, every commit on a branch, idle a day.")))
-        .when(Boolean(this.notice), (el) => el.child(div().text_size(12).text_color(c.muted).child(this.notice)))
-        .when(Boolean(this.note), (el) => el.child(div().text_size(12).text_color(c.red).child(this.note))));
+        .when(Boolean(this.notice), (el) => el.child(div().text_size(T.body).text_color(c.muted).child(this.notice)))
+        .when(Boolean(this.note), (el) => el.child(failureBlock(this.note)("wt-note", c))));
   }
 
   row(w, c) {
-    const v = this.verdict(w, c), picked = this.picked === w.path, busy = this.working === w.path || Boolean(this.batch?.has(w.path));
+    const v = this.verdict(w), picked = this.picked === w.path, busy = this.working === w.path || Boolean(this.batch?.has(w.path));
     const age = fmtAge(w.last), when = age ? (age === "today" ? "last commit today" : `last commit ${age} ago`) : "";
     const meta = [w.orphan ? tilde(w.path) : w.branch && w.branch !== name(w.path) ? w.branch : !w.branch ? "detached HEAD" : "", when].filter(Boolean).join(" · ");
-    const button = Button.new(`wt-${w.path}`).w_full().px(G.md).py(10).rounded(6).cursor_pointer()
-      .selected(picked)
-      .when(picked, (el) => el.bg(c.selected))
-      .when(!picked, (el) => el.hover((s) => s.bg(c.subtle)))
-      .when(busy, (el) => el.opacity(0.45))
-      .accessibility_label(`${name(w.path)}, ${v.text}`)
-      .on_click((_e, cx) => { this.picked = picked ? null : w.path; this.armed.clear(); cx.notify(); })
-      .child(h_flex().w_full().items_start().gap(G.md)
-        .child(v_flex().flex_1().min_w(0).gap(4)
-          .child(div().w_full().truncate().text_size(14).text_color(c.text).when(picked, (e) => e.font_medium()).child(name(w.path)))
-          .when(Boolean(meta), (el) => el.child(div().w_full().truncate().text_size(11.5).text_color(c.dim).child(meta)))
-          .child(h_flex().w_full().min_w(0).gap(G.sm).items_center()
-            .child(div().size(6).flex_none().rounded_full().bg(v.color).when(Boolean(v.pulse), (el) => breathe(el, PULSE)))
-            .child(div().min_w(0).truncate().text_size(12).text_color(v.quiet || v.color === c.dim ? c.muted : v.color).child(busy ? "Removing…" : v.text))))
-        .child(div().flex_none().text_size(15).font_light().text_color(c.text).child(fmtSize(w.size))));
+    const button = row(`wt-${w.path}`, c, {
+      name: name(w.path), detail: { text: busy ? "Removing…" : v.text, tone: v.tone }, meta: fmtSize(w.size), second: meta || null,
+      current: picked, pending: busy,
+      onClick: (cx) => { this.picked = picked ? null : w.path; this.armed.clear(); cx.notify(); },
+    }).aria_selected(picked).accessibility_label(`${name(w.path)}, ${v.text}`);
     if (!picked) return button;
-    const s = stateOf(w), key = `one:${w.path}`, armed = this.armed.is(key);
+    const s = stateOf(w);
     const blocked = s === "open" ? "Close its tabs in Herdr to remove it." : s === "locked" ? "Locked: run git worktree unlock to remove it."
       : s === "broken" ? "Its .git points to where the repository used to be, so git can't read what it holds. Repair the link to check it like any other."
       : s === "checking" || !w.fresh ? "As the last scan saw it. Checking it again before it can be removed." : "";
@@ -714,16 +686,17 @@ export class Worktrees {
     return v_flex().w_full()
       .child(button)
       .child(v_flex().w_full().px(G.md).pt(G.xs).pb(G.md).gap(G.sm)
-        .child(div().w_full().text_size(12).line_height(1.45).text_color(loses ? c.red : c.muted).child(blocked || text))
-        .child(div().w_full().truncate().text_size(11).text_color(c.dim).child(tilde(w.path)))
+        .child(div().w_full().text_size(T.body).line_height(1.45).text_color(loses ? c.red : c.muted).child(blocked || text))
+        .child(div().w_full().truncate().text_size(T.micro).text_color(c.dim).child(tilde(w.path)))
         .child(h_flex().flex_wrap().gap_x(G.lg)
           .when(s === "broken", (el) => el.child(quietLink(`wt-repair-${w.path}`, this.working === w.path ? "Repairing…" : "Repair the link",
             (cx) => this.repair(w.path, cx), c, { color: c.text, disabled: Boolean(this.working) })))
-          .when(!w.missing && s !== "broken", (el) => el.child(quietLink(`wt-explain-${w.path}`, "Explain it", () => this.ask(`Explain ${name(w.path)}`, w.path,
-            explainPrompt(this.item(w.path) ?? w, this.groups.find((g) => g.repo === w.repo)?.base)), c, { color: c.text })))
+          .when(!w.missing && s !== "broken", (el) => el.child(explainButton({ agent: this.explainer?.name ?? "an agent", size: "sm" })(`wt-explain-${w.path}`, c, {
+            onClick: () => this.ask(`Explain ${name(w.path)}`, w.path, explainPrompt(this.item(w.path) ?? w, this.groups.find((g) => g.repo === w.repo)?.base)),
+          })))
           .when(!w.missing, (el) => el.child(quietLink(`wt-open-${w.path}`, "Open in a new tab", () => run("tab.new", { folder: w.path }), c)))
-          .when(!blocked, (el) => el.child(quietLink(`wt-rm-${w.path}`, busy ? "Removing…" : armed ? "Press again to remove" : "Remove",
-            (cx) => this.armed.press(key, cx, (cx) => this.remove(w.path, cx)), c, { color: armed ? c.red : c.text, disabled: Boolean(this.working) })))));
+          .when(!blocked, (el) => el.child(this.armed.link(`wt-rm-${w.path}`, busy ? "Removing…" : "Remove", "remove",
+            `one:${w.path}`, (cx) => this.remove(w.path, cx), c, { color: c.text, disabled: Boolean(this.working) })))));
   }
 
   group(id, title, where, items, c) {
@@ -733,52 +706,49 @@ export class Worktrees {
     const size = items.reduce((n, w) => n + (w.size ?? 0), 0), many = items.filter(removable);
     const key = `group:${id}`, armed = this.armed.is(key), lost = losses(many);
     const note = [`${shown.length || missing.length}`, fmtSize(size)].filter(Boolean).join(" · ");
-    return v_flex().w_full().gap(2)
+    return v_flex().w_full().gap(G.hair)
       .child(h_flex().w_full().items_end().justify_between().gap(G.md).pb(G.sm)
-        .child(v_flex().flex_1().min_w(0).gap(2)
-          .child(div().w_full().truncate().text_size(15).text_color(c.text).child(title))
-          .child(div().w_full().truncate().text_size(11.5).text_color(c.dim).child(where)))
-        .child(div().flex_none().text_size(12).text_color(c.dim).child(note)))
+        .child(v_flex().flex_1().min_w(0).gap(G.hair)
+          .child(div().w_full().truncate().text_size(T.title).text_color(c.text).child(title))
+          .child(div().w_full().truncate().text_size(T.body).text_color(c.dim).child(where)))
+        .child(div().flex_none().text_size(T.body).text_color(c.dim).child(note)))
       .children(rows.map((w) => this.row(w, c)))
-      .when(armed, (el) => el.child(div().w_full().px(G.md).pt(G.xs).text_size(12).line_height(1.45).text_color(lost === "Nothing is lost." ? c.muted : c.red)
-        .child(`${lost} Branches stay unless merged. Anything open in Herdr, locked or in use today stays.`)))
       .child(h_flex().w_full().flex_wrap().gap_x(G.lg).px(G.md).pt(G.xs)
         .when(shown.length > ROWS, (el) => el.child(quietLink(`wt-more-${id}`, open ? "Show fewer" : `Show ${shown.length - ROWS} more`,
           (cx) => { this.more = open ? new Set([...this.more].filter((x) => x !== id)) : new Set([...this.more, id]); cx.notify(); }, c)))
         .when(missing.length > 0, (el) => el.child(quietLink(`wt-prune-${id}`, `Prune ${missing.length} ${missing.length === 1 ? "record" : "records"} of ${missing.some((w) => w.replaced) ? "folders gone or reused" : missing.length === 1 ? "a folder already gone" : "folders already gone"}`,
           (cx) => this.prune(missing.map((w) => w.path), cx), c, { disabled: Boolean(this.working) })))
-        .when(many.length > 1 && this.done, (el) => el.child(quietLink(`wt-all-${id}`, armed ? `Press again to remove ${many.length}` : `Remove all ${many.length}`,
-          (cx) => this.armed.press(key, cx, (cx) => { this.markOpen(); this.removeAll(items.map((w) => this.item(w.path)).filter((w) => w && removable(w)), cx); }), c, { color: armed ? c.red : c.muted, disabled: Boolean(this.working) }))));
+        .when(many.length > 1 && this.done, (el) => el.child(this.armed.link(`wt-all-${id}`, `Remove all ${many.length}`, `remove ${many.length}`,
+          key, (cx) => { this.markOpen(); this.removeAll(items.map((w) => this.item(w.path)).filter((w) => w && removable(w)), cx); }, c, { disabled: Boolean(this.working) }))))
+      // Below the actions, so arming moves none of them.
+      .when(armed, (el) => el.child(div().w_full().px(G.md).pt(G.xs).text_size(T.body).line_height(1.45).text_color(lost === "Nothing is lost." ? c.muted : c.red)
+        .child(`${lost} Branches stay unless merged. Anything open in Herdr, locked or in use today stays.`)));
   }
 
   ask(title, folder, prompt) {
-    knownAgents({ on: null }).then((list) => {
-      const agent = list.find((a) => a.installed);
-      if (!agent) throw new Error("no agent is installed");
-      run("tab.new", { name: title, space: spaces().find((s) => s.active)?.id, folder, argv: agent.run, task: prompt });
-    }).catch((e) => notify({ title: "Could not start the agent", body: String(e?.message ?? e), level: "error" }));
+    explainWith(this.explainer, { name: title, space: spaces().find((s) => s.active)?.id, folder, task: prompt });
   }
 
   bars(c, byDay, title, height, empty) {
     const days = lastDays(byDay), top = Math.max(0, ...days.map((d) => d.kb));
     return v_flex().w_full().gap(G.sm)
       .child(h_flex().w_full().items_end().justify_between()
-        .child(div().text_size(12).text_color(c.muted).child(title))
-        .child(div().text_size(11).text_color(c.dim).child(top ? `top ${fmtSize(top)}` : empty)))
+        .child(div().text_size(T.body).text_color(c.muted).child(title))
+        .child(div().text_size(T.micro).text_color(c.dim).child(top ? `top ${fmtSize(top)}` : empty)))
       .child(h_flex().w_full().items_end()
         .children(days.map((d) => {
           const peak = top > 0 && d.kb === top;
-          return v_flex().flex_1().min_w(0).h(height + 18).items_center().justify_end().gap(4)
-            .tooltip(`${shortDate(d.at)} · ${d.kb ? fmtSize(d.kb) : "nothing"}`)
-            .when(peak, (e) => e.child(div().text_size(10).text_color(c.text).whitespace_nowrap().child(fmtSize(d.kb))))
+          return v_flex().flex_1().min_w(0).h(height + 18).items_center().justify_end().gap(G.xs)
+            .tooltip(tooltip({ label: shortDate(d.at), detail: d.kb ? fmtSize(d.kb) : "nothing" }))
+            .when(peak, (e) => e.child(div().text_size(T.micro).text_color(c.text).whitespace_nowrap().child(fmtSize(d.kb))))
             .child(div().w(peak ? 3 : 2).flex_none().rounded_t(1)
               .h(d.kb ? Math.max(3, Math.round((d.kb / top) * height)) : 1)
               .bg(peak ? c.accent : d.kb ? c.muted : c.border)
-              .opacity(peak || !d.kb ? 1 : 0.55));
+              .opacity(peak || !d.kb ? 1 : OPACITY.quiet));
         })))
       .child(h_flex().w_full().justify_between()
-        .child(div().text_size(10).text_color(c.dim).child(shortDate(days[0].at)))
-        .child(div().text_size(10).text_color(c.dim).child("Today")));
+        .child(div().text_size(T.micro).text_color(c.dim).child(shortDate(days[0].at)))
+        .child(div().text_size(T.micro).text_color(c.dim).child("Today")));
   }
 
   space(c) {
@@ -793,23 +763,23 @@ export class Worktrees {
     const most = repos[0]?.kb ?? 1;
     return v_flex().w_full().gap(G.lg)
       .child(section(c, "Where the space is", fmtSize(total)))
-      .child(h_flex().w_full().h(10).rounded(5).overflow_hidden().gap(2)
-        .children(parts.filter((p) => p.kb > 0).map((p) => div().h_full().w(pct(p.kb)).flex_shrink_0().bg(color[p.key]).opacity(p.key === "checking" ? 1 : 0.85)
-          .tooltip(`${p.label}: ${fmtSize(p.kb)}`))))
+      .child(h_flex().w_full().h(10).rounded(R.sm).overflow_hidden().gap(G.hair)
+        .children(parts.filter((p) => p.kb > 0).map((p) => div().h_full().w(pct(p.kb)).flex_shrink_0().bg(color[p.key]).opacity(p.key === "checking" ? 1 : OPACITY.part)
+          .tooltip(tooltip({ label: p.label, detail: fmtSize(p.kb) })))))
       .child(v_flex().w_full().gap(6)
         .children(parts.map((p) => h_flex().w_full().items_center().gap(G.sm)
-          .child(div().size(8).flex_none().rounded_full().bg(color[p.key]))
-          .child(div().flex_1().min_w(0).truncate().text_size(12.5).text_color(c.text).child(p.label))
-          .child(div().text_size(11).text_color(c.dim).child(`${p.count}`))
-          .child(div().w(64).flex_none().text_right().text_size(13).font_light().text_color(c.text).child(fmtSize(p.kb) || "0 KB"))
-          .child(div().w(36).flex_none().text_right().text_size(11).text_color(c.dim).child(`${Math.round((p.kb / total) * 100)}%`)))))
+          .child(dot(c, color[p.key]))
+          .child(div().flex_1().min_w(0).truncate().text_size(T.value).text_color(c.text).child(p.label))
+          .child(div().text_size(T.micro).text_color(c.dim).child(`${p.count}`))
+          .child(div().w(64).flex_none().text_right().text_size(T.card).font_light().text_color(c.text).child(fmtSize(p.kb) || "0 KB"))
+          .child(div().w(36).flex_none().text_right().text_size(T.micro).text_color(c.dim).child(`${Math.round((p.kb / total) * 100)}%`)))))
       .when(repos.length > 1, (el) => el.child(v_flex().w_full().gap(G.sm).pt(G.sm)
-        .child(div().text_size(12).text_color(c.muted).child("The repositories that take the most"))
-        .children(repos.map((r) => v_flex().w_full().gap(4)
+        .child(div().text_size(T.body).text_color(c.muted).child("The repositories that take the most"))
+        .children(repos.map((r) => v_flex().w_full().gap(G.xs)
           .child(h_flex().w_full().items_end().gap(G.sm)
-            .child(div().flex_1().min_w(0).truncate().text_size(12.5).text_color(c.text).child(r.name))
-            .child(div().text_size(11).text_color(c.dim).child(`${r.count}`))
-            .child(div().w(64).flex_none().text_right().text_size(13).font_light().text_color(c.text).child(fmtSize(r.kb))))
+            .child(div().flex_1().min_w(0).truncate().text_size(T.value).text_color(c.text).child(r.name))
+            .child(div().text_size(T.micro).text_color(c.dim).child(`${r.count}`))
+            .child(div().w(64).flex_none().text_right().text_size(T.card).font_light().text_color(c.text).child(fmtSize(r.kb))))
           .child(div().w_full().h(4).rounded(2).bg(c.border)
             .child(div().h_full().w(`${Math.max(1, (r.kb / most) * 100).toFixed(2)}%`).rounded(2).bg(c.muted)))))));
   }
@@ -817,28 +787,17 @@ export class Worktrees {
   freed(c, narrow) {
     const h = this.hist;
     if (!h) return v_flex().w_full().child(section(c, "Freed"))
-      .child(this.storeNote ? div().text_size(12).text_color(c.red).child(this.storeNote) : this.freedBones(c, narrow));
+      .child(this.storeNote ? failureBlock(this.storeNote)("wt-store", c) : this.freedBones(c));
     const freedBars = this.bars(c, h.freedByDay, "Freed each day", 96, "fills as you remove")
       , diskBars = this.bars(c, h.diskByDay, "In worktrees each day", 56, "a bar per day with a scan");
-    const stats = [
-      { value: String(h.worktrees), unit: h.worktrees === 1 ? "worktree removed" : "worktrees removed" },
-      { value: String(h.branches), unit: h.branches === 1 ? "merged branch deleted" : "merged branches deleted" },
-      { value: String(h.records + h.orphans), unit: "leftovers cleared" },
-    ];
     const outside = h.kb - h.kanso;
     return v_flex().w_full().gap(G.lg)
       .child(section(c, "Freed", h.since ? `since ${shortDate(h.since)}` : ""))
       .child(v_flex().gap(G.xs)
-        .child(h_flex().flex_wrap().items_end().gap_x(G.md)
-          .child(div().text_size(narrow ? 36 : 48).line_height(1).font_light().text_color(c.text).child(fmtSize(h.kb) || "0 KB"))
-          .child(div().pb(narrow ? 4 : 7).text_size(13).text_color(c.dim).child("of disk freed")))
-        .child(div().text_size(12).text_color(c.dim).child(!h.kb
+        .child(metric({ value: fmtSize(h.kb) || "0 KB", unit: "of disk freed", facts: h.kb > 0 || h.records + h.orphans > 0 ? factList(cleanedStats(h)) : "" })("wt-freed", c))
+        .child(div().text_size(T.body).text_color(c.dim).child(!h.kb
           ? "Nothing freed yet. Every scan is kept: what Clean up, Remove or anything else frees adds up here."
           : outside > 0 ? `${fmtSize(h.kanso) || "0 KB"} here, ${fmtSize(outside)} removed outside the panel since a scan saw them.` : "All of it from this panel.")))
-      .when(h.kb > 0 || h.records + h.orphans > 0, (el) => el.child(h_flex().w_full().flex_wrap().gap_x(narrow ? G.xl : 48).gap_y(G.md)
-        .children(stats.map((s) => h_flex().items_end().gap(6)
-          .child(div().text_size(narrow ? 20 : 24).line_height(1).font_light().text_color(c.text).child(s.value))
-          .child(div().pb(2).text_size(12).text_color(c.dim).child(s.unit))))))
       .child(freedBars)
       .child(diskBars);
   }
@@ -849,10 +808,10 @@ export class Worktrees {
     const baseOf = (w) => this.groups.find((g) => g.repo === w.repo)?.base;
     return v_flex().w_full()
       .child(section(c, "Ask your agent", "in a new tab"))
-      .child(div().text_size(12).text_color(c.dim).pb(G.xs)
+      .child(div().text_size(T.body).text_color(c.dim).pb(G.xs)
         .child(`${look.length} would lose work if removed. Your agent can find out what that work is and whether it already lives somewhere else.`))
       .child(h_flex().w_full().flex_wrap().gap_x(G.lg).gap_y(G.xs)
-        .child(quietLink("wt-review", `Review the ${look.length} that need a look`, () => this.ask("Worktrees review", home(), reviewPrompt(look, baseOf)), c, { size: 13, color: c.text })));
+        .child(quietLink("wt-review", `Review the ${look.length} that need a look`, () => this.ask("Worktrees review", home(), reviewPrompt(look, baseOf)), c, { color: c.text })));
   }
 
   current() {
@@ -880,7 +839,7 @@ export class Worktrees {
       .when(groups.length > REPOS, (el) => el.child(h_flex().child(quietLink("wt-repos", this.allRepos ? "Show fewer repositories" : `Show ${groups.length - REPOS} more repositories`,
         (cx) => { this.allRepos = !this.allRepos; cx.notify(); }, c))))
       .when(this.orphans.length > 0, (el) => el.child(this.group("orphans", "Left behind", "Folders of worktrees whose repository moved or was deleted", this.orphans, c)))
-      .when(Boolean(this.scannedAt), (el) => el.child(div().text_size(10.5).text_color(c.dim)
+      .when(Boolean(this.scannedAt), (el) => el.child(div().text_size(T.micro).text_color(c.dim)
         .child(`Scanned ${new Date(this.scannedAt).toTimeString().slice(0, 5)}.`)));
   }
 
@@ -892,19 +851,21 @@ export class Worktrees {
       ? b.items.reduce((n, w) => n + (w.size ?? 0), 0) - a.items.reduce((n, w) => n + (w.size ?? 0), 0)
       : b.items.length - a.items.length);
     const shown = this.allRepos ? groups : groups.slice(0, REPOS);
-    const body = !scanned && this.phase ? this.skeleton(c, narrow)
-      : !scanned ? v_flex().w_full().gap(G.sm)
-        .child(div().text_size(15).text_color(this.note ? c.red : c.muted).child(this.note ? "The scan failed." : "No worktrees besides your checkouts."))
-        .child(div().text_size(12).text_color(c.dim).child(this.note ?? "Nothing left behind either."))
+    const body = !scanned && this.phase ? this.skeleton(c)
+      : !scanned ? (this.note
+        ? failureBlock({ ...this.note, fix: "Refresh" })("wt-failed", c, { onClick: (cx) => { if (!this.working) this.refresh(cx); } })
+        : emptyState({ icon: "git-fork", text: "No worktrees besides your checkouts" })("wt-empty", c))
         : this.page(c, narrow, groups, shown);
-    return v_flex().id("kanso-worktrees").size_full().min_h(0).bg(c.canvas).text_color(c.text).overflow_y_scrollbar()
-      .on_size_change((size, sizeCx) => { if (Math.abs((this.width || 0) - size.width) >= 1) { this.width = size.width; sizeCx.notify(); } })
-      .child(h_flex().flex_none().w_full().justify_center().px(narrow ? G.lg : 32).py(narrow ? G.lg : 28)
-        .child(v_flex().w_full().max_w(1080).gap(narrow ? 32 : 44)
+    return sizedPage.call(this, v_flex().id("kanso-worktrees").size_full().min_h(0).bg(c.canvas).text_color(c.text).overflow_y_scrollbar(), narrow, (column) => column
           .child(this.header(c, narrow))
-          .when(this.share.open, (el) => el.child(this.share.row(c, () => this.shareCard(),
-            (this.hist?.kb ?? 0) > 0 ? "Only the totals: how much was freed, how many were removed, and the days. Never a repository, branch or folder name."
-              : "Nothing freed yet, so it shares what the worktrees take now: totals only, never a repository, branch or folder name.", G.sm)))
-          .child(body)));
+          .children(shareRows(this, c, (this.hist?.kb ?? 0) > 0 ? "Only the totals: how much was freed, how many were removed, and the days. Never a repository, branch or folder name."
+              : "Nothing freed yet, so it shares what the worktrees take now: totals only, never a repository, branch or folder name."))
+          .child(body));
   }
 }
+
+const cleanedStats = (h) => [
+  { value: String(h.worktrees), unit: h.worktrees === 1 ? "worktree removed" : "worktrees removed" },
+  { value: String(h.branches), unit: h.branches === 1 ? "merged branch deleted" : "merged branches deleted" },
+  { value: String(h.records + h.orphans), unit: "leftovers cleared" },
+];

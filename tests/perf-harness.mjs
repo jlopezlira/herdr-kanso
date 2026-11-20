@@ -1,7 +1,7 @@
 // Real mod code with a fake clock, inert native elements and counted host boundaries.
 import { performance } from "node:perf_hooks";
 import { pathToFileURL } from "node:url";
-import { load, exec as runFile, clone } from "./helpers.mjs";
+import { load, exec as runFile, clone, until, success, failure, openedKdb } from "./helpers.mjs";
 
 export const PANEL_IDS = ["files", "pr", "preview", "shipped", "worktrees", "ports", "look", "find"];
 const source = process.env.PERF_SOURCE_ROOT ? pathToFileURL(`${process.env.PERF_SOURCE_ROOT}/kanso/mods/`) : undefined;
@@ -19,7 +19,7 @@ function element() {
 }
 
 export function fixture({ dir = "/fixture", blocked = false, quiet = null, working = 10 } = {}) {
-  const state = { now: 1_000_000, project: 0, processes: [], reads: [], watches: [], timers: [], errors: [], inFlight: 0, layouts: [{ name: null, layout: "ready" }] };
+  const state = { now: 1_000_000, project: 0, processes: [], reads: [], watches: [], timers: [], errors: [], inFlight: 0, flights: [], layouts: [{ name: null, layout: "ready" }] };
   const shared = new Map();
   const projects = Array.from({ length: 4 }, (_, i) => ({ id: `s${i}`, name: `Project ${i}`, folder: `/projects/p${i}`, machine: null,
     tabs: [{ id: `tab${i}`, name: "Main", active: true }] }));
@@ -35,8 +35,8 @@ export function fixture({ dir = "/fixture", blocked = false, quiet = null, worki
   });
   const ps = list.map((a, i) => ({ pane: a.pane, terminal: a.address, tab: a.tab, cwd: projects[i % 4].folder, status: a.status, program: a.program }));
   if (quiet === "sleeping") {
-    shared.set("kanso.asleep", projects.map((p) => ({ id: `sleep-${p.id}`, from: `:${p.folder}`, spaceId: p.id, state: "asleep", saved: state.now,
-      agents: list.filter((a) => a.space === p.id).map((a) => ({ terminal: a.address, resume: `session-${a.address}` })) })));
+    projects.forEach((p) => { p.tabs = p.tabs.map((tab) => ({ ...tab, active: false, settled: true, settled_at: state.now })); });
+    terms.forEach((t) => { t.labels["kanso.resume"] = `00000000-0000-4000-8000-${t.address.replace(/\D/g, "").padStart(12, "0")}`; t.program = { shell: true }; t.foreground = { pid: t.pid, argv: ["zsh"] }; });
   }
   if (quiet === "off") {
     state.layouts = [{ name: "remote", layout: "unavailable" }];
@@ -51,31 +51,36 @@ export function fixture({ dir = "/fixture", blocked = false, quiet = null, worki
   const counted = async (command, args = [], options = {}) => {
     state.processes.push({ command, args, options, at: state.now });
     if (blocked) return pending();
+    state.flights.push(command);
     state.inFlight += 1;
     try {
       if (command === "sqlite3" || command === "mkdir") return await runFile(command, args, options);
-      if (command === "ps") return { code: 0, stdout: terms.map((t, i) => `${200 + i} 1 00:01 agent`).join("\n"), stderr: "" };
+      if (command === "ps") return success(terms.map((t, i) => `${200 + i} 1 00:01 agent`).join("\n"));
       if (command === "hc") {
         if (args[0] === "label") {
           const term = terms.find((t) => t.address === args[1]);
           for (const pair of args.slice(2)) { const at = pair.indexOf("="); if (term) term.labels[pair.slice(0, at)] = pair.slice(at + 1); }
         }
-        return { code: 0, stdout: JSON.stringify(args[0] === "get" ? terms.find((term) => term.address === args[1]) ?? {} : { machines: [] }), stderr: "" };
+        return success(JSON.stringify(args[0] === "get" ? terms.find((term) => term.address === args[1]) ?? {} : { machines: [] }));
       }
-      if (command === "git") return { code: 128, stdout: "", stderr: "not a git repository" };
+      if (command === "git") return failure("not a git repository", 128);
       if (command === "wc") {
         const transcript = transcripts.find((row) => row.file === args[1]);
         return { code: transcript ? 0 : 1, stdout: transcript ? `${Buffer.byteLength(transcript.text)} ${transcript.file}\n` : "", stderr: "" };
       }
       if (command === "sh" && args[1].startsWith('pid="$1"')) {
         const transcript = transcripts.find((row) => row.pid === Number(args[3]));
-        return { code: 0, stdout: transcript ? `claude\t${JSON.stringify({ sessionId: transcript.sessionId, cwd: transcript.cwd })}\n` : "", stderr: "" };
+        return success(transcript ? `claude\t${JSON.stringify({ sessionId: transcript.sessionId, cwd: transcript.cwd })}\n` : "");
       }
       if (command === "sh" && args[1].startsWith('f="$1"; said()')) {
-        return { code: 0, stdout: transcripts.find((row) => row.file === args[3])?.text ?? "", stderr: "" };
+        return success(transcripts.find((row) => row.file === args[3])?.text ?? "");
       }
-      return { code: 0, stdout: "", stderr: "" };
-    } finally { state.inFlight -= 1; }
+      return success("");
+    } finally {
+      state.inFlight -= 1;
+      const at = state.flights.indexOf(command);
+      if (at >= 0) state.flights.splice(at, 1);
+    }
   };
   const cx = {
     notify() { state.dirty = true; }, stop_propagation() {}, focus_handle: element,
@@ -101,15 +106,18 @@ export function fixture({ dir = "/fixture", blocked = false, quiet = null, worki
     readTextFile: (file) => { state.reads.push({ file, at: state.now }); return blocked ? pending() : Promise.resolve(""); },
     watchFolder: (file) => { state.watches.push(file); return pending(); }, nextCommand: pending,
     layout: () => ({ id: "root", children: [{ id: "sidebar" }, { id: "work-body", children: [{ id: "main", content: { tab: "active" } }, { id: "panel-body", hidden: state.panelHidden !== false, children: [] }] }, { id: "strip-map" }] }),
-    run() {}, openOverlay() {}, closeOverlay() {}, notify() {}, setAgentOrder() {}, fetch: async () => ({ ok: false, status: 503 }),
+    run() {}, openOverlay() {}, closeOverlay() {}, notify() {}, knownAgents: async () => [], setAgentOrder() {}, fetch: async () => ({ ok: false, status: 503 }),
   };
+  const unfinished = () => `performance harness has ${state.inFlight} unfinished host calls (${state.flights.join(", ")})`;
   const settle = async () => {
     for (let idle = 0, turns = 0; idle < 4 && turns < 3000; turns += 1) {
+      // sqlite3 and mkdir are real processes: a turn count expires while one is still running.
+      if (state.inFlight) { try { await until(() => state.inFlight === 0); } catch { if (state.inFlight) throw new Error(unfinished()); } }
       await new Promise((resolve) => setTimeout(resolve, 1));
       if (state.dirty && state.draw) { state.dirty = false; state.draw(); }
       idle = state.inFlight || state.dirty && state.draw ? 0 : idle + 1;
     }
-    if (state.inFlight) throw new Error(`performance harness has ${state.inFlight} unfinished host calls`);
+    if (state.inFlight) throw new Error(unfinished());
     if (state.errors.length) throw state.errors[0];
   };
   const advance = async (ms) => {
@@ -128,6 +136,32 @@ export function fixture({ dir = "/fixture", blocked = false, quiet = null, worki
   return { state, host, cx, shared, projects, list, terms, transcripts, ps, settle, advance };
 }
 
+// The processes started over the next `ms`, counted from none.
+export const freshAdvance = async (f, ms) => {
+  f.state.processes.length = 0;
+  await f.advance(ms);
+};
+// A view behind brought in front, and what it starts at once.
+export const broughtForward = async (f, view) => {
+  f.state.active = true;
+  view.render(f.cx);
+  await freshAdvance(f, 0);
+};
+export const initialised = async (f, view, ...args) => {
+  view.init(...args);
+  await f.settle();
+  return view;
+};
+// The sidebar on a migrated database, its Kdb on the host.
+export const sidebarOn = async (f) => {
+  const { Kdb } = await loadMod("kanso-spaces/kdb.js", ["Kdb"], f.host);
+  f.host.Kdb = Kdb;
+  const db = await openedKdb(Kdb);
+  await db.migrate();
+  const { Spaces } = await loadMod("kanso-spaces/main.js", ["Spaces"], f.host);
+  return new Spaces();
+};
+
 export async function firstDraw(id) {
   const f = fixture({ blocked: true });
   const start = performance.now();
@@ -137,12 +171,14 @@ export async function firstDraw(id) {
   const mod = await loadMod(file, [name], f.host);
   const moduleMs = performance.now() - start;
   const draw = () => {
-    const opened = performance.now();
+    // CPU, not wall time: other test files preempt this one and move performance.now().
+    const opened = process.cpuUsage();
     const view = new (isPanel ? mod.PANELS[id] : mod[name])();
     f.state.props = isPanel ? { panel: id, ...(id === "preview" ? { path: "/projects/p0/README.md" } : {}) } : {};
     if (isPanel) view.init(f.cx, f.state.props); else view.init(f.state.props, f.cx);
     view.render(f.cx);
-    return { ms: performance.now() - opened, processes: f.state.processes.length, database: f.state.processes.filter((p) => p.command === "sqlite3").length, files: f.state.reads.length, timers: f.state.timers.length };
+    const used = process.cpuUsage(opened);
+    return { ms: (used.user + used.system) / 1000, processes: f.state.processes.length, database: f.state.processes.filter((p) => p.command === "sqlite3").length, files: f.state.reads.length, timers: f.state.timers.length };
   };
   const open = draw();
   f.state.project = 1;

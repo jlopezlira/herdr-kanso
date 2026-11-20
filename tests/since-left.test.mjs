@@ -1,8 +1,8 @@
+import { loadSpaces, loadPullRequest, loadSinceLeft, loadRecordPrFacts, loadDuration, temporaryKdb } from "./mod-fixtures.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { join } from "node:path";
-import { load, clone, temporary, exec, singleUse, context, tape } from "./helpers.mjs";
-import { AWAY_MS, KEEP_MS, EVENT_CAP, MAINTENANCE_MS, targetOf, parseTarget, sleepEvent, returnSignature, changes, digest, lines, focusedTarget, agentSnapshot, observedAgents, present, RETURN_LABEL, destinationOf, livePlaces, eventLabel, oneLine, awayShown, AWAY_PIECE, DID_CAP } from "../kanso/mods/kanso-spaces/since-left-model.js";
+import { load, clone, exec, singleUse, context, tape, recordingElement } from "./helpers.mjs";
+import { AWAY_MS, KEEP_MS, EVENT_CAP, MAINTENANCE_MS, targetOf, parseTarget, returnSignature, changes, digest, focusedTarget, agentSnapshot, observedAgents, present, RETURN_LABEL, destinationOf, livePlaces, eventLabel, oneLine, awayShown, AWAY_PIECE, DID_CAP } from "../kanso/mods/kanso-spaces/since-left-model.js";
 
 const project = ":C:\\work\\kanso";
 const event = (id, kind = "finished", at = id) => ({ id, project, target: `agent:${id}`, kind, text: `Agent ${id}`, at });
@@ -10,31 +10,42 @@ const snapshot = (status, name = "Padme") => ({ source: "agent:c1", project, val
 const cx = { notify() {} };
 
 async function database(t) {
-  const dir = await temporary(t);
-  const { Kdb, rowsOfOutput } = await load("kanso-spaces/kdb.js", ["Kdb", "rowsOfOutput"], { exec, appHome: () => dir });
+  const { dir, db, rowsOfOutput } = await temporaryKdb(t, ["rowsOfOutput"]);
   const { SinceStore } = await load("kanso-spaces/since-left-store.js", ["SinceStore"], { exec, appHome: () => dir });
-  const db = new Kdb(join(dir, "data"));
-  await db.open();
   return { db, store: new SinceStore(db), rowsOfOutput };
 }
+// A database whose store has seen the project at 0.
+const entered = async (t) => {
+  const opened = await database(t);
+  await opened.store.enter(project, 0);
+  return opened;
+};
+// A database with the project App on the GitHub repository o/r.
+const appOnGitHub = async (t) => {
+  const { db } = await database(t);
+  await db.run("INSERT INTO projects(id,name,folder,machine,added) VALUES('p1','App','C:\\work\\app','',0);");
+  await db.run("INSERT INTO pr_repos(id,provider,host,owner,name,project_id) VALUES('r1','github','github.com','o','r','p1');");
+  return db;
+};
+const eventCount = async (db) => (await db.read("SELECT COUNT(*) AS n FROM since_events;"))[0].n;
+// The return view's class on a host that keeps the text drawn and each press.
+const taped = async () => {
+  const ui = tape();
+  return { ui, ...await loadSinceLeft(ui.host) };
+};
+// A return view with no database, and the calls its store will keep.
+const detached = async () => {
+  const { SinceLeft } = await loadSinceLeft();
+  return { view: new SinceLeft(null), calls: [] };
+};
 
 const saveEvents = (db, events) => db.run(["BEGIN;", ...events.map((row) => `INSERT INTO since_events(id,project,target,kind,text,at) VALUES(${row.id},'${project}','${row.target}','${row.kind}','${row.text}',${row.at});`), "COMMIT;"]);
 
 test("return events put blocked, errors, PRs, and finishes first, newest within each priority", () => {
-  const events = [event(1), event(3, "pr"), event(2, "blocked"), event(4, "error"), event(5, "blocked"), event(6, "sleep_failed"), event(7, "sleep_finished")];
+  const events = [event(1), event(3, "pr"), event(2, "blocked"), event(4, "error"), event(5, "blocked"), event(6, "finished")];
   const rows = digest(events, { focused_at: 0 }, AWAY_MS);
-  assert.deepEqual(rows.map((row) => row.id), [5, 2, 6, 4, 3, 7, 1]);
-  assert.deepEqual(events.map((row) => row.id), [1, 3, 2, 4, 5, 6, 7]);
-});
-
-test("a return has no more than three lines, including its +N, and expands to all events", () => {
-  for (const count of [0, 1, 2, 3, 4, 15]) {
-    const events = Array.from({ length: count }, (_, i) => event(i + 1));
-    const compact = lines(events);
-    assert.equal(compact.length, Math.min(count, 3));
-    if (count > 3) assert.equal(compact.at(-1).more, count - 2);
-    assert.deepEqual(lines(events, true), events);
-  }
+  assert.deepEqual(rows.map((row) => row.id), [5, 2, 4, 3, 6, 1]);
+  assert.deepEqual(events.map((row) => row.id), [1, 3, 2, 4, 5, 6]);
 });
 
 test("five minutes away is the boundary, a first visit and nothing happened stay empty", () => {
@@ -88,8 +99,7 @@ test("PR facts include approval, requested changes, failed checks, and merges wi
 });
 
 test("the database remembers projects separately, persists dismissal, and keeps new events", async (t) => {
-  const { db, store } = await database(t);
-  await store.enter(project, 0);
+  const { db, store } = await entered(t);
   await store.observe([snapshot("working")], 1);
   await store.observe([snapshot("blocked")], 2);
   assert.deepEqual(clone(await store.enter(":other", AWAY_MS)), []);
@@ -111,7 +121,7 @@ test("two observers record one transition, reject older sightings, and do not re
   await store.observe([snapshot("working")], 150);
   await store.seed([snapshot("working")], 300);
   await store.observe([snapshot("done")], 400);
-  assert.equal((await db.read("SELECT COUNT(*) AS n FROM since_events;"))[0].n, 1);
+  assert.equal(await eventCount(db), 1);
 });
 
 test("the event log prunes by age and cap and sqlite output accepts Windows line endings", async (t) => {
@@ -125,25 +135,11 @@ test("the event log prunes by age and cap and sqlite output accepts Windows line
   assert.deepEqual(clone(rowsOfOutput('[{"n":1}]\r\n[{"n":2}]\r\n')), [{ n: 1 }, { n: 2 }]);
 });
 
-test("sleep completion and failure log only a transition held by its owner", async (t) => {
-  const { db } = await database(t);
-  await db.run(`INSERT INTO sleeps(id,name,project,layout,saved,pending,state) VALUES('s1','Padme','${project}','{}',0,'owner','sleeping');`);
-  assert.equal(await db.setWorkState("s1", "other", "sleeping", "stuck", "failed", 10, sleepEvent("s1", "stuck")), false);
-  assert.equal(await db.setWorkState("s1", "owner", "sleeping", "stuck", "failed", 11, sleepEvent("s1", "stuck")), true);
-  assert.equal(await db.setWorkState("s1", "owner", "sleeping", "stuck", "failed", 12, sleepEvent("s1", "stuck")), false);
-  await db.run("UPDATE sleeps SET state='sleeping',pending='owner' WHERE id='s1';");
-  assert.equal(await db.finishSleep("s1", "other", null, 13, sleepEvent("s1", "asleep")), false);
-  assert.equal(await db.finishSleep("s1", "owner", null, 14, sleepEvent("s1", "asleep")), true);
-  assert.deepEqual(clone(await db.read("SELECT kind, target, text FROM since_events ORDER BY id;")), [
-    { kind: "sleep_failed", target: "sleep:s1", text: "Padme" }, { kind: "sleep_finished", target: "sleep:s1", text: "Padme" },
-  ]);
-});
-
 test("PR observations use only known local project mappings and keep check results across partial reads", async (t) => {
   const { db } = await database(t);
   await db.run("INSERT INTO projects(id,name,folder,machine,added) VALUES('p1','Kanso','C:\\work\\kanso','',0);");
   await db.run("INSERT INTO pr_repos(id,provider,host,owner,name,project_id) VALUES('r1','github','ghe.example','o','r','p1');");
-  const { recordPrFacts } = await load("kanso-panel/pr-inbox.js", ["recordPrFacts"]);
+  const { recordPrFacts } = await loadRecordPrFacts();
   const pr = { url: "https://ghe.example/o/r/pull/2", number: 2, state: "OPEN", reviewDecision: "REVIEW_REQUIRED", statusCheckRollup: [] };
   await recordPrFacts(db, [pr], 1);
   await recordPrFacts(db, [{ ...pr, reviewDecision: "APPROVED", statusCheckRollup: [{ __typename: "CheckRun", name: "test", status: "COMPLETED", conclusion: "FAILURE" }] }], 2);
@@ -155,30 +151,18 @@ test("PR observations use only known local project mappings and keep check resul
 
 test("the return view expands inline, never focuses a handle, and stays silent while absent", async (t) => {
   const { db } = await database(t);
-  const clicks = new Map(), nav = [];
+  const nav = [];
   const ui = singleUse();
-  const button = ui.Button.new;
-  ui.Button.new = (id) => {
-    const element = button(id);
-    return new Proxy(element, { get: (target, key) => key === "on_click" ? (fn) => { clicks.set(id, fn); return target; } : target[key] });
-  };
-  const { SinceLeft } = await load("kanso-spaces/since-left.js", ["SinceLeft"], { ...ui });
-  const view = new SinceLeft(db);
-  view.project = project;
-  view.rows = Array.from({ length: 4 }, (_, i) => event(i + 1));
+  const { SinceLeft } = await loadSinceLeft({ ...ui });
+  const view = Object.assign(new SinceLeft(db), { project, rows: Array.from({ length: 6 }, (_, i) => event(i + 1)) });
   const register = (id, go) => { nav.push({ id, go }); return false; };
-  const heads = [];
-  view.render({}, project, register, () => true, (label, count) => { heads.push([label, count]); return {}; });
-  assert.deepEqual(heads, [[RETURN_LABEL, 4]]);
-  assert.equal(nav.length, 3);
-  nav.at(-1).go(cx);
-  assert.equal(view.lineCount(), 4);
-  view.render({}, project, register, () => true);
-  assert.equal(nav.length, 7);
+  const rendered = () => { nav.length = 0; view.render({}, project, register, () => () => {}); return nav.length; };
+  assert.equal(rendered(), 5, "four rows, then +N more: five stops");
+  view.expanded = true;
+  assert.equal(rendered(), 6);
   await view.dismiss(cx);
   assert.equal(view.rows.length, 0);
-  view.render({}, project, register, () => true);
-  assert.equal(nav.length, 7);
+  assert.equal(view.render({}, project, register, () => () => {}), null);
 });
 
 test("a second finished turn is recorded even when both observed states are done", () => {
@@ -190,7 +174,7 @@ test("a second finished turn is recorded even when both observed states are done
 });
 
 test("a return row is a mark, a name and an age, and one agent keeps its latest state", async () => {
-  const { duration } = await load("kanso-spaces/agents.js", ["duration"]);
+  const { duration } = await loadDuration();
   const now = 10 * 60_000;
   const row = (id, target, kind, text, at) => ({ id, target, kind, text, at });
   const events = [
@@ -198,63 +182,40 @@ test("a return row is a mark, a name and an age, and one agent keeps its latest 
     row(2, "agent:a", "blocked", "Kylo-ren needs you", now - 60_000),
     row(3, "agent:b", "error", "Implement performance budget CI | herdr-kanso errored", now - 3_600_000),
     row(4, "pr:https://x/pull/12", "pr", "PR #12 approved", now - 60_000),
-    row(5, "sleep:s", "sleep_finished", "Rey slept", now - 2 * 60_000),
-    row(6, "sleep:t", "sleep_failed", "Finn could not sleep", now),
   ];
-  const shown = present(events, { now, expanded: true, format: duration });
-  assert.equal(shown.count, 5);
-  const by = Object.fromEntries(shown.rows.map((item) => [item.target, item]));
-  assert.deepEqual(shown.rows.map((item) => item.target), ["agent:a", "sleep:t", "agent:b", "pr:https://x/pull/12", "sleep:s"]);
-  assert.equal(by["agent:a"].mark, "blocked");
-  assert.equal(by["agent:a"].name, "Kylo-ren");
+  const shown = present(events, { now, format: duration });
+  assert.equal(shown.length, 3);
+  const by = Object.fromEntries(shown.map((item) => [item.target, item]));
+  assert.deepEqual(shown.map((item) => item.target), ["agent:a", "agent:b", "pr:https://x/pull/12"]);
+  assert.deepEqual([by["agent:a"].icon, by["agent:a"].tone], ["e-blk", "blocked"]);
+  assert.equal(by["agent:a"].subject, "Kylo-ren");
   assert.equal(by["agent:a"].age, "1m");
-  assert.equal(by["agent:b"].mark, "error");
-  assert.equal(by["agent:b"].name, "Implement performance budget CI");
+  assert.deepEqual([by["agent:b"].icon, by["agent:b"].tone], ["e-blk", "blocked"], "a failed agent takes the blocked mark");
+  assert.equal(by["agent:b"].subject, "Implement performance budget CI");
   assert.equal(by["agent:b"].age, "1h");
-  assert.equal(by["pr:https://x/pull/12"].mark, "pr");
-  assert.equal(by["pr:https://x/pull/12"].name, "PR #12");
-  assert.equal(by["pr:https://x/pull/12"].outcome, "Approved");
+  assert.deepEqual([by["pr:https://x/pull/12"].icon, by["pr:https://x/pull/12"].tone], ["lu-check", "done"]);
+  assert.equal(by["pr:https://x/pull/12"].subject, "PR #12");
+  assert.equal(by["pr:https://x/pull/12"].fact, "approved");
   assert.equal(by["pr:https://x/pull/12"].age, duration(60_000));
-  assert.equal(by["sleep:s"].mark, "asleep");
-  assert.equal(by["sleep:s"].name, "Rey");
-  assert.equal(by["sleep:s"].age, "2m");
-  assert.equal(by["sleep:t"].mark, "error");
-  assert.equal(by["sleep:t"].name, "Finn");
-  assert.equal(by["sleep:t"].age, "<1m");
-  assert.deepEqual(shown.rows.map((item) => [item.outcome, item.did]), [["Needs you", null], ["Could not sleep", null], ["Failed", null], ["Approved", null], ["Went to sleep", null]]);
+  assert.deepEqual(shown.map((item) => [item.fact, item.detail]), [["needs you", null], ["failed", null], ["approved", null]]);
   const away = present(events, { now, focus: "agent:a", format: duration });
-  assert.equal(away.count, 4);
-  assert.equal(away.rows.some((item) => item.target === "agent:a"), false);
+  assert.equal(away.length, 2);
+  assert.equal(away.some((item) => item.target === "agent:a"), false);
 });
 
-test("more than three agents stay at three rows, the last of them +N", async () => {
-  const { duration } = await load("kanso-spaces/agents.js", ["duration"]);
-  const events = [1, 2, 3, 4].map((id) => ({ id, target: `agent:${id}`, kind: "finished", text: `Agent ${id}`, at: id }));
-  const compact = present(events, { now: 10, format: duration });
-  assert.equal(compact.count, 4);
-  assert.equal(compact.rows.length, 3);
-  assert.equal(compact.rows.at(-1).more, 2);
-  assert.equal(present(events, { now: 10, format: duration, expanded: true }).rows.length, 4);
-  assert.equal(present(events, { now: 10, focus: "agent:1", format: duration }).rows.length, 3);
+test("every event is kept for the card, which shows four and +N more; the one in view leaves", async () => {
+  const { duration } = await loadDuration();
+  const events = [1, 2, 3, 4, 5].map((id) => ({ id, target: `agent:${id}`, kind: "finished", text: `Agent ${id}`, at: id }));
+  assert.equal(present(events, { now: 10, format: duration }).length, 5);
+  assert.equal(present(events, { now: 10, focus: "agent:1", format: duration }).length, 4);
+  const { ui, SinceLeft } = await taped();
+  Object.assign(new SinceLeft(null), { project, rows: events }).render({}, project, () => false, () => () => {});
+  assert.ok(ui.texts.includes("+1 more"));
 });
 
-test("the return head shows the count and its dismiss clears the rows", async (t) => {
+test("the return head says While you were away and its × clears the rows", async (t) => {
   const { db } = await database(t);
-  const texts = [], clicks = new Map();
-  const node = (initial = null) => {
-    const self = { id: initial };
-    const el = new Proxy({}, { get(_target, key) {
-      if (key === "then") return undefined;
-      if (key === "id") return (value) => { self.id = value; return el; };
-      if (key === "child") return (value) => { if (typeof value === "string" || typeof value === "number") texts.push(String(value)); return el; };
-      if (key === "children") return (list) => list;
-      if (key === "when") return (on, apply) => (on ? apply(el) : el);
-      if (key === "on_click") return (fn) => { clicks.set(self.id, fn); return el; };
-      return () => el;
-    } });
-    return el;
-  };
-  const { SinceLeft } = await load("kanso-spaces/since-left.js", ["SinceLeft"], { div: node, svg: node, h_flex: node, v_flex: node, Button: { new: node } });
+  const { ui, SinceLeft } = await taped();
   const view = new SinceLeft(db);
   view.project = project;
   view.target = "agent:1";
@@ -262,22 +223,19 @@ test("the return head shows the count and its dismiss clears the rows", async (t
     { id: 1, target: "agent:1", kind: "finished", text: "Kylo-ren finished", at: 1 },
     { id: 2, target: "agent:2", kind: "blocked", text: "Implement performance budget CI | herdr-kanso needs you", at: 2 },
   ];
-  const heads = [];
-  view.render({ foreground: "#fff", dim: "#666", muted: "#888", done: "#9a9", blocked: "#c99" }, project, () => false, () => true,
-    (label, count, dismiss) => { heads.push([label, count, dismiss]); return dismiss; });
-  assert.deepEqual(heads.map(([label, count]) => [label, count]), [[RETURN_LABEL, 1]]);
-  assert.equal(texts.includes("Kylo-ren"), false);
-  assert.equal(texts.includes("Kylo-ren finished"), false);
-  assert.ok(texts.includes("Implement performance budget CI"));
-  assert.equal(texts.includes("needs you"), false);
-  assert.equal(texts.includes("finished"), false);
-  await clicks.get("since-dismiss")(null, { ...cx, stop_propagation() {} });
+  view.render({ foreground: "#fff", dim: "#666", muted: "#888", done: "#9a9", blocked: "#c99" }, project, () => false, () => () => {});
+  assert.ok(ui.texts.includes(RETURN_LABEL));
+  assert.equal(ui.texts.includes("Kylo-ren"), false, "the agent in view says it itself");
+  assert.ok(ui.texts.includes("Implement performance budget CI"));
+  assert.ok(ui.texts.includes("needs you"));
+  const cleared = new Promise((resolve) => { view.dismiss = () => SinceLeft.prototype.dismiss.call(view, { notify: resolve }); });
+  ui.handlers.get("since-left-0-action")(null, { ...cx, stop_propagation() {} });
+  await cleared;
   assert.equal(view.rows.length, 0);
 });
 
 test("return tracking holds the initial focus, dismisses on a later target, and retries a failed load silently", async () => {
-  const { SinceLeft } = await load("kanso-spaces/since-left.js", ["SinceLeft"]);
-  const view = new SinceLeft(null), calls = [];
+  const { view, calls } = await detached();
   let fails = true;
   view.store = {
     async observe() {}, async prune() {}, async touch() {},
@@ -307,44 +265,40 @@ test("return tracking holds the initial focus, dismisses on a later target, and 
 
 test("a return row takes you to the agent's pane, the menu that wakes it, or the PR, and a gone one nowhere", async () => {
   const calls = [], commits = [], overlays = [];
-  const { Spaces } = await load("kanso-spaces/main.js", ["Spaces"], {
+  const { Spaces } = await loadSpaces({
     run: (...args) => calls.push(clone(args)), commitLayout: (patch) => commits.push(clone(patch)), openOverlay: (overlay) => overlays.push(clone(overlay)),
   });
   const view = new Spaces();
   view.returnPlaces = livePlaces([{ address: "t1" }], () => ["agent:c1", "agent:t1:5"]);
-  view.sleepingRows = { rows: [{ address: "zz:c9", name: "Leia", asleep: { id: "s1", resume: "c9" } }] };
+  view.sleepingRows = { rows: [{ address: "zz:t9", name: "Leia", asleep: { id: "t9", resume: "c9" } }] };
   view.returnGo({ target: "agent:t1:5" })();
   assert.deepEqual(calls, [["agent.focus", { terminal: "t1" }]]);
   view.returnGo({ target: "agent:c9" })();
-  view.returnGo({ target: "sleep:s1" })();
-  assert.deepEqual(overlays.map((o) => o.props.menu.asleep.id), ["s1", "s1"]);
+  assert.deepEqual(overlays.map((o) => o.props.menu.asleep.id), ["t9"]);
   view.returnGo({ target: "pr:https://ghe.example/o/r/pull/2" })();
   assert.equal(commits[0].panel.content.props.url, "https://ghe.example/o/r/pull/2");
-  for (const target of ["agent:gone", "sleep:woken", "unknown:id", "constructor:id"]) assert.equal(view.returnGo({ target }), null);
+  for (const target of ["agent:gone", "sleep:s1", "unknown:id", "constructor:id"]) assert.equal(view.returnGo({ target }), null);
 });
 
-test("each kind of event leads where it happened: a waiting or failed agent to its pane, a sleep to its wake menu", () => {
+test("each kind of event leads where it happened: a waiting or failed agent to its pane, an asleep one to its wake menu", () => {
   const live = new Map([["agent:c1", "t1"]]);
-  const asleep = [{ asleep: { id: "s1", resume: "c9" } }];
-  const kinds = { blocked: "agent:c1", error: "agent:c1", finished: "agent:c1", sleep_failed: "sleep:s1", sleep_finished: "sleep:s1", pr: "pr:https://github.com/o/r/pull/4" };
+  const asleep = [{ asleep: { id: "t9", resume: "c9" } }];
+  const kinds = { blocked: "agent:c1", error: "agent:c1", finished: "agent:c1", pr: "pr:https://github.com/o/r/pull/4" };
   const to = Object.fromEntries(Object.entries(kinds).map(([kind, target]) => [kind, destinationOf(target, live, asleep)]));
   for (const kind of ["blocked", "error", "finished"]) assert.deepEqual(to[kind], { kind: "agent", address: "t1" });
-  for (const kind of ["sleep_failed", "sleep_finished"]) assert.equal(to[kind].row, asleep[0]);
   assert.deepEqual(to.pr, { kind: "pr", url: "https://github.com/o/r/pull/4" });
-  assert.equal(destinationOf("agent:c9", live, asleep).kind, "asleep");
+  assert.equal(destinationOf("agent:c9", live, asleep).row, asleep[0]);
 });
 
 test("a first detailed PR read compares against the inbox cache, including a merged PR", async (t) => {
-  const { db } = await database(t);
-  await db.run("INSERT INTO projects(id,name,folder,machine,added) VALUES('p1','App','C:\\work\\app','',0);");
-  await db.run("INSERT INTO pr_repos(id,provider,host,owner,name,project_id) VALUES('r1','github','github.com','o','r','p1');");
+  const db = await appOnGitHub(t);
   await db.run("INSERT INTO pr_items(url,provider,host,owner,name,number,title,state,review_decision,role,fetched_at) VALUES('https://github.com/o/r/pull/4','github','github.com','o','r',4,'Fix','OPEN','REVIEW_REQUIRED','author',1);");
-  const { recordPrFacts } = await load("kanso-panel/pr-inbox.js", ["recordPrFacts"]);
+  const { recordPrFacts } = await loadRecordPrFacts();
   await recordPrFacts(db, [{ url: "https://github.com/o/r/pull/4", number: 4, state: "MERGED" }], 2);
   assert.equal((await db.read("SELECT text FROM since_events;"))[0].text, "PR #4 merged");
   await recordPrFacts(db, [], 3);
   await recordPrFacts(db, [{ url: "https://github.com/o/r/pull/4", number: 4, state: "MERGED" }], 4);
-  assert.equal((await db.read("SELECT COUNT(*) AS n FROM since_events;"))[0].n, 1);
+  assert.equal(await eventCount(db), 1);
 });
 
 test("raw errors and nested agents keep their project even when absent from the main agent list", () => {
@@ -363,8 +317,7 @@ test("raw errors and nested agents keep their project even when absent from the 
 });
 
 test("an unseen digest adds the next absence's events and skips events from the visit between them", async (t) => {
-  const { db, store } = await database(t);
-  await store.enter(project, 0);
+  const { db, store } = await entered(t);
   await saveEvents(db, [event(1, "blocked", 1)]);
   assert.equal((await store.enter(project, AWAY_MS)).length, 1);
   await saveEvents(db, [event(2, "finished", AWAY_MS + 1)]);
@@ -375,23 +328,19 @@ test("an unseen digest adds the next absence's events and skips events from the 
   assert.equal((await db.read("SELECT COUNT(*) AS n FROM since_focus;"))[0].n, 1);
 });
 
-test("pruning the log also forgets a conversation with no project and a project gone for 7 days", async (t) => {
+test("pruning the log also forgets a conversation with no project", async (t) => {
   const { db, store } = await database(t);
   const now = KEEP_MS * 2;
   await db.observe([{ conversation: "c-free", given: "free", space: "s", pos: 0, status: "idle", terminal: "t1" }], 1);
   await db.observe([], KEEP_MS);
-  await db.syncSpaces([{ id: "old", name: "old", folder: "/old", machine: null }], 1);
-  await db.run(`UPDATE spaces SET gone=${now - KEEP_MS - 1} WHERE id='old';`);
   await store.prune(now);
   assert.equal((await db.read("SELECT id FROM agents WHERE id='c-free'")).length, 0);
-  assert.equal((await db.read("SELECT id FROM spaces WHERE id='old'")).length, 0);
 });
 
 test("targets round trip ids containing colons", () => {
-  for (const [kind, id] of [["pr", "https://ghe.example/o/r/pull/1"], ["agent", "t1:123"], ["sleep", "s1"]]) {
+  for (const [kind, id] of [["pr", "https://ghe.example/o/r/pull/1"], ["agent", "t1:123"]]) {
     assert.deepEqual(parseTarget(targetOf(kind, id)), { kind, id });
   }
-  assert.equal(sleepEvent("s1", "sleeping"), null);
 });
 
 test("PR facts reuse remote identities, sanitize URLs, and query only received PRs", async (t) => {
@@ -430,10 +379,9 @@ test("the return signature changes with event facts and project assignment", () 
 });
 
 test("unchanged return polling skips snapshots and sleeping projects never read the log", async () => {
-  const { SinceLeft } = await load("kanso-spaces/since-left.js", ["SinceLeft"]);
-  const view = new SinceLeft(null), calls = [];
+  const { view, calls } = await detached();
   view.store = { async observe(rows) { if (rows.length) calls.push("observe"); }, async prune() { calls.push("prune"); }, async touchSources() { calls.push("heartbeat"); } };
-  const { Spaces } = await load("kanso-spaces/main.js", ["Spaces"], { agents: () => [], terminals: () => [], focused: () => null, shared: () => null, machines: () => [], home: () => "" });
+  const { Spaces } = await loadSpaces({ agents: () => [], terminals: () => [], focused: () => null, shared: () => null, machines: () => [], home: () => "" });
   const spaces = new Spaces();
   spaces.panel = { agents: new Map() };
   const updates = [];
@@ -452,9 +400,8 @@ test("unchanged return polling skips snapshots and sleeping projects never read 
 
 test("each kind of event says its outcome in words beside the name", () => {
   const outcome = (kind, text = "Cassian") => eventLabel({ kind, text }).outcome;
-  assert.deepEqual(["finished", "blocked", "error", "sleep_finished", "sleep_failed"].map((kind) => outcome(kind)),
-    ["Finished", "Needs you", "Failed", "Went to sleep", "Could not sleep"]);
-  assert.deepEqual(eventLabel({ kind: "pr", text: "PR #12 changes requested" }), { name: "PR #12", outcome: "Changes requested" });
+  assert.deepEqual(["finished", "blocked", "error"].map((kind) => outcome(kind)), ["finished", "needs you", "failed"]);
+  assert.deepEqual(eventLabel({ kind: "pr", text: "PR #12 changes requested" }), { name: "PR #12", outcome: "changes requested" });
   assert.equal(outcome("unknown"), null);
 });
 
@@ -465,8 +412,8 @@ test("what the agent did is one line, capped, and absent when it said nothing", 
   const long = oneLine("x".repeat(DID_CAP * 2));
   assert.equal(long.length, DID_CAP);
   assert.ok(long.endsWith("\u2026"));
-  const rows = present([{ id: 1, target: "agent:a", kind: "finished", text: "Cassian", at: 0 }], { now: 0, format: String }).rows;
-  assert.equal(rows[0].did, null);
+  const rows = present([{ id: 1, target: "agent:a", kind: "finished", text: "Cassian", at: 0 }], { now: 0, format: String });
+  assert.equal(rows[0].detail, null);
 });
 
 test("what the agent did is kept with the event and outlives the agent's next step", async (t) => {
@@ -478,61 +425,49 @@ test("what the agent did is kept with the event and outlives the agent's next st
   const [row] = await db.read("SELECT kind,text,did FROM since_events;");
   assert.deepEqual(clone(row), { kind: "finished", text: "Cassian", did: "Fixed the away rows" });
   const shown = present(await db.read("SELECT * FROM since_events;"), { now: 4, format: String });
-  assert.deepEqual([shown.rows[0].name, shown.rows[0].outcome, shown.rows[0].did], ["Cassian", "Finished", "Fixed the away rows"]);
-});
-
-test("a sleep that could not finish keeps why with its event", async (t) => {
-  const { db } = await database(t);
-  await db.run("INSERT INTO sleeps(id,name,project,layout,saved,pending,state) VALUES('s1','Rey','p','{}',0,'owner','sleeping');");
-  assert.equal(await db.setWorkState("s1", "owner", "sleeping", "stuck", "Rey's conversation was not found", 5, sleepEvent("s1", "stuck", "Rey's conversation was not found")), true);
-  assert.deepEqual(clone((await db.read("SELECT kind,text,did FROM since_events;"))[0]), { kind: "sleep_failed", text: "Rey", did: "Rey's conversation was not found" });
+  assert.deepEqual([shown[0].subject, shown[0].fact, shown[0].detail], ["Cassian", "finished", "Fixed the away rows"]);
 });
 
 test("While you were away is a piece: off, nothing is recorded, read or drawn", async (t) => {
   assert.equal(awayShown(undefined), true);
-  assert.equal(awayShown(["sidebar.activity"]), true);
-  assert.equal(awayShown([AWAY_PIECE]), false);
+  assert.equal(awayShown({ "sidebar.activity": "hide" }), true);
+  assert.equal(awayShown({ [AWAY_PIECE]: "hide" }), false);
   const { cx } = context();
   const reads = [], runs = [];
   const db = { read: async (sql) => { reads.push(sql); return []; }, run: async (sql) => { runs.push(sql); } };
-  const { Spaces } = await load("kanso-spaces/main.js", ["Spaces"]);
-  const { SinceLeft } = await load("kanso-spaces/since-left.js", ["SinceLeft"]);
+  const hidden = { "kanso.pieces.migrated": true, "kanso.pieces": { [AWAY_PIECE]: "hide" } };
+  const { Spaces } = await loadSpaces({ shared: (key) => hidden[key], setShared: (key, value) => { hidden[key] = value; } });
+  const { SinceLeft } = await loadSinceLeft();
   const view = new Spaces();
   Object.assign(view, { showAway: false, returnSignature: "x", sinceLeft: Object.assign(new SinceLeft(db), { project: project, rows: [event(1)] }) });
   view.trackReturn([], [], true, 10, cx);
   assert.deepEqual([reads, runs], [[], []]);
   assert.equal(view.returnSignature, null);
   assert.deepEqual(clone([view.sinceLeft.project, view.sinceLeft.rows]), [null, []]);
-  assert.equal(view.returnRows({}, { folder: "C:\\work\\kanso" }).length, 0);
-  const { SleepWork } = await load("kanso-spaces/sleepwork.js", ["SleepWork"]);
-  assert.equal(new SleepWork(db, () => {}, "w", () => false).fact("s1", "stuck", "why"), null);
-  assert.equal(new SleepWork(db, () => {}, "w").fact("s1", "stuck", "why").did, "why");
+  assert.equal(view.awayCard({}, { folder: "C:\\work\\kanso" }), null);
 });
 
 test("a row says who, what happened and what it did; a gone agent's row stays but leads nowhere", async () => {
-  const ui = tape();
-  const { SinceLeft } = await load("kanso-spaces/since-left.js", ["SinceLeft"], ui.host);
-  const { agentRowH } = await load("kanso-spaces/agents.js", ["agentRowH"], ui.host);
+  const { ui, SinceLeft } = await taped();
   const view = Object.assign(new SinceLeft(null), { project, rows: [
     { id: 1, target: "agent:c1", kind: "finished", text: "Cassian", did: "Fixed the away rows", at: 0 },
     { id: 2, target: "agent:gone", kind: "error", text: "Bodhi", did: null, at: 0 },
   ] });
   const marked = [], went = [];
   view.render({ foreground: "#fff" }, project, (key) => { marked.push(key); return false; }, (row) => (row.target === "agent:c1" ? () => went.push(row.id) : null));
-  for (const text of ["Cassian", "Finished", "Fixed the away rows", "Bodhi", "Failed"]) assert.ok(ui.texts.includes(text), text);
+  for (const text of ["Cassian", "finished", "Fixed the away rows", "Bodhi", "failed"]) assert.ok(ui.texts.includes(text), text);
   assert.deepEqual(marked, ["since-1"]);
-  assert.equal(ui.handlers.has("since-2"), false);
-  ui.handlers.get("since-1")({}, { notify() {} });
+  assert.equal(ui.handlers.has("since-left-1"), false, "Bodhi's pane is gone: the row does not act");
+  ui.handlers.get("since-left-2")({}, { notify() {} });
   assert.deepEqual(went, [1]);
-  assert.equal(view.blockHeight(), agentRowH({}, { activity: "x" }) + agentRowH({}, {}) + 1);
 });
 
 test("with While you were away off, a pull request read records no fact", async (t) => {
-  const { db } = await database(t);
-  await db.run("INSERT INTO projects(id,name,folder,machine,added) VALUES('p1','App','C:\\work\\app','',0);");
-  await db.run("INSERT INTO pr_repos(id,provider,host,owner,name,project_id) VALUES('r1','github','github.com','o','r','p1');");
+  const db = await appOnGitHub(t);
   const observed = async (hidden) => {
-    const { PullRequest } = await load("kanso-panel/pr.js", ["PullRequest"], { exec, shared: () => hidden });
+    const { PullRequest } = await loadPullRequest({
+      exec, shared: (key) => (key === "kanso.pieces" ? Object.fromEntries(hidden.map((id) => [id, "hide"])) : null),
+    });
     await new PullRequest(db).keepPrFacts([{ url: "https://github.com/o/r/pull/4", number: 4, state: "OPEN" }]);
     return (await db.read("SELECT COUNT(*) AS n FROM since_observed;"))[0].n;
   };

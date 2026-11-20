@@ -1,49 +1,67 @@
 import { localService } from "./platform-host.js";
-import { paths } from "./platform-paths.js";
 import { systemApi } from "./platform-system.js";
 // Derived from the `workspace-chrome` mod shipped with Herdr (Apache-2.0, https://github.com/herdrdev/herdr-app).
 // Modified by 0OZ: brand bar, solid sidebar footer with Settings, Add machine and an account chip.
 // Modified by José Gutiérrez (minimalistic, 0oz design fork): renamed from oz-chrome.
-// Modified by jlopezlira (Kanso, https://github.com/jlopezlira/herdr-kanso): renamed from mn-chrome; sidebar footer as centred squares when collapsed, one icon set (icons/), Herdr's mark beside the traffic lights; an "Update Kanso" row for Kanso's own releases (update.js).
-import { View, div, svg, image } from "gpui-kit";
-import { h_flex, v_flex } from "gpui-base";
-import { theme, run, props, shared, setShared, updates, agents, home, window, nextCommand, openOverlay, appHome, notify } from "herdr";
+// Modified by jlopezlira (Kanso, https://github.com/jlopezlira/herdr-kanso): renamed from mn-chrome; sidebar footer as centred squares when collapsed, one icon set (icons/), a title bar of the lights and, in Dawn Mode, its sky and pill (header.js); an "Update Kanso" row for Kanso's own releases (update.js); Settings opens one menu (sidebar-footer.js).
+import { View, div } from "gpui-kit";
+import { theme, run, props, shared, setShared, updates, keys, nextCommand, openOverlay, appHome, notify } from "herdr";
+import { explainWith, findExplainer } from "./explain.js";
 import { Updater } from "./update.js";
-import { tryOrAsync } from "./pure.js";
+import { tryOrAsync, readCommands } from "./pure.js";
+import { loadPieces, pieces, shown } from "./pieces.js";
+import { undoHide } from "./piece-lines.js";
+import { outOfMemory } from "./notices.js";
+import { glyphs } from "./marks.js";
+import { tokens, DAWN_W, G, H } from "./ui.js";
+import { DAWN_RING_MS, RING_FRAMES } from "./ui-dawn.js";
+import { Armed } from "./ui-button.js";
+import { menu } from "./kit.js";
+import { channelOf } from "./release.js";
+import { ITEM, COLLAPSED, explainRefusal, refusalBlock, settingsChord, settingsEntries, updateLabel } from "./footer-model.js";
+import { header } from "./header.js";
+import { sidebarFooter } from "./sidebar-footer.js";
 
-const basename = (path) => paths.basename(path);
 const SAMPLE_MS = 120_000;
-const openSettings = (page = "keys") => openOverlay({ mod: "kanso-settings", kind: "dialog", width: 860, height: 680, props: { page } });
-const hidden = () => new Set(Array.isArray(shared("kanso.hidden")) ? shared("kanso.hidden") : []);
+const openSettings = (page = "pieces") => openOverlay({ mod: "kanso-settings", kind: "dialog", width: 860, height: 680, props: { page } });
 
 // The runtime out of memory says so, or, with no room left for the error itself, throws null:
 // a mod then "did not load: Null "null"".
 export const exhausted = (e) => /out of memory|\bNull\b\s*["'“]?null/i.test(String(e));
 
+const DAWN_START_MS = 34;
+
 export default class WorkspaceChrome extends View {
   // Only the footer copy has an Updater (update.js), and it does not poll: the tab bar,
   // always on screen, looks for releases; the footer shows what it found and installs on a click.
   init(_props, cx) {
+    // The one migration. A later read must not write, or every mod draws again.
+    loadPieces(shared, setShared);
     if (!props()?.footer) return;
+    this.armed = new Armed();
+    this.menuOpen = false;
+    // Settings' own focus handle: shut it is a row or a Button, open the menu's trigger, so Escape gives the keyboard back to it.
+    this.settingsFocus = cx.focus_handle();
     this.updater = new Updater();
     this.updater.start(cx, { polls: false });
+    this.explainer = null;
+    this.lookup = null;
+    cx.timer.after(0, (later) => this.known(later));
     // Command names stay kanso-tabs.* for keys bound to them before.
-    cx.spawn(async (cx) => {
-      for (;;) {
-        const next = await tryOrAsync(async () => { const c = await nextCommand(); cx.notify(); return { c }; });
-        if (!next) break; // a replaced build (hot reload, update) stops here, before acting
-        const { c } = next;
-        if (c === "update") this.updater.install(cx);
-        else if (c === "check") { await this.updater.check(cx, true, true); this.updater.fit(); cx.notify(); }
-        else if (c === "settings") openSettings();
-        else if (c === "settings-mods") openSettings("mods");
-        else if (c === "settings-news") openSettings("news");
-        else if (c === "restart") this.restart();
-      }
-    });
+    readCommands(cx, () => nextCommand(), (c, cx) => this.command(c, cx));
     cx.timer.every(SAMPLE_MS, (cx) => this.watch(cx));
     this.power(cx);
     cx.timer.every(SAMPLE_MS, (cx) => this.power(cx));
+  }
+
+  async command(c, cx) {
+    if (c === "update") this.updater.install(cx);
+    else if (c === "check") { await this.updater.check(cx, true, true); this.updater.fit(); cx.notify(); }
+    else if (c === "settings") openSettings();
+    else if (c === "settings-mods") openSettings("pieces");
+    else if (c === "settings-news") openSettings("news");
+    else if (c === "restart") this.restart();
+    else if (c === "piece-undo") undoHide();
   }
 
   // Written only when it changes: every mod draws again on a shared write.
@@ -70,8 +88,8 @@ export default class WorkspaceChrome extends View {
       if (!errors.some(exhausted)) { this.warned = false; return; }
       if (this.warned) return;
       this.warned = true;
-      notify({ title: "Herdr's mod runtime is out of memory", level: "error", action: { name: "kanso-chrome.restart" },
-        body: "Panels and bars won't load again until the window restarts. Click to restart it now; your terminals and agents stay in herdr-core." });
+      if (!shown("toast.memory", true, pieces(shared))) return;
+      notify(outOfMemory());
     });
   }
 
@@ -81,48 +99,77 @@ export default class WorkspaceChrome extends View {
     run("app.quit");
   }
 
-  render() {
-    const t = theme();
-    const collapsed = shared("sidebar.collapsed") === true;
-    if (props()?.footer) {
-      const row = (id, icon, label, action) => h_flex().id(id).relative().h(34).flex_none().items_center().rounded(6)
-        .text_color(t.muted).hover(s => s.bg(t.hover).text_color(t.foreground)).cursor_pointer()
-        .on_click(action).child(svg(icon).size(17).flex_none())
-        .when(collapsed, el => el.w(34).justify_center().tooltip(label))
-        .when(!collapsed, el => el.px(10).gap(10).child(div().flex_1().child(label)));
-      const dot = () => div().size(6).rounded_full().bg(t.accent).flex_none();
-      const who = basename(home()) || "me";
-      const n = agents().length;
-      const count = `${n} ${n === 1 ? "agent" : "agents"}`;
-      const avatar = div().size(collapsed ? 28 : 32).flex_none().rounded(6).bg(t.selected).flex().items_center().justify_center()
-        .font_semibold().text_size(13).text_color(t.foreground).child(who[0].toUpperCase());
-      const chip = h_flex().id("account").h(collapsed ? 40 : 48).flex_none().items_center().rounded(6).cursor_pointer()
-        .hover(s => s.bg(t.hover)).on_click(() => run("app.settings")).child(avatar)
-        .when(collapsed, el => el.w(40).justify_center().tooltip(`${who} · ${count}`))
-        .when(!collapsed, el => el.px(8).gap(10).child(v_flex().flex_1().min_w(0)
-          .child(div().truncate().text_size(13).font_medium().text_color(t.foreground).child(who))
-          .child(div().truncate().text_size(11.5).text_color(t.muted).child(count))));
-      const ready = Boolean(updates().app.ready);
-      const kanso = this.updater?.available();
-      const busy = this.updater?.busy;
-      const kansoLabel = busy ? "Updating kansō..." : `Update kansō to ${kanso}`;
-      return v_flex().size_full().bg(t.chrome).px(collapsed ? 0 : 8).pt(8).pb(12).gap(2).text_size(13).justify_end()
-        .when(collapsed, el => el.items_center())
-        .when(Boolean(kanso), el => el.child(row("kanso-update", "mods/kanso-chrome/icons/refresh.svg", kansoLabel,
-          (_e, cx) => this.updater.install(cx))
-          .when(!busy && !collapsed, el => el.child(dot()))
-          .when(!busy && collapsed, el => el.child(dot().absolute().top(6).right(6)))))
-        .child(row("settings", "mods/kanso-chrome/icons/settings.svg", ready ? "Settings · update ready" : "Settings", () => run("app.settings"))
-          .when(ready && !collapsed, el => el.child(dot()))
-          .when(ready && collapsed, el => el.child(dot().absolute().top(6).right(6))))
-        // A server, not a second "+": the rail already has one for New space.
-        .when(!hidden().has("footer.machine"), el => el.child(row("machine", "mods/kanso-chrome/icons/server.svg", "Add computer", () => run("mod.open", { name: "machine-add" }))))
-        .child(div().h(8).flex_none())
-        .child(chip);
-    }
-    const lights = window()?.platform === "macos" ? 76 : 14;
-    return h_flex().size_full().bg(t.chrome).items_center().justify_end().pl(lights).pr(14).gap(8)
-      .when(!collapsed, el => el.child(image("frame/welcome/herdr.png").size(20).rounded(6))
-        .child(div().font_semibold().text_size(13).text_color(t.foreground).child("Herdr")));
+  // Read only while the menu is open: Herdr's waiting update and the key bound to kansō settings.
+  settingsMenu() {
+    if (!this.menuOpen) return null;
+    const acts = {
+      [ITEM.kanso]: (cx) => { this.setMenu(false, cx); openSettings(); },
+      [ITEM.herdr]: (cx) => { this.setMenu(false, cx); run("app.settings"); },
+      [ITEM.updateHerdr]: (cx) => this.armed.press(ITEM.updateHerdr, cx, () => run("app.update")),
+    };
+    const chord = settingsChord(keys());
+    const entries = settingsEntries({ ready: updates().app.ready, hint: chord && glyphs(chord) });
+    return menu({ title: "Settings", items: entries.map((entry) => (entry.separator ? entry : { ...entry, armed: this.armed.is(entry.key), onClick: acts[entry.key] })) });
+  }
+
+  setMenu(open, cx) {
+    this.menuOpen = open;
+    cx.notify();
+  }
+
+  // The Footer composition: kansō's update while one is offered (quiet once pressed, its refusal under it), then Settings and its menu.
+  footer(collapsed) {
+    const update = this.updater?.available() ?? null, busy = Boolean(this.updater?.busy);
+    const why = update && !busy ? this.updater.refused() : null;
+    const install = (cx) => this.updater.install(cx), refused = why ? refusalBlock(why, this.explainer?.name ?? "an agent") : null, menu = this.settingsMenu();
+    // Only the targets on show: the update's icon while one is offered, the refusal's fix while it shows (not in the rail),
+    // and Settings while its menu is shut (open, Herdr's popover owns the next press).
+    const presses = { ...(update ? { "refresh-cw": install } : {}), ...(refused && !collapsed ? { [refused.fix]: install, [`Explain to ${refused.agent}`]: (cx) => this.explain(why, cx) } : {}), ...(menu ? {} : { settings: (cx) => this.setMenu(true, cx) }) };
+    return sidebarFooter({ update: update && updateLabel(update, busy), busy, refused, menu, collapsed })(
+      "footer", tokens(theme()), { presses, focuses: { settings: this.settingsFocus }, onOpen: (open, cx) => this.setMenu(open, cx) });
+  }
+
+  look() {
+    this.lookup ??= findExplainer().then((agent) => {
+      this.explainer = agent;
+      return agent;
+    });
+    return this.lookup;
+  }
+
+  known(later, use = () => {}) {
+    return later.spawn(async (again) => {
+      use(await this.look());
+      again.notify();
+    });
+  }
+
+  explain(why, cx) {
+    cx.timer.after(0, (later) => this.known(later, (agent) => explainWith(agent, { name: "Explain the update", folder: appHome(), task: explainRefusal(why) })));
+  }
+
+  render(cx) {
+    const collapsed = shared(COLLAPSED) === true;
+    if (props()?.footer) return this.footer(collapsed);
+    // The title bar: Herdr's own lights, and in Dawn Mode the sky behind them and, open, the pill that says the mode.
+    const dawn = channelOf(shared("kanso.update")?.channel) === "beta";
+    const c = tokens(theme());
+    if (this.brandDawn !== dawn) { this.brandDawn = dawn; cx.timer.after(0, () => run("layout.resize", { id: "brand", px: dawn ? H.tabBar + G.lg : H.tabBar })); }
+    if (!dawn) return header({ collapsed, dawn })("brand", c);
+    if (!this.dawnScheduled) { this.dawnScheduled = true; cx.timer.after(0, (later) => this.rise(later)); }
+    const sky = { width: this.width ?? DAWN_W, run: this.dawnRun ?? 0, rising: Boolean(this.dawnRising), ring: this.dawnRing ?? 0 };
+    return div().id("brand-sky").size_full().relative().on_size_change((size, later) => { this.width = size.width; later.notify(); })
+      .child(header({ collapsed, dawn })("brand", { ...c, dawn: { ...c.dawn, sky } }, { presses: collapsed ? {} : { "Dawn Mode": (later) => this.rise(later) } }));
+  }
+
+  // The sunrise from its first frame: the night, then the Storybook's keyframes, the ring stepping round as its dash moves.
+  rise(cx) {
+    for (const task of this.dawnTasks ?? []) task?.cancel?.();
+    this.dawnRun = (this.dawnRun ?? 0) + 1;
+    this.dawnRising = false;
+    this.dawnRing = 0;
+    this.dawnTasks = [cx.timer.after(DAWN_START_MS, (later) => { this.dawnRising = true; later.notify(); }),
+      ...Array.from({ length: RING_FRAMES }, (_, i) => cx.timer.after(DAWN_RING_MS(i + 1), (later) => { this.dawnRing = i + 1; later.notify(); }))];
+    cx.notify();
   }
 }

@@ -1,0 +1,531 @@
+{
+  "session": [
+    [
+      " | checkout |  | ",
+      "chevron-right | Open |  | ",
+      " | Rename… |  | ",
+      "pin | Pin to the top |  | ",
+      " | Mark unread |  | ",
+      "clock | Snooze | › | ",
+      " | Move to project | › | ",
+      "copy | Copy | › | ",
+      "moon | Sleep this agent |  | ",
+      "moon | Sleep its tab |  | ",
+      "x | Close agent |  | ",
+      "eye-off | Hide \"What each agent is on\" |  | ",
+      "sliders-vertical | Settings for this… |  | "
+    ]
+  ],
+  "sessionArmed": [
+    [
+      " | checkout |  | ",
+      "chevron-right | Open |  | ",
+      " | Rename… |  | ",
+      "pin | Pin to the top |  | ",
+      " | Mark unread |  | ",
+      "clock | Snooze | › | ",
+      " | Move to project | › | ",
+      "copy | Copy | › | ",
+      "moon | Sleep this agent |  | ",
+      "moon | Sleep its tab |  | ",
+      "x | Press again to close checkout |  | ",
+      "eye-off | Hide \"What each agent is on\" |  | ",
+      "sliders-vertical | Settings for this… |  | "
+    ]
+  ],
+  "snooze": [
+    [
+      " | Snooze checkout |  | ",
+      " | In 1 hour | 15:02 | ",
+      " | In 3 hours | 17:02 | ",
+      " | This evening | 18:00 | ",
+      " | Tomorrow | Thu 9:00 | ",
+      " | Monday | Mon 9:00 | "
+    ]
+  ],
+  "copy": [
+    [
+      " | Copy |  | ",
+      "folder | Folder | ~/acme-shop-checkout | ",
+      "git-branch | Branch | checkout-v2 | ",
+      "copy | Conversation id | 9f2c… | "
+    ]
+  ],
+  "move": [
+    [
+      " | Move checkout to |  | ",
+      " | docs-site |  | ",
+      " | reports |  | ",
+      "undo | Back to acme-shop |  | "
+    ]
+  ],
+  "pinned": [
+    [
+      " | checkout |  | ",
+      "chevron-right | Open |  | ",
+      " | Rename… |  | ",
+      "pin | Unpin |  | ",
+      " | Mark unread |  | ",
+      "clock | Snooze | › | ",
+      " | Move to project | › | ",
+      "copy | Copy | › | ",
+      "moon | Sleep this agent |  | ",
+      "moon | Sleep its tab |  | ",
+      "x | Close agent |  | ",
+      "eye-off | Hide \"What each agent is on\" |  | ",
+      "sliders-vertical | Settings for this… |  | "
+    ]
+  ],
+  "settled": [
+    [
+      " | checkout |  | ",
+      "chevron-right | Open |  | ",
+      " | Rename… |  | ",
+      "pin | Pin to the top |  | ",
+      "undo | Bring back |  | ",
+      " | Mark unread |  | ",
+      "clock | Snooze | › | ",
+      " | Move to project | › | ",
+      "copy | Copy | › | ",
+      "moon | Sleep this agent |  | ",
+      "moon | Sleep its tab |  | ",
+      "x | Close agent |  | ",
+      "eye-off | Hide \"What each agent is on\" |  | ",
+      "sliders-vertical | Settings for this… |  | "
+    ]
+  ],
+  "snoozed": [
+    [
+      " | checkout |  | ",
+      "chevron-right | Open |  | ",
+      " | Rename… |  | ",
+      "pin | Pin to the top |  | ",
+      " | Mark unread |  | ",
+      "clock | Wake |  | ",
+      " | Move to project | › | ",
+      "copy | Copy | › | ",
+      "moon | Sleep this agent |  | ",
+      "moon | Sleep its tab |  | ",
+      "x | Close agent |  | ",
+      "eye-off | Hide \"What each agent is on\" |  | ",
+      "sliders-vertical | Settings for this… |  | "
+    ]
+  ],
+  "thread": [
+    [
+      " | checkout |  | ",
+      "chevron-right | Open |  | ",
+      " | Rename… |  | ",
+      "pin | Pin to the top |  | ",
+      "check | Settle |  | ",
+      " | Mark unread |  | ",
+      "clock | Snooze | › | ",
+      " | Move to project | › | ",
+      "copy | Copy | › | ",
+      "moon | Sleep this agent |  | ",
+      "moon | Sleep its tab |  | ",
+      "x | Close agent |  | ",
+      "eye-off | Hide \"What each agent is on\" |  | ",
+      "sliders-vertical | Settings for this… |  | "
+    ]
+  ],
+  "project": [
+    [
+      " | acme-shop |  | ",
+      " | New conversation… |  | ",
+      "git-branch | New in a worktree… |  | ",
+      " | Worktrees |  | ",
+      "git-branch | checkout-v2 | kansō | ",
+      "git-branch | cart-retry | ~/acme-shop-cart | ",
+      " | Rename… |  | ",
+      "moon | Sleep this tab… |  | ",
+      "moon | Sleep the project… |  | ",
+      " | Project options… |  | ",
+      "x | Remove project |  | ",
+      "eye-off | Hide \"Branch, ahead, behind\" |  | ",
+      "sliders-vertical | Settings for this… |  | "
+    ]
+  ],
+  "projectArmed": [
+    [
+      " | acme-shop |  | ",
+      " | New conversation… |  | ",
+      "git-branch | New in a worktree… |  | ",
+      " | Worktrees |  | ",
+      "git-branch | checkout-v2 | kansō | ",
+      "git-branch | cart-retry | ~/acme-shop-cart | ",
+      " | Rename… |  | ",
+      "moon | Sleep this tab… |  | ",
+      "moon | Sleep the project… |  | ",
+      " | Project options… |  | ",
+      "x | Press again to remove, close 3 tabs |  | ",
+      "eye-off | Hide \"Branch, ahead, behind\" |  | ",
+      "sliders-vertical | Settings for this… |  | "
+    ]
+  ],
+  "projectAsleep": [
+    [
+      " | acme-shop |  | ",
+      " | Asleep |  | ",
+      "sun | Wake review | 14:02 | ",
+      " | New conversation… |  | ",
+      "git-branch | New in a worktree… |  | ",
+      " | Worktrees |  | ",
+      "git-branch | checkout-v2 | kansō | ",
+      "git-branch | cart-retry | ~/acme-shop-cart | ",
+      " | Rename… |  | ",
+      "moon | Sleep this tab… |  | ",
+      "moon | Sleep the project… |  | ",
+      " | Project options… |  | ",
+      "x | Remove project |  | ",
+      "eye-off | Hide \"Branch, ahead, behind\" |  | ",
+      "sliders-vertical | Settings for this… |  | "
+    ]
+  ],
+  "gone": [
+    [
+      " | This project is no longer here. |  | "
+    ]
+  ],
+  "keep": [
+    [
+      " | acme-shop |  | ",
+      " | New conversation… |  | ",
+      "git-branch | New in a worktree… |  | ",
+      " | Worktrees |  | ",
+      "git-branch | checkout-v2 | kansō | ",
+      "git-branch | cart-retry | ~/acme-shop-cart | ",
+      " | Rename… |  | ",
+      "moon | Sleep this tab… |  | ",
+      "moon | Sleep the project… |  | ",
+      " | Project options… |  | ",
+      "pin | Keep as a project |  | ",
+      "x | Remove project |  | ",
+      "eye-off | Hide \"Branch, ahead, behind\" |  | ",
+      "sliders-vertical | Settings for this… |  | "
+    ]
+  ],
+  "missing": [
+    [
+      " | acme-shop |  | ",
+      " | Worktrees |  | ",
+      "git-branch | checkout-v2 | kansō | ",
+      "git-branch | cart-retry | ~/acme-shop-cart | ",
+      " | Rename… |  | ",
+      "moon | Sleep this tab… |  | ",
+      "moon | Sleep the project… |  | ",
+      " | Project options… |  | ",
+      "file | Locate folder… |  | ",
+      "x | Remove project |  | ",
+      "eye-off | Hide \"Branch, ahead, behind\" |  | ",
+      "sliders-vertical | Settings for this… |  | "
+    ]
+  ],
+  "computer": [
+    [
+      " | devbox |  | ",
+      " | Rename… |  | ",
+      "power | Turn off |  | ",
+      "arrow-right-left | Sync | on | ",
+      "plus | New project |  | ",
+      "server | Add computer… |  | ",
+      "eye-off | Hide \"Computers\" |  | ",
+      "sliders-vertical | Settings for this… |  | "
+    ]
+  ],
+  "syncPending": [
+    [
+      " | devbox |  | ",
+      " | Rename… |  | ",
+      "power | Turn off |  | ",
+      "arrow-right-left | Sync | on | ",
+      "plus | New project |  | ",
+      "server | Add computer… |  | ",
+      "eye-off | Hide \"Computers\" |  | ",
+      "sliders-vertical | Settings for this… |  | "
+    ]
+  ],
+  "syncFailed": [
+    [
+      " | devbox |  | ",
+      " | Rename… |  | ",
+      "power | Turn off |  | ",
+      "arrow-right-left | Sync | off | ",
+      "plus | New project |  | ",
+      "server | Add computer… |  | ",
+      "eye-off | Hide \"Computers\" |  | ",
+      "sliders-vertical | Settings for this… |  | "
+    ]
+  ],
+  "powerFailed": [
+    [
+      " | devbox |  | ",
+      " | Rename… |  | ",
+      "refresh-cw | Refresh |  | ",
+      "server | Add computer… |  | ",
+      "eye-off | Hide \"Computers\" |  | ",
+      "sliders-vertical | Settings for this… |  | "
+    ]
+  ],
+  "login": [
+    [
+      " | devbox |  | ",
+      " | Rename… |  | ",
+      "key | Sign in… |  | ",
+      "server | Add computer… |  | ",
+      "eye-off | Hide \"Computers\" |  | ",
+      "sliders-vertical | Settings for this… |  | "
+    ]
+  ],
+  "off": [
+    [
+      " | devbox |  | ",
+      " | Rename… |  | ",
+      "power | Turn on |  | ",
+      "server | Add computer… |  | ",
+      "eye-off | Hide \"Computers\" |  | ",
+      "sliders-vertical | Settings for this… |  | "
+    ]
+  ],
+  "unreachable": [
+    [
+      " | devbox |  | ",
+      " | Rename… |  | ",
+      "refresh-cw | Refresh |  | ",
+      "server | Add computer… |  | ",
+      "eye-off | Hide \"Computers\" |  | ",
+      "sliders-vertical | Settings for this… |  | "
+    ]
+  ],
+  "asleepRow": [
+    [
+      " | billing, asleep since 14:02 |  | ",
+      "sun | Wake |  | ",
+      "sun | Wake all 3 in review |  | ",
+      "copy | Copy conversation id |  | ",
+      "moon | Everything asleep… |  | "
+    ]
+  ],
+  "noMenu": [
+    [
+      " | Projects, Status, Threads |  | ",
+      "eye-off | Hide this |  | ",
+      "sliders-vertical | Settings for this… |  | "
+    ]
+  ],
+  "pane": [
+    [
+      " | tests |  | ",
+      "columns-2 | Split right | ⌘D | ",
+      "rows-2 | Split down | ⇧⌘D | ",
+      "columns-2 | Split left | ⌥⇧⌘D | ",
+      "move-horizontal | Wider or narrower | ⇧⌘↩ | ",
+      "pin | Pin | ⌥⌘P | ",
+      "send | Send to an agent… | ⌥⌘S | ",
+      "search | Find in conversation | ⌘F | ",
+      "external-link | Open with… |  | ",
+      "moon | Sleep |  | ",
+      " | Right-clicks go to the program |  | ",
+      "x | Close pane | ⇧⌘W | "
+    ]
+  ],
+  "paneToProgram": [
+    [
+      " | web · devbox |  | ",
+      "columns-2 | Split right | ⌘D | ",
+      "rows-2 | Split down | ⇧⌘D | ",
+      "columns-2 | Split left | ⌥⇧⌘D | ",
+      "move-horizontal | Wider or narrower | ⇧⌘↩ | ",
+      "pin | Unpin | ⌥⌘P | ",
+      "external-link | Open with… |  | ",
+      " | Right-clicks go to the program |  | check",
+      "x | Close pane | ⇧⌘W | "
+    ]
+  ],
+  "panePinned": [
+    [
+      " | web · devbox |  | ",
+      "columns-2 | Split right | ⌘D | ",
+      "rows-2 | Split down | ⇧⌘D | ",
+      "columns-2 | Split left | ⌥⇧⌘D | ",
+      "move-horizontal | Wider or narrower | ⇧⌘↩ | ",
+      "pin | Unpin | ⌥⌘P | ",
+      "external-link | Open with… |  | ",
+      " | Right-clicks go to the program |  | check",
+      "x | Close pane | ⇧⌘W | "
+    ]
+  ],
+  "paneChild": [
+    [
+      " | tests |  | ",
+      "columns-2 | Split right | ⌘D | ",
+      "rows-2 | Split down | ⇧⌘D | ",
+      "columns-2 | Split left | ⌥⇧⌘D | ",
+      "move-horizontal | Wider or narrower | ⇧⌘↩ | ",
+      "pin | Pin | ⌥⌘P | ",
+      "send | Send to an agent… | ⌥⌘S | ",
+      "search | Find in conversation | ⌘F | ",
+      "external-link | Open with… |  | ",
+      "moon | Sleep |  | ",
+      "chevron-right | Send back to J |  | ",
+      " | Right-clicks go to the program |  | ",
+      "x | Close pane | ⇧⌘W | "
+    ]
+  ],
+  "keyboard": [
+    [
+      " | tests |  | ",
+      "columns-2 | Split right | ⌘D | ",
+      "rows-2 | Split down | ⇧⌘D | ",
+      "columns-2 | Split left | ⌥⇧⌘D | ",
+      "move-horizontal | Wider or narrower | ⇧⌘↩ | ",
+      "pin | Pin | ⌥⌘P | ",
+      "send | Send to an agent… | ⌥⌘S | ",
+      "search | Find in conversation | ⌘F | ",
+      "external-link | Open with… |  | ",
+      "moon | Sleep |  | ",
+      " | Right-clicks go to the program |  | ",
+      "x | Close pane | ⇧⌘W | "
+    ]
+  ],
+  "bars": [
+    [
+      " | checkout |  | ",
+      "pencil | Rename |  | ",
+      "plus | New tab | ⌘T | ",
+      "moon | Sleep checkout… |  | ",
+      "x | Close tab | ⌘W | ",
+      "eye-off | Hide \"Agent state on tabs\" |  | ",
+      "sliders-vertical | Settings for this… |  | "
+    ],
+    [
+      " | checkout |  | ",
+      "pencil | Rename |  | ",
+      "plus | New tab | ⌘T | ",
+      "moon | Sleep checkout… |  | ",
+      "x | Press again to close 2 agents | ⌘W | ",
+      "eye-off | Hide \"Agent state on tabs\" |  | ",
+      "sliders-vertical | Settings for this… |  | "
+    ],
+    [
+      " | tests |  | ",
+      "columns-2 | Split right | ⌘D | ",
+      "rows-2 | Split down | ⇧⌘D | ",
+      "columns-2 | Split left | ⌥⇧⌘D | ",
+      "move-horizontal | Wider or narrower | ⇧⌘↩ | ",
+      "pin | Pin | ⌥⌘P | ",
+      "send | Send to an agent… | ⌥⌘S | ",
+      "search | Find in conversation | ⌘F | ",
+      "external-link | Open with… |  | ",
+      "moon | Sleep |  | ",
+      " | Right-clicks go to the program |  | ",
+      "x | Close pane | ⇧⌘W | "
+    ],
+    [
+      " | tests |  | ",
+      "pin | Pin |  | ",
+      "moon | Sleep this agent |  | ",
+      "send | Send to another agent |  | ",
+      "external-link | Open with… |  | ",
+      "rows-2 | Split down |  | ",
+      "maximize-2 | Zoom |  | ",
+      "check | Only when needed |  | ",
+      "eye-off | Hide this |  | ",
+      "sliders-vertical | Settings for this… |  | "
+    ],
+    [
+      " | web · devbox |  | ",
+      "columns-2 | Split right | ⌘D | ",
+      "rows-2 | Split down | ⇧⌘D | ",
+      "columns-2 | Split left | ⌥⇧⌘D | ",
+      "move-horizontal | Wider or narrower | ⇧⌘↩ | ",
+      "pin | Unpin | ⌥⌘P | ",
+      "external-link | Open with… |  | ",
+      " | Right-clicks go to the program |  | check",
+      "x | Close pane | ⇧⌘W | "
+    ],
+    [
+      " | Folder and branch |  | ",
+      "copy | Copy path |  | ",
+      "copy | Copy branch name |  | ",
+      "external-link | Open with… |  | ",
+      "eye-off | Hide this |  | ",
+      "sliders-vertical | Settings for this… |  | "
+    ],
+    [
+      " | Files and commits |  | ",
+      "file | Open the diff |  | ",
+      "git-pull-request | Push 2 commits… |  | ",
+      "check | Only when needed |  | ",
+      "eye-off | Hide this |  | ",
+      "sliders-vertical | Settings for this… |  | "
+    ],
+    [
+      " | Needs you |  | ",
+      " | Go to cart-ui | ⌘J | blocked"
+    ],
+    [
+      " | devbox |  | ",
+      "refresh-cw | Refresh |  | ",
+      "check | Only when needed |  | ",
+      "eye-off | Hide this |  | ",
+      "sliders-vertical | Settings for this… |  | "
+    ],
+    [
+      " | Memory low |  | ",
+      "memory-stick | Open Memory |  | "
+    ],
+    [
+      " | Agents at work |  | ",
+      " | Show them | ⌃⌥S | working",
+      "check | Only when needed |  | ",
+      "eye-off | Hide this |  | ",
+      "sliders-vertical | Settings for this… |  | "
+    ],
+    [
+      " | Command palette key |  | ",
+      "eye-off | Hide this |  | ",
+      "sliders-vertical | Settings for this… |  | "
+    ]
+  ],
+  "anyPiece": [
+    [
+      " | Pull request · #166 |  | ",
+      "copy | Copy link |  | ",
+      "git-pull-request | Open the pull request |  | ",
+      "external-link | Open on GitHub |  | ",
+      "check | Only when needed |  | ",
+      "eye-off | Hide this |  | ",
+      "sliders-vertical | Settings for this… |  | "
+    ],
+    [
+      " | PR panel |  | ",
+      "eye-off | Hide this |  | ",
+      "sliders-vertical | Settings for this… |  | ",
+      "panels-top-left | Panels… |  | "
+    ]
+  ],
+  "settings": [
+    [
+      " | Settings |  | ",
+      "sliders-vertical | kansō settings | ⌃⇧, | ",
+      "panels-top-left | Herdr settings |  | "
+    ]
+  ],
+  "hostUpdate": [
+    [
+      " | Settings |  | ",
+      "sliders-vertical | kansō settings | ⌃⇧, | ",
+      "panels-top-left | Herdr settings |  | ",
+      "refresh-cw | Update Herdr to 0.1.16 |  | "
+    ]
+  ],
+  "restartArmed": [
+    [
+      " | Settings |  | ",
+      "sliders-vertical | kansō settings | ⌃⇧, | ",
+      "panels-top-left | Herdr settings |  | ",
+      "refresh-cw | Press again to restart Herdr |  | "
+    ]
+  ]
+}

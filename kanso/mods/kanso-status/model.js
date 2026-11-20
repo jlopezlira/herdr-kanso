@@ -1,65 +1,60 @@
 // What the status bar says, and where a click goes. No host calls.
-import { parseOr } from "./pure.js";
+import { machineTitle, parseOr, oneLine, memoryFree, plural, tellsSomething } from "./pure.js";
 
-export const QUESTION_W = 260;
 export const MEMORY_MS = 60_000;
 // A now.json older than three minutes is not a current fact (the guard's own rule).
 export const MEMORY_STALE_MS = 3 * 60_000;
 export const NEEDS_COMMAND = "kanso-spaces.needs-you.next";
 export const MEMORY_COMMAND = "kanso-tabs.memory";
-
-const firstLine = (text) => {
-  const line = String(text ?? "").split(/\r?\n/).find((part) => part.trim()) ?? "";
-  const flat = line.replace(/\s+/g, " ").trim();
-  return flat || null;
-};
+export const STATUS_COMMAND = "kanso-spaces.view-agents";
+export const PALETTE_COMMAND = "app.palette";
 
 const clean = (text) => (text ?? "").replace(/^[^\p{L}\p{N}]+/u, "").trim();
 const sameName = (a, b) => a.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "") === b.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "");
 
 export function questionOf({ msg, title, name, program } = {}) {
-  const said = firstLine(msg);
+  const said = oneLine(msg);
   if (said) return said;
   if (!name) return null;
   const live = clean(title), raw = String(title ?? "").trim();
-  const telling = live && !/^[~/]|^[A-Za-z]:\\/.test(raw) && !/^[~/]|^[A-Za-z]:\\/.test(live) && !live.includes("@")
-    && live.toLowerCase() !== program?.key && live !== program?.name;
-  return telling && !sameName(live, name) ? live : null;
+  return tellsSomething(live, raw, program) && !sameName(live, name) ? live : null;
 }
 
 const waiting = (rows) => (Array.isArray(rows) ? rows : []).filter((row) => row?.status === "blocked" && row.address && row.pane);
 
 const tipLine = (row, question) => [row.name || "Agent", row.project, question].filter(Boolean).join(" · ");
 
-export function needsItem(rows, questions = {}) {
+export function waitingItem(rows, questions = {}) {
   const list = waiting(rows);
   if (!list.length) return null;
   const ask = (row) => questions[row.address] || null;
-  const more = list.length - 1;
   return {
     name: list[0].name || "Agent",
     question: ask(list[0]),
-    more: more > 0 ? `+${more}` : null,
-    mark: "blocked",
-    nameTone: "foreground",
-    questionTone: "muted",
-    moreTone: "dim",
-    questionWidth: QUESTION_W,
+    more: list.length - 1,
     command: NEEDS_COMMAND,
     tooltip: list.map((row) => tipLine(row, ask(row))).join("\n"),
   };
 }
 
-export function computerOf(space, layouts) {
+// The Computer item's props, and where its Refresh goes when the computer can't be reached.
+export function computerOf(space, layouts, alias = "") {
   const remote = space?.machine ? String(space.machine) : "";
-  const name = remote || "This computer";
-  const icon = remote ? "server" : "monitor";
+  const name = machineTitle(remote, "", alias);
   const layout = remote ? (layouts ?? []).find((row) => row?.name === remote)?.layout : null;
   if (remote && layout === "unavailable") {
-    const words = `${name} · unreachable`;
-    return { icon, words, tone: "blocked", command: `kanso-spaces.retry-machine:${name}`, tooltip: words };
+    const words = `Can't reach ${name}`;
+    return { name, remote: true, state: "unreachable", detail: words, command: `kanso-spaces.retry-machine:${remote}` };
   }
-  return { icon, words: name, tone: "muted", command: null, tooltip: null };
+  return { name, remote: Boolean(remote), state: layout === "loading" ? "pending" : "on", detail: null, command: null };
+}
+
+// A stand-in for the sidebar's computer row: only while that row is out of sight, or the computer can't be reached.
+export const computerShown = (computer, collapsed) => Boolean(computer) && (collapsed === true || computer.state === "unreachable");
+
+export function workingItem(agents) {
+  const count = (Array.isArray(agents) ? agents : []).filter((agent) => agent?.status === "working").length;
+  return { count, mark: count > 0 ? "working" : "idle", words: String(count), command: STATUS_COMMAND, tooltip: `${plural(count, "agent", "agents")} working` };
 }
 
 export function memoryLow(text, now = Date.now()) {
@@ -68,7 +63,7 @@ export function memoryLow(text, now = Date.now()) {
   const free = raw.machine?.freePct, floor = raw.limits?.lowFreePct;
   if (typeof free !== "number" || !Number.isFinite(free)) return null;
   if (typeof floor !== "number" || !Number.isFinite(floor) || !(free < floor)) return null;
-  const words = `Memory ${Math.round(free)}% free`;
+  const words = memoryFree(free);
   return { words, tone: "blocked", command: MEMORY_COMMAND, tooltip: words };
 }
 

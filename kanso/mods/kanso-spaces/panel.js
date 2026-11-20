@@ -1,6 +1,5 @@
 // Kanso, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
 // localStorage mirrors the prefs only so the first frame after a start is already right; the database is what counts.
-import { Store } from "./store.js";
 import { tryOr } from "./pure.js";
 
 export const REFRESH_MS = 20_000; // an unchanged agent is seen again this often (gone after kdb's GONE_MS)
@@ -13,7 +12,8 @@ export const sameSeen = (left, right) => left?.size === right.size && [...right]
 });
 
 export class Panel {
-  constructor(seed = [], store = null) {
+  constructor(seed = [], store) {
+    if (!store) throw new TypeError("A panel needs its store");
     this.store = store;
     this.cache = new Map(seed.flatMap((k) => {
       const v = tryOr(() => localStorage.getItem(k));
@@ -24,13 +24,13 @@ export class Panel {
     this.chain = Promise.resolve();
   }
 
-  get kdb() { return (this.store ??= new Store()).kdb; }
+  get kdb() { return this.store.kdb; }
 
   // True when a pref differs from the first frame's.
   async load() {
-    await (this.store ??= new Store()).open();
+    await this.store.open();
     const [prefs, agents] = [await this.kdb.prefs(), await this.kdb.agents()];
-    for (const r of agents) this.agents.set(r.id, { name: r.name, title: r.title, said: r.said, space: r.space_id, pos: r.pos, program: r.program, status: r.status, restore: r.restore, project: r.project ?? null, projectAt: r.project_at ?? null });
+    for (const r of agents) this.agents.set(r.id, { name: r.name, title: r.title, said: r.said, space: r.space_id, pos: r.pos, program: r.program, status: r.status, project: r.project ?? null, projectAt: r.project_at ?? null });
     this.dropUnlisted(new Set(agents.map((r) => r.id)));
     if (!prefs.length) {
       for (const [k, v] of this.cache) this.write(() => this.kdb.setPref(k, v));
@@ -60,11 +60,6 @@ export class Panel {
     this.write(() => this.kdb.setPref(key, v));
   }
 
-  // Writes also end the agents no longer seen (gone), so they run each REFRESH_MS even when nothing changed.
-  toRestore(seen) {
-    return [...seen.values()].filter((a) => a.conversation && !a.given && this.agents.get(a.conversation)?.restore)
-      .map((a) => ({ terminal: a.terminal, conversation: a.conversation, name: this.agents.get(a.conversation).restore }));
-  }
   dropUnlisted(ids) {
     for (const id of [...this.agents.keys()]) if (!ids.has(id)) { this.agents.delete(id); this.sent.delete(id); }
   }
@@ -72,20 +67,21 @@ export class Panel {
     const ids = new Set([...seen.values()].map((a) => a.conversation).filter(Boolean));
     for (const id of [...this.agents.keys()]) {
       const row = this.agents.get(id);
-      if (ids.has(id) || row?.projectAt || row?.restore) continue;
+      if (ids.has(id) || row?.projectAt) continue;
       this.agents.delete(id);
       this.sent.delete(id);
     }
   }
   async reloadAgents() {
     const rows = await this.kdb.agents(), ids = new Set(rows.map((r) => r.id));
-    for (const r of rows) { const was = this.agents.get(r.id); this.agents.set(r.id, { ...was, restore: r.restore, name: was?.name ?? r.name, project: r.project ?? null, projectAt: r.project_at ?? null }); }
+    for (const r of rows) { const was = this.agents.get(r.id); this.agents.set(r.id, { ...was, name: was?.name ?? r.name, project: r.project ?? null, projectAt: r.project_at ?? null }); }
     this.dropUnlisted(ids);
   }
   setProject(id, project, at = Date.now()) {
     this.agents.set(id, { ...this.agents.get(id), project: project ?? null, projectAt: at });
     return this.write(() => this.kdb.setProject(id, project ?? null, at));
   }
+  // Writes also end the agents no longer seen (gone), so they run each REFRESH_MS even when nothing changed.
   remember(seen, at = Date.now()) {
     this.forgetUnseen(seen);
     const list = [...seen.values()].filter((a) => a.conversation);
@@ -95,10 +91,8 @@ export class Panel {
     for (const a of due) {
       this.sent.set(a.conversation, { a, at });
       const was = this.agents.get(a.conversation);
-      const keep = !a.given && was?.restore;
-      this.agents.set(a.conversation, { ...was, name: keep ? was.name : a.given ?? null, restore: a.given ? null : was?.restore ?? null, title: a.title ?? was?.title ?? null, said: a.said ?? was?.said ?? null, space: a.space, pos: a.pos, program: a.program, status: a.status });
+      this.agents.set(a.conversation, { ...was, name: a.given ?? null, title: a.title ?? was?.title ?? null, said: a.said ?? was?.said ?? null, space: a.space, pos: a.pos, program: a.program, status: a.status });
     }
-    // Freed from its sleep first, so this sighting is what the row shows.
-    return this.write(async () => { await this.kdb.awake(list, at); await this.kdb.observe(due, at); });
+    return this.write(() => this.kdb.observe(due, at));
   }
 }

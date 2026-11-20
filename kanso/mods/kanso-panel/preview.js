@@ -1,18 +1,23 @@
-import { div, svg, image } from "gpui-kit";
+import { startRemotePoll, advanceRemotePoll, bring, appRelative, svgPixels, copyFailure, quietError, remoteDue, fileId, ArmPoll, takeStamp, staleView, asOf, bytesLabel } from "./remote-file.js";
+import { restorePath, isMarkdown, showPanel } from "./lib.js";
+import { sourceState } from "./ui-code.js";
+import { documentBones } from "./ui-page.js";
+import { div, image } from "gpui-kit";
 import { v_flex, h_flex, Editor } from "gpui-base";
-import { readTextFile, watchFolder, theme, openOverlay, window, layout, appHome } from "herdr";
+import { readTextFile, watchFolder, theme, openOverlay, window, layout, appHome, nextCommand } from "herdr";
+import { commandLoop } from "./sidebar.js";
 import { localService, serviceOn } from "./platform-host.js";
 import { paths } from "./platform-paths.js";
 import { fileApi } from "./platform-files.js";
 import { imageApi } from "./platform-images.js";
-import { codeState, isMarkdown, showPanel } from "./lib.js";
 import { kindOf } from "./kinds.js";
-import { MarkdownDoc, tildePath, readingLines } from "./doc.js";
-import { skeleton, quietLink, tokens } from "./ui.js";
-import { tryOrAsync, extOf } from "./pure.js";
+import { MarkdownDoc, tildePath, readingLines, conflictBar, textIo, readWhole } from "./doc.js";
+import { drafts, draftKey, remember, restore, seenDisk, typed, opened, beginSave, commitText, applied, word, needsSave, didFail, EDIT_LIMIT, keepMine, takeTheirs, tooLarge } from "./edit.js";
+import { G, T, tokens } from "./ui.js";
+import { quietLink, iconButton, Armed } from "./ui-button.js";
+import { tryOrAsync, extOf, afterMount } from "./pure.js";
 import { fileMemory } from "./panel-state.js";
 import { walkLayout } from "./layout.js";
-import { bring, appRelative, svgPixels, copyFailure, remoteDue, fileId, ArmPoll, pollStart, pollNext, takeStamp, staleView, asOf, bytesLabel } from "./remote-file.js";
 
 const folderOf = (path) => path.replace(/[\\/][^\\/]*$/, "") || "/";
 const nameOf = (path) => path.split(/[\\/]/).at(-1);
@@ -21,6 +26,39 @@ const PREVIEW_DIR = "data/kanso-panel/preview";
 const BACK = { files: "Back to Files", look: "Back to Look" };
 export const previewKind = (path) => isMarkdown(path) ? "markdown" : kindOf(path) === "image" ? "picture" : "text";
 
+class PreviewKeys {
+  constructor() { this.view = null; this.cx = null; this.live = false; }
+
+  bind(view, cx) {
+    this.view = view;
+    this.cx = cx;
+    if (!this.live) afterMount(cx, (cx) => this.start(cx));
+  }
+
+  // Marked live only once the loop runs, so a view gone before its first turn leaves nothing behind.
+  start(cx) {
+    if (this.live || !this.view) return;
+    this.live = true;
+    cx.spawn((commandCx) => commandLoop(
+      () => nextCommand(),
+      () => {
+        if (!this.view) throw new Error("gone");
+        this.cx.notify();
+      },
+      (command) => {
+        if (this.view && String(command).replace(/^kanso-panel\./, "") === "save") this.view.save(this.cx);
+      },
+      commandCx.timer,
+    ).finally(() => { this.live = false; }));
+  }
+
+  unbind(view) {
+    if (this.view === view) { this.view = null; this.cx = null; }
+  }
+}
+
+const previewKeys = new PreviewKeys();
+
 export class Preview {
   init(cx, p) {
     const kept = this.kept;
@@ -28,7 +66,9 @@ export class Preview {
     this.on = p.on ?? kept?.on ?? null;
     this.back = BACK[p.back] ? p.back : (kept?.back && BACK[kept.back] ? kept.back : null);
     this.handle = cx.focus_handle();
-    this.poll = pollStart(); this.stamp = null; this.fresh = null; this.held = null; this.arm = null;
+    startRemotePoll.call(this);
+    this.ask = new Armed(); this.edit = null;
+    previewKeys.bind(this, cx);
     this.open(p.path || kept?.path || "", cx);
   }
 
@@ -38,29 +78,32 @@ export class Preview {
   }
 
   // A file that is gone leaves the preview empty, with no error.
-  async restoreState(state) {
-    const path = typeof state?.path === "string" ? state.path : "";
-    if (!path) return false;
+  async restoreState(state) { return restorePath.call(this, state, this.restoreFile); }
+
+  async restoreFile(path, state) {
     if (previewKind(path) === "picture") {
       const ok = await (await serviceOn(fileApi, state.on ?? null)).test(path).catch(() => false);
       const next = ok ? fileMemory(state, () => true) : null;
-      if (!next) return false;
-      this.kept = next;
-      return true;
+      return this.keepRestored(next);
     }
     const text = await tryOrAsync(() => readTextFile(path, { on: state.on ?? null }));
     if (text == null || String(text).includes("\0")) return false;
     const next = fileMemory(state, () => true);
+    return this.keepRestored(next);
+  }
+
+  keepRestored(next) {
     if (!next) return false;
     this.kept = next;
     return true;
   }
 
   open(path, cx) {
+    this.stash();
     this.path = path;
     this.doc?.release(); this.doc = null;
-    this.code?.release(); this.code = null; this.error = null; this.picture = null; this.pixels = null;
-    this.stamp = null; this.fresh = null; this.held = null; this.poll = pollStart(); this.arm = null;
+    this.code?.release(); this.code = null; this.edit = null; this.error = null; this.picture = null; this.pixels = null;
+    startRemotePoll.call(this); this.ask?.clear();
     if (!path) { cx.notify(); return; }
     if (previewKind(path) === "markdown") this.doc = new MarkdownDoc(path, this.on, (to) => this.follow(to, cx));
     else if (previewKind(path) === "picture") this.picture = { busy: true };
@@ -75,11 +118,82 @@ export class Preview {
     this.leave(cx, (cx) => this.open(to, cx));
   }
 
-  // What you typed is saved before the panel shows another file or closes.
+  stash() {
+    if (this.doc) this.doc.remember();
+    else if (this.path && this.edit) remember(drafts, draftKey(this.path, this.on), this.edit);
+  }
+
+  // A draft stays in this session when the write cannot finish, and the panel moves on.
   leave(cx, then) {
+    this.stash();
     const doc = this.doc;
-    if (!doc) { then(cx); return; }
-    cx.spawn(async (cx) => { if (await doc.flush()) then(cx); else cx.notify(); });
+    if (doc) { cx.spawn(async (cx) => { await doc.flush(); then(cx); }); return; }
+    if (!needsSave(this.edit)) { then(cx); return; }
+    cx.spawn(async (cx) => { await this.flushCode(); then(cx); });
+  }
+
+  save(cx) {
+    if (this.doc) { this.doc.save(cx); return; }
+    this.saveCode(cx);
+  }
+
+  armCode() {
+    const saving = beginSave(this.edit);
+    if (!saving) return null;
+    this.edit = saving;
+    return saving;
+  }
+
+  withCodeSave(work) {
+    const saving = this.armCode();
+    return saving ? work(saving) : undefined;
+  }
+
+  saveCode(cx) {
+    this.withCodeSave((saving) => {
+      cx.notify();
+      cx.spawn(async (cx) => { await this.finishCode(saving); cx.notify(); });
+    });
+  }
+
+  async flushCode() {
+    return this.withCodeSave((saving) => this.finishCode(saving));
+  }
+
+  async finishCode(saving) {
+    const path = this.path, on = this.on;
+    const outcome = await commitText(saving, textIo(path, on));
+    const latest = this.path === path && this.edit ? this.edit : saving;
+    const next = applied(latest, outcome.written, outcome.result);
+    if (this.path === path) this.edit = next;
+    remember(drafts, draftKey(path, on), next);
+  }
+
+  dirty() { return this.doc ? Boolean(this.doc.dirty || this.doc.conflict) : needsSave(this.edit) || this.edit?.phase === "conflict"; }
+
+  discard(cx) {
+    if (this.doc) this.doc.dropDraft();
+    else if (this.path) {
+      drafts.drop(draftKey(this.path, this.on));
+      if (this.edit?.saved != null) this.edit = opened(this.edit.saved);
+    }
+    this.load(cx);
+  }
+
+  keepCode(cx) {
+    this.edit = keepMine(this.edit);
+    this.saveCode(cx);
+  }
+
+  rememberCode(cx) {
+    remember(drafts, draftKey(this.path, this.on), this.edit);
+    cx.notify();
+  }
+
+  takeCode(cx) {
+    this.edit = takeTheirs(this.edit);
+    if (this.code) this.code.set_value(this.edit.text ?? "");
+    this.rememberCode(cx);
   }
 
   load(cx) {
@@ -88,13 +202,61 @@ export class Preview {
     const path = this.path, on = this.on;
     cx.spawn(async (cx) => {
       try {
-        const text = on ? await (await serviceOn(fileApi, on)).read(path) : await readTextFile(path);
+        const got = await readWhole(path, on);
         if (this.path !== path) return;
-        if (text === null || text === undefined) this.miss(on, "This file is no longer available");
-        else if (String(text).includes("\0")) this.miss(on, "Binary file: no text preview");
-        else { this.error = null; this.held = null; this.fresh = Date.now(); this.code?.release(); this.code = codeState(path, text); }
-      } catch (e) { if (this.path === path) this.miss(on, on ? copyFailure(e, on) : `Cannot read this file: ${e?.message ?? e}`); }
+        if (got.big) {
+          if (this.code) this.code.release();
+          this.code = null; this.edit = tooLarge(); this.error = null; this.held = null;
+          return;
+        }
+        const text = got.text;
+        if (text === null || text === undefined) this.keepUnreadable(path, on, "This file is no longer available");
+        else if (String(text).includes("\0")) {
+          if (this.code) this.code.release();
+          this.code = null; this.edit = null;
+          this.miss(on, "Binary file: no text preview");
+        } else { this.error = null; this.held = null; this.fresh = Date.now(); this.placeText(path, text); }
+      } catch (e) {
+        if (this.path !== path) return;
+        const note = on ? copyFailure(e, on) : (quietError(e) ? "This computer did not answer" : `Cannot read this file: ${e?.message ?? e}`);
+        this.keepUnreadable(path, on, note);
+      }
       finally { cx.notify(); }
+    });
+  }
+
+  heldDraft(path, on) {
+    if (this.edit?.text != null) return this.edit;
+    const stored = drafts.peek(draftKey(path, on));
+    return stored ? restore(stored) : null;
+  }
+
+  keepUnreadable(path, on, note) {
+    const held = this.heldDraft(path, on);
+    if (!held || held.text == null || held.text === held.saved) { this.miss(on, note); return; }
+    this.error = null;
+    this.edit = didFail(held, note);
+    this.showCode(path, this.edit);
+  }
+
+  placeText(path, text) {
+    const base = this.heldDraft(path, this.on);
+    const next = base ? seenDisk(base, text) : opened(text);
+    this.edit = next;
+    remember(drafts, draftKey(path, this.on), next);
+    this.showCode(path, next);
+  }
+
+  showCode(path, state) {
+    const shown = this.code ? this.code.value() : null;
+    if (!state.big && shown === state.text) return;
+    if (this.code) this.code.release();
+    this.code = sourceState(path, state.text ?? "", {
+      readonly: Boolean(state.big), limit: EDIT_LIMIT,
+      onChange: state.big ? null : (value, cx) => {
+        this.edit = typed(this.edit, value);
+        this.rememberCode(cx);
+      },
     });
   }
 
@@ -142,15 +304,11 @@ export class Preview {
       if (this.path !== path) return;
       if (outcome === "seen") this.stamp = next;
       if (outcome === "changed") { this.stamp = next; this.load(cx); }
-      if (outcome === "failed") {
-        const had = Boolean(this.code || this.picture?.image || this.picture?.deferred || this.doc?.saved != null);
-        const view = staleView(had, this.fresh ?? this.doc?.fresh, Date.now(), copyFailure(new Error("timed out"), on));
-        if (view.keep) this.held = view.hold;
-        else if (!this.error) this.error = view.error;
-      }
-      this.poll = pollNext(this.poll, outcome);
-      new ArmPoll(this).start(cx, (tick) => this.probe(tick));
-      cx.notify();
+      const had = Boolean(this.code || this.picture?.image || this.picture?.deferred || this.doc?.saved != null);
+      const failure = outcome === "failed"
+        ? staleView(had, this.fresh ?? this.doc?.fresh, Date.now(), copyFailure(new Error("timed out"), on)) : null;
+      if (failure?.keep) this.held = failure.hold;
+      advanceRemotePoll.call(this, cx, outcome, failure);
     });
   }
 
@@ -178,42 +336,41 @@ export class Preview {
   }
 
   goBack(cx) {
-    this.leave(cx, () => showPanel(this.back, { mod: "kanso-panel", props: { panel: this.back } }));
+    this.leave(cx, () => { previewKeys.unbind(this); showPanel(this.back, { mod: "kanso-panel", props: { panel: this.back } }); });
   }
 
-  bones(c) {
-    const { header } = skeleton(c);
-    return v_flex().size_full().min_h(0).bg(c.canvas).text_color(c.text)
-      .child(h_flex().h(42).flex_none().px(14).gap(8).items_center().border_b(1).border_color(c.border)
-        .child(header(120, 13)))
-      .child(readingLines(c));
-  }
+  bones(c) { return documentBones(c, readingLines(c)); }
 
   render(cx) {
     if (this.on && this.path && !this.arm && remoteDue(this.on, window()?.active, walkLayout(layout(), "panel-body")?.hidden)) new ArmPoll(this).start(cx, (tick) => this.probe(tick));
-    const t = theme();
-    const button = (id, icon, tip, action) => div().id(id).p(4).rounded(6).cursor_pointer().text_color(t.muted).tooltip(tip)
-      .hover((s) => s.bg(t.hover).text_color(t.foreground)).on_click((_e, cx) => { action(cx); })
-      .child(svg(`mods/kanso-chrome/icons/${icon}.svg`).size(14));
-    return v_flex().id("preview").track_focus(this.handle).size_full().min_h(0).bg(t.background).text_color(t.foreground).text_size(13)
-      .on_key_down((e, cx) => this.doc?.key(e, cx))
+    const t = theme(), c = tokens(t);
+    const editing = this.doc ? this.doc.snapshot() : this.edit;
+    const mark = this.doc ? "" : word(this.edit);
+    return v_flex().id("preview").track_focus(this.handle).size_full().min_h(0).bg(t.background).text_color(t.foreground).text_size(T.card)
+      .on_key_down((e, cx) => { this.doc?.key(e, cx); })
       .child(h_flex().h(42).flex_none().px(10).gap(6).items_center().border_b(1).border_color(t.border)
-        .when(Boolean(this.back), (el) => el.child(button("preview-back", "chevron-left", BACK[this.back], (cx) => this.goBack(cx))))
+        .when(Boolean(this.back), (el) => el.child(iconButton("preview-back", "chevron-left", BACK[this.back], (cx) => this.goBack(cx), c)))
         .child(v_flex().flex_1().min_w(0).pl(this.back ? 0 : 4)
-          .child(div().truncate().font_semibold().text_size(13).child(nameOf(this.path)))
-          .child(div().truncate().text_size(11).text_color(t.dim).child(`${tildePath(folderOf(this.path), this.on)}${this.pixels ? ` · ${this.pixels.width} × ${this.pixels.height}` : ""}${(this.held ?? this.doc?.held) ? ` · ${asOf((this.held ?? this.doc.held).at, Date.now())}` : ""}`)))
+          .child(div().truncate().font_semibold().text_size(T.card).child(nameOf(this.path)))
+          .child(div().truncate().text_size(T.micro).text_color(t.dim).child(`${tildePath(folderOf(this.path), this.on)}${this.pixels ? ` · ${this.pixels.width} × ${this.pixels.height}` : ""}${(this.held ?? this.doc?.held) ? ` · ${asOf((this.held ?? this.doc.held).at, Date.now())}` : ""}`)))
         .children(this.doc ? this.doc.controls(t, "preview") : [])
-        .child(button("preview-open-with", "open-with", "Open with…", () => this.openWith()))
-        .when(!this.doc?.editing, (el) => el.child(button("preview-refresh", "refresh", this.held || this.doc?.held ? "Retry" : "Read again", (cx) => this.load(cx))))
-        .child(button("preview-close", "close", "Close", (cx) => this.leave(cx, () => showPanel(null)))))
+        .when(Boolean(mark), (el) => el.child(div().text_size(T.body).text_color(t.dim).child(mark)))
+        .when(needsSave(editing), (el) => el.child(quietLink("preview-save", "Save", (cx) => this.save(cx), c)))
+        .child(iconButton("preview-open-with", "external-link", "Open with…", () => this.openWith(), c))
+        .when(this.dirty(), (el) => el.child(this.ask.link("preview-discard", "Discard", "discard", this.path, (cx) => this.discard(cx), c)))
+        .when(!this.dirty(), (el) => el.child(iconButton("preview-refresh", "refresh-cw", this.held || this.doc?.held ? "Retry" : "Read again", (cx) => this.load(cx), c)))
+        .child(iconButton("preview-close", "x", "Close", (cx) => this.leave(cx, () => { previewKeys.unbind(this); showPanel(null); }), c)))
       .child(this.doc ? this.doc.body(t, "preview-md")
-        : this.error ? div().p(12).text_color(t.dim).child(this.error)
-        : this.picture?.deferred ? v_flex().id("preview-hold").flex_1().min_h(0).items_center().justify_center().gap(8)
+        : this.edit?.big ? div().p(G.md).text_color(t.dim).child("Too large to edit")
+        : this.code ? v_flex().flex_1().min_h(0)
+          .when(this.edit?.phase === "conflict", (el) => el.child(conflictBar("preview-code", t, (cx) => this.keepCode(cx), (cx) => this.takeCode(cx))))
+          .child(Editor.new(this.code).flex_1().min_h(0))
+        : this.error ? div().p(G.md).text_color(t.dim).child(this.error)
+        : this.picture?.deferred ? v_flex().id("preview-hold").flex_1().min_h(0).items_center().justify_center().gap(G.sm)
           .child(div().font_semibold().child(nameOf(this.path)))
-          .child(div().text_size(12).text_color(t.dim).child(bytesLabel(this.picture.size)))
-          .child(quietLink("preview-load", "Load", (cx) => this.loadPicture(cx, true), tokens(t)))
-        : this.picture?.image ? v_flex().id("preview-picture").flex_1().min_h(0).p(16).items_center().justify_center().child(image(this.picture.image).w_full())
-        : this.code ? Editor.new(this.code).flex_1().min_h(0)
+          .child(div().text_size(T.body).text_color(t.dim).child(bytesLabel(this.picture.size)))
+          .child(quietLink("preview-load", "Load", (cx) => this.loadPicture(cx, true), c))
+        : this.picture?.image ? v_flex().id("preview-picture").flex_1().min_h(0).p(G.lg).items_center().justify_center().child(image(this.picture.image).w_full())
         : this.path ? readingLines(t) : div().flex_1());
   }
 }

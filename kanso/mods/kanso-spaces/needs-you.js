@@ -1,3 +1,5 @@
+import { RESUME_LABEL } from "./resume.js";
+
 export const NEEDS_YOU = "kanso.needs-you";
 export const EMPTY_NOTICE_MS = 1800;
 
@@ -6,11 +8,15 @@ const order = (a, b) => rank(a) - rank(b) || a.at - b.at || a.seq - b.seq || a.a
 
 const field = (value) => { const text = String(value ?? ""); return `${text.length}:${text}`; };
 
-export function sleepingSignature(spaces, terms, asleep, away, home) {
-  const project = spaces.map((s) => [s.id, s.name, s.folder, s.machine, (s.tabs ?? []).map((t) => field(t.id)).join("")].map(field).join(""));
-  const sleeps = (rows) => rows.map((s) => [s.id, s.from, s.name, s.saved, s.spaceId, s.space, s.into?.tabId, s.going, s.state, s.pending, s.stuck, s.busy,
-    (s.agents ?? []).map((p) => [p.terminal, p.resume, p.spaceId, p.program, p.name, p.title, p.at, p.said].map(field).join("")).map(field).join("")].map(field).join(""));
-  return [home, project.map(field).join(""), terms.map((t) => field(t.address)).join(""), sleeps(asleep).map(field).join(""), sleeps(away?.rows ?? []).map(field).join("")].map(field).join("");
+// What asleep is read from: each tab's settled state, each terminal's labels and shell, and the names kept for conversations.
+export function sleepingSignature(spaces, panes, terms, kept) {
+  const tabs = spaces.map((s) => [s.id, s.name, (s.tabs ?? []).map((t) => [t.id, t.name, t.index, t.settled, t.settled_at].map(field).join(""))].map(field).join(""));
+  const where = panes.map((p) => [p.terminal, p.tab].map(field).join(""));
+  const asleep = terms.map((t) => {
+    const g = kept.get(t.labels?.[RESUME_LABEL]);
+    return [t.address, JSON.stringify(t.labels ?? {}), t.program?.shell, t.state, t.status_ms, g?.name, g?.title, g?.said, g?.program].map(field).join("");
+  });
+  return [tabs.join(""), where.join(""), asleep.join("")].map(field).join("");
 }
 
 export function waitingSignature(list, terms, excluded, nameLabel) {
@@ -27,16 +33,16 @@ export function sameQueue(a, b) {
   return a.rows.every((row, i) => Object.keys(row).every((key) => row[key] === b.rows[i][key]));
 }
 
-export function waitingQueue(list, terms, excluded = new Set(), previous = [], now = Date.now()) {
+export function waitingQueue(list, terms, excluded = new Set(), previous = [], now = Date.now(), statuses = ["blocked"]) {
   const byAddress = new Map(terms.map((term) => [term.address, term]));
   const before = new Map(previous.map((row) => [row.address, row]));
   return list.filter((a) => a.pane && !a.asleep && !a.dozing && !excluded.has(a.address)
-    && (a.status === "blocked" || a.status === "done") && (!byAddress.has(a.address) || byAddress.get(a.address).state === "live"))
+    && statuses.includes(a.status) && (!byAddress.has(a.address) || byAddress.get(a.address).state === "live"))
     .map((a) => {
       const was = before.get(a.address), term = byAddress.get(a.address);
       const at = was?.status === a.status ? was.at : term?.status_ms ?? now;
       return { address: a.address, pane: a.pane, space: a.space, tab: a.tab, project: a.space_name,
-        name: a.name || a.title || a.program?.name || a.address, status: a.status, at, seq: a.seq ?? 0 };
+        name: a.name || a.title || a.program?.name || a.address, icon: a.program?.icon ?? null, tint: a.program?.tint ?? null, status: a.status, at, seq: a.seq ?? 0 };
     }).toSorted(order);
 }
 
@@ -53,5 +59,5 @@ export function queueState(rows, machines) {
   return { rows, state: "ready" };
 }
 
-export const waitingReason = (row) => row.status === "blocked" ? "Waiting for you" : "Finished";
+export const waitingReason = () => "Waiting for you";
 export const queueMessage = (state) => state === "unavailable" ? "Queue unavailable" : "Nobody is waiting";

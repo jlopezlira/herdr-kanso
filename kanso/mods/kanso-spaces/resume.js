@@ -78,3 +78,10 @@ export function promptEmpty(screen) {
 // Claude Code asks before leaving with work in the background ("Background work is running… 1. Exit and stop
 // tasks"); sleeping an agent is stopping everything of it, so Sleep answers that question itself.
 export const asksToExit = (screen) => /Background work is running|Exit and stop tasks|will stop when you exit/.test(String(screen ?? ""));
+
+// A conversation Sleep ended is a reference on its terminal: the label holds the id, the shell is back at its prompt.
+// Only a real session id is kept or typed: a label can never carry shell text.
+export const RESUME_LABEL = "kanso.resume";
+export const isSessionId = (id) => /^[0-9a-f-]{36}$/.test(String(id ?? ""));
+export const resumeLine = (session) => (isSessionId(session) ? `claude --resume ${session}` : null);
+export const asleepTerminal = (k) => isSessionId(k?.labels?.[RESUME_LABEL]) && k.program?.shell === true && (!k.state || k.state === "live");

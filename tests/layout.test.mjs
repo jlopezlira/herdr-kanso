@@ -1,29 +1,56 @@
+import { loadStrip, loadTabs, loadTabPanels } from "./mod-fixtures.mjs";
+import { loadSidebar, mountedState, recorder } from "./sidebar-fixtures.mjs";
 import assert from "node:assert/strict";
 import test from "node:test";
-import { clone, context, load } from "./helpers.mjs";
+import { clone, load, layoutHost } from "./helpers.mjs";
+
+// The strip's one column, a block per terminal.
+const column = (...terminals) => [{ id: "strip-col-a", type: "column", size: { weight: 1 }, children: terminals.map((terminal) => (
+  { id: `strip-${terminal}`, type: "block", size: { weight: 1 }, content: { terminal } }
+)) }];
+const keepWrites = (writes) => (command, args) => { if (command === "layout.set") writes.push(clone(args.layout)); };
 
 async function layoutFixture() {
-  const nodes = [{ id: "strip-col-a", type: "column", size: { weight: 1 }, children: [
-    { id: "strip-a", type: "block", size: { weight: 1 }, content: { terminal: "a" } },
-    { id: "strip-b", type: "block", size: { weight: 1 }, content: { terminal: "b" } },
-  ] }];
+  const nodes = column("a", "b");
   let tree = { id: "root", children: [
     { id: "sidebar", min: 200 },
     { id: "work-body", children: [...clone(nodes), { id: "panel-body", type: "stack", hidden: true, children: [] }] },
     { id: "strip-map", type: "block", content: { mod: "kanso-strip" } },
   ] };
-  const state = {}, writes = [];
-  const host = {
-    shared: (key) => clone(state[key] ?? null), setShared: (key, value) => { state[key] = clone(value); },
-    layout: () => clone(tree), window: () => ({ platform: "macos" }), theme: () => ({ accent: "#000000", background: "#ffffff" }),
-    run: (command, args) => { if (command === "layout.set") writes.push(clone(args.layout)); },
-  };
-  const { Strip } = await load("kanso-strip/main.js", ["Strip"], host);
+  const writes = [];
+  const host = { ...layoutHost({}, () => tree, keepWrites(writes)), theme: () => ({ accent: "#000000", background: "#ffffff" }) };
+  const { Strip } = await loadStrip(host);
   const strip = new Strip(); strip.sets = [];
   const flush = () => { while (writes.length) tree = writes.shift(); };
   strip.apply(clone(nodes)); flush();
-  return { nodes, host, strip, flush, body: () => tree.children[1] };
+  const body = () => tree.children[1];
+  return { nodes, host, strip, flush, body, panel: () => body().children.find((node) => node.id === "panel-body") };
 }
+
+// A fixture whose first column a person dragged to 350 px.
+const resizedFixture = async () => {
+  const f = await layoutFixture();
+  f.body().children[0].size = { px: 350 };
+  return f;
+};
+const tabsIn = async (f) => new (await loadTabs(f.host)).Tabs();
+const withTabs = async () => {
+  const f = await layoutFixture();
+  return { f, tabs: await tabsIn(f) };
+};
+const pressSim = (tabs, f) => {
+  tabs.command("sim");
+  f.flush();
+  return f.panel().children;
+};
+// Tabs whose every mount is kept instead of drawn.
+const watchedTabs = async () => {
+  const { Tabs } = await loadTabs({ shared: () => undefined });
+  const tabs = new Tabs();
+  const mounted = [];
+  tabs.mount = (id) => mounted.push(id);
+  return { tabs, mounted };
+};
 
 const writers = [
   ["kanso-tabs/main.js", "Tabs", (x) => new x.Tabs().mount("pr")],
@@ -33,8 +60,7 @@ const writers = [
 ];
 for (const [file, name, write] of writers) {
   test(`${file} preserves native column and stack resizing`, async () => {
-    const f = await layoutFixture();
-    f.body().children[0].size = { px: 350 };
+    const f = await resizedFixture();
     f.body().children[0].children[0].size = { px: 73 };
     write(await load(file, [name], f.host)); f.flush();
     assert.equal(f.body().children[0].size.px, 350);
@@ -46,8 +72,7 @@ for (const [file, name, write] of writers) {
   });
 
   test(`${file} preserves a pending strip width command`, async () => {
-    const f = await layoutFixture();
-    f.body().children[0].size = { px: 350 };
+    const f = await resizedFixture();
     const next = clone(f.nodes); next[0].size = { weight: 2 };
     f.strip.sets = []; f.strip.apply(next); // Still queued: layout() returns the old px size.
     write(await load(file, [name], f.host)); f.flush();
@@ -62,9 +87,9 @@ for (const [file, name, write] of writers) {
     f.strip.sets = []; f.strip.apply(next); f.flush();
     assert.deepEqual(f.body().children[0].size, { weight: 2 });
     if (intent.panel) {
-      assert.deepEqual(f.body().children.find((node) => node.id === "panel-body").children, [intent.panel]);
+      assert.deepEqual(f.panel().children, [intent.panel]);
     } else {
-      assert.equal(f.host.layout().resizable, intent.rail.open);
+      assert.equal(f.host.layout().resizable, true);
       assert.equal(f.host.layout().children[0].min, intent.rail.min);
     }
   });
@@ -81,13 +106,8 @@ function foreignLayout() {
       { id: "panel-body", type: "stack", hidden: true, children: [] },
     ] }] },
   ] };
-  const state = {}, writes = [];
-  const host = {
-    shared: (key) => clone(state[key] ?? null), setShared: (key, value) => { state[key] = clone(value); },
-    layout: () => clone(tree), window: () => ({ platform: "macos" }),
-    run: (command, args) => { if (command === "layout.set") writes.push(clone(args.layout)); },
-  };
-  return { host, writes };
+  const writes = [];
+  return { host: layoutHost({}, () => tree, keepWrites(writes)), writes };
 }
 
 for (const [file, name, write] of writers) {
@@ -100,11 +120,9 @@ for (const [file, name, write] of writers) {
 
 test("kanso-strip/main.js never writes another layout's tree", async () => {
   const f = foreignLayout();
-  const { Strip } = await load("kanso-strip/main.js", ["Strip"], f.host);
+  const { Strip } = await loadStrip(f.host);
   const strip = new Strip(); strip.sets = [];
-  const nodes = [{ id: "strip-col-a", type: "column", size: { weight: 1 }, children: [
-    { id: "strip-a", type: "block", size: { weight: 1 }, content: { terminal: "a" } },
-  ] }];
+  const nodes = column("a");
   strip.apply(nodes);
   assert.equal(f.writes.length, 0);
   assert.notEqual(strip.applied, JSON.stringify(nodes), "A skipped write must not count as applied, or it is never retried");
@@ -118,27 +136,41 @@ for (const file of helpers) {
   test(`${file} puts the strip's right edge rail after a shown panel`, async () => {
     const { edgeBesidePanel } = await load(file, ["edgeBesidePanel"], {});
     const tree = (hidden) => ({ id: "root", children: [{ id: "work-body", children: [
-      { id: "strip-ruler-h" }, { id: "strip-a" }, { id: "strip-edge-right" }, { id: "panel-body", hidden, children: [] }] }] });
+      { id: "strip-a" }, { id: "strip-edge-right" }, { id: "panel-body", hidden, children: [] }] }] });
     const order = (t) => t.children[0].children.map((n) => n.id);
     const given = tree(false), shown = edgeBesidePanel(given);
-    assert.deepEqual(order(shown), ["strip-ruler-h", "strip-a", "panel-body", "strip-edge-right"]);
-    assert.deepEqual(order(given), ["strip-ruler-h", "strip-a", "strip-edge-right", "panel-body"], "the tree it is given stays as it was");
-    assert.deepEqual(order(edgeBesidePanel(shown)), ["strip-ruler-h", "strip-a", "panel-body", "strip-edge-right"], "idempotent");
+    assert.deepEqual(order(shown), ["strip-a", "panel-body", "strip-edge-right"]);
+    assert.deepEqual(order(given), ["strip-a", "strip-edge-right", "panel-body"], "the tree it is given stays as it was");
+    assert.deepEqual(order(edgeBesidePanel(shown)), ["strip-a", "panel-body", "strip-edge-right"], "idempotent");
     const hidden = edgeBesidePanel(tree(true));
-    assert.deepEqual(order(hidden), ["strip-ruler-h", "strip-a", "strip-edge-right", "panel-body"], "a closed panel leaves it in place");
+    assert.deepEqual(order(hidden), ["strip-a", "strip-edge-right", "panel-body"], "a closed panel leaves it in place");
   });
 }
 
-test("The strip's fixed height ruler stands at the row's start, never beside the panel", async () => {
+// Herdr draws a resize handle between any two nodes of the row, so a pane has a left handle only when a node stands before it.
+test("The first pane has no left resize handle beside the sidebar's edge, and every pane after it keeps one", async () => {
   const f = await layoutFixture();
-  const { Strip } = await load("kanso-strip/main.js", ["Strip"], f.host);
+  const { Strip } = await loadStrip(f.host);
   const strip = new Strip();
   strip.row = (st) => st.cols.map((_c, ci) => ({ ci }));
   strip.shownCols = (st) => st.cols.map((_c, ci) => ci);
-  const st = { cols: [{ panes: ["a"], w: 0.5 }, { panes: ["b"], w: 0.5 }] };
-  const ids = strip.build(st, [{ pane: "a", terminal: "ta" }, { pane: "b", terminal: "tb" }]).map((n) => n.id);
-  assert.equal(ids[0], "strip-ruler-h");
-  assert.notEqual(ids.at(-1), "strip-ruler-h");
+  const st = { cols: [{ panes: ["a"], w: 0.4 }, { panes: ["b"], w: 0.3 }, { panes: ["c"], w: 0.3 }] };
+  const ids = strip.build(st, ["a", "b", "c"].map((pane) => ({ pane, terminal: `t${pane}` }))).map((n) => n.id);
+  assert.equal(ids.indexOf("strip-a"), 0, "nothing stands before the first pane");
+  assert.ok(ids.indexOf("strip-b") > 0 && ids.indexOf("strip-c") > 0, "the panes after it have a node to their left");
+});
+
+test("Dragging the divider between two stacked panes keeps the heights they were dragged to", async () => {
+  const f = await layoutFixture();
+  f.strip.tab = () => "tab";
+  f.strip.state = { tab: { cols: [{ panes: ["a", "b"], w: 1 }] } };
+  f.host.setShared("strip.px", { a: 800 });
+  const [top, bottom] = f.body().children[0].children;
+  top.size = { weight: 1.5 }; bottom.size = { weight: 0.5 };
+  assert.equal(f.strip.adopt(), false, "a drag is read back only once it rests");
+  f.strip.drift.at -= 1000;
+  assert.equal(f.strip.adopt(), true);
+  assert.deepEqual(clone(f.strip.state.tab.cols[0].hs), { a: 0.75, b: 0.25 });
 });
 
 test("kanso-tabs opens and closes a custom panel from kanso.panels through commitLayout", async () => {
@@ -146,10 +178,9 @@ test("kanso-tabs opens and closes a custom panel from kanso.panels through commi
   f.host.setShared("kanso.panels", [
     { id: "workflow", label: "Workflow", icon: "mods/herdr-workflow/icon.svg", mod: "herdr-workflow", props: { tab: "state" } },
   ]);
-  const { Tabs } = await load("kanso-tabs/main.js", ["Tabs"], f.host);
-  const tabs = new Tabs();
+  const tabs = await tabsIn(f);
   tabs.mount("workflow"); f.flush();
-  const panelBody = () => f.body().children.find((node) => node.id === "panel-body");
+  const panelBody = f.panel;
   assert.equal(panelBody().hidden, false);
   assert.deepEqual(panelBody().children, [
     { id: "workflow", type: "block", content: { mod: "herdr-workflow", props: { tab: "state" } } },
@@ -160,10 +191,8 @@ test("kanso-tabs opens and closes a custom panel from kanso.panels through commi
 });
 
 test("kanso-tabs.look opens Look on the path its name carries, since Herdr gives a mod command no arguments", async () => {
-  const f = await layoutFixture();
-  const { Tabs } = await load("kanso-tabs/main.js", ["Tabs"], f.host);
-  const tabs = new Tabs();
-  const shown = () => f.body().children.find((node) => node.id === "panel-body").children;
+  const { f, tabs } = await withTabs();
+  const shown = () => f.panel().children;
   tabs.command("look /repo/shots/home page.png"); f.flush();
   const [look] = shown();
   assert.equal(look.id, "look");
@@ -178,7 +207,7 @@ test("kanso-tabs.look opens Look on the path its name carries, since Herdr gives
 });
 
 test("kanso-tabs shows its panels in the order you drag them, without the ones you turned off", async () => {
-  const store = {};
+  const store = { "kanso.sim.tools": { ios: true } };
   const host = { shared: (k) => store[k], setShared: (k, v) => { store[k] = v; } };
   const { panelList, movePanel, setPanelOn } = await load("kanso-tabs/main.js", ["panelList", "movePanel", "setPanelOn"], host);
   const ids = () => clone(panelList().filter((p) => p.on).map((p) => p.id));
@@ -199,32 +228,41 @@ test("kanso-tabs shows its panels in the order you drag them, without the ones y
 });
 
 test("kanso-tabs.memory opens Memory and a second call leaves it open", async () => {
-  const f = await layoutFixture();
-  const { Tabs } = await load("kanso-tabs/main.js", ["Tabs"], f.host);
-  const tabs = new Tabs();
-  const panelBody = () => f.body().children.find((node) => node.id === "panel-body");
-  tabs.command("memory"); f.flush();
-  assert.equal(panelBody().children[0].content.mod, "kanso-guard");
-  tabs.command("memory"); f.flush();
-  assert.equal(panelBody().children[0].content.mod, "kanso-guard");
+  const { f, tabs } = await withTabs();
+  for (const call of ["first", "second"]) {
+    tabs.command("memory"); f.flush();
+    assert.equal(f.panel().children[0].content.mod, "kanso-guard", call);
+  }
 });
 
 test("kanso-tabs.sim toggles the Simulator panel", async () => {
   const f = await layoutFixture();
-  const { Tabs } = await load("kanso-tabs/main.js", ["Tabs"], f.host);
+  f.host.setShared("kanso.sim.tools", { ios: true });
+  const tabs = await tabsIn(f);
+  assert.equal(pressSim(tabs, f)[0].content.mod, "kanso-sim");
+  assert.deepEqual(pressSim(tabs, f), []);
+});
+
+test("Simulator is absent without native tools, present with either, and hidden like any panel", async () => {
+  const f = await layoutFixture();
+  const { Tabs, panelList } = await loadTabPanels(f.host);
   const tabs = new Tabs();
-  const panelBody = () => f.body().children.find((node) => node.id === "panel-body");
-  tabs.command("sim"); f.flush();
-  assert.equal(panelBody().children[0].content.mod, "kanso-sim");
-  tabs.command("sim"); f.flush();
-  assert.deepEqual(panelBody().children, []);
+  const listed = () => panelList().find((panel) => panel.id === "sim");
+  f.host.setShared("kanso.sim.tools", { ios: null });
+  assert.equal(listed(), undefined);
+  assert.deepEqual(pressSim(tabs, f), []);
+  for (const tools of [{ ios: true }, { adb: "/sdk/adb" }]) {
+    f.host.setShared("kanso.sim.tools", tools);
+    assert.equal(listed().on, true);
+    f.host.setShared("kanso.pieces", { "panel.sim": "hide" });
+    assert.equal(listed().on, false);
+    assert.deepEqual(pressSim(tabs, f), []);
+    f.host.setShared("kanso.pieces", {});
+  }
 });
 
 test("kanso-tabs closes a panel Kanso no longer has (Specs)", async () => {
-  const { Tabs } = await load("kanso-tabs/main.js", ["Tabs"], { shared: () => undefined });
-  const tabs = new Tabs();
-  const mounted = [];
-  tabs.mount = (id) => mounted.push(id);
+  const { tabs, mounted } = await watchedTabs();
   tabs.reconcile({ id: "s1" }, null, { id: "panel-body", children: [{ id: "specs", type: "block", content: { mod: "sdd-focused" } }] }, "specs");
   assert.deepEqual(mounted, [null]);
   tabs.reconcile({ id: "s1" }, null, { id: "panel-body", children: [{ id: "changes", type: "block", content: { mod: "kanso-panel", props: { panel: "changes" } } }] }, "changes");
@@ -237,10 +275,7 @@ test("kanso-tabs closes a panel Kanso no longer has (Specs)", async () => {
 // Parse a single PowerShell literal independently of the production escaper.
 
 test("kanso-tabs remounts a panel kept from the separate token-spend mod as Kanso's Spend", async () => {
-  const { Tabs } = await load("kanso-tabs/main.js", ["Tabs"], { shared: () => undefined });
-  const tabs = new Tabs();
-  const mounted = [];
-  tabs.mount = (id) => mounted.push(id);
+  const { tabs, mounted } = await watchedTabs();
   const body = (mod) => ({ id: "panel-body", children: [{ id: "insights", type: "block", content: { mod } }] });
   tabs.reconcile({ id: "s1" }, null, body("token-spend"), "insights");
   assert.deepEqual(mounted, ["insights"], "mounted again, now with kanso-spend");
@@ -249,53 +284,29 @@ test("kanso-tabs remounts a panel kept from the separate token-spend mod as Kans
 });
 
 test("kanso-spaces passes an explicit machine to space.new for local, remote, and active spaces", async () => {
-  const clicks = {};
-  const node = () => {
-    let currentId = null;
-    const proxy = new Proxy({}, {
-      get(_target, prop) {
-        if (prop === "id") return (id) => { currentId = id; return proxy; };
-        if (prop === "on_click") return (fn) => { if (currentId) clicks[currentId] = fn; return proxy; };
-        if (prop === "when") return (cond, fn) => (cond ? fn(proxy) : proxy);
-        return () => proxy;
-      },
-    });
-    return proxy;
-  };
+  const { node, host, handlers } = recorder();
   const calls = [];
   let activeMachine = "odin";
   const spList = () => [
     { id: "sp-local", name: "local", folder: "/home", machine: null, active: activeMachine === null, tabs: [] },
     { id: "odin/sp1", name: "remote", folder: "/srv", machine: "odin", active: activeMachine === "odin", tabs: [] },
   ];
-  const { Spaces } = await load("kanso-spaces/main.js", ["Spaces"], {
-    div: node, svg: node, image: node, h_flex: node, v_flex: node,
-    Popover: { new: node }, Toggle: { new: node }, Button: { new: (id) => { const el = node(); return id ? el.id(id) : el; } },
-    ORDERS: { updated: "Updated" }, DEFAULT_ORDER: "updated", NAME_LABEL: "kanso.name", PIN_LABEL: "kanso.pin",
-    orderSessions: (l) => l, withTerminals: () => [], terminals: () => [], nest: () => [], bySection: () => [],
-    track: () => null, elapsed: () => null, activityOf: () => null, agentLabel: () => "", duration: () => "", findThreads: async () => ({}),
-    props: () => ({}), FLUSH: -24, STATUS_ORDERS: { latest: "Latest" }, THREAD_ORDERS: { said: "Said" },
-    theme: () => ({ foreground: "#fff", muted: "#888", dim: "#666", chrome: "#111", hover: "#222", ansi2: "#0f0" }),
-    shared: () => null, setShared: () => {},
-    spaces: spList, panes: () => [], agents: () => [],
-    machines: () => [{ name: null, layout: "ready" }, { name: "odin", layout: "ready" }],
-    run: (cmd, args) => calls.push([cmd, clone(args ?? null)]), home: () => "/Users/me",
+  const { Spaces } = await loadSidebar(host, {
+    spaces: spList, machines: () => [{ name: null, layout: "ready" }, { name: "odin", layout: "ready" }],
+    run: (cmd, args) => calls.push([cmd, clone(args ?? null)]),
   });
-  const view = new Spaces();
-  Object.assign(view, {
-    git: {}, shown: new Set(["odin/sp1"]), born: {}, custom: {}, order: "updated",
-    machines: [{ name: "odin", state: "connected", target: "odin.example" }], folded: new Set(), agentsFolded: new Set(),
-    orderPicker: node, sync: { config: {}, status: {} },
-  });
+  const view = Object.assign(new Spaces(), mountedState({
+    shown: new Set(["odin/sp1"]), machines: [{ name: "odin", state: "connected", target: "odin.example" }], tools: node,
+  }));
   view.hoverMachine = "local";
   view.render();
 
   const cx = { stop_propagation() {}, notify() {} };
-  clicks["machine-add-local"]({}, cx);
-  clicks["machine-new-local"]({}, cx);
+  handlers["on_click:machine-local-tool-0"]({}, cx); // this computer: + alone
+  handlers["on_click:machine-new-local-action"]({}, cx);
   view.hoverMachine = "odin";
   view.render();
-  clicks["machine-add-odin"]({}, cx);
+  handlers["on_click:machine-odin-tool-1"]({}, cx); // Turn off, +, Sync
 
   // The top + is no longer a bare space: it adds a project (tests/projects.test.mjs).
   assert.deepEqual(calls, [
@@ -312,11 +323,7 @@ test("kanso-spaces passes an explicit machine to space.new for local, remote, an
 });
 
 test("an agent moved to another project shows there, and only there, whatever space its terminal is in", async () => {
-  const node = () => new Proxy(() => {}, { get: (_t, k) => (k === "then" ? undefined : () => node()), apply: () => node() });
-  const { Spaces } = await load("kanso-spaces/main.js", ["Spaces"], {
-    div: node, svg: node, image: node, h_flex: node, v_flex: node, Popover: { new: node },
-    orderSessions: (l) => l, terminals: () => [], shared: () => null, setShared: () => {}, spaces: () => [], panes: () => [], agents: () => [],
-  });
+  const { Spaces } = await loadSidebar(recorder().host);
   const view = new Spaces();
   Object.assign(view, { order: "updated", custom: {}, termBy: new Map([["t1", { address: "t1", labels: { "kanso.id": "t1-5" } }], ["t2", { address: "t2", labels: {} }]]),
     panel: { agents: new Map([["term:t1-5", { project: "sp-kanso", projectAt: 1 }]]) }, inStripOrder: (l) => l });
@@ -328,11 +335,7 @@ test("an agent moved to another project shows there, and only there, whatever sp
 });
 
 test("the latest project choice wins, whichever key it was made under, and a clearing is a choice too", async () => {
-  const node = () => new Proxy(() => {}, { get: (_t, k) => (k === "then" ? undefined : () => node()), apply: () => node() });
-  const { Spaces } = await load("kanso-spaces/main.js", ["Spaces"], {
-    div: node, svg: node, image: node, h_flex: node, v_flex: node, Popover: { new: node },
-    orderSessions: (l) => l, terminals: () => [], shared: () => null, setShared: () => {}, spaces: () => [], panes: () => [], agents: () => [],
-  });
+  const { Spaces } = await loadSidebar(recorder().host);
   const C = "00000000-0000-4000-8000-0000000000aa";
   const view = new Spaces();
   const th = { file: `/h/.claude/projects/-w/${C}.jsonl`, pid: 7 };
@@ -363,17 +366,13 @@ test("Folding a hidden sidebar shows it at the rail's width, marked collapsed", 
   let tree = kansoTree({ hidden: true, min: 120 });
   tree.resizable = true;
   const state = {}, sent = [];
-  const host = {
-    shared: (key) => clone(state[key] ?? null), setShared: (key, value) => { state[key] = clone(value); },
-    layout: () => clone(tree), window: () => ({ platform: "macos" }),
-    run: (command, args) => { sent.push(command); if (command === "layout.set") tree = clone(args.layout); else if (command === "layout.resize") tree.children[0].size = { px: args.px }; },
-  };
+  const host = layoutHost(state, () => tree, (command, args) => { sent.push(command); if (command === "layout.set") tree = clone(args.layout); else if (command === "layout.resize") tree.children[0].size = { px: args.px }; });
   const { foldSidebar } = await load("kanso-tabs/layout.js", ["foldSidebar"], host);
   foldSidebar();
   assert.equal(state["sidebar.collapsed"], true);
   assert.deepEqual(sent, ["layout.set", "layout.resize"]);
   assert.deepEqual(clone(tree.children[0]), { id: "sidebar", hidden: false, min: 76, size: { px: 76 } });
-  assert.equal(tree.resizable, false);
+  assert.equal(tree.resizable, true, "the rail's edge drags too, to open it");
   sent.length = 0;
   foldSidebar();
   assert.deepEqual(sent, ["layout.resize"], "a shown rail is not set again");
@@ -387,7 +386,7 @@ test("A layout write keeps the sidebar shown", async () => {
 
 test("The tab bar brings a hidden sidebar back once, and again after the next hiding", async () => {
   const folds = [];
-  const { Tabs } = await load("kanso-tabs/main.js", ["Tabs"], { setShared: (key, value) => folds.push([key, value]), shared: () => null, layout: () => null, window: () => ({ platform: "macos" }), run: () => {} });
+  const { Tabs } = await loadTabs({ setShared: (key, value) => folds.push([key, value]), shared: () => null, layout: () => null, window: () => ({ platform: "macos" }), run: () => {} });
   const tabs = new Tabs();
   const hidden = kansoTree({ hidden: true }), shown = kansoTree({});
   for (const tree of [hidden, hidden, shown, hidden]) tabs.keepRail(tree);

@@ -26,9 +26,10 @@ export function systemApi(platform, run) {
   };
   const hostname = ({ short = true } = {}) => platform === "windows" ? powershell(run, "[Environment]::MachineName") : run("hostname", short ? ["-s"] : []);
   const temporary = async () => {
-    if (platform === "windows") return [(await powershell(run, "[IO.Path]::GetTempPath()")).stdout.trim()].filter(Boolean);
-    const r = await run("sh", ["-c", 'printf %s "${TMPDIR:-/tmp}"']);
-    return [...new Set([...(platform === "macos" ? ["/private/tmp"] : []), "/tmp", r.code === 0 ? r.stdout.trim() : ""].filter(Boolean))];
+    const r = await (platform === "windows" ? powershell(run, "[IO.Path]::GetTempPath()") : run("sh", ["-c", 'printf %s "${TMPDIR:-/tmp}"'])).catch(() => null);
+    const dir = r?.code === 0 ? String(r.stdout ?? "").trim() : "";
+    if (!dir) return null;
+    return platform === "windows" ? [dir] : [...new Set([...(platform === "macos" ? ["/private/tmp"] : []), "/tmp", dir])];
   };
   const userHome = async () => (platform === "windows" ? await powershell(run, "$HOME") : await run("sh", ["-c", 'printf %s "$HOME"'])).stdout.trim();
   const startDocker = () => platform === "macos" ? run("open", ["-a", "Docker"]) : platform === "windows"

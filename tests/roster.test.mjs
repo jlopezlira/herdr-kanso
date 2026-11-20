@@ -1,4 +1,5 @@
 // The left nav's roster: who sleeps where, one name per agent, asleep as a status.
+import { loadSleepingNow, loadRosterReads, loadTerminalNames } from "./mod-fixtures.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { load, clone } from "./helpers.mjs";
@@ -10,34 +11,41 @@ const spaces = [
 ];
 const C1 = "78efdf1f-a14a-432a-acf8-0a964fcc0b1a", C2 = "019a1b2c-3d4e-4f50-8a6b-7c8d9e0f1a2b";
 
-test("an agent asleep is in its own space, never another that shares its folder", async () => {
-  const { sleepingNow } = await load("kanso-spaces/roster.js", ["sleepingNow"], {});
-  const slept = [{ id: "z1", from: ":/f", name: "Hashiko", space: "herdr-kanso", spaceId: "sp-kanso", saved: 1, agents: [{ name: "Hashiko", terminal: "t3q", resume: "c1", spaceId: "sp-kanso", at: 2 }] },
-    { id: "z2", from: ":/f", name: "old", space: "agile", saved: 2, agents: [{ name: "Old", terminal: "t9", resume: "c2" }] },
-    { id: "z3", from: ":/f", name: "lost", spaceId: "gone-id", saved: 3, agents: [{ name: "Lost", terminal: "t8", resume: "c3" }] }];
-  const { rows } = clone(sleepingNow(spaces, [], slept, () => ""));
-  assert.deepEqual(rows.map((r) => [r.name, r.space, r.status, r.asleep.at]), [["Hashiko", "sp-kanso", "asleep", 2], ["Old", "sp-agile", "asleep", null], ["Lost", null, "asleep", null]], "the third fits three spaces: none is guessed");
-  assert.deepEqual(rows.map((r) => r.address), ["zz:c1", "zz:c2", "zz:c3"], "each row by its conversation");
+// A terminal at its shell's prompt with a conversation kept on it; `tab`: where its pane is.
+const shell = (address, resume, labels = {}) => ({ address, state: "live", program: { shell: true }, status_ms: 7, labels: { ...(resume ? { "kanso.resume": resume } : {}), ...labels } });
+
+test("asleep is read from Herdr: a settled tab with a conversation kept on a terminal sleeps as one", async () => {
+  const { sleepingNow } = await loadSleepingNow();
+  const sp = [{ id: "sp-kanso", name: "herdr-kanso", tabs: [{ id: "tb-k", index: 1, settled: true, settled_at: 50 }, { id: "tb-o", index: 2 }] }];
+  const ps = [{ terminal: "t1", tab: "tb-k" }, { terminal: "t2", tab: "tb-k" }, { terminal: "t3", tab: "tb-k" }, { terminal: "t4", tab: "tb-o" }];
+  const terms = [shell("t1", "00000000-0000-4000-8000-000000000001", { "kanso.name": "Hashiko" }), shell("t2", "00000000-0000-4000-8000-000000000002"), shell("t3", null), { address: "t4", state: "live", program: { agent: true }, labels: {} }];
+  const kept = new Map([["00000000-0000-4000-8000-000000000002", { name: null, title: "Memory leaks", said: 9, program: JSON.stringify({ name: "claude" }) }]]);
+  const got = sleepingNow(sp, ps, terms, kept), rows = clone(got.rows), dozing = [...got.dozing];
+  assert.deepEqual(rows.map((r) => [r.address, r.name, r.space, r.status]), [["zz:t1", "Hashiko", "sp-kanso", "asleep"], ["zz:t2", "Memory leaks", "sp-kanso", "asleep"]]);
+  assert.deepEqual(rows.map((r) => [r.asleep.id, r.asleep.tab, r.asleep.n, r.asleep.saved, r.asleep.resume, r.asleep.settled]),
+    [["tb-k", "Tab 2", 2, 50, "00000000-0000-4000-8000-000000000001", true], ["tb-k", "Tab 2", 2, 50, "00000000-0000-4000-8000-000000000002", true]], "one sleep: the tab, since it settled");
+  assert.equal(rows[1].program.name, "claude");
+  assert.deepEqual(dozing.sort(), ["t1", "t2", "t3"], "the whole tab dozes; the awake tab does not");
 });
 
-test("a terminal address given to another agent after a sleep neither hides the one asleep nor marks the new one", async () => {
-  const { sleepingNow } = await load("kanso-spaces/roster.js", ["sleepingNow"], {});
-  const terms = [{ address: "t1", state: "live" }];
-  const slept = (pending) => [{ id: "z1", from: ":/f", name: "Alice", spaceId: "sp-kanso", saved: 1, pending, agents: [{ name: "Alice", terminal: "t1", resume: "c1" }] }];
-  const settled = sleepingNow(spaces, terms, slept(false));
-  assert.deepEqual([settled.rows.length, settled.dozing.size], [1, 0], "asleep, and t1 is Bob's now");
-  const going = sleepingNow(spaces, terms, slept(true));
-  assert.equal(going.rows.length, 1, "on its way, it is already in the asleep list");
-  assert.equal(going.rows[0].asleep.going, true);
-  assert.equal(going.dozing.has("t1"), true, "and its awake row is gone");
+test("settled without a conversation is not asleep, and a conversation in a tab still shown sleeps alone", async () => {
+  const { sleepingNow } = await loadSleepingNow();
+  const sp = [{ id: "sp", name: "app", tabs: [{ id: "a", index: 0, settled: true }, { id: "b", index: 1 }] }];
+  const ps = [{ terminal: "t1", tab: "a" }, { terminal: "t2", tab: "b" }];
+  const none = sleepingNow(sp, ps, [shell("t1", null), shell("t2", null)]);
+  assert.deepEqual([none.rows.length, none.dozing.size], [0, 0], "a tab you settled yourself is not asleep");
+  const got = sleepingNow(sp, ps, [shell("t1", null), shell("t2", "00000000-0000-4000-8000-000000000009", { "kanso.name": "Rey" })]), rows = clone(got.rows), dozing = [...got.dozing];
+  assert.deepEqual(rows.map((r) => [r.name, r.asleep.id, r.asleep.tab, r.asleep.settled, r.asleep.n]), [["Rey", "t2", "Rey", false, 1]], "an agent asleep on its own, or a tab settled on another screen");
+  assert.deepEqual(dozing, ["t2"]);
 });
 
-test("a row drawn before the write is dropped once the database has that terminal", async () => {
-  const { withAway } = await load("kanso-spaces/roster.js", ["withAway"], {});
-  const db = [{ id: "z1", agents: [{ terminal: "t1" }] }];
-  const away = { rows: [{ id: "away:tb", agents: [{ terminal: "t1" }] }, { id: "away:tb2", agents: [{ terminal: "t9" }] }] };
-  assert.deepEqual(clone(withAway(db, away).map((s) => s.id)), ["z1", "away:tb2"]);
-  assert.deepEqual(clone(withAway(db, null).map((s) => s.id)), ["z1"]);
+test("a conversation kept on a terminal that runs something, or ended, is not asleep", async () => {
+  const { sleepingNow } = await loadSleepingNow();
+  const sp = [{ id: "sp", name: "app", tabs: [{ id: "a", settled: true }] }];
+  const ps = [{ terminal: "t1", tab: "a" }];
+  const running = { ...shell("t1", "00000000-0000-4000-8000-000000000001"), program: { shell: false, agent: true } };
+  assert.equal(sleepingNow(sp, ps, [running]).rows.length, 0, "a wake started it: awake");
+  assert.equal(sleepingNow(sp, ps, [{ ...shell("t1", "00000000-0000-4000-8000-000000000001"), state: "exited" }]).rows.length, 0);
 });
 
 test("one name per agent, kept with its conversation: the one you gave it, else its conversation's title", async () => {
@@ -59,9 +67,11 @@ test("asleep is a status like working, idle or done: its own section in Status, 
   assert.deepEqual(clone(sections.map((s) => [s.id, s.entries.map((x) => x.a.address)])), [["working", ["t1"]], ["done", ["t3"]], ["idle", ["t2"]], ["asleep", ["zz:1"]]]);
 });
 
+// Alice's conversation, read from process 10, and the roster's readers.
+const aliceReads = async () => ({ ...await loadRosterReads(), th: { file: `/h/.claude/projects/-w/${C1}.jsonl`, pid: 10 } });
+
 test("a conversation read from a terminal is its agent's only while that process still runs there", async () => {
-  const { readNow, seenNow } = await load("kanso-spaces/roster.js", ["readNow", "seenNow"], {});
-  const th = { file: `/h/.claude/projects/-w/${C1}.jsonl`, pid: 10 };
+  const { readNow, seenNow, th } = await aliceReads();
   assert.equal(readNow(th, { foreground: { pid: 10 } }), true);
   assert.equal(readNow(th, { foreground: { pid: 11 } }), false, "Bob started in Alice's terminal: not Alice's conversation");
   assert.equal(readNow(th, { foreground: null }), false, "nothing runs there now");
@@ -76,8 +86,7 @@ test("a conversation read from a terminal is its agent's only while that process
 });
 
 test("where Herdr's terminal list does not say what runs in front, a reading counts only while its process lives", async () => {
-  const { readNow, seenNow } = await load("kanso-spaces/roster.js", ["readNow", "seenNow"], {});
-  const th = { file: `/h/.claude/projects/-w/${C1}.jsonl`, pid: 10 };
+  const { readNow, seenNow, th } = await aliceReads();
   assert.equal(readNow(th, { address: "t1" }, new Set([10])), true, "Alice still runs: hers");
   assert.equal(readNow(th, { address: "t1" }, new Set([11])), false, "Alice ended (Bob runs there now): not Bob's");
   assert.equal(readNow(th, { address: "t1" }, null), false, "not looked yet: no");
@@ -88,7 +97,7 @@ test("where Herdr's terminal list does not say what runs in front, a reading cou
 });
 
 test("every terminal has a name in Herdr, whatever its program, and no two share one", async () => {
-  const { terminalNames } = await load("kanso-spaces/roster.js", ["terminalNames"], {});
+  const { terminalNames } = await loadTerminalNames();
   const terms = [
     { address: "t5t", state: "live", title: "qb2      ", agent: "qwen-code", labels: { "herdr.space": "sp-f" } },
     { address: "t5s", state: "live", title: "\u25d0\ufe0e qwen    ", labels: { "kanso.name": "qwen", "herdr.space": "sp-a" } },
@@ -121,7 +130,7 @@ test("an agent's key: its conversation while it runs there, else its terminal's 
 });
 
 test("names stay unique even when one is already called like a second", async () => {
-  const { terminalNames } = await load("kanso-spaces/roster.js", ["terminalNames"], {});
+  const { terminalNames } = await loadTerminalNames();
   const terms = ["t1", "t2", "t3"].map((address, i) => ({ address, state: "live", labels: { "kanso.name": ["Lead", "Lead", "Lead 2"][i] } }));
   assert.deepEqual(clone([...terminalNames(terms).values()].map((x) => x.name)), ["Lead", "Lead 3", "Lead 2"]);
 });

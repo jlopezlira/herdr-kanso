@@ -1,4 +1,5 @@
 // A Markdown file in the side panel, edited where it reads: blocks that give
+import { loadMarkdownDoc } from "./mod-fixtures.mjs";
 // the file back byte for byte, tables as cells, links, and saving that never
 // overwrites a change made on disk meanwhile.
 import test from "node:test";
@@ -78,30 +79,41 @@ test("links go to the web, or to a file beside the document", async () => {
   assert.equal(linkTarget("vscode://file/x", doc), null);
 });
 
+// A text field whose `type` changes it as a person would; each one made is kept in `states`.
+const textState = (states = []) => (o) => {
+  let v = o?.value ?? ""; const on = {};
+  const s = { value: () => v, set_value: (x) => { v = x; }, on: (n, f) => { on[n] = f; }, type(x, cx) { v = x; on.change?.({}, cx); },
+    set_auto_grow() {}, focus() {}, release() { s.released = true; } };
+  states.push(s); return s;
+};
+// A file that refuses a write made against text it no longer holds.
+const diskIo = (disk) => ({
+  readTextFile: async () => disk.text,
+  writeTextFile: async (_p, text, expected) => { if (expected !== disk.text) throw new Error("stale"); disk.text = text; return null; },
+});
+const EDITING = { theme: () => ({}), settings: () => ({}), home: () => "/Users/me" };
+const opened = async (MarkdownDoc, cx, drain) => {
+  const doc = new MarkdownDoc("/repo/PLAN.md", null);
+  doc.load(cx); await drain();
+  return doc;
+};
+const typeChanged = (doc, cx) => {
+  doc.open(0, cx);
+  doc.box.type("Changed.", cx);
+};
+
 // A host where typing into a block, the autosave timer and the disk can be driven.
 async function fixture(initial) {
   const disk = { text: initial };
   const timers = [];
   const states = [];
-  const state = (o) => {
-    let v = o?.value ?? ""; const on = {};
-    const s = { value: () => v, set_value: (x) => { v = x; }, on: (n, f) => { on[n] = f; }, type(x, cx) { v = x; on.change?.({}, cx); },
-      set_auto_grow() {}, focus() {}, release() { s.released = true; } };
-    states.push(s); return s;
-  };
+  const state = textState(states);
   const blocks = await load("kanso-panel/blocks.js", ["parseBlocks", "joinBlocks", "headingOf", "headingLine", "parseTable", "tableLines"]);
-  const { MarkdownDoc } = await load("kanso-panel/doc.js", ["MarkdownDoc"], {
-    ...blocks,
-    readTextFile: async () => disk.text,
-    writeTextFile: async (_p, text, expected) => { if (expected !== disk.text) throw new Error("stale"); disk.text = text; return null; },
-    TextareaState: { new: state }, EditorState: { new: state },
-    theme: () => ({}), settings: () => ({}), home: () => "/Users/me",
-  });
+  const { MarkdownDoc } = await loadMarkdownDoc({ ...blocks, ...diskIo(disk), ...EDITING, TextareaState: { new: state }, EditorState: { new: state } });
   const { cx, drain } = context();
   cx.timer = { after: (_ms, f) => timers.push(f) };
   const tick = async () => { while (timers.length) timers.shift()(cx); await drain(); };
-  const doc = new MarkdownDoc("/repo/PLAN.md", null);
-  doc.load(cx); await drain();
+  const doc = await opened(MarkdownDoc, cx, drain);
   return { doc, disk, cx, drain, tick, states };
 }
 
@@ -161,11 +173,66 @@ test("a change on disk while you edit is never overwritten: you choose", async (
   assert.equal(doc.dirty, false);
 });
 
-test("another machine's file is read only", async () => {
-  const { MarkdownDoc } = await load("kanso-panel/doc.js", ["MarkdownDoc"]);
+test("a file on another computer can be edited", async () => {
+  const { MarkdownDoc } = await loadMarkdownDoc();
   const doc = new MarkdownDoc("/x.md", "server");
   doc.saved = doc.text = "x";
-  assert.equal(doc.canEdit, false);
+  assert.equal(doc.canEdit, true);
+  assert.equal(doc.big, false);
+});
+
+test("a file over 1 MiB stays a view and a remote note does not save while you type", async () => {
+  let huge = false;
+  let writes = 0;
+  const timers = [];
+  const state = textState();
+  const { MarkdownDoc, readWhole, textIo } = await load("kanso-panel/doc.js", ["MarkdownDoc", "readWhole", "textIo"], {
+    readTextFile: async () => { if (huge) throw new Error("Text file exceeds 1 MiB"); return "One.\n"; },
+    writeTextFile: async () => { writes += 1; },
+    TextareaState: { new: state }, EditorState: { new: state }, ...EDITING,
+  });
+  assert.equal((await readWhole("/repo/PLAN.md", null)).text, "One.\n");
+  huge = true;
+  assert.equal((await readWhole("/repo/PLAN.md", null)).big, true);
+  await assert.rejects(() => textIo("/repo/PLAN.md", null).read(), /Text file exceeds 1 MiB/);
+  huge = false;
+  const { cx, drain } = context();
+  cx.timer = { after(_ms, fn) { timers.push(fn); } };
+  typeChanged(await opened(MarkdownDoc, cx, drain), cx);
+  assert.equal(timers.length, 1);
+  huge = true;
+  const again = await opened(MarkdownDoc, cx, drain);
+  assert.equal(again.big, true);
+  assert.equal(again.canEdit, false);
+  assert.equal(again.text, null);
+  again.save(cx); await drain();
+  assert.equal(writes, 0);
+  huge = false;
+  const back = await opened(MarkdownDoc, cx, drain);
+  assert.equal(back.text, "Changed.\n");
+  assert.equal(back.dirty, true);
+  const remote = new MarkdownDoc("/repo/PLAN.md", "light");
+  remote.saved = "One.\n";
+  remote.text = "Two.\n";
+  remote.phase = "edited";
+  remote.later(cx);
+  assert.equal(timers.length, 1);
+  assert.equal(remote.phase, "edited");
+});
+
+test("an edit you leave comes back when you open the file again", async () => {
+  const disk = { text: "One.\n" };
+  const { MarkdownDoc } = await loadMarkdownDoc({ ...diskIo(disk), ...EDITING, TextareaState: { new: textState() }, EditorState: { new: () => ({}) } });
+  const { cx, drain } = context();
+  cx.timer = { after() {} };
+  typeChanged(await opened(MarkdownDoc, cx, drain), cx);
+  const again = await opened(MarkdownDoc, cx, drain);
+  assert.equal(again.text, "Changed.\n");
+  assert.equal(again.dirty, true);
+  assert.equal(again.conflict, false);
+  const other = new MarkdownDoc("/repo/OTHER.md", null);
+  other.load(cx); await drain();
+  assert.equal(other.text, "One.\n");
 });
 
 test("the standalone panel lists a folder's Markdown, shallowest first", async () => {

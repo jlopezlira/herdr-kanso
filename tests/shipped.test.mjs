@@ -1,8 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { load, context, temporary, clone, exec as run, nativeWindow } from "./helpers.mjs";
+import { databaseTimer, load, context, temporary, clone, exec as run, nativeWindow, success, textFiles } from "./helpers.mjs";
 
 const names = ["Shipped", "periodRange", "comparedRange", "periodLabel", "streaks", "computeRecords", "mergeRecords", "periodQuery",
   "REPOS", "fmt", "yourWeeks", "weekAt", "sumWeeks", "heatLayout", "contributionsIn"];
@@ -107,18 +106,18 @@ function github({ computing = new Set(), weeks = {} } = {}) {
   const calls = [];
   const repos = Object.keys(weeks);
   const exec = async (command, args, options) => {
-    if (command === "sleep" || command === "pwsh" && args.at(-1).includes("Start-Sleep")) return { code: 0, stdout: "", stderr: "" };
+    if (command === "sleep" || command === "pwsh" && args.at(-1).includes("Start-Sleep")) return success("");
     if (command !== "gh") return run(command, args, options);
     if (args.some((a) => a.startsWith("gists"))) {
-      if (args[1].startsWith("gists?")) return { code: 0, stdout: "", stderr: "" };
+      if (args[1].startsWith("gists?")) return success("");
       calls.push("gist");
-      return { code: 0, stdout: JSON.stringify({ id: "g1", files: {} }), stderr: "" };
+      return success(JSON.stringify({ id: "g1", files: {} }));
     }
     if (args[1] !== "graphql") {
       const name = args[1].replace(/^repos\//, "").replace(/\/stats\/contributors$/, "");
       calls.push(`stats ${name}`);
-      if (computing.has(name)) { computing.delete(name); return { code: 0, stdout: "{}", stderr: "" }; }
-      return { code: 0, stderr: "", stdout: JSON.stringify([{ author: { login: "me" }, weeks: weeks[name] }]) };
+      if (computing.has(name)) { computing.delete(name); return success("{}"); }
+      return success(JSON.stringify([{ author: { login: "me" }, weeks: weeks[name] }]));
     }
     const query = args[3].slice("query=".length);
     if (query.startsWith("query{viewer")) {
@@ -126,21 +125,29 @@ function github({ computing = new Set(), weeks = {} } = {}) {
       const today = new Date();
       const day = (i, n) => { const d = new Date(today.getFullYear(), today.getMonth(), today.getDate() - i); return { date: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`, contributionCount: n, contributionLevel: n ? "FOURTH_QUARTILE" : "NONE", weekday: d.getDay() }; };
       const totals = { totalCommitContributions: 40, totalPullRequestContributions: 9, totalPullRequestReviewContributions: 3, totalIssueContributions: 0, restrictedContributionsCount: 100 };
-      return { code: 0, stderr: "", stdout: JSON.stringify({ data: {
+      return success(JSON.stringify({ data: {
         viewer: { login: "me", name: "Me", createdAt: "2011-01-01T00:00:00Z",
           cal: { contributionCalendar: { weeks: [{ contributionDays: [day(2, 5), day(1, 7), day(0, 2)] }] } }, cur: totals, prev: totals },
         curMerged: { issueCount: 3 }, prevMerged: { issueCount: 1 }, ever: { issueCount: 4321 },
-      } }) };
+      } }));
     }
     calls.push("repos");
     const half = Math.ceil(repos.length / 2), node = (n) => ({ nameWithOwner: n, pushedAt: "2026-11-01T00:00:00Z" });
-    return { code: 0, stderr: "", stdout: JSON.stringify({ data: { viewer: { databaseId: 1,
+    return success(JSON.stringify({ data: { viewer: { databaseId: 1,
       contributed: { pageInfo: { hasNextPage: false }, nodes: repos.slice(0, half).map(node) },
       access: { pageInfo: { hasNextPage: false }, nodes: repos.slice(half).map(node) },
-    } } }) };
+    } } }));
   };
   return { exec, calls };
 }
+
+// The Shipped panel opened on `gh`, settled.
+const shownPanel = async (t, gh) => {
+  const p = await panelWith(t, gh);
+  const panel = new p.Shipped();
+  panel.init(p.cx); await p.settle();
+  return { p, panel };
+};
 
 async function panelWith(t, gh) {
   const root = await temporary(t);
@@ -150,13 +157,12 @@ async function panelWith(t, gh) {
     window: nativeWindow, exec: gh.exec, appHome: () => home, home: () => join(root, "home"), spaces: () => [], panes: () => [], theme: () => ({}),
     shared: (k) => store[k], setShared: (k, v) => { store[k] = v; },
     notify: (n) => { toasts.push(n); return "1"; },
-    readTextFile: async (p) => { try { return await readFile(p, "utf8"); } catch { return null; } },
-    writeTextFile: async (p, text) => { await mkdir(join(p, ".."), { recursive: true }); await writeFile(p, text); return null; },
+    ...textFiles,
   };
   const { Store } = await load("kanso-panel/shipped-store.js", ["Store"], host);
   const mod = await shipped({ ...host, Store });
   const { cx, drain } = context();
-  cx.timer = { every() {} };
+  cx.timer = { after: databaseTimer.after, every() {} };
   const settle = async () => { for (let i = 0; i < 40; i++) await drain(); };
   return { ...mod, home, store, toasts, cx, settle };
 }
@@ -169,9 +175,7 @@ test("Shipped asks each repository for its sums once, and again only after a pus
     "other-org/thing": [{ w: thisWeek - 200 * 86400, a: 5000, d: 0, c: 40 }],
   };
   const gh = github({ weeks, computing: new Set(["me/tool"]) });
-  const p = await panelWith(t, gh);
-  const panel = new p.Shipped();
-  panel.init(p.cx); await p.settle();
+  const { p, panel } = await shownPanel(t, gh);
 
   assert.equal(Object.keys(panel.stats.repos).length, 3, "contributed to and reachable, every organization");
   assert.equal(gh.calls.filter((c) => c === "stats me/tool").length, 2, "asked again while GitHub computed it");
@@ -193,10 +197,8 @@ test("Shipped asks each repository for its sums once, and again only after a pus
 test("Shipped keeps going when GitHub keeps computing a repository", async (t) => {
   const gh = github({ weeks: { "org/slow": [], "org/fine": [{ w: 1793491200, a: 3, d: 0, c: 1 }] } });
   const always = gh.exec;
-  gh.exec = async (command, args, options) => (command === "gh" && args[1] === "repos/org/slow/stats/contributors" ? { code: 0, stdout: "{}", stderr: "" } : always(command, args, options));
-  const p = await panelWith(t, gh);
-  const panel = new p.Shipped();
-  panel.init(p.cx); await p.settle();
+  gh.exec = async (command, args, options) => (command === "gh" && args[1] === "repos/org/slow/stats/contributors" ? success("{}") : always(command, args, options));
+  const { p, panel } = await shownPanel(t, gh);
   assert.equal(panel.syncing, false, "it stops waiting, and asks again next time");
   assert.equal(panel.syncError, null);
   assert.ok(panel.stats.repos["org/fine"]);

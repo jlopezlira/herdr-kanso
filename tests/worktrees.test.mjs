@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { mkdir, rm, writeFile, stat, realpath } from "node:fs/promises";
-import { existsSync } from "node:fs";
+import { mkdir, rm, writeFile, realpath } from "node:fs/promises";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join, basename } from "node:path";
-import { load, context, temporary, clone, exec } from "./helpers.mjs";
+import { load, context, temporary, clone, exec, failure, gitOk, fileExists as exists } from "./helpers.mjs";
 
-const names = ["Worktrees", "removable", "losses", "lastDays", "spaceBy", "freedSpec", "freedText", "explainPrompt", "reviewPrompt", "rootsFor", "parseDiscovery", "basesFrom", "parseWorktrees", "parseProbe", "stateOf", "safe", "consequence", "fmtSize", "fmtAge", "inside"];
+const names = ["Worktrees", "removable", "losses", "lastDays", "spaceBy", "freedSpec", "freedText", "explainPrompt", "reviewPrompt", "rootsFor", "parseDiscovery", "basesFrom", "parseWorktrees", "parseProbe", "stateOf", "safe", "consequence", "fmtSize", "fmtAge", "inside", "openIn"];
 const writeTextFile = (path, text) => writeFile(path, text);
 const storeOf = (app) => load("kanso-panel/worktrees-store.js", ["WorktreeStore", "upsertSql", "rowOf", "itemOf"], { exec, appHome: () => app, writeTextFile });
 const worktrees = async (host = {}) => load("kanso-panel/worktrees.js", names, {
@@ -13,20 +14,97 @@ const worktrees = async (host = {}) => load("kanso-panel/worktrees.js", names, {
   exec, spaces: () => [], panes: () => [], home: () => "/Users/me", run() {}, theme: () => ({}), shared: () => null, notify() {},
   knownAgents: async () => [], Share: class { constructor() { this.open = false; } }, postText: (parts, fallback) => (parts.length ? parts.join(", ") + "." : fallback), ...host,
 });
-const git = async (cwd, ...args) => {
-  const r = await exec("git", ["-c", "core.autocrlf=false", "-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false", ...args], { cwd });
-  assert.equal(r.code, 0, `git ${args.join(" ")}: ${r.stderr}`);
-  return r.stdout.trim();
-};
-const exists = (p) => stat(p).then(() => true, () => false);
+const git = gitOk();
 
 test("Worktrees searches the top folders of your spaces, or the ones you chose", async () => {
-  const { rootsFor, inside } = await worktrees();
-  assert.deepEqual(clone(rootsFor(["/Users/me/Apps/acme/web", "/Users/me/Apps/x", "/Users/me", "/Users/me/.config/a", "/Volumes/w/repo", "/private/tmp/x", null], "/Users/me")),
+  const { rootsFor, inside, openIn } = await worktrees();
+  assert.deepEqual(clone(rootsFor(["/Users/me/Apps/acme/web", "/Users/me/Apps/x", "/Users/me", "/Users/me/.config/a", "/Volumes/w/repo", "/private/tmp/x", null], "/Users/me", null, ["/private/tmp", "/tmp"])),
     ["/Users/me/Apps", "/Volumes/w/repo"], "home itself, hidden folders and temp are not roots");
   assert.deepEqual(clone(rootsFor(["/Users/me/Apps/a"], "/Users/me", ["/src", "rel", "/src"])), ["/src"]);
   assert.ok(inside("/private/tmp/wt", "/tmp/wt/src"), "/tmp is /private/tmp");
   assert.ok(!inside("/a/wt", "/a/wt2"));
+  const opened = openIn(["/tmp/wt/src", "/a/wt2"]);
+  assert.deepEqual(["/private/tmp/wt", "/a/wt", "/a/wt2"].map(opened), [true, false, true], "open: a folder in use is in it");
+  assert.ok(openIn(["\\\\server\\share\\repo"])("\\\\server\\share"), "a network share's root is open with a folder in it in use");
+  assert.ok(openIn(["/a/../tmp/wt"])("/a/../tmp/wt"), "a path with dot segments that lands in /tmp is open with itself in use");
+  const spellings = ["/", "/a", "/a/", "/a/b", "/a/b/", "/a/b/src", "/a/b2", "/A/b", "/tmp/wt", "/private/tmp/wt", "/tmp/wt/src/", "/var/wt", "/private/var/wt/src", "/a/../tmp/wt", "/a/../var/wt/src", "/a/./b/../b/src",
+    "C:\\", "C:\\repo", "c:\\REPO\\src\\", "\\\\server\\share", "\\\\server\\share\\", "\\\\server\\share\\repo", "\\\\server\\share\\repo\\src", "\\\\SERVER\\Share\\repo", "/link/wt", "/target/wt/src", "rel", "rel/src", ""];
+  const differ = spellings.flatMap((used) => spellings.filter((path) => openIn([used])(path) !== inside(path, used)).map((path) => [path, used]));
+  assert.deepEqual(differ, [], "every spelling is open exactly when a folder in use is inside it");
+});
+
+test("Worktrees searches this computer only for its own panes, never for a pane on another machine", async () => {
+  const far = mkdtempSync(join(tmpdir(), "kanso-far-"));
+  try {
+    const { Worktrees, inside } = await worktrees({
+      home: () => "/fixture-home",
+      spaces: () => [
+        { folder: "/fixture-home/Apps/web", machine: null, tabs: [{ id: "t1" }] },
+        { folder: "/fixture-home/srv", machine: "box", tabs: [{ id: "box/t2" }] },
+      ],
+      panes: () => [{ tab: "t1", cwd: "/fixture-home/panes/repo" }, { tab: "box/t2", cwd: far }],
+    });
+    const panel = new Worktrees();
+    panel.tempDirs = ["/fixture-temp"];
+    const { roots, search } = panel.roots();
+    const locations = [...roots, ...search];
+    assert.deepEqual(clone(roots), ["/fixture-home/Apps", "/fixture-home/panes"], "this computer's space and pane are searched");
+    assert.ok(locations.every((root) => !inside(root, far) && !inside(far, root)), "the remote folder lies outside every root and every search location");
+    assert.ok(!search.some((root) => inside(root, far) || inside(far, root)), "a folder open on another machine is not searched here");
+  } finally {
+    rmSync(far, { recursive: true, force: true });
+  }
+});
+
+const windowsPane = {
+  home: () => "C:\\Users\\me",
+  spaces: () => [{ folder: "C:\\Users\\me\\Apps\\web", machine: null, tabs: [{ id: "t1" }] }],
+  panes: () => [{ tab: "t1", cwd: "C:\\Users\\me\\AppData\\Local\\Temp\\x" }],
+};
+
+test("Worktrees never searches the system temp folder or the folder above it", async () => {
+  const { Worktrees, rootsFor } = await worktrees(windowsPane);
+  const panel = new Worktrees();
+  panel.tempDirs = ["C:\\Users\\me\\AppData\\Local\\Temp\\"];
+  assert.deepEqual(clone(panel.roots().roots), ["C:\\Users\\me\\Apps"], "on Windows a pane in the temp folder makes no AppData root");
+  assert.deepEqual(clone(rootsFor(["/tmp/x", "/private/tmp/y", "/Users/me/Apps/a"], "/Users/me", null, ["/private/tmp", "/tmp"])), ["/Users/me/Apps"],
+    "on macOS and Linux a pane in /tmp is no root, as before");
+  assert.deepEqual(clone(rootsFor(["/var/folders/ab/T/z", "/Users/me/Apps/a"], "/Users/me", null, ["/private/var/folders/ab/T/"])), ["/Users/me/Apps"],
+    "on macOS a pane in your own temp folder is no root either: that folder is searched already");
+});
+
+test("Worktrees searches nothing it was not asked to when it cannot tell where the temp folder or home is", async () => {
+  const settings = {};
+  const { Worktrees } = await worktrees({
+    ...windowsPane, shared: (k) => settings[k] ?? null,
+  });
+  const panel = new Worktrees();
+  const unknown = [undefined, null, [], [""], ["C:\\Users\\me\\AppData\\Local\\Temp\\", ""]];
+  assert.deepEqual(unknown.map((temp) => { panel.tempDirs = temp; return clone(panel.roots()); }), unknown.map(() => ({ roots: [], search: [] })),
+    "a failed, blank or partial temp lookup infers no root");
+  const { Worktrees: Homeless } = await worktrees({ home: () => "", spaces: () => [{ folder: "/Users/me/Apps/web", machine: null, tabs: [{ id: "t1" }] }] });
+  const homeless = new Homeless();
+  homeless.tempDirs = ["/private/tmp", "/tmp"];
+  assert.deepEqual(clone(homeless.roots().roots), [], "without a home folder no root is inferred");
+  settings["kanso.worktrees.roots"] = ["D:\\src"];
+  panel.tempDirs = null;
+  assert.deepEqual(clone(panel.roots()), { roots: ["D:\\src"], search: ["D:\\src"] }, "the folders you chose are still searched");
+});
+
+test("A temp folder lookup that fails, answers nothing or is refused infers no root, on every platform", async () => {
+  const { rootsFor } = await worktrees();
+  const { systemApi } = await load("kanso-panel/platform-system.js", ["systemApi"]);
+  const lookups = { "exit 1": async () => failure(""), "an empty answer": async () => ({ code: 0, stdout: "  ", stderr: "" }), "a refusal": async () => { throw new Error("cannot run sh"); } };
+  for (const platform of ["macos", "linux", "windows"]) {
+    for (const [label, run] of Object.entries(lookups)) {
+      const temp = await systemApi(platform, run).temporary();
+      assert.equal(temp, null, `${platform}, ${label}: unknown`);
+      assert.deepEqual(clone(rootsFor(["/home/me/cache/tmp/task"], "/home/me", null, temp)), [], `${platform}, ${label}: no root from a pane under an unknown temp folder`);
+    }
+  }
+  const mac = await systemApi("macos", async () => ({ code: 0, stdout: "/home/me/cache/tmp", stderr: "" })).temporary();
+  assert.deepEqual(clone(mac), ["/private/tmp", "/tmp", "/home/me/cache/tmp"], "an answer keeps the defaults beside it");
+  assert.deepEqual(clone(rootsFor(["/home/me/cache/tmp/task", "/home/me/Apps/a"], "/home/me", null, mac)), ["/home/me/Apps"], "and its folder is never widened into a root");
 });
 
 test("Worktrees parses git's worktree list and the probes", async () => {
@@ -198,7 +276,7 @@ test("Worktrees finds every kind in a real repository and cleans up the safe one
   const notes = [], settings = { "kanso.worktrees.roots": [root] }, app = join(dir, "app");
   const host = (extra) => worktrees({
     app, home: () => dir, shared: (k) => settings[k] ?? null,
-    spaces: () => [{ folder: repo }], panes: () => [{ cwd: join(open, "src") }], notify: (n) => notes.push(n), ...extra,
+    spaces: () => [{ folder: repo, machine: null, tabs: [{ id: "t1" }] }], panes: () => [{ tab: "t1", cwd: join(open, "src") }], notify: (n) => notes.push(n), ...extra,
   });
   const { cx, drain } = context();
   const { Worktrees, stateOf, removable } = await host();
@@ -271,4 +349,41 @@ test("Worktrees finds every kind in a real repository and cleans up the safe one
   assert.equal(panel.note, null);
   assert.equal(stateOf(row("moved")), "changes");
   assert.equal(row("moved").dirty, 1);
+});
+
+test("Explain names and starts the one installed agent, looked up once", async () => {
+  let lookups = 0;
+  const started = [];
+  const codex = { name: "Codex", installed: true, run: ["codex"] };
+  const { Worktrees } = await worktrees({ exec: async () => failure("not here"), knownAgents: async () => { lookups++; return [{ name: "Claude", installed: false, run: ["claude"] }, codex]; }, run: (verb, args) => started.push([verb, args]) });
+  const { cx, drain } = context();
+  const opened = new Worktrees();
+  opened.init(cx); await drain();
+  assert.equal(opened.explainer.name, "Codex");
+  assert.equal(typeof opened.agent, "function", "the Ask your agent section still draws");
+  opened.ask("Explain web", "/w", "Explain it");
+  assert.deepEqual(clone(started), [["tab.new", { name: "Explain web", folder: "/w", argv: ["codex"], task: "Explain it" }]]);
+  assert.equal(lookups, 1);
+});
+
+test("Worktrees' first draw with forty folders open costs less than ten draws with none open", async () => {
+  const { fixture, loadMod } = await import("./perf-harness.mjs");
+  const count = (n, make) => Array.from({ length: n }, (_, i) => make(i));
+  const items = count(240, (i) => ({ path: `/Users/me/Apps/repo${i % 12}/.worktrees/tree${i}`, repo: `/Users/me/Apps/repo${i % 12}`, branch: `feat/${i}`, size: 1000 + i, dirty: 0, ahead: 1, only: 0, probed: true, fresh: true }));
+  const folders = count(40, (i) => `/Users/me/Apps/repo${i % 12}/packages/app${i}/src`);
+  const firstDrawMs = async (used) => {
+    const { host, cx } = fixture();
+    const { Worktrees } = await loadMod("kanso-panel/worktrees.js", ["Worktrees"], { ...host, home: () => "/Users/me", spaces: () => [{ folder: "", machine: null, tabs: [{ id: "t1" }] }], panes: () => used.map((cwd) => ({ tab: "t1", cwd })) });
+    const timed = () => {
+      const panel = new Worktrees();
+      panel.init({ spawn() {}, notify() {} });
+      panel.show(items);
+      const from = performance.now();
+      panel.render(cx);
+      return performance.now() - from;
+    };
+    return Math.min(...count(12, timed));
+  };
+  const [none, open] = [await firstDrawMs([]), await firstDrawMs(folders)];
+  assert.ok(open < none * 10, `the first draw took ${open.toFixed(1)} ms with 40 folders open and ${none.toFixed(1)} ms with none`);
 });

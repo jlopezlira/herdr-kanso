@@ -1,11 +1,12 @@
 // Each computer keeps its own spend ledger. Sync only adds the others.
+import { loadTokenSpend } from "./mod-fixtures.mjs";
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { copyFile, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 import { promisify } from "node:util";
-import { load, temporary } from "./helpers.mjs";
+import { temporary } from "./helpers.mjs";
 
 const runFile = promisify(execFile);
 const { exchange } = await import("../kanso/mods/kanso-spend/sync-probe.mjs");
@@ -26,6 +27,14 @@ const priced = (usd) => ({ costs: { hero: { usd, tokens: usd, value: `$${usd}.00
 const on = (id = "odin") => ({ version: 1, peers: { [id]: { enabled: true } } });
 const ready = (name = "odin") => [{ name, layout: "ready" }];
 
+// An app home where kansō Spend is installed.
+const withSpend = async (t) => {
+  const app = await temporary(t);
+  await mkdir(path.join(app, "mods", "kanso-spend"), { recursive: true });
+  await writeFile(path.join(app, "mods", "kanso-spend", "presenter.mjs"), "");
+  return app;
+};
+
 test("A computer keeps the same id", async (t) => {
   let minted = 0;
   const first = sync.identityFrom("", () => { minted += 1; return SELF; }, "2026-11-10T00:00:00.000Z");
@@ -35,9 +44,7 @@ test("A computer keeps the same id", async (t) => {
   assert.equal(again.id, SELF);
   assert.equal(minted, 1);
 
-  const app = await temporary(t);
-  await mkdir(path.join(app, "mods", "kanso-spend"), { recursive: true });
-  await writeFile(path.join(app, "mods", "kanso-spend", "presenter.mjs"), "");
+  const app = await withSpend(t);
   const deps = {
     appHome: app,
     now: "2026-11-10T12:00:00.000Z",
@@ -73,9 +80,7 @@ test("A computer does not take another computer's ledger, or give its own away",
   assert.equal(out.rows.find((row) => row.machine === PEER).body.usd, 4);
   assert.equal(out.rows.find((row) => row.machine === PEER).body.name, "odin");
 
-  const app = await temporary(t);
-  await mkdir(path.join(app, "mods", "kanso-spend"), { recursive: true });
-  await writeFile(path.join(app, "mods", "kanso-spend", "presenter.mjs"), "");
+  const app = await withSpend(t);
   const dir = path.join(app, "data", "kanso-sync");
   await mkdir(dir, { recursive: true });
   await writeFile(path.join(dir, "identity.json"), sync.identityText({ id: PEER, created_at: "t" }));
@@ -107,6 +112,7 @@ test("Spend adds each computer and leaves one computer as it was", () => {
   assert.equal(folded.hero.value, "$15.00");
   assert.equal(folded.hero.note, "");
   assert.deepEqual(folded.machines.map((row) => row.name), ["This computer", "Studio"]);
+  assert.deepEqual(foldCosts(costs, { self: SELF, rows, options: { ...options, aliases: { "": "Home", Studio: "Night" } } }).machines.map((row) => row.name), ["Home", "Night"]);
   assert.equal(folded.hero.stats.find((stat) => stat.unit === "tokens").value, "150");
   assert.equal(foldCosts(costs, { self: SELF, rows: [], options }), costs);
   assert.equal(foldCosts(costs, { self: SELF, rows, options: { cost: { project: "app", model: "all" } } }), costs);
@@ -303,7 +309,7 @@ test("Paths are built with the other computer's path API", async () => {
 
 test("Spend exchanges at once when the sidebar changes Sync, and not on other renders", async () => {
   let kick = 1;
-  const { TokenSpend } = await load("kanso-spend/main.js", ["TokenSpend"], { shared: (key) => (key === "kanso.sync.kick" ? kick : null) });
+  const { TokenSpend } = await loadTokenSpend({ shared: (key) => (key === "kanso.sync.kick" ? kick : null) });
   const view = new TokenSpend();
   const forced = [];
   view.syncKick = kick;

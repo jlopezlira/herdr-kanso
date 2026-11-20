@@ -14,50 +14,56 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
 - **Sidebar**, theme `chrome` (`#161615` dark, `#e3dfd6` light).
   - **Top strip**, 48 tall: the macOS traffic lights (at `[12, 16]`) and,
     at its right end (14 in), Herdr's mark: its icon
-    (`frame/welcome/herdr.png`, 20, radius 6) and "Herdr" (13, semibold,
+    (`frame/welcome/herdr.png`, 20, radius 4) and "Herdr" (13, semibold,
     `foreground`). It drags the window.
-    Collapsed, the strip is empty and the mark sits lower, over the rail's
-    buttons.
+    Collapsed, the strip is empty.
   - **Spaces** (`kanso-spaces`), filling the middle.
-    - Open (256 wide): a 40-tall row with a + (New project) at the left, and
-      Search and Hide sidebar at the right. Each is a 32 square with a 17 icon
-      in `muted` that turns `foreground` on hover over a `foreground`+`12`
-      wash.
-    - Space rows are 32 tall with radius 6, no avatar: the name, then,
-      right-aligned, the repo, branch and ahead/behind counts in 11.5.
-    - The active space has a `foreground`+`14` wash; hover shows
-      `foreground`+`0c`.
+    - Open (256 wide): the Toolbar, a 40-tall row with + at the left (Add
+      project on Projects, New conversation on Status and Threads), and Sort,
+      Search and Hide sidebar at the right, 4 apart. Each is the kit's large
+      icon button, a 32 square with a 17 icon in `muted`. Sort is `dim` at
+      its default order; its menu (the orders, the current one ticked, then
+      Show) opens under it.
+    - Space rows are 36 tall, radius 8: name 13.5 semibold, repo, branch
+      and counts 11.5. + stays on the active project; + and … on hover.
+      ↓N asks twice, then Pulling…; ↑N goes to the project and opens the
+      panel. Active `foreground`+`14`, hover `foreground`+`0c`.
     - Worktree spaces nest under their repo on 1px `input` guide lines.
-    - A space's agents are listed under it in 28-tall rows: program icon 15,
-      title 12.5, status mark at the right. The focused agent is in full ink
-      over a `foreground`+`0c` wash; the others are `muted`, and idle ones
-      `dim`.
-    - Collapsed (76 wide): the + and Hide buttons, stacked, then one mark
+    - Agents under a space: icon 15, title 12.5, status mark.
+    - Collapsed (76 wide): + and Show sidebar, stacked 8 apart, and a caret
+      whose Sort and Search open below it on a `w4` wash (Sort's menu opens
+      beside it); then the view switch and one mark
       per group (project, status, shelf): a project's initial in its color,
       no square (else an icon), under it the most urgent state and count.
       A click lists the group in a popup (click goes; asleep: wake menu).
-  - **Footer** (`kanso-chrome`, `footer: true`), 156 tall, bottom-aligned:
-    - Settings (gear) and Add computer (server icon), 34 tall, icon 17.
-    - An 8 space.
-    - An account chip: a 32 avatar (28 when collapsed) with the home folder
-      name's first letter, then the name and "N agents".
-    - Collapsed, each item is a centred square with its label as a tooltip.
-      When an app update is ready, a 6 `accent` dot shows on Settings.
+  - **Footer** (`kanso-chrome`, `footer: true`), bottom-aligned:
+    - Settings (gear), a kit row of 32, icon 17, text 13.5, muted; 8 above
+      and 16 below. Add computer lives at the end of the + menu.
+    - Settings opens one menu: kansō settings (with its key) and Herdr
+      settings; while Herdr has an update waiting, "Update Herdr to X",
+      pressed twice to restart Herdr into it.
+    - Collapsed, each item is a centred 34 square, icon 17, with its label
+      as a tooltip; the gear opens the same menu. The footer fits them: 54
+      for one, 36 more each, 12 below.
     - Kanso's own release (`update.js`). What's new
       chooses Stable (default) or Early. Stable offers a newer `vX.Y.Z`.
       Early offers the newest beta, rc or stable, never an older one.
-      The row "Update kansō to X" (refresh icon, 6 `accent` dot) names
-      that tag; the footer grows to 192 while it shows (back to 156
-      after; a size you set is kept). `version.json` stays `X.Y.Z`; the
+      The row "Update kansō to X" (refresh icon) names
+      that tag ("Update to X" for a beta); the footer grows to 120 while it
+      shows (back to 88 after; a size you set is kept). A refused install
+      keeps the row and puts the kit's failure block under it, the tool's
+      words and Update. `version.json` stays `X.Y.Z`; the
       download uses the tag and the check wants `X.Y.Z`. The tab bar
       reads tags (`git ls-remote`) on start, every 5 min (if on) and on
       `kanso-tabs.check`; one 30 s toast names the tag and runs
       `kanso-tabs.update`. Keys merge three-way; the
       layout is replaced only when the release changed it
-      (`kanso.json.old-<time>`). A detached shell holds a kernel lock,
-      downloads into `.kanso-updates/<id>/`, checks `version.json` and
-      `herdr-app check`, swaps each mod, `kanso-chrome` last (put back if
-      it fails or dies), writes `<id>.status`.
+      (`kanso.json.old-<time>`). A detached shell, or Windows PowerShell,
+      holds the lock and downloads with the system's curl and tar into
+      `.kanso-updates/<id>/`, checks `version.json` and `herdr-app check`,
+      swaps each file and mod in turn, `kanso-chrome` last (put back if it
+      fails, dies, or a file is in use or read-only), writes `<id>.status`;
+      the tab bar toasts "Kanso updated to X".
 - **Corners**: two radii and nothing else. Surfaces (panes, cards, popovers,
   menus) are 8; controls and rows (buttons, tabs, list rows, tiles, chips,
   fields) are 6; dots are circles.
@@ -66,12 +72,31 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
   that 6 gutter is where Herdr's own dividers are dragged.
     - **Tab bar** (`kanso-tabs`), 48 tall, no line under it. It drags the
       window.
-      - Tabs are 26 tall with radius 6: program icon 15, name 12.5, then the
-        tab's status. The active tab has a `foreground`+`12` wash and the
-        rest are `muted`, with no borders and no tray behind them. A close x
-        (13) shows on the active tab only when there is more than one tab.
-      - After the tabs, a + (16 icon, 28 square) opens the shipped
-        `new-menu`.
+      - Tabs are the kit's tab (`ui-tab.js`), 26 tall with radius 6, 2
+        apart, 12 inside each side and 8 between its parts: the name 12.5, trimmed at 170, then a mark only when an
+        agent in a tab out of view waits for you. No program icon, no
+        working or done mark, nothing after a zoomed tab. The chosen tab
+        has the `w7` fill, gliding under it, and the rest are `muted` with
+        the `w4` wash on hover. A close x shows on the chosen tab only when
+        there is more than one tab; on a tab holding an agent the first
+        press arms it with the accent for 4 s, "Press again to close
+        <name>".
+      - Right-click opens the tab's Menu: its name, Rename, New tab, Sleep
+        it, Close tab (asks twice when agents run in it, "Press again to
+        close 2 agents"), then Hide "Agent state on tabs" and Settings for
+        this.
+      - Double-click renames in place, the name selected: Enter or leaving
+        keeps it, Escape restores it. On another computer the new name draws
+        at 80% with a breathing dot until the tab carries it; refused, the
+        old name returns with a toast.
+      - A tab dragged onto another is held on the `selected` wash, with a
+        2-wide accent bar where it lands.
+      - Tabs that do not fit fold behind +N, a Menu of them with their
+        marks. While a project on another computer connects, one breathing
+        skeleton per known tab; unreachable, the tabs step down to `dim`.
+        Both have no + and no Arrange.
+      - After the tabs, 8 apart, a + (26 square) opens the sidebar's + menu,
+        then Arrange.
       - At the right are the panel buttons: Files, Spend, PR,
         Shipped, Worktrees, Ports, Containers, Memory, Look, Simulator, as icons only (15, in a 26 square ghost
         button), and a wash when their panel is open. While the pointer is
@@ -80,27 +105,22 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
         (`transition("width")` and `transition("opacity")`, ease-out, run
         natively), and closes the same way. The open panel's button keeps
         its name showing. No tooltip. Pressing one and letting go on another moves it there.
-        Right-click opens the Panels popup (`kanso-tabs` again, as an
-        overlay with `props().arrange`): one 30 tall row per panel with a
-        grip, its icon, its name and a switch, dragged the same way into
-        order. The order is in shared `kanso.panels.order` and the panels
-        turned off in `kanso.panels.off`; a panel turned off while open
-        closes. Custom panels from `kanso.panels` join the list.
+        Right-click opens its Menu: Hide this, Settings for this, then
+        Panels…. Drag writes `kanso.panels.order`. A hidden
+        panel is not mounted, and one hidden while open closes. Custom panels
+        from `kanso.panels` join the list.
     - **Panes**: an endless canvas (`kanso-strip`). Panes sit side by side
       in columns. You choose how many fit in the view at once, 1 to 8
       (default 2): a new column takes 1/n of it, so on a wide screen you can
-      hold 3, 4 or more side by side. A lone pane fills the view. Every header ends in a
-      six-dot grip (14 icon, `dim`, `foreground` on hover or while held,
-      grab cursor), 6 from the edge. The header's top corners round with
-      the slab's (8). Resizing is Herdr's own: drag the 6
+      hold 3, 4 or more side by side. A lone pane fills the view. The header
+      itself is the handle (grab cursor); a pinned one does not move. The
+      header's top corners round with the slab's (8). Resizing is Herdr's own: drag the 6
       gutter between two columns sideways, or between two stacked panes up
       and down (a column never goes under 140 px, a stacked pane under 90).
       Once the drag has rested 250 ms, the strip reads the sizes back from
       the layout and its ruler blocks (one under each terminal, 8 tall,
       for its width, which also draws the slab's rounded bottom since a
-      terminal paints square corners; one 1px wide at the start of work-body
-      for the height) and keeps them as
-      shares, so later trees keep what you dragged. The view always starts at a
+      terminal paints square corners) and keeps them as shares, so later trees keep what you dragged. The view always starts at a
       column's edge and shows only whole, live panes: as many as fit, which
       then share the width by their weights. It never slides past the first
       start from which the rest of the row fits. When columns lie beyond an
@@ -123,14 +143,13 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
       (evening out resets that). Panes never move vertically: dragging one out
       of a stack makes it its own column. A tab holding a mod pane falls back to
       Herdr's own split view.
-      A column can be pinned (the header's pin button on hover, "Pin pane"
+      A column can be pinned (Pin in the header's ⋯, "Pin pane"
       in the right-click menu, Cmd+Alt+P). It stays on the side of the view
       it was on, always whole and at its width, and never changes place:
       dragging it, moving it, dropping a pane on it and new panes leave it
       where it is. The rest slides in what the pinned columns leave (never
       under 20% of the view; a pin that would leave less is refused). A
-      pinned header has the `accent` at 14% (25% when selected) and a 12 px
-      pin by the title; it has no grip.
+      pinned header shows only a 12 px `dim` pin after the name.
       Each pane has a 34-tall header (a `{pane}` copy of `kanso-strip`,
       always shown). The
       selected pane's header has the `selected` background (in the strip, the
@@ -139,16 +158,26 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
       1px border in `accent` at 55%, following its rounded corners; the
       others carry the same border in clear, so a new selection shifts no
       terminal, and none shows while a pane is held. A pane whose agent needs you has `blocked` at 40% instead,
-      a 2px `blocked` bar along the header's bottom breathing between 45% and
-      full (1.6 s), its title in full ink, and "Needs you" in `foreground`
-      after a breathing dot.
-      - Program icon 15 (75% opacity when unfocused) and the title, 12.5 in
-        `foreground` and medium weight when focused, `muted` otherwise.
-      - The folder (`~/...`) and branch (with a branch glyph) as plain 11.5
-        text.
-      - At the right, the pane's status. On hover the status gives way to
-        open with (a terminal pane only), split right, split down, zoom and
-        close (15 icons).
+      and the blocked mark; no words. Focus moved by the keyboard adds a 2px
+      `accent` ring around the header. A pane on a computer out of reach is
+      at 55% with no mark; a held pane at 40%.
+      - Program icon 15 and the name, 12.5 medium in `foreground`, the same
+        focused or not. A pane with no agent and no project is "Terminal".
+      - The folder (`~/...`) and branch (with a branch glyph), each only when
+        it differs from the tab's project; files with their lines, commits
+        not on GitHub and the pull request with its verdict word in its
+        colour, each opening its home. GitHub not answering is the failure
+        line ("Can't read #N", Refresh) in the pull request's place; a
+        refresh in flight draws the pull request at 80% with a breathing dot.
+      - At the right, Sleep and Send stay out on a focused agent that
+        finished or idles, then the state's mark. Under the pointer: split
+        right, wider or narrower, close (asks twice while an agent is in
+        the pane) and ⋯, a Menu with pin, sleep, send, open with, split
+        down, zoom, the tools folded away and the piece lines.
+      - As the pane narrows the header folds, in order: folder, branch, the
+        tools into ⋯ (close stays), commits, files, the verdict word, the
+        pull request, then close; the name truncates last. A folded fact
+        stays in the pull request's tooltip.
       - Terminal padding is `[14, 10]`.
     - **Side panel**, at the right of the panes: 368 wide (280 to 900),
       hidden by default. It holds whichever panel is open: `kanso-panel`
@@ -157,8 +186,8 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
       The Worktrees brief, in this one's order: [RECIPE-worktrees.md](RECIPE-worktrees.md).
       The Shipped brief, in this one's order: [RECIPE-shipped.md](RECIPE-shipped.md).
       The PR brief, in this one's order: [RECIPE-pr.md](RECIPE-pr.md).
-      Simulator (`kanso-sim`) is the device beside the agent.
-      Its brief: [RECIPE-sim.md](RECIPE-sim.md).
+      Simulator uses Xcode and Android tools only:
+      [RECIPE-sim.md](RECIPE-sim.md).
   - **Status bar**, 26 tall: `kanso-status` with `{side: "left"}`, a
     180-wide minimap (`kanso-strip`) exactly in the middle, and
     `kanso-status` with `{side: "right"}`. The minimap is a centred row of
@@ -167,13 +196,17 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     `foreground` focused; a stacked column shows one 2px bar per pane. Click a pill to go there. After the pills, a tiny
     "− n +" control: fewer or more panes per view, and the number itself
     evens the columns out to 1/n.
-    `kanso-status`, text 11.5 `muted`:
-    - Left: computer icon, "This computer" or its name, then the branch.
-      Unreachable: "<name> · unreachable" in `blocked`; a click retries.
+    `kanso-status`, text 11.5 `muted`, 12 inside, 16 between items, 8 from an
+    icon or mark to its words. Each item stands in for a home out of sight:
+    - Left, only while the sidebar is folded: computer icon and "This computer"
+      or a name you give it; connecting, at 80% with a breathing dot. No branch:
+      the pane header and the sidebar carry it. Unreachable, even with the
+      sidebar open: the blocked mark, "Can't reach <name>" and a small Refresh.
     - Right, while someone waits: mark, name, question (260) and +N; a click
       runs `kanso-spaces.needs-you.next`. "Memory N% free" in `blocked` when
-      under the guard's floor; a click opens Memory. Then the working count
-      and "⌘⇧P".
+      under the guard's floor; a click opens Memory. While an agent works, the
+      working mark and how many; a click opens Status. Then the palette, an
+      icon button with its key in the tooltip.
 - **Themes**: `kanso` (dark) and `kanso-day` (light), in `themes/`.
   - Dark: background `#1b1b19`, foreground `#d8d4cb`, chrome and canvas
     `#161615`, border `#272725`, input `#353430`, muted `#949086`, dim
@@ -181,48 +214,47 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     `#98ad8f`.
   - Light: background `#f4f1eb`, foreground `#3c3934`, chrome `#e3dfd6`,
     working `#8f7d52`, blocked `#9a6e68`, done `#6d7d62`.
-- **Icons**: one Lucide-style set in `mods/kanso-chrome/icons/`, every one
-  with the same stroke (2 on a 24 grid, 1.4 on a 16 grid), so they read as
-  one family.
+- **Icons**: Lucide's own icons in `mods/kanso-chrome/icons/`, unchanged and
+  named as Lucide names them (stroke 2 on a 24 grid); the ensō marks
+  (`enso`, `enso-idle`, `working`) are marks, not icons.
 
 ## How it behaves
 
-- **Since you left**: after 5 minutes away, a "While you were away" head under
-  the project lists up to three rows: mark, name, outcome (Finished, Needs you,
-  Failed, Went to sleep, Could not sleep, a PR's state) and age; under it, dim,
-  the agent's line when it happened (`did`, kept with the event). The agent in
-  front is left out; one row per agent. +N expands inline. Enter or a click
-  goes to the agent's pane, a sleeper's Wake menu or the PR, and dismisses; a
-  gone agent's row is dim and inert. Dismissal persists in kanso.db. Events
-  expire after 7 days, capped at 500. Piece `sidebar.away`: off, no event is
-  written or read. Nothing, loading or a failed read: nothing.
+- **Since you left**: after 5 minutes away, "While you were away" sits above
+  the projects, and on Status and Threads. Up to three rows: mark, name,
+  outcome (Finished, Needs you, Failed, a
+  PR's state) and age; under it, dim, the line then (`did`, kept with the
+  event). The agent in front is left out; one row per agent. +N expands
+  inline. Enter or a click goes to the pane, a sleeper's Wake menu or the
+  PR, and dismisses; a gone row is dim and inert. Dismissal stays in
+  kanso.db. Events expire after 7 days, capped at 500. Piece `sidebar.away`
+  off: nothing is written or read. Nothing, loading or a failed read: nothing.
 - **Needs you**: Cmd+J (`kanso-spaces.needs-you.next`) cycles
-  blocked then unseen done, oldest first. Native status owns seen; no sleepers.
+  agents who wait on you, oldest first. Off until chosen. Native status owns seen; no sleepers.
   The count, from 1, opens project/name/reason/age; click/Enter focuses. With none waiting it stays hidden; Cmd+J still says "Nobody is waiting" briefly;
   loading: kit; unavailable: error. The bar names the oldest blocked one from this queue.
-  Strip checks panes each 1.5 s; leaving
-  `working` gets `git status --porcelain`, `git diff --shortstat HEAD`,
-  commits ahead of `@{upstream}` (else `origin/HEAD`) and `gh pr view`
-  (open only; checks and merge state) in shared `kanso.digest`
-  by pane, cleared when it works again or closes. The header shows it
-  after the branch: files, +/-, commits, #number. A blocked one is not
-  green and the tooltip names why. Send opens `kanso-send`.
+  Leaving `working` stores files, commits and the open pull request in
+  `kanso.digest` (kept while it works; dropped when the pane closes).
+  Files, commits and `#N` open the diff, the unpushed work and the
+  section the verdict names. Files and commits dim while working.
+  Sleep and Send stay on the focused finished pane; no Send while it waits on you.
 
 - **Agent status**, one mark everywhere: the tabs, the pane headers, the
-  status bar, the sidebar and Send draw it from one file, kanso-spaces/marks.js
-  `stateMark` (with `programIcon` and `nameOf`; copied by `npm run
-  sync:share`). An ensō, the brush circle
+  status bar, the sidebar and Send draw it from one kit piece, `mark` in
+  kanso-panel/ui-mark.js (copied by `npm run sync:share`; `programIcon` and
+  `nameOf` stay in kanso-spaces/marks.js). An ensō, the brush circle
   (`kanso-chrome/icons/enso*.svg`, tinted), 13px (12 in the status bar, 15
   in the sidebar):
   - Working: the idle ring as a faint track (r 5.6 in 16, 1.5 stroke at
     22%) with a 100° arc running on it (1.7 stroke, round caps;
     `icons/working.svg`), in `working`, turning once every 0.9 s
     (`.spin(900)`). No other spinner for an agent's state.
-  - Blocked: a solid `blocked` disc with a bold `chrome` "!". The pane
-    header adds "Needs you", and a project in the collapsed rail shows it.
+  - Blocked: a solid `blocked` disc with a bold `chrome` "!". A project in
+    the collapsed rail shows it.
   - Done: the circle closed, in `done`.
   - Idle: a thin even ring in `idle` at 70%, on sidebar rows (and in the
-    status bar when nothing works); nothing on the tab or header.
+    status bar when its working count is always shown and nothing works);
+    nothing on the tab or header.
   - The 7px corner dots on the strip's edge tabs stay dots: a badge.
 - **Motion**, native, and never stopped behind other windows (a still ring
   there reads as a stalled agent; what the window saves behind others is
@@ -236,9 +268,10 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
   panel by its place, ⌃⌥P/S/T a view, ⌃⌥1-9 a pane column, ⌃⇧, Kanso
   settings; ⌘⌥hjkl (⇧ moves) vim; left of column 1: sidebar list
   (`kanso-spaces.list`, `kanso.list`); lists: listkeys.js. ⌘F on an agent lists matching turns, newest first.
-- **Kanso settings** (kanso-settings, the gear): Keys rebinds Kanso-only keys
-  (never Herdr's), Mods orders and hides panels and pieces, What's new the
-  log (Updates: Stable or Early), Credits who.
+- **Kanso settings** (kanso-settings, the fixed gear after the panels): Pieces
+  shows, shows when it has something to say, or hides each piece (`kanso.pieces`;
+  hiding stops its work). Keys rebinds Kanso-only keys (never Herdr's). What's new
+  is the log (Updates: Stable or Early). Credits who. Panel order stays `kanso.panels.order`.
 - **Spaces**:
   - Click a space to select it. Clicking the space you are in folds or
     unfolds its agents; the folded state is kept.
@@ -252,9 +285,12 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     edge tabs and the drop cards show the same name.
     Right-click opens the shipped space menu.
   - With another machine, each is one project-height row: monitor or server
-    icon, medium name (`foreground` connected, `muted` off, unreachable,
-    or needs login; this computer's host name). Small `dim`: Off, Unreachable,
-    Needs login; a breathing line while loading. Turn on, Retry, and copy stay
+    icon, medium name (`foreground` connected or loading, else `muted`;
+    this computer's host name, or a name you give it).
+    Right-click or double-click the name; empty brings the old name
+    back. It is kept on that computer and shows on the others.
+    State 11.5: Off and Needs login `dim`,
+    Unreachable `blocked`. A breathing line while loading. Turn on, Retry and copy stay
     visible; hover or keyboard shows turn off and + only when connected; a
     chevron folds it. Copy is `hc machine login <name>`. Off stores
     target, name, via, session and temporary, then `hc machine rm`
@@ -262,14 +298,12 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     and `null` are none, so add never sends an empty `--via`. On is
     `hc machine add` with those, never `--install`; dropped once
     `hc machine ls` shows it connected. If the save fails after the remove,
-    or add keeps failing, it stays with Retry; the hint is the state's
-    tooltip. This computer has no power. Alone, no header. On keeps it awake
-    and renews that hold after a missed answer; a closed lid still sleeps,
-    and an asleep machine is not woken. Connected, a remote row has Sync
-    (`sync-row.js`): `text` and always shown when on, `yellow` when it cannot
-    run, `dim` on hover when off; the tooltip has the words. A click saves
-    `data/kanso-sync/config.json` and bumps
-    `kanso.sync.kick`, so Spend exchanges at once.
+    or add keeps failing, it stays with Retry; the hint is its tooltip.
+    This computer has no power. Alone, no header. On keeps it awake; a closed
+    lid still sleeps, and an asleep machine is not woken. Connected, a remote
+    row has Sync: `text` and always shown when on, `yellow` when it cannot
+    run, `dim` on hover when off. A click turns Sync on, and Spend exchanges
+    at once.
     `hc machine ls`: 30 s in front, 2 min behind, and a hung one is given up.
   - Click an agent row to focus its pane. Pinned agents come first (the
     `kanso.pin` label; drag them, or click the pin). The rest follow the
@@ -292,8 +326,7 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     the step it is on while it works and its last words when it finishes;
     at rest, those last words in `dim`). Without one: while working or
     blocked, the agent's own title when the row shows a name you gave it
-    (else the title is the name already); when done, the pane's digest from
-    shared `kanso.digest` ("+12 −3 · 1 commit · PR #41 failing", or "PR #575, review required" when the merge is blocked). After the
+    (else the title is the name already). Finished: those last words only. After the
     line, a working agent three minutes on the same step shows its time
     (`dim`; past fifteen, `blocked`), counted from when the `msg` changed
     or was first seen (`trackSteps`, `stepOf`; `status_ms` is not it). Before the mark
@@ -322,10 +355,11 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     wide at 35%, 60% and full) that slide across it and back while their
     copy of the text slides the other way (`.loop` on `left`, linear, 2.2
     to 3.2 s, its own pace per agent), so a glint passes over the letters
-    in place; after it three dots count (`.frames`, "", ".", "..", "...",
-    380 ms). Nothing in the row is laid out again. A row waiting on you sits on
-    `blocked` at 8%; the focused one on `foreground` at 7%. Projects:
-    space rows 36 tall, the name 13.5px semibold, 10px between projects.
+    in place. Nothing in the row is laid out again. A row waiting on you sits on
+    `blocked` at 8%; the focused one on `foreground` at 7%. 10px between
+    projects. Asleep rows are 32 tall: dim moon and name, Wake when it
+    can. A click opens the menu; Enter wakes. Second line: full ink waiting, quiet working, dim
+    finished or idle.
   - Projects | Status | Threads: a switch under the top row (three
     segments, 28 tall, in a 3px-padded `foreground` 4% track, radius 10,
     14px of space under it;
@@ -423,7 +457,7 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     below (stacked in the same column). The new pane is focused. The header's
     split buttons and the right-click menu do the same.
   - Cmd+W closes the focused pane. Cmd+Shift+[ and Cmd+Shift+] move it left
-    and right. Cmd+Shift+Enter (or the header's zoom button) cycles its width
+    and right. Cmd+Shift+Enter (or the header's wider or narrower button) cycles its width
     1/4, 1/3, 1/2, 2/3, 1.
   - Cmd+Shift+- and Cmd+Shift+= show fewer or more panes per view (every
     column 1/n); Cmd+Shift+0 evens them out. `kanso-strip.per-N` sets N.
@@ -436,8 +470,8 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     moving the focus; if the focused pane leaves the view, the keyboard
     moves to the nearest pane still in view. Cmd+Alt+, and Cmd+Alt+. slide
     one column. Clicking an edge tab or a minimap mark slides to that pane.
-  - Hold a header's six-dot grip (or Ctrl+drag the header) and drag onto
-    another pane to move the pane. While a pane is held the strip is
+  - Press a header and drag it a few pixels onto another pane to move the
+    pane; a click still only focuses it. While a pane is held the strip is
     sorting: every pane's terminal gives its place to a drop card (a
     `kanso-strip` copy with `{drop: pane}`; the terminal lives on, the tree
     just stops showing it), so the whole pane takes the drop, not only its
@@ -467,19 +501,19 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     pull request, picture), on return and after a restart. Nothing open
     stays shut. A missing file or a closed pull request leaves it empty.
   - Files and PR are idle whenever they aren't the shown panel.
-    PR rereads every minute while shown, every 20 s while a check runs.
+    PR rereads while shown, and stays quiet when the window is behind.
 - **Background**:
   - Git runs only while Spaces shows (0.5 s in front, 5 s behind); the
     `ps` under agents skips Threads. A machine that is off is not read.
 
 ## Built from
 
-- **Layout tree** (`layouts/kanso.json`), root `row`, `titlebar: "none"`,
+- **Layout tree** (`layouts/kanso.json`, its sizes written from the layout tokens by `npm run build:ui-tokens`), root `row`, `titlebar: "none"`,
   `traffic_lights: [12, 16]`, `resizable: true`, `terminal_menu: "kanso-menu"`:
   - `sidebar` (column, `chrome`, 256 px, min 200, max 480):
     - `brand`: block `kanso-chrome` (Herdr's mark), 48 px, `window_drag`.
     - `spaces`: block `kanso-spaces`.
-    - `sidebar-footer`: block `kanso-chrome` with `{footer: true}`, 156 px.
+    - `sidebar-footer`: block `kanso-chrome` with `{footer: true}`, 156 px in the file and fitted to its rows at start: 56 for Settings, 32 more each for Add computer and a kansō update, and room for a refused update's block while the sidebar is open.
   - `work` (column, padding 6, gap 4):
     - `inset` (column, no fill, no border):
       - `tabs`: block `kanso-tabs`, 48 px, `window_drag`.
@@ -504,15 +538,15 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     tab lives in shared `strip.state` (`{cols: [{panes, w, pin, hs}], vx,
     n}`; `hs` is each stacked pane's share of the height); the last chosen
     `n` is in shared `strip.n` for new tabs. Copies with `{ruler}` are the
-    1px rulers; what they measure is in shared `strip.px`.
+    panes' feet; each pane's width they measure is in shared `strip.px`.
     Headers talk to it through shared `strip.req` (scroll, move, width, pin),
     `strip.intent` (where the next new pane goes), `strip.drag` (the held
     pane) and `strip.drop` (where it would land). Copies with `{drop}` are
     the cards that stand in for terminals while a pane is held.
     A `{pane, terminal}` copy (the app passes those to a header; the strip
     adds `strip: true`) is the pane header: icon, name, folder, branch,
-    status, hover buttons, the grip and the wheel. Double-click it to
-    rename the terminal (the same dialog and `kanso.name` label as the
+    digest, status, hover tools, ⋯ and the wheel. Double-click it to
+    rename the terminal in place (the same `kanso.name` label as the
     sidebar). The strip owns the header, drag, drop zones, names and icons;
     Herdr cannot import files across mods.
   - `kanso-prompt`: Herdr's prompt dialog, copied, for what Herdr has no
@@ -540,10 +574,11 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     strip's columns; opening (tabkit.js) runs
     `tab.new`, then `terminal.open` per pane after a `strip.intent`, then
     `strip.req` widths.
-  - `kanso-sleep`: a dialog (520 wide); asleep is in that computer's `kanso.db`.
-    Sleep hides it; a last tab selects a neighbour (Undo returns) or stays alone.
-    One owner (20 s). Another computer's space sleeps there; each step asks
-    once, then not again until its timer. Silent rows stay grey and Wake waits.
+  - `kanso-sleep`: a dialog (520 wide) that stores nothing. Sleep labels each
+    Claude terminal `kanso.resume=<id>` (from `~/.claude/sessions/<pid>.json`),
+    exits it, interrupts the rest, then `tab.settle` and shows another tab or
+    project. Asleep: that label on a terminal at its prompt. Wake: `tab.unsettle`,
+    clear the label, send `claude --resume <id>`. Remote by the machine address.
   - `open-with`: a popup (380 wide, at the top; 340 at the pointer from the
     menu and the header) that opens a folder in a code editor. Props
     `{folder, machine}`; without them, the focused pane's folder. With
@@ -560,28 +595,27 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
   - `kanso-status`: the status bar.
   - `kanso-panel`: the side panels in one mod, chosen by `props.panel`;
     each is a plain class in its own file (`files.js`: that computer's folder
-    (a failure says why), git marks, code in place, Markdown or a picture to
+    (a failure says why), git marks; a file that is not a directory opens in
     `preview.js` with `back: "files"`; `changes.js`:
     git diff and commit; `pr.js`: the pull request, and reviews across this
     machine's projects when `gh` is signed in; `preview.js`: one file by full path, `{path, on, back}`, read
-    again only when that file changed, with Open with, read-again and close:
-    code read-only, a picture (png jpg jpeg gif webp svg, name and pixel size when known), Markdown as `doc.js` `MarkdownDoc`
-    (embedded pictures on another computer), formatted
-    and edited in place (a double-click opens one block, a table as cells;
-    saved after 700 ms, only when the file on disk is still what was read,
-    else a conflict you resolve; "Source" edits the whole file; links to
-    other Markdown files open here). `blocks.js` splits and joins the
-    blocks. kanso-tabs watches `data/kanso-open` and shows the newest path
-    left there (`markdown-handler.sh install`, macOS: makes a small app
-    the `.md` handler). The markdown-panel mod is its copy in a window, by
-    sync:share); `lib.js` holds what they share (where the focused pane is,
-    diff rows, folders from home, the two file renderers: `codeState` is a read-only `EditorState`,
-    `markdownView` is `TextView.markdown`; and `showPanel`, which mounts a block in `panel-body`). A panel
+    again when that file changed, with Open with and close:
+    any file that is not a picture, edited when the read has no NUL and fits in 1 MiB
+    (Save, Cmd+S; Ctrl+S on Windows), on this computer or another,
+    a picture (png jpg jpeg gif webp svg), Markdown as `doc.js` `MarkdownDoc`
+    (a double-click opens one block, a table as cells; on this computer, saved after 700 ms;
+    on another, Save, that key, or leaving writes it, and it does not save while you type;
+    a conflict when the file on disk changed; "Source" edits the whole file).
+    Over 1 MiB stays a view. `blocks.js` splits and joins the blocks.
+    kanso-tabs watches `data/kanso-open` (`markdown-handler.sh install`).
+    The markdown-panel mod is that copy, by sync:share); the kit's `ui-code.js`
+    gives `sourceState` (an `EditorState`, read-only when the file is not text)
+    and `lib.js` gives `showPanel` (a block in `panel-body`). A panel
     exists only while `kanso-tabs` shows it. A remote re-read runs only while it is shown and the window is in front.
     `ports.js` lists TCP listeners (`lsof -F pcn`) with their folder
     (`lsof -d cwd`), age and parent chain (`ps`); a listener under a
     terminal's shell pid (`hc get`) is in that pane, one in a folder of
-    home (not `~/Library`) with none is "No pane runs it". Read every 10 s
+    home (not `~/Library`) with none says "no pane". Read every 10 s
     in front; Stop: SIGTERM on a second press, then SIGKILL.
     `look.js` (Images, panel id `look`, `eye.svg`): no mod hears a click on
     a terminal's link, so it reads the terminal in focus (`hc read --lines
@@ -637,11 +671,10 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
 - A host argument nests at most 16 levels, and the layout tree counts each
   node and its `children` array: there is no room for a wrapper around the
   strip's columns in `work-body`, which is why the rulers sit inside the
-  columns and at the row's start instead.
+  columns instead.
 - Herdr's divider moves only the two nodes beside it and never a fixed one
   (`min` = `max`). The side panel's border must have a strip column on its
-  left: the 1px height ruler stands at the row's start, and while a panel
-  shows, every layout writer puts the strip's right edge rail
+  left: while a panel shows, every layout writer puts the strip's right edge rail
   (`strip-edge-right`) after the panel (`edgeBesidePanel`), so the panel
   can be dragged between 280 and 900 wide.
 - A terminal block takes the keyboard on click, so `focused().pane` is null
@@ -704,9 +737,7 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
 
 - Right-click a terminal, "Open with…": the popup names that pane's folder
   and lists the installed editors; picking one opens that folder in it.
-- In a repository whose branch has an open PR, the PR panel shows its title,
-  checks, review, mergeability, unresolved threads and files; clicking a file
-  shows its diff, and Explain opens an agent tab with the task.
+- In a repository whose branch has an open PR, the panel opens on what stops it, with one action. Send hands that to the agent in front. Details holds the description, people, checks and files.
 - `herdr-app check` passes for all eight `kanso-*` mods and `open-with`, and
   `herdr-app status` shows no errors after `layout.switch {name: "kanso"}`.
 - With no panel open, `panel-body` in the layout file has no children. After

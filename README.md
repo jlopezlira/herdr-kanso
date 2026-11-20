@@ -40,12 +40,14 @@ For the Herdr desktop app, not the Herdr TUI. macOS, Windows and Linux; the iOS 
 
 Tell your agent: **`add herdr.dev/layouts/jlopezlira/herdr-kanso--kanso`**
 
-Or, from a clone: `sh ./scripts/local-install.sh`. You need the Herdr app;
+Or, from a clone: `sh ./scripts/local-install.sh`. On Windows:
+`powershell -NoProfile -File ./scripts/local-install.ps1`. You need the Herdr app;
 `gh` for the PR and Shipped panels; Node 22.15 or newer for Spend, Memory and
 Simulator. Memory supports macOS and Windows; Windows uses its built-in
 PowerShell and Task Scheduler without administrator rights. kansō updates
-itself: a release shows as a row above Settings, and a click installs
-it. Stable is what you get. Early, under What's new, also follows a beta
+itself the same way on Windows, with Windows PowerShell and the curl and tar
+that ship with Windows: a release shows as a row above Settings, and a click
+installs it. Stable is what you get. Early, under What's new, also follows a beta
 or a release candidate, and going back to Stable never installs an older
 version. `ctrl-shift-l` goes back to your previous layout.
 On Windows, merge `kanso/keys.windows.json` into your Herdr keys instead of
@@ -69,16 +71,16 @@ On Windows, merge `kanso/keys.windows.json` into your Herdr keys instead of
   The sidebar shows every project, every agent's state and what it is on, and
   your conversations as threads.
 - **Sleep and wake.** An agent, a tab or a project goes to sleep: it exits with
-  its conversation kept, and wakes on it where it was. Sleep of a space on
-  another computer stays on that computer, so the same tabs are asleep
-  whichever computer you sit at, and waking from either works.
+  its conversation kept on its terminal, and wakes on it in the same pane.
+  Herdr keeps that, so another computer on the same space sees it asleep too,
+  and waking from either works.
 - **Images.** The newest picture the agent in focus made, big beside it,
   and a circle for each picture. Click a circle to switch. Click a spot to
   pin it and say what about it; ⌘↩ sends every note to the agent. Files,
   Preview and Images work for a space on another computer, and a note still sends.
 - **Review without leaving.** Pull requests with diff, checks and threads, and
-  one click to hand the feedback to an agent. Markdown files open to read and
-  edit in place; `md-review plan.md` from an agent asks for your comments.
+  one click to hand the feedback to an agent. Any file that is not a picture opens in Preview,
+  and it can be edited when the read has no NUL and fits in 1 MiB, on this computer or another; `md-review plan.md` from an agent asks for your comments.
 - **Take over in one key.** Cmd+Shift+O opens the agent's folder, worktree
   included, in your editor. Cmd+Alt+S hands a pane's work to another agent.
 - **What your agents leave running.** Ports: dev servers and the panes that
@@ -90,10 +92,11 @@ On Windows, merge `kanso/keys.windows.json` into your Herdr keys instead of
 - **Spend and Shipped.** What your AI work is worth at list price, and what you
   delivered on GitHub, with share images that carry totals only. Turn Sync on
   from another computer's row and Spend adds that computer's tokens.
-- **The device beside the agent.** Simulator shows an iOS simulator or an
-  Android emulator: its screen, and touch, typing, Home, Lock, volume and
-  rotate. Cmd+Shift+S opens it, and Ctrl+Shift+M on Windows.
-  Nothing is downloaded until you press the button that installs serve-sim.
+  A computer's row can be renamed, and that name shows on the other computer.
+- **The device beside the agent.** Simulator is kansō's own panel, using only
+  Xcode's and Android's tools. It installs nothing. The iOS screen is a view;
+  touch it in Apple's Simulator. Android keeps touch, typing and keys, with
+  Rotate for emulators. Cmd+Shift+S opens it, and Ctrl+Shift+M on Windows.
 - **Keys you can see.** Cmd+? draws your keys on a keyboard, layer by modifier,
   and opens the hjkl dōjō, a game for vim's moves with a pixel pet.
 - Two themes, `kanso` and `kanso-day`.
@@ -118,6 +121,8 @@ alone. Help follows the bindings you have.
 | Cmd+Alt+S | Send the pane's work to another agent |
 | Cmd+Alt+T | Arrangements: save this tab, or open a saved one |
 | Cmd+J | Next agent that needs you |
+| Cmd+Shift+Up and Cmd+Shift+Down | Agent above and below in the sidebar |
+| Cmd+Shift+Left and Cmd+Shift+Right | Back and forward through the agents you visited |
 | Cmd+Alt+H/J/K/L | Between panes, as vim; Shift moves the pane |
 | Cmd+? | kansō help, and the dōjō |
 | Cmd+Shift+S | Simulator |
@@ -128,12 +133,11 @@ tab bar rebinds kansō's own keys and hides the panels you don't use.
 ## Privacy
 
 Everything runs on your machine, and reads only the folders you work in:
-`git`, `gh`, `find`, `du`, `lsof`, `ps`, `sqlite3`, `node`, `npx`, `docker`,
-`xcrun`, `adb`, `emulator` and Herdr's `hc`. What reaches the network: PR and
+`git`, `gh`, `find`, `du`, `lsof`, `ps`, `sqlite3`, `node`, `docker`,
+`xcode-select`, `simctl`, `adb`, `emulator` and Herdr's `hc`. What reaches the network: PR and
 Shipped through `gh`, only while their panel is shown (Shipped keeps a private
-gist of your own statistics); Spend's daily fetch of OpenRouter's price list;
-and, only when you press the button, the install of `serve-sim` for Simulator.
-Simulator otherwise stays on this computer. Threads and
+gist of your own statistics); Spend's daily fetch of OpenRouter's price list.
+Simulator's pictures and input stay on this computer. Threads and
 Images read the agents' conversation files for the pictures
 they printed; Spend reads the session files your AI tools write, for tokens and
 prices. State lives under `~/.config/herdr-app/data/`. Nothing is sent to an
@@ -150,8 +154,8 @@ bump than the section already has. `npm run check:version` checks it. `npm test`
 against the Herdr names in `tests/herdr-api.json` (`node scripts/herdr-api.mjs`
 rewrites that file from this machine's declarations), and `npm run check:mods`
 runs `herdr-app check` on every mod when the app is installed. A push
-to `develop` publishes `vX.Y.Z-beta.N` when what kansō installs changed since
-the last beta or the newest stable tag. Running the Release candidate workflow
+to `develop` publishes `vX.Y.Z-beta.N`, once CI passes on all three platforms,
+when what kansō installs changed since the last beta or the newest stable tag. Running the Release candidate workflow
 on `develop` publishes `vX.Y.Z-rc.N`. Merging `develop` into `main` publishes
 the stable `vX.Y.Z`. Docs do not bump the version. How to work on it:
 [CONTRIBUTING.md](CONTRIBUTING.md). How every part is built:
@@ -159,8 +163,11 @@ the stable `vX.Y.Z`. Docs do not bump the version. How to work on it:
 
 ## Credits and license
 
+The idea of a simulator panel beside the agent came from herdr-sim by Robert Soriano.
+
 Grown out of the mods shipped with Herdr; [NOTICE](NOTICE) says who changed
 what. Contributors: Iván Campaña ([icampana](https://github.com/icampana)),
-Leangseu Kim ([leangseu](https://github.com/leangseu), pull request prompts)
-and Johannes Hund ([h0ru5](https://github.com/h0ru5), markdown reviews).
+Leangseu Kim ([leangseu](https://github.com/leangseu), pull request prompts),
+Johannes Hund ([h0ru5](https://github.com/h0ru5), markdown reviews) and
+Jericho Siahaya ([jerichosiahaya](https://github.com/jerichosiahaya), Spend's source toggles).
 Apache License 2.0: [LICENSE](LICENSE).

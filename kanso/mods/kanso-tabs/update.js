@@ -1,10 +1,17 @@
 import { localName } from "./platform-host.js";
-import { shippedKeymap } from "./platform-keymap.js";
+import { missingKeys, shippedKeymap } from "./platform-keymap.js";
 import { paths } from "./platform-paths.js";
+import { sameVolume, updateHost, windowsInstallScript, windowsLaunchScript, windowsRecoverScript } from "./platform-update.js";
 // Kanso's own updates, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
-import { exec, readTextFile, appHome, shared, setShared, notify, layout, run } from "herdr";
-import { tryOr, tryOrAsync } from "./pure.js";
+import { exec, readTextFile, appHome, shared, setShared, notify, layout, run, writeTextFile } from "herdr";
+import { tryOr, tryOrAsync, nodeById } from "./pure.js";
+import { stateBlockPx } from "./ui-state.js";
+import { COLLAPSED, REFUSAL_LINES, footerHeight, railHeight, refusalBlock } from "./footer-model.js";
+import { footerRows } from "./sidebar-footer.js";
+import { pieces, runs, shown } from "./pieces.js";
 import { channelOf, compareReleases, hostInstall, installedRelease, newestTag, offerRelease, parseRelease } from "./release.js";
+import { alreadyUpdating, checkFailed, installFailed, updateAvailable, updated, upToDate } from "./notices.js";
+export { sameVolume, updateHost, windowsInstallScript, windowsLaunchScript, windowsRecoverScript, newestTag };
 
 export const SOURCE = {
   remote: "https://github.com/jlopezlira/herdr-kanso.git",
@@ -33,23 +40,18 @@ const RECOVER_MS = 5 * 60 * 1000;
 const BUSY = 75;
 // Under Herdr's home: the lock, and per install its staging folder, pid, log and outcome.
 const UPDATES = ".kanso-updates";
-// The footer is its account chip and a 34px row (and its gap) for each of Update, Settings and
-// Add machine that shows; a row a switch hides gives its place back.
+// The footer is as tall as its rows, or its squares in the rail; a refused update's block counts only while open.
 const FOOTER = "sidebar-footer";
-const FOOTER_BASE_PX = 84, ROW_PX = 36;
-const OPTIONAL = ["footer.machine"];
-export const footerPx = (hidden, update) => FOOTER_BASE_PX + ROW_PX * (1 + (update ? 1 : 0) + OPTIONAL.filter((id) => !hidden.has(id)).length);
-// Every size this sets, now or before (228 and 264 in 3.9.1), so one you sized yourself stays.
-const OURS = (px) => px >= FOOTER_BASE_PX + ROW_PX && px <= FOOTER_BASE_PX + ROW_PX * 5 && (px - FOOTER_BASE_PX) % ROW_PX === 0;
-
-function findNode(node, id) {
-  if (node?.id === id) return node;
-  for (const child of node?.children ?? []) {
-    const found = findNode(child, id);
-    if (found) return found;
-  }
-  return null;
-}
+const REFUSED_PX = stateBlockPx(refusalBlock("words"), REFUSAL_LINES);
+export const footerPx = (update, refused = null, open = true) => {
+  const rows = footerRows({ update });
+  return open ? footerHeight(rows, update && refused ? REFUSED_PX : 0) : railHeight(rows);
+};
+// Every size this sets, now or before the account chip left (84 and 36 a row), so one you sized yourself stays.
+const LEGACY_BASE_PX = 84, LEGACY_ROW_PX = 36;
+const legacy = (px) => px >= LEGACY_BASE_PX + LEGACY_ROW_PX && px <= LEGACY_BASE_PX + LEGACY_ROW_PX * 5 && (px - LEGACY_BASE_PX) % LEGACY_ROW_PX === 0;
+const SIZES = new Set([1, 2, 3].flatMap((rows) => [footerHeight(rows), footerHeight(rows, REFUSED_PX), railHeight(rows)]));
+const OURS = (px) => legacy(px) || SIZES.has(px);
 
 export function compareVersions(a, b) {
   return compareReleases(a, b);
@@ -263,6 +265,7 @@ export class Updater {
     this.following = {};
     this.recovering = null;
     this.pauseS = source.pauseS ?? 2;
+    this.host = source.host ?? updateHost(localName(), exec, writeTextFile, { HOLD, INSTALL_SCRIPT, RECOVER, LAUNCH });
   }
 
   // The tab bar and the footer each hold an Updater: an install either started shows on both.
@@ -275,12 +278,16 @@ export class Updater {
   installs() { return this.state().installs ?? {}; }
   mark(id, patch) { this.setState({ installs: { ...this.installs(), [id]: { ...this.installs()[id], ...patch } } }); }
   unmark(id) { this.setState({ installs: Object.fromEntries(Object.entries(this.installs()).filter(([k]) => k !== id)) }); }
-  autoCheckEnabled() { return this.state().autoCheck !== false; }
+  autoCheckEnabled() { return this.state().autoCheck !== false && runs("update.check", pieces(shared)); }
   channel() { return channelOf(this.state().channel); }
   // The tag written when an install landed, or version.json when that tag is absent or no longer matches.
   current() { return installedRelease(this.installed, this.state().tag); }
 
   available() { return offerRelease(this.state().latest, this.current(), this.channel()); }
+
+  // Shared, so the footer shows the tool's words whichever copy installed.
+  refused() { return this.state().refused ?? null; }
+  refuse(why) { if (this.refused() !== why) this.setState({ refused: why }); }
 
   // Not cached: mid-update a copy can start before version.json lands and would re-offer what is installed.
   async readInstalled() {
@@ -321,19 +328,18 @@ export class Updater {
       const channel = this.channel();
       const changed = this.seenChannel != null && this.seenChannel !== channel;
       this.seenChannel = channel;
-      const now = JSON.stringify([shared("kanso.hidden") ?? [], this.state().latest ?? null, channel]);
-      if (now !== this.hiddenSeen) { this.hiddenSeen = now; this.fit(); }
+      const now = JSON.stringify([this.state().latest ?? null, channel, this.refused(), shared(COLLAPSED) === true]);
+      if (now !== this.fitSeen) { this.fitSeen = now; this.fit(); }
       if (changed) cx.spawn((cx) => this.check(cx, true));
     });
   }
 
   // Resized only when at a size we set, so a footer you sized yourself is left alone.
   fit() {
-    const found = tryOr(() => ({ size: findNode(layout()?.root ?? layout(), FOOTER)?.size?.px }));
+    const found = tryOr(() => ({ size: nodeById(layout()?.root ?? layout(), FOOTER)?.size?.px }));
     if (!found) return;
     const { size } = found;
-    const hidden = new Set(tryOr(() => (Array.isArray(shared("kanso.hidden")) ? shared("kanso.hidden") : []), []));
-    const want = footerPx(hidden, Boolean(this.available()));
+    const want = footerPx(this.available(), this.refused(), shared(COLLAPSED) !== true);
     if (size !== want && OURS(size)) run("layout.resize", { id: FOOTER, px: want });
   }
 
@@ -343,7 +349,7 @@ export class Updater {
     if (!done) return;
     this.setState({ done: null });
     if (done.version !== this.installed) return;
-    notify({ title: `kansō updated to ${done.version}`, body: done.notes || undefined, level: "success" });
+    if (shown("toast.update", true, pieces(shared))) notify(updated(done.version, done.notes));
   }
 
   async check(cx, force = false, report = false) {
@@ -357,22 +363,16 @@ export class Updater {
     const r = await tryOrAsync(() => exec("git", ["-c", "core.askPass=true", "-c", "credential.interactive=never", "-c", "http.lowSpeedLimit=1000", "-c", "http.lowSpeedTime=20", "ls-remote", "--tags", "--refs", this.source.remote]));
     if (this.state().looking?.id === id) this.setState({ looking: null });
     if (r?.code !== 0) {
-      if (report) notify({ title: "kansō could not check for updates", body: "GitHub could not be reached.", level: "warning" });
+      if (report) notify(checkFailed());
       return;
     }
     this.setState({ latest: newestTag(r.stdout, this.channel()), checked: Date.now() });
     const v = this.available();
-    const have = this.current();
-    if (report && !v) notify({ title: "kansō is up to date", body: `You have ${have}, the newest release.`, level: "success" });
+    if (report && !v) notify(upToDate());
     if (report && v && this.state().notified === v) this.setState({ notified: null }); // an explicit check re-notifies for the same version
     if (v && this.state().notified !== v) {
       this.setState({ notified: v });
-      notify({
-        title: `kansō ${v} is available`,
-        body: `You have ${have}. Click to update; Herdr's own updates stay under Settings.`,
-        action: { name: "kanso-tabs.update" },
-        timeout: 30000,
-      });
+      if (report || shown("toast.update", true, pieces(shared))) notify(updateAvailable(v));
     }
   }
 
@@ -385,18 +385,23 @@ export class Updater {
     const id = opId();
     this.working = true;
     this.error = null;
+    this.refuse(null);
+    this.fit();
     const spec = hostInstall(v, this.installed);
     this.mark(id, { version: v, from: this.installed, notes: "", at: Date.now(), phase: "preparing" });
     cx.notify();
-    const home = appHome(), dir = `${home}/${UPDATES}`;
+    const home = appHome(), dir = paths.join(home, UPDATES);
     const started = await tryOrAsync(async () => {
       // Planned on what recovery leaves, never on a swap a dead install left half done (its keys.json
       // would read as yours). Busy, another install holds the lock: this one would be told so too.
       if ((await this.recover())?.code === BUSY) return { code: BUSY };
       const plan = await this.plan(v, home);
       this.mark(id, { notes: plan.notes });
-      return exec("sh", ["-c", LAUNCH, "sh", dir, id, INSTALL_SCRIPT, this.source.tarball(spec.tag), home, dir, id,
-        spec.want, spec.from, this.source.checker ?? SOURCE.checker, stamp(), plan.keys, plan.layout ? "1" : "", plan.base]);
+      return this.host.launch({
+        dir, id, url: this.source.tarball(spec.tag), home, want: spec.want, from: spec.from,
+        checker: this.source.checker ?? SOURCE.checker, stamp: stamp(),
+        keys: plan.keys, layout: plan.layout ? "1" : "", base: plan.base,
+      });
     });
     this.working = false;
     if (started?.code !== 0) {
@@ -408,14 +413,14 @@ export class Updater {
     return this.follow(cx, id);
   }
 
-  pause() { return tryOrAsync(() => exec("sleep", [String(this.pauseS)])); }
+  pause() { return tryOrAsync(() => this.host.pause(this.pauseS)); }
 
   // RECOVER, once. Its code is 0 once every dead install's stage is settled (or there was none),
   // BUSY while the lock is another's; anything else (killed, or a stage that could not be undone)
   // is not done either.
   recover() {
     const home = appHome();
-    return tryOrAsync(() => exec("sh", ["-c", RECOVER, "sh", home, `${home}/${UPDATES}`]));
+    return tryOrAsync(() => this.host.recover(home, paths.join(home, UPDATES)));
   }
 
   // RECOVER, tried again after a pause while busy or cut short, for about RECOVER_MS (a count of
@@ -442,8 +447,9 @@ export class Updater {
     if (this.following[id]) return;
     this.following = { ...this.following, [id]: true };
     const dir = paths.join(appHome(), UPDATES);
+    const slot = (suffix) => paths.join(dir, `${id}.${suffix}`);
     const read = async () => {
-      const [state, why] = String(await readTextFile(`${dir}/${id}.status`) ?? "running").split("\n");
+      const [state, why] = String(await readTextFile(slot("status")) ?? "running").split("\n");
       return { state, why: why ?? "" };
     };
     const end = async () => {
@@ -457,8 +463,10 @@ export class Updater {
         }
         const now = await read();
         if (now.state !== "running") return now;
-        const alive = await tryOrAsync(() => exec("sh", ["-c", 'kill -0 "$(cat "$1")" 2>/dev/null', "sh", `${dir}/${id}.pid`]));
+        const alive = await tryOrAsync(() => this.host.alive(slot("pid")));
         if (alive?.code !== 0) {
+          // The probe was killed or never ran. That is not the worker dying.
+          if (alive?.code !== 1) { await this.pause(); continue; }
           const last = await read(); // it may have said so just before it ended
           if (last.state !== "running") return last;
           // Until recovery has ended with 0, the version on disk may be a half swap's: it says
@@ -480,10 +488,10 @@ export class Updater {
     this.following = Object.fromEntries(Object.entries(this.following).filter(([k]) => k !== id));
     const mark = this.installs()[id];
     if (!outcome || !mark) return;
-    const claimed = await tryOrAsync(() => exec("mv", [`${dir}/${id}.pid`, `${dir}/${id}.reported`]));
+    const claimed = await tryOrAsync(() => this.host.claim(slot("pid"), slot("reported")));
     if (claimed?.code !== 0) return; // another copy reports it
     this.unmark(id);
-    await tryOrAsync(() => exec("rm", ["-f", `${dir}/${id}.status`, `${dir}/${id}.reported`, `${dir}/${id}.log`]));
+    await tryOrAsync(() => this.host.clear([slot("status"), slot("reported"), slot("log"), slot("ps1")]));
     return this.report(cx, outcome.state, outcome.why, mark);
   }
 
@@ -492,19 +500,20 @@ export class Updater {
     const told = state === "busy" || state === "already" ? this.elsewhere() : undefined;
     if (state === "ok" && mark.version) {
       if (hostInstall(mark.version)?.want === this.installed) this.setState({ tag: mark.version });
-      notify({ title: `kansō updated to ${mark.version}`, body: mark.notes || undefined, level: "success" });
+      notify(updated(mark.version, mark.notes));
     }
     if (state === "error") {
       this.error = why || "the update failed";
-      notify({ title: "kansō was not updated", body: this.error, level: "error" });
+      notify(installFailed(this.error));
     }
+    this.refuse(state === "error" ? this.error : null);
     this.fit();
     cx.notify();
     return told;
   }
 
   elsewhere() {
-    notify({ title: "kansō is already being updated", body: "Another window or the other Update button started it; it finishes on its own.", level: "info" });
+    notify(alreadyUpdating());
     return "busy";
   }
 
@@ -514,7 +523,7 @@ export class Updater {
   async plan(v, home) {
     const shipped = async (version, path) => {
       try {
-        const r = await exec("curl", ["-fsSL", "--max-time", "15", this.source.file(version, path)]);
+        const r = await this.host.fetch(this.source.file(version, path));
         return r.code === 0 ? r.stdout : null;
       } catch { return null; }
     };
@@ -526,9 +535,9 @@ export class Updater {
       shipped(had, keymap), shipped(had, "kanso/layouts/kanso.json"),
       shipped(next, keymap), shipped(next, "kanso/layouts/kanso.json"),
     ]);
-    const oldKeys = beforeKeys ?? (localName() === "windows" ? "{}" : null);
+    const oldKeys = beforeKeys ?? missingKeys(localName());
     const layout = oldLayout !== null && newLayout !== null && !sameJson(oldLayout, newLayout);
-    const userKeys = await readTextFile(`${home}/keys.json`);
+    const userKeys = await readTextFile(paths.join(home, "keys.json"));
     const differ = oldKeys !== null && newKeys !== null && userKeys !== null && !sameJson(oldKeys, newKeys);
     const merged = differ ? tryOr(() => mergeKeys(JSON.parse(userKeys), JSON.parse(oldKeys), JSON.parse(newKeys)), "unread") : null;
     const keyNotes = merged === "unread" ? ["Your keys.json could not be read, so kansō's keys were left as they are."]

@@ -1,4 +1,5 @@
 // Kanso settings: the keys page's bookkeeping, the changelog reader and the
+import { loadDefaultKeys, loadSettings } from "./mod-fixtures.mjs";
 // shipped keys it resets to.
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -51,7 +52,7 @@ const herdrKeys = () => {
 test("The Keys page lists Kanso's own keys only, and Reset knows them all", async () => {
   const { GROUPS, HERDRS, ofRow } = await actions();
   const herdrChords = herdrKeys();
-  const { DEFAULT_KEYS } = await load("kanso-settings/defaults.js", ["DEFAULT_KEYS"]);
+  const { DEFAULT_KEYS } = await loadDefaultKeys();
   const shipped = JSON.parse(readFileSync(new URL("../kanso/keys.json", import.meta.url), "utf8"));
   assert.deepEqual(clone(DEFAULT_KEYS["kanso/keys.json"]), shipped, "regenerate kanso-settings/defaults.js from kanso/keys.json");
   for (const [section, map] of Object.entries(shipped)) {
@@ -100,6 +101,7 @@ const SAME_AS_HERDR = {
   "pane.swap": /^(kanso-strip\.(move|vim-move)-(left|right|up|down)|terminal)$/,
   "pane.zoom": /^kanso-strip\.width$/,
   "space.select": /^kanso-spaces\.space-\d$/,
+  "tab.select": /^kanso-tabs\.tab-\d$/,
   "app.settings": /^kanso-spend\.settings$/,
   "app.help": /^mod\.open:kanso-help$/,
   "terminal.search": /^kanso-strip\.find$/,
@@ -124,7 +126,7 @@ test("Kanso's keys never give Herdr's or macOS's keys another meaning", () => {
 
 test("Settings has no Sync page", async () => {
   const { PAGES } = await load("kanso-settings/main.js", ["PAGES"]);
-  assert.deepEqual(clone(PAGES.map((page) => page.key)), ["keys", "mods", "news", "credits"]);
+  assert.deepEqual(clone(PAGES.map((page) => page.key)), ["pieces", "keys", "news", "credits"]);
 });
 
 const TAKEN_OVER_ON_PURPOSE = {
@@ -148,7 +150,7 @@ test("Windows takes Herdr keys for the same intent, except the named agent navig
       } else {
         assert.match(action, SAME_AS_HERDR[original.split(":")[0]] ?? /^$/, key);
         const direction = original.split(":")[1];
-        if (direction && /^(pane\.go|pane\.swap|pane\.split|space\.select)/.test(original)) assert.ok(action.endsWith(`-${direction}`), `${key}: same direction or space`);
+        if (direction && /^(pane\.go|pane\.swap|pane\.split|space\.select|tab\.select)/.test(original)) assert.ok(action.endsWith(`-${direction}`), `${key}: same direction or space`);
       }
     }
   }
@@ -156,11 +158,11 @@ test("Windows takes Herdr keys for the same intent, except the named agent navig
 });
 
 test("Settings compares and resets to this platform's shipped bindings", async () => {
-  const { DEFAULT_KEYS } = await load("kanso-settings/defaults.js", ["DEFAULT_KEYS"]);
+  const { DEFAULT_KEYS } = await loadDefaultKeys();
   const windows = JSON.parse(readFileSync(new URL("../kanso/keys.windows.json", import.meta.url), "utf8"));
   assert.deepEqual(clone(DEFAULT_KEYS["kanso/keys.windows.json"]), windows, "regenerate defaults with node scripts/sync-keys.mjs");
   for (const platform of ["macos", "linux", "windows"]) {
-    const { Settings } = await load("kanso-settings/main.js", ["Settings"], { window: () => ({ platform }) });
+    const { Settings } = await loadSettings({ window: () => ({ platform }) });
     const settings = new Settings(), row = { action: "kanso-strip.new-right" }, section = "layout:kanso";
     const chord = platform === "windows" ? "ctrl-shift-o" : "cmd-d";
     assert.deepEqual(clone(settings.shipped(row, section)), [chord]);

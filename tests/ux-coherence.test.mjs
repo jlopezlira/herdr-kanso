@@ -13,6 +13,8 @@ import { describe } from "../kanso/mods/kanso-help/keymap.js";
 const root = fileURLToPath(new URL("../", import.meta.url));
 const text = (path) => readFile(join(root, path), "utf8");
 
+const MOD_ROOTS = ["kanso/mods", "open-with/mods", "markdown-panel/mods"];
+
 test("Spend opens on today, and a chosen period is the one it accepts next time", () => {
   assert.equal(spendPeriod(undefined), "day");
   assert.equal(spendPeriod("nope"), "day");
@@ -39,7 +41,7 @@ test("Spend opens on today, and a chosen period is the one it accepts next time"
 });
 
 test("a second press within four seconds confirms, and after that it arms again", async () => {
-  const { Armed, ARM_MS } = await load("kanso-panel/ui.js", ["Armed", "ARM_MS"], { Date });
+  const { Armed, ARM_MS } = await load("kanso-panel/ui-button.js", ["Armed", "ARM_MS"], { Date });
   const armed = new Armed();
   const ran = [];
   const timers = [];
@@ -67,25 +69,32 @@ test("a second press within four seconds confirms, and after that it arms again"
   }
 });
 
-test("the sidebar, settings and sleep confirm through Armed", async () => {
-  const spaces = await text("kanso/mods/kanso-spaces/main.js");
-  assert.equal(spaces.includes("confirmClose"), false);
-  assert.equal(spaces.includes("Click again"), false);
-  assert.match(spaces, /this\.armed\.press\("remove"/);
-  assert.match(spaces, /this\.armed\.press\("close"/);
-  assert.match(spaces, /Press again: remove it/);
-  assert.match(spaces, /Press again to close it/);
-  const settings = await text("kanso/mods/kanso-settings/main.js");
-  assert.match(settings, /new Armed\(\)/);
-  assert.match(settings, /Press again to take it/);
-  assert.equal(settings.includes("Press it again"), false);
-  const sleep = await text("kanso/mods/kanso-sleep/main.js");
-  assert.equal(sleep.includes("ARM_MS"), false);
-  assert.equal(/^\s*arm\(key, cx, act\)/m.test(sleep), false);
-  assert.match(sleep, /this\.armed\.press\(key/);
-  assert.match(sleep, /Press again to forget it/);
+test("A row's verb that asks twice arms on the first press, reads as armed, and runs on the second", async () => {
+  const { Armed } = await load("kanso-panel/ui-button.js", ["Armed"], { Date });
+  const armed = new Armed();
+  const ran = [];
+  const cx = { notify() {}, timer: { after() {} } };
+  const stop = () => armed.verb("Stop", "stop", "stop:1", () => ran.push("stop"), { disabled: false });
+  assert.deepEqual({ ...stop(), onClick: null }, { label: "Stop", verb: "stop", armed: false, disabled: false, onClick: null });
+  stop().onClick(cx);
+  assert.equal(stop().armed, true);
+  assert.deepEqual(ran, []);
+  stop().onClick(cx);
+  assert.deepEqual(ran, ["stop"]);
 });
 
+test("the sidebar and settings confirm through Armed", async () => {
+  const spaces = await text("kanso/mods/kanso-spaces/main.js");
+  assert.equal(spaces.includes("confirmClose"), false);
+  assert.match(spaces, /this\.armed\.press\("remove"/);
+  assert.match(spaces, /this\.armed\.press\("close"/);
+  assert.match(spaces, /verb: w \? `remove, close/);
+  assert.ok(spaces.includes("verb: `close ${name}`"));
+  const settings = await text("kanso/mods/kanso-settings/main.js");
+  assert.match(settings, /new Armed\(\)/);
+  assert.match(settings, /pressAgain\("take it"\)/);
+  assert.equal(settings.includes("Press it again"), false);
+});
 test("memory's Esc leaves the full list only while that list is open", async () => {
   assert.equal(leaveShowAll(true), false);
   assert.equal(leaveShowAll(false), null);
@@ -103,10 +112,24 @@ test("armed ink comes from the kit token", async () => {
   ]) {
     const source = await text(file);
     assert.equal(source.includes("#ffffff"), false, file);
-    assert.match(source, /primaryText/);
+    assert.match(source, /this\.armed\.button\("[\w-]+"/, file);
   }
+  assert.match(await text("kanso/mods/kanso-panel/ui-button.js"), /filled\(c\.accent, c\.accentText, c\)/);
 });
 
+test("one armed wording: only the kit says Press again, and only as Press again to <verb>", async () => {
+  const dirs = MOD_ROOTS.map((dir) => join(root, dir));
+  const all = async (dir) => (await readdir(dir, { recursive: true })).filter((name) => /\.m?js$/.test(name)).map((name) => join(dir, name));
+  const files = (await Promise.all(dirs.map(all))).flat().filter((file) => !/[\\/]ui-button\.js$/.test(file));
+  const found = [];
+  for (const file of files) {
+    for (const line of (await readFile(file, "utf8")).split("\n")) {
+      if (/\b(?:Press|Click|Tap)\b[^\n]{0,24}\bagain\b|Press again:/.test(line)) found.push(`${file}: ${line.trim().slice(0, 120)}`);
+    }
+  }
+  assert.deepEqual(found, []);
+  assert.match(await text("kanso/mods/kanso-panel/ui-button.js"), /export const pressAgain = \(verb\) => `Press again to \$\{verb\}`;/);
+});
 test("the teaching footers are gone and a scan time can still be said", async () => {
   assert.equal((await text("kanso/mods/kanso-panel/ports.js")).includes("Programs of yours listening"), false);
   assert.equal((await text("kanso/mods/kanso-containers/main.js")).includes("grouped by the Kanso project"), false);
@@ -127,7 +150,7 @@ test("help names a project, and a panel list keeps the name PR", async () => {
 });
 
 const SKIP_DIR = new Set(["kanso-strip"]);
-const skipFile = (name) => name === "sleepwork.js" || name === "pr.js" || name.startsWith("pr-");
+const skipFile = (name) => name === "pr.js" || name.startsWith("pr-");
 
 async function sources(dir, acc = []) {
   for (const entry of await readdir(dir, { withFileTypes: true })) {
@@ -248,7 +271,7 @@ const BANNED = [
   [/machine low/, "machine low"],
   [/\} machine\b/, "} machine"],
   [/Press it again/, "Press it again"],
-  [/Click again(?! to leave)/, "Click again"],
+  [/Click again/, "Click again"],
   [/Pull request/, "Pull request"],
 ];
 
@@ -271,7 +294,7 @@ test("a comment beside a regular expression is not text a person reads", () => {
 });
 
 test("retired words stay out of the words a person reads", async () => {
-  const dirs = ["kanso/mods", "open-with/mods", "markdown-panel/mods"].map((dir) => join(root, dir));
+  const dirs = MOD_ROOTS.map((dir) => join(root, dir));
   const files = (await Promise.all(dirs.map((dir) => sources(dir)))).flat();
   const found = [];
   for (const file of files) {

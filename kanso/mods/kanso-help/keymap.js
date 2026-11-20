@@ -6,7 +6,7 @@ export const ROWS = [
   [["tab", 1.6], ["q"], ["w"], ["e"], ["r"], ["t"], ["y"], ["u"], ["i"], ["o"], ["p"], ["["], ["]"], ["\\"]],
   [["capslock", 1.9], ["a"], ["s"], ["d"], ["f"], ["g"], ["h"], ["j"], ["k"], ["l"], [";"], ["'"], ["enter", 1.7]],
   [["shift", 2.4], ["z"], ["x"], ["c"], ["v"], ["b"], ["n"], ["m"], [","], ["."], ["/"], ["shift", 2.2]],
-  [["ctrl", 1.3], ["alt", 1.3], ["cmd", 1.6], ["space", 5.3], ["cmd", 1.6], ["alt", 1.3], ["left"], ["up"], ["down"], ["right"]],
+  [["ctrl", 1.3], ["alt", 1.3], ["cmd", 1.6], ["space", 3.5], ["cmd", 1.6], ["alt", 1.3], ["left"], ["up"], ["down"], ["right"]],
 ];
 export const MODIFIERS = ["ctrl", "alt", "shift", "cmd"];
 export const CAP = { backspace: "⌫", tab: "⇥", capslock: "⇪", enter: "↩", shift: "⇧", ctrl: "⌃", alt: "⌥", cmd: "⌘", space: "", left: "←", right: "→", up: "↑", down: "↓", escape: "esc" };
@@ -63,7 +63,7 @@ const WORDS = {
   "kanso-strip.close": "Close the pane", "kanso-strip.width": "Wider or narrower", "kanso-strip.pin": "Pin the pane",
   "kanso-strip.scroll-left": "Slide the view left", "kanso-strip.scroll-right": "Slide the view right", "kanso-strip.first": "First column", "kanso-strip.last": "Last column",
   "kanso-strip.center": "Bring the pane into view", "kanso-strip.fewer": "Fewer panes in view", "kanso-strip.more": "More panes in view", "kanso-strip.fit": "Even the columns out",
-  "kanso-spaces.needs-you.next": "Next agent that needs you", "kanso-strip.send": "Send the pane's work to an agent", "kanso-strip.arrange": "Arrangements",
+  "kanso-spaces.needs-you.next": "Next agent that needs you", "kanso-spaces.agent-up": "Agent above", "kanso-spaces.agent-down": "Agent below", "kanso-spaces.agent-back": "Back through the agents visited", "kanso-spaces.agent-forward": "Forward through the agents visited", "kanso-strip.send": "Send the pane's work to an agent", "kanso-strip.arrange": "Arrangements",
   "kanso-spaces.view-spaces": "Sidebar: Projects", "kanso-spaces.view-agents": "Sidebar: Status", "kanso-spaces.view-threads": "Sidebar: Threads", "kanso-spaces.sidebar": "Hide or show the sidebar",
   "kanso-tabs.settings": "kansō settings", "kanso-tabs.sim": "Simulator", "mod.open:kanso-help": "This help",
   "tab.new": "New tab", "tab.close": "Close the tab", "tab.next": "Next tab", "tab.prev": "Previous tab",
@@ -71,6 +71,7 @@ const WORDS = {
   "agent.next": "Next agent", "agent.prev": "Previous agent", "app.palette": "Command palette", "app.settings": "Herdr settings",
   "app.quit": "Quit", "app.hide": "Hide Herdr", "app.hide_others": "Hide the other apps", "app.help": "Herdr's help",
   "mod.open:picker": "Search projects, tabs and agents", "mod.open:open-with": "Open the folder in an editor", "layout.switch": "Switch layout",
+  "kanso-panel.save": "Save the file",
   "pane.zoom": "Zoom the pane", "pane.close": "Close the pane", "pane.split": "Split the pane",
   "list:down": "Down the list", "list:up": "Up the list", "list:first": "First row (press g twice)", "list:last": "Last row", "list:open": "Open the row", "list:search": "Search",
 };

@@ -7,10 +7,9 @@ import { fileURLToPath } from "node:url";
 import { bannedGlobals, fixtureDrift, loadDeclarations, parseDeclarations } from "../scripts/herdr-api.mjs";
 import { globalUses, importsOf, issuesIn, repositoryAudit, resolveSpec } from "../scripts/check-imports.mjs";
 import { SKIPPED, checkMods } from "../scripts/check-mods.mjs";
-import { MOD_BANNED_GLOBALS, bindHerdrModules, modSandbox } from "./helpers.mjs";
+import { MOD_BANNED_GLOBALS, bindHerdrModules, modSandbox, herdrApi as api } from "./helpers.mjs";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
-const api = JSON.parse(readFileSync(new URL("./herdr-api.json", import.meta.url), "utf8"));
 const read = (files) => (file) => {
   if (!Object.hasOwn(files, file)) throw new Error("missing");
   return files[file];
@@ -83,7 +82,7 @@ test("Imports survive a string, a comment and a template, and a rename keeps the
   assert.deepEqual(importsOf(clip).map((item) => item.from), ["./platform-command.js"]);
   const view = readFileSync(new URL("../kanso/mods/kanso-panel/find-view.js", import.meta.url), "utf8");
   const found = importsOf(view).find((item) => item.from === "./find.js");
-  assert.equal(found.specs.find((spec) => spec.imported === "locateConversation").line, 10);
+  assert.equal(found.specs.find((spec) => spec.imported === "locateConversation").line, 12);
 });
 
 test("A bare global the runtime does not provide is reported, and a binding or a comment is not", () => {

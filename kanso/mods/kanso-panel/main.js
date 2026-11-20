@@ -3,6 +3,7 @@
 import { View, div } from "gpui-kit";
 import { props, spaces, home, theme } from "herdr";
 import { tokens, EASE } from "./ui.js";
+import { pageBones } from "./ui-page.js";
 import { Files } from "./files.js";
 import { PullRequest } from "./pr.js";
 import { Preview } from "./preview.js";
@@ -25,7 +26,7 @@ export default class Panel extends View {
     const id = typeof p.panel === "string" ? p.panel : "files";
     const Impl = PANELS[id] ?? Files;
     this.id = id;
-    this.db = new Kdb();
+    this.db = new Kdb(cx.timer);
     this.panel = new Impl(this.db);
     this.project = projectNow();
     this.ready = false;
@@ -60,9 +61,12 @@ export default class Panel extends View {
     write.catch(() => {});
   }
 
+  // A panel's frame while it loads: its own, or a page around its skeleton.
+  bones(c) { return this.panel.bones?.(c) ?? pageBones(c, true, { body: this.panel.skeleton(c) }); }
+
   render(cx) {
     this.keep();
-    const body = this.ready && this.panel ? this.panel.render(cx) : this.panel ? this.panel.bones(tokens(theme()), true) : div().size_full();
+    const body = this.ready && this.panel ? this.panel.render(cx) : this.panel ? this.bones(tokens(theme())) : div().size_full();
     return div().w_full().when(!this.panel?.constructor?.fits, (el) => el.size_full()).opacity(this.shown ? 1 : 0).transition("opacity", EASE).child(body);
   }
 }

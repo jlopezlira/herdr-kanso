@@ -4,14 +4,23 @@
   "description": "Kanso: your agents in a row, not a grid. A Herdr layout with PR review and your editor one key away.",
   "license": "Apache-2.0",
   "type": "module",
-  "engines": { "node": ">=22.15" },
+  "engines": {
+    "node": ">=22.15"
+  },
   "scripts": {
-    "test": "node --test",
+    "test": "node --test --test-timeout=180000 --test-force-exit",
+    "pre-pr": "node scripts/pre-pr.mjs",
     "bench": "node benchmarks/macos.mjs",
     "bench:report": "node benchmarks/summarize.mjs",
     "check:version": "node scripts/check-version.mjs",
     "check:mods": "node scripts/check-mods.mjs",
     "sync:share": "node scripts/sync-share.mjs",
-    "sync:mods": "node scripts/sync-mods.mjs"
+    "sync:mods": "node scripts/sync-mods.mjs",
+    "build:site-tokens": "node scripts/build-site-tokens.mjs",
+    "build:site": "node scripts/build-site.mjs",
+    "build:issue-forms": "node scripts/build-issue-forms.mjs",
+    "build:ui-tokens": "node scripts/build-ui-tokens.mjs",
+    "check:tokens": "node scripts/check-tokens.mjs",
+    "check:dupes": "node scripts/check-dupes.mjs"
   }
 }

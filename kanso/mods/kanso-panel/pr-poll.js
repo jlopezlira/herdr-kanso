@@ -47,3 +47,12 @@ export function waitLine(retryAt) {
 export function heldView(hasPr, freshAt, now) {
   return hasPr ? { keep: true, text: asOfAge(freshAt ?? now, now) } : { keep: false, text: null };
 }
+
+// One failed run is read once, and only while this panel is in front.
+export const logDue = ({ facing, key, have }) => Boolean(facing) && Boolean(key) && key !== have;
+
+export function footLine({ wait, stale, at, now }) {
+  if (wait) return { text: wait, retry: false };
+  if (stale) return { text: asOfAge(at ?? now, now), retry: true };
+  return { text: null, retry: false };
+}

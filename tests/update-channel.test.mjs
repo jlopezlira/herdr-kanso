@@ -1,8 +1,9 @@
 // The update channel: what the shell is given, what the toast says, and the What's new row.
+import { loadUpdater, loadSettings } from "./mod-fixtures.mjs";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { hostInstall } from "../kanso/mods/kanso-chrome/release.js";
-import { context, load, tape } from "./helpers.mjs";
+import { context, tape, success, failure, storeShared, tickingContext } from "./helpers.mjs";
 
 const listing = [
   "a\trefs/tags/v3.29.0",
@@ -16,32 +17,33 @@ function updaterHost({ store, toasts = [], version = "3.30.0", onExec }) {
   return {
     appHome: () => "/app",
     layout: () => null,
-    shared: (key) => store[key],
-    setShared: (key, value) => { store[key] = value; },
+    ...storeShared(store),
     notify: (note) => { toasts.push(note); return String(toasts.length); },
     readTextFile: async () => `{"version":"${version}"}`,
     exec: async (command, args) => {
       if (onExec) return onExec(command, args);
-      return command === "git" ? { code: 0, stdout: listing, stderr: "" } : { code: 0, stdout: "", stderr: "" };
+      return command === "git" ? success(listing) : success("");
     },
   };
 }
+
+// An updater on 3.30.0, and a context to run it in.
+const installedAt = (Updater) => ({ updater: Object.assign(new Updater(), { installed: "3.30.0" }), cx: context().cx });
+const updaterWith = async (options) => (await loadUpdater(updaterHost(options))).Updater;
 
 test("A prerelease download uses the tag, and the version check wants X.Y.Z", async () => {
   const store = { "kanso.update": { channel: "beta", tag: "3.30.0-beta.1", latest: "3.30.0-beta.2", autoCheck: true } };
   const urls = [];
   const sh = [];
-  const { Updater } = await load("kanso-chrome/update.js", ["Updater"], updaterHost({
+  const Updater = await updaterWith({
     store,
     onExec: async (command, args) => {
-      if (command === "curl") { urls.push(args.at(-1)); return { code: 1, stdout: "", stderr: "" }; }
+      if (command === "curl") { urls.push(args.at(-1)); return failure(""); }
       if (command === "sh") { sh.push(args); return { code: String(args[1]).startsWith("dir=") ? 1 : 0, stdout: "", stderr: "could not start" }; }
-      return { code: 0, stdout: "", stderr: "" };
+      return success("");
     },
-  }));
-  const updater = new Updater();
-  updater.installed = "3.30.0";
-  const { cx } = context();
+  });
+  const { updater, cx } = installedAt(Updater);
   await updater.install(cx);
   const spec = hostInstall("3.30.0-beta.2", "3.30.0");
   const launch = sh.find((args) => String(args[1]).startsWith("dir="));
@@ -55,15 +57,13 @@ test("A prerelease download uses the tag, and the version check wants X.Y.Z", as
 
 test("A finished install records its tag when version.json is that version", async () => {
   const store = { "kanso.update": { channel: "beta", tag: "3.30.0-beta.1" } };
-  const { Updater } = await load("kanso-chrome/update.js", ["Updater"], updaterHost({ store }));
-  const updater = new Updater();
-  updater.installed = "3.30.0";
-  const { cx } = context();
+  const Updater = await updaterWith({ store });
+  const { updater, cx } = installedAt(Updater);
   await updater.report(cx, "ok", "", { version: "3.30.0-beta.2" });
   assert.equal(store["kanso.update"].tag, "3.30.0-beta.2");
 
   const moved = { "kanso.update": { tag: "3.30.0-beta.2" } };
-  const { Updater: Again } = await load("kanso-chrome/update.js", ["Updater"], updaterHost({ store: moved, version: "3.31.0" }));
+  const { Updater: Again } = await loadUpdater(updaterHost({ store: moved, version: "3.31.0" }));
   const next = new Again();
   await next.report(cx, "ok", "", { version: "3.30.0-beta.2" });
   assert.equal(next.installed, "3.31.0");
@@ -74,7 +74,7 @@ test("The toast names the tag, and Stable never offers an older release", async 
   const look = async (state, version) => {
     const store = { "kanso.update": { autoCheck: true, ...state } };
     const toasts = [];
-    const { Updater } = await load("kanso-chrome/update.js", ["Updater"], updaterHost({ store, toasts, version }));
+    const { Updater } = await loadUpdater(updaterHost({ store, toasts, version }));
     const updater = new Updater();
     const { cx } = context();
     await updater.check(cx, true, true);
@@ -82,33 +82,32 @@ test("The toast names the tag, and Stable never offers an older release", async 
   };
   const early = await look({ channel: "beta", tag: "3.30.0-beta.1" }, "3.30.0");
   assert.equal(early.toasts[0].title, "kansō 3.31.0-beta.1 is available");
-  assert.match(early.toasts[0].body, /You have 3.30.0-beta.1/);
+  assert.equal(early.updater.current(), "3.30.0-beta.1");
 
   const stable = await look({ tag: "3.30.0-beta.2" }, "3.30.0");
   assert.equal(stable.toasts[0].title, "kansō 3.30.0 is available");
-  assert.match(stable.toasts[0].body, /You have 3.30.0-beta.2/);
+  assert.equal(stable.updater.current(), "3.30.0-beta.2");
   assert.equal(stable.toasts.some((note) => note.title.includes("beta")), false);
 
   const ahead = await look({ tag: "3.31.0-beta.1" }, "3.31.0");
   assert.equal(ahead.updater.available(), null);
   assert.equal(ahead.toasts[0].title, "kansō is up to date");
-  assert.match(ahead.toasts[0].body, /You have 3.31.0-beta.1/);
+  assert.equal(ahead.updater.current(), "3.31.0-beta.1");
 });
 
 test("Choosing Early looks again, and Stable stays the default until then", async () => {
   const store = { "kanso.update": { autoCheck: true, tag: "3.30.0-beta.2", latest: "3.29.0" } };
   let asked = 0;
-  const { Updater } = await load("kanso-chrome/update.js", ["Updater"], updaterHost({
+  const Updater = await updaterWith({
     store,
     onExec: async (command) => {
-      if (command === "git") { asked += 1; return { code: 0, stdout: listing, stderr: "" }; }
-      return { code: 0, stdout: "", stderr: "" };
+      if (command === "git") { asked += 1; return success(listing); }
+      return success("");
     },
-  }));
+  });
   const updater = new Updater();
   const timers = [];
-  const { cx, drain } = context();
-  cx.timer = { every(ms, fn) { timers.push({ ms, fn }); } };
+  const { cx, drain } = tickingContext(timers);
   updater.start(cx);
   await drain();
   const seen = asked;
@@ -134,12 +133,11 @@ const colors = () => ({
 async function settingsOf(store) {
   const ui = tape();
   ui.host.Toggle = { new: (id) => ui.host.Button.new(id) };
-  const { Settings } = await load("kanso-settings/main.js", ["Settings"], {
+  const { Settings } = await loadSettings({
     ...ui.host,
     theme: colors,
     props: () => ({}),
-    shared: (key) => store[key],
-    setShared: (key, value) => { store[key] = value; },
+    ...storeShared(store),
     appHome: () => "/app",
     keys: () => [],
     run: () => {},

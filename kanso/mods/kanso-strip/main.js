@@ -1,4 +1,3 @@
-import { paths } from "./platform-paths.js";
 // Kanso strip, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
 // Herdr can't clip a terminal, so the view shows only whole, live panes and slides a column at a time.
 // Herdr rules that shape the tree: a layout nests at most 16 levels (columns sit directly in work-body), and Herdr folds empty and single-child containers.
@@ -6,54 +5,64 @@ import { paths } from "./platform-paths.js";
 // The mod's copies (header, edge, ruler, drop card) talk to the controller through shared "strip.req", "strip.intent", "strip.drag" and "strip.drop".
 
 import { View, div, svg } from "gpui-kit";
-import { h_flex, v_flex, HoverCard } from "gpui-base";
-import { spaces, panes, agents, focused, layout, run, shared, setShared, theme, nextCommand, props, openOverlay, home, exec, notify, window } from "herdr";
-import { stateMark, programIcon, givenNames, nameOf, NAME_LABEL, onBattery } from "./marks.js";
-import { STRIP_INTENT, isKansoTree, walkLayout, paintLayout, changeLayout } from "./layout.js";
-import { tryOr, tryOrAsync } from "./pure.js";
+import { h_flex, v_flex, HoverCard, Popover } from "gpui-base";
+import { spaces, panes, agents, machines, focused, layout, run, hc, shared, setShared, theme, nextCommand, props, openOverlay, home, exec, notify, window } from "herdr";
+import { programIcon, givenNames, nameOf, NAME_LABEL } from "./marks.js";
+import { STRIP_INTENT, isKansoTree, walkLayout, paintLayout, changeLayout, commitLayout } from "./layout.js";
+import { tryOr, readCommands, pad2 } from "./pure.js";
+import { shortFolder } from "./folder.js";
+import { openArrange } from "./open.js";
+import { openWithPopup } from "./popup.js";
+import { openSend, openSleep } from "./launch.js";
 import { FIND } from "./find-key.js";
-import { rollupState, headerHold } from "./ghchecks.js";
+import { rollupState, headerHold, prFacts, prLine } from "./ghchecks.js";
+import { pieces, shown, runs, setPiece, STORE } from "./pieces.js";
+import { G, R, T, W, FOCUS, ICON, ICON_CHROME, OPACITY, TINT, CLEAR, DRAG_START, CHROME_SQUARE, PANE, alpha, glyphOf, mix, tokens, washes } from "./ui.js";
+import { mark } from "./ui-mark.js";
+import { iconButton, Armed } from "./ui-button.js";
+import { menu } from "./ui-menu.js";
+import { field, TextField } from "./ui-field.js";
+import { pendingDot, PENDING } from "./ui-state.js";
+import { button, failureLine, stepper } from "./kit.js";
+import { layoutPaused, statusBar } from "./status-bar.js";
+import { COLUMN } from "./ui-status.js";
+import { boundChord } from "./ui-tooltip.js";
+import { headerSegment } from "./ui-header.js";
+import { pieceLines } from "./piece-lines.js";
+import { localService } from "./platform-host.js";
+import { openApi } from "./platform-open.js";
+import { NAME_LIMIT, ENTRIES, DIGEST_PIECES, PIECE_GROUP, shownAt, foldFor, headerWidths, headerTools, hoverTools, menuEntries, placeOf, paneLabel, headerMark, prTitle } from "./header-model.js";
 
 // Panes the view holds at once (st.n, 1 to 8): a new column takes 1/n of the view.
 const N_MAX = 8;
+const openUrl = (url) => localService(openApi).open(url).catch(() => { });
 const DEFAULT_N = 2;
 const MIN_W = 0.08; // narrowest a column can be dragged, as a share of the view
 const W_STEPS = [1 / 4, 1 / 3, 1 / 2, 2 / 3, 1];
 const newW = (st) => 1 / (st.n ?? DEFAULT_N);
 // The minimap's slot is 180px and its stepper takes about 60: the pills shrink to the rest, and past a mark's least width they are cut in their own box, so the stepper always shows.
-const PILLS_PX = 110;
-export function pillWidths(cols, budget = PILLS_PX) {
+export function pillWidths(cols, budget = PANE.pills) {
   const raw = cols.map((c) => 6 + (Number(c.w) || 0) * 18);
-  const room = budget - cols.length * 2 - Math.max(0, cols.length - 1) * 3;
+  const room = budget - cols.length * 2 * COLUMN.side - Math.max(0, cols.length - 1) * COLUMN.gap;
   const total = raw.reduce((a, b) => a + b, 0);
   const scale = total > room ? Math.max(0, room) / total : 1;
   return raw.map((w) => Math.max(3, scale < 1 ? Math.floor(w * scale) : Math.round(w)));
 }
 const EPS = 1e-3;
 const KEY = "strip.state";
-const HEADER_H = 34;
 const WHEEL_PX = 600; // trackpad/wheel pixels that slide the view one full width
-const EDGE_W = 28; // the tab at an edge that stands for the panes beyond it
 const WHEEL_STEP = 0.25; // of a view width of wheel travel moves one column
 const MIN_VIEW = 0.2; // pinned columns always leave this much of the view to slide
-const COL_MIN = 140; // px: a column can't be dragged narrower
-const ROW_MIN = 90; // px: a stacked pane can't be dragged shorter
 // Layout writes are throttled: a burst writes its first step at once, then its latest state every WRITE_MS.
 const WRITE_MS = 100;
 const SETTLE = 250; // ms without the dragged sizes changing before the strip adopts them
 
-const GAP = 6; // the soft gutter between panes, in the frame's tone: no lines
-const RADIUS = 8;
-// TOOL: a 15px glyph in 5px of padding on each side.
-const TOOL = 25;
-const TOOL_GAP = 10;
-const TOOLS_EASE = { duration: 160, easing: "ease-out" };
 const TAB_BLOCK = {
   id: "main", type: "block", background: "chrome",
   content: { tab: "active", pane: {
-    header: { content: { mod: "kanso-strip" }, reveal: "always", height: HEADER_H, position: "top" },
+    header: { content: { mod: "kanso-strip" }, reveal: "always", height: CHROME_SQUARE, position: "top" },
     background: "background", border: { width: 0, color: "border" }, focus: { width: 0, color: "border" },
-    radius: RADIUS, gap: GAP, lone: false } },
+    radius: R.card, gap: PANE.gap, lone: false } },
 };
 
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
@@ -82,12 +91,15 @@ function showsTerminal(node, id) {
 
 const nodeId = (c) => (c.panes.length === 1 ? `strip-${c.panes[0]}` : `strip-col-${c.panes[0]}`);
 
-// Ruler measurements in logical px, in shared "strip.px": each pane's width by id, the strip's height as "h".
+// Ruler measurements in logical px, in shared "strip.px": each pane's width by id.
 // Each copy of this mod runs on its own, so they meet in shared state.
 const PX = "strip.px";
 const DRAG_MAX = 12000; // ms a held pane stays held with nobody dropping it (let go over a gutter)
 
 const iconOf = (prog, size, color) => programIcon(prog, size, color) ?? div().size(size);
+// A pane beyond the edge shows its agent's mark only while it has something to say.
+const EDGE_MARKS = ["working", "blocked", "done"];
+const EDGE_CARD_MS = { open: 350, close: 250 };
 const zoneOf = (e, fallback = "below") => {
   const w = e.bounds?.width, h = e.bounds?.height, at = e.local_position;
   if (!w || !h || !at) return fallback;
@@ -95,11 +107,15 @@ const zoneOf = (e, fallback = "below") => {
 };
 const endDrag = () => { setShared("strip.drop", null); setShared("strip.drag", null); };
 
-const PROMPT_W = 420;
-const BADGE_MAX_W = 220;
-const folder = (cwd) => {
-  if (!cwd) return "";
-  return paths.shorten(cwd, home());
+// Let go on a landing place: the held pane moves there. The ruler's foot ends the drag even with nothing held, as it always has.
+const dropMove = (to, side, end = true) => {
+  const d = shared("strip.drag");
+  if (!d) {
+    if (end) endDrag();
+    return;
+  }
+  if (d.pane !== to) setShared("strip.req", { op: "move", pane: d.pane, to, side, n: nonce() });
+  endDrag();
 };
 
 // When an agent stops working: what is in its folder, read from git and gh (never from the conversation).
@@ -119,12 +135,30 @@ const PR_FIELDS = "number,state,isDraft,mergeable,mergeStateStatus,reviewDecisio
 // Open pull request for the header. `hold` is why it cannot merge. Permission is not a header fact.
 export function digestPr(view) {
   if (!view?.number || view.state !== "OPEN") return null;
-  return { number: view.number, state: view.state, checks: checksOf(view.statusCheckRollup), hold: headerHold(view) };
+  const facts = prFacts(view);
+  return facts ? { ...facts, checks: checksOf(view.statusCheckRollup), hold: headerHold(view) } : null;
 }
 
-// `run(cmd, args)` resolves with stdout, or null when the command fails.
-export async function readDigest(cwd, run) {
-  const git = (...args) => run("git", ["-C", cwd, ...args]);
+// gh says this when the branch has no pull request: an answer, not a failure.
+const NO_PR = /no pull requests found/i;
+const stdout = (r) => (r?.code === 0 ? r.stdout : null);
+const ghWords = (r) => String(r?.stderr ?? "").trim().split("\n")[0] || `gh exited with ${r?.code}`;
+
+// `run(cmd, args, cwd)` resolves with { code, stdout, stderr }. `failure` is gh's words when it could not answer.
+export async function readDigest(cwd, run, want = {}) {
+  const gitOn = want.git !== false, prOn = want.pr !== false;
+  if (!gitOn && !prOn) return null;
+  const pull = async () => {
+    const r = await run("gh", ["pr", "view", "--json", PR_FIELDS], cwd);
+    const out = stdout(r);
+    if (out != null) return { pr: tryOr(() => digestPr(JSON.parse(out))), failure: null };
+    return { pr: null, failure: NO_PR.test(r?.stderr ?? "") ? null : ghWords(r) };
+  };
+  if (!gitOn) {
+    const read = await pull();
+    return read.pr || read.failure ? { files: 0, add: 0, del: 0, ahead: 0, pushed: false, ...read } : null;
+  }
+  const git = (...args) => run("git", ["-C", cwd, ...args]).then(stdout);
   if ((await git("rev-parse", "--is-inside-work-tree"))?.trim() !== "true") return null;
   const [status, stat, upstream, branch] = await Promise.all([
     git("status", "--porcelain"), git("diff", "--shortstat", "HEAD"),
@@ -134,39 +168,80 @@ export async function readDigest(cwd, run) {
   // Without an upstream, ahead of the default branch.
   const aheadOfBase = async () => { const base = await git("rev-list", "--count", "origin/HEAD..HEAD"); return base == null ? 0 : Number(base.trim()) || 0; };
   const ahead = pushed ? Number(upstream.trim()) || 0 : await aheadOfBase();
-  const prOf = async () => {
-    if (!branch?.trim()) return null;
-    const out = await run("gh", ["pr", "view", "--json", PR_FIELDS], cwd);
-    return tryOr(() => digestPr(out ? JSON.parse(out) : null));
-  };
-  const pr = await prOf();
-  return { files, ...parseShortstat(stat), ahead, pushed, pr };
+  const read = prOn && branch?.trim() ? await pull() : { pr: null, failure: null };
+  return { files, ...parseShortstat(stat), ahead, pushed, ...read };
 }
 
-export function digestTip(d) {
-  if (!d) return "";
-  const n = (k, one, many) => `${d[k]} ${d[k] === 1 ? one : many}`;
-  const parts = [
-    d.files ? `${n("files", "changed file", "changed files")} (+${d.add} −${d.del})` : null,
-    d.ahead ? `${n("ahead", "commit", "commits")} ${d.pushed ? "not pushed" : "not on the default branch"}` : null,
-    d.pr ? `pull request #${d.pr.number}${d.pr.hold ? `, ${d.pr.hold[0].toLowerCase()}${d.pr.hold.slice(1)}` : d.pr.checks ? `, checks ${d.pr.checks}` : ""}` : null,
-  ].filter((x) => x !== null);
-  return parts.length ? `In its folder now: ${parts.join("; ")}.` : "";
+/** A read GitHub did not answer keeps the pull request it last named, with gh's words; with none named, there is nothing to say. */
+export function settleDigest(was, read) {
+  if (!read) return null;
+  return read.failure && was?.pr ? { ...read, pr: was.pr } : { ...read, failure: null };
 }
 
-const openSend = (p) => openOverlay({ mod: "kanso-send", kind: "dialog", width: 520, props: { pane: p.pane } });
-const openArrange = () => openOverlay({ mod: "kanso-arrange", kind: "dialog", width: 480 });
-const openSleep = (p) => {
-  const space = spaces().find((s) => s.tabs.some((t) => t.id === p.tab));
-  if (space) openOverlay({ mod: "kanso-sleep", kind: "dialog", width: 520, props: { sleep: { scope: "agent", space: space.id, tab: p.tab, pane: p.pane } } });
+const words = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+
+export function readClock(at) {
+  if (at == null || !Number.isFinite(Number(at))) return null;
+  const date = new Date(at);
+  return `${pad2(date.getHours())}:${pad2(date.getMinutes())}`;
+}
+
+const readNote = (working, at) => {
+  const clock = working ? readClock(at) : null;
+  return clock ? ` · read ${clock}` : "";
 };
+
+export function digestSegments(d, { working = false, map = null } = {}) {
+  if (!d) return [];
+  const read = readNote(working, d.at);
+  const tone = working ? "dim" : "muted";
+  const openPr = d.pr?.number && String(d.pr.state ?? "OPEN").toUpperCase() === "OPEN" ? d.pr : null;
+  const line = openPr ? prLine(d) : null;
+  const filesOn = shown("header.digest", d.files > 0 || d.ahead > 0, map);
+  const prOn = shown("header.pr", Boolean(openPr), map);
+  const files = filesOn && d.files > 0 ? {
+    kind: "files", count: words(d.files, "file", "files"), tone,
+    diff: d.add > 0 || d.del > 0 ? `+${d.add ?? 0} −${d.del ?? 0}` : null, diffTone: "dim",
+    tip: `Open the diff${read}`, open: { panel: "files", changed: true },
+  } : null;
+  const commits = filesOn && d.ahead > 0 ? {
+    kind: "commits", count: words(d.ahead, "commit", "commits"), tone,
+    tip: `${words(d.ahead, "commit", "commits")} not on GitHub${read}`, open: { panel: "pr", section: "push" },
+  } : null;
+  const pr = prOn && openPr ? {
+    kind: "pr", number: `#${openPr.number}`, numberTone: "muted", url: openPr.url ?? null,
+    verdict: line?.text ?? null, verdictTone: line?.tone ?? null, tone: line?.tone ?? null,
+    tip: line?.text ?? `Pull request #${openPr.number}`,
+    open: { panel: "pr", section: line?.section ?? null, check: line?.check ?? null },
+  } : null;
+  // GitHub not answering is the failure line in the pull request's place, until a refresh is in flight.
+  const failed = pr && d.failure && !d.reading ? { kind: "failure", text: `Can't read #${openPr.number}`, tip: d.failure } : null;
+  return [files, commits, failed ?? pr].filter((part) => part);
+}
+
+export function digestOpen(segment, cwd) {
+  const open = segment?.open;
+  if (!open?.panel) return null;
+  if (open.panel === "files") return { panel: "files", changed: true, cwd: cwd ?? null };
+  return { panel: "pr", section: open.section ?? null, check: open.check ?? null };
+}
 
 export default class Strip extends View {
   init(_props, cx) {
     const p = props() ?? {};
     this.kind = p.edge ? "edge" : p.ruler ? "ruler" : p.drop ? "drop" : p.pane ? "head" : "controller";
-    if (this.kind === "head") this.hovered = false;
+    if (this.kind === "head") {
+      this.hovered = false;
+      this.moreOpen = false;
+      this.segmentMenu = null; // the header fact whose right-click Menu is open
+      this.renaming = null; // the inline name field while renaming
+      this.press = null; // where a press that may become a drag started
+      this.width = null;
+      this.armed = new Armed();
+    }
     if (this.kind !== "controller") return;
+    // Panes per view shows its − and + while the keyboard is on one of its Buttons, so each keeps a handle.
+    this.stepperFocus = { minus: cx.focus_handle(), plus: cx.focus_handle(), value: cx.focus_handle() };
 
     this.state = JSON.parse(JSON.stringify(shared(KEY) ?? {}));
     this.saved = JSON.stringify(this.state);
@@ -180,19 +255,15 @@ export default class Strip extends View {
     this.lastStatus = new Map();
     this.digesting = new Set();
     cx.timer.every(1500, (cx) => this.watchDigests(cx));
-    cx.spawn(async (cx) => {
-      for (;;) {
-        const next = await tryOrAsync(async () => { const c = await nextCommand(); cx.notify(); return { c }; });
-        if (!next) break; // a replaced build (hot reload, update) stops here, before acting
-        this.command(String(next.c).replace(/^kanso-strip\./, ""));
-        this.seq += 1;
-        cx.notify();
-      }
+    readCommands(cx, () => nextCommand(), (c, cx) => {
+      this.command(String(c).replace(/^kanso-strip\./, ""));
+      this.seq += 1;
+      cx.notify();
     });
   }
 
   renderEdge() {
-    const t = theme(), p = props();
+    const t = theme(), p = props(), w = washes(t);
     const byId = new Map(panes().map((q) => [q.pane, q]));
     const ids = (p.panes ?? [p.edge]).filter((id) => byId.has(id));
     const left = p.side === "left";
@@ -201,63 +272,53 @@ export default class Strip extends View {
     const given = givenNames();
     const drag = shared("strip.drag");
     const takes = Boolean(drag) && drag.pane !== p.edge; // a held pane can land beyond this edge
-    const calm = onBattery(); // on battery the dots hold still (marks.js)
-    const dot = (st, size) => st === "working" ? div().size(size).rounded_full().bg(t.working).when(!calm, (d) => d.loop("opacity", { from: 0.35, to: 1, period: 1800 }))
-      : st === "blocked" ? div().size(size).rounded_full().bg(t.blocked).when(!calm, (d) => d.loop("opacity", { from: 0.45, to: 1, period: 1600 }))
-      : st === "done" ? div().size(size).rounded_full().bg(t.done) : null;
+    const c = tokens(t);
+    const paneItem = (id) => {
+      const info = byId.get(id);
+      return { id, info, name: nameOf(info, given), mark: EDGE_MARKS.includes(info?.status) ? info.status : null, show: (cx) => { cx.stop_propagation(); show(id); } };
+    };
     const MAX_TILES = 8;
-    const tile = (id) => {
-      const info = byId.get(id), d = dot(info?.status, 7);
-      return div().id(`edge-tile-${id}`).relative().size(20).flex_none().rounded(6).bg(t.input)
-        .flex().items_center().justify_center()
-        .hover((h) => h.bg(t.selected))
-        .on_click((_e, cx) => { cx.stop_propagation(); show(id); })
+    const tile = ({ id, info, name, mark: status, show: showPane }) => {
+      const d = status ? mark(c, { status, size: "sm" }) : null;
+      const face = div().id(`edge-tile-face-${id}`).relative().size(20).flex_none().rounded(R.control).bg(w?.w7 ?? t.hover)
+        .border_1().border_color(CLEAR).flex().items_center().justify_center()
+        .hover((h) => h.bg(c.selected).border_color(c.border))
         .child(iconOf(info?.program, 12, t.muted))
-        .when(Boolean(d), (el) => el.child(d.absolute().top(-2).right(-2).border(1).border_color(t.chrome)));
+        .when(Boolean(d), (el) => el.child(d.absolute().top(-G.hair).right(-G.hair).rounded_full().border_1().border_color(c.chrome)));
+      return button({ label: name, kind: "quiet", content: [face] })(`edge-tile-${id}`, c, { onClick: showPane }).m(-FOCUS);
     };
-    const stack = v_flex().id("edge-stack").items_center().gap(5).py(6).px(4)
-      .child(div().h(16).text_size(14).text_color(takes ? t.foreground : t.muted).child(chevron))
-      .children(ids.slice(0, MAX_TILES).map(tile))
-      .when(ids.length > MAX_TILES, (el) => el.child(div().text_size(10).text_color(t.dim).child(`+${ids.length - MAX_TILES}`)));
-    const rowOf = (id) => {
-      const info = byId.get(id), d = dot(info?.status, 6);
-      return h_flex().id(`edge-row-${id}`).h(26).px(8).gap(8).items_center().rounded(6).cursor_pointer()
-        .hover((h) => h.bg(t.hover))
-        .on_click((_e, cx) => { cx.stop_propagation(); show(id); })
-        .child(iconOf(info?.program, 13, t.muted))
-        .child(div().flex_1().min_w(0).truncate().text_size(12.5).text_color(t.foreground).child(nameOf(info, given)))
-        .when(Boolean(d), (el) => el.child(d));
+    const items = ids.map(paneItem);
+    const stack = v_flex().id("edge-stack").items_center().gap(G.hair).py(6).px(4)
+      .child(div().h(16).text_size(T.card).text_color(takes ? t.foreground : t.muted).child(chevron))
+      .children(items.slice(0, MAX_TILES).map(tile))
+      .when(ids.length > MAX_TILES, (el) => el.child(div().text_size(T.micro).text_color(t.dim).child(`+${ids.length - MAX_TILES}`)));
+    const item = ({ info, name, mark: status, show: showPane }) => {
+      const prog = info?.program;
+      return { ...(prog?.icon ? { [prog.tint ? "icon" : "picture"]: prog.icon } : {}), label: name, mark: status, onClick: showPane };
     };
-    const card = v_flex().w(220).p(6).gap(1).rounded(8).bg(t.chrome).shadow_md()
-      .child(div().h(22).px(8).flex().items_center().text_size(11).text_color(t.dim)
-        .child(`${ids.length === 1 ? "One pane" : `${ids.length} panes`} beyond the ${left ? "left" : "right"} edge`))
-      .children(ids.map(rowOf));
-    return v_flex().id("edge").size_full().items_center().justify_center().bg(t.chrome).cursor_pointer()
-      .hover((h) => h.bg(takes ? t.accent + "40" : t.hover))
-      .when(takes, (el) => el.bg(t.accent + "24").cursor_grabbing())
-      .on_mouse_up("left", () => {
-        const d = shared("strip.drag");
-        if (!d) return;
-        if (d.pane !== p.edge) setShared("strip.req", { op: "move", pane: d.pane, to: p.edge, side: left ? "after" : "before", n: nonce() });
-        endDrag();
-      })
-      .on_click(() => show(p.edge))
-      .on_scroll_wheel((e) => { const d = wheelDelta(e); if (d) postScroll(d / WHEEL_PX); })
-      .child(HoverCard.new(`edge-card-${p.side}`).anchor(left ? "left_center" : "right_center").open_delay(350).close_delay(250)
-        .trigger(stack)
-        .content(card));
+    const beyond = `${ids.length === 1 ? "One pane" : `${ids.length} panes`} beyond the ${left ? "left" : "right"} edge`;
+    const card = menu("edge-menu", { title: beyond, items: items.map(item) }, c);
+    const hoverCard = HoverCard.new(`edge-card-${p.side}`).anchor(left ? "left_center" : "right_center").open_delay(EDGE_CARD_MS.open).close_delay(EDGE_CARD_MS.close)
+      .trigger(stack)
+      .content(card);
+    return button({ label: beyond, kind: "quiet", content: [hoverCard] })("edge", c, { onClick: () => show(p.edge) })
+      .flex().flex_col().size_full().rounded(0).bg(t.chrome)
+      .hover((h) => h.bg(takes ? alpha(t.accent, TINT.strong) : t.hover))
+      .when(takes, (el) => el.bg(alpha(t.accent, TINT.strong)).cursor_grabbing())
+      .on_mouse_up("left", () => dropMove(p.edge, left ? "after" : "before", false))
+      .on_scroll_wheel((e) => { const d = wheelDelta(e); if (d) postScroll(d / WHEEL_PX); });
   }
 
   renderRuler() {
     const what = props().ruler;
     const t = theme();
     // The ruler is a pane's foot, part of its drop card: landing below the pane lights it too.
-    const drag = what !== "h" ? shared("strip.drag") : null;
+    const drag = shared("strip.drag");
     const takes = Boolean(drag) && drag.pane !== what;
     const drop = takes ? shared("strip.drop") : null;
     // A shared write redraws every mod, so write the last measurement only once the size has rested 120 ms.
-    return div().size_full().when(what !== "h", (el) => el.rounded_b(RADIUS).bg(t.background)).on_size_change((sz, cx) => {
-      const v = Math.round(what === "h" ? sz.height : sz.width);
+    return div().size_full().rounded_b(R.card).bg(t.background).on_size_change((sz, cx) => {
+      const v = Math.round(sz.width);
       if (!v) return;
       this.measured = v;
       if (this.measuring) return;
@@ -269,12 +330,8 @@ export default class Strip extends View {
     })
       .when(takes, (el) => el.cursor_grabbing()
         .on_mouse_move(() => { const d = shared("strip.drop"); if (d?.to !== what || d.side !== "below") setShared("strip.drop", { to: what, side: "below" }); })
-        .on_mouse_up("left", () => {
-          const d = shared("strip.drag");
-          if (d && d.pane !== what) setShared("strip.req", { op: "move", pane: d.pane, to: what, side: "below", n: nonce() });
-          endDrag();
-        }))
-      .when(drop?.to === what && drop.side === "below", (el) => el.child(div().size_full().rounded_b(RADIUS).bg(t.accent + "40")));
+        .on_mouse_up("left", () => dropMove(what, "below")))
+      .when(drop?.to === what && drop.side === "below", (el) => el.child(div().size_full().rounded_b(R.card).bg(alpha(t.accent, TINT.strong))));
   }
 
   // The drop card stands in for a pane's terminal, which lives on: the whole pane takes the drop, not just its header.
@@ -287,15 +344,15 @@ export default class Strip extends View {
     const mine = drag?.pane === id;
     const drop = !mine ? shared("strip.drop") : null;
     const side = drop?.to === id ? drop.side : null;
-    const label = (info, strong) => v_flex().flex_1().size_full().min_w(0).min_h(0).items_center().justify_center().gap(8)
-      .child(iconOf(info?.program, 22, strong ? t.foreground : t.muted))
-      .child(div().w_full().px(12).truncate().text_center().text_size(13).when(strong, (el) => el.font_medium())
+    const label = (info, strong) => v_flex().flex_1().size_full().min_w(0).min_h(0).items_center().justify_center().gap(G.sm)
+      .child(iconOf(info?.program, ICON_CHROME, strong ? t.foreground : t.muted))
+      .child(div().w_full().px(G.md).truncate().text_center().text_size(T.card).when(strong, (el) => el.font_medium())
         .text_color(strong ? t.foreground : t.muted).child(nameOf(info, given)));
     const across = side === "before" || side === "after";
     const first = side === "before" || side === "above";
-    const ghost = () => label(held, true).bg(t.accent + "40");
+    const ghost = () => label(held, true).bg(alpha(t.accent, TINT.strong));
     return div().id(`drop-${id}`).size_full().relative().cursor_grabbing()
-      .when(mine, (el) => el.opacity(0.4))
+      .when(mine, (el) => el.opacity(OPACITY.held))
       .when(!mine, (el) => el
         .on_mouse_move((e) => {
           const s = zoneOf(e), d = shared("strip.drop");
@@ -319,23 +376,31 @@ export default class Strip extends View {
     return all.find((p) => p.pane === props()?.pane);
   }
 
-  rename(p, shown) {
-    openOverlay({ mod: "kanso-prompt", kind: "dialog", width: PROMPT_W, props: {
-      title: "Rename terminal", value: shown, hint: "Empty: the name the program gives it",
-      label: { terminal: p.terminal, key: NAME_LABEL } } });
+  // Double-click renames in place; Enter or leaving the field keeps the name, Escape drops it, empty gives the program's name back.
+  startRename(p, shown, cx) {
+    const text = new TextField({ value: shown }, { limit: NAME_LIMIT });
+    text.set_selected_range({ start: 0, end: shown.length });
+    text.on("submit", (_e, cx) => this.endRename(p, shown, cx, true));
+    text.on("blur", (_e, cx) => this.endRename(p, shown, cx, true));
+    this.renaming = text;
+    text.focus();
+    cx.timer.after(0, () => this.renaming?.focus());
+    cx.notify();
   }
 
-  badge(t, text, iconPath, on) {
-    return h_flex().flex_shrink(1).min_w(0).max_w(BADGE_MAX_W).gap(4).items_center().text_size(11.5).text_color(on ? t.muted : t.dim)
-      .when(Boolean(iconPath), (el) => el.child(svg(iconPath).size(12).flex_none()))
-      .child(div().min_w(0).truncate().child(text));
+  endRename(p, shown, cx, keep) {
+    const text = this.renaming;
+    if (!text) return;
+    this.renaming = null;
+    const name = text.value().trim();
+    if (keep && name !== shown) hc(["label", p.terminal, `${NAME_LABEL}=${name}`]).catch(() => {});
+    text.release();
+    cx.notify();
   }
 
-  // In the strip a split records where the new pane goes, and zoom cycles the column's width.
+  // In the strip a split records where the new pane goes.
   act(command, args) {
-    const pane = props()?.pane;
-    if (props()?.strip && command === "pane.split") setShared("strip.intent", { dir: args.direction, from: pane, at: Date.now() });
-    if (props()?.strip && command === "pane.zoom") { setShared("strip.req", { op: "width", pane, n: nonce() }); return; }
+    if (props()?.strip && command === "pane.split") setShared("strip.intent", { dir: args.direction, from: props()?.pane, at: Date.now() });
     run(command, args);
   }
 
@@ -344,28 +409,18 @@ export default class Strip extends View {
     if (d) postScroll(d / WHEEL_PX);
   }
 
-  // Opens on the machine the pane's space lives on.
-  openWith(p) {
-    const space = spaces().find((s) => s.tabs.some((x) => x.id === p.tab));
-    openOverlay({ mod: "open-with", kind: "popup", width: 340, props: { folder: p.cwd, machine: space?.machine ?? null } });
-  }
-
-  grip(t, pane) {
-    const held = shared("strip.drag")?.pane === pane;
-    return div().id(`grip-${pane}`).w(18).h_full().flex_none().flex().items_center().justify_center().cursor_grab()
-      .tooltip("Hold and drag onto another pane to move this one there")
-      .text_color(held ? t.foreground : t.dim)
-      .hover((h) => h.text_color(t.foreground))
-      .on_mouse_down("left", (e, cx) => { cx.stop_propagation(); setShared("strip.drag", { pane, at: Date.now() }); })
-      // A press elsewhere while this pane is still held: it was let go where nothing took it.
-      .on_mouse_down_out(() => { const d = shared("strip.drag"); if (d?.pane === pane && Date.now() - d.at > 300) endDrag(); })
-      .child(svg("mods/kanso-chrome/icons/grip-vertical.svg").size(14));
+  // The header is the handle: a press held and moved a few pixels picks the pane up.
+  pressMove(e, pane) {
+    const from = this.press;
+    if (!from || shared("strip.drag")) return;
+    if (Math.hypot(e.position.x - from.x, e.position.y - from.y) < DRAG_START) return;
+    this.press = null;
+    setShared("strip.drag", { pane, at: Date.now() });
   }
 
   // The header is the top of the drop card: the middle means "above" here, the card below has the zone for "below".
   dragMove(e, pane) {
     const width = e.bounds?.width || this.width || 0;
-    if (width) this.width = width;
     const d = shared("strip.drag");
     if (!d || d.pane === pane || !width) return;
     const x = e.local_position.x;
@@ -374,123 +429,243 @@ export default class Strip extends View {
     if (cur?.to !== pane || cur.side !== side) setShared("strip.drop", { to: pane, side });
   }
 
-  button(t, id, icon, command, args) {
-    return div().id(id).p(5).rounded(6).text_color(t.muted)
-      .hover((s) => s.bg(t.hover).text_color(t.foreground))
-      .on_click((_e, cx) => {
-        cx.stop_propagation();
-        if (typeof command === "function") command();
-        else this.act(command, args);
-      })
-      .child(svg(`mods/kanso-chrome/icons/${icon}.svg`).size(15));
-  }
-
-  digestBadge(t, pane, d, on) {
-    const tone = on ? t.muted : t.dim;
-    const held = d.pr?.hold, bad = held && /failing|Conflicts|Changes requested/.test(held);
-    const ci = held ? (bad ? t.blocked : t.working) : { failing: t.blocked, running: t.working, passing: t.done }[d.pr?.checks] ?? null;
-    return h_flex().id(`digest-${pane}`).flex_shrink(1).min_w(0).gap(8).items_center().text_size(11.5).text_color(tone).tooltip(digestTip(d))
-      .when(d.files > 0, (el) => el.child(h_flex().flex_none().gap(4)
-        .child(`${d.files} ${d.files === 1 ? "file" : "files"}`)
-        .when(d.add > 0 || d.del > 0, (el) => el.child(div().text_color(t.dim).child(`+${d.add} −${d.del}`)))))
-      .when(d.ahead > 0, (el) => el.child(div().flex_none().child(`${d.ahead} ${d.ahead === 1 ? "commit" : "commits"}`)))
-      .when(d.pr?.state === "OPEN", (el) => el.child(h_flex().flex_none().gap(4).items_center()
-        .when(Boolean(ci), (el) => el.child(div().size(6).rounded_full().bg(ci)))
-        .child(`#${d.pr.number}`)));
-  }
-
-  renderHead() {
-    const t = theme();
-    const all = panes(); // read once: each read copies every pane
-    const p = this.me(all);
-    if (!p) return div();
-    const name = nameOf(p, givenNames());
-    const pic = programIcon(p.program, 15, t.muted);
-    const st = p.status;
+  // What each tool and ⋯ entry does; close asks twice while an agent is in the pane.
+  actions(p, { name, agent }) {
     const pane = p.pane;
-    // In the strip the selected pane is the one the strip remembers, so it stays marked while a side panel has the keyboard.
-    const strip = Boolean(props()?.strip);
+    const close = (cx) => (agent ? this.armed.press("close", cx, () => run("pane.close", { pane })) : run("pane.close", { pane }));
+    const pieceState = (state) => () => setShared(STORE, DIGEST_PIECES.reduce((map, id) => setPiece(map, id, state), pieces(shared)));
+    const pin = () => setShared("strip.req", { op: "pin", pane, n: nonce() });
+    const zoom = () => run("pane.zoom", { pane });
+    return {
+      pin,
+      unpin: pin,
+      sleep: () => openSleep(p),
+      send: () => openSend(p),
+      "open-with": () => openWithPopup(p),
+      "split-right": () => this.act("pane.split", { direction: "right", pane }),
+      "split-down": () => this.act("pane.split", { direction: "down", pane }),
+      width: () => setShared("strip.req", { op: "width", pane, n: nonce() }),
+      zoom,
+      unzoom: zoom,
+      close,
+      needed: pieceState("needed"),
+      hide: pieceState("hide"),
+      settings: () => openOverlay({ mod: "kanso-settings", kind: "dialog", width: 860, height: 680, props: { page: "pieces", find: PIECE_GROUP } }),
+      refresh: () => setShared(DIGEST, { ...(shared(DIGEST) ?? {}), [pane]: { ...shared(DIGEST)?.[pane], reading: true } }),
+      rename: (cx) => this.startRename(p, name, cx),
+    };
+  }
+
+  tool(c, pane, key, does, { armed = false, verb = null } = {}) {
+    const [icon, label] = ENTRIES[key];
+    return iconButton(`ph-${key}-${pane}`, icon, label, (cx) => { cx.stop_propagation(); does[key](cx); }, c, { armed, verb });
+  }
+
+  // ⋯ opens its Menu under itself, right-aligned to it; while it is open the tools stay out.
+  more(c, pane, { name, entries, does }) {
+    const trigger = iconButton(`ph-more-${pane}`, "ellipsis", "More", null, c, { active: this.moreOpen });
+    const close = (cx) => { this.moreOpen = false; cx.notify(); };
+    const item = (key) => (key === "separator" ? { separator: true } : {
+      icon: ENTRIES[key][0], label: ENTRIES[key][1],
+      armed: key === "close" && this.armed.is("close"), verb: key === "close" ? `close ${name}` : null,
+      onClick: (cx) => { does[key](cx); if (key !== "close" || !this.armed.is("close")) close(cx); },
+    });
+    const pop = Popover.new(`ph-menu-${pane}`).trigger(trigger).anchor("top_right").open(this.moreOpen)
+      .on_open_change((open, cx) => { this.moreOpen = open; cx.notify(); });
+    return this.moreOpen ? pop.content(menu(`ph-menu-list-${pane}`, { title: name, items: entries.map(item) }, c)) : pop;
+  }
+
+  // Sleep and Send when they rest out; under the pointer the tools this fold keeps, then ⋯.
+  tools(c, p, { name, out, hover, entries, fold, strip, does }) {
+    const pane = p.pane;
+    const armed = this.armed.is("close");
+    return h_flex().id(`ph-tools-${pane}`).flex_none().items_center().gap(G.hair)
+      .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
+      .children(out.map((key) => this.tool(c, pane, key, does)))
+      .when(hover, (el) => el
+        .children(hoverTools({ fold, strip }).map((key) => this.tool(c, pane, key, does, key === "close" ? { armed, verb: `close ${name}` } : {})))
+        .child(this.more(c, pane, { name, entries, does })));
+  }
+
+  // Folder and branch share one Menu: copy either, or open the folder with an editor.
+  placeMenu(p, f) {
+    return { title: "Folder and branch", piece: "header.place", actions: [
+      ...(p.cwd ? [{ icon: "copy", label: "Copy path", act: (cx) => cx.write_to_clipboard?.(p.cwd) }] : []),
+      ...(f.where.branch ? [{ icon: "copy", label: "Copy branch name", act: (cx) => cx.write_to_clipboard?.(f.where.branch) }] : []),
+      ...(p.cwd ? [{ icon: "external-link", label: "Open with\u2026", act: () => openWithPopup(p) }] : []),
+    ] };
+  }
+
+  // A right-click on a header fact opens its Menu in place: what it does, then the piece lines.
+  factMenu(c, id, fact, { title, actions, piece }) {
+    const shut = (cx) => { this.segmentMenu = null; cx.notify(); };
+    const trigger = fact.on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); this.segmentMenu = id; cx.notify(); });
+    if (this.segmentMenu !== id) return trigger;
+    const items = [...actions.map((a) => ({ ...a, onClick: (cx) => { a.act(cx); shut(cx); } })), ...pieceLines(piece, { done: shut })];
+    return Popover.new(`fact-menu-${id}`).trigger(trigger).open(true).anchor("top_left").on_open_change((open, cx) => { if (!open) shut(cx); })
+      .content(menu(`fact-menu-list-${id}`, { title, items }, c));
+  }
+
+  // The digest: files, commits not on GitHub, then the pull request, or the failure line in its place; a refresh in flight is pending.
+  digestBar(c, p, segments, { fold, working, reading, strip, does }) {
+    const pane = p.pane;
+    const open = (seg) => () => {
+      const to = digestOpen(seg, p.cwd);
+      if (!to) return;
+      run("pane.focus", strip && p.terminal ? { terminal: p.terminal } : { pane });
+      commitLayout({ panel: { id: to.panel, type: "block", content: { mod: "kanso-panel", props: { ...to, at: Date.now() } } } });
+    };
+    const tone = working ? "dim" : null;
+    const digest = segments.filter((seg) => seg.kind === "files" || seg.kind === "commits")
+      .map((seg) => (seg.kind === "files" ? { icon: "file", label: "Open the diff", act: open(seg) } : { icon: "git-pull-request", label: `Push ${seg.count}\u2026`, act: open(seg) }));
+    const piece = (seg) => {
+      if (seg.kind === "failure") return failureLine({ text: seg.text, fix: "Refresh", detail: seg.tip })(`digest-failure-${pane}`, c, { onClick: does.refresh });
+      if (seg.kind === "pr") return shownAt(fold, "PR") ? this.factMenu(c, `pr-${pane}`, headerSegment(`digest-pr-${pane}`, { act: open(seg), title: prTitle(segments, fold),
+        parts: [{ text: seg.number, tone: "muted" }, shownAt(fold, "verdict word") && seg.verdict ? { text: `· ${seg.verdict}`, tone: seg.verdictTone } : null] }, c),
+        { title: `Pull request \u00b7 ${seg.number}`, piece: "header.pr", actions: [
+          ...(seg.url ? [{ icon: "copy", label: "Copy link", act: (cx) => cx.write_to_clipboard?.(seg.url) }] : []),
+          { icon: "git-pull-request", label: "Open the pull request", act: open(seg) },
+          ...(seg.url ? [{ icon: "external-link", label: "Open on GitHub", act: () => openUrl(seg.url) }] : [])] }) : null;
+      const step = seg.kind === "files" ? "files" : "commits";
+      return shownAt(fold, step) ? this.factMenu(c, `${seg.kind}-${pane}`, headerSegment(`digest-${seg.kind}-${pane}`, { act: open(seg), tone, title: seg.tip,
+        parts: [{ text: seg.count }, seg.diff ? { text: seg.diff, tone: seg.diffTone } : null] }, c),
+        { title: "Files and commits", piece: "header.digest", actions: digest }) : null;
+    };
+    return h_flex().id(`digest-${pane}`).flex_shrink(1).min_w(0).overflow_hidden().gap(G.sm).items_center().text_size(T.body).text_color(c.muted)
+      .when(reading, (el) => el.opacity(PENDING))
+      .children(segments.map(piece).filter(Boolean))
+      .when(reading, (el) => el.child(pendingDot(`digest-pending-${pane}`, c)));
+  }
+
+  // In the strip the selected pane is the one the strip remembers, so it stays marked while a side panel has the keyboard.
+  isSelected(p, strip) {
     const remembered = strip ? shared(KEY)?.[p.tab]?.focus : null;
-    const on = remembered ? remembered === pane : p.focused || (strip && p.terminal && focused()?.terminal === p.terminal);
+    return remembered ? remembered === p.pane : p.focused || (strip && p.terminal && focused()?.terminal === p.terminal);
+  }
+
+  // Folder and branch where they differ from the project, and whether its computer is out of reach.
+  placeFacts(p, map) {
+    const space = spaces().find((s) => s.tabs.some((x) => x.id === p.tab));
+    return {
+      where: shown("header.place", true, map) ? placeOf(p, space, home()) : {},
+      away: Boolean(space?.machine) && machines().some((m) => m.name === space.machine && m.layout === "unavailable"),
+    };
+  }
+
+  // Where Sleep and Send go: out, into ⋯, or nowhere.
+  toolPlaces(p, all, on) {
+    const canSend = Boolean(p.terminal) && all.some((q) => q.pane !== p.pane && q.terminal && (q.program?.agent || q.status));
+    const canSleep = Boolean(p.terminal && p.tab && agents().some((x) => x.address === p.terminal));
+    return headerTools({ focused: on, status: p.status, canSend, canSleep });
+  }
+
+  // What the header shows now: who it is, its states, what folds and what ⋯ holds.
+  headFacts(p, all) {
+    const pane = p.pane, st = p.status;
+    const given = givenNames();
+    const agent = Boolean(p.program?.agent || st);
+    const name = paneLabel({ agent, cwd: p.cwd, given: given.get(p.terminal), name: nameOf(p, given) });
+    const strip = Boolean(props()?.strip);
+    const on = this.isSelected(p, strip);
     const drag = strip ? shared("strip.drag") : null;
     const drop = drag && drag.pane !== pane ? shared("strip.drop") : null;
-    const side = drop?.to === pane ? drop.side : null;
-    const ink = on || st === "blocked";
-    const cols = strip ? shared(KEY)?.[p.tab]?.cols ?? [] : [];
-    const col = cols.findIndex((c) => c.panes?.includes(pane));
-    const pinned = Boolean(cols[col]?.pin);
-    const pin = () => setShared("strip.req", { op: "pin", pane, n: nonce() });
-    const d = st !== "working" ? shared(DIGEST)?.[pane] : null;
-    const digest = d && (d.files > 0 || d.ahead > 0 || d.pr?.state === "OPEN") ? d : null;
-    const canSend = Boolean(p.terminal) && all.some((q) => q.pane !== pane && q.terminal && (q.program?.agent || q.status));
-    return h_flex().id(`pane-head-${pane}`).size_full().pl(14).pr(6).gap(10).items_center().text_size(12.5).relative()
-      .rounded_t(RADIUS)
-      .when(pinned && st !== "blocked", (el) => el.bg(t.accent + (on ? "40" : "24")))
-      .when(st === "blocked", (el) => el.bg(t.blocked + "66")
-        .child(div().absolute().left_0().bottom_0().w_full().h(2).bg(t.blocked).when(!onBattery(), (d) => d.loop("opacity", { from: 0.45, to: 1, period: 1600 }))))
-      .when(on && !pinned && st !== "blocked", (el) => el.bg(t.selected))
-      .when(Boolean(side), (el) => el.child(h_flex().absolute().inset_0().rounded_t(RADIUS)
-        .child(div().flex_1().h_full().when(side === "before" || side === "above", (d) => d.bg(t.accent + "40").rounded_tl(RADIUS).when(side === "above", (d) => d.rounded_tr(RADIUS))))
-        .child(div().flex_1().h_full().when(side === "after" || side === "above", (d) => d.bg(t.accent + "40").rounded_tr(RADIUS)))))
-      .when(Boolean(drag) && drag.pane === pane, (el) => el.opacity(0.4))
-      .when(Boolean(drag), (el) => el.cursor_grabbing())
+    const pinned = Boolean((strip ? shared(KEY)?.[p.tab]?.cols ?? [] : []).find((k) => k.panes?.includes(pane))?.pin);
+    const map = pieces(shared);
+    const record = shared(DIGEST)?.[pane];
+    const segments = agent ? digestSegments(record, { working: st === "working", map }) : [];
+    const { where, away } = this.placeFacts(p, map);
+    const placed = this.toolPlaces(p, all, on);
+    const out = ["sleep", "send"].filter((key) => placed[key] === "out");
+    const hover = (this.hovered || this.moreOpen) && !drag;
+    const status = headerMark(st, away);
+    const sized = headerWidths({ name, place: where, digest: segments, pinned, out: out.length, hover, mark: Boolean(status) });
+    const fold = foldFor(this.width ?? Infinity, sized.base, sized.widths);
+    return {
+      name, agent, strip, on, drag, pinned, record, segments, where, away, out, hover, status, fold,
+      side: drop?.to === pane ? drop.side : null,
+      entries: menuEntries({ strip, pinned, zoomed: p.zoomed, tools: placed, fold, canOpen: Boolean(p.cwd) }),
+      keyboard: on && strip && shared("strip.keys") === pane,
+    };
+  }
+
+  // Where a held pane would land on this header: its left or right half, or both for "above".
+  dropZones(t, side) {
+    const zone = (lit) => div().flex_1().h_full().when(lit, (d) => d.bg(alpha(t.accent, TINT.strong)));
+    return h_flex().absolute().inset_0().rounded_t(R.card).overflow_hidden()
+      .child(zone(side === "before" || side === "above"))
+      .child(zone(side === "after" || side === "above"));
+  }
+
+  // Hover, size, rename keys, the press that may become a drag, the drop, the wheel and the click that focuses.
+  headEvents(el, p, { name, strip, pinned, side }, does) {
+    const pane = p.pane, movable = strip && !pinned;
+    return el
       .on_hover((hovered, cx) => {
         this.hovered = hovered;
+        // No button state reaches a move, so a press that leaves the header is dropped: its release may land elsewhere.
+        if (!hovered) this.press = null;
         if (!hovered && shared("strip.drop")?.to === pane && shared("strip.drop")?.side !== "below") setShared("strip.drop", null);
         cx.notify();
       })
-      .on_size_change((sz) => { this.width = sz.width; })
-      .on_mouse_down("left", (e) => {
-        if (e.click_count === 2 && p.terminal) { this.rename(p, name); return; }
-        if (!strip) return;
-        if (e.modifiers.control && !pinned) setShared("strip.drag", { pane, at: Date.now() });
-        else if (shared("strip.drag")) endDrag();
+      .on_size_change((sz, cx) => {
+        const width = Math.round(sz.width);
+        if (width === this.width) return;
+        this.width = width;
+        cx.notify();
+      })
+      .on_key_down((e, cx) => { if (this.renaming && e.key === "escape") { this.endRename(p, name, cx, false); cx.stop_propagation(); } })
+      .on_mouse_down("left", (e, cx) => {
+        if (shared("strip.keys")) setShared("strip.keys", null);
+        if (e.click_count === 2 && p.terminal) { this.press = null; does.rename(cx); return; }
+        if (shared("strip.drag")) endDrag();
+        else if (movable) this.press = e.position;
       })
       .when(strip, (el) => el
         .on_scroll_wheel((e) => this.wheelReq(e))
-        .on_mouse_move((e) => this.dragMove(e, pane))
+        .on_mouse_move((e) => { this.pressMove(e, pane); this.dragMove(e, pane); })
         .on_mouse_up("left", () => {
-          const d = shared("strip.drag");
-          if (!d) return;
-          if (d.pane !== pane) setShared("strip.req", { op: "move", pane: d.pane, to: pane, side: side ?? "above", n: nonce() });
-          endDrag();
+          this.press = null;
+          dropMove(pane, side ?? "above", false);
         }))
-      .on_click(() => run("pane.focus", strip && p.terminal ? { terminal: p.terminal } : { pane }))
-      .when(Boolean(pic), (el) => el.child(pic.opacity(ink ? 1 : 0.75)))
-      .child(div().flex_none().truncate().max_w(260).text_size(12.5).when(ink, (el) => el.font_medium()).text_color(ink ? t.foreground : t.muted).child(name))
-      .when(Boolean(p.cwd), (el) => el.child(this.badge(t, folder(p.cwd), null, ink)))
-      .when(Boolean(p.branch), (el) => el.child(this.badge(t, p.branch, "mods/kanso-chrome/icons/branch.svg", ink)))
-      .when(Boolean(digest), (el) => el.child(this.digestBadge(t, pane, digest, ink)))
-      .when(pinned && !this.hovered, (el) => el.child(svg("mods/kanso-chrome/icons/pin.svg").size(12).flex_none().text_color(t.dim)))
-      .child(div().flex_1())
-      .child(this.tools(t, p, { strip, pinned, canSend, pin, shown: this.hovered && !drag }))
-      .when(st === "working", (el) => el.child(stateMark(t, "working")))
-      .when(st === "blocked", (el) => el.child(h_flex().flex_none().gap(6).items_center().text_size(11.5).font_medium().text_color(t.foreground)
-        .child(stateMark(t, "blocked")).child("Needs you")))
-      .when(st === "done", (el) => el.child(stateMark(t, "done")))
-      .when(strip && !pinned, (el) => el.child(this.grip(t, pane)));
+      .on_click(() => { if (!this.renaming) run("pane.focus", strip && p.terminal ? { terminal: p.terminal } : { pane }); });
   }
 
-  // The tools group is always in the row, 0 wide and clear until hovered, so it eases open natively and the state mark never moves.
-  tools(t, p, { strip, pinned, canSend, pin, shown }) {
+  // The name, or the field that renames it in place.
+  headName(c, pane, name) {
+    return this.renaming
+      ? div().id(`ph-rename-${pane}`).flex_shrink(1).min_w(0).on_mouse_down("left", (_e, cx) => cx.stop_propagation()).on_click((_e, cx) => cx.stop_propagation())
+        .child(field(`ph-name-${pane}`, this.renaming, c, { inline: true, spoken: "Name" }))
+      : div().flex_shrink(1).min_w(0).max_w(W.paneName).truncate().font_medium().child(name);
+  }
+
+  renderHead() {
+    const t = theme(), c = tokens(t);
+    const all = panes(); // read once: each read copies every pane
+    const p = this.me(all);
+    if (!p) return div();
     const pane = p.pane;
-    const list = [
-      strip ? this.button(t, `ph-p-${pane}`, "pin", pin).when(pinned, (b) => b.text_color(t.foreground)) : null,
-      p.terminal && p.tab && agents().some((x) => x.address === p.terminal) ? this.button(t, `ph-zz-${pane}`, "moon", () => openSleep(p)).tooltip("Sleep this agent") : null,
-      canSend ? this.button(t, `ph-s-${pane}`, "send", () => openSend(p)).tooltip("Send to another agent") : null,
-      p.cwd ? this.button(t, `ph-o-${pane}`, "open-with", () => this.openWith(p)) : null,
-      this.button(t, `ph-r-${pane}`, "split-right", "pane.split", { direction: "right", pane }),
-      this.button(t, `ph-d-${pane}`, "split-down", "pane.split", { direction: "down", pane }),
-      this.button(t, `ph-z-${pane}`, p.zoomed ? "unzoom" : "zoom", "pane.zoom", { pane }),
-      this.button(t, `ph-x-${pane}`, "close", "pane.close", { pane }),
-    ].filter(Boolean);
-    const wide = list.length * TOOL + (list.length - 1) * TOOL_GAP;
-    return h_flex().id(`ph-tools-${pane}`).flex_none().h_full().items_center().gap(TOOL_GAP).overflow_hidden()
-      .w(shown ? wide : 0).opacity(shown ? 1 : 0)
-      .transition("width", TOOLS_EASE).transition("opacity", TOOLS_EASE)
-      // The row puts its gap on both sides of the group; closed, one of them is taken back.
-      .ml(-TOOL_GAP)
-      .children(list);
+    const f = this.headFacts(p, all);
+    const does = this.actions(p, f);
+    const blocked = p.status === "blocked";
+    const row = h_flex().id(`pane-head-${pane}`).size_full().pl(G.md).pr(G.sm).gap(G.sm).items_center().text_size(T.value).text_color(c.text).relative()
+      .rounded_t(R.card).border_2().border_color(f.keyboard ? c.accent : CLEAR)
+      .when(f.on && !blocked, (el) => el.bg(c.selected))
+      .when(blocked, (el) => el.bg(mix(c.blocked, c.background, OPACITY.blockedWash)))
+      .when(f.away, (el) => el.opacity(OPACITY.away))
+      .when(f.drag?.pane === pane, (el) => el.opacity(OPACITY.held))
+      .when(f.strip && !f.pinned, (el) => el.cursor_grab())
+      .when(Boolean(f.drag), (el) => el.cursor_grabbing())
+      .when(Boolean(f.side), (el) => el.child(this.dropZones(t, f.side)));
+    return this.headEvents(row, p, f, does)
+      .child(programIcon(p.program, ICON, c.muted) ?? svg(glyphOf("terminal")).size(ICON).flex_none().text_color(c.muted))
+      .child(this.headName(c, pane, f.name))
+      .when(Boolean(f.where.folder) && shownAt(f.fold, "folder"), (el) => el.child(this.factMenu(c, `folder-${pane}`, headerSegment(`ph-folder-${pane}`, { icon: "folder", parts: [{ text: shortFolder(f.where.folder) }] }, c), this.placeMenu(p, f))))
+      .when(Boolean(f.where.branch) && shownAt(f.fold, "branch"), (el) => el.child(this.factMenu(c, `branch-${pane}`, headerSegment(`ph-branch-${pane}`, { icon: "git-branch", parts: [{ text: f.where.branch }] }, c), this.placeMenu(p, f))))
+      .when(f.segments.length > 0, (el) => el.child(this.digestBar(c, p, f.segments, { fold: f.fold, working: p.status === "working", reading: Boolean(f.record?.reading), strip: f.strip, does })))
+      .when(f.pinned, (el) => el.child(headerSegment(`ph-pinned-${pane}`, { icon: "pin", tone: "dim", title: "Pinned" }, c)))
+      .child(div().flex_1())
+      .child(this.tools(c, p, { ...f, does }))
+      .when(Boolean(f.status), (el) => el.child(mark(c, { status: f.status })));
   }
 
   tab() {
@@ -610,33 +785,40 @@ export default class Strip extends View {
   }
 
 
-  // A digest is read once when an agent stops working, and goes when it starts again or its pane does.
+  // A digest is read once when an agent stops working, and stays until the pane closes.
   watchDigests(cx) {
     const store = shared(DIGEST) ?? {};
     const all = panes();
-    const working = all.filter((p) => p.terminal && p.cwd && p.status).flatMap((p) => {
+    for (const p of all) {
+      if (!p.terminal || !p.cwd || !p.status) continue;
       const was = this.lastStatus.get(p.pane);
       this.lastStatus.set(p.pane, p.status);
-      if (p.status === "working") return p.pane in store ? [p.pane] : [];
-      if ((was === "working" || (was === undefined && !(p.pane in store))) && !this.digesting.has(p.pane)) this.digest(p, cx);
-      return [];
-    });
+      const stopped = p.status !== "working" && (was === "working" || (was === undefined && !(p.pane in store)));
+      // A header's Refresh marks its record reading; the read starts here.
+      if ((stopped || store[p.pane]?.reading) && !this.digesting.has(p.pane)) this.digest(p, cx);
+    }
     const live = new Set(all.map((p) => p.pane));
-    const gone = new Set([...working, ...Object.keys(store).filter((id) => !live.has(id))]);
+    const gone = new Set(Object.keys(store).filter((id) => !live.has(id)));
     for (const id of [...this.lastStatus.keys()]) if (!live.has(id)) this.lastStatus.delete(id);
     if (gone.size) setShared(DIGEST, Object.fromEntries(Object.entries(store).filter(([id]) => !gone.has(id))));
   }
 
   digest(p, cx) {
+    const map = pieces(shared);
+    const want = { git: runs("header.digest", map), pr: runs("header.pr", map) };
+    if (!want.git && !want.pr) return;
     this.digesting.add(p.pane);
     const on = spaces().find((s) => s.tabs.some((x) => x.id === p.tab))?.machine ?? null;
-    const run = (cmd, args, cwd) => exec(cmd, args, { cwd, on }).then((r) => (r.code === 0 ? r.stdout : null)).catch(() => null);
+    const run = (cmd, args, cwd) => exec(cmd, args, { cwd, on }).catch((e) => ({ code: -1, stdout: "", stderr: String(e?.message ?? e) }));
     cx.spawn(async () => {
       try {
-        const d = await readDigest(p.cwd, run);
-        // It went back to work meanwhile: what it left is no longer the news.
-        if (panes().find((q) => q.pane === p.pane)?.status === "working") return;
-        setShared(DIGEST, { ...(shared(DIGEST) ?? {}), [p.pane]: d ? { ...d, at: Date.now() } : null });
+        const d = await readDigest(p.cwd, run, want);
+        const live = panes().find((q) => q.pane === p.pane);
+        const was = shared(DIGEST)?.[p.pane];
+        // It went back to work meanwhile: what it left is no longer the news, unless someone asked for this read.
+        if (!live || (live.status === "working" && !was?.reading)) return;
+        const settled = settleDigest(was, d);
+        setShared(DIGEST, { ...(shared(DIGEST) ?? {}), [p.pane]: settled ? { ...settled, at: Date.now() } : null });
       } finally { this.digesting.delete(p.pane); }
     });
   }
@@ -677,7 +859,10 @@ export default class Strip extends View {
     const st = tab && this.state[tab];
     if (!st) return;
     const next = this.commandOn(st, name, panes().filter((p) => p.tab === tab));
-    if (next !== st) this.commit(tab, next);
+    if (next === st) return;
+    this.commit(tab, next);
+    // Focus the keyboard moved draws the accent ring around its header, until a header is pressed.
+    if (next.focus !== st.focus) setShared("strip.keys", next.focus ?? null);
   }
 
   commandOn(st, name, ps) {
@@ -755,7 +940,7 @@ export default class Strip extends View {
       ...(String(n.id).startsWith("strip-col-") ? (n.children ?? []).map((c) => [c.id, c.size ?? null]) : []),
     ]));
   }
-  isCol(n) { const id = String(n.id); return id.startsWith("strip-") && !id.startsWith("strip-edge") && !id.startsWith("strip-ruler"); }
+  isCol(n) { const id = String(n.id); return id.startsWith("strip-") && !id.startsWith("strip-edge"); }
 
   pollAdopt(cx) {
     const now = Date.now(), held = shared("strip.drag");
@@ -781,25 +966,19 @@ export default class Strip extends View {
     const inTree = st.cols.filter((c) => colNodes.some((n) => n.id === nodeId(c)));
     const px = shared(PX) ?? {};
     const width = (c) => px[c.panes[0]] ?? 0;
-    const H = px.h;
-    if (!H || inTree.some((c) => !width(c))) return false;
+    if (inTree.some((c) => !width(c))) return false;
     const span = inTree.reduce((s, c) => s + width(c), 0) || 1;
     const sumW = inTree.reduce((s, c) => s + c.w, 0);
-    const pxOf = (nodes, total, gap) => {
-      const fixed = nodes.reduce((s, n) => s + (n.size?.px ?? 0), 0) + gap * (nodes.length - 1);
-      const wsum = nodes.reduce((s, n) => s + (n.size?.px ? 0 : (n.size?.weight ?? 1)), 0) || 1;
-      const free = Math.max(0, total - fixed);
-      return new Map(nodes.map((n) => [n.id, n.size?.px ?? free * (n.size?.weight ?? 1) / wsum]));
-    };
     const fit = (c) => {
       const n = colNodes.find((k) => k.id === nodeId(c));
       const w = clamp(width(c) / span * sumW, MIN_W, 1);
       const wider = Math.abs(w - c.w) > EPS;
       const sized = wider ? { ...c, w } : c;
-      if (!(c.panes.length > 1 && n.children)) return { col: sized, moved: wider };
-      const hs = pxOf(n.children, H, GAP);
-      const tot = c.panes.reduce((s, id) => s + (hs.get(`strip-${id}`) ?? 0), 0) || 1;
-      const next = Object.fromEntries(c.panes.map((id) => [id, (hs.get(`strip-${id}`) ?? 0) / tot]));
+      // A stack's weights are its shares; px heights are left as they were.
+      if (!(c.panes.length > 1 && n.children) || n.children.some((k) => k.size?.px !== undefined)) return { col: sized, moved: wider };
+      const weightOf = (id) => { const k = n.children.find((x) => x.id === `strip-${id}`); return k ? k.size?.weight ?? 1 : 0; };
+      const tot = c.panes.reduce((s, id) => s + weightOf(id), 0) || 1;
+      const next = Object.fromEntries(c.panes.map((id) => [id, weightOf(id) / tot]));
       const taller = JSON.stringify(next) !== JSON.stringify(c.hs ?? null);
       return { col: taller ? { ...sized, hs: next } : sized, moved: wider || taller };
     };
@@ -944,22 +1123,22 @@ export default class Strip extends View {
   build(st, ps, sorting = false) {
     const byId = new Map(ps.map((p) => [p.pane, p]));
     const weight = (f) => Math.max(1, Math.round(f * 1000));
-    const header = (id) => ({ id: `head-${id}`, type: "block", size: { px: HEADER_H }, content: { mod: "kanso-strip", props: { pane: id, terminal: byId.get(id).terminal, strip: true } } });
+    const header = (id) => ({ id: `head-${id}`, type: "block", size: { px: CHROME_SQUARE }, content: { mod: "kanso-strip", props: { pane: id, terminal: byId.get(id).terminal, strip: true } } });
     const body = (id) => ({ id: `term-${id}`, type: "block", content: sorting ? { mod: "kanso-strip", props: { drop: id } } : { terminal: byId.get(id).terminal } });
-    // A terminal paints square corners, so the ruler doubles as a RADIUS-tall foot drawing the slab's rounded bottom.
-    const ruler = (what) => { const px = what === "h" ? 1 : RADIUS; return { id: `strip-ruler-${what}`, type: "block", size: { px }, min: px, max: px, background: "chrome",
-      content: { mod: "kanso-strip", props: { ruler: what } } }; };
+    // A terminal paints square corners, so the ruler doubles as an R.card-tall foot drawing the slab's rounded bottom.
+    const ruler = (what) => ({ id: `strip-ruler-${what}`, type: "block", size: { px: R.card }, min: R.card, max: R.card, background: "chrome",
+      content: { mod: "kanso-strip", props: { ruler: what } } });
     // Every pane keeps a 1px border, clear except the selected one's accent, so moving the selection never shifts a terminal.
     const t = theme();
     const sel = ps.length > 1 && !sorting ? st.focus : null;
-    const edgeOf = (id) => ({ width: 1, color: id === sel ? t.accent + "8c" : t.background + "00" });
-    const live = (id, size, min) => ({ id: `strip-${id}`, type: "column", size, min, background: "background", radius: RADIUS,
+    const edgeOf = (id) => ({ width: 1, color: id === sel ? alpha(t.accent, TINT.line) : CLEAR });
+    const live = (id, size, min) => ({ id: `strip-${id}`, type: "column", size, min, background: "background", radius: R.card,
       border: edgeOf(id), children: [header(id), body(id), ruler(id)] });
     const share = (c, id) => (c.hs?.[id] ?? 1) / c.panes.reduce((s, k) => s + (c.hs?.[k] ?? 1), 0);
-    const whole = (c) => c.panes.length === 1 ? live(c.panes[0], { weight: weight(c.w) }, COL_MIN)
-      : { id: `strip-col-${c.panes[0]}`, type: "column", gap: GAP, background: "chrome", min: COL_MIN, size: { weight: weight(c.w) },
-        children: c.panes.map((id) => live(id, { weight: weight(share(c, id)) }, ROW_MIN)) };
-    const edge = (ci, side, beyond) => ({ id: `strip-edge-${side}`, type: "block", size: { px: EDGE_W }, min: EDGE_W, max: EDGE_W,
+    const whole = (c) => c.panes.length === 1 ? live(c.panes[0], { weight: weight(c.w) }, PANE.minW)
+      : { id: `strip-col-${c.panes[0]}`, type: "column", gap: PANE.gap, background: "chrome", min: PANE.minW, size: { weight: weight(c.w) },
+        children: c.panes.map((id) => live(id, { weight: weight(share(c, id)) }, PANE.minH)) };
+    const edge = (ci, side, beyond) => ({ id: `strip-edge-${side}`, type: "block", size: { px: PANE.edge }, min: PANE.edge, max: PANE.edge,
       content: { mod: "kanso-strip", props: { edge: st.cols[ci].panes[0], side, count: beyond.length, panes: beyond.flatMap((r) => st.cols[r.ci].panes) } } });
     const row = this.row(st), shown = this.shownCols(st);
     this.shown = new Set(shown);
@@ -971,8 +1150,8 @@ export default class Strip extends View {
       ...(after < row.length ? [edge(row[after].ci, "right", row.slice(after))] : []),
     ];
     const pinned = (side) => st.cols.filter((c) => c.pin === side).map(whole);
-    // The height ruler stands at the start: at the end, Herdr's divider pinned the side panel's border (it cannot move a fixed node).
-    return [ruler("h"), ...pinned("left"), ...out, ...pinned("right")];
+    // Nothing before the first pane: Herdr's divider there would move nothing.
+    return [...pinned("left"), ...out, ...pinned("right")];
   }
 
 
@@ -1021,7 +1200,7 @@ export default class Strip extends View {
     if (px && Date.now() - (this.prunedAt ?? 0) > 10000) {
       this.prunedAt = Date.now();
       const live = new Set(panes().map((p) => p.pane));
-      const kept = Object.fromEntries(Object.entries(px).filter(([k]) => k === "h" || live.has(k)));
+      const kept = Object.fromEntries(Object.entries(px).filter(([k]) => live.has(k)));
       if (Object.keys(kept).length !== Object.keys(px).length) setShared(PX, kept);
     }
   }
@@ -1057,14 +1236,17 @@ export default class Strip extends View {
     return st;
   }
 
+  // A failed layout write stops the strip; it writes again on its own after 10 s, or at once on Resume.
+  resume() { this.halted = 0; this.sets = []; this.applied = null; }
+
   render() {
     if (this.kind === "edge") return this.renderEdge();
     if (this.kind === "ruler") return this.renderRuler();
     if (this.kind === "drop") return this.renderDrop();
     if (this.kind === "head") return this.renderHead();
     const t = theme();
-    if (this.halted && Date.now() - this.halted > 10000) { this.halted = 0; this.sets = []; this.applied = null; }
-    if (this.halted) return h_flex().size_full().justify_center().items_center().text_size(11).text_color(t.blocked).child("Strip paused");
+    if (this.halted && Date.now() - this.halted > 10000) this.resume();
+    if (this.halted) return statusBar({ middle: layoutPaused() })("strip-map", tokens(t), { presses: { Resume: () => { this.resume(); this.dirty = true; } } });
 
     const tab = this.tab();
     const ps = tab ? panes().filter((p) => p.tab === tab) : [];
@@ -1078,32 +1260,24 @@ export default class Strip extends View {
     const st = key !== this.lastKey || this.pendingFocus || !this.state[tab] ? this.refresh(tab, ps, key, drag) : this.state[tab];
 
     const at = this.where(st, st.focus);
-    const widths = pillWidths(st.cols);
-    const pills = st.cols.map((c, i) => {
-      const tone = at?.ci === i ? t.foreground : c.pin || this.shown?.has(i) ? t.muted : t.input;
-      const w = widths[i], k = c.panes.length;
-      return v_flex().id(`strip-mark-${i}`).h(14).px(1).gap(1).flex_none().justify_center().cursor_pointer()
-        .on_click(() => { this.edit(tab, st, (now) => this.focusOn(now, c.panes[0], ps)); this.dirty = true; })
-        .children(c.panes.map((id, r) => div().id(`strip-cell-${id}`).w(w).h(k > 1 ? 2 : 4).rounded_full()
-          .bg(at?.ci === i && at?.ri !== r ? t.muted : tone)));
-    });
     // The minimap can be turned off in Kanso settings; the model above still runs.
-    if ((shared("kanso.hidden") ?? []).includes?.("strip.minimap")) return div();
+    if (!shown("strip.minimap", true, pieces(shared))) return div();
+    const widths = pillWidths(st.cols);
+    const tone = (ci, ri, pin) => (at?.ci === ci && at?.ri === ri ? "current" : at?.ci === ci || pin || this.shown?.has(ci) ? "seen" : "away");
+    const columns = st.cols.map((col, i) => ({ width: widths[i], panes: col.panes.map((_id, r) => tone(i, r, col.pin)) }));
     const n = st.n ?? DEFAULT_N;
-    const tiny = (id, label, tip, action) => div().id(id).size(16).flex_none().flex().items_center().justify_center().rounded(6)
-      .text_size(11).text_color(t.dim).cursor_pointer().tooltip(tip)
-      .hover((h) => h.bg(t.foreground + "12").text_color(t.foreground))
-      .on_click(() => { action(); this.dirty = true; })
-      .child(label);
-    return h_flex().id("strip-map").size_full().gap(3).justify_center().items_center()
-      .on_mouse_up("left", () => { if (shared("strip.drag")) endDrag(); })
-      .on_scroll_wheel((ev) => this.wheel(ev, tab, st))
-      // Past what fits, the extra marks are cut here, never the stepper.
-      .child(h_flex().id("strip-pills").flex_shrink(1).min_w(0).max_w(PILLS_PX).overflow_hidden().gap(3).items_center().children(pills))
-      .child(div().w(8).flex_none())
-      .child(tiny("strip-fewer", "\u2212", "Fewer panes per view", () => this.edit(tab, st, (now) => this.setN(now, n - 1, now.focus))))
-      .child(div().id("strip-n").flex_none().text_size(11).text_color(t.muted).tooltip(`${n} per view · click to even out`).cursor_pointer()
-        .on_click(() => { this.edit(tab, st, (now) => this.fit(now, now.focus)); this.dirty = true; }).child(String(n)))
-      .child(tiny("strip-more", "+", "More panes per view", () => this.edit(tab, st, (now) => this.setN(now, n + 1, now.focus))));
+    const act = (change) => () => { this.edit(tab, st, change); this.dirty = true; };
+    const chords = { fewer: boundChord("kanso-strip.fewer"), more: boundChord("kanso-strip.more"), fit: boundChord("kanso-strip.fit") };
+    const hover = Boolean(this.overStepper) || Object.values(this.stepperFocus).some((handle) => handle.is_focused());
+    // Past what fits, the extra marks are cut in their own box, never the stepper.
+    return statusBar({ middle: stepper({ value: n, hover, columns, chords }) })("strip-map", tokens(t), {
+      presses: { minus: act((now) => this.setN(now, n - 1, now.focus)), plus: act((now) => this.setN(now, n + 1, now.focus)) },
+      focuses: this.stepperFocus,
+      onClick: act((now) => this.fit(now, now.focus)),
+      onChange: (i) => act((now) => this.focusOn(now, st.cols[i].panes[0], ps))(),
+      onHover: (over, cx) => { if (this.overStepper !== over) { this.overStepper = over; cx.notify(); } },
+      onWheel: (ev) => this.wheel(ev, tab, st),
+      onRelease: () => { if (shared("strip.drag")) endDrag(); },
+    });
   }
 }

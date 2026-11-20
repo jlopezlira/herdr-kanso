@@ -1,24 +1,13 @@
 // Memory, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
 // No host calls here, so the tests load it as is.
-import { parseOr, clock } from "./pure.js";
-export { clock };
+import { parseOr, clock, num, pad2, sizeMB, dayWord, RANGES } from "./pure.js";
+export { clock, RANGES };
+export const size = sizeMB;
 
 export const STALE_MS = 3 * 60_000;
 export const leaveShowAll = (showAll) => (showAll ? false : null);
-const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const HOUR = 3_600_000;
 const DAY = 24 * HOUR;
-
-const num = (v) => (typeof v === "number" && Number.isFinite(v) ? v : null);
-const pad = (n) => String(n).padStart(2, "0");
-
-export function size(mb) {
-  const n = num(mb);
-  if (n === null) return "–";
-  if (n < 1000) return `${Math.max(0, Math.round(n))} MB`;
-  const gb = n / 1024;
-  return `${gb < 10 ? gb.toFixed(1).replace(/\.0$/, "") : Math.round(gb)} GB`;
-}
 
 export function span(min) {
   const n = num(min);
@@ -29,10 +18,13 @@ export function span(min) {
   return `${Math.round(n / 1440)} d`;
 }
 
+// The guard's own envelope: one version, one moment, and the lists it promises.
+const versioned = (raw) => Boolean(raw) && typeof raw === "object" && raw.v === 1 && num(raw.at) !== null;
+
 export function parseNow(text, now = Date.now()) {
   if (!text || !String(text).trim()) return { state: "off", data: null };
   const raw = parseOr(text, null);
-  if (!raw || typeof raw !== "object" || raw.v !== 1 || !num(raw.at)) return { state: "bad", data: null };
+  if (!versioned(raw)) return { state: "bad", data: null };
   const data = {
     ...raw,
     agents: (Array.isArray(raw.agents) ? raw.agents.filter((a) => a && typeof a === "object") : []).toSorted((a, b) => (num(b.mb) ?? 0) - (num(a.mb) ?? 0)),
@@ -46,6 +38,18 @@ export function parseNow(text, now = Date.now()) {
   return { state: now - data.at > STALE_MS ? "stale" : "ok", data };
 }
 
+export const unreadable = (error) => ({ state: "bad", data: null, why: String(error?.message ?? error ?? "").trim() });
+
+export function refreshPlan({ now, busy = {}, refreshing = false }) {
+  const bad = now?.state === "bad";
+  const words = bad ? now.why ?? "" : "";
+  return {
+    failure: words ? { text: "Memory could not be read", source: words } : null,
+    inline: bad ? { enabled: !refreshing } : null,
+    header: { enabled: Object.keys(busy).length === 0, busy: Boolean(busy.check) },
+  };
+}
+
 export const agentsMB = (data) => (data?.agents ?? []).reduce((sum, a) => sum + (num(a.mb) ?? 0), 0);
 
 export function agentMeta(a) {
@@ -55,18 +59,12 @@ export function agentMeta(a) {
 
 export function limitsNote(l = {}) {
   return [
-    num(l.windowMB) ? `Window restarts past ${size(l.windowMB)}` : null,
+    num(l.windowMB) ? `Window restarts past ${sizeMB(l.windowMB)}` : null,
     l.recycle === false ? "agents are never recycled"
-      : num(l.agentMB) ? `idle agents recycle past ${size(l.agentMB)}${num(l.agentIdleMin) ? ` after ${span(l.agentIdleMin)}` : ""}` : null,
+      : num(l.agentMB) ? `idle agents recycle past ${sizeMB(l.agentMB)}${num(l.agentIdleMin) ? ` after ${span(l.agentIdleMin)}` : ""}` : null,
     num(l.lowFreePct) ? `notice under ${l.lowFreePct}% free` : null,
   ].filter(Boolean).join(" · ");
 }
-
-export const RANGES = [
-  { key: "day", label: "24 h", ms: DAY, buckets: 96 },
-  { key: "week", label: "7 days", ms: 7 * DAY, buckets: 84 },
-  { key: "month", label: "30 days", ms: 30 * DAY, buckets: 90 },
-];
 
 // Each bucket is the lowest free % seen in it; the 24 h view reads minute samples, the others hourly.
 export function freeSeries(history, key, now = Date.now(), low = null) {
@@ -89,12 +87,12 @@ export function freeSeries(history, key, now = Date.now(), low = null) {
   const lowest = lows.reduce((best, v, i) => (v !== null && (best < 0 || v <= lows[best]) ? i : best), -1);
   const bars = lows.map((v, i) => {
     const from = start + i * step;
-    const when = key === "day" ? clock(from, now) : `${MONTHS[new Date(from).getMonth()]} ${new Date(from).getDate()} ${pad(new Date(from).getHours())}:00`;
+    const when = key === "day" ? clock(from, now) : `${dayWord(new Date(from))} ${pad2(new Date(from).getHours())}:00`;
     return v === null
       ? { ratio: 0, empty: true, tip: `${when} · no sample` }
       : { ratio: Math.max(0, Math.min(1, v / 100)), value: `${Math.round(v)}%`, low: low !== null && v < low, mark: i === lowest, tip: `${when} · ${Math.round(v)}% free at the lowest` };
   });
-  const first = key === "day" ? `${pad(new Date(start).getHours())}:${pad(new Date(start).getMinutes())}` : `${MONTHS[new Date(start).getMonth()]} ${new Date(start).getDate()}`;
+  const first = key === "day" ? `${pad2(new Date(start).getHours())}:${pad2(new Date(start).getMinutes())}` : dayWord(new Date(start));
   return { bars, first, last: "now", lowest: lowest < 0 ? null : bars[lowest].value, empty: lowest < 0 };
 }
 

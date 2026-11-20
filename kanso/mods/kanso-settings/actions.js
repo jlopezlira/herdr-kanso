@@ -14,6 +14,10 @@ export const GROUPS = [
   { name: "Panes", section: "layout:kanso", actions: [
     { action: "kanso-strip.new-left", label: "New pane to the left" },
     { action: "kanso-spaces.needs-you.next", label: "Next agent that needs you" },
+    { action: "kanso-spaces.agent-up", label: "Agent above" },
+    { action: "kanso-spaces.agent-down", label: "Agent below" },
+    { action: "kanso-spaces.agent-back", label: "Back through the agents visited" },
+    { action: "kanso-spaces.agent-forward", label: "Forward through the agents visited" },
     { action: "kanso-strip.send", label: "Send the pane's work to an agent" },
     { action: "kanso-strip.pin", label: "Pin the pane to its side" },
     { action: "kanso-strip.arrange", label: "Arrangements" },
@@ -44,6 +48,9 @@ export const GROUPS = [
     { action: "kanso-spend.settings", label: "Spend's settings" },
     { action: "kanso-spend.back", label: "Back" },
   ] },
+  { name: "Preview, while it has the keyboard", section: "mod:kanso-panel", actions: [
+    { action: "kanso-panel.save", label: "Save the file" },
+  ] },
   { name: "Memory, while its panel has the keyboard", section: "mod:kanso-guard", actions: [
     { action: "kanso-guard.refresh", label: "Check now" },
     { action: "kanso-guard.back", label: "Show fewer" },
@@ -51,7 +58,7 @@ export const GROUPS = [
 ];
 
 // Herdr's own commands, on Herdr's keys; the Keys page leaves them out.
-export const HERDRS = /^(kanso-strip\.(new-right|new-down|close|go-(left|right|up|down)|move-(left|right|up|down)|width|find)|kanso-spaces\.(space-\d|sidebar)|mod\.open:kanso-help|terminal\.search)$/;
+export const HERDRS = /^(kanso-strip\.(new-right|new-down|close|go-(left|right|up|down)|move-(left|right|up|down)|width|find)|kanso-spaces\.(space-\d|sidebar)|kanso-tabs\.tab-\d|mod\.open:kanso-help|terminal\.search)$/;
 
 export const ofRow = (row, action) => (row.family ? new RegExp(`^${row.family.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}[1-9]$`).test(action) : action === row.action);
 

@@ -1,8 +1,7 @@
 // Ports' share card, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
 import { postText } from "./share.js";
+import { plural } from "./pure.js";
 import { size, portStats, activeSeries } from "./ports-model.js";
-
-const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 
 export function portsSpec(data, now = Date.now()) {
   const s = portStats(data, now);

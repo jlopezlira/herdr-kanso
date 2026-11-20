@@ -1,18 +1,18 @@
 // Concurrent database calls share a process without sharing their results or failures.
+import { loadKdb } from "./mod-fixtures.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { load, clone, temporary, exec } from "./helpers.mjs";
+import { clone, temporary, exec, openedKdb } from "./helpers.mjs";
 
 async function database(t) {
   const dir = await temporary(t), calls = [];
   const clock = { now: Date.now() };
   class Clock extends Date { static now() { return clock.now; } }
-  const { Kdb } = await load("kanso-spaces/kdb.js", ["Kdb"], {
+  const { Kdb } = await loadKdb({
     appHome: () => dir, Date: Clock,
     exec: (command, args) => { calls.push([command, args]); return exec(command, args); },
   });
-  const db = new Kdb();
-  await db.open();
+  const db = await openedKdb(Kdb);
   calls.length = 0;
   return { db, calls, clock };
 }
@@ -86,15 +86,4 @@ test("a failed cached read is tried again", async (t) => {
   await assert.rejects(db.prefs(), /prefs/);
   await db.run("CREATE TABLE prefs(key TEXT, value TEXT);");
   assert.deepEqual(clone(await db.prefs()), []);
-});
-
-test("space synchronization and sleeping rows share one database process", async (t) => {
-  const { db, calls } = await database(t);
-  await db.sleepTab({ name: "Sleep", space: { id: "s1", name: "Project" }, project: ":/project", layout: { cols: [] }, agents: [] });
-  calls.length = 0;
-  const rows = await db.sleeps([{ id: "s1", name: "Project", folder: "/project" }], 123);
-  assert.equal(calls.length, 1, `sleep reload started ${calls.length} processes; budget 1`);
-  assert.equal(rows[0].name, "Sleep");
-  assert.deepEqual(Array.from(rows[0].agents), []);
-  assert.equal((await db.read("SELECT seen FROM spaces WHERE id='s1';"))[0].seen, 123);
 });

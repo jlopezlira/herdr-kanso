@@ -11,6 +11,8 @@ import {
   sessionHash,
   toNonNegInt,
   tokenTotal,
+  tokenVector,
+  missingFile,
 } from "./util.mjs";
 
 // A scan never changes the store: openStore wraps it in persistent maps (pmap.mjs), functions answer new stores, closeStore makes the plain one once.
@@ -22,19 +24,13 @@ export function fileKey(sourceId, filePath) {
 
 // Setting fields through the descriptors keeps the hidden ones (_saved, _readOnly).
 export function storeWith(store, fields) {
-  return Object.create(Object.getPrototypeOf(store), {
-    ...Object.getOwnPropertyDescriptors(store),
-    ...Object.getOwnPropertyDescriptors(fields),
-  });
+  return withDescriptors(store, Object.getOwnPropertyDescriptors(fields));
 }
 
 function withHidden(store, values) {
-  return Object.create(Object.getPrototypeOf(store), {
-    ...Object.getOwnPropertyDescriptors(store),
-    ...Object.fromEntries(Object.entries(values).map(([key, value]) => [
-      key, { value, enumerable: false, writable: true, configurable: true },
-    ])),
-  });
+  return withDescriptors(store, Object.fromEntries(Object.entries(values).map(([key, value]) => [
+    key, { value, enumerable: false, writable: true, configurable: true },
+  ])));
 }
 
 export function emptyStore(config = defaultConfig()) {
@@ -141,17 +137,8 @@ export function resetFileEntry(work, key, entry) {
 
 function newRow(meta) {
   return {
-    day: meta.day,
-    session: meta.session,
-    harness: meta.harness,
-    provider: meta.provider,
-    model: meta.model,
-    project: meta.project,
-    input: 0,
-    output: 0,
-    cacheRead: 0,
-    cacheWrite: 0,
-    reasoning: 0,
+    ...rowMeta(meta),
+    ...emptyTokens(),
     messages: 0,
   };
 }
@@ -162,10 +149,7 @@ function rowsFrom(array) {
 }
 
 function rowsOf(work, id) {
-  const changed = work.rows.get(id);
-  if (changed) return changed;
-  const file = fileById(work, id);
-  return file ? rowsFrom(Array.isArray(file.rows) ? file.rows : []) : null;
+  return existingFile(work, "rows", id, (file) => rowsFrom(Array.isArray(file.rows) ? file.rows : []));
 }
 
 export function rowCount(work, id) {
@@ -207,10 +191,7 @@ function taskList(base) {
 }
 
 function listOf(work, id) {
-  const changed = work.lists.get(id);
-  if (changed) return changed;
-  const file = fileById(work, id);
-  return file && Array.isArray(file.tasks) ? taskList(file.tasks) : null;
+  return existingFile(work, "lists", id, (file) => Array.isArray(file.tasks) ? taskList(file.tasks) : null);
 }
 
 // What filter and append would have left: each key added and not taken out later, in order.
@@ -275,37 +256,27 @@ function takeCandidate(work, aux) {
   return at < 0 ? null : { candidate: fileById(work, aux.copies[at]), rest: aux.copies.slice(at + 1) };
 }
 
-function transferDedupOwnership(work, entry) {
-  const aux = entry[DEDUP_AUX_INDEX];
-  if (!isPlainObject(aux) || !Array.isArray(aux.copies) || !validAuxMeta(aux.meta)) return null;
-  const taken = takeCandidate(work, aux);
-  if (!taken) return null;
-  const { rows, rowIdx } = getOrCreateRow(rowsOf(work, taken.candidate.id), aux.meta);
-  const row = rows.list.at(rowIdx);
-  const grown = addRowTokens(row, {
-    input: entry[2],
-    output: entry[3],
-    cacheRead: entry[4],
-    cacheWrite: entry[5],
-    reasoning: entry[6],
-  });
+function transferOwnership(work, entry, index, update) {
+  const aux = entry[index], ready = candidateRow(work, aux);
+  if (!ready) return null;
+  const { rows, rowIdx, candidate, rest } = ready;
   return {
-    work: putRow(work, taken.candidate.id, rows, rowIdx, { ...grown, messages: toNonNegInt(row.messages + 1) }),
-    entry: entry.with(0, taken.candidate.id).with(1, rowIdx).with(DEDUP_AUX_INDEX, { ...aux, copies: taken.rest }),
+    work: update(candidate.id, rows, rowIdx),
+    entry: entry.with(0, candidate.id).with(1, rowIdx).with(index, { ...aux, copies: rest }),
   };
 }
 
-function transferTaskOwnership(work, entry) {
-  const aux = entry[TASK_AUX_INDEX];
-  if (!isPlainObject(aux) || !Array.isArray(aux.copies) || !validAuxMeta(aux.meta)) return null;
-  const taken = takeCandidate(work, aux);
-  if (!taken) return null;
-  const { rows, rowIdx } = getOrCreateRow(rowsOf(work, taken.candidate.id), aux.meta);
-  return {
-    work: { ...work, rows: work.rows.with(taken.candidate.id, rows) },
-    entry: entry.with(0, taken.candidate.id).with(1, rowIdx).with(TASK_AUX_INDEX, { ...aux, copies: taken.rest }),
-  };
-}
+const transferDedupOwnership = (work, entry) => transferOwnership(work, entry, DEDUP_AUX_INDEX, (id, rows, rowIdx) => {
+  const row = rows.list.at(rowIdx);
+  const grown = addRowTokens(row, {
+    input: entry[2], output: entry[3], cacheRead: entry[4], cacheWrite: entry[5], reasoning: entry[6],
+  });
+  return putRow(work, id, rows, rowIdx, { ...grown, messages: toNonNegInt(row.messages + 1) });
+});
+
+const transferTaskOwnership = (work, entry) => transferOwnership(work, entry, TASK_AUX_INDEX, (id, rows) => ({
+  ...work, rows: work.rows.with(id, rows),
+}));
 
 // In stored order: a transfer can add a row to the file that takes it over.
 function releaseOwned(work, collection, auxIndex, transfer, fileId) {
@@ -381,11 +352,7 @@ export function addUsage(work, fileId, meta, tokens, dedupKey) {
       dedup: fresh.with(dedupKey, [
         fileId,
         rowIdx,
-        tokens.input,
-        tokens.output,
-        tokens.cacheRead,
-        tokens.cacheWrite,
-        tokens.reasoning,
+        ...tokenVector(tokens),
       ]),
     },
     fileId,
@@ -469,18 +436,9 @@ export function removeLatestFallbackTaskForSession(work, session) {
 
 function emptyAggregate(meta) {
   return {
-    day: meta.day,
-    session: meta.session,
-    harness: meta.harness,
-    provider: meta.provider,
-    model: meta.model,
-    project: meta.project,
+    ...rowMeta(meta),
     tokens: {
-      input: 0,
-      output: 0,
-      cacheRead: 0,
-      cacheWrite: 0,
-      reasoning: 0,
+      ...emptyTokens(),
       total: 0,
     },
     messages: 0,
@@ -624,10 +582,7 @@ function validateLoadedStore(raw) {
           value[7].copies.every((id) => Number.isInteger(id)) &&
           validAuxMeta(value[7].meta)));
     if (
-      !Array.isArray(value) ||
-      !validAux ||
-      !Number.isInteger(value[0]) ||
-      !Number.isInteger(value[1]) ||
+      !validOwner(value, validAux) ||
       !value.slice(2, 7).every((number) => Number.isFinite(number) && number >= 0)
     ) {
       throw new Error(`dedup entry ${key} is malformed`);
@@ -643,10 +598,7 @@ function validateLoadedStore(raw) {
           value[5].copies.every((id) => Number.isInteger(id)) &&
           validAuxMeta(value[5].meta)));
     if (
-      !Array.isArray(value) ||
-      !validAux ||
-      !Number.isInteger(value[0]) ||
-      !Number.isInteger(value[1]) ||
+      !validOwner(value, validAux) ||
       !Number.isFinite(value[2]) ||
       value[2] < 0 ||
       (value[3] !== 0 && value[3] !== 1) ||
@@ -745,10 +697,7 @@ function writeDb(db, store, saved) {
 }
 
 async function readLegacy(storePath) {
-  const read = await readFile(storePath, "utf8").then((text) => ({ text }), (error) => {
-    if (error?.code === "ENOENT") return null;
-    throw error;
-  });
+  const read = await readFile(storePath, "utf8").then((text) => ({ text }), missingFile);
   return read && JSON.parse(read.text);
 }
 
@@ -796,6 +745,7 @@ async function readStoreDb(dbPath, readOnly) {
 }
 
 export async function loadStore(storePath, { readOnly = false } = {}) {
+  const preserve = readOnly ? async (error) => { throw corruptStore(error); } : preserved;
   const dbPath = dbPathFor(storePath);
   if (!readOnly) await ensureParent(storePath);
   const hasDb = Boolean(await fileStatOrNull(dbPath));
@@ -818,8 +768,7 @@ export async function loadStore(storePath, { readOnly = false } = {}) {
         return { store: written, warnings: [], errors: 0, exists: true, dirty: migrated };
       }
     } catch (error) {
-      if (readOnly) throw new Error("Spend store is corrupt; refresh to preserve and rebuild it.", { cause: error });
-      const backup = await preserved(error, async () => {
+      const backup = await preserve(error, async () => {
         const kept = await backupCorruptStore(storePath);
         await unlink(storePath).catch(() => {});
         return kept;
@@ -833,8 +782,7 @@ export async function loadStore(storePath, { readOnly = false } = {}) {
     const { store, migrated } = await readStoreDb(dbPath, readOnly);
     return { store, warnings: [], errors: 0, exists: true, dirty: migrated };
   } catch (error) {
-    if (readOnly) throw new Error("Spend store is corrupt; refresh to preserve and rebuild it.", { cause: error });
-    return restarted(await preserved(error, () => moveAside(dbPath)), error);
+    return restarted(await preserve(error, () => moveAside(dbPath)), error);
   }
 }
 
@@ -854,8 +802,7 @@ export async function fileStatOrNull(file) {
   try {
     return await stat(file);
   } catch (error) {
-    if (error?.code === "ENOENT") return null;
-    throw error;
+    return missingFile(error);
   }
 }
 
@@ -875,3 +822,24 @@ export function dedupKeyFor(harness, ...parts) {
 export function taskKeyFor(harness, ...parts) {
   return hashKey("task", harness, ...parts);
 }
+
+const withDescriptors = (store, descriptors) => Object.create(Object.getPrototypeOf(store), {
+  ...Object.getOwnPropertyDescriptors(store), ...descriptors,
+});
+const emptyTokens = () => Object.fromEntries(TOKEN_FIELDS.map((key) => [key, 0]));
+const existingFile = (work, collection, id, fallback) => {
+  const changed = work[collection].get(id);
+  if (changed) return changed;
+  const file = fileById(work, id);
+  return file ? fallback(file) : null;
+};
+
+function candidateRow(work, aux) {
+  if (!isPlainObject(aux) || !Array.isArray(aux.copies) || !validAuxMeta(aux.meta)) return null;
+  const taken = takeCandidate(work, aux);
+  return taken ? { ...taken, ...getOrCreateRow(rowsOf(work, taken.candidate.id), aux.meta) } : null;
+}
+
+const validOwner = (value, validAux) => Array.isArray(value) && validAux
+  && Number.isInteger(value[0]) && Number.isInteger(value[1]);
+const corruptStore = (error) => new Error("Spend store is corrupt; refresh to preserve and rebuild it.", { cause: error });
