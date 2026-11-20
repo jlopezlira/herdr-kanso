@@ -146,6 +146,27 @@ test("Status puts the project after a session's name, and the computer when it i
   assert.equal(drawn.texts.includes("ops · dark"), true);
 });
 
+const darkSessions = {
+  spaces: [local(), ops],
+  layouts: [{ name: null, layout: "ready" }, { name: "dark", layout: "ready" }],
+  own: { machines: [{ name: "dark", state: "connected", target: "dark" }] },
+  agents: [agent("dark/t2", { status: "working", space: "sp2", space_name: "ops", tab: "tab2" }), agent("dark/t3", { status: "working", space: "sp2", space_name: "ops", tab: "tab2" })],
+  terminals: [{ address: "dark/t3", parent: "dark/t2" }],
+};
+
+test("in Projects a session on another computer leaves its computer's name to the heading above it", async () => {
+  const drawn = await sidebar(darkSessions);
+  assert.equal(drawn.ids.includes("space-agent-dark/t2"), true);
+  assert.equal(drawn.ids.includes("space-agent-dark/t3"), true);
+  assert.deepEqual(drawn.texts.filter((x) => x === "dark"), ["dark"], "the computer's heading names it once");
+});
+
+test("in Status a helper on another computer leaves the computer's name to the session above it", async () => {
+  const drawn = await sidebar({ ...darkSessions, view: "agents" });
+  assert.equal(drawn.ids.includes("space-agent-dark/t3"), true);
+  assert.deepEqual(drawn.texts.filter((x) => x === "dark" || x === "ops · dark"), ["ops · dark"], "the parent row names it once");
+});
+
 test("Threads lists active, finished, snoozed and settled conversations, and one that cannot be read says so", async () => {
   const thursday = new Date(NOW + 6 * 86400000);
   thursday.setHours(9, 0, 0, 0);

@@ -28,6 +28,10 @@ the branch's rules.
 
 - Opening a pane in a new column shares its page evenly: one pane fills the view, two take half each, and so on up to the number in the status bar's stepper, which now starts at 4. Pinned panes keep their width, and the page shares what they leave. When the last page is full, a pane opened after the last column starts a new page at full width, and the view slides to it. A pane opened between columns shares only the page it lands on, and the column pushed onto the next page keeps its width. A pane stacked in a column changes no width. Changing the stepper or pressing Fit lays every page out the same way and shows the focused pane's page, and so does a tab seen for the first time.
 
+### Fixed
+
+- In Projects, a session on another computer no longer repeats that computer's name: the computer's heading above it already says it. In Status, a helper under a session on another computer no longer repeats it either: the session's row above still says the project and the computer.
+
 ## [3.31.0] - 2026-11-19
 
 ### Added

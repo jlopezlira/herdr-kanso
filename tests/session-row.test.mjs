@@ -27,8 +27,7 @@ test("A session shows its program, name, activity, how long on this step, time, 
   }, "a working session lists no commands, as today");
   const done = sessionProps({ ...atlas, status: "done", pin: 1, focused: true, address: "dark/t1" }, 1, { hovered: true, pin: () => {}, kbd: true }, { tasks: [{ command: "npm test", time: "2m" }], oneLine: true, activity: "x" });
   assert.equal(done.activity, null, "a narrow sidebar keeps one line");
-  assert.deepEqual([done.place, done.pinned, done.pinnable, done.current, done.hover, done.selected, done.commands, done.commandsTip], ["dark", true, true, true, true, true, 1, "npm test · 2m"]);
-  assert.equal(sessionProps({ ...atlas, address: "dark/t1" }, 1, null, { noMachine: true }).place, null);
+  assert.deepEqual([done.place, done.pinned, done.pinnable, done.current, done.hover, done.selected, done.commands, done.commandsTip], [null, true, true, true, true, true, 1, "npm test · 2m"]);
 });
 
 test("A sub-agent hangs one depth deeper from its parent by tree guides, and a terminal leads with the terminal's icon", async () => {
