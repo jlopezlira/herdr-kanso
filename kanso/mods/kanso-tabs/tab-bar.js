@@ -3,10 +3,10 @@ import { button, grow, menu, plus, stack, tabSkeleton, tabs } from './kit.js';
 export const tabBarStates = ['connected', 'connecting', 'unreachable'];
 export const tabBar = ({ items = [], value = null, folded = [], overflow = false, panels = [], panel = null, state = 'connected', arrange = true, help = false, tips = {}, windows = false } = {}) => {
   const connected = state === 'connected';
-  const door = (icon, label, { active = false, name = '', held = false } = {}) => button({ label, kind: icon ? 'icon' : 'quiet', icon: icon || 'none', active, tip: tips[label] ?? '', name, held });
+  const door = (icon, label, { active = false, name = '', held = false, reveal = null } = {}) => button({ label, kind: icon || reveal ? 'icon' : 'quiet', icon: icon || 'none', active, tip: tips[label] ?? '', name, held, reveal });
   const insertion = () => stack({ variant: 'tab bar insertion' });
   const panelDoor = (item) => {
-    const drawn = door(item.icon, item.label, { active: item.key === panel, name: `panel:${item.key}`, held: Boolean(item.held) });
+    const drawn = door(item.icon, item.label, { active: item.key === panel, name: `panel:${item.key}`, held: Boolean(item.held), reveal: item.reveal ?? null });
     return item.drop === 'after' ? [drawn, insertion()] : item.drop ? [insertion(), drawn] : [drawn];
   };
   const tabList = state === 'connecting' ? Array.from({ length: Math.max(items.length, 1) }, () => tabSkeleton())

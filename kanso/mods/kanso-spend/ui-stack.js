@@ -97,11 +97,12 @@ const tabBarDoors = (id, c, _flags, kids, more) => placed(box(doorsFace(), c, RU
 const tabBarInsertion = (id, c) => box({ ...cssNode(["kanso-tab-bar__insertion"], doorsFace()), tag: "i" }, c, RULES, id);
 const holder = (id, c, _flags, kids, more, _wire, context) => placed(div(), id, c, kids, more, context);
 
-export const tabBarRoom = (width, { tools = 0, doors = [] }) => {
+export const tabBarRoom = (width, { tools = [], doors = [] }) => {
   const bar = tabBarFace(), gap = opOf(bar, "gap"), side = opOf(doorFace(), "w"), doorGap = opOf(doorsFace(), "gap");
   const pad = stylesFor(bar, RULES).filter(([op]) => op === "px" || op === "pl" || op === "pr").reduce((sum, [op, value]) => ({ ...sum, ...(op === "px" ? { pl: value, pr: value } : { [op]: value }) }), {});
   const doorsWidth = doors.reduce((sum, door, i) => sum + (door ?? side) + (i ? doorGap : 0), 0);
-  return width - (pad.pl ?? 0) - (pad.pr ?? 0) - tools * (side + gap) - 2 * gap - doorsWidth;
+  const toolsWidth = tools.reduce((sum, tool) => sum + (tool ?? side) + gap, 0);
+  return width - (pad.pl ?? 0) - (pad.pr ?? 0) - toolsWidth - 2 * gap - doorsWidth;
 };
 
 const STACKS = {

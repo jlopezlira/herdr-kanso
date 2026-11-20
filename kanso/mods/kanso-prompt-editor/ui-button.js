@@ -2,7 +2,7 @@
 // Kept byte for byte by `npm run sync:share`: edit kanso-panel/ui-button.js.
 import { div, svg } from "gpui-kit";
 import { v_flex, Button } from "gpui-base";
-import { G, H, R, T, W, ICON, ICON_ROW, ICON_INLINE, ICON_CHROME, SPIN, ARM_MS, WASH, CLEAR, glyphOf, mix, well } from "./ui.js";
+import { G, H, R, T, W, ICON, ICON_ROW, ICON_INLINE, ICON_CHROME, SPIN, ARM_MS, WASH, CLEAR, EASE, glyphOf, mix, well } from "./ui.js";
 
 const filled = (fill, ink, c) => ({ fill, ink, hover: mix(fill, c.background, WASH.hover), press: mix(fill, c.background, WASH.press) });
 /** A look on a pressable element: its fill, then its hover and press washes; a look with no hover is not pressable. */
@@ -39,7 +39,7 @@ export function armedLabel(label, verb, on, text, { start = false } = {}) {
  * `tip`: the tooltip, when it says more than the label; `focus`: the keyboard's ring is on it. `size`: "sm" draws the small form, an icon button at the row's 20 with a 12 glyph; "lg" an icon button at 32 with a 17 glyph. `verb`: the action asks twice; `armed` fills it with the accent and reads "Press again to <verb>".
  * `content`: drawn elements shown in place of the icon and label, such as a picture with its name; the button takes their size, and `label` is what it says.
  * `truncate`: a long label is cut at W.buttonLabel, such as a menu's chosen project, so the button never grows past it. */
-export function button(id, label, onClick, c, { kind = "solid", icon = null, small = false, size = null, disabled = false, spoken = label, verb = null, armed = false, active = false, spin = false, color = null, tip = null, focus = false, held = false, content = [], truncate = false, flush = false, name = "" } = {}) {
+export function button(id, label, onClick, c, { kind = "solid", icon = null, small = false, size = null, disabled = false, spoken = label, verb = null, armed = false, active = false, spin = false, color = null, tip = null, focus = false, held = false, content = [], truncate = false, flush = false, name = "", reveal = null } = {}) {
   const square = kind === "icon", on = armed && !disabled;
   const look = disabled ? { fill: kind === "quiet" ? null : well(c), ink: c.dim }
     : on ? armedLook(c)
@@ -56,17 +56,21 @@ export function button(id, label, onClick, c, { kind = "solid", icon = null, sma
   const glyph = icon ? svg(glyphOf(icon)).size(square ? box.glyph : ICON_ROW).flex_none().text_color(ink) : null;
   const face = [content].flat().filter(Boolean), drawn = face.length > 0;
   // The ring is a border kept clear at rest, so focusing never resizes the box.
-  const frame = Button.new(name ? `${id}-${name}` : id).when(square || !drawn, (el) => el.h(side)).flex_none().items_center().justify_center().gap(G.sm).rounded(R.control)
+  const key = name ? `${id}-${name}` : id;
+  const frame = Button.new(key).when(square || !drawn, (el) => el.h(side)).flex_none().items_center().justify_center().gap(G.sm).rounded(R.control)
     .border_2().border_color(focus ? c.accent : CLEAR).focus((s) => s.border_color(c.accent))
     .disabled(disabled)
     .accessibility_label(on && verb ? pressAgain(verb) : spoken)
-    .when(square, (el) => el.w(side).tooltip(tip ?? spoken))
+    .when(square, (el) => (reveal ? el.min_w(side).px(G.xs).gap(0) : el.w(side)).tooltip(tip ?? spoken))
     .when(!square && Boolean(tip), (el) => el.tooltip(tip))
     .when(!square && !drawn, (el) => el.px(inset - G.hair).when(flush, (e) => e.ml(-inset)));
   const pressed = withLook(frame, look).when(!disabled && Boolean(onClick), (el) => el.on_click((_e, cx) => onClick(cx)));
   if (drawn) return pressed.children(face);
   return pressed
     .when(Boolean(glyph), (el) => el.child(spin ? glyph.spin(SPIN) : glyph))
+    .when(square && Boolean(reveal), (el) => el.child(div().id(`${key}-reveal`).h_full().flex().items_center().overflow_hidden().flex_none()
+      .w(reveal.shown ? reveal.width : 0).opacity(reveal.shown ? 1 : 0).transition("width", EASE).transition("opacity", EASE)
+      .child(text(label).pl(G.xs).whitespace_nowrap())))
     .when(!square, (el) => el.child(verb ? armedLabel(label, verb, on, text, { start: kind === "quiet" }) : text(label)));
 }
 
