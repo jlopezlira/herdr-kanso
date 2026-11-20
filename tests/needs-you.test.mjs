@@ -103,6 +103,12 @@ async function controller() {
   return { state, view, cx, ui, sharedState };
 }
 
+const drawStub = (view, ui, extra = {}) => Object.assign(view, {
+  custom: {}, order: "updated", assignColors() {}, projectOf: () => null,
+  listed: () => [], seen: () => new Map(), header: ui.host.div, switchViews: ui.host.div,
+  agentsView: () => [], threadsView: () => [], grouped: () => [], ...extra,
+});
+
 test("The command only focuses live agents and publishes the same queue used by the count", async () => {
   const { state, view, cx, sharedState } = await controller();
   view.command("needs-you.next", cx);
@@ -204,11 +210,7 @@ test("Projects, Status and Threads keep the return digest when Needs you is hidd
   state.spaces = [{ id: "project", active: true, folder: "C:\\work\\project", tabs: [] }];
   const returned = new SinceLeft(null);
   Object.assign(returned, { project: `:${state.spaces[0].folder}`, rows: [{ id: 7, target: "agent:a", text: "Finished while you were away" }] });
-  Object.assign(view, {
-    sinceLeft: returned, returnPlaces: new Map([["agent:a", "a"]]), custom: {}, order: "updated", assignColors() {}, projectOf: () => null,
-    listed: () => [], seen: () => new Map(), header: ui.host.div, switchViews: ui.host.div,
-    agentsView: () => [], threadsView: () => [], grouped: () => [],
-  });
+  drawStub(view, ui, { sinceLeft: returned, returnPlaces: new Map([["agent:a", "a"]]) });
   const drawAs = (mode, open) => {
     Object.assign(view, { view: mode, needsOpen: open });
     ui.texts.length = 0;
@@ -258,6 +260,21 @@ test("An empty jump stays in the sidebar briefly and never posts a notification 
   assert.equal(view.needsEmpty, true, "an earlier timeout cannot hide the latest empty state");
   state.timers[1].fn(cx);
   assert.equal(view.needsEmpty, false);
+});
+
+test("An open Needs you list gives the projects back when nobody is waiting", async () => {
+  const { state, view, ui, sharedState } = await controller();
+  state.spaces = [{ id: "project", active: true, name: "Work", tabs: [] }];
+  drawStub(view, ui, { view: "spaces", sinceLeft: null });
+  sharedState.set("kanso.pieces", { "sidebar.needs": "show" });
+  view.needsOpen = true;
+  view.render();
+  assert.ok(ui.ids.includes("needs-you-list"));
+  state.list = [];
+  ui.ids.length = 0;
+  view.render();
+  assert.equal(ui.ids.includes("needs-you-list"), false);
+  assert.ok(ui.ids.includes("spaces-list-spaces"));
 });
 
 test("Opening the queue from the collapsed rail expands the list", async () => {
