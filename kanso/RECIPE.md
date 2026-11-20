@@ -132,7 +132,8 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
       terminal paints square corners) and keeps them as shares, so later trees keep what you dragged. The view always starts at a
       column's edge and shows only whole, live panes: as many as fit, which
       then share the width by their weights. It never slides past the first
-      start from which the rest of the row fits. When columns lie beyond an
+      start from which the rest of the row fits, or past the last column's
+      start when that column alone is wider than the view. When columns lie beyond an
       edge, a 28-wide edge rail stands there (the right one after the side
       panel while one is open) in `chrome` (`hover` on hover),
       so it reads as frame, not pane. At its middle, a ‹ or › (14, `muted`)

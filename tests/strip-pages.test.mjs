@@ -140,3 +140,21 @@ test("A tab seen for the first time shows the focused pane's page", async () => 
   assert.deepEqual(shown(), ["p5", "p6"]);
   assert.deepEqual(widths(), [1 / 4, 1 / 4, 1 / 4, 1 / 4, 1 / 2, 1 / 2]);
 });
+
+test("With a pin leaving less than a whole last column, a pane opened mid-strip still shows its page", async () => {
+  const { strip, open, now, widths, seen } = await stripWith({ "strip.n": 2 });
+  for (const _ of Array(5)) open();
+  strip.commit(TAB, strip.pin(now(), "p1"));
+  open("right", "p2", "x");
+  assert.deepEqual(seen(), ["p2", "x"]);
+  open("right", "x", "y");
+  assert.deepEqual(widths(), [1 / 2, 1 / 4, 1 / 4, 1 / 4, 1 / 4, 1 / 2, 1]);
+  assert.equal(now().vx, 1 / 2);
+  assert.deepEqual(seen(), ["y", "p3"]);
+});
+
+test("Stepping right reaches a last column wider than the view the pins leave", async () => {
+  const { strip, now, seen } = await stripWith({}, { tab: { n: 4, vx: 0, focus: "p1", cols: [pinned, { panes: ["p1"], w: 1 / 2 }, { panes: ["p2"], w: 1 }] } });
+  strip.commit(TAB, strip.step(now(), 1));
+  assert.deepEqual(seen(), ["p2"]);
+});

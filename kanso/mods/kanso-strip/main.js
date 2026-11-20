@@ -771,7 +771,7 @@ export default class Strip extends View {
   }
   lastStart(st) {
     const row = this.row(st), vw = this.viewW(st), total = this.total(st);
-    return row.find((r) => total - r.s <= vw + EPS)?.s ?? 0;
+    return (row.find((r) => total - r.s <= vw + EPS) ?? row.at(-1))?.s ?? 0;
   }
 
 
