@@ -30,7 +30,7 @@ the branch's rules.
 
 ### Fixed
 
-- Panes per view in the status bar is drawn on a round pill instead of a grey box, and the minimap beside it no longer sits on a lighter box when you point at it, reach it with the keyboard or open its menu.
+- Panes per view in the status bar, its − and + and the number between them, sits on a round pill instead of a grey box. The minimap beside it no longer has a grey box behind it, and a column under the pointer or pressed shows no box either: pressing the number still fits the columns, and pressing a column still goes to its pane.
 
 ## [3.31.0] - 2026-11-19
 

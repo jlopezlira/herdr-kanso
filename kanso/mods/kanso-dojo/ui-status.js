@@ -73,11 +73,12 @@ export const stepper = (id, c, { value = 2, open = false, hover = false, columns
   // min-width: 1ch is not drawn: gpui has no ch.
   const number = button(`${id}-value`, String(value), even, c, { kind: "quiet", content: [still(div(), node(["kanso-status-bar__value"], item), c).child(String(value))],
     tip: tipText({ label: `${value} per view`, chord: chords.fit, detail: "scroll to change, click to even out" }) });
-  return paint(h_flex().id(id), item, c, RULES).rounded(R.full)
+  return still(h_flex().id(id), inBar(["kanso-status-bar__item", "kanso-status-bar__stepper"]), c)
     .when(Boolean(onHover), (el) => el.on_hover((over, cx) => onHover(over, cx)))
     .when(columns.length > 0, (el) => el.child(still(h_flex().id(`${id}-columns`), columnsNode, c)
-      .children(columns.map((col, i) => button(`${id}-column-${i}`, `Column ${i + 1}`, column && ((cx) => column(i, cx)), c, { kind: "quiet", content: [columnFace(c, columnsNode, col)] })))))
-    .child(tool("minus", "Fewer panes per view", chords.fewer, minus))
-    .child(focused(number, focuses.value))
-    .child(tool("plus", "More panes per view", chords.more, plus));
+      .children(columns.map((col, i) => button(`${id}-column-${i}`, `Column ${i + 1}`, column && ((cx) => column(i, cx)), c, { kind: "bare", content: [columnFace(c, columnsNode, col)] })))))
+    .child(paint(h_flex().id(`${id}-pill`), item, c, RULES).rounded(R.full)
+      .child(tool("minus", "Fewer panes per view", chords.fewer, minus))
+      .child(focused(number, focuses.value))
+      .child(tool("plus", "More panes per view", chords.more, plus)));
 };

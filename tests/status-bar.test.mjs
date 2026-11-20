@@ -172,30 +172,59 @@ test("Panes per view is buttons the keyboard reaches, and a press named for noth
 });
 
 const shippedThemes = ["kanso", "kanso-day"].map((name) => JSON.parse(repoText(`kanso/themes/${name}.json`))).map((theme) => ({ ...theme, ...theme.colors }));
-const fillsOf = (el) => [...calls(el, "bg"), ...calls(el, "hover").flatMap(([, paint]) => {
+const styleFills = (el, state) => calls(el, state).flatMap(([, paint]) => {
   const style = chain();
   paint(style);
-  return calls(style, "bg");
-})];
+  return calls(style, "bg").map(([, colour]) => colour);
+});
+const fillsOf = (el) => ({ always: calls(el, "bg").map(([, colour]) => colour), hover: styleFills(el, "hover"), press: styleFills(el, "active") });
+const NO_FILL = { always: [], hover: [], press: [] };
 
-test("Panes per view is a full pill on its token washes and the minimap has no fill of its own, at rest, hovered or focused, and open, in both themes", async () => {
+test("Only − n + sits on a full pill on its token washes, and no part of the minimap paints a fill, at rest, hovered or focused, and open, in both themes", async () => {
   const kit = await compositions();
   const { R } = await load("kanso-panel/ui.js", ["R"], popoverHost());
   const pill = repoText("kanso/tokens.json").match(/"name": "k-r-full",\s*"value": "(\d+)px"/)[1];
   assert.equal(R.full, Number(pill));
   for (const theme of shippedThemes) {
     const c = kit.tokens(theme);
-    for (const [state, wash] of [[{}, c.subtle], [{ hover: true }, c.subtle], [{ open: true }, c.w12]]) {
+    const tones = [c.dim, c.muted, c.text];
+    for (const [state, wash] of [[{}, { ...NO_FILL, hover: [c.subtle] }], [{ hover: true }, { ...NO_FILL, always: [c.subtle] }], [{ open: true }, { ...NO_FILL, always: [c.w12] }]]) {
       const el = kit.statusBar({ middle: kit.stepper({ ...state, columns: sampleColumns }) })("bar", c);
-      const box = byId(el, "bar-middle-0");
       const where = `${theme.background} ${JSON.stringify(state)}`;
+      const box = byId(el, "bar-middle-0-pill");
+      const minimap = byId(el, "bar-middle-0-columns");
       assert.equal(arg(box, "rounded"), R.full, where);
-      assert.deepEqual(fillsOf(box).map(([, colour]) => colour), [wash], where);
-      const minimap = every(byId(el, "bar-middle-0-columns")).filter((kid) => !/-column-\d+$/.test(kid.tag) && !calls(kid, "w").length);
-      assert.deepEqual(minimap.filter((kid) => fillsOf(kid).length).map((kid) => kid.tag), [], where);
-      for (const tool of ["minus", "plus"]) assert.deepEqual(fillsOf(byId(el, `bar-middle-0-${tool}`)), [["bg", c.subtle]], `${tool} keeps its hover wash`);
+      assert.deepEqual(fillsOf(box), wash, where);
+      assert.deepEqual(every(box).map((kid) => kid.tag).filter((tag) => /-(minus|value|plus)$/.test(tag)), ["bar-middle-0-minus", "bar-middle-0-value", "bar-middle-0-plus"], where);
+      assert.equal(every(box).includes(minimap), false, `${where}: the pill leaves the minimap out`);
+      assert.deepEqual(fillsOf(byId(el, "bar-middle-0")), NO_FILL, where);
+      const marks = every(minimap).filter((kid) => calls(kid, "w").length && calls(kid, "rounded").length);
+      assert.equal(marks.length, sampleColumns.flatMap((col) => col.panes).length, where);
+      for (const mark of marks) {
+        assert.equal(tones.includes(fillsOf(mark).always.at(-1)), true, `${where}: a pane mark keeps its tone`);
+        assert.deepEqual({ ...fillsOf(mark), always: [] }, NO_FILL, where);
+      }
+      const filled = every(minimap).filter((kid) => !marks.includes(kid)).map((kid) => [kid.tag, fillsOf(kid)]).filter(([, fills]) => Object.values(fills).some((list) => list.length));
+      assert.deepEqual(filled, [], `${where}: the minimap paints no fill`);
+      for (const tool of ["minus", "plus"]) assert.deepEqual(fillsOf(byId(el, `bar-middle-0-${tool}`)), { always: [], hover: [c.subtle], press: [c.selected] }, `${tool} keeps its hover wash`);
     }
   }
+});
+
+test("Each minimap column keeps its press, its name, its pointer and its focus border", async () => {
+  const { statusBar, stepper, c } = await compositions();
+  const hits = [];
+  const el = statusBar({ middle: stepper({ columns: sampleColumns }) })("bar", c, { onChange: (i) => hits.push(i) });
+  sampleColumns.forEach((_col, i) => {
+    const column = byId(el, `bar-middle-0-column-${i}`);
+    assert.deepEqual(calls(column, "accessibility_label").map((call) => call[1]), [`Column ${i + 1}`]);
+    assert.equal(calls(column, "cursor_pointer").length, 1);
+    const ring = chain();
+    arg(column, "focus")(ring);
+    assert.equal(arg(ring, "border_color"), c.accent);
+    arg(column, "on_click")({}, {});
+  });
+  assert.deepEqual(hits, sampleColumns.map((_col, i) => i));
 });
 
 test("The bar's three tracks stand in for the grid columns", async () => {
