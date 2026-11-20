@@ -459,7 +459,7 @@ export const CHROME_NIGHT = {
   blocked: "#d5674f", working: "#d9a74a", done: "#7fa66b", accent: "#7d9cd4", popover: "#222220", border: "#33332f", chrome: "#141413",
 };
 // A text field holding `value`.
-export const fieldWith = ({ value }) => ({ on() {}, focus() {}, value: () => value, set_selected_range() {}, release() {} });
+export const fieldWith = ({ value }) => ({ on() {}, focus() {}, value: () => value, set_value() {}, set_selected_range() {}, release() {} });
 // Every .js file under dir, at any depth; a folder that is not there has none.
 export async function jsFiles(dir) {
   const entries = await readdir(dir, { withFileTypes: true }).catch(() => []);
