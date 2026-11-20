@@ -200,19 +200,24 @@ export function tone(t, status) {
 }
 
 const CUT_DRAW_RETRY_MS = 250;
+const CUT_DRAW_RETRY_MAX_MS = 4000;
 
-class FinishedView extends View {
+class RetryingView extends View {
   render() {
+    const finished = this.drawsFinished ?? 0;
     const started = (this.drawsStarted ?? 0) + 1;
     this.drawsStarted = started;
-    this.clock.after(CUT_DRAW_RETRY_MS, (cx) => { if ((this.drawsFinished ?? 0) < started) cx.notify(); });
-    const drawn = this.draw();
-    this.drawsFinished = Math.max(this.drawsFinished ?? 0, started);
-    return drawn;
+    const wait = Math.min(CUT_DRAW_RETRY_MS * 2 ** Math.max(0, started - 1 - finished), CUT_DRAW_RETRY_MAX_MS);
+    this.clock.after(wait, (cx) => { if ((this.drawsFinished ?? 0) < started) cx.notify(); });
+    try {
+      return this.draw();
+    } finally {
+      this.drawsFinished = Math.max(this.drawsFinished ?? 0, started);
+    }
   }
 }
 
-class LookView extends FinishedView {
+class LookView extends RetryingView {
   init(look, cx) {
     this.look = look;
     this.clock = cx.timer;
@@ -292,7 +297,7 @@ export class SidebarFooter extends LookView {
   }
 }
 
-export default class Spaces extends FinishedView {
+export default class Spaces extends RetryingView {
   names = new Names(this);
 
   init(_props, cx) {
