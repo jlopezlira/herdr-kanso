@@ -13,16 +13,17 @@ import { tryOr, readCommands, pad2 } from "./pure.js";
 import { shortFolder } from "./folder.js";
 import { openArrange } from "./open.js";
 import { openWithPopup } from "./popup.js";
+import { openSend, openSleep } from "./launch.js";
 import { FIND } from "./find-key.js";
 import { rollupState, headerHold, prFacts, prLine } from "./ghchecks.js";
 import { pieces, shown, runs, setPiece, STORE } from "./pieces.js";
-import { DIALOG, G, R, T, W, ICON, ICON_CHROME, OPACITY, TINT, CLEAR, DRAG_START, CHROME_SQUARE, PANE, alpha, glyphOf, mix, tokens, washes } from "./ui.js";
+import { G, R, T, W, FOCUS, ICON, ICON_CHROME, OPACITY, TINT, CLEAR, DRAG_START, CHROME_SQUARE, PANE, alpha, glyphOf, mix, tokens, washes } from "./ui.js";
 import { mark } from "./ui-mark.js";
 import { iconButton, Armed } from "./ui-button.js";
 import { menu } from "./ui-menu.js";
 import { field, TextField } from "./ui-field.js";
 import { pendingDot, PENDING } from "./ui-state.js";
-import { failureLine, stepper } from "./kit.js";
+import { button, failureLine, stepper } from "./kit.js";
 import { layoutPaused, statusBar } from "./status-bar.js";
 import { COLUMN } from "./ui-status.js";
 import { boundChord } from "./ui-tooltip.js";
@@ -98,6 +99,7 @@ const DRAG_MAX = 12000; // ms a held pane stays held with nobody dropping it (le
 const iconOf = (prog, size, color) => programIcon(prog, size, color) ?? div().size(size);
 // A pane beyond the edge shows its agent's mark only while it has something to say.
 const EDGE_MARKS = ["working", "blocked", "done"];
+const EDGE_CARD_MS = { open: 350, close: 250 };
 const zoneOf = (e, fallback = "below") => {
   const w = e.bounds?.width, h = e.bounds?.height, at = e.local_position;
   if (!w || !h || !at) return fallback;
@@ -224,12 +226,6 @@ export function digestOpen(segment, cwd) {
   return { panel: "pr", section: open.section ?? null, check: open.check ?? null };
 }
 
-const openSend = (p) => openOverlay({ mod: "kanso-send", kind: "dialog", width: DIALOG.wide, props: { pane: p.pane } });
-const openSleep = (p) => {
-  const space = spaces().find((s) => s.tabs.some((t) => t.id === p.tab));
-  if (space) openOverlay({ mod: "kanso-sleep", kind: "dialog", width: DIALOG.wide, props: { sleep: { scope: "agent", space: space.id, tab: p.tab, pane: p.pane } } });
-};
-
 export default class Strip extends View {
   init(_props, cx) {
     const p = props() ?? {};
@@ -277,38 +273,40 @@ export default class Strip extends View {
     const drag = shared("strip.drag");
     const takes = Boolean(drag) && drag.pane !== p.edge; // a held pane can land beyond this edge
     const c = tokens(t);
-    const corner = (st) => (["working", "blocked", "done"].includes(st) ? mark(c, { status: st, size: "sm" }) : null);
+    const paneItem = (id) => {
+      const info = byId.get(id);
+      return { id, info, name: nameOf(info, given), mark: EDGE_MARKS.includes(info?.status) ? info.status : null, show: (cx) => { cx.stop_propagation(); show(id); } };
+    };
     const MAX_TILES = 8;
-    const tile = (id) => {
-      const info = byId.get(id), d = corner(info?.status);
-      return div().id(`edge-tile-${id}`).relative().size(20).flex_none().rounded(R.control).bg(w?.w7 ?? t.hover)
+    const tile = ({ id, info, name, mark: status, show: showPane }) => {
+      const d = status ? mark(c, { status, size: "sm" }) : null;
+      const face = div().id(`edge-tile-face-${id}`).relative().size(20).flex_none().rounded(R.control).bg(w?.w7 ?? t.hover)
         .border_1().border_color(CLEAR).flex().items_center().justify_center()
         .hover((h) => h.bg(c.selected).border_color(c.border))
-        .on_click((_e, cx) => { cx.stop_propagation(); show(id); })
         .child(iconOf(info?.program, 12, t.muted))
         .when(Boolean(d), (el) => el.child(d.absolute().top(-G.hair).right(-G.hair).rounded_full().border_1().border_color(c.chrome)));
+      return button({ label: name, kind: "quiet", content: [face] })(`edge-tile-${id}`, c, { onClick: showPane }).m(-FOCUS);
     };
+    const items = ids.map(paneItem);
     const stack = v_flex().id("edge-stack").items_center().gap(G.hair).py(6).px(4)
       .child(div().h(16).text_size(T.card).text_color(takes ? t.foreground : t.muted).child(chevron))
-      .children(ids.slice(0, MAX_TILES).map(tile))
+      .children(items.slice(0, MAX_TILES).map(tile))
       .when(ids.length > MAX_TILES, (el) => el.child(div().text_size(T.micro).text_color(t.dim).child(`+${ids.length - MAX_TILES}`)));
-    const item = (id) => {
-      const info = byId.get(id), prog = info?.program;
-      return {
-        ...(prog?.icon ? { [prog.tint ? "icon" : "picture"]: prog.icon } : {}), label: nameOf(info, given),
-        mark: EDGE_MARKS.includes(info?.status) ? info.status : null, onClick: (cx) => { cx.stop_propagation(); show(id); },
-      };
+    const item = ({ info, name, mark: status, show: showPane }) => {
+      const prog = info?.program;
+      return { ...(prog?.icon ? { [prog.tint ? "icon" : "picture"]: prog.icon } : {}), label: name, mark: status, onClick: showPane };
     };
-    const card = menu("edge-menu", { title: `${ids.length === 1 ? "One pane" : `${ids.length} panes`} beyond the ${left ? "left" : "right"} edge`, items: ids.map(item) }, c);
-    return v_flex().id("edge").size_full().items_center().justify_center().bg(t.chrome).cursor_pointer()
+    const beyond = `${ids.length === 1 ? "One pane" : `${ids.length} panes`} beyond the ${left ? "left" : "right"} edge`;
+    const card = menu("edge-menu", { title: beyond, items: items.map(item) }, c);
+    const hoverCard = HoverCard.new(`edge-card-${p.side}`).anchor(left ? "left_center" : "right_center").open_delay(EDGE_CARD_MS.open).close_delay(EDGE_CARD_MS.close)
+      .trigger(stack)
+      .content(card);
+    return button({ label: beyond, kind: "quiet", content: [hoverCard] })("edge", c, { onClick: () => show(p.edge) })
+      .flex().flex_col().size_full().rounded(0).bg(t.chrome)
       .hover((h) => h.bg(takes ? alpha(t.accent, TINT.strong) : t.hover))
       .when(takes, (el) => el.bg(alpha(t.accent, TINT.strong)).cursor_grabbing())
       .on_mouse_up("left", () => dropMove(p.edge, left ? "after" : "before", false))
-      .on_click(() => show(p.edge))
-      .on_scroll_wheel((e) => { const d = wheelDelta(e); if (d) postScroll(d / WHEEL_PX); })
-      .child(HoverCard.new(`edge-card-${p.side}`).anchor(left ? "left_center" : "right_center").open_delay(350).close_delay(250)
-        .trigger(stack)
-        .content(card));
+      .on_scroll_wheel((e) => { const d = wheelDelta(e); if (d) postScroll(d / WHEEL_PX); });
   }
 
   renderRuler() {

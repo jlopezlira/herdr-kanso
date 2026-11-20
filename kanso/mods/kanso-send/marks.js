@@ -1,7 +1,7 @@
 // This is the source copy; `npm run sync:share` copies it into every mod, and a test fails when a copy differs.
 // Motion is native and keeps going behind other windows: a ring that stops when the window loses the keyboard reads as a stalled agent.
 export { onBattery } from "./ui.js";
-import { KEY } from "./ui.js";
+import { KEY, TINT, alpha } from "./ui.js";
 // A chord as this computer writes it lives with the tooltip that shows it.
 import { MAC, OTHER, LINUX, modifierGlyphs, chordParts, glyphs } from "./ui-tooltip.js";
 export { MAC, OTHER, LINUX, modifierGlyphs, glyphs };
@@ -9,7 +9,7 @@ import { div, svg, image } from "gpui-kit";
 import { terminals, shared } from "herdr";
 
 export function keycap(t, text, faint = false) {
-  return div().flex_none().h(16).px(KEY.x).rounded(4).bg(t.foreground + (faint ? "0c" : "14")).flex().items_center().justify_center()
+  return div().flex_none().h(16).px(KEY.x).rounded(4).bg(alpha(t.foreground, faint ? TINT.row : TINT.pill)).flex().items_center().justify_center()
     .text_size(KEY.text).font_medium().text_color(faint ? t.dim : t.foreground).whitespace_nowrap().child(text);
 }
 

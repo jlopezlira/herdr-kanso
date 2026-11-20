@@ -2,7 +2,7 @@
 import { loadSpaces, temporaryKdbFile } from "./mod-fixtures.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { load, clone, temporary, exec, context, failure } from "./helpers.mjs";
+import { load, clone, temporary, exec, context, failure, popoverHost, keyboard, calls, arg, tipsOf, svgsOf, find } from "./helpers.mjs";
 import { loadSidebar, mountedState, recorder } from "./sidebar-fixtures.mjs";
 
 const record = { name: "dark", target: "dark.example", via: "", session: "", temporary: false };
@@ -505,4 +505,44 @@ test("the sidebar reads Sync only when the machine list has a remote machine", a
   await view.readMachines();
   assert.deepEqual(reads, ["/app/data/kanso-sync/config.json", "/app/data/kanso-sync/status.json"]);
   assert.equal(view.sync.status.dark.reason, "update");
+});
+
+test("On the rail a computer is a Tile like the projects beside it: Tab reaches it with the kit's ring, Enter and Space fold it, and a right click opens its menu", async () => {
+  const opened = [];
+  const { Spaces } = await loadSidebar(popoverHost(), {
+    shared: (key) => (key === "sidebar.collapsed" ? true : null), spaces: () => connected.spaces, machines: () => connected.layouts, openOverlay: (overlay) => opened.push(Object.keys(overlay.props)[0]),
+  });
+  const view = Object.assign(new Spaces(), mountedState({ shown: new Set(connected.spaces.map((space) => space.id)), machines: connected.live }));
+  const walk = () => {
+    const keys = keyboard(view.render());
+    const at = keys.stops.findIndex((stop) => stop.tag === "machine-dark");
+    assert.ok(at >= 0, "the computer's tile is a Tab stop");
+    for (let n = 0; n < at; n += 1) keys.tab();
+    return { keys, tile: keys.tab() };
+  };
+  const { tile } = walk();
+  assert.ok(calls(tile, "focus").length > 0, "its ring");
+  assert.equal(arg(tile, "accessibility_label"), "dark");
+  assert.deepEqual(tipsOf(tile), ["dark"], "its name and state in the tooltip");
+  assert.ok(svgsOf(tile).some((path) => path.endsWith("server.svg")));
+  assert.equal(view.nav.filter((row) => row.key === "machine:dark").length, 1, "and still one stop of the list");
+  for (const [key, folded] of [["enter", true], ["space", false]]) {
+    walk().keys.key(key, { notify() {} });
+    assert.equal(view.folded.has("dark"), folded, key);
+  }
+  calls(walk().tile, "on_mouse_down").find((call) => call[1] === "right")[2]({}, { stop_propagation() {} });
+  assert.deepEqual(opened, ["machineMenu"]);
+
+  const rail = find(view.render(), (el) => calls(el, "id").some((call) => call[1] === "machine-dark-row"));
+  assert.ok(rail, "the whole 48px row answers, not only the tile inside it");
+  assert.deepEqual(tipsOf(rail).at(-1), "dark", "its tooltip is over the row");
+  view.folded.clear();
+  calls(rail, "on_click").at(-1)[1]({}, { notify() {} });
+  assert.equal(view.folded.has("dark"), true, "a click beside the tile folds it");
+  opened.length = 0;
+  calls(rail, "on_mouse_down").find((call) => call[1] === "right")[2]({}, { stop_propagation() {} });
+  assert.deepEqual(opened, ["machineMenu"], "a right click beside the tile opens its menu");
+  const stopped = [];
+  calls(walk().tile, "on_click").at(-1)[1]({}, { notify() {}, stop_propagation: () => stopped.push(true) });
+  assert.deepEqual(stopped, [true], "a press on the tile stays on the tile, so the row does not fold it twice");
 });

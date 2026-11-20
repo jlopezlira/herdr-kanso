@@ -2,11 +2,12 @@
 // Apache-2.0; derived from Herdr's shipped `menu` mod.
 // In the strip Herdr's menu gets the block id ("term-<pane>"), so pane commands fail: this menu resolves the real pane.
 import { View } from "gpui-kit";
-import { run, props, closeOverlay, openOverlay, theme, terminals, panes, spaces, agents, shared, setShared } from "herdr";
+import { run, props, closeOverlay, theme, terminals, panes, spaces, agents, shared, setShared } from "herdr";
 import { listKey, moveTo } from "./listkeys.js";
 import { focusOn } from "./pure.js";
 import { openWithPopup } from "./popup.js";
-import { DIALOG, tokens } from "./ui.js";
+import { openSend, openSleep } from "./launch.js";
+import { tokens } from "./ui.js";
 import { Armed } from "./ui-button.js";
 import { menuList } from "./ui-menu.js";
 import { pieceLines } from "./piece-lines.js";
@@ -47,10 +48,10 @@ function groups(tg, armed) {
       { label: pinned ? "Unpin" : "Pin", icon: "pin", key: "kanso-strip.pin", does: () => setShared("strip.req", { op: "pin", pane, n: nonce() }) },
     ],
     [
-      ...(canSend ? [{ label: "Send to an agent\u2026", icon: "send", key: "kanso-strip.send", does: () => openOverlay({ mod: "kanso-send", kind: "dialog", width: DIALOG.wide, props: { pane } }) }] : []),
+      ...(canSend ? [{ label: "Send to an agent\u2026", icon: "send", key: "kanso-strip.send", does: () => openSend(info) }] : []),
       ...(agent ? [{ label: "Find in conversation", icon: "search", key: "kanso-strip.find", does: () => { run("pane.focus", { pane }); run("kanso-strip.find"); } }] : []),
       ...(info?.cwd ? [{ label: "Open with\u2026", icon: "external-link", key: "mod.open:open-with", does: () => openWithPopup(info) }] : []),
-      ...(canSleep && space ? [{ label: "Sleep", icon: "moon", does: () => openOverlay({ mod: "kanso-sleep", kind: "dialog", width: DIALOG.wide, props: { sleep: { scope: "agent", space: space.id, tab: info.tab, pane: info.pane } } }) }] : []),
+      ...(canSleep && space ? [{ label: "Sleep", icon: "moon", does: () => openSleep(info) }] : []),
       ...(parent ? [{ label: `Send back to ${parent.name || parent.address}`, icon: "chevron-right", does: () => run("terminal.park", { terminal: term.address }) }] : []),
     ],
     ...(term ? [[{ label: "Right-clicks go to the program", checked: toProgram,
@@ -70,7 +71,7 @@ export default class KansoMenu extends View {
   listed(e) {
     const nav = listKey(e, this.listG);
     this.listG = nav.gAt;
-    return nav.move;
+    return nav.move === "enter" && !this.handle.is_focused() ? null : nav.move;
   }
 
   // Close asks twice while an agent is in the pane: the first press arms it and keeps the menu open.

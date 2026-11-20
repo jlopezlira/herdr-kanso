@@ -39,7 +39,7 @@ const PICK = {
 // Line heights, as a share of the font size.
 const LEADINGS = { LH: { body: "k-lh-body" } };
 // Durations in milliseconds.
-const TIMING = { SPIN: "k-spin-ms", GLINT_MS: "k-glint-ms", GLINT_STAGGER: "k-glint-stagger" };
+const TIMING = { SPIN: "k-spin-ms", GLINT_MS: "k-glint-ms", GLINT_STAGGER: "k-glint-stagger", LIT_MS: "k-key-lit-ms" };
 // Transitions: a duration and an easing.
 const MOTION = { EASE: { duration: "k-fade-ms", easing: "k-glide-ease" }, GLIDE: { duration: "k-glide-ms", easing: "k-glide-ease" } };
 const EASINGS = { GLINT_EASE: "k-ease-out" };

@@ -127,7 +127,7 @@ export default class Arrange extends View {
   listed(e) {
     const { move, gAt } = listKey(e, this.listG);
     this.listG = gAt;
-    return move;
+    return move === "enter" && !this.handle.is_focused() ? null : move;
   }
 
   render() {

@@ -42,6 +42,7 @@ const COMMON = [
   { source: "kanso/mods/kanso-dojo/lit.js", copies: ["kanso/mods/kanso-help/lit.js"] },
   // The Open with popup, from the terminal's menu and from the strip's pane menu.
   { source: "kanso/mods/open-with/popup.js", copies: ["kanso/mods/kanso-menu/popup.js", "kanso/mods/kanso-strip/popup.js"] },
+  { source: "kanso/mods/kanso-strip/launch.js", copies: ["kanso/mods/kanso-menu/launch.js"] },
   // The way into the arrangements dialog, from the tab bar and from the strip.
   { source: "kanso/mods/kanso-arrange/open.js", copies: ["kanso/mods/kanso-strip/open.js", "kanso/mods/kanso-tabs/open.js"] },
   // The view both rename dialogs are, the one-line and the many-line, and the answer they give: a terminal's label, or a command with the new name.

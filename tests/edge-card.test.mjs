@@ -1,7 +1,7 @@
 // The card over an edge: the panes beyond it as the kit's Menu, each with its agent's mark, a press brings one into view.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { svgsOf as svgs } from "./helpers.mjs";
+import { svgsOf as svgs, keyboard, clone, calls, nodes as all, texts, everyDrawn } from "./helpers.mjs";
 import { loadStripWith } from "./mod-fixtures.mjs";
 
 const program = (name, icon, tint) => ({ agent: true, shell: false, name, icon, tint });
@@ -18,9 +18,6 @@ async function edge() {
   return { view, store };
 }
 
-const calls = (el, name) => el.calls.filter((call) => call[0] === name);
-const all = (el) => [el, ...el.kids.flatMap(all)];
-const texts = (el) => all(el).flatMap((kid) => calls(kid, "child").map((call) => call[1]).filter((x) => typeof x === "string"));
 const cardOf = (root) => all(root).flatMap((el) => calls(el, "content").map((call) => call[1]))[0];
 
 test("The card over an edge lists each pane beyond it as a Menu item under how many there are, and a press brings that pane into view", async () => {
@@ -46,4 +43,53 @@ test("A pane's agent mark shows only while it works, waits or is done, and its p
   assert.ok(svgs(items[0]).some((path) => /working/.test(path)), "working shows its mark");
   assert.equal(svgs(items[1]).some((path) => /enso-idle/.test(path)), false, "idle shows none");
   assert.ok(all(items[1]).some((kid) => calls(kid, "image").some((call) => call[1] === "/apps/codex.png")), "an untinted program's own picture");
+});
+
+test("Tab reaches the edge and each pane's tile, each with the kit's ring, and Enter and Space bring that pane into view", async () => {
+  const { view, store } = await edge();
+  const keys = keyboard(view.render());
+  const walked = ["edge", "edge-tile-p1", "edge-tile-p2"];
+  assert.deepEqual(keys.stops.map((stop) => stop.tag).filter((tag) => !tag.startsWith("edge-menu-")), walked, "the edge, then a tile per pane beyond it");
+  for (const [tag, pane] of [["edge", "p1"], ["edge-tile-p1", "p1"], ["edge-tile-p2", "p2"]]) {
+    const stop = keys.tab();
+    assert.equal(stop.tag, tag);
+    assert.ok(calls(stop, "focus").length > 0, `${tag}: its ring`);
+    for (const key of ["enter", "space"]) {
+      store["strip.req"] = null;
+      keys.key(key, {});
+      assert.deepEqual([store["strip.req"].op, store["strip.req"].pane], ["focus", pane], `${tag}, ${key}`);
+    }
+  }
+  assert.deepEqual(keys.stops.slice(0, 3).map((stop) => calls(stop, "accessibility_label")[0][1]), ["2 panes beyond the left edge", "Claude Code", "Codex"], "each says what it is");
+});
+
+test("The edge keeps what the pointer does there: a held pane lands beyond it, the wheel slides the strip, and the card waits as long as before", async () => {
+  const { view, store } = await edge();
+  store["strip.drag"] = { pane: "p9", at: 1 };
+  const root = view.render();
+  calls(root, "on_mouse_up").at(-1)[2]({}, {});
+  assert.deepEqual(clone([store["strip.req"].op, store["strip.req"].pane, store["strip.req"].to, store["strip.req"].side, store["strip.drag"]]), ["move", "p9", "p1", "after", null]);
+  calls(root, "on_scroll_wheel").at(-1)[1]({ delta_lines: { y: -1 } }, {});
+  assert.equal(store["strip.req"].op, "scroll");
+  const card = all(root).find((el) => calls(el, "content").length > 0);
+  assert.deepEqual([calls(card, "open_delay")[0][1], calls(card, "close_delay")[0][1]], [350, 250]);
+});
+
+test("A pane's tile and its card item say the same name and show the same status, and a press on either does the same", async () => {
+  const { view, store } = await edge();
+  const root = view.render();
+  const card = cardOf(root);
+  const tileOf = (pane) => everyDrawn(root).find((el) => el.tag === `edge-tile-${pane}`);
+  const itemOf = (index) => all(card).find((el) => el.tag === `edge-menu-${index}`);
+  [["p1", 0, "Claude Code", /working/], ["p2", 1, "Codex", null]].forEach(([pane, index, name, status]) => {
+    const tile = tileOf(pane), item = itemOf(index);
+    assert.equal(calls(tile, "accessibility_label")[0][1], name);
+    assert.ok(texts(item).includes(name));
+    assert.deepEqual([svgs(tile).some((path) => /working/.test(path)), svgs(item).some((path) => /working/.test(path))], [Boolean(status), Boolean(status)], `${name}: the same status on both`);
+    for (const surface of [tile, item]) {
+      store["strip.req"] = null;
+      calls(surface, "on_click").at(-1)[1]({}, { stop_propagation() {} });
+      assert.deepEqual([store["strip.req"].op, store["strip.req"].pane], ["focus", pane]);
+    }
+  });
 });

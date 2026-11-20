@@ -117,12 +117,12 @@ export const listedFiles = async (entries, guard = () => {}) => {
 };
 
 export const STRIP_NIGHT = { foreground: "#d8d4cb", background: "#1b1b19", hover: "#232321", selected: "#2b2b28", accent: "#da627d", dim: "#6b6862", muted: "#949086", chrome: "#141413" };
-export const loadStripWith = (props, panes, store) => load("kanso-strip/main.js", ["Strip"], {
+export const loadStripWith = (props, panes, store, over = {}) => load("kanso-strip/main.js", ["Strip"], {
   ...gpuiHost(), svg: (path) => { const el = chain("svg"); el.calls.push(["svg", path]); return el; },
   image: (path) => { const el = chain("image"); el.calls.push(["image", path]); return el; }, Popover: { new: (id) => chain(id) }, HoverCard: { new: (id) => chain(id) },
   theme: () => STRIP_NIGHT, props: () => props, panes: () => panes, agents: () => [], focused: () => null,
   spaces: () => [], machines: () => [], home: () => "/home/me", terminals: () => [], shared: (key) => store[key] ?? null, setShared: (key, value) => { store[key] = value; },
-  run: () => {}, hc: async () => ({ code: 0 }), openOverlay: () => {},
+  run: () => {}, hc: async () => ({ code: 0 }), openOverlay: () => {}, ...over,
 });
 
 export const byTag = (el, tag) => nodes(el).find((kid) => kid.tag === tag);

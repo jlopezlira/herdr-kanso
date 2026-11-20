@@ -15,7 +15,7 @@ import { dojoShare } from "./card.js";
 import { TICK_MS, Companion } from "./pets.js";
 import { LEVELS, gridWorld, textWorld, move, shortest, newTarget, points, same } from "./dojo.js";
 
-const TARGETS = 10, HINT_MS = 2000, LIT_MS = 600, SLEEP_MS = 20000;
+const TARGETS = 10, HINT_MS = 2000, SLEEP_MS = 20000;
 const FINGER = { h: ["←", "index, reach"], j: ["↓", "index"], k: ["↑", "middle"], l: ["→", "ring"] };
 
 export default class Dojo extends View {
@@ -26,7 +26,7 @@ export default class Dojo extends View {
     this.totals = { bests: {}, rounds: 0, rings: 0, fewest: 0, longest: 0, days: [], first: null };
     this.snippet = 0;
     this.pending = ""; // a count, a first g, or f t F T waiting for its letter
-    this.capLight = new Lit(LIT_MS);
+    this.capLight = new Lit();
     this.setLevel(1, false);
     cx.spawn(async (cx) => {
       try {

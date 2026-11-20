@@ -330,7 +330,7 @@ const menuKit = () => load("kanso-spaces/ui-menu.js", ["menuHeight"], gpuiHost()
 const devbox = () => ({ space: "sp-api", folder: "/work/api", machine: "devbox", project: null, name: "api" });
 const plusMenu = (Spaces, state) => {
   const scrolled = [];
-  const view = Object.assign(new Spaces(), { kdb: { setProjectAgent: async () => {} }, menuAt: -1, handle: {}, agentScroll: { scroll_to_item: (i) => scrolled.push(i) } }, state);
+  const view = Object.assign(new Spaces(), { kdb: { setProjectAgent: async () => {} }, menuAt: -1, handle: { is_focused: () => true }, agentScroll: { scroll_to_item: (i) => scrolled.push(i) } }, state);
   const lines = [], items = [];
   view.menuLine = ((line) => (text, act, opts) => { lines.push([text, opts?.hint ?? null]); return line(text, act, opts); })(view.menuLine.bind(view));
   view.popup = (_t, _title, list) => { items.push(...list); return null; };
@@ -372,7 +372,7 @@ test("Tab walks every row of the New tab + menu in order, each with its focus wa
     ...popoverHost(), keys: () => [], openOverlay: (o) => made.push(Object.keys(o.props ?? {})[0]),
     spaces: () => [{ id: "sp-api", machine: "devbox", active: true, tabs: [] }],
   }));
-  const view = Object.assign(new Spaces(), { kdb: { setProjectAgent: async () => {} }, menuAt: -1, handle: {}, agentScroll: { scroll_to_item() {} }, known: TWO_AGENTS, repo: true, trees: [{ path: "/work/api-feat", branch: "feat" }] });
+  const view = Object.assign(new Spaces(), { kdb: { setProjectAgent: async () => {} }, menuAt: -1, handle: { is_focused: () => false }, agentScroll: { scroll_to_item() {} }, known: TWO_AGENTS, repo: true, trees: [{ path: "/work/api-feat", branch: "feat" }] });
   view.addProject = () => calls.push(["add project"]);
   view.worktreeDialog = () => calls.push(["new worktree"]);
   const keys = keyboard(view.newAgentView(AGENT_THEME));
@@ -531,4 +531,18 @@ test("The + popup lets go of the scroll handle it made", async () => {
   view.init({}, { notify() {}, timer: { after: () => ({ cancel() {} }) }, focus_handle: () => ({ focus() {} }) });
   view.close();
   assert.deepEqual(counted, { made: 1, released: 1 });
+});
+
+test("In the + menu Enter runs the highlighted row only when the list holds the keyboard; on a focused row it is that row's", async () => {
+  const { calls, Spaces } = await startMenu((made) => ({ openOverlay: (o) => made.push(Object.keys(o.props ?? {})[0]), keys: () => [] }));
+  const { view, press } = plusMenu(Spaces, { known: TWO_AGENTS, repo: false });
+  view.menuAt = 1;
+  const focused = (on) => { view.handle.is_focused = () => on; };
+  focused(false);
+  calls.length = 0;
+  press("enter");
+  assert.deepEqual(calls, [], "focus on a row: the list's index runs nothing");
+  focused(true);
+  press("enter");
+  assert.deepEqual(calls.at(-1), ["tab.new", { space: "sp-api", folder: "/work/api", argv: ["claude"] }], "focus on the list: the highlighted row runs");
 });
