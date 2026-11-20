@@ -161,6 +161,21 @@ test("in Projects a session on another computer leaves its computer's name to th
   assert.deepEqual(drawn.texts.filter((x) => x === "dark"), ["dark"], "the computer's heading names it once");
 });
 
+test("in Projects with Computers hidden a session on another computer still names its computer", async () => {
+  const drawn = await sidebar({ ...darkSessions, shared: (key) => (key === "kanso.pieces" ? { "sidebar.computers": "hide" } : null) });
+  assert.equal(drawn.ids.includes("space-agent-dark/t2"), true);
+  assert.deepEqual(drawn.texts.filter((x) => x === "dark"), ["dark", "dark"], "no heading names it, so each row does");
+});
+
+test("a session on another computer moved into a project on this one still names its computer", async () => {
+  const terminals = [{ address: "dark/t2", labels: { "kanso.id": "d2" } }];
+  const panel = { set() {}, agents: new Map([["term:d2", { project: "sp1", projectAt: 1 }]]) };
+  const drawn = await sidebar({ ...darkSessions, agents: [darkSessions.agents[0]], terminals, own: { ...darkSessions.own, panel } });
+  assert.equal(drawn.ids.includes("space-agent-dark/t2"), true);
+  assert.deepEqual(drawn.texts.filter((x) => x === "dark"), ["dark", "dark"], "the dark heading, and the row under this computer's project");
+  assert.ok(drawn.ids.indexOf("space-agent-dark/t2") < drawn.ids.indexOf("space-sp2"), "it sits under the project on this computer");
+});
+
 test("in Status a helper on another computer leaves the computer's name to the session above it", async () => {
   const drawn = await sidebar({ ...darkSessions, view: "agents" });
   assert.equal(drawn.ids.includes("space-agent-dark/t3"), true);

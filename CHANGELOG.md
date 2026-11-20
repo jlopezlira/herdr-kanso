@@ -30,7 +30,7 @@ the branch's rules.
 
 ### Fixed
 
-- In Projects, a session on another computer no longer repeats that computer's name: the computer's heading above it already says it. In Status, a helper under a session on another computer no longer repeats it either: the session's row above still says the project and the computer.
+- A session on another computer no longer repeats that computer's name when a heading or row above it already says it. In Projects with Computers shown, that is the computer's heading. In Status, it is the row of the session a helper works for, which still says the project and the computer. Everywhere else the row keeps its computer's name: in Projects with Computers hidden, and when the session was moved into a project on a different computer.
 
 ## [3.31.0] - 2026-11-19
 
