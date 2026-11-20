@@ -98,6 +98,27 @@ test("A shared value the rows do not show changes, and the sidebar's refresh dra
   assert.deepEqual(after, before, "the update check is the footer's bookkeeping, and nothing shows it");
 });
 
+test("A refresh that changes nothing the rows show does not draw them again, and a hover, a press or a fold does", async (t) => {
+  const { cx, view, renders } = await mounted(t);
+  const rows = () => renders().rows;
+  const before = rows();
+  view.redraw(cx);
+  view.redraw(cx);
+  assert.equal(rows(), before, "nothing the rows show changed");
+  view.hoverRow = "t2";
+  view.redraw(cx);
+  assert.equal(rows(), before + 1, "the row under the pointer lights");
+  view.redraw(cx);
+  assert.equal(rows(), before + 1, "the pointer stayed on it");
+  view.pressed = "s1";
+  view.over = "s2";
+  view.redraw(cx);
+  assert.equal(rows(), before + 2, "a project held over another shows where it drops");
+  view.toggleFold("s1", false, cx);
+  view.redraw(cx);
+  assert.equal(rows(), before + 3, "a fold starts");
+});
+
 test("A paint with nothing changed draws no part, and opening Sort draws the header alone", async (t) => {
   const { view, renders } = await mounted(t);
   const before = renders();

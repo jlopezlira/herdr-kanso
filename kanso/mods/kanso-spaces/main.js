@@ -155,6 +155,14 @@ const projectAt = (key) => registry().find((p) => keyOfProject(p) === sameKey(ke
 const ROW_SHARED = [REGISTRY, NEEDS_YOU, "strip.state", SLEEP_PENDING, SLEEP_WAKING, SLEEP_FAILED, FORGET_HELD, STORE, KNOWN_AGENTS, "kanso.battery"];
 const rowInputs = () => ({ spaces: spaces(), panes: panes(), terminals: terminals(), agents: agents(), machines: machines(), focused: focused(), front: window()?.active === true, keys: keys(),
   shared: ROW_SHARED.map((key) => shared(key)) });
+const ROW_STATE = ["hoverRow", "hoverSpace", "hoverHead", "hoverMachine", "pressed", "over", "draggedAgent", "overAgent", "kbd", "navKey", "needsOpen", "needsEmpty", "foldH", "folded",
+  "agentsFolded", "sectionsFolded", "asleepOpen", "shelvesOpen", "alive", "git", "held", "custom", "machines", "parked", "waking", "login", "failed", "pulling", "hints", "sync", "hostName"];
+const ROW_REPLACED = ["threads", "steps", "since", "tasks"];
+const listed = (value) => (value instanceof Set || value instanceof Map ? [...value] : value);
+const MINUTE_MS = 60_000;
+const BORN_MS = 1500;
+const bornBy = (at, now) => now - at > BORN_MS;
+const narrowAt = (width) => (width ?? SIDEBAR.w) < SIDEBAR.narrow;
 // Kanso's worktrees: beside its database here; on another machine, ~/.kanso/worktrees (the script's default).
 const kansoWorktrees = (machine) => (machine ? "" : paths.join(appHome(), WORKTREES));
 const spaceAt = (id) => spaces().findIndex((s) => s.id === id);
@@ -406,18 +414,30 @@ export default class Spaces extends View {
 
   redraw(cx) {
     if (!this.parts) { cx.notify(); return; }
-    this.paint(true);
+    this.paint();
+  }
+
+  rowsShown(now = Date.now()) {
+    const fold = this.folding && { ...this.folding, moving: this.unfolded(this.folding.id, false, now) };
+    const { project, expanded } = this.sinceLeft;
+    return JSON.stringify({ ...rowInputs(), own: ROW_STATE.map((key) => listed(this[key])), fold, away: [project, expanded], remembered: listed(this.panel.agents),
+      narrow: narrowAt(this.width), born: Object.entries(this.born).map(([id, at]) => [id, bornBy(at, now)]), minute: Math.floor(now / MINUTE_MS) });
+  }
+
+  rowsReplaced() {
+    return [...ROW_REPLACED.map((key) => this[key]), this.names.book, this.sinceLeft.rows];
   }
 
   rowsChanged() {
-    const read = JSON.stringify(rowInputs());
-    const changed = read !== this.rowsRead;
+    const read = this.rowsShown(), replaced = this.rowsReplaced();
+    const changed = read !== this.rowsRead || replaced.some((value, i) => value !== this.rowsRefs?.[i]);
     this.rowsRead = read;
+    this.rowsRefs = replaced;
     return changed;
   }
 
-  paint(rowsAsked = false) {
-    if (this.rowsChanged() || rowsAsked) this.rowsAt = (this.rowsAt ?? 0) + 1;
+  paint() {
+    if (this.rowsChanged()) this.rowsAt = (this.rowsAt ?? 0) + 1;
     const next = this.looks();
     Object.entries(next).filter(([name, look]) => JSON.stringify(look) !== JSON.stringify(this.drawnLooks?.[name])).forEach(([name, look]) => this.parts[name].set_props(look));
     this.drawnLooks = next;
@@ -1067,14 +1087,14 @@ export default class Spaces extends View {
   // Herdr sizes the sidebar as its edge is dragged: past SIDEBAR.min narrower it folds to the rail, and the rail dragged to SIDEBAR.min or wider opens.
   // The sizes while a fold or an open is still landing, and before the first draw settles, are not a drag.
   sized(w, cx) {
-    const was = this.width ?? SIDEBAR.w;
+    const was = this.width;
     this.width = w;
     if (w > 0 && Date.now() >= (this.settleUntil ?? 0)) {
       const folded = shared("sidebar.collapsed") === true;
       if (folded && w >= SIDEBAR.min) { this.openRail(w); return; }
       if (!folded && w < SIDEBAR.min) { this.foldRail(null); return; }
     }
-    if ((was < SIDEBAR.narrow) !== (w < SIDEBAR.narrow)) this.redraw(cx);
+    if (narrowAt(was) !== narrowAt(w)) this.redraw(cx);
   }
 
   checkNew(cx) {
@@ -1896,7 +1916,7 @@ export default class Spaces extends View {
   // Each worktree space moves under its main checkout's.
   ordered(sp, places) {
     const key = (w) => places.get(w.id).key;
-    const ready = (w) => this.shown.has(w.id) || key(w) in this.git || Date.now() - (this.born[w.id] ??= Date.now()) > 1500;
+    const ready = (w) => this.shown.has(w.id) || key(w) in this.git || bornBy(this.born[w.id] ??= Date.now(), Date.now());
     for (const w of sp) if (!this.shown.has(w.id) && ready(w)) this.shown.add(w.id);
     const list = sp.map((w) => ({ w, g: this.git[key(w)] ?? null, place: places.get(w.id) })).filter((r) => this.shown.has(r.w.id));
     const mains = new Set(list.filter((r) => r.g && !r.g.linked).map((r) => r.g.repo));
@@ -2851,7 +2871,7 @@ export default class Spaces extends View {
   rows({ view, collapsed, query }) {
     const t = theme();
     if (this.sinceLeft) this.sinceLeft.showing = false;
-    this.narrow = !collapsed && (this.width ?? SIDEBAR.w) < SIDEBAR.narrow;
+    this.narrow = !collapsed && narrowAt(this.width);
     // The keyboard left (a click on a pane, say): the ring goes too.
     if (this.kbd && ((!this.needsOpen && collapsed) || !this.handle.is_focused())) { this.kbd = false; if (shared("kanso.list")) setShared("kanso.list", null); }
     this.navNext = [];
