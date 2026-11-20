@@ -2,6 +2,15 @@
 import { COULD_NOT_SLEEP } from "./resume.js";
 
 export const AWAY_MENU = ["Dismiss", "Switch off"];
+export const FORGET_HELD = "kanso.sleep.forget";
+
+export function forgetHeld(record, terminal, now, ms) {
+  return Boolean(terminal && record?.terminal === terminal && now - record.at <= ms);
+}
+
+export function holdForget(terminal, now) {
+  return { terminal, at: now };
+}
 
 export const machineReaches = (layout) => layout !== "unavailable";
 

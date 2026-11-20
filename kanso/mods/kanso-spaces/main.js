@@ -29,12 +29,12 @@ import { projectRow } from "./project-row.js";
 import { computerRow, computerTools } from "./computer-row.js";
 import { section } from "./section.js";
 import { asleep } from "./asleep.js";
-import { machineReaches, asleepLook, withPending, withoutWaking, AWAY_MENU } from "./row-states.js";
+import { machineReaches, asleepLook, withPending, withoutWaking, AWAY_MENU, FORGET_HELD, forgetHeld, holdForget } from "./row-states.js";
 import { SLEEP_PENDING, SLEEP_WAKING, SLEEP_FAILED, COULD_NOT_SLEEP, failedTerminals, withoutTerminals, RESUME_LABEL, asleepTerminal } from "./resume.js";
 import { tile } from "./tile.js";
 import { views, viewSwitch } from "./view-switch.js";
 import { pullKey, runPull, canWake, enterOpens, sectionMarkOf, sectionCount, rowDirectory, unnamedComputer, threadWord, threadActions, signInCommand, noProjectsOn, sortOf, foldTail, readWord } from "./sidebar-rows.js";
-import { DIALOG, H, G, T, R, W, SIDEBAR, GLIDE, OPACITY, TINT, alpha, sidebarSides, tokens } from "./ui.js";
+import { DIALOG, H, G, T, R, W, SIDEBAR, GLIDE, OPACITY, TINT, ARM_MS, alpha, sidebarSides, tokens } from "./ui.js";
 import { ELBOW } from "./ui-row.js";
 import { button, Armed } from "./ui-button.js";
 import { dialog } from "./ui-dialog.js";
@@ -1887,6 +1887,7 @@ export default class Spaces extends View {
         down: () => { this.draggedAgent = { address: a.address, space, section, at: mine.indexOf(a) }; this.overAgent = null; },
         up: (cx) => { const d = this.draggedAgent; this.draggedAgent = null; if (ok) this.dropped(d, a, mine, side(), space); cx.notify(); },
       } : null,
+      ...this.sleepFace(a),
     };
   }
 
@@ -2361,17 +2362,23 @@ export default class Spaces extends View {
       props: { menu: { address: a.address, view: this.view, title, session } } });
   }
 
-  rowFor(a, actions = null, extra = {}) {
+  sleepFace(a) {
     const address = a.asleep?.terminal ?? a.address;
     const failed = failedTerminals(shared(SLEEP_FAILED)).includes(address);
+    return {
+      failure: failed ? COULD_NOT_SLEEP : null,
+      undo: failed ? () => this.undoSleep(a) : null,
+      armed: Boolean(a.asleep && forgetHeld(shared(FORGET_HELD), address, Date.now(), ARM_MS)),
+    };
+  }
+
+  rowFor(a, actions = null, extra = {}) {
     return {
       hovered: this.hoverRow === a.address,
       hover: (h, cx) => { if (h ? this.hoverRow !== a.address : this.hoverRow === a.address) { this.hoverRow = h ? a.address : null; cx.notify(); } },
       menu: () => this.openMenu(a, extra),
       wake: canWake(a, reachesRow(a)) ? () => wakeRow(a.asleep) : null,
-      failure: failed ? COULD_NOT_SLEEP : null,
-      undo: failed ? () => this.undoSleep(a) : null,
-      armed: Boolean(a.asleep && this.armed?.is?.(`forget:${address}`)),
+      ...this.sleepFace(a),
       actions,
     };
   }
@@ -2623,9 +2630,21 @@ export default class Spaces extends View {
   zzLines(item, m) {
     const z = m.asleep;
     const reachable = reachesRow(m);
-    const key = `forget:${z.terminal}`;
-    const armed = this.armed?.is?.(key) ?? false;
-    const forget = (cx) => this.armed.press(key, cx, () => this.forgetAsleep(z));
+    const armed = forgetHeld(shared(FORGET_HELD), z.terminal, Date.now(), ARM_MS);
+    const forget = (cx) => {
+      if (forgetHeld(shared(FORGET_HELD), z.terminal, Date.now(), ARM_MS)) {
+        setShared(FORGET_HELD, null);
+        this.forgetAsleep(z);
+        return;
+      }
+      setShared(FORGET_HELD, holdForget(z.terminal, Date.now()));
+      cx.timer?.after(ARM_MS + 50, (task) => {
+        const held = shared(FORGET_HELD);
+        if (held?.terminal === z.terminal && !forgetHeld(held, z.terminal, Date.now(), ARM_MS)) setShared(FORGET_HELD, null);
+        task.notify();
+      });
+      cx.notify();
+    };
     return { title: z.saved ? `${m.name}, asleep since ${since(z.saved)}` : `${m.name}, asleep`, items: [
       ...(reachable ? [
         item("Wake", () => arrange({ wake: { space: z.space, terminal: z.terminal } }), { icon: "sun" }),

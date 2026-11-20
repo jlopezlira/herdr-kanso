@@ -228,6 +228,7 @@ export default class Sleep extends View {
     if (this.busy || this.error || !this.reads) return;
     const plan = sleepPlan(this.order.scope, this.space, this.tabIds(), this.reads, spaces());
     const moving = [...plan.exits.map((r) => r.terminal), ...plan.interrupts];
+    setShared(SLEEP_FAILED, withoutTerminals(shared(SLEEP_FAILED), moving));
     setShared(SLEEP_PENDING, { terminals: moving });
     this.busy = "Going to sleep";
     cx.notify();
