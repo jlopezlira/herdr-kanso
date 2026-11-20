@@ -160,31 +160,33 @@ test("The first pane has no left resize handle beside the sidebar's edge, and ev
   assert.ok(ids.indexOf("strip-b") > 0 && ids.indexOf("strip-c") > 0, "the panes after it have a node to their left");
 });
 
-test("Dragging the divider between two stacked panes keeps the heights they were dragged to", async () => {
+const stripOnTab = async (tab) => {
   const f = await layoutFixture();
   f.strip.tab = () => "tab";
-  f.strip.state = { tab: { cols: [{ panes: ["a", "b"], w: 1 }] } };
+  f.strip.state = { tab };
+  return f;
+};
+const rested = (f) => { f.strip.drift.at -= 1000; return f.strip.adopt(); };
+
+test("Dragging the divider between two stacked panes keeps the heights they were dragged to", async () => {
+  const f = await stripOnTab({ cols: [{ panes: ["a", "b"], w: 1 }] });
   f.host.setShared("strip.px", { a: 800 });
   const [top, bottom] = f.body().children[0].children;
   top.size = { weight: 1.5 }; bottom.size = { weight: 0.5 };
   assert.equal(f.strip.adopt(), false, "a drag is read back only once it rests");
-  f.strip.drift.at -= 1000;
-  assert.equal(f.strip.adopt(), true);
+  assert.equal(rested(f), true);
   assert.deepEqual(clone(f.strip.state.tab.cols[0].hs), { a: 0.75, b: 0.25 });
 });
 
 test("Dragging the divider between two columns keeps their widths when the next pane opens on a new page", async () => {
-  const f = await layoutFixture();
-  f.strip.tab = () => "tab";
-  f.strip.state = { tab: { n: 2, vx: 0, focus: "b", cols: [{ panes: ["a"], w: 0.5 }, { panes: ["b"], w: 0.5 }] } };
+  const f = await stripOnTab({ n: 2, vx: 0, focus: "b", cols: [{ panes: ["a"], w: 0.5 }, { panes: ["b"], w: 0.5 }] });
   f.strip.sets = [];
   f.strip.apply(["a", "b"].map((id) => ({ id: `strip-${id}`, type: "column", size: { weight: 500 } }))); f.flush();
   f.host.setShared("strip.px", { a: 600, b: 200 });
   const [a, b] = f.body().children;
   a.size = { px: 600 }; b.size = { px: 200 };
   f.strip.adopt();
-  f.strip.drift.at -= 1000;
-  assert.equal(f.strip.adopt(), true);
+  assert.equal(rested(f), true);
   assert.deepEqual(clone(f.strip.state.tab.cols.map((c) => c.w)), [0.75, 0.25]);
   const opened = f.strip.sync("tab", ["a", "b", "c"].map((pane) => ({ pane, terminal: `t${pane}`, tab: "tab" })));
   assert.deepEqual(clone(opened.cols.map((c) => c.w)), [0.75, 0.25, 1]);
