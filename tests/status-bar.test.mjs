@@ -178,17 +178,21 @@ const fillsOf = (el) => [...calls(el, "bg"), ...calls(el, "hover").flatMap(([, p
   return calls(style, "bg");
 })];
 
-test("Panes per view and the minimap sit on the bar's own ground at rest, hovered or focused, and open, in both themes", async () => {
+test("Panes per view is a full pill on its token washes and the minimap has no fill of its own, at rest, hovered or focused, and open, in both themes", async () => {
   const kit = await compositions();
+  const { R } = await load("kanso-panel/ui.js", ["R"], popoverHost());
+  const pill = repoText("kanso/tokens.json").match(/"name": "k-r-full",\s*"value": "(\d+)px"/)[1];
+  assert.equal(R.full, Number(pill));
   for (const theme of shippedThemes) {
     const c = kit.tokens(theme);
-    for (const state of [{}, { hover: true }, { open: true }]) {
+    for (const [state, wash] of [[{}, c.subtle], [{ hover: true }, c.subtle], [{ open: true }, c.w12]]) {
       const el = kit.statusBar({ middle: kit.stepper({ ...state, columns: sampleColumns }) })("bar", c);
-      const middle = byId(el, "bar-middle-0");
-      const isButton = (kid) => /-(minus|plus|value|column-\d+)$/.test(kid.tag);
-      const isPane = (kid) => calls(kid, "w").length > 0;
-      const filled = every(middle).filter((kid) => !isButton(kid) && !isPane(kid) && fillsOf(kid).length);
-      assert.deepEqual(filled.map((kid) => calls(kid, "id").at(-1)?.[1] ?? kid.tag), [], `${theme.name ?? theme.background} ${JSON.stringify(state)}`);
+      const box = byId(el, "bar-middle-0");
+      const where = `${theme.background} ${JSON.stringify(state)}`;
+      assert.equal(arg(box, "rounded"), R.full, where);
+      assert.deepEqual(fillsOf(box).map(([, colour]) => colour), [wash], where);
+      const minimap = every(byId(el, "bar-middle-0-columns")).filter((kid) => !/-column-\d+$/.test(kid.tag) && !calls(kid, "w").length);
+      assert.deepEqual(minimap.filter((kid) => fillsOf(kid).length).map((kid) => kid.tag), [], where);
       for (const tool of ["minus", "plus"]) assert.deepEqual(fillsOf(byId(el, `bar-middle-0-${tool}`)), [["bg", c.subtle]], `${tool} keeps its hover wash`);
     }
   }

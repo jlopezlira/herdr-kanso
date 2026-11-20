@@ -2,7 +2,7 @@
 // Kept byte for byte by `npm run sync:share`: edit kanso-panel/ui-status.js.
 import { div, svg } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
-import { G, LINE, FOCUS, glyphOf } from "./ui.js";
+import { G, R, LINE, FOCUS, glyphOf } from "./ui.js";
 import { mark } from "./ui-mark.js";
 import { button } from "./ui-button.js";
 import { tipText } from "./ui-tooltip.js";
@@ -66,15 +66,14 @@ const columnFace = (c, columnsNode, { width, panes }) => {
  * `hover(over, cx)`, and `focuses`, the handles of minus, plus and value. */
 export const stepper = (id, c, { value = 2, open = false, hover = false, columns = [], chords = {} }, on = {}) => {
   const { minus = null, plus = null, value: even = null, column = null, hover: onHover = null, focuses = {} } = on;
-  const ground = ["kanso-status-bar__item", "kanso-status-bar__stepper"];
-  const item = inBar([...ground, open ? "kanso-status-bar__item--open" : "", hover ? "kanso-control--hover" : ""].filter(Boolean));
+  const item = inBar(["kanso-status-bar__item", "kanso-status-bar__stepper", open ? "kanso-status-bar__item--open" : "", hover ? "kanso-control--hover" : ""].filter(Boolean));
   const columnsNode = node(["kanso-status-bar__columns"], item);
   const tool = (icon, label, chord, onClick) => focused(withDisplay(button(`${id}-${icon}`, label, onClick, c,
     { kind: "icon", icon, size: "sm", tip: tipText({ label, chord }) }), item), focuses[icon]);
   // min-width: 1ch is not drawn: gpui has no ch.
   const number = button(`${id}-value`, String(value), even, c, { kind: "quiet", content: [still(div(), node(["kanso-status-bar__value"], item), c).child(String(value))],
     tip: tipText({ label: `${value} per view`, chord: chords.fit, detail: "scroll to change, click to even out" }) });
-  return still(h_flex().id(id), inBar(ground), c)
+  return paint(h_flex().id(id), item, c, RULES).rounded(R.full)
     .when(Boolean(onHover), (el) => el.on_hover((over, cx) => onHover(over, cx)))
     .when(columns.length > 0, (el) => el.child(still(h_flex().id(`${id}-columns`), columnsNode, c)
       .children(columns.map((col, i) => button(`${id}-column-${i}`, `Column ${i + 1}`, column && ((cx) => column(i, cx)), c, { kind: "quiet", content: [columnFace(c, columnsNode, col)] })))))
