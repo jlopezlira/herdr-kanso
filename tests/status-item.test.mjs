@@ -127,9 +127,9 @@ test("Panes per view take their row, their number and their columns from the com
   const hot = stepper("panes", c, { value: 2, hover: true });
   assert.equal(calls(nodesOf(hot, "panes-minus"), "grid").length, 1);
   assert.equal(calls(nodesOf(hot, "panes-minus"), "hidden").length, 0);
-  assert.deepEqual(first(hot, "bg"), [c.subtle]);
+  assert.deepEqual(first(nodesOf(hot, "panes-pill"), "bg"), [c.subtle]);
   const open = stepper("panes", c, { value: 2, open: true });
-  assert.deepEqual(first(open, "bg"), [c.w12]);
+  assert.deepEqual(first(nodesOf(open, "panes-pill"), "bg"), [c.w12]);
   const columns = [{ width: 15, panes: ["seen"] }, { width: 9, panes: ["seen", "current"] }];
   const map = stepper("panes", c, { value: 2, columns });
   const slot = nodesOf(map, "panes-columns");
