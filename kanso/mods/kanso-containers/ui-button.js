@@ -5,9 +5,10 @@ import { v_flex, Button } from "gpui-base";
 import { G, H, R, T, W, ICON, ICON_ROW, ICON_INLINE, ICON_CHROME, SPIN, ARM_MS, WASH, CLEAR, EASE, glyphOf, mix, well } from "./ui.js";
 
 const filled = (fill, ink, c) => ({ fill, ink, hover: mix(fill, c.background, WASH.hover), press: mix(fill, c.background, WASH.press) });
-/** A look on a pressable element: its fill, then its hover and press washes; a look with no hover is not pressable. */
+/** A look on a pressable element: its fill, then its hover and press washes; a look with neither hover nor `pointer` is not pressable. */
 export const withLook = (el, look) => el.when(Boolean(look.fill), (e) => e.bg(look.fill))
-  .when(Boolean(look.hover), (e) => e.cursor_pointer().hover((s) => s.bg(look.hover)).active((s) => s.bg(look.press)));
+  .when(Boolean(look.hover) || Boolean(look.pointer), (e) => e.cursor_pointer())
+  .when(Boolean(look.hover), (e) => e.hover((s) => s.bg(look.hover)).active((s) => s.bg(look.press)));
 
 /** The armed look: the accent fill, its hover and press washes, the accent foreground. */
 export const armedLook = (c) => filled(c.accent, c.accentText, c);
@@ -16,6 +17,7 @@ const LOOKS = {
   tonal: (c) => ({ fill: c.subtle, ink: c.text, hover: c.selected, press: c.selected }),
   quiet: (c) => ({ fill: null, ink: c.muted, hover: c.subtle, press: c.selected }),
   icon: (c) => ({ fill: null, ink: c.muted, hover: c.subtle, press: c.selected }),
+  bare: (c) => ({ fill: null, ink: c.muted, hover: null, press: null, pointer: true }),
 };
 
 /** An icon button's square and glyph: sm is a row's tool, compact sits in a field, lg is the window chrome's tool, md everywhere else. */
@@ -35,7 +37,7 @@ export function armedLabel(label, verb, on, text, { start = false } = {}) {
     .child(hidden(text(label).whitespace_nowrap(), on)).child(hidden(text(pressAgain(verb)).whitespace_nowrap(), !on));
 }
 
-/** solid: the one primary action; tonal: a wash, no edge; quiet: text only; icon: `label` is its tip. `icon`: a name in kanso-chrome's icons, or a path.
+/** solid: the one primary action; tonal: a wash, no edge; quiet: text only; bare: its content alone, with no wash under the pointer or the press; icon: `label` is its tip. `icon`: a name in kanso-chrome's icons, or a path.
  * `tip`: the tooltip, when it says more than the label; `focus`: the keyboard's ring is on it. `size`: "sm" draws the small form, an icon button at the row's 20 with a 12 glyph; "lg" an icon button at 32 with a 17 glyph. `verb`: the action asks twice; `armed` fills it with the accent and reads "Press again to <verb>".
  * `content`: drawn elements shown in place of the icon and label, such as a picture with its name; the button takes their size, and `label` is what it says.
  * `truncate`: a long label is cut at W.buttonLabel, such as a menu's chosen project, so the button never grows past it. */
