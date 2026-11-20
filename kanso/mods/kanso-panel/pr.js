@@ -24,7 +24,8 @@ import { deliver, classify, reachable } from "./deliver.js";
 import { nameOf, givenNames } from "./marks.js";
 import { verdictOf, failedLog, sendText, sendStep } from "./pr-verdict.js";
 import { readyProviders } from "./pr-providers.js";
-import { groupInbox, inboxLabel, isNew, limitLine, recordPrFacts } from "./pr-inbox.js";
+import { inboxLabel, isNew, limitLine, recordPrFacts } from "./pr-inbox.js";
+import { blockFacts, boardOf, failingMeta, isOpen, scopeLine, toggled } from "./pr-board.js";
 import { prMemory } from "./panel-state.js";
 import { TICK_MS, ageOf, authFresh, pollFacing, pollTick, readDue } from "./pr-poll.js";
 import { FolderSession, DONE_LIMIT, keepsFacts, repoOf } from "./pr-session.js";
@@ -388,8 +389,7 @@ export class PullRequest {
     const label = this.session.inboxOn && this.session.inboxOpen ? (back ? `Back to #${this.session.pr.number}` : "This pane") : `${this.reviewCount()} to review`;
     return button("pr-reviews", label, (cx) => {
       this.session.inboxOpen = !this.session.inboxOpen;
-      if (this.session.inboxOpen) this.session.inboxTab = this.session.inboxTab ?? "needs";
-      else this.noteSeen(this.session.pr?.url);
+      if (!this.session.inboxOpen) this.noteSeen(this.session.pr?.url);
       cx.notify();
     }, c, { kind: "tonal", small: true, active: this.session.inboxOpen })
       .tooltip(tooltip({ label: this.session.inboxOpen ? "Back to this pane" : "Reviews and your open pull requests" }));
@@ -652,28 +652,38 @@ export class PullRequest {
   }
 
   inboxPage(c) {
-    const tab = this.session.inboxTab || "needs";
-    const rows = tab === "yours" ? (this.session.inbox?.yours ?? []) : (this.session.inbox?.needs ?? []);
-    const groups = groupInbox(rows, { repos: this.session.inbox?.repos ?? [], projects: this.session.inbox?.projects ?? [] });
+    const scope = this.session.scope;
+    const blocks = boardOf(this.session.inbox, scope);
     const mine = new Set((this.session.inbox?.logins ?? [this.session.inbox?.login]).filter(Boolean).map((name) => name.toLowerCase()));
-    const firsts = groups.map((_, g) => groups.slice(0, g).reduce((n, group) => n + group.rows.length, 0));
-    const row = (item, i) => {
+    const itemRow = (id, item) => {
       const meta = [`#${item.number}`, item.author && mine.has(String(item.author).toLowerCase()) ? "you" : item.author, item.updatedAt ? ago(item.updatedAt) : "", isNew(item) ? "new" : ""].filter(Boolean).join(" · ");
-      return prRow(`pr-in-${i}`, c, item, { meta, state: this.inboxState(item), onClick: (cx) => this.openInboxItem(item, cx) });
+      return prRow(id, c, item, { meta, state: this.inboxState(item), onClick: (cx) => this.openInboxItem(item, cx) });
     };
+    const pulls = (id, title, items) => (items.length ? v_flex().w_full().gap(G.hair)
+      .child(section(c, title, String(items.length)))
+      .children(items.map((item, k) => itemRow(`${id}-${k}`, item))) : null);
+    const block = (item, b) => {
+      const open = isOpen(this.session.boardOpen, item.key, blocks, scope);
+      const head = kitRow({ level: 0, open, name: item.title, second: blockFacts(item, item.oldest ? ago(item.oldest) : null), meta: failingMeta(item) })(`pr-block-${b}`, c, {
+        onClick: (cx) => { this.session.boardOpen = toggled(this.session.boardOpen, item.key, blocks, scope); cx.notify(); },
+      });
+      return v_flex().w_full().gap(G.sm).child(head)
+        .when(open, (el) => el.children([pulls(`pr-in-${b}-n`, "Needs you", item.needs), pulls(`pr-in-${b}-y`, "Yours", item.yours)].filter(Boolean)));
+    };
+    const where = scopeLine(scope);
     return this.withNote(v_flex().w_full().gap(G.lg)
-      .child(segmented("pr-inbox", [{ key: "needs", label: "Needs you" }, { key: "yours", label: "Yours" }], tab, (key, cx) => { this.session.inboxTab = key; cx.notify(); }, c))
-      .when(this.session.outside, (el) => el.child(div().text_size(T.body).text_color(c.dim).child("This pane is not in a repository.")))
-      .child(!groups.length
+      .when(Boolean(where), (el) => el.child(div().text_size(T.body).text_color(c.dim).child(where)))
+      .child(!blocks.length
         ? div().text_size(T.body).text_color(c.dim).child("Nothing waiting on you.")
-        : v_flex().w_full().gap(G.xl).children(groups.map((group, g) => v_flex().w_full().gap(G.hair)
-          .child(section(c, group.title, String(group.rows.length)))
-          .children(group.rows.map((item, k) => row(item, firsts[g] + k))))))
+        : v_flex().w_full().gap(G.xs).children(blocks.flatMap((item, b) => [
+          b > 0 && blocks[b - 1].here && !item.here ? section(c, "Elsewhere", String(blocks.length - b)).mt(G.md) : null,
+          block(item, b),
+        ].filter(Boolean))))
       .when(Boolean(this.session.wait || this.session.inbox?.limitedUntil), (el) => el.child(div().text_size(T.body).text_color(c.dim).child(this.session.wait || limitLine(this.session.inbox.limitedUntil)))), c);
   }
 
   body(c, narrow) {
-    if (this.session.inboxOn && this.session.inboxOpen) return this.inboxPage(c);
+    if (this.session.inboxOn && (this.session.inboxOpen || this.session.outside)) return this.inboxPage(c);
     if (this.session.listing) return this.listPage(c);
     const kind = this.sceneKind();
     if (kind === "pr") return this.hero(c);
