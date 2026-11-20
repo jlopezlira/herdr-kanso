@@ -199,22 +199,47 @@ export function tone(t, status) {
   return t[status] ?? t.unknown;
 }
 
-const sidebarPart = (owner) => class SidebarPart extends View {
-  init(look) {
+const CUT_DRAW_RETRY_MS = 250;
+const CUT_DRAW_RETRY_MAX_MS = 4000;
+
+class RetryingView extends View {
+  render() {
+    const finished = this.drawsFinished ?? 0;
+    const started = (this.drawsStarted ?? 0) + 1;
+    this.drawsStarted = started;
+    const wait = Math.min(CUT_DRAW_RETRY_MS * 2 ** Math.max(0, started - 1 - finished), CUT_DRAW_RETRY_MAX_MS);
+    this.clock.after(wait, (cx) => { if ((this.drawsFinished ?? 0) < started) cx.notify(); });
+    try {
+      return this.draw();
+    } finally {
+      this.drawsFinished = Math.max(this.drawsFinished ?? 0, started);
+    }
+  }
+}
+
+class LookView extends RetryingView {
+  init(look, cx) {
     this.look = look;
-    if (look.piece === "switch") owner.makeFind();
+    this.clock = cx.timer;
   }
   update(look) { this.look = look; }
-  render() {
+}
+
+const sidebarPart = (owner) => class SidebarPart extends LookView {
+  init(look, cx) {
+    super.init(look, cx);
+    if (look.piece === "switch") owner.makeFind();
+  }
+  draw() {
     if (this.look.piece === "header") return owner.header(this.look);
     if (this.look.piece === "switch") return owner.switchPart(this.look);
     return owner.rows(this.look);
   }
 };
 
-export class SidebarFooter extends View {
+export class SidebarFooter extends LookView {
   init(look, cx) {
-    this.look = look;
+    super.init(look, cx);
     this.armed = new Armed();
     this.menuOpen = false;
     this.settingsFocus = cx.focus_handle();
@@ -224,8 +249,6 @@ export class SidebarFooter extends View {
     this.lookup = null;
     cx.timer.after(0, (later) => this.known(later));
   }
-
-  update(look) { this.look = look; }
 
   settingsMenu() {
     if (!this.menuOpen) return null;
@@ -263,7 +286,7 @@ export class SidebarFooter extends View {
     cx.timer.after(0, (later) => this.known(later, (agent) => explainWith(agent, { name: "Explain the update", folder: appHome(), task: explainRefusal(why) })));
   }
 
-  render() {
+  draw() {
     const { collapsed } = this.look;
     const update = this.updater.available(), busy = Boolean(this.updater.busy);
     const why = update && !busy ? this.updater.refused() : null;
@@ -274,7 +297,7 @@ export class SidebarFooter extends View {
   }
 }
 
-export default class Spaces extends View {
+export default class Spaces extends RetryingView {
   names = new Names(this);
 
   init(_props, cx) {
@@ -2853,7 +2876,7 @@ export default class Spaces extends View {
     this.colors = colors;
   }
 
-  render() {
+  draw() {
     const t = theme();
     if (props()?.awayMenu) return this.awayMenuView(t);
     if (props()?.menu) return this.menuView(t);

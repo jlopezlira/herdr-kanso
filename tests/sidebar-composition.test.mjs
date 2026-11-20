@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import vm from "node:vm";
 import { temporary } from "./helpers.mjs";
 import { element, fixture, initialised, sidebarOn } from "./perf-harness.mjs";
 
@@ -47,9 +48,18 @@ const field = (cx) => {
   return { state, fire: (event) => (listeners[event] ?? []).forEach(({ fn, view }) => fn({}, { notify: () => cx.notify(view) })) };
 };
 
-const mounted = async (t) => {
-  const dir = await temporary(t), f = fixture({ dir });
+const owningTimer = (cx, timer) => ({
+  ...timer,
+  after: (ms, fn) => {
+    const owner = cx.current;
+    return timer.after(ms, () => fn({ ...cx, notify: () => { cx.timerNotified.push(owner); cx.notify(owner); } }));
+  },
+});
+
+const mounted = async (t, options = {}) => {
+  const dir = await temporary(t), f = fixture({ dir, ...options });
   const cx = retained(f.cx);
+  Object.assign(cx, { timer: owningTimer(cx, f.cx.timer), timerNotified: [] });
   const input = field(cx);
   Object.assign(f.host, { v_flex: mounting, h_flex: mounting, div: mounting, InputState: { new: () => input.state } });
   const view = await initialised(f, await sidebarOn(f), {}, cx);
@@ -125,6 +135,42 @@ test("A refresh that changes nothing the rows show does not draw them again, and
   view.toggleFold("s1", false, cx);
   view.redraw(cx);
   assert.equal(rows(), before + 3, "a fold starts");
+});
+
+const cutOff = (cx, draw) => {
+  assert.throws(() => vm.runInContext("draw()", vm.createContext({ draw }), { timeout: 50 }), /timed out/);
+  Object.assign(cx, { depth: 0, current: null });
+};
+
+const retriesOf = (cx, part) => cx.timerNotified.filter((owner) => owner === part).length;
+
+test("A sidebar list whose draw Herdr cut off draws again by itself, with nothing changed, and a draw that finished does not", async (t) => {
+  const { f, cx, view, renders } = await mounted(t, { working: 0 });
+  await f.advance(1000);
+  const part = view.parts.rows;
+  part.set_props(view.drawnLooks.rows);
+  await f.advance(5000);
+  assert.equal(retriesOf(cx, part), 0, "a draw that finished asks for none");
+  const rows = view.rows.bind(view);
+  view.rows = () => { view.rows = rows; for (const until = Date.now() + 1000; Date.now() < until;); };
+  const before = renders().rows;
+  cutOff(cx, () => part.draw());
+  assert.equal(renders().rows, before + 1, "the draw was cut off before it finished");
+  await f.advance(300);
+  assert.equal(retriesOf(cx, part), 1, "the list asks to draw again on its own, so Herdr's banner over it goes");
+  assert.ok(renders().rows >= before + 2, "and draws");
+  await f.advance(5000);
+  assert.equal(retriesOf(cx, part), 1, "the draw that followed finished and asks for no more");
+});
+
+test("A sidebar list whose draw failed with an error is not drawn again and again", async (t) => {
+  const { f, cx, view } = await mounted(t, { working: 0 });
+  await f.advance(1000);
+  const rows = view.rows.bind(view);
+  view.rows = () => { view.rows = rows; throw new Error("broken"); };
+  assert.throws(() => view.parts.rows.set_props(view.drawnLooks.rows), /broken/);
+  await f.advance(5000);
+  assert.equal(retriesOf(cx, view.parts.rows), 0, "the error shows; a retry would only fail the same way");
 });
 
 test("A paint with nothing changed draws no part, and opening Sort draws the header alone", async (t) => {
