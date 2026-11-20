@@ -91,6 +91,8 @@ export function rowDirectory(project, machine) {
   return [project, machine].filter(Boolean).join(" · ") || null;
 }
 
+export const unnamedComputer = (machine, named) => (machine && machine !== named ? machine : null);
+
 const hm = (ms) => { const d = new Date(ms); return `${d.getHours()}:${String(d.getMinutes()).padStart(2, "0")}`; };
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
