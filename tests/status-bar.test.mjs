@@ -171,6 +171,29 @@ test("Panes per view is buttons the keyboard reaches, and a press named for noth
   assert.throws(() => statusItem({ text: "Memory" })("memory", c, { tone: "blocked" }), /handlers/);
 });
 
+const shippedThemes = ["kanso", "kanso-day"].map((name) => JSON.parse(repoText(`kanso/themes/${name}.json`))).map((theme) => ({ ...theme, ...theme.colors }));
+const fillsOf = (el) => [...calls(el, "bg"), ...calls(el, "hover").flatMap(([, paint]) => {
+  const style = chain();
+  paint(style);
+  return calls(style, "bg");
+})];
+
+test("Panes per view and the minimap sit on the bar's own ground at rest, hovered or focused, and open, in both themes", async () => {
+  const kit = await compositions();
+  for (const theme of shippedThemes) {
+    const c = kit.tokens(theme);
+    for (const state of [{}, { hover: true }, { open: true }]) {
+      const el = kit.statusBar({ middle: kit.stepper({ ...state, columns: sampleColumns }) })("bar", c);
+      const middle = byId(el, "bar-middle-0");
+      const isButton = (kid) => /-(minus|plus|value|column-\d+)$/.test(kid.tag);
+      const isPane = (kid) => calls(kid, "w").length > 0;
+      const filled = every(middle).filter((kid) => !isButton(kid) && !isPane(kid) && fillsOf(kid).length);
+      assert.deepEqual(filled.map((kid) => calls(kid, "id").at(-1)?.[1] ?? kid.tag), [], `${theme.name ?? theme.background} ${JSON.stringify(state)}`);
+      for (const tool of ["minus", "plus"]) assert.deepEqual(fillsOf(byId(el, `bar-middle-0-${tool}`)), [["bg", c.subtle]], `${tool} keeps its hover wash`);
+    }
+  }
+});
+
 test("The bar's three tracks stand in for the grid columns", async () => {
   const { statusBar, statusItem, stepper, c } = await compositions();
   const { G, H } = await load("kanso-panel/ui.js", ["G", "H"], popoverHost());

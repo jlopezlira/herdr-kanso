@@ -26,6 +26,7 @@ the branch's rules.
 
 ### Fixed
 
+- The minimap and panes per view in the status bar no longer sit on a lighter box when you point at them, reach them with the keyboard or open their menu; they stay on the bar's own ground. The − and + keep their own hover.
 - Memory and Spend say Refresh for reading again: Memory's Check now and Read again, and Spend's Try again, are now Refresh. A read that fails in Spend shows what the tool said in a block with Refresh, and Memory shows an action that failed the same way. Spend's project and model chooser moves with j and k, gg and G, Home and End; Enter chooses the lit one and Escape closes it.
 - Containers offers to remove unused volumes or images, or to clear the build cache, only when a refresh has shown what uses them, and checks again on the same Docker when you press before removing anything. Quit Docker and this computer's memory show only when Docker is known to run on this computer, No containers shows only when the latest read found none, and the panel's Read again is now Refresh, as everywhere. The Simulator door stays when Xcode answers nothing.
 - Waking a sleeping conversation brings it back before forgetting it was asleep. If it does not come back, it stays asleep and Wake says so, so you can try again. If it comes back but still looks asleep, Wake says that. Waking several at once names each one that did not come back and each one that came back but still looks asleep.

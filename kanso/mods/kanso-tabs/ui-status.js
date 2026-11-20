@@ -53,10 +53,11 @@ const withDisplay = (el, parent) => {
   const op = toolDisplay(parent);
   return op ? el[op]() : el;
 };
+const still = (el, at, c) => paint(el, at, c, RULES, null, false);
 const columnFace = (c, columnsNode, { width, panes }) => {
   const column = node(["kanso-status-bar__column", ...(panes.length > 1 ? ["kanso-status-bar__column--stacked"] : [])], columnsNode);
   const pane = (tone) => paint(div().w(width), node(["kanso-status-bar__pane", `kanso-status-bar__pane--${tone}`], column), c, RULES);
-  return paint(v_flex(), column, c, RULES).children(panes.map(pane));
+  return still(v_flex(), column, c).children(panes.map(pane));
 };
 
 /** Panes per view: the number, which evens out on a press, between − and +. The glyphs stay hidden unless `hover` (the pointer or the keyboard
@@ -65,16 +66,17 @@ const columnFace = (c, columnsNode, { width, panes }) => {
  * `hover(over, cx)`, and `focuses`, the handles of minus, plus and value. */
 export const stepper = (id, c, { value = 2, open = false, hover = false, columns = [], chords = {} }, on = {}) => {
   const { minus = null, plus = null, value: even = null, column = null, hover: onHover = null, focuses = {} } = on;
-  const item = inBar(["kanso-status-bar__item", "kanso-status-bar__stepper", open ? "kanso-status-bar__item--open" : "", hover ? "kanso-control--hover" : ""].filter(Boolean));
+  const ground = ["kanso-status-bar__item", "kanso-status-bar__stepper"];
+  const item = inBar([...ground, open ? "kanso-status-bar__item--open" : "", hover ? "kanso-control--hover" : ""].filter(Boolean));
   const columnsNode = node(["kanso-status-bar__columns"], item);
   const tool = (icon, label, chord, onClick) => focused(withDisplay(button(`${id}-${icon}`, label, onClick, c,
     { kind: "icon", icon, size: "sm", tip: tipText({ label, chord }) }), item), focuses[icon]);
   // min-width: 1ch is not drawn: gpui has no ch.
-  const number = button(`${id}-value`, String(value), even, c, { kind: "quiet", content: [paint(div(), node(["kanso-status-bar__value"], item), c, RULES).child(String(value))],
+  const number = button(`${id}-value`, String(value), even, c, { kind: "quiet", content: [still(div(), node(["kanso-status-bar__value"], item), c).child(String(value))],
     tip: tipText({ label: `${value} per view`, chord: chords.fit, detail: "scroll to change, click to even out" }) });
-  return paint(h_flex().id(id), item, c, RULES)
+  return still(h_flex().id(id), inBar(ground), c)
     .when(Boolean(onHover), (el) => el.on_hover((over, cx) => onHover(over, cx)))
-    .when(columns.length > 0, (el) => el.child(paint(h_flex().id(`${id}-columns`), columnsNode, c, RULES)
+    .when(columns.length > 0, (el) => el.child(still(h_flex().id(`${id}-columns`), columnsNode, c)
       .children(columns.map((col, i) => button(`${id}-column-${i}`, `Column ${i + 1}`, column && ((cx) => column(i, cx)), c, { kind: "quiet", content: [columnFace(c, columnsNode, col)] })))))
     .child(tool("minus", "Fewer panes per view", chords.fewer, minus))
     .child(focused(number, focuses.value))
