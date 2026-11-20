@@ -8,7 +8,7 @@ const forget = (record) => Object.keys(record).forEach((key) => delete record[ke
 
 // Elements that keep their ids, words, tooltips, icons, border lines and handlers: `on_x:id`, and `on_x:button:id` for a mouse button.
 export function recorder() {
-  const ids = [], texts = [], tips = [], icons = [], handlers = {}, lines = {};
+  const ids = [], texts = [], tips = [], icons = [], chosen = [], handlers = {}, lines = {};
   // A row's drop line: a child in the accent at its top (above) or its bottom (below).
   const drops = new WeakMap();
   const node = () => {
@@ -28,6 +28,7 @@ export function recorder() {
       child: (value) => { strings(texts)(value); lineOf(value); },
       children: (list) => { [list].flat().forEach(lineOf); },
       tooltip: strings(tips),
+      selected: (value) => { if (value && id) chosen.push(id); },
       top_0: () => { edge.top = true; },
       bottom_0: () => { edge.bottom = true; },
       bg: (value) => { if (value === SIDEBAR_THEME.accent) edge.accent = true; },
@@ -48,10 +49,10 @@ export function recorder() {
   const named = { new: (value) => (value ? node().id(value) : node()) };
   const host = { div: node, image: node, h_flex: node, v_flex: node, svg: (path) => { icons.push(path); return node(); }, Popover: named, Toggle: named, Button: named, Input: { new: node } };
   const clear = () => {
-    [ids, texts, tips, icons].forEach((list) => { list.length = 0; });
+    [ids, texts, tips, icons, chosen].forEach((list) => { list.length = 0; });
     [handlers, lines].forEach(forget);
   };
-  return { node, host, ids, texts, tips, icons, handlers, lines, clear };
+  return { node, host, ids, texts, tips, icons, chosen, handlers, lines, clear };
 }
 
 // Draws `view` now, and again on each call, from a clean record.

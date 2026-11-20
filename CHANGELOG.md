@@ -26,7 +26,7 @@ the branch's rules.
 
 ### Changed
 
-- The collapsed sidebar on Projects no longer shows the view switch, so its project tiles start right below the tools. On Status and Threads the view button and its menu stay, and the view keys still change view from any rail. (#232)
+- The collapsed sidebar on Projects no longer shows the view switch. On Status and Threads the view button and its menu stay, and the view keys still change view from any rail. (#232)
 
 ### Fixed
 

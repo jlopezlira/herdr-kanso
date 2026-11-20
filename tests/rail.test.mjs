@@ -82,20 +82,27 @@ test("collapsed on Status or Threads, the rail draws that view's tiles", async (
   assert.deepEqual(tiles("threads"), ["rail-thread-project-sp1"]);
 });
 
-test("opened and folded again, the rail keeps the view, the selection and what was folded", async () => {
-  const state = { "sidebar.collapsed": true, "sidebar.width": 280 };
-  const { host, clear } = recorder();
-  const spaces = [{ id: "sp1", name: "app", folder: "/w", machine: null, active: true, tabs: [{ id: "tab1" }] }, { id: "sp2", name: "web", folder: "/v", machine: null, active: false, tabs: [] }];
-  const { Spaces } = await loadSidebar(host, { ...laidOut(state, 76), spaces: () => spaces });
-  const view = Object.assign(new Spaces(), mountedState({ shown: new Set(["sp1", "sp2"]), view: "agents", navKey: "t1", sectionsFolded: new Set(["done"]), agentsFolded: new Set(["sp2"]), folded: new Set(["dev"]) }));
-  const kept = () => clone({ view: view.view, navKey: view.navKey, sections: [...view.sectionsFolded], agents: [...view.agentsFolded], computers: [...view.folded] });
-  const before = kept();
-  for (const fold of [false, true]) {
+test("expanded then collapsed, the rail keeps the view, the project you are in and what was folded", async () => {
+  const spaces = [{ id: "sp1", name: "app", folder: "/w", machine: null, active: true, tabs: [{ id: "tab1" }] }, { id: "sp2", name: "web", folder: "/v", machine: null, active: false, tabs: [{ id: "tab2" }] }];
+  const agent = (address, space, status, seq) => ({ address, pane: `p${seq}`, tab: `tab${seq}`, space, space_name: space, status, program: { agent: true, name: "Claude Code" }, title: address, seq });
+  const cases = [
+    { view: "spaces", folds: { agentsFolded: new Set(["sp2"]) }, rail: ["space-sp1", "space-sp2"], chosen: ["space-sp1"] },
+    { view: "agents", folds: { sectionsFolded: new Set(["working"]) }, rail: ["rail-section-blocked", "rail-section-working"], chosen: [] },
+  ];
+  for (const { view: shown, folds, rail, chosen } of cases) {
+    const state = { "sidebar.collapsed": false, "sidebar.width": 280 };
+    const { host, ids, chosen: picked, clear } = recorder();
+    const { Spaces } = await loadSidebar(host, { ...laidOut(state, 76), spaces: () => spaces, agents: () => [agent("t1", "sp1", "blocked", 1), agent("t3", "sp2", "working", 2)] });
+    const view = Object.assign(new Spaces(), mountedState({ shown: new Set(["sp1", "sp2"]), view: shown, ...folds }));
+    const draw = () => { clear(); view.render(); return ids.filter((id) => /^space-agent-|^space-sp|^rail-section-/.test(id)); };
+    const open = draw();
+    assert.deepEqual([open.includes("space-agent-t1"), open.includes("space-agent-t3")], [true, false], `${shown}: open, the folded group hides its row`);
     view.width = 280;
     view.command("sidebar");
-    assert.equal(state["sidebar.collapsed"], fold);
-    clear();
-    view.render();
-    assert.deepEqual(kept(), before);
+    assert.equal(state["sidebar.collapsed"], true);
+    assert.deepEqual(draw(), rail, `${shown}: collapsed, the rail draws the view you were on`);
+    assert.deepEqual(picked.filter((id) => rail.includes(id)), chosen, `${shown}: the project you are in is the one on`);
+    view.command("sidebar");
+    assert.deepEqual(draw(), open, `${shown}: open again, the same rows and the same fold`);
   }
 });
