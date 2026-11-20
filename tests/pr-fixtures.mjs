@@ -1,5 +1,6 @@
 // Shared by the pull request panel tests: a panel with nothing open, and a second read of it.
 import assert from "node:assert/strict";
+import { load } from "./helpers.mjs";
 
 export const SIGNED_OUT = "You are not logged into any GitHub hosts. To log in, run: gh auth login";
 export const PASSED = [{ __typename: "CheckRun", status: "COMPLETED", conclusion: "SUCCESS", name: "ci" }];
@@ -20,4 +21,12 @@ export const refreshAgain = async (panel, cx, drain) => {
 export const openInbox = (panel) => {
   assert.equal(panel.session.inboxOpen, false);
   panel.session.inboxOpen = true;
+};
+
+export const SIGNED_IN = { status: "ok", login: "jj", hosts: [{ host: "github.com", login: "jj", active: true }] };
+
+export const drawOpenBoard = async (panel, colours) => {
+  const { boardOf } = await load("kanso-panel/pr-board.js", ["boardOf"], {});
+  panel.session.boardOpen = boardOf(panel.session.inbox, panel.session.scope).map((block) => block.key);
+  panel.inboxPage(colours);
 };

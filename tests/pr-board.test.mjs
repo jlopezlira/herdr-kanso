@@ -4,6 +4,7 @@ import test from "node:test";
 import { join } from "node:path";
 import { clone as plain, exec, failure, load, nativePlatform, temporary } from "./helpers.mjs";
 import { temporaryKdb } from "./mod-fixtures.mjs";
+import { SIGNED_IN } from "./pr-fixtures.mjs";
 
 const pull = (owner, name, number, extra = {}) => ({
   url: `https://github.com/${owner}/${name}/pull/${number}`,
@@ -100,7 +101,7 @@ test("Repositories in this folder are read before the ones already known", async
       return { items: [], complete: true, searchOk: true, queried: repos, error: null, rate: null };
     },
   };
-  const session = { status: "ok", login: "jj", hosts: [{ host: "github.com", login: "jj", active: true }] };
+  const session = SIGNED_IN;
   const extra = [repo("acme", "extra-b"), repo("acme", "extra-a")];
   await refreshInbox({ db, run: async () => failure("no"), provider, session, extra, facts: false, now: 5_000_000 });
   assert.deepEqual(plain(walked), ["extra-b", "extra-a", "known"]);

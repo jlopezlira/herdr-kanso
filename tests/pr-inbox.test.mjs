@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { join } from "node:path";
 import { databaseTimer, load, context, callContext, exec as realExec, success, failure, clone as plain, refreshedContext } from "./helpers.mjs";
-import { blankPanel, refreshAgain, openInbox, SIGNED_OUT } from "./pr-fixtures.mjs";
+import { blankPanel, refreshAgain, openInbox, drawOpenBoard, SIGNED_IN, SIGNED_OUT } from "./pr-fixtures.mjs";
 
 const AUTH = "github.com\n  Logged in to github.com account jj (keyring)\n  - Active account: true\n  - Token: gho_secret\n";
 
@@ -108,7 +108,7 @@ test("a fresh inbox is not fetched, and a hidden panel does not touch the networ
   const { dir, db } = await database(t);
   await db.run(itemRow("https://github.com/o/r/pull/1", "o", "r", 1, "Cached", "2026-11-01T00:00:00Z"));
   const { refreshInbox } = await load("kanso-panel/pr-inbox.js", ["refreshInbox"], { exec: realExec, appHome: () => dir });
-  const session = { status: "ok", login: "jj", hosts: [{ host: "github.com", login: "jj", active: true }] };
+  const session = SIGNED_IN;
   const provider = { id: "github", inbox() { throw new Error("network"); } };
   const model = await refreshInbox({ db, run: () => { throw new Error("network"); }, provider, session, shown: false, now });
   assert.equal(model.needs[0].title, "Cached");
@@ -284,9 +284,7 @@ test("Needs you groups another project apart from the focused one, and skips the
   assert.deepEqual(plain(needs.map((group) => group.title)), ["eres-admin-app"]);
   assert.equal(needs[0].rows[0].title, "Review me");
   assert.notEqual(eres.row.folder, kanso.row.folder);
-  const { boardOf } = await load("kanso-panel/pr-board.js", ["boardOf"], {});
-  panel.session.boardOpen = boardOf(panel.session.inbox, panel.session.scope).map((block) => block.key);
-  panel.inboxPage(tone);
+  await drawOpenBoard(panel, tone);
   assert.ok(ui.texts.includes("Needs you"));
   assert.ok(ui.texts.includes("Yours"));
   assert.ok(ui.texts.includes("eres-admin-app"));
@@ -440,9 +438,7 @@ test("each signed-in host is read as its own account", async (t) => {
   assert.equal(titled(panel.session.inbox.needs, "For jj"), false);
   assert.equal(titled(panel.session.inbox.yours, "Mine on github"), true);
   assert.deepEqual(plain(panel.session.inbox.logins).toSorted(), ["ent", "jj"]);
-  const { boardOf } = await load("kanso-panel/pr-board.js", ["boardOf"], {});
-  panel.session.boardOpen = boardOf(panel.session.inbox, panel.session.scope).map((block) => block.key);
-  panel.inboxPage(tone);
+  await drawOpenBoard(panel, tone);
   assert.ok(ui.texts.some((text) => text.includes(" · you")));
 });
 
