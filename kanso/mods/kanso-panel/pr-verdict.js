@@ -228,6 +228,7 @@ function prVerdict(scene) {
 
 function emptyVerdict(scene) {
   const kind = scene.kind;
+  if ((kind === "folder" || kind === "outside") && scene.signedOut) return emptyVerdict({ ...scene, kind: "auth" });
   if (kind === "folder" || kind === "outside") return blank({ id: "folder", text: `No repository in ${scene.place || "~"}`, tone: "muted" });
   if (kind === "absent") return blank({ id: "absent", text: "GitHub CLI not installed", tone: "muted", quiet: link("pr-cli", "cli.github.com", "cli", CLI_URL) });
   if (kind === "auth") {

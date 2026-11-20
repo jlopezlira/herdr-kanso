@@ -10,7 +10,7 @@ import { fetchDue, parseRemote } from "./pr-remote.js";
 import { q } from "./kdb.js";
 import { serviceFor } from "./platform-host.js";
 import { repositoryApi } from "./platform-repositories.js";
-import { scopeRepos } from "./pr-board.js";
+import { folderScope, scopeRepos } from "./pr-board.js";
 import { CALL_MS, heldView, logDue, needsPermission, needsThreads, stayOnBranch, threadKey, waitLine } from "./pr-poll.js";
 
 export const keepsFacts = () => awayShown(pieces(shared));
@@ -69,7 +69,7 @@ const blank = () => ({
   pushed: false, behind: false, base: undefined, aheadCount: 0, behindCount: 0, subjects: [], subjectsFor: null,
   baseBehind: null, baseBehindFor: null, permission: null, permissionRepo: null, threadsFor: null,
   listing: false, openedList: false, tab: "open", closedPrs: null,
-  inboxOn: false, inbox: null, inboxOpen: null, inboxForce: false, boardOpen: null, scope: null, scoped: null, scopeReady: () => {},
+  inboxOn: false, inbox: null, inboxOpen: null, inboxForce: false, boardOpen: null, scope: null, signedOut: false, scoped: null, scopeReady: () => {},
   stale: null, wait: null, freshAt: null, loadedAt: undefined,
   logFor: null, failedLog: null, logParsed: null, logParsedFor: null, sendShown: false, sendFor: null,
   queued: false, asking: false, loading: false, busy: null, pending: null, flights: [],
@@ -208,7 +208,7 @@ export class FolderSession {
     const remoteUrl = String(remote?.stdout ?? "");
     this.home = /github\.com[:/]([^/]+\/[^/\s]+?)(?:\.git)?\s*$/.exec(remoteUrl)?.[1] ?? null;
     this.host = parseRemote(remoteUrl.trim())?.host ?? null;
-    this.scope = { kind: "repo", repos: scopeRepos([{ folder: this.root, remote: remoteUrl }]) };
+    this.scope = { kind: "repo", repos: scopeRepos([{ folder: this.root, remote: remoteUrl }]), local: [] };
     this.scopeReady(this.scope);
     const waited = await this.heldByGitHub(Date.now());
     if (waited) {
@@ -234,8 +234,7 @@ export class FolderSession {
 
   async childScope() {
     const found = await serviceFor(repositoryApi, this.on).then((api) => api.children(this.cwd)).catch(() => []);
-    const repos = scopeRepos(found);
-    return repos.length ? { kind: "folder", repos } : { kind: "all", repos: [] };
+    return folderScope(found);
   }
 
   readLog(cx) {
@@ -258,12 +257,13 @@ export class FolderSession {
   async readInbox(cx) {
     const ready = await this.panel.account(Date.now(), this.runner(cx));
     if (ready == null) return;
+    this.signedOut = !ready.length;
     if (!ready.length) { this.inboxOn = false; this.inbox = null; this.inboxOpen = null; return; }
     const db = await this.panel.inboxStore().catch((e) => { this.inboxFailure(e); return null; });
     if (!db) { this.inboxOn = false; this.inboxOpen = null; return; }
     const scope = await this.scoped;
     const extra = scope?.kind === "folder" ? scope.repos : [];
-    const force = Boolean(this.inboxForce) || (extra.length > 0 && !this.inbox);
+    const force = Boolean(this.inboxForce);
     this.inboxForce = false;
     const model = await ready.reduce(async (prev, { provider, session }) => {
       const soFar = await prev;

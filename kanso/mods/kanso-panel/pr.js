@@ -476,7 +476,7 @@ export class PullRequest {
       kind: this.sceneKind(), pr: this.session.pr, checks: this.session.pr ? this.checks() : [], threads: this.session.threads ?? [],
       permission: this.session.permission ?? null, agent: this.frontAgent(), stale: Boolean(this.session.stale), baseBehind: this.session.baseBehind ?? null,
       log: this.parsedLog(), now: Date.now(), branch: this.session.branch, place: this.session.pr ? "" : this.place(), computer: named ? machineTitle(this.session.on || "", "", named) : (this.session.on || ""),
-      title: this.session.missing?.title, canCreate: this.canCreate(), ahead: this.session.aheadCount ?? 0, behindCount: this.session.behindCount ?? 0, subjects: this.session.subjects ?? [],
+      title: this.session.missing?.title, signedOut: this.session.signedOut, canCreate: this.canCreate(), ahead: this.session.aheadCount ?? 0, behindCount: this.session.behindCount ?? 0, subjects: this.session.subjects ?? [],
     };
   }
 
@@ -664,7 +664,7 @@ export class PullRequest {
       .children(items.map((item, k) => itemRow(`${id}-${k}`, item))) : null);
     const block = (item, b) => {
       const open = isOpen(this.session.boardOpen, item.key, blocks, scope);
-      const head = kitRow({ level: 0, open, name: item.title, second: blockFacts(item, item.oldest ? ago(item.oldest) : null), meta: failingMeta(item) })(`pr-block-${b}`, c, {
+      const head = kitRow({ level: 0, open, name: item.title, dimmed: !item.remote, second: blockFacts(item, item.oldest ? ago(item.oldest) : null), meta: failingMeta(item) })(`pr-block-${b}`, c, {
         onClick: (cx) => { this.session.boardOpen = toggled(this.session.boardOpen, item.key, blocks, scope); cx.notify(); },
       });
       return v_flex().w_full().gap(G.sm).child(head)
