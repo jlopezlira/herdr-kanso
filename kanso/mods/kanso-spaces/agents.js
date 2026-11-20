@@ -10,7 +10,6 @@ import { oneLine } from "./since-left-model.js";
 import { G, GLIDE, H, R, DIALOG, SIDEBAR, sidebarSides } from "./ui.js";
 import { mark, MARK_SIZES } from "./ui-mark.js";
 import { sessionRow } from "./session-row.js";
-import { machineOf } from "./machines.js";
 
 export { NAME_LABEL };
 
@@ -331,7 +330,7 @@ export function sessionProps(a, base, row, more = {}) {
     activity: two ? more.activity : null,
     step: two ? more.step ?? null : null,
     time: more.time ?? null,
-    place: more.directory ?? (more.noMachine ? null : machineOf(a.address)),
+    place: more.directory ?? null,
     placeTip: more.wordTip ?? null,
     depth: base + lines.length,
     guides: guidesOf(base, lines),

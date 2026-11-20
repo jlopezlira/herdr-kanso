@@ -22,6 +22,17 @@ in version.json, which the stable updater offers. Versions follow
 [Keep a Changelog](https://keepachangelog.com). `npm run check:version` checks
 the branch's rules.
 
+## [3.31.1] - 2026-11-20
+
+### Changed
+
+- Opening a pane in a new column shares its page evenly: one pane fills the view, two take half each, and so on up to the number in the status bar's stepper, which now starts at 4. Pinned panes keep their width, and the page shares what they leave. When the last page is full, a pane opened after the last column starts a new page at full width, and the view slides to it. A pane opened between columns shares only the page it lands on, and the column pushed onto the next page keeps its width. A pane stacked in a column changes no width. Changing the stepper or pressing Fit lays every page out the same way and shows the focused pane's page, and so does a tab seen for the first time.
+
+### Fixed
+
+- A session on another computer no longer repeats that computer's name when a heading or row above it already says it. In Projects with Computers shown, that is the computer's heading. In Status, it is the row of the session a helper works for, which still says the project and the computer. Everywhere else an awake session's row keeps its computer's name: in Projects with Computers hidden, and when the session was moved into a project on a different computer.
+- Panes per view in the status bar, its − and + and the number between them, sits on a round pill instead of a grey box. The minimap beside it no longer has a grey box behind it, and a column under the pointer or pressed shows no box either: pressing the number still fits the columns, and pressing a column still goes to its pane.
+
 ## [3.31.0] - 2026-11-19
 
 ### Added

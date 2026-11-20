@@ -31,7 +31,7 @@ import { section } from "./section.js";
 import { asleep } from "./asleep.js";
 import { tile } from "./tile.js";
 import { views, viewSwitch } from "./view-switch.js";
-import { pullKey, runPull, canWake, enterOpens, sectionMarkOf, sectionCount, rowDirectory, threadWord, threadActions, signInCommand, noProjectsOn, sortOf, foldTail, readWord } from "./sidebar-rows.js";
+import { pullKey, runPull, canWake, enterOpens, sectionMarkOf, sectionCount, rowDirectory, unnamedComputer, threadWord, threadActions, signInCommand, noProjectsOn, sortOf, foldTail, readWord } from "./sidebar-rows.js";
 import { DIALOG, H, G, T, R, W, SIDEBAR, GLIDE, OPACITY, TINT, alpha, sidebarSides, tokens } from "./ui.js";
 import { ELBOW } from "./ui-row.js";
 import { button, Armed } from "./ui-button.js";
@@ -1755,7 +1755,7 @@ export default class Spaces extends View {
   }
 
   // Panes that share a strip column are held together in one soft slab, so the sidebar shows what is linked on screen.
-  stacked(entries, mine, indent, t, c, space, ctx) {
+  stacked(entries, mine, indent, t, c, space, ctx, heading) {
     const colOf = ({ a }) => { if (this.order !== "screen" || a.pin != null || !a.pane) return null; const col = (ctx.strip[a.tab]?.cols ?? []).find((k) => k.panes?.includes(a.pane)); return col && col.panes.length > 1 ? `${a.tab}:${col.panes[0]}` : null; };
     // Runs of rows in one column; a row in none is a run of its own.
     const keys = entries.map(colOf);
@@ -1764,7 +1764,7 @@ export default class Spaces extends View {
       const span = entries.slice(i, starts[k + 1] ?? entries.length), slab = keys[i] && span.length > 1;
       const rows = span.map((e) => {
         if (e.a.asleep) return { a: e.a, h: H.line, el: this.asleepLine(e.a, t) };
-        const m = this.more(e, ctx);
+        const m = this.more(e, ctx, unnamedComputer(machineOf(e.a.address), heading));
         return { a: e.a, h: sessionHeight(m), el: agentSession(e.a, indent ? 2 : 1, c, this.navRow(e.a, e.lines.length ? this.rowFor(e.a) : e.a.pane ? this.rowOf(e.a, mine, space) : null), m) };
       });
       return { key: keys[i], rows, slab };
@@ -1971,6 +1971,8 @@ export default class Spaces extends View {
     const c = tokens(t);
     const rows = this.ordered(sp, ctx.places);
     const live = machines();
+    const remote = [...new Set([...rows.map((r) => r.w.machine).filter(Boolean), ...(this.machines ?? []).map((row) => row.name), ...(this.parked ?? []).map((row) => row.name)])].filter(Boolean).toSorted();
+    const heads = shown("sidebar.computers", true, pieces(shared));
     // `first`: the first project under its heading, or in the list, sits right under it.
     const draw = (r, first) => {
       if (collapsed) return item(this.compact(r, t, c, ctx), SIDEBAR.railRow);
@@ -1990,7 +1992,7 @@ export default class Spaces extends View {
         return [...gap, head, ...box];
       }
       const show = this.unfolded(r.w.id, open, ctx.now);
-      const st = show ? this.stacked(entries, split.live, indent, t, c, r.w.id, ctx) : null;
+      const st = show ? this.stacked(entries, split.live, indent, t, c, r.w.id, ctx, heads && remote.length ? r.w.machine ?? null : undefined) : null;
       // Each head before its rows: the keyboard's path goes in screen order.
       const tabs = show ? split.groups.flatMap((g) => {
         const head = this.asleepHead(c, g);
@@ -2002,7 +2004,6 @@ export default class Spaces extends View {
       return [...gap, head, ...box];
     };
     const drawAll = (list) => list.flatMap((r, i) => draw(r, i === 0));
-    const remote = [...new Set([...rows.map((r) => r.w.machine).filter(Boolean), ...(this.machines ?? []).map((row) => row.name), ...(this.parked ?? []).map((row) => row.name)])].filter(Boolean).toSorted();
     const loading = m => {
       const state = live.find(k => k.name === m)?.layout;
       return state === "loading" || (!state && this.machines.some(k => k.name === m && k.state === "connected"))
@@ -2012,7 +2013,6 @@ export default class Spaces extends View {
     // Projects you added with no space open, on their machine; each keeps a + to start an agent in it.
     const names = shownNames(ctx.registry);
     const closed = (m) => (collapsed ? [] : this.closedOn(m, ctx)).flatMap((entry) => [lift(SIDEBAR.groupGap), item(this.closedRow(t, entry, names), H.line)]);
-    const heads = shown("sidebar.computers", true, pieces(shared));
     if (!remote.length || !heads) {
       const shut = [null, ...(heads ? [] : remote)].flatMap((m) => closed(m));
       return loading(null) && !rows.length && !shut.length ? [loadingRow(null)] : [...drawAll(rows), ...shut];
@@ -2296,9 +2296,11 @@ export default class Spaces extends View {
         this.panel.set("spaces.sections", [...this.sectionsFolded]);
         this.toggleFold(id, !open, cx);
       }, { title: s.label, status: sectionMarkOf(s.id) ?? "none", count: sectionCount(open, count) });
-      const laid = this.unfolded(id, open, ctx.now) ? (s.id === "asleep" ? this.asleepStatus(s, t, c, ctx) : s.entries.map((e) => {
+      const tops = s.entries.reduce((list, e, k) => [...list, e.lines.length ? list[k - 1] : e.a], []);
+      const laid = this.unfolded(id, open, ctx.now) ? (s.id === "asleep" ? this.asleepStatus(s, t, c, ctx) : s.entries.map((e, k) => {
         if (e.a.asleep) return { focused: false, rh: H.line, el: this.asleepLine(e.a, t) };
-        const m = this.more(e, ctx, e.lines.length ? null : rowDirectory(project(e.a.space)?.name, machineOf(e.a.address))), rh = sessionHeight(m);
+        const where = machineOf(e.a.address);
+        const m = this.more(e, ctx, e.lines.length ? unnamedComputer(where, machineOf(tops[k]?.address)) : rowDirectory(project(e.a.space)?.name, where)), rh = sessionHeight(m);
         return { focused: e.a.focused, rh, el: agentSession(e.a, 0, c, this.navRow(e.a, this.rowFor(e.a)), m) };
       })) : [];
       const { h, focus, focusH } = laid.reduce((acc, r) => ({ h: acc.h + r.rh + 1, focus: r.focused ? acc.h : acc.focus, focusH: r.focused ? r.rh : acc.focusH }), { h: 0, focus: null, focusH: 0 });
@@ -2452,7 +2454,7 @@ export default class Spaces extends View {
       const more = {
         label: this.nameOf(a),
         time: this.showTime === false || !when || word ? null : duration(Math.max(0, ctx.now - when)),
-        directory: word ?? (nested ? null : project(a.space)?.name ?? null),
+        directory: word ?? (nested ? null : project(a.space)?.name) ?? machineOf(a.address),
         wordTip: unreadable,
         quiet: Boolean(unreadable),
         refresh: unreadable ? (cx) => this.refreshThreads(cx) : null,
