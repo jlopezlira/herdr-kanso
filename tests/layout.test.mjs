@@ -173,6 +173,23 @@ test("Dragging the divider between two stacked panes keeps the heights they were
   assert.deepEqual(clone(f.strip.state.tab.cols[0].hs), { a: 0.75, b: 0.25 });
 });
 
+test("Dragging the divider between two columns keeps their widths when the next pane opens on a new page", async () => {
+  const f = await layoutFixture();
+  f.strip.tab = () => "tab";
+  f.strip.state = { tab: { n: 2, vx: 0, focus: "b", cols: [{ panes: ["a"], w: 0.5 }, { panes: ["b"], w: 0.5 }] } };
+  f.strip.sets = [];
+  f.strip.apply(["a", "b"].map((id) => ({ id: `strip-${id}`, type: "column", size: { weight: 500 } }))); f.flush();
+  f.host.setShared("strip.px", { a: 600, b: 200 });
+  const [a, b] = f.body().children;
+  a.size = { px: 600 }; b.size = { px: 200 };
+  f.strip.adopt();
+  f.strip.drift.at -= 1000;
+  assert.equal(f.strip.adopt(), true);
+  assert.deepEqual(clone(f.strip.state.tab.cols.map((c) => c.w)), [0.75, 0.25]);
+  const opened = f.strip.sync("tab", ["a", "b", "c"].map((pane) => ({ pane, terminal: `t${pane}`, tab: "tab" })));
+  assert.deepEqual(clone(opened.cols.map((c) => c.w)), [0.75, 0.25, 1]);
+});
+
 test("kanso-tabs opens and closes a custom panel from kanso.panels through commitLayout", async () => {
   const f = await layoutFixture();
   f.host.setShared("kanso.panels", [

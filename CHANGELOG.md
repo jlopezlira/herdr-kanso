@@ -22,6 +22,12 @@ in version.json, which the stable updater offers. Versions follow
 [Keep a Changelog](https://keepachangelog.com). `npm run check:version` checks
 the branch's rules.
 
+## [Unreleased]
+
+### Changed
+
+- Opening a pane shares its page evenly: one pane fills the view, two take half each, and so on up to the number in the status bar's stepper, which now starts at 4. The next pane starts a new page at full width, and the view slides to it. Changing the stepper or pressing Fit lays every page out the same way.
+
 ## [3.31.0] - 2026-11-19
 
 ### Added

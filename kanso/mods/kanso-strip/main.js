@@ -29,17 +29,16 @@ import { COLUMN } from "./ui-status.js";
 import { boundChord } from "./ui-tooltip.js";
 import { headerSegment } from "./ui-header.js";
 import { pieceLines } from "./piece-lines.js";
+import { paged } from "./strip-model.js";
 import { localService } from "./platform-host.js";
 import { openApi } from "./platform-open.js";
 import { NAME_LIMIT, ENTRIES, DIGEST_PIECES, PIECE_GROUP, shownAt, foldFor, headerWidths, headerTools, hoverTools, menuEntries, placeOf, paneLabel, headerMark, prTitle } from "./header-model.js";
 
-// Panes the view holds at once (st.n, 1 to 8): a new column takes 1/n of the view.
 const N_MAX = 8;
 const openUrl = (url) => localService(openApi).open(url).catch(() => { });
-const DEFAULT_N = 2;
+const DEFAULT_N = 4;
 const MIN_W = 0.08; // narrowest a column can be dragged, as a share of the view
 const W_STEPS = [1 / 4, 1 / 3, 1 / 2, 2 / 3, 1];
-const newW = (st) => 1 / (st.n ?? DEFAULT_N);
 // The minimap's slot is 180px and its stepper takes about 60: the pills shrink to the rest, and past a mark's least width they are cut in their own box, so the stepper always shows.
 export function pillWidths(cols, budget = PANE.pills) {
   const raw = cols.map((c) => 6 + (Number(c.w) || 0) * 18);
@@ -733,7 +732,7 @@ export default class Strip extends View {
     const known = new Set(st.cols.flatMap((c) => c.panes));
     const fresh = ps.filter((p) => !known.has(p.pane));
     const placed = fresh.length && !st.cols.length
-      ? { ...st, cols: [...st.cols, ...fresh.map((p) => ({ panes: [p.pane], w: fresh.length === 1 ? 1 : newW(st) }))] }
+      ? { ...st, cols: paged([...st.cols, ...fresh.map((p) => ({ panes: [p.pane], w: 1 }))], st.n).cols }
       : fresh.reduce((s, p) => {
         const chosen = { ...this.place(s, p.pane), focus: p.pane };
         this.pendingFocus = p.terminal;
@@ -752,7 +751,9 @@ export default class Strip extends View {
       const col = st.cols[at.ci];
       return { ...st, cols: st.cols.with(at.ci, { ...col, panes: col.panes.toSpliced(dir === "down" ? at.ri + 1 : at.ri, 0, id) }) };
     }
-    return { ...st, cols: st.cols.toSpliced(dir === "left" ? at.ci : at.ci + 1, 0, { panes: [id], w: newW(st) }) };
+    const opened = this.order({ ...st, cols: st.cols.toSpliced(dir === "left" ? at.ci : at.ci + 1, 0, { panes: [id], w: 1 }) });
+    const { cols, page } = paged(opened.cols, st.n, opened.cols.findIndex((c) => c.panes.includes(id)));
+    return { ...opened, cols, vx: this.start({ ...opened, cols }, page[0]) };
   }
 
   // `tx` is kept by older builds' state; it goes here.
@@ -926,7 +927,7 @@ export default class Strip extends View {
   setN(st, n, keep) {
     const per = clamp(Math.round(n), 1, N_MAX);
     setShared("strip.n", per);
-    const cols = st.cols.map(({ hs: _hs, ...c }) => (c.pin ? c : { ...c, w: 1 / per }));
+    const { cols } = paged(st.cols.map(({ hs: _hs, ...c }) => c), per);
     const even = this.clampView({ ...st, n: per, cols });
     return keep ? this.reveal(even, keep) : even;
   }
