@@ -47,9 +47,18 @@ const field = (cx) => {
   return { state, fire: (event) => (listeners[event] ?? []).forEach(({ fn, view }) => fn({}, { notify: () => cx.notify(view) })) };
 };
 
-const mounted = async (t) => {
-  const dir = await temporary(t), f = fixture({ dir });
+const owningTimer = (cx, timer) => ({
+  ...timer,
+  after: (ms, fn) => {
+    const owner = cx.current;
+    return timer.after(ms, () => fn({ ...cx, notify: () => cx.notify(owner) }));
+  },
+});
+
+const mounted = async (t, options = {}) => {
+  const dir = await temporary(t), f = fixture({ dir, ...options });
   const cx = retained(f.cx);
+  cx.timer = owningTimer(cx, f.cx.timer);
   const input = field(cx);
   Object.assign(f.host, { v_flex: mounting, h_flex: mounting, div: mounting, InputState: { new: () => input.state } });
   const view = await initialised(f, await sidebarOn(f), {}, cx);
@@ -125,6 +134,22 @@ test("A refresh that changes nothing the rows show does not draw them again, and
   view.toggleFold("s1", false, cx);
   view.redraw(cx);
   assert.equal(rows(), before + 3, "a fold starts");
+});
+
+test("A sidebar list whose draw Herdr cut off draws again by itself, with nothing changed, and a draw that finished does not", async (t) => {
+  const { f, view, renders } = await mounted(t, { working: 0 });
+  await f.advance(1000);
+  const before = renders().rows;
+  const look = view.drawnLooks.rows;
+  view.parts.rows.set_props(look);
+  await f.advance(1000);
+  assert.equal(renders().rows, before + 1, "a draw that finished asks for none");
+  const rows = view.rows.bind(view);
+  view.rows = () => { view.rows = rows; throw new Error("interrupted"); };
+  assert.throws(() => view.parts.rows.set_props(look), /interrupted/);
+  assert.equal(renders().rows, before + 2, "the draw was cut off");
+  await f.advance(300);
+  assert.equal(renders().rows, before + 3, "the list drew again on its own, so Herdr's banner over it goes");
 });
 
 test("A paint with nothing changed draws no part, and opening Sort draws the header alone", async (t) => {

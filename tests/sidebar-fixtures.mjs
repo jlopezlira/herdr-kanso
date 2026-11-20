@@ -89,6 +89,8 @@ export const mountedState = (extra = {}) => ({
 });
 
 export const withParts = (view) => {
-  view.mountParts(inlineCx());
+  const cx = inlineCx();
+  view.clock ??= cx.timer;
+  view.mountParts(cx);
   return view;
 };

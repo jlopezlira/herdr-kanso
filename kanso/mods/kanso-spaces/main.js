@@ -199,22 +199,37 @@ export function tone(t, status) {
   return t[status] ?? t.unknown;
 }
 
-const sidebarPart = (owner) => class SidebarPart extends View {
-  init(look) {
+const CUT_DRAW_RETRY_MS = 250;
+
+class FinishedView extends View {
+  render() {
+    const started = (this.drawsStarted ?? 0) + 1;
+    this.drawsStarted = started;
+    this.clock.after(CUT_DRAW_RETRY_MS, (cx) => { if ((this.drawsFinished ?? 0) < started) cx.notify(); });
+    const drawn = this.draw();
+    this.drawsFinished = Math.max(this.drawsFinished ?? 0, started);
+    return drawn;
+  }
+}
+
+const sidebarPart = (owner) => class SidebarPart extends FinishedView {
+  init(look, cx) {
     this.look = look;
+    this.clock = cx.timer;
     if (look.piece === "switch") owner.makeFind();
   }
   update(look) { this.look = look; }
-  render() {
+  draw() {
     if (this.look.piece === "header") return owner.header(this.look);
     if (this.look.piece === "switch") return owner.switchPart(this.look);
     return owner.rows(this.look);
   }
 };
 
-export class SidebarFooter extends View {
+export class SidebarFooter extends FinishedView {
   init(look, cx) {
     this.look = look;
+    this.clock = cx.timer;
     this.armed = new Armed();
     this.menuOpen = false;
     this.settingsFocus = cx.focus_handle();
@@ -263,7 +278,7 @@ export class SidebarFooter extends View {
     cx.timer.after(0, (later) => this.known(later, (agent) => explainWith(agent, { name: "Explain the update", folder: appHome(), task: explainRefusal(why) })));
   }
 
-  render() {
+  draw() {
     const { collapsed } = this.look;
     const update = this.updater.available(), busy = Boolean(this.updater.busy);
     const why = update && !busy ? this.updater.refused() : null;
@@ -274,7 +289,7 @@ export class SidebarFooter extends View {
   }
 }
 
-export default class Spaces extends View {
+export default class Spaces extends FinishedView {
   names = new Names(this);
 
   init(_props, cx) {
@@ -2853,7 +2868,7 @@ export default class Spaces extends View {
     this.colors = colors;
   }
 
-  render() {
+  draw() {
     const t = theme();
     if (props()?.awayMenu) return this.awayMenuView(t);
     if (props()?.menu) return this.menuView(t);
