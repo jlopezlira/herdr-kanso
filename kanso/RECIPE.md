@@ -111,8 +111,17 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
         from `kanso.panels` join the list.
     - **Panes**: an endless canvas (`kanso-strip`). Panes sit side by side
       in columns. You choose how many fit in the view at once, 1 to 8
-      (default 2): a new column takes 1/n of it, so on a wide screen you can
-      hold 3, 4 or more side by side. A lone pane fills the view. The header
+      (default 4): columns fill pages of at most n, in strip order, and a
+      pane opened in a new column shares its page evenly with the others
+      there (1, 1/2, 1/3 … 1/n) in what pinned columns leave of the view;
+      a pinned column keeps its width and is not counted. When the last page
+      is full, a pane opened after the last column starts a new page at full
+      width, and the view starts at the new pane's page. Opened between
+      columns, a pane shares only the page it lands on: a column pushed onto
+      the next page keeps its width. A pane stacked in a column changes no
+      width, and a pane dragged out of a stack takes the width of the stack it left. A tab
+      seen for the first time is laid out in pages and shows the focused
+      pane's page. A lone pane fills the view. The header
       itself is the handle (grab cursor); a pinned one does not move. The
       header's top corners round with the slab's (8). Resizing is Herdr's own: drag the 6
       gutter between two columns sideways, or between two stacked panes up
@@ -123,7 +132,8 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
       terminal paints square corners) and keeps them as shares, so later trees keep what you dragged. The view always starts at a
       column's edge and shows only whole, live panes: as many as fit, which
       then share the width by their weights. It never slides past the first
-      start from which the rest of the row fits. When columns lie beyond an
+      start from which the rest of the row fits, or past the last column's
+      start when that column alone is wider than the view. When columns lie beyond an
       edge, a 28-wide edge rail stands there (the right one after the side
       panel while one is open) in `chrome` (`hover` on hover),
       so it reads as frame, not pane. At its middle, a ‹ or › (14, `muted`)
@@ -195,7 +205,8 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     frame): `muted` in view, `input` off-screen,
     `foreground` focused; a stacked column shows one 2px bar per pane. Click a pill to go there. After the pills, a tiny
     "− n +" control: fewer or more panes per view, and the number itself
-    evens the columns out to 1/n.
+    lays the columns out again in pages of at most n and shows the focused
+    pane's page.
     `kanso-status`, text 11.5 `muted`, 12 inside, 16 between items, 8 from an
     icon or mark to its words. Each item stands in for a home out of sight:
     - Left, only while the sidebar is folded: computer icon and "This computer"
@@ -459,8 +470,9 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
   - Cmd+W closes the focused pane. Cmd+Shift+[ and Cmd+Shift+] move it left
     and right. Cmd+Shift+Enter (or the header's wider or narrower button) cycles its width
     1/4, 1/3, 1/2, 2/3, 1.
-  - Cmd+Shift+- and Cmd+Shift+= show fewer or more panes per view (every
-    column 1/n); Cmd+Shift+0 evens them out. `kanso-strip.per-N` sets N.
+  - Cmd+Shift+- and Cmd+Shift+= show fewer or more panes per view (pages
+    of at most n, each shared evenly); Cmd+Shift+0 lays them out again in
+    pages. `kanso-strip.per-N` sets N.
   - Cmd+Alt+Up/Down (or K/J) move the focus within a stacked column.
   - Alternatives: Cmd+Alt+Left/Right or H/L (focus), with Shift
     (move), Cmd+Alt+1-9, Cmd+Alt+Home/End, Cmd+Alt+C (centre). There is no
@@ -751,10 +763,11 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
   lights sit inside it. Opened, it drags between 200 and 480 and reopens at
   the width you left.
 - One trackpad swipe over the tab bar moves exactly one tab.
-- At 3 per view, Cmd+D three times from one pane gives four columns at a
-  third each; the view slides to the new one and the minimap shows four
-  pills. Cmd+Shift+= makes it 4 per view and all four fit; Cmd+Shift+- twice
-  goes back to 2 per view with the focused pane still in view.
+- At 3 per view, Cmd+D three times from one pane gives three columns at a
+  third each and a fourth that starts a new page at full width; the view
+  slides to it and the minimap shows four pills. Cmd+Shift+= makes it 4 per
+  view and all four fit; Cmd+Shift+- twice goes back to 2 per view, two
+  halves a page, with the view on the focused pane's page.
 - Dragging the gutter between two columns 200px right on a 1200px view
   makes the left one a sixth of the view wider and the right one that much
   narrower; a quarter second later the minimap pills show the new shares,
