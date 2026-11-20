@@ -124,3 +124,5 @@ export const aliveIn = (listed, pids) => new Set(pids.filter((p) => listed.has(p
 
 // `last`: the signature and start of the last look, its own or checkTasks'; none yet is due.
 export const aliveDue = (last, sig, now, every) => last?.at == null || last.sig !== sig || now - last.at >= every;
+
+export const sameThread = (a, b) => a === b || (Boolean(a && b) && Object.keys({ ...a, ...b }).every((key) => key === "checked" || a[key] === b[key]));

@@ -12,7 +12,7 @@ import { systemApi } from "./platform-system.js";
 import { View, div } from "gpui-kit";
 import { v_flex, h_flex, ScrollHandle } from "gpui-base";
 import { agentSession, agentLabel, renameTerminal, SETTLED_LABEL, SNOOZE_LABEL, UNREAD_LABEL, THREAD_LABEL, settledOf, snoozedUntil, isUnread, woke, backFromSettled, threadSections, snoozePresets, THREAD_ORDERS, STATUS_ORDERS, withTerminals, NAME_LABEL, PIN_LABEL, ORDERS, DEFAULT_ORDER, orderSessions, moved, nest, track, elapsed, activityOf, bySection, duration, trackSteps, stepOf, tasksOf, said, FOLD_MS, pill, sessionHeight, mostUrgent } from "./agents.js";
-import { ThreadLocator, findThreads, pidsOf, aliveIn, aliveDue, ALIVE_MS, ALIVE_BEHIND_MS } from "./threads.js";
+import { ThreadLocator, findThreads, sameThread, pidsOf, aliveIn, aliveDue, ALIVE_MS, ALIVE_BEHIND_MS } from "./threads.js";
 import { Panel, sameSeen } from "./panel.js";
 import { Store } from "./store.js";
 import { Kdb, restDue, machinesToAsk, kansoDir } from "./kdb.js";
@@ -152,12 +152,12 @@ const registry = () => { const rows = shared(REGISTRY); return Array.isArray(row
 // A sleep's key as a project's (a trailing / never makes two of one place).
 const sameKey = (key) => { const i = String(key).indexOf(":"); return `${key.slice(0, i)}:${trimmed(key.slice(i + 1))}`; };
 const projectAt = (key) => registry().find((p) => keyOfProject(p) === sameKey(key)) ?? null;
-const ROW_SHARED = [REGISTRY, NEEDS_YOU, "strip.state", SLEEP_PENDING, SLEEP_WAKING, SLEEP_FAILED, FORGET_HELD, STORE, KNOWN_AGENTS, "kanso.battery", "space.colors"];
+const ROW_SHARED = [REGISTRY, NEEDS_YOU, "strip.state", SLEEP_PENDING, SLEEP_WAKING, SLEEP_FAILED, FORGET_HELD, KNOWN_AGENTS, "kanso.battery", "space.colors"];
 const rowInputs = () => ({ spaces: spaces(), panes: panes(), terminals: terminals(), agents: agents(), machines: machines(), focused: focused(), front: window()?.active === true, keys: keys(),
-  shared: ROW_SHARED.map((key) => shared(key)) });
+  shared: ROW_SHARED.map((key) => shared(key)), pieces: Object.entries(pieces(shared)).filter(([id]) => id.startsWith("sidebar.")) });
 const ROW_STATE = ["hoverRow", "hoverSpace", "hoverHead", "hoverMachine", "pressed", "over", "draggedAgent", "overAgent", "kbd", "navKey", "needsOpen", "needsEmpty", "foldH", "folded",
   "agentsFolded", "sectionsFolded", "asleepOpen", "shelvesOpen", "alive", "git", "held", "custom", "machines", "parked", "waking", "login", "failed", "pulling", "hints", "sync", "hostName"];
-const ROW_REPLACED = ["threads", "steps", "since", "tasks"];
+const ROW_REPLACED = ["threadsShown", "steps", "since", "tasks"];
 const listed = (value) => (value instanceof Set || value instanceof Map ? [...value] : value);
 const MINUTE_MS = 60_000;
 const BORN_MS = 1500;
@@ -419,13 +419,16 @@ export default class Spaces extends View {
 
   rowsShown(now = Date.now()) {
     const fold = this.folding && { ...this.folding, moving: this.unfolded(this.folding.id, false, now) };
-    return JSON.stringify({ ...rowInputs(), own: ROW_STATE.map((key) => listed(this[key])), fold, away: [this.sinceLeft?.project, this.sinceLeft?.expanded],
+    const host = rowInputs(), away = this.sinceLeft;
+    const times = [...host.agents.map((a) => [elapsed(a, this.since ?? {}, now), stepOf(a, this.steps, now)]),
+      ...Object.values(this.tasks ?? {}).flat().map((x) => duration(Math.max(0, now - x.start)))];
+    return JSON.stringify({ ...host, own: ROW_STATE.map((key) => listed(this[key])), fold, away: away?.rows.length ? [away.project, away.expanded, away.target, away.rows] : null,
       remembered: listed(this.panel?.agents), ring: Boolean(this.kbd && this.handle.is_focused()), narrow: narrowAt(this.width),
-      born: Object.entries(this.born ?? {}).map(([id, at]) => [id, bornBy(at, now)]), minute: Math.floor(now / MINUTE_MS) });
+      born: Object.entries(this.born ?? {}).map(([id, at]) => [id, bornBy(at, now)]), times, minute: Math.floor(now / MINUTE_MS) });
   }
 
   rowsReplaced() {
-    return [...ROW_REPLACED.map((key) => this[key]), this.names.book, this.sinceLeft?.rows];
+    return [...ROW_REPLACED.map((key) => this[key]), this.names.book];
   }
 
   rowsChanged() {
@@ -757,10 +760,10 @@ export default class Spaces extends View {
     const list = agents(), layouts = machines();
     const signature = waitingSignature(list, terms, asleep.dozing, NAME_LABEL);
     const layoutSignature = layouts.map((m) => m.layout).join(",");
-    const changed = signature !== this.needsSignature || this.threads !== this.needsThreads;
+    const changed = signature !== this.needsSignature || this.threadsShown !== this.needsThreads;
     if (!changed && layoutSignature === this.needsLayoutSignature) return this.needsQueue;
     this.needsSignature = signature;
-    this.needsThreads = this.threads;
+    this.needsThreads = this.threadsShown;
     this.needsLayoutSignature = layoutSignature;
     const named = () => {
       const names = new Map(terms.map((term) => [term.address, term.labels?.[NAME_LABEL]]));
@@ -2098,10 +2101,12 @@ export default class Spaces extends View {
       try {
         const before = this.threads ?? {};
         const next = await findThreads(list, before, terminals(), this.threadLocator);
-        if (this.threads && Object.keys(before).length === Object.keys(next).length && Object.keys(next).every((id) => next[id] === before[id])) return;
+        const same = this.threads && Object.keys(before).length === Object.keys(next).length && Object.keys(next).every((id) => sameThread(next[id], before[id]));
         this.threads = next;
+        if (same) return;
+        this.threadsShown = next;
         this.redraw();
-      } catch { this.threads ??= {}; }
+      } catch { this.threads ??= {}; this.threadsShown ??= this.threads; }
       finally { this.readingThreads = false; }
     });
   }
