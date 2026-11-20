@@ -348,6 +348,7 @@ export function sessionProps(a, base, row, more = {}) {
     hover: Boolean(row?.hovered),
     selected: Boolean(row?.kbd),
     dimmed: Boolean(more.quiet || a.dozing),
+    ...(row?.failure ? { failure: row.failure } : {}),
   };
 }
 
@@ -359,6 +360,7 @@ export function sessionHandlers(a, row, more = {}) {
       ...(row?.pin ? { pin: (cx) => row.pin(cx) } : {}),
       ...(row?.menu ? { ellipsis: (cx) => row.menu(cx) } : {}),
       ...(more.refresh ? { "refresh-cw": more.refresh } : {}),
+      ...(row?.undo ? { Undo: row.undo } : {}),
       ...Object.fromEntries((row?.actions ?? []).map((x) => [x.icon, x.act])),
     },
     onClick: () => (a.pane ? run("pane.focus", { pane: a.pane }) : run("terminal.peek", { terminal: a.address })),

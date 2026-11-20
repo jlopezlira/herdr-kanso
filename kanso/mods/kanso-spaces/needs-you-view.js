@@ -1,6 +1,6 @@
 import { h_flex, v_flex } from "gpui-base";
 import { SIDEBAR, sidebarSides, tokens } from "./ui.js";
-import { button, emptyState, failureBlock, skeletonOf, tooltip } from "./kit.js";
+import { button, failureBlock, skeletonOf, tooltip } from "./kit.js";
 import { sessionRow } from "./session-row.js";
 import { boundChord } from "./ui-tooltip.js";
 import { programOf } from "./agents.js";
@@ -30,10 +30,11 @@ const sessionOf = (row, age, selected) => sessionRow({ program: programOf({ prog
 const STATES = {
   loading: () => skeletonOf({ shape: "row" }),
   unavailable: (queue) => failureBlock({ text: queueMessage(queue.state) }),
-  ready: (queue) => (queue.rows.length ? null : emptyState({ text: queueMessage(queue.state) })),
+  ready: () => null,
 };
 
 export function queueList(t, queue, rowFor, age, scroll = null) {
+  if (queue.state === "ready" && !queue.rows.length) return null;
   const c = tokens(t);
   const state = STATES[queue.state]?.(queue);
   return sidebarSides(v_flex().id("needs-you-list").flex_1().min_h(0), SIDEBAR.gutter).gap(SIDEBAR.gap).overflow_y_scrollbar()

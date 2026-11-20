@@ -154,8 +154,8 @@ test("Needs you: the count is the kit's quiet Button, each waiting agent its Ses
   for (const text of ["Nova", "kansō", "3m", "Waiting for you"]) assert.ok(texts(nova).includes(text), text);
   calls(nova, "on_click")[0][1]({}, cx);
   assert.equal(went, 1);
-  const states = (state, queueRows = []) => texts(queueList(KIT_NIGHT, { rows: queueRows, state }, () => ({}), () => ""));
-  assert.ok(states("ready").includes("Nobody is waiting"), "empty: the kit's empty state");
+  const states = (state, queueRows = []) => { const drawn = queueList(KIT_NIGHT, { rows: queueRows, state }, () => ({}), () => ""); return drawn ? texts(drawn) : []; };
+  assert.equal(states("ready").includes("Nobody is waiting"), false, "nobody waits: the list draws nothing");
   assert.ok(states("unavailable").includes("Queue unavailable"), "unavailable: the kit's failure block");
   const loading = queueList(KIT_NIGHT, { rows: [], state: "loading" }, () => ({}), () => "");
   assert.ok(nodes(loading).some((kid) => calls(kid, "id").some((call) => call[1] === "needs-you-loading")), "loading: the kit's skeleton");

@@ -82,6 +82,15 @@ export const asksToExit = (screen) => /Background work is running|Exit and stop 
 // A conversation Sleep ended is a reference on its terminal: the label holds the id, the shell is back at its prompt.
 // Only a real session id is kept or typed: a label can never carry shell text.
 export const RESUME_LABEL = "kanso.resume";
+export const SLEEP_PENDING = "kanso.sleep.pending";
+export const SLEEP_WAKING = "kanso.sleep.waking";
+export const SLEEP_FAILED = "kanso.sleep.failed";
+export const COULD_NOT_SLEEP = "could not sleep";
 export const isSessionId = (id) => /^[0-9a-f-]{36}$/.test(String(id ?? ""));
 export const resumeLine = (session) => (isSessionId(session) ? `claude --resume ${session}` : null);
 export const asleepTerminal = (k) => isSessionId(k?.labels?.[RESUME_LABEL]) && k.program?.shell === true && (!k.state || k.state === "live");
+export const failedTerminals = (record) => (Array.isArray(record?.terminals) ? record.terminals : []);
+export function withoutTerminals(record, terminals) {
+  const left = failedTerminals(record).filter((id) => !terminals.includes(id));
+  return left.length ? { text: record?.text ?? COULD_NOT_SLEEP, terminals: left } : null;
+}

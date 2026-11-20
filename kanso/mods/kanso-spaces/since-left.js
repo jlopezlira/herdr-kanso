@@ -75,7 +75,7 @@ export class SinceLeft {
 
   // The Activity card, or nothing: each row the keyboard can reach is one of the list's stops (`nav`), in screen order;
   // a press goes where it happened (`reach`) and drops the rows, × dismisses them all, +N more (the last stop) shows the rest.
-  render(t, project, nav, reach) {
+  render(t, project, nav, reach, menu = null) {
     const events = present(this.rows, this.viewOf());
     this.showing = project === this.project && events.length > 0;
     if (!this.showing) return null;
@@ -91,6 +91,6 @@ export class SinceLeft {
       ...(more ? { [phrase(plus(events.length - max), "more")]: more } : {}),
     });
     const focus = rings.indexOf(true);
-    return activity({ events, max, focus })("since-left", tokens(t), { presses });
+    return activity({ events, max, focus })("since-left", tokens(t), { presses, ...(menu ? { onMenu: (_e, cx) => menu(cx) } : {}) });
   }
 }

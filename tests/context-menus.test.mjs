@@ -230,7 +230,7 @@ const CASES = {
   login: { draw: computer("login"), want: COMPUTER_ROWS("Sign in…") },
   off: { draw: computer("off"), want: COMPUTER_ROWS("Turn on") },
   unreachable: { draw: computer("unavailable"), want: COMPUTER_ROWS("Refresh") },
-  asleepRow: { draw: asleepRow, want: ["billing, asleep since 14:02", "Wake", "Wake all 3 in review", "Copy conversation id", "Everything asleep…"] },
+  asleepRow: { draw: asleepRow, want: ["billing, asleep since 14:02", "Wake", "Wake all 3 in review", "Copy conversation id", "Forget", "Everything asleep…"] },
   noMenu: { draw: piece("sidebar.switch", "Projects, Status, Threads"), want: ["Projects, Status, Threads", ...PIECE()] },
   pane: { draw: pane({ pane: { name: "tests" } }), want: PANE_ROWS("tests", "Pin", AGENT_ROWS) },
   paneToProgram: { draw: PANE_PINNED, want: PANE_ROWS("web · devbox", "Unpin", ["Open with…"]) },
