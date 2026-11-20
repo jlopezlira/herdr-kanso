@@ -188,9 +188,10 @@ test("Collapsed, while someone needs you and Status is not on show, the view but
 });
 
 test("A view key shuts the collapsed view menu, as a pick from it does", async () => {
-  const { view, render } = await rail();
+  const { view, render, drawn } = await rail({ state: { view: "threads", threads: {} } });
   view.viewMenu = true;
   render();
+  assert.ok(drawn.ids.some((id) => id.startsWith("rail-view-menu")), "the menu is on screen");
   view.command("view-agents", cx);
   assert.deepEqual([view.view, view.viewMenu], ["agents", false]);
 });
