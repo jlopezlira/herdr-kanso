@@ -115,3 +115,16 @@ test("Search's field draws its focus ring as the keyboard comes and goes, in the
   assert.equal(renders().switch, open.switch + 2, "the switch draws it gone");
   assert.equal(renders().header, open.header, "the header is not drawn for it");
 });
+
+test("The footer draws again for an install that starts, and not for the notes or phase the install writes", async (t) => {
+  const { f, draw, renders } = await mounted(t);
+  const install = (patch) => f.shared.set("kanso.update", { installs: { a: { version: "9.9.9", at: f.state.now, phase: "preparing", notes: "", ...patch } } });
+  const before = renders();
+  install({});
+  await draw();
+  assert.equal(renders().footer, before.footer + 1, "an install began: the row goes quiet");
+  const started = renders();
+  install({ notes: "New layout; the one you had is in layouts/kanso.json.old-*.", phase: "started" });
+  await draw();
+  assert.equal(renders().footer, started.footer, "its notes and phase are bookkeeping the footer does not show");
+});

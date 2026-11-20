@@ -393,7 +393,7 @@ export default class Spaces extends View {
         open: collapsed && this.viewMenu === true, asks: visibleSpaces(spaces(), this.offNames()).some((s) => s.status === "blocked"),
         chords: Object.fromEntries(Object.keys(VIEWS).map((key) => [key, boundChord(`kanso-spaces.view-${key}`, bindings)])) },
       rows: { piece: "rows", view, collapsed, ...orders, query: finding ? this.find.value() : null, at: this.rowsAt ?? 0 },
-      footer: { collapsed, update: { latest, channel, tag, refused, installs }, ready: updates()?.app?.ready ?? null, hint: hintOf(KANSO_SETTINGS, bindings) },
+      footer: { collapsed, update: { latest, channel, tag, refused, installing: Object.keys(installs ?? {}).sort() }, ready: updates()?.app?.ready ?? null, hint: hintOf(KANSO_SETTINGS, bindings) },
     };
   }
 
