@@ -36,7 +36,7 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
       per group (project, status, shelf): a project's initial in its color,
       no square (else an icon), under it the most urgent state and count.
       A click lists the group in a popup (click goes; asleep: wake menu).
-  - **Footer** (`kanso-chrome`, `footer: true`), bottom-aligned:
+  - **Footer**, bottom-aligned, as tall as its rows:
     - Settings (gear), a kit row of 32, icon 17, text 13.5, muted; 8 above
       and 16 below. Add computer lives at the end of the + menu.
     - Settings opens one menu: kansō settings (with its key) and Herdr
@@ -524,8 +524,7 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
   `traffic_lights: [12, 16]`, `resizable: true`, `terminal_menu: "kanso-menu"`:
   - `sidebar` (column, `chrome`, 256 px, min 200, max 480):
     - `brand`: block `kanso-chrome` (Herdr's mark), 48 px, `window_drag`.
-    - `spaces`: block `kanso-spaces`.
-    - `sidebar-footer`: block `kanso-chrome` with `{footer: true}`, 156 px in the file and fitted to its rows at start: 56 for Settings, 32 more each for Add computer and a kansō update, and room for a refused update's block while the sidebar is open.
+    - `spaces`: block `kanso-spaces`, the one sidebar composition: the header, the view switch, the rows and the footer, each a retained view of its own.
   - `work` (column, padding 6, gap 4):
     - `inset` (column, no fill, no border):
       - `tabs`: block `kanso-tabs`, 48 px, `window_drag`.

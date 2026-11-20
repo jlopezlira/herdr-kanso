@@ -2,7 +2,7 @@
 // Kept byte for byte by `npm run sync:share`: edit kanso-panel/ui-stack.js.
 import { h_flex, v_flex, Button, Popover } from "gpui-base";
 import { div } from "gpui-kit";
-import { G, H, R, LINE, PANE, SIDEBAR, DIALOG, TINT, CLEAR, alpha, sidebarSides } from "./ui.js";
+import { G, H, R, T, LINE, PANE, SIDEBAR, DIALOG, TINT, CLEAR, alpha, sidebarSides } from "./ui.js";
 import { dot } from "./ui-dot.js";
 import { RULES } from "./ui-css.js";
 import { box, lastOp } from "./ui-draw.js";
@@ -69,7 +69,7 @@ const dialogList = (id, c, { scroll = false }, kids) => {
     .when(scroll, (el) => el.h(Math.min(rows.length * (H.line + G.hair) - G.hair, DIALOG.list)).mx(-G.sm).px(G.sm).overflow_y_scrollbar());
 };
 
-// The footer's room, which Herdr's footer height is fitted to: open, its rows touch between 8 above and 16 below, on the sidebar's gutter
+// The footer's room, its height fitted to its rows: open, its rows touch between 8 above and 16 below, on the sidebar's gutter
 // at both sides seen, as the list's rows are; a refused update's block a hair under its row and 8 above the next; in the rail, its icon Buttons a hair apart above 12.
 export const FOOTER = Object.freeze({ top: G.sm, bottom: G.md, side: SIDEBAR.gutter, railBottom: G.md, railGap: G.hair, refusalAbove: G.hair, refusalBelow: G.sm });
 // The Footer composition's pieces by name: kansō's update, its refusal (only under it), then Settings, always last.
@@ -112,6 +112,9 @@ const STACKS = {
   "toolbar group": { states: ["open"], draw: (id, c, { open }, kids, more, _wire, context) => placed(v_flex().id(id).flex_none().items_center().gap(G.xs).rounded(R.card)
     .when(open, (el) => el.bg(c.w4)), id, c, kids, more, context) },
   "toolbar menu": { draw: holder },
+  sidebar: { draw: (id, c, _flags, kids, more) => placed(v_flex().id(id).size_full().min_h(0).bg(c.chrome).text_size(T.card), id, c, kids, more) },
+  "sidebar switch": { draw: (id, c, _flags, kids, more) => placed(div().id(id).flex_none(), id, c, kids, more) },
+  "sidebar rows": { draw: (id, c, _flags, kids, more) => placed(v_flex().id(id).flex_1().min_h(0), id, c, kids, more) },
   header: { states: ["collapsed"], draw: header },
   "header title": { draw: headerTitle },
   "rail tile": { states: ["strong"], draw: railTile, pressable: true },
@@ -121,9 +124,9 @@ const STACKS = {
   // Proposed: the collapsed view button carrying the dot while someone needs you, a hairline in from its corner.
   "view button": { draw: (id, c, _flags, [button], more) => button(id, c, more).relative().child(dot(c, "blocked").absolute().top(LINE).right(LINE)) },
   // Both sit at the block's foot.
-  footer: { draw: (id, c, _flags, kids, more) => placed(sidebarSides(v_flex().id(id).size_full().justify_end().bg(c.chrome).pt(FOOTER.top), FOOTER.side).pb(FOOTER.bottom),
+  footer: { states: ["height"], draw: (id, c, { height }, kids, more) => placed(sidebarSides(v_flex().id(id).w_full().h(height).flex_none().justify_end().bg(c.chrome).pt(FOOTER.top), FOOTER.side).pb(FOOTER.bottom),
     id, c, kids, more, {}, footerSlots(kids)) },
-  "rail footer": { draw: (id, c, _flags, kids, more) => placed(v_flex().id(id).size_full().justify_end().items_center().bg(c.chrome).pt(FOOTER.top).pb(FOOTER.railBottom)
+  "rail footer": { states: ["height"], draw: (id, c, { height }, kids, more) => placed(v_flex().id(id).w_full().h(height).flex_none().justify_end().items_center().bg(c.chrome).pt(FOOTER.top).pb(FOOTER.railBottom)
     .gap(FOOTER.railGap), id, c, kids, more, {}, footerSlots(kids)) },
   // Proposed: Settings and its menu, which opens over it; a refused update's block in the footer's room.
   "footer settings": { draw: withMenu(() => "bottom_left", bare) },

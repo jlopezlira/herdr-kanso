@@ -43,11 +43,11 @@ test("Cmd+B folds the sidebar right after kansō was updated or reloaded", async
   assert.equal(f.shared.get("sidebar.collapsed"), true);
 });
 
-test("the strip, the tab bar and the sidebar footer take their keys right after a reload", async () => {
+test("the strip, the tab bar and the title bar take their keys right after a reload", async () => {
   for (const [file, name, props, key] of [
     ["kanso-strip/main.js", "Strip", {}, "kanso-strip.arrange"],
     ["kanso-tabs/main.js", "Tabs", {}, "kanso-tabs.panel-1"],
-    ["kanso-chrome/main.js", "WorkspaceChrome", { footer: true }, "kanso-tabs.settings"],
+    ["kanso-chrome/main.js", "WorkspaceChrome", {}, "kanso-tabs.settings"],
   ]) {
     const { keys, pressed } = await mount(file, name, props, key);
     assert.ok(pressed, `${name} listens for its keys once it is on screen`);

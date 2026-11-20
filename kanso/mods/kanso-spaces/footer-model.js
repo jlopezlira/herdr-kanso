@@ -27,9 +27,6 @@ export const refusalBlock = (why, agent = "") => ({ text: "kansō didn't update"
 
 export const explainRefusal = (why) => `kansō could not update itself. The tool said: ${why}\nExplain in plain words what went wrong and how to fix it.`;
 
-/** The chord bound to kansō settings, or null. `bindings`: Herdr's keys(). */
-export const settingsChord = (bindings) => bindings.find((binding) => binding.action === KANSO_SETTINGS)?.keys ?? null;
-
 /** kansō settings with its key, Herdr settings and, while Herdr has `ready` waiting, its update after a line. */
 export const settingsEntries = ({ ready = null, hint = null } = {}) => [
   { key: ITEM.kanso, icon: "sliders-vertical", label: "kansō settings", hint },

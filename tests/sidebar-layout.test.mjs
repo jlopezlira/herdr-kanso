@@ -123,7 +123,7 @@ test("one gutter from both sides seen: toolbar, rows, the current project's hove
   assert.deepEqual([glyphIn(add, "left"), seen.right(glyphIn(hide, "right"))], [toolbar, toolbar], "+ and Hide sidebar, to the half pixel");
 
   // The footer's rows: the gutter from both sides seen.
-  const { sidebarFooter } = await load("kanso-chrome/sidebar-footer.js", ["sidebarFooter"], host());
+  const { sidebarFooter } = await load("kanso-spaces/sidebar-footer.js", ["sidebarFooter"], host());
   const c = tokens({ foreground: "#ffffff", background: "#000000" });
   for (const footer of [sidebarFooter({ update: "Update kansō" }), sidebarFooter({ update: "Update kansō", refused: { text: "kansō didn't update", source: "offline" } })]) {
     const drawn = rowsIn(footer("f", c, {}));

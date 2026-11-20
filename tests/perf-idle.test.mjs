@@ -225,9 +225,10 @@ test("Memory redraws 0 times a minute when the reading has not changed", async (
   assert.equal(redraws.n, 0, `an unchanged Memory reading redrawn ${redraws.n} times per minute; budget 0`);
 });
 
-test("the footer fits from one timer, and battery and the memory warning are read every 2 minutes", async (t) => {
+test("the sidebar's footer arms no fit timer, and the title bar reads battery and the memory warning every 2 minutes", async (t) => {
   const dir = await temporary(t), f = fixture({ dir });
-  f.state.props = { footer: true };
+  const { SidebarFooter } = await loadMod("kanso-spaces/main.js", ["SidebarFooter"], f.host);
+  new SidebarFooter().init({ collapsed: false, update: null, ready: null, hint: null }, f.cx);
   const { WorkspaceChrome } = await loadMod("kanso-chrome/main.js", ["WorkspaceChrome"], f.host);
   const view = new WorkspaceChrome();
   view.init({}, f.cx);

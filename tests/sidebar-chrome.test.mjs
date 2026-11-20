@@ -8,7 +8,7 @@ const compositions = async () => themed({
   kit: await load("kanso-panel/kit.js", ["menu", "stack"], host()),
   ...await load("kanso-spaces/toolbar.js", ["toolbar", "addLabels"], host()),
   ...await load("kanso-chrome/header.js", ["header"], host()),
-  ...await load("kanso-chrome/sidebar-footer.js", ["sidebarFooter"], host()),
+  ...await load("kanso-spaces/sidebar-footer.js", ["sidebarFooter"], host()),
   ...await load("kanso-panel/ui.js", ["tokens", "G", "H", "R", "PANE", "DAWN", "DAWN_H"], host()),
 }, KIT_NIGHT);
 const tipsOf = (el) => every(el).flatMap((kid) => calls(kid, "tooltip").map((call) => call[1]));
@@ -226,7 +226,7 @@ test("No hand-drawn toolbar, header or footer is left, and the stacks draw no li
 });
 
 test("The footer builds no update stage of its own", () => {
-  for (const file of ["kanso/mods/kanso-chrome/main.js", "kanso/mods/kanso-chrome/footer-model.js", "kanso/mods/kanso-chrome/sidebar-footer.js"]) {
+  for (const file of ["kanso/mods/kanso-chrome/main.js", "kanso/mods/kanso-chrome/footer-model.js", "kanso/mods/kanso-spaces/sidebar-footer.js"]) {
     assert.doesNotMatch(repoText(file), /Downloading|Installing/, `${file} builds no stage`);
   }
 });

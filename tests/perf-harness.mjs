@@ -1,7 +1,7 @@
 // Real mod code with a fake clock, inert native elements and counted host boundaries.
 import { performance } from "node:perf_hooks";
 import { pathToFileURL } from "node:url";
-import { load, exec as runFile, clone, until, success, failure, openedKdb } from "./helpers.mjs";
+import { load, exec as runFile, clone, until, success, failure, openedKdb, inlineView } from "./helpers.mjs";
 
 export const PANEL_IDS = ["files", "pr", "preview", "shipped", "worktrees", "ports", "look", "find"];
 const source = process.env.PERF_SOURCE_ROOT ? pathToFileURL(`${process.env.PERF_SOURCE_ROOT}/kanso/mods/`) : undefined;
@@ -89,6 +89,7 @@ export function fixture({ dir = "/fixture", blocked = false, quiet = null, worki
       after(ms, fn) { const timer = { ms, fn, next: state.now + ms, every: false }; state.timers.push(timer); return element(); },
     },
     spawn(fn) { const task = Promise.resolve(fn(cx)); task.catch((error) => state.errors.push(error)); return task; },
+    new: (Class, props) => inlineView(Class, props, cx),
   };
   const storage = new Map();
   const factory = { new: element, vertical: element, markdown: element };

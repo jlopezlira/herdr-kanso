@@ -7,6 +7,7 @@ import { systemApi } from "./platform-system.js";
 // Modified by José Gutiérrez (minimalistic, 0oz design fork): renamed from oz-spaces; each space lists its agents (agents.js), folded by clicking the space. The active space is a faint wash of the text color, never a theme accent.
 // Modified by jlopezlira (Kanso, https://github.com/jlopezlira/herdr-kanso): renamed from mn-spaces; a fixed 76px rail when collapsed (resizable only when open), space avatars in the theme's hues, a breathing dot instead of a spinner, background polling slowed when the window is behind.
 // Modified by Iván Campaña (https://github.com/icampana): layout writers set the tree only when it is Kanso's, so a switch from another layout never saves that layout into kanso.json.
+// SidebarFooter is derived from the sidebar footer of the `workspace-chrome` mod shipped with Herdr (Apache-2.0, https://github.com/herdrdev/herdr-app), by way of kanso-chrome.
 
 import { View, div } from "gpui-kit";
 import { v_flex, h_flex, ScrollHandle } from "gpui-base";
@@ -39,8 +40,8 @@ import { ELBOW } from "./ui-row.js";
 import { button, Armed } from "./ui-button.js";
 import { dialog } from "./ui-dialog.js";
 import { field, TextField } from "./ui-field.js";
-import { menu, emptyState, skeletonOf, tooltip } from "./kit.js";
-import { boundChord, chordOf } from "./ui-tooltip.js";
+import { menu, emptyState, skeletonOf, stack, tooltip } from "./kit.js";
+import { boundChord, chordOf, hintOf } from "./ui-tooltip.js";
 import { menuList, menuHeight, RUN_ROWS } from "./ui-menu.js";
 import { pieceLines, openPieceMenu, hidePiece } from "./piece-lines.js";
 import { toolbar } from "./toolbar.js";
@@ -55,7 +56,11 @@ import { createAwake, keepAwake } from "./awake.js";
 import { NEEDS_YOU, EMPTY_NOTICE_MS, waitingSignature, sleepingSignature, sameQueue, waitingQueue, nextWaiting, queueState } from "./needs-you.js";
 import { queueControl, queueList } from "./needs-you-view.js";
 import { Visits, visited, stepped, beside } from "./agent-nav.js";
-import { spaces, machines, panes, agents, terminals, run, openOverlay, closeOverlay, props, exec, hc, theme, shared, setShared, watchFolder, window, nextCommand, focused, home, appHome, pickFolder, knownAgents, notify } from "herdr";
+import { spaces, machines, panes, agents, terminals, run, openOverlay, closeOverlay, props, exec, hc, theme, shared, setShared, watchFolder, window, nextCommand, focused, home, appHome, pickFolder, knownAgents, notify, updates } from "herdr";
+import { sidebarFooter } from "./sidebar-footer.js";
+import { ITEM, COLLAPSED, KANSO_SETTINGS, explainRefusal, refusalBlock, settingsEntries, updateLabel } from "./footer-model.js";
+import { Updater } from "./update.js";
+import { explainWith, findExplainer } from "./explain.js";
 
 const PREFS = ["machines.folded", "spaces.agentsFolded", "spaces.order", "spaces.statusOrder", "spaces.threadOrder", "spaces.threadGroup",
   "spaces.shelvesOpen", "spaces.custom", "spaces.view", "spaces.sections", "spaces.since"];
@@ -183,6 +188,80 @@ export function tone(t, status) {
   return t[status] ?? t.unknown;
 }
 
+const sidebarPart = (owner) => class SidebarPart extends View {
+  init(look) { this.look = look; }
+  update(look) { this.look = look; }
+  render() {
+    if (this.look.piece === "header") return owner.header(this.look);
+    if (this.look.piece === "switch") return owner.switchPart(this.look);
+    return owner.rows();
+  }
+};
+
+const openSettings = (page = "pieces") => openOverlay({ mod: "kanso-settings", kind: "dialog", width: DIALOG.settingsW, height: DIALOG.settingsH, props: { page } });
+
+export class SidebarFooter extends View {
+  init(look, cx) {
+    this.look = look;
+    this.armed = new Armed();
+    this.menuOpen = false;
+    this.settingsFocus = cx.focus_handle();
+    this.updater = new Updater();
+    this.updater.start(cx, { polls: false });
+    this.explainer = null;
+    this.lookup = null;
+    cx.timer.after(0, (later) => this.known(later));
+  }
+
+  update(look) { this.look = look; }
+
+  settingsMenu() {
+    if (!this.menuOpen) return null;
+    const acts = {
+      [ITEM.kanso]: (cx) => { this.setMenu(false, cx); openSettings(); },
+      [ITEM.herdr]: (cx) => { this.setMenu(false, cx); run("app.settings"); },
+      [ITEM.updateHerdr]: (cx) => this.armed.press(ITEM.updateHerdr, cx, () => run("app.update")),
+    };
+    const { ready, hint } = this.look;
+    const entries = settingsEntries({ ready, hint });
+    return menu({ title: "Settings", items: entries.map((entry) => (entry.separator ? entry : { ...entry, armed: this.armed.is(entry.key), onClick: acts[entry.key] })) });
+  }
+
+  setMenu(open, cx) {
+    this.menuOpen = open;
+    cx.notify();
+  }
+
+  agent() {
+    this.lookup ??= findExplainer().then((agent) => {
+      this.explainer = agent;
+      return agent;
+    });
+    return this.lookup;
+  }
+
+  known(later, use = () => {}) {
+    return later.spawn(async (again) => {
+      use(await this.agent());
+      again.notify();
+    });
+  }
+
+  explain(why, cx) {
+    cx.timer.after(0, (later) => this.known(later, (agent) => explainWith(agent, { name: "Explain the update", folder: appHome(), task: explainRefusal(why) })));
+  }
+
+  render() {
+    const { collapsed } = this.look;
+    const update = this.updater.available(), busy = Boolean(this.updater.busy);
+    const why = update && !busy ? this.updater.refused() : null;
+    const install = (cx) => this.updater.install(cx), refused = why ? refusalBlock(why, this.explainer?.name ?? "an agent") : null, menu = this.settingsMenu();
+    const presses = { ...(update ? { "refresh-cw": install } : {}), ...(refused && !collapsed ? { [refused.fix]: install, [`Explain to ${refused.agent}`]: (cx) => this.explain(why, cx) } : {}), ...(menu ? {} : { settings: (cx) => this.setMenu(true, cx) }) };
+    return sidebarFooter({ update: update && updateLabel(update, busy), busy, refused, menu, collapsed })(
+      "footer", tokens(theme()), { presses, focuses: { settings: this.settingsFocus }, onOpen: (open, cx) => this.setMenu(open, cx) });
+  }
+}
+
 export default class Spaces extends View {
   names = new Names(this);
 
@@ -291,6 +370,37 @@ export default class Spaces extends View {
       (command) => this.command(String(command).replace(/^kanso-spaces\./, ""), cx),
       cx.timer,
     )));
+    this.mountParts(cx);
+  }
+
+  mountParts(cx) {
+    const Part = sidebarPart(this);
+    const looks = this.looks();
+    this.parts = { header: cx.new(Part, looks.header), switch: cx.new(Part, looks.switch), rows: cx.new(Part, looks.rows), footer: cx.new(SidebarFooter, looks.footer) };
+    this.drawnLooks = looks;
+    this.paintTimer = cx.timer;
+  }
+
+  looks() {
+    const collapsed = shared(COLLAPSED) === true, map = pieces(shared);
+    const switchOn = shown("sidebar.switch", true, map) !== false;
+    const view = switchOn ? this.view : "spaces";
+    return {
+      header: { piece: "header", view, collapsed, tools: this.toolsOpen === true, sortOpen: this.orderOpen ?? null, order: this.order, statusOrder: this.statusOrder,
+        threadOrder: this.threadOrder, threadGroup: Boolean(this.threadGroup), activity: shown("sidebar.activity", true, map) !== false, away: runs("sidebar.away", map) !== false, switch: switchOn },
+      switch: { piece: "switch", view: this.view, collapsed, finding: Boolean(this.finding && this.find && !collapsed), shown: switchOn && !(collapsed && view === "spaces"),
+        open: collapsed && this.viewMenu === true, asks: visibleSpaces(spaces(), this.offNames()).some((s) => s.status === "blocked"),
+        chords: Object.fromEntries(Object.keys(VIEWS).map((key) => [key, boundChord(`kanso-spaces.view-${key}`)])) },
+      rows: { piece: "rows", at: this.rowsAt ?? 0 },
+      footer: { collapsed, update: shared("kanso.update") ?? null, ready: updates()?.app?.ready ?? null, hint: hintOf(KANSO_SETTINGS) },
+    };
+  }
+
+  paint() {
+    this.rowsAt = (this.rowsAt ?? 0) + 1;
+    const next = this.looks();
+    Object.entries(next).filter(([name, look]) => JSON.stringify(look) !== JSON.stringify(this.drawnLooks?.[name])).forEach(([name, look]) => this.parts[name].set_props(look));
+    this.drawnLooks = next;
   }
 
   leftNavStore() {
@@ -560,7 +670,7 @@ export default class Spaces extends View {
   command(c, cx) {
     const space = /^space-(\d)$/.exec(c), view = /^view-(spaces|agents|threads)$/.exec(c);
     if (space) { const i = Number(space[1]); if (i >= 1 && i <= spaces().length) run("space.select", { index: i }); }
-    else if (view) { this.setView(view[1], cx); cx.notify(); }
+    else if (view) { this.setView(view[1], cx); this.paint(); }
     else if (c === "asleep") this.showAsleep(cx);
     else if (c === "needs-you.next") this.nextNeeds(cx);
     else if (c === "agent-up" || c === "agent-down") this.besideAgent(c === "agent-up" ? -1 : 1);
@@ -712,27 +822,27 @@ export default class Spaces extends View {
     if (shared("sidebar.collapsed") === true) { run("mod.open", { name: "picker" }); return; }
     if (!this.find) {
       this.find = new TextField({ placeholder: "Find" });
-      this.find.on("change", (_e, cx) => cx.notify());
-      this.find.on("submit", (_e, cx) => this.enterList(cx, true));
+      this.find.on("change", () => this.paint());
+      this.find.on("submit", (_e, cx) => { this.enterList(cx, true); this.paint(); });
     }
     this.finding = true;
     this.find.focus();
-    cx.notify();
+    this.paint();
   }
 
-  closeFind(cx) {
+  closeFind() {
     this.finding = false;
     try { this.find?.release(); } catch { /* already gone */ }
     this.find = null;
     this.handle.focus();
-    cx.notify();
+    this.paint();
   }
 
   findField(t) {
     const c = tokens(t);
     return h_flex().id("spaces-find").flex_none().items_center().pl(G.sm).pr(SIDEBAR.gutter).pb(G.sm)
-      .on_key_down((e, cx) => { if (e.key === "escape") { cx.stop_propagation(); this.closeFind(cx); } })
-      .child(div().flex_1().min_w(0).child(field("spaces-find-field", this.find, c, { lead: "search", icon: "x", iconTip: "Close", onIcon: (cx) => this.closeFind(cx), spoken: "Find" })));
+      .on_key_down((e, cx) => { if (e.key === "escape") { cx.stop_propagation(); this.closeFind(); } })
+      .child(div().flex_1().min_w(0).child(field("spaces-find-field", this.find, c, { lead: "search", icon: "x", iconTip: "Close", onIcon: () => this.closeFind(), spoken: "Find" })));
   }
 
   // What the sidebar already knows, by name, step, branch or folder; a project that matches keeps all its sessions, one that does not stays for the sessions that do.
@@ -1840,11 +1950,11 @@ export default class Spaces extends View {
     });
   }
 
-  setOrder(key, value, cx) {
+  setOrder(key, value) {
     this[key] = value;
     this.panel.set(`spaces.${key}`, key === "threadGroup" ? (value ? "on" : "off") : value);
     this.orderOpen = null;
-    cx.notify();
+    this.paint();
   }
 
   // The pin is the `kanso.pin` label on the terminal: its number is its place among the pinned; pinning again unpins.
@@ -1892,10 +2002,10 @@ export default class Spaces extends View {
   }
 
   // With the switch off, the sidebar stays on Spaces.
-  setShown(key, on, cx) {
+  setShown(key, on) {
     if (key === "switch" && !on) this.setView("spaces");
     this.hide({ switch: "sidebar.switch", activity: "sidebar.activity", away: AWAY_PIECE }[key], !on);
-    cx.notify();
+    this.paint();
   }
 
   // Hide stores hide; showing again stores the piece's default.
@@ -1918,7 +2028,7 @@ export default class Spaces extends View {
     this.setView("agents", cx);
     this.sectionsFolded.delete("asleep");
     this.panel.set("spaces.sections", [...this.sectionsFolded]);
-    cx.notify();
+    this.paint();
   }
 
   checkAlive(cx, now = Date.now(), active = window().active) {
@@ -1948,53 +2058,50 @@ export default class Spaces extends View {
         const before = this.threads ?? {};
         const next = await findThreads(list, before, terminals(), this.threadLocator);
         this.threads = next;
-        if (Object.keys(before).length !== Object.keys(next).length || Object.keys(next).some((id) => next[id] !== before[id])) cx.notify();
+        if (Object.keys(before).length !== Object.keys(next).length || Object.keys(next).some((id) => next[id] !== before[id])) this.paint();
       } catch { this.threads ??= {}; }
       finally { this.readingThreads = false; }
     });
   }
 
   // The Sort menu: the view's orders, the current one ticked, then what the sidebar shows.
-  sortMenu(view) {
-    const { orders, current, key, head } = sortOf(view, this, { ORDERS, STATUS_ORDERS, THREAD_ORDERS, DEFAULT_ORDER });
+  sortMenu(look) {
+    const { view, threadGroup, activity, away, switch: switchOn } = look;
+    const { orders, current, key, head } = sortOf(view, look, { ORDERS, STATUS_ORDERS, THREAD_ORDERS, DEFAULT_ORDER });
     const ticked = (label, on, onClick) => ({ label, icon: on ? "check" : null, onClick });
-    const grouped = view === "threads" ? [ticked("Grouped by project", this.threadGroup, (cx) => this.setOrder("threadGroup", !this.threadGroup, cx))] : [];
+    const grouped = view === "threads" ? [ticked("Grouped by project", threadGroup, () => this.setOrder("threadGroup", !threadGroup))] : [];
     return menu({ items: [
       { heading: head },
-      ...Object.keys(orders).map((mode) => ticked(orders[mode], mode === current, (cx) => this.setOrder(key, mode, cx))),
+      ...Object.keys(orders).map((mode) => ticked(orders[mode], mode === current, () => this.setOrder(key, mode))),
       ...grouped,
       { separator: true },
       { heading: "Show" },
-      ticked("What each agent is on", this.showActivity !== false, (cx) => this.setShown("activity", this.showActivity === false, cx)),
-      ticked(RETURN_LABEL, this.showAway !== false, (cx) => this.setShown("away", this.showAway === false, cx)),
-      ticked("Projects, Status and Threads", this.showSwitch !== false, (cx) => this.setShown("switch", this.showSwitch === false, cx)),
+      ticked("What each agent is on", activity, () => this.setShown("activity", !activity)),
+      ticked(RETURN_LABEL, away, () => this.setShown("away", !away)),
+      ticked("Projects, Status and Threads", switchOn, () => this.setShown("switch", !switchOn)),
     ] });
   }
 
   // The Header composition with its Toolbar: + names what it adds in this view; collapsed, Sort and Search fold under the caret.
   // The window's lights are the block above, so the header has no title row of its own.
-  header(c, view, collapsed) {
-    const { orders, current, plain } = sortOf(view, this, { ORDERS, STATUS_ORDERS, THREAD_ORDERS, DEFAULT_ORDER });
+  header(look) {
+    const { view, collapsed, tools: open, sortOpen } = look;
+    const { orders, current, plain } = sortOf(view, look, { ORDERS, STATUS_ORDERS, THREAD_ORDERS, DEFAULT_ORDER });
     const form = collapsed ? "rail" : "bar";
     // Folding the caret, or the sidebar, shuts Sort's menu for good.
-    const more = (cx) => { this.toolsOpen = !this.toolsOpen; if (!this.toolsOpen) this.orderOpen = null; cx.notify(); };
-    const open = this.toolsOpen === true;
-    const bar = toolbar({ view, column: collapsed, open, sorted: !plain, order: orders[current], sortMenu: this.sortShown(form, collapsed) ? this.sortMenu(view) : null });
+    const more = () => { this.toolsOpen = !open; if (open) this.orderOpen = null; this.paint(); };
+    const sorting = sortOpen === form && (!collapsed || open);
+    const bar = toolbar({ view, column: collapsed, open, sorted: !plain, order: orders[current], sortMenu: sorting ? this.sortMenu(look) : null });
     // Only the tools on show: a name the Toolbar does not draw throws. Collapsed, Search sits under the open caret.
-    return header({ collapsed, title: false, toolbar: bar })("spaces-header", c, {
+    return header({ collapsed, title: false, toolbar: bar })("spaces-header", tokens(theme()), {
       presses: {
         plus: () => this.startMenu(view),
         "panel-left": () => this.toggleRail(),
         ...(!collapsed || open ? { search: (cx) => (collapsed ? run("mod.open", { name: "picker" }) : this.openFind(cx)) } : {}),
         ...(collapsed ? { [open ? "chevron-up" : "chevron-down"]: more } : {}),
       },
-      onOpen: (open, cx) => { this.orderOpen = open ? form : null; cx.notify(); },
+      onOpen: (next) => { this.orderOpen = next ? form : null; this.paint(); },
     });
-  }
-
-  // Sort's menu stays with the form it opened in, and in the rail with the caret open.
-  sortShown(form, collapsed) {
-    return this.orderOpen === form && (!collapsed || this.toolsOpen === true);
   }
 
   grouped(t, collapsed, sp, ps, ctx) {
@@ -2466,13 +2573,18 @@ export default class Spaces extends View {
 
   // The three views, the View switch composition: a track open; collapsed, the current view's button and its menu.
   // Each tooltip has the view's key; Status carries the dot while someone needs you.
-  switchViews(t, sp, collapsed = false) {
-    const tips = Object.fromEntries(Object.entries(VIEWS).map(([key, label]) => [key, tooltip({ label, chord: boundChord(`kanso-spaces.view-${key}`) })]));
-    const pick = (view, cx) => { this.setView(view, cx); cx.notify(); };
-    const open = (next, cx) => { this.viewMenu = next; cx.notify(); };
-    const look = { view: this.view, column: collapsed, open: collapsed && this.viewMenu === true, asks: sp.some((s) => s.status === "blocked"), carry: true, tips };
+  switchViews({ view, collapsed, open, asks, chords }) {
+    const tips = Object.fromEntries(Object.entries(VIEWS).map(([key, label]) => [key, tooltip({ label, chord: chords[key] })]));
+    const pick = (next, cx) => { this.setView(next, cx); this.paint(); };
+    const toggle = (next) => { this.viewMenu = next; this.paint(); };
     const menu = (_e, cx) => { cx.stop_propagation(); openPieceMenu({ id: "sidebar.switch", title: "Projects, Status, Threads" }); };
-    return viewSwitch(look)(collapsed ? "rail-view" : "spaces-view", tokens(t), collapsed ? { onChange: pick, onOpen: open, onMenu: menu } : { onChange: pick, onMenu: menu });
+    return viewSwitch({ view, column: collapsed, open, asks, carry: true, tips })(collapsed ? "rail-view" : "spaces-view", tokens(theme()),
+      collapsed ? { onChange: pick, onOpen: toggle, onMenu: menu } : { onChange: pick, onMenu: menu });
+  }
+
+  switchPart(look) {
+    const t = theme();
+    return stack({ variant: "sidebar switch" }, look.finding ? this.findField(t) : look.shown ? this.switchViews(look) : null)("spaces-switch", tokens(t));
   }
 
   threadsView(t, sp, ps, ctx) {
@@ -2706,6 +2818,17 @@ export default class Spaces extends View {
     if (props()?.newProject) return this.newProjectView(t);
     if (props()?.worktree) return this.worktreeView(t);
     if (props()?.machineMenu) return this.computerMenuView(t);
+    const { header, switch: views, rows, footer } = this.parts;
+    if (!this.painting) { this.painting = true; this.paintTimer.after(0, () => { this.painting = false; this.paint(); }); }
+    return stack({ variant: "sidebar" }, header, views, rows, footer)("spaces-root", tokens(t)).track_focus(this.handle)
+      .on_key_down((e, cx) => this.listKeyDown(e, cx))
+      .on_size_change((size, cx) => this.sized(size.width, cx))
+      // A pane held in the strip and let go here goes back where it was.
+      .on_mouse_up("left", dropStripDrag);
+  }
+
+  rows() {
+    const t = theme();
     const collapsed = shared("sidebar.collapsed") === true;
     if (this.sinceLeft) this.sinceLeft.showing = false;
     this.narrow = !collapsed && (this.width ?? SIDEBAR.w) < SIDEBAR.narrow;
@@ -2742,25 +2865,18 @@ export default class Spaces extends View {
     this.seenAt = ctx.now; // when it was seen: a later write of it is no newer
     const needsOn = shown("sidebar.needs", true, map);
     const needsListOpen = this.needsOpen && needsOn && (queue.rows.length > 0 || queue.state !== "ready");
-    const root = v_flex().id("spaces-root").track_focus(this.handle).size_full().min_h(0).bg(t.chrome).text_size(T.card)
-      .on_key_down((e, cx) => this.listKeyDown(e, cx))
-      .on_size_change((size, cx) => this.sized(size.width, cx))
-      // A pane held in the strip and let go here goes back where it was.
-      .on_mouse_up("left", dropStripDrag)
-      .child(this.header(tokens(t), view, collapsed))
-      .when(finding, (el) => el.child(this.findField(t)))
-      .when(switchShown && !finding && !(collapsed && view === "spaces"), (el) => el.child(this.switchViews(t, sp, collapsed)))
-      .when(shown("sidebar.needs", queue.rows.length > 0 || this.needsEmpty, map), (el) => el.children([queueControl(t, queue, collapsed, this.needsEmpty && !queue.rows.length, (cx) => this.toggleNeeds(cx))].filter(Boolean)))
-      .children(needsListOpen ? [this.needsList(t, queue, read.now)] : [this.list(t, collapsed, view,
+    const rows = stack({ variant: "sidebar rows" },
+      shown("sidebar.needs", queue.rows.length > 0 || this.needsEmpty, map) ? queueControl(t, queue, collapsed, this.needsEmpty && !queue.rows.length, (cx) => this.toggleNeeds(cx)) : null,
+      needsListOpen ? [this.needsList(t, queue, read.now)] : [this.list(t, collapsed, view,
         lens?.none ? [item(emptyState({ icon: "search", text: `No match for \u201c${this.find.value().trim()}\u201d` })("spaces-find-empty", tokens(t)), H.line * 3)]
           : view === "agents" ? (collapsed ? this.agentsRail(t, shownSp, shownCtx) : this.agentsView(t, shownSp, ps, shownCtx))
           : view === "threads" ? (collapsed ? this.threadsRail(t, shownSp, shownCtx) : this.threadsView(t, shownSp, ps, shownCtx)) : this.grouped(t, collapsed, shownSp, ps, shownCtx)),
-        collapsed ? null : this.awayCard(t, active)].filter(Boolean));
+        collapsed ? null : this.awayCard(t, active)])("spaces-rows", tokens(t));
     this.nav = this.navNext;
     // The row the ring was on is gone: it stays at the same place in the list.
     if (this.kbd && this.nav.length && !this.nav.some((n) => n.key === this.navKey)) this.navKey = this.nav[Math.min(this.navAt ?? 0, this.nav.length - 1)].key;
     this.navAt = Math.max(0, this.nav.findIndex((n) => n.key === this.navKey));
-    return root;
+    return rows;
   }
 
   // A pill keeps its identity per view, so a change of view places it rather than sliding it across.

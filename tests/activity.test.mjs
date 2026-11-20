@@ -114,7 +114,7 @@ test("Keyboard first: each event row is a kit Button that goes there and drops t
 
 test("Docked under the list: the card leaves the list's rows and sits at the sidebar's foot", () => {
   const main = repoText("kanso/mods/kanso-spaces/main.js");
-  assert.match(main, /collapsed \? null : this\.awayCard\(t, active\)\]\.filter\(Boolean\)/);
+  assert.match(main, /collapsed \? null : this\.awayCard\(t, active\)\]\)\("spaces-rows"/);
   assert.doesNotMatch(main, /returnRows|bareHead|blockHeight/);
 });
 
