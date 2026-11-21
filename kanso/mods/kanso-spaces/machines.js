@@ -33,10 +33,6 @@ export function rmArgs(name) {
   return ["machine", "rm", name];
 }
 
-export function loginLine(name) {
-  return `hc machine login ${name}`;
-}
-
 export function hcError(result) {
   if (!result || result.code === 0) return null;
   const raw = String(result.stdout || result.stderr || "").trim();

@@ -212,8 +212,8 @@ export default class Computers extends View {
       job.retry(cx);
       return;
     }
-    if (reach === "password") {
-      run("tab.new", { name: `Add ${plan.name || plan.target}`, argv: keySetup(plan, this.platform) });
+    if (reach === "password" || reach === "keyonly") {
+      run("tab.new", { name: `Add ${plan.name || plan.target}`, argv: keySetup(plan, { platform: this.platform }) });
       delete this.jobs[key];
       this.close();
       return;

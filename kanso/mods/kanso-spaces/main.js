@@ -1,4 +1,5 @@
-import { localService, serviceOn } from "./platform-host.js";
+import { localService, serviceOn, localName } from "./platform-host.js";
+import { signInTab } from "./sign-in.js";
 import { paths } from "./platform-paths.js";
 import { processApi } from "./platform-processes.js";
 import { systemApi } from "./platform-system.js";
@@ -34,7 +35,7 @@ import { machineReaches, asleepLook, withPending, withoutWaking, AWAY_MENU, FORG
 import { SLEEP_PENDING, SLEEP_WAKING, SLEEP_FAILED, COULD_NOT_SLEEP, failedTerminals, withoutTerminals, RESUME_LABEL, asleepTerminal } from "./resume.js";
 import { tile } from "./tile.js";
 import { views, viewSwitch } from "./view-switch.js";
-import { pullKey, runPull, canWake, enterOpens, sectionMarkOf, sectionCount, rowDirectory, unnamedComputer, threadWord, threadActions, signInCommand, noProjectsOn, sortOf, foldTail, readWord } from "./sidebar-rows.js";
+import { pullKey, runPull, canWake, enterOpens, sectionMarkOf, sectionCount, rowDirectory, unnamedComputer, threadWord, threadActions, noProjectsOn, sortOf, foldTail, readWord } from "./sidebar-rows.js";
 import { DIALOG, H, G, T, R, W, SIDEBAR, GLIDE, OPACITY, TINT, ARM_MS, alpha, sidebarSides, tokens } from "./ui.js";
 import { ELBOW } from "./ui-row.js";
 import { button, Armed } from "./ui-button.js";
@@ -47,7 +48,7 @@ import { pieceLines, openPieceMenu, hidePiece } from "./piece-lines.js";
 import { toolbar } from "./toolbar.js";
 import { header } from "./header.js";
 import { pieces, shown, runs, asksPs, setPiece, pieceOf, STORE } from "./pieces.js";
-import { machineRecord, canRestore, addArgs, rmArgs, loginLine, hcError, needsLogin, heldNames, connectedNames, machinePhase, machineOf, visibleSpaces, visibleAgents, pollKeys, machineState, machineHot, machineStop, machineTip, listedMachines } from "./machines.js";
+import { machineRecord, canRestore, addArgs, rmArgs, hcError, needsLogin, heldNames, connectedNames, machinePhase, machineOf, visibleSpaces, visibleAgents, pollKeys, machineState, machineHot, machineStop, machineTip, listedMachines } from "./machines.js";
 import { Names } from "./alias.js";
 import { syncIcon, peerOn, withPeer } from "./sync.js";
 import { computerMenuItems } from "./computer-menu.js";
@@ -746,6 +747,7 @@ export default class Spaces extends RetryingView {
     // From a computer's menu, which is gone once clicked: the sidebar holds the computer's state.
     else if (c.startsWith("power-machine:") && c.length > "power-machine:".length) { const m = c.slice("power-machine:".length); this.setPower(m, this.phaseOf(m) === "off", cx); }
     else if (c.startsWith("sync-machine:") && c.length > "sync-machine:".length) this.toggleSync(c.slice("sync-machine:".length), cx);
+    else if (c.startsWith("sign-in-machine:") && c.length > "sign-in-machine:".length) this.signIn(c.slice("sign-in-machine:".length));
     else if (c === "sidebar") this.toggleRail();
     else if (c === "needs-you.list") this.toggleNeeds(cx);
     else if (c === "away-dismiss") this.sinceLeft?.dismiss(cx);
@@ -1506,6 +1508,10 @@ export default class Spaces extends RetryingView {
     });
   }
 
+  signIn(name) {
+    run("terminal.open", signInTab((this.machines ?? []).find((row) => row.name === name) ?? { name }, localName()));
+  }
+
   retryMachine(name, cx) {
     const parked = (this.parked ?? []).some((row) => row.name === name);
     const listed = (this.machines ?? []).some((row) => row.name === name);
@@ -2247,7 +2253,7 @@ export default class Spaces extends RetryingView {
       power: () => run(`kanso-spaces.power-machine:${route}`),
       sync: () => run(`kanso-spaces.sync-machine:${route}`),
       retry: () => run(`kanso-spaces.retry-machine:${route}`),
-      signin: () => run("terminal.open", signInCommand(route)),
+      signin: () => run(`kanso-spaces.sign-in-machine:${route}`),
       plus: () => run("space.new", { machine: route }),
       add: () => run("mod.open", { name: "kanso-computers" }),
       hide: () => this.hide("sidebar.computers", true),
@@ -2281,7 +2287,7 @@ export default class Spaces extends RetryingView {
     if (phase === "loading") return;
     if (phase === "off" && m) { this.setPower(m, true, cx); return; }
     if (phase === "unavailable" && m) { this.retryMachine(m, cx); return; }
-    if (phase === "login" && m) { cx.write_to_clipboard?.(loginLine(m)); return; }
+    if (phase === "login" && m) { this.signIn(m); return; }
     if (phase !== "connected") return;
     if (folded) this.folded.delete(m); else this.folded.add(m);
     this.panel?.set("machines.folded", [...this.folded]);
@@ -2316,7 +2322,7 @@ export default class Spaces extends RetryingView {
       "lu-power": (cx) => this.setPower(m, this.phaseOf(m) === "off", cx),
       "lu-plus": () => run("space.new", { machine: m ?? "" }),
       "lu-refresh-cw": (cx) => this.retryMachine(m, cx),
-      "lu-key": () => run("terminal.open", signInCommand(m)),
+      "lu-key": () => this.signIn(m),
       "lu-arrow-right-left": (cx) => this.toggleSync(m, cx),
     };
     // Loading, it breathes until hc answers.
