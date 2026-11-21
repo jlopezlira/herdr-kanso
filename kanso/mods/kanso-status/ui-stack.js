@@ -74,7 +74,7 @@ const dialogList = (id, c, { scroll = false }, kids) => {
 export const FOOTER = Object.freeze({ top: G.sm, bottom: G.md, side: SIDEBAR.gutter, railBottom: G.md, railGap: G.hair, refusalAbove: G.hair, refusalBelow: G.sm });
 // The Footer composition's pieces by name: kansō's update, its refusal (only under it), then Settings, always last.
 // Each is drawn under its name, so Settings keeps its id as the rows above it come and go.
-const footerSlots = (kids) => (kids.length === 3 ? ["update", "refused", "settings"] : ["update", "settings"].slice(-kids.length));
+const footerSlots = (kids, slots = null) => slots ?? (kids.length === 3 ? ["update", "refused", "settings"] : ["update", "settings"].slice(-kids.length));
 
 const cssNode = (classes, parent = null) => ({ tag: "div", attrs: {}, classes, parent, children: [] });
 const statusFace = () => cssNode(["kanso-status-bar", "kanso-status-bar--grid"]);
@@ -125,10 +125,10 @@ const STACKS = {
   // Proposed: the collapsed view button carrying the dot while someone needs you, a hairline in from its corner.
   "view button": { draw: (id, c, _flags, [button], more) => button(id, c, more).relative().child(dot(c, "blocked").absolute().top(LINE).right(LINE)) },
   // Both sit at the block's foot.
-  footer: { states: ["height"], draw: (id, c, { height }, kids, more) => placed(sidebarSides(v_flex().id(id).w_full().h(height).flex_none().justify_end().bg(c.chrome).pt(FOOTER.top), FOOTER.side).pb(FOOTER.bottom),
-    id, c, kids, more, {}, footerSlots(kids)) },
-  "rail footer": { states: ["height"], draw: (id, c, { height }, kids, more) => placed(v_flex().id(id).w_full().h(height).flex_none().justify_end().items_center().bg(c.chrome).pt(FOOTER.top).pb(FOOTER.railBottom)
-    .gap(FOOTER.railGap), id, c, kids, more, {}, footerSlots(kids)) },
+  footer: { states: ["height", "slots"], draw: (id, c, { height, slots }, kids, more) => placed(sidebarSides(v_flex().id(id).w_full().h(height).flex_none().justify_end().bg(c.chrome).pt(FOOTER.top), FOOTER.side).pb(FOOTER.bottom),
+    id, c, kids, more, {}, footerSlots(kids, slots)) },
+  "rail footer": { states: ["height", "slots"], draw: (id, c, { height, slots }, kids, more) => placed(v_flex().id(id).w_full().h(height).flex_none().justify_end().items_center().bg(c.chrome).pt(FOOTER.top).pb(FOOTER.railBottom)
+    .gap(FOOTER.railGap), id, c, kids, more, {}, footerSlots(kids, slots)) },
   // Proposed: Settings and its menu, which opens over it; a refused update's block in the footer's room.
   "footer settings": { draw: withMenu(() => "bottom_left", bare) },
   "footer menu": { draw: holder },

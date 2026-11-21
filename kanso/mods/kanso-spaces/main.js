@@ -291,8 +291,9 @@ export class SidebarFooter extends LookView {
     const update = this.updater.available(), busy = Boolean(this.updater.busy);
     const why = update && !busy ? this.updater.refused() : null;
     const install = (cx) => this.updater.install(cx), refused = why ? refusalBlock(why, this.explainer?.name ?? "an agent") : null, menu = this.settingsMenu();
-    const presses = { ...(update ? { "refresh-cw": install } : {}), ...(refused && !collapsed ? { [refused.fix]: install, [`Explain to ${refused.agent}`]: (cx) => this.explain(why, cx) } : {}), ...(menu ? {} : { settings: (cx) => this.setMenu(true, cx) }) };
-    return sidebarFooter({ update: update && updateLabel(update, busy), busy, refused, menu, collapsed })(
+    const machine = shown("footer.machine", true, pieces(shared));
+    const presses = { ...(update ? { "refresh-cw": install } : {}), ...(machine ? { server: () => run("mod.open", { name: "kanso-computers" }) } : {}), ...(refused && !collapsed ? { [refused.fix]: install, [`Explain to ${refused.agent}`]: (cx) => this.explain(why, cx) } : {}), ...(menu ? {} : { settings: (cx) => this.setMenu(true, cx) }) };
+    return sidebarFooter({ update: update && updateLabel(update, busy), busy, refused, menu, collapsed, machine })(
       "footer", tokens(theme()), { presses, focuses: { settings: this.settingsFocus }, onOpen: (open, cx) => this.setMenu(open, cx) });
   }
 }
@@ -624,7 +625,7 @@ export default class Spaces extends RetryingView {
     return [
       { id: "conv-add-project", label: "New project with a conversation\u2026", act: () => this.addProject(true), icon: "folder-plus" },
       { id: "conv-folder", label: "Open a folder, no project\u2026", act: () => run("kanso-spaces.open-folder"), icon: "file" },
-      ...(machine ? [{ id: "conv-machine", label: "Add computer\u2026", act: () => run("mod.open", { name: "machine-add" }), icon: "server" }] : []),
+      ...(machine ? [{ id: "conv-machine", label: "Add computer\u2026", act: () => run("mod.open", { name: "kanso-computers" }), icon: "server" }] : []),
     ];
   }
 
@@ -2248,7 +2249,7 @@ export default class Spaces extends RetryingView {
       retry: () => run(`kanso-spaces.retry-machine:${route}`),
       signin: () => run("terminal.open", signInCommand(route)),
       plus: () => run("space.new", { machine: route }),
-      add: () => run("mod.open", { name: "machine-add" }),
+      add: () => run("mod.open", { name: "kanso-computers" }),
       hide: () => this.hide("sidebar.computers", true),
       settings: () => openOverlay({ mod: "kanso-settings", kind: "dialog", width: 860, height: 680, props: { page: "pieces", find: "Computers" } }),
     };

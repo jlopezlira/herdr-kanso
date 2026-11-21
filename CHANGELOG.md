@@ -26,6 +26,7 @@ the branch's rules.
 
 ### Added
 
+- Add a computer is back at the foot of the sidebar, above Settings, and opens kansō's own dialog. Your Tailscale computers are listed with Add: one press connects, with no key when the computer has Tailscale SSH, and installs what it needs there. Your ssh config hosts follow. A computer that wants its password opens a tab to type it once and is added right after. One that refuses ssh says what to turn on, and an offline one says it is offline.
 - Approve, request changes and comment on a pull request from the Pull requests panel, with Undo. (#400)
 - Re-run a failing check and read its whole log, reply to a thread, open a pull request, Undo on close, ready, reply and a new pull request, keys for every action, and statistics on the board, all from the Pull requests panel. (#400)
 - The hjkl dōjō has its own button in the tab bar and opens in the side panel, like Memory or Spend; Pieces can hide it like any other panel.
