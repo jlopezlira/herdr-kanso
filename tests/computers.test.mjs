@@ -178,7 +178,7 @@ const keyBin = async (t) => {
   return { bin, home, env: { PATH: `${bin}:/bin:/usr/bin`, HOME: home } };
 };
 
-test("The password tab passes the computer as $1, then adds it without --json, and stops if the key was not copied", async (t) => {
+test("The password tab passes the computer as $1, then adds it without --json, and stops if the key was not copied", { skip: process.platform === "win32" && "the sh form runs on macOS and Linux; Windows uses the PowerShell form" }, async (t) => {
   const { keySetup, addArgs } = await reach();
   const plan = { name: "grey box", target: "ada@100.64.1.2", via: "tailscale ssh ada@100.64.1.2" };
   const expected = addArgs(plan, { json: false });
@@ -318,7 +318,7 @@ test("A typed port reaches ssh as -p, and an IPv6 address is not read as a port"
   assert.deepEqual(clone(bare), [...options, "--", "fe80::1", "true"]);
 });
 
-test("The password tab passes the port to ssh-copy-id, and omits -p when the computer has none", async (t) => {
+test("The password tab passes the port to ssh-copy-id, and omits -p when the computer has none", { skip: process.platform === "win32" && "the sh form runs on macOS and Linux; Windows uses the PowerShell form" }, async (t) => {
   const { keySetup, addArgs } = await reach();
   const withPort = { name: "can", target: "can@10.0.0.7:2222", via: "" };
   const noPort = { name: "grey", target: "ada@100.64.1.2", via: "" };
