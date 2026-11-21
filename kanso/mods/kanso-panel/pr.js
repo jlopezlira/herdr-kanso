@@ -26,6 +26,7 @@ import { verdictOf, failedLog, sendText, sendStep } from "./pr-verdict.js";
 import { readyProviders } from "./pr-providers.js";
 import { inboxLabel, isNew, limitLine, recordPrFacts } from "./pr-inbox.js";
 import { blockFacts, boardOf, failingMeta, isOpen, scopeLine, toggled } from "./pr-board.js";
+import { pieces, shown } from "./pieces.js";
 import { prMemory } from "./panel-state.js";
 import { TICK_MS, ageOf, authFresh, pollFacing, pollTick, readDue } from "./pr-poll.js";
 import { FolderSession, DONE_LIMIT, keepsFacts, repoOf } from "./pr-session.js";
@@ -652,6 +653,9 @@ export class PullRequest {
   }
 
   inboxPage(c) {
+    const map = pieces(shared);
+    const checksOn = shown("pr.checks", true, map);
+    const waitOn = shown("pr.wait", true, map);
     const scope = this.session.scope;
     const blocks = boardOf(this.session.inbox, scope);
     const mine = new Set((this.session.inbox?.logins ?? [this.session.inbox?.login]).filter(Boolean).map((name) => name.toLowerCase()));
@@ -664,7 +668,7 @@ export class PullRequest {
       .children(items.map((item, k) => itemRow(`${id}-${k}`, item))) : null);
     const block = (item, b) => {
       const open = isOpen(this.session.boardOpen, item.key, blocks, scope);
-      const head = kitRow({ level: 0, open, name: item.title, dimmed: !item.remote, second: blockFacts(item, item.oldest ? ago(item.oldest) : null), meta: failingMeta(item) })(`pr-block-${b}`, c, {
+      const head = kitRow({ level: 0, open, name: item.title, dimmed: !item.remote, second: blockFacts(item, waitOn && item.oldest ? ago(item.oldest) : null), meta: checksOn ? failingMeta(item) : null })(`pr-block-${b}`, c, {
         onClick: (cx) => { this.session.boardOpen = toggled(this.session.boardOpen, item.key, blocks, scope); cx.notify(); },
       });
       return v_flex().w_full().gap(G.sm).child(head)

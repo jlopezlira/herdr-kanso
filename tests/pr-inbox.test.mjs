@@ -1,9 +1,9 @@
-import { temporaryKdb, loadPullRequest, loadPanelKdb, loadGroupInbox, loadAuthTiming } from "./mod-fixtures.mjs";
+import { temporaryKdb, loadGroupInbox, loadAuthTiming } from "./mod-fixtures.mjs";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { join } from "node:path";
-import { databaseTimer, load, context, callContext, exec as realExec, success, failure, clone as plain, refreshedContext } from "./helpers.mjs";
-import { blankPanel, refreshAgain, openInbox, drawOpenBoard, SIGNED_IN, SIGNED_OUT } from "./pr-fixtures.mjs";
+import { load, context, callContext, exec as realExec, success, failure, clone as plain, refreshedContext } from "./helpers.mjs";
+import { openedPanel, recorder, refreshAgain, openInbox, drawOpenBoard, SIGNED_IN, SIGNED_OUT } from "./pr-fixtures.mjs";
 
 const AUTH = "github.com\n  Logged in to github.com account jj (keyring)\n  - Active account: true\n  - Token: gho_secret\n";
 
@@ -114,36 +114,6 @@ test("a fresh inbox is not fetched, and a hidden panel does not touch the networ
   assert.equal(model.needs[0].title, "Cached");
 });
 
-function recorder() {
-  const texts = [];
-  const ids = [];
-  const node = () => {
-    const api = new Proxy({}, {
-      get(_target, prop) {
-        if (prop === "child") return (child) => {
-          if (typeof child === "string" || typeof child === "number") texts.push(String(child));
-          return api;
-        };
-        if (prop === "children") return (list) => {
-          for (const child of list ?? []) if (typeof child === "string") texts.push(child);
-          return api;
-        };
-        if (prop === "when") return (cond, fn) => (cond ? fn(api) : api);
-        return () => api;
-      },
-    });
-    return api;
-  };
-  return {
-    texts, ids, div: node, svg: node, v_flex: node, h_flex: node,
-    Button: { new: (id) => { ids.push(id); return node(); } },
-    Popover: { new: () => node() },
-    Input: { new: () => node() },
-    InputState: { new: () => ({}) },
-    TextView: { markdown: () => node() },
-  };
-}
-
 const tone = new Proxy({}, { get: () => "#888" });
 const ITEM_COLUMNS = "url,provider,host,owner,name,number,title,state,draft,author,role,updated_at,fetched_at";
 const ERES = { "/work/eres-admin-app": "amtelser/eres-admin-app" };
@@ -183,9 +153,7 @@ async function panelFor(t, { gh, git, dir, host: more = {}, state }) {
     return failure("");
   };
   const host = { ...ui, exec, appHome: () => dir, home: () => "/Users/x", key: () => "repo", location: () => ({ cwd: "/work/herdr-kanso", on: null }), ...more };
-  const { PullRequest } = await loadPullRequest(host);
-  const { Kdb } = await loadPanelKdb(host);
-  return { panel: blankPanel(PullRequest, new Kdb(databaseTimer), state), calls, ui };
+  return { panel: await openedPanel(host, state), calls, ui };
 }
 
 const focused = { number: 4, title: "Focused", url: "https://github.com/jlopezlira/herdr-kanso/pull/4", state: "OPEN", author: { login: "jj" }, headRefName: "feat", baseRefName: "main", updatedAt: "2026-11-01T00:00:00Z", files: [], additions: 1, deletions: 1, changedFiles: 1, body: "Short." };
