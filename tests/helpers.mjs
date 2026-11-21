@@ -250,7 +250,7 @@ export const storeShared = (store, missing = undefined) => ({ shared: (key) => s
 // A view context whose spawned tasks can be awaited.
 export function context() {
   const pending = [];
-  const cx = { notify() {}, spawn(fn) { const task = fn(cx); pending.push(task); return task; } };
+  const cx = { notify() {}, stop_propagation() {}, focus_handle: () => ({ focus() {}, is_focused: () => false, release() {} }), spawn(fn) { const task = fn(cx); pending.push(task); return task; } };
   return { cx, async drain() { while (pending.length) await pending.shift(); } };
 }
 

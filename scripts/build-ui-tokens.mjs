@@ -30,7 +30,7 @@ const PICK = {
   PANE: { edge: "k-edge-w", gap: "k-pane-gap", minW: "k-pane-min-w", minH: "k-pane-min-h", pills: "k-w-pills" },
   KEY: { x: "k-keycap-x", text: "k-keycap-text", unit: "k-help-key", gap: "k-help-key-gap" },
   DIALOG: { wide: "k-dialog-w", small: "k-dialog-small", sidebar: "k-dialog-sidebar", worktree: "k-dialog-worktree", prompt: "k-dialog-prompt", list: "k-h-dialog-list", pad: "k-dialog-paged-pad", settingsW: "k-settings-w", settingsH: "k-settings-tall" },
-  PR: { title: "k-pr-title", titleMax: "k-pr-title-max", fold: "k-pr-body-fold" },
+  PR: { title: "k-pr-title", titleMax: "k-pr-title-max", fold: "k-pr-body-fold", ages: "k-pr-ages" },
   SKELETON: { text: "k-skeleton-text", meta: "k-skeleton-meta" },
   HEATMAP_GAP: "k-heatmap-gap",
   DOJO_CELL: "k-dojo-cell",

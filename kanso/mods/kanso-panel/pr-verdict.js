@@ -12,20 +12,22 @@ const commitLine = (n, tail) => (n > 0 ? `${plural(n, "commit", "commits")} ${ta
 
 const blank = (partial) => ({
   facts: null, details: false, detailsNote: null, body: null, primary: null, quiet: null,
-  more: null, note: null, writes: [], logKey: null, ...partial,
+  more: null, also: null, note: null, writes: [], logKey: null, ...partial,
 });
 
 const push = { id: "pr-push", label: "Push", target: "push", armed: false, write: true, busy: "Push", busyLabel: "Pushing…" };
 const pull = { id: "pr-pull", label: "Pull", target: "pull", armed: false, write: true, busy: "Pull", busyLabel: "Pulling…" };
 const update = { id: "pr-update", label: "Update branch", target: "update", armed: false, write: true, busy: "Update", busyLabel: "Updating…" };
-const ready = { id: "pr-ready", label: "Ready for review", target: "ready", armed: false, write: true, busy: "Ready", busyLabel: "Marking ready…" };
-const merge = { id: "pr-merge", label: "Squash and merge", verb: "squash and merge", target: "merge", armed: true, write: true, busy: "Merge", busyLabel: "Merging…" };
+const ready = { id: "pr-ready", label: "Ready for review", target: "ready", armed: false, write: true, busy: "ready", busyLabel: "Marking ready…" };
+const merge = { id: "pr-merge", label: "Squash and merge", verb: "squash and merge", target: "merge", armed: true, write: true, busy: "merge", busyLabel: "Merging…" };
 const send = { id: "pr-send", label: "Send", target: "send", armed: false, write: false };
 const create = { id: "pr-create", label: "Create on GitHub", target: "create", armed: false, write: false, busy: "Create", busyLabel: "Opening GitHub…" };
+const compose = { id: "pr-new", label: "Create pull request", target: "new", armed: false, write: false };
+const rerun = { id: "pr-rerun", label: "Re-run", target: "rerun", armed: false, write: true, busy: "rerun", busyLabel: "Re-running…" };
 const signIn = { id: "pr-sign-in", label: "Sign in", target: "sign-in", armed: false, write: false };
 const reopen = { id: "pr-reopen", label: "Reopen", target: "reopen", armed: false, write: true, busy: "Reopen", busyLabel: "Reopening…" };
 
-const close = { id: "pr-close", label: "Close", verb: "close", target: "close", armed: true, write: true, busy: "Close", busyLabel: "Closing…" };
+const close = { id: "pr-close", label: "Close", target: "close", armed: false, write: true, busy: "close", busyLabel: "Closing…" };
 const draftBack = { id: "pr-draft", label: "Back to draft", target: "draft", armed: false, write: true, busy: "Draft", busyLabel: "Returning…" };
 
 const link = (id, label, target, url) => ({ id, label, target, url, armed: false, write: false });
@@ -53,14 +55,18 @@ export function firstLines(text, n) {
 }
 
 const STAMP = /^\d{4}-\d{2}-\d{2}T[\d:.]+Z\s?/;
+const ANSI = new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*m`, "g");
+
+const logRow = (row) => {
+  const parts = row.split("\t");
+  const whole = parts.length >= 3;
+  return { job: whole ? parts[0] : "", step: whole ? parts[1] : "", line: (whole ? parts.slice(2).join("\t") : row).replace(STAMP, "").replace(ANSI, "") };
+};
+
+export const logRows = (text) => String(text ?? "").split("\n").filter((line) => line.length > 0).map(logRow);
 
 export function failedLog(text) {
-  const rows = String(text ?? "").split("\n").filter((line) => line.length > 0);
-  const groups = rows.reduce((acc, row) => {
-    const parts = row.split("\t");
-    const job = parts.length >= 3 ? parts[0] : "";
-    const step = parts.length >= 3 ? parts[1] : "";
-    const line = (parts.length >= 3 ? parts.slice(2).join("\t") : row).replace(STAMP, "");
+  const groups = logRows(text).reduce((acc, { job, step, line }) => {
     const last = acc.at(-1);
     if (last && last.job === job && last.step === step) return [...acc.slice(0, -1), { ...last, lines: [...last.lines, line] }];
     return [...acc, { job, step, lines: [line] }];
@@ -132,6 +138,7 @@ function failedShape(scene) {
     body: { kind: "log", job: jobLabel(first), step: group?.step || "", elapsed: elapsed(first.startedAt, first.completedAt, scene.now), lines: group?.lines ?? [] },
     primary: send,
     quiet: link("pr-log", "Open log on GitHub", "log", first.url || scene.pr.url),
+    also: isWriter(scene.permission) ? { ...rerun, runs: failing.map((c) => c.runId || runIdOf(c)).filter(Boolean) } : null,
     more: extra > 0 ? link("pr-more-fail", `${plus(extra)} more`, "failures") : null,
   };
 }
@@ -248,7 +255,8 @@ function emptyVerdict(scene) {
   if (kind === "none") {
     return blank({
       id: "none", text: `No pull request for ${scene.branch}`, tone: "muted", details: true,
-      primary: scene.canCreate ? create : null,
+      primary: scene.canCreate ? compose : null,
+      quiet: scene.canCreate ? create : null,
     });
   }
   return blank({ id: "empty", text: "", tone: "muted" });
@@ -276,6 +284,7 @@ function settle(view, stale) {
     primary: mark(view.primary),
     quiet: mark(view.quiet),
     more: mark(view.more),
+    also: mark(view.also),
     writes: (view.writes ?? []).map(mark),
   };
 }

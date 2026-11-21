@@ -1,10 +1,9 @@
 const EVENT = { approve: "APPROVE", changes: "REQUEST_CHANGES" };
-const PENDING = { approve: "Approving…", changes: "Requesting changes…", comment: "Commenting…" };
 
 export const REVIEWS = Object.freeze({
-  approve: Object.freeze({ label: "Approve", done: "Approved", needsBody: false }),
-  changes: Object.freeze({ label: "Request changes", done: "Changes requested", needsBody: true }),
-  comment: Object.freeze({ label: "Comment", done: "Commented", needsBody: true }),
+  approve: Object.freeze({ label: "Approve", needsBody: false }),
+  changes: Object.freeze({ label: "Request changes", needsBody: true }),
+  comment: Object.freeze({ label: "Comment", needsBody: true }),
 });
 
 const reviewPath = (kind, { o, r, number }) => (kind === "comment"
@@ -15,9 +14,7 @@ export const reviewArgs = (kind, pull) => (kind === "comment"
   ? ["api", "-X", "POST", reviewPath(kind, pull), "-f", `body=${pull.body}`]
   : ["api", "-X", "POST", reviewPath(kind, pull), "-f", `event=${EVENT[kind]}`, "-f", `body=${pull.body}`]);
 
-export const undoArgs = ({ kind, id }, { o, r, number }) => (kind === "comment"
-  ? ["api", "-X", "DELETE", `repos/${o}/${r}/issues/comments/${id}`]
-  : ["api", "-X", "PUT", `repos/${o}/${r}/pulls/${number}/reviews/${id}/dismissals`, "-f", "message=Undone from kansō", "-f", "event=DISMISS"]);
+export const replyArgs = ({ o, r, number, comment, body }) => ["api", "-X", "POST", `repos/${o}/${r}/pulls/${number}/comments/${comment}/replies`, "-f", `body=${body}`];
 
 export const createdId = (stdout) => {
   try {
@@ -37,17 +34,3 @@ export const reviewable = (pr, viewer) => {
 };
 
 export const ready = (kind, body) => !REVIEWS[kind]?.needsBody || String(body ?? "").trim() !== "";
-
-export const pendingOf = (kind) => ({ kind, state: "pending" });
-export const doneOf = (kind, id) => ({ kind, state: "done", id });
-export const refusedOf = (kind, error) => ({ kind, state: "refused", error });
-export const undoneOf = ({ undoError, ...outcome }) => ({ ...outcome, state: "undone" });
-export const undoRefusedOf = (outcome, error) => ({ ...outcome, undoError: error });
-export const canUndo = (outcome) => outcome?.state === "done" && outcome.id != null;
-
-export const saidOf = (outcome) => {
-  if (outcome.state === "pending") return PENDING[outcome.kind];
-  if (outcome.state === "done") return REVIEWS[outcome.kind].done;
-  if (outcome.state === "undone") return "Undone";
-  return String(outcome.error ?? "").split("\n")[0];
-};

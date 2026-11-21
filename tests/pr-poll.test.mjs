@@ -818,10 +818,13 @@ const sentOutcome = async (name, spec, place, ok, broken = false) => {
     assert.equal(seen.some((pair) => pair.some((pr) => holds(pr, spec.kind))), false, `${label}: no patch`);
     return;
   }
-  const inline = !ok && !spec.kind;
-  const redrawn = ok && name !== "merge" && (!spec.kind || (broken && name === "labels"));
+  const inline = !ok && !spec.kind && !["merge", "ready", "close"].includes(name);
+  const throughActed = ["merge", "ready", "close"].includes(name);
+  const acted = throughActed && (a.acted?.state === "done" || a.acted?.state === "refused") ? 1 : 0;
+  const redrawn = ok && !throughActed && name !== "merge" && (!spec.kind || (broken && name === "labels"));
   if (ok) assert.equal(told.length, ["merge", "assignees", "reviewers"].includes(name) ? 1 : 0, `${label}: as on develop`);
-  assert.equal(told.length + (a.note ? 1 : 0) + (patched && told.length === 0 ? 1 : 0) + (redrawn ? 1 : 0), 1, label);
+  const toldCount = throughActed ? 0 : told.length;
+  assert.equal(toldCount + (a.note ? 1 : 0) + (patched && told.length === 0 && !throughActed ? 1 : 0) + (redrawn ? 1 : 0) + acted, 1, label);
   assert.equal(Boolean(a.note), inline, label);
   if (inline) assert.equal(a.note.source, "rejected", label);
   if (told.length) assert.equal(told[0].level, ok ? "success" : "error", label);

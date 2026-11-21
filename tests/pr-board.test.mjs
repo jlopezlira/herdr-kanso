@@ -193,6 +193,7 @@ test("Hiding failing checks and the oldest wait leaves those facts off the block
   assert.equal(ui.texts.some((text) => text.includes("oldest")), true);
   store["pr.checks"] = "hide";
   store["pr.wait"] = "hide";
+  store["pr.stats"] = "hide";
   ui.texts.length = 0;
   panel.inboxPage(tone);
   assert.equal(ui.texts.some((text) => text.includes("failing")), false);

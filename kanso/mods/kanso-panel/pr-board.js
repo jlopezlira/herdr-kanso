@@ -1,4 +1,4 @@
-import { parseRemote, repoId } from "./pr-remote.js";
+import { isNew, parseRemote, repoId } from "./pr-remote.js";
 import { plural } from "./pure.js";
 import { paths } from "./platform-paths.js";
 
@@ -82,3 +82,22 @@ export const toggled = (open, key, blocks, scope) => {
   const now = shownOpen(open, blocks, scope);
   return now.includes(key) ? now.filter((k) => k !== key) : [...now, key];
 };
+
+const DAY = 86_400_000;
+const AGE_DAYS = [1, 3, 7, 14, 21, Infinity];
+
+export function statsOf(blocks, now) {
+  const needs = blocks.flatMap((block) => block.needs.map((item) => ({ ...item, repo: block.title })));
+  const all = blocks.flatMap((block) => [...block.needs, ...block.yours]);
+  if (!all.length) return null;
+  const since = (item) => now - Date.parse(item.createdAt ?? item.updatedAt);
+  const waited = needs.filter((item) => Number.isFinite(since(item))).toSorted((a, b) => since(b) - since(a));
+  const counts = AGE_DAYS.map((days, i) => waited.filter((item) => since(item) >= (AGE_DAYS[i - 1] ?? 0) * DAY && since(item) < days * DAY).length);
+  const peak = Math.max(1, ...counts);
+  return {
+    oldest: waited[0] ?? null,
+    fresh: all.filter(isNew).length,
+    review: { add: needs.reduce((n, item) => n + (item.additions ?? 0), 0), del: needs.reduce((n, item) => n + (item.deletions ?? 0), 0), count: needs.length, sized: needs.some((item) => item.additions != null) },
+    ages: counts.map((n) => n / peak),
+  };
+}

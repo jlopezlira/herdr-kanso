@@ -3,11 +3,10 @@ import test from "node:test";
 import { clone as plain, context, failure, load, success } from "./helpers.mjs";
 import { openedPanel, recorder, reviewFields } from "./pr-fixtures.mjs";
 
-const api = await load("kanso-panel/pr-review.js", [
-  "REVIEWS", "reviewArgs", "undoArgs", "createdId", "reviewable", "ready",
-  "pendingOf", "doneOf", "refusedOf", "undoneOf", "canUndo", "saidOf",
-]);
-const { REVIEWS, reviewArgs, undoArgs, createdId, reviewable, ready, pendingOf, doneOf, refusedOf, undoneOf, canUndo, saidOf } = api;
+const api = await load("kanso-panel/pr-review.js", ["REVIEWS", "reviewArgs", "createdId", "reviewable", "ready"]);
+const acts = await load("kanso-panel/pr-act.js", ["undoCalls", "pendingOf", "doneOf", "refusedOf", "undoneOf", "canUndo", "saidOf", "refusedTitle"]);
+const { REVIEWS, reviewArgs, createdId, reviewable, ready } = api;
+const { undoCalls, pendingOf, doneOf, refusedOf, undoneOf, canUndo, saidOf, refusedTitle } = acts;
 const pull = { o: "acme", r: "app", number: 12 };
 const open = (login) => ({ state: "OPEN", author: { login } });
 
@@ -22,9 +21,9 @@ test("An approve, a request for changes and a comment each post with -f, and a b
 });
 
 test("Undoing an approval or a request for changes dismisses that review, and undoing a comment deletes it", () => {
-  assert.deepEqual(plain(undoArgs({ kind: "approve", id: 7 }, pull)), ["api", "-X", "PUT", "repos/acme/app/pulls/12/reviews/7/dismissals", "-f", "message=Undone from kansō", "-f", "event=DISMISS"]);
-  assert.deepEqual(plain(undoArgs({ kind: "changes", id: 8 }, pull)), ["api", "-X", "PUT", "repos/acme/app/pulls/12/reviews/8/dismissals", "-f", "message=Undone from kansō", "-f", "event=DISMISS"]);
-  assert.deepEqual(plain(undoArgs({ kind: "comment", id: 9 }, pull)), ["api", "-X", "DELETE", "repos/acme/app/issues/comments/9"]);
+  assert.deepEqual(plain(undoCalls({ kind: "approve", id: 7 }, pull)), [["api", "-X", "PUT", "repos/acme/app/pulls/12/reviews/7/dismissals", "-f", "message=Undone from kansō", "-f", "event=DISMISS"]]);
+  assert.deepEqual(plain(undoCalls({ kind: "changes", id: 8 }, pull)), [["api", "-X", "PUT", "repos/acme/app/pulls/12/reviews/8/dismissals", "-f", "message=Undone from kansō", "-f", "event=DISMISS"]]);
+  assert.deepEqual(plain(undoCalls({ kind: "comment", id: 9 }, pull)), [["api", "-X", "DELETE", "repos/acme/app/issues/comments/9"]]);
 });
 
 test("A created review's id is read, and a bad answer is not", () => {
@@ -53,11 +52,11 @@ test("A review goes pending, then done, and only a done review with an id can be
   const done = doneOf("changes", 7);
   const refused = refusedOf("comment", "HTTP 422\nmore");
   const undone = undoneOf(done);
-  assert.deepEqual(plain(pending), { kind: "approve", state: "pending" });
+  assert.deepEqual(plain(pending), { kind: "approve", state: "pending", at: null });
   assert.equal(String(saidOf(pending)), "Approving…");
   assert.equal(String(saidOf(pendingOf("changes"))), "Requesting changes…");
   assert.equal(String(saidOf(pendingOf("comment"))), "Commenting…");
-  assert.deepEqual(plain(done), { kind: "changes", state: "done", id: 7 });
+  assert.deepEqual(plain(done), { kind: "changes", state: "done", id: 7, at: null });
   assert.equal(String(saidOf(done)), "Changes requested");
   assert.equal(canUndo(done), true);
   assert.equal(canUndo(doneOf("approve", null)), false);
@@ -102,8 +101,8 @@ test("An open pull request by someone else offers Approve, Request changes and C
   assert.equal(has("Approve"), false);
   assert.equal(has("Request changes"), false);
   ui.texts.length = 0;
-  panel.session.reviewed = doneOf("approve", 7);
-  panel.session.reviewFor = url;
+  panel.session.acted = doneOf("approve", 7);
+  panel.session.actedFor = url;
   panel.hero(tone);
   assert.equal(has("Approved"), true);
   assert.equal(has("Undo"), true);
@@ -193,9 +192,9 @@ test("A refused Undo keeps the review as sent and says the Undo failed", async (
   panel.reviewText.state.type("a note", tasks.cx);
   assert.equal(press("pr-review-comment"), true);
   await tasks.drain();
-  assert.equal(press("pr-review-undo"), true);
+  assert.equal(press("pr-act-undo"), true);
   await tasks.drain();
-  const outcome = plain(panel.session.reviewed);
+  const outcome = plain(panel.session.acted);
   assert.equal(outcome.state, "done");
   assert.equal(outcome.id, 19);
   assert.match(String(outcome.undoError), /403/);
@@ -203,11 +202,12 @@ test("A refused Undo keeps the review as sent and says the Undo failed", async (
   panel.hero(tone);
   assert.equal(ui.texts.includes("Commented"), true);
   assert.equal(ui.texts.includes("Undo failed"), true);
+  assert.equal(ui.texts.includes(String(refusedTitle({ kind: "comment" }))), false);
   assert.equal(ui.texts.includes("Review not sent"), false);
 });
 
 test("A refused Undo keeps the sent review, and undoing drops that refusal", async () => {
-  const { undoRefusedOf: refuseUndo, undoneOf: clearUndo, doneOf: finished } = await load("kanso-panel/pr-review.js", ["undoRefusedOf", "undoneOf", "doneOf"]);
+  const { undoRefusedOf: refuseUndo, undoneOf: clearUndo, doneOf: finished } = await load("kanso-panel/pr-act.js", ["undoRefusedOf", "undoneOf", "doneOf"]);
   const refused = refuseUndo(finished("comment", 19), "gh: HTTP 403: Forbidden");
   assert.equal(plain(refused).state, "done");
   assert.equal(plain(refused).id, 19);

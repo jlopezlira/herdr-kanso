@@ -203,7 +203,7 @@ const DRAWN = {
   "kanso/mods/kanso-panel/doc.js": ['kitButton({ label: tip, kind: "icon", size: "sm"'],
   "kanso/mods/kanso-panel/look.js": ['thumbnail({ image: shown?.image ?? "", label: item.name, selected: on, loading: Boolean(shown?.busy), color: item.color ?? "" })('],
   "kanso/mods/kanso-panel/pr-view.js": ['kitRow({ icon: on ? "chevron-down" : "chevron-right", name: label'],
-  "kanso/mods/kanso-panel/pr.js": ["(`pr-check-${i}`, c, {", "kitRow({ name: body, second, wrap: true })(`pr-thread-${i}`, c, {", "(`pr-file-${i}`, c, {"],
+  "kanso/mods/kanso-panel/pr.js": ["(`pr-check-${i}`, c, {", "kitRow({ name: body, second, wrap: true, verbs })(`pr-thread-${i}`, c, {", "(`pr-file-${i}`, c, {"],
   "kanso/mods/kanso-panel/worktrees.js": ['explainButton({ agent: this.explainer?.name ?? "an agent", size: "sm" })(`wt-explain-'],
   "kanso/mods/kanso-settings/main.js": ['kitButton({ label, kind: "quiet", active: this.capture?.row === row, content: ['],
   "kanso/mods/kanso-sim/main.js": ["})(`sim-device-${item.id}`, c, { onClick: (next) => this.pick(item, next) })"],
