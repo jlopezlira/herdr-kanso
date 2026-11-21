@@ -75,7 +75,7 @@ const SITES = {
   "kanso-containers/main.js": ["metric("],
   "kanso-spend/main.js": ["metric(", "metric("],
   "kanso-dojo/main.js": ["metric("],
-  "kanso-panel/pr.js": ["diffText(", "diffText("],
+  "kanso-panel/pr.js": ["diffText(", "diffText(", "diffText("],
   "kanso-panel/pr-view.js": ["diffText("],
   "kanso-panel/pr-verdict.js": ["diffText(", "plus(", "plus("],
 };

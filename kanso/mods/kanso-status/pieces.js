@@ -38,7 +38,7 @@ export const PIECES = [
   piece("tabs.arrange", "Arrangements", "Tab bar and panels", SHOW, "show", "draw"),
   piece("pr.checks", "Failing checks on pull requests", "Tab bar and panels", SHOW, "show", "draw"),
   piece("pr.wait", "Oldest pull request wait", "Tab bar and panels", SHOW, "show", "draw"),
-  piece("pr.stats", "Pull request statistics", "Tab bar and panels", SHOW, "show", "draw"),
+  piece("pr.stats", "Statistics on pull requests", "Tab bar and panels", SHOW, "show", "draw"),
   ...PANELS.map(([id, label, job = null]) => piece(`panel.${id}`, label, "Tab bar and panels", SHOW, "show", "work", job)),
   piece("toast.update", "kansō update", "Notifications", SHOW, "show", "draw"),
   piece("toast.memory", "Memory low", "Notifications", SHOW, "show", "draw"),
