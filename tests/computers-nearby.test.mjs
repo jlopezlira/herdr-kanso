@@ -42,7 +42,7 @@ test("The network interfaces are read from macOS ifconfig, from Linux ip address
   assert.deepEqual(clone(interfacesOf(WINDOWS_ADDR)), lan);
 });
 
-test("Only neighbours already in the address table, on this computer's own networks, are tried, and not this computer", async () => {
+test("Neighbours on this computer's own networks come first, then the rest of its /24, never this computer or a far network", async () => {
   const { candidates } = await nearby();
   const interfaces = [{ ip: "192.168.1.10", prefix: 24 }, { ip: "10.8.1.4", prefix: 22 }];
   const neighbors = [
@@ -52,8 +52,12 @@ test("Only neighbours already in the address table, on this computer's own netwo
     { ip: "10.8.2.9", name: "nas" },
     { ip: "10.8.4.1", name: "far" },
   ];
-  assert.deepEqual(clone(candidates(interfaces, neighbors)), ["192.168.1.20", "10.8.2.9"]);
-  assert.equal(clone(candidates(interfaces, neighbors)).includes("192.168.1.21"), false);
+  const tried = clone(candidates(interfaces, neighbors));
+  assert.deepEqual(tried.slice(0, 2), ["192.168.1.20", "10.8.2.9"]);
+  assert.equal(tried.length, 253 + 253 + 1);
+  assert.ok(tried.includes("192.168.1.21") && tried.includes("10.8.1.200"));
+  assert.ok(!tried.includes("192.168.1.10") && !tried.includes("10.8.1.4") && !tried.includes("192.168.2.20") && !tried.includes("10.8.4.1"));
+  assert.ok(!tried.includes("192.168.1.0") && !tried.includes("192.168.1.255"));
 });
 
 test("An incomplete neighbour and a broadcast neighbour are not listed", async () => {

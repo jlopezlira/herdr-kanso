@@ -1,6 +1,6 @@
 import { View, div } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
-import { theme, props, closeOverlay, exec, hc, home, readTextFile, run, shared } from "herdr";
+import { theme, props, closeOverlay, exec, hc, home, readTextFile, run, shared, setShared } from "herdr";
 import { localName } from "./platform-host.js";
 import { pieces, runs } from "./pieces.js";
 import { findExplainer, explainWith } from "./explain.js";
@@ -28,6 +28,12 @@ const OS_WORD = { macos: "Mac", linux: "Linux", windows: "Windows", freebsd: "Fr
 const osWord = (os) => OS_WORD[String(os).toLowerCase()] ?? os;
 const osIcon = (os) => (/^(macos|windows)$/i.test(os) ? "monitor" : "server");
 const SIDEBAR_REFRESH = "kanso-spaces.retry-machine:";
+const NEARBY = "computers.nearby";
+const NEARBY_FRESH_MS = 120_000;
+const freshNearby = (now = Date.now()) => {
+  const last = shared(NEARBY);
+  return last && Array.isArray(last.hosts) && now - Number(last.at) < NEARBY_FRESH_MS ? last.hosts : undefined;
+};
 
 async function findTailscale(platform) {
   for (const path of tailscalePaths(platform)) {
@@ -59,7 +65,7 @@ export default class Computers extends View {
     this.net = undefined;
     this.hosts = null;
     this.added = [];
-    this.nearby = runs("computers.network", pieces(shared)) ? undefined : null;
+    this.nearby = runs("computers.network", pieces(shared)) ? freshNearby() : null;
     this.dropped = {};
     this.explainer = undefined;
     this.jobs = {};
@@ -79,6 +85,7 @@ export default class Computers extends View {
     });
     if (this.nearby === undefined) afterMount(cx, (cx) => cx.spawn(async (cx) => {
       this.nearby = await scanNearby(this.platform, cx.timer).catch(() => []);
+      setShared(NEARBY, { at: Date.now(), hosts: this.nearby });
       cx.notify();
     }));
   }

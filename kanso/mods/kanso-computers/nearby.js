@@ -1,6 +1,9 @@
 const IPV4 = /\b(\d{1,3}(?:\.\d{1,3}){3})\b/;
 
+const SPAN = 24;
+
 export const ipNumber = (ip) => String(ip).split(".").reduce((n, part) => n * 256 + Number(part), 0);
+const ipText = (n) => [24, 16, 8, 0].map((shift) => Math.floor(n / 2 ** shift) % 256).join(".");
 
 const validIp = (ip) => IPV4.test(ip) && String(ip).split(".").every((part) => Number(part) <= 255);
 const RANGES = [["10.0.0.0", 8], ["172.16.0.0", 12], ["192.168.0.0", 16]];
@@ -16,6 +19,12 @@ export function interfacesOf(text) {
     const mask = line.match(/inet (\d{1,3}(?:\.\d{1,3}){3}).*?netmask 0x([0-9a-f]{8})/i);
     return mask ? [{ ip: mask[1], prefix: bitsOf(mask[2]) }] : [];
   }).filter(({ ip, prefix }) => privateIp(ip) && prefix > 0 && prefix < 32);
+}
+
+export function subnetHosts({ ip, prefix }) {
+  const size = 2 ** (32 - Math.max(prefix, SPAN));
+  const first = Math.floor(ipNumber(ip) / size) * size;
+  return Array.from({ length: size - 2 }, (_, i) => ipText(first + i + 1)).filter((host) => host !== ip);
 }
 
 const sameNet = (ip, { ip: own, prefix }) => Math.floor(ipNumber(ip) / 2 ** (32 - prefix)) === Math.floor(ipNumber(own) / 2 ** (32 - prefix));
@@ -35,17 +44,13 @@ export function neighborsOf(text) {
 
 export function candidates(interfaces, neighbors) {
   const own = new Set(interfaces.map(({ ip }) => ip));
-  return [...new Set(neighbors.map(({ ip }) => ip))].filter((ip) => !own.has(ip) && interfaces.some((net) => sameNet(ip, net)));
+  const near = neighbors.map(({ ip }) => ip).filter((ip) => interfaces.some((net) => sameNet(ip, net)));
+  return [...new Set([...near, ...interfaces.flatMap(subnetHosts)])].filter((ip) => !own.has(ip));
 }
-
-const BANNER_OS = [["Windows", /for_Windows/i], ["Linux", /Ubuntu|Debian|Raspbian|Fedora|Alpine|Arch|Linux/i], ["FreeBSD", /FreeBSD/i]];
-export const osOfBanner = (banner) => BANNER_OS.find(([, pattern]) => pattern.test(String(banner ?? "")))?.[0] ?? "";
-
-export const bannerText = (bytes) => (bytes ? String.fromCharCode(...bytes.slice(0, 255)).split(/\r?\n/)[0].trim() : "");
 
 export function foundHosts(answered, neighbors) {
   const names = new Map(neighbors.filter(({ name }) => name).map(({ ip, name }) => [ip, name]));
-  return answered.map(({ ip, banner }) => ({ ip, name: names.get(ip) ?? "", os: osOfBanner(banner) }))
+  return [...new Set(answered)].map((ip) => ({ ip, name: names.get(ip) ?? "", os: "" }))
     .toSorted((a, b) => ipNumber(a.ip) - ipNumber(b.ip));
 }
 
