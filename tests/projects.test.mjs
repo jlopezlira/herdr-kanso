@@ -278,7 +278,7 @@ test("New conversation's menu ends with Add computer, last for the keyboard too,
   const { view, calls, made, height } = await menuOf(null);
   assert.deepEqual(made, ["New project with a conversation\u2026", "Open a folder, no project\u2026", "Add computer\u2026"]);
   view.menuActs.at(-1)({});
-  assert.deepEqual(calls, [["mod.open", { name: "machine-add" }]], "the last row the keyboard reaches opens Add computer");
+  assert.deepEqual(calls, [["mod.open", { name: "kanso-computers" }]], "the last row the keyboard reaches opens Add computer");
   assert.equal(height, 8 + 28 + 0 + 9 + 3 * 32, "no project: 4 at each edge, the title, the line and three items");
   assert.equal((await menuOf(null, 12)).height, 8 + 28 + 11 * 32 + 9 + 3 * 32, "a long run stops at 11 items and Add computer still fits under it");
   const off = await menuOf({ "footer.machine": "hide" }, 12);

@@ -54,7 +54,7 @@ test("A right-click on a computer opens the kit's menu under its name, and Add c
   const drawn = view.render();
   assert.deepEqual(texts(drawn), ["devbox", "Rename…", "Turn off", "Sync", "on", "New project", "Add computer…", "Hide “Computers”", "Settings for this…"]);
   press(pressing(drawn, "Add computer…"));
-  assert.deepEqual(calls, [["mod.open", { name: "machine-add" }]]);
+  assert.deepEqual(calls, [["mod.open", { name: "kanso-computers" }]]);
   assert.deepEqual(closed, ["ov1"], "the menu closes once chosen");
 });
 

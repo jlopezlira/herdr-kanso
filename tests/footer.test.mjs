@@ -21,9 +21,33 @@ const settle = (context) => Promise.all(context.queued.splice(0).map((fn) => fn(
 const press = (el, context = cx()) => { arg(el, "on_click")({}, context); context.expired = true; return context; };
 const pressInRefusal = (view, words) => press(holding(all(view.render()).find((x) => calls(x, "mt").length), words));
 
-test("In Stable Mode with nothing to install, the footer is Settings alone: Add computer lives in +", async () => {
+test("In Stable Mode with nothing to install, the footer is Add a computer, then Settings", async () => {
   const { view } = await footer();
-  assert.deepEqual(texts(view.render()), ["Settings"]);
+  assert.deepEqual(texts(view.render()), ["Add a computer", "Settings"]);
+});
+
+test("Add a computer opens kansō's window", async () => {
+  const { view, ran } = await footer();
+  press(holding(view.render(), "Add a computer"));
+  assert.deepEqual(JSON.parse(JSON.stringify(ran)), [["mod.open", { name: "kanso-computers" }]]);
+});
+
+const footerKit = async () => {
+  const { sidebarFooter } = await load("kanso-spaces/sidebar-footer.js", ["sidebarFooter"], popoverHost());
+  const { tokens } = await load("kanso-spaces/ui.js", ["tokens"], popoverHost());
+  return { sidebarFooter, c: tokens(night) };
+};
+
+test("Add a computer is a row above Settings, pressed as server, and it is left out when the piece is off", async () => {
+  const { sidebarFooter, c } = await footerKit();
+  const hits = [];
+  const on = sidebarFooter({ machine: true })("footer", c, { presses: { server: () => hits.push("server") } });
+  assert.deepEqual(texts(on), ["Add a computer", "Settings"]);
+  press(holding(on, "Add a computer"));
+  assert.deepEqual(hits, ["server"]);
+  const off = sidebarFooter({})("footer", c, {});
+  assert.equal(texts(off).includes("Add a computer"), false);
+  assert.throws(() => sidebarFooter({})("footer", c, { presses: { server: () => {} } }), /no tool server/);
 });
 
 test("The footer is as tall as the rows it shows, and a refused update's block takes room only while open", async () => {
@@ -36,8 +60,11 @@ test("The footer is as tall as the rows it shows, and a refused update's block t
   assert.equal(footerPx("3.31.0", "words"), 84 + 2 + block + 8, "the kit's block with our words on two lines, a hair under its row and 8 above the next");
   assert.equal(footerPx("3.31.0", "words", false), 86, "in the rail two of the kit's large icon buttons (32) a hair apart, 8 above and 12 below, and no block");
   assert.equal(footerPx(null, null, false), 52, "one square");
-  for (const [shared, updater, px] of [[{}, {}, 52], [{}, { available: () => "3.31.0" }, 84], [{}, { available: () => "3.31.0", refused: () => "words" }, 84 + 2 + block + 8],
-    [{ "sidebar.collapsed": true }, { available: () => "3.31.0", refused: () => "words" }, 86], [{}, { available: () => "3.31.0", busy: true, refused: () => "words" }, 84]]) {
+  assert.equal(footerPx(null, null, true, true), footerPx(null) + 32, "Add a computer adds one row open, 32");
+  assert.equal(footerPx(null, null, false, true), footerPx("3.31.0", null, false), "and one square in the rail");
+  for (const [shared, updater, px] of [[{ "kanso.pieces": { "footer.machine": "hide" } }, {}, 52], [{}, {}, 84], [{}, { available: () => "3.31.0" }, 116],
+    [{}, { available: () => "3.31.0", refused: () => "words" }, 116 + 2 + block + 8],
+    [{ "sidebar.collapsed": true }, { available: () => "3.31.0", refused: () => "words" }, 120], [{}, { available: () => "3.31.0", busy: true, refused: () => "words" }, 116]]) {
     const { view } = await footer({ shared, updater });
     assert.equal(arg(view.render(), "h"), px, JSON.stringify([shared, px]));
   }
@@ -60,7 +87,7 @@ test("Open, the footer's rows are the kit's rows at the sidebar's gutter, Settin
 test("A kansō update is a row on top, in the foreground, and a press installs it", async () => {
   const { view, installs } = await footer({ updater: { available: () => "3.31.0" } });
   const drawn = view.render();
-  assert.deepEqual(texts(drawn), ["Update kansō to 3.31.0", "Settings"]);
+  assert.deepEqual(texts(drawn), ["Update kansō to 3.31.0", "Add a computer", "Settings"]);
   const row = holding(drawn, "Update kansō to 3.31.0");
   assert.equal(arg(row, "text_color"), night.foreground);
   press(row);
@@ -75,7 +102,7 @@ test("A Dawn Mode build is offered by its own name", async () => {
 test("A pressed update says Updating kansō at once and stays quiet until it lands", async () => {
   const { view } = await footer({ updater: { available: () => "3.31.0", busy: true, refused: () => "old words" } });
   const drawn = view.render();
-  assert.deepEqual(texts(drawn), ["Updating kansō", "Settings"], "no refusal while it runs");
+  assert.deepEqual(texts(drawn), ["Updating kansō", "Add a computer", "Settings"], "no refusal while it runs");
   assert.equal(arg(all(drawn).find((x) => texts(x)[0] === "Updating kansō" && calls(x, "text_color").length), "text_color"), night.muted);
 });
 
@@ -99,7 +126,7 @@ test("A refused update keeps its row and shows the tool's words under it, with U
   const { view, installs, ran, G } = await footer({ updater: { available: () => "3.31.0", refused: () => why }, agents: async () => [{ name: "Claude Code", installed: true, run: ["claude"] }] });
   view.explainer = { name: "Claude Code", run: ["claude"] };
   const drawn = view.render();
-  assert.deepEqual(texts(drawn), ["Update kansō to 3.31.0", "!", "kansō didn't update", why, "Update", "Explain to Claude Code", "Settings"], "the blocked mark, our words, the tool's words, the fix, Explain");
+  assert.deepEqual(texts(drawn), ["Update kansō to 3.31.0", "!", "kansō didn't update", why, "Update", "Explain to Claude Code", "Add a computer", "Settings"], "the blocked mark, our words, the tool's words, the fix, Explain");
   const block = all(drawn).find((x) => calls(x, "mt").length);
   assert.deepEqual([arg(block, "mt"), arg(block, "mb")], [G.hair, G.sm], "a hair under its row, 8 above Settings");
   press(holding(block, "Update"));
@@ -204,6 +231,38 @@ const herdrWindow = () => {
     },
   };
 };
+
+test("Settings keeps footer-settings with a computer alone, with an update, with a refusal, and in the rail, and Add a computer is footer-machine", async () => {
+  const { sidebarFooter, c } = await footerKit();
+  const update = "Update kansō to 3.31.0";
+  const refused = { text: "kansō didn't update", source: "offline", fix: "Update" };
+  const named = (drawn, words) => holding(drawn, words) ?? all(drawn).find((x) => arg(x, "tooltip") === words);
+  const pressesFor = (props) => ({
+    settings: () => {},
+    ...(props.machine ? { server: () => {} } : {}),
+    ...(props.update ? { "refresh-cw": () => {} } : {}),
+    ...(props.refused && !props.collapsed ? { Update: () => {} } : {}),
+  });
+  const mixes = [
+    [{ machine: true }, "machine alone"],
+    [{ update, machine: true }, "update and a computer"],
+    [{ update, refused, machine: true }, "update, a refusal and a computer"],
+    [{ machine: true, collapsed: true }, "the rail"],
+    [{ update, machine: true, collapsed: true }, "the rail with an update"],
+    [{ update, refused, machine: true, collapsed: true }, "the rail with a refusal"],
+  ];
+  for (const [props, name] of mixes) {
+    const drawn = sidebarFooter(props)("footer", c, { presses: pressesFor(props) });
+    assert.equal(named(drawn, "Settings").tag, "footer-settings", name);
+    assert.equal(named(drawn, "Add a computer").tag, "footer-machine", name);
+  }
+  const fixOf = (machine) => {
+    const drawn = sidebarFooter({ update, refused, machine })("footer", c, { presses: pressesFor({ update, refused, machine }) });
+    return holding(all(drawn).find((x) => calls(x, "mt").length), "Update").tag;
+  };
+  assert.equal(fixOf(false), "footer-refused-0-fix");
+  assert.equal(fixOf(true), fixOf(false), "a computer does not rename the refusal fix");
+});
 
 test("Escape gives the keyboard back to Settings, open and in the rail, so Tab goes on from it", async () => {
   for (const collapsed of [false, true]) {
