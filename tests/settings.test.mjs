@@ -4,7 +4,7 @@ import { loadDefaultKeys, loadSettings } from "./mod-fixtures.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { load, clone } from "./helpers.mjs";
+import { load, clone, settingsTape, settingsView } from "./helpers.mjs";
 
 const actions = () => load("kanso-settings/actions.js", ["GROUPS", "HERDRS", "ofRow", "familyChords", "conflictsOf", "rebound"]);
 
@@ -68,7 +68,7 @@ test("The Keys page lists Kanso's own keys only, and Reset knows them all", asyn
 });
 
 test("The changelog reads into versions, categories and bullets", async () => {
-  const { parseChangelog, plain, compare } = await load("kanso-settings/changelog.js", ["parseChangelog", "plain", "compare"]);
+  const { parseChangelog, plain, compare } = await load("kanso-help/changelog.js", ["parseChangelog", "plain", "compare"]);
   const text = "# Changelog\n\nIntro.\n\n## [2.7.0] - 2026-11-05\n\n### Added\n\n- The keys, on what they open. Tap `⌃⇧Space`.\n- New keys.\n\n### Fixed\n\n- No error.\n\n## [2.6.0] - 2026-11-05\n\n### Changed\n\n- Nothing moves while behind,\n  so an idle window draws no frames.\n";
   const log = clone(parseChangelog(text));
   assert.equal(log.length, 2);
@@ -124,9 +124,33 @@ test("Kanso's keys never give Herdr's or macOS's keys another meaning", () => {
   assert.deepEqual(wrong, []);
 });
 
-test("Settings has no Sync page", async () => {
+test("Settings has Pieces, Keys and Updates", async () => {
   const { PAGES } = await load("kanso-settings/main.js", ["PAGES"]);
-  assert.deepEqual(clone(PAGES.map((page) => page.key)), ["pieces", "keys", "news", "credits"]);
+  assert.deepEqual(clone(PAGES), [
+    { key: "pieces", label: "Pieces" },
+    { key: "keys", label: "Keys" },
+    { key: "updates", label: "Updates" },
+  ]);
+});
+
+test("Settings opened with page news shows Updates", async () => {
+  const ui = settingsTape();
+  const asked = { page: "news", overlay: "ov" };
+  const settings = await settingsView(loadSettings, ui, {
+    theme: () => ({ foreground: "#111", background: "#fff", muted: "#888", dim: "#999", border: "#ccc", input: "#ccc", raised: "#eee", canvas: "#fff", accent: "#a00", popover: "#fff", solid: "#111", solid_foreground: "#fff" }),
+    props: () => asked,
+    shared: () => ({ "kanso.update": { autoCheck: true } }),
+    setShared: () => {},
+    keys: () => [],
+    appHome: () => "/tmp/app",
+  });
+  settings.init({}, { focus_handle() { return { focus() {}, is_focused() { return true; } }; }, spawn() {}, notify() {} });
+  settings.render();
+  assert.equal(settings.page, "updates");
+  assert.ok(ui.ids.includes("settings-scroll-updates"), ui.ids.join(" "));
+  assert.equal(ui.ids.includes("settings-scroll-news"), false);
+  assert.ok(ui.texts.includes("Check for updates automatically"), ui.texts.join(" | "));
+  assert.equal(ui.texts.includes("What's new"), false);
 });
 
 const TAKEN_OVER_ON_PURPOSE = {

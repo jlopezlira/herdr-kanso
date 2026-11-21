@@ -85,6 +85,16 @@ for d in "$c"/worktrees/*/; do
   if [ "$(head -n 1 "$d/gitdir")" = "$2/.git" ]; then rm -rf -- "$d" && echo forgot; fi
 done
 exit 0`;
+const CHILDREN = String.raw`
+for d in "$1"/*; do
+  [ -e "$d/.git" ] || continue
+  printf '%s\t%s\n' "$d" "$(git -C "$d" remote get-url origin 2>/dev/null)"
+done
+exit 0`;
+const childLines = (text) => String(text ?? "").split(/\r?\n/).flatMap((line) => {
+  const [folder, remote = ""] = line.split("\t");
+  return folder ? [{ folder, remote: remote.trim() }] : [];
+});
 export function repositoryApi(platform, run) {
   const files = fileApi(platform, run);
   const git = (folder, args) => run("git", ["-C", folder, ...args]);
@@ -178,5 +188,13 @@ export function repositoryApi(platform, run) {
     const refs = checked(await git(folder, ["for-each-ref", "--format=%(objectname)"]));
     return { code: 0, stdout: `${roots.stdout.trim()}\n${origin.code === 0 ? origin.stdout.trim() : ""}\n${hash(refs.stdout)}` };
   };
-  return { createWorktree: add, discover, bases, probe, forget, removeOrphan, fingerprint };
+  const children = async (folder) => {
+    if (platform !== "windows") return childLines(checked(await run("sh", ["-c", CHILDREN, "children", folder])).stdout);
+    const markers = await files.walk([folder], { depth: 2, names: [".git"] });
+    return Promise.all(markers.map(paths.dirname).map(async (repo) => {
+      const origin = await git(repo, ["remote", "get-url", "origin"]);
+      return { folder: repo, remote: origin.code === 0 ? origin.stdout.trim() : "" };
+    }));
+  };
+  return { createWorktree: add, discover, bases, probe, forget, removeOrphan, fingerprint, children };
 }

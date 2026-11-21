@@ -1,5 +1,5 @@
 // A project or tab that is asleep is one quiet row until a click; waking it opens the usual group.
-import { drawEachTime, loadSidebar, mountedState, recorder, shell } from "./sidebar-fixtures.mjs";
+import { drawEachTime, loadSidebar, mountedState, withParts, recorder, shell, SIDEBAR_THEME } from "./sidebar-fixtures.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { load, clone } from "./helpers.mjs";
@@ -11,15 +11,16 @@ const sleepers = [{ pane: "p1", tab: "tb", terminal: "t1", cwd: "/Users/me/fury"
 const sleeperTerms = [shell("t1", "00000000-0000-4000-8000-000000000001", "Ada"), shell("t2", "00000000-0000-4000-8000-000000000002", "Bea")];
 const registry = [{ id: "p-fury", name: "fury", folder: "/Users/me/fury", machine: "", missing: false }];
 
-async function draw({ spaces = () => [], agents = () => [], panes = () => [], terminals = () => [], collapsed = false } = {}) {
+async function draw({ spaces = () => [], agents = () => [], panes = () => [], terminals = () => [], collapsed = false, view: shown = "spaces" } = {}) {
   const { host, handlers, ids, texts, icons, clear } = recorder();
+  const overlays = [], popup = { now: {} };
   const shared = (k) => (k === "kanso.registry" ? registry : k === "sidebar.collapsed" ? collapsed : null);
-  const { Spaces } = await loadSidebar(host, { shared, spaces, panes, agents, terminals, machines: () => [] });
-  const view = Object.assign(new Spaces(), mountedState({ shown: new Set(spaces().map((w) => w.id)), threadGroup: true }));
+  const { Spaces } = await loadSidebar(host, { shared, spaces, panes, agents, terminals, machines: () => [], openOverlay: (o) => overlays.push(o), closeOverlay() {}, props: () => popup.now });
+  const view = withParts(Object.assign(new Spaces(), mountedState({ shown: new Set(spaces().map((w) => w.id)), threadGroup: true, view: shown, threads: {} })));
   const render = drawEachTime(view, clear);
-  return { view, handlers, ids, texts, icons, render };
+  return { view, handlers, ids, texts, icons, render, overlays, popup };
 }
-const asleepProject = () => draw({ spaces: () => fury([asleepTab]), panes: () => sleepers, terminals: () => sleeperTerms });
+const asleepProject = (more = {}) => draw({ spaces: () => fury([asleepTab]), panes: () => sleepers, terminals: () => sleeperTerms, ...more });
 
 const cx = { stop_propagation() {}, notify() {} };
 const has = (ids, id) => ids.includes(id);
@@ -85,6 +86,7 @@ test("a sleeping tab inside a live project is one row, and a click shows its age
 test("Status and Threads start an asleep project collapsed", async () => {
   const status = await asleepProject();
   status.view.view = "agents";
+  status.view.redraw();
   status.render();
   assert.equal(has(status.ids, "section-asleep"), true);
   assert.equal(has(status.ids, "asleep-group-project:sp1"), true);
@@ -96,6 +98,7 @@ test("Status and Threads start an asleep project collapsed", async () => {
   const threads = await asleepProject();
   threads.view.view = "threads";
   threads.view.threads = {};
+  threads.view.redraw();
   threads.render();
   assert.equal(has(threads.ids, "space-agent-zz:t1"), false, "a project asleep is closed in Threads too");
   const head = [...threads.ids].find((id) => id.startsWith("thread-project-"));
@@ -103,4 +106,19 @@ test("Status and Threads start an asleep project collapsed", async () => {
   threads.handlers[`on_click:${head}`]({}, cx);
   threads.render();
   assert.equal(has(threads.ids, "space-agent-zz:t1"), true);
+});
+
+test("On the rail, the asleep tile of each view opens the popup of who sleeps, and a sleeper there opens its Wake menu", async () => {
+  for (const [shown, tile, title, hint] of [["spaces", "space-sp1", "fury", null], ["agents", "rail-section-asleep", "Asleep", "fury"], ["threads", "rail-thread-project-sp1", "fury", null]]) {
+    const { view, handlers, ids, icons, overlays, popup } = await asleepProject({ collapsed: true, view: shown });
+    assert.equal(has(ids, tile), true, `${shown}: the asleep tile is on the rail`);
+    assert.equal(icons.includes("mods/kanso-chrome/icons/moon.svg"), true, `${shown}: it carries the moon`);
+    handlers[`on_click:${tile}`]({}, cx);
+    const { railMenu } = overlays.at(-1).props;
+    assert.deepEqual(clone([railMenu.title, railMenu.rows.map((r) => [r.name, r.status, r.hint])]), [title, [["Ada", "asleep", hint], ["Bea", "asleep", hint]]], `${shown}: pressed, the popup lists who sleeps`);
+    popup.now = { railMenu, overlay: 1 };
+    view.railMenuView(SIDEBAR_THEME);
+    view.menuActs[0](cx);
+    assert.deepEqual(clone([overlays.at(-1).props.menu?.address, overlays.at(-1).props.menu?.name]), ["zz:t1", "Ada"], `${shown}: a sleeper opens its Wake menu`);
+  }
 });

@@ -1,5 +1,5 @@
 // Each fact is one sentence: a finished row, an update, a question, low memory, a failed sleep, a server with no pane.
-import { loadWorkspaceChrome, loadTabs, loadQuestionOf } from "./mod-fixtures.mjs";
+import { mountFooter, loadTabs, loadQuestionOf } from "./mod-fixtures.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
@@ -43,11 +43,10 @@ test("An update draws no dot on the gear or the footer", async () => {
     div: drawn.node, svg: drawn.node, image: drawn.node, h_flex: drawn.node, v_flex: drawn.node, Button: { new: drawn.node }, Popover: { new: drawn.node },
     theme, run: () => {}, openOverlay: () => {}, home: () => "/Users/me", window: () => ({ platform: "macos" }),
   };
-  const { WorkspaceChrome } = await loadWorkspaceChrome({
-    ...host, props: () => ({ footer: true }), shared: () => null, setShared: () => {},
+  const footer = await mountFooter({
+    ...host, shared: () => null, setShared: () => {},
     updates: () => ({ app: { ready: "0.1.16" } }), keys: () => [], settings: () => ({}),
   });
-  const footer = new WorkspaceChrome();
   footer.updater = { available: () => "3.31.0", busy: false, refused: () => null, install() {} };
   footer.render();
   const { Tabs } = await loadTabs({

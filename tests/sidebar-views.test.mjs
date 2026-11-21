@@ -1,5 +1,5 @@
 import { loadSessionHeight } from "./mod-fixtures.mjs";
-import { loadSidebar, mountedState, recorder } from "./sidebar-fixtures.mjs";
+import { loadSidebar, mountedState, withParts, recorder } from "./sidebar-fixtures.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { load, clone } from "./helpers.mjs";
@@ -28,12 +28,12 @@ async function sidebar(state) {
     machines: () => state.layouts ?? [{ name: null, layout: "ready" }], run: (cmd, args) => calls.push([cmd, clone(args ?? null)]),
     window: () => ({ platform: "macos", active: true }),
   });
-  const view = Object.assign(new Spaces(), mountedState({
+  const view = withParts(Object.assign(new Spaces(), mountedState({
     git: state.git ?? {}, shown: new Set(spaces.map((s) => s.id)),
     agentsFolded: state.agentsFolded ?? new Set(), sectionsFolded: state.sectionsFolded ?? new Set(), shelvesOpen: state.shelvesOpen ?? new Set(),
     hoverSpace: state.hoverSpace ?? null, hoverRow: state.hoverRow ?? null, threads: state.threads ?? null, view: state.view ?? "spaces",
     ...state.own,
-  }));
+  })));
   if (state.before) state.before(view);
   view.render();
   const { ids, texts, tips, icons, handlers } = drawn;

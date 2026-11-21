@@ -138,7 +138,7 @@ test("The scan finds a bare press with its file and line, through .when, and pas
 
 test("The press targets this baseline started from are drawn by the kit now", () => {
   const baseline = JSON.parse(repoText(BASELINE));
-  for (const file of ["kanso/mods/kanso-chrome/main.js", "kanso/mods/kanso-chrome/sidebar-footer.js", "kanso/mods/kanso-dojo/main.js", "kanso/mods/kanso-dojo/pets.js", "kanso/mods/kanso-help/main.js", "kanso/mods/kanso-panel/doc.js",
+  for (const file of ["kanso/mods/kanso-chrome/main.js", "kanso/mods/kanso-spaces/sidebar-footer.js", "kanso/mods/kanso-dojo/main.js", "kanso/mods/kanso-dojo/pets.js", "kanso/mods/kanso-help/main.js", "kanso/mods/kanso-panel/doc.js",
     "kanso/mods/kanso-settings/main.js", "kanso/mods/kanso-sim/main.js", "kanso/mods/kanso-spaces/main.js"]) {
     assert.equal(baseline[file], undefined, `${file} is listed`);
   }
@@ -197,13 +197,13 @@ test("A row that acts is the kit's Button with the ring: the dōjō's levels, Si
 
 // Each target the issue named, and the kit call that draws it now; the hand helpers they had are gone.
 const DRAWN = {
-  "kanso/mods/kanso-chrome/sidebar-footer.js": ["button({ label, kind: 'icon', size: 'lg', icon: name, spin: busy, disabled: busy })", "row({ icon: 'lu-settings', name: 'Settings', names: true, nameInk: 'muted' })"],
+  "kanso/mods/kanso-spaces/sidebar-footer.js": ['button({ label, kind: "icon", size: "lg", icon: name, spin: busy, disabled: busy })', 'row({ icon: "lu-settings", name: "Settings", names: true, nameInk: "muted" })'],
   "kanso/mods/kanso-dojo/main.js": ['button({ label: "Choose your pet", kind: "quiet"', 'row({ letter: String(L.n), name: L.name'],
   "kanso/mods/kanso-dojo/pets.js": ['button({ label: p.name, kind: "quiet", active: on, content: [face] })(`pet-${p.id}`'],
   "kanso/mods/kanso-panel/doc.js": ['kitButton({ label: tip, kind: "icon", size: "sm"'],
   "kanso/mods/kanso-panel/look.js": ['thumbnail({ image: shown?.image ?? "", label: item.name, selected: on, loading: Boolean(shown?.busy), color: item.color ?? "" })('],
   "kanso/mods/kanso-panel/pr-view.js": ['kitRow({ icon: on ? "chevron-down" : "chevron-right", name: label'],
-  "kanso/mods/kanso-panel/pr.js": ["(`pr-check-${i}`, c, {", "kitRow({ name: body, second, wrap: true })(`pr-thread-${i}`, c, {", "(`pr-file-${i}`, c, {"],
+  "kanso/mods/kanso-panel/pr.js": ["(`pr-check-${i}`, c, {", "kitRow({ name: body, second, wrap: true, verbs })(`pr-thread-${i}`, c, {", "(`pr-file-${i}`, c, {"],
   "kanso/mods/kanso-panel/worktrees.js": ['explainButton({ agent: this.explainer?.name ?? "an agent", size: "sm" })(`wt-explain-'],
   "kanso/mods/kanso-settings/main.js": ['kitButton({ label, kind: "quiet", active: this.capture?.row === row, content: ['],
   "kanso/mods/kanso-sim/main.js": ["})(`sim-device-${item.id}`, c, { onClick: (next) => this.pick(item, next) })"],

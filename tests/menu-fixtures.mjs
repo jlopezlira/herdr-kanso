@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { load, clone, gpuiHost, drawingHost, popoverHost, CHROME_NIGHT, fieldWith } from "./helpers.mjs";
-import { mountChrome } from "./mod-fixtures.mjs";
+import { mountFooter } from "./mod-fixtures.mjs";
 
 const TABLE = JSON.parse(readFileSync(new URL("../kanso/keys.json", import.meta.url), "utf8"));
 export const BINDINGS = [...Object.entries(TABLE).flatMap(([section, keys]) => Object.entries(keys).map(([chord, action]) => ({ section, keys: chord, action }))),
@@ -53,12 +53,12 @@ export async function footer({ shared = {}, ready = null, bindings = [{ action: 
   const host = {
     ...popoverHost(),
     appHome: () => "/home/me/.config/herdr-app", notify: (notice) => { notices.push(notice); }, knownAgents: (options) => { lookups.push(options); return agents(options); },
-    theme: () => FOOTER_NIGHT, props: () => ({ footer: true }), shared: (key) => shared[key] ?? null, setShared: () => {},
+    theme: () => FOOTER_NIGHT, shared: (key) => shared[key] ?? null, setShared: () => {},
     run: (name, args) => { ran.push([name, args]); }, openOverlay: (spec) => { overlays.push(spec); return "o"; },
     updates: () => ({ app: { ready } }), keys: () => bindings, settings: () => ({ font_family: "Mono" }), window: () => ({ platform: "macos" }),
   };
-  const view = await mountChrome(host);
-  const kit = await load("kanso-chrome/ui.js", ["H", "G", "T", "SIDEBAR", "PANE", "SPIN"], host);
+  const view = await mountFooter(host);
+  const kit = await load("kanso-spaces/ui.js", ["H", "G", "T", "SIDEBAR", "PANE", "SPIN"], host);
   view.updater = { available: () => null, busy: false, refused: () => null, install: (context) => installs.push(context), ...updater };
   return { view, ran, overlays, installs, notices, lookups, ...kit };
 }

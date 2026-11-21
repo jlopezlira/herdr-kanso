@@ -1,9 +1,9 @@
-import { temporaryKdb, loadPullRequest, loadPanelKdb, loadGroupInbox, loadAuthTiming } from "./mod-fixtures.mjs";
+import { temporaryKdb, loadGroupInbox, loadAuthTiming } from "./mod-fixtures.mjs";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { join } from "node:path";
-import { databaseTimer, load, context, callContext, exec as realExec, success, failure, clone as plain, refreshedContext } from "./helpers.mjs";
-import { blankPanel, refreshAgain, openInbox, SIGNED_OUT } from "./pr-fixtures.mjs";
+import { load, context, callContext, exec as realExec, success, failure, clone as plain, refreshedContext } from "./helpers.mjs";
+import { openedPanel, recorder, refreshAgain, openInbox, drawOpenBoard, SIGNED_IN, SIGNED_OUT } from "./pr-fixtures.mjs";
 
 const AUTH = "github.com\n  Logged in to github.com account jj (keyring)\n  - Active account: true\n  - Token: gho_secret\n";
 
@@ -108,41 +108,11 @@ test("a fresh inbox is not fetched, and a hidden panel does not touch the networ
   const { dir, db } = await database(t);
   await db.run(itemRow("https://github.com/o/r/pull/1", "o", "r", 1, "Cached", "2026-11-01T00:00:00Z"));
   const { refreshInbox } = await load("kanso-panel/pr-inbox.js", ["refreshInbox"], { exec: realExec, appHome: () => dir });
-  const session = { status: "ok", login: "jj", hosts: [{ host: "github.com", login: "jj", active: true }] };
+  const session = SIGNED_IN;
   const provider = { id: "github", inbox() { throw new Error("network"); } };
   const model = await refreshInbox({ db, run: () => { throw new Error("network"); }, provider, session, shown: false, now });
   assert.equal(model.needs[0].title, "Cached");
 });
-
-function recorder() {
-  const texts = [];
-  const ids = [];
-  const node = () => {
-    const api = new Proxy({}, {
-      get(_target, prop) {
-        if (prop === "child") return (child) => {
-          if (typeof child === "string" || typeof child === "number") texts.push(String(child));
-          return api;
-        };
-        if (prop === "children") return (list) => {
-          for (const child of list ?? []) if (typeof child === "string") texts.push(child);
-          return api;
-        };
-        if (prop === "when") return (cond, fn) => (cond ? fn(api) : api);
-        return () => api;
-      },
-    });
-    return api;
-  };
-  return {
-    texts, ids, div: node, svg: node, v_flex: node, h_flex: node,
-    Button: { new: (id) => { ids.push(id); return node(); } },
-    Popover: { new: () => node() },
-    Input: { new: () => node() },
-    InputState: { new: () => ({}) },
-    TextView: { markdown: () => node() },
-  };
-}
 
 const tone = new Proxy({}, { get: () => "#888" });
 const ITEM_COLUMNS = "url,provider,host,owner,name,number,title,state,draft,author,role,updated_at,fetched_at";
@@ -183,9 +153,7 @@ async function panelFor(t, { gh, git, dir, host: more = {}, state }) {
     return failure("");
   };
   const host = { ...ui, exec, appHome: () => dir, home: () => "/Users/x", key: () => "repo", location: () => ({ cwd: "/work/herdr-kanso", on: null }), ...more };
-  const { PullRequest } = await loadPullRequest(host);
-  const { Kdb } = await loadPanelKdb(host);
-  return { panel: blankPanel(PullRequest, new Kdb(databaseTimer), state), calls, ui };
+  return { panel: await openedPanel(host, state), calls, ui };
 }
 
 const focused = { number: 4, title: "Focused", url: "https://github.com/jlopezlira/herdr-kanso/pull/4", state: "OPEN", author: { login: "jj" }, headRefName: "feat", baseRefName: "main", updatedAt: "2026-11-01T00:00:00Z", files: [], additions: 1, deletions: 1, changedFiles: 1, body: "Short." };
@@ -279,24 +247,22 @@ test("Needs you groups another project apart from the focused one, and skips the
   }));
   assert.equal(calls.some((call) => call.startsWith("gh search") || call.includes(" -R ")), false, "fresh cache skips the network");
   assert.equal(panel.session.inboxOpen, false, "an unseen review stays on this branch");
-  assert.equal(panel.session.inboxTab, "needs");
   const { groupInbox } = await loadGroupInbox();
   const needs = groupInbox(panel.session.inbox.needs, panel.session.inbox);
   assert.deepEqual(plain(needs.map((group) => group.title)), ["eres-admin-app"]);
   assert.equal(needs[0].rows[0].title, "Review me");
   assert.notEqual(eres.row.folder, kanso.row.folder);
-  panel.inboxPage(tone);
+  await drawOpenBoard(panel, tone);
   assert.ok(ui.texts.includes("Needs you"));
   assert.ok(ui.texts.includes("Yours"));
   assert.ok(ui.texts.includes("eres-admin-app"));
-  assert.equal(ui.texts.includes("herdr-kanso"), false, "the focused repository is not this group");
+  assert.ok(ui.texts.includes("herdr-kanso"), "every repository has its block, the focused one's too");
   assert.ok(ui.texts.some((text) => text.includes(" · new")));
   assert.ok(ui.texts.some((text) => text.includes("+12")));
   const stored = await realExec("sqlite3", ["-json", file, "SELECT detail FROM pr_providers;"]);
   assert.equal(stored.stdout.includes("gho_secret"), false);
   assert.equal(stored.stdout.includes("signed in"), true);
 
-  panel.session.inboxTab = "yours";
   const yours = groupInbox(panel.session.inbox.yours, panel.session.inbox);
   assert.deepEqual(plain(yours.map((group) => group.title)), ["herdr-kanso"]);
 });
@@ -440,8 +406,7 @@ test("each signed-in host is read as its own account", async (t) => {
   assert.equal(titled(panel.session.inbox.needs, "For jj"), false);
   assert.equal(titled(panel.session.inbox.yours, "Mine on github"), true);
   assert.deepEqual(plain(panel.session.inbox.logins).toSorted(), ["ent", "jj"]);
-  panel.session.inboxTab = "yours";
-  panel.inboxPage(tone);
+  await drawOpenBoard(panel, tone);
   assert.ok(ui.texts.some((text) => text.includes(" · you")));
 });
 

@@ -12,6 +12,9 @@ import { ageOf, footLine } from "./pr-poll.js";
 import { aliasText, machineTitle } from "./pure.js";
 import { verdictBody } from "./pr-body.js";
 import { dot } from "./ui-dot.js";
+import { field } from "./ui-field.js";
+import { REVIEWS, ready, reviewable } from "./pr-review.js";
+import { canUndo, refusedTitle, saidOf } from "./pr-act.js";
 
 
 export function footOf(panel) {
@@ -60,6 +63,7 @@ function onAction(panel, action, cx) {
   if (action.target === "details") return panel.setDetails(cx, true);
   if (action.target === "log" || action.target === "reply" || action.target === "github" || action.target === "cli") return panel.openLink(action.url);
   if (action.target === "sign-in") return panel.signIn();
+  if (action.target === "new") return panel.compose(cx);
   const go = (next) => panel.runWrite(action, next);
   if (action.armed) return panel.armed.press(action.target, cx, go);
   return go(cx);
@@ -77,8 +81,8 @@ export function listedRow(panel, c, p, i, { finished = false, id = null } = {}) 
 }
 
 // A pull request in a list: its title, its state and what it changes, then who and when.
-export const prRow = (id, c, p, { meta, state, on = false, onClick }) => row(id, c, {
-  name: p.title, detail: [state, p.additions == null ? null : diffText({ add: p.additions, del: p.deletions })], meta: on ? "Shown" : null, second: meta, current: on, onClick,
+export const prRow = (id, c, p, { meta, state, on = false, focus = false, onClick }) => row(id, c, {
+  name: p.title, detail: [state, p.additions == null ? null : diffText({ add: p.additions, del: p.deletions })], meta: on ? "Shown" : null, second: meta, current: on, focus, onClick,
 }).aria_selected(on).accessibility_label(`#${p.number} ${p.title}${on ? ", shown" : ""}`);
 
 function otherPrs(panel, c, titled) {
@@ -146,7 +150,8 @@ function heroTop(panel, c, view) {
       .children(preview.map((line) => div().text_size(T.body).text_color(c.text).child(line || " ")))))
     .child(h_flex().w_full().gap(G.lg).items_center().flex_wrap()
       .when(Boolean(view.primary), (row) => row.child(actionButton(panel, c, view.primary)))
-      .when(Boolean(view.quiet), (row) => row.child(quietAction(panel, c, view.quiet))));
+      .when(Boolean(view.quiet), (row) => row.child(quietAction(panel, c, view.quiet)))
+      .when(Boolean(view.also), (row) => row.child(quietAction(panel, c, view.also))));
   return scopedColumn(scope)
     .when(Boolean(panel.session.pr?.title), (el) => el.child(div().w_full().max_h(PR.titleMax).overflow_hidden().text_size(PR.title).line_height(1.3).font_medium().text_color(c.text).child(panel.session.pr.title)))
     .child(h_flex().gap(G.sm).items_center()
@@ -163,12 +168,51 @@ export function heroPieces(panel, c) {
   const note = panel.session.note ? [["remark", veil(failureBlock(panel.session.note)("remark", c))]] : [];
   const foot = footnote(panel, c);
   const tail = foot ? [["foot", foot.id("foot")]] : [];
+  const review = reviewPiece(panel, c);
+  const acted = shownOutcome(panel);
   return [
     ["hero", heroTop(panel, c, view).id("hero")],
+    ...(acted ? [["acted", outcomeLine(panel, c, acted).id("acted")]] : []),
+    ...(review ? [["review", veil(review.id("review"))]] : []),
     ...detailParts(panel, c, view).map(([id, el]) => [id, veil(el)]),
     ...note,
     ...tail,
   ];
+}
+
+const REVIEW_LOOK = { approve: "solid", changes: "tonal", comment: "tonal" };
+
+export function outcomeLine(panel, c, outcome, id = "pr-act") {
+  if (outcome.state === "refused") return failureBlock({ text: refusedTitle(outcome), source: saidOf(outcome) })(`${id}-refused`, c);
+  const line = h_flex().w_full().gap(G.sm).items_center().text_size(T.body)
+    .child(div().flex_1().min_w(0).truncate().text_color(outcome.state === "pending" ? c.dim : c.text).child(saidOf(outcome)))
+    .when(canUndo(outcome), (el) => el.child(quietLink(`${id}-undo`, panel.session.busy === "undo" ? "Undoing…" : "Undo", (cx) => panel.session.undo(cx), c, { disabled: Boolean(panel.session.busy) })));
+  const more = [
+    outcome.partial ? failureBlock({ text: refusedTitle(outcome), source: outcome.partial })(`${id}-partial`, c) : null,
+    outcome.undoError ? failureBlock({ text: "Undo failed", source: outcome.undoError })(`${id}-undo-refused`, c) : null,
+  ].filter(Boolean);
+  return more.length ? v_flex().w_full().gap(G.sm).child(line).children(more) : line;
+}
+
+export function outcomeFor(panel, url, at = null) {
+  const outcome = panel.session.acted;
+  if (!outcome || !url || panel.session.actedFor !== url) return null;
+  return (outcome.at ?? null) === at ? outcome : null;
+}
+
+export const shownOutcome = (panel, at = null) => outcomeFor(panel, panel.session.pr?.url, at);
+
+function reviewPiece(panel, c) {
+  const pr = panel.session.pr;
+  const can = reviewable(pr, panel.viewer);
+  if (!pr || !can.comment || !panel.reviewText) return null;
+  const body = panel.draftOf(pr.url);
+  const press = (kind) => button(`pr-review-${kind}`, REVIEWS[kind].label, (cx) => panel.session.review(kind, panel.draftOf(pr.url), cx), c,
+    { kind: REVIEW_LOOK[kind], small: true, disabled: Boolean(panel.session.busy) || !ready(kind, body) });
+  return v_flex().w_full().gap(G.sm)
+    .child(section(c, "Review", ""))
+    .child(field("pr-review-text", panel.reviewText, c, { spoken: "Review" }))
+    .child(h_flex().gap(G.sm).flex_wrap().children(Object.keys(REVIEWS).filter((kind) => can[kind]).map(press)));
 }
 
 export function drawHero(panel, c) {

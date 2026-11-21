@@ -3,7 +3,7 @@ import { loadUpdater, loadSettings } from "./mod-fixtures.mjs";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { hostInstall } from "../kanso/mods/kanso-chrome/release.js";
-import { context, tape, success, failure, storeShared, tickingContext } from "./helpers.mjs";
+import { context, success, failure, storeShared, tickingContext, settingsTape, settingsView } from "./helpers.mjs";
 
 const listing = [
   "a\trefs/tags/v3.29.0",
@@ -131,32 +131,26 @@ const colors = () => ({
 });
 
 async function settingsOf(store) {
-  const ui = tape();
-  ui.host.Toggle = { new: (id) => ui.host.Button.new(id) };
-  const { Settings } = await loadSettings({
-    ...ui.host,
+  const ui = settingsTape();
+  const settings = await settingsView(loadSettings, ui, {
     theme: colors,
     props: () => ({}),
     ...storeShared(store),
     appHome: () => "/app",
     keys: () => [],
-    run: () => {},
-    closeOverlay: () => {},
   });
-  const settings = new Settings();
-  settings.page = "news";
+  settings.page = "updates";
   settings.handle = {};
-  settings.news = { entries: [], error: null, from: null };
   settings.installed = "3.30.0";
   return { ui, settings };
 }
 
 const drawn = (ui) => ui.texts.join("");
 
-test("What's new offers Stable or Early, and Early is the only place that asks for a star", async () => {
+test("Updates offers Stable or Early, and Early is the only place that asks for a star", async () => {
   const store = { "kanso.update": { autoCheck: true } };
   const { ui, settings } = await settingsOf(store);
-  settings.newsPage(colors(), colors());
+  settings.updatesPage(colors(), colors());
   assert.equal(settings.shown(), "3.30.0");
   assert.match(drawn(ui), /Updates/);
   assert.match(drawn(ui), /Stable/);
@@ -178,7 +172,7 @@ test("What's new offers Stable or Early, and Early is the only place that asks f
 
   ui.texts.length = 0;
   ui.handlers.clear();
-  settings.newsPage(colors(), colors());
+  settings.updatesPage(colors(), colors());
   assert.equal(drawn(ui).includes("until Stable reaches it"), false);
   assert.match(drawn(ui), /Early gets changes before they are tested by everyone\. If kansō is useful to you, Star on GitHub helps others find it\./);
   ui.handlers.get("updates-star")(null, cx);

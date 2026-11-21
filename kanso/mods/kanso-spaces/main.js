@@ -7,11 +7,12 @@ import { systemApi } from "./platform-system.js";
 // Modified by José Gutiérrez (minimalistic, 0oz design fork): renamed from oz-spaces; each space lists its agents (agents.js), folded by clicking the space. The active space is a faint wash of the text color, never a theme accent.
 // Modified by jlopezlira (Kanso, https://github.com/jlopezlira/herdr-kanso): renamed from mn-spaces; a fixed 76px rail when collapsed (resizable only when open), space avatars in the theme's hues, a breathing dot instead of a spinner, background polling slowed when the window is behind.
 // Modified by Iván Campaña (https://github.com/icampana): layout writers set the tree only when it is Kanso's, so a switch from another layout never saves that layout into kanso.json.
+// SidebarFooter is derived from the sidebar footer of the `workspace-chrome` mod shipped with Herdr (Apache-2.0, https://github.com/herdrdev/herdr-app), by way of kanso-chrome.
 
 import { View, div } from "gpui-kit";
 import { v_flex, h_flex, ScrollHandle } from "gpui-base";
 import { agentSession, agentLabel, renameTerminal, SETTLED_LABEL, SNOOZE_LABEL, UNREAD_LABEL, THREAD_LABEL, settledOf, snoozedUntil, isUnread, woke, backFromSettled, threadSections, snoozePresets, THREAD_ORDERS, STATUS_ORDERS, withTerminals, NAME_LABEL, PIN_LABEL, ORDERS, DEFAULT_ORDER, orderSessions, moved, nest, track, elapsed, activityOf, bySection, duration, trackSteps, stepOf, tasksOf, said, FOLD_MS, pill, sessionHeight, mostUrgent } from "./agents.js";
-import { ThreadLocator, findThreads, pidsOf, aliveIn, aliveDue, ALIVE_MS, ALIVE_BEHIND_MS } from "./threads.js";
+import { ThreadLocator, findThreads, sameThread, pidsOf, aliveIn, aliveDue, ALIVE_MS, ALIVE_BEHIND_MS } from "./threads.js";
 import { Panel, sameSeen } from "./panel.js";
 import { Store } from "./store.js";
 import { Kdb, restDue, machinesToAsk, kansoDir } from "./kdb.js";
@@ -29,18 +30,20 @@ import { projectRow } from "./project-row.js";
 import { computerRow, computerTools } from "./computer-row.js";
 import { section } from "./section.js";
 import { asleep } from "./asleep.js";
+import { machineReaches, asleepLook, withPending, withoutWaking, AWAY_MENU, FORGET_HELD, forgetHeld, holdForget } from "./row-states.js";
+import { SLEEP_PENDING, SLEEP_WAKING, SLEEP_FAILED, COULD_NOT_SLEEP, failedTerminals, withoutTerminals, RESUME_LABEL, asleepTerminal } from "./resume.js";
 import { tile } from "./tile.js";
 import { views, viewSwitch } from "./view-switch.js";
 import { pullKey, runPull, canWake, enterOpens, sectionMarkOf, sectionCount, rowDirectory, unnamedComputer, threadWord, threadActions, signInCommand, noProjectsOn, sortOf, foldTail, readWord } from "./sidebar-rows.js";
-import { DIALOG, H, G, T, R, W, SIDEBAR, GLIDE, OPACITY, TINT, alpha, sidebarSides, tokens } from "./ui.js";
+import { DIALOG, H, G, T, R, W, SIDEBAR, GLIDE, OPACITY, TINT, ARM_MS, alpha, sidebarSides, tokens } from "./ui.js";
 import { ELBOW } from "./ui-row.js";
 import { button, Armed } from "./ui-button.js";
 import { dialog } from "./ui-dialog.js";
 import { field, TextField } from "./ui-field.js";
-import { menu, emptyState, skeletonOf, tooltip } from "./kit.js";
-import { boundChord, chordOf } from "./ui-tooltip.js";
+import { menu, emptyState, skeletonOf, stack, tooltip } from "./kit.js";
+import { boundChord, chordOf, hintOf } from "./ui-tooltip.js";
 import { menuList, menuHeight, RUN_ROWS } from "./ui-menu.js";
-import { pieceLines, openPieceMenu } from "./piece-lines.js";
+import { pieceLines, openPieceMenu, hidePiece } from "./piece-lines.js";
 import { toolbar } from "./toolbar.js";
 import { header } from "./header.js";
 import { pieces, shown, runs, asksPs, setPiece, pieceOf, STORE } from "./pieces.js";
@@ -53,7 +56,11 @@ import { createAwake, keepAwake } from "./awake.js";
 import { NEEDS_YOU, EMPTY_NOTICE_MS, waitingSignature, sleepingSignature, sameQueue, waitingQueue, nextWaiting, queueState } from "./needs-you.js";
 import { queueControl, queueList } from "./needs-you-view.js";
 import { Visits, visited, stepped, beside } from "./agent-nav.js";
-import { spaces, machines, panes, agents, terminals, run, openOverlay, closeOverlay, props, exec, hc, theme, shared, setShared, watchFolder, window, nextCommand, focused, home, appHome, pickFolder, knownAgents, notify } from "herdr";
+import { spaces, machines, panes, agents, terminals, run, openOverlay, closeOverlay, props, exec, hc, theme, shared, setShared, watchFolder, window, nextCommand, focused, home, appHome, pickFolder, knownAgents, notify, keys, updates } from "herdr";
+import { sidebarFooter } from "./sidebar-footer.js";
+import { ITEM, COLLAPSED, KANSO_SETTINGS, explainRefusal, refusalBlock, settingsEntries, updateLabel } from "./footer-model.js";
+import { Updater, STATE as UPDATE_STATE } from "./update.js";
+import { explainWith, findExplainer } from "./explain.js";
 
 const PREFS = ["machines.folded", "spaces.agentsFolded", "spaces.order", "spaces.statusOrder", "spaces.threadOrder", "spaces.threadGroup",
   "spaces.shelvesOpen", "spaces.custom", "spaces.view", "spaces.sections", "spaces.since"];
@@ -115,9 +122,16 @@ const tilde = (path) => { const base = trimmed(home()); return base && paths.wit
 const sleepTab = (spaceId, tab) => arrange({ sleep: { scope: "tab", space: spaceId, tab } });
 // A settled tab wakes whole; a terminal asleep in a tab still shown wakes alone.
 const wakeRow = (z) => arrange({ wake: z.settled ? { space: z.space, tab: z.tabId } : { space: z.space, terminal: z.terminal } });
+const reachesRow = (a) => {
+  const id = a.space ?? a.asleep?.space;
+  if (!id) return true;
+  const machine = spaces().find((s) => s.id === id)?.machine;
+  if (!machine) return true;
+  return machineReaches(machines().find((m) => m.name === machine)?.layout);
+};
 const openRow = (a) => {
   const open = enterOpens(a);
-  if (open?.wake) wakeRow(open.wake);
+  if (open?.wake) { if (canWake(a, reachesRow(a))) wakeRow(open.wake); }
   else if (open?.focus) run("pane.focus", { pane: open.focus });
   else if (open?.peek) run("terminal.peek", { terminal: open.peek });
 };
@@ -138,6 +152,17 @@ const registry = () => { const rows = shared(REGISTRY); return Array.isArray(row
 // A sleep's key as a project's (a trailing / never makes two of one place).
 const sameKey = (key) => { const i = String(key).indexOf(":"); return `${key.slice(0, i)}:${trimmed(key.slice(i + 1))}`; };
 const projectAt = (key) => registry().find((p) => keyOfProject(p) === sameKey(key)) ?? null;
+const ROW_SHARED = [REGISTRY, NEEDS_YOU, "strip.state", SLEEP_PENDING, SLEEP_WAKING, SLEEP_FAILED, FORGET_HELD, KNOWN_AGENTS, "kanso.battery", "space.colors"];
+const rowInputs = () => ({ spaces: spaces(), panes: panes(), terminals: terminals(), agents: agents(), machines: machines(), focused: focused(), front: window()?.active === true, keys: keys(),
+  shared: ROW_SHARED.map((key) => shared(key)), pieces: Object.entries(pieces(shared)).filter(([id]) => id.startsWith("sidebar.")) });
+const ROW_STATE = ["hoverRow", "hoverSpace", "hoverHead", "hoverMachine", "pressed", "over", "draggedAgent", "overAgent", "kbd", "navKey", "needsOpen", "needsEmpty", "foldH", "folded",
+  "agentsFolded", "sectionsFolded", "asleepOpen", "shelvesOpen", "alive", "git", "held", "custom", "machines", "parked", "waking", "login", "failed", "pulling", "hints", "sync", "hostName"];
+const ROW_REPLACED = ["threadsShown", "steps", "since", "tasks"];
+const listed = (value) => (value instanceof Set || value instanceof Map ? [...value] : value);
+const MINUTE_MS = 60_000;
+const BORN_MS = 1500;
+const bornBy = (at, now) => now - at > BORN_MS;
+const narrowAt = (width) => (width ?? SIDEBAR.w) < SIDEBAR.narrow;
 // Kanso's worktrees: beside its database here; on another machine, ~/.kanso/worktrees (the script's default).
 const kansoWorktrees = (machine) => (machine ? "" : paths.join(appHome(), WORKTREES));
 const spaceAt = (id) => spaces().findIndex((s) => s.id === id);
@@ -174,14 +199,113 @@ export function tone(t, status) {
   return t[status] ?? t.unknown;
 }
 
-export default class Spaces extends View {
+const CUT_DRAW_RETRY_MS = 250;
+const CUT_DRAW_RETRY_MAX_MS = 4000;
+
+class RetryingView extends View {
+  render() {
+    const finished = this.drawsFinished ?? 0;
+    const started = (this.drawsStarted ?? 0) + 1;
+    this.drawsStarted = started;
+    const wait = Math.min(CUT_DRAW_RETRY_MS * 2 ** Math.max(0, started - 1 - finished), CUT_DRAW_RETRY_MAX_MS);
+    this.clock.after(wait, (cx) => { if ((this.drawsFinished ?? 0) < started) cx.notify(); });
+    try {
+      return this.draw();
+    } finally {
+      this.drawsFinished = Math.max(this.drawsFinished ?? 0, started);
+    }
+  }
+}
+
+class LookView extends RetryingView {
+  init(look, cx) {
+    this.look = look;
+    this.clock = cx.timer;
+  }
+  update(look) { this.look = look; }
+}
+
+const sidebarPart = (owner) => class SidebarPart extends LookView {
+  init(look, cx) {
+    super.init(look, cx);
+    if (look.piece === "switch") owner.makeFind();
+  }
+  draw() {
+    if (this.look.piece === "header") return owner.header(this.look);
+    if (this.look.piece === "switch") return owner.switchPart(this.look);
+    return owner.rows(this.look);
+  }
+};
+
+export class SidebarFooter extends LookView {
+  init(look, cx) {
+    super.init(look, cx);
+    this.armed = new Armed();
+    this.menuOpen = false;
+    this.settingsFocus = cx.focus_handle();
+    this.updater = new Updater();
+    this.updater.start(cx, { polls: false });
+    this.explainer = null;
+    this.lookup = null;
+    cx.timer.after(0, (later) => this.known(later));
+  }
+
+  settingsMenu() {
+    if (!this.menuOpen) return null;
+    const acts = {
+      [ITEM.kanso]: (cx) => { this.setMenu(false, cx); run(KANSO_SETTINGS); },
+      [ITEM.herdr]: (cx) => { this.setMenu(false, cx); run("app.settings"); },
+      [ITEM.updateHerdr]: (cx) => this.armed.press(ITEM.updateHerdr, cx, () => run("app.update")),
+    };
+    const { ready, hint } = this.look;
+    const entries = settingsEntries({ ready, hint });
+    return menu({ title: "Settings", items: entries.map((entry) => (entry.separator ? entry : { ...entry, armed: this.armed.is(entry.key), onClick: acts[entry.key] })) });
+  }
+
+  setMenu(open, cx) {
+    this.menuOpen = open;
+    cx.notify();
+  }
+
+  agent() {
+    this.lookup ??= findExplainer().then((agent) => {
+      this.explainer = agent;
+      return agent;
+    });
+    return this.lookup;
+  }
+
+  known(later, use = () => {}) {
+    return later.spawn(async (again) => {
+      use(await this.agent());
+      again.notify();
+    });
+  }
+
+  explain(why, cx) {
+    cx.timer.after(0, (later) => this.known(later, (agent) => explainWith(agent, { name: "Explain the update", folder: appHome(), task: explainRefusal(why) })));
+  }
+
+  draw() {
+    const { collapsed } = this.look;
+    const update = this.updater.available(), busy = Boolean(this.updater.busy);
+    const why = update && !busy ? this.updater.refused() : null;
+    const install = (cx) => this.updater.install(cx), refused = why ? refusalBlock(why, this.explainer?.name ?? "an agent") : null, menu = this.settingsMenu();
+    const machine = shown("footer.machine", true, pieces(shared));
+    const presses = { ...(update ? { "refresh-cw": install } : {}), ...(machine ? { server: () => run("mod.open", { name: "kanso-computers" }) } : {}), ...(refused && !collapsed ? { [refused.fix]: install, [`Explain to ${refused.agent}`]: (cx) => this.explain(why, cx) } : {}), ...(menu ? {} : { settings: (cx) => this.setMenu(true, cx) }) };
+    return sidebarFooter({ update: update && updateLabel(update, busy), busy, refused, menu, collapsed, machine })(
+      "footer", tokens(theme()), { presses, focuses: { settings: this.settingsFocus }, onOpen: (open, cx) => this.setMenu(open, cx) });
+  }
+}
+
+export default class Spaces extends RetryingView {
   names = new Names(this);
 
   init(_props, cx) {
     this.clock = cx.timer;
     this.settleUntil = Date.now() + SETTLE;
     // Opened as a row's right-click menu (props().menu): nothing else to run.
-    if (props()?.menu || props()?.railMenu || props()?.spaceMenu || props()?.newAgent || props()?.trees || props()?.worktree || props()?.newConversation || props()?.newProject || props()?.machineMenu) {
+    if (props()?.menu || props()?.awayMenu || props()?.railMenu || props()?.spaceMenu || props()?.newAgent || props()?.trees || props()?.worktree || props()?.newConversation || props()?.newProject || props()?.machineMenu) {
       // Nothing is chosen for you: no row lit until the keyboard moves.
       this.armed = new Armed(); this.menuAt = -1; this.handle = cx.focus_handle();
       // A scroll handle is state: made here, never during render (Herdr refuses it there).
@@ -220,13 +344,13 @@ export default class Spaces extends View {
     // The first frame uses localStorage's copy; the database's answer replaces it when it comes.
     this.panel = new Panel(PREFS, this.leftNavStore());
     this.panelReady = false;
-    this.sinceLeft = new SinceLeft(this.leftNavStore().kdb);
+    this.sinceLeft = new SinceLeft(this.leftNavStore().kdb, (cx) => this.redraw(cx));
     this.prSeenAt = shared("kanso.pr.seen")?.at ?? 0;
     this.applyPrefs();
     cx.spawn(async (cx) => {
       this.panelTried = Date.now();
       try { if (await this.panel.load()) this.applyPrefs(); this.panelReady = true; } catch { /* tried again from keepSeen; the copy stays meanwhile */ }
-      cx.notify();
+      this.redraw(cx);
     });
     this.orderOpen = null;
     this.threads = null; // terminal -> its conversation (threads.js), once read
@@ -253,13 +377,13 @@ export default class Spaces extends View {
         this.parked = rows;
         await this.settleParked();
       } catch { /* the next look reads it */ }
-      cx.notify();
+      this.redraw(cx);
     });
     cx.spawn(async (cx) => {
       try {
         const result = await localService(systemApi).hostname({ short: false });
         const name = String(result?.stdout ?? "").replace(/\r/g, "").trim();
-        if (result?.code === 0 && name) { this.hostName = name; cx.notify(); }
+        if (result?.code === 0 && name) { this.hostName = name; this.redraw(cx); }
       } catch { /* the header says This computer */ }
     });
     // Remote machines: every 30 s in front, every 2 min behind.
@@ -282,6 +406,68 @@ export default class Spaces extends View {
       (command) => this.command(String(command).replace(/^kanso-spaces\./, ""), cx),
       cx.timer,
     )));
+    this.mountParts(cx);
+  }
+
+  mountParts(cx) {
+    const Part = sidebarPart(this);
+    this.rowsChanged();
+    const looks = this.looks();
+    this.parts = { header: cx.new(Part, looks.header), switch: cx.new(Part, looks.switch), rows: cx.new(Part, looks.rows), footer: cx.new(SidebarFooter, looks.footer) };
+    this.drawnLooks = looks;
+    this.paintTimer = cx.timer;
+  }
+
+  looks() {
+    const collapsed = shared(COLLAPSED) === true, map = pieces(shared), bindings = keys();
+    const switchOn = shown("sidebar.switch", true, map) !== false;
+    const view = switchOn ? this.view : "spaces";
+    const finding = Boolean(this.finding && !collapsed);
+    const orders = { order: this.order, statusOrder: this.statusOrder, threadOrder: this.threadOrder, threadGroup: Boolean(this.threadGroup) };
+    const { latest = null, channel = null, tag = null, refused = null, installs = null } = shared(UPDATE_STATE) ?? {};
+    return {
+      header: { piece: "header", view, collapsed, tools: this.toolsOpen === true, sortOpen: this.orderOpen ?? null, ...orders,
+        activity: shown("sidebar.activity", true, map) !== false, away: runs("sidebar.away", map) !== false, switch: switchOn },
+      switch: { piece: "switch", view: this.view, collapsed, finding, focused: finding && this.find.focused === true, shown: switchOn && !(collapsed && view === "spaces"),
+        open: collapsed && this.viewMenu === true, asks: visibleSpaces(spaces(), this.offNames()).some((s) => s.status === "blocked"),
+        chords: Object.fromEntries(Object.keys(VIEWS).map((key) => [key, boundChord(`kanso-spaces.view-${key}`, bindings)])) },
+      rows: { piece: "rows", view, collapsed, ...orders, query: finding ? this.find.value() : null, at: this.rowsAt ?? 0 },
+      footer: { collapsed, update: { latest, channel, tag, refused, installing: Object.keys(installs ?? {}).toSorted() }, ready: updates()?.app?.ready ?? null, hint: hintOf(KANSO_SETTINGS, bindings) },
+    };
+  }
+
+  redraw(cx) {
+    if (!this.parts) { cx.notify(); return; }
+    this.paint();
+  }
+
+  rowsShown(now = Date.now()) {
+    const fold = this.folding && { ...this.folding, moving: this.unfolded(this.folding.id, false, now) };
+    const host = rowInputs(), away = this.sinceLeft;
+    const times = [...host.agents.map((a) => [elapsed(a, this.since ?? {}, now), stepOf(a, this.steps, now)]),
+      ...Object.values(this.tasks ?? {}).flat().map((x) => duration(Math.max(0, now - x.start)))];
+    return JSON.stringify({ ...host, own: ROW_STATE.map((key) => listed(this[key])), fold, away: away?.rows.length ? [away.project, away.expanded, away.target, away.rows] : null,
+      remembered: listed(this.panel?.agents), ring: Boolean(this.kbd && this.handle.is_focused()), narrow: narrowAt(this.width),
+      born: Object.entries(this.born ?? {}).map(([id, at]) => [id, bornBy(at, now)]), times, minute: Math.floor(now / MINUTE_MS) });
+  }
+
+  rowsReplaced() {
+    return [...ROW_REPLACED.map((key) => this[key]), this.names.book];
+  }
+
+  rowsChanged() {
+    const read = this.rowsShown(), replaced = this.rowsReplaced();
+    const changed = read !== this.rowsRead || replaced.some((value, i) => value !== this.rowsRefs?.[i]);
+    this.rowsRead = read;
+    this.rowsRefs = replaced;
+    return changed;
+  }
+
+  paint() {
+    if (this.rowsChanged()) this.rowsAt = (this.rowsAt ?? 0) + 1;
+    const next = this.looks();
+    Object.entries(next).filter(([name, look]) => JSON.stringify(look) !== JSON.stringify(this.drawnLooks?.[name])).forEach(([name, look]) => this.parts[name].set_props(look));
+    this.drawnLooks = next;
   }
 
   leftNavStore() {
@@ -308,18 +494,18 @@ export default class Spaces extends View {
     if (p.newAgent) {
       this.askAgents(p.newAgent, cx);
       if (p.start && p.newAgent.folder && !p.newAgent.tree) {
-        worktreesOf(p.newAgent.folder, p.newAgent.machine || null).then((list) => { this.repo = list.length > 0; this.trees = list.filter((x) => !x.main && !x.prunable); cx.notify(); });
+        worktreesOf(p.newAgent.folder, p.newAgent.machine || null).then((list) => { this.repo = list.length > 0; this.trees = list.filter((x) => !x.main && !x.prunable); this.redraw(cx); });
       }
     }
     const place = p.spaceMenu ? this.menuPlace(p.spaceMenu) : null;
     // A worktree whose folder was deleted (prunable) is only git's note of it: not listed.
     if (place?.folder) {
-      worktreesOf(place.folder, place.machine || null).then((list) => { this.trees = list.filter((x) => !x.main && !x.prunable); cx.notify(); });
+      worktreesOf(place.folder, place.machine || null).then((list) => { this.trees = list.filter((x) => !x.main && !x.prunable); this.redraw(cx); });
     }
   }
 
   close() {
-    try { this.branch?.release(); this.projectName?.release(); this.convScroll?.release(); this.agentScroll?.release(); } catch { /* already gone */ }
+    try { this.branch?.release(); this.projectName?.release(); this.convScroll?.release(); this.agentScroll?.release(); this.find?.release(); } catch { /* already gone */ }
   }
 
   menuPlace(m) {
@@ -370,14 +556,14 @@ export default class Spaces extends View {
       this.projectFolder = trimmed(folder);
       if (!this.projectName.value().trim()) this.projectName.set_value(folderName(folder));
       this.projectError = null;
-      cx.notify();
+      this.redraw(cx);
     });
   }
 
   createProject(cx) {
     if (this.creating) return;
     const name = this.projectName.value().trim(), folder = this.projectFolder, start = Boolean(props().newProject?.start);
-    if (!folder) { this.projectError = "Choose its folder."; cx.notify(); return; }
+    if (!folder) { this.projectError = "Choose its folder."; this.redraw(cx); return; }
     this.creating = true;
     cx.spawn(async (cx) => {
       try {
@@ -390,7 +576,7 @@ export default class Spaces extends View {
         if (start) this.newAgentMenu(open ? placeOfSpace(open) : placeOfKey(keyOfProject(row), row));
         else if (open) run("space.select", { id: open.id });
       } catch (e) { this.projectError = String(e?.message ?? e); }
-      finally { this.creating = false; cx.notify(); }
+      finally { this.creating = false; this.redraw(cx); }
     });
   }
 
@@ -439,7 +625,7 @@ export default class Spaces extends View {
     return [
       { id: "conv-add-project", label: "New project with a conversation\u2026", act: () => this.addProject(true), icon: "folder-plus" },
       { id: "conv-folder", label: "Open a folder, no project\u2026", act: () => run("kanso-spaces.open-folder"), icon: "file" },
-      ...(machine ? [{ id: "conv-machine", label: "Add computer\u2026", act: () => run("mod.open", { name: "machine-add" }), icon: "server" }] : []),
+      ...(machine ? [{ id: "conv-machine", label: "Add computer\u2026", act: () => run("mod.open", { name: "kanso-computers" }), icon: "server" }] : []),
     ];
   }
 
@@ -551,7 +737,7 @@ export default class Spaces extends View {
   command(c, cx) {
     const space = /^space-(\d)$/.exec(c), view = /^view-(spaces|agents|threads)$/.exec(c);
     if (space) { const i = Number(space[1]); if (i >= 1 && i <= spaces().length) run("space.select", { index: i }); }
-    else if (view) { this.setView(view[1], cx); cx.notify(); }
+    else if (view) { this.setView(view[1], cx); this.paint(); }
     else if (c === "asleep") this.showAsleep(cx);
     else if (c === "needs-you.next") this.nextNeeds(cx);
     else if (c === "agent-up" || c === "agent-down") this.besideAgent(c === "agent-up" ? -1 : 1);
@@ -562,6 +748,8 @@ export default class Spaces extends View {
     else if (c.startsWith("sync-machine:") && c.length > "sync-machine:".length) this.toggleSync(c.slice("sync-machine:".length), cx);
     else if (c === "sidebar") this.toggleRail();
     else if (c === "needs-you.list") this.toggleNeeds(cx);
+    else if (c === "away-dismiss") this.sinceLeft?.dismiss(cx);
+    else if (c === "away-off") hidePiece("sidebar.away");
     else if (c === "list") this.enterList(cx);
     // From a popup, which is gone once clicked: the sidebar asks for the folder.
     else if (c === "add-project") this.addProject();
@@ -596,10 +784,10 @@ export default class Spaces extends View {
     const list = agents(), layouts = machines();
     const signature = waitingSignature(list, terms, asleep.dozing, NAME_LABEL);
     const layoutSignature = layouts.map((m) => m.layout).join(",");
-    const changed = signature !== this.needsSignature || this.threads !== this.needsThreads;
+    const changed = signature !== this.needsSignature || this.threadsShown !== this.needsThreads;
     if (!changed && layoutSignature === this.needsLayoutSignature) return this.needsQueue;
     this.needsSignature = signature;
-    this.needsThreads = this.threads;
+    this.needsThreads = this.threadsShown;
     this.needsLayoutSignature = layoutSignature;
     const named = () => {
       const names = new Map(terms.map((term) => [term.address, term.labels?.[NAME_LABEL]]));
@@ -632,8 +820,8 @@ export default class Spaces extends View {
     this.needsEmpty = true;
     const at = (this.needsEmptyAt ?? 0) + 1;
     this.needsEmptyAt = at;
-    cx.timer.after(EMPTY_NOTICE_MS, (cx) => { if (this.needsEmptyAt === at) { this.needsEmpty = false; cx.notify(); } });
-    cx.notify();
+    cx.timer.after(EMPTY_NOTICE_MS, (cx) => { if (this.needsEmptyAt === at) { this.needsEmpty = false; this.redraw(cx); } });
+    this.redraw(cx);
   }
 
   visit(list = agents()) {
@@ -685,7 +873,7 @@ export default class Spaces extends View {
       this.navKey = `agent:${this.refreshNeeds().rows[0]?.address}`;
       this.handle.focus();
     } else this.leaveList(cx);
-    cx.notify();
+    this.redraw(cx);
   }
 
   needsList(t, queue, now) {
@@ -697,31 +885,32 @@ export default class Spaces extends View {
 
   // Rows add themselves as they draw (navMark), in screen order; Esc goes back to the pane you came from.
   // Search opens a field in place of the view switch; the list narrows to what matches, a project kept as context. Esc brings the list back as it was.
-  openFind(cx) {
-    if (shared("sidebar.collapsed") === true) { run("mod.open", { name: "picker" }); return; }
-    if (!this.find) {
-      this.find = new TextField({ placeholder: "Find" });
-      this.find.on("change", (_e, cx) => cx.notify());
-      this.find.on("submit", (_e, cx) => this.enterList(cx, true));
-    }
-    this.finding = true;
-    this.find.focus();
-    cx.notify();
+  makeFind() {
+    this.find = new TextField({ placeholder: "Find" });
+    this.find.on("change", () => this.paint());
+    this.find.on("focus", () => this.paint());
+    this.find.on("blur", () => this.paint());
+    this.find.on("submit", (_e, cx) => { this.enterList(cx, true); this.redraw(cx); });
   }
 
-  closeFind(cx) {
+  openFind() {
+    if (shared("sidebar.collapsed") === true) { run("mod.open", { name: "picker" }); return; }
+    this.finding = true;
+    this.find.focus();
+    this.paint();
+  }
+
+  closeFind() {
     this.finding = false;
-    try { this.find?.release(); } catch { /* already gone */ }
-    this.find = null;
+    this.find.set_value("");
     this.handle.focus();
-    cx.notify();
+    this.paint();
   }
 
   findField(t) {
     const c = tokens(t);
-    return h_flex().id("spaces-find").flex_none().items_center().pl(G.sm).pr(SIDEBAR.gutter).pb(G.sm)
-      .on_key_down((e, cx) => { if (e.key === "escape") { cx.stop_propagation(); this.closeFind(cx); } })
-      .child(div().flex_1().min_w(0).child(field("spaces-find-field", this.find, c, { lead: "search", icon: "x", iconTip: "Close", onIcon: (cx) => this.closeFind(cx), spoken: "Find" })));
+    return stack({ variant: "sidebar find" }, field("spaces-find-field", this.find, c, { lead: "search", icon: "x", iconTip: "Close", onIcon: () => this.closeFind(), spoken: "Find" }))("spaces-find", c)
+      .on_key_down((e, cx) => { if (e.key === "escape") { cx.stop_propagation(); this.closeFind(); } });
   }
 
   // What the sidebar already knows, by name, step, branch or folder; a project that matches keeps all its sessions, one that does not stays for the sessions that do.
@@ -746,14 +935,14 @@ export default class Spaces extends View {
     this.handle.focus();
     // For the strip: ⌘⌥l (or →) now goes back to that pane.
     setShared("kanso.list", { from: this.listFrom, at: Date.now() });
-    cx.notify();
+    this.redraw(cx);
   }
 
   leaveList(cx, back = true) {
     this.kbd = false;
     if (shared("kanso.list")) setShared("kanso.list", null);
     if (back && this.listFrom) run("pane.focus", { pane: this.listFrom });
-    cx.notify();
+    this.redraw(cx);
   }
 
   // True when the keyboard's ring is on this row; `go` is its click, `here` the row you are in.
@@ -775,7 +964,7 @@ export default class Spaces extends View {
     const { move: listed, gAt } = listKey(e, this.listG);
     this.listG = gAt;
     const move = !listed && plain && k === "l" ? "enter" : listed;
-    if (!move && plain && (k === "/" || e.key_char === "/")) { this.leaveList(cx, false); this.openFind(cx); cx.stop_propagation?.(); return; }
+    if (!move && plain && (k === "/" || e.key_char === "/")) { this.leaveList(cx, false); this.openFind(); cx.stop_propagation?.(); return; }
     if (!move) return;
     cx.stop_propagation?.();
     if (move === "escape") { this.leaveList(cx); return; }
@@ -786,13 +975,13 @@ export default class Spaces extends View {
       if (!row) return;
       if (row.key.startsWith("agent:")) { this.kbd = false; setShared("kanso.list", null); }
       row.go(cx);
-      cx.notify();
+      this.redraw(cx);
       return;
     }
     const next = moveTo(move, at, nav.length);
     this.navKey = nav[next]?.key ?? this.navKey;
     if (this.needsOpen) this.needsScroll?.scroll_to_item(next);
-    cx.notify();
+    this.redraw(cx);
   }
 
   // One `ps` at a time for checkTasks and checkAlive: `psLook` is the start of the one out. One that has not answered in
@@ -826,11 +1015,11 @@ export default class Spaces extends View {
     const tasksOn = runs("sidebar.tasks", map);
     const working = mine.some((k) => k.status === "working");
     if (!working && !due) {
-      if (!mine.length && Object.keys(this.tasks).length) { this.tasks = {}; cx.notify(); }
+      if (!mine.length && Object.keys(this.tasks).length) { this.tasks = {}; this.redraw(cx); }
       return;
     }
     if (!asksPs(map, { working, alive: Boolean(due) })) {
-      if (!tasksOn && Object.keys(this.tasks).length) { this.tasks = {}; cx.notify(); }
+      if (!tasksOn && Object.keys(this.tasks).length) { this.tasks = {}; this.redraw(cx); }
       return;
     }
     if (now - (this.psAt ?? -Infinity) < every) return;
@@ -839,7 +1028,7 @@ export default class Spaces extends View {
     cx.spawn((cx) => this.psRun(now, (table) => {
       if (pids.length) this.sawAlive(new Set([...confirmed, ...aliveIn(table.byPid, pending)]), sig, now, cx);
       if (!tasksOn) {
-        if (Object.keys(this.tasks).length) { this.tasks = {}; cx.notify(); }
+        if (Object.keys(this.tasks).length) { this.tasks = {}; this.redraw(cx); }
         return;
       }
       const next = Object.fromEntries(mine.flatMap((k) => {
@@ -849,7 +1038,7 @@ export default class Spaces extends View {
         return list.length ? [[k.address, list]] : [];
       }));
       const key = (m) => JSON.stringify(Object.entries(m).map(([addr, l]) => [addr, l.map((x) => [x.pid, x.command])]));
-      if (key(next) !== key(this.tasks)) { this.tasks = next; cx.notify(); }
+      if (key(next) !== key(this.tasks)) { this.tasks = next; this.redraw(cx); }
     }));
   }
 
@@ -925,14 +1114,14 @@ export default class Spaces extends View {
   // Herdr sizes the sidebar as its edge is dragged: past SIDEBAR.min narrower it folds to the rail, and the rail dragged to SIDEBAR.min or wider opens.
   // The sizes while a fold or an open is still landing, and before the first draw settles, are not a drag.
   sized(w, cx) {
-    const was = this.width ?? SIDEBAR.w;
+    const was = this.width;
     this.width = w;
     if (w > 0 && Date.now() >= (this.settleUntil ?? 0)) {
       const folded = shared("sidebar.collapsed") === true;
       if (folded && w >= SIDEBAR.min) { this.openRail(w); return; }
       if (!folded && w < SIDEBAR.min) { this.foldRail(null); return; }
     }
-    if ((was < SIDEBAR.narrow) !== (w < SIDEBAR.narrow)) cx?.notify();
+    if (narrowAt(was) !== narrowAt(w)) this.redraw(cx);
   }
 
   checkNew(cx) {
@@ -944,11 +1133,11 @@ export default class Spaces extends View {
     this.takeMoves();
     this.names.take(cx);
     const projects = registry();
-    if (!sameProjects(projects, this.projectsSeen)) { this.projectsSeen = projects; cx.notify(); }
+    if (!sameProjects(projects, this.projectsSeen)) { this.projectsSeen = projects; this.redraw(cx); }
     this.trackFocus();
     const sp = visibleSpaces(spaces(), this.offNames());
     for (const s of sp) if (!this.shown.has(s.id)) this.born[s.id] ??= now;
-    if (sp.some((s) => !this.shown.has(s.id))) cx.notify();
+    if (sp.some((s) => !this.shown.has(s.id))) this.redraw(cx);
     if (now - (this.trackedAt ?? -Infinity) < 2000) return;
     this.trackedAt = now;
     const ps = panes();
@@ -995,7 +1184,7 @@ export default class Spaces extends View {
   // While you were away: the Activity card docked under the list, or nothing.
   awayCard(t, space) {
     if (!runs("sidebar.away", pieces(shared)) || !space || !this.sinceLeft?.rows.length || this.sinceLeft.project !== projectKey(space)) return null;
-    return this.sinceLeft.render(t, projectKey(space), (key, go) => this.navMark(key, go), (row) => this.returnGo(row));
+    return this.sinceLeft.render(t, projectKey(space), (key, go) => this.navMark(key, go), (row) => this.returnGo(row), (cx) => this.openAwayMenu(cx));
   }
 
   returnGo(row) {
@@ -1126,12 +1315,12 @@ export default class Spaces extends View {
     this.tidyLabels(list, now, terms);
     const steps = trackSteps(this.steps, list.map((a) => { const k = terms.get(a.address); return { address: a.address, status: a.status, msg: k?.report?.msg, status_ms: k?.status_ms }; }), now);
     if (steps) this.steps = steps;
-    if (!next) { if (steps) cx.notify(); return; }
+    if (!next) { if (steps) this.redraw(cx); return; }
     // A turn ended or began: what was said changed.
     if (this.view === "threads") this.threadsAt = 0;
     this.since = next;
     this.panel.set("spaces.since", next);
-    cx.notify();
+    this.redraw(cx);
   }
 
   // Each label goes once: `tidying` holds it until herdr-core echoes the change.
@@ -1227,7 +1416,7 @@ export default class Spaces extends View {
     this.machineRead ??= new MachineRead();
     if (repeat && !this.machineRead.busy && ![...(this.machines ?? []), ...(this.parked ?? []), ...machines()].some((row) => row.name)) return;
     const job = this.machineRead.start(cx.timer, MACHINE_READ_MS, () => this.readMachines());
-    if (job) cx.spawn(async (cx) => { await job; this.holdAwake(cx); cx.notify(); });
+    if (job) cx.spawn(async (cx) => { await job; this.holdAwake(cx); this.redraw(cx); });
   }
 
   // The list is read every two minutes behind; the hold still renews on time.
@@ -1296,10 +1485,10 @@ export default class Spaces extends View {
   // Both power changes: the machine is held awake, the work runs in the background, and the row frees whatever happened.
   powerRun(name, cx, work) {
     this.holdAwake(cx);
-    cx.notify();
+    this.redraw(cx);
     cx.spawn(async (spawnCx) => {
       try { await work(spawnCx); }
-      finally { this.powerBusy.delete(name); this.holdAwake(spawnCx); spawnCx.notify(); }
+      finally { this.powerBusy.delete(name); this.holdAwake(spawnCx); this.redraw(spawnCx); }
     });
   }
 
@@ -1340,7 +1529,7 @@ export default class Spaces extends View {
       const used = new Set(Object.entries(this.git).filter(([key, value]) => keys.has(key) && value).map(([, value]) => value).map((g) => JSON.parse(g.repo)).filter(([on]) => !on).map(([, repo]) => repo));
       for (const repo of this.watching) if (!used.has(repo)) this.watching.delete(repo);
       this.refreshing = false;
-      cx.notify();
+      this.redraw(cx);
     });
   }
 
@@ -1419,9 +1608,9 @@ export default class Spaces extends View {
     const on = missing ? { folder: () => (project.machine ? open() : this.locate(project)) } : { plus: () => this.newAgentMenu(placeOfKey(key, project)) };
     return projectRow({ name, dimmed: true, missing, hover: this.hoverSpace === key, focus })(`closed-project-${key}`, tokens(t), {
       on: { ...on, ellipsis: open },
-      onClick: (cx) => { open(); cx.notify(); },
+      onClick: (cx) => { open(); this.redraw(cx); },
       onMenu: open,
-      onHover: (h, cx) => { if (h ? this.hoverSpace !== key : this.hoverSpace === key) { this.hoverSpace = h ? key : null; cx.notify(); } },
+      onHover: (h, cx) => { if (h ? this.hoverSpace !== key : this.hoverSpace === key) { this.hoverSpace = h ? key : null; this.redraw(cx); } },
     });
   }
 
@@ -1452,7 +1641,7 @@ export default class Spaces extends View {
     const open = this.asleepOpenOf(group.id);
     const focus = this.navMark(`asleep:${group.id}`, (cx) => this.toggleAsleep(group.id, this.asleepOpenOf(group.id), cx));
     const [head] = asleep({ names: group.rows.map(agentLabel), open, title: name || group.name || "Asleep", focus });
-    return head(`asleep-group-${group.id}`, c, { onClick: (cx) => { this.toggleAsleep(group.id, open, cx); cx.notify(); } });
+    return head(`asleep-group-${group.id}`, c, { onClick: (cx) => { this.toggleAsleep(group.id, open, cx); this.redraw(cx); } });
   }
 
   asleepAgents(group, t, ctx) {
@@ -1485,7 +1674,21 @@ export default class Spaces extends View {
       this.sleepingRows = sleepingNow(sp, ps, terms, kept);
       this.sleepingSignature = signature;
     }
-    return this.sleepingRows;
+    const pending = (shared(SLEEP_PENDING)?.terminals ?? []).filter((id) => !failedTerminals(shared(SLEEP_FAILED)).includes(id));
+    const live = typeof agents === "function" ? agents() : [];
+    return withoutWaking(withPending(this.sleepingRows, live, pending), shared(SLEEP_WAKING)?.terminals ?? []);
+  }
+
+  undoSleep(a) {
+    const address = a.asleep?.terminal ?? a.address;
+    setShared(SLEEP_FAILED, withoutTerminals(shared(SLEEP_FAILED), [address]));
+    const term = terminals().find((k) => k.address === address);
+    if (asleepTerminal(term)) wakeRow({ space: a.space ?? a.asleep?.space, terminal: address, settled: false });
+  }
+
+  forgetAsleep(z) {
+    hc(["label", z.terminal, `${RESUME_LABEL}=`]).catch(() => {});
+    if (z.settled && z.tabId) run("tab.unsettle", { id: z.tabId });
   }
 
   // Asleep rows follow the awake ones, in the panes' order.
@@ -1510,12 +1713,16 @@ export default class Spaces extends View {
 
   seen(sp, ctx) { return seenNow(sp, ctx, this.threads, this.panel?.agents ?? new Map(), (a) => this.nameOf(a), this.since ?? {}); }
 
-  // One sleeping session: the asleep composition's row, dimmed, with Wake; a press opens its menu.
   asleepLine(a, t) {
     const row = this.navRow(a, this.rowFor(a));
-    const [, line] = asleep({ names: [agentLabel(a)], open: true, selected: row.kbd ? 0 : -1 });
+    const look = asleepLook({ reachable: reachesRow(a), failed: Boolean(row.failure), armed: Boolean(row.armed) });
+    const [, line] = asleep({
+      names: [agentLabel(a)], open: true, selected: row.kbd ? 0 : -1, hover: row.hovered ? 0 : -1,
+      wake: look.wake, failure: look.failure, armed: look.armed,
+    });
     const menu = (cx) => { cx.stop_propagation(); row.menu(cx); };
-    return line(`space-agent-${a.address}`, tokens(t), { on: row.wake ? { Wake: row.wake } : {}, onClick: menu, onMenu: (_e, cx) => menu(cx), onHover: row.hover });
+    const on = { ...(row.wake && look.wake ? { Wake: row.wake } : {}), ...(row.undo && look.undo ? { Undo: row.undo } : {}) };
+    return line(`space-agent-${a.address}`, tokens(t), { on, onClick: menu, onMenu: (_e, cx) => menu(cx), onHover: row.hover });
   }
 
   // A popup's keyboard: j and k or the arrows walk menuActs, Enter runs the lit one, Escape closes.
@@ -1534,7 +1741,7 @@ export default class Spaces extends View {
         const inRun = this.menuScroll ? this.menuAt - this.menuScroll.from : -1;
         if (inRun >= 0 && inRun < this.menuScroll.count) this.menuScroll.handle.scroll_to_item(inRun);
         cx.stop_propagation();
-        cx.notify();
+        this.redraw(cx);
       });
   }
 
@@ -1558,7 +1765,7 @@ export default class Spaces extends View {
     const at = this.menuActs.length;
     const go = (cx) => { act(cx); if (!keep) closeOverlay(props().overlay); };
     this.menuActs = [...this.menuActs, go];
-    return { ...look, label: text, selected: at === this.menuAt, onClick: (cx) => { go(cx); cx.notify(); } };
+    return { ...look, label: text, selected: at === this.menuAt, onClick: (cx) => { go(cx); this.redraw(cx); } };
   }
 
   // Opens a worktree's folder: where something already runs there it is shown; else a shell starts there.
@@ -1639,10 +1846,10 @@ export default class Spaces extends View {
       this.checking = false;
       if (list) { this.known = list; setShared(KNOWN_AGENTS, { ...(shared(KNOWN_AGENTS) ?? {}), [on]: list }); }
       else this.agentsFailed = failed;
-      cx.notify();
+      this.redraw(cx);
     };
     if (on && !shared(KNOWN_AGENTS)?.[""]) {
-      knownAgents({ on: null }).then((list) => { setShared(KNOWN_AGENTS, { ...(shared(KNOWN_AGENTS) ?? {}), "": JSON.parse(JSON.stringify(list)) }); cx.notify(); }).catch(() => {});
+      knownAgents({ on: null }).then((list) => { setShared(KNOWN_AGENTS, { ...(shared(KNOWN_AGENTS) ?? {}), "": JSON.parse(JSON.stringify(list)) }); this.redraw(cx); }).catch(() => {});
     }
     const deadline = cx.timer.after(MACHINE_READ_MS, () => settle(null, "no answer in time"));
     knownAgents({ on: on || null }).then((list) => { deadline.cancel(); settle(JSON.parse(JSON.stringify(list)), null); })
@@ -1664,7 +1871,7 @@ export default class Spaces extends View {
   agentsFailure(place) {
     const agent = this.explainer();
     const at = this.menuActs.length;
-    this.menuActs = [...this.menuActs, (cx) => { this.askAgents(place, cx); cx.notify(); }, ...(agent ? [() => { this.explainAgents(place, agent); closeOverlay(props().overlay); }] : [])];
+    this.menuActs = [...this.menuActs, (cx) => { this.askAgents(place, cx); this.redraw(cx); }, ...(agent ? [() => { this.explainAgents(place, agent); closeOverlay(props().overlay); }] : [])];
     const lit = this.menuAt === at ? "fix" : this.menuAt === at + 1 ? "agent" : null;
     return { failure: { text: `Can't list agents on ${place.machine || "this computer"}`, source: this.agentsFailed, fix: "Refresh", onClick: this.menuActs[at],
       agent: agent?.name ?? "", onExplain: agent ? this.menuActs[at + 1] : null, lit } };
@@ -1673,7 +1880,7 @@ export default class Spaces extends View {
   newAgentView(t) {
     const place = props().newAgent, start = Boolean(props().start);
     const installed = (this.known ?? []).filter((a) => a.installed);
-    this.menuDigits = installed.slice(0, 9).map((a) => (cx) => { this.pickAgent(place, a); cx.notify(); });
+    this.menuDigits = installed.slice(0, 9).map((a) => (cx) => { this.pickAgent(place, a); this.redraw(cx); });
     const agents = this.known ? (item) => installed.map((a, i) => item(a.name, () => this.pickAgent(place, a), { icon: a.icon ?? null, hint: i < 9 ? String(i + 1) : null, keep: true })) : null;
     const lines = this.agentLines(place, { start, agents, pending: this.checking, failure: this.agentsFailed ? () => this.agentsFailure(place) : null, repo: this.repo, trees: this.trees,
       item: this.lines(), room: props().height ?? Infinity });
@@ -1705,7 +1912,7 @@ export default class Spaces extends View {
     const place = props().worktree, branch = this.branch.value().trim();
     this.making = true;
     this.wtError = null;
-    cx.notify();
+    this.redraw(cx);
     cx.spawn(async (cx) => {
       try {
         const r = await addWorktree({ folder: place.folder, machine: place.machine || null, branch, base: kansoWorktrees(place.machine) });
@@ -1714,7 +1921,7 @@ export default class Spaces extends View {
         closeOverlay(props().overlay);
         // Then which agent starts in it, asked like every other start.
         this.newAgentMenu({ ...place, tree: { folder: r.path, branch } });
-      } finally { this.making = false; cx.notify(); }
+      } finally { this.making = false; this.redraw(cx); }
     });
   }
 
@@ -1736,7 +1943,7 @@ export default class Spaces extends View {
   // Each worktree space moves under its main checkout's.
   ordered(sp, places) {
     const key = (w) => places.get(w.id).key;
-    const ready = (w) => this.shown.has(w.id) || key(w) in this.git || Date.now() - (this.born[w.id] ??= Date.now()) > 1500;
+    const ready = (w) => this.shown.has(w.id) || key(w) in this.git || bornBy(this.born[w.id] ??= Date.now(), Date.now());
     for (const w of sp) if (!this.shown.has(w.id) && ready(w)) this.shown.add(w.id);
     const list = sp.map((w) => ({ w, g: this.git[key(w)] ?? null, place: places.get(w.id) })).filter((r) => this.shown.has(r.w.id));
     const mains = new Set(list.filter((r) => r.g && !r.g.linked).map((r) => r.g.repo));
@@ -1811,11 +2018,11 @@ export default class Spaces extends View {
     });
   }
 
-  setOrder(key, value, cx) {
+  setOrder(key, value) {
     this[key] = value;
     this.panel.set(`spaces.${key}`, key === "threadGroup" ? (value ? "on" : "off") : value);
     this.orderOpen = null;
-    cx.notify();
+    this.paint();
   }
 
   // The pin is the `kanso.pin` label on the terminal: its number is its place among the pinned; pinning again unpins.
@@ -1849,23 +2056,24 @@ export default class Spaces extends View {
         if (over) this.overAgent = a.address;
         const hovered = h ? this.hoverRow !== a.address : this.hoverRow === a.address;
         if (hovered) this.hoverRow = h ? a.address : null;
-        if (over || hovered) cx.notify();
+        if (over || hovered) this.redraw(cx);
       },
       pin: () => this.pin(a, mine.map((x) => x.pin).filter((p) => p != null)),
       menu: () => this.openMenu(a),
       drag: section ? {
         target: ok && this.overAgent === a.address ? side() : null,
         down: () => { this.draggedAgent = { address: a.address, space, section, at: mine.indexOf(a) }; this.overAgent = null; },
-        up: (cx) => { const d = this.draggedAgent; this.draggedAgent = null; if (ok) this.dropped(d, a, mine, side(), space); cx.notify(); },
+        up: (cx) => { const d = this.draggedAgent; this.draggedAgent = null; if (ok) this.dropped(d, a, mine, side(), space); this.redraw(cx); },
       } : null,
+      ...this.sleepFace(a),
     };
   }
 
   // With the switch off, the sidebar stays on Spaces.
-  setShown(key, on, cx) {
+  setShown(key, on) {
     if (key === "switch" && !on) this.setView("spaces");
     this.hide({ switch: "sidebar.switch", activity: "sidebar.activity", away: AWAY_PIECE }[key], !on);
-    cx.notify();
+    this.redraw();
   }
 
   // Hide stores hide; showing again stores the piece's default.
@@ -1888,7 +2096,7 @@ export default class Spaces extends View {
     this.setView("agents", cx);
     this.sectionsFolded.delete("asleep");
     this.panel.set("spaces.sections", [...this.sectionsFolded]);
-    cx.notify();
+    this.redraw();
   }
 
   checkAlive(cx, now = Date.now(), active = window().active) {
@@ -1900,7 +2108,7 @@ export default class Spaces extends View {
     this.aliveAt = at;
     const changed = !this.alive || next.size !== this.alive.size || [...next].some((p) => !this.alive.has(p));
     this.alive = next;
-    if (changed) cx.notify();
+    if (changed) this.redraw(cx);
   }
 
   // A file that hasn't grown isn't read again (threads.js).
@@ -1917,54 +2125,54 @@ export default class Spaces extends View {
       try {
         const before = this.threads ?? {};
         const next = await findThreads(list, before, terminals(), this.threadLocator);
+        const same = this.threads && Object.keys(before).length === Object.keys(next).length && Object.keys(next).every((id) => sameThread(next[id], before[id]));
         this.threads = next;
-        if (Object.keys(before).length !== Object.keys(next).length || Object.keys(next).some((id) => next[id] !== before[id])) cx.notify();
-      } catch { this.threads ??= {}; }
+        if (same) return;
+        this.threadsShown = next;
+        this.redraw();
+      } catch { this.threads ??= {}; this.threadsShown ??= this.threads; }
       finally { this.readingThreads = false; }
     });
   }
 
   // The Sort menu: the view's orders, the current one ticked, then what the sidebar shows.
-  sortMenu(view) {
-    const { orders, current, key, head } = sortOf(view, this, { ORDERS, STATUS_ORDERS, THREAD_ORDERS, DEFAULT_ORDER });
+  sortMenu(look) {
+    const { view, threadGroup, activity, away, switch: switchOn } = look;
+    const { orders, current, key, head } = sortOf(view, look, { ORDERS, STATUS_ORDERS, THREAD_ORDERS, DEFAULT_ORDER });
     const ticked = (label, on, onClick) => ({ label, icon: on ? "check" : null, onClick });
-    const grouped = view === "threads" ? [ticked("Grouped by project", this.threadGroup, (cx) => this.setOrder("threadGroup", !this.threadGroup, cx))] : [];
+    const grouped = view === "threads" ? [ticked("Grouped by project", threadGroup, () => this.setOrder("threadGroup", !threadGroup))] : [];
     return menu({ items: [
       { heading: head },
-      ...Object.keys(orders).map((mode) => ticked(orders[mode], mode === current, (cx) => this.setOrder(key, mode, cx))),
+      ...Object.keys(orders).map((mode) => ticked(orders[mode], mode === current, () => this.setOrder(key, mode))),
       ...grouped,
       { separator: true },
       { heading: "Show" },
-      ticked("What each agent is on", this.showActivity !== false, (cx) => this.setShown("activity", this.showActivity === false, cx)),
-      ticked(RETURN_LABEL, this.showAway !== false, (cx) => this.setShown("away", this.showAway === false, cx)),
-      ticked("Projects, Status and Threads", this.showSwitch !== false, (cx) => this.setShown("switch", this.showSwitch === false, cx)),
+      ticked("What each agent is on", activity, () => this.setShown("activity", !activity)),
+      ticked(RETURN_LABEL, away, () => this.setShown("away", !away)),
+      ticked("Projects, Status and Threads", switchOn, () => this.setShown("switch", !switchOn)),
     ] });
   }
 
   // The Header composition with its Toolbar: + names what it adds in this view; collapsed, Sort and Search fold under the caret.
   // The window's lights are the block above, so the header has no title row of its own.
-  header(c, view, collapsed) {
-    const { orders, current, plain } = sortOf(view, this, { ORDERS, STATUS_ORDERS, THREAD_ORDERS, DEFAULT_ORDER });
+  header(look) {
+    const { view, collapsed, tools: open, sortOpen } = look;
+    const { orders, current, plain } = sortOf(view, look, { ORDERS, STATUS_ORDERS, THREAD_ORDERS, DEFAULT_ORDER });
     const form = collapsed ? "rail" : "bar";
     // Folding the caret, or the sidebar, shuts Sort's menu for good.
-    const more = (cx) => { this.toolsOpen = !this.toolsOpen; if (!this.toolsOpen) this.orderOpen = null; cx.notify(); };
-    const open = this.toolsOpen === true;
-    const bar = toolbar({ view, column: collapsed, open, sorted: !plain, order: orders[current], sortMenu: this.sortShown(form, collapsed) ? this.sortMenu(view) : null });
+    const more = () => { this.toolsOpen = !open; if (open) this.orderOpen = null; this.paint(); };
+    const sorting = sortOpen === form && (!collapsed || open);
+    const bar = toolbar({ view, column: collapsed, open, sorted: !plain, order: orders[current], sortMenu: sorting ? this.sortMenu(look) : null });
     // Only the tools on show: a name the Toolbar does not draw throws. Collapsed, Search sits under the open caret.
-    return header({ collapsed, title: false, toolbar: bar })("spaces-header", c, {
+    return header({ collapsed, title: false, toolbar: bar })("spaces-header", tokens(theme()), {
       presses: {
         plus: () => this.startMenu(view),
         "panel-left": () => this.toggleRail(),
-        ...(!collapsed || open ? { search: (cx) => (collapsed ? run("mod.open", { name: "picker" }) : this.openFind(cx)) } : {}),
+        ...(!collapsed || open ? { search: () => (collapsed ? run("mod.open", { name: "picker" }) : this.openFind()) } : {}),
         ...(collapsed ? { [open ? "chevron-up" : "chevron-down"]: more } : {}),
       },
-      onOpen: (open, cx) => { this.orderOpen = open ? form : null; cx.notify(); },
+      onOpen: (next) => { this.orderOpen = next ? form : null; this.paint(); },
     });
-  }
-
-  // Sort's menu stays with the form it opened in, and in the rail with the caret open.
-  sortShown(form, collapsed) {
-    return this.orderOpen === form && (!collapsed || this.toolsOpen === true);
   }
 
   grouped(t, collapsed, sp, ps, ctx) {
@@ -2041,7 +2249,7 @@ export default class Spaces extends View {
       retry: () => run(`kanso-spaces.retry-machine:${route}`),
       signin: () => run("terminal.open", signInCommand(route)),
       plus: () => run("space.new", { machine: route }),
-      add: () => run("mod.open", { name: "machine-add" }),
+      add: () => run("mod.open", { name: "kanso-computers" }),
       hide: () => this.hide("sidebar.computers", true),
       settings: () => openOverlay({ mod: "kanso-settings", kind: "dialog", width: 860, height: 680, props: { page: "pieces", find: "Computers" } }),
     };
@@ -2061,11 +2269,11 @@ export default class Spaces extends View {
     const on = !peerOn(before, m);
     this.syncSaving = true;
     this.sync = { ...this.sync, config: withPeer(before, m, on) };
-    cx.notify();
+    this.redraw(cx);
     cx.spawn(async (cx) => {
       try { this.sync = { ...this.sync, config: await saveSync(m, on) }; }
       catch { this.sync = { ...this.sync, config: before }; notify({ title: `Sync ${m} was not changed`, level: "error" }); }
-      finally { this.syncSaving = false; cx.notify(); }
+      finally { this.syncSaving = false; this.redraw(cx); }
     });
   }
 
@@ -2077,7 +2285,7 @@ export default class Spaces extends View {
     if (phase !== "connected") return;
     if (folded) this.folded.delete(m); else this.folded.add(m);
     this.panel?.set("machines.folded", [...this.folded]);
-    cx.notify();
+    this.redraw(cx);
   }
 
   // Collapsed, a computer is its icon on the rail, its name and state in the tooltip.
@@ -2126,7 +2334,7 @@ export default class Spaces extends View {
       // One press opens, folds or fixes it; two rename it.
       onPress: (e, cx) => { if (e.click_count === 2) { cx.stop_propagation(); this.names.rename(m); } else go(cx); },
       onMenu: (_e, cx) => { cx.stop_propagation(); this.computerMenu(m, phase); },
-      onHover: (h, cx) => { if (h ? this.hoverMachine !== key : this.hoverMachine === key) { this.hoverMachine = h ? key : null; cx.notify(); } },
+      onHover: (h, cx) => { if (h ? this.hoverMachine !== key : this.hoverMachine === key) { this.hoverMachine = h ? key : null; this.redraw(cx); } },
     });
   }
 
@@ -2155,8 +2363,8 @@ export default class Spaces extends View {
 
   pull(place, cx) {
     if (!place?.cwd || this.pulling) return;
-    this.pulling = pullKey(place.cwd, place.on); cx.notify();
-    cx.spawn((spawnCx) => runPull(exec, notify, { folder: place.cwd, on: place.on }).catch(() => null).then((result) => { this.pulling = false; if (result?.code === 0) this.refreshGit(new Set([place.key]), spawnCx); spawnCx.notify(); }));
+    this.pulling = pullKey(place.cwd, place.on); this.redraw(cx);
+    cx.spawn((spawnCx) => runPull(exec, notify, { folder: place.cwd, on: place.on }).catch(() => null).then((result) => { this.pulling = false; if (result?.code === 0) this.refreshGit(new Set([place.key]), spawnCx); this.redraw(spawnCx); }));
   }
 
   setAgentsFolded(id, folded, cx = null) {
@@ -2170,9 +2378,9 @@ export default class Spaces extends View {
   // closing keeps the rows drawn for FOLD_MS so it has an end to show.
   toggleFold(id, open, cx) {
     this.folding = { id, open, phase: 0, at: Date.now() };
-    const tick = (cx) => { if (this.folding?.id !== id) return; if (this.folding.phase === 0) this.folding.phase = 1; cx.notify(); };
+    const tick = (cx) => { if (this.folding?.id !== id) return; if (this.folding.phase === 0) this.folding.phase = 1; this.redraw(cx); };
     cx.timer.after(16, tick);
-    cx.timer.after(FOLD_MS, (cx) => { if (this.folding?.id === id && !this.folding.open) cx.notify(); });
+    cx.timer.after(FOLD_MS, (cx) => { if (this.folding?.id === id && !this.folding.open) this.redraw(cx); });
   }
 
   unfolded(id, open, now) {
@@ -2188,7 +2396,7 @@ export default class Spaces extends View {
     const start = open && mine && this.folding.open && this.folding.phase === 0;
     const h = this.foldH?.[id];
     const inner = v_flex().w_full().flex_none().px(G.sm).gap(gap).children(rows)
-      .on_size_change((s, cx) => { if (this.foldH[id] !== s.height) { this.foldH[id] = s.height; cx.notify(); } });
+      .on_size_change((s, cx) => { if (this.foldH[id] !== s.height) { this.foldH[id] = s.height; this.redraw(cx); } });
     // Out to the list's edges, so the rows' ground is not cut short.
     return [v_flex().id(`fold-${id}`).mx(-G.sm).flex_none().overflow_hidden()
       .h(closing || start ? 0 : h ?? "auto").opacity(closing || start ? 0 : 1)
@@ -2241,11 +2449,11 @@ export default class Spaces extends View {
         this.downOn = null;
         if (drop) run("space.move", { id: from, index: spaceAt(w.id) + 1 });
         else if (mineDown && (from === null || from === w.id)) this.openSpace(w, group, on, away, mine, cx);
-        cx.notify();
+        this.redraw(cx);
       },
       onMenu: () => this.menu(w),
       onHover: (h, cx) => {
-        if (h ? this.hoverSpace !== w.id : this.hoverSpace === w.id) { this.hoverSpace = h ? w.id : null; cx.notify(); }
+        if (h ? this.hoverSpace !== w.id : this.hoverSpace === w.id) { this.hoverSpace = h ? w.id : null; this.redraw(cx); }
         if (!h && this.over === w.id) this.hold(null, cx);
       },
     });
@@ -2257,7 +2465,7 @@ export default class Spaces extends View {
     return Boolean(from) && (from.machine || null) === (w.machine || null);
   }
 
-  hold(over, cx) { if (this.pressed !== null && this.over !== over) { this.over = over; cx.notify(); } }
+  hold(over, cx) { if (this.pressed !== null && this.over !== over) { this.over = over; this.redraw(cx); } }
 
   // Projects, collapsed: one mark per project; a click lists its agents, or goes to it when it has none.
   compact({ w }, t, c, ctx) {
@@ -2314,7 +2522,7 @@ export default class Spaces extends View {
   // A section: the section composition; a press folds it. `add`: + under the pointer, its label and what it starts.
   sectionHead(c, id, toggle, { title, status = "none", count = null, add = null, hover = false, onHover = null }) {
     return section({ title, status, count: count ?? 0, add: add?.label ?? null, hover })(id, c, {
-      on: add ? { plus: add.go } : {}, onClick: (cx) => { toggle(cx); cx.notify(); }, onHover: onHover ?? undefined,
+      on: add ? { plus: add.go } : {}, onClick: (cx) => { toggle(cx); this.redraw(cx); }, onHover: onHover ?? undefined,
     });
   }
 
@@ -2332,12 +2540,23 @@ export default class Spaces extends View {
       props: { menu: { address: a.address, view: this.view, title, session } } });
   }
 
+  sleepFace(a) {
+    const address = a.asleep?.terminal ?? a.address;
+    const failed = failedTerminals(shared(SLEEP_FAILED)).includes(address);
+    return {
+      failure: failed ? COULD_NOT_SLEEP : null,
+      undo: failed ? () => this.undoSleep(a) : null,
+      armed: Boolean(a.asleep && forgetHeld(shared(FORGET_HELD), address, Date.now(), ARM_MS)),
+    };
+  }
+
   rowFor(a, actions = null, extra = {}) {
     return {
       hovered: this.hoverRow === a.address,
-      hover: (h, cx) => { if (h ? this.hoverRow !== a.address : this.hoverRow === a.address) { this.hoverRow = h ? a.address : null; cx.notify(); } },
+      hover: (h, cx) => { if (h ? this.hoverRow !== a.address : this.hoverRow === a.address) { this.hoverRow = h ? a.address : null; this.redraw(cx); } },
       menu: () => this.openMenu(a, extra),
-      wake: canWake(a) ? () => wakeRow(a.asleep) : null,
+      wake: canWake(a, reachesRow(a)) ? () => wakeRow(a.asleep) : null,
+      ...this.sleepFace(a),
       actions,
     };
   }
@@ -2425,13 +2644,18 @@ export default class Spaces extends View {
 
   // The three views, the View switch composition: a track open; collapsed, the current view's button and its menu.
   // Each tooltip has the view's key; Status carries the dot while someone needs you.
-  switchViews(t, sp, collapsed = false) {
-    const tips = Object.fromEntries(Object.entries(VIEWS).map(([key, label]) => [key, tooltip({ label, chord: boundChord(`kanso-spaces.view-${key}`) })]));
-    const pick = (view, cx) => { this.setView(view, cx); cx.notify(); };
-    const open = (next, cx) => { this.viewMenu = next; cx.notify(); };
-    const look = { view: this.view, column: collapsed, open: collapsed && this.viewMenu === true, asks: sp.some((s) => s.status === "blocked"), carry: true, tips };
+  switchViews({ view, collapsed, open, asks, chords }) {
+    const tips = Object.fromEntries(Object.entries(VIEWS).map(([key, label]) => [key, tooltip({ label, chord: chords[key] })]));
+    const pick = (next, cx) => { this.setView(next, cx); this.paint(); };
+    const toggle = (next) => { this.viewMenu = next; this.paint(); };
     const menu = (_e, cx) => { cx.stop_propagation(); openPieceMenu({ id: "sidebar.switch", title: "Projects, Status, Threads" }); };
-    return viewSwitch(look)(collapsed ? "rail-view" : "spaces-view", tokens(t), collapsed ? { onChange: pick, onOpen: open, onMenu: menu } : { onChange: pick, onMenu: menu });
+    return viewSwitch({ view, column: collapsed, open, asks, carry: true, tips })(collapsed ? "rail-view" : "spaces-view", tokens(theme()),
+      collapsed ? { onChange: pick, onOpen: toggle, onMenu: menu } : { onChange: pick, onMenu: menu });
+  }
+
+  switchPart(look) {
+    const t = theme();
+    return stack({ variant: "sidebar switch" }, look.finding ? this.findField(t) : look.shown ? this.switchViews(look) : null)("spaces-switch", tokens(t));
   }
 
   threadsView(t, sp, ps, ctx) {
@@ -2501,7 +2725,7 @@ export default class Spaces extends View {
       // A project's conversations: under the pointer its + starts a new one there.
       const w = s.project ? sp.find((x) => x.id === s.project) : null;
       const add = w ? { label: `New conversation in ${w.name}`, go: () => this.newAgentMenu(placeOfSpace(w)) } : null;
-      const onHover = w ? (h, cx) => { if (h ? this.hoverHead !== s.id : this.hoverHead === s.id) { this.hoverHead = h ? s.id : null; cx.notify(); } } : null;
+      const onHover = w ? (h, cx) => { if (h ? this.hoverHead !== s.id : this.hoverHead === s.id) { this.hoverHead = h ? s.id : null; this.redraw(cx); } } : null;
       const headName = p ? p.name : whole ? whole.rows[0].a.asleep.spaceName : (s.label ?? "Active");
       const head = [...(i ? [lift(G.lg)] : []), item(this.sectionHead(c, `thread-${s.id}`, toggle,
         { title: headName, status: whole ? "asleep" : "none", count: sectionCount(open, s.rows.length), add, hover: this.hoverHead === s.id, onHover }), H.line)];
@@ -2588,13 +2812,46 @@ export default class Spaces extends View {
 
   zzLines(item, m) {
     const z = m.asleep;
+    const reachable = reachesRow(m);
+    const armed = forgetHeld(shared(FORGET_HELD), z.terminal, Date.now(), ARM_MS);
+    const forget = (cx) => {
+      if (forgetHeld(shared(FORGET_HELD), z.terminal, Date.now(), ARM_MS)) {
+        setShared(FORGET_HELD, null);
+        this.forgetAsleep(z);
+        return;
+      }
+      setShared(FORGET_HELD, holdForget(z.terminal, Date.now()));
+      cx.timer?.after(ARM_MS + 50, (task) => {
+        const held = shared(FORGET_HELD);
+        if (held?.terminal === z.terminal && !forgetHeld(held, z.terminal, Date.now(), ARM_MS)) setShared(FORGET_HELD, null);
+        this.redraw(task);
+      });
+      this.redraw(cx);
+    };
     return { title: z.saved ? `${m.name}, asleep since ${since(z.saved)}` : `${m.name}, asleep`, items: [
-      item("Wake", () => arrange({ wake: { space: z.space, terminal: z.terminal } }), { icon: "sun" }),
-      ...(z.n > 1 ? [item(`Wake all ${z.n} in ${z.tab}`, () => wakeRow(z), { icon: "sun" })] : []),
+      ...(reachable ? [
+        item("Wake", () => arrange({ wake: { space: z.space, terminal: z.terminal } }), { icon: "sun" }),
+        ...(z.n > 1 ? [item(`Wake all ${z.n} in ${z.tab}`, () => wakeRow(z), { icon: "sun" })] : []),
+      ] : []),
       item("Copy conversation id", (cx) => cx.write_to_clipboard?.(z.resume), { icon: "copy" }),
       { separator: true },
+      item("Forget", forget, { icon: "x", keep: true, verb: "forget", armed }),
       item("Everything asleep\u2026", () => run("kanso-spaces.asleep"), { icon: "moon" }),
     ] };
+  }
+
+  openAwayMenu(cx) {
+    cx?.stop_propagation?.();
+    openOverlay({ mod: "kanso-spaces", kind: "popup", width: W.menu, height: menuHeight({ title: "While you were away", items: [{}, {}] }), at: "pointer", props: { awayMenu: true } });
+  }
+
+  awayMenuView(t) {
+    const item = this.lines();
+    const [dismiss, off] = AWAY_MENU;
+    return this.popup(t, "While you were away", [
+      item(dismiss, () => run("kanso-spaces.away-dismiss")),
+      item(off, () => run("kanso-spaces.away-off")),
+    ]);
   }
 
   openAsleepMenu(menu) {
@@ -2620,8 +2877,9 @@ export default class Spaces extends View {
     this.colors = colors;
   }
 
-  render() {
+  draw() {
     const t = theme();
+    if (props()?.awayMenu) return this.awayMenuView(t);
     if (props()?.menu) return this.menuView(t);
     if (props()?.railMenu) return this.railMenuView(t);
     if (props()?.spaceMenu) return this.spaceMenuView(t);
@@ -2631,9 +2889,19 @@ export default class Spaces extends View {
     if (props()?.newProject) return this.newProjectView(t);
     if (props()?.worktree) return this.worktreeView(t);
     if (props()?.machineMenu) return this.computerMenuView(t);
-    const collapsed = shared("sidebar.collapsed") === true;
+    const { header, switch: views, rows, footer } = this.parts;
+    if (!this.painting) { this.painting = true; this.paintTimer.after(0, () => { this.painting = false; this.paint(); }); }
+    return stack({ variant: "sidebar" }, header, views, rows, footer)("spaces-root", tokens(t)).track_focus(this.handle)
+      .on_key_down((e, cx) => this.listKeyDown(e, cx))
+      .on_size_change((size, cx) => this.sized(size.width, cx))
+      // A pane held in the strip and let go here goes back where it was.
+      .on_mouse_up("left", dropStripDrag);
+  }
+
+  rows({ view, collapsed, query }) {
+    const t = theme();
     if (this.sinceLeft) this.sinceLeft.showing = false;
-    this.narrow = !collapsed && (this.width ?? SIDEBAR.w) < SIDEBAR.narrow;
+    this.narrow = !collapsed && narrowAt(this.width);
     // The keyboard left (a click on a pane, say): the ring goes too.
     if (this.kbd && ((!this.needsOpen && collapsed) || !this.handle.is_focused())) { this.kbd = false; if (shared("kanso.list")) setShared("kanso.list", null); }
     this.navNext = [];
@@ -2648,9 +2916,6 @@ export default class Spaces extends View {
     this.showAway = runs("sidebar.away", map);
     this.showTime = shown("sidebar.time", true, map);
     this.showTasks = runs("sidebar.tasks", map);
-    const switchShown = this.showSwitch !== false;
-    // Collapsed, the rail keeps the view you chose: projects as avatars, agents and threads as tiles.
-    const view = switchShown ? this.view : "spaces";
     const read = { terms: terminals(), alive: this.alive, strip: shared("strip.state") ?? {}, places: placesOf(sp, ps), now: Date.now() };
     // Each terminal now: a conversation read from another process in it is not this one's.
     this.termBy = new Map(read.terms.map((k) => [k.address, k]));
@@ -2659,31 +2924,25 @@ export default class Spaces extends View {
     const rowsCtx = { ...read, asleep, spaces: sp, registry: registry(), spaceIds: new Set(sp.map((w) => w.id)), all: this.listed(ps, sp, read.terms).filter((a) => !asleep.dozing.has(a.address)) };
     const ctx = { ...rowsCtx, rowsBy: new Map(sp.map((w) => [w.id, this.spaceRows(w.id, rowsCtx)])), project: this.projectOf(sp, t) };
     const queue = this.refreshNeeds(sp, read.terms, asleep);
-    const finding = Boolean(this.finding && this.find && !collapsed);
-    const query = finding ? this.find.value().trim().toLowerCase() : "";
-    const lens = query ? this.narrowed(query, sp, ctx) : null;
+    const words = (query ?? "").trim();
+    const lens = words ? this.narrowed(words.toLowerCase(), sp, ctx) : null;
     const shownSp = lens?.sp ?? sp, shownCtx = lens?.ctx ?? ctx;
     this.seenNow = this.seen(sp, ctx);
     this.seenAt = ctx.now; // when it was seen: a later write of it is no newer
-    const root = v_flex().id("spaces-root").track_focus(this.handle).size_full().min_h(0).bg(t.chrome).text_size(T.card)
-      .on_key_down((e, cx) => this.listKeyDown(e, cx))
-      .on_size_change((size, cx) => this.sized(size.width, cx))
-      // A pane held in the strip and let go here goes back where it was.
-      .on_mouse_up("left", dropStripDrag)
-      .child(this.header(tokens(t), view, collapsed))
-      .when(finding, (el) => el.child(this.findField(t)))
-      .when(switchShown && !finding, (el) => el.child(this.switchViews(t, sp, collapsed)))
-      .when(shown("sidebar.needs", queue.rows.length > 0 || this.needsEmpty, map), (el) => el.children([queueControl(t, queue, collapsed, this.needsEmpty && !queue.rows.length, (cx) => this.toggleNeeds(cx))].filter(Boolean)))
-      .children(this.needsOpen && shown("sidebar.needs", true, map) ? [this.needsList(t, queue, read.now)] : [this.list(t, collapsed, view,
-        lens?.none ? [item(emptyState({ icon: "search", text: `No match for \u201c${this.find.value().trim()}\u201d` })("spaces-find-empty", tokens(t)), H.line * 3)]
+    const needsOn = shown("sidebar.needs", true, map);
+    const needsListOpen = this.needsOpen && needsOn && (queue.rows.length > 0 || queue.state !== "ready");
+    const rows = stack({ variant: "sidebar rows" },
+      shown("sidebar.needs", queue.rows.length > 0 || this.needsEmpty, map) ? queueControl(t, queue, collapsed, this.needsEmpty && !queue.rows.length, (cx) => this.toggleNeeds(cx)) : null,
+      needsListOpen ? [this.needsList(t, queue, read.now)] : [this.list(t, collapsed, view,
+        lens?.none ? [item(emptyState({ icon: "search", text: `No match for \u201c${words}\u201d` })("spaces-find-empty", tokens(t)), H.line * 3)]
           : view === "agents" ? (collapsed ? this.agentsRail(t, shownSp, shownCtx) : this.agentsView(t, shownSp, ps, shownCtx))
           : view === "threads" ? (collapsed ? this.threadsRail(t, shownSp, shownCtx) : this.threadsView(t, shownSp, ps, shownCtx)) : this.grouped(t, collapsed, shownSp, ps, shownCtx)),
-        collapsed ? null : this.awayCard(t, active)].filter(Boolean));
+        collapsed ? null : this.awayCard(t, active)])("spaces-rows", tokens(t));
     this.nav = this.navNext;
     // The row the ring was on is gone: it stays at the same place in the list.
     if (this.kbd && this.nav.length && !this.nav.some((n) => n.key === this.navKey)) this.navKey = this.nav[Math.min(this.navAt ?? 0, this.nav.length - 1)].key;
     this.navAt = Math.max(0, this.nav.findIndex((n) => n.key === this.navKey));
-    return root;
+    return rows;
   }
 
   // A pill keeps its identity per view, so a change of view places it rather than sliding it across.
@@ -2697,7 +2956,7 @@ export default class Spaces extends View {
     // Named, so its scroll position survives every redraw (an unnamed one is placed anew and starts at the top).
     // Open, its sides are the sidebar's gutter: each row's ground reaches out past it by the row's own padding, its content stays on it.
     return v_flex().id(`spaces-list-${collapsed ? "rail" : view}`).relative().flex_1().min_h(0).when(!collapsed, (el) => sidebarSides(el, SIDEBAR.gutter)).gap(collapsed ? 0 : gap).pt(collapsed ? G.sm : 0).pb(G.lg).overflow_y_scrollbar().mode(collapsed ? "hover" : "always")
-      .on_mouse_up("left", (_e, cx) => { this.pressed = null; this.over = null; this.draggedAgent = null; cx.notify(); })
+      .on_mouse_up("left", (_e, cx) => { this.pressed = null; this.over = null; this.draggedAgent = null; this.redraw(cx); })
       // Rows keep their height: shrunk to fit, there would be nothing to scroll.
       .children([...pills, ...els.map((el) => el.flex_none())]);
   }

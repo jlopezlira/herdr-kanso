@@ -1,10 +1,16 @@
 // The dialogs' and panels' lists draw each item through the kit row, and every item still does what it did.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { load, tape, drawingHost, calls } from "./helpers.mjs";
+import { load, tape, drawingHost, calls, nodes, texts } from "./helpers.mjs";
 
 const night = { foreground: "#d8d4cb", background: "#1b1b19", hover: "#232321", selected: "#2b2b28", accent: "#da627d", dim: "#6b6862", muted: "#949086" };
 const cx = (seen = []) => ({ notify() {}, stop_propagation: () => seen.push("stopped"), open_url: (url) => seen.push(url), timer: { after() {} } });
+
+const credits = async (host) => {
+  const { tokens } = await load("kanso-help/ui.js", ["tokens"], host);
+  const { creditsPage } = await load("kanso-help/credits.js", ["creditsPage"], host);
+  return { page: creditsPage(tokens(night), new Set(["jlopezlira"])) };
+};
 
 test("Arrangements lists each one as a row that opens it, with Overwrite and Delete, which asks twice, under it", async () => {
   const ui = tape();
@@ -29,13 +35,24 @@ test("Arrangements lists each one as a row that opens it, with Overwrite and Del
 
 test("Credits are rows with their picture, words and address, and a press opens the address", async () => {
   const ui = tape();
-  const { Settings, tokens } = await load("kanso-settings/main.js", ["Settings", "tokens"], { ...ui.host, image: ui.host.div, theme: () => night, props: () => ({}) });
-  const settings = new Settings();
-  settings.creditsPage(night, tokens(night));
+  const host = { ...ui.host, image: ui.host.div, theme: () => night, props: () => ({}) };
+  await credits(host);
   assert.ok(["Where it comes from", "Herdr", "herdr.dev", "Made by", "JJ", "@jlopezlira on GitHub"].every((text) => ui.texts.includes(text)), ui.texts.join(" | "));
   const seen = [];
   ui.handlers.get("credit-herdr")({}, cx(seen));
   assert.deepEqual(seen, ["https://herdr.dev"]);
+});
+
+test("The note of a Credits row sits in the same horizontal box as its picture, and Jericho Siahaya is listed", async () => {
+  const host = { ...drawingHost(), theme: () => night, props: () => ({}) };
+  const { page } = await credits(host);
+  const row = nodes(page).find((el) => el.tag === "credit-jlopezlira");
+  const note = nodes(row).find((el) => calls(el, "child").some((call) => call[1] === "@jlopezlira on GitHub"));
+  const picture = nodes(row).find((el) => calls(el, "rounded_full").length && calls(el, "child").some((call) => call[1] === "J"));
+  const box = picture.parent;
+  assert.equal(box.tag, "h_flex");
+  assert.ok(nodes(box).includes(note), "the note is outside the picture's horizontal box");
+  assert.ok(texts(page).includes("Jericho Siahaya"), texts(page).join(" | "));
 });
 
 test("Look's note rows: a press writes the note again, and the remove tool drops the pin without writing", async () => {

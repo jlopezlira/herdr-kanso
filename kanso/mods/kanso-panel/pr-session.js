@@ -8,12 +8,17 @@ import { awayShown } from "./since-left-model.js";
 import { pieces } from "./pieces.js";
 import { fetchDue, parseRemote } from "./pr-remote.js";
 import { q } from "./kdb.js";
+import { createdId, ready, replyArgs, reviewArgs } from "./pr-review.js";
+import { ACTS, canUndo, doneOf, partlyOf, pendingOf, refusedOf, undoCalls, undoneOf, undoRefusedOf } from "./pr-act.js";
+import { serviceFor } from "./platform-host.js";
+import { repositoryApi } from "./platform-repositories.js";
+import { folderScope, scopeRepos } from "./pr-board.js";
 import { CALL_MS, heldView, logDue, needsPermission, needsThreads, stayOnBranch, threadKey, waitLine } from "./pr-poll.js";
 
 export const keepsFacts = () => awayShown(pieces(shared));
 
 const FIELDS = "number,title,body,state,isDraft,url,author,baseRefName,headRefName,mergeable,mergeStateStatus,reviewDecision,statusCheckRollup,latestReviews,reviewRequests,assignees,labels,additions,deletions,changedFiles,commits,files,updatedAt,mergedAt,closedAt";
-const THREADS = "query($o:String!,$r:String!,$n:Int!){repository(owner:$o,name:$r){pullRequest(number:$n){reviewThreads(first:100){nodes{isResolved isOutdated path line comments(first:1){totalCount nodes{author{login} body url}}}}}}}";
+const THREADS = "query($o:String!,$r:String!,$n:Int!){repository(owner:$o,name:$r){pullRequest(number:$n){reviewThreads(first:100){nodes{isResolved isOutdated path line comments(first:1){totalCount nodes{author{login} body url databaseId}}}}}}}";
 const PEOPLE = "query($o:String!,$r:String!){viewer{login} repository(owner:$o,name:$r){assignableUsers(first:100){pageInfo{hasNextPage} nodes{login name}}}}";
 const LABELS = "query($o:String!,$r:String!){repository(owner:$o,name:$r){labels(first:100,orderBy:{field:NAME,direction:ASC}){pageInfo{hasNextPage} nodes{name color description}}}}";
 const OPEN = "number,title,url,isDraft,updatedAt,author,headRefName,baseRefName,reviewDecision,mergeable,mergeStateStatus,statusCheckRollup,additions,deletions";
@@ -26,7 +31,8 @@ const changed = (pr, kind, name, on, candidates) => ({
   reviewers: () => ({ ...pr, reviewRequests: on ? pr.reviewRequests.filter((x) => x.login !== name) : [...pr.reviewRequests, { login: name }] }),
 }[kind]());
 
-const FINISHED = { Push: "Pushed", Pull: "Pulled", Update: "Branch updated", Ready: "Marked ready for review", Draft: "Returned to draft", Close: "Closed", Reopen: "Reopened" };
+const FINISHED = { Push: "Pushed", Pull: "Pulled", Update: "Branch updated", Draft: "Returned to draft", Reopen: "Reopened" };
+const LOGS_KEPT = 3;
 const NO_PR = /no (open )?pull requests? found|could not determine current branch/i;
 
 export function ghMissing(r) {
@@ -41,6 +47,11 @@ export function ghMissing(r) {
 export const repoOf = (url) => {
   const m = /github\.com\/([^/]+)\/([^/]+)\/pull\//.exec(url ?? "");
   return m ? { o: m[1], r: m[2] } : null;
+};
+
+const repoFlag = (url) => {
+  const place = repoOf(url);
+  return place ? ["-R", `${place.o}/${place.r}`] : [];
 };
 
 const FILE_HEAD = /^diff -{2}git a\/.* b\/(.*)$/;
@@ -66,10 +77,10 @@ const blank = () => ({
   pushed: false, behind: false, base: undefined, aheadCount: 0, behindCount: 0, subjects: [], subjectsFor: null,
   baseBehind: null, baseBehindFor: null, permission: null, permissionRepo: null, threadsFor: null,
   listing: false, openedList: false, tab: "open", closedPrs: null,
-  inboxOn: false, inbox: null, inboxOpen: null, inboxTab: "needs", inboxForce: false,
+  inboxOn: false, inbox: null, inboxOpen: null, inboxForce: false, boardOpen: null, scope: null, signedOut: false, scoped: null, scopeReady: () => {},
   stale: null, wait: null, freshAt: null, loadedAt: undefined,
   logFor: null, failedLog: null, logParsed: null, logParsedFor: null, sendShown: false, sendFor: null,
-  queued: false, asking: false, loading: false, busy: null, pending: null, flights: [],
+  queued: false, asking: false, loading: false, busy: null, pending: null, flights: [], acted: null, actedFor: null, created: null, logs: null,
 });
 
 export class FolderSession {
@@ -155,11 +166,12 @@ export class FolderSession {
     this.cwd = cwd; this.on = on;
     this.loading = true;
     const want = this.selected;
+    this.scoped = new Promise((resolve) => { this.scopeReady = resolve; });
     cx.spawn(async (cx) => {
       const inbox = this.syncInbox(cx).catch((e) => this.inboxFailure(e));
       const failed = (e) => this.keepLast(e?.message ?? e);
       const follow = await (async () => {
-        const open = await this.readFolder(cx, want, failed).catch((e) => { failed(e); return null; });
+        const open = await this.readFolder(cx, want, failed).catch((e) => { failed(e); return null; }).finally(() => this.scopeReady(this.scope));
         if (open) await open;
         await inbox;
         return (this.selected !== want || this.openedList) && !this.wait;
@@ -180,6 +192,8 @@ export class FolderSession {
     const top = await this.git(cx, ["rev-parse", "--show-toplevel"], this.cwd, this.on);
     if (top?.late) { this.keepLast(); return null; }
     if (top.code !== 0) {
+      this.scope = await this.childScope();
+      this.scopeReady(this.scope);
       this.outside = true; this.missing = null; this.error = null; this.none = false; this.openPrs = [];
       this.stale = null; this.wait = null;
       if (!this.selected) { this.pr = null; this.freshAt = null; return null; }
@@ -202,6 +216,8 @@ export class FolderSession {
     const remoteUrl = String(remote?.stdout ?? "");
     this.home = /github\.com[:/]([^/]+\/[^/\s]+?)(?:\.git)?\s*$/.exec(remoteUrl)?.[1] ?? null;
     this.host = parseRemote(remoteUrl.trim())?.host ?? null;
+    this.scope = { kind: "repo", repos: scopeRepos([{ folder: this.root, remote: remoteUrl }]), local: [] };
+    this.scopeReady(this.scope);
     const waited = await this.heldByGitHub(Date.now());
     if (waited) {
       this.wait = waited;
@@ -224,13 +240,18 @@ export class FolderSession {
     return open;
   }
 
+  async childScope() {
+    const found = await serviceFor(repositoryApi, this.on).then((api) => api.children(this.cwd)).catch(() => []);
+    return folderScope(found);
+  }
+
   readLog(cx) {
     if (!this.live() || !this.pr || this.flying("checks")) return;
     const stamp = this.panel.view().logKey;
     if (!logDue({ facing: this.panel.facing(), key: stamp, have: this.logFor ?? null })) return;
     this.forgetLog(stamp);
     this.flight(cx, "checks", async (task) => {
-      const r = await this.gh(task, ["run", "view", stamp, "--log-failed"]).catch(() => null);
+      const r = await this.gh(task, ["run", "view", stamp, "--log-failed", ...repoFlag(this.pr?.url)]).catch(() => null);
       if (this.logFor === stamp && r?.code === 0) this.failedLog = r.stdout ?? "";
     });
   }
@@ -244,15 +265,18 @@ export class FolderSession {
   async readInbox(cx) {
     const ready = await this.panel.account(Date.now(), this.runner(cx));
     if (ready == null) return;
+    this.signedOut = !ready.length;
     if (!ready.length) { this.inboxOn = false; this.inbox = null; this.inboxOpen = null; return; }
     const db = await this.panel.inboxStore().catch((e) => { this.inboxFailure(e); return null; });
     if (!db) { this.inboxOn = false; this.inboxOpen = null; return; }
+    const scope = await this.scoped;
+    const extra = scope?.kind === "folder" ? scope.repos : [];
     const force = Boolean(this.inboxForce);
     this.inboxForce = false;
     const model = await ready.reduce(async (prev, { provider, session }) => {
       const soFar = await prev;
       return [...soFar, await refreshInbox({
-        db, run: this.runner(cx), provider, session, force, shown: true, facts: keepsFacts(),
+        db, run: this.runner(cx), provider, session, force, extra, shown: true, facts: keepsFacts(),
         onCache: (cached, pending) => this.paintInbox(cached, !pending || cached.needs.length > 0 || cached.yours.length > 0),
       })];
     }, Promise.resolve([])).then(mergeInbox).catch((e) => e);
@@ -368,7 +392,7 @@ export class FolderSession {
       if (nodes) {
         this.threads = nodes.filter((n) => !n.isResolved).map((n) => {
           const first = n.comments?.nodes?.[0];
-          return { path: n.path, line: n.line, outdated: n.isOutdated, author: first?.author?.login ?? "", body: (first?.body ?? "").replace(/\r\n?/g, "\n").trim(), url: first?.url, replies: Math.max(0, (n.comments?.totalCount ?? 1) - 1) };
+          return { path: n.path, line: n.line, outdated: n.isOutdated, author: first?.author?.login ?? "", body: (first?.body ?? "").replace(/\r\n?/g, "\n").trim(), url: first?.url, comment: first?.databaseId ?? null, replies: Math.max(0, (n.comments?.totalCount ?? 1) - 1) };
         });
         this.threadsFor = threadKey(pr.url, pr.updatedAt);
       }
@@ -414,6 +438,18 @@ export class FolderSession {
   loadOthers(cx) {
     if (!this.live() || this.listed || this.wait || !this.root) return;
     this.flight(cx, "details", async (task) => { this.takeOpen(await this.gh(task, openListArgs()).catch(() => null)); });
+  }
+
+  readFullLog(id, cx) {
+    const have = this.logs?.[id];
+    if (!id || (have && !have.error)) return;
+    const keep = (entry) => { this.logs = Object.fromEntries([...Object.entries(this.logs ?? {}).filter(([key]) => key !== id), [id, entry]].slice(-LOGS_KEPT)); };
+    if (this.logFor === id && this.failedLog != null) { keep({ text: this.failedLog }); return; }
+    keep({ text: null });
+    this.flight(cx, `log:${id}`, async (task) => {
+      const r = await this.gh(task, ["run", "view", id, "--log-failed", ...repoFlag(this.pr?.url)]).catch((e) => ({ code: 1, stderr: String(e?.message ?? e) }));
+      keep(r?.code === 0 ? { text: r.stdout ?? "" } : { text: null, error: String(r?.stderr || r?.stdout || "").split("\n")[0] || "GitHub did not send the log." });
+    });
   }
 
   readDiff(cx) {
@@ -485,23 +521,108 @@ export class FolderSession {
     if (this.perform(label, cx, words, async (task) => commandOk(await run(task, args)), (next) => this.reread(next))) this.panel.armed.clear();
   }
 
+  actOn(kind, cx, work, { pull = this.pr, at = null, idOf = () => null, partialOf = () => null, after = () => {}, loud = false } = {}) {
+    if (!pull?.url || this.busy) return false;
+    const { folder } = this.target();
+    const target = { pr: pull, folder, place: `#${pull.number} in ${folder}` };
+    this.busy = kind; this.acted = pendingOf(kind, at); this.actedFor = pull.url; this.note = null;
+    this.panel.armed.clear();
+    this.start(cx, async (task) => {
+      const said = await work(task).then(commandOk).then((r) => ({ r }), (e) => ({ e }));
+      const error = said.e ? String(said.e?.message ?? said.e) : null;
+      this.busy = null;
+      this.acted = said.r ? partlyOf(doneOf(kind, idOf(said.r), at), partialOf(said.r)) : refusedOf(kind, error, at);
+      if (said.r) after(said.r);
+      this.outcome(target, said.r ? { title: ACTS[kind].done, body: pull.title, level: "success" } : { title: ACTS[kind].refused, body: error, level: "error" }, { quiet: !(loud && said.r) });
+      this.reread(task);
+    });
+    return true;
+  }
+
+  undo(cx) {
+    const done = this.acted, url = this.actedFor, place = repoOf(url);
+    if (!place || this.busy || !canUndo(done)) return;
+    this.busy = "undo";
+    this.start(cx, async (task) => {
+      const failed = await undoCalls(done, { ...place, number: Number(url.split("/").at(-1)) })
+        .reduce((prev, args) => prev.then(() => this.gh(task, args).then(commandOk)), Promise.resolve())
+        .then(() => null, (e) => String(e?.message ?? e));
+      this.busy = null;
+      this.acted = failed ? undoRefusedOf(done, failed) : undoneOf(done);
+      this.reread(task);
+    });
+  }
+
   mergeNow(cx) {
     const pr = this.pr;
     if (!pr) return;
-    this.perform("Merge", cx, { failure: "Merge failed", done: `Merged #${pr.number}`, body: pr.title, loud: true }, async (task) => {
+    this.actOn("merge", cx, async (task) => {
       const { o, r: name } = repoOf(pr.url);
       const repo = await this.gh(task, ["repo", "view", `${o}/${name}`, "--json", "squashMergeAllowed,mergeCommitAllowed,rebaseMergeAllowed"]);
       const allowed = repo.code === 0 ? JSON.parse(repo.stdout) : {};
       const method = allowed.squashMergeAllowed !== false ? "--squash" : allowed.mergeCommitAllowed ? "--merge" : "--rebase";
-      commandOk(await this.gh(task, ["pr", "merge", pr.url, method]));
-    }, (next) => this.reread(next));
+      return this.gh(task, ["pr", "merge", pr.url, method]);
+    }, { loud: true });
+  }
+
+  close(cx) { this.actOn("close", cx, (task) => this.gh(task, ["pr", "close", this.pr.url]), { idOf: () => this.actedFor }); }
+
+  markReady(cx) { this.actOn("ready", cx, (task) => this.gh(task, ["pr", "ready", this.pr.url]), { idOf: () => this.actedFor }); }
+
+  rerun(runs, cx) {
+    const ids = [...new Set(runs.filter(Boolean).map(String))];
+    const flag = repoFlag(this.pr?.url);
+    if (!ids.length || !flag.length) return;
+    const each = (task) => Promise.all(ids.map((id) => this.gh(task, ["run", "rerun", id, "--failed", ...flag]).then(commandOk).then(() => ({ id }), (e) => ({ id, error: String(e?.message ?? e) }))));
+    this.actOn("rerun", cx, async (task) => {
+      const runs = await each(task);
+      const started = runs.filter((run) => !run.error).map((run) => run.id);
+      const refused = runs.filter((run) => run.error);
+      if (!started.length) throw new Error(refused[0].error);
+      return { code: 0, stdout: "", started, refused: refused.map((run) => `${run.id}: ${run.error.split("\n")[0]}`).join("\n") || null };
+    }, { idOf: (r) => r.started, partialOf: (r) => r.refused });
+  }
+
+  review(kind, body, cx, pull = this.pr) {
+    const place = repoOf(pull?.url);
+    if (!place || !ready(kind, body)) return;
+    this.actOn(kind, cx, (task) => this.gh(task, reviewArgs(kind, { ...place, number: pull.number, body })), {
+      pull, idOf: (r) => createdId(r.stdout), after: () => this.panel.reviewSent(pull.url, body),
+    });
+  }
+
+  reply(thread, body, cx) {
+    const pr = this.pr, place = repoOf(pr?.url);
+    if (!place || !thread?.comment || !String(body ?? "").trim()) return;
+    this.actOn("reply", cx, (task) => this.gh(task, replyArgs({ ...place, number: pr.number, comment: thread.comment, body })), {
+      at: thread.comment, idOf: (r) => createdId(r.stdout), after: () => this.panel.replySent(thread.comment, body),
+    });
+  }
+
+  createHere(title, body, cx) {
+    if (this.busy || !String(title ?? "").trim()) return;
+    const branch = this.branch;
+    this.busy = "create"; this.note = null; this.created = pendingOf("create");
+    this.start(cx, async (task) => {
+      const said = await this.onGitHub(task, branch)
+        .then(() => this.gh(task, ["pr", "create", "--head", branch, "--title", title, "--body", String(body ?? "")])).then(commandOk).then((r) => ({ r }), (e) => ({ e }));
+      this.busy = null;
+      const url = said.r ? String(said.r.stdout ?? "").trim().split("\n").at(-1) : null;
+      this.created = said.r ? null : refusedOf("create", String(said.e?.message ?? said.e));
+      if (said.r) { this.acted = doneOf("create", url); this.actedFor = url; this.panel.createdHere(); }
+      this.reread(task);
+    });
+  }
+
+  async onGitHub(task, branch) {
+    const now = await this.readPushed(task, this.root, this.on);
+    if (!now || now.state === "late") throw new Error("It took too long to answer.");
+    if (now.state !== "pushed") throw new Error(`${now.state === "behind" ? "pull" : "push"} ${branch ?? "the branch"} first`);
   }
 
   createPr(cx) {
     this.perform("Create", cx, { failure: "Could not create it", done: "Opened GitHub to create the pull request" }, async (task) => {
-      const now = await this.readPushed(task, this.root, this.on);
-      if (!now || now.state === "late") throw new Error("It took too long to answer.");
-      if (now.state !== "pushed") throw new Error(`${now.state === "behind" ? "pull" : "push"} ${this.branch ?? "the branch"} first`);
+      await this.onGitHub(task, this.branch);
       commandOk(await this.gh(task, ["pr", "create", "--web"]));
     }, (next) => next.notify());
   }

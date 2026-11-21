@@ -1,5 +1,5 @@
 import { loadStrip, loadTabs, loadTabPanels } from "./mod-fixtures.mjs";
-import { loadSidebar, mountedState, recorder } from "./sidebar-fixtures.mjs";
+import { loadSidebar, mountedState, withParts, recorder } from "./sidebar-fixtures.mjs";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { clone, load, layoutHost } from "./helpers.mjs";
@@ -230,18 +230,18 @@ test("kanso-tabs shows its panels in the order you drag them, without the ones y
   const host = { shared: (k) => store[k], setShared: (k, v) => { store[k] = v; } };
   const { panelList, movePanel, setPanelOn } = await load("kanso-tabs/main.js", ["panelList", "movePanel", "setPanelOn"], host);
   const ids = () => clone(panelList().filter((p) => p.on).map((p) => p.id));
-  assert.deepEqual(ids(), ["files", "insights", "pr", "shipped", "worktrees", "ports", "containers", "memory", "look", "sim"], "Spend, Worktrees, Ports, Containers, Memory, Look and Simulator ship with Kanso; no Specs");
+  assert.deepEqual(ids(), ["files", "insights", "pr", "shipped", "worktrees", "ports", "containers", "memory", "look", "sim", "dojo"], "Spend, Worktrees, Ports, Containers, Memory, Look, Simulator and the hjkl dōjō ship with Kanso; no Specs");
   movePanel("shipped", "files");
-  assert.deepEqual(ids(), ["shipped", "files", "insights", "pr", "worktrees", "ports", "containers", "memory", "look", "sim"], "dropped on Files: takes its place");
+  assert.deepEqual(ids(), ["shipped", "files", "insights", "pr", "worktrees", "ports", "containers", "memory", "look", "sim", "dojo"], "dropped on Files: takes its place");
   movePanel("files", "pr");
-  assert.deepEqual(ids(), ["shipped", "insights", "pr", "files", "worktrees", "ports", "containers", "memory", "look", "sim"], "dragged right");
+  assert.deepEqual(ids(), ["shipped", "insights", "pr", "files", "worktrees", "ports", "containers", "memory", "look", "sim", "dojo"], "dragged right");
   setPanelOn("pr", false);
-  assert.deepEqual(ids(), ["shipped", "insights", "files", "worktrees", "ports", "containers", "memory", "look", "sim"]);
+  assert.deepEqual(ids(), ["shipped", "insights", "files", "worktrees", "ports", "containers", "memory", "look", "sim", "dojo"]);
   assert.equal(panelList().find((p) => p.id === "pr").on, false, "still listed in the popup, off");
   setPanelOn("pr", true);
-  assert.deepEqual(ids(), ["shipped", "insights", "pr", "files", "worktrees", "ports", "containers", "memory", "look", "sim"], "back where it was");
+  assert.deepEqual(ids(), ["shipped", "insights", "pr", "files", "worktrees", "ports", "containers", "memory", "look", "sim", "dojo"], "back where it was");
   store["kanso.panels.order"] = ["files", "insights", "pr", "shipped"];
-  assert.deepEqual(clone(ids().slice(-6)), ["worktrees", "ports", "containers", "memory", "look", "sim"], "panels added after you placed yours come after them");
+  assert.deepEqual(clone(ids().slice(-7)), ["worktrees", "ports", "containers", "memory", "look", "sim", "dojo"], "panels added after you placed yours come after them");
   store["kanso.panels"] = [{ id: "workflow", label: "Workflow", mod: "herdr-workflow" }];
   assert.equal(ids().at(-1), "workflow", "a custom panel you never placed comes last");
 });
@@ -260,6 +260,18 @@ test("kanso-tabs.sim toggles the Simulator panel", async () => {
   const tabs = await tabsIn(f);
   assert.equal(pressSim(tabs, f)[0].content.mod, "kanso-sim");
   assert.deepEqual(pressSim(tabs, f), []);
+});
+
+test("kanso-tabs.dojo toggles the dōjō panel", async () => {
+  const { f, tabs } = await withTabs();
+  tabs.command("dojo");
+  f.flush();
+  const mounted = f.panel().children;
+  assert.equal(mounted[0].id, "dojo");
+  assert.equal(mounted[0].content.mod, "kanso-dojo");
+  tabs.command("dojo");
+  f.flush();
+  assert.deepEqual(f.panel().children, []);
 });
 
 test("Simulator is absent without native tools, present with either, and hidden like any panel", async () => {
@@ -314,9 +326,9 @@ test("kanso-spaces passes an explicit machine to space.new for local, remote, an
     spaces: spList, machines: () => [{ name: null, layout: "ready" }, { name: "odin", layout: "ready" }],
     run: (cmd, args) => calls.push([cmd, clone(args ?? null)]),
   });
-  const view = Object.assign(new Spaces(), mountedState({
+  const view = withParts(Object.assign(new Spaces(), mountedState({
     shown: new Set(["odin/sp1"]), machines: [{ name: "odin", state: "connected", target: "odin.example" }], tools: node,
-  }));
+  })));
   view.hoverMachine = "local";
   view.render();
 

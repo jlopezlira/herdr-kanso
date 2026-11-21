@@ -3,8 +3,8 @@ import { paths } from "./platform-paths.js";
 // Props: sleep { scope: "agent" | "tab" | "project", space, tab, pane }, wake { space, tab, terminal }.
 // Asleep is Herdr's own state: each Claude terminal keeps its conversation id as a label, and its tab is settled.
 import { View } from "gpui-kit";
-import { spaces, panes, terminals, shared, hc, run, props, closeOverlay, theme, home } from "herdr";
-import { isClaude, promptEmpty, asksToExit, RESUME_LABEL, isSessionId, resumeLine, asleepTerminal } from "./resume.js";
+import { spaces, panes, terminals, shared, setShared, hc, run, props, closeOverlay, theme, home } from "herdr";
+import { isClaude, promptEmpty, asksToExit, RESUME_LABEL, isSessionId, resumeLine, asleepTerminal, SLEEP_PENDING, SLEEP_WAKING, SLEEP_FAILED, COULD_NOT_SLEEP, withoutTerminals } from "./resume.js";
 import { tilde, describe, spaceBeside } from "./tabkit.js";
 import { focusOn, bounded } from "./pure.js";
 import { tokens } from "./ui.js";
@@ -227,26 +227,35 @@ export default class Sleep extends View {
   async sleep(cx) {
     if (this.busy || this.error || !this.reads) return;
     const plan = sleepPlan(this.order.scope, this.space, this.tabIds(), this.reads, spaces());
+    const moving = [...plan.exits.map((r) => r.terminal), ...plan.interrupts];
+    setShared(SLEEP_FAILED, withoutTerminals(shared(SLEEP_FAILED), moving));
+    setShared(SLEEP_PENDING, { terminals: moving });
     this.busy = "Going to sleep";
     cx.notify();
-    const say = (why) => {
+    const say = (why, terminals = moving) => {
       if (!why.length) return false;
       this.error = `It can't sleep: ${why.join("; ")}.`;
+      setShared(SLEEP_PENDING, null);
+      setShared(SLEEP_FAILED, { text: COULD_NOT_SLEEP, terminals });
       return true;
     };
     try {
-      const failed = (await Promise.all(plan.exits.map((r) => exitOne(cx, r)))).filter(Boolean);
-      if (say(failed)) return;
+      const exits = await Promise.all(plan.exits.map(async (r) => ({ terminal: r.terminal, why: await exitOne(cx, r) })));
+      const failed = exits.filter((row) => row.why);
+      if (say(failed.map((row) => row.why), failed.map((row) => row.terminal))) return;
       const stopped = (await Promise.all(plan.interrupts.map(async (t) => {
         const outcome = await host(cx, ["interrupt", t]);
         if (outcome.outcome === "ok") return null;
         const name = this.reads.find((r) => r.terminal === t)?.name ?? t;
-        return outcome.outcome === "refused" ? `${name} could not be stopped` : said(name, outcome);
+        return { terminal: t, why: outcome.outcome === "refused" ? `${name} could not be stopped` : said(name, outcome) };
       }))).filter(Boolean);
-      if (say(stopped)) return;
+      if (say(stopped.map((row) => row.why), stopped.map((row) => row.terminal))) return;
       for (const [cmd, args] of plan.after) run(cmd, args);
+      setShared(SLEEP_PENDING, null);
+      setShared(SLEEP_FAILED, withoutTerminals(shared(SLEEP_FAILED), moving));
       closeOverlay(props()?.overlay);
     } finally {
+      if (shared(SLEEP_PENDING)) setShared(SLEEP_PENDING, null);
       this.busy = null;
       cx.notify();
     }
@@ -261,6 +270,8 @@ export default class Sleep extends View {
       : (this.space?.tabs ?? []).map((t) => t.id).filter((id) => asleepTabs.has(id));
     const plan = wakePlan(this.space, ids, terminal ?? null, ps, terms);
     if (!plan.sessions.length && !plan.commands.some(([cmd]) => cmd === "tab.unsettle")) { this.error = "That is no longer asleep."; return; }
+    const waking = plan.sessions.map((session) => session.resume?.[1]).filter(Boolean);
+    setShared(SLEEP_WAKING, { terminals: waking });
     this.busy = "Waking";
     for (const [cmd, args] of plan.commands) run(cmd, args);
     cx.spawn(async (task) => {
@@ -269,6 +280,7 @@ export default class Sleep extends View {
         if (!failed.length) { closeOverlay(props()?.overlay); return; }
         this.error = wakeFailure(failed);
       } finally {
+        setShared(SLEEP_WAKING, withoutTerminals(shared(SLEEP_WAKING), waking));
         this.busy = null;
         task.notify();
       }

@@ -22,6 +22,36 @@ in version.json, which the stable updater offers. Versions follow
 [Keep a Changelog](https://keepachangelog.com). `npm run check:version` checks
 the branch's rules.
 
+## [3.32.0] - 2026-11-21
+
+### Added
+
+- Add a computer finds the computers on this network that answer ssh and lists them with Add; a setting under Background turns the search off. (#443)
+- A computer added from Add a computer can be disconnected there, with Undo. (#443)
+- A computer on your tailnet that is also on this network is reached over the local network, and over Tailscale when you are away, without a step from you. On Windows it keeps its Tailscale route. (#443)
+- Set up with an agent, in Add a computer, starts your agent with one prompt that walks you through getting another computer ready, over the local network or with Tailscale, and adds it. (#443)
+- Add a computer is back at the foot of the sidebar, above Settings, and opens kansō's own dialog. Your Tailscale computers are listed with Add: one press connects, with no key when the computer has Tailscale SSH, and installs what it needs there. Your ssh config hosts follow. A computer that wants its password opens a tab to type it once and is added right after. One that refuses ssh says what to turn on, and an offline one says it is offline.
+- Approve, request changes and comment on a pull request from the Pull requests panel, with Undo. (#400)
+- Re-run a failing check and read its whole log, reply to a thread, open a pull request, Undo on close, ready, reply and a new pull request, keys for every action, and statistics on the board, all from the Pull requests panel. (#400)
+- The hjkl dōjō has its own button in the tab bar and opens in the side panel, like Memory or Spend; Pieces can hide it like any other panel.
+
+### Changed
+
+- The Pull requests panel shows one block per repository, with what needs you, your own, failing checks and the oldest wait; outside a repository it finds the repositories in the folder. (#400)
+- The collapsed sidebar on Projects no longer shows the view switch. On Status and Threads the view button and its menu stay, and the view keys still change view from any rail. (#232)
+- The sidebar draws its header, view switch, rows and footer as one piece, and the layout file no longer has a separate footer block; a change in one session no longer redraws the header or the footer. (#282)
+- kansō help and kansō settings are two separate windows that no longer link to each other. Settings keeps Pieces, Keys and Updates; help has Keyboard, Guide, What's new and Credits.
+- Credits lists Jericho Siahaya and Fabian among the people who made kansō.
+
+### Fixed
+
+- The sidebar no longer rebuilds its rows on a refresh that changed nothing they show.
+- When a busy computer makes Herdr stop a sidebar draw, the sidebar draws again by itself, so "This view could not be re-rendered" no longer stays over an empty project list.
+- An asleep row on a computer that cannot be reached no longer offers Wake. Sleep and Wake move the row at once, and a sleep that does not finish shows could not sleep with Undo on the row. Forgetting a slept conversation asks for a second press, and the row shows that. (#231)
+- While you were away keeps a closed pane's last words. A right-click dismisses the summary or switches it off. The summary takes the sidebar's width, including 420. (#231)
+- Needs you, when it is open and nobody is waiting, draws nothing and the project list returns. (#231)
+- Credits keeps each picture beside its name and note, so the rows no longer run into each other.
+
 ## [3.31.1] - 2026-11-20
 
 ### Changed

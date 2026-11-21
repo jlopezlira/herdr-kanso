@@ -69,4 +69,10 @@ test("Copies made by the shared-file sync are skipped and their sources scanned"
   assert.deepEqual(files.filter((file) => copies.includes(file)), []);
   assert.ok(files.includes("kanso/mods/kanso-spaces/marks.js"));
   assert.ok(files.includes("tests/check-dupes.test.mjs") && files.includes(".github/workflows/ci.yml"));
+  const help = copies.filter((file) => file.startsWith("kanso/mods/kanso-help/"));
+  for (const name of ["pets.js", "store.js", "file-store.js", "mascot.js", "mascot-pixels.js", "platform-database.js", "platform-pets.js", "platform-sqlite.js"]) {
+    assert.equal(help.includes("kanso/mods/kanso-help/" + name), false, name);
+  }
+  assert.ok(help.includes("kanso/mods/kanso-help/release.js"), "the release order is copied into help");
+  assert.ok(help.includes("kanso/mods/kanso-help/lit.js"), "the lit cap stays a help copy");
 });

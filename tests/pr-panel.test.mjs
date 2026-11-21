@@ -261,7 +261,7 @@ test("Pull request panel offers to create one only where gh can: a branch pushed
     const waiting = panel.waiting.bind(panel);
     panel.waiting = (c, title, detail, action) => { said = { title, detail }; return waiting(c, title, detail, action); };
     panel.body({}, true);
-    const link = ids.includes("pr-create");
+    const link = ids.includes("pr-new");
     panel.session.listing = true; panel.session.tab = "open"; ids.length = 0;
     await refreshAgain(panel, cx, drain);
     panel.body({}, true);
@@ -488,7 +488,7 @@ test("a failed run's log is read once, and not while the window is behind", asyn
     if (args[0] === "repo") return success("WRITE\n");
   });
   const { panel, cx, drain } = await panelOn(exec, { window: () => ({ active }) });
-  assert.deepEqual(runs, ["run view 99 --log-failed"]);
+  assert.deepEqual(runs, ["run view 99 --log-failed -R o/here"]);
   await refreshAgain(panel, cx, drain);
   assert.equal(runs.length, 1);
   active = false;

@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import { mkdir, writeFile, realpath, rm } from "node:fs/promises";
 import { join, relative } from "node:path";
 import { load, clone, temporary, exec, until, elements, watchPopups, watchLines, failure, context, gitOk, fileExists as exists, gpuiHost, popoverHost, keyboard, texts, calls as calls_ } from "./helpers.mjs";
-import { loadSidebar, mountedState, recorder } from "./sidebar-fixtures.mjs";
+import { loadSidebar, mountedState, withParts, recorder } from "./sidebar-fixtures.mjs";
 
 const NAMES = ["placeKey", "keyOfSpace", "keyOfProject", "closedProjects", "shownNames", "startingProjects", "parseWorktreeList", "addWorktree", "worktreesOf", "missingFolders", "folderName", "trimmed"];
 const projects = () => load("kanso-spaces/projects.js", NAMES, { exec });
@@ -146,7 +146,7 @@ test("the top + adds a project in Projects and starts a conversation in Threads;
     openOverlay: (o) => overlays.push(clone({ kind: o.kind, props: o.props })),
     knownAgents: async () => [{ key: "claude", name: "Claude Code", installed: true, run: ["claude"] }, { key: "codex", name: "Codex", installed: true, run: ["codex"] }],
   });
-  const view = Object.assign(new Spaces(), mountedState({ shown: new Set(["sp-agile"]) }));
+  const view = withParts(Object.assign(new Spaces(), mountedState({ shown: new Set(["sp-agile"]) })));
   const addFromTop = () => {
     view.render();
     handlers["on_click:spaces-header-0-0-0"]({}, { stop_propagation() {}, notify() {} });
@@ -278,7 +278,7 @@ test("New conversation's menu ends with Add computer, last for the keyboard too,
   const { view, calls, made, height } = await menuOf(null);
   assert.deepEqual(made, ["New project with a conversation\u2026", "Open a folder, no project\u2026", "Add computer\u2026"]);
   view.menuActs.at(-1)({});
-  assert.deepEqual(calls, [["mod.open", { name: "machine-add" }]], "the last row the keyboard reaches opens Add computer");
+  assert.deepEqual(calls, [["mod.open", { name: "kanso-computers" }]], "the last row the keyboard reaches opens Add computer");
   assert.equal(height, 8 + 28 + 0 + 9 + 3 * 32, "no project: 4 at each edge, the title, the line and three items");
   assert.equal((await menuOf(null, 12)).height, 8 + 28 + 11 * 32 + 9 + 3 * 32, "a long run stops at 11 items and Add computer still fits under it");
   const off = await menuOf({ "footer.machine": "hide" }, 12);

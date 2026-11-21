@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { load, context, exec, nativePlatform, nativeWindow, temporary, clone, until, failure, success, readOrNull } from "./helpers.mjs";
 
-const names = ["Updater", "newestTag", "compareVersions", "mergeKeys", "SOURCE", "footerPx", "HOLD", "INSTALL_SCRIPT", "RECOVER", "LAUNCH", "updateHost", "windowsInstallScript", "windowsLaunchScript", "windowsRecoverScript", "sameVolume"];
+const names = ["Updater", "newestTag", "compareVersions", "mergeKeys", "SOURCE", "HOLD", "INSTALL_SCRIPT", "RECOVER", "LAUNCH", "updateHost", "windowsInstallScript", "windowsLaunchScript", "windowsRecoverScript", "sameVolume"];
 export const repo = new URL("../kanso/", import.meta.url);
 export const windows = process.platform === "win32";
 const timed = (name, fn) => async (t) => {
@@ -205,7 +205,7 @@ export function heldDirectory(t, file, release) {
 }
 
 export async function updater(host) {
-  return load("kanso-chrome/update.js", names, host);
+  return load("kanso-tabs/update.js", names, host);
 }
 
 // A Herdr home with Kanso 1.0.0 installed and used, and two releases served
@@ -271,15 +271,12 @@ export async function fixture(t, { layoutChanged = true, homeName = "O'Brien hom
   // kills what runs past `limit`, as Herdr's does at 30 s. `abandon` plays the copy replaced by
   // the swap: from its next pause on, it never runs again.
   const window = async () => {
-    const store = {}, toasts = [], resizes = [];
-    const footer = { id: "sidebar-footer", size: { px: 156 } };
+    const store = {}, toasts = [];
     // holdCurl: the plan's downloads wait for release(), keeping an install in preparation.
     const gate = {};
     gate.promise = new Promise((resolve) => { gate.open = resolve; });
     const ctl = { abandon: false, stuck: 0, limit: 30000, holdCurl: false, held: 0, release: () => gate.open() };
     const host = {
-      layout: () => ({ id: "root", children: [{ id: "sidebar", children: [footer] }] }),
-      run: (name, args) => { resizes.push(args.px); footer.size = { px: args.px }; return null; },
       appHome: () => home,
       shared: (k) => store[k],
       setShared: (k, v) => { store[k] = v; },
@@ -296,7 +293,7 @@ export async function fixture(t, { layoutChanged = true, homeName = "O'Brien hom
       },
     };
     const { Updater, HOLD } = await updater(host);
-    return { store, toasts, resizes, footer, ctl, HOLD, Updater, updater: new Updater(source) };
+    return { store, toasts, ctl, HOLD, Updater, updater: new Updater(source) };
   };
   return { root, home, checks, flag, source, window, userKeys, ...(await window()) };
 }

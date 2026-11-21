@@ -1,14 +1,14 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { load, nodes, texts, svgsOf, themed, calls, arg, KIT_NIGHT, popoverHost as host, everyDrawn as every, blockedDots, repoText, numberArguments } from "./helpers.mjs";
-import { loadSidebar, mountedState, recorder } from "./sidebar-fixtures.mjs";
+import { loadSidebar, mountedState, withParts, recorder } from "./sidebar-fixtures.mjs";
 import { mountChrome } from "./mod-fixtures.mjs";
 
 const compositions = async () => themed({
   kit: await load("kanso-panel/kit.js", ["menu", "stack"], host()),
   ...await load("kanso-spaces/toolbar.js", ["toolbar", "addLabels"], host()),
   ...await load("kanso-chrome/header.js", ["header"], host()),
-  ...await load("kanso-chrome/sidebar-footer.js", ["sidebarFooter"], host()),
+  ...await load("kanso-spaces/sidebar-footer.js", ["sidebarFooter"], host()),
   ...await load("kanso-panel/ui.js", ["tokens", "G", "H", "R", "PANE", "DAWN", "DAWN_H"], host()),
 }, KIT_NIGHT);
 const tipsOf = (el) => every(el).flatMap((kid) => calls(kid, "tooltip").map((call) => call[1]));
@@ -133,7 +133,7 @@ test("Dawn Mode's art is the sky in each theme's colours", async () => {
 test("The app sidebar draws its header from the composition, the lights left to the window's block above", async () => {
   const drawn = recorder();
   const { Spaces } = await loadSidebar(drawn.host, { window: () => ({ platform: "macos", active: true }) });
-  Object.assign(new Spaces(), mountedState({ order: "attention" })).render();
+  withParts(Object.assign(new Spaces(), mountedState({ order: "attention" }))).render();
   assert.ok(drawn.ids.includes("spaces-header"));
   assert.ok(drawn.tips.includes("Sort: Needs you first"), "Sort's tooltip names the order");
   assert.ok(["Add project", "Search", "Hide sidebar"].every((tip) => drawn.tips.includes(tip)));
@@ -163,7 +163,7 @@ const rail = async (own = {}) => {
     agents: () => [{ address: "t1", pane: "p1", tab: "tab1", space: "sp1", space_name: "app", status: "blocked", program: { agent: true, name: "Claude Code" }, title: "t1", seq: 1 }],
     window: () => ({ platform: "macos", active: true }), openOverlay() {}, run() {},
   });
-  const view = Object.assign(new Spaces(), mountedState({ shown: new Set(["sp1"]), ...own.state }));
+  const view = withParts(Object.assign(new Spaces(), mountedState({ shown: new Set(["sp1"]), ...own.state })));
   return { view, drawn, dots, render: () => { drawn.clear(); view.render(); } };
 };
 
@@ -182,15 +182,17 @@ test("Collapsed, while someone needs you and Status is not on show, the view but
   assert.equal(arg(asked, "tooltip"), "Projects · Someone needs you");
   assert.equal(dots(button({ view: "spaces" })), 0);
   assert.equal(dots(button({ view: "agents", asks: true })), 0, "on Status, the states say it already");
-  const { drawn, render } = await rail();
+  const { drawn, render } = await rail({ state: { view: "threads", threads: {} } });
   render();
-  assert.ok(drawn.tips.includes("Projects · Someone needs you"), "in the rail, while Projects is on show, its tooltip says someone needs you");
+  assert.ok(drawn.tips.includes("Threads · Someone needs you"), "in the rail, while Threads is on show, its tooltip says someone needs you");
 });
 
 test("A view key shuts the collapsed view menu, as a pick from it does", async () => {
-  const { view, render } = await rail();
+  const { view, render, drawn } = await rail({ state: { view: "threads", threads: {} } });
   view.viewMenu = true;
+  view.paint();
   render();
+  assert.ok(drawn.ids.some((id) => id.startsWith("rail-view-menu")), "the menu is on screen");
   view.command("view-agents", cx);
   assert.deepEqual([view.view, view.viewMenu], ["agents", false]);
 });
@@ -225,7 +227,7 @@ test("No hand-drawn toolbar, header or footer is left, and the stacks draw no li
 });
 
 test("The footer builds no update stage of its own", () => {
-  for (const file of ["kanso/mods/kanso-chrome/main.js", "kanso/mods/kanso-chrome/footer-model.js", "kanso/mods/kanso-chrome/sidebar-footer.js"]) {
+  for (const file of ["kanso/mods/kanso-chrome/main.js", "kanso/mods/kanso-chrome/footer-model.js", "kanso/mods/kanso-spaces/sidebar-footer.js"]) {
     assert.doesNotMatch(repoText(file), /Downloading|Installing/, `${file} builds no stage`);
   }
 });

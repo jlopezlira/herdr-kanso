@@ -3,11 +3,8 @@ import { missingKeys, shippedKeymap } from "./platform-keymap.js";
 import { paths } from "./platform-paths.js";
 import { sameVolume, updateHost, windowsInstallScript, windowsLaunchScript, windowsRecoverScript } from "./platform-update.js";
 // Kanso's own updates, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
-import { exec, readTextFile, appHome, shared, setShared, notify, layout, run, writeTextFile } from "herdr";
-import { tryOr, tryOrAsync, nodeById } from "./pure.js";
-import { stateBlockPx } from "./ui-state.js";
-import { COLLAPSED, REFUSAL_LINES, footerHeight, railHeight, refusalBlock } from "./footer-model.js";
-import { footerRows } from "./sidebar-footer.js";
+import { exec, readTextFile, appHome, shared, setShared, notify, writeTextFile } from "herdr";
+import { tryOr, tryOrAsync } from "./pure.js";
 import { pieces, runs, shown } from "./pieces.js";
 import { channelOf, compareReleases, hostInstall, installedRelease, newestTag, offerRelease, parseRelease } from "./release.js";
 import { alreadyUpdating, checkFailed, installFailed, updateAvailable, updated, upToDate } from "./notices.js";
@@ -20,7 +17,7 @@ export const SOURCE = {
   checker: "herdr-app",
 };
 
-const STATE = "kanso.update";
+export const STATE = "kanso.update";
 // ls-remote costs no GitHub API quota; EVERY keeps copies from asking twice.
 const TICK = 5 * 60 * 1000;
 const EVERY = 4 * 60 * 1000;
@@ -40,19 +37,6 @@ const RECOVER_MS = 5 * 60 * 1000;
 const BUSY = 75;
 // Under Herdr's home: the lock, and per install its staging folder, pid, log and outcome.
 const UPDATES = ".kanso-updates";
-// The footer is as tall as its rows, or its squares in the rail; a refused update's block counts only while open.
-const FOOTER = "sidebar-footer";
-const REFUSED_PX = stateBlockPx(refusalBlock("words"), REFUSAL_LINES);
-export const footerPx = (update, refused = null, open = true) => {
-  const rows = footerRows({ update });
-  return open ? footerHeight(rows, update && refused ? REFUSED_PX : 0) : railHeight(rows);
-};
-// Every size this sets, now or before the account chip left (84 and 36 a row), so one you sized yourself stays.
-const LEGACY_BASE_PX = 84, LEGACY_ROW_PX = 36;
-const legacy = (px) => px >= LEGACY_BASE_PX + LEGACY_ROW_PX && px <= LEGACY_BASE_PX + LEGACY_ROW_PX * 5 && (px - LEGACY_BASE_PX) % LEGACY_ROW_PX === 0;
-const SIZES = new Set([1, 2, 3].flatMap((rows) => [footerHeight(rows), footerHeight(rows, REFUSED_PX), railHeight(rows)]));
-const OURS = (px) => legacy(px) || SIZES.has(px);
-
 export function compareVersions(a, b) {
   return compareReleases(a, b);
 }
@@ -312,7 +296,6 @@ export class Updater {
       // The tab bar copy picks up an install a replaced copy started; it reports the outcome.
       if (polls) Object.keys(this.installs()).forEach((id) => cx.spawn((cx) => this.follow(cx, id)));
       if (polling()) await this.check(cx, true);
-      this.fit();
       cx.notify();
     });
     cx.timer.every(TICK, (cx) => cx.spawn(async (cx) => {
@@ -320,27 +303,14 @@ export class Updater {
       await this.recovered();
       if (polling()) await this.check(cx);
       else if (!this.busy) await this.readInstalled();
-      this.fit();
       cx.notify();
     }));
-    // The polling copy fits the footer when a row is turned on or off, or a release is found. The other copy fits on start and on its slow tick.
     if (polls) cx.timer.every(1500, (cx) => {
       const channel = this.channel();
       const changed = this.seenChannel != null && this.seenChannel !== channel;
       this.seenChannel = channel;
-      const now = JSON.stringify([this.state().latest ?? null, channel, this.refused(), shared(COLLAPSED) === true]);
-      if (now !== this.fitSeen) { this.fitSeen = now; this.fit(); }
       if (changed) cx.spawn((cx) => this.check(cx, true));
     });
-  }
-
-  // Resized only when at a size we set, so a footer you sized yourself is left alone.
-  fit() {
-    const found = tryOr(() => ({ size: nodeById(layout()?.root ?? layout(), FOOTER)?.size?.px }));
-    if (!found) return;
-    const { size } = found;
-    const want = footerPx(this.available(), this.refused(), shared(COLLAPSED) !== true);
-    if (size !== want && OURS(size)) run("layout.resize", { id: FOOTER, px: want });
   }
 
   // The updater of an older release notes `done` before its swap; the copy that swap starts reports it.
@@ -386,7 +356,6 @@ export class Updater {
     this.working = true;
     this.error = null;
     this.refuse(null);
-    this.fit();
     const spec = hostInstall(v, this.installed);
     this.mark(id, { version: v, from: this.installed, notes: "", at: Date.now(), phase: "preparing" });
     cx.notify();
@@ -507,7 +476,6 @@ export class Updater {
       notify(installFailed(this.error));
     }
     this.refuse(state === "error" ? this.error : null);
-    this.fit();
     cx.notify();
     return told;
   }

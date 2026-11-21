@@ -29,11 +29,12 @@ const PICK = {
   SIDEBAR: { w: "k-w-sidebar", narrow: "k-w-sidebar-narrow", min: "k-w-sidebar-min", railRow: "k-rail-row", tile: "k-rail-tile", guideX: "k-guide-x", agentX: "k-sidebar-agent-x", elbowGap: "k-sidebar-elbow-gap", gap: "k-sidebar-row-gap", gutter: "k-sidebar-gutter", groupGap: "k-sidebar-group-gap", computerGap: "k-sidebar-computer-gap", threadGap: "k-sidebar-thread-gap" },
   PANE: { edge: "k-edge-w", gap: "k-pane-gap", minW: "k-pane-min-w", minH: "k-pane-min-h", pills: "k-w-pills" },
   KEY: { x: "k-keycap-x", text: "k-keycap-text", unit: "k-help-key", gap: "k-help-key-gap" },
-  DIALOG: { wide: "k-dialog-w", small: "k-dialog-small", sidebar: "k-dialog-sidebar", worktree: "k-dialog-worktree", prompt: "k-dialog-prompt", list: "k-h-dialog-list", pad: "k-dialog-paged-pad", settingsW: "k-settings-w", settingsH: "k-settings-tall" },
-  PR: { title: "k-pr-title", titleMax: "k-pr-title-max", fold: "k-pr-body-fold" },
+  DIALOG: { wide: "k-dialog-w", small: "k-dialog-small", sidebar: "k-dialog-sidebar", worktree: "k-dialog-worktree", prompt: "k-dialog-prompt", list: "k-h-dialog-list", pad: "k-dialog-paged-pad", settingsW: "k-settings-w", settingsH: "k-settings-tall", computers: "k-dialog-computers" },
+  PR: { title: "k-pr-title", titleMax: "k-pr-title-max", fold: "k-pr-body-fold", ages: "k-pr-ages" },
   SKELETON: { text: "k-skeleton-text", meta: "k-skeleton-meta" },
   HEATMAP_GAP: "k-heatmap-gap",
   DOJO_CELL: "k-dojo-cell",
+  DOJO: { gap: "k-dojo-gap", pad: "k-dojo-board-pad", char: "k-dojo-char", wide: "k-dojo-wide", w: "k-dojo-w" },
   CODE: { line: "k-lh-line", gutter: "k-h-pane" },
 };
 // Line heights, as a share of the font size.
@@ -138,7 +139,6 @@ export const LAYOUT_SIZES = {
   sidebar: { "size.px": "k-w-sidebar", min: "k-w-sidebar-layout-min", max: "k-w-sidebar-max" },
   brand: { "size.px": "k-h-tab-bar" },
   spaces: { min: "k-h-spaces-min" },
-  "sidebar-footer": { "size.px": "k-h-sidebar-footer" },
   work: { padding: "k-pane-gap", gap: "k-sp-1" },
   tabs: { "size.px": "k-h-tab-bar" },
   "work-body": { gap: "k-pane-gap" },

@@ -48,6 +48,7 @@ const PANELS = {
   insights: { mod: "kanso-spend" },
   memory: { mod: "kanso-guard" },
   sim: { mod: "kanso-sim" },
+  dojo: { mod: "kanso-dojo" },
 };
 
 function customPanels() {
@@ -73,6 +74,7 @@ const BUILTIN = [
   { id: "memory", label: "Memory", icon: "lu-memory-stick" },
   { id: "look", label: "Images", icon: "lu-image" },
   { id: "sim", label: "Simulator", icon: "lu-smartphone" },
+  { id: "dojo", label: "hjkl dōjō", icon: "lu-gamepad-2" },
 ];
 const list = (key) => { const v = shared(key); return Array.isArray(v) ? v.filter((x) => typeof x === "string") : []; };
 const simulatorRoster = () => JSON.stringify([list(ORDER), choice("panel.sim", pieces(shared)), customPanels()]);
@@ -168,7 +170,7 @@ export default class Tabs extends View {
   async barCommand(c, cx) {
     const name = String(c).replace(/^kanso-tabs\./, "");
     if (name === "update") this.updater.install(cx);
-    else if (name === "check") { await this.updater.check(cx, true, true); this.updater.fit(); }
+    else if (name === "check") await this.updater.check(cx, true, true);
     else if (name === "settings" || name.startsWith("settings-")) {
       const asked = name.slice(9);
       openSettings(!asked || asked === "mods" ? "pieces" : asked);
@@ -238,8 +240,8 @@ export default class Tabs extends View {
     } else if (name === "memory") {
       const tree = layout();
       if (this.openPanel(walkLayout(tree, "panel"), walkLayout(tree, "panel-body")) !== "memory") this.mount("memory");
-    } else if (name === "sim" || panel) {
-      const id = panel ? panelList(this.commandsHere()).filter((x) => x.on)[Number(panel[1]) - 1]?.id : "sim";
+    } else if (name === "sim" || name === "dojo" || panel) {
+      const id = panel ? panelList(this.commandsHere()).filter((x) => x.on)[Number(panel[1]) - 1]?.id : name;
       if (!id || !panelList(this.commandsHere()).some((item) => item.id === id && item.on)) return;
       const tree = layout(), now = this.openPanel(walkLayout(tree, "panel"), walkLayout(tree, "panel-body"));
       this.mount(now === id ? null : id);

@@ -1,5 +1,5 @@
 // Dragging a project row in the sidebar: where it shows it lands, and where it moves.
-import { drawEachTime, loadSidebar, mountedState, recorder } from "./sidebar-fixtures.mjs";
+import { drawEachTime, loadSidebar, mountedState, withParts, recorder } from "./sidebar-fixtures.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { clone } from "./helpers.mjs";
@@ -13,10 +13,10 @@ async function draw(list, extra = {}) {
     spaces: () => list, machines: () => [{ name: null, layout: "ready" }, { name: "m2", layout: "ready" }],
     run: (cmd, args) => runs.push([cmd, args]),
   });
-  const view = Object.assign(new Spaces(), mountedState({
+  const view = withParts(Object.assign(new Spaces(), mountedState({
     shown: new Set(list.map((w) => w.id)), machines: [{ name: "m2", state: "connected" }],
     threadGroup: true, armed: { is: () => false }, ...extra,
-  }));
+  })));
   const render = drawEachTime(view, clear);
   const press = (id) => { handlers[`on_mouse_down:left:space-${id}`]({ click_count: 1 }, cx); render(); };
   const move = (id) => { handlers[`on_mouse_move:space-${id}`]?.({}, cx); render(); };

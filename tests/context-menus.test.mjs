@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { load, popoverHost, chain, clone, calls, context, texts, everyDrawn, CHROME_NIGHT } from "./helpers.mjs";
-import { loadSidebar, mountedState, recorder, world, shell } from "./sidebar-fixtures.mjs";
+import { loadSidebar, mountedState, withParts, recorder, world, shell } from "./sidebar-fixtures.mjs";
 import { loadWorkspaceStatus } from "./mod-fixtures.mjs";
 import { paneMenu, tabBar, footer, BINDINGS } from "./menu-fixtures.mjs";
 import ROWS from "./fixtures/context-menu-rows.json" with { type: "json" };
@@ -57,7 +57,7 @@ async function sidebarPopup({ popup, open, status = "working", labels = {}, regi
     Date: FrozenDate, appHome: () => "/Users/me/.config/herdr-app", shared: (key) => store[key] ?? null,
     props: () => ({ [popup]: open, overlay: "o", ...(popup === "newAgent" ? { start: true } : {}) }), closeOverlay: () => {},
   });
-  const view = Object.assign(new Spaces(), mountedState({ shown: new Set(["sp1"]), armed: { is: (key) => key === armed }, menuAt: -1, sub, trees: TREES, known }));
+  const view = withParts(Object.assign(new Spaces(), mountedState({ shown: new Set(["sp1"]), armed: { is: (key) => key === armed }, menuAt: -1, sub, trees: TREES, known })));
   return [menuOf(view.render())];
 }
 
@@ -67,7 +67,7 @@ async function machineSidebar(host = {}) {
     appHome: () => "/app", exec: async () => ({ code: 0, stdout: "" }), hc: async () => ({ code: 0, stdout: "" }),
     readTextFile: async () => null, writeTextFile: async () => {}, notify: (note) => toasts.push(note), openOverlay: (o) => opened.push(clone(o.props)), ...host,
   });
-  const view = Object.assign(new Spaces(), mountedState({ machines: [{ name: "devbox", target: "devbox.example", via: "", session: "", state: "connected" }] }));
+  const view = withParts(Object.assign(new Spaces(), mountedState({ machines: [{ name: "devbox", target: "devbox.example", via: "", session: "", state: "connected" }] })));
   const menuOf = (phase) => { view.computerMenu("devbox", phase); return sidebarPopup({ popup: "machineMenu", open: opened.at(-1).machineMenu }); };
   return { view, toasts, menuOf, ...context() };
 }
@@ -230,7 +230,7 @@ const CASES = {
   login: { draw: computer("login"), want: COMPUTER_ROWS("Sign in…") },
   off: { draw: computer("off"), want: COMPUTER_ROWS("Turn on") },
   unreachable: { draw: computer("unavailable"), want: COMPUTER_ROWS("Refresh") },
-  asleepRow: { draw: asleepRow, want: ["billing, asleep since 14:02", "Wake", "Wake all 3 in review", "Copy conversation id", "Everything asleep…"] },
+  asleepRow: { draw: asleepRow, want: ["billing, asleep since 14:02", "Wake", "Wake all 3 in review", "Copy conversation id", "Forget", "Everything asleep…"] },
   noMenu: { draw: piece("sidebar.switch", "Projects, Status, Threads"), want: ["Projects, Status, Threads", ...PIECE()] },
   pane: { draw: pane({ pane: { name: "tests" } }), want: PANE_ROWS("tests", "Pin", AGENT_ROWS) },
   paneToProgram: { draw: PANE_PINNED, want: PANE_ROWS("web · devbox", "Unpin", ["Open with…"]) },
@@ -289,7 +289,7 @@ async function subagents(menu = null) {
     ...world(SPACES, SUBAGENTS, SUBAGENT_PANES, SUBAGENT_TERMS),
     props: () => (menu ? { menu, overlay: "o" } : {}), openOverlay: (o) => opened.push(o.props.menu.address), closeOverlay: () => {},
   });
-  const view = Object.assign(new Spaces(), mountedState({ shown: new Set(["sp1"]), armed: { is: () => false }, menuAt: -1 }));
+  const view = withParts(Object.assign(new Spaces(), mountedState({ shown: new Set(["sp1"]), armed: { is: () => false }, menuAt: -1 })));
   return { el, view, opened };
 }
 
@@ -330,7 +330,7 @@ test("An asleep row's Wake wakes only it, Wake all wakes its tab, and Everything
   const { Spaces } = await loadSidebar(el.host, {
     ...world(SPACES, [], [], []), run: (cmd) => ran.push(cmd), openOverlay: (o) => opened.push(o.props),
   });
-  const view = Object.assign(new Spaces(), mountedState({ sectionsFolded: new Set(["asleep"]), panel: { set: (key, value) => { stored[key] = value; } } }));
+  const view = withParts(Object.assign(new Spaces(), mountedState({ sectionsFolded: new Set(["asleep"]), panel: { set: (key, value) => { stored[key] = value; } } })));
   const z = { space: "sp1", terminal: "t5", tabId: "tb2", settled: true, tab: "review", n: 3, resume: "r" };
   const { items } = view.zzLines((label, act) => ({ label, act }), { name: "billing", asleep: z });
   const act = (label) => items.find((row) => row.label === label).act();

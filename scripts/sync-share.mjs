@@ -9,8 +9,8 @@ const root = new URL("../", import.meta.url);
 const COMMON = [
   { source: "kanso/mods/kanso-panel/share.js", copies: ["kanso/mods/kanso-spend/share.js", "kanso/mods/kanso-guard/share.js", "kanso/mods/kanso-dojo/share.js"] },
   // What can be shown, shown when it has something to say, or hidden. Hide stops the work.
-  { source: "kanso/mods/kanso-settings/pieces.js", copies: ["kanso-spaces", "kanso-strip", "kanso-chrome", "kanso-tabs", "kanso-status", "kanso-panel", "kanso-sim", "kanso-menu"].map((m) => `kanso/mods/${m}/pieces.js`) },
-  { source: "kanso/mods/kanso-panel/explain.js", copies: ["kanso/mods/kanso-chrome/explain.js"] },
+  { source: "kanso/mods/kanso-settings/pieces.js", copies: ["kanso-spaces", "kanso-strip", "kanso-chrome", "kanso-tabs", "kanso-status", "kanso-panel", "kanso-sim", "kanso-menu", "kanso-computers"].map((m) => `kanso/mods/${m}/pieces.js`) },
+  { source: "kanso/mods/kanso-panel/explain.js", copies: ["kanso/mods/kanso-spaces/explain.js", "kanso/mods/kanso-computers/explain.js"] },
   // The lines every right-click menu ends with, and Hide with its Undo.
   { source: "kanso/mods/kanso-panel/piece-lines.js", copies: ["kanso-spaces", "kanso-strip", "kanso-chrome", "kanso-tabs", "kanso-status", "kanso-menu"].map((m) => `kanso/mods/${m}/piece-lines.js`) },
   // An agent's program icon and name, and the key caps, the same in the tabs, headers, status bar, sidebar and Send.
@@ -22,22 +22,17 @@ const COMMON = [
   // The layout writers' helpers: what each keeps, and how a write puts it all back.
   // Kanso's own updates: the footer shows the row, the tab bar (always on
   // screen, unlike the sidebar) checks, tells you and installs from the toast.
-  { source: "kanso/mods/kanso-chrome/update.js", copies: ["kanso/mods/kanso-tabs/update.js"] },
-  { source: "kanso/mods/kanso-chrome/notices.js", copies: ["kanso/mods/kanso-tabs/notices.js"] },
-  // The footer's rows and sizes: the footer draws them, the tab bar's updater fits the footer to them.
-  { source: "kanso/mods/kanso-chrome/footer-model.js", copies: ["kanso/mods/kanso-tabs/footer-model.js"] },
+  { source: "kanso/mods/kanso-tabs/update.js", copies: ["kanso/mods/kanso-spaces/update.js"] },
+  { source: "kanso/mods/kanso-chrome/notices.js", copies: ["kanso/mods/kanso-tabs/notices.js", "kanso/mods/kanso-spaces/notices.js"] },
+  { source: "kanso/mods/kanso-spaces/footer-model.js", copies: ["kanso/mods/kanso-chrome/footer-model.js"] },
   // Order of a beta, a release candidate and a stable tag, shared with that updater.
-  { source: "kanso/mods/kanso-chrome/release.js", copies: ["kanso/mods/kanso-tabs/release.js", "kanso/mods/kanso-settings/release.js"] },
+  { source: "kanso/mods/kanso-chrome/release.js", copies: ["kanso/mods/kanso-tabs/release.js", "kanso/mods/kanso-settings/release.js", "kanso/mods/kanso-spaces/release.js", "kanso/mods/kanso-help/release.js"] },
   // A pull request's checks, read one way in the PR panel and the header.
   { source: "kanso/mods/kanso-panel/ghchecks.js", copies: ["kanso/mods/kanso-strip/ghchecks.js"] },
   // The key a second Cmd+F or Ctrl+F uses to select the query in the open bar.
   { source: "kanso/mods/kanso-panel/find-key.js", copies: ["kanso/mods/kanso-strip/find-key.js"] },
   // Hachi, the dōjō's shiba, also on kansō help's way into the dōjō.
-  { source: "kanso/mods/kanso-dojo/mascot.js", copies: ["kanso/mods/kanso-help/mascot.js"] },
-  { source: "kanso/mods/kanso-dojo/mascot-pixels.js", copies: ["kanso/mods/kanso-help/mascot-pixels.js"] },
   // Your pet and the one to choose, in the dōjō and on kansō help's dōjō page; the choice kept in the dōjō's SQLite.
-  { source: "kanso/mods/kanso-dojo/pets.js", copies: ["kanso/mods/kanso-help/pets.js"] },
-  { source: "kanso/mods/kanso-dojo/store.js", copies: ["kanso/mods/kanso-help/store.js"] },
   // The cap a key press lights for a moment, in the dōjō and on help's keyboard page.
   { source: "kanso/mods/kanso-dojo/lit.js", copies: ["kanso/mods/kanso-help/lit.js"] },
   // The Open with popup, from the terminal's menu and from the strip's pane menu.
@@ -51,10 +46,11 @@ const COMMON = [
   { source: "kanso/mods/kanso-send/folder.js", copies: ["kanso/mods/kanso-strip/folder.js"] },
   // The one window kansō help and kansō settings share.
   { source: "kanso/mods/kanso-settings/pages.js", copies: ["kanso/mods/kanso-help/pages.js"] },
+  { source: "kanso/mods/kanso-settings/installed.js", copies: ["kanso/mods/kanso-help/installed.js"] },
   // The shell of a full-page mod view: Memory draws in it, Containers the same.
   { source: "kanso/mods/kanso-guard/page.js", copies: ["kanso/mods/kanso-containers/page.js"] },
   // One SQLite file under the app's folder: the stores of arrangements and of the dōjō (and help's copy of it).
-  { source: "kanso/mods/kanso-dojo/file-store.js", copies: ["kanso/mods/kanso-help/file-store.js", "kanso/mods/kanso-arrange/file-store.js"] },
+  { source: "kanso/mods/kanso-dojo/file-store.js", copies: ["kanso/mods/kanso-arrange/file-store.js"] },
   // Lists by keyboard (j/k, gg/G, Enter, Esc), the same in every menu and list.
   { source: "kanso/mods/kanso-menu/listkeys.js", copies: ["kanso/mods/open-with/listkeys.js", "kanso/mods/kanso-spaces/listkeys.js", "kanso/mods/kanso-arrange/listkeys.js", "kanso/mods/kanso-spend/listkeys.js"] },
   // Opening a tab from data: arrangements; Sleep reads a few of its words.
@@ -69,14 +65,14 @@ const COMMON = [
   { source: "kanso/mods/kanso-spaces/since-left-store.js", copies: ["kanso/mods/kanso-panel/since-left-store.js"] },
   { source: "kanso/mods/kanso-spaces/kdb.js", copies: ["kanso/mods/kanso-panel/kdb.js", "kanso/mods/kanso-tabs/kdb.js", "kanso/mods/kanso-spend/kdb.js"] },
   // Off is a saved row plus hc machine ls. Spend asks neither file from another mod.
-  { source: "kanso/mods/kanso-spaces/machines.js", copies: ["kanso/mods/kanso-spend/machines.js"] },
+  { source: "kanso/mods/kanso-spaces/machines.js", copies: ["kanso/mods/kanso-spend/machines.js", "kanso/mods/kanso-computers/machines.js"] },
   // Which panel is open, and the two hooks every panel uses to keep its own state.
   { source: "kanso/mods/kanso-panel/panel-state.js", copies: ["kanso/mods/kanso-tabs/panel-state.js"] },
   { source: "kanso/mods/kanso-sim/registration.js", copies: ["kanso/mods/kanso-tabs/sim-registration.js"] },
   // One key waiter: the sidebar's commands, and Preview's Save, each while that view is up.
   { source: "kanso/mods/kanso-spaces/sidebar.js", copies: ["kanso/mods/kanso-panel/sidebar.js"] },
   // No reassignment anywhere: retry, range, parseOr... in every mod.
-  { source: "kanso/mods/kanso-spaces/pure.js", copies: ["kanso-arrange", "kanso-chrome", "kanso-containers", "kanso-dojo", "kanso-guard", "kanso-help", "kanso-menu", "kanso-panel", "kanso-prompt", "kanso-prompt-editor", "kanso-send", "kanso-settings", "kanso-sim", "kanso-sleep", "kanso-spend", "kanso-status", "kanso-strip", "kanso-tabs", "kanso-toast", "open-with"].map((m) => `kanso/mods/${m}/pure.js`).concat(["markdown-panel/mods/markdown-panel/pure.js", "open-with/mods/open-with/pure.js"]) },
+  { source: "kanso/mods/kanso-spaces/pure.js", copies: ["kanso-arrange", "kanso-chrome", "kanso-computers", "kanso-containers", "kanso-dojo", "kanso-guard", "kanso-help", "kanso-menu", "kanso-panel", "kanso-prompt", "kanso-prompt-editor", "kanso-send", "kanso-settings", "kanso-sim", "kanso-sleep", "kanso-spend", "kanso-status", "kanso-strip", "kanso-tabs", "kanso-toast", "open-with"].map((m) => `kanso/mods/${m}/pure.js`).concat(["markdown-panel/mods/markdown-panel/pure.js", "open-with/mods/open-with/pure.js"]) },
   // Who this computer is, and rows exchanged with the others. Spend runs it; the sidebar turns it on per machine.
   { source: "kanso/mods/kanso-spend/sync.js", copies: ["kanso/mods/kanso-spaces/sync.js"] },
   { source: "kanso/mods/kanso-tabs/layout.js", copies: ["kanso/mods/kanso-strip/layout.js", "kanso/mods/kanso-spaces/layout.js", "kanso/mods/kanso-panel/layout.js", "kanso/mods/open-with/layout.js"] },
@@ -89,7 +85,6 @@ const COMMON = [
   // One wake when a panel that was behind, or hidden, is in front again.
   { source: "kanso/mods/kanso-panel/front.js", copies: ["kanso/mods/kanso-containers/front.js", "kanso/mods/kanso-sim/front.js"] },
   { source: "kanso/mods/kanso-spaces/header.js", copies: ["kanso/mods/kanso-chrome/header.js"] },
-  { source: "kanso/mods/kanso-chrome/sidebar-footer.js", copies: ["kanso/mods/kanso-tabs/sidebar-footer.js"] },
   { source: "kanso/mods/kanso-status/status-bar.js", copies: ["kanso/mods/kanso-strip/status-bar.js"] },
   { source: "kanso/mods/kanso-panel/blocks.js", copies: ["markdown-panel/mods/markdown-panel/blocks.js"] },
   { source: "kanso/mods/kanso-tabs/markdown-handler.sh", copies: ["markdown-panel/mods/markdown-panel/markdown-handler.sh"] },

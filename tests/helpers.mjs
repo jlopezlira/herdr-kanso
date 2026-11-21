@@ -113,6 +113,17 @@ export function modSandbox(host = {}) {
   return sandbox;
 }
 
+export const inlineCx = (cx = {}) => {
+  const own = { notify() {}, stop_propagation() {}, focus_handle: () => ({ focus() {}, is_focused: () => false, release() {} }), spawn: () => Promise.resolve(),
+    timer: { after: () => ({ cancel() {} }), every: () => ({ cancel() {} }) }, ...cx };
+  return { ...own, new: (Class, props) => inlineView(Class, props, own) };
+};
+export function inlineView(Class, props, cx) {
+  const view = new Class(props);
+  view.init?.(props, cx);
+  const draw = () => view.render(cx);
+  return Object.assign(draw, { view, set_props: (next) => view.update?.(next), release: () => true });
+}
 // Load the actual mod logic (its own-folder imports included) with the
 // desktop host supplied by each fixture.
 export async function load(file, names, host = {}, root = mods) {
@@ -130,7 +141,7 @@ export async function load(file, names, host = {}, root = mods) {
     }
   }
   const source = modScript(sources.get(file), (name) => sources.get(`${dir}${name.slice(2)}`));
-  return vm.runInContext(`${source}\n;({ ${names.join(", ")} });`, modSandbox({ View: class {}, join, basename, shared() {}, setShared() {}, writeTextFile: (path, text) => writeFile(path, text, { flag: "wx" }), exec: async () => { throw new Error("Unexpected command in fixture"); }, window: host.exec === exec ? nativeWindow : () => ({ platform: "macos" }), layout: () => null, focused: () => null, panes: () => [], terminals: () => [], machines: () => [], keys: () => [], settings: () => ({}), ...host, __herdrModule: (name) => modules[name] }));
+  return vm.runInContext(`${source}\n;({ ${names.join(", ")} });`, modSandbox({ View: class {}, join, basename, shared() {}, setShared() {}, writeTextFile: (path, text) => writeFile(path, text, { flag: "wx" }), exec: async () => { throw new Error("Unexpected command in fixture"); }, window: host.exec === exec ? nativeWindow : () => ({ platform: "macos" }), layout: () => null, focused: () => null, panes: () => [], terminals: () => [], machines: () => [], keys: () => [], updates: () => ({ app: {} }), settings: () => ({}), InputState: { new: () => fieldWith({ value: "" }) }, ...host, __herdrModule: (name) => modules[name] }));
 }
 
 // Tests that watch real processes need ps; a sandbox that denies it skips them, saying so, rather than failing.
@@ -239,7 +250,7 @@ export const storeShared = (store, missing = undefined) => ({ shared: (key) => s
 // A view context whose spawned tasks can be awaited.
 export function context() {
   const pending = [];
-  const cx = { notify() {}, spawn(fn) { const task = fn(cx); pending.push(task); return task; } };
+  const cx = { notify() {}, stop_propagation() {}, focus_handle: () => ({ focus() {}, is_focused: () => false, release() {} }), spawn(fn) { const task = fn(cx); pending.push(task); return task; } };
   return { cx, async drain() { while (pending.length) await pending.shift(); } };
 }
 
@@ -330,6 +341,17 @@ export function tape() {
     return recordingElement((key, el) => (Object.hasOwn(record, key) ? (value) => { record[key](value); return el; } : undefined));
   };
   return { texts, colors, ids, handlers, tips, opacities, hovers, host: { div: node, svg: node, h_flex: node, v_flex: node, Button: { new: node } } };
+}
+
+export function settingsTape() {
+  const ui = tape();
+  ui.host.Toggle = { new: (id) => ui.host.Button.new(id) };
+  return ui;
+}
+
+export async function settingsView(loadSettings, ui, host) {
+  const { Settings } = await loadSettings({ ...ui.host, ...host, run: () => {}, closeOverlay: () => {} });
+  return new Settings();
 }
 
 // A gpui element that records its calls, and a host that builds them.
@@ -448,7 +470,7 @@ export const CHROME_NIGHT = {
   blocked: "#d5674f", working: "#d9a74a", done: "#7fa66b", accent: "#7d9cd4", popover: "#222220", border: "#33332f", chrome: "#141413",
 };
 // A text field holding `value`.
-export const fieldWith = ({ value }) => ({ on() {}, focus() {}, value: () => value, set_selected_range() {}, release() {} });
+export const fieldWith = ({ value }) => ({ on() {}, focus() {}, value: () => value, set_value() {}, set_selected_range() {}, release() {} });
 // Every .js file under dir, at any depth; a folder that is not there has none.
 export async function jsFiles(dir) {
   const entries = await readdir(dir, { withFileTypes: true }).catch(() => []);
@@ -470,3 +492,36 @@ export const kansoColours = async () => {
   const theme = JSON.parse(readFileSync(new URL("../kanso/themes/kanso.json", import.meta.url), "utf8"));
   return tokens({ ...theme, ...theme.colors });
 };
+
+const COMPUTERS_THEME = { foreground: "#d8d4cb", background: "#1b1b19", muted: "#949086", dim: "#6b6862", border: "#33332f", popover: "#222220", hover: "#232321", selected: "#2b2b28", accent: "#da627d" };
+
+export async function computersDialog(host) {
+  const { Computers } = await load("kanso-computers/main.js", ["Computers"], {
+    ...gpuiHost(),
+    theme: () => COMPUTERS_THEME,
+    props: () => ({ overlay: "computers-overlay" }),
+    closeOverlay: () => {},
+    home: () => "/tmp/kanso-none",
+    readTextFile: async () => null,
+    exec: async () => ({ code: 1, stdout: "", stderr: "missing" }),
+    run: () => {},
+    window: () => ({ platform: "macos" }),
+    shared: () => null,
+    settings: () => ({}),
+    knownAgents: async () => [],
+    ...host,
+  });
+  const pending = [];
+  const cx = {
+    notify() {},
+    stop_propagation() {},
+    focus_handle: () => ({ focus() {}, is_focused: () => false, release() {} }),
+    spawn(fn) { pending.push(fn(cx)); return { cancel() {} }; },
+    timer: { after: () => ({ cancel() {} }), every: () => ({ cancel() {} }) },
+  };
+  const flush = async () => { while (pending.length) await pending.shift(); };
+  const view = new Computers();
+  view.init({}, cx);
+  await flush();
+  return { view, cx, flush };
+}

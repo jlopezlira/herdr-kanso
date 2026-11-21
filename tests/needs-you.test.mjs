@@ -5,6 +5,7 @@ import { readFile } from "node:fs/promises";
 import { waitingQueue, nextWaiting, queueState, waitingSignature, sameQueue, waitingReason, queueMessage, NEEDS_YOU, EMPTY_NOTICE_MS } from "../kanso/mods/kanso-spaces/needs-you.js";
 import { modScript } from "../scripts/mod-source.mjs";
 import { load, clone, singleUse, tape } from "./helpers.mjs";
+import { withParts } from "./sidebar-fixtures.mjs";
 
 const agent = (address, status = "blocked", extra = {}) => ({ address, status, pane: `pane-${address}`, space: "project", space_name: "Project", tab: "tab", title: address, seq: 1, ...extra });
 const terminal = (address, status_ms = 1, extra = {}) => ({ address, status_ms, state: "live", ...extra });
@@ -102,6 +103,12 @@ async function controller() {
   const cx = { notify() {}, stop_propagation() {}, timer: { after: (ms, fn) => state.timers.push({ ms, fn }) } };
   return { state, view, cx, ui, sharedState };
 }
+
+const drawStub = (view, ui, extra = {}) => withParts(Object.assign(view, {
+  custom: {}, order: "updated", assignColors() {}, projectOf: () => null,
+  listed: () => [], seen: () => new Map(), header: ui.host.div, switchViews: ui.host.div,
+  agentsView: () => [], threadsView: () => [], grouped: () => [], ...extra,
+}));
 
 test("The command only focuses live agents and publishes the same queue used by the count", async () => {
   const { state, view, cx, sharedState } = await controller();
@@ -204,14 +211,11 @@ test("Projects, Status and Threads keep the return digest when Needs you is hidd
   state.spaces = [{ id: "project", active: true, folder: "C:\\work\\project", tabs: [] }];
   const returned = new SinceLeft(null);
   Object.assign(returned, { project: `:${state.spaces[0].folder}`, rows: [{ id: 7, target: "agent:a", text: "Finished while you were away" }] });
-  Object.assign(view, {
-    sinceLeft: returned, returnPlaces: new Map([["agent:a", "a"]]), custom: {}, order: "updated", assignColors() {}, projectOf: () => null,
-    listed: () => [], seen: () => new Map(), header: ui.host.div, switchViews: ui.host.div,
-    agentsView: () => [], threadsView: () => [], grouped: () => [],
-  });
+  drawStub(view, ui, { sinceLeft: returned, returnPlaces: new Map([["agent:a", "a"]]) });
   const drawAs = (mode, open) => {
     Object.assign(view, { view: mode, needsOpen: open });
     ui.texts.length = 0;
+    view.redraw();
     view.render();
   };
   const digestShown = () => {
@@ -239,6 +243,7 @@ test("Projects, Status and Threads keep the return digest when Needs you is hidd
       assert.equal(returned.showing, false, "a hidden digest is not acknowledged");
       assert.ok(!view.nav.some((row) => row.key === "since-7"));
       view.needsOpen = false;
+      view.redraw();
       view.render();
       assert.equal(returned.rows.length, 1);
       assert.equal(returned.showing, true);
@@ -258,6 +263,21 @@ test("An empty jump stays in the sidebar briefly and never posts a notification 
   assert.equal(view.needsEmpty, true, "an earlier timeout cannot hide the latest empty state");
   state.timers[1].fn(cx);
   assert.equal(view.needsEmpty, false);
+});
+
+test("An open Needs you list gives the projects back when nobody is waiting", async () => {
+  const { state, view, ui, sharedState } = await controller();
+  state.spaces = [{ id: "project", active: true, name: "Work", tabs: [] }];
+  drawStub(view, ui, { view: "spaces", sinceLeft: null });
+  sharedState.set("kanso.pieces", { "sidebar.needs": "show" });
+  view.needsOpen = true;
+  view.render();
+  assert.ok(ui.ids.includes("needs-you-list"));
+  state.list = [];
+  ui.ids.length = 0;
+  view.render();
+  assert.equal(ui.ids.includes("needs-you-list"), false);
+  assert.ok(ui.ids.includes("spaces-list-spaces"));
 });
 
 test("Opening the queue from the collapsed rail expands the list", async () => {

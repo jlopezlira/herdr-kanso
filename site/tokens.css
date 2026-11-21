@@ -157,7 +157,6 @@
   --k-w-sidebar-min: 120px;
   --k-w-sidebar-layout-min: 200px;
   --k-w-sidebar-max: 480px;
-  --k-h-sidebar-footer: 156px;
   --k-h-spaces-min: 90px;
   --k-w-panel-min: 280px;
   --k-w-panel-max: 900px;
@@ -240,6 +239,7 @@
   --k-pr-title: 17px;
   --k-pr-title-max: 44px;
   --k-pr-body-fold: 150px;
+  --k-pr-ages: 40px;
   --k-dialog-w: 480px;
   --k-dialog-small: 340px;
   --k-dialog-sidebar: 460px;
@@ -248,6 +248,7 @@
   --k-dialog-key: 132px;
   --k-dialog-stripe: 6px;
   --k-credit-tile: 28px;
+  --k-dialog-computers: 440px;
   --k-settings-w: 860px;
   --k-settings-tall: 680px;
   --k-settings-map-w: 372px;
@@ -290,6 +291,10 @@
   --k-dojo-menu-x: 120px;
   --k-dojo-menu-y: 44px;
   --k-dojo-cell: 30px;
+  --k-dojo-gap: 3px;
+  --k-dojo-board-pad: 14px;
+  --k-dojo-char: 12px;
+  --k-dojo-wide: 560px;
   --k-skeleton-text: 9px;
   --k-skeleton-meta: 11px;
   --k-skeleton-row-y: 9px;

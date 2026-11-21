@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { load, nodes, texts, tipsOf, svgsOf, themed, calls, arg, KIT_NIGHT, popoverHost as host, blockedDots, repoText as read } from "./helpers.mjs";
-import { loadSidebar, mountedState, recorder } from "./sidebar-fixtures.mjs";
+import { load, nodes, texts, tipsOf, svgsOf, themed, calls, arg, styled, KIT_NIGHT, popoverHost as host, blockedDots, repoText as read } from "./helpers.mjs";
+import { loadSidebar, mountedState, withParts, recorder } from "./sidebar-fixtures.mjs";
 
 const compositions = async () => themed({
   ...await load("kanso-spaces/tile.js", ["tile"], host()),
@@ -39,6 +39,9 @@ test("Each Tile state draws in the app: a button with its lead, its count, and t
   assert.deepEqual(svgsOf(draw({ initial: "D", status: "working", count: 1 })), [], "unmarked, a project shows no state of its own");
   assert.equal(ringOf(draw({ initial: "A", status: "done", count: 2, strong: true, label: "kansō" }))[0], alpha(c.accent, TINT.ring), "something unread or woke: the ring");
   assert.equal(ringOf(urgent)[0], "#00000000", "no ring at rest: a border kept clear, so nothing moves");
+  assert.deepEqual(styled(urgent, "hover"), [["bg", c.w4]], "under the pointer, a tile not on wears wash-4");
+  assert.equal(calls(project, "hover").length, 0, "the project you are in keeps its wash under the pointer");
+  assert.deepEqual(styled(urgent, "focus"), [["border_color", c.accent]], "the keyboard ring is the accent, on the border kept clear");
 });
 
 test("Each View switch state draws in the app, with no margin of the mod's own", async () => {
@@ -76,42 +79,58 @@ test("The kit draws a stack only as it is named, and gives it only handlers", as
 });
 
 // The collapsed sidebar, recorded: which elements are buttons, and the press handlers by id.
-const rail = async (own = {}, spaces = [{ id: "sp1", name: "app", folder: "/w", machine: null, active: true, tabs: [{ id: "tab1" }] }]) => {
+const rail = async (own = {}, stored = {}, spaces = [{ id: "sp1", name: "app", folder: "/w", machine: null, active: true, tabs: [{ id: "tab1" }] }]) => {
   const drawn = recorder(), buttons = [], overlays = [], ran = [];
   const named = drawn.host.Button;
   drawn.host.Button = { new: (id) => { buttons.push(id); return named.new(id); } };
   const agents = [{ address: "t1", pane: "p1", tab: "tab1", space: "sp1", space_name: "app", status: "blocked", program: { agent: true, name: "Claude Code" }, title: "t1", seq: 1 }];
   const { Spaces } = await loadSidebar(drawn.host, {
-    shared: (key) => (key === "sidebar.collapsed" ? true : null), spaces: () => spaces, agents: () => agents,
+    shared: (key) => (key === "sidebar.collapsed" ? true : stored[key] ?? null), spaces: () => spaces, agents: () => agents,
     window: () => ({ platform: "macos", active: true }), openOverlay: (o) => overlays.push(o), run: (cmd) => ran.push(cmd),
   });
-  const view = Object.assign(new Spaces(), mountedState({ shown: new Set(spaces.map((s) => s.id)), ...own }));
+  const view = withParts(Object.assign(new Spaces(), mountedState({ shown: new Set(spaces.map((s) => s.id)), ...own })));
   const render = () => { drawn.clear(); buttons.length = 0; view.render(); };
   render();
   return { view, drawn, buttons, overlays, ran, render };
 };
 
-test("Keyboard first: each rail tile and the view button are buttons Tab reaches; Enter on a tile lists its group, and the view menu picks a view", async () => {
-  const { view, drawn, buttons, overlays, render } = await rail();
+test("Keyboard first: each rail tile is a button Tab reaches and Enter on it lists its group; on Projects the rail hides the view switch", async () => {
+  const { drawn, buttons, overlays } = await rail();
   assert.ok(buttons.includes("space-sp1"), "the project's tile is a button");
   drawn.handlers["on_click:space-sp1"]({}, cx);
   assert.equal(overlays.at(-1)?.props?.railMenu?.title, "app", "pressed, it lists the project's conversations");
+  assert.equal(buttons.some((id) => id.startsWith("rail-view")), false, "collapsed on Projects, the switch is hidden");
+});
+
+test("On Status and Threads the rail keeps the view button and its menu; picking Projects there hides it", async () => {
+  const { view, drawn, buttons, render } = await rail({ view: "threads", threads: {} });
+  const press = (id) => { drawn.handlers[`on_click:${id}`]({}, cx); render(); };
+  const pick = (at) => press(buttons.filter((id) => id.startsWith("rail-view-menu-"))[at]);
   assert.ok(buttons.includes("rail-view-button"), "collapsed, the view switch is one button");
-  drawn.handlers["on_click:rail-view-button"]({}, cx);
+  press("rail-view-button");
   assert.equal(view.viewMenu, true, "pressed, it opens the menu");
-  render();
-  const items = buttons.filter((id) => id.startsWith("rail-view-menu-"));
-  assert.equal(items.length, 3, "each view is a menu item, a button of its own");
-  drawn.handlers[`on_click:${items[1]}`]({}, cx);
+  assert.equal(buttons.filter((id) => id.startsWith("rail-view-menu-")).length, 3, "each view is a menu item, a button of its own");
+  pick(1);
   assert.equal(view.view, "agents");
   assert.equal(view.viewMenu, false, "a choice shuts the menu");
-  render();
-  drawn.handlers["on_click:rail-view-button"]({}, cx);
-  render();
+  assert.ok(buttons.some((id) => id.startsWith("rail-section-")), "on Status, each state's tile is a button too");
+  press("rail-view-button");
   drawn.handlers["on_open_change:rail-view"](false, cx);
   assert.equal(view.viewMenu, false, "a press outside or Escape shuts it");
   render();
-  assert.ok(buttons.some((id) => id.startsWith("rail-section-")), "on Status, each state's tile is a button too");
+  press("rail-view-button");
+  pick(0);
+  assert.equal(view.view, "spaces");
+  assert.equal(buttons.some((id) => id.startsWith("rail-view")), false, "on Projects it is gone");
+  view.command("view-agents", cx);
+  render();
+  assert.ok(buttons.includes("rail-view-button"), "a view key still changes view, and the button is back");
+});
+
+test("With the switch piece off, the rail shows Projects whatever view was chosen, and no switch", async () => {
+  const { buttons } = await rail({ view: "agents" }, { "kanso.pieces": { "sidebar.switch": "hide" } });
+  assert.ok(buttons.includes("space-sp1"));
+  assert.equal(buttons.some((id) => id.startsWith("rail-view") || id.startsWith("rail-section-")), false);
 });
 
 test("Open, the views are a track of buttons", async () => {
@@ -119,7 +138,7 @@ test("Open, the views are a track of buttons", async () => {
   const named = open.host.Button;
   open.host.Button = { new: (id) => { buttons.push(id); return named.new(id); } };
   const { Spaces } = await loadSidebar(open.host, { window: () => ({ platform: "macos", active: true }) });
-  Object.assign(new Spaces(), mountedState()).render();
+  withParts(Object.assign(new Spaces(), mountedState())).render();
   assert.deepEqual(buttons.filter((id) => id.startsWith("spaces-view")), ["spaces-view-tabs-spaces", "spaces-view-tabs-agents", "spaces-view-tabs-threads"]);
 });
 

@@ -13,7 +13,7 @@ const piece = (id, label, group, states, def, stops, job = null) => ({ id, label
 
 const PANELS = [
   ["files", "Files", "git"], ["insights", "Spend"], ["pr", "PR", "gh"], ["shipped", "Shipped", "git"], ["worktrees", "Worktrees", "git"],
-  ["ports", "Ports", "lsof"], ["containers", "Containers", "docker"], ["memory", "Memory", "ps"], ["look", "Images"], ["sim", "Simulator"],
+  ["ports", "Ports", "lsof"], ["containers", "Containers", "docker"], ["memory", "Memory", "ps"], ["look", "Images"], ["sim", "Simulator"], ["dojo", "hjkl dōjō"],
 ];
 
 export const PIECES = [
@@ -36,10 +36,14 @@ export const PIECES = [
   piece("status.palette", "Command palette", "Status bar", SHOW, "show", "draw"),
   piece("tabs.state", "Agent state on tabs", "Tab bar and panels", SHOW, "show", "draw"),
   piece("tabs.arrange", "Arrangements", "Tab bar and panels", SHOW, "show", "draw"),
+  piece("pr.checks", "Failing checks on pull requests", "Tab bar and panels", SHOW, "show", "draw"),
+  piece("pr.wait", "Oldest pull request wait", "Tab bar and panels", SHOW, "show", "draw"),
+  piece("pr.stats", "Statistics on pull requests", "Tab bar and panels", SHOW, "show", "draw"),
   ...PANELS.map(([id, label, job = null]) => piece(`panel.${id}`, label, "Tab bar and panels", SHOW, "show", "work", job)),
   piece("toast.update", "kansō update", "Notifications", SHOW, "show", "draw"),
   piece("toast.memory", "Memory low", "Notifications", SHOW, "show", "draw"),
   piece("update.check", "Check for updates", "Background", SHOW, "show", "work", "git"),
+  piece("computers.network", "Look for computers on this network", "Background", SHOW, "show", "work"),
 ];
 
 export const STATE_LABEL = { show: "Show", needed: "When needed", hide: "Hide" };
