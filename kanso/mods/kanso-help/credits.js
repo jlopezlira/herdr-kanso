@@ -21,6 +21,7 @@ const PEOPLE = [
   { login: "leangseu", name: "Leangseu Kim" },
   { login: "h0ru5", name: "Johannes Hund" },
   { login: "jerichosiahaya", name: "Jericho Siahaya" },
+  { login: "SiliconKaiser", name: "Fabian" },
 ];
 const AVATARS_DIR = "data/kanso-settings/avatars";
 

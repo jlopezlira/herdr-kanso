@@ -37,7 +37,7 @@ the branch's rules.
 - The collapsed sidebar on Projects no longer shows the view switch. On Status and Threads the view button and its menu stay, and the view keys still change view from any rail. (#232)
 - The sidebar draws its header, view switch, rows and footer as one piece, and the layout file no longer has a separate footer block; a change in one session no longer redraws the header or the footer. (#282)
 - kansō help and kansō settings are two separate windows that no longer link to each other. Settings keeps Pieces, Keys and Updates; help has Keyboard, Guide, What's new and Credits.
-- Credits lists Jericho Siahaya among the people who made kansō.
+- Credits lists Jericho Siahaya and Fabian among the people who made kansō.
 
 ### Fixed
 
