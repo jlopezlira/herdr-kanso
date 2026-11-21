@@ -437,9 +437,10 @@ async function keyWalk(state) {
   return { stops, ran };
 }
 
+const base = { spaces: [local, remote], layouts: [{ name: null, layout: "ready" }] };
+
 test("each tool a computer row shows is its own keyboard stop: j walks to it and Enter runs it, as a press does", async () => {
   const { signInTab } = await load("kanso-spaces/sign-in.js", ["signInTab"]);
-  const base = { spaces: [local, remote], layouts: [{ name: null, layout: "ready" }] };
   const login = ["terminal.open", clone(signInTab(record, "macos"))];
   // On, Sync on or off: Turn off, New project, then Sync, wherever Sync sits.
   const onStops = ["machine-lu-power:dark", "machine-lu-plus:dark", "machine-lu-arrow-right-left:dark"];
@@ -462,7 +463,6 @@ test("pressing Sign in on a Needs login row opens that computer's sign-in tab, f
   const { signInTab } = await load("kanso-spaces/sign-in.js", ["signInTab"]);
   const live = { name: "dark", target: "ada@10.0.0.8", via: false, state: "needs_login" };
   const saved = { ...record, target: "saved@10.0.0.9" };
-  const base = { spaces: [local, remote], layouts: [{ name: null, layout: "ready" }] };
   const fromLive = await keyWalk({ ...base, live: [live], parked: [saved], login: new Set(["dark"]) });
   assert.deepEqual(fromLive.ran, [["terminal.open", clone(signInTab(live, "macos"))]]);
   const fromSaved = await keyWalk({ ...base, parked: [saved], login: new Set(["dark"]) });
