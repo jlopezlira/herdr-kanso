@@ -1,6 +1,6 @@
 import { location, key, tilde, said } from "./lib.js";
 import { pageSize, pageBones, listBones } from "./ui-page.js";
-import { drawHero, drawEmpty, footOf, listedRow, prRow, heroPieces } from "./pr-view.js";
+import { drawHero, drawEmpty, footOf, listedRow, prRow, heroPieces, outcomeLine, shownOutcome } from "./pr-view.js";
 import { localService } from "./platform-host.js";
 import { openApi } from "./platform-open.js";
 // Kanso's pull request panel, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
@@ -11,7 +11,7 @@ import { run, theme, setShared, shared, window, layout, focused, panes, terminal
 import { walkLayout } from "./layout.js";
 import { R, G, T, PR, TINT, alpha, tokens } from "./ui.js";
 import { Armed, button, quietLink, iconButton } from "./ui-button.js";
-import { TextField } from "./ui-field.js";
+import { TextField, field } from "./ui-field.js";
 import { menu } from "./ui-menu.js";
 import { failureBlock, skeletonOf, diffText, facts, code, tooltip, row as kitRow } from "./kit.js";
 import { dot } from "./ui-dot.js";
@@ -19,15 +19,16 @@ import { caption } from "./ui-caption.js";
 import { section } from "./ui-section.js";
 import { segmented } from "./ui-tab.js";
 import { aliasText, machineTitle, tryOrAsync } from "./pure.js";
-import { STATES, checkState, onePerJob, checkSummary, runIdOf, listHold, mergeReadiness } from "./ghchecks.js";
+import { STATES, checkState, onePerJob, checkSummary, runIdOf, listHold, mergeReadiness, isWriter } from "./ghchecks.js";
 import { deliver, classify, reachable } from "./deliver.js";
 import { nameOf, givenNames } from "./marks.js";
-import { verdictOf, failedLog, sendText, sendStep } from "./pr-verdict.js";
+import { verdictOf, failedLog, sendText, sendStep, logRows } from "./pr-verdict.js";
 import { readyProviders } from "./pr-providers.js";
 import { inboxLabel, isNew, limitLine, recordPrFacts } from "./pr-inbox.js";
-import { blockFacts, boardOf, failingMeta, isOpen, scopeLine, toggled } from "./pr-board.js";
+import { blockFacts, boardOf, failingMeta, isOpen, scopeLine, statsOf, toggled } from "./pr-board.js";
 import { pieces, shown } from "./pieces.js";
 import { prMemory } from "./panel-state.js";
+import { ready, reviewable } from "./pr-review.js";
 import { TICK_MS, ageOf, authFresh, pollFacing, pollTick, readDue } from "./pr-poll.js";
 import { FolderSession, DONE_LIMIT, keepsFacts, repoOf } from "./pr-session.js";
 
@@ -111,6 +112,18 @@ export class PullRequest {
       if (this.draftShown) this.drafts = { ...this.drafts, [this.draftShown]: this.reviewText.value() };
       cx.notify();
     });
+    this.replyText = new TextField({ placeholder: "Reply" }, { multiline: true });
+    this.replies = {};
+    this.replyOpen = null;
+    this.replyText.on("change", (_e, cx) => {
+      if (this.replyOpen != null) this.replies = { ...this.replies, [this.replyOpen]: this.replyText.value() };
+      cx.notify();
+    });
+    this.newTitle = new TextField({ placeholder: "Title" });
+    this.newBody = new TextField({ placeholder: "Description" }, { multiline: true });
+    this.page = null;
+    this.cursor = null;
+    this.handle = cx.focus_handle();
     this.section = props.section ?? null;
     this.check = props.check ?? null;
     this.asked = props.at ?? null;
@@ -268,6 +281,46 @@ export class PullRequest {
   }
 
   createPr(cx) { this.session.createPr(cx); }
+
+  openReply(thread, cx) {
+    this.replyOpen = this.replyOpen === thread.comment ? null : thread.comment;
+    const shown = this.replyOpen;
+    if (shown != null) cx.timer.after(0, (next) => { if (this.replyOpen !== shown) return; this.replyText.set_value(this.replies[shown] ?? ""); this.replyText.focus(); next.notify(); });
+    cx.notify();
+  }
+
+  replySent(comment, body) {
+    if ((this.replies[comment] ?? "") !== body) return;
+    this.replies = { ...this.replies, [comment]: "" };
+    if (this.replyOpen === comment) { this.replyText.set_value(""); this.replyOpen = null; }
+  }
+
+  compose(cx) {
+    this.page = { kind: "new" };
+    this.session.created = null;
+    const subject = this.session.subjects?.[0] ?? this.session.branch ?? "";
+    cx.timer.after(0, (next) => { if (!this.newTitle.value()) this.newTitle.set_value(subject); this.newTitle.focus(); next.notify(); });
+    cx.notify();
+  }
+
+  createdHere() {
+    this.page = null;
+    this.newTitle.set_value("");
+    this.newBody.set_value("");
+  }
+
+  openLog(check, cx) {
+    if (!check.runId) { if (check.url) openUrl(check.url); return; }
+    this.page = { kind: "log", id: String(check.runId), name: check.name, url: check.url };
+    this.session.readFullLog(String(check.runId), cx);
+    cx.notify();
+  }
+
+  back(cx) { this.page = null; cx.notify(); }
+
+  writer() { return isWriter(this.session.permission); }
+
+  failingRuns() { return this.checks().filter((ch) => ch.state === "fail").map((ch) => ch.runId); }
 
   // terminal.open cannot name a machine; the pane opens in the space already on screen.
   signIn() {
@@ -541,9 +594,10 @@ export class PullRequest {
       return folder.act("Update", ["api", "-X", "PUT", `repos/${place.o}/${place.r}/pulls/${this.session.pr.number}/update-branch`], cx);
     }
     if (action.target === "create") return this.createPr(cx);
-    if (action.target === "ready") return folder.act("Ready", ["pr", "ready", url], cx);
+    if (action.target === "ready") return folder.markReady(cx);
+    if (action.target === "rerun") return folder.rerun(action.runs ?? this.failingRuns(), cx);
     if (action.target === "draft") return folder.act("Draft", ["pr", "ready", url, "--undo"], cx);
-    if (action.target === "close") return folder.act("Close", ["pr", "close", url], cx);
+    if (action.target === "close") return folder.close(cx);
     if (action.target === "reopen") return folder.act("Reopen", ["pr", "reopen", url], cx);
   }
 
@@ -616,21 +670,42 @@ export class PullRequest {
     const note = checksNote(summaryOf(checks));
     return v_flex().w_full()
       .child(section(c, "Checks", note))
-      .children(shown.map((ch, i) => kitRow({ name: ch.name, second: ch.workflow || null, meta: { text: CHECK_WORDS[ch.state].label, tone: CHECK_WORDS[ch.state].color } })(`pr-check-${i}`, c, {
+      .children(shown.map((ch, i) => kitRow({ name: ch.name, second: ch.workflow || null, meta: { text: CHECK_WORDS[ch.state].label, tone: CHECK_WORDS[ch.state].color }, verbs: this.checkVerbs(ch) })(`pr-check-${i}`, c, {
         onClick: () => { if (ch.url) openUrl(ch.url); },
       })))
       .when(sorted.length > 5, (el) => el.child(h_flex().pt(G.sm).child(quietLink("pr-checks-more", open ? "Show fewer" : `Show ${sorted.length - 5} more`, (cx) => { this.session.expanded = { ...this.session.expanded, checks: !open }; cx.notify(); }, c))));
   }
 
+  checkVerbs(ch) {
+    if (ch.state !== "fail" || !ch.runId) return [];
+    const busy = Boolean(this.session.busy);
+    const rerun = this.writer() ? [{ label: this.session.busy === "rerun" ? "Re-running…" : "Re-run", disabled: busy, onClick: (cx) => this.session.rerun([ch.runId], cx) }] : [];
+    return [...rerun, { label: "Full log", onClick: (cx) => this.openLog(ch, cx) }];
+  }
+
   discussion(c) {
+    const open = this.session.pr?.state === "OPEN";
     return v_flex().w_full()
       .child(section(c, "Unresolved threads", String(this.session.threads.length)))
       .children(this.session.threads.map((th, i) => {
         const body = th.body.length > 240 ? th.body.slice(0, 240) + "…" : th.body;
         const second = [`${th.path}${th.line ? `:${th.line}` : ""}`, th.author, th.replies > 0 ? `${th.replies} repl${th.replies > 1 ? "ies" : "y"}` : null, th.outdated ? "outdated" : null];
+        const verbs = open && th.comment != null ? [{ label: this.replyOpen === th.comment ? "Cancel" : "Reply", onClick: (cx) => this.openReply(th, cx) }] : [];
+        const acted = th.comment != null ? shownOutcome(this, th.comment) : null;
         // The thread's first 240 characters, wrapped over its lines.
-        return kitRow({ name: body, second, wrap: true })(`pr-thread-${i}`, c, { onClick: () => { if (th.url) openUrl(th.url); } });
+        return v_flex().w_full().gap(G.sm)
+          .child(kitRow({ name: body, second, wrap: true, verbs })(`pr-thread-${i}`, c, { onClick: () => { if (th.url) openUrl(th.url); } }))
+          .when(this.replyOpen === th.comment && th.comment != null, (el) => el.child(this.replyBox(th, c)))
+          .when(Boolean(acted), (el) => el.child(outcomeLine(this, c, acted, `pr-reply-${i}`)));
       }));
+  }
+
+  replyBox(th, c) {
+    const body = this.replies[th.comment] ?? "";
+    return v_flex().w_full().gap(G.sm)
+      .child(field("pr-reply-text", this.replyText, c, { spoken: `Reply to ${th.author}` }))
+      .child(h_flex().gap(G.sm).child(button("pr-reply-send", "Reply", (cx) => this.session.reply(th, this.replies[th.comment] ?? "", cx), c,
+        { kind: "tonal", small: true, disabled: Boolean(this.session.busy) || !body.trim() })));
   }
 
   // A line is cut at MAX_DIFF characters too: a minified file's one line stays cheap to draw.
@@ -678,31 +753,98 @@ export class PullRequest {
     this.choose(item, cx);
   }
 
+  board() {
+    const scope = this.session.scope;
+    return { scope, blocks: boardOf(this.session.inbox, scope) };
+  }
+
+  boardRows({ blocks, scope }) {
+    return blocks.flatMap((item) => [
+      { key: item.key, block: item },
+      ...(isOpen(this.session.boardOpen, item.key, blocks, scope)
+        ? [...item.needs.map((pull) => ({ key: pull.url, pull, needs: true })), ...item.yours.map((pull) => ({ key: pull.url, pull, needs: false }))]
+        : []),
+    ]);
+  }
+
+  boardShown() { return !this.pageShown() && this.session.inboxOn && (this.session.inboxOpen || this.session.outside); }
+
+  typing() { return [this.search, this.reviewText, this.replyText, this.newTitle, this.newBody].some((text) => text?.focused); }
+
+  key(e, cx) {
+    const m = e.modifiers ?? {};
+    if (this.typing() || m.platform || m.control || m.alt) return;
+    const k = String(e.key ?? "").toLowerCase();
+    if (this.boardShown() ? this.boardKey(k, cx) : this.pageKey(k, cx)) cx.stop_propagation();
+  }
+
+  boardKey(k, cx) {
+    const shownBoard = this.board();
+    const rows = this.boardRows(shownBoard);
+    const at = rows.findIndex((row) => row.key === this.cursor);
+    if (k === "down" || k === "up") {
+      if (!rows.length) return false;
+      const next = at < 0 ? 0 : Math.min(rows.length - 1, Math.max(0, at + (k === "down" ? 1 : -1)));
+      this.cursor = rows[next].key; cx.notify();
+      return true;
+    }
+    const row = rows[at];
+    if (!row) return false;
+    if (k === "enter" && this.handle.is_focused()) {
+      if (row.block) { this.session.boardOpen = toggled(this.session.boardOpen, row.key, shownBoard.blocks, shownBoard.scope); cx.notify(); }
+      else this.openInboxItem(row.pull, cx);
+      return true;
+    }
+    if (k === "a" && row.needs && !this.session.busy) { this.session.review("approve", "", cx, row.pull); return true; }
+    return false;
+  }
+
+  pageKey(k, cx) {
+    if (k === "escape" && this.pageShown()) { this.back(cx); return true; }
+    const pr = this.session.pr;
+    if (!pr || this.session.busy || this.pageShown()) return false;
+    const can = reviewable(pr, this.viewer);
+    const body = this.draftOf(pr.url);
+    if (k === "a" && can.approve) { this.session.review("approve", body, cx); return true; }
+    const kind = { r: "changes", c: "comment" }[k];
+    if (kind && can[kind]) {
+      if (ready(kind, body)) this.session.review(kind, body, cx);
+      else this.reviewText.focus();
+      return true;
+    }
+    const merge = this.view().primary;
+    if (k === "m" && merge?.target === "merge" && merge.acts) { this.armed.press("merge", cx, (next) => this.mergeNow(next)); return true; }
+    const runs = this.failingRuns().filter(Boolean);
+    if (k === "e" && this.writer() && runs.length) { this.session.rerun(runs, cx); return true; }
+    return false;
+  }
+
   inboxPage(c) {
     const map = pieces(shared);
     const checksOn = shown("pr.checks", true, map);
     const waitOn = shown("pr.wait", true, map);
-    const scope = this.session.scope;
-    const blocks = boardOf(this.session.inbox, scope);
+    const { scope, blocks } = this.board();
     const mine = new Set((this.session.inbox?.logins ?? [this.session.inbox?.login]).filter(Boolean).map((name) => name.toLowerCase()));
     const itemRow = (id, item) => {
       const meta = [`#${item.number}`, item.author && mine.has(String(item.author).toLowerCase()) ? "you" : item.author, item.updatedAt ? ago(item.updatedAt) : "", isNew(item) ? "new" : ""].filter(Boolean).join(" · ");
-      return prRow(id, c, item, { meta, state: this.inboxState(item), onClick: (cx) => this.openInboxItem(item, cx) });
+      return prRow(id, c, item, { meta, state: this.inboxState(item), focus: this.cursor === item.url, onClick: (cx) => this.openInboxItem(item, cx) });
     };
     const pulls = (id, title, items) => (items.length ? v_flex().w_full().gap(G.hair)
       .child(section(c, title, String(items.length)))
       .children(items.map((item, k) => itemRow(`${id}-${k}`, item))) : null);
     const block = (item, b) => {
       const open = isOpen(this.session.boardOpen, item.key, blocks, scope);
-      const head = kitRow({ level: 0, open, name: item.title, dimmed: !item.remote, second: blockFacts(item, waitOn && item.oldest ? ago(item.oldest) : null), meta: checksOn ? failingMeta(item) : null })(`pr-block-${b}`, c, {
+      const head = kitRow({ level: 0, open, focus: this.cursor === item.key, name: item.title, dimmed: !item.remote, second: blockFacts(item, waitOn && item.oldest ? ago(item.oldest) : null), meta: checksOn ? failingMeta(item) : null })(`pr-block-${b}`, c, {
         onClick: (cx) => { this.session.boardOpen = toggled(this.session.boardOpen, item.key, blocks, scope); cx.notify(); },
       });
       return v_flex().w_full().gap(G.sm).child(head)
         .when(open, (el) => el.children([pulls(`pr-in-${b}-n`, "Needs you", item.needs), pulls(`pr-in-${b}-y`, "Yours", item.yours)].filter(Boolean)));
     };
     const where = scopeLine(scope);
+    const stats = shown("pr.stats", true, map) ? statsOf(blocks, Date.now()) : null;
     return this.withNote(v_flex().w_full().gap(G.lg)
       .when(Boolean(where), (el) => el.child(div().text_size(T.body).text_color(c.dim).child(where)))
+      .when(Boolean(stats), (el) => el.child(this.statsFold(c, stats)))
       .child(!blocks.length
         ? div().text_size(T.body).text_color(c.dim).child("Nothing waiting on you.")
         : v_flex().w_full().gap(G.xs).children(blocks.flatMap((item, b) => [
@@ -712,7 +854,78 @@ export class PullRequest {
       .when(Boolean(this.session.wait || this.session.inbox?.limitedUntil), (el) => el.child(div().text_size(T.body).text_color(c.dim).child(this.session.wait || limitLine(this.session.inbox.limitedUntil)))), c);
   }
 
+  pageShown() {
+    const kind = this.page?.kind;
+    if (kind === "log") return Boolean(this.session.pr) && !this.session.listing && !(this.session.inboxOn && this.session.inboxOpen);
+    if (kind === "new") return !this.session.pr && this.canCreate();
+    return false;
+  }
+
+  pageHead(c, title) {
+    return v_flex().w_full().gap(G.sm)
+      .child(h_flex().child(quietLink("pr-page-back", this.session.pr ? `Back to #${this.session.pr.number}` : "Back", (cx) => this.back(cx), c)))
+      .child(div().text_size(T.card).font_medium().text_color(c.text).child(title));
+  }
+
+  logPage(c) {
+    const pg = this.page, log = this.session.fullLog?.id === pg.id ? this.session.fullLog : null;
+    const lines = logRows(log?.text).map((row) => row.line);
+    const tail = lines.slice(-MAX_DIFF).map((line) => line.slice(0, MAX_DIFF));
+    const again = (cx) => { this.session.fullLog = null; this.session.readFullLog(pg.id, cx); cx.notify(); };
+    const shown = !log || (log.text == null && !log.error) ? this.diffBones(c)
+      : log.error ? failureBlock({ text: "Couldn’t read the log", source: log.error, fix: "Refresh" })("pr-log-failed", c, { onClick: again })
+        : code({ text: tail.join("\n") || "GitHub sent an empty log.", kind: "log" })("pr-log", c);
+    const acted = shownOutcome(this);
+    return v_flex().w_full().gap(G.lg)
+      .child(this.pageHead(c, pg.name))
+      .child(h_flex().gap(G.lg).items_center().flex_wrap()
+        .when(this.writer(), (el) => el.child(button("pr-log-rerun", this.session.busy === "rerun" ? "Re-running…" : "Re-run", (cx) => this.session.rerun([pg.id], cx), c, { kind: "tonal", small: true, disabled: Boolean(this.session.busy) })))
+        .when(Boolean(pg.url), (el) => el.child(quietLink("pr-log-web", "Open on GitHub", () => openUrl(pg.url), c))))
+      .when(Boolean(acted), (el) => el.child(outcomeLine(this, c, acted, "pr-log-act")))
+      .child(shown)
+      .when(lines.length > MAX_DIFF, (el) => el.child(div().text_size(T.body).text_color(c.dim).child(`The last ${MAX_DIFF} lines; the rest is on GitHub.`)));
+  }
+
+  newPage(c) {
+    const made = this.session.created;
+    const busy = this.session.busy === "create";
+    return v_flex().w_full().gap(G.lg)
+      .child(this.pageHead(c, `${this.session.branch} → ${this.session.base || "the default branch"}`))
+      .child(field("pr-new-title", this.newTitle, c, { label: "Title" }))
+      .child(field("pr-new-body", this.newBody, c, { label: "Description" }))
+      .child(h_flex().gap(G.lg).items_center()
+        .child(button("pr-new-create", busy ? "Opening…" : "Create pull request", (cx) => this.session.createHere(this.newTitle.value(), this.newBody.value(), cx), c,
+          { small: true, disabled: Boolean(this.session.busy) || !this.newTitle.value().trim() }))
+        .child(quietLink("pr-new-web", "Create on GitHub", (cx) => this.createPr(cx), c, { disabled: Boolean(this.session.busy) })))
+      .when(made?.state === "refused", (el) => el.child(outcomeLine(this, c, made, "pr-new")));
+  }
+
+  statsFold(c, stats) {
+    const open = Boolean(this.statsOpen);
+    const summary = [stats.oldest ? `${ago(stats.oldest.createdAt ?? stats.oldest.updatedAt)} oldest` : null, stats.fresh ? `${stats.fresh} new` : null].filter(Boolean).join(" · ");
+    const fact = (label, value) => h_flex().w_full().gap(G.md).items_center()
+      .child(div().flex_1().min_w(0).truncate().text_size(T.body).text_color(c.dim).child(label))
+      .child(div().flex_none().text_size(T.body).text_color(c.text).child(value));
+    const head = kitRow({ level: 0, open, name: "Statistics", meta: summary || null, dimmed: true })("pr-stats", c, { onClick: (cx) => { this.statsOpen = !open; cx.notify(); } });
+    return v_flex().w_full().gap(G.sm).child(head)
+      .when(open, (el) => el.child(v_flex().w_full().gap(G.sm)
+        .when(Boolean(stats.oldest), (col) => col.child(fact("Waiting longest", `#${stats.oldest.number} ${stats.oldest.repo} · ${ago(stats.oldest.createdAt ?? stats.oldest.updatedAt)}`)))
+        .when(stats.review.count > 0, (col) => col.child(fact("To review", `${diffText({ add: stats.review.add, del: stats.review.del })} in ${stats.review.count === 1 ? "1 pull request" : `${stats.review.count} pull requests`}`)))
+        .child(fact("New since you looked", String(stats.fresh)))
+        .when(stats.review.count > 0, (col) => col.child(this.agesChart(c, stats.ages)))
+        .child(div().text_size(T.body).text_color(c.dim).child("Merged this week is in Shipped"))));
+  }
+
+  agesChart(c, ages) {
+    return v_flex().w_full().gap(G.xs)
+      .child(div().text_size(T.body).text_color(c.dim).child("How long they have waited, by day"))
+      .child(h_flex().w_full().h(PR.ages).gap(G.xs).items_end()
+        .children(ages.map((share, i) => div().id(`pr-age-${i}`).flex_1().h(Math.max(1, Math.round(PR.ages * share))).rounded(R.sm).bg(share > 0 ? c.accent : c.border))))
+      .child(h_flex().w_full().justify_between().text_size(T.micro).text_color(c.dim).child("today").child("3 weeks"));
+  }
+
   body(c, narrow) {
+    if (this.pageShown()) return this.page.kind === "log" ? this.logPage(c) : this.newPage(c);
     if (this.session.inboxOn && (this.session.inboxOpen || this.session.outside)) return this.inboxPage(c);
     if (this.session.listing) return this.listPage(c);
     const kind = this.sceneKind();
@@ -725,7 +938,7 @@ export class PullRequest {
 
   nodes(c, narrow) {
     const header = ["header", this.header(c, narrow).id("header")];
-    if ((this.session.inboxOn && this.session.inboxOpen) || this.session.listing || this.sceneKind() !== "pr") return [header, ["body", this.body(c, narrow)]];
+    if (this.pageShown() || (this.session.inboxOn && this.session.inboxOpen) || this.session.listing || this.sceneKind() !== "pr") return [header, ["body", this.body(c, narrow)]];
     return [header, ...heroPieces(this, c)];
   }
 
@@ -783,10 +996,11 @@ export class PullRequest {
     const c = tokens(theme());
     const narrow = (this.width || 368) < 560;
     const nodes = this.nodes(c, narrow);
-    if (this.session.pr && !(this.session.inboxOn && this.session.inboxOpen) && !this.session.listing && this.sceneKind() === "pr") this.land(nodes.map(([id]) => id));
+    if (this.session.pr && !this.pageShown() && !(this.session.inboxOn && this.session.inboxOpen) && !this.session.listing && this.sceneKind() === "pr") this.land(nodes.map(([id]) => id));
     const padX = narrow ? G.lg : 32;
     const padY = narrow ? G.lg : 28;
     return v_flex().id("kanso-pr").size_full().min_h(0).bg(c.background).text_color(c.text).overflow_y_scrollbar()
+      .track_focus(this.handle).on_key_down((e, next) => this.key(e, next))
       .on_size_change(pageSize.call(this))
       .pt(padY).pb(padY).gap(G.lg).track_scroll(this.scroll)
       .children(nodes.map(([, el]) => h_flex().flex_none().w_full().justify_center().px(padX)

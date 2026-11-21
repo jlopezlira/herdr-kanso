@@ -8,7 +8,8 @@ import { awayShown } from "./since-left-model.js";
 import { pieces } from "./pieces.js";
 import { fetchDue, parseRemote } from "./pr-remote.js";
 import { q } from "./kdb.js";
-import { REVIEWS, canUndo, createdId, doneOf, pendingOf, ready, refusedOf, reviewArgs, undoArgs, undoneOf, undoRefusedOf } from "./pr-review.js";
+import { createdId, ready, replyArgs, reviewArgs } from "./pr-review.js";
+import { ACTS, canUndo, doneOf, pendingOf, refusedOf, undoCalls, undoneOf, undoRefusedOf } from "./pr-act.js";
 import { serviceFor } from "./platform-host.js";
 import { repositoryApi } from "./platform-repositories.js";
 import { folderScope, scopeRepos } from "./pr-board.js";
@@ -17,7 +18,7 @@ import { CALL_MS, heldView, logDue, needsPermission, needsThreads, stayOnBranch,
 export const keepsFacts = () => awayShown(pieces(shared));
 
 const FIELDS = "number,title,body,state,isDraft,url,author,baseRefName,headRefName,mergeable,mergeStateStatus,reviewDecision,statusCheckRollup,latestReviews,reviewRequests,assignees,labels,additions,deletions,changedFiles,commits,files,updatedAt,mergedAt,closedAt";
-const THREADS = "query($o:String!,$r:String!,$n:Int!){repository(owner:$o,name:$r){pullRequest(number:$n){reviewThreads(first:100){nodes{isResolved isOutdated path line comments(first:1){totalCount nodes{author{login} body url}}}}}}}";
+const THREADS = "query($o:String!,$r:String!,$n:Int!){repository(owner:$o,name:$r){pullRequest(number:$n){reviewThreads(first:100){nodes{isResolved isOutdated path line comments(first:1){totalCount nodes{author{login} body url databaseId}}}}}}}";
 const PEOPLE = "query($o:String!,$r:String!){viewer{login} repository(owner:$o,name:$r){assignableUsers(first:100){pageInfo{hasNextPage} nodes{login name}}}}";
 const LABELS = "query($o:String!,$r:String!){repository(owner:$o,name:$r){labels(first:100,orderBy:{field:NAME,direction:ASC}){pageInfo{hasNextPage} nodes{name color description}}}}";
 const OPEN = "number,title,url,isDraft,updatedAt,author,headRefName,baseRefName,reviewDecision,mergeable,mergeStateStatus,statusCheckRollup,additions,deletions";
@@ -30,7 +31,7 @@ const changed = (pr, kind, name, on, candidates) => ({
   reviewers: () => ({ ...pr, reviewRequests: on ? pr.reviewRequests.filter((x) => x.login !== name) : [...pr.reviewRequests, { login: name }] }),
 }[kind]());
 
-const FINISHED = { Push: "Pushed", Pull: "Pulled", Update: "Branch updated", Ready: "Marked ready for review", Draft: "Returned to draft", Close: "Closed", Reopen: "Reopened" };
+const FINISHED = { Push: "Pushed", Pull: "Pulled", Update: "Branch updated", Draft: "Returned to draft", Reopen: "Reopened" };
 const NO_PR = /no (open )?pull requests? found|could not determine current branch/i;
 
 export function ghMissing(r) {
@@ -73,7 +74,7 @@ const blank = () => ({
   inboxOn: false, inbox: null, inboxOpen: null, inboxForce: false, boardOpen: null, scope: null, signedOut: false, scoped: null, scopeReady: () => {},
   stale: null, wait: null, freshAt: null, loadedAt: undefined,
   logFor: null, failedLog: null, logParsed: null, logParsedFor: null, sendShown: false, sendFor: null,
-  queued: false, asking: false, loading: false, busy: null, pending: null, flights: [], reviewed: null, reviewFor: null,
+  queued: false, asking: false, loading: false, busy: null, pending: null, flights: [], acted: null, actedFor: null, created: null, fullLog: null,
 });
 
 export class FolderSession {
@@ -385,7 +386,7 @@ export class FolderSession {
       if (nodes) {
         this.threads = nodes.filter((n) => !n.isResolved).map((n) => {
           const first = n.comments?.nodes?.[0];
-          return { path: n.path, line: n.line, outdated: n.isOutdated, author: first?.author?.login ?? "", body: (first?.body ?? "").replace(/\r\n?/g, "\n").trim(), url: first?.url, replies: Math.max(0, (n.comments?.totalCount ?? 1) - 1) };
+          return { path: n.path, line: n.line, outdated: n.isOutdated, author: first?.author?.login ?? "", body: (first?.body ?? "").replace(/\r\n?/g, "\n").trim(), url: first?.url, comment: first?.databaseId ?? null, replies: Math.max(0, (n.comments?.totalCount ?? 1) - 1) };
         });
         this.threadsFor = threadKey(pr.url, pr.updatedAt);
       }
@@ -431,6 +432,17 @@ export class FolderSession {
   loadOthers(cx) {
     if (!this.live() || this.listed || this.wait || !this.root) return;
     this.flight(cx, "details", async (task) => { this.takeOpen(await this.gh(task, openListArgs()).catch(() => null)); });
+  }
+
+  readFullLog(id, cx) {
+    if (!id || (this.fullLog?.id === id && !this.fullLog.error)) return;
+    if (this.logFor === id && this.failedLog != null) { this.fullLog = { id, text: this.failedLog }; return; }
+    this.fullLog = { id, text: null };
+    this.flight(cx, "log", async (task) => {
+      const r = await this.gh(task, ["run", "view", id, "--log-failed"]).catch((e) => ({ code: 1, stderr: String(e?.message ?? e) }));
+      if (this.fullLog?.id !== id) return;
+      this.fullLog = r?.code === 0 ? { id, text: r.stdout ?? "" } : { id, text: null, error: String(r?.stderr || r?.stdout || "").split("\n")[0] || "GitHub did not send the log." };
+    });
   }
 
   readDiff(cx) {
@@ -502,39 +514,90 @@ export class FolderSession {
     if (this.perform(label, cx, words, async (task) => commandOk(await run(task, args)), (next) => this.reread(next))) this.panel.armed.clear();
   }
 
-  mergeNow(cx) {
-    const pr = this.pr;
-    if (!pr) return;
-    this.perform("Merge", cx, { failure: "Merge failed", done: `Merged #${pr.number}`, body: pr.title, loud: true }, async (task) => {
-      const { o, r: name } = repoOf(pr.url);
-      const repo = await this.gh(task, ["repo", "view", `${o}/${name}`, "--json", "squashMergeAllowed,mergeCommitAllowed,rebaseMergeAllowed"]);
-      const allowed = repo.code === 0 ? JSON.parse(repo.stdout) : {};
-      const method = allowed.squashMergeAllowed !== false ? "--squash" : allowed.mergeCommitAllowed ? "--merge" : "--rebase";
-      commandOk(await this.gh(task, ["pr", "merge", pr.url, method]));
-    }, (next) => this.reread(next));
+  actOn(kind, cx, work, { pull = this.pr, at = null, idOf = () => null, after = () => {}, loud = false } = {}) {
+    if (!pull?.url || this.busy) return false;
+    const { folder } = this.target();
+    const target = { pr: pull, folder, place: `#${pull.number} in ${folder}` };
+    this.busy = kind; this.acted = pendingOf(kind, at); this.actedFor = pull.url; this.note = null;
+    this.panel.armed.clear();
+    this.start(cx, async (task) => {
+      const said = await work(task).then(commandOk).then((r) => ({ r }), (e) => ({ e }));
+      const error = said.e ? String(said.e?.message ?? said.e) : null;
+      this.busy = null;
+      this.acted = said.r ? doneOf(kind, idOf(said.r), at) : refusedOf(kind, error, at);
+      if (said.r) after(said.r);
+      this.outcome(target, said.r ? { title: ACTS[kind].done, body: pull.title, level: "success" } : { title: ACTS[kind].refused, body: error, level: "error" }, { quiet: !(loud && said.r) });
+      this.reread(task);
+    });
+    return true;
   }
 
-  review(kind, body, cx) {
-    const pr = this.pr, place = repoOf(pr?.url);
-    if (!pr || !place || this.busy || !ready(kind, body)) return;
-    this.busy = REVIEWS[kind].label; this.reviewed = pendingOf(kind); this.reviewFor = pr.url;
+  undo(cx) {
+    const done = this.acted, url = this.actedFor, place = repoOf(url);
+    if (!place || this.busy || !canUndo(done)) return;
+    this.busy = "undo";
     this.start(cx, async (task) => {
-      const said = await this.gh(task, reviewArgs(kind, { ...place, number: pr.number, body })).then(commandOk).then((r) => ({ r }), (e) => ({ e }));
+      const failed = await undoCalls(done, { ...place, number: Number(url.split("/").at(-1)) })
+        .reduce((prev, args) => prev.then(() => this.gh(task, args).then(commandOk)), Promise.resolve())
+        .then(() => null, (e) => String(e?.message ?? e));
       this.busy = null;
-      this.reviewed = said.r ? doneOf(kind, createdId(said.r.stdout)) : refusedOf(kind, String(said.e?.message ?? said.e));
-      if (said.r) this.panel.reviewSent(pr.url, body);
+      this.acted = failed ? undoRefusedOf(done, failed) : undoneOf(done);
       this.reread(task);
     });
   }
 
-  undoReview(cx) {
-    const pr = this.pr, place = repoOf(pr?.url), done = this.reviewed;
-    if (!pr || !place || this.busy || !canUndo(done) || this.reviewFor !== pr.url) return;
-    this.busy = "Undo";
+  mergeNow(cx) {
+    const pr = this.pr;
+    if (!pr) return;
+    this.actOn("merge", cx, async (task) => {
+      const { o, r: name } = repoOf(pr.url);
+      const repo = await this.gh(task, ["repo", "view", `${o}/${name}`, "--json", "squashMergeAllowed,mergeCommitAllowed,rebaseMergeAllowed"]);
+      const allowed = repo.code === 0 ? JSON.parse(repo.stdout) : {};
+      const method = allowed.squashMergeAllowed !== false ? "--squash" : allowed.mergeCommitAllowed ? "--merge" : "--rebase";
+      return this.gh(task, ["pr", "merge", pr.url, method]);
+    }, { loud: true });
+  }
+
+  close(cx) { this.actOn("close", cx, (task) => this.gh(task, ["pr", "close", this.pr.url]), { idOf: () => this.actedFor }); }
+
+  markReady(cx) { this.actOn("ready", cx, (task) => this.gh(task, ["pr", "ready", this.pr.url]), { idOf: () => this.actedFor }); }
+
+  rerun(runs, cx) {
+    const ids = [...new Set(runs.filter(Boolean).map(String))];
+    if (!ids.length) return;
+    this.actOn("rerun", cx, (task) => ids.reduce((prev, id) => prev.then(() => this.gh(task, ["run", "rerun", id, "--failed"]).then(commandOk)), Promise.resolve()), { idOf: () => ids });
+  }
+
+  review(kind, body, cx, pull = this.pr) {
+    const place = repoOf(pull?.url);
+    if (!place || !ready(kind, body)) return;
+    this.actOn(kind, cx, (task) => this.gh(task, reviewArgs(kind, { ...place, number: pull.number, body })), {
+      pull, idOf: (r) => createdId(r.stdout), after: () => this.panel.reviewSent(pull.url, body),
+    });
+  }
+
+  reply(thread, body, cx) {
+    const pr = this.pr, place = repoOf(pr?.url);
+    if (!place || !thread?.comment || !String(body ?? "").trim()) return;
+    this.actOn("reply", cx, (task) => this.gh(task, replyArgs({ ...place, number: pr.number, comment: thread.comment, body })), {
+      at: thread.comment, idOf: (r) => createdId(r.stdout), after: () => this.panel.replySent(thread.comment, body),
+    });
+  }
+
+  createHere(title, body, cx) {
+    if (this.busy || !String(title ?? "").trim()) return;
+    const branch = this.branch;
+    this.busy = "create"; this.note = null; this.created = pendingOf("create");
     this.start(cx, async (task) => {
-      const said = await this.gh(task, undoArgs(done, { ...place, number: pr.number })).then(commandOk).then(() => null, (e) => e);
+      const said = await this.readPushed(task, this.root, this.on).then((now) => {
+        if (!now || now.state === "late") throw new Error("It took too long to answer.");
+        if (now.state !== "pushed") throw new Error(`${now.state === "behind" ? "pull" : "push"} ${branch ?? "the branch"} first`);
+        return this.gh(task, ["pr", "create", "--head", branch, "--title", title, "--body", String(body ?? "")]);
+      }).then(commandOk).then((r) => ({ r }), (e) => ({ e }));
       this.busy = null;
-      this.reviewed = said ? undoRefusedOf(done, String(said?.message ?? said)) : undoneOf(done);
+      const url = said.r ? String(said.r.stdout ?? "").trim().split("\n").at(-1) : null;
+      this.created = said.r ? null : refusedOf("create", String(said.e?.message ?? said.e));
+      if (said.r) { this.acted = doneOf("create", url); this.actedFor = url; this.panel.createdHere(); }
       this.reread(task);
     });
   }
