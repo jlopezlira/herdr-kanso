@@ -1,0 +1,136 @@
+import { psQuote, shellQuote, windowsArg } from "./platform-command.js";
+
+export const TAILSCALE_PATHS = {
+  macos: ["tailscale", "/usr/local/bin/tailscale", "/opt/homebrew/bin/tailscale", "/Applications/Tailscale.app/Contents/MacOS/Tailscale"],
+  linux: ["tailscale", "/usr/bin/tailscale", "/usr/local/bin/tailscale"],
+  windows: ["tailscale", "C:\\Program Files\\Tailscale\\tailscale.exe"],
+};
+export const tailscalePaths = (platform) => TAILSCALE_PATHS[platform] ?? TAILSCALE_PATHS.linux;
+
+const PHONES = new Set(["ios", "android", "tvos"]);
+const ipv4 = (ip) => /^\d+\.\d+\.\d+\.\d+$/.test(ip);
+const labelOf = (peer) => String(peer.DNSName ?? "").split(".")[0] || String(peer.HostName ?? "").toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-+|-+$/g, "");
+
+export function tailnet(text) {
+  const raw = String(text ?? "");
+  const at = raw.indexOf("{");
+  if (at < 0) return null;
+  try {
+    const status = JSON.parse(raw.slice(at));
+    if (status.BackendState && status.BackendState !== "Running") return { state: status.BackendState, peers: [] };
+    const peers = Object.values(status.Peer ?? {})
+      .filter((peer) => !PHONES.has(String(peer.OS ?? "").toLowerCase()))
+      .map((peer) => ({
+        name: labelOf(peer),
+        ip: (peer.TailscaleIPs ?? []).find(ipv4) ?? peer.TailscaleIPs?.[0] ?? "",
+        os: String(peer.OS ?? ""),
+        online: peer.Online === true,
+        tailscaleSsh: Array.isArray(peer.sshHostKeys) && peer.sshHostKeys.length > 0,
+      }))
+      .filter((peer) => peer.name && peer.ip)
+      .toSorted((a, b) => Number(b.online) - Number(a.online) || a.name.localeCompare(b.name));
+    return { state: "Running", peers };
+  } catch {
+    return null;
+  }
+}
+
+export function splitTarget(text) {
+  const value = String(text ?? "").trim();
+  const at = value.lastIndexOf("@");
+  return at < 0 ? { user: "", host: value } : { user: value.slice(0, at), host: value.slice(at + 1) };
+}
+
+const joined = (user, host) => (user ? `${user}@${host}` : host);
+
+export function planFor(choice, { tailscale = "", platform = "macos" } = {}) {
+  const { user } = splitTarget(choice.target);
+  const peer = choice.peer ?? null;
+  if (!peer) return { name: choice.name ?? "", target: choice.target.trim(), via: "", probe: true };
+  const target = joined(user, peer.ip);
+  if (peer.tailscaleSsh && tailscale) {
+    const quote = platform === "windows" ? windowsArg : shellQuote;
+    return { name: peer.name, target, via: `${quote(tailscale)} ssh ${quote(target)}`, probe: false };
+  }
+  return { name: peer.name, target, via: "", probe: true };
+}
+
+export function choiceOf(typed, peers = []) {
+  const { user, host } = splitTarget(typed);
+  const peer = peers.find((p) => p.name === host.toLowerCase() || p.ip === host) ?? null;
+  return peer ? { peer, target: joined(user, host), name: peer.name } : { peer: null, target: String(typed ?? "").trim() };
+}
+
+export const addArgs = ({ name = "", target = "", via = "" }, { json = true } = {}) => ["machine", "add", ...(via ? [] : [target]),
+  ...(name ? ["--name", name] : []), ...(via ? ["--via", via] : []), "--install", ...(json ? ["--json"] : [])];
+
+export const probeArgs = (target) => ["-o", "BatchMode=yes", "-o", "ConnectTimeout=8", "-o", "StrictHostKeyChecking=accept-new", target, "true"];
+
+export const forgetArgs = (host) => ["-R", host];
+
+const REACH = [
+  ["hostkey", /REMOTE HOST IDENTIFICATION HAS CHANGED|Host key verification failed/i],
+  ["password", /Permission denied|Too many authentication failures|password|passphrase|login_needed|auth_failed/i],
+  ["closed", /Connection refused|port 22: Connection/i],
+  ["unreachable", /timed out|no answer|unreachable|No route to host|Network is unreachable|Could not resolve|Name or service not known|nodename nor servname/i],
+];
+
+export function reachOf(result) {
+  if (result && result.code === 0) return "ready";
+  const text = `${result?.stderr ?? ""}\n${result?.stdout ?? ""}`;
+  return REACH.find(([, pattern]) => pattern.test(text))?.[0] ?? "failed";
+}
+
+const SH_SETUP = 'k="$HOME/.ssh/id_ed25519"; [ -f "$k.pub" ] || ssh-keygen -q -t ed25519 -N "" -f "$k"; ssh-copy-id -o StrictHostKeyChecking=accept-new -i "$k.pub" "$1" || exit; shift; hc "$@" && echo && echo "Done: this tab can close."';
+
+export function keySetup(plan, platform = "macos") {
+  const add = addArgs(plan, { json: false });
+  if (platform !== "windows") return ["sh", "-c", SH_SETUP, "sh", plan.target, ...add];
+  const script = `$PSNativeCommandArgumentPassing = 'Legacy'; $k = Join-Path $env:USERPROFILE '.ssh\\id_ed25519'; if (-not (Test-Path "$k.pub")) { ssh-keygen -q -t ed25519 -N '""' -f $k }; `
+    + `Get-Content "$k.pub" | ssh -o StrictHostKeyChecking=accept-new ${psQuote(plan.target)} 'umask 077; mkdir -p ~/.ssh; cat >> ~/.ssh/authorized_keys'; `
+    + `if ($LASTEXITCODE -eq 0) { & hc ${add.map(psQuote).join(" ")}; Write-Host 'Done: this tab can close.' }`;
+  return ["powershell", "-NoProfile", "-Command", script];
+}
+
+const MAC = /^mac/i;
+export const ACCESS_CONTROLS = "https://login.tailscale.com/admin/acls";
+
+export function advice(reach, { name, os = "", tailnet: onTailnet = false } = {}) {
+  if (reach === "password") return { text: `${name} wants its password once. Type it in the tab that opens, and ${name} is added right after.`, fix: "Enter the password" };
+  if (reach === "closed" && MAC.test(os)) return { text: `${name} doesn't let ssh in. On ${name}: System Settings › General › Sharing › Remote Login, on. Then Retry.`, fix: "Retry" };
+  if (reach === "closed" && onTailnet) return { text: `Nothing answers ssh on ${name}. Run this once on ${name}, then Retry:`, command: "sudo tailscale set --ssh", fix: "Retry" };
+  if (reach === "closed") return { text: `Nothing answers ssh on ${name}. Start its ssh server, then Retry.`, fix: "Retry" };
+  if (reach === "unreachable" && onTailnet) return { text: `${name} is online, but its ssh (port 22) doesn't answer this computer. Most often Tailscale's access controls don't allow it: allow this computer to ${name} on port 22, then Retry.`, fix: "Open access controls", url: ACCESS_CONTROLS };
+  if (reach === "unreachable") return { text: `${name} doesn't answer. Is it on and online?`, fix: "Retry" };
+  if (reach === "hostkey") return onTailnet
+    ? { text: `${name}'s key changed since last time, as after a reinstall.`, fix: "Forget the old key" }
+    : { text: `${name}'s key changed since last time. If you reinstalled it, forget the old key, then Retry:`, command: `ssh-keygen -R ${splitTarget(name).host}`, fix: "Retry" };
+  return { text: "", fix: "Retry" };
+}
+
+const holdsHost = (text, host) => String(text ?? "").split(/[\s'"]+/).some((word) => splitTarget(word).host === host);
+
+export function isAdded(added, { name = "", target = "", ip = "" }) {
+  return (added ?? []).some((m) => (name && m.name === name) || (target && m.target === target)
+    || (ip && [m.target, m.via].some((text) => holdsHost(text, ip))));
+}
+
+const HOST_FIELDS = { hostname: "hostname", user: "user" };
+
+export function sshConfigHosts(text) {
+  const blocks = String(text ?? "").split("\n").map((raw) => raw.trim().match(/^([^\s#=]+)\s*=?\s*(.*)$/)).filter(Boolean)
+    .reduce((found, [, key, value]) => {
+      const word = key.toLowerCase();
+      if (word === "host" || word === "match") {
+        const names = word === "host" ? value.trim().split(/\s+/).filter((h) => h && !/[*?!]/.test(h)) : [];
+        return [...found, names.length ? { alias: names[0], hostname: "", user: "" } : null];
+      }
+      const last = found.at(-1);
+      return last && HOST_FIELDS[word] ? [...found.slice(0, -1), { ...last, [HOST_FIELDS[word]]: value.trim() }] : found;
+    }, []);
+  return blocks.filter(Boolean).filter((host, i, all) => all.findIndex((other) => other.alias === host.alias) === i);
+}
+
+export const includesOf = (text) => String(text ?? "").split("\n")
+  .map((raw) => raw.trim().match(/^include\s*=?\s*(.+)$/i)?.[1]).filter(Boolean)
+  .flatMap((value) => value.match(/"[^"]*"|\S+/g) ?? []).map((p) => p.replace(/^"|"$/g, ""));
