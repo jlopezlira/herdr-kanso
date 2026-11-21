@@ -7,6 +7,14 @@ import { blankPanel, recorder, reviewFields } from "./pr-fixtures.mjs";
 const tone = new Proxy({}, { get: () => "#888" });
 const pull = { o: "acme", r: "app", number: 12 };
 const url = "https://github.com/acme/app/pull/12";
+const repoNamed = (name) => ({ provider: "github", host: "github.com", owner: "acme", name });
+const NEEDS = { url, ...repoNamed("app"), number: 12, title: "Ship", updatedAt: "2026-11-01T00:00:00Z", author: "ada" };
+const onBoard = (panel, inbox, names) => {
+  panel.session.inboxOn = true;
+  panel.session.inboxOpen = true;
+  panel.session.scope = { kind: "folder", repos: names.map(repoNamed), local: [] };
+  panel.session.inbox = inbox;
+};
 
 test("Undoing each action names the one GitHub call that takes it back, and a merge cannot be undone", async () => {
   const { undoCalls, canUndo, doneOf } = await load("kanso-panel/pr-act.js", ["undoCalls", "canUndo", "doneOf"], {});
@@ -225,14 +233,9 @@ test("Keys on a pull request send the matching action, and only when the field i
 
 test("Board keys move over open rows, fold or open on Enter, and approve a Needs you row in place", async () => {
   const { panel, calls, tasks } = await actionPanel((command, args) => (command === "gh" && args[0] === "api" ? success("{\"id\":5}\n") : undefined));
-  const repo = (name) => ({ provider: "github", host: "github.com", owner: "acme", name });
-  const needs = { url, provider: "github", host: "github.com", owner: "acme", name: "app", number: 12, title: "Ship", updatedAt: "2026-11-01T00:00:00Z", author: "ada" };
-  const yours = { ...needs, url: "https://github.com/acme/app/pull/13", number: 13, title: "Mine" };
-  const other = { ...needs, url: "https://github.com/acme/also/pull/2", name: "also", number: 2, title: "Also" };
-  panel.session.inboxOn = true;
-  panel.session.inboxOpen = true;
-  panel.session.scope = { kind: "folder", repos: [repo("app"), repo("also")], local: [] };
-  panel.session.inbox = { needs: [needs, other], yours: [yours], login: "jj" };
+  const yours = { ...NEEDS, url: "https://github.com/acme/app/pull/13", number: 13, title: "Mine" };
+  const other = { ...NEEDS, url: "https://github.com/acme/also/pull/2", name: "also", number: 2, title: "Also" };
+  onBoard(panel, { needs: [NEEDS, other], yours: [yours], login: "jj" }, ["app", "also"]);
   panel.handle = { is_focused: () => true, focus() {}, release() {} };
   const shown = panel.board();
   const head = shown.blocks[0].key;
@@ -283,7 +286,7 @@ test("Statistics name the oldest Needs you item, the new count and the review si
   assert.equal(statsOf([], now), null);
   const { panel, ui } = await actionPanel(() => undefined);
   panel.session.inbox = { needs: [item("2026-11-01T12:00:00Z", { url, provider: "github", host: "github.com", owner: "acme", name: "app", number: 12 })], yours: [], login: "jj" };
-  panel.session.scope = { kind: "folder", repos: [{ provider: "github", host: "github.com", owner: "acme", name: "app" }], local: [] };
+  panel.session.scope = { kind: "folder", repos: [repoNamed("app")], local: [] };
   panel.session.inboxOn = true;
   ui.texts.length = 0;
   panel.inboxPage(tone);
@@ -325,11 +328,7 @@ test("Approving a Needs you row draws Approving, then Approved with Undo, and Un
     if (command === "gh" && args[0] === "api") return success("");
     return undefined;
   });
-  const needs = { url, provider: "github", host: "github.com", owner: "acme", name: "app", number: 12, title: "Ship", updatedAt: "2026-11-01T00:00:00Z", author: "ada" };
-  panel.session.inboxOn = true;
-  panel.session.inboxOpen = true;
-  panel.session.scope = { kind: "folder", repos: [{ provider: "github", host: "github.com", owner: "acme", name: "app" }], local: [] };
-  panel.session.inbox = { needs: [needs], yours: [], login: "jj" };
+  onBoard(panel, { needs: [NEEDS], yours: [], login: "jj" }, ["app"]);
   panel.session.boardOpen = [panel.board().blocks[0].key];
   panel.cursor = url;
   pressKey(panel, tasks, "a");
