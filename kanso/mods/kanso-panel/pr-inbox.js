@@ -9,7 +9,7 @@ import { fetchDue, isNew, limitLine, parsePullRequest, parseRemotes, projectSign
 
 const num = (x) => (x != null && Number.isFinite(Number(x)) ? String(Math.round(Number(x))) : "NULL");
 const SCAN = "repos:scan";
-const COLS = ["provider", "host", "owner", "name", "number", "title", "state", "draft", "author", "role", "head", "base", "review_decision", "additions", "deletions", "updated_at"];
+const COLS = ["provider", "host", "owner", "name", "number", "title", "state", "draft", "author", "role", "head", "base", "review_decision", "additions", "deletions", "updated_at", "checks", "created_at"];
 
 export { fetchDue, isNew, limitLine };
 
@@ -27,7 +27,7 @@ function valuesOf(item) {
     provider: q(item.provider), host: q(item.host), owner: q(item.owner), name: q(item.name), number: num(item.number),
     title: q(item.title), state: q(item.state ?? "OPEN"), draft: item.draft ? "1" : "0", author: q(item.author), role: q(item.role),
     head: q(item.head), base: q(item.base), review_decision: q(item.reviewDecision), additions: num(item.additions),
-    deletions: num(item.deletions), updated_at: q(item.updatedAt),
+    deletions: num(item.deletions), updated_at: q(item.updatedAt), checks: q(item.checks), created_at: q(item.createdAt),
   };
 }
 
@@ -48,6 +48,7 @@ function itemOf(row) {
     url: row.url, provider: row.provider, host: row.host, owner: row.owner, name: row.name, number: row.number, title: row.title,
     state: row.state, draft: Boolean(row.draft), author: row.author, role: row.role, head: row.head, base: row.base,
     reviewDecision: row.review_decision, additions: row.additions, deletions: row.deletions, updatedAt: row.updated_at,
+    checks: row.checks ?? null, createdAt: row.created_at ?? null,
     seenAt: row.seen_at, fetchedAt: row.fetched_at,
   };
 }
@@ -190,7 +191,7 @@ async function storeInbox(db, { provider, host, items, before, skipped = [], rat
   if (facts) await recordPrFacts(db, items, now);
 }
 
-export async function refreshInbox({ db, run, provider, session, force = false, shown = true, facts = true, now = Date.now(), onCache } = {}) {
+export async function refreshInbox({ db, run, provider, session, force = false, extra = [], shown = true, facts = true, now = Date.now(), onCache } = {}) {
   const readHost = (hostRow) => readInbox(db, { provider: provider.id, host: hostRow.host, login: hostRow.login });
   if (!shown) {
     const parts = await session.hosts.reduce(async (prev, hostRow) => [...await prev, await readHost(hostRow)], Promise.resolve([]));
@@ -208,7 +209,8 @@ export async function refreshInbox({ db, run, provider, session, force = false, 
   const parts = await cachedParts.reduce(async (prev, part) => {
     const soFar = await prev;
     if (!part.due) return [...soFar, part.before];
-    const repos = part.before.repos.filter((repo) => repo.project_id).toSorted((a, b) => `${a.owner}/${a.name}`.localeCompare(`${b.owner}/${b.name}`));
+    const known = part.before.repos.filter((repo) => repo.project_id).toSorted((a, b) => `${a.owner}/${a.name}`.localeCompare(`${b.owner}/${b.name}`));
+    const repos = withExtra(known, extra.filter((repo) => repo.host === part.hostRow.host));
     const result = await provider.inbox(run, { repos, login: part.hostRow.login, host: part.hostRow.host, now }).catch((e) => ({ failed: true, error: String(e?.message ?? e).split("\n")[0] }));
     if (result.failed) return [...soFar, { ...part.before, writeError: result.error }];
     const queried = new Set((result.queried ?? []).map((repo) => `${repo.owner}\n${repo.name}`.toLowerCase()));
@@ -222,6 +224,11 @@ export async function refreshInbox({ db, run, provider, session, force = false, 
   }, Promise.resolve([]));
   return mergeInbox(parts);
 }
+
+const withExtra = (repos, extra) => {
+  const known = new Set(repos.map((repo) => repoId(repo.provider, repo.host, repo.owner, repo.name)));
+  return [...extra.filter((repo) => !known.has(repoId(repo.provider, repo.host, repo.owner, repo.name))), ...repos];
+};
 
 export function mergeInbox(parts) {
   const all = parts.filter(Boolean);
