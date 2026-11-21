@@ -1,6 +1,6 @@
 import { shellQuote, windowsArg } from "./platform-command.js";
 import { privateIp } from "./nearby.js";
-import { splitTarget, joined, destinationOf, keySetup } from "./sign-in.js";
+import { splitTarget, joined, destinationOf, keySetup, lanFirst } from "./sign-in.js";
 
 export { splitTarget, destinationOf, keySetup };
 
@@ -53,9 +53,6 @@ export function aliasOf(peer, hosts = []) {
   return (hosts ?? []).find((h) => h.hostname === peer.ip || h.hostname === peer.name || h.hostname.startsWith(`${peer.name}.`)
     || (!h.hostname && h.alias === peer.name)) ?? null;
 }
-
-const LAN_SSH = "-o BatchMode=yes -o ConnectTimeout=2 -o StrictHostKeyChecking=accept-new";
-const lanFirst = (lan, away) => `sh -c ${shellQuote(`ssh ${LAN_SSH} ${shellQuote(lan)} true >/dev/null 2>&1 && exec ssh -o StrictHostKeyChecking=accept-new ${shellQuote(lan)} "$1"; exec ${away} "$1"`)} route`;
 
 function awayPlan(choice, { tailscale, platform }) {
   const { user } = splitTarget(choice.target);

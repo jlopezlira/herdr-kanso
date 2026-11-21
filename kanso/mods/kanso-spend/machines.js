@@ -9,10 +9,12 @@ const kept = (value) => {
 
 export function machineRecord(row) {
   if (!row || row.name == null || row.name === "") return null;
+  const target = kept(row.target);
+  const through = row.via === true || row.via === 1 || /\s/.test(target);
   return {
     name: String(row.name),
-    target: String(row.target ?? ""),
-    via: kept(row.via),
+    target: through ? "" : target,
+    via: through ? target : kept(row.via),
     session: kept(row.session),
     temporary: row.temporary === true || row.temporary === 1 || row.temporary === "1",
   };

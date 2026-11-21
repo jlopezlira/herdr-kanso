@@ -1,4 +1,5 @@
 import { psQuote, shellQuote } from "./platform-command.js";
+import { machineRecord } from "./machines.js";
 
 export function splitTarget(text) {
   const value = String(text ?? "").trim();
@@ -28,15 +29,22 @@ const sshLine = (target, quote) => {
 };
 
 export function routeOf(machine) {
-  if (!machine) return { name: "", target: "", via: "", session: "" };
-  const text = (value) => (typeof value === "string" && value !== "false" && value !== "null" ? value.trim() : "");
-  const through = machine.via === true || machine.via === 1 || /\s/.test(text(machine.target));
-  return {
-    name: String(machine.name ?? ""),
-    target: through ? "" : text(machine.target),
-    via: through ? text(machine.target) : text(machine.via),
-    session: text(machine.session),
-  };
+  const { name = "", target = "", via = "", session = "" } = machineRecord(machine) ?? {};
+  return { name, target, via, session };
+}
+
+const LAN_SSH = "-o BatchMode=yes -o ConnectTimeout=2 -o StrictHostKeyChecking=accept-new";
+const LAN_ASK = "-o ConnectTimeout=2 -o StrictHostKeyChecking=accept-new";
+const lanLine = (lan, away) => `ssh ${LAN_SSH} ${shellQuote(lan)} true >/dev/null 2>&1 && exec ssh -o StrictHostKeyChecking=accept-new ${shellQuote(lan)} "$1"; exec ${away} "$1"`;
+export const lanFirst = (lan, away) => `sh -c ${shellQuote(lanLine(lan, away))} route`;
+
+const unquote = (word) => (/^'.*'$/s.test(word) ? word.slice(1, -1).replace(/'\\''/g, "'") : word);
+
+export function lanParts(via) {
+  const inner = String(via ?? "").match(/^sh -c ('(?:[^']|'\\'')*'|\S+) route$/s);
+  const line = inner ? unquote(inner[1]) : "";
+  const found = line.match(/^ssh -o BatchMode=yes -o ConnectTimeout=2 -o StrictHostKeyChecking=accept-new (\S+) true >\/dev\/null 2>&1 && exec ssh -o StrictHostKeyChecking=accept-new \1 "\$1"; exec (.+) "\$1"$/s);
+  return found && lanFirst(unquote(found[1]), found[2]) === via ? { lan: unquote(found[1]), away: found[2] } : null;
 }
 
 export function keyable({ target = "", via = "" }, platform = "macos") {
@@ -47,8 +55,10 @@ export function keyable({ target = "", via = "" }, platform = "macos") {
 
 export function keyedRoute({ target = "", via = "" }, platform = "macos") {
   const windows = platform === "windows";
-  const base = (quote) => via || sshLine(target, quote);
-  return { ask: withSsh(base(windows ? psQuote : shellQuote), ASK), keyed: withSsh(base(windows ? String : shellQuote), KEYED) };
+  const base = (quote) => via.split(KEYED).join("") || sshLine(target, quote);
+  const lan = lanParts(base(shellQuote));
+  const ask = lan ? `sh -c ${shellQuote(`ssh ${ASK}${LAN_ASK} ${shellQuote(lan.lan)} "$1" || exec ${withSsh(lan.away, ASK)} "$1"`)} route` : withSsh(base(windows ? psQuote : shellQuote), ASK);
+  return { ask, keyed: withSsh(base(windows ? String : shellQuote), KEYED) };
 }
 
 const nameOf = ({ name, target }) => name || splitTarget(destinationOf(target).dest).host;
