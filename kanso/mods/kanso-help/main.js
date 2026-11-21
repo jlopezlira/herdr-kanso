@@ -4,22 +4,25 @@ import { v_flex, h_flex } from "gpui-base";
 import { paths } from "./platform-paths.js";
 import { localName } from "./platform-host.js";
 import { modifierLabels, guideSections } from "./guide.js";
-import { theme, appHome, home, props, closeOverlay, keys, openOverlay, run } from "herdr";
+import { theme, appHome, home, props, closeOverlay, keys, shared } from "herdr";
 import { focusOn } from "./pure.js";
+import { installedRelease } from "./release.js";
+import { whenInstalled } from "./installed.js";
+import { readNews, newsPage, NEWS_LOADING } from "./news.js";
+import { readAvatars, creditsPage } from "./credits.js";
 import { Lit } from "./lit.js";
 import { pagedDialog } from "./pages.js";
-import { R, T, G, DIALOG, FOCUS, ICON_CHROME, KEY, TINT, alpha, tokens } from "./ui.js";
-import { button, quietLink } from "./ui-button.js";
+import { R, T, G, FOCUS, ICON_CHROME, KEY, TINT, alpha, tokens } from "./ui.js";
 import { button as kitButton } from "./kit.js";
 import { row } from "./ui-row.js";
 import { glyphs } from "./marks.js";
-import { TICK_MS, Companion } from "./pets.js";
 import { ROWS, MODIFIERS, CAP, layer, LIST_LAYER, LIST_SHIFT, describe } from "./keymap.js";
 
 const PAGES = [
   { key: "keys", label: "Keyboard" },
-  { key: "dojo", label: "hjkl dōjō" },
   { key: "guide", label: "Guide" },
+  { key: "news", label: "What's new" },
+  { key: "credits", label: "Credits" },
 ];
 
 const MODIFIER_KEYS = ["shift", "control", "alt", "platform", "meta", "cmd", "ctrl", "option", "command"];
@@ -38,7 +41,6 @@ export function keyPress({ page, key, held = [], onControl = false }) {
   const reverseTab = raw === "tab" && held.every((m) => m === "shift");
   if (raw === "escape") return { does: "close", stop: true };
   if (onControl && (reverseTab || (held.length === 0 && ACTIVATING.includes(raw)))) return { does: null, stop: false };
-  if (page === "dojo" && raw === "enter") return { does: "dojo", stop: true };
   if (page !== "keys" || MODIFIER_KEYS.includes(raw)) return { does: null, stop: false };
   return { does: "pick", stop: !reverseTab };
 }
@@ -49,13 +51,11 @@ export default class Help extends View {
   init(_props, cx) {
     this.handle = focusOn(cx);
     this.page = PAGES.some((p) => p.key === props()?.page) ? props().page : "keys";
-    this.pal = new Companion(cx.timer);
-    this.pal.load(cx);
-    // The agents' pets come the first time the dōjō's page shows.
-    if (this.page === "dojo") this.pal.bring(cx);
-    // Your pet waves once when the dōjō's page shows, then is still; a redraw only when its frame changes.
-    this.hello = Date.now();
-    cx.timer.every(TICK_MS, (cx) => { if (this.page === "dojo" && this.pal.moved(this.petState(), this.hello)) cx.notify(); });
+    this.installed = null;
+    this.news = null;
+    this.avatars = null;
+    whenInstalled(cx, (version) => { this.installed = version; });
+    this.load(this.page, cx);
     this.mods = localName() === "windows" ? ["alt"] : ["cmd", "alt"]; // the layer shown first: the vim panes
     this.lists = false;
     this.picked = "h";
@@ -67,12 +67,22 @@ export default class Help extends View {
     const { does, stop } = keyPress({ page: this.page, key: e.key, held: heldModifiers(e.modifiers), onControl: !this.handle.is_focused() });
     if (stop) cx.stop_propagation();
     if (does === "close") closeOverlay(props()?.overlay);
-    if (does === "dojo") this.enterDojo();
     if (does !== "pick") return;
     if (mods.length) { this.mods = mods; this.lists = false; }
     this.picked = key;
     this.capLight.light(key, cx);
     cx.notify();
+  }
+
+  load(page, cx) {
+    if (page === "news" && !this.news) {
+      this.news = NEWS_LOADING;
+      cx.spawn(async (cx) => { this.news = await readNews(); cx.notify(); });
+    }
+    if (page === "credits" && !this.avatars) {
+      this.avatars = new Set();
+      cx.spawn(async (cx) => { this.avatars = await readAvatars(); cx.notify(); });
+    }
   }
 
   target(id, c, label, face, act) {
@@ -147,32 +157,6 @@ export default class Help extends View {
         }))));
   }
 
-  enterDojo() {
-    closeOverlay(props()?.overlay);
-    run("mod.open", { name: "kanso-dojo" });
-  }
-
-  petState() { return Date.now() - this.hello < 1800 ? "waving" : "idle"; }
-
-  dojoPage(t, c) {
-    const pet = this.pal.pet;
-    return v_flex().gap(G.xl).pt(G.lg)
-      .child(h_flex().gap(G.xl).items_center()
-      .child(h_flex().w(150).h(150).flex_none().items_center().justify_center().child(this.pal.face(t, this.petState(), { since: this.hello, scale: 0.7, mood: "glad", px: 9 })))
-      .child(v_flex().flex_1().gap(G.md)
-        .child(div().text_size(T.page).font_semibold().text_color(c.text).child("hjkl dōjō"))
-        .child(div().text_size(T.value).line_height(1.55).text_color(c.muted).child("Practice vim's moves until your fingers know them. Nine levels, from h and l alone to w b e, f t and gg G on real lines of code; rounds of ten targets, points for the fewest moves, a streak, and a hint when you stop to think."))
-        .child(div().text_size(T.value).line_height(1.55).text_color(c.muted).child(pet.sheet
-          ? `${pet.name} keeps you company, still until you earn it: a jump for a target in the fewest moves, a wave for a streak or a round won, a slump for a key that is no move or the long way round.`
-          : "Hachi, the dōjō's shiba, keeps you company: tongue out on a streak or a new best, sweating when you go the long way, asleep if you leave it alone."))
-        .child(h_flex().pt(G.sm).gap(G.md).items_center()
-          .child(button("enter-dojo", "Enter the dōjō", () => this.enterDojo(), c))
-          .child(div().text_size(T.body).text_color(c.dim).child("or press Enter")))))
-      .child(v_flex().gap(G.md)
-        .child(div().text_size(T.card).font_semibold().text_color(c.text).child("Your pet"))
-        .child(this.pal.grid(t, c)));
-  }
-
   block(c, title, lines) {
     return v_flex().gap(6)
       .child(div().text_size(T.card).font_semibold().text_color(c.text).child(title))
@@ -185,18 +169,19 @@ export default class Help extends View {
 
   render() {
     const t = theme(), c = tokens(t);
-    const page = this.page === "dojo" ? this.dojoPage(t, c) : this.page === "guide" ? this.guidePage(t, c) : this.keysPage(t, c);
-    // The same window as kansō settings, in its place: each leads to the other, so you can always go back.
-    const toSettings = () => { closeOverlay(props()?.overlay); openOverlay({ mod: "kanso-settings", kind: "dialog", width: DIALOG.settingsW, height: DIALOG.settingsH, props: { page: "keys" } }); };
+    const have = installedRelease(this.installed, shared("kanso.update")?.tag);
+    const page = this.page === "guide" ? this.guidePage(t, c)
+      : this.page === "news" ? newsPage(c, this.news ?? NEWS_LOADING, have)
+        : this.page === "credits" ? creditsPage(c, this.avatars)
+          : this.keysPage(t, c);
     return pagedDialog({
       name: "help", handle: this.handle, onKey: (e, cx) => this.key(e, cx),
       head: h_flex().w_full().items_center().gap(G.md)
         .child(svg("mods/kanso-chrome/icons/circle-question-mark.svg").size(ICON_CHROME).text_color(c.accent))
         .child(div().flex_1().text_size(T.title).font_semibold().child("kansō help"))
-        .child(quietLink("help-settings", "Settings", toSettings, c, { color: c.accent }))
         .child(div().text_size(T.micro).text_color(t.dim).child("Esc")),
       tabs: PAGES, tab: this.page, page, t, c,
-      onTab: (key, cx) => { this.page = key; if (key === "dojo") { this.hello = Date.now(); this.pal.bring(cx); } cx.notify(); },
+      onTab: (key, cx) => { this.page = key; this.load(key, cx); cx.notify(); },
     }).on_mouse_up("left", () => this.handle.focus());
   }
 }

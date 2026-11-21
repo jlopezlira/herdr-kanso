@@ -30,6 +30,7 @@ export const PR = { title: 17, titleMax: 44, fold: 150, ages: 40 };
 export const SKELETON = { text: 9, meta: 11 };
 export const HEATMAP_GAP = 3;
 export const DOJO_CELL = 30;
+export const DOJO = { gap: 3, pad: 14, char: 12, wide: 560, w: 980 };
 export const CODE = { line: 20, gutter: 36 };
 export const LH = { body: 1.5 };
 export const SPIN = 900;

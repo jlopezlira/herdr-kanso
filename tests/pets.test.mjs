@@ -1,5 +1,4 @@
 // The dōjō's pets: Codex Pets read from ~/.codex/pets, and installed from codex-pets.net when chosen.
-import { loadHelp } from "./mod-fixtures.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { mkdir, writeFile, readFile, stat } from "node:fs/promises";
@@ -150,25 +149,6 @@ test("the dōjō draws its pet at each reaction, and the chooser with every pet"
   dojo.pal.id = "hachi"; images.length = 0;
   dojo.render();
   assert.equal(images.length, 0, "Hachi is drawn, no sheet");
-});
-
-test("kansō help's dōjō page shows your pet, and every pet to choose from there", async () => {
-  const { ui, images, image, petOf } = await drawnImages();
-  const { Help } = await loadHelp({
-    ...ui, image, exec, appHome: () => "/app", home: () => "/home", keys: () => ({}), run: () => {}, openOverlay: () => {},
-    theme: () => ({ foreground: "#fff", accent: "#f80", dim: "#666", muted: "#888", border: "#333" }),
-    props: () => ({ overlay: "ov", page: "dojo" }), closeOverlay: () => {},
-  });
-  const spawned = [];
-  const cx = { focus_handle: () => ({ focus() {} }), spawn: (f) => spawned.push(f), notify() {}, timer: { every() {}, after() {} } };
-  const help = new Help();
-  help.init({}, cx);
-  assert.equal(spawned.length, 2, "your choice read, and the agents' pets brought: the page opened on the dōjō");
-  help.pal.pets = [help.pal.pets[0], petOf("clawd", "clawd.png", { displayName: "Clawd" })];
-  help.pal.id = "clawd";
-  help.render();
-  assert.ok(images.includes("data/kanso-dojo/pets/clawd.png"), "your pet, drawn");
-  assert.ok(images.includes("data/kanso-dojo/pets/thumbs/clawd.png"), "and in the grid to choose from");
 });
 
 test("a share card carries your pet: Hachi in its squares, a pet's first frame cut from its atlas copied beside the card", async (t) => {

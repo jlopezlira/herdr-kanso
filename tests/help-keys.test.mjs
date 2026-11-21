@@ -47,7 +47,7 @@ async function openHelp(platform, bindings, { folder = "/actual/config", userHom
     Companion: class { load() {} },
   });
   const help = new Help();
-  help.init({}, { focus_handle: () => ({ focus() { held.onPage = true; }, is_focused: () => held.onPage }), timer: { every() {} } });
+  help.init({}, { focus_handle: () => ({ focus() { held.onPage = true; }, is_focused: () => held.onPage }), timer: { every() {} }, spawn() {} });
   return { ui, help };
 }
 
@@ -140,12 +140,10 @@ const PRESS = [
   ["keys", "tab", [], false, "pick", false], ["keys", "tab", ["shift"], false, "pick", false], ["keys", "tab", ["control"], false, "pick", true], ["keys", "tab", ["function"], true, "pick", true],
   ["keys", "tab", [], true, null, false], ["keys", "tab", ["shift"], true, null, false],
   ["keys", "shift", [], false, null, false], ["keys", "platform", [], false, null, false],
-  ["dojo", "enter", [], false, "dojo", true], ["dojo", "enter", [], true, null, false], ["dojo", "enter", ["shift"], true, "dojo", true],
-  ["dojo", "return", [], false, null, false], ["dojo", "j", [], false, null, false],
   ["guide", "enter", [], false, null, false], ["guide", "j", [], false, null, false],
 ];
 
-test("A key on Help closes it, enters the dōjō, shows that key, or is left to the control that holds the keyboard only when it is that control's own unmodified key", async () => {
+test("A key on Help closes it, shows that key, or is left to the control that holds the keyboard only when it is that control's own unmodified key", async () => {
   const { keyPress, keyName } = await load("kanso-help/main.js", ["keyPress", "keyName"], tape().host);
   for (const [page, key, held, onControl, does, stop] of PRESS) {
     assert.deepEqual(clone(keyPress({ page, key, held, onControl })), { does, stop }, `${page}, ${[...held, key].join("-")}, ${onControl ? "on a control" : "on the page"}`);
@@ -153,7 +151,7 @@ test("A key on Help closes it, enters the dōjō, shows that key, or is left to 
   assert.deepEqual(["Return", " ", "J", "Tab", undefined].map(keyName), ["enter", "space", "j", "tab", ""]);
 });
 
-test("On a focused control a modified Enter or Space still does what the page did: it shows the key and the layer, or enters the dōjō", async () => {
+test("On a focused control a modified Enter or Space still does what the page did: it shows the key and the layer", async () => {
   const { help, held } = await drawnHelp();
   held.onPage = false;
   const press = (key, modifiers) => help.key({ key, modifiers }, { notify() {}, stop_propagation() {}, timer: { after() {} } });
@@ -167,13 +165,6 @@ test("On a focused control a modified Enter or Space still does what the page di
   help.picked = "j";
   press("space", {});
   assert.equal(help.picked, "j", "unmodified Space is the control's");
-  const opened = [];
-  const { help: dojo } = await drawnHelp({ closeOverlay() {}, run: (name, args) => opened.push([name, args]) });
-  dojo.page = "dojo";
-  dojo.key({ key: "enter", modifiers: { shift: true } }, { notify() {}, stop_propagation() {} });
-  assert.deepEqual(clone(opened), [["mod.open", { name: "kanso-dojo" }]], "Shift+Enter still enters the dōjō from the dōjō page");
-  dojo.key({ key: "return", modifiers: {} }, { notify() {}, stop_propagation() {} });
-  assert.equal(opened.length, 1, "a raw return does not");
 });
 
 test("Tab reaches every chip, key and row of Help's keyboard, each with the kit's ring, and Enter and Space press it while every other key still shows itself", async () => {

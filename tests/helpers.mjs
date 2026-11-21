@@ -343,6 +343,17 @@ export function tape() {
   return { texts, colors, ids, handlers, tips, opacities, hovers, host: { div: node, svg: node, h_flex: node, v_flex: node, Button: { new: node } } };
 }
 
+export function settingsTape() {
+  const ui = tape();
+  ui.host.Toggle = { new: (id) => ui.host.Button.new(id) };
+  return ui;
+}
+
+export async function settingsView(loadSettings, ui, host) {
+  const { Settings } = await loadSettings({ ...ui.host, ...host, run: () => {}, closeOverlay: () => {} });
+  return new Settings();
+}
+
 // A gpui element that records its calls, and a host that builds them.
 export function chain(tag) {
   const state = { calls: [], kids: [], tag, parent: null };

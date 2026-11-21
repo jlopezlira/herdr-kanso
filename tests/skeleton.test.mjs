@@ -177,7 +177,7 @@ test("the side panels show the shared skeleton before they are ready and while t
   assertSkeleton(framed(shipped));
 });
 
-test("spend, settings, memory and containers load as the shared skeleton", async () => {
+test("spend, What's new, memory and containers load as the shared skeleton", async () => {
   const make = tape();
   const host = hostFor(make);
   const { TokenSpend } = await loadTokenSpend(host);
@@ -187,12 +187,13 @@ test("spend, settings, memory and containers load as the shared skeleton", async
   assert.equal(/first time/.test(walk(spend.waitingView(c, true)).texts.join(" ")), false);
   assertSkeleton(spend.settingsView(c));
 
+  const { newsPage, NEWS_LOADING } = await load("kanso-help/news.js", ["newsPage", "NEWS_LOADING"], host);
+  assertSkeleton(newsPage(c, NEWS_LOADING, "3.18.11"));
+
   const { Settings } = await loadSettings(host);
   const settings = new Settings();
-  settings.news = { entries: null, error: null, from: null };
   settings.installed = "3.18.11";
-  assertSkeleton(settings.newsPage({}, c));
-  assert.equal(walk(settings.newsPage({}, c)).texts.includes("Check for updates"), true);
+  assert.equal(walk(settings.updatesPage({}, c)).texts.includes("Check for updates"), true);
 
   const { Memory } = await loadMemory(host);
   const memory = new Memory();

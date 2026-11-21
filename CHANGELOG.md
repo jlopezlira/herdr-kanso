@@ -29,12 +29,14 @@ the branch's rules.
 - Add a computer is back at the foot of the sidebar, above Settings, and opens kansō's own dialog. Your Tailscale computers are listed with Add: one press connects, with no key when the computer has Tailscale SSH, and installs what it needs there. Your ssh config hosts follow. A computer that wants its password opens a tab to type it once and is added right after. One that refuses ssh says what to turn on, and an offline one says it is offline.
 - Approve, request changes and comment on a pull request from the Pull requests panel, with Undo. (#400)
 - Re-run a failing check and read its whole log, reply to a thread, open a pull request, Undo on close, ready, reply and a new pull request, keys for every action, and statistics on the board, all from the Pull requests panel. (#400)
+- The hjkl dōjō has its own button in the tab bar and opens in the side panel, like Memory or Spend; Pieces can hide it like any other panel.
 
 ### Changed
 
 - The Pull requests panel shows one block per repository, with what needs you, your own, failing checks and the oldest wait; outside a repository it finds the repositories in the folder. (#400)
 - The collapsed sidebar on Projects no longer shows the view switch. On Status and Threads the view button and its menu stay, and the view keys still change view from any rail. (#232)
 - The sidebar draws its header, view switch, rows and footer as one piece, and the layout file no longer has a separate footer block; a change in one session no longer redraws the header or the footer. (#282)
+- kansō help and kansō settings are two separate windows that no longer link to each other. Settings keeps Pieces, Keys and Updates; help has Keyboard, Guide, What's new and Credits.
 
 ### Fixed
 
