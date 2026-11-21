@@ -34,7 +34,7 @@ export function guideSections(bindings, platform, home) {
       "J and K (or the arrows) move, gg and G go to the first and last, Enter chooses, Esc closes.",
     ]],
     ["Your setup", [
-      "Your keys, the panels and what shows are in kansō settings (Settings, at the top right here): rebind a key by clicking it and pressing the new chord.",
+      "Your keys, the panels and what shows are in kansō settings (Settings, at the bottom of the sidebar): rebind a key by clicking it and pressing the new chord.",
       "Two themes come with kansō: kanso (dark) and kanso-day (light). Pick one in Herdr's settings, under Appearance.",
       `Your settings folder is ${home}: keys in keys.json, the layout in layouts/kanso.json, kansō's data under data/. An update changes a key only where the release changed it, never one you set.`,
       "kansō checks for a new release on start and every few minutes; turn automatic checks off or check now in kansō settings, What's new. Installing an update is always your choice.",

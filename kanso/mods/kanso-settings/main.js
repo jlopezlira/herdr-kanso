@@ -347,9 +347,8 @@ export default class Settings extends View {
   }
 
   render() {
-    const t = theme(), c = tokens(t), p = props() ?? {};
+    const t = theme(), c = tokens(t);
     const page = this.page === "keys" ? this.keysPage(t, c) : this.page === "news" ? this.newsPage(t, c) : this.page === "credits" ? this.creditsPage(t, c) : this.piecesPage(t, c);
-    // The same window as kansō help, in its place: each leads to the other, so you can always go back.
     return pagedDialog({
       name: "settings", handle: this.handle, t, c, page,
       tabs: PAGES, tab: this.page,
@@ -359,7 +358,6 @@ export default class Settings extends View {
         .child(svg("mods/kanso-chrome/icons/settings.svg").size(ICON_CHROME).text_color(c.accent))
         .child(div().flex_1().text_size(T.title).font_semibold().child("kansō settings"))
         .when(Boolean(this.shown()), (el) => el.child(div().text_size(T.body).text_color(t.dim).child(this.shown())))
-        .child(quietLink("settings-help", "Help", () => { closeOverlay(p.overlay); run("mod.open", { name: "kanso-help" }); }, c, { color: c.accent }))
         .child(div().text_size(T.micro).text_color(t.dim).child("Esc")),
     });
   }

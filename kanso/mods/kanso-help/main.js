@@ -4,12 +4,12 @@ import { v_flex, h_flex } from "gpui-base";
 import { paths } from "./platform-paths.js";
 import { localName } from "./platform-host.js";
 import { modifierLabels, guideSections } from "./guide.js";
-import { theme, appHome, home, props, closeOverlay, keys, openOverlay, run } from "herdr";
+import { theme, appHome, home, props, closeOverlay, keys, run } from "herdr";
 import { focusOn } from "./pure.js";
 import { Lit } from "./lit.js";
 import { pagedDialog } from "./pages.js";
-import { R, T, G, DIALOG, FOCUS, ICON_CHROME, KEY, TINT, alpha, tokens } from "./ui.js";
-import { button, quietLink } from "./ui-button.js";
+import { R, T, G, FOCUS, ICON_CHROME, KEY, TINT, alpha, tokens } from "./ui.js";
+import { button } from "./ui-button.js";
 import { button as kitButton } from "./kit.js";
 import { row } from "./ui-row.js";
 import { glyphs } from "./marks.js";
@@ -186,14 +186,11 @@ export default class Help extends View {
   render() {
     const t = theme(), c = tokens(t);
     const page = this.page === "dojo" ? this.dojoPage(t, c) : this.page === "guide" ? this.guidePage(t, c) : this.keysPage(t, c);
-    // The same window as kansō settings, in its place: each leads to the other, so you can always go back.
-    const toSettings = () => { closeOverlay(props()?.overlay); openOverlay({ mod: "kanso-settings", kind: "dialog", width: DIALOG.settingsW, height: DIALOG.settingsH, props: { page: "keys" } }); };
     return pagedDialog({
       name: "help", handle: this.handle, onKey: (e, cx) => this.key(e, cx),
       head: h_flex().w_full().items_center().gap(G.md)
         .child(svg("mods/kanso-chrome/icons/circle-question-mark.svg").size(ICON_CHROME).text_color(c.accent))
         .child(div().flex_1().text_size(T.title).font_semibold().child("kansō help"))
-        .child(quietLink("help-settings", "Settings", toSettings, c, { color: c.accent }))
         .child(div().text_size(T.micro).text_color(t.dim).child("Esc")),
       tabs: PAGES, tab: this.page, page, t, c,
       onTab: (key, cx) => { this.page = key; if (key === "dojo") { this.hello = Date.now(); this.pal.bring(cx); } cx.notify(); },
