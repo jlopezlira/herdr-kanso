@@ -220,14 +220,18 @@ const runSh = async (t, argv, options) => {
 const viaOf = (dest, port = "") => `ssh ${KEY_WORDS}${port ? ` -p ${port}` : ""} ${dest}`;
 const sshMarks = (text) => text.match(/(^|[\s'"])ssh (?=\S)/g) ?? [];
 
+const endsDone = (ran) => {
+  assert.equal(ran.code, 0, `${ran.stderr}\n${ran.stdout}`);
+  assert.match(ran.stdout, /Done: this tab can close\.\n$/);
+};
+
 test("Signing in to a plain computer, with a port and without one, makes a key, asks the password once, and adds the computer with that key", { skip: shForm }, async (t) => {
   const { keySetup } = await signIn();
   const once = async (machine, dest, port) => {
     const argv = keySetup(machine);
     assert.deepEqual(clone(argv.slice(0, 2)), ["sh", "-c"]);
     const { home, ran, calls } = await runSh(t, argv);
-    assert.equal(ran.code, 0, `${ran.stderr}\n${ran.stdout}`);
-    assert.match(ran.stdout, /Done: this tab can close\.\n$/);
+    endsDone(ran);
     const key = join(home, ".ssh", "id_ed25519_kanso");
     assert.equal((await readFile(`${key}.pub`, "utf8")).trim(), PUB);
     assert.equal((await calls("ssh-keygen"))[0].at(-1), key);
@@ -341,8 +345,7 @@ test("Signing in on a local-first route asks on the local network first, and fin
     "exit 1",
   ].join("\n");
   const { ran, calls } = await runSh(t, tab.argv, { sshBody });
-  assert.equal(ran.code, 0, `${ran.stderr}\n${ran.stdout}`);
-  assert.match(ran.stdout, /Done: this tab can close\.\n$/);
+  endsDone(ran);
   const pushed = await calls("ssh");
   assert.equal(pushed.some((call) => call.join(" ").includes(away)), false, pushed.map((call) => call.join(" ")).join("\n"));
   const ssh = pushed[0];
