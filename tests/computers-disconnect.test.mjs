@@ -4,7 +4,7 @@ import { computersDialog, nodes, texts } from "./helpers.mjs";
 
 const MACHINE = { name: "box", target: "ada@10.0.0.9", via: "ssh -J bastion" };
 
-const open = async ({ failRm = false } = {}) => {
+const open = async ({ failRm = false, exec } = {}) => {
   const asked = [];
   const ran = [];
   let listed = [{ ...MACHINE }];
@@ -29,6 +29,7 @@ const open = async ({ failRm = false } = {}) => {
       return { code: 1, stdout: "", stderr: "unexpected" };
     },
     run: (command) => { ran.push(command); },
+    ...(exec ? { exec } : {}),
     shared: (key) => (key === "kanso.pieces" ? { "computers.network": "hide" } : null),
   });
   const click = (el) => {
@@ -81,19 +82,8 @@ test("When Disconnect cannot remove the computer, it stays listed and Retry trie
 
 const peer = (name, ip, lan) => ({ name, ip, os: "linux", online: true, tailscaleSsh: false, lan });
 
-const press = (drawn, tag, cx) => {
-  const tool = nodes(drawn).find((el) => el.tag === tag);
-  assert.ok(tool, tag);
-  tool.calls.find((call) => call[0] === "on_click")[1]({}, cx);
-};
-
 test("A Tailscale computer the network search did not see is added without a local route, and one it saw is reached there first", async () => {
-  const asked = [];
-  const { view, cx, flush } = await computersDialog({
-    hc: async (args) => {
-      asked.push([...args]);
-      return { code: 0, stdout: args[1] === "ls" ? JSON.stringify({ machines: [] }) : "{}", stderr: "" };
-    },
+  const { view, asked, click, flush, button } = await open({
     exec: async (cmd) => (cmd === "ssh" ? { code: 0, stdout: "", stderr: "" } : { code: 1, stdout: "", stderr: "missing" }),
   });
   view.net = {
@@ -102,9 +92,9 @@ test("A Tailscale computer the network search did not see is added without a loc
   };
   view.hosts = [];
   view.nearby = [{ ip: "192.168.1.30", name: "grey", os: "" }];
-  press(view.render(), "computer-away-action", cx);
+  click(button(view.render(), "computer-away-action"));
   await flush();
-  press(view.render(), "computer-grey-action", cx);
+  click(button(view.render(), "computer-grey-action"));
   await flush();
   const added = (name) => asked.find((args) => args[1] === "add" && args[args.indexOf("--name") + 1] === name);
   const away = added("away");
