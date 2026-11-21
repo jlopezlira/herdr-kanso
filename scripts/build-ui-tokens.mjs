@@ -34,6 +34,7 @@ const PICK = {
   SKELETON: { text: "k-skeleton-text", meta: "k-skeleton-meta" },
   HEATMAP_GAP: "k-heatmap-gap",
   DOJO_CELL: "k-dojo-cell",
+  DOJO: { gap: "k-dojo-gap", pad: "k-dojo-board-pad", char: "k-dojo-char", wide: "k-dojo-wide", w: "k-dojo-w" },
   CODE: { line: "k-lh-line", gutter: "k-h-pane" },
 };
 // Line heights, as a share of the font size.

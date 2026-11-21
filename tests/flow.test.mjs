@@ -4,7 +4,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { databaseTimer, load, clone, temporary, exec, singleUse, failure, success } from "./helpers.mjs";
+import { databaseTimer, load, clone, temporary, exec, singleUse, failure, success, gpuiHost, one } from "./helpers.mjs";
 import { PASSED } from "./pr-fixtures.mjs";
 
 const HOME = "/Users/me";
@@ -364,6 +364,142 @@ test("A dōjō round ends after ten targets, with its result kept; End round sto
   game.endRound(null, false);
   assert.equal(game.over.kept, false, "End round: stopped");
   assert.equal(added.length, 1, "and not counted");
+});
+
+const dojoNight = { foreground: "#d8d4cb", accent: "#da627d", background: "#1b1b19" };
+const dojoInk = "#161615";
+const dojoColors = { accent: dojoNight.accent, text: dojoNight.foreground, muted: "#949086" };
+
+const quietCx = (extra = {}) => {
+  const cx = {
+    notify() {},
+    stop_propagation() {},
+    focus_handle: () => ({ focus() {} }),
+    spawn(fn) { return fn(cx); },
+    timer: { after() { return { cancel() {} }; }, every() { return { cancel() {} }; } },
+    ...extra,
+  };
+  return cx;
+};
+
+const dojoHost = (extra = {}) => ({
+  ...gpuiHost(),
+  theme: () => dojoNight,
+  appHome: () => "/dojo",
+  settings: () => ({}),
+  props: () => ({ overlay: "dojo" }),
+  window: () => ({ platform: "macos" }),
+  exec: async () => ({ code: 0, stdout: "", stderr: "" }),
+  run() {},
+  ...extra,
+});
+
+const startDojo = async (host, cx) => {
+  const [{ Dojo }, tokens] = await Promise.all([
+    load("kanso-dojo/main.js", ["Dojo"], host),
+    load("kanso-dojo/ui.js", ["DOJO", "T"], host),
+  ]);
+  const game = new Dojo();
+  game.init({}, cx);
+  return { game, ...tokens };
+};
+
+const rowWidth = (row, gap) => {
+  const cell = one(row.kids[0], "size");
+  return { cell, width: row.kids.length * cell + (row.kids.length - 1) * gap };
+};
+
+const glyphBox = (board) => {
+  const glyphs = board.kids.flatMap((row) => row.kids);
+  return { glyphs, cell: one(glyphs[0], "w"), size: one(glyphs[0], "text_size") };
+};
+
+test("The dōjō grid still fits a wide room, and both layouts pass that room", async () => {
+  const { game, DOJO } = await startDojo(dojoHost(), quietCx());
+  game.setLevel(1, false);
+  const board = game.grid(dojoColors, dojoInk, 270);
+  const row = rowWidth(board.kids[0], DOJO.gap);
+  assert.equal(board.kids[0].kids.length, game.world.w);
+  assert.equal(one(board.kids[0], "gap"), DOJO.gap);
+  assert.ok(board.kids[0].kids.every((item) => one(item, "size") === row.cell));
+  assert.ok(row.width <= 270, `level 1 is ${row.width}px in a 270px room`);
+  const passed = [];
+  const draw = game.grid.bind(game);
+  game.grid = (color, mark, room) => { passed.push(room); return draw(color, mark, room); };
+  game.room = 270;
+  for (const [width, layout] of [[DOJO.wide - 1, "narrow"], [DOJO.wide, "wide"]]) {
+    passed.length = 0;
+    game.width = width;
+    game.render();
+    assert.deepEqual(passed, [game.room], `the ${layout} layout passes this.room`);
+  }
+});
+
+test("A text level's letters fit the room, scale down, and stay full size with no room", async () => {
+  const { game, DOJO, T } = await startDojo(dojoHost(), quietCx());
+  game.setLevel(8, false);
+  const longest = Math.max(...game.world.lines.map((line) => line.length));
+  const fitted = glyphBox(game.text(dojoColors, dojoInk, 330));
+  assert.ok(fitted.glyphs.every((glyph) => one(glyph, "w") === fitted.cell));
+  assert.ok(fitted.cell * longest <= 330, `${fitted.cell}px times ${longest}`);
+  assert.ok(fitted.cell <= DOJO.char);
+  assert.ok(fitted.cell < DOJO.char, "room 330 shrinks level 8");
+  assert.ok(fitted.glyphs.every((glyph) => one(glyph, "text_size") === fitted.size));
+  assert.ok(fitted.size <= T.title);
+  assert.ok(fitted.size < T.title, "the font scales with the cell");
+  assert.equal(fitted.size, Math.min(T.title, Math.round((fitted.cell * T.title) / DOJO.char)));
+  const plain = glyphBox(game.text(dojoColors, dojoInk));
+  assert.ok(plain.glyphs.every((glyph) => one(glyph, "w") === DOJO.char));
+  assert.ok(plain.glyphs.every((glyph) => one(glyph, "text_size") === T.title));
+});
+
+test("The dōjō issues no store call before the first timer tick, and reads after it", async () => {
+  const commands = [];
+  const host = dojoHost({
+    exec: async (cmd, args = []) => {
+      commands.push([cmd, ...args]);
+      return { code: 0, stdout: "", stderr: "" };
+    },
+  });
+  const ticks = [];
+  const pending = [];
+  const cx = quietCx({
+    spawn(fn) {
+      const task = fn(cx);
+      pending.push(task);
+      return task;
+    },
+    timer: {
+      after(ms, fn) { ticks.push([ms, fn]); return { cancel() {} }; },
+      every() { return { cancel() {} }; },
+    },
+  });
+  const { game } = await startDojo(host, cx);
+  assert.equal(game.level.n, 1);
+  assert.equal(commands.length, 0, "no exec before the first timer tick");
+  const due = ticks.filter(([ms]) => ms === 0);
+  assert.ok(due.length > 0, "the first read waits on timer.after(0)");
+  for (const [, fn] of due) fn(cx);
+  while (pending.length) await pending.shift();
+  assert.ok(commands.some(([cmd, flag]) => cmd === "sqlite3" && flag === "-version"));
+});
+
+test("Escape leaves the dōjō when nothing is pending, and a pending count only clears", async () => {
+  const ran = [];
+  const host = dojoHost({ run: (name) => { ran.push(name); } });
+  const cx = quietCx();
+  const { game } = await startDojo(host, cx);
+  assert.equal(game.choosing, false);
+  assert.equal(game.pending, "");
+  game.key({ key: "escape", modifiers: {} }, cx);
+  assert.deepEqual(ran, ["kanso-tabs.dojo"]);
+  ran.length = 0;
+  game.setLevel(5, false);
+  game.key({ key: "3", key_char: "3", modifiers: {} }, cx);
+  assert.equal(game.pending, "3");
+  game.key({ key: "escape", modifiers: {} }, cx);
+  assert.equal(game.pending, "");
+  assert.deepEqual(ran, []);
 });
 
 test("The sidebar keeps its state in the left nav's database: prefs moved from localStorage once, each agent by its conversation", async (t) => {

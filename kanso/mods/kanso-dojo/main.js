@@ -2,10 +2,10 @@ import { paths } from "./platform-paths.js";
 // hjkl dōjō, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
-import { theme, appHome, settings } from "herdr";
+import { theme, appHome, settings, run } from "herdr";
 import { focusOn } from "./pure.js";
 import { Lit } from "./lit.js";
-import { R, G, H, T, DOJO_CELL, TINT, CLEAR, alpha, tokens } from "./ui.js";
+import { R, G, H, T, LINE, DOJO_CELL, DOJO, TINT, CLEAR, alpha, tokens, monoFont } from "./ui.js";
 import { iconButton, button as drawButton } from "./ui-button.js";
 import { button, metric, row, tooltip } from "./kit.js";
 import { caption } from "./ui-caption.js";
@@ -29,17 +29,17 @@ export default class Dojo extends View {
     this.pending = ""; // a count, a first g, or f t F T waiting for its letter
     this.capLight = new Lit();
     this.setLevel(1, false);
-    cx.spawn(async (cx) => {
+    cx.timer.after(0, (later) => later.spawn(async (cx) => {
       try {
         const n = await this.store.level();
         if (!this.round) this.setLevel(Math.min(LEVELS.length, Math.max(1, n)), false);
         this.totals = await this.store.totals();
       } catch (e) { this.say = String(e?.message ?? e); }
       cx.notify();
-    });
+    }));
     cx.timer.every(500, (cx) => { if (this.round || this.capLight.lit) cx.notify(); });
     this.pal = new Companion(cx.timer, this.store); this.choosing = false;
-    this.pal.load(cx);
+    cx.timer.after(0, (later) => this.pal.load(later));
     // A pet moves on its own: a redraw only when its frame changes.
     cx.timer.every(TICK_MS, (cx) => { const r = this.reaction(); if (this.pal.moved(r.state, r.since)) cx.notify(); });
   }
@@ -108,6 +108,7 @@ export default class Dojo extends View {
     if (this.choosing) { if (k === "escape") { this.choosing = false; cx.notify(); } return; }
     if (k === "escape") {
       if (this.pending) { this.pending = ""; cx.notify(); }
+      else run("kanso-tabs.dojo");
       return;
     }
     const ch = e.key_char ?? (m.shift && k.length === 1 ? k.toUpperCase() : k);
@@ -191,18 +192,21 @@ export default class Dojo extends View {
 
   grid(c, ink, room) {
     const { w, h } = this.world;
-    const cell = room ? Math.max(1, Math.min(DOJO_CELL, Math.floor((room - (w - 1) * 3) / w))) : DOJO_CELL;
-    return v_flex().gap(3).children(Array.from({ length: h }, (_, y) => h_flex().gap(3).children(Array.from({ length: w }, (_, x) => {
+    const cell = room ? Math.max(1, Math.min(DOJO_CELL, Math.floor((room - (w - 1) * DOJO.gap) / w))) : DOJO_CELL;
+    return v_flex().gap(DOJO.gap).children(Array.from({ length: h }, (_, y) => h_flex().gap(DOJO.gap).children(Array.from({ length: w }, (_, x) => {
       const { here, goal } = this.cellMark(x, y);
       return div().size(cell).flex_none().rounded(R.sm).bg(here ? c.accent : alpha(c.text, TINT.cell)).when(goal && !here, (el) => el.border_2().border_color(c.accent));
     }))));
   }
 
-  text(c, ink) {
-    const mono = settings()?.font_family ?? "JetBrains Mono";
+  text(c, ink, room) {
+    const mono = monoFont();
+    const longest = Math.max(1, ...this.world.lines.map((line) => line.length));
+    const char = room ? Math.max(1, Math.min(DOJO.char, Math.floor(room / longest))) : DOJO.char;
+    const size = Math.min(T.title, Math.round((char * T.title) / DOJO.char));
     return v_flex().gap(G.xs).children(this.world.lines.map((line, y) => h_flex().h(H.icon).items_center().children([...(line.length ? line : " ")].map((ch, x) => {
       const { goal, here } = this.cellMark(x, y);
-      return div().w(12).h(24).flex_none().flex().items_center().justify_center().rounded(R.sm).font_family(mono).text_size(T.title)
+      return div().w(char).h(H.compact).flex_none().flex().items_center().justify_center().rounded(R.sm).font_family(mono).text_size(size)
         .bg(here ? c.accent : CLEAR).text_color(here ? ink : goal ? c.text : c.muted)
         .when(goal && !here, (el) => el.border_2().border_color(c.accent).bg(alpha(c.accent, TINT.goal)))
         .child(ch === " " ? " " : ch);
@@ -271,7 +275,7 @@ export default class Dojo extends View {
       .child(h_flex().gap(G.md).flex_wrap()
         .child(press("dojo-again", "Play again  ↩", () => this.again(), { kind: "solid" }))
         .when(lv.n < LEVELS.length, (el) => el.child(press("dojo-next", `Next level: ${LEVELS[lv.n].name}  n`, () => this.setLevel(lv.n + 1))))) : null;
-    const narrow = (this.width || 960) < 560;
+    const narrow = (this.width || DOJO.w) < DOJO.wide;
     const pet = this.petView(t, c, now);
     const stats = v_flex().gap(G.lg)
       .child(h_flex().gap(G.lg)
@@ -286,9 +290,9 @@ export default class Dojo extends View {
         "Your best round, targets, days practiced and levels: nothing else. The post opens with the image in it.", G.sm)))
       .child(div().text_size(T.value).line_height(1.5).text_color(c.muted).child(lv.tip))
       .when(Boolean(result), (el) => el.child(result))
-      .when(!result, (el) => el.child(div().id("dojo-board").w_full().min_w(0).overflow_hidden().p(14).rounded(12).bg(alpha(c.text, TINT.board)).border_1().border_color(c.border)
-        .on_size_change((size, cx) => { const room = Math.floor(size.width / (Number(settings()?.zoom) || 1)) - 2 * 14 - 2; if (room !== this.room) { this.room = room; cx.notify(); } })
-        .child(lv.world === "grid" ? this.grid(c, ink, narrow ? this.room : null) : this.text(c, ink))))
+      .when(!result, (el) => el.child(div().id("dojo-board").w_full().min_w(0).overflow_hidden().p(DOJO.pad).rounded(12).bg(alpha(c.text, TINT.board)).border_1().border_color(c.border)
+        .on_size_change((size, cx) => { const room = Math.floor(size.width / (Number(settings()?.zoom) || 1)) - 2 * (DOJO.pad + LINE); if (room !== this.room) { this.room = room; cx.notify(); } })
+        .child(lv.world === "grid" ? this.grid(c, ink, this.room) : this.text(c, ink, this.room))))
       .child(h_flex().gap(6).items_center()
         .children(Array.from({ length: TARGETS }, (_, i) => div().h(6).flex_1().rounded_full().bg(i < done ? c.accent : alpha(c.text, TINT.pill))))
         .child(div().pl(G.sm).text_size(T.body).text_color(c.muted).child(`${done} / ${TARGETS}`)))

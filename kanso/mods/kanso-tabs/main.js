@@ -240,8 +240,8 @@ export default class Tabs extends View {
     } else if (name === "memory") {
       const tree = layout();
       if (this.openPanel(walkLayout(tree, "panel"), walkLayout(tree, "panel-body")) !== "memory") this.mount("memory");
-    } else if (name === "sim" || panel) {
-      const id = panel ? panelList(this.commandsHere()).filter((x) => x.on)[Number(panel[1]) - 1]?.id : "sim";
+    } else if (name === "sim" || name === "dojo" || panel) {
+      const id = panel ? panelList(this.commandsHere()).filter((x) => x.on)[Number(panel[1]) - 1]?.id : name;
       if (!id || !panelList(this.commandsHere()).some((item) => item.id === id && item.on)) return;
       const tree = layout(), now = this.openPanel(walkLayout(tree, "panel"), walkLayout(tree, "panel-body"));
       this.mount(now === id ? null : id);

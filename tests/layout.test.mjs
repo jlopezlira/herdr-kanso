@@ -262,6 +262,18 @@ test("kanso-tabs.sim toggles the Simulator panel", async () => {
   assert.deepEqual(pressSim(tabs, f), []);
 });
 
+test("kanso-tabs.dojo toggles the dōjō panel", async () => {
+  const { f, tabs } = await withTabs();
+  tabs.command("dojo");
+  f.flush();
+  const mounted = f.panel().children;
+  assert.equal(mounted[0].id, "dojo");
+  assert.equal(mounted[0].content.mod, "kanso-dojo");
+  tabs.command("dojo");
+  f.flush();
+  assert.deepEqual(f.panel().children, []);
+});
+
 test("Simulator is absent without native tools, present with either, and hidden like any panel", async () => {
   const f = await layoutFixture();
   const { Tabs, panelList } = await loadTabPanels(f.host);

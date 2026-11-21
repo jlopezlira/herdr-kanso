@@ -291,6 +291,10 @@
   --k-dojo-menu-x: 120px;
   --k-dojo-menu-y: 44px;
   --k-dojo-cell: 30px;
+  --k-dojo-gap: 3px;
+  --k-dojo-board-pad: 14px;
+  --k-dojo-char: 12px;
+  --k-dojo-wide: 560px;
   --k-skeleton-text: 9px;
   --k-skeleton-meta: 11px;
   --k-skeleton-row-y: 9px;
