@@ -1,8 +1,6 @@
 const IPV4 = /\b(\d{1,3}(?:\.\d{1,3}){3})\b/;
-const SPAN = 24;
 
 export const ipNumber = (ip) => String(ip).split(".").reduce((n, part) => n * 256 + Number(part), 0);
-export const ipText = (n) => [24, 16, 8, 0].map((shift) => Math.floor(n / 2 ** shift) % 256).join(".");
 
 const validIp = (ip) => IPV4.test(ip) && String(ip).split(".").every((part) => Number(part) <= 255);
 const RANGES = [["10.0.0.0", 8], ["172.16.0.0", 12], ["192.168.0.0", 16]];
@@ -20,12 +18,7 @@ export function interfacesOf(text) {
   }).filter(({ ip, prefix }) => privateIp(ip) && prefix > 0 && prefix < 32);
 }
 
-export function subnetHosts({ ip, prefix }) {
-  const bits = Math.max(prefix, SPAN);
-  const size = 2 ** (32 - bits);
-  const first = Math.floor(ipNumber(ip) / size) * size;
-  return Array.from({ length: size - 2 }, (_, i) => ipText(first + i + 1)).filter((host) => host !== ip);
-}
+const sameNet = (ip, { ip: own, prefix }) => Math.floor(ipNumber(ip) / 2 ** (32 - prefix)) === Math.floor(ipNumber(own) / 2 ** (32 - prefix));
 
 const shortName = (name) => String(name ?? "").split(".")[0].toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-+|-+$/g, "");
 
@@ -42,8 +35,7 @@ export function neighborsOf(text) {
 
 export function candidates(interfaces, neighbors) {
   const own = new Set(interfaces.map(({ ip }) => ip));
-  const swept = interfaces.flatMap(subnetHosts);
-  return [...new Set([...neighbors.map(({ ip }) => ip), ...swept])].filter((ip) => !own.has(ip));
+  return [...new Set(neighbors.map(({ ip }) => ip))].filter((ip) => !own.has(ip) && interfaces.some((net) => sameNet(ip, net)));
 }
 
 const BANNER_OS = [["Windows", /for_Windows/i], ["Linux", /Ubuntu|Debian|Raspbian|Fedora|Alpine|Arch|Linux/i], ["FreeBSD", /FreeBSD/i]];

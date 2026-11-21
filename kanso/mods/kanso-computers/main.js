@@ -7,7 +7,7 @@ import { findExplainer, explainWith } from "./explain.js";
 import { scanNearby } from "./nearby-scan.js";
 import { lanOf } from "./nearby.js";
 import { setupPrompt } from "./setup.js";
-import { focusOn, tryOrAsync } from "./pure.js";
+import { focusOn, tryOrAsync, afterMount } from "./pure.js";
 import { G, T, LH, DIALOG, tokens } from "./ui.js";
 import { button } from "./ui-button.js";
 import { dialog } from "./ui-dialog.js";
@@ -81,10 +81,10 @@ export default class Computers extends View {
       this.explainer = await findExplainer();
       cx.notify();
     });
-    if (this.nearby === undefined) cx.spawn(async (cx) => {
+    if (this.nearby === undefined) afterMount(cx, (cx) => cx.spawn(async (cx) => {
       this.nearby = await scanNearby(this.platform, cx.timer).catch(() => []);
       cx.notify();
-    });
+    }));
   }
 
   peers() {
@@ -120,10 +120,9 @@ export default class Computers extends View {
     });
   }
 
-  async connect(key, picked) {
-    const plan = picked.pick ? await this.pickRoute(picked) : picked;
+  async connect(key, plan) {
     if (plan.probe) {
-      const probe = await exec("ssh", probeArgs(plan.target), { timeout: PROBE_MS }).catch(failed);
+      const probe = await this.probe([plan.lan, plan.target].filter(Boolean));
       const reach = reachOf(probe);
       if (reach !== "ready") return this.fail(key, reach, String(probe.stderr || probe.stdout).trim());
     }
@@ -136,9 +135,9 @@ export default class Computers extends View {
     await this.checkMac(plan.name || plan.target);
   }
 
-  async pickRoute(plan) {
-    const local = await exec("ssh", probeArgs(plan.lan), { timeout: PROBE_MS }).catch(failed);
-    return reachOf(local) === "ready" ? { name: plan.name, target: plan.lan, via: "", probe: false } : plan;
+  async probe([target, ...rest]) {
+    const result = await exec("ssh", probeArgs(target), { timeout: PROBE_MS }).catch(failed);
+    return reachOf(result) === "ready" || !rest.length ? result : this.probe(rest);
   }
 
   disconnect(key, machine, cx) {
@@ -150,7 +149,7 @@ export default class Computers extends View {
       const error = hcError(await hc(rmArgs(machine.name)).catch(failed));
       if (error) {
         delete this.dropped[key];
-        this.jobs[key] = { phase: "failed", reach: "failed", words: String(error.message ?? "").trim(), retry: (cx) => this.disconnect(key, machine, cx) };
+        this.jobs[key] = { phase: "failed", reach: "failed", text: `${machine.name} wasn't disconnected.`, words: String(error.message ?? "").trim(), retry: (cx) => this.disconnect(key, machine, cx) };
         await this.refresh();
       } else {
         this.dropped = { ...this.dropped, [key]: { record, phase: "gone" } };
@@ -168,7 +167,7 @@ export default class Computers extends View {
       const error = hcError(await hc(restoreArgs(record)).catch(failed));
       if (error) {
         this.dropped = { ...this.dropped, [key]: { record, phase: "gone" } };
-        this.jobs[key] = { phase: "failed", reach: "failed", words: String(error.message ?? "").trim(), retry: (cx) => this.undo(key, cx) };
+        this.jobs[key] = { phase: "failed", reach: "failed", text: `${record.name} wasn't added back.`, words: String(error.message ?? "").trim(), retry: (cx) => this.undo(key, cx) };
       } else {
         delete this.dropped[key];
         delete this.jobs[key];
@@ -238,7 +237,7 @@ export default class Computers extends View {
     const said = advice(job.reach, about);
     return v_flex().w_full().gap(G.sm).pt(G.xs).pb(G.sm)
       .child(stateBlock(`computer-fail-${key}`, c, {
-        text: said.text || `${about.name} wasn't added.`, source: job.words ?? "", fix: said.fix,
+        text: job.text || said.text || `${about.name} wasn't added.`, source: job.words ?? "", fix: said.fix,
         onClick: (cx) => (said.url ? cx.open_url(said.url) : this.fix(key, job, cx)),
       }))
       .when(Boolean(said.command), (el) => el.child(this.commandLine(`computer-command-${key}`, said.command, c)));
@@ -308,11 +307,11 @@ export default class Computers extends View {
     if (!peers.length) return [this.heading(c, "Tailscale"), this.note(c, "No other computer is on your tailnet yet.")];
     return [this.heading(c, "On your tailnet"), ...peers.map((peer) => {
       const alias = this.aliasFor(peer);
-      const lan = lanOf(peer, this.nearby ?? []);
+      const seen = lanOf(peer, this.nearby ?? []);
       return this.computer(c, {
         key: peer.name, icon: osIcon(peer.os), name: peer.name, ip: peer.ip,
-        facts: [osWord(peer.os), peer.ip, peer.tailscaleSsh ? "Tailscale SSH" : null, alias ? `ssh ${alias.alias}` : null, lan ? "On this network" : null],
-        choice: { peer, target: "", name: peer.name, alias, lan },
+        facts: [osWord(peer.os), peer.ip, peer.tailscaleSsh ? "Tailscale SSH" : null, alias ? `ssh ${alias.alias}` : null, seen ? "On this network" : null],
+        choice: { peer, target: "", name: peer.name, alias, lan: seen || (peer.lan ?? [])[0] || "" },
         done: isAdded(this.added, { name: peer.name, ip: peer.ip, target: alias?.alias }), offline: !peer.online,
         about: { name: peer.name, os: peer.os, tailnet: true },
       });
@@ -339,7 +338,8 @@ export default class Computers extends View {
       .filter((record) => !this.added.some((m) => m.name === record.name));
     const others = [...this.added, ...gone].filter((m) => !listed(m));
     return others.length ? [this.heading(c, "Added"), ...others.map((m) => this.computer(c, {
-      key: `added:${m.name}`, icon: "server", name: m.name, facts: [m.target || m.via || ""], choice: null, done: true, about: { name: m.name },
+      key: `added:${m.name}`, icon: "server", name: m.name, facts: [m.target || m.via || ""], done: true, about: { name: m.name },
+      choice: canRestore(machineRecord(m)) ? { record: machineRecord(m) } : null,
     }))] : [];
   }
 

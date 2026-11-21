@@ -5,10 +5,10 @@ import { bounded, tryOrAsync, LATE } from "./pure.js";
 import { interfacesOf, neighborsOf, candidates, bannerText, foundHosts } from "./nearby.js";
 
 const SSH_PORT = 22;
-const KNOCK_MS = 1500;
+const KNOCK_MS = 2000;
 const BANNER_MS = 1000;
 const READ_MS = 5000;
-const AT_ONCE = 128;
+const AT_ONCE = 8;
 
 const INTERFACES = {
   macos: () => exec("ifconfig", [], { timeout: READ_MS }),
@@ -21,7 +21,7 @@ const NEIGHBORS = {
   windows: () => exec("arp", ["-a"], { timeout: READ_MS }),
 };
 
-const textOf = async (read) => String((await tryOrAsync(read))?.stdout ?? "");
+const textOf = async (read, timer) => String((await bounded(tryOrAsync(read), timer, READ_MS))?.stdout ?? "");
 
 async function knock(ip, timer) {
   const gate = { late: false };
@@ -47,8 +47,8 @@ async function inBatches(list, work, from = 0, done = []) {
 
 export async function scanNearby(platform, timer) {
   const [interfaces, neighbors] = await Promise.all([
-    textOf(INTERFACES[platform] ?? INTERFACES.linux).then(interfacesOf),
-    textOf(NEIGHBORS[platform] ?? NEIGHBORS.linux).then(neighborsOf),
+    textOf(INTERFACES[platform] ?? INTERFACES.linux, timer).then(interfacesOf),
+    textOf(NEIGHBORS[platform] ?? NEIGHBORS.linux, timer).then(neighborsOf),
   ]);
   const answered = (await inBatches(candidates(interfaces, neighbors), (ip) => knock(ip, timer))).filter(Boolean);
   return foundHosts(answered, neighbors);

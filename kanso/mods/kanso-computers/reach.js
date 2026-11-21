@@ -82,11 +82,11 @@ function awayPlan(choice, { tailscale, platform }) {
 }
 
 export function planFor(choice, { tailscale = "", platform = "macos" } = {}) {
+  if (choice.record) return { name: choice.record.name, target: choice.record.target, via: choice.record.via, probe: false };
   if (!choice.peer) return { name: choice.name ?? "", target: choice.target.trim(), via: "", probe: true };
   const away = awayPlan(choice, { tailscale, platform });
-  if (!choice.lan) return away;
+  if (!choice.lan || platform === "windows") return away;
   const lan = joined(splitTarget(choice.target).user || splitTarget(away.target).user, choice.lan);
-  if (platform === "windows") return { ...away, lan, pick: true };
   return { ...away, lan, via: lanFirst(lan, away.via || `ssh ${shellQuote(away.target)}`) };
 }
 
@@ -157,8 +157,8 @@ export function isAdded(added, { name = "", target = "", ip = "" }) {
 }
 
 export function nearbyOnly(found, { peers = [], hosts = [], added = [] } = {}) {
-  return found.filter(({ ip, name }) => !peers.some((peer) => (peer.lan ?? []).includes(ip))
-    && !hosts.some((host) => host.hostname === ip)
+  return found.filter(({ ip, name }) => !peers.some((peer) => (peer.lan ?? []).includes(ip) || (name && peer.name === name))
+    && !hosts.some((host) => host.hostname === ip || (name && host.alias === name))
     && !isAdded(added, { ip, name }));
 }
 
