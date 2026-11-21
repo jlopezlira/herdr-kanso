@@ -65,6 +65,7 @@ const COMMON = [
   { source: "kanso/mods/kanso-spaces/since-left-store.js", copies: ["kanso/mods/kanso-panel/since-left-store.js"] },
   { source: "kanso/mods/kanso-spaces/kdb.js", copies: ["kanso/mods/kanso-panel/kdb.js", "kanso/mods/kanso-tabs/kdb.js", "kanso/mods/kanso-spend/kdb.js"] },
   // Off is a saved row plus hc machine ls. Spend asks neither file from another mod.
+  { source: "kanso/mods/kanso-computers/sign-in.js", copies: ["kanso/mods/kanso-spaces/sign-in.js"] },
   { source: "kanso/mods/kanso-spaces/machines.js", copies: ["kanso/mods/kanso-spend/machines.js", "kanso/mods/kanso-computers/machines.js"] },
   // Which panel is open, and the two hooks every panel uses to keep its own state.
   { source: "kanso/mods/kanso-panel/panel-state.js", copies: ["kanso/mods/kanso-tabs/panel-state.js"] },

@@ -22,6 +22,13 @@ in version.json, which the stable updater offers. Versions follow
 [Keep a Changelog](https://keepachangelog.com). `npm run check:version` checks
 the branch's rules.
 
+## [Unreleased]
+
+### Changed
+
+- A computer that asks for a password or for your key's passphrase signs in with one click: Sign in opens a tab that asks for it once, leaves kansō's own key there and reconnects, so it never asks again. Clicking a computer that needs a login does the same, instead of copying a command.
+- In Add a computer, a computer that takes keys only is added the same way, instead of asking you to copy your key there by hand.
+
 ## [3.32.0] - 2026-11-21
 
 ### Added

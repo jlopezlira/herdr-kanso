@@ -119,8 +119,6 @@ export function threadActions({ settled, status, pinned }) {
   return [{ id: "settle", icon: "check", tip: "Settle" }];
 }
 
-export const signInCommand = (name) => ({ argv: ["hc", "machine", "login", name], place: "right" });
-
 export const noProjectsOn = (title) => `No projects on ${title} yet`;
 
 // The sort of the view on show; `plain` is its default, drawn quieter but never hidden.

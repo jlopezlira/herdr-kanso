@@ -30,8 +30,23 @@ test("adding a machine back uses the saved setup and never installs", async () =
   assert.equal(machineRecord({ name: "dark", target: "dark.example", via: "False", session: "NULL" }).session, "NULL");
 });
 
+test("a listed keyed route and an old saved command are added through --via, and a plain computer stays a positional target", async () => {
+  const { machineRecord, addArgs } = await load("kanso-spaces/machines.js", ["machineRecord", "addArgs"]);
+  const keyed = "ssh -i ~/.ssh/id_ed25519_kanso -o IdentitiesOnly=yes -o BatchMode=yes ada@box";
+  const savedCommand = "ssh -J jump ada@box";
+  const listed = machineRecord({ name: "grey", target: keyed, via: true });
+  const saved = machineRecord({ name: "grey", target: savedCommand, via: "" });
+  for (const [row, command] of [[listed, keyed], [saved, savedCommand]]) {
+    const args = clone(addArgs(row));
+    assert.equal(args[2], "--name");
+    assert.equal(args[args.indexOf("--via") + 1], command);
+    assert.equal(args.includes(command) && args.indexOf(command) === args.indexOf("--via") + 1, true);
+  }
+  assert.deepEqual(clone(addArgs(machineRecord({ name: "grey", target: "grey", via: false }))), ["machine", "add", "grey", "--name", "grey", "--json"]);
+});
+
 test("a login Herdr asks for is told apart from a missing install", async () => {
-  const { hcError, needsLogin, loginLine } = await load("kanso-spaces/machines.js", ["hcError", "needsLogin", "loginLine"]);
+  const { hcError, needsLogin } = await load("kanso-spaces/machines.js", ["hcError", "needsLogin"]);
   assert.equal(hcError({ code: 0, stdout: "{}" }), null);
   assert.deepEqual(clone(hcError({ code: 1, stdout: JSON.stringify({ error: { kind: "login_needed", message: "needs a login" } }) })), { kind: "login_needed", message: "needs a login" });
   assert.equal(hcError({ code: 1, stderr: "nope" }).message, "nope");
@@ -39,7 +54,6 @@ test("a login Herdr asks for is told apart from a missing install", async () => 
   assert.equal(needsLogin({ message: "host key changed" }), true);
   assert.equal(needsLogin({ kind: "hc_missing", message: "install herdr" }), false);
   assert.equal(needsLogin(null), false);
-  assert.equal(loginLine("dark"), "hc machine login dark");
 });
 
 test("a machine row names only the states that need a word", async () => {
@@ -438,9 +452,11 @@ async function keyWalk(state) {
   return { stops, ran };
 }
 
+const base = { spaces: [local, remote], layouts: [{ name: null, layout: "ready" }] };
+
 test("each tool a computer row shows is its own keyboard stop: j walks to it and Enter runs it, as a press does", async () => {
-  const base = { spaces: [local, remote], layouts: [{ name: null, layout: "ready" }] };
-  const login = ["terminal.open", { argv: ["hc", "machine", "login", "dark"], place: "right" }];
+  const { signInTab } = await load("kanso-spaces/sign-in.js", ["signInTab"]);
+  const login = ["terminal.open", clone(signInTab(record, "macos"))];
   // On, Sync on or off: Turn off, New project, then Sync, wherever Sync sits.
   const onStops = ["machine-lu-power:dark", "machine-lu-plus:dark", "machine-lu-arrow-right-left:dark"];
   const onRan = [["power", "dark", false], ["space.new", { machine: "dark" }], ["sync", "dark"]];
@@ -456,6 +472,16 @@ test("each tool a computer row shows is its own keyboard stop: j walks to it and
     assert.deepEqual(walked.stops, stops, `${name}: a stop per tool, in screen order`);
     assert.deepEqual(walked.ran, ran, `${name}: Enter runs each tool`);
   }
+});
+
+test("pressing Sign in on a Needs login row opens that computer's sign-in tab, from the live list before the saved row", async () => {
+  const { signInTab } = await load("kanso-spaces/sign-in.js", ["signInTab"]);
+  const live = { name: "dark", target: "ada@10.0.0.8", via: false, state: "needs_login" };
+  const saved = { ...record, target: "saved@10.0.0.9" };
+  const fromLive = await keyWalk({ ...base, live: [live], parked: [saved], login: new Set(["dark"]) });
+  assert.deepEqual(fromLive.ran, [["terminal.open", clone(signInTab(live, "macos"))]]);
+  const fromSaved = await keyWalk({ ...base, parked: [saved], login: new Set(["dark"]) });
+  assert.deepEqual(fromSaved.ran, [["terminal.open", clone(signInTab(saved, "macos"))]]);
 });
 
 async function syncView({ sync = { config: {}, status: {} }, host = {} } = {}) {

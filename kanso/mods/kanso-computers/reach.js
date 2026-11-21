@@ -1,5 +1,8 @@
-import { psQuote, shellQuote, windowsArg } from "./platform-command.js";
+import { shellQuote, windowsArg } from "./platform-command.js";
 import { privateIp } from "./nearby.js";
+import { splitTarget, joined, destinationOf, keySetup, lanFirst } from "./sign-in.js";
+
+export { splitTarget, destinationOf, keySetup };
 
 export const TAILSCALE_PATHS = {
   macos: ["tailscale", "/usr/local/bin/tailscale", "/opt/homebrew/bin/tailscale", "/Applications/Tailscale.app/Contents/MacOS/Tailscale"],
@@ -39,24 +42,10 @@ export function tailnet(text) {
   }
 }
 
-export function splitTarget(text) {
-  const value = String(text ?? "").trim();
-  const at = value.lastIndexOf("@");
-  return at < 0 ? { user: "", host: value } : { user: value.slice(0, at), host: value.slice(at + 1) };
-}
-
-const joined = (user, host) => (user ? `${user}@${host}` : host);
-
 export const validTarget = (text) => {
   const value = String(text ?? "").trim();
   return Boolean(value) && !/\s/.test(value) && !value.startsWith("-") && !splitTarget(value).host.startsWith("-") && Boolean(splitTarget(value).host);
 };
-
-export function destinationOf(target) {
-  const { user, host } = splitTarget(target);
-  const port = host.match(/^\[([^\]]+)\]:(\d+)$/) ?? (host.split(":").length === 2 ? host.match(/^([^:]+):(\d+)$/) : null);
-  return port ? { dest: joined(user, port[1]), port: port[2] } : { dest: joined(user, host), port: "" };
-}
 
 export const usesTailscaleSsh = (peer, tailscale) => Boolean(peer?.tailscaleSsh && tailscale);
 
@@ -64,9 +53,6 @@ export function aliasOf(peer, hosts = []) {
   return (hosts ?? []).find((h) => h.hostname === peer.ip || h.hostname === peer.name || h.hostname.startsWith(`${peer.name}.`)
     || (!h.hostname && h.alias === peer.name)) ?? null;
 }
-
-const LAN_SSH = "-o BatchMode=yes -o ConnectTimeout=2 -o StrictHostKeyChecking=accept-new";
-const lanFirst = (lan, away) => `sh -c ${shellQuote(`ssh ${LAN_SSH} ${shellQuote(lan)} true >/dev/null 2>&1 && exec ssh -o StrictHostKeyChecking=accept-new ${shellQuote(lan)} "$1"; exec ${away} "$1"`)} route`;
 
 function awayPlan(choice, { tailscale, platform }) {
   const { user } = splitTarget(choice.target);
@@ -120,24 +106,12 @@ export function reachOf(result) {
   return REACH.find(([, pattern]) => pattern.test(text))?.[0] ?? "failed";
 }
 
-const SH_SETUP = 'k="$HOME/.ssh/id_ed25519"; [ -f "$k.pub" ] || ssh-keygen -q -t ed25519 -N "" -f "$k"; p=$2; ssh-copy-id -o StrictHostKeyChecking=accept-new ${p:+-p "$p"} -i "$k.pub" "$1" || exit; shift 2; hc "$@" && echo && echo "Done: this tab can close."';
-
-export function keySetup(plan, platform = "macos") {
-  const add = addArgs(plan, { json: false });
-  const { dest, port } = destinationOf(plan.target);
-  if (platform !== "windows") return ["sh", "-c", SH_SETUP, "sh", dest, port, ...add];
-  const script = `$PSNativeCommandArgumentPassing = 'Legacy'; $k = Join-Path $env:USERPROFILE '.ssh\\id_ed25519'; if (-not (Test-Path "$k.pub")) { ssh-keygen -q -t ed25519 -N '""' -f $k }; `
-    + `Get-Content "$k.pub" | ssh -o StrictHostKeyChecking=accept-new ${port ? `-p ${port} ` : ""}${psQuote(dest)} 'umask 077; mkdir -p ~/.ssh; cat >> ~/.ssh/authorized_keys'; `
-    + `if ($LASTEXITCODE -eq 0) { & hc ${add.map(psQuote).join(" ")}; if ($LASTEXITCODE -eq 0) { Write-Host 'Done: this tab can close.' } }`;
-  return ["powershell", "-NoProfile", "-Command", script];
-}
-
 const MAC = /^mac/i;
 export const ACCESS_CONTROLS = "https://login.tailscale.com/admin/acls";
 
 export function advice(reach, { name, os = "", tailnet: onTailnet = false } = {}) {
   if (reach === "password") return { text: `${name} wants its password once. Type it in the tab that opens, and ${name} is added right after.`, fix: "Enter the password" };
-  if (reach === "keyonly") return { text: `${name} takes keys only, and this computer's key isn't there yet. Put this computer's public key (~/.ssh/id_ed25519.pub) in ~/.ssh/authorized_keys on ${name}, then Retry.`, fix: "Retry" };
+  if (reach === "keyonly") return { text: `${name} takes keys only. Type your key's passphrase once in the tab that opens, and ${name} is added right after.`, fix: "Sign in" };
   if (reach === "closed" && MAC.test(os)) return { text: `${name} doesn't let ssh in. On ${name}: System Settings › General › Sharing › Remote Login, on. Then Retry.`, fix: "Retry" };
   if (reach === "closed" && onTailnet) return { text: `Nothing answers ssh on ${name}. Run this once on ${name}, then Retry:`, command: "sudo tailscale set --ssh", fix: "Retry" };
   if (reach === "closed") return { text: `Nothing answers ssh on ${name}. Start its ssh server, then Retry.`, fix: "Retry" };
