@@ -1,10 +1,11 @@
-import { View, div, svg } from "gpui-kit";
+import { View, div } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import { theme, props, closeOverlay, exec, hc, home, readTextFile, run } from "herdr";
 import { localName } from "./platform-host.js";
 import { focusOn, tryOrAsync } from "./pure.js";
-import { G, T, DIALOG, ICON_CHROME, tokens } from "./ui.js";
-import { button, quietLink } from "./ui-button.js";
+import { G, T, LH, DIALOG, tokens } from "./ui.js";
+import { button } from "./ui-button.js";
+import { dialog } from "./ui-dialog.js";
 import { row } from "./ui-row.js";
 import { stateBlock } from "./ui-state.js";
 import { field, TextField } from "./ui-field.js";
@@ -12,11 +13,10 @@ import { code } from "./ui-code.js";
 import { hcError, needsLogin, listedMachines } from "./machines.js";
 import {
   tailscalePaths, tailnet, planFor, choiceOf, addArgs, probeArgs, forgetArgs, reachOf, keySetup, advice, isAdded,
-  sshConfigHosts, includesOf, splitTarget,
+  sshConfigHosts, includesOf, splitTarget, validTarget, aliasOf, usesTailscaleSsh,
 } from "./reach.js";
 
 const PROBE_MS = 15000;
-const GET_TAILSCALE = "https://tailscale.com/download";
 const FDA_PANE = "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles";
 const failed = (error) => ({ code: 1, stdout: "", stderr: String(error?.message ?? error) });
 const OS_WORD = { macos: "Mac", linux: "Linux", windows: "Windows", freebsd: "FreeBSD" };
@@ -81,15 +81,9 @@ export default class Computers extends View {
     closeOverlay(props()?.overlay);
   }
 
-  key(e, cx) {
-    if (String(e.key).toLowerCase() !== "escape") return;
-    cx.stop_propagation();
-    this.close();
-  }
-
   typedKey() {
     const text = this.typed.value().trim();
-    return text ? choiceOf(text, this.peers()).name ?? splitTarget(text).host : "";
+    return validTarget(text) ? choiceOf(text, this.peers()).name ?? splitTarget(text).host : "";
   }
 
   addTyped(cx) {
@@ -177,31 +171,31 @@ export default class Computers extends View {
       .when(Boolean(said.command), (el) => el.child(this.commandLine(`computer-command-${key}`, said.command, c)));
   }
 
+  noteBlock(c, text) {
+    return v_flex().w_full().gap(G.sm).pb(G.sm).child(div().text_size(T.value).line_height(LH.body).text_color(c.muted).child(text));
+  }
+
   macNote(name, c) {
     const mac = this.macs[name];
-    return v_flex().w_full().gap(G.sm).pb(G.sm)
-      .child(div().text_size(T.value).line_height(1.5).text_color(c.muted)
-        .child(`${name} is a Mac. It asks on its own screen before an agent reads Desktop, Documents or Downloads, and waits for an answer. Give herdr-core Full Disk Access there once (press + and pick this file):`))
+    return this.noteBlock(c, `${name} is a Mac. It asks on its own screen before an agent reads Desktop, Documents or Downloads, and waits for an answer. Give herdr-core Full Disk Access there once (press + and pick this file):`)
       .child(code(`computer-core-${name}`, c, { text: mac.core }))
       .child(h_flex().child(button(`computer-fda-${name}`, `Open the setting on ${name}`, () => { tryOrAsync(() => exec("open", [FDA_PANE], { on: name })); }, c, { kind: "tonal", small: true })));
   }
 
   lingerNote(machine, c) {
     const command = `sudo loginctl enable-linger -- ${machine.logout_linger_user ?? "<user>"}`;
-    return v_flex().w_full().gap(G.sm).pb(G.sm)
-      .child(div().text_size(T.value).line_height(1.5).text_color(c.muted)
-        .child(`Agents on ${machine.name} stop when your last login there closes, as when this laptop sleeps. Run this on ${machine.name} once:`))
+    return this.noteBlock(c, `Agents on ${machine.name} stop when your last login there closes, as when this laptop sleeps. Run this on ${machine.name} once:`)
       .child(this.commandLine(`computer-linger-${machine.name}`, command, c));
   }
 
-  computer(c, { key, icon, name, second, choice, done, offline = false, about }) {
+  computer(c, { key, icon, name, facts = [], choice, done, offline = false, about }) {
     const job = this.jobs[key];
     const adding = job?.phase === "adding";
-    const machine = done ? this.added.find((m) => m.name === key || m.name === name || m.target === choice?.target) : null;
+    const machine = done ? this.added.find((m) => m.name === name || (choice?.target && m.target === choice.target)) : null;
     const add = (cx) => this.add(key, choice, cx);
     return v_flex().w_full()
       .child(row(`computer-${key}`, c, {
-        icon, name, second, dimmed: offline, busy: adding,
+        icon, name, detail: facts.filter(Boolean), dimmed: offline, busy: adding,
         meta: done ? { text: "Added", tone: "done" } : adding ? "Connecting…" : offline ? "Offline" : null,
         action: done || adding || offline ? null : { label: job ? "Retry" : "Add", onClick: add, kind: "tonal" },
         onClick: done || adding || offline ? null : add,
@@ -216,33 +210,50 @@ export default class Computers extends View {
   }
 
   note(c, text) {
-    return div().py(G.xs).text_size(T.value).line_height(1.5).text_color(c.muted).child(text);
+    return div().py(G.xs).text_size(T.value).line_height(LH.body).text_color(c.muted).child(text);
   }
 
   tailnetSection(c) {
     if (this.net === undefined) return [this.heading(c, "Tailscale"), this.note(c, "Looking for your computers…")];
-    if (this.net === null) return [this.heading(c, "Tailscale"),
-      this.note(c, "With Tailscale on your computers, they show up here by themselves, ready to add."),
-      h_flex().child(quietLink("computers-get-tailscale", "Get Tailscale", (cx) => cx.open_url(GET_TAILSCALE), c, { color: c.accent }))];
+    if (this.net === null) return [this.heading(c, "Tailscale"), this.note(c, "Tailscale isn't on this computer. Where it is, your computers show up here by themselves.")];
     if (this.net.state !== "Running") return [this.heading(c, "Tailscale"), this.note(c, "Tailscale is off on this computer. Turn it on and your computers show up here.")];
     const peers = this.peers();
     if (!peers.length) return [this.heading(c, "Tailscale"), this.note(c, "No other computer is on your tailnet yet.")];
-    return [this.heading(c, "On your tailnet"), ...peers.map((peer) => this.computer(c, {
-      key: peer.name, icon: osIcon(peer.os), name: peer.name,
-      second: [osWord(peer.os), peer.ip, peer.tailscaleSsh ? "Tailscale SSH" : null].filter(Boolean).join(" · "),
-      choice: { peer, target: "", name: peer.name },
-      done: isAdded(this.added, { name: peer.name, ip: peer.ip }), offline: !peer.online,
-      about: { name: peer.name, os: peer.os, tailnet: true },
-    }))];
+    return [this.heading(c, "On your tailnet"), ...peers.map((peer) => {
+      const alias = this.aliasFor(peer);
+      return this.computer(c, {
+        key: peer.name, icon: osIcon(peer.os), name: peer.name,
+        facts: [osWord(peer.os), peer.ip, peer.tailscaleSsh ? "Tailscale SSH" : null, alias ? `ssh ${alias.alias}` : null],
+        choice: { peer, target: "", name: peer.name, alias },
+        done: isAdded(this.added, { name: peer.name, ip: peer.ip, target: alias?.alias }), offline: !peer.online,
+        about: { name: peer.name, os: peer.os, tailnet: true },
+      });
+    })];
+  }
+
+  aliasFor(peer) {
+    return usesTailscaleSsh(peer, this.tailscale) ? null : aliasOf(peer, this.hosts);
+  }
+
+  shownHosts() {
+    const folded = new Set(this.peers().map((peer) => this.aliasFor(peer)?.alias).filter(Boolean));
+    return (this.hosts ?? []).filter((h) => !folded.has(h.alias));
+  }
+
+  addedSection(c) {
+    const listed = (m) => this.peers().some((p) => isAdded([m], { name: p.name, ip: p.ip })) || this.shownHosts().some((h) => isAdded([m], { name: h.alias, target: h.alias }));
+    const others = this.added.filter((m) => !listed(m));
+    return others.length ? [this.heading(c, "Added"), ...others.map((m) => this.computer(c, {
+      key: `added:${m.name}`, icon: "server", name: m.name, facts: [m.target || m.via || ""], choice: null, done: true, about: { name: m.name },
+    }))] : [];
   }
 
   sshSection(c) {
-    const ips = new Set(this.peers().flatMap((p) => [p.ip, p.name]));
-    const hosts = (this.hosts ?? []).filter((h) => !ips.has(h.hostname) && !ips.has(h.alias));
+    const hosts = this.shownHosts();
     if (!hosts.length) return [];
     return [this.heading(c, "From your ssh config"), ...hosts.map((h) => this.computer(c, {
-      key: h.alias, icon: "server", name: h.alias,
-      second: [h.user, h.hostname].filter(Boolean).join("@"),
+      key: `ssh:${h.alias}`, icon: "server", name: h.alias,
+      facts: [[h.user, h.hostname].filter(Boolean).join("@")],
       choice: { peer: null, target: h.alias, name: "" },
       done: isAdded(this.added, { name: h.alias, target: h.alias }),
       about: { name: h.alias },
@@ -260,17 +271,16 @@ export default class Computers extends View {
   }
 
   render() {
-    const t = theme(), c = tokens(t);
-    return v_flex().id("kanso-computers").track_focus(this.handle).w_full().min_h(0).p(DIALOG.pad).bg(c.popover).text_color(c.text)
-      .on_key_down((e, cx) => this.key(e, cx))
-      .child(h_flex().w_full().items_center().gap(G.md)
-        .child(svg("mods/kanso-chrome/icons/server.svg").size(ICON_CHROME).text_color(c.accent))
-        .child(div().flex_1().text_size(T.title).font_semibold().child("Add a computer"))
-        .child(div().text_size(T.micro).text_color(c.dim).child("Esc")))
-      .child(div().pt(G.sm).text_size(T.value).line_height(1.5).text_color(c.muted)
-        .child("A Mac mini, a box at home, a VPS: its agents show in this sidebar and keep running while this laptop sleeps. Pick it and press Add."))
-      .child(v_flex().id("computers-list").w_full().max_h(DIALOG.computers).min_h(0).flex_shrink(1).overflow_y_scroll()
-        .children([...this.tailnetSection(c), ...this.sshSection(c)].filter(Boolean)))
-      .children(this.typedSection(c).filter(Boolean));
+    const c = tokens(theme());
+    return dialog("kanso-computers", c, {
+      title: "Add a computer", focusHandle: this.handle, secondary: "Close", onCancel: () => this.close(),
+      body: [
+        div().text_size(T.value).line_height(LH.body).text_color(c.muted)
+          .child("A Mac mini, a box at home, a VPS: its agents show in this sidebar and keep running while this laptop sleeps. Pick it and press Add."),
+        v_flex().id("computers-list").w_full().max_h(DIALOG.computers).min_h(0).flex_shrink(1).mx(-G.sm).px(G.sm).overflow_y_scroll()
+          .children([...this.tailnetSection(c), ...this.sshSection(c), ...this.addedSection(c)].filter(Boolean)),
+        ...this.typedSection(c).filter(Boolean),
+      ],
+    });
   }
 }

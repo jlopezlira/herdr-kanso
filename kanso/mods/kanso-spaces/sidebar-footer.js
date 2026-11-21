@@ -1,4 +1,3 @@
-// The sidebar's Footer: kansō's update while one is offered, Add a computer, then Settings; collapsed, their icon Buttons in the rail.
 import { button, failureBlock, row, stack } from "./kit.js";
 import { stateBlockPx } from "./ui-state.js";
 import { REFUSAL_LINES, footerHeight, railHeight, refusalBlock } from "./footer-model.js";

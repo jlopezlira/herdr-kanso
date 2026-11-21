@@ -1,13 +1,12 @@
-// Adding a computer: who is on the tailnet, how ssh reaches them, and what a refusal means.
 import test from "node:test";
 import assert from "node:assert/strict";
 import { chmod, mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { clone, exec, find, gpuiHost, load, temporary } from "./helpers.mjs";
+import { clone, exec, find, gpuiHost, load, temporary, texts } from "./helpers.mjs";
 
 const reach = () => load("kanso-computers/reach.js", [
   "tailnet", "planFor", "choiceOf", "addArgs", "probeArgs", "reachOf", "keySetup", "advice", "isAdded",
-  "sshConfigHosts", "includesOf", "ACCESS_CONTROLS",
+  "sshConfigHosts", "includesOf", "ACCESS_CONTROLS", "validTarget", "destinationOf", "aliasOf",
 ]);
 const quote = () => load("kanso-computers/platform-command.js", ["windowsArg", "psQuote"]);
 
@@ -17,6 +16,25 @@ const peer = (over = {}) => ({
 });
 const status = (peers, state = "Running") => JSON.stringify({ BackendState: state, Peer: peers });
 const names = (net) => net.peers.map((row) => row.name);
+const netOf = async (peers) => {
+  const { tailnet } = await reach();
+  return { tailnet, net: tailnet(status(peers)) };
+};
+const configText = (more = []) => [
+  "Host *.example *",
+  "  User nope",
+  "Match host exec",
+  "  User skip",
+  "Host grey",
+  "  HostName 100.64.1.2",
+  "  User root",
+  "Host grey",
+  "  HostName 10.0.0.9",
+  "Host box",
+  "  Hostname=10.0.0.2",
+  "  User=ada",
+  ...more,
+].join("\n");
 
 test("A tailscale status with a warning line still lists the computers, and phones are left out", async () => {
   const { tailnet } = await reach();
@@ -39,13 +57,12 @@ test("A tailnet that is not running, or garbage, lists no computers", async () =
 });
 
 test("A computer's address is its IPv4, its name the first label, and online ones come first", async () => {
-  const { tailnet } = await reach();
-  const net = tailnet(status({
+  const { tailnet, net } = await netOf({
     zed: peer({ DNSName: "zed.tail.ts.net.", Online: false, TailscaleIPs: ["fd7a:115c:a1e0::9", "100.64.1.9"] }),
     ada: peer({ DNSName: "ada.tail.ts.net.", Online: true, TailscaleIPs: ["fd7a:115c:a1e0::1", "100.64.1.1"] }),
     amy: peer({ DNSName: "amy.tail.ts.net.", Online: false, TailscaleIPs: ["100.64.1.3"] }),
     bob: peer({ DNSName: "bob.tail.ts.net.", Online: true, TailscaleIPs: ["100.64.1.2"] }),
-  }));
+  });
   assert.deepEqual(clone(names(net)), ["ada", "bob", "amy", "zed"]);
   assert.deepEqual(clone(net.peers.map((row) => row.online)), [true, true, false, false]);
   assert.equal(net.peers.find((row) => row.name === "ada").ip, "100.64.1.1", "IPv4 over IPv6");
@@ -54,12 +71,11 @@ test("A computer's address is its IPv4, its name the first label, and online one
 });
 
 test("Tailscale SSH is on only when the computer has a host key", async () => {
-  const { tailnet } = await reach();
-  const net = tailnet(status({
+  const { net } = await netOf({
     on: peer({ DNSName: "on.tail.ts.net.", TailscaleIPs: ["100.64.1.1"], sshHostKeys: ["ssh-ed25519 AAAA"] }),
     empty: peer({ DNSName: "empty.tail.ts.net.", TailscaleIPs: ["100.64.1.4"], sshHostKeys: [] }),
     missing: peer({ DNSName: "missing.tail.ts.net.", TailscaleIPs: ["100.64.1.5"], sshHostKeys: null }),
-  }));
+  });
   assert.deepEqual(clone(net.peers.map((row) => [row.name, row.tailscaleSsh])), [["empty", false], ["missing", false], ["on", true]]);
 });
 
@@ -150,17 +166,7 @@ const recorded = async (file) => {
     return null;
   }
 };
-
-test("The password tab passes the computer as $1, then adds it without --json, and stops if the key was not copied", async (t) => {
-  const { keySetup, addArgs } = await reach();
-  const plan = { name: "grey box", target: "ada@100.64.1.2", via: "tailscale ssh ada@100.64.1.2" };
-  const expected = addArgs(plan, { json: false });
-  const argv = keySetup(plan);
-  assert.deepEqual(clone(argv.slice(0, 2)), ["sh", "-c"]);
-  assert.equal(argv[3], "sh");
-  assert.equal(argv[4], plan.target, "the target is $1");
-  assert.deepEqual(clone(argv.slice(5)), clone(expected));
-  assert.equal(expected.includes("--json"), false);
+const keyBin = async (t) => {
   const dir = await temporary(t);
   const bin = join(dir, "bin");
   const home = join(dir, "home");
@@ -169,7 +175,21 @@ test("The password tab passes the computer as $1, then adds it without --json, a
   await stub(bin, "ssh-keygen", 0);
   await stub(bin, "ssh-copy-id", 0);
   await stub(bin, "hc", 0);
-  const env = { PATH: `${bin}:/bin:/usr/bin`, HOME: home };
+  return { bin, home, env: { PATH: `${bin}:/bin:/usr/bin`, HOME: home } };
+};
+
+test("The password tab passes the computer as $1, then adds it without --json, and stops if the key was not copied", async (t) => {
+  const { keySetup, addArgs } = await reach();
+  const plan = { name: "grey box", target: "ada@100.64.1.2", via: "tailscale ssh ada@100.64.1.2" };
+  const expected = addArgs(plan, { json: false });
+  const argv = keySetup(plan);
+  assert.deepEqual(clone(argv.slice(0, 2)), ["sh", "-c"]);
+  assert.equal(argv[3], "sh");
+  assert.equal(argv[4], plan.target, "the destination is $1");
+  assert.equal(argv[5], "", "a target with no port leaves $2 empty");
+  assert.deepEqual(clone(argv.slice(6)), clone(expected));
+  assert.equal(expected.includes("--json"), false);
+  const { bin, home, env } = await keyBin(t);
   const copied = await exec(argv[0], argv.slice(1), { env });
   assert.equal(copied.code, 0, copied.stderr);
   assert.match(copied.stdout, /Done: this tab can close/);
@@ -244,41 +264,16 @@ test("A computer already added is known by its name, its target, its address, or
 
 test("An Include line may quote a path or name several files", async () => {
   const { includesOf } = await reach();
-  const text = [
-    "Host *.example *",
-    "  User nope",
-    "Match host exec",
-    "  User skip",
-    "Host grey",
-    "  HostName 100.64.1.2",
-    "  User root",
-    "Host grey",
-    "  HostName 10.0.0.9",
-    "Host box",
-    "  Hostname=10.0.0.2",
-    "  User=ada",
+  const text = configText([
     "Include \"quoted path\" other.conf",
     "Include one.conf two.conf",
-  ].join("\n");
+  ]);
   assert.deepEqual(clone(includesOf(text)), ["quoted path", "other.conf", "one.conf", "two.conf"]);
 });
 
 test("ssh config hosts skip a pattern and a Match block, keep a duplicate alias once, and attach HostName and User to that host", async () => {
   const { sshConfigHosts } = await reach();
-  const text = [
-    "Host *.example *",
-    "  User nope",
-    "Match host exec",
-    "  User skip",
-    "Host grey",
-    "  HostName 100.64.1.2",
-    "  User root",
-    "Host grey",
-    "  HostName 10.0.0.9",
-    "Host box",
-    "  Hostname=10.0.0.2",
-    "  User=ada",
-  ].join("\n");
+  const text = configText();
   assert.deepEqual(clone(sshConfigHosts(text)), [
     { alias: "grey", hostname: "100.64.1.2", user: "root" },
     { alias: "box", hostname: "10.0.0.2", user: "ada" },
@@ -298,4 +293,146 @@ test("When a tailnet computer does not answer, Open access controls opens Tailsc
   fix.calls.find((call) => call[0] === "on_click")[1]({}, { open_url: (url) => opened.push(url) });
   assert.deepEqual(opened, [ACCESS_CONTROLS]);
   assert.equal(job.phase, "failed", "opening the page does not add the computer");
+});
+
+test("A typed ssh option, a blank, or a space is not a computer, and a host with a port is", async () => {
+  const { validTarget } = await reach();
+  for (const bad of ["-V", "-oProxyCommand=x", "user@-x", "", " ", "grey box"]) {
+    assert.equal(validTarget(bad), false, JSON.stringify(bad));
+  }
+  for (const good of ["grey", "root@100.1.2.3", "can@10.0.0.7:2222"]) {
+    assert.equal(validTarget(good), true, good);
+  }
+});
+
+test("A typed port reaches ssh as -p, and an IPv6 address is not read as a port", async () => {
+  const { destinationOf, probeArgs } = await reach();
+  const options = ["-o", "BatchMode=yes", "-o", "ConnectTimeout=8", "-o", "StrictHostKeyChecking=accept-new"];
+  assert.deepEqual(clone(destinationOf("can@10.0.0.7:2222")), { dest: "can@10.0.0.7", port: "2222" });
+  assert.deepEqual(clone(probeArgs("can@10.0.0.7:2222")), [...options, "-p", "2222", "--", "can@10.0.0.7", "true"]);
+  assert.deepEqual(clone(destinationOf("[fe80::1]:2222")), { dest: "fe80::1", port: "2222" });
+  assert.deepEqual(clone(probeArgs("[fe80::1]:2222")), [...options, "-p", "2222", "--", "fe80::1", "true"]);
+  assert.deepEqual(clone(destinationOf("fe80::1")), { dest: "fe80::1", port: "" });
+  const bare = probeArgs("fe80::1");
+  assert.equal(bare.includes("-p"), false);
+  assert.deepEqual(clone(bare), [...options, "--", "fe80::1", "true"]);
+});
+
+test("The password tab passes the port to ssh-copy-id, and omits -p when the computer has none", async (t) => {
+  const { keySetup, addArgs } = await reach();
+  const withPort = { name: "can", target: "can@10.0.0.7:2222", via: "" };
+  const noPort = { name: "grey", target: "ada@100.64.1.2", via: "" };
+  const portArgs = addArgs(withPort, { json: false });
+  const plainArgs = addArgs(noPort, { json: false });
+  const portArgv = keySetup(withPort);
+  const plainArgv = keySetup(noPort);
+  assert.equal(portArgv[3], "sh");
+  assert.equal(portArgv[4], "can@10.0.0.7");
+  assert.equal(portArgv[5], "2222");
+  assert.deepEqual(clone(portArgv.slice(6)), clone(portArgs));
+  assert.equal(plainArgv[4], noPort.target);
+  assert.equal(plainArgv[5], "");
+  assert.deepEqual(clone(plainArgv.slice(6)), clone(plainArgs));
+  const { bin, home, env } = await keyBin(t);
+  const copied = await exec(portArgv[0], portArgv.slice(1), { env });
+  assert.equal(copied.code, 0, copied.stderr);
+  assert.deepEqual(await recorded(join(bin, "ssh-copy-id.args")), ["-o", "StrictHostKeyChecking=accept-new", "-p", "2222", "-i", `${home}/.ssh/id_ed25519.pub`, "can@10.0.0.7"]);
+  assert.deepEqual(await recorded(join(bin, "hc.args")), clone(portArgs));
+  const plain = await exec(plainArgv[0], plainArgv.slice(1), { env });
+  assert.equal(plain.code, 0, plain.stderr);
+  const plainCopy = await recorded(join(bin, "ssh-copy-id.args"));
+  assert.equal(plainCopy.includes("-p"), false);
+  assert.deepEqual(plainCopy, ["-o", "StrictHostKeyChecking=accept-new", "-i", `${home}/.ssh/id_ed25519.pub`, noPort.target]);
+  assert.deepEqual(await recorded(join(bin, "hc.args")), clone(plainArgs));
+});
+
+test("Windows says the password tab is done only after hc itself succeeds", async () => {
+  const { keySetup } = await reach();
+  const script = keySetup({ name: "grey", target: "ada@box", via: "" }, "windows")[3];
+  const done = "Done: this tab can close.";
+  assert.match(script, /if \(\$LASTEXITCODE -eq 0\) \{ & hc .+; if \(\$LASTEXITCODE -eq 0\) \{ Write-Host 'Done: this tab can close\.' \} \}$/);
+  assert.equal(script.split(done).length, 2);
+});
+
+test("An ssh config host is the tailnet computer when HostName is its address, its name, or its name with a suffix, or when the alias is the name", async () => {
+  const { aliasOf } = await reach();
+  const peer = { name: "grey", ip: "100.64.1.2" };
+  assert.equal(aliasOf(peer, [{ alias: "build", hostname: "100.64.1.2", user: "deploy" }]).alias, "build");
+  assert.equal(aliasOf(peer, [{ alias: "build", hostname: "grey", user: "deploy" }]).alias, "build");
+  assert.equal(aliasOf(peer, [{ alias: "build", hostname: "grey.tail.ts.net", user: "deploy" }]).alias, "build");
+  assert.equal(aliasOf(peer, [{ alias: "grey", hostname: "", user: "deploy" }]).alias, "grey");
+  assert.equal(aliasOf(peer, [{ alias: "other", hostname: "10.0.0.9", user: "ada" }]), null);
+  assert.equal(aliasOf(peer, [{ alias: "other", hostname: "", user: "ada" }]), null);
+});
+
+test("A folded ssh alias is how the computer is reached, unless a user was typed or Tailscale SSH is on", async () => {
+  const { planFor } = await reach();
+  const peer = { name: "grey", ip: "100.64.1.2", tailscaleSsh: false };
+  const folded = { alias: "build", hostname: "100.64.1.2", user: "deploy" };
+  const bare = { alias: "grey", hostname: "", user: "deploy" };
+  assert.deepEqual(clone(planFor({ peer, target: "", alias: folded })), { name: "grey", target: "build", via: "", probe: true });
+  assert.deepEqual(clone(planFor({ peer, target: "", alias: bare })), { name: "grey", target: "deploy@100.64.1.2", via: "", probe: true });
+  assert.deepEqual(clone(planFor({ peer, target: "root@grey", alias: folded })), { name: "grey", target: "root@100.64.1.2", via: "", probe: true });
+  assert.deepEqual(clone(planFor({ peer: { ...peer, tailscaleSsh: true }, target: "", alias: folded }, { tailscale: "/usr/bin/tailscale" })), {
+    name: "grey", target: "100.64.1.2", via: "/usr/bin/tailscale ssh 100.64.1.2", probe: false,
+  });
+});
+
+test("A computer that accepts only a key is not offered a password", async () => {
+  const { reachOf, advice } = await reach();
+  const said = (stderr) => reachOf({ code: 1, stdout: "", stderr });
+  assert.equal(said("Permission denied (publickey)."), "keyonly");
+  assert.equal(said("Permission denied (publickey,password)."), "password");
+  const keyonly = advice("keyonly", { name: "grey" });
+  assert.match(keyonly.text, /keys only/);
+  assert.equal(keyonly.fix, "Retry");
+  assert.doesNotMatch(keyonly.text, /password/i);
+});
+
+test("A computer saved with hc, and not on the tailnet or in ssh config, shows under Added, and Close dismisses the dialog", async () => {
+  const closed = [];
+  const asked = [];
+  const { Computers } = await load("kanso-computers/main.js", ["Computers"], {
+    ...gpuiHost(),
+    theme: () => ({ foreground: "#d8d4cb", background: "#1b1b19", muted: "#949086", dim: "#6b6862", border: "#33332f", popover: "#222220", hover: "#232321", selected: "#2b2b28", accent: "#da627d" }),
+    props: () => ({ overlay: "computers-overlay" }),
+    closeOverlay: (id) => closed.push(id),
+    hc: async (args) => {
+      asked.push(clone(args));
+      return { code: 0, stdout: JSON.stringify({ machines: [{ name: "box", target: "ada@10.0.0.9", via: "" }] }), stderr: "" };
+    },
+    home: () => "/tmp/kanso-none",
+    readTextFile: async () => null,
+    exec: async () => ({ code: 1, stdout: "", stderr: "missing" }),
+    run: () => {},
+    window: () => ({ platform: "macos" }),
+    shared: () => null,
+    settings: () => ({}),
+  });
+  const pending = [];
+  const cx = {
+    notify() {},
+    focus_handle: () => ({ focus() {}, is_focused: () => false, release() {} }),
+    spawn(fn) { pending.push(fn(cx)); return { cancel() {} }; },
+    timer: { after: () => ({ cancel() {} }), every: () => ({ cancel() {} }) },
+  };
+  const view = new Computers();
+  view.init({}, cx);
+  await Promise.all(pending);
+  view.net = { state: "Running", peers: [{ name: "grey", ip: "100.64.1.2", os: "linux", online: true, tailscaleSsh: false }] };
+  view.hosts = [{ alias: "other", hostname: "10.0.0.8", user: "ada" }];
+  const drawn = view.render();
+  const words = texts(drawn);
+  const heading = words.indexOf("Added");
+  assert.deepEqual(asked, [["machine", "ls", "--json"]]);
+  assert.equal(words[heading + 1], "box", words.join(" | "));
+  assert.ok(words.indexOf("grey") < heading, "a peer is not filed under Added");
+  assert.ok(words.indexOf("other") < heading, "an ssh host is not filed under Added");
+  assert.equal(words.includes("Get Tailscale"), false);
+  const close = find(drawn, (el) => el.tag === "kanso-computers-secondary");
+  assert.ok(close);
+  assert.equal(close.calls.find((call) => call[0] === "accessibility_label")[1], "Close");
+  assert.deepEqual(closed, []);
+  close.calls.find((call) => call[0] === "on_click")[1]({}, { stop_propagation() {} });
+  assert.deepEqual(closed, ["computers-overlay"]);
 });
