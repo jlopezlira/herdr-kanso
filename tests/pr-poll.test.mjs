@@ -3,7 +3,7 @@ import { loadPullRequest, loadAuthTiming } from "./mod-fixtures.mjs";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { load, context, tape, singleUse, failure, success, KIT_NIGHT, storeShared, until } from "./helpers.mjs";
-import { blankPanel, refreshAgain, openInbox, SIGNED_OUT, PASSED } from "./pr-fixtures.mjs";
+import { blankPanel, refreshAgain, openInbox, textFields, SIGNED_OUT, PASSED } from "./pr-fixtures.mjs";
 
 const TONE = { dim: "dim", muted: "muted", text: "text", border: "border", red: "red", yellow: "yellow", green: "green" };
 
@@ -924,7 +924,7 @@ test("the timer returns while the window is behind or the panel is hidden, and r
     location: () => ({ cwd: "/repo", on: null }),
     window: () => ({ active }),
     layout: () => ({ id: "panel-body", hidden }),
-    InputState: { new: () => ({ on() {} }) },
+    ...textFields(),
     ScrollHandle: { new: () => ({ scroll_to_item() {} }) },
     props: () => ({}),
   });

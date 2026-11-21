@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { clone as plain, context, failure, load } from "./helpers.mjs";
-import { openedPanel, recorder } from "./pr-fixtures.mjs";
+import { fieldState, openedPanel, recorder } from "./pr-fixtures.mjs";
 
 const api = await load("kanso-panel/pr-review.js", [
   "REVIEWS", "reviewArgs", "undoArgs", "createdId", "reviewable", "ready",
@@ -68,15 +68,6 @@ test("A review goes pending, then done, and only a done review with an id can be
   assert.equal(canUndo(undone), false);
 });
 
-const fieldState = () => ({
-  value: () => "",
-  set_value() {},
-  set_auto_grow() {},
-  set_selected_range() {},
-  on() { return this; },
-  focus() {},
-  release() {},
-});
 const tone = new Proxy({}, { get: () => "#888" });
 
 test("An open pull request by someone else offers Approve, Request changes and Comment, and your own offers Comment only", async () => {

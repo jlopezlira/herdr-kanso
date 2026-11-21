@@ -42,6 +42,18 @@ export const recorder = () => {
   };
 };
 
+export const fieldState = () => ({
+  value: () => "",
+  set_value() {},
+  set_auto_grow() {},
+  set_selected_range() {},
+  on() { return this; },
+  focus() {},
+  release() {},
+});
+
+export const textFields = () => ({ InputState: { new: fieldState }, TextareaState: { new: fieldState } });
+
 export const openedPanel = async (host, state) => {
   const { PullRequest } = await loadPullRequest(host);
   const { Kdb } = await loadPanelKdb(host);
