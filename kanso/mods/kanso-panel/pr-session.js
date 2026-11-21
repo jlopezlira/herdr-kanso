@@ -9,6 +9,9 @@ import { pieces } from "./pieces.js";
 import { fetchDue, parseRemote } from "./pr-remote.js";
 import { q } from "./kdb.js";
 import { REVIEWS, canUndo, createdId, doneOf, pendingOf, ready, refusedOf, reviewArgs, undoArgs, undoneOf, undoRefusedOf } from "./pr-review.js";
+import { serviceFor } from "./platform-host.js";
+import { repositoryApi } from "./platform-repositories.js";
+import { folderScope, scopeRepos } from "./pr-board.js";
 import { CALL_MS, heldView, logDue, needsPermission, needsThreads, stayOnBranch, threadKey, waitLine } from "./pr-poll.js";
 
 export const keepsFacts = () => awayShown(pieces(shared));
@@ -67,7 +70,7 @@ const blank = () => ({
   pushed: false, behind: false, base: undefined, aheadCount: 0, behindCount: 0, subjects: [], subjectsFor: null,
   baseBehind: null, baseBehindFor: null, permission: null, permissionRepo: null, threadsFor: null,
   listing: false, openedList: false, tab: "open", closedPrs: null,
-  inboxOn: false, inbox: null, inboxOpen: null, inboxTab: "needs", inboxForce: false,
+  inboxOn: false, inbox: null, inboxOpen: null, inboxForce: false, boardOpen: null, scope: null, signedOut: false, scoped: null, scopeReady: () => {},
   stale: null, wait: null, freshAt: null, loadedAt: undefined,
   logFor: null, failedLog: null, logParsed: null, logParsedFor: null, sendShown: false, sendFor: null,
   queued: false, asking: false, loading: false, busy: null, pending: null, flights: [], reviewed: null, reviewFor: null,
@@ -156,11 +159,12 @@ export class FolderSession {
     this.cwd = cwd; this.on = on;
     this.loading = true;
     const want = this.selected;
+    this.scoped = new Promise((resolve) => { this.scopeReady = resolve; });
     cx.spawn(async (cx) => {
       const inbox = this.syncInbox(cx).catch((e) => this.inboxFailure(e));
       const failed = (e) => this.keepLast(e?.message ?? e);
       const follow = await (async () => {
-        const open = await this.readFolder(cx, want, failed).catch((e) => { failed(e); return null; });
+        const open = await this.readFolder(cx, want, failed).catch((e) => { failed(e); return null; }).finally(() => this.scopeReady(this.scope));
         if (open) await open;
         await inbox;
         return (this.selected !== want || this.openedList) && !this.wait;
@@ -181,6 +185,8 @@ export class FolderSession {
     const top = await this.git(cx, ["rev-parse", "--show-toplevel"], this.cwd, this.on);
     if (top?.late) { this.keepLast(); return null; }
     if (top.code !== 0) {
+      this.scope = await this.childScope();
+      this.scopeReady(this.scope);
       this.outside = true; this.missing = null; this.error = null; this.none = false; this.openPrs = [];
       this.stale = null; this.wait = null;
       if (!this.selected) { this.pr = null; this.freshAt = null; return null; }
@@ -203,6 +209,8 @@ export class FolderSession {
     const remoteUrl = String(remote?.stdout ?? "");
     this.home = /github\.com[:/]([^/]+\/[^/\s]+?)(?:\.git)?\s*$/.exec(remoteUrl)?.[1] ?? null;
     this.host = parseRemote(remoteUrl.trim())?.host ?? null;
+    this.scope = { kind: "repo", repos: scopeRepos([{ folder: this.root, remote: remoteUrl }]), local: [] };
+    this.scopeReady(this.scope);
     const waited = await this.heldByGitHub(Date.now());
     if (waited) {
       this.wait = waited;
@@ -225,6 +233,11 @@ export class FolderSession {
     return open;
   }
 
+  async childScope() {
+    const found = await serviceFor(repositoryApi, this.on).then((api) => api.children(this.cwd)).catch(() => []);
+    return folderScope(found);
+  }
+
   readLog(cx) {
     if (!this.live() || !this.pr || this.flying("checks")) return;
     const stamp = this.panel.view().logKey;
@@ -245,15 +258,18 @@ export class FolderSession {
   async readInbox(cx) {
     const ready = await this.panel.account(Date.now(), this.runner(cx));
     if (ready == null) return;
+    this.signedOut = !ready.length;
     if (!ready.length) { this.inboxOn = false; this.inbox = null; this.inboxOpen = null; return; }
     const db = await this.panel.inboxStore().catch((e) => { this.inboxFailure(e); return null; });
     if (!db) { this.inboxOn = false; this.inboxOpen = null; return; }
+    const scope = await this.scoped;
+    const extra = scope?.kind === "folder" ? scope.repos : [];
     const force = Boolean(this.inboxForce);
     this.inboxForce = false;
     const model = await ready.reduce(async (prev, { provider, session }) => {
       const soFar = await prev;
       return [...soFar, await refreshInbox({
-        db, run: this.runner(cx), provider, session, force, shown: true, facts: keepsFacts(),
+        db, run: this.runner(cx), provider, session, force, extra, shown: true, facts: keepsFacts(),
         onCache: (cached, pending) => this.paintInbox(cached, !pending || cached.needs.length > 0 || cached.yours.length > 0),
       })];
     }, Promise.resolve([])).then(mergeInbox).catch((e) => e);

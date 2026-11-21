@@ -2,9 +2,10 @@
 import { exec } from "herdr";
 import { parseOr } from "./pure.js";
 import { parseRemote, parseAuth, rateFrom, urlHost, LIST_CAP } from "./pr-remote.js";
+import { rollupState } from "./ghchecks.js";
 
-export const SEARCH_FIELDS = "number,title,url,author,repository,updatedAt,isDraft";
-export const LIST_FIELDS = "number,title,url,author,headRefName,updatedAt,isDraft,reviewDecision,additions,deletions,reviewRequests";
+export const SEARCH_FIELDS = "number,title,url,author,repository,createdAt,updatedAt,isDraft";
+export const LIST_FIELDS = "number,title,url,author,headRefName,createdAt,updatedAt,isDraft,reviewDecision,additions,deletions,reviewRequests,statusCheckRollup";
 
 export function searchArgs(kind) {
   const who = kind === "reviews" ? "--review-requested=@me" : "--author=@me";
@@ -66,6 +67,8 @@ const itemOf = (row, role, prev, where) => ({
   additions: row.additions ?? prev?.additions ?? null,
   deletions: row.deletions ?? prev?.deletions ?? null,
   updatedAt: row.updatedAt ?? prev?.updatedAt ?? null,
+  createdAt: row.createdAt ?? prev?.createdAt ?? null,
+  checks: Array.isArray(row.statusCheckRollup) ? rollupState(row.statusCheckRollup) : prev?.checks ?? null,
 });
 
 const put = (acc, row, role, place) => {
