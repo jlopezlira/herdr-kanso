@@ -6,6 +6,12 @@ import { load, tape, drawingHost, calls, nodes, texts } from "./helpers.mjs";
 const night = { foreground: "#d8d4cb", background: "#1b1b19", hover: "#232321", selected: "#2b2b28", accent: "#da627d", dim: "#6b6862", muted: "#949086" };
 const cx = (seen = []) => ({ notify() {}, stop_propagation: () => seen.push("stopped"), open_url: (url) => seen.push(url), timer: { after() {} } });
 
+const credits = async (host) => {
+  const { tokens } = await load("kanso-help/ui.js", ["tokens"], host);
+  const { creditsPage } = await load("kanso-help/credits.js", ["creditsPage"], host);
+  return { page: creditsPage(tokens(night), new Set(["jlopezlira"])) };
+};
+
 test("Arrangements lists each one as a row that opens it, with Overwrite and Delete, which asks twice, under it", async () => {
   const ui = tape();
   const { Arrange, Armed } = await load("kanso-arrange/main.js", ["Arrange", "Armed"], { ...ui.host, theme: () => night, props: () => ({}), spaces: () => [], panes: () => [] });
@@ -30,9 +36,7 @@ test("Arrangements lists each one as a row that opens it, with Overwrite and Del
 test("Credits are rows with their picture, words and address, and a press opens the address", async () => {
   const ui = tape();
   const host = { ...ui.host, image: ui.host.div, theme: () => night, props: () => ({}) };
-  const { tokens } = await load("kanso-help/ui.js", ["tokens"], host);
-  const { creditsPage } = await load("kanso-help/credits.js", ["creditsPage"], host);
-  creditsPage(tokens(night), new Set(["jlopezlira"]));
+  await credits(host);
   assert.ok(["Where it comes from", "Herdr", "herdr.dev", "Made by", "JJ", "@jlopezlira on GitHub"].every((text) => ui.texts.includes(text)), ui.texts.join(" | "));
   const seen = [];
   ui.handlers.get("credit-herdr")({}, cx(seen));
@@ -41,9 +45,7 @@ test("Credits are rows with their picture, words and address, and a press opens 
 
 test("The note of a Credits row sits in the same horizontal box as its picture, and Jericho Siahaya is listed", async () => {
   const host = { ...drawingHost(), theme: () => night, props: () => ({}) };
-  const { tokens } = await load("kanso-help/ui.js", ["tokens"], host);
-  const { creditsPage } = await load("kanso-help/credits.js", ["creditsPage"], host);
-  const page = creditsPage(tokens(night), new Set(["jlopezlira"]));
+  const { page } = await credits(host);
   const row = nodes(page).find((el) => el.tag === "credit-jlopezlira");
   const note = nodes(row).find((el) => calls(el, "child").some((call) => call[1] === "@jlopezlira on GitHub"));
   const picture = nodes(row).find((el) => calls(el, "rounded_full").length && calls(el, "child").some((call) => call[1] === "J"));
