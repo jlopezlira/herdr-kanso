@@ -229,7 +229,8 @@ test("a branch with no pull request says where it is, and offers the one next st
   assert.equal(empty({ kind: "unpushed", ahead: 0 }).text, "Commits not on GitHub");
   const none = empty({ kind: "none", canCreate: true });
   assert.equal(none.text, "No pull request for feat");
-  assert.equal(none.primary.id, "pr-create");
+  assert.equal(none.primary.id, "pr-new");
+  assert.equal(none.quiet.id, "pr-create");
   assert.equal(none.primary.armed, false);
   assert.equal(empty({ kind: "none", canCreate: false }).primary, null);
   for (const view of [folder, absent, auth, base, unpushed, none]) painted(view);
