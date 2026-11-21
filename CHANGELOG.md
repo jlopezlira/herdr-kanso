@@ -27,6 +27,7 @@ the branch's rules.
 ### Added
 
 - Approve, request changes and comment on a pull request from the Pull requests panel, with Undo. (#400)
+- Re-run a failing check and read its whole log, reply to a thread, open a pull request, Undo on close, ready, reply and a new pull request, keys for every action, and statistics on the board, all from the Pull requests panel. (#400)
 
 ### Changed
 
