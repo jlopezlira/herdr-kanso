@@ -48,6 +48,11 @@ export const repoOf = (url) => {
   return m ? { o: m[1], r: m[2] } : null;
 };
 
+const repoFlag = (url) => {
+  const place = repoOf(url);
+  return place ? ["-R", `${place.o}/${place.r}`] : [];
+};
+
 const FILE_HEAD = /^diff -{2}git a\/.* b\/(.*)$/;
 function splitDiff(text) {
   const lines = text.split("\n");
@@ -245,7 +250,7 @@ export class FolderSession {
     if (!logDue({ facing: this.panel.facing(), key: stamp, have: this.logFor ?? null })) return;
     this.forgetLog(stamp);
     this.flight(cx, "checks", async (task) => {
-      const r = await this.gh(task, ["run", "view", stamp, "--log-failed"]).catch(() => null);
+      const r = await this.gh(task, ["run", "view", stamp, "--log-failed", ...repoFlag(this.pr?.url)]).catch(() => null);
       if (this.logFor === stamp && r?.code === 0) this.failedLog = r.stdout ?? "";
     });
   }
@@ -439,7 +444,7 @@ export class FolderSession {
     if (this.logFor === id && this.failedLog != null) { this.fullLog = { id, text: this.failedLog }; return; }
     this.fullLog = { id, text: null };
     this.flight(cx, "log", async (task) => {
-      const r = await this.gh(task, ["run", "view", id, "--log-failed"]).catch((e) => ({ code: 1, stderr: String(e?.message ?? e) }));
+      const r = await this.gh(task, ["run", "view", id, "--log-failed", ...repoFlag(this.pr?.url)]).catch((e) => ({ code: 1, stderr: String(e?.message ?? e) }));
       if (this.fullLog?.id !== id) return;
       this.fullLog = r?.code === 0 ? { id, text: r.stdout ?? "" } : { id, text: null, error: String(r?.stderr || r?.stdout || "").split("\n")[0] || "GitHub did not send the log." };
     });
@@ -564,8 +569,9 @@ export class FolderSession {
 
   rerun(runs, cx) {
     const ids = [...new Set(runs.filter(Boolean).map(String))];
-    if (!ids.length) return;
-    this.actOn("rerun", cx, (task) => ids.reduce((prev, id) => prev.then(() => this.gh(task, ["run", "rerun", id, "--failed"]).then(commandOk)), Promise.resolve()), { idOf: () => ids });
+    const flag = repoFlag(this.pr?.url);
+    if (!ids.length || !flag.length) return;
+    this.actOn("rerun", cx, (task) => ids.reduce((prev, id) => prev.then(() => this.gh(task, ["run", "rerun", id, "--failed", ...flag]).then(commandOk)), Promise.resolve()), { idOf: () => ids });
   }
 
   review(kind, body, cx, pull = this.pr) {

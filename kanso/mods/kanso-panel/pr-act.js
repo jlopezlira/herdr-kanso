@@ -14,7 +14,7 @@ const UNDO = {
   approve: ({ id }, { o, r, number }) => [["api", "-X", "PUT", `repos/${o}/${r}/pulls/${number}/reviews/${id}/dismissals`, "-f", "message=Undone from kansō", "-f", "event=DISMISS"]],
   comment: ({ id }, { o, r }) => [["api", "-X", "DELETE", `repos/${o}/${r}/issues/comments/${id}`]],
   reply: ({ id }, { o, r }) => [["api", "-X", "DELETE", `repos/${o}/${r}/pulls/comments/${id}`]],
-  rerun: ({ id }) => [id].flat().map((run) => ["run", "cancel", String(run)]),
+  rerun: ({ id }, { o, r }) => [id].flat().map((run) => ["run", "cancel", String(run), "-R", `${o}/${r}`]),
   close: ({ id }) => [["pr", "reopen", id]],
   ready: ({ id }) => [["pr", "ready", id, "--undo"]],
   create: ({ id }) => [["pr", "close", id]],
