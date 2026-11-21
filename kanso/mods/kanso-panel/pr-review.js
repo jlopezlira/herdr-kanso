@@ -41,7 +41,8 @@ export const ready = (kind, body) => !REVIEWS[kind]?.needsBody || String(body ??
 export const pendingOf = (kind) => ({ kind, state: "pending" });
 export const doneOf = (kind, id) => ({ kind, state: "done", id });
 export const refusedOf = (kind, error) => ({ kind, state: "refused", error });
-export const undoneOf = (outcome) => ({ ...outcome, state: "undone" });
+export const undoneOf = ({ undoError, ...outcome }) => ({ ...outcome, state: "undone" });
+export const undoRefusedOf = (outcome, error) => ({ ...outcome, undoError: error });
 export const canUndo = (outcome) => outcome?.state === "done" && outcome.id != null;
 
 export const saidOf = (outcome) => {

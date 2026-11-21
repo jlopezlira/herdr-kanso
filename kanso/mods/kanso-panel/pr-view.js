@@ -179,18 +179,21 @@ const REVIEW_LOOK = { approve: "solid", changes: "tonal", comment: "tonal" };
 
 function reviewOutcome(panel, c, outcome) {
   if (outcome.state === "refused") return failureBlock({ text: "Review not sent", source: saidOf(outcome) })("pr-review-refused", c);
-  return h_flex().w_full().gap(G.sm).items_center().text_size(T.body)
+  const line = h_flex().w_full().gap(G.sm).items_center().text_size(T.body)
     .child(div().flex_1().min_w(0).truncate().text_color(outcome.state === "pending" ? c.dim : c.text).child(saidOf(outcome)))
     .when(canUndo(outcome), (el) => el.child(quietLink("pr-review-undo", panel.session.busy === "Undo" ? "Undoing…" : "Undo", (cx) => panel.session.undoReview(cx), c, { disabled: Boolean(panel.session.busy) })));
+  return outcome.undoError
+    ? v_flex().w_full().gap(G.sm).child(line).child(failureBlock({ text: "Undo failed", source: outcome.undoError })("pr-review-undo-refused", c))
+    : line;
 }
 
 function reviewPiece(panel, c) {
   const pr = panel.session.pr;
   const can = reviewable(pr, panel.viewer);
   if (!pr || !can.comment || !panel.reviewText) return null;
-  const body = panel.reviewText.value();
+  const body = panel.draftOf(pr.url);
   const outcome = panel.session.reviewFor === pr.url ? panel.session.reviewed : null;
-  const press = (kind) => button(`pr-review-${kind}`, REVIEWS[kind].label, (cx) => panel.session.review(kind, panel.reviewText.value(), cx), c,
+  const press = (kind) => button(`pr-review-${kind}`, REVIEWS[kind].label, (cx) => panel.session.review(kind, panel.draftOf(pr.url), cx), c,
     { kind: REVIEW_LOOK[kind], small: true, disabled: Boolean(panel.session.busy) || !ready(kind, body) });
   return v_flex().w_full().gap(G.sm)
     .child(section(c, "Review", ""))
