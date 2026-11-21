@@ -37,6 +37,7 @@ the branch's rules.
 - The collapsed sidebar on Projects no longer shows the view switch. On Status and Threads the view button and its menu stay, and the view keys still change view from any rail. (#232)
 - The sidebar draws its header, view switch, rows and footer as one piece, and the layout file no longer has a separate footer block; a change in one session no longer redraws the header or the footer. (#282)
 - kansō help and kansō settings are two separate windows that no longer link to each other. Settings keeps Pieces, Keys and Updates; help has Keyboard, Guide, What's new and Credits.
+- Credits lists Jericho Siahaya among the people who made kansō.
 
 ### Fixed
 
@@ -45,6 +46,7 @@ the branch's rules.
 - An asleep row on a computer that cannot be reached no longer offers Wake. Sleep and Wake move the row at once, and a sleep that does not finish shows could not sleep with Undo on the row. Forgetting a slept conversation asks for a second press, and the row shows that. (#231)
 - While you were away keeps a closed pane's last words. A right-click dismisses the summary or switches it off. The summary takes the sidebar's width, including 420. (#231)
 - Needs you, when it is open and nobody is waiting, draws nothing and the project list returns. (#231)
+- Credits keeps each picture beside its name and note, so the rows no longer run into each other.
 
 ## [3.31.1] - 2026-11-20
 
