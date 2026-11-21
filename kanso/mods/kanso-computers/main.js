@@ -1,7 +1,12 @@
 import { View, div } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
-import { theme, props, closeOverlay, exec, hc, home, readTextFile, run } from "herdr";
+import { theme, props, closeOverlay, exec, hc, home, readTextFile, run, shared } from "herdr";
 import { localName } from "./platform-host.js";
+import { pieces, runs } from "./pieces.js";
+import { findExplainer, explainWith } from "./explain.js";
+import { scanNearby } from "./nearby-scan.js";
+import { lanOf } from "./nearby.js";
+import { setupPrompt } from "./setup.js";
 import { focusOn, tryOrAsync } from "./pure.js";
 import { G, T, LH, DIALOG, tokens } from "./ui.js";
 import { button } from "./ui-button.js";
@@ -10,10 +15,10 @@ import { row } from "./ui-row.js";
 import { stateBlock } from "./ui-state.js";
 import { field, TextField } from "./ui-field.js";
 import { code } from "./ui-code.js";
-import { hcError, needsLogin, listedMachines } from "./machines.js";
+import { hcError, needsLogin, listedMachines, machineRecord, canRestore, addArgs as restoreArgs, rmArgs } from "./machines.js";
 import {
   tailscalePaths, tailnet, planFor, choiceOf, addArgs, probeArgs, forgetArgs, reachOf, keySetup, advice, isAdded,
-  sshConfigHosts, includesOf, splitTarget, validTarget, aliasOf, usesTailscaleSsh,
+  sshConfigHosts, includesOf, splitTarget, validTarget, aliasOf, usesTailscaleSsh, nearbyOnly,
 } from "./reach.js";
 
 const PROBE_MS = 15000;
@@ -22,6 +27,8 @@ const failed = (error) => ({ code: 1, stdout: "", stderr: String(error?.message 
 const OS_WORD = { macos: "Mac", linux: "Linux", windows: "Windows", freebsd: "FreeBSD" };
 const osWord = (os) => OS_WORD[String(os).toLowerCase()] ?? os;
 const osIcon = (os) => (/^(macos|windows)$/i.test(os) ? "monitor" : "server");
+const NETWORK = "computers.network";
+const SIDEBAR_REFRESH = "kanso-spaces.retry-machine:";
 
 async function findTailscale(platform) {
   for (const path of tailscalePaths(platform)) {
@@ -53,6 +60,9 @@ export default class Computers extends View {
     this.net = undefined;
     this.hosts = null;
     this.added = [];
+    this.nearby = runs(NETWORK, pieces(shared)) ? undefined : null;
+    this.dropped = {};
+    this.explainer = undefined;
     this.jobs = {};
     this.macs = {};
     this.copied = "";
@@ -65,6 +75,14 @@ export default class Computers extends View {
       this.net = found.net;
       this.hosts = hosts;
       await this.refresh();
+      cx.notify();
+    });
+    cx.spawn(async (cx) => {
+      this.explainer = await findExplainer();
+      cx.notify();
+    });
+    if (this.nearby === undefined) cx.spawn(async (cx) => {
+      this.nearby = await scanNearby(this.platform, cx.timer).catch(() => []);
       cx.notify();
     });
   }
@@ -102,7 +120,8 @@ export default class Computers extends View {
     });
   }
 
-  async connect(key, plan) {
+  async connect(key, picked) {
+    const plan = picked.pick ? await this.pickRoute(picked) : picked;
     if (plan.probe) {
       const probe = await exec("ssh", probeArgs(plan.target), { timeout: PROBE_MS }).catch(failed);
       const reach = reachOf(probe);
@@ -111,9 +130,58 @@ export default class Computers extends View {
     const error = hcError(await hc(addArgs(plan)).catch(failed));
     if (error) return this.fail(key, needsLogin(error) ? "password" : reachOf({ code: 1, stderr: error.message }), String(error.message ?? "").trim());
     delete this.jobs[key];
+    delete this.dropped[key];
     if (key === this.typedKey()) this.typed.set_value("");
     await this.refresh();
     await this.checkMac(plan.name || plan.target);
+  }
+
+  async pickRoute(plan) {
+    const local = await exec("ssh", probeArgs(plan.lan), { timeout: PROBE_MS }).catch(failed);
+    return reachOf(local) === "ready" ? { name: plan.name, target: plan.lan, via: "", probe: false } : plan;
+  }
+
+  disconnect(key, machine, cx) {
+    const record = machineRecord(machine);
+    this.added = this.added.filter((m) => m.name !== machine.name);
+    this.dropped = { ...this.dropped, [key]: { record, phase: "leaving" } };
+    cx.notify();
+    cx.spawn(async (cx) => {
+      const error = hcError(await hc(rmArgs(machine.name)).catch(failed));
+      if (error) {
+        delete this.dropped[key];
+        this.jobs[key] = { phase: "failed", reach: "failed", words: String(error.message ?? "").trim(), retry: (cx) => this.disconnect(key, machine, cx) };
+        await this.refresh();
+      } else {
+        this.dropped = { ...this.dropped, [key]: { record, phase: "gone" } };
+        run(`${SIDEBAR_REFRESH}${machine.name}`);
+      }
+      cx.notify();
+    });
+  }
+
+  undo(key, cx) {
+    const { record } = this.dropped[key];
+    this.dropped = { ...this.dropped, [key]: { record, phase: "returning" } };
+    cx.notify();
+    cx.spawn(async (cx) => {
+      const error = hcError(await hc(restoreArgs(record)).catch(failed));
+      if (error) {
+        this.dropped = { ...this.dropped, [key]: { record, phase: "gone" } };
+        this.jobs[key] = { phase: "failed", reach: "failed", words: String(error.message ?? "").trim(), retry: (cx) => this.undo(key, cx) };
+      } else {
+        delete this.dropped[key];
+        delete this.jobs[key];
+        await this.refresh();
+        run(`${SIDEBAR_REFRESH}${record.name}`);
+      }
+      cx.notify();
+    });
+  }
+
+  setUp() {
+    explainWith(this.explainer, { name: "Set up a computer", folder: home(), task: setupPrompt({ platform: this.platform }) });
+    this.close();
   }
 
   fail(key, reach, words) {
@@ -130,6 +198,11 @@ export default class Computers extends View {
 
   fix(key, job, cx) {
     const { reach, plan } = job;
+    if (job.retry) {
+      delete this.jobs[key];
+      job.retry(cx);
+      return;
+    }
     if (reach === "password") {
       run("tab.new", { name: `Add ${plan.name || plan.target}`, argv: keySetup(plan, this.platform) });
       delete this.jobs[key];
@@ -188,17 +261,31 @@ export default class Computers extends View {
       .child(this.commandLine(`computer-linger-${machine.name}`, command, c));
   }
 
-  computer(c, { key, icon, name, facts = [], choice, done, offline = false, about }) {
-    const job = this.jobs[key];
+  undoFact(key) {
+    const dropped = this.dropped[key];
+    return dropped?.phase === "gone" && canRestore(dropped.record) ? [{ text: "Undo", label: "Undo", tip: "Add it back as it was", onClick: (cx) => this.undo(key, cx) }] : [];
+  }
+
+  rowState(key, { job, machine, choice, offline }) {
+    const dropped = this.dropped[key];
+    if (dropped && dropped.phase !== "gone") return { busy: true, meta: dropped.phase === "leaving" ? "Disconnecting…" : "Adding back…" };
+    if (machine) return { action: { label: "Disconnect", onClick: (cx) => this.disconnect(key, machine, cx), kind: "quiet" } };
     const adding = job?.phase === "adding";
-    const machine = done ? this.added.find((m) => m.name === name || (choice?.target && m.target === choice.target)) : null;
-    const add = (cx) => this.add(key, choice, cx);
+    const add = choice ? (cx) => this.add(key, choice, cx) : null;
+    return {
+      busy: adding,
+      meta: adding ? "Connecting…" : offline ? "Offline" : dropped ? "Disconnected" : null,
+      action: adding || offline || !add ? null : { label: job ? "Retry" : "Add", onClick: add, kind: "tonal" },
+      onClick: adding || offline ? null : add,
+    };
+  }
+
+  computer(c, { key, icon, name, facts = [], choice, done, offline = false, about, ip = "" }) {
+    const job = this.jobs[key];
+    const machine = done ? this.added.find((m) => isAdded([m], { name, target: choice?.target, ip })) : null;
     return v_flex().w_full()
       .child(row(`computer-${key}`, c, {
-        icon, name, detail: facts.filter(Boolean), dimmed: offline, busy: adding,
-        meta: done ? { text: "Added", tone: "done" } : adding ? "Connecting…" : offline ? "Offline" : null,
-        action: done || adding || offline ? null : { label: job ? "Retry" : "Add", onClick: add, kind: "tonal" },
-        onClick: done || adding || offline ? null : add,
+        icon, name, detail: [...facts.filter(Boolean), ...this.undoFact(key)], dimmed: offline, ...this.rowState(key, { job, machine, choice, offline }),
       }))
       .when(job?.phase === "failed", (el) => el.child(this.failure(key, job, c, about)))
       .when(Boolean(machine && this.macs[machine.name]), (el) => el.child(this.macNote(machine.name, c)))
@@ -221,10 +308,11 @@ export default class Computers extends View {
     if (!peers.length) return [this.heading(c, "Tailscale"), this.note(c, "No other computer is on your tailnet yet.")];
     return [this.heading(c, "On your tailnet"), ...peers.map((peer) => {
       const alias = this.aliasFor(peer);
+      const lan = lanOf(peer, this.nearby ?? []);
       return this.computer(c, {
-        key: peer.name, icon: osIcon(peer.os), name: peer.name,
-        facts: [osWord(peer.os), peer.ip, peer.tailscaleSsh ? "Tailscale SSH" : null, alias ? `ssh ${alias.alias}` : null],
-        choice: { peer, target: "", name: peer.name, alias },
+        key: peer.name, icon: osIcon(peer.os), name: peer.name, ip: peer.ip,
+        facts: [osWord(peer.os), peer.ip, peer.tailscaleSsh ? "Tailscale SSH" : null, alias ? `ssh ${alias.alias}` : null, lan ? "On this network" : null],
+        choice: { peer, target: "", name: peer.name, alias, lan },
         done: isAdded(this.added, { name: peer.name, ip: peer.ip, target: alias?.alias }), offline: !peer.online,
         about: { name: peer.name, os: peer.os, tailnet: true },
       });
@@ -240,12 +328,33 @@ export default class Computers extends View {
     return (this.hosts ?? []).filter((h) => !folded.has(h.alias));
   }
 
+  nearbyHosts() {
+    return nearbyOnly(this.nearby ?? [], { peers: this.peers(), hosts: this.hosts ?? [], added: [] });
+  }
+
   addedSection(c) {
-    const listed = (m) => this.peers().some((p) => isAdded([m], { name: p.name, ip: p.ip })) || this.shownHosts().some((h) => isAdded([m], { name: h.alias, target: h.alias }));
-    const others = this.added.filter((m) => !listed(m));
+    const listed = (m) => this.peers().some((p) => isAdded([m], { name: p.name, ip: p.ip })) || this.shownHosts().some((h) => isAdded([m], { name: h.alias, target: h.alias }))
+      || this.nearbyHosts().some((h) => isAdded([m], { name: h.name, ip: h.ip }));
+    const gone = Object.entries(this.dropped).filter(([key]) => key.startsWith("added:")).map(([, { record }]) => record)
+      .filter((record) => !this.added.some((m) => m.name === record.name));
+    const others = [...this.added, ...gone].filter((m) => !listed(m));
     return others.length ? [this.heading(c, "Added"), ...others.map((m) => this.computer(c, {
       key: `added:${m.name}`, icon: "server", name: m.name, facts: [m.target || m.via || ""], choice: null, done: true, about: { name: m.name },
     }))] : [];
+  }
+
+  nearbySection(c) {
+    if (this.nearby === null) return [];
+    if (this.nearby === undefined) return [this.heading(c, "On this network"), this.note(c, "Looking for computers that answer ssh…")];
+    const hosts = this.nearbyHosts();
+    if (!hosts.length) return [this.heading(c, "On this network"), this.note(c, "No other computer on this network answers ssh.")];
+    return [this.heading(c, "On this network"), ...hosts.map((h) => this.computer(c, {
+      key: `lan:${h.ip}`, icon: osIcon(h.os), name: h.name || h.ip, ip: h.ip,
+      facts: [h.os, h.name ? h.ip : null],
+      choice: { peer: null, target: h.ip, name: h.name },
+      done: isAdded(this.added, { ip: h.ip, name: h.name }),
+      about: { name: h.name || h.ip, os: h.os },
+    }))];
   }
 
   sshSection(c) {
@@ -274,11 +383,12 @@ export default class Computers extends View {
     const c = tokens(theme());
     return dialog("kanso-computers", c, {
       title: "Add a computer", focusHandle: this.handle, secondary: "Close", onCancel: () => this.close(),
+      primary: "Set up with an agent", kind: "tonal", state: this.explainer === undefined ? "disabled" : "default", onPrimary: () => this.setUp(),
       body: [
         div().text_size(T.value).line_height(LH.body).text_color(c.muted)
           .child("A Mac mini, a box at home, a VPS: its agents show in this sidebar and keep running while this laptop sleeps. Pick it and press Add."),
         v_flex().id("computers-list").w_full().max_h(DIALOG.computers).min_h(0).flex_shrink(1).mx(-G.sm).px(G.sm).overflow_y_scroll()
-          .children([...this.tailnetSection(c), ...this.sshSection(c), ...this.addedSection(c)].filter(Boolean)),
+          .children([...this.tailnetSection(c), ...this.nearbySection(c), ...this.sshSection(c), ...this.addedSection(c)].filter(Boolean)),
         ...this.typedSection(c).filter(Boolean),
       ],
     });

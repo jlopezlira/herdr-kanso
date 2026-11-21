@@ -43,6 +43,7 @@ export const PIECES = [
   piece("toast.update", "kansō update", "Notifications", SHOW, "show", "draw"),
   piece("toast.memory", "Memory low", "Notifications", SHOW, "show", "draw"),
   piece("update.check", "Check for updates", "Background", SHOW, "show", "work", "git"),
+  piece("computers.network", "Look for computers on this network", "Background", SHOW, "show", "work", "ssh"),
 ];
 
 export const STATE_LABEL = { show: "Show", needed: "When needed", hide: "Hide" };

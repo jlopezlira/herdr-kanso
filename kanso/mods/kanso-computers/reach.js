@@ -1,4 +1,5 @@
 import { psQuote, shellQuote, windowsArg } from "./platform-command.js";
+import { privateIp } from "./nearby.js";
 
 export const TAILSCALE_PATHS = {
   macos: ["tailscale", "/usr/local/bin/tailscale", "/opt/homebrew/bin/tailscale", "/Applications/Tailscale.app/Contents/MacOS/Tailscale"],
@@ -9,6 +10,8 @@ export const tailscalePaths = (platform) => TAILSCALE_PATHS[platform] ?? TAILSCA
 
 const PHONES = new Set(["ios", "android", "tvos"]);
 const ipv4 = (ip) => /^\d+\.\d+\.\d+\.\d+$/.test(ip);
+const hostOfAddress = (address) => String(address ?? "").replace(/:\d+$/, "");
+const lanOfPeer = (peer) => [...new Set([peer.CurAddr, ...(peer.Addrs ?? [])].map(hostOfAddress).filter(privateIp))];
 const labelOf = (peer) => String(peer.DNSName ?? "").split(".")[0] || String(peer.HostName ?? "").toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-+|-+$/g, "");
 
 export function tailnet(text) {
@@ -26,6 +29,7 @@ export function tailnet(text) {
         os: String(peer.OS ?? ""),
         online: peer.Online === true,
         tailscaleSsh: Array.isArray(peer.sshHostKeys) && peer.sshHostKeys.length > 0,
+        lan: lanOfPeer(peer),
       }))
       .filter((peer) => peer.name && peer.ip)
       .toSorted((a, b) => Number(b.online) - Number(a.online) || a.name.localeCompare(b.name));
@@ -61,10 +65,12 @@ export function aliasOf(peer, hosts = []) {
     || (!h.hostname && h.alias === peer.name)) ?? null;
 }
 
-export function planFor(choice, { tailscale = "", platform = "macos" } = {}) {
+const LAN_SSH = "-o BatchMode=yes -o ConnectTimeout=2 -o StrictHostKeyChecking=accept-new";
+const lanFirst = (lan, away) => `sh -c ${shellQuote(`ssh ${LAN_SSH} ${shellQuote(lan)} true >/dev/null 2>&1 && exec ssh -o StrictHostKeyChecking=accept-new ${shellQuote(lan)} "$1"; exec ${away} "$1"`)} route`;
+
+function awayPlan(choice, { tailscale, platform }) {
   const { user } = splitTarget(choice.target);
-  const peer = choice.peer ?? null;
-  if (!peer) return { name: choice.name ?? "", target: choice.target.trim(), via: "", probe: true };
+  const peer = choice.peer;
   if (usesTailscaleSsh(peer, tailscale)) {
     const quote = platform === "windows" ? windowsArg : shellQuote;
     const target = joined(user, peer.ip);
@@ -73,6 +79,15 @@ export function planFor(choice, { tailscale = "", platform = "macos" } = {}) {
   const alias = user ? null : choice.alias ?? null;
   const target = alias ? (alias.hostname ? alias.alias : joined(alias.user, peer.ip)) : joined(user, peer.ip);
   return { name: peer.name, target, via: "", probe: true };
+}
+
+export function planFor(choice, { tailscale = "", platform = "macos" } = {}) {
+  if (!choice.peer) return { name: choice.name ?? "", target: choice.target.trim(), via: "", probe: true };
+  const away = awayPlan(choice, { tailscale, platform });
+  if (!choice.lan) return away;
+  const lan = joined(splitTarget(choice.target).user || splitTarget(away.target).user, choice.lan);
+  if (platform === "windows") return { ...away, lan, pick: true };
+  return { ...away, lan, via: lanFirst(lan, away.via || `ssh ${shellQuote(away.target)}`) };
 }
 
 export function choiceOf(typed, peers = []) {
@@ -139,6 +154,12 @@ const holdsHost = (text, host) => String(text ?? "").split(/[\s'"]+/).some((word
 export function isAdded(added, { name = "", target = "", ip = "" }) {
   return (added ?? []).some((m) => (name && m.name === name) || (target && m.target === target)
     || (ip && [m.target, m.via].some((text) => holdsHost(text, ip))));
+}
+
+export function nearbyOnly(found, { peers = [], hosts = [], added = [] } = {}) {
+  return found.filter(({ ip, name }) => !peers.some((peer) => (peer.lan ?? []).includes(ip))
+    && !hosts.some((host) => host.hostname === ip)
+    && !isAdded(added, { ip, name }));
 }
 
 const HOST_FIELDS = { hostname: "hostname", user: "user" };
