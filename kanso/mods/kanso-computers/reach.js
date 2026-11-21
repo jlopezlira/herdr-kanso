@@ -1,8 +1,8 @@
 import { shellQuote, windowsArg } from "./platform-command.js";
 import { privateIp } from "./nearby.js";
-import { splitTarget, joined, destinationOf } from "./sign-in.js";
+import { splitTarget, joined, destinationOf, keySetup } from "./sign-in.js";
 
-export { splitTarget, destinationOf, keySetup } from "./sign-in.js";
+export { splitTarget, destinationOf, keySetup };
 
 export const TAILSCALE_PATHS = {
   macos: ["tailscale", "/usr/local/bin/tailscale", "/opt/homebrew/bin/tailscale", "/Applications/Tailscale.app/Contents/MacOS/Tailscale"],

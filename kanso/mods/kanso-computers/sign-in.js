@@ -17,7 +17,7 @@ export function destinationOf(target) {
 export const KEY = "~/.ssh/id_ed25519_kanso";
 const KEYED = `-i ${KEY} -o IdentitiesOnly=yes -o BatchMode=yes `;
 const ASK = "-o PasswordAuthentication=yes -o KbdInteractiveAuthentication=yes -o StrictHostKeyChecking=accept-new ";
-const SSH = /(^|[\s'"])ssh (?=\S)/g;
+const SSH = /(^|['"]|\bexec )ssh (?=\S)/g;
 const DONE = "Done: this tab can close.";
 const refused = (name) => `${name} didn't let this computer in. Put this line in ~/.ssh/authorized_keys on ${name}, then sign in again:`;
 
@@ -46,8 +46,9 @@ export function keyable({ target = "", via = "" }, platform = "macos") {
 }
 
 export function keyedRoute({ target = "", via = "" }, platform = "macos") {
-  const base = via || sshLine(target, platform === "windows" ? String : shellQuote);
-  return { ask: withSsh(base, ASK), keyed: withSsh(base, KEYED) };
+  const windows = platform === "windows";
+  const base = (quote) => via || sshLine(target, quote);
+  return { ask: withSsh(base(windows ? psQuote : shellQuote), ASK), keyed: withSsh(base(windows ? String : shellQuote), KEYED) };
 }
 
 const nameOf = ({ name, target }) => name || splitTarget(destinationOf(target).dest).host;
