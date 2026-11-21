@@ -30,6 +30,21 @@ test("adding a machine back uses the saved setup and never installs", async () =
   assert.equal(machineRecord({ name: "dark", target: "dark.example", via: "False", session: "NULL" }).session, "NULL");
 });
 
+test("a listed keyed route and an old saved command are added through --via, and a plain computer stays a positional target", async () => {
+  const { machineRecord, addArgs } = await load("kanso-spaces/machines.js", ["machineRecord", "addArgs"]);
+  const keyed = "ssh -i ~/.ssh/id_ed25519_kanso -o IdentitiesOnly=yes -o BatchMode=yes ada@box";
+  const savedCommand = "ssh -J jump ada@box";
+  const listed = machineRecord({ name: "grey", target: keyed, via: true });
+  const saved = machineRecord({ name: "grey", target: savedCommand, via: "" });
+  for (const [row, command] of [[listed, keyed], [saved, savedCommand]]) {
+    const args = clone(addArgs(row));
+    assert.equal(args[2], "--name");
+    assert.equal(args[args.indexOf("--via") + 1], command);
+    assert.equal(args.includes(command) && args.indexOf(command) === args.indexOf("--via") + 1, true);
+  }
+  assert.deepEqual(clone(addArgs(machineRecord({ name: "grey", target: "grey", via: false }))), ["machine", "add", "grey", "--name", "grey", "--json"]);
+});
+
 test("a login Herdr asks for is told apart from a missing install", async () => {
   const { hcError, needsLogin } = await load("kanso-spaces/machines.js", ["hcError", "needsLogin"]);
   assert.equal(hcError({ code: 0, stdout: "{}" }), null);

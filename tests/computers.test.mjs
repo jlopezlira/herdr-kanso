@@ -158,7 +158,7 @@ const shForm = process.platform === "win32" && "the sh form runs on macOS and Li
 const PUB = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIKansoOneClickTest kanso";
 const KEY_WORDS = "-i ~/.ssh/id_ed25519_kanso -o IdentitiesOnly=yes -o BatchMode=yes";
 const ASK = "-o PasswordAuthentication=yes -o KbdInteractiveAuthentication=yes -o StrictHostKeyChecking=accept-new";
-const signIn = () => load("kanso-computers/sign-in.js", ["signInTab", "routeOf", "keySetup"]);
+const signIn = () => load("kanso-computers/sign-in.js", ["signInTab", "routeOf", "keySetup", "lanParts"]);
 
 const writeStub = async (dir, name, body) => {
   const file = join(dir, name);
@@ -187,7 +187,7 @@ const callsOf = async (dir, name) => {
     return [];
   }
 };
-const keyBin = async (t, { sshCode = 0, sshSaid = "", failVia = false } = {}) => {
+const keyBin = async (t, { sshCode = 0, sshSaid = "", failVia = false, sshBody = "" } = {}) => {
   const dir = await temporary(t);
   const bin = join(dir, "bin");
   const home = join(dir, "home");
@@ -207,7 +207,7 @@ const keyBin = async (t, { sshCode = 0, sshSaid = "", failVia = false } = {}) =>
     "fi",
     "exit 0",
   ].join("\n"));
-  await writeStub(bin, "ssh", `${sshSaid ? `printf '%s\\n' ${JSON.stringify(sshSaid)} >&2\n` : ""}exit ${sshCode}`);
+  await writeStub(bin, "ssh", sshBody || `${sshSaid ? `printf '%s\\n' ${JSON.stringify(sshSaid)} >&2\n` : ""}exit ${sshCode}`);
   await writeStub(bin, "hc", failVia ? "if [ \"$1\" = machine ] && [ \"$2\" = add ] && [ \"$3\" = --via ]; then exit 1; fi\nexit 0" : "exit 0");
   await writeStub(bin, "herdr-app", "exit 0");
   return { bin, home, env: { PATH: `${bin}:/bin:/usr/bin`, HOME: home, TMPDIR: dir } };
@@ -304,6 +304,65 @@ test("Signing in through a local-first route puts the key on every ssh once, and
   const readded = (await again.calls("hc")).find((args) => args[1] === "add");
   assert.equal(readded[readded.indexOf("--via") + 1], via);
   for (const call of await again.calls("ssh")) assert.equal(call.join(" ").includes("id_ed25519_kanso"), false);
+});
+
+test("Signing in on a local-first route asks on the local network first, and finishes there when the away route does not answer", { skip: shForm }, async (t) => {
+  const { planFor } = await reach();
+  const { signInTab } = await signIn();
+  const away = "100.64.9.9";
+  const plan = planFor({
+    peer: { name: "grey", ip: away, tailscaleSsh: false },
+    target: "ada@grey",
+    lan: "10.99.0.1",
+  }, {});
+  assert.equal(plan.lan, "ada@10.99.0.1");
+  const tab = signInTab(plan);
+  const script = tab.argv[2];
+  const ask = script.split("\n").find((line) => line.includes("PasswordAuthentication"));
+  const lanAt = ask.indexOf("ada@10.99.0.1");
+  const awayAt = ask.indexOf(away);
+  assert.ok(lanAt > 0 && awayAt > lanAt, ask);
+  const first = ask.slice(0, lanAt);
+  assert.ok(first.includes(ASK), first);
+  assert.ok(first.includes("-o ConnectTimeout=2"), first);
+  assert.equal(first.includes("BatchMode"), false, first);
+  assert.ok(ask.slice(lanAt, awayAt).includes("|| exec"), ask);
+  const sshBody = [
+    "dest=",
+    "batch=",
+    "for arg in \"$@\"; do",
+    "  case \"$arg\" in",
+    "    *BatchMode*) batch=yes ;;",
+    "    ada@10.99.0.1|ada@100.64.9.9) dest=$arg ;;",
+    "  esac",
+    "done",
+    "if [ \"$dest\" = ada@10.99.0.1 ] && [ -z \"$batch\" ]; then exit 0; fi",
+    "printf '%s\\n' refused >&2",
+    "exit 1",
+  ].join("\n");
+  const { ran, calls } = await runSh(t, tab.argv, { sshBody });
+  assert.equal(ran.code, 0, `${ran.stderr}\n${ran.stdout}`);
+  assert.match(ran.stdout, /Done: this tab can close\.\n$/);
+  const pushed = await calls("ssh");
+  assert.equal(pushed.some((call) => call.join(" ").includes(away)), false, pushed.map((call) => call.join(" ")).join("\n"));
+  const ssh = pushed[0];
+  assert.ok(ssh.join(" ").includes(ASK), ssh.join(" "));
+  assert.ok(ssh.includes("ConnectTimeout=2"), ssh.join(" "));
+  assert.equal(ssh.join(" ").includes("BatchMode"), false, ssh.join(" "));
+  assert.ok(ssh.includes("ada@10.99.0.1"));
+  assert.ok(ssh.at(-1).includes(PUB), ssh.at(-1));
+  const added = (await calls("hc")).find((args) => args.includes("--via"));
+  const via = added[added.indexOf("--via") + 1];
+  assert.ok(via.includes(KEY_WORDS), via);
+  assert.ok(via.includes("ada@10.99.0.1"), via);
+  assert.ok(via.includes(away), via);
+});
+
+test("A route that is not the local-first shape has no local part", async () => {
+  const { lanParts } = await signIn();
+  assert.equal(lanParts("ssh ada@box"), null);
+  assert.equal(lanParts("fly ssh console -a app --pty=false -C"), null);
+  assert.equal(lanParts(""), null);
 });
 
 test("A Tailscale route, a route that is not ssh, a fly route, and a Windows route open Herdr's login; a Windows computer quotes the password ask and adds the key only after that add", async () => {
