@@ -13,6 +13,7 @@ import { button } from "./ui-button.js";
 import { dialog } from "./ui-dialog.js";
 import { row } from "./ui-row.js";
 import { stateBlock } from "./ui-state.js";
+import { skeletonOf } from "./ui-skeleton.js";
 import { field, TextField } from "./ui-field.js";
 import { code } from "./ui-code.js";
 import { hcError, needsLogin, listedMachines, machineRecord, canRestore, addArgs as restoreArgs, rmArgs } from "./machines.js";
@@ -65,7 +66,8 @@ export default class Computers extends View {
     this.net = undefined;
     this.hosts = null;
     this.added = [];
-    this.nearby = runs("computers.network", pieces(shared)) ? freshNearby() : null;
+    this.searching = runs("computers.network", pieces(shared));
+    this.nearby = this.searching ? freshNearby() : null;
     this.dropped = {};
     this.explainer = undefined;
     this.jobs = {};
@@ -83,8 +85,13 @@ export default class Computers extends View {
       await this.refresh();
       cx.notify();
     });
-    if (this.nearby === undefined) afterMount(cx, (cx) => cx.spawn(async (cx) => {
-      this.nearby = await scanNearby(this.platform, cx.timer).catch(() => []);
+    if (this.searching) afterMount(cx, (cx) => cx.spawn(async (cx) => {
+      const near = (hosts) => {
+        this.nearby = [...new Map([...(this.nearby ?? []), ...hosts].map((host) => [host.ip, host])).values()];
+        cx.notify();
+      };
+      this.nearby = await scanNearby(this.platform, cx.timer, near).catch(() => this.nearby ?? []);
+      this.searching = false;
       setShared(NEARBY, { at: Date.now(), hosts: this.nearby });
       cx.notify();
     }));
@@ -303,7 +310,7 @@ export default class Computers extends View {
   }
 
   tailnetSection(c) {
-    if (this.net === undefined) return [this.heading(c, "Tailscale"), this.note(c, "Looking for your computers…")];
+    if (this.net === undefined) return [this.heading(c, "Tailscale"), skeletonOf("computers-tailnet-loading", c, { shape: "row", count: 2 })];
     if (this.net === null) return [this.heading(c, "Tailscale"), this.note(c, "Tailscale isn't on this computer. Where it is, your computers show up here by themselves.")];
     if (this.net.state !== "Running") return [this.heading(c, "Tailscale"), this.note(c, "Tailscale is off on this computer. Turn it on and your computers show up here.")];
     const peers = this.peers();
@@ -314,7 +321,7 @@ export default class Computers extends View {
       return this.computer(c, {
         key: peer.name, icon: osIcon(peer.os), name: peer.name, ip: peer.ip,
         facts: [osWord(peer.os), peer.ip, peer.tailscaleSsh ? "Tailscale SSH" : null, alias ? `ssh ${alias.alias}` : null, seen ? "On this network" : null],
-        choice: { peer, target: "", name: peer.name, alias, lan: seen || (peer.lan ?? [])[0] || "" },
+        choice: { peer, target: "", name: peer.name, alias, lan: seen },
         done: isAdded(this.added, { name: peer.name, ip: peer.ip, target: alias?.alias }), offline: !peer.online,
         about: { name: peer.name, os: peer.os, tailnet: true },
       });
@@ -348,16 +355,16 @@ export default class Computers extends View {
 
   nearbySection(c) {
     if (this.nearby === null) return [];
-    if (this.nearby === undefined) return [this.heading(c, "On this network"), this.note(c, "Looking for computers that answer ssh…")];
     const hosts = this.nearbyHosts();
-    if (!hosts.length) return [this.heading(c, "On this network"), this.note(c, "No other computer on this network answers ssh.")];
+    const looking = this.searching ? [skeletonOf("computers-nearby-loading", c, { shape: "row", count: hosts.length ? 1 : 2 })] : [];
+    if (!hosts.length && !looking.length) return [this.heading(c, "On this network"), this.note(c, "No other computer on this network answers ssh.")];
     return [this.heading(c, "On this network"), ...hosts.map((h) => this.computer(c, {
       key: `lan:${h.ip}`, icon: osIcon(h.os), name: h.name || h.ip, ip: h.ip,
       facts: [h.os, h.name ? h.ip : null],
       choice: { peer: null, target: h.ip, name: h.name },
       done: isAdded(this.added, { ip: h.ip, name: h.name }),
       about: { name: h.name || h.ip, os: h.os },
-    }))];
+    })), ...looking];
   }
 
   sshSection(c) {

@@ -1,6 +1,6 @@
 const IPV4 = /\b(\d{1,3}(?:\.\d{1,3}){3})\b/;
 
-const SPAN = 24;
+const SPAN = 22;
 
 export const ipNumber = (ip) => String(ip).split(".").reduce((n, part) => n * 256 + Number(part), 0);
 const ipText = (n) => [24, 16, 8, 0].map((shift) => Math.floor(n / 2 ** shift) % 256).join(".");
@@ -42,10 +42,14 @@ export function neighborsOf(text) {
   });
 }
 
+export function nearOf(interfaces, neighbors) {
+  const own = new Set(interfaces.map(({ ip }) => ip));
+  return [...new Set(neighbors.map(({ ip }) => ip))].filter((ip) => !own.has(ip) && interfaces.some((net) => sameNet(ip, net)));
+}
+
 export function candidates(interfaces, neighbors) {
   const own = new Set(interfaces.map(({ ip }) => ip));
-  const near = neighbors.map(({ ip }) => ip).filter((ip) => interfaces.some((net) => sameNet(ip, net)));
-  return [...new Set([...near, ...interfaces.flatMap(subnetHosts)])].filter((ip) => !own.has(ip));
+  return [...new Set([...nearOf(interfaces, neighbors), ...interfaces.flatMap(subnetHosts)])].filter((ip) => !own.has(ip));
 }
 
 export function foundHosts(answered, neighbors) {

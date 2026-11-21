@@ -78,3 +78,39 @@ test("When Disconnect cannot remove the computer, it stays listed and Retry trie
   assert.deepEqual(asked.filter((args) => args[1] === "rm"), [["machine", "rm", "box"], ["machine", "rm", "box"]]);
   assert.ok(texts(view.render()).includes("box"));
 });
+
+const peer = (name, ip, lan) => ({ name, ip, os: "linux", online: true, tailscaleSsh: false, lan });
+
+const press = (drawn, tag, cx) => {
+  const tool = nodes(drawn).find((el) => el.tag === tag);
+  assert.ok(tool, tag);
+  tool.calls.find((call) => call[0] === "on_click")[1]({}, cx);
+};
+
+test("A Tailscale computer the network search did not see is added without a local route, and one it saw is reached there first", async () => {
+  const asked = [];
+  const { view, cx, flush } = await computersDialog({
+    hc: async (args) => {
+      asked.push([...args]);
+      return { code: 0, stdout: args[1] === "ls" ? JSON.stringify({ machines: [] }) : "{}", stderr: "" };
+    },
+    exec: async (cmd) => (cmd === "ssh" ? { code: 0, stdout: "", stderr: "" } : { code: 1, stdout: "", stderr: "missing" }),
+  });
+  view.net = {
+    state: "Running",
+    peers: [peer("away", "100.64.1.2", ["192.168.1.20"]), peer("grey", "100.64.1.3", ["192.168.1.30"])],
+  };
+  view.hosts = [];
+  view.nearby = [{ ip: "192.168.1.30", name: "grey", os: "" }];
+  press(view.render(), "computer-away-action", cx);
+  await flush();
+  press(view.render(), "computer-grey-action", cx);
+  await flush();
+  const added = (name) => asked.find((args) => args[1] === "add" && args[args.indexOf("--name") + 1] === name);
+  const away = added("away");
+  const grey = added("grey");
+  assert.equal(away.join(" ").includes("sh -c"), false);
+  const via = grey[grey.indexOf("--via") + 1];
+  assert.match(via, /^sh -c /);
+  assert.ok(via.indexOf("192.168.1.30") < via.indexOf("100.64.1.3"), via);
+});
