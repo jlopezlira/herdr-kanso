@@ -1509,7 +1509,8 @@ export default class Spaces extends RetryingView {
   }
 
   signIn(name) {
-    run("terminal.open", signInTab((this.machines ?? []).find((row) => row.name === name) ?? { name }, localName()));
+    const known = [...(this.machines ?? []), ...(this.parked ?? [])].find((row) => row.name === name) ?? { name };
+    run("terminal.open", signInTab(known, localName()));
   }
 
   retryMachine(name, cx) {

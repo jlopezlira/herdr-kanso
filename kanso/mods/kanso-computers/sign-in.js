@@ -30,7 +30,7 @@ const sshLine = (target, quote) => {
 export function routeOf(machine) {
   if (!machine) return { name: "", target: "", via: "", session: "" };
   const text = (value) => (typeof value === "string" && value !== "false" && value !== "null" ? value.trim() : "");
-  const through = machine.via === true || machine.via === 1;
+  const through = machine.via === true || machine.via === 1 || /\s/.test(text(machine.target));
   return {
     name: String(machine.name ?? ""),
     target: through ? "" : text(machine.target),
@@ -68,7 +68,10 @@ function shSetup(machine, { replace }) {
     '[ -f "$k" ] || ssh-keygen -q -t ed25519 -N "" -C kanso -f "$k" || exit',
     'pub=$(cat "$k.pub") || exit',
     `line="${pushLine("$pub")}"`,
-    `${ask} "$line" || { echo; echo ${shellQuote(refused(name))}; echo "$pub"; exit 1; }`,
+    'e=$(mktemp) || exit',
+    `${ask} "$line" 2>"$e"; s=$?; cat "$e" >&2`,
+    `[ "$s" -eq 0 ] || { grep -q "Permission denied" "$e" && { echo; echo ${shellQuote(refused(name))}; echo "$pub"; }; rm -f "$e"; exit 1; }`,
+    'rm -f "$e"',
     replace ? `${hc(["machine", "rm", name])} >/dev/null 2>&1` : "",
     `${hc(addLine("", { via: keyed, name, session: machine.session }))} || { ${replace ? `${hc(back)} >/dev/null 2>&1; ` : ""}exit 1; }`,
     `herdr-app do ${shellQuote(`kanso-spaces.retry-machine:${name}`)} >/dev/null 2>&1`,
@@ -87,8 +90,8 @@ function psSetup(machine, { replace }) {
     "New-Item -ItemType Directory -Force (Split-Path $k) | Out-Null",
     `if (-not (Test-Path $k)) { ssh-keygen -q -t ed25519 -N '""' -C kanso -f $k }`,
     `$pub = (Get-Content "$k.pub" -Raw).Trim()`,
-    `${ask} "${pushLine("$pub")}"`,
-    `if ($LASTEXITCODE -ne 0) { Write-Host ''; Write-Host ${psQuote(refused(name))}; Write-Host $pub; exit 1 }`,
+    `$said = ${ask} "${pushLine("$pub")}" 2>&1; $said | Write-Host`,
+    `if ($LASTEXITCODE -ne 0) { if ("$said" -match 'Permission denied') { Write-Host ''; Write-Host ${psQuote(refused(name))}; Write-Host $pub }; exit 1 }`,
     replace ? `${hc(["machine", "rm", name])} *> $null` : "",
     hc(addLine("", { via: keyed, name, session: machine.session })),
     `if ($LASTEXITCODE -ne 0) { ${replace ? `${hc(back)} *> $null; ` : ""}exit 1 }`,
