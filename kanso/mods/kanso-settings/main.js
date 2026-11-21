@@ -1,19 +1,15 @@
-import { localName, localService } from "./platform-host.js";
+import { localName } from "./platform-host.js";
 import { paths } from "./platform-paths.js";
-import { fileApi } from "./platform-files.js";
-import { imageApi } from "./platform-images.js";
 // Kanso settings, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import { theme, props, closeOverlay, keys, shared, setShared, readTextFile, writeTextFile, appHome, run } from "herdr";
 import { G, R, T, W, ICON, ICON_CHROME, TINT, alpha, tokens } from "./ui.js";
-import { avatar, tile } from "./ui-avatar.js";
-import { dot } from "./ui-dot.js";
 import { button, quietLink, iconButton, Armed, pressAgain } from "./ui-button.js";
 import { field, TextField } from "./ui-field.js";
 import { row } from "./ui-row.js";
 import { section } from "./ui-section.js";
-import { button as kitButton, skeletonOf, tooltip } from "./kit.js";
+import { button as kitButton, tooltip } from "./kit.js";
 import { undoLine } from "./ui-state.js";
 import { segmented } from "./ui-tab.js";
 import { toggleSwitch } from "./ui-toggle.js";
@@ -22,9 +18,9 @@ import { glyphs, keycap, familyPattern, shownChord } from "./marks.js";
 import { GROUPS, ofRow, familyChords, conflictsOf, rebound } from "./actions.js";
 import { DEFAULT_KEYS } from "./defaults.js";
 import { shippedKeymap } from "./platform-keymap.js";
-import { parseChangelog, plain } from "./changelog.js";
-import { channelOf, compareReleases, installedRelease, offerRelease, stableStay } from "./release.js";
-import { tryOrAsync, focusOn } from "./pure.js";
+import { channelOf, installedRelease, offerRelease, stableStay } from "./release.js";
+import { focusOn } from "./pure.js";
+import { whenInstalled } from "./installed.js";
 import { pagedDialog } from "./pages.js";
 
 // A shortcut's key hints: each chord, or a faint No key.
@@ -33,27 +29,14 @@ const keysOf = (chords) => (chords.length ? chords.map((k) => ({ text: shownChor
 const REPO = "https://github.com/jlopezlira/herdr-kanso";
 const UPDATE_CHOICES = [{ key: "stable", label: "Stable" }, { key: "beta", label: "Early" }];
 
-const PAGES = [{ key: "pieces", label: "Pieces" }, { key: "keys", label: "Keys" }, { key: "news", label: "What's new" }, { key: "credits", label: "Credits" }];
-const PLACES = [
-  { id: "herdr", name: "Herdr", note: "The app kansō runs in", url: "https://herdr.dev" },
-  { id: "kanso", name: "kansō", note: "Source, releases and issues", url: REPO },
-  { id: "lucide", name: "Lucide", note: "Toolbar icons (ISC)", url: "https://lucide.dev" },
-];
-const PEOPLE = [
-  { login: "jlopezlira", name: "JJ" },
-  { login: "icampana", name: "Iván Campaña" },
-  { login: "leangseu", name: "Leangseu Kim" },
-  { login: "h0ru5", name: "Johannes Hund" },
-];
-// image() reads only the app's folder: GitHub avatars are downloaded there; prints the logins that have one.
-const AVATARS_DIR = "data/kanso-settings/avatars";
-const CHANGELOG_URL = "https://raw.githubusercontent.com/jlopezlira/herdr-kanso/main/CHANGELOG.md";
+const PAGES = [{ key: "pieces", label: "Pieces" }, { key: "keys", label: "Keys" }, { key: "updates", label: "Updates" }];
+const ASKED = { mods: "pieces", news: "updates" };
 const MODIFIERS = new Set(["shift", "control", "ctrl", "alt", "option", "cmd", "platform", "function", "fn", "capslock"]);
 
 export default class Settings extends View {
   init(_props, cx) {
     this.handle = focusOn(cx);
-    const asked = props()?.page === "mods" ? "pieces" : props()?.page;
+    const asked = ASKED[props()?.page] ?? props()?.page;
     this.page = PAGES.some((p) => p.key === asked) ? asked : "pieces";
     this.capture = null; // { key, section, row, old }: the row waiting for a press
     this.conflict = null; // { chord, taken }: the press that needs a second one
@@ -61,16 +44,9 @@ export default class Settings extends View {
     this.undo = null; // the pieces before Reset all
     this.message = null;
     this.installed = null;
-    this.news = { entries: null, error: null, from: null };
-    this.avatars = null;
     this.find = new TextField({ placeholder: "Find", value: props()?.find ?? "" });
     this.find.on("change", (_e, cx) => cx.notify());
-    if (this.page === "credits") this.readAvatars(cx);
-    cx.spawn(async (cx) => {
-      try { this.installed = JSON.parse(await readTextFile(paths.join(appHome(), "mods", "kanso-chrome", "version.json")) ?? "{}").version ?? null; } catch {}
-      cx.notify();
-      await this.readNews(cx);
-    });
+    whenInstalled(cx, (version) => { this.installed = version; });
   }
 
   shown() { return installedRelease(this.installed, shared("kanso.update")?.tag); }
@@ -261,48 +237,12 @@ export default class Settings extends View {
         : quietLink("pieces-reset", "Reset all", (cx) => { this.undo = pieces(shared); setShared(STORE, {}); cx.notify(); }, c)));
   }
 
-  async readNews(cx) {
-    const dir = paths.join(appHome(), "data", "kanso-settings"), cache = paths.join(dir, "CHANGELOG.md");
-    const fresh = await tryOrAsync(async () => { const r = await fetch(CHANGELOG_URL); return r.ok ? await r.text() : null; });
-    if (fresh) await tryOrAsync(async () => { await localService(fileApi).mkdir(dir); await writeTextFile(cache, fresh, await readTextFile(cache)); });
-    const kept = fresh ? null : await tryOrAsync(() => readTextFile(cache));
-    const text = fresh || kept, from = fresh ? "github" : kept ? "cache" : null;
-    this.news = text ? { entries: parseChangelog(text), error: null, from } : { entries: [], error: "GitHub could not be reached, and nothing was kept from before.", from: null };
-    cx.notify();
-  }
-
-  readAvatars(cx) {
-    if (this.avatars) return;
-    this.avatars = new Set();
-    cx.spawn(async (cx) => {
-      const r = await tryOrAsync(() => localService(imageApi).avatars(paths.join(appHome(), AVATARS_DIR), PEOPLE.map((p) => p.login)));
-      this.avatars = new Set((r?.stdout ?? "").split("\n").filter(Boolean));
-      cx.notify();
-    });
-  }
-
-  newsPage(t, c) {
-    const { entries, error, from } = this.news;
+  updatesPage(t, c) {
     const updateState = shared("kanso.update") ?? {};
     const autoCheck = updateState.autoCheck !== false;
     const channel = channelOf(updateState.channel);
     const have = installedRelease(this.installed, updateState.tag);
     const stay = channel === "stable" ? stableStay(this.installed, updateState.tag, updateState.latest) : null;
-    const entry = (e) => {
-      const rel = have ? compareReleases(e.version, have) : null;
-      const tag = rel === 0 ? "installed" : rel > 0 ? "newer than yours" : null;
-      return v_flex().id(`news-${e.version}`).w_full().pt(G.lg).gap(G.xs)
-        .child(h_flex().w_full().gap(G.sm).items_baseline()
-          .child(div().text_size(T.title).font_medium().text_color(c.text).child(e.version))
-          .when(Boolean(e.date), (el) => el.child(div().text_size(T.body).text_color(c.dim).child(e.date)))
-          .when(Boolean(tag), (el) => el.child(div().px(6).h(18).rounded_full().bg(alpha(rel === 0 ? c.green : c.accent, TINT.soft)).flex().items_center()
-            .text_size(T.micro).font_medium().text_color(rel === 0 ? c.green : c.accent).child(tag))))
-        .children(e.sections.map((s) => v_flex().w_full().pt(G.xs).gap(G.xs)
-          .child(div().text_size(T.body).text_color(c.dim).child(s.name))
-          .children(s.items.map((item, i) => h_flex().w_full().gap(G.sm).items_start()
-            .child(dot(c, "dim", "sm").mt(G.sm))
-            .child(div().flex_1().min_w(0).text_size(T.value).line_height(1.5).text_color(c.muted).child(plain(item)))))));
-    };
     const waiting = offerRelease(updateState.latest, have, channel);
     const setChannel = (key, cx) => { setShared("kanso.update", { ...(shared("kanso.update") ?? {}), channel: key }); cx.notify(); };
     return v_flex().w_full()
@@ -322,37 +262,18 @@ export default class Settings extends View {
       .child(h_flex().w_full().pt(G.sm).items_center()
         .child(
           button("check-kanso-update", "Check for updates", () => run("kanso-tabs.check"), c)))
-      .when(entries === null, (el) => el.child(skeletonOf({ shape: "line", count: 4 })("kanso-skeleton", c)))
       .when(Boolean(waiting), (el) => el.child(h_flex().w_full().gap(G.md).items_center().p(G.md).rounded(R.card).bg(alpha(c.accent, TINT.faint))
         .child(div().flex_1().text_size(T.card).text_color(c.text).child(`kansō ${waiting} is available. You have ${have}.`))
-        .child(button("update-kanso", `Update to ${waiting}`, () => { run("kanso-tabs.update"); closeOverlay(props().overlay); }, c))))
-      .when(Boolean(error), (el) => el.child(div().text_size(T.value).text_color(c.red).child(error)))
-      .when(from === "cache", (el) => el.child(div().text_size(T.body).text_color(c.dim).child("GitHub could not be reached; this is the last copy read.")))
-      .children((entries ?? []).map(entry));
-  }
-
-  creditsPage(t, c) {
-    const link = (id, start, title, note, url) => row(`credit-${id}`, c, {
-      start, name: title, second: note, meta: url.replace(/^https:\/\//, ""), flag: "external-link", onClick: (cx) => cx.open_url(url),
-    });
-    const heading = (text) => row(`credits-${text}`, c, { name: text, heading: true }).mt(G.lg);
-    return v_flex().w_full()
-      .child(div().text_size(T.value).line_height(1.5).text_color(c.muted).child("kansō is a layout for Herdr, made in the open."))
-      .child(heading("Where it comes from"))
-      // Herdr's mark ships with the app; the ensō is Kanso's.
-      .children(PLACES.map((p) => link(p.id, [tile(c, { initial: p.name, image: p.id === "herdr" ? "frame/welcome/herdr.png" : null, size: "lg" })], p.name, p.note, p.url)))
-      .child(heading("Made by"))
-      .children(PEOPLE.map((p) => link(p.login, [avatar(c, { initial: p.name, image: this.avatars?.has(p.login) ? `${AVATARS_DIR}/${p.login}.jpg` : null, size: "lg" })],
-        p.name, `@${p.login} on GitHub`, `https://github.com/${p.login}`)));
+        .child(button("update-kanso", `Update to ${waiting}`, () => { run("kanso-tabs.update"); closeOverlay(props().overlay); }, c))));
   }
 
   render() {
     const t = theme(), c = tokens(t);
-    const page = this.page === "keys" ? this.keysPage(t, c) : this.page === "news" ? this.newsPage(t, c) : this.page === "credits" ? this.creditsPage(t, c) : this.piecesPage(t, c);
+    const page = this.page === "keys" ? this.keysPage(t, c) : this.page === "updates" ? this.updatesPage(t, c) : this.piecesPage(t, c);
     return pagedDialog({
       name: "settings", handle: this.handle, t, c, page,
       tabs: PAGES, tab: this.page,
-      onTab: (key, cx) => { this.page = key; if (key === "credits") this.readAvatars(cx); this.undo = null; this.capture = null; this.conflict = null; this.message = null; this.armed.clear(); cx.notify(); },
+      onTab: (key, cx) => { this.page = key; this.undo = null; this.capture = null; this.conflict = null; this.message = null; this.armed.clear(); cx.notify(); },
       onKey: (e, cx) => this.key(e, cx),
       head: h_flex().w_full().items_center().gap(G.md)
         .child(svg("mods/kanso-chrome/icons/settings.svg").size(ICON_CHROME).text_color(c.accent))

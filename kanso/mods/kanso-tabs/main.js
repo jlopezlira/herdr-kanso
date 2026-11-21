@@ -48,6 +48,7 @@ const PANELS = {
   insights: { mod: "kanso-spend" },
   memory: { mod: "kanso-guard" },
   sim: { mod: "kanso-sim" },
+  dojo: { mod: "kanso-dojo" },
 };
 
 function customPanels() {
@@ -73,6 +74,7 @@ const BUILTIN = [
   { id: "memory", label: "Memory", icon: "lu-memory-stick" },
   { id: "look", label: "Images", icon: "lu-image" },
   { id: "sim", label: "Simulator", icon: "lu-smartphone" },
+  { id: "dojo", label: "hjkl dōjō", icon: "lu-gamepad-2" },
 ];
 const list = (key) => { const v = shared(key); return Array.isArray(v) ? v.filter((x) => typeof x === "string") : []; };
 const simulatorRoster = () => JSON.stringify([list(ORDER), choice("panel.sim", pieces(shared)), customPanels()]);

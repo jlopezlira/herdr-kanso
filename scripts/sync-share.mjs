@@ -26,17 +26,13 @@ const COMMON = [
   { source: "kanso/mods/kanso-chrome/notices.js", copies: ["kanso/mods/kanso-tabs/notices.js", "kanso/mods/kanso-spaces/notices.js"] },
   { source: "kanso/mods/kanso-spaces/footer-model.js", copies: ["kanso/mods/kanso-chrome/footer-model.js"] },
   // Order of a beta, a release candidate and a stable tag, shared with that updater.
-  { source: "kanso/mods/kanso-chrome/release.js", copies: ["kanso/mods/kanso-tabs/release.js", "kanso/mods/kanso-settings/release.js", "kanso/mods/kanso-spaces/release.js"] },
+  { source: "kanso/mods/kanso-chrome/release.js", copies: ["kanso/mods/kanso-tabs/release.js", "kanso/mods/kanso-settings/release.js", "kanso/mods/kanso-spaces/release.js", "kanso/mods/kanso-help/release.js"] },
   // A pull request's checks, read one way in the PR panel and the header.
   { source: "kanso/mods/kanso-panel/ghchecks.js", copies: ["kanso/mods/kanso-strip/ghchecks.js"] },
   // The key a second Cmd+F or Ctrl+F uses to select the query in the open bar.
   { source: "kanso/mods/kanso-panel/find-key.js", copies: ["kanso/mods/kanso-strip/find-key.js"] },
   // Hachi, the dōjō's shiba, also on kansō help's way into the dōjō.
-  { source: "kanso/mods/kanso-dojo/mascot.js", copies: ["kanso/mods/kanso-help/mascot.js"] },
-  { source: "kanso/mods/kanso-dojo/mascot-pixels.js", copies: ["kanso/mods/kanso-help/mascot-pixels.js"] },
   // Your pet and the one to choose, in the dōjō and on kansō help's dōjō page; the choice kept in the dōjō's SQLite.
-  { source: "kanso/mods/kanso-dojo/pets.js", copies: ["kanso/mods/kanso-help/pets.js"] },
-  { source: "kanso/mods/kanso-dojo/store.js", copies: ["kanso/mods/kanso-help/store.js"] },
   // The cap a key press lights for a moment, in the dōjō and on help's keyboard page.
   { source: "kanso/mods/kanso-dojo/lit.js", copies: ["kanso/mods/kanso-help/lit.js"] },
   // The Open with popup, from the terminal's menu and from the strip's pane menu.
@@ -50,10 +46,11 @@ const COMMON = [
   { source: "kanso/mods/kanso-send/folder.js", copies: ["kanso/mods/kanso-strip/folder.js"] },
   // The one window kansō help and kansō settings share.
   { source: "kanso/mods/kanso-settings/pages.js", copies: ["kanso/mods/kanso-help/pages.js"] },
+  { source: "kanso/mods/kanso-settings/installed.js", copies: ["kanso/mods/kanso-help/installed.js"] },
   // The shell of a full-page mod view: Memory draws in it, Containers the same.
   { source: "kanso/mods/kanso-guard/page.js", copies: ["kanso/mods/kanso-containers/page.js"] },
   // One SQLite file under the app's folder: the stores of arrangements and of the dōjō (and help's copy of it).
-  { source: "kanso/mods/kanso-dojo/file-store.js", copies: ["kanso/mods/kanso-help/file-store.js", "kanso/mods/kanso-arrange/file-store.js"] },
+  { source: "kanso/mods/kanso-dojo/file-store.js", copies: ["kanso/mods/kanso-arrange/file-store.js"] },
   // Lists by keyboard (j/k, gg/G, Enter, Esc), the same in every menu and list.
   { source: "kanso/mods/kanso-menu/listkeys.js", copies: ["kanso/mods/open-with/listkeys.js", "kanso/mods/kanso-spaces/listkeys.js", "kanso/mods/kanso-arrange/listkeys.js", "kanso/mods/kanso-spend/listkeys.js"] },
   // Opening a tab from data: arrangements; Sleep reads a few of its words.

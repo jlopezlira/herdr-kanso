@@ -146,7 +146,6 @@ test("Settings and Spend keep each switch on its row and flip the same way", asy
   const { Settings } = await loadSettings(desk);
   const settings = new Settings();
   settings.init({}, { focus_handle() { return { focus() {} }; }, spawn() {}, notify() {} });
-  settings.news = { entries: [], error: null, from: null };
   settings.installed = "3.22.3";
   const pieces = settings.piecesPage(theme, theme);
   const files = find(pieces, "piece-panel.files-hide");
@@ -168,13 +167,13 @@ test("Settings and Spend keep each switch on its row and flip the same way", asy
   const none = settings.piecesPage(theme, theme);
   assert.ok(find(none, "pieces-none").calls.some((call) => call[0] === "child" && call[1] === "No piece matches."));
 
-  const news = settings.newsPage(theme, theme);
-  const auto = find(news, "auto-update-check");
+  const updates = settings.updatesPage(theme, theme);
+  const auto = find(updates, "auto-update-check");
   centered(auto);
   assert.equal(one(auto, "accessibility_label"), "Check for updates automatically");
   one(auto, "on_change")(false, { notify() {} });
   assert.equal(JSON.stringify(written.at(-1)), JSON.stringify(["kanso.update", { autoCheck: false }]));
-  assert.ok(find(news, "check-kanso-update"));
+  assert.ok(find(updates, "check-kanso-update"));
 
   const { TokenSpend } = await loadTokenSpend(desk);
   const spend = new TokenSpend();

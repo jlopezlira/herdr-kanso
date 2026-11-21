@@ -29,9 +29,10 @@ test("Arrangements lists each one as a row that opens it, with Overwrite and Del
 
 test("Credits are rows with their picture, words and address, and a press opens the address", async () => {
   const ui = tape();
-  const { Settings, tokens } = await load("kanso-settings/main.js", ["Settings", "tokens"], { ...ui.host, image: ui.host.div, theme: () => night, props: () => ({}) });
-  const settings = new Settings();
-  settings.creditsPage(night, tokens(night));
+  const host = { ...ui.host, image: ui.host.div, theme: () => night, props: () => ({}) };
+  const { tokens } = await load("kanso-help/ui.js", ["tokens"], host);
+  const { creditsPage } = await load("kanso-help/credits.js", ["creditsPage"], host);
+  creditsPage(tokens(night), new Set(["jlopezlira"]));
   assert.ok(["Where it comes from", "Herdr", "herdr.dev", "Made by", "JJ", "@jlopezlira on GitHub"].every((text) => ui.texts.includes(text)), ui.texts.join(" | "));
   const seen = [];
   ui.handlers.get("credit-herdr")({}, cx(seen));

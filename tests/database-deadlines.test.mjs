@@ -11,7 +11,7 @@ const clock = () => {
   return { waits, after(ms, fn) { waits.push({ ms, fn }); } };
 };
 
-for (const file of ["kanso-arrange/store.js", "kanso-dojo/store.js", "kanso-help/store.js", "kanso-panel/shipped-store.js", "kanso-spaces/kdb.js"]) {
+for (const file of ["kanso-arrange/store.js", "kanso-dojo/store.js", "kanso-panel/shipped-store.js", "kanso-spaces/kdb.js"]) {
   test(`${file} requires a view timer and drops a lost call`, async () => {
     const timer = clock();
     let lost = true;

@@ -2,13 +2,14 @@ import { paths } from "./platform-paths.js";
 // hjkl dōjō, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
-import { theme, props, closeOverlay, appHome, settings } from "herdr";
+import { theme, appHome, settings } from "herdr";
 import { focusOn } from "./pure.js";
 import { Lit } from "./lit.js";
 import { R, G, H, T, DOJO_CELL, TINT, CLEAR, alpha, tokens } from "./ui.js";
 import { iconButton, button as drawButton } from "./ui-button.js";
 import { button, metric, row, tooltip } from "./kit.js";
 import { caption } from "./ui-caption.js";
+import { pageFrame, pageSize } from "./ui-page.js";
 import { Store } from "./store.js";
 import { Share } from "./share.js";
 import { dojoShare } from "./card.js";
@@ -106,8 +107,8 @@ export default class Dojo extends View {
     cx.stop_propagation();
     if (this.choosing) { if (k === "escape") { this.choosing = false; cx.notify(); } return; }
     if (k === "escape") {
-      if (this.pending) { this.pending = ""; cx.notify(); return; }
-      closeOverlay(props()?.overlay); return;
+      if (this.pending) { this.pending = ""; cx.notify(); }
+      return;
     }
     const ch = e.key_char ?? (m.shift && k.length === 1 ? k.toUpperCase() : k);
     if (["left", "right", "up", "down"].includes(k)) { this.say = "The arrows don't count in the dōjō: h j k l."; this.missAt = Date.now(); cx.notify(); return; }
@@ -188,11 +189,12 @@ export default class Dojo extends View {
     return { here: x === this.at.x && y === this.at.y, goal: x === this.target.x && y === this.target.y };
   }
 
-  grid(c, ink) {
+  grid(c, ink, room) {
     const { w, h } = this.world;
+    const cell = room ? Math.max(1, Math.min(DOJO_CELL, Math.floor((room - (w - 1) * 3) / w))) : DOJO_CELL;
     return v_flex().gap(3).children(Array.from({ length: h }, (_, y) => h_flex().gap(3).children(Array.from({ length: w }, (_, x) => {
       const { here, goal } = this.cellMark(x, y);
-      return div().size(DOJO_CELL).rounded(R.sm).bg(here ? c.accent : alpha(c.text, TINT.cell)).when(goal && !here, (el) => el.border_2().border_color(c.accent));
+      return div().size(cell).flex_none().rounded(R.sm).bg(here ? c.accent : alpha(c.text, TINT.cell)).when(goal && !here, (el) => el.border_2().border_color(c.accent));
     }))));
   }
 
@@ -200,7 +202,7 @@ export default class Dojo extends View {
     const mono = settings()?.font_family ?? "JetBrains Mono";
     return v_flex().gap(G.xs).children(this.world.lines.map((line, y) => h_flex().h(H.icon).items_center().children([...(line.length ? line : " ")].map((ch, x) => {
       const { goal, here } = this.cellMark(x, y);
-      return div().w(12).h(24).flex().items_center().justify_center().rounded(R.sm).font_family(mono).text_size(T.title)
+      return div().w(12).h(24).flex_none().flex().items_center().justify_center().rounded(R.sm).font_family(mono).text_size(T.title)
         .bg(here ? c.accent : CLEAR).text_color(here ? ink : goal ? c.text : c.muted)
         .when(goal && !here, (el) => el.border_2().border_color(c.accent).bg(alpha(c.accent, TINT.goal)))
         .child(ch === " " ? " " : ch);
@@ -261,8 +263,6 @@ export default class Dojo extends View {
     // A press here never reaches the board behind it.
     const press = (id, text, act, o = { kind: "tonal" }) => drawButton(id, text, (cx) => { act(); cx.notify(); }, c, o)
       .on_mouse_down("left", (_e, cx) => cx.stop_propagation());
-    // A new element each place it shows: an element can have one parent, and the result shows it beside the header's.
-    const leave = (id) => press(id, "Leave the dōjō", () => closeOverlay(props()?.overlay));
     const o = this.over;
     const result = o ? v_flex().gap(G.lg).p(G.xl).rounded(12).bg(alpha(c.accent, TINT.card)).border_1().border_color(alpha(c.accent, TINT.frame))
       .child(div().text_size(T.value).text_color(c.muted).child(o.kept ? `Level ${lv.n}: ${lv.name}, done` : "Round stopped"))
@@ -270,42 +270,44 @@ export default class Dojo extends View {
       .when(this.record, (el) => el.child(div().text_size(T.title).font_semibold().text_color(c.text).child("A new best for this level.")))
       .child(h_flex().gap(G.md).flex_wrap()
         .child(press("dojo-again", "Play again  ↩", () => this.again(), { kind: "solid" }))
-        .when(lv.n < LEVELS.length, (el) => el.child(press("dojo-next", `Next level: ${LEVELS[lv.n].name}  n`, () => this.setLevel(lv.n + 1))))
-        .child(leave("dojo-leave-result"))) : null;
-    return v_flex().id("kanso-dojo").track_focus(this.handle).size_full().min_h(0).bg(t.popover).text_color(t.foreground)
+        .when(lv.n < LEVELS.length, (el) => el.child(press("dojo-next", `Next level: ${LEVELS[lv.n].name}  n`, () => this.setLevel(lv.n + 1))))) : null;
+    const narrow = (this.width || 960) < 560;
+    const pet = this.petView(t, c, now);
+    const stats = v_flex().gap(G.lg)
+      .child(h_flex().gap(G.lg)
+        .child(stat("Score", r ? r.score : this.over ? this.over.score : 0, true))
+        .child(stat("Time", elapsed)))
+      .child(h_flex().gap(G.lg)
+        .child(stat("Streak", r ? r.streak : 0))
+        .child(stat("Best", best ?? "–")));
+    const levels = v_flex().gap(G.hair).children(LEVELS.map(levelRow));
+    const game = this.choosing ? this.chooser(t, c, press) : v_flex().flex_1().min_w(0).gap(G.lg)
+      .when(this.share.open && this.totals.rounds > 0, (el) => el.child(this.share.row(c, async () => ({ ...dojoShare(this.totals, Date.now(), await this.pal.figure(theme(), this.share.workDir).catch(() => null)), name: "dojo", title: "hjkl dōjō" }),
+        "Your best round, targets, days practiced and levels: nothing else. The post opens with the image in it.", G.sm)))
+      .child(div().text_size(T.value).line_height(1.5).text_color(c.muted).child(lv.tip))
+      .when(Boolean(result), (el) => el.child(result))
+      .when(!result, (el) => el.child(div().id("dojo-board").w_full().min_w(0).overflow_hidden().p(14).rounded(12).bg(alpha(c.text, TINT.board)).border_1().border_color(c.border)
+        .on_size_change((size, cx) => { const room = Math.floor(size.width / (Number(settings()?.zoom) || 1)) - 2 * 14 - 2; if (room !== this.room) { this.room = room; cx.notify(); } })
+        .child(lv.world === "grid" ? this.grid(c, ink, narrow ? this.room : null) : this.text(c, ink))))
+      .child(h_flex().gap(6).items_center()
+        .children(Array.from({ length: TARGETS }, (_, i) => div().h(6).flex_1().rounded_full().bg(i < done ? c.accent : alpha(c.text, TINT.pill))))
+        .child(div().pl(G.sm).text_size(T.body).text_color(c.muted).child(`${done} / ${TARGETS}`)))
+      .child(h_flex().min_h(40).px(14).py(10).rounded(R.card).bg(alpha(c.accent, TINT.pill)).items_center()
+        .child(div().flex_1().min_w(0).text_size(T.card).line_height(1.45).text_color(c.text).child(this.line())))
+      .child(keysRow);
+    const body = narrow
+      ? v_flex().w_full().min_w(0).gap(G.xl).p(G.lg).child(h_flex().gap(G.xl).items_end().flex_wrap().child(pet).child(stats)).child(game).child(levels)
+      : h_flex().items_start().gap(G.xl).p(20).child(v_flex().w(196).flex_none().gap(G.lg).child(pet).child(stats).child(levels)).child(game);
+    return pageFrame(c).id("kanso-dojo").track_focus(this.handle).on_size_change(pageSize.call(this))
       .on_key_down((e, cx) => this.key(e, cx))
-      .child(h_flex().h(44).px(G.lg).gap(G.md).items_center().border_b_1().border_color(c.border)
+      .on_mouse_up("left", () => this.handle.focus())
+      .child(h_flex().h(44).flex_none().px(G.lg).gap(G.md).items_center().border_b_1().border_color(c.border)
         .child(svg("mods/kanso-chrome/icons/enso.svg").size(16).text_color(c.accent))
         .child(div().text_size(T.card).font_semibold().child("hjkl dōjō"))
-        .child(div().text_size(T.body).text_color(c.dim).child(`level ${lv.n} · ${lv.name}`))
-        .child(div().flex_1())
+        .child(div().flex_1().min_w(0).truncate().text_size(T.body).text_color(c.dim).child(`level ${lv.n} · ${lv.name}`))
         .when(this.totals.rounds > 0, (el) => el.child(div().on_mouse_down("left", (_e, cx) => cx.stop_propagation())
           .child(iconButton("dojo-share", "share", "Share", (cx) => this.share.toggle(cx), c, { active: this.share.open }))))
-        .when(Boolean(r), (el) => el.child(press("dojo-end", "End round", () => this.endRound(null, false))))
-        .child(leave("dojo-leave")))
-      .child(h_flex().flex_1().min_h(0).items_start().gap(G.xl).p(20)
-        .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
-        .child(v_flex().w(196).flex_none().gap(G.lg)
-          .child(this.petView(t, c, now))
-          .child(h_flex().gap(G.lg)
-            .child(stat("Score", r ? r.score : this.over ? this.over.score : 0, true))
-            .child(stat("Time", elapsed)))
-          .child(h_flex().gap(G.lg)
-            .child(stat("Streak", r ? r.streak : 0))
-            .child(stat("Best", best ?? "–")))
-          .child(v_flex().gap(G.hair).children(LEVELS.map(levelRow))))
-        .child(this.choosing ? this.chooser(t, c, press) : v_flex().flex_1().min_w(0).gap(G.lg)
-          .when(this.share.open && this.totals.rounds > 0, (el) => el.child(this.share.row(c, async () => ({ ...dojoShare(this.totals, Date.now(), await this.pal.figure(theme(), this.share.workDir).catch(() => null)), name: "dojo", title: "hjkl dōjō" }),
-            "Your best round, targets, days practiced and levels: nothing else. The post opens with the image in it.", G.sm)))
-          .child(div().text_size(T.value).line_height(1.5).text_color(c.muted).child(lv.tip))
-          .when(Boolean(result), (el) => el.child(result))
-          .when(!result, (el) => el.child(div().p(14).rounded(12).bg(alpha(c.text, TINT.board)).border_1().border_color(c.border)
-            .child(lv.world === "grid" ? this.grid(c, ink) : this.text(c, ink))))
-          .child(h_flex().gap(6).items_center()
-            .children(Array.from({ length: TARGETS }, (_, i) => div().h(6).flex_1().rounded_full().bg(i < done ? c.accent : alpha(c.text, TINT.pill))))
-            .child(div().pl(G.sm).text_size(T.body).text_color(c.muted).child(`${done} / ${TARGETS}`)))
-          .child(h_flex().min_h(40).px(14).py(10).rounded(R.card).bg(alpha(c.accent, TINT.pill)).items_center()
-            .child(div().text_size(T.card).line_height(1.45).text_color(c.text).child(this.line())))
-          .child(keysRow)));
+        .when(Boolean(r), (el) => el.child(press("dojo-end", "End round", () => this.endRound(null, false)))))
+      .child(div().id("dojo-body").flex_1().min_h(0).overflow_y_scrollbar().on_mouse_down("left", (_e, cx) => cx.stop_propagation()).child(body));
   }
 }
