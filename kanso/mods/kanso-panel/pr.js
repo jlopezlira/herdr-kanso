@@ -1,6 +1,6 @@
 import { location, key, tilde, said } from "./lib.js";
 import { pageSize, pageBones, listBones } from "./ui-page.js";
-import { drawHero, drawEmpty, footOf, listedRow, prRow, heroPieces, outcomeLine, shownOutcome } from "./pr-view.js";
+import { drawHero, drawEmpty, footOf, listedRow, prRow, heroPieces, outcomeFor, outcomeLine, shownOutcome } from "./pr-view.js";
 import { localService } from "./platform-host.js";
 import { openApi } from "./platform-open.js";
 // Kanso's pull request panel, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
@@ -320,7 +320,7 @@ export class PullRequest {
   back(cx) { this.page = null; cx.notify(); }
 
   logToEnd() {
-    const id = this.page?.kind === "log" && this.pageShown() && this.session.fullLog?.id === this.page.id && this.session.fullLog.text != null ? this.page.id : null;
+    const id = this.screen() === "log" && this.session.logs?.[this.page.id]?.text != null ? this.page.id : null;
     if (!id || this.logEnd === id) return;
     this.logEnd = id;
     this.scroll.scroll_to_bottom();
@@ -775,15 +775,14 @@ export class PullRequest {
     ]);
   }
 
-  boardShown() { return !this.pageShown() && this.session.inboxOn && (this.session.inboxOpen || this.session.outside); }
-
   typing() { return [this.search, this.reviewText, this.replyText, this.newTitle, this.newBody].some((text) => text?.focused); }
 
   key(e, cx) {
     const m = e.modifiers ?? {};
     if (this.typing() || m.platform || m.control || m.alt) return;
     const k = String(e.key ?? "").toLowerCase();
-    if (this.boardShown() ? this.boardKey(k, cx) : this.pageKey(k, cx)) cx.stop_propagation();
+    const keys = { board: () => this.boardKey(k, cx), pr: () => this.pageKey(k, cx), log: () => this.pageKey(k, cx), new: () => this.pageKey(k, cx) }[this.screen()];
+    if (keys?.()) cx.stop_propagation();
   }
 
   boardKey(k, cx) {
@@ -835,7 +834,9 @@ export class PullRequest {
     const mine = new Set((this.session.inbox?.logins ?? [this.session.inbox?.login]).filter(Boolean).map((name) => name.toLowerCase()));
     const itemRow = (id, item) => {
       const meta = [`#${item.number}`, item.author && mine.has(String(item.author).toLowerCase()) ? "you" : item.author, item.updatedAt ? ago(item.updatedAt) : "", isNew(item) ? "new" : ""].filter(Boolean).join(" · ");
-      return prRow(id, c, item, { meta, state: this.inboxState(item), focus: this.cursor === item.url, onClick: (cx) => this.openInboxItem(item, cx) });
+      const drawn = prRow(id, c, item, { meta, state: this.inboxState(item), focus: this.cursor === item.url, onClick: (cx) => this.openInboxItem(item, cx) });
+      const acted = outcomeFor(this, item.url);
+      return acted ? v_flex().w_full().gap(G.xs).child(drawn).child(outcomeLine(this, c, acted, `${id}-act`)) : drawn;
     };
     const pulls = (id, title, items) => (items.length ? v_flex().w_full().gap(G.hair)
       .child(section(c, title, String(items.length)))
@@ -876,10 +877,12 @@ export class PullRequest {
   }
 
   logPage(c) {
-    const pg = this.page, log = this.session.fullLog?.id === pg.id ? this.session.fullLog : null;
+    const pg = this.page, log = this.session.logs?.[pg.id] ?? null;
     const lines = logRows(log?.text).map((row) => row.line);
-    const tail = lines.slice(-MAX_DIFF).map((line) => line.slice(0, MAX_DIFF));
-    const again = (cx) => { this.session.fullLog = null; this.session.readFullLog(pg.id, cx); cx.notify(); };
+    const count = pg.lines ?? MAX_DIFF;
+    const tail = lines.slice(-count);
+    const earlier = (cx) => { this.page = { ...pg, lines: count + MAX_DIFF }; cx.notify(); };
+    const again = (cx) => { this.session.readFullLog(pg.id, cx); cx.notify(); };
     const shown = !log || (log.text == null && !log.error) ? this.diffBones(c)
       : log.error ? failureBlock({ text: "Couldn’t read the log", source: log.error, fix: "Refresh" })("pr-log-failed", c, { onClick: again })
         : code({ text: tail.join("\n") || "GitHub sent an empty log.", kind: "log" })("pr-log", c);
@@ -890,8 +893,10 @@ export class PullRequest {
         .when(this.writer(), (el) => el.child(button("pr-log-rerun", this.session.busy === "rerun" ? "Re-running…" : "Re-run", (cx) => this.session.rerun([pg.id], cx), c, { kind: "tonal", small: true, disabled: Boolean(this.session.busy) })))
         .when(Boolean(pg.url), (el) => el.child(quietLink("pr-log-web", "Open on GitHub", () => openUrl(pg.url), c))))
       .when(Boolean(acted), (el) => el.child(outcomeLine(this, c, acted, "pr-log-act")))
-      .child(shown)
-      .when(lines.length > MAX_DIFF, (el) => el.child(div().text_size(T.body).text_color(c.dim).child(`The last ${MAX_DIFF} lines; the rest is on GitHub.`)));
+      .when(lines.length > count, (el) => el.child(h_flex().gap(G.md).items_center()
+        .child(div().text_size(T.body).text_color(c.dim).child(`The last ${tail.length} of ${lines.length} lines`))
+        .child(quietLink("pr-log-earlier", `Show ${Math.min(MAX_DIFF, lines.length - count)} earlier`, earlier, c))))
+      .child(shown);
   }
 
   newPage(c) {
@@ -932,12 +937,23 @@ export class PullRequest {
       .child(h_flex().w_full().justify_between().text_size(T.micro).text_color(c.dim).child("today").child("3 weeks"));
   }
 
-  body(c, narrow) {
-    if (this.pageShown()) return this.page.kind === "log" ? this.logPage(c) : this.newPage(c);
-    if (this.session.inboxOn && (this.session.inboxOpen || this.session.outside)) return this.inboxPage(c);
-    if (this.session.listing) return this.listPage(c);
+  screen() {
+    if (this.pageShown()) return this.page.kind;
+    if (this.session.inboxOn && this.session.inboxOpen) return "board";
     const kind = this.sceneKind();
-    if (kind === "pr") return this.hero(c);
+    if (kind === "pr" && !this.session.listing) return "pr";
+    if (this.session.inboxOn && this.session.outside) return "board";
+    if (this.session.listing) return "list";
+    return kind;
+  }
+
+  body(c, narrow) {
+    const screen = this.screen();
+    if (screen === "log") return this.logPage(c);
+    if (screen === "new") return this.newPage(c);
+    if (screen === "board") return this.inboxPage(c);
+    if (screen === "list") return this.listPage(c);
+    const kind = screen;
     if (kind === "loading") return listBones(c);
     if (kind === "wait") return this.waiting(c, this.session.wait);
     if (kind === "error") return failureBlock({ text: this.session.error.title, source: this.session.error.detail, fix: "Refresh" })("pr-failed", c, { onClick: (cx) => this.again(cx) });
@@ -946,7 +962,7 @@ export class PullRequest {
 
   nodes(c, narrow) {
     const header = ["header", this.header(c, narrow).id("header")];
-    if (this.pageShown() || (this.session.inboxOn && this.session.inboxOpen) || this.session.listing || this.sceneKind() !== "pr") return [header, ["body", this.body(c, narrow)]];
+    if (this.screen() !== "pr") return [header, ["body", this.body(c, narrow)]];
     return [header, ...heroPieces(this, c)];
   }
 
@@ -1005,7 +1021,7 @@ export class PullRequest {
     const narrow = (this.width || 368) < 560;
     const nodes = this.nodes(c, narrow);
     this.logToEnd();
-    if (this.session.pr && !this.pageShown() && !(this.session.inboxOn && this.session.inboxOpen) && !this.session.listing && this.sceneKind() === "pr") this.land(nodes.map(([id]) => id));
+    if (this.screen() === "pr") this.land(nodes.map(([id]) => id));
     const padX = narrow ? G.lg : 32;
     const padY = narrow ? G.lg : 28;
     return v_flex().id("kanso-pr").size_full().min_h(0).bg(c.background).text_color(c.text).overflow_y_scrollbar()

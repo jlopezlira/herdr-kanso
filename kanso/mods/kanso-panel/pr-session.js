@@ -9,7 +9,7 @@ import { pieces } from "./pieces.js";
 import { fetchDue, parseRemote } from "./pr-remote.js";
 import { q } from "./kdb.js";
 import { createdId, ready, replyArgs, reviewArgs } from "./pr-review.js";
-import { ACTS, canUndo, doneOf, pendingOf, refusedOf, undoCalls, undoneOf, undoRefusedOf } from "./pr-act.js";
+import { ACTS, canUndo, doneOf, partlyOf, pendingOf, refusedOf, undoCalls, undoneOf, undoRefusedOf } from "./pr-act.js";
 import { serviceFor } from "./platform-host.js";
 import { repositoryApi } from "./platform-repositories.js";
 import { folderScope, scopeRepos } from "./pr-board.js";
@@ -32,6 +32,7 @@ const changed = (pr, kind, name, on, candidates) => ({
 }[kind]());
 
 const FINISHED = { Push: "Pushed", Pull: "Pulled", Update: "Branch updated", Draft: "Returned to draft", Reopen: "Reopened" };
+const LOGS_KEPT = 3;
 const NO_PR = /no (open )?pull requests? found|could not determine current branch/i;
 
 export function ghMissing(r) {
@@ -79,7 +80,7 @@ const blank = () => ({
   inboxOn: false, inbox: null, inboxOpen: null, inboxForce: false, boardOpen: null, scope: null, signedOut: false, scoped: null, scopeReady: () => {},
   stale: null, wait: null, freshAt: null, loadedAt: undefined,
   logFor: null, failedLog: null, logParsed: null, logParsedFor: null, sendShown: false, sendFor: null,
-  queued: false, asking: false, loading: false, busy: null, pending: null, flights: [], acted: null, actedFor: null, created: null, fullLog: null,
+  queued: false, asking: false, loading: false, busy: null, pending: null, flights: [], acted: null, actedFor: null, created: null, logs: null,
 });
 
 export class FolderSession {
@@ -440,13 +441,14 @@ export class FolderSession {
   }
 
   readFullLog(id, cx) {
-    if (!id || (this.fullLog?.id === id && !this.fullLog.error)) return;
-    if (this.logFor === id && this.failedLog != null) { this.fullLog = { id, text: this.failedLog }; return; }
-    this.fullLog = { id, text: null };
-    this.flight(cx, "log", async (task) => {
+    const have = this.logs?.[id];
+    if (!id || (have && !have.error)) return;
+    const keep = (entry) => { this.logs = Object.fromEntries([...Object.entries(this.logs ?? {}).filter(([key]) => key !== id), [id, entry]].slice(-LOGS_KEPT)); };
+    if (this.logFor === id && this.failedLog != null) { keep({ text: this.failedLog }); return; }
+    keep({ text: null });
+    this.flight(cx, `log:${id}`, async (task) => {
       const r = await this.gh(task, ["run", "view", id, "--log-failed", ...repoFlag(this.pr?.url)]).catch((e) => ({ code: 1, stderr: String(e?.message ?? e) }));
-      if (this.fullLog?.id !== id) return;
-      this.fullLog = r?.code === 0 ? { id, text: r.stdout ?? "" } : { id, text: null, error: String(r?.stderr || r?.stdout || "").split("\n")[0] || "GitHub did not send the log." };
+      keep(r?.code === 0 ? { text: r.stdout ?? "" } : { text: null, error: String(r?.stderr || r?.stdout || "").split("\n")[0] || "GitHub did not send the log." });
     });
   }
 
@@ -519,7 +521,7 @@ export class FolderSession {
     if (this.perform(label, cx, words, async (task) => commandOk(await run(task, args)), (next) => this.reread(next))) this.panel.armed.clear();
   }
 
-  actOn(kind, cx, work, { pull = this.pr, at = null, idOf = () => null, after = () => {}, loud = false } = {}) {
+  actOn(kind, cx, work, { pull = this.pr, at = null, idOf = () => null, partialOf = () => null, after = () => {}, loud = false } = {}) {
     if (!pull?.url || this.busy) return false;
     const { folder } = this.target();
     const target = { pr: pull, folder, place: `#${pull.number} in ${folder}` };
@@ -529,7 +531,7 @@ export class FolderSession {
       const said = await work(task).then(commandOk).then((r) => ({ r }), (e) => ({ e }));
       const error = said.e ? String(said.e?.message ?? said.e) : null;
       this.busy = null;
-      this.acted = said.r ? doneOf(kind, idOf(said.r), at) : refusedOf(kind, error, at);
+      this.acted = said.r ? partlyOf(doneOf(kind, idOf(said.r), at), partialOf(said.r)) : refusedOf(kind, error, at);
       if (said.r) after(said.r);
       this.outcome(target, said.r ? { title: ACTS[kind].done, body: pull.title, level: "success" } : { title: ACTS[kind].refused, body: error, level: "error" }, { quiet: !(loud && said.r) });
       this.reread(task);
@@ -571,7 +573,14 @@ export class FolderSession {
     const ids = [...new Set(runs.filter(Boolean).map(String))];
     const flag = repoFlag(this.pr?.url);
     if (!ids.length || !flag.length) return;
-    this.actOn("rerun", cx, (task) => ids.reduce((prev, id) => prev.then(() => this.gh(task, ["run", "rerun", id, "--failed", ...flag]).then(commandOk)), Promise.resolve()), { idOf: () => ids });
+    const each = (task) => Promise.all(ids.map((id) => this.gh(task, ["run", "rerun", id, "--failed", ...flag]).then(commandOk).then(() => ({ id }), (e) => ({ id, error: String(e?.message ?? e) }))));
+    this.actOn("rerun", cx, async (task) => {
+      const runs = await each(task);
+      const started = runs.filter((run) => !run.error).map((run) => run.id);
+      const refused = runs.filter((run) => run.error);
+      if (!started.length) throw new Error(refused[0].error);
+      return { code: 0, stdout: "", started, refused: refused.map((run) => `${run.id}: ${run.error.split("\n")[0]}`).join("\n") || null };
+    }, { idOf: (r) => r.started, partialOf: (r) => r.refused });
   }
 
   review(kind, body, cx, pull = this.pr) {

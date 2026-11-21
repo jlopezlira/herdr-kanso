@@ -27,7 +27,7 @@ const rerun = { id: "pr-rerun", label: "Re-run", target: "rerun", armed: false, 
 const signIn = { id: "pr-sign-in", label: "Sign in", target: "sign-in", armed: false, write: false };
 const reopen = { id: "pr-reopen", label: "Reopen", target: "reopen", armed: false, write: true, busy: "Reopen", busyLabel: "Reopening…" };
 
-const close = { id: "pr-close", label: "Close", verb: "close", target: "close", armed: true, write: true, busy: "close", busyLabel: "Closing…" };
+const close = { id: "pr-close", label: "Close", target: "close", armed: false, write: true, busy: "close", busyLabel: "Closing…" };
 const draftBack = { id: "pr-draft", label: "Back to draft", target: "draft", armed: false, write: true, busy: "Draft", busyLabel: "Returning…" };
 
 const link = (id, label, target, url) => ({ id, label, target, url, armed: false, write: false });

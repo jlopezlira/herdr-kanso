@@ -187,16 +187,20 @@ export function outcomeLine(panel, c, outcome, id = "pr-act") {
   const line = h_flex().w_full().gap(G.sm).items_center().text_size(T.body)
     .child(div().flex_1().min_w(0).truncate().text_color(outcome.state === "pending" ? c.dim : c.text).child(saidOf(outcome)))
     .when(canUndo(outcome), (el) => el.child(quietLink(`${id}-undo`, panel.session.busy === "undo" ? "Undoing…" : "Undo", (cx) => panel.session.undo(cx), c, { disabled: Boolean(panel.session.busy) })));
-  return outcome.undoError
-    ? v_flex().w_full().gap(G.sm).child(line).child(failureBlock({ text: "Undo failed", source: outcome.undoError })(`${id}-undo-refused`, c))
-    : line;
+  const more = [
+    outcome.partial ? failureBlock({ text: refusedTitle(outcome), source: outcome.partial })(`${id}-partial`, c) : null,
+    outcome.undoError ? failureBlock({ text: "Undo failed", source: outcome.undoError })(`${id}-undo-refused`, c) : null,
+  ].filter(Boolean);
+  return more.length ? v_flex().w_full().gap(G.sm).child(line).children(more) : line;
 }
 
-export function shownOutcome(panel, at = null) {
+export function outcomeFor(panel, url, at = null) {
   const outcome = panel.session.acted;
-  if (!outcome || panel.session.actedFor !== panel.session.pr?.url) return null;
+  if (!outcome || !url || panel.session.actedFor !== url) return null;
   return (outcome.at ?? null) === at ? outcome : null;
 }
+
+export const shownOutcome = (panel, at = null) => outcomeFor(panel, panel.session.pr?.url, at);
 
 function reviewPiece(panel, c) {
   const pr = panel.session.pr;

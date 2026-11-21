@@ -26,7 +26,8 @@ export const undoCalls = (outcome, pull) => UNDO_OF[outcome.kind]?.(outcome, pul
 export const pendingOf = (kind, at = null) => ({ kind, state: "pending", at });
 export const doneOf = (kind, id, at = null) => ({ kind, state: "done", id, at });
 export const refusedOf = (kind, error, at = null) => ({ kind, state: "refused", error, at });
-export const undoneOf = ({ undoError, ...outcome }) => ({ ...outcome, state: "undone" });
+export const partlyOf = (outcome, partial) => (partial ? { ...outcome, partial } : outcome);
+export const undoneOf = ({ undoError, partial, ...outcome }) => ({ ...outcome, state: "undone" });
 export const undoRefusedOf = (outcome, error) => ({ ...outcome, undoError: error });
 export const canUndo = (outcome) => outcome?.state === "done" && outcome.id != null && Boolean(UNDO_OF[outcome.kind]);
 
