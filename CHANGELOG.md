@@ -24,6 +24,10 @@ the branch's rules.
 
 ## [Unreleased]
 
+### Added
+
+- Approve, request changes and comment on a pull request from the Pull requests panel, with Undo. (#400)
+
 ### Changed
 
 - The collapsed sidebar on Projects no longer shows the view switch. On Status and Threads the view button and its menu stay, and the view keys still change view from any rail. (#232)

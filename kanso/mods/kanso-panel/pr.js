@@ -102,6 +102,8 @@ export class PullRequest {
     this.query = "";
     this.search = new TextField({ placeholder: "Search" });
     this.search.on("change", (_e, cx) => { this.query = this.search.value(); cx.notify(); });
+    this.reviewText = new TextField({ placeholder: "Leave a review" }, { multiline: true });
+    this.reviewText.on("change", (_e, cx) => cx.notify());
     this.section = props.section ?? null;
     this.check = props.check ?? null;
     this.asked = props.at ?? null;
@@ -238,6 +240,8 @@ export class PullRequest {
   }
 
   mergeNow(cx) { this.session.mergeNow(cx); }
+
+  reviewSent() { this.reviewText.set_value(""); }
 
   createPr(cx) { this.session.createPr(cx); }
 
