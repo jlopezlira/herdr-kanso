@@ -55,11 +55,12 @@ export function firstLines(text, n) {
 }
 
 const STAMP = /^\d{4}-\d{2}-\d{2}T[\d:.]+Z\s?/;
+const ANSI = new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*m`, "g");
 
 const logRow = (row) => {
   const parts = row.split("\t");
   const whole = parts.length >= 3;
-  return { job: whole ? parts[0] : "", step: whole ? parts[1] : "", line: (whole ? parts.slice(2).join("\t") : row).replace(STAMP, "") };
+  return { job: whole ? parts[0] : "", step: whole ? parts[1] : "", line: (whole ? parts.slice(2).join("\t") : row).replace(STAMP, "").replace(ANSI, "") };
 };
 
 export const logRows = (text) => String(text ?? "").split("\n").filter((line) => line.length > 0).map(logRow);

@@ -36,6 +36,7 @@ const ICON = "mods/kanso-chrome/icons/";
 const INBOX_TONES = { Draft: "dim", "Changes requested": "blocked", "Review required": "working", Approved: "done" };
 const MAX_DIFF = 400;
 const FILE_ROWS = 8;
+const LOG_END = 2;
 
 // A pull request's body as Markdown to show: no template comments, no Windows line ends.
 export function cleanBody(text) {
@@ -323,7 +324,7 @@ export class PullRequest {
     const id = this.screen() === "log" && this.session.logs?.[this.page.id]?.text != null ? this.page.id : null;
     if (!id || this.logEnd === id) return;
     this.logEnd = id;
-    this.scroll.scroll_to_bottom();
+    this.scroll.scroll_to_item(LOG_END);
   }
 
   writer() { return isWriter(this.session.permission); }
@@ -876,9 +877,14 @@ export class PullRequest {
       .child(div().text_size(T.card).font_medium().text_color(c.text).child(title));
   }
 
+  logLines(text) {
+    if (this.linesOf?.text !== text) this.linesOf = { text, lines: logRows(text).map((row) => row.line) };
+    return this.linesOf.lines;
+  }
+
   logPage(c) {
     const pg = this.page, log = this.session.logs?.[pg.id] ?? null;
-    const lines = logRows(log?.text).map((row) => row.line);
+    const lines = this.logLines(log?.text);
     const count = pg.lines ?? MAX_DIFF;
     const tail = lines.slice(-count);
     const earlier = (cx) => { this.page = { ...pg, lines: count + MAX_DIFF }; cx.notify(); };
@@ -962,6 +968,7 @@ export class PullRequest {
 
   nodes(c, narrow) {
     const header = ["header", this.header(c, narrow).id("header")];
+    if (this.screen() === "log") return [header, ["body", this.body(c, narrow)], ["end", div().id("pr-log-end")]];
     if (this.screen() !== "pr") return [header, ["body", this.body(c, narrow)]];
     return [header, ...heroPieces(this, c)];
   }
