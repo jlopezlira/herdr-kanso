@@ -27,7 +27,6 @@ const failed = (error) => ({ code: 1, stdout: "", stderr: String(error?.message 
 const OS_WORD = { macos: "Mac", linux: "Linux", windows: "Windows", freebsd: "FreeBSD" };
 const osWord = (os) => OS_WORD[String(os).toLowerCase()] ?? os;
 const osIcon = (os) => (/^(macos|windows)$/i.test(os) ? "monitor" : "server");
-const NETWORK = "computers.network";
 const SIDEBAR_REFRESH = "kanso-spaces.retry-machine:";
 
 async function findTailscale(platform) {
@@ -60,7 +59,7 @@ export default class Computers extends View {
     this.net = undefined;
     this.hosts = null;
     this.added = [];
-    this.nearby = runs(NETWORK, pieces(shared)) ? undefined : null;
+    this.nearby = runs("computers.network", pieces(shared)) ? undefined : null;
     this.dropped = {};
     this.explainer = undefined;
     this.jobs = {};
@@ -70,15 +69,12 @@ export default class Computers extends View {
     this.typed.on("change", (_e, cx) => cx.notify());
     this.typed.on("submit", (_e, cx) => this.addTyped(cx));
     cx.spawn(async (cx) => {
-      const [found, hosts] = await Promise.all([findTailscale(this.platform), readHosts(this.platform)]);
+      const [found, hosts, explainer] = await Promise.all([findTailscale(this.platform), readHosts(this.platform), findExplainer()]);
+      this.explainer = explainer;
       this.tailscale = found.path;
       this.net = found.net;
       this.hosts = hosts;
       await this.refresh();
-      cx.notify();
-    });
-    cx.spawn(async (cx) => {
-      this.explainer = await findExplainer();
       cx.notify();
     });
     if (this.nearby === undefined) afterMount(cx, (cx) => cx.spawn(async (cx) => {

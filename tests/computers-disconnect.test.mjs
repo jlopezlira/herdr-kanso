@@ -1,11 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { gpuiHost, load, nodes, texts } from "./helpers.mjs";
-
-const THEME = {
-  foreground: "#d8d4cb", background: "#1b1b19", muted: "#949086", dim: "#6b6862", border: "#33332f",
-  popover: "#222220", hover: "#232321", selected: "#2b2b28", accent: "#da627d",
-};
+import { computersDialog, nodes, texts } from "./helpers.mjs";
 
 const MACHINE = { name: "box", target: "ada@10.0.0.9", via: "ssh -J bastion" };
 
@@ -13,11 +8,7 @@ const open = async ({ failRm = false } = {}) => {
   const asked = [];
   const ran = [];
   let listed = [{ ...MACHINE }];
-  const { Computers } = await load("kanso-computers/main.js", ["Computers"], {
-    ...gpuiHost(),
-    theme: () => THEME,
-    props: () => ({ overlay: "computers-overlay" }),
-    closeOverlay: () => {},
+  const { view, cx, flush } = await computersDialog({
     hc: async (args) => {
       asked.push([...args]);
       if (args[1] === "ls") return { code: 0, stdout: JSON.stringify({ machines: listed }), stderr: "" };
@@ -37,36 +28,14 @@ const open = async ({ failRm = false } = {}) => {
       }
       return { code: 1, stdout: "", stderr: "unexpected" };
     },
-    home: () => "/tmp/kanso-none",
-    readTextFile: async () => null,
-    exec: async () => ({ code: 1, stdout: "", stderr: "missing" }),
     run: (command) => { ran.push(command); },
-    window: () => ({ platform: "macos" }),
     shared: (key) => (key === "kanso.pieces" ? { "computers.network": "hide" } : null),
-    settings: () => ({}),
-    knownAgents: async () => [],
   });
-  const pending = [];
-  const cx = {
-    notify() {},
-    stop_propagation() {},
-    focus_handle: () => ({ focus() {}, is_focused: () => false, release() {} }),
-    spawn(fn) {
-      const task = fn(cx);
-      pending.push(task);
-      return { cancel() {} };
-    },
-    timer: { after: () => ({ cancel() {} }), every: () => ({ cancel() {} }) },
-  };
-  const view = new Computers();
-  view.init({}, cx);
-  while (pending.length) await pending.shift();
   const click = (el) => {
     const handler = el.calls.find((call) => call[0] === "on_click")?.[1];
     assert.ok(handler, el?.tag);
     handler({}, cx);
   };
-  const flush = async () => { while (pending.length) await pending.shift(); };
   const button = (drawn, tag) => nodes(drawn).find((el) => el.tag === tag);
   return { view, asked, ran, click, flush, button };
 };

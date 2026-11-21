@@ -24,16 +24,10 @@ const NEIGHBORS = {
 const textOf = async (read, timer) => String((await bounded(tryOrAsync(read), timer, READ_MS))?.stdout ?? "");
 
 async function knock(ip, timer) {
-  const gate = { late: false };
-  const opening = net.connect(ip, SSH_PORT).then((socket) => {
-    if (gate.late) socket.close();
-    return socket;
-  }, () => null);
+  const opening = net.connect(ip, SSH_PORT).catch(() => null);
   const socket = await bounded(opening, timer, KNOCK_MS);
-  if (!socket || socket === LATE) {
-    gate.late = true;
-    return null;
-  }
+  if (socket === LATE) opening.then((late) => late?.close());
+  if (!socket || socket === LATE) return null;
   const bytes = await bounded(socket.read(255).catch(() => null), timer, BANNER_MS);
   socket.close();
   return { ip, banner: bannerText(bytes === LATE ? null : bytes) };

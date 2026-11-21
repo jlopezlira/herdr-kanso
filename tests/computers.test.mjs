@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { chmod, mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { clone, exec, find, gpuiHost, load, temporary, texts } from "./helpers.mjs";
+import { clone, computersDialog, exec, find, gpuiHost, load, temporary, texts } from "./helpers.mjs";
 
 const reach = () => load("kanso-computers/reach.js", [
   "tailnet", "planFor", "choiceOf", "addArgs", "probeArgs", "reachOf", "keySetup", "advice", "isAdded",
@@ -392,33 +392,13 @@ test("A computer that accepts only a key is not offered a password", async () =>
 test("A computer saved with hc, and not on the tailnet or in ssh config, shows under Added, and Close dismisses the dialog", async () => {
   const closed = [];
   const asked = [];
-  const { Computers } = await load("kanso-computers/main.js", ["Computers"], {
-    ...gpuiHost(),
-    theme: () => ({ foreground: "#d8d4cb", background: "#1b1b19", muted: "#949086", dim: "#6b6862", border: "#33332f", popover: "#222220", hover: "#232321", selected: "#2b2b28", accent: "#da627d" }),
-    props: () => ({ overlay: "computers-overlay" }),
+  const { view } = await computersDialog({
     closeOverlay: (id) => closed.push(id),
     hc: async (args) => {
       asked.push(clone(args));
       return { code: 0, stdout: JSON.stringify({ machines: [{ name: "box", target: "ada@10.0.0.9", via: "" }] }), stderr: "" };
     },
-    home: () => "/tmp/kanso-none",
-    readTextFile: async () => null,
-    exec: async () => ({ code: 1, stdout: "", stderr: "missing" }),
-    run: () => {},
-    window: () => ({ platform: "macos" }),
-    shared: () => null,
-    settings: () => ({}),
   });
-  const pending = [];
-  const cx = {
-    notify() {},
-    focus_handle: () => ({ focus() {}, is_focused: () => false, release() {} }),
-    spawn(fn) { pending.push(fn(cx)); return { cancel() {} }; },
-    timer: { after: () => ({ cancel() {} }), every: () => ({ cancel() {} }) },
-  };
-  const view = new Computers();
-  view.init({}, cx);
-  await Promise.all(pending);
   view.net = { state: "Running", peers: [{ name: "grey", ip: "100.64.1.2", os: "linux", online: true, tailscaleSsh: false }] };
   view.hosts = [{ alias: "other", hostname: "10.0.0.8", user: "ada" }];
   const drawn = view.render();
