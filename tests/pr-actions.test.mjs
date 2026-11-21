@@ -25,7 +25,7 @@ test("Undoing each action names the one GitHub call that takes it back, and a me
 
 const ghOf = (calls) => calls.filter((call) => call[0] === "gh").map((call) => call.slice(1));
 
-const actionPanel = async (answer) => {
+const actionPanel = async (answer, extra = {}) => {
   const ui = recorder();
   const calls = [];
   const exec = async (command, args) => {
@@ -33,7 +33,7 @@ const actionPanel = async (answer) => {
     const given = answer(command, args);
     return given ?? failure("offline");
   };
-  const { PullRequest } = await loadPullRequest({ ...ui, ...reviewFields(ui), exec, notify: () => {}, appHome: () => "/tmp/pr-actions", home: () => "/Users/x", key: () => "repo", location: () => ({ cwd: "/repo", on: null }) });
+  const { PullRequest } = await loadPullRequest({ ...ui, ...reviewFields(ui), exec, notify: () => {}, appHome: () => "/tmp/pr-actions", home: () => "/Users/x", key: () => "repo", location: () => ({ cwd: "/repo", on: null }), ...extra });
   const panel = blankPanel(PullRequest, {});
   const tasks = context();
   tasks.cx.timer = { every() {}, after() {} };
@@ -130,7 +130,8 @@ const failing = {
 };
 
 test("A failing check offers Re-run to a writer and Full log to anyone, and the log page keeps the lines", async () => {
-  const log = ["CI\ttest\t2026-11-20T00:00:00.000Z hello", ...Array.from({ length: 400 }, (_, i) => "CI\ttest\t2026-11-20T00:00:01.000Z line " + (i + 2))].join("\n");
+  const long = "L".repeat(401);
+  const log = ["CI\ttest\t2026-11-20T00:00:00.000Z hello", ...Array.from({ length: 800 }, (_, i) => "CI\ttest\t2026-11-20T00:00:01.000Z " + (i === 799 ? long : "line " + (i + 2)))].join("\n");
   const { panel, ui, calls, tasks } = await actionPanel((command, args) => (command === "gh" && args[0] === "run" && args[1] === "view" ? success(log) : undefined));
   panel.session.pr = { ...panel.session.pr, statusCheckRollup: [failing] };
   panel.session.permission = "READ";
@@ -148,10 +149,13 @@ test("A failing check offers Re-run to a writer and Full log to anyone, and the 
   assert.deepEqual(viewed, [["run", "view", "77", "--log-failed", "-R", "acme/app"]]);
   ui.texts.length = 0;
   panel.logPage(tone);
-  assert.equal(ui.texts.includes("line 2"), true);
+  assert.equal(ui.texts.includes("line 2"), false);
+  assert.equal(ui.texts.includes(long), true);
   assert.equal(ui.texts.includes("hello"), false);
   assert.equal(ui.texts.some((text) => text.includes("2026-11-20") || text.includes("CI\ttest")), false);
-  assert.equal(ui.texts.includes("The last 400 lines; the rest is on GitHub."), true);
+  assert.equal(ui.texts.includes("The last 400 of 801 lines"), true);
+  assert.equal(ui.texts.includes("Show 400 earlier"), true);
+  assert.equal(panel.session.logs?.["77"]?.text?.includes(long), true);
   ui.clicks.get("pr-page-back")({}, tasks.cx);
   assert.equal(panel.page, null);
   assert.equal(panel.session.pr.number, 12);
@@ -293,4 +297,143 @@ test("Statistics name the oldest Needs you item, the new count and the review si
   quiet.session.scope = panel.session.scope;
   quiet.inboxPage(tone);
   assert.equal(hiddenUi.texts.includes("Statistics"), false);
+});
+
+test("Keys follow the page on screen: the open list sends nothing, and a pull request opened from outside still takes its comment", async () => {
+  const { panel, calls, tasks } = await actionPanel((command, args) => (command === "gh" && args[0] === "api" ? success("{\"id\":4}\n") : undefined));
+  panel.session.listing = true;
+  pressKey(panel, tasks, "a");
+  await tasks.drain();
+  assert.equal(ghOf(calls).some((args) => args.includes("event=APPROVE")), false);
+  calls.length = 0;
+  panel.session.listing = false;
+  panel.session.outside = true;
+  panel.session.inboxOn = true;
+  panel.session.inboxOpen = false;
+  panel.drafts = { [url]: "a note" };
+  pressKey(panel, tasks, "c");
+  await tasks.drain();
+  assert.equal(ghOf(calls).some((args) => String(args[3]).includes("/issues/12/comments") && args.includes("body=a note")), true);
+});
+
+test("Approving a Needs you row draws Approving, then Approved with Undo, and Undo dismisses that review", async () => {
+  let release;
+  const gate = new Promise((resolve) => { release = () => resolve(success("{\"id\":9}\n")); });
+  const { panel, ui, calls, tasks } = await actionPanel((command, args) => {
+    if (command === "gh" && args[0] === "auth") return { late: true, code: 1, stdout: "", stderr: "" };
+    if (command === "gh" && args[0] === "api" && args.includes("event=APPROVE")) return gate;
+    if (command === "gh" && args[0] === "api") return success("");
+    return undefined;
+  });
+  const needs = { url, provider: "github", host: "github.com", owner: "acme", name: "app", number: 12, title: "Ship", updatedAt: "2026-11-01T00:00:00Z", author: "ada" };
+  panel.session.inboxOn = true;
+  panel.session.inboxOpen = true;
+  panel.session.scope = { kind: "folder", repos: [{ provider: "github", host: "github.com", owner: "acme", name: "app" }], local: [] };
+  panel.session.inbox = { needs: [needs], yours: [], login: "jj" };
+  panel.session.boardOpen = [panel.board().blocks[0].key];
+  panel.cursor = url;
+  pressKey(panel, tasks, "a");
+  ui.texts.length = 0;
+  panel.inboxPage(tone);
+  assert.equal(ui.texts.indexOf("Approving\u2026") > ui.texts.indexOf("Ship"), true);
+  release();
+  await tasks.drain();
+  ui.texts.length = 0;
+  panel.inboxPage(tone);
+  assert.equal(ui.texts.includes("Approved"), true);
+  const undo = [...ui.clicks.keys()].find((id) => String(id).endsWith("-undo"));
+  assert.equal(ui.clicks.get(undo)({}, tasks.cx), undefined);
+  await tasks.drain();
+  assert.equal(ghOf(calls).some((args) => String(args[3]).includes("/pulls/12/reviews/9/dismissals")), true);
+});
+
+test("Opening one log, going back, and opening another reads both, and each page shows its own lines", async () => {
+  let releaseA, releaseB;
+  const gateA = new Promise((resolve) => { releaseA = () => resolve(success("CI\tstep\t2026-11-20T00:00:00.000Z alpha line\n")); });
+  const gateB = new Promise((resolve) => { releaseB = () => resolve(success("CI\tstep\t2026-11-20T00:00:00.000Z beta line\n")); });
+  const { panel, ui, calls, tasks } = await actionPanel((command, args) => {
+    if (command !== "gh" || args[1] !== "view") return undefined;
+    return args[2] === "77" ? gateA : gateB;
+  });
+  const open = (id, name) => panel.openLog({ runId: id, name, url: "https://github.com/acme/app/actions/runs/" + id }, tasks.cx);
+  open("77", "alpha");
+  panel.back(tasks.cx);
+  open("88", "beta");
+  const viewed = () => ghOf(calls).filter((args) => args[0] === "run" && args[1] === "view").map((args) => args[2]);
+  assert.deepEqual(viewed(), ["77", "88"]);
+  releaseA();
+  releaseB();
+  await tasks.drain();
+  const show = (id) => { panel.page = { kind: "log", id, name: id }; ui.texts.length = 0; panel.logPage(tone); };
+  show("77");
+  assert.equal(ui.texts.includes("alpha line"), true);
+  assert.equal(ui.texts.includes("beta line"), false);
+  show("88");
+  assert.equal(ui.texts.includes("beta line"), true);
+  assert.equal(ui.texts.includes("alpha line"), false);
+});
+
+test("A long log shows the last 400 lines first, then 400 earlier, and a long line is shown whole", async () => {
+  const whole = "W".repeat(420);
+  const lines = Array.from({ length: 1000 }, (_, i) => "CI\tstep\t2026-11-20T00:00:00.000Z " + (i === 999 ? whole : "row " + (i + 1)));
+  const { panel, ui, tasks } = await actionPanel((command, args) => (command === "gh" && args[1] === "view" ? success(lines.join("\n")) : undefined));
+  panel.openLog({ runId: "77", name: "test", url: "https://github.com/acme/app/actions/runs/77" }, tasks.cx);
+  await tasks.drain();
+  ui.texts.length = 0;
+  panel.logPage(tone);
+  assert.equal(ui.texts.includes("The last 400 of 1000 lines"), true);
+  assert.equal(ui.texts.includes("Show 400 earlier"), true);
+  assert.equal(ui.texts.includes(whole), true);
+  assert.equal(ui.texts.includes("row 1"), false);
+  ui.clicks.get("pr-log-earlier")({}, tasks.cx);
+  ui.texts.length = 0;
+  panel.logPage(tone);
+  assert.equal(ui.texts.includes("The last 800 of 1000 lines"), true);
+  assert.equal(ui.texts.includes("row 201"), true);
+  assert.equal(ui.texts.includes(whole), true);
+});
+
+test("A re-run that starts one run and refuses the other keeps that run and its Undo, and two refusals stay refused", async () => {
+  const answer = (command, args) => {
+    if (command === "gh" && args[1] === "rerun") return args[2] === "12" ? failure("HTTP 403") : success("");
+    if (command === "gh" && args[1] === "cancel") return success("");
+    return undefined;
+  };
+  const one = await actionPanel(answer);
+  one.panel.session.rerun(["11", "12"], one.tasks.cx);
+  await one.tasks.drain();
+  assert.equal(plain(one.panel.session.acted).state, "done");
+  assert.deepEqual(plain(one.panel.session.acted).id, ["11"]);
+  if (!one.panel.session.pr) one.panel.session.pr = { number: 12, title: "Ship", url, state: "OPEN", author: { login: "ada" } };
+  one.ui.texts.length = 0;
+  one.panel.hero(tone);
+  assert.equal(one.ui.texts.includes("Couldn\u2019t re-run"), true);
+  assert.equal(one.ui.texts.some((text) => text.includes("403")), true);
+  one.ui.clicks.get([...one.ui.clicks.keys()].find((id) => String(id).endsWith("-undo")))({}, one.tasks.cx);
+  await one.tasks.drain();
+  const cancelled = ghOf(one.calls).filter((args) => args[1] === "cancel").map((args) => args[2]);
+  assert.deepEqual(cancelled, ["11"]);
+  const both = await actionPanel((command, args) => (command === "gh" && args[1] === "rerun" ? failure("HTTP 403") : undefined));
+  both.panel.session.rerun(["11", "12"], both.tasks.cx);
+  await both.tasks.drain();
+  assert.equal(plain(both.panel.session.acted).state, "refused");
+});
+
+test("Close sends on the first press, and Undo reopens that pull request", async () => {
+  const { panel, ui, calls, tasks } = await actionPanel(
+    (command, args) => (command === "gh" && args[0] === "pr" ? success("") : undefined),
+    { shared: (name) => (name === "kanso.pr.details" ? { "/repo": true } : undefined) },
+  );
+  panel.session.stale = false;
+  panel.hero(tone);
+  ui.clicks.get("pr-close")({}, tasks.cx);
+  await tasks.drain();
+  assert.deepEqual(ghOf(calls).filter((args) => args[0] === "pr" && args[1] === "close"), [["pr", "close", url]]);
+  calls.length = 0;
+  if (!panel.session.pr) panel.session.pr = { number: 12, title: "Ship", url, state: "OPEN", author: { login: "ada" } };
+  ui.texts.length = 0;
+  panel.hero(tone);
+  ui.clicks.get([...ui.clicks.keys()].find((id) => String(id).endsWith("-undo")))({}, tasks.cx);
+  await tasks.drain();
+  assert.deepEqual(ghOf(calls).filter((args) => args[0] === "pr" && args[1] === "reopen"), [["pr", "reopen", url]]);
 });
