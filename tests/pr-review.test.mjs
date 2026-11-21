@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { clone as plain, context, failure, load } from "./helpers.mjs";
-import { fieldState, openedPanel, recorder } from "./pr-fixtures.mjs";
+import { clone as plain, context, failure, load, success } from "./helpers.mjs";
+import { openedPanel, recorder, reviewFields } from "./pr-fixtures.mjs";
 
 const api = await load("kanso-panel/pr-review.js", [
   "REVIEWS", "reviewArgs", "undoArgs", "createdId", "reviewable", "ready",
@@ -74,10 +74,7 @@ test("An open pull request by someone else offers Approve, Request changes and C
   const ui = recorder();
   const panel = await openedPanel({
     ...ui,
-    Textarea: { new: () => ui.div() },
-    TextareaState: { new: fieldState },
-    InputState: { new: fieldState },
-    ScrollHandle: { new: () => ({}) },
+    ...reviewFields(ui),
     exec: async () => failure("offline"),
     appHome: () => "/tmp",
     home: () => "/Users/x",
@@ -110,4 +107,112 @@ test("An open pull request by someone else offers Approve, Request changes and C
   panel.hero(tone);
   assert.equal(has("Approved"), true);
   assert.equal(has("Undo"), true);
+});
+
+const issue = (number) => ({
+  number, title: "Pull " + number, url: "https://github.com/jlopezlira/herdr-kanso/pull/" + number,
+  state: "OPEN", isDraft: false, author: { login: "ada" }, headRefName: "feat", baseRefName: "main",
+  updatedAt: "2026-11-20T00:00:00Z", additions: 1, deletions: 0, changedFiles: 1,
+});
+
+const reviewPanel = async () => {
+  const ui = recorder();
+  const calls = [];
+  const gate = { current: null };
+  const after = [];
+  const exec = async (command, args) => {
+    if (command !== "gh") return failure("offline");
+    calls.push(args);
+    if (args[0] === "pr" && args[1] === "view") return success(JSON.stringify(issue(Number(String(args[2]).split("/").at(-1)))));
+    if (args[0] === "api" && args[2] === "POST" && String(args[3]).includes("/comments")) return gate.current ?? success("{\"id\":19}\n");
+    if (args[0] === "api" && args[2] === "DELETE") return failure("gh: HTTP 403: Forbidden");
+    if (args[0] === "api" && args[1] === "user") return success("jj\n");
+    return failure("offline");
+  };
+  const panel = await openedPanel({
+    ...ui, ...reviewFields(ui), exec,
+    appHome: () => "/tmp/pr-review-drafts", home: () => "/Users/x",
+    key: () => JSON.stringify({ cwd: "/work/reviews", on: null }),
+    location: () => ({ cwd: "/work/reviews", on: null }),
+  });
+  const tasks = context();
+  tasks.cx.timer = { every() {}, after(_ms, fn) { after.push(fn); } };
+  const flush = () => { const queued = after.splice(0); for (const fn of queued) fn(tasks.cx); };
+  panel.viewer = "jj";
+  panel.init(tasks.cx);
+  await tasks.drain();
+  const open = async (number) => {
+    panel.choose(issue(number), tasks.cx);
+    await tasks.drain();
+    flush();
+    panel.showDraft?.(tasks.cx);
+    flush();
+  };
+  const press = (id) => {
+    ui.texts.length = 0;
+    panel.hero(tone);
+    const click = ui.clicks.get(id);
+    if (!click) return false;
+    click({}, tasks.cx);
+    return true;
+  };
+  return { panel, ui, calls, gate, tasks, open, press, flush };
+};
+
+const commentBodies = (calls) => calls.filter((args) => args[0] === "api" && args[2] === "POST" && String(args[3]).includes("/comments")).map((args) => String(args.find((arg) => String(arg).startsWith("body=")) ?? ""));
+
+test("Words typed for one pull request are not sent as the comment on another", async () => {
+  const { panel, calls, open, press, tasks } = await reviewPanel();
+  await open(436);
+  panel.reviewText.state.type("draft for #436", tasks.cx);
+  await open(437);
+  assert.equal(panel.session.pr.number, 437);
+  press("pr-review-comment");
+  await tasks.drain();
+  assert.equal(commentBodies(calls).some((body) => body.includes("draft for #436")), false);
+  await open(436);
+  assert.equal(panel.draftOf(issue(436).url), "draft for #436");
+});
+
+test("Words typed while a review is being sent stay on that pull request", async () => {
+  const { panel, gate, tasks, open, press } = await reviewPanel();
+  let release;
+  gate.current = new Promise((resolve) => { release = () => resolve(success("{\"id\":19}\n")); });
+  await open(436);
+  panel.reviewText.state.type("first", tasks.cx);
+  assert.equal(press("pr-review-comment"), true);
+  panel.reviewText.state.type("second", tasks.cx);
+  release();
+  await tasks.drain();
+  assert.equal(panel.draftOf(issue(436).url), "second");
+});
+
+test("A refused Undo keeps the review as sent and says the Undo failed", async () => {
+  const { panel, ui, tasks, open, press } = await reviewPanel();
+  await open(436);
+  panel.reviewText.state.type("a note", tasks.cx);
+  assert.equal(press("pr-review-comment"), true);
+  await tasks.drain();
+  assert.equal(press("pr-review-undo"), true);
+  await tasks.drain();
+  const outcome = plain(panel.session.reviewed);
+  assert.equal(outcome.state, "done");
+  assert.equal(outcome.id, 19);
+  assert.match(String(outcome.undoError), /403/);
+  ui.texts.length = 0;
+  panel.hero(tone);
+  assert.equal(ui.texts.includes("Commented"), true);
+  assert.equal(ui.texts.includes("Undo failed"), true);
+  assert.equal(ui.texts.includes("Review not sent"), false);
+});
+
+test("A refused Undo keeps the sent review, and undoing drops that refusal", async () => {
+  const { undoRefusedOf: refuseUndo, undoneOf: clearUndo, doneOf: finished } = await load("kanso-panel/pr-review.js", ["undoRefusedOf", "undoneOf", "doneOf"]);
+  const refused = refuseUndo(finished("comment", 19), "gh: HTTP 403: Forbidden");
+  assert.equal(plain(refused).state, "done");
+  assert.equal(plain(refused).id, 19);
+  assert.equal(String(plain(refused).undoError), "gh: HTTP 403: Forbidden");
+  const cleared = plain(clearUndo(refused));
+  assert.equal(cleared.state, "undone");
+  assert.equal(Object.hasOwn(cleared, "undoError"), false);
 });
