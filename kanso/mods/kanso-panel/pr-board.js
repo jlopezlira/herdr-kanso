@@ -97,7 +97,7 @@ export function statsOf(blocks, now) {
   return {
     oldest: waited[0] ?? null,
     fresh: all.filter(isNew).length,
-    review: { add: needs.reduce((n, item) => n + (item.additions ?? 0), 0), del: needs.reduce((n, item) => n + (item.deletions ?? 0), 0), count: needs.length },
+    review: { add: needs.reduce((n, item) => n + (item.additions ?? 0), 0), del: needs.reduce((n, item) => n + (item.deletions ?? 0), 0), count: needs.length, sized: needs.some((item) => item.additions != null) },
     ages: counts.map((n) => n / peak),
   };
 }

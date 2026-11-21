@@ -18,7 +18,7 @@ import { dot } from "./ui-dot.js";
 import { caption } from "./ui-caption.js";
 import { section } from "./ui-section.js";
 import { segmented } from "./ui-tab.js";
-import { aliasText, machineTitle, tryOrAsync } from "./pure.js";
+import { aliasText, machineTitle, plural, tryOrAsync } from "./pure.js";
 import { STATES, checkState, onePerJob, checkSummary, runIdOf, listHold, mergeReadiness, isWriter } from "./ghchecks.js";
 import { deliver, classify, reachable } from "./deliver.js";
 import { nameOf, givenNames } from "./marks.js";
@@ -120,7 +120,7 @@ export class PullRequest {
       cx.notify();
     });
     this.newTitle = new TextField({ placeholder: "Title" });
-    this.newBody = new TextField({ placeholder: "Description" }, { multiline: true });
+    this.newBody = new TextField({ placeholder: "Optional" }, { multiline: true });
     this.page = null;
     this.cursor = null;
     this.handle = cx.focus_handle();
@@ -312,11 +312,19 @@ export class PullRequest {
   openLog(check, cx) {
     if (!check.runId) { if (check.url) openUrl(check.url); return; }
     this.page = { kind: "log", id: String(check.runId), name: check.name, url: check.url };
+    this.logEnd = null;
     this.session.readFullLog(String(check.runId), cx);
     cx.notify();
   }
 
   back(cx) { this.page = null; cx.notify(); }
+
+  logToEnd() {
+    const id = this.page?.kind === "log" && this.pageShown() && this.session.fullLog?.id === this.page.id && this.session.fullLog.text != null ? this.page.id : null;
+    if (!id || this.logEnd === id) return;
+    this.logEnd = id;
+    this.scroll.scroll_to_bottom();
+  }
 
   writer() { return isWriter(this.session.permission); }
 
@@ -902,7 +910,7 @@ export class PullRequest {
 
   statsFold(c, stats) {
     const open = Boolean(this.statsOpen);
-    const summary = [stats.oldest ? `${ago(stats.oldest.createdAt ?? stats.oldest.updatedAt)} oldest` : null, stats.fresh ? `${stats.fresh} new` : null].filter(Boolean).join(" · ");
+    const summary = [stats.oldest ? `oldest ${ago(stats.oldest.createdAt ?? stats.oldest.updatedAt)}` : null, stats.fresh ? `${stats.fresh} new` : null].filter(Boolean).join(" · ");
     const fact = (label, value) => h_flex().w_full().gap(G.md).items_center()
       .child(div().flex_1().min_w(0).truncate().text_size(T.body).text_color(c.dim).child(label))
       .child(div().flex_none().text_size(T.body).text_color(c.text).child(value));
@@ -910,7 +918,7 @@ export class PullRequest {
     return v_flex().w_full().gap(G.sm).child(head)
       .when(open, (el) => el.child(v_flex().w_full().gap(G.sm)
         .when(Boolean(stats.oldest), (col) => col.child(fact("Waiting longest", `#${stats.oldest.number} ${stats.oldest.repo} · ${ago(stats.oldest.createdAt ?? stats.oldest.updatedAt)}`)))
-        .when(stats.review.count > 0, (col) => col.child(fact("To review", `${diffText({ add: stats.review.add, del: stats.review.del })} in ${stats.review.count === 1 ? "1 pull request" : `${stats.review.count} pull requests`}`)))
+        .when(stats.review.count > 0, (col) => col.child(fact("To review", [stats.review.sized ? diffText({ add: stats.review.add, del: stats.review.del }) : null, plural(stats.review.count, "pull request", "pull requests")].filter(Boolean).join(" in "))))
         .child(fact("New since you looked", String(stats.fresh)))
         .when(stats.review.count > 0, (col) => col.child(this.agesChart(c, stats.ages)))
         .child(div().text_size(T.body).text_color(c.dim).child("Merged this week is in Shipped"))));
@@ -920,7 +928,7 @@ export class PullRequest {
     return v_flex().w_full().gap(G.xs)
       .child(div().text_size(T.body).text_color(c.dim).child("How long they have waited, by day"))
       .child(h_flex().w_full().h(PR.ages).gap(G.xs).items_end()
-        .children(ages.map((share, i) => div().id(`pr-age-${i}`).flex_1().h(Math.max(1, Math.round(PR.ages * share))).rounded(R.sm).bg(share > 0 ? c.accent : c.border))))
+        .children(ages.map((share, i) => div().id(`pr-age-${i}`).flex_1().h(Math.max(1, Math.round(PR.ages * share))).rounded(R.sm).bg(share > 0 ? c.muted : c.border))))
       .child(h_flex().w_full().justify_between().text_size(T.micro).text_color(c.dim).child("today").child("3 weeks"));
   }
 
@@ -996,6 +1004,7 @@ export class PullRequest {
     const c = tokens(theme());
     const narrow = (this.width || 368) < 560;
     const nodes = this.nodes(c, narrow);
+    this.logToEnd();
     if (this.session.pr && !this.pageShown() && !(this.session.inboxOn && this.session.inboxOpen) && !this.session.listing && this.sceneKind() === "pr") this.land(nodes.map(([id]) => id));
     const padX = narrow ? G.lg : 32;
     const padY = narrow ? G.lg : 28;
