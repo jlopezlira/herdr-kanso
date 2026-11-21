@@ -20,6 +20,8 @@ const PEOPLE = [
   { login: "icampana", name: "Iván Campaña" },
   { login: "leangseu", name: "Leangseu Kim" },
   { login: "h0ru5", name: "Johannes Hund" },
+  { login: "jerichosiahaya", name: "Jericho Siahaya" },
+  { login: "SiliconKaiser", name: "Fabian" },
 ];
 const AVATARS_DIR = "data/kanso-settings/avatars";
 
@@ -29,15 +31,15 @@ export async function readAvatars() {
 }
 
 export function creditsPage(c, avatars) {
-  const link = (id, start, title, note, url) => row(`credit-${id}`, c, {
-    start, name: title, second: note, meta: url.replace(/^https:\/\//, ""), flag: "external-link", onClick: (cx) => cx.open_url(url),
+  const link = (id, lead, title, note, url) => row(`credit-${id}`, c, {
+    lead, name: title, second: note, meta: url.replace(/^https:\/\//, ""), flag: "external-link", onClick: (cx) => cx.open_url(url),
   });
   const heading = (text) => row(`credits-${text}`, c, { name: text, heading: true }).mt(G.lg);
   return v_flex().w_full()
     .child(div().text_size(T.value).line_height(1.5).text_color(c.muted).child("kansō is a layout for Herdr, made in the open."))
     .child(heading("Where it comes from"))
-    .children(PLACES.map((p) => link(p.id, [tile(c, { initial: p.name, image: p.id === "herdr" ? "frame/welcome/herdr.png" : null, size: "lg" })], p.name, p.note, p.url)))
+    .children(PLACES.map((p) => link(p.id, tile(c, { initial: p.name, image: p.id === "herdr" ? "frame/welcome/herdr.png" : null, size: "lg" }), p.name, p.note, p.url)))
     .child(heading("Made by"))
-    .children(PEOPLE.map((p) => link(p.login, [avatar(c, { initial: p.name, image: avatars?.has(p.login) ? `${AVATARS_DIR}/${p.login}.jpg` : null, size: "lg" })],
+    .children(PEOPLE.map((p) => link(p.login, avatar(c, { initial: p.name, image: avatars?.has(p.login) ? `${AVATARS_DIR}/${p.login}.jpg` : null, size: "lg" }),
       p.name, `@${p.login} on GitHub`, `https://github.com/${p.login}`)));
 }

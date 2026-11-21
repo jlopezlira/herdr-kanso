@@ -168,6 +168,7 @@ The idea of a simulator panel beside the agent came from herdr-sim by Robert Sor
 Grown out of the mods shipped with Herdr; [NOTICE](NOTICE) says who changed
 what. Contributors: Iván Campaña ([icampana](https://github.com/icampana)),
 Leangseu Kim ([leangseu](https://github.com/leangseu), pull request prompts),
-Johannes Hund ([h0ru5](https://github.com/h0ru5), markdown reviews) and
-Jericho Siahaya ([jerichosiahaya](https://github.com/jerichosiahaya), Spend's source toggles).
+Johannes Hund ([h0ru5](https://github.com/h0ru5), markdown reviews),
+Jericho Siahaya ([jerichosiahaya](https://github.com/jerichosiahaya), Spend's source toggles) and
+Fabian ([SiliconKaiser](https://github.com/SiliconKaiser), the Markdown panel over SSH report).
 Apache License 2.0: [LICENSE](LICENSE).
