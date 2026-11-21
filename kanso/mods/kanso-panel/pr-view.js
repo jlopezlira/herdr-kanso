@@ -187,7 +187,7 @@ function reviewOutcome(panel, c, outcome) {
 function reviewPiece(panel, c) {
   const pr = panel.session.pr;
   const can = reviewable(pr, panel.viewer);
-  if (!pr || !can.comment) return null;
+  if (!pr || !can.comment || !panel.reviewText) return null;
   const body = panel.reviewText.value();
   const outcome = panel.session.reviewFor === pr.url ? panel.session.reviewed : null;
   const press = (kind) => button(`pr-review-${kind}`, REVIEWS[kind].label, (cx) => panel.session.review(kind, panel.reviewText.value(), cx), c,

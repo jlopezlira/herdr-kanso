@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { clone as plain, load } from "./helpers.mjs";
+import { clone as plain, context, failure, load } from "./helpers.mjs";
+import { openedPanel, recorder } from "./pr-fixtures.mjs";
 
 const api = await load("kanso-panel/pr-review.js", [
   "REVIEWS", "reviewArgs", "undoArgs", "createdId", "reviewable", "ready",
@@ -65,4 +66,57 @@ test("A review goes pending, then done, and only a done review with an id can be
   assert.equal(plain(undone).state, "undone");
   assert.equal(String(saidOf(undone)), "Undone");
   assert.equal(canUndo(undone), false);
+});
+
+const fieldState = () => ({
+  value: () => "",
+  set_value() {},
+  set_auto_grow() {},
+  set_selected_range() {},
+  on() { return this; },
+  focus() {},
+  release() {},
+});
+const tone = new Proxy({}, { get: () => "#888" });
+
+test("An open pull request by someone else offers Approve, Request changes and Comment, and your own offers Comment only", async () => {
+  const ui = recorder();
+  const panel = await openedPanel({
+    ...ui,
+    Textarea: { new: () => ui.div() },
+    TextareaState: { new: fieldState },
+    InputState: { new: fieldState },
+    ScrollHandle: { new: () => ({}) },
+    exec: async () => failure("offline"),
+    appHome: () => "/tmp",
+    home: () => "/Users/x",
+    key: () => JSON.stringify({ cwd: "/work/review", on: null }),
+    location: () => ({ cwd: "/work/review", on: null }),
+  });
+  const drawn = context();
+  drawn.cx.timer = { every() {} };
+  panel.init(drawn.cx);
+  await drawn.drain();
+  const url = "https://github.com/acme/app/pull/3";
+  const has = (text) => ui.texts.some((line) => line === text);
+  panel.viewer = "jj";
+  panel.session.pr = { number: 3, title: "Ship", url, state: "OPEN", author: { login: "ada" }, headRefName: "feat", baseRefName: "main" };
+  panel.session.loading = false;
+  ui.texts.length = 0;
+  panel.hero(tone);
+  assert.equal(has("Approve"), true);
+  assert.equal(has("Request changes"), true);
+  assert.equal(has("Comment"), true);
+  ui.texts.length = 0;
+  panel.session.pr = { ...panel.session.pr, author: { login: "jj" } };
+  panel.hero(tone);
+  assert.equal(has("Comment"), true);
+  assert.equal(has("Approve"), false);
+  assert.equal(has("Request changes"), false);
+  ui.texts.length = 0;
+  panel.session.reviewed = doneOf("approve", 7);
+  panel.session.reviewFor = url;
+  panel.hero(tone);
+  assert.equal(has("Approved"), true);
+  assert.equal(has("Undo"), true);
 });
