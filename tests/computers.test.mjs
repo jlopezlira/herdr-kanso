@@ -306,16 +306,19 @@ test("Signing in through a local-first route puts the key on every ssh once, and
   for (const call of await again.calls("ssh")) assert.equal(call.join(" ").includes("id_ed25519_kanso"), false);
 });
 
-test("A Tailscale route, a route that is not ssh, and a Windows route open Herdr's login; a Windows computer gets a PowerShell tab that adds the key and says done only after that add", async () => {
+test("A Tailscale route, a route that is not ssh, a fly route, and a Windows route open Herdr's login; a Windows computer quotes the password ask and adds the key only after that add", async () => {
   const { signInTab } = await signIn();
   const { psQuote } = await quote();
   const login = (row, platform) => clone(signInTab(row, platform).argv);
   assert.deepEqual(login({ name: "grey", target: "root@100.64.1.2", via: "/usr/local/bin/tailscale ssh root@100.64.1.2" }), ["hc", "machine", "login", "grey"]);
   assert.deepEqual(login({ name: "grey", target: "ada@box", via: "wsl.exe -d Ubuntu -e sh -c" }), ["hc", "machine", "login", "grey"]);
+  assert.deepEqual(login({ name: "grey", target: "box", via: "fly ssh console -a app --pty=false -C" }), ["hc", "machine", "login", "grey"]);
   assert.deepEqual(login({ name: "grey", target: "ada@box", via: "ssh ada@box" }, "windows"), ["hc", "machine", "login", "grey"]);
   const script = signInTab({ name: "grey", target: "O'Brien@box", via: false }, "windows").argv[3];
-  const add = ["machine", "add", "--via", viaOf("O'Brien@box"), "--name", "grey", "--install"].map(psQuote).join(" ");
+  const keyed = viaOf("O'Brien@box");
+  const add = ["machine", "add", "--via", keyed, "--name", "grey", "--install"].map(psQuote).join(" ");
   assert.ok(script.startsWith("$PSNativeCommandArgumentPassing = 'Legacy'"));
+  assert.ok(script.includes("StrictHostKeyChecking=accept-new 'O''Brien@box'"), script);
   assert.ok(script.includes(`& hc ${add}`), script);
   assert.match(script, /if \(\$LASTEXITCODE -ne 0\) \{[^}]*exit 1 \}; Write-Host ''; Write-Host 'Done: this tab can close\.'$/);
   assert.equal(script.split("Done: this tab can close.").length, 2);
