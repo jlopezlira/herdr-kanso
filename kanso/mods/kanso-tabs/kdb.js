@@ -63,7 +63,7 @@ export function asOfText(at, now) {
 export const conversationOf = (file) => String(file ?? "").match(/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.jsonl$/)?.[1] ?? null;
 
 // Columns added after a table's first release: [table, name, type].
-const ADDED = [["agents", "project", "TEXT"], ["agents", "project_at", "INTEGER"], ["picture_scans", "mark", "TEXT"], ["since_events", "did", "TEXT"]];
+const ADDED = [["agents", "project", "TEXT"], ["agents", "project_at", "INTEGER"], ["picture_scans", "mark", "TEXT"], ["since_events", "did", "TEXT"], ["pr_items", "checks", "TEXT"], ["pr_items", "created_at", "TEXT"]];
 // What the old Sleep kept, dropped once: a sleep is now a label on its terminal.
 const DROPPED = ["sleep_id", "restore", "step", "step_at", "sent_at", "nudged_at", "why"];
 const DROP_SLEEPS = `DROP TRIGGER IF EXISTS agents_one_sleep;DROP TABLE IF EXISTS sleeps;DROP TABLE IF EXISTS spaces;
@@ -83,7 +83,7 @@ CREATE INDEX IF NOT EXISTS pictures_ord ON pictures(file, ord);
 CREATE TABLE IF NOT EXISTS pr_providers(provider TEXT NOT NULL, host TEXT NOT NULL, login TEXT, status TEXT NOT NULL, detail TEXT, checked_at INTEGER NOT NULL, PRIMARY KEY(provider, host));
 CREATE TABLE IF NOT EXISTS pr_repos(id TEXT PRIMARY KEY, provider TEXT NOT NULL, host TEXT NOT NULL, owner TEXT NOT NULL, name TEXT NOT NULL, project_id TEXT, folder TEXT, machine TEXT, remote TEXT, seen_at INTEGER);
 CREATE INDEX IF NOT EXISTS pr_repos_project ON pr_repos(project_id);
-CREATE TABLE IF NOT EXISTS pr_items(url TEXT PRIMARY KEY, provider TEXT NOT NULL, host TEXT NOT NULL, owner TEXT NOT NULL, name TEXT NOT NULL, number INTEGER NOT NULL, title TEXT NOT NULL, state TEXT, draft INTEGER NOT NULL DEFAULT 0, author TEXT, role TEXT NOT NULL, head TEXT, base TEXT, review_decision TEXT, additions INTEGER, deletions INTEGER, updated_at TEXT, fetched_at INTEGER NOT NULL, seen_at INTEGER);
+CREATE TABLE IF NOT EXISTS pr_items(url TEXT PRIMARY KEY, provider TEXT NOT NULL, host TEXT NOT NULL, owner TEXT NOT NULL, name TEXT NOT NULL, number INTEGER NOT NULL, title TEXT NOT NULL, state TEXT, draft INTEGER NOT NULL DEFAULT 0, author TEXT, role TEXT NOT NULL, head TEXT, base TEXT, review_decision TEXT, additions INTEGER, deletions INTEGER, updated_at TEXT, fetched_at INTEGER NOT NULL, seen_at INTEGER, checks TEXT, created_at TEXT);
 CREATE INDEX IF NOT EXISTS pr_items_repo ON pr_items(provider, host, owner, name);
 CREATE TABLE IF NOT EXISTS pr_fetches(key TEXT PRIMARY KEY, fetched_at INTEGER, retry_at INTEGER, error TEXT);
 CREATE TABLE IF NOT EXISTS since_focus(project TEXT PRIMARY KEY, focused_at INTEGER NOT NULL, pending_json TEXT, dismissed_to INTEGER NOT NULL DEFAULT 0);

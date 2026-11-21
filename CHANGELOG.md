@@ -30,6 +30,7 @@ the branch's rules.
 
 ### Changed
 
+- The Pull requests panel shows one block per repository, with what needs you, your own, failing checks and the oldest wait; outside a repository it finds the repositories in the folder. (#400)
 - The collapsed sidebar on Projects no longer shows the view switch. On Status and Threads the view button and its menu stay, and the view keys still change view from any rail. (#232)
 - The sidebar draws its header, view switch, rows and footer as one piece, and the layout file no longer has a separate footer block; a change in one session no longer redraws the header or the footer. (#282)
 
