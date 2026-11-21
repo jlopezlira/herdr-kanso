@@ -8,6 +8,7 @@ import { awayShown } from "./since-left-model.js";
 import { pieces } from "./pieces.js";
 import { fetchDue, parseRemote } from "./pr-remote.js";
 import { q } from "./kdb.js";
+import { REVIEWS, canUndo, createdId, doneOf, pendingOf, ready, refusedOf, reviewArgs, undoArgs, undoneOf, undoRefusedOf } from "./pr-review.js";
 import { serviceFor } from "./platform-host.js";
 import { repositoryApi } from "./platform-repositories.js";
 import { folderScope, scopeRepos } from "./pr-board.js";
@@ -72,7 +73,7 @@ const blank = () => ({
   inboxOn: false, inbox: null, inboxOpen: null, inboxForce: false, boardOpen: null, scope: null, signedOut: false, scoped: null, scopeReady: () => {},
   stale: null, wait: null, freshAt: null, loadedAt: undefined,
   logFor: null, failedLog: null, logParsed: null, logParsedFor: null, sendShown: false, sendFor: null,
-  queued: false, asking: false, loading: false, busy: null, pending: null, flights: [],
+  queued: false, asking: false, loading: false, busy: null, pending: null, flights: [], reviewed: null, reviewFor: null,
 });
 
 export class FolderSession {
@@ -511,6 +512,31 @@ export class FolderSession {
       const method = allowed.squashMergeAllowed !== false ? "--squash" : allowed.mergeCommitAllowed ? "--merge" : "--rebase";
       commandOk(await this.gh(task, ["pr", "merge", pr.url, method]));
     }, (next) => this.reread(next));
+  }
+
+  review(kind, body, cx) {
+    const pr = this.pr, place = repoOf(pr?.url);
+    if (!pr || !place || this.busy || !ready(kind, body)) return;
+    this.busy = REVIEWS[kind].label; this.reviewed = pendingOf(kind); this.reviewFor = pr.url;
+    this.start(cx, async (task) => {
+      const said = await this.gh(task, reviewArgs(kind, { ...place, number: pr.number, body })).then(commandOk).then((r) => ({ r }), (e) => ({ e }));
+      this.busy = null;
+      this.reviewed = said.r ? doneOf(kind, createdId(said.r.stdout)) : refusedOf(kind, String(said.e?.message ?? said.e));
+      if (said.r) this.panel.reviewSent(pr.url, body);
+      this.reread(task);
+    });
+  }
+
+  undoReview(cx) {
+    const pr = this.pr, place = repoOf(pr?.url), done = this.reviewed;
+    if (!pr || !place || this.busy || !canUndo(done) || this.reviewFor !== pr.url) return;
+    this.busy = "Undo";
+    this.start(cx, async (task) => {
+      const said = await this.gh(task, undoArgs(done, { ...place, number: pr.number })).then(commandOk).then(() => null, (e) => e);
+      this.busy = null;
+      this.reviewed = said ? undoRefusedOf(done, String(said?.message ?? said)) : undoneOf(done);
+      this.reread(task);
+    });
   }
 
   createPr(cx) {

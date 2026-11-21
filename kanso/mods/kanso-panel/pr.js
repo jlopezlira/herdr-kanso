@@ -104,6 +104,13 @@ export class PullRequest {
     this.query = "";
     this.search = new TextField({ placeholder: "Search" });
     this.search.on("change", (_e, cx) => { this.query = this.search.value(); cx.notify(); });
+    this.reviewText = new TextField({ placeholder: "Leave a review" }, { multiline: true });
+    this.drafts = {};
+    this.draftShown = null;
+    this.reviewText.on("change", (_e, cx) => {
+      if (this.draftShown) this.drafts = { ...this.drafts, [this.draftShown]: this.reviewText.value() };
+      cx.notify();
+    });
     this.section = props.section ?? null;
     this.check = props.check ?? null;
     this.asked = props.at ?? null;
@@ -240,6 +247,25 @@ export class PullRequest {
   }
 
   mergeNow(cx) { this.session.mergeNow(cx); }
+
+  draftOf(url) { return this.drafts?.[url] ?? ""; }
+
+  showDraft(cx) {
+    const url = this.session.pr?.url ?? null;
+    if (!this.reviewText || url === this.draftShown) return;
+    this.draftShown = url;
+    cx.timer.after(0, (next) => {
+      if (this.draftShown !== url) return;
+      this.reviewText.set_value(this.draftOf(url));
+      next.notify();
+    });
+  }
+
+  reviewSent(url, body) {
+    if (this.draftOf(url) !== body) return;
+    this.drafts = { ...this.drafts, [url]: "" };
+    if (this.draftShown === url) this.reviewText.set_value("");
+  }
 
   createPr(cx) { this.session.createPr(cx); }
 
@@ -753,6 +779,7 @@ export class PullRequest {
     this.noteAsk(cx);
     this.readSoon(cx);
     this.openAsked(cx);
+    this.showDraft(cx);
     const c = tokens(theme());
     const narrow = (this.width || 368) < 560;
     const nodes = this.nodes(c, narrow);

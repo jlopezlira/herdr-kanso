@@ -24,6 +24,10 @@ the branch's rules.
 
 ## [Unreleased]
 
+### Added
+
+- Approve, request changes and comment on a pull request from the Pull requests panel, with Undo. (#400)
+
 ### Changed
 
 - The Pull requests panel shows one block per repository, with what needs you, your own, failing checks and the oldest wait; outside a repository it finds the repositories in the folder. (#400)

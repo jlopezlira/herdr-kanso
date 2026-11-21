@@ -12,6 +12,8 @@ import { ageOf, footLine } from "./pr-poll.js";
 import { aliasText, machineTitle } from "./pure.js";
 import { verdictBody } from "./pr-body.js";
 import { dot } from "./ui-dot.js";
+import { field } from "./ui-field.js";
+import { REVIEWS, canUndo, ready, reviewable, saidOf } from "./pr-review.js";
 
 
 export function footOf(panel) {
@@ -163,12 +165,41 @@ export function heroPieces(panel, c) {
   const note = panel.session.note ? [["remark", veil(failureBlock(panel.session.note)("remark", c))]] : [];
   const foot = footnote(panel, c);
   const tail = foot ? [["foot", foot.id("foot")]] : [];
+  const review = reviewPiece(panel, c);
   return [
     ["hero", heroTop(panel, c, view).id("hero")],
+    ...(review ? [["review", veil(review.id("review"))]] : []),
     ...detailParts(panel, c, view).map(([id, el]) => [id, veil(el)]),
     ...note,
     ...tail,
   ];
+}
+
+const REVIEW_LOOK = { approve: "solid", changes: "tonal", comment: "tonal" };
+
+function reviewOutcome(panel, c, outcome) {
+  if (outcome.state === "refused") return failureBlock({ text: "Review not sent", source: saidOf(outcome) })("pr-review-refused", c);
+  const line = h_flex().w_full().gap(G.sm).items_center().text_size(T.body)
+    .child(div().flex_1().min_w(0).truncate().text_color(outcome.state === "pending" ? c.dim : c.text).child(saidOf(outcome)))
+    .when(canUndo(outcome), (el) => el.child(quietLink("pr-review-undo", panel.session.busy === "Undo" ? "Undoing…" : "Undo", (cx) => panel.session.undoReview(cx), c, { disabled: Boolean(panel.session.busy) })));
+  return outcome.undoError
+    ? v_flex().w_full().gap(G.sm).child(line).child(failureBlock({ text: "Undo failed", source: outcome.undoError })("pr-review-undo-refused", c))
+    : line;
+}
+
+function reviewPiece(panel, c) {
+  const pr = panel.session.pr;
+  const can = reviewable(pr, panel.viewer);
+  if (!pr || !can.comment || !panel.reviewText) return null;
+  const body = panel.draftOf(pr.url);
+  const outcome = panel.session.reviewFor === pr.url ? panel.session.reviewed : null;
+  const press = (kind) => button(`pr-review-${kind}`, REVIEWS[kind].label, (cx) => panel.session.review(kind, panel.draftOf(pr.url), cx), c,
+    { kind: REVIEW_LOOK[kind], small: true, disabled: Boolean(panel.session.busy) || !ready(kind, body) });
+  return v_flex().w_full().gap(G.sm)
+    .child(section(c, "Review", ""))
+    .child(field("pr-review-text", panel.reviewText, c, { spoken: "Review" }))
+    .child(h_flex().gap(G.sm).flex_wrap().children(Object.keys(REVIEWS).filter((kind) => can[kind]).map(press)))
+    .when(Boolean(outcome), (el) => el.child(reviewOutcome(panel, c, outcome)));
 }
 
 export function drawHero(panel, c) {
