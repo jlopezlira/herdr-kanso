@@ -122,7 +122,7 @@ test("find matches a label or an id and keeps the window order", () => {
   assert.deepEqual(filterPieces("panel.files").map((row) => row.id), ["panel.files"]);
   assert.ok(filterPieces("SPEND").some((row) => row.id === "panel.insights"));
   assert.deepEqual(filterPieces("no-such-piece"), []);
-  assert.deepEqual(groupsOf(filterPieces("computer")).map((group) => group.name), ["Sidebar", "Status bar"]);
+  assert.deepEqual(groupsOf(filterPieces("computer")).map((group) => group.name), ["Sidebar", "Status bar", "Background"]);
   assert.deepEqual(groupsOf([]), []);
   const roster = withRoster([{ id: "workflow", label: "Workflow" }, { id: "files", label: "Not files" }]);
   assert.ok(roster.some((row) => row.id === "panel.workflow" && row.label === "Workflow"));

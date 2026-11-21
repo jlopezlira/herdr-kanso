@@ -492,3 +492,36 @@ export const kansoColours = async () => {
   const theme = JSON.parse(readFileSync(new URL("../kanso/themes/kanso.json", import.meta.url), "utf8"));
   return tokens({ ...theme, ...theme.colors });
 };
+
+const COMPUTERS_THEME = { foreground: "#d8d4cb", background: "#1b1b19", muted: "#949086", dim: "#6b6862", border: "#33332f", popover: "#222220", hover: "#232321", selected: "#2b2b28", accent: "#da627d" };
+
+export async function computersDialog(host) {
+  const { Computers } = await load("kanso-computers/main.js", ["Computers"], {
+    ...gpuiHost(),
+    theme: () => COMPUTERS_THEME,
+    props: () => ({ overlay: "computers-overlay" }),
+    closeOverlay: () => {},
+    home: () => "/tmp/kanso-none",
+    readTextFile: async () => null,
+    exec: async () => ({ code: 1, stdout: "", stderr: "missing" }),
+    run: () => {},
+    window: () => ({ platform: "macos" }),
+    shared: () => null,
+    settings: () => ({}),
+    knownAgents: async () => [],
+    ...host,
+  });
+  const pending = [];
+  const cx = {
+    notify() {},
+    stop_propagation() {},
+    focus_handle: () => ({ focus() {}, is_focused: () => false, release() {} }),
+    spawn(fn) { pending.push(fn(cx)); return { cancel() {} }; },
+    timer: { after: () => ({ cancel() {} }), every: () => ({ cancel() {} }) },
+  };
+  const flush = async () => { while (pending.length) await pending.shift(); };
+  const view = new Computers();
+  view.init({}, cx);
+  await flush();
+  return { view, cx, flush };
+}

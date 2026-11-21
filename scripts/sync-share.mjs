@@ -9,8 +9,8 @@ const root = new URL("../", import.meta.url);
 const COMMON = [
   { source: "kanso/mods/kanso-panel/share.js", copies: ["kanso/mods/kanso-spend/share.js", "kanso/mods/kanso-guard/share.js", "kanso/mods/kanso-dojo/share.js"] },
   // What can be shown, shown when it has something to say, or hidden. Hide stops the work.
-  { source: "kanso/mods/kanso-settings/pieces.js", copies: ["kanso-spaces", "kanso-strip", "kanso-chrome", "kanso-tabs", "kanso-status", "kanso-panel", "kanso-sim", "kanso-menu"].map((m) => `kanso/mods/${m}/pieces.js`) },
-  { source: "kanso/mods/kanso-panel/explain.js", copies: ["kanso/mods/kanso-spaces/explain.js"] },
+  { source: "kanso/mods/kanso-settings/pieces.js", copies: ["kanso-spaces", "kanso-strip", "kanso-chrome", "kanso-tabs", "kanso-status", "kanso-panel", "kanso-sim", "kanso-menu", "kanso-computers"].map((m) => `kanso/mods/${m}/pieces.js`) },
+  { source: "kanso/mods/kanso-panel/explain.js", copies: ["kanso/mods/kanso-spaces/explain.js", "kanso/mods/kanso-computers/explain.js"] },
   // The lines every right-click menu ends with, and Hide with its Undo.
   { source: "kanso/mods/kanso-panel/piece-lines.js", copies: ["kanso-spaces", "kanso-strip", "kanso-chrome", "kanso-tabs", "kanso-status", "kanso-menu"].map((m) => `kanso/mods/${m}/piece-lines.js`) },
   // An agent's program icon and name, and the key caps, the same in the tabs, headers, status bar, sidebar and Send.

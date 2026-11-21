@@ -26,6 +26,10 @@ the branch's rules.
 
 ### Added
 
+- Add a computer finds the computers on this network that answer ssh and lists them with Add; a setting under Background turns the search off. (#443)
+- A computer added from Add a computer can be disconnected there, with Undo. (#443)
+- A computer on your tailnet that is also on this network is reached over the local network, and over Tailscale when you are away, without a step from you. On Windows it keeps its Tailscale route. (#443)
+- Set up with an agent, in Add a computer, starts your agent with one prompt that walks you through getting another computer ready, over the local network or with Tailscale, and adds it. (#443)
 - Add a computer is back at the foot of the sidebar, above Settings, and opens kansō's own dialog. Your Tailscale computers are listed with Add: one press connects, with no key when the computer has Tailscale SSH, and installs what it needs there. Your ssh config hosts follow. A computer that wants its password opens a tab to type it once and is added right after. One that refuses ssh says what to turn on, and an offline one says it is offline.
 - Approve, request changes and comment on a pull request from the Pull requests panel, with Undo. (#400)
 - Re-run a failing check and read its whole log, reply to a thread, open a pull request, Undo on close, ready, reply and a new pull request, keys for every action, and statistics on the board, all from the Pull requests panel. (#400)
