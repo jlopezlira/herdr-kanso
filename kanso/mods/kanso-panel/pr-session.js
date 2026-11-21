@@ -595,11 +595,8 @@ export class FolderSession {
     const branch = this.branch;
     this.busy = "create"; this.note = null; this.created = pendingOf("create");
     this.start(cx, async (task) => {
-      const said = await this.readPushed(task, this.root, this.on).then((now) => {
-        if (!now || now.state === "late") throw new Error("It took too long to answer.");
-        if (now.state !== "pushed") throw new Error(`${now.state === "behind" ? "pull" : "push"} ${branch ?? "the branch"} first`);
-        return this.gh(task, ["pr", "create", "--head", branch, "--title", title, "--body", String(body ?? "")]);
-      }).then(commandOk).then((r) => ({ r }), (e) => ({ e }));
+      const said = await this.onGitHub(task, branch)
+        .then(() => this.gh(task, ["pr", "create", "--head", branch, "--title", title, "--body", String(body ?? "")])).then(commandOk).then((r) => ({ r }), (e) => ({ e }));
       this.busy = null;
       const url = said.r ? String(said.r.stdout ?? "").trim().split("\n").at(-1) : null;
       this.created = said.r ? null : refusedOf("create", String(said.e?.message ?? said.e));
@@ -608,11 +605,15 @@ export class FolderSession {
     });
   }
 
+  async onGitHub(task, branch) {
+    const now = await this.readPushed(task, this.root, this.on);
+    if (!now || now.state === "late") throw new Error("It took too long to answer.");
+    if (now.state !== "pushed") throw new Error(`${now.state === "behind" ? "pull" : "push"} ${branch ?? "the branch"} first`);
+  }
+
   createPr(cx) {
     this.perform("Create", cx, { failure: "Could not create it", done: "Opened GitHub to create the pull request" }, async (task) => {
-      const now = await this.readPushed(task, this.root, this.on);
-      if (!now || now.state === "late") throw new Error("It took too long to answer.");
-      if (now.state !== "pushed") throw new Error(`${now.state === "behind" ? "pull" : "push"} ${this.branch ?? "the branch"} first`);
+      await this.onGitHub(task, this.branch);
       commandOk(await this.gh(task, ["pr", "create", "--web"]));
     }, (next) => next.notify());
   }

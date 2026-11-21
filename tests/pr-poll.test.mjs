@@ -920,7 +920,6 @@ test("the timer returns while the window is behind or the panel is hidden, and r
   const after = [];
   let tick = null;
   const { cx, drain } = context();
-  cx.focus_handle = () => ({ focus() {}, is_focused: () => false, release() {} });
   cx.timer = { every(_ms, fn) { tick = fn; }, after(_ms, fn) { after.push(fn); } };
   const { PullRequest } = await loadPullRequest({
     exec,
