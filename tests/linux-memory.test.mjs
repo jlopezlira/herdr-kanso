@@ -115,13 +115,16 @@ test("Linux paste types only when the front window is the default browser", asyn
   assert.equal(hyprlandClass('{"class":"Code"}'), "Code");
   assert.equal(hyprlandClass("not json"), null);
   const typed = (calls) => calls.some((program) => program === "wtype" || program === "xdotool");
-  const paste = async (window, target) => {
+  const lookupFirst = (calls) => { const sh = calls.indexOf("sh"), hypr = calls.indexOf("hyprctl"); return sh >= 0 && (hypr < 0 || sh < hypr); };
+  const paste = async (window, target, { afterSh, wtypeFails = false } = {}) => {
     const calls = [];
+    let front = window;
     const api = clipboardApi("linux", async (program) => {
       calls.push(program);
-      if (program === "hyprctl") return success(JSON.stringify(window));
-      if (program === "sh") return success("google-chrome\nGoogle-chrome\n");
-      if (program === "wtype" || program === "xdotool") return success("");
+      if (program === "sh") { if (afterSh) front = afterSh; return success("google-chrome\nGoogle-chrome\n"); }
+      if (program === "hyprctl") return success(JSON.stringify(front));
+      if (program === "wtype") { if (wtypeFails) { front = { class: "Alacritty" }; return { code: 1, stdout: "", stderr: "missed" }; } return success(""); }
+      if (program === "xdotool") return success("");
       return { code: 1, stdout: "", stderr: "missing" };
     });
     return { result: clone(await api.paste(target)), calls };
@@ -139,6 +142,16 @@ test("Linux paste types only when the front window is the default browser", asyn
   assert.deepEqual(browser.result, { state: "ok" });
   assert.equal(browser.calls.includes("wtype"), true);
   assert.equal(browser.calls.includes("xdotool"), false);
+  assert.equal(lookupFirst(browser.calls), true);
+  const switched = await paste({ class: "google-chrome" }, "google-chrome", { afterSh: { class: "Alacritty" } });
+  assert.deepEqual(switched.result, { state: "error" });
+  assert.equal(typed(switched.calls), false);
+  assert.equal(lookupFirst(switched.calls), true);
+  const missedKey = await paste({ class: "google-chrome" }, "google-chrome", { wtypeFails: true });
+  assert.deepEqual(missedKey.result, { state: "error" });
+  assert.equal(missedKey.calls.includes("wtype"), true);
+  assert.equal(missedKey.calls.includes("xdotool"), false);
+  assert.equal(lookupFirst(missedKey.calls), true);
 });
 
 test("The Linux working-directory and open-file scripts end with exit 0", async () => {
@@ -239,6 +252,7 @@ test("Linux Markdown install records the previous default and uninstall restores
   assert.equal(await readFile(previous, "utf8"), saved);
   const removed = await run(["uninstall"]);
   assert.equal(removed.code, 0, removed.stderr);
+  assert.equal(removed.stdout.trim().split("\n").at(-1), "Markdown files open in obsidian.desktop again.");
   assert.equal(await readFile(state, "utf8"), saved);
   await assert.rejects(readFile(desktop, "utf8"));
   await writeFile(state, saved);
@@ -248,4 +262,11 @@ test("Linux Markdown install records the previous default and uninstall restores
   assert.equal((await run(["uninstall"])).code, 0);
   assert.equal(await readFile(state, "utf8"), "text/markdown obsidian.desktop\ntext/x-markdown other.desktop\n");
   assert.doesNotMatch(await readFile(log, "utf8"), /default omawrite\.desktop/);
+  await writeFile(state, saved);
+  assert.equal((await run(["install"])).code, 0);
+  await writeFile(state, "text/markdown omawrite.desktop\ntext/x-markdown dev.kanso.markdown.desktop\n");
+  const named = await run(["uninstall"]);
+  assert.equal(named.code, 0, named.stderr);
+  assert.equal(named.stdout.trim().split("\n").at(-1), "Markdown files open in omawrite.desktop again.");
+  assert.match(await readFile(state, "utf8"), /^text\/markdown omawrite\.desktop$/m);
 });
