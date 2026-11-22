@@ -108,6 +108,10 @@ The table is the macOS keys. Windows ships its own in
 `kanso/keys.windows.json`: Ctrl and Alt, leaving the Windows key and AltGr
 alone. Linux ships `kanso/keys.linux.json`: Super where Omarchy leaves it free,
 and Ctrl or Alt with Shift where Omarchy uses it. Help follows the bindings you have.
+On Omarchy, kansō has Hyprland treat Herdr as a terminal: it writes
+`~/.config/hypr/kanso.lua` and loads it from `hyprland.lua`. Then Super+C and
+Super+V copy and paste in Herdr's terminals, on this computer or another, as in
+Omarchy's other terminals. Ctrl+C still interrupts the program.
 
 | Keys | What they do |
 |---|---|

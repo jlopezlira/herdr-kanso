@@ -11,7 +11,7 @@ import { Popover } from "gpui-base";
 import { spaces, panes, run, openOverlay, props, theme, window, shared, setShared, layout, appHome, exec, watchFolder, nextCommand, home, machines, notify } from "herdr";
 import { walkLayout, commitLayout, sidebarBack, foldSidebar, dropStripDrag } from "./layout.js";
 import { Updater } from "./update.js";
-import { arriveOnLinux } from "./linux-arrival.js";
+import { arriveOnLinux, herdrIsTerminal } from "./linux-arrival.js";
 import { tryOr, readCommands, bounded, afterMount } from "./pure.js";
 import { openArrange } from "./open.js";
 import { DIALOG, G, T, glyphOf, tokens } from "./ui.js";
@@ -157,7 +157,7 @@ export default class Tabs extends View {
     this.holding = false;
     this.openRow = undefined;
     if (!this.arrange && cx) {
-      afterMount(cx, (later) => later.spawn(() => arriveOnLinux(localName()).catch(() => false)));
+      afterMount(cx, (later) => later.spawn(() => Promise.all([arriveOnLinux(localName()), herdrIsTerminal(localName())]).catch(() => false)));
       this.db = new Kdb(cx.timer);
       this.watchOpens(cx);
       // The bar is always on screen and the sidebar's footer may not be, so the bar polls for releases.

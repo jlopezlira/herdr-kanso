@@ -275,6 +275,7 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
   by `height` (220 ms, measured) and a new row grows in; a header's tools
   slide out by `width`; a panel fades in.
 - **Keys**: on Windows merge `keys.windows.json` instead of `keys.json`, on Linux `keys.linux.json`.
+- **Omarchy's clipboard keys**: at start on Linux, kanso-tabs (`linux-arrival.js`) adds a Hyprland rule that tags `herdr-app` windows `terminal`. It applies the rule now with `hyprctl` and keeps it in `~/.config/hypr/kanso.lua`, loaded by `pcall(require, "hypr.kanso")` in `hyprland.lua`; an older `hyprland.conf` gets `kanso.conf` and a `source` line instead. Omarchy's Super+C and Super+V then send Ctrl+Shift+C and Ctrl+Shift+V, the terminal's copy and paste, instead of Ctrl+C and Ctrl+V.
   macOS (`layout:kanso`): ⌃1-9 a space (guarded), ⌃⇧1-9 a
   panel by its place, ⌃⌥P/S/T a view, ⌃⌥1-9 a pane column, ⌃⇧, Kanso
   settings; ⌘⌥hjkl (⇧ moves) vim; left of column 1: sidebar list
