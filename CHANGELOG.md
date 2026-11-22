@@ -26,6 +26,7 @@ the branch's rules.
 
 ### Changed
 
+- A computer that is not connected stays in the sidebar: Asleep when it does not answer, Disconnected when you disconnected it, with its projects dimmed. Its buttons say Connect and Disconnect, and its right-click menu can Remove it, with a toast that adds it back.
 - A computer that asks for a password or for your key's passphrase signs in with one click: Sign in opens a tab that asks for it once, leaves kansō's own key there and reconnects, so it never asks again. Clicking a computer that needs a login does the same, instead of copying a command.
 - In Add a computer, a computer that takes keys only is added the same way, instead of asking you to copy your key there by hand.
 

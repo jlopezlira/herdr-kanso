@@ -256,7 +256,7 @@ test("The sidebar's sync icon is on, off or cannot run, and its tooltip says whe
   assert.equal(icon(dark, { dark: { synced_at: at(0) } }).tip, "Sync dark: synced just now");
   assert.match(icon(dark, { dark: { synced_at: at(90) } }).tip, /^Sync dark: synced (\w{3} \d+ )?\d\d:\d\d$/);
   assert.deepEqual(icon(dark, { dark: { reason: "update" } }), { state: "cannot", tip: `Sync dark: ${sync.UPDATE_TEXT}` });
-  assert.deepEqual(icon(dark, { dark: { reason: "unreachable" } }), { state: "cannot", tip: "Sync dark: Unreachable" });
+  assert.deepEqual(icon(dark, { dark: { reason: "unreachable" } }), { state: "cannot", tip: "Sync dark: Asleep" });
   assert.deepEqual(icon({}, { dark: { reason: "update" } }), { state: "off", tip: "Sync dark" }, "a failure from before it was off is not shown");
 });
 

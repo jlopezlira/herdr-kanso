@@ -8,24 +8,34 @@ const rows = async () => (await load("kanso-spaces/computer-menu.js", ["computer
 const words = (items) => clone(items).map((row) => (row.separator ? "—" : row.hint ? `${row.label} (${row.hint})` : row.label));
 const TAIL = ["—", "Add computer…", "—", "Hide “Computers”", "Settings for this…"];
 
-test("Another computer, connected, has its menu: Rename, Turn off, Sync, New project, Add computer, Hide and Settings", async () => {
+test("Another computer, connected, has its menu: Rename, Disconnect, Sync, New project, Remove, Add computer, Hide and Settings", async () => {
   const computerMenuItems = await rows();
-  assert.deepEqual(words(computerMenuItems({ remote: true, phase: "connected", syncOn: true })), ["Rename…", "Turn off", "Sync (on)", "New project", ...TAIL]);
-  assert.deepEqual(words(computerMenuItems({ remote: true, phase: "connected" })).slice(0, 3), ["Rename…", "Turn off", "Sync (off)"]);
+  assert.deepEqual(words(computerMenuItems({ remote: true, phase: "connected", syncOn: true })), ["Rename…", "Disconnect", "Sync (on)", "New project", "Remove", ...TAIL]);
+  assert.deepEqual(words(computerMenuItems({ remote: true, phase: "connected" })).slice(0, 4), ["Rename…", "Disconnect", "Sync (off)", "New project"]);
 });
 
 test("This computer has no power or sync to offer, and a computer out of reach keeps only its way back", async () => {
   const computerMenuItems = await rows();
   assert.deepEqual(words(computerMenuItems({ remote: false, phase: "connected" })), ["Rename…", "New project", ...TAIL]);
-  assert.deepEqual(words(computerMenuItems({ remote: true, phase: "off" })), ["Rename…", "Turn on", ...TAIL]);
-  assert.deepEqual(words(computerMenuItems({ remote: true, phase: "unavailable" })), ["Rename…", "Refresh", ...TAIL]);
-  assert.deepEqual(words(computerMenuItems({ remote: true, phase: "login" })), ["Rename…", "Sign in…", ...TAIL]);
+  assert.deepEqual(words(computerMenuItems({ remote: true, phase: "off" })), ["Rename…", "Connect", "Remove", ...TAIL]);
+  assert.deepEqual(words(computerMenuItems({ remote: true, phase: "unavailable" })), ["Rename…", "Refresh", "Remove", ...TAIL]);
+  assert.deepEqual(words(computerMenuItems({ remote: true, phase: "login" })), ["Rename…", "Sign in…", "Remove", ...TAIL]);
   assert.deepEqual(words(computerMenuItems({ remote: true, phase: "loading" })), ["Rename…", ...TAIL]);
+});
+
+test("Remove is on a remote computer in every phase but loading, and never on this computer", async () => {
+  const computerMenuItems = await rows();
+  const item = (props) => clone(computerMenuItems(props)).find((row) => row.key === "remove") ?? null;
+  for (const phase of ["connected", "off", "unavailable", "login"]) {
+    assert.deepEqual(item({ remote: true, phase }), { key: "remove", icon: "x", label: "Remove" });
+    assert.equal(item({ remote: false, phase }), null);
+  }
+  assert.equal(item({ remote: true, phase: "loading" }), null);
 });
 
 test("Add computer switched off in kansō settings leaves the menu without it or its line", async () => {
   const computerMenuItems = await rows();
-  assert.deepEqual(words(computerMenuItems({ remote: true, phase: "off", addComputer: false })), ["Rename…", "Turn on", "—", "Hide “Computers”", "Settings for this…"]);
+  assert.deepEqual(words(computerMenuItems({ remote: true, phase: "off", addComputer: false })), ["Rename…", "Connect", "Remove", "—", "Hide “Computers”", "Settings for this…"]);
 });
 
 // The popup as Herdr mounts it, with the kit drawing into recording elements.
@@ -52,7 +62,7 @@ const press = (el) => el.calls.find((c) => c[0] === "on_click")[1]({}, { notify(
 test("A right-click on a computer opens the kit's menu under its name, and Add computer opens the window to add one", async () => {
   const { view, calls, closed } = await popup({ menuProps: { route: "devbox", shown: "devbox", phase: "connected", syncOn: true } });
   const drawn = view.render();
-  assert.deepEqual(texts(drawn), ["devbox", "Rename…", "Turn off", "Sync", "on", "New project", "Add computer…", "Hide “Computers”", "Settings for this…"]);
+  assert.deepEqual(texts(drawn), ["devbox", "Rename…", "Disconnect", "Sync", "on", "New project", "Remove", "Add computer…", "Hide “Computers”", "Settings for this…"]);
   press(pressing(drawn, "Add computer…"));
   assert.deepEqual(calls, [["mod.open", { name: "kanso-computers" }]]);
   assert.deepEqual(closed, ["ov1"], "the menu closes once chosen");
@@ -61,7 +71,7 @@ test("A right-click on a computer opens the kit's menu under its name, and Add c
 test("Each row of a computer's menu does what its button or command does", async () => {
   const { view, calls, overlays, store } = await popup({ menuProps: { route: "devbox", shown: "devbox", phase: "connected", syncOn: false } });
   const drawn = view.render();
-  for (const words of ["Turn off", "Sync", "New project", "Hide “Computers”", "Settings for this…"]) press(pressing(drawn, words));
+  for (const words of ["Disconnect", "Sync", "New project", "Hide “Computers”", "Settings for this…"]) press(pressing(drawn, words));
   assert.deepEqual(calls, [["kanso-spaces.power-machine:devbox", null], ["kanso-spaces.sync-machine:devbox", null], ["space.new", { machine: "devbox" }]]);
   assert.equal(store["kanso.pieces"]["sidebar.computers"], "hide", "Hide switches the Computers piece off");
   assert.deepEqual(overlays.at(-1).props, { page: "pieces", find: "Computers" }, "Settings opens kansō settings on the Computers piece");
