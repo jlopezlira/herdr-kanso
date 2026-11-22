@@ -45,17 +45,19 @@ export const logindIdle = (text, now) => {
   return since > 0 ? Math.max(0, Math.floor((now - since / 1000) / 1000)) : 0;
 };
 const tryRead = (file) => { try { return readFileSync(file, "utf8"); } catch { return null; } };
+const specifiers = (text) => String(text).replace(/%/g, "%%");
+const unitQuote = (text) => `"${specifiers(text).replace(/[\\"]/g, "\\$&")}"`;
 export const systemdService = ({ node, self, appHome, log }) => `[Unit]
 Description=kansō Memory
 
 [Service]
 Type=oneshot
-Environment=HERDR_APP_HOME=${appHome}
-ExecStart="${node}" "${self}" check
+Environment=${unitQuote(`HERDR_APP_HOME=${appHome}`)}
+ExecStart=${unitQuote(node)} ${unitQuote(self)} check
 Nice=10
 IOSchedulingClass=idle
-StandardOutput=append:${log}
-StandardError=append:${log}
+StandardOutput=append:${specifiers(log)}
+StandardError=append:${specifiers(log)}
 `;
 export const systemdTimer = () => `[Unit]
 Description=kansō Memory, every minute
@@ -127,6 +129,7 @@ export function guardHost({ platform = platformName(process.platform), run, home
     corePids: async (rows) => rows.filter((p) => /\/herdr-core$/.test(p.command.split(" ")[0]) && !/ connect\b/.test(p.command)).map((p) => p.pid),
     window: async () => { const r = await run("lsof", ["-t", join(appHome, "herdr-app.sock")], 5000); return { pid: Number(r.stdout.trim().split("\n")[0]) || null }; },
     captureWindow: async () => {},
+    scheduled: async () => ({ state: "unavailable", reason: "Task Scheduler is only used on Windows" }),
   };
   const implementations = {
     macos: () => ({
@@ -174,7 +177,6 @@ export function guardHost({ platform = platformName(process.platform), run, home
         return checked(await run("launchctl", ["bootstrap", `gui/${uid}`, plist]));
       },
       uninstall: async () => { await run("launchctl", ["bootout", `gui/${uid}/${LABEL}`]); rmSync(join(home, "Library/LaunchAgents", `${LABEL}.plist`), { force: true }); },
-      scheduled: async () => ({ state: "unavailable", reason: "Task Scheduler is only used on Windows" }),
     }),
     linux: () => ({
       ...unix, metric: "proportional set size",
@@ -205,7 +207,6 @@ export function guardHost({ platform = platformName(process.platform), run, home
         ["service", "timer"].forEach((kind) => rmSync(join(home, ".config/systemd/user", `${LABEL}.${kind}`), { force: true }));
         await run("systemctl", ["--user", "daemon-reload"]);
       },
-      scheduled: async () => ({ state: "unavailable", reason: "Task Scheduler is only used on Windows" }),
     }),
     windows: () => ({
       metric: "working set", swapLabel: "page file", forceHelpers: true, quitCommand: "window.close",

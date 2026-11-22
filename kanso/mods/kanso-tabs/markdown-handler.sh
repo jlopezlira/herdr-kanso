@@ -8,11 +8,13 @@
 #   sh markdown-handler.sh install     make Kanso Markdown the app for .md files
 #   sh markdown-handler.sh uninstall   give .md files back to the app they had
 #
-# Kanso Markdown is a small AppleScript app in ~/Applications. It writes the
-# file's path into Herdr's data/kanso-open folder, where Kanso (kanso-tabs)
-# or the markdown-panel mod picks it up; outside Kanso it opens that mod's
-# window if it isn't open. Then it brings Herdr to the front. When Herdr
-# isn't running, it opens the file in TextEdit.
+# On macOS, Kanso Markdown is a small AppleScript app in ~/Applications; on
+# Linux, a desktop entry in ~/.local/share/applications made the default for
+# text/markdown. Each writes the file's path into Herdr's data/kanso-open
+# folder, where Kanso (kanso-tabs) or the markdown-panel mod picks it up;
+# outside Kanso it opens that mod's window if it isn't open. Then it brings
+# Herdr to the front. When Herdr isn't running, macOS opens the file in
+# TextEdit and Linux in the app .md files had before, or starts Herdr.
 set -eu
 
 APP="$HOME/Applications/Kanso Markdown.app"
@@ -21,6 +23,7 @@ HOME_DIR="${HERDR_APP_HOME:-$HOME/.config/herdr-app}"
 INBOX="$HOME_DIR/data/kanso-open"
 SAVED="$HOME_DIR/data/kanso-markdown-previous"
 TYPES="net.daringfireball.markdown"
+DESKTOP_APPS="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
 LSREGISTER=/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister
 
 # Prints the bundle id that opens .md files now, or sets it ($1).
@@ -40,6 +43,29 @@ let status = LSSetDefaultRoleHandlerForContentType("net.daringfireball.markdown"
 if status != 0 { print("LaunchServices refused (\(status))"); exit(1) }
 SWIFT
   fi
+}
+
+hand_to_herdr() {
+  cat <<HAND
+mkdir -p "$INBOX"
+printf '%s' "\$p" > "$INBOX/\$(date +%s)-\$\$.path"
+s=\$("$herdr" status 2>/dev/null)
+case "\$s" in
+  *'"layout": "kanso"'*) ;;
+  *) if [ -d "$HOME_DIR/mods/markdown-panel" ]; then
+       case "\$s" in *'"markdown-panel"'*) ;; *) "$herdr" do mod.open '{"name":"markdown-panel"}' >/dev/null 2>&1 ;; esac
+     fi ;;
+esac
+HAND
+}
+
+announce() {
+  if [ "$1" = "$2" ]; then echo "Kanso Markdown is updated; .md files still open in Herdr."
+  else echo "Markdown files now open in Herdr (they opened in ${1:-the system default})."; fi
+}
+
+refresh_desktop() {
+  command -v update-desktop-database >/dev/null && update-desktop-database "$DESKTOP_APPS" >/dev/null 2>&1 || true
 }
 
 install() {
@@ -67,15 +93,7 @@ APPLESCRIPT
 p=\$1
 export HERDR_APP_HOME="$HOME_DIR"
 /usr/bin/pgrep -xq Herdr || exec /usr/bin/open -a TextEdit "\$p"
-/bin/mkdir -p "$INBOX"
-/usr/bin/printf '%s' "\$p" > "$INBOX/\$(/bin/date +%s)-\$\$.path"
-s=\$("$herdr" status 2>/dev/null)
-case "\$s" in
-  *'"layout": "kanso"'*) ;;
-  *) if [ -d "$HOME_DIR/mods/markdown-panel" ]; then
-       case "\$s" in *'"markdown-panel"'*) ;; *) "$herdr" do mod.open '{"name":"markdown-panel"}' >/dev/null 2>&1 ;; esac
-     fi ;;
-esac
+$(hand_to_herdr)
 /usr/bin/open -a Herdr
 OPEN
   plist="$APP/Contents/Info.plist"
@@ -89,8 +107,7 @@ OPEN
   previous=$(handler || true)
   if [ -n "$previous" ] && [ "$previous" != "$ID" ]; then printf '%s\n' "$previous" > "$SAVED"; fi
   handler "$ID"
-  if [ "$previous" = "$ID" ]; then echo "Kanso Markdown is updated; .md files still open in Herdr."
-  else echo "Markdown files now open in Herdr (they opened in ${previous:-the system default})."; fi
+  announce "$previous" "$ID"
 }
 
 uninstall() {
@@ -104,9 +121,8 @@ uninstall() {
 linux_install() {
   command -v xdg-mime >/dev/null || { echo "Needs xdg-mime (xdg-utils)." >&2; exit 1; }
   herdr=$(command -v herdr-app || echo "$HOME/.local/bin/herdr-app")
-  apps="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
   opener="$HOME_DIR/data/kanso-markdown/open.sh"
-  mkdir -p "$apps" "$INBOX" "$(dirname "$opener")"
+  mkdir -p "$DESKTOP_APPS" "$INBOX" "$(dirname "$opener")"
   previous=$(xdg-mime query default text/markdown 2>/dev/null || true)
   if [ -n "$previous" ] && [ "$previous" != "$ID.desktop" ]; then printf '%s\n' "$previous" > "$SAVED"; fi
   cat > "$opener" <<OPEN
@@ -118,20 +134,12 @@ if ! pgrep -x herdr-app >/dev/null; then
   [ -n "\$back" ] && command -v gtk-launch >/dev/null && exec gtk-launch "\${back%.desktop}" "\$p"
   exec "$herdr"
 fi
-mkdir -p "$INBOX"
-printf '%s' "\$p" > "$INBOX/\$(date +%s)-\$\$.path"
-s=\$("$herdr" status 2>/dev/null)
-case "\$s" in
-  *'"layout": "kanso"'*) ;;
-  *) if [ -d "$HOME_DIR/mods/markdown-panel" ]; then
-       case "\$s" in *'"markdown-panel"'*) ;; *) "$herdr" do mod.open '{"name":"markdown-panel"}' >/dev/null 2>&1 ;; esac
-     fi ;;
-esac
+$(hand_to_herdr)
 command -v omarchy-launch-or-focus >/dev/null && exec omarchy-launch-or-focus herdr-app "$herdr"
 exit 0
 OPEN
   chmod +x "$opener"
-  cat > "$apps/$ID.desktop" <<DESKTOP
+  cat > "$DESKTOP_APPS/$ID.desktop" <<DESKTOP
 [Desktop Entry]
 Type=Application
 Name=Kanso Markdown
@@ -140,18 +148,16 @@ MimeType=text/markdown;text/x-markdown;
 NoDisplay=true
 Terminal=false
 DESKTOP
-  command -v update-desktop-database >/dev/null && update-desktop-database "$apps" >/dev/null 2>&1 || true
+  refresh_desktop
   xdg-mime default "$ID.desktop" text/markdown text/x-markdown
-  if [ "$previous" = "$ID.desktop" ]; then echo "Kanso Markdown is updated; .md files still open in Herdr."
-  else echo "Markdown files now open in Herdr (they opened in ${previous:-the system default})."; fi
+  announce "$previous" "$ID.desktop"
 }
 
 linux_uninstall() {
-  apps="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
   previous=$(cat "$SAVED" 2>/dev/null || true)
   if [ "$(xdg-mime query default text/markdown 2>/dev/null)" = "$ID.desktop" ] && [ -n "$previous" ]; then xdg-mime default "$previous" text/markdown text/x-markdown; fi
-  rm -rf "$apps/$ID.desktop" "$HOME_DIR/data/kanso-markdown" "$SAVED"
-  command -v update-desktop-database >/dev/null && update-desktop-database "$apps" >/dev/null 2>&1 || true
+  rm -rf "$DESKTOP_APPS/$ID.desktop" "$HOME_DIR/data/kanso-markdown" "$SAVED"
+  refresh_desktop
   echo "Markdown files open in ${previous:-the system default} again."
 }
 

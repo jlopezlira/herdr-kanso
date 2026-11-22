@@ -28,15 +28,25 @@ exit 0`;
 
 const LINUX_ICON = `
 out=$1; shift; mkdir -p "$out"
-apps="\${XDG_DATA_HOME:-$HOME/.local/share}/applications /usr/share/applications /var/lib/flatpak/exports/share/applications $HOME/.local/share/flatpak/exports/share/applications"
-themes="\${XDG_DATA_HOME:-$HOME/.local/share}/icons/hicolor /usr/share/icons/hicolor /var/lib/flatpak/exports/share/icons/hicolor $HOME/.local/share/flatpak/exports/share/icons/hicolor"
+IFS='
+'
+data=\${XDG_DATA_HOME:-$HOME/.local/share}
+apps="$data/applications
+/usr/share/applications
+/var/lib/flatpak/exports/share/applications
+$HOME/.local/share/flatpak/exports/share/applications"
+themes="$data/icons/hicolor
+/usr/share/icons/hicolor
+/var/lib/flatpak/exports/share/icons/hicolor
+$HOME/.local/share/flatpak/exports/share/icons/hicolor"
 while [ $# -gt 1 ]; do
   id=$1; name=$(basename "$2"); shift 2
+  pattern=$(printf '%s' "$name" | sed 's/[][\\.*^$+?(){}|/]/\\\\&/g')
   [ -f "$out/$id.png" ] && continue
   d=""
   for a in $apps; do
     [ -f "$a/$name.desktop" ] && { d="$a/$name.desktop"; break; }
-    for f in "$a"/*.desktop; do grep -qE "^Exec=([^ ]*/)?$name( |$)" "$f" 2>/dev/null && { d=$f; break 2; }; done
+    for f in "$a"/*.desktop; do grep -qE "^Exec=([^ ]*/)?$pattern( |$)" "$f" 2>/dev/null && { d=$f; break 2; }; done
   done
   [ -n "$d" ] || continue
   i=$(sed -n 's/^Icon=//p' "$d" | head -1)
