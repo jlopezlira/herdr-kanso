@@ -288,6 +288,9 @@ test("New conversation's menu ends with Add computer, last for the keyboard too,
 });
 
 const AGENT_THEME = { foreground: "#fff", muted: "#888", dim: "#666", border: "#333", selected: "#444" };
+const { copiesToViewer: localViewer } = await load("kanso-spaces/platform-viewer.js", ["copiesToViewer"]);
+const onThisMac = (argv) => clone(localViewer("macos")(argv));
+const flushed = async () => { for (let step = 0; step < 40; step += 1) await Promise.resolve(); };
 const agentMenu = (host) => loadSpaces({
   ...elements(blank), theme: () => (AGENT_THEME),
   shared: () => null, setShared: () => {}, spaces: () => [], home: () => "/Users/me", closeOverlay: () => {}, ...host,
@@ -307,7 +310,8 @@ test("which agent: only the ones installed, nothing chosen for you, and one pick
   view.newAgentView(AGENT_THEME);
   assert.deepEqual(made.slice(0, 3), ["Terminal", "Codex", "pi"], "Terminal first, then the agents; Claude Code is not installed here: not offered");
   view.menuActs[1]({});
-  assert.deepEqual(calls, [["space.new", { folder: "/work/api", machine: "", argv: ["codex"] }]]);
+  await flushed();
+  assert.deepEqual(calls, [["space.new", { folder: "/work/api", machine: "", argv: onThisMac(["codex"]) }]]);
 
   // A worktree just made: the agent chosen starts in its own tab there, named by its branch.
   calls.length = 0; made.length = 0;
@@ -317,7 +321,8 @@ test("which agent: only the ones installed, nothing chosen for you, and one pick
   tree.newAgentView(AGENT_THEME);
   assert.ok(!made.includes("New worktree\u2026"), "no worktree in a worktree");
   tree.menuActs[2]({});
-  assert.deepEqual(calls, [["space.new", { folder: "/work/api", machine: "" }], ["tab.new", { folder: "/kanso/worktrees/api/feat-x", name: "feat-x", argv: ["pi"] }]]);
+  await flushed();
+  assert.deepEqual(calls, [["space.new", { folder: "/work/api", machine: "" }], ["tab.new", { folder: "/kanso/worktrees/api/feat-x", name: "feat-x", argv: onThisMac(["pi"]) }]]);
 });
 
 const claudeHere = () => ({ "kanso.agents.installed": { "": [{ key: "claude", name: "Claude Code", installed: true, run: ["claude"] }] } });
@@ -360,6 +365,7 @@ test("The + menu is the approved one: where it opens, Terminal with its key, the
   view.menuActs[5]({});
   assert.deepEqual(overlays.at(-1), { height: 4 + 28 + 32 + 4, props: { trees: { place, trees: [{ path: "/work/api-feat", branch: "feat" }] } } }, "Open worktree… lists the others, as tall as its menu draws");
   view.menuDigits[1]({ notify() {} });
+  await flushed();
   assert.deepEqual(calls, [["space.select", { id: "sp-api" }], ["tab.new", { space: "sp-api", folder: "/work/api", argv: ["codex"] }]], "2 starts the second agent");
   assert.equal(menu({ known, repo: false }).lines.some(([text]) => text.includes("worktree")), false, "outside a repository: no worktree rows");
   assert.deepEqual(menu({ known: null }).lines.map(([text]) => text), ["Terminal", "New project", "Arrange\u2026"], "the first time no agent is offered until the computer answers");
@@ -389,6 +395,7 @@ test("Tab walks every row of the New tab + menu in order, each with its focus wa
     for (const key of ["enter", "space"]) {
       calls.length = 0; overlays.length = 0; view.starting = false;
       keys.key(key, { notify() {} });
+      await flushed();
       if (typeof effect === "string") assert.equal(overlays.at(-1), effect, `${label}, ${key}`);
       else assert.deepEqual(calls.at(-1), effect, `${label}, ${key}`);
     }
@@ -415,6 +422,7 @@ test("The + menu keeps every installed agent, numbers the first nine, starts one
   many.press("g", { shift: true });
   assert.equal(many.view.menuAt, many.view.menuActs.length - 1, "Shift-G still goes to the last row");
   many.press("2");
+  await flushed();
   assert.deepEqual(calls.at(-1), ["tab.new", { space: "sp-api", folder: "/work/api", argv: ["a2"] }]);
   calls.length = 0;
   const known = [{ key: "codex", name: "Codex", installed: true, run: ["codex"] }];
@@ -427,10 +435,11 @@ test("The + menu keeps every installed agent, numbers the first nine, starts one
   failed.press("j"); failed.press("j");
   assert.equal(menu({ known, agentsFailed: "ssh: connect timed out", menuAt: 2 }).items.find((line) => line.failure).failure.lit, "fix", "the keyboard reaches Refresh after the agents");
   failed.press("1");
+  await flushed();
   assert.deepEqual(calls.at(-1), ["tab.new", { space: "sp-api", folder: "/work/api", argv: ["codex"] }], "1 still starts the agent last found");
   failed.view.menuAt = 3;
   failed.press("enter");
-  assert.deepEqual(calls.at(-1), ["tab.new", { name: "Explain devbox", argv: ["claude"],
+  assert.deepEqual(calls.at(-1), ["tab.new", { name: "Explain devbox", argv: onThisMac(["claude"]),
     task: "kansō could not list the agents installed on devbox. The error: ssh: connect timed out. Explain why, and how to fix it. Do not change anything.", space: "sp-home" }],
   "Enter on Explain asks this computer's agent, in a space on this computer, never devbox's");
 });
@@ -447,7 +456,7 @@ test("Explain is this computer's: with no local space it opens one here, a refus
   const view = plusMenu(Spaces, failed);
   view.view.menuActs[2]({});
   assert.deepEqual(calls.at(-1)?.slice(0, 1), ["space.new"]);
-  assert.deepEqual([calls.at(-1)[1].machine, calls.at(-1)[1].folder, calls.at(-1)[1].argv], ["", "/Users/me", ["claude"]], "a new space on this computer");
+  assert.deepEqual([calls.at(-1)[1].machine, calls.at(-1)[1].folder, calls.at(-1)[1].argv], ["", "/Users/me", onThisMac(["claude"])], "a new space on this computer");
   const { Spaces: Refusing } = await host(() => { throw new Error("refused"); });
   assert.doesNotThrow(() => plusMenu(Refusing, failed).view.menuActs[2]({}), "a refusal is quiet");
   store["kanso.agents.installed"][""] = [];
@@ -544,5 +553,6 @@ test("In the + menu Enter runs the highlighted row only when the list holds the 
   assert.deepEqual(calls, [], "focus on a row: the list's index runs nothing");
   focused(true);
   press("enter");
+  await flushed();
   assert.deepEqual(calls.at(-1), ["tab.new", { space: "sp-api", folder: "/work/api", argv: ["claude"] }], "focus on the list: the highlighted row runs");
 });
