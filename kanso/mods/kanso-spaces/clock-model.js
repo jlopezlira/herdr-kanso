@@ -55,7 +55,7 @@ export function resumeWaiter({ platform, address, until, token, command = "", gr
   return waiter(platform, RESUME_SH, resumePs(at, address, token, command), [at, address, token, command]);
 }
 
-export function runArgs({ cwd, space, on = null, id, name = null, tab = null }) {
+export function runArgs({ cwd, space, on = null, id = null, name = null, tab = null }) {
   return [
     "run", "--bg", "--no-parent", "--outlive-parent",
     ...(on ? ["--on", on] : []),
@@ -63,7 +63,7 @@ export function runArgs({ cwd, space, on = null, id, name = null, tab = null }) 
     "--label", `herdr.space=${localId(space)}`,
     ...(tab ? ["--label", `herdr.tab=${localId(tab)}`] : []),
     "--label", "herdr.seen=0",
-    "--label", `${RUN_LABEL}=${id}`,
+    ...(id ? ["--label", `${RUN_LABEL}=${id}`] : []),
     ...(name ? ["--label", `kanso.name=${name}`] : []),
     "--",
   ];

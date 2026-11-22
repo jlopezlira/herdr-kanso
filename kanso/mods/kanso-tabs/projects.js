@@ -64,6 +64,14 @@ export async function addWorktree({ folder, machine = null, branch, base = "", f
   return { path, made: kind === "made" };
 }
 
+export async function defaultBranch(folder, machine = null) {
+  const on = machine ? { on: machine } : {};
+  const remote = await exec("git", ["-C", folder, "symbolic-ref", "--short", "refs/remotes/origin/HEAD"], on).catch(() => null);
+  if (remote?.code === 0 && remote.stdout.trim()) return remote.stdout.trim().replace(/^origin\//, "");
+  const here = await exec("git", ["-C", folder, "rev-parse", "--abbrev-ref", "HEAD"], on).catch(() => null);
+  return here?.code === 0 ? here.stdout.trim() : "";
+}
+
 export async function worktreesOf(folder, machine = null) {
   const r = await exec("git", ["-C", folder, "worktree", "list", "--porcelain"], machine ? { on: machine } : {}).catch(() => null);
   return r?.code === 0 ? parseWorktreeList(r.stdout) : [];

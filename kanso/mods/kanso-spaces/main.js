@@ -19,15 +19,15 @@ import { agentSession, agentLabel, renameTerminal, SETTLED_LABEL, SNOOZE_LABEL, 
 import { ThreadLocator, findThreads, sameThread, pidsOf, aliveIn, aliveDue, ALIVE_MS, ALIVE_BEHIND_MS } from "./threads.js";
 import { Panel, sameSeen } from "./panel.js";
 import { Store } from "./store.js";
-import { Kdb, restDue, machinesToAsk, kansoDir, worktreeBase } from "./kdb.js";
+import { Kdb, restDue, machinesToAsk, kansoDir, worktreeBase, newId } from "./kdb.js";
 import { agentSnapshot, agentTargets, observedAgents, targetOf, parseTarget, returnSignature, RETURN_LABEL, AWAY_PIECE, destinationOf, livePlaces } from "./since-left-model.js";
 import { SinceLeft } from "./since-left.js";
-import { REGISTRY, keyOfSpace, keyOfProject, closedProjects, shownNames, startingProjects, folderName, addWorktree, worktreesOf, missingFolders, trimmed, sameProjects } from "./projects.js";
+import { REGISTRY, keyOfSpace, keyOfProject, placeKey, defaultBranch, closedProjects, shownNames, startingProjects, folderName, addWorktree, worktreesOf, missingFolders, trimmed, sameProjects } from "./projects.js";
 import { sleepingNow, asleepGroups, nameOf, seenNow, conversationOfThread, shownThread, terminalNames, agentKey, SHOWN_LABEL, PROJECT_LABEL, ID_LABEL } from "./roster.js";
 import { pollable, activePlaces } from "./background.js";
 import { listKey, moveTo, plainKey } from "./listkeys.js";
 import { commitLayout, setRail, foldSidebar, railWidth, dropStripDrag } from "./layout.js";
-import { afterMount, tryOr } from "./pure.js";
+import { afterMount, tryOr, mapSeries } from "./pure.js";
 import { commandLoop, MachineRead } from "./sidebar.js";
 import { gitFacts, openAhead, AHEAD } from "./sidebar-draw.js";
 import { projectRow } from "./project-row.js";
@@ -42,9 +42,9 @@ import { pullKey, runPull, canWake, enterOpens, sectionMarkOf, sectionCount, row
 import { DIALOG, H, G, T, R, W, SIDEBAR, GLIDE, OPACITY, TINT, ARM_MS, alpha, sidebarSides, tokens } from "./ui.js";
 import { ELBOW } from "./ui-row.js";
 import { button, Armed } from "./ui-button.js";
-import { dialog } from "./ui-dialog.js";
-import { field, TextField } from "./ui-field.js";
-import { menu, emptyState, skeletonOf, stack, tooltip } from "./kit.js";
+import { dialog, statusNotes } from "./ui-dialog.js";
+import { field, TextField, labelled, choices } from "./ui-field.js";
+import { menu, emptyState, skeletonOf, stack, tooltip, failureLine } from "./kit.js";
 import { boundChord, chordOf, hintOf } from "./ui-tooltip.js";
 import { contextRows, contextMenu } from "./context-menu.js";
 import { menuHeight, RUN_ROWS } from "./ui-menu.js";
@@ -56,8 +56,12 @@ import { machineRecord, canRestore, addArgs, rmArgs, hcError, needsLogin, heldNa
 import { Names } from "./alias.js";
 import { syncIcon, peerOn, withPeer } from "./sync.js";
 import { withNeeds } from "./needs.js";
-import { withLimits, limitOf, resumeArmed, commandOf, AT_RESET_LABEL, COMMAND_LABEL } from "./limits-model.js";
-import { armResume, disarmResume } from "./clock.js";
+import { withLimits, limitOf, resumeArmed, commandOf, resetWords, AT_RESET_LABEL, COMMAND_LABEL } from "./limits-model.js";
+import { armResume, disarmResume, stopWaiter } from "./clock.js";
+import { nextRun } from "./clock-model.js";
+import { scheduleOf, armFor, runNow, outcomeOf, scheduleName } from "./schedules.js";
+import { draftOf, checkDraft, scheduleBody, scheduleWords } from "./schedule-dialog.js";
+import { severalRun, startInTree, shownTab } from "./several.js";
 import { LimitWatch } from "./limits.js";
 import { resumeCommand, limitLines, providerLimits, shownNow } from "./limit-menu.js";
 import { computerMenuItems } from "./computer-menu.js";
@@ -168,11 +172,13 @@ const ROW_SHARED = [REGISTRY, NEEDS_YOU, "strip.state", SLEEP_PENDING, SLEEP_WAK
 const rowInputs = () => ({ spaces: spaces(), panes: panes(), terminals: terminals(), agents: withLimits(withNeeds(agents(), terminals()), terminals()), machines: machines(), focused: focused(), front: window()?.active === true, keys: keys(),
   shared: ROW_SHARED.map((key) => shared(key)), pieces: Object.entries(pieces(shared)).filter(([id]) => id.startsWith("sidebar.")) });
 const ROW_STATE = ["hoverRow", "hoverSpace", "hoverHead", "hoverMachine", "pressed", "over", "draggedAgent", "overAgent", "kbd", "navKey", "needsOpen", "needsEmpty", "foldH", "folded",
-  "agentsFolded", "sectionsFolded", "asleepOpen", "shelvesOpen", "alive", "git", "held", "custom", "machines", "parked", "waking", "login", "failed", "pulling", "hints", "sync", "hostName"];
+  "agentsFolded", "sectionsFolded", "asleepOpen", "shelvesOpen", "alive", "git", "held", "custom", "machines", "parked", "waking", "login", "failed", "pulling", "hints", "sync", "hostName", "runFailures"];
 const ROW_REPLACED = ["threadsShown", "steps", "since", "tasks"];
 const listed = (value) => (value instanceof Set || value instanceof Map ? [...value] : value);
 const MINUTE_MS = 60_000;
 const LIMIT_MS = 2000;
+const SEVERAL_SHOW_MS = 4000;
+const SEVERAL_POLL_MS = 200;
 const BORN_MS = 1500;
 const bornBy = (at, now) => now - at > BORN_MS;
 const narrowAt = (width) => (width ?? SIDEBAR.w) < SIDEBAR.narrow;
@@ -317,7 +323,7 @@ export default class Spaces extends RetryingView {
     this.clock = cx.timer;
     this.settleUntil = Date.now() + SETTLE;
     // Opened as a row's right-click menu (props().menu): nothing else to run.
-    if (props()?.menu || props()?.awayMenu || props()?.railMenu || props()?.spaceMenu || props()?.newAgent || props()?.trees || props()?.worktree || props()?.newConversation || props()?.newProject || props()?.machineMenu) {
+    if (props()?.menu || props()?.awayMenu || props()?.railMenu || props()?.spaceMenu || props()?.newAgent || props()?.trees || props()?.worktree || props()?.schedule || props()?.newConversation || props()?.newProject || props()?.machineMenu) {
       // Nothing is chosen for you: no row lit until the keyboard moves.
       this.armed = new Armed(); this.menuAt = -1; this.handle = cx.focus_handle();
       // A scroll handle is state: made here, never during render (Herdr refuses it there).
@@ -400,11 +406,13 @@ export default class Spaces extends RetryingView {
     });
     // Remote machines: every 30 s in front, every 2 min behind.
     cx.timer.every(30000, cx => {
+      this.refreshRunFailures().then(() => this.paint()).catch(() => {});
       if (window().active) { this.refreshMachines(cx, true); return; }
       this.machineTicks += 1;
       if (this.machineTicks % 4 === 0) this.refreshMachines(cx, true);
     });
     this.machineTicks = 0;
+    cx.timer.after(0, () => this.refreshRunFailures().then(() => this.paint()).catch(() => {}));
     // `git status` walks the whole tree: only when its answer could have changed (see `due`);
     // behind other windows every 5 s instead of 0.5 s, nothing is missed.
     cx.timer.every(500, (cx) => this.checkNew(cx));
@@ -501,7 +509,17 @@ export default class Spaces extends RetryingView {
     if (p.worktree) {
       this.branch = new TextField({ placeholder: "feat/my-change" });
       this.branch.on("submit", (_e, cx) => this.makeWorktree(cx));
+      this.wtPrompt = new TextField({ placeholder: "What each agent is asked first" }, { multiline: true });
+      this.wtBase = new TextField({ placeholder: "main" });
+      this.wtAgents = new Set();
+      this.wtFailed = [];
+      this.askAgents(p.worktree, cx);
+      defaultBranch(p.worktree.folder, p.worktree.machine || null).then((b) => { if (!this.wtBase.value()) this.wtBase.set_value(b); this.redraw(cx); });
       this.branch.focus();
+      return;
+    }
+    if (p.schedule) {
+      this.openSchedule(p.schedule, cx);
       return;
     }
     this.handle.focus();
@@ -516,10 +534,11 @@ export default class Spaces extends RetryingView {
     if (place?.folder) {
       worktreesOf(place.folder, place.machine || null).then((list) => { this.trees = list.filter((x) => !x.main && !x.prunable); this.redraw(cx); });
     }
+    if (place) this.loadSchedules(place, cx);
   }
 
   close() {
-    try { this.branch?.release(); this.projectName?.release(); this.convScroll?.release(); this.agentScroll?.release(); this.find?.release(); } catch { /* already gone */ }
+    try { this.wtPrompt?.release(); this.wtBase?.release(); Object.values(this.fields ?? {}).forEach((f) => f.release()); this.branch?.release(); this.projectName?.release(); this.convScroll?.release(); this.agentScroll?.release(); this.find?.release(); } catch { /* already gone */ }
   }
 
   menuPlace(m) {
@@ -1878,6 +1897,136 @@ export default class Spaces extends RetryingView {
     else openAt(place, x.path, null, x.branch);
   }
 
+  scheduleDialog(place, id = null) {
+    openOverlay({ mod: "kanso-spaces", kind: "dialog", width: DIALOG.wide, props: { schedule: { place, id } } });
+  }
+
+  openSchedule({ place, id }, cx) {
+    this.askAgents(place, cx);
+    this.draftBase = "";
+    defaultBranch(place.folder, place.machine || null).then((b) => { this.draftBase = b; this.redraw(cx); });
+    const begin = (s) => {
+      this.draft = draftOf(s, Date.now());
+      const text = (placeholder, value, more) => new TextField({ placeholder, value }, more);
+      this.fields = { prompt: text("Triage the pull requests whose checks failed", this.draft.prompt, { multiline: true }), time: text("09:00", this.draft.time),
+        every: text("30", this.draft.every), at: text("2026-11-23 09:00", this.draft.at) };
+      this.fields.prompt.focus();
+      this.redraw(cx);
+    };
+    if (!id) { begin(null); return; }
+    this.db().schedules().then((rows) => begin(rows.map(scheduleOf).find((s) => s.id === id) ?? null)).catch(() => begin(null));
+  }
+
+  setDraft(patch, cx) {
+    this.draft = { ...this.draft, ...patch };
+    this.schedError = null;
+    this.redraw(cx);
+  }
+
+  agentChoices(id, c, on, pick, place) {
+    if (this.agentsFailed) return failureLine({ text: `Can't list agents on ${place.machine || "this computer"}`, fix: "Refresh", detail: this.agentsFailed })(`${id}-failed`, c, { onClick: (cx) => { this.askAgents(place, cx); this.redraw(cx); } });
+    if (!this.known) return skeletonOf({ shape: "line", count: 1 })(`${id}-loading`, c);
+    const installed = this.known.filter((a) => a.installed);
+    return installed.length ? choices(id, installed.map((a) => ({ key: a.key, label: a.name })), on, pick, c) : emptyState({ icon: "bot", text: "No agents installed" })(`${id}-none`, c);
+  }
+
+  scheduleView(t) {
+    const { place, id } = props().schedule, c = tokens(t), close = () => closeOverlay(props().overlay);
+    const title = id ? "Edit schedule" : `Schedule an agent in ${place.name ?? "this project"}`;
+    if (!this.draft) return dialog("schedule-dialog", c, { title, loading: true, secondary: "Cancel", onCancel: close });
+    const d = this.draft;
+    const agents = this.agentChoices("schedule-agent", c, (k) => d.agent === k, (k, cx) => this.setDraft({ agent: k }, cx), place);
+    const on = {
+      kind: (kind, cx) => this.setDraft({ kind }, cx), unit: (unit, cx) => this.setDraft({ unit }, cx), tree: (_k, cx) => this.setDraft({ tree: !d.tree }, cx),
+      day: (day, cx) => this.setDraft({ days: d.days.includes(day) ? d.days.filter((x) => x !== day) : [...d.days, day] }, cx),
+    };
+    return dialog("schedule-dialog", c, {
+      title, body: scheduleBody("schedule", c, { draft: d, agents, fields: this.fields, base: this.draftBase, on }),
+      notes: statusNotes({ busy: this.saving ? "Saving\u{2026}" : null, error: this.schedError }),
+      secondary: "Cancel", primary: id ? "Save" : "Schedule", state: this.saving ? "loading" : "default", onCancel: close, onPrimary: (cx) => this.saveSchedule(cx),
+    });
+  }
+
+  saveSchedule(cx) {
+    if (this.saving) return;
+    const { place, id } = props().schedule, now = Date.now(), f = this.fields;
+    const d = { ...this.draft, prompt: f.prompt.value(), time: f.time.value(), every: f.every.value(), at: f.at.value() };
+    const checked = checkDraft(d, now);
+    if (checked.error) { this.schedError = checked.error; this.redraw(cx); return; }
+    const a = this.known.find((x) => x.key === d.agent);
+    const s = { id: id ?? newId(), project: placeKey(place.machine, place.folder || home()), agent: a.key, agentName: a.name, run: a.run, prompt: d.prompt.trim(), when: checked.when, tree: d.tree, base: this.draftBase };
+    this.saving = true;
+    this.redraw(cx);
+    cx.spawn(async (cx) => {
+      try {
+        await this.db().saveSchedule(s, now);
+        const row = (await this.db().schedules()).find((r) => r.id === s.id);
+        await armFor(scheduleOf(row));
+        closeOverlay(props().overlay);
+      } catch (e) {
+        this.schedError = String(e?.message ?? e);
+      } finally { this.saving = false; this.redraw(cx); }
+    });
+  }
+
+  loadSchedules(place, cx) {
+    const key = placeKey(place.machine, place.folder || home());
+    this.db().schedules().then(async (rows) => {
+      const mine = rows.map(scheduleOf).filter((s) => s.project === key);
+      this.schedules = await Promise.all(mine.map(async (s) => ({ ...s, ...(await outcomeOf(s.id)) })));
+      this.redraw(cx);
+    }).catch(() => {});
+  }
+
+  scheduleHint(s, now = Date.now()) {
+    if (s.paused) return "Paused";
+    if (s.failed) return "Did not start";
+    const next = nextRun(s.when, now);
+    return next ? resetWords(next, now) : "Ran";
+  }
+
+  async pauseSchedule(s, paused) {
+    await this.db().pauseSchedule(s.id, paused);
+    if (paused) return stopWaiter(scheduleName(s.id));
+    const row = (await this.db().schedules()).find((r) => r.id === s.id);
+    return row ? armFor(scheduleOf(row)) : null;
+  }
+
+  async deleteSchedule(s) {
+    await this.db().deleteSchedule(s.id);
+    return stopWaiter(scheduleName(s.id));
+  }
+
+  retryRun(s) {
+    this.runFailures = new Map([...(this.runFailures ?? new Map())].filter(([, r]) => r.s.id !== s.id));
+    return runNow(s);
+  }
+
+  scheduleLines(item, s, place) {
+    const key = `delete-${s.id}`;
+    return [
+      ...(s.failed ? [{ failure: { text: "The last run did not start", source: s.failed.why ?? "-", fix: "Retry", agent: "", onClick: () => this.thenClose(this.retryRun(s)) } }] : []),
+      ...this.actions(item, [
+        { act: "run-now", does: () => this.thenClose(runNow(s)) },
+        s.paused ? { act: "resume-schedule", does: () => this.thenClose(this.pauseSchedule(s, false)) } : { act: "pause-schedule", does: () => this.thenClose(this.pauseSchedule(s, true)) },
+        { act: "edit-schedule", does: () => { closeOverlay(props().overlay); this.scheduleDialog(place, s.id); } },
+        { act: "delete-schedule", does: (cx) => this.armed.press(key, cx, () => this.thenClose(this.deleteSchedule(s))), keep: true, verb: "delete it", armed: this.armed.is(key) },
+      ]),
+    ];
+  }
+
+  async refreshRunFailures() {
+    const rows = (await this.db().schedules()).map(scheduleOf);
+    const outcomes = await Promise.all(rows.map(async (s) => ({ s, ...(await outcomeOf(s.id)) })));
+    this.runFailures = new Map(outcomes.filter((r) => r.failed).map((r) => [r.s.project, r]));
+  }
+
+  runFailureRow(key, id, c) {
+    const r = this.runFailures?.get(key);
+    if (!r) return [];
+    return [item(failureLine({ text: "A scheduled run did not start", fix: "Retry", detail: r.failed.why ?? "" })(`run-failed-${id}`, c, { onClick: (cx) => { this.retryRun(r.s); this.redraw(cx); } }), H.line)];
+  }
+
   worktreeDialog(place) {
     openOverlay({ mod: "kanso-spaces", kind: "dialog", width: DIALOG.worktree, props: { worktree: place } });
   }
@@ -1902,6 +2051,9 @@ export default class Spaces extends RetryingView {
     const asleep = w ? [...new Map(sleepingNow([w], panes(), terminals()).rows.map((a) => [a.asleep.id, a.asleep])).values()] : [];
     if (!w && !project) return this.popup(t, null, [{ heading: "This project is no longer here." }]);
     const item = this.lines();
+    const scheds = this.schedules ?? [];
+    const open = this.sub ? scheds.find((s) => s.id === this.sub) : null;
+    if (open) return this.popup(t, scheduleWords(open), this.scheduleLines(item, open, place));
     const active = w?.tabs?.find((x) => x.active);
     const tabs = w?.tabs?.length ?? 0;
     const trees = this.trees ?? [];
@@ -1921,7 +2073,8 @@ export default class Spaces extends RetryingView {
       ...this.actions(item, [
         ...(asleep.length ? [{ heading: "Asleep" }, ...asleep.map((z) => ({ act: "wake-tab", of: [z.tab], does: () => wakeRow(z), hint: z.saved ? since(z.saved) : null }))] : []),
         ...(asleep.length > 1 ? [{ act: "wake-all", of: [asleep.length], does: () => arrange({ wake: { space: w.id } }) }] : []),
-        ...(place && !project?.missing ? [{ act: "new-conversation", does: () => this.newAgentMenu(place) }, { act: "new-worktree", does: () => this.worktreeDialog(place) }] : []),
+        ...(place && !project?.missing ? [{ act: "new-conversation", does: () => this.newAgentMenu(place) }, { act: "new-worktree", does: () => this.worktreeDialog(place) }, { act: "schedule", does: () => this.scheduleDialog(place) }] : []),
+        ...(scheds.length ? [{ heading: "Schedules" }, ...scheds.map((s) => ({ act: "schedule-of", of: [scheduleWords(s)], does: () => { this.sub = s.id; this.menuAt = -1; }, hint: this.scheduleHint(s), keep: true }))] : []),
         ...(trees.length ? [{ heading: "Worktrees" }, { scroll: trees.map((x) => ({ act: "worktree", of: [x.branch ?? "detached"], does: () => this.openTree(place, x), hint: where(x.path) })) }] : []),
         ...(w ? [{ act: "rename", does: () => run("space.rename", { id: w.id }) }] : []),
         ...(active ? [{ act: "sleep-tab", does: () => sleepTab(w.id, active.id) }] : []),
@@ -2013,6 +2166,8 @@ export default class Spaces extends RetryingView {
 
   makeWorktree(cx) {
     if (this.making) return;
+    const picked = (this.known ?? []).filter((a) => a.installed && this.wtAgents.has(a.key));
+    if (picked.length) { this.startSeveral(cx, picked); return; }
     const place = props().worktree, branch = this.branch.value().trim();
     this.making = true;
     this.wtError = null;
@@ -2029,20 +2184,69 @@ export default class Spaces extends RetryingView {
     });
   }
 
+  startSeveral(cx, picked) {
+    const place = props().worktree, task = this.branch.value().trim();
+    if (!task) { this.wtError = "Name the task: each agent's branch is the task and the agent."; this.redraw(cx); return; }
+    const ask = { task, from: this.wtBase.value().trim(), prompt: this.wtPrompt.value().trim() };
+    this.making = true;
+    this.wtError = null;
+    this.redraw(cx);
+    cx.spawn(async (cx) => {
+      try {
+        this.severalRun ??= await severalRun(place);
+        this.severalAsk = ask;
+        const results = await mapSeries(picked, (a) => startInTree(this.severalRun, a, ask));
+        this.wtFailed = results.filter((r) => r.error);
+        if (results.some((r) => !r.error)) await this.showSeveral(cx);
+        if (!this.wtFailed.length) closeOverlay(props().overlay);
+      } finally { this.making = false; this.redraw(cx); }
+    });
+  }
+
+  retrySeveral(cx, agent) {
+    cx.spawn(async (cx) => {
+      const r = await startInTree(this.severalRun, agent, this.severalAsk);
+      this.wtFailed = r.error ? this.wtFailed.map((f) => (f.agent.key === agent.key ? r : f)) : this.wtFailed.filter((f) => f.agent.key !== agent.key);
+      if (!r.error) await this.showSeveral(cx);
+      if (!this.wtFailed.length) closeOverlay(props().overlay);
+      this.redraw(cx);
+    });
+  }
+
+  async showSeveral(cx) {
+    const deadline = Date.now() + SEVERAL_SHOW_MS;
+    while (!shownTab(this.severalRun) && Date.now() < deadline) await new Promise((done) => cx.timer.after(SEVERAL_POLL_MS, done));
+    const at = shownTab(this.severalRun);
+    if (at) { run("space.select", { id: at.space }); run("tab.select", { id: at.tab }); }
+  }
+
   worktreeView(t) {
     const place = props().worktree;
     const base = worktreeBase(place.machine);
     const shownBase = base ? base.replace(trimmed(home()), "~") : "~/.kanso/worktrees";
     const c = tokens(t);
+    const picked = (this.known ?? []).filter((a) => a.installed && this.wtAgents.has(a.key));
+    const pick = (key, cx) => { this.wtAgents = this.wtAgents.has(key) ? new Set([...this.wtAgents].filter((k) => k !== key)) : new Set([...this.wtAgents, key]); this.redraw(cx); };
+    const several = picked.length > 0;
+    const failed = this.wtFailed.map((f) => failureLine({ text: `${f.agent.name} did not start`, fix: "Retry", detail: f.error })(`wt-failed-${f.agent.key}`, c, { onClick: (cx) => this.retrySeveral(cx, f.agent) }));
+    const busy = this.making ? (several ? "Making the worktrees\u{2026}" : "Making the worktree\u{2026}") : null;
     return dialog("worktree-dialog", c, {
       title: `New agent in a worktree of ${place.name ?? "this project"}`,
-      body: field("wt-branch", this.branch, c, { error: Boolean(this.wtError) }),
-      notes: [{ text: `A new branch (or one you have), checked out in its own folder under ${shownBase}. The agent starts there.`, tone: "muted" },
-        { text: this.wtError ?? (this.making ? "Making the worktree\u2026" : "Enter to make it, Esc to cancel."), tone: this.wtError ? "error" : "dim" }],
-      secondary: "Cancel", primary: "Make worktree", state: this.making ? "loading" : "default",
+      body: [
+        field("wt-branch", this.branch, c, { label: several ? "Task" : "Branch", error: Boolean(this.wtError) }),
+        labelled("Agents", this.agentChoices("wt-agents", c, (k) => this.wtAgents.has(k), pick, place), c),
+        ...(several ? [field("wt-base", this.wtBase, c, { label: "From branch" }), field("wt-prompt", this.wtPrompt, c, { label: "First prompt" })] : []),
+        ...failed,
+      ],
+      notes: [{ text: several ? `One branch per agent, each checked out in its own folder under ${shownBase}. They open side by side in one tab.`
+        : `A new branch (or one you have), checked out in its own folder under ${shownBase}. The agent starts there.`, tone: "muted" },
+        ...statusNotes({ busy, error: this.wtError }),
+        ...(busy || this.wtError ? [] : [{ text: "Enter to make it, Esc to cancel.", tone: "dim" }])],
+      secondary: "Cancel", primary: several ? `Start ${picked.length}` : "Make worktree", state: this.making ? "loading" : "default",
       onCancel: () => closeOverlay(props().overlay), onPrimary: (cx) => this.makeWorktree(cx),
     });
   }
+
 
   // Each worktree space moves under its main checkout's.
   ordered(sp, places) {
@@ -2313,7 +2517,7 @@ export default class Spaces extends RetryingView {
       const inner = [...(st?.out ?? []), ...tabs];
       const box = (inner.length ? this.foldBox(r.w.id, open, inner, ctx.now) : [])
         .map((el) => item(el, open ? ((this.foldH ?? {})[r.w.id] ?? st?.h ?? 0) : 0, open && st?.focus != null ? agentMark(st.focus, st.focusH) : null));
-      return [...gap, head, ...box];
+      return [...gap, head, ...this.runFailureRow(keyOfSpace(r.w, home()), r.w.id, c), ...box];
     };
     const drawAll = (list) => list.flatMap((r, i) => draw(r, i === 0));
     const loading = m => {
@@ -2324,7 +2528,7 @@ export default class Spaces extends RetryingView {
     const loadingRow = m => item(skeletonOf({ shape: collapsed ? "tile" : "line" })(`machine-loading-${m ?? "local"}`, t), collapsed ? SIDEBAR.railRow : H.line);
     // Projects you added with no space open, on their machine; each keeps a + to start an agent in it.
     const names = shownNames(ctx.registry);
-    const closed = (m) => (collapsed ? [] : this.closedOn(m, ctx)).flatMap((entry) => [lift(SIDEBAR.groupGap), item(this.closedRow(t, entry, names), H.line)]);
+    const closed = (m) => (collapsed ? [] : this.closedOn(m, ctx)).flatMap((entry) => [lift(SIDEBAR.groupGap), item(this.closedRow(t, entry, names), H.line), ...this.runFailureRow(entry.key, entry.key, c)]);
     if (!remote.length || !heads) {
       const shut = [null, ...(heads ? [] : remote)].flatMap((m) => closed(m));
       return loading(null) && !rows.length && !shut.length ? [loadingRow(null)] : [...drawAll(rows), ...shut];
@@ -3008,6 +3212,7 @@ export default class Spaces extends RetryingView {
     if (props()?.newConversation) return this.newConversationView(t);
     if (props()?.newProject) return this.newProjectView(t);
     if (props()?.worktree) return this.worktreeView(t);
+    if (props()?.schedule) return this.scheduleView(t);
     if (props()?.machineMenu) return this.computerMenuView(t);
     const { header, switch: views, rows, footer } = this.parts;
     if (!this.painting) { this.painting = true; this.paintTimer.after(0, () => { this.painting = false; this.paint(); }); }
