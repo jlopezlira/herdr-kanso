@@ -2092,10 +2092,10 @@ export default class Spaces extends RetryingView {
 
   listed(ps, sp, terms) {
     const byAddress = new Map(terms.map((k) => [k.address, k]));
-    return visibleAgents(withTerminals(agents(), ps, sp), this.offNames()).map((a) => {
+    return withNeeds(visibleAgents(withTerminals(agents(), ps, sp), this.offNames()).map((a) => {
       const k = byAddress.get(a.address), l = k?.labels, pin = l?.[PIN_LABEL];
       return { ...a, parent: k?.parent ?? null, labels: l ?? {}, turn: k?.turn ?? 0, msg: k?.report?.msg ?? null, name: l?.[NAME_LABEL] || undefined, pin: pin != null && pin !== "" && !Number.isNaN(Number(pin)) ? Number(pin) : null };
-    });
+    }), terms);
   }
 
   setOrder(key, value) {
