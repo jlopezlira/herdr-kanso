@@ -56,7 +56,7 @@ test("Memory is available on Linux, and the window pid is the one ss reports for
   const host = guardHost({
     platform: "linux", appHome: "/app", home: "/home/jj", self: "/mod/guard.mjs", node: "/usr/bin/node",
     run: async (command, args) => {
-      assert.deepEqual([command, args], ["ss", ["-xlpH", "src", "/app/herdr-app.sock"]]);
+      assert.deepEqual([command, args], ["ss", ["-xlpH", "src", join("/app", "herdr-app.sock")]]);
       return success('u_str LISTEN 0 128 /app/herdr-app.sock 0 users:(("herdr-app",pid=4242,fd=8))\n');
     },
   });
