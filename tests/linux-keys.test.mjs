@@ -115,6 +115,41 @@ test("An update from a tag without Linux keys gives the Mac keys back as Linux k
   assert.match(plan.notes, /Kept your own cmd-j/);
 });
 
+test("An update of Herdr's Mac keys plus kansō leaves no moved Herdr key on a kansō key that does something else, and nothing Omarchy takes remains", async () => {
+  const { takenByOmarchy } = await load("kanso-panel/platform-linux-keys.js", ["takenByOmarchy"]);
+  const { mergeKeys, omarchyKeys } = await load("kanso-tabs/update.js", ["mergeKeys", "omarchyKeys"]);
+  const mac = readKeys("kanso/keys.json");
+  const linux = readKeys("kanso/keys.linux.json");
+  const herdr = JSON.parse(repoText("tests/herdr-keys.macos.json"));
+  const user = { ...clone(mac), global: { ...herdr.global } };
+  const got = omarchyKeys(mergeKeys(clone(user), mac, linux), linux).keys;
+  const clashes = [];
+  for (const [name, bindings] of Object.entries(got)) {
+    if (name in linux) continue;
+    for (const [chord, action] of Object.entries(bindings)) {
+      if (user[name]?.[chord] === action) continue;
+      for (const [kansoName, kanso] of Object.entries(got)) {
+        if (!(kansoName in linux) || !kanso[chord] || kanso[chord] === action) continue;
+        clashes.push(`${name} ${chord} is ${action}, and ${kansoName} ${chord} is ${kanso[chord]}`);
+      }
+    }
+  }
+  assert.deepEqual(clashes, []);
+  for (const [section, bindings] of Object.entries(got)) {
+    for (const chord of Object.keys(bindings)) assert.equal(takenByOmarchy(chord), false, `${section} ${chord} is one Omarchy takes`);
+  }
+});
+
+test("A chord reserved for kansō is never given to a key that had to move, nor to the form Linux reports", async () => {
+  const { linuxSection } = await load("kanso-panel/platform-linux-keys.js", ["linuxSection"]);
+  assert.equal(linuxSection({ "cmd-j": "mine.jump" })["ctrl-shift-j"], "mine.jump");
+  const moved = linuxSection({ "cmd-j": "mine.jump" }, new Set(["ctrl-shift-j"]));
+  assert.equal(moved["ctrl-shift-j"], undefined);
+  assert.deepEqual(Object.values(moved), ["mine.jump"]);
+  assert.equal(linuxSection({ "cmd-shift-/": "app.help" })["ctrl-?"], "app.help");
+  assert.equal(linuxSection({ "cmd-shift-/": "app.help" }, new Set(["ctrl-?"]))["ctrl-?"], undefined);
+});
+
 test("Settings on Linux lists a row's shipped key from the Linux keymap", async () => {
   const { Settings } = await loadSettings({ window: () => ({ platform: "linux" }) });
   const settings = new Settings();
