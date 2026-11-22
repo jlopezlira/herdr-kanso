@@ -64,9 +64,13 @@ export function clipboardApi(platform, run) {
       const r = await powershell(run, `Add-Type -TypeDefinition ${psQuote(WINDOWS_INPUT.replace(/\n/g, " "))}; if (-not [KansoPaste]::Paste([long]${psQuote(target)})) { exit 1 }`);
       return { state: r.code === 0 ? "ok" : "error" };
     }
-    if (platform !== "macos" && !(target && (await frontApp()) === target && await isBrowser(target))) return { state: "error" };
-    const commands = platform === "macos" ? [["osascript", ["-e", 'tell application "System Events" to keystroke "v" using command down']]] : [["wtype", ["-M", "ctrl", "-k", "v", "-m", "ctrl"]], ["xdotool", ["key", "--clearmodifiers", "ctrl+v"]]];
-    for (const [program, args] of commands) if ((await run(program, args).catch(() => null))?.code === 0) return { state: "ok" };
+    const linux = platform !== "macos";
+    if (linux && !(target && await isBrowser(target))) return { state: "error" };
+    const commands = linux ? [["wtype", ["-M", "ctrl", "-k", "v", "-m", "ctrl"]], ["xdotool", ["key", "--clearmodifiers", "ctrl+v"]]] : [["osascript", ["-e", 'tell application "System Events" to keystroke "v" using command down']]];
+    for (const [program, args] of commands) {
+      if (linux && (await frontApp()) !== target) return { state: "error" };
+      if ((await run(program, args).catch(() => null))?.code === 0) return { state: "ok" };
+    }
     return { state: "error" };
   };
   return { image, frontApp, paste, observesFrontApp: true, pasteKey: platform === "macos" ? "Cmd-V" : "Ctrl-V", permissionNote: platform === "macos" ? " To have it pasted for you, allow Herdr in System Settings > Privacy & Security > Accessibility." : "", write: (cx, text) => cx.write_to_clipboard(String(text)), read: (cx) => cx.read_from_clipboard() };

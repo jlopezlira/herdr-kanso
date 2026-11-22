@@ -142,14 +142,14 @@ DESKTOP
 }
 
 linux_uninstall() {
-  previous=$(sed -n 's|^text/markdown ||p' "$SAVED" 2>/dev/null || true)
   for type in $LINUX_TYPES; do
     back=$(sed -n "s|^$type ||p" "$SAVED" 2>/dev/null || true)
     if [ -n "$back" ] && [ "$(xdg-mime query default "$type" 2>/dev/null)" = "$ID.desktop" ]; then xdg-mime default "$back" "$type"; fi
   done
   rm -rf "$DESKTOP_APPS/$ID.desktop" "$HOME_DIR/data/kanso-markdown" "$SAVED"
   refresh_desktop
-  echo "Markdown files open in ${previous:-the system default} again."
+  now=$(xdg-mime query default text/markdown 2>/dev/null || true)
+  echo "Markdown files open in ${now:-the system default} again."
 }
 
 case "$(uname):${1:-}" in
