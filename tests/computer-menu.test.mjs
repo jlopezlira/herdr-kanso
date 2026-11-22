@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import { load, clone, chain, gpuiHost } from "./helpers.mjs";
 
 const rows = async () => (await load("kanso-spaces/computer-menu.js", ["computerMenuItems"])).computerMenuItems;
-const wordsOf = async () => (await load("kanso-spaces/context-menu.js", ["wordsOf"])).wordsOf;
+const wordsOf = async () => (await load("kanso-spaces/menu-actions.js", ["wordsOf"])).wordsOf;
 const words = (items, said) => clone(items).map((row) => {
   if (row.separator) return "—";
   const label = row.act ? said(row.act) : row.label;

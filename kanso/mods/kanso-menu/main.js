@@ -9,10 +9,8 @@ import { openWithPopup } from "./popup.js";
 import { openSend, openSleep } from "./launch.js";
 import { tokens } from "./ui.js";
 import { Armed } from "./ui-button.js";
-import { menuList } from "./ui-menu.js";
 import { pieceLines } from "./piece-lines.js";
-import { hintOf } from "./ui-tooltip.js";
-import { contextItems } from "./context-menu.js";
+import { contextRows, contextMenu } from "./context-menu.js";
 
 const nonce = () => Date.now() + Math.random();
 
@@ -109,7 +107,7 @@ export default class KansoMenu extends View {
   paneView(target) {
     const { title, groups: sets } = groups(target, this.armed);
     const make = (label, does, { arms, ...look }) => ({ ...look, label, onClick: (cx) => this.choose({ arms, does }, cx) });
-    return { title, lines: contextItems(sets.flatMap((set, g) => [...(g ? [{ separator: true }] : []), ...set]), { hint: hintOf, make }) };
+    return { title, lines: contextRows(sets.flatMap((set, g) => [...(g ? [{ separator: true }] : []), ...set]), make) };
   }
 
   render() {
@@ -117,7 +115,7 @@ export default class KansoMenu extends View {
     const { title, lines: drawn } = target.piece ? this.pieceView(target.piece) : this.paneView(target);
     const list = drawn.filter((line) => line.onClick && !line.disabled);
     const lines = drawn.map((line) => (line.onClick ? { ...line, selected: list.indexOf(line) === this.at } : line));
-    return menuList("kanso-menu", { title, items: lines }, tokens(theme())).track_focus(this.handle)
+    return contextMenu("kanso-menu", { title, lines }, tokens(theme())).track_focus(this.handle)
       .on_key_down((e, cx) => {
         const move = this.listed(e);
         if (!move) return;

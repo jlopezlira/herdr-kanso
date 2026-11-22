@@ -1,6 +1,6 @@
 // The pane header's pure model: what folds as the pane narrows, which tools are out, what ⋯ holds and which place is news.
 import { G, H, T, W, ICON, ICON_ROW, ICON_INLINE } from "./ui.js";
-import { ACTIONS, ORDER, wordsOf } from "./context-menu.js";
+import { ACTIONS, ORDER, wordsOf } from "./menu-actions.js";
 
 // A step is shown until the header folds that far; the order lives only here.
 export const FOLDS = ["nothing", "folder", "branch", "tools into ⋯", "commits", "files", "verdict word", "PR", "close into ⋯"];
@@ -67,7 +67,6 @@ const ACT = { sleep: "sleep-agent", close: "close-pane" };
 export const actOf = (key) => ACT[key] ?? key;
 const byAction = (a, b) => ORDER.indexOf(actOf(a)) - ORDER.indexOf(actOf(b));
 
-/** What ⋯ holds: what is not out and the tools folded away, in every menu's order, then the piece lines. */
 export function menuEntries({ strip, pinned, zoomed, tools, fold, canOpen }) {
   const out = hoverTools({ fold, strip });
   const folded = hoverTools({ fold: 0, strip }).filter((key) => !out.includes(key));

@@ -26,8 +26,8 @@ import { pendingDot, PENDING } from "./ui-state.js";
 import { button, failureLine, stepper } from "./kit.js";
 import { layoutPaused, statusBar } from "./status-bar.js";
 import { COLUMN } from "./ui-status.js";
-import { boundChord, hintOf } from "./ui-tooltip.js";
-import { contextItems } from "./context-menu.js";
+import { boundChord } from "./ui-tooltip.js";
+import { contextMenu } from "./context-menu.js";
 import { headerSegment } from "./ui-header.js";
 import { pieceLines } from "./piece-lines.js";
 import { paged } from "./strip-model.js";
@@ -469,11 +469,11 @@ export default class Strip extends View {
     const item = (key) => {
       if (key === "separator") return { separator: true };
       if (PIECE_LINES.includes(key)) return { icon: ENTRIES[key][0], label: ENTRIES[key][1], onClick: act(key) };
-      return contextItems([{ act: actOf(key), does: act(key), armed: key === "close" && this.armed.is("close"), verb: key === "close" ? `close ${name}` : null }], { hint: hintOf })[0];
+      return { act: actOf(key), does: act(key), armed: key === "close" && this.armed.is("close"), verb: key === "close" ? `close ${name}` : null };
     };
     const pop = Popover.new(`ph-menu-${pane}`).trigger(trigger).anchor("top_right").open(this.moreOpen)
       .on_open_change((open, cx) => { this.moreOpen = open; cx.notify(); });
-    return this.moreOpen ? pop.content(menu(`ph-menu-list-${pane}`, { title: name, items: entries.map(item) }, c)) : pop;
+    return this.moreOpen ? pop.content(contextMenu(`ph-menu-list-${pane}`, { title: name, lines: entries.map(item), framed: true }, c)) : pop;
   }
 
   // Sleep and Send when they rest out; under the pointer the tools this fold keeps, then ⋯.
@@ -502,9 +502,9 @@ export default class Strip extends View {
     const shut = (cx) => { this.segmentMenu = null; cx.notify(); };
     const trigger = fact.on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); this.segmentMenu = id; cx.notify(); });
     if (this.segmentMenu !== id) return trigger;
-    const items = [...contextItems(actions.map((a) => ({ ...a, does: (cx) => { a.does(cx); shut(cx); } })), { hint: hintOf }), ...pieceLines(piece, { done: shut })];
+    const lines = [...actions.map((a) => ({ ...a, does: (cx) => { a.does(cx); shut(cx); } })), ...pieceLines(piece, { done: shut })];
     return Popover.new(`fact-menu-${id}`).trigger(trigger).open(true).anchor("top_left").on_open_change((open, cx) => { if (!open) shut(cx); })
-      .content(menu(`fact-menu-list-${id}`, { title, items }, c));
+      .content(contextMenu(`fact-menu-list-${id}`, { title, lines, framed: true }, c));
   }
 
   // The digest: files, commits not on GitHub, then the pull request, or the failure line in its place; a refresh in flight is pending.

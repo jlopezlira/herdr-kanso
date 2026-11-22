@@ -13,7 +13,7 @@ const parseRow = (line) => {
 const menus = Object.values(ROWS).flat();
 const parsed = menus.map((menu) => menu.map(parseRow));
 
-const table = () => load("kanso-menu/context-menu.js", ["ACTIONS", "ORDER", "wordsOf", "contextItems"]);
+const table = () => load("kanso-menu/menu-actions.js", ["ACTIONS", "ORDER", "wordsOf", "contextItems"]);
 const hints = () => load("kanso-menu/ui-tooltip.js", ["hintOf"], {
   ...gpuiHost(), keys: () => BINDINGS, window: () => ({ platform: "macos" }),
 });

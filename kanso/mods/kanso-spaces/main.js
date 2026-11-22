@@ -46,8 +46,8 @@ import { dialog } from "./ui-dialog.js";
 import { field, TextField } from "./ui-field.js";
 import { menu, emptyState, skeletonOf, stack, tooltip } from "./kit.js";
 import { boundChord, chordOf, hintOf } from "./ui-tooltip.js";
-import { contextItems } from "./context-menu.js";
-import { menuList, menuHeight, RUN_ROWS } from "./ui-menu.js";
+import { contextRows, contextMenu } from "./context-menu.js";
+import { menuHeight, RUN_ROWS } from "./ui-menu.js";
 import { pieceLines, openPieceMenu, hidePiece } from "./piece-lines.js";
 import { toolbar } from "./toolbar.js";
 import { header } from "./header.js";
@@ -1826,9 +1826,9 @@ export default class Spaces extends RetryingView {
   }
 
   // A popup's Menu, walked by the keyboard; Herdr draws its frame.
-  popup(t, title, items) { return this.menuKeys(menuList("spaces-menu", { title, items }, tokens(t))); }
+  popup(t, title, items) { return this.menuKeys(contextMenu("spaces-menu", { title, lines: items }, tokens(t))); }
 
-  actions(item, lines) { return contextItems(lines, { hint: hintOf, make: item }); }
+  actions(item, lines) { return contextRows(lines, item); }
 
   // The piece lines every right-click menu ends with, as items the keyboard walks like the rest.
   pieceItems(item, id) {
@@ -2342,7 +2342,7 @@ export default class Spaces extends RetryingView {
     this.menuActs = acting.map((row) => go(row.key));
     const lit = acting[this.menuAt]?.key ?? null;
     const lines = rows.map((row) => (row.key ? { ...row, selected: row.key === lit, ...(row.act ? { does: go(row.key) } : { onClick: go(row.key) }) } : row));
-    return this.menuKeys(menu({ title, items: contextItems(lines, { hint: hintOf }) })("computer-menu", tokens(t)));
+    return this.menuKeys(contextMenu("computer-menu", { title, lines, framed: true }, tokens(t)));
   }
 
   // The icon turns at once; a save that fails turns it back and says so.

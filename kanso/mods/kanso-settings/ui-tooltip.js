@@ -18,8 +18,11 @@ export function glyphs(chord, platform = window()?.platform ?? "macos") {
 }
 
 const typed = (chord) => !/(^|-)(insert|delete)$/.test(chord);
+const inLayout = (binding) => String(binding.section ?? "").startsWith("layout:");
+const shadowed = (binding, bindings) => !inLayout(binding)
+  && bindings.some((other) => inLayout(other) && other.keys === binding.keys && other.action !== binding.action);
 export const boundChord = (action, bindings = keys()) => {
-  const bound = bindings.filter((binding) => binding.action === action).map((binding) => binding.keys);
+  const bound = bindings.filter((binding) => binding.action === action && !shadowed(binding, bindings)).map((binding) => binding.keys);
   return bound.find(typed) ?? bound[0] ?? "";
 };
 
