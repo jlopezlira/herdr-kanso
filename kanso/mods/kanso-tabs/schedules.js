@@ -51,8 +51,7 @@ async function start(name, s, plan, homeDir) {
 
 export async function armFor(s, { now = Date.now(), lastRun = null, homeDir = home() } = {}) {
   const plan = s.paused ? null : waiterPlan(s.when, { now, since: Math.max(s.updated, lastRun ?? 0) });
-  if (!plan) return stopWaiter(scheduleName(s.id));
-  return start(scheduleName(s.id), s, plan, homeDir);
+  return plan ? start(scheduleName(s.id), s, plan, homeDir) : null;
 }
 
 export const runNow = (s, { now = Date.now(), homeDir = home() } = {}) => start(nowName(s.id), s, { mode: "at", spec: String(Math.floor(now / 1000)) }, homeDir);
