@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { load, chain, gpuiHost, texts, calls } from "./helpers.mjs";
+import { readFileSync } from "node:fs";
+import { load, chain, gpuiHost, texts, calls, popoverHost, everyDrawn, CHROME_NIGHT } from "./helpers.mjs";
 import { world, mountedState, withParts } from "./sidebar-fixtures.mjs";
 import { BINDINGS, paneMenu, tabBar } from "./menu-fixtures.mjs";
 import { loadStrip, menuSidebar, openHeaderEntries } from "./context-menu-fixtures.mjs";
@@ -194,4 +195,169 @@ test("The tab, terminal pane, header menu and the sidebar project, session, asle
   const asleep = await sidebar("menu", { address: "zz:t0", name: "checkout", asleep: { tab: "Main", n: 2, terminal: "t0", space: "sp1", resume: "r" } });
   assert.ok(asleep.includes(wordsOf("wake")));
   assert.ok(asleep.includes(wordsOf("forget")));
+});
+
+const readTable = (file) => JSON.parse(readFileSync(new URL(file, import.meta.url), "utf8"));
+const rowsOf = (table) => Object.entries(table).flatMap(([section, keys]) => Object.entries(keys).map(([chord, action]) => ({ section, keys: chord, action })));
+const shipped = () => [...rowsOf(readTable("../kanso/keys.json")), ...rowsOf(readTable("./herdr-keys.macos.json"))];
+const idsOf = (el) => everyDrawn(el).flatMap((kid) => calls(kid, "id").map((call) => call[1]));
+const drawnWords = (el) => everyDrawn(el).flatMap((kid) => calls(kid, "child").filter((call) => typeof call[1] === "string").map((call) => call[1]));
+const byLabel = (root, label) => everyDrawn(root).find((el) => calls(el, "accessibility_label").some((call) => call[1] === label));
+const countKeys = () => {
+  const reads = { n: 0 };
+  return { reads, keys: () => { reads.n += 1; return shipped(); } };
+};
+const tabsHost = {
+  ...popoverHost(), theme: () => CHROME_NIGHT, spaces: () => [], panes: () => [], run: () => {}, openOverlay: () => {},
+};
+const quiet = { shared: () => null, setShared: () => {}, run: () => {}, closeOverlay: () => {}, openOverlay: () => {} };
+const openPane = (Menu) => {
+  const menu = new Menu();
+  const focus = () => ({ is_focused: () => true, focus() {} });
+  menu.init({}, { notify() {}, focus_handle: focus });
+  return menu;
+};
+const openMore = (Strip) => Object.assign(new Strip(), { armed: { is: () => false }, moreOpen: true });
+
+test("A layout chord that shadows a global binding hides that hint, a layout binding of the same action still wins, and an unshadowed global binding still shows", async () => {
+  const { boundChord, hintOf } = await load("kanso-panel/ui-tooltip.js", ["boundChord", "hintOf"], { window: () => ({ platform: "macos" }) });
+  const shadowed = [
+    { section: "global", keys: "cmd-shift-enter", action: "pane.zoom" },
+    { section: "layout:kanso", keys: "cmd-shift-enter", action: "kanso-strip.width" },
+  ];
+  assert.equal(boundChord("pane.zoom", shadowed), "");
+  assert.equal(hintOf("pane.zoom", shadowed), null);
+  assert.equal(hintOf("kanso-strip.width", shadowed), "⇧⌘↩");
+  const sameAction = [...shadowed, { section: "layout:kanso", keys: "cmd-0", action: "pane.zoom" }];
+  assert.equal(hintOf("pane.zoom", sameAction), "⌘0");
+  const sharedChord = [
+    { section: "global", keys: "cmd-j", action: "kanso-spaces.needs-you.next" },
+    { section: "layout:kanso", keys: "cmd-j", action: "kanso-spaces.needs-you.next" },
+  ];
+  assert.equal(hintOf("kanso-spaces.needs-you.next", sharedChord), "⌘J");
+  assert.equal(hintOf("app.palette", [{ section: "global", keys: "cmd-shift-p", action: "app.palette" }]), "⇧⌘P");
+});
+
+test("The header more menu drawn with the shipped macOS bindings shows no Zoom hint and keeps the wider chord on Wider or narrower", async () => {
+  const { Strip, tokens } = await load("kanso-strip/main.js", ["Strip", "tokens"], {
+    ...popoverHost(), theme: () => CHROME_NIGHT, shared: () => null,
+    keys: () => shipped(), window: () => ({ platform: "macos" }),
+  });
+  const headerFile = "kanso-strip/header-model.js";
+  const { menuEntries } = await load(headerFile, ["menuEntries"]);
+  const view = openMore(Strip);
+  const entries = menuEntries({
+    strip: true, pinned: false, zoomed: false, fold: 3, canOpen: true,
+    tools: { sleep: "menu", send: "menu" },
+  });
+  const menu = view.more(tokens(CHROME_NIGHT), "p1", { name: "tests", entries, does: {} });
+  const zoom = byLabel(menu, "Zoom");
+  const wider = byLabel(menu, "Wider or narrower");
+  assert.ok(zoom, "Zoom is drawn");
+  assert.equal(drawnWords(zoom).includes("⇧⌘↩"), false);
+  assert.ok(wider, "Wider or narrower is drawn");
+  assert.ok(drawnWords(wider).includes("⇧⌘↩"));
+});
+
+test("contextRows reads the key table never for a computer menu and once for a terminal pane menu", async () => {
+  const computerReads = { n: 0 };
+  const { contextRows } = await load("kanso-menu/context-menu.js", ["contextRows"], {
+    keys: () => { computerReads.n += 1; return shipped(); },
+  });
+  const { computerMenuItems } = await load("kanso-spaces/computer-menu.js", ["computerMenuItems"]);
+  const rows = computerMenuItems({ remote: true, phase: "connected", syncOn: true });
+  const lines = rows.map((row) => (row.act ? { ...row, does: () => {} } : row));
+  contextRows(lines, (label, does, look) => ({ label, does, ...look }));
+  assert.equal(computerReads.n, 0);
+  const paneReads = { n: 0 };
+  const { KansoMenu } = await load("kanso-menu/main.js", ["KansoMenu"], {
+    ...gpuiHost(), theme: () => CHROME_NIGHT, window: () => ({ platform: "macos" }),
+    keys: () => { paneReads.n += 1; return shipped(); },
+    props: () => ({ target: { pane: "p1", terminal: "T1" }, overlay: "o" }),
+    panes: () => [{ pane: "p1", tab: "t1", terminal: "T1", cwd: "/work/acme", name: "tests", status: "idle", program: { agent: true } }],
+    terminals: () => [{ address: "T1", name: "tests", labels: {} }],
+    agents: () => [{ address: "T1" }],
+    spaces: () => [{ id: "s1", machine: null, tabs: [{ id: "t1" }] }],
+    ...quiet,
+  });
+  openPane(KansoMenu).paneView({ pane: "p1", terminal: "T1" });
+  assert.equal(paneReads.n, 1);
+});
+
+test("The tab, panel button, header more, header fact, terminal pane, sidebar popup and computer menus draw through contextMenu", async () => {
+  const drawn = async (file, names, host, render) => {
+    const counter = countKeys();
+    const loaded = await load(file, names, { ...host, keys: counter.keys, window: () => ({ platform: "macos" }) });
+    return { ids: idsOf(render(loaded)), reads: counter.reads.n };
+  };
+  const tab = await drawn("kanso-tabs/main.js", ["Tabs", "tokens"], tabsHost, ({ Tabs, tokens }) => {
+    const view = Object.assign(new Tabs(), { armed: { is: () => false, press() {} } });
+    return view.tabMenuPopover(tokens(CHROME_NIGHT), chain("tab"), { id: "t1", name: "Main" }, {
+      space: { id: "s1" }, ps: [],
+    });
+  });
+  assert.ok(tab.ids.includes("tab-menu-list-t1"));
+  assert.equal(tab.reads, 1);
+  const panel = await drawn("kanso-tabs/main.js", ["Tabs", "tokens"], tabsHost, ({ Tabs, tokens }) => {
+    const view = new Tabs();
+    return view.panelMenuPopover(tokens(CHROME_NIGHT), chain("door"), { id: "pr", label: "PR" });
+  });
+  assert.ok(panel.ids.includes("panel-menu-list-pr"));
+  assert.equal(panel.reads, 0);
+  const header = await drawn("kanso-strip/main.js", ["Strip", "tokens"], {
+    ...popoverHost(), theme: () => CHROME_NIGHT, shared: () => null,
+  }, ({ Strip, tokens }) => {
+    return openMore(Strip).more(tokens(CHROME_NIGHT), "p1", {
+      name: "tests", does: {},
+      entries: ["pin", "zoom", "width", "separator"],
+    });
+  });
+  assert.ok(header.ids.includes("ph-menu-list-p1"));
+  assert.equal(header.reads, 1);
+  const fact = await drawn("kanso-strip/main.js", ["Strip", "tokens"], {
+    ...popoverHost(), theme: () => CHROME_NIGHT, shared: () => null, openOverlay: () => {},
+  }, ({ Strip, tokens }) => {
+    const view = Object.assign(new Strip(), { segmentMenu: "folder-p1" });
+    return view.factMenu(tokens(CHROME_NIGHT), "folder-p1", chain("fact"), {
+      title: "Folder", piece: "header.place",
+      actions: [{ act: "open-with", does: () => {} }],
+    });
+  });
+  assert.ok(fact.ids.includes("fact-menu-list-folder-p1"));
+  assert.equal(fact.reads, 1);
+  const pane = await drawn("kanso-menu/main.js", ["KansoMenu"], {
+    ...gpuiHost(), theme: () => CHROME_NIGHT,
+    props: () => ({ target: { pane: "p1", terminal: "T1" }, overlay: "o" }),
+    panes: () => [{ pane: "p1", tab: "t1", terminal: "T1", cwd: "/work", name: "tests", program: { agent: true } }],
+    terminals: () => [{ address: "T1", name: "tests", labels: {} }],
+    agents: () => [], spaces: () => [{ id: "s1", tabs: [{ id: "t1" }] }],
+    ...quiet,
+  }, ({ KansoMenu }) => openPane(KansoMenu).render());
+  assert.ok(pane.ids.includes("kanso-menu"));
+  assert.equal(pane.reads, 1);
+  const sideReads = countKeys();
+  const { Spaces } = await menuSidebar({
+    ...world(
+      [{ id: "s1", name: "acme", folder: "/work", machine: null, active: true, tabs: [{ id: "t1", name: "Main" }] }],
+      [{ address: "t0", pane: "p1", tab: "t1", space: "s1", status: "idle", name: "checkout" }],
+      [{ pane: "p1", tab: "t1", terminal: "t0", cwd: "/work" }],
+      [{ address: "t0", state: "live", labels: {} }],
+    ),
+    keys: sideReads.keys, window: () => ({ platform: "macos" }),
+    props: () => ({ menu: { address: "t0" }, overlay: "o" }), closeOverlay: () => {},
+  });
+  const session = withParts(Object.assign(new Spaces(), mountedState({ armed: { is: () => false }, menuAt: -1 })));
+  sideReads.reads.n = 0;
+  assert.ok(idsOf(session.render()).includes("spaces-menu"));
+  assert.equal(sideReads.reads.n, 0);
+  const computerReads = countKeys();
+  const { Spaces: Computers } = await menuSidebar({
+    keys: computerReads.keys, window: () => ({ platform: "macos" }),
+    props: () => ({ machineMenu: { route: "devbox", shown: "devbox", phase: "connected", syncOn: true }, overlay: "o" }),
+    closeOverlay: () => {},
+  });
+  const computer = withParts(Object.assign(new Computers(), mountedState({ armed: { is: () => false }, menuAt: -1 })));
+  computerReads.reads.n = 0;
+  assert.ok(idsOf(computer.render()).includes("computer-menu"));
+  assert.equal(computerReads.reads.n, 0);
 });
