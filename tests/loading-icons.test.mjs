@@ -15,6 +15,11 @@ const glyph = (el) => nodes(el).find((kid) => calls(kid, "svg").length);
 const pathOf = (el) => one(glyph(el), "svg");
 const sideOf = (el) => one(glyph(el), "size");
 
+const turnsInsteadOfIcon = (busy, mark, spin) => {
+  assert.deepEqual(calls(mark, "spin").map((call) => call[1]), [spin]);
+  assert.equal(nodes(busy).some((kid) => calls(kid, "svg").some((call) => String(call[1]).includes("refresh-cw"))), false);
+};
+
 test("A spinning button draws the working ensō at the icon's size, and the icon itself stays still", async () => {
   const { button, glyphOf, SPIN, c } = await kit();
   const working = glyphOf("working");
@@ -31,8 +36,7 @@ test("A spinning button draws the working ensō at the icon's size, and the icon
     const mark = glyph(busy);
     assert.equal(pathOf(busy), working, JSON.stringify(options));
     assert.equal(sideOf(busy), sideOf(still), JSON.stringify(options));
-    assert.deepEqual(calls(mark, "spin").map((call) => call[1]), [SPIN]);
-    assert.equal(nodes(busy).some((kid) => calls(kid, "svg").some((call) => String(call[1]).includes("refresh-cw"))), false);
+    turnsInsteadOfIcon(busy, mark, SPIN);
     assert.equal(nodes(busy).filter((kid) => calls(kid, "spin").length).length, 1);
   }
 });
@@ -43,8 +47,7 @@ test("A busy row leads with the working ensō at the row icon's size", async () 
   const mark = glyph(busy);
   assert.equal(pathOf(busy), glyphOf("working"));
   assert.equal(sideOf(busy), ICON_ROW);
-  assert.deepEqual(calls(mark, "spin").map((call) => call[1]), [SPIN]);
-  assert.equal(nodes(busy).some((kid) => calls(kid, "svg").some((call) => String(call[1]).includes("refresh-cw"))), false);
+  turnsInsteadOfIcon(busy, mark, SPIN);
 });
 
 test("Only the working ensō spins in the kit", () => {
