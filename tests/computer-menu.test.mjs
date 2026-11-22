@@ -5,29 +5,38 @@ import assert from "node:assert/strict";
 import { load, clone, chain, gpuiHost } from "./helpers.mjs";
 
 const rows = async () => (await load("kanso-spaces/computer-menu.js", ["computerMenuItems"])).computerMenuItems;
-const words = (items) => clone(items).map((row) => (row.separator ? "—" : row.hint ? `${row.label} (${row.hint})` : row.label));
+const wordsOf = async () => (await load("kanso-spaces/context-menu.js", ["wordsOf"])).wordsOf;
+const words = (items, said) => clone(items).map((row) => {
+  if (row.separator) return "—";
+  const label = row.act ? said(row.act) : row.label;
+  return row.hint ? `${label} (${row.hint})` : label;
+});
+const menuWords = async () => {
+  const [items, said] = await Promise.all([rows(), wordsOf()]);
+  return (props) => words(items(props), said);
+};
 const TAIL = ["—", "Add computer…", "—", "Hide “Computers”", "Settings for this…"];
 
 test("Another computer, connected, has its menu: Rename, Disconnect, Sync, New project, Remove, Add computer, Hide and Settings", async () => {
-  const computerMenuItems = await rows();
-  assert.deepEqual(words(computerMenuItems({ remote: true, phase: "connected", syncOn: true })), ["Rename…", "Disconnect", "Sync (on)", "New project", "Remove", ...TAIL]);
-  assert.deepEqual(words(computerMenuItems({ remote: true, phase: "connected" })).slice(0, 4), ["Rename…", "Disconnect", "Sync (off)", "New project"]);
+  const read = await menuWords();
+  assert.deepEqual(read({ remote: true, phase: "connected", syncOn: true }), ["Rename…", "Disconnect", "Sync (on)", "New project", "Remove", ...TAIL]);
+  assert.deepEqual(read({ remote: true, phase: "connected" }).slice(0, 4), ["Rename…", "Disconnect", "Sync (off)", "New project"]);
 });
 
 test("This computer has no power or sync to offer, and a computer out of reach keeps only its way back", async () => {
-  const computerMenuItems = await rows();
-  assert.deepEqual(words(computerMenuItems({ remote: false, phase: "connected" })), ["Rename…", "New project", ...TAIL]);
-  assert.deepEqual(words(computerMenuItems({ remote: true, phase: "off" })), ["Rename…", "Connect", "Remove", ...TAIL]);
-  assert.deepEqual(words(computerMenuItems({ remote: true, phase: "unavailable" })), ["Rename…", "Refresh", "Remove", ...TAIL]);
-  assert.deepEqual(words(computerMenuItems({ remote: true, phase: "login" })), ["Rename…", "Sign in…", "Remove", ...TAIL]);
-  assert.deepEqual(words(computerMenuItems({ remote: true, phase: "loading" })), ["Rename…", ...TAIL]);
+  const read = await menuWords();
+  assert.deepEqual(read({ remote: false, phase: "connected" }), ["Rename…", "New project", ...TAIL]);
+  assert.deepEqual(read({ remote: true, phase: "off" }), ["Rename…", "Connect", "Remove", ...TAIL]);
+  assert.deepEqual(read({ remote: true, phase: "unavailable" }), ["Rename…", "Refresh", "Remove", ...TAIL]);
+  assert.deepEqual(read({ remote: true, phase: "login" }), ["Rename…", "Sign in…", "Remove", ...TAIL]);
+  assert.deepEqual(read({ remote: true, phase: "loading" }), ["Rename…", ...TAIL]);
 });
 
 test("Remove is on a remote computer in every phase but loading, and never on this computer", async () => {
   const computerMenuItems = await rows();
   const item = (props) => clone(computerMenuItems(props)).find((row) => row.key === "remove") ?? null;
   for (const phase of ["connected", "off", "unavailable", "login"]) {
-    assert.deepEqual(item({ remote: true, phase }), { key: "remove", icon: "x", label: "Remove" });
+    assert.deepEqual(item({ remote: true, phase }), { key: "remove", act: "remove-computer" });
     assert.equal(item({ remote: false, phase }), null);
   }
   assert.equal(item({ remote: true, phase: "loading" }), null);
@@ -35,7 +44,7 @@ test("Remove is on a remote computer in every phase but loading, and never on th
 
 test("Add computer switched off in kansō settings leaves the menu without it or its line", async () => {
   const computerMenuItems = await rows();
-  assert.deepEqual(words(computerMenuItems({ remote: true, phase: "off", addComputer: false })), ["Rename…", "Connect", "Remove", "—", "Hide “Computers”", "Settings for this…"]);
+  assert.deepEqual(words(computerMenuItems({ remote: true, phase: "off", addComputer: false }), await wordsOf()), ["Rename…", "Connect", "Remove", "—", "Hide “Computers”", "Settings for this…"]);
 });
 
 // The popup as Herdr mounts it, with the kit drawing into recording elements.

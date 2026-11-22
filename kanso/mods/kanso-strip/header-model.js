@@ -80,7 +80,7 @@ export function menuEntries({ strip, pinned, zoomed, tools, fold, canOpen }) {
     zoomed ? "unzoom" : "zoom",
     ...folded,
   ];
-  return [...acts.sort(byAction), "separator", ...PIECE_LINES];
+  return [...acts.toSorted(byAction), "separator", ...PIECE_LINES];
 }
 
 const bare = (path) => String(path ?? "").replace(/\/+$/, "");

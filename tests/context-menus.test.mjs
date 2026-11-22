@@ -94,7 +94,9 @@ const panelMenu = async () => {
   return [menuOf(contentOf(b.view.panelMenuPopover(b.c, chain("trigger"), { id: "pr", label: "PR" })))];
 };
 const strip = async (segmentMenu) => {
-  const { Strip, tokens } = await load("kanso-strip/main.js", ["Strip", "tokens"], { ...popoverHost(), theme: () => CHROME_NIGHT, shared: () => null });
+  const { Strip, tokens } = await load("kanso-strip/main.js", ["Strip", "tokens"], {
+    ...popoverHost(), theme: () => CHROME_NIGHT, shared: () => null, keys: () => BINDINGS, window: () => ({ platform: "macos" }),
+  });
   return { view: Object.assign(new Strip(), { segmentMenu }), c: tokens(CHROME_NIGHT) };
 };
 const headerPr = async () => {
@@ -189,17 +191,17 @@ const keyboard = async () => {
 const PIECE = (named) => [named ? `Hide “${named}”` : "Hide this", "Settings for this…"];
 const SUBMENU = "›";
 const SESSION_ROWS = ({ pin = "Pin to the top", shelf = [], wake = ["Snooze", SUBMENU], close = "Close agent" } = {}) => ["checkout", "Open", "Rename…", pin, ...shelf, "Mark unread", ...wake,
-  "Move to project", SUBMENU, "Copy", SUBMENU, "Sleep this agent", "Sleep its tab", close, ...PIECE("What each agent is on")];
+  "Move to project", SUBMENU, "Copy", SUBMENU, "Sleep this agent…", "Sleep this tab…", close, ...PIECE("What each agent is on")];
 const PROJECT_HEAD = ["acme-shop", "New conversation…", "New in a worktree…", "Worktrees", "checkout-v2", "kansō", "cart-retry", "~/acme-shop-cart", "Rename…", "Sleep this tab…", "Sleep the project…", "Project options…"];
 const PROJECT_ROWS = ({ head = PROJECT_HEAD, extra = [], remove = "Remove project" } = {}) => [...head, ...extra, remove, ...PIECE("Branch, ahead, behind")];
 const COMPUTER_ROWS = (...phase) => ["devbox", "Rename…", ...phase, "Add computer…", ...PIECE("Computers")];
 const PANE_ROWS = (title, pin, agentRows, back = []) => [title, "Copy", "Cut", "Paste", "Split right", "⌘D", "Split down", "⇧⌘D", "Split left", "⌥⇧⌘D", "Wider or narrower", "⇧⌘↩", pin, "⌥⌘P",
   ...agentRows, ...back, "Right-clicks go to the program", "Close pane", "⇧⌘W"];
-const AGENT_ROWS = ["Send to an agent…", "⌥⌘S", "Find in conversation", "⌘F", "Open with…", "Sleep"];
-const TAB_ROWS = (close, hint = []) => ["checkout", "Rename", "New tab", "⌘T", "Sleep checkout…", close, ...hint, ...PIECE("Agent state on tabs")];
+const AGENT_ROWS = ["Send to an agent…", "⌥⌘S", "Find in conversation", "⌘F", "Open with…", "Sleep this agent…"];
+const TAB_ROWS = (close, hint = []) => ["checkout", "Rename…", "New tab", "⌘T", "Sleep this tab…", close, ...hint, ...PIECE("Agent state on tabs")];
 const PLACE_ROWS = ["Folder and branch", "Copy path", "Copy branch name", "Open with…", ...PIECE()];
 const NEEDED = "Only when needed";
-const MORE_ROWS = ["tests", "Pin", "Sleep this agent", "Send to another agent", "Open with…", "Split down", "Zoom", NEEDED, ...PIECE()];
+const MORE_ROWS = ["tests", "Split down", "⇧⌘D", "Pin", "⌥⌘P", "Zoom", "Send to an agent…", "⌥⌘S", "Open with…", "Sleep this agent…", NEEDED, ...PIECE()];
 const DIGEST_ROWS = ["Files and commits", "Open the diff", "Push 2 commits…", NEEDED, ...PIECE()];
 const STATUS_ROWS = { needs: ["Needs you", "Go to cart-ui", "⌘J"], memory: ["Memory low", "Open Memory"], computer: ["devbox", "Refresh", NEEDED, ...PIECE()], agents: ["Agents at work", "Show them", "⌃⌥S", NEEDED, ...PIECE()], palette: ["Command palette key", ...PIECE()] };
 const SETTINGS_ROWS = ["Settings", "kansō settings", "⌃⇧,", "Herdr settings"];
@@ -269,7 +271,7 @@ test("A pane whose Close is pressed once keeps every row and Close's key", async
 });
 
 test("A tab's menu writes no shortcut for New tab or Close tab when neither is bound", async () => {
-  assert.deepEqual((await tabMenu(false, [])()).map((menu) => menu.words), [["checkout", "Rename", "New tab", "Sleep checkout…", "Close tab", ...PIECE("Agent state on tabs")]]);
+  assert.deepEqual((await tabMenu(false, [])()).map((menu) => menu.words), [["checkout", "Rename…", "New tab", "Sleep this tab…", "Close tab", ...PIECE("Agent state on tabs")]]);
 });
 
 const SUBAGENTS = [
@@ -307,7 +309,7 @@ for (const name of ["spaces", "agents"]) {
   });
 }
 
-const ACTIONS = ["Open", "Rename…", "Pin to the top", "Settle", "Mark unread", "Snooze", "Move to project", "Copy", "Sleep this agent", "Sleep its tab", "Close agent", "Close terminal"];
+const ACTIONS = ["Open", "Rename…", "Pin to the top", "Settle", "Mark unread", "Snooze", "Move to project", "Copy", "Sleep this agent…", "Sleep this tab…", "Close agent", "Close terminal"];
 const offered = async (address) => {
   const { el, view } = await subagents({ address, view: "spaces" });
   view.render();
@@ -317,12 +319,12 @@ const offered = async (address) => {
 test("A subagent with no pane of its own is offered Rename, Pin, Settle, Mark read, Snooze, Move and Close, and no Open, Copy or Sleep, which its parent is", async () => {
   assert.deepEqual(await offered("s1"), ["Rename…", "Pin to the top", "Settle", "Mark unread", "Snooze", "Move to project", "Close terminal"]);
   const parent = await offered("t0");
-  for (const row of ["Open", "Copy", "Sleep this agent", "Sleep its tab"]) assert.ok(parent.includes(row), `the parent offers ${row}`);
+  for (const row of ["Open", "Copy", "Sleep this agent…", "Sleep this tab…"]) assert.ok(parent.includes(row), `the parent offers ${row}`);
 });
 
 test("A subagent in a pane of its own is offered the rows its pane gives, as any agent is", async () => {
   const child = await offered("t9");
-  for (const row of ["Open", "Copy", "Sleep this agent", "Sleep its tab"]) assert.ok(child.includes(row), `it offers ${row}`);
+  for (const row of ["Open", "Copy", "Sleep this agent…", "Sleep this tab…"]) assert.ok(child.includes(row), `it offers ${row}`);
 });
 
 test("An asleep row's Wake wakes only it, Wake all wakes its tab, and Everything asleep… opens Status with Asleep unfolded", async () => {

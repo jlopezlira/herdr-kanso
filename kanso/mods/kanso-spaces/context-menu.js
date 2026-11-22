@@ -81,8 +81,6 @@ export const ACTIONS = Object.freeze({
 
 export const ORDER = Object.freeze(Object.keys(ACTIONS));
 
-export const inOrder = (keys) => [...keys].sort((a, b) => ORDER.indexOf(a) - ORDER.indexOf(b));
-
 export const wordsOf = (act, of = []) => ACTIONS[act].label(...of);
 
 const plain = (label, does, look) => ({ ...look, label, onClick: does });
