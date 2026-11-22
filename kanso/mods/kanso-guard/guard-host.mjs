@@ -178,6 +178,7 @@ export function guardHost({ platform = platformName(process.platform), run, home
     }),
     linux: () => ({
       ...unix, metric: "proportional set size",
+      window: async () => { const r = await run("ss", ["-xlpH", "src", join(appHome, "herdr-app.sock")], 5000); return { pid: Number(/pid=(\d+)/.exec(r.stdout)?.[1]) || null }; },
       processes: async () => macProcesses(checked(await run("env", ["LC_ALL=C", "ps", "-eo", "pid=,ppid=,rss=,etime=,lstart=,args="])).stdout),
       footprints: async (pids) => new Map([...new Set(pids.filter(Boolean))].flatMap((pid) => {
         const kb = linuxPss(tryRead(`/proc/${validPid(pid)}/smaps_rollup`));

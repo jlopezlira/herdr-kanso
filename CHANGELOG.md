@@ -32,6 +32,14 @@ the branch's rules.
 ### Added
 
 - Memory works on Linux: it reads each process's proportional memory and the machine's from the system, runs its check every minute from a systemd user timer, notifies through the desktop, and waits for Omarchy's idle before it recycles on its own.
+- On Linux, Kanso Markdown makes .md files open in Herdr (`sh markdown-handler.sh install`), as on macOS, and hands them back to the app they had on uninstall.
+- On Linux, the editors in Open with show their icons.
+
+### Fixed
+
+- On Linux, Ports, a process's folder, its open files and a Codex conversation are read from `ss` and `/proc`, so they work on a stock Omarchy without `lsof`.
+- On Linux, Containers opens and quits Docker's own engine (rootless, Docker Desktop or the system service), and counts its memory.
+- On Linux, sharing waits for the browser in front on Hyprland and pastes only into it, battery power is read from the battery's status, and a pet's picture is converted with ImageMagick.
 
 ## [3.32.0] - 2026-11-21
 

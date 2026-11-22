@@ -33,7 +33,7 @@ and no Restart window action. Windows core identity comes from `hc server status
 macOS sums all process-table `herdr-core` programs except `connect` clients.
 Failed readings log the primitive and keep the check running with its previous
 fallback; failed macOS memory fields and idle seconds are zero.
-Linux remains unavailable. `HERDR_APP_HOME` overrides Herdr's `~/.config/herdr-app`.
+Linux reads each process's proportional set size from `/proc/<pid>/smaps_rollup`, the machine from `/proc/meminfo`, the window from `ss -xlp` on its socket, idle from Omarchy's shell (logind otherwise), notifies with `notify-send` and checks every minute from a systemd user timer. `HERDR_APP_HOME` overrides Herdr's `~/.config/herdr-app`.
 
 ## What you see
 

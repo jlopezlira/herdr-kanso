@@ -1,5 +1,5 @@
 #!/bin/sh
-# Kanso Markdown (macOS): makes .md files open in Herdr, formatted and
+# Kanso Markdown (macOS and Linux): makes .md files open in Herdr, formatted and
 # editable (Kanso's side panel, or the markdown-panel mod's window in any
 # other layout), instead of in the app macOS uses for them. That covers a
 # Cmd-click on a path in a terminal (Herdr hands it to macOS) and a double
@@ -14,8 +14,6 @@
 # window if it isn't open. Then it brings Herdr to the front. When Herdr
 # isn't running, it opens the file in TextEdit.
 set -eu
-
-[ "$(uname)" = Darwin ] || { echo "Kanso Markdown is for macOS." >&2; exit 1; }
 
 APP="$HOME/Applications/Kanso Markdown.app"
 ID="dev.kanso.markdown"
@@ -103,8 +101,65 @@ uninstall() {
   echo "Markdown files open in $previous again."
 }
 
-case "${1:-}" in
-  install) install ;;
-  uninstall) uninstall ;;
-  *) echo "Usage: sh $0 install | uninstall" >&2; exit 2 ;;
+linux_install() {
+  command -v xdg-mime >/dev/null || { echo "Needs xdg-mime (xdg-utils)." >&2; exit 1; }
+  herdr=$(command -v herdr-app || echo "$HOME/.local/bin/herdr-app")
+  apps="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
+  opener="$HOME_DIR/data/kanso-markdown/open.sh"
+  mkdir -p "$apps" "$INBOX" "$(dirname "$opener")"
+  previous=$(xdg-mime query default text/markdown 2>/dev/null || true)
+  if [ -n "$previous" ] && [ "$previous" != "$ID.desktop" ]; then printf '%s\n' "$previous" > "$SAVED"; fi
+  cat > "$opener" <<OPEN
+#!/bin/sh
+p=\$1
+export HERDR_APP_HOME="$HOME_DIR"
+if ! pgrep -x herdr-app >/dev/null; then
+  back=\$(cat "$SAVED" 2>/dev/null)
+  [ -n "\$back" ] && command -v gtk-launch >/dev/null && exec gtk-launch "\${back%.desktop}" "\$p"
+  exec "$herdr"
+fi
+mkdir -p "$INBOX"
+printf '%s' "\$p" > "$INBOX/\$(date +%s)-\$\$.path"
+s=\$("$herdr" status 2>/dev/null)
+case "\$s" in
+  *'"layout": "kanso"'*) ;;
+  *) if [ -d "$HOME_DIR/mods/markdown-panel" ]; then
+       case "\$s" in *'"markdown-panel"'*) ;; *) "$herdr" do mod.open '{"name":"markdown-panel"}' >/dev/null 2>&1 ;; esac
+     fi ;;
+esac
+command -v omarchy-launch-or-focus >/dev/null && exec omarchy-launch-or-focus herdr-app "$herdr"
+exit 0
+OPEN
+  chmod +x "$opener"
+  cat > "$apps/$ID.desktop" <<DESKTOP
+[Desktop Entry]
+Type=Application
+Name=Kanso Markdown
+Exec=/bin/sh "$opener" %f
+MimeType=text/markdown;text/x-markdown;
+NoDisplay=true
+Terminal=false
+DESKTOP
+  command -v update-desktop-database >/dev/null && update-desktop-database "$apps" >/dev/null 2>&1 || true
+  xdg-mime default "$ID.desktop" text/markdown text/x-markdown
+  if [ "$previous" = "$ID.desktop" ]; then echo "Kanso Markdown is updated; .md files still open in Herdr."
+  else echo "Markdown files now open in Herdr (they opened in ${previous:-the system default})."; fi
+}
+
+linux_uninstall() {
+  apps="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
+  previous=$(cat "$SAVED" 2>/dev/null || true)
+  if [ "$(xdg-mime query default text/markdown 2>/dev/null)" = "$ID.desktop" ] && [ -n "$previous" ]; then xdg-mime default "$previous" text/markdown text/x-markdown; fi
+  rm -rf "$apps/$ID.desktop" "$HOME_DIR/data/kanso-markdown" "$SAVED"
+  command -v update-desktop-database >/dev/null && update-desktop-database "$apps" >/dev/null 2>&1 || true
+  echo "Markdown files open in ${previous:-the system default} again."
+}
+
+case "$(uname):${1:-}" in
+  Darwin:install) install ;;
+  Darwin:uninstall) uninstall ;;
+  Linux:install) linux_install ;;
+  Linux:uninstall) linux_uninstall ;;
+  Darwin:*|Linux:*) echo "Usage: sh $0 install | uninstall" >&2; exit 2 ;;
+  *) echo "Kanso Markdown is for macOS and Linux." >&2; exit 1 ;;
 esac

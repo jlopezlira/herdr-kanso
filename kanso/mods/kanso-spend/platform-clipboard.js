@@ -17,6 +17,10 @@ public static class KansoPaste {
   }
 }`;
 
+export const hyprlandClass = (text) => {
+  try { return String(JSON.parse(text)?.class ?? "") || null; } catch { return null; }
+};
+
 export function clipboardApi(platform, run) {
   const image = async (file) => {
     if (platform === "windows") {
@@ -33,7 +37,10 @@ export function clipboardApi(platform, run) {
       const r = await powershell(run, `Add-Type -TypeDefinition ${psQuote(WINDOWS_INPUT.replace(/\n/g, " "))}; [KansoPaste]::GetForegroundWindow().ToInt64()`);
       return r.code === 0 && /^\d+$/.test(r.stdout.trim()) ? r.stdout.trim() : null;
     }
-    if (platform !== "macos") return null;
+    if (platform !== "macos") {
+      const r = await run("hyprctl", ["activewindow", "-j"]).catch(() => null);
+      return r?.code === 0 ? hyprlandClass(r.stdout) : null;
+    }
     const r = await run("osascript", ["-l", "JavaScript", "-e", 'ObjC.import("AppKit"); var a = $.NSWorkspace.sharedWorkspace.frontmostApplication; a ? ObjC.unwrap(a.bundleIdentifier) : ""']);
     return r.code === 0 && r.stdout.trim() ? r.stdout.trim() : null;
   };
@@ -43,9 +50,10 @@ export function clipboardApi(platform, run) {
       const r = await powershell(run, `Add-Type -TypeDefinition ${psQuote(WINDOWS_INPUT.replace(/\n/g, " "))}; if (-not [KansoPaste]::Paste([long]${psQuote(target)})) { exit 1 }`);
       return { state: r.code === 0 ? "ok" : "error" };
     }
+    if (target && platform !== "macos" && (await frontApp()) !== target) return { state: "error" };
     const commands = platform === "macos" ? [["osascript", ["-e", 'tell application "System Events" to keystroke "v" using command down']]] : [["wtype", ["-M", "ctrl", "-k", "v", "-m", "ctrl"]], ["xdotool", ["key", "--clearmodifiers", "ctrl+v"]]];
     for (const [program, args] of commands) if ((await run(program, args).catch(() => null))?.code === 0) return { state: "ok" };
     return { state: "error" };
   };
-  return { image, frontApp, paste, observesFrontApp: platform !== "linux", pasteKey: platform === "macos" ? "Cmd-V" : "Ctrl-V", permissionNote: platform === "macos" ? " To have it pasted for you, allow Herdr in System Settings > Privacy & Security > Accessibility." : "", write: (cx, text) => cx.write_to_clipboard(String(text)), read: (cx) => cx.read_from_clipboard() };
+  return { image, frontApp, paste, observesFrontApp: true, pasteKey: platform === "macos" ? "Cmd-V" : "Ctrl-V", permissionNote: platform === "macos" ? " To have it pasted for you, allow Herdr in System Settings > Privacy & Security > Accessibility." : "", write: (cx, text) => cx.write_to_clipboard(String(text)), read: (cx) => cx.read_from_clipboard() };
 }

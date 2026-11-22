@@ -403,7 +403,7 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     `terminals()` gives the foreground pid; Claude Code's
     `~/.claude/sessions/<pid>.json` gives `sessionId` and `cwd`, and the
     file is `~/.claude/projects/<cwd, each non-alphanumeric as ->/<id>.jsonl`;
-    for Codex, `lsof` on the pid (or its children) finds the open
+    for Codex, `/proc/<pid>/fd` on Linux (`lsof` elsewhere) on the pid (or its children) finds the open
     `rollout-*.jsonl`. What you typed leaves out tool results, sidechains,
     meta records, text starting with `<` or `/`, "[Request interrupted",
     "This session is being continued" and "# AGENTS.md"; only the first
@@ -623,8 +623,8 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     gives `sourceState` (an `EditorState`, read-only when the file is not text)
     and `lib.js` gives `showPanel` (a block in `panel-body`). A panel
     exists only while `kanso-tabs` shows it. A remote re-read runs only while it is shown and the window is in front.
-    `ports.js` lists TCP listeners (`lsof -F pcn`) with their folder
-    (`lsof -d cwd`), age and parent chain (`ps`); a listener under a
+    `ports.js` lists TCP listeners (`lsof -F pcn`; `ss -ltnp` on Linux) with their folder
+    (`lsof -d cwd`; `/proc/<pid>/cwd` on Linux), age and parent chain (`ps`); a listener under a
     terminal's shell pid (`hc get`) is in that pane, one in a folder of
     home (not `~/Library`) with none says "no pane". Read every 10 s
     in front; Stop: SIGTERM on a second press, then SIGKILL.

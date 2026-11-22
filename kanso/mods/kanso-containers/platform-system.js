@@ -6,6 +6,9 @@ const DETACHED = 'nohup "$0" "$@" >/dev/null 2>&1 &';
 
 const memoryGuardReason = "Memory is not available on this computer.";
 const MEMORY_GUARD = new Set(["macos", "windows", "linux"]);
+const LINUX_DOCKER = `for u in docker-desktop docker; do systemctl --user cat "$u.service" >/dev/null 2>&1 && exec systemctl --user "$1" "$u"; done
+if [ "$1" = start ]; then docker info >/dev/null 2>&1 && exit 0; exec systemctl start docker.service; fi
+exec systemctl stop docker.service docker.socket`;
 
 export function systemApi(platform, run) {
   const status = (appHome) => platform === "windows"
@@ -21,7 +24,7 @@ export function systemApi(platform, run) {
     }
     const r = platform === "windows"
       ? await powershell(run, "Add-Type -AssemblyName System.Windows.Forms; [Windows.Forms.SystemInformation]::PowerStatus.PowerLineStatus.ToString()")
-      : await run("sh", ["-c", 'for f in /sys/class/power_supply/*/online; do [ -f "$f" ] || continue; cat "$f"; done']);
+      : await run("sh", ["-c", 'for f in /sys/class/power_supply/*/status; do [ "$(cat "$f" 2>/dev/null)" = Discharging ] && { echo 0; exit 0; }; done; for f in /sys/class/power_supply/*/online; do [ -f "$f" ] || continue; cat "$f"; done']);
     if (r.code !== 0 || !r.stdout.trim() || /Unknown/.test(r.stdout)) return null;
     return platform === "windows" ? r.stdout.trim() === "Offline" : !r.stdout.split(/\s+/).includes("1");
   };
@@ -35,8 +38,8 @@ export function systemApi(platform, run) {
   const userHome = async () => (platform === "windows" ? await powershell(run, "$HOME") : await run("sh", ["-c", 'printf %s "$HOME"'])).stdout.trim();
   const startDocker = () => platform === "macos" ? run("open", ["-a", "Docker"]) : platform === "windows"
     ? powershell(run, "Start-Process -FilePath (Join-Path $env:ProgramFiles 'Docker\\Docker\\Docker Desktop.exe') -ErrorAction Stop")
-    : run("systemctl", ["--user", "start", "docker-desktop"]);
-  const stopDocker = () => platform === "macos" ? run("osascript", ["-e", 'quit app "Docker"']) : platform === "windows" ? run("taskkill", ["/IM", "Docker Desktop.exe"]) : run("systemctl", ["--user", "stop", "docker-desktop"]);
+    : run("sh", ["-c", LINUX_DOCKER, "sh", "start"]);
+  const stopDocker = () => platform === "macos" ? run("osascript", ["-e", 'quit app "Docker"']) : platform === "windows" ? run("taskkill", ["/IM", "Docker Desktop.exe"]) : run("sh", ["-c", LINUX_DOCKER, "sh", "stop"]);
   const hiddenGuard = (node, file, args, appHome) => {
     const start = `$child=Start-Process -FilePath ${psQuote(node)} -ArgumentList ${psQuote([file, ...args].map(windowsArg).join(" "))} -WindowStyle Hidden -PassThru -ErrorAction Stop`;
     const capture = args[0] === "install" && appHome

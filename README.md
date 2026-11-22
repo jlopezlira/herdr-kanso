@@ -134,7 +134,7 @@ tab bar rebinds kansō's own keys and hides the panels you don't use.
 ## Privacy
 
 Everything runs on your machine, and reads only the folders you work in:
-`git`, `gh`, `find`, `du`, `lsof`, `ps`, `sqlite3`, `node`, `docker`,
+`git`, `gh`, `find`, `du`, `lsof` (`ss` and `/proc` on Linux), `ps`, `sqlite3`, `node`, `docker`,
 `xcode-select`, `simctl`, `adb`, `emulator` and Herdr's `hc`. What reaches the network: PR and
 Shipped through `gh`, only while their panel is shown (Shipped keeps a private
 gist of your own statistics); Spend's daily fetch of OpenRouter's price list.
