@@ -748,6 +748,8 @@ export default class Spaces extends RetryingView {
     else if (c.startsWith("power-machine:") && c.length > "power-machine:".length) { const m = c.slice("power-machine:".length); this.setPower(m, this.phaseOf(m) === "off", cx); }
     else if (c.startsWith("sync-machine:") && c.length > "sync-machine:".length) this.toggleSync(c.slice("sync-machine:".length), cx);
     else if (c.startsWith("sign-in-machine:") && c.length > "sign-in-machine:".length) this.signIn(c.slice("sign-in-machine:".length));
+    else if (c.startsWith("remove-machine:") && c.length > "remove-machine:".length) this.removeMachine(c.slice("remove-machine:".length), cx);
+    else if (c.startsWith("restore-machine:") && c.length > "restore-machine:".length) this.restoreMachine(c.slice("restore-machine:".length), cx);
     else if (c === "sidebar") this.toggleRail();
     else if (c === "needs-you.list") this.toggleNeeds(cx);
     else if (c === "away-dismiss") this.sinceLeft?.dismiss(cx);
@@ -1438,6 +1440,36 @@ export default class Spaces extends RetryingView {
     if (!name || this.powerBusy?.has(name)) return;
     if (on) this.turnOn(name, cx);
     else this.turnOff(name, cx);
+  }
+
+  removeMachine(name, cx) {
+    const live = (this.machines ?? []).find((row) => row.name === name) ?? null;
+    const record = machineRecord(live) ?? machineRecord((this.parked ?? []).find((row) => row.name === name));
+    if (!canRestore(record) || this.powerBusy.has(name)) return;
+    const title = this.names.title(name);
+    this.removed = { ...(this.removed ?? {}), [name]: record };
+    this.powerBusy.add(name);
+    this.powerRun(name, cx, async () => {
+      if (live) await hc(rmArgs(name)).catch(() => null);
+      this.parked = (this.parked ?? []).filter((row) => row.name !== name);
+      this.machines = (this.machines ?? []).filter((row) => row.name !== name);
+      this.clearFlags(name);
+      await this.db().forgetMachine(name).catch(() => {});
+      notify({ title: `${title} removed`, body: "Click here to add it back.", timeout: 15000, action: { name: `kanso-spaces.restore-machine:${name}` } });
+      await this.readMachines();
+    });
+  }
+
+  restoreMachine(name, cx) {
+    const record = this.removed?.[name];
+    if (!record || this.powerBusy.has(name)) return;
+    this.powerBusy.add(name);
+    this.powerRun(name, cx, async () => {
+      const error = hcError(await hc(addArgs(record)).catch((e) => ({ code: 1, stderr: String(e?.message ?? e) })));
+      if (error) { notify({ title: `${this.names.title(name)} was not added back`, body: String(error.message ?? ""), level: "error" }); return; }
+      this.removed = Object.fromEntries(Object.entries(this.removed ?? {}).filter(([key]) => key !== name));
+      await this.readMachines();
+    });
   }
 
   clearFlags(name) {
@@ -2255,6 +2287,7 @@ export default class Spaces extends RetryingView {
       sync: () => run(`kanso-spaces.sync-machine:${route}`),
       retry: () => run(`kanso-spaces.retry-machine:${route}`),
       signin: () => run(`kanso-spaces.sign-in-machine:${route}`),
+      remove: () => run(`kanso-spaces.remove-machine:${route}`),
       plus: () => run("space.new", { machine: route }),
       add: () => run("mod.open", { name: "kanso-computers" }),
       hide: () => this.hide("sidebar.computers", true),
