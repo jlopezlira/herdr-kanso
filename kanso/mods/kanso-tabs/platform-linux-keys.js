@@ -39,7 +39,7 @@ export const OMARCHY = new Set([
 ]);
 
 const ORDER = ["ctrl", "alt", "shift", "cmd"];
-const SWAPS = [["cmd"], ["ctrl", "shift"], ["alt", "shift"], ["ctrl", "alt"], ["ctrl", "alt", "shift"]];
+const SWAPS = [["cmd"], ["ctrl", "shift"], ["alt", "shift"], ["ctrl", "alt"], ["ctrl", "alt", "shift"], ["cmd", "ctrl"], ["cmd", "ctrl", "shift"]];
 
 const parse = (chord) => {
   const [, prefix, key] = String(chord).match(/^((?:(?:ctrl|alt|shift|cmd)-)*)(.+)$/);
@@ -63,10 +63,12 @@ const familyOf = (action) => String(action).replace(/-(?:left|right|up|down|\d+)
 
 export const takenByOmarchy = (chord) => OMARCHY.has(asOmarchy(chord));
 
-export function linuxSection(section) {
+export const chordsOf = (section) => new Set(Object.keys(section ?? {}).map(canonical));
+
+export function linuxSection(section, reserved = new Set()) {
   const entries = Object.entries(section ?? {});
   const families = [...new Set(entries.filter(([chord]) => usesCmd(chord)).map(([, action]) => familyOf(action)))];
-  const fixed = new Set(entries.filter(([chord]) => !usesCmd(chord)).map(([chord]) => canonical(chord)));
+  const fixed = new Set([...reserved, ...entries.filter(([chord]) => !usesCmd(chord)).map(([chord]) => canonical(chord))]);
   const chosen = families.reduce((picked, family) => {
     const members = entries.filter(([chord, action]) => usesCmd(chord) && familyOf(action) === family).map(([chord]) => chord);
     const taken = new Set([...fixed, ...[...picked.values()].map(([next]) => next)]);
@@ -81,7 +83,7 @@ export function linuxSection(section) {
   }, new Map());
   const written = (chord) => { const [next, swap] = chosen.get(chord) ?? [chord, SWAPS[0]]; return swap === SWAPS[0] ? chord : next; };
   const out = entries.map(([chord, action]) => [written(chord), action]);
-  const bound = new Set(out.map(([chord]) => canonical(chord)));
+  const bound = new Set([...reserved, ...out.map(([chord]) => canonical(chord))]);
   const aliases = out.map(([chord, action]) => [reported(chord), action]).filter(([chord]) => chord && !bound.has(canonical(chord)) && !takenByOmarchy(chord));
   return Object.fromEntries([...out, ...aliases]);
 }

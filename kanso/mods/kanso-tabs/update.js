@@ -1,6 +1,6 @@
 import { localName } from "./platform-host.js";
 import { formerKeymap, missingKeys, shippedKeymap } from "./platform-keymap.js";
-import { linuxSection } from "./platform-linux-keys.js";
+import { chordsOf, linuxSection } from "./platform-linux-keys.js";
 import { paths } from "./platform-paths.js";
 import { sameVolume, updateHost, windowsInstallScript, windowsLaunchScript, windowsRecoverScript } from "./platform-update.js";
 // Kanso's own updates, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
@@ -74,7 +74,9 @@ export function mergeKeys(user, before, after) {
 
 export function omarchyKeys(merged, shippedKeys) {
   if (!shippedKeys) return merged;
-  const keys = Object.fromEntries(Object.entries(merged.keys).map(([name, section]) => [name, linuxSection(section)]));
+  const ours = Object.fromEntries(Object.entries(merged.keys).filter(([name]) => name in shippedKeys).map(([name, section]) => [name, linuxSection(section)]));
+  const reserved = new Set(Object.values(ours).flatMap((section) => [...chordsOf(section)]));
+  const keys = Object.fromEntries(Object.entries(merged.keys).map(([name, section]) => [name, ours[name] ?? linuxSection(section, reserved)]));
   return { ...merged, keys, changed: merged.changed || JSON.stringify(keys) !== JSON.stringify(merged.keys) };
 }
 
