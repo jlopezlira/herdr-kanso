@@ -2,13 +2,13 @@
 // Kept byte for byte by `npm run sync:share`: edit kanso-panel/ui-row.js.
 import { div, svg, image } from "gpui-kit";
 import { h_flex, v_flex, Button } from "gpui-base";
-import { G, H, LH, R, T, W, ICON_ROW, ICON_INLINE, CLEAR, OPACITY, SPIN, alpha, glyphOf, toneColor } from "./ui.js";
+import { G, H, LH, R, T, W, ICON_ROW, ICON_INLINE, CLEAR, OPACITY, alpha, glyphOf, toneColor } from "./ui.js";
 import { button } from "./ui-button.js";
 import { chip } from "./ui-chip.js";
 import { dot } from "./ui-dot.js";
 import { glint as glinting } from "./ui-glint.js";
 import { keyHint } from "./ui-key-hint.js";
-import { mark } from "./ui-mark.js";
+import { busyMark, mark } from "./ui-mark.js";
 import { PENDING, pendingDot } from "./ui-state.js";
 
 // Each step in is the lead icon and its gap; the guide of a deeper row runs under its parent's icon.
@@ -66,8 +66,7 @@ const foldOf = (c, open) => div().w(ICON_INLINE).flex_none().flex().items_center
 const slotOf = (c, { letter, icon, tone, ink, dimmed, busy }) => {
   if (letter) return letterOf(c, letter);
   if (!icon) return null;
-  const lead = leadOf(icon, tone ? toneColor(c, tone) : ink, dimmed);
-  return busy ? lead.spin(SPIN) : lead;
+  return busy ? busyMark(c, ICON_ROW) : leadOf(icon, tone ? toneColor(c, tone) : ink, dimmed);
 };
 
 const chipOf = (id, c, count) => {
