@@ -1998,7 +1998,7 @@ export default class Spaces extends RetryingView {
   }
 
   retryRun(s) {
-    this.runFailures = new Map([...(this.runFailures ?? new Map())].filter(([, r]) => r.s.id !== s.id));
+    this.runFailures = new Map([...(this.runFailures ?? new Map())].map(([key, list]) => [key, list.filter((r) => r.s.id !== s.id)]).filter(([, list]) => list.length));
     return runNow(s);
   }
 
@@ -2018,13 +2018,14 @@ export default class Spaces extends RetryingView {
   async refreshRunFailures() {
     const rows = (await this.db().schedules()).map(scheduleOf);
     const outcomes = await Promise.all(rows.map(async (s) => ({ s, ...(await outcomeOf(s.id)) })));
-    this.runFailures = new Map(outcomes.filter((r) => r.failed).map((r) => [r.s.project, r]));
+    this.runFailures = Map.groupBy(outcomes.filter((r) => r.failed), (r) => r.s.project);
   }
 
   runFailureRow(key, id, c) {
-    const r = this.runFailures?.get(key);
-    if (!r) return [];
-    return [item(failureLine({ text: "A scheduled run did not start", fix: "Retry", detail: r.failed.why ?? "" })(`run-failed-${id}`, c, { onClick: (cx) => { this.retryRun(r.s); this.redraw(cx); } }), H.line)];
+    const list = this.runFailures?.get(key) ?? [];
+    if (!list.length) return [];
+    const text = list.length === 1 ? "A scheduled run did not start" : `${list.length} scheduled runs did not start`;
+    return [item(failureLine({ text, fix: "Retry", detail: list.at(-1).failed.why ?? "" })(`run-failed-${id}`, c, { onClick: (cx) => { list.forEach((r) => this.retryRun(r.s)); this.redraw(cx); } }), H.line)];
   }
 
   worktreeDialog(place) {

@@ -5,7 +5,7 @@ import { addWorktree } from "./projects.js";
 import { worktreeBase, newId } from "./kdb.js";
 import { runArgs, agentLaunch } from "./clock-model.js";
 
-export const treeBranch = (task, key) => `${String(task).trim()}-${key}`;
+export const treeBranch = (task, key) => `${String(task).trim().replace(/\s+/g, "-").replace(/[~^:?*[\\\]]+|\.\.|@\{/g, "")}-${key}`;
 const lastLine = (text) => String(text ?? "").trim().split("\n").filter(Boolean).at(-1) || "hc could not start it.";
 
 export async function severalRun(place) {
