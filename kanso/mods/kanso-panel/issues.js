@@ -240,7 +240,7 @@ export class Issues {
           : v_flex().w_full().gap(G.xl).children(projects.map((p) => this.projectBlock(p, c, now)));
     return scrollPage("kanso-issues", c, true, (column) => column
       .child(pageHeader(div().text_size(17).text_color(c.text).child("Issues"),
-        refreshTool("issues-refresh", c, { busy, working: `Reading ${plural(this.reading.size, "project", "projects")}` }, (cx) => this.refresh(cx, true))))
+        [refreshTool("issues-refresh", c, { busy, working: `Reading ${plural(this.reading.size, "project", "projects")}` }, (cx) => this.refresh(cx, true))]))
       .child(body));
   }
 }
