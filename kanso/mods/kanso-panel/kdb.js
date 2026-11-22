@@ -9,6 +9,8 @@ import { sqliteLimit, CALL_MS } from "./platform-sqlite.js";
 export { CALL_MS };
 
 export const DIR = "data/kanso";
+export const WORKTREES = `${DIR}/worktrees`;
+export const worktreeBase = (machine) => (machine ? "" : paths.join(appHome(), WORKTREES));
 export const VERSION = 1;
 export const GONE_MS = 60_000; // an agent not seen this long is gone
 export const forgetAgentsSql = () => "DELETE FROM agents WHERE status='gone' AND project_at IS NULL;";
@@ -93,6 +95,7 @@ CREATE TABLE IF NOT EXISTS since_observed(source TEXT PRIMARY KEY, value TEXT NO
 CREATE TABLE IF NOT EXISTS panel_state(project TEXT NOT NULL, panel TEXT NOT NULL, state_json TEXT NOT NULL, updated_at INTEGER NOT NULL, PRIMARY KEY(project, panel));
 CREATE TABLE IF NOT EXISTS machines_off(name TEXT PRIMARY KEY, target TEXT NOT NULL DEFAULT '', via TEXT NOT NULL DEFAULT '', session TEXT NOT NULL DEFAULT '', temporary INTEGER NOT NULL DEFAULT 0);
 CREATE TABLE IF NOT EXISTS computer_alias(route TEXT PRIMARY KEY, name TEXT NOT NULL, at INTEGER NOT NULL, pending INTEGER NOT NULL DEFAULT 0);
+CREATE TABLE IF NOT EXISTS schedules(id TEXT PRIMARY KEY, project TEXT NOT NULL, agent TEXT NOT NULL, agent_name TEXT, run TEXT NOT NULL, prompt TEXT NOT NULL, when_json TEXT NOT NULL, tree INTEGER NOT NULL DEFAULT 0, base TEXT, paused INTEGER NOT NULL DEFAULT 0, created INTEGER NOT NULL, updated INTEGER NOT NULL);
 INSERT OR IGNORE INTO meta(key,value) VALUES('version','${VERSION}');`;
 // hc once stored the words false and null for a plain ssh machine.
 const CLEAN_OFF = `UPDATE machines_off SET via=CASE WHEN via IN ('false','null') THEN '' ELSE via END, session=CASE WHEN session IN ('false','null') THEN '' ELSE session END WHERE via IN ('false','null') OR session IN ('false','null');`;
@@ -351,4 +354,12 @@ export class Kdb extends Database {
   clearPanelState(project, panel) {
     return this.run(`DELETE FROM panel_state WHERE project=${q(project)} AND panel=${q(panel)};`);
   }
+  schedules() { return this.read("SELECT * FROM schedules ORDER BY created;"); }
+  saveSchedule(s, now = Date.now()) {
+    return this.run(`INSERT INTO schedules(id,project,agent,agent_name,run,prompt,when_json,tree,base,paused,created,updated)
+      VALUES(${q(s.id)},${q(s.project)},${q(s.agent)},${q(s.agentName)},${q(JSON.stringify(s.run))},${q(s.prompt)},${q(JSON.stringify(s.when))},${s.tree ? 1 : 0},${q(s.base)},0,${n(now)},${n(now)})
+      ON CONFLICT(id) DO UPDATE SET agent=excluded.agent,agent_name=excluded.agent_name,run=excluded.run,prompt=excluded.prompt,when_json=excluded.when_json,tree=excluded.tree,base=excluded.base,updated=excluded.updated;`);
+  }
+  pauseSchedule(id, paused, now = Date.now()) { return this.run(`UPDATE schedules SET paused=${paused ? 1 : 0},updated=${n(now)} WHERE id=${q(id)};`); }
+  deleteSchedule(id) { return this.run(`DELETE FROM schedules WHERE id=${q(id)};`); }
 }

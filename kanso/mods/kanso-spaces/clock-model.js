@@ -8,32 +8,42 @@ const NAME_MAX = 32;
 const DAY_MS = 86_400_000;
 const UNIT_MS = Object.freeze({ minutes: 60_000, hours: 3_600_000 });
 
-export const clockName = (kind, id) => `kanso-${kind}-${String(id).toLowerCase().replace(/[^a-z0-9_.-]+/g, "-")}`.slice(0, NAME_MAX);
+const hash = (text) => [...String(text)].reduce((h, ch) => (Math.imul(h, 31) + ch.codePointAt(0)) >>> 0, 7).toString(36);
+export const clockName = (kind, id) => {
+  const name = `kanso-${kind}-${String(id).toLowerCase().replace(/[^a-z0-9_.-]+/g, "-")}`;
+  if (name.length <= NAME_MAX) return name;
+  const tail = `-${hash(id)}`;
+  return name.slice(0, NAME_MAX - tail.length) + tail;
+};
 export const localId = (id) => String(id ?? "").split("/").at(-1);
 export const machineOfAddress = (address) => (String(address ?? "").includes("/") ? String(address).split("/")[0] : null);
 const seconds = (ms) => Math.floor(ms / 1000);
 
 const RESUME_SH = [
   'at=$1; t=$2; tok=$3; cmd=$4',
+  'want="\\"kanso.limit.resume\\":\\"$tok\\""',
+  'clear() { hc label "$t" kanso.limit= kanso.limit.resume= kanso.limit.cmd=; exit 0; }',
   `while [ "$(date +%s)" -lt "$at" ]; do sleep ${TICK_S}; done`,
-  'j=$(hc get "$t" --json 2>/dev/null) || exit 0',
-  'want="\\"kanso.limit.resume\\":\\"$tok\\""; case "$j" in *"$want"*) ;; *) exit 0 ;; esac',
-  'case "$j" in',
-  '  *\'"state":"working"\'*|*\'"state":"blocked"\'*) ;;',
-  '  *\'"state":"done"\'*|*\'"state":"idle"\'*) hc send "$t" continue ;;',
-  '  *) [ -n "$cmd" ] && hc send "$t" "$cmd" ;;',
-  'esac',
-  'hc label "$t" kanso.limit= kanso.limit.resume=',
+  'while :; do',
+  '  j=$(hc get "$t" --json 2>/dev/null) || exit 0',
+  '  case "$j" in *"$want"*) ;; *) exit 0 ;; esac',
+  '  case "$j" in',
+  '    *\'"state":"working"\'*) clear ;;',
+  '    *\'"state":"blocked"\'*) ;;',
+  '    *\'"state":"done"\'*|*\'"state":"idle"\'*) hc send "$t" continue >/dev/null 2>&1 && clear ;;',
+  '    *) [ -n "$cmd" ] && hc send "$t" "$cmd" >/dev/null 2>&1 && clear ;;',
+  '  esac',
+  `  sleep ${TICK_S}`,
+  'done',
 ].join("\n");
 
 const resumePs = (at, address, token, cmd) => [
   `$at = ${Number(at)}; $t = ${psQuote(address)}; $tok = ${psQuote(token)}; $cmd = ${psQuote(cmd ?? "")}`,
+  "function Clear { hc label $t kanso.limit= kanso.limit.resume= kanso.limit.cmd= | Out-Null; exit 0 }",
   `while ([DateTimeOffset]::UtcNow.ToUnixTimeSeconds() -lt $at) { Start-Sleep -Seconds ${TICK_S} }`,
-  "$j = (hc get $t --json 2>$null) | ConvertFrom-Json",
-  "if (-not $j -or $j.labels.'kanso.limit.resume' -ne $tok) { exit 0 }",
-  "$s = $j.status.state",
-  "if ($s -in 'done','idle') { hc send $t continue } elseif ($s -notin 'working','blocked' -and $cmd) { hc send $t $cmd }",
-  "hc label $t kanso.limit= kanso.limit.resume=",
+  "while ($true) { $j = (hc get $t --json 2>$null) | ConvertFrom-Json; if (-not $j -or $j.labels.'kanso.limit.resume' -ne $tok) { exit 0 }; $s = $j.status.state;" +
+    " if ($s -eq 'working') { Clear } elseif ($s -in 'done','idle') { hc send $t continue | Out-Null; if ($LASTEXITCODE -eq 0) { Clear } }" +
+    ` elseif ($s -ne 'blocked' -and $cmd) { hc send $t $cmd | Out-Null; if ($LASTEXITCODE -eq 0) { Clear } }; Start-Sleep -Seconds ${TICK_S} }`,
 ].join("; ");
 
 const waiter = (platform, sh, ps, args) => (platform === "windows"
@@ -60,17 +70,17 @@ export function runArgs({ cwd, space, on = null, id, name = null, tab = null }) 
 }
 
 const SCHEDULE_SH = [
-  'id=$1; log=$2; mode=$3; spec=$4; on=$5; folder=$6; space=$7; tree=$8; base=$9; shift 9; dir=$1; slug=$2; shift 2',
+  'id=$1; log=$2; mode=$3; spec=$4; on=$5; folder=$6; space=$7; tree=$8; from=$9; shift 9; dir=$1; slug=$2; add=$3; shift 3',
   'x() { if [ -n "$on" ]; then hc exec --on "$on" -- "$@"; else "$@"; fi; }',
   'say() { printf \'%s %s\\n\' "$(date +%s)" "$1" >> "$log"; }',
   'fire() {',
   '  cwd=$folder',
   '  if [ "$tree" = 1 ]; then',
-  '    stamp=$(date +%Y%m%d-%H%M); branch="kanso/$slug-$stamp"; cwd="$dir/$slug-$stamp"',
-  '    x git -C "$folder" fetch --quiet origin "$base" >/dev/null 2>&1',
-  '    if ! out=$(x git -C "$folder" worktree add -b "$branch" "$cwd" "origin/$base" 2>&1) && ! out=$(x git -C "$folder" worktree add -b "$branch" "$cwd" "$base" 2>&1); then',
-  '      say "failed $(printf %s "$out" | tail -n 1)"; return',
-  '    fi',
+  '    branch="kanso/$slug-$(date +%Y%m%d-%H%M)"',
+  '    x git -C "$folder" fetch --quiet origin "$from" >/dev/null 2>&1',
+  '    start="origin/$from"; x git -C "$folder" rev-parse --verify --quiet "$start" >/dev/null 2>&1 || start=$from',
+  '    if ! out=$(x sh -c "$add" sh "$folder" "$branch" "$dir" "$start" 2>&1); then say "failed $(printf %s "$out" | tail -n 1)"; return; fi',
+  '    cwd=$(printf %s "$out" | tail -n 1 | cut -f2)',
   '  fi',
   '  if [ -n "$on" ]; then out=$(hc run --bg --no-parent --outlive-parent --on "$on" --cwd "$cwd" --label "herdr.space=$space" --label herdr.seen=0 --label "kanso.run=$id" -- "$@" 2>&1)',
   '  else out=$(hc run --bg --no-parent --outlive-parent --cwd "$cwd" --label "herdr.space=$space" --label herdr.seen=0 --label "kanso.run=$id" -- "$@" 2>&1); fi',
@@ -95,12 +105,12 @@ const schedulePs = (job) => {
   const on = job.on ? `@('--on', ${q(job.on)})` : "@()";
   return [
     `$id = ${q(job.id)}; $log = ${q(job.log)}; $mode = ${q(job.mode)}; $spec = ${q(job.spec)}; $folder = ${q(job.folder)}; $space = ${q(localId(job.space))}`,
-    `$tree = ${job.tree ? 1 : 0}; $base = ${q(job.base ?? "")}; $dir = ${q(job.dir ?? "")}; $slug = ${q(job.slug ?? "run")}; $on = ${on}; $words = @(${words})`,
+    `$tree = ${job.tree ? 1 : 0}; $from = ${q(job.from ?? "")}; $dir = ${q(job.dir ?? "")}; $slug = ${q(job.slug ?? "run")}; $on = ${on}; $words = @(${words})`,
     "New-Item -ItemType Directory -Force -Path (Split-Path $log) | Out-Null",
     "function Now { [DateTimeOffset]::UtcNow.ToUnixTimeSeconds() }",
     "function Say($w) { Add-Content -Path $log -Value \"$(Now) $w\" }",
     "function Git { if ($on.Count) { hc exec @on -- git @args } else { git @args } }",
-    "function Fire { $cwd = $folder; if ($tree -eq 1) { $stamp = Get-Date -Format 'yyyyMMdd-HHmm'; $branch = \"kanso/$slug-$stamp\"; $cwd = \"$dir/$slug-$stamp\"; Git -C $folder fetch --quiet origin $base 2>&1 | Out-Null; $out = Git -C $folder worktree add -b $branch $cwd \"origin/$base\" 2>&1; if ($LASTEXITCODE -ne 0) { $out = Git -C $folder worktree add -b $branch $cwd $base 2>&1 }; if ($LASTEXITCODE -ne 0) { Say \"failed $(@($out)[-1])\"; return } }; $out = hc run --bg --no-parent --outlive-parent @on --cwd $cwd --label \"herdr.space=$space\" --label herdr.seen=0 --label \"kanso.run=$id\" -- @words 2>&1; if ($LASTEXITCODE -eq 0) { Say 'ran' } else { Say \"failed $(@($out)[-1])\" } }",
+    "function Fire { $cwd = $folder; if ($tree -eq 1) { $stamp = Get-Date -Format 'yyyyMMdd-HHmm'; $branch = \"kanso/$slug-$stamp\"; $cwd = Join-Path $dir \"$slug-$stamp\"; Git -C $folder fetch --quiet origin $from 2>&1 | Out-Null; $start = \"origin/$from\"; Git -C $folder rev-parse --verify --quiet $start 2>&1 | Out-Null; if ($LASTEXITCODE -ne 0) { $start = $from }; $out = Git -C $folder worktree add -b $branch $cwd $start 2>&1; if ($LASTEXITCODE -ne 0) { Say \"failed $(@($out)[-1])\"; return } }; $out = hc run --bg --no-parent --outlive-parent @on --cwd $cwd --label \"herdr.space=$space\" --label herdr.seen=0 --label \"kanso.run=$id\" -- @words 2>&1; if ($LASTEXITCODE -eq 0) { Say 'ran' } else { Say \"failed $(@($out)[-1])\" } }",
     "function Until($t) { while ((Now) -lt $t) { Start-Sleep -Seconds " + TICK_S + " } }",
     "if ($mode -eq 'every') { $p = $spec -split ' '; $t = [long]$p[0]; $step = [long]$p[1]; while ($true) { Until $t; Fire; $n = Now; while ($t -le $n) { $t += $step } } }",
     "$last = 0; foreach ($t in ($spec -split ' ' | ForEach-Object { [long]$_ })) { if ($t -le $last) { continue }; Until $t; Fire; $last = Now }",
@@ -108,12 +118,13 @@ const schedulePs = (job) => {
 };
 
 export function scheduleWaiter(job) {
-  const args = [job.id, job.log, job.mode, job.spec, job.on ?? "", job.folder, localId(job.space), job.tree ? 1 : 0, job.base ?? "", job.dir ?? "", job.slug ?? "run", ...job.argv];
+  const args = [job.id, job.log, job.mode, job.spec, job.on ?? "", job.folder, localId(job.space), job.tree ? 1 : 0, job.from ?? "", job.dir ?? "", job.slug ?? "run", job.add ?? "", ...job.argv];
   return waiter(job.platform, SCHEDULE_SH, schedulePs(job), args);
 }
 
-export function waiterArgs(name, kind, argv) {
-  return ["run", "--bg", "--no-parent", "--outlive-parent", "--rm", "--name", name, "--label", `${CLOCK_LABEL}=${kind}`, "--", ...argv];
+export function waiterArgs(name, kind, argv, labels = {}) {
+  const more = Object.entries(labels).flatMap(([key, value]) => ["--label", `${key}=${value}`]);
+  return ["run", "--bg", "--no-parent", "--outlive-parent", "--rm", "--name", name, "--label", `${CLOCK_LABEL}=${kind}`, ...more, "--", ...argv];
 }
 
 const LAUNCH = [

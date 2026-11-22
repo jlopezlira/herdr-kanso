@@ -1,5 +1,9 @@
 export const LIMIT_LABEL = "kanso.limit";
 export const AT_RESET_LABEL = "kanso.limit.resume";
+export const COMMAND_LABEL = "kanso.limit.cmd";
+export const SNOOZE_LABEL = "kanso.snooze";
+export const READ_TRIES = 3;
+export const RETRY_MS = 3000;
 export const UNKNOWN_RESET = "?";
 export const LIMIT_APPS = Object.freeze(["claude-code", "codex"]);
 export const RESUME_GRACE_MS = 60_000;
@@ -15,8 +19,7 @@ const UNIT_MS = Object.freeze({ d: 86_400_000, h: 3_600_000, m: 60_000, s: 1000 
 const DAY_MS = UNIT_MS.d;
 
 export const providerOf = (app) => PROVIDER_OF[app] ?? null;
-const busy = (status) => status === "working" || status === "blocked";
-const waits = (status) => status === "done" || status === "idle";
+const waits = (status) => status === "done" || status === "idle" || status === "blocked";
 
 export function limitOf(labels) {
   const raw = String(labels?.[LIMIT_LABEL] ?? "").trim();
@@ -94,6 +97,23 @@ export function whenOf(text, now) {
   return at({ ...date, year: date.year + 1 });
 }
 
+const wallOffset = (ms, zone) => {
+  if (!zone) return -new Date(ms).getTimezoneOffset() * 60_000;
+  try {
+    const parts = Object.fromEntries(new Intl.DateTimeFormat("en-US", { timeZone: zone, hourCycle: "h23", year: "numeric", month: "numeric", day: "numeric", hour: "numeric", minute: "numeric", second: "numeric" })
+      .formatToParts(new Date(ms)).map((p) => [p.type, Number(p.value)]));
+    return Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour % 24, parts.minute, parts.second) - Math.floor(ms / 1000) * 1000;
+  } catch {
+    return -new Date(ms).getTimezoneOffset() * 60_000;
+  }
+};
+
+export function whenIn(text, zone, now) {
+  const shift = wallOffset(now, zone) - wallOffset(now, null);
+  const at = whenOf(text, now + shift);
+  return at == null ? null : at - shift;
+}
+
 const RESET_AT = /(?:resets?|reset at|will reset at|try again)\s+(?:at\s+|on\s+)?(in\s+[^.()]+|[^()]+?)(?:\s*\(([^)]*)\))?\s*(?:[.·\u{2219}|]|$)/iu;
 
 export function parseLimit(screen, now) {
@@ -102,15 +122,28 @@ export function parseLimit(screen, now) {
   const hit = [...tail.matchAll(LIMIT_PHRASE)].filter((m) => !NOT_PLAN.test(tail.slice(Math.max(0, m.index - 40), m.index + m[0].length + 20))).at(-1);
   if (!hit) return null;
   const found = tail.slice(hit.index, hit.index + 320).match(RESET_AT);
-  const until = found ? whenOf(found[1], now) : null;
+  const until = found ? whenIn(found[1], found[2]?.trim() || null, now) : null;
   return { until: until && until > now - DAY_MS ? until : null };
 }
 
 export const limitLabel = (limit) => `${LIMIT_LABEL}=${limit?.until ? String(limit.until) : UNKNOWN_RESET}`;
-export const clearLabels = () => [`${LIMIT_LABEL}=`, `${AT_RESET_LABEL}=`];
+export const clearLabels = (labels = {}) => {
+  const until = limitOf(labels)?.until;
+  const ours = until && Number(labels?.[SNOOZE_LABEL]) === until ? [`${SNOOZE_LABEL}=`] : [];
+  return [`${LIMIT_LABEL}=`, `${AT_RESET_LABEL}=`, `${COMMAND_LABEL}=`, ...ours];
+};
+
+export const commandOf = (labels) => {
+  try {
+    const words = JSON.parse(String(labels?.[COMMAND_LABEL] ?? ""));
+    return Array.isArray(words) && words.every((w) => typeof w === "string") ? words : [];
+  } catch {
+    return [];
+  }
+};
 
 export function limitStep({ status, app, labels = {} }) {
-  if (busy(status)) return limitOf(labels) || labels?.[AT_RESET_LABEL] ? { act: "clear", labels: clearLabels() } : { act: "none" };
+  if (status === "working") return limitOf(labels) || labels?.[AT_RESET_LABEL] ? { act: "clear", labels: clearLabels(labels) } : { act: "none" };
   if (waits(status) && !limitOf(labels) && LIMIT_APPS.includes(app)) return { act: "read" };
   return { act: "none" };
 }

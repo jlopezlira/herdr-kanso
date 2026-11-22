@@ -8,7 +8,7 @@ import { fileApi } from "./platform-files.js";
 // Modified by Iván Campaña (https://github.com/icampana): layout writers set the tree only when it is Kanso's, so a switch from another layout never saves that layout into kanso.json.
 import { View, div } from "gpui-kit";
 import { Popover } from "gpui-base";
-import { spaces, panes, run, openOverlay, props, theme, window, shared, setShared, layout, appHome, exec, watchFolder, nextCommand, home, machines, notify } from "herdr";
+import { spaces, panes, run, openOverlay, props, theme, window, shared, setShared, layout, appHome, exec, watchFolder, nextCommand, home, machines, notify, checking, terminals } from "herdr";
 import { walkLayout, commitLayout, sidebarBack, foldSidebar, dropStripDrag } from "./layout.js";
 import { Updater } from "./update.js";
 import { arriveOnLinux, herdrIsTerminal } from "./linux-arrival.js";
@@ -30,6 +30,10 @@ import { projectOpen, OPEN } from "./panel-state.js";
 import { TOOLS, PROBE_MS, probeTools, available, UNKNOWN_TOOLS, FAILED_TOOLS } from "./sim-registration.js";
 import { commandOn, machineKey, offered, toolsFor, toolKey, withoutNegatives, forgetting, ASK_MS, RETRY_MS } from "./panel-tools.js";
 import { pieces, runs, shown, setPiece, STORE, choice } from "./pieces.js";
+import { reconcileSchedules } from "./schedules.js";
+import { reconcileResumes } from "./clock.js";
+
+const SCHEDULES_MS = 60_000;
 
 function storedObject(key) {
   try {
@@ -160,6 +164,7 @@ export default class Tabs extends View {
       afterMount(cx, (later) => later.spawn(() => Promise.all([arriveOnLinux(localName()), herdrIsTerminal(localName())]).catch(() => false)));
       this.db = new Kdb(cx.timer);
       this.watchOpens(cx);
+      this.watchSchedules(cx);
       // The bar is always on screen and the sidebar's footer may not be, so the bar polls for releases.
       this.updater = new Updater();
       this.updater.start(cx);
@@ -251,6 +256,16 @@ export default class Tabs extends View {
   }
 
   // markdown-handler.sh leaves .md paths opened from outside in data/kanso-open; the newest shows in the preview.
+  watchSchedules(cx) {
+    if (checking()) return;
+    const reconcile = (next) => next.spawn(async () => {
+      await reconcileSchedules(this.db).catch(() => null);
+      await reconcileResumes(terminals()).catch(() => null);
+    });
+    cx.timer.after(0, reconcile);
+    cx.timer.every(SCHEDULES_MS, reconcile);
+  }
+
   watchOpens(cx) {
     const dir = paths.join(appHome(), "data", "kanso-open");
     cx.spawn(async (cx) => {

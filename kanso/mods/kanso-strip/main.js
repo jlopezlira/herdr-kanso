@@ -817,7 +817,7 @@ export default class Strip extends View {
       // A header's Refresh marks its record reading; the read starts here.
       if ((stopped || store[p.pane]?.reading) && !this.digesting.has(p.pane)) this.digest(p, cx);
     }
-    this.limits.watch(all.filter((p) => p.terminal && p.status), cx);
+    this.limits.watch(cx);
     const live = new Set(all.map((p) => p.pane));
     const gone = new Set(Object.keys(store).filter((id) => !live.has(id)));
     for (const id of [...this.lastStatus.keys()]) if (!live.has(id)) this.lastStatus.delete(id);

@@ -10,6 +10,8 @@ import { oneLine } from "./since-left-model.js";
 import { G, GLIDE, H, R, DIALOG, SIDEBAR, sidebarSides } from "./ui.js";
 import { mark, MARK_SIZES } from "./ui-mark.js";
 import { sessionRow } from "./session-row.js";
+import { SNOOZE_LABEL } from "./limits-model.js";
+export { SNOOZE_LABEL };
 
 export { NAME_LABEL };
 
@@ -38,7 +40,6 @@ const clean = (s) => (s ?? "").replace(/^[^\p{L}\p{N}]+/u, "").trim();
 export const PIN_LABEL = "kanso.pin";
 // Values: settled "<ms>:<turn>", snooze "<ms>", unread "1", thread a title.
 export const SETTLED_LABEL = "kanso.settled";
-export const SNOOZE_LABEL = "kanso.snooze";
 export const UNREAD_LABEL = "kanso.unread";
 export const THREAD_LABEL = "kanso.thread";
 

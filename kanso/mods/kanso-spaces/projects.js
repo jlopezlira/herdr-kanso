@@ -9,7 +9,6 @@ import { systemApi } from "./platform-system.js";
 import { exec, home } from "herdr";
 
 export const REGISTRY = "kanso.registry"; // shared: the projects, as the database last said
-export const WORKTREES = "data/kanso/worktrees"; // under the app's folder on this computer; ~/.kanso/worktrees on another machine
 
 export const trimmed = (path) => (String(path ?? "").length > 1 ? paths.normalize(path) : String(path ?? ""));
 export const folderName = (path) => path ? paths.basename(trimmed(path)) || "~" : "~";
@@ -53,12 +52,12 @@ export function parseWorktreeList(out) {
 // Makes a worktree in Kanso's folder (or finds the one that branch already has) and prints its path.
 // $1 the project's folder, $2 the branch, $3 the base folder (empty: ~/.kanso/worktrees, for another machine).
 // { path, made } or { error }.
-export async function addWorktree({ folder, machine = null, branch, base = "" }) {
+export async function addWorktree({ folder, machine = null, branch, base = "", from = "" }) {
   const name = String(branch ?? "").trim();
   if (!name) return { error: "Name the branch." };
   if (name.startsWith("-")) return { error: "A branch name can't start with -." };
   const repositories = await serviceOn(repositoryApi, machine);
-  const r = await repositories.createWorktree(folder, name, base, base ? "" : machine ? await (await serviceOn(systemApi, machine)).userHome() : home()).catch((e) => ({ code: 1, stderr: String(e?.message ?? e) }));
+  const r = await repositories.createWorktree(folder, name, base, base ? "" : machine ? await (await serviceOn(systemApi, machine)).userHome() : home(), from).catch((e) => ({ code: 1, stderr: String(e?.message ?? e) }));
   const line = String(r.stdout ?? "").trim().split("\n").at(-1) ?? "";
   const [kind, path] = line.split("\t");
   if (r.code !== 0 || !path) return { error: String(r.stderr ?? "").trim().split("\n").filter(Boolean).at(-1) || "git could not make the worktree." };

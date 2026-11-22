@@ -19,10 +19,10 @@ import { agentSession, agentLabel, renameTerminal, SETTLED_LABEL, SNOOZE_LABEL, 
 import { ThreadLocator, findThreads, sameThread, pidsOf, aliveIn, aliveDue, ALIVE_MS, ALIVE_BEHIND_MS } from "./threads.js";
 import { Panel, sameSeen } from "./panel.js";
 import { Store } from "./store.js";
-import { Kdb, restDue, machinesToAsk, kansoDir } from "./kdb.js";
+import { Kdb, restDue, machinesToAsk, kansoDir, worktreeBase } from "./kdb.js";
 import { agentSnapshot, agentTargets, observedAgents, targetOf, parseTarget, returnSignature, RETURN_LABEL, AWAY_PIECE, destinationOf, livePlaces } from "./since-left-model.js";
 import { SinceLeft } from "./since-left.js";
-import { REGISTRY, WORKTREES, keyOfSpace, keyOfProject, closedProjects, shownNames, startingProjects, folderName, addWorktree, worktreesOf, missingFolders, trimmed, sameProjects } from "./projects.js";
+import { REGISTRY, keyOfSpace, keyOfProject, closedProjects, shownNames, startingProjects, folderName, addWorktree, worktreesOf, missingFolders, trimmed, sameProjects } from "./projects.js";
 import { sleepingNow, asleepGroups, nameOf, seenNow, conversationOfThread, shownThread, terminalNames, agentKey, SHOWN_LABEL, PROJECT_LABEL, ID_LABEL } from "./roster.js";
 import { pollable, activePlaces } from "./background.js";
 import { listKey, moveTo, plainKey } from "./listkeys.js";
@@ -56,8 +56,9 @@ import { machineRecord, canRestore, addArgs, rmArgs, hcError, needsLogin, heldNa
 import { Names } from "./alias.js";
 import { syncIcon, peerOn, withPeer } from "./sync.js";
 import { withNeeds } from "./needs.js";
-import { withLimits, limitOf, resumeArmed, AT_RESET_LABEL } from "./limits-model.js";
+import { withLimits, limitOf, resumeArmed, commandOf, AT_RESET_LABEL, COMMAND_LABEL } from "./limits-model.js";
 import { armResume, disarmResume } from "./clock.js";
+import { LimitWatch } from "./limits.js";
 import { resumeCommand, limitLines, providerLimits, shownNow } from "./limit-menu.js";
 import { computerMenuItems } from "./computer-menu.js";
 import { readSync, saveSync } from "./sync-row.js";
@@ -171,11 +172,11 @@ const ROW_STATE = ["hoverRow", "hoverSpace", "hoverHead", "hoverMachine", "press
 const ROW_REPLACED = ["threadsShown", "steps", "since", "tasks"];
 const listed = (value) => (value instanceof Set || value instanceof Map ? [...value] : value);
 const MINUTE_MS = 60_000;
+const LIMIT_MS = 2000;
 const BORN_MS = 1500;
 const bornBy = (at, now) => now - at > BORN_MS;
 const narrowAt = (width) => (width ?? SIDEBAR.w) < SIDEBAR.narrow;
 // Kanso's worktrees: beside its database here; on another machine, ~/.kanso/worktrees (the script's default).
-const kansoWorktrees = (machine) => (machine ? "" : paths.join(appHome(), WORKTREES));
 const spaceAt = (id) => spaces().findIndex((s) => s.id === id);
 // Where a new agent of a project goes. Plain data, so a menu can be given it.
 const placeOfSpace = (w) => {
@@ -407,6 +408,8 @@ export default class Spaces extends RetryingView {
     // `git status` walks the whole tree: only when its answer could have changed (see `due`);
     // behind other windows every 5 s instead of 0.5 s, nothing is missed.
     cx.timer.every(500, (cx) => this.checkNew(cx));
+    this.limits = new LimitWatch();
+    cx.timer.every(LIMIT_MS, (cx) => { this.limits.watch(cx); this.fillResumeCommands(); });
     cx.timer.every(ALIVE_MS, (cx) => this.checkTasks(cx));
     // Another window's names and projects arrive.
     cx.timer.every(30000, () => this.loadNames(false).catch(() => {}));
@@ -687,6 +690,14 @@ export default class Spaces extends RetryingView {
     const listed = rows.length ? [{ scroll: rows, rows: Math.min(rows.length, fit), handle: this.agentScroll }] : !failure && pending && !agents ? [{ loading: true }, { loading: true }] : [];
     const middle = [...listed, ...failed];
     return { items: [...head, ...middle, ...ends], count: rows.length };
+  }
+
+  fillResumeCommands() {
+    const conversations = new Map(Object.entries(this.threads ?? {}).map(([address, th]) => [address, th ? conversationOfThread(th) : null]));
+    terminals().filter((t) => resumeArmed(t.labels) && !commandOf(t.labels).length).forEach((t) => {
+      const command = resumeCommand(t.report?.app ?? t.agent, t.foreground?.argv ?? t.argv ?? [], conversations.get(t.address));
+      if (command.length) label(t.address, COMMAND_LABEL, JSON.stringify(command));
+    });
   }
 
   limitedNow() {
@@ -1894,7 +1905,7 @@ export default class Spaces extends RetryingView {
     const active = w?.tabs?.find((x) => x.active);
     const tabs = w?.tabs?.length ?? 0;
     const trees = this.trees ?? [];
-    const home_ = trimmed(home()), base = trimmed(kansoWorktrees(place?.machine));
+    const home_ = trimmed(home()), base = trimmed(worktreeBase(place?.machine));
     const where = (path) => base && paths.within(path, base) ? "kans\u014d" : paths.within(path, home_) ? `~/${paths.relative(home_, path).split(/[\\/]/).slice(-2).join("/")}` : path.split(/[\\/]/).slice(-2).join("/");
     // Keeping it: a space's folder (not home) can be a project of yours.
     const keepable = Boolean(w && !project && w.folder && trimmed(w.folder) !== home_);
@@ -2008,7 +2019,7 @@ export default class Spaces extends RetryingView {
     this.redraw(cx);
     cx.spawn(async (cx) => {
       try {
-        const r = await addWorktree({ folder: place.folder, machine: place.machine || null, branch, base: kansoWorktrees(place.machine) });
+        const r = await addWorktree({ folder: place.folder, machine: place.machine || null, branch, base: worktreeBase(place.machine) });
         if (r.error) { this.wtError = r.error; return; }
         if (!r.made) notify({ title: `${branch} already had a worktree`, body: r.path, level: "info", timeout: 5000 });
         closeOverlay(props().overlay);
@@ -2020,7 +2031,7 @@ export default class Spaces extends RetryingView {
 
   worktreeView(t) {
     const place = props().worktree;
-    const base = kansoWorktrees(place.machine);
+    const base = worktreeBase(place.machine);
     const shownBase = base ? base.replace(trimmed(home()), "~") : "~/.kanso/worktrees";
     const c = tokens(t);
     return dialog("worktree-dialog", c, {
@@ -2909,7 +2920,7 @@ export default class Spaces extends RetryingView {
       disarmResume(address);
       return;
     }
-    label(address, AT_RESET_LABEL, String(until));
+    hc(["label", address, `${AT_RESET_LABEL}=${until}`, ...(command.length ? [`${COMMAND_LABEL}=${JSON.stringify(command)}`] : [])]).catch(() => {});
     armResume({ address, until, command }).catch((e) => notify({ title: "Resume at reset could not be set", body: String(e?.message ?? e), level: "error" }));
   }
 
