@@ -1,9 +1,9 @@
 // The computer row: this computer or a remote one in the sidebar, the row in its heading configuration, heading the group of its projects (Proposed).
 import { icon, phrase, row } from './kit.js';
 
-const words = { off: 'Off', unreachable: 'Unreachable', login: 'Needs login' };
-// What is wrong has one button: Turn on, Refresh, or Sign in.
-const fixes = { off: (name) => icon('lu-power', phrase('Turn', name, 'on')), unreachable: () => icon('lu-refresh-cw', 'Refresh'), login: () => icon('lu-key', 'Sign in') };
+const words = { off: 'Disconnected', unreachable: 'Asleep', login: 'Needs login' };
+// What is wrong has one button: Connect, Refresh, or Sign in.
+const fixes = { off: (name) => icon('lu-power', phrase('Connect', name)), unreachable: () => icon('lu-refresh-cw', 'Refresh'), login: () => icon('lu-key', 'Sign in') };
 const syncTool = (label) => icon('lu-arrow-right-left', label);
 
 // `action` is always out; `actions` show under the pointer or the keyboard. Turning on (`pending`), they wait.
@@ -13,7 +13,7 @@ const toolsOf = ({ name, remote = true, state = 'on', pending = false, sync = nu
   const on = state === 'on';
   return {
     action: fix ? fix(name) : on && remote && sync ? syncTool(sync) : null,
-    actions: on && !pending ? [remote && icon('lu-power', 'Turn off'), icon('lu-plus', phrase('New project on', name)), remote && !sync && syncTool('Sync')].filter(Boolean) : [],
+    actions: on && !pending ? [remote && icon('lu-power', 'Disconnect'), icon('lu-plus', phrase('New project on', name)), remote && !sync && syncTool('Sync')].filter(Boolean) : [],
   };
 };
 

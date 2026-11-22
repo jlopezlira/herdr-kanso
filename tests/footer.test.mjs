@@ -20,6 +20,8 @@ const later = () => ({ notify() {}, spawn: (body) => body({ notify() {} }) });
 const settle = (context) => Promise.all(context.queued.splice(0).map((fn) => fn(later())));
 const press = (el, context = cx()) => { arg(el, "on_click")({}, context); context.expired = true; return context; };
 const pressInRefusal = (view, words) => press(holding(all(view.render()).find((x) => calls(x, "mt").length), words));
+const { copiesToViewer } = await load("kanso-panel/platform-viewer.js", ["copiesToViewer"]);
+const seen = (argv) => JSON.parse(JSON.stringify(copiesToViewer("macos")(argv)));
 
 test("In Stable Mode with nothing to install, the footer is Add a computer, then Settings", async () => {
   const { view } = await footer();
@@ -133,7 +135,7 @@ test("A refused update keeps its row and shows the tool's words under it, with U
   assert.equal(installs.length, 1);
   assert.equal(ran.length, 0, "Update asks nothing of the agent");
   await settle(press(holding(block, "Explain to Claude Code")));
-  assert.deepEqual(JSON.parse(JSON.stringify(ran)), [["tab.new", { name: "Explain the update", folder: "/home/me/.config/herdr-app", argv: ["claude"], task: `kansō could not update itself. The tool said: ${why}\nExplain in plain words what went wrong and how to fix it.` }]]);
+  assert.deepEqual(JSON.parse(JSON.stringify(ran)), [["tab.new", { name: "Explain the update", folder: "/home/me/.config/herdr-app", argv: seen(["claude"]), task: `kansō could not update itself. The tool said: ${why}\nExplain in plain words what went wrong and how to fix it.` }]]);
   assert.equal(installs.length, 1, "and Explain does not install");
 });
 
@@ -154,7 +156,7 @@ test("Explain pressed first starts the lookup from a timer, never from the click
   assert.deepEqual([ran.length, notices.length, lookups.length], [0, 0, 1], "pending: nothing yet, and nothing said");
   found([{ name: "Atlas", installed: true, run: ["atlas"] }]);
   await running;
-  assert.deepEqual(JSON.parse(JSON.stringify([ran.map((call) => [call[0], call[1].argv]), notices.length])), [[["tab.new", ["atlas"]]], 0]);
+  assert.deepEqual(JSON.parse(JSON.stringify([ran.map((call) => [call[0], call[1].argv]), notices.length])), [[["tab.new", seen(["atlas"])]], 0]);
   await settle(pressInRefusal(view, "Explain to Atlas"));
   assert.deepEqual([ran.length, lookups.length], [2, 1], "a second press opens a second tab with no second lookup");
 });
