@@ -1407,7 +1407,7 @@ export default class Spaces extends RetryingView {
       const run = (program, args) => exec(program, args, { timeout: HOME_PROBE_MS });
       const peers = (await findTailscale(localName(), run)).net?.peers ?? [];
       if (!peers.length) return;
-      const rows = (this.machines ?? []).filter((row) => row.state === "connected").map(machineRecord).filter(canRestore);
+      const rows = (this.machines ?? []).map(machineRecord).filter(canRestore);
       for (const record of rows) {
         const found = await homeRoute(record, peers, run).catch(() => null);
         if (found?.record) await this.reroute(record, found.record, found.ip);

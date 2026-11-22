@@ -55,7 +55,7 @@ export async function homeRoute(record, peers, run) {
   if (!resolved) return null;
   const peer = peerFor(peers, { host, hostname: resolved.hostname });
   const candidates = lanCandidates(peer);
-  if (!candidates.length || (lan?.ip && candidates.includes(lan.ip) && /HostKeyAlias=/.test(lan.args))) return null;
+  if (!candidates.length || (lan?.ip && candidates.includes(lan.ip) && lanFirst(lan.args, lan.away) === record.via && /HostKeyAlias=/.test(lan.args))) return null;
   for (const ip of candidates) {
     const probe = await run("ssh", lanProbeArgs(ip, { target, hostKey: resolved.hostKey })).catch(() => null);
     if (probe?.code === 0) return { ip, record: lanRecord(record, ip, { hostKey: resolved.hostKey }) };

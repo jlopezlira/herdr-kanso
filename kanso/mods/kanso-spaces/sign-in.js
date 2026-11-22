@@ -36,7 +36,7 @@ export function routeOf(machine) {
 
 const LAN_SSH = "-o BatchMode=yes -o ConnectTimeout=2 -o StrictHostKeyChecking=accept-new";
 const LAN_ASK = "-o ConnectTimeout=2 -o StrictHostKeyChecking=accept-new";
-const lanLine = (args, away) => `ssh ${LAN_SSH} ${args} true >/dev/null 2>&1 && exec ssh -o StrictHostKeyChecking=accept-new ${args} "$1"; exec ${away} "$1"`;
+const lanLine = (args, away) => `ssh ${LAN_SSH} ${args} true </dev/null >/dev/null 2>&1 && exec ssh -o StrictHostKeyChecking=accept-new ${args} "$1"; exec ${away} "$1"`;
 export const lanFirst = (args, away) => `sh -c ${shellQuote(lanLine(args, away))} route`;
 
 export function lanArgs(ip, { target = "", user = "", hostKey = "" } = {}) {
@@ -52,8 +52,8 @@ const LAN_IP = /(?:^|\s)-o HostName=(\S+)(?:\s|$)/;
 export function lanParts(via) {
   const inner = String(via ?? "").match(/^sh -c ('(?:[^']|'\\'')*'|\S+) route$/s);
   const line = inner ? unquote(inner[1]) : "";
-  const found = line.match(/^ssh -o BatchMode=yes -o ConnectTimeout=2 -o StrictHostKeyChecking=accept-new (.+?) true >\/dev\/null 2>&1 && exec ssh -o StrictHostKeyChecking=accept-new \1 "\$1"; exec (.+) "\$1"$/s);
-  if (!found || lanFirst(found[1], found[2]) !== via) return null;
+  const found = line.match(/^ssh -o BatchMode=yes -o ConnectTimeout=2 -o StrictHostKeyChecking=accept-new (.+?) true (?:<\/dev\/null )?>\/dev\/null 2>&1 && exec ssh -o StrictHostKeyChecking=accept-new \1 "\$1"; exec (.+) "\$1"$/s);
+  if (!found || `sh -c ${shellQuote(line)} route` !== via) return null;
   const ip = found[1].match(LAN_IP)?.[1] ?? splitTarget(unquote(found[1])).host;
   return { args: found[1], ip, away: found[2] };
 }
