@@ -38,7 +38,10 @@ function groups(tg, armed) {
     setShared("strip.intent", { dir, from: pane, at: Date.now() });
     run("pane.split", { pane, direction: dir === "down" ? "down" : "right" });
   } });
-  const inTerminal = (command) => () => { run("pane.focus", { terminal: term.address }); run(command); };
+  const inTerminal = (command) => () => {
+    if (ps.some((p) => p.terminal === term.address)) run("pane.focus", { terminal: term.address });
+    run(command);
+  };
   const clipboard = term ? [
     { label: "Copy", icon: "copy", key: "terminal.copy", does: inTerminal("terminal.copy") },
     { label: "Cut", icon: "scissors", disabled: true, does: () => {} },
