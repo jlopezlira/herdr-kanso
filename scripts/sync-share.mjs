@@ -16,7 +16,7 @@ const COMMON = [
   // An agent's program icon and name, and the key caps, the same in the tabs, headers, status bar, sidebar and Send.
   { source: "kanso/mods/kanso-spaces/marks.js", copies: ["kanso/mods/kanso-strip/marks.js", "kanso/mods/kanso-status/marks.js", "kanso/mods/kanso-send/marks.js", "kanso/mods/kanso-settings/marks.js", "kanso/mods/kanso-help/marks.js", "kanso/mods/kanso-panel/marks.js", "kanso/mods/kanso-toast/marks.js", "kanso/mods/kanso-chrome/marks.js"] },
   // Text for an agent, delivered the same from Send and from Look.
-  { source: "kanso/mods/kanso-send/deliver.js", copies: ["kanso/mods/kanso-panel/deliver.js"] },
+  { source: "kanso/mods/kanso-send/deliver.js", copies: ["kanso/mods/kanso-panel/deliver.js", "kanso/mods/kanso-strip/deliver.js"] },
   // What a file is by its name: the preview panel's text, Look's pictures, Open with's "Preview in the panel".
   { source: "kanso/mods/kanso-panel/kinds.js", copies: ["kanso/mods/open-with/kinds.js"] },
   // The layout writers' helpers: what each keeps, and how a write puts it all back.
@@ -52,6 +52,7 @@ const COMMON = [
   // One SQLite file under the app's folder: the stores of arrangements and of the dōjō (and help's copy of it).
   { source: "kanso/mods/kanso-dojo/file-store.js", copies: ["kanso/mods/kanso-arrange/file-store.js"] },
   // Lists by keyboard (j/k, gg/G, Enter, Esc), the same in every menu and list.
+  { source: "kanso/mods/kanso-strip/needs.js", copies: ["kanso/mods/kanso-spaces/needs.js", "kanso/mods/kanso-status/needs.js"] },
   { source: "kanso/mods/kanso-menu/listkeys.js", copies: ["kanso/mods/open-with/listkeys.js", "kanso/mods/kanso-spaces/listkeys.js", "kanso/mods/kanso-arrange/listkeys.js", "kanso/mods/kanso-spend/listkeys.js"] },
   // Opening a tab from data: arrangements; Sleep reads a few of its words.
   { source: "kanso/mods/kanso-arrange/tabkit.js", copies: ["kanso/mods/kanso-sleep/tabkit.js", "kanso/mods/kanso-spaces/tabkit.js"] },

@@ -54,6 +54,7 @@ import { pieces, shown, runs, asksPs, setPiece, pieceOf, STORE } from "./pieces.
 import { machineRecord, canRestore, addArgs, rmArgs, hcError, needsLogin, heldNames, connectedNames, machinePhase, machineOf, visibleSpaces, visibleAgents, pollKeys, machineState, machineHot, machineStop, machineTip, listedMachines } from "./machines.js";
 import { Names } from "./alias.js";
 import { syncIcon, peerOn, withPeer } from "./sync.js";
+import { withNeeds } from "./needs.js";
 import { computerMenuItems } from "./computer-menu.js";
 import { readSync, saveSync } from "./sync-row.js";
 import { createAwake, keepAwake } from "./awake.js";
@@ -159,7 +160,7 @@ const registry = () => { const rows = shared(REGISTRY); return Array.isArray(row
 const sameKey = (key) => { const i = String(key).indexOf(":"); return `${key.slice(0, i)}:${trimmed(key.slice(i + 1))}`; };
 const projectAt = (key) => registry().find((p) => keyOfProject(p) === sameKey(key)) ?? null;
 const ROW_SHARED = [REGISTRY, NEEDS_YOU, "strip.state", SLEEP_PENDING, SLEEP_WAKING, SLEEP_FAILED, FORGET_HELD, KNOWN_AGENTS, "kanso.battery", "space.colors"];
-const rowInputs = () => ({ spaces: spaces(), panes: panes(), terminals: terminals(), agents: agents(), machines: machines(), focused: focused(), front: window()?.active === true, keys: keys(),
+const rowInputs = () => ({ spaces: spaces(), panes: panes(), terminals: terminals(), agents: withNeeds(agents(), terminals()), machines: machines(), focused: focused(), front: window()?.active === true, keys: keys(),
   shared: ROW_SHARED.map((key) => shared(key)), pieces: Object.entries(pieces(shared)).filter(([id]) => id.startsWith("sidebar.")) });
 const ROW_STATE = ["hoverRow", "hoverSpace", "hoverHead", "hoverMachine", "pressed", "over", "draggedAgent", "overAgent", "kbd", "navKey", "needsOpen", "needsEmpty", "foldH", "folded",
   "agentsFolded", "sectionsFolded", "asleepOpen", "shelvesOpen", "alive", "git", "held", "custom", "machines", "parked", "waking", "login", "failed", "pulling", "hints", "sync", "hostName"];
@@ -793,7 +794,7 @@ export default class Spaces extends RetryingView {
   }
 
   refreshNeeds(sp = spaces(), terms = terminals(), asleep = this.sleepingNow(sp, terms)) {
-    const list = agents(), layouts = machines();
+    const list = withNeeds(agents(), terms), layouts = machines();
     const signature = waitingSignature(list, terms, asleep.dozing, NAME_LABEL);
     const layoutSignature = layouts.map((m) => m.layout).join(",");
     const changed = signature !== this.needsSignature || this.threadsShown !== this.needsThreads;
@@ -825,7 +826,7 @@ export default class Spaces extends RetryingView {
 
   nextNeeds(cx) {
     const terms = terminals(), asleep = this.sleepingNow(spaces(), terms);
-    const rows = waitingQueue(agents(), terms, asleep.dozing, this.refreshNeeds().rows, Date.now(), ["blocked", "done"]);
+    const rows = waitingQueue(withNeeds(agents(), terms), terms, asleep.dozing, this.refreshNeeds().rows, Date.now(), ["blocked", "done"]);
     const row = nextWaiting(rows, this.needsCursor);
     if (row) { this.jumpNeeds(row, cx, rows); return; }
     this.needsCursor = null;

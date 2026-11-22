@@ -6,7 +6,7 @@
 
 import { View, div, svg } from "gpui-kit";
 import { h_flex, v_flex, HoverCard, Popover } from "gpui-base";
-import { spaces, panes, agents, machines, focused, layout, run, hc, shared, setShared, theme, nextCommand, props, openOverlay, home, exec, notify, window } from "herdr";
+import { spaces, panes, agents, terminals, machines, focused, layout, run, hc, shared, setShared, theme, nextCommand, props, openOverlay, home, exec, notify, window } from "herdr";
 import { programIcon, givenNames, nameOf, NAME_LABEL } from "./marks.js";
 import { STRIP_INTENT, isKansoTree, walkLayout, paintLayout, changeLayout, commitLayout } from "./layout.js";
 import { tryOr, readCommands, pad2 } from "./pure.js";
@@ -30,6 +30,8 @@ import { boundChord } from "./ui-tooltip.js";
 import { headerSegment } from "./ui-header.js";
 import { pieceLines } from "./piece-lines.js";
 import { paged } from "./strip-model.js";
+import { checksOutcome, checksStep, POLL_MS } from "./checks-to-agent.js";
+import { deliver } from "./deliver.js";
 import { localService } from "./platform-host.js";
 import { openApi } from "./platform-open.js";
 import { NAME_LIMIT, ENTRIES, DIGEST_PIECES, PIECE_GROUP, shownAt, foldFor, headerWidths, headerTools, hoverTools, menuEntries, placeOf, paneLabel, headerMark, prTitle } from "./header-model.js";
@@ -129,13 +131,13 @@ export function parseShortstat(text) {
 // gh's statusCheckRollup, read as the pull request panel reads it (ghchecks.js), in the header's words.
 const CHECKS = { fail: "failing", pending: "running", unknown: "unknown", pass: "passing" };
 export const checksOf = (rollup) => CHECKS[rollupState(rollup)] ?? null;
-const PR_FIELDS = "number,state,isDraft,mergeable,mergeStateStatus,reviewDecision,baseRefName,statusCheckRollup";
+const PR_FIELDS = "number,url,headRefOid,state,isDraft,mergeable,mergeStateStatus,reviewDecision,baseRefName,statusCheckRollup";
 
 // Open pull request for the header. `hold` is why it cannot merge. Permission is not a header fact.
 export function digestPr(view) {
   if (!view?.number || view.state !== "OPEN") return null;
   const facts = prFacts(view);
-  return facts ? { ...facts, checks: checksOf(view.statusCheckRollup), hold: headerHold(view) } : null;
+  return facts ? { ...facts, checks: checksOf(view.statusCheckRollup), hold: headerHold(view), head: view.headRefOid ?? null, url: view.url ?? null, run: checksOutcome(view.statusCheckRollup) } : null;
 }
 
 // gh says this when the branch has no pull request: an answer, not a failure.
@@ -253,6 +255,7 @@ export default class Strip extends View {
     cx.timer.every(150, (cx) => this.pollAdopt(cx));
     this.lastStatus = new Map();
     this.digesting = new Set();
+    this.polling = new Set();
     cx.timer.every(1500, (cx) => this.watchDigests(cx));
     readCommands(cx, () => nextCommand(), (c, cx) => {
       this.command(String(c).replace(/^kanso-strip\./, ""));
@@ -811,7 +814,7 @@ export default class Strip extends View {
     if (gone.size) setShared(DIGEST, Object.fromEntries(Object.entries(store).filter(([id]) => !gone.has(id))));
   }
 
-  digest(p, cx) {
+  digest(p, cx, poll = false) {
     const map = pieces(shared);
     const want = { git: runs("header.digest", map), pr: runs("header.pr", map) };
     if (!want.git && !want.pr) return;
@@ -824,11 +827,33 @@ export default class Strip extends View {
         const live = panes().find((q) => q.pane === p.pane);
         const was = shared(DIGEST)?.[p.pane];
         // It went back to work meanwhile: what it left is no longer the news, unless someone asked for this read.
-        if (!live || (live.status === "working" && !was?.reading)) return;
-        const settled = settleDigest(was, d);
-        setShared(DIGEST, { ...(shared(DIGEST) ?? {}), [p.pane]: settled ? { ...settled, at: Date.now() } : null });
+        if (!live) return;
+        if (!(live.status === "working" && !was?.reading && !poll)) {
+          const settled = settleDigest(was, d);
+          setShared(DIGEST, { ...(shared(DIGEST) ?? {}), [p.pane]: settled ? { ...settled, at: Date.now() } : null });
+        }
+        if (want.pr && !d?.failure) this.checksTurn(live, d?.pr ?? null, cx);
       } finally { this.digesting.delete(p.pane); }
     });
+  }
+
+  checksTurn(p, pr, cx) {
+    const labels = terminals().find((term) => term.address === p.terminal)?.labels ?? {};
+    const step = checksStep({ pr, labels, status: p.status, on: runs("agents.checks", pieces(shared)) });
+    const label = (pairs) => (pairs?.length ? hc(["label", p.terminal, ...pairs]).catch(() => null) : null);
+    if (step.act === "send") {
+      deliver(cx.timer, p.terminal, step.text, "GitHub checks").then((sent) => (sent.code === 0 ? label(step.labels) : null)).catch(() => {});
+      return;
+    }
+    label(step.labels);
+    if (step.act === "poll" && !this.polling.has(p.pane)) {
+      this.polling.add(p.pane);
+      cx.timer.after(POLL_MS, (next) => {
+        this.polling.delete(p.pane);
+        const live = panes().find((q) => q.pane === p.pane);
+        if (live?.terminal && live.cwd && !this.digesting.has(live.pane)) this.digest(live, next, true);
+      });
+    }
   }
 
   openFind() {
