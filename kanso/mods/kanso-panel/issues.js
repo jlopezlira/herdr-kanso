@@ -1,7 +1,7 @@
 import { div } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import { exec, run, theme, spaces, home, openOverlay } from "herdr";
-import { G, T, PR, tokens } from "./ui.js";
+import { G, T, PR, DIALOG, tokens } from "./ui.js";
 import { iconButton, quietLink } from "./ui-button.js";
 import { row } from "./ui-row.js";
 import { segmented } from "./ui-tab.js";
@@ -14,14 +14,16 @@ import { openApi } from "./platform-open.js";
 import { localService } from "./platform-host.js";
 import { projectKey } from "./kdb.js";
 import { tryOrAsync, plural } from "./pure.js";
-import { FILTERS, FILTER_WORDS, EVERY_MS, matches, sectionsOf, isFolded, foldKey, projectsInOrder, stale, ageOf, sendText, listOf } from "./issues-model.js";
-import { readIssues, storeSql, detailSql } from "./issues-store.js";
-import { issuesGithub } from "./issues-github.js";
+import { FILTERS, FILTER_WORDS, EVERY_MS, OPEN, matches, sectionsOf, isFolded, foldKey, projectsInOrder, stale, ageOf, sendText, listOf } from "./issues-model.js";
+import { readIssues } from "./issues-store.js";
+import { issuesGithub, repoText } from "./issues-github.js";
 
 const PROVIDERS = [issuesGithub];
 const PROJECTS = "SELECT id, name, folder, machine FROM projects WHERE removed IS NULL;";
 const SIGNED_OUT = { kind: "signed out", text: "Sign in to GitHub to see your issues" };
 const NO_REMOTE = { kind: "no remote", text: "No GitHub remote" };
+const UNREACHED = (detail) => ({ kind: "offline", text: "GitHub can't be reached", source: detail ?? "" });
+const SIGNED_OUT_STATES = new Set(["logged_out", "no_cli"]);
 
 const runOn = (machine) => (cmd, args) => exec(cmd, args, { on: machine || null }).catch((e) => ({ code: -1, stdout: "", stderr: String(e?.message ?? e) }));
 const openUrl = (url) => localService(openApi).open(url).catch(() => {});
@@ -51,7 +53,7 @@ export class Issues {
     this.open = null;
     this.front = null;
     this.load(cx, true);
-    cx.timer.every(EVERY_MS, (next) => this.refresh(next, true));
+    cx.timer.every(EVERY_MS, (next) => this.refresh(next));
   }
 
   filterOf(project) { return FILTERS.includes(this.filters[project]) ? this.filters[project] : "assigned"; }
@@ -90,8 +92,10 @@ export class Issues {
 
   async loginOn(machine, provider) {
     const key = `${machine ?? ""}:${provider.id}`;
-    if (!(key in this.logins)) this.logins = { ...this.logins, [key]: await provider.probe(runOn(machine)) };
-    return this.logins[key];
+    if (this.logins[key]?.status === "ok") return this.logins[key];
+    const session = await provider.probe(runOn(machine));
+    if (session?.status === "ok") this.logins = { ...this.logins, [key]: session };
+    return session;
   }
 
   readProject(project, cx) {
@@ -100,14 +104,12 @@ export class Issues {
       try {
         const run = runOn(project.machine);
         const provider = PROVIDERS[0];
-        const repo = await provider.repoOf(run, project.folder);
-        if (!repo) { this.places = { ...this.places, [project.id]: NO_REMOTE }; return; }
         const session = await this.loginOn(project.machine, provider);
-        if (session?.status !== "ok") { this.places = { ...this.places, [project.id]: SIGNED_OUT }; return; }
+        if (session?.status !== "ok") { this.places = { ...this.places, [project.id]: SIGNED_OUT_STATES.has(session?.status) ? SIGNED_OUT : UNREACHED(session?.detail) }; return; }
+        const repo = await provider.repoOf(run, project.folder, session.hosts);
+        if (!repo) { this.places = { ...this.places, [project.id]: NO_REMOTE }; return; }
         this.places = { ...this.places, [project.id]: { repo } };
-        const filter = this.filterOf(project.id), now = Date.now();
-        const board = await provider.readBoard(run, { repo, project: project.id, filter, login: session.login, now });
-        await this.db.run(storeSql({ project: project.id, source: provider.id, filter, login: session.login, ...board, kept: this.rows, now }));
+        await provider.syncBoard(this.db, run, { repo, project: project.id, filter: this.filterOf(project.id), login: session.login, kept: this.rows, now: Date.now() });
         await this.reload();
       } catch (e) {
         this.places = { ...this.places, [project.id]: { kind: "error", text: "Issues could not be read", source: String(e?.message ?? e) } };
@@ -133,17 +135,17 @@ export class Issues {
     this.open = issue.url;
     cx.notify();
     const project = (this.projects ?? []).find((p) => p.id === issue.project);
-    const repo = this.places[issue.project]?.repo;
+    const repo = this.places[issue.project]?.repo ?? repoText(this.boardOf(issue.project)?.repo);
     if (!project || !repo) return;
     cx.spawn(async (cx) => {
-      const detail = await tryOrAsync(() => issuesGithub.readDetail(runOn(project.machine), { repo, number: issue.number }));
-      if (detail) { await tryOrAsync(() => this.db.run(detailSql(issue.url, detail))); await this.reload(); }
+      const detail = await tryOrAsync(() => issuesGithub.syncDetail(this.db, runOn(project.machine), { repo, project: issue.project, url: issue.url, number: issue.number }));
+      if (detail) await this.reload();
       cx.notify();
     });
   }
 
   sendToAgent(issue) {
-    openOverlay({ mod: "kanso-send", kind: "dialog", width: 480, props: { text: sendText(issue) } });
+    openOverlay({ mod: "kanso-send", kind: "dialog", width: DIALOG.wide, props: { text: sendText(issue), whenWaiting: true } });
   }
 
   signIn(project) {
@@ -172,7 +174,7 @@ export class Issues {
     const labels = listOf(issue.labels);
     return row(`issue-${issue.url}`, c, {
       name: issue.title, start: [div().flex_none().text_size(T.body).text_color(c.dim).child(issue.ticket)],
-      detail: labels.length ? labels.join(", ") : null, meta: [issue.status, ageOf(issue.updated_at ?? issue.created_at, now)].filter(Boolean).join(" · "),
+      detail: labels.length ? labels.join(", ") : null, meta: [issue.status || OPEN, ageOf(issue.updated_at ?? issue.created_at, now)].filter(Boolean).join(" · "),
       current: this.open === issue.url, onClick: (cx) => this.show(issue, cx),
     });
   }
@@ -200,7 +202,7 @@ export class Issues {
   }
 
   loginFor(project) {
-    return this.logins[`${project.machine ?? ""}:github`]?.login ?? null;
+    return this.logins[`${project.machine ?? ""}:github`]?.login ?? this.boardOf(project.id)?.who ?? null;
   }
 
   detail(issue, c, now) {

@@ -4,9 +4,9 @@ import { num } from "./pr-inbox.js";
 
 const COLS = ["url", "source", "project", "ticket", "number", "repo", "title", "status", "priority", "labels", "assignees", "author", "created_at", "updated_at", "body", "read_at"];
 const value = (col, row) => (col === "number" || col === "read_at" ? num(row[col]) : q(row[col] ?? null));
-const KEPT = COLS.filter((col) => col !== "url").map((col) => `${col}=excluded.${col}`).join(",");
+const KEPT = COLS.filter((col) => col !== "url" && col !== "project").map((col) => `${col}=excluded.${col}`).join(",");
 
-const upsert = (row) => `INSERT INTO issues(${COLS.join(",")}) VALUES(${COLS.map((col) => value(col, row)).join(",")}) ON CONFLICT(url) DO UPDATE SET ${KEPT};`;
+const upsert = (row) => `INSERT INTO issues(${COLS.join(",")}) VALUES(${COLS.map((col) => value(col, row)).join(",")}) ON CONFLICT(project,url) DO UPDATE SET ${KEPT};`;
 
 export async function readIssues(db, projects) {
   if (!projects.length) return { rows: [], boards: [] };
@@ -18,12 +18,12 @@ export async function readIssues(db, projects) {
   return { rows, boards };
 }
 
-export function boardSql({ project, source, filter, columns, failure, now }) {
+export function boardSql({ project, source, filter, who, repo, columns, failure, now }) {
   const failed = failure ? q(JSON.stringify(failure)) : "NULL";
   const readAt = failure ? "NULL" : num(now);
   const retry = failure?.retryAt ? num(failure.retryAt) : "NULL";
-  return `INSERT INTO issue_boards(project,source,filter,columns,read_at,retry_at,failure) VALUES(${q(project)},${q(source)},${q(filter)},${q(JSON.stringify(columns ?? []))},${readAt},${retry},${failed}) `
-    + `ON CONFLICT(project,source) DO UPDATE SET filter=excluded.filter,${failure ? "" : "columns=excluded.columns,read_at=excluded.read_at,"}retry_at=excluded.retry_at,failure=excluded.failure;`;
+  return `INSERT INTO issue_boards(project,source,filter,who,repo,columns,read_at,retry_at,failure) VALUES(${q(project)},${q(source)},${q(filter)},${q(who ?? null)},${q(repo ?? null)},${q(JSON.stringify(columns ?? []))},${readAt},${retry},${failed}) `
+    + `ON CONFLICT(project,source) DO UPDATE SET filter=excluded.filter,${failure ? "" : "who=excluded.who,repo=excluded.repo,columns=excluded.columns,read_at=excluded.read_at,"}retry_at=excluded.retry_at,failure=excluded.failure;`;
 }
 
 export function storeSql({ project, source, filter, login, rows, columns, failure, kept = [], now }) {
@@ -34,4 +34,4 @@ export function storeSql({ project, source, filter, login, rows, columns, failur
   return `BEGIN;${rows.map(upsert).join("")}${drop}${boardSql({ project, source, filter, columns, failure: null, now })}COMMIT;`;
 }
 
-export const detailSql = (url, { body, comments, prs }) => `UPDATE issues SET body=${q(body)},comments=${q(comments)},prs=${q(prs)} WHERE url=${q(url)};`;
+export const detailSql = (project, url, { body, comments, prs }) => `UPDATE issues SET body=${q(body)},comments=${q(comments)},prs=${q(prs)} WHERE project=${q(project)} AND url=${q(url)};`;
