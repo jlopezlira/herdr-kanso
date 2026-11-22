@@ -23,7 +23,7 @@
 
 - Agents sit side by side, readable at their own width, and the one waiting on you comes first.
 - Sleep a project and wake it on the same conversations.
-- Memory, on macOS and Windows, recycles idle Claude sessions so the machine lasts weeks. Spend adds up across your computers once Sync is on.
+- Memory, on macOS, Windows and Linux, recycles idle Claude sessions so the machine lasts weeks. Spend adds up across your computers once Sync is on.
 - A Simulator sits beside the agent. kansō works on a space that lives on another computer.
 
 For the Herdr desktop app, not the Herdr TUI. macOS, Windows and Linux; the iOS simulator and the Markdown file handler are macOS only.
@@ -43,8 +43,9 @@ Tell your agent: **`add herdr.dev/layouts/jlopezlira/herdr-kanso--kanso`**
 Or, from a clone: `sh ./scripts/local-install.sh`. On Windows:
 `powershell -NoProfile -File ./scripts/local-install.ps1`. You need the Herdr app;
 `gh` for the PR and Shipped panels; Node 22.15 or newer for Spend, Memory and
-Simulator. Memory supports macOS and Windows; Windows uses its built-in
-PowerShell and Task Scheduler without administrator rights. kansō updates
+Simulator. Memory supports macOS, Windows and Linux; Windows uses its built-in
+PowerShell and Task Scheduler without administrator rights, and Linux a
+systemd user timer. kansō updates
 itself the same way on Windows, with Windows PowerShell and the curl and tar
 that ship with Windows: a release shows as a row above Settings, and a click
 installs it. Stable is what you get. Early, under What's new, also follows a beta
@@ -86,7 +87,7 @@ On Windows, merge `kanso/keys.windows.json` into your Herdr keys instead of
 - **What your agents leave running.** Ports: dev servers and the panes that
   run them. Containers: Docker, with Up, Rebuild and Down per project.
   Worktrees: every one agents made, what removing it would lose, the disk back.
-- **Weeks without a restart.** On macOS and Windows, the memory guard recycles
+- **Weeks without a restart.** On macOS, Windows and Linux, the memory guard recycles
   bloated idle Claude agents on the same conversation; the Memory panel shows
   what it sees.
 - **Spend and Shipped.** What your AI work is worth at list price, and what you

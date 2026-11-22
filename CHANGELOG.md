@@ -29,6 +29,10 @@ the branch's rules.
 - A computer that asks for a password or for your key's passphrase signs in with one click: Sign in opens a tab that asks for it once, leaves kansō's own key there and reconnects, so it never asks again. Clicking a computer that needs a login does the same, instead of copying a command.
 - In Add a computer, a computer that takes keys only is added the same way, instead of asking you to copy your key there by hand.
 
+### Added
+
+- Memory works on Linux: it reads each process's proportional memory and the machine's from the system, runs its check every minute from a systemd user timer, notifies through the desktop, and waits for Omarchy's idle before it recycles on its own.
+
 ## [3.32.0] - 2026-11-21
 
 ### Added

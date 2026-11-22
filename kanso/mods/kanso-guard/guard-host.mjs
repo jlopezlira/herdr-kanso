@@ -13,7 +13,7 @@ const LABEL = "dev.kanso.guard";
 export const readJSON = (file) => { try { return JSON.parse(readFileSync(file, "utf8")); } catch { return null; } };
 export function writeJSON(file, value) { const temp = `${file}.${process.pid}.tmp`; writeFileSync(temp, JSON.stringify(value)); renameSync(temp, file); }
 export const guardHome = (env, home, platform = platformName(process.platform)) => env.HERDR_APP_HOME || pathApi(platform).join(home, ".config", "herdr-app");
-export const guardEnvironment = (env, home, platform) => ({ ...env, PATH: [...(platform === "macos" ? [join(home, ".local/bin"), "/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/bin", "/usr/sbin", "/sbin"] : []), env.PATH ?? ""].join(delimiter) });
+export const guardEnvironment = (env, home, platform) => ({ ...env, PATH: [...(platform === "macos" ? [join(home, ".local/bin"), "/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/bin", "/usr/sbin", "/sbin"] : platform === "linux" ? [join(home, ".local/bin"), "/usr/local/bin", "/usr/bin", "/bin"] : []), env.PATH ?? ""].join(delimiter) });
 
 export function macProcesses(text) {
   return String(text).split("\n").flatMap((line) => {
@@ -32,6 +32,42 @@ export const macMemory = (total, free, swap) => ({ totalMB: Math.round(Number(to
 export const memoryLow = (platform, memory, limits) => memory.freePct < limits.lowFreePct || (platform === "macos" && memory.swapMB > limits.lowSwapMB);
 export const idleValue = (platform, text) => platform === "macos" ? Math.floor(Number(/"HIDIdleTime" = (\d+)/.exec(text)?.[1] ?? 0) / 1e9) : String(text).trim() ? Number(String(text).trim()) : NaN;
 export const resumeShellReason = (platform, shell) => platform !== "windows" || /^(?:pwsh|powershell)(?:\.exe)?$/i.test(pathApi("windows").basename(shell?.executable || shell?.name || "")) ? null : "Recycling and closing agents require a PowerShell terminal on Windows";
+export const linuxPss = (text) => { const kb = /^Pss:\s+(\d+)\s+kB/m.exec(String(text ?? ""))?.[1]; return kb === undefined ? null : Number(kb); };
+export const linuxMemory = (text) => {
+  const kb = (name) => Number(new RegExp(`^${name}:\\s+(\\d+)`, "m").exec(text)?.[1] ?? 0);
+  const total = kb("MemTotal");
+  return { totalMB: Math.round(total / 1024), freePct: total > 0 ? Math.round(kb("MemAvailable") / total * 1000) / 10 : 0, swapMB: Math.round((kb("SwapTotal") - kb("SwapFree")) / 1024), swapTotalMB: Math.round(kb("SwapTotal") / 1024) };
+};
+export const omarchyIdle = (text) => { const status = JSON.parse(text); return status.idle ? Number(status.screensaver) || 300 : 0; };
+export const logindIdle = (text, now) => {
+  if (!/^IdleHint=yes$/m.test(text)) return 0;
+  const since = Number(/^IdleSinceHint=(\d+)$/m.exec(text)?.[1] ?? 0);
+  return since > 0 ? Math.max(0, Math.floor((now - since / 1000) / 1000)) : 0;
+};
+const tryRead = (file) => { try { return readFileSync(file, "utf8"); } catch { return null; } };
+export const systemdService = ({ node, self, appHome, log }) => `[Unit]
+Description=kansō Memory
+
+[Service]
+Type=oneshot
+Environment=HERDR_APP_HOME=${appHome}
+ExecStart="${node}" "${self}" check
+Nice=10
+IOSchedulingClass=idle
+StandardOutput=append:${log}
+StandardError=append:${log}
+`;
+export const systemdTimer = () => `[Unit]
+Description=kansō Memory, every minute
+
+[Timer]
+OnActiveSec=10s
+OnUnitActiveSec=60s
+AccuracySec=5s
+
+[Install]
+WantedBy=timers.target
+`;
 export const corePid = (text) => { const pid = Number(JSON.parse(text).pid); return Number.isSafeInteger(pid) && pid > 0 ? pid : null; };
 
 export function windowAncestor(rows, pid) {
@@ -86,11 +122,16 @@ export function guardHost({ platform = platformName(process.platform), run, home
       return { ...result, forced: platform === "windows" && force && result.code === 0, note: platform === "windows" && force && result.code === 0 ? "Forced stop: Windows has no graceful signal for this process" : "" };
     },
   };
+  const unix = {
+    swapLabel: "swap", forceHelpers: false, quitCommand: "app.quit",
+    corePids: async (rows) => rows.filter((p) => /\/herdr-core$/.test(p.command.split(" ")[0]) && !/ connect\b/.test(p.command)).map((p) => p.pid),
+    window: async () => { const r = await run("lsof", ["-t", join(appHome, "herdr-app.sock")], 5000); return { pid: Number(r.stdout.trim().split("\n")[0]) || null }; },
+    captureWindow: async () => {},
+  };
   const implementations = {
     macos: () => ({
-      metric: "physical footprint", swapLabel: "swap", forceHelpers: false, quitCommand: "app.quit",
+      ...unix, metric: "physical footprint",
       processes: async () => macProcesses(checked(await run("ps", ["-axo", "pid=,ppid=,rss=,etime=,lstart=,command="])).stdout),
-      corePids: async (rows) => rows.filter((p) => /\/herdr-core$/.test(p.command.split(" ")[0]) && !/ connect\b/.test(p.command)).map((p) => p.pid),
       footprints: async (pids) => {
         const want = [...new Set(pids.filter(Boolean))];
         if (!want.length) return new Map();
@@ -98,8 +139,6 @@ export function guardHost({ platform = platformName(process.platform), run, home
         try { await run("footprint", [...want.flatMap((pid) => ["-p", String(pid)]), "--noCategories", "-j", file], 20000); return footprintValues(readJSON(file)); }
         finally { rmSync(file, { force: true }); }
       },
-      window: async () => { const r = await run("lsof", ["-t", join(appHome, "herdr-app.sock")], 5000); return { pid: Number(r.stdout.trim().split("\n")[0]) || null }; },
-      captureWindow: async () => {},
       idleSeconds: async () => idleValue(platform, checked(await run("ioreg", ["-c", "IOHIDSystem"], 5000)).stdout),
       machine: async (read = async (_name, operation) => operation()) => {
         const values = await Promise.all(["hw.memsize", "kern.memorystatus_level", "vm.swapusage"].map((key) => read(`sysctl ${key}`, async () => checked(await run("sysctl", ["-n", key])).stdout, "")));
@@ -135,6 +174,36 @@ export function guardHost({ platform = platformName(process.platform), run, home
         return checked(await run("launchctl", ["bootstrap", `gui/${uid}`, plist]));
       },
       uninstall: async () => { await run("launchctl", ["bootout", `gui/${uid}/${LABEL}`]); rmSync(join(home, "Library/LaunchAgents", `${LABEL}.plist`), { force: true }); },
+      scheduled: async () => ({ state: "unavailable", reason: "Task Scheduler is only used on Windows" }),
+    }),
+    linux: () => ({
+      ...unix, metric: "proportional set size",
+      processes: async () => macProcesses(checked(await run("env", ["LC_ALL=C", "ps", "-eo", "pid=,ppid=,rss=,etime=,lstart=,args="])).stdout),
+      footprints: async (pids) => new Map([...new Set(pids.filter(Boolean))].flatMap((pid) => {
+        const kb = linuxPss(tryRead(`/proc/${validPid(pid)}/smaps_rollup`));
+        return kb === null ? [] : [[Number(pid), Math.round(kb / 1024)]];
+      })),
+      idleSeconds: async () => {
+        const shell = await run("omarchy-shell", ["idle", "status"], 5000);
+        if (shell.code === 0) return omarchyIdle(shell.stdout);
+        return logindIdle(checked(await run("loginctl", ["show-session", "auto", "-p", "IdleHint", "-p", "IdleSinceHint"], 5000)).stdout, Date.now());
+      },
+      machine: async () => linuxMemory(readFileSync("/proc/meminfo", "utf8")),
+      reopen: async () => checked(await run("sh", ["-c", 'export HERDR_APP_HOME="$1"; if command -v uwsm-app >/dev/null; then exec setsid uwsm-app -- herdr-app >/dev/null 2>&1 & else exec setsid herdr-app >/dev/null 2>&1 & fi', "_", appHome])),
+      notify: (title, body) => run("notify-send", ["--app-name=Herdr", title, body], 5000).then(checked),
+      install: async () => {
+        const folder = join(home, ".config/systemd/user"), unit = (kind) => join(folder, `${LABEL}.${kind}`);
+        mkdirSync(folder, { recursive: true });
+        writeFileSync(unit("service"), systemdService({ node, self, appHome, log: join(data, "systemd.log") }));
+        writeFileSync(unit("timer"), systemdTimer());
+        checked(await run("systemctl", ["--user", "daemon-reload"]));
+        return checked(await run("systemctl", ["--user", "enable", "--now", `${LABEL}.timer`]));
+      },
+      uninstall: async () => {
+        await run("systemctl", ["--user", "disable", "--now", `${LABEL}.timer`]);
+        ["service", "timer"].forEach((kind) => rmSync(join(home, ".config/systemd/user", `${LABEL}.${kind}`), { force: true }));
+        await run("systemctl", ["--user", "daemon-reload"]);
+      },
       scheduled: async () => ({ state: "unavailable", reason: "Task Scheduler is only used on Windows" }),
     }),
     windows: () => ({

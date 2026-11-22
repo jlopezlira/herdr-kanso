@@ -4,7 +4,8 @@ import { powershell, psQuote, windowsArg } from "./platform-command.js";
 export const STOP_LOOP = 'g="$1"; shift; for a in "$@"; do case "$a" in *:force) "$0" "$g" stop-server "${a%:force}" force;; *) "$0" "$g" stop-server "$a";; esac; done';
 const DETACHED = 'nohup "$0" "$@" >/dev/null 2>&1 &';
 
-const memoryGuardReason = "Memory is not available on Linux.";
+const memoryGuardReason = "Memory is not available on this computer.";
+const MEMORY_GUARD = new Set(["macos", "windows", "linux"]);
 
 export function systemApi(platform, run) {
   const status = (appHome) => platform === "windows"
@@ -51,5 +52,5 @@ export function systemApi(platform, run) {
     }).join("; ")].map(windowsArg).join(" "))} -ErrorAction Stop`)
     : run("sh", ["-c", DETACHED, "sh", "-c", STOP_LOOP, node, file, ...args]);
   const containerShell = (name, os) => ["docker", "exec", "-it", name, ...(os === "windows" ? ["cmd.exe"] : ["sh", "-c", "command -v bash >/dev/null 2>&1 && exec bash || exec sh"])];
-  return { guardRun, guardStop, containerShell, status, restart, battery, hostname, temporary, userHome, startDocker, stopDocker, memoryGuardAvailable: platform === "macos" || platform === "windows", memoryGuardReason };
+  return { guardRun, guardStop, containerShell, status, restart, battery, hostname, temporary, userHome, startDocker, stopDocker, memoryGuardAvailable: MEMORY_GUARD.has(platform), memoryGuardReason };
 }
