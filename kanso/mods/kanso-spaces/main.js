@@ -1,5 +1,7 @@
 import { localService, serviceOn, localName } from "./platform-host.js";
 import { signInTab } from "./sign-in.js";
+import { homeRoute } from "./lan-route.js";
+import { findTailscale } from "./reach.js";
 import { paths } from "./platform-paths.js";
 import { processApi } from "./platform-processes.js";
 import { systemApi } from "./platform-system.js";
@@ -105,6 +107,8 @@ const FALLBACK = 60000;
 const PS_GIVE_UP_MS = 10000;
 // Under the 30 s machine look, so a hung list is free before the next one.
 const MACHINE_READ_MS = 20_000;
+const HOME_EVERY_MS = 10 * 60_000;
+const HOME_PROBE_MS = 8000;
 const KNOWN_AGENTS = "kanso.agents.installed";
 
 // The views' names, by key, as the view switch says them.
@@ -1390,8 +1394,36 @@ export default class Spaces extends RetryingView {
     const result = await hc(["machine", "ls", "--json"]);
     if (result.code !== 0) return;
     this.machines = listedMachines(result);
+    this.preferHome();
     if (this.machines.length && !this.syncSaving) this.sync = await readSync();
     await this.settleParked();
+  }
+
+  async preferHome() {
+    if (localName() === "windows" || this.homeBusy || Date.now() - (this.homeAt ?? 0) < HOME_EVERY_MS) return;
+    this.homeBusy = true;
+    this.homeAt = Date.now();
+    try {
+      const run = (program, args) => exec(program, args, { timeout: HOME_PROBE_MS });
+      const peers = (await findTailscale(localName(), run)).net?.peers ?? [];
+      if (!peers.length) return;
+      const rows = (this.machines ?? []).filter((row) => row.state === "connected").map(machineRecord).filter(canRestore);
+      for (const record of rows) {
+        const found = await homeRoute(record, peers, run).catch(() => null);
+        if (found?.record) await this.reroute(record, found.record, found.ip);
+      }
+    } finally {
+      this.homeBusy = false;
+    }
+  }
+
+  async reroute(was, next, ip) {
+    await hc(rmArgs(was.name)).catch(() => null);
+    if (hcError(await hc(addArgs(next)).catch((e) => ({ code: 1, stderr: String(e?.message ?? e) })))) {
+      await hc(addArgs(was)).catch(() => null);
+      return;
+    }
+    notify({ title: `${was.name} now uses your home network`, body: `At ${ip} when you are home, and Tailscale when you are away.`, level: "success" });
   }
 
   async settleParked() {
