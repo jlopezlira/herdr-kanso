@@ -82,7 +82,7 @@ test("The text sent to an agent has the ticket, the title, the link and the body
 test("A board read keeps the status columns, and the filter query names the login only for assigned or created", async () => {
   const { readBoard, calls } = await boardRun();
   const run = async (cmd, args) => { calls.push(args); return payload([node("Open")]); };
-  const board = await readBoard(run, { repo: REPO, project: "shop", filter: "assigned", login: "jj" });
+  const board = await readBoard(run, { repo: REPO, project: "shop", filter: "assigned", who: "jj" });
   same(board.columns, ["Open", "Done"]);
   assert.equal(board.rows[0].status, "Open");
   assert.equal(board.rows[0].ticket, "#12");
@@ -93,7 +93,7 @@ test("A board read keeps the status columns, and the filter query names the logi
   assert.equal(named(calls[0], "author=jj"), true);
   assert.equal(named(calls[0], "assignee=jj"), false);
   calls.length = 0;
-  await readBoard(run, { repo: REPO, project: "shop", filter: "all", login: "jj" });
+  await readBoard(run, { repo: REPO, project: "shop", filter: "all", who: "jj" });
   assert.equal(named(calls[0], "assignee=jj"), false);
   assert.equal(named(calls[0], "author=jj"), false);
 });
@@ -105,7 +105,7 @@ test("A missing project scope is read again without project items, and that read
     payload([node(null)]),
   ];
   const run = async (_cmd, args) => { calls.push(args); return answers.shift(); };
-  const board = await readBoard(run, { repo: REPO, project: "shop", filter: "all", login: "jj" });
+  const board = await readBoard(run, { repo: REPO, project: "shop", filter: "all", who: "jj" });
   assert.equal(board.noProjects, true);
   assert.equal(calls[1].some((part) => String(part).includes("projectItems")), false);
   assert.equal(board.rows[0].status, null);
@@ -115,9 +115,9 @@ test("A rate limit names when to retry, and an offline read is offline", async (
   const { readBoard } = await boardRun();
   const now = 1_700_000_000_000;
   const reset = Math.floor(now / 1000) + 180;
-  const limited = await readBoard(async () => ({ code: 1, stdout: "", stderr: "rate limit exceeded\nX-RateLimit-Reset: " + reset }), { repo: REPO, project: "shop", filter: "all", login: "jj", now });
+  const limited = await readBoard(async () => ({ code: 1, stdout: "", stderr: "rate limit exceeded\nX-RateLimit-Reset: " + reset }), { repo: REPO, project: "shop", filter: "all", who: "jj", now });
   same(limited.failure, { kind: "rate", text: "GitHub is limiting requests", retryAt: reset * 1000 });
-  const offline = await readBoard(async () => ({ code: 1, stdout: "", stderr: "could not resolve host" }), { repo: REPO, project: "shop", filter: "all", login: "jj", now });
+  const offline = await readBoard(async () => ({ code: 1, stdout: "", stderr: "could not resolve host" }), { repo: REPO, project: "shop", filter: "all", who: "jj", now });
   assert.equal(offline.failure.kind, "offline");
 });
 
@@ -259,9 +259,9 @@ test("A failed read still shows the cached issues and when that copy was read", 
 });
 
 test("A signed-out project shows Sign in, and a project without a GitHub remote says so", async () => {
-  const signed = await mount({ projects: [shop], places: { shop: { kind: "signed out", text: "Sign in to GitHub to see your issues" } } });
+  const signed = await mount({ projects: [shop], places: { "shop\u0000github": { kind: "signed out", text: "Sign in to GitHub to see your issues" } } });
   assert.ok(draw(signed).includes("Sign in"));
-  const remote = await mount({ projects: [shop], places: { shop: { kind: "no remote", text: "No GitHub remote" } } });
+  const remote = await mount({ projects: [shop], places: { "shop\u0000github": { kind: "no remote", text: "No GitHub remote" } } });
   assert.ok(draw(remote).includes("No GitHub remote"));
 });
 
@@ -321,13 +321,13 @@ test("A board read follows the next page cursor up to the page cap, and an unfin
   const { readBoard, PAGES } = await load("kanso-panel/issues-github.js", ["readBoard", "PAGES"]);
   const seen = [];
   let n = 0;
-  const followed = await readBoard(async (_cmd, args) => { seen.push(afterOf(args)); n += 1; return pageOf(n, "c" + n, n < 2); }, { repo: REPO, project: "shop", filter: "all", login: "jj" });
+  const followed = await readBoard(async (_cmd, args) => { seen.push(afterOf(args)); n += 1; return pageOf(n, "c" + n, n < 2); }, { repo: REPO, project: "shop", filter: "all", who: "jj" });
   assert.equal(seen[0], null);
   assert.equal(seen[1], "after=c1");
   assert.equal(followed.rows.length, 2);
   assert.equal(followed.complete, true);
   const capped = [];
-  const limited = await readBoard(async (_cmd, args) => { capped.push(afterOf(args)); return pageOf(capped.length, "p" + capped.length, true); }, { repo: REPO, project: "shop", filter: "all", login: "jj" });
+  const limited = await readBoard(async (_cmd, args) => { capped.push(afterOf(args)); return pageOf(capped.length, "p" + capped.length, true); }, { repo: REPO, project: "shop", filter: "all", who: "jj" });
   assert.equal(capped.length, PAGES);
   assert.equal(limited.complete, false);
   const { db, storeSql, readIssues } = await rowsOf(t);

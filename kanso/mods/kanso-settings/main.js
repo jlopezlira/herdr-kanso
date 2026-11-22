@@ -24,6 +24,7 @@ import { channelOf, installedRelease, offerRelease, stableStay } from "./release
 import { focusOn } from "./pure.js";
 import { whenInstalled } from "./installed.js";
 import { pagedDialog } from "./pages.js";
+import { Accounts } from "./accounts.js";
 
 const shippedDefaults = (platform) => (formerKeymap(platform) ? shippedLinuxKeymap(DEFAULT_KEYS[formerKeymap(platform)]) : DEFAULT_KEYS[shippedKeymap(platform)]);
 
@@ -33,7 +34,7 @@ const keysOf = (chords) => (chords.length ? chords.map((k) => ({ text: shownChor
 const REPO = "https://github.com/jlopezlira/herdr-kanso";
 const UPDATE_CHOICES = [{ key: "stable", label: "Stable" }, { key: "beta", label: "Early" }];
 
-const PAGES = [{ key: "pieces", label: "Pieces" }, { key: "keys", label: "Keys" }, { key: "updates", label: "Updates" }];
+const PAGES = [{ key: "pieces", label: "Pieces" }, { key: "keys", label: "Keys" }, { key: "accounts", label: "Accounts" }, { key: "updates", label: "Updates" }];
 const ASKED = { mods: "pieces", news: "updates" };
 const MODIFIERS = new Set(["shift", "control", "ctrl", "alt", "option", "cmd", "platform", "function", "fn", "capslock"]);
 
@@ -51,6 +52,7 @@ export default class Settings extends View {
     this.find = new TextField({ placeholder: "Find", value: props()?.find ?? "" });
     this.find.on("change", (_e, cx) => cx.notify());
     whenInstalled(cx, (version) => { this.installed = version; });
+    this.accounts = new Accounts(cx);
   }
 
   shown() { return installedRelease(this.installed, shared("kanso.update")?.tag); }
@@ -273,7 +275,7 @@ export default class Settings extends View {
 
   render() {
     const t = theme(), c = tokens(t);
-    const page = this.page === "keys" ? this.keysPage(t, c) : this.page === "updates" ? this.updatesPage(t, c) : this.piecesPage(t, c);
+    const page = this.page === "keys" ? this.keysPage(t, c) : this.page === "updates" ? this.updatesPage(t, c) : this.page === "accounts" ? this.accounts.page(c) : this.piecesPage(t, c);
     return pagedDialog({
       name: "settings", handle: this.handle, t, c, page,
       tabs: PAGES, tab: this.page,

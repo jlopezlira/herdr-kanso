@@ -3,6 +3,9 @@ export const FILTER_WORDS = { assigned: "Assigned to me", created: "Created by m
 export const OPEN = "Open";
 export const DONE = "Done";
 export const FRESH_MS = 60_000;
+export const ACCOUNTS = "kanso.issues.accounts";
+export const kindOf = (source) => String(source ?? "github").split(":")[0];
+export const SOURCE_WORDS = { github: "GitHub", jira: "Jira", linear: "Linear" };
 export const EVERY_MS = 5 * 60_000;
 
 import { same } from "./pure.js";
@@ -55,6 +58,8 @@ export function ageOf(at, now) {
   const days = Math.floor(hours / 24);
   return days < 30 ? `${days}d` : days < 365 ? `${Math.floor(days / 30)}mo` : `${Math.floor(days / 365)}y`;
 }
+
+export const linkWords = (source) => (kindOf(source) === "github" ? "Open on GitHub" : `Open in ${SOURCE_WORDS[kindOf(source)]}`);
 
 export function sendText(row) {
   return [`${row.ticket} ${row.title}`, row.url, String(row.body ?? "").trim()].filter(Boolean).join("\n\n");
