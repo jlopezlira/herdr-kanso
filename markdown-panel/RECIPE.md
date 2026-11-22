@@ -136,7 +136,7 @@ files next to it are one build of it.
 - `gpui-base`: `TextView.markdown`, `Textarea` / `TextareaState`, `Editor` /
   `EditorState`.
 
-## Kanso Markdown (macOS, optional)
+## Kanso Markdown (macOS and Linux, optional)
 
 A Cmd-click on a file path in a terminal goes from Herdr to macOS, which opens
 the file in its app for `.md` (often Xcode). `sh
@@ -155,6 +155,15 @@ It is an AppleScript app (`osacompile`) with its bundle id set to
 `net.daringfireball.markdown`, signed ad hoc, registered with `lsregister`,
 and made the default with `LSSetDefaultRoleHandlerForContentType` (through
 `swift`, so it needs Xcode or its Command Line Tools).
+
+On Linux the same command writes `~/.local/share/applications/dev.kanso.markdown.desktop`,
+which runs `data/kanso-markdown/open.sh`, and makes it the default for
+`text/markdown` and `text/x-markdown` with `xdg-mime`. It saves each type's
+previous app in `data/kanso-markdown-previous`. When Herdr isn't running, the
+file opens in the previous app through `gtk-launch`, or Herdr starts. Uninstall
+gives each type back its own previous app, and only while Kanso Markdown is
+still that type's default. Under Omarchy, Herdr is brought to the front with
+`omarchy-launch-or-focus`.
 
 ## Watch out
 

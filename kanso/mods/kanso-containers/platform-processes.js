@@ -103,8 +103,8 @@ for f in "$d"/*.json; do
   echo "$p"; exit 0
 done
 exit 0`;
-const PROC_CWD = 'for p; do t=$(readlink "/proc/$p/cwd" 2>/dev/null) && printf "%s\\t%s\\n" "$p" "$t"; done';
-const PROC_FDS = 'for p; do for f in /proc/"$p"/fd/*; do t=$(readlink "$f" 2>/dev/null) && printf "%s\\t%s\\n" "$p" "$t"; done; done';
+const PROC_CWD = 'for p; do t=$(readlink "/proc/$p/cwd" 2>/dev/null) && printf "%s\\t%s\\n" "$p" "$t"; done; exit 0';
+const PROC_FDS = 'for p; do for f in /proc/"$p"/fd/*; do t=$(readlink "$f" 2>/dev/null) && printf "%s\\t%s\\n" "$p" "$t"; done; done; exit 0';
 export const procLinks = (text) => String(text ?? "").split("\n").flatMap((line) => {
   const at = line.indexOf("\t");
   const pid = Number(line.slice(0, at));

@@ -32,7 +32,7 @@ the branch's rules.
 ### Added
 
 - Memory works on Linux: it reads each process's proportional memory and the machine's from the system, runs its check every minute from a systemd user timer, notifies through the desktop, and waits for Omarchy's idle before it recycles on its own.
-- On Linux, Kanso Markdown makes .md files open in Herdr (`sh markdown-handler.sh install`), as on macOS, and hands them back to the app they had on uninstall.
+- On Linux, Kanso Markdown makes .md files open in Herdr, as on macOS, and on uninstall gives each kind of Markdown file back to the app it had.
 - On Linux, the editors in Open with show their icons.
 
 ### Fixed

@@ -1,20 +1,4 @@
 #!/bin/sh
-# Kanso Markdown (macOS and Linux): makes .md files open in Herdr, formatted and
-# editable (Kanso's side panel, or the markdown-panel mod's window in any
-# other layout), instead of in the app macOS uses for them. That covers a
-# Cmd-click on a path in a terminal (Herdr hands it to macOS) and a double
-# click in Finder. Nothing else changes, and only when you run it.
-#
-#   sh markdown-handler.sh install     make Kanso Markdown the app for .md files
-#   sh markdown-handler.sh uninstall   give .md files back to the app they had
-#
-# On macOS, Kanso Markdown is a small AppleScript app in ~/Applications; on
-# Linux, a desktop entry in ~/.local/share/applications made the default for
-# text/markdown. Each writes the file's path into Herdr's data/kanso-open
-# folder, where Kanso (kanso-tabs) or the markdown-panel mod picks it up;
-# outside Kanso it opens that mod's window if it isn't open. Then it brings
-# Herdr to the front. When Herdr isn't running, macOS opens the file in
-# TextEdit and Linux in the app .md files had before, or starts Herdr.
 set -eu
 
 APP="$HOME/Applications/Kanso Markdown.app"
@@ -23,10 +7,10 @@ HOME_DIR="${HERDR_APP_HOME:-$HOME/.config/herdr-app}"
 INBOX="$HOME_DIR/data/kanso-open"
 SAVED="$HOME_DIR/data/kanso-markdown-previous"
 TYPES="net.daringfireball.markdown"
+LINUX_TYPES="text/markdown text/x-markdown"
 DESKTOP_APPS="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
 LSREGISTER=/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister
 
-# Prints the bundle id that opens .md files now, or sets it ($1).
 handler() {
   if [ $# -eq 0 ]; then
     swift - <<'SWIFT' 2>/dev/null
@@ -87,7 +71,6 @@ APPLESCRIPT
   rm -rf "$APP"
   osacompile -o "$APP" "$script"
   rm -f "$script"
-  # What the app runs for each file, with this machine's paths written in.
   cat > "$APP/Contents/Resources/open.sh" <<OPEN
 #!/bin/sh
 p=\$1
@@ -124,13 +107,18 @@ linux_install() {
   opener="$HOME_DIR/data/kanso-markdown/open.sh"
   mkdir -p "$DESKTOP_APPS" "$INBOX" "$(dirname "$opener")"
   previous=$(xdg-mime query default text/markdown 2>/dev/null || true)
-  if [ -n "$previous" ] && [ "$previous" != "$ID.desktop" ]; then printf '%s\n' "$previous" > "$SAVED"; fi
+  for type in $LINUX_TYPES; do
+    now=$(xdg-mime query default "$type" 2>/dev/null || true)
+    if [ "$now" = "$ID.desktop" ]; then grep "^$type " "$SAVED" 2>/dev/null || true
+    elif [ -n "$now" ]; then printf '%s %s\n' "$type" "$now"; fi
+  done > "$SAVED.new"
+  mv -f "$SAVED.new" "$SAVED"
   cat > "$opener" <<OPEN
 #!/bin/sh
 p=\$1
 export HERDR_APP_HOME="$HOME_DIR"
 if ! pgrep -x herdr-app >/dev/null; then
-  back=\$(cat "$SAVED" 2>/dev/null)
+  back=\$(sed -n 's|^text/markdown ||p' "$SAVED" 2>/dev/null)
   [ -n "\$back" ] && command -v gtk-launch >/dev/null && exec gtk-launch "\${back%.desktop}" "\$p"
   exec "$herdr"
 fi
@@ -149,13 +137,16 @@ NoDisplay=true
 Terminal=false
 DESKTOP
   refresh_desktop
-  xdg-mime default "$ID.desktop" text/markdown text/x-markdown
+  xdg-mime default "$ID.desktop" $LINUX_TYPES
   announce "$previous" "$ID.desktop"
 }
 
 linux_uninstall() {
-  previous=$(cat "$SAVED" 2>/dev/null || true)
-  if [ "$(xdg-mime query default text/markdown 2>/dev/null)" = "$ID.desktop" ] && [ -n "$previous" ]; then xdg-mime default "$previous" text/markdown text/x-markdown; fi
+  previous=$(sed -n 's|^text/markdown ||p' "$SAVED" 2>/dev/null || true)
+  for type in $LINUX_TYPES; do
+    back=$(sed -n "s|^$type ||p" "$SAVED" 2>/dev/null || true)
+    if [ -n "$back" ] && [ "$(xdg-mime query default "$type" 2>/dev/null)" = "$ID.desktop" ]; then xdg-mime default "$back" "$type"; fi
+  done
   rm -rf "$DESKTOP_APPS/$ID.desktop" "$HOME_DIR/data/kanso-markdown" "$SAVED"
   refresh_desktop
   echo "Markdown files open in ${previous:-the system default} again."

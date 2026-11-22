@@ -26,7 +26,7 @@
 - Memory, on macOS, Windows and Linux, recycles idle Claude sessions so the machine lasts weeks. Spend adds up across your computers once Sync is on.
 - A Simulator sits beside the agent. kansō works on a space that lives on another computer.
 
-For the Herdr desktop app, not the Herdr TUI. macOS, Windows and Linux; the iOS simulator and the Markdown file handler are macOS only.
+For the Herdr desktop app, not the Herdr TUI. macOS, Windows and Linux; the iOS simulator is macOS only.
 
 <p align="center">
   <a href="https://jlopezlira.github.io/herdr-kanso/">Website</a> ·
