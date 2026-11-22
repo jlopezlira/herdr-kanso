@@ -26,6 +26,9 @@ the branch's rules.
 
 ### Added
 
+- An agent stopped by its plan limit shows Limited and the time the limit resets, in place of Done. Its menu offers Resume at reset, which types "continue" into it once the allowance is back, even with the window closed, the sidebar hidden or after a restart, and Snooze until reset, which hides it until then. The + menu shows a limited provider with its reset time and asks again before starting an agent on it. Settings, under Background, makes Resume at reset the default. (#253)
+- A project's menu has Schedule…: an agent, a prompt and when it runs (a time of day on chosen days, every few minutes or hours, or once), in the project or in a new worktree from the default branch. Each run is a normal agent row in that project. The project's menu lists its schedules with their next run, to run now, pause, edit or delete. A run missed while the computer was asleep or off runs once when it is back, and a run that could not start shows on its project with Retry. (#254)
+- New agent in a worktree can start the same task on several agents: pick them, write one first prompt and a base branch, and each gets its own worktree and branch, side by side in one tab. One that cannot start shows Retry while the others run. (#255)
 - When every check on an agent's pull request has finished, the agent hears the result once per push, as soon as it waits for you: which checks failed, each with its link, or that they passed. A failure moves its row to Needs you with "checks failed"; a cancelled run says nothing. Settings, under Background, turns it off. (#252)
 
 ### Changed

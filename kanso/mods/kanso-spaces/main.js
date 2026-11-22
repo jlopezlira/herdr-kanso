@@ -2074,7 +2074,7 @@ export default class Spaces extends RetryingView {
         ...(asleep.length ? [{ heading: "Asleep" }, ...asleep.map((z) => ({ act: "wake-tab", of: [z.tab], does: () => wakeRow(z), hint: z.saved ? since(z.saved) : null }))] : []),
         ...(asleep.length > 1 ? [{ act: "wake-all", of: [asleep.length], does: () => arrange({ wake: { space: w.id } }) }] : []),
         ...(place && !project?.missing ? [{ act: "new-conversation", does: () => this.newAgentMenu(place) }, { act: "new-worktree", does: () => this.worktreeDialog(place) }, { act: "schedule", does: () => this.scheduleDialog(place) }] : []),
-        ...(scheds.length ? [{ heading: "Schedules" }, ...scheds.map((s) => ({ act: "schedule-of", of: [scheduleWords(s)], does: () => { this.sub = s.id; this.menuAt = -1; }, hint: this.scheduleHint(s), keep: true }))] : []),
+        ...(scheds.length ? [{ heading: "Schedules" }, { scroll: scheds.map((s) => ({ act: "schedule-of", of: [scheduleWords(s)], does: () => { this.sub = s.id; this.menuAt = -1; }, hint: this.scheduleHint(s), keep: true })) }] : []),
         ...(trees.length ? [{ heading: "Worktrees" }, { scroll: trees.map((x) => ({ act: "worktree", of: [x.branch ?? "detached"], does: () => this.openTree(place, x), hint: where(x.path) })) }] : []),
         ...(w ? [{ act: "rename", does: () => run("space.rename", { id: w.id }) }] : []),
         ...(active ? [{ act: "sleep-tab", does: () => sleepTab(w.id, active.id) }] : []),
