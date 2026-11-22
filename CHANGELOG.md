@@ -31,7 +31,8 @@ the branch's rules.
 
 ### Added
 
-- A terminal's right-click menu starts with Copy, Cut and Paste. Copy copies the selection, Paste pastes into that terminal, on this computer or another, and Cut stays dim because a terminal's text cannot be cut.
+- A terminal's right-click menu starts with Copy, Cut and Paste. Copy copies the selection and Paste pastes into that terminal, on this computer or another. Cut stays dim, because a terminal's text cannot be cut.
+- Off macOS, menus and tooltips write keys as words (Ctrl+Shift+Enter, Shift+Insert), and show Ctrl+Shift+C rather than Ctrl+Insert when an action has both.
 - Memory works on Linux: it reads each process's proportional memory and the machine's from the system, runs its check every minute from a systemd user timer, notifies through the desktop, and waits for Omarchy's idle before it recycles on its own.
 - On Linux, Kanso Markdown makes .md files open in Herdr, as on macOS, and on uninstall gives each kind of Markdown file back to the app it had.
 - On Linux, the editors in Open with show their icons.
