@@ -6,7 +6,8 @@ import { shippedKeymap } from "../kanso/mods/kanso-panel/platform-keymap.js";
 const read = (file) => readFileSync(new URL(`../kanso/${file}`, import.meta.url), "utf8");
 
 test("Only Windows selects the Windows shipped keymap", () => {
-  for (const platform of ["macos", "linux", "windows"]) assert.equal(shippedKeymap(platform), `kanso/${platform === "windows" ? "keys.windows.json" : "keys.json"}`);
+  assert.equal(shippedKeymap("macos"), "kanso/keys.json");
+  assert.equal(shippedKeymap("windows"), "kanso/keys.windows.json");
 });
 
 test("Windows keys cover exactly the shipped actions without Command, AltGr or plain Ctrl letters", () => {

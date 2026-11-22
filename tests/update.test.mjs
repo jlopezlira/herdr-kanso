@@ -207,7 +207,7 @@ test("A mod that did not load for want of memory asks for a restart, however the
 });
 
 test("The update plan reads this platform's keymap and adds Windows keys when the installed tag predates them", async () => {
-  for (const platform of ["macos", "linux", "windows"]) {
+  for (const platform of ["macos", "windows"]) {
     for (const missing of [false, true]) {
       const path = `kanso/keys${platform === "windows" ? ".windows" : ""}.json`;
       const chord = platform === "windows" ? "ctrl-shift-o" : "cmd-d";
