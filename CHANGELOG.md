@@ -39,6 +39,7 @@ the branch's rules.
 
 ### Fixed
 
+- A busy icon no longer turns. A computer being added, a refresh button or any other icon that waits shows the working mark in its place, at the icon's size, and only that mark turns.
 - On Omarchy, Super+C and Super+V copy and paste in Herdr's terminals, on this computer or another, instead of interrupting the program. Hyprland now treats Herdr as a terminal, and the Linux keys copy and paste with Ctrl+Shift+C and Ctrl+Shift+V and with Ctrl+Insert and Shift+Insert, so every Omarchy version's Super+C and Super+V work.
 - On Linux, kansō's keys work with Omarchy: each keeps Super where Omarchy leaves it free and moves to Ctrl or Alt with Shift where Omarchy uses it, so Super+J and the rest no longer go to the window manager. The update moves the Mac keys a Linux computer had, keeps the ones you changed, and moves Herdr's own keys Omarchy takes the same way.
 - On Linux, Ports, a process's folder, its open files and a Codex conversation are read from `ss` and `/proc`, so they work on a stock Omarchy without `lsof`.
