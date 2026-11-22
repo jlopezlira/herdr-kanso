@@ -3,13 +3,13 @@ import assert from "node:assert/strict";
 import { cp, mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { clone, exec, load, repoText, temporary } from "./helpers.mjs";
+import { clone, context, exec, load, repoText, temporary } from "./helpers.mjs";
 import { loadSettings } from "./mod-fixtures.mjs";
 import { installedUpdater } from "./update-harness.mjs";
 
 const repo = fileURLToPath(new URL("..", import.meta.url));
 const readKeys = (file) => JSON.parse(repoText(file));
-const { linuxKeymap, linuxSection, takenByOmarchy } = await load("kanso-panel/platform-linux-keys.js", ["linuxKeymap", "linuxSection", "takenByOmarchy"]);
+const { linuxKeymap, linuxSection, migrateToLinux, takenByOmarchy } = await load("kanso-panel/platform-linux-keys.js", ["linuxKeymap", "linuxSection", "migrateToLinux", "takenByOmarchy"]);
 const macLinux = () => ({
   mac: readKeys("kanso/keys.json"),
   linux: readKeys("kanso/keys.linux.json"),
@@ -25,6 +25,10 @@ const noneTaken = (keys) => {
   for (const [section, bindings] of Object.entries(keys)) {
     for (const chord of Object.keys(bindings)) assert.equal(takenByOmarchy(chord), false, `${section} ${chord} is one Omarchy takes`);
   }
+};
+const captureWrites = () => {
+  const writes = [];
+  return { writes, writeTextFile: async (file, body, expected) => { writes.push({ file, body, expected }); } };
 };
 
 test("Linux keys leave Omarchy's chords alone, keep every action, and do not bind a chord twice", async () => {
@@ -83,7 +87,109 @@ test("macOS and Windows keep their own key files, and Linux uses the Linux file 
   assert.equal(formerKeymap("linux"), "kanso/keys.json");
 });
 
-test("An update from a tag without Linux keys gives the Mac keys back as Linux keys, keeps a key you changed, and moves Quit off Super+Q", async () => {
+test("A chord reserved for kansō is never given to a key that had to move, nor to the form Linux reports", async () => {
+  assert.equal(linuxSection({ "cmd-j": "mine.jump" })["ctrl-shift-j"], "mine.jump");
+  const moved = linuxSection({ "cmd-j": "mine.jump" }, new Set(["ctrl-shift-j"]));
+  assert.equal(moved["ctrl-shift-j"], undefined);
+  assert.deepEqual(Object.values(moved), ["mine.jump"]);
+  assert.equal(linuxSection({ "cmd-shift-/": "app.help" })["ctrl-?"], "app.help");
+  assert.equal(linuxSection({ "cmd-shift-/": "app.help" }, new Set(["ctrl-?"]))["ctrl-?"], undefined);
+});
+
+test("Settings on Linux lists a row's shipped key from the Linux keymap", async () => {
+  const { Settings } = await loadSettings({ window: () => ({ platform: "linux" }) });
+  const settings = new Settings();
+  assert.deepEqual(clone(settings.shipped({ action: "kanso-spaces.needs-you.next" }, "layout:kanso")), ["ctrl-shift-j"]);
+  assert.deepEqual(clone(settings.shipped({ action: "mod.open:kanso-help" }, "layout:kanso")), ["ctrl-shift-/"]);
+  assert.deepEqual(clone(settings.shipped({ action: "kanso-strip.new-right" }, "layout:kanso")), ["cmd-d"]);
+});
+
+test("A Mac keys file moves kansō and Herdr to Linux keys, and a second run changes nothing", async () => {
+  const { mac, linux, herdr } = macLinux();
+  const user = { ...clone(mac), global: { ...herdr.global } };
+  const first = migrateToLinux(user, mac);
+  assert.equal(first.changed, true);
+  for (const [section, bindings] of Object.entries(linux)) {
+    for (const [chord, action] of Object.entries(bindings)) assert.equal(first.keys[section][chord], action, `${section} ${chord}`);
+  }
+  assert.equal(first.keys.global["cmd-q"], undefined);
+  assert.equal(first.keys.global["ctrl-shift-q"], "app.quit");
+  noneTaken(first.keys);
+  const second = migrateToLinux(first.keys, mac);
+  assert.equal(second.changed, false);
+  assert.equal(JSON.stringify(second.keys), JSON.stringify(first.keys));
+});
+
+test("A Mac map without Super+J migrates with no key for the next agent that needs you", async () => {
+  const { mac } = macLinux();
+  const layout = Object.fromEntries(Object.entries(mac["layout:kanso"]).filter(([chord]) => chord !== "cmd-j"));
+  const moved = migrateToLinux({ ...mac, "layout:kanso": layout }, mac);
+  for (const bindings of Object.values(moved.keys)) assert.equal(Object.values(bindings).includes("kanso-spaces.needs-you.next"), false);
+});
+
+test("Linux arrival writes the moved keys once, with the text it read as the expected content, and does nothing on macOS, Windows, or a missing or unreadable keys file", async () => {
+  const { herdr } = macLinux();
+  const { DEFAULT_KEYS } = await load("kanso-tabs/defaults.js", ["DEFAULT_KEYS"]);
+  const mac = DEFAULT_KEYS["kanso/keys.json"];
+  const user = { ...clone(mac), global: { ...herdr.global } };
+  const text = JSON.stringify(user);
+  const { writes, writeTextFile } = captureWrites();
+  let read = async () => text;
+  const { arriveOnLinux } = await load("kanso-tabs/linux-arrival.js", ["arriveOnLinux"], {
+    appHome: () => "/app",
+    readTextFile: () => read(),
+    writeTextFile,
+    notify: () => {},
+  });
+  assert.equal(await arriveOnLinux("linux"), true);
+  assert.equal(writes.length, 1);
+  assert.equal(writes[0].file, "/app/keys.json");
+  assert.equal(writes[0].expected, text);
+  assert.equal(writes[0].body, JSON.stringify(migrateToLinux(user, mac).keys, null, 2) + "\n");
+  read = async () => writes[0].body;
+  assert.equal(await arriveOnLinux("linux"), false);
+  assert.equal(await arriveOnLinux("macos"), false);
+  assert.equal(await arriveOnLinux("windows"), false);
+  read = async () => null;
+  assert.equal(await arriveOnLinux("linux"), false);
+  read = async () => { throw new Error("unreadable"); };
+  assert.equal(await arriveOnLinux("linux"), false);
+  assert.equal(writes.length, 1);
+});
+
+test("Backspace on the panel family removes Ctrl+Shift+N and Ctrl+! through Ctrl+(, and the panel row lists one chord pattern", async () => {
+  const shifted = ["!", "@", "#", "$", "%", "^", "&", "*", "("];
+  const panel = Object.fromEntries([1, 2, 3, 4, 5, 6, 7, 8, 9].flatMap((n, i) => [
+    [`ctrl-shift-${n}`, `kanso-tabs.panel-${n}`],
+    [`ctrl-${shifted[i]}`, `kanso-tabs.panel-${n}`],
+  ]));
+  const doc = { "layout:kanso": { ...panel, "cmd-d": "kanso-strip.new-right" } };
+  const text = JSON.stringify(doc);
+  const { writes, writeTextFile } = captureWrites();
+  const { Settings } = await loadSettings({
+    window: () => ({ platform: "linux" }),
+    appHome: () => "/app",
+    readTextFile: async () => text,
+    writeTextFile,
+  });
+  const settings = new Settings();
+  const row = { family: "kanso-tabs.panel-" };
+  const list = Object.entries(doc["layout:kanso"]).map(([keys, action]) => ({ section: "layout:kanso", keys, action }));
+  assert.deepEqual(clone(settings.chordsOf(row, "layout:kanso", list)), ["ctrl-shift-N"]);
+  assert.deepEqual(clone(settings.shipped(row, "layout:kanso")), ["ctrl-shift-N"]);
+  settings.armed = { clear() {} };
+  settings.capture = { row, section: "layout:kanso", old: "ctrl-shift-N" };
+  const { cx, drain } = context();
+  settings.key({ key: "backspace", modifiers: {} }, cx);
+  await drain();
+  assert.equal(writes.length, 1);
+  assert.equal(writes[0].expected, text);
+  const left = JSON.parse(writes[0].body)["layout:kanso"];
+  for (const chord of Object.keys(panel)) assert.equal(left[chord], undefined, chord);
+  assert.equal(left["cmd-d"], "kanso-strip.new-right");
+});
+
+test("An update from a tag without Linux keys moves the Mac keys with migrateToLinux", async () => {
   const { mac, linux, herdr } = macLinux();
   const user = { ...clone(mac), global: { ...herdr.global }, "layout:kanso": { ...mac["layout:kanso"], "cmd-j": "mine.jump" } };
   const asked = [];
@@ -102,52 +208,5 @@ test("An update from a tag without Linux keys gives the Mac keys back as Linux k
     },
   })).plan("new", "/app");
   assert.ok(asked.includes("old/kanso/keys.linux.json") && asked.includes("old/kanso/keys.json") && asked.includes("new/kanso/keys.linux.json"));
-  const got = JSON.parse(plan.keys);
-  for (const [section, bindings] of Object.entries(linux)) {
-    for (const [chord, action] of Object.entries(bindings)) assert.equal(got[section][chord], action, `${section} ${chord}`);
-  }
-  const yours = Object.entries(got["layout:kanso"]).filter(([, action]) => action === "mine.jump");
-  assert.equal(yours.length, 1, "the key you changed is gone");
-  assert.equal(takenByOmarchy(yours[0][0]), false, yours[0][0]);
-  assert.equal(got.global["cmd-q"], undefined);
-  assert.equal(got.global["ctrl-shift-q"], "app.quit");
-  noneTaken(got);
-  assert.match(plan.notes, /Kept your own cmd-j/);
-});
-
-test("An update of Herdr's Mac keys plus kansō leaves no moved Herdr key on a kansō key that does something else, and nothing Omarchy takes remains", async () => {
-  const { mergeKeys, omarchyKeys } = await load("kanso-tabs/update.js", ["mergeKeys", "omarchyKeys"]);
-  const { mac, linux, herdr } = macLinux();
-  const user = { ...clone(mac), global: { ...herdr.global } };
-  const got = omarchyKeys(mergeKeys(clone(user), mac, linux), linux).keys;
-  const clashes = [];
-  for (const [name, bindings] of Object.entries(got)) {
-    if (name in linux) continue;
-    for (const [chord, action] of Object.entries(bindings)) {
-      if (user[name]?.[chord] === action) continue;
-      for (const [kansoName, kanso] of Object.entries(got)) {
-        if (!(kansoName in linux) || !kanso[chord] || kanso[chord] === action) continue;
-        clashes.push(`${name} ${chord} is ${action}, and ${kansoName} ${chord} is ${kanso[chord]}`);
-      }
-    }
-  }
-  assert.deepEqual(clashes, []);
-  noneTaken(got);
-});
-
-test("A chord reserved for kansō is never given to a key that had to move, nor to the form Linux reports", async () => {
-  assert.equal(linuxSection({ "cmd-j": "mine.jump" })["ctrl-shift-j"], "mine.jump");
-  const moved = linuxSection({ "cmd-j": "mine.jump" }, new Set(["ctrl-shift-j"]));
-  assert.equal(moved["ctrl-shift-j"], undefined);
-  assert.deepEqual(Object.values(moved), ["mine.jump"]);
-  assert.equal(linuxSection({ "cmd-shift-/": "app.help" })["ctrl-?"], "app.help");
-  assert.equal(linuxSection({ "cmd-shift-/": "app.help" }, new Set(["ctrl-?"]))["ctrl-?"], undefined);
-});
-
-test("Settings on Linux lists a row's shipped key from the Linux keymap", async () => {
-  const { Settings } = await loadSettings({ window: () => ({ platform: "linux" }) });
-  const settings = new Settings();
-  assert.deepEqual(clone(settings.shipped({ action: "kanso-spaces.needs-you.next" }, "layout:kanso")), ["ctrl-shift-j"]);
-  assert.deepEqual(clone(settings.shipped({ action: "mod.open:kanso-help" }, "layout:kanso")), ["ctrl-shift-/", "ctrl-?"]);
-  assert.deepEqual(clone(settings.shipped({ action: "kanso-strip.new-right" }, "layout:kanso")), ["cmd-d"]);
+  assert.equal(plan.keys, JSON.stringify(migrateToLinux(user, mac).keys, null, 2));
 });
