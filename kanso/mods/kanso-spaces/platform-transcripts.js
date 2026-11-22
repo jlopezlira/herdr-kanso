@@ -100,7 +100,7 @@ if [ "$kind" = claude ]; then
   exit 0
 fi
 for p in "$pid" $(pgrep -P "$pid" 2>/dev/null); do
-  f=$(lsof -a -p "$p" -d 0-999 -Fn 2>/dev/null | sed -n 's/^n\(.*rollout-.*\.jsonl\)$/\1/p' | head -1)
+  f=$(if [ -d "/proc/$p/fd" ]; then for d in /proc/"$p"/fd/*; do readlink "$d"; done; else lsof -a -p "$p" -d 0-999 -Fn | sed -n 's/^n//p'; fi 2>/dev/null | grep 'rollout-.*\.jsonl$' | head -1)
   [ -n "$f" ] || continue
   id=$(basename "$f" .jsonl | grep -o '[0-9a-f]\{8\}-[0-9a-f]\{4\}-[0-9a-f]\{4\}-[0-9a-f]\{4\}-[0-9a-f]\{12\}$')
   name=$(grep -h "\"id\":\"$id\"" "$HOME/.codex/session_index.jsonl" 2>/dev/null | tail -1)

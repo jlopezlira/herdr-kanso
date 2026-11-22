@@ -83,7 +83,7 @@ for (const platform of ["macos", "linux", "windows"]) {
     await api.startDocker(); await api.stopDocker();
     assert.deepEqual(api.containerShell("container", "windows"), ["docker", "exec", "-it", "container", "cmd.exe"]);
     assert.equal(api.containerShell("container", "linux").at(-2), "-c");
-    assert.equal(api.memoryGuardAvailable, platform !== "linux");
+    assert.equal(api.memoryGuardAvailable, true);
     if (windows) {
       await api.guardRun("node", "guard.mjs", ["install"], "C:\\App");
       assert.match(r.calls.at(-1).args.at(-1), /Start-Process.*Hidden.*installerPid/s);
@@ -109,7 +109,7 @@ for (const platform of ["macos", "linux", "windows"]) {
   test(`${platform} clipboard paste validates the destination and reports failure`, async () => {
     const r = stub(() => windows ? "42" : "com.example.browser"), api = clipboardApi(platform, r.run);
     assert.equal(await api.frontApp(), platform === "linux" ? null : windows ? "42" : "com.example.browser");
-    assert.equal((await api.paste(windows ? "42" : "com.example.browser")).state, "ok");
+    assert.equal((await api.paste(windows ? "42" : "com.example.browser")).state, platform === "linux" ? "error" : "ok");
     const failed = clipboardApi(platform, stub(() => (failure("blocked"))).run);
     assert.equal((await failed.paste("42")).state, "error");
     if (windows) {

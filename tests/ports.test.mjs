@@ -233,16 +233,16 @@ test("A Windows computer lists its terminals' servers and stops them with taskki
   assert.deepEqual(clone(f.calls.find((c) => c[0] === "taskkill")), ["taskkill", "/PID", "300", "win"]);
 });
 
-test("A Linux computer without lsof says so on its line instead of unreachable", async () => {
+test("A Linux computer without ss says so on its line instead of unreachable", async () => {
   const f = computers({ answer: (command, _args, on) => {
     if (on !== "light") return null;
     if (command === "uname") return ok("Linux\n");
-    if (command === "lsof") return failure("sh: 1: lsof: not found", 127);
+    if (command === "ss") return failure("sh: 1: ss: not found", 127);
     return null;
   } });
   const view = await listedPorts(f);
   const texts = wordsOf(view.render(f.cx));
-  assert.ok(texts.includes("light · lsof is not installed"));
+  assert.ok(texts.includes("light · ss is not installed"));
   assert.ok(texts.includes(":3000"));
 });
 

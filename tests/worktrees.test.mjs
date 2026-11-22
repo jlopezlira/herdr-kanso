@@ -4,7 +4,7 @@ import { mkdir, rm, writeFile, realpath } from "node:fs/promises";
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, basename } from "node:path";
-import { load, context, temporary, clone, exec, failure, gitOk, fileExists as exists } from "./helpers.mjs";
+import { load, loadSystemApi, context, temporary, clone, exec, failure, gitOk, fileExists as exists } from "./helpers.mjs";
 
 const names = ["Worktrees", "removable", "losses", "lastDays", "spaceBy", "freedSpec", "freedText", "explainPrompt", "reviewPrompt", "rootsFor", "parseDiscovery", "basesFrom", "parseWorktrees", "parseProbe", "stateOf", "safe", "consequence", "fmtSize", "fmtAge", "inside", "openIn"];
 const writeTextFile = (path, text) => writeFile(path, text);
@@ -93,7 +93,7 @@ test("Worktrees searches nothing it was not asked to when it cannot tell where t
 
 test("A temp folder lookup that fails, answers nothing or is refused infers no root, on every platform", async () => {
   const { rootsFor } = await worktrees();
-  const { systemApi } = await load("kanso-panel/platform-system.js", ["systemApi"]);
+  const systemApi = await loadSystemApi();
   const lookups = { "exit 1": async () => failure(""), "an empty answer": async () => ({ code: 0, stdout: "  ", stderr: "" }), "a refusal": async () => { throw new Error("cannot run sh"); } };
   for (const platform of ["macos", "linux", "windows"]) {
     for (const [label, run] of Object.entries(lookups)) {

@@ -13,6 +13,9 @@ for d in "$@"; do [ -d "$d" ] && printf '%s\\n' "$d"/*/; done | while IFS= read 
     if command -v sips >/dev/null 2>&1 && sips -s format png "$s" --out "$out/.$f" >/dev/null 2>&1; then
       mkdir -p "$out/thumbs" && sips -Z 749 "$out/.$f" --out "$out/thumbs/$f" >/dev/null 2>&1 || cp -f "$out/.$f" "$out/thumbs/$f"
       mv -f "$out/.$f" "$out/$f"
+    elif command -v magick >/dev/null 2>&1 && magick "$s" "png:$out/.$f" >/dev/null 2>&1; then
+      mkdir -p "$out/thumbs" && magick "$out/.$f" -resize 749x749 "png:$out/thumbs/$f" >/dev/null 2>&1 || cp -f "$out/.$f" "$out/thumbs/$f"
+      mv -f "$out/.$f" "$out/$f"
     else f="$id.\${s##*.}"; mkdir -p "$out/thumbs" && cp -f "$s" "$out/$f" && cp -f "$s" "$out/thumbs/$f" || continue; fi
   fi
   seen="$seen$id "

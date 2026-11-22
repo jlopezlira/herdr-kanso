@@ -29,9 +29,18 @@ the branch's rules.
 - A computer that asks for a password or for your key's passphrase signs in with one click: Sign in opens a tab that asks for it once, leaves kansō's own key there and reconnects, so it never asks again. Clicking a computer that needs a login does the same, instead of copying a command.
 - In Add a computer, a computer that takes keys only is added the same way, instead of asking you to copy your key there by hand.
 
+### Added
+
+- Memory works on Linux: it reads each process's proportional memory and the machine's from the system, runs its check every minute from a systemd user timer, notifies through the desktop, and waits for Omarchy's idle before it recycles on its own.
+- On Linux, Kanso Markdown makes .md files open in Herdr, as on macOS, and on uninstall gives each kind of Markdown file back to the app it had.
+- On Linux, the editors in Open with show their icons.
+
 ### Fixed
 
 - On Linux, kansō's keys work with Omarchy: each keeps Super where Omarchy leaves it free and moves to Ctrl or Alt with Shift where Omarchy uses it, so Super+J and the rest no longer go to the window manager. The update moves the Mac keys a Linux computer had, keeps the ones you changed, and moves Herdr's own keys Omarchy takes the same way.
+- On Linux, Ports, a process's folder, its open files and a Codex conversation are read from `ss` and `/proc`, so they work on a stock Omarchy without `lsof`.
+- On Linux, Containers opens and quits Docker's own engine (rootless, Docker Desktop or the system service), and counts its memory.
+- On Linux, sharing pastes only into your default browser when Hyprland shows it in front, battery power is read from the battery's status, and a pet's picture is converted with ImageMagick.
 
 ## [3.32.0] - 2026-11-21
 
