@@ -89,3 +89,26 @@ export function linuxSection(section, reserved = new Set()) {
 }
 
 export const linuxKeymap = (keymap) => Object.fromEntries(Object.entries(keymap ?? {}).map(([name, section]) => [name, linuxSection(section)]));
+
+export const reportedForms = (chords) => [...new Set([...chords, ...chords.map(reported).filter(Boolean)])];
+
+export const withoutReported = (chords) => chords.filter((chord) => !chords.some((other) => other !== chord && reported(other) === chord));
+
+export function migrateToLinux(user, mac) {
+  const shipped = linuxKeymap(mac);
+  const ours = Object.fromEntries(Object.keys(mac ?? {}).filter((name) => name in (user ?? {})).map((name) => {
+    const macEntries = Object.entries(mac[name]);
+    const linuxEntries = Object.entries(shipped[name]);
+    const moved = new Map(macEntries.map(([chord, action], i) => [chord, [action, linuxEntries[i][0]]]));
+    const entries = Object.entries(user[name]).flatMap(([chord, action]) => {
+      const [was, next] = moved.get(chord) ?? [];
+      if (was !== action) return [[chord, action]];
+      const alias = reported(next);
+      return [[next, action], ...(alias && shipped[name][alias] === action ? [[alias, action]] : [])];
+    });
+    return [name, linuxSection(Object.fromEntries(entries))];
+  }));
+  const reserved = new Set(Object.values(ours).flatMap((section) => [...chordsOf(section)]));
+  const keys = Object.fromEntries(Object.entries(user ?? {}).map(([name, section]) => [name, ours[name] ?? linuxSection(section, reserved)]));
+  return { keys, changed: JSON.stringify(keys) !== JSON.stringify(user) };
+}

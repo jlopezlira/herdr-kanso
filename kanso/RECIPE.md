@@ -274,7 +274,7 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
   tabs `left`/`width`; 220 ms) to the chosen space, agent or tab; rows fold
   by `height` (220 ms, measured) and a new row grows in; a header's tools
   slide out by `width`; a panel fades in.
-- **Keys**: on Windows merge `keys.windows.json` instead of `keys.json`.
+- **Keys**: on Windows merge `keys.windows.json` instead of `keys.json`, on Linux `keys.linux.json`.
   macOS (`layout:kanso`): ⌃1-9 a space (guarded), ⌃⇧1-9 a
   panel by its place, ⌃⌥P/S/T a view, ⌃⌥1-9 a pane column, ⌃⇧, Kanso
   settings; ⌘⌥hjkl (⇧ moves) vim; left of column 1: sidebar list

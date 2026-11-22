@@ -1,6 +1,6 @@
 import { localName } from "./platform-host.js";
 import { formerKeymap, missingKeys, shippedKeymap } from "./platform-keymap.js";
-import { chordsOf, linuxSection } from "./platform-linux-keys.js";
+import { migrateToLinux } from "./platform-linux-keys.js";
 import { paths } from "./platform-paths.js";
 import { sameVolume, updateHost, windowsInstallScript, windowsLaunchScript, windowsRecoverScript } from "./platform-update.js";
 // Kanso's own updates, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
@@ -70,14 +70,6 @@ export function mergeKeys(user, before, after) {
     changed: sections.some((x) => x.changed),
     kept: sections.flatMap((x) => x.kept),
   };
-}
-
-export function omarchyKeys(merged, shippedKeys) {
-  if (!shippedKeys) return merged;
-  const ours = Object.fromEntries(Object.entries(merged.keys).filter(([name]) => name in shippedKeys).map(([name, section]) => [name, linuxSection(section)]));
-  const reserved = new Set(Object.values(ours).flatMap((section) => [...chordsOf(section)]));
-  const keys = Object.fromEntries(Object.entries(merged.keys).map(([name, section]) => [name, ours[name] ?? linuxSection(section, reserved)]));
-  return { ...merged, keys, changed: merged.changed || JSON.stringify(keys) !== JSON.stringify(merged.keys) };
 }
 
 const sameJson = (a, b) => {
@@ -517,8 +509,8 @@ export class Updater {
     const oldKeys = beforeKeys ?? (former ? await shipped(had, former) : null) ?? missingKeys(platform);
     const layout = oldLayout !== null && newLayout !== null && !sameJson(oldLayout, newLayout);
     const userKeys = await readTextFile(paths.join(home, "keys.json"));
-    const differ = oldKeys !== null && newKeys !== null && userKeys !== null && (!sameJson(oldKeys, newKeys) || Boolean(former));
-    const merged = differ ? tryOr(() => omarchyKeys(mergeKeys(JSON.parse(userKeys), JSON.parse(oldKeys), JSON.parse(newKeys)), former && JSON.parse(newKeys)), "unread") : null;
+    const differ = oldKeys !== null && newKeys !== null && userKeys !== null && (!sameJson(oldKeys, newKeys) || Boolean(former && !beforeKeys));
+    const merged = differ ? tryOr(() => (former && !beforeKeys ? { ...migrateToLinux(JSON.parse(userKeys), JSON.parse(oldKeys)), kept: [] } : mergeKeys(JSON.parse(userKeys), JSON.parse(oldKeys), JSON.parse(newKeys))), "unread") : null;
     const keyNotes = merged === "unread" ? ["Your keys.json could not be read, so kansō's keys were left as they are."]
       : merged ? [...(merged.changed ? ["kansō's keys updated."] : []), ...(merged.kept.length ? [`Kept your own ${merged.kept.join(", ")}.`] : [])]
       : [];

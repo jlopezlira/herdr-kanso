@@ -18,7 +18,7 @@ import { glyphs, keycap, familyPattern, shownChord } from "./marks.js";
 import { GROUPS, ofRow, familyChords, conflictsOf, rebound } from "./actions.js";
 import { DEFAULT_KEYS } from "./defaults.js";
 import { formerKeymap, shippedKeymap } from "./platform-keymap.js";
-import { linuxKeymap } from "./platform-linux-keys.js";
+import { linuxKeymap, reportedForms, withoutReported } from "./platform-linux-keys.js";
 
 import { channelOf, installedRelease, offerRelease, stableStay } from "./release.js";
 import { focusOn } from "./pure.js";
@@ -58,7 +58,7 @@ export default class Settings extends View {
   bound() { return keys().filter((k) => GROUPS.some((g) => g.section === k.section)); }
 
   chordsOf(row, section, list) {
-    const mine = list.filter((k) => k.section === section && ofRow(row, k.action)).map((k) => k.keys);
+    const mine = withoutReported(list.filter((k) => k.section === section && ofRow(row, k.action)).map((k) => k.keys));
     return row.family ? [...new Set(mine.map(familyPattern))] : mine;
   }
   shippedBindings(row, section) {
@@ -66,7 +66,7 @@ export default class Settings extends View {
   }
 
   shipped(row, section) {
-    const mine = this.shippedBindings(row, section).map(([chord]) => chord);
+    const mine = withoutReported(this.shippedBindings(row, section).map(([chord]) => chord));
     return row.family ? [...new Set(mine.map(familyPattern))] : mine;
   }
 
@@ -87,7 +87,7 @@ export default class Settings extends View {
     if (MODIFIERS.has(String(e.key).toLowerCase())) return;
     const { row, section, old } = this.capture;
     if ((e.key === "backspace" || e.key === "delete") && !e.modifiers.control && !e.modifiers.alt && !e.modifiers.platform) {
-      if (old) this.change(cx, (doc) => rebound(doc, section, { drop: row.family ? familyChords(old.replace(/N$/, "1")) ?? [] : [old] }));
+      if (old) this.change(cx, (doc) => rebound(doc, section, { drop: reportedForms(row.family ? familyChords(old.replace(/N$/, "1")) ?? [] : [old]) }));
       else { this.capture = null; this.conflict = null; this.armed.clear(); cx.notify(); }
       return;
     }
@@ -98,7 +98,7 @@ export default class Settings extends View {
     const apply = () => {
       this.armed.clear();
       const set = Object.fromEntries(chords.map((c) => [c, row.family ? `${row.family}${c.slice(-1)}` : row.action]));
-      const drop = old ? (row.family ? familyChords(old.replace(/N$/, "1")) ?? [] : [old]) : [];
+      const drop = reportedForms(old ? (row.family ? familyChords(old.replace(/N$/, "1")) ?? [] : [old]) : []);
       this.change(cx, (doc) => rebound(doc, section, { drop, set }));
     };
     if (taken.length && !this.armed.is(chord)) {
