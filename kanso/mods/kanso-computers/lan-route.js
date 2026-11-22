@@ -1,8 +1,7 @@
-import { awayLine, destinationOf, joined, lanArgs, lanFirst, lanParts, splitTarget } from "./sign-in.js";
+import { awayLine, destinationOf, joined, lanArgs, lanFirst, lanParts, splitTarget, unquote } from "./sign-in.js";
 import { privateIp } from "./nearby.js";
 
 const LAN_PROBE = ["-o", "BatchMode=yes", "-o", "ConnectTimeout=2", "-o", "StrictHostKeyChecking=accept-new"];
-const unquote = (word) => (/^'.*'$/s.test(word) ? word.slice(1, -1).replace(/'\\''/g, "'") : word);
 
 export function sshSettings(text) {
   return Object.fromEntries(String(text ?? "").split("\n").map((line) => line.trim().split(/\s+/)).filter((words) => words.length > 1)

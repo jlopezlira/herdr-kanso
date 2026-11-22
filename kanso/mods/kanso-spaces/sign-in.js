@@ -46,7 +46,7 @@ export function lanArgs(ip, { target = "", user = "", hostKey = "" } = {}) {
   return [`-o HostName=${ip}`, `-o HostKeyAlias=${shellQuote(key)}`, ...(port ? [`-p ${port}`] : []), shellQuote(dest)].join(" ");
 }
 
-const unquote = (word) => (/^'.*'$/s.test(word) ? word.slice(1, -1).replace(/'\\''/g, "'") : word);
+export const unquote = (word) => (/^'.*'$/s.test(word) ? word.slice(1, -1).replace(/'\\''/g, "'") : word);
 const LAN_IP = /(?:^|\s)-o HostName=(\S+)(?:\s|$)/;
 
 export function lanParts(via) {
