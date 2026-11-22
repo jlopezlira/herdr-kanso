@@ -236,6 +236,16 @@ test("A layout chord that shadows a global binding hides that hint, a layout bin
   ];
   assert.equal(hintOf("kanso-spaces.needs-you.next", sharedChord), "⌘J");
   assert.equal(hintOf("app.palette", [{ section: "global", keys: "cmd-shift-p", action: "app.palette" }]), "⇧⌘P");
+  const otherLayout = [
+    { section: "global", keys: "cmd-t", action: "tab.new" },
+    { section: "layout:terminals", keys: "cmd-t", action: "space.new" },
+  ];
+  assert.equal(hintOf("tab.new", otherLayout), "⌘T", "A binding of the same chord in another layout does not hide New tab's global cmd-t hint.");
+  const { hintOf: hintOnLinux } = await load("kanso-panel/ui-tooltip.js", ["hintOf"], { window: () => ({ platform: "linux" }) });
+  const linuxRows = rowsOf(readTable("../kanso/keys.linux.json"));
+  assert.equal(hintOnLinux("kanso-panel.save", linuxRows), "Ctrl+Shift+S", "Save keeps its chord because a mod-local section is never shadowed.");
+  assert.equal(hintOnLinux("kanso-spend.settings", linuxRows), "Ctrl+Shift+,", "Spend settings keeps its chord because a mod-local section is never shadowed.");
+  assert.equal(hintOnLinux("kanso-tabs.sim", linuxRows), "Ctrl+Shift+S", "The Simulator hint stays Ctrl+Shift+S.");
 });
 
 test("The header more menu drawn with the shipped macOS bindings shows no Zoom hint and keeps the wider chord on Wider or narrower", async () => {
