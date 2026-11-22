@@ -29,7 +29,7 @@ export default class Send extends View {
     this.to = targetsOf(panes(), p.pane, shared(LAST), machines())[0]?.terminal ?? this.state("").groups[0]?.recipients[0]?.terminal ?? null;
     this.query = new TextField({ placeholder: "Find an agent or a project" });
     this.query.on("change", (_e, cx) => cx.notify());
-    this.text = draftFor(this.from, shared("kanso.digest")?.[p.pane]);
+    this.text = typeof p.text === "string" && p.text.trim() ? p.text : draftFor(this.from, shared("kanso.digest")?.[p.pane]);
     this.box = new TextField({ value: this.text }, { multiline: true });
     this.box.on("change", (_e, cx) => this.pick(cx, () => { this.text = this.box.value(); }));
     this.box.focus();
