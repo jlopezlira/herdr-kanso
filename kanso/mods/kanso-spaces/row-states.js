@@ -1,7 +1,6 @@
 // One set of states for asleep rows, Wake, the away summary and Needs you. Apache-2.0.
 import { COULD_NOT_SLEEP } from "./resume.js";
 
-export const AWAY_MENU = ["Dismiss", "Switch off"];
 export const FORGET_HELD = "kanso.sleep.forget";
 
 export function forgetHeld(record, terminal, now, ms) {

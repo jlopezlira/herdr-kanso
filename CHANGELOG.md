@@ -22,6 +22,12 @@ in version.json, which the stable updater offers. Versions follow
 [Keep a Changelog](https://keepachangelog.com). `npm run check:version` checks
 the branch's rules.
 
+## [Unreleased]
+
+### Changed
+
+- Every right-click menu names the same action with the same words, order and shortcut: Sleep this agent…, Sleep this tab…, Send to an agent…, Close pane and Rename… read the same in the tab bar, the pane header and the sidebar, and the pane header's ⋯ shows each shortcut. A right-click on the pane header opens its ⋯ menu. (#238)
+
 ## [3.33.0] - 2026-11-22
 
 ### Added

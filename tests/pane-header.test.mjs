@@ -36,10 +36,10 @@ test("Under the pointer: split right, wider or narrower, close and ⋯; folded t
   const tools = { sleep: "menu", send: "menu" };
   assert.deepEqual(clone(hoverTools({ fold: 0, strip: true })), ["split-right", "width", "close"]);
   assert.deepEqual(clone(menuEntries({ strip: true, pinned: false, zoomed: false, tools, fold: 0, canOpen: true })),
-    ["pin", "sleep", "send", "open-with", "split-down", "zoom", "separator", "needed", "hide", "settings"]);
+    ["split-down", "pin", "zoom", "send", "open-with", "sleep", "separator", "needed", "hide", "settings"]);
   assert.deepEqual(clone(hoverTools({ fold: 3, strip: true })), ["close"], "the tools fold into ⋯ and close stays");
   assert.deepEqual(clone(menuEntries({ strip: true, pinned: true, zoomed: true, tools, fold: 3, canOpen: true })).slice(0, 8),
-    ["unpin", "sleep", "send", "open-with", "split-down", "unzoom", "split-right", "width"]);
+    ["split-right", "split-down", "width", "unpin", "unzoom", "send", "open-with", "sleep"]);
   assert.deepEqual(clone(hoverTools({ fold: 8, strip: true })), []);
   assert.ok(menuEntries({ strip: true, pinned: false, zoomed: false, tools, fold: 8, canOpen: true }).includes("close"), "close folds into ⋯ last");
   const rest = menuEntries({ strip: true, pinned: false, zoomed: false, tools: { sleep: "out", send: "out" }, fold: 0, canOpen: true });
@@ -118,6 +118,7 @@ const drawnHeader = async () => {
 };
 const byTag = (root, tag) => find(root, (el) => el.tag === tag);
 const handler = (el, name) => calls(el, name).at(-1)?.at(-1);
+const leftDown = (el) => calls(el, "on_mouse_down").find((call) => call[1] === "left")[2];
 // ⋯'s Menu is the Popover's content, not a child.
 const menuItems = (root) => {
   const pop = find(root, (el) => calls(el, "content").length > 0);
@@ -151,7 +152,7 @@ test("Pinned is a pin after the name, and the header itself is the handle: no gr
   const handle = free.view.render();
   assert.equal(calls(handle, "cursor_grab").length, 1);
   assert.equal(all(handle, (el) => calls(el, "tooltip").some((call) => /Hold and drag/.test(call[1]))).length, 0);
-  handler(handle, "on_mouse_down")({ click_count: 1, position: { x: 10, y: 10 }, modifiers: {} }, free.cx);
+  leftDown(handle)({ click_count: 1, position: { x: 10, y: 10 }, modifiers: {} }, free.cx);
   handler(handle, "on_mouse_move")({ position: { x: 11, y: 10 }, local_position: { x: 11, y: 10 }, bounds: { width: 400 } });
   assert.equal(free.store["strip.drag"] ?? null, null, "a click that barely moves only focuses");
   handler(handle, "on_mouse_move")({ position: { x: 30, y: 10 }, local_position: { x: 30, y: 10 }, bounds: { width: 400 } });
@@ -194,7 +195,7 @@ test("A terminal with no project is called Terminal, has no digest, and its ⋯ 
   assert.ok(texts(root).includes("Terminal"));
   assert.equal(byTag(root, "digest-p1") ?? find(root, (el) => calls(el, "id").some((call) => call[1] === "digest-p1")), null);
   const items = menuItems(root).map((el) => arg(el, "accessibility_label"));
-  assert.deepEqual(items, ["Pin", "Split down", "Zoom", "Only when needed", "Hide this", "Settings for this…"]);
+  assert.deepEqual(items, ["Split down", "Pin", "Zoom", "Only when needed", "Hide this", "Settings for this…"]);
 });
 
 test("Only when needed and Hide this in ⋯ act on files, commits and the pull request together", async () => {
@@ -221,7 +222,7 @@ test("GitHub not answering is the failure line with Refresh, and the refresh in 
 
 test("Double-click renames in place, and Enter keeps the new name as the terminal's label", async () => {
   const { head, root } = await drawnHeader();
-  handler(root, "on_mouse_down")({ click_count: 2, position: { x: 0, y: 0 }, modifiers: {} }, head.cx);
+  leftDown(root)({ click_count: 2, position: { x: 0, y: 0 }, modifiers: {} }, head.cx);
   assert.ok(head.view.renaming, "the name is a field in the header");
   head.view.endRename({ terminal: "t1" }, "Claude Code", head.cx, true);
   assert.deepEqual(head.labels, [], "the same name writes nothing");

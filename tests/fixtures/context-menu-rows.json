@@ -9,8 +9,8 @@
       "clock | Snooze | › | ",
       " | Move to project | › | ",
       "copy | Copy | › | ",
-      "moon | Sleep this agent |  | ",
-      "moon | Sleep its tab |  | ",
+      "moon | Sleep this agent… |  | ",
+      "moon | Sleep this tab… |  | ",
       "x | Close agent |  | ",
       "eye-off | Hide \"What each agent is on\" |  | ",
       "sliders-vertical | Settings for this… |  | "
@@ -26,8 +26,8 @@
       "clock | Snooze | › | ",
       " | Move to project | › | ",
       "copy | Copy | › | ",
-      "moon | Sleep this agent |  | ",
-      "moon | Sleep its tab |  | ",
+      "moon | Sleep this agent… |  | ",
+      "moon | Sleep this tab… |  | ",
       "x | Press again to close checkout |  | ",
       "eye-off | Hide \"What each agent is on\" |  | ",
       "sliders-vertical | Settings for this… |  | "
@@ -69,8 +69,8 @@
       "clock | Snooze | › | ",
       " | Move to project | › | ",
       "copy | Copy | › | ",
-      "moon | Sleep this agent |  | ",
-      "moon | Sleep its tab |  | ",
+      "moon | Sleep this agent… |  | ",
+      "moon | Sleep this tab… |  | ",
       "x | Close agent |  | ",
       "eye-off | Hide \"What each agent is on\" |  | ",
       "sliders-vertical | Settings for this… |  | "
@@ -87,8 +87,8 @@
       "clock | Snooze | › | ",
       " | Move to project | › | ",
       "copy | Copy | › | ",
-      "moon | Sleep this agent |  | ",
-      "moon | Sleep its tab |  | ",
+      "moon | Sleep this agent… |  | ",
+      "moon | Sleep this tab… |  | ",
       "x | Close agent |  | ",
       "eye-off | Hide \"What each agent is on\" |  | ",
       "sliders-vertical | Settings for this… |  | "
@@ -104,8 +104,8 @@
       "clock | Wake |  | ",
       " | Move to project | › | ",
       "copy | Copy | › | ",
-      "moon | Sleep this agent |  | ",
-      "moon | Sleep its tab |  | ",
+      "moon | Sleep this agent… |  | ",
+      "moon | Sleep this tab… |  | ",
       "x | Close agent |  | ",
       "eye-off | Hide \"What each agent is on\" |  | ",
       "sliders-vertical | Settings for this… |  | "
@@ -122,8 +122,8 @@
       "clock | Snooze | › | ",
       " | Move to project | › | ",
       "copy | Copy | › | ",
-      "moon | Sleep this agent |  | ",
-      "moon | Sleep its tab |  | ",
+      "moon | Sleep this agent… |  | ",
+      "moon | Sleep this tab… |  | ",
       "x | Close agent |  | ",
       "eye-off | Hide \"What each agent is on\" |  | ",
       "sliders-vertical | Settings for this… |  | "
@@ -335,7 +335,7 @@
       "send | Send to an agent… | ⌥⌘S | ",
       "search | Find in conversation | ⌘F | ",
       "external-link | Open with… |  | ",
-      "moon | Sleep |  | ",
+      "moon | Sleep this agent… |  | ",
       " | Right-clicks go to the program |  | ",
       "x | Close pane | ⇧⌘W | "
     ]
@@ -386,7 +386,7 @@
       "send | Send to an agent… | ⌥⌘S | ",
       "search | Find in conversation | ⌘F | ",
       "external-link | Open with… |  | ",
-      "moon | Sleep |  | ",
+      "moon | Sleep this agent… |  | ",
       "chevron-right | Send back to J |  | ",
       " | Right-clicks go to the program |  | ",
       "x | Close pane | ⇧⌘W | "
@@ -406,7 +406,7 @@
       "send | Send to an agent… | ⌥⌘S | ",
       "search | Find in conversation | ⌘F | ",
       "external-link | Open with… |  | ",
-      "moon | Sleep |  | ",
+      "moon | Sleep this agent… |  | ",
       " | Right-clicks go to the program |  | ",
       "x | Close pane | ⇧⌘W | "
     ]
@@ -414,18 +414,18 @@
   "bars": [
     [
       " | checkout |  | ",
-      "pencil | Rename |  | ",
+      " | Rename… |  | ",
       "plus | New tab | ⌘T | ",
-      "moon | Sleep checkout… |  | ",
+      "moon | Sleep this tab… |  | ",
       "x | Close tab | ⌘W | ",
       "eye-off | Hide \"Agent state on tabs\" |  | ",
       "sliders-vertical | Settings for this… |  | "
     ],
     [
       " | checkout |  | ",
-      "pencil | Rename |  | ",
+      " | Rename… |  | ",
       "plus | New tab | ⌘T | ",
-      "moon | Sleep checkout… |  | ",
+      "moon | Sleep this tab… |  | ",
       "x | Press again to close 2 agents | ⌘W | ",
       "eye-off | Hide \"Agent state on tabs\" |  | ",
       "sliders-vertical | Settings for this… |  | "
@@ -443,18 +443,18 @@
       "send | Send to an agent… | ⌥⌘S | ",
       "search | Find in conversation | ⌘F | ",
       "external-link | Open with… |  | ",
-      "moon | Sleep |  | ",
+      "moon | Sleep this agent… |  | ",
       " | Right-clicks go to the program |  | ",
       "x | Close pane | ⇧⌘W | "
     ],
     [
       " | tests |  | ",
-      "pin | Pin |  | ",
-      "moon | Sleep this agent |  | ",
-      "send | Send to another agent |  | ",
-      "external-link | Open with… |  | ",
-      "rows-2 | Split down |  | ",
+      "rows-2 | Split down | ⇧⌘D | ",
+      "pin | Pin | ⌥⌘P | ",
       "maximize-2 | Zoom |  | ",
+      "send | Send to an agent… | ⌥⌘S | ",
+      "external-link | Open with… |  | ",
+      "moon | Sleep this agent… |  | ",
       "check | Only when needed |  | ",
       "eye-off | Hide this |  | ",
       "sliders-vertical | Settings for this… |  | "
