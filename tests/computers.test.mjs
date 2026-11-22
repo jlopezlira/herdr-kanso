@@ -317,45 +317,47 @@ test("Signing in on a local-first route asks on the local network first, and fin
     target: "ada@grey",
     lan: "10.99.0.1",
   }, {});
-  assert.equal(plan.lan, "ada@10.99.0.1");
-  const tab = signInTab(plan);
+  assert.deepEqual([plan.lan, plan.user, plan.via], ["10.99.0.1", "ada", ""]);
+  const { lanRecord } = await load("kanso-computers/lan-route.js", ["lanRecord"]);
+  const built = lanRecord({ name: plan.name, target: plan.target, via: "" }, plan.lan, { user: plan.user });
+  const tab = signInTab({ name: built.name, target: built.target, via: built.via });
   const script = tab.argv[2];
   const ask = script.split("\n").find((line) => line.includes("PasswordAuthentication"));
-  const lanAt = ask.indexOf("ada@10.99.0.1");
-  const awayAt = ask.indexOf(away);
-  assert.ok(lanAt > 0 && awayAt > lanAt, ask);
+  const lanAt = ask.indexOf("HostName=10.99.0.1");
+  const split = ask.indexOf("|| exec");
+  assert.ok(lanAt > 0 && split > lanAt, ask);
   const first = ask.slice(0, lanAt);
   assert.ok(first.includes(ASK), first);
   assert.ok(first.includes("-o ConnectTimeout=2"), first);
   assert.equal(first.includes("BatchMode"), false, first);
-  assert.ok(ask.slice(lanAt, awayAt).includes("|| exec"), ask);
+  assert.ok(ask.slice(split).includes(away), ask);
   const sshBody = [
-    "dest=",
+    "lan=",
     "batch=",
     "for arg in \"$@\"; do",
     "  case \"$arg\" in",
     "    *BatchMode*) batch=yes ;;",
-    "    ada@10.99.0.1|ada@100.64.9.9) dest=$arg ;;",
+    "    *HostName=10.99.0.1*) lan=yes ;;",
     "  esac",
     "done",
-    "if [ \"$dest\" = ada@10.99.0.1 ] && [ -z \"$batch\" ]; then exit 0; fi",
+    "if [ -n \"$lan\" ] && [ -z \"$batch\" ]; then exit 0; fi",
     "printf '%s\\n' refused >&2",
     "exit 1",
   ].join("\n");
   const { ran, calls } = await runSh(t, tab.argv, { sshBody });
   endsDone(ran);
   const pushed = await calls("ssh");
-  assert.equal(pushed.some((call) => call.join(" ").includes(away)), false, pushed.map((call) => call.join(" ")).join("\n"));
+  assert.equal(pushed.length, 1, pushed.map((call) => call.join(" ")).join("\n"));
   const ssh = pushed[0];
   assert.ok(ssh.join(" ").includes(ASK), ssh.join(" "));
   assert.ok(ssh.includes("ConnectTimeout=2"), ssh.join(" "));
   assert.equal(ssh.join(" ").includes("BatchMode"), false, ssh.join(" "));
-  assert.ok(ssh.includes("ada@10.99.0.1"));
+  assert.ok(ssh.includes("HostName=10.99.0.1"));
   assert.ok(ssh.at(-1).includes(PUB), ssh.at(-1));
   const added = (await calls("hc")).find((args) => args.includes("--via"));
   const via = added[added.indexOf("--via") + 1];
   assert.ok(via.includes(KEY_WORDS), via);
-  assert.ok(via.includes("ada@10.99.0.1"), via);
+  assert.ok(via.includes("HostName=10.99.0.1"), via);
   assert.ok(via.includes(away), via);
 });
 
