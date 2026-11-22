@@ -167,6 +167,14 @@ export async function temporary(t) {
   return dir;
 }
 
+export async function folderWith(t, ...names) {
+  const dir = await temporary(t);
+  const paths = Object.fromEntries(names.map((name) => [name, join(dir, name)]));
+  return { dir, ...paths };
+}
+
+export const loadSystemApi = async () => (await load("kanso-panel/platform-system.js", ["systemApi"])).systemApi;
+
 // Waits for a state real processes or files bring, never longer than exec's own limit.
 export async function until(ready, limit = 30000) {
   const deadline = Date.now() + limit;

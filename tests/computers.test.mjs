@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { chmod, mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { clone, computersDialog, exec, find, gpuiHost, load, temporary, texts } from "./helpers.mjs";
+import { clone, computersDialog, exec, find, folderWith, gpuiHost, load, texts } from "./helpers.mjs";
 
 const reach = () => load("kanso-computers/reach.js", [
   "tailnet", "planFor", "choiceOf", "addArgs", "probeArgs", "reachOf", "keySetup", "advice", "isAdded",
@@ -188,9 +188,7 @@ const callsOf = async (dir, name) => {
   }
 };
 const keyBin = async (t, { sshCode = 0, sshSaid = "", failVia = false, sshBody = "" } = {}) => {
-  const dir = await temporary(t);
-  const bin = join(dir, "bin");
-  const home = join(dir, "home");
+  const { dir, bin, home } = await folderWith(t, "bin", "home");
   await mkdir(bin);
   await mkdir(home);
   const pub = JSON.stringify(PUB);

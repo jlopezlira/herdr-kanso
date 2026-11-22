@@ -3,9 +3,9 @@ import assert from "node:assert/strict";
 import { chmod, mkdir, open, readFile, writeFile } from "node:fs/promises";
 import { delimiter, dirname, join } from "node:path";
 import { guardHost, linuxMemory, linuxPss, logindIdle, omarchyIdle, systemdService, systemdTimer } from "../kanso/mods/kanso-guard/guard-host.mjs";
-import { clone, exec, load, success, temporary } from "./helpers.mjs";
+import { clone, exec, folderWith, load, loadSystemApi, success, temporary } from "./helpers.mjs";
 
-const { systemApi } = await load("kanso-panel/platform-system.js", ["systemApi"]);
+const systemApi = await loadSystemApi();
 const { linuxPorts } = await load("kanso-panel/platform-ports.js", ["linuxPorts"]);
 const { procLinks, processApi } = await load("kanso-panel/platform-processes.js", ["procLinks", "processApi"]);
 const { dockerHeld } = await load("kanso-containers/model.js", ["dockerHeld"]);
@@ -42,10 +42,11 @@ test("Omarchy idle is zero until the shell says idle, and logind idle is zero un
   assert.equal(logindIdle("IdleHint=yes\nIdleSinceHint=" + since + "\n", now), 5);
 });
 
-test("The systemd user service quotes node and the script, and the timer repeats every 60 seconds", () => {
-  const unit = systemdService({ node: "/usr/bin/node", self: "/opt/kanso guard.mjs", appHome: "/home/jj/.config/herdr-app", log: "/var/log/kanso.log" });
-  assert.match(unit, /ExecStart="\/usr\/bin\/node" "\/opt\/kanso guard\.mjs" check/);
-  assert.match(unit, /Environment=HERDR_APP_HOME=\/home\/jj\/\.config\/herdr-app/);
+test("The systemd user service quotes its paths, escapes quotes and percent signs, and the timer repeats every 60 seconds", () => {
+  const unit = systemdService({ node: "/usr/bin/node", self: "/opt/kanso guard 100%.mjs", appHome: '/home/jj/my "herdr"', log: "/var/log/kanso 5%.log" });
+  assert.ok(unit.includes('ExecStart="/usr/bin/node" "/opt/kanso guard 100%%.mjs" check'));
+  assert.ok(unit.includes('Environment="HERDR_APP_HOME=/home/jj/my \\"herdr\\""'));
+  assert.ok(unit.includes("StandardOutput=append:/var/log/kanso 5%%.log"));
   assert.match(systemdTimer(), /OnUnitActiveSec=60s/);
 });
 
@@ -172,8 +173,7 @@ test("A pet atlas converts with magick when sips is not installed", { skip: !mag
 });
 
 test("Linux Markdown install records the previous default and uninstall restores it", async (t) => {
-  const dir = await temporary(t);
-  const bin = join(dir, "bin");
+  const { dir, bin } = await folderWith(t, "bin");
   const log = join(dir, "xdg.log");
   const state = join(dir, "default");
   const home = join(dir, "home");
