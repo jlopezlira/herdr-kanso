@@ -1,8 +1,8 @@
 import { q } from "./kdb.js";
 import { matches } from "./issues-model.js";
+import { num } from "./pr-inbox.js";
 
 const COLS = ["url", "source", "project", "ticket", "number", "repo", "title", "status", "priority", "labels", "assignees", "author", "created_at", "updated_at", "body", "read_at"];
-const num = (x) => (x != null && Number.isFinite(Number(x)) ? String(Math.round(Number(x))) : "NULL");
 const value = (col, row) => (col === "number" || col === "read_at" ? num(row[col]) : q(row[col] ?? null));
 const KEPT = COLS.filter((col) => col !== "url").map((col) => `${col}=excluded.${col}`).join(",");
 

@@ -1,13 +1,12 @@
 import { parseOr } from "./pure.js";
 import { parseRemote, rateFrom } from "./pr-remote.js";
-import { probe } from "./pr-github.js";
+import { probe, firstLine, ask } from "./pr-github.js";
 
 const STATUS = `projectItems(first:5){nodes{project{number title field(name:"Status"){... on ProjectV2SingleSelectField{options{name}}}} fieldValueByName(name:"Status"){... on ProjectV2ItemFieldSingleSelectValue{name}}}}`;
 const ISSUE = (withStatus) => `number title url body createdAt updatedAt author{login} assignees(first:10){nodes{login}} labels(first:10){nodes{name}} ${withStatus ? STATUS : ""}`;
 export const listQuery = (withStatus) => `query($owner:String!,$name:String!,$assignee:String,$author:String){repository(owner:$owner,name:$name){issues(first:100,states:OPEN,orderBy:{field:UPDATED_AT,direction:DESC},filterBy:{assignee:$assignee,createdBy:$author}){nodes{${ISSUE(withStatus)}}}}}`;
 export const DETAIL = "query($owner:String!,$name:String!,$number:Int!){repository(owner:$owner,name:$name){issue(number:$number){body comments(last:20){nodes{author{login} body createdAt}} closedByPullRequestsReferences(first:5,includeClosedPrs:true){nodes{number title url state}}}}}";
 
-const firstLine = (r) => String(r?.stderr || r?.stdout || "").trim().split("\n")[0] || "GitHub could not be read.";
 const OFFLINE = /could not resolve host|network is unreachable|connection refused|no such host|timeout|dial tcp|i\/o timeout/i;
 const NO_SCOPE = /INSUFFICIENT_SCOPES|read:project|required scopes/i;
 
@@ -16,7 +15,6 @@ export async function repoOf(run, folder) {
   return r?.code === 0 ? parseRemote(r.stdout.trim()) : null;
 }
 
-const ask = (run, host, args) => run("env", [`GH_HOST=${host}`, "gh", ...args]);
 const vars = (pairs) => Object.entries(pairs).flatMap(([k, v]) => (v === null || v === undefined ? [] : [typeof v === "number" ? "-F" : "-f", `${k}=${v}`]));
 const graphql = (run, repo, query, extra) => ask(run, repo.host, ["api", "graphql", "-f", `query=${query}`, ...vars({ owner: repo.owner, name: repo.name, ...extra })]);
 

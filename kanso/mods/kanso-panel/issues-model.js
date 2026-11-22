@@ -5,7 +5,7 @@ export const DONE = "Done";
 export const FRESH_MS = 60_000;
 export const EVERY_MS = 5 * 60_000;
 
-const same = (a, b) => String(a ?? "").toLowerCase() === String(b ?? "").toLowerCase();
+import { same } from "./pure.js";
 
 export const listOf = (text) => {
   try {

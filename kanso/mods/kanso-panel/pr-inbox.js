@@ -7,7 +7,7 @@ import { q } from "./kdb.js";
 import { matchRemote } from "./pr-providers.js";
 import { fetchDue, isNew, limitLine, parsePullRequest, parseRemotes, projectSignature, publicUrl, repoId, SCAN_MS } from "./pr-remote.js";
 
-const num = (x) => (x != null && Number.isFinite(Number(x)) ? String(Math.round(Number(x))) : "NULL");
+export const num = (x) => (x != null && Number.isFinite(Number(x)) ? String(Math.round(Number(x))) : "NULL");
 const SCAN = "repos:scan";
 const COLS = ["provider", "host", "owner", "name", "number", "title", "state", "draft", "author", "role", "head", "base", "review_decision", "additions", "deletions", "updated_at", "checks", "created_at"];
 
