@@ -1,5 +1,6 @@
 import { localName } from "./platform-host.js";
-import { missingKeys, shippedKeymap } from "./platform-keymap.js";
+import { formerKeymap, missingKeys, shippedKeymap } from "./platform-keymap.js";
+import { linuxSection } from "./platform-linux-keys.js";
 import { paths } from "./platform-paths.js";
 import { sameVolume, updateHost, windowsInstallScript, windowsLaunchScript, windowsRecoverScript } from "./platform-update.js";
 // Kanso's own updates, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
@@ -69,6 +70,12 @@ export function mergeKeys(user, before, after) {
     changed: sections.some((x) => x.changed),
     kept: sections.flatMap((x) => x.kept),
   };
+}
+
+export function omarchyKeys(merged, shippedKeys) {
+  if (!shippedKeys) return merged;
+  const keys = Object.fromEntries(Object.entries(merged.keys).map(([name, section]) => [name, linuxSection(section)]));
+  return { ...merged, keys, changed: merged.changed || JSON.stringify(keys) !== JSON.stringify(merged.keys) };
 }
 
 const sameJson = (a, b) => {
@@ -495,7 +502,9 @@ export class Updater {
         return r.code === 0 ? r.stdout : null;
       } catch { return null; }
     };
-    const keymap = shippedKeymap(localName());
+    const platform = localName();
+    const keymap = shippedKeymap(platform);
+    const former = formerKeymap(platform);
     const tagOf = (value) => hostInstall(value)?.tag ?? value;
     const had = tagOf(this.current() ?? this.installed);
     const next = tagOf(v);
@@ -503,11 +512,11 @@ export class Updater {
       shipped(had, keymap), shipped(had, "kanso/layouts/kanso.json"),
       shipped(next, keymap), shipped(next, "kanso/layouts/kanso.json"),
     ]);
-    const oldKeys = beforeKeys ?? missingKeys(localName());
+    const oldKeys = beforeKeys ?? (former ? await shipped(had, former) : null) ?? missingKeys(platform);
     const layout = oldLayout !== null && newLayout !== null && !sameJson(oldLayout, newLayout);
     const userKeys = await readTextFile(paths.join(home, "keys.json"));
-    const differ = oldKeys !== null && newKeys !== null && userKeys !== null && !sameJson(oldKeys, newKeys);
-    const merged = differ ? tryOr(() => mergeKeys(JSON.parse(userKeys), JSON.parse(oldKeys), JSON.parse(newKeys)), "unread") : null;
+    const differ = oldKeys !== null && newKeys !== null && userKeys !== null && (!sameJson(oldKeys, newKeys) || Boolean(former));
+    const merged = differ ? tryOr(() => omarchyKeys(mergeKeys(JSON.parse(userKeys), JSON.parse(oldKeys), JSON.parse(newKeys)), former && JSON.parse(newKeys)), "unread") : null;
     const keyNotes = merged === "unread" ? ["Your keys.json could not be read, so kansō's keys were left as they are."]
       : merged ? [...(merged.changed ? ["kansō's keys updated."] : []), ...(merged.kept.length ? [`Kept your own ${merged.kept.join(", ")}.`] : [])]
       : [];

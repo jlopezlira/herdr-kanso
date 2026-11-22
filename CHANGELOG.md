@@ -29,6 +29,10 @@ the branch's rules.
 - A computer that asks for a password or for your key's passphrase signs in with one click: Sign in opens a tab that asks for it once, leaves kansō's own key there and reconnects, so it never asks again. Clicking a computer that needs a login does the same, instead of copying a command.
 - In Add a computer, a computer that takes keys only is added the same way, instead of asking you to copy your key there by hand.
 
+### Fixed
+
+- On Linux, kansō's keys work with Omarchy: each keeps Super where Omarchy leaves it free and moves to Ctrl or Alt with Shift where Omarchy uses it, so Super+J and the rest no longer go to the window manager. The update moves the Mac keys a Linux computer had, keeps the ones you changed, and moves Herdr's own keys Omarchy takes the same way.
+
 ## [3.32.0] - 2026-11-21
 
 ### Added

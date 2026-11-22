@@ -51,7 +51,7 @@ installs it. Stable is what you get. Early, under What's new, also follows a bet
 or a release candidate, and going back to Stable never installs an older
 version. `ctrl-shift-l` goes back to your previous layout.
 On Windows, merge `kanso/keys.windows.json` into your Herdr keys instead of
-`kanso/keys.json`.
+`kanso/keys.json`; on Linux, `kanso/keys.linux.json`.
 
 ## What it does
 
@@ -105,7 +105,8 @@ On Windows, merge `kanso/keys.windows.json` into your Herdr keys instead of
 
 The table is the macOS keys. Windows ships its own in
 `kanso/keys.windows.json`: Ctrl and Alt, leaving the Windows key and AltGr
-alone. Help follows the bindings you have.
+alone. Linux ships `kanso/keys.linux.json`: Super where Omarchy leaves it free,
+and Ctrl or Alt with Shift where Omarchy uses it. Help follows the bindings you have.
 
 | Keys | What they do |
 |---|---|

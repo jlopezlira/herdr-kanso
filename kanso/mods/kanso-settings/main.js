@@ -17,11 +17,15 @@ import { pieces, choice, setPiece, filterPieces, groupsOf, withRoster, STATE_LAB
 import { glyphs, keycap, familyPattern, shownChord } from "./marks.js";
 import { GROUPS, ofRow, familyChords, conflictsOf, rebound } from "./actions.js";
 import { DEFAULT_KEYS } from "./defaults.js";
-import { shippedKeymap } from "./platform-keymap.js";
+import { formerKeymap, shippedKeymap } from "./platform-keymap.js";
+import { linuxKeymap } from "./platform-linux-keys.js";
+
 import { channelOf, installedRelease, offerRelease, stableStay } from "./release.js";
 import { focusOn } from "./pure.js";
 import { whenInstalled } from "./installed.js";
 import { pagedDialog } from "./pages.js";
+
+const shippedDefaults = (platform) => (formerKeymap(platform) ? linuxKeymap(DEFAULT_KEYS[formerKeymap(platform)]) : DEFAULT_KEYS[shippedKeymap(platform)]);
 
 // A shortcut's key hints: each chord, or a faint No key.
 const keysOf = (chords) => (chords.length ? chords.map((k) => ({ text: shownChord(k) })) : [{ text: "No key", faint: true }]);
@@ -58,7 +62,7 @@ export default class Settings extends View {
     return row.family ? [...new Set(mine.map(familyPattern))] : mine;
   }
   shippedBindings(row, section) {
-    return Object.entries(DEFAULT_KEYS[shippedKeymap(localName())][section] ?? {}).filter(([, action]) => ofRow(row, action));
+    return Object.entries(shippedDefaults(localName())[section] ?? {}).filter(([, action]) => ofRow(row, action));
   }
 
   shipped(row, section) {
