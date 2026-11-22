@@ -1,8 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { load, chain, gpuiHost, texts, calls, popoverHost } from "./helpers.mjs";
-import { loadSidebar, world, mountedState, withParts } from "./sidebar-fixtures.mjs";
+import { load, chain, gpuiHost, texts, calls } from "./helpers.mjs";
+import { world, mountedState, withParts } from "./sidebar-fixtures.mjs";
 import { BINDINGS, paneMenu, tabBar } from "./menu-fixtures.mjs";
+import { loadStrip, menuSidebar, openHeaderEntries } from "./context-menu-fixtures.mjs";
 import ROWS from "./fixtures/context-menu-rows.json" with { type: "json" };
 
 const parseRow = (line) => {
@@ -16,6 +17,7 @@ const table = () => load("kanso-menu/context-menu.js", ["ACTIONS", "ORDER", "wor
 const hints = () => load("kanso-menu/ui-tooltip.js", ["hintOf"], {
   ...gpuiHost(), keys: () => BINDINGS, window: () => ({ platform: "macos" }),
 });
+const openTable = async () => ({ ...(await table()), hintOf: (await hints()).hintOf });
 
 const blank = (hint) => hint ?? "";
 const pieceLine = (label) => label === "Only when needed" || label === "Hide this" || label === "Settings for this…" || label.startsWith("Hide ");
@@ -60,8 +62,7 @@ const explained = (ACTIONS, ORDER, wordsOf, label, icon) => {
 };
 
 test("An action that the fixture menus share keeps the same words, icon and key hint in every one of them", async () => {
-  const { ACTIONS, ORDER, wordsOf } = await table();
-  const { hintOf } = await hints();
+  const { ACTIONS, ORDER, wordsOf, hintOf } = await openTable();
   const seen = new Map();
   parsed.forEach((menu, menuAt) => {
     for (const row of menu) {
@@ -80,8 +81,7 @@ test("An action that the fixture menus share keeps the same words, icon and key 
 });
 
 test("Actions that two fixture menus share stay in the same order in both", async () => {
-  const { ACTIONS, ORDER, wordsOf } = await table();
-  const { hintOf } = await hints();
+  const { ACTIONS, ORDER, wordsOf, hintOf } = await openTable();
   const once = (list) => list.filter((act, at) => list.indexOf(act) === at);
   const keys = parsed.map((menu) => once(menu.map((row) => actOfRow(ACTIONS, ORDER, wordsOf, hintOf, row)).filter(Boolean)));
   let pairs = 0;
@@ -142,7 +142,7 @@ test("A right-click on the pane header opens the more menu, and does not while t
 });
 
 const sidebar = async (popup, open) => {
-  const { Spaces } = await loadSidebar({ ...popoverHost(), Scrollbar: { vertical: () => chain() } }, {
+  const { Spaces } = await menuSidebar({
     ...world(
       [{ id: "sp1", name: "acme", folder: "/Users/me/acme", machine: null, active: true, tabs: [{ id: "tb0", name: "Main", index: 0, active: true }] }],
       [{ address: "t0", pane: "p0", tab: "tb0", space: "sp1", space_name: "acme", status: "working", name: "checkout", seq: 1 }],
@@ -176,13 +176,9 @@ test("The tab, terminal pane, header menu and the sidebar project, session, asle
   const paneWords = texts(pane.view.render());
   assert.ok(paneWords.includes(wordsOf("sleep-agent")));
   assert.equal(paneWords.includes("Sleep"), false);
-  const { Strip, tokens } = await load("kanso-strip/main.js", ["Strip", "tokens"], {
-    ...popoverHost(), theme: () => ({ foreground: "#fff", muted: "#888", dim: "#666", border: "#333", popover: "#222", selected: "#444", accent: "#c9a46a" }),
-    shared: () => null, keys: () => BINDINGS, window: () => ({ platform: "macos" }),
-  });
-  const { menuEntries } = await load("kanso-strip/header-model.js", ["menuEntries"]);
+  const { Strip, tokens } = await loadStrip(() => ({ foreground: "#fff", muted: "#888", dim: "#666", border: "#333", popover: "#222", selected: "#444", accent: "#c9a46a" }));
   const head = Object.assign(new Strip(), { moreOpen: true });
-  const entries = menuEntries({ strip: true, pinned: false, zoomed: false, tools: { sleep: "menu", send: "menu" }, fold: 0, canOpen: true });
+  const entries = await openHeaderEntries();
   const headerWords = texts(calls(head.more(tokens({}), "p1", { name: "tests", entries, does: {} }), "content")[0][1]);
   assert.ok(headerWords.includes(wordsOf("send")));
   assert.ok(headerWords.indexOf(wordsOf("split-down")) < headerWords.indexOf(wordsOf("pin")));

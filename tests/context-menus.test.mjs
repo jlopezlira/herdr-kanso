@@ -4,6 +4,7 @@ import { load, popoverHost, chain, clone, calls, context, texts, everyDrawn, CHR
 import { loadSidebar, mountedState, withParts, recorder, world, shell } from "./sidebar-fixtures.mjs";
 import { loadWorkspaceStatus } from "./mod-fixtures.mjs";
 import { paneMenu, tabBar, footer, BINDINGS } from "./menu-fixtures.mjs";
+import { loadStrip, menuSidebar, openHeaderEntries } from "./context-menu-fixtures.mjs";
 import ROWS from "./fixtures/context-menu-rows.json" with { type: "json" };
 
 const quotes = (word) => word.replace(/[“”]/g, "\"");
@@ -52,7 +53,7 @@ const TREES = [{ branch: "checkout-v2", path: "/Users/me/.config/herdr-app/data/
 
 async function sidebarPopup({ popup, open, status = "working", labels = {}, registry = [PROJECT], armed = null, sub = null, spaces = SPACES, known = null, asleep = false, moved = null }) {
   const store = { "kanso.registry": registry, "kanso.projects": moved };
-  const { Spaces } = await loadSidebar({ ...popoverHost(), Scrollbar: { vertical: () => chain() } }, {
+  const { Spaces } = await menuSidebar({
     ...world(spaces, agent(status), PANES.filter((p) => asleep || p.tab !== "tb2"), terms(labels)),
     Date: FrozenDate, appHome: () => "/Users/me/.config/herdr-app", shared: (key) => store[key] ?? null,
     props: () => ({ [popup]: open, overlay: "o", ...(popup === "newAgent" ? { start: true } : {}) }), closeOverlay: () => {},
@@ -94,9 +95,7 @@ const panelMenu = async () => {
   return [menuOf(contentOf(b.view.panelMenuPopover(b.c, chain("trigger"), { id: "pr", label: "PR" })))];
 };
 const strip = async (segmentMenu) => {
-  const { Strip, tokens } = await load("kanso-strip/main.js", ["Strip", "tokens"], {
-    ...popoverHost(), theme: () => CHROME_NIGHT, shared: () => null, keys: () => BINDINGS, window: () => ({ platform: "macos" }),
-  });
+  const { Strip, tokens } = await loadStrip();
   return { view: Object.assign(new Strip(), { segmentMenu }), c: tokens(CHROME_NIGHT) };
 };
 const headerPr = async () => {
@@ -111,9 +110,8 @@ const digestMenu = async () => {
 };
 const headerMore = async () => {
   const { view, c } = await strip(null);
-  const { menuEntries } = await load("kanso-strip/header-model.js", ["menuEntries"]);
   view.moreOpen = true;
-  const entries = menuEntries({ strip: true, pinned: false, zoomed: false, tools: { sleep: "menu", send: "menu" }, fold: 0, canOpen: true });
+  const entries = await openHeaderEntries();
   return [menuOf(contentOf(view.more(c, "p1", { name: "tests", entries, does: {} })))];
 };
 const statusMenus = async () => {
