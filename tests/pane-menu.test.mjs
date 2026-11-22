@@ -98,9 +98,10 @@ test("In the pane menu Enter runs the highlighted row only when the list holds t
   assert.deepEqual([closed.includes("closeOverlay"), closed.includes("terminal.copy"), stopped.at(-1)], [true, true, "enter"], "focus on the list: the highlighted Copy runs");
 });
 
+const cx = { notify() {}, timer: { after() {} } };
+const row = (view, label) => find(view.render(), (el) => calls(el, "accessibility_label").some((call) => call[1] === label));
+
 test("The pane menu leads with Copy, Cut and Paste: Copy always, since an agent draws its own selection, Cut never in a terminal, and each acts on that terminal", async () => {
-  const cx = { notify() {}, timer: { after() {} } };
-  const row = (view, label) => find(view.render(), (el) => calls(el, "accessibility_label").some((call) => call[1] === label));
   const disabled = (el) => calls(el, "disabled").at(-1)?.[1] === true;
   const plain = await menu();
   const words = texts(plain.view.render());
@@ -115,8 +116,6 @@ test("The pane menu leads with Copy, Cut and Paste: Copy always, since an agent 
 });
 
 test("Copy and Paste on a terminal shown outside a pane, as a peek, act on it without focusing a pane", async () => {
-  const cx = { notify() {}, timer: { after() {} } };
-  const row = (view, label) => find(view.render(), (el) => calls(el, "accessibility_label").some((call) => call[1] === label));
   for (const [label, command] of [["Copy", "terminal.copy"], ["Paste", "terminal.paste"]]) {
     const peek = await menu({ target: { pane: "term-peek", terminal: "T1" }, pane: { terminal: "T9" } });
     calls(row(peek.view, label), "on_click").at(-1)[1]({}, cx);
