@@ -850,7 +850,8 @@ export default class Strip extends View {
     this.openers.set(key, null);
     cx.spawn(async (cx) => {
       const read = await hc(["read", p.terminal, "--lines", String(HISTORY_LINES)]).catch(() => null);
-      const found = read?.code === 0 && opened(read.stdout, pr);
+      if (read?.code !== 0) { this.openers.delete(key); this.pollAgain(p, cx); return; }
+      const found = opened(read.stdout, pr);
       this.openers.set(key, found);
       if (found) await hc(["label", p.terminal, `${PR_LABEL}=${pr.url}`]).catch(() => null);
       const live = panes().find((q) => q.pane === p.pane);
@@ -886,7 +887,7 @@ export default class Strip extends View {
     this.watching.delete(p.pane);
     if (step.act !== "send") { label(step.labels).catch(() => null); return; }
     const sending = `${p.terminal}\u0000${pr.head}`;
-    if (this.sent.has(sending)) return;
+    if (this.sent.has(sending)) { label(step.labels).catch(() => null); return; }
     const now = panes().find((q) => q.pane === p.pane);
     if (now?.status !== p.status) return;
     this.sent.set(sending, true);

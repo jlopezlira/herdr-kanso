@@ -17,10 +17,12 @@ const failedRun = {
   result: "failed",
   failed: [{ name: "test", url: "https://github.com/acme/shop/actions/runs/test" }],
 };
-const pr = (head, outcome) => ({ number: 12, url: "https://github.com/acme/shop/pull/12", head, run: outcome });
+const PR_URL = "https://github.com/acme/shop/pull/12";
+const OPENER = { "kanso.pr": PR_URL };
+const pr = (head, outcome) => ({ number: 12, url: PR_URL, head, run: outcome });
 
 test("A failure names each failed job and its link, a cancelled job is not a failure, only cancelled besides passes is cancelled, passes or skips pass, and pending or unknown gives nothing", async () => {
-  const { checksOutcome } = await load("kanso-strip/checks-to-agent.js", ["checksOutcome"]);
+  const { checksOutcome } = await loadOutcome();
   const failed = checksOutcome([
     run("test", "FAILURE"),
     context("coverage", "FAILURE"),
@@ -93,13 +95,14 @@ test("A needs label makes an idle or done agent blocked with that reason, and le
 });
 
 const loadChecksStep = () => load("kanso-strip/checks-to-agent.js", ["checksStep"]);
-const quietTerm = { address: "t0", labels: {} };
-const stripCase = (pieces, status, pull = null, extra = {}) => ({
-  pieces, panes: [{ pane: "p1", terminal: "t0", status, ...extra }], terminals: [quietTerm], pr: pull,
+const loadOutcome = () => load("kanso-strip/checks-to-agent.js", ["checksOutcome"]);
+const stripCase = (pieces, status, pull = null, extra = {}, labels = {}) => ({
+  pieces, panes: [{ pane: "p1", terminal: "t0", status, ...extra }], terminals: [{ address: "t0", labels }], pr: pull,
 });
 const pullView = (head, rollup) => ({
-  number: 12, url: "https://github.com/acme/shop/pull/12", headRefOid: head, state: "OPEN", statusCheckRollup: rollup,
+  number: 12, url: PR_URL, headRefOid: head, state: "OPEN", statusCheckRollup: rollup,
 });
+const running = (name) => ({ __typename: "CheckRun", name, status: "IN_PROGRESS" });
 
 const stripHost = (state) => {
   const hcCalls = [];
@@ -113,9 +116,17 @@ const stripHost = (state) => {
     setShared: () => {},
     exec: async (cmd, args) => {
       execCalls.push([cmd, args]);
-      return cmd === "gh" ? { code: 0, stdout: JSON.stringify(state.pr), stderr: "" } : { code: 1, stdout: "", stderr: "" };
+      if (state.ghFail && cmd === "gh") return { code: 1, stdout: "", stderr: "could not resolve host" };
+      if (cmd === "gh") return { code: 0, stdout: JSON.stringify(state.pr ?? {}), stderr: "" };
+      if (cmd !== "git") return { code: 1, stdout: "", stderr: "" };
+      if (args.includes("--is-inside-work-tree")) return { code: 0, stdout: "true\n", stderr: "" };
+      if (args.includes("symbolic-ref")) return { code: 0, stdout: "feat\n", stderr: "" };
+      return { code: 0, stdout: args.includes("--porcelain") ? "" : "0\n", stderr: "" };
     },
-    hc: async (args) => { hcCalls.push(args); return { code: 0, stdout: "", stderr: "" }; },
+    hc: async (args) => {
+      hcCalls.push(args);
+      return args[0] === "read" ? { code: 0, stdout: state.history?.[args[1]] ?? "", stderr: "" } : { code: 0, stdout: "", stderr: "" };
+    },
   };
   const timer = { after: (ms, fn) => { afters.push([ms, fn]); } };
   return { host, hcCalls, afters, execCalls, timer };
@@ -124,17 +135,17 @@ const stripHost = (state) => {
 const openStrip = async (state) => {
   const kit = stripHost(state);
   const { Strip } = await load("kanso-strip/main.js", ["Strip"], kit.host);
-  const view = Object.assign(new Strip(), { polling: new Set(), digesting: new Set() });
-  let job = null;
-  const cx = { timer: kit.timer, spawn: (fn) => { job = fn(); } };
-  return { ...kit, view, cx, done: () => job };
+  const view = Object.assign(new Strip(), {
+    polling: new Set(), digesting: new Set(), watching: new Map(), sent: new Map(), openers: new Map(), lastStatus: new Map(),
+  });
+  const jobs = [];
+  const cx = { timer: kit.timer, spawn(fn) { jobs.push(Promise.resolve(fn(cx))); return { cancel() {} }; } };
+  return { ...kit, view, cx, done: async () => { while (jobs.length) await jobs.shift(); } };
 };
 
 test("Pending checks schedule one poll, a failed idle agent is told once and labeled, a working agent is not told, and a hidden setting calls nothing", async () => {
   const { POLL_MS } = await load("kanso-strip/checks-to-agent.js", ["POLL_MS"]);
-  const pending = await openStrip(stripCase({ "header.digest": "hide" }, "idle", pullView("abc", [
-    { __typename: "CheckRun", name: "test", status: "IN_PROGRESS" },
-  ]), { tab: "t1", cwd: "/work" }));
+  const pending = await openStrip(stripCase({ "header.digest": "hide" }, "idle", pullView("abc", [running("test")]), { tab: "t1", cwd: "/work" }, OPENER));
   pending.view.digest(pending.host.panes()[0], pending.cx);
   await pending.done();
   pending.view.checksTurn(pending.host.panes()[0], { head: "abc" }, pending.cx);
@@ -143,7 +154,7 @@ test("Pending checks schedule one poll, a failed idle agent is told once and lab
 
   const failed = await openStrip(stripCase({ "header.digest": "hide" }, "idle", pullView("abc123", [
     run("test", "FAILURE", { detailsUrl: "https://github.com/acme/shop/actions/runs/9" }),
-  ]), { tab: "t1", cwd: "/work" }));
+  ]), { tab: "t1", cwd: "/work" }, OPENER));
   failed.view.digest(failed.host.panes()[0], failed.cx);
   await failed.done();
   await settle();
@@ -159,19 +170,23 @@ test("Pending checks schedule one poll, a failed idle agent is told once and lab
   working.view.checksTurn(working.host.panes()[0], pr("abc", failedRun), working.cx);
   assert.equal(working.hcCalls.some((call) => call[0] === "send"), false);
 
-  const hidden = await openStrip(stripCase({ "agents.checks": "hide" }, "idle"));
-  hidden.view.checksTurn(hidden.host.panes()[0], pr("abc", failedRun), hidden.cx);
+  const hidden = await openStrip(stripCase({ "agents.checks": "hide" }, "idle", pullView("abc", [
+    run("test", "FAILURE"),
+  ]), { tab: "t1", cwd: "/work" }, OPENER));
+  hidden.view.digest(hidden.host.panes()[0], hidden.cx);
+  await hidden.done();
   assert.equal(hidden.hcCalls.length, 0);
   assert.equal(hidden.afters.length, 0);
 });
 
-test("A waiting row whose terminal is labeled checks failed shows that as its question", async () => {
+const waiting = (agent, pieces = {}) => ({
+  agents: [agent],
+  terminals: [{ address: "t0", labels: { "kanso.needs": "checks failed" }, report: { msg: "other question" } }],
+  shared: { "kanso.needs-you": { rows: [{ address: "t0", status: "blocked", pane: "p1", name: "checkout" }] }, "kanso.pieces": pieces },
+});
+
+const drawStatus = async (state) => {
   const drawn = tape();
-  const state = {
-    agents: [{ address: "t0", name: "checkout", title: "checkout" }],
-    terminals: [{ address: "t0", labels: { "kanso.needs": "checks failed" }, report: { msg: "other question" } }],
-    shared: { "kanso.needs-you": { rows: [{ address: "t0", status: "blocked", pane: "p1", name: "checkout" }] } },
-  };
   const { WorkspaceStatus } = await load("kanso-status/main.js", ["WorkspaceStatus"], {
     ...drawn.host,
     Button: { new: (id) => drawn.host.div().id(id) },
@@ -181,23 +196,138 @@ test("A waiting row whose terminal is labeled checks failed shows that as its qu
     shared: (key) => state.shared[key], run: () => {},
   });
   new WorkspaceStatus().render();
-  assert.ok(drawn.texts.includes("checks failed"));
-  assert.equal(drawn.texts.includes("other question"), false);
+  return drawn.texts;
+};
+
+const sidebarHost = (pieces = null) => ({
+  agents: () => [{ address: "t0", status: "idle", pane: "p1", name: "checkout", space: "s1" }],
+  panes: () => [{ pane: "p1", tab: "t1", terminal: "t0" }],
+  spaces: () => [{ id: "s1", name: "acme", tabs: [{ id: "t1", name: "Main" }] }],
+  terminals: () => [{ address: "t0", state: "live", labels: { "kanso.needs": "checks failed" } }],
+  shared: (key) => (key === "kanso.pieces" ? pieces : null),
+});
+
+const listedAgents = async (pieces = null) => {
+  const host = sidebarHost(pieces);
+  const { Spaces } = await load("kanso-spaces/main.js", ["Spaces"], host);
+  return new Spaces().listed(host.panes(), host.spaces(), host.terminals());
+};
+
+const needsSection = async (pieces = null) => {
+  const { bySection } = await load("kanso-spaces/agents.js", ["bySection"]);
+  const rows = await listedAgents(pieces);
+  return bySection(rows.map((agent) => ({ a: agent, lines: [] }))).find((section) => section.label === "Needs you");
+};
+
+test("A waiting row whose terminal is labeled checks failed shows that as its question", async () => {
+  const texts = await drawStatus(waiting({ address: "t0", name: "checkout", title: "checkout" }));
+  assert.ok(texts.includes("checks failed"));
+  assert.equal(texts.includes("other question"), false);
 });
 
 test("An idle agent whose checks failed lands in the Needs you section of Status", async () => {
-  const { Spaces } = await load("kanso-spaces/main.js", ["Spaces"], {
-    agents: () => [{ address: "t0", status: "idle", pane: "p1", name: "checkout", space: "s1" }],
-    panes: () => [{ pane: "p1", tab: "t1", terminal: "t0" }],
-    spaces: () => [{ id: "s1", name: "acme", tabs: [{ id: "t1", name: "Main" }] }],
-    terminals: () => [{ address: "t0", state: "live", labels: { "kanso.needs": "checks failed" } }],
-  });
-  const { bySection } = await load("kanso-spaces/agents.js", ["bySection"]);
-  const rows = new Spaces().listed(
-    [{ pane: "p1", tab: "t1", terminal: "t0" }],
-    [{ id: "s1", name: "acme", tabs: [{ id: "t1", name: "Main" }] }],
-    [{ address: "t0", state: "live", labels: { "kanso.needs": "checks failed" } }],
-  );
-  const needs = bySection(rows.map((agent) => ({ a: agent, lines: [] }))).find((section) => section.label === "Needs you");
+  const needs = await needsSection();
   assert.equal(needs?.entries.some((entry) => entry.a.address === "t0" && entry.a.msg === "checks failed"), true);
 });
+
+const sendsTo = (calls) => calls.filter((call) => call[0] === "send").map((call) => call[1]);
+const ghOnly = (calls) => calls.every((call) => call[0] === "gh" && call[1][0] === "pr" && call[1][1] === "view");
+
+test("Two idle panes on the same branch tell only the terminal whose history opened the pull request", async () => {
+  const { HISTORY_LINES } = await load("kanso-strip/checks-to-agent.js", ["HISTORY_LINES"]);
+  const state = {
+    pieces: { "header.digest": "hide" },
+    panes: [0, 1].map((i) => ({ pane: "p" + (i + 1), tab: "t1", terminal: "t" + i, cwd: "/work", status: "idle" })),
+    terminals: [0, 1].map((i) => ({ address: "t" + i, labels: {} })),
+    pr: pullView("abc123", [run("test", "FAILURE")]),
+    history: { t0: "opened /pull/12" },
+  };
+  const both = await openStrip(state);
+  both.view.watchDigests(both.cx);
+  await both.done();
+  await settle();
+  assert.deepEqual(sendsTo(both.hcCalls), ["t0"]);
+  assert.deepEqual(both.hcCalls.filter((call) => call[0] === "label" && call.includes("kanso.pr=" + PR_URL)).map((call) => call[1]), ["t0"]);
+  assert.ok(both.hcCalls.some((call) => call[0] === "read" && call[2] === "--lines" && call[3] === String(HISTORY_LINES)));
+});
+
+test("Two runs of one name wait while one is still running, both failures are listed, and an empty rollup is none", async () => {
+  const { checksOutcome } = await loadOutcome();
+  const still = { ...run("test", null), status: "IN_PROGRESS", conclusion: null };
+  assert.equal(checksOutcome([run("test", "FAILURE"), still]), null);
+  const other = "https://ci.example/other";
+  same(checksOutcome([run("test", "FAILURE"), run("test", "FAILURE", { detailsUrl: other })]), {
+    result: "failed",
+    failed: [{ name: "test", url: "https://github.com/acme/shop/actions/runs/test" }, { name: "test", url: other }],
+  });
+  same(checksOutcome([]), { result: "none", failed: [] });
+});
+
+test("Two digests of the same finished head send once before the checks label is visible", async () => {
+  const twice = await openStrip(stripCase({ "header.digest": "hide" }, "idle", pullView("abc123", [run("test", "FAILURE")]), { tab: "t1", cwd: "/work" }, OPENER));
+  const pane = twice.host.panes()[0];
+  twice.view.digest(pane, twice.cx);
+  twice.view.digest(pane, twice.cx);
+  await twice.done();
+  await settle();
+  assert.deepEqual(sendsTo(twice.hcCalls), ["t0"]);
+});
+
+test("A poll whose GitHub read fails schedules another poll for that pane", async () => {
+  const { POLL_MS } = await load("kanso-strip/checks-to-agent.js", ["POLL_MS", "EMPTY_POLLS"]);
+  const state = stripCase({ "header.digest": "hide" }, "idle", pullView("abc", [running("test")]), { tab: "t1", cwd: "/work" }, OPENER);
+  const watched = await openStrip(state);
+  watched.view.digest(watched.host.panes()[0], watched.cx);
+  await watched.done();
+  state.ghFail = true;
+  watched.afters.at(-1)[1](watched.cx);
+  await watched.done();
+  assert.equal(watched.afters.filter(([ms]) => ms === POLL_MS).length, 2);
+});
+
+test("Hiding the header still tells an idle opener, and hiding the checks setting sends nothing", async () => {
+  const shown = await openStrip(stripCase(
+    { "header.digest": "hide", "header.pr": "hide" }, "idle", pullView("abc123", [run("test", "FAILURE")]), { tab: "t1", cwd: "/work" }, OPENER,
+  ));
+  shown.view.digest(shown.host.panes()[0], shown.cx);
+  await shown.done();
+  await settle();
+  assert.deepEqual(sendsTo(shown.hcCalls), ["t0"]);
+  const off = await openStrip(stripCase({ "agents.checks": "hide" }, "idle", pullView("abc", [run("lint", "FAILURE")]), { tab: "t1", cwd: "/work" }, OPENER));
+  off.view.digest(off.host.panes()[0], off.cx);
+  await off.done();
+  await settle();
+  assert.deepEqual(sendsTo(off.hcCalls), []);
+});
+
+test("An empty rollup polls at most four times, and a poll reads the pull request without git status or diff", async () => {
+  const { POLL_MS, EMPTY_POLLS } = await load("kanso-strip/checks-to-agent.js", ["EMPTY_POLLS", "POLL_MS"]);
+  const quiet = await openStrip(stripCase({}, "idle", pullView("abc", []), { tab: "t1", cwd: "/work" }, OPENER));
+  quiet.view.digest(quiet.host.panes()[0], quiet.cx);
+  await quiet.done();
+  const fire = async () => { quiet.afters.at(-1)[1](quiet.cx); await quiet.done(); };
+  for (let i = 1; i < EMPTY_POLLS; i += 1) await fire();
+  const before = quiet.execCalls.length;
+  const scheduled = quiet.afters.length;
+  await fire();
+  assert.equal(quiet.afters.filter(([ms]) => ms === POLL_MS).length, EMPTY_POLLS);
+  assert.equal(quiet.afters.length, scheduled);
+  assert.equal(ghOnly(quiet.execCalls.slice(before)), true);
+});
+
+test("A blocked agent keeps its own question, and a hidden checks setting ignores the needs label", async () => {
+  const blocked = await drawStatus(waiting({ address: "t0", status: "blocked", name: "checkout", title: "checkout" }));
+  assert.ok(blocked.includes("other question"));
+  assert.equal(blocked.includes("checks failed"), false);
+  const hidden = await drawStatus(waiting({ address: "t0", status: "idle", name: "checkout", title: "checkout" }, { "agents.checks": "hide" }));
+  assert.ok(hidden.includes("other question"));
+  assert.equal(hidden.includes("checks failed"), false);
+  const { withNeeds } = await load("kanso-strip/needs.js", ["withNeeds"]);
+  const list = [{ address: "t0", status: "idle", name: "checkout" }];
+  assert.equal(withNeeds(list, [{ address: "t0", labels: { "kanso.needs": "checks failed" } }], false), list);
+  const hiddenRows = await listedAgents({ "agents.checks": "hide" });
+  assert.equal(hiddenRows[0].status, "idle");
+  assert.equal(hiddenRows[0].msg, null);
+  assert.equal((await needsSection({ "agents.checks": "hide" }))?.entries?.some((entry) => entry.a.address === "t0") ?? false, false);
+});
+
