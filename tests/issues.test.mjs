@@ -24,6 +24,12 @@ const node = (status) => ({
 
 const payload = (nodes) => ({ code: 0, stdout: JSON.stringify({ data: { repository: { issues: { nodes } } } }), stderr: "" });
 const named = (args, key) => args.some((part) => part === key || String(part).startsWith(key));
+const boardRun = async () => {
+  const { readBoard } = await load("kanso-panel/issues-github.js", ["readBoard"]);
+  return { readBoard, calls: [] };
+};
+const storeDb = async (t, names) => ({ ...(await temporaryKdb(t)), ...(await load("kanso-panel/issues-store.js", names)) });
+const rowsOf = (t) => storeDb(t, ["storeSql", "readIssues"]);
 
 test("Board columns stay in order, an issue with no status sits under Open, empty columns stay, and newer issues come first", async () => {
   const { sectionsOf, OPEN } = await load("kanso-panel/issues-model.js", ["sectionsOf", "OPEN"]);
@@ -74,8 +80,7 @@ test("The text sent to an agent has the ticket, the title, the link and the body
 });
 
 test("A board read keeps the status columns, and the filter query names the login only for assigned or created", async () => {
-  const { readBoard } = await load("kanso-panel/issues-github.js", ["readBoard"]);
-  const calls = [];
+  const { readBoard, calls } = await boardRun();
   const run = async (cmd, args) => { calls.push(args); return payload([node("Open")]); };
   const board = await readBoard(run, { repo: REPO, project: "shop", filter: "assigned", login: "jj" });
   same(board.columns, ["Open", "Done"]);
@@ -94,8 +99,7 @@ test("A board read keeps the status columns, and the filter query names the logi
 });
 
 test("A missing project scope is read again without project items, and that read says there is no project", async () => {
-  const { readBoard } = await load("kanso-panel/issues-github.js", ["readBoard"]);
-  const calls = [];
+  const { readBoard, calls } = await boardRun();
   const answers = [
     { code: 1, stdout: "", stderr: "INSUFFICIENT_SCOPES: read:project" },
     payload([node(null)]),
@@ -108,7 +112,7 @@ test("A missing project scope is read again without project items, and that read
 });
 
 test("A rate limit names when to retry, and an offline read is offline", async () => {
-  const { readBoard } = await load("kanso-panel/issues-github.js", ["readBoard"]);
+  const { readBoard } = await boardRun();
   const now = 1_700_000_000_000;
   const reset = Math.floor(now / 1000) + 180;
   const limited = await readBoard(async () => ({ code: 1, stdout: "", stderr: "rate limit exceeded\nX-RateLimit-Reset: " + reset }), { repo: REPO, project: "shop", filter: "all", login: "jj", now });
@@ -136,8 +140,7 @@ test("The origin remote is the repository", async () => {
 const keptRow = (url, extra) => issue({ url, ...extra });
 
 test("A stored read writes the rows and the board, and a later read drops only the rows of that filter", async (t) => {
-  const { db } = await temporaryKdb(t);
-  const { storeSql, readIssues } = await load("kanso-panel/issues-store.js", ["storeSql", "readIssues"]);
+  const { db, storeSql, readIssues } = await rowsOf(t);
   const assigned = keptRow("https://github.com/acme/shop/issues/1", { ticket: "#1", title: "Assigned", assignees: JSON.stringify(["JJ"]), author: "ada" });
   const other = keptRow("https://github.com/acme/shop/issues/2", { ticket: "#2", title: "Created", assignees: "[]", author: "ada" });
   const stale = keptRow("https://github.com/acme/shop/issues/3", { ticket: "#3", title: "Gone", assignees: JSON.stringify(["jj"]), author: "ada" });
@@ -151,8 +154,7 @@ test("A stored read writes the rows and the board, and a later read drops only t
 });
 
 test("A failed read keeps the rows and the last time, and records the failure", async (t) => {
-  const { db } = await temporaryKdb(t);
-  const { storeSql, readIssues } = await load("kanso-panel/issues-store.js", ["storeSql", "readIssues"]);
+  const { db, storeSql, readIssues } = await rowsOf(t);
   await db.run(storeSql({ project: "shop", source: "github", filter: "assigned", login: "jj", rows: [issue()], columns: ["Open"], kept: [], now: 20 }));
   await db.run(storeSql({ project: "shop", source: "github", filter: "assigned", login: "jj", rows: [], columns: [], failure: { kind: "offline", text: "GitHub can't be reached" }, now: 99 }));
   const read = await readIssues(db, ["shop"]);
@@ -162,8 +164,7 @@ test("A failed read keeps the rows and the last time, and records the failure", 
 });
 
 test("A detail write adds the comments and the pull requests, and a read returns both", async (t) => {
-  const { db } = await temporaryKdb(t);
-  const { storeSql, detailSql, readIssues } = await load("kanso-panel/issues-store.js", ["storeSql", "detailSql", "readIssues"]);
+  const { db, storeSql, detailSql, readIssues } = await storeDb(t, ["storeSql", "detailSql", "readIssues"]);
   await db.run(storeSql({ project: "shop", source: "github", filter: "all", login: "jj", rows: [issue()], columns: ["Open"], kept: [], now: 1 }));
   await db.run(detailSql(PR_URL, { body: "The body", comments: JSON.stringify([{ author: "ada", body: "Yes", at: "2026-11-22T01:00:00Z" }]), prs: JSON.stringify([{ number: 9, title: "Fix", url: "https://github.com/acme/shop/pull/9", state: "OPEN" }]) }));
   const read = await readIssues(db, ["shop"]);
