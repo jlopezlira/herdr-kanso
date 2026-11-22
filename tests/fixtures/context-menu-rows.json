@@ -317,6 +317,9 @@
   "pane": [
     [
       " | tests |  | ",
+      "copy | Copy |  | ",
+      "scissors | Cut |  | ",
+      "clipboard-paste | Paste |  | ",
       "columns-2 | Split right | ⌘D | ",
       "rows-2 | Split down | ⇧⌘D | ",
       "columns-2 | Split left | ⌥⇧⌘D | ",
@@ -333,6 +336,9 @@
   "paneToProgram": [
     [
       " | web · devbox |  | ",
+      "copy | Copy |  | ",
+      "scissors | Cut |  | ",
+      "clipboard-paste | Paste |  | ",
       "columns-2 | Split right | ⌘D | ",
       "rows-2 | Split down | ⇧⌘D | ",
       "columns-2 | Split left | ⌥⇧⌘D | ",
@@ -346,6 +352,9 @@
   "panePinned": [
     [
       " | web · devbox |  | ",
+      "copy | Copy |  | ",
+      "scissors | Cut |  | ",
+      "clipboard-paste | Paste |  | ",
       "columns-2 | Split right | ⌘D | ",
       "rows-2 | Split down | ⇧⌘D | ",
       "columns-2 | Split left | ⌥⇧⌘D | ",
@@ -359,6 +368,9 @@
   "paneChild": [
     [
       " | tests |  | ",
+      "copy | Copy |  | ",
+      "scissors | Cut |  | ",
+      "clipboard-paste | Paste |  | ",
       "columns-2 | Split right | ⌘D | ",
       "rows-2 | Split down | ⇧⌘D | ",
       "columns-2 | Split left | ⌥⇧⌘D | ",
@@ -376,6 +388,9 @@
   "keyboard": [
     [
       " | tests |  | ",
+      "copy | Copy |  | ",
+      "scissors | Cut |  | ",
+      "clipboard-paste | Paste |  | ",
       "columns-2 | Split right | ⌘D | ",
       "rows-2 | Split down | ⇧⌘D | ",
       "columns-2 | Split left | ⌥⇧⌘D | ",
@@ -410,6 +425,9 @@
     ],
     [
       " | tests |  | ",
+      "copy | Copy |  | ",
+      "scissors | Cut |  | ",
+      "clipboard-paste | Paste |  | ",
       "columns-2 | Split right | ⌘D | ",
       "rows-2 | Split down | ⇧⌘D | ",
       "columns-2 | Split left | ⌥⇧⌘D | ",
@@ -436,6 +454,9 @@
     ],
     [
       " | web · devbox |  | ",
+      "copy | Copy |  | ",
+      "scissors | Cut |  | ",
+      "clipboard-paste | Paste |  | ",
       "columns-2 | Split right | ⌘D | ",
       "rows-2 | Split down | ⇧⌘D | ",
       "columns-2 | Split left | ⌥⇧⌘D | ",

@@ -95,5 +95,22 @@ test("In the pane menu Enter runs the highlighted row only when the list holds t
   assert.deepEqual([closed, stopped], [[], []], "focus on a row: nothing runs, the row's own press goes through");
   view.handle = { is_focused: () => true };
   keys("enter", stopped);
-  assert.deepEqual([closed.includes("closeOverlay"), closed.includes("pane.split"), stopped.at(-1)], [true, true, "enter"], "focus on the list: the highlighted Split right runs");
+  assert.deepEqual([closed.includes("closeOverlay"), closed.includes("terminal.paste"), stopped.at(-1)], [true, true, "enter"], "focus on the list: the highlighted Paste runs");
+});
+
+test("The pane menu leads with Copy, Cut and Paste: Copy only with a selection, Cut never in a terminal, and each acts on that terminal", async () => {
+  const cx = { notify() {}, timer: { after() {} } };
+  const row = (view, label) => find(view.render(), (el) => calls(el, "accessibility_label").some((call) => call[1] === label));
+  const disabled = (el) => calls(el, "disabled").at(-1)?.[1] === true;
+  const plain = await menu();
+  const words = texts(plain.view.render());
+  assert.deepEqual(["Copy", "Cut", "Paste"].map((label) => words.indexOf(label)), [1, 2, 3], "first, after the title");
+  assert.ok(words.indexOf("Paste") < words.indexOf("Split right"));
+  assert.deepEqual([disabled(row(plain.view, "Copy")), disabled(row(plain.view, "Cut")), disabled(row(plain.view, "Paste"))], [true, true, false]);
+  calls(row(plain.view, "Paste"), "on_click").at(-1)[1]({}, cx);
+  assert.deepEqual(plain.closed, ["closeOverlay", "pane.focus", "terminal.paste"]);
+  const selected = await menu({ terminal: { selection: { start: { row: 0, col: 0 }, end: { row: 0, col: 4 } } } });
+  assert.equal(disabled(row(selected.view, "Copy")), false);
+  calls(row(selected.view, "Copy"), "on_click").at(-1)[1]({}, cx);
+  assert.deepEqual(selected.closed, ["closeOverlay", "pane.focus", "terminal.copy"]);
 });

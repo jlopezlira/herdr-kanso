@@ -38,8 +38,15 @@ function groups(tg, armed) {
     setShared("strip.intent", { dir, from: pane, at: Date.now() });
     run("pane.split", { pane, direction: dir === "down" ? "down" : "right" });
   } });
+  const inTerminal = (command) => () => { run("pane.focus", { terminal: term.address }); run(command); };
+  const clipboard = term ? [
+    { label: "Copy", icon: "copy", key: "terminal.copy", disabled: !term.selection, does: inTerminal("terminal.copy") },
+    { label: "Cut", icon: "scissors", disabled: true, does: () => {} },
+    { label: "Paste", icon: "clipboard-paste", key: "terminal.paste", does: inTerminal("terminal.paste") },
+  ] : [];
   const close = { label: "Close pane", icon: "x", key: "kanso-strip.close", verb: `close ${name}`, arms: agent, does: () => run("pane.close", { pane }) };
   return { title, armedKey: close.arms ? "close" : null, groups: [
+    clipboard,
     [
       split("Split right", "right", "columns-2", "kanso-strip.new-right"),
       split("Split down", "down", "rows-2", "kanso-strip.new-down"),
@@ -100,14 +107,14 @@ export default class KansoMenu extends View {
     return {
       title,
       lines: sets.flatMap((set, g) => [...(g ? [{ separator: true }] : []),
-        ...set.map((it) => ({ icon: it.icon, label: it.label, hint: hintOf(it.key), checked: it.checked, armed: it.armed, verb: it.verb, onClick: (cx) => this.choose(it, cx) }))]),
+        ...set.map((it) => ({ icon: it.icon, label: it.label, hint: hintOf(it.key), checked: it.checked, armed: it.armed, verb: it.verb, disabled: it.disabled, onClick: (cx) => this.choose(it, cx) }))]),
     };
   }
 
   render() {
     const target = props()?.target ?? {};
     const { title, lines: drawn } = target.piece ? this.pieceView(target.piece) : this.paneView(target);
-    const list = drawn.filter((line) => line.onClick);
+    const list = drawn.filter((line) => line.onClick && !line.disabled);
     const lines = drawn.map((line) => (line.onClick ? { ...line, selected: list.indexOf(line) === this.at } : line));
     return menuList("kanso-menu", { title, items: lines }, tokens(theme())).track_focus(this.handle)
       .on_key_down((e, cx) => {
