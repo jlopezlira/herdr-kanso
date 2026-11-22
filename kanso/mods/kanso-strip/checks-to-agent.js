@@ -29,7 +29,21 @@ export function checksMessage({ number, url }, outcome) {
   return [`The checks on ${named} failed:`, ...outcome.failed.map(({ name, url: link }) => `- ${name}${link ? `: ${link}` : ""}`)].join("\n");
 }
 
-export const opened = (history, { url, number }) => Boolean(url) && (String(history ?? "").includes(url) || String(history ?? "").includes(`/pull/${number}`));
+export const DELIVERIES = "kanso.checks.deliveries";
+const CREATED = /\bgh\s+pr\s+create\b|create_pull_request/;
+const escaped = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+export const opened = (history, { url }) => {
+  const text = String(history ?? "");
+  return Boolean(url) && CREATED.test(text) && new RegExp(`${escaped(url)}(?![0-9])`).test(text);
+};
+
+const deliveryKey = (terminal, head) => `${terminal}\u0000${head}`;
+export const deliveryOf = (store, terminal, head) => (store && typeof store === "object" ? store[deliveryKey(terminal, head)] ?? null : null);
+export const reserve = (store, terminal, head, state) => {
+  const kept = Object.fromEntries(Object.entries(store && typeof store === "object" ? store : {}).filter(([key]) => key !== deliveryKey(terminal, head)));
+  return state ? { ...kept, [deliveryKey(terminal, head)]: state } : kept;
+};
 
 const waiting = (status) => status === "done" || status === "idle";
 const ours = (labels) => needsWord(labels) === CHECKS_FAILED;

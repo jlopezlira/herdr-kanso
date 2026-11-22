@@ -30,7 +30,7 @@ import { boundChord } from "./ui-tooltip.js";
 import { headerSegment } from "./ui-header.js";
 import { pieceLines } from "./piece-lines.js";
 import { paged } from "./strip-model.js";
-import { checksOutcome, checksStep, opened, POLL_MS, PR_LABEL, HISTORY_LINES } from "./checks-to-agent.js";
+import { checksOutcome, checksStep, opened, deliveryOf, reserve, POLL_MS, PR_LABEL, HISTORY_LINES, DELIVERIES } from "./checks-to-agent.js";
 import { deliver } from "./deliver.js";
 import { localService } from "./platform-host.js";
 import { openApi } from "./platform-open.js";
@@ -146,6 +146,8 @@ const stdout = (r) => (r?.code === 0 ? r.stdout : null);
 const ghWords = (r) => String(r?.stderr ?? "").trim().split("\n")[0] || `gh exited with ${r?.code}`;
 
 // `run(cmd, args, cwd)` resolves with { code, stdout, stderr }. `failure` is gh's words when it could not answer.
+const labelled = (label, pairs) => label(pairs).then((r) => (r?.code === 0 ? r : label(pairs))).catch(() => null);
+
 export async function readDigest(cwd, run, want = {}) {
   const gitOn = want.git !== false, prOn = want.pr !== false;
   if (!gitOn && !prOn) return null;
@@ -257,7 +259,6 @@ export default class Strip extends View {
     this.digesting = new Set();
     this.polling = new Set();
     this.watching = new Map();
-    this.sent = new Map();
     this.openers = new Map();
     cx.timer.every(1500, (cx) => this.watchDigests(cx));
     readCommands(cx, () => nextCommand(), (c, cx) => {
@@ -855,7 +856,7 @@ export default class Strip extends View {
       this.openers.set(key, found);
       if (found) await hc(["label", p.terminal, `${PR_LABEL}=${pr.url}`]).catch(() => null);
       const live = panes().find((q) => q.pane === p.pane);
-      if (live) this.checksTurn(live, pr, cx);
+      if (live && runs("agents.checks", pieces(shared))) this.checksTurn(live, pr, cx);
     });
     return null;
   }
@@ -871,13 +872,14 @@ export default class Strip extends View {
   }
 
   checksTurn(p, pr, cx) {
+    if (!runs("agents.checks", pieces(shared))) return;
     const labels = terminals().find((term) => term.address === p.terminal)?.labels ?? {};
     const opener = pr?.url ? this.openerOf(p, pr, labels, cx) : false;
     if (opener === null) return;
     const watched = this.watching.get(p.pane);
-    const empties = watched?.head === pr?.head ? watched.empties : 0;
+    const empties = watched && watched.head === pr?.head ? watched.empties : 0;
     const step = checksStep({ pr, labels, status: p.status, opener, empties });
-    const label = (pairs) => (pairs?.length ? hc(["label", p.terminal, ...pairs]) : Promise.resolve(null));
+    const label = (pairs) => (pairs?.length ? hc(["label", p.terminal, ...pairs]) : Promise.resolve({ code: 0 }));
     if (step.act === "poll") {
       this.watching.set(p.pane, { head: pr.head, empties: empties + (step.empty ? 1 : 0) });
       label(step.labels).catch(() => null);
@@ -886,17 +888,19 @@ export default class Strip extends View {
     }
     this.watching.delete(p.pane);
     if (step.act !== "send") { label(step.labels).catch(() => null); return; }
-    const sending = `${p.terminal}\u0000${pr.head}`;
-    if (this.sent.has(sending)) { label(step.labels).catch(() => null); return; }
+    const reserved = deliveryOf(shared(DELIVERIES), p.terminal, pr.head);
+    if (reserved === "sending") return;
+    if (reserved === "sent") { labelled(label, step.labels); return; }
     const now = panes().find((q) => q.pane === p.pane);
     if (now?.status !== p.status) return;
-    this.sent.set(sending, true);
+    setShared(DELIVERIES, reserve(shared(DELIVERIES), p.terminal, pr.head, "sending"));
     deliver(cx.timer, p.terminal, step.text, "GitHub checks")
       .then((sent) => {
-        if (sent.code !== 0 && !sent.unconfirmed) { this.sent.delete(sending); return null; }
-        return label(step.labels).catch(() => label(step.labels).catch(() => null));
+        const ok = sent.code === 0 || sent.unconfirmed;
+        setShared(DELIVERIES, reserve(shared(DELIVERIES), p.terminal, pr.head, ok ? "sent" : null));
+        if (ok) labelled(label, step.labels);
       })
-      .catch(() => this.sent.delete(sending));
+      .catch(() => setShared(DELIVERIES, reserve(shared(DELIVERIES), p.terminal, pr.head, null)));
   }
 
   openFind() {
