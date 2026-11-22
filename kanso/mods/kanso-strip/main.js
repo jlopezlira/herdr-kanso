@@ -30,7 +30,7 @@ import { boundChord } from "./ui-tooltip.js";
 import { headerSegment } from "./ui-header.js";
 import { pieceLines } from "./piece-lines.js";
 import { paged } from "./strip-model.js";
-import { checksOutcome, checksStep, POLL_MS } from "./checks-to-agent.js";
+import { checksOutcome, checksStep, opened, POLL_MS, PR_LABEL, HISTORY_LINES } from "./checks-to-agent.js";
 import { deliver } from "./deliver.js";
 import { localService } from "./platform-host.js";
 import { openApi } from "./platform-open.js";
@@ -256,6 +256,9 @@ export default class Strip extends View {
     this.lastStatus = new Map();
     this.digesting = new Set();
     this.polling = new Set();
+    this.watching = new Map();
+    this.sent = new Map();
+    this.openers = new Map();
     cx.timer.every(1500, (cx) => this.watchDigests(cx));
     readCommands(cx, () => nextCommand(), (c, cx) => {
       this.command(String(c).replace(/^kanso-strip\./, ""));
@@ -816,7 +819,8 @@ export default class Strip extends View {
 
   digest(p, cx, poll = false) {
     const map = pieces(shared);
-    const want = { git: runs("header.digest", map), pr: runs("header.pr", map) };
+    const checks = runs("agents.checks", map);
+    const want = poll ? { git: false, pr: true } : { git: runs("header.digest", map), pr: runs("header.pr", map) || checks };
     if (!want.git && !want.pr) return;
     this.digesting.add(p.pane);
     const on = spaces().find((s) => s.tabs.some((x) => x.id === p.tab))?.machine ?? null;
@@ -828,32 +832,70 @@ export default class Strip extends View {
         const was = shared(DIGEST)?.[p.pane];
         // It went back to work meanwhile: what it left is no longer the news, unless someone asked for this read.
         if (!live) return;
-        if (!(live.status === "working" && !was?.reading && !poll)) {
+        if (!poll && !(live.status === "working" && !was?.reading)) {
           const settled = settleDigest(was, d);
           setShared(DIGEST, { ...(shared(DIGEST) ?? {}), [p.pane]: settled ? { ...settled, at: Date.now() } : null });
         }
-        if (want.pr && !d?.failure) this.checksTurn(live, d?.pr ?? null, cx);
+        if (!checks) return;
+        if (d?.failure) { if (this.watching.has(live.pane)) this.pollAgain(live, cx); return; }
+        this.checksTurn(live, d?.pr ?? null, cx);
       } finally { this.digesting.delete(p.pane); }
+    });
+  }
+
+  openerOf(p, pr, labels, cx) {
+    if (labels[PR_LABEL] === pr.url) return true;
+    const key = `${p.terminal}\u0000${pr.url}`;
+    if (this.openers.has(key)) return this.openers.get(key);
+    this.openers.set(key, null);
+    cx.spawn(async (cx) => {
+      const read = await hc(["read", p.terminal, "--lines", String(HISTORY_LINES)]).catch(() => null);
+      const found = read?.code === 0 && opened(read.stdout, pr);
+      this.openers.set(key, found);
+      if (found) await hc(["label", p.terminal, `${PR_LABEL}=${pr.url}`]).catch(() => null);
+      const live = panes().find((q) => q.pane === p.pane);
+      if (live) this.checksTurn(live, pr, cx);
+    });
+    return null;
+  }
+
+  pollAgain(p, cx) {
+    if (this.polling.has(p.pane)) return;
+    this.polling.add(p.pane);
+    cx.timer.after(POLL_MS, (next) => {
+      this.polling.delete(p.pane);
+      const live = panes().find((q) => q.pane === p.pane);
+      if (live?.terminal && live.cwd && !this.digesting.has(live.pane)) this.digest(live, next, true);
     });
   }
 
   checksTurn(p, pr, cx) {
     const labels = terminals().find((term) => term.address === p.terminal)?.labels ?? {};
-    const step = checksStep({ pr, labels, status: p.status, on: runs("agents.checks", pieces(shared)) });
-    const label = (pairs) => (pairs?.length ? hc(["label", p.terminal, ...pairs]).catch(() => null) : null);
-    if (step.act === "send") {
-      deliver(cx.timer, p.terminal, step.text, "GitHub checks").then((sent) => (sent.code === 0 ? label(step.labels) : null)).catch(() => {});
+    const opener = pr?.url ? this.openerOf(p, pr, labels, cx) : false;
+    if (opener === null) return;
+    const watched = this.watching.get(p.pane);
+    const empties = watched?.head === pr?.head ? watched.empties : 0;
+    const step = checksStep({ pr, labels, status: p.status, opener, empties });
+    const label = (pairs) => (pairs?.length ? hc(["label", p.terminal, ...pairs]) : Promise.resolve(null));
+    if (step.act === "poll") {
+      this.watching.set(p.pane, { head: pr.head, empties: empties + (step.empty ? 1 : 0) });
+      label(step.labels).catch(() => null);
+      this.pollAgain(p, cx);
       return;
     }
-    label(step.labels);
-    if (step.act === "poll" && !this.polling.has(p.pane)) {
-      this.polling.add(p.pane);
-      cx.timer.after(POLL_MS, (next) => {
-        this.polling.delete(p.pane);
-        const live = panes().find((q) => q.pane === p.pane);
-        if (live?.terminal && live.cwd && !this.digesting.has(live.pane)) this.digest(live, next, true);
-      });
-    }
+    this.watching.delete(p.pane);
+    if (step.act !== "send") { label(step.labels).catch(() => null); return; }
+    const sending = `${p.terminal}\u0000${pr.head}`;
+    if (this.sent.has(sending)) return;
+    const now = panes().find((q) => q.pane === p.pane);
+    if (now?.status !== p.status) return;
+    this.sent.set(sending, true);
+    deliver(cx.timer, p.terminal, step.text, "GitHub checks")
+      .then((sent) => {
+        if (sent.code !== 0 && !sent.unconfirmed) { this.sent.delete(sending); return null; }
+        return label(step.labels).catch(() => label(step.labels).catch(() => null));
+      })
+      .catch(() => this.sent.delete(sending));
   }
 
   openFind() {
