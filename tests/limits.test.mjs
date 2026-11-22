@@ -2,6 +2,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { load } from "./helpers.mjs";
 
+const plain = (value) => JSON.parse(JSON.stringify(value));
+
 const now = new Date(2026, 5, 10, 12, 0, 0, 0).getTime();
 const clock = (ms, zone) => new Intl.DateTimeFormat("en-GB", {
   timeZone: zone, hour: "2-digit", minute: "2-digit", hourCycle: "h23",
@@ -44,25 +46,25 @@ test("A done agent with a limit shows Limited until the reset, and a working one
 });
 
 test("A stopped Claude Code or Codex agent is read once, and working again clears the limit, the resume and our snooze", () => {
-  assert.deepEqual(model.limitStep({ status: "done", app: "claude-code" }), { act: "read" });
-  assert.deepEqual(model.limitStep({ status: "idle", app: "codex" }), { act: "read" });
-  assert.deepEqual(model.limitStep({ status: "blocked", app: "claude-code" }), { act: "read" });
+  assert.deepEqual(plain(model.limitStep({ status: "done", app: "claude-code" })), { act: "read" });
+  assert.deepEqual(plain(model.limitStep({ status: "idle", app: "codex" })), { act: "read" });
+  assert.deepEqual(plain(model.limitStep({ status: "blocked", app: "claude-code" })), { act: "read" });
   const until = String(now + 60_000);
   const labeled = { "kanso.limit": until };
-  assert.deepEqual(model.limitStep({ status: "done", app: "claude-code", labels: labeled }), { act: "none" });
+  assert.deepEqual(plain(model.limitStep({ status: "done", app: "claude-code", labels: labeled })), { act: "none" });
   const ours = { "kanso.limit": until, "kanso.limit.resume": until, "kanso.limit.cmd": "[\"claude\"]", "kanso.snooze": until };
-  assert.deepEqual(model.limitStep({ status: "working", app: "claude-code", labels: ours }), {
+  assert.deepEqual(plain(model.limitStep({ status: "working", app: "claude-code", labels: ours })), {
     act: "clear",
     labels: ["kanso.limit=", "kanso.limit.resume=", "kanso.limit.cmd=", "kanso.snooze="],
   });
   const hand = { ...ours, "kanso.snooze": String(now + 3_600_000) };
-  assert.deepEqual(model.limitStep({ status: "working", app: "codex", labels: hand }).labels, ["kanso.limit=", "kanso.limit.resume=", "kanso.limit.cmd="]);
+  assert.deepEqual(plain(model.limitStep({ status: "working", app: "codex", labels: hand }).labels), ["kanso.limit=", "kanso.limit.resume=", "kanso.limit.cmd="]);
 });
 
 test("Resume at reset is armed only when it is on and the reset is known", () => {
-  assert.deepEqual(model.foundLabels({ until: 5000 }, true), ["kanso.limit=5000", "kanso.limit.resume=5000"]);
-  assert.deepEqual(model.foundLabels({ until: 5000 }, false), ["kanso.limit=5000"]);
-  assert.deepEqual(model.foundLabels({ until: null }, true), ["kanso.limit=?"]);
+  assert.deepEqual(plain(model.foundLabels({ until: 5000 }, true)), ["kanso.limit=5000", "kanso.limit.resume=5000"]);
+  assert.deepEqual(plain(model.foundLabels({ until: 5000 }, false)), ["kanso.limit=5000"]);
+  assert.deepEqual(plain(model.foundLabels({ until: null }, true)), ["kanso.limit=?"]);
 });
 
 test("A limited Claude Code provider is Claude, and a reset that has passed is dropped", () => {
@@ -70,5 +72,5 @@ test("A limited Claude Code provider is Claude, and a reset that has passed is d
     { status: "limited", app: "claude-code", limit: { until: now + 60_000 } },
     { status: "limited", app: "codex", limit: { until: now - 1000 } },
   ];
-  assert.deepEqual(model.limitedProviders(list, now), { claude: { until: now + 60_000 } });
+  assert.deepEqual(plain(model.limitedProviders(list, now)), { claude: { until: now + 60_000 } });
 });

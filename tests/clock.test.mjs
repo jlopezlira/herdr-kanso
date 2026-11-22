@@ -4,6 +4,8 @@ import { chmod, readFile, writeFile } from "node:fs/promises";
 import { delimiter, join } from "node:path";
 import { exec, load, temporary } from "./helpers.mjs";
 
+const plain = (value) => JSON.parse(JSON.stringify(value));
+
 const model = await load("kanso-strip/clock-model.js", [
   "nextRuns", "lastDue", "waiterPlan", "parseRunLog", "lastOutcome", "clockName", "resumeWaiter",
 ]);
@@ -14,13 +16,13 @@ const weekdays = { kind: "daily", time: "09:00", days: [1, 2, 3, 4, 5] };
 
 test("A weekday schedule, an interval and a one-time schedule name their next runs", () => {
   const days = model.nextRuns(weekdays, now, 3).map((ms) => new Date(ms));
-  assert.deepEqual(days.map((d) => d.getDay()), [4, 5, 1]);
+  assert.deepEqual(plain(days.map((d) => d.getDay())), [4, 5, 1]);
   assert.ok(days.every((d) => d.getHours() === 9 && d.getMinutes() === 0 && d.getTime() > now));
-  assert.deepEqual(model.nextRuns({ kind: "every", every: 15, unit: "minutes", start: now }, now, 2), [now + 15 * 60_000, now + 30 * 60_000]);
-  assert.deepEqual(model.nextRuns({ kind: "every", every: 2, unit: "hours", start: now }, now, 2), [now + 2 * 3_600_000, now + 4 * 3_600_000]);
+  assert.deepEqual(plain(model.nextRuns({ kind: "every", every: 15, unit: "minutes", start: now }, now, 2)), [now + 15 * 60_000, now + 30 * 60_000]);
+  assert.deepEqual(plain(model.nextRuns({ kind: "every", every: 2, unit: "hours", start: now }, now, 2)), [now + 2 * 3_600_000, now + 4 * 3_600_000]);
   const once = now + 3_600_000;
-  assert.deepEqual(model.nextRuns({ kind: "once", at: once }, now), [once]);
-  assert.deepEqual(model.nextRuns({ kind: "once", at: now - 1 }, now), []);
+  assert.deepEqual(plain(model.nextRuns({ kind: "once", at: once }, now)), [once]);
+  assert.deepEqual(plain(model.nextRuns({ kind: "once", at: now - 1 }, now)), []);
 });
 
 test("A missed schedule catches up once, now, and a schedule that already ran does not", () => {
@@ -39,13 +41,13 @@ test("A missed schedule catches up once, now, and a schedule that already ran do
 
 test("A run log names the last success and a failed start", () => {
   const text = "100 ran\n200 failed worktree missing\n300 ran\n";
-  assert.deepEqual(model.parseRunLog(text), [
+  assert.deepEqual(plain(model.parseRunLog(text)), [
     { at: 100_000, ok: true, why: null },
     { at: 200_000, ok: false, why: "worktree missing" },
     { at: 300_000, ok: true, why: null },
   ]);
-  assert.deepEqual(model.lastOutcome(text), { lastRun: 300_000, failed: null });
-  assert.deepEqual(model.lastOutcome("100 ran\n200 failed boom"), { lastRun: 100_000, failed: { at: 200_000, ok: false, why: "boom" } });
+  assert.deepEqual(plain(model.lastOutcome(text)), { lastRun: 300_000, failed: null });
+  assert.deepEqual(plain(model.lastOutcome("100 ran\n200 failed boom")), { lastRun: 100_000, failed: { at: 200_000, ok: false, why: "boom" } });
 });
 
 test("A clock name stays short, and two long addresses do not share one", () => {
