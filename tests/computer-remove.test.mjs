@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { loadSpaces } from "./mod-fixtures.mjs";
 import { clone, context } from "./helpers.mjs";
 
-const record = { name: "dark", target: "dark.example", via: "", session: "", temporary: false };
+const record = { name: "grey", target: "grey.example", via: "", session: "", temporary: false };
 
 const viewFor = async ({ machines = [], parked = [], hc, notices }) => {
   const { Spaces } = await loadSpaces({
@@ -25,19 +25,19 @@ test("removeMachine drops a listed computer with rm, and an Off-only one without
   const listedCalls = [];
   const listedNotes = [];
   const listed = await viewFor({
-    machines: [{ name: "dark", target: "dark.example", via: false, state: "connected" }],
+    machines: [{ name: "grey", target: "grey.example", via: false, state: "connected" }],
     parked: [record],
     hc: async (args) => { listedCalls.push(clone(args)); return { code: 0, stdout: "" }; },
     notices: listedNotes,
   });
   const tasks = context();
-  listed.view.removeMachine("dark", tasks.cx);
+  listed.view.removeMachine("grey", tasks.cx);
   await tasks.drain();
-  assert.deepEqual(listedCalls, [["machine", "rm", "dark"]]);
+  assert.deepEqual(listedCalls, [["machine", "rm", "grey"]]);
   assert.deepEqual(listed.view.parked, []);
   assert.deepEqual(listed.view.machines, []);
-  assert.deepEqual(listed.forgotten, ["dark"]);
-  assert.equal(listedNotes[0].action.name, "kanso-spaces.restore-machine:dark");
+  assert.deepEqual(listed.forgotten, ["grey"]);
+  assert.equal(listedNotes[0].action.name, "kanso-spaces.restore-machine:grey");
 
   const offCalls = [];
   const offNotes = [];
@@ -47,12 +47,12 @@ test("removeMachine drops a listed computer with rm, and an Off-only one without
     notices: offNotes,
   });
   const offTasks = context();
-  off.view.removeMachine("dark", offTasks.cx);
+  off.view.removeMachine("grey", offTasks.cx);
   await offTasks.drain();
   assert.deepEqual(offCalls, []);
   assert.deepEqual(off.view.parked, []);
-  assert.deepEqual(off.forgotten, ["dark"]);
-  assert.equal(offNotes[0].action.name, "kanso-spaces.restore-machine:dark");
+  assert.deepEqual(off.forgotten, ["grey"]);
+  assert.equal(offNotes[0].action.name, "kanso-spaces.restore-machine:grey");
 });
 
 test("restoreMachine adds the kept record back, and an error toast names the failure", async () => {
@@ -62,12 +62,12 @@ test("restoreMachine adds the kept record back, and an error toast names the fai
     hc: async (args) => { added.push(clone(args)); return { code: 0, stdout: "" }; },
     notices,
   });
-  view.removed = { dark: record };
+  view.removed = { grey: record };
   const tasks = context();
-  view.restoreMachine("dark", tasks.cx);
+  view.restoreMachine("grey", tasks.cx);
   await tasks.drain();
-  assert.deepEqual(added, [["machine", "add", "dark.example", "--name", "dark", "--json"]]);
-  assert.equal(view.removed.dark, undefined);
+  assert.deepEqual(added, [["machine", "add", "grey.example", "--name", "grey", "--json"]]);
+  assert.equal(view.removed.grey, undefined);
   assert.deepEqual(notices, []);
 
   const failed = [];
@@ -76,12 +76,12 @@ test("restoreMachine adds the kept record back, and an error toast names the fai
     hc: async (args) => { failed.push(clone(args)); return { code: 1, stderr: "timed out" }; },
     notices: errors,
   });
-  again.view.removed = { dark: record };
+  again.view.removed = { grey: record };
   const failTasks = context();
-  again.view.restoreMachine("dark", failTasks.cx);
+  again.view.restoreMachine("grey", failTasks.cx);
   await failTasks.drain();
-  assert.deepEqual(failed, [["machine", "add", "dark.example", "--name", "dark", "--json"]]);
-  assert.deepEqual(again.view.removed.dark, record);
+  assert.deepEqual(failed, [["machine", "add", "grey.example", "--name", "grey", "--json"]]);
+  assert.deepEqual(again.view.removed.grey, record);
   assert.equal(errors[0].level, "error");
   assert.equal(errors[0].body, "timed out");
 });
