@@ -5,20 +5,30 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { clone, exec, load, repoText, temporary } from "./helpers.mjs";
 import { loadSettings } from "./mod-fixtures.mjs";
-import { updater } from "./update-harness.mjs";
+import { installedUpdater } from "./update-harness.mjs";
 
 const repo = fileURLToPath(new URL("..", import.meta.url));
 const readKeys = (file) => JSON.parse(repoText(file));
+const { linuxKeymap, linuxSection, takenByOmarchy } = await load("kanso-panel/platform-linux-keys.js", ["linuxKeymap", "linuxSection", "takenByOmarchy"]);
+const macLinux = () => ({
+  mac: readKeys("kanso/keys.json"),
+  linux: readKeys("kanso/keys.linux.json"),
+  herdr: JSON.parse(repoText("tests/herdr-keys.macos.json")),
+});
 const canonical = (chord) => {
   const match = String(chord).match(/^((?:(?:ctrl|alt|shift|cmd)-)*)(.+)$/);
   const mods = new Set(match[1].split("-").filter(Boolean));
   return [...["ctrl", "alt", "shift", "cmd"].filter((mod) => mods.has(mod)), match[2]].join("-");
 };
 const modifiers = (chord) => chord.split("-").slice(0, -1).join("-");
+const noneTaken = (keys) => {
+  for (const [section, bindings] of Object.entries(keys)) {
+    for (const chord of Object.keys(bindings)) assert.equal(takenByOmarchy(chord), false, `${section} ${chord} is one Omarchy takes`);
+  }
+};
 
 test("Linux keys leave Omarchy's chords alone, keep every action, and do not bind a chord twice", async () => {
-  const { linuxKeymap, takenByOmarchy } = await load("kanso-panel/platform-linux-keys.js", ["linuxKeymap", "takenByOmarchy"]);
-  const mac = readKeys("kanso/keys.json");
+  const { mac } = macLinux();
   const linux = linuxKeymap(mac);
   for (const [section, bindings] of Object.entries(linux)) {
     const chords = Object.keys(bindings);
@@ -32,8 +42,7 @@ test("Linux keys leave Omarchy's chords alone, keep every action, and do not bin
 });
 
 test("Super+D and Super+B stay, the next agent that needs you moves to Ctrl+Shift+J, and the vim keys share one set of modifiers", async () => {
-  const { linuxKeymap } = await load("kanso-panel/platform-linux-keys.js", ["linuxKeymap"]);
-  const mac = readKeys("kanso/keys.json");
+  const { mac } = macLinux();
   const layout = linuxKeymap(mac)["layout:kanso"];
   assert.equal(layout["cmd-d"], mac["layout:kanso"]["cmd-d"]);
   assert.equal(layout["cmd-b"], mac["layout:kanso"]["cmd-b"]);
@@ -47,8 +56,7 @@ test("Super+D and Super+B stay, the next agent that needs you moves to Ctrl+Shif
 });
 
 test("The Linux keys file is the Mac keys rewritten for Omarchy, and the build check fails when that file is changed", async (t) => {
-  const { linuxKeymap } = await load("kanso-panel/platform-linux-keys.js", ["linuxKeymap"]);
-  const mac = readKeys("kanso/keys.json");
+  const { mac } = macLinux();
   const text = `${JSON.stringify(linuxKeymap(mac), null, 2)}\n`;
   assert.equal(repoText("kanso/keys.linux.json"), text);
   const onRepo = await exec(process.execPath, ["scripts/build-linux-keys.mjs", "--check"], { cwd: repo });
@@ -76,13 +84,10 @@ test("macOS and Windows keep their own key files, and Linux uses the Linux file 
 });
 
 test("An update from a tag without Linux keys gives the Mac keys back as Linux keys, keeps a key you changed, and moves Quit off Super+Q", async () => {
-  const { takenByOmarchy } = await load("kanso-panel/platform-linux-keys.js", ["takenByOmarchy"]);
-  const mac = readKeys("kanso/keys.json");
-  const linux = readKeys("kanso/keys.linux.json");
-  const herdr = JSON.parse(repoText("tests/herdr-keys.macos.json"));
+  const { mac, linux, herdr } = macLinux();
   const user = { ...clone(mac), global: { ...herdr.global }, "layout:kanso": { ...mac["layout:kanso"], "cmd-j": "mine.jump" } };
   const asked = [];
-  const { Updater } = await updater({
+  const plan = await (await installedUpdater({
     window: () => ({ platform: "linux" }),
     readTextFile: async () => JSON.stringify(user),
     exec: async (command, args) => {
@@ -95,10 +100,7 @@ test("An update from a tag without Linux keys gives the Mac keys back as Linux k
       if (url === "new/kanso/keys.linux.json") return { code: 0, stdout: JSON.stringify(linux) };
       assert.fail(url);
     },
-  });
-  const instance = new Updater({ file: (version, path) => `${version}/${path}` });
-  instance.installed = "old";
-  const plan = await instance.plan("new", "/app");
+  })).plan("new", "/app");
   assert.ok(asked.includes("old/kanso/keys.linux.json") && asked.includes("old/kanso/keys.json") && asked.includes("new/kanso/keys.linux.json"));
   const got = JSON.parse(plan.keys);
   for (const [section, bindings] of Object.entries(linux)) {
@@ -109,18 +111,13 @@ test("An update from a tag without Linux keys gives the Mac keys back as Linux k
   assert.equal(takenByOmarchy(yours[0][0]), false, yours[0][0]);
   assert.equal(got.global["cmd-q"], undefined);
   assert.equal(got.global["ctrl-shift-q"], "app.quit");
-  for (const [section, bindings] of Object.entries(got)) {
-    for (const chord of Object.keys(bindings)) assert.equal(takenByOmarchy(chord), false, `${section} ${chord} is one Omarchy takes`);
-  }
+  noneTaken(got);
   assert.match(plan.notes, /Kept your own cmd-j/);
 });
 
 test("An update of Herdr's Mac keys plus kansō leaves no moved Herdr key on a kansō key that does something else, and nothing Omarchy takes remains", async () => {
-  const { takenByOmarchy } = await load("kanso-panel/platform-linux-keys.js", ["takenByOmarchy"]);
   const { mergeKeys, omarchyKeys } = await load("kanso-tabs/update.js", ["mergeKeys", "omarchyKeys"]);
-  const mac = readKeys("kanso/keys.json");
-  const linux = readKeys("kanso/keys.linux.json");
-  const herdr = JSON.parse(repoText("tests/herdr-keys.macos.json"));
+  const { mac, linux, herdr } = macLinux();
   const user = { ...clone(mac), global: { ...herdr.global } };
   const got = omarchyKeys(mergeKeys(clone(user), mac, linux), linux).keys;
   const clashes = [];
@@ -135,13 +132,10 @@ test("An update of Herdr's Mac keys plus kansō leaves no moved Herdr key on a k
     }
   }
   assert.deepEqual(clashes, []);
-  for (const [section, bindings] of Object.entries(got)) {
-    for (const chord of Object.keys(bindings)) assert.equal(takenByOmarchy(chord), false, `${section} ${chord} is one Omarchy takes`);
-  }
+  noneTaken(got);
 });
 
 test("A chord reserved for kansō is never given to a key that had to move, nor to the form Linux reports", async () => {
-  const { linuxSection } = await load("kanso-panel/platform-linux-keys.js", ["linuxSection"]);
   assert.equal(linuxSection({ "cmd-j": "mine.jump" })["ctrl-shift-j"], "mine.jump");
   const moved = linuxSection({ "cmd-j": "mine.jump" }, new Set(["ctrl-shift-j"]));
   assert.equal(moved["ctrl-shift-j"], undefined);

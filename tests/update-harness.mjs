@@ -208,6 +208,13 @@ export async function updater(host) {
   return load("kanso-tabs/update.js", names, host);
 }
 
+export async function installedUpdater(host) {
+  const { Updater } = await updater(host);
+  const instance = new Updater({ file: (version, path) => `${version}/${path}` });
+  instance.installed = "old";
+  return instance;
+}
+
 // A Herdr home with Kanso 1.0.0 installed and used, and two releases served
 // from file:// URLs: what v1.0.0 shipped and the v1.1.0 tarball.
 export async function fixture(t, { layoutChanged = true, homeName = "O'Brien home" } = {}) {
