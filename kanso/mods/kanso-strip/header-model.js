@@ -1,5 +1,6 @@
 // The pane header's pure model: what folds as the pane narrows, which tools are out, what ⋯ holds and which place is news.
 import { G, H, T, W, ICON, ICON_ROW, ICON_INLINE } from "./ui.js";
+import { ACTIONS, ORDER, wordsOf } from "./context-menu.js";
 
 // A step is shown until the header folds that far; the order lives only here.
 export const FOLDS = ["nothing", "folder", "branch", "tools into ⋯", "commits", "files", "verdict word", "PR", "close into ⋯"];
@@ -62,11 +63,15 @@ export function hoverTools({ fold, strip }) {
 
 export const PIECE_LINES = ["needed", "hide", "settings"];
 
-/** What ⋯ holds, in order: what is not out, the tools folded away, then the piece lines. */
+const ACT = { sleep: "sleep-agent", close: "close-pane" };
+export const actOf = (key) => ACT[key] ?? key;
+const byAction = (a, b) => ORDER.indexOf(actOf(a)) - ORDER.indexOf(actOf(b));
+
+/** What ⋯ holds: what is not out and the tools folded away, in every menu's order, then the piece lines. */
 export function menuEntries({ strip, pinned, zoomed, tools, fold, canOpen }) {
   const out = hoverTools({ fold, strip });
   const folded = hoverTools({ fold: 0, strip }).filter((key) => !out.includes(key));
-  return [
+  const acts = [
     ...(strip ? [pinned ? "unpin" : "pin"] : []),
     ...(tools.sleep === "menu" ? ["sleep"] : []),
     ...(tools.send === "menu" ? ["send"] : []),
@@ -74,9 +79,8 @@ export function menuEntries({ strip, pinned, zoomed, tools, fold, canOpen }) {
     "split-down",
     zoomed ? "unzoom" : "zoom",
     ...folded,
-    "separator",
-    ...PIECE_LINES,
   ];
+  return [...acts.sort(byAction), "separator", ...PIECE_LINES];
 }
 
 const bare = (path) => String(path ?? "").replace(/\/+$/, "");
@@ -94,10 +98,9 @@ export function placeOf({ cwd, branch }, project, home) {
 export const paneLabel = ({ agent, cwd, given, name }) => given || (agent || cwd ? name : "Terminal");
 
 /** Each tool and ⋯ entry: its icon in kanso-chrome's icons and its words. */
+const toolLook = (key) => [ACTIONS[actOf(key)].icon, wordsOf(actOf(key))];
 export const ENTRIES = {
-  pin: ["pin", "Pin"], unpin: ["pin", "Unpin"], sleep: ["moon", "Sleep this agent"], send: ["send", "Send to another agent"],
-  "open-with": ["external-link", "Open with…"], "split-down": ["rows-2", "Split down"], zoom: ["maximize-2", "Zoom"], unzoom: ["minimize-2", "Unzoom"],
-  "split-right": ["columns-2", "Split right"], width: ["move-horizontal", "Wider or narrower"], close: ["x", "Close"],
+  ...Object.fromEntries(["pin", "unpin", "sleep", "send", "open-with", "split-down", "zoom", "unzoom", "split-right", "width", "close"].map((key) => [key, toolLook(key)])),
   needed: ["check", "Only when needed"], hide: ["eye-off", "Hide this"], settings: ["sliders-vertical", "Settings for this…"],
 };
 

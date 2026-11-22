@@ -12,6 +12,7 @@ import { Armed } from "./ui-button.js";
 import { menuList } from "./ui-menu.js";
 import { pieceLines } from "./piece-lines.js";
 import { hintOf } from "./ui-tooltip.js";
+import { contextItems } from "./context-menu.js";
 
 const nonce = () => Date.now() + Math.random();
 
@@ -34,7 +35,7 @@ function groups(tg, armed) {
   const name = info?.name || term?.name || "Terminal";
   const title = space?.machine ? `${name} \u00b7 ${space.machine}` : name;
   // A split first tells the strip where the new pane goes.
-  const split = (label, dir, icon, key) => ({ label, icon, key, does: () => {
+  const split = (act, dir) => ({ act, does: () => {
     setShared("strip.intent", { dir, from: pane, at: Date.now() });
     run("pane.split", { pane, direction: dir === "down" ? "down" : "right" });
   } });
@@ -43,28 +44,28 @@ function groups(tg, armed) {
     run(command);
   };
   const clipboard = term ? [
-    { label: "Copy", icon: "copy", key: "terminal.copy", does: inTerminal("terminal.copy") },
-    { label: "Cut", icon: "scissors", disabled: true, does: () => {} },
-    { label: "Paste", icon: "clipboard-paste", key: "terminal.paste", does: inTerminal("terminal.paste") },
+    { act: "copy", does: inTerminal("terminal.copy") },
+    { act: "cut", disabled: true, does: () => {} },
+    { act: "paste", does: inTerminal("terminal.paste") },
   ] : [];
-  const close = { label: "Close pane", icon: "x", key: "kanso-strip.close", verb: `close ${name}`, arms: agent, does: () => run("pane.close", { pane }) };
+  const close = { act: "close-pane", verb: `close ${name}`, arms: agent, does: () => run("pane.close", { pane }) };
   return { title, armedKey: close.arms ? "close" : null, groups: [
     clipboard,
     [
-      split("Split right", "right", "columns-2", "kanso-strip.new-right"),
-      split("Split down", "down", "rows-2", "kanso-strip.new-down"),
-      split("Split left", "left", "columns-2", "kanso-strip.new-left"),
-      { label: "Wider or narrower", icon: "move-horizontal", key: "kanso-strip.width", does: () => setShared("strip.req", { op: "width", pane, n: nonce() }) },
-      { label: pinned ? "Unpin" : "Pin", icon: "pin", key: "kanso-strip.pin", does: () => setShared("strip.req", { op: "pin", pane, n: nonce() }) },
+      split("split-right", "right"),
+      split("split-down", "down"),
+      split("split-left", "left"),
+      { act: "width", does: () => setShared("strip.req", { op: "width", pane, n: nonce() }) },
+      { act: pinned ? "unpin" : "pin", does: () => setShared("strip.req", { op: "pin", pane, n: nonce() }) },
     ],
     [
-      ...(canSend ? [{ label: "Send to an agent\u2026", icon: "send", key: "kanso-strip.send", does: () => openSend(info) }] : []),
-      ...(agent ? [{ label: "Find in conversation", icon: "search", key: "kanso-strip.find", does: () => { run("pane.focus", { pane }); run("kanso-strip.find"); } }] : []),
-      ...(info?.cwd ? [{ label: "Open with\u2026", icon: "external-link", key: "mod.open:open-with", does: () => openWithPopup(info) }] : []),
-      ...(canSleep && space ? [{ label: "Sleep", icon: "moon", does: () => openSleep(info) }] : []),
-      ...(parent ? [{ label: `Send back to ${parent.name || parent.address}`, icon: "chevron-right", does: () => run("terminal.park", { terminal: term.address }) }] : []),
+      ...(canSend ? [{ act: "send", does: () => openSend(info) }] : []),
+      ...(agent ? [{ act: "find", does: () => { run("pane.focus", { pane }); run("kanso-strip.find"); } }] : []),
+      ...(info?.cwd ? [{ act: "open-with", does: () => openWithPopup(info) }] : []),
+      ...(canSleep && space ? [{ act: "sleep-agent", does: () => openSleep(info) }] : []),
+      ...(parent ? [{ act: "send-back", of: [parent.name || parent.address], does: () => run("terminal.park", { terminal: term.address }) }] : []),
     ],
-    ...(term ? [[{ label: "Right-clicks go to the program", checked: toProgram,
+    ...(term ? [[{ act: "right-clicks", checked: toProgram,
       does: () => run("terminal.right_click", { terminal: term.address, to: toProgram ? "menu" : "program" }) }]] : []),
     [{ ...close, armed: Boolean(close.arms) && armed.is("close") }],
   ].filter((group) => group.length) };
@@ -107,11 +108,8 @@ export default class KansoMenu extends View {
   // A pane's menu: its groups, a rule between them.
   paneView(target) {
     const { title, groups: sets } = groups(target, this.armed);
-    return {
-      title,
-      lines: sets.flatMap((set, g) => [...(g ? [{ separator: true }] : []),
-        ...set.map((it) => ({ icon: it.icon, label: it.label, hint: hintOf(it.key), checked: it.checked, armed: it.armed, verb: it.verb, disabled: it.disabled, onClick: (cx) => this.choose(it, cx) }))]),
-    };
+    const make = (label, does, { arms, ...look }) => ({ ...look, label, onClick: (cx) => this.choose({ arms, does }, cx) });
+    return { title, lines: contextItems(sets.flatMap((set, g) => [...(g ? [{ separator: true }] : []), ...set]), { hint: hintOf, make }) };
   }
 
   render() {

@@ -34,7 +34,7 @@ import { projectRow } from "./project-row.js";
 import { computerRow, computerTools } from "./computer-row.js";
 import { section } from "./section.js";
 import { asleep } from "./asleep.js";
-import { machineReaches, asleepLook, withPending, withoutWaking, AWAY_MENU, FORGET_HELD, forgetHeld, holdForget } from "./row-states.js";
+import { machineReaches, asleepLook, withPending, withoutWaking, FORGET_HELD, forgetHeld, holdForget } from "./row-states.js";
 import { SLEEP_PENDING, SLEEP_WAKING, SLEEP_FAILED, COULD_NOT_SLEEP, failedTerminals, withoutTerminals, RESUME_LABEL, asleepTerminal } from "./resume.js";
 import { tile } from "./tile.js";
 import { views, viewSwitch } from "./view-switch.js";
@@ -46,6 +46,7 @@ import { dialog } from "./ui-dialog.js";
 import { field, TextField } from "./ui-field.js";
 import { menu, emptyState, skeletonOf, stack, tooltip } from "./kit.js";
 import { boundChord, chordOf, hintOf } from "./ui-tooltip.js";
+import { contextItems } from "./context-menu.js";
 import { menuList, menuHeight, RUN_ROWS } from "./ui-menu.js";
 import { pieceLines, openPieceMenu, hidePiece } from "./piece-lines.js";
 import { toolbar } from "./toolbar.js";
@@ -1827,6 +1828,8 @@ export default class Spaces extends RetryingView {
   // A popup's Menu, walked by the keyboard; Herdr draws its frame.
   popup(t, title, items) { return this.menuKeys(menuList("spaces-menu", { title, items }, tokens(t))); }
 
+  actions(item, lines) { return contextItems(lines, { hint: hintOf, make: item }); }
+
   // The piece lines every right-click menu ends with, as items the keyboard walks like the rest.
   pieceItems(item, id) {
     return pieceLines(id, { named: true }).map((line) => (line.separator ? line : item(line.label, (cx) => line.onClick(cx), { icon: line.icon, selected: line.selected })));
@@ -1896,19 +1899,19 @@ export default class Spaces extends RetryingView {
     const options = () => openOverlay({ mod: "menu", kind: "popup", width: 200, height: 260, props: { tab: "space", target: { id: w.id } } });
     const remove = (cx) => { this.armed.press("remove", cx, () => this.removeProject(project, w)); };
     return this.popup(t, place?.name ?? w?.name ?? null, [
-      ...(asleep.length ? [{ heading: "Asleep" }, ...asleep.map((z) => item(`Wake ${z.tab}`, () => wakeRow(z), { icon: "sun", hint: z.saved ? since(z.saved) : null }))] : []),
-      ...(asleep.length > 1 ? [item(`Wake all ${asleep.length}`, () => arrange({ wake: { space: w.id } }), { icon: "undo" })] : []),
-      ...(place && !project?.missing ? [item("New conversation\u2026", () => this.newAgentMenu(place)),
-        item("New in a worktree\u2026", () => this.worktreeDialog(place), { icon: "git-branch" })] : []),
-      ...(trees.length ? [{ heading: "Worktrees" }, { scroll: trees.map((x) => item(x.branch ?? "detached", () => this.openTree(place, x), { icon: "git-branch", hint: where(x.path) })) }] : []),
-      ...(w ? [item("Rename\u2026", () => run("space.rename", { id: w.id }))] : []),
-      ...(active ? [item("Sleep this tab\u2026", () => sleepTab(w.id, active.id), { icon: "moon" })] : []),
-      ...(tabs > 1 ? [item("Sleep the project\u2026", () => sleepProject(w.id), { icon: "moon" })] : []),
-      ...(w ? [item("Project options\u2026", options)] : []),
-      ...(keepable ? [item("Keep as a project", keep, { icon: "pin", keep: true })] : []),
-      ...(project?.missing && !project?.machine ? [item("Locate folder\u2026", locate, { icon: "file", keep: true })] : []),
-      // Any project you see can go: one you added (its row too), or an open space you never kept.
-      ...(project || w ? [item("Remove project", remove, { icon: "x", keep: true, verb: w ? `remove, close ${tabs} tab${tabs === 1 ? "" : "s"}` : "remove it", armed: this.armed.is("remove") })] : []),
+      ...this.actions(item, [
+        ...(asleep.length ? [{ heading: "Asleep" }, ...asleep.map((z) => ({ act: "wake-tab", of: [z.tab], does: () => wakeRow(z), hint: z.saved ? since(z.saved) : null }))] : []),
+        ...(asleep.length > 1 ? [{ act: "wake-all", of: [asleep.length], does: () => arrange({ wake: { space: w.id } }) }] : []),
+        ...(place && !project?.missing ? [{ act: "new-conversation", does: () => this.newAgentMenu(place) }, { act: "new-worktree", does: () => this.worktreeDialog(place) }] : []),
+        ...(trees.length ? [{ heading: "Worktrees" }, { scroll: trees.map((x) => ({ act: "worktree", of: [x.branch ?? "detached"], does: () => this.openTree(place, x), hint: where(x.path) })) }] : []),
+        ...(w ? [{ act: "rename", does: () => run("space.rename", { id: w.id }) }] : []),
+        ...(active ? [{ act: "sleep-tab", does: () => sleepTab(w.id, active.id) }] : []),
+        ...(tabs > 1 ? [{ act: "sleep-project", does: () => sleepProject(w.id) }] : []),
+        ...(w ? [{ act: "project-options", does: options }] : []),
+        ...(keepable ? [{ act: "keep-project", does: keep, keep: true }] : []),
+        ...(project?.missing && !project?.machine ? [{ act: "locate", does: locate, keep: true }] : []),
+        ...(project || w ? [{ act: "remove-project", does: remove, keep: true, verb: w ? `remove, close ${tabs} tab${tabs === 1 ? "" : "s"}` : "remove it", armed: this.armed.is("remove") }] : []),
+      ]),
       ...this.pieceItems(item, "sidebar.git"),
     ]);
   }
@@ -2338,8 +2341,8 @@ export default class Spaces extends RetryingView {
     const acting = rows.filter((row) => row.key);
     this.menuActs = acting.map((row) => go(row.key));
     const lit = acting[this.menuAt]?.key ?? null;
-    const items = rows.map((row) => (row.key ? { ...row, selected: row.key === lit, onClick: go(row.key) } : row));
-    return this.menuKeys(menu({ title, items })("computer-menu", tokens(t)));
+    const lines = rows.map((row) => (row.key ? { ...row, selected: row.key === lit, ...(row.act ? { does: go(row.key) } : { onClick: go(row.key) }) } : row));
+    return this.menuKeys(menu({ title, items: contextItems(lines, { hint: hintOf }) })("computer-menu", tokens(t)));
   }
 
   // The icon turns at once; a save that fails turns it back and says so.
@@ -2676,7 +2679,7 @@ export default class Spaces extends RetryingView {
       title,
       items: [
         { scroll: rows.map((r) => item(r.name, to(r), { mark: r.status, hint: r.hint, badge: r.badge, keep: true })), rows: RAIL_MENU_ROWS, handle: this.convScroll },
-        ...(space ? [{ separator: true }, item("Go to project", () => run("space.select", { id: space }), { icon: "chevron-right" })] : []),
+        ...(space ? [{ separator: true }, ...this.actions(item, [{ act: "go-project", does: () => run("space.select", { id: space }) }])] : []),
       ],
     };
   }
@@ -2853,31 +2856,34 @@ export default class Spaces extends RetryingView {
     const name = this.subjectOf(m, l, a, title);
     const into = (sub) => () => { this.sub = sub; this.menuAt = -1; };
     // A picker is its own Menu, named for what it acts on; Escape returns to the first.
-    if (this.sub === "snooze") return this.popup(t, `Snooze ${name}`, snoozePresets(now).map((x) => item(x.label, () => label(m.address, SNOOZE_LABEL, x.until), { hint: x.when })));
+    if (this.sub === "snooze") return this.popup(t, `Snooze ${name}`, this.actions(item, snoozePresets(now).map((x) => ({ act: "snooze-until", of: [x.label], does: () => label(m.address, SNOOZE_LABEL, x.until), hint: x.when }))));
     if (this.sub === "move") {
-      return this.popup(t, `Move ${name} to`, [...others.map((w) => item(w.name, () => moveTo(w.id))),
-        ...(movedTo ? [item(`Back to ${sp?.name ?? "where it runs"}`, () => moveTo(null), { icon: "undo" })] : [])]);
+      return this.popup(t, `Move ${name} to`, this.actions(item, [...others.map((w) => ({ act: "move-to", of: [w.name], does: () => moveTo(w.id) })),
+        ...(movedTo ? [{ act: "move-back", of: [sp?.name ?? "where it runs"], does: () => moveTo(null) }] : [])]));
     }
     if (this.sub === "copy") {
-      return this.popup(t, "Copy", [
-        ...(p?.cwd ? [item("Folder", copy(p.cwd), { icon: "folder", hint: tilde(p.cwd) })] : []),
-        ...(p?.branch ? [item("Branch", copy(p.branch), { icon: "git-branch", hint: p.branch })] : []),
-        ...(session ? [item("Conversation id", copy(session), { icon: "copy", hint: `${session.slice(0, 4)}\u2026` })] : []),
-      ]);
+      return this.popup(t, "Copy", this.actions(item, [
+        ...(p?.cwd ? [{ act: "copy-folder", does: copy(p.cwd), hint: tilde(p.cwd) }] : []),
+        ...(p?.branch ? [{ act: "copy-branch-row", does: copy(p.branch), hint: p.branch }] : []),
+        ...(session ? [{ act: "copy-conversation", does: copy(session), hint: `${session.slice(0, 4)}\u2026` }] : []),
+      ]));
     }
+    const more = { hint: "\u203a", keep: true };
     return this.popup(t, name, [
-      ...(p ? [item("Open", () => run("pane.focus", { pane: p.pane }), { icon: "chevron-right" })] : []),
-      item("Rename\u2026", () => renameTerminal(m.address, l[NAME_LABEL] || l[THREAD_LABEL] || title || a?.title || "")),
-      item(pinned ? "Unpin" : "Pin to the top", () => this.pinThread({ address: m.address, pin: pinned ? 1 : null }), { icon: "pin" }),
-      ...(settled ? [item("Bring back", () => label(m.address, SETTLED_LABEL), { icon: "undo" })] : []),
-      ...(!settled && free ? [item("Settle", () => label(m.address, SETTLED_LABEL, `${now}:${k?.turn ?? 0}`), { icon: "check" })] : []),
-      item(isUnread(l) ? "Mark read" : "Mark unread", () => label(m.address, UNREAD_LABEL, isUnread(l) ? "" : "1")),
-      ...(snoozed ? [item("Wake", () => label(m.address, SNOOZE_LABEL), { icon: "clock" })] : [item("Snooze", into("snooze"), { icon: "clock", hint: "\u203a", keep: true })]),
-      ...(m.address && (others.length || movedTo) ? [item("Move to project", into("move"), { hint: "\u203a", keep: true })] : []),
-      ...(p?.cwd || p?.branch || session ? [item("Copy", into("copy"), { icon: "copy", hint: "\u203a", keep: true })] : []),
-      ...(p?.tab && sp && a ? [item("Sleep this agent", () => sleepAgent(sp.id, p.tab, p.pane), { icon: "moon" })] : []),
-      ...(p?.tab && sp ? [item("Sleep its tab", () => sleepTab(sp.id, p.tab), { icon: "moon" })] : []),
-      item(a ? "Close agent" : "Close terminal", kill, { icon: "x", keep: !this.armed.is("close"), verb: `close ${name}`, armed: this.armed.is("close") }),
+      ...this.actions(item, [
+        ...(p ? [{ act: "open", does: () => run("pane.focus", { pane: p.pane }) }] : []),
+        { act: "rename", does: () => renameTerminal(m.address, l[NAME_LABEL] || l[THREAD_LABEL] || title || a?.title || "") },
+        { act: pinned ? "unpin-top" : "pin-top", does: () => this.pinThread({ address: m.address, pin: pinned ? 1 : null }) },
+        ...(settled ? [{ act: "bring-back", does: () => label(m.address, SETTLED_LABEL) }] : []),
+        ...(!settled && free ? [{ act: "settle", does: () => label(m.address, SETTLED_LABEL, `${now}:${k?.turn ?? 0}`) }] : []),
+        { act: isUnread(l) ? "mark-read" : "mark-unread", does: () => label(m.address, UNREAD_LABEL, isUnread(l) ? "" : "1") },
+        snoozed ? { act: "unsnooze", does: () => label(m.address, SNOOZE_LABEL) } : { act: "snooze", does: into("snooze"), ...more },
+        ...(m.address && (others.length || movedTo) ? [{ act: "move", does: into("move"), ...more }] : []),
+        ...(p?.cwd || p?.branch || session ? [{ act: "copy-menu", does: into("copy"), ...more }] : []),
+        ...(p?.tab && sp && a ? [{ act: "sleep-agent", does: () => sleepAgent(sp.id, p.tab, p.pane) }] : []),
+        ...(p?.tab && sp ? [{ act: "sleep-tab", does: () => sleepTab(sp.id, p.tab) }] : []),
+        { act: a ? "close-agent" : "close-terminal", does: kill, keep: !this.armed.is("close"), verb: `close ${name}`, armed: this.armed.is("close") },
+      ]),
       ...this.pieceItems(item, "sidebar.activity"),
     ]);
   }
@@ -2908,16 +2914,16 @@ export default class Spaces extends RetryingView {
       });
       this.redraw(cx);
     };
-    return { title: z.saved ? `${m.name}, asleep since ${since(z.saved)}` : `${m.name}, asleep`, items: [
+    return { title: z.saved ? `${m.name}, asleep since ${since(z.saved)}` : `${m.name}, asleep`, items: this.actions(item, [
       ...(reachable ? [
-        item("Wake", () => arrange({ wake: { space: z.space, terminal: z.terminal } }), { icon: "sun" }),
-        ...(z.n > 1 ? [item(`Wake all ${z.n} in ${z.tab}`, () => wakeRow(z), { icon: "sun" })] : []),
+        { act: "wake", does: () => arrange({ wake: { space: z.space, terminal: z.terminal } }) },
+        ...(z.n > 1 ? [{ act: "wake-all-in", of: [z.n, z.tab], does: () => wakeRow(z) }] : []),
       ] : []),
-      item("Copy conversation id", (cx) => cx.write_to_clipboard?.(z.resume), { icon: "copy" }),
+      { act: "copy-conversation-id", does: (cx) => cx.write_to_clipboard?.(z.resume) },
       { separator: true },
-      item("Forget", forget, { icon: "x", keep: true, verb: "forget", armed }),
-      item("Everything asleep\u2026", () => run("kanso-spaces.asleep"), { icon: "moon" }),
-    ] };
+      { act: "forget", does: forget, keep: true, verb: "forget", armed },
+      { act: "everything-asleep", does: () => run("kanso-spaces.asleep") },
+    ]) };
   }
 
   openAwayMenu(cx) {
@@ -2926,12 +2932,10 @@ export default class Spaces extends RetryingView {
   }
 
   awayMenuView(t) {
-    const item = this.lines();
-    const [dismiss, off] = AWAY_MENU;
-    return this.popup(t, "While you were away", [
-      item(dismiss, () => run("kanso-spaces.away-dismiss")),
-      item(off, () => run("kanso-spaces.away-off")),
-    ]);
+    return this.popup(t, "While you were away", this.actions(this.lines(), [
+      { act: "away-dismiss", does: () => run("kanso-spaces.away-dismiss") },
+      { act: "away-off", does: () => run("kanso-spaces.away-off") },
+    ]));
   }
 
   openAsleepMenu(menu) {
