@@ -9,7 +9,7 @@ import { installedUpdater } from "./update-harness.mjs";
 
 const repo = fileURLToPath(new URL("..", import.meta.url));
 const readKeys = (file) => JSON.parse(repoText(file));
-const { linuxKeymap, linuxSection, migrateToLinux, takenByOmarchy } = await load("kanso-panel/platform-linux-keys.js", ["linuxKeymap", "linuxSection", "migrateToLinux", "takenByOmarchy"]);
+const { linuxKeymap, linuxSection, migrateToLinux, shippedLinuxKeymap, takenByOmarchy, withClipboardKeys } = await load("kanso-panel/platform-linux-keys.js", ["linuxKeymap", "linuxSection", "migrateToLinux", "shippedLinuxKeymap", "takenByOmarchy", "withClipboardKeys"]);
 const macLinux = () => ({
   mac: readKeys("kanso/keys.json"),
   linux: readKeys("kanso/keys.linux.json"),
@@ -61,7 +61,7 @@ test("Super+D and Super+B stay, the next agent that needs you moves to Ctrl+Shif
 
 test("The Linux keys file is the Mac keys rewritten for Omarchy, and the build check fails when that file is changed", async (t) => {
   const { mac } = macLinux();
-  const text = `${JSON.stringify(linuxKeymap(mac), null, 2)}\n`;
+  const text = `${JSON.stringify(shippedLinuxKeymap(mac), null, 2)}\n`;
   assert.equal(repoText("kanso/keys.linux.json"), text);
   const onRepo = await exec(process.execPath, ["scripts/build-linux-keys.mjs", "--check"], { cwd: repo });
   assert.equal(onRepo.code, 0, onRepo.stderr);
@@ -115,9 +115,24 @@ test("A Mac keys file moves kansō and Herdr to Linux keys, and a second run cha
   assert.equal(first.keys.global["cmd-q"], undefined);
   assert.equal(first.keys.global["ctrl-shift-q"], "app.quit");
   noneTaken(first.keys);
+  assert.equal(first.keys.terminal["ctrl-shift-c"], "terminal.copy");
+  assert.equal(first.keys.terminal["ctrl-insert"], "terminal.copy");
+  assert.equal(first.keys.terminal["ctrl-shift-v"], "terminal.paste");
+  assert.equal(first.keys.terminal["shift-insert"], "terminal.paste");
   const second = migrateToLinux(first.keys, mac);
   assert.equal(second.changed, false);
   assert.equal(JSON.stringify(second.keys), JSON.stringify(first.keys));
+});
+
+test("Clipboard keys fill only the unbound chords and keep a user's own Ctrl+Shift+C", () => {
+  const keys = { terminal: { "ctrl-shift-c": "mine.copy", "ctrl-insert": "mine.insert", "ctrl-shift-f": "kanso-strip.find" } };
+  const next = withClipboardKeys(keys);
+  assert.equal(next.terminal["ctrl-shift-c"], "mine.copy");
+  assert.equal(next.terminal["ctrl-insert"], "mine.insert");
+  assert.equal(next.terminal["ctrl-shift-f"], "kanso-strip.find");
+  assert.equal(next.terminal["ctrl-shift-v"], "terminal.paste");
+  assert.equal(next.terminal["shift-insert"], "terminal.paste");
+  assert.equal(Object.keys(next.terminal).length, 5);
 });
 
 test("A Mac map without Super+J migrates with no key for the next agent that needs you", async () => {
