@@ -9,7 +9,7 @@ const systemApi = await loadSystemApi();
 const { linuxPorts } = await load("kanso-panel/platform-ports.js", ["linuxPorts"]);
 const { procLinks, processApi } = await load("kanso-panel/platform-processes.js", ["procLinks", "processApi"]);
 const { dockerHeld } = await load("kanso-containers/model.js", ["dockerHeld"]);
-const { clipboardApi, hyprlandClass } = await load("kanso-panel/platform-clipboard.js", ["clipboardApi", "hyprlandClass"]);
+const { browserClasses, clipboardApi, hyprlandClass } = await load("kanso-panel/platform-clipboard.js", ["browserClasses", "clipboardApi", "hyprlandClass"]);
 const { openApi } = await load("kanso-panel/platform-open.js", ["openApi"]);
 const { petApi } = await load("kanso-panel/platform-pets.js", ["petApi"]);
 
@@ -86,12 +86,15 @@ test("Linux reads this process's working directory and open files from /proc", {
   process.chdir(dir);
   try {
     const api = processApi("linux", (command, args) => exec(command, args));
-    const cwd = await api.cwd([process.pid]);
+    const pids = [process.pid, 999999];
+    const cwd = await api.cwd(pids);
     assert.equal(cwd.state, "ok");
     assert.equal(cwd.values.get(process.pid), dir);
-    const files = await api.openFiles([process.pid]);
+    assert.equal(cwd.values.has(999999), false);
+    const files = await api.openFiles(pids);
     assert.equal(files.state, "ok");
     assert.ok(files.values.some((row) => row.pid === process.pid && row.path === note));
+    assert.equal(files.values.some((row) => row.pid === 999999), false);
   } finally {
     process.chdir(previous);
     await handle.close();
@@ -104,20 +107,50 @@ test("Docker's engine processes count, and Docker Desktop on macOS still counts"
   assert.equal(dockerHeld(text), rows.filter((row) => row[2] !== "Safari").reduce((sum, row) => sum + row[1] / 1024, 0));
 });
 
-test("A paste aimed at another front class does not type, and Hyprland's class is the window class", async () => {
+test("Linux paste types only when the front window is the default browser", async () => {
+  const browsers = browserClasses("Google-chrome\n firefox \n");
+  assert.equal(browsers.size, 2);
+  assert.equal(browsers.has("google-chrome"), true);
+  assert.equal(browsers.has("firefox"), true);
   assert.equal(hyprlandClass('{"class":"Code"}'), "Code");
   assert.equal(hyprlandClass("not json"), null);
-  const calls = [];
-  const api = clipboardApi("linux", async (program, args) => {
-    calls.push([program, args]);
-    if (program === "hyprctl") return success(JSON.stringify({ class: "Code" }));
-    if (program === "wtype") return success("");
-    return { code: 1, stdout: "", stderr: "missing" };
+  const typed = (calls) => calls.some((program) => program === "wtype" || program === "xdotool");
+  const paste = async (window, target) => {
+    const calls = [];
+    const api = clipboardApi("linux", async (program) => {
+      calls.push(program);
+      if (program === "hyprctl") return success(JSON.stringify(window));
+      if (program === "sh") return success("google-chrome\nGoogle-chrome\n");
+      if (program === "wtype" || program === "xdotool") return success("");
+      return { code: 1, stdout: "", stderr: "missing" };
+    });
+    return { result: clone(await api.paste(target)), calls };
+  };
+  for (const target of ["Alacritty", undefined]) {
+    const missed = await paste({}, target);
+    assert.deepEqual(missed.result, { state: "error" });
+    assert.equal(typed(missed.calls), false);
+  }
+  const terminal = await paste({ class: "Alacritty" }, "Alacritty");
+  assert.deepEqual(terminal.result, { state: "error" });
+  assert.equal(typed(terminal.calls), false);
+  assert.equal(terminal.calls.includes("sh"), true);
+  const browser = await paste({ class: "google-chrome" }, "google-chrome");
+  assert.deepEqual(browser.result, { state: "ok" });
+  assert.equal(browser.calls.includes("wtype"), true);
+  assert.equal(browser.calls.includes("xdotool"), false);
+});
+
+test("The Linux working-directory and open-file scripts end with exit 0", async () => {
+  const scripts = [];
+  const api = processApi("linux", async (command, args) => {
+    assert.equal(command, "sh");
+    scripts.push(args[1]);
+    return success("");
   });
-  assert.deepEqual(clone(await api.paste("Obsidian")), { state: "error" });
-  assert.equal(calls.some(([program]) => program === "wtype"), false);
-  assert.deepEqual(clone(await api.paste("Code")), { state: "ok" });
-  assert.deepEqual(clone(calls.filter(([program]) => program === "wtype")), [["wtype", ["-M", "ctrl", "-k", "v", "-m", "ctrl"]]]);
+  assert.equal((await api.cwd([1])).state, "ok");
+  assert.equal((await api.openFiles([1])).state, "ok");
+  assert.deepEqual(scripts.map((script) => script.endsWith("exit 0")), [true, true]);
 });
 
 test("Linux Docker starts the user unit when systemctl --user cat succeeds, and otherwise asks docker info", async (t) => {
@@ -184,25 +217,35 @@ test("Linux Markdown install records the previous default and uninstall restores
   await executable(bin, "xdg-mime", lines([
     "#!/bin/sh",
     "printf '%s\\n' \"$*\" >> \"$LOG\"",
-    "if [ \"$1\" = query ]; then",
-    "  if [ -s \"$STATE\" ]; then cat \"$STATE\"; else printf '%s\\n' obsidian.desktop; fi",
-    "else",
-    "  printf '%s\\n' \"$2\" > \"$STATE\"",
-    "fi",
-    "exit 0",
+    "if [ \"$1\" = query ]; then awk -v type=\"$3\" '$1 == type { print $2 }' \"$STATE\"; exit 0; fi",
+    "desk=$2; shift 2; tmp=$(mktemp); cp \"$STATE\" \"$tmp\"",
+    "for type in \"$@\"; do awk -v type=\"$type\" -v desk=\"$desk\" 'BEGIN { found = 0 } $1 == type { print type, desk; found = 1; next } { print } END { if (!found) print type, desk }' \"$tmp\" > \"$tmp.next\"; mv \"$tmp.next\" \"$tmp\"; done",
+    "mv \"$tmp\" \"$STATE\"; exit 0",
   ]));
+  const saved = "text/markdown obsidian.desktop\ntext/x-markdown omawrite.desktop\n";
+  const kanso = "text/markdown dev.kanso.markdown.desktop\ntext/x-markdown dev.kanso.markdown.desktop\n";
+  await writeFile(state, saved);
   const env = { ...process.env, PATH: [bin, "/bin", "/usr/bin"].join(delimiter), HOME: home, XDG_DATA_HOME: data, XDG_CONFIG_HOME: config, HERDR_APP_HOME: app, LOG: log, STATE: state };
   const run = (args) => exec("/bin/sh", [handler.pathname, ...args], { env });
   const installed = await run(["install"]);
   assert.equal(installed.code, 0, installed.stderr);
   const desktop = join(data, "applications/dev.kanso.markdown.desktop");
   const opener = join(app, "data/kanso-markdown/open.sh");
+  const previous = join(app, "data/kanso-markdown-previous");
   assert.match(await readFile(opener, "utf8"), /data\/kanso-open/);
-  assert.equal((await readFile(join(app, "data/kanso-markdown-previous"), "utf8")).trim(), "obsidian.desktop");
+  assert.equal(await readFile(state, "utf8"), kanso);
+  assert.equal(await readFile(previous, "utf8"), saved);
+  assert.equal((await run(["install"])).code, 0);
+  assert.equal(await readFile(previous, "utf8"), saved);
   const removed = await run(["uninstall"]);
   assert.equal(removed.code, 0, removed.stderr);
+  assert.equal(await readFile(state, "utf8"), saved);
   await assert.rejects(readFile(desktop, "utf8"));
-  const recorded = await readFile(log, "utf8");
-  assert.match(recorded, /default dev\.kanso\.markdown\.desktop text\/markdown text\/x-markdown/);
-  assert.match(recorded, /default obsidian\.desktop text\/markdown text\/x-markdown/);
+  await writeFile(state, saved);
+  await writeFile(log, "");
+  assert.equal((await run(["install"])).code, 0);
+  await writeFile(state, "text/markdown dev.kanso.markdown.desktop\ntext/x-markdown other.desktop\n");
+  assert.equal((await run(["uninstall"])).code, 0);
+  assert.equal(await readFile(state, "utf8"), "text/markdown obsidian.desktop\ntext/x-markdown other.desktop\n");
+  assert.doesNotMatch(await readFile(log, "utf8"), /default omawrite\.desktop/);
 });
