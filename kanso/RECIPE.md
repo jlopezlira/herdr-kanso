@@ -1,9 +1,11 @@
 # Kanso
 
 Agents sit side by side at their own width, and the one waiting on you comes first.
-Sleep a project and wake it on the same conversations. Memory, on macOS and Windows, recycles idle Claude sessions so the machine lasts weeks.
-Spend adds up across computers once Sync is on. A Simulator sits beside the agent.
-It works on a space that lives on another computer, and it runs on macOS, Windows and Linux.
+Sleep an agent, a tab or a whole project, and wake it on the same conversation.
+Add another computer over your network or Tailscale: its projects sit in the sidebar beside yours, and files, pictures, sleep, copy and paste work there too.
+Review pull requests, files, pictures and Markdown next to the agent that wrote them.
+Memory recycles idle Claude sessions so the machine lasts weeks, Spend adds up your AI work across computers, and a Simulator sits beside the agent.
+It runs on macOS, Windows and Linux.
 
 ![Kanso](preview.png)
 
@@ -280,7 +282,7 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
   panel by its place, ⌃⌥P/S/T a view, ⌃⌥1-9 a pane column, ⌃⇧, Kanso
   settings; ⌘⌥hjkl (⇧ moves) vim; left of column 1: sidebar list
   (`kanso-spaces.list`, `kanso.list`); lists: listkeys.js. ⌘F on an agent lists matching turns, newest first.
-- **Kanso settings** (kanso-settings, the fixed gear after the panels): Pieces
+- **Kanso settings** (kanso-settings, opened from Settings at the foot of the sidebar or Ctrl+Shift+,): Pieces
   shows, shows when it has something to say, or hides each piece (`kanso.pieces`;
   hiding stops its work). Keys rebinds Kanso-only keys (never Herdr's). What's new
   is the log (Updates: Stable or Early). Credits who. Panel order stays `kanso.panels.order`.
@@ -602,7 +604,7 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     editors open with `terminal.open {place: "right"}`. A folder on another
     machine opens over SSH in the VS Code family (`--remote ssh-remote+<machine>`)
     and Zed (`ssh://<machine>/<path>`); the rest show "local only".
-    Cmd+Shift+O (`mod.open:open-with`, in `keys.json`) opens it.
+    Open with… in a pane's right-click and header menus opens it (`mod.open:open-with`); no key is bound to it.
   - `kanso-chrome`: the top strip's mark and the sidebar footer, plus the icon set.
   - `kanso-status`: the status bar.
   - `kanso-panel`: the side panels in one mod, chosen by `props.panel`;
@@ -638,8 +640,8 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     read once and replaces its rows. A missing file, or one that will not
     open, is dropped; none yet is one line.
     Copies in `data/kanso-panel/look` draw the newest big (`image()` reads
-    the app folder; HEIC/TIFF via `sips`/`magick`); each picture is a circle,
-    the active one filled with its color. A click drops a numbered pin, kept until Send, and
+    the app folder; HEIC/TIFF via `sips`/`magick`); each picture is a square
+    thumbnail on its own color, the active one ringed in the accent. A click drops a numbered pin, kept until Send, and
     opens `kanso-prompt` with `shared: "kanso.look.note"` (`{[token]: {text,
     at}}`, read on render; Cancel drops a new pin). ⌘↩ sends "About <path>:"
     and a line per noted pin (`deliver.js`).

@@ -22,9 +22,10 @@
 </p>
 
 - Agents sit side by side, readable at their own width, and the one waiting on you comes first.
-- Sleep a project and wake it on the same conversations.
-- Memory, on macOS, Windows and Linux, recycles idle Claude sessions so the machine lasts weeks. Spend adds up across your computers once Sync is on.
-- A Simulator sits beside the agent. kansō works on a space that lives on another computer.
+- Sleep an agent, a tab or a whole project, and wake it on the same conversation.
+- Add another computer over your network or Tailscale. Its projects sit in the sidebar beside yours, and files, pictures, sleep, copy and paste work there too.
+- Review pull requests, files, pictures and Markdown next to the agent that wrote them.
+- Memory recycles idle Claude sessions so the machine lasts weeks. Spend adds up your AI work across computers. A Simulator sits beside the agent.
 
 For the Herdr desktop app, not the Herdr TUI. macOS, Windows and Linux; the iOS simulator is macOS only.
 
@@ -66,40 +67,56 @@ On Windows, merge `kanso/keys.windows.json` into your Herdr keys instead of
 </p>
 
 - **A strip, not a grid.** Terminals keep their width; a new pane opens beside
-  you and the view glides to it. Pin a column, stack a server under an agent,
-  1 to 8 columns per view.
-- **Needs you first.** Cmd+J goes to the agent waiting on you, in any space.
-  The sidebar shows every project, every agent's state and what it is on, and
-  your conversations as threads.
+  you and the view glides to it. A view holds 1 to 8 panes, 4 to start, and a
+  full view starts the next page. Pin a column, stack a server under an agent.
+  Cmd+F finds in the terminal, or in an agent's whole conversation.
+- **Needs you first.** Cmd+J goes to the agent waiting on you, in any project.
+  The sidebar shows every project you keep, every agent's state and what it is
+  on, in three views: Projects, Status and Threads. Search finds any of them.
+  After five minutes away, "While you were away" says what finished.
 - **Sleep and wake.** An agent, a tab or a project goes to sleep: it exits with
   its conversation kept on its terminal, and wakes on it in the same pane.
   Herdr keeps that, so another computer on the same space sees it asleep too,
   and waking from either works.
-- **Images.** The newest picture the agent in focus made, big beside it,
-  and a circle for each picture. Click a circle to switch. Click a spot to
-  pin it and say what about it; ⌘↩ sends every note to the agent. Files,
-  Preview and Images work for a space on another computer, and a note still sends.
+- **Your other computers.** Add a computer at the foot of the sidebar: kansō
+  lists your Tailscale computers, your ssh hosts and the computers on this
+  network, or an agent sets one up with you. It reaches a computer on the home
+  network first and over Tailscale when you are away, and asks for a password
+  or passphrase with one click. A computer you disconnect stays in the sidebar,
+  Asleep or Disconnected, until you remove it. Rename it, and the name shows on
+  every computer.
+- **Images.** The newest picture the agent in focus made, big beside it, and a
+  square for each other picture. Click a square to switch. Click a spot to pin
+  it and say what about it; ⌘↩ sends every note to the agent. Files, Preview
+  and Images work for a space on another computer, and a note still sends.
 - **Review without leaving.** Pull requests with diff, checks and threads, and
   one click to hand the feedback to an agent. Any file that is not a picture opens in Preview,
   and it can be edited when the read has no NUL and fits in 1 MiB, on this computer or another; `md-review plan.md` from an agent asks for your comments.
-- **Take over in one key.** Cmd+Shift+O opens the agent's folder, worktree
-  included, in your editor. Cmd+Alt+S hands a pane's work to another agent.
+- **Take over.** Open with… opens the pane's folder, worktree included, in your
+  editor. Cmd+Alt+S hands a pane's work to another agent, or to every agent in
+  a project. Cmd+Alt+T saves the tab as an arrangement to open in any project.
+  A terminal's right-click copies and pastes, on this computer or another.
 - **What your agents leave running.** Ports: dev servers and the panes that
-  run them. Containers: Docker, with Up, Rebuild and Down per project.
-  Worktrees: every one agents made, what removing it would lose, the disk back.
+  run them, on every connected computer. Containers: Docker, with Up, Rebuild
+  and Down per project. Worktrees: every one agents made, what removing it
+  would lose, the disk back.
 - **Weeks without a restart.** On macOS, Windows and Linux, the memory guard recycles
   bloated idle Claude agents on the same conversation; the Memory panel shows
   what it sees.
 - **Spend and Shipped.** What your AI work is worth at list price, and what you
   delivered on GitHub, with share images that carry totals only. Turn Sync on
   from another computer's row and Spend adds that computer's tokens.
-  A computer's row can be renamed, and that name shows on the other computer.
 - **The device beside the agent.** Simulator is kansō's own panel, using only
   Xcode's and Android's tools. It installs nothing. The iOS screen is a view;
   touch it in Apple's Simulator. Android keeps touch, typing and keys, with
-  Rotate for emulators. Cmd+Shift+S opens it, and Ctrl+Shift+M on Windows.
-- **Keys you can see.** Cmd+? draws your keys on a keyboard, layer by modifier,
-  and opens the hjkl dōjō, a game for vim's moves with a pixel pet.
+  Rotate for emulators. Cmd+Shift+S opens it, Ctrl+Shift+S on Linux and
+  Ctrl+Shift+M on Windows.
+- **Keys you can see.** Cmd+? opens kansō help: your keys drawn on a keyboard,
+  layer by modifier, a guide and what's new. The hjkl dōjō, a game for vim's
+  moves with a pixel pet, has its own button in the tab bar.
+- **Your layout, your pieces.** Settings, at the foot of the sidebar, rebinds
+  kansō's keys and sets each piece of the window to show, show only when
+  needed, or hide; hiding a piece stops the work behind it.
 - Two themes, `kanso` and `kanso-day`.
 
 ## Keys
@@ -117,26 +134,32 @@ Ctrl+C still interrupts the program.
 
 | Keys | What they do |
 |---|---|
-| Cmd+1 … Cmd+9 | Go to pane 1 to 9 |
-| Cmd+[ and Cmd+] | Previous and next pane |
-| Cmd+D, Cmd+Alt+D, Cmd+Shift+D | New pane right, left, below |
-| Cmd+W | Close the pane |
-| Cmd+Shift+[ and Cmd+Shift+] | Move the pane left and right |
+| Cmd+1 … Cmd+9 | Go to tab 1 to 9 |
+| Ctrl+1 … Ctrl+9 | Go to project 1 to 9 |
+| Ctrl+Alt+1 … Ctrl+Alt+9 | Go to pane 1 to 9 |
+| Cmd+Alt+Left and Cmd+Alt+Right | Previous and next pane |
+| Cmd+Alt+H/J/K/L | Between panes, as vim; Shift moves the pane |
+| Cmd+Alt+Shift+Left and Cmd+Alt+Shift+Right | Move the pane left and right |
+| Cmd+D, Cmd+Alt+Shift+D, Cmd+Shift+D | New pane right, left, below |
+| Cmd+Shift+W | Close the pane |
 | Cmd+Shift+- and Cmd+Shift+= | Fewer or more panes per view |
 | Cmd+Shift+Enter | Wider or narrower pane |
 | Cmd+Alt+P | Pin the pane |
-| Cmd+Shift+O | Open the pane's folder in an editor |
+| Cmd+F | Find in the terminal, or in the agent's whole conversation |
 | Cmd+Alt+S | Send the pane's work to another agent |
 | Cmd+Alt+T | Arrangements: save this tab, or open a saved one |
 | Cmd+J | Next agent that needs you |
 | Cmd+Shift+Up and Cmd+Shift+Down | Agent above and below in the sidebar |
 | Cmd+Shift+Left and Cmd+Shift+Right | Back and forward through the agents you visited |
-| Cmd+Alt+H/J/K/L | Between panes, as vim; Shift moves the pane |
-| Cmd+? | kansō help, and the dōjō |
+| Ctrl+Alt+P, Ctrl+Alt+S, Ctrl+Alt+T | Projects, Status and Threads in the sidebar |
+| Cmd+B | Show or hide the sidebar |
+| Ctrl+Shift+1 … Ctrl+Shift+9 | Open panel 1 to 9 of the tab bar |
+| Ctrl+Shift+, | kansō settings |
+| Cmd+? | kansō help |
 | Cmd+Shift+S | Simulator |
 
-Every list answers j, k, gg, G, Enter, / and Esc. The gear at the end of the
-tab bar rebinds kansō's own keys and hides the panels you don't use.
+Every list answers j, k, gg, G, Enter, / and Esc. Settings, at the foot of the
+sidebar, rebinds kansō's own keys and hides the panels you don't use.
 
 ## Privacy
 
@@ -144,7 +167,10 @@ Everything runs on your machine, and reads only the folders you work in:
 `git`, `gh`, `find`, `du`, `lsof` (`ss` and `/proc` on Linux), `ps`, `sqlite3`, `node`, `docker`,
 `xcode-select`, `simctl`, `adb`, `emulator` and Herdr's `hc`. What reaches the network: PR and
 Shipped through `gh`, only while their panel is shown (Shipped keeps a private
-gist of your own statistics); Spend's daily fetch of OpenRouter's price list.
+gist of your own statistics); Spend's daily fetch of OpenRouter's price list;
+Add a computer, which reads Tailscale's list of your computers and, unless
+Settings turns it off, asks the computers on this network whether they answer
+ssh. Another computer is reached only through Herdr's own connection to it.
 Simulator's pictures and input stay on this computer. Threads and
 Images read the agents' conversation files for the pictures
 they printed; Spend reads the session files your AI tools write, for tokens and
