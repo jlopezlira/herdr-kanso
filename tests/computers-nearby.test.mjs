@@ -107,22 +107,19 @@ test("A Tailscale computer keeps the private addresses it has on this network", 
 const peer = (over = {}) => ({ name: "grey", ip: "100.64.1.2", tailscaleSsh: false, ...over });
 const onLan = (over = {}) => ({ peer: peer(over), target: "ada@grey", name: "grey", lan: "192.168.1.20" });
 
-const lanBefore = (via, lan, away) => {
-  assert.match(via, /^sh -c /);
-  assert.equal(via.endsWith(" route"), true);
-  const lanAt = via.indexOf(lan);
-  const awayAt = via.indexOf(away);
-  assert.ok(lanAt >= 0, via);
-  assert.ok(awayAt > lanAt, via);
-};
-
 test("A computer on this network is reached there first, and over Tailscale when that does not answer", async () => {
   const { planFor } = await reach();
+  const routeMod = await load("kanso-computers/lan-route.js", ["lanRecord"]);
   const tailscale = "/usr/local/bin/tailscale";
   const ssh = planFor(onLan(), { tailscale });
-  lanBefore(ssh.via, "ada@192.168.1.20", "ssh ada@100.64.1.2");
+  assert.deepEqual([ssh.lan, ssh.user, ssh.via], ["192.168.1.20", "ada", ""]);
+  const sshVia = routeMod.lanRecord({ name: ssh.name, target: ssh.target, via: ssh.via }, ssh.lan, { user: ssh.user }).via;
+  assert.ok(sshVia.indexOf("192.168.1.20") < sshVia.indexOf("100.64.1.2"), sshVia);
   const agent = planFor(onLan({ tailscaleSsh: true }), { tailscale });
-  lanBefore(agent.via, "ada@192.168.1.20", tailscale + " ssh ada@100.64.1.2");
+  assert.equal(agent.lan, "192.168.1.20");
+  assert.equal(agent.user, "ada");
+  const agentVia = routeMod.lanRecord({ name: agent.name, target: "", via: agent.via }, agent.lan, { user: agent.user }).via;
+  assert.ok(agentVia.indexOf("192.168.1.20") < agentVia.indexOf(tailscale), agentVia);
 });
 
 test("On Windows a computer on Tailscale keeps its Tailscale route, with no shell route", async () => {

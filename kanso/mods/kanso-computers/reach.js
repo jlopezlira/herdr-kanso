@@ -1,6 +1,6 @@
 import { shellQuote, windowsArg } from "./platform-command.js";
 import { privateIp } from "./nearby.js";
-import { splitTarget, joined, destinationOf, keySetup, lanFirst } from "./sign-in.js";
+import { splitTarget, joined, destinationOf, keySetup } from "./sign-in.js";
 
 export { splitTarget, destinationOf, keySetup };
 
@@ -10,6 +10,14 @@ export const TAILSCALE_PATHS = {
   windows: ["tailscale", "C:\\Program Files\\Tailscale\\tailscale.exe"],
 };
 export const tailscalePaths = (platform) => TAILSCALE_PATHS[platform] ?? TAILSCALE_PATHS.linux;
+
+export async function findTailscale(platform, run) {
+  for (const path of tailscalePaths(platform)) {
+    const r = await run(path, ["status", "--json"]).catch(() => null);
+    if (r && (r.code === 0 || String(r.stdout ?? "").includes("{"))) return { path, net: tailnet(r.stdout) };
+  }
+  return { path: "", net: null };
+}
 
 const PHONES = new Set(["ios", "android", "tvos"]);
 const ipv4 = (ip) => /^\d+\.\d+\.\d+\.\d+$/.test(ip);
@@ -72,8 +80,7 @@ export function planFor(choice, { tailscale = "", platform = "macos" } = {}) {
   if (!choice.peer) return { name: choice.name ?? "", target: choice.target.trim(), via: "", probe: true };
   const away = awayPlan(choice, { tailscale, platform });
   if (!choice.lan || platform === "windows") return away;
-  const lan = joined(splitTarget(choice.target).user || splitTarget(away.target).user, choice.lan);
-  return { ...away, lan, via: lanFirst(lan, away.via || `ssh ${shellQuote(away.target)}`) };
+  return { ...away, lan: choice.lan, user: splitTarget(choice.target).user || splitTarget(away.target).user };
 }
 
 export function choiceOf(typed, peers = []) {

@@ -101,7 +101,7 @@ export function machinePhase({ name, stored, live, layout, asking, login, failed
   return "loading";
 }
 
-const MACHINE_WORD = { off: "Off", unavailable: "Unreachable", login: "Needs login" };
+const MACHINE_WORD = { off: "Disconnected", unavailable: "Asleep", login: "Needs login" };
 
 export function machineState(phase) {
   return MACHINE_WORD[phase] ?? "";

@@ -225,9 +225,10 @@
     [
       " | devbox |  | ",
       " | Rename… |  | ",
-      "power | Turn off |  | ",
+      "power | Disconnect |  | ",
       "arrow-right-left | Sync | on | ",
       "plus | New project |  | ",
+      "x | Remove |  | ",
       "server | Add computer… |  | ",
       "eye-off | Hide \"Computers\" |  | ",
       "sliders-vertical | Settings for this… |  | "
@@ -237,9 +238,10 @@
     [
       " | devbox |  | ",
       " | Rename… |  | ",
-      "power | Turn off |  | ",
+      "power | Disconnect |  | ",
       "arrow-right-left | Sync | on | ",
       "plus | New project |  | ",
+      "x | Remove |  | ",
       "server | Add computer… |  | ",
       "eye-off | Hide \"Computers\" |  | ",
       "sliders-vertical | Settings for this… |  | "
@@ -249,9 +251,10 @@
     [
       " | devbox |  | ",
       " | Rename… |  | ",
-      "power | Turn off |  | ",
+      "power | Disconnect |  | ",
       "arrow-right-left | Sync | off | ",
       "plus | New project |  | ",
+      "x | Remove |  | ",
       "server | Add computer… |  | ",
       "eye-off | Hide \"Computers\" |  | ",
       "sliders-vertical | Settings for this… |  | "
@@ -262,6 +265,7 @@
       " | devbox |  | ",
       " | Rename… |  | ",
       "refresh-cw | Refresh |  | ",
+      "x | Remove |  | ",
       "server | Add computer… |  | ",
       "eye-off | Hide \"Computers\" |  | ",
       "sliders-vertical | Settings for this… |  | "
@@ -272,6 +276,7 @@
       " | devbox |  | ",
       " | Rename… |  | ",
       "key | Sign in… |  | ",
+      "x | Remove |  | ",
       "server | Add computer… |  | ",
       "eye-off | Hide \"Computers\" |  | ",
       "sliders-vertical | Settings for this… |  | "
@@ -281,7 +286,8 @@
     [
       " | devbox |  | ",
       " | Rename… |  | ",
-      "power | Turn on |  | ",
+      "power | Connect |  | ",
+      "x | Remove |  | ",
       "server | Add computer… |  | ",
       "eye-off | Hide \"Computers\" |  | ",
       "sliders-vertical | Settings for this… |  | "
@@ -292,6 +298,7 @@
       " | devbox |  | ",
       " | Rename… |  | ",
       "refresh-cw | Refresh |  | ",
+      "x | Remove |  | ",
       "server | Add computer… |  | ",
       "eye-off | Hide \"Computers\" |  | ",
       "sliders-vertical | Settings for this… |  | "
