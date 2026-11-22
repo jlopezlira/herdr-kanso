@@ -93,9 +93,10 @@ test("homeRoute uses the first LAN address whose probe answers", async () => {
   assert.deepEqual(probed, ["HostName=10.0.0.5", "HostName=192.168.1.20"]);
 });
 
+const routeAndSign = async () => ({ ...(await route()), ...(await sign()) });
+
 test("homeRoute leaves the route when nothing on the LAN answers, or the peer has no LAN address, or the route is already the current LAN form, or Tailscale SSH has no target", async () => {
-  const { homeRoute } = await route();
-  const { lanArgs, lanFirst } = await sign();
+  const { homeRoute, lanArgs, lanFirst } = await routeAndSign();
   const quiet = fakeRun({ "10.0.0.5": { code: 1, stdout: "" }, "192.168.1.20": { code: 1, stdout: "" } });
   assert.equal(await homeRoute(saved, grey(), quiet.run), null);
   const bare = fakeRun({});
@@ -111,8 +112,7 @@ test("homeRoute leaves the route when nothing on the LAN answers, or the peer ha
 });
 
 test("homeRoute rebuilds an old LAN route even when that address is already current", async () => {
-  const { homeRoute } = await route();
-  const { lanArgs, lanFirst } = await sign();
+  const { homeRoute, lanArgs, lanFirst } = await routeAndSign();
   const { shellQuote } = await quote();
   const args = lanArgs("192.168.1.20", { target: "ada@grey", hostKey: "grey" });
   const away = "ssh ada@grey";
