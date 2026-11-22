@@ -19,7 +19,7 @@ test("Each composition is the kit row with its own props: the app draws what a h
   const same = (piece, props) => assert.deepEqual(drawn(piece("r", c)), drawn(kit.row(props)("r", c)));
   same(section({ title: "Needs you", status: "blocked" }), { name: "Needs you", heading: true, mark: "blocked", meta: null, hover: false, focus: false, actions: [] });
   same(computerRow({ name: "dark", state: "unreachable" }), { icon: "lu-server", name: "dark", heading: true, group: true, names: true, hover: false, focus: false, pending: false, mark: "none",
-    meta: { text: "Unreachable", tip: null }, action: { kind: "icon", icon: "lu-refresh-cw", label: "Refresh" }, actions: [] });
+    meta: { text: "Asleep", tip: null }, action: { kind: "icon", icon: "lu-refresh-cw", label: "Refresh" }, actions: [] });
   const [head, ...rows] = asleep({ names: ["site", "dojo"], open: true });
   assert.equal(rows.length, 2, "open, a row per sleeper under the heading");
   assert.deepEqual(texts(head("h", c)).filter((text) => text === "2"), [], "open, the heading drops its count");
@@ -33,11 +33,11 @@ test("Each composition is the kit row with its own props: the app draws what a h
 test("A computer row shows its state: Turn on when off, Refresh when unreachable, Sign in for a login, and its tools only when on", async () => {
   const { computerRow, c } = await compositions();
   const shown = (props) => tipsOf(computerRow({ name: "dark", ...props })("m", c));
-  assert.deepEqual(shown({ state: "off" }), ["Turn dark on"]);
+  assert.deepEqual(shown({ state: "off" }), ["Connect dark"]);
   assert.deepEqual(shown({ state: "unreachable", tip: "ssh timed out" }), ["ssh timed out", "Refresh"]);
   assert.deepEqual(shown({ state: "login" }), ["Sign in"]);
   assert.deepEqual(shown({ state: "on" }), [], "on, at rest: nothing but its name");
-  assert.deepEqual(shown({ state: "on", hover: true }), ["Turn off", "New project on dark", "Sync"]);
+  assert.deepEqual(shown({ state: "on", hover: true }), ["Disconnect", "New project on dark", "Sync"]);
   assert.deepEqual(shown({ state: "on", sync: "Sync dark: synced 2 min ago" }), ["Sync dark: synced 2 min ago"], "Sync on stays out");
   assert.deepEqual(shown({ state: "on", hover: true, pending: true }), [], "turning on, its tools wait");
   assert.deepEqual(tipsOf(computerRow({ name: "This computer", remote: false, hover: true })("m", c)), ["New project on This computer"], "this computer: + alone");

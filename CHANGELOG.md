@@ -26,6 +26,7 @@ the branch's rules.
 
 ### Changed
 
+- A computer that is not connected stays in the sidebar: Asleep when it does not answer, Disconnected when you disconnected it, with its projects dimmed. Its buttons say Connect and Disconnect, and its right-click menu can Remove it, with a toast that adds it back.
 - A computer that asks for a password or for your key's passphrase signs in with one click: Sign in opens a tab that asks for it once, leaves kansō's own key there and reconnects, so it never asks again. Clicking a computer that needs a login does the same, instead of copying a command.
 - In Add a computer, a computer that takes keys only is added the same way, instead of asking you to copy your key there by hand.
 
@@ -39,6 +40,9 @@ the branch's rules.
 
 ### Fixed
 
+- Copying inside an agent on another computer reaches the computer you look from. Agents kansō starts or reopens copy through the terminal, which Herdr delivers to your clipboard, instead of the clipboard of the computer they run on. That covers Claude Code's copy on select, Codex and pi.
+- A computer on your home network is reached over it, and over Tailscale only when you are away. The local attempt uses the same ssh settings and host key as the Tailscale route, so it signs in as the right user and never reaches a different computer at that address. Before, it tried with this computer's user and no key, and the attempt took the connection's input, so it never worked. Computers added before switch by themselves when they answer on the home network.
+- Copy and Paste in the right-click menu of a terminal shown outside a pane, such as a peek, act on that terminal instead of failing with "pane.focus failed".
 - A busy icon no longer turns. A computer being added, a refresh button or any other icon that waits shows the working mark in its place, at the icon's size, and only that mark turns.
 - On Omarchy, Super+C and Super+V copy and paste in Herdr's terminals, on this computer or another, instead of interrupting the program. Hyprland now treats Herdr as a terminal, and the Linux keys copy and paste with Ctrl+Shift+C and Ctrl+Shift+V and with Ctrl+Insert and Shift+Insert, so every Omarchy version's Super+C and Super+V work.
 - On Linux, kansō's keys work with Omarchy: each keeps Super where Omarchy leaves it free and moves to Ctrl or Alt with Shift where Omarchy uses it, so Super+J and the rest no longer go to the window manager. The update moves the Mac keys a Linux computer had, keeps the ones you changed, and moves Herdr's own keys Omarchy takes the same way.

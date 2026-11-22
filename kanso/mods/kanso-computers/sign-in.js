@@ -27,6 +27,7 @@ const sshLine = (target, quote) => {
   const { dest, port } = destinationOf(target);
   return `ssh ${port ? `-p ${port} ` : ""}${quote(dest)}`;
 };
+export const awayLine = (target) => sshLine(target, shellQuote);
 
 export function routeOf(machine) {
   const { name = "", target = "", via = "", session = "" } = machineRecord(machine) ?? {};
@@ -35,16 +36,26 @@ export function routeOf(machine) {
 
 const LAN_SSH = "-o BatchMode=yes -o ConnectTimeout=2 -o StrictHostKeyChecking=accept-new";
 const LAN_ASK = "-o ConnectTimeout=2 -o StrictHostKeyChecking=accept-new";
-const lanLine = (lan, away) => `ssh ${LAN_SSH} ${shellQuote(lan)} true >/dev/null 2>&1 && exec ssh -o StrictHostKeyChecking=accept-new ${shellQuote(lan)} "$1"; exec ${away} "$1"`;
-export const lanFirst = (lan, away) => `sh -c ${shellQuote(lanLine(lan, away))} route`;
+const lanLine = (args, away) => `ssh ${LAN_SSH} ${args} true </dev/null >/dev/null 2>&1 && exec ssh -o StrictHostKeyChecking=accept-new ${args} "$1"; exec ${away} "$1"`;
+export const lanFirst = (args, away) => `sh -c ${shellQuote(lanLine(args, away))} route`;
 
-const unquote = (word) => (/^'.*'$/s.test(word) ? word.slice(1, -1).replace(/'\\''/g, "'") : word);
+export function lanArgs(ip, { target = "", user = "", hostKey = "" } = {}) {
+  if (!target) return shellQuote(joined(user, ip));
+  const { dest, port } = destinationOf(target);
+  const key = hostKey || splitTarget(dest).host;
+  return [`-o HostName=${ip}`, `-o HostKeyAlias=${shellQuote(key)}`, ...(port ? [`-p ${port}`] : []), shellQuote(dest)].join(" ");
+}
+
+export const unquote = (word) => (/^'.*'$/s.test(word) ? word.slice(1, -1).replace(/'\\''/g, "'") : word);
+const LAN_IP = /(?:^|\s)-o HostName=(\S+)(?:\s|$)/;
 
 export function lanParts(via) {
   const inner = String(via ?? "").match(/^sh -c ('(?:[^']|'\\'')*'|\S+) route$/s);
   const line = inner ? unquote(inner[1]) : "";
-  const found = line.match(/^ssh -o BatchMode=yes -o ConnectTimeout=2 -o StrictHostKeyChecking=accept-new (\S+) true >\/dev\/null 2>&1 && exec ssh -o StrictHostKeyChecking=accept-new \1 "\$1"; exec (.+) "\$1"$/s);
-  return found && lanFirst(unquote(found[1]), found[2]) === via ? { lan: unquote(found[1]), away: found[2] } : null;
+  const found = line.match(/^ssh -o BatchMode=yes -o ConnectTimeout=2 -o StrictHostKeyChecking=accept-new (.+?) true (?:<\/dev\/null )?>\/dev\/null 2>&1 && exec ssh -o StrictHostKeyChecking=accept-new \1 "\$1"; exec (.+) "\$1"$/s);
+  if (!found || `sh -c ${shellQuote(line)} route` !== via) return null;
+  const ip = found[1].match(LAN_IP)?.[1] ?? splitTarget(unquote(found[1])).host;
+  return { args: found[1], ip, away: found[2] };
 }
 
 export function keyable({ target = "", via = "" }, platform = "macos") {
@@ -57,7 +68,7 @@ export function keyedRoute({ target = "", via = "" }, platform = "macos") {
   const windows = platform === "windows";
   const base = (quote) => via.split(KEYED).join("") || sshLine(target, quote);
   const lan = lanParts(base(shellQuote));
-  const ask = lan ? `sh -c ${shellQuote(`ssh ${ASK}${LAN_ASK} ${shellQuote(lan.lan)} "$1" || exec ${withSsh(lan.away, ASK)} "$1"`)} route` : withSsh(base(windows ? psQuote : shellQuote), ASK);
+  const ask = lan ? `sh -c ${shellQuote(`ssh ${ASK}${LAN_ASK} ${lan.args} "$1" || exec ${withSsh(lan.away, ASK)} "$1"`)} route` : withSsh(base(windows ? psQuote : shellQuote), ASK);
   return { ask, keyed: withSsh(base(windows ? String : shellQuote), KEYED) };
 }
 

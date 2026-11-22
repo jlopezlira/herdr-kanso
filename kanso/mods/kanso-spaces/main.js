@@ -1,5 +1,8 @@
 import { localService, serviceOn, localName } from "./platform-host.js";
+import { copiesToViewer, viewerFor } from "./platform-viewer.js";
 import { signInTab } from "./sign-in.js";
+import { homeRoute } from "./lan-route.js";
+import { findTailscale } from "./reach.js";
 import { paths } from "./platform-paths.js";
 import { processApi } from "./platform-processes.js";
 import { systemApi } from "./platform-system.js";
@@ -105,6 +108,8 @@ const FALLBACK = 60000;
 const PS_GIVE_UP_MS = 10000;
 // Under the 30 s machine look, so a hung list is free before the next one.
 const MACHINE_READ_MS = 20_000;
+const HOME_EVERY_MS = 10 * 60_000;
+const HOME_PROBE_MS = 8000;
 const KNOWN_AGENTS = "kanso.agents.installed";
 
 // The views' names, by key, as the view switch says them.
@@ -683,8 +688,11 @@ export default class Spaces extends RetryingView {
     if (this.starting) return;
     this.starting = true;
     const project = registry().find((p) => p.id === place.project) ?? null;
-    if (place.tree) openAt(place, place.tree.folder, a?.run ?? null, place.tree.branch);
-    else startIn(place, a?.run ?? null);
+    viewerFor(place.machine).then((viewed) => {
+      const argv = viewed(a?.run ?? null);
+      if (place.tree) openAt(place, place.tree.folder, argv, place.tree.branch);
+      else startIn(place, argv);
+    });
     this.thenClose(project && a ? this.db().setProjectAgent(project.id, a.key) : null);
   }
 
@@ -748,6 +756,8 @@ export default class Spaces extends RetryingView {
     else if (c.startsWith("power-machine:") && c.length > "power-machine:".length) { const m = c.slice("power-machine:".length); this.setPower(m, this.phaseOf(m) === "off", cx); }
     else if (c.startsWith("sync-machine:") && c.length > "sync-machine:".length) this.toggleSync(c.slice("sync-machine:".length), cx);
     else if (c.startsWith("sign-in-machine:") && c.length > "sign-in-machine:".length) this.signIn(c.slice("sign-in-machine:".length));
+    else if (c.startsWith("remove-machine:") && c.length > "remove-machine:".length) this.removeMachine(c.slice("remove-machine:".length), cx);
+    else if (c.startsWith("restore-machine:") && c.length > "restore-machine:".length) this.restoreMachine(c.slice("restore-machine:".length), cx);
     else if (c === "sidebar") this.toggleRail();
     else if (c === "needs-you.list") this.toggleNeeds(cx);
     else if (c === "away-dismiss") this.sinceLeft?.dismiss(cx);
@@ -1390,8 +1400,36 @@ export default class Spaces extends RetryingView {
     const result = await hc(["machine", "ls", "--json"]);
     if (result.code !== 0) return;
     this.machines = listedMachines(result);
+    this.preferHome();
     if (this.machines.length && !this.syncSaving) this.sync = await readSync();
     await this.settleParked();
+  }
+
+  async preferHome() {
+    if (localName() === "windows" || this.homeBusy || Date.now() - (this.homeAt ?? 0) < HOME_EVERY_MS) return;
+    this.homeBusy = true;
+    this.homeAt = Date.now();
+    try {
+      const run = (program, args) => exec(program, args, { timeout: HOME_PROBE_MS });
+      const peers = (await findTailscale(localName(), run)).net?.peers ?? [];
+      if (!peers.length) return;
+      const rows = (this.machines ?? []).map(machineRecord).filter(canRestore);
+      for (const record of rows) {
+        const found = await homeRoute(record, peers, run).catch(() => null);
+        if (found?.record) await this.reroute(record, found.record, found.ip);
+      }
+    } finally {
+      this.homeBusy = false;
+    }
+  }
+
+  async reroute(was, next, ip) {
+    await hc(rmArgs(was.name)).catch(() => null);
+    if (hcError(await hc(addArgs(next)).catch((e) => ({ code: 1, stderr: String(e?.message ?? e) })))) {
+      await hc(addArgs(was)).catch(() => null);
+      return;
+    }
+    notify({ title: `${was.name} now uses your home network`, body: `At ${ip} when you are home, and Tailscale when you are away.`, level: "success" });
   }
 
   async settleParked() {
@@ -1399,10 +1437,7 @@ export default class Spaces extends RetryingView {
     if (done.length) {
       const drop = new Set(done);
       this.parked = (this.parked ?? []).filter((row) => !drop.has(row.name));
-      for (const name of done) {
-        this.clearFlags(name);
-        await this.db().forgetMachine(name).catch(() => {});
-      }
+      for (const name of done) await this.dropMachine(name);
     }
     for (const row of this.parked ?? []) {
       const live = (this.machines ?? []).find((item) => item.name === row.name);
@@ -1438,6 +1473,43 @@ export default class Spaces extends RetryingView {
     if (!name || this.powerBusy?.has(name)) return;
     if (on) this.turnOn(name, cx);
     else this.turnOff(name, cx);
+  }
+
+  removeMachine(name, cx) {
+    const live = (this.machines ?? []).find((row) => row.name === name) ?? null;
+    const record = machineRecord(live) ?? machineRecord((this.parked ?? []).find((row) => row.name === name));
+    if (!canRestore(record) || this.powerBusy.has(name)) return;
+    const title = this.names.title(name);
+    this.removed = { ...(this.removed ?? {}), [name]: record };
+    this.holdPower(name, cx, async () => {
+      if (live) await hc(rmArgs(name)).catch(() => null);
+      this.parked = (this.parked ?? []).filter((row) => row.name !== name);
+      this.machines = (this.machines ?? []).filter((row) => row.name !== name);
+      await this.dropMachine(name);
+      notify({ title: `${title} removed`, body: "Click here to add it back.", timeout: 15000, action: { name: `kanso-spaces.restore-machine:${name}` } });
+      await this.readMachines();
+    });
+  }
+
+  restoreMachine(name, cx) {
+    const record = this.removed?.[name];
+    if (!record || this.powerBusy.has(name)) return;
+    this.holdPower(name, cx, async () => {
+      const error = hcError(await hc(addArgs(record)).catch((e) => ({ code: 1, stderr: String(e?.message ?? e) })));
+      if (error) { notify({ title: `${this.names.title(name)} was not added back`, body: String(error.message ?? ""), level: "error" }); return; }
+      this.removed = Object.fromEntries(Object.entries(this.removed ?? {}).filter(([key]) => key !== name));
+      await this.readMachines();
+    });
+  }
+
+  holdPower(name, cx, work) {
+    this.powerBusy.add(name);
+    this.powerRun(name, cx, work);
+  }
+
+  dropMachine(name) {
+    this.clearFlags(name);
+    return this.db().forgetMachine(name).catch(() => {});
   }
 
   clearFlags(name) {
@@ -1869,7 +1941,7 @@ export default class Spaces extends RetryingView {
 
   explainAgents(place, agent) {
     const where = place.machine || "this computer";
-    const ask = { name: `Explain ${where}`, argv: agent.run, task: `kansō could not list the agents installed on ${where}. The error: ${this.agentsFailed}. Explain why, and how to fix it. Do not change anything.` };
+    const ask = { name: `Explain ${where}`, argv: copiesToViewer(localName())(agent.run), task: `kansō could not list the agents installed on ${where}. The error: ${this.agentsFailed}. Explain why, and how to fix it. Do not change anything.` };
     const local = spaces().filter((w) => !w.machine);
     const here = local.find((w) => w.active) ?? local[0];
     tryOr(() => (here ? run("tab.new", { ...ask, space: here.id }) : run("space.new", { ...ask, machine: "", folder: home() })));
@@ -2255,6 +2327,7 @@ export default class Spaces extends RetryingView {
       sync: () => run(`kanso-spaces.sync-machine:${route}`),
       retry: () => run(`kanso-spaces.retry-machine:${route}`),
       signin: () => run(`kanso-spaces.sign-in-machine:${route}`),
+      remove: () => run(`kanso-spaces.remove-machine:${route}`),
       plus: () => run("space.new", { machine: route }),
       add: () => run("mod.open", { name: "kanso-computers" }),
       hide: () => this.hide("sidebar.computers", true),
