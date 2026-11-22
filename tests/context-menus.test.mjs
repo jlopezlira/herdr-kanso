@@ -178,11 +178,11 @@ const keyboard = async () => {
   const cx = { notify() {}, stop_propagation() {} };
   const keyDown = (key) => calls(menu.view.render(), "on_key_down").at(-1).at(-1)({ key, modifiers: {} }, cx);
   keyDown("j");
-  assert.equal(menu.view.at, 0, "j lights the first row it can run: Copy waits for a selection, Cut never runs in a terminal");
-  const lit = everyDrawn(menu.view.render()).filter((kid) => calls(kid, "bg").length && texts(kid).includes("Paste") && !texts(kid).includes("Split right"));
+  assert.equal(menu.view.at, 0, "j lights the first row");
+  const lit = everyDrawn(menu.view.render()).filter((kid) => calls(kid, "bg").length && texts(kid).includes("Copy") && !texts(kid).includes("Cut"));
   assert.ok(lit.length > 0, "the lit row draws its selected ground");
   keyDown("enter");
-  assert.ok(menu.closed.includes("terminal.paste"), "Enter runs the lit row");
+  assert.ok(menu.closed.includes("terminal.copy"), "Enter runs the lit row");
   return [menuOf(menu.view.render())];
 };
 

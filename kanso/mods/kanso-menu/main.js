@@ -40,7 +40,7 @@ function groups(tg, armed) {
   } });
   const inTerminal = (command) => () => { run("pane.focus", { terminal: term.address }); run(command); };
   const clipboard = term ? [
-    { label: "Copy", icon: "copy", key: "terminal.copy", disabled: !term.selection, does: inTerminal("terminal.copy") },
+    { label: "Copy", icon: "copy", key: "terminal.copy", does: inTerminal("terminal.copy") },
     { label: "Cut", icon: "scissors", disabled: true, does: () => {} },
     { label: "Paste", icon: "clipboard-paste", key: "terminal.paste", does: inTerminal("terminal.paste") },
   ] : [];
