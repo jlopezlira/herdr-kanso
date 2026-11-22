@@ -54,6 +54,7 @@ const COMMON = [
   // Lists by keyboard (j/k, gg/G, Enter, Esc), the same in every menu and list.
   ...["menu-actions.js", "context-menu.js"].map((file) => ({ source: `kanso/mods/kanso-menu/${file}`, copies: ["kanso-tabs", "kanso-strip", "kanso-spaces"].map((m) => `kanso/mods/${m}/${file}`) })),
   { source: "kanso/mods/kanso-strip/needs.js", copies: ["kanso/mods/kanso-spaces/needs.js", "kanso/mods/kanso-status/needs.js"] },
+  ...["limits-model.js", "clock-model.js", "clock.js"].map((file) => ({ source: `kanso/mods/kanso-strip/${file}`, copies: ["kanso-spaces", "kanso-tabs"].map((m) => `kanso/mods/${m}/${file}`) })),
   { source: "kanso/mods/kanso-menu/listkeys.js", copies: ["kanso/mods/open-with/listkeys.js", "kanso/mods/kanso-spaces/listkeys.js", "kanso/mods/kanso-arrange/listkeys.js", "kanso/mods/kanso-spend/listkeys.js"] },
   // Opening a tab from data: arrangements; Sleep reads a few of its words.
   { source: "kanso/mods/kanso-arrange/tabkit.js", copies: ["kanso/mods/kanso-sleep/tabkit.js", "kanso/mods/kanso-spaces/tabkit.js"] },

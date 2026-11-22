@@ -1,0 +1,220 @@
+import { psQuote } from "./platform-command.js";
+
+export const CLOCK_LABEL = "kanso.clock";
+export const RUN_LABEL = "kanso.run";
+export const TICK_S = 20;
+export const PLAN_RUNS = 60;
+const NAME_MAX = 32;
+const DAY_MS = 86_400_000;
+const UNIT_MS = Object.freeze({ minutes: 60_000, hours: 3_600_000 });
+
+export const clockName = (kind, id) => `kanso-${kind}-${String(id).toLowerCase().replace(/[^a-z0-9_.-]+/g, "-")}`.slice(0, NAME_MAX);
+export const localId = (id) => String(id ?? "").split("/").at(-1);
+export const machineOfAddress = (address) => (String(address ?? "").includes("/") ? String(address).split("/")[0] : null);
+const seconds = (ms) => Math.floor(ms / 1000);
+
+const RESUME_SH = [
+  'at=$1; t=$2; tok=$3; cmd=$4',
+  `while [ "$(date +%s)" -lt "$at" ]; do sleep ${TICK_S}; done`,
+  'j=$(hc get "$t" --json 2>/dev/null) || exit 0',
+  'want="\\"kanso.limit.resume\\":\\"$tok\\""; case "$j" in *"$want"*) ;; *) exit 0 ;; esac',
+  'case "$j" in',
+  '  *\'"state":"working"\'*|*\'"state":"blocked"\'*) ;;',
+  '  *\'"state":"done"\'*|*\'"state":"idle"\'*) hc send "$t" continue ;;',
+  '  *) [ -n "$cmd" ] && hc send "$t" "$cmd" ;;',
+  'esac',
+  'hc label "$t" kanso.limit= kanso.limit.resume=',
+].join("\n");
+
+const resumePs = (at, address, token, cmd) => [
+  `$at = ${Number(at)}; $t = ${psQuote(address)}; $tok = ${psQuote(token)}; $cmd = ${psQuote(cmd ?? "")}`,
+  `while ([DateTimeOffset]::UtcNow.ToUnixTimeSeconds() -lt $at) { Start-Sleep -Seconds ${TICK_S} }`,
+  "$j = (hc get $t --json 2>$null) | ConvertFrom-Json",
+  "if (-not $j -or $j.labels.'kanso.limit.resume' -ne $tok) { exit 0 }",
+  "$s = $j.status.state",
+  "if ($s -in 'done','idle') { hc send $t continue } elseif ($s -notin 'working','blocked' -and $cmd) { hc send $t $cmd }",
+  "hc label $t kanso.limit= kanso.limit.resume=",
+].join("; ");
+
+const waiter = (platform, sh, ps, args) => (platform === "windows"
+  ? ["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", ps]
+  : ["sh", "-c", sh, "kanso-clock", ...args.map(String)]);
+
+export function resumeWaiter({ platform, address, until, token, command = "", grace = 0 }) {
+  const at = seconds(until + grace);
+  return waiter(platform, RESUME_SH, resumePs(at, address, token, command), [at, address, token, command]);
+}
+
+export function runArgs({ cwd, space, on = null, id, name = null, tab = null }) {
+  return [
+    "run", "--bg", "--no-parent", "--outlive-parent",
+    ...(on ? ["--on", on] : []),
+    "--cwd", cwd,
+    "--label", `herdr.space=${localId(space)}`,
+    ...(tab ? ["--label", `herdr.tab=${localId(tab)}`] : []),
+    "--label", "herdr.seen=0",
+    "--label", `${RUN_LABEL}=${id}`,
+    ...(name ? ["--label", `kanso.name=${name}`] : []),
+    "--",
+  ];
+}
+
+const SCHEDULE_SH = [
+  'id=$1; log=$2; mode=$3; spec=$4; on=$5; folder=$6; space=$7; tree=$8; base=$9; shift 9; dir=$1; slug=$2; shift 2',
+  'x() { if [ -n "$on" ]; then hc exec --on "$on" -- "$@"; else "$@"; fi; }',
+  'say() { printf \'%s %s\\n\' "$(date +%s)" "$1" >> "$log"; }',
+  'fire() {',
+  '  cwd=$folder',
+  '  if [ "$tree" = 1 ]; then',
+  '    stamp=$(date +%Y%m%d-%H%M); branch="kanso/$slug-$stamp"; cwd="$dir/$slug-$stamp"',
+  '    x git -C "$folder" fetch --quiet origin "$base" >/dev/null 2>&1',
+  '    if ! out=$(x git -C "$folder" worktree add -b "$branch" "$cwd" "origin/$base" 2>&1) && ! out=$(x git -C "$folder" worktree add -b "$branch" "$cwd" "$base" 2>&1); then',
+  '      say "failed $(printf %s "$out" | tail -n 1)"; return',
+  '    fi',
+  '  fi',
+  '  if [ -n "$on" ]; then out=$(hc run --bg --no-parent --outlive-parent --on "$on" --cwd "$cwd" --label "herdr.space=$space" --label herdr.seen=0 --label "kanso.run=$id" -- "$@" 2>&1)',
+  '  else out=$(hc run --bg --no-parent --outlive-parent --cwd "$cwd" --label "herdr.space=$space" --label herdr.seen=0 --label "kanso.run=$id" -- "$@" 2>&1); fi',
+  '  if [ $? -eq 0 ]; then say ran; else say "failed $(printf %s "$out" | tail -n 1)"; fi',
+  '}',
+  'mkdir -p "$(dirname "$log")"',
+  'if [ "$mode" = every ]; then',
+  '  t=${spec% *}; step=${spec#* }',
+  `  while :; do while [ "$(date +%s)" -lt "$t" ]; do sleep ${TICK_S}; done; fire "$@"; now=$(date +%s); while [ "$t" -le "$now" ]; do t=$((t + step)); done; done`,
+  'fi',
+  'last=0',
+  'for t in $spec; do',
+  '  [ "$t" -le "$last" ] && continue',
+  `  while [ "$(date +%s)" -lt "$t" ]; do sleep ${TICK_S}; done`,
+  '  fire "$@"; last=$(date +%s)',
+  'done',
+].join("\n");
+
+const schedulePs = (job) => {
+  const q = psQuote;
+  const words = job.argv.map(q).join(", ");
+  const on = job.on ? `@('--on', ${q(job.on)})` : "@()";
+  return [
+    `$id = ${q(job.id)}; $log = ${q(job.log)}; $mode = ${q(job.mode)}; $spec = ${q(job.spec)}; $folder = ${q(job.folder)}; $space = ${q(localId(job.space))}`,
+    `$tree = ${job.tree ? 1 : 0}; $base = ${q(job.base ?? "")}; $dir = ${q(job.dir ?? "")}; $slug = ${q(job.slug ?? "run")}; $on = ${on}; $words = @(${words})`,
+    "New-Item -ItemType Directory -Force -Path (Split-Path $log) | Out-Null",
+    "function Now { [DateTimeOffset]::UtcNow.ToUnixTimeSeconds() }",
+    "function Say($w) { Add-Content -Path $log -Value \"$(Now) $w\" }",
+    "function Git { if ($on.Count) { hc exec @on -- git @args } else { git @args } }",
+    "function Fire { $cwd = $folder; if ($tree -eq 1) { $stamp = Get-Date -Format 'yyyyMMdd-HHmm'; $branch = \"kanso/$slug-$stamp\"; $cwd = \"$dir/$slug-$stamp\"; Git -C $folder fetch --quiet origin $base 2>&1 | Out-Null; $out = Git -C $folder worktree add -b $branch $cwd \"origin/$base\" 2>&1; if ($LASTEXITCODE -ne 0) { $out = Git -C $folder worktree add -b $branch $cwd $base 2>&1 }; if ($LASTEXITCODE -ne 0) { Say \"failed $(@($out)[-1])\"; return } }; $out = hc run --bg --no-parent --outlive-parent @on --cwd $cwd --label \"herdr.space=$space\" --label herdr.seen=0 --label \"kanso.run=$id\" -- @words 2>&1; if ($LASTEXITCODE -eq 0) { Say 'ran' } else { Say \"failed $(@($out)[-1])\" } }",
+    "function Until($t) { while ((Now) -lt $t) { Start-Sleep -Seconds " + TICK_S + " } }",
+    "if ($mode -eq 'every') { $p = $spec -split ' '; $t = [long]$p[0]; $step = [long]$p[1]; while ($true) { Until $t; Fire; $n = Now; while ($t -le $n) { $t += $step } } }",
+    "$last = 0; foreach ($t in ($spec -split ' ' | ForEach-Object { [long]$_ })) { if ($t -le $last) { continue }; Until $t; Fire; $last = Now }",
+  ].join("\n");
+};
+
+export function scheduleWaiter(job) {
+  const args = [job.id, job.log, job.mode, job.spec, job.on ?? "", job.folder, localId(job.space), job.tree ? 1 : 0, job.base ?? "", job.dir ?? "", job.slug ?? "run", ...job.argv];
+  return waiter(job.platform, SCHEDULE_SH, schedulePs(job), args);
+}
+
+export function waiterArgs(name, kind, argv) {
+  return ["run", "--bg", "--no-parent", "--outlive-parent", "--rm", "--name", name, "--label", `${CLOCK_LABEL}=${kind}`, "--", ...argv];
+}
+
+const LAUNCH = [
+  'shell=${SHELL:-/bin/sh}',
+  'case "${shell##*/}" in',
+  '  fish) exec "$shell" -lic \'command $argv[2..]; exec $argv[1] -li\' "$shell" "$@" ;;',
+  '  sh|bash|zsh|dash|ksh) exec "$shell" -lic \'"$@"; exec "$0" -li\' "$shell" "$@" ;;',
+  '  *) exec sh -c \'"$@"; exec "${SHELL:-sh}" -i\' sh "$@" ;;',
+  'esac',
+].join("\n");
+
+const psLine = (words) => `& ${words.map(psQuote).join(" ")}`;
+
+export function agentLaunch(platform, argv, prompt = "") {
+  const words = [...argv, ...(String(prompt).trim() ? [String(prompt).trim()] : [])].map(String);
+  return platform === "windows" ? ["powershell.exe", "-NoLogo", "-NoExit", "-Command", psLine(words)] : ["sh", "-c", LAUNCH, "sh", ...words];
+}
+
+const pad = (n) => String(n).padStart(2, "0");
+const dayStart = (ms) => { const d = new Date(ms); return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime(); };
+const atClock = (dayMs, time) => {
+  const [h, m] = String(time).split(":").map(Number);
+  const d = new Date(dayMs);
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate(), h || 0, m || 0, 0, 0).getTime();
+};
+const stepOf = (when) => Math.max(1, Number(when.every) || 1) * (UNIT_MS[when.unit] ?? UNIT_MS.minutes);
+const daysOf = (when) => (Array.isArray(when.days) && when.days.length ? when.days : [0, 1, 2, 3, 4, 5, 6]);
+
+export function validWhen(when) {
+  if (when?.kind === "daily") return /^\d{1,2}:\d{2}$/.test(String(when.time ?? "")) && daysOf(when).every((d) => d >= 0 && d <= 6);
+  if (when?.kind === "every") return Number(when.every) >= 1 && Object.hasOwn(UNIT_MS, when.unit) && Number.isFinite(Number(when.start));
+  if (when?.kind === "once") return Number.isFinite(Number(when.at)) && Number(when.at) > 0;
+  return false;
+}
+
+export function nextRuns(when, from, count = PLAN_RUNS) {
+  if (!validWhen(when) || count <= 0) return [];
+  if (when.kind === "once") return Number(when.at) > from ? [Number(when.at)] : [];
+  if (when.kind === "every") {
+    const step = stepOf(when), start = Number(when.start);
+    const first = start > from ? start : start + (Math.floor((from - start) / step) + 1) * step;
+    return Array.from({ length: count }, (_, i) => first + i * step);
+  }
+  const days = new Set(daysOf(when));
+  const out = [];
+  for (let day = dayStart(from), n = 0; out.length < count && n < 400 + count * 7; n += 1, day = dayStart(day + DAY_MS + 3_600_000)) {
+    const at = atClock(day, when.time);
+    if (at > from && days.has(new Date(day).getDay())) out.push(at);
+  }
+  return out;
+}
+
+export const nextRun = (when, from) => nextRuns(when, from, 1)[0] ?? null;
+
+export function lastDue(when, after, upTo) {
+  if (!validWhen(when) || upTo <= after) return null;
+  if (when.kind === "once") return Number(when.at) > after && Number(when.at) <= upTo ? Number(when.at) : null;
+  if (when.kind === "every") {
+    const step = stepOf(when), start = Number(when.start);
+    if (start > upTo) return null;
+    const last = start + Math.floor((upTo - start) / step) * step;
+    return last > after ? last : null;
+  }
+  const days = new Set(daysOf(when));
+  for (let day = dayStart(upTo), n = 0; n < 8; n += 1, day = dayStart(day - 3_600_000)) {
+    const at = atClock(day, when.time);
+    if (at <= upTo && days.has(new Date(day).getDay())) return at > after ? at : null;
+  }
+  return null;
+}
+
+export function waiterPlan(when, { now, since }) {
+  const missed = lastDue(when, since, now) != null;
+  if (when.kind === "every") {
+    const next = missed ? now : nextRun(when, now);
+    return next == null ? null : { mode: "every", spec: `${seconds(next)} ${seconds(stepOf(when))}` };
+  }
+  const times = [...(missed ? [now] : []), ...nextRuns(when, now, PLAN_RUNS)];
+  return times.length ? { mode: "at", spec: times.map(seconds).join(" ") } : null;
+}
+
+export function parseRunLog(text) {
+  return String(text ?? "").split(/\r?\n/).map((line) => line.match(/^(\d+) (ran|failed)(?: (.*))?$/)).filter(Boolean)
+    .map(([, at, what, why]) => ({ at: Number(at) * 1000, ok: what === "ran", why: why?.trim() || null }));
+}
+
+export function lastOutcome(text) {
+  const rows = parseRunLog(text);
+  const last = rows.at(-1) ?? null;
+  return { lastRun: rows.filter((r) => r.ok).at(-1)?.at ?? null, failed: last && !last.ok ? last : null };
+}
+
+export const slugOf = (text, fallback = "run") => String(text ?? "").toLowerCase().normalize("NFKD").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 24).replace(/-+$/, "") || fallback;
+
+export function whenWords(when) {
+  if (!validWhen(when)) return "";
+  if (when.kind === "once") return `${new Date(Number(when.at)).toDateString().slice(4, 10)} ${new Date(Number(when.at)).toTimeString().slice(0, 5)}`;
+  if (when.kind === "every") return `Every ${Number(when.every)} ${Number(when.every) === 1 ? when.unit.replace(/s$/, "") : when.unit}`;
+  const names = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  const days = daysOf(when);
+  const which = days.length === 7 ? "Every day" : days.join() === "1,2,3,4,5" ? "Weekdays" : days.map((d) => names[d]).join(" ");
+  const [h, m] = String(when.time).split(":").map(Number);
+  return `${which} at ${pad(h)}:${pad(m)}`;
+}

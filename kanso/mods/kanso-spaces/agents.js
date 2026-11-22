@@ -30,7 +30,7 @@ const twoLines = (more) => !more.oneLine && Boolean(more.activity);
 export const sessionHeight = (more = {}) => (twoLines(more) ? H.two : H.line);
 
 // Asleep is one more status: its own section, after the awake ones.
-const RANK = { blocked: 4, done: 3, working: 2, idle: 1, asleep: 0.5 };
+const RANK = { blocked: 4, done: 3, working: 2, limited: 1.5, idle: 1, asleep: 0.5 };
 
 const clean = (s) => (s ?? "").replace(/^[^\p{L}\p{N}]+/u, "").trim();
 
@@ -216,6 +216,7 @@ export function nest(rows, all = []) {
 export const SECTIONS = [
   { id: "blocked", label: "Needs you" },
   { id: "working", label: "Working" },
+  { id: "limited", label: "Limited" },
   { id: "done", label: "Done" },
   { id: "idle", label: "Idle" },
   { id: "asleep", label: "Asleep" },

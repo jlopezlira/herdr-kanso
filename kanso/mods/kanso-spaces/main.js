@@ -56,6 +56,9 @@ import { machineRecord, canRestore, addArgs, rmArgs, hcError, needsLogin, heldNa
 import { Names } from "./alias.js";
 import { syncIcon, peerOn, withPeer } from "./sync.js";
 import { withNeeds } from "./needs.js";
+import { withLimits, limitOf, resumeArmed, AT_RESET_LABEL } from "./limits-model.js";
+import { armResume, disarmResume } from "./clock.js";
+import { resumeCommand, limitLines, providerLimits, shownNow } from "./limit-menu.js";
 import { computerMenuItems } from "./computer-menu.js";
 import { readSync, saveSync } from "./sync-row.js";
 import { createAwake, keepAwake } from "./awake.js";
@@ -161,7 +164,7 @@ const registry = () => { const rows = shared(REGISTRY); return Array.isArray(row
 const sameKey = (key) => { const i = String(key).indexOf(":"); return `${key.slice(0, i)}:${trimmed(key.slice(i + 1))}`; };
 const projectAt = (key) => registry().find((p) => keyOfProject(p) === sameKey(key)) ?? null;
 const ROW_SHARED = [REGISTRY, NEEDS_YOU, "strip.state", SLEEP_PENDING, SLEEP_WAKING, SLEEP_FAILED, FORGET_HELD, KNOWN_AGENTS, "kanso.battery", "space.colors"];
-const rowInputs = () => ({ spaces: spaces(), panes: panes(), terminals: terminals(), agents: withNeeds(agents(), terminals()), machines: machines(), focused: focused(), front: window()?.active === true, keys: keys(),
+const rowInputs = () => ({ spaces: spaces(), panes: panes(), terminals: terminals(), agents: withLimits(withNeeds(agents(), terminals()), terminals()), machines: machines(), focused: focused(), front: window()?.active === true, keys: keys(),
   shared: ROW_SHARED.map((key) => shared(key)), pieces: Object.entries(pieces(shared)).filter(([id]) => id.startsWith("sidebar.")) });
 const ROW_STATE = ["hoverRow", "hoverSpace", "hoverHead", "hoverMachine", "pressed", "over", "draggedAgent", "overAgent", "kbd", "navKey", "needsOpen", "needsEmpty", "foldH", "folded",
   "agentsFolded", "sectionsFolded", "asleepOpen", "shelvesOpen", "alive", "git", "held", "custom", "machines", "parked", "waking", "login", "failed", "pulling", "hints", "sync", "hostName"];
@@ -686,6 +689,10 @@ export default class Spaces extends RetryingView {
     return { items: [...head, ...middle, ...ends], count: rows.length };
   }
 
+  limitedNow() {
+    return providerLimits(withLimits(agents(), terminals()), Date.now());
+  }
+
   pickAgent(place, a) {
     if (this.starting) return;
     this.starting = true;
@@ -795,7 +802,7 @@ export default class Spaces extends RetryingView {
   }
 
   refreshNeeds(sp = spaces(), terms = terminals(), asleep = this.sleepingNow(sp, terms)) {
-    const list = withNeeds(agents(), terms), layouts = machines();
+    const list = withLimits(withNeeds(agents(), terms), terms), layouts = machines();
     const signature = waitingSignature(list, terms, asleep.dozing, NAME_LABEL);
     const layoutSignature = layouts.map((m) => m.layout).join(",");
     const changed = signature !== this.needsSignature || this.threadsShown !== this.needsThreads;
@@ -827,7 +834,7 @@ export default class Spaces extends RetryingView {
 
   nextNeeds(cx) {
     const terms = terminals(), asleep = this.sleepingNow(spaces(), terms);
-    const rows = waitingQueue(withNeeds(agents(), terms), terms, asleep.dozing, this.refreshNeeds().rows, Date.now(), ["blocked", "done"]);
+    const rows = waitingQueue(withLimits(withNeeds(agents(), terms), terms), terms, asleep.dozing, this.refreshNeeds().rows, Date.now(), ["blocked", "done"]);
     const row = nextWaiting(rows, this.needsCursor);
     if (row) { this.jumpNeeds(row, cx, rows); return; }
     this.needsCursor = null;
@@ -1774,7 +1781,7 @@ export default class Spaces extends RetryingView {
 
   // Asleep rows follow the awake ones, in the panes' order.
   spaceRows(id, ctx) {
-    const mine = orderSessions(this.inStripOrder(ctx.all.filter((a) => this.projectFor(a, ctx) === id), ctx.strip), this.order, this.custom[id] ?? []);
+    const mine = orderSessions(this.inStripOrder(ctx.all.filter((a) => this.projectFor(a, ctx) === id).filter(shownNow(ctx.now)), ctx.strip), this.order, this.custom[id] ?? []);
     return [...mine, ...ctx.asleep.rows.filter((a) => a.space === id)];
   }
 
@@ -1963,8 +1970,11 @@ export default class Spaces extends RetryingView {
   newAgentView(t) {
     const place = props().newAgent, start = Boolean(props().start);
     const installed = (this.known ?? []).filter((a) => a.installed);
-    this.menuDigits = installed.slice(0, 9).map((a) => (cx) => { this.pickAgent(place, a); this.redraw(cx); });
-    const agents = this.known ? (item) => installed.map((a, i) => item(a.name, () => this.pickAgent(place, a), { icon: a.icon ?? null, hint: i < 9 ? String(i + 1) : null, keep: true })) : null;
+    const limited = this.limitedNow();
+    const pick = (a) => (limited(a.key) ? (cx) => this.armed.press(`start-${a.key}`, cx, () => this.pickAgent(place, a)) : () => this.pickAgent(place, a));
+    this.menuDigits = installed.slice(0, 9).map((a) => (cx) => { pick(a)(cx); this.redraw(cx); });
+    const asks = (a) => (limited(a.key) ? { verb: "start anyway", armed: this.armed.is(`start-${a.key}`) } : {});
+    const agents = this.known ? (item) => installed.map((a, i) => item(a.name, pick(a), { icon: a.icon ?? null, hint: limited(a.key) ?? (i < 9 ? String(i + 1) : null), keep: true, ...asks(a) })) : null;
     const lines = this.agentLines(place, { start, agents, pending: this.checking, failure: this.agentsFailed ? () => this.agentsFailure(place) : null, repo: this.repo, trees: this.trees,
       item: this.lines(), room: props().height ?? Infinity });
     this.menuScroll = lines.count ? { handle: this.agentScroll, count: lines.count, from: 1 } : null;
@@ -2095,10 +2105,10 @@ export default class Spaces extends RetryingView {
 
   listed(ps, sp, terms) {
     const byAddress = new Map(terms.map((k) => [k.address, k]));
-    return withNeeds(visibleAgents(withTerminals(agents(), ps, sp), this.offNames()).map((a) => {
+    return withLimits(withNeeds(visibleAgents(withTerminals(agents(), ps, sp), this.offNames()).map((a) => {
       const k = byAddress.get(a.address), l = k?.labels, pin = l?.[PIN_LABEL];
       return { ...a, parent: k?.parent ?? null, labels: l ?? {}, turn: k?.turn ?? 0, msg: k?.report?.msg ?? null, name: l?.[NAME_LABEL] || undefined, pin: pin != null && pin !== "" && !Number.isNaN(Number(pin)) ? Number(pin) : null };
-    }), terms);
+    }), terms), terms);
   }
 
   setOrder(key, value) {
@@ -2561,7 +2571,7 @@ export default class Spaces extends RetryingView {
   statusSections(sp, ctx) {
     const names = new Map(sp.map((w) => [w.id, w.name]));
     const zz = ctx.asleep.rows.map((a) => ({ a: { ...a, space_name: names.get(a.space) ?? a.asleep.spaceName ?? "" }, lines: [] }));
-    const entries = [...nest(this.inStripOrder(ctx.all, ctx.strip), ctx.terms), ...zz];
+    const entries = [...nest(this.inStripOrder(ctx.all.filter(shownNow(ctx.now)), ctx.strip), ctx.terms), ...zz];
     const since = { ...(this.since ?? {}), ...Object.fromEntries(zz.map((e) => [e.a.address, { s: "asleep", at: e.a.asleep.saved }])) };
     return bySection(entries, since, this.held?.done ? this.held.address : null, this.statusOrder);
   }
@@ -2879,6 +2889,8 @@ export default class Spaces extends RetryingView {
         ...(!settled && free ? [{ act: "settle", does: () => label(m.address, SETTLED_LABEL, `${now}:${k?.turn ?? 0}`) }] : []),
         { act: isUnread(l) ? "mark-read" : "mark-unread", does: () => label(m.address, UNREAD_LABEL, isUnread(l) ? "" : "1") },
         snoozed ? { act: "unsnooze", does: () => label(m.address, SNOOZE_LABEL) } : { act: "snooze", does: into("snooze"), ...more },
+        ...limitLines({ labels: l, status: a?.status, now, snoozed, snooze: () => label(m.address, SNOOZE_LABEL, limitOf(l).until),
+          atReset: () => this.atReset(m.address, l, resumeCommand(a?.app, k?.foreground?.argv ?? k?.argv ?? [], conversation)) }),
         ...(m.address && (others.length || movedTo) ? [{ act: "move", does: into("move"), ...more }] : []),
         ...(p?.cwd || p?.branch || session ? [{ act: "copy-menu", does: into("copy"), ...more }] : []),
         ...(p?.tab && sp && a ? [{ act: "sleep-agent", does: () => sleepAgent(sp.id, p.tab, p.pane) }] : []),
@@ -2887,6 +2899,18 @@ export default class Spaces extends RetryingView {
       ]),
       ...this.pieceItems(item, "sidebar.activity"),
     ]);
+  }
+
+  atReset(address, labels, command) {
+    const until = limitOf(labels)?.until;
+    if (!until) return;
+    if (resumeArmed(labels)) {
+      label(address, AT_RESET_LABEL);
+      disarmResume(address);
+      return;
+    }
+    label(address, AT_RESET_LABEL, String(until));
+    armResume({ address, until, command }).catch((e) => notify({ title: "Resume at reset could not be set", body: String(e?.message ?? e), level: "error" }));
   }
 
   // What a menu names: the conversation's title, else the agent's.
