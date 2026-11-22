@@ -225,9 +225,10 @@
     [
       " | devbox |  | ",
       " | Rename… |  | ",
-      "power | Turn off |  | ",
+      "power | Disconnect |  | ",
       "arrow-right-left | Sync | on | ",
       "plus | New project |  | ",
+      "x | Remove |  | ",
       "server | Add computer… |  | ",
       "eye-off | Hide \"Computers\" |  | ",
       "sliders-vertical | Settings for this… |  | "
@@ -237,9 +238,10 @@
     [
       " | devbox |  | ",
       " | Rename… |  | ",
-      "power | Turn off |  | ",
+      "power | Disconnect |  | ",
       "arrow-right-left | Sync | on | ",
       "plus | New project |  | ",
+      "x | Remove |  | ",
       "server | Add computer… |  | ",
       "eye-off | Hide \"Computers\" |  | ",
       "sliders-vertical | Settings for this… |  | "
@@ -249,9 +251,10 @@
     [
       " | devbox |  | ",
       " | Rename… |  | ",
-      "power | Turn off |  | ",
+      "power | Disconnect |  | ",
       "arrow-right-left | Sync | off | ",
       "plus | New project |  | ",
+      "x | Remove |  | ",
       "server | Add computer… |  | ",
       "eye-off | Hide \"Computers\" |  | ",
       "sliders-vertical | Settings for this… |  | "
@@ -262,6 +265,7 @@
       " | devbox |  | ",
       " | Rename… |  | ",
       "refresh-cw | Refresh |  | ",
+      "x | Remove |  | ",
       "server | Add computer… |  | ",
       "eye-off | Hide \"Computers\" |  | ",
       "sliders-vertical | Settings for this… |  | "
@@ -272,6 +276,7 @@
       " | devbox |  | ",
       " | Rename… |  | ",
       "key | Sign in… |  | ",
+      "x | Remove |  | ",
       "server | Add computer… |  | ",
       "eye-off | Hide \"Computers\" |  | ",
       "sliders-vertical | Settings for this… |  | "
@@ -281,7 +286,8 @@
     [
       " | devbox |  | ",
       " | Rename… |  | ",
-      "power | Turn on |  | ",
+      "power | Connect |  | ",
+      "x | Remove |  | ",
       "server | Add computer… |  | ",
       "eye-off | Hide \"Computers\" |  | ",
       "sliders-vertical | Settings for this… |  | "
@@ -292,6 +298,7 @@
       " | devbox |  | ",
       " | Rename… |  | ",
       "refresh-cw | Refresh |  | ",
+      "x | Remove |  | ",
       "server | Add computer… |  | ",
       "eye-off | Hide \"Computers\" |  | ",
       "sliders-vertical | Settings for this… |  | "
@@ -317,6 +324,9 @@
   "pane": [
     [
       " | tests |  | ",
+      "copy | Copy |  | ",
+      "scissors | Cut |  | ",
+      "clipboard-paste | Paste |  | ",
       "columns-2 | Split right | ⌘D | ",
       "rows-2 | Split down | ⇧⌘D | ",
       "columns-2 | Split left | ⌥⇧⌘D | ",
@@ -333,6 +343,9 @@
   "paneToProgram": [
     [
       " | web · devbox |  | ",
+      "copy | Copy |  | ",
+      "scissors | Cut |  | ",
+      "clipboard-paste | Paste |  | ",
       "columns-2 | Split right | ⌘D | ",
       "rows-2 | Split down | ⇧⌘D | ",
       "columns-2 | Split left | ⌥⇧⌘D | ",
@@ -346,6 +359,9 @@
   "panePinned": [
     [
       " | web · devbox |  | ",
+      "copy | Copy |  | ",
+      "scissors | Cut |  | ",
+      "clipboard-paste | Paste |  | ",
       "columns-2 | Split right | ⌘D | ",
       "rows-2 | Split down | ⇧⌘D | ",
       "columns-2 | Split left | ⌥⇧⌘D | ",
@@ -359,6 +375,9 @@
   "paneChild": [
     [
       " | tests |  | ",
+      "copy | Copy |  | ",
+      "scissors | Cut |  | ",
+      "clipboard-paste | Paste |  | ",
       "columns-2 | Split right | ⌘D | ",
       "rows-2 | Split down | ⇧⌘D | ",
       "columns-2 | Split left | ⌥⇧⌘D | ",
@@ -376,6 +395,9 @@
   "keyboard": [
     [
       " | tests |  | ",
+      "copy | Copy |  | ",
+      "scissors | Cut |  | ",
+      "clipboard-paste | Paste |  | ",
       "columns-2 | Split right | ⌘D | ",
       "rows-2 | Split down | ⇧⌘D | ",
       "columns-2 | Split left | ⌥⇧⌘D | ",
@@ -410,6 +432,9 @@
     ],
     [
       " | tests |  | ",
+      "copy | Copy |  | ",
+      "scissors | Cut |  | ",
+      "clipboard-paste | Paste |  | ",
       "columns-2 | Split right | ⌘D | ",
       "rows-2 | Split down | ⇧⌘D | ",
       "columns-2 | Split left | ⌥⇧⌘D | ",
@@ -436,6 +461,9 @@
     ],
     [
       " | web · devbox |  | ",
+      "copy | Copy |  | ",
+      "scissors | Cut |  | ",
+      "clipboard-paste | Paste |  | ",
       "columns-2 | Split right | ⌘D | ",
       "rows-2 | Split down | ⇧⌘D | ",
       "columns-2 | Split left | ⌥⇧⌘D | ",

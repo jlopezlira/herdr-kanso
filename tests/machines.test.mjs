@@ -30,8 +30,23 @@ test("adding a machine back uses the saved setup and never installs", async () =
   assert.equal(machineRecord({ name: "dark", target: "dark.example", via: "False", session: "NULL" }).session, "NULL");
 });
 
+test("a listed keyed route and an old saved command are added through --via, and a plain computer stays a positional target", async () => {
+  const { machineRecord, addArgs } = await load("kanso-spaces/machines.js", ["machineRecord", "addArgs"]);
+  const keyed = "ssh -i ~/.ssh/id_ed25519_kanso -o IdentitiesOnly=yes -o BatchMode=yes ada@box";
+  const savedCommand = "ssh -J jump ada@box";
+  const listed = machineRecord({ name: "grey", target: keyed, via: true });
+  const saved = machineRecord({ name: "grey", target: savedCommand, via: "" });
+  for (const [row, command] of [[listed, keyed], [saved, savedCommand]]) {
+    const args = clone(addArgs(row));
+    assert.equal(args[2], "--name");
+    assert.equal(args[args.indexOf("--via") + 1], command);
+    assert.equal(args.includes(command) && args.indexOf(command) === args.indexOf("--via") + 1, true);
+  }
+  assert.deepEqual(clone(addArgs(machineRecord({ name: "grey", target: "grey", via: false }))), ["machine", "add", "grey", "--name", "grey", "--json"]);
+});
+
 test("a login Herdr asks for is told apart from a missing install", async () => {
-  const { hcError, needsLogin, loginLine } = await load("kanso-spaces/machines.js", ["hcError", "needsLogin", "loginLine"]);
+  const { hcError, needsLogin } = await load("kanso-spaces/machines.js", ["hcError", "needsLogin"]);
   assert.equal(hcError({ code: 0, stdout: "{}" }), null);
   assert.deepEqual(clone(hcError({ code: 1, stdout: JSON.stringify({ error: { kind: "login_needed", message: "needs a login" } }) })), { kind: "login_needed", message: "needs a login" });
   assert.equal(hcError({ code: 1, stderr: "nope" }).message, "nope");
@@ -39,18 +54,17 @@ test("a login Herdr asks for is told apart from a missing install", async () => 
   assert.equal(needsLogin({ message: "host key changed" }), true);
   assert.equal(needsLogin({ kind: "hc_missing", message: "install herdr" }), false);
   assert.equal(needsLogin(null), false);
-  assert.equal(loginLine("dark"), "hc machine login dark");
 });
 
 test("a machine row names only the states that need a word", async () => {
   const { machineState, machineTip, machineHot, machineStop } = await load("kanso-spaces/machines.js", ["machineState", "machineTip", "machineHot", "machineStop"]);
-  assert.equal(machineState("off"), "Off");
-  assert.equal(machineState("unavailable"), "Unreachable");
+  assert.equal(machineState("off"), "Disconnected");
+  assert.equal(machineState("unavailable"), "Asleep");
   assert.equal(machineState("login"), "Needs login");
   assert.equal(machineState("connected"), "");
   assert.equal(machineState("loading"), "");
   assert.equal(machineTip("dark", "connected"), "dark");
-  assert.equal(machineTip("dark", "off"), "dark: Off");
+  assert.equal(machineTip("dark", "off"), "dark: Disconnected");
   assert.equal(machineTip("dark", "unavailable", "ssh timed out"), "dark: ssh timed out");
   assert.equal(machineTip("dark", "login", ""), "dark: Needs login");
   assert.equal(machineHot("dark", "dark", false, null), true);
@@ -153,7 +167,7 @@ const turnedOff = async (view) => {
 };
 
 // A computer row's tools, by what each does: the kit draws them, each named by its tip.
-const TOOLS = { power: /^Turn (off|dark on)$/, retry: /^Refresh$/, login: /^Sign in$/, add: /^New project on dark$/, sync: /^Sync\b/ };
+const TOOLS = { power: /^(Disconnect|Connect dark)$/, retry: /^Refresh$/, login: /^Sign in$/, add: /^New project on dark$/, sync: /^Sync\b/ };
 const tools = (drawn) => drawn.tips.flatMap((tip) => Object.keys(TOOLS).filter((name) => TOOLS[name].test(tip)));
 const tool = (drawn, name) => tools(drawn).includes(name);
 const oneRow = (drawn, name) => drawn.view.nav.filter((row) => row.key === `machine:${name}`).length;
@@ -175,12 +189,12 @@ test("each machine state is one row, and this computer has no power button", asy
   assert.equal(off.ids.includes("space-dark-sp"), false, "its projects are not listed");
   assert.equal(off.texts.includes("macbook"), true);
   assert.equal(off.texts.includes("dark"), true);
-  assert.equal(off.texts.includes("Off"), true);
+  assert.equal(off.texts.includes("Disconnected"), true);
   assert.equal(off.texts.includes("Unavailable"), false);
 
   const offHover = await sidebar({ ...parkedDark, hover: "dark" });
   assert.equal(tool(offHover, "power"), true);
-  assert.equal(offHover.tips.includes("Turn dark on"), true);
+  assert.equal(offHover.tips.includes("Connect dark"), true);
   assert.equal(tool(offHover, "add"), false);
   assert.equal(tool(offHover, "retry"), false);
 
@@ -192,9 +206,9 @@ test("each machine state is one row, and this computer has no power button", asy
   assert.equal(back.ids.includes("space-dark-sp"), true, "on: its project is back");
   assert.equal(tool(back, "power"), true);
   assert.equal(tool(back, "add"), true);
-  assert.equal(back.tips.includes("Turn off"), true);
+  assert.equal(back.tips.includes("Disconnect"), true);
   assert.equal(back.tips.includes("New project on dark"), true);
-  assert.equal(back.texts.includes("Off"), false);
+  assert.equal(back.texts.includes("Disconnected"), false);
   assert.equal(back.tips.includes("Connected"), false);
 
   const onQuiet = await sidebar(connected);
@@ -211,7 +225,7 @@ test("each machine state is one row, and this computer has no power button", asy
   assert.equal(tool(rail, "power"), false);
   assert.equal(tool(rail, "retry"), false);
   assert.equal(rail.texts.includes("dark"), false);
-  assert.equal(rail.tips.includes("dark: Off"), true);
+  assert.equal(rail.tips.includes("dark: Disconnected"), true);
 });
 
 test("loading, unreachable, and needs login each stay on that one row", async () => {
@@ -231,7 +245,7 @@ test("loading, unreachable, and needs login each stay on that one row", async ()
   assert.equal(down.ids.includes("machine-unavailable-dark"), false);
   assert.equal(tool(down, "retry"), true);
   assert.equal(tool(down, "power"), false);
-  assert.equal(down.texts.includes("Unreachable"), true);
+  assert.equal(down.texts.includes("Asleep"), true);
   assert.equal(down.texts.includes("Unavailable"), false);
   assert.equal(down.tips.includes("ssh timed out"), true);
   assert.equal(down.tips.includes("Refresh"), true);
@@ -257,7 +271,7 @@ test("loading, unreachable, and needs login each stay on that one row", async ()
   assert.equal(oneRow(quiet, "dark"), 1);
   assert.equal(tool(quiet, "retry"), true, "retry stays on the row");
   assert.equal(tool(quiet, "power"), false);
-  assert.equal(quiet.texts.includes("Unreachable"), true);
+  assert.equal(quiet.texts.includes("Asleep"), true);
 });
 
 test("turning a machine off stops reading it at once, and turning it on adds the saved setup", async () => {
@@ -438,9 +452,11 @@ async function keyWalk(state) {
   return { stops, ran };
 }
 
+const base = { spaces: [local, remote], layouts: [{ name: null, layout: "ready" }] };
+
 test("each tool a computer row shows is its own keyboard stop: j walks to it and Enter runs it, as a press does", async () => {
-  const base = { spaces: [local, remote], layouts: [{ name: null, layout: "ready" }] };
-  const login = ["terminal.open", { argv: ["hc", "machine", "login", "dark"], place: "right" }];
+  const { signInTab } = await load("kanso-spaces/sign-in.js", ["signInTab"]);
+  const login = ["terminal.open", clone(signInTab(record, "macos"))];
   // On, Sync on or off: Turn off, New project, then Sync, wherever Sync sits.
   const onStops = ["machine-lu-power:dark", "machine-lu-plus:dark", "machine-lu-arrow-right-left:dark"];
   const onRan = [["power", "dark", false], ["space.new", { machine: "dark" }], ["sync", "dark"]];
@@ -456,6 +472,16 @@ test("each tool a computer row shows is its own keyboard stop: j walks to it and
     assert.deepEqual(walked.stops, stops, `${name}: a stop per tool, in screen order`);
     assert.deepEqual(walked.ran, ran, `${name}: Enter runs each tool`);
   }
+});
+
+test("pressing Sign in on a Needs login row opens that computer's sign-in tab, from the live list before the saved row", async () => {
+  const { signInTab } = await load("kanso-spaces/sign-in.js", ["signInTab"]);
+  const live = { name: "dark", target: "ada@10.0.0.8", via: false, state: "needs_login" };
+  const saved = { ...record, target: "saved@10.0.0.9" };
+  const fromLive = await keyWalk({ ...base, live: [live], parked: [saved], login: new Set(["dark"]) });
+  assert.deepEqual(fromLive.ran, [["terminal.open", clone(signInTab(live, "macos"))]]);
+  const fromSaved = await keyWalk({ ...base, parked: [saved], login: new Set(["dark"]) });
+  assert.deepEqual(fromSaved.ran, [["terminal.open", clone(signInTab(saved, "macos"))]]);
 });
 
 async function syncView({ sync = { config: {}, status: {} }, host = {} } = {}) {

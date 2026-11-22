@@ -45,7 +45,7 @@ for (const name of ["macos", "linux", "windows"]) {
       assert.match((await api.openFiles([42])).reason, /Herdr API/);
       assert.equal(r.calls.length, 1);
     } else {
-      const files = processApi(name, runner("p42\nn/home/a b\nn/home/file.txt\n").run);
+      const files = processApi(name, runner(name === "linux" ? "42\t/home/a b\n42\t/home/file.txt\n" : "p42\nn/home/a b\nn/home/file.txt\n").run);
       assert.equal((await files.cwd([42])).values.get(42), "/home/file.txt");
       assert.deepEqual((await files.openFiles([42])).values.map((file) => file.path), ["/home/a b", "/home/file.txt"]);
     }
@@ -53,7 +53,10 @@ for (const name of ["macos", "linux", "windows"]) {
   });
 
   test(`${name} listeners deduplicate IPv4 and IPv6 ports`, async () => {
-    const input = name === "windows" ? '[{"pid":42,"port":3000},{"pid":42,"port":3000},{"pid":42,"port":8080}]' : "p42\ncnode\nn127.0.0.1:3000\nn[::1]:3000\nn*:8080\n";
+    const input = {
+      windows: '[{"pid":42,"port":3000},{"pid":42,"port":3000},{"pid":42,"port":8080}]',
+      linux: 'LISTEN 0 511 127.0.0.1:3000 0.0.0.0:* users:(("node",pid=42,fd=20))\nLISTEN 0 511 [::1]:3000 [::]:* users:(("node",pid=42,fd=21))\nLISTEN 0 511 *:8080 *:* users:(("node",pid=42,fd=22))\n',
+    }[name] ?? "p42\ncnode\nn127.0.0.1:3000\nn[::1]:3000\nn*:8080\n";
     const r = runner(input), listeners = await portApi(name, r.run).listen();
     assert.deepEqual(listeners.get(42).ports, [3000, 8080]);
     await assert.rejects(portApi(name, runner("", 5).run).listen(), /Access denied/);

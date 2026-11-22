@@ -88,7 +88,7 @@ test("Sharing words fit a post and the networks take them from a link", async ()
 });
 
 // A Linux machine with rsvg-convert and xclip, and maybe a way to type.
-async function machine(t, { typer = true } = {}) {
+async function machine(t, { typer = true, browser = "google-chrome" } = {}) {
   const dir = await temporary(t);
   const tried = [], opened = [], notes = [];
   const ok = success("");
@@ -101,6 +101,8 @@ async function machine(t, { typer = true } = {}) {
     exec: async (bin, args) => {
       if (["rm", "test", "mkdir", "sleep"].includes(bin)) return ok;
       if (bin === "sh" && args[1].startsWith("test -s")) { try { return { ...ok, code: (await readFile(args[3])).length ? 0 : 1 }; } catch { return { ...ok, code: 1 }; } }
+      if (bin === "hyprctl") return success(JSON.stringify(opened.length ? (browser ? { class: browser } : {}) : { class: "herdr-app" }));
+      if (bin === "sh" && args[1].includes("default-web-browser")) return success("google-chrome\nGoogle-chrome\n");
       tried.push(bin.split("/").pop());
       if (bin === "rsvg-convert") { const out = args[args.indexOf("-o") + 1]; await mkdir(join(out, ".."), { recursive: true }); await writeFile(out, "PNG"); return ok; }
       if (bin === "xclip") return ok;
@@ -136,6 +138,13 @@ test("A share opens the composer with the text and pastes the image into it", as
   const n = await machine(t, { typer: false });
   await n.shareImage("x", make, join(n.dir, "work"));
   assert.match(n.notes[0].title, /^Paste the image into your X post: Ctrl-V$/);
+
+  for (const [browser, why] of [[null, "no window in front"], ["Alacritty", "a terminal in front"]]) {
+    const o = await machine(t, { browser });
+    await o.shareImage("x", make, join(o.dir, "work"));
+    assert.equal(o.tried.includes("wtype"), false, why);
+    assert.match(o.notes[0].title, /^Paste the image into your X post: Ctrl-V$/, why);
+  }
 
   // Save image: saved and opened, nothing posted.
   await n.shareImage(null, make, join(n.dir, "work"));

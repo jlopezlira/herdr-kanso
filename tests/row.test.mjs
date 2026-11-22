@@ -186,11 +186,13 @@ test("The row takes its click, hover, keyboard and focus from the caller, wires 
 });
 
 test("A busy row turns its icon at the spinner's pace and takes no press, so no ring is left on it", async () => {
-  const { row, SPIN, CLEAR, c } = await kit();
+  const { row, SPIN, CLEAR, ICON_ROW, c } = await kit();
   const idle = row("r", c, { icon: "refresh-cw", name: "Updating kansō", onClick: () => {}, focusHandle: { is_focused: () => false } });
   const busy = row("r", c, { icon: "refresh-cw", name: "Updating kansō", busy: true, onClick: () => {}, focusHandle: { is_focused: () => false } });
   assert.equal(all(idle).filter((el) => calls(el, "spin").length).length, 0, "at rest the icon is still");
-  assert.deepEqual(all(busy).flatMap((el) => calls(el, "spin")).map((call) => call[1]), [SPIN], "busy, the icon turns once per spin token");
+  assert.deepEqual(svgs(busy), ["mods/kanso-chrome/icons/working.svg"], "busy, the lead is the working ensō, not the icon");
+  assert.equal(one(all(busy).find((el) => calls(el, "spin").length), "size"), ICON_ROW);
+  assert.deepEqual(all(busy).flatMap((el) => calls(el, "spin")).map((call) => call[1]), [SPIN], "only that ensō turns");
   for (const name of ["on_click", "cursor_pointer", "track_focus", "focus", "hover", "active"]) assert.equal(calls(busy, name).length, 0, `busy, no ${name}`);
   assert.equal(busy.tag, "h_flex", "no Button for the keyboard to keep, so no ring can stay after a press");
   assert.equal(one(busy, "border_color"), CLEAR, "its border stays clear");

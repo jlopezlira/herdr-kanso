@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { mkdir, readFile, readdir, realpath, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { load, context, exec, nativePlatform, temporary, clone, gpuiHost, success, failure, storeShared, tickingContext } from "./helpers.mjs";
-import { test, dropChild, trackedSpawn, quote, windowsOnly, heldFile, heldDirectory, updater, fixture, version, small, tree, stages, hostFor, startUpdater, versionFile } from "./update-harness.mjs";
+import { test, dropChild, trackedSpawn, quote, windowsOnly, heldFile, heldDirectory, updater, installedUpdater, fixture, version, small, tree, stages, hostFor, startUpdater, versionFile } from "./update-harness.mjs";
 
 test("Kanso's newest release comes from the vX.Y.Z tags, not from Herdr", async () => {
   const { newestTag, compareVersions } = await updater();
@@ -207,13 +207,13 @@ test("A mod that did not load for want of memory asks for a restart, however the
 });
 
 test("The update plan reads this platform's keymap and adds Windows keys when the installed tag predates them", async () => {
-  for (const platform of ["macos", "linux", "windows"]) {
+  for (const platform of ["macos", "windows"]) {
     for (const missing of [false, true]) {
       const path = `kanso/keys${platform === "windows" ? ".windows" : ""}.json`;
       const chord = platform === "windows" ? "ctrl-shift-o" : "cmd-d";
       const requests = [], before = { "layout:kanso": { [chord]: "before" } }, after = { "layout:kanso": { [chord]: "after", f5: "refresh" } };
       const current = { "layout:kanso": { ...(missing ? {} : before["layout:kanso"]), f5: "mine" } };
-      const { Updater } = await updater({
+      const plan = await (await installedUpdater({
         window: () => ({ platform }),
         readTextFile: async () => JSON.stringify(current),
         exec: async (cmd, args) => {
@@ -224,10 +224,7 @@ test("The update plan reads this platform's keymap and adds Windows keys when th
           assert.ok(url.endsWith(path), url);
           return missing && url.startsWith("old/") ? { code: 22, stdout: "" } : { code: 0, stdout: JSON.stringify(url.startsWith("old/") ? before : after) };
         },
-      });
-      const instance = new Updater({ file: (version, file) => `${version}/${file}` });
-      instance.installed = "old";
-      const plan = await instance.plan("new", "/app");
+      })).plan("new", "/app");
       assert.ok(requests.includes(`old/${path}`) && requests.includes(`new/${path}`));
       if (missing && platform !== "windows") assert.equal(plan.keys, "", "missing Unix baseline keeps existing behavior");
       else {

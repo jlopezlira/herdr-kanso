@@ -23,10 +23,10 @@
 
 - Agents sit side by side, readable at their own width, and the one waiting on you comes first.
 - Sleep a project and wake it on the same conversations.
-- Memory, on macOS and Windows, recycles idle Claude sessions so the machine lasts weeks. Spend adds up across your computers once Sync is on.
+- Memory, on macOS, Windows and Linux, recycles idle Claude sessions so the machine lasts weeks. Spend adds up across your computers once Sync is on.
 - A Simulator sits beside the agent. kansō works on a space that lives on another computer.
 
-For the Herdr desktop app, not the Herdr TUI. macOS, Windows and Linux; the iOS simulator and the Markdown file handler are macOS only.
+For the Herdr desktop app, not the Herdr TUI. macOS, Windows and Linux; the iOS simulator is macOS only.
 
 <p align="center">
   <a href="https://jlopezlira.github.io/herdr-kanso/">Website</a> ·
@@ -43,15 +43,16 @@ Tell your agent: **`add herdr.dev/layouts/jlopezlira/herdr-kanso--kanso`**
 Or, from a clone: `sh ./scripts/local-install.sh`. On Windows:
 `powershell -NoProfile -File ./scripts/local-install.ps1`. You need the Herdr app;
 `gh` for the PR and Shipped panels; Node 22.15 or newer for Spend, Memory and
-Simulator. Memory supports macOS and Windows; Windows uses its built-in
-PowerShell and Task Scheduler without administrator rights. kansō updates
+Simulator. Memory supports macOS, Windows and Linux; Windows uses its built-in
+PowerShell and Task Scheduler without administrator rights, and Linux a
+systemd user timer. kansō updates
 itself the same way on Windows, with Windows PowerShell and the curl and tar
 that ship with Windows: a release shows as a row above Settings, and a click
 installs it. Stable is what you get. Early, under What's new, also follows a beta
 or a release candidate, and going back to Stable never installs an older
 version. `ctrl-shift-l` goes back to your previous layout.
 On Windows, merge `kanso/keys.windows.json` into your Herdr keys instead of
-`kanso/keys.json`.
+`kanso/keys.json`; on Linux, `kanso/keys.linux.json`.
 
 ## What it does
 
@@ -86,7 +87,7 @@ On Windows, merge `kanso/keys.windows.json` into your Herdr keys instead of
 - **What your agents leave running.** Ports: dev servers and the panes that
   run them. Containers: Docker, with Up, Rebuild and Down per project.
   Worktrees: every one agents made, what removing it would lose, the disk back.
-- **Weeks without a restart.** On macOS and Windows, the memory guard recycles
+- **Weeks without a restart.** On macOS, Windows and Linux, the memory guard recycles
   bloated idle Claude agents on the same conversation; the Memory panel shows
   what it sees.
 - **Spend and Shipped.** What your AI work is worth at list price, and what you
@@ -105,7 +106,14 @@ On Windows, merge `kanso/keys.windows.json` into your Herdr keys instead of
 
 The table is the macOS keys. Windows ships its own in
 `kanso/keys.windows.json`: Ctrl and Alt, leaving the Windows key and AltGr
-alone. Help follows the bindings you have.
+alone. Linux ships `kanso/keys.linux.json`: Super where Omarchy leaves it free,
+and Ctrl or Alt with Shift where Omarchy uses it. Help follows the bindings you have.
+On Omarchy, kansō has Hyprland treat Herdr as a terminal: it writes
+`~/.config/hypr/kanso.lua` and loads it from `hyprland.lua`. Then Super+C and
+Super+V copy and paste in Herdr's terminals, on this computer or another, as in
+Omarchy's other terminals. The Linux keys copy and paste with Ctrl+Shift+C and
+Ctrl+Shift+V, and with Ctrl+Insert and Shift+Insert, which older Omarchy sends.
+Ctrl+C still interrupts the program.
 
 | Keys | What they do |
 |---|---|
@@ -133,7 +141,7 @@ tab bar rebinds kansō's own keys and hides the panels you don't use.
 ## Privacy
 
 Everything runs on your machine, and reads only the folders you work in:
-`git`, `gh`, `find`, `du`, `lsof`, `ps`, `sqlite3`, `node`, `docker`,
+`git`, `gh`, `find`, `du`, `lsof` (`ss` and `/proc` on Linux), `ps`, `sqlite3`, `node`, `docker`,
 `xcode-select`, `simctl`, `adb`, `emulator` and Herdr's `hc`. What reaches the network: PR and
 Shipped through `gh`, only while their panel is shown (Shipped keeps a private
 gist of your own statistics); Spend's daily fetch of OpenRouter's price list.

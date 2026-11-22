@@ -221,9 +221,9 @@ async function pasteInto(network, before) {
   if (localService(clipboardApi).observesFrontApp) {
     // Wait until the app in front is no longer Herdr: the browser came up.
     const front = await retry(13, () => frontApp(), { done: (app) => !(app && app === before), between: () => pause(0.5) });
-    if (front && front === before) return false; // the browser never came up
+    if (!front || front === before) return false; // the browser never came up
     await pause(network.wait);
-    if (front && (await frontApp()) !== front) return false; // you moved on: not into another app
+    if ((await frontApp()) !== front) return false; // you moved on: not into another app
     return (await localService(clipboardApi).paste(front)).state === "ok";
   }
   await pause(network.wait);

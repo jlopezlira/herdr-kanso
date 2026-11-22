@@ -208,6 +208,15 @@ export async function updater(host) {
   return load("kanso-tabs/update.js", names, host);
 }
 
+export async function installedUpdater(host) {
+  const { Updater } = await updater(host);
+  const instance = new Updater({ file: (version, path) => `${version}/${path}` });
+  instance.installed = "old";
+  return instance;
+}
+
+const writeKeymaps = (dir, keymap) => Promise.all(["keys.json", "keys.windows.json", "keys.linux.json"].map((name) => writeFile(join(dir, name), keymap)));
+
 // A Herdr home with Kanso 1.0.0 installed and used, and two releases served
 // from file:// URLs: what v1.0.0 shipped and the v1.1.0 tarball.
 export async function fixture(t, { layoutChanged = true, homeName = "O'Brien home" } = {}) {
@@ -221,10 +230,9 @@ export async function fixture(t, { layoutChanged = true, homeName = "O'Brien hom
   oldKeys["layout:kanso"]["cmd-d"] = "kanso-strip.old-right";
   delete oldKeys["layout:kanso"]["cmd-shift-w"];
   await mkdir(join(site, "v1.0.0/kanso/layouts"), { recursive: true });
-  // Windows reads keys.windows.json. The same bytes stand in for this fixture.
+  // Windows reads keys.windows.json and Linux keys.linux.json. The same bytes stand in for this fixture.
   const oldKeymap = JSON.stringify(oldKeys);
-  await writeFile(join(site, "v1.0.0/kanso/keys.json"), oldKeymap);
-  await writeFile(join(site, "v1.0.0/kanso/keys.windows.json"), oldKeymap);
+  await writeKeymaps(join(site, "v1.0.0/kanso"), oldKeymap);
   await writeFile(join(site, "v1.0.0/kanso/layouts/kanso.json"), layoutChanged ? '{"root":{"id":"old"}}' : shippedLayout);
 
   // v1.1.0: this repository's kanso/ with version.json saying 1.1.0.
@@ -236,8 +244,7 @@ export async function fixture(t, { layoutChanged = true, homeName = "O'Brien hom
   // And its raw files, which decide the keys and the layout before the download.
   await mkdir(join(site, "v1.1.0/kanso/layouts"), { recursive: true });
   const newKeymap = await readFile(new URL("keys.json", repo), "utf8");
-  await writeFile(join(site, "v1.1.0/kanso/keys.json"), newKeymap);
-  await writeFile(join(site, "v1.1.0/kanso/keys.windows.json"), newKeymap);
+  await writeKeymaps(join(site, "v1.1.0/kanso"), newKeymap);
   await writeFile(join(site, "v1.1.0/kanso/layouts/kanso.json"), shippedLayout);
 
   // Herdr's `herdr-app check`, faked: it notes each mod, and on a file's say holds open-with

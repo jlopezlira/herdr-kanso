@@ -6,6 +6,7 @@ import { pieces, runs } from "./pieces.js";
 import { findExplainer, explainWith } from "./explain.js";
 import { scanNearby } from "./nearby-scan.js";
 import { lanOf } from "./nearby.js";
+import { lanRecord, resolvedHost } from "./lan-route.js";
 import { setupPrompt } from "./setup.js";
 import { focusOn, tryOrAsync, afterMount } from "./pure.js";
 import { G, T, LH, DIALOG, tokens } from "./ui.js";
@@ -18,7 +19,7 @@ import { field, TextField } from "./ui-field.js";
 import { code } from "./ui-code.js";
 import { hcError, needsLogin, listedMachines, machineRecord, canRestore, addArgs as restoreArgs, rmArgs } from "./machines.js";
 import {
-  tailscalePaths, tailnet, planFor, choiceOf, addArgs, probeArgs, forgetArgs, reachOf, keySetup, advice, isAdded,
+  findTailscale, planFor, choiceOf, addArgs, probeArgs, forgetArgs, reachOf, keySetup, advice, isAdded,
   sshConfigHosts, includesOf, splitTarget, validTarget, aliasOf, usesTailscaleSsh, nearbyOnly,
 } from "./reach.js";
 
@@ -36,13 +37,6 @@ const freshNearby = (now = Date.now()) => {
   return last && Array.isArray(last.hosts) && now - Number(last.at) < NEARBY_FRESH_MS ? last.hosts : undefined;
 };
 
-async function findTailscale(platform) {
-  for (const path of tailscalePaths(platform)) {
-    const r = await tryOrAsync(() => exec(path, ["status", "--json"], { timeout: PROBE_MS }));
-    if (r && (r.code === 0 || String(r.stdout ?? "").includes("{"))) return { path, net: tailnet(r.stdout) };
-  }
-  return { path: "", net: null };
-}
 
 async function includeFiles(pattern, platform) {
   const path = pattern.startsWith("~/") ? `${home()}/${pattern.slice(2)}` : /^([a-z]:)?[\\/]/i.test(pattern) ? pattern : `${home()}/.ssh/${pattern}`;
@@ -77,7 +71,7 @@ export default class Computers extends View {
     this.typed.on("change", (_e, cx) => cx.notify());
     this.typed.on("submit", (_e, cx) => this.addTyped(cx));
     cx.spawn(async (cx) => {
-      const [found, hosts, explainer] = await Promise.all([findTailscale(this.platform), readHosts(this.platform), findExplainer()]);
+      const [found, hosts, explainer] = await Promise.all([findTailscale(this.platform, (program, args) => exec(program, args, { timeout: PROBE_MS })), readHosts(this.platform), findExplainer()]);
       this.explainer = explainer;
       this.tailscale = found.path;
       this.net = found.net;
@@ -130,9 +124,18 @@ export default class Computers extends View {
     });
   }
 
-  async connect(key, plan) {
+  async homeFirst(plan) {
+    if (!plan.lan) return plan;
+    const run = (program, args) => exec(program, args, { timeout: PROBE_MS });
+    const resolved = plan.via ? null : await resolvedHost(plan.target, run);
+    const record = lanRecord({ name: plan.name, target: plan.via ? "" : plan.target, via: plan.via }, plan.lan, { hostKey: resolved?.hostKey ?? "", user: plan.user });
+    return record ? { ...plan, via: record.via } : plan;
+  }
+
+  async connect(key, given) {
+    const plan = await this.homeFirst(given);
     if (plan.probe) {
-      const probe = await this.probe([plan.lan, plan.target].filter(Boolean));
+      const probe = await this.probe([plan.target].filter(Boolean));
       const reach = reachOf(probe);
       if (reach !== "ready") return this.fail(key, reach, String(probe.stderr || probe.stdout).trim());
     }
@@ -212,8 +215,8 @@ export default class Computers extends View {
       job.retry(cx);
       return;
     }
-    if (reach === "password") {
-      run("tab.new", { name: `Add ${plan.name || plan.target}`, argv: keySetup(plan, this.platform) });
+    if (reach === "password" || reach === "keyonly") {
+      run("tab.new", { name: `Add ${plan.name || plan.target}`, argv: keySetup(plan, { platform: this.platform }) });
       delete this.jobs[key];
       this.close();
       return;

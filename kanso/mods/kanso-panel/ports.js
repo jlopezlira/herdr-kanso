@@ -96,7 +96,7 @@ const LONGEST_MS = 10 * 60_000;
 export const backoffMs = (fails) => Math.min(2 ** Math.max(0, fails - 1) * 60_000, LONGEST_MS);
 export function unreadable(error) {
   const text = String(error?.message ?? error ?? "");
-  const missing = /\b(lsof|ps)\b[^\n]*(?:not found|no such file|not installed)/i.exec(text) ?? /(?:not found|no such file|not installed)[^\n]*\b(lsof|ps)\b/i.exec(text);
+  const missing = /\b(lsof|ss|ps)\b[^\n]*(?:not found|no such file|not installed)/i.exec(text) ?? /(?:not found|no such file|not installed)[^\n]*\b(lsof|ss|ps)\b/i.exec(text);
   if (missing) return `${missing[1]} is not installed`;
   return !text || /unreachable|did not answer|timed out|timeout|refused|offline|no route|was lost|not connected/i.test(text) ? "unreachable" : "its ports can't be read";
 }

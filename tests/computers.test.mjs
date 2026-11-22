@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { chmod, mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { clone, computersDialog, exec, find, gpuiHost, load, temporary, texts } from "./helpers.mjs";
+import { clone, computersDialog, exec, find, folderWith, gpuiHost, load, texts } from "./helpers.mjs";
 
 const reach = () => load("kanso-computers/reach.js", [
   "tailnet", "planFor", "choiceOf", "addArgs", "probeArgs", "reachOf", "keySetup", "advice", "isAdded",
@@ -154,65 +154,237 @@ test("What ssh said says whether the computer is ready, wants a password, is clo
   assert.equal(said("ssh: weird failure"), "failed");
 });
 
-const stub = async (dir, name, code) => {
+const shForm = process.platform === "win32" && "the sh form runs on macOS and Linux; Windows uses the PowerShell form";
+const PUB = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIKansoOneClickTest kanso";
+const KEY_WORDS = "-i ~/.ssh/id_ed25519_kanso -o IdentitiesOnly=yes -o BatchMode=yes";
+const ASK = "-o PasswordAuthentication=yes -o KbdInteractiveAuthentication=yes -o StrictHostKeyChecking=accept-new";
+const signIn = () => load("kanso-computers/sign-in.js", ["signInTab", "routeOf", "keySetup", "lanParts"]);
+
+const writeStub = async (dir, name, body) => {
   const file = join(dir, name);
-  await writeFile(file, `#!/bin/sh\nprintf '%s\\0' "$@" > ${JSON.stringify(join(dir, `${name}.args`))}\nexit ${code}\n`);
+  const out = JSON.stringify(join(dir, `${name}.args`));
+  await writeFile(file, `#!/bin/sh\nexec 9>>${out}\nfor arg in "$@"; do printf '%s:%s\\n' "\${#arg}" "$arg" >&9; done\nprintf '\\n' >&9\nexec 9>&-\n${body}\n`);
   await chmod(file, 0o755);
 };
-const recorded = async (file) => {
+const callsOf = async (dir, name) => {
   try {
-    return (await readFile(file)).toString().split("\0").filter(Boolean);
+    const text = await readFile(join(dir, `${name}.args`), "utf8");
+    const calls = [];
+    let call = [];
+    for (const line of text.split("\n")) {
+      if (line === "") {
+        if (call.length) calls.push(call);
+        call = [];
+        continue;
+      }
+      const mark = line.indexOf(":");
+      const size = Number(line.slice(0, mark));
+      call.push(line.slice(mark + 1, mark + 1 + size));
+    }
+    if (call.length) calls.push(call);
+    return calls;
   } catch {
-    return null;
+    return [];
   }
 };
-const keyBin = async (t) => {
-  const dir = await temporary(t);
-  const bin = join(dir, "bin");
-  const home = join(dir, "home");
+const keyBin = async (t, { sshCode = 0, sshSaid = "", failVia = false, sshBody = "" } = {}) => {
+  const { dir, bin, home } = await folderWith(t, "bin", "home");
   await mkdir(bin);
   await mkdir(home);
-  await stub(bin, "ssh-keygen", 0);
-  await stub(bin, "ssh-copy-id", 0);
-  await stub(bin, "hc", 0);
-  return { bin, home, env: { PATH: `${bin}:/bin:/usr/bin`, HOME: home } };
+  const pub = JSON.stringify(PUB);
+  await writeStub(bin, "ssh-keygen", [
+    "prev=",
+    "key=",
+    "for arg in \"$@\"; do",
+    "  if [ \"$prev\" = -f ]; then key=$arg; fi",
+    "  prev=$arg",
+    "done",
+    "if [ -n \"$key\" ]; then",
+    "  printf '%s\\n' private > \"$key\"",
+    `  printf '%s\\n' ${pub} > "$key.pub"`,
+    "fi",
+    "exit 0",
+  ].join("\n"));
+  await writeStub(bin, "ssh", sshBody || `${sshSaid ? `printf '%s\\n' ${JSON.stringify(sshSaid)} >&2\n` : ""}exit ${sshCode}`);
+  await writeStub(bin, "hc", failVia ? "if [ \"$1\" = machine ] && [ \"$2\" = add ] && [ \"$3\" = --via ]; then exit 1; fi\nexit 0" : "exit 0");
+  await writeStub(bin, "herdr-app", "exit 0");
+  return { bin, home, env: { PATH: `${bin}:/bin:/usr/bin`, HOME: home, TMPDIR: dir } };
+};
+const runSh = async (t, argv, options) => {
+  const placed = await keyBin(t, options);
+  const ran = await exec(argv[0], argv.slice(1), { env: placed.env });
+  return { ...placed, ran, calls: (name) => callsOf(placed.bin, name) };
+};
+const viaOf = (dest, port = "") => `ssh ${KEY_WORDS}${port ? ` -p ${port}` : ""} ${dest}`;
+const sshMarks = (text) => text.match(/(^|[\s'"])ssh (?=\S)/g) ?? [];
+
+const endsDone = (ran) => {
+  assert.equal(ran.code, 0, `${ran.stderr}\n${ran.stdout}`);
+  assert.match(ran.stdout, /Done: this tab can close\.\n$/);
 };
 
-test("The password tab passes the computer as $1, then adds it without --json, and stops if the key was not copied", { skip: process.platform === "win32" && "the sh form runs on macOS and Linux; Windows uses the PowerShell form" }, async (t) => {
-  const { keySetup, addArgs } = await reach();
-  const plan = { name: "grey box", target: "ada@100.64.1.2", via: "tailscale ssh ada@100.64.1.2" };
-  const expected = addArgs(plan, { json: false });
-  const argv = keySetup(plan);
-  assert.deepEqual(clone(argv.slice(0, 2)), ["sh", "-c"]);
-  assert.equal(argv[3], "sh");
-  assert.equal(argv[4], plan.target, "the destination is $1");
-  assert.equal(argv[5], "", "a target with no port leaves $2 empty");
-  assert.deepEqual(clone(argv.slice(6)), clone(expected));
-  assert.equal(expected.includes("--json"), false);
-  const { bin, home, env } = await keyBin(t);
-  const copied = await exec(argv[0], argv.slice(1), { env });
-  assert.equal(copied.code, 0, copied.stderr);
-  assert.match(copied.stdout, /Done: this tab can close/);
-  assert.deepEqual(await recorded(join(bin, "ssh-copy-id.args")), ["-o", "StrictHostKeyChecking=accept-new", "-i", `${home}/.ssh/id_ed25519.pub`, plan.target]);
-  assert.deepEqual(await recorded(join(bin, "hc.args")), clone(expected));
-  await stub(bin, "ssh-copy-id", 1);
-  await writeFile(join(bin, "hc.args"), "");
-  const refused = await exec(argv[0], argv.slice(1), { env });
-  assert.notEqual(refused.code, 0);
-  assert.equal(await readFile(join(bin, "hc.args"), "utf8"), "", "hc does not run when ssh-copy-id fails");
+test("Signing in to a plain computer, with a port and without one, makes a key, asks the password once, and adds the computer with that key", { skip: shForm }, async (t) => {
+  const { keySetup } = await signIn();
+  const once = async (machine, dest, port) => {
+    const argv = keySetup(machine);
+    assert.deepEqual(clone(argv.slice(0, 2)), ["sh", "-c"]);
+    const { home, ran, calls } = await runSh(t, argv);
+    endsDone(ran);
+    const key = join(home, ".ssh", "id_ed25519_kanso");
+    assert.equal((await readFile(`${key}.pub`, "utf8")).trim(), PUB);
+    assert.equal((await calls("ssh-keygen"))[0].at(-1), key);
+    const ssh = (await calls("ssh"))[0];
+    assert.ok(ssh.join(" ").includes(ASK), ssh.join(" "));
+    assert.equal(ssh.includes("-p"), Boolean(port));
+    if (port) assert.equal(ssh[ssh.indexOf("-p") + 1], port);
+    assert.ok(ssh.includes(dest));
+    assert.ok(ssh.at(-1).includes(PUB), ssh.at(-1));
+    const hc = await calls("hc");
+    assert.deepEqual(hc, [["machine", "add", "--via", viaOf(dest, port), "--name", machine.name, "--install"]]);
+    assert.equal(hc[0].includes("--json"), false);
+    assert.deepEqual(await calls("herdr-app"), [["do", `kanso-spaces.retry-machine:${machine.name}`]]);
+  };
+  await once({ name: "grey", target: "ada@100.64.1.2", via: "" }, "ada@100.64.1.2", "");
+  await once({ name: "can", target: "can@10.0.0.7:2222", via: "" }, "can@10.0.0.7", "2222");
 });
 
-test("Windows quotes the password tab's command", async () => {
-  const { keySetup, addArgs } = await reach();
+test("When the computer denies the key, the tab says it didn't let this computer in and shows the key; a timeout or a refused port shows only that error", { skip: shForm }, async (t) => {
+  const { keySetup } = await signIn();
+  const machine = { name: "grey", target: "ada@box", via: "" };
+  const denied = await runSh(t, keySetup(machine), { sshCode: 1, sshSaid: "Permission denied (publickey)." });
+  assert.notEqual(denied.ran.code, 0);
+  assert.match(denied.ran.stdout, /didn't let this computer in/);
+  assert.ok(denied.ran.stdout.includes(PUB));
+  assert.deepEqual(await denied.calls("hc"), []);
+  const refused = await runSh(t, keySetup(machine), { sshCode: 1, sshSaid: "ssh: connect to host box port 22: Connection refused" });
+  assert.notEqual(refused.ran.code, 0);
+  assert.match(refused.ran.stderr, /Connection refused/);
+  assert.doesNotMatch(refused.ran.stdout, /didn't let this computer in/);
+  assert.equal(refused.ran.stdout.includes(PUB), false);
+  assert.deepEqual(await refused.calls("hc"), []);
+  const timed = await runSh(t, keySetup(machine), { sshCode: 1, sshSaid: "ssh: connect to host box port 22: Operation timed out" });
+  assert.notEqual(timed.ran.code, 0);
+  assert.match(timed.ran.stderr, /timed out/);
+  assert.doesNotMatch(timed.ran.stdout, /didn't let this computer in/);
+  assert.equal(timed.ran.stdout.includes(PUB), false);
+  assert.deepEqual(await timed.calls("hc"), []);
+});
+
+test("Signing in to a computer Herdr already lists removes it and adds it with the key, and puts the old route back if that add fails", { skip: shForm }, async (t) => {
+  const { signInTab } = await signIn();
+  const row = { name: "grey", target: "ada@box", via: false, session: null };
+  const tab = signInTab(row);
+  assert.equal(tab.place, "right");
+  const { ran, calls } = await runSh(t, tab.argv, { failVia: true });
+  assert.notEqual(ran.code, 0);
+  assert.deepEqual(await calls("hc"), [
+    ["machine", "rm", "grey"],
+    ["machine", "add", "--via", viaOf("ada@box"), "--name", "grey", "--install"],
+    ["machine", "add", "ada@box", "--name", "grey", "--install"],
+  ]);
+});
+
+test("Signing in through a local-first route puts the key on every ssh once, and signing in again does not repeat it; the password ask goes through the route without the key", { skip: shForm }, async (t) => {
+  const { signInTab, routeOf } = await signIn();
+  const route = "sh -c 'ssh -o BatchMode=yes -o ConnectTimeout=2 -o StrictHostKeyChecking=accept-new ada@10.0.0.7 true >/dev/null 2>&1 && exec ssh -o StrictHostKeyChecking=accept-new ada@10.0.0.7 \"$1\"; exec ssh ada@10.0.0.9 \"$1\"' route";
+  const listed = { name: "grey", via: true, target: route };
+  const saved = { name: "grey", target: route, via: false };
+  assert.equal(routeOf(saved).target, "");
+  assert.equal(routeOf(saved).via, route);
+  assert.deepEqual(clone(signInTab(saved).argv), clone(signInTab(listed).argv));
+  const first = await runSh(t, signInTab(listed).argv);
+  assert.equal(first.ran.code, 0, first.ran.stderr);
+  const added = (await first.calls("hc")).find((args) => args[1] === "add");
+  const via = added[added.indexOf("--via") + 1];
+  assert.equal(sshMarks(via).length, sshMarks(route).length);
+  assert.equal(via.split(KEY_WORDS).length - 1, sshMarks(via).length);
+  const pushed = await first.calls("ssh");
+  assert.ok(pushed.some((call) => call.includes("ada@10.0.0.7")));
+  for (const call of pushed) assert.equal(call.join(" ").includes("id_ed25519_kanso"), false, call.join(" "));
+  const again = await runSh(t, signInTab({ name: "grey", via: true, target: via }).argv);
+  assert.equal(again.ran.code, 0, again.ran.stderr);
+  const readded = (await again.calls("hc")).find((args) => args[1] === "add");
+  assert.equal(readded[readded.indexOf("--via") + 1], via);
+  for (const call of await again.calls("ssh")) assert.equal(call.join(" ").includes("id_ed25519_kanso"), false);
+});
+
+test("Signing in on a local-first route asks on the local network first, and finishes there when the away route does not answer", { skip: shForm }, async (t) => {
+  const { planFor } = await reach();
+  const { signInTab } = await signIn();
+  const away = "100.64.9.9";
+  const plan = planFor({
+    peer: { name: "grey", ip: away, tailscaleSsh: false },
+    target: "ada@grey",
+    lan: "10.99.0.1",
+  }, {});
+  assert.deepEqual([plan.lan, plan.user, plan.via], ["10.99.0.1", "ada", ""]);
+  const { lanRecord } = await load("kanso-computers/lan-route.js", ["lanRecord"]);
+  const built = lanRecord({ name: plan.name, target: plan.target, via: "" }, plan.lan, { user: plan.user });
+  const tab = signInTab({ name: built.name, target: built.target, via: built.via });
+  const script = tab.argv[2];
+  const ask = script.split("\n").find((line) => line.includes("PasswordAuthentication"));
+  const lanAt = ask.indexOf("HostName=10.99.0.1");
+  const split = ask.indexOf("|| exec");
+  assert.ok(lanAt > 0 && split > lanAt, ask);
+  const first = ask.slice(0, lanAt);
+  assert.ok(first.includes(ASK), first);
+  assert.ok(first.includes("-o ConnectTimeout=2"), first);
+  assert.equal(first.includes("BatchMode"), false, first);
+  assert.ok(ask.slice(split).includes(away), ask);
+  const sshBody = [
+    "lan=",
+    "batch=",
+    "for arg in \"$@\"; do",
+    "  case \"$arg\" in",
+    "    *BatchMode*) batch=yes ;;",
+    "    *HostName=10.99.0.1*) lan=yes ;;",
+    "  esac",
+    "done",
+    "if [ -n \"$lan\" ] && [ -z \"$batch\" ]; then exit 0; fi",
+    "printf '%s\\n' refused >&2",
+    "exit 1",
+  ].join("\n");
+  const { ran, calls } = await runSh(t, tab.argv, { sshBody });
+  endsDone(ran);
+  const pushed = await calls("ssh");
+  assert.equal(pushed.length, 1, pushed.map((call) => call.join(" ")).join("\n"));
+  const ssh = pushed[0];
+  assert.ok(ssh.join(" ").includes(ASK), ssh.join(" "));
+  assert.ok(ssh.includes("ConnectTimeout=2"), ssh.join(" "));
+  assert.equal(ssh.join(" ").includes("BatchMode"), false, ssh.join(" "));
+  assert.ok(ssh.includes("HostName=10.99.0.1"));
+  assert.ok(ssh.at(-1).includes(PUB), ssh.at(-1));
+  const added = (await calls("hc")).find((args) => args.includes("--via"));
+  const via = added[added.indexOf("--via") + 1];
+  assert.ok(via.includes(KEY_WORDS), via);
+  assert.ok(via.includes("HostName=10.99.0.1"), via);
+  assert.ok(via.includes(away), via);
+});
+
+test("A route that is not the local-first shape has no local part", async () => {
+  const { lanParts } = await signIn();
+  assert.equal(lanParts("ssh ada@box"), null);
+  assert.equal(lanParts("fly ssh console -a app --pty=false -C"), null);
+  assert.equal(lanParts(""), null);
+});
+
+test("A Tailscale route, a route that is not ssh, a fly route, and a Windows route open Herdr's login; a Windows computer quotes the password ask and adds the key only after that add", async () => {
+  const { signInTab } = await signIn();
   const { psQuote } = await quote();
-  const plan = { name: "grey", target: "O'Brien@box", via: "tail scale" };
-  const argv = keySetup(plan, "windows");
-  assert.deepEqual(clone(argv.slice(0, 3)), ["powershell", "-NoProfile", "-Command"]);
-  const add = addArgs(plan, { json: false });
-  assert.ok(argv[3].includes(psQuote(plan.target)));
-  assert.ok(argv[3].includes(add.map(psQuote).join(" ")));
-  assert.equal(argv[3].includes("--json"), false);
-  assert.ok(argv[3].startsWith("$PSNativeCommandArgumentPassing = 'Legacy'"), "native arguments stay whole");
+  const login = (row, platform) => clone(signInTab(row, platform).argv);
+  assert.deepEqual(login({ name: "grey", target: "root@100.64.1.2", via: "/usr/local/bin/tailscale ssh root@100.64.1.2" }), ["hc", "machine", "login", "grey"]);
+  assert.deepEqual(login({ name: "grey", target: "ada@box", via: "wsl.exe -d Ubuntu -e sh -c" }), ["hc", "machine", "login", "grey"]);
+  assert.deepEqual(login({ name: "grey", target: "box", via: "fly ssh console -a app --pty=false -C" }), ["hc", "machine", "login", "grey"]);
+  assert.deepEqual(login({ name: "grey", target: "ada@box", via: "ssh ada@box" }, "windows"), ["hc", "machine", "login", "grey"]);
+  const script = signInTab({ name: "grey", target: "O'Brien@box", via: false }, "windows").argv[3];
+  const keyed = viaOf("O'Brien@box");
+  const add = ["machine", "add", "--via", keyed, "--name", "grey", "--install"].map(psQuote).join(" ");
+  assert.ok(script.startsWith("$PSNativeCommandArgumentPassing = 'Legacy'"));
+  assert.ok(script.includes("StrictHostKeyChecking=accept-new 'O''Brien@box'"), script);
+  assert.ok(script.includes(`& hc ${add}`), script);
+  assert.match(script, /if \(\$LASTEXITCODE -ne 0\) \{[^}]*exit 1 \}; Write-Host ''; Write-Host 'Done: this tab can close\.'$/);
+  assert.equal(script.split("Done: this tab can close.").length, 2);
+  assert.equal(script.includes("--json"), false);
 });
 
 test("A refusal says what to do: the password, Remote Login, Tailscale SSH, or access controls", async () => {
@@ -318,42 +490,6 @@ test("A typed port reaches ssh as -p, and an IPv6 address is not read as a port"
   assert.deepEqual(clone(bare), [...options, "--", "fe80::1", "true"]);
 });
 
-test("The password tab passes the port to ssh-copy-id, and omits -p when the computer has none", { skip: process.platform === "win32" && "the sh form runs on macOS and Linux; Windows uses the PowerShell form" }, async (t) => {
-  const { keySetup, addArgs } = await reach();
-  const withPort = { name: "can", target: "can@10.0.0.7:2222", via: "" };
-  const noPort = { name: "grey", target: "ada@100.64.1.2", via: "" };
-  const portArgs = addArgs(withPort, { json: false });
-  const plainArgs = addArgs(noPort, { json: false });
-  const portArgv = keySetup(withPort);
-  const plainArgv = keySetup(noPort);
-  assert.equal(portArgv[3], "sh");
-  assert.equal(portArgv[4], "can@10.0.0.7");
-  assert.equal(portArgv[5], "2222");
-  assert.deepEqual(clone(portArgv.slice(6)), clone(portArgs));
-  assert.equal(plainArgv[4], noPort.target);
-  assert.equal(plainArgv[5], "");
-  assert.deepEqual(clone(plainArgv.slice(6)), clone(plainArgs));
-  const { bin, home, env } = await keyBin(t);
-  const copied = await exec(portArgv[0], portArgv.slice(1), { env });
-  assert.equal(copied.code, 0, copied.stderr);
-  assert.deepEqual(await recorded(join(bin, "ssh-copy-id.args")), ["-o", "StrictHostKeyChecking=accept-new", "-p", "2222", "-i", `${home}/.ssh/id_ed25519.pub`, "can@10.0.0.7"]);
-  assert.deepEqual(await recorded(join(bin, "hc.args")), clone(portArgs));
-  const plain = await exec(plainArgv[0], plainArgv.slice(1), { env });
-  assert.equal(plain.code, 0, plain.stderr);
-  const plainCopy = await recorded(join(bin, "ssh-copy-id.args"));
-  assert.equal(plainCopy.includes("-p"), false);
-  assert.deepEqual(plainCopy, ["-o", "StrictHostKeyChecking=accept-new", "-i", `${home}/.ssh/id_ed25519.pub`, noPort.target]);
-  assert.deepEqual(await recorded(join(bin, "hc.args")), clone(plainArgs));
-});
-
-test("Windows says the password tab is done only after hc itself succeeds", async () => {
-  const { keySetup } = await reach();
-  const script = keySetup({ name: "grey", target: "ada@box", via: "" }, "windows")[3];
-  const done = "Done: this tab can close.";
-  assert.match(script, /if \(\$LASTEXITCODE -eq 0\) \{ & hc .+; if \(\$LASTEXITCODE -eq 0\) \{ Write-Host 'Done: this tab can close\.' \} \}$/);
-  assert.equal(script.split(done).length, 2);
-});
-
 test("An ssh config host is the tailnet computer when HostName is its address, its name, or its name with a suffix, or when the alias is the name", async () => {
   const { aliasOf } = await reach();
   const peer = { name: "grey", ip: "100.64.1.2" };
@@ -378,14 +514,15 @@ test("A folded ssh alias is how the computer is reached, unless a user was typed
   });
 });
 
-test("A computer that accepts only a key is not offered a password", async () => {
+test("A computer that accepts only a key offers Sign in, and mentions the passphrase", async () => {
   const { reachOf, advice } = await reach();
   const said = (stderr) => reachOf({ code: 1, stdout: "", stderr });
   assert.equal(said("Permission denied (publickey)."), "keyonly");
   assert.equal(said("Permission denied (publickey,password)."), "password");
   const keyonly = advice("keyonly", { name: "grey" });
   assert.match(keyonly.text, /keys only/);
-  assert.equal(keyonly.fix, "Retry");
+  assert.match(keyonly.text, /passphrase/);
+  assert.equal(keyonly.fix, "Sign in");
   assert.doesNotMatch(keyonly.text, /password/i);
 });
 

@@ -97,7 +97,7 @@ test("A panel's failure note is the failure block's props: our words first and t
   const note = said("Can't read the ports", new Error("lsof: permission denied").message);
   assert.deepEqual({ ...note }, { text: "Can't read the ports", source: "lsof: permission denied" });
   assert.deepEqual(texts(failureBlock(note)("pt-note", tokens(night))).slice(-2), ["Can't read the ports", "lsof: permission denied"]);
-  assert.equal(said("Memory is not available on Linux.").source, "", "our words alone when the tool said nothing");
+  assert.equal(said("Memory is not available on this computer.").source, "", "our words alone when the tool said nothing");
 });
 
 test("A failure on a line is the mark, our words and one small quiet fix, with the source's words in its tooltip", async () => {

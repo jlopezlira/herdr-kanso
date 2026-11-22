@@ -4,7 +4,7 @@ import { mkdir, rm, writeFile, realpath } from "node:fs/promises";
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, basename } from "node:path";
-import { load, context, temporary, clone, exec, failure, gitOk, fileExists as exists } from "./helpers.mjs";
+import { load, loadSystemApi, context, temporary, clone, exec, failure, gitOk, fileExists as exists } from "./helpers.mjs";
 
 const names = ["Worktrees", "removable", "losses", "lastDays", "spaceBy", "freedSpec", "freedText", "explainPrompt", "reviewPrompt", "rootsFor", "parseDiscovery", "basesFrom", "parseWorktrees", "parseProbe", "stateOf", "safe", "consequence", "fmtSize", "fmtAge", "inside", "openIn"];
 const writeTextFile = (path, text) => writeFile(path, text);
@@ -93,7 +93,7 @@ test("Worktrees searches nothing it was not asked to when it cannot tell where t
 
 test("A temp folder lookup that fails, answers nothing or is refused infers no root, on every platform", async () => {
   const { rootsFor } = await worktrees();
-  const { systemApi } = await load("kanso-panel/platform-system.js", ["systemApi"]);
+  const systemApi = await loadSystemApi();
   const lookups = { "exit 1": async () => failure(""), "an empty answer": async () => ({ code: 0, stdout: "  ", stderr: "" }), "a refusal": async () => { throw new Error("cannot run sh"); } };
   for (const platform of ["macos", "linux", "windows"]) {
     for (const [label, run] of Object.entries(lookups)) {
@@ -362,7 +362,9 @@ test("Explain names and starts the one installed agent, looked up once", async (
   assert.equal(opened.explainer.name, "Codex");
   assert.equal(typeof opened.agent, "function", "the Ask your agent section still draws");
   opened.ask("Explain web", "/w", "Explain it");
-  assert.deepEqual(clone(started), [["tab.new", { name: "Explain web", folder: "/w", argv: ["codex"], task: "Explain it" }]]);
+  for (let step = 0; step < 40; step += 1) await Promise.resolve();
+  const { copiesToViewer: treeViewer } = await load("kanso-panel/platform-viewer.js", ["copiesToViewer"]);
+  assert.deepEqual(clone(started), [["tab.new", { name: "Explain web", folder: "/w", argv: clone(treeViewer("macos")(["codex"])), task: "Explain it" }]]);
   assert.equal(lookups, 1);
 });
 

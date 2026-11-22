@@ -1,19 +1,20 @@
 // A computer's right-click menu as data: its rows in the Storybook's order, each act named by its key.
 
 const PHASE_ROWS = {
-  off: () => [{ key: "power", icon: "power", label: "Turn on" }],
+  off: () => [{ key: "power", icon: "power", label: "Connect" }],
   unavailable: () => [{ key: "retry", icon: "refresh-cw", label: "Refresh" }],
   login: () => [{ key: "signin", icon: "key", label: "Sign in…" }],
   connected: (remote, syncOn) => [
-    ...(remote ? [{ key: "power", icon: "power", label: "Turn off" }, { key: "sync", icon: "arrow-right-left", label: "Sync", hint: syncOn ? "on" : "off" }] : []),
+    ...(remote ? [{ key: "power", icon: "power", label: "Disconnect" }, { key: "sync", icon: "arrow-right-left", label: "Sync", hint: syncOn ? "on" : "off" }] : []),
     { key: "plus", icon: "plus", label: "New project" },
   ],
 };
 
-/** Rename, what its phase allows, Add computer unless it is switched off, then Hide and Settings for the Computers piece. */
+/** Rename, what its phase allows, Remove for another computer, Add computer unless it is switched off, then Hide and Settings for the Computers piece. */
 export const computerMenuItems = ({ remote = false, phase = "connected", syncOn = false, addComputer = true } = {}) => [
   { key: "rename", label: "Rename…" },
   ...(PHASE_ROWS[phase]?.(remote, syncOn) ?? []),
+  ...(remote && phase !== "loading" ? [{ key: "remove", icon: "x", label: "Remove" }] : []),
   ...(addComputer ? [{ separator: true }, { key: "add", icon: "server", label: "Add computer…" }] : []),
   { separator: true },
   { key: "hide", icon: "eye-off", label: "Hide “Computers”" },

@@ -5,7 +5,7 @@ import {
   pullKey, pullLabel, pullCommand, refusalLine,
   aheadOpen, gitControls, runPull, canWake, enterOpens,
   gitTask, behindTip, aheadTip, foldTail, sectionMarkOf, sectionCount, rowDirectory, untilWord, readWord,
-  threadWord, threadActions, signInCommand, noProjectsOn, sortOf,
+  threadWord, threadActions, noProjectsOn, sortOf,
 } from "../kanso/mods/kanso-spaces/sidebar-rows.js";
 import { load, failure } from "./helpers.mjs";
 
@@ -137,8 +137,7 @@ test("under the pointer a finished thread offers Settle, a settled one Bring bac
   assert.deepEqual(threadActions({ settled: false, status: "idle", pinned: true }), []);
 });
 
-test("a computer that needs a login signs in from a terminal pane, and one with no project says so", () => {
-  assert.deepEqual(signInCommand("dark"), { argv: ["hc", "machine", "login", "dark"], place: "right" });
+test("a computer with no project says so", () => {
   assert.equal(noProjectsOn("dark"), "No projects on dark yet");
 });
 

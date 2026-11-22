@@ -4,7 +4,8 @@ export const MAC = { ctrl: "⌃", alt: "⌥", shift: "⇧", cmd: "⌘", fn: "fn"
 export const OTHER = { ctrl: "Ctrl", alt: "Alt", shift: "Shift", cmd: "Win", fn: "Fn" };
 export const LINUX = { ...OTHER, cmd: "Super" };
 export const modifierGlyphs = (platform) => platform === "macos" ? MAC : platform === "linux" ? LINUX : OTHER;
-const NAMES = { space: "Space", left: "←", right: "→", up: "↑", down: "↓", enter: "↩", escape: "Esc", tab: "⇥", backspace: "⌫", delete: "⌦", home: "Home", end: "End", pageup: "PgUp", pagedown: "PgDn" };
+const NAMES = { space: "Space", left: "←", right: "→", up: "↑", down: "↓", enter: "↩", escape: "Esc", tab: "⇥", backspace: "⌫", delete: "⌦", insert: "Insert", home: "Home", end: "End", pageup: "PgUp", pagedown: "PgDn" };
+const WORDS = { ...NAMES, enter: "Enter", tab: "Tab", backspace: "Backspace", delete: "Delete" };
 const ORDER = ["ctrl", "alt", "shift", "cmd", "fn"];
 export const chordParts = (chord) => {
   const all = String(chord).split("-");
@@ -12,11 +13,15 @@ export const chordParts = (chord) => {
 };
 export function glyphs(chord, platform = window()?.platform ?? "macos") {
   const { mods, key } = chordParts(chord), labels = modifierGlyphs(platform);
-  const name = NAMES[key] ?? (key.length === 1 ? key.toUpperCase() : key);
+  const name = (labels === MAC ? NAMES : WORDS)[key] ?? (key.length === 1 ? key.toUpperCase() : key);
   return labels === MAC ? `${mods.map((m) => labels[m]).join("")}${name}` : [...mods.map((m) => labels[m]), name].join("+");
 }
 
-export const boundChord = (action, bindings = keys()) => bindings.find((binding) => binding.action === action)?.keys ?? "";
+const typed = (chord) => !/(^|-)(insert|delete)$/.test(chord);
+export const boundChord = (action, bindings = keys()) => {
+  const bound = bindings.filter((binding) => binding.action === action).map((binding) => binding.keys);
+  return bound.find(typed) ?? bound[0] ?? "";
+};
 
 export const chordOf = (action, platform) => glyphs(boundChord(action), platform);
 

@@ -274,7 +274,8 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
   tabs `left`/`width`; 220 ms) to the chosen space, agent or tab; rows fold
   by `height` (220 ms, measured) and a new row grows in; a header's tools
   slide out by `width`; a panel fades in.
-- **Keys**: on Windows merge `keys.windows.json` instead of `keys.json`.
+- **Keys**: on Windows merge `keys.windows.json` instead of `keys.json`, on Linux `keys.linux.json`.
+- **Omarchy's clipboard keys**: at start on Linux, kanso-tabs (`linux-arrival.js`) adds a Hyprland rule that tags `herdr-app` windows `terminal`. It applies the rule now with `hyprctl` and keeps it in `~/.config/hypr/kanso.lua`, loaded by `pcall(require, "hypr.kanso")` in `hyprland.lua`; an older `hyprland.conf` gets `kanso.conf` and a `source` line instead. Omarchy 4's Super+C and Super+V then send Ctrl+Shift+C and Ctrl+Shift+V, the terminal's copy and paste, instead of Ctrl+C and Ctrl+V; Omarchy 3 sends Ctrl+Insert and Shift+Insert to every window. `keys.linux.json`'s terminal section binds all four (`withClipboardKeys`), and moving a Mac keys file to Linux adds them. On `hyprland.conf`, the rule uses `match:class` from Hyprland 0.53 and `class:` before it.
   macOS (`layout:kanso`): ⌃1-9 a space (guarded), ⌃⇧1-9 a
   panel by its place, ⌃⌥P/S/T a view, ⌃⌥1-9 a pane column, ⌃⇧, Kanso
   settings; ⌘⌥hjkl (⇧ moves) vim; left of column 1: sidebar list
@@ -403,7 +404,7 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     `terminals()` gives the foreground pid; Claude Code's
     `~/.claude/sessions/<pid>.json` gives `sessionId` and `cwd`, and the
     file is `~/.claude/projects/<cwd, each non-alphanumeric as ->/<id>.jsonl`;
-    for Codex, `lsof` on the pid (or its children) finds the open
+    for Codex, `/proc/<pid>/fd` on Linux (`lsof` elsewhere) on the pid (or its children) finds the open
     `rollout-*.jsonl`. What you typed leaves out tool results, sidechains,
     meta records, text starting with `<` or `/`, "[Request interrupted",
     "This session is being continued" and "# AGENTS.md"; only the first
@@ -623,8 +624,8 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     gives `sourceState` (an `EditorState`, read-only when the file is not text)
     and `lib.js` gives `showPanel` (a block in `panel-body`). A panel
     exists only while `kanso-tabs` shows it. A remote re-read runs only while it is shown and the window is in front.
-    `ports.js` lists TCP listeners (`lsof -F pcn`) with their folder
-    (`lsof -d cwd`), age and parent chain (`ps`); a listener under a
+    `ports.js` lists TCP listeners (`lsof -F pcn`; `ss -ltnp` on Linux) with their folder
+    (`lsof -d cwd`; `/proc/<pid>/cwd` on Linux), age and parent chain (`ps`); a listener under a
     terminal's shell pid (`hc get`) is in that pane, one in a folder of
     home (not `~/Library`) with none says "no pane". Read every 10 s
     in front; Stop: SIGTERM on a second press, then SIGKILL.

@@ -19,5 +19,7 @@ const MARKS = Object.freeze({
   asleep: (c, side) => art("moon", c.muted, side),
 });
 
+export const busyMark = (c, side) => MARKS.working(c, side);
+
 /** `status`: working, blocked, done, idle or asleep; any other draws nothing. `size`: sm, md or lg. */
 export const mark = (c, { status, size = "md" } = {}) => (Object.hasOwn(MARKS, status) ? MARKS[status](c, MARK_SIZES[size] ?? MARK_SIZES.md) : null);

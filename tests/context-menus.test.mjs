@@ -179,10 +179,10 @@ const keyboard = async () => {
   const keyDown = (key) => calls(menu.view.render(), "on_key_down").at(-1).at(-1)({ key, modifiers: {} }, cx);
   keyDown("j");
   assert.equal(menu.view.at, 0, "j lights the first row");
-  const lit = everyDrawn(menu.view.render()).filter((kid) => calls(kid, "bg").length && texts(kid).includes("Split right") && !texts(kid).includes("Split down"));
+  const lit = everyDrawn(menu.view.render()).filter((kid) => calls(kid, "bg").length && texts(kid).includes("Copy") && !texts(kid).includes("Cut"));
   assert.ok(lit.length > 0, "the lit row draws its selected ground");
   keyDown("enter");
-  assert.ok(menu.closed.includes("pane.split"), "Enter runs the lit row");
+  assert.ok(menu.closed.includes("terminal.copy"), "Enter runs the lit row");
   return [menuOf(menu.view.render())];
 };
 
@@ -193,7 +193,7 @@ const SESSION_ROWS = ({ pin = "Pin to the top", shelf = [], wake = ["Snooze", SU
 const PROJECT_HEAD = ["acme-shop", "New conversation…", "New in a worktree…", "Worktrees", "checkout-v2", "kansō", "cart-retry", "~/acme-shop-cart", "Rename…", "Sleep this tab…", "Sleep the project…", "Project options…"];
 const PROJECT_ROWS = ({ head = PROJECT_HEAD, extra = [], remove = "Remove project" } = {}) => [...head, ...extra, remove, ...PIECE("Branch, ahead, behind")];
 const COMPUTER_ROWS = (...phase) => ["devbox", "Rename…", ...phase, "Add computer…", ...PIECE("Computers")];
-const PANE_ROWS = (title, pin, agentRows, back = []) => [title, "Split right", "⌘D", "Split down", "⇧⌘D", "Split left", "⌥⇧⌘D", "Wider or narrower", "⇧⌘↩", pin, "⌥⌘P",
+const PANE_ROWS = (title, pin, agentRows, back = []) => [title, "Copy", "Cut", "Paste", "Split right", "⌘D", "Split down", "⇧⌘D", "Split left", "⌥⇧⌘D", "Wider or narrower", "⇧⌘↩", pin, "⌥⌘P",
   ...agentRows, ...back, "Right-clicks go to the program", "Close pane", "⇧⌘W"];
 const AGENT_ROWS = ["Send to an agent…", "⌥⌘S", "Find in conversation", "⌘F", "Open with…", "Sleep"];
 const TAB_ROWS = (close, hint = []) => ["checkout", "Rename", "New tab", "⌘T", "Sleep checkout…", close, ...hint, ...PIECE("Agent state on tabs")];
@@ -223,13 +223,13 @@ const CASES = {
   gone: { draw: project({ spaces: [], registry: [] }), want: ["This project is no longer here."] },
   keep: { draw: project({ registry: [] }), want: PROJECT_ROWS({ extra: ["Keep as a project"] }) },
   missing: { draw: project({ registry: [{ ...PROJECT, missing: true }] }), want: PROJECT_ROWS({ head: [PROJECT_HEAD[0], ...PROJECT_HEAD.slice(3)], extra: ["Locate folder…"] }) },
-  computer: { draw: computer("connected", true), want: COMPUTER_ROWS("Turn off", "Sync", "on", "New project") },
-  syncPending: { draw: syncPending, want: COMPUTER_ROWS("Turn off", "Sync", "on", "New project") },
-  syncFailed: { draw: syncFailed, want: COMPUTER_ROWS("Turn off", "Sync", "off", "New project") },
-  powerFailed: { draw: powerFailed, want: COMPUTER_ROWS("Refresh") },
-  login: { draw: computer("login"), want: COMPUTER_ROWS("Sign in…") },
-  off: { draw: computer("off"), want: COMPUTER_ROWS("Turn on") },
-  unreachable: { draw: computer("unavailable"), want: COMPUTER_ROWS("Refresh") },
+  computer: { draw: computer("connected", true), want: COMPUTER_ROWS("Disconnect", "Sync", "on", "New project", "Remove") },
+  syncPending: { draw: syncPending, want: COMPUTER_ROWS("Disconnect", "Sync", "on", "New project", "Remove") },
+  syncFailed: { draw: syncFailed, want: COMPUTER_ROWS("Disconnect", "Sync", "off", "New project", "Remove") },
+  powerFailed: { draw: powerFailed, want: COMPUTER_ROWS("Refresh", "Remove") },
+  login: { draw: computer("login"), want: COMPUTER_ROWS("Sign in…", "Remove") },
+  off: { draw: computer("off"), want: COMPUTER_ROWS("Connect", "Remove") },
+  unreachable: { draw: computer("unavailable"), want: COMPUTER_ROWS("Refresh", "Remove") },
   asleepRow: { draw: asleepRow, want: ["billing, asleep since 14:02", "Wake", "Wake all 3 in review", "Copy conversation id", "Forget", "Everything asleep…"] },
   noMenu: { draw: piece("sidebar.switch", "Projects, Status, Threads"), want: ["Projects, Status, Threads", ...PIECE()] },
   pane: { draw: pane({ pane: { name: "tests" } }), want: PANE_ROWS("tests", "Pin", AGENT_ROWS) },

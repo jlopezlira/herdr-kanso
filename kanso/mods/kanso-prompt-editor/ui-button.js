@@ -2,7 +2,8 @@
 // Kept byte for byte by `npm run sync:share`: edit kanso-panel/ui-button.js.
 import { div, svg } from "gpui-kit";
 import { v_flex, Button } from "gpui-base";
-import { G, H, R, T, W, ICON, ICON_ROW, ICON_INLINE, ICON_CHROME, SPIN, ARM_MS, WASH, CLEAR, EASE, glyphOf, mix, well } from "./ui.js";
+import { busyMark } from "./ui-mark.js";
+import { G, H, R, T, W, ICON, ICON_ROW, ICON_INLINE, ICON_CHROME, ARM_MS, WASH, CLEAR, EASE, glyphOf, mix, well } from "./ui.js";
 
 const filled = (fill, ink, c) => ({ fill, ink, hover: mix(fill, c.background, WASH.hover), press: mix(fill, c.background, WASH.press) });
 /** A look on a pressable element: its fill, then its hover and press washes; a look with neither hover nor `pointer` is not pressable. */
@@ -55,7 +56,8 @@ export function button(id, label, onClick, c, { kind = "solid", icon = null, sma
   const inset = compact ? G.sm : G.md;
   const side = square ? box.side : line;
   const text = (words) => div().text_size(compact ? T.body : T.value).font_medium().text_color(ink).when(truncate, (el) => el.max_w(W.buttonLabel).truncate()).child(words);
-  const glyph = icon ? svg(glyphOf(icon)).size(square ? box.glyph : ICON_ROW).flex_none().text_color(ink) : null;
+  const glyphSide = square ? box.glyph : ICON_ROW;
+  const glyph = icon ? (spin ? busyMark(c, glyphSide) : svg(glyphOf(icon)).size(glyphSide).flex_none().text_color(ink)) : null;
   const face = [content].flat().filter(Boolean), drawn = face.length > 0;
   // The ring is a border kept clear at rest, so focusing never resizes the box.
   const key = name ? `${id}-${name}` : id;
@@ -69,7 +71,7 @@ export function button(id, label, onClick, c, { kind = "solid", icon = null, sma
   const pressed = withLook(frame, look).when(!disabled && Boolean(onClick), (el) => el.on_click((_e, cx) => onClick(cx)));
   if (drawn) return pressed.children(face);
   return pressed
-    .when(Boolean(glyph), (el) => el.child(spin ? glyph.spin(SPIN) : glyph))
+    .when(Boolean(glyph), (el) => el.child(glyph))
     .when(square && Boolean(reveal), (el) => el.child(div().id(`${key}-reveal`).h_full().flex().items_center().overflow_hidden().flex_none()
       .w(reveal.shown ? reveal.width : 0).opacity(reveal.shown ? 1 : 0).transition("width", EASE).transition("opacity", EASE)
       .child(text(label).pl(G.xs).whitespace_nowrap())))

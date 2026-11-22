@@ -22,6 +22,34 @@ in version.json, which the stable updater offers. Versions follow
 [Keep a Changelog](https://keepachangelog.com). `npm run check:version` checks
 the branch's rules.
 
+## [3.33.0] - 2026-11-22
+
+### Added
+
+- A terminal's right-click menu starts with Copy, Cut and Paste. Copy copies the selection and Paste pastes into that terminal, on this computer or another. Cut stays dim, because a terminal's text cannot be cut.
+- Off macOS, menus and tooltips write keys as words (Ctrl+Shift+Enter, Shift+Insert), and show Ctrl+Shift+C rather than Ctrl+Insert when an action has both.
+- Memory works on Linux: it reads each process's proportional memory and the machine's from the system, runs its check every minute from a systemd user timer, notifies through the desktop, and waits for Omarchy's idle before it recycles on its own.
+- On Linux, Kanso Markdown makes .md files open in Herdr, as on macOS, and on uninstall gives each kind of Markdown file back to the app it had.
+- On Linux, the editors in Open with show their icons.
+
+### Changed
+
+- A computer that is not connected stays in the sidebar: Asleep when it does not answer, Disconnected when you disconnected it, with its projects dimmed. Its buttons say Connect and Disconnect, and its right-click menu can Remove it, with a toast that adds it back.
+- A computer that asks for a password or for your key's passphrase signs in with one click: Sign in opens a tab that asks for it once, leaves kansō's own key there and reconnects, so it never asks again. Clicking a computer that needs a login does the same, instead of copying a command.
+- In Add a computer, a computer that takes keys only is added the same way, instead of asking you to copy your key there by hand.
+
+### Fixed
+
+- Copying inside an agent on another computer reaches the computer you look from. Agents kansō starts or reopens copy through the terminal, which Herdr delivers to your clipboard, instead of the clipboard of the computer they run on. That covers Claude Code's copy on select, Codex and pi.
+- A computer on your home network is reached over it, and over Tailscale only when you are away. The local attempt uses the same ssh settings and host key as the Tailscale route, so it signs in as the right user and never reaches a different computer at that address. Before, it tried with this computer's user and no key, and the attempt took the connection's input, so it never worked. Computers added before switch by themselves when they answer on the home network.
+- Copy and Paste in the right-click menu of a terminal shown outside a pane, such as a peek, act on that terminal instead of failing with "pane.focus failed".
+- A busy icon no longer turns. A computer being added, a refresh button or any other icon that waits shows the working mark in its place, at the icon's size, and only that mark turns.
+- On Omarchy, Super+C and Super+V copy and paste in Herdr's terminals, on this computer or another, instead of interrupting the program. Hyprland now treats Herdr as a terminal, and the Linux keys copy and paste with Ctrl+Shift+C and Ctrl+Shift+V and with Ctrl+Insert and Shift+Insert, so every Omarchy version's Super+C and Super+V work.
+- On Linux, kansō's keys work with Omarchy: each keeps Super where Omarchy leaves it free and moves to Ctrl or Alt with Shift where Omarchy uses it, so Super+J and the rest no longer go to the window manager. The update moves the Mac keys a Linux computer had, keeps the ones you changed, and moves Herdr's own keys Omarchy takes the same way.
+- On Linux, Ports, a process's folder, its open files and a Codex conversation are read from `ss` and `/proc`, so they work on a stock Omarchy without `lsof`.
+- On Linux, Containers opens and quits Docker's own engine (rootless, Docker Desktop or the system service), and counts its memory.
+- On Linux, sharing pastes only into your default browser when Hyprland shows it in front, battery power is read from the battery's status, and a pet's picture is converted with ImageMagick.
+
 ## [3.32.0] - 2026-11-21
 
 ### Added

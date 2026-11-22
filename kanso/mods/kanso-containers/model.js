@@ -233,6 +233,7 @@ export const STATS_FORMAT = ["{{.ID}}", "{{.MemUsage}}"].join(TAB);
 export const parseStats = (text) => new Map(lines(text).map((l) => l.split(TAB)).filter((f) => f.length >= 2).map((f) => [f[0].slice(0, 12), memMB(f[1])]));
 
 const VM = /com\.apple\.Virtualization\.VirtualMachine|^vmmem(?:WSL)?(?:\.exe)?$/i;
+const ENGINE = /^(?:dockerd|containerd(?:-shim[\w-]*)?|docker-proxy|rootlesskit)$/;
 const procs = (text) => lines(text).map((l) => /^\s*(\d+)\s+(\d+)\s+(.*)$/.exec(l)).filter(Boolean).map((m) => ({ pid: Number(m[1]), kb: Number(m[2]), comm: m[3] }));
 // `ps -axo pid=,rss=,comm=`: the virtual machines running, Docker's or another app's.
 export const vmPids = (text) => procs(text).filter((p) => VM.test(p.comm)).map((p) => p.pid);
@@ -246,7 +247,7 @@ export function dockerVms(text) {
 }
 // What Docker Desktop and its VM hold in this computer's memory, in MB; another app's VM is not Docker's.
 export function dockerHeld(text, vms = new Set()) {
-  return procs(text).filter((p) => /\/Docker\.app\/|com\.docker\./.test(p.comm) || (VM.test(p.comm) && vms.has(p.pid)))
+  return procs(text).filter((p) => /\/Docker\.app\/|com\.docker\./.test(p.comm) || ENGINE.test(p.comm) || (VM.test(p.comm) && vms.has(p.pid)))
     .reduce((t, p) => t + p.kb / 1024, 0);
 }
 
