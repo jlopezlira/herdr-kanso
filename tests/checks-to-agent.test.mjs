@@ -112,8 +112,8 @@ const stripHost = (state) => {
     panes: () => state.panes,
     terminals: () => state.terminals,
     spaces: () => [],
-    shared: (key) => (key === "kanso.pieces" ? state.pieces : null),
-    setShared: () => {},
+    shared: (key) => (key === "kanso.pieces" ? state.pieces : (state.store ?? {})[key] ?? null),
+    setShared: (key, value) => { state.store = { ...(state.store ?? {}), [key]: value }; },
     exec: async (cmd, args) => {
       execCalls.push([cmd, args]);
       if (state.ghFail && cmd === "gh") return { code: 1, stdout: "", stderr: "could not resolve host" };
@@ -125,7 +125,11 @@ const stripHost = (state) => {
     },
     hc: async (args) => {
       hcCalls.push(args);
-      return args[0] === "read" ? { code: 0, stdout: state.history?.[args[1]] ?? "", stderr: "" } : { code: 0, stdout: "", stderr: "" };
+      if (args[0] === "read" && state.holdRead) return new Promise((resolve) => { state.releaseRead = () => resolve({ code: 0, stdout: state.history?.[args[1]] ?? "", stderr: "" }); });
+      if (args[0] === "read") return { code: 0, stdout: state.history?.[args[1]] ?? "", stderr: "" };
+      if (args[0] === "send" && state.holdSend) return new Promise((resolve) => { state.releaseSend = () => resolve({ code: state.sendCode ?? 0, stdout: "", stderr: "" }); });
+      const code = args[0] === "label" ? state.labelCode : args[0] === "send" ? state.sendCode : 0;
+      return { code: code ?? 0, stdout: "", stderr: "" };
     },
   };
   const timer = { after: (ms, fn) => { afters.push([ms, fn]); } };
@@ -240,7 +244,7 @@ test("Two idle panes on the same branch tell only the terminal whose history ope
     panes: [0, 1].map((i) => ({ pane: "p" + (i + 1), tab: "t1", terminal: "t" + i, cwd: "/work", status: "idle" })),
     terminals: [0, 1].map((i) => ({ address: "t" + i, labels: {} })),
     pr: pullView("abc123", [run("test", "FAILURE")]),
-    history: { t0: "opened /pull/12" },
+    history: { t0: "gh pr create\n" + PR_URL },
   };
   const both = await openStrip(state);
   both.view.watchDigests(both.cx);
@@ -329,5 +333,79 @@ test("A blocked agent keeps its own question, and a hidden checks setting ignore
   assert.equal(hiddenRows[0].status, "idle");
   assert.equal(hiddenRows[0].msg, null);
   assert.equal((await needsSection({ "agents.checks": "hide" }))?.entries?.some((entry) => entry.a.address === "t0") ?? false, false);
+});
+
+const checksLabels = (calls, head) => calls.filter((call) => call[0] === "label" && call.includes("kanso.checks=" + head));
+const idleOpener = () => stripCase({ "header.digest": "hide" }, "idle", null, { tab: "t1", cwd: "/work" }, OPENER);
+const seen = async (calls, kind) => {
+  for (let i = 0; i < 8 && !calls.some((call) => call[0] === kind); i += 1) await Promise.resolve();
+};
+
+test("A review mention, a longer pull number, and another repository are not the opener, and creating that pull request is", async () => {
+  const { opened } = await load("kanso-strip/checks-to-agent.js", ["opened"]);
+  const ask = { url: PR_URL, number: 12 };
+  assert.equal(opened("Please review " + PR_URL, ask), false);
+  assert.equal(opened("gh pr create\n" + PR_URL.replace("pull/12", "pull/123"), ask), false);
+  assert.equal(opened("gh pr create\nhttps://github.com/other/repo/pull/12", ask), false);
+  assert.equal(opened("gh pr create\n" + PR_URL, ask), true);
+  assert.equal(opened("create_pull_request\n" + PR_URL, ask), true);
+});
+
+test("A label that fails is tried again, and a remounted strip does not send the same head again", async () => {
+  const state = idleOpener();
+  state.labelCode = 1;
+  const first = await openStrip(state);
+  const pane = first.host.panes()[0];
+  first.view.checksTurn(pane, pr("abc123", failedRun), first.cx);
+  await settle();
+  assert.equal(checksLabels(first.hcCalls, "abc123").length, 2);
+  const again = await openStrip(state);
+  again.view.checksTurn(again.host.panes()[0], pr("abc123", failedRun), again.cx);
+  await settle();
+  assert.deepEqual(sendsTo(again.hcCalls), []);
+  assert.deepEqual(sendsTo(first.hcCalls), ["t0"]);
+});
+
+test("A second turn while the send is pending writes no checks label, and a refused send can be sent later", async () => {
+  const state = idleOpener();
+  state.holdSend = true;
+  state.sendCode = 1;
+  const held = await openStrip(state);
+  const pane = held.host.panes()[0];
+  const finished = pr("abc123", failedRun);
+  held.view.checksTurn(pane, finished, held.cx);
+  await seen(held.hcCalls, "send");
+  held.view.checksTurn(pane, finished, held.cx);
+  assert.deepEqual(sendsTo(held.hcCalls), ["t0"]);
+  assert.equal(checksLabels(held.hcCalls, "abc123").length, 0);
+  state.holdSend = false;
+  state.releaseSend();
+  await settle();
+  assert.equal(checksLabels(held.hcCalls, "abc123").length, 0);
+  held.view.checksTurn(pane, finished, held.cx);
+  await settle();
+  assert.deepEqual(sendsTo(held.hcCalls), ["t0", "t0"]);
+});
+
+test("A turn with no pull request and no watched pane clears a stale checks label", async () => {
+  const quiet = await openStrip(stripCase({}, "idle", null, {}, { "kanso.needs": "checks failed" }));
+  const pane = quiet.host.panes()[0];
+  assert.doesNotThrow(() => quiet.view.checksTurn(pane, null, quiet.cx));
+  assert.ok(quiet.hcCalls.some((call) => call[0] === "label" && call.includes("kanso.needs=")));
+  assert.equal(quiet.hcCalls.some((call) => call.includes("kanso.needs=checks failed")), false);
+});
+
+test("Hiding checks while the opener history is still being read sends nothing", async () => {
+  const state = stripCase({ "header.digest": "hide" }, "idle", pullView("abc123", [run("test", "FAILURE")]), { tab: "t1", cwd: "/work" });
+  state.holdRead = true;
+  state.history = { t0: "gh pr create\n" + PR_URL };
+  const late = await openStrip(state);
+  late.view.digest(late.host.panes()[0], late.cx);
+  await seen(late.hcCalls, "read");
+  state.pieces = { ...state.pieces, "agents.checks": "hide" };
+  state.releaseRead();
+  await late.done();
+  await settle();
+  assert.deepEqual(sendsTo(late.hcCalls), []);
 });
 
