@@ -13,7 +13,8 @@ const { browserClasses, clipboardApi, hyprlandClass } = await load("kanso-panel/
 const { openApi } = await load("kanso-panel/platform-open.js", ["openApi"]);
 const { petApi } = await load("kanso-panel/platform-pets.js", ["petApi"]);
 
-const magick = (await exec("sh", ["-c", "command -v magick"])).stdout.trim();
+const unixOnly = process.platform === "win32" && "its sh stubs run on macOS and Linux";
+const magick = !unixOnly && (await exec("sh", ["-c", "command -v magick"])).stdout.trim();
 const handler = new URL("../kanso/mods/kanso-tabs/markdown-handler.sh", import.meta.url);
 const lines = (body) => body.join("\n");
 
@@ -166,7 +167,7 @@ test("The Linux working-directory and open-file scripts end with exit 0", async 
   assert.deepEqual(scripts.map((script) => script.endsWith("exit 0")), [true, true]);
 });
 
-test("Linux Docker starts the user unit when systemctl --user cat succeeds, and otherwise asks docker info", async (t) => {
+test("Linux Docker starts the user unit when systemctl --user cat succeeds, and otherwise asks docker info", { skip: unixOnly }, async (t) => {
   const dir = await temporary(t);
   const log = join(dir, "log");
   const bin = join(dir, "bin");
@@ -187,7 +188,7 @@ test("Linux Docker starts the user unit when systemctl --user cat succeeds, and 
   assert.doesNotMatch(after, /systemctl start docker/);
 });
 
-test("An editor icon is found from a desktop file and written as a 64 px png", { skip: !magick && "needs magick" }, async (t) => {
+test("An editor icon is found from a desktop file and written as a 64 px png", { skip: unixOnly || (!magick && "needs magick") }, async (t) => {
   const dir = await temporary(t);
   const xdg = join(dir, "share");
   const out = join(dir, "out");
@@ -203,7 +204,7 @@ test("An editor icon is found from a desktop file and written as a 64 px png", {
   assert.equal(png.readUInt32BE(20), 64);
 });
 
-test("A pet atlas converts with magick when sips is not installed", { skip: !magick && "needs magick" }, async (t) => {
+test("A pet atlas converts with magick when sips is not installed", { skip: unixOnly || (!magick && "needs magick") }, async (t) => {
   const dir = await temporary(t);
   const source = join(dir, "pets/rocky");
   const out = join(dir, "out");
@@ -218,7 +219,7 @@ test("A pet atlas converts with magick when sips is not installed", { skip: !mag
   assert.equal((await readFile(join(out, "rocky.png"))).subarray(1, 4).toString(), "PNG");
 });
 
-test("Linux Markdown install records the previous default and uninstall restores it", async (t) => {
+test("Linux Markdown install records the previous default and uninstall restores it", { skip: unixOnly }, async (t) => {
   const { dir, bin } = await folderWith(t, "bin");
   const log = join(dir, "xdg.log");
   const state = join(dir, "default");
