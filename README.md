@@ -111,7 +111,9 @@ and Ctrl or Alt with Shift where Omarchy uses it. Help follows the bindings you 
 On Omarchy, kansō has Hyprland treat Herdr as a terminal: it writes
 `~/.config/hypr/kanso.lua` and loads it from `hyprland.lua`. Then Super+C and
 Super+V copy and paste in Herdr's terminals, on this computer or another, as in
-Omarchy's other terminals. Ctrl+C still interrupts the program.
+Omarchy's other terminals. The Linux keys copy and paste with Ctrl+Shift+C and
+Ctrl+Shift+V, and with Ctrl+Insert and Shift+Insert, which older Omarchy sends.
+Ctrl+C still interrupts the program.
 
 | Keys | What they do |
 |---|---|

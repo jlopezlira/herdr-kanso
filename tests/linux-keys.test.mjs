@@ -9,7 +9,7 @@ import { installedUpdater } from "./update-harness.mjs";
 
 const repo = fileURLToPath(new URL("..", import.meta.url));
 const readKeys = (file) => JSON.parse(repoText(file));
-const { linuxKeymap, linuxSection, migrateToLinux, takenByOmarchy, withClipboardKeys } = await load("kanso-panel/platform-linux-keys.js", ["linuxKeymap", "linuxSection", "migrateToLinux", "takenByOmarchy", "withClipboardKeys"]);
+const { linuxKeymap, linuxSection, migrateToLinux, shippedLinuxKeymap, takenByOmarchy, withClipboardKeys } = await load("kanso-panel/platform-linux-keys.js", ["linuxKeymap", "linuxSection", "migrateToLinux", "shippedLinuxKeymap", "takenByOmarchy", "withClipboardKeys"]);
 const macLinux = () => ({
   mac: readKeys("kanso/keys.json"),
   linux: readKeys("kanso/keys.linux.json"),
@@ -61,7 +61,7 @@ test("Super+D and Super+B stay, the next agent that needs you moves to Ctrl+Shif
 
 test("The Linux keys file is the Mac keys rewritten for Omarchy, and the build check fails when that file is changed", async (t) => {
   const { mac } = macLinux();
-  const text = `${JSON.stringify(linuxKeymap(mac), null, 2)}\n`;
+  const text = `${JSON.stringify(shippedLinuxKeymap(mac), null, 2)}\n`;
   assert.equal(repoText("kanso/keys.linux.json"), text);
   const onRepo = await exec(process.execPath, ["scripts/build-linux-keys.mjs", "--check"], { cwd: repo });
   assert.equal(onRepo.code, 0, onRepo.stderr);
