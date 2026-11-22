@@ -1401,10 +1401,7 @@ export default class Spaces extends RetryingView {
     if (done.length) {
       const drop = new Set(done);
       this.parked = (this.parked ?? []).filter((row) => !drop.has(row.name));
-      for (const name of done) {
-        this.clearFlags(name);
-        await this.db().forgetMachine(name).catch(() => {});
-      }
+      for (const name of done) await this.dropMachine(name);
     }
     for (const row of this.parked ?? []) {
       const live = (this.machines ?? []).find((item) => item.name === row.name);
@@ -1448,13 +1445,11 @@ export default class Spaces extends RetryingView {
     if (!canRestore(record) || this.powerBusy.has(name)) return;
     const title = this.names.title(name);
     this.removed = { ...(this.removed ?? {}), [name]: record };
-    this.powerBusy.add(name);
-    this.powerRun(name, cx, async () => {
+    this.holdPower(name, cx, async () => {
       if (live) await hc(rmArgs(name)).catch(() => null);
       this.parked = (this.parked ?? []).filter((row) => row.name !== name);
       this.machines = (this.machines ?? []).filter((row) => row.name !== name);
-      this.clearFlags(name);
-      await this.db().forgetMachine(name).catch(() => {});
+      await this.dropMachine(name);
       notify({ title: `${title} removed`, body: "Click here to add it back.", timeout: 15000, action: { name: `kanso-spaces.restore-machine:${name}` } });
       await this.readMachines();
     });
@@ -1463,13 +1458,22 @@ export default class Spaces extends RetryingView {
   restoreMachine(name, cx) {
     const record = this.removed?.[name];
     if (!record || this.powerBusy.has(name)) return;
-    this.powerBusy.add(name);
-    this.powerRun(name, cx, async () => {
+    this.holdPower(name, cx, async () => {
       const error = hcError(await hc(addArgs(record)).catch((e) => ({ code: 1, stderr: String(e?.message ?? e) })));
       if (error) { notify({ title: `${this.names.title(name)} was not added back`, body: String(error.message ?? ""), level: "error" }); return; }
       this.removed = Object.fromEntries(Object.entries(this.removed ?? {}).filter(([key]) => key !== name));
       await this.readMachines();
     });
+  }
+
+  holdPower(name, cx, work) {
+    this.powerBusy.add(name);
+    this.powerRun(name, cx, work);
+  }
+
+  dropMachine(name) {
+    this.clearFlags(name);
+    return this.db().forgetMachine(name).catch(() => {});
   }
 
   clearFlags(name) {
