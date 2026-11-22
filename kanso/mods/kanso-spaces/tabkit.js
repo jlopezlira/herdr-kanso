@@ -120,8 +120,6 @@ export const opening = (name) => `${name} (opening ${Math.random().toString(36).
 export async function openTab(a, cx, { space: given = null, create = null, progress = () => {}, before = async () => {} } = {}) {
   const flat = a.cols.flatMap((c, ci) => c.panes.map((p, ri) => ({ ...p, ci, ri })));
   if (!flat.length) throw new Error("nothing to open");
-  let viewed = (argv) => argv;
-  const opts = (p) => ({ folder: p.cwd || undefined, ...(p.argv ? { argv: viewed(p.argv) } : {}) });
   const fresh = !given && create ? await (async () => {
     const { key, ...args } = create;
     const had = new Set(spaces().map((sp) => sp.id)), mine = opening(args.name);
@@ -140,7 +138,8 @@ export async function openTab(a, cx, { space: given = null, create = null, progr
   const space = given ?? fresh?.space ?? null;
   const starter = fresh?.starter ?? null, made = fresh?.space.id ?? null;
   if (!space) throw new Error("no space to open it in");
-  viewed = await viewerFor(space.machine);
+  const viewed = await viewerFor(space.machine);
+  const opts = (p) => ({ folder: p.cwd || undefined, ...(p.argv ? { argv: viewed(p.argv) } : {}) });
   progress(`Opening 1 of ${flat.length}`);
   // The new tab is matched by its unique temp name, never one opening elsewhere.
   const had = new Set((spaces().find((sp) => sp.id === space.id)?.tabs ?? []).map((t) => t.id)), mine = opening(a.name);
