@@ -178,11 +178,11 @@ const keyboard = async () => {
   const cx = { notify() {}, stop_propagation() {} };
   const keyDown = (key) => calls(menu.view.render(), "on_key_down").at(-1).at(-1)({ key, modifiers: {} }, cx);
   keyDown("j");
-  assert.equal(menu.view.at, 0, "j lights the first row");
-  const lit = everyDrawn(menu.view.render()).filter((kid) => calls(kid, "bg").length && texts(kid).includes("Split right") && !texts(kid).includes("Split down"));
+  assert.equal(menu.view.at, 0, "j lights the first row it can run: Copy waits for a selection, Cut never runs in a terminal");
+  const lit = everyDrawn(menu.view.render()).filter((kid) => calls(kid, "bg").length && texts(kid).includes("Paste") && !texts(kid).includes("Split right"));
   assert.ok(lit.length > 0, "the lit row draws its selected ground");
   keyDown("enter");
-  assert.ok(menu.closed.includes("pane.split"), "Enter runs the lit row");
+  assert.ok(menu.closed.includes("terminal.paste"), "Enter runs the lit row");
   return [menuOf(menu.view.render())];
 };
 
@@ -193,7 +193,7 @@ const SESSION_ROWS = ({ pin = "Pin to the top", shelf = [], wake = ["Snooze", SU
 const PROJECT_HEAD = ["acme-shop", "New conversation…", "New in a worktree…", "Worktrees", "checkout-v2", "kansō", "cart-retry", "~/acme-shop-cart", "Rename…", "Sleep this tab…", "Sleep the project…", "Project options…"];
 const PROJECT_ROWS = ({ head = PROJECT_HEAD, extra = [], remove = "Remove project" } = {}) => [...head, ...extra, remove, ...PIECE("Branch, ahead, behind")];
 const COMPUTER_ROWS = (...phase) => ["devbox", "Rename…", ...phase, "Add computer…", ...PIECE("Computers")];
-const PANE_ROWS = (title, pin, agentRows, back = []) => [title, "Split right", "⌘D", "Split down", "⇧⌘D", "Split left", "⌥⇧⌘D", "Wider or narrower", "⇧⌘↩", pin, "⌥⌘P",
+const PANE_ROWS = (title, pin, agentRows, back = []) => [title, "Copy", "Cut", "Paste", "Split right", "⌘D", "Split down", "⇧⌘D", "Split left", "⌥⇧⌘D", "Wider or narrower", "⇧⌘↩", pin, "⌥⌘P",
   ...agentRows, ...back, "Right-clicks go to the program", "Close pane", "⇧⌘W"];
 const AGENT_ROWS = ["Send to an agent…", "⌥⌘S", "Find in conversation", "⌘F", "Open with…", "Sleep"];
 const TAB_ROWS = (close, hint = []) => ["checkout", "Rename", "New tab", "⌘T", "Sleep checkout…", close, ...hint, ...PIECE("Agent state on tabs")];
