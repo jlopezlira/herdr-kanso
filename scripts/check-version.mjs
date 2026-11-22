@@ -6,7 +6,7 @@ import { bareRelease, parseRelease } from "../kanso/mods/kanso-chrome/release.js
 
 export const VERSION_FILE = "kanso/mods/kanso-chrome/version.json";
 export const CHANGELOG = "CHANGELOG.md";
-export const INSTALLED = ["kanso/mods", "kanso/themes", "kanso/layouts", "kanso/keys.json", "kanso/keys.windows.json"];
+export const INSTALLED = ["kanso/mods", "kanso/themes", "kanso/layouts", "kanso/keys.json", "kanso/keys.windows.json", "kanso/keys.linux.json"];
 export const CATEGORIES = ["Breaking", "Added", "Changed", "Deprecated", "Removed", "Fixed", "Security", "Upgrade"];
 export const UNRELEASED = "Unreleased";
 

@@ -19,6 +19,7 @@
     "build:site-tokens": "node scripts/build-site-tokens.mjs",
     "build:site": "node scripts/build-site.mjs",
     "build:issue-forms": "node scripts/build-issue-forms.mjs",
+    "build:linux-keys": "node scripts/build-linux-keys.mjs",
     "build:ui-tokens": "node scripts/build-ui-tokens.mjs",
     "check:tokens": "node scripts/check-tokens.mjs",
     "check:dupes": "node scripts/check-dupes.mjs"
