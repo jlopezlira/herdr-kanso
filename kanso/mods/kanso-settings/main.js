@@ -18,14 +18,14 @@ import { glyphs, keycap, familyPattern, shownChord } from "./marks.js";
 import { GROUPS, ofRow, familyChords, conflictsOf, rebound } from "./actions.js";
 import { DEFAULT_KEYS } from "./defaults.js";
 import { formerKeymap, shippedKeymap } from "./platform-keymap.js";
-import { linuxKeymap, reportedForms, withoutReported } from "./platform-linux-keys.js";
+import { reportedForms, shippedLinuxKeymap, withoutReported } from "./platform-linux-keys.js";
 
 import { channelOf, installedRelease, offerRelease, stableStay } from "./release.js";
 import { focusOn } from "./pure.js";
 import { whenInstalled } from "./installed.js";
 import { pagedDialog } from "./pages.js";
 
-const shippedDefaults = (platform) => (formerKeymap(platform) ? linuxKeymap(DEFAULT_KEYS[formerKeymap(platform)]) : DEFAULT_KEYS[shippedKeymap(platform)]);
+const shippedDefaults = (platform) => (formerKeymap(platform) ? shippedLinuxKeymap(DEFAULT_KEYS[formerKeymap(platform)]) : DEFAULT_KEYS[shippedKeymap(platform)]);
 
 // A shortcut's key hints: each chord, or a faint No key.
 const keysOf = (chords) => (chords.length ? chords.map((k) => ({ text: shownChord(k) })) : [{ text: "No key", faint: true }]);

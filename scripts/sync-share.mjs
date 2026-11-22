@@ -31,7 +31,6 @@ const COMMON = [
   { source: "kanso/mods/kanso-panel/ghchecks.js", copies: ["kanso/mods/kanso-strip/ghchecks.js"] },
   // The key a second Cmd+F or Ctrl+F uses to select the query in the open bar.
   { source: "kanso/mods/kanso-panel/find-key.js", copies: ["kanso/mods/kanso-strip/find-key.js"] },
-  { source: "kanso/mods/kanso-panel/platform-linux-keys.js", copies: ["kanso/mods/kanso-tabs/platform-linux-keys.js", "kanso/mods/kanso-spaces/platform-linux-keys.js", "kanso/mods/kanso-settings/platform-linux-keys.js"] },
   // Hachi, the dōjō's shiba, also on kansō help's way into the dōjō.
   // Your pet and the one to choose, in the dōjō and on kansō help's dōjō page; the choice kept in the dōjō's SQLite.
   // The cap a key press lights for a moment, in the dōjō and on help's keyboard page.
