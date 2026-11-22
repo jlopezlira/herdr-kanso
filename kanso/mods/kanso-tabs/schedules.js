@@ -1,5 +1,5 @@
 import { spaces, terminals, readTextFile, home } from "herdr";
-import { serviceFor, localName } from "./platform-host.js";
+import { platformOf } from "./platform-host.js";
 import { copiesToViewer } from "./platform-viewer.js";
 import { ADD_WORKTREE } from "./platform-repositories.js";
 import { parseOr } from "./pure.js";
@@ -38,7 +38,7 @@ export function clockTodo(list, terms, spacesNow, homeDir) {
 }
 
 async function argvFor(s, machine) {
-  const platform = machine ? await serviceFor((p) => p, machine).catch(() => "linux") : localName();
+  const platform = await platformOf(machine);
   return agentLaunch(platform, copiesToViewer(platform)(s.run), s.prompt);
 }
 

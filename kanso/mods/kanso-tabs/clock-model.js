@@ -160,14 +160,23 @@ export function validWhen(when) {
   return false;
 }
 
+function everyRuns(when, from, count) {
+  const step = stepOf(when), start = Number(when.start);
+  const first = start > from ? start : start + (Math.floor((from - start) / step) + 1) * step;
+  return Array.from({ length: count }, (_, i) => first + i * step);
+}
+
+function everyLast(when, after, upTo) {
+  const step = stepOf(when), start = Number(when.start);
+  if (start > upTo) return null;
+  const last = start + Math.floor((upTo - start) / step) * step;
+  return last > after ? last : null;
+}
+
 export function nextRuns(when, from, count = PLAN_RUNS) {
   if (!validWhen(when) || count <= 0) return [];
   if (when.kind === "once") return Number(when.at) > from ? [Number(when.at)] : [];
-  if (when.kind === "every") {
-    const step = stepOf(when), start = Number(when.start);
-    const first = start > from ? start : start + (Math.floor((from - start) / step) + 1) * step;
-    return Array.from({ length: count }, (_, i) => first + i * step);
-  }
+  if (when.kind === "every") return everyRuns(when, from, count);
   const days = new Set(daysOf(when));
   const out = [];
   for (let day = dayStart(from), n = 0; out.length < count && n < 400 + count * 7; n += 1, day = dayStart(day + DAY_MS + 3_600_000)) {
@@ -182,12 +191,7 @@ export const nextRun = (when, from) => nextRuns(when, from, 1)[0] ?? null;
 export function lastDue(when, after, upTo) {
   if (!validWhen(when) || upTo <= after) return null;
   if (when.kind === "once") return Number(when.at) > after && Number(when.at) <= upTo ? Number(when.at) : null;
-  if (when.kind === "every") {
-    const step = stepOf(when), start = Number(when.start);
-    if (start > upTo) return null;
-    const last = start + Math.floor((upTo - start) / step) * step;
-    return last > after ? last : null;
-  }
+  if (when.kind === "every") return everyLast(when, after, upTo);
   const days = new Set(daysOf(when));
   for (let day = dayStart(upTo), n = 0; n < 8; n += 1, day = dayStart(day - 3_600_000)) {
     const at = atClock(day, when.time);

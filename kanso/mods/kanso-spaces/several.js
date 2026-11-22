@@ -1,5 +1,5 @@
 import { hc, spaces } from "herdr";
-import { serviceFor, localName } from "./platform-host.js";
+import { platformOf } from "./platform-host.js";
 import { viewerFor } from "./platform-viewer.js";
 import { addWorktree } from "./projects.js";
 import { worktreeBase, newId } from "./kdb.js";
@@ -10,7 +10,7 @@ const lastLine = (text) => String(text ?? "").trim().split("\n").filter(Boolean)
 
 export async function severalRun(place) {
   const machine = place.machine || null;
-  const platform = machine ? await serviceFor((p) => p, machine).catch(() => "linux") : localName();
+  const platform = await platformOf(machine);
   return { place, machine, platform, viewed: await viewerFor(machine), space: place.space ?? `sp${newId()}`, tab: `tb${newId()}` };
 }
 

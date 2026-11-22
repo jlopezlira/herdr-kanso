@@ -2165,23 +2165,31 @@ export default class Spaces extends RetryingView {
   }
 
 
-  makeWorktree(cx) {
-    if (this.making) return;
-    const picked = (this.known ?? []).filter((a) => a.installed && this.wtAgents.has(a.key));
-    if (picked.length) { this.startSeveral(cx, picked); return; }
-    const place = props().worktree, branch = this.branch.value().trim();
+  pickedAgents() {
+    return (this.known ?? []).filter((a) => a.installed && this.wtAgents.has(a.key));
+  }
+
+  whileMaking(cx, work) {
     this.making = true;
     this.wtError = null;
     this.redraw(cx);
     cx.spawn(async (cx) => {
-      try {
-        const r = await addWorktree({ folder: place.folder, machine: place.machine || null, branch, base: worktreeBase(place.machine) });
-        if (r.error) { this.wtError = r.error; return; }
-        if (!r.made) notify({ title: `${branch} already had a worktree`, body: r.path, level: "info", timeout: 5000 });
-        closeOverlay(props().overlay);
-        // Then which agent starts in it, asked like every other start.
-        this.newAgentMenu({ ...place, tree: { folder: r.path, branch } });
-      } finally { this.making = false; this.redraw(cx); }
+      try { await work(cx); } finally { this.making = false; this.redraw(cx); }
+    });
+  }
+
+  makeWorktree(cx) {
+    if (this.making) return;
+    const picked = this.pickedAgents();
+    if (picked.length) { this.startSeveral(cx, picked); return; }
+    const place = props().worktree, branch = this.branch.value().trim();
+    this.whileMaking(cx, async () => {
+      const r = await addWorktree({ folder: place.folder, machine: place.machine || null, branch, base: worktreeBase(place.machine) });
+      if (r.error) { this.wtError = r.error; return; }
+      if (!r.made) notify({ title: `${branch} already had a worktree`, body: r.path, level: "info", timeout: 5000 });
+      closeOverlay(props().overlay);
+      // Then which agent starts in it, asked like every other start.
+      this.newAgentMenu({ ...place, tree: { folder: r.path, branch } });
     });
   }
 
@@ -2189,18 +2197,13 @@ export default class Spaces extends RetryingView {
     const place = props().worktree, task = this.branch.value().trim();
     if (!task) { this.wtError = "Name the task: each agent's branch is the task and the agent."; this.redraw(cx); return; }
     const ask = { task, from: this.wtBase.value().trim(), prompt: this.wtPrompt.value().trim() };
-    this.making = true;
-    this.wtError = null;
-    this.redraw(cx);
-    cx.spawn(async (cx) => {
-      try {
-        this.severalRun ??= await severalRun(place);
-        this.severalAsk = ask;
-        const results = await mapSeries(picked, (a) => startInTree(this.severalRun, a, ask));
-        this.wtFailed = results.filter((r) => r.error);
-        if (results.some((r) => !r.error)) await this.showSeveral(cx);
-        if (!this.wtFailed.length) closeOverlay(props().overlay);
-      } finally { this.making = false; this.redraw(cx); }
+    this.whileMaking(cx, async (cx) => {
+      this.severalRun ??= await severalRun(place);
+      this.severalAsk = ask;
+      const results = await mapSeries(picked, (a) => startInTree(this.severalRun, a, ask));
+      this.wtFailed = results.filter((r) => r.error);
+      if (results.some((r) => !r.error)) await this.showSeveral(cx);
+      if (!this.wtFailed.length) closeOverlay(props().overlay);
     });
   }
 
@@ -2226,7 +2229,7 @@ export default class Spaces extends RetryingView {
     const base = worktreeBase(place.machine);
     const shownBase = base ? base.replace(trimmed(home()), "~") : "~/.kanso/worktrees";
     const c = tokens(t);
-    const picked = (this.known ?? []).filter((a) => a.installed && this.wtAgents.has(a.key));
+    const picked = this.pickedAgents();
     const pick = (key, cx) => { this.wtAgents = this.wtAgents.has(key) ? new Set([...this.wtAgents].filter((k) => k !== key)) : new Set([...this.wtAgents, key]); this.redraw(cx); };
     const several = picked.length > 0;
     const failed = this.wtFailed.map((f) => failureLine({ text: `${f.agent.name} did not start`, fix: "Retry", detail: f.error })(`wt-failed-${f.agent.key}`, c, { onClick: (cx) => this.retrySeveral(cx, f.agent) }));
