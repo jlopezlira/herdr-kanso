@@ -22,10 +22,10 @@
 </p>
 
 - Agents sit side by side, readable at their own width, and the one waiting on you comes first.
-- Sleep an agent, a tab or a whole project, and wake it on the same conversation.
+- Sleep a Claude Code agent, a tab or a whole project, and wake its Claude Code conversations where they were.
 - Add another computer over your network or Tailscale. Its projects sit in the sidebar beside yours, and files, pictures, sleep, copy and paste work there too.
 - Review pull requests, files, pictures and Markdown next to the agent that wrote them.
-- Memory recycles idle Claude sessions so the machine lasts weeks. Spend adds up your AI work across computers. A Simulator sits beside the agent.
+- Memory recycles idle Claude sessions so the machine lasts weeks. Spend adds up your AI work across computers once Sync is on. A Simulator sits beside the agent.
 
 For the Herdr desktop app, not the Herdr TUI. macOS, Windows and Linux; the iOS simulator is macOS only.
 
@@ -49,7 +49,7 @@ PowerShell and Task Scheduler without administrator rights, and Linux a
 systemd user timer. kansō updates
 itself the same way on Windows, with Windows PowerShell and the curl and tar
 that ship with Windows: a release shows as a row above Settings, and a click
-installs it. Stable is what you get. Early, under What's new, also follows a beta
+installs it. Stable is what you get. Early, in Settings under Updates, also follows a beta
 or a release candidate, and going back to Stable never installs an older
 version. `ctrl-shift-l` goes back to your previous layout.
 On Windows, merge `kanso/keys.windows.json` into your Herdr keys instead of
@@ -69,20 +69,23 @@ On Windows, merge `kanso/keys.windows.json` into your Herdr keys instead of
 - **A strip, not a grid.** Terminals keep their width; a new pane opens beside
   you and the view glides to it. A view holds 1 to 8 panes, 4 to start, and a
   full view starts the next page. Pin a column, stack a server under an agent.
-  Cmd+F finds in the terminal, or in an agent's whole conversation.
+  Cmd+F finds in the terminal, or in the whole conversation of a Claude Code or
+  Codex agent on this computer.
 - **Needs you first.** Cmd+J goes to the agent waiting on you, in any project.
   The sidebar shows every project you keep, every agent's state and what it is
   on, in three views: Projects, Status and Threads. Search finds any of them.
   After five minutes away, "While you were away" says what finished.
-- **Sleep and wake.** An agent, a tab or a project goes to sleep: it exits with
-  its conversation kept on its terminal, and wakes on it in the same pane.
+- **Sleep and wake.** A Claude Code agent, a tab or a project goes to sleep:
+  each Claude Code agent exits with its conversation kept on its terminal and
+  wakes on it in the same pane; other programs in the tab or project stop.
   Herdr keeps that, so another computer on the same space sees it asleep too,
   and waking from either works.
 - **Your other computers.** Add a computer at the foot of the sidebar: kansō
   lists your Tailscale computers, your ssh hosts and the computers on this
   network, or an agent sets one up with you. It reaches a computer on the home
-  network first and over Tailscale when you are away, and asks for a password
-  or passphrase with one click. A computer you disconnect stays in the sidebar,
+  network first and over Tailscale when you are away (Windows keeps the
+  Tailscale route). When one asks for a password or a key's passphrase, Sign in
+  opens a tab where you type it once. A computer you disconnect stays in the sidebar,
   Asleep or Disconnected, until you remove it. Rename it, and the name shows on
   every computer.
 - **Images.** The newest picture the agent in focus made, big beside it, and a
@@ -94,7 +97,8 @@ On Windows, merge `kanso/keys.windows.json` into your Herdr keys instead of
   and it can be edited when the read has no NUL and fits in 1 MiB, on this computer or another; `md-review plan.md` from an agent asks for your comments.
 - **Take over.** Open with… opens the pane's folder, worktree included, in your
   editor. Cmd+Alt+S hands a pane's work to another agent, or to every agent in
-  a project. Cmd+Alt+T saves the tab as an arrangement to open in any project.
+  a project. Cmd+Alt+T opens Arrangements: save the tab, then open it in any
+  project.
   A terminal's right-click copies and pastes, on this computer or another.
 - **What your agents leave running.** Ports: dev servers and the panes that
   run them, on every connected computer. Containers: Docker, with Up, Rebuild
@@ -136,7 +140,7 @@ Ctrl+C still interrupts the program.
 |---|---|
 | Cmd+1 … Cmd+9 | Go to tab 1 to 9 |
 | Ctrl+1 … Ctrl+9 | Go to project 1 to 9 |
-| Ctrl+Alt+1 … Ctrl+Alt+9 | Go to pane 1 to 9 |
+| Ctrl+Alt+1 … Ctrl+Alt+9 | Go to column 1 to 9 |
 | Cmd+Alt+Left and Cmd+Alt+Right | Previous and next pane |
 | Cmd+Alt+H/J/K/L | Between panes, as vim; Shift moves the pane |
 | Cmd+Alt+Shift+Left and Cmd+Alt+Shift+Right | Move the pane left and right |
@@ -145,7 +149,7 @@ Ctrl+C still interrupts the program.
 | Cmd+Shift+- and Cmd+Shift+= | Fewer or more panes per view |
 | Cmd+Shift+Enter | Wider or narrower pane |
 | Cmd+Alt+P | Pin the pane |
-| Cmd+F | Find in the terminal, or in the agent's whole conversation |
+| Cmd+F | Find in the terminal, or in a Claude Code or Codex conversation |
 | Cmd+Alt+S | Send the pane's work to another agent |
 | Cmd+Alt+T | Arrangements: save this tab, or open a saved one |
 | Cmd+J | Next agent that needs you |
@@ -167,7 +171,9 @@ Everything runs on your machine, and reads only the folders you work in:
 `git`, `gh`, `find`, `du`, `lsof` (`ss` and `/proc` on Linux), `ps`, `sqlite3`, `node`, `docker`,
 `xcode-select`, `simctl`, `adb`, `emulator` and Herdr's `hc`. What reaches the network: PR and
 Shipped through `gh`, only while their panel is shown (Shipped keeps a private
-gist of your own statistics); Spend's daily fetch of OpenRouter's price list;
+gist of your own statistics); the update check, `git ls-remote` on kansō's
+GitHub repository, and the download of a release you install; Spend's daily
+fetch of OpenRouter's price list;
 Add a computer, which reads Tailscale's list of your computers and, unless
 Settings turns it off, asks the computers on this network whether they answer
 ssh. Another computer is reached only through Herdr's own connection to it.
@@ -181,10 +187,11 @@ agent unless you press Send, and share images carry totals only.
 ## Development
 
 `npm test` (Node 22.15+, Git, Bash, sqlite3). Pull requests target `develop`.
-A change to what kansō installs adds its entries to the next version's section
-in [CHANGELOG.md](CHANGELOG.md), and raises
-`kanso/mods/kanso-chrome/version.json` only when that category needs a bigger
-bump than the section already has. `npm run check:version` checks it. `npm test` also checks each mod's imports
+A change to what kansō installs adds its entries under `## [Unreleased]` in
+[CHANGELOG.md](CHANGELOG.md); a pull request never edits a numbered section or
+`kanso/mods/kanso-chrome/version.json`, which the Release candidate workflow
+sets. `npm run check:version -- --branch develop` checks it. Before a pull
+request, `npm run pre-pr` runs every check and `npm test`. `npm test` also checks each mod's imports
 against the Herdr names in `tests/herdr-api.json` (`node scripts/herdr-api.mjs`
 rewrites that file from this machine's declarations), and `npm run check:mods`
 runs `herdr-app check` on every mod when the app is installed. A push
