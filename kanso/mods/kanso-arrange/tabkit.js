@@ -1,4 +1,5 @@
 import { paths } from "./platform-paths.js";
+import { viewerFor } from "./platform-viewer.js";
 // Arrangements and Sleep, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
 // Shared source: npm run sync:share copies it, and a test fails when a copy differs.
 import { spaces, panes, shared, setShared, run, home, hc } from "herdr";
@@ -99,7 +100,9 @@ export async function openInto(p, cx, tabId) {
   const seen = new Set(panes().map((q) => q.pane));
   setShared("strip.intent", { dir: "right", from, at: Date.now() });
   run("pane.focus", { pane: from });
-  run("terminal.open", { folder: p.cwd || undefined, ...(p.argv ? { argv: p.argv } : {}), place: "right" });
+  const machine = spaces().find((sp) => sp.tabs.some((t) => t.id === tabId))?.machine ?? null;
+  const argv = p.argv ? (await viewerFor(machine))(p.argv) : null;
+  run("terminal.open", { folder: p.cwd || undefined, ...(argv ? { argv } : {}), place: "right" });
   try { return (await newPane(seen, cx, tabId, p.resume ?? null)).pane; }
   catch (e) { throw new OpenError(e, { pending: 1 }); }
 }
@@ -117,7 +120,8 @@ export const opening = (name) => `${name} (opening ${Math.random().toString(36).
 export async function openTab(a, cx, { space: given = null, create = null, progress = () => {}, before = async () => {} } = {}) {
   const flat = a.cols.flatMap((c, ci) => c.panes.map((p, ri) => ({ ...p, ci, ri })));
   if (!flat.length) throw new Error("nothing to open");
-  const opts = (p) => ({ folder: p.cwd || undefined, ...(p.argv ? { argv: p.argv } : {}) });
+  let viewed = (argv) => argv;
+  const opts = (p) => ({ folder: p.cwd || undefined, ...(p.argv ? { argv: viewed(p.argv) } : {}) });
   const fresh = !given && create ? await (async () => {
     const { key, ...args } = create;
     const had = new Set(spaces().map((sp) => sp.id)), mine = opening(args.name);
@@ -136,6 +140,7 @@ export async function openTab(a, cx, { space: given = null, create = null, progr
   const space = given ?? fresh?.space ?? null;
   const starter = fresh?.starter ?? null, made = fresh?.space.id ?? null;
   if (!space) throw new Error("no space to open it in");
+  viewed = await viewerFor(space.machine);
   progress(`Opening 1 of ${flat.length}`);
   // The new tab is matched by its unique temp name, never one opening elsewhere.
   const had = new Set((spaces().find((sp) => sp.id === space.id)?.tabs ?? []).map((t) => t.id)), mine = opening(a.name);
