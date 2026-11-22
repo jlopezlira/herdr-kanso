@@ -1,7 +1,7 @@
 import { div } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import { exec, run, theme, spaces, home, openOverlay } from "herdr";
-import { G, T, tokens } from "./ui.js";
+import { G, T, PR, tokens } from "./ui.js";
 import { iconButton, quietLink } from "./ui-button.js";
 import { row } from "./ui-row.js";
 import { segmented } from "./ui-tab.js";
@@ -220,7 +220,7 @@ export class Issues {
         .children(comments.map((m, i) => v_flex().w_full().gap(G.xs)
           .child(div().text_size(T.body).text_color(c.dim).child(`${m.author} · ${ageOf(m.at, now)}`))
           .child(markdown(`issues-comment-${i}`, c, { source: m.body })))))
-      .when(prs.length > 0, (el) => el.child(section(c, "Pull requests", String(prs.length)))
+      .when(prs.length > 0, (el) => el.child(section(c, "Linked pull requests", String(prs.length)))
         .children(prs.map((p) => row(`issues-pr-${p.number}`, c, { name: p.title, start: [div().flex_none().text_size(T.body).text_color(c.dim).child(`#${p.number}`)], meta: String(p.state ?? "").toLowerCase(),
           onClick: () => openUrl(p.url) }))));
   }
@@ -239,7 +239,7 @@ export class Issues {
         : !projects.length ? emptyState({ text: "Add a project to see its issues" })("issues-none", c)
           : v_flex().w_full().gap(G.xl).children(projects.map((p) => this.projectBlock(p, c, now)));
     return scrollPage("kanso-issues", c, true, (column) => column
-      .child(pageHeader(div().text_size(17).text_color(c.text).child("Issues"),
+      .child(pageHeader(div().text_size(PR.title).text_color(c.text).child("Issues"),
         [refreshTool("issues-refresh", c, { busy, working: `Reading ${plural(this.reading.size, "project", "projects")}` }, (cx) => this.refresh(cx, true))]))
       .child(body));
   }
