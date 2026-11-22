@@ -1,4 +1,5 @@
 import { localService, serviceOn, localName } from "./platform-host.js";
+import { copiesToViewer, viewerFor } from "./platform-viewer.js";
 import { signInTab } from "./sign-in.js";
 import { paths } from "./platform-paths.js";
 import { processApi } from "./platform-processes.js";
@@ -683,8 +684,11 @@ export default class Spaces extends RetryingView {
     if (this.starting) return;
     this.starting = true;
     const project = registry().find((p) => p.id === place.project) ?? null;
-    if (place.tree) openAt(place, place.tree.folder, a?.run ?? null, place.tree.branch);
-    else startIn(place, a?.run ?? null);
+    viewerFor(place.machine).then((viewed) => {
+      const argv = viewed(a?.run ?? null);
+      if (place.tree) openAt(place, place.tree.folder, argv, place.tree.branch);
+      else startIn(place, argv);
+    });
     this.thenClose(project && a ? this.db().setProjectAgent(project.id, a.key) : null);
   }
 
@@ -1869,7 +1873,7 @@ export default class Spaces extends RetryingView {
 
   explainAgents(place, agent) {
     const where = place.machine || "this computer";
-    const ask = { name: `Explain ${where}`, argv: agent.run, task: `kansō could not list the agents installed on ${where}. The error: ${this.agentsFailed}. Explain why, and how to fix it. Do not change anything.` };
+    const ask = { name: `Explain ${where}`, argv: copiesToViewer(localName())(agent.run), task: `kansō could not list the agents installed on ${where}. The error: ${this.agentsFailed}. Explain why, and how to fix it. Do not change anything.` };
     const local = spaces().filter((w) => !w.machine);
     const here = local.find((w) => w.active) ?? local[0];
     tryOr(() => (here ? run("tab.new", { ...ask, space: here.id }) : run("space.new", { ...ask, machine: "", folder: home() })));
