@@ -38,7 +38,7 @@ A mod runs in Herdr's runtime, not in Node. That runtime is QuickJS, and a step 
 
 ## Try a build
 
-Set `HERDR_APP_HOME` to a separate directory, so the try does not use your own Herdr home, then run `sh ./scripts/local-install.sh`. The script copies the layout, themes and mods there and switches Herdr to kansō. Merge the `layout:kanso` section of `kanso/keys.json` into that home's `keys.json`. On Windows, merge `kanso/keys.windows.json` instead.
+Set `HERDR_APP_HOME` to a separate directory, so the try does not use your own Herdr home, then run `sh ./scripts/local-install.sh`. The script copies the layout, themes and mods there and switches Herdr to kansō. Merge the `layout:kanso` section of `kanso/keys.json` into that home's `keys.json`. On Windows, merge `kanso/keys.windows.json` instead, and on Linux `kanso/keys.linux.json`. `npm run build:linux-keys` writes the Linux file from `kanso/keys.json`.
 
 ## Pull requests
 

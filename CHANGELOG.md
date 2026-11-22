@@ -37,9 +37,10 @@ the branch's rules.
 
 ### Fixed
 
+- On Linux, kansō's keys work with Omarchy: each keeps Super where Omarchy leaves it free and moves to Ctrl or Alt with Shift where Omarchy uses it, so Super+J and the rest no longer go to the window manager. The update moves the Mac keys a Linux computer had, keeps the ones you changed, and moves Herdr's own keys Omarchy takes the same way.
 - On Linux, Ports, a process's folder, its open files and a Codex conversation are read from `ss` and `/proc`, so they work on a stock Omarchy without `lsof`.
 - On Linux, Containers opens and quits Docker's own engine (rootless, Docker Desktop or the system service), and counts its memory.
-- On Linux, sharing waits for the browser in front on Hyprland and pastes only into it, battery power is read from the battery's status, and a pet's picture is converted with ImageMagick.
+- On Linux, sharing pastes only into your default browser when Hyprland shows it in front, battery power is read from the battery's status, and a pet's picture is converted with ImageMagick.
 
 ## [3.32.0] - 2026-11-21
 

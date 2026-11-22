@@ -11,6 +11,6 @@ cp -R "$ROOT"/kanso/mods/kanso-* "$ROOT/kanso/mods/open-with" "$APP_HOME/mods/"
 
 printf '%s\n' "Installed kansō files to $APP_HOME." \
   "Merge the \"layout:kanso\" section of $ROOT/kanso/keys.json into $APP_HOME/keys.json." \
-  "On Windows, merge $ROOT/kanso/keys.windows.json instead of keys.json."
+  "On Windows, merge $ROOT/kanso/keys.windows.json instead of keys.json; on Linux, $ROOT/kanso/keys.linux.json."
 
 herdr-app do layout.switch --name kanso
