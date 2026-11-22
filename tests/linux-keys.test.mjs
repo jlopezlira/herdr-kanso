@@ -9,7 +9,7 @@ import { installedUpdater } from "./update-harness.mjs";
 
 const repo = fileURLToPath(new URL("..", import.meta.url));
 const readKeys = (file) => JSON.parse(repoText(file));
-const { linuxKeymap, linuxSection, migrateToLinux, takenByOmarchy } = await load("kanso-panel/platform-linux-keys.js", ["linuxKeymap", "linuxSection", "migrateToLinux", "takenByOmarchy"]);
+const { linuxKeymap, linuxSection, migrateToLinux, takenByOmarchy, withClipboardKeys } = await load("kanso-panel/platform-linux-keys.js", ["linuxKeymap", "linuxSection", "migrateToLinux", "takenByOmarchy", "withClipboardKeys"]);
 const macLinux = () => ({
   mac: readKeys("kanso/keys.json"),
   linux: readKeys("kanso/keys.linux.json"),
@@ -115,9 +115,24 @@ test("A Mac keys file moves kansō and Herdr to Linux keys, and a second run cha
   assert.equal(first.keys.global["cmd-q"], undefined);
   assert.equal(first.keys.global["ctrl-shift-q"], "app.quit");
   noneTaken(first.keys);
+  assert.equal(first.keys.terminal["ctrl-shift-c"], "terminal.copy");
+  assert.equal(first.keys.terminal["ctrl-insert"], "terminal.copy");
+  assert.equal(first.keys.terminal["ctrl-shift-v"], "terminal.paste");
+  assert.equal(first.keys.terminal["shift-insert"], "terminal.paste");
   const second = migrateToLinux(first.keys, mac);
   assert.equal(second.changed, false);
   assert.equal(JSON.stringify(second.keys), JSON.stringify(first.keys));
+});
+
+test("Clipboard keys fill only the unbound chords and keep a user's own Ctrl+Shift+C", () => {
+  const keys = { terminal: { "ctrl-shift-c": "mine.copy", "ctrl-insert": "mine.insert", "ctrl-shift-f": "kanso-strip.find" } };
+  const next = withClipboardKeys(keys);
+  assert.equal(next.terminal["ctrl-shift-c"], "mine.copy");
+  assert.equal(next.terminal["ctrl-insert"], "mine.insert");
+  assert.equal(next.terminal["ctrl-shift-f"], "kanso-strip.find");
+  assert.equal(next.terminal["ctrl-shift-v"], "terminal.paste");
+  assert.equal(next.terminal["shift-insert"], "terminal.paste");
+  assert.equal(Object.keys(next.terminal).length, 5);
 });
 
 test("A Mac map without Super+J migrates with no key for the next agent that needs you", async () => {

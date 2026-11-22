@@ -21,14 +21,13 @@ const { HYPRLAND_TERMINAL, herdrIsTerminal } = await load("kanso-tabs/linux-arri
 });
 
 const LUA_RULE = "hl.window_rule({ match = { class = \"herdr-app\" }, tag = \"+terminal\" })";
-const CONF_RULE = "tag +terminal, class:^(herdr-app)$";
-const CONF_LINE = `windowrule = ${CONF_RULE}`;
 const REQUIRE_LINE = "pcall(require, \"hypr.kanso\")";
 const TITLE = "Super+C and Super+V copy and paste in Herdr";
 const hyprctlBody = `#!/bin/sh
 printf '%s\\n' "$#" >> "$HYPRCTL_LOG"
 for arg in "$@"; do printf '%s\\n' "$arg" >> "$HYPRCTL_LOG"; done
 printf '%s\\n' --- >> "$HYPRCTL_LOG"
+if [ "$1" = version ]; then printf '%s\\n' "$HYPRCTL_VERSION"; fi
 `;
 
 const callsOf = (text) => text.split("---\n").filter((part) => part.trim()).map((part) => {
@@ -44,11 +43,7 @@ const stamp = async (path) => {
   return `${info.mtimeMs}:${info.size}`;
 };
 const textIs = (path, text) => readFile(path, "utf8").then((body) => assert.equal(body, text));
-const logged = async (world) => {
-  const calls = callsOf(await readFile(world.log, "utf8"));
-  assert.equal(calls.length, 1);
-  return calls;
-};
+const logged = (world) => readFile(world.log, "utf8").then(callsOf);
 const reset = (code) => {
   host.notes = [];
   host.ran = [];
@@ -77,6 +72,7 @@ const stage = async (t) => {
       HOME: home,
       XDG_CONFIG_HOME: xdg,
       HYPRCTL_LOG: log,
+      HYPRCTL_VERSION: "Hyprland 0.56.2 built from branch main",
       HYPRLAND_INSTANCE_SIGNATURE: omarchy,
       OMARCHY_PATH: omarchy,
       ...overrides,
@@ -97,15 +93,15 @@ const applyOnce = async (t, spec) => {
   const world = await stage(t);
   const before = `${spec.mark}\nbind = SUPER, Q, killactive\n`;
   await writeFile(spec.config(world), before);
-  const opened = await world.run();
+  const opened = await world.run(spec.env ?? {});
   assert.equal(opened.code, 0, opened.stderr);
   const rule = `${spec.ruleText}\n`;
   await textIs(spec.ruleFile(world), rule);
   const after = await readFile(spec.config(world), "utf8");
   assert.deepEqual(addedLines(before, after), spec.added(world));
-  spec.checkCall((await logged(world))[0]);
+  spec.checkCall(await logged(world));
   const marks = [await stamp(spec.config(world)), await stamp(spec.ruleFile(world))];
-  const again = await world.run();
+  const again = await world.run(spec.env ?? {});
   assert.equal(again.code, 1, again.stderr);
   await textIs(spec.config(world), after);
   await textIs(spec.ruleFile(world), rule);
@@ -120,24 +116,36 @@ test("The first Omarchy run writes Herdr's terminal rule and a second run change
     ruleFile: (world) => world.kansoLua,
     ruleText: LUA_RULE,
     added: () => [REQUIRE_LINE],
-    checkCall: (call) => {
-      assert.equal(call[0], "dispatch");
-      assert.equal(call.some((arg) => arg.includes(LUA_RULE)), true);
+    checkCall: (calls) => {
+      assert.equal(calls.length, 1);
+      assert.equal(calls[0][0], "dispatch");
+      assert.equal(calls[0].some((arg) => arg.includes(LUA_RULE)), true);
     },
     absent: (world) => world.kansoConf,
   });
 });
 
-test("An older hyprland.conf gets the terminal rule once, and a second run changes no file", { skip: onWindows }, async (t) => {
-  await applyOnce(t, {
-    mark: "# keep $HOME \"byte\"",
-    config: (world) => world.conf,
-    ruleFile: (world) => world.kansoConf,
-    ruleText: CONF_LINE,
-    added: (world) => [`source = ${join(world.hypr, "kanso.conf")}`],
-    checkCall: (call) => assert.deepEqual(call, ["keyword", "windowrule", CONF_RULE]),
-    absent: (world) => world.kansoLua,
-  });
+test("An older hyprland.conf uses match:class from Hyprland 0.53 and the class form before that, and a second run changes no file", { skip: onWindows }, async (t) => {
+  const versions = [
+    ["Hyprland 0.56.2 built from branch main", "match:class ^(herdr-app)$"],
+    ["Hyprland 0.48.1 built from tag v0.48.1", "class:^(herdr-app)$"],
+  ];
+  for (const [version, match] of versions) {
+    const keyword = `tag +terminal, ${match}`;
+    await applyOnce(t, {
+      mark: "# keep $HOME \"byte\"",
+      config: (world) => world.conf,
+      ruleFile: (world) => world.kansoConf,
+      ruleText: `windowrule = ${keyword}`,
+      added: (world) => [`source = ${join(world.hypr, "kanso.conf")}`],
+      checkCall: (calls) => {
+        assert.equal(calls[0][0], "version");
+        assert.deepEqual(calls[1], ["keyword", "windowrule", keyword]);
+      },
+      absent: (world) => world.kansoLua,
+      env: { HYPRCTL_VERSION: version },
+    });
+  }
 });
 
 test("Hyprland is left untouched when the session, Omarchy or its config is missing", { skip: onWindows || noShare }, async (t) => {

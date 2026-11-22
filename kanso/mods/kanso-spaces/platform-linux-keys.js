@@ -110,5 +110,14 @@ export function migrateToLinux(user, mac) {
   }));
   const reserved = new Set(Object.values(ours).flatMap((section) => [...chordsOf(section)]));
   const keys = Object.fromEntries(Object.entries(user ?? {}).map(([name, section]) => [name, ours[name] ?? linuxSection(section, reserved)]));
-  return { keys, changed: JSON.stringify(keys) !== JSON.stringify(user) };
+  if (JSON.stringify(keys) === JSON.stringify(user)) return { keys, changed: false };
+  return { keys: withClipboardKeys(keys), changed: true };
+}
+
+export const CLIPBOARD_KEYS = { "ctrl-shift-c": "terminal.copy", "ctrl-insert": "terminal.copy", "ctrl-shift-v": "terminal.paste", "shift-insert": "terminal.paste" };
+
+export function withClipboardKeys(keys) {
+  const taken = chordsOf(keys.terminal);
+  const missing = Object.entries(CLIPBOARD_KEYS).filter(([chord]) => !taken.has(canonical(chord)));
+  return missing.length ? { ...keys, terminal: { ...keys.terminal, ...Object.fromEntries(missing) } } : keys;
 }
