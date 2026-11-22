@@ -68,10 +68,10 @@ test("Memory parsers keep Windows page-file usage distinct and apply the swap li
   assert.equal(idleValue("windows", "120.9\r\n"), 120.9);
 });
 
-test("Every Linux host operation explains its unavailability and runs no command", async () => {
-  const host = guardHost({ platform: "linux", run: () => assert.fail("No Linux command"), self: "guard.mjs" });
+test("An unknown platform explains that Memory is unavailable and runs no command", async () => {
+  const host = guardHost({ platform: "freebsd", run: () => assert.fail("No command"), self: "guard.mjs" });
   assert.equal(host.available, false);
-  for (const operation of Object.values(host).filter((value) => typeof value === "function")) assert.deepEqual(await operation(), { state: "unavailable", reason: "Memory is not available on linux" });
+  for (const operation of Object.values(host).filter((value) => typeof value === "function")) assert.deepEqual(await operation(), { state: "unavailable", reason: "Memory is not available on freebsd" });
 });
 
 test("The guard uses the selected home and supports resuming only shells it can quote", () => {
