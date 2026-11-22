@@ -113,3 +113,13 @@ test("The pane menu leads with Copy, Cut and Paste: Copy always, since an agent 
   calls(row(copy.view, "Copy"), "on_click").at(-1)[1]({}, cx);
   assert.deepEqual(copy.closed, ["closeOverlay", "pane.focus", "terminal.copy"]);
 });
+
+test("Copy and Paste on a terminal shown outside a pane, as a peek, act on it without focusing a pane", async () => {
+  const cx = { notify() {}, timer: { after() {} } };
+  const row = (view, label) => find(view.render(), (el) => calls(el, "accessibility_label").some((call) => call[1] === label));
+  for (const [label, command] of [["Copy", "terminal.copy"], ["Paste", "terminal.paste"]]) {
+    const peek = await menu({ target: { pane: "term-peek", terminal: "T1" }, pane: { terminal: "T9" } });
+    calls(row(peek.view, label), "on_click").at(-1)[1]({}, cx);
+    assert.deepEqual(peek.closed, ["closeOverlay", command], label);
+  }
+});
