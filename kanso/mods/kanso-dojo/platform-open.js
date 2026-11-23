@@ -61,7 +61,7 @@ while [ $# -gt 1 ]; do
 done
 exit 0`;
 
-export const isWebLink = (url) => /^(https?:\/\/|mailto:)[^\s]+$/i.test(String(url ?? ""));
+export const isWebLink = (url) => typeof url === "string" && /^(https?:\/\/|mailto:)[^\s]+$/i.test(url);
 const notOption = (target) => (String(target).startsWith("-") ? `./${target}` : target);
 
 export function openApi(platform, run) {
