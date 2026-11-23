@@ -17,11 +17,11 @@ import { openArrange } from "./open.js";
 import { DIALOG, G, T, glyphOf, tokens } from "./ui.js";
 import { pressAgain, Armed } from "./ui-button.js";
 import { TextField } from "./ui-field.js";
-import { menu } from "./ui-menu.js";
 import { plus, tooltip } from "./kit.js";
 import { tabBarRoom } from "./ui-stack.js";
 import { tabBar } from "./tab-bar.js";
-import { boundChord, hintOf } from "./ui-tooltip.js";
+import { boundChord } from "./ui-tooltip.js";
+import { contextMenu } from "./context-menu.js";
 import { TAB_NAME_LIMIT } from "./ui-tab.js";
 import { pieceLines } from "./piece-lines.js";
 import { tabMark, tabName, barState, foldTabs, renameWaits, landing, heldOn, dropMarks } from "./tab-bar-model.js";
@@ -507,13 +507,13 @@ export default class Tabs extends View {
   // Right-click on a panel's button: its name, Hide, Settings, and the whole list of panels.
   panelMenuPopover(c, trigger, panel) {
     const shut = (cx) => { this.panelMenu = null; cx.notify(); };
-    const items = [
+    const lines = [
       ...pieceLines(`panel.${panel.id}`, { done: shut }).slice(1),
       { separator: true },
-      { icon: "panels-top-left", label: "Panels\u2026", onClick: (cx) => { shut(cx); openSettings("pieces"); } },
+      { act: "panels", does: (cx) => { shut(cx); openSettings("pieces"); } },
     ];
     return Popover.new(`panel-menu-${panel.id}`).trigger(trigger).open(true).on_open_change((open, cx) => { if (!open) shut(cx); })
-      .content(menu(`panel-menu-list-${panel.id}`, { title: `${panel.label} panel`, items }, c));
+      .content(contextMenu(`panel-menu-list-${panel.id}`, { title: `${panel.label} panel`, lines, framed: true }, c));
   }
 
   // Right-click: its name, Rename, New tab, Sleep, Close (twice with agents in it), then the piece lines.
@@ -522,17 +522,17 @@ export default class Tabs extends View {
     const agents = ps.filter((p) => p.tab === tab.id && p.program?.agent).length;
     const verb = `close ${agents} agent${agents === 1 ? "" : "s"}`;
     const armed = agents > 0 && this.armed.is(closeKey(tab));
-    const items = [
-      { icon: "pencil", label: "Rename", onClick: (cx) => { shut(cx); this.startRename(tab, cx); } },
-      { icon: "plus", label: "New tab", hint: hintOf("tab.new"), onClick: (cx) => { shut(cx); run("tab.new", { space: space.id }); } },
-      { icon: "moon", label: `Sleep ${tabName(tab, ps)}\u2026`, onClick: (cx) => { shut(cx); openOverlay({ mod: "kanso-sleep", kind: "dialog", width: DIALOG.wide, props: { sleep: { scope: "tab", space: space.id, tab: tab.id } } }); } },
-      { separator: true },
-      { icon: "x", label: "Close tab", hint: hintOf("tab.close"), armed, verb: agents ? verb : null,
-        onClick: (cx) => (agents ? this.armed.press(closeKey(tab), cx, () => { shut(cx); run("tab.close", { id: tab.id }); }) : (shut(cx), run("tab.close", { id: tab.id }))) },
+    const lines = [
+        { act: "rename", does: (cx) => { shut(cx); this.startRename(tab, cx); } },
+        { act: "new-tab", does: (cx) => { shut(cx); run("tab.new", { space: space.id }); } },
+        { act: "sleep-tab", does: (cx) => { shut(cx); openOverlay({ mod: "kanso-sleep", kind: "dialog", width: DIALOG.wide, props: { sleep: { scope: "tab", space: space.id, tab: tab.id } } }); } },
+        { separator: true },
+        { act: "close-tab", armed, verb: agents ? verb : null,
+          does: (cx) => (agents ? this.armed.press(closeKey(tab), cx, () => { shut(cx); run("tab.close", { id: tab.id }); }) : (shut(cx), run("tab.close", { id: tab.id }))) },
       ...pieceLines("tabs.state", { named: true, done: shut }),
     ];
     return Popover.new(`tab-menu-${tab.id}`).trigger(trigger).open(true).on_open_change((open, cx) => { if (!open) shut(cx); })
-      .content(menu(`tab-menu-list-${tab.id}`, { title: tabName(tab, ps), items }, c));
+      .content(contextMenu(`tab-menu-list-${tab.id}`, { title: tabName(tab, ps), lines, framed: true }, c));
   }
 
   render(cx) {
