@@ -127,7 +127,7 @@ export default class Send extends View {
     // A program with no art of its own takes the terminal's, so every name starts at the same place.
     const agent = (q) => row({
       icon: q.program?.icon ? q.program : "terminal", tone: "muted", name: q.title, detail: q.pane?.branch ?? null,
-      meta: meta(q), mark: q.status, current: !this.toProject && q.terminal === this.to,
+      meta: meta(q), mark: q.status, current: !this.toProject && q.terminal === state.chosen?.terminal,
     })(`to-${q.terminal}`, c, { onClick: (cx) => this.pick(cx, () => { this.to = q.terminal; this.toProject = null; }) });
     const from = this.from ? `From ${name(this.from)}${this.from.cwd ? `, in ${shortFolder(this.from.cwd)}` : ""}` : "";
     const ready = (state.recipients.length > 0 || state.waiting.length > 0) && Boolean(this.text.trim());
