@@ -135,18 +135,20 @@ test("Adding a computer always installs, and a via command is not a positional t
 const ACCEPT_NEW = "StrictHostKeyChecking=accept-new";
 const UNIX_PROBE_HOSTS = "UserKnownHostsFile=/dev/null";
 
-test("Checking whether a computer answers SSH never asks for a password or saves its host key", async () => {
-  const { probeArgs } = await reach();
-  for (const [platform, hosts] of [
-    ["macos", UNIX_PROBE_HOSTS], ["linux", UNIX_PROBE_HOSTS], ["windows", "UserKnownHostsFile=NUL"],
-  ]) {
+for (const [platform, name, hosts] of [
+  ["macos", "macOS", UNIX_PROBE_HOSTS],
+  ["linux", "Linux", UNIX_PROBE_HOSTS],
+  ["windows", "Windows", "UserKnownHostsFile=NUL"],
+]) {
+  test(`On ${name}, checking whether a computer answers SSH does not ask for a password or save its host key`, async () => {
+    const { probeArgs } = await reach();
     const args = probeArgs("ada@box", platform);
-    assert.ok(args.includes("BatchMode=yes"), platform);
-    assert.ok(args.includes(ACCEPT_NEW), platform);
-    assert.equal(args[args.indexOf(hosts) - 1], "-o", platform);
-    assert.equal(args.at(-2), "ada@box", platform);
-  }
-});
+    assert.ok(args.includes("BatchMode=yes"));
+    assert.ok(args.includes(ACCEPT_NEW));
+    assert.equal(args[args.indexOf(hosts) - 1], "-o", hosts);
+    assert.equal(args.at(-2), "ada@box");
+  });
+}
 
 test("What ssh said says whether the computer is ready, wants a password, is closed, or cannot be reached", async () => {
   const { reachOf } = await reach();
