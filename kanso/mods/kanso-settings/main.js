@@ -255,7 +255,7 @@ export default class Settings extends View {
     const have = installedRelease(this.installed, updateState.tag);
     const stay = channel === "stable" ? stableStay(this.installed, updateState.tag, updateState.latest) : null;
     const waiting = offerRelease(updateState.latest, have, channel);
-    const setChannel = (key, cx) => { setShared("kanso.update", { ...(shared("kanso.update") ?? {}), channel: key }); cx.notify(); };
+    const setChannel = (key, cx) => { setShared("kanso.update", { ...(shared("kanso.update") ?? {}), channel: key }); run("kanso-tabs.channel"); cx.notify(); };
     return v_flex().w_full()
       .child(h_flex().w_full().gap(G.md).items_center()
         .child(div().flex_1().text_size(T.card).text_color(c.text).child("Updates"))
