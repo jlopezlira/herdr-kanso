@@ -170,8 +170,9 @@ sidebar, rebinds kansō's own keys and hides the panels you don't use.
 Everything runs on your machine, and reads only the folders you work in:
 `git`, `gh`, `find`, `du`, `lsof` (`ss` and `/proc` on Linux), `ps`, `sqlite3`, `node`, `docker`,
 `xcode-select`, `simctl`, `adb`, `emulator` and Herdr's `hc`. What reaches the network: PR and
-Shipped through `gh`, only while their panel is shown (Shipped keeps a private
-gist of your own statistics); the update check, `git ls-remote` on kansō's
+Shipped through `gh`, only while their panel is shown (when Settings turns it on,
+Shipped adds up your computers in a secret gist: unlisted, but readable by anyone
+with its link); the update check, `git ls-remote` on kansō's
 GitHub repository, and the download of a release you install; Spend's daily
 fetch of OpenRouter's price list;
 Add a computer, which reads Tailscale's list of your computers and, unless

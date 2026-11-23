@@ -17,6 +17,7 @@ import { factList } from "./ui-facts.js";
 import { segmented } from "./ui-tab.js";
 import { range, tryOrAsync, mapSeries, MONTHS } from "./pure.js";
 import { shippedMemory } from "./panel-state.js";
+import { pieces, runs } from "./pieces.js";
 import { spawnAndNotify, said } from "./lib.js";
 import { dot } from "./ui-dot.js";
 
@@ -363,6 +364,7 @@ export class Shipped {
     this.phase = "this computer's repositories"; cx.notify();
     await this.store.scanLocal(ids.all, (done, total) => { this.phase = `this computer's repositories, ${fmt(total - done)} to go`; cx.notify(); });
 
+    if (!runs("shipped.sync", pieces(shared))) { this.machines = []; return; }
     this.phase = "your other computers"; cx.notify();
     try {
       const synced = await this.store.syncMachines(ids.mine);
