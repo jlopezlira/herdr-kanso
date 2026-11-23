@@ -247,6 +247,12 @@ const draftKept = (send, closed) => {
   assert.equal(send.text, DRAFT);
   assert.equal(send.box.value(), DRAFT);
 };
+const startsAgent = (el, ran) => {
+  const start = byTag(el, "send-list-action");
+  assert.ok(texts(start).includes("Start an agent"));
+  calls(start, "on_click")[0][1]({}, { notify() {}, stop_propagation() {} });
+  assert.deepEqual(ran, ["kanso-spaces.start"]);
+};
 const drop = (world, address) => { world.terms = world.terms.filter((term) => term.address !== address); };
 const fire = (timers, cx) => timers.forEach(([, fn]) => fn(cx));
 const closedOnly = async () => {
@@ -277,10 +283,7 @@ test("With no other agent, Send says no other agent is running and Start an agen
   const send = await openSend(world, { run: (command) => ran.push(command) });
   const el = renders(send);
   assert.ok(texts(el).includes("No other agent is running."));
-  const start = byTag(el, "send-list-action");
-  assert.ok(texts(start).includes("Start an agent"));
-  calls(start, "on_click")[0][1]({}, { notify() {}, stop_propagation() {} });
-  assert.deepEqual(ran, ["kanso-spaces.start"]);
+  startsAgent(el, ran);
   draftKept(send);
   assert.ok(texts(renders(send)).includes("No other agent is running."));
 });
@@ -348,7 +351,6 @@ test("When another computer cannot be reached and no agent is seen, Send still o
   const send = await openSend(alone(), { machines: () => [...readyMachines, { name: "grey", layout: "unavailable" }], run: (command) => ran.push(command) });
   const el = renders(send);
   assert.ok(texts(el).includes("Can't see the agents right now."));
-  calls(byTag(el, "send-list-action"), "on_click")[0][1]({}, { notify() {}, stop_propagation() {} });
-  assert.deepEqual(ran, ["kanso-spaces.start"]);
+  startsAgent(el, ran);
   draftKept(send);
 });
