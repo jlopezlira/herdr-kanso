@@ -7,7 +7,7 @@ HOME_DIR="${HERDR_APP_HOME:-$HOME/.config/herdr-app}"
 INBOX="$HOME_DIR/data/kanso-open"
 SAVED="$HOME_DIR/data/kanso-markdown-previous"
 TYPES="net.daringfireball.markdown"
-LINUX_TYPES="text/markdown text/x-markdown"
+LINUX_TYPES="text/markdown text/x-markdown text/plain"
 DESKTOP_APPS="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
 LSREGISTER=/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister
 
@@ -118,7 +118,8 @@ linux_install() {
 p=\$1
 export HERDR_APP_HOME="$HOME_DIR"
 if ! pgrep -x herdr-app >/dev/null; then
-  back=\$(sed -n 's|^text/markdown ||p' "$SAVED" 2>/dev/null)
+  case "\$p" in *.md|*.markdown) t=text/markdown ;; *) t=text/plain ;; esac
+  back=\$(sed -n "s|^\$t ||p" "$SAVED" 2>/dev/null)
   [ -n "\$back" ] && command -v gtk-launch >/dev/null && exec gtk-launch "\${back%.desktop}" "\$p"
   exec "$herdr"
 fi
@@ -131,8 +132,8 @@ OPEN
 [Desktop Entry]
 Type=Application
 Name=Kanso Markdown
-Exec=/bin/sh "$opener" %f
-MimeType=text/markdown;text/x-markdown;
+Exec=$opener %f
+MimeType=text/markdown;text/x-markdown;text/plain;
 NoDisplay=true
 Terminal=false
 DESKTOP
@@ -152,11 +153,17 @@ linux_uninstall() {
   echo "Markdown files open in ${now:-the system default} again."
 }
 
+status() { if [ "$(handler 2>/dev/null || true)" = "$ID" ]; then echo on; else echo off; fi; }
+
+linux_status() { if [ "$(xdg-mime query default text/markdown 2>/dev/null)" = "$ID.desktop" ]; then echo on; else echo off; fi; }
+
 case "$(uname):${1:-}" in
+  Darwin:status) status ;;
+  Linux:status) linux_status ;;
   Darwin:install) install ;;
   Darwin:uninstall) uninstall ;;
   Linux:install) linux_install ;;
   Linux:uninstall) linux_uninstall ;;
-  Darwin:*|Linux:*) echo "Usage: sh $0 install | uninstall" >&2; exit 2 ;;
+  Darwin:*|Linux:*) echo "Usage: sh $0 install | uninstall | status" >&2; exit 2 ;;
   *) echo "Kanso Markdown is for macOS and Linux." >&2; exit 1 ;;
 esac
