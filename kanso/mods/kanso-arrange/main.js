@@ -82,9 +82,11 @@ export default class Arrange extends View {
     });
   }
 
+  savable() { return Boolean(this.name.value().trim()) && Boolean(this.capture?.cols.length); }
+
   save(cx) {
+    if (!this.savable()) return;
     const name = this.name.value().trim();
-    if (!name || !this.capture?.cols.length) return;
     const entry = { name, ...this.capture, saved: Date.now() };
     const t = this.target;
     const key = t && t.name === name ? t.project : projectOf(this.space);
@@ -148,7 +150,7 @@ export default class Arrange extends View {
       return shell({
         title: tg ? `Overwrite ${tg.name}` : "Save this tab", scope: tg ? "With this tab as it is now" : `An arrangement for ${project}`,
         body: [
-          field("ar-name", this.name, c, { label: "Name" }),
+          field("ar-name", this.name, c, { label: "Name", error: !typed }),
           cols.length ? v_flex().pt(G.md).gap(G.md).children(cols.map((c, ci) => h_flex().w_full().gap(G.md).items_stretch()
             .child(div().w(2).flex_none().rounded_full().bg(t.border))
             .child(v_flex().flex_1().min_w(0).gap(G.xs).children(c.panes.map((q, ri) => line(q, `${ci}-${starts[ci] + ri}`)))))) : skeletonOf({ shape: "list row", count: 2 })("kanso-skeleton", c),
@@ -156,8 +158,9 @@ export default class Arrange extends View {
         notes: [...(cols.length ? [{ text: `${cols.length} ${cols.length === 1 ? "column" : "columns"}, left to right` }] : []),
           { text: "Each program is kept with the flags you started it with. A resumed session's id is left out, so each agent starts fresh." },
           ...(replaces ? [{ text: `This replaces the arrangement named ${replaces.name}.`, tone: "muted" }] : []),
+          ...(typed ? [] : [{ text: "An arrangement needs a name.", tone: "error" }]),
           ...statusNotes({ error: this.error })],
-        secondary: "Back", primary: replaces ? "Overwrite" : "Save", state: cols.length ? "default" : "disabled",
+        secondary: "Back", primary: replaces ? "Overwrite" : "Save", state: this.savable() ? "default" : "disabled",
         onCancel: back, onPrimary: (cx) => this.save(cx),
       });
     }

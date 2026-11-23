@@ -103,13 +103,13 @@ const typeChanged = (doc, cx) => {
 };
 
 // A host where typing into a block, the autosave timer and the disk can be driven.
-async function fixture(initial) {
+async function fixture(initial, host = {}) {
   const disk = { text: initial };
   const timers = [];
   const states = [];
   const state = textState(states);
   const blocks = await load("kanso-panel/blocks.js", ["parseBlocks", "joinBlocks", "headingOf", "headingLine", "parseTable", "tableLines"]);
-  const { MarkdownDoc } = await loadMarkdownDoc({ ...blocks, ...diskIo(disk), ...EDITING, TextareaState: { new: state }, EditorState: { new: state } });
+  const { MarkdownDoc } = await loadMarkdownDoc({ ...blocks, ...diskIo(disk), ...EDITING, TextareaState: { new: state }, EditorState: { new: state }, ...host });
   const { cx, drain } = context();
   cx.timer = { after: (_ms, f) => timers.push(f) };
   const tick = async () => { while (timers.length) timers.shift()(cx); await drain(); };
@@ -263,4 +263,15 @@ test("reviews still waiting are read one per md-review process, by its pid", asy
   assert.deepEqual(clone(reviewsIn("101\t/a/plan.md\u0000102\t/a/plan.md\u0000x\t/b.md\u0000103\trelative.md\u0000")),
     [{ id: "101", path: "/a/plan.md" }, { id: "102", path: "/a/plan.md" }]);
   assert.deepEqual(clone(reviewsIn("")), []);
+});
+
+test("Each formatted block has an Edit block button and the document ends with Add paragraph", async () => {
+  const { gpuiHost, chain, find, calls } = await import("./helpers.mjs");
+  const { doc, cx } = await fixture("# Plan\n\nFirst.\n", { ...gpuiHost(), TextView: { markdown: () => chain("words") } });
+  const press = (tag) => calls(find(doc.body({}, "md"), (el) => el.tag === tag), "on_click").at(-1).at(-1)({}, cx);
+  press("md-add");
+  assert.equal(doc.blocks[doc.active].kind, "paragraph", "a new paragraph, open to type in");
+  doc.close();
+  press("md-b0-edit");
+  assert.equal(doc.active, 0, "the heading opens from its own button");
 });

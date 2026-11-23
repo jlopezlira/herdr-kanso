@@ -39,6 +39,16 @@ the branch's rules.
 
 - Every right-click menu names the same action with the same words, order and shortcut: Sleep this agent…, Sleep this tab…, Send to an agent…, Close pane and Rename… read the same in the tab bar, the pane header and the sidebar, and the pane header's ⋯ shows each shortcut. A right-click on the pane header opens its ⋯ menu. (#238)
 
+### Fixed
+
+- Open with no longer waits forever when it cannot look for editors: it says so and offers Retry. With no editor found, Look again checks once more after you install one. A scan that fails says so instead of telling you to install an editor. Preview in the panel is dimmed, and says so, when the layout has no kansō panel to show it in.
+- Arrangements: Save is dimmed while the name is empty, and the dialog says the arrangement needs a name.
+- Containers: an image name with a space, or one that starts with a hyphen, dims Pull and says what an image name looks like.
+- Simulator: a URL without a scheme dims Open a URL and asks you to include one; custom schemes still open.
+- The Markdown editor gives each block an Edit block button and ends the document with Add paragraph; double-click and Source still edit.
+- The hjkl dōjō offers Retry under the pets that could not be brought, however many there are.
+- The Projects toolbar's + is called New project, as its dialog is.
+
 ## [3.33.0] - 2026-11-22
 
 ### Added
