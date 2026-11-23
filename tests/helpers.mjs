@@ -3,6 +3,7 @@ import { execFile, execFileSync } from "node:child_process";
 import assert from "node:assert/strict";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { access, mkdir, mkdtemp, readFile, readdir, rename, rmdir, rm, unlink, writeFile } from "node:fs/promises";
+import { createHash, randomBytes, randomUUID, webcrypto } from "node:crypto";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { promisify } from "node:util";
@@ -25,6 +26,7 @@ const HERDR_MODULES = {
   "fs/promises": declaredNames("fs/promises"),
   net: declaredNames("net").filter((name) => name !== "default"),
   websocket: declaredNames("websocket"),
+  crypto: declaredNames("crypto"),
 };
 export function bindHerdrModules(text) {
   return text.replace(/^import\s+(?:(\*\s+as\s+\w+|\{[^}]*\}|\w+)\s+from\s+)?["']([^"']+)["'];[ \t]*(?:\r?\n|$)/gm, (full, clause, from) => {
@@ -60,6 +62,7 @@ const herdrModules = (host) => {
     "fs/promises": overlay("fs/promises", { readFile, writeFile, readdir, exists: fileExists, unlink, rmdir, mkdir }),
     net: overlay("net", { connect() { throw new Error("net.connect is not available to a mod"); } }),
     websocket: overlay("websocket", { WebSocket: { connect() { throw new Error("WebSocket.connect is not available to a mod"); } } }),
+    crypto: overlay("crypto", { createHash, randomBytes, randomUUID, webcrypto }),
   };
 };
 

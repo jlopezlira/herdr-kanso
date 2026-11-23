@@ -9,7 +9,7 @@ import { systemApi } from "./platform-system.js";
 // A repository's week counts the larger of what the machines and GitHub saw.
 import { exec, appHome, home, spaces, panes, writeTextFile } from "herdr";
 import { range, mapSeries } from "./pure.js";
-import { sha256 } from "./sha256.js";
+import { createHash } from "crypto";
 
 export const STORE_DIR = "data/kanso-panel";
 const GIST_DESCRIPTION = "Kanso Shipped stats";
@@ -60,7 +60,7 @@ export function insertCommits(repo, commits, machine) {
 
 const literally = (text) => String(text).replace(/[\\.[\]()*+?{}|^$]/g, "\\$&");
 
-export const seal = (key, text) => sha256(`${key}\n${String(text).trim().toLowerCase()}`);
+export const seal = (key, text) => createHash("sha256").update(`${key}\n${String(text).trim().toLowerCase()}`).digest("hex");
 
 export function machineFile(machine, identities, rows, key) {
   const repos = [...new Set(rows.map((r) => r.repo))];

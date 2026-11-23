@@ -7,22 +7,8 @@ import { load, exec, temporary, clone, nativeWindow, success, openedKdb, textFil
 
 const names = ["Store", "repoName", "parseLog", "insertCommits", "machineFile", "readMachineFile", "weekOf", "weeklyStats", "WEEK0"];
 const store = (host = {}, exports = names) => load("kanso-panel/shipped-store.js", exports, host);
-const loadSha256 = async () => (await load("kanso-panel/sha256.js", ["sha256"])).sha256;
 const digest = (text) => createHash("sha256").update(text).digest("hex");
 const sealedFixture = (key, normalized) => digest(`${key}\n${normalized}`);
-
-test("Shipped's SHA-256 matches Node for empty, padded, multi-block and UTF-8 inputs", async () => {
-  const sha256 = await loadSha256();
-  for (const input of ["", "abc", ...[55, 56, 63, 64, 1000].map((length) => "a".repeat(length)), "ñ", "日本", "🐈"]) {
-    assert.equal(sha256(input), digest(input), `input ${JSON.stringify(input.slice(0, 8))}, length ${input.length}`);
-  }
-});
-
-test("Shipped's SHA-256 matches Node for a lone surrogate", async () => {
-  const sha256 = await loadSha256();
-  const input = "\uD800";
-  assert.equal(sha256(input), digest(input));
-});
 
 test("Shipped's store names repositories by their remote", async () => {
   const { repoName } = await store();
