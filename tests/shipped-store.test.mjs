@@ -7,14 +7,21 @@ import { load, exec, temporary, clone, nativeWindow, success, openedKdb, textFil
 
 const names = ["Store", "repoName", "parseLog", "insertCommits", "machineFile", "readMachineFile", "weekOf", "weeklyStats", "WEEK0"];
 const store = (host = {}, exports = names) => load("kanso-panel/shipped-store.js", exports, host);
+const loadSha256 = async () => (await load("kanso-panel/sha256.js", ["sha256"])).sha256;
 const digest = (text) => createHash("sha256").update(text).digest("hex");
 const sealedFixture = (key, normalized) => digest(`${key}\n${normalized}`);
 
 test("Shipped's SHA-256 matches Node for empty, padded, multi-block and UTF-8 inputs", async () => {
-  const { sha256 } = await load("kanso-panel/sha256.js", ["sha256"]);
+  const sha256 = await loadSha256();
   for (const input of ["", "abc", ...[55, 56, 63, 64, 1000].map((length) => "a".repeat(length)), "ñ", "日本", "🐈"]) {
     assert.equal(sha256(input), digest(input), `input ${JSON.stringify(input.slice(0, 8))}, length ${input.length}`);
   }
+});
+
+test("Shipped's SHA-256 matches Node for a lone surrogate", async () => {
+  const sha256 = await loadSha256();
+  const input = "\uD800";
+  assert.equal(sha256(input), digest(input));
 });
 
 test("Shipped's store names repositories by their remote", async () => {
@@ -105,7 +112,7 @@ async function setup(t, { otherMachine = null, rawUrl = null } = {}) {
     },
   };
   const mod = await store(host);
-  return { ...mod, app, repo, sent, curl, gist: () => gist };
+  return { ...mod, app, repo, commit, sent, curl, gist: () => gist };
 }
 
 // The fixture with its store open.
@@ -235,15 +242,44 @@ test("Shipped imports sealed commits under known or abbreviated repository names
   assert.deepEqual(await readCommits(), after);
 });
 
+test("Shipped moves a peer commit to its repository name once that name becomes known", async (t) => {
+  const repo = "org/newly-known", hash = "abababababab", adds = 7;
+  const repoSeal = sealedFixture("g1", repo);
+  const other = { v: 2, machine: "other", identities: [], repos: [repoSeal], commits: [[0, hash, 1793000000, adds, 0]] };
+  const { db } = await opened(t, { otherMachine: other });
+  const rows = async () => clone(await db.sql("SELECT repo, hash, adds FROM commits ORDER BY repo;", true));
+
+  await db.syncMachines([]);
+  assert.deepEqual(await rows(), [{ repo: `other/${repoSeal.slice(0, 7)}`, hash, adds }]);
+  await db.saveGithub([{ repo, pushed: null, fetched: 1, weeks: [] }]);
+  await db.syncMachines([]);
+  assert.deepEqual(await rows(), [{ repo, hash, adds }]);
+});
+
+const additions = async (db) => clone((await db.sql("SELECT adds FROM commits ORDER BY adds;", true)).map((row) => row.adds));
+
 test("Shipped finds commits by a sealed author identity not in the plain list", async (t) => {
   const { db } = await opened(t);
   const identities = ["me@example.invalid"], key = "g1";
-  const additions = async () => clone((await db.sql("SELECT adds FROM commits ORDER BY adds;", true)).map((row) => row.adds));
   await db.scanLocal(identities, null);
-  assert.deepEqual(await additions(), [5, 10]);
+  assert.deepEqual(await additions(db), [5, 10]);
   await db.sql("DELETE FROM scans;");
   await db.scanLocal(identities, null, { key, seals: [sealedFixture(key, "mequexample.invalid")] });
-  assert.deepEqual(await additions(), [5, 10, 20]);
+  assert.deepEqual(await additions(db), [5, 10, 20]);
+});
+
+test("Shipped credits exact sealed author emails and names, not longer matches", async (t) => {
+  const { s, db } = await opened(t);
+  await s.commit("longer-email.txt", 33, { name: "Different Author", email: "prefix-mequexample.invalid" });
+  await s.commit("longer-name.txt", 44, { name: "JJ Other", email: "another@example.invalid" });
+  const key = "g1", identities = ["me@example.invalid"];
+  const scanAs = async (normalized) => {
+    await db.sql("DELETE FROM scans; DELETE FROM commits;");
+    await db.scanLocal(identities, null, { key, seals: [sealedFixture(key, normalized)] });
+    return additions(db);
+  };
+  const actual = { email: await scanAs("mequexample.invalid"), name: await scanAs("jj") };
+  assert.deepEqual(actual, { email: [5, 10, 20], name: [5, 10, 20] });
 });
 
 test("Shipped fetches truncated gist files over HTTPS only, including redirects", async (t) => {
