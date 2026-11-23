@@ -25,10 +25,11 @@ test("A Claude Code or Codex limit shows when it resets, a limit with no time ha
   assert.equal(new Date(monday.until).getDay(), 1);
   assert.equal(clock(monday.until), "10:00");
   assert.ok(monday.until > now);
-  const afternoon = read("try again at 3:05 PM.");
+  const afternoon = read("You've hit your usage limit. try again at 3:05 PM.");
   assert.equal(clock(afternoon.until), "15:05");
   assert.ok(afternoon.until > now);
-  assert.equal(read("try again in 2 hours 13 minutes.").until, now + (2 * 60 + 13) * 60_000);
+  assert.equal(read("You've hit your usage limit. try again in 2 hours 13 minutes.").until, now + (2 * 60 + 13) * 60_000);
+  assert.equal(read("try again at 3:05 PM."), null);
   assert.equal(read("You've hit your usage limit.").until, null);
   assert.equal(read("You've hit your fast mode limit. resets at 3pm."), null);
   assert.equal(read("Finished the review."), null);
