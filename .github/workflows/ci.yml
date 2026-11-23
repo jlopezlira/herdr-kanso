@@ -8,6 +8,9 @@ on:
   push:
     branches: [main, develop]
 
+permissions:
+  contents: read
+
 jobs:
   platform:
     strategy:
@@ -23,9 +26,10 @@ jobs:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0 # tags: the version check compares against the last release
+          persist-credentials: false
       - uses: ./.github/actions/node
         with:
           cache: npm
@@ -43,7 +47,7 @@ jobs:
         shell: pwsh
         run: |
           if (-not (Get-Command sqlite3 -ErrorAction SilentlyContinue)) {
-            choco install sqlite --yes --no-progress
+            choco install sqlite --version 3.54.1 --yes --no-progress
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
             # The tests start sqlite3 hundreds of times: the real one, not Chocolatey's shim in front of it.
             Add-Content $env:GITHUB_PATH "$env:ChocolateyInstall\lib\SQLite\tools"
