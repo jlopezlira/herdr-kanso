@@ -2,8 +2,10 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { chmod, mkdir, open, readFile, writeFile } from "node:fs/promises";
 import { delimiter, dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { guardHost, linuxMemory, linuxPss, logindIdle, omarchyIdle, systemdService, systemdTimer } from "../kanso/mods/kanso-guard/guard-host.mjs";
-import { clone, exec, folderWith, load, loadSystemApi, success, temporary } from "./helpers.mjs";
+import { arg, clone, context, exec, failure, find, folderWith, gpuiHost, KIT_NIGHT, load, loadSystemApi, success, temporary, texts } from "./helpers.mjs";
+import { loadSettings } from "./mod-fixtures.mjs";
 
 const systemApi = await loadSystemApi();
 const { linuxPorts } = await load("kanso-panel/platform-ports.js", ["linuxPorts"]);
@@ -219,55 +221,169 @@ test("A pet atlas converts with magick when sips is not installed", { skip: unix
   assert.equal((await readFile(join(out, "rocky.png"))).subarray(1, 4).toString(), "PNG");
 });
 
-test("Linux Markdown install records the previous default and uninstall restores it", { skip: unixOnly }, async (t) => {
-  const { dir, bin } = await folderWith(t, "bin");
-  const log = join(dir, "xdg.log");
-  const state = join(dir, "default");
-  const home = join(dir, "home");
-  const data = join(dir, "data");
-  const config = join(dir, "config");
-  const app = join(dir, "herdr");
-  await executable(bin, "uname", "#!/bin/sh\necho Linux\n");
-  await executable(bin, "xdg-mime", lines([
-    "#!/bin/sh",
-    "printf '%s\\n' \"$*\" >> \"$LOG\"",
-    "if [ \"$1\" = query ]; then awk -v type=\"$3\" '$1 == type { print $2 }' \"$STATE\"; exit 0; fi",
-    "desk=$2; shift 2; tmp=$(mktemp); cp \"$STATE\" \"$tmp\"",
-    "for type in \"$@\"; do awk -v type=\"$type\" -v desk=\"$desk\" 'BEGIN { found = 0 } $1 == type { print type, desk; found = 1; next } { print } END { if (!found) print type, desk }' \"$tmp\" > \"$tmp.next\"; mv \"$tmp.next\" \"$tmp\"; done",
-    "mv \"$tmp\" \"$STATE\"; exit 0",
-  ]));
-  const saved = "text/markdown obsidian.desktop\ntext/x-markdown omawrite.desktop\n";
-  const kanso = "text/markdown dev.kanso.markdown.desktop\ntext/x-markdown dev.kanso.markdown.desktop\n";
-  await writeFile(state, saved);
-  const env = { ...process.env, PATH: [bin, "/bin", "/usr/bin"].join(delimiter), HOME: home, XDG_DATA_HOME: data, XDG_CONFIG_HOME: config, HERDR_APP_HOME: app, LOG: log, STATE: state };
-  const run = (args) => exec("/bin/sh", [handler.pathname, ...args], { env });
-  const installed = await run(["install"]);
-  assert.equal(installed.code, 0, installed.stderr);
-  const desktop = join(data, "applications/dev.kanso.markdown.desktop");
-  const opener = join(app, "data/kanso-markdown/open.sh");
-  const previous = join(app, "data/kanso-markdown-previous");
+const markdownDesktop = "dev.kanso.markdown.desktop";
+const markdownDefaults = {
+  "text/markdown": "obsidian.desktop",
+  "text/x-markdown": "omawrite.desktop",
+  "text/plain": "text-editor.desktop",
+};
+const mimeTypes = Object.keys(markdownDefaults);
+const mimeState = (overrides = {}) => Object.entries({ ...markdownDefaults, ...overrides })
+  .map(([type, app]) => type + " " + app + "\n").join("");
+const kansoDefaults = Object.fromEntries(mimeTypes.map((type) => [type, markdownDesktop]));
+
+const linuxMarkdown = async (t) => {
+  const { dir, bin, home, data, config, app, log, state, launched } = await folderWith(
+    t, "bin", "home", "data", "config", "app", "log", "state", "launched",
+  );
+  const programs = {
+    uname: "echo Linux",
+    pgrep: "exit 1",
+    "herdr-app": "exit 1",
+    "update-desktop-database": "exit 0",
+    "gtk-launch": "printf '%s\\n' \"$@\" >> \"$LAUNCHED\"",
+    "xdg-mime": lines([
+      "printf '%s\\n' \"$*\" >> \"$LOG\"",
+      "if [ \"$1\" = query ]; then awk -v type=\"$3\" '$1 == type { print $2 }' \"$STATE\"; exit 0; fi",
+      "desk=$2; shift 2",
+      "for type in \"$@\"; do awk -v type=\"$type\" -v desk=\"$desk\" '$1 == type { $2 = desk } { print }' \"$STATE\" > \"$STATE.next\"; mv \"$STATE.next\" \"$STATE\"; done",
+    ]),
+  };
+  for (const [name, body] of Object.entries(programs)) await executable(bin, name, "#!/bin/sh\n" + body);
+  await writeFile(state, mimeState());
+  const env = {
+    PATH: [bin, "/bin", "/usr/bin"].join(delimiter), HOME: home, XDG_DATA_HOME: data,
+    XDG_CONFIG_HOME: config, HERDR_APP_HOME: app, TMPDIR: dir, LOG: log, STATE: state, LAUNCHED: launched,
+  };
+  const run = async (verb) => {
+    const result = await exec("/bin/sh", [fileURLToPath(handler), verb], { env });
+    assert.equal(result.code, 0, result.stderr);
+    return result.stdout.trim();
+  };
+  return {
+    dir, env, launched, log, run, state,
+    desktop: join(data, "applications", markdownDesktop),
+    opener: join(app, "data", "kanso-markdown", "open.sh"),
+    previous: join(app, "data", "kanso-markdown-previous"),
+  };
+};
+
+test("Turning on the Omarchy opener covers Markdown and plain text, and turning it off restores each app", { skip: unixOnly }, async (t) => {
+  const { desktop, log, opener, previous, run, state } = await linuxMarkdown(t);
+  await run("install");
+  const entry = (await readFile(desktop, "utf8")).split("\n");
+  assert.ok(entry.includes("Exec=" + opener + " %f"), "xdg-open needs the unquoted script path");
+  assert.ok(entry.includes("MimeType=" + mimeTypes.join(";") + ";"));
+  assert.equal(await readFile(state, "utf8"), mimeState(kansoDefaults));
+  assert.equal(await readFile(previous, "utf8"), mimeState());
+  assert.equal(await run("status"), "on");
+
+  await run("install");
+  assert.equal(await readFile(previous, "utf8"), mimeState());
+  assert.equal(await run("uninstall"), "Markdown files open in obsidian.desktop again.");
+  assert.equal(await readFile(state, "utf8"), mimeState());
+  assert.equal(await run("status"), "off");
+  await assert.rejects(readFile(desktop, "utf8"), { code: "ENOENT" });
+
+  const defaults = (await readFile(log, "utf8")).split("\n").filter((line) => line.startsWith("default "));
+  const register = ["default", markdownDesktop, ...mimeTypes].join(" ");
+  const restore = mimeTypes.map((type) => `default ${markdownDefaults[type]} ${type}`);
+  assert.deepEqual(defaults.toSorted(), [register, register, ...restore].toSorted());
+});
+
+test("Turning off the Omarchy opener keeps defaults changed by the user", { skip: unixOnly }, async (t) => {
+  const { run, state } = await linuxMarkdown(t);
+  await run("install");
+  const changes = { "text/markdown": "other-notes.desktop", "text/x-markdown": "other-markdown.desktop" };
+  await writeFile(state, mimeState({ ...kansoDefaults, ...changes }));
+  assert.equal(await run("uninstall"), "Markdown files open in other-notes.desktop again.");
+  assert.equal(await readFile(state, "utf8"), mimeState(changes));
+});
+
+test("With kansō closed, Omarchy opens a Markdown file and a text file in their respective previous apps", { skip: unixOnly }, async (t) => {
+  const { dir, env, launched, opener, run } = await linuxMarkdown(t);
+  await run("install");
   assert.match(await readFile(opener, "utf8"), /data\/kanso-open/);
-  assert.equal(await readFile(state, "utf8"), kanso);
-  assert.equal(await readFile(previous, "utf8"), saved);
-  assert.equal((await run(["install"])).code, 0);
-  assert.equal(await readFile(previous, "utf8"), saved);
-  const removed = await run(["uninstall"]);
-  assert.equal(removed.code, 0, removed.stderr);
-  assert.equal(removed.stdout.trim().split("\n").at(-1), "Markdown files open in obsidian.desktop again.");
-  assert.equal(await readFile(state, "utf8"), saved);
-  await assert.rejects(readFile(desktop, "utf8"));
-  await writeFile(state, saved);
-  await writeFile(log, "");
-  assert.equal((await run(["install"])).code, 0);
-  await writeFile(state, "text/markdown dev.kanso.markdown.desktop\ntext/x-markdown other.desktop\n");
-  assert.equal((await run(["uninstall"])).code, 0);
-  assert.equal(await readFile(state, "utf8"), "text/markdown obsidian.desktop\ntext/x-markdown other.desktop\n");
-  assert.doesNotMatch(await readFile(log, "utf8"), /default omawrite\.desktop/);
-  await writeFile(state, saved);
-  assert.equal((await run(["install"])).code, 0);
-  await writeFile(state, "text/markdown omawrite.desktop\ntext/x-markdown dev.kanso.markdown.desktop\n");
-  const named = await run(["uninstall"]);
-  assert.equal(named.code, 0, named.stderr);
-  assert.equal(named.stdout.trim().split("\n").at(-1), "Markdown files open in omawrite.desktop again.");
-  assert.match(await readFile(state, "utf8"), /^text\/markdown omawrite\.desktop$/m);
+  const documents = [["meeting notes.md", "text/markdown"], ["todo list.txt", "text/plain"]];
+  const paths = documents.map(([name]) => join(dir, name));
+  for (const path of paths) {
+    await writeFile(path, "A note\n");
+    const result = await exec(opener, [path], { env });
+    assert.equal(result.code, 0, result.stderr);
+  }
+  const expected = documents.flatMap(([, type], i) => [markdownDefaults[type].replace(/\.desktop$/, ""), paths[i]]);
+  assert.equal(await readFile(launched, "utf8"), lines([...expected, ""]));
+});
+
+const markdownLabel = "Open .md files in kansō";
+
+const markdownSettings = async (t, platform, responses = []) => {
+  const appHome = "/tmp/kanso settings app";
+  const script = appHome + "/mods/kanso-tabs/markdown-handler.sh";
+  const replies = responses.values();
+  const command = t.mock.fn(async () => replies.next().value ?? failure("Unexpected Markdown command"));
+  const { Settings } = await loadSettings({
+    ...gpuiHost(),
+    window: () => ({ platform }),
+    props: () => ({ page: "pieces" }),
+    theme: () => KIT_NIGHT,
+    appHome: () => appHome,
+    readTextFile: async () => null,
+    exec: (program, args) => args[0] === "-c" || program === "security" || program === "cmdkey"
+      ? Promise.resolve(failure("No secret store"))
+      : command(program, args),
+  });
+  const { cx, drain } = context();
+  const settings = new Settings();
+  settings.init({}, cx);
+  await drain();
+  const page = () => settings.render();
+  const toggle = () => find(page(), (el) => el.tag === "markdown-opener");
+  return {
+    page, toggle,
+    calls: () => clone(command.mock.calls.map((call) => call.arguments)),
+    expected: (...verbs) => verbs.map((verb) => ["sh", [script, verb]]),
+    change: async (on) => {
+      const control = toggle();
+      assert.ok(control, "The .md opener switch is visible");
+      const change = arg(control, "on_change");
+      assert.equal(typeof change, "function", "The .md opener switch is enabled");
+      change(on, cx);
+      await drain();
+    },
+  };
+};
+
+for (const [platform, name] of Object.entries({ linux: "Linux", macos: "macOS" })) {
+  test(`On ${name}, Settings switches .md files between kansō and the previous app`, async (t) => {
+    const settings = await markdownSettings(t, platform, [
+      success("on\n"), success("Restored"), success("off\n"), success("Installed"), success("on\n"),
+    ]);
+    assert.ok(texts(settings.page()).includes(markdownLabel));
+    assert.equal(arg(settings.toggle(), "pressed"), true);
+    await settings.change(false);
+    assert.equal(arg(settings.toggle(), "pressed"), false);
+    await settings.change(true);
+    assert.equal(arg(settings.toggle(), "pressed"), true);
+    assert.deepEqual(settings.calls(), settings.expected("status", "uninstall", "status", "install", "status"));
+  });
+}
+
+test("Settings shows the last error line if .md files cannot be set to open in kansō", async (t) => {
+  const detail = "Trying to register the opener";
+  const error = "Could not set the default app";
+  const settings = await markdownSettings(t, "linux", [success("off\n"), failure(detail + "\n" + error + "\n"), success("off\n")]);
+  await settings.change(true);
+  const rendered = texts(settings.page());
+  assert.ok(rendered.includes(error));
+  assert.ok(!rendered.some((word) => word.includes(detail)));
+  assert.equal(arg(settings.toggle(), "pressed"), false);
+  assert.deepEqual(settings.calls(), settings.expected("status", "install", "status"));
+});
+
+test("Settings does not offer to open .md files in kansō on Windows", async (t) => {
+  const settings = await markdownSettings(t, "windows");
+  assert.ok(!texts(settings.page()).includes(markdownLabel));
+  assert.equal(settings.toggle(), null);
+  assert.deepEqual(settings.calls(), []);
 });

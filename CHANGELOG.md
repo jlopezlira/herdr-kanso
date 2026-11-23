@@ -32,6 +32,7 @@ the branch's rules.
 
 ### Fixed
 
+- Settings › Pieces has Open .md files in kansō on macOS and Linux. On Omarchy, a .md or text file path an agent prints now opens in kansō, ready to edit: Linux read a .md as plain text and its opener never started kansō.
 - With no projects, the Tasks panel offers New project, and shows a project as soon as it is added, and it lists the projects of every computer you have open, not only this one's.
 - New project asks for the folder first, keeps Create project off until one is chosen, marks the name optional, and its conversation variant says you then choose the agent. Settings › Keys points to kansō help for every key, and Images with no agent in focus offers Open a folder… to see that folder's pictures. Switching to a project scrolls the Projects list to it once, so a new or far-down project is in view.
 
