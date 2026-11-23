@@ -30,7 +30,7 @@ import { projectOpen, OPEN } from "./panel-state.js";
 import { TOOLS, PROBE_MS, probeTools, available, UNKNOWN_TOOLS, FAILED_TOOLS } from "./sim-registration.js";
 import { commandOn, machineKey, offered, toolsFor, toolKey, withoutNegatives, forgetting, ASK_MS, RETRY_MS } from "./panel-tools.js";
 import { pieces, runs, shown, setPiece, STORE, choice } from "./pieces.js";
-import { reconcileSchedules } from "./schedules.js";
+import { reconcileSchedules, RUN_FAILURES } from "./schedules.js";
 import { reconcileResumes } from "./clock.js";
 
 const SCHEDULES_MS = 60_000;
@@ -259,7 +259,8 @@ export default class Tabs extends View {
   watchSchedules(cx) {
     if (checking()) return;
     const reconcile = (next) => next.spawn(async () => {
-      await reconcileSchedules(this.db).catch(() => null);
+      const failed = await reconcileSchedules(this.db).catch(() => null);
+      if (failed && JSON.stringify(failed) !== JSON.stringify(shared(RUN_FAILURES) ?? [])) setShared(RUN_FAILURES, failed);
       await reconcileResumes(terminals()).catch(() => null);
     });
     cx.timer.after(0, reconcile);

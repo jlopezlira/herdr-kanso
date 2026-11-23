@@ -59,7 +59,7 @@ import { withNeeds } from "./needs.js";
 import { withLimits, limitOf, resumeArmed, commandOf, resetWords, AT_RESET_LABEL, COMMAND_LABEL } from "./limits-model.js";
 import { armResume, disarmResume, stopWaiter } from "./clock.js";
 import { nextRun } from "./clock-model.js";
-import { scheduleOf, armFor, runNow, outcomeOf, scheduleName } from "./schedules.js";
+import { scheduleOf, armFor, runNow, outcomeOf, scheduleName, RUN_FAILURES } from "./schedules.js";
 import { draftOf, checkDraft, scheduleBody, scheduleWords } from "./schedule-dialog.js";
 import { severalRun, startInTree, shownTab } from "./several.js";
 import { LimitWatch } from "./limits.js";
@@ -168,11 +168,11 @@ const registry = () => { const rows = shared(REGISTRY); return Array.isArray(row
 // A sleep's key as a project's (a trailing / never makes two of one place).
 const sameKey = (key) => { const i = String(key).indexOf(":"); return `${key.slice(0, i)}:${trimmed(key.slice(i + 1))}`; };
 const projectAt = (key) => registry().find((p) => keyOfProject(p) === sameKey(key)) ?? null;
-const ROW_SHARED = [REGISTRY, NEEDS_YOU, "strip.state", SLEEP_PENDING, SLEEP_WAKING, SLEEP_FAILED, FORGET_HELD, KNOWN_AGENTS, "kanso.battery", "space.colors"];
+const ROW_SHARED = [REGISTRY, NEEDS_YOU, RUN_FAILURES, "strip.state", SLEEP_PENDING, SLEEP_WAKING, SLEEP_FAILED, FORGET_HELD, KNOWN_AGENTS, "kanso.battery", "space.colors"];
 const rowInputs = () => ({ spaces: spaces(), panes: panes(), terminals: terminals(), agents: withLimits(withNeeds(agents(), terminals()), terminals()), machines: machines(), focused: focused(), front: window()?.active === true, keys: keys(),
   shared: ROW_SHARED.map((key) => shared(key)), pieces: Object.entries(pieces(shared)).filter(([id]) => id.startsWith("sidebar.")) });
 const ROW_STATE = ["hoverRow", "hoverSpace", "hoverHead", "hoverMachine", "pressed", "over", "draggedAgent", "overAgent", "kbd", "navKey", "needsOpen", "needsEmpty", "foldH", "folded",
-  "agentsFolded", "sectionsFolded", "asleepOpen", "shelvesOpen", "alive", "git", "held", "custom", "machines", "parked", "waking", "login", "failed", "pulling", "hints", "sync", "hostName", "runFailures"];
+  "agentsFolded", "sectionsFolded", "asleepOpen", "shelvesOpen", "alive", "git", "held", "custom", "machines", "parked", "waking", "login", "failed", "pulling", "hints", "sync", "hostName", "retried"];
 const ROW_REPLACED = ["threadsShown", "steps", "since", "tasks"];
 const listed = (value) => (value instanceof Set || value instanceof Map ? [...value] : value);
 const MINUTE_MS = 60_000;
@@ -406,13 +406,11 @@ export default class Spaces extends RetryingView {
     });
     // Remote machines: every 30 s in front, every 2 min behind.
     cx.timer.every(30000, cx => {
-      this.refreshRunFailures().then(() => this.paint()).catch(() => {});
       if (window().active) { this.refreshMachines(cx, true); return; }
       this.machineTicks += 1;
       if (this.machineTicks % 4 === 0) this.refreshMachines(cx, true);
     });
     this.machineTicks = 0;
-    cx.timer.after(0, () => this.refreshRunFailures().then(() => this.paint()).catch(() => {}));
     // `git status` walks the whole tree: only when its answer could have changed (see `due`);
     // behind other windows every 5 s instead of 0.5 s, nothing is missed.
     cx.timer.every(500, (cx) => this.checkNew(cx));
@@ -1998,7 +1996,7 @@ export default class Spaces extends RetryingView {
   }
 
   retryRun(s) {
-    this.runFailures = new Map([...(this.runFailures ?? new Map())].map(([key, list]) => [key, list.filter((r) => r.s.id !== s.id)]).filter(([, list]) => list.length));
+    this.retried = { ...(this.retried ?? {}), [s.id]: Date.now() };
     return runNow(s);
   }
 
@@ -2015,14 +2013,9 @@ export default class Spaces extends RetryingView {
     ];
   }
 
-  async refreshRunFailures() {
-    const rows = (await this.db().schedules()).map(scheduleOf);
-    const outcomes = await Promise.all(rows.map(async (s) => ({ s, ...(await outcomeOf(s.id)) })));
-    this.runFailures = Map.groupBy(outcomes.filter((r) => r.failed), (r) => r.s.project);
-  }
-
   runFailureRow(key, id, c) {
-    const list = this.runFailures?.get(key) ?? [];
+    const failed = Array.isArray(shared(RUN_FAILURES)) ? shared(RUN_FAILURES) : [];
+    const list = failed.filter((r) => r.s?.project === key && r.failed.at > (this.retried?.[r.s.id] ?? 0));
     if (!list.length) return [];
     const text = list.length === 1 ? "A scheduled run did not start" : `${list.length} scheduled runs did not start`;
     return [item(failureLine({ text, fix: "Retry", detail: list.at(-1).failed.why ?? "" })(`run-failed-${id}`, c, { onClick: (cx) => { list.forEach((r) => this.retryRun(r.s)); this.redraw(cx); } }), H.line)];

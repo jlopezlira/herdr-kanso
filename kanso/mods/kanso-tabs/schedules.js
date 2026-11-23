@@ -9,6 +9,7 @@ import { clockName, waiterPlan, agentLaunch, localId, slugOf, lastOutcome, CLOCK
 import { armSchedule, stopWaiter, runLog } from "./clock.js";
 
 export const SCHEDULE_KIND = "schedule";
+export const RUN_FAILURES = "kanso.runs.failed";
 export const SPACE_LABEL = "kanso.space";
 export const REV_LABEL = "kanso.rev";
 export const scheduleName = (id) => clockName("sched", id);
@@ -60,8 +61,9 @@ export const outcomeOf = async (id) => lastOutcome(await readTextFile(runLog(id)
 
 export async function reconcileSchedules(db, homeDir = home()) {
   const list = (await db.schedules()).map(scheduleOf);
+  const outcomes = new Map(await Promise.all(list.map(async (s) => [s.id, await outcomeOf(s.id)])));
   const { arm, stop } = clockTodo(list, terminals(), spaces(), homeDir);
   for (const name of stop) await stopWaiter(name);
-  for (const s of arm) await armFor(s, { lastRun: (await outcomeOf(s.id)).lastRun, homeDir }).catch(() => null);
-  return list;
+  for (const s of arm) await armFor(s, { lastRun: outcomes.get(s.id).lastRun, homeDir }).catch(() => null);
+  return list.flatMap((s) => (outcomes.get(s.id).failed ? [{ s, failed: outcomes.get(s.id).failed }] : []));
 }

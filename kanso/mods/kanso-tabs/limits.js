@@ -3,7 +3,6 @@ import { limitStep, parseLimit, foundLabels, READ_TRIES, RETRY_MS } from "./limi
 import { armResume, disarmResume, reconcileResumes } from "./clock.js";
 import { pieces, runs } from "./pieces.js";
 
-export const AUTO_RESUME = "agents.resume";
 const RECONCILE_MS = 60_000;
 const live = (t) => !t.state || t.state === "live";
 const appOf = (t) => t.report?.app ?? t.app ?? t.agent ?? null;
@@ -25,7 +24,7 @@ export class LimitWatch {
   watch(cx, now = Date.now()) {
     if (checking()) return;
     const terms = terminals().filter(live);
-    const auto = runs(AUTO_RESUME, pieces(shared));
+    const auto = runs("agents.resume", pieces(shared));
     for (const term of terms) {
       const step = limitStep({ status: term.status, app: appOf(term), labels: term.labels ?? {} });
       const stop = `${term.status}:${term.turn ?? 0}`;

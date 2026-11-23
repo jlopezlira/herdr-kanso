@@ -144,7 +144,7 @@ export function agentLaunch(platform, argv, prompt = "") {
 }
 
 const pad = (n) => String(n).padStart(2, "0");
-const dayStart = (ms) => { const d = new Date(ms); return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime(); };
+const dayAt = (ms, i) => { const d = new Date(ms); return new Date(d.getFullYear(), d.getMonth(), d.getDate() + i).getTime(); };
 const atClock = (dayMs, time) => {
   const [h, m] = String(time).split(":").map(Number);
   const d = new Date(dayMs);
@@ -178,12 +178,7 @@ export function nextRuns(when, from, count = PLAN_RUNS) {
   if (when.kind === "once") return Number(when.at) > from ? [Number(when.at)] : [];
   if (when.kind === "every") return everyRuns(when, from, count);
   const days = new Set(daysOf(when));
-  const out = [];
-  for (let day = dayStart(from), n = 0; out.length < count && n < 400 + count * 7; n += 1, day = dayStart(day + DAY_MS + 3_600_000)) {
-    const at = atClock(day, when.time);
-    if (at > from && days.has(new Date(day).getDay())) out.push(at);
-  }
-  return out;
+  return Array.from({ length: (count + 1) * 7 + 1 }, (_, i) => atClock(dayAt(from, i), when.time)).filter((at) => at > from && days.has(new Date(at).getDay())).slice(0, count);
 }
 
 export const nextRun = (when, from) => nextRuns(when, from, 1)[0] ?? null;
@@ -193,11 +188,8 @@ export function lastDue(when, after, upTo) {
   if (when.kind === "once") return Number(when.at) > after && Number(when.at) <= upTo ? Number(when.at) : null;
   if (when.kind === "every") return everyLast(when, after, upTo);
   const days = new Set(daysOf(when));
-  for (let day = dayStart(upTo), n = 0; n < 8; n += 1, day = dayStart(day - 3_600_000)) {
-    const at = atClock(day, when.time);
-    if (at <= upTo && days.has(new Date(day).getDay())) return at > after ? at : null;
-  }
-  return null;
+  const last = Array.from({ length: 8 }, (_, i) => atClock(dayAt(upTo, -i), when.time)).find((at) => at <= upTo && days.has(new Date(at).getDay()));
+  return last && last > after ? last : null;
 }
 
 export function waiterPlan(when, { now, since }) {
