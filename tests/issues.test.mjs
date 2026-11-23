@@ -232,12 +232,24 @@ const kdbWithShop = async (t, linked = true) => {
 
 const NO_BOARDS = "Follow only the GitHub issues, Jira projects and Linear teams you choose";
 const ADD_ACTION = "issues-none-action";
-const control = (panel, id) => find(panel, (el) => el.tag === id);
+const control = (panel, id) => find(panel, (el) => el.tag === id || arg(el, "id") === id);
+const wordsAt = (panel, id) => {
+  const element = control(panel, id);
+  return element ? texts(element) : [];
+};
+const issueLinks = (db) => db.read("SELECT project, source, ref, name FROM issue_links;");
+const removeGithub = (id) => `issues-remove-${id}-github`;
+const expectGithubBoard = async (db, id, panel) => {
+  same(await issueLinks(db), [githubLink(id)]);
+  assert.ok(control(panel, removeGithub(id)));
+};
 const clickIssues = (panel, id, cx) => one(control(panel, id), "on_click")(null, cx);
 const startIssues = async (db, host = {}, { timers = [], ...context } = {}) => {
+  const ui = drawingHost();
   const { Issues, DIALOG } = await load("kanso-panel/issues.js", ["Issues", "DIALOG"], {
     ...viewHost,
-    ...drawingHost(),
+    ...ui,
+    TextView: { markdown: ui.div },
     spaces: () => [],
     checking: () => true,
     exec: async () => ({ code: 1, stdout: "", stderr: "" }),
@@ -247,11 +259,12 @@ const startIssues = async (db, host = {}, { timers = [], ...context } = {}) => {
   const view = new Issues(db);
   view.init(cx);
   await drain();
-  return { view, cx, drain, DIALOG };
+  const page = () => view.render(cx);
+  return { view, cx, drain, DIALOG, page, click: (id) => clickIssues(page(), id, cx) };
 };
 const openProjectStep = async (db, host) => {
   const tasks = await startIssues(db, host);
-  clickIssues(tasks.view.render(tasks.cx), ADD_ACTION, tasks.cx);
+  tasks.click(ADD_ACTION);
   return tasks;
 };
 
@@ -285,11 +298,10 @@ test("Tasks reads a GitHub board only after I add it, and Remove stops following
   const { id, name } = project;
   const ticket = node("Open");
   const exec = t.mock.fn(githubAnswer([ticket]));
-  const { view, cx, drain } = await startIssues(db, { exec });
-  const page = () => view.render(cx);
+  const { cx, drain, page } = await startIssues(db, { exec });
   const githubReads = () => exec.mock.calls.filter(({ arguments: [cmd, args] }) =>
     cmd === "git" || cmd === "gh" || (cmd === "env" && args.includes("gh")));
-  const links = () => db.read("SELECT project, source, ref, name FROM issue_links;");
+  const links = () => issueLinks(db);
   const expectEmpty = (panel) => {
     const words = texts(panel);
     for (const text of ["Tasks", NO_BOARDS, "Add a board"]) assert.ok(words.includes(text), text);
@@ -324,10 +336,73 @@ test("Tasks reads a GitHub board only after I add it, and Remove stops following
   for (const text of [link.name, ticket.title, "Remove"]) assert.ok(texts(linked).includes(text), text);
   assert.ok(githubReads().some(({ arguments: [cmd, args] }) => cmd === "env" && args.includes("graphql")));
 
-  clickIssues(linked, `issues-remove-${id}-github`, cx);
+  clickIssues(linked, removeGithub(id), cx);
   await drain();
   same(await links(), []);
   expectEmpty(page());
+});
+
+test("Pressing the header + leaves the issue detail and asks me to choose a project.", async (t) => {
+  const { db } = await kdbWithShop(t);
+  const { page, click, drain } = await startIssues(db, { exec: githubAnswer([node("Open")]) });
+  click(`issue-${PR_URL}`);
+  await drain();
+  assert.ok(control(page(), "issues-back"));
+
+  click("issues-add");
+  const chooser = page();
+  assert.ok(texts(chooser).includes("Add a board: choose a project"));
+  assert.equal(control(chooser, "issues-back"), null);
+});
+
+test("GitHub issues shows Adding… and offers Retry when the board cannot be added.", async (t) => {
+  const { db, project: { id } } = await kdbWithShop(t, false);
+  const { page, click, drain } = await startIssues(db, { exec: githubAnswer([]) });
+  const write = Promise.withResolvers();
+  t.mock.method(db, "run", async () => {
+    await write.promise;
+    throw new Error("The link could not be saved");
+  }, { times: 1 });
+  const githubChoice = "issues-add-github";
+  const retry = "issues-save-failed-fix";
+
+  click("issues-add");
+  click(`issues-add-project-${id}`);
+  click(githubChoice);
+  const pending = wordsAt(page(), githubChoice);
+  write.resolve();
+  await drain();
+
+  const refused = page();
+  const error = "Can't add GitHub issues";
+  assert.deepEqual({
+    pending,
+    error: texts(refused).includes(error),
+    retry: wordsAt(refused, retry),
+  }, { pending: ["GitHub issues", "Adding…"], error: true, retry: ["Retry"] });
+  same(await issueLinks(db), []);
+
+  click(retry);
+  await drain();
+  await expectGithubBoard(db, id, page());
+});
+
+test("Removing the last board leaves Add a board beside Undo, and Undo brings the board back.", async (t) => {
+  const { db, project: { id } } = await kdbWithShop(t);
+  const { page, click, drain } = await startIssues(db, { exec: githubAnswer([]) });
+  const undo = "issues-removed-undo";
+
+  click(removeGithub(id));
+  await drain();
+  const empty = page();
+  assert.deepEqual(wordsAt(empty, "issues-removed"), ["Removed GitHub issues", "Undo"]);
+  assert.deepEqual(wordsAt(empty, ADD_ACTION), ["Add a board"]);
+
+  click(undo);
+  await drain();
+  const restored = page();
+  await expectGithubBoard(db, id, restored);
+  assert.equal(control(restored, undo), null);
 });
 
 test("Tasks lists each open project once, skips the home space, and prefers a saved project at the same place", async (t) => {
@@ -478,7 +553,6 @@ const githubTasks = async (t, answer, host = {}) => {
   const tasks = await startIssues(db, { exec, ...host });
   return {
     ...tasks, exec,
-    page: () => tasks.view.render(tasks.cx),
     action: `issues-state-${row.id}-github-fix`,
   };
 };

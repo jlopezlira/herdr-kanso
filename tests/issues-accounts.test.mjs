@@ -1020,6 +1020,67 @@ test("One project shows two Jira boards and one Linear board by source, and the 
   assertNoSecret(draft, "Jira detail draft");
 });
 
+const projectWithBoards = async (t, links) => {
+  const { db } = await temporaryKdb(t);
+  const { linkSql, storeSql, readIssues } = await load("kanso-panel/issues-store.js", ["linkSql", "storeSql", "readIssues"]);
+  const { row: { id } } = await db.addProject({ ...shop, machine: "" });
+  await db.run(links.map((link) => linkSql({ ...link, project: id }, true)).join(""));
+  return { db, id, storeSql, read: () => readIssues(db, [id]) };
+};
+
+const openSavedBoards = async (db, id, answer) => {
+  const { view } = await mountIssues(signedIn(), { db, host: drawingHost(), answer });
+  const { cx, drain } = timedContext([]);
+  view.restoreState({ filters: { [id]: "all" } });
+  view.load(cx);
+  await drain();
+  return { view, cx, drain };
+};
+
+test("Choosing Jira projects lists each project once when I already follow GitHub issues.", async (t) => {
+  const { db, id } = await projectWithBoards(t, [githubLink]);
+  const [jira] = pickerCases;
+  const projects = [{ key: "ABC", name: "Alpha" }, { key: "DEF", name: "Beta" }];
+  const answer = () => okJson(jira.payload(projects, false));
+  const { view, cx, drain } = await openSavedBoards(db, id, answer);
+  const ui = chooseBoardProject(view, cx, id);
+  ui.press(addJira);
+  await drain();
+
+  const panel = ui.render();
+  const counts = projects.map(({ key }) => {
+    const rowId = `issues-link-${id}-${jiraRef(key)}`;
+    return all(panel, (el) => el.tag === rowId || arg(el, "id") === rowId).length;
+  });
+  assert.deepEqual(counts, [1, 1]);
+});
+
+test("Removing GitHub issues clears its cache and shows No open issues when only an empty Jira board remains.", async (t) => {
+  const { db, id, storeSql, read } = await projectWithBoards(t, [githubLink, alphaLink]);
+  const now = Date.now();
+  const ticket = {
+    project: id, source: "github", url: "https://github.com/acme/shop/issues/12",
+    title: "Cached GitHub issue", ticket: "#12", number: 12, status: "Open", assignees: "[]", labels: "[]", read_at: now,
+  };
+  await db.run(storeSql({
+    project: id, source: ticket.source, filter: "all", rows: [ticket], columns: ["Open"], now,
+  }));
+  const answer = ({ url }) => okJson(url.endsWith("/jql") ? { issues: [], isLast: true } : jiraFixture(url));
+  const { view, cx, drain } = await openSavedBoards(db, id, answer);
+  const ui = issuesControls(view, cx);
+  assert.ok(ui.words().includes(ticket.title));
+
+  ui.press(`issues-remove-${id}-github`);
+  await drain();
+  const { rows, boards, links } = await read();
+  same({
+    issues: rows.map(({ source }) => source),
+    cachedBoards: boards.map(({ source }) => source).toSorted(),
+    followedBoards: links.map(({ source }) => source),
+    noOpenIssues: ui.words().includes("No open issues"),
+  }, { issues: [], cachedBoards: [sourceOf(alphaLink)], followedBoards: ["jira"], noOpenIssues: true });
+});
+
 const jiraFixture = (url) => {
   if (url.endsWith("/myself")) return JIRA_ME;
   if (url.endsWith("/jql")) return { issues: [jiraIssue(1)] };
