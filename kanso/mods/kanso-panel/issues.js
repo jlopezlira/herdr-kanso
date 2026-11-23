@@ -68,6 +68,7 @@ export class Issues {
     this.front = null;
     this.registered = registered();
     this.linking = null;
+    this.signedIn = JSON.stringify(accounts());
     this.secrets = localSecrets();
     this.store = null;
     if (!checking()) cx.spawn(async (cx) => { this.store = await this.secrets.available(); cx.notify(); });
@@ -240,7 +241,7 @@ export class Issues {
       if (this.linking?.asked !== asked) return;
       const failure = found?.failure ?? (found ? null : { text: `${SOURCE_WORDS[kind]} could not be read` });
       this.linking = { project, kind, list: [...earlier, ...(found?.list ?? [])], complete: !failure && found?.complete !== false,
-        next: failure ? start : found?.next ?? null, more: false, failure, asked };
+        next: found?.next ?? (failure ? start : null), more: false, failure, asked };
       cx.notify();
     });
   }
@@ -396,6 +397,12 @@ export class Issues {
     const c = tokens(theme()), now = Date.now();
     const known = registered();
     if (known !== this.registered) { this.registered = known; if (this.projects) this.load(cx, true); }
+    const signedIn = JSON.stringify(accounts());
+    if (signedIn !== this.signedIn) {
+      this.signedIn = signedIn;
+      const l = this.linking;
+      if (l?.failure) cx.timer.after(0, (next) => this.loadLinking(l.project, l.kind, l.next, next));
+    }
     const front = this.frontProject();
     if (front !== this.front) { this.front = front; if (this.projects) cx.timer.after(0, (next) => this.refresh(next)); }
     const open = this.open ? this.rows.find((r) => r.url === this.open.url && r.project === this.open.project) : null;
