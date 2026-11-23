@@ -468,6 +468,7 @@ export const numberArguments = (file) => [...readFileSync(new URL(`../kanso/mods
 // A kit's exports with `c`, its colours in `theme`.
 export const themed = (kit, theme) => ({ ...kit, c: kit.tokens(theme) });
 export const eachTheme = (tokens, ...themes) => themes.map((theme) => ({ theme, c: tokens(theme) }));
+export const same = (actual, expected) => assert.deepEqual(JSON.parse(JSON.stringify(actual)), expected);
 // The kit's night colours, as the row and kit tests draw them.
 export const KIT_NIGHT = { foreground: "#d8d4cb", background: "#1b1b19", hover: "#232321", selected: "#2b2b28", accent: "#da627d", dim: "#6b6862", muted: "#949086", blocked: "#ca938b", working: "#c4b07e", done: "#98ad8f" };
 // A host whose svg and image elements keep the path they draw.
@@ -493,7 +494,7 @@ export const CHROME_NIGHT = {
   blocked: "#d5674f", working: "#d9a74a", done: "#7fa66b", accent: "#7d9cd4", popover: "#222220", border: "#33332f", chrome: "#141413",
 };
 // A text field holding `value`.
-export const fieldWith = ({ value }) => ({ on() {}, focus() {}, value: () => value, set_value() {}, set_selected_range() {}, release() {} });
+export const fieldWith = ({ value }) => ({ on() {}, focus() {}, value: () => value, set_value() {}, set_masked() {}, set_selected_range() {}, release() {} });
 // Every .js file under dir, at any depth; a folder that is not there has none.
 export async function jsFiles(dir) {
   const entries = await readdir(dir, { withFileTypes: true }).catch(() => []);

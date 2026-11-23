@@ -43,10 +43,10 @@
 <main id="top">
 
   <section class="hero">
-    <a class="pill" href="#dojo"><span class="pill-tag">New in 3.4</span>Learn vim's moves in the hjkl dōjō, and sleep a single agent</a>
+    <a class="pill" href="#projects"><span class="pill-tag">New in 3.33</span>Copy and paste on any computer, and Sign in when one asks for a password</a>
     <!-- The headline and subline: change them here. -->
     <h1>More agents.<br>Less babysitting.</h1>
-    <p class="lede">Every agent gets a readable pane, the one waiting on you comes first, and idle Claude Code sessions recycle on the same conversation so your machine lasts weeks. Returning to a project shows what changed in three quiet lines.</p>
+    <p class="lede">Every agent gets a readable pane, the one waiting on you comes first, and idle Claude Code sessions recycle on the same conversation so your machine lasts weeks. Returning to a project shows what changed while you were away.</p>
     <div class="actions">
       <a class="button button-primary" href="#install">Install kansō</a>
       <a class="button" href="https://github.com/jlopezlira/herdr-kanso">
@@ -119,7 +119,7 @@
       <article class="tile" id="ports">
         <figure class="window window-panel"><a href="shots/ports-panel.png" aria-label="Open the full-size screenshot"><img src="shots/ports-panel.png" loading="lazy" width="760" height="1150" alt="The Ports panel: dev servers listening, one with no pane, and a chart of servers over the day."></a></figure>
         <h3>Ports</h3>
-        <p>Dev servers your agents started, which pane runs each one, and the ones left behind.</p>
+        <p>Dev servers your agents started, on this computer and every connected one, which pane runs each one, and the ones left behind.</p>
       </article>
 
       <article class="tile">
@@ -138,10 +138,10 @@
 
   <section class="block spotlight" id="sleep">
     <h2>Put agents to sleep, wake them where they were</h2>
-    <p class="sub">Waiting on a backend ticket? Sleep the agents that wait on it. They exit with their conversation kept, so nothing of them runs or holds memory, and wake tomorrow on the same conversation. Asleep, each one is a short row with Wake on it. A click opens its menu, and Enter wakes it.</p>
+    <p class="sub">Waiting on a backend ticket? Sleep the agents that wait on it. Claude Code agents exit with their conversation kept, so nothing of them runs or holds memory, and wake tomorrow on the same conversation. Asleep, each one is a short row with Wake on it. A click opens its menu, and Enter wakes it.</p>
     <ul class="facts">
       <li><span class="ring ring-done" aria-hidden="true"></span><div><strong>One agent, a tab or a project</strong>The moon in a pane's header sleeps that agent and leaves the rest of the tab; the project's menu sleeps a tab or all of it. Sleep and Send stay on the pane you are in once it has finished.</div></li>
-      <li><span class="ring ring-working" aria-hidden="true"></span><div><strong>The same conversation</strong>Wake brings each agent back on its conversation, in its tab, with its folder and options, and checks it is really there.</div></li>
+      <li><span class="ring ring-working" aria-hidden="true"></span><div><strong>The same conversation</strong>Wake brings each Claude Code agent back on its conversation, in its tab, with its folder and options, and checks it is really there.</div></li>
       <li><span class="ring ring-blocked" aria-hidden="true"></span><div><strong>Careful with your work</strong>A draft in the prompt is cleared, never sent. An agent at work or waiting on you doesn't sleep.</div></li>
       <li><span class="ring ring-done" aria-hidden="true"></span><div><strong>On another computer</strong>The record stays on the computer that owns the agents, so the same tabs are asleep wherever you sit, and waking from either works. When that computer does not answer, its rows stay listed and Wake stays off until it can answer.</div></li>
     </ul>
@@ -169,10 +169,10 @@
 
   <section class="block spotlight" id="projects">
     <h2>Projects you keep, containers you can see</h2>
-    <p class="sub">A project is a folder you added. It stays in the sidebar when its last agent closes. On the one you are in, + stays visible; on the others it shows when you point at the row. It starts the agent you used there last, in the folder or in a new worktree on a branch you name. A count behind the branch asks once, then says Pulling until git answers. A count ahead goes to that project and opens the pull request panel. Add a computer, at the foot of the sidebar, lists your Tailscale computers, your ssh hosts and the computers on this network that answer ssh, and one press adds one; what it needs there is copied over, and when it asks for a password, a tab takes it once. One already added can be disconnected there, with Undo. A computer on your tailnet that is also on this network is reached over the local network, and over Tailscale when you are away. One added before switches by itself the first time it answers on the local network, and you are told. Set up with an agent walks you through getting a new one ready. A remote machine's header turns its connection off and back on without setting it up again; the name on that row can be one you give it, and it follows the computer. What was running there keeps running. Files, Preview and Images work for a space on that computer. A text file in Preview can be edited and saved there, and a note on a picture still sends. The pull request panel shows one block per repository, with what needs you and failing checks; from it you approve, request changes, comment, reply, re-run a failing check and read its log, each with Undo.</p>
+    <p class="sub">A project is a folder you added. It stays in the sidebar when its last agent closes. On the one you are in, + stays visible; on the others it shows when you point at the row. It starts the agent you used there last, in the folder or in a new worktree on a branch you name. A count behind the branch asks once, then says Pulling until git answers. A count ahead goes to that project and opens the pull request panel. Add a computer, at the foot of the sidebar, lists your Tailscale computers, your ssh hosts and the computers on this network that answer ssh, and one press adds one; what it needs there is copied over, and when it asks for a password or a key's passphrase, Sign in opens a tab where you type it once. One already added can be disconnected there, with Undo. A computer that is not connected stays in the sidebar, Asleep when it does not answer and Disconnected when you disconnected it, until you remove it; a toast adds it back. A computer on your tailnet that is also on this network is reached over the local network, and over Tailscale when you are away; Windows keeps the Tailscale route. One added before switches by itself the first time it answers on the local network, and you are told. Set up with an agent walks you through getting a new one ready. A remote machine's header turns its connection off and back on without setting it up again; the name on that row can be one you give it, and it follows the computer. What was running there keeps running. Files, Preview and Images work for a space on that computer, and a terminal's right-click copies and pastes there. A text file in Preview can be edited and saved there, and a note on a picture still sends. The pull request panel shows one block per repository, with what needs you and failing checks; from it you approve, request changes, comment, reply, re-run a failing check and read its log, each with Undo.</p>
     <ul class="facts">
       <li><span class="ring ring-done" aria-hidden="true"></span><div><strong>Threads by project</strong>Conversations grouped under the project they belong to, each with a + for a new one. Remove a project and its space closes; files are never touched.</div></li>
-      <li><span class="ring ring-working" aria-hidden="true"></span><div><strong>Containers</strong>What you would open Docker Desktop for: a project's compose files with Up, Rebuild and Down, every container's memory, and Quit Docker to get the VM's memory back.</div></li>
+      <li><span class="ring ring-working" aria-hidden="true"></span><div><strong>Containers</strong>What you would open Docker Desktop for: a project's compose files with Up, Rebuild and Down, every container's memory, and Quit Docker to get its memory back. On Linux it opens and quits Docker's own engine.</div></li>
       <li><span class="ring ring-blocked" aria-hidden="true"></span><div><strong>Markdown reviews</strong>An agent runs <code>md-review plan.md</code>, the file opens in the Markdown panel, you write your comments in it and press Done: the agent gets them.</div></li>
     </ul>
   </section>
@@ -181,7 +181,7 @@
     <h2>Keys you can see, moves you can learn</h2>
     <p class="sub">Needs you, once you choose it in the sidebar, lists waiting agents across projects. Cmd+J cycles through blocked agents first, then unseen finished turns, oldest first. Click the count to choose one.</p>
     <p class="sub">⌘⌥ h j k l move between panes as vim does, and every list answers j, k, gg and G. ⌘⇧↑ and ⌘⇧↓ go to the agent above or below in the sidebar, across tabs and projects, and ⌘⇧← and ⌘⇧→ go back and forward through the agents you visited; on Windows, Ctrl+Shift with the arrows. ⌘? draws your own keys on a keyboard, layer by modifier.</p>
-    <p class="sub">Windows has its own shortcuts for panes, spaces, panels and search. They use Ctrl and Alt, and they leave the Windows key and AltGr alone. Reset restores the shortcuts for your system, and Help follows the bindings you have.</p>
+    <p class="sub">Windows has its own shortcuts for panes, spaces, panels and search. They use Ctrl and Alt, and they leave the Windows key and AltGr alone. Linux keeps Super where Omarchy leaves it free and uses Ctrl or Alt with Shift where Omarchy takes it; on Omarchy, Super+C and Super+V copy and paste in Herdr's terminals. Reset restores the shortcuts for your system, and Help follows the bindings you have.</p>
     <div class="duo">
       <figure class="window"><img src="shots/help-keys.png" loading="lazy" width="860" height="680" alt="kansō help: a keyboard with ⌘⌥ held, H J K L lit for moving between panes, and what each key does."></figure>
       <figure class="window" id="dojo"><img src="shots/dojo.png" loading="lazy" width="418" height="738" alt="The hjkl dōjō in the side panel: a pet, the score, and a line-ends level on real lines of code."></figure>
@@ -205,7 +205,7 @@
 
   <section class="block spotlight" id="simulator">
     <h2>The device, beside the agent that writes it</h2>
-    <p class="sub">Simulator is kansō's own panel, using only Xcode's and Android's tools on this computer. It installs nothing. Cmd+Shift+S opens it, and Ctrl+Shift+M on Windows. Its button appears when this computer has simctl or an Android SDK with adb.</p>
+    <p class="sub">Simulator is kansō's own panel, using only Xcode's and Android's tools on this computer. It installs nothing. Cmd+Shift+S opens it, Ctrl+Shift+S on Linux and Ctrl+Shift+M on Windows. Its button appears when this computer has simctl or an Android SDK with adb.</p>
     <ul class="facts">
       <li><span class="ring ring-done" aria-hidden="true"></span><div><strong>Boot, then the screen</strong>Pick a device and press Start if it is off. Pictures arrive one at a time, at the device's proportions. A failed picture keeps the last one with its age.</div></li>
       <li><span class="ring ring-working" aria-hidden="true"></span><div><strong>This computer only</strong>A project on another computer still shows the devices here. Only platforms present on this computer are listed. Closing the panel, or leaving the window behind, stops taking pictures.</div></li>

@@ -166,3 +166,18 @@ test("a share card carries your pet: Hachi in its squares, a pet's first frame c
   assert.match(rocky.svg, /viewBox="0 0 192 208".*href="pet.png" width="1536" height="1872"/, "the first cell of the whole atlas, beside the card");
   assert.equal(await readFile(join(dir, "share/pet.png"), "utf8"), "png", "the atlas copied, never read into the card: a few MiB would pass the 1 MiB a mod may write");
 });
+
+test("Pets that could not be brought offer Retry beside their names, and Retry brings them again", async () => {
+  const { gpuiHost, texts, find, calls } = await import("./helpers.mjs");
+  const { Companion } = await pets({ ...gpuiHost() });
+  const pal = new Companion({ after() {} }, { pet: async () => null, setPet: async () => {} });
+  pal.error = "Clawd could not be brought.";
+  let again = 0;
+  pal.bring = () => { again += 1; };
+  const grid = pal.grid({}, { red: "red", dim: "dim", text: "text", muted: "muted" });
+  assert.ok(texts(grid).includes("Clawd could not be brought."));
+  calls(find(grid, (el) => el.tag === "pets-retry"), "on_click").at(-1).at(-1)({}, {});
+  assert.equal(again, 1);
+  const line = find(grid, (el) => el.kids.some((kid) => kid.tag === "pets-retry"));
+  assert.equal(line.tag, "v_flex", "Retry sits under the names, so a long list never pushes it out of view");
+});

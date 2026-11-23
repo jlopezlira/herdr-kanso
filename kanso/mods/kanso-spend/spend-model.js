@@ -4,8 +4,8 @@ const UNREAD = "Spend could not read your sessions.";
 const STALE = "Last update failed";
 
 export function readPlan({ nodeBinary = null, runtimeError = null, error = null, running = null }, loaded) {
-  const refresh = { enabled: Boolean(nodeBinary) && !running, busy: Boolean(running) };
-  if (!nodeBinary && runtimeError) return { failure: { text: UNREAD, source: runtimeError }, refresh };
+  const refresh = { enabled: Boolean(nodeBinary || runtimeError) && !running, busy: Boolean(running) };
+  if (!nodeBinary && runtimeError) return { failure: { text: UNREAD, source: runtimeError, fix: "Retry" }, refresh };
   if (!error || running) return { failure: null, refresh };
   return { failure: { text: loaded ? STALE : UNREAD, source: error, fix: "Refresh" }, refresh };
 }

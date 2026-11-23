@@ -53,3 +53,58 @@ test("Windows arguments retain spaces, empty strings, quotes and trailing slashe
     assert.throws(() => view.spawn("editor.exe", [invalid]), /Invalid path/);
   }
 });
+
+const chooser = async ({ exec, tree = { id: "root", children: [] } }) => {
+  const { gpuiHost, texts, find, calls } = await import("./helpers.mjs");
+  const closed = [];
+  const store = {};
+  const { OpenWith } = await loadOpenWith({
+    ...gpuiHost(), exec, layout: () => tree, props: () => ({ file: "/repo/README.md", overlay: "ov" }), closeOverlay: (id) => closed.push(id),
+    shared: (key) => store[key], setShared: (key, value) => { store[key] = value; }, theme: () => ({}), win: () => ({ platform: "macos" }),
+    focused: () => null, panes: () => [], spaces: () => [], home: () => "/home/me", appHome: () => "/app",
+  });
+  const pending = [];
+  const cx = { spawn: (fn) => pending.push(fn(cx)), notify() {}, focus_handle: () => ({ focus() {}, is_focused: () => false }), stop_propagation() {} };
+  const view = new OpenWith();
+  view.init({}, cx);
+  const settle = async () => { while (pending.length) await pending.shift(); };
+  const press = (label) => calls(find(view.render(cx), (el) => calls(el, "accessibility_label").some((c) => c[1] === label)), "on_click").at(-1).at(-1)({}, cx);
+  return { view, cx, closed, settle, press, words: () => texts(view.render(cx)) };
+};
+
+test("A failed look for editors says so and offers Retry, which looks again", async () => {
+  let fail = true;
+  const { settle, press, words } = await chooser({ exec: async () => { if (fail) throw new Error("no shell"); return { code: 0, stdout: "", stderr: "" }; } });
+  await settle();
+  assert.ok(words().includes("Could not look for editors"), "the failure, not a loading list");
+  fail = false;
+  press("Retry");
+  await settle();
+  assert.ok(!words().includes("Could not look for editors"), "Retry looked again");
+});
+
+
+test("A scan that exits with an error, or fails after an empty one, shows the failure with Retry, never Install an editor", async () => {
+  let answer = { code: 1, stdout: "", stderr: "sh: denied" };
+  const { settle, press, words } = await chooser({ exec: async () => answer });
+  await settle();
+  assert.ok(words().includes("Could not look for editors"), "a failed exit is no empty result");
+  answer = { code: 0, stdout: "", stderr: "" };
+  press("Retry");
+  await settle();
+  assert.ok(words().includes("Look again"), "a clean scan that found nothing");
+  answer = { code: 1, stdout: "", stderr: "sh: denied" };
+  press("Look again");
+  await settle();
+  assert.ok(words().includes("Could not look for editors"), "the failed rescan says so");
+});
+
+test("Preview in the panel is dim, and choosing it keeps the chooser open, on a layout with no panel or one that is not kansō's", async () => {
+  for (const tree of [{ id: "root", children: [] }, { id: "root", children: [{ id: "panel-body", children: [] }] }]) {
+    const { view, settle, closed, words } = await chooser({ exec: async () => ({ code: 0, stdout: "", stderr: "" }), tree });
+    await settle();
+    assert.ok(words().includes("no panel in this layout"));
+    await view.open(view.list()[0]);
+    assert.deepEqual(closed, [], "nothing opened, so nothing closed");
+  }
+});

@@ -1,4 +1,4 @@
-import { powershell, psQuote, shellQuote, windowsArg } from "./platform-command.js";
+import { checked, powershell, psQuote, shellQuote, windowsArg } from "./platform-command.js";
 
 const DETECT = `
 for a in "$@"; do
@@ -70,7 +70,7 @@ export function openApi(platform, run) {
       return Object.fromEntries(hits.filter((h, i) => hits.findIndex((x) => x[0].id === h[0].id) === i).map((h) => [h[0].id, { cli: h[1] }]));
     }
     const args = editors.flatMap((e) => [...(platform === "macos" ? (e.mac ?? []).map((m) => `app:${m}`) : []), ...(e.cli ?? []).map((c) => `cli:${c}`)]);
-    const r = await run("sh", ["-c", DETECT, "sh", ...args]);
+    const r = checked(await run("sh", ["-c", DETECT, "sh", ...args]));
     const hits = r.stdout.split("\n").filter(Boolean).map((l) => l.split("\t"));
     return Object.fromEntries(editors.flatMap((e) => {
       const app = hits.find(([k, n]) => k === "app" && e.mac?.includes(n));

@@ -24,6 +24,8 @@ import { channelOf, installedRelease, offerRelease, stableStay } from "./release
 import { focusOn } from "./pure.js";
 import { whenInstalled } from "./installed.js";
 import { pagedDialog } from "./pages.js";
+import { Accounts } from "./accounts.js";
+import { MarkdownOpener } from "./markdown-opener.js";
 
 const shippedDefaults = (platform) => (formerKeymap(platform) ? shippedLinuxKeymap(DEFAULT_KEYS[formerKeymap(platform)]) : DEFAULT_KEYS[shippedKeymap(platform)]);
 
@@ -33,7 +35,7 @@ const keysOf = (chords) => (chords.length ? chords.map((k) => ({ text: shownChor
 const REPO = "https://github.com/jlopezlira/herdr-kanso";
 const UPDATE_CHOICES = [{ key: "stable", label: "Stable" }, { key: "beta", label: "Early" }];
 
-const PAGES = [{ key: "pieces", label: "Pieces" }, { key: "keys", label: "Keys" }, { key: "updates", label: "Updates" }];
+const PAGES = [{ key: "pieces", label: "Pieces" }, { key: "keys", label: "Keys" }, { key: "accounts", label: "Accounts" }, { key: "updates", label: "Updates" }];
 const ASKED = { mods: "pieces", news: "updates" };
 const MODIFIERS = new Set(["shift", "control", "ctrl", "alt", "option", "cmd", "platform", "function", "fn", "capslock"]);
 
@@ -51,6 +53,8 @@ export default class Settings extends View {
     this.find = new TextField({ placeholder: "Find", value: props()?.find ?? "" });
     this.find.on("change", (_e, cx) => cx.notify());
     whenInstalled(cx, (version) => { this.installed = version; });
+    this.accounts = new Accounts(cx);
+    this.markdown = new MarkdownOpener(cx);
   }
 
   shown() { return installedRelease(this.installed, shared("kanso.update")?.tag); }
@@ -188,7 +192,9 @@ export default class Settings extends View {
       })));
     return v_flex().w_full()
       .child(div().text_size(T.value).line_height(1.5).text_color(c.muted).child("kansō's own keys. Click one and press the new key."))
-      .child(div().text_size(T.body).line_height(1.5).text_color(c.dim).child("Panes, tabs and spaces use Herdr's keys, in Herdr's settings."))
+      .child(h_flex().w_full().gap(G.sm).items_center()
+        .child(div().flex_1().text_size(T.body).line_height(1.5).text_color(c.dim).child("kansō help lists every key, Herdr's own included."))
+        .child(quietLink("keys-help", "Open kansō help", () => run("mod.open", { name: "kanso-help" }), c)))
       .children(rows);
   }
 
@@ -234,8 +240,9 @@ export default class Settings extends View {
     };
     return v_flex().w_full()
       .child(this.findField(c))
-      .when(!groups.length, (el) => el.child(div().id("pieces-none").py(G.sm).text_size(T.body).text_color(c.dim).child("No piece matches.")))
+      .when(!groups.length && !this.markdown.matches(this.query()), (el) => el.child(div().id("pieces-none").py(G.sm).text_size(T.body).text_color(c.dim).child("No piece matches.")))
       .children(groups.map((group) => v_flex().w_full().pt(G.lg).child(section(c, group.name)).children(group.rows.map(pieceRow))))
+      .children([this.markdown.row(c, this.query())].filter(Boolean))
       .child(h_flex().w_full().justify_end().pt(G.lg).child(this.undo
         ? undoLine("pieces-reset", "Back to the defaults", (cx) => { setShared(STORE, this.undo); this.undo = null; cx.notify(); }, c)
         : quietLink("pieces-reset", "Reset all", (cx) => { this.undo = pieces(shared); setShared(STORE, {}); cx.notify(); }, c)));
@@ -273,7 +280,7 @@ export default class Settings extends View {
 
   render() {
     const t = theme(), c = tokens(t);
-    const page = this.page === "keys" ? this.keysPage(t, c) : this.page === "updates" ? this.updatesPage(t, c) : this.piecesPage(t, c);
+    const page = this.page === "keys" ? this.keysPage(t, c) : this.page === "updates" ? this.updatesPage(t, c) : this.page === "accounts" ? this.accounts.page(c) : this.piecesPage(t, c);
     return pagedDialog({
       name: "settings", handle: this.handle, t, c, page,
       tabs: PAGES, tab: this.page,

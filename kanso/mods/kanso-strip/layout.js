@@ -92,7 +92,9 @@ export const railWidth = () => (window()?.platform === "macos" ? 76 : 44);
 // The painted tree lands only when it is Kanso's own.
 const writePainted = (tree) => {
   const painted = paintLayout(tree);
-  if (isKansoTree(painted)) run("layout.set", { layout: painted });
+  if (!isKansoTree(painted)) return false;
+  run("layout.set", { layout: painted });
+  return true;
 };
 
 export function setRail(open, width) {
@@ -135,6 +137,5 @@ export function commitLayout(patch) {
   rememberLayout(patch);
   const tree = layout();
   if (!tree) return false;
-  writePainted(tree);
-  return true;
+  return writePainted(tree);
 }

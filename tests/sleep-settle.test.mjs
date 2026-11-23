@@ -1,7 +1,8 @@
 // Sleep on Herdr's own state: a label keeps the conversation, the tab settles; Wake reads them back.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { load, clone, drawingHost, texts, KIT_NIGHT } from "./helpers.mjs";
+import { load, clone, texts } from "./helpers.mjs";
+import { loadSleep } from "./mod-fixtures.mjs";
 
 const sleepMod = (host = {}) => load("kanso-sleep/main.js", ["Sleep", "sleepPlan", "hideCommands", "wakePlan", "exitStep", "labelArgs", "atPrompt", "CLEAR_MS", "EXIT_MS", "RESEND_MS"], { home: () => "/home/me", ...host });
 const space = (over = {}) => ({ id: "sp1", active: true, tabs: [{ id: "a", active: true }, { id: "b" }], ...over });
@@ -116,10 +117,7 @@ const awakeSpace = { id: "sp1", active: true, name: "App", tabs: [{ id: "a", act
 
 async function openWake({ hc, panes, terminals, timer }) {
   const closed = [];
-  const { Sleep } = await load("kanso-sleep/main.js", ["Sleep"], {
-    ...drawingHost(),
-    home: () => "/home/me",
-    theme: () => KIT_NIGHT,
+  const { Sleep } = await loadSleep({
     props: () => ({ overlay: "wake" }),
     closeOverlay: (id) => closed.push(id),
     spaces: () => [awakeSpace],
