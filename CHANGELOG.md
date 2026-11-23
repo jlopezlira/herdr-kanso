@@ -37,8 +37,8 @@ the branch's rules.
 ### Fixed
 
 - Send says when no other agent is running and offers Start an agent, keeps the message you wrote, and says which recipient closed before a held send went out.
-- Sleep's Wake and sleep dialogs can be closed, a project sleep keeps Cancel until it fails, and that button waits while sleep or wake is working.
-- Spend offers Retry when it cannot read Node, keeps Refresh on, and reads Node again before it takes a new snapshot.
+- The Sleep and Wake dialogs always have a button to close them, including after a failed wake.
+- Spend offers Retry when it cannot find Node, and reads its settings again before the next update.
 - Add a computer offers Refresh when Tailscale is off, missing, or has no other computer, and keeps the address you typed.
 - Needs you names each computer it cannot reach, keeps the agents already waiting, and offers Refresh for that computer.
 
