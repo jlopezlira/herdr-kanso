@@ -105,9 +105,9 @@ export class Issues {
         const run = runOn(project.machine);
         const provider = PROVIDERS[0];
         const session = await this.loginOn(project.machine, provider);
-        if (session?.status !== "ok") { this.places = { ...this.places, [project.id]: SIGNED_OUT_STATES.has(session?.status) ? SIGNED_OUT : UNREACHED(session?.detail) }; return; }
-        const repo = await provider.repoOf(run, project.folder, session.hosts);
+        const repo = await provider.repoOf(run, project.folder, session?.hosts?.length ? session.hosts : ["github.com"]);
         if (!repo) { this.places = { ...this.places, [project.id]: NO_REMOTE }; return; }
+        if (session?.status !== "ok") { this.places = { ...this.places, [project.id]: SIGNED_OUT_STATES.has(session?.status) ? SIGNED_OUT : UNREACHED(session?.detail) }; return; }
         this.places = { ...this.places, [project.id]: { repo } };
         await provider.syncBoard(this.db, run, { repo, project: project.id, filter: this.filterOf(project.id), login: session.login, kept: this.rows, now: Date.now() });
         await this.reload();
@@ -132,7 +132,7 @@ export class Issues {
   }
 
   show(issue, cx) {
-    this.open = issue.url;
+    this.open = { project: issue.project, url: issue.url };
     cx.notify();
     const project = (this.projects ?? []).find((p) => p.id === issue.project);
     const repo = this.places[issue.project]?.repo ?? repoText(this.boardOf(issue.project)?.repo);
@@ -175,7 +175,7 @@ export class Issues {
     return row(`issue-${issue.url}`, c, {
       name: issue.title, start: [div().flex_none().text_size(T.body).text_color(c.dim).child(issue.ticket)],
       detail: labels.length ? labels.join(", ") : null, meta: [issue.status || OPEN, ageOf(issue.updated_at ?? issue.created_at, now)].filter(Boolean).join(" · "),
-      current: this.open === issue.url, onClick: (cx) => this.show(issue, cx),
+      current: this.open?.url === issue.url && this.open.project === issue.project, onClick: (cx) => this.show(issue, cx),
     });
   }
 
@@ -191,6 +191,7 @@ export class Issues {
       .child(segmented(`issues-filter-${project.id}`, FILTERS.map((f) => ({ key: f, label: FILTER_WORDS[f] })), filter, (value, cx) => this.choose(project.id, value, cx), c, { size: "sm" }))
       .when(Boolean(state), (el) => el.child(state))
       .when(loading, (el) => el.child(skeletonOf({ shape: "two lines", count: 3 })(`issues-bones-${project.id}`, c)))
+      .when(Number(board?.total) > rows.length && board?.filter === filter, (el) => el.child(div().text_size(T.body).text_color(c.dim).child(`Showing the newest ${rows.length} of ${board.total}`)))
       .when(!loading && !rows.length && !state, (el) => el.child(emptyState({ text: `No open issues ${filter === "all" ? "" : FILTER_WORDS[filter].toLowerCase()}`.trim() })(`issues-empty-${project.id}`, c)))
       .children(sections.flatMap(({ status, rows: listed }) => {
         const folded = isFolded(this.folds, project.id, status);
@@ -233,7 +234,7 @@ export class Issues {
     const c = tokens(theme()), now = Date.now();
     const front = this.frontProject();
     if (front !== this.front) { this.front = front; if (this.projects) this.refresh(cx); }
-    const open = this.open ? this.rows.find((r) => r.url === this.open) : null;
+    const open = this.open ? this.rows.find((r) => r.url === this.open.url && r.project === this.open.project) : null;
     const busy = this.reading.size > 0;
     const projects = projectsInOrder(this.projects ?? [], front);
     const body = open ? this.detail(open, c, now)

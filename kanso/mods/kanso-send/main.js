@@ -63,20 +63,20 @@ export default class Send extends View {
   }
 
   hold(cx) {
-    const now = this.state();
-    const live = (x) => now.recipients.find((r) => r.terminal === x.terminal) ?? x;
-    if (this.held.some((x) => live(x).status === "working")) { cx.timer.after(HOLD_MS, (next) => this.hold(next)); return; }
-    const ready = this.held.map(live);
+    const statusOf = (x) => panes().find((p) => p.terminal === x.terminal)?.status ?? null;
+    const there = this.held.recipients.filter((x) => panes().some((p) => p.terminal === x.terminal));
+    if (there.some((x) => statusOf(x) === "working")) { cx.timer.after(HOLD_MS, (next) => this.hold(next)); return; }
+    const { text } = this.held;
     this.held = null; this.note = null;
-    this.send(cx, { recipients: ready, waiting: [] });
+    this.send(cx, { recipients: there.filter((x) => statusOf(x) !== "blocked"), waiting: there.filter((x) => statusOf(x) === "blocked") }, text);
   }
 
-  send(cx, { recipients: ready, waiting }) {
-    const text = this.text.trim();
+  send(cx, { recipients: ready, waiting }, held = null) {
+    const text = (held ?? this.text).trim();
     if (!text || this.sending || this.held || (!ready.length && !waiting.length)) return;
     if (!ready.length) { this.error = waitingNote(waiting.map((x) => x.label)); cx.notify(); return; }
-    if ((props() ?? {}).whenWaiting && ready.some((x) => x.status === "working")) {
-      this.held = ready; this.error = null;
+    if (!held && (props() ?? {}).whenWaiting && ready.some((x) => x.status === "working")) {
+      this.held = { recipients: ready, text }; this.error = null;
       this.note = `Sends when ${ready.filter((x) => x.status === "working").map((x) => x.label).join(", ")} waits for you.`;
       cx.notify();
       cx.timer.after(HOLD_MS, (next) => this.hold(next));

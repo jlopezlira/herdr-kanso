@@ -6,7 +6,7 @@ import { storeSql, detailSql } from "./issues-store.js";
 const STATUS = `projectItems(first:5){nodes{project{number title field(name:"Status"){... on ProjectV2SingleSelectField{options{name}}}} fieldValueByName(name:"Status"){... on ProjectV2ItemFieldSingleSelectValue{name}}}}`;
 const ISSUE = (withStatus) => `number title url body createdAt updatedAt author{login} assignees(first:10){nodes{login}} labels(first:10){nodes{name}} ${withStatus ? STATUS : ""}`;
 export const PAGES = 10;
-export const listQuery = (withStatus) => `query($owner:String!,$name:String!,$assignee:String,$author:String,$after:String){repository(owner:$owner,name:$name){issues(first:100,after:$after,states:OPEN,orderBy:{field:UPDATED_AT,direction:DESC},filterBy:{assignee:$assignee,createdBy:$author}){pageInfo{hasNextPage endCursor} nodes{${ISSUE(withStatus)}}}}}`;
+export const listQuery = (withStatus) => `query($owner:String!,$name:String!,$assignee:String,$author:String,$after:String){repository(owner:$owner,name:$name){issues(first:100,after:$after,states:OPEN,orderBy:{field:UPDATED_AT,direction:DESC},filterBy:{assignee:$assignee,createdBy:$author}){totalCount pageInfo{hasNextPage endCursor} nodes{${ISSUE(withStatus)}}}}}`;
 export const DETAIL = "query($owner:String!,$name:String!,$number:Int!){repository(owner:$owner,name:$name){issue(number:$number){body comments(last:20){nodes{author{login} body createdAt}} closedByPullRequestsReferences(first:5,includeClosedPrs:true){nodes{number title url state}}}}}";
 
 const OFFLINE = /could not resolve host|network is unreachable|connection refused|no such host|timeout|dial tcp|i\/o timeout/i;
@@ -69,9 +69,9 @@ async function readPages(run, repo, withStatus, extra) {
     if (r?.code !== 0) return { r, nodes, complete: false };
     const issues = parseOr(r.stdout, null)?.data?.repository?.issues;
     if (!Array.isArray(issues?.nodes)) return { r: { ...r, code: 1 }, nodes, complete: false };
-    const all = [...nodes, ...issues.nodes];
-    if (!issues.pageInfo?.hasNextPage) return { r, nodes: all, complete: true };
-    return page + 1 < PAGES ? walk(issues.pageInfo.endCursor, all, page + 1) : { r, nodes: all, complete: false };
+    const all = [...nodes, ...issues.nodes], total = issues.totalCount ?? all.length;
+    if (!issues.pageInfo?.hasNextPage) return { r, nodes: all, complete: true, total };
+    return page + 1 < PAGES ? walk(issues.pageInfo.endCursor, all, page + 1) : { r, nodes: all, complete: false, total };
   };
   return walk(null, [], 0);
 }
@@ -80,8 +80,8 @@ export async function readBoard(run, { repo, project, filter, login, now = Date.
   const full = await readPages(run, repo, true, filterVars(filter, login));
   const scoped = full.r?.code !== 0 && NO_SCOPE.test(`${full.r?.stderr ?? ""}${full.r?.stdout ?? ""}`);
   const read = scoped ? await readPages(run, repo, false, filterVars(filter, login)) : full;
-  if (read.r?.code !== 0 && !read.nodes.length) return { rows: [], columns: [], failure: failure(read.r, now) };
-  return { rows: rowsOf(read.nodes, repo, project, now), columns: boardOf(read.nodes), failure: null, complete: read.complete, noProjects: scoped };
+  const failed = read.r?.code !== 0 ? failure(read.r, now) : null;
+  return { rows: rowsOf(read.nodes, repo, project, now), columns: boardOf(read.nodes), failure: failed, complete: read.complete, total: read.total ?? read.nodes.length, noProjects: scoped };
 }
 
 export async function syncBoard(db, run, { repo, project, filter, login, kept, now = Date.now() }) {

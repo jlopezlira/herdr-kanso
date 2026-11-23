@@ -95,7 +95,7 @@ CREATE TABLE IF NOT EXISTS machines_off(name TEXT PRIMARY KEY, target TEXT NOT N
 CREATE TABLE IF NOT EXISTS computer_alias(route TEXT PRIMARY KEY, name TEXT NOT NULL, at INTEGER NOT NULL, pending INTEGER NOT NULL DEFAULT 0);
 CREATE TABLE IF NOT EXISTS issues(url TEXT NOT NULL, source TEXT NOT NULL, project TEXT NOT NULL, ticket TEXT NOT NULL, number INTEGER, repo TEXT, title TEXT NOT NULL, status TEXT, priority TEXT, labels TEXT, assignees TEXT, author TEXT, created_at TEXT, updated_at TEXT, body TEXT, comments TEXT, prs TEXT, read_at INTEGER NOT NULL, PRIMARY KEY(project, url));
 CREATE INDEX IF NOT EXISTS issues_project ON issues(project, source);
-CREATE TABLE IF NOT EXISTS issue_boards(project TEXT NOT NULL, source TEXT NOT NULL, filter TEXT NOT NULL, who TEXT, repo TEXT, columns TEXT NOT NULL DEFAULT '[]', read_at INTEGER, retry_at INTEGER, failure TEXT, PRIMARY KEY(project, source));
+CREATE TABLE IF NOT EXISTS issue_boards(project TEXT NOT NULL, source TEXT NOT NULL, filter TEXT NOT NULL, who TEXT, repo TEXT, columns TEXT NOT NULL DEFAULT '[]', total INTEGER, read_at INTEGER, retry_at INTEGER, failure TEXT, PRIMARY KEY(project, source));
 INSERT OR IGNORE INTO meta(key,value) VALUES('version','${VERSION}');`;
 // hc once stored the words false and null for a plain ssh machine.
 const CLEAN_OFF = `UPDATE machines_off SET via=CASE WHEN via IN ('false','null') THEN '' ELSE via END, session=CASE WHEN session IN ('false','null') THEN '' ELSE session END WHERE via IN ('false','null') OR session IN ('false','null');`;
