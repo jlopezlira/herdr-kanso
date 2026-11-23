@@ -113,7 +113,7 @@ const mountIssues = async (store, spec = {}) => {
   });
   Object.assign(view, {
     filters: { shop: "all" }, folds: {}, projects: [shop], rows, boards, links, logins: {}, places: spec.places ?? {},
-    reading: new Set(), open: null, front: null, linking: null, store: spec.store ?? true,
+    reading: new Set(), open: null, front: null, registered: "", linking: null, store: spec.store ?? true,
     secrets: spec.secrets ?? { request: async (req) => { urls.push(req.url); return spec.answer ? spec.answer(req) : okJson({}); } },
   });
   return { drawn, overlays, urls, runs, view };
