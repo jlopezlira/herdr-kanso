@@ -16,10 +16,12 @@ export function destinationOf(target) {
 }
 
 export const KEY = "~/.ssh/id_ed25519_kanso";
-const KEYED = `-o IdentityFile=${KEY} -o IdentitiesOnly=yes -o BatchMode=yes `;
-const KEYED_BEFORE = `-i ${KEY} -o IdentitiesOnly=yes -o BatchMode=yes `;
-const unkeyed = (via) => [KEYED, KEYED_BEFORE].reduce((rest, words) => rest.split(words).join(""), String(via ?? ""));
-export const kansoKeyed = (via) => [KEYED, KEYED_BEFORE].some((words) => String(via ?? "").includes(words));
+export const AGENT_KEY = "~/.ssh/id_kanso_agent";
+const keyedWords = (path) => `-o IdentityFile=${path} -o IdentitiesOnly=yes -o BatchMode=yes `;
+const ROUTE_WORDS = [keyedWords(KEY), keyedWords(AGENT_KEY), `-i ${KEY} -o IdentitiesOnly=yes -o BatchMode=yes `];
+const unkeyed = (via) => ROUTE_WORDS.reduce((rest, words) => rest.split(words).join(""), String(via ?? ""));
+export const kansoKeyed = (via) => ROUTE_WORDS.some((words) => String(via ?? "").includes(words));
+export const keyOfRoute = (via) => (String(via ?? "").includes(keyedWords(AGENT_KEY)) ? AGENT_KEY : KEY);
 const ASK = "-o PasswordAuthentication=yes -o KbdInteractiveAuthentication=yes ";
 const SSH = /(^|['"]|\bexec )ssh (?=\S)/g;
 const DONE = "Done: this tab can close.";
@@ -73,7 +75,11 @@ export function keyedRoute({ target = "", via = "" }, platform = "macos") {
   const base = (quote) => unkeyed(via) || sshLine(target, quote);
   const lan = lanParts(base(shellQuote));
   const ask = lan ? `sh -c ${shellQuote(`ssh ${ASK}${LAN_ASK} ${lan.args} "$1" || exec ${withSsh(lan.away, ASK)} "$1"`)} route` : withSsh(base(windows ? psQuote : shellQuote), ASK);
-  return { ask, keyed: withSsh(base(windows ? String : shellQuote), KEYED), reach: withSsh(base(windows ? psQuote : shellQuote), KEYED) };
+  return {
+    ask,
+    keyed: (path = KEY) => withSsh(base(windows ? String : shellQuote), keyedWords(path)),
+    reach: (path = KEY) => withSsh(base(windows ? psQuote : shellQuote), keyedWords(path)),
+  };
 }
 
 const nameOf = ({ name, target }) => name || splitTarget(destinationOf(target).dest).host;
@@ -81,26 +87,32 @@ const nameOf = ({ name, target }) => name || splitTarget(destinationOf(target).d
 const addLine = (route, { via, name, session, install = true }) => ["machine", "add", ...(via ? [] : [route]), ...(via ? ["--via", via] : []),
   "--name", name, ...(session ? ["--session", session] : []), ...(install ? ["--install"] : [])];
 
-const pushLine = (pub, b64) => `umask 077; mkdir -p ~/.ssh; touch ~/.ssh/authorized_keys; grep -qF '${b64}' ~/.ssh/authorized_keys || printf '\\n%s\\n' '${pub}' >> ~/.ssh/authorized_keys`;
-const forgetLine = (old) => `grep -vxF '${old}' ~/.ssh/authorized_keys > ~/.ssh/authorized_keys.kanso && mv ~/.ssh/authorized_keys.kanso ~/.ssh/authorized_keys; rm -f ~/.ssh/authorized_keys.kanso; `;
+const pushLine = (pub, b64) => `umask 077; mkdir -p ~/.ssh; touch ~/.ssh/authorized_keys; grep -qF '${b64}' ~/.ssh/authorized_keys || { printf '\\n%s\\n' '${pub}' >> ~/.ssh/authorized_keys && echo kanso-added; }`;
 const LINE = "LINE";
 const dropLine = `test -f ~/.ssh/authorized_keys || exit 0; grep -qxF '${LINE}' ~/.ssh/authorized_keys || { echo absent; exit 0; }; umask 077; grep -vxF '${LINE}' ~/.ssh/authorized_keys > ~/.ssh/authorized_keys.kanso; test $? -le 1 && mv ~/.ssh/authorized_keys.kanso ~/.ssh/authorized_keys && echo removed`;
-const SH_LINE = `line=$(awk '{ print $1 " " $2 " kanso" }' "$k.pub")`;
+const forgetLine = `umask 077; grep -vxF '${LINE}' ~/.ssh/authorized_keys > ~/.ssh/authorized_keys.kanso; test $? -le 1 && mv ~/.ssh/authorized_keys.kanso ~/.ssh/authorized_keys; rm -f ~/.ssh/authorized_keys.kanso; `;
+const shSpliced = (template, variable) => template.split(LINE).map(shellQuote).join(`"$${variable}"`);
+const psSpliced = (template, variable) => `(${template.split(LINE).map(psQuote).join(` + $${variable} + `)})`;
+const shHome = (path) => path.replace("~", '"$HOME"');
+const psHome = (path) => `Join-Path $env:USERPROFILE ${psQuote(path.slice(2).replace("/", "\\"))}`;
+const VIA = "KANSO_VIA";
+
 const SH_KEY = [
   `agent() { ssh-add -L 2>/dev/null | awk '$1 ~ /^(ssh-ed25519|ecdsa-sha2-nistp[0-9]+|ssh-rsa)$/ { print $1 " " $2 }'; }`,
-  `held() { [ -f "$k.pub" ] && agent | grep -qxF "$(awk '{ print $1 " " $2 }' "$k.pub")"; }`,
-  `pick() { a=$(agent); [ -n "$a" ] && printf '%s\\n' "$a" | awk '/^ssh-ed25519 / { print $0 " kanso"; f = 1; exit } NR == 1 { first = $0 } END { if (!f) print first " kanso" }' > "$k.pub"; }`,
-  'fresh() { rm -f "$k.pub"; ssh-keygen -q -t ed25519 -N "" -C kanso -f "$k"; }',
-  `lines() { pub=$(awk '{ print $1 " " $2 " kanso" }' "$k.pub") && b64=$(awk '{ print $2 }' "$k.pub") && line="${pushLine("$pub", "$b64")}"; }`,
+  `held() { [ -f "$g.pub" ] && agent | grep -qxF "$(awk '{ print $1 " " $2 }' "$g.pub")"; }`,
+  `pick() { a=$(agent); [ -n "$a" ] && printf '%s\\n' "$a" | awk '/^ssh-ed25519 / { print $0 " kanso"; f = 1; exit } NR == 1 { first = $0 } END { if (!f) print first " kanso" }' > "$g.pub"; }`,
+  'own() { [ -f "$k" ] || { rm -f "$k.pub"; ssh-keygen -q -t ed25519 -N "" -C kanso -f "$k"; }; }',
+  `lines() { pub=$(awk '{ print $1 " " $2 " kanso" }' "$1.pub") && b64=$(awk '{ print $2 }' "$1.pub") && line="${pushLine("$pub", "$b64")}"; }`,
 ];
-const PS_PAIR = "function Get-Pair { ((Get-Content \"$k.pub\" -Raw).Trim() -split '\\s+')[0..1] -join ' ' }";
+const PS_START = ["$PSNativeCommandArgumentPassing = 'Legacy'", `$k = ${psHome(KEY)}`, `$g = ${psHome(AGENT_KEY)}`];
+const PS_PAIR = "function Get-Pair($f) { ((Get-Content \"$f.pub\" -Raw).Trim() -split '\\s+')[0..1] -join ' ' }";
 const PS_KEY = [
   "function Get-Agent { @(ssh-add -L 2>$null | Where-Object { $_ -match '^(ssh-ed25519|ecdsa-sha2-nistp\\d+|ssh-rsa) ' } | ForEach-Object { ($_ -split ' ')[0..1] -join ' ' }) }",
   PS_PAIR,
-  "function Test-Held { (Test-Path \"$k.pub\") -and ((Get-Agent) -contains (Get-Pair)) }",
-  "function Select-Agent { $a = Get-Agent; if (-not $a) { return $false }; (@($a | Where-Object { $_ -like 'ssh-ed25519 *' }) + $a)[0] + ' kanso' | Set-Content \"$k.pub\" -Encoding ascii; $true }",
-  "function New-Key { Remove-Item \"$k.pub\" -ErrorAction SilentlyContinue; ssh-keygen -q -t ed25519 -N '\"\"' -C kanso -f $k }",
-  "function Read-Key { $script:pub = (Get-Pair) + ' kanso'; $script:b64 = (Get-Pair).Split(' ')[1] }",
+  "function Test-Held { (Test-Path \"$g.pub\") -and ((Get-Agent) -contains (Get-Pair $g)) }",
+  "function Select-Agent { $a = Get-Agent; if (-not $a) { return $false }; (@($a | Where-Object { $_ -like 'ssh-ed25519 *' }) + $a)[0] + ' kanso' | Set-Content \"$g.pub\" -Encoding ascii; $true }",
+  "function New-Own { if (-not (Test-Path $k)) { Remove-Item \"$k.pub\" -ErrorAction SilentlyContinue; ssh-keygen -q -t ed25519 -N '\"\"' -C kanso -f $k } }",
+  "function Read-Key($f) { $script:pub = (Get-Pair $f) + ' kanso'; $script:b64 = (Get-Pair $f).Split(' ')[1] }",
 ];
 
 function shSetup(machine, { replace }) {
@@ -108,17 +120,19 @@ function shSetup(machine, { replace }) {
   const { ask, keyed, reach } = keyedRoute(machine);
   const hc = (args) => ["hc", ...args].map(shellQuote).join(" ");
   const back = addLine(machine.target, { via: machine.via, name, session: machine.session });
+  const own = `lines "$k" || exit; push; via=${shellQuote(keyed(KEY))}`;
   return [
-    `k=${KEY.replace("~", '"$HOME"')}`,
+    `k=${shHome(KEY)}; g=${shHome(AGENT_KEY)}`,
     'mkdir -p "$HOME/.ssh" && chmod 700 "$HOME/.ssh" || exit',
     ...SH_KEY,
-    `push() { e=$(mktemp) || exit; ${ask} "$line" 2>"$e"; s=$?; cat "$e" >&2; [ "$s" -eq 0 ] || { grep -q "Permission denied" "$e" && { echo; echo ${shellQuote(refused(name))}; echo "$pub"; }; rm -f "$e"; exit 1; }; rm -f "$e"; }`,
-    '[ -f "$k" ] || held || pick || fresh || exit',
-    'lines || exit',
-    'push',
-    `[ -f "$k" ] || ${reach} true </dev/null >/dev/null 2>&1 || { echo ${shellQuote(AGENT_FAILED(name))}; old=$pub; fresh && lines || exit; line="${forgetLine("$old")}$line"; push; }`,
+    `push() { e=$(mktemp) || exit; said=$(${ask} "$line" 2>"$e"); s=$?; cat "$e" >&2; case $said in *kanso-added*) added=1 ;; *) added= ;; esac; [ "$s" -eq 0 ] || { grep -q "Permission denied" "$e" && { echo; echo ${shellQuote(refused(name))}; echo "$pub"; }; rm -f "$e"; exit 1; }; rm -f "$e"; }`,
+    "if held || pick; then",
+    '  lines "$g" || exit; push',
+    `  if ${reach(AGENT_KEY)} true </dev/null >/dev/null 2>&1; then via=${shellQuote(keyed(AGENT_KEY))}`,
+    `  else echo ${shellQuote(AGENT_FAILED(name))}; old=$pub; was=$added; own || exit; lines "$k" || exit; [ -z "$was" ] || line=${shSpliced(forgetLine, "old")}"$line"; push; via=${shellQuote(keyed(KEY))}; fi`,
+    `else own || exit; ${own}; fi`,
     replace ? `${hc(["machine", "rm", name])} >/dev/null 2>&1` : "",
-    `${hc(addLine("", { via: keyed, name, session: machine.session }))} || { ${replace ? `${hc(back)} >/dev/null 2>&1; ` : ""}exit 1; }`,
+    `${hc(addLine("", { via: VIA, name, session: machine.session })).replace(VIA, '"$via"')} || { ${replace ? `${hc(back)} >/dev/null 2>&1; ` : ""}exit 1; }`,
     `herdr-app do ${shellQuote(`kanso-spaces.retry-machine:${name}`)} >/dev/null 2>&1`,
     `echo; echo ${shellQuote(DONE)}`,
   ].filter(Boolean).join("\n");
@@ -130,18 +144,15 @@ function psSetup(machine, { replace }) {
   const hc = (args) => `& hc ${args.map(psQuote).join(" ")}`;
   const back = addLine(machine.target, { name, session: machine.session });
   return [
-    "$PSNativeCommandArgumentPassing = 'Legacy'",
-    `$k = Join-Path $env:USERPROFILE '.ssh\\id_ed25519_kanso'`,
+    ...PS_START,
     "New-Item -ItemType Directory -Force (Split-Path $k) | Out-Null",
     ...PS_KEY,
-    `function Send-Key { $said = ${ask} "$pre${pushLine("$pub", "$b64")}" 2>&1; $said | Write-Host; if ($LASTEXITCODE -ne 0) { if ("$said" -match 'Permission denied') { Write-Host ''; Write-Host ${psQuote(refused(name))}; Write-Host $pub }; exit 1 } }`,
-    "if (-not (Test-Path $k) -and -not (Test-Held)) { if (-not (Select-Agent)) { New-Key } }",
-    "Read-Key",
+    `function Send-Key { $said = ${ask} "$pre${pushLine("$pub", "$b64")}" 2>&1; $code = $LASTEXITCODE; $script:added = [bool]("$said" -match 'kanso-added'); $said | Where-Object { "$_" -notmatch 'kanso-added' } | Write-Host; if ($code -ne 0) { if ("$said" -match 'Permission denied') { Write-Host ''; Write-Host ${psQuote(refused(name))}; Write-Host $pub }; exit 1 } }`,
     "$pre = ''",
-    "Send-Key",
-    `if (-not (Test-Path $k)) { ${reach} true *> $null; if ($LASTEXITCODE -ne 0) { Write-Host ${psQuote(AGENT_FAILED(name))}; $old = $pub; New-Key; Read-Key; $pre = "${forgetLine("$old")}"; Send-Key } }`,
+    `if ((Test-Held) -or (Select-Agent)) { Read-Key $g; Send-Key; ${reach(AGENT_KEY)} true *> $null; if ($LASTEXITCODE -eq 0) { $via = ${psQuote(keyed(AGENT_KEY))} } else { Write-Host ${psQuote(AGENT_FAILED(name))}; $old = $pub; $was = $added; New-Own; Read-Key $k; if ($was) { $pre = ${psSpliced(forgetLine, "old")} }; Send-Key; $via = ${psQuote(keyed(KEY))} } }`,
+    `else { New-Own; Read-Key $k; Send-Key; $via = ${psQuote(keyed(KEY))} }`,
     replace ? `${hc(["machine", "rm", name])} *> $null` : "",
-    hc(addLine("", { via: keyed, name, session: machine.session })),
+    hc(addLine("", { via: VIA, name, session: machine.session })).replace(psQuote(VIA), "$via"),
     `if ($LASTEXITCODE -ne 0) { ${replace ? `${hc(back)} *> $null; ` : ""}exit 1 }`,
     `Write-Host ''; Write-Host '${DONE}'`,
   ].filter(Boolean).join("; ");
@@ -160,46 +171,45 @@ export function keySetup(machine, { platform = "macos", replace = false } = {}) 
 export const signInTab = (machine, platform = "macos") => ({ argv: keySetup(routeOf(machine), { platform, replace: true }), place: "right" });
 
 const REMOVED = (name) => `Removed this computer's key from ${name}.`;
+const STILL_LISTED = (name) => `Removed this computer's key from ${name}, but Herdr still lists ${name}: remove it from the sidebar.`;
 const NONE_THERE = (name) => `kansō had added no key on ${name}, so nothing was removed there.`;
 const NO_KEY = "This computer has no kansō key, so there is nothing to remove.";
 const UNREACHED = (name) => `${name} did not answer with the key, so nothing was removed.`;
 
-function shRemoval(machine) {
-  const name = nameOf(machine);
+function shRemoval(machine, name, path) {
   const { reach } = keyedRoute(machine);
-  const drop = dropLine.split(LINE).map(shellQuote).join('"$line"');
   return [
-    `k=${KEY.replace("~", '"$HOME"')}`,
+    `k=${shHome(path)}`,
     `[ -f "$k.pub" ] || { echo ${shellQuote(NO_KEY)}; exit 1; }`,
-    `${SH_LINE} || exit`,
-    `said=$(${reach} ${drop} </dev/null) || { echo ${shellQuote(UNREACHED(name))}; exit 1; }`,
+    `line=$(awk '{ print $1 " " $2 " kanso" }' "$k.pub") || exit`,
+    `said=$(${reach(path)} ${shSpliced(dropLine, "line")} </dev/null) || { echo ${shellQuote(UNREACHED(name))}; exit 1; }`,
     `[ "$said" = removed ] || { echo ${shellQuote(NONE_THERE(name))}; exit 0; }`,
-    `herdr-app do ${shellQuote(`kanso-spaces.remove-machine:${name}`)} >/dev/null 2>&1`,
+    `herdr-app do ${shellQuote(`kanso-spaces.remove-machine:${name}`)} >/dev/null 2>&1 || { echo ${shellQuote(STILL_LISTED(name))}; exit 1; }`,
     `echo ${shellQuote(REMOVED(name))}; echo; echo ${shellQuote(DONE)}`,
   ].join("\n");
 }
 
-function psRemoval(machine) {
-  const name = nameOf(machine);
+function psRemoval(machine, name, path) {
   const { reach } = keyedRoute(machine, "windows");
-  const drop = `(${dropLine.split(LINE).map(psQuote).join(" + $line + ")})`;
   return [
-    "$PSNativeCommandArgumentPassing = 'Legacy'",
-    `$k = Join-Path $env:USERPROFILE '.ssh\\id_ed25519_kanso'`,
-    `if (-not (Test-Path "$k.pub")) { Write-Host ${psQuote(NO_KEY)}; exit 1 }`,
+    ...PS_START,
+    `$f = ${path === AGENT_KEY ? "$g" : "$k"}`,
+    `if (-not (Test-Path "$f.pub")) { Write-Host ${psQuote(NO_KEY)}; exit 1 }`,
     PS_PAIR,
-    "$line = (Get-Pair) + ' kanso'",
-    `$said = ${reach} ${drop}`,
+    "$line = (Get-Pair $f) + ' kanso'",
+    `$said = ${reach(path)} ${psSpliced(dropLine, "line")}`,
     `if ($LASTEXITCODE -ne 0) { Write-Host ${psQuote(UNREACHED(name))}; exit 1 }`,
     `if ("$said".Trim() -ne 'removed') { Write-Host ${psQuote(NONE_THERE(name))}; exit 0 }`,
     `& herdr-app do ${psQuote(`kanso-spaces.remove-machine:${name}`)} *> $null`,
+    `if ($LASTEXITCODE -ne 0) { Write-Host ${psQuote(STILL_LISTED(name))}; exit 1 }`,
     `Write-Host ${psQuote(REMOVED(name))}; Write-Host ''; Write-Host '${DONE}'`,
   ].join("; ");
 }
 
 export function keyRemoval(machine, platform = "macos") {
   const route = { name: "", target: "", via: "", session: "", ...routeOf(machine) };
-  return platform === "windows" ? ["powershell", "-NoProfile", "-Command", psRemoval(route)] : ["sh", "-c", shRemoval(route)];
+  const [name, path] = [nameOf(route), keyOfRoute(route.via)];
+  return platform === "windows" ? ["powershell", "-NoProfile", "-Command", psRemoval(route, name, path)] : ["sh", "-c", shRemoval(route, name, path)];
 }
 
 export const removeKeyTab = (machine, platform = "macos") => ({ argv: keyRemoval(machine, platform), place: "right" });
