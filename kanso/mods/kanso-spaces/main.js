@@ -4,6 +4,7 @@ import { signInTab } from "./sign-in.js";
 import { homeRoute } from "./lan-route.js";
 import { findTailscale } from "./reach.js";
 import { paths } from "./platform-paths.js";
+import { GIT_READ } from "./platform-command.js";
 import { processApi } from "./platform-processes.js";
 import { systemApi } from "./platform-system.js";
 // Derived from the `spaces` mod shipped with Herdr (Apache-2.0, https://github.com/herdrdev/herdr-app).
@@ -1664,7 +1665,7 @@ export default class Spaces extends RetryingView {
     this.unsure.delete(key);
     try {
       // No optional locks: a status that touched the index would wake the watch again.
-      const r = await exec("git", ["--no-optional-locks", "status", "--porcelain=v2", "--branch"], { cwd, on });
+      const r = await exec("git", [...GIT_READ, "--no-optional-locks", "status", "--porcelain=v2", "--branch"], { cwd, on });
       if (r.code !== 0) {
         // Only git's own "no" is remembered as no repo; anything else is asked again.
         if (!/not a git repository/i.test(r.stderr)) this.unsure.add(key);

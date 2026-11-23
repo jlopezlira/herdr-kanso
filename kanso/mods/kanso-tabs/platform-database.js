@@ -36,7 +36,7 @@ export class Database {
   async prepare(dir, missing) {
     const ok = await this.call((_platform, run) => run("sqlite3", ["-version"])).catch((error) => { if (error?.late) throw error; return null; });
     if (ok?.code !== 0) throw new Error(missing);
-    await this.call((platform, run) => fileApi(platform, run).mkdir(dir));
+    await this.call((platform, run) => fileApi(platform, run).ownOnly(dir, this.file));
   }
 
   execute(text, options = {}) {

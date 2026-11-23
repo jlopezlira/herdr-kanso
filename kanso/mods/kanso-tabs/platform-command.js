@@ -1,3 +1,4 @@
+export const GIT_READ = Object.freeze(["-c", "core.fsmonitor=false"]);
 export const platformName = (name) => ({ darwin: "macos", win32: "windows" }[name] ?? name);
 
 export function psQuote(value) {

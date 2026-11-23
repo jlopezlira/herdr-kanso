@@ -1,4 +1,4 @@
-import { checked } from "./platform-command.js";
+import { checked, GIT_READ } from "./platform-command.js";
 import { paths } from "./platform-paths.js";
 import { fileApi } from "./platform-files.js";
 
@@ -58,7 +58,7 @@ cd "$1" 2>/dev/null || { echo gone; exit 0; }
 # git can't read it (its .git names where the repository used to be): nothing
 # below would be true, so it says so and stops.
 git rev-parse --git-dir >/dev/null 2>&1 || { echo broken; exit 0; }
-status=$(git --no-optional-locks status --porcelain=v1 --untracked-files=normal 2>/dev/null) || { echo broken; exit 0; }
+status=$(git ${GIT_READ.join(" ")} --no-optional-locks status --porcelain=v1 --untracked-files=normal 2>/dev/null) || { echo broken; exit 0; }
 idle=$2
 shift 2
 if [ "$idle" -gt 0 ] 2>/dev/null; then
