@@ -21,6 +21,8 @@ import { issuesGithub, repoText } from "./issues-github.js";
 import { LINKED, linkedOf, syncLinkedBoard, syncLinkedDetail } from "./issues-linked.js";
 
 const PROJECTS = "SELECT id, name, folder, machine FROM projects WHERE removed IS NULL;";
+const REGISTRY = "kanso.registry";
+const registered = () => { const rows = shared(REGISTRY); return Array.isArray(rows) ? rows.map((p) => p.id).join() : ""; };
 const SIGNED_OUT = { kind: "signed out", text: "Sign in to GitHub to see your issues" };
 const NO_REMOTE = { kind: "no remote", text: "No GitHub remote" };
 const UNREACHED = (detail) => ({ kind: "offline", text: "GitHub can't be reached", source: detail ?? "" });
@@ -61,6 +63,7 @@ export class Issues {
     this.reading = new Set();
     this.open = null;
     this.front = null;
+    this.registered = registered();
     this.linking = null;
     this.secrets = localSecrets();
     this.store = null;
@@ -78,7 +81,7 @@ export class Issues {
 
   load(cx, refresh = false) {
     cx.spawn(async (cx) => {
-      this.projects ??= (await tryOrAsync(() => this.db.read(PROJECTS))) ?? [];
+      this.projects = (await tryOrAsync(() => this.db.read(PROJECTS))) ?? this.projects ?? [];
       await this.reload();
       cx.notify();
       if (refresh) this.refresh(cx);
@@ -251,6 +254,10 @@ export class Issues {
     return stateBlock(`issues-state-${project.id}-${source}`, c, { text: `${failure.text}${until}`, source: [failure.source, copy].filter(Boolean).join(" · "), ...fix });
   }
 
+  newProject() {
+    openOverlay({ mod: "kanso-spaces", kind: "dialog", width: DIALOG.sidebar, props: { newProject: { start: false } } });
+  }
+
   openSettings() {
     openOverlay({ mod: "kanso-settings", kind: "dialog", width: DIALOG.settingsW, height: DIALOG.settingsH, props: { page: "accounts" } });
   }
@@ -346,6 +353,8 @@ export class Issues {
 
   render(cx) {
     const c = tokens(theme()), now = Date.now();
+    const known = registered();
+    if (known !== this.registered) { this.registered = known; if (this.projects) this.load(cx, true); }
     const front = this.frontProject();
     if (front !== this.front) { this.front = front; if (this.projects) this.refresh(cx); }
     const open = this.open ? this.rows.find((r) => r.url === this.open.url && r.project === this.open.project) : null;
@@ -353,7 +362,7 @@ export class Issues {
     const projects = projectsInOrder(this.projects ?? [], front);
     const body = open ? this.detail(open, c, now)
       : !this.projects ? this.skeleton(c)
-        : !projects.length ? emptyState({ text: "Add a project to see its issues" })("issues-none", c)
+        : !projects.length ? emptyState({ text: "Add a project to see its issues", action: "New project" })("issues-none", c, { onClick: () => this.newProject() })
           : v_flex().w_full().gap(G.xl).children([...this.noStore(c), ...projects.map((p) => this.projectBlock(p, c, now))]);
     return scrollPage("kanso-issues", c, true, (column) => column
       .child(pageHeader(div().text_size(PR.title).text_color(c.text).child("Issues"),

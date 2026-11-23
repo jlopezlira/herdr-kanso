@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { load, tape, KIT_NIGHT, timedContext, same } from "./helpers.mjs";
+import { load, tape, KIT_NIGHT, timedContext, same, drawingHost, press, texts } from "./helpers.mjs";
 import { temporaryKdb } from "./mod-fixtures.mjs";
 
 const PR_URL = "https://github.com/acme/shop/issues/12";
@@ -206,6 +206,67 @@ const draw = (view) => {
 
 const shop = { id: "shop", name: "Shop", folder: "/work/shop", machine: null };
 const acme = { id: "acme", name: "Acme", folder: "/work/acme", machine: null };
+
+const NO_PROJECTS = "Add a project to see its issues";
+const startIssues = async (db, host = {}) => {
+  const { Issues, DIALOG } = await load("kanso-panel/issues.js", ["Issues", "DIALOG"], {
+    ...viewHost,
+    ...drawingHost(),
+    spaces: () => [],
+    checking: () => true,
+    exec: async () => ({ code: 1, stdout: "", stderr: "" }),
+    ...host,
+  });
+  const { cx, drain } = timedContext([]);
+  const view = new Issues(db);
+  view.init(cx);
+  await drain();
+  return { view, cx, drain, DIALOG };
+};
+
+test("With no projects, New project opens the sidebar's New project dialog", async (t) => {
+  const { db } = await temporaryKdb(t);
+  const openOverlay = t.mock.fn();
+  const { view, cx, DIALOG } = await startIssues(db, { openOverlay });
+  const page = view.render(cx);
+  assert.ok(texts(page).includes(NO_PROJECTS));
+  assert.ok(texts(page).includes("New project"));
+  press(page, "issues-none-action");
+  const opened = openOverlay.mock.calls.map((call) => call.arguments);
+  assert.deepEqual(structuredClone(opened), [[{
+    mod: "kanso-spaces",
+    kind: "dialog",
+    width: DIALOG.sidebar,
+    props: { newProject: { start: false } },
+  }]]);
+});
+
+test("An Issues panel that mounted without projects shows a newly registered project", async (t) => {
+  const { db } = await temporaryKdb(t);
+  const shared = t.mock.fn(() => null);
+  const { view, cx, drain } = await startIssues(db, { shared });
+  assert.ok(texts(view.render(cx)).includes(NO_PROJECTS));
+  const { row } = await db.addProject({ name: shop.name, folder: shop.folder });
+  shared.mock.mockImplementation((key) => key === "kanso.registry" ? [{ id: row.id }] : null);
+  view.render(cx);
+  await drain();
+  const words = texts(view.render(cx));
+  assert.ok(words.includes(shop.name));
+  assert.equal(words.includes(NO_PROJECTS), false);
+});
+
+test("Issues keeps showing the project when a later projects read fails", async (t) => {
+  const { db } = await temporaryKdb(t);
+  await db.addProject({ name: shop.name, folder: shop.folder });
+  const { view, cx, drain } = await startIssues(db);
+  const originalRead = db.read.bind(db);
+  const unavailable = t.mock.fn(async () => { throw new Error("Projects are unavailable"); });
+  t.mock.method(db, "read", (sql) => /\bFROM projects\b/.test(sql) ? unavailable() : originalRead(sql));
+  view.load(cx);
+  await drain();
+  assert.equal(unavailable.mock.callCount(), 1);
+  assert.ok(texts(view.render(cx)).includes(shop.name));
+});
 
 test("Two projects are drawn with the front project first, each section shows its count, and Done stays folded", async () => {
   const view = await mount({
