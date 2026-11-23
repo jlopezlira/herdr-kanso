@@ -54,7 +54,6 @@ test("Windows arguments retain spaces, empty strings, quotes and trailing slashe
   }
 });
 
-// Open with in a menu drawn by the fake kit: what the user reads and the presses it offers.
 const chooser = async ({ exec, tree = { id: "root", children: [] } }) => {
   const { gpuiHost, texts, find, calls } = await import("./helpers.mjs");
   const closed = [];
@@ -84,10 +83,28 @@ test("A failed look for editors says so and offers Retry, which looks again", as
   assert.ok(!words().includes("Could not look for editors"), "Retry looked again");
 });
 
-test("Preview in the panel is dim when the layout has no panel, and choosing it keeps the chooser open", async () => {
-  const { view, settle, closed, words } = await chooser({ exec: async () => ({ code: 0, stdout: "", stderr: "" }) });
+
+test("A scan that exits with an error, or fails after an empty one, shows the failure with Retry, never Install an editor", async () => {
+  let answer = { code: 1, stdout: "", stderr: "sh: denied" };
+  const { settle, press, words } = await chooser({ exec: async () => answer });
   await settle();
-  assert.ok(words().includes("no panel in this layout"));
-  await view.open(view.list()[0]);
-  assert.deepEqual(closed, [], "nothing opened, so nothing closed");
+  assert.ok(words().includes("Could not look for editors"), "a failed exit is no empty result");
+  answer = { code: 0, stdout: "", stderr: "" };
+  press("Retry");
+  await settle();
+  assert.ok(words().includes("Look again"), "a clean scan that found nothing");
+  answer = { code: 1, stdout: "", stderr: "sh: denied" };
+  press("Look again");
+  await settle();
+  assert.ok(words().includes("Could not look for editors"), "the failed rescan says so");
+});
+
+test("Preview in the panel is dim, and choosing it keeps the chooser open, on a layout with no panel or one that is not kansō's", async () => {
+  for (const tree of [{ id: "root", children: [] }, { id: "root", children: [{ id: "panel-body", children: [] }] }]) {
+    const { view, settle, closed, words } = await chooser({ exec: async () => ({ code: 0, stdout: "", stderr: "" }), tree });
+    await settle();
+    assert.ok(words().includes("no panel in this layout"));
+    await view.open(view.list()[0]);
+    assert.deepEqual(closed, [], "nothing opened, so nothing closed");
+  }
 });

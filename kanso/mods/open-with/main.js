@@ -5,7 +5,7 @@ import { openApi } from "./platform-open.js";
 
 import { View } from "gpui-kit";
 import { exec, run, notify, theme, props, closeOverlay, focused, panes, spaces, home, appHome, shared, setShared, layout, window as win } from "herdr";
-import { walkLayout, commitLayout } from "./layout.js";
+import { walkLayout, commitLayout, isKansoTree } from "./layout.js";
 import { listKey, moveTo } from "./listkeys.js";
 import { isText } from "./kinds.js";
 import { aliasText, machineTitle, focusOn } from "./pure.js";
@@ -58,7 +58,7 @@ const TILE_TONES = ["blue", "teal", "violet", "yellow", "green", "red"];
 // One shell pass: prints `app|cli|flatpak <tab> key <tab> path` per hit.
 const PREVIEW = { id: "preview", name: "Preview in the panel", icon: "mods/kanso-chrome/icons/file.svg", builtin: true };
 
-const hasPanel = () => Boolean(walkLayout(layout(), "panel-body"));
+const hasPanel = () => isKansoTree(layout()) && Boolean(walkLayout(layout(), "panel-body"));
 
 function showPreview(file, machine) {
   if (!hasPanel()) return false;
@@ -194,7 +194,7 @@ export default class OpenWith extends View {
     const firstTui = list.findIndex((e) => e.tui);
     const again = (cx) => this.detect(cx);
     const none = !list.some((e) => !e.builtin);
-    const state = this.error && !this.found ? [{ failure: { text: "Could not look for editors", source: this.error, fix: "Retry", onClick: again } }]
+    const state = this.error && none ? [{ failure: { text: "Could not look for editors", source: this.error, fix: "Retry", onClick: again } }]
       : !this.found || (this.looking && none) ? [{ loading: true }, { loading: true }]
       : none ? [{ heading: "No code editor found. Install Cursor, VS Code, Zed or another editor." }, { icon: "refresh-cw", label: "Look again", onClick: again }]
       : [];

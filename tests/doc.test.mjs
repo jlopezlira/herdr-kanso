@@ -265,15 +265,13 @@ test("reviews still waiting are read one per md-review process, by its pid", asy
   assert.deepEqual(clone(reviewsIn("")), []);
 });
 
-test("A formatted document says how to edit a block and offers Add paragraph as a button; Enter on a block edits it", async () => {
-  const { gpuiHost, chain, find, calls, tipsOf } = await import("./helpers.mjs");
+test("Each formatted block has an Edit block button and the document ends with Add paragraph", async () => {
+  const { gpuiHost, chain, find, calls } = await import("./helpers.mjs");
   const { doc, cx } = await fixture("# Plan\n\nFirst.\n", { ...gpuiHost(), TextView: { markdown: () => chain("words") } });
-  const drawn = doc.body({}, "md");
-  assert.ok(tipsOf(drawn).includes("Double-click to edit"));
-  calls(find(drawn, (el) => el.tag === "md-add"), "on_click").at(-1).at(-1)({}, cx);
+  const press = (tag) => calls(find(doc.body({}, "md"), (el) => el.tag === tag), "on_click").at(-1).at(-1)({}, cx);
+  press("md-add");
   assert.equal(doc.blocks[doc.active].kind, "paragraph", "a new paragraph, open to type in");
   doc.close();
-  const block = find(doc.body({}, "md"), (el) => calls(el, "tab_index").length > 0);
-  calls(block, "on_key_down").at(-1).at(-1)({ key: "enter" }, cx);
-  assert.equal(doc.active, 0, "the heading opens from the keyboard");
+  press("md-b0-edit");
+  assert.equal(doc.active, 0, "the heading opens from its own button");
 });

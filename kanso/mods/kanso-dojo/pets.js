@@ -211,8 +211,8 @@ export class Companion {
     const note = this.error ?? (coming ? `Bringing ${coming} more\u2026` : null);
     return v_flex().gap(G.md)
       .child(h_flex().flex_wrap().gap(8).children(this.pets.map(tile)))
-      .when(Boolean(note), (el) => el.child(h_flex().items_center().gap(G.sm)
-        .child(div().text_size(T.body).text_color(this.error ? c.red ?? c.accent : c.dim).child(note))
+      .when(Boolean(note), (el) => el.child(v_flex().items_start().gap(G.xs)
+        .child(div().w_full().text_size(T.body).text_color(this.error ? c.red ?? c.accent : c.dim).child(note))
         .when(Boolean(this.error), (line) => line.child(button({ label: "Retry", kind: "quiet", small: true })("pets-retry", c, { onClick: (cx) => this.bring(cx) })))));
   }
 }

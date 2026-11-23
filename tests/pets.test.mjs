@@ -178,4 +178,6 @@ test("Pets that could not be brought offer Retry beside their names, and Retry b
   assert.ok(texts(grid).includes("Clawd could not be brought."));
   calls(find(grid, (el) => el.tag === "pets-retry"), "on_click").at(-1).at(-1)({}, {});
   assert.equal(again, 1);
+  const line = find(grid, (el) => el.kids.some((kid) => kid.tag === "pets-retry"));
+  assert.equal(line.tag, "v_flex", "Retry sits under the names, so a long list never pushes it out of view");
 });
