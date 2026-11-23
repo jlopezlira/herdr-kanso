@@ -109,8 +109,8 @@ function github({ computing = new Set(), weeks = {} } = {}) {
     if (command === "sleep" || command === "pwsh" && args.at(-1).includes("Start-Sleep")) return success("");
     if (command !== "gh") return run(command, args, options);
     if (args.some((a) => a.startsWith("gists"))) {
+      calls.push(args[1].startsWith("gists?") ? "gist list" : "gist publish");
       if (args[1].startsWith("gists?")) return success("");
-      calls.push("gist");
       return success(JSON.stringify({ id: "g1", files: {} }));
     }
     if (args[1] !== "graphql") {
@@ -142,17 +142,17 @@ function github({ computing = new Set(), weeks = {} } = {}) {
 }
 
 // The Shipped panel opened on `gh`, settled.
-const shownPanel = async (t, gh) => {
-  const p = await panelWith(t, gh);
+const shownPanel = async (t, gh, pieces = {}) => {
+  const p = await panelWith(t, gh, pieces);
   const panel = new p.Shipped();
   panel.init(p.cx); await p.settle();
   return { p, panel };
 };
 
-async function panelWith(t, gh) {
+async function panelWith(t, gh, pieces) {
   const root = await temporary(t);
   const home = join(root, "app");
-  const store = {}, toasts = [];
+  const store = { "kanso.pieces": pieces }, toasts = [];
   const host = {
     window: nativeWindow, exec: gh.exec, appHome: () => home, home: () => join(root, "home"), spaces: () => [], panes: () => [], theme: () => ({}),
     shared: (k) => store[k], setShared: (k, v) => { store[k] = v; },
@@ -167,6 +167,15 @@ async function panelWith(t, gh) {
   return { ...mod, home, store, toasts, cx, settle };
 }
 
+const gistCalls = ({ calls }) => calls.filter((call) => call.startsWith("gist "));
+
+test("Shipped refreshes this computer's stats without asking for a gist by default", async (t) => {
+  const gh = github({ weeks: { "org/app": [{ w: 1793491200, a: 3, d: 0, c: 1 }] } });
+  const { panel } = await shownPanel(t, gh);
+  assert.ok(panel.stats.repos["org/app"]);
+  assert.deepEqual(gistCalls(gh), []);
+});
+
 test("Shipped asks each repository for its sums once, and again only after a push", async (t) => {
   const thisWeek = Math.floor((Date.now() - new Date().getUTCDay() * DAY) / DAY) * DAY / 1000;
   const weeks = {
@@ -175,13 +184,13 @@ test("Shipped asks each repository for its sums once, and again only after a pus
     "other-org/thing": [{ w: thisWeek - 200 * 86400, a: 5000, d: 0, c: 40 }],
   };
   const gh = github({ weeks, computing: new Set(["me/tool"]) });
-  const { p, panel } = await shownPanel(t, gh);
+  const { p, panel } = await shownPanel(t, gh, { "shipped.sync": "show" });
 
   assert.equal(Object.keys(panel.stats.repos).length, 3, "contributed to and reachable, every organization");
   assert.equal(gh.calls.filter((c) => c === "stats me/tool").length, 2, "asked again while GitHub computed it");
   const all = clone(p.sumWeeks(panel.stats, 0, Infinity));
   assert.deepEqual([all.add, all.commits], [6295, 55]);
-  assert.ok(gh.calls.includes("gist"), "this machine published to the gist");
+  assert.deepEqual(gistCalls(gh), ["gist list", "gist publish"], "this computer looked up and published to the gist when enabled");
   assert.equal(p.toasts.length, 0, "the first reading sets records quietly");
   assert.equal(p.store["kanso.shipped.bests"].bestWeek.add, 5000);
 
