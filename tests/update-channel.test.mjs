@@ -47,7 +47,8 @@ test("A prerelease download uses the tag, and the version check wants X.Y.Z", as
   await updater.install(cx);
   const spec = hostInstall("3.30.0-beta.2", "3.30.0");
   const launch = sh.find((args) => String(args[1]).startsWith("dir="));
-  assert.equal(launch[6], `https://github.com/jlopezlira/herdr-kanso/archive/refs/tags/v${spec.tag}.tar.gz`);
+  const tag = `v${spec.tag}`;
+  assert.equal(launch[6], `https://github.com/jlopezlira/herdr-kanso/releases/download/${tag}/kanso-${tag}.tar.gz`);
   assert.equal(launch[10], spec.want);
   assert.equal(launch[11], spec.from);
   assert.equal(spec.want, "3.30.0");

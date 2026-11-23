@@ -123,8 +123,10 @@ test("Workflows publish a beta from develop, a release candidate on demand, and 
   const release = await workflow("release.yml");
   assert.match(release, /^on:\n  workflow_call:\n/m, "the release workflow runs only when CI or the release candidate calls it");
   assert.doesNotMatch(release, /\n\s*(push|workflow_dispatch|pull_request):/, "no workflow publishes a stable release beside CI");
-  assert.match(release, /release-plan\.mjs \$\{\{ inputs\.kind \}\}/);
-  assert.match(release, /test "\$GITHUB_REF_NAME" = "\$\{\{ inputs\.branch \}\}"/);
+  assert.match(release, /INPUT_KIND: \$\{\{ inputs\.kind \}\}/);
+  assert.match(release, /release-plan\.mjs \$INPUT_KIND/);
+  assert.match(release, /INPUT_BRANCH: \$\{\{ inputs\.branch \}\}/);
+  assert.match(release, /test "\$GITHUB_REF_NAME" = "\$INPUT_BRANCH"/);
   const archive = release.slice(release.indexOf("Tag the archive"), release.indexOf("Commit and tag"));
   assert.match(archive, /release-tag\.mjs "\$RELEASE_TAG"/);
   assert.match(archive, /git push origin "refs\/tags\/\$RELEASE_TAG"/);
@@ -147,6 +149,29 @@ test("Workflows publish a beta from develop, a release candidate on demand, and 
   assert.match(pages, /branches: \[main\]/);
   assert.match(pages, /the site deploys only from main/);
   assert.doesNotMatch(pages, /develop/);
+});
+
+test("Beta, release candidate and stable workflows pass the required signing secret and publish both signed assets", async () => {
+  const [ci, rc, release] = await Promise.all(["ci.yml", "rc.yml", "release.yml"].map(workflow));
+  const betaAt = ci.indexOf("\n  beta:");
+  const stableAt = ci.indexOf("\n  stable:", betaAt);
+  for (const caller of [ci.slice(betaAt, stableAt), ci.slice(stableAt), rc]) {
+    assert.match(caller, /^    uses: \.\/\.github\/workflows\/release\.yml$/m);
+    assert.match(caller, /^    secrets: inherit$/m);
+  }
+  const jobsAt = release.indexOf("\njobs:");
+  assert.match(release.slice(0, jobsAt),
+    /^    secrets:\n      KANSO_RELEASE_KEY:\n(?:        description: .*\n)?        required: true$/m);
+  const signAt = release.indexOf("      - name: Sign the archive");
+  const publishAt = release.indexOf("      - name: Publish");
+  assert.ok(signAt > jobsAt && publishAt > signAt);
+  const sign = release.slice(signAt, publishAt);
+  assert.match(sign, /SIGNING_KEY: \$\{\{ secrets\.KANSO_RELEASE_KEY \}\}/);
+  assert.match(sign, /run: node scripts\/release-sign\.mjs "\$PLAN_TAG" "\$RUNNER_TEMP"/);
+  const publish = release.slice(publishAt);
+  const archive = "$RUNNER_TEMP/kanso-$PLAN_TAG.tar.gz";
+  const command = publish.match(/^        run: gh release create .+$/m)?.[0] ?? "";
+  for (const asset of [archive, `${archive}.sig`]) assert.ok(command.includes(`"${asset}"`));
 });
 
 test("CI runs only on pushes to main and develop, never cancels a run, and every job of every workflow has a time limit", async () => {
