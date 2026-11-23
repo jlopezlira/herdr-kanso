@@ -1,6 +1,8 @@
 // Real mod code with a fake clock, inert native elements and counted host boundaries.
 import { performance } from "node:perf_hooks";
 import { pathToFileURL } from "node:url";
+import { setFlagsFromString } from "node:v8";
+import { runInNewContext } from "node:vm";
 import { load, exec as runFile, clone, until, success, failure, openedKdb, inlineView } from "./helpers.mjs";
 
 export const PANEL_IDS = ["files", "pr", "preview", "shipped", "worktrees", "ports", "look", "find"];
@@ -165,6 +167,9 @@ export const sidebarOn = async (f) => {
   return new Spaces();
 };
 
+setFlagsFromString("--expose-gc");
+const collect = runInNewContext("gc");
+
 export async function firstDraw(id) {
   const f = fixture({ blocked: true });
   const start = performance.now();
@@ -174,6 +179,7 @@ export async function firstDraw(id) {
   const mod = await loadMod(file, [name], f.host);
   const moduleMs = performance.now() - start;
   const draw = () => {
+    collect();
     // CPU, not wall time: other test files preempt this one and move performance.now().
     const opened = process.cpuUsage();
     const view = new (isPanel ? mod.PANELS[id] : mod[name])();

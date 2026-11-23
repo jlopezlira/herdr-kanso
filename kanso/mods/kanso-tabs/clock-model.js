@@ -31,8 +31,7 @@ const RESUME_SH = [
   '  case "$j" in *"$want"*) ;; *) exit 0 ;; esac',
   '  case "$j" in',
   '    *\'"state":"working"\'*) clear ;;',
-  '    *\'"state":"blocked"\'*) ;;',
-  '    *\'"state":"done"\'*|*\'"state":"idle"\'*) hc send "$t" continue >/dev/null 2>&1 && clear ;;',
+  '    *\'"state":"blocked"\'*|*\'"state":"done"\'*|*\'"state":"idle"\'*) hc send "$t" continue >/dev/null 2>&1 && clear ;;',
   '    *) [ -n "$cmd" ] && hc send "$t" "$cmd" >/dev/null 2>&1 && clear ;;',
   '  esac',
   `  sleep ${TICK_S}`,
@@ -44,8 +43,8 @@ const resumePs = (at, address, token, cmd) => [
   "function Clear { hc label $t kanso.limit= kanso.limit.resume= kanso.limit.cmd= | Out-Null; exit 0 }",
   `while ([DateTimeOffset]::UtcNow.ToUnixTimeSeconds() -lt $at) { Start-Sleep -Seconds ${TICK_S} }`,
   "while ($true) { $j = (hc get $t --json 2>$null) | ConvertFrom-Json; if (-not $j -or $j.labels.'kanso.limit.resume' -ne $tok) { exit 0 }; $s = $j.status.state;" +
-    " if ($s -eq 'working') { Clear } elseif ($s -in 'done','idle') { hc send $t continue | Out-Null; if ($LASTEXITCODE -eq 0) { Clear } }" +
-    ` elseif ($s -ne 'blocked' -and $cmd) { hc send $t $cmd | Out-Null; if ($LASTEXITCODE -eq 0) { Clear } }; Start-Sleep -Seconds ${TICK_S} }`,
+    " if ($s -eq 'working') { Clear } elseif ($s -in 'blocked','done','idle') { hc send $t continue | Out-Null; if ($LASTEXITCODE -eq 0) { Clear } }" +
+    ` elseif ($cmd) { hc send $t $cmd | Out-Null; if ($LASTEXITCODE -eq 0) { Clear } }; Start-Sleep -Seconds ${TICK_S} }`,
 ].join("; ");
 
 const waiter = (platform, sh, ps, args) => (platform === "windows"
@@ -72,7 +71,7 @@ export function runArgs({ cwd, space, on = null, id = null, name = null, tab = n
 }
 
 const SCHEDULE_SH = [
-  'id=$1; db=$2; mode=$3; spec=$4; on=$5; folder=$6; space=$7; tree=$8; from=$9; shift 9; dir=$1; slug=$2; add=$3; shift 3',
+  'id=$1; db=$2; mode=$3; spec=$4; on=$5; folder=$6; space=$7; tree=$8; from=$9; shift 9; dir=$1; slug=$2; add=$3; tail=$4; shift 4',
   'x() { if [ -n "$on" ]; then hc exec --on "$on" -- "$@"; else "$@"; fi; }',
   'say() { why=$(printf %s "$2" | tr -d "\\r" | tail -n 1 | sed "s/\x27/\x27\x27/g"); sqlite3 -cmd ".timeout 5000" "$db" "INSERT INTO schedule_runs(schedule,at,ok,why) VALUES(\x27$id\x27,$(date +%s)000,$1,\x27$why\x27); DELETE FROM schedule_runs WHERE schedule=\x27$id\x27 AND id NOT IN (SELECT id FROM schedule_runs WHERE schedule=\x27$id\x27 ORDER BY id DESC LIMIT 20);" >/dev/null 2>&1; }',
   'fire() {',
@@ -98,6 +97,10 @@ const SCHEDULE_SH = [
   `  while [ "$(date +%s)" -lt "$t" ]; do sleep ${TICK_S}; done`,
   '  fire "$@"; last=$(date +%s)',
   'done',
+  '[ -n "$tail" ] || exit 0',
+  'hm=${tail% *}; days=${tail#* }',
+  'fired=; [ "$(date +%H%M)" -ge "$hm" ] && fired=$(date +%Y%m%d)',
+  `while :; do d=$(date +%Y%m%d); case "$days" in *"$(date +%w)"*) if [ "$fired" != "$d" ] && [ "$(date +%H%M)" -ge "$hm" ]; then fire "$@"; fired=$d; fi ;; esac; sleep ${TICK_S}; done`,
 ].join("\n");
 
 const schedulePs = (job) => {
@@ -106,7 +109,7 @@ const schedulePs = (job) => {
   const on = job.on ? `@('--on', ${q(job.on)})` : "@()";
   return [
     `$id = ${q(job.id)}; $db = ${q(job.db)}; $mode = ${q(job.mode)}; $spec = ${q(job.spec)}; $folder = ${q(job.folder)}; $space = ${q(localId(job.space))}`,
-    `$tree = ${job.tree ? 1 : 0}; $from = ${q(job.from ?? "")}; $dir = ${q(job.dir ?? "")}; $slug = ${q(job.slug ?? "run")}; $on = ${on}; $words = @(${words})`,
+    `$tree = ${job.tree ? 1 : 0}; $from = ${q(job.from ?? "")}; $dir = ${q(job.dir ?? "")}; $slug = ${q(job.slug ?? "run")}; $tail = ${q(job.tail ?? "")}; $on = ${on}; $words = @(${words})`,
     "function Now { [DateTimeOffset]::UtcNow.ToUnixTimeSeconds() }",
     "function Say($ok, $w) { $why = (@($w | Out-String) -split [char]10 | Where-Object { $_.Trim() })[-1] -replace \"'\", \"''\"; sqlite3 -cmd '.timeout 5000' $db \"INSERT INTO schedule_runs(schedule,at,ok,why) VALUES('$id',$((Now) * 1000),$ok,'$why'); DELETE FROM schedule_runs WHERE schedule='$id' AND id NOT IN (SELECT id FROM schedule_runs WHERE schedule='$id' ORDER BY id DESC LIMIT 20);\" | Out-Null }",
     "function InRepo { if ($on.Count) { hc exec @on -- git @args } else { & git.exe @args } }",
@@ -114,12 +117,14 @@ const schedulePs = (job) => {
     "function Until($t) { while ((Now) -lt $t) { Start-Sleep -Seconds " + TICK_S + " } }",
     "if ($mode -eq 'every') { $p = $spec -split ' '; $t = [long]$p[0]; $step = [long]$p[1]; while ($true) { Until $t; Fire; $n = Now; while ($t -le $n) { $t += $step } } }",
     "$last = 0; foreach ($t in ($spec -split ' ' | ForEach-Object { [long]$_ })) { if ($t -le $last) { continue }; Until $t; Fire; $last = Now }",
+    "if (-not $tail) { exit 0 }; $hm, $days = $tail -split ' '; $fired = if ([int](Get-Date -Format HHmm) -ge [int]$hm) { Get-Date -Format yyyyMMdd } else { '' }",
+    "while ($true) { $d = Get-Date -Format yyyyMMdd; if ($days.Contains([string][int](Get-Date).DayOfWeek) -and $fired -ne $d -and [int](Get-Date -Format HHmm) -ge [int]$hm) { Fire; $fired = $d }; Start-Sleep -Seconds " + TICK_S + " }",
   ].join("\n");
 };
 
 export function scheduleWaiter(job) {
-  const args = [job.id, job.db, job.mode, job.spec, job.on ?? "", job.folder, localId(job.space), job.tree ? 1 : 0, job.from ?? "", job.dir ?? "", job.slug ?? "run", job.add ?? "", ...job.argv];
-  return waiter(job.platform, SCHEDULE_SH, schedulePs(job), args);
+  const args = [job.id, job.db, job.mode, job.spec, job.on ?? "", job.folder, localId(job.space), job.tree ? 1 : 0, job.from ?? "", job.dir ?? "", job.slug ?? "run", job.add ?? "", job.tail ?? "", ...job.argv];
+  return waiter(job.platform, SCHEDULE_SH, () => schedulePs(job), args);
 }
 
 export function waiterArgs(name, kind, argv, labels = {}) {
@@ -198,7 +203,8 @@ export function waiterPlan(when, { now, since }) {
     return next == null ? null : { mode: "every", spec: `${seconds(next)} ${seconds(stepOf(when))}` };
   }
   const times = [...(missed ? [now] : []), ...nextRuns(when, now, PLAN_RUNS)];
-  return times.length ? { mode: "at", spec: times.map(seconds).join(" ") } : null;
+  const tail = when.kind === "daily" ? { tail: `${String(when.time).split(":").map((n) => pad(Number(n))).join("")} ${daysOf(when).join("")}` } : {};
+  return times.length ? { mode: "at", spec: times.map(seconds).join(" "), ...tail } : null;
 }
 
 export function outcomesOf(rows) {

@@ -196,6 +196,12 @@ export async function exec(command, args, options = {}) {
   }
 }
 
+export async function stdoutOf(command, args, options = {}) {
+  const result = await exec(command, args, options);
+  assert.equal(result.code, 0, result.stderr);
+  return result.stdout.trim();
+}
+
 // A host whose shared state lives in `state` and whose layout is `tree()`, each read as a copy.
 export const layoutHost = (state, tree, run) => ({
   shared: (key) => clone(state[key] ?? null), setShared: (key, value) => { state[key] = clone(value); },

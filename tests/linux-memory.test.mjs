@@ -4,7 +4,7 @@ import { chmod, mkdir, open, readFile, stat, writeFile } from "node:fs/promises"
 import { delimiter, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { guardHost, linuxMemory, linuxPss, logindIdle, omarchyIdle, systemdService, systemdTimer } from "../kanso/mods/kanso-guard/guard-host.mjs";
-import { arg, clone, context, exec, failure, find, folderWith, gpuiHost, KIT_NIGHT, load, loadSystemApi, success, temporary, texts } from "./helpers.mjs";
+import { arg, clone, context, exec, stdoutOf, failure, find, folderWith, gpuiHost, KIT_NIGHT, load, loadSystemApi, success, temporary, texts } from "./helpers.mjs";
 import { loadSettings } from "./mod-fixtures.mjs";
 import { fieldState } from "./pr-fixtures.mjs";
 
@@ -263,11 +263,7 @@ const linuxMarkdown = async (t, { dataName = "data", appName = "app" } = {}) => 
     PATH: [bin, "/bin", "/usr/bin"].join(delimiter), HOME: home, XDG_DATA_HOME: data,
     XDG_CONFIG_HOME: config, HERDR_APP_HOME: app, TMPDIR: dir, LOG: log, STATE: state, LAUNCHED: launched,
   };
-  const run = async (verb) => {
-    const result = await exec("/bin/sh", [fileURLToPath(handler), verb], { env });
-    assert.equal(result.code, 0, result.stderr);
-    return result.stdout.trim();
-  };
+  const run = (verb) => stdoutOf("/bin/sh", [fileURLToPath(handler), verb], { env });
   return {
     dir, env, launched, log, run, state,
     desktop: join(data, "applications", markdownDesktop),

@@ -1,15 +1,32 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { chmod, readFile, writeFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { delimiter, join } from "node:path";
-import { exec, git, load, committedRepo, plain } from "./helpers.mjs";
+import { exec, stdoutOf, git, load, committedRepo, plain, success, temporary } from "./helpers.mjs";
 
 const now = new Date(2026, 5, 10, 12, 0, 0, 0).getTime();
 
-const schedules = await load("kanso-spaces/schedules.js", ["clockTodo", "scheduleOf", "spaceOf", "placeOfKey", "scheduleName", "SPACE_LABEL", "REV_LABEL", "SCHEDULE_KIND"]);
+const schedulesFile = "kanso-spaces/schedules.js";
+const schedules = await load(schedulesFile, ["clockTodo", "scheduleOf", "spaceOf", "placeOfKey", "scheduleName", "SPACE_LABEL", "REV_LABEL", "SCHEDULE_KIND"]);
 const dialog = await load("kanso-spaces/schedule-dialog.js", ["draftOf", "checkDraft", "whenOfDraft"]);
 const clock = await load("kanso-spaces/clock-model.js", ["scheduleWaiter", "waiterPlan", "agentLaunch"]);
 const { ADD_WORKTREE } = await load("kanso-spaces/platform-repositories.js", ["ADD_WORKTREE"]);
+
+const unixOnly = { skip: process.platform === "win32" };
+const withStubs = (bin, env) => ({ ...process.env, PATH: `${bin}${delimiter}${process.env.PATH ?? ""}`, ...env });
+const writeStub = (bin, name, script) => writeFile(join(bin, name), `#!/bin/sh\n${script}\n`, { mode: 0o755 });
+const logCall = `printf '%s\\n' "$*" >> "$LOG"`;
+const runSchedule = (job, bin, env) => {
+  const [command, ...args] = clock.scheduleWaiter(job);
+  return exec(command, args, { env: withStubs(bin, env), limit: 8000 });
+};
+
+const assertPowerShell = (argv) => {
+  assert.equal(argv[0], "powershell.exe");
+  const command = argv.indexOf("-Command");
+  assert.ok(command > 0);
+  assert.ok(argv[command + 1]?.trim());
+};
 
 const draft = (patch = {}) => ({
   agent: "claude", prompt: "Triage the failures", kind: "daily", time: "09:00", days: [5, 1, 3], every: "15", unit: "minutes", at: "2026-11-23 09:00", tree: false, ...patch,
@@ -81,17 +98,84 @@ test("A failed one-time run is still listed, and the last try means it is not ar
   assert.equal(clock.waiterPlan(once.when, { now, since: once.updated }).spec.split(" ")[0], String(Math.floor(now / 1000)));
 });
 
-test("A scheduled run in a worktree of main records that it ran, and a start that fails records the reason once and waits for the next time", async (t) => {
+test("A Windows schedule builds a PowerShell waiter with a command script", () => {
+  const argv = clock.scheduleWaiter({
+    platform: "windows", id: "s1", db: "C:/kanso.db", mode: "at", spec: String(Math.floor(now / 1000)),
+    folder: "C:/work", space: "sp9", argv: ["claude"],
+  });
+  assertPowerShell(argv);
+});
+
+for (const [action, title] of [
+  ["armFor", "Arming a schedule on Windows starts a PowerShell waiter through hc run"],
+  ["runNow", "Running a schedule now on Windows starts a PowerShell waiter through hc run"],
+]) {
+  test(title, async (t) => {
+    const folder = "C:/work";
+    const home = () => "C:/Users/test";
+    const hc = t.mock.fn(async () => success(""));
+    const windows = await load(schedulesFile, [action], {
+      window: () => ({ platform: "windows" }),
+      home,
+      appHome: home,
+      spaces: () => [{ id: "sp9", machine: null, folder }],
+      hc,
+    });
+    const schedule = schedules.scheduleOf({
+      id: "s1", project: `:${folder}`, agent: "claude", run: '["claude"]', prompt: "Triage the failures",
+      when_json: JSON.stringify({ kind: "once", at: now + 60_000 }), updated: now,
+    });
+    await windows[action]({ file: "C:/kanso.db" }, schedule, { now });
+    const runs = hc.mock.calls.map(({ arguments: [args] }) => args).filter(([command]) => command === "run");
+    assert.equal(runs.length, 1);
+    assertPowerShell(runs[0].slice(runs[0].indexOf("--") + 1));
+  });
+}
+
+test("A daily schedule still runs once on its weekday after its planned runs are exhausted", unixOnly, async (t) => {
+  const bin = await temporary(t);
+  const log = join(bin, "hc.log");
+  await writeFile(log, "");
+  const start = Date.UTC(2026, 5, 10, 8, 59) / 1000;
+  await Promise.all(Object.entries({
+    hc: logCall,
+    sqlite3: "exit 0",
+    date: `if grep -q '^tick$' "$LOG"; then
+  hm=0900; epoch=${start + 60}
+else
+  hm=0859; epoch=${start}
+fi
+case "$1" in
+  +%H%M) echo "$hm" ;;
+  +%w) echo 3 ;;
+  +%Y%m%d) echo 20260610 ;;
+  +%s) echo "$epoch" ;;
+  *) exit 1 ;;
+esac`,
+    sleep: `echo tick >> "$LOG"
+if [ "$(grep -c '^tick$' "$LOG")" -eq 3 ]; then kill -TERM "$PPID"; fi`,
+  }).map(([name, script]) => writeStub(bin, name, script)));
+  const env = { LOG: log };
+  const fakeDate = (format) => stdoutOf("date", [format], { env: withStubs(bin, env) });
+  const [epoch, weekday] = await Promise.all([fakeDate("+%s"), fakeDate("+%w")]);
+  const next = new Date((Number(epoch) + 60) * 1000);
+  const tail = `${next.toISOString().slice(11, 16).replace(":", "")} ${weekday}`;
+  const result = await runSchedule({
+    platform: "macos", id: "s1", db: join(bin, "kanso.db"), mode: "at", spec: "", tail,
+    folder: bin, space: "sp9", argv: ["claude"],
+  }, bin, env);
+  const events = (await readFile(log, "utf8")).split("\n").filter(Boolean).map((line) => line.split(" ")[0]);
+  assert.deepEqual(events, ["tick", "run", "tick", "tick"], result.stderr);
+});
+
+test("A scheduled run in a worktree of main records that it ran, and a start that fails records the reason once and waits for the next time", unixOnly, async (t) => {
   const { dir, repo } = await committedRepo(t);
   const bin = join(dir, "bin");
   await exec("mkdir", ["-p", bin]);
-  await writeFile(join(bin, "hc"), `#!/bin/sh
-printf '%s\\n' "$*" >> "$LOG"
+  await writeStub(bin, "hc", `${logCall}
 if [ "$1" = exec ]; then shift; exec "$@"; fi
 if [ "$1" = run ] && [ -n "$FAIL" ]; then printf '%s\\n' "$FAIL" >&2; exit 1; fi
-exit 0
-`);
-  await chmod(join(bin, "hc"), 0o755);
+exit 0`);
   const run = async (fail) => {
     const root = join(dir, fail ? "fail" : "ok");
     await exec("mkdir", ["-p", root]);
@@ -105,11 +189,7 @@ exit 0
       dir: join(root, "trees"), slug: "triage", add: ADD_WORKTREE,
       argv: clock.agentLaunch("macos", ["claude"], "Triage the failures\nName each one"),
     };
-    const argv = clock.scheduleWaiter(job);
-    const result = await exec(argv[0], argv.slice(1), {
-      env: { ...process.env, PATH: `${bin}${delimiter}${process.env.PATH ?? ""}`, LOG: calls, FAIL: fail ? "the agent did not start" : "" },
-      limit: 8000,
-    });
+    const result = await runSchedule(job, bin, { LOG: calls, FAIL: fail ? "the agent did not start" : "" });
     const rows = await exec("sqlite3", ["-separator", "\t", db, "SELECT ok, ifnull(why, '') FROM schedule_runs;"]);
     return { code: result.code, rows: rows.stdout.trim(), calls: await readFile(calls, "utf8").catch(() => ""), stderr: result.stderr };
   };

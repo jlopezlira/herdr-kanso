@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { chmod, readFile, writeFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { delimiter, join } from "node:path";
 import { exec, load, temporary } from "./helpers.mjs";
 
@@ -45,6 +45,14 @@ test("A missed schedule catches up once, now, and a schedule that already ran do
   assert.equal(model.waiterPlan(once, { now, since: now - 1000 }), null);
 });
 
+test("A daily schedule keeps its time and weekdays after its planned runs, and a one-time schedule does not", () => {
+  const options = { now, since: now };
+  const daily = model.waiterPlan({ kind: "daily", time: "9:05", days: [1, 2, 3] }, options);
+  const once = model.waiterPlan({ kind: "once", at: now + 60_000 }, options);
+  assert.equal(daily.tail, "0905 123");
+  assert.equal(Object.hasOwn(once, "tail"), false);
+});
+
 test("The last successful run and the last try are kept apart, and a failure is recorded only when the last try failed", () => {
   const rows = (ok) => [{ schedule: "s1", id: 1, at: 100_000, ok: 1, why: null }, { schedule: "s1", id: 2, at: 200_000, ok: 0, why: "worktree missing" }, { schedule: "s1", id: 3, at: 300_000, ok, why: ok ? null : "boom" }];
   assert.deepEqual(plain(model.outcomesOf(rows(1)).get("s1")), { lastRun: 300_000, lastTry: 300_000, failed: null });
@@ -59,35 +67,46 @@ test("A clock name stays short, and two long addresses do not share one", () => 
   assert.notEqual(one, two);
 });
 
-test("The resume clock sends continue and clears the limit when the agent is done, and clears without sending when it is working", async (t) => {
+const clearLimit = "label t9 kanso.limit= kanso.limit.resume= kanso.limit.cmd=";
+const resumeTarget = "get t9 --json";
+const continueAgent = "send t9 continue";
+const unixOnly = { skip: process.platform === "win32" };
+
+const resumeCalls = async (t, state) => {
   const dir = await temporary(t);
-  const hc = join(dir, "hc");
-  await writeFile(hc, `#!/bin/sh
+  const log = join(dir, `${state}.log`);
+  await writeFile(join(dir, "hc"), `#!/bin/sh
+if [ "$1" = get ] && [ ! -s "$LOG" ]; then printf '%s\\n' "$GET"; fi
 printf '%s\\n' "$*" >> "$LOG"
-if [ "$1" = get ]; then printf '%s\\n' "$GET"; fi
-exit 0
-`);
-  await chmod(hc, 0o755);
-  const run = async (state) => {
-    const log = join(dir, `${state}.log`);
-    const until = Date.now() - 120_000;
-    const argv = model.resumeWaiter({ platform: "macos", address: "t9", until, token: "TOKEN" });
-    assert.equal(argv[4], String(Math.floor(until / 1000)));
-    const result = await exec(argv[0], argv.slice(1), {
-      env: { ...process.env, PATH: `${dir}${delimiter}${process.env.PATH ?? ""}`, LOG: log, GET: JSON.stringify({ "kanso.limit.resume": "TOKEN", state }) },
-      limit: 8000,
-    });
-    return { code: result.code, log: await readFile(log, "utf8"), stderr: result.stderr };
-  };
-  const done = await run("done");
-  assert.equal(done.code, 0, done.stderr);
-  assert.match(done.log, /send t9 continue/);
-  assert.match(done.log, /label t9 kanso\.limit= kanso\.limit\.resume= kanso\.limit\.cmd=/);
-  assert.ok(done.log.indexOf("send t9 continue") < done.log.indexOf("label t9"));
-  const working = await run("working");
-  assert.equal(working.code, 0, working.stderr);
-  assert.doesNotMatch(working.log, /send /);
-  assert.match(working.log, /label t9 kanso\.limit= kanso\.limit\.resume= kanso\.limit\.cmd=/);
+`, { mode: 0o755 });
+  await writeFile(join(dir, "sleep"), "#!/bin/sh\nexit 0\n", { mode: 0o755 });
+  const until = Date.now() - 120_000;
+  const token = "TOKEN";
+  const argv = model.resumeWaiter({ platform: "macos", address: "t9", until, token });
+  assert.equal(argv[4], String(Math.floor(until / 1000)));
+  const result = await exec(argv[0], argv.slice(1), {
+    env: {
+      ...process.env,
+      PATH: `${dir}${delimiter}${process.env.PATH ?? ""}`,
+      LOG: log,
+      GET: JSON.stringify({ labels: { "kanso.limit.resume": token }, status: { state } }),
+    },
+    limit: 8000,
+  });
+  assert.equal(result.code, 0, result.stderr);
+  return (await readFile(log, "utf8")).trimEnd().split("\n");
+};
+
+test("The resume clock sends continue and clears the limit when the agent is done, and clears without sending when it is working", unixOnly, async (t) => {
+  const done = await resumeCalls(t, "done");
+  assert.deepEqual(done, [resumeTarget, continueAgent, clearLimit]);
+  const working = await resumeCalls(t, "working");
+  assert.deepEqual(working, [resumeTarget, clearLimit]);
+});
+
+test("The resume clock sends continue once and clears all three limit labels when the agent is blocked", unixOnly, async (t) => {
+  const blocked = await resumeCalls(t, "blocked");
+  assert.deepEqual(blocked, [resumeTarget, continueAgent, clearLimit]);
 });
 
 test("A Windows launch keeps a prompt that has more than one line", () => {
