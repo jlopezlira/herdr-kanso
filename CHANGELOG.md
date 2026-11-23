@@ -34,6 +34,14 @@ the branch's rules.
 
 - Every right-click menu names the same action with the same words, order and shortcut: Sleep this agent…, Sleep this tab…, Send to an agent…, Close pane and Rename… read the same in the tab bar, the pane header and the sidebar, and the pane header's ⋯ shows each shortcut. A right-click on the pane header opens its ⋯ menu. (#238)
 
+### Fixed
+
+- Send says when no other agent is running and offers Start an agent, keeps the message you wrote, and says which recipient closed before a held send went out.
+- Sleep's Wake and sleep dialogs can be closed, a project sleep keeps Cancel until it fails, and that button waits while sleep or wake is working.
+- Spend offers Retry when it cannot read Node, keeps Refresh on, and reads Node again before it takes a new snapshot.
+- Add a computer offers Refresh when Tailscale is off, missing, or has no other computer, and keeps the address you typed.
+- Needs you names each computer it cannot reach, keeps the agents already waiting, and offers Refresh for that computer.
+
 ## [3.33.0] - 2026-11-22
 
 ### Added

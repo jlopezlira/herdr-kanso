@@ -61,9 +61,9 @@ test("Missing times have a stable first observation and equal times use sequence
 
 test("The queue has empty, loading and unavailable states without inventing agents", () => {
   assert.equal(nextWaiting([]), null);
-  assert.equal(queueMessage(queueState([], []).state), "Nobody is waiting");
+  assert.equal(queueMessage(queueState([], [])), "Nobody is waiting");
   assert.equal(queueState([], [{ layout: "loading" }]).state, "loading");
-  assert.equal(queueMessage(queueState([], [{ layout: "unavailable" }]).state), "Queue unavailable");
+  assert.equal(queueMessage(queueState([], [{ name: "grey", layout: "unavailable" }])), "Can't reach grey");
 });
 
 test("The queue signature follows agent state, names and sleep, excluding unrelated terminals", () => {
@@ -315,9 +315,9 @@ test("The kit renders every queue state with single-use elements", async () => {
   const ui = tape();
   const kit = await loadNeedsYouView(ui.host);
   kit.queueControl({}, { rows: [], state: "ready" }, false, true, () => {});
-  kit.queueList({}, { rows: [], state: "unavailable" }, () => ({}), () => "");
+  kit.queueList({}, { rows: [], state: "unavailable", unreachable: ["grey"] }, () => ({}), () => "");
   assert.ok(ui.texts.includes("Nobody is waiting"));
-  assert.ok(ui.texts.includes("Queue unavailable"));
+  assert.ok(ui.texts.includes("Can't reach grey"));
   ui.texts.length = 0;
   kit.queueControl({}, { rows: [], state: "ready" }, false, false, () => {});
   kit.queueControl({}, { rows: [], state: "ready" }, true, false, () => {});
@@ -331,7 +331,7 @@ test("The count label distinguishes normal, collapsed, empty and unavailable sta
   assert.equal(queueLabel(queue, false, false), "Needs you · 1");
   assert.equal(queueLabel(queue, true, false), "1");
   assert.equal(queueLabel(queue, false, true), "Nobody is waiting");
-  assert.equal(queueLabel({ ...queue, state: "unavailable" }, false, true), "Queue unavailable");
+  assert.equal(queueLabel({ ...queue, state: "unavailable", unreachable: ["grey"] }, false, true), "Can't reach grey");
 });
 
 test("The queue keeps Ctrl+J available to the terminal and source loading accepts CRLF", async () => {
@@ -343,4 +343,25 @@ test("The queue keeps Ctrl+J available to the terminal and source loading accept
   const script = modScript(source, () => "export const value = 1;\r\n");
   assert.doesNotMatch(script, /\bimport\b|\bexport\b/);
   assert.match(script, /const result = value/);
+});
+
+test("Needs you names each computer it cannot reach, keeps who is waiting, and Refresh tries that computer again", async () => {
+  const waiting = waitingQueue([agent("a", "blocked", { title: "Nova" })], []);
+  const down = [{ name: "box", layout: "unavailable" }, { name: "blue", layout: "ready" }, { name: "red", layout: "unavailable" }];
+  const queue = queueState(waiting, down);
+  assert.deepEqual(queue.unreachable, ["box", "red"]);
+  assert.deepEqual(addresses(queue.rows), ["a"]);
+  const shown = (name) => (name === "box" ? "grey" : name);
+  assert.equal(queueMessage(queueState([], [{ name: "box", layout: "unavailable" }]), shown), "Can't reach grey");
+  const other = queueState(waiting, [{ name: "blue", layout: "unavailable" }]);
+  assert.equal(sameQueue(queue, other), false);
+  assert.equal(sameQueue(queue, queueState(waiting, down)), true);
+  const retried = [];
+  const ui = tape();
+  const { queueList } = await load("kanso-spaces/needs-you-view.js", ["queueList"], ui.host);
+  queueList({}, queue, () => ({ selected: false, go() {} }), () => "1m", null, { title: shown, retry: (name) => retried.push(name) });
+  assert.ok(ui.texts.includes("Nova") && ui.texts.includes("Waiting for you"), ui.texts.join(" | "));
+  assert.ok(ui.texts.includes("Can't reach grey") && ui.texts.includes("Can't reach red"), ui.texts.join(" | "));
+  ui.handlers.get("needs-you-unavailable-box-fix")({}, { stop_propagation() {} });
+  assert.deepEqual(retried, ["box"]);
 });

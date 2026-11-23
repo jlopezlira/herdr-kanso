@@ -50,7 +50,9 @@ test("An agent with no program art leads with the terminal's icon, in the muted 
 });
 
 test("No one to send to, or no match, is the kit's empty state with the same words", async () => {
-  assert.ok(texts((await sendDrawn([{ address: "t9", state: "live" }], "", null)).el).includes("No other agent is running. Start one in a pane, then send."), "a roster read with no agent in it");
+  const roster = (await sendDrawn([{ address: "t9", state: "live" }], "", null)).el;
+  assert.ok(texts(roster).includes("No other agent is running."), "a roster read with no agent in it");
+  assert.ok(texts(roster).includes("Start an agent"));
   assert.ok(texts((await sendDrawn([], "", null)).el).includes("Can't see the agents right now."), "a roster not read yet is not an empty one");
   const { el } = await sendDrawn(AGENTS, "zz");
   assert.ok(texts(el).includes("No agent or project by that name."));
