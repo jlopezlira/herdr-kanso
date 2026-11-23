@@ -33,7 +33,7 @@ the branch's rules.
 ### Fixed
 
 - Settings › Pieces has Open .md files in kansō on macOS, and Open .md and text files in kansō on Linux, where it also becomes the app for text files. On Omarchy, a .md or text file path an agent prints now opens in kansō, ready to edit: Linux read a .md as plain text and its opener never started kansō.
-- With no projects, the Tasks panel offers New project, and shows a project as soon as it is added, and it lists the projects of every computer you have open, not only this one's.
+- Tasks shows only the boards you add: + (or Add a board) asks for a project, then GitHub issues, Jira projects or Linear teams, and each board has Remove. Nothing loads by itself.
 - New project asks for the folder first, keeps Create project off until one is chosen, marks the name optional, and its conversation variant says you then choose the agent. Settings › Keys points to kansō help for every key, and Images with no agent in focus offers Open a folder… to see that folder's pictures. Switching to a project scrolls the Projects list to it once, so a new or far-down project is in view.
 
 ### Changed

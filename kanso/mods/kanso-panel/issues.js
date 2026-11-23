@@ -7,7 +7,7 @@ import { row } from "./ui-row.js";
 import { segmented } from "./ui-tab.js";
 import { section } from "./ui-section.js";
 import { markdown } from "./ui-markdown.js";
-import { stateBlock } from "./ui-state.js";
+import { stateBlock, undoLine } from "./ui-state.js";
 import { emptyState, skeletonOf } from "./kit.js";
 import { scrollPage, pageHeader, refreshTool } from "./ui-page.js";
 import { openApi } from "./platform-open.js";
@@ -16,7 +16,7 @@ import { localService } from "./platform-host.js";
 import { localSecrets } from "./platform-secrets.js";
 import { projectKey } from "./kdb.js";
 import { tryOrAsync, plural } from "./pure.js";
-import { FILTERS, FILTER_WORDS, EVERY_MS, OPEN, ACCOUNTS, SOURCE_WORDS, matches, withSpaces, placeOf, sectionsOf, isFolded, foldKey, projectsInOrder, stale, ageOf, sendText, listOf, kindOf, linkWords } from "./issues-model.js";
+import { sourceKey, FILTERS, FILTER_WORDS, EVERY_MS, OPEN, ACCOUNTS, SOURCE_WORDS, matches, withSpaces, placeOf, sectionsOf, isFolded, foldKey, projectsInOrder, stale, ageOf, sendText, listOf, kindOf, linkWords } from "./issues-model.js";
 import { readIssues, linkSql } from "./issues-store.js";
 import { issuesGithub, repoText } from "./issues-github.js";
 import { LINKED, linkedOf, syncLinkedBoard, syncLinkedDetail } from "./issues-linked.js";
@@ -24,6 +24,7 @@ import { LINKED, linkedOf, syncLinkedBoard, syncLinkedDetail } from "./issues-li
 const PROJECTS = "SELECT id, name, folder, machine FROM projects WHERE removed IS NULL;";
 const REGISTRY = "kanso.registry";
 const registered = () => { const rows = shared(REGISTRY); return [...(Array.isArray(rows) ? rows.map((p) => p.id) : []), ...spaces().map((s) => projectKey(s, home()))].join(); };
+const GITHUB_BOARD = { ref: "issues", name: "GitHub issues" };
 const SIGNED_OUT = { kind: "signed out", text: "Sign in to GitHub to see your issues" };
 const NO_REMOTE = { kind: "no remote", text: "No GitHub remote" };
 const NO_CLI = { kind: "no cli", text: "GitHub CLI not installed" };
@@ -68,6 +69,10 @@ export class Issues {
     this.front = null;
     this.registered = registered();
     this.linking = null;
+    this.adding = null;
+    this.saving = null;
+    this.saveFailure = null;
+    this.removed = null;
     this.signedIn = JSON.stringify(accounts());
     this.secrets = localSecrets();
     this.store = null;
@@ -99,7 +104,39 @@ export class Issues {
   }
 
   sourcesOf(project) {
-    return ["github", ...this.links.filter((l) => l.project === project).map((l) => `${l.source}:${l.ref}`)];
+    return this.links.filter((l) => l.project === project).map(sourceKey);
+  }
+
+  followed() {
+    return projectsInOrder(this.projects ?? [], this.front).filter((p) => this.links.some((l) => l.project === p.id));
+  }
+
+  startAdding(cx) {
+    this.open = null;
+    this.removed = null;
+    this.adding = { project: null };
+    this.linking = null;
+    cx.notify();
+  }
+
+  stopAdding(cx) {
+    this.adding = null;
+    this.linking = null;
+    cx.notify();
+  }
+
+  chooseProject(project, cx) {
+    this.adding = { project };
+    cx.notify();
+  }
+
+  addSource(project, kind, cx) {
+    if (kind === "github") {
+      this.link(project, "github", GITHUB_BOARD, true, cx);
+      return;
+    }
+    if (!this.linkedFor(kind)) { this.openSettings(); return; }
+    this.openLinking(project, kind, cx);
   }
 
   boardOf(project, source) { return this.boards.find((b) => b.project === project && b.source === source) ?? null; }
@@ -253,12 +290,26 @@ export class Issues {
     return row.id;
   }
 
+  savingOf(project, kind, ref) { return this.saving === [project, kind, ref].join("\u0000"); }
+
   link(project, kind, item, on, cx) {
+    this.saving = [project, kind, item.ref].join("\u0000");
+    this.saveFailure = null;
+    this.removed = null;
+    cx.notify();
     cx.spawn(async (cx) => {
-      const id = await tryOrAsync(() => this.ownId(project));
-      if (!id) return;
-      await tryOrAsync(() => this.db.run(linkSql({ project: id, source: kind, ref: item.ref, name: item.name }, on)));
-      if (id !== project) this.linking = this.linking && { ...this.linking, project: id };
+      try {
+        const id = await this.ownId(project);
+        await this.db.run(linkSql({ project: id, source: kind, ref: item.ref, name: item.name }, on));
+        if (id !== project) {
+          this.linking = this.linking && { ...this.linking, project: id };
+          this.adding = this.adding && { project: id };
+        }
+        if (on && kind === "github") this.adding = null;
+        if (!on) this.removed = { project: id, kind, item };
+      } catch {
+        this.saveFailure = { text: `${on ? "Can't add" : "Can't remove"} ${item.name}`, retry: (cx) => this.link(project, kind, item, on, cx) };
+      } finally { this.saving = null; }
       this.load(cx, true);
     });
   }
@@ -322,7 +373,7 @@ export class Issues {
       .child(div().flex_1().text_size(T.body).text_color(c.dim).child(`Showing the first ${l.list.length} ${things}`))
       .child(quietLink(`issues-link-more-${project.id}`, "Load more", (cx) => this.loadLinking(project.id, l.kind, l.next, cx), c, { disabled: l.more }))];
     return [...l.list.map((item) => row(`issues-link-${project.id}-${item.ref}`, c, { name: item.name, icon: linked.has(item.ref) ? "check" : null,
-      onClick: (cx) => this.link(project.id, l.kind, item, !linked.has(item.ref), cx) })), ...more];
+      ...(this.savingOf(project.id, l.kind, item.ref) ? { meta: "Saving…" } : { onClick: (cx) => this.link(project.id, l.kind, item, !linked.has(item.ref), cx) }) })), ...more];
   }
 
   boardBlock(project, source, c, now, marked) {
@@ -331,10 +382,14 @@ export class Issues {
     const board = this.boardOf(project.id, source);
     const state = this.stateOf(project, source, c);
     const loading = !board && this.reading.has(placeKey(project.id, source));
-    const name = this.links.find((l) => `${l.source}:${l.ref}` === source && l.project === project.id)?.name;
+    const link = this.links.find((l) => sourceKey(l) === source && l.project === project.id);
     const folds = `${project.id}\u0000${source}`;
+    const title = source === "github" ? GITHUB_BOARD.name : `${SOURCE_WORDS[kindOf(source)]} · ${link?.name ?? source}`;
+    const kind = link?.source ?? "github", ref = link?.ref ?? GITHUB_BOARD.ref, removing = this.savingOf(project.id, kind, ref);
     return [
-      ...(marked && source !== "github" ? [section(c, `${SOURCE_WORDS[kindOf(source)]} · ${name ?? source}`, String(rows.length))] : []),
+      h_flex().w_full().gap(G.sm).items_center()
+        .child(div().flex_1().min_w(0).child(section(c, title, String(rows.length))))
+        .child(quietLink(`issues-remove-${project.id}-${source}`, removing ? "Removing…" : "Remove", (cx) => this.link(project.id, kind, { ref, name: link?.name ?? title }, false, cx), c, { disabled: removing })),
       ...(state ? [state] : []),
       ...(loading ? [skeletonOf({ shape: "two lines", count: 3 })(`issues-bones-${project.id}-${source}`, c)] : []),
       ...(Number(board?.total) > rows.length && board?.filter === filter ? [div().text_size(T.body).text_color(c.dim).child(`Showing the newest ${rows.length} of ${board.total}`)] : []),
@@ -352,7 +407,7 @@ export class Issues {
     const filter = this.filterOf(project.id), kept = accounts();
     const sources = this.sourcesOf(project.id);
     const marked = sources.length > 1;
-    const any = this.rows.some((r) => r.project === project.id && matches(r, filter, this.whoFor(project.id, r.source)));
+    const any = this.rows.some((r) => r.project === project.id && sources.includes(r.source) && matches(r, filter, this.whoFor(project.id, r.source)));
     const busy = sources.some((s) => this.reading.has(placeKey(project.id, s)));
     const failing = sources.some((s) => this.failureOf(project, s));
     return v_flex().w_full().gap(G.sm)
@@ -362,7 +417,7 @@ export class Issues {
       .when(!any && !busy && !failing, (el) => el.child(emptyState({ text: `No open issues ${filter === "all" ? "" : FILTER_WORDS[filter].toLowerCase()}`.trim() })(`issues-empty-${project.id}`, c)))
       .child(h_flex().gap(G.md).children(Object.entries(LINKED).filter(([, provider]) => this.store !== false && provider.account(kept))
         .map(([kind, provider]) => quietLink(`issues-link-${kind}-${project.id}`, `Link ${SOURCE_WORDS[kind]} ${provider.things}…`, (cx) => this.openLinking(project.id, kind, cx), c))))
-      .children(this.linkingRows(project, c));
+      .children(this.adding?.project === project.id ? [] : this.linkingRows(project, c));
   }
 
   detail(issue, c, now) {
@@ -387,7 +442,39 @@ export class Issues {
           onClick: () => openUrl(p.url) }))));
   }
 
+  addingBlock(c) {
+    const chosen = this.adding.project;
+    const all = projectsInOrder(this.projects ?? [], this.front);
+    const heading = (words) => h_flex().w_full().gap(G.sm).items_center()
+      .child(div().flex_1().min_w(0).child(section(c, words)))
+      .child(quietLink("issues-add-close", "Close", (cx) => this.stopAdding(cx), c));
+    if (!chosen) {
+      const listed = all.length
+        ? all.map((p) => row(`issues-add-project-${p.id}`, c, { name: p.name, meta: p.machine ?? null, onClick: (cx) => this.chooseProject(p.id, cx) }))
+        : [emptyState({ text: "Add a project first", action: "New project" })("issues-add-none", c, { onClick: () => this.newProject() })];
+      return v_flex().w_full().gap(G.sm).child(heading("Add a board: choose a project")).children(listed);
+    }
+    const project = all.find((p) => p.id === chosen);
+    const has = new Set(this.sourcesOf(chosen));
+    const others = this.store === false ? [] : Object.entries(LINKED).map(([kind, provider]) => ({
+      kind, name: this.linkedFor(kind) ? `${SOURCE_WORDS[kind]} ${provider.things}…` : `Sign in to ${SOURCE_WORDS[kind]}…`,
+    }));
+    const kinds = [{ kind: "github", name: GITHUB_BOARD.name, done: has.has("github") }, ...others];
+    return v_flex().w_full().gap(G.sm).child(heading(`Add a board to ${project?.name ?? ""}`))
+      .children(kinds.map((k) => row(`issues-add-${k.kind}`, c, { name: k.name, icon: k.done ? "check" : null,
+        ...(k.kind === "github" && this.savingOf(chosen, "github", GITHUB_BOARD.ref) ? { meta: "Adding…" } : k.done ? {} : { onClick: (cx) => this.addSource(chosen, k.kind, cx) }) })))
+      .children(project ? this.linkingRows(project, c) : []);
+  }
+
   skeleton(c) { return skeletonOf({ shape: "two lines", count: 4 })("kanso-skeleton", c); }
+
+  saved(c) {
+    const r = this.removed, f = this.saveFailure;
+    return [
+      ...(f ? [stateBlock("issues-save-failed", c, { text: f.text, fix: "Retry", onClick: f.retry })] : []),
+      ...(r ? [undoLine("issues-removed", `Removed ${r.item.name}`, (cx) => this.link(r.project, r.kind, r.item, true, cx), c)] : []),
+    ];
+  }
 
   noStore(c) {
     return this.store === false && !this.links.length ? [stateBlock("issues-no-store", c, { text: NO_STORE.text })] : [];
@@ -407,14 +494,16 @@ export class Issues {
     if (front !== this.front) { this.front = front; if (this.projects) cx.timer.after(0, (next) => this.refresh(next)); }
     const open = this.open ? this.rows.find((r) => r.url === this.open.url && r.project === this.open.project) : null;
     const busy = this.reading.size > 0;
-    const projects = projectsInOrder(this.projects ?? [], front);
+    const followed = this.followed();
+    const adding = this.adding ? [this.addingBlock(c)] : [];
     const body = open ? this.detail(open, c, now)
       : !this.projects ? this.skeleton(c)
-        : !projects.length ? emptyState({ text: "Add a project to see its tasks", action: "New project" })("issues-none", c, { onClick: () => this.newProject() })
-          : v_flex().w_full().gap(G.xl).children([...this.noStore(c), ...projects.map((p) => this.projectBlock(p, c, now))]);
+        : v_flex().w_full().gap(G.xl).children([...this.saved(c), ...(!followed.length && !this.adding
+          ? [emptyState({ text: "Follow only the GitHub issues, Jira projects and Linear teams you choose", action: "Add a board" })("issues-none", c, { onClick: (cx) => this.startAdding(cx) })]
+          : [...adding, ...this.noStore(c), ...followed.map((p) => this.projectBlock(p, c, now))])]);
     return scrollPage("kanso-issues", c, true, (column) => column
       .child(pageHeader(div().text_size(PR.title).text_color(c.text).child("Tasks"),
-        [refreshTool("issues-refresh", c, { busy, working: `Reading ${plural(this.reading.size, "board", "boards")}` }, (cx) => this.refresh(cx, true))]))
+        [iconButton("issues-add", "plus", "Add a board", (cx) => this.startAdding(cx), c), refreshTool("issues-refresh", c, { busy, working: `Reading ${plural(this.reading.size, "board", "boards")}` }, (cx) => this.refresh(cx, true))]))
       .child(body));
   }
 }

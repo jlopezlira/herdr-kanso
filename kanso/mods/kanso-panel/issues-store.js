@@ -1,5 +1,5 @@
 import { q } from "./kdb.js";
-import { matches } from "./issues-model.js";
+import { matches, sourceKey } from "./issues-model.js";
 import { num } from "./pr-inbox.js";
 
 const COLS = ["url", "source", "project", "ticket", "number", "repo", "title", "status", "priority", "labels", "assignees", "author", "created_at", "updated_at", "body", "read_at"];
@@ -19,9 +19,9 @@ export async function readIssues(db, projects) {
   return { rows, boards, links };
 }
 
-export const linkSql = ({ project, source, ref, name }, on) => (on
+export const linkSql = ({ project, source, ref, name }, on, cached = sourceKey({ source, ref })) => (on
   ? `INSERT OR IGNORE INTO issue_links(project,source,ref,name) VALUES(${q(project)},${q(source)},${q(ref)},${q(name)});`
-  : `BEGIN;DELETE FROM issue_links WHERE project=${q(project)} AND source=${q(source)} AND ref=${q(ref)};DELETE FROM issues WHERE project=${q(project)} AND source=${q(`${source}:${ref}`)};DELETE FROM issue_boards WHERE project=${q(project)} AND source=${q(`${source}:${ref}`)};COMMIT;`);
+  : `BEGIN;DELETE FROM issue_links WHERE project=${q(project)} AND source=${q(source)} AND ref=${q(ref)};DELETE FROM issues WHERE project=${q(project)} AND source=${q(cached)};DELETE FROM issue_boards WHERE project=${q(project)} AND source=${q(cached)};COMMIT;`);
 
 export function boardSql({ project, source, filter, who, repo, columns, total = null, failure, now }) {
   const failed = failure ? q(JSON.stringify(failure)) : "NULL";
