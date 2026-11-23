@@ -74,6 +74,7 @@ jobs:
       group: develop-release
       tag: archive
       options: --verify-tag --prerelease
+    secrets: inherit
     permissions:
       contents: write
   stable:
@@ -85,5 +86,6 @@ jobs:
       branch: main
       group: release
       options: --target "$GITHUB_SHA"
+    secrets: inherit
     permissions:
       contents: write

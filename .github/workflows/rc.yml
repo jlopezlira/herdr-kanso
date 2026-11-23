@@ -16,3 +16,4 @@ jobs:
       group: develop-release
       tag: commit
       options: --verify-tag --prerelease
+    secrets: inherit

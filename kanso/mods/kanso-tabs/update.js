@@ -13,7 +13,7 @@ export { sameVolume, updateHost, windowsInstallScript, windowsLaunchScript, wind
 
 export const SOURCE = {
   remote: "https://github.com/jlopezlira/herdr-kanso.git",
-  tarball: (v) => `https://github.com/jlopezlira/herdr-kanso/archive/refs/tags/v${v}.tar.gz`,
+  tarball: (v) => `https://github.com/jlopezlira/herdr-kanso/releases/download/v${v}/kanso-v${v}.tar.gz`,
   file: (v, path) => `https://raw.githubusercontent.com/jlopezlira/herdr-kanso/v${v}/${path}`,
   checker: "herdr-app",
 };
@@ -181,8 +181,10 @@ have=$(version "$home/mods/kanso-chrome/version.json")
 [ -z "$base" ] || [ "$(cat "$home/keys.json" 2>/dev/null)" = "$(printf '%s' "$base")" ] || { echo "your keys.json changed while the update was prepared; try again" >&2; exit 1; }
 mkdir -p "$stage/src"
 curl -fsSL --proto '=https' --proto-redir '=https' --max-time 120 -o "$stage/release.tar.gz" "$url" || { echo "the download failed" >&2; exit 1; }
+curl -fsSL --proto '=https' --proto-redir '=https' --max-time 60 -o "$stage/release.tar.gz.sig" "$url.sig" || { echo "the release's signature could not be downloaded" >&2; exit 1; }
+ssh-keygen -Y verify -f "$home/mods/kanso-tabs/allowed_signers" -I kanso-release -n kanso-release -s "$stage/release.tar.gz.sig" < "$stage/release.tar.gz" >/dev/null 2>&1 || { echo "the download is not signed with kansō's key, so nothing changed" >&2; exit 1; }
 tar -xzf "$stage/release.tar.gz" -C "$stage/src" --strip-components=1 || { echo "the download could not be opened" >&2; exit 1; }
-rm -f "$stage/release.tar.gz"
+rm -f "$stage/release.tar.gz" "$stage/release.tar.gz.sig"
 src="$stage/src/kanso"
 got=$(version "$src/mods/kanso-chrome/version.json")
 [ "$got" = "$want" ] || { echo "the v$want release says it is \${got:-no version}" >&2; exit 3; }
