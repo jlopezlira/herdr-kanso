@@ -168,11 +168,11 @@ test("What ssh said says whether the computer is ready, wants a password, is clo
 const shForm = process.platform === "win32" && "the sh form runs on macOS and Linux; Windows uses the PowerShell form";
 const PUB = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIKansoOneClickTest kanso";
 const KEY_PATH = "~/.ssh/id_ed25519_kanso";
-const AGENT_PATH = "~/.ssh/id_kanso_agent";
+const agentPath = (suffix) => "~/.ssh/id_kanso_agent_" + suffix;
 const KEY_OPTIONS = "-o IdentitiesOnly=yes -o BatchMode=yes";
 const identityWords = (path) => `-o IdentityFile=${path} ${KEY_OPTIONS}`;
 const KEY_WORDS = identityWords(KEY_PATH);
-const AGENT_WORDS = identityWords(AGENT_PATH);
+const agentWords = (suffix) => identityWords(agentPath(suffix));
 const OLD_KEY_WORDS = `-i ${KEY_PATH} ${KEY_OPTIONS}`;
 const ASK = "-o PasswordAuthentication=yes -o KbdInteractiveAuthentication=yes";
 const signIn = () => load("kanso-computers/sign-in.js", ["signInTab", "routeOf", "keySetup", "lanParts"]);
@@ -204,6 +204,9 @@ const callsOf = async (dir, name) => {
     return [];
   }
 };
+const agentListing = (keys) => keys.length
+  ? `printf '%s\\n' ${keys.map((line) => JSON.stringify(line)).join(" ")}`
+  : "exit 1";
 const keyBin = async (t, { agentKeys = [], probeCode, sshCode = 0, sshSaid = "", sshOut = "", failVia = false, sshBody = "", appCode = 0 } = {}) => {
   const { dir, bin, home } = await folderWith(t, "bin", "home");
   await mkdir(bin);
@@ -222,9 +225,7 @@ const keyBin = async (t, { agentKeys = [], probeCode, sshCode = 0, sshSaid = "",
     "fi",
     "exit 0",
   ].join("\n"));
-  await writeStub(bin, "ssh-add", agentKeys.length
-    ? `printf '%s\\n' ${agentKeys.map((line) => JSON.stringify(line)).join(" ")}`
-    : "exit 1");
+  await writeStub(bin, "ssh-add", agentListing(agentKeys));
   await writeStub(bin, "ssh", [
     "for arg do",
     '  case "$arg" in BatchMode=yes) batch=yes ;; esac',
@@ -242,7 +243,7 @@ const keyBin = async (t, { agentKeys = [], probeCode, sshCode = 0, sshSaid = "",
   return { bin, home, env: { PATH: `${bin}:/bin:/usr/bin`, HOME: home, TMPDIR: dir } };
 };
 const runKeyScript = ([program, ...args], env) => exec(program, args, { env });
-const agentFile = (home) => join(home, ".ssh", basename(AGENT_PATH));
+const agentFile = (home, suffix) => join(home, ".ssh", basename(agentPath(suffix)));
 const runSh = async (t, argv, options, prepare) => {
   const placed = await keyBin(t, options);
   const key = join(placed.home, ".ssh", "id_ed25519_kanso");
@@ -433,6 +434,7 @@ test("A Tailscale route, a route that is not ssh, a fly route, and a Windows rou
 });
 
 const KEY_MACHINE = { name: "grey", target: "ada@box" };
+const AGENT_WORDS = agentWords(KEY_MACHINE.name);
 const AGENT_ED = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFixtureAgentEd";
 const AGENT_EC = "ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYFixtureAgentEc";
 const AGENT_KEYS = [AGENT_EC, AGENT_ED].map((key) => key + " agent comment");
@@ -448,7 +450,7 @@ test("Signing in prefers an agent's Ed25519 key, saves only its public key, and 
   const { keySetup } = await signIn();
   const { home, key, ran, calls } = await runSh(t, keySetup(KEY_MACHINE), { agentKeys: AGENT_KEYS });
   endsDone(ran);
-  const agent = agentFile(home);
+  const agent = agentFile(home, KEY_MACHINE.name);
   assert.equal(await readFile(agent + ".pub", "utf8"), AGENT_LINE + "\n");
   await assert.rejects(readFile(agent), { code: "ENOENT" });
   await assert.rejects(readFile(key + ".pub"), { code: "ENOENT" });
@@ -463,9 +465,9 @@ test("Signing in keeps a public key already held by the agent, even when the age
   const { keySetup } = await signIn();
   const existing = AGENT_EC + " existing comment\n";
   const { home, ran, calls } = await runSh(t, keySetup(KEY_MACHINE), { agentKeys: AGENT_KEYS },
-    (fixture) => writeFile(agentFile(fixture.home) + ".pub", existing));
+    (fixture) => writeFile(agentFile(fixture.home, KEY_MACHINE.name) + ".pub", existing));
   endsDone(ran);
-  assert.equal(await readFile(agentFile(home) + ".pub", "utf8"), existing);
+  assert.equal(await readFile(agentFile(home, KEY_MACHINE.name) + ".pub", "utf8"), existing);
   assert.deepEqual(await calls("ssh-keygen"), []);
   assert.ok((await calls("ssh"))[0].at(-1).includes(AGENT_EC + " kanso"));
 });
@@ -510,7 +512,8 @@ test("The key push appends new key material but keeps an existing line with the 
 });
 
 const KEY_ACTIONS = "kanso-spaces/sign-in.js";
-const keyedMachine = (words = KEY_WORDS) => ({ ...KEY_MACHINE, via: "ssh " + words + " " + KEY_MACHINE.target });
+const routeWith = (words, target) => "ssh " + words + " " + target;
+const keyedMachine = (words = KEY_WORDS) => ({ ...KEY_MACHINE, via: routeWith(words, KEY_MACHINE.target) });
 const checkRemovalCall = async (calls) => {
   assert.deepEqual(await calls("herdr-app"), [["do", "kanso-spaces.remove-machine:grey"]]);
 };
@@ -600,8 +603,8 @@ test("The Windows key removal uses the saved public key and removes the computer
   assert.match(script, /-ne 'removed'\) \{[^}]+exit 0 \}; & herdr-app do 'kanso-spaces\.remove-machine:grey'/);
 });
 
-test("An agent route still opens its computer after another computer falls back to a generated key", { skip: shForm }, async (t) => {
-  const { keySetup, keyRemoval } = await load(KEY_ACTIONS, ["keySetup", "keyRemoval"]);
+const twoAgentComputers = async (t, { betaFallback = false, betaKeys = AGENT_KEYS } = {}) => {
+  const { keySetup } = await signIn();
   const sshBody = [
     "for arg do",
     '  case "$arg" in alpha|beta) host=$arg ;; IdentityFile=*) identity=${arg#IdentityFile=} ;; esac',
@@ -609,7 +612,7 @@ test("An agent route still opens its computer after another computer falls back 
     '[ -n "$host" ] || exit 1',
     'remote="$TMPDIR/$host"',
     'if [ "$batch" = yes ]; then',
-    '  [ "$host/$last" != beta/true ] || exit 255',
+    '  if [ "$host/$last" = beta/true ] && [ "$BETA_FALLBACK" = yes ]; then exit 255; fi',
     '  file="$HOME/.ssh/${identity##*/}.pub"',
     '  [ -s "$file" ] || exit 255',
     '  key=$(awk \'{ print $2 }\' "$file")',
@@ -617,19 +620,68 @@ test("An agent route still opens its computer after another computer falls back 
     "fi",
     'HOME="$remote" ' + REMOTE_SHELL,
   ].join("\n");
-  const { bin, env } = await keyBin(t, { agentKeys: AGENT_KEYS, sshBody });
+  const { bin, env, home } = await keyBin(t, { agentKeys: AGENT_KEYS, sshBody });
   const [alpha, beta] = ["alpha", "beta"].map((name) => ({ name, target: name }));
-  for (const machine of [alpha, beta]) {
+  const setup = async (machine, options) => {
     await mkdir(join(env.TMPDIR, machine.name));
-    endsDone(await runKeyScript(keySetup(machine), env));
-  }
+    endsDone(await runKeyScript(keySetup(machine), { ...env, ...options }));
+  };
+  await setup(alpha);
+  if (betaKeys !== AGENT_KEYS) await writeStub(bin, "ssh-add", agentListing(betaKeys));
+  await setup(beta, { BETA_FALLBACK: betaFallback ? "yes" : "no" });
   const [[, , , alphaVia], [, , , betaVia]] = await callsOf(bin, "hc");
+  return { alpha, beta, alphaVia, betaVia, env, home };
+};
+
+test("An agent route still opens its computer after another computer falls back to a generated key", { skip: shForm }, async (t) => {
+  const { keyRemoval } = await load(KEY_ACTIONS, ["keyRemoval"]);
+  const { alpha, beta, alphaVia, betaVia, env } = await twoAgentComputers(t, { betaFallback: true });
   const removed = await runKeyScript(keyRemoval({ ...alpha, via: alphaVia }), env);
   endsDone(removed);
-  assert.equal(alphaVia, "ssh " + AGENT_WORDS + " alpha");
+  assert.equal(alphaVia, routeWith(agentWords(alpha.name), alpha.target));
   assert.equal(betaVia, viaOf(beta.target));
   const alphaKeys = await readFile(authorizedFile(join(env.TMPDIR, alpha.name)), "utf8");
   assert.equal(alphaKeys.trim(), "");
+});
+
+test("Alpha keeps its original agent public key and saved route after Beta signs in with a different agent key", { skip: shForm }, async (t) => {
+  const { alpha, beta, alphaVia, betaVia, env, home } = await twoAgentComputers(t, { betaKeys: [AGENT_KEYS[0]] });
+  const probe = await runKeyScript(["sh", "-c", alphaVia + " true"], env);
+  assert.equal(probe.code, 0, probe.stderr);
+  const [alphaPub, betaPub] = await Promise.all([alpha, beta].map(({ name }) => readFile(agentFile(home, name) + ".pub", "utf8")));
+  assert.deepEqual([alphaPub.trim(), betaPub.trim()], [AGENT_LINE, AGENT_EC + " kanso"]);
+  for (const [machine, via] of [[alpha, alphaVia], [beta, betaVia]]) {
+    assert.equal(via, routeWith(agentWords(machine.name), machine.target));
+  }
+});
+
+test("Successful removal deletes only the local agent public key named in the saved route", { skip: shForm }, async (t) => {
+  const { keyRemoval } = await load(KEY_ACTIONS, ["keyRemoval"]);
+  const suffix = "saved_grey";
+  const agentMachine = keyedMachine(agentWords(suffix));
+  for (const machine of [keyedMachine(), agentMachine]) {
+    const agent = machine === agentMachine;
+    const { home, key, ran } = await runSh(t, keyRemoval(machine), { sshBody: REMOTE_SHELL }, async (fixture) => {
+      await Promise.all([
+        writeFile(fixture.key + ".pub", PUB + "\n"),
+        writeFile(agentFile(fixture.home, suffix) + ".pub", AGENT_LINE + "\n"),
+        writeFile(authorizedFile(fixture.home), [AGENT_LINE, PUB, ""].join("\n")),
+      ]);
+    });
+    endsDone(ran);
+    assert.match(ran.stdout, /Removed this computer's key/);
+    assert.equal(await readFile(key + ".pub", "utf8"), PUB + "\n");
+    const agentPub = readFile(agentFile(home, suffix) + ".pub", "utf8");
+    if (agent) await assert.rejects(agentPub, { code: "ENOENT" });
+    else assert.equal(await agentPub, AGENT_LINE + "\n");
+    assert.equal(await readFile(authorizedFile(home), "utf8"), (agent ? PUB : AGENT_LINE) + "\n");
+  }
+});
+
+test("Windows emits PowerShell if and else branches without a semicolon between them", async () => {
+  const { keySetup } = await signIn();
+  const script = windowsScript(keySetup(KEY_MACHINE, { platform: "windows" }));
+  assert.doesNotMatch(script, /\};\s*else\b/i);
 });
 
 const withoutBlankLines = [
