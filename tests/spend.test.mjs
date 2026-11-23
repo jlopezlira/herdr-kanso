@@ -98,7 +98,7 @@ test("The header Refresh with the collector failing shows the tool's words with 
   const collector = async () => ({ code: 1, stdout: "", stderr: said });
   for (const [name, fields] of Object.entries(pages)) {
     const { cx, drain } = timedContext([]);
-    const page = await spendPage({ nodeBinary: "node", awake: false, ...fields }, { exec: collector });
+    const page = await spendPage({ nodeBinary: "node", awake: false, ...fields }, { exec: collector, readTextFile: async () => '{"node":"node"}' });
     const header = () => find(page.render(cx), (el) => el.tag === "spend-refresh");
     assert.equal(arg(header(), "disabled"), false, name);
     arg(header(), "on_click")({}, cx);

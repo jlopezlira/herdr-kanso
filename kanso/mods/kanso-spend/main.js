@@ -196,7 +196,8 @@ export default class TokenSpend extends View {
   }
 
   reload(cx) {
-    if (this.nodeBinary) { this.run("snapshot", cx); return; }
+    if (this.running) { this.run("snapshot", cx); return; }
+    this.nodeBinary = null;
     this.runtimeError = null;
     this.wake(cx);
   }

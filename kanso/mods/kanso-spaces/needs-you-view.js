@@ -26,14 +26,12 @@ export function queueControl(t, queue, collapsed, empty, toggle, title = AS_IS.t
     tip: tooltip({ label: spoken, chord: boundChord(NEXT_NEEDS) }) })("needs-you-count", tokens(t), { onClick: toggle }));
 }
 
-// Each waiting agent is its session row, the project after the name; then the queue's state: loading, or each computer it can't reach with its Refresh.
 const sessionOf = (row, age, selected) => sessionRow({ program: programOf({ program: row.icon && { icon: row.icon, tint: row.tint } }), name: row.name,
   activity: waitingReason(row), time: age(row), place: row.project, status: row.status, depth: 0, selected, pinnable: false, menu: false });
-const stateOf = (queue, c, { title, retry }) => {
-  if (queue.state === "loading") return [skeletonOf({ shape: "row" })("needs-you-loading", c)];
-  if (queue.state !== "unavailable") return [];
-  return (queue.unreachable ?? []).map((name) => failureBlock({ text: cantReach([title(name)]), fix: "Refresh" })(`needs-you-unavailable-${name}`, c, { onClick: (cx) => retry(name, cx) }));
-};
+const stateOf = (queue, c, { title, retry }) => [
+  ...(queue.state === "loading" ? [skeletonOf({ shape: "row" })("needs-you-loading", c)] : []),
+  ...(queue.unreachable ?? []).map((name) => failureBlock({ text: cantReach([title(name)]), fix: "Refresh" })(`needs-you-unavailable-${name}`, c, { onClick: (cx) => retry(name, cx) })),
+];
 
 export function queueList(t, queue, rowFor, age, scroll = null, computer = AS_IS) {
   if (queue.state === "ready" && !queue.rows.length) return null;

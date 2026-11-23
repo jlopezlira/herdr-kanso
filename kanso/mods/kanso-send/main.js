@@ -73,7 +73,7 @@ export default class Send extends View {
     if (there.some((x) => statusOf(x) === "working")) { cx.timer.after(HOLD_MS, (next) => this.hold(next)); return; }
     const { text } = this.held, gone = this.held.recipients.filter((x) => !there.includes(x));
     this.held = null; this.note = null;
-    if (!there.length) { this.error = closedNote(gone); cx.notify(); return; }
+    if (!there.length) { this.error = closedNote(gone); this.to = null; cx.notify(); return; }
     this.send(cx, { recipients: there.filter((x) => statusOf(x) !== "blocked"), waiting: there.filter((x) => statusOf(x) === "blocked") }, text, gone);
   }
 
@@ -138,7 +138,7 @@ export default class Send extends View {
       title: "Send to an agent", scope: from,
       body: [
         field("send-to", this.query, c, { label: "To" }),
-        rows.length ? stack({ variant: "dialog list", scroll: true }, rows)("send-list", c)
+        !state.empty ? stack({ variant: "dialog list", scroll: true }, rows)("send-list", c)
           : emptyState({ text: empty, action: state.empty === "none" ? START : "" })("send-list", c, { onClick: () => run("kanso-spaces.start") }),
         field("send-message", this.box, c, { label: "Message" }),
       ],

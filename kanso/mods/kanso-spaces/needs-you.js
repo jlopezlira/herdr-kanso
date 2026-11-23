@@ -54,10 +54,9 @@ export function nextWaiting(rows, cursor = null) {
 }
 
 export function queueState(rows, machines) {
-  if (machines.some((m) => m.layout === "loading")) return { rows, state: "loading" };
   const unreachable = machines.filter((m) => m.layout === "unavailable").map((m) => m.name);
-  if (unreachable.length) return { rows, state: "unavailable", unreachable };
-  return { rows, state: "ready" };
+  const state = machines.some((m) => m.layout === "loading") ? "loading" : unreachable.length ? "unavailable" : "ready";
+  return unreachable.length ? { rows, state, unreachable } : { rows, state };
 }
 
 export const waitingReason = () => "Waiting for you";
