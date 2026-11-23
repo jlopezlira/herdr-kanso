@@ -463,7 +463,13 @@ test("The five-minute tick does not read a board read less than a minute ago", a
   };
   const cx = { notify() {}, spawn(fn) { pending.push(fn(cx)); return { cancel() {} }; }, timer: { every(_ms, fn) { ticks.push(fn); return { cancel() {} }; }, after() { return { cancel() {} }; } } };
   new Issues(db).init(cx);
-  await pending.shift();
+  const settle = async () => {
+    const waiting = pending.splice(0);
+    if (!waiting.length) return;
+    await Promise.all(waiting);
+    await settle();
+  };
+  await settle();
   const before = calls.length;
   ticks[0](cx);
   await Promise.all(pending);

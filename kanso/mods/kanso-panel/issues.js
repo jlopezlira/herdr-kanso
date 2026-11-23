@@ -1,6 +1,6 @@
 import { div } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
-import { exec, run, theme, spaces, home, openOverlay, shared, window } from "herdr";
+import { exec, run, theme, spaces, home, openOverlay, shared, checking } from "herdr";
 import { G, T, PR, DIALOG, tokens } from "./ui.js";
 import { iconButton, quietLink } from "./ui-button.js";
 import { row } from "./ui-row.js";
@@ -12,21 +12,20 @@ import { emptyState, skeletonOf } from "./kit.js";
 import { scrollPage, pageHeader, refreshTool } from "./ui-page.js";
 import { openApi } from "./platform-open.js";
 import { localService } from "./platform-host.js";
-import { secretsApi } from "./platform-secrets.js";
+import { localSecrets } from "./platform-secrets.js";
 import { projectKey } from "./kdb.js";
 import { tryOrAsync, plural } from "./pure.js";
 import { FILTERS, FILTER_WORDS, EVERY_MS, OPEN, ACCOUNTS, SOURCE_WORDS, matches, sectionsOf, isFolded, foldKey, projectsInOrder, stale, ageOf, sendText, listOf, kindOf, linkWords } from "./issues-model.js";
 import { readIssues, linkSql } from "./issues-store.js";
 import { issuesGithub, repoText } from "./issues-github.js";
-import { jiraClient } from "./issues-jira.js";
-import { linearClient } from "./issues-linear.js";
-import { syncJiraBoard, syncJiraDetail, syncLinearBoard, syncLinearDetail } from "./issues-linked.js";
+import { LINKED, linkedOf, syncLinkedBoard, syncLinkedDetail } from "./issues-linked.js";
 
 const PROJECTS = "SELECT id, name, folder, machine FROM projects WHERE removed IS NULL;";
 const SIGNED_OUT = { kind: "signed out", text: "Sign in to GitHub to see your issues" };
 const NO_REMOTE = { kind: "no remote", text: "No GitHub remote" };
 const UNREACHED = (detail) => ({ kind: "offline", text: "GitHub can't be reached", source: detail ?? "" });
 const SIGNED_OUT_STATES = new Set(["logged_out", "no_cli"]);
+const NO_STORE = { kind: "no store", text: "This computer has no secret store, so Jira and Linear can't sign in here. GitHub keeps working." };
 
 const runOn = (machine) => (cmd, args) => exec(cmd, args, { on: machine || null }).catch((e) => ({ code: -1, stdout: "", stderr: String(e?.message ?? e) }));
 const openUrl = (url) => localService(openApi).open(url).catch(() => {});
@@ -36,6 +35,7 @@ const accounts = () => {
   return kept && typeof kept === "object" ? kept : {};
 };
 const placeKey = (project, source) => `${project}\u0000${source}`;
+const refOf = (source) => source.slice(kindOf(source).length + 1);
 
 export class Issues {
   constructor(db) { this.db = db; }
@@ -62,7 +62,9 @@ export class Issues {
     this.open = null;
     this.front = null;
     this.linking = null;
-    this.secrets = secretsApi(window()?.platform ?? "macos", runOn(null));
+    this.secrets = localSecrets();
+    this.store = null;
+    if (!checking()) cx.spawn(async (cx) => { this.store = await this.secrets.available(); cx.notify(); });
     this.load(cx, true);
     cx.timer.every(EVERY_MS, (next) => this.refresh(next));
   }
@@ -94,17 +96,14 @@ export class Issues {
 
   boardOf(project, source) { return this.boards.find((b) => b.project === project && b.source === source) ?? null; }
 
-  clientOf(kind) {
-    const kept = accounts();
-    if (kind === "jira") return kept.jira?.site ? jiraClient(this.secrets, kept.jira) : null;
-    if (kind === "linear") return kept.linear ? linearClient(this.secrets) : null;
-    return null;
+  linkedFor(kind) {
+    const provider = linkedOf(kind), account = provider?.account(accounts());
+    return account && this.store !== false ? { provider, account, client: provider.client(this.secrets, account) } : null;
   }
 
   whoFor(project, source) {
-    const kind = kindOf(source), kept = accounts();
-    if (kind === "jira") return kept.jira?.email ?? null;
-    if (kind === "linear") return kept.linear?.email ?? null;
+    const provider = linkedOf(kindOf(source));
+    if (provider) { const account = provider.account(accounts()); return account ? provider.who(account) : null; }
     const machine = (this.projects ?? []).find((p) => p.id === project)?.machine ?? "";
     return this.logins[`${machine}:github`]?.login ?? this.boardOf(project, "github")?.who ?? null;
   }
@@ -115,7 +114,7 @@ export class Issues {
       for (const source of this.sourcesOf(project.id)) {
         const board = this.boardOf(project.id, source);
         const due = force || stale(board?.read_at, now) || board?.filter !== this.filterOf(project.id);
-        const waiting = board?.retry_at && board.retry_at > now;
+        const waiting = !force && board?.retry_at && board.retry_at > now;
         const key = placeKey(project.id, source);
         if (due && !waiting && !this.reading.has(key)) this.readBoard(project, source, cx);
       }
@@ -144,13 +143,13 @@ export class Issues {
   }
 
   async readLinked(project, source, filter, now) {
-    const kind = kindOf(source), ref = source.slice(kind.length + 1);
-    const client = this.clientOf(kind);
-    if (!client) { this.place(project.id, source, { kind: "signed out", text: `Sign in to ${SOURCE_WORDS[kind]} in Settings to see these tickets` }); return; }
+    const kind = kindOf(source), ref = refOf(source);
+    if (this.store === false) { this.place(project.id, source, NO_STORE); return; }
+    const linked = this.linkedFor(kind);
+    if (!linked) { this.place(project.id, source, { kind: "signed out", text: `Sign in to ${SOURCE_WORDS[kind]} in Settings to see these tickets` }); return; }
+    if (!linked.provider.owns(ref, linked.account)) { this.place(project.id, source, { kind: "signed out", text: linked.provider.other(ref) }); return; }
     this.place(project.id, source, { ref });
-    const args = { project: project.id, filter, who: this.whoFor(project.id, source), kept: this.rows, now };
-    if (kind === "jira") await syncJiraBoard(this.db, client, { ...args, site: accounts().jira.site, key: ref });
-    else await syncLinearBoard(this.db, client, { ...args, team: ref });
+    await syncLinkedBoard(this.db, linked.provider, linked.client, { kind, ref, project: project.id, filter, who: linked.provider.who(linked.account), kept: this.rows, now });
   }
 
   readBoard(project, source, cx) {
@@ -183,9 +182,10 @@ export class Issues {
   }
 
   async detailOf(issue) {
-    const kind = kindOf(issue.source);
-    if (kind === "jira") return this.clientOf("jira") ? syncJiraDetail(this.db, this.clientOf("jira"), issue) : null;
-    if (kind === "linear") return this.clientOf("linear") ? syncLinearDetail(this.db, this.clientOf("linear"), issue) : null;
+    if (linkedOf(kindOf(issue.source))) {
+      const linked = this.linkedFor(kindOf(issue.source));
+      return linked?.provider.owns(refOf(issue.source), linked.account) ? syncLinkedDetail(this.db, linked.provider, linked.client, issue) : null;
+    }
     const project = (this.projects ?? []).find((p) => p.id === issue.project);
     const repo = this.places[placeKey(issue.project, "github")]?.repo ?? repoText(this.boardOf(issue.project, "github")?.repo);
     return project && repo ? issuesGithub.syncDetail(this.db, runOn(project.machine), { repo, project: issue.project, url: issue.url, number: issue.number }) : null;
@@ -214,7 +214,7 @@ export class Issues {
     this.linking = { project, kind, list: null, failure: null };
     cx.notify();
     cx.spawn(async (cx) => {
-      const found = await tryOrAsync(() => this.clientOf(kind).projects());
+      const found = await tryOrAsync(() => this.linkedFor(kind)?.client.projects());
       if (this.linking?.project !== project || this.linking.kind !== kind) return;
       this.linking = { ...this.linking, list: found?.list ?? [], failure: found?.failure ?? (found ? null : { text: `${SOURCE_WORDS[kind]} could not be read` }) };
       cx.notify();
@@ -242,14 +242,15 @@ export class Issues {
     const read = this.boardOf(project.id, source)?.read_at;
     const copy = read && failure.kind !== "no remote" && failure.kind !== "signed out" ? `Showing the copy read at ${clock(read)}` : "";
     const until = failure.retryAt ? ` until ${clock(failure.retryAt)}` : "";
-    const github = source === "github";
-    const fix = failure.kind === "signed out" ? (github ? { fix: "Sign in", onClick: () => this.signIn(project) } : { fix: failure.fix ?? "Reconnect", onClick: () => this.openSettings() })
-      : failure.kind === "no remote" ? {} : { fix: "Refresh", onClick: (cx) => this.refresh(cx, true) };
+    const again = { onClick: (cx) => this.refresh(cx, true) };
+    const fix = failure.kind === "no remote" || failure.kind === "no store" ? {}
+      : source !== "github" ? { fix: "Reconnect", ...(failure.kind === "signed out" ? { onClick: () => this.openSettings() } : again) }
+        : failure.kind === "signed out" ? { fix: "Sign in", onClick: () => this.signIn(project) } : { fix: "Refresh", ...again };
     return stateBlock(`issues-state-${project.id}-${source}`, c, { text: `${failure.text}${until}`, source: [failure.source, copy].filter(Boolean).join(" · "), ...fix });
   }
 
   openSettings() {
-    openOverlay({ mod: "kanso-settings", kind: "dialog", width: 860, height: 680, props: { page: "accounts" } });
+    openOverlay({ mod: "kanso-settings", kind: "dialog", width: DIALOG.settingsW, height: DIALOG.settingsH, props: { page: "accounts" } });
   }
 
   ticketRow(issue, c, now, marked) {
@@ -307,9 +308,8 @@ export class Issues {
       .child(segmented(`issues-filter-${project.id}`, FILTERS.map((f) => ({ key: f, label: FILTER_WORDS[f] })), filter, (value, cx) => this.choose(project.id, value, cx), c, { size: "sm" }))
       .children(sources.flatMap((source) => this.boardBlock(project, source, c, now, marked)))
       .when(!any && !busy && !failing, (el) => el.child(emptyState({ text: `No open issues ${filter === "all" ? "" : FILTER_WORDS[filter].toLowerCase()}`.trim() })(`issues-empty-${project.id}`, c)))
-      .child(h_flex().gap(G.md)
-        .when(Boolean(kept.jira?.site), (el) => el.child(quietLink(`issues-link-jira-${project.id}`, "Link Jira projects…", (cx) => this.openLinking(project.id, "jira", cx), c)))
-        .when(Boolean(kept.linear), (el) => el.child(quietLink(`issues-link-linear-${project.id}`, "Link Linear teams…", (cx) => this.openLinking(project.id, "linear", cx), c))))
+      .child(h_flex().gap(G.md).children(Object.entries(LINKED).filter(([, provider]) => this.store !== false && provider.account(kept))
+        .map(([kind, provider]) => quietLink(`issues-link-${kind}-${project.id}`, `Link ${SOURCE_WORDS[kind]} ${provider.things}…`, (cx) => this.openLinking(project.id, kind, cx), c))))
       .children(this.linkingRows(project, c));
   }
 

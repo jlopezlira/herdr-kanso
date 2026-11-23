@@ -1,6 +1,6 @@
 import { storeSql, detailSql } from "./issues-store.js";
-import { readJiraBoard, readJiraDetail } from "./issues-jira.js";
-import { readLinearBoard, readLinearDetail } from "./issues-linear.js";
+import { jiraClient, readJiraBoard, readJiraDetail, refParts } from "./issues-jira.js";
+import { linearClient, readLinearBoard, readLinearDetail } from "./issues-linear.js";
 
 const storeBoard = async (db, board, { project, source, filter, who, repo, kept, now }) => {
   await db.run(storeSql({ project, source, filter, who, repo, ...board, kept, now }));
@@ -12,12 +12,32 @@ const storeDetail = async (db, issue, detail) => {
   return detail;
 };
 
-export const syncJiraBoard = async (db, client, { site, key, project, filter, who, kept, now = Date.now() }) =>
-  storeBoard(db, await readJiraBoard(client, { site, key, project, filter, now }), { project, source: `jira:${key}`, filter, who, repo: site, kept, now });
+export const LINKED = {
+  jira: {
+    things: "projects",
+    account: (kept) => (kept?.jira?.site ? kept.jira : null),
+    client: (secrets, account) => jiraClient(secrets, account),
+    who: (account) => account.accountId ?? null,
+    owns: (ref, account) => refParts(ref).site === account.site,
+    other: (ref) => `Signed in to another Jira site. Sign in to ${refParts(ref).site} to see these tickets`,
+    readBoard: readJiraBoard,
+    readDetail: (client, issue) => readJiraDetail(client, issue.ticket),
+  },
+  linear: {
+    things: "teams",
+    account: (kept) => (kept?.linear?.name ? kept.linear : null),
+    client: (secrets) => linearClient(secrets),
+    who: (account) => account.id ?? null,
+    owns: () => true,
+    other: () => "",
+    readBoard: readLinearBoard,
+    readDetail: (client, issue) => readLinearDetail(client, issue.repo),
+  },
+};
 
-export const syncLinearBoard = async (db, client, { team, project, filter, who, kept, now = Date.now() }) =>
-  storeBoard(db, await readLinearBoard(client, { team, project, filter, now }), { project, source: `linear:${team}`, filter, who, repo: team, kept, now });
+export const linkedOf = (kind) => (Object.hasOwn(LINKED, kind) ? LINKED[kind] : null);
 
-export const syncJiraDetail = async (db, client, issue) => storeDetail(db, issue, await readJiraDetail(client, issue.ticket));
+export const syncLinkedBoard = async (db, provider, client, { kind, ref, project, filter, who, kept, now = Date.now() }) =>
+  storeBoard(db, await provider.readBoard(client, { ref, project, filter, now }), { project, source: `${kind}:${ref}`, filter, who, repo: ref, kept, now });
 
-export const syncLinearDetail = async (db, client, issue) => storeDetail(db, issue, await readLinearDetail(client, issue.repo));
+export const syncLinkedDetail = async (db, provider, client, issue) => storeDetail(db, issue, await provider.readDetail(client, issue));

@@ -62,6 +62,17 @@ export function ageOf(at, now) {
 
 export const linkWords = (source) => (kindOf(source) === "github" ? "Open on GitHub" : `Open in ${SOURCE_WORDS[kindOf(source)]}`);
 
+export async function pagesOf(read, pages = 10) {
+  const walk = async (cursor, items, page) => {
+    const got = await read(cursor);
+    if (got.failure) return { items, failure: got.failure, complete: false };
+    const all = [...items, ...(got.items ?? [])];
+    if (got.next === null || got.next === undefined) return { items: all, failure: null, complete: true };
+    return page + 1 < pages ? walk(got.next, all, page + 1) : { items: all, failure: null, complete: false };
+  };
+  return walk(null, [], 0);
+}
+
 export function sendText(row) {
   return [`${row.ticket} ${row.title}`, row.url, String(row.body ?? "").trim()].filter(Boolean).join("\n\n");
 }

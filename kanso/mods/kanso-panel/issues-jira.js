@@ -1,13 +1,18 @@
 import { parseOr } from "./pure.js";
+import { pagesOf } from "./issues-model.js";
 
 export const JIRA = "kanso-jira";
-export const SITE_PREF = "issues.jira.site";
-export const EMAIL_PREF = "issues.jira.email";
 const FIELDS = ["summary", "status", "priority", "created", "updated", "assignee", "reporter", "labels", "description"];
 
 export const siteOf = (text) => {
   const host = String(text ?? "").trim().toLowerCase().replace(/^https?:\/\//, "").replace(/\/.*$/, "");
   return /^[a-z0-9][a-z0-9-]*(\.[a-z0-9-]+)*\.atlassian\.net$/.test(host) ? host : null;
+};
+
+export const jiraRef = (site, key) => `${site}/${key}`;
+export const refParts = (ref) => {
+  const cut = String(ref ?? "").lastIndexOf("/");
+  return { site: String(ref).slice(0, cut), key: String(ref).slice(cut + 1) };
 };
 
 const filterJql = (filter) => (filter === "assigned" ? " AND assignee = currentUser()" : filter === "created" ? " AND reporter = currentUser()" : "");
@@ -35,13 +40,19 @@ export function jiraClient(secrets, { site, email }) {
     return r.status >= 200 && r.status < 300 ? { data: parseOr(r.text, null), failure: null } : { data: null, failure: failureOf(r) };
   };
   return {
+    site,
     me: async () => {
       const { data, failure } = await ask("/rest/api/3/myself");
-      return failure ? { failure } : { name: data?.displayName ?? data?.emailAddress ?? email };
+      return failure ? { failure } : { name: data?.displayName ?? data?.emailAddress ?? email, accountId: data?.accountId ?? null };
     },
     projects: async () => {
-      const { data, failure } = await ask("/rest/api/3/project/search?maxResults=100");
-      return failure ? { failure, list: [] } : { list: (data?.values ?? []).map((p) => ({ ref: p.key, name: `${p.key} · ${p.name}` })) };
+      const read = await pagesOf(async (at) => {
+        const { data, failure } = await ask(`/rest/api/3/project/search?maxResults=100&startAt=${at ?? 0}`);
+        if (failure) return { failure };
+        const values = data?.values ?? [];
+        return { items: values, next: data?.isLast || !values.length ? null : (at ?? 0) + values.length };
+      });
+      return { failure: read.failure, list: read.items.map((p) => ({ ref: jiraRef(site, p.key), name: `${p.key} · ${p.name}` })) };
     },
     board: async (key) => {
       const boards = await ask(`/rest/agile/1.0/board?projectKeyOrId=${encodeURIComponent(key)}`);
@@ -51,15 +62,20 @@ export function jiraClient(secrets, { site, email }) {
       const columns = config.data?.columnConfig?.columns ?? [];
       return { columns: columns.map((c) => c.name), statusColumn: Object.fromEntries(columns.flatMap((c) => (c.statuses ?? []).map((s) => [String(s.id), c.name]))) };
     },
-    issues: async (key, filter) => ask("/rest/api/3/search/jql", { method: "POST", body: { jql: jqlOf(key, filter), fields: FIELDS, maxResults: 100 } }),
+    issues: (key, filter) => pagesOf(async (token) => {
+      const { data, failure } = await ask("/rest/api/3/search/jql", { method: "POST", body: { jql: jqlOf(key, filter), fields: FIELDS, maxResults: 100, ...(token ? { nextPageToken: token } : {}) } });
+      if (failure) return { failure };
+      return { items: data?.issues ?? [], next: data?.isLast === false && data?.nextPageToken ? data.nextPageToken : null };
+    }),
     detail: async (ticket) => ask(`/rest/api/3/issue/${encodeURIComponent(ticket)}?fields=description,comment`),
   };
 }
 
 export function rowsOf(issues, { site, key, project, statusColumn, now }) {
+  const ref = jiraRef(site, key);
   return issues.map((i) => ({
     url: `https://${site}/browse/${i.key}`,
-    source: `jira:${key}`,
+    source: `jira:${ref}`,
     project,
     ticket: i.key,
     number: null,
@@ -68,8 +84,8 @@ export function rowsOf(issues, { site, key, project, statusColumn, now }) {
     status: statusColumn[String(i.fields?.status?.id)] ?? i.fields?.status?.name ?? null,
     priority: i.fields?.priority?.name ?? null,
     labels: JSON.stringify(i.fields?.labels ?? []),
-    assignees: JSON.stringify(i.fields?.assignee ? [i.fields.assignee.emailAddress ?? i.fields.assignee.displayName] : []),
-    author: i.fields?.reporter?.emailAddress ?? i.fields?.reporter?.displayName ?? null,
+    assignees: JSON.stringify(i.fields?.assignee?.accountId ? [i.fields.assignee.accountId] : []),
+    author: i.fields?.reporter?.accountId ?? null,
     created_at: i.fields?.created ?? null,
     updated_at: i.fields?.updated ?? null,
     body: adfText(i.fields?.description),
@@ -77,11 +93,11 @@ export function rowsOf(issues, { site, key, project, statusColumn, now }) {
   }));
 }
 
-export async function readJiraBoard(client, { site, key, project, filter, now = Date.now() }) {
-  const { data, failure } = await client.issues(key, filter);
-  if (failure) return { rows: [], columns: [], failure };
-  const { columns, statusColumn } = await client.board(key);
-  return { rows: rowsOf(data?.issues ?? [], { site, key, project, statusColumn, now }), columns, failure: null };
+export async function readJiraBoard(client, { ref, project, filter, now = Date.now() }) {
+  const { site, key } = refParts(ref);
+  const read = await client.issues(key, filter);
+  const { columns, statusColumn } = read.items.length ? await client.board(key) : { columns: [], statusColumn: {} };
+  return { rows: rowsOf(read.items, { site, key, project, statusColumn, now }), columns, failure: read.failure, complete: read.complete };
 }
 
 export async function readJiraDetail(client, ticket) {

@@ -1,14 +1,15 @@
 import { parseOr } from "./pure.js";
-import { stampsOf } from "./issues-model.js";
+import { stampsOf, pagesOf } from "./issues-model.js";
 
 export const LINEAR = "kanso-linear";
 export const LINEAR_ACCOUNT = "api.linear.app";
 const LINEAR_URL = "https://api.linear.app/graphql";
 
+const PAGE = "pageInfo{hasNextPage endCursor}";
 const ME = "query{viewer{id name email}}";
-const TEAMS = "query{teams(first:100){nodes{id key name}}}";
-const STATES = "query($team:String!){team(id:$team){states{nodes{name position type}}}}";
-const ISSUES = "query($filter:IssueFilter){issues(first:100,filter:$filter,orderBy:updatedAt){nodes{id identifier title url priorityLabel createdAt updatedAt description state{name} labels{nodes{name}} assignee{email name} creator{email name}}}}";
+const TEAMS = `query($after:String){teams(first:100,after:$after){${PAGE} nodes{id key name}}}`;
+const STATES = "query($team:String!){team(id:$team){states(first:100){nodes{name position type}}}}";
+const ISSUES = `query($filter:IssueFilter,$after:String){issues(first:100,after:$after,filter:$filter,orderBy:updatedAt){${PAGE} nodes{id identifier title url priorityLabel createdAt updatedAt description state{name} labels{nodes{name}} assignee{id} creator{id}}}}`;
 const DETAIL = "query($id:String!){issue(id:$id){description comments(first:20){nodes{body createdAt user{name}}}}}";
 
 export const issueFilter = (team, filter) => ({
@@ -31,17 +32,23 @@ export function linearClient(secrets) {
     const out = parseOr(r.text, null);
     return r.status === 200 && out?.data && !out.errors?.length ? { data: out.data, failure: null } : { data: null, failure: failureOf(r, out) };
   };
+  const paged = (query, variables, pick) => pagesOf(async (after) => {
+    const { data, failure } = await ask(query, { ...variables, after });
+    if (failure) return { failure };
+    const page = pick(data);
+    return { items: page?.nodes ?? [], next: page?.pageInfo?.hasNextPage ? page.pageInfo.endCursor : null };
+  });
   return {
     me: async () => {
       const { data, failure } = await ask(ME);
-      return failure ? { failure } : { name: data.viewer?.name ?? data.viewer?.email ?? "", email: data.viewer?.email ?? null };
+      return failure ? { failure } : { name: data.viewer?.name ?? data.viewer?.email ?? "", email: data.viewer?.email ?? null, id: data.viewer?.id ?? null };
     },
     projects: async () => {
-      const { data, failure } = await ask(TEAMS);
-      return failure ? { failure, list: [] } : { list: (data.teams?.nodes ?? []).map((t) => ({ ref: t.id, name: `${t.key} · ${t.name}` })) };
+      const read = await paged(TEAMS, {}, (data) => data.teams);
+      return { failure: read.failure, list: read.items.map((t) => ({ ref: t.id, name: `${t.key} · ${t.name}` })) };
     },
     states: async (team) => (await ask(STATES, { team })).data?.team?.states?.nodes ?? [],
-    issues: async (team, filter) => ask(ISSUES, { filter: issueFilter(team, filter) }),
+    issues: (team, filter) => paged(ISSUES, { filter: issueFilter(team, filter) }, (data) => data.issues),
     detail: async (id) => ask(DETAIL, { id }),
   };
 }
@@ -58,20 +65,19 @@ export function rowsOf(nodes, { team, project, now }) {
     status: n.state?.name ?? null,
     priority: n.priorityLabel ?? null,
     labels: JSON.stringify((n.labels?.nodes ?? []).map((l) => l.name)),
-    assignees: JSON.stringify(n.assignee ? [n.assignee.email ?? n.assignee.name] : []),
-    author: n.creator?.email ?? n.creator?.name ?? null,
+    assignees: JSON.stringify(n.assignee?.id ? [n.assignee.id] : []),
+    author: n.creator?.id ?? null,
     ...stampsOf(n),
     body: n.description ?? "",
     read_at: now,
   }));
 }
 
-export async function readLinearBoard(client, { team, project, filter, now = Date.now() }) {
-  const { data, failure } = await client.issues(team, filter);
-  if (failure) return { rows: [], columns: [], failure };
-  const states = await client.states(team);
+export async function readLinearBoard(client, { ref, project, filter, now = Date.now() }) {
+  const read = await client.issues(ref, filter);
+  const states = read.items.length ? await client.states(ref) : [];
   const columns = states.toSorted((a, b) => a.position - b.position).map((s) => s.name);
-  return { rows: rowsOf(data.issues?.nodes ?? [], { team, project, now }), columns, failure: null };
+  return { rows: rowsOf(read.items, { team: ref, project, now }), columns, failure: read.failure, complete: read.complete };
 }
 
 export async function readLinearDetail(client, id) {
