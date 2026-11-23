@@ -316,8 +316,7 @@ test("Tasks reads a GitHub board only after I add it, and Remove stops following
     const panel = page();
     assert.equal(arg(control(panel, action), "accessibility_label"), "Add a board");
     clickIssues(panel, action, cx);
-    const chooser = page();
-    assert.ok(texts(chooser).includes("Add a board: choose a project"));
+    const chooser = projectChooser(page);
     assert.ok(texts(projectChoice(chooser, id)).includes(name));
     if (action === ADD_ACTION) clickIssues(chooser, "issues-add-close", cx);
   }
@@ -342,6 +341,13 @@ test("Tasks reads a GitHub board only after I add it, and Remove stops following
   expectEmpty(page());
 });
 
+const projectChooser = (page) => {
+  const chooser = page();
+  assert.ok(texts(chooser).includes("Add a board: choose a project"));
+  return chooser;
+};
+const withoutIssues = (db) => startIssues(db, { exec: githubAnswer([]) });
+
 test("Pressing the header + leaves the issue detail and asks me to choose a project.", async (t) => {
   const { db } = await kdbWithShop(t);
   const { page, click, drain } = await startIssues(db, { exec: githubAnswer([node("Open")]) });
@@ -350,14 +356,12 @@ test("Pressing the header + leaves the issue detail and asks me to choose a proj
   assert.ok(control(page(), "issues-back"));
 
   click("issues-add");
-  const chooser = page();
-  assert.ok(texts(chooser).includes("Add a board: choose a project"));
-  assert.equal(control(chooser, "issues-back"), null);
+  assert.equal(control(projectChooser(page), "issues-back"), null);
 });
 
 test("GitHub issues shows Adding… and offers Retry when the board cannot be added.", async (t) => {
   const { db, project: { id } } = await kdbWithShop(t, false);
-  const { page, click, drain } = await startIssues(db, { exec: githubAnswer([]) });
+  const { page, click, drain } = await withoutIssues(db);
   const write = Promise.withResolvers();
   t.mock.method(db, "run", async () => {
     await write.promise;
@@ -389,7 +393,7 @@ test("GitHub issues shows Adding… and offers Retry when the board cannot be ad
 
 test("Removing the last board leaves Add a board beside Undo, and Undo brings the board back.", async (t) => {
   const { db, project: { id } } = await kdbWithShop(t);
-  const { page, click, drain } = await startIssues(db, { exec: githubAnswer([]) });
+  const { page, click, drain } = await withoutIssues(db);
   const undo = "issues-removed-undo";
 
   click(removeGithub(id));
