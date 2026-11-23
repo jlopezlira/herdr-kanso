@@ -25,6 +25,7 @@ import { focusOn } from "./pure.js";
 import { whenInstalled } from "./installed.js";
 import { pagedDialog } from "./pages.js";
 import { Accounts } from "./accounts.js";
+import { MarkdownOpener } from "./markdown-opener.js";
 
 const shippedDefaults = (platform) => (formerKeymap(platform) ? shippedLinuxKeymap(DEFAULT_KEYS[formerKeymap(platform)]) : DEFAULT_KEYS[shippedKeymap(platform)]);
 
@@ -53,6 +54,7 @@ export default class Settings extends View {
     this.find.on("change", (_e, cx) => cx.notify());
     whenInstalled(cx, (version) => { this.installed = version; });
     this.accounts = new Accounts(cx);
+    this.markdown = new MarkdownOpener(cx);
   }
 
   shown() { return installedRelease(this.installed, shared("kanso.update")?.tag); }
@@ -238,8 +240,9 @@ export default class Settings extends View {
     };
     return v_flex().w_full()
       .child(this.findField(c))
-      .when(!groups.length, (el) => el.child(div().id("pieces-none").py(G.sm).text_size(T.body).text_color(c.dim).child("No piece matches.")))
+      .when(!groups.length && !this.markdown.matches(this.query()), (el) => el.child(div().id("pieces-none").py(G.sm).text_size(T.body).text_color(c.dim).child("No piece matches.")))
       .children(groups.map((group) => v_flex().w_full().pt(G.lg).child(section(c, group.name)).children(group.rows.map(pieceRow))))
+      .children([this.markdown.row(c, this.query())].filter(Boolean))
       .child(h_flex().w_full().justify_end().pt(G.lg).child(this.undo
         ? undoLine("pieces-reset", "Back to the defaults", (cx) => { setShared(STORE, this.undo); this.undo = null; cx.notify(); }, c)
         : quietLink("pieces-reset", "Reset all", (cx) => { this.undo = pieces(shared); setShared(STORE, {}); cx.notify(); }, c)));
