@@ -19,7 +19,7 @@ const UNIT_MS = Object.freeze({ d: 86_400_000, h: 3_600_000, m: 60_000, s: 1000 
 const DAY_MS = UNIT_MS.d;
 
 export const providerOf = (app) => PROVIDER_OF[app] ?? null;
-const waits = (status) => status === "done" || status === "idle" || status === "blocked";
+export const waits = (status) => status === "done" || status === "idle" || status === "blocked";
 
 export function limitOf(labels) {
   const raw = String(labels?.[LIMIT_LABEL] ?? "").trim();
