@@ -13,7 +13,7 @@ const footer = REPORT_LINE;
 const rcIntro = "Release candidate for 1.2.0. It becomes 1.2.0 stable if nothing blocks it.";
 const pending = "### Added\n\n- Feature.\n\n  Detail kept in release notes.";
 
-test("Workflow commands preserve PR history, publish computed notes and prepare successive RCs", (t) => {
+const releaseFixture = (t) => {
   const root = mkdtempSync(join(project, ".release-fixture-"));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const write = (path, text) => writeFileSync(join(root, path), text);
@@ -35,14 +35,6 @@ test("Workflow commands preserve PR history, publish computed notes and prepare 
   git("config", "user.email", "release@example.test");
   commit("Stable");
   git("tag", "v1.1.0");
-  git("tag", "v1.2.0-beta.13");
-  const base = git("rev-parse", "HEAD");
-  write("CHANGELOG.md", `# Changelog\n\n## [Unreleased]\n\n${pending}\n\n${stable}`);
-  write("kanso/mods/kanso-chrome/feature.js", "export const feature = true;\n");
-  commit("Add feature");
-  git("init", "--bare", join(root, "remote.git"));
-  git("remote", "add", "origin", join(root, "remote.git"));
-  git("push", "origin", "develop");
   const env = { ...process.env, KANSO_BRANCH: "develop", GITHUB_EVENT_NAME: "push", GITHUB_OUTPUT: join(root, "output"), RUNNER_TEMP: root };
   const node = (script, args = [], extra = {}) => {
     write("output", "");
@@ -53,6 +45,22 @@ test("Workflow commands preserve PR history, publish computed notes and prepare 
     assert.equal(result.status, 0, result.stderr);
     return result;
   };
+  const addFeature = () => {
+    write("CHANGELOG.md", `# Changelog\n\n## [Unreleased]\n\n${pending}\n\n${stable}`);
+    write("kanso/mods/kanso-chrome/feature.js", "export const feature = true;\n");
+    commit("Add feature");
+  };
+  return { write, read, git, commit, node, run, root, addFeature };
+};
+
+test("Workflow commands preserve PR history, publish computed notes and prepare successive RCs", (t) => {
+  const { write, read, git, commit, run, node, root, addFeature } = releaseFixture(t);
+  git("tag", "v1.2.0-beta.13");
+  const base = git("rev-parse", "HEAD");
+  addFeature();
+  git("init", "--bare", join(root, "remote.git"));
+  git("remote", "add", "origin", join(root, "remote.git"));
+  git("push", "origin", "develop");
   // The next release candidate prepared, and the version file it leaves.
   const prepareRc = () => {
     run("release-plan", ["rc", "--prepare"]);
@@ -160,4 +168,15 @@ test("Workflow commands preserve PR history, publish computed notes and prepare 
   assert.equal(git("rev-parse", "v2.0.1-rc.1^"), stableHead);
   assert.equal(JSON.parse(git("show", `v2.0.1-rc.1:${versionFile}`)).version, "2.0.1");
   assert.equal(JSON.parse(git("show", `develop:${versionFile}`)).version, "2.0.0");
+});
+
+test("The release planner refuses a beta whose planned tag is not a release version", (t) => {
+  const { read, git, node, addFeature } = releaseFixture(t);
+  git("tag", "v1.2.0-beta.1000000000000000000000");
+  addFeature();
+
+  const planned = node("release-plan", ["beta"]);
+  assert.equal(planned.status, 1, planned.stdout);
+  assert.match(planned.stderr, /is not vX\.Y\.Z, vX\.Y\.Z-beta\.N or vX\.Y\.Z-rc\.N/);
+  assert.equal(read("output"), "");
 });

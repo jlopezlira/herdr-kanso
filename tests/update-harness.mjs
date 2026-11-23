@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
 import nodeTest, { after as afterAll } from "node:test";
 import { execFile, execFileSync, spawn } from "node:child_process";
-import { cp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
-import { join } from "node:path";
-import { pathToFileURL } from "node:url";
+import { access, cp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { once } from "node:events";
+import { createServer } from "node:https";
+import { join, resolve } from "node:path";
 import { load, context, exec, nativePlatform, nativeWindow, temporary, clone, until, failure, success, readOrNull } from "./helpers.mjs";
 
 const names = ["Updater", "newestTag", "compareVersions", "mergeKeys", "SOURCE", "HOLD", "INSTALL_SCRIPT", "RECOVER", "LAUNCH", "updateHost", "windowsInstallScript", "windowsLaunchScript", "windowsRecoverScript", "sameVolume"];
@@ -64,6 +65,39 @@ const packRelease = async (site) => {
   const made = await exec("tar", ["-czf", join(site, "v1.1.0.tar.gz"), "-C", join(site, "build"), "herdr-kanso-1.1.0"]);
   assert.equal(made.code, 0, made.stderr);
 };
+const fixtureDownloads = async (t, root, site) => {
+  const key = join(root, "fixture.key");
+  const cert = join(root, "fixture.pem");
+  const gitExec = windows ? (await exec("git", ["--exec-path"])).stdout.trim() : "";
+  const bundled = gitExec && resolve(gitExec, "../../bin/openssl.exe");
+  const openssl = bundled && await access(bundled).then(() => true, () => false) ? bundled : "openssl";
+  const made = await exec(openssl, [
+    "req", "-x509", "-newkey", "ec", "-pkeyopt", "ec_paramgen_curve:P-256", "-nodes",
+    "-subj", "/CN=127.0.0.1", "-addext", "subjectAltName=IP:127.0.0.1",
+    "-days", "1", "-keyout", key, "-out", cert,
+  ]);
+  assert.equal(made.code, 0, made.stderr);
+  await writeFile(join(root, ".curlrc"), `cacert = ${JSON.stringify(cert)}\n`);
+  const assets = new Map();
+  const server = createServer({ key: await readFile(key), cert: await readFile(cert), maxVersion: "TLSv1.2" }, async (request, response) => {
+    const file = assets.get(request.url);
+    const bytes = file && await readFile(file).catch(() => null);
+    if (!bytes) response.writeHead(404);
+    response.end(bytes || undefined);
+  });
+  t.after(() => { server.close(); server.closeAllConnections(); });
+  const listening = once(server, "listening");
+  server.listen(0, "127.0.0.1");
+  await listening;
+  const url = (path) => {
+    const route = "/" + path;
+    assets.set(route, join(site, path));
+    return `https://127.0.0.1:${server.address().port}${route}`;
+  };
+  const env = { CURL_HOME: root, NO_PROXY: "127.0.0.1", no_proxy: "127.0.0.1" };
+  return { url, env };
+};
+
 async function stopInstalls(root) {
   const entries = await readdir(root, { withFileTypes: true }).catch(() => []);
   for (const entry of entries) {
@@ -217,8 +251,6 @@ export async function installedUpdater(host) {
 
 const writeKeymaps = (dir, keymap) => Promise.all(["keys.json", "keys.windows.json", "keys.linux.json"].map((name) => writeFile(join(dir, name), keymap)));
 
-// A Herdr home with Kanso 1.0.0 installed and used, and two releases served
-// from file:// URLs: what v1.0.0 shipped and the v1.1.0 tarball.
 export async function fixture(t, { layoutChanged = true, homeName = "O'Brien home" } = {}) {
   const root = await temporary(t);
   const home = join(root, homeName), site = join(root, "site");
@@ -262,7 +294,7 @@ export async function fixture(t, { layoutChanged = true, homeName = "O'Brien hom
   const userKeys = { global: { "cmd-q": "app.quit" }, "layout:kanso": { ...oldKeys["layout:kanso"], "cmd-shift-o": "mine.open" } };
   await writeFile(join(home, "keys.json"), JSON.stringify(userKeys, null, 2));
 
-  const url = (p) => pathToFileURL(join(site, p)).href;
+  const { url, env } = await fixtureDownloads(t, root, site);
   const source = {
     remote: "unused",
     tarball: (v) => url(`v${v}.tar.gz`),
@@ -296,7 +328,7 @@ export async function fixture(t, { layoutChanged = true, homeName = "O'Brien hom
         if (command === "git") return success("x\trefs/tags/v1.0.0\ny\trefs/tags/v1.1.0\n");
         if (ctl.abandon && pauses(command, args)) { ctl.stuck += 1; return new Promise(() => {}); }
         if (ctl.holdCurl && fetches(command)) { ctl.held += 1; await gate.promise; }
-        return exec(command, args, { ...options, limit: ctl.limit });
+        return exec(command, args, { ...options, env: { ...process.env, ...env }, limit: ctl.limit });
       },
     };
     const { Updater, HOLD } = await updater(host);
@@ -380,7 +412,8 @@ export async function small(t) {
   await writeFile(join(base, "layouts/kanso.png"), "png 1.0.0\n");
   await writeFile(join(base, "keys.json"), '{"yours":true}\n');
   const checker = await writeChecker(root);
-  const url = pathToFileURL(join(site, "v1.1.0.tar.gz")).href;
+  const downloads = await fixtureDownloads(t, root, site);
+  const url = downloads.url("v1.1.0.tar.gz");
   const { HOLD, INSTALL_SCRIPT, RECOVER, LAUNCH, updateHost } = await updater({ window: nativeWindow });
   const writer = async (path, text) => { await writeFile(path, text); return null; };
   const host = updateHost(nativePlatform, rawExec, writer, { HOLD, INSTALL_SCRIPT, RECOVER, LAUNCH });
@@ -395,7 +428,7 @@ export async function small(t) {
     const result = await host.foreground({
       url, home, dir, id: "op", want: "1.1.0", from, checker, stamp: "20261108-1200",
       keys, layout, base: base ?? baseKeys,
-    }, { env: { ...process.env, KANSO_UPDATE_STOP: String(stop), ...env }, limit: 60000 });
+    }, { env: { ...process.env, ...downloads.env, KANSO_UPDATE_STOP: String(stop), ...env }, limit: 60000 });
     await rm(join(root, "sabotage"), { force: true });
     return classify(result);
   };
