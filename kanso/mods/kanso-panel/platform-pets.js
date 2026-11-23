@@ -99,8 +99,8 @@ try {
         Copy-Item -LiteralPath $sheet -Destination $target -Force
         Copy-Item -LiteralPath $json.FullName -Destination (Join-Path $target 'pet.json') -Force
       } else {
-        [IO.Directory]::CreateDirectory($target) | Out-Null
         if ((Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash -ne $pet.sheet) { throw 'No atlas' }
+        [IO.Directory]::CreateDirectory($target) | Out-Null
         Move-Item -LiteralPath $archive -Destination (Join-Path $target 'spritesheet.webp') -Force
         [IO.File]::WriteAllText((Join-Path $target 'pet.json'),(@{id=$id;displayName=$pet.name} | ConvertTo-Json -Compress),[Text.UTF8Encoding]::new($false))
       }
