@@ -92,9 +92,9 @@ export function choiceOf(typed, peers = []) {
 export const addArgs = ({ name = "", target = "", via = "" }, { json = true } = {}) => ["machine", "add", ...(via ? [] : [target]),
   ...(name ? ["--name", name] : []), ...(via ? ["--via", via] : []), "--install", ...(json ? ["--json"] : [])];
 
-export function probeArgs(target) {
+export function probeArgs(target, platform = "macos") {
   const { dest, port } = destinationOf(target);
-  return ["-o", "BatchMode=yes", "-o", "ConnectTimeout=8", "-o", "StrictHostKeyChecking=accept-new", ...(port ? ["-p", port] : []), "--", dest, "true"];
+  return ["-o", "BatchMode=yes", "-o", "ConnectTimeout=8", "-o", "StrictHostKeyChecking=accept-new", "-o", `UserKnownHostsFile=${platform === "windows" ? "NUL" : "/dev/null"}`, ...(port ? ["-p", port] : []), "--", dest, "true"];
 }
 
 export const forgetArgs = (host) => ["-R", host];

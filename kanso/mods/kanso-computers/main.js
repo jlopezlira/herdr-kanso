@@ -162,7 +162,7 @@ export default class Computers extends View {
   }
 
   async probe([target, ...rest]) {
-    const result = await exec("ssh", probeArgs(target), { timeout: PROBE_MS }).catch(failed);
+    const result = await exec("ssh", probeArgs(target, this.platform), { timeout: PROBE_MS }).catch(failed);
     return reachOf(result) === "ready" || !rest.length ? result : this.probe(rest);
   }
 

@@ -17,7 +17,7 @@ export function destinationOf(target) {
 
 export const KEY = "~/.ssh/id_ed25519_kanso";
 const KEYED = `-i ${KEY} -o IdentitiesOnly=yes -o BatchMode=yes `;
-const ASK = "-o PasswordAuthentication=yes -o KbdInteractiveAuthentication=yes -o StrictHostKeyChecking=accept-new ";
+const ASK = "-o PasswordAuthentication=yes -o KbdInteractiveAuthentication=yes ";
 const SSH = /(^|['"]|\bexec )ssh (?=\S)/g;
 const DONE = "Done: this tab can close.";
 const refused = (name) => `${name} didn't let this computer in. Put this line in ~/.ssh/authorized_keys on ${name}, then sign in again:`;
@@ -35,7 +35,7 @@ export function routeOf(machine) {
 }
 
 const LAN_SSH = "-o BatchMode=yes -o ConnectTimeout=2 -o StrictHostKeyChecking=accept-new";
-const LAN_ASK = "-o ConnectTimeout=2 -o StrictHostKeyChecking=accept-new";
+const LAN_ASK = "-o ConnectTimeout=2";
 const lanLine = (args, away) => `ssh ${LAN_SSH} ${args} true </dev/null >/dev/null 2>&1 && exec ssh -o StrictHostKeyChecking=accept-new ${args} "$1"; exec ${away} "$1"`;
 export const lanFirst = (args, away) => `sh -c ${shellQuote(lanLine(args, away))} route`;
 
