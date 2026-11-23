@@ -104,7 +104,7 @@ test("A missing project scope is read again without project items, and that read
     payload([node(null)]),
   ];
   const run = async (_cmd, args) => { calls.push(args); return answers.shift(); };
-  const board = await readBoard(run, { repo: REPO, project: "shop", filter: "all", login: "jj" });
+  const board = await readBoard(run, { repo: REPO, project: "shop", filter: "all", who: "jj" });
   assert.equal(board.noProjects, true);
   assert.equal(calls[1].some((part) => String(part).includes("projectItems")), false);
   assert.equal(board.rows[0].status, null);
@@ -114,9 +114,9 @@ test("A rate limit names when to retry, and an offline read is offline", async (
   const { readBoard } = await boardRun();
   const now = 1_700_000_000_000;
   const reset = Math.floor(now / 1000) + 180;
-  const limited = await readBoard(async () => ({ code: 1, stdout: "", stderr: "rate limit exceeded\nX-RateLimit-Reset: " + reset }), { repo: REPO, project: "shop", filter: "all", login: "jj", now });
+  const limited = await readBoard(async () => ({ code: 1, stdout: "", stderr: "rate limit exceeded\nX-RateLimit-Reset: " + reset }), { repo: REPO, project: "shop", filter: "all", who: "jj", now });
   same(limited.failure, { kind: "rate", text: "GitHub is limiting requests", retryAt: reset * 1000 });
-  const offline = await readBoard(async () => ({ code: 1, stdout: "", stderr: "could not resolve host" }), { repo: REPO, project: "shop", filter: "all", login: "jj", now });
+  const offline = await readBoard(async () => ({ code: 1, stdout: "", stderr: "could not resolve host" }), { repo: REPO, project: "shop", filter: "all", who: "jj", now });
   assert.equal(offline.failure.kind, "offline");
 });
 
@@ -185,13 +185,15 @@ const viewHost = {
   home: () => "/Users/jj",
   openOverlay: (spec) => overlays.push(spec),
   openUrl: () => {},
+  shared: () => null,
+  window: () => ({ platform: "macos" }),
   exec: async (cmd, args) => { world.calls.push([cmd, args]); return world.answer(cmd, args); },
 };
 
 const mount = async (extra = {}) => {
   const { Issues } = await load("kanso-panel/issues.js", ["Issues"], viewHost);
   return Object.assign(new Issues({ read: async () => [], run: async () => {} }), {
-    projects: [], rows: [], boards: [], places: {}, folds: {}, filters: {}, logins: {},
+    projects: [], rows: [], boards: [], links: [], places: {}, folds: {}, filters: {}, logins: {},
     reading: new Set(), open: null, front: "shop", ...extra,
   });
 };
@@ -258,9 +260,9 @@ test("A failed read still shows the cached issues and when that copy was read", 
 });
 
 test("A signed-out project shows Sign in, and a project without a GitHub remote says so", async () => {
-  const signed = await mount({ projects: [shop], places: { shop: { kind: "signed out", text: "Sign in to GitHub to see your issues" } } });
+  const signed = await mount({ projects: [shop], places: { "shop\u0000github": { kind: "signed out", text: "Sign in to GitHub to see your issues" } } });
   assert.ok(draw(signed).includes("Sign in"));
-  const remote = await mount({ projects: [shop], places: { shop: { kind: "no remote", text: "No GitHub remote" } } });
+  const remote = await mount({ projects: [shop], places: { "shop\u0000github": { kind: "no remote", text: "No GitHub remote" } } });
   assert.ok(draw(remote).includes("No GitHub remote"));
 });
 
@@ -320,13 +322,13 @@ test("A board read follows the next page cursor up to the page cap, and an unfin
   const { readBoard, PAGES } = await load("kanso-panel/issues-github.js", ["readBoard", "PAGES"]);
   const seen = [];
   let n = 0;
-  const followed = await readBoard(async (_cmd, args) => { seen.push(afterOf(args)); n += 1; return pageOf(n, "c" + n, n < 2); }, { repo: REPO, project: "shop", filter: "all", login: "jj" });
+  const followed = await readBoard(async (_cmd, args) => { seen.push(afterOf(args)); n += 1; return pageOf(n, "c" + n, n < 2); }, { repo: REPO, project: "shop", filter: "all", who: "jj" });
   assert.equal(seen[0], null);
   assert.equal(seen[1], "after=c1");
   assert.equal(followed.rows.length, 2);
   assert.equal(followed.complete, true);
   const capped = [];
-  const limited = await readBoard(async (_cmd, args) => { capped.push(afterOf(args)); return pageOf(capped.length, "p" + capped.length, true); }, { repo: REPO, project: "shop", filter: "all", login: "jj" });
+  const limited = await readBoard(async (_cmd, args) => { capped.push(afterOf(args)); return pageOf(capped.length, "p" + capped.length, true); }, { repo: REPO, project: "shop", filter: "all", who: "jj" });
   assert.equal(capped.length, PAGES);
   assert.equal(limited.complete, false);
   const { db, storeSql, readIssues } = await rowsOf(t);
@@ -423,17 +425,19 @@ test("A logged-out probe is not kept, a later signed-in probe is used, and a pro
   assert.equal(second.login, "jj");
   assert.equal(world.calls.filter((call) => call[0] === "gh").length, 2);
   const at = Date.parse("2026-11-22T15:04:00Z");
+  const board = { project: "shop", source: "github", filter: "all", who: "jj", columns: JSON.stringify(["Open"]), read_at: at, failure: null };
   const failed = await mount({
     projects: [shop],
     rows: [issue({ title: "Cached issue" })],
     filters: { shop: "all" },
-    boards: [{ project: "shop", source: "github", filter: "all", who: "jj", columns: JSON.stringify(["Open"]), read_at: at, failure: null }],
+    boards: [board],
   });
+  failed.db = { read: async (sql) => String(sql).includes("issue_boards") ? [board] : String(sql).includes("FROM issues") ? failed.rows : [], run: async () => {} };
   world.answer = async (cmd) => cmd === "git"
     ? { code: 0, stdout: "origin\tgit@github.com:acme/shop.git (fetch)\n", stderr: "" }
     : { code: 1, stdout: "", stderr: "temporary failure" };
   const { cx, drain } = timedContext([]);
-  failed.readProject(shop, cx);
+  failed.readBoard(shop, "github", cx);
   await drain();
   const texts = draw(failed);
   assert.ok(texts.some((text) => text.includes("Showing the copy read at " + clock(at))));
@@ -459,7 +463,13 @@ test("The five-minute tick does not read a board read less than a minute ago", a
   };
   const cx = { notify() {}, spawn(fn) { pending.push(fn(cx)); return { cancel() {} }; }, timer: { every(_ms, fn) { ticks.push(fn); return { cancel() {} }; }, after() { return { cancel() {} }; } } };
   new Issues(db).init(cx);
-  await pending.shift();
+  const settle = async () => {
+    const waiting = pending.splice(0);
+    if (!waiting.length) return;
+    await Promise.all(waiting);
+    await settle();
+  };
+  await settle();
   const before = calls.length;
   ticks[0](cx);
   await Promise.all(pending);
@@ -588,7 +598,7 @@ test("A project with no GitHub remote shows that, even when GitHub is signed out
     : { code: 1, stdout: "", stderr: "You are not logged into any GitHub hosts. Run gh auth login" };
   const view = await mount({ projects: [shop], rows: [], boards: [] });
   const { cx, drain } = timedContext([]);
-  view.readProject(shop, cx);
+  view.readBoard(shop, "github", cx);
   await drain();
   const texts = draw(view);
   assert.ok(texts.includes("No GitHub remote"));

@@ -2,6 +2,7 @@ import { parseOr } from "./pure.js";
 import { parseRemote, rateFrom } from "./pr-remote.js";
 import { probe, firstLine, ask } from "./pr-github.js";
 import { storeSql, detailSql } from "./issues-store.js";
+import { stampsOf } from "./issues-model.js";
 
 const STATUS = `projectItems(first:5){nodes{project{number title field(name:"Status"){... on ProjectV2SingleSelectField{options{name}}}} fieldValueByName(name:"Status"){... on ProjectV2ItemFieldSingleSelectValue{name}}}}`;
 const ISSUE = (withStatus) => `number title url body createdAt updatedAt author{login} assignees(first:10){nodes{login}} labels(first:10){nodes{name}} ${withStatus ? STATUS : ""}`;
@@ -48,8 +49,7 @@ export function rowsOf(nodes, repo, project, now) {
     labels: JSON.stringify((n.labels?.nodes ?? []).map((l) => l.name)),
     assignees: JSON.stringify((n.assignees?.nodes ?? []).map((a) => a.login)),
     author: n.author?.login ?? null,
-    created_at: n.createdAt ?? null,
-    updated_at: n.updatedAt ?? null,
+    ...stampsOf(n),
     body: n.body ?? "",
     read_at: now,
   }));

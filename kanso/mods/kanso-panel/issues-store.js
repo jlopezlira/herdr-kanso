@@ -9,14 +9,19 @@ const KEPT = COLS.filter((col) => col !== "url" && col !== "project").map((col) 
 const upsert = (row) => `INSERT INTO issues(${COLS.join(",")}) VALUES(${COLS.map((col) => value(col, row)).join(",")}) ON CONFLICT(project,url) DO UPDATE SET ${KEPT};`;
 
 export async function readIssues(db, projects) {
-  if (!projects.length) return { rows: [], boards: [] };
+  if (!projects.length) return { rows: [], boards: [], links: [] };
   const ids = projects.map((p) => q(p)).join(",");
-  const [rows, boards] = await Promise.all([
+  const [rows, boards, links] = await Promise.all([
     db.read(`SELECT * FROM issues WHERE project IN (${ids});`),
     db.read(`SELECT * FROM issue_boards WHERE project IN (${ids});`),
+    db.read(`SELECT * FROM issue_links WHERE project IN (${ids});`),
   ]);
-  return { rows, boards };
+  return { rows, boards, links };
 }
+
+export const linkSql = ({ project, source, ref, name }, on) => (on
+  ? `INSERT OR IGNORE INTO issue_links(project,source,ref,name) VALUES(${q(project)},${q(source)},${q(ref)},${q(name)});`
+  : `BEGIN;DELETE FROM issue_links WHERE project=${q(project)} AND source=${q(source)} AND ref=${q(ref)};DELETE FROM issues WHERE project=${q(project)} AND source=${q(`${source}:${ref}`)};DELETE FROM issue_boards WHERE project=${q(project)} AND source=${q(`${source}:${ref}`)};COMMIT;`);
 
 export function boardSql({ project, source, filter, who, repo, columns, total = null, failure, now }) {
   const failed = failure ? q(JSON.stringify(failure)) : "NULL";

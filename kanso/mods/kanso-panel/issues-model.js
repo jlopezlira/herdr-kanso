@@ -3,7 +3,11 @@ export const FILTER_WORDS = { assigned: "Assigned to me", created: "Created by m
 export const OPEN = "Open";
 export const DONE = "Done";
 export const FRESH_MS = 60_000;
+export const ACCOUNTS = "kanso.issues.accounts";
+export const kindOf = (source) => String(source ?? "github").split(":")[0];
+export const SOURCE_WORDS = { github: "GitHub", jira: "Jira", linear: "Linear" };
 export const EVERY_MS = 5 * 60_000;
+export const stampsOf = (node) => ({ created_at: node.createdAt ?? null, updated_at: node.updatedAt ?? null });
 
 import { same } from "./pure.js";
 
@@ -54,6 +58,21 @@ export function ageOf(at, now) {
   if (hours < 24) return `${hours}h`;
   const days = Math.floor(hours / 24);
   return days < 30 ? `${days}d` : days < 365 ? `${Math.floor(days / 30)}mo` : `${Math.floor(days / 365)}y`;
+}
+
+export const linkWords = (source) => (kindOf(source) === "github" ? "Open on GitHub" : `Open in ${SOURCE_WORDS[kindOf(source)]}`);
+
+export const PICKER_PAGES = 50;
+
+export async function pagesOf(read, pages = 10) {
+  const walk = async (cursor, items, page) => {
+    const got = await read(cursor);
+    if (got.failure) return { items, failure: got.failure, complete: false };
+    const all = [...items, ...(got.items ?? [])];
+    if (got.next === null || got.next === undefined) return { items: all, failure: null, complete: true };
+    return page + 1 < pages ? walk(got.next, all, page + 1) : { items: all, failure: null, complete: false };
+  };
+  return walk(null, [], 0);
 }
 
 export function sendText(row) {
