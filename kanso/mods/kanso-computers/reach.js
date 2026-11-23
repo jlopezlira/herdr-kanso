@@ -94,7 +94,7 @@ export const addArgs = ({ name = "", target = "", via = "" }, { json = true } = 
 
 export function probeArgs(target, platform = "macos") {
   const { dest, port } = destinationOf(target);
-  return ["-o", "BatchMode=yes", "-o", "ConnectTimeout=8", "-o", "StrictHostKeyChecking=accept-new", "-o", `UserKnownHostsFile=${platform === "windows" ? "NUL" : "/dev/null"}`, ...(port ? ["-p", port] : []), "--", dest, "true"];
+  return ["-o", "BatchMode=yes", "-o", "ConnectTimeout=8", "-o", "StrictHostKeyChecking=accept-new", "-o", `UserKnownHostsFile=${platform === "windows" ? "NUL" : "/dev/null"}`, "-o", "GlobalKnownHostsFile=~/.ssh/known_hosts", ...(port ? ["-p", port] : []), "--", dest, "true"];
 }
 
 export const forgetArgs = (host) => ["-R", host];

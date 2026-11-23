@@ -493,7 +493,7 @@ test("A typed ssh option, a blank, or a space is not a computer, and a host with
 
 test("A typed port reaches ssh as -p, and an IPv6 address is not read as a port", async () => {
   const { destinationOf, probeArgs } = await reach();
-  const options = ["-o", "BatchMode=yes", "-o", "ConnectTimeout=8", "-o", ACCEPT_NEW, "-o", UNIX_PROBE_HOSTS];
+  const options = ["-o", "BatchMode=yes", "-o", "ConnectTimeout=8", "-o", ACCEPT_NEW, "-o", UNIX_PROBE_HOSTS, "-o", "GlobalKnownHostsFile=~/.ssh/known_hosts"];
   assert.deepEqual(clone(destinationOf("can@10.0.0.7:2222")), { dest: "can@10.0.0.7", port: "2222" });
   assert.deepEqual(clone(probeArgs("can@10.0.0.7:2222")), [...options, "-p", "2222", "--", "can@10.0.0.7", "true"]);
   assert.deepEqual(clone(destinationOf("[fe80::1]:2222")), { dest: "fe80::1", port: "2222" });
