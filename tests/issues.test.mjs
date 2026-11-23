@@ -207,8 +207,14 @@ const draw = (view) => {
 const shop = { id: "shop", name: "Shop", folder: "/work/shop", machine: null };
 const acme = { id: "acme", name: "Acme", folder: "/work/acme", machine: null };
 
+const kdbWithShop = async (t) => {
+  const { db } = await temporaryKdb(t);
+  await db.addProject({ name: shop.name, folder: shop.folder });
+  return db;
+};
+
 const NO_PROJECTS = "Add a project to see its tasks";
-const startIssues = async (db, host = {}) => {
+const startIssues = async (db, host = {}, { timers = [], ...context } = {}) => {
   const { Issues, DIALOG } = await load("kanso-panel/issues.js", ["Issues", "DIALOG"], {
     ...viewHost,
     ...drawingHost(),
@@ -217,7 +223,7 @@ const startIssues = async (db, host = {}) => {
     exec: async () => ({ code: 1, stdout: "", stderr: "" }),
     ...host,
   });
-  const { cx, drain } = timedContext([]);
+  const { cx, drain } = timedContext(timers, context);
   const view = new Issues(db);
   view.init(cx);
   await drain();
@@ -225,19 +231,12 @@ const startIssues = async (db, host = {}) => {
 };
 
 test("Opening Tasks in a project draws without asking for a redraw while it draws, then reads that project", async (t) => {
-  const { db } = await temporaryKdb(t);
-  await db.addProject({ name: shop.name, folder: shop.folder });
+  const db = await kdbWithShop(t);
   const exec = t.mock.fn(async () => ({ code: 1, stdout: "", stderr: "" }));
-  const { Issues } = await load("kanso-panel/issues.js", ["Issues"], {
-    ...viewHost, ...drawingHost(), checking: () => true, exec,
-    spaces: () => [{ active: true, folder: shop.folder, machine: null, tabs: [] }],
-  });
   const drawing = { now: false };
   const timers = [];
-  const { cx, drain } = timedContext(timers, { notify() { if (drawing.now) throw new Error("cx.notify() during render"); } });
-  const view = new Issues(db);
-  view.init(cx);
-  await drain();
+  const { view, cx, drain } = await startIssues(db, { exec, spaces: () => [{ active: true, folder: shop.folder, machine: null, tabs: [] }] },
+    { timers, notify() { if (drawing.now) throw new Error("cx.notify() during render"); } });
   const before = exec.mock.callCount();
   drawing.now = true;
   view.render(cx);
@@ -352,8 +351,7 @@ test("An Issues panel that mounted without projects shows a newly registered pro
 });
 
 test("Issues keeps showing the project when a later projects read fails", async (t) => {
-  const { db } = await temporaryKdb(t);
-  await db.addProject({ name: shop.name, folder: shop.folder });
+  const db = await kdbWithShop(t);
   const { view, cx, drain } = await startIssues(db);
   const originalRead = db.read.bind(db);
   const unavailable = t.mock.fn(async () => { throw new Error("Projects are unavailable"); });
