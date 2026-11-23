@@ -379,7 +379,7 @@ export function settingsTape() {
 }
 
 export async function settingsView(loadSettings, ui, host) {
-  const { Settings } = await loadSettings({ ...ui.host, ...host, run: () => {}, closeOverlay: () => {} });
+  const { Settings } = await loadSettings({ ...ui.host, run: () => {}, closeOverlay: () => {}, ...host });
   return new Settings();
 }
 

@@ -98,7 +98,8 @@ const oneCopy = async (host) => {
 // The tab bar's copy and the footer's, started.
 const twoCopies = async (host, timers) => {
   const { Updater } = await updater(host);
-  const tabs = new Updater(), footer = new Updater();
+  const { Updater: Footer } = await load("kanso-spaces/update.js", ["Updater"], host);
+  const tabs = new Updater(), footer = new Footer();
   const { cx, drain } = tickingContext(timers);
   tabs.start(cx); footer.start(cx, { polls: false }); await drain();
   return { tabs, footer, cx, drain };
@@ -113,7 +114,7 @@ test("The tab bar looks for releases; the footer reads what it found", async () 
   let asked = 0;
   const host = releaseHost(store, async (command) => { if (command === "git") asked++; return command === "git" ? success("x\trefs/tags/v1.4.0\n") : failure(""); }, toasting(toasts));
   const { tabs, footer, cx, drain } = await twoCopies(host, timers);
-  assert.equal(timers.filter((timer) => timer.ms === 1500).length, 1, "one footer fit timer");
+  assert.deepEqual(timers.map(({ ms }) => ms), Array(2).fill(5 * 60 * 1000), "only the five-minute tick per copy");
   assert.equal(asked, 1, "one forced look on start, not one per copy");
   assert.equal(footer.available(), "1.4.0", "the footer offers what the tab bar found");
   assert.equal(toasts.filter((n) => n.title === "kansō 1.4.0 is available").length, 1);
