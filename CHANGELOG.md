@@ -22,6 +22,13 @@ in version.json, which the stable updater offers. Versions follow
 [Keep a Changelog](https://keepachangelog.com). `npm run check:version` checks
 the branch's rules.
 
+## [Unreleased]
+
+### Security
+
+- kansō's database and its folder are readable only by you, on this computer and on your other computers, and an existing database is corrected the next time it opens.
+- Text read from GitHub reaches an agent marked as text from GitHub and without terminal control characters, and background git reads no longer run a repository's file-system monitor.
+
 ## [3.34.0] - 2026-11-23
 
 ### Added
