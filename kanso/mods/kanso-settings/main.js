@@ -190,7 +190,9 @@ export default class Settings extends View {
       })));
     return v_flex().w_full()
       .child(div().text_size(T.value).line_height(1.5).text_color(c.muted).child("kansō's own keys. Click one and press the new key."))
-      .child(div().text_size(T.body).line_height(1.5).text_color(c.dim).child("Panes, tabs and spaces use Herdr's keys, in Herdr's settings."))
+      .child(h_flex().w_full().gap(G.sm).items_center()
+        .child(div().flex_1().text_size(T.body).line_height(1.5).text_color(c.dim).child("kansō help lists every key, Herdr's own included."))
+        .child(quietLink("keys-help", "Open kansō help", () => run("mod.open", { name: "kanso-help" }), c)))
       .children(rows);
   }
 
