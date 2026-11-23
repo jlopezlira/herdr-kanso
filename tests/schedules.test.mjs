@@ -8,7 +8,7 @@ const now = new Date(2026, 5, 10, 12, 0, 0, 0).getTime();
 
 const schedules = await load("kanso-spaces/schedules.js", ["clockTodo", "scheduleOf", "spaceOf", "placeOfKey", "scheduleName", "SPACE_LABEL", "REV_LABEL", "SCHEDULE_KIND"]);
 const dialog = await load("kanso-spaces/schedule-dialog.js", ["draftOf", "checkDraft", "whenOfDraft"]);
-const clock = await load("kanso-spaces/clock-model.js", ["scheduleWaiter", "waiterPlan"]);
+const clock = await load("kanso-spaces/clock-model.js", ["scheduleWaiter", "waiterPlan", "agentLaunch"]);
 const { ADD_WORKTREE } = await load("kanso-spaces/platform-repositories.js", ["ADD_WORKTREE"]);
 
 const draft = (patch = {}) => ({
@@ -72,7 +72,16 @@ test("A missed run is caught up once, at now", () => {
   assert.equal(times.filter((t) => t === times[0]).length, 1);
 });
 
-test("A scheduled run in a worktree of main logs that it ran, and a start that fails logs the reason once and waits for the next time", async (t) => {
+test("A failed one-time run is still listed, and the last try means it is not armed again", () => {
+  const due = now - 60_000;
+  const once = schedules.scheduleOf({ id: "once", project: ":/work", agent: "claude", run: "[]", prompt: "once", when_json: JSON.stringify({ kind: "once", at: due }), tree: 0, paused: 0, created: 1, updated: due - 1000 });
+  const open = [{ id: "sp9", machine: null, folder: "/work" }];
+  assert.deepEqual(plain(schedules.clockTodo([once], [], open, "/home")).arm.map((s) => s.id), ["once"]);
+  assert.equal(clock.waiterPlan(once.when, { now, since: now - 1000 }), null);
+  assert.equal(clock.waiterPlan(once.when, { now, since: once.updated }).spec.split(" ")[0], String(Math.floor(now / 1000)));
+});
+
+test("A scheduled run in a worktree of main records that it ran, and a start that fails records the reason once and waits for the next time", async (t) => {
   const { dir, repo } = await committedRepo(t);
   const bin = join(dir, "bin");
   await exec("mkdir", ["-p", bin]);
@@ -88,27 +97,31 @@ exit 0
     await exec("mkdir", ["-p", root]);
     const past = Math.floor(Date.now() / 1000) - 30;
     const calls = join(root, "hc.log");
+    const db = join(root, "kanso.db");
+    await exec("sqlite3", [db, "CREATE TABLE schedule_runs(id INTEGER PRIMARY KEY AUTOINCREMENT, schedule TEXT NOT NULL, at INTEGER NOT NULL, ok INTEGER NOT NULL, why TEXT);"]);
     const job = {
-      platform: "macos", id: "s1", log: join(root, "run.log"), mode: "at",
+      platform: "macos", id: "s1", db, mode: "at",
       spec: fail ? `${past} ${past + 3600}` : String(past), on: "", folder: repo, space: "sp9", tree: true, from: "main",
-      dir: join(root, "trees"), slug: "triage", add: ADD_WORKTREE, argv: ["claude"],
+      dir: join(root, "trees"), slug: "triage", add: ADD_WORKTREE,
+      argv: clock.agentLaunch("macos", ["claude"], "Triage the failures\nName each one"),
     };
     const argv = clock.scheduleWaiter(job);
     const result = await exec(argv[0], argv.slice(1), {
       env: { ...process.env, PATH: `${bin}${delimiter}${process.env.PATH ?? ""}`, LOG: calls, FAIL: fail ? "the agent did not start" : "" },
       limit: 8000,
     });
-    return { code: result.code, log: await readFile(job.log, "utf8").catch(() => ""), calls: await readFile(calls, "utf8").catch(() => ""), stderr: result.stderr };
+    const rows = await exec("sqlite3", ["-separator", "\t", db, "SELECT ok, ifnull(why, '') FROM schedule_runs;"]);
+    return { code: result.code, rows: rows.stdout.trim(), calls: await readFile(calls, "utf8").catch(() => ""), stderr: result.stderr };
   };
   const ok = await run(false);
-  assert.equal(ok.code, 0, ok.stderr + ok.log);
-  assert.match(ok.log, / ran$/m);
+  assert.equal(ok.code, 0, ok.stderr + ok.rows);
+  assert.equal(ok.rows, "1");
   const listed = await git(repo, "worktree", "list", "--porcelain");
   const made = listed.stdout.split("\n\n").map((block) => block.match(/^worktree (.*)$/m)?.[1]).find((path) => path && path !== repo);
   assert.ok(made, listed.stdout);
   assert.equal((await git(made, "rev-parse", "HEAD")).stdout.trim(), (await git(repo, "rev-parse", "main")).stdout.trim());
   const failed = await run(true);
-  assert.equal(failed.code, 137, failed.stderr + failed.log);
-  assert.equal(failed.log.split("\n").filter((line) => line.includes("failed the agent did not start")).length, 1);
+  assert.equal(failed.code, 137, failed.stderr + failed.rows);
+  assert.equal(failed.rows, "0\tthe agent did not start");
   assert.equal(failed.calls.split("\n").filter((line) => line.startsWith("run ")).length, 1);
 });

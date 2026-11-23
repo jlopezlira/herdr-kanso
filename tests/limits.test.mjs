@@ -10,6 +10,7 @@ const clock = (ms, zone) => new Intl.DateTimeFormat("en-GB", {
 const model = await load("kanso-strip/limits-model.js", [
   "parseLimit", "withLimits", "limitStep", "foundLabels", "limitedProviders",
 ]);
+const { limitLines } = await load("kanso-spaces/limit-menu.js", ["limitLines"]);
 
 test("A Claude Code or Codex limit shows when it resets, a limit with no time has no reset, and a fast-mode limit or a normal finish is not a limit", () => {
   const read = (screen) => model.parseLimit(screen, now);
@@ -72,4 +73,10 @@ test("A limited Claude Code provider is Claude, and a reset that has passed is d
     { status: "limited", app: "codex", limit: { until: now - 1000 } },
   ];
   assert.deepEqual(plain(model.limitedProviders(list, now)), { claude: { until: now + 60_000 } });
+});
+
+test("A blocked Limited row offers Resume at reset and Snooze until reset", () => {
+  const until = String(now + 3_600_000);
+  const lines = limitLines({ labels: { "kanso.limit": until, "kanso.limit.resume": until }, status: "blocked", now, atReset: () => {}, snooze: () => {}, snoozed: false });
+  assert.deepEqual(plain(lines.map((line) => line.act)), ["resume-at-reset", "snooze-reset"]);
 });

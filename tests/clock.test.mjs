@@ -7,7 +7,7 @@ import { exec, load, temporary } from "./helpers.mjs";
 const plain = (value) => JSON.parse(JSON.stringify(value));
 
 const model = await load("kanso-strip/clock-model.js", [
-  "nextRuns", "lastDue", "waiterPlan", "parseRunLog", "lastOutcome", "clockName", "resumeWaiter",
+  "nextRuns", "lastDue", "waiterPlan", "outcomesOf", "clockName", "resumeWaiter", "agentLaunch",
 ]);
 const { resumesToArm } = await load("kanso-strip/clock.js", ["resumesToArm"], {
   window: () => ({ platform: "macos" }),
@@ -45,15 +45,10 @@ test("A missed schedule catches up once, now, and a schedule that already ran do
   assert.equal(model.waiterPlan(once, { now, since: now - 1000 }), null);
 });
 
-test("A run log names the last success and a failed start", () => {
-  const text = "100 ran\n200 failed worktree missing\n300 ran\n";
-  assert.deepEqual(plain(model.parseRunLog(text)), [
-    { at: 100_000, ok: true, why: null },
-    { at: 200_000, ok: false, why: "worktree missing" },
-    { at: 300_000, ok: true, why: null },
-  ]);
-  assert.deepEqual(plain(model.lastOutcome(text)), { lastRun: 300_000, failed: null });
-  assert.deepEqual(plain(model.lastOutcome("100 ran\n200 failed boom")), { lastRun: 100_000, failed: { at: 200_000, ok: false, why: "boom" } });
+test("The last successful run and the last try are kept apart, and a failure is recorded only when the last try failed", () => {
+  const rows = (ok) => [{ schedule: "s1", id: 1, at: 100_000, ok: 1, why: null }, { schedule: "s1", id: 2, at: 200_000, ok: 0, why: "worktree missing" }, { schedule: "s1", id: 3, at: 300_000, ok, why: ok ? null : "boom" }];
+  assert.deepEqual(plain(model.outcomesOf(rows(1)).get("s1")), { lastRun: 300_000, lastTry: 300_000, failed: null });
+  assert.deepEqual(plain(model.outcomesOf(rows(0)).get("s1")), { lastRun: 100_000, lastTry: 300_000, failed: { at: 300_000, why: "boom" } });
 });
 
 test("A clock name stays short, and two long addresses do not share one", () => {
@@ -75,7 +70,9 @@ exit 0
   await chmod(hc, 0o755);
   const run = async (state) => {
     const log = join(dir, `${state}.log`);
-    const argv = model.resumeWaiter({ platform: "macos", address: "t9", until: Date.now() - 120_000, token: "TOKEN" });
+    const until = Date.now() - 120_000;
+    const argv = model.resumeWaiter({ platform: "macos", address: "t9", until, token: "TOKEN" });
+    assert.equal(argv[4], String(Math.floor(until / 1000)));
     const result = await exec(argv[0], argv.slice(1), {
       env: { ...process.env, PATH: `${dir}${delimiter}${process.env.PATH ?? ""}`, LOG: log, GET: JSON.stringify({ "kanso.limit.resume": "TOKEN", state }) },
       limit: 8000,
@@ -91,6 +88,10 @@ exit 0
   assert.equal(working.code, 0, working.stderr);
   assert.doesNotMatch(working.log, /send /);
   assert.match(working.log, /label t9 kanso\.limit= kanso\.limit\.resume= kanso\.limit\.cmd=/);
+});
+
+test("A Windows launch keeps a prompt that has more than one line", () => {
+  assert.ok(Array.isArray(model.agentLaunch("windows", ["codex"], "a\nb")));
 });
 
 test("A restart before the reset re-arms an agent whose resume is still ours, a waiter with no command stays, that waiter is re-armed once the command is known, a typed resume is left, and a different resume token does nothing", () => {
