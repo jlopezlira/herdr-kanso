@@ -39,7 +39,7 @@ import { openApi } from "./platform-open.js";
 import { NAME_LIMIT, ENTRIES, PIECE_LINES, actOf, DIGEST_PIECES, PIECE_GROUP, shownAt, foldFor, headerWidths, headerTools, hoverTools, menuEntries, placeOf, paneLabel, headerMark, prTitle } from "./header-model.js";
 
 const N_MAX = 8;
-const openUrl = (url) => localService(openApi).open(url).catch(() => { });
+const openUrl = (url) => localService(openApi).web(url).catch(() => { });
 const DEFAULT_N = 4;
 const MIN_W = 0.08; // narrowest a column can be dragged, as a share of the view
 const W_STEPS = [1 / 4, 1 / 3, 1 / 2, 2 / 3, 1];
