@@ -1,7 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { chmod, mkdir, readFile, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { basename, join } from "node:path";
+import { compare, scan, scannedFiles } from "../scripts/check-dupes.mjs";
 import { arg, clone, computersDialog, exec, find, folderWith, gpuiHost, load, success, texts } from "./helpers.mjs";
 
 const reach = () => load("kanso-computers/reach.js", [
@@ -167,8 +168,11 @@ test("What ssh said says whether the computer is ready, wants a password, is clo
 const shForm = process.platform === "win32" && "the sh form runs on macOS and Linux; Windows uses the PowerShell form";
 const PUB = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIKansoOneClickTest kanso";
 const KEY_PATH = "~/.ssh/id_ed25519_kanso";
+const AGENT_PATH = "~/.ssh/id_kanso_agent";
 const KEY_OPTIONS = "-o IdentitiesOnly=yes -o BatchMode=yes";
-const KEY_WORDS = `-o IdentityFile=${KEY_PATH} ${KEY_OPTIONS}`;
+const identityWords = (path) => `-o IdentityFile=${path} ${KEY_OPTIONS}`;
+const KEY_WORDS = identityWords(KEY_PATH);
+const AGENT_WORDS = identityWords(AGENT_PATH);
 const OLD_KEY_WORDS = `-i ${KEY_PATH} ${KEY_OPTIONS}`;
 const ASK = "-o PasswordAuthentication=yes -o KbdInteractiveAuthentication=yes";
 const signIn = () => load("kanso-computers/sign-in.js", ["signInTab", "routeOf", "keySetup", "lanParts"]);
@@ -200,7 +204,7 @@ const callsOf = async (dir, name) => {
     return [];
   }
 };
-const keyBin = async (t, { agentKeys = [], probeCode = 0, sshCode = 0, sshSaid = "", sshOut = "", failVia = false, sshBody = "" } = {}) => {
+const keyBin = async (t, { agentKeys = [], probeCode, sshCode = 0, sshSaid = "", sshOut = "", failVia = false, sshBody = "", appCode = 0 } = {}) => {
   const { dir, bin, home } = await folderWith(t, "bin", "home");
   await mkdir(bin);
   await mkdir(home);
@@ -226,7 +230,7 @@ const keyBin = async (t, { agentKeys = [], probeCode = 0, sshCode = 0, sshSaid =
     '  case "$arg" in BatchMode=yes) batch=yes ;; esac',
     "  last=$arg",
     "done",
-    `if [ "$batch" = yes ] && [ "$last" = true ]; then exit ${probeCode}; fi`,
+    probeCode === undefined ? "" : `if [ "$batch" = yes ] && [ "$last" = true ]; then exit ${probeCode}; fi`,
     sshBody || [
       sshSaid && `printf '%s\\n' ${JSON.stringify(sshSaid)} >&2`,
       sshOut && `printf '%s\\n' ${JSON.stringify(sshOut)}`,
@@ -234,9 +238,11 @@ const keyBin = async (t, { agentKeys = [], probeCode = 0, sshCode = 0, sshSaid =
     ].filter(Boolean).join("\n"),
   ].join("\n"));
   await writeStub(bin, "hc", failVia ? "if [ \"$1\" = machine ] && [ \"$2\" = add ] && [ \"$3\" = --via ]; then exit 1; fi\nexit 0" : "exit 0");
-  await writeStub(bin, "herdr-app", "exit 0");
+  await writeStub(bin, "herdr-app", `exit ${appCode}`);
   return { bin, home, env: { PATH: `${bin}:/bin:/usr/bin`, HOME: home, TMPDIR: dir } };
 };
+const runKeyScript = ([program, ...args], env) => exec(program, args, { env });
+const agentFile = (home) => join(home, ".ssh", basename(AGENT_PATH));
 const runSh = async (t, argv, options, prepare) => {
   const placed = await keyBin(t, options);
   const key = join(placed.home, ".ssh", "id_ed25519_kanso");
@@ -244,7 +250,7 @@ const runSh = async (t, argv, options, prepare) => {
     await mkdir(join(placed.home, ".ssh"));
     await prepare({ key, home: placed.home });
   }
-  const ran = await exec(argv[0], argv.slice(1), { env: placed.env });
+  const ran = await runKeyScript(argv, placed.env);
   return { ...placed, key, ran, calls: (name) => callsOf(placed.bin, name) };
 };
 const viaOf = (dest, port = "") => `ssh ${KEY_WORDS}${port ? ` -p ${port}` : ""} ${dest}`;
@@ -413,12 +419,14 @@ test("A Tailscale route, a route that is not ssh, a fly route, and a Windows rou
   assert.deepEqual(login({ name: "grey", target: "ada@box", via: "ssh ada@box" }, "windows"), ["hc", "machine", "login", "grey"]);
   const script = signInTab({ name: "grey", target: "O'Brien@box", via: false }, "windows").argv[3];
   const keyed = viaOf("O'Brien@box");
-  const add = ["machine", "add", "--via", keyed, "--name", "grey", "--install"].map(psQuote).join(" ");
+  const add = ["machine", "add", "--via"].map(psQuote).join(" ");
+  const named = ["--name", "grey", "--install"].map(psQuote).join(" ");
   assert.ok(script.startsWith("$PSNativeCommandArgumentPassing = 'Legacy'"));
   const password = script.split("; ").find((line) => line.includes("$said = ssh"));
   assert.ok(password.includes(`${ASK} 'O''Brien@box'`), password);
   assert.equal(password.includes(ACCEPT_NEW), false, password);
-  assert.ok(script.includes(`& hc ${add}`), script);
+  assert.ok(script.includes(`$via = ${psQuote(keyed)}`), script);
+  assert.ok(script.includes(`& hc ${add} $via ${named}`), script);
   assert.match(script, /if \(\$LASTEXITCODE -ne 0\) \{[^}]*exit 1 \}; Write-Host ''; Write-Host 'Done: this tab can close\.'$/);
   assert.equal(script.split("Done: this tab can close.").length, 2);
   assert.equal(script.includes("--json"), false);
@@ -429,32 +437,35 @@ const AGENT_ED = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFixtureAgentEd";
 const AGENT_EC = "ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYFixtureAgentEc";
 const AGENT_KEYS = [AGENT_EC, AGENT_ED].map((key) => key + " agent comment");
 const AGENT_LINE = AGENT_ED + " kanso";
+const REMOTE_SHELL = 'exec sh -c "$last"';
 const authorizedFile = (home) => join(home, ".ssh", "authorized_keys");
 const checkAgentPush = ([push, probe]) => {
   assert.ok(push.at(-1).includes(AGENT_LINE));
-  assert.deepEqual(probe, [...KEY_WORDS.split(" "), KEY_MACHINE.target, "true"]);
+  assert.deepEqual(probe, [...AGENT_WORDS.split(" "), KEY_MACHINE.target, "true"]);
 };
 
 test("Signing in prefers an agent's Ed25519 key, saves only its public key, and checks the new route before adding it", { skip: shForm }, async (t) => {
   const { keySetup } = await signIn();
-  const { key, ran, calls } = await runSh(t, keySetup(KEY_MACHINE), { agentKeys: AGENT_KEYS });
+  const { home, key, ran, calls } = await runSh(t, keySetup(KEY_MACHINE), { agentKeys: AGENT_KEYS });
   endsDone(ran);
-  assert.equal(await readFile(key + ".pub", "utf8"), AGENT_LINE + "\n");
-  await assert.rejects(readFile(key), { code: "ENOENT" });
+  const agent = agentFile(home);
+  assert.equal(await readFile(agent + ".pub", "utf8"), AGENT_LINE + "\n");
+  await assert.rejects(readFile(agent), { code: "ENOENT" });
+  await assert.rejects(readFile(key + ".pub"), { code: "ENOENT" });
   assert.deepEqual(await calls("ssh-keygen"), []);
   const ssh = await calls("ssh");
   assert.equal(ssh.length, 2);
   checkAgentPush(ssh);
-  assert.deepEqual(await calls("hc"), [["machine", "add", "--via", viaOf(KEY_MACHINE.target), "--name", KEY_MACHINE.name, "--install"]]);
+  assert.deepEqual(await calls("hc"), [["machine", "add", "--via", keyedMachine(AGENT_WORDS).via, "--name", KEY_MACHINE.name, "--install"]]);
 });
 
 test("Signing in keeps a public key already held by the agent, even when the agent has a preferred key", { skip: shForm }, async (t) => {
   const { keySetup } = await signIn();
   const existing = AGENT_EC + " existing comment\n";
-  const { key, ran, calls } = await runSh(t, keySetup(KEY_MACHINE), { agentKeys: AGENT_KEYS },
-    ({ key }) => writeFile(key + ".pub", existing));
+  const { home, ran, calls } = await runSh(t, keySetup(KEY_MACHINE), { agentKeys: AGENT_KEYS },
+    (fixture) => writeFile(agentFile(fixture.home) + ".pub", existing));
   endsDone(ran);
-  assert.equal(await readFile(key + ".pub", "utf8"), existing);
+  assert.equal(await readFile(agentFile(home) + ".pub", "utf8"), existing);
   assert.deepEqual(await calls("ssh-keygen"), []);
   assert.ok((await calls("ssh"))[0].at(-1).includes(AGENT_EC + " kanso"));
 });
@@ -471,7 +482,7 @@ test("Signing in makes its own key when ssh-add cannot list any agent keys", { s
 
 test("If the agent key cannot sign in on its own, the tab says so and pushes a new key after filtering out the exact agent line", { skip: shForm }, async (t) => {
   const { keySetup } = await signIn();
-  const { ran, calls } = await runSh(t, keySetup(KEY_MACHINE), { agentKeys: AGENT_KEYS, probeCode: 255 });
+  const { ran, calls } = await runSh(t, keySetup(KEY_MACHINE), { agentKeys: AGENT_KEYS, probeCode: 255, sshOut: "kanso-added" });
   endsDone(ran);
   assert.match(ran.stdout, /The key in your ssh agent did not open grey on its own, so kansō makes its own key and asks once more\./);
   assert.equal((await calls("ssh-keygen")).length, 1);
@@ -479,8 +490,9 @@ test("If the agent key cannot sign in on its own, the tab says so and pushes a n
   assert.equal(ssh.length, 3);
   checkAgentPush(ssh);
   const fallback = ssh[2].at(-1);
-  assert.ok(fallback.startsWith("grep -vxF '" + AGENT_LINE + "' ~/.ssh/authorized_keys > "), fallback);
-  assert.ok(fallback.includes(">> ~/.ssh/authorized_keys") && fallback.includes(PUB), fallback);
+  const filter = fallback.indexOf("grep -vxF '" + AGENT_LINE + "' ~/.ssh/authorized_keys > ");
+  const append = fallback.indexOf(">> ~/.ssh/authorized_keys");
+  assert.ok(filter >= 0 && append > filter && fallback.includes(PUB), fallback);
 });
 
 test("The key push appends new key material but keeps an existing line with the same material and a different comment", { skip: shForm }, async (t) => {
@@ -488,7 +500,7 @@ test("The key push appends new key material but keeps an existing line with the 
   const other = AGENT_LINE + "\n";
   const alreadyThere = PUB.replace(/ kanso$/, " a different comment") + "\n";
   for (const [existing, expected] of [[other, other + "\n" + PUB + "\n"], [alreadyThere, alreadyThere]]) {
-    const { home, ran, calls } = await runSh(t, keySetup(KEY_MACHINE), { sshBody: 'exec sh -c "$last"' },
+    const { home, ran, calls } = await runSh(t, keySetup(KEY_MACHINE), { sshBody: REMOTE_SHELL },
       ({ home }) => writeFile(authorizedFile(home), existing));
     endsDone(ran);
     const command = (await calls("ssh"))[0].at(-1);
@@ -499,6 +511,9 @@ test("The key push appends new key material but keeps an existing line with the 
 
 const KEY_ACTIONS = "kanso-spaces/sign-in.js";
 const keyedMachine = (words = KEY_WORDS) => ({ ...KEY_MACHINE, via: "ssh " + words + " " + KEY_MACHINE.target });
+const checkRemovalCall = async (calls) => {
+  assert.deepEqual(await calls("herdr-app"), [["do", "kanso-spaces.remove-machine:grey"]]);
+};
 const withAgentPub = ({ key }) => writeFile(key + ".pub", AGENT_KEYS[1] + "\n");
 
 test("Removing a key uses the exact kansō line and removes the computer only after SSH reports removal, on either saved route", { skip: shForm }, async (t) => {
@@ -510,7 +525,7 @@ test("Removing a key uses the exact kansō line and removes the computer only af
     const { home, env, ran, calls } = await runSh(t, argv, { sshOut: "removed" }, withAgentPub);
     endsDone(ran);
     assert.match(ran.stdout, /Removed this computer's key from grey\./);
-    assert.deepEqual(await calls("herdr-app"), [["do", "kanso-spaces.remove-machine:grey"]]);
+    await checkRemovalCall(calls);
     const ssh = await calls("ssh");
     assert.equal(ssh.length, 1);
     assert.deepEqual(ssh[0].slice(0, -1), [...KEY_WORDS.split(" "), machine.target]);
@@ -564,22 +579,99 @@ test("The Windows key setup checks its agent, probes without prompting, and gene
   const { keySetup } = await signIn();
   const argv = keySetup(KEY_MACHINE, { platform: "windows" });
   const script = windowsScript(argv);
-  for (const name of ["Get-Agent", "Get-Pair", "Test-Held", "Select-Agent", "New-Key", "Read-Key", "Send-Key"]) {
+  for (const name of ["Get-Agent", "Get-Pair($f)", "Test-Held", "Select-Agent", "New-Own", "Read-Key($f)", "Send-Key"]) {
     assert.ok(script.includes("function " + name));
   }
   assert.ok(script.includes("ssh-add -L"));
-  assert.ok(script.includes(`${KEY_WORDS} '${KEY_MACHINE.target}' true`));
-  assert.match(script, /if \(\$LASTEXITCODE -ne 0\) \{ Write-Host 'The key in your ssh agent[^;]+; \$old = \$pub; New-Key; Read-Key;[^}]+Send-Key \}/);
+  assert.ok(script.includes(`${AGENT_WORDS} '${KEY_MACHINE.target}' true`));
+  assert.match(script, /Read-Key \$g; Send-Key; ssh [^;]+; if \(\$LASTEXITCODE -eq 0\) \{ \$via = /);
+  assert.match(script, /else \{ Write-Host 'The key in your ssh agent[^;]+;[^}]+New-Own; Read-Key \$k;[^}]+\}; Send-Key; \$via = /);
+  for (const words of [AGENT_WORDS, KEY_WORDS]) assert.ok(script.includes(`$via = '${keyedMachine(words).via}'`));
 });
 
 test("The Windows key removal uses the saved public key and removes the computer only after SSH reports removal", async () => {
   const { keyRemoval } = await load(KEY_ACTIONS, ["keyRemoval"]);
   const argv = keyRemoval(keyedMachine(OLD_KEY_WORDS), "windows");
   const script = windowsScript(argv);
-  assert.ok(script.includes("function Get-Pair"));
-  assert.ok(script.includes("$line = (Get-Pair) + ' kanso'"));
+  assert.ok(script.includes("function Get-Pair($f)"));
+  assert.ok(script.includes("$f = $k"));
+  assert.ok(script.includes("$line = (Get-Pair $f) + ' kanso'"));
   assert.ok(script.includes(KEY_WORDS));
   assert.match(script, /-ne 'removed'\) \{[^}]+exit 0 \}; & herdr-app do 'kanso-spaces\.remove-machine:grey'/);
+});
+
+test("An agent route still opens its computer after another computer falls back to a generated key", { skip: shForm }, async (t) => {
+  const { keySetup, keyRemoval } = await load(KEY_ACTIONS, ["keySetup", "keyRemoval"]);
+  const sshBody = [
+    "for arg do",
+    '  case "$arg" in alpha|beta) host=$arg ;; IdentityFile=*) identity=${arg#IdentityFile=} ;; esac',
+    "done",
+    '[ -n "$host" ] || exit 1',
+    'remote="$TMPDIR/$host"',
+    'if [ "$batch" = yes ]; then',
+    '  [ "$host/$last" != beta/true ] || exit 255',
+    '  file="$HOME/.ssh/${identity##*/}.pub"',
+    '  [ -s "$file" ] || exit 255',
+    '  key=$(awk \'{ print $2 }\' "$file")',
+    '  grep -qF "$key" "$remote/.ssh/authorized_keys" || exit 255',
+    "fi",
+    'HOME="$remote" ' + REMOTE_SHELL,
+  ].join("\n");
+  const { bin, env } = await keyBin(t, { agentKeys: AGENT_KEYS, sshBody });
+  const [alpha, beta] = ["alpha", "beta"].map((name) => ({ name, target: name }));
+  for (const machine of [alpha, beta]) {
+    await mkdir(join(env.TMPDIR, machine.name));
+    endsDone(await runKeyScript(keySetup(machine), env));
+  }
+  const [[, , , alphaVia], [, , , betaVia]] = await callsOf(bin, "hc");
+  const removed = await runKeyScript(keyRemoval({ ...alpha, via: alphaVia }), env);
+  endsDone(removed);
+  assert.equal(alphaVia, "ssh " + AGENT_WORDS + " alpha");
+  assert.equal(betaVia, viaOf(beta.target));
+  const alphaKeys = await readFile(authorizedFile(join(env.TMPDIR, alpha.name)), "utf8");
+  assert.equal(alphaKeys.trim(), "");
+});
+
+const withoutBlankLines = [
+  'sh -c "$last" || exit $?',
+  'file="$HOME/.ssh/authorized_keys"',
+  'sed \'/^$/d\' "$file" > "$file.compact" && mv "$file.compact" "$file"',
+].join("\n");
+
+for (const [description, existing, sshBody, expected] of [
+  ["keeps a pre-existing agent line", AGENT_LINE + "\n" + AGENT_KEYS[0] + "\n", REMOTE_SHELL, [AGENT_LINE, AGENT_KEYS[0], PUB]],
+  ["removes the agent line it appended even when it is the only line", "", withoutBlankLines, [PUB]],
+]) {
+  test("A failed agent probe " + description, { skip: shForm }, async (t) => {
+    const { keySetup } = await signIn();
+    const options = { agentKeys: AGENT_KEYS, probeCode: 255, sshBody };
+    const { home, ran } = await runSh(t, keySetup(KEY_MACHINE), options,
+      (fixture) => writeFile(authorizedFile(fixture.home), existing));
+    endsDone(ran);
+    assert.match(ran.stdout, /did not open grey on its own/);
+    const content = await readFile(authorizedFile(home), "utf8");
+    assert.deepEqual(content.split("\n").filter(Boolean), expected);
+  });
+}
+
+test("Removing a key fails and explains that Herdr still lists the computer when Herdr refuses the removal", { skip: shForm }, async (t) => {
+  const { keyRemoval } = await load(KEY_ACTIONS, ["keyRemoval"]);
+  const { home, ran, calls } = await runSh(t, keyRemoval(keyedMachine()), { appCode: 1, sshBody: REMOTE_SHELL }, async (fixture) => {
+    await withAgentPub(fixture);
+    await writeFile(authorizedFile(fixture.home), AGENT_LINE + "\n");
+  });
+  assert.equal(ran.code, 1);
+  assert.match(ran.stdout, /Herdr still lists grey: remove it from the sidebar\./);
+  assert.doesNotMatch(ran.stdout, /Done:/);
+  await checkRemovalCall(calls);
+  assert.equal(await readFile(authorizedFile(home), "utf8"), "");
+});
+
+test("The duplicate guard detects no repeated code in the sign-in scripts", async () => {
+  const files = await scannedFiles();
+  const baseline = JSON.parse(await readFile(new URL("../kanso/dupes-baseline.json", import.meta.url), "utf8"));
+  const { added, gone } = compare(scan(files).windows, baseline);
+  assert.deepEqual([...added, ...gone].filter(({ file }) => basename(file) === "sign-in.js"), []);
 });
 
 test("A refusal says what to do: the password, Remote Login, Tailscale SSH, or access controls", async () => {
