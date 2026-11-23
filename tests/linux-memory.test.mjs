@@ -1,11 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { chmod, mkdir, open, readFile, writeFile } from "node:fs/promises";
+import { chmod, mkdir, open, readFile, stat, writeFile } from "node:fs/promises";
 import { delimiter, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { guardHost, linuxMemory, linuxPss, logindIdle, omarchyIdle, systemdService, systemdTimer } from "../kanso/mods/kanso-guard/guard-host.mjs";
 import { arg, clone, context, exec, failure, find, folderWith, gpuiHost, KIT_NIGHT, load, loadSystemApi, success, temporary, texts } from "./helpers.mjs";
 import { loadSettings } from "./mod-fixtures.mjs";
+import { fieldState } from "./pr-fixtures.mjs";
 
 const systemApi = await loadSystemApi();
 const { linuxPorts } = await load("kanso-panel/platform-ports.js", ["linuxPorts"]);
@@ -222,6 +223,8 @@ test("A pet atlas converts with magick when sips is not installed", { skip: unix
 });
 
 const markdownDesktop = "dev.kanso.markdown.desktop";
+const openerFolder = "kanso-markdown";
+const openerFile = "open.sh";
 const markdownDefaults = {
   "text/markdown": "obsidian.desktop",
   "text/x-markdown": "omawrite.desktop",
@@ -232,10 +235,15 @@ const mimeState = (overrides = {}) => Object.entries({ ...markdownDefaults, ...o
   .map(([type, app]) => type + " " + app + "\n").join("");
 const kansoDefaults = Object.fromEntries(mimeTypes.map((type) => [type, markdownDesktop]));
 
-const linuxMarkdown = async (t) => {
-  const { dir, bin, home, data, config, app, log, state, launched } = await folderWith(
-    t, "bin", "home", "data", "config", "app", "log", "state", "launched",
+const desktopLines = async (path) => (await readFile(path, "utf8")).split("\n");
+const desktopExec = async (path) => (await desktopLines(path)).find((line) => line.startsWith("Exec="));
+
+const linuxMarkdown = async (t, { dataName = "data", appName = "app" } = {}) => {
+  const { dir, bin, home, config, log, state, launched } = await folderWith(
+    t, "bin", "home", "config", "log", "state", "launched",
   );
+  const data = join(dir, dataName);
+  const app = join(dir, appName);
   const programs = {
     uname: "echo Linux",
     pgrep: "exit 1",
@@ -263,17 +271,15 @@ const linuxMarkdown = async (t) => {
   return {
     dir, env, launched, log, run, state,
     desktop: join(data, "applications", markdownDesktop),
-    opener: join(app, "data", "kanso-markdown", "open.sh"),
+    opener: join(data, openerFolder, openerFile),
     previous: join(app, "data", "kanso-markdown-previous"),
   };
 };
 
 test("Turning on the Omarchy opener covers Markdown and plain text, and turning it off restores each app", { skip: unixOnly }, async (t) => {
-  const { desktop, log, opener, previous, run, state } = await linuxMarkdown(t);
+  const { desktop, log, previous, run, state } = await linuxMarkdown(t);
   await run("install");
-  const entry = (await readFile(desktop, "utf8")).split("\n");
-  assert.ok(entry.includes("Exec=" + opener + " %f"), "xdg-open needs the unquoted script path");
-  assert.ok(entry.includes("MimeType=" + mimeTypes.join(";") + ";"));
+  assert.ok((await desktopLines(desktop)).includes("MimeType=" + mimeTypes.join(";") + ";"));
   assert.equal(await readFile(state, "utf8"), mimeState(kansoDefaults));
   assert.equal(await readFile(previous, "utf8"), mimeState());
   assert.equal(await run("status"), "on");
@@ -291,6 +297,36 @@ test("Turning on the Omarchy opener covers Markdown and plain text, and turning 
   assert.deepEqual(defaults.toSorted(), [register, register, ...restore].toSorted());
 });
 
+test("The previous Omarchy opener shows as off until kansō is set to open every supported file type", { skip: unixOnly }, async (t) => {
+  const { desktop, env, previous, run, state } = await linuxMarkdown(t);
+  const type = "text/markdown";
+  const oldOpener = await executable(join(env.HERDR_APP_HOME, "data", openerFolder), openerFile, "#!/bin/sh\nexit 0");
+  await mkdir(dirname(desktop), { recursive: true });
+  await writeFile(desktop, lines(["[Desktop Entry]", "Type=Application", "Name=Kanso Markdown", `Exec=${oldOpener} %f`, `MimeType=${type};`, ""]));
+  await writeFile(previous, `${type} ${markdownDefaults[type]}\n`);
+  await writeFile(state, mimeState({ [type]: markdownDesktop }));
+
+  assert.equal(await run("status"), "off");
+  await run("install");
+  assert.equal(await readFile(state, "utf8"), mimeState(kansoDefaults));
+  assert.equal(await run("status"), "on");
+});
+
+for (const [dataName, quoted, title] of [
+  ["data", false, "The Omarchy opener path stays unquoted when only the app home contains a space"],
+  ["shared data", true, "The Omarchy opener path is double-quoted when the data folder contains a space"],
+]) {
+  test(title, { skip: unixOnly }, async (t) => {
+    const { desktop, opener, run } = await linuxMarkdown(t, { dataName, appName: "app home" });
+    await run("install");
+    const execPath = quoted ? `"${opener}"` : opener;
+    assert.equal(await desktopExec(desktop), `Exec=${execPath} %f`);
+    assert.ok((await stat(opener)).isFile());
+    await run("uninstall");
+    await assert.rejects(stat(dirname(opener)), { code: "ENOENT" });
+  });
+}
+
 test("Turning off the Omarchy opener keeps defaults changed by the user", { skip: unixOnly }, async (t) => {
   const { run, state } = await linuxMarkdown(t);
   await run("install");
@@ -301,8 +337,9 @@ test("Turning off the Omarchy opener keeps defaults changed by the user", { skip
 });
 
 test("With kansō closed, Omarchy opens a Markdown file and a text file in their respective previous apps", { skip: unixOnly }, async (t) => {
-  const { dir, env, launched, opener, run } = await linuxMarkdown(t);
+  const { desktop, dir, env, launched, run } = await linuxMarkdown(t);
   await run("install");
+  const opener = (await desktopExec(desktop)).slice("Exec=".length, -" %f".length);
   assert.match(await readFile(opener, "utf8"), /data\/kanso-open/);
   const documents = [["meeting notes.md", "text/markdown"], ["todo list.txt", "text/plain"]];
   const paths = documents.map(([name]) => join(dir, name));
@@ -315,7 +352,10 @@ test("With kansō closed, Omarchy opens a Markdown file and a text file in their
   assert.equal(await readFile(launched, "utf8"), lines([...expected, ""]));
 });
 
-const markdownLabel = "Open .md files in kansō";
+const markdownLabel = {
+  linux: "Open .md and text files in kansō",
+  macos: "Open .md files in kansō",
+};
 
 const markdownSettings = async (t, platform, responses = []) => {
   const appHome = "/tmp/kanso settings app";
@@ -324,6 +364,7 @@ const markdownSettings = async (t, platform, responses = []) => {
   const command = t.mock.fn(async () => replies.next().value ?? failure("Unexpected Markdown command"));
   const { Settings } = await loadSettings({
     ...gpuiHost(),
+    InputState: { new: fieldState },
     window: () => ({ platform }),
     props: () => ({ page: "pieces" }),
     theme: () => KIT_NIGHT,
@@ -338,9 +379,10 @@ const markdownSettings = async (t, platform, responses = []) => {
   settings.init({}, cx);
   await drain();
   const page = () => settings.render();
-  const toggle = () => find(page(), (el) => el.tag === "markdown-opener");
+  const toggle = (drawn = page()) => find(drawn, (el) => el.tag === "markdown-opener");
   return {
     page, toggle,
+    type: (query) => settings.find.state.type(query, cx),
     calls: () => clone(command.mock.calls.map((call) => call.arguments)),
     expected: (...verbs) => verbs.map((verb) => ["sh", [script, verb]]),
     change: async (on) => {
@@ -359,7 +401,7 @@ for (const [platform, name] of Object.entries({ linux: "Linux", macos: "macOS" }
     const settings = await markdownSettings(t, platform, [
       success("on\n"), success("Restored"), success("off\n"), success("Installed"), success("on\n"),
     ]);
-    assert.ok(texts(settings.page()).includes(markdownLabel));
+    assert.ok(texts(settings.page()).includes(markdownLabel[platform]), markdownLabel[platform]);
     assert.equal(arg(settings.toggle(), "pressed"), true);
     await settings.change(false);
     assert.equal(arg(settings.toggle(), "pressed"), false);
@@ -368,6 +410,36 @@ for (const [platform, name] of Object.entries({ linux: "Linux", macos: "macOS" }
     assert.deepEqual(settings.calls(), settings.expected("status", "uninstall", "status", "install", "status"));
   });
 }
+
+for (const [query, matches, title] of [
+  ["text files", true, "Find shows the opener without an empty message when only the opener matches"],
+  ["zzzz", false, "Find hides the opener and says no piece matches when nothing matches"],
+]) {
+  test(title, async (t) => {
+    const settings = await markdownSettings(t, "linux", [success("off\n")]);
+    settings.type(query);
+    const page = settings.page();
+    assert.equal(find(page, (el) => arg(el, "id")?.startsWith("piece-row-")), null);
+    assert.equal(Boolean(settings.toggle(page)), matches, "The opener switch is shown only when it matches");
+    assert.equal(texts(page).includes("No piece matches."), !matches);
+  });
+}
+
+test("The opener switch shows on and is disabled while kansō sets the default app", async (t) => {
+  const { promise, resolve } = Promise.withResolvers();
+  const settings = await markdownSettings(t, "linux", [success("off\n"), promise, success("on\n")]);
+  assert.equal(arg(settings.toggle(), "pressed"), false, "The opener starts off");
+  const pending = settings.change(true);
+  try {
+    assert.deepEqual(settings.calls(), settings.expected("status", "install"));
+    const toggle = settings.toggle();
+    assert.equal(arg(toggle, "disabled"), true);
+    assert.equal(arg(toggle, "pressed"), true);
+  } finally {
+    resolve(success("Installed"));
+    await pending;
+  }
+});
 
 test("Settings shows the last error line if .md files cannot be set to open in kansō", async (t) => {
   const detail = "Trying to register the opener";
@@ -383,7 +455,8 @@ test("Settings shows the last error line if .md files cannot be set to open in k
 
 test("Settings does not offer to open .md files in kansō on Windows", async (t) => {
   const settings = await markdownSettings(t, "windows");
-  assert.ok(!texts(settings.page()).includes(markdownLabel));
+  const rendered = texts(settings.page());
+  assert.ok(Object.values(markdownLabel).every((label) => !rendered.includes(label)));
   assert.equal(settings.toggle(), null);
   assert.deepEqual(settings.calls(), []);
 });
