@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { exec as realExec, failure, load, tape, KIT_NIGHT, timedContext, same, success, temporary } from "./helpers.mjs";
+import { arg, calls, drawingHost, exec as realExec, failure, find, KIT_NIGHT, load, one, same, success, tape, temporary, texts, timedContext } from "./helpers.mjs";
 import { temporaryKdb } from "./mod-fixtures.mjs";
 
 const SECRET = "SECRET-XYZ";
@@ -469,48 +469,167 @@ for (const { kind, ref, columns, requestOf, steps, payloads } of emptyBoardCases
 
 const pickerCases = [
   {
-    kind: "jira", things: "projects", lastRef: jiraRef("P1099"),
-    pageOf: ({ url }) => Number(new URL(url).searchParams.get("startAt")) / 100,
-    items: (n) => ({ key: "P" + n, name: "Project" }),
+    name: "Jira", things: "projects", lastRef: jiraRef("P1099"),
+    cursor: ({ url }) => new URL(url).searchParams.get("startAt"),
+    index: (start, size) => Number(start) / size,
+    continuation: "50",
+    item: (n) => ({ key: "P" + n, name: "Project" }),
     payload: (values, next) => ({ values, isLast: !next }),
   },
   {
-    kind: "linear", things: "teams", lastRef: "team-1099",
-    pageOf: ({ body }) => linearBody(body).index,
-    items: (n) => ({ id: "team-" + n, key: "T" + n, name: "Team" }),
+    name: "Linear", things: "teams", lastRef: "team-1099",
+    cursor: ({ body }) => linearBody(body).after,
+    index: (after) => Number(after?.slice(5) ?? 0),
+    continuation: "page-50",
+    item: (n) => ({ id: "team-" + n, key: "T" + n, name: "Team" }),
     payload: (nodes, next, endCursor) => linearData({ teams: { nodes, pageInfo: { hasNextPage: next, endCursor } } }),
   },
 ];
 
-for (const { kind, things, lastRef, pageOf, items, payload } of pickerCases) {
-  test(`The ${kind} picker loads all 11 pages and warns when it stops at 50`, async (t) => {
-    const { LINKED } = await load("kanso-panel/issues-linked.js", ["LINKED"]);
-    const answer = (pages) => async (req) => {
-      const page = pageOf(req);
-      const list = Array.from({ length: 100 }, (_, i) => items(page * 100 + i));
-      return okJson(payload(list, page + 1 < pages, String(page + 1)));
-    };
-    const pageNumbers = (request) => request.mock.calls.map(({ arguments: [req] }) => pageOf(req));
-    const sequence = (length) => Array.from({ length }, (_, i) => i);
+const listPage = ({ cursor, index, item, payload }, pages, size) => (request) => {
+  const page = index(cursor(request), size);
+  const list = Array.from({ length: size }, (_, i) => item(page * size + i));
+  return okJson(payload(list, page + 1 < pages, `page-${page + 1}`));
+};
+const askedFor = (request, cursor) => execArgs(request).map(([req]) => cursor(req));
+const pageNumbers = (request, { cursor, index }, size) => askedFor(request, cursor).map((at) => index(at, size));
+const sequence = (length) => Array.from({ length }, (_, i) => i);
+const expectAccounts = (overlays) => {
+  same(overlays.map(({ mod, props }) => [mod, props.page]), [["kanso-settings", "accounts"]]);
+};
+const picker = async (kind, answer) => {
+  const { view, overlays } = await mountIssues(bothAccounts(), { answer, host: drawingHost() });
+  const { cx, drain, pending } = timedContext([]);
+  const render = () => view.render(cx);
+  const button = (id) => find(render(), (el) => el.tag === id);
+  const press = (id) => one(button(id), "on_click")(null, cx);
+  const toggle = () => press(`issues-link-${kind}-shop`);
+  toggle();
+  await drain();
+  return { button, press, toggle, drain, overlays, lastRead: () => pending.at(-1), words: () => texts(render()) };
+};
+const PICKER_FIX = "issues-link-failure-shop-fix";
+const PICKER_MORE = "issues-link-more-shop";
 
-    const request = t.mock.fn(answer(11));
+for (const provider of pickerCases) {
+  const { name, things, lastRef, cursor, continuation, item, payload } = provider;
+  const kind = name.toLowerCase();
+
+  test(`The ${name} picker reads every page of an 11-page list`, async (t) => {
+    const { LINKED } = await load("kanso-panel/issues-linked.js", ["LINKED"]);
+    const request = t.mock.fn(listPage(provider, 11, 100));
     const all = await LINKED[kind].client({ request }, jiraAccount()).projects();
-    same(pageNumbers(request), sequence(11));
+    same(pageNumbers(request, provider, 100), sequence(11));
     assert.equal(all.complete, true);
     assert.equal(all.list.length, 1100);
     assert.equal(all.list.at(-1).ref, lastRef);
+  });
 
-    const capped = t.mock.fn(answer(51));
-    const { drawn, view } = await mountIssues(bothAccounts(), { answer: capped });
-    const { cx, drain } = drawIssues(view);
-    click(drawn, `issues-link-${kind}-shop`, cx);
-    await drain();
-    redraw(drawn, view, cx);
-    same(pageNumbers(capped), sequence(50));
-    assert.equal(view.linking.complete, false);
-    assert.ok(drawn.texts.includes(`Showing the first 5000 ${things}`));
+  for (const [status, problem] of [[0, "the service cannot be reached"], [429, "requests are limited"]]) {
+    test(`The ${name} picker offers Refresh to try again when ${problem}`, async (t) => {
+      const request = t.mock.fn(async () => ({ status, text: "" }));
+      const ui = await picker(kind, request);
+      assert.ok(ui.words().includes("Refresh"));
+      assert.equal(ui.words().includes("Reconnect"), false);
+      request.mock.mockImplementation(async () => okJson(payload([], false, null)));
+      ui.press(PICKER_FIX);
+      await ui.drain();
+      assert.equal(request.mock.callCount(), 2);
+      assert.deepEqual(ui.overlays, []);
+      assert.ok(ui.words().includes(`No ${things} visible to this account`));
+    });
+  }
+
+  test(`The ${name} picker opens Accounts to reconnect and says when the account can see no ${things}`, async (t) => {
+    const request = t.mock.fn(async () => ({ status: 401, text: "" }));
+    const ui = await picker(kind, request);
+    assert.ok(ui.words().includes("Reconnect"));
+    assert.equal(ui.words().includes("Refresh"), false);
+    ui.press(PICKER_FIX);
+    await ui.drain();
+    expectAccounts(ui.overlays);
+    assert.equal(request.mock.callCount(), 1);
+
+    request.mock.mockImplementation(async () => okJson(payload([], false, null)));
+    ui.toggle();
+    ui.toggle();
+    await ui.drain();
+    assert.ok(ui.words().includes(`No ${things} visible to this account`));
+    assert.ok(ui.words().includes("Open Accounts"));
+    ui.press("issues-link-none-shop-action");
+    expectAccounts(ui.overlays.slice(1));
+  });
+
+  test(`The ${name} picker pauses after 50 pages and appends more without allowing a second press while it loads`, async (t) => {
+    const answer = listPage(provider, 51, 1);
+    const request = t.mock.fn(async (req) => answer(req));
+    const ui = await picker(kind, request);
+    const more = PICKER_MORE;
+    const label = (n) => { const row = item(n); return `${row.key} · ${row.name}`; };
+    assert.deepEqual(pageNumbers(request, provider, 1), sequence(50));
+    assert.ok(ui.words().includes(`Showing the first 50 ${things}`));
+    assert.ok(ui.words().includes("Load more"));
+    assert.equal(arg(ui.button(more), "disabled"), false);
+    assert.equal(ui.words().includes(label(50)), false);
+
+    const page = Promise.withResolvers();
+    request.mock.mockImplementation((req) => page.promise.then(() => answer(req)));
+    ui.press(more);
+    const loading = ui.button(more);
+    assert.equal(arg(loading, "disabled"), true);
+    assert.equal(calls(loading, "on_click").length, 0);
+    assert.equal(askedFor(request, cursor).at(-1), continuation);
+    page.resolve();
+    await ui.drain();
+
+    const words = ui.words();
+    assert.deepEqual(pageNumbers(request, provider, 1), sequence(51));
+    assert.deepEqual(words.filter((word) => word.endsWith(` · ${item(0).name}`)), sequence(51).map(label));
+    assert.equal(ui.button(more), null);
   });
 }
+
+test("A slow Load more does not replace the fresh results when I reopen the Jira picker", async (t) => {
+  const [jira] = pickerCases;
+  const request = t.mock.fn(listPage(jira, 51, 1));
+  const ui = await picker("jira", request);
+  const previous = Promise.withResolvers();
+  request.mock.mockImplementation(() => previous.promise);
+  ui.press(PICKER_MORE);
+  ui.toggle();
+
+  const fresh = { key: "NEW", name: "Fresh project" };
+  request.mock.mockImplementation(() => okJson(jira.payload([fresh], false)));
+  ui.toggle();
+  await ui.lastRead();
+  assert.ok(ui.words().includes("NEW · Fresh project"));
+
+  previous.resolve(okJson(jira.payload([jira.item(50)], false)));
+  await ui.drain();
+  const words = ui.words();
+  assert.ok(words.includes("NEW · Fresh project"));
+  assert.equal(words.includes("P50 · Project"), false);
+});
+
+test("Refresh retries the same page after Load more fails in the Linear picker", async (t) => {
+  const [, linear] = pickerCases;
+  const answer = listPage(linear, 51, 1);
+  const request = t.mock.fn(answer);
+  const ui = await picker("linear", request);
+  request.mock.mockImplementation(() => ({ status: 429, text: "" }));
+  ui.press(PICKER_MORE);
+  await ui.drain();
+  assert.ok(ui.words().includes("Linear is limiting requests"));
+
+  request.mock.mockImplementation(answer);
+  ui.press(PICKER_FIX);
+  await ui.drain();
+  assert.deepEqual(pageNumbers(request, linear, 1), [...sequence(51), 50]);
+  const words = ui.words();
+  assert.ok(words.includes("T0 · Team"));
+  assert.ok(words.includes("T50 · Team"));
+  assert.equal(ui.button(PICKER_MORE), null);
+});
 
 test("Settings shows it is looking before the secret store answers, and a bad site is rejected before the dialog", async () => {
   const c = await settingsColors();
@@ -651,6 +770,25 @@ test("A Jira source on another site is not read, and opening it asks for no deta
 const alphaLink = linkTo("jira", jiraRef("ABC"), "ABC · Alpha");
 const betaLink = linkTo("jira", jiraRef("DEF"), "DEF · Beta");
 const teamLink = linkTo("linear", "team-1", "ENG · Eng");
+
+test("Tasks without a GitHub remote offers Jira or Linear sign-in only when neither account is signed in", async () => {
+  const label = "Sign in to Jira or Linear";
+  const exec = async (cmd) => cmd === "git" ? success("") : failure("You are not logged into any GitHub hosts.");
+  for (const store of [{}, signedIn(), { [ACCOUNTS]: { linear: LINEAR_ME } }]) {
+    const { drawn, overlays, view } = await mountIssues(store, { host: { exec } });
+    const context = timedContext([]);
+    view.readBoard(shop, "github", context.cx);
+    await context.drain();
+    view.render(context.cx);
+    assert.ok(drawn.texts.includes("No GitHub remote"));
+    const signedOut = !store[ACCOUNTS];
+    assert.equal(drawn.texts.includes(label), signedOut);
+    if (signedOut) {
+      click(drawn, stateId("github") + "-fix", context.cx);
+      expectAccounts(overlays);
+    }
+  }
+});
 
 test("Without a secret store the panel shows one page notice until a linked source has its own notice", async () => {
   const { cx, drain } = timedContext([]);

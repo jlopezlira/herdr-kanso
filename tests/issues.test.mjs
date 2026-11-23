@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { load, tape, KIT_NIGHT, timedContext, same, drawingHost, press, texts } from "./helpers.mjs";
+import { arg, drawingHost, failure, find, KIT_NIGHT, load, one, press, same, success, tape, texts, timedContext } from "./helpers.mjs";
 import { temporaryKdb } from "./mod-fixtures.mjs";
 
 const PR_URL = "https://github.com/acme/shop/issues/12";
@@ -224,6 +224,78 @@ const startIssues = async (db, host = {}) => {
   return { view, cx, drain, DIALOG };
 };
 
+const remoteShop = { ...shop, machine: "light" };
+const remoteKanso = {
+  id: "kanso-space", name: "kansō", machine: "light", folder: "/Users/jj/Apps/herdr/herdr-kanso",
+};
+const homeSpace = { id: "home-space", name: "Home", machine: null, folder: "/Users/jj" };
+const projectHeading = (panel, id) => find(panel, (el) => arg(el, "id") === `issues-project-${id}`);
+
+test("The empty Tasks panel tells me to add a project to see its tasks", async (t) => {
+  const { db } = await temporaryKdb(t);
+  const { view, cx } = await startIssues(db);
+  const words = texts(view.render(cx));
+  assert.ok(words.includes("Tasks"));
+  assert.ok(words.includes(NO_PROJECTS));
+});
+
+test("Tasks lists each open project once, skips the home space, and prefers a saved project at the same place", async (t) => {
+  const { db } = await temporaryKdb(t);
+  const spaces = () => [homeSpace, remoteKanso, { ...remoteKanso, id: "second-space" }];
+  const { view, cx, drain } = await startIssues(db, { spaces });
+  const openId = `light:${remoteKanso.folder}`;
+  const open = view.render(cx);
+  assert.ok(projectHeading(open, openId));
+  const words = texts(open);
+  assert.equal(words.filter((word) => word === remoteKanso.name).length, 1);
+  assert.equal(words.includes(homeSpace.name), false);
+
+  const { row } = await db.addProject({ ...remoteKanso, name: "Saved kansō" });
+  view.load(cx);
+  await drain();
+  const saved = view.render(cx);
+  assert.ok(texts(projectHeading(saved, row.id)).includes(row.name));
+  assert.equal(projectHeading(saved, openId), null);
+});
+
+test("Tasks skips the local home but keeps a project at the same path on another computer", async (t) => {
+  const { db } = await temporaryKdb(t);
+  const remote = { ...homeSpace, id: "remote-home", name: "Project on light", machine: "light" };
+  const { view, cx } = await startIssues(db, { spaces: () => [homeSpace, remote] });
+  const words = texts(view.render(cx));
+  assert.ok(words.includes(remote.name));
+  assert.equal(words.includes(homeSpace.name), false);
+});
+
+test("Linking a Jira board from an open space saves the project and links the board to that saved project", async (t) => {
+  const { db } = await temporaryKdb(t);
+  const addProject = t.mock.method(db, "addProject");
+  const { view, cx, drain } = await startIssues(db, { spaces: () => [remoteKanso] });
+  const { name, folder, machine } = remoteKanso;
+  const item = { ref: "acme.atlassian.net/ABC", name: "ABC · Alpha" };
+  view.link(`${machine}:${folder}`, "jira", item, true, cx);
+  await drain();
+
+  assert.equal(addProject.mock.callCount(), 1);
+  const [call] = addProject.mock.calls;
+  same(call.arguments, [{ name, folder, machine }]);
+  const { row } = await call.result;
+  same(await db.read("SELECT project, source, ref, name FROM issue_links;"), [
+    { project: row.id, source: "jira", ...item },
+  ]);
+});
+
+test("Tasks picks up a project space opened after the panel mounted", async (t) => {
+  const { db } = await temporaryKdb(t);
+  const spaces = t.mock.fn(() => [homeSpace]);
+  const { view, cx, drain } = await startIssues(db, { spaces });
+  assert.equal(texts(view.render(cx)).includes(remoteKanso.name), false);
+  spaces.mock.mockImplementation(() => [homeSpace, remoteKanso]);
+  view.render(cx);
+  await drain();
+  assert.ok(texts(view.render(cx)).includes(remoteKanso.name));
+});
+
 test("With no projects, New project opens the sidebar's New project dialog", async (t) => {
   const { db } = await temporaryKdb(t);
   const openOverlay = t.mock.fn();
@@ -325,6 +397,78 @@ test("A signed-out project shows Sign in, and a project without a GitHub remote 
   assert.ok(draw(signed).includes("Sign in"));
   const remote = await mount({ projects: [shop], places: { "shop\u0000github": { kind: "no remote", text: "No GitHub remote" } } });
   assert.ok(draw(remote).includes("No GitHub remote"));
+});
+
+const GITHUB_REMOTE = "origin\tgit@github.com:acme/shop.git (fetch)\n";
+const signedOut = () => failure("You are not logged into any GitHub hosts.");
+const githubTasks = async (t, answer, host = {}) => {
+  const { db } = await temporaryKdb(t);
+  const { row } = await db.addProject(remoteShop);
+  const exec = t.mock.fn(answer);
+  const tasks = await startIssues(db, { exec, ...host });
+  return {
+    ...tasks, exec,
+    page: () => tasks.view.render(tasks.cx),
+    action: `issues-state-${row.id}-github-fix`,
+  };
+};
+
+test("GitHub sign-in uses a pane in the active project space, a tab in an inactive one, or a new space on that computer", async (t) => {
+  const samePlace = { id: "shop-on-light", folder: shop.folder, machine: remoteShop.machine };
+  const anotherComputer = { ...samePlace, id: "shop-local", machine: null, active: true };
+  const spaces = t.mock.fn(() => []);
+  const run = t.mock.fn();
+  const answer = async (cmd) => cmd === "git" ? success(GITHUB_REMOTE) : signedOut();
+  const { page, action } = await githubTasks(t, answer, { spaces, run });
+  const argv = ["gh", "auth", "login"];
+  const folder = shop.folder;
+  const cases = [
+    [[{ ...samePlace, active: true }], "terminal.open", { folder, place: "right" }],
+    [[anotherComputer, samePlace], "tab.new", { folder, space: samePlace.id }],
+    [[anotherComputer], "space.new", { folder, machine: remoteShop.machine }],
+  ];
+  for (const [open, command, expected] of cases) {
+    spaces.mock.mockImplementation(() => open);
+    run.mock.resetCalls();
+    press(page(), action);
+    assert.equal(run.mock.callCount(), 1);
+    const [actual, options] = run.mock.calls[0].arguments;
+    assert.equal(actual, command);
+    same(options.argv, argv);
+    for (const [key, value] of Object.entries(expected)) assert.equal(options[key], value, key);
+  }
+});
+
+test("When the GitHub CLI is missing, Tasks opens its download page instead of offering sign-in", async (t) => {
+  const answer = async (cmd) => cmd === "git" ? success(GITHUB_REMOTE) : failure("gh: command not found", 127);
+  const { page, action, exec } = await githubTasks(t, answer);
+  const panel = page();
+  const words = texts(panel);
+  assert.ok(words.includes("GitHub CLI not installed"));
+  assert.ok(words.includes("Get the GitHub CLI"));
+  assert.equal(words.includes("Sign in"), false);
+  press(panel, action);
+  const [command, args] = exec.mock.calls.at(-1).arguments;
+  assert.equal(command, "open");
+  same(args, ["https://cli.github.com"]);
+});
+
+test("Tasks lets me retry a Git read failure but says there is no GitHub remote outside a repository", async (t) => {
+  const git = t.mock.fn(() => failure("fatal: could not open .git/config: Permission denied", 128));
+  const answer = async (cmd) => cmd === "git" ? git() : signedOut();
+  const { page, action, cx, drain } = await githubTasks(t, answer);
+  const panel = page();
+  const words = texts(panel);
+  assert.ok(words.includes("Git could not read this project"));
+  assert.ok(words.includes("Refresh"));
+  assert.equal(words.includes("No GitHub remote"), false);
+
+  git.mock.mockImplementation(() => failure("fatal: not a git repository (or any parent directory): .git", 128));
+  one(find(panel, (el) => el.tag === action), "on_click")(null, cx);
+  await drain();
+  const retried = texts(page());
+  assert.ok(retried.includes("No GitHub remote"));
+  assert.equal(retried.includes("Git could not read this project"), false);
 });
 
 test("Send to agent opens the send dialog with the issue text", async () => {

@@ -64,12 +64,12 @@ export const linkWords = (source) => (kindOf(source) === "github" ? "Open on Git
 
 export const PICKER_PAGES = 50;
 
-const placeOf = (machine, folder) => `${machine ?? ""}:${String(folder ?? "").replace(/\/+$/, "")}`;
+export const placeOf = (machine, folder) => `${machine ?? ""}:${String(folder ?? "").replace(/\/+$/, "")}`;
 
 export function withSpaces(projects, spaces, homeDir) {
   const known = new Set(projects.map((p) => placeOf(p.machine, p.folder)));
-  const opened = spaces.filter((s) => s.folder && placeOf(null, s.folder) !== placeOf(null, homeDir))
-    .map((s) => ({ id: placeOf(s.machine, s.folder), name: s.name, folder: s.folder, machine: s.machine ?? null }));
+  const opened = spaces.filter((s) => s.folder && placeOf(s.machine, s.folder) !== placeOf(null, homeDir))
+    .map((s) => ({ id: placeOf(s.machine, s.folder), name: s.name, folder: s.folder, machine: s.machine ?? null, auto: true }));
   return [...projects, ...opened.filter((p, i) => !known.has(p.id) && opened.findIndex((x) => x.id === p.id) === i)];
 }
 

@@ -16,7 +16,7 @@ import { localService } from "./platform-host.js";
 import { localSecrets } from "./platform-secrets.js";
 import { projectKey } from "./kdb.js";
 import { tryOrAsync, plural } from "./pure.js";
-import { FILTERS, FILTER_WORDS, EVERY_MS, OPEN, ACCOUNTS, SOURCE_WORDS, matches, withSpaces, sectionsOf, isFolded, foldKey, projectsInOrder, stale, ageOf, sendText, listOf, kindOf, linkWords } from "./issues-model.js";
+import { FILTERS, FILTER_WORDS, EVERY_MS, OPEN, ACCOUNTS, SOURCE_WORDS, matches, withSpaces, placeOf, sectionsOf, isFolded, foldKey, projectsInOrder, stale, ageOf, sendText, listOf, kindOf, linkWords } from "./issues-model.js";
 import { readIssues, linkSql } from "./issues-store.js";
 import { issuesGithub, repoText } from "./issues-github.js";
 import { LINKED, linkedOf, syncLinkedBoard, syncLinkedDetail } from "./issues-linked.js";
@@ -78,8 +78,9 @@ export class Issues {
   filterOf(project) { return FILTERS.includes(this.filters[project]) ? this.filters[project] : "assigned"; }
 
   frontProject() {
-    const key = projectKey(spaces().find((s) => s.active), home());
-    return (this.projects ?? []).find((p) => `${p.machine ?? ""}:${p.folder}` === key)?.id ?? null;
+    const active = spaces().find((s) => s.active);
+    const key = placeOf(active?.machine, active?.folder || home());
+    return (this.projects ?? []).find((p) => placeOf(p.machine, p.folder) === key)?.id ?? null;
   }
 
   load(cx, refresh = false) {
@@ -216,8 +217,8 @@ export class Issues {
   }
 
   signIn(project) {
-    const argv = ["gh", "auth", "login"], place = `${project.machine ?? ""}:${project.folder}`;
-    const open = spaces().filter((s) => projectKey(s, home()) === place);
+    const argv = ["gh", "auth", "login"], place = placeOf(project.machine, project.folder);
+    const open = spaces().filter((s) => placeOf(s.machine, s.folder || home()) === place);
     if (open.some((s) => s.active)) run("terminal.open", { argv, folder: project.folder, place: "right" });
     else if (open.length) run("tab.new", { space: open[0].id, name: "GitHub sign in", folder: project.folder, argv });
     else run("space.new", { name: project.name, folder: project.folder, machine: project.machine ?? "", argv });
@@ -231,22 +232,33 @@ export class Issues {
 
   loadLinking(project, kind, start, cx) {
     const earlier = start ? this.linking?.list ?? [] : [];
-    this.linking = { project, kind, list: start ? earlier : null, failure: null, more: Boolean(start) };
+    const asked = {};
+    this.linking = { project, kind, list: start ? earlier : null, failure: null, more: Boolean(start), next: start, asked };
     cx.notify();
     cx.spawn(async (cx) => {
       const found = await tryOrAsync(() => this.linkedFor(kind)?.client.projects(start));
-      if (this.linking?.project !== project || this.linking.kind !== kind) return;
-      this.linking = { project, kind, list: [...earlier, ...(found?.list ?? [])], complete: found?.complete !== false, next: found?.next ?? null, more: false,
-        failure: found?.failure ?? (found ? null : { text: `${SOURCE_WORDS[kind]} could not be read` }) };
+      if (this.linking?.asked !== asked) return;
+      const failure = found?.failure ?? (found ? null : { text: `${SOURCE_WORDS[kind]} could not be read` });
+      this.linking = { project, kind, list: [...earlier, ...(found?.list ?? [])], complete: !failure && found?.complete !== false,
+        next: failure ? start : found?.next ?? null, more: false, failure, asked };
       cx.notify();
     });
   }
 
+  async ownId(id) {
+    const project = (this.projects ?? []).find((p) => p.id === id);
+    if (!project?.auto) return id;
+    const { row } = await this.db.addProject({ name: project.name, folder: project.folder, machine: project.machine ?? "" });
+    return row.id;
+  }
+
   link(project, kind, item, on, cx) {
     cx.spawn(async (cx) => {
-      await tryOrAsync(() => this.db.run(linkSql({ project, source: kind, ref: item.ref, name: item.name }, on)));
-      await this.reload();
-      this.refresh(cx);
+      const id = await tryOrAsync(() => this.ownId(project));
+      if (!id) return;
+      await tryOrAsync(() => this.db.run(linkSql({ project: id, source: kind, ref: item.ref, name: item.name }, on)));
+      if (id !== project) this.linking = this.linking && { ...this.linking, project: id };
+      this.load(cx, true);
     });
   }
 
@@ -300,7 +312,7 @@ export class Issues {
     if (!l.list && !l.failure) return [skeletonOf({ shape: "two lines", count: 2 })(`issues-link-bones-${project.id}`, c)];
     const things = linkedOf(l.kind).things;
     if (l.failure) {
-      const fix = l.failure.kind === "signed out" ? { fix: "Reconnect", onClick: () => this.openSettings() } : { fix: "Refresh", onClick: (cx) => this.loadLinking(project.id, l.kind, null, cx) };
+      const fix = l.failure.kind === "signed out" ? { fix: "Reconnect", onClick: () => this.openSettings() } : { fix: "Refresh", onClick: (cx) => this.loadLinking(project.id, l.kind, l.next, cx) };
       return [stateBlock(`issues-link-failure-${project.id}`, c, { text: l.failure.text, source: l.failure.source ?? "", ...fix })];
     }
     if (!l.list.length) return [emptyState({ text: `No ${things} visible to this account`, action: "Open Accounts" })(`issues-link-none-${project.id}`, c, { onClick: () => this.openSettings() })];
