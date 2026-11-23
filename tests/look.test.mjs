@@ -592,7 +592,7 @@ test("an agent with no pictures is told what shows up here", async () => {
   assert.equal(look.emptyLine(), "Pictures this agent writes show up here, from its conversation");
   assert.ok(look.render(cx));
   const none = await panel({ focus: "t2" });
-  assert.equal(none.look.emptyLine(), "No agent in focus");
+  assert.equal(none.look.emptyLine(), "Pick an agent to see the pictures it writes");
   assert.ok(none.look.render(none.cx));
 });
 

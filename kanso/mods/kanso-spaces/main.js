@@ -600,11 +600,11 @@ export default class Spaces extends RetryingView {
         label("Folder"),
         h_flex().gap(8).items_center()
           .child(div().flex_1().min_w(0).truncate().text_size(T.value).text_color(this.projectFolder ? t.foreground : t.dim).child(shown))
-          .child(button("project-choose", this.projectFolder ? "Change\u2026" : "Choose\u2026", (cx) => this.chooseProjectFolder(cx), c, { kind: "tonal" })),
-        field("project-name", this.projectName, c, { label: "Name" }).pt(G.sm),
+          .child(button("project-choose", this.projectFolder ? "Change\u2026" : "Choose\u2026", (cx) => this.chooseProjectFolder(cx), c, { kind: this.projectFolder ? "tonal" : "solid" })),
+        field("project-name", this.projectName, c, { label: "Name, optional" }).pt(G.sm),
       ],
-      notes: [{ text: this.projectError ?? (start ? "The agent you used there last starts in it." : "It stays in Projects even with nothing open."), tone: this.projectError ? "error" : "dim" }],
-      secondary: "Cancel", primary: start ? "Create and start" : "Create project", state: this.creating ? "loading" : "default",
+      notes: [{ text: this.projectError ?? (start ? "Then you choose the agent that starts in it." : "It stays in Projects even with nothing open."), tone: this.projectError ? "error" : "dim" }],
+      secondary: "Cancel", primary: start ? "Create and choose agent" : "Create project", state: this.creating ? "loading" : this.projectFolder ? "default" : "disabled",
       onCancel: () => closeOverlay(props().overlay), onPrimary: (cx) => this.createProject(cx),
     });
   }

@@ -11,7 +11,7 @@ import { bring, machineOf, copyFailure, drawablePath, remoteDue, ArmPoll, pollSt
 // printed: its screen, and the conversation on disk, from the byte it stored last time.
 import { div, image } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
-import { hc, focused, panes, terminals, machines, theme, appHome, home, shared, setShared, watchFolder, openOverlay, window, layout } from "herdr";
+import { hc, focused, panes, terminals, machines, theme, appHome, home, shared, setShared, watchFolder, openOverlay, window, layout, run } from "herdr";
 import { G, H, T, tokens } from "./ui.js";
 import { button, quietLink, iconButton } from "./ui-button.js";
 import { row } from "./ui-row.js";
@@ -35,7 +35,7 @@ const DIR = "data/kanso-panel/look"; // the copies image() draws, under the app'
 const KEPT = "kanso.look"; // { follow, pinned }: whose pictures these are, kept while the panel is closed
 const NOTE = "kanso.look.note"; // the dialogs' answers, by token: { [token]: { text, at } }, each taken once by the pin that asked
 const EMPTY = "Pictures this agent writes show up here, from its conversation";
-const NO_AGENT = "No agent in focus";
+const NO_AGENT = "Pick an agent to see the pictures it writes";
 const kindOf = (address, ...records) => classify(records, { reachable: reachable(address, machines()) });
 // An agent's terminal that still runs, or null: a shell would run the note.
 function live(address) {
@@ -525,7 +525,8 @@ export class Look {
   }
 
   empty(c) {
-    return v_flex().flex_1().w_full().justify_center().child(emptyState({ icon: "eye", text: this.emptyLine() })("look-empty", c));
+    const pick = this.agent() ? {} : { action: "Show agents" };
+    return v_flex().flex_1().w_full().justify_center().child(emptyState({ icon: "eye", text: this.emptyLine(), ...pick })("look-empty", c, { onClick: () => run("kanso-spaces.view-agents") }));
   }
 
   drawing(c) { return v_flex().flex_1().w_full().items_center().justify_center().child(skeletonOf({ shape: "picture" })("kanso-skeleton", c)); }

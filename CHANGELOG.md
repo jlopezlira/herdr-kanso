@@ -30,6 +30,10 @@ the branch's rules.
 - The Issues panel shows Jira Cloud and Linear tickets too. Settings, under Accounts, signs in with your own Jira site and email or your own Linear account: you paste the API token or key into the operating system's own secure dialog, never a terminal, so it goes straight into its secret store (Keychain on macOS, Credential Manager on Windows, Secret Service on Linux and Omarchy) and never into kansō, a file, a log or an agent. Each project links to any number of Jira projects and Linear teams; their tickets sit with its GitHub issues, marked by source, in the board's columns or the team's workflow states. (#257)
 - When every check on an agent's pull request has finished, the agent hears the result once per push, as soon as it waits for you: which checks failed, each with its link, or that they passed. A failure moves its row to Needs you with "checks failed"; a cancelled run says nothing. Settings, under Background, turns it off. (#252)
 
+### Fixed
+
+- New project asks for the folder first, keeps Create project off until one is chosen, marks the name optional, and its conversation variant says you then choose the agent. Settings › Keys points to kansō help for every key, and Images with no agent in focus offers Show agents.
+
 ### Changed
 
 - Every right-click menu names the same action with the same words, order and shortcut: Sleep this agent…, Sleep this tab…, Send to an agent…, Close pane and Rename… read the same in the tab bar, the pane header and the sidebar, and the pane header's ⋯ shows each shortcut. A right-click on the pane header opens its ⋯ menu. (#238)
