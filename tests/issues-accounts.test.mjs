@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { writeFile } from "node:fs/promises";
+import { readFile, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { exec as realExec, failure, load, tape, KIT_NIGHT, timedContext, same, success, temporary } from "./helpers.mjs";
 import { temporaryKdb } from "./mod-fixtures.mjs";
@@ -58,12 +58,13 @@ const jiraIndex = (body) => { const token = body ? JSON.parse(body).nextPageToke
 const linearBody = (body) => { const parsed = JSON.parse(body); return { query: parsed.query, after: parsed.variables.after, index: parsed.variables.after ? Number(parsed.variables.after) : 0 }; };
 const redraw = (drawn, view, cx) => { drawn.texts.length = 0; view.render(cx); };
 
+const forbidTerminalPrompt = () => assert.fail("Sign-in must not open a Herdr terminal or overlay");
 const accountHost = (ui, exec, store, extra = {}) => ({
   ...ui.host, ...fields, exec, theme: () => KIT_NIGHT,
   Input: { new: () => ui.host.div() }, Textarea: { new: () => ui.host.div() },
   shared: (key) => store[key] ?? null, setShared: (key, value) => { store[key] = value; },
   window: () => ({ platform: "macos" }), checking: () => false,
-  hc: async () => ({ code: 0, stdout: "", stderr: "" }), terminals: () => [], openOverlay() {},
+  hc: forbidTerminalPrompt, terminals: forbidTerminalPrompt, openOverlay: forbidTerminalPrompt,
   ...extra,
 });
 const fillJira = (page, site) => { page.site.set_value(site); page.email.set_value("ada@acme.net"); };
@@ -71,14 +72,18 @@ const beginJira = ({ page, cx }, site = SITE) => {
   fillJira(page, site);
   page.signInJira(cx);
 };
+const signInLinear = async ({ page, cx, drain }, store) => {
+  page.signInLinear(cx);
+  await drain();
+  same(store, bothAccounts());
+};
 const openAccounts = async (exec, store, extra = {}) => {
   const ui = tape();
-  const timers = [];
   const { Accounts } = await load("kanso-settings/accounts.js", ["Accounts"], accountHost(ui, exec, store, extra));
-  const timed = timedContext(timers);
+  const timed = timedContext([]);
   const page = new Accounts(timed.cx);
   await timed.drain();
-  return { ui, page, timers, ...timed };
+  return { ui, page, ...timed };
 };
 const loadIssues = (drawn, store, extra) => load("kanso-panel/issues.js", ["Issues"], {
   ...drawn.host, theme: () => KIT_NIGHT, spaces: () => [], home: () => "/home/me", checking: () => false,
@@ -113,45 +118,177 @@ const mountIssues = async (store, spec = {}) => {
   });
   return { drawn, overlays, urls, runs, view };
 };
-const promptHost = (gate, launch = () => {}) => ({
-  hc: async (args) => {
-    gate.gone = false;
-    launch(args);
-    return success('{"address":"t9"}');
-  },
-  terminals: () => (gate.gone ? [] : [{ address: "t9" }]),
+const askJira = ["kanso-jira", SITE, "kansō Jira", "Paste your Jira API token"];
+const assertNoSecret = (value, place, marker = SECRET) => assert.equal(JSON.stringify(value).includes(marker), false, place);
+const timeout = { timeout: 300_000 };
+const isMacAsk = (cmd, args) => cmd === "sh" && args[1]?.includes("osascript");
+const secretsFor = async (platform, exec) => (await loadSecrets()).secretsApi(platform, exec);
+const execArgs = (mock) => mock.mock.calls.map(({ arguments: args }) => args);
+const execRejected = async () => { throw new Error("Cannot start dialog"); };
+const askResults = [
+  [quiet, "saved"],
+  [async () => failure("", 3), "cancelled"],
+  [async () => failure("", 9), "failed"],
+  [async () => failure("", 4), "failed"],
+  [execRejected, "failed"],
+];
+const askCommands = [
+  { platform: "macos", command: "sh", check: (args) => assert.match(args.at(-1), /with hidden answer/) },
+  { platform: "linux", command: "sh", check: (args) => assert.doesNotMatch(args[1], /pinentry-(curses|tty)/) },
+  { platform: "windows", command: "pwsh", check: (args) => {
+    assert.match(args.at(-1), /CredUIPromptForWindowsCredentialsW\(ref u/);
+    assert.match(args.at(-1), /CredWriteW\(ref w,0\)/);
+    assert.match(args.at(-1), /if\(r==1223\)return 3;if\(r!=0\)return 8;/);
+  } },
+];
+
+for (const { platform, command, check } of askCommands) {
+  test(`${platform} asks once with a five-minute timeout and returns only the save outcome`, async (t) => {
+    const exec = t.mock.fn();
+    const api = await secretsFor(platform, exec);
+    for (const [reply, expected] of askResults) {
+      exec.mock.resetCalls();
+      exec.mock.mockImplementation(reply);
+      assert.equal(await api.ask(...askJira), expected);
+      assert.equal(exec.mock.callCount(), 1, expected);
+      const [[cmd, args, options]] = execArgs(exec);
+      assert.equal(cmd, command);
+      same(options, timeout);
+      assertNoSecret(args, platform + " dialog argv");
+      check(args);
+      if (cmd === "sh") {
+        const [service, account, label, words] = askJira;
+        same(args.slice(2, 7), ["kanso", words, service, account, label]);
+      }
+    }
+  });
+}
+
+test("The Windows dialog falls back to powershell when pwsh is missing", async (t) => {
+  const exec = t.mock.fn(async (cmd) => {
+    if (cmd === "pwsh") throw Object.assign(new Error("spawn pwsh ENOENT"), { code: "ENOENT" });
+    return success("");
+  });
+  const api = await secretsFor("windows", exec);
+  assert.equal(await api.ask(...askJira), "saved");
+  const calls = execArgs(exec);
+  assert.deepEqual(calls.map(([cmd]) => cmd), ["pwsh", "powershell"]);
+  const [[, argv], [, fallbackArgv]] = calls;
+  same(fallbackArgv, Array.from(argv));
+  for (const [, , options] of calls) same(options, timeout);
+  assertNoSecret(argv, "Windows fallback argv");
 });
-const finishPrompt = async ({ cx, drain, timers }, gate, submit = () => {}) => {
-  await drain();
-  submit();
-  gate.gone = true;
-  timers.at(-1)[1](cx);
-  await drain();
+
+test("An unsupported platform cannot ask for a token", async (t) => {
+  const exec = t.mock.fn();
+  const api = await secretsFor("unknown", exec);
+  assert.equal(await api.ask(...askJira), "failed");
+  assert.equal(exec.mock.callCount(), 0);
+});
+
+test("Available, has, remove and request keep the token inside the credential tools", async (t) => {
+  const { secretsApi } = await loadSecrets();
+  const exec = t.mock.fn(async () => http("", 204));
+  const api = secretsApi("macos", exec);
+  for (const { platform } of askCommands) assert.equal(secretsApi(platform, exec).save, undefined);
+  const [service, account] = askJira;
+  await api.available();
+  await api.has(service, account);
+  await api.remove(service, account);
+  await api.request({ service, account, auth: "basic", email: jiraAccount().email, url: `https://${SITE}/rest/api/3/myself` });
+  const calls = execArgs(exec);
+  assertNoSecret(calls, "Credential commands");
+  assert.equal(calls.some(([, args]) => args.includes("-w")), false);
+});
+
+const nativeAsk = async (t, platform) => {
+  const dir = await temporary(t);
+  const { secretsApi } = await loadSecrets();
+  const stub = (name, body) => writeFile(join(dir, name),
+    `#!/bin/sh\nfor arg do printf "%s\\n" "$arg"; done > "$0.args"\n${body}\n`, { mode: 0o755 });
+  const read = (name, part) => readFile(join(dir, name + "." + part), "utf8");
+  const exec = t.mock.fn(async (cmd, args, options, env, marker) => {
+    assertNoSecret(args, "Outer dialog argv", marker);
+    const result = await realExec("/bin/" + cmd, args, { ...options, env: { PATH: dir, ...env } });
+    assertNoSecret([result.stdout, result.stderr], "Dialog output", marker);
+    return result;
+  });
+  const api = (env = {}, marker) => secretsApi(platform, (cmd, args, options) => exec(cmd, args, options, env, marker));
+  const exitCode = async () => (await exec.mock.calls.at(-1).result).code;
+  return { dir, stub, read, api, exitCode };
 };
 
-test("A prompt never carries the secret, and available, has, remove and request never print it", async () => {
-  const { secretsApi } = await loadSecrets();
-  const calls = [];
-  const run = async (cmd, args) => { calls.push([cmd, args]); return { code: 0, stdout: "\n204", stderr: "" }; };
-  const mac = secretsApi("macos", run);
-  const linux = secretsApi("linux", quiet);
-  const windows = secretsApi("windows", run);
-  assert.equal(mac.save, undefined);
-  assert.equal(linux.save, undefined);
-  assert.equal(windows.save, undefined);
-  const macPrompt = mac.prompt("kanso-jira", SITE, "kansō Jira", "Paste your Jira API token");
-  assert.equal(macPrompt[2].endsWith("-w"), true);
-  assert.equal(macPrompt.includes(SECRET), false);
-  const linuxPrompt = linux.prompt("kanso-jira", SITE, "kansō Jira", "Paste");
-  assert.match(linuxPrompt[2], /secret-tool store --label="\$4" service "\$2" account "\$3"/);
-  assert.equal(linuxPrompt.includes(SECRET), false);
-  same(windows.prompt("kanso-jira", SITE, "kansō Jira", "Paste"), ["cmdkey", "/generic:kanso-jira:" + SITE, "/user:" + SITE, "/pass"]);
-  await mac.available();
-  await mac.has("kanso-jira", SITE);
-  await mac.remove("kanso-jira", SITE);
-  await mac.request({ service: "kanso-jira", account: SITE, auth: "basic", email: "ada@acme.net", method: "GET", url: "https://" + SITE + "/rest/api/3/myself" });
-  assert.equal(JSON.stringify(calls).includes(SECRET), false);
-  assert.equal(calls.some((call) => call[1]?.includes("-w")), false);
+const unixOnly = { skip: process.platform === "win32" };
+const captureStdin = '/bin/cat > "$0.stdin"';
+const lines = (...values) => [...values, ""].join("\n");
+const notInvoked = (fixture, name) => assert.rejects(fixture.read(name, "args"), { code: "ENOENT" });
+
+test("The Linux dialog passes the decoded token to Secret Service on stdin, never on argv", unixOnly, async (t) => {
+  const fixture = await nativeAsk(t, "linux");
+  const pinentry = "pinentry-gnome3";
+  const store = "secret-tool";
+  const token = "pr%obe";
+  await symlink("/usr/bin/sed", join(fixture.dir, "sed"));
+  await fixture.stub(pinentry, lines(captureStdin, 'printf "%s\\n" "OK ready" "D pr%25obe" "OK"'));
+  await fixture.stub(store, captureStdin);
+  assert.equal(await fixture.api({}, token).ask(...askJira), "saved");
+  const [service, account, label, words] = askJira;
+  assert.equal(await fixture.read(pinentry, "stdin"),
+    lines("SETTITLE kansō", `SETDESC ${words}`, "SETPROMPT Token", "SETOK Save", "GETPIN", "BYE"));
+  assert.equal(await fixture.read(pinentry, "args"), "");
+  assert.equal(await fixture.read(store, "args"), lines("store", `--label=${label}`, "service", service, "account", account));
+  assert.equal(await fixture.read(store, "stdin"), token);
+});
+
+test("Linux cancellation does not run secret-tool, and a terminal-only pinentry cannot open", unixOnly, async (t) => {
+  const fixture = await nativeAsk(t, "linux");
+  const api = fixture.api();
+  await fixture.stub("pinentry-curses", "exit 1");
+  await fixture.stub("secret-tool", "exit 0");
+  assert.equal(await api.ask(...askJira), "failed");
+  assert.equal(await fixture.exitCode(), 9);
+  await notInvoked(fixture, "pinentry-curses");
+  await symlink("/usr/bin/sed", join(fixture.dir, "sed"));
+  await fixture.stub("pinentry-gnome3", lines("/bin/cat >/dev/null", 'printf "%s\\n" "OK ready" "ERR 83886179"'));
+  assert.equal(await api.ask(...askJira), "cancelled");
+  await fixture.stub("pinentry-gnome3", lines("/bin/cat >/dev/null", 'printf "%s\\n" "OK ready" "ERR 83886082 No display"'));
+  assert.equal(await api.ask(...askJira), "failed");
+  await notInvoked(fixture, "secret-tool");
+});
+
+test("Linux reads with only a secret store, and asks only with a display and a GUI pinentry", unixOnly, async (t) => {
+  const fixture = await nativeAsk(t, "linux");
+  await fixture.stub("secret-tool", "exit 1");
+  const display = { WAYLAND_DISPLAY: "wayland-0" };
+  assert.equal(await fixture.api().available(), true);
+  assert.equal(await fixture.api(display).canAsk(), false);
+  await fixture.stub("pinentry-gnome3", "exit 0");
+  assert.equal(await fixture.api().canAsk(), false);
+  assert.equal(await fixture.api(display).canAsk(), true);
+});
+
+test("The macOS dialog passes the token twice to Keychain on stdin, never on argv", unixOnly, async (t) => {
+  const fixture = await nativeAsk(t, "macos");
+  await fixture.stub("osascript", `printf '%s\\n' '${SECRET}'`);
+  await fixture.stub("security", captureStdin);
+  assert.equal(await fixture.api().ask(...askJira), "saved");
+  const [service, account, label, words] = askJira;
+  const dialogArgs = await fixture.read("osascript", "args");
+  assertNoSecret(dialogArgs, "osascript argv");
+  assert.ok(dialogArgs.endsWith(lines(words)));
+  assert.equal(await fixture.read("security", "args"),
+    lines("add-generic-password", "-U", "-s", service, "-a", account, "-l", label, "-w"));
+  assert.equal(await fixture.read("security", "stdin"), lines(SECRET, SECRET));
+});
+
+test("A cancelled or broken macOS dialog never calls Keychain, and only Cancel counts as cancelled", unixOnly, async (t) => {
+  const fixture = await nativeAsk(t, "macos");
+  await fixture.stub("security", "exit 0");
+  for (const [script, asked] of [["echo 'User canceled. (-128)' >&2; exit 1", "cancelled"], ["echo 'Not authorized' >&2; exit 1", "failed"]]) {
+    await fixture.stub("osascript", script);
+    assert.equal(await fixture.api().ask(...askJira), asked);
+  }
+  await notInvoked(fixture, "security");
 });
 
 test("The macOS secret store reports a missing token only for exit 44", async (t) => {
@@ -375,7 +512,7 @@ for (const { kind, things, lastRef, pageOf, items, payload } of pickerCases) {
   });
 }
 
-test("Settings shows it is looking before the secret store answers, and a bad site is rejected before a prompt", async () => {
+test("Settings shows it is looking before the secret store answers, and a bad site is rejected before the dialog", async () => {
   const c = await settingsColors();
   const ui = tape();
   const calls = [];
@@ -390,37 +527,32 @@ test("Settings shows it is looking before the secret store answers, and a bad si
   rejected.page.signInJira(rejected.cx);
   rejected.page.page(c);
   assert.ok(rejected.ui.texts.includes("Enter your Jira Cloud site, such as your-site.atlassian.net"));
-  assert.equal(calls.some((call) => call[0] === "hc" || String(call[1]?.[0]).includes("add-generic-password")), false);
+  assert.equal(calls.some(([cmd, args]) => isMacAsk(cmd, args)), false);
 });
 
-test("Sign in waits for the hidden prompt and stores the Jira and Linear account ids", async (t) => {
-  const gate = { gone: true };
+test("Sign-in waits for the native dialog before checking and storing Jira and Linear accounts", async (t) => {
+  const dialog = Promise.withResolvers();
+  const request = t.mock.fn(async (url) => http(JSON.stringify(url === LINEAR ? linearData({ viewer: LINEAR_ME }) : JIRA_ME)));
   const exec = async (cmd, args) => {
     if (cmd !== "sh") return success("");
-    if (args.at(-1) === LINEAR) return http(JSON.stringify(linearData({ viewer: LINEAR_ME })));
-    return http(JSON.stringify(JIRA_ME));
+    return isMacAsk(cmd, args) ? dialog.promise : request(args.at(-1));
   };
   const store = {};
-  const openOverlay = t.mock.fn();
-  const settings = await openAccounts(exec, store, { ...promptHost(gate), openOverlay });
+  const settings = await openAccounts(exec, store);
   beginJira(settings, "https://" + SITE + "/jira");
-  await settings.drain();
-  const [overlay] = openOverlay.mock.calls[0].arguments;
-  assert.equal(overlay.layout.children[0].content.terminal, "t9");
+  assert.equal(request.mock.callCount(), 0);
   assert.equal(store[ACCOUNTS], undefined);
-  await finishPrompt(settings, gate);
+  dialog.resolve(success(""));
+  await settings.drain();
   same(store[ACCOUNTS].jira, jiraAccount());
 
-  settings.page.signInLinear(settings.cx);
-  await finishPrompt(settings, gate);
-  same(store[ACCOUNTS].linear, LINEAR_ME);
+  await signInLinear(settings, store);
 });
 
-const tryJiraPrompt = async (exec, store) => {
-  const gate = { gone: true };
-  const settings = await openAccounts(exec, store, promptHost(gate));
+const tryJiraSignIn = async (exec, store) => {
+  const settings = await openAccounts(exec, store);
   beginJira(settings);
-  await finishPrompt(settings, gate);
+  await settings.drain();
   settings.page.page(await settingsColors());
   return settings.ui;
 };
@@ -433,14 +565,19 @@ const assertRemovedThenChecked = (exec) => {
   assert.ok(removal >= 0 && credentialsCommand(exec, "find-generic-password") > removal);
 };
 
-test("Cancelling the hidden prompt reports that no token was saved without deleting a credential", async (t) => {
-  const store = {};
-  const exec = t.mock.fn(async (cmd) => (cmd === "sh" ? failure("", 3) : success("")));
-  const ui = await tryJiraPrompt(exec, store);
-  assert.ok(ui.texts.includes("No token was saved"));
-  assert.equal(store[ACCOUNTS], undefined);
-  assert.equal(credentialsCommand(exec, "delete-generic-password"), -1);
-});
+for (const [code, message] of [[3, "No token was saved"], [9, "The secret store could not ask for the token"]]) {
+  test(`Settings says "${message}" without checking or deleting credentials`, async (t) => {
+    const store = {};
+    const exec = t.mock.fn(async (cmd) => (cmd === "sh" ? failure("", code) : success("")));
+    const ui = await tryJiraSignIn(exec, store);
+    assert.ok(ui.texts.includes(message));
+    assert.equal(store[ACCOUNTS], undefined);
+    const [probe, dialog] = execArgs(exec);
+    assert.equal(probe[1][0], "list-keychains");
+    assert.ok(isMacAsk(...dialog));
+    assert.equal(exec.mock.callCount(), 2);
+  });
+}
 
 const hadAccessError = () => failure("User interaction is not allowed");
 const noCredential = () => failure("The specified item could not be found", 44);
@@ -459,11 +596,12 @@ for (const { status, reason, lookup } of signInFailures) {
   test(`A failed sign-in says "${reason}. ${result}" and does not store the account`, async (t) => {
     const store = {};
     const exec = t.mock.fn(async (cmd, args) => {
+      if (isMacAsk(cmd, args)) return success("");
       if (cmd === "sh") return http("", status);
       if (args[0] === "find-generic-password") return lookup();
       return success("");
     });
-    const ui = await tryJiraPrompt(exec, store);
+    const ui = await tryJiraSignIn(exec, store);
     assert.ok(ui.texts.includes(`${reason}. ${result}`));
     assert.equal(store[ACCOUNTS], undefined);
     assertRemovedThenChecked(exec);
@@ -599,7 +737,6 @@ const markedIssue = (link, ticket, title, status) => ({
   project: shop.id, source: sourceOf(link), ticket, title, status, assignees: "[]", labels: "[]",
   url: link.source === "jira" ? "https://" + SITE + "/browse/" + ticket : "https://linear.app/acme/issue/" + ticket,
 });
-const assertNoSecret = (value, place) => assert.equal(JSON.stringify(value).includes(SECRET), false, place);
 
 test("One project shows two Jira boards and one Linear board by source, and the Jira detail can open or send the issue", async () => {
   const links = [alphaLink, betaLink, teamLink];
@@ -656,24 +793,20 @@ test("Signing in and reading Jira and Linear boards keeps the token out of SQLit
   const exec = t.mock.fn(async (cmd, args) => {
     if (cmd === "security" && args[0] === "list-keychains") return success("");
     if (cmd !== "sh") return failure("Unexpected command");
+    if (isMacAsk(cmd, args)) {
+      const [service, account] = args.slice(4);
+      vault.set(service + ":" + account, SECRET);
+      return success("");
+    }
     const [service, account, , , body, url] = args.slice(3);
     if (vault.get(service + ":" + account) !== SECRET) return failure("", 3);
     return http(JSON.stringify(url === LINEAR ? linearFixture(body) : jiraFixture(url)));
   });
   const store = {};
-  const gate = { gone: true };
-  const prompt = t.mock.fn();
-  const settings = await openAccounts(exec, store, { ...logHost, ...promptHost(gate, prompt) });
-  const submit = (service, account) => () => {
-    const [argv] = prompt.mock.calls.at(-1).arguments;
-    same(argv.slice(-3, -1), [service, account]);
-    vault.set(service + ":" + account, SECRET);
-  };
+  const settings = await openAccounts(exec, store, logHost);
   beginJira(settings);
-  await finishPrompt(settings, gate, submit("kanso-jira", SITE));
-  settings.page.signInLinear(settings.cx);
-  await finishPrompt(settings, gate, submit("kanso-linear", "api.linear.app"));
-  same(store, bothAccounts());
+  await settings.drain();
+  await signInLinear(settings, store);
 
   const { db } = await temporaryKdb(t);
   const { linkSql } = await load("kanso-panel/issues-store.js", ["linkSql"], logHost);
@@ -710,9 +843,9 @@ test("Signing in and reading Jira and Linear boards keeps the token out of SQLit
   }
   assertNoSecret(capture.mock.calls.map(({ arguments: args }) => args), "Console");
   assertNoSecret(store, "Shared state");
-  assertNoSecret(prompt.mock.calls.map(({ arguments: args }) => args), "Prompt command");
-  const requests = exec.mock.calls.map(({ arguments: args }) => args).filter(([cmd]) => cmd === "sh");
-  assertNoSecret(requests, "Provider commands");
+  const commands = execArgs(exec);
+  assertNoSecret(commands, "Dialog and provider argv");
+  const requests = commands.filter(([cmd, args]) => cmd === "sh" && !isMacAsk(cmd, args));
   const urls = requests.map(([, args]) => new URL(args.at(-1)));
   assert.ok(urls.every((url) => url.protocol === "https:"));
   same([...new Set(urls.map((url) => url.host))].toSorted(), [SITE, "api.linear.app"]);
