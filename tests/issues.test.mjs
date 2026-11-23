@@ -180,6 +180,7 @@ const viewHost = {
   ...drawn.host,
   svg: drawn.host.div,
   image: drawn.host.div,
+  TextView: { new: () => drawn.host.div(), markdown: () => drawn.host.div() },
   theme: () => KIT_NIGHT,
   spaces: () => [{ active: true, folder: "/work/shop", machine: null, tabs: [] }],
   home: () => "/Users/jj",
@@ -348,16 +349,27 @@ test("The same issue address stored for two projects keeps both rows", async (t)
   same(read.rows.map((row) => row.project).toSorted(), ["acme", "shop"]);
 });
 
-const agentHost = (props, pane, calls) => ({
-  props: () => props,
-  panes: () => [pane],
-  terminals: () => [{ address: pane.terminal, status: pane.status, program: pane.program, labels: { "kanso.shown": "Claude" } }],
-  machines: () => [], spaces: () => [{ name: "Shop", tabs: [{ id: pane.tab }] }], shared: () => null,
-  hc: async (args) => { calls.push(args); return { code: 0, stdout: "", stderr: "" }; },
-  closeOverlay() {}, run() {},
-  TextareaState: { new: (start) => ({ value: () => start?.value ?? "", on() { return this; }, focus() {}, set_auto_grow() {}, set_value() {} }) },
-  InputState: { new: (start) => ({ value: () => start?.value ?? "", on() { return this; }, focus() {}, set_auto_grow() {}, set_value() {} }) },
-});
+const fieldState = (start) => ({ value: () => start?.value ?? "", on() { return this; }, focus() {}, set_auto_grow() {}, set_value(next) { if (start) start.value = next; } });
+const agentHost = (props, panes, calls) => {
+  const list = [panes].flat();
+  return {
+    props: () => props, panes: () => list, shared: () => null, machines: () => [],
+    terminals: () => list.map((pane) => ({ address: pane.terminal, status: pane.status, program: pane.program, labels: { "kanso.shown": pane.program?.name || "Claude" } })),
+    spaces: () => [{ name: "Shop", tabs: list.map((pane) => ({ id: pane.tab })) }],
+    hc: async (args) => { calls.push(args); return { code: 0, stdout: "", stderr: "" }; },
+    closeOverlay() {}, run() {}, TextareaState: { new: fieldState }, InputState: { new: fieldState },
+  };
+};
+const holdCx = () => {
+  const timers = [];
+  const pending = [];
+  return { timers, pending, cx: sendCx(timers, pending) };
+};
+const sendCx = (timers, pending) => {
+  const cx = { notify() {}, focus_handle: () => ({}), timer: { after(_ms, fn) { timers.push(fn); return { cancel() {} }; } } };
+  cx.spawn = (fn) => { pending.push(fn(cx)); return { cancel() {} }; };
+  return cx;
+};
 
 test("Send holds a working recipient until that agent is done, and without the wait it sends at once", async () => {
   const pane = { pane: "p1", terminal: "t1", tab: "tab1", status: "working", program: { name: "Claude", agent: true } };
@@ -365,9 +377,7 @@ test("Send holds a working recipient until that agent is done, and without the w
   const props = { text: "Ship it", whenWaiting: true };
   const { Send } = await load("kanso-send/main.js", ["Send"], agentHost(props, pane, held));
   const waiting = new Send();
-  const timers = [];
-  const pending = [];
-  const cx = { notify() {}, focus_handle: () => ({}), spawn(fn) { pending.push(fn(cx)); return { cancel() {} }; }, timer: { after(_ms, fn) { timers.push(fn); return { cancel() {} }; } } };
+  const { timers, pending, cx } = holdCx();
   waiting.init({}, cx);
   waiting.send(cx, waiting.state());
   assert.equal(held.length, 0);
@@ -420,7 +430,9 @@ test("A logged-out probe is not kept, a later signed-in probe is used, and a pro
     filters: { shop: "all" },
     boards: [{ project: "shop", source: "github", filter: "all", who: "jj", columns: JSON.stringify(["Open"]), read_at: at, failure: null }],
   });
-  world.answer = async () => ({ code: 1, stdout: "", stderr: "temporary failure" });
+  world.answer = async (cmd) => cmd === "git"
+    ? { code: 0, stdout: "origin\tgit@github.com:acme/shop.git (fetch)\n", stderr: "" }
+    : { code: 1, stdout: "", stderr: "temporary failure" };
   const { cx, drain } = timedContext([]);
   failed.readProject(shop, cx);
   await drain();
@@ -463,4 +475,123 @@ test("An issue with no status shows Open in its row", async () => {
     rows: [issue({ status: null, title: "Unboarded", updated_at: updated })],
   });
   assert.ok(draw(view).includes("Open · 5m"));
+});
+
+test("A first page with a next cursor, then a rate limit, keeps those rows and records the limit without a new read time", async (t) => {
+  const { readBoard, syncBoard } = await load("kanso-panel/issues-github.js", ["readBoard", "syncBoard"]);
+  const now = 1_700_000_000_000 + 0;
+  const reset = Math.floor(now / 1000) + 180;
+  let n = 0;
+  const run = async () => {
+    n += 1;
+    if (n === 1) return pageOf(1, "c1", true);
+    return { code: 1, stdout: "", stderr: "rate limit exceeded\nX-RateLimit-Reset: " + reset };
+  };
+  const board = await readBoard(run, { repo: REPO, project: "shop", filter: "all", login: "jj", now });
+  assert.equal(board.rows.length, 1);
+  assert.equal(board.rows[0].title, "N1");
+  assert.equal(board.failure.kind, "rate");
+  const { db, storeSql, readIssues } = await rowsOf(t);
+  await db.run(storeSql({ project: "shop", source: "github", filter: "all", who: "jj", repo: "github.com/acme/shop", complete: true, rows: [], columns: ["Open"], kept: [], now: 20 }));
+  n = 0;
+  await syncBoard(db, run, { repo: REPO, project: "shop", filter: "all", login: "jj", kept: [], now });
+  const stored = await readIssues(db, ["shop"]);
+  assert.equal(stored.rows.length, 1);
+  assert.equal(stored.boards[0].read_at, 20);
+  assert.equal(stored.boards[0].retry_at, reset * 1000);
+  same(JSON.parse(stored.boards[0].failure), { kind: "rate", text: "GitHub is limiting requests", retryAt: reset * 1000 });
+});
+
+test("A capped read stores the total, and the list says it is showing the newest of that total", async (t) => {
+  const { readBoard, syncBoard, PAGES } = await load("kanso-panel/issues-github.js", ["readBoard", "syncBoard", "PAGES"]);
+  let n = 0;
+  const run = async () => {
+    n += 1;
+    const page = pageOf(n, "p" + n, true);
+    const body = JSON.parse(page.stdout);
+    body.data.repository.issues.totalCount = 1082;
+    return { ...page, stdout: JSON.stringify(body) };
+  };
+  const capped = await readBoard(run, { repo: REPO, project: "shop", filter: "all", login: "jj" });
+  assert.equal(n, PAGES);
+  assert.equal(capped.complete, false);
+  assert.equal(capped.total, 1082);
+  const { db, readIssues } = await rowsOf(t);
+  n = 0;
+  await syncBoard(db, run, { repo: REPO, project: "shop", filter: "all", login: "jj", kept: [] });
+  const stored = await readIssues(db, ["shop"]);
+  assert.equal(stored.boards[0].total, 1082);
+  const listed = await mount({
+    projects: [shop],
+    filters: { shop: "all" },
+    rows: [issue({ title: "Newest" })],
+    boards: [{ project: "shop", source: "github", filter: "all", who: "jj", columns: JSON.stringify(["Open"]), total: 1082, read_at: 1, failure: null }],
+  });
+  assert.ok(draw(listed).includes("Showing the newest 1 of 1082"));
+});
+
+test("Selecting the second project's copy of a shared issue opens that project's detail", async () => {
+  const url = "https://github.com/acme/shop/issues/1";
+  const alpha = { id: "a", name: "Alpha", folder: "/work/a", machine: null };
+  const beta = { id: "b", name: "Beta", folder: "/work/b", machine: null };
+  const view = await mount({
+    projects: [alpha, beta],
+    filters: { a: "all", b: "all" },
+    rows: [issue({ project: "a", url, ticket: "#1", title: "From Alpha" }), issue({ project: "b", url, ticket: "#1", title: "From Beta" })],
+    boards: [
+      { project: "a", source: "github", filter: "all", who: "jj", columns: JSON.stringify(["Open"]), read_at: 1, failure: null },
+      { project: "b", source: "github", filter: "all", who: "jj", columns: JSON.stringify(["Open"]), read_at: 1, failure: null },
+    ],
+  });
+  view.show(view.rows[1], { notify() {}, spawn() { return { cancel() {} }; } });
+  const texts = draw(view);
+  assert.ok(texts.includes("#1 · Beta"));
+  assert.equal(texts.includes("#1 · Alpha"), false);
+});
+
+test("A held send keeps the confirmed draft and the held recipient, and a blocked one is named instead of sent", async () => {
+  const first = { pane: "p1", terminal: "t1", tab: "tab1", status: "working", program: { name: "Claude", agent: true } };
+  const second = { pane: "p2", terminal: "t2", tab: "tab2", status: "done", program: { name: "Codex", agent: true } };
+  const calls = [];
+  const props = { text: "first draft", whenWaiting: true };
+  const { Send } = await load("kanso-send/main.js", ["Send"], agentHost(props, [first, second], calls));
+  const view = new Send();
+  const { timers, pending, cx } = holdCx();
+  view.init({}, cx);
+  view.to = first.terminal;
+  view.send(cx, view.state());
+  view.text = "replacement";
+  view.to = second.terminal;
+  first.status = "done";
+  timers.at(-1)(cx);
+  await Promise.all(pending);
+  assert.equal(calls.filter((call) => call[0] === "send").length, 1);
+  assert.equal(calls.find((call) => call[0] === "send")[2], "first draft");
+  assert.equal(calls.find((call) => call[0] === "send")[1], first.terminal);
+  const blocked = [];
+  const blockedPane = { ...first, status: "working" };
+  const { Send: Held } = await load("kanso-send/main.js", ["Send"], agentHost({ text: "wait for it", whenWaiting: true }, blockedPane, blocked));
+  const later = new Held();
+  const again = [];
+  const blockedCx = sendCx(again, []);
+  later.init({}, blockedCx);
+  later.to = "t1";
+  later.send(blockedCx, later.state());
+  blockedPane.status = "blocked";
+  again.at(-1)(blockedCx);
+  assert.equal(blocked.some((call) => call[0] === "send"), false);
+  assert.match(later.error, /Claude is waiting on its own question/);
+});
+
+test("A project with no GitHub remote shows that, even when GitHub is signed out", async () => {
+  world.answer = async (cmd) => cmd === "git"
+    ? { code: 0, stdout: "", stderr: "" }
+    : { code: 1, stdout: "", stderr: "You are not logged into any GitHub hosts. Run gh auth login" };
+  const view = await mount({ projects: [shop], rows: [], boards: [] });
+  const { cx, drain } = timedContext([]);
+  view.readProject(shop, cx);
+  await drain();
+  const texts = draw(view);
+  assert.ok(texts.includes("No GitHub remote"));
+  assert.equal(texts.includes("Sign in"), false);
 });
