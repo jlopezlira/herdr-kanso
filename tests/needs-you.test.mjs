@@ -345,6 +345,13 @@ test("The queue keeps Ctrl+J available to the terminal and source loading accept
   assert.match(script, /const result = value/);
 });
 
+const queueView = async (queue, computer) => {
+  const ui = tape();
+  const { queueList } = await load("kanso-spaces/needs-you-view.js", ["queueList"], ui.host);
+  queueList({}, queue, () => ({ selected: false, go() {} }), () => "1m", null, computer);
+  return ui;
+};
+
 test("Needs you names each computer it cannot reach, keeps who is waiting, and Refresh tries that computer again", async () => {
   const waiting = waitingQueue([agent("a", "blocked", { title: "Nova" })], []);
   const down = [{ name: "box", layout: "unavailable" }, { name: "blue", layout: "ready" }, { name: "red", layout: "unavailable" }];
@@ -357,11 +364,27 @@ test("Needs you names each computer it cannot reach, keeps who is waiting, and R
   assert.equal(sameQueue(queue, other), false);
   assert.equal(sameQueue(queue, queueState(waiting, down)), true);
   const retried = [];
-  const ui = tape();
-  const { queueList } = await load("kanso-spaces/needs-you-view.js", ["queueList"], ui.host);
-  queueList({}, queue, () => ({ selected: false, go() {} }), () => "1m", null, { title: shown, retry: (name) => retried.push(name) });
+  const ui = await queueView(queue, { title: shown, retry: (name) => retried.push(name) });
   assert.ok(ui.texts.includes("Nova") && ui.texts.includes("Waiting for you"), ui.texts.join(" | "));
   assert.ok(ui.texts.includes("Can't reach grey") && ui.texts.includes("Can't reach red"), ui.texts.join(" | "));
   ui.handlers.get("needs-you-unavailable-box-fix")({}, { stop_propagation() {} });
   assert.deepEqual(retried, ["box"]);
+});
+
+test("Needs you keeps a computer it cannot reach while another is still loading, with or without someone waiting", async () => {
+  const mixed = [{ name: "grey", layout: "unavailable" }, { name: "dark", layout: "loading" }];
+  const drawn = async (rows) => {
+    const queue = queueState(rows, mixed);
+    assert.deepEqual([queue.state, queue.unreachable], ["loading", ["grey"]]);
+    return queueView(queue);
+  };
+  const quiet = await drawn([]);
+  assert.ok(quiet.ids.includes("needs-you-loading"));
+  assert.ok(quiet.texts.includes("Can't reach grey") && quiet.texts.includes("Refresh"), quiet.texts.join(" | "));
+  assert.equal(quiet.texts.includes("Nova"), false);
+  const waiting = waitingQueue([agent("a", "blocked", { title: "Nova" })], []);
+  const busy = await drawn(waiting);
+  assert.ok(busy.ids.includes("needs-you-loading"));
+  assert.ok(busy.texts.includes("Nova") && busy.texts.includes("Waiting for you"), busy.texts.join(" | "));
+  assert.ok(busy.texts.includes("Can't reach grey") && busy.texts.includes("Refresh"), busy.texts.join(" | "));
 });

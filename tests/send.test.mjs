@@ -249,6 +249,22 @@ const draftKept = (send, closed) => {
 };
 const drop = (world, address) => { world.terms = world.terms.filter((term) => term.address !== address); };
 const fire = (timers, cx) => timers.forEach(([, fn]) => fn(cx));
+const closedOnly = async () => {
+  const closed = [], sent = [], timers = [];
+  const world = {
+    terms: [agent("t0", "Me"), { ...agent("t1", "Nova"), status: "working" }],
+    panes: [{ pane: "p1", terminal: "t1", status: "working" }],
+  };
+  const send = await heldSend(world, closed, sent, "t1");
+  const { cx } = timedContext(timers, { stop_propagation() {} });
+  keyDown(renders(send), CMD_ENTER, cx);
+  world.panes = [];
+  drop(world, "t1");
+  fire(timers, cx);
+  assert.equal(send.error, "Not sent to Nova: it closed.");
+  draftKept(send, closed);
+  return { send, closed, sent };
+};
 const heldSend = (world, closed, sent, to = null) => openSend(world, {
   props: () => ({ overlay: "o1", whenWaiting: true }),
   closeOverlay: (id) => closed.push(id),
@@ -281,22 +297,29 @@ test("When an agent appears later and none was chosen, it is chosen and Send is 
 });
 
 test("A held send whose only recipient closes says it was not sent and keeps the dialog and the draft", async () => {
-  const closed = [], sent = [];
-  const world = {
-    terms: [agent("t0", "Me"), { ...agent("t1", "Nova"), status: "working" }],
-    panes: [{ pane: "p1", terminal: "t1", status: "working" }],
-  };
-  const send = await heldSend(world, closed, sent, "t1");
-  const timers = [];
-  const { cx } = timedContext(timers, { stop_propagation() {} });
-  keyDown(renders(send), CMD_ENTER, cx);
-  assert.ok(send.held);
-  world.panes = [];
-  drop(world, "t1");
-  fire(timers, cx);
-  assert.equal(send.error, "Not sent to Nova: it closed.");
-  draftKept(send, closed);
+  const { sent } = await closedOnly();
   assert.equal(sent.filter(([verb]) => verb === "send").length, 0);
+});
+
+test("A held send whose only recipient closes offers Start an agent with the draft and the closed note, and a chosen agent that becomes a shell stays in the list", async () => {
+  const { send } = await closedOnly();
+  const drawn = renders(send);
+  assert.equal(byTag(drawn, "to-t1") ?? null, null);
+  assert.equal(texts(drawn).includes("Unknown"), false);
+  assert.ok(texts(drawn).includes("No other agent is running."));
+  assert.ok(texts(byTag(drawn, "send-list-action")).includes("Start an agent"));
+
+  const world = {
+    terms: [agent("t0", "Me"), agent("t1", "Nova")],
+    panes: [{ pane: "p1", terminal: "t1", status: "idle" }],
+  };
+  const chosen = await openSend(world, {}, "t1");
+  world.terms = world.terms.map((term) => (term.address === "t1" ? { ...TARGETS.shell.terms[0] } : term));
+  world.panes = world.panes.map((pane) => (pane.terminal === "t1" ? { ...TARGETS.shell.panes[0] } : pane));
+  const row = byTag(renders(chosen), "to-t1");
+  assert.ok(row);
+  assert.ok(texts(row).includes("zsh"));
+  assert.equal(texts(renders(chosen)).includes("Start an agent"), false);
 });
 
 test("With two held recipients and one closed, Send goes to the other and says who closed", async () => {

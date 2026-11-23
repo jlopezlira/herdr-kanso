@@ -211,3 +211,34 @@ test("Pressing Retry, or kanso-spend.refresh, after runtime.json was repaired re
   assert.ok(asked.some((args) => args.includes("snapshot")));
 });
 
+test("After a snapshot fails on the Node named in runtime.json, Refresh reads that file again and the next snapshot runs the Node it names now", async () => {
+  const reads = [], ran = [];
+  let node = "/old-node";
+  const page = await spendPage({ runtimeError: "runtime.json needs a node path." }, {
+    readTextFile: async (file) => {
+      if (!String(file).endsWith("runtime.json")) return null;
+      reads.push(file);
+      return JSON.stringify({ node });
+    },
+    exec: async (command, args = []) => {
+      ran.push([command, ...args]);
+      return command === "/old-node"
+        ? { code: 1, stdout: "", stderr: "No such executable" }
+        : { code: 0, stdout: "{}", stderr: "" };
+    },
+  });
+  const { cx, drain } = timedContext([]);
+  const failureButton = () => find(page.render(cx), (el) => el.tag === "spend-failed-fix");
+  const snapshots = () => ran.filter((args) => args.includes("snapshot")).map((args) => args[0]);
+  const press = async () => { arg(failureButton(), "on_click")({}, cx); await drain(); };
+  await press();
+  assert.match(page.error, /No such executable/);
+  assert.deepEqual(snapshots(), ["/old-node"]);
+  assert.equal(reads.length, 1);
+  node = process.execPath;
+  assert.ok(texts(failureButton()).includes("Refresh"));
+  await press();
+  assert.equal(reads.length, 2);
+  assert.deepEqual(snapshots(), ["/old-node", process.execPath]);
+});
+
