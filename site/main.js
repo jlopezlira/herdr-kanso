@@ -23,13 +23,15 @@
     });
   });
   var status = document.querySelector("[data-copy-status]");
+  var platform = (navigator.userAgentData && navigator.userAgentData.platform) || navigator.platform || "";
+  var copyKey = /mac|iphone|ipad/i.test(platform) ? "Cmd+C" : "Ctrl+C";
   function announce(text) { if (status) { status.textContent = ""; status.textContent = text; } }
   // Nothing was copied: the line is selected so you can copy it yourself.
   function failed(box) {
     select(box);
     var label = box.querySelector("[data-copy-label]");
-    label.textContent = "Press Cmd+C";
-    announce("Could not copy. The install line is selected; press Cmd+C to copy it.");
+    label.textContent = "Press " + copyKey;
+    announce("Could not copy. The install line is selected; press " + copyKey + " to copy it.");
     setTimeout(function () { label.textContent = "Copy"; }, 2400);
   }
   function select(box) {

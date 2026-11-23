@@ -149,7 +149,7 @@ export default class TokenSpend extends View {
           if (!next) break; // a replaced build (hot reload, update) stops here, before acting
           const { command } = next;
           const name = String(command).replace(new RegExp(`^${MOD}\\.`), "");
-          if (name === "refresh") this.run("snapshot", commandCx);
+          if (name === "refresh") this.reload(commandCx);
           else if (name === "open") this.wake(commandCx);
           else if (name === "settings") this.openSettings(commandCx);
           else if (name === "back") this.back(commandCx);
@@ -193,6 +193,13 @@ export default class TokenSpend extends View {
     else if (!this.costs) this.run("prepare", cx);
     this.exchange(cx, true);
     cx.notify();
+  }
+
+  reload(cx) {
+    if (this.running) { this.run("snapshot", cx); return; }
+    this.nodeBinary = null;
+    this.runtimeError = null;
+    this.wake(cx);
   }
 
   sleep() {
@@ -470,7 +477,7 @@ export default class TokenSpend extends View {
     return scrollPage.call(this, "spend-root", c, narrow, (column) => column
       .child(this.header(c, narrow))
       .children(shareRows(this, c, "Only the totals and the days: no project, task or session names. The post opens with the image in it."))
-      .when(Boolean(failure), (el) => el.child(failureBlock(failure)("spend-failed", c, { onClick: (cx) => this.run("snapshot", cx) })))
+      .when(Boolean(failure), (el) => el.child(failureBlock(failure)("spend-failed", c, { onClick: (cx) => this.reload(cx) })))
       .when(Boolean(body), (el) => el.child(body)), { always: true });
   }
 
@@ -503,7 +510,7 @@ export default class TokenSpend extends View {
     return pageHeader(heading, [
       reading ? div().pr(G.xs).text_size(T.micro).text_color(c.dim).child(reading) : null,
       this.canShare() ? iconButton("spend-share", "share", "Share", (cx) => this.share.toggle(cx), c, { active: this.share.open }) : null,
-      refreshTool("spend-refresh", c, { ...this.plan().refresh, working: "Updating…", stamp: updated }, (cx) => this.run("snapshot", cx)),
+      refreshTool("spend-refresh", c, { ...this.plan().refresh, working: "Updating…", stamp: updated }, (cx) => this.reload(cx)),
       this.page === "settings" ? null : iconButton("spend-settings", "settings", "Settings", (cx) => this.openSettings(cx), c),
     ]);
   }

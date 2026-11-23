@@ -3,7 +3,7 @@ import { button, grow, phrase, stack } from './kit.js';
 
 const tool = (icon, label) => button({ label, kind: 'icon', size: 'lg', icon });
 // + names what it adds in the view on show.
-export const addLabels = { spaces: 'Add project', agents: 'New conversation', threads: 'New conversation' };
+export const addLabels = { spaces: 'New project', agents: 'New conversation', threads: 'New conversation' };
 // A tool whose menu, open, hangs under it, or beside it in a column.
 const menuTool = ({ variant, flags = {}, label, icon, tip = null, open }) => stack({ variant, ...flags },
   button({ label, kind: 'icon', size: 'lg', icon, tip, active: Boolean(open) }), open ? stack({ variant: 'toolbar menu' }, open) : null);

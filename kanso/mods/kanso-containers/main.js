@@ -18,7 +18,7 @@ import { pageFrame } from "./page.js";
 import { Front } from "./front.js";
 import {
   PS_FORMAT, IMAGES_FORMAT, STATS_FORMAT, INSPECT_FORMAT, CONTEXT_FORMAT, VOLUMES_FORMAT, COMPOSE_FILES, OTHER,
-  parseContainers, contextOf, vmPids, lookIn, urlOf, since, size, failed, okRead, failedRead, readOf, settle, panelOf, cleanupOf, proves, containerKey, idKey,
+  parseContainers, contextOf, vmPids, lookIn, urlOf, since, size, failed, okRead, failedRead, readOf, settle, panelOf, cleanupOf, proves, containerKey, idKey, pullable,
 } from "./model.js";
 
 // Read while the panel is open; a closed panel is unmounted, so nothing runs behind it.
@@ -284,9 +284,8 @@ export default class Containers extends View {
 
   pullImage() {
     const name = this.pull.value().trim();
-    // A name, never an option: docker would take "-…" as one.
     const engine = this.panel.engine?.name;
-    if (!engine || !name || /\s/.test(name) || name.startsWith("-")) return;
+    if (!engine || !pullable(name)) return;
     inTab(`pull ${name}`, onEngine(engine, ["docker", "pull", name]));
     this.pulling = { seen: this.panel.imagesText, left: PULL_READS };
     this.pull.set_value("");
@@ -432,12 +431,14 @@ export default class Containers extends View {
 
   imagesView(c) {
     const { imagesSummary: summary, targets, can } = this.panel, open = this.show.images, name = this.pull.value().trim();
+    const ready = pullable(name) && can.pull, wrong = Boolean(name) && !pullable(name);
     const spare = summary?.spare ?? 0;
     return v_flex().w_full().gap(G.xs)
       .child(this.head("images", "images", summary ? `${summary.count} · ${size(summary.mb)}${spare > 0 ? ` · ${size(spare)} unused` : ""}` : "", open, c))
       .child(h_flex().w_full().gap(G.sm).items_center()
-        .child(field("ct-pull-image", this.pull, c).flex_1().min_w(0))
-        .child(quietLink("ct-pull", "Pull", () => this.pullImage(), c, { color: name && can.pull ? c.text : c.border, disabled: !name || !can.pull })))
+        .child(field("ct-pull-image", this.pull, c, { error: wrong }).flex_1().min_w(0))
+        .child(quietLink("ct-pull", "Pull", () => this.pullImage(), c, { color: ready ? c.text : c.border, disabled: !ready })))
+      .when(wrong, (el) => el.child(div().text_size(T.body).text_color(c.red).child("An image name has no spaces and does not start with -, such as nginx:alpine")))
       .when(Boolean(targets.images), (el) => el.child(h_flex()
         .child(this.armed.link("ct-rmi", `Remove unused images (${size(spare)})`, `remove ${targets.images?.items.length}`,
           targets.images?.key, (cx) => this.clean(targets.images, "remove images", cx), c))))
