@@ -254,7 +254,7 @@ test("The panel doors: each one a door at rest, the open one on the active wash,
   const tree = withPanel("pr");
   const b = await bar({ tree });
   const root = b.view.render(b.cx);
-  const labels = ["Files", "Spend", "PR", "Issues", "Shipped", "Worktrees", "Ports", "Containers", "Memory", "Images", "kansō help"];
+  const labels = ["Files", "Spend", "PR", "Tasks", "Shipped", "Worktrees", "Ports", "Containers", "Memory", "Images", "kansō help"];
   for (const label of labels) assert.ok(door(root, label), label);
   assert.equal(arg(door(root, "PR"), "bg"), b.c.w12, "the open door");
   assert.equal(calls(door(root, "Files"), "bg").length, 0, "a closed door paints nothing");
@@ -622,7 +622,7 @@ test("A door being dragged is held on the pressed wash with the accent bar where
   assert.equal(all(after, (el) => calls(el, "bg").some((call) => call[1] === b.c.accent)).length, 0, "and no bar is left");
 });
 
-const DOORS = [["Files", "files"], ["Spend", "insights"], ["PR", "pr"], ["Issues", "issues"], ["Shipped", "shipped"], ["Worktrees", "worktrees"], ["Ports", "ports"], ["Containers", "containers"], ["Memory", "memory"], ["Images", "look"], ["hjkl dōjō", "dojo"]]
+const DOORS = [["Files", "files"], ["Spend", "insights"], ["PR", "pr"], ["Tasks", "issues"], ["Shipped", "shipped"], ["Worktrees", "worktrees"], ["Ports", "ports"], ["Containers", "containers"], ["Memory", "memory"], ["Images", "look"], ["hjkl dōjō", "dojo"]]
   .map(([label, want]) => [label, { want }]);
 const TOOLS = [["New tab", [["kanso-spaces.start", null]]], ["Arrange", { opened: "kanso-arrange" }]];
 const CHOSEN = [["checkout", []], ["Close checkout", [["tab.close", { id: "t1" }]]]];

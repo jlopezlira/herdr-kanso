@@ -22,7 +22,9 @@ export function remoteOf(text, hosts) {
 
 export async function repoOf(run, folder, hosts = ["github.com"]) {
   const r = await run("git", ["-C", folder, "remote", "-v"]);
-  return r?.code === 0 ? remoteOf(r.stdout, hosts) : null;
+  if (r?.code === 0) return { repo: remoteOf(r.stdout, hosts) };
+  const said = String(r?.stderr ?? "").trim().split("\n")[0];
+  return /not a git repository/i.test(said) ? { repo: null } : { repo: null, failed: said || "git did not answer" };
 }
 
 const vars = (pairs) => Object.entries(pairs).flatMap(([k, v]) => (v === null || v === undefined ? [] : [typeof v === "number" ? "-F" : "-f", `${k}=${v}`]));

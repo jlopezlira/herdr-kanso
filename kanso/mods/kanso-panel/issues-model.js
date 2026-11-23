@@ -64,15 +64,24 @@ export const linkWords = (source) => (kindOf(source) === "github" ? "Open on Git
 
 export const PICKER_PAGES = 50;
 
-export async function pagesOf(read, pages = 10) {
+export const placeOf = (machine, folder) => `${machine ?? ""}:${String(folder ?? "").replace(/\/+$/, "")}`;
+
+export function withSpaces(projects, spaces, homeDir) {
+  const known = new Set(projects.map((p) => placeOf(p.machine, p.folder)));
+  const opened = spaces.filter((s) => s.folder && placeOf(s.machine, s.folder) !== placeOf(null, homeDir))
+    .map((s) => ({ id: placeOf(s.machine, s.folder), name: s.name, folder: s.folder, machine: s.machine ?? null, auto: true }));
+  return [...projects, ...opened.filter((p, i) => !known.has(p.id) && opened.findIndex((x) => x.id === p.id) === i)];
+}
+
+export async function pagesOf(read, pages = 10, start = null) {
   const walk = async (cursor, items, page) => {
     const got = await read(cursor);
-    if (got.failure) return { items, failure: got.failure, complete: false };
+    if (got.failure) return { items, failure: got.failure, complete: false, next: cursor };
     const all = [...items, ...(got.items ?? [])];
-    if (got.next === null || got.next === undefined) return { items: all, failure: null, complete: true };
-    return page + 1 < pages ? walk(got.next, all, page + 1) : { items: all, failure: null, complete: false };
+    if (got.next === null || got.next === undefined) return { items: all, failure: null, complete: true, next: null };
+    return page + 1 < pages ? walk(got.next, all, page + 1) : { items: all, failure: null, complete: false, next: got.next };
   };
-  return walk(null, [], 0);
+  return walk(start, [], 0);
 }
 
 export function sendText(row) {

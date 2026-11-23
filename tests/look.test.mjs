@@ -1,13 +1,13 @@
 import { loadLook, loadPanelKdb, loadShareImages, recordCases, recordsFor } from "./mod-fixtures.mjs";
 import assert from "node:assert/strict";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { mkdir, readdir, readFile, stat, unlink, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, readdir, readFile, stat, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, posix } from "node:path";
 import { fileApi } from "../kanso/mods/kanso-panel/platform-files.js";
 import { paths } from "../kanso/mods/kanso-panel/platform-paths.js";
 import test from "node:test";
-import { databaseTimer, load, clone, context, singleUse, drawingHost, nodes, calls, arg, exec as run, nativeWindow, nativePlatform, until, failure, success, moved, isDecode, decoded } from "./helpers.mjs";
+import { databaseTimer, load, clone, context, singleUse, drawingHost, drawn, nodes, texts, calls, arg, exec as run, nativeWindow, nativePlatform, until, failure, success, moved, isDecode, decoded } from "./helpers.mjs";
 
 const dirs = [];
 process.on("exit", () => { for (const d of dirs) rmSync(d, { recursive: true, force: true }); });
@@ -111,7 +111,8 @@ test("A note to the agent names the file and where each pin sits on the picture"
 // The panel in a fake Herdr: agent t1 whose screen shows `screen`, a shell t2, and the files in `files`.
 // `copy(args)`: what cp answers, a promise a test can hold back.
 async function panel({ screen = OUTPUT, files = ["/repo/tests/shot.png", "/repo/images/hero.jpg", "/repo/docs/plan.md"], status = "idle", focus = "t1",
-  copy = async () => ({ code: 0, stdout: "" }), session = null, transcript = "", appHome = "/app", bad = [], remote = null, statText = "4 1700000000\n", drawing = null, sending = null } = {}) {
+  copy = async () => ({ code: 0, stdout: "" }), pickFolder = async () => null,
+  session = null, transcript = "", appHome = "/app", bad = [], remote = null, statText = "4 1700000000\n", drawing = null, sending = null } = {}) {
   if (appHome !== "/app") dirs.push(appHome);
   const calls = [], ons = [], store = {};
   const address = remote ? `${remote}/${focus}` : focus;
@@ -147,7 +148,7 @@ async function panel({ screen = OUTPUT, files = ["/repo/tests/shot.png", "/repo/
       if (options?.on) ons.push(["readTextFile", options.on, path]);
       return world.session && (path === posix.join("/home/me", ".claude", "sessions", `${world.session.pid}.json`) || path.endsWith(`/${world.session.pid}.json`)) ? JSON.stringify(world.session) : null;
     },
-    writeFile, mkdir, readdir, unlink, stat,
+    writeFile, mkdir, readdir, unlink, stat, pickFolder,
     exec: async (cmd, args = [], options) => {
       calls.push([cmd, ...args]);
       if (options?.on) ons.push([cmd, options.on, ...args]);
@@ -158,6 +159,10 @@ async function panel({ screen = OUTPUT, files = ["/repo/tests/shot.png", "/repo/
       if (name === "stat") {
         const info = await stat(args.at(-1)).catch(() => null);
         if (info) return success(`${info.size} ${Math.floor(info.mtimeMs / 1000)}\n`);
+      }
+      if (cmd === "find" && options?.cwd) {
+        const entries = await readdir(options.cwd, { withFileTypes: true });
+        return success(entries.map((entry) => (`./${entry.name}\0`).repeat(entry.isDirectory() ? 2 : 1)).join(""));
       }
       if (cmd === "mv") return moved(args);
       if (options?.on && name === "base64") return { code: 0, stdout: "AQIDBA==\n" };
@@ -592,8 +597,49 @@ test("an agent with no pictures is told what shows up here", async () => {
   assert.equal(look.emptyLine(), "Pictures this agent writes show up here, from its conversation");
   assert.ok(look.render(cx));
   const none = await panel({ focus: "t2" });
-  assert.equal(none.look.emptyLine(), "No agent in focus");
+  assert.equal(none.look.emptyLine(), "Pick an agent to see the pictures it writes, or open a folder of pictures");
   assert.ok(none.look.render(none.cx));
+});
+
+test("Images opens a folder of pictures when no agent is in focus.", async (t) => {
+  const folder = lookDir(), png = join(folder, "a.png"), emptyFolder = join(folder, "subfolder.png");
+  await copyFile(new URL("../open-with/preview.png", import.meta.url), png);
+  await writeFile(join(folder, "b.txt"), "Not a picture");
+  await mkdir(emptyFolder);
+
+  const render = ({ look, cx }) => look.render(cx);
+  const folderButton = (view) => nodes(view).find((node) => arg(node, "accessibility_label") === "Open a folder…");
+  const pressFolder = async (shown) => {
+    const button = folderButton(render(shown));
+    assert.ok(button, "the empty state offers Open a folder…");
+    arg(button, "on_click")({}, shown.cx);
+    await shown.drain();
+  };
+  const emptyPanel = (pickFolder, focus = "t2") => panel({ focus, files: [], pickFolder, drawing: drawingHost() });
+
+  const withAgent = await emptyPanel(undefined, "t1");
+  assert.equal(folderButton(render(withAgent)), undefined, "an agent's empty state has no folder action");
+
+  const pick = t.mock.fn(async () => folder);
+  const opened = await emptyPanel(pick);
+  await pressFolder(opened);
+  assert.deepEqual(clone(pick.mock.calls.map(({ arguments: args }) => args)), [[{ prompt: "Open" }]]);
+  assert.deepEqual(Array.from(opened.look.list(), (item) => item.name), ["a.png"]);
+  assert.equal(opened.look.selected?.path, png);
+  assert.ok(!nodes(render(opened)).some((node) => node.tag === "look-empty"), "selecting the picture replaces the empty state");
+
+  const pickEmpty = t.mock.fn(async () => null);
+  pickEmpty.mock.mockImplementationOnce(async () => emptyFolder);
+  const empty = await emptyPanel(pickEmpty);
+  await pressFolder(empty);
+  assert.equal(empty.look.list().length, 0);
+  const beforeCancel = render(empty), note = clone(empty.look.note);
+  await pressFolder(empty);
+  assert.equal(pickEmpty.mock.callCount(), 2);
+  assert.deepEqual(drawn(render(empty)), drawn(beforeCancel), "cancelling leaves the panel as it was");
+  assert.deepEqual(clone(empty.look.note), note, "cancelling keeps the previous notice");
+  const message = `No pictures in ${emptyFolder}`;
+  assert.ok(texts(beforeCancel).includes(message), `the empty state shows "${message}"`);
 });
 
 test("a path cut at the stored offset is indexed once the line is whole, and a rewritten file is read again", async () => {
