@@ -3,7 +3,7 @@ import test from "node:test";
 import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { arg, calls, exec, find, temporary, texts, timedContext } from "./helpers.mjs";
+import { arg, calls, exec, find, KIT_NIGHT, load, popoverHost, temporary, texts, timedContext } from "./helpers.mjs";
 import { keyDown, spendPage } from "./mod-fixtures.mjs";
 import { chooserKey, readPlan } from "../kanso/mods/kanso-spend/spend-model.js";
 
@@ -83,12 +83,12 @@ const bare = { hero: { title: "Today", value: "$0.00", stats: [], tip: "", note:
 const detail = { title: "Tidy", ticket: "", project: "kanso", tools: "", when: "", usdText: "$1", usdExact: "$1.00", parts: [], models: [], sessions: [], sessionCount: 0, projectPath: "/work/kanso" };
 const failureOn = (drawn) => find(drawn, (el) => arg(el, "id") === "spend-failed");
 
-test("What Refresh can do is decided once: a read in step shows the failure and Refresh, without Node there is nothing to refresh, and while it reads Refresh is off", () => {
+test("What Refresh can do is decided once: a read in step shows the failure and Refresh, a runtime failure offers Retry and keeps Refresh on, and while it reads Refresh is off", () => {
   const plan = (state, loaded) => { const { failure, refresh } = readPlan(state, loaded); return [failure && [failure.text, failure.source, failure.fix ?? null], refresh.enabled]; };
   assert.deepEqual(plan({ nodeBinary: "node" }, false), [null, true]);
   assert.deepEqual(plan({ nodeBinary: "node", error: said, running: "snapshot" }, true), [null, false], "while it reads, nothing is said yet");
   assert.deepEqual([false, true].map((loaded) => plan({ nodeBinary: "node", error: said }, loaded)), [[[unread, said, "Refresh"], true], [["Last update failed", said, "Refresh"], true]]);
-  assert.deepEqual(plan({ runtimeError: "runtime.json needs a node path." }, false), [[unread, "runtime.json needs a node path.", null], false]);
+  assert.deepEqual(plan({ runtimeError: "runtime.json needs a node path." }, false), [[unread, "runtime.json needs a node path.", "Retry"], true]);
   assert.deepEqual(plan({}, false), [null, false], "Node not found yet: nothing to refresh");
 });
 
@@ -98,7 +98,7 @@ test("The header Refresh with the collector failing shows the tool's words with 
   const collector = async () => ({ code: 1, stdout: "", stderr: said });
   for (const [name, fields] of Object.entries(pages)) {
     const { cx, drain } = timedContext([]);
-    const page = await spendPage({ nodeBinary: "node", awake: false, ...fields }, { exec: collector });
+    const page = await spendPage({ nodeBinary: "node", awake: false, ...fields }, { exec: collector, readTextFile: async () => '{"node":"node"}' });
     const header = () => find(page.render(cx), (el) => el.tag === "spend-refresh");
     assert.equal(arg(header(), "disabled"), false, name);
     arg(header(), "on_click")({}, cx);
@@ -112,12 +112,12 @@ test("The header Refresh with the collector failing shows the tool's words with 
   }
 });
 
-test("With no Node to run, Spend says why without a Refresh that does nothing, and the header Refresh is off", async () => {
+test("With no Node to run, Spend says why, offers Retry, and keeps Refresh on", async () => {
   const page = await spendPage({ runtimeError: "runtime.json needs a node path.", page: "settings" });
   const drawn = page.render({});
-  assert.deepEqual(texts(failureOn(drawn)).filter((words) => words !== "!"), [unread, "runtime.json needs a node path."]);
-  assert.equal(find(drawn, (el) => el.tag === "spend-failed-fix") ?? null, null);
-  assert.equal(arg(find(drawn, (el) => el.tag === "spend-refresh"), "disabled"), true);
+  assert.deepEqual(texts(failureOn(drawn)).filter((words) => words !== "!"), [unread, "runtime.json needs a node path.", "Retry"]);
+  assert.equal(arg(find(drawn, (el) => el.tag === "spend-failed-fix"), "disabled") ?? false, false);
+  assert.equal(arg(find(drawn, (el) => el.tag === "spend-refresh"), "disabled"), false);
   assert.equal(arg(find(drawn, (el) => el.tag === "spend-settings") ?? find(drawn, (el) => el.tag === "spend-back"), "disabled") ?? false, false, "the page's own actions stay");
 });
 
@@ -160,5 +160,85 @@ test("The chooser shows the lit choice when it opens, and Spend lets go of its h
   assert.deepEqual(revealed, [10], "the current choice is the tenth row (after All models), brought into view at once");
   page.close();
   assert.deepEqual(released.toSorted(), ["model", "project", "scroll"]);
+});
+
+const repaired = JSON.stringify({ node: "/usr/local/bin/node" });
+const runtimeHost = (reads, ran) => ({
+  readTextFile: async (file) => {
+    reads.push(file);
+    return String(file).endsWith("runtime.json") ? repaired : null;
+  },
+  exec: async (command, args) => {
+    ran.push([command, ...(args ?? [])]);
+    return { code: 0, stdout: "{}", stderr: "" };
+  },
+});
+
+test("Pressing Retry, or kanso-spend.refresh, after runtime.json was repaired reads it again and takes a snapshot", async () => {
+  const reads = [], ran = [];
+  const page = await spendPage({ runtimeError: "runtime.json needs a node path.", page: "settings" }, runtimeHost(reads, ran));
+  const { cx, drain } = timedContext([]);
+  const retry = find(page.render(cx), (el) => el.tag === "spend-failed-fix");
+  arg(retry, "on_click")({}, cx);
+  await drain();
+  assert.ok(reads.some((file) => String(file).endsWith("runtime.json")));
+  assert.equal(page.nodeBinary, "/usr/local/bin/node");
+  assert.ok(ran.some((args) => args.includes("snapshot")));
+
+  const again = [], asked = [];
+  let deliver, open = true;
+  const { TokenSpend } = await load("kanso-spend/main.js", ["TokenSpend"], {
+    ...popoverHost(), theme: () => KIT_NIGHT, appHome: () => "/app", home: () => "/home/me",
+    layout: () => ({ content: { mod: "kanso-spend" }, hidden: true }), shared: () => null, setShared() {},
+    ScrollHandle: { new: () => ({}) }, ...runtimeHost(again, asked),
+    nextCommand: () => new Promise((resolve, reject) => {
+      if (!open) reject(new Error("stop"));
+      else deliver = (command) => { open = false; resolve(command); };
+    }),
+  });
+  const timers = [];
+  const command = timedContext(timers, { focus_handle: () => ({ focus() {}, is_focused: () => false, release() {} }) });
+  const view = new TokenSpend();
+  view.init({}, command.cx);
+  for (const [, fn] of timers.filter(([ms]) => ms === 0)) fn(command.cx);
+  view.runtimeError = "runtime.json needs a node path.";
+  view.nodeBinary = null;
+  assert.equal(typeof deliver, "function");
+  deliver("kanso-spend.refresh");
+  await command.drain();
+  assert.ok(again.some((file) => String(file).endsWith("runtime.json")));
+  assert.equal(view.nodeBinary, "/usr/local/bin/node");
+  assert.ok(asked.some((args) => args.includes("snapshot")));
+});
+
+test("After a snapshot fails on the Node named in runtime.json, Refresh reads that file again and the next snapshot runs the Node it names now", async () => {
+  const reads = [], ran = [];
+  let node = "/old-node";
+  const page = await spendPage({ runtimeError: "runtime.json needs a node path." }, {
+    readTextFile: async (file) => {
+      if (!String(file).endsWith("runtime.json")) return null;
+      reads.push(file);
+      return JSON.stringify({ node });
+    },
+    exec: async (command, args = []) => {
+      ran.push([command, ...args]);
+      return command === "/old-node"
+        ? { code: 1, stdout: "", stderr: "No such executable" }
+        : { code: 0, stdout: "{}", stderr: "" };
+    },
+  });
+  const { cx, drain } = timedContext([]);
+  const failureButton = () => find(page.render(cx), (el) => el.tag === "spend-failed-fix");
+  const snapshots = () => ran.filter((args) => args.includes("snapshot")).map((args) => args[0]);
+  const press = async () => { arg(failureButton(), "on_click")({}, cx); await drain(); };
+  await press();
+  assert.match(page.error, /No such executable/);
+  assert.deepEqual(snapshots(), ["/old-node"]);
+  assert.equal(reads.length, 1);
+  node = process.execPath;
+  assert.ok(texts(failureButton()).includes("Refresh"));
+  await press();
+  assert.equal(reads.length, 2);
+  assert.deepEqual(snapshots(), ["/old-node", process.execPath]);
 });
 

@@ -14,6 +14,8 @@ import { row, stack, emptyState } from "./kit.js";
 const LAST = "kanso.send.last";
 const HOLD_MS = 1000;
 const UNSEEN = "Can't see the agents right now.";
+const START = "Start an agent";
+const closedNote = (gone) => `Not sent to ${gone.map((x) => x.label).join(", ")}: ${gone.length === 1 ? "it" : "they"} closed.`;
 
 export function draftFor(p, digest) {
   if (!p?.cwd) return "Review the latest changes.";
@@ -51,8 +53,11 @@ export default class Send extends View {
 
   state(query = this.query?.value() ?? "") {
     const given = givenNames();
-    return sendState({ terms: terminals(), ps: panes(), spaces: spaces(), computers: machines(), from: this.from?.terminal ?? null,
-      to: this.to, toProject: this.toProject, query, last: shared(LAST), nameOf: (q) => nameOf(q, given) });
+    const at = (to) => sendState({ terms: terminals(), ps: panes(), spaces: spaces(), computers: machines(), from: this.from?.terminal ?? null,
+      to, toProject: this.toProject, query, last: shared(LAST), nameOf: (q) => nameOf(q, given) });
+    const now = at(this.to);
+    const first = this.to || this.toProject ? null : now.groups.flatMap((g) => g.recipients)[0];
+    return first ? at(first.terminal) : now;
   }
 
   press(cx, drawn) {
@@ -66,12 +71,13 @@ export default class Send extends View {
     const statusOf = (x) => panes().find((p) => p.terminal === x.terminal)?.status ?? null;
     const there = this.held.recipients.filter((x) => panes().some((p) => p.terminal === x.terminal));
     if (there.some((x) => statusOf(x) === "working")) { cx.timer.after(HOLD_MS, (next) => this.hold(next)); return; }
-    const { text } = this.held;
+    const { text } = this.held, gone = this.held.recipients.filter((x) => !there.includes(x));
     this.held = null; this.note = null;
-    this.send(cx, { recipients: there.filter((x) => statusOf(x) !== "blocked"), waiting: there.filter((x) => statusOf(x) === "blocked") }, text);
+    if (!there.length) { this.error = closedNote(gone); this.to = null; cx.notify(); return; }
+    this.send(cx, { recipients: there.filter((x) => statusOf(x) !== "blocked"), waiting: there.filter((x) => statusOf(x) === "blocked") }, text, gone);
   }
 
-  send(cx, { recipients: ready, waiting }, held = null) {
+  send(cx, { recipients: ready, waiting }, held = null, gone = []) {
     const text = (held ?? this.text).trim();
     if (!text || this.sending || this.held || (!ready.length && !waiting.length)) return;
     if (!ready.length) { this.error = waitingNote(waiting.map((x) => x.label)); cx.notify(); return; }
@@ -93,6 +99,7 @@ export default class Send extends View {
         refused.length ? `Not sent to ${refused.map(({ x, r }) => `${x.label} (${(r.stderr || r.stdout || "hc send failed").trim()})`).join(", ")}.` : "",
         unsure.length ? `${NOT_CONFIRMED} for ${unsure.map(({ x }) => x.label).join(", ")}: ${MAY_HAVE_ARRIVED}.` : "",
         waiting.length ? `${waiting.map((x) => x.label).join(", ")} waited on ${waiting.length === 1 ? "its" : "their"} own question and got nothing.` : "",
+        gone.length ? closedNote(gone) : "",
       ].filter(Boolean).join(" ");
       if (refused.length || unsure.length) { this.error = said; cx.notify(); return; }
       if (said) { this.error = `Sent. ${said}`; cx.notify(); return; }
@@ -120,18 +127,19 @@ export default class Send extends View {
     // A program with no art of its own takes the terminal's, so every name starts at the same place.
     const agent = (q) => row({
       icon: q.program?.icon ? q.program : "terminal", tone: "muted", name: q.title, detail: q.pane?.branch ?? null,
-      meta: meta(q), mark: q.status, current: !this.toProject && q.terminal === this.to,
+      meta: meta(q), mark: q.status, current: !this.toProject && q.terminal === state.chosen?.terminal,
     })(`to-${q.terminal}`, c, { onClick: (cx) => this.pick(cx, () => { this.to = q.terminal; this.toProject = null; }) });
     const from = this.from ? `From ${name(this.from)}${this.from.cwd ? `, in ${shortFolder(this.from.cwd)}` : ""}` : "";
     const ready = (state.recipients.length > 0 || state.waiting.length > 0) && Boolean(this.text.trim());
     const rows = state.groups.flatMap((g) => [head(g), ...g.agents.map(agent)]);
-    const empty = { unknown: UNSEEN, "no match": "No agent or project by that name.", none: "No other agent is running. Start one in a pane, then send." }[state.empty];
+    const empty = { unknown: UNSEEN, "no match": "No agent or project by that name.", none: "No other agent is running." }[state.empty];
     const close = () => closeOverlay(p.overlay);
     return dialog("kanso-send", c, {
       title: "Send to an agent", scope: from,
       body: [
         field("send-to", this.query, c, { label: "To" }),
-        (rows.length ? stack({ variant: "dialog list", scroll: true }, rows) : emptyState({ text: empty }))("send-list", c),
+        !state.empty ? stack({ variant: "dialog list", scroll: true }, rows)("send-list", c)
+          : emptyState({ text: empty, action: state.empty === "no match" ? "" : START })("send-list", c, { onClick: () => run("kanso-spaces.start") }),
         field("send-message", this.box, c, { label: "Message" }),
       ],
       notes: [{ text: this.error ?? this.note ?? "Pasted into its terminal and sent with Enter, as if you typed it there.", tone: this.error ? "error" : "dim" },

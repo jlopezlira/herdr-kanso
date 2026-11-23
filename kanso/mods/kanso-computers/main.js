@@ -71,12 +71,8 @@ export default class Computers extends View {
     this.typed.on("change", (_e, cx) => cx.notify());
     this.typed.on("submit", (_e, cx) => this.addTyped(cx));
     cx.spawn(async (cx) => {
-      const [found, hosts, explainer] = await Promise.all([findTailscale(this.platform, (program, args) => exec(program, args, { timeout: PROBE_MS })), readHosts(this.platform), findExplainer()]);
+      const [explainer] = await Promise.all([findExplainer(), this.discover()]);
       this.explainer = explainer;
-      this.tailscale = found.path;
-      this.net = found.net;
-      this.hosts = hosts;
-      await this.refresh();
       cx.notify();
     });
     if (this.searching) afterMount(cx, (cx) => cx.spawn(async (cx) => {
@@ -97,6 +93,23 @@ export default class Computers extends View {
 
   async refresh() {
     this.added = listedMachines(await tryOrAsync(() => hc(["machine", "ls", "--json"])));
+  }
+
+  async discover() {
+    const [found, hosts] = await Promise.all([findTailscale(this.platform, (program, args) => exec(program, args, { timeout: PROBE_MS })), readHosts(this.platform)]);
+    this.tailscale = found.path;
+    this.net = found.net;
+    this.hosts = hosts;
+    await this.refresh();
+  }
+
+  rediscover(cx) {
+    this.net = undefined;
+    cx.notify();
+    cx.spawn(async (cx) => {
+      await this.discover();
+      cx.notify();
+    });
   }
 
   close() {
@@ -312,12 +325,17 @@ export default class Computers extends View {
     return div().py(G.xs).text_size(T.value).line_height(LH.body).text_color(c.muted).child(text);
   }
 
+  tailnetNote(c, text) {
+    return [this.heading(c, "Tailscale"), this.noteBlock(c, text)
+      .child(h_flex().child(button("computers-tailnet-refresh", "Refresh", (cx) => this.rediscover(cx), c, { kind: "tonal", small: true })))];
+  }
+
   tailnetSection(c) {
     if (this.net === undefined) return [this.heading(c, "Tailscale"), skeletonOf("computers-tailnet-loading", c, { shape: "row", count: 2 })];
-    if (this.net === null) return [this.heading(c, "Tailscale"), this.note(c, "Tailscale isn't on this computer. Where it is, your computers show up here by themselves.")];
-    if (this.net.state !== "Running") return [this.heading(c, "Tailscale"), this.note(c, "Tailscale is off on this computer. Turn it on and your computers show up here.")];
+    if (this.net === null) return this.tailnetNote(c, "Tailscale isn't on this computer. Where it is, your computers show up here by themselves.");
+    if (this.net.state !== "Running") return this.tailnetNote(c, "Tailscale is off on this computer. Turn it on and your computers show up here.");
     const peers = this.peers();
-    if (!peers.length) return [this.heading(c, "Tailscale"), this.note(c, "No other computer is on your tailnet yet.")];
+    if (!peers.length) return this.tailnetNote(c, "No other computer is on your tailnet yet.");
     return [this.heading(c, "On your tailnet"), ...peers.map((peer) => {
       const alias = this.aliasFor(peer);
       const seen = lanOf(peer, this.nearby ?? []);

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { load, texts, calls, clone, timedContext } from "./helpers.mjs";
+import { load, texts, calls, clone, KIT_NIGHT, timedContext } from "./helpers.mjs";
 import { byTag, keyDown, openedSend, recordCases, recordsFor } from "./mod-fixtures.mjs";
 
 const agent = (address, name, project = "App") => ({ address, state: "live", status: "idle", labels: { "kanso.shown": name, "kanso.project": project } });
@@ -233,4 +233,124 @@ test("The shared delivery keeps its own deadline: a caller without a timer is re
   const r = await result;
   assert.equal(r.unconfirmed, true);
   assert.notEqual(r.code, 0);
+});
+
+const DRAFT = "Look at this.";
+const readyMachines = [{ name: null, layout: "ready" }];
+const source = { from: { terminal: "t0", pane: "p0" }, to: null, text: DRAFT };
+const alone = () => ({ terms: [agent("t0", "Me")], panes: [{ pane: "p0", terminal: "t0", status: "idle" }] });
+const openSend = (world, host = {}, to = null) => openedSend({
+  terminals: () => world.terms, panes: () => world.panes, machines: () => readyMachines, ...host,
+}, { ...source, to });
+const draftKept = (send, closed) => {
+  if (closed) assert.deepEqual(closed, []);
+  assert.equal(send.text, DRAFT);
+  assert.equal(send.box.value(), DRAFT);
+};
+const startsAgent = (el, ran) => {
+  const start = byTag(el, "send-list-action");
+  assert.ok(texts(start).includes("Start an agent"));
+  calls(start, "on_click")[0][1]({}, { notify() {}, stop_propagation() {} });
+  assert.deepEqual(ran, ["kanso-spaces.start"]);
+};
+const drop = (world, address) => { world.terms = world.terms.filter((term) => term.address !== address); };
+const fire = (timers, cx) => timers.forEach(([, fn]) => fn(cx));
+const closedOnly = async () => {
+  const closed = [], sent = [], timers = [];
+  const world = {
+    terms: [agent("t0", "Me"), { ...agent("t1", "Nova"), status: "working" }],
+    panes: [{ pane: "p1", terminal: "t1", status: "working" }],
+  };
+  const send = await heldSend(world, closed, sent, "t1");
+  const { cx } = timedContext(timers, { stop_propagation() {} });
+  keyDown(renders(send), CMD_ENTER, cx);
+  world.panes = [];
+  drop(world, "t1");
+  fire(timers, cx);
+  assert.equal(send.error, "Not sent to Nova: it closed.");
+  draftKept(send, closed);
+  return { send, closed, sent };
+};
+const heldSend = (world, closed, sent, to = null) => openSend(world, {
+  props: () => ({ overlay: "o1", whenWaiting: true }),
+  closeOverlay: (id) => closed.push(id),
+  hc: async (args) => { sent.push(clone(args)); return { code: 0, stdout: "", stderr: "" }; },
+}, to);
+
+test("With no other agent, Send says no other agent is running and Start an agent keeps the drafted message", async () => {
+  const ran = [];
+  const world = alone();
+  const send = await openSend(world, { run: (command) => ran.push(command) });
+  const el = renders(send);
+  assert.ok(texts(el).includes("No other agent is running."));
+  startsAgent(el, ran);
+  draftKept(send);
+  assert.ok(texts(renders(send)).includes("No other agent is running."));
+});
+
+test("When an agent appears later and none was chosen, it is chosen and Send is enabled", async () => {
+  const world = alone();
+  const send = await openSend(world);
+  assert.equal(last(primaryOf(renders(send)), "disabled"), true);
+  world.terms = [...world.terms, agent("t3", "Nova")];
+  world.panes = [...world.panes, { pane: "p3", terminal: "t3", status: "idle" }];
+  const el = renders(send);
+  assert.ok(calls(byTag(el, "to-t3"), "bg").some(([, color]) => color === KIT_NIGHT.selected), "the agent that appeared is marked");
+  assert.equal(last(primaryOf(el), "disabled"), false);
+});
+
+test("A held send whose only recipient closes says it was not sent and keeps the dialog and the draft", async () => {
+  const { sent } = await closedOnly();
+  assert.equal(sent.filter(([verb]) => verb === "send").length, 0);
+});
+
+test("A held send whose only recipient closes offers Start an agent with the draft and the closed note, and a chosen agent that becomes a shell stays in the list", async () => {
+  const { send } = await closedOnly();
+  const drawn = renders(send);
+  assert.equal(byTag(drawn, "to-t1") ?? null, null);
+  assert.equal(texts(drawn).includes("Unknown"), false);
+  assert.ok(texts(drawn).includes("No other agent is running."));
+  assert.ok(texts(byTag(drawn, "send-list-action")).includes("Start an agent"));
+
+  const world = {
+    terms: [agent("t0", "Me"), agent("t1", "Nova")],
+    panes: [{ pane: "p1", terminal: "t1", status: "idle" }],
+  };
+  const chosen = await openSend(world, {}, "t1");
+  world.terms = world.terms.map((term) => (term.address === "t1" ? { ...TARGETS.shell.terms[0] } : term));
+  world.panes = world.panes.map((pane) => (pane.terminal === "t1" ? { ...TARGETS.shell.panes[0] } : pane));
+  const row = byTag(renders(chosen), "to-t1");
+  assert.ok(row);
+  assert.ok(texts(row).includes("zsh"));
+  assert.equal(texts(renders(chosen)).includes("Start an agent"), false);
+});
+
+test("With two held recipients and one closed, Send goes to the other and says who closed", async () => {
+  const closed = [], sent = [];
+  const world = {
+    terms: [agent("t0", "Me"), { ...agent("t1", "Nova"), status: "working" }, { ...agent("t2", "Atlas"), status: "working" }],
+    panes: [{ pane: "p1", terminal: "t1", status: "working" }, { pane: "p2", terminal: "t2", status: "working" }],
+  };
+  const send = await heldSend(world, closed, sent);
+  send.toProject = "App";
+  const timers = [];
+  const { cx, pending } = timedContext(timers, { stop_propagation() {} });
+  keyDown(renders(send), CMD_ENTER, cx);
+  assert.deepEqual(clone(send.held.recipients.map((row) => row.terminal).toSorted()), ["t1", "t2"]);
+  world.panes = [{ pane: "p2", terminal: "t2", status: "idle" }];
+  drop(world, "t1");
+  fire(timers, cx);
+  while (pending.length) await pending.shift();
+  assert.deepEqual(sent.filter(([verb]) => verb === "send").map(([, to]) => to), ["t2"]);
+  assert.equal(send.error, "Sent. Not sent to Nova: it closed.");
+  draftKept(send, closed);
+});
+
+test("When another computer cannot be reached and no agent is seen, Send still offers Start an agent", async () => {
+  const ran = [];
+  const send = await openSend(alone(), { machines: () => [...readyMachines, { name: "grey", layout: "unavailable" }], run: (command) => ran.push(command) });
+  const el = renders(send);
+  assert.ok(texts(el).includes("Can't see the agents right now."));
+  startsAgent(el, ran);
+  draftKept(send);
 });

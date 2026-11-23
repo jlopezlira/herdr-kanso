@@ -41,6 +41,11 @@ the branch's rules.
 
 ### Fixed
 
+- Send says when no other agent is running and offers Start an agent, keeps the message you wrote, and says which recipient closed before a held send went out.
+- The Sleep and Wake dialogs always have a button to close them, including after a failed wake.
+- Spend offers Retry when it cannot find Node, and reads its settings again before the next update.
+- Add a computer offers Refresh when Tailscale is off, missing, or has no other computer, and keeps the address you typed.
+- Needs you names each computer it cannot reach, keeps the agents already waiting, and offers Refresh for that computer.
 - Open with no longer waits forever when it cannot look for editors: it says so and offers Retry. With no editor found, Look again checks once more after you install one. A scan that fails says so instead of telling you to install an editor. Preview in the panel is dimmed, and says so, when the layout has no kansō panel to show it in.
 - Arrangements: Save is dimmed while the name is empty, and the dialog says the arrangement needs a name.
 - Containers: an image name with a space, or one that starts with a hyphen, dims Pull and says what an image name looks like.
