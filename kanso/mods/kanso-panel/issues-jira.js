@@ -45,14 +45,14 @@ export function jiraClient(secrets, { site, email }) {
       const { data, failure } = await ask("/rest/api/3/myself");
       return failure ? { failure } : { name: data?.displayName ?? data?.emailAddress ?? email, accountId: data?.accountId ?? null };
     },
-    projects: async () => {
+    projects: async (start = null) => {
       const read = await pagesOf(async (at) => {
         const { data, failure } = await ask(`/rest/api/3/project/search?maxResults=100&startAt=${at ?? 0}`);
         if (failure) return { failure };
         const values = data?.values ?? [];
         return { items: values, next: data?.isLast || !values.length ? null : (at ?? 0) + values.length };
-      }, PICKER_PAGES);
-      return { failure: read.failure, complete: read.complete, list: read.items.map((p) => ({ ref: jiraRef(site, p.key), name: `${p.key} · ${p.name}` })) };
+      }, PICKER_PAGES, start);
+      return { failure: read.failure, complete: read.complete, next: read.next, list: read.items.map((p) => ({ ref: jiraRef(site, p.key), name: `${p.key} · ${p.name}` })) };
     },
     board: async (key) => {
       const boards = await ask(`/rest/agile/1.0/board?projectKeyOrId=${encodeURIComponent(key)}`);

@@ -69,7 +69,7 @@ const BUILTIN = [
   { id: "files", label: "Files", icon: "lu-file" },
   { id: "insights", label: "Spend", icon: "lu-chart-column" },
   { id: "pr", label: "PR", icon: "lu-git-pull-request" },
-  { id: "issues", label: "Issues", icon: "lu-circle-dot" },
+  { id: "issues", label: "Tasks", icon: "lu-circle-dot" },
   { id: "shipped", label: "Shipped", icon: "lu-trophy" },
   { id: "worktrees", label: "Worktrees", icon: "lu-git-fork" },
   { id: "ports", label: "Ports", icon: "lu-plug" },
