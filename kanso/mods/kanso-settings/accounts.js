@@ -1,6 +1,6 @@
 import { div } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
-import { exec, shared, setShared, window } from "herdr";
+import { exec, shared, setShared, window, checking } from "herdr";
 import { G, T } from "./ui.js";
 import { button } from "./ui-button.js";
 import { field, TextField } from "./ui-field.js";
@@ -34,7 +34,7 @@ export class Accounts {
     this.jiraToken = masked("API token");
     this.linearKey = masked("Personal API key");
     for (const text of [this.site, this.email, this.jiraToken, this.linearKey]) text.on("change", (_e, next) => next.notify());
-    cx.spawn(async (next) => { this.available = await this.secrets.available().catch(() => false); next.notify(); });
+    if (!checking()) cx.spawn(async (next) => { this.available = await this.secrets.available().catch(() => false); next.notify(); });
   }
 
   fail(key, text, cx) { this.errors = { ...this.errors, [key]: text }; this.busy = null; cx.notify(); }
