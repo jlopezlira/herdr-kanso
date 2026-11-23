@@ -22,7 +22,7 @@ in version.json, which the stable updater offers. Versions follow
 [Keep a Changelog](https://keepachangelog.com). `npm run check:version` checks
 the branch's rules.
 
-## [Unreleased]
+## [3.34.0] - 2026-11-23
 
 ### Added
 
@@ -33,18 +33,15 @@ the branch's rules.
 - New agent in a worktree can start the same task on several agents: pick them, write one first prompt and a base branch, and each gets its own worktree and branch, side by side in one tab. One that cannot start shows Retry while the others run. In Worktrees, a worktree whose branch is not merged offers Remove with its branch, which asks once more before the branch and its commits go. (#255)
 - When every check on an agent's pull request has finished, the agent hears the result once per push, as soon as it waits for you: which checks failed, each with its link, or that they passed. A failure moves its row to Needs you with "checks failed"; a cancelled run says nothing. Settings, under Background, turns it off. (#252)
 
-### Fixed
-
-- Settings › Pieces has Open .md files in kansō on macOS, and Open .md and text files in kansō on Linux, where it also becomes the app for text files. On Omarchy, a .md or text file path an agent prints now opens in kansō, ready to edit: Linux read a .md as plain text and its opener never started kansō.
-- Tasks shows only the boards you add: + (or Add a board) asks for a project, then GitHub issues, Jira projects or Linear teams, and each board has Remove. Nothing loads by itself.
-- New project asks for the folder first, keeps Create project off until one is chosen, marks the name optional, and its conversation variant says you then choose the agent. Settings › Keys points to kansō help for every key, and Images with no agent in focus offers Open a folder… to see that folder's pictures. Switching to a project scrolls the Projects list to it once, so a new or far-down project is in view.
-
 ### Changed
 
 - Every right-click menu names the same action with the same words, order and shortcut: Sleep this agent…, Sleep this tab…, Send to an agent…, Close pane and Rename… read the same in the tab bar, the pane header and the sidebar, and the pane header's ⋯ shows each shortcut. A right-click on the pane header opens its ⋯ menu. (#238)
 
 ### Fixed
 
+- Settings › Pieces has Open .md files in kansō on macOS, and Open .md and text files in kansō on Linux, where it also becomes the app for text files. On Omarchy, a .md or text file path an agent prints now opens in kansō, ready to edit: Linux read a .md as plain text and its opener never started kansō.
+- Tasks shows only the boards you add: + (or Add a board) asks for a project, then GitHub issues, Jira projects or Linear teams, and each board has Remove. Nothing loads by itself.
+- New project asks for the folder first, keeps Create project off until one is chosen, marks the name optional, and its conversation variant says you then choose the agent. Settings › Keys points to kansō help for every key, and Images with no agent in focus offers Open a folder… to see that folder's pictures. Switching to a project scrolls the Projects list to it once, so a new or far-down project is in view.
 - Send says when no other agent is running and offers Start an agent, keeps the message you wrote, and says which recipient closed before a held send went out.
 - The Sleep and Wake dialogs always have a button to close them, including after a failed wake.
 - Spend offers Retry when it cannot find Node, and reads its settings again before the next update.
