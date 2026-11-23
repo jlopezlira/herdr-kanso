@@ -16,12 +16,12 @@ export function destinationOf(target) {
 }
 
 export const KEY = "~/.ssh/id_ed25519_kanso";
-export const AGENT_KEY = "~/.ssh/id_kanso_agent";
+export const agentKey = (name) => `~/.ssh/id_kanso_agent_${String(name).replace(/[^\w-]/g, "_")}`;
 const keyedWords = (path) => `-o IdentityFile=${path} -o IdentitiesOnly=yes -o BatchMode=yes `;
-const ROUTE_WORDS = [keyedWords(KEY), keyedWords(AGENT_KEY), `-i ${KEY} -o IdentitiesOnly=yes -o BatchMode=yes `];
-const unkeyed = (via) => ROUTE_WORDS.reduce((rest, words) => rest.split(words).join(""), String(via ?? ""));
-export const kansoKeyed = (via) => ROUTE_WORDS.some((words) => String(via ?? "").includes(words));
-export const keyOfRoute = (via) => (String(via ?? "").includes(keyedWords(AGENT_KEY)) ? AGENT_KEY : KEY);
+const ROUTE_WORDS = /(?:-o IdentityFile=(~\/\.ssh\/(?:id_ed25519_kanso|id_kanso_agent_[\w-]+))|-i ~\/\.ssh\/id_ed25519_kanso) -o IdentitiesOnly=yes -o BatchMode=yes /g;
+const unkeyed = (via) => String(via ?? "").replace(ROUTE_WORDS, "");
+export const kansoKeyed = (via) => new RegExp(ROUTE_WORDS.source).test(String(via ?? ""));
+export const keyOfRoute = (via) => new RegExp(ROUTE_WORDS.source).exec(String(via ?? ""))?.[1] ?? KEY;
 const ASK = "-o PasswordAuthentication=yes -o KbdInteractiveAuthentication=yes ";
 const SSH = /(^|['"]|\bexec )ssh (?=\S)/g;
 const DONE = "Done: this tab can close.";
@@ -104,7 +104,7 @@ const SH_KEY = [
   'own() { [ -f "$k" ] || { rm -f "$k.pub"; ssh-keygen -q -t ed25519 -N "" -C kanso -f "$k"; }; }',
   `lines() { pub=$(awk '{ print $1 " " $2 " kanso" }' "$1.pub") && b64=$(awk '{ print $2 }' "$1.pub") && line="${pushLine("$pub", "$b64")}"; }`,
 ];
-const PS_START = ["$PSNativeCommandArgumentPassing = 'Legacy'", `$k = ${psHome(KEY)}`, `$g = ${psHome(AGENT_KEY)}`];
+const psStart = (agentPath) => ["$PSNativeCommandArgumentPassing = 'Legacy'", `$k = ${psHome(KEY)}`, `$g = ${psHome(agentPath)}`];
 const PS_PAIR = "function Get-Pair($f) { ((Get-Content \"$f.pub\" -Raw).Trim() -split '\\s+')[0..1] -join ' ' }";
 const PS_KEY = [
   "function Get-Agent { @(ssh-add -L 2>$null | Where-Object { $_ -match '^(ssh-ed25519|ecdsa-sha2-nistp\\d+|ssh-rsa) ' } | ForEach-Object { ($_ -split ' ')[0..1] -join ' ' }) }",
@@ -121,14 +121,15 @@ function shSetup(machine, { replace }) {
   const hc = (args) => ["hc", ...args].map(shellQuote).join(" ");
   const back = addLine(machine.target, { via: machine.via, name, session: machine.session });
   const own = `lines "$k" || exit; push; via=${shellQuote(keyed(KEY))}`;
+  const agentPath = agentKey(name);
   return [
-    `k=${shHome(KEY)}; g=${shHome(AGENT_KEY)}`,
+    `k=${shHome(KEY)}; g=${shHome(agentPath)}`,
     'mkdir -p "$HOME/.ssh" && chmod 700 "$HOME/.ssh" || exit',
     ...SH_KEY,
     `push() { e=$(mktemp) || exit; said=$(${ask} "$line" 2>"$e"); s=$?; cat "$e" >&2; case $said in *kanso-added*) added=1 ;; *) added= ;; esac; [ "$s" -eq 0 ] || { grep -q "Permission denied" "$e" && { echo; echo ${shellQuote(refused(name))}; echo "$pub"; }; rm -f "$e"; exit 1; }; rm -f "$e"; }`,
     "if held || pick; then",
     '  lines "$g" || exit; push',
-    `  if ${reach(AGENT_KEY)} true </dev/null >/dev/null 2>&1; then via=${shellQuote(keyed(AGENT_KEY))}`,
+    `  if ${reach(agentPath)} true </dev/null >/dev/null 2>&1; then via=${shellQuote(keyed(agentPath))}`,
     `  else echo ${shellQuote(AGENT_FAILED(name))}; old=$pub; was=$added; own || exit; lines "$k" || exit; [ -z "$was" ] || line=${shSpliced(forgetLine, "old")}"$line"; push; via=${shellQuote(keyed(KEY))}; fi`,
     `else own || exit; ${own}; fi`,
     replace ? `${hc(["machine", "rm", name])} >/dev/null 2>&1` : "",
@@ -143,14 +144,14 @@ function psSetup(machine, { replace }) {
   const { ask, keyed, reach } = keyedRoute(machine, "windows");
   const hc = (args) => `& hc ${args.map(psQuote).join(" ")}`;
   const back = addLine(machine.target, { name, session: machine.session });
+  const agentPath = agentKey(name);
   return [
-    ...PS_START,
+    ...psStart(agentPath),
     "New-Item -ItemType Directory -Force (Split-Path $k) | Out-Null",
     ...PS_KEY,
     `function Send-Key { $said = ${ask} "$pre${pushLine("$pub", "$b64")}" 2>&1; $code = $LASTEXITCODE; $script:added = [bool]("$said" -match 'kanso-added'); $said | Where-Object { "$_" -notmatch 'kanso-added' } | Write-Host; if ($code -ne 0) { if ("$said" -match 'Permission denied') { Write-Host ''; Write-Host ${psQuote(refused(name))}; Write-Host $pub }; exit 1 } }`,
     "$pre = ''",
-    `if ((Test-Held) -or (Select-Agent)) { Read-Key $g; Send-Key; ${reach(AGENT_KEY)} true *> $null; if ($LASTEXITCODE -eq 0) { $via = ${psQuote(keyed(AGENT_KEY))} } else { Write-Host ${psQuote(AGENT_FAILED(name))}; $old = $pub; $was = $added; New-Own; Read-Key $k; if ($was) { $pre = ${psSpliced(forgetLine, "old")} }; Send-Key; $via = ${psQuote(keyed(KEY))} } }`,
-    `else { New-Own; Read-Key $k; Send-Key; $via = ${psQuote(keyed(KEY))} }`,
+    `if ((Test-Held) -or (Select-Agent)) { Read-Key $g; Send-Key; ${reach(agentPath)} true *> $null; if ($LASTEXITCODE -eq 0) { $via = ${psQuote(keyed(agentPath))} } else { Write-Host ${psQuote(AGENT_FAILED(name))}; $old = $pub; $was = $added; New-Own; Read-Key $k; if ($was) { $pre = ${psSpliced(forgetLine, "old")} }; Send-Key; $via = ${psQuote(keyed(KEY))} } } else { New-Own; Read-Key $k; Send-Key; $via = ${psQuote(keyed(KEY))} }`,
     replace ? `${hc(["machine", "rm", name])} *> $null` : "",
     hc(addLine("", { via: VIA, name, session: machine.session })).replace(psQuote(VIA), "$via"),
     `if ($LASTEXITCODE -ne 0) { ${replace ? `${hc(back)} *> $null; ` : ""}exit 1 }`,
@@ -185,15 +186,16 @@ function shRemoval(machine, name, path) {
     `said=$(${reach(path)} ${shSpliced(dropLine, "line")} </dev/null) || { echo ${shellQuote(UNREACHED(name))}; exit 1; }`,
     `[ "$said" = removed ] || { echo ${shellQuote(NONE_THERE(name))}; exit 0; }`,
     `herdr-app do ${shellQuote(`kanso-spaces.remove-machine:${name}`)} >/dev/null 2>&1 || { echo ${shellQuote(STILL_LISTED(name))}; exit 1; }`,
+    path === KEY ? "" : 'rm -f "$k.pub"',
     `echo ${shellQuote(REMOVED(name))}; echo; echo ${shellQuote(DONE)}`,
-  ].join("\n");
+  ].filter(Boolean).join("\n");
 }
 
 function psRemoval(machine, name, path) {
   const { reach } = keyedRoute(machine, "windows");
   return [
-    ...PS_START,
-    `$f = ${path === AGENT_KEY ? "$g" : "$k"}`,
+    ...psStart(path),
+    `$f = ${path === KEY ? "$k" : "$g"}`,
     `if (-not (Test-Path "$f.pub")) { Write-Host ${psQuote(NO_KEY)}; exit 1 }`,
     PS_PAIR,
     "$line = (Get-Pair $f) + ' kanso'",
@@ -202,8 +204,9 @@ function psRemoval(machine, name, path) {
     `if ("$said".Trim() -ne 'removed') { Write-Host ${psQuote(NONE_THERE(name))}; exit 0 }`,
     `& herdr-app do ${psQuote(`kanso-spaces.remove-machine:${name}`)} *> $null`,
     `if ($LASTEXITCODE -ne 0) { Write-Host ${psQuote(STILL_LISTED(name))}; exit 1 }`,
+    path === KEY ? "" : "Remove-Item \"$f.pub\" -ErrorAction SilentlyContinue",
     `Write-Host ${psQuote(REMOVED(name))}; Write-Host ''; Write-Host '${DONE}'`,
-  ].join("; ");
+  ].filter(Boolean).join("; ");
 }
 
 export function keyRemoval(machine, platform = "macos") {
