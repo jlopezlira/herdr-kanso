@@ -330,8 +330,10 @@ export class MarkdownDoc {
       : div().id(`${id}-scroll`).flex_1().min_h(0).overflow_y_scrollbar()
         .child(v_flex().flex_none().w_full().max_w(W.prose).px(G.sm).pt(G.md).pb(G.sm).gap(G.xs)
           .children(this.blocks.map((b, i) => this.block(b, i, c, id)).filter(Boolean)))
-        .when(this.canEdit, (el) => el.child(div().id(`${id}-append`).flex_none().h(H.append).w_full()
-          .on_mouse_down("left", (e, cx) => { if (e.click_count === 2) this.append(cx); })));
+        .when(this.canEdit, (el) => el.child(h_flex().flex_none().w_full().max_w(W.prose).px(G.sm)
+          .child(button(`${id}-add`, "Add paragraph", (cx) => this.append(cx), c, { kind: "quiet", small: true, icon: "plus", disabled: this.conflict })))
+          .child(div().id(`${id}-append`).flex_none().h(H.append).w_full()
+            .on_mouse_down("left", (e, cx) => { if (e.click_count === 2) this.append(cx); })));
     return v_flex().flex_1().min_h(0).when(Boolean(conflict), (el) => el.child(conflict)).child(main);
   }
 
@@ -354,7 +356,7 @@ export class MarkdownDoc {
     const editable = this.canEdit && !this.conflict;
     const press = (e, cx) => { if (e.click_count === 2) { this.open(i, cx); cx.stop_propagation(); } };
     const content = parts?.some((part) => part.kind === "image") ? this.pictureParts(parts, key, c) : [];
-    return markdownBlock({ source: md, content })(key, c, { ...this.links(), onPress: editable ? press : undefined });
+    return markdownBlock({ source: md, content })(key, c, { ...this.links(), onPress: editable ? press : undefined, onOpen: editable ? (cx) => this.open(i, cx) : undefined });
   }
 
   // A block with pictures: its words drawn by the kit, each picture loading, waiting for Load, failed or drawn.

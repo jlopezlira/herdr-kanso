@@ -141,7 +141,7 @@ export async function load(file, names, host = {}, root = mods) {
     }
   }
   const source = modScript(sources.get(file), (name) => sources.get(`${dir}${name.slice(2)}`));
-  return vm.runInContext(`${source}\n;({ ${names.join(", ")} });`, modSandbox({ View: class {}, join, basename, shared() {}, setShared() {}, writeTextFile: (path, text) => writeFile(path, text, { flag: "wx" }), exec: async () => { throw new Error("Unexpected command in fixture"); }, window: host.exec === exec ? nativeWindow : () => ({ platform: "macos" }), layout: () => null, focused: () => null, panes: () => [], terminals: () => [], machines: () => [], keys: () => [], updates: () => ({ app: {} }), settings: () => ({}), InputState: { new: () => fieldWith({ value: "" }) }, ...host, __herdrModule: (name) => modules[name] }));
+  return vm.runInContext(`${source}\n;({ ${names.join(", ")} });`, modSandbox({ View: class {}, join, basename, shared() {}, setShared() {}, writeTextFile: (path, text) => writeFile(path, text, { flag: "wx" }), exec: async () => { throw new Error("Unexpected command in fixture"); }, window: host.exec === exec ? nativeWindow : () => ({ platform: "macos" }), layout: () => null, focused: () => null, panes: () => [], agents: () => [], terminals: () => [], checking: () => false, machines: () => [], keys: () => [], updates: () => ({ app: {} }), settings: () => ({}), InputState: { new: () => fieldWith({ value: "" }) }, ...host, __herdrModule: (name) => modules[name] }));
 }
 
 // Tests that watch real processes need ps; a sandbox that denies it skips them, saying so, rather than failing.
@@ -196,6 +196,12 @@ export async function exec(command, args, options = {}) {
   }
 }
 
+export async function stdoutOf(command, args, options = {}) {
+  const result = await exec(command, args, options);
+  assert.equal(result.code, 0, result.stderr);
+  return result.stdout.trim();
+}
+
 // A host whose shared state lives in `state` and whose layout is `tree()`, each read as a copy.
 export const layoutHost = (state, tree, run) => ({
   shared: (key) => clone(state[key] ?? null), setShared: (key, value) => { state[key] = clone(value); },
@@ -208,6 +214,21 @@ export const gitOk = (...config) => async (cwd, ...args) => {
   assert.equal(r.code, 0, `git ${args.join(" ")}: ${r.stderr}`);
   return r.stdout.trim();
 };
+
+export const git = (cwd, ...args) => exec("git", ["-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false", "-c", "init.defaultBranch=main", ...args], { cwd });
+
+export async function committedRepo(t) {
+  const dir = await temporary(t);
+  const repo = join(dir, "repo");
+  await mkdir(repo, { recursive: true });
+  await writeFile(join(repo, "readme"), "a\n");
+  for (const args of [["init"], ["add", "readme"], ["commit", "-m", "start"]]) assert.equal((await git(repo, ...args)).code, 0);
+  return { dir, repo };
+}
+
+export function plain(value) {
+  return JSON.parse(JSON.stringify(value));
+}
 
 export const databaseTimer = { after(ms, fn) { const timer = setTimeout(fn, ms); timer.unref(); return { cancel: () => clearTimeout(timer) }; } };
 
@@ -453,6 +474,7 @@ export const numberArguments = (file) => [...readFileSync(new URL(`../kanso/mods
 // A kit's exports with `c`, its colours in `theme`.
 export const themed = (kit, theme) => ({ ...kit, c: kit.tokens(theme) });
 export const eachTheme = (tokens, ...themes) => themes.map((theme) => ({ theme, c: tokens(theme) }));
+export const same = (actual, expected) => assert.deepEqual(JSON.parse(JSON.stringify(actual)), expected);
 // The kit's night colours, as the row and kit tests draw them.
 export const KIT_NIGHT = { foreground: "#d8d4cb", background: "#1b1b19", hover: "#232321", selected: "#2b2b28", accent: "#da627d", dim: "#6b6862", muted: "#949086", blocked: "#ca938b", working: "#c4b07e", done: "#98ad8f" };
 // A host whose svg and image elements keep the path they draw.
@@ -478,7 +500,7 @@ export const CHROME_NIGHT = {
   blocked: "#d5674f", working: "#d9a74a", done: "#7fa66b", accent: "#7d9cd4", popover: "#222220", border: "#33332f", chrome: "#141413",
 };
 // A text field holding `value`.
-export const fieldWith = ({ value }) => ({ on() {}, focus() {}, value: () => value, set_value() {}, set_selected_range() {}, release() {} });
+export const fieldWith = ({ value }) => ({ on() {}, focus() {}, value: () => value, set_value() {}, set_masked() {}, set_selected_range() {}, release() {} });
 // Every .js file under dir, at any depth; a folder that is not there has none.
 export async function jsFiles(dir) {
   const entries = await readdir(dir, { withFileTypes: true }).catch(() => []);

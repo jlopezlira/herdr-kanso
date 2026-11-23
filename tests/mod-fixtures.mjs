@@ -72,6 +72,8 @@ export const loadRecordPrFacts = (host) => load("kanso-panel/pr-inbox.js", ["rec
 export const loadDuration = (host) => load("kanso-spaces/agents.js", ["duration"], host);
 export const loadTokenSpend = (host) => load("kanso-spend/main.js", ["TokenSpend"], host);
 export const loadToast = (host) => load("kanso-toast/main.js", ["Toast"], host);
+export const loadSleep = (host = {}) => load("kanso-sleep/main.js", ["Sleep"], { ...drawingHost(), home: () => "/home/me", theme: () => KIT_NIGHT, ...host });
+export const chromeTheme = () => new Proxy({ chrome: "chrome" }, { get: (obj, key) => (key in obj ? obj[key] : String(key)) });
 
 const pageHost = (host) => ({ ...popoverHost(), theme: () => KIT_NIGHT, appHome: () => "/app", home: () => "/home/me", ...host });
 const onScreen = { awake: true, width: 960, share: { open: false }, busy: {}, reading: false, again: false };

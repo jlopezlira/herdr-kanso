@@ -4,6 +4,7 @@ import { load, popoverHost, chain, clone, calls, context, texts, everyDrawn, CHR
 import { loadSidebar, mountedState, withParts, recorder, world, shell } from "./sidebar-fixtures.mjs";
 import { loadWorkspaceStatus } from "./mod-fixtures.mjs";
 import { paneMenu, tabBar, footer, BINDINGS } from "./menu-fixtures.mjs";
+import { loadStrip, menuSidebar, openHeaderEntries } from "./context-menu-fixtures.mjs";
 import ROWS from "./fixtures/context-menu-rows.json" with { type: "json" };
 
 const quotes = (word) => word.replace(/[“”]/g, "\"");
@@ -52,7 +53,7 @@ const TREES = [{ branch: "checkout-v2", path: "/Users/me/.config/herdr-app/data/
 
 async function sidebarPopup({ popup, open, status = "working", labels = {}, registry = [PROJECT], armed = null, sub = null, spaces = SPACES, known = null, asleep = false, moved = null }) {
   const store = { "kanso.registry": registry, "kanso.projects": moved };
-  const { Spaces } = await loadSidebar({ ...popoverHost(), Scrollbar: { vertical: () => chain() } }, {
+  const { Spaces } = await menuSidebar({
     ...world(spaces, agent(status), PANES.filter((p) => asleep || p.tab !== "tb2"), terms(labels)),
     Date: FrozenDate, appHome: () => "/Users/me/.config/herdr-app", shared: (key) => store[key] ?? null,
     props: () => ({ [popup]: open, overlay: "o", ...(popup === "newAgent" ? { start: true } : {}) }), closeOverlay: () => {},
@@ -94,7 +95,7 @@ const panelMenu = async () => {
   return [menuOf(contentOf(b.view.panelMenuPopover(b.c, chain("trigger"), { id: "pr", label: "PR" })))];
 };
 const strip = async (segmentMenu) => {
-  const { Strip, tokens } = await load("kanso-strip/main.js", ["Strip", "tokens"], { ...popoverHost(), theme: () => CHROME_NIGHT, shared: () => null });
+  const { Strip, tokens } = await loadStrip();
   return { view: Object.assign(new Strip(), { segmentMenu }), c: tokens(CHROME_NIGHT) };
 };
 const headerPr = async () => {
@@ -109,9 +110,8 @@ const digestMenu = async () => {
 };
 const headerMore = async () => {
   const { view, c } = await strip(null);
-  const { menuEntries } = await load("kanso-strip/header-model.js", ["menuEntries"]);
   view.moreOpen = true;
-  const entries = menuEntries({ strip: true, pinned: false, zoomed: false, tools: { sleep: "menu", send: "menu" }, fold: 0, canOpen: true });
+  const entries = await openHeaderEntries();
   return [menuOf(contentOf(view.more(c, "p1", { name: "tests", entries, does: {} })))];
 };
 const statusMenus = async () => {
@@ -189,17 +189,17 @@ const keyboard = async () => {
 const PIECE = (named) => [named ? `Hide “${named}”` : "Hide this", "Settings for this…"];
 const SUBMENU = "›";
 const SESSION_ROWS = ({ pin = "Pin to the top", shelf = [], wake = ["Snooze", SUBMENU], close = "Close agent" } = {}) => ["checkout", "Open", "Rename…", pin, ...shelf, "Mark unread", ...wake,
-  "Move to project", SUBMENU, "Copy", SUBMENU, "Sleep this agent", "Sleep its tab", close, ...PIECE("What each agent is on")];
-const PROJECT_HEAD = ["acme-shop", "New conversation…", "New in a worktree…", "Worktrees", "checkout-v2", "kansō", "cart-retry", "~/acme-shop-cart", "Rename…", "Sleep this tab…", "Sleep the project…", "Project options…"];
+  "Move to project", SUBMENU, "Copy", SUBMENU, "Sleep this agent…", "Sleep this tab…", close, ...PIECE("What each agent is on")];
+const PROJECT_HEAD = ["acme-shop", "New conversation…", "New in a worktree…", "Schedule…", "Worktrees", "checkout-v2", "kansō", "cart-retry", "~/acme-shop-cart", "Rename…", "Sleep this tab…", "Sleep the project…", "Project options…"];
 const PROJECT_ROWS = ({ head = PROJECT_HEAD, extra = [], remove = "Remove project" } = {}) => [...head, ...extra, remove, ...PIECE("Branch, ahead, behind")];
 const COMPUTER_ROWS = (...phase) => ["devbox", "Rename…", ...phase, "Add computer…", ...PIECE("Computers")];
 const PANE_ROWS = (title, pin, agentRows, back = []) => [title, "Copy", "Cut", "Paste", "Split right", "⌘D", "Split down", "⇧⌘D", "Split left", "⌥⇧⌘D", "Wider or narrower", "⇧⌘↩", pin, "⌥⌘P",
   ...agentRows, ...back, "Right-clicks go to the program", "Close pane", "⇧⌘W"];
-const AGENT_ROWS = ["Send to an agent…", "⌥⌘S", "Find in conversation", "⌘F", "Open with…", "Sleep"];
-const TAB_ROWS = (close, hint = []) => ["checkout", "Rename", "New tab", "⌘T", "Sleep checkout…", close, ...hint, ...PIECE("Agent state on tabs")];
+const AGENT_ROWS = ["Send to an agent…", "⌥⌘S", "Find in conversation", "⌘F", "Open with…", "Sleep this agent…"];
+const TAB_ROWS = (close, hint = []) => ["checkout", "Rename…", "New tab", "⌘T", "Sleep this tab…", close, ...hint, ...PIECE("Agent state on tabs")];
 const PLACE_ROWS = ["Folder and branch", "Copy path", "Copy branch name", "Open with…", ...PIECE()];
 const NEEDED = "Only when needed";
-const MORE_ROWS = ["tests", "Pin", "Sleep this agent", "Send to another agent", "Open with…", "Split down", "Zoom", NEEDED, ...PIECE()];
+const MORE_ROWS = ["tests", "Split down", "⇧⌘D", "Pin", "⌥⌘P", "Zoom", "Send to an agent…", "⌥⌘S", "Open with…", "Sleep this agent…", NEEDED, ...PIECE()];
 const DIGEST_ROWS = ["Files and commits", "Open the diff", "Push 2 commits…", NEEDED, ...PIECE()];
 const STATUS_ROWS = { needs: ["Needs you", "Go to cart-ui", "⌘J"], memory: ["Memory low", "Open Memory"], computer: ["devbox", "Refresh", NEEDED, ...PIECE()], agents: ["Agents at work", "Show them", "⌃⌥S", NEEDED, ...PIECE()], palette: ["Command palette key", ...PIECE()] };
 const SETTINGS_ROWS = ["Settings", "kansō settings", "⌃⇧,", "Herdr settings"];
@@ -222,7 +222,7 @@ const CASES = {
   projectAsleep: { draw: project({ asleep: true }), want: PROJECT_ROWS({ head: [PROJECT_HEAD[0], "Asleep", "Wake review", "14:02", ...PROJECT_HEAD.slice(1)] }), own: true },
   gone: { draw: project({ spaces: [], registry: [] }), want: ["This project is no longer here."] },
   keep: { draw: project({ registry: [] }), want: PROJECT_ROWS({ extra: ["Keep as a project"] }) },
-  missing: { draw: project({ registry: [{ ...PROJECT, missing: true }] }), want: PROJECT_ROWS({ head: [PROJECT_HEAD[0], ...PROJECT_HEAD.slice(3)], extra: ["Locate folder…"] }) },
+  missing: { draw: project({ registry: [{ ...PROJECT, missing: true }] }), want: PROJECT_ROWS({ head: [PROJECT_HEAD[0], ...PROJECT_HEAD.slice(4)], extra: ["Locate folder…"] }) },
   computer: { draw: computer("connected", true), want: COMPUTER_ROWS("Disconnect", "Sync", "on", "New project", "Remove") },
   syncPending: { draw: syncPending, want: COMPUTER_ROWS("Disconnect", "Sync", "on", "New project", "Remove") },
   syncFailed: { draw: syncFailed, want: COMPUTER_ROWS("Disconnect", "Sync", "off", "New project", "Remove") },
@@ -269,7 +269,7 @@ test("A pane whose Close is pressed once keeps every row and Close's key", async
 });
 
 test("A tab's menu writes no shortcut for New tab or Close tab when neither is bound", async () => {
-  assert.deepEqual((await tabMenu(false, [])()).map((menu) => menu.words), [["checkout", "Rename", "New tab", "Sleep checkout…", "Close tab", ...PIECE("Agent state on tabs")]]);
+  assert.deepEqual((await tabMenu(false, [])()).map((menu) => menu.words), [["checkout", "Rename…", "New tab", "Sleep this tab…", "Close tab", ...PIECE("Agent state on tabs")]]);
 });
 
 const SUBAGENTS = [
@@ -307,7 +307,7 @@ for (const name of ["spaces", "agents"]) {
   });
 }
 
-const ACTIONS = ["Open", "Rename…", "Pin to the top", "Settle", "Mark unread", "Snooze", "Move to project", "Copy", "Sleep this agent", "Sleep its tab", "Close agent", "Close terminal"];
+const ACTIONS = ["Open", "Rename…", "Pin to the top", "Settle", "Mark unread", "Snooze", "Move to project", "Copy", "Sleep this agent…", "Sleep this tab…", "Close agent", "Close terminal"];
 const offered = async (address) => {
   const { el, view } = await subagents({ address, view: "spaces" });
   view.render();
@@ -317,12 +317,12 @@ const offered = async (address) => {
 test("A subagent with no pane of its own is offered Rename, Pin, Settle, Mark read, Snooze, Move and Close, and no Open, Copy or Sleep, which its parent is", async () => {
   assert.deepEqual(await offered("s1"), ["Rename…", "Pin to the top", "Settle", "Mark unread", "Snooze", "Move to project", "Close terminal"]);
   const parent = await offered("t0");
-  for (const row of ["Open", "Copy", "Sleep this agent", "Sleep its tab"]) assert.ok(parent.includes(row), `the parent offers ${row}`);
+  for (const row of ["Open", "Copy", "Sleep this agent…", "Sleep this tab…"]) assert.ok(parent.includes(row), `the parent offers ${row}`);
 });
 
 test("A subagent in a pane of its own is offered the rows its pane gives, as any agent is", async () => {
   const child = await offered("t9");
-  for (const row of ["Open", "Copy", "Sleep this agent", "Sleep its tab"]) assert.ok(child.includes(row), `it offers ${row}`);
+  for (const row of ["Open", "Copy", "Sleep this agent…", "Sleep this tab…"]) assert.ok(child.includes(row), `it offers ${row}`);
 });
 
 test("An asleep row's Wake wakes only it, Wake all wakes its tab, and Everything asleep… opens Status with Asleep unfolded", async () => {

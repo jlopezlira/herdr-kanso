@@ -6,7 +6,7 @@
 
 import { View, div, svg } from "gpui-kit";
 import { h_flex, v_flex, HoverCard, Popover } from "gpui-base";
-import { spaces, panes, agents, machines, focused, layout, run, hc, shared, setShared, theme, nextCommand, props, openOverlay, home, exec, notify, window } from "herdr";
+import { spaces, panes, agents, terminals, machines, focused, layout, run, hc, shared, setShared, theme, nextCommand, props, openOverlay, home, exec, notify, window } from "herdr";
 import { programIcon, givenNames, nameOf, NAME_LABEL } from "./marks.js";
 import { STRIP_INTENT, isKansoTree, walkLayout, paintLayout, changeLayout, commitLayout } from "./layout.js";
 import { tryOr, readCommands, pad2 } from "./pure.js";
@@ -27,12 +27,16 @@ import { button, failureLine, stepper } from "./kit.js";
 import { layoutPaused, statusBar } from "./status-bar.js";
 import { COLUMN } from "./ui-status.js";
 import { boundChord } from "./ui-tooltip.js";
+import { contextMenu } from "./context-menu.js";
 import { headerSegment } from "./ui-header.js";
 import { pieceLines } from "./piece-lines.js";
 import { paged } from "./strip-model.js";
+import { checksOutcome, checksStep, opened, deliveryOf, reserve, POLL_MS, PR_LABEL, HISTORY_LINES, DELIVERIES } from "./checks-to-agent.js";
+import { LimitWatch } from "./limits.js";
+import { deliver } from "./deliver.js";
 import { localService } from "./platform-host.js";
 import { openApi } from "./platform-open.js";
-import { NAME_LIMIT, ENTRIES, DIGEST_PIECES, PIECE_GROUP, shownAt, foldFor, headerWidths, headerTools, hoverTools, menuEntries, placeOf, paneLabel, headerMark, prTitle } from "./header-model.js";
+import { NAME_LIMIT, ENTRIES, PIECE_LINES, actOf, DIGEST_PIECES, PIECE_GROUP, shownAt, foldFor, headerWidths, headerTools, hoverTools, menuEntries, placeOf, paneLabel, headerMark, prTitle } from "./header-model.js";
 
 const N_MAX = 8;
 const openUrl = (url) => localService(openApi).open(url).catch(() => { });
@@ -129,13 +133,13 @@ export function parseShortstat(text) {
 // gh's statusCheckRollup, read as the pull request panel reads it (ghchecks.js), in the header's words.
 const CHECKS = { fail: "failing", pending: "running", unknown: "unknown", pass: "passing" };
 export const checksOf = (rollup) => CHECKS[rollupState(rollup)] ?? null;
-const PR_FIELDS = "number,state,isDraft,mergeable,mergeStateStatus,reviewDecision,baseRefName,statusCheckRollup";
+const PR_FIELDS = "number,url,headRefOid,state,isDraft,mergeable,mergeStateStatus,reviewDecision,baseRefName,statusCheckRollup";
 
 // Open pull request for the header. `hold` is why it cannot merge. Permission is not a header fact.
 export function digestPr(view) {
   if (!view?.number || view.state !== "OPEN") return null;
   const facts = prFacts(view);
-  return facts ? { ...facts, checks: checksOf(view.statusCheckRollup), hold: headerHold(view) } : null;
+  return facts ? { ...facts, checks: checksOf(view.statusCheckRollup), hold: headerHold(view), head: view.headRefOid ?? null, url: view.url ?? null, run: checksOutcome(view.statusCheckRollup) } : null;
 }
 
 // gh says this when the branch has no pull request: an answer, not a failure.
@@ -144,6 +148,8 @@ const stdout = (r) => (r?.code === 0 ? r.stdout : null);
 const ghWords = (r) => String(r?.stderr ?? "").trim().split("\n")[0] || `gh exited with ${r?.code}`;
 
 // `run(cmd, args, cwd)` resolves with { code, stdout, stderr }. `failure` is gh's words when it could not answer.
+const labelled = (label, pairs) => label(pairs).then((r) => (r?.code === 0 ? r : label(pairs))).catch(() => null);
+
 export async function readDigest(cwd, run, want = {}) {
   const gitOn = want.git !== false, prOn = want.pr !== false;
   if (!gitOn && !prOn) return null;
@@ -253,6 +259,10 @@ export default class Strip extends View {
     cx.timer.every(150, (cx) => this.pollAdopt(cx));
     this.lastStatus = new Map();
     this.digesting = new Set();
+    this.polling = new Set();
+    this.watching = new Map();
+    this.openers = new Map();
+    this.limits = new LimitWatch();
     cx.timer.every(1500, (cx) => this.watchDigests(cx));
     readCommands(cx, () => nextCommand(), (c, cx) => {
       this.command(String(c).replace(/^kanso-strip\./, ""));
@@ -464,14 +474,15 @@ export default class Strip extends View {
   more(c, pane, { name, entries, does }) {
     const trigger = iconButton(`ph-more-${pane}`, "ellipsis", "More", null, c, { active: this.moreOpen });
     const close = (cx) => { this.moreOpen = false; cx.notify(); };
-    const item = (key) => (key === "separator" ? { separator: true } : {
-      icon: ENTRIES[key][0], label: ENTRIES[key][1],
-      armed: key === "close" && this.armed.is("close"), verb: key === "close" ? `close ${name}` : null,
-      onClick: (cx) => { does[key](cx); if (key !== "close" || !this.armed.is("close")) close(cx); },
-    });
+    const act = (key) => (cx) => { does[key](cx); if (key !== "close" || !this.armed.is("close")) close(cx); };
+    const item = (key) => {
+      if (key === "separator") return { separator: true };
+      if (PIECE_LINES.includes(key)) return { icon: ENTRIES[key][0], label: ENTRIES[key][1], onClick: act(key) };
+      return { act: actOf(key), does: act(key), armed: key === "close" && this.armed.is("close"), verb: key === "close" ? `close ${name}` : null };
+    };
     const pop = Popover.new(`ph-menu-${pane}`).trigger(trigger).anchor("top_right").open(this.moreOpen)
       .on_open_change((open, cx) => { this.moreOpen = open; cx.notify(); });
-    return this.moreOpen ? pop.content(menu(`ph-menu-list-${pane}`, { title: name, items: entries.map(item) }, c)) : pop;
+    return this.moreOpen ? pop.content(contextMenu(`ph-menu-list-${pane}`, { title: name, lines: entries.map(item), framed: true }, c)) : pop;
   }
 
   // Sleep and Send when they rest out; under the pointer the tools this fold keeps, then ⋯.
@@ -489,9 +500,9 @@ export default class Strip extends View {
   // Folder and branch share one Menu: copy either, or open the folder with an editor.
   placeMenu(p, f) {
     return { title: "Folder and branch", piece: "header.place", actions: [
-      ...(p.cwd ? [{ icon: "copy", label: "Copy path", act: (cx) => cx.write_to_clipboard?.(p.cwd) }] : []),
-      ...(f.where.branch ? [{ icon: "copy", label: "Copy branch name", act: (cx) => cx.write_to_clipboard?.(f.where.branch) }] : []),
-      ...(p.cwd ? [{ icon: "external-link", label: "Open with\u2026", act: () => openWithPopup(p) }] : []),
+      ...(p.cwd ? [{ act: "copy-path", does: (cx) => cx.write_to_clipboard?.(p.cwd) }] : []),
+      ...(f.where.branch ? [{ act: "copy-branch", does: (cx) => cx.write_to_clipboard?.(f.where.branch) }] : []),
+      ...(p.cwd ? [{ act: "open-with", does: () => openWithPopup(p) }] : []),
     ] };
   }
 
@@ -500,9 +511,9 @@ export default class Strip extends View {
     const shut = (cx) => { this.segmentMenu = null; cx.notify(); };
     const trigger = fact.on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); this.segmentMenu = id; cx.notify(); });
     if (this.segmentMenu !== id) return trigger;
-    const items = [...actions.map((a) => ({ ...a, onClick: (cx) => { a.act(cx); shut(cx); } })), ...pieceLines(piece, { done: shut })];
+    const lines = [...actions.map((a) => ({ ...a, does: (cx) => { a.does(cx); shut(cx); } })), ...pieceLines(piece, { done: shut })];
     return Popover.new(`fact-menu-${id}`).trigger(trigger).open(true).anchor("top_left").on_open_change((open, cx) => { if (!open) shut(cx); })
-      .content(menu(`fact-menu-list-${id}`, { title, items }, c));
+      .content(contextMenu(`fact-menu-list-${id}`, { title, lines, framed: true }, c));
   }
 
   // The digest: files, commits not on GitHub, then the pull request, or the failure line in its place; a refresh in flight is pending.
@@ -516,15 +527,15 @@ export default class Strip extends View {
     };
     const tone = working ? "dim" : null;
     const digest = segments.filter((seg) => seg.kind === "files" || seg.kind === "commits")
-      .map((seg) => (seg.kind === "files" ? { icon: "file", label: "Open the diff", act: open(seg) } : { icon: "git-pull-request", label: `Push ${seg.count}\u2026`, act: open(seg) }));
+      .map((seg) => (seg.kind === "files" ? { act: "open-diff", does: open(seg) } : { act: "push", of: [seg.count], does: open(seg) }));
     const piece = (seg) => {
       if (seg.kind === "failure") return failureLine({ text: seg.text, fix: "Refresh", detail: seg.tip })(`digest-failure-${pane}`, c, { onClick: does.refresh });
       if (seg.kind === "pr") return shownAt(fold, "PR") ? this.factMenu(c, `pr-${pane}`, headerSegment(`digest-pr-${pane}`, { act: open(seg), title: prTitle(segments, fold),
         parts: [{ text: seg.number, tone: "muted" }, shownAt(fold, "verdict word") && seg.verdict ? { text: `· ${seg.verdict}`, tone: seg.verdictTone } : null] }, c),
         { title: `Pull request \u00b7 ${seg.number}`, piece: "header.pr", actions: [
-          ...(seg.url ? [{ icon: "copy", label: "Copy link", act: (cx) => cx.write_to_clipboard?.(seg.url) }] : []),
-          { icon: "git-pull-request", label: "Open the pull request", act: open(seg) },
-          ...(seg.url ? [{ icon: "external-link", label: "Open on GitHub", act: () => openUrl(seg.url) }] : [])] }) : null;
+          ...(seg.url ? [{ act: "copy-link", does: (cx) => cx.write_to_clipboard?.(seg.url) }] : []),
+          { act: "open-pr", does: open(seg) },
+          ...(seg.url ? [{ act: "open-github", does: () => openUrl(seg.url) }] : [])] }) : null;
       const step = seg.kind === "files" ? "files" : "commits";
       return shownAt(fold, step) ? this.factMenu(c, `${seg.kind}-${pane}`, headerSegment(`digest-${seg.kind}-${pane}`, { act: open(seg), tone, title: seg.tip,
         parts: [{ text: seg.count }, seg.diff ? { text: seg.diff, tone: seg.diffTone } : null] }, c),
@@ -618,6 +629,11 @@ export default class Strip extends View {
         if (e.click_count === 2 && p.terminal) { this.press = null; does.rename(cx); return; }
         if (shared("strip.drag")) endDrag();
         else if (movable) this.press = e.position;
+      })
+      .on_mouse_down("right", (_e, cx) => {
+        if (this.renaming) return;
+        this.moreOpen = true;
+        cx.notify();
       })
       .when(strip, (el) => el
         .on_scroll_wheel((e) => this.wheelReq(e))
@@ -805,15 +821,17 @@ export default class Strip extends View {
       // A header's Refresh marks its record reading; the read starts here.
       if ((stopped || store[p.pane]?.reading) && !this.digesting.has(p.pane)) this.digest(p, cx);
     }
+    this.limits.watch(cx);
     const live = new Set(all.map((p) => p.pane));
     const gone = new Set(Object.keys(store).filter((id) => !live.has(id)));
     for (const id of [...this.lastStatus.keys()]) if (!live.has(id)) this.lastStatus.delete(id);
     if (gone.size) setShared(DIGEST, Object.fromEntries(Object.entries(store).filter(([id]) => !gone.has(id))));
   }
 
-  digest(p, cx) {
+  digest(p, cx, poll = false) {
     const map = pieces(shared);
-    const want = { git: runs("header.digest", map), pr: runs("header.pr", map) };
+    const checks = runs("agents.checks", map);
+    const want = poll ? { git: false, pr: true } : { git: runs("header.digest", map), pr: runs("header.pr", map) || checks };
     if (!want.git && !want.pr) return;
     this.digesting.add(p.pane);
     const on = spaces().find((s) => s.tabs.some((x) => x.id === p.tab))?.machine ?? null;
@@ -824,11 +842,75 @@ export default class Strip extends View {
         const live = panes().find((q) => q.pane === p.pane);
         const was = shared(DIGEST)?.[p.pane];
         // It went back to work meanwhile: what it left is no longer the news, unless someone asked for this read.
-        if (!live || (live.status === "working" && !was?.reading)) return;
-        const settled = settleDigest(was, d);
-        setShared(DIGEST, { ...(shared(DIGEST) ?? {}), [p.pane]: settled ? { ...settled, at: Date.now() } : null });
+        if (!live) return;
+        if (!poll && !(live.status === "working" && !was?.reading)) {
+          const settled = settleDigest(was, d);
+          setShared(DIGEST, { ...(shared(DIGEST) ?? {}), [p.pane]: settled ? { ...settled, at: Date.now() } : null });
+        }
+        if (!checks) return;
+        if (d?.failure) { if (this.watching.has(live.pane)) this.pollAgain(live, cx); return; }
+        this.checksTurn(live, d?.pr ?? null, cx);
       } finally { this.digesting.delete(p.pane); }
     });
+  }
+
+  openerOf(p, pr, labels, cx) {
+    if (labels[PR_LABEL] === pr.url) return true;
+    const key = `${p.terminal}\u0000${pr.url}`;
+    if (this.openers.has(key)) return this.openers.get(key);
+    this.openers.set(key, null);
+    cx.spawn(async (cx) => {
+      const read = await hc(["read", p.terminal, "--lines", String(HISTORY_LINES)]).catch(() => null);
+      if (read?.code !== 0) { this.openers.delete(key); this.pollAgain(p, cx); return; }
+      const found = opened(read.stdout, pr);
+      this.openers.set(key, found);
+      if (found) await hc(["label", p.terminal, `${PR_LABEL}=${pr.url}`]).catch(() => null);
+      const live = panes().find((q) => q.pane === p.pane);
+      if (live && runs("agents.checks", pieces(shared))) this.checksTurn(live, pr, cx);
+    });
+    return null;
+  }
+
+  pollAgain(p, cx) {
+    if (this.polling.has(p.pane)) return;
+    this.polling.add(p.pane);
+    cx.timer.after(POLL_MS, (next) => {
+      this.polling.delete(p.pane);
+      const live = panes().find((q) => q.pane === p.pane);
+      if (live?.terminal && live.cwd && !this.digesting.has(live.pane)) this.digest(live, next, true);
+    });
+  }
+
+  checksTurn(p, pr, cx) {
+    if (!runs("agents.checks", pieces(shared))) return;
+    const labels = terminals().find((term) => term.address === p.terminal)?.labels ?? {};
+    const opener = pr?.url ? this.openerOf(p, pr, labels, cx) : false;
+    if (opener === null) return;
+    const watched = this.watching.get(p.pane);
+    const empties = watched && watched.head === pr?.head ? watched.empties : 0;
+    const step = checksStep({ pr, labels, status: p.status, opener, empties });
+    const label = (pairs) => (pairs?.length ? hc(["label", p.terminal, ...pairs]) : Promise.resolve({ code: 0 }));
+    if (step.act === "poll") {
+      this.watching.set(p.pane, { head: pr.head, empties: empties + (step.empty ? 1 : 0) });
+      label(step.labels).catch(() => null);
+      this.pollAgain(p, cx);
+      return;
+    }
+    this.watching.delete(p.pane);
+    if (step.act !== "send") { label(step.labels).catch(() => null); return; }
+    const reserved = deliveryOf(shared(DELIVERIES), p.terminal, pr.head);
+    if (reserved === "sending") return;
+    if (reserved === "sent") { labelled(label, step.labels); return; }
+    const now = panes().find((q) => q.pane === p.pane);
+    if (now?.status !== p.status) return;
+    setShared(DELIVERIES, reserve(shared(DELIVERIES), p.terminal, pr.head, "sending"));
+    deliver(cx.timer, p.terminal, step.text, "GitHub checks")
+      .then((sent) => {
+        const ok = sent.code === 0 || sent.unconfirmed;
+        setShared(DELIVERIES, reserve(shared(DELIVERIES), p.terminal, pr.head, ok ? "sent" : null));
+        if (ok) labelled(label, step.labels);
+      })
+      .catch(() => setShared(DELIVERIES, reserve(shared(DELIVERIES), p.terminal, pr.head, null)));
   }
 
   openFind() {

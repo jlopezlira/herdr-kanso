@@ -32,6 +32,7 @@ export const tryOrAsync = async (fn, fallback = null) => {
   try { return await fn(); } catch { return fallback; }
 };
 
+export const same = (a, b) => String(a ?? "").toLowerCase() === String(b ?? "").toLowerCase();
 export const parseOr = (text, fallback = null) => tryOr(() => JSON.parse(text), fallback);
 
 export const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;

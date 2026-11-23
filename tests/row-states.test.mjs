@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { load, texts, nodes, KIT_NIGHT, drawingHost } from "./helpers.mjs";
 import { canWake } from "../kanso/mods/kanso-spaces/sidebar-rows.js";
-import { asleepLook, withPending, withoutWaking, AWAY_MENU, machineReaches } from "../kanso/mods/kanso-spaces/row-states.js";
+import { asleepLook, withPending, withoutWaking, machineReaches } from "../kanso/mods/kanso-spaces/row-states.js";
 import { COULD_NOT_SLEEP, SLEEP_FAILED, SLEEP_PENDING, failedTerminals } from "../kanso/mods/kanso-sleep/resume.js";
 import { present } from "../kanso/mods/kanso-spaces/since-left-model.js";
 
@@ -112,7 +112,6 @@ test("a closed pane keeps its last words, and a right-click offers dismiss or sw
   assert.equal(typeof press?.[2], "function");
   press[2]({}, { stop_propagation() {} });
   assert.deepEqual(menus, ["menu"]);
-  assert.deepEqual(AWAY_MENU, ["Dismiss", "Switch off"]);
 });
 
 test("the away summary draws inside a 420-wide sidebar and does not take a width of its own", async () => {

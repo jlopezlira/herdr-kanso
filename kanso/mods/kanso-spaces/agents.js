@@ -10,6 +10,8 @@ import { oneLine } from "./since-left-model.js";
 import { G, GLIDE, H, R, DIALOG, SIDEBAR, sidebarSides } from "./ui.js";
 import { mark, MARK_SIZES } from "./ui-mark.js";
 import { sessionRow } from "./session-row.js";
+import { SNOOZE_LABEL } from "./limits-model.js";
+export { SNOOZE_LABEL };
 
 export { NAME_LABEL };
 
@@ -30,7 +32,7 @@ const twoLines = (more) => !more.oneLine && Boolean(more.activity);
 export const sessionHeight = (more = {}) => (twoLines(more) ? H.two : H.line);
 
 // Asleep is one more status: its own section, after the awake ones.
-const RANK = { blocked: 4, done: 3, working: 2, idle: 1, asleep: 0.5 };
+const RANK = { blocked: 4, done: 3, working: 2, limited: 1.5, idle: 1, asleep: 0.5 };
 
 const clean = (s) => (s ?? "").replace(/^[^\p{L}\p{N}]+/u, "").trim();
 
@@ -38,7 +40,6 @@ const clean = (s) => (s ?? "").replace(/^[^\p{L}\p{N}]+/u, "").trim();
 export const PIN_LABEL = "kanso.pin";
 // Values: settled "<ms>:<turn>", snooze "<ms>", unread "1", thread a title.
 export const SETTLED_LABEL = "kanso.settled";
-export const SNOOZE_LABEL = "kanso.snooze";
 export const UNREAD_LABEL = "kanso.unread";
 export const THREAD_LABEL = "kanso.thread";
 
@@ -216,6 +217,7 @@ export function nest(rows, all = []) {
 export const SECTIONS = [
   { id: "blocked", label: "Needs you" },
   { id: "working", label: "Working" },
+  { id: "limited", label: "Limited" },
   { id: "done", label: "Done" },
   { id: "idle", label: "Idle" },
   { id: "asleep", label: "Asleep" },

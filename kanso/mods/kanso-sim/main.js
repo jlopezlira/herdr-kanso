@@ -13,7 +13,7 @@ import { TOOLS, PROBE_MS, probeTools, toolRecord } from "./registration.js";
 import { pieces, runs } from "./pieces.js";
 import { iosCommand } from "./ios.js";
 import { adbCommand, readDevices, startDevice, deviceSize, captureDevice } from "./devices.js";
-import { BEAT_MS, FRAME_MS, BOOT_MS, FrameLoop, TextBatch, canStart, canRotate, bootState, age, pictureSize, fitPicture, sizeDue, screenPoint, gesture, keyInput, textParts, CONTROLS, panelShown } from "./model.js";
+import { BEAT_MS, FRAME_MS, BOOT_MS, FrameLoop, TextBatch, canStart, canRotate, bootState, openable, age, pictureSize, fitPicture, sizeDue, screenPoint, gesture, keyInput, textParts, CONTROLS, panelShown } from "./model.js";
 
 const PICKED = "kanso.sim.picked";
 const failure = (error) => String(error?.message ?? error).split(/\r?\n/)[0];
@@ -35,6 +35,7 @@ export default class Simulator extends View {
     this.focus = cx.focus_handle();
     this.url = new TextField({ placeholder: "URL" });
     this.url.on("submit", (_event, cx) => this.openUrl(cx));
+    this.url.on("change", (_event, cx) => cx.notify());
     cx.timer.after(0, (next) => this.tick(next));
   }
 
@@ -227,7 +228,7 @@ export default class Simulator extends View {
 
   openUrl(cx) {
     const device = this.current(), url = this.url.value().trim();
-    if (device?.platform !== "ios" || device.state !== "Booted" || !/^[a-z][a-z\d+.-]*:\S+$/i.test(url)) return;
+    if (device?.platform !== "ios" || device.state !== "Booted" || !openable(url)) return;
     this.act(() => iosCommand(exec, this.tools, ["openurl", device.target, url]), cx);
   }
 
@@ -236,7 +237,8 @@ export default class Simulator extends View {
   loading(c) { return skeletonOf({ shape: "device" })("kanso-skeleton", c); }
 
   controls(device, c) {
-    const link = (label, fn) => quietLink(`sim-${label}`, label, fn, c, { disabled: this.acting });
+    const link = (label, fn, ready = true) => quietLink(`sim-${label}`, label, fn, c, { disabled: this.acting || !ready });
+    const url = this.url.value().trim(), wrong = Boolean(url) && !openable(url);
     if (device.platform === "android") return h_flex().flex_none().flex_wrap().gap_x(G.md).gap_y(G.xs)
       .children(CONTROLS.map(([label, code]) => link(label, (cx) => this.android(["shell", "input", "keyevent", String(code)], cx))))
       .when(canRotate(device), (el) => el
@@ -248,8 +250,9 @@ export default class Simulator extends View {
         .children(["light", "dark"].map((mode) => link(`Appearance ${mode}`, (cx) => this.act(() => iosCommand(exec, this.tools, ["ui", device.target, "appearance", mode]), cx))))
         .child(link("Shut down", (cx) => this.act(() => iosCommand(exec, this.tools, ["shutdown", device.target]), cx))))
       .child(h_flex().gap(G.sm).items_center()
-        .child(field("sim-url", this.url, c).flex_1().min_w(0))
-        .child(link("Open a URL", (cx) => this.openUrl(cx))));
+        .child(field("sim-url", this.url, c, { error: wrong }).flex_1().min_w(0))
+        .child(link("Open a URL", (cx) => this.openUrl(cx), openable(url))))
+      .when(wrong, (el) => el.child(this.line("Include a scheme, such as mailto: or myapp://", c, true)));
   }
 
   screen(c) {

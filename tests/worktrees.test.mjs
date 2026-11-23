@@ -4,9 +4,9 @@ import { mkdir, rm, writeFile, realpath } from "node:fs/promises";
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, basename } from "node:path";
-import { load, loadSystemApi, context, temporary, clone, exec, failure, gitOk, fileExists as exists } from "./helpers.mjs";
+import { load, loadSystemApi, context, temporary, clone, exec, failure, gitOk, committedRepo, tape, fileExists as exists } from "./helpers.mjs";
 
-const names = ["Worktrees", "removable", "losses", "lastDays", "spaceBy", "freedSpec", "freedText", "explainPrompt", "reviewPrompt", "rootsFor", "parseDiscovery", "basesFrom", "parseWorktrees", "parseProbe", "stateOf", "safe", "consequence", "fmtSize", "fmtAge", "inside", "openIn"];
+const names = ["Worktrees", "removable", "losses", "lastDays", "spaceBy", "freedSpec", "freedText", "explainPrompt", "reviewPrompt", "rootsFor", "parseDiscovery", "basesFrom", "parseWorktrees", "parseProbe", "stateOf", "safe", "consequence", "fmtSize", "fmtAge", "inside", "openIn", "branchLoss", "tokens"];
 const writeTextFile = (path, text) => writeFile(path, text);
 const storeOf = (app) => load("kanso-panel/worktrees-store.js", ["WorktreeStore", "upsertSql", "rowOf", "itemOf"], { exec, appHome: () => app, writeTextFile });
 const worktrees = async (host = {}) => load("kanso-panel/worktrees.js", names, {
@@ -209,7 +209,7 @@ test("Worktrees shares the totals only: what was freed, or what they take before
   assert.deepEqual([spec.hero.big, spec.hero.small, spec.right], ["2.5", "GB", "since Nov 1"]);
   assert.deepEqual(spec.stats.map((x) => x.value), ["4", "2", "6"]);
   assert.equal(spec.blocks[0].title, "Freed each day");
-  assert.match(freedText(h, now), /^Freed 2\.5 GB of disk from 4 git worktrees my AI agents left behind, 2 merged branches deleted\.$/);
+  assert.match(freedText(h, now), /^Freed 2\.5 GB of disk from 4 git worktrees my AI agents left behind, 2 branches deleted\.$/);
   const before = clone(freedSpec({ ...h, kb: 0, freedByDay: {} }, now, day(3)));
   assert.deepEqual([before.hero.big, before.hero.label], ["9.0", "of disk in git worktrees agents left behind"]);
   assert.equal(before.blocks[0].title, "On disk each day");
@@ -349,6 +349,133 @@ test("Worktrees finds every kind in a real repository and cleans up the safe one
   assert.equal(panel.note, null);
   assert.equal(stateOf(row("moved")), "changes");
   assert.equal(row("moved").dirty, 1);
+});
+
+const removalFixture = async (t) => {
+  const { dir, repo } = await committedRepo(t);
+  const settings = { "kanso.worktrees.roots": [repo], "kanso.worktrees.idleHours": 0 };
+  const { Worktrees } = await worktrees({ app: join(dir, "app"), home: () => dir, shared: (key) => settings[key] ?? null });
+  const add = async (branch) => {
+    const path = join(dir, branch);
+    await git(repo, "worktree", "add", "-qb", branch, path);
+    await writeFile(join(path, "readme"), `${branch}\n`);
+    await git(path, "commit", "-qam", branch);
+    const head = await git(path, "rev-parse", "--verify", "HEAD");
+    return { path, repo, branch, head, merged: false, dirty: 0 };
+  };
+  return { dir, repo, add, panel: new Worktrees() };
+};
+
+test("Remove with its branch deletes the unmerged branch, while plain Remove keeps it", async (t) => {
+  const { repo, add, panel } = await removalFixture(t);
+  const kept = await add("kept");
+  const dropped = await add("dropped");
+
+  assert.equal((await panel.removeOne(kept)).branches, 0);
+  assert.ok(!existsSync(kept.path), "plain Remove removes the folder");
+  assert.equal(await git(repo, "branch", "--list", kept.branch), kept.branch);
+
+  assert.equal((await panel.removeOne(dropped, true)).branches, 1);
+  assert.ok(!existsSync(dropped.path), "Remove with its branch removes the folder");
+  assert.equal(await git(repo, "branch", "--list", dropped.branch), "");
+});
+
+const busyBranchFixture = async (t) => {
+  const { dir, repo, add, panel } = await removalFixture(t);
+  const w = await add("in-use");
+  await git(repo, "worktree", "add", "-q", "--force", join(dir, "other"), w.branch);
+  return { w, panel };
+};
+
+test("Remove with its branch reports why Git keeps the branch and counts the removed folder", async (t) => {
+  const { w, panel } = await busyBranchFixture(t);
+  const { branchStays, ...removed } = await panel.removeOne({ ...w, size: 32 }, true);
+
+  assert.deepEqual(removed, { kb: 32, worktrees: 1, branches: 0 });
+  assert.match(branchStays, /cannot delete branch 'in-use'.*other/i);
+  assert.ok(!existsSync(w.path), "the original folder is gone");
+  assert.equal(await git(w.repo, "branch", "--list", "--format=%(refname:short)", w.branch), w.branch);
+});
+
+test("Worktrees drops the removed row, credits the freed space and says the branch stays", async (t) => {
+  const { w, panel } = await busyBranchFixture(t);
+  const { cx, drain } = context();
+  panel.init(cx); await drain();
+  const row = panel.groups.flatMap((g) => g.items).find((x) => basename(x.path) === basename(w.path));
+  assert.ok(row, "the scan lists the worktree");
+
+  panel.remove(row, cx, true); await drain();
+  assert.equal(panel.item(row.path), null);
+  assert.equal(panel.note?.text, "Branch in-use stays");
+  assert.match(panel.note.source, /cannot delete branch 'in-use'/i);
+  assert.deepEqual([panel.hist.worktrees, panel.hist.kanso, panel.hist.branches], [1, row.size ?? 0, 0]);
+});
+
+test("Remove with its branch keeps the folder and both branches if the checkout changed after the scan", async (t) => {
+  const { repo, add, panel } = await removalFixture(t);
+  const w = await add("switched");
+  await git(w.path, "switch", "-qc", "replacement");
+
+  await assert.rejects(panel.removeOne(w, true), { message: "Branch switched changed since the scan; scan again" });
+  assert.equal(await git(w.path, "branch", "--show-current"), "replacement", "the worktree is still there");
+  const branches = await git(repo, "branch", "--list", "--format=%(refname:short)", w.branch, "replacement");
+  assert.deepEqual(branches.split(/\r?\n/).sort(), ["replacement", "switched"]);
+});
+
+test("Remove with its branch keeps the worktree and the amended commit if the branch changed after the scan", async (t) => {
+  const { repo, add, panel } = await removalFixture(t);
+  const w = await add("amended");
+  await writeFile(join(w.path, "readme"), "amended after the scan\n");
+  await git(w.path, "commit", "--amend", "-qa", "--no-edit");
+  const amended = await git(w.path, "rev-parse", "--verify", "HEAD");
+  assert.notEqual(amended, w.head);
+
+  await assert.rejects(panel.removeOne(w, true), { message: "Branch amended changed since the scan; scan again" });
+  assert.ok(existsSync(w.path), "the worktree is still there");
+  assert.equal(await git(repo, "rev-parse", "--verify", "refs/heads/amended"), amended);
+});
+
+test("Remove with its branch deletes the branch but leaves a tag with the same name", async (t) => {
+  const { repo, add, panel } = await removalFixture(t);
+  const w = await add("tagged");
+  await git(repo, "tag", w.branch, "main");
+
+  assert.equal((await panel.removeOne(w, true)).branches, 1);
+  assert.ok(!existsSync(w.path), "the worktree is gone");
+  assert.equal(await git(repo, "branch", "--list", w.branch), "");
+  assert.equal(await git(repo, "tag", "--list", w.branch), w.branch);
+});
+
+test("The branch removal warning names the branch and counts its unmerged commits", async () => {
+  const { branchLoss } = await worktrees();
+  const branch = "feat/inbox";
+  assert.equal(branchLoss({ branch, ahead: 1 }), "Loses branch feat/inbox and its 1 commit not merged.");
+  assert.equal(branchLoss({ branch, ahead: 2 }), "Loses branch feat/inbox and its 2 commits not merged.");
+});
+
+test("Only an unmerged worktree offers Remove with its branch and warns what it loses when pressed", async () => {
+  const { texts, handlers, host } = tape();
+  const { Worktrees, tokens } = await worktrees(host);
+  const panel = new Worktrees(), c = tokens();
+  const w = { path: "/repo/tree", repo: "/repo", branch: "feat/inbox", probed: true, fresh: true, ahead: 1 };
+  panel.show([w]);
+  panel.picked = w.path;
+  const draw = (changes = {}) => {
+    texts.length = 0;
+    panel.row({ ...w, ...changes }, c);
+    return texts.slice();
+  };
+  const label = "Remove with its branch";
+  assert.ok(draw().includes(label));
+  for (const state of [{ merged: true }, { branch: null }, { dirty: 1 }, { recent: true }, { open: true }, { locked: true }, { fresh: false }]) {
+    assert.ok(!draw(state).includes(label), JSON.stringify(state));
+  }
+
+  const { cx } = context();
+  const warns = (drawn) => drawn.some((text) => text.startsWith("Loses branch feat/inbox"));
+  assert.ok(!warns(draw()));
+  handlers.get(`wt-rmb-${w.path}`)(null, cx);
+  assert.ok(warns(draw()));
 });
 
 test("Explain names and starts the one installed agent, looked up once", async () => {

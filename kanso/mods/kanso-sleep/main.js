@@ -291,7 +291,7 @@ export default class Sleep extends View {
     const close = () => closeOverlay(props()?.overlay);
     const scope = this.order?.scope ?? null;
     const c = tokens(theme());
-    const shell = { focusHandle: this.handle, held: Boolean(this.busy), onCancel: close };
+    const shell = { focusHandle: this.handle, held: Boolean(this.busy), onCancel: close, secondary: scope === "project" && !this.error ? "Cancel" : "Close" };
     if (!scope) return dialog("kanso-sleep", c, { ...shell, title: "Wake", notes: statusNotes(this) });
     const project = this.space?.name ?? tilde(this.space?.folder);
     const list = (this.reads ?? []).filter((r) => r.resume || r.running);

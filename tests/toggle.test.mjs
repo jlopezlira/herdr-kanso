@@ -141,7 +141,7 @@ test("Settings and Spend keep each switch on its row and flip the same way", asy
     props: () => ({}),
     appHome: () => "/tmp/app",
     home: () => "/tmp",
-    InputState: { new: () => ({ value() { return ""; }, on() {} }) },
+    InputState: { new: () => ({ value() { return ""; }, on() {}, set_masked() {} }) },
   };
   const { Settings } = await loadSettings(desk);
   const settings = new Settings();

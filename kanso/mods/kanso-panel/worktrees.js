@@ -123,6 +123,10 @@ export const removable = (w) => !["open", "locked", "recent", "checking", "broke
 // Would lose work, or can't be read until repaired.
 export const needsLook = (w) => ["changes", "lost", "broken"].includes(stateOf(w));
 
+const commits = (n) => `${n} ${n === 1 ? "commit" : "commits"}`;
+
+export const branchLoss = (w) => `Loses branch ${w.branch}${w.ahead > 0 ? ` and its ${commits(w.ahead)} not merged` : ""}.`;
+
 // Sizes in KB.
 export function spaceBy(items, orphans = []) {
   const live = items.filter((w) => !w.missing), of = (test) => live.filter(test);
@@ -159,7 +163,7 @@ export function consequence(w, base) {
     ...(!w.branch && w.only > 0 ? [`${w.only} ${w.only === 1 ? "commit" : "commits"} no branch has`] : []),
   ];
   const branch = !w.branch ? "" : w.merged ? ` Branch ${w.branch} goes too: its work is in ${base || "the default branch"}.`
-    : ` Branch ${w.branch} stays${w.ahead > 0 ? ` with its ${w.ahead} ${w.ahead === 1 ? "commit" : "commits"}` : ""}.`;
+    : ` Branch ${w.branch} stays${w.ahead > 0 ? ` with its ${commits(w.ahead)}` : ""}.`;
   return (lost.length ? `Loses ${lost.join(" and ")}.` : "Nothing is lost.") + branch;
 }
 
@@ -214,7 +218,7 @@ export function freedSpec(h, current, at = Date.now()) {
 export function freedText(h, current) {
   const parts = (h?.kb ?? 0) > 0 ? [
     `Freed ${fmtSize(h.kb)} of disk from ${h.worktrees} git ${h.worktrees === 1 ? "worktree" : "worktrees"} my AI agents left behind`,
-    ...(h.branches ? [`${h.branches} merged ${h.branches === 1 ? "branch" : "branches"} deleted`] : []),
+    ...(h.branches ? [`${h.branches} ${h.branches === 1 ? "branch" : "branches"} deleted`] : []),
   ] : current?.size ? [`My AI agents left ${fmtSize(current.size)} of disk in ${current.worktrees} git worktrees`] : [];
   return postText(parts, "Cleaning up after my AI agents.");
 }
@@ -469,7 +473,7 @@ export class Worktrees {
     });
   }
 
-  async removeOne(w) {
+  async removeOne(w, withBranch = false) {
     if (w.orphan) {
       // Checked again right before deleting: if it is a worktree again, the script exits instead.
       const r = await localService(repositoryApi).removeOrphan(w.path).catch((error) => ({ code: 1, stderr: String(error) }));
@@ -483,13 +487,18 @@ export class Worktrees {
       return { records: 1 };
     }
     const git = (args) => exec("git", args, { cwd: w.repo });
+    if (withBranch) {
+      const head = await exec("git", ["rev-parse", "HEAD", "--symbolic-full-name", "HEAD"], { cwd: w.path });
+      if (head.code !== 0 || head.stdout.trim() !== `${w.head}\nrefs/heads/${w.branch}`) throw new Error(`Branch ${w.branch} changed since the scan; scan again`);
+    }
     if (!w.missing) {
       const r = await git(["worktree", "remove", ...(w.dirty > 0 ? ["--force"] : []), w.path]);
       if (r.code !== 0) throw new Error((r.stderr || r.stdout).trim());
     }
-    const branch = w.merged && w.branch ? (await git(["branch", "-D", w.branch])).code === 0 : false;
+    const gone = (w.merged || withBranch) && w.branch ? await git(["branch", "-D", w.branch]) : null, branch = gone?.code === 0;
     await git(["worktree", "prune"]);
-    return w.missing ? { records: 1 } : { kb: w.size ?? 0, worktrees: 1, branches: branch ? 1 : 0 };
+    const kept = withBranch && !branch ? { branchStays: (gone?.stderr || gone?.stdout || "").trim() } : {};
+    return w.missing ? { records: 1 } : { kb: w.size ?? 0, worktrees: 1, branches: branch ? 1 : 0, ...kept };
   }
 
   drop(w) {
@@ -514,21 +523,23 @@ export class Worktrees {
     return now && ok(now) ? now : null;
   }
 
-  remove(target, cx) {
+  remove(target, cx, withBranch = false) {
     this.markOpen();
     const w = this.item(keyOf(target));
     if (!w || w.open || w.locked || this.working || !w.fresh) return;
     this.working = w.path; this.armed.clear(); this.note = null; this.notice = null;
-    const before = { dirty: w.dirty ?? 0, only: w.only ?? 0 };
+    const before = { dirty: w.dirty ?? 0, only: w.only ?? 0, ahead: w.ahead ?? 0, branch: w.branch };
     spawnAndNotify(cx, async (cx) => {
       try {
-        const now = await this.still(w.path, (x) => removable(x) && (x.dirty ?? 0) <= before.dirty && (x.only ?? 0) <= before.only);
+        const now = await this.still(w.path, (x) => removable(x) && (x.dirty ?? 0) <= before.dirty && (x.only ?? 0) <= before.only
+          && (!withBranch || (x.branch === before.branch && (x.ahead ?? 0) <= before.ahead)));
         if (!now) {
           this.notice = `${name(w.path)} changed since you looked, so it stays. Its row shows it as it is now.`;
           return;
         }
-        const got = await this.removeOne(now);
+        const got = await this.removeOne(now, withBranch);
         this.drop(now); await this.credit([[now, got]]);
+        if (got.branchStays !== undefined) this.note ??= said(`Branch ${now.branch} stays`, got.branchStays || "Git did not delete it");
         if (got.kb) notify({ title: `Freed ${fmtSize(got.kb)}`, body: this.hist?.kb ? `${fmtSize(this.hist.kb)} freed so far` : undefined, level: "success" });
       } catch (e) { this.note = said(`Can't remove ${name(w.path)}`, e.message ?? e); }
       finally { this.finishWork(cx); }
@@ -681,8 +692,11 @@ export class Worktrees {
     const blocked = s === "open" ? "Close its tabs in Herdr to remove it." : s === "locked" ? "Locked: run git worktree unlock to remove it."
       : s === "broken" ? "Its .git points to where the repository used to be, so git can't read what it holds. Repair the link to check it like any other."
       : s === "checking" || !w.fresh ? "As the last scan saw it. Checking it again before it can be removed." : "";
-    const text = consequence(w, this.groups.find((g) => g.repo === w.repo)?.base);
+    const dropsBranch = this.armed.is(`branch:${w.path}`);
+    const text = dropsBranch ? branchLoss(w) : consequence(w, this.groups.find((g) => g.repo === w.repo)?.base);
     const loses = text.startsWith("Loses") || w.orphan;
+    const removeLink = (id, key, label, withBranch) => this.armed.link(`wt-${id}-${w.path}`, busy ? "Removing…" : label, label.toLowerCase(),
+      `${key}:${w.path}`, (cx) => this.remove(w.path, cx, withBranch), c, { color: c.text, disabled: Boolean(this.working) });
     return v_flex().w_full()
       .child(button)
       .child(v_flex().w_full().px(G.md).pt(G.xs).pb(G.md).gap(G.sm)
@@ -695,8 +709,8 @@ export class Worktrees {
             onClick: () => this.ask(`Explain ${name(w.path)}`, w.path, explainPrompt(this.item(w.path) ?? w, this.groups.find((g) => g.repo === w.repo)?.base)),
           })))
           .when(!w.missing, (el) => el.child(quietLink(`wt-open-${w.path}`, "Open in a new tab", () => run("tab.new", { folder: w.path }), c)))
-          .when(!blocked, (el) => el.child(this.armed.link(`wt-rm-${w.path}`, busy ? "Removing…" : "Remove", "remove",
-            `one:${w.path}`, (cx) => this.remove(w.path, cx), c, { color: c.text, disabled: Boolean(this.working) })))));
+          .when(!blocked, (el) => el.child(removeLink("rm", "one", "Remove", false)))
+          .when(!blocked && s === "unmerged", (el) => el.child(removeLink("rmb", "branch", "Remove with its branch", true)))));
   }
 
   group(id, title, where, items, c) {
@@ -866,6 +880,6 @@ export class Worktrees {
 
 const cleanedStats = (h) => [
   { value: String(h.worktrees), unit: h.worktrees === 1 ? "worktree removed" : "worktrees removed" },
-  { value: String(h.branches), unit: h.branches === 1 ? "merged branch deleted" : "merged branches deleted" },
+  { value: String(h.branches), unit: h.branches === 1 ? "branch deleted" : "branches deleted" },
   { value: String(h.records + h.orphans), unit: "leftovers cleared" },
 ];

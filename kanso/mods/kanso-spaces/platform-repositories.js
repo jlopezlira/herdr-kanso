@@ -3,7 +3,7 @@ import { paths } from "./platform-paths.js";
 import { fileApi } from "./platform-files.js";
 
 const hash = (text) => [...String(text)].reduce((n, ch) => Math.imul(n ^ ch.charCodeAt(0), 16777619) >>> 0, 2166136261).toString(16);
-const ADD_WORKTREE = String.raw`
+export const ADD_WORKTREE = String.raw`
 cd "$1" 2>/dev/null || { echo "The project's folder is not there." >&2; exit 3; }
 top=$(git rev-parse --show-toplevel 2>/dev/null) || { echo "This project is not a git repository." >&2; exit 4; }
 git check-ref-format --branch "$2" >/dev/null 2>&1 || { echo "That is not a branch name git takes." >&2; exit 5; }
@@ -20,6 +20,7 @@ dest="$base/$(basename "$main")-$id/$(printf %s "$2" | tr '/' '-')-$(printf %s "
 if [ -e "$dest" ]; then echo "$dest is already there." >&2; exit 6; fi
 mkdir -p "$(dirname "$dest")" || exit 7
 if git show-ref --verify --quiet "refs/heads/$2"; then git worktree add "$dest" "$2" >&2 || exit 8
+elif [ -n "$4" ]; then git worktree add -b "$2" "$dest" "$4" >&2 || exit 8
 else git worktree add -b "$2" "$dest" >&2 || exit 8; fi
 printf 'made\t%s\n' "$dest"
 `;
@@ -106,8 +107,8 @@ export function repositoryApi(platform, run) {
     const found = await Promise.all(candidates.map(async (ref) => (await git(folder, ["rev-parse", "-q", "--verify", `${ref}^{commit}`])).code === 0 ? `${/(?:^|\/)(?:develop|dev)$/.test(ref) ? "+" : ""}${ref}` : null));
     return { code: 0, stdout: found.filter(Boolean).join("\n") };
   };
-  const add = async (folder, branch, base, home) => {
-    if (platform !== "windows") return run("sh", ["-c", ADD_WORKTREE, "sh", folder, branch, base]);
+  const add = async (folder, branch, base, home, from = "") => {
+    if (platform !== "windows") return run("sh", ["-c", ADD_WORKTREE, "sh", folder, branch, base, from]);
     if (!await files.test(folder, "directory")) throw new Error("The project's folder is not there.");
     checked(await git(folder, ["rev-parse", "--show-toplevel"]));
     checked(await git(folder, ["check-ref-format", "--branch", branch]));
@@ -120,7 +121,7 @@ export function repositoryApi(platform, run) {
     if (await files.test(destination, "any")) throw new Error(`${destination} is already there.`);
     checked(await files.mkdir(paths.dirname(destination)));
     const hasBranch = (await git(folder, ["show-ref", "--verify", "--quiet", `refs/heads/${branch}`])).code === 0;
-    checked(await git(folder, ["worktree", "add", ...(hasBranch ? [] : ["-b", branch]), destination, ...(hasBranch ? [branch] : [])]));
+    checked(await git(folder, ["worktree", "add", ...(hasBranch ? [] : ["-b", branch]), destination, ...(hasBranch ? [branch] : from ? [from] : [])]));
     return { code: 0, stdout: `made\t${destination}` };
   };
   const discover = async (roots) => {

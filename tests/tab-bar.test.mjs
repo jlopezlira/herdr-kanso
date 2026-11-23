@@ -210,7 +210,7 @@ test("A right-click opens the tab's menu and the wheel still moves one tab", asy
   assert.equal(b.view.tabMenu, "t2");
   const popover = byTag(b.view.render(b.cx), "tab-menu-t2");
   const words = texts(arg(popover, "content"));
-  for (const row of ["cart-ui", "Rename", "New tab", "Sleep cart-ui…", "Close tab", "Hide “Agent state on tabs”", "Settings for this…"]) assert.ok(words.includes(row), row);
+  for (const row of ["cart-ui", "Rename…", "New tab", "Sleep this tab…", "Close tab", "Hide “Agent state on tabs”", "Settings for this…"]) assert.ok(words.includes(row), row);
   b.view.wheel({ delta_lines: { y: 1 } });
   assert.equal(b.ran.at(-1)[0], "tab.prev");
 });
@@ -254,14 +254,14 @@ test("The panel doors: each one a door at rest, the open one on the active wash,
   const tree = withPanel("pr");
   const b = await bar({ tree });
   const root = b.view.render(b.cx);
-  const labels = ["Files", "Spend", "PR", "Shipped", "Worktrees", "Ports", "Containers", "Memory", "Images", "kansō help"];
+  const labels = ["Files", "Spend", "PR", "Tasks", "Shipped", "Worktrees", "Ports", "Containers", "Memory", "Images", "kansō help"];
   for (const label of labels) assert.ok(door(root, label), label);
   assert.equal(arg(door(root, "PR"), "bg"), b.c.w12, "the open door");
   assert.equal(calls(door(root, "Files"), "bg").length, 0, "a closed door paints nothing");
   assert.match(arg(door(root, "kansō help"), "tooltip"), /^kansō help/);
   pressOf(doorBox(root, "Files"), "left")(press, b.cx);
   handler(doorBox(root, "Ports"), "on_mouse_up")({}, b.cx);
-  assert.deepEqual(clone(b.store["kanso.panels.order"]).slice(0, 6), ["insights", "pr", "shipped", "worktrees", "ports", "files"]);
+  assert.deepEqual(clone(b.store["kanso.panels.order"]).slice(0, 7), ["insights", "pr", "issues", "shipped", "worktrees", "ports", "files"]);
   pressOf(doorBox(b.view.render(b.cx), "Shipped"), "right")(press, b.cx);
   const menu = byTag(b.view.render(b.cx), "panel-menu-shipped");
   assert.ok(texts(arg(menu, "content")).includes("Panels\u2026"));
@@ -352,7 +352,7 @@ test("A door with a long name takes its measured width from the room, so the tab
   const panels = [{ id: "notes", mod: "notes-panel", label: "A very long detail panel for this project" }];
   const wide = await bar({ stored: { "kanso.panels": panels } });
   for (const id of ["t1", "t2", "t3"]) wide.view.tabW[id] = 100;
-  wide.view.barW.bar = ROOM + 28 + 2 + 3 * 100 + 2 * 2;
+  wide.view.barW.bar = ROOM + 2 * (28 + 2) + 3 * 100 + 2 * 2;
   assert.equal(["t1", "t2", "t3"].filter((id) => tab(wide.view.render(wide.cx), id)).length, 3, "before the door is measured, all fit");
   wide.view.doorW.notes = 205;
   const root = wide.view.render(wide.cx);
@@ -554,7 +554,7 @@ test("Folding takes every width from the drawn controls' own size reports: no ro
   b.view.moreOpen = true;
   assert.ok(["cart-ui", "tests"].every((name) => drawnTexts(b.view.render(b.cx)).includes(name)), "+N lists the folded tabs");
   b.view.moreOpen = false;
-  const roomy = measureAll(b, { barWidth: ROOM + 3 * 100 + 2 * 2 });
+  const roomy = measureAll(b, { barWidth: ROOM + 28 + 2 + 3 * 100 + 2 * 2 });
   assert.deepEqual(["t1", "t2", "t3"].filter((id) => tab(roomy, id)), ["t1", "t2", "t3"], "with room for all three, all show");
   assert.equal(drawnTexts(roomy).includes("+2"), false);
   assert.deepEqual(Object.keys(b.view.toolW).toSorted(), ["arrange", "plus"], "New tab and Arrange are measured like the doors");
@@ -582,12 +582,13 @@ test("Each door's easing name has an id of its own, so a fold during the ease ke
   }
 });
 
-test("A tab nobody named is called by its program in its right-click menu and its Sleep action too", async () => {
+test("A tab nobody named is called by its program in its right-click menu, and its Sleep action says Sleep this tab", async () => {
   const b = await unnamedCodex();
   pressOf(tab(b.view.render(b.cx), "t2"), "right")(press, b.cx);
   const said = drawnTexts(b.view.render(b.cx));
   assert.ok(said.includes("Codex"), "the menu's title");
-  assert.ok(said.includes("Sleep Codex\u2026"), "and its Sleep action");
+  assert.ok(said.includes("Sleep this tab\u2026"), "and its Sleep action");
+  assert.equal(said.includes("Sleep Codex\u2026"), false);
   assert.equal(said.some((text) => text === "2" || text === "Sleep 2\u2026"), false);
 });
 
@@ -621,7 +622,7 @@ test("A door being dragged is held on the pressed wash with the accent bar where
   assert.equal(all(after, (el) => calls(el, "bg").some((call) => call[1] === b.c.accent)).length, 0, "and no bar is left");
 });
 
-const DOORS = [["Files", "files"], ["Spend", "insights"], ["PR", "pr"], ["Shipped", "shipped"], ["Worktrees", "worktrees"], ["Ports", "ports"], ["Containers", "containers"], ["Memory", "memory"], ["Images", "look"], ["hjkl dōjō", "dojo"]]
+const DOORS = [["Files", "files"], ["Spend", "insights"], ["PR", "pr"], ["Tasks", "issues"], ["Shipped", "shipped"], ["Worktrees", "worktrees"], ["Ports", "ports"], ["Containers", "containers"], ["Memory", "memory"], ["Images", "look"], ["hjkl dōjō", "dojo"]]
   .map(([label, want]) => [label, { want }]);
 const TOOLS = [["New tab", [["kanso-spaces.start", null]]], ["Arrange", { opened: "kanso-arrange" }]];
 const CHOSEN = [["checkout", []], ["Close checkout", [["tab.close", { id: "t1" }]]]];

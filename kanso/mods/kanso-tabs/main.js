@@ -8,7 +8,7 @@ import { fileApi } from "./platform-files.js";
 // Modified by Iván Campaña (https://github.com/icampana): layout writers set the tree only when it is Kanso's, so a switch from another layout never saves that layout into kanso.json.
 import { View, div } from "gpui-kit";
 import { Popover } from "gpui-base";
-import { spaces, panes, run, openOverlay, props, theme, window, shared, setShared, layout, appHome, exec, watchFolder, nextCommand, home, machines, notify } from "herdr";
+import { spaces, panes, run, openOverlay, props, theme, window, shared, setShared, layout, appHome, exec, watchFolder, nextCommand, home, machines, notify, checking, terminals } from "herdr";
 import { walkLayout, commitLayout, sidebarBack, foldSidebar, dropStripDrag } from "./layout.js";
 import { Updater } from "./update.js";
 import { arriveOnLinux, herdrIsTerminal } from "./linux-arrival.js";
@@ -17,11 +17,11 @@ import { openArrange } from "./open.js";
 import { DIALOG, G, T, glyphOf, tokens } from "./ui.js";
 import { pressAgain, Armed } from "./ui-button.js";
 import { TextField } from "./ui-field.js";
-import { menu } from "./ui-menu.js";
 import { plus, tooltip } from "./kit.js";
 import { tabBarRoom } from "./ui-stack.js";
 import { tabBar } from "./tab-bar.js";
-import { boundChord, hintOf } from "./ui-tooltip.js";
+import { boundChord } from "./ui-tooltip.js";
+import { contextMenu } from "./context-menu.js";
 import { TAB_NAME_LIMIT } from "./ui-tab.js";
 import { pieceLines } from "./piece-lines.js";
 import { tabMark, tabName, barState, foldTabs, renameWaits, landing, heldOn, dropMarks } from "./tab-bar-model.js";
@@ -30,6 +30,10 @@ import { projectOpen, OPEN } from "./panel-state.js";
 import { TOOLS, PROBE_MS, probeTools, available, UNKNOWN_TOOLS, FAILED_TOOLS } from "./sim-registration.js";
 import { commandOn, machineKey, offered, toolsFor, toolKey, withoutNegatives, forgetting, ASK_MS, RETRY_MS } from "./panel-tools.js";
 import { pieces, runs, shown, setPiece, STORE, choice } from "./pieces.js";
+import { reconcileSchedules, RUN_FAILURES } from "./schedules.js";
+import { reconcileResumes } from "./clock.js";
+
+const SCHEDULES_MS = 60_000;
 
 function storedObject(key) {
   try {
@@ -41,6 +45,7 @@ function storedObject(key) {
 // Mounted on demand: closing removes the block, so Herdr ends that mod (its timers, watches and processes stop).
 const PANELS = {
   files: { mod: "kanso-panel", props: { panel: "files" } }, pr: { mod: "kanso-panel", props: { panel: "pr" } },
+  issues: { mod: "kanso-panel", props: { panel: "issues" } },
   shipped: { mod: "kanso-panel", props: { panel: "shipped" } },
   worktrees: { mod: "kanso-panel", props: { panel: "worktrees" } },
   ports: { mod: "kanso-panel", props: { panel: "ports" } },
@@ -68,6 +73,7 @@ const BUILTIN = [
   { id: "files", label: "Files", icon: "lu-file" },
   { id: "insights", label: "Spend", icon: "lu-chart-column" },
   { id: "pr", label: "PR", icon: "lu-git-pull-request" },
+  { id: "issues", label: "Tasks", icon: "lu-circle-dot" },
   { id: "shipped", label: "Shipped", icon: "lu-trophy" },
   { id: "worktrees", label: "Worktrees", icon: "lu-git-fork" },
   { id: "ports", label: "Ports", icon: "lu-plug" },
@@ -160,6 +166,7 @@ export default class Tabs extends View {
       afterMount(cx, (later) => later.spawn(() => Promise.all([arriveOnLinux(localName()), herdrIsTerminal(localName())]).catch(() => false)));
       this.db = new Kdb(cx.timer);
       this.watchOpens(cx);
+      this.watchSchedules(cx);
       // The bar is always on screen and the sidebar's footer may not be, so the bar polls for releases.
       this.updater = new Updater();
       this.updater.start(cx);
@@ -251,6 +258,17 @@ export default class Tabs extends View {
   }
 
   // markdown-handler.sh leaves .md paths opened from outside in data/kanso-open; the newest shows in the preview.
+  watchSchedules(cx) {
+    if (checking()) return;
+    const reconcile = (next) => next.spawn(async () => {
+      const failed = await reconcileSchedules(this.db).catch(() => null);
+      if (failed && JSON.stringify(failed) !== JSON.stringify(shared(RUN_FAILURES) ?? [])) setShared(RUN_FAILURES, failed);
+      await reconcileResumes(terminals()).catch(() => null);
+    });
+    cx.timer.after(0, reconcile);
+    cx.timer.every(SCHEDULES_MS, reconcile);
+  }
+
   watchOpens(cx) {
     const dir = paths.join(appHome(), "data", "kanso-open");
     cx.spawn(async (cx) => {
@@ -505,13 +523,13 @@ export default class Tabs extends View {
   // Right-click on a panel's button: its name, Hide, Settings, and the whole list of panels.
   panelMenuPopover(c, trigger, panel) {
     const shut = (cx) => { this.panelMenu = null; cx.notify(); };
-    const items = [
+    const lines = [
       ...pieceLines(`panel.${panel.id}`, { done: shut }).slice(1),
       { separator: true },
-      { icon: "panels-top-left", label: "Panels\u2026", onClick: (cx) => { shut(cx); openSettings("pieces"); } },
+      { act: "panels", does: (cx) => { shut(cx); openSettings("pieces"); } },
     ];
     return Popover.new(`panel-menu-${panel.id}`).trigger(trigger).open(true).on_open_change((open, cx) => { if (!open) shut(cx); })
-      .content(menu(`panel-menu-list-${panel.id}`, { title: `${panel.label} panel`, items }, c));
+      .content(contextMenu(`panel-menu-list-${panel.id}`, { title: `${panel.label} panel`, lines, framed: true }, c));
   }
 
   // Right-click: its name, Rename, New tab, Sleep, Close (twice with agents in it), then the piece lines.
@@ -520,17 +538,17 @@ export default class Tabs extends View {
     const agents = ps.filter((p) => p.tab === tab.id && p.program?.agent).length;
     const verb = `close ${agents} agent${agents === 1 ? "" : "s"}`;
     const armed = agents > 0 && this.armed.is(closeKey(tab));
-    const items = [
-      { icon: "pencil", label: "Rename", onClick: (cx) => { shut(cx); this.startRename(tab, cx); } },
-      { icon: "plus", label: "New tab", hint: hintOf("tab.new"), onClick: (cx) => { shut(cx); run("tab.new", { space: space.id }); } },
-      { icon: "moon", label: `Sleep ${tabName(tab, ps)}\u2026`, onClick: (cx) => { shut(cx); openOverlay({ mod: "kanso-sleep", kind: "dialog", width: DIALOG.wide, props: { sleep: { scope: "tab", space: space.id, tab: tab.id } } }); } },
-      { separator: true },
-      { icon: "x", label: "Close tab", hint: hintOf("tab.close"), armed, verb: agents ? verb : null,
-        onClick: (cx) => (agents ? this.armed.press(closeKey(tab), cx, () => { shut(cx); run("tab.close", { id: tab.id }); }) : (shut(cx), run("tab.close", { id: tab.id }))) },
+    const lines = [
+        { act: "rename", does: (cx) => { shut(cx); this.startRename(tab, cx); } },
+        { act: "new-tab", does: (cx) => { shut(cx); run("tab.new", { space: space.id }); } },
+        { act: "sleep-tab", does: (cx) => { shut(cx); openOverlay({ mod: "kanso-sleep", kind: "dialog", width: DIALOG.wide, props: { sleep: { scope: "tab", space: space.id, tab: tab.id } } }); } },
+        { separator: true },
+        { act: "close-tab", armed, verb: agents ? verb : null,
+          does: (cx) => (agents ? this.armed.press(closeKey(tab), cx, () => { shut(cx); run("tab.close", { id: tab.id }); }) : (shut(cx), run("tab.close", { id: tab.id }))) },
       ...pieceLines("tabs.state", { named: true, done: shut }),
     ];
     return Popover.new(`tab-menu-${tab.id}`).trigger(trigger).open(true).on_open_change((open, cx) => { if (!open) shut(cx); })
-      .content(menu(`tab-menu-list-${tab.id}`, { title: tabName(tab, ps), items }, c));
+      .content(contextMenu(`tab-menu-list-${tab.id}`, { title: tabName(tab, ps), lines, framed: true }, c));
   }
 
   render(cx) {
