@@ -1,11 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { writeFile } from "node:fs/promises";
-import { join } from "node:path";
-import { exec, load, temporary } from "./helpers.mjs";
-
-const plain = (value) => JSON.parse(JSON.stringify(value));
-const git = (cwd, ...args) => exec("git", ["-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false", "-c", "init.defaultBranch=main", ...args], { cwd });
+import { exec, load, committedRepo, plain } from "./helpers.mjs";
 
 const { treeBranch } = await load("kanso-spaces/several.js", ["treeBranch"]);
 const of = (args, key) => args.find((part, i) => args[i - 1] === "--label" && String(part).startsWith(`${key}=`))?.slice(key.length + 1);
@@ -24,15 +19,9 @@ test("A task with spaces makes a distinct valid branch for each agent", async ()
 });
 
 test("Two or three agents open in the same tab, each under its own name, and one worktree failure does not stop the others", async (t) => {
-  const dir = await temporary(t);
+  const { dir, repo } = await committedRepo(t);
   process.env.KANSO_TEST_HOME = dir;
   t.after(() => { delete process.env.KANSO_TEST_HOME; });
-  const repo = join(dir, "repo");
-  await exec("mkdir", ["-p", repo]);
-  await writeFile(join(repo, "readme"), "a\n");
-  assert.equal((await git(repo, "init")).code, 0);
-  assert.equal((await git(repo, "add", "readme")).code, 0);
-  assert.equal((await git(repo, "commit", "-m", "start")).code, 0);
   const fail = treeBranch("fix the login bug", "codex");
   const calls = [];
   const { startInTree: start } = await load("kanso-spaces/several.js", ["startInTree"], {
@@ -46,10 +35,13 @@ test("Two or three agents open in the same tab, each under its own name, and one
   const agent = (key, name) => ({ key, name, run: [key] });
   const ask = { task: "fix the login bug", from: "main", prompt: "Fix the login bug" };
   const two = [agent("claude", "Claude"), agent("grok", "Grok")];
+  const sameTab = () => {
+    assert.deepEqual(calls.map((args) => of(args, "herdr.space")), ["sp1", "sp1"]);
+    assert.deepEqual(calls.map((args) => of(args, "herdr.tab")), ["tb1", "tb1"]);
+    assert.deepEqual(calls.map((args) => of(args, "kanso.name")), ["Claude", "Grok"]);
+  };
   for (const one of two) assert.equal((await start(run, one, ask)).error, undefined);
-  assert.deepEqual(calls.map((args) => of(args, "herdr.space")), ["sp1", "sp1"]);
-  assert.deepEqual(calls.map((args) => of(args, "herdr.tab")), ["tb1", "tb1"]);
-  assert.deepEqual(calls.map((args) => of(args, "kanso.name")), ["Claude", "Grok"]);
+  sameTab();
   calls.length = 0;
   const three = [agent("claude", "Claude"), agent("codex", "Codex"), agent("grok", "Grok")];
   const results = [];
@@ -58,7 +50,5 @@ test("Two or three agents open in the same tab, each under its own name, and one
   assert.equal(results[0].error, undefined);
   assert.equal(results[2].error, undefined);
   assert.equal(calls.length, 2);
-  assert.deepEqual(calls.map((args) => of(args, "herdr.space")), ["sp1", "sp1"]);
-  assert.deepEqual(calls.map((args) => of(args, "herdr.tab")), ["tb1", "tb1"]);
-  assert.deepEqual(calls.map((args) => of(args, "kanso.name")), ["Claude", "Grok"]);
+  sameTab();
 });

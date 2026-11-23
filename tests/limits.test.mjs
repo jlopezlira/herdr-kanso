@@ -1,8 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { load } from "./helpers.mjs";
-
-const plain = (value) => JSON.parse(JSON.stringify(value));
+import { load, plain } from "./helpers.mjs";
 
 const now = new Date(2026, 5, 10, 12, 0, 0, 0).getTime();
 const clock = (ms, zone) => new Intl.DateTimeFormat("en-GB", {

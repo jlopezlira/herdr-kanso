@@ -209,6 +209,21 @@ export const gitOk = (...config) => async (cwd, ...args) => {
   return r.stdout.trim();
 };
 
+export const git = (cwd, ...args) => exec("git", ["-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false", "-c", "init.defaultBranch=main", ...args], { cwd });
+
+export async function committedRepo(t) {
+  const dir = await temporary(t);
+  const repo = join(dir, "repo");
+  await mkdir(repo, { recursive: true });
+  await writeFile(join(repo, "readme"), "a\n");
+  for (const args of [["init"], ["add", "readme"], ["commit", "-m", "start"]]) assert.equal((await git(repo, ...args)).code, 0);
+  return { dir, repo };
+}
+
+export function plain(value) {
+  return JSON.parse(JSON.stringify(value));
+}
+
 export const databaseTimer = { after(ms, fn) { const timer = setTimeout(fn, ms); timer.unref(); return { cancel: () => clearTimeout(timer) }; } };
 
 export const openedKdb = async (Kdb) => {

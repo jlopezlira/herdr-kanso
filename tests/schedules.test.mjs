@@ -2,11 +2,9 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { chmod, readFile, writeFile } from "node:fs/promises";
 import { delimiter, join } from "node:path";
-import { exec, load, temporary } from "./helpers.mjs";
+import { exec, git, load, committedRepo, plain } from "./helpers.mjs";
 
-const plain = (value) => JSON.parse(JSON.stringify(value));
 const now = new Date(2026, 5, 10, 12, 0, 0, 0).getTime();
-const git = (cwd, ...args) => exec("git", ["-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false", "-c", "init.defaultBranch=main", ...args], { cwd });
 
 const schedules = await load("kanso-spaces/schedules.js", ["clockTodo", "scheduleOf", "spaceOf", "placeOfKey", "scheduleName", "SPACE_LABEL", "REV_LABEL", "SCHEDULE_KIND"]);
 const dialog = await load("kanso-spaces/schedule-dialog.js", ["draftOf", "checkDraft", "whenOfDraft"]);
@@ -75,14 +73,9 @@ test("A missed run is caught up once, at now", () => {
 });
 
 test("A scheduled run in a worktree of main logs that it ran, and a start that fails logs the reason once and waits for the next time", async (t) => {
-  const dir = await temporary(t);
-  const repo = join(dir, "repo");
+  const { dir, repo } = await committedRepo(t);
   const bin = join(dir, "bin");
-  await exec("mkdir", ["-p", repo, bin]);
-  await writeFile(join(repo, "readme"), "a\n");
-  assert.equal((await git(repo, "init")).code, 0);
-  assert.equal((await git(repo, "add", "readme")).code, 0);
-  assert.equal((await git(repo, "commit", "-m", "start")).code, 0);
+  await exec("mkdir", ["-p", bin]);
   await writeFile(join(bin, "hc"), `#!/bin/sh
 printf '%s\\n' "$*" >> "$LOG"
 if [ "$1" = exec ]; then shift; exec "$@"; fi
