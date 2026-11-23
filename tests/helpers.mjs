@@ -454,6 +454,7 @@ export const numberArguments = (file) => [...readFileSync(new URL(`../kanso/mods
 export const themed = (kit, theme) => ({ ...kit, c: kit.tokens(theme) });
 export const eachTheme = (tokens, ...themes) => themes.map((theme) => ({ theme, c: tokens(theme) }));
 // The kit's night colours, as the row and kit tests draw them.
+export const same = (actual, expected) => assert.deepEqual(JSON.parse(JSON.stringify(actual)), expected);
 export const KIT_NIGHT = { foreground: "#d8d4cb", background: "#1b1b19", hover: "#232321", selected: "#2b2b28", accent: "#da627d", dim: "#6b6862", muted: "#949086", blocked: "#ca938b", working: "#c4b07e", done: "#98ad8f" };
 // A host whose svg and image elements keep the path they draw.
 const drawnAt = (tag) => (path) => { const el = chain(tag); el.calls.push([tag, path]); return el; };

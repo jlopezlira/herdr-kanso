@@ -1,9 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { load, tape, KIT_NIGHT, timedContext } from "./helpers.mjs";
+import { load, tape, KIT_NIGHT, timedContext, same } from "./helpers.mjs";
 import { temporaryKdb } from "./mod-fixtures.mjs";
 
-const same = (actual, expected) => assert.deepEqual(JSON.parse(JSON.stringify(actual)), expected);
 const PR_URL = "https://github.com/acme/shop/issues/12";
 const REPO = { host: "github.com", owner: "acme", name: "shop" };
 const clock = (at) => new Date(at).toTimeString().slice(0, 5);
@@ -82,7 +81,7 @@ test("The text sent to an agent has the ticket, the title, the link and the body
 test("A board read keeps the status columns, and the filter query names the login only for assigned or created", async () => {
   const { readBoard, calls } = await boardRun();
   const run = async (cmd, args) => { calls.push(args); return payload([node("Open")]); };
-  const board = await readBoard(run, { repo: REPO, project: "shop", filter: "assigned", who: "jj" });
+  const board = await readBoard(run, { repo: REPO, project: "shop", filter: "assigned", login: "jj" });
   same(board.columns, ["Open", "Done"]);
   assert.equal(board.rows[0].status, "Open");
   assert.equal(board.rows[0].ticket, "#12");
@@ -93,7 +92,7 @@ test("A board read keeps the status columns, and the filter query names the logi
   assert.equal(named(calls[0], "author=jj"), true);
   assert.equal(named(calls[0], "assignee=jj"), false);
   calls.length = 0;
-  await readBoard(run, { repo: REPO, project: "shop", filter: "all", who: "jj" });
+  await readBoard(run, { repo: REPO, project: "shop", filter: "all", login: "jj" });
   assert.equal(named(calls[0], "assignee=jj"), false);
   assert.equal(named(calls[0], "author=jj"), false);
 });
@@ -186,13 +185,15 @@ const viewHost = {
   home: () => "/Users/jj",
   openOverlay: (spec) => overlays.push(spec),
   openUrl: () => {},
+  shared: () => null,
+  window: () => ({ platform: "macos" }),
   exec: async (cmd, args) => { world.calls.push([cmd, args]); return world.answer(cmd, args); },
 };
 
 const mount = async (extra = {}) => {
   const { Issues } = await load("kanso-panel/issues.js", ["Issues"], viewHost);
   return Object.assign(new Issues({ read: async () => [], run: async () => {} }), {
-    projects: [], rows: [], boards: [], places: {}, folds: {}, filters: {}, logins: {},
+    projects: [], rows: [], boards: [], links: [], places: {}, folds: {}, filters: {}, logins: {},
     reading: new Set(), open: null, front: "shop", ...extra,
   });
 };
@@ -424,17 +425,19 @@ test("A logged-out probe is not kept, a later signed-in probe is used, and a pro
   assert.equal(second.login, "jj");
   assert.equal(world.calls.filter((call) => call[0] === "gh").length, 2);
   const at = Date.parse("2026-11-22T15:04:00Z");
+  const board = { project: "shop", source: "github", filter: "all", who: "jj", columns: JSON.stringify(["Open"]), read_at: at, failure: null };
   const failed = await mount({
     projects: [shop],
     rows: [issue({ title: "Cached issue" })],
     filters: { shop: "all" },
-    boards: [{ project: "shop", source: "github", filter: "all", who: "jj", columns: JSON.stringify(["Open"]), read_at: at, failure: null }],
+    boards: [board],
   });
+  failed.db = { read: async (sql) => String(sql).includes("issue_boards") ? [board] : String(sql).includes("FROM issues") ? failed.rows : [], run: async () => {} };
   world.answer = async (cmd) => cmd === "git"
     ? { code: 0, stdout: "origin\tgit@github.com:acme/shop.git (fetch)\n", stderr: "" }
     : { code: 1, stdout: "", stderr: "temporary failure" };
   const { cx, drain } = timedContext([]);
-  failed.readProject(shop, cx);
+  failed.readBoard(shop, "github", cx);
   await drain();
   const texts = draw(failed);
   assert.ok(texts.some((text) => text.includes("Showing the copy read at " + clock(at))));
@@ -589,7 +592,7 @@ test("A project with no GitHub remote shows that, even when GitHub is signed out
     : { code: 1, stdout: "", stderr: "You are not logged into any GitHub hosts. Run gh auth login" };
   const view = await mount({ projects: [shop], rows: [], boards: [] });
   const { cx, drain } = timedContext([]);
-  view.readProject(shop, cx);
+  view.readBoard(shop, "github", cx);
   await drain();
   const texts = draw(view);
   assert.ok(texts.includes("No GitHub remote"));

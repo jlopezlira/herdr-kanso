@@ -1,12 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { load, tape, KIT_NIGHT, timedContext } from "./helpers.mjs";
+import { load, tape, KIT_NIGHT, timedContext, same } from "./helpers.mjs";
 import { temporaryKdb } from "./mod-fixtures.mjs";
 
 const SECRET = "SECRET-XYZ";
 const SITE = "acme.atlassian.net";
 const LINEAR = "https://api.linear.app/graphql";
-const same = (actual, expected) => assert.deepEqual(JSON.parse(JSON.stringify(actual)), expected);
 const input = (start = {}) => {
   let value = start.value ?? "";
   return { value: () => value, set_value(next) { value = next; }, set_masked() {}, on() { return this; }, focus() {}, set_auto_grow() {} };
@@ -104,7 +103,28 @@ const accountHost = (ui, exec, store) => ({
   ...ui.host, ...fields, exec, theme: () => KIT_NIGHT,
   Input: { new: () => ui.host.div() }, Textarea: { new: () => ui.host.div() },
   shared: (key) => store[key] ?? null, setShared: (key, value) => { store[key] = value; },
-  window: () => ({ platform: "macos" }),
+  window: () => ({ platform: "macos" }), checking: () => false,
+});
+const fillJira = (page, site) => {
+  page.site.set_value(site);
+  page.email.set_value("ada@acme.net");
+  page.jiraToken.set_value(SECRET);
+};
+const noJira = async (drain, store) => {
+  await drain();
+  assert.equal(store["kanso.issues.accounts"].jira, undefined);
+};
+const openAccounts = async (exec, store) => {
+  const ui = tape();
+  const { Accounts } = await load("kanso-settings/accounts.js", ["Accounts"], accountHost(ui, exec, store));
+  const timed = timedContext([]);
+  const page = new Accounts(timed.cx);
+  await timed.drain();
+  return { ui, page, ...timed };
+};
+const loadIssues = (drawn, store, extra) => load("kanso-panel/issues.js", ["Issues"], {
+  ...drawn.host, theme: () => KIT_NIGHT, spaces: () => [], home: () => "/home/me",
+  shared: (key) => store[key] ?? null, window: () => ({ platform: "macos" }), ...extra,
 });
 
 test("Settings Accounts hides Sign in without a secret store, and a bad Jira site is rejected before anything is saved", async () => {
@@ -119,13 +139,8 @@ test("Settings Accounts hides Sign in without a secret store, and a bad Jira sit
   assert.ok(none.texts.includes("This computer has no secret store, so Jira and Linear can't sign in here. GitHub keeps working."));
   assert.equal(none.texts.some((text) => text.includes("Sign in")), false);
   const calls = [];
-  const ui = tape();
-  const { Accounts: Ready } = await load("kanso-settings/accounts.js", ["Accounts"], accountHost(ui, async (cmd, args) => { calls.push([cmd, args]); return { code: 0, stdout: "", stderr: "" }; }, {}));
-  const page = new Ready(cx);
-  await drain();
-  page.site.set_value("not-a-site");
-  page.email.set_value("ada@acme.net");
-  page.jiraToken.set_value(SECRET);
+  const { ui, page } = await openAccounts(async (cmd, args) => { calls.push([cmd, args]); return { code: 0, stdout: "", stderr: "" }; }, {});
+  fillJira(page, "not-a-site");
   page.signInJira(cx);
   page.page(c);
   assert.ok(ui.texts.includes("Enter your Jira Cloud site, such as your-site.atlassian.net"));
@@ -141,31 +156,21 @@ test("A Jira sign-in stores the site, email and name and clears the token, a ref
     if (cmd === "sh" && String(args.at(-1)).includes("myself")) return refuse ? http("", 401) : http(JSON.stringify({ displayName: "Ada" }));
     return { code: 0, stdout: "", stderr: "" };
   };
-  const ui = tape();
-  const { Accounts } = await load("kanso-settings/accounts.js", ["Accounts"], accountHost(ui, exec, store));
-  const { cx, drain } = timedContext([]);
-  const page = new Accounts(cx);
-  await drain();
-  page.site.set_value("https://" + SITE + "/jira");
-  page.email.set_value("ada@acme.net");
-  page.jiraToken.set_value(SECRET);
+  const { page, cx, drain } = await openAccounts(exec, store);
+  fillJira(page, "https://" + SITE + "/jira");
   page.signInJira(cx);
   await drain();
   same(store["kanso.issues.accounts"].jira, { site: SITE, email: "ada@acme.net", name: "Ada" });
   assert.equal(page.jiraToken.value(), "");
   assert.equal(JSON.stringify(store).includes(SECRET), false);
   page.signOut("jira", cx);
-  await drain();
-  assert.equal(store["kanso.issues.accounts"].jira, undefined);
+  await noJira(drain, store);
   assert.ok(calls.some((call) => call[1]?.[0] === "delete-generic-password"));
   refuse = true;
-  page.site.set_value(SITE);
-  page.email.set_value("ada@acme.net");
-  page.jiraToken.set_value(SECRET);
+  fillJira(page, SITE);
   const before = calls.length;
   page.signInJira(cx);
-  await drain();
-  assert.equal(store["kanso.issues.accounts"].jira, undefined);
+  await noJira(drain, store);
   assert.ok(calls.slice(before).some((call) => call[1]?.[0] === "delete-generic-password"));
 });
 
@@ -179,11 +184,7 @@ test("A project linked to two Jira projects and one Linear team shows each board
   const drawn = tape();
   const overlays = [];
   const store = { "kanso.issues.accounts": { jira: { site: SITE, email: "ada@acme.net", name: "Ada" }, linear: { name: "Ada", email: "ada@acme.net" } } };
-  const { Issues } = await load("kanso-panel/issues.js", ["Issues"], {
-    ...drawn.host, theme: () => KIT_NIGHT, spaces: () => [], home: () => "/home/me",
-    shared: (key) => store[key] ?? null, openOverlay: (overlay) => overlays.push(overlay),
-    window: () => ({ platform: "macos" }), exec: async () => ({ code: 0, stdout: "", stderr: "" }),
-  });
+  const { Issues } = await loadIssues(drawn, store, { openOverlay: (overlay) => overlays.push(overlay), exec: async () => ({ code: 0, stdout: "", stderr: "" }) });
   const { sendText } = await load("kanso-panel/issues-model.js", ["sendText"]);
   const rows = [
     ticket("jira:ABC", "ABC-1", "Alpha ship", "To Do"),
@@ -210,7 +211,7 @@ test("A project linked to two Jira projects and one Linear team shows each board
   assert.ok(texts.indexOf("Linear · ENG · Eng") < texts.indexOf("Todo"));
   assert.ok(texts.indexOf("Todo") < texts.indexOf("Doing"));
   assert.ok(texts.includes("Link Jira projects…"));
-  view.open = rows[0].url;
+  view.open = { project: rows[0].project, url: rows[0].url };
   drawn.texts.length = 0;
   view.render({ notify() {} });
   assert.ok(drawn.texts.includes("Open in Jira"));
@@ -241,14 +242,8 @@ test("A Jira and Linear sign-in and board read keep the secret out of the databa
       return http("{}");
     };
     const store = {};
-    const ui = tape();
-    const { Accounts } = await load("kanso-settings/accounts.js", ["Accounts"], accountHost(ui, exec, store));
-    const { cx, drain } = timedContext([]);
-    const page = new Accounts(cx);
-    await drain();
-    page.site.set_value(SITE);
-    page.email.set_value("ada@acme.net");
-    page.jiraToken.set_value(SECRET);
+    const { page, cx, drain } = await openAccounts(exec, store);
+    fillJira(page, SITE);
     page.signInJira(cx);
     await drain();
     page.linearKey.set_value(SECRET);
@@ -284,11 +279,7 @@ test("Link Jira projects lists the projects, and a click stores the link and rea
   const drawn = tape();
   const urls = [];
   const store = { "kanso.issues.accounts": { jira: { site: SITE, email: "ada@acme.net", name: "Ada" } } };
-  const { Issues } = await load("kanso-panel/issues.js", ["Issues"], {
-    ...drawn.host, theme: () => KIT_NIGHT, spaces: () => [], home: () => "/home/me",
-    shared: (key) => store[key] ?? null, window: () => ({ platform: "macos" }),
-    exec: async () => ({ code: 1, stdout: "", stderr: "" }),
-  });
+  const { Issues } = await loadIssues(drawn, store, { exec: async () => ({ code: 1, stdout: "", stderr: "" }) });
   const { db } = await temporaryKdb(t);
   const view = new Issues(db);
   Object.assign(view, {
