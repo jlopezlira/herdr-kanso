@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { arg, calls, drawingHost, exec as realExec, failure, find, KIT_NIGHT, load, one, same, success, tape, temporary, texts, timedContext } from "./helpers.mjs";
+import { all, arg, calls, drawingHost, exec as realExec, failure, find, KIT_NIGHT, load, one, same, success, tape, temporary, texts, timedContext } from "./helpers.mjs";
 import { temporaryKdb } from "./mod-fixtures.mjs";
 
 const SECRET = "SECRET-XYZ";
@@ -497,16 +497,17 @@ const sequence = (length) => Array.from({ length }, (_, i) => i);
 const expectAccounts = (overlays) => {
   same(overlays.map(({ mod, props }) => [mod, props.page]), [["kanso-settings", "accounts"]]);
 };
-const picker = async (kind, answer) => {
-  const { view, overlays } = await mountIssues(bothAccounts(), { answer, host: drawingHost() });
-  const { cx, drain, pending } = timedContext([]);
+const picker = async (kind, answer, store = bothAccounts()) => {
+  const { view, overlays } = await mountIssues(store, { answer, host: drawingHost() });
+  const timers = [];
+  const { cx, drain, pending } = timedContext(timers);
   const render = () => view.render(cx);
   const button = (id) => find(render(), (el) => el.tag === id);
   const press = (id) => one(button(id), "on_click")(null, cx);
   const toggle = () => press(`issues-link-${kind}-shop`);
   toggle();
   await drain();
-  return { button, press, toggle, drain, overlays, lastRead: () => pending.at(-1), words: () => texts(render()) };
+  return { button, press, toggle, drain, overlays, cx, timers, render, lastRead: () => pending.at(-1), words: () => texts(render()) };
 };
 const PICKER_FIX = "issues-link-failure-shop-fix";
 const PICKER_MORE = "issues-link-more-shop";
@@ -588,6 +589,55 @@ for (const provider of pickerCases) {
     assert.equal(ui.button(more), null);
   });
 }
+
+test("The Jira picker reloads projects when a new account replaces the rejected one", async (t) => {
+  const [jira] = pickerCases;
+  const account = { ...jiraAccount(), name: "Grace", email: "grace@acme.net", accountId: "acc-2" };
+  const readAccounts = t.mock.fn(() => bothAccounts()[ACCOUNTS]);
+  const fresh = { key: "NEW", name: "Fresh project" };
+  const request = t.mock.fn(({ email }) => email === account.email
+    ? okJson(jira.payload([fresh], false))
+    : { status: 401, text: "" });
+  const ui = await picker("jira", request, { get [ACCOUNTS]() { return readAccounts(); } });
+
+  assert.ok(ui.words().includes("Jira did not accept your credentials"));
+  assert.deepEqual(ui.timers, []);
+  readAccounts.mock.mockImplementation(() => ({ ...bothAccounts()[ACCOUNTS], jira: account }));
+  ui.render();
+  assert.equal(request.mock.callCount(), 1);
+  assert.deepEqual(ui.timers.map(([ms]) => ms), [0]);
+
+  const [[, retry]] = ui.timers;
+  retry(ui.cx);
+  await ui.drain();
+  assert.deepEqual(askedFor(request, jira.cursor), ["0", "0"]);
+  assert.ok(ui.words().includes("NEW · Fresh project"));
+});
+
+test("Refresh resumes after the last successful page in the Jira picker", async (t) => {
+  const [jira] = pickerCases;
+  const size = 100;
+  const answer = listPage(jira, 52, size);
+  const lastPage = t.mock.fn(answer);
+  lastPage.mock.mockImplementationOnce(() => ({ status: 429, text: "" }));
+  const request = t.mock.fn((req) => jira.cursor(req) === "5100" ? lastPage(req) : answer(req));
+  const ui = await picker("jira", request);
+  assert.deepEqual(pageNumbers(request, jira, size), sequence(50));
+
+  ui.press(PICKER_MORE);
+  await ui.drain();
+  assert.ok(ui.words().includes("Jira is limiting requests"));
+
+  ui.press(PICKER_FIX);
+  await ui.drain();
+  const prefix = `issues-link-${shop.id}-${jiraRef("P")}`;
+  const rows = all(ui.render(), (el) => el.tag?.startsWith(prefix) && calls(el, "on_click").length > 0);
+  assert.deepEqual({
+    offsets: askedFor(request, jira.cursor).slice(50),
+    rows: rows.length,
+    distinct: new Set(rows.map(({ tag }) => tag)).size,
+  }, { offsets: ["5000", "5100", "5100"], rows: 5200, distinct: 5200 });
+});
 
 test("A slow Load more does not replace the fresh results when I reopen the Jira picker", async (t) => {
   const [jira] = pickerCases;
