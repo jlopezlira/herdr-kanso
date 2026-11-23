@@ -26,12 +26,12 @@ export function boardSql({ project, source, filter, who, repo, columns, failure,
     + `ON CONFLICT(project,source) DO UPDATE SET filter=excluded.filter,${failure ? "" : "who=excluded.who,repo=excluded.repo,columns=excluded.columns,read_at=excluded.read_at,"}retry_at=excluded.retry_at,failure=excluded.failure;`;
 }
 
-export function storeSql({ project, source, filter, login, rows, columns, failure, kept = [], now }) {
-  if (failure) return `BEGIN;${boardSql({ project, source, filter, columns, failure, now })}COMMIT;`;
+export function storeSql({ project, source, filter, who, repo, rows, columns, failure, complete = true, kept = [], now }) {
+  if (failure) return `BEGIN;${boardSql({ project, source, filter, who, repo, columns, failure, now })}COMMIT;`;
   const urls = new Set(rows.map((row) => row.url));
-  const gone = kept.filter((row) => row.project === project && row.source === source && !urls.has(row.url) && matches(row, filter, login)).map((row) => q(row.url));
-  const drop = gone.length ? `DELETE FROM issues WHERE url IN (${gone.join(",")});` : "";
-  return `BEGIN;${rows.map(upsert).join("")}${drop}${boardSql({ project, source, filter, columns, failure: null, now })}COMMIT;`;
+  const gone = complete ? kept.filter((row) => row.project === project && row.source === source && !urls.has(row.url) && matches(row, filter, who)).map((row) => q(row.url)) : [];
+  const drop = gone.length ? `DELETE FROM issues WHERE project=${q(project)} AND url IN (${gone.join(",")});` : "";
+  return `BEGIN;${rows.map(upsert).join("")}${drop}${boardSql({ project, source, filter, who, repo, columns, failure: null, now })}COMMIT;`;
 }
 
 export const detailSql = (project, url, { body, comments, prs }) => `UPDATE issues SET body=${q(body)},comments=${q(comments)},prs=${q(prs)} WHERE project=${q(project)} AND url=${q(url)};`;

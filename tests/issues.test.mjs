@@ -131,7 +131,7 @@ test("A detail read keeps the comments and the linked pull requests", async () =
 
 test("The origin remote is the repository", async () => {
   const { repoOf } = await load("kanso-panel/issues-github.js", ["repoOf"]);
-  const repo = await repoOf(async () => ({ code: 0, stdout: "git@github.com:acme/shop.git\n", stderr: "" }), "/work/shop");
+  const repo = await repoOf(async (_cmd, args) => ({ code: 0, stdout: args?.includes("-v") ? "origin\tgit@github.com:acme/shop.git (fetch)\n" : "", stderr: "" }), "/work/shop");
   assert.equal(repo.owner, "acme");
   assert.equal(repo.name, "shop");
   assert.equal(repo.host, "github.com");
@@ -144,19 +144,19 @@ test("A stored read writes the rows and the board, and a later read drops only t
   const assigned = keptRow("https://github.com/acme/shop/issues/1", { ticket: "#1", title: "Assigned", assignees: JSON.stringify(["JJ"]), author: "ada" });
   const other = keptRow("https://github.com/acme/shop/issues/2", { ticket: "#2", title: "Created", assignees: "[]", author: "ada" });
   const stale = keptRow("https://github.com/acme/shop/issues/3", { ticket: "#3", title: "Gone", assignees: JSON.stringify(["jj"]), author: "ada" });
-  await db.run(storeSql({ project: "shop", source: "github", filter: "assigned", login: "jj", rows: [assigned, other, stale], columns: ["Open", "Done"], kept: [], now: 10 }));
+  await db.run(storeSql({ project: "shop", source: "github", filter: "assigned", who: "jj", repo: "github.com/acme/shop", complete: true, rows: [assigned, other, stale], columns: ["Open", "Done"], kept: [], now: 10 }));
   const first = await readIssues(db, ["shop"]);
   assert.equal(first.rows.length, 3);
   assert.equal(first.boards[0].filter, "assigned");
-  await db.run(storeSql({ project: "shop", source: "github", filter: "assigned", login: "jj", rows: [assigned], columns: ["Open", "Done"], kept: first.rows, now: 12 }));
+  await db.run(storeSql({ project: "shop", source: "github", filter: "assigned", who: "jj", repo: "github.com/acme/shop", complete: true, rows: [assigned], columns: ["Open", "Done"], kept: first.rows, now: 12 }));
   const next = await readIssues(db, ["shop"]);
   same(next.rows.map((row) => row.title).toSorted(), ["Assigned", "Created"]);
 });
 
 test("A failed read keeps the rows and the last time, and records the failure", async (t) => {
   const { db, storeSql, readIssues } = await rowsOf(t);
-  await db.run(storeSql({ project: "shop", source: "github", filter: "assigned", login: "jj", rows: [issue()], columns: ["Open"], kept: [], now: 20 }));
-  await db.run(storeSql({ project: "shop", source: "github", filter: "assigned", login: "jj", rows: [], columns: [], failure: { kind: "offline", text: "GitHub can't be reached" }, now: 99 }));
+  await db.run(storeSql({ project: "shop", source: "github", filter: "assigned", who: "jj", repo: "github.com/acme/shop", complete: true, rows: [issue()], columns: ["Open"], kept: [], now: 20 }));
+  await db.run(storeSql({ project: "shop", source: "github", filter: "assigned", who: "jj", repo: "github.com/acme/shop", rows: [], columns: [], failure: { kind: "offline", text: "GitHub can't be reached" }, now: 99 }));
   const read = await readIssues(db, ["shop"]);
   assert.equal(read.rows.length, 1);
   assert.equal(read.boards[0].read_at, 20);
@@ -165,8 +165,8 @@ test("A failed read keeps the rows and the last time, and records the failure", 
 
 test("A detail write adds the comments and the pull requests, and a read returns both", async (t) => {
   const { db, storeSql, detailSql, readIssues } = await storeDb(t, ["storeSql", "detailSql", "readIssues"]);
-  await db.run(storeSql({ project: "shop", source: "github", filter: "all", login: "jj", rows: [issue()], columns: ["Open"], kept: [], now: 1 }));
-  await db.run(detailSql(PR_URL, { body: "The body", comments: JSON.stringify([{ author: "ada", body: "Yes", at: "2026-11-22T01:00:00Z" }]), prs: JSON.stringify([{ number: 9, title: "Fix", url: "https://github.com/acme/shop/pull/9", state: "OPEN" }]) }));
+  await db.run(storeSql({ project: "shop", source: "github", filter: "all", who: "jj", repo: "github.com/acme/shop", complete: true, rows: [issue()], columns: ["Open"], kept: [], now: 1 }));
+  await db.run(detailSql("shop", PR_URL, { body: "The body", comments: JSON.stringify([{ author: "ada", body: "Yes", at: "2026-11-22T01:00:00Z" }]), prs: JSON.stringify([{ number: 9, title: "Fix", url: "https://github.com/acme/shop/pull/9", state: "OPEN" }]) }));
   const read = await readIssues(db, ["shop"]);
   same(JSON.parse(read.rows[0].comments), [{ author: "ada", body: "Yes", at: "2026-11-22T01:00:00Z" }]);
   same(JSON.parse(read.rows[0].prs), [{ number: 9, title: "Fix", url: "https://github.com/acme/shop/pull/9", state: "OPEN" }]);
@@ -228,7 +228,7 @@ test("Two projects are drawn with the front project first, each section shows it
 test("Switching the filter stores it and reads the issues again", async () => {
   world.calls = [];
   world.answer = async (cmd) => {
-    if (cmd === "git") return { code: 0, stdout: "git@github.com:acme/shop.git\n", stderr: "" };
+    if (cmd === "git") return { code: 0, stdout: "origin\tgit@github.com:acme/shop.git (fetch)\n", stderr: "" };
     if (cmd === "gh") return { code: 0, stdout: "github.com\n  Logged in to github.com account jj\n  Active account: true\n", stderr: "" };
     return payload([]);
   };
@@ -288,4 +288,179 @@ test("A draft passed in as text is the message", async () => {
   view.init({}, { timer: { after() {} }, focus_handle: () => ({}) });
   assert.equal(view.text, text);
   assert.equal(view.text.includes("/work/acme"), false);
+});
+
+const pageOf = (n, cursor, more) => ({
+  code: 0,
+  stdout: JSON.stringify({ data: { repository: { issues: { pageInfo: { hasNextPage: more, endCursor: cursor }, nodes: [{ number: n, title: "N" + n, url: "https://github.com/acme/shop/issues/" + n, body: "", createdAt: "2026-11-20T00:00:00Z", updatedAt: "2026-11-22T00:00:00Z", author: { login: "ada" }, assignees: { nodes: [{ login: "jj" }] }, labels: { nodes: [] }, projectItems: { nodes: [] } }] } } } }),
+  stderr: "",
+});
+const afterOf = (args) => args.find((part) => String(part).startsWith("after=")) ?? null;
+
+test("A fresh Issues list shows stored assigned rows from the board's who, and a detail read uses the board's stored repo", async () => {
+  const row = issue({ assignees: JSON.stringify(["jj"]) });
+  const sql = [];
+  const view = await mount({
+    projects: [shop], rows: [row], logins: {},
+    boards: [{ project: "shop", source: "github", filter: "assigned", who: "jj", repo: "github.com/acme/shop", columns: JSON.stringify(["Open"]), read_at: 1, failure: null }],
+  });
+  view.db = { read: async () => ({ rows: view.rows, boards: view.boards }), run: async (text) => { sql.push(text); } };
+  assert.ok(draw(view).includes("Ship it"));
+  assert.equal(draw(view).includes("No open issues"), false);
+  world.calls = [];
+  world.answer = async () => ({ code: 0, stdout: JSON.stringify({ data: { repository: { issue: { body: "The body", comments: { nodes: [] }, closedByPullRequestsReferences: { nodes: [] } } } } }), stderr: "" });
+  const { cx, drain } = timedContext([]);
+  view.show(row, cx);
+  await drain();
+  assert.ok(world.calls.some((call) => call[0] === "env" && named(call[1], "owner=acme") && named(call[1], "name=shop")));
+  assert.ok(sql.some((text) => text.includes("project=") && text.includes(PR_URL)));
+});
+
+test("A board read follows the next page cursor up to the page cap, and an unfinished read deletes nothing", async (t) => {
+  const { readBoard, PAGES } = await load("kanso-panel/issues-github.js", ["readBoard", "PAGES"]);
+  const seen = [];
+  let n = 0;
+  const followed = await readBoard(async (_cmd, args) => { seen.push(afterOf(args)); n += 1; return pageOf(n, "c" + n, n < 2); }, { repo: REPO, project: "shop", filter: "all", login: "jj" });
+  assert.equal(seen[0], null);
+  assert.equal(seen[1], "after=c1");
+  assert.equal(followed.rows.length, 2);
+  assert.equal(followed.complete, true);
+  const capped = [];
+  const limited = await readBoard(async (_cmd, args) => { capped.push(afterOf(args)); return pageOf(capped.length, "p" + capped.length, true); }, { repo: REPO, project: "shop", filter: "all", login: "jj" });
+  assert.equal(capped.length, PAGES);
+  assert.equal(limited.complete, false);
+  const { db, storeSql, readIssues } = await rowsOf(t);
+  const kept = [issue({ url: "https://github.com/acme/shop/issues/1", title: "Kept" }), issue({ url: "https://github.com/acme/shop/issues/2", title: "Extra", assignees: JSON.stringify(["jj"]) })];
+  await db.run(storeSql({ project: "shop", source: "github", filter: "assigned", who: "jj", repo: "github.com/acme/shop", complete: true, rows: kept, columns: ["Open"], kept: [], now: 1 }));
+  await db.run(storeSql({ project: "shop", source: "github", filter: "assigned", who: "jj", repo: "github.com/acme/shop", complete: false, rows: [kept[0]], columns: ["Open"], kept, now: 2 }));
+  const next = await readIssues(db, ["shop"]);
+  same(next.rows.map((row) => row.title).toSorted(), ["Extra", "Kept"]);
+  assert.equal(next.boards[0].who, "jj");
+  assert.equal(next.boards[0].repo, "github.com/acme/shop");
+});
+
+test("The same issue address stored for two projects keeps both rows", async (t) => {
+  const { db, storeSql, readIssues } = await rowsOf(t);
+  const shared = issue({ title: "Shared" });
+  await db.run(storeSql({ project: "shop", source: "github", filter: "all", who: "jj", repo: "github.com/acme/shop", complete: true, rows: [shared], columns: ["Open"], kept: [], now: 1 }));
+  await db.run(storeSql({ project: "acme", source: "github", filter: "all", who: "jj", repo: "github.com/acme/shop", complete: true, rows: [{ ...shared, project: "acme" }], columns: ["Open"], kept: [], now: 2 }));
+  const read = await readIssues(db, ["shop", "acme"]);
+  same(read.rows.map((row) => row.project).toSorted(), ["acme", "shop"]);
+});
+
+const agentHost = (props, pane, calls) => ({
+  props: () => props,
+  panes: () => [pane],
+  terminals: () => [{ address: pane.terminal, status: pane.status, program: pane.program, labels: { "kanso.shown": "Claude" } }],
+  machines: () => [], spaces: () => [{ name: "Shop", tabs: [{ id: pane.tab }] }], shared: () => null,
+  hc: async (args) => { calls.push(args); return { code: 0, stdout: "", stderr: "" }; },
+  closeOverlay() {}, run() {},
+  TextareaState: { new: (start) => ({ value: () => start?.value ?? "", on() { return this; }, focus() {}, set_auto_grow() {}, set_value() {} }) },
+  InputState: { new: (start) => ({ value: () => start?.value ?? "", on() { return this; }, focus() {}, set_auto_grow() {}, set_value() {} }) },
+});
+
+test("Send holds a working recipient until that agent is done, and without the wait it sends at once", async () => {
+  const pane = { pane: "p1", terminal: "t1", tab: "tab1", status: "working", program: { name: "Claude", agent: true } };
+  const held = [];
+  const props = { text: "Ship it", whenWaiting: true };
+  const { Send } = await load("kanso-send/main.js", ["Send"], agentHost(props, pane, held));
+  const waiting = new Send();
+  const timers = [];
+  const pending = [];
+  const cx = { notify() {}, focus_handle: () => ({}), spawn(fn) { pending.push(fn(cx)); return { cancel() {} }; }, timer: { after(_ms, fn) { timers.push(fn); return { cancel() {} }; } } };
+  waiting.init({}, cx);
+  waiting.send(cx, waiting.state());
+  assert.equal(held.length, 0);
+  assert.equal(waiting.note, "Sends when Claude waits for you.");
+  pane.status = "done";
+  timers.at(-1)(cx);
+  await Promise.all(pending);
+  assert.equal(held.filter((call) => call[0] === "send").length, 1);
+  const immediate = [];
+  props.whenWaiting = false;
+  const { Send: Plain } = await load("kanso-send/main.js", ["Send"], agentHost(props, { ...pane, status: "working" }, immediate));
+  const now = new Plain();
+  now.init({}, { ...cx, spawn(fn) { pending.push(fn(cx)); return { cancel() {} }; } });
+  now.send(cx, now.state());
+  await Promise.all(pending);
+  assert.equal(immediate.filter((call) => call[0] === "send").length, 1);
+  assert.equal(now.note, null);
+});
+
+test("A GitHub remote named origin wins, otherwise another GitHub remote is used, and a non-GitHub origin is not a repository", async () => {
+  const { remoteOf } = await load("kanso-panel/issues-github.js", ["remoteOf"]);
+  const origin = remoteOf("origin https://github.com/acme/shop.git (fetch)\nupstream https://gitlab.com/acme/shop.git (fetch)\n", ["github.com"]);
+  assert.equal(origin.owner, "acme");
+  assert.equal(origin.name, "shop");
+  const upstream = remoteOf("upstream https://github.com/acme/other.git (fetch)\n", ["github.com"]);
+  assert.equal(upstream.name, "other");
+  assert.equal(remoteOf("origin https://gitlab.com/acme/shop.git (fetch)\n", ["github.com"]), null);
+});
+
+test("A logged-out probe is not kept, a later signed-in probe is used, and a probe error shows the copy instead of Sign in", async () => {
+  const { issuesGithub } = await load("kanso-panel/issues-github.js", ["issuesGithub"]);
+  const signed = "github.com\n  Logged in to github.com account jj\n  Active account: true\n";
+  const answers = [
+    { code: 1, stdout: "", stderr: "You are not logged into any GitHub hosts. Run gh auth login" },
+    { code: 0, stdout: signed, stderr: "" },
+  ];
+  world.calls = [];
+  world.answer = async () => answers.shift();
+  const view = await mount({ projects: [shop] });
+  const first = await view.loginOn(null, issuesGithub);
+  const second = await view.loginOn(null, issuesGithub);
+  assert.equal(first.status, "logged_out");
+  assert.equal(second.status, "ok");
+  assert.equal(second.login, "jj");
+  assert.equal(world.calls.filter((call) => call[0] === "gh").length, 2);
+  const at = Date.parse("2026-11-22T15:04:00Z");
+  const failed = await mount({
+    projects: [shop],
+    rows: [issue({ title: "Cached issue" })],
+    filters: { shop: "all" },
+    boards: [{ project: "shop", source: "github", filter: "all", who: "jj", columns: JSON.stringify(["Open"]), read_at: at, failure: null }],
+  });
+  world.answer = async () => ({ code: 1, stdout: "", stderr: "temporary failure" });
+  const { cx, drain } = timedContext([]);
+  failed.readProject(shop, cx);
+  await drain();
+  const texts = draw(failed);
+  assert.ok(texts.some((text) => text.includes("Showing the copy read at " + clock(at))));
+  assert.equal(texts.includes("Sign in"), false);
+});
+
+test("The five-minute tick does not read a board read less than a minute ago", async () => {
+  const calls = [];
+  const ticks = [];
+  const pending = [];
+  const { Issues } = await load("kanso-panel/issues.js", ["Issues"], {
+    ...viewHost,
+    exec: async (cmd, args) => { calls.push([cmd, args]); return { code: 1, stdout: "", stderr: "not logged" }; },
+  });
+  const readAt = Date.now();
+  const db = {
+    read: async (sql) => {
+      if (String(sql).includes("FROM projects")) return [shop];
+      if (String(sql).includes("issue_boards")) return [{ project: "shop", source: "github", filter: "assigned", who: "jj", read_at: readAt, columns: "[]", failure: null }];
+      return [];
+    },
+    run: async () => {},
+  };
+  const cx = { notify() {}, spawn(fn) { pending.push(fn(cx)); return { cancel() {} }; }, timer: { every(_ms, fn) { ticks.push(fn); return { cancel() {} }; }, after() { return { cancel() {} }; } } };
+  new Issues(db).init(cx);
+  await pending.shift();
+  const before = calls.length;
+  ticks[0](cx);
+  await Promise.all(pending);
+  assert.equal(calls.length, before);
+});
+
+test("An issue with no status shows Open in its row", async () => {
+  const updated = new Date(Date.now() - 5 * 60_000).toISOString();
+  const view = await mount({
+    projects: [shop], filters: { shop: "all" },
+    boards: [{ project: "shop", source: "github", filter: "all", who: "jj", columns: JSON.stringify(["Open"]), read_at: 1, failure: null }],
+    rows: [issue({ status: null, title: "Unboarded", updated_at: updated })],
+  });
+  assert.ok(draw(view).includes("Open · 5m"));
 });
