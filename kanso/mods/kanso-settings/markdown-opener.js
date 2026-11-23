@@ -8,7 +8,7 @@ import { paths } from "./platform-paths.js";
 
 const SCRIPT = () => paths.join(appHome(), "mods", "kanso-tabs", "markdown-handler.sh");
 const SUPPORTED = new Set(["macos", "linux"]);
-const LABEL = "Open .md files in kansō";
+const LABELS = { macos: "Open .md files in kansō", linux: "Open .md and text files in kansō" };
 
 const lastLine = (text) => String(text ?? "").trim().split("\n").at(-1) ?? "";
 
@@ -17,6 +17,7 @@ export class MarkdownOpener {
     this.platform = window()?.platform ?? "macos";
     this.on = null;
     this.busy = false;
+    this.wanted = null;
     this.said = null;
     if (SUPPORTED.has(this.platform) && !checking()) cx.spawn(async (next) => { this.on = await this.status(); next.notify(); });
   }
@@ -30,8 +31,16 @@ export class MarkdownOpener {
     return r.code === 0 ? lastLine(r.stdout) === "on" : null;
   }
 
+  label() { return LABELS[this.platform] ?? ""; }
+
+  matches(query) {
+    const q = String(query ?? "").trim().toLowerCase();
+    return SUPPORTED.has(this.platform) && this.label().toLowerCase().includes(q);
+  }
+
   set(next, cx) {
     this.busy = true;
+    this.wanted = next;
     this.said = null;
     cx.notify();
     cx.spawn(async (after) => {
@@ -39,19 +48,20 @@ export class MarkdownOpener {
       this.on = await this.status();
       this.said = r.code === 0 ? null : { text: lastLine(r.stderr) || lastLine(r.stdout) || "It could not be changed" };
       this.busy = false;
+      this.wanted = null;
       after.notify();
     });
   }
 
-  row(c) {
-    if (!SUPPORTED.has(this.platform)) return null;
-    const words = this.on === null && !this.busy ? "Looking…" : "A click on a .md path in a terminal shows it here, ready to edit.";
+  row(c, query) {
+    if (!this.matches(query)) return null;
+    const label = this.label(), looking = this.on === null && !this.busy;
     return v_flex().w_full().pt(G.lg).gap(G.sm)
       .child(h_flex().w_full().gap(G.md).items_center()
         .child(v_flex().flex_1().min_w(0).gap(G.hair)
-          .child(div().text_size(T.card).text_color(c.text).child(LABEL))
-          .child(div().text_size(T.body).text_color(c.dim).child(words)))
-        .child(toggleSwitch("markdown-opener", this.on === true, (next, cx) => this.set(next, cx), c, { label: LABEL, disabled: this.busy || this.on === null })))
+          .child(div().text_size(T.card).text_color(c.text).child(label))
+          .when(looking, (el) => el.child(div().text_size(T.body).text_color(c.dim).child("Looking…"))))
+        .child(toggleSwitch("markdown-opener", this.busy ? this.wanted === true : this.on === true, (next, cx) => this.set(next, cx), c, { label, disabled: this.busy || this.on === null })))
       .children(this.said ? [stateBlock("markdown-opener-error", c, { text: this.said.text })] : []);
   }
 }

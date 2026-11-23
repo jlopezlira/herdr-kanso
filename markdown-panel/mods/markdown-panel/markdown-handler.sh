@@ -8,7 +8,9 @@ INBOX="$HOME_DIR/data/kanso-open"
 SAVED="$HOME_DIR/data/kanso-markdown-previous"
 TYPES="net.daringfireball.markdown"
 LINUX_TYPES="text/markdown text/x-markdown text/plain"
-DESKTOP_APPS="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
+DATA_HOME="${XDG_DATA_HOME:-$HOME/.local/share}"
+DESKTOP_APPS="$DATA_HOME/applications"
+OPENER="$DATA_HOME/kanso-markdown/open.sh"
 LSREGISTER=/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister
 
 handler() {
@@ -104,8 +106,7 @@ uninstall() {
 linux_install() {
   command -v xdg-mime >/dev/null || { echo "Needs xdg-mime (xdg-utils)." >&2; exit 1; }
   herdr=$(command -v herdr-app || echo "$HOME/.local/bin/herdr-app")
-  opener="$HOME_DIR/data/kanso-markdown/open.sh"
-  mkdir -p "$DESKTOP_APPS" "$INBOX" "$(dirname "$opener")"
+  mkdir -p "$DESKTOP_APPS" "$INBOX" "$(dirname "$OPENER")"
   previous=$(xdg-mime query default text/markdown 2>/dev/null || true)
   for type in $LINUX_TYPES; do
     now=$(xdg-mime query default "$type" 2>/dev/null || true)
@@ -113,7 +114,7 @@ linux_install() {
     elif [ -n "$now" ]; then printf '%s %s\n' "$type" "$now"; fi
   done > "$SAVED.new"
   mv -f "$SAVED.new" "$SAVED"
-  cat > "$opener" <<OPEN
+  cat > "$OPENER" <<OPEN
 #!/bin/sh
 p=\$1
 export HERDR_APP_HOME="$HOME_DIR"
@@ -127,12 +128,13 @@ $(hand_to_herdr)
 command -v omarchy-launch-or-focus >/dev/null && exec omarchy-launch-or-focus herdr-app "$herdr"
 exit 0
 OPEN
-  chmod +x "$opener"
+  chmod +x "$OPENER"
+  case "$OPENER" in *' '*) exec_line="\"$OPENER\" %f" ;; *) exec_line="$OPENER %f" ;; esac
   cat > "$DESKTOP_APPS/$ID.desktop" <<DESKTOP
 [Desktop Entry]
 Type=Application
 Name=Kanso Markdown
-Exec=$opener %f
+Exec=$exec_line
 MimeType=text/markdown;text/x-markdown;text/plain;
 NoDisplay=true
 Terminal=false
@@ -147,7 +149,7 @@ linux_uninstall() {
     back=$(sed -n "s|^$type ||p" "$SAVED" 2>/dev/null || true)
     if [ -n "$back" ] && [ "$(xdg-mime query default "$type" 2>/dev/null)" = "$ID.desktop" ]; then xdg-mime default "$back" "$type"; fi
   done
-  rm -rf "$DESKTOP_APPS/$ID.desktop" "$HOME_DIR/data/kanso-markdown" "$SAVED"
+  rm -rf "$DESKTOP_APPS/$ID.desktop" "$(dirname "$OPENER")" "$HOME_DIR/data/kanso-markdown" "$SAVED"
   refresh_desktop
   now=$(xdg-mime query default text/markdown 2>/dev/null || true)
   echo "Markdown files open in ${now:-the system default} again."
@@ -155,7 +157,11 @@ linux_uninstall() {
 
 status() { if [ "$(handler 2>/dev/null || true)" = "$ID" ]; then echo on; else echo off; fi; }
 
-linux_status() { if [ "$(xdg-mime query default text/markdown 2>/dev/null)" = "$ID.desktop" ]; then echo on; else echo off; fi; }
+linux_status() {
+  [ -x "$OPENER" ] || { echo off; return; }
+  for type in $LINUX_TYPES; do [ "$(xdg-mime query default "$type" 2>/dev/null)" = "$ID.desktop" ] || { echo off; return; }; done
+  echo on
+}
 
 case "$(uname):${1:-}" in
   Darwin:status) status ;;
