@@ -9,6 +9,12 @@ const plain = (value) => JSON.parse(JSON.stringify(value));
 const model = await load("kanso-strip/clock-model.js", [
   "nextRuns", "lastDue", "waiterPlan", "parseRunLog", "lastOutcome", "clockName", "resumeWaiter",
 ]);
+const { resumesToArm } = await load("kanso-strip/clock.js", ["resumesToArm"], {
+  window: () => ({ platform: "macos" }),
+  appHome: () => "/tmp/kanso-test",
+  hc: async () => ({ code: 0, stdout: "", stderr: "" }),
+  exec: async () => ({ code: 0, stdout: "", stderr: "" }),
+});
 
 const at = (y, m, d, h, min = 0) => new Date(y, m, d, h, min, 0, 0).getTime();
 const now = at(2026, 5, 10, 12);
@@ -85,4 +91,19 @@ exit 0
   assert.equal(working.code, 0, working.stderr);
   assert.doesNotMatch(working.log, /send /);
   assert.match(working.log, /label t9 kanso\.limit= kanso\.limit\.resume= kanso\.limit\.cmd=/);
+});
+
+test("A restart before the reset re-arms an agent whose resume is still ours, a waiter with no command stays, that waiter is re-armed once the command is known, a typed resume is left, and a different resume token does nothing", () => {
+  const until = "5000";
+  const words = ["claude", "--resume", "abc"];
+  const cmd = JSON.stringify(words);
+  const agent = (labels) => ({ address: "t9", state: "live", labels });
+  const ours = { "kanso.limit": until, "kanso.limit.resume": until };
+  const waiter = (kind) => ({ address: "w1", name: model.clockName("resume", "t9"), state: "live", labels: { "kanso.clock": kind } });
+  const arms = (terms) => plain(resumesToArm(terms));
+  assert.deepEqual(arms([agent({ ...ours, "kanso.limit.cmd": cmd })]), [{ address: "t9", until: 5000, command: words }]);
+  assert.deepEqual(arms([agent(ours), waiter("resume")]), []);
+  assert.deepEqual(arms([agent({ ...ours, "kanso.limit.cmd": cmd }), waiter("resume")]), [{ address: "t9", until: 5000, command: words }]);
+  assert.deepEqual(arms([agent({ ...ours, "kanso.limit.cmd": cmd }), waiter("resume-typed")]), []);
+  assert.deepEqual(arms([agent({ "kanso.limit": until, "kanso.limit.resume": "1", "kanso.limit.cmd": cmd })]), []);
 });
