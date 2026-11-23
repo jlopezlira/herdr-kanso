@@ -53,3 +53,41 @@ test("Windows arguments retain spaces, empty strings, quotes and trailing slashe
     assert.throws(() => view.spawn("editor.exe", [invalid]), /Invalid path/);
   }
 });
+
+// Open with in a menu drawn by the fake kit: what the user reads and the presses it offers.
+const chooser = async ({ exec, tree = { id: "root", children: [] } }) => {
+  const { gpuiHost, texts, find, calls } = await import("./helpers.mjs");
+  const closed = [];
+  const store = {};
+  const { OpenWith } = await loadOpenWith({
+    ...gpuiHost(), exec, layout: () => tree, props: () => ({ file: "/repo/README.md", overlay: "ov" }), closeOverlay: (id) => closed.push(id),
+    shared: (key) => store[key], setShared: (key, value) => { store[key] = value; }, theme: () => ({}), win: () => ({ platform: "macos" }),
+    focused: () => null, panes: () => [], spaces: () => [], home: () => "/home/me", appHome: () => "/app",
+  });
+  const pending = [];
+  const cx = { spawn: (fn) => pending.push(fn(cx)), notify() {}, focus_handle: () => ({ focus() {}, is_focused: () => false }), stop_propagation() {} };
+  const view = new OpenWith();
+  view.init({}, cx);
+  const settle = async () => { while (pending.length) await pending.shift(); };
+  const press = (label) => calls(find(view.render(cx), (el) => calls(el, "accessibility_label").some((c) => c[1] === label)), "on_click").at(-1).at(-1)({}, cx);
+  return { view, cx, closed, settle, press, words: () => texts(view.render(cx)) };
+};
+
+test("A failed look for editors says so and offers Retry, which looks again", async () => {
+  let fail = true;
+  const { settle, press, words } = await chooser({ exec: async () => { if (fail) throw new Error("no shell"); return { code: 0, stdout: "", stderr: "" }; } });
+  await settle();
+  assert.ok(words().includes("Could not look for editors"), "the failure, not a loading list");
+  fail = false;
+  press("Retry");
+  await settle();
+  assert.ok(!words().includes("Could not look for editors"), "Retry looked again");
+});
+
+test("Preview in the panel is dim when the layout has no panel, and choosing it keeps the chooser open", async () => {
+  const { view, settle, closed, words } = await chooser({ exec: async () => ({ code: 0, stdout: "", stderr: "" }) });
+  await settle();
+  assert.ok(words().includes("no panel in this layout"));
+  await view.open(view.list()[0]);
+  assert.deepEqual(closed, [], "nothing opened, so nothing closed");
+});

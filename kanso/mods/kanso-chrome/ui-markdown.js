@@ -20,9 +20,11 @@ export const markdownWords = (id, c, { source = "" }, handlers = {}) => {
 /** One block: `state` rest, hover or editing; `content`, drawn elements in place of its formatted `source` (the editor's field, a picture and its words).
  * `onPress` (a press on the block, as `on_mouse_down`) gives it the pointer's wash; its words stay selectable. `onLink` takes a link's press. */
 export const markdownBlock = (id, c, { source = "", state = "rest", content = [] }, handlers = {}) => {
-  const { onLink = null, onPress = null } = handlers, ground = GROUNDS[state] ?? GROUNDS.rest;
+  const { onLink = null, onPress = null, onOpen = null } = handlers, ground = GROUNDS[state] ?? GROUNDS.rest;
   return ground(v_flex().id(id).w_full().gap(G.sm).px(G.sm).rounded(R.control).text_size(T.card).line_height(LH.body).text_color(c.text), c)
     .when(Boolean(onPress) && state === "rest", (el) => el.hover((s) => s.bg(c.subtle)).on_mouse_down("left", onPress))
+    .when(Boolean(onOpen) && state === "rest", (el) => el.tab_index(0).focus((s) => s.bg(c.subtle)).tooltip("Double-click to edit").accessibility_label("Edit block")
+      .on_key_down((e, cx) => { if (e.key === "enter") { cx.stop_propagation(); onOpen(cx); } }))
     .children(content.length ? content : [markdownWords(id, c, { source }, { onLink })]);
 };
 

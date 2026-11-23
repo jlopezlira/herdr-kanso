@@ -582,3 +582,16 @@ test("the minimap's pills fit their slot whatever the columns, so the stepper al
   assert.ok(many.every((w) => w >= 3), "never thinner than a mark");
   assert.ok(span(many) > PANE.pills, "past the slot they are cut in their own box");
 });
+
+test("Save is dim and says the arrangement needs a name while Name is empty", async () => {
+  const { gpuiHost, texts, find, calls, fieldWith } = await import("./helpers.mjs");
+  const { Arrange } = await load("kanso-arrange/main.js", ["Arrange"], { ...gpuiHost(), home: () => HOME, theme: () => ({}), props: () => ({ overlay: "ov" }), spaces: () => [], panes: () => [] });
+  const view = Object.assign(Object.create(Arrange.prototype), { view: "save", target: null, list: [], error: null, handle: { focus() {}, is_focused: () => false },
+    capture: { cols: [{ w: 1, panes: [{ argv: ["claude"], cwd: HOME }] }] } });
+  const saveWith = (value) => { view.name = { ...fieldWith({ value }), state: {}, focused: false, multiline: false }; return view.render(); };
+  const primary = (el) => calls(find(el, (kid) => kid.tag === "kanso-arrange-primary"), "disabled").at(-1)[1];
+  const blank = saveWith("  ");
+  assert.equal(primary(blank), true, "Save cannot save without a name, so it is dim");
+  assert.ok(texts(blank).includes("An arrangement needs a name."));
+  assert.equal(primary(saveWith("Review")), false);
+});

@@ -58,8 +58,10 @@ const TILE_TONES = ["blue", "teal", "violet", "yellow", "green", "red"];
 // One shell pass: prints `app|cli|flatpak <tab> key <tab> path` per hit.
 const PREVIEW = { id: "preview", name: "Preview in the panel", icon: "mods/kanso-chrome/icons/file.svg", builtin: true };
 
+const hasPanel = () => Boolean(walkLayout(layout(), "panel-body"));
+
 function showPreview(file, machine) {
-  if (!walkLayout(layout(), "panel-body")) return false;
+  if (!hasPanel()) return false;
   const child = { id: "preview", type: "block", content: { mod: "kanso-panel", props: { panel: "preview", path: file, on: machine } } };
   return commitLayout({ panel: child });
 }
@@ -78,6 +80,12 @@ export default class OpenWith extends View {
     this.icons = {};
     this.handle = focusOn(cx);
     this.target = this.resolveTarget();
+    this.detect(cx);
+  }
+
+  detect(cx) {
+    if (this.looking) return;
+    this.looking = true; this.error = null;
     cx.spawn(async (cx) => {
       try {
         this.found = await openApi(this.platform, exec).detectEditors(EDITORS);
@@ -85,10 +93,12 @@ export default class OpenWith extends View {
       } catch (err) {
         this.error = String(err?.message ?? err);
       }
+      this.looking = false;
       cx.notify();
       await this.loadIcons();
       cx.notify();
     });
+    cx.notify();
   }
 
   resolveTarget() {
@@ -118,7 +128,8 @@ export default class OpenWith extends View {
   }
 
   canOpen(e) {
-    if (e.builtin || !this.target.machine) return true;
+    if (e.builtin) return hasPanel();
+    if (!this.target.machine) return true;
     return e.tui || e.family === "vscode" || e.family === "zed";
   }
 
@@ -129,8 +140,8 @@ export default class OpenWith extends View {
   async open(e) {
     if (!e || !this.canOpen(e)) return;
     const { folder, machine, file } = this.target;
+    if (e.builtin) { if (showPreview(file, machine)) this.close(); return; }
     this.close();
-    if (e.builtin) { showPreview(file, machine); return; }
     const how = this.found[e.id];
     setShared(RECENT, [e.id, ...(shared(RECENT) ?? []).filter((x) => x !== e.id)].slice(0, 12));
     if (e.tui) {
@@ -168,7 +179,7 @@ export default class OpenWith extends View {
     const picture = this.icons[e.id] ?? null;
     return {
       picture, icon: picture ? null : e.icon ?? null, letter: picture || e.icon ? null : e.name[0], tone: TILE_TONES[EDITORS.indexOf(e) % TILE_TONES.length],
-      label: e.name, hint: !ok ? "local only" : i < 9 ? String(i + 1) : null,
+      label: e.name, hint: !ok ? (e.builtin ? "no panel in this layout" : "local only") : i < 9 ? String(i + 1) : null,
       disabled: !ok, selected: i === sel && ok, onClick: () => this.open(e),
     };
   }
@@ -181,9 +192,11 @@ export default class OpenWith extends View {
     const { folder, machine, file } = this.target;
     const shown = file ?? folder;
     const firstTui = list.findIndex((e) => e.tui);
-    const state = !this.found ? [{ loading: true }, { loading: true }]
-      : this.error && !list.length ? [{ failure: { text: "Could not look for editors", source: this.error } }]
-      : !list.length ? [{ heading: "No code editor found. Install Cursor, VS Code, Zed or another editor and open this again." }]
+    const again = (cx) => this.detect(cx);
+    const none = !list.some((e) => !e.builtin);
+    const state = this.error && !this.found ? [{ failure: { text: "Could not look for editors", source: this.error, fix: "Retry", onClick: again } }]
+      : !this.found || (this.looking && none) ? [{ loading: true }, { loading: true }]
+      : none ? [{ heading: "No code editor found. Install Cursor, VS Code, Zed or another editor." }, { icon: "refresh-cw", label: "Look again", onClick: again }]
       : [];
     const editors = list.flatMap((e, i) => [...(i === firstTui ? [{ heading: "In a split" }] : []), this.item(e, i, sel)]);
     const title = `Open with · ${machine ? `${machine}: ${shown}` : shortPath(shown, machine)}`;
@@ -192,7 +205,7 @@ export default class OpenWith extends View {
         const k = ev.key, { move, gAt } = listKey(ev, this.listG);
         this.listG = gAt;
         if (move === "escape") return this.close();
-        if (move === "enter") return void this.open(pickable[this.at]);
+        if (move === "enter") return void (pickable.length ? this.open(pickable[this.at]) : this.detect(cx));
         if (move && move !== "pending") { if (pickable.length) this.at = moveTo(move, this.at, pickable.length); }
         else if (move === "pending") { /* the first g of gg */ }
         else if (!ev.modifiers.control && !ev.modifiers.platform && !ev.modifiers.alt && /^[1-9]$/.test(k)) return void this.open(list[Number(k) - 1]);

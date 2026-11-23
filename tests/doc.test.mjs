@@ -103,13 +103,13 @@ const typeChanged = (doc, cx) => {
 };
 
 // A host where typing into a block, the autosave timer and the disk can be driven.
-async function fixture(initial) {
+async function fixture(initial, host = {}) {
   const disk = { text: initial };
   const timers = [];
   const states = [];
   const state = textState(states);
   const blocks = await load("kanso-panel/blocks.js", ["parseBlocks", "joinBlocks", "headingOf", "headingLine", "parseTable", "tableLines"]);
-  const { MarkdownDoc } = await loadMarkdownDoc({ ...blocks, ...diskIo(disk), ...EDITING, TextareaState: { new: state }, EditorState: { new: state } });
+  const { MarkdownDoc } = await loadMarkdownDoc({ ...blocks, ...diskIo(disk), ...EDITING, TextareaState: { new: state }, EditorState: { new: state }, ...host });
   const { cx, drain } = context();
   cx.timer = { after: (_ms, f) => timers.push(f) };
   const tick = async () => { while (timers.length) timers.shift()(cx); await drain(); };
@@ -263,4 +263,17 @@ test("reviews still waiting are read one per md-review process, by its pid", asy
   assert.deepEqual(clone(reviewsIn("101\t/a/plan.md\u0000102\t/a/plan.md\u0000x\t/b.md\u0000103\trelative.md\u0000")),
     [{ id: "101", path: "/a/plan.md" }, { id: "102", path: "/a/plan.md" }]);
   assert.deepEqual(clone(reviewsIn("")), []);
+});
+
+test("A formatted document says how to edit a block and offers Add paragraph as a button; Enter on a block edits it", async () => {
+  const { gpuiHost, chain, find, calls, tipsOf } = await import("./helpers.mjs");
+  const { doc, cx } = await fixture("# Plan\n\nFirst.\n", { ...gpuiHost(), TextView: { markdown: () => chain("words") } });
+  const drawn = doc.body({}, "md");
+  assert.ok(tipsOf(drawn).includes("Double-click to edit"));
+  calls(find(drawn, (el) => el.tag === "md-add"), "on_click").at(-1).at(-1)({}, cx);
+  assert.equal(doc.blocks[doc.active].kind, "paragraph", "a new paragraph, open to type in");
+  doc.close();
+  const block = find(doc.body({}, "md"), (el) => calls(el, "tab_index").length > 0);
+  calls(block, "on_key_down").at(-1).at(-1)({ key: "enter" }, cx);
+  assert.equal(doc.active, 0, "the heading opens from the keyboard");
 });

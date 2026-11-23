@@ -150,7 +150,7 @@ export class Companion {
         const missed = await bringAgentPets(new Set(this.pets.map((p) => p.id)));
         this.pets = [HACHI, ...await installedPets()];
         this.brought = !missed.length;
-        if (missed.length) this.error = `${missed.map((id) => AGENT_PETS.find((p) => p.id === id)?.name ?? id).join(", ")} could not be brought. Open this again to retry.`;
+        if (missed.length) this.error = `${missed.map((id) => AGENT_PETS.find((p) => p.id === id)?.name ?? id).join(", ")} could not be brought.`;
       } catch (e) { this.error = String(e?.message ?? e); }
       this.bringing = false;
       cx.notify();
@@ -211,6 +211,8 @@ export class Companion {
     const note = this.error ?? (coming ? `Bringing ${coming} more\u2026` : null);
     return v_flex().gap(G.md)
       .child(h_flex().flex_wrap().gap(8).children(this.pets.map(tile)))
-      .when(Boolean(note), (el) => el.child(div().text_size(12).text_color(this.error ? c.red ?? c.accent : c.dim).child(note)));
+      .when(Boolean(note), (el) => el.child(h_flex().items_center().gap(G.sm)
+        .child(div().text_size(T.body).text_color(this.error ? c.red ?? c.accent : c.dim).child(note))
+        .when(Boolean(this.error), (line) => line.child(button({ label: "Retry", kind: "quiet", small: true })("pets-retry", c, { onClick: (cx) => this.bring(cx) })))));
   }
 }

@@ -819,3 +819,11 @@ test("A first read that never answers ends in a failure with Refresh inside its 
   assert.equal(view.groups.length, 1, "Refresh reads the containers");
   assert.equal(words().includes("Can't read Docker"), false);
 });
+
+test("An image name with a space dims Pull and says what an image name looks like", async () => {
+  const { f, view, words } = await openPanel({ drawn: true });
+  view.pull = { value: () => "my image", set_value() {}, state: {}, focused: false, multiline: false };
+  const pull = find(view.render(f.cx), (el) => el.tag === "ct-pull");
+  assert.equal(calls(pull, "disabled").at(-1)[1], true, "Pull does nothing here, so it is dim");
+  assert.ok(words().some((w) => w.startsWith("An image name has no spaces")), "the field says why");
+});
