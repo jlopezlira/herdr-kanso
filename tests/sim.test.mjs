@@ -592,3 +592,17 @@ test("Simulator source contains no package runner, install launcher, alternate t
     assert.doesNotMatch(source, /\b(?:npx|xcrun|http|https|net|websocket|serve-sim)\b/i, file);
   }
 });
+
+test("A URL without a scheme dims Open a URL and says to include one; a custom scheme opens", async () => {
+  const { gpuiHost, texts, find, calls } = await import("./helpers.mjs");
+  const f = await viewFixture({ ui: gpuiHost() });
+  const device = { platform: "ios", state: "Booted", target: "one" };
+  const typed = (value) => { f.view.url = { value: () => value, set_value() {}, state: {}, focused: false, multiline: false }; return f.view.controls(device, {}); };
+  const open = (el) => calls(find(el, (kid) => kid.tag === "sim-Open a URL"), "disabled").at(-1)[1];
+  const bare = typed("example.com");
+  assert.equal(open(bare), true);
+  assert.ok(texts(bare).includes("Include a scheme, such as mailto: or myapp://"));
+  const custom = typed("myapp://home");
+  assert.equal(open(custom), false);
+  assert.ok(!texts(custom).includes("Include a scheme, such as mailto: or myapp://"));
+});

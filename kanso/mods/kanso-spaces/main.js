@@ -327,6 +327,7 @@ export default class Spaces extends RetryingView {
     this.armed = new Armed();
     this.pulling = false;
     this.needsScroll = ScrollHandle.new();
+    this.listScroll = ScrollHandle.new();
     if (shared("kanso.list")) setShared("kanso.list", null); // a reload: nothing is on the list
     this.git = {}; // place key -> { name, branch, ahead, behind, repo, linked }, null: not a repo
     this.checked = {};
@@ -600,11 +601,11 @@ export default class Spaces extends RetryingView {
         label("Folder"),
         h_flex().gap(8).items_center()
           .child(div().flex_1().min_w(0).truncate().text_size(T.value).text_color(this.projectFolder ? t.foreground : t.dim).child(shown))
-          .child(button("project-choose", this.projectFolder ? "Change\u2026" : "Choose\u2026", (cx) => this.chooseProjectFolder(cx), c, { kind: "tonal" })),
-        field("project-name", this.projectName, c, { label: "Name" }).pt(G.sm),
+          .child(button("project-choose", this.projectFolder ? "Change\u2026" : "Choose\u2026", (cx) => this.chooseProjectFolder(cx), c, { kind: this.projectFolder ? "tonal" : "solid" })),
+        field("project-name", this.projectName, c, { label: "Name, optional" }).pt(G.sm),
       ],
-      notes: [{ text: this.projectError ?? (start ? "The agent you used there last starts in it." : "It stays in Projects even with nothing open."), tone: this.projectError ? "error" : "dim" }],
-      secondary: "Cancel", primary: start ? "Create and start" : "Create project", state: this.creating ? "loading" : "default",
+      notes: [{ text: this.projectError ?? (start ? "Then you choose the agent that starts in it." : "It stays in Projects even with nothing open."), tone: this.projectError ? "error" : "dim" }],
+      secondary: "Cancel", primary: start ? "Create and choose agent" : "Create project", state: this.creating ? "loading" : this.projectFolder ? "default" : "disabled",
       onCancel: () => closeOverlay(props().overlay), onPrimary: (cx) => this.createProject(cx),
     });
   }
@@ -3039,6 +3040,13 @@ export default class Spaces extends RetryingView {
   list(t, collapsed, view, items) {
     const gap = view === "threads" ? SIDEBAR.threadGap : SIDEBAR.gap;
     const { els, space, agent } = laidOut(items, gap);
+    const projects = !collapsed && view === "spaces" && Boolean(this.listScroll);
+    const active = projects ? spaces().find((s) => s.active)?.id ?? null : this.revealed;
+    if (projects && active !== this.revealed) {
+      this.revealed = active;
+      const row = items.findLastIndex((it) => it.mark?.kind === "space");
+      if (row >= 0) this.listScroll.scroll_to_item((space ? 1 : 0) + (agent ? 1 : 0) + row);
+    }
     const pills = collapsed ? [] : [
       ...(space ? [pill("pill-space", space.y, space.h, tokens(t).w12)] : []),
       ...(agent ? [pill(`pill-agent-${view}`, agent.y, agent.h, tokens(t).w7)] : []),
@@ -3046,6 +3054,7 @@ export default class Spaces extends RetryingView {
     // Named, so its scroll position survives every redraw (an unnamed one is placed anew and starts at the top).
     // Open, its sides are the sidebar's gutter: each row's ground reaches out past it by the row's own padding, its content stays on it.
     return v_flex().id(`spaces-list-${collapsed ? "rail" : view}`).relative().flex_1().min_h(0).when(!collapsed, (el) => sidebarSides(el, SIDEBAR.gutter)).gap(collapsed ? 0 : gap).pt(collapsed ? G.sm : 0).pb(G.lg).overflow_y_scrollbar().mode(collapsed ? "hover" : "always")
+      .when(projects, (el) => el.track_scroll(this.listScroll))
       .on_mouse_up("left", (_e, cx) => { this.pressed = null; this.over = null; this.draggedAgent = null; this.redraw(cx); })
       // Rows keep their height: shrunk to fit, there would be nothing to scroll.
       .children([...pills, ...els.map((el) => el.flex_none())]);

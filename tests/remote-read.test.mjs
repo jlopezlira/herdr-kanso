@@ -570,7 +570,7 @@ test("a picture in Files opens in Preview, and a Markdown file on another comput
       appHome: () => dir,
       readTextFile: async () => "Hello\n\n![shot](./shot.png)\n",
       window: () => ({ platform: "macos" }),
-      div: view, svg: view, image: (src) => { seen.push(src); return view(); }, h_flex: view, v_flex: view,
+      div: view, svg: view, image: (src) => { seen.push(src); return view(); }, h_flex: view, v_flex: view, Button: { new: view },
       TextView: { markdown: () => view() }, Textarea: { new: view }, Editor: { new: view },
       EditorState: { new: () => ({}) }, TextareaState: { new: () => ({ set_auto_grow() {}, on() {}, focus() {}, release() {} }) },
       exec: async (cmd, args = []) => {

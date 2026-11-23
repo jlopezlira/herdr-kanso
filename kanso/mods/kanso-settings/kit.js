@@ -240,8 +240,8 @@ export const markdownWords = ({ source = "" }) => (id, c, more = {}) => {
 
 // One block of a document. Proposed: `content`, drawn pieces in place of its formatted source (`markdownWords` for words). `onPress` takes a press on it (a double press edits it).
 export const markdownBlock = ({ source = "", state = "rest", content = [] }) => (id, c, more = {}) => {
-  const { onLink = null, onPress = null } = given(more);
-  return drawMarkdownBlock(id, c, { source, state, content: drawn(id, c, "content", content) }, { onLink, onPress });
+  const { onLink = null, onPress = null, onOpen = null } = given(more);
+  return drawMarkdownBlock(id, c, { source, state, content: drawn(id, c, "content", content) }, { onLink, onPress, onOpen });
 };
 
 // The status bar's items: a press is named by the item's icon, else its mark, else its words; Needs you's by its mark. App only: `tip`.

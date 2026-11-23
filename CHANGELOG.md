@@ -26,9 +26,14 @@ the branch's rules.
 
 ### Added
 
-- An Issues panel, beside Pull requests in the tab bar, shows the open GitHub issues of every project at once, the project you are in first: one table per project with a section for each status of its board, in the board's order, and a count on each. Done starts folded. Assigned to me, Created by me and All open switch per project and are remembered. Selecting an issue shows its body, comments and linked pull requests, with Open on GitHub and Send to agent. The issues are kept in kansō's database, so the panel opens at once and still shows them, with the time they were read, when GitHub cannot be reached. It reads `gh` on the computer that holds the project, only while the panel is open, and Settings can hide its button. (#256)
-- The Issues panel shows Jira Cloud and Linear tickets too. Settings, under Accounts, signs in with your own Jira site and email or your own Linear account: you paste the API token or key into the operating system's own secure dialog, never a terminal, so it goes straight into its secret store (Keychain on macOS, Credential Manager on Windows, Secret Service on Linux and Omarchy) and never into kansō, a file, a log or an agent. Each project links to any number of Jira projects and Linear teams; their tickets sit with its GitHub issues, marked by source, in the board's columns or the team's workflow states. (#257)
+- A Tasks panel, beside Pull requests in the tab bar, shows the open GitHub issues of every project at once, the project you are in first: one table per project with a section for each status of its board, in the board's order, and a count on each. Done starts folded. Assigned to me, Created by me and All open switch per project and are remembered. Selecting an issue shows its body, comments and linked pull requests, with Open on GitHub and Send to agent. The issues are kept in kansō's database, so the panel opens at once and still shows them, with the time they were read, when GitHub cannot be reached. It reads `gh` on the computer that holds the project, only while the panel is open, and Settings can hide its button. (#256)
+- The Tasks panel shows Jira Cloud and Linear tickets too. Settings, under Accounts, signs in with your own Jira site and email or your own Linear account: you paste the API token or key into the operating system's own secure dialog, never a terminal, so it goes straight into its secret store (Keychain on macOS, Credential Manager on Windows, Secret Service on Linux and Omarchy) and never into kansō, a file, a log or an agent. Each project links to any number of Jira projects and Linear teams; their tickets sit with its GitHub issues, marked by source, in the board's columns or the team's workflow states. (#257)
 - When every check on an agent's pull request has finished, the agent hears the result once per push, as soon as it waits for you: which checks failed, each with its link, or that they passed. A failure moves its row to Needs you with "checks failed"; a cancelled run says nothing. Settings, under Background, turns it off. (#252)
+
+### Fixed
+
+- With no projects, the Tasks panel offers New project, and shows a project as soon as it is added, and it lists the projects of every computer you have open, not only this one's.
+- New project asks for the folder first, keeps Create project off until one is chosen, marks the name optional, and its conversation variant says you then choose the agent. Settings › Keys points to kansō help for every key, and Images with no agent in focus offers Open a folder… to see that folder's pictures. Switching to a project scrolls the Projects list to it once, so a new or far-down project is in view.
 
 ### Changed
 
@@ -41,6 +46,13 @@ the branch's rules.
 - Spend offers Retry when it cannot find Node, and reads its settings again before the next update.
 - Add a computer offers Refresh when Tailscale is off, missing, or has no other computer, and keeps the address you typed.
 - Needs you names each computer it cannot reach, keeps the agents already waiting, and offers Refresh for that computer.
+- Open with no longer waits forever when it cannot look for editors: it says so and offers Retry. With no editor found, Look again checks once more after you install one. A scan that fails says so instead of telling you to install an editor. Preview in the panel is dimmed, and says so, when the layout has no kansō panel to show it in.
+- Arrangements: Save is dimmed while the name is empty, and the dialog says the arrangement needs a name.
+- Containers: an image name with a space, or one that starts with a hyphen, dims Pull and says what an image name looks like.
+- Simulator: a URL without a scheme dims Open a URL and asks you to include one; custom schemes still open.
+- The Markdown editor gives each block an Edit block button and ends the document with Add paragraph; double-click and Source still edit.
+- The hjkl dōjō offers Retry under the pets that could not be brought, however many there are.
+- The Projects toolbar's + is called New project, as its dialog is.
 
 ## [3.33.0] - 2026-11-22
 
