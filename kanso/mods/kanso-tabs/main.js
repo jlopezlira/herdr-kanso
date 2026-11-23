@@ -41,6 +41,7 @@ function storedObject(key) {
 // Mounted on demand: closing removes the block, so Herdr ends that mod (its timers, watches and processes stop).
 const PANELS = {
   files: { mod: "kanso-panel", props: { panel: "files" } }, pr: { mod: "kanso-panel", props: { panel: "pr" } },
+  issues: { mod: "kanso-panel", props: { panel: "issues" } },
   shipped: { mod: "kanso-panel", props: { panel: "shipped" } },
   worktrees: { mod: "kanso-panel", props: { panel: "worktrees" } },
   ports: { mod: "kanso-panel", props: { panel: "ports" } },
@@ -68,6 +69,7 @@ const BUILTIN = [
   { id: "files", label: "Files", icon: "lu-file" },
   { id: "insights", label: "Spend", icon: "lu-chart-column" },
   { id: "pr", label: "PR", icon: "lu-git-pull-request" },
+  { id: "issues", label: "Issues", icon: "lu-circle-dot" },
   { id: "shipped", label: "Shipped", icon: "lu-trophy" },
   { id: "worktrees", label: "Worktrees", icon: "lu-git-fork" },
   { id: "ports", label: "Ports", icon: "lu-plug" },

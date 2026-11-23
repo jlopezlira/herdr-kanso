@@ -1,9 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { load, tape } from "./helpers.mjs";
+import { load, tape, same } from "./helpers.mjs";
 import { chromeTheme } from "./mod-fixtures.mjs";
 
-const same = (actual, expected) => assert.deepEqual(JSON.parse(JSON.stringify(actual)), expected);
 const settle = async () => { for (let i = 0; i < 8; i += 1) await Promise.resolve(); };
 
 const run = (name, conclusion, extra = {}) => ({

@@ -1,6 +1,6 @@
 // GitHub, through the gh that is already signed in on this machine, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
 import { exec } from "herdr";
-import { parseOr } from "./pure.js";
+import { parseOr, same } from "./pure.js";
 import { parseRemote, parseAuth, rateFrom, urlHost, LIST_CAP } from "./pr-remote.js";
 import { rollupState } from "./ghchecks.js";
 
@@ -17,7 +17,7 @@ export function listArgs(repo) {
   return ["pr", "list", "-R", name, "--state", "open", "--limit", "30", "--json", LIST_FIELDS];
 }
 
-const firstLine = (r) => String(r?.stderr || r?.stdout || "").trim().split("\n")[0] || "GitHub could not be read.";
+export const firstLine = (r) => String(r?.stderr || r?.stdout || "").trim().split("\n")[0] || "GitHub could not be read.";
 
 export async function probe(run = exec) {
   const result = await run("gh", ["auth", "status"]).catch(() => null);
@@ -46,7 +46,6 @@ function fromRepository(row) {
   return { host: hostOf(row.url), owner: parts.slice(0, -1).join("/"), name: parts.at(-1) };
 }
 
-const same = (a, b) => String(a ?? "").toLowerCase() === String(b ?? "").toLowerCase();
 
 // Search names the account. The per-repository list fills in what search has not indexed yet, and only where it asks this login.
 const itemOf = (row, role, prev, where) => ({
@@ -91,7 +90,7 @@ export function combineInbox({ reviews = [], authored = [], listed = [], login }
 const json = (result) => result?.code === 0 ? parseOr(result.stdout, null) : null;
 
 // gh search has no hostname flag. GH_HOST selects the account that is signed in there.
-const ask = (run, host, args) => run("env", [`GH_HOST=${host}`, "gh", ...args]);
+export const ask = (run, host, args) => run("env", [`GH_HOST=${host}`, "gh", ...args]);
 
 const empty = (extra) => ({ items: [], rate: null, complete: false, error: null, queried: [], searchOk: false, ...extra });
 

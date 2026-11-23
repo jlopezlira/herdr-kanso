@@ -12,6 +12,7 @@ import { field, TextField } from "./ui-field.js";
 import { row, stack, emptyState } from "./kit.js";
 
 const LAST = "kanso.send.last";
+const HOLD_MS = 1000;
 const UNSEEN = "Can't see the agents right now.";
 
 export function draftFor(p, digest) {
@@ -29,7 +30,7 @@ export default class Send extends View {
     this.to = targetsOf(panes(), p.pane, shared(LAST), machines())[0]?.terminal ?? this.state("").groups[0]?.recipients[0]?.terminal ?? null;
     this.query = new TextField({ placeholder: "Find an agent or a project" });
     this.query.on("change", (_e, cx) => cx.notify());
-    this.text = draftFor(this.from, shared("kanso.digest")?.[p.pane]);
+    this.text = typeof p.text === "string" && p.text.trim() ? p.text : draftFor(this.from, shared("kanso.digest")?.[p.pane]);
     this.box = new TextField({ value: this.text }, { multiline: true });
     this.box.on("change", (_e, cx) => this.pick(cx, () => { this.text = this.box.value(); }));
     this.box.focus();
@@ -38,6 +39,8 @@ export default class Send extends View {
     this.sending = false;
     this.unsure = [];
     this.error = null;
+    this.note = null;
+    this.held = null;
   }
 
   pick(cx, choose) {
@@ -59,10 +62,26 @@ export default class Send extends View {
     this.send(cx, now);
   }
 
-  send(cx, { recipients: ready, waiting }) {
-    const text = this.text.trim();
-    if (!text || this.sending || (!ready.length && !waiting.length)) return;
+  hold(cx) {
+    const statusOf = (x) => panes().find((p) => p.terminal === x.terminal)?.status ?? null;
+    const there = this.held.recipients.filter((x) => panes().some((p) => p.terminal === x.terminal));
+    if (there.some((x) => statusOf(x) === "working")) { cx.timer.after(HOLD_MS, (next) => this.hold(next)); return; }
+    const { text } = this.held;
+    this.held = null; this.note = null;
+    this.send(cx, { recipients: there.filter((x) => statusOf(x) !== "blocked"), waiting: there.filter((x) => statusOf(x) === "blocked") }, text);
+  }
+
+  send(cx, { recipients: ready, waiting }, held = null) {
+    const text = (held ?? this.text).trim();
+    if (!text || this.sending || this.held || (!ready.length && !waiting.length)) return;
     if (!ready.length) { this.error = waitingNote(waiting.map((x) => x.label)); cx.notify(); return; }
+    if (!held && (props() ?? {}).whenWaiting && ready.some((x) => x.status === "working")) {
+      this.held = { recipients: ready, text }; this.error = null;
+      this.note = `Sends when ${ready.filter((x) => x.status === "working").map((x) => x.label).join(", ")} waits for you.`;
+      cx.notify();
+      cx.timer.after(HOLD_MS, (next) => this.hold(next));
+      return;
+    }
     const sender = this.from?.terminal ? terminals().find((k) => k.address === this.from.terminal)?.labels?.["kanso.shown"] || nameOf(this.from, givenNames()) : "you";
     this.sending = true; this.error = null; this.unsure = []; cx.notify();
     cx.spawn(async (cx) => {
@@ -115,7 +134,7 @@ export default class Send extends View {
         (rows.length ? stack({ variant: "dialog list", scroll: true }, rows) : emptyState({ text: empty }))("send-list", c),
         field("send-message", this.box, c, { label: "Message" }),
       ],
-      notes: [{ text: this.error ?? "Pasted into its terminal and sent with Enter, as if you typed it there.", tone: this.error ? "error" : "dim" },
+      notes: [{ text: this.error ?? this.note ?? "Pasted into its terminal and sent with Enter, as if you typed it there.", tone: this.error ? "error" : "dim" },
         ...(rows.length && !state.complete ? [{ text: UNSEEN, tone: "dim" }] : [])],
       secondary: "Cancel", primary: state.label,
       state: this.sending ? "loading" : ready ? "default" : "disabled",

@@ -26,6 +26,7 @@ the branch's rules.
 
 ### Added
 
+- An Issues panel, beside Pull requests in the tab bar, shows the open GitHub issues of every project at once, the project you are in first: one table per project with a section for each status of its board, in the board's order, and a count on each. Done starts folded. Assigned to me, Created by me and All open switch per project and are remembered. Selecting an issue shows its body, comments and linked pull requests, with Open on GitHub and Send to agent. The issues are kept in kansō's database, so the panel opens at once and still shows them, with the time they were read, when GitHub cannot be reached. It reads `gh` on the computer that holds the project, only while the panel is open, and Settings can hide its button. (#256)
 - When every check on an agent's pull request has finished, the agent hears the result once per push, as soon as it waits for you: which checks failed, each with its link, or that they passed. A failure moves its row to Needs you with "checks failed"; a cancelled run says nothing. Settings, under Background, turns it off. (#252)
 
 ### Changed
