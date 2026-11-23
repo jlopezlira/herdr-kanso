@@ -7,6 +7,7 @@ export const ACCOUNTS = "kanso.issues.accounts";
 export const kindOf = (source) => String(source ?? "github").split(":")[0];
 export const SOURCE_WORDS = { github: "GitHub", jira: "Jira", linear: "Linear" };
 export const EVERY_MS = 5 * 60_000;
+export const stampsOf = (node) => ({ created_at: node.createdAt ?? null, updated_at: node.updatedAt ?? null });
 
 import { same } from "./pure.js";
 

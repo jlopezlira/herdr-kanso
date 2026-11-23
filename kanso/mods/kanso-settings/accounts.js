@@ -46,8 +46,8 @@ export class Accounts {
     this.busy = "jira"; this.errors = { ...this.errors, jira: null }; cx.notify();
     cx.spawn(async (next) => {
       const saved = await this.secrets.save(JIRA, site, token);
-      this.jiraToken.state.set_value("");
       if (saved?.code !== 0) { this.fail("jira", "The secret store refused the token", next); return; }
+      this.jiraToken.state.set_value("");
       const me = await jiraClient(this.secrets, { site, email }).me();
       if (me.failure) { await this.secrets.remove(JIRA, site); this.fail("jira", me.failure.text, next); return; }
       setShared(ACCOUNTS, { ...kept(), jira: { site, email, name: me.name } });
@@ -61,8 +61,8 @@ export class Accounts {
     this.busy = "linear"; this.errors = { ...this.errors, linear: null }; cx.notify();
     cx.spawn(async (next) => {
       const saved = await this.secrets.save(LINEAR, LINEAR_ACCOUNT, key);
-      this.linearKey.state.set_value("");
       if (saved?.code !== 0) { this.fail("linear", "The secret store refused the key", next); return; }
+      this.linearKey.state.set_value("");
       const me = await linearClient(this.secrets).me();
       if (me.failure) { await this.secrets.remove(LINEAR, LINEAR_ACCOUNT); this.fail("linear", me.failure.text, next); return; }
       setShared(ACCOUNTS, { ...kept(), linear: { name: me.name, email: me.email } });

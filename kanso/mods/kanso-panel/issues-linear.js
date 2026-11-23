@@ -1,4 +1,5 @@
 import { parseOr } from "./pure.js";
+import { stampsOf } from "./issues-model.js";
 
 export const LINEAR = "kanso-linear";
 export const LINEAR_ACCOUNT = "api.linear.app";
@@ -59,8 +60,7 @@ export function rowsOf(nodes, { team, project, now }) {
     labels: JSON.stringify((n.labels?.nodes ?? []).map((l) => l.name)),
     assignees: JSON.stringify(n.assignee ? [n.assignee.email ?? n.assignee.name] : []),
     author: n.creator?.email ?? n.creator?.name ?? null,
-    created_at: n.createdAt ?? null,
-    updated_at: n.updatedAt ?? null,
+    ...stampsOf(n),
     body: n.description ?? "",
     read_at: now,
   }));
