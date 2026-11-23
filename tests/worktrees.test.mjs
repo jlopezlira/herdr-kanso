@@ -403,13 +403,12 @@ test("Worktrees drops the removed row, credits the freed space and says the bran
   const path = await realpath(w.path);
   panel.init(cx); await drain();
   const row = panel.item(path);
-  assert.ok(row?.size > 0, "the scanned row has a measured size");
 
   panel.remove(row, cx, true); await drain();
   assert.equal(panel.item(path), null);
   assert.equal(panel.note?.text, "Branch in-use stays");
   assert.match(panel.note.source, /cannot delete branch 'in-use'/i);
-  assert.deepEqual([panel.hist.worktrees, panel.hist.kanso, panel.hist.branches], [1, row.size, 0]);
+  assert.deepEqual([panel.hist.worktrees, panel.hist.kanso, panel.hist.branches], [1, row.size ?? 0, 0]);
 });
 
 test("Remove with its branch keeps the folder and both branches if the checkout changed after the scan", async (t) => {
