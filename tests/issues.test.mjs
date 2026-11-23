@@ -1,9 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { load, tape, KIT_NIGHT, timedContext } from "./helpers.mjs";
+import { load, tape, KIT_NIGHT, timedContext, same } from "./helpers.mjs";
 import { temporaryKdb } from "./mod-fixtures.mjs";
 
-const same = (actual, expected) => assert.deepEqual(JSON.parse(JSON.stringify(actual)), expected);
 const PR_URL = "https://github.com/acme/shop/issues/12";
 const REPO = { host: "github.com", owner: "acme", name: "shop" };
 const clock = (at) => new Date(at).toTimeString().slice(0, 5);
