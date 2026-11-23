@@ -400,12 +400,12 @@ test("Remove with its branch reports why Git keeps the branch and counts the rem
 test("Worktrees drops the removed row, credits the freed space and says the branch stays", async (t) => {
   const { w, panel } = await busyBranchFixture(t);
   const { cx, drain } = context();
-  const path = await realpath(w.path);
   panel.init(cx); await drain();
-  const row = panel.item(path);
+  const row = panel.groups.flatMap((g) => g.items).find((x) => basename(x.path) === basename(w.path));
+  assert.ok(row, "the scan lists the worktree");
 
   panel.remove(row, cx, true); await drain();
-  assert.equal(panel.item(path), null);
+  assert.equal(panel.item(row.path), null);
   assert.equal(panel.note?.text, "Branch in-use stays");
   assert.match(panel.note.source, /cannot delete branch 'in-use'/i);
   assert.deepEqual([panel.hist.worktrees, panel.hist.kanso, panel.hist.branches], [1, row.size ?? 0, 0]);
