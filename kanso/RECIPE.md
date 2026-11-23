@@ -1,9 +1,11 @@
 # Kanso
 
 Agents sit side by side at their own width, and the one waiting on you comes first.
-Sleep a project and wake it on the same conversations. Memory, on macOS and Windows, recycles idle Claude sessions so the machine lasts weeks.
-Spend adds up across computers once Sync is on. A Simulator sits beside the agent.
-It works on a space that lives on another computer, and it runs on macOS, Windows and Linux.
+Sleep a Claude Code agent, a tab or a whole project, and wake its Claude Code conversations where they were.
+Add another computer over your network or Tailscale: its projects sit in the sidebar beside yours, and files, pictures, sleep, copy and paste work there too.
+Review pull requests, files, pictures and Markdown next to the agent that wrote them.
+Memory recycles idle Claude sessions so the machine lasts weeks, Spend adds up your AI work across computers once Sync is on, and a Simulator sits beside the agent.
+kansō runs on macOS, Windows and Linux.
 
 ![Kanso](preview.png)
 
@@ -38,14 +40,14 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
       A click lists the group in a popup (click goes; asleep: wake menu).
   - **Footer**, bottom-aligned, as tall as its rows:
     - Settings (gear), a kit row of 32, icon 17, text 13.5, muted; 8 above
-      and 16 below. Add computer lives at the end of the + menu.
+      and 16 below. Add computer sits above Settings.
     - Settings opens one menu: kansō settings (with its key) and Herdr
       settings; while Herdr has an update waiting, "Update Herdr to X",
       pressed twice to restart Herdr into it.
     - Collapsed, each item is a centred 34 square, icon 17, with its label
       as a tooltip; the gear opens the same menu. The footer fits them: 54
       for one, 36 more each, 12 below.
-    - Kanso's own release (`update.js`). What's new
+    - Kanso's own release (`update.js`). Settings, under Updates,
       chooses Stable (default) or Early. Stable offers a newer `vX.Y.Z`.
       Early offers the newest beta, rc or stable, never an older one.
       The row "Update kansō to X" (refresh icon) names
@@ -232,7 +234,7 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
 ## How it behaves
 
 - **Since you left**: after 5 minutes away, "While you were away" sits above
-  the projects, and on Status and Threads. Up to three rows: mark, name,
+  the projects, and on Status and Threads. Up to four rows: mark, name,
   outcome (Finished, Needs you, Failed, a
   PR's state) and age; under it, dim, the line then (`did`, kept with the
   event). The agent in front is left out; one row per agent. +N expands
@@ -280,7 +282,7 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
   panel by its place, ⌃⌥P/S/T a view, ⌃⌥1-9 a pane column, ⌃⇧, Kanso
   settings; ⌘⌥hjkl (⇧ moves) vim; left of column 1: sidebar list
   (`kanso-spaces.list`, `kanso.list`); lists: listkeys.js. ⌘F on an agent lists matching turns, newest first.
-- **Kanso settings** (kanso-settings, the fixed gear after the panels): Pieces
+- **Kanso settings** (kanso-settings, opened from Settings at the foot of the sidebar or Ctrl+Shift+,): Pieces
   shows, shows when it has something to say, or hides each piece (`kanso.pieces`;
   hiding stops its work). Keys rebinds Kanso-only keys (never Herdr's). What's new
   is the log (Updates: Stable or Early). Credits who. Panel order stays `kanso.panels.order`.
@@ -463,21 +465,24 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     trackpad swipe (about 40px of travel).
 - **The strip** (keys in `keys.json`, section `layout:kanso`; in Kanso they
   replace Herdr's tab keys, since the canvas is where you move):
-  - Cmd+1 to Cmd+9 go to that pane; Cmd+[ and Cmd+] go to the previous and
-    next one. The view glides to it (eases over about 0.3 s).
-  - Cmd+D opens a pane to the right, Cmd+Alt+D to the left, Cmd+Shift+D
-    below (stacked in the same column). The new pane is focused. The header's
-    split buttons and the right-click menu do the same.
-  - Cmd+W closes the focused pane. Cmd+Shift+[ and Cmd+Shift+] move it left
-    and right. Cmd+Shift+Enter (or the header's wider or narrower button) cycles its width
+  - Cmd+1 to Cmd+9 go to that tab. Ctrl+Alt+1 to Ctrl+Alt+9 go to the first
+    pane of that column; Cmd+Alt+Left and Cmd+Alt+Right (or H and L) go to the
+    previous and next column. The view glides to it (eases over about 0.3 s).
+  - Cmd+D opens a pane to the right, Cmd+Alt+Shift+D to the left (Cmd+Alt+D
+    shows and hides the macOS Dock), Cmd+Shift+D below (stacked in the same
+    column). The new pane is focused. The header's split buttons and the
+    right-click menu do the same.
+  - Cmd+Shift+W closes the focused pane; Cmd+W closes the tab.
+    Cmd+Alt+Shift+Left and Cmd+Alt+Shift+Right (or Shift+H and Shift+L) move
+    it left and right, and Cmd+Alt+Shift+Up and Down move it within its
+    column. Cmd+Shift+Enter (or the header's wider or narrower button) cycles its width
     1/4, 1/3, 1/2, 2/3, 1.
   - Cmd+Shift+- and Cmd+Shift+= show fewer or more panes per view (pages
     of at most n, each shared evenly); Cmd+Shift+0 lays them out again in
     pages. `kanso-strip.per-N` sets N.
   - Cmd+Alt+Up/Down (or K/J) move the focus within a stacked column.
-  - Alternatives: Cmd+Alt+Left/Right or H/L (focus), with Shift
-    (move), Cmd+Alt+1-9, Cmd+Alt+Home/End, Cmd+Alt+C (centre). There is no
-    vertical move; those keys go to the program.
+  - Cmd+Alt+Home and Cmd+Alt+End go to the first and last column, and
+    Cmd+Alt+C centres the focused one.
   - The wheel or a swipe over any pane header, an edge tab or the minimap slides the view
     one column per quarter view of travel (600px per view width) without
     moving the focus; if the focused pane leaves the view, the keyboard
@@ -602,7 +607,7 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     editors open with `terminal.open {place: "right"}`. A folder on another
     machine opens over SSH in the VS Code family (`--remote ssh-remote+<machine>`)
     and Zed (`ssh://<machine>/<path>`); the rest show "local only".
-    Cmd+Shift+O (`mod.open:open-with`, in `keys.json`) opens it.
+    Open with… in a pane's right-click and header menus opens it (`mod.open:open-with`); no key is bound to it.
   - `kanso-chrome`: the top strip's mark and the sidebar footer, plus the icon set.
   - `kanso-status`: the status bar.
   - `kanso-panel`: the side panels in one mod, chosen by `props.panel`;
@@ -638,8 +643,8 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     read once and replaces its rows. A missing file, or one that will not
     open, is dropped; none yet is one line.
     Copies in `data/kanso-panel/look` draw the newest big (`image()` reads
-    the app folder; HEIC/TIFF via `sips`/`magick`); each picture is a circle,
-    the active one filled with its color. A click drops a numbered pin, kept until Send, and
+    the app folder; HEIC/TIFF via `sips`/`magick`); each picture is a square
+    thumbnail on its own color, the active one ringed in the accent. A click drops a numbered pin, kept until Send, and
     opens `kanso-prompt` with `shared: "kanso.look.note"` (`{[token]: {text,
     at}}`, read on render; Cancel drops a new pin). ⌘↩ sends "About <path>:"
     and a line per noted pin (`deliver.js`).
@@ -661,7 +666,10 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
 - **Programs run**: `git` (spaces, Files), `sh` (Files listing),
   `hc` (machines) and, for Open with, `sh`, `open`, `plutil` and `sips`
   (macOS) and the chosen editor. The PR panel runs `gh` and `git` only while
-  shown. Nothing else reaches the network.
+  shown. The update check runs `git ls-remote` on kansō's GitHub repository,
+  Spend fetches OpenRouter's price list once a day, and Add a computer reads
+  Tailscale's list and, unless Settings turns it off, asks the computers on
+  this network whether they answer ssh. Nothing else reaches the network.
 
 ## Watch out
 
@@ -750,7 +758,7 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
 - Right-click a terminal, "Open with…": the popup names that pane's folder
   and lists the installed editors; picking one opens that folder in it.
 - In a repository whose branch has an open PR, the panel opens on what stops it, with one action. Send hands that to the agent in front. Details holds the description, people, checks and files.
-- `herdr-app check` passes for all eight `kanso-*` mods and `open-with`, and
+- `herdr-app check` passes for every `kanso-*` mod and `open-with`, and
   `herdr-app status` shows no errors after `layout.switch {name: "kanso"}`.
 - With no panel open, `panel-body` in the layout file has no children. After
   clicking Files it holds exactly one `files` block, and closing it empties
@@ -776,7 +784,7 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
   other loses; Cmd+Shift+0 evens them out again.
 - Cmd+Alt+Left past the first column in view slides the view.
 - Pin the left pane of three and scroll: it stays at the left, whole, while
-  the others slide beside it. Ctrl+dragging it, Cmd+Shift+] and dropping a
+  the others slide beside it. Ctrl+dragging it, Cmd+Alt+Shift+Right and dropping a
   pane on it change nothing. Pinning panes that would leave under a fifth of
   the view does nothing.
 - Select the second of three panes, go to another space and back: that pane

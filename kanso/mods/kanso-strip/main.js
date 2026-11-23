@@ -27,6 +27,7 @@ import { button, failureLine, stepper } from "./kit.js";
 import { layoutPaused, statusBar } from "./status-bar.js";
 import { COLUMN } from "./ui-status.js";
 import { boundChord } from "./ui-tooltip.js";
+import { contextMenu } from "./context-menu.js";
 import { headerSegment } from "./ui-header.js";
 import { pieceLines } from "./piece-lines.js";
 import { paged } from "./strip-model.js";
@@ -34,7 +35,7 @@ import { checksOutcome, checksStep, opened, deliveryOf, reserve, POLL_MS, PR_LAB
 import { deliver } from "./deliver.js";
 import { localService } from "./platform-host.js";
 import { openApi } from "./platform-open.js";
-import { NAME_LIMIT, ENTRIES, DIGEST_PIECES, PIECE_GROUP, shownAt, foldFor, headerWidths, headerTools, hoverTools, menuEntries, placeOf, paneLabel, headerMark, prTitle } from "./header-model.js";
+import { NAME_LIMIT, ENTRIES, PIECE_LINES, actOf, DIGEST_PIECES, PIECE_GROUP, shownAt, foldFor, headerWidths, headerTools, hoverTools, menuEntries, placeOf, paneLabel, headerMark, prTitle } from "./header-model.js";
 
 const N_MAX = 8;
 const openUrl = (url) => localService(openApi).open(url).catch(() => { });
@@ -471,14 +472,15 @@ export default class Strip extends View {
   more(c, pane, { name, entries, does }) {
     const trigger = iconButton(`ph-more-${pane}`, "ellipsis", "More", null, c, { active: this.moreOpen });
     const close = (cx) => { this.moreOpen = false; cx.notify(); };
-    const item = (key) => (key === "separator" ? { separator: true } : {
-      icon: ENTRIES[key][0], label: ENTRIES[key][1],
-      armed: key === "close" && this.armed.is("close"), verb: key === "close" ? `close ${name}` : null,
-      onClick: (cx) => { does[key](cx); if (key !== "close" || !this.armed.is("close")) close(cx); },
-    });
+    const act = (key) => (cx) => { does[key](cx); if (key !== "close" || !this.armed.is("close")) close(cx); };
+    const item = (key) => {
+      if (key === "separator") return { separator: true };
+      if (PIECE_LINES.includes(key)) return { icon: ENTRIES[key][0], label: ENTRIES[key][1], onClick: act(key) };
+      return { act: actOf(key), does: act(key), armed: key === "close" && this.armed.is("close"), verb: key === "close" ? `close ${name}` : null };
+    };
     const pop = Popover.new(`ph-menu-${pane}`).trigger(trigger).anchor("top_right").open(this.moreOpen)
       .on_open_change((open, cx) => { this.moreOpen = open; cx.notify(); });
-    return this.moreOpen ? pop.content(menu(`ph-menu-list-${pane}`, { title: name, items: entries.map(item) }, c)) : pop;
+    return this.moreOpen ? pop.content(contextMenu(`ph-menu-list-${pane}`, { title: name, lines: entries.map(item), framed: true }, c)) : pop;
   }
 
   // Sleep and Send when they rest out; under the pointer the tools this fold keeps, then ⋯.
@@ -496,9 +498,9 @@ export default class Strip extends View {
   // Folder and branch share one Menu: copy either, or open the folder with an editor.
   placeMenu(p, f) {
     return { title: "Folder and branch", piece: "header.place", actions: [
-      ...(p.cwd ? [{ icon: "copy", label: "Copy path", act: (cx) => cx.write_to_clipboard?.(p.cwd) }] : []),
-      ...(f.where.branch ? [{ icon: "copy", label: "Copy branch name", act: (cx) => cx.write_to_clipboard?.(f.where.branch) }] : []),
-      ...(p.cwd ? [{ icon: "external-link", label: "Open with\u2026", act: () => openWithPopup(p) }] : []),
+      ...(p.cwd ? [{ act: "copy-path", does: (cx) => cx.write_to_clipboard?.(p.cwd) }] : []),
+      ...(f.where.branch ? [{ act: "copy-branch", does: (cx) => cx.write_to_clipboard?.(f.where.branch) }] : []),
+      ...(p.cwd ? [{ act: "open-with", does: () => openWithPopup(p) }] : []),
     ] };
   }
 
@@ -507,9 +509,9 @@ export default class Strip extends View {
     const shut = (cx) => { this.segmentMenu = null; cx.notify(); };
     const trigger = fact.on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); this.segmentMenu = id; cx.notify(); });
     if (this.segmentMenu !== id) return trigger;
-    const items = [...actions.map((a) => ({ ...a, onClick: (cx) => { a.act(cx); shut(cx); } })), ...pieceLines(piece, { done: shut })];
+    const lines = [...actions.map((a) => ({ ...a, does: (cx) => { a.does(cx); shut(cx); } })), ...pieceLines(piece, { done: shut })];
     return Popover.new(`fact-menu-${id}`).trigger(trigger).open(true).anchor("top_left").on_open_change((open, cx) => { if (!open) shut(cx); })
-      .content(menu(`fact-menu-list-${id}`, { title, items }, c));
+      .content(contextMenu(`fact-menu-list-${id}`, { title, lines, framed: true }, c));
   }
 
   // The digest: files, commits not on GitHub, then the pull request, or the failure line in its place; a refresh in flight is pending.
@@ -523,15 +525,15 @@ export default class Strip extends View {
     };
     const tone = working ? "dim" : null;
     const digest = segments.filter((seg) => seg.kind === "files" || seg.kind === "commits")
-      .map((seg) => (seg.kind === "files" ? { icon: "file", label: "Open the diff", act: open(seg) } : { icon: "git-pull-request", label: `Push ${seg.count}\u2026`, act: open(seg) }));
+      .map((seg) => (seg.kind === "files" ? { act: "open-diff", does: open(seg) } : { act: "push", of: [seg.count], does: open(seg) }));
     const piece = (seg) => {
       if (seg.kind === "failure") return failureLine({ text: seg.text, fix: "Refresh", detail: seg.tip })(`digest-failure-${pane}`, c, { onClick: does.refresh });
       if (seg.kind === "pr") return shownAt(fold, "PR") ? this.factMenu(c, `pr-${pane}`, headerSegment(`digest-pr-${pane}`, { act: open(seg), title: prTitle(segments, fold),
         parts: [{ text: seg.number, tone: "muted" }, shownAt(fold, "verdict word") && seg.verdict ? { text: `· ${seg.verdict}`, tone: seg.verdictTone } : null] }, c),
         { title: `Pull request \u00b7 ${seg.number}`, piece: "header.pr", actions: [
-          ...(seg.url ? [{ icon: "copy", label: "Copy link", act: (cx) => cx.write_to_clipboard?.(seg.url) }] : []),
-          { icon: "git-pull-request", label: "Open the pull request", act: open(seg) },
-          ...(seg.url ? [{ icon: "external-link", label: "Open on GitHub", act: () => openUrl(seg.url) }] : [])] }) : null;
+          ...(seg.url ? [{ act: "copy-link", does: (cx) => cx.write_to_clipboard?.(seg.url) }] : []),
+          { act: "open-pr", does: open(seg) },
+          ...(seg.url ? [{ act: "open-github", does: () => openUrl(seg.url) }] : [])] }) : null;
       const step = seg.kind === "files" ? "files" : "commits";
       return shownAt(fold, step) ? this.factMenu(c, `${seg.kind}-${pane}`, headerSegment(`digest-${seg.kind}-${pane}`, { act: open(seg), tone, title: seg.tip,
         parts: [{ text: seg.count }, seg.diff ? { text: seg.diff, tone: seg.diffTone } : null] }, c),
@@ -625,6 +627,11 @@ export default class Strip extends View {
         if (e.click_count === 2 && p.terminal) { this.press = null; does.rename(cx); return; }
         if (shared("strip.drag")) endDrag();
         else if (movable) this.press = e.position;
+      })
+      .on_mouse_down("right", (_e, cx) => {
+        if (this.renaming) return;
+        this.moreOpen = true;
+        cx.notify();
       })
       .when(strip, (el) => el
         .on_scroll_wheel((e) => this.wheelReq(e))

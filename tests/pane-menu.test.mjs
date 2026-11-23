@@ -11,7 +11,7 @@ test("The menu names the pane, then keeps its groups in order", async () => {
   const at = (label) => words.indexOf(label);
   assert.equal(words[0], "tests");
   for (const [a, b] of [["Split right", "Split down"], ["Split down", "Split left"], ["Split left", "Wider or narrower"], ["Wider or narrower", "Pin"], ["Pin", "Send to an agent…"],
-    ["Send to an agent…", "Find in conversation"], ["Find in conversation", "Open with…"], ["Open with…", "Sleep"], ["Sleep", "Right-clicks go to the program"], ["Right-clicks go to the program", "Close pane"]]) {
+    ["Send to an agent…", "Find in conversation"], ["Find in conversation", "Open with…"], ["Open with…", "Sleep this agent…"], ["Sleep this agent…", "Right-clicks go to the program"], ["Right-clicks go to the program", "Close pane"]]) {
     assert.ok(at(a) >= 0 && at(b) > at(a), `${a} comes before ${b}`);
   }
 });
@@ -20,7 +20,7 @@ test("A pane on another computer carries its name in the title, and one with no 
   const { view } = await menu({ machine: "devbox", agent: false });
   const words = texts(view.render());
   assert.equal(words[0], "tests · devbox");
-  for (const gone of ["Send to an agent…", "Find in conversation", "Sleep"]) assert.ok(!words.includes(gone), gone);
+  for (const gone of ["Send to an agent…", "Find in conversation", "Sleep this agent…"]) assert.ok(!words.includes(gone), gone);
 });
 
 test("Close asks twice with an agent in the pane and once without", async () => {
@@ -48,7 +48,7 @@ test("The pane menu opens as tall as its longest set of rows, with none cut off"
   const { view } = await menu({ parent: { address: "T0", name: "zsh", labels: {} } });
   const { title, lines } = view.paneView({ pane: "p1", terminal: "T1" });
   const words = lines.map((line) => line.label);
-  for (const row of ["Send to an agent\u2026", "Find in conversation", "Open with\u2026", "Sleep", "Send back to zsh", "Right-clicks go to the program", "Close pane"]) assert.ok(words.includes(row), row);
+  for (const row of ["Send to an agent\u2026", "Find in conversation", "Open with\u2026", "Sleep this agent\u2026", "Send back to zsh", "Right-clicks go to the program", "Close pane"]) assert.ok(words.includes(row), row);
   const needed = menuHeight({ title, items: lines });
   assert.equal(Math.min(ceiling(OVERLAY.height, needed), needed), needed);
 });
@@ -59,7 +59,7 @@ test("Each row's key hint is its chord in glyphs, as the kit writes it, not the 
   const hint = (label) => lines.find((line) => line.label === label)?.hint;
   assert.equal(hint("Wider or narrower"), "\u21e7\u2318\u21a9");
   assert.equal(hint("Split left"), "\u2325\u21e7\u2318D");
-  assert.equal(hint("Sleep"), null);
+  assert.equal(hint("Sleep this agent…"), null);
 });
 
 test("Sleep and Send each open one overlay, the same from the pane's menu and from its header", async () => {
@@ -70,7 +70,7 @@ test("Sleep and Send each open one overlay, the same from the pane's menu and fr
 
   const fromMenu = await menu();
   const item = (label) => find(fromMenu.view.render(), (el) => calls(el, "accessibility_label").some((call) => call[1] === label));
-  for (const label of ["Send to an agent\u2026", "Sleep"]) calls(item(label), "on_click").at(-1)[1]({}, { notify() {} });
+  for (const label of ["Send to an agent\u2026", "Sleep this agent\u2026"]) calls(item(label), "on_click").at(-1)[1]({}, { notify() {} });
   assert.deepEqual(clone(fromMenu.opened), [send, sleep]);
 
   const opened = [];
