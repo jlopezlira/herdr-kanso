@@ -22,6 +22,13 @@ in version.json, which the stable updater offers. Versions follow
 [Keep a Changelog](https://keepachangelog.com). `npm run check:version` checks
 the branch's rules.
 
+## [Unreleased]
+
+### Security
+
+- Shipped adds up your computers in a gist only when you turn it on in Settings, under Background, and the gist no longer holds your e-mails or repository names in the clear: each computer reads back only the repositories it already knows. The README and the privacy page say a secret gist can be read by anyone with its link.
+- Pets are downloaded over https only and checked against their checksum and size before they are kept.
+
 ## [3.34.0] - 2026-11-23
 
 ### Added
