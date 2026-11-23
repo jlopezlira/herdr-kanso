@@ -139,7 +139,7 @@ const openStrip = async (state) => {
   const kit = stripHost(state);
   const { Strip } = await load("kanso-strip/main.js", ["Strip"], kit.host);
   const view = Object.assign(new Strip(), {
-    polling: new Set(), digesting: new Set(), watching: new Map(), sent: new Map(), openers: new Map(), lastStatus: new Map(),
+    polling: new Set(), digesting: new Set(), watching: new Map(), sent: new Map(), openers: new Map(), lastStatus: new Map(), limits: { watch() {} },
   });
   const jobs = [];
   const cx = { timer: kit.timer, spawn(fn) { jobs.push(Promise.resolve(fn(cx))); return { cancel() {} }; } };

@@ -3,7 +3,7 @@
 import { div, svg } from "gpui-kit";
 import { h_flex, v_flex, Input, InputState, Textarea, TextareaState } from "gpui-base";
 import { G, H, R, T, LINE, ICON_ROW, CLEAR, glyphOf, well } from "./ui.js";
-import { iconButton } from "./ui-button.js";
+import { iconButton, button } from "./ui-button.js";
 
 /** The most lines a multi-line field grows to before it scrolls. */
 export const FIELD_LINES = 10;
@@ -63,7 +63,10 @@ export function field(id, text, c, { label = null, icon = null, onIcon = null, i
   // The ring sits outside the edge and takes no room, as an outline would; Herdr has none.
   const ring = v_flex().id(id).m(-G.hair).rounded(radius + G.hair).border_2()
     .border_color(text.focused && !disabled ? c.accent : CLEAR).child(box);
-  return label && !inline
-    ? v_flex().gap(G.sm).child(div().text_size(T.value).font_medium().text_color(c.muted).child(label)).child(ring)
-    : ring;
+  return label && !inline ? labelled(label, ring, c) : ring;
 }
+
+export const labelled = (label, child, c) => v_flex().gap(G.sm).child(div().text_size(T.value).font_medium().text_color(c.muted).child(label)).child(child);
+
+export const choices = (id, items, on, onPick, c) => h_flex().id(id).flex_wrap().gap(G.xs)
+  .children(items.map(({ key, label }) => button(`${id}-${key}`, label, (cx) => onPick(key, cx), c, { kind: "tonal", small: true, held: on(key) })));

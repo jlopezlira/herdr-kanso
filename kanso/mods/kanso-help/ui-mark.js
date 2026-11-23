@@ -1,4 +1,4 @@
-// Kanso's panel kit: an agent's state mark, the ensō as working, blocked, done, idle or asleep. Apache-2.0.
+// Kanso's panel kit: an agent's state mark, the ensō as working, blocked, done, idle, asleep or limited. Apache-2.0.
 // Kept byte for byte by `npm run sync:share`: edit kanso-panel/ui-mark.js.
 import { div, svg } from "gpui-kit";
 import { ICON, ICON_ROW, ICON_INLINE, SPIN, OPACITY, glyphOf } from "./ui.js";
@@ -17,9 +17,10 @@ const MARKS = Object.freeze({
   done: (c, side) => art("enso", c.done, side),
   idle: (c, side) => art("enso-idle", c.idle, side).opacity(OPACITY.idle),
   asleep: (c, side) => art("moon", c.muted, side),
+  limited: (c, side) => art("clock", c.muted, side),
 });
 
 export const busyMark = (c, side) => MARKS.working(c, side);
 
-/** `status`: working, blocked, done, idle or asleep; any other draws nothing. `size`: sm, md or lg. */
+/** `status`: working, blocked, done, idle, asleep or limited; any other draws nothing. `size`: sm, md or lg. */
 export const mark = (c, { status, size = "md" } = {}) => (Object.hasOwn(MARKS, status) ? MARKS[status](c, MARK_SIZES[size] ?? MARK_SIZES.md) : null);

@@ -1,6 +1,8 @@
 // Real mod code with a fake clock, inert native elements and counted host boundaries.
 import { performance } from "node:perf_hooks";
 import { pathToFileURL } from "node:url";
+import { setFlagsFromString } from "node:v8";
+import { runInNewContext } from "node:vm";
 import { load, exec as runFile, clone, until, success, failure, openedKdb, inlineView } from "./helpers.mjs";
 
 export const PANEL_IDS = ["files", "pr", "preview", "shipped", "worktrees", "ports", "look", "find"];
@@ -101,7 +103,7 @@ export function fixture({ dir = "/fixture", blocked = false, quiet = null, worki
     Button: factory, Toggle: factory, Input: factory, InputState: factory, Textarea: factory, TextareaState: factory, Editor: factory, EditorState: factory,
     VirtualListScrollHandle: factory, ScrollHandle: factory, Scrollbar: factory, Popover: factory, HoverCard: factory, TextView: factory,
     props: () => state.props ?? {}, theme: () => colors, settings: () => ({}), window: () => ({ active: state.active !== false, platform: "macos" }),
-    spaces: () => clone(projects.map((p, i) => ({ ...p, active: i === state.project }))), panes: () => clone(ps), agents: () => clone(list), terminals: () => clone(terms),
+    spaces: () => clone(projects.map((p, i) => ({ ...p, active: i === state.project }))), panes: () => clone(ps), agents: () => clone(list), terminals: () => clone(terms), checking: () => false,
     machines: () => clone(state.layouts), focused: () => ({ space: `s${state.project}`, tab: `tab${state.project}`, terminal: list[state.project].address, cwd: projects[state.project].folder }),
     shared: (key) => clone(shared.get(key) ?? null), setShared: (key, value) => { if (JSON.stringify(value) !== JSON.stringify(shared.get(key))) state.dirty = true; shared.set(key, clone(value)); },
     localStorage: { getItem: (key) => storage.get(key) ?? null, setItem: (key, value) => storage.set(key, value), removeItem: (key) => storage.delete(key) },
@@ -165,6 +167,9 @@ export const sidebarOn = async (f) => {
   return new Spaces();
 };
 
+setFlagsFromString("--expose-gc");
+const collect = runInNewContext("gc");
+
 export async function firstDraw(id) {
   const f = fixture({ blocked: true });
   const start = performance.now();
@@ -174,6 +179,7 @@ export async function firstDraw(id) {
   const mod = await loadMod(file, [name], f.host);
   const moduleMs = performance.now() - start;
   const draw = () => {
+    collect();
     // CPU, not wall time: other test files preempt this one and move performance.now().
     const opened = process.cpuUsage();
     const view = new (isPanel ? mod.PANELS[id] : mod[name])();

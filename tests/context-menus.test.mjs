@@ -190,7 +190,7 @@ const PIECE = (named) => [named ? `Hide “${named}”` : "Hide this", "Settings
 const SUBMENU = "›";
 const SESSION_ROWS = ({ pin = "Pin to the top", shelf = [], wake = ["Snooze", SUBMENU], close = "Close agent" } = {}) => ["checkout", "Open", "Rename…", pin, ...shelf, "Mark unread", ...wake,
   "Move to project", SUBMENU, "Copy", SUBMENU, "Sleep this agent…", "Sleep this tab…", close, ...PIECE("What each agent is on")];
-const PROJECT_HEAD = ["acme-shop", "New conversation…", "New in a worktree…", "Worktrees", "checkout-v2", "kansō", "cart-retry", "~/acme-shop-cart", "Rename…", "Sleep this tab…", "Sleep the project…", "Project options…"];
+const PROJECT_HEAD = ["acme-shop", "New conversation…", "New in a worktree…", "Schedule…", "Worktrees", "checkout-v2", "kansō", "cart-retry", "~/acme-shop-cart", "Rename…", "Sleep this tab…", "Sleep the project…", "Project options…"];
 const PROJECT_ROWS = ({ head = PROJECT_HEAD, extra = [], remove = "Remove project" } = {}) => [...head, ...extra, remove, ...PIECE("Branch, ahead, behind")];
 const COMPUTER_ROWS = (...phase) => ["devbox", "Rename…", ...phase, "Add computer…", ...PIECE("Computers")];
 const PANE_ROWS = (title, pin, agentRows, back = []) => [title, "Copy", "Cut", "Paste", "Split right", "⌘D", "Split down", "⇧⌘D", "Split left", "⌥⇧⌘D", "Wider or narrower", "⇧⌘↩", pin, "⌥⌘P",
@@ -222,7 +222,7 @@ const CASES = {
   projectAsleep: { draw: project({ asleep: true }), want: PROJECT_ROWS({ head: [PROJECT_HEAD[0], "Asleep", "Wake review", "14:02", ...PROJECT_HEAD.slice(1)] }), own: true },
   gone: { draw: project({ spaces: [], registry: [] }), want: ["This project is no longer here."] },
   keep: { draw: project({ registry: [] }), want: PROJECT_ROWS({ extra: ["Keep as a project"] }) },
-  missing: { draw: project({ registry: [{ ...PROJECT, missing: true }] }), want: PROJECT_ROWS({ head: [PROJECT_HEAD[0], ...PROJECT_HEAD.slice(3)], extra: ["Locate folder…"] }) },
+  missing: { draw: project({ registry: [{ ...PROJECT, missing: true }] }), want: PROJECT_ROWS({ head: [PROJECT_HEAD[0], ...PROJECT_HEAD.slice(4)], extra: ["Locate folder…"] }) },
   computer: { draw: computer("connected", true), want: COMPUTER_ROWS("Disconnect", "Sync", "on", "New project", "Remove") },
   syncPending: { draw: syncPending, want: COMPUTER_ROWS("Disconnect", "Sync", "on", "New project", "Remove") },
   syncFailed: { draw: syncFailed, want: COMPUTER_ROWS("Disconnect", "Sync", "off", "New project", "Remove") },

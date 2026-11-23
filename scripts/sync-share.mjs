@@ -55,6 +55,8 @@ const COMMON = [
   ...["issues-jira.js", "issues-linear.js", "issues-model.js"].map((file) => ({ source: `kanso/mods/kanso-panel/${file}`, copies: [`kanso/mods/kanso-settings/${file}`] })),
   ...["menu-actions.js", "context-menu.js"].map((file) => ({ source: `kanso/mods/kanso-menu/${file}`, copies: ["kanso-tabs", "kanso-strip", "kanso-spaces"].map((m) => `kanso/mods/${m}/${file}`) })),
   { source: "kanso/mods/kanso-strip/needs.js", copies: ["kanso/mods/kanso-spaces/needs.js", "kanso/mods/kanso-status/needs.js"] },
+  ...["schedules.js", "projects.js"].map((file) => ({ source: `kanso/mods/kanso-spaces/${file}`, copies: [`kanso/mods/kanso-tabs/${file}`] })),
+  ...["limits-model.js", "clock-model.js", "clock.js", "limits.js"].map((file) => ({ source: `kanso/mods/kanso-strip/${file}`, copies: ["kanso-spaces", "kanso-tabs"].map((m) => `kanso/mods/${m}/${file}`) })),
   { source: "kanso/mods/kanso-menu/listkeys.js", copies: ["kanso/mods/open-with/listkeys.js", "kanso/mods/kanso-spaces/listkeys.js", "kanso/mods/kanso-arrange/listkeys.js", "kanso/mods/kanso-spend/listkeys.js"] },
   // Opening a tab from data: arrangements; Sleep reads a few of its words.
   { source: "kanso/mods/kanso-arrange/tabkit.js", copies: ["kanso/mods/kanso-sleep/tabkit.js", "kanso/mods/kanso-spaces/tabkit.js"] },

@@ -23,6 +23,7 @@ class RemoteServices {
 }
 const remoteServices = new RemoteServices();
 export const serviceOn = (factory, on) => remoteServices.get(factory, on);
+export const platformOf = (machine) => (machine ? serviceOn((platform) => platform, machine).catch(() => "linux") : Promise.resolve(localName()));
 const withTimeout = (run, timeout) => (timeout == null ? run : (cmd, args, options = {}) => run(cmd, args, { timeout, ...options }));
 export function serviceFor(factory, machine = null, timeout = null, remote = null) {
   if (!machine) return Promise.resolve(localService((platform, run, write) => factory(platform, withTimeout(run, timeout), write)));

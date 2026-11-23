@@ -32,6 +32,7 @@ import { headerSegment } from "./ui-header.js";
 import { pieceLines } from "./piece-lines.js";
 import { paged } from "./strip-model.js";
 import { checksOutcome, checksStep, opened, deliveryOf, reserve, POLL_MS, PR_LABEL, HISTORY_LINES, DELIVERIES } from "./checks-to-agent.js";
+import { LimitWatch } from "./limits.js";
 import { deliver } from "./deliver.js";
 import { localService } from "./platform-host.js";
 import { openApi } from "./platform-open.js";
@@ -261,6 +262,7 @@ export default class Strip extends View {
     this.polling = new Set();
     this.watching = new Map();
     this.openers = new Map();
+    this.limits = new LimitWatch();
     cx.timer.every(1500, (cx) => this.watchDigests(cx));
     readCommands(cx, () => nextCommand(), (c, cx) => {
       this.command(String(c).replace(/^kanso-strip\./, ""));
@@ -819,6 +821,7 @@ export default class Strip extends View {
       // A header's Refresh marks its record reading; the read starts here.
       if ((stopped || store[p.pane]?.reading) && !this.digesting.has(p.pane)) this.digest(p, cx);
     }
+    this.limits.watch(cx);
     const live = new Set(all.map((p) => p.pane));
     const gone = new Set(Object.keys(store).filter((id) => !live.has(id)));
     for (const id of [...this.lastStatus.keys()]) if (!live.has(id)) this.lastStatus.delete(id);
