@@ -237,30 +237,41 @@ test("The shared delivery keeps its own deadline: a caller without a timer is re
 
 const DRAFT = "Look at this.";
 const readyMachines = [{ name: null, layout: "ready" }];
-const source = { terminal: "t0", pane: "p0" };
+const source = { from: { terminal: "t0", pane: "p0" }, to: null, text: DRAFT };
+const alone = () => ({ terms: [agent("t0", "Me")], panes: [{ pane: "p0", terminal: "t0", status: "idle" }] });
+const openSend = (world, host = {}, to = null) => openedSend({
+  terminals: () => world.terms, panes: () => world.panes, machines: () => readyMachines, ...host,
+}, { ...source, to });
+const draftKept = (send, closed) => {
+  if (closed) assert.deepEqual(closed, []);
+  assert.equal(send.text, DRAFT);
+  assert.equal(send.box.value(), DRAFT);
+};
+const drop = (world, address) => { world.terms = world.terms.filter((term) => term.address !== address); };
+const fire = (timers, cx) => timers.forEach(([, fn]) => fn(cx));
+const heldSend = (world, closed, sent, to = null) => openSend(world, {
+  props: () => ({ overlay: "o1", whenWaiting: true }),
+  closeOverlay: (id) => closed.push(id),
+  hc: async (args) => { sent.push(clone(args)); return { code: 0, stdout: "", stderr: "" }; },
+}, to);
 
 test("With no other agent, Send says no other agent is running and Start an agent keeps the drafted message", async () => {
   const ran = [];
-  const world = { terms: [agent("t0", "Me")], panes: [{ pane: "p0", terminal: "t0", status: "idle" }] };
-  const send = await openedSend({
-    terminals: () => world.terms, panes: () => world.panes, machines: () => readyMachines, run: (command) => ran.push(command),
-  }, { from: source, to: null, text: DRAFT });
+  const world = alone();
+  const send = await openSend(world, { run: (command) => ran.push(command) });
   const el = renders(send);
   assert.ok(texts(el).includes("No other agent is running."));
   const start = byTag(el, "send-list-action");
   assert.ok(texts(start).includes("Start an agent"));
   calls(start, "on_click")[0][1]({}, { notify() {}, stop_propagation() {} });
   assert.deepEqual(ran, ["kanso-spaces.start"]);
-  assert.equal(send.text, DRAFT);
-  assert.equal(send.box.value(), DRAFT);
+  draftKept(send);
   assert.ok(texts(renders(send)).includes("No other agent is running."));
 });
 
 test("When an agent appears later and none was chosen, it is chosen and Send is enabled", async () => {
-  const world = { terms: [agent("t0", "Me")], panes: [{ pane: "p0", terminal: "t0", status: "idle" }] };
-  const send = await openedSend({
-    terminals: () => world.terms, panes: () => world.panes, machines: () => readyMachines,
-  }, { from: source, to: null, text: DRAFT });
+  const world = alone();
+  const send = await openSend(world);
   assert.equal(last(primaryOf(renders(send)), "disabled"), true);
   world.terms = [...world.terms, agent("t3", "Nova")];
   world.panes = [...world.panes, { pane: "p3", terminal: "t3", status: "idle" }];
@@ -275,23 +286,16 @@ test("A held send whose only recipient closes says it was not sent and keeps the
     terms: [agent("t0", "Me"), { ...agent("t1", "Nova"), status: "working" }],
     panes: [{ pane: "p1", terminal: "t1", status: "working" }],
   };
-  const send = await openedSend({
-    props: () => ({ overlay: "o1", whenWaiting: true }),
-    terminals: () => world.terms, panes: () => world.panes, machines: () => readyMachines,
-    closeOverlay: (id) => closed.push(id),
-    hc: async (args) => { sent.push(clone(args)); return { code: 0, stdout: "", stderr: "" }; },
-  }, { from: source, to: "t1", text: DRAFT });
+  const send = await heldSend(world, closed, sent, "t1");
   const timers = [];
   const { cx } = timedContext(timers, { stop_propagation() {} });
   keyDown(renders(send), CMD_ENTER, cx);
   assert.ok(send.held);
   world.panes = [];
-  world.terms = world.terms.filter((term) => term.address !== "t1");
-  timers.forEach(([, fn]) => fn(cx));
+  drop(world, "t1");
+  fire(timers, cx);
   assert.equal(send.error, "Not sent to Nova: it closed.");
-  assert.deepEqual(closed, []);
-  assert.equal(send.text, DRAFT);
-  assert.equal(send.box.value(), DRAFT);
+  draftKept(send, closed);
   assert.equal(sent.filter(([verb]) => verb === "send").length, 0);
 });
 
@@ -301,24 +305,17 @@ test("With two held recipients and one closed, Send goes to the other and says w
     terms: [agent("t0", "Me"), { ...agent("t1", "Nova"), status: "working" }, { ...agent("t2", "Atlas"), status: "working" }],
     panes: [{ pane: "p1", terminal: "t1", status: "working" }, { pane: "p2", terminal: "t2", status: "working" }],
   };
-  const send = await openedSend({
-    props: () => ({ overlay: "o1", whenWaiting: true }),
-    terminals: () => world.terms, panes: () => world.panes, machines: () => readyMachines,
-    closeOverlay: (id) => closed.push(id),
-    hc: async (args) => { sent.push(clone(args)); return { code: 0, stdout: "", stderr: "" }; },
-  }, { from: source, to: null, text: DRAFT });
+  const send = await heldSend(world, closed, sent);
   send.toProject = "App";
   const timers = [];
   const { cx, pending } = timedContext(timers, { stop_propagation() {} });
   keyDown(renders(send), CMD_ENTER, cx);
   assert.deepEqual(clone(send.held.recipients.map((row) => row.terminal).toSorted()), ["t1", "t2"]);
   world.panes = [{ pane: "p2", terminal: "t2", status: "idle" }];
-  world.terms = world.terms.filter((term) => term.address !== "t1");
-  timers.forEach(([, fn]) => fn(cx));
+  drop(world, "t1");
+  fire(timers, cx);
   while (pending.length) await pending.shift();
   assert.deepEqual(sent.filter(([verb]) => verb === "send").map(([, to]) => to), ["t2"]);
   assert.equal(send.error, "Sent. Not sent to Nova: it closed.");
-  assert.deepEqual(closed, []);
-  assert.equal(send.text, DRAFT);
-  assert.equal(send.box.value(), DRAFT);
+  draftKept(send, closed);
 });

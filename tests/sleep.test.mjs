@@ -1,14 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { arg, calls, drawingHost, find, KIT_NIGHT, load, texts } from "./helpers.mjs";
+import { arg, calls, find, texts } from "./helpers.mjs";
+import { loadSleep } from "./mod-fixtures.mjs";
 
 const sleep = async ({ order, busy = null, error = null, closed = [] } = {}) => {
-  const { Sleep } = await load("kanso-sleep/main.js", ["Sleep"], {
-    ...drawingHost(),
-    theme: () => KIT_NIGHT,
+  const { Sleep } = await loadSleep({
     props: () => ({ overlay: "sleep-overlay" }),
     closeOverlay: (id) => closed.push(id),
-    home: () => "/home/me",
   });
   const view = Object.assign(new Sleep(), {
     handle: {}, order, busy, error, reads: [], space: { name: "App", folder: "/repo" },
