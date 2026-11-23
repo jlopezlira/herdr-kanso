@@ -192,7 +192,9 @@ const viewHost = {
 
 const mount = async (extra = {}) => {
   const { Issues } = await load("kanso-panel/issues.js", ["Issues"], viewHost);
-  return Object.assign(new Issues({ read: async () => [], run: async () => {} }), {
+  const tables = { issues: extra.rows, issue_boards: extra.boards, issue_links: extra.links };
+  const read = async (sql) => tables[sql.match(/\bFROM (\w+)/)?.[1]] ?? [];
+  return Object.assign(new Issues({ read, run: async () => {} }), {
     projects: [], rows: [], boards: [], links: [], places: {}, folds: {}, filters: {}, logins: {},
     reading: new Set(), open: null, front: "shop", ...extra,
   });
@@ -207,13 +209,31 @@ const draw = (view) => {
 const shop = { id: "shop", name: "Shop", folder: "/work/shop", machine: null };
 const acme = { id: "acme", name: "Acme", folder: "/work/acme", machine: null };
 
-const kdbWithShop = async (t) => {
+const GITHUB_REMOTE = "origin\tgit@github.com:acme/shop.git (fetch)\n";
+const GITHUB_LOGIN = "github.com\n  Logged in to github.com account jj\n  Active account: true\n";
+const githubAnswer = (tickets) => async (cmd, args) => {
+  if (cmd === "git") return success(GITHUB_REMOTE);
+  if (cmd === "gh") return success(GITHUB_LOGIN);
+  if (cmd === "env" && args.includes("graphql")) return payload(tickets);
+  return failure("Unexpected command");
+};
+const githubLink = (project) => ({ project, source: "github", ref: "issues", name: "GitHub issues" });
+const shopBoard = { projects: [shop], links: [githubLink(shop.id)] };
+const linkGithub = async (db, project) => {
+  const { linkSql } = await load("kanso-panel/issues-store.js", ["linkSql"]);
+  await db.run(linkSql(githubLink(project), true));
+};
+const kdbWithShop = async (t, linked = true) => {
   const { db } = await temporaryKdb(t);
-  await db.addProject({ name: shop.name, folder: shop.folder });
-  return db;
+  const { row } = await db.addProject({ name: shop.name, folder: shop.folder });
+  if (linked) await linkGithub(db, row.id);
+  return { db, project: row };
 };
 
-const NO_PROJECTS = "Add a project to see its tasks";
+const NO_BOARDS = "Follow only the GitHub issues, Jira projects and Linear teams you choose";
+const ADD_ACTION = "issues-none-action";
+const control = (panel, id) => find(panel, (el) => el.tag === id);
+const clickIssues = (panel, id, cx) => one(control(panel, id), "on_click")(null, cx);
 const startIssues = async (db, host = {}, { timers = [], ...context } = {}) => {
   const { Issues, DIALOG } = await load("kanso-panel/issues.js", ["Issues", "DIALOG"], {
     ...viewHost,
@@ -229,18 +249,23 @@ const startIssues = async (db, host = {}, { timers = [], ...context } = {}) => {
   await drain();
   return { view, cx, drain, DIALOG };
 };
+const openProjectStep = async (db, host) => {
+  const tasks = await startIssues(db, host);
+  clickIssues(tasks.view.render(tasks.cx), ADD_ACTION, tasks.cx);
+  return tasks;
+};
 
 test("Opening Tasks in a project draws without asking for a redraw while it draws, then reads that project", async (t) => {
-  const db = await kdbWithShop(t);
-  const exec = t.mock.fn(async () => ({ code: 1, stdout: "", stderr: "" }));
-  const drawing = { now: false };
+  const { db } = await kdbWithShop(t);
+  const exec = t.mock.fn(async () => failure(""));
+  const notify = t.mock.fn();
   const timers = [];
-  const { view, cx, drain } = await startIssues(db, { exec, spaces: () => [{ active: true, folder: shop.folder, machine: null, tabs: [] }] },
-    { timers, notify() { if (drawing.now) throw new Error("cx.notify() during render"); } });
+  const spaces = () => [{ ...shop, active: true, tabs: [] }];
+  const { view, cx, drain } = await startIssues(db, { exec, spaces }, { timers, notify });
   const before = exec.mock.callCount();
-  drawing.now = true;
+  const redraws = notify.mock.callCount();
   view.render(cx);
-  drawing.now = false;
+  assert.equal(notify.mock.callCount(), redraws);
   const [, later] = timers.find(([ms]) => ms === 0);
   later(cx);
   await drain();
@@ -253,22 +278,65 @@ const remoteKanso = {
 };
 const homeSpace = { id: "home-space", name: "Home", machine: null, folder: "/Users/jj" };
 const projectHeading = (panel, id) => find(panel, (el) => arg(el, "id") === `issues-project-${id}`);
+const projectChoice = (panel, id) => control(panel, `issues-add-project-${id}`);
 
-test("The empty Tasks panel tells me to add a project to see its tasks", async (t) => {
-  const { db } = await temporaryKdb(t);
-  const { view, cx } = await startIssues(db);
-  const words = texts(view.render(cx));
-  assert.ok(words.includes("Tasks"));
-  assert.ok(words.includes(NO_PROJECTS));
+test("Tasks reads a GitHub board only after I add it, and Remove stops following it", async (t) => {
+  const { db, project } = await kdbWithShop(t, false);
+  const { id, name } = project;
+  const ticket = node("Open");
+  const exec = t.mock.fn(githubAnswer([ticket]));
+  const { view, cx, drain } = await startIssues(db, { exec });
+  const page = () => view.render(cx);
+  const githubReads = () => exec.mock.calls.filter(({ arguments: [cmd, args] }) =>
+    cmd === "git" || cmd === "gh" || (cmd === "env" && args.includes("gh")));
+  const links = () => db.read("SELECT project, source, ref, name FROM issue_links;");
+  const expectEmpty = (panel) => {
+    const words = texts(panel);
+    for (const text of ["Tasks", NO_BOARDS, "Add a board"]) assert.ok(words.includes(text), text);
+    assert.equal(projectHeading(panel, id), null);
+    assert.equal(words.includes("GitHub issues"), false);
+  };
+
+  expectEmpty(page());
+  assert.equal(githubReads().length, 0);
+
+  for (const action of [ADD_ACTION, "issues-add"]) {
+    const panel = page();
+    assert.equal(arg(control(panel, action), "accessibility_label"), "Add a board");
+    clickIssues(panel, action, cx);
+    const chooser = page();
+    assert.ok(texts(chooser).includes("Add a board: choose a project"));
+    assert.ok(texts(projectChoice(chooser, id)).includes(name));
+    if (action === ADD_ACTION) clickIssues(chooser, "issues-add-close", cx);
+  }
+  one(projectChoice(page(), id), "on_click")(null, cx);
+  const sources = page();
+  assert.ok(texts(sources).includes(`Add a board to ${name}`));
+  assert.equal(githubReads().length, 0);
+  assert.equal((await links()).length, 0);
+  clickIssues(sources, "issues-add-github", cx);
+  await drain();
+
+  const linked = page();
+  const link = githubLink(id);
+  same(await links(), [link]);
+  assert.ok(projectHeading(linked, id));
+  for (const text of [link.name, ticket.title, "Remove"]) assert.ok(texts(linked).includes(text), text);
+  assert.ok(githubReads().some(({ arguments: [cmd, args] }) => cmd === "env" && args.includes("graphql")));
+
+  clickIssues(linked, `issues-remove-${id}-github`, cx);
+  await drain();
+  same(await links(), []);
+  expectEmpty(page());
 });
 
 test("Tasks lists each open project once, skips the home space, and prefers a saved project at the same place", async (t) => {
   const { db } = await temporaryKdb(t);
   const spaces = () => [homeSpace, remoteKanso, { ...remoteKanso, id: "second-space" }];
-  const { view, cx, drain } = await startIssues(db, { spaces });
+  const { view, cx, drain } = await openProjectStep(db, { spaces });
   const openId = `light:${remoteKanso.folder}`;
   const open = view.render(cx);
-  assert.ok(projectHeading(open, openId));
+  assert.ok(projectChoice(open, openId));
   const words = texts(open);
   assert.equal(words.filter((word) => word === remoteKanso.name).length, 1);
   assert.equal(words.includes(homeSpace.name), false);
@@ -277,41 +345,23 @@ test("Tasks lists each open project once, skips the home space, and prefers a sa
   view.load(cx);
   await drain();
   const saved = view.render(cx);
-  assert.ok(texts(projectHeading(saved, row.id)).includes(row.name));
-  assert.equal(projectHeading(saved, openId), null);
+  assert.ok(texts(projectChoice(saved, row.id)).includes(row.name));
+  assert.equal(projectChoice(saved, openId), null);
 });
 
 test("Tasks skips the local home but keeps a project at the same path on another computer", async (t) => {
   const { db } = await temporaryKdb(t);
   const remote = { ...homeSpace, id: "remote-home", name: "Project on light", machine: "light" };
-  const { view, cx } = await startIssues(db, { spaces: () => [homeSpace, remote] });
+  const { view, cx } = await openProjectStep(db, { spaces: () => [homeSpace, remote] });
   const words = texts(view.render(cx));
   assert.ok(words.includes(remote.name));
   assert.equal(words.includes(homeSpace.name), false);
 });
 
-test("Linking a Jira board from an open space saves the project and links the board to that saved project", async (t) => {
-  const { db } = await temporaryKdb(t);
-  const addProject = t.mock.method(db, "addProject");
-  const { view, cx, drain } = await startIssues(db, { spaces: () => [remoteKanso] });
-  const { name, folder, machine } = remoteKanso;
-  const item = { ref: "acme.atlassian.net/ABC", name: "ABC · Alpha" };
-  view.link(`${machine}:${folder}`, "jira", item, true, cx);
-  await drain();
-
-  assert.equal(addProject.mock.callCount(), 1);
-  const [call] = addProject.mock.calls;
-  same(call.arguments, [{ name, folder, machine }]);
-  const { row } = await call.result;
-  same(await db.read("SELECT project, source, ref, name FROM issue_links;"), [
-    { project: row.id, source: "jira", ...item },
-  ]);
-});
-
 test("Tasks picks up a project space opened after the panel mounted", async (t) => {
   const { db } = await temporaryKdb(t);
   const spaces = t.mock.fn(() => [homeSpace]);
-  const { view, cx, drain } = await startIssues(db, { spaces });
+  const { view, cx, drain } = await openProjectStep(db, { spaces });
   assert.equal(texts(view.render(cx)).includes(remoteKanso.name), false);
   spaces.mock.mockImplementation(() => [homeSpace, remoteKanso]);
   view.render(cx);
@@ -322,11 +372,11 @@ test("Tasks picks up a project space opened after the panel mounted", async (t) 
 test("With no projects, New project opens the sidebar's New project dialog", async (t) => {
   const { db } = await temporaryKdb(t);
   const openOverlay = t.mock.fn();
-  const { view, cx, DIALOG } = await startIssues(db, { openOverlay });
+  const { view, cx, DIALOG } = await openProjectStep(db, { openOverlay });
   const page = view.render(cx);
-  assert.ok(texts(page).includes(NO_PROJECTS));
+  assert.ok(texts(page).includes("Add a project first"));
   assert.ok(texts(page).includes("New project"));
-  press(page, "issues-none-action");
+  press(page, "issues-add-none-action");
   const opened = openOverlay.mock.calls.map((call) => call.arguments);
   assert.deepEqual(structuredClone(opened), [[{
     mod: "kanso-spaces",
@@ -340,18 +390,19 @@ test("An Issues panel that mounted without projects shows a newly registered pro
   const { db } = await temporaryKdb(t);
   const shared = t.mock.fn(() => null);
   const { view, cx, drain } = await startIssues(db, { shared });
-  assert.ok(texts(view.render(cx)).includes(NO_PROJECTS));
+  assert.ok(texts(view.render(cx)).includes(NO_BOARDS));
   const { row } = await db.addProject({ name: shop.name, folder: shop.folder });
+  await linkGithub(db, row.id);
   shared.mock.mockImplementation((key) => key === "kanso.registry" ? [{ id: row.id }] : null);
   view.render(cx);
   await drain();
   const words = texts(view.render(cx));
   assert.ok(words.includes(shop.name));
-  assert.equal(words.includes(NO_PROJECTS), false);
+  assert.equal(words.includes(NO_BOARDS), false);
 });
 
 test("Issues keeps showing the project when a later projects read fails", async (t) => {
-  const db = await kdbWithShop(t);
+  const { db } = await kdbWithShop(t);
   const { view, cx, drain } = await startIssues(db);
   const originalRead = db.read.bind(db);
   const unavailable = t.mock.fn(async () => { throw new Error("Projects are unavailable"); });
@@ -365,6 +416,7 @@ test("Issues keeps showing the project when a later projects read fails", async 
 test("Two projects are drawn with the front project first, each section shows its count, and Done stays folded", async () => {
   const view = await mount({
     projects: [acme, shop],
+    links: [acme, shop].map(({ id }) => githubLink(id)),
     boards: [{ project: "shop", source: "github", filter: "all", columns: JSON.stringify(["Open", "Done", "Review"]), read_at: 1, failure: null }],
     filters: { shop: "all" },
     rows: [
@@ -384,13 +436,9 @@ test("Two projects are drawn with the front project first, each section shows it
 
 test("Switching the filter stores it and reads the issues again", async () => {
   world.calls = [];
-  world.answer = async (cmd) => {
-    if (cmd === "git") return { code: 0, stdout: "origin\tgit@github.com:acme/shop.git (fetch)\n", stderr: "" };
-    if (cmd === "gh") return { code: 0, stdout: "github.com\n  Logged in to github.com account jj\n  Active account: true\n", stderr: "" };
-    return payload([]);
-  };
+  world.answer = githubAnswer([]);
   const view = await mount({
-    projects: [shop],
+    ...shopBoard,
     boards: [{ project: "shop", source: "github", filter: "assigned", columns: "[]", read_at: Date.now(), failure: null }],
     logins: { ":github": { status: "ok", login: "jj" } },
   });
@@ -404,7 +452,7 @@ test("Switching the filter stores it and reads the issues again", async () => {
 test("A failed read still shows the cached issues and when that copy was read", async () => {
   const at = Date.parse("2026-11-22T15:04:00Z");
   const view = await mount({
-    projects: [shop],
+    ...shopBoard,
     boards: [{ project: "shop", source: "github", filter: "assigned", columns: JSON.stringify(["Open"]), read_at: at, failure: JSON.stringify({ kind: "offline", text: "GitHub can't be reached" }) }],
     filters: { shop: "all" },
     rows: [issue({ title: "Cached issue" })],
@@ -415,17 +463,17 @@ test("A failed read still shows the cached issues and when that copy was read", 
 });
 
 test("A signed-out project shows Sign in, and a project without a GitHub remote says so", async () => {
-  const signed = await mount({ projects: [shop], places: { "shop\u0000github": { kind: "signed out", text: "Sign in to GitHub to see your issues" } } });
+  const signed = await mount({ ...shopBoard, places: { "shop\u0000github": { kind: "signed out", text: "Sign in to GitHub to see your issues" } } });
   assert.ok(draw(signed).includes("Sign in"));
-  const remote = await mount({ projects: [shop], places: { "shop\u0000github": { kind: "no remote", text: "No GitHub remote" } } });
+  const remote = await mount({ ...shopBoard, places: { "shop\u0000github": { kind: "no remote", text: "No GitHub remote" } } });
   assert.ok(draw(remote).includes("No GitHub remote"));
 });
 
-const GITHUB_REMOTE = "origin\tgit@github.com:acme/shop.git (fetch)\n";
 const signedOut = () => failure("You are not logged into any GitHub hosts.");
 const githubTasks = async (t, answer, host = {}) => {
   const { db } = await temporaryKdb(t);
   const { row } = await db.addProject(remoteShop);
+  await linkGithub(db, row.id);
   const exec = t.mock.fn(answer);
   const tasks = await startIssues(db, { exec, ...host });
   return {
@@ -486,7 +534,7 @@ test("Tasks lets me retry a Git read failure but says there is no GitHub remote 
   assert.equal(words.includes("No GitHub remote"), false);
 
   git.mock.mockImplementation(() => failure("fatal: not a git repository (or any parent directory): .git", 128));
-  one(find(panel, (el) => el.tag === action), "on_click")(null, cx);
+  clickIssues(panel, action, cx);
   await drain();
   const retried = texts(page());
   assert.ok(retried.includes("No GitHub remote"));
@@ -531,6 +579,7 @@ test("A fresh Issues list shows stored assigned rows from the board's who, and a
   const sql = [];
   const view = await mount({
     projects: [shop], rows: [row], logins: {},
+    links: [githubLink(shop.id)],
     boards: [{ project: "shop", source: "github", filter: "assigned", who: "jj", repo: "github.com/acme/shop", columns: JSON.stringify(["Open"]), read_at: 1, failure: null }],
   });
   view.db = { read: async () => ({ rows: view.rows, boards: view.boards }), run: async (text) => { sql.push(text); } };
@@ -637,10 +686,9 @@ test("A GitHub remote named origin wins, otherwise another GitHub remote is used
 
 test("A logged-out probe is not kept, a later signed-in probe is used, and a probe error shows the copy instead of Sign in", async () => {
   const { issuesGithub } = await load("kanso-panel/issues-github.js", ["issuesGithub"]);
-  const signed = "github.com\n  Logged in to github.com account jj\n  Active account: true\n";
   const answers = [
     { code: 1, stdout: "", stderr: "You are not logged into any GitHub hosts. Run gh auth login" },
-    { code: 0, stdout: signed, stderr: "" },
+    success(GITHUB_LOGIN),
   ];
   world.calls = [];
   world.answer = async () => answers.shift();
@@ -654,15 +702,13 @@ test("A logged-out probe is not kept, a later signed-in probe is used, and a pro
   const at = Date.parse("2026-11-22T15:04:00Z");
   const board = { project: "shop", source: "github", filter: "all", who: "jj", columns: JSON.stringify(["Open"]), read_at: at, failure: null };
   const failed = await mount({
-    projects: [shop],
+    ...shopBoard,
     rows: [issue({ title: "Cached issue" })],
     filters: { shop: "all" },
     boards: [board],
   });
-  failed.db = { read: async (sql) => String(sql).includes("issue_boards") ? [board] : String(sql).includes("FROM issues") ? failed.rows : [], run: async () => {} };
   world.answer = async (cmd) => cmd === "git"
-    ? { code: 0, stdout: "origin\tgit@github.com:acme/shop.git (fetch)\n", stderr: "" }
-    : { code: 1, stdout: "", stderr: "temporary failure" };
+    ? success(GITHUB_REMOTE) : failure("temporary failure");
   const { cx, drain } = timedContext([]);
   failed.readBoard(shop, "github", cx);
   await drain();
@@ -682,7 +728,8 @@ test("The five-minute tick does not read a board read less than a minute ago", a
   const readAt = Date.now();
   const db = {
     read: async (sql) => {
-      if (String(sql).includes("FROM projects")) return [shop];
+      if (sql.includes("FROM projects")) return [shop];
+      if (sql.includes("issue_links")) return [githubLink(shop.id)];
       if (String(sql).includes("issue_boards")) return [{ project: "shop", source: "github", filter: "assigned", who: "jj", read_at: readAt, columns: "[]", failure: null }];
       return [];
     },
@@ -707,6 +754,7 @@ test("An issue with no status shows Open in its row", async () => {
   const updated = new Date(Date.now() - 5 * 60_000).toISOString();
   const view = await mount({
     projects: [shop], filters: { shop: "all" },
+    links: [githubLink(shop.id)],
     boards: [{ project: "shop", source: "github", filter: "all", who: "jj", columns: JSON.stringify(["Open"]), read_at: 1, failure: null }],
     rows: [issue({ status: null, title: "Unboarded", updated_at: updated })],
   });
@@ -759,6 +807,7 @@ test("A capped read stores the total, and the list says it is showing the newest
   assert.equal(stored.boards[0].total, 1082);
   const listed = await mount({
     projects: [shop],
+    links: [githubLink(shop.id)],
     filters: { shop: "all" },
     rows: [issue({ title: "Newest" })],
     boards: [{ project: "shop", source: "github", filter: "all", who: "jj", columns: JSON.stringify(["Open"]), total: 1082, read_at: 1, failure: null }],
@@ -772,6 +821,7 @@ test("Selecting the second project's copy of a shared issue opens that project's
   const beta = { id: "b", name: "Beta", folder: "/work/b", machine: null };
   const view = await mount({
     projects: [alpha, beta],
+    links: [alpha, beta].map(({ id }) => githubLink(id)),
     filters: { a: "all", b: "all" },
     rows: [issue({ project: "a", url, ticket: "#1", title: "From Alpha" }), issue({ project: "b", url, ticket: "#1", title: "From Beta" })],
     boards: [
@@ -823,7 +873,7 @@ test("A project with no GitHub remote shows that, even when GitHub is signed out
   world.answer = async (cmd) => cmd === "git"
     ? { code: 0, stdout: "", stderr: "" }
     : { code: 1, stdout: "", stderr: "You are not logged into any GitHub hosts. Run gh auth login" };
-  const view = await mount({ projects: [shop], rows: [], boards: [] });
+  const view = await mount(shopBoard);
   const { cx, drain } = timedContext([]);
   view.readBoard(shop, "github", cx);
   await drain();

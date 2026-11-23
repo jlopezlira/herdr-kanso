@@ -34,6 +34,7 @@ const bothAccounts = () => ({ [ACCOUNTS]: { jira: jiraAccount(), linear: LINEAR_
 const jiraRef = (key) => SITE + "/" + key;
 const sourceOf = (link) => link.source + ":" + link.ref;
 const linkTo = (source, ref, name) => ({ project: "shop", source, ref, name });
+const githubLink = linkTo("github", "issues", "GitHub issues");
 const stateId = (source) => "issues-state-shop-" + source;
 const click = (drawn, id, cx) => drawn.handlers.get(id)(null, cx);
 const drawIssues = (view) => {
@@ -497,17 +498,21 @@ const sequence = (length) => Array.from({ length }, (_, i) => i);
 const expectAccounts = (overlays) => {
   same(overlays.map(({ mod, props }) => [mod, props.page]), [["kanso-settings", "accounts"]]);
 };
-const picker = async (kind, answer, store = bothAccounts()) => {
-  const { view, overlays } = await mountIssues(store, { answer, host: drawingHost() });
-  const timers = [];
-  const { cx, drain, pending } = timedContext(timers);
+const issuesControls = (view, cx) => {
   const render = () => view.render(cx);
   const button = (id) => find(render(), (el) => el.tag === id);
   const press = (id) => one(button(id), "on_click")(null, cx);
-  const toggle = () => press(`issues-link-${kind}-shop`);
+  return { render, button, press, words: () => texts(render()) };
+};
+const picker = async (kind, answer, store = bothAccounts()) => {
+  const { view, overlays } = await mountIssues(store, { answer, host: drawingHost(), links: [githubLink] });
+  const timers = [];
+  const { cx, drain, pending } = timedContext(timers);
+  const controls = issuesControls(view, cx);
+  const toggle = () => controls.press(`issues-link-${kind}-shop`);
   toggle();
   await drain();
-  return { button, press, toggle, drain, overlays, cx, timers, render, lastRead: () => pending.at(-1), words: () => texts(render()) };
+  return { ...controls, toggle, drain, overlays, cx, timers, lastRead: () => pending.at(-1) };
 };
 const PICKER_FIX = "issues-link-failure-shop-fix";
 const PICKER_MORE = "issues-link-more-shop";
@@ -820,12 +825,67 @@ test("A Jira source on another site is not read, and opening it asks for no deta
 const alphaLink = linkTo("jira", jiraRef("ABC"), "ABC · Alpha");
 const betaLink = linkTo("jira", jiraRef("DEF"), "DEF · Beta");
 const teamLink = linkTo("linear", "team-1", "ENG · Eng");
+const addJira = "issues-add-jira";
+const chooseBoardProject = (view, cx, project) => {
+  const ui = issuesControls(view, cx);
+  ui.press("issues-add");
+  ui.press(`issues-add-project-${project}`);
+  return ui;
+};
+
+test("Choosing Jira while signed out opens Accounts instead of reading Jira projects", async () => {
+  const { view, overlays, urls } = await mountIssues({}, { host: drawingHost() });
+  const ui = chooseBoardProject(view, timedContext([]).cx, shop.id);
+  assert.ok(texts(ui.button(addJira)).includes("Sign in to Jira…"));
+  ui.press(addJira);
+  expectAccounts(overlays);
+  assert.deepEqual(urls, []);
+});
+
+test("Adding Jira from an open space lists projects inside Add a board and links the choice to the newly saved project", async (t) => {
+  const { db } = await temporaryKdb(t);
+  const space = { name: "Shop on light", folder: shop.folder, machine: "light" };
+  const openId = `${space.machine}:${space.folder}`;
+  const addProject = t.mock.method(db, "addProject");
+  const [jira] = pickerCases;
+  const answer = ({ url }) => okJson(url.includes("/project/search?")
+    ? jira.payload([{ key: "ABC", name: "Alpha" }], false)
+    : jiraFixture(url));
+  const host = { ...drawingHost(), spaces: () => [space] };
+  const { view, urls, overlays } = await mountIssues(signedIn(), { db, host, answer });
+  const { cx, drain } = timedContext([]);
+  view.load(cx);
+  await drain();
+  const ui = chooseBoardProject(view, cx, openId);
+  assert.ok(texts(ui.button(addJira)).includes("Jira projects…"));
+  assert.deepEqual(urls, []);
+
+  ui.press(addJira);
+  await drain();
+  const block = ui.button(addJira).parent;
+  assert.ok(texts(block).includes(`Add a board to ${space.name}`));
+  const choice = find(block, (el) => el.tag === `issues-link-${openId}-${alphaLink.ref}`);
+  assert.ok(texts(choice).includes(alphaLink.name));
+  assert.equal(addProject.mock.callCount(), 0);
+  assert.deepEqual(overlays, []);
+
+  one(choice, "on_click")(null, cx);
+  await drain();
+  assert.equal(addProject.mock.callCount(), 1);
+  const [call] = addProject.mock.calls;
+  same(call.arguments, [space]);
+  const { row } = await call.result;
+  same(await db.read("SELECT project, source, ref, name FROM issue_links;"), [
+    { ...alphaLink, project: row.id },
+  ]);
+  assert.ok(ui.words().includes(`Jira · ${alphaLink.name}`));
+});
 
 test("Tasks without a GitHub remote offers Jira or Linear sign-in only when neither account is signed in", async () => {
   const label = "Sign in to Jira or Linear";
   const exec = async (cmd) => cmd === "git" ? success("") : failure("You are not logged into any GitHub hosts.");
   for (const store of [{}, signedIn(), { [ACCOUNTS]: { linear: LINEAR_ME } }]) {
-    const { drawn, overlays, view } = await mountIssues(store, { host: { exec } });
+    const { drawn, overlays, view } = await mountIssues(store, { host: { exec }, links: [githubLink] });
     const context = timedContext([]);
     view.readBoard(shop, "github", context.cx);
     await context.drain();
@@ -845,6 +905,8 @@ test("Without a secret store the panel shows one page notice until a linked sour
   const unavailable = { store: false };
   const empty = await mountIssues(signedIn(), unavailable);
   empty.view.render(cx);
+  click(empty.drawn, "issues-add", cx);
+  redraw(empty.drawn, empty.view, cx);
   const notices = (ui) => ui.texts.filter((text) => text === NO_STORE).length;
   assert.equal(notices(empty.drawn), 1);
   assert.ok(empty.drawn.ids.includes("issues-no-store"));
@@ -899,7 +961,7 @@ test("The header refresh leaves waiting boards alone, but Jira Reconnect reads o
   const exec = t.mock.fn(async () => failure("GitHub read"));
   const answer = ({ url }) => okJson(url.endsWith("/jql") ? { issues: [] } : { values: [] });
   const { drawn, urls, runs, view } = await mountIssues(signedIn(), {
-    links: [alphaLink, betaLink],
+    links: [githubLink, alphaLink, betaLink],
     boards: [board("github", true), board(source, true), board(sourceOf(betaLink), false)],
     host: { exec }, answer,
   });
