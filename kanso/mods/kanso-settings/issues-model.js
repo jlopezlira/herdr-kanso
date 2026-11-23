@@ -62,6 +62,8 @@ export function ageOf(at, now) {
 
 export const linkWords = (source) => (kindOf(source) === "github" ? "Open on GitHub" : `Open in ${SOURCE_WORDS[kindOf(source)]}`);
 
+export const PICKER_PAGES = 50;
+
 export async function pagesOf(read, pages = 10) {
   const walk = async (cursor, items, page) => {
     const got = await read(cursor);

@@ -108,13 +108,15 @@ export class Issues {
     return this.logins[`${machine}:github`]?.login ?? this.boardOf(project, "github")?.who ?? null;
   }
 
-  refresh(cx, force = false) {
+  refresh(cx, force = false, only = null) {
     const now = Date.now();
     for (const project of this.projects ?? []) {
       for (const source of this.sourcesOf(project.id)) {
         const board = this.boardOf(project.id, source);
         const due = force || stale(board?.read_at, now) || board?.filter !== this.filterOf(project.id);
-        const waiting = !force && board?.retry_at && board.retry_at > now;
+        const chosen = only?.project === project.id && only.source === source;
+        if (only && !chosen) continue;
+        const waiting = !chosen && board?.retry_at && board.retry_at > now;
         const key = placeKey(project.id, source);
         if (due && !waiting && !this.reading.has(key)) this.readBoard(project, source, cx);
       }
@@ -216,7 +218,7 @@ export class Issues {
     cx.spawn(async (cx) => {
       const found = await tryOrAsync(() => this.linkedFor(kind)?.client.projects());
       if (this.linking?.project !== project || this.linking.kind !== kind) return;
-      this.linking = { ...this.linking, list: found?.list ?? [], failure: found?.failure ?? (found ? null : { text: `${SOURCE_WORDS[kind]} could not be read` }) };
+      this.linking = { ...this.linking, list: found?.list ?? [], complete: found?.complete !== false, failure: found?.failure ?? (found ? null : { text: `${SOURCE_WORDS[kind]} could not be read` }) };
       cx.notify();
     });
   }
@@ -242,7 +244,7 @@ export class Issues {
     const read = this.boardOf(project.id, source)?.read_at;
     const copy = read && failure.kind !== "no remote" && failure.kind !== "signed out" ? `Showing the copy read at ${clock(read)}` : "";
     const until = failure.retryAt ? ` until ${clock(failure.retryAt)}` : "";
-    const again = { onClick: (cx) => this.refresh(cx, true) };
+    const again = { onClick: (cx) => this.refresh(cx, true, source === "github" ? null : { project: project.id, source }) };
     const fix = failure.kind === "no remote" || failure.kind === "no store" ? {}
       : source !== "github" ? { fix: "Reconnect", ...(failure.kind === "signed out" ? { onClick: () => this.openSettings() } : again) }
         : failure.kind === "signed out" ? { fix: "Sign in", onClick: () => this.signIn(project) } : { fix: "Refresh", ...again };
@@ -269,8 +271,9 @@ export class Issues {
     if (!l.list && !l.failure) return [skeletonOf({ shape: "two lines", count: 2 })(`issues-link-bones-${project.id}`, c)];
     if (l.failure) return [stateBlock(`issues-link-failure-${project.id}`, c, { text: l.failure.text, source: l.failure.source ?? "", fix: "Reconnect", onClick: () => this.openSettings() })];
     const linked = new Set(this.links.filter((x) => x.project === project.id && x.source === l.kind).map((x) => x.ref));
-    return l.list.map((item) => row(`issues-link-${project.id}-${item.ref}`, c, { name: item.name, icon: linked.has(item.ref) ? "check" : null,
-      onClick: (cx) => this.link(project.id, l.kind, item, !linked.has(item.ref), cx) }));
+    const more = l.complete ? [] : [div().text_size(T.body).text_color(c.dim).child(`Showing the first ${l.list.length} ${linkedOf(l.kind).things}`)];
+    return [...l.list.map((item) => row(`issues-link-${project.id}-${item.ref}`, c, { name: item.name, icon: linked.has(item.ref) ? "check" : null,
+      onClick: (cx) => this.link(project.id, l.kind, item, !linked.has(item.ref), cx) })), ...more];
   }
 
   boardBlock(project, source, c, now, marked) {
@@ -337,6 +340,10 @@ export class Issues {
 
   skeleton(c) { return skeletonOf({ shape: "two lines", count: 4 })("kanso-skeleton", c); }
 
+  noStore(c) {
+    return this.store === false && !this.links.length ? [stateBlock("issues-no-store", c, { text: NO_STORE.text })] : [];
+  }
+
   render(cx) {
     const c = tokens(theme()), now = Date.now();
     const front = this.frontProject();
@@ -347,7 +354,7 @@ export class Issues {
     const body = open ? this.detail(open, c, now)
       : !this.projects ? this.skeleton(c)
         : !projects.length ? emptyState({ text: "Add a project to see its issues" })("issues-none", c)
-          : v_flex().w_full().gap(G.xl).children(projects.map((p) => this.projectBlock(p, c, now)));
+          : v_flex().w_full().gap(G.xl).children([...this.noStore(c), ...projects.map((p) => this.projectBlock(p, c, now))]);
     return scrollPage("kanso-issues", c, true, (column) => column
       .child(pageHeader(div().text_size(PR.title).text_color(c.text).child("Issues"),
         [refreshTool("issues-refresh", c, { busy, working: `Reading ${plural(this.reading.size, "board", "boards")}` }, (cx) => this.refresh(cx, true))]))

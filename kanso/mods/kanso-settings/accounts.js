@@ -17,6 +17,7 @@ const PROMPT_H = 220;
 const NO_STORE = "This computer has no secret store, so Jira and Linear can't sign in here. GitHub keeps working.";
 const CANCELLED = "No token was saved";
 const KEPT = "The secret store kept the token, so you are still signed in";
+const STUCK = "The secret store kept the token; remove it there or sign in again";
 
 const kept = () => {
   const value = shared(ACCOUNTS);
@@ -70,8 +71,8 @@ export class Accounts {
         const me = await check();
         if (me.failure?.kind === "signed out" && !me.failure.fix) { this.fail(kind, CANCELLED, after); return; }
         if (me.failure) {
-          if (me.failure.fix) await this.forget(kind, state);
-          this.fail(kind, me.failure.text, after);
+          const forgotten = await this.forget(kind, state);
+          this.fail(kind, forgotten ? `${me.failure.text}. The token was not kept` : `${me.failure.text}. ${STUCK}`, after);
           return;
         }
         setShared(ACCOUNTS, { ...kept(), [kind]: keep(me) });
@@ -95,7 +96,7 @@ export class Accounts {
   async forget(kind, state) {
     const s = SERVICES[kind], account = s.account(state);
     await this.secrets.remove(s.service, account);
-    return !(await this.secrets.has(s.service, account));
+    return this.secrets.gone(s.service, account);
   }
 
   signOut(kind, cx) {

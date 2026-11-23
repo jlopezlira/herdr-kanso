@@ -1,5 +1,5 @@
 import { parseOr } from "./pure.js";
-import { pagesOf } from "./issues-model.js";
+import { pagesOf, PICKER_PAGES } from "./issues-model.js";
 
 export const JIRA = "kanso-jira";
 const FIELDS = ["summary", "status", "priority", "created", "updated", "assignee", "reporter", "labels", "description"];
@@ -51,8 +51,8 @@ export function jiraClient(secrets, { site, email }) {
         if (failure) return { failure };
         const values = data?.values ?? [];
         return { items: values, next: data?.isLast || !values.length ? null : (at ?? 0) + values.length };
-      });
-      return { failure: read.failure, list: read.items.map((p) => ({ ref: jiraRef(site, p.key), name: `${p.key} · ${p.name}` })) };
+      }, PICKER_PAGES);
+      return { failure: read.failure, complete: read.complete, list: read.items.map((p) => ({ ref: jiraRef(site, p.key), name: `${p.key} · ${p.name}` })) };
     },
     board: async (key) => {
       const boards = await ask(`/rest/agile/1.0/board?projectKeyOrId=${encodeURIComponent(key)}`);
@@ -96,7 +96,7 @@ export function rowsOf(issues, { site, key, project, statusColumn, now }) {
 export async function readJiraBoard(client, { ref, project, filter, now = Date.now() }) {
   const { site, key } = refParts(ref);
   const read = await client.issues(key, filter);
-  const { columns, statusColumn } = read.items.length ? await client.board(key) : { columns: [], statusColumn: {} };
+  const { columns, statusColumn } = read.failure && !read.items.length ? { columns: [], statusColumn: {} } : await client.board(key);
   return { rows: rowsOf(read.items, { site, key, project, statusColumn, now }), columns, failure: read.failure, complete: read.complete };
 }
 
