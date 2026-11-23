@@ -129,8 +129,9 @@ test("Workflows publish a beta from develop, a release candidate on demand, and 
   assert.match(release, /test "\$GITHUB_REF_NAME" = "\$INPUT_BRANCH"/);
   const archive = release.slice(release.indexOf("Tag the archive"), release.indexOf("Commit and tag"));
   assert.match(archive, /release-tag\.mjs "\$RELEASE_TAG"/);
-  assert.match(archive, /git push origin "refs\/tags\/\$RELEASE_TAG"/);
-  assert.doesNotMatch(archive, /HEAD:refs\/heads/);
+  const pushTag = release.slice(release.indexOf("Push the tag"), release.indexOf("Push the commit and tag"));
+  assert.match(pushTag, /git push origin "refs\/tags\/\$RELEASE_TAG"/);
+  assert.doesNotMatch(pushTag, /HEAD:refs\/heads/);
   const beta = ci.slice(ci.indexOf("\n  beta:"), ci.indexOf("\n  stable:"));
   assert.match(beta, /needs: platform\n    if: github\.event_name == 'push' && github\.ref == 'refs\/heads\/develop'/, "a beta waits for all three platforms");
   assert.match(beta, /kind: beta\n      branch: develop/);
@@ -166,6 +167,8 @@ test("Beta, release candidate and stable workflows pass the required signing sec
   const publishAt = release.indexOf("      - name: Publish");
   assert.ok(signAt > jobsAt && publishAt > signAt);
   const sign = release.slice(signAt, publishAt);
+  const firstPush = release.indexOf("git push");
+  assert.ok(firstPush > signAt, "no tag or branch is pushed before the archive is signed");
   assert.match(sign, /SIGNING_KEY: \$\{\{ secrets\.KANSO_RELEASE_KEY \}\}/);
   assert.match(sign, /run: node scripts\/release-sign\.mjs "\$PLAN_TAG" "\$RUNNER_TEMP"/);
   const publish = release.slice(publishAt);

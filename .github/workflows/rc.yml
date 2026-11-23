@@ -9,6 +9,7 @@ permissions:
 jobs:
   rc:
     uses: ./.github/workflows/release.yml
+    secrets: inherit
     with:
       kind: rc --prepare
       branch: develop
@@ -16,4 +17,3 @@ jobs:
       group: develop-release
       tag: commit
       options: --verify-tag --prerelease
-    secrets: inherit

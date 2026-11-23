@@ -28,10 +28,15 @@ const commitTrust = async ({ repo }, key, text) => {
   await git(repo, "commit", "-m", text);
 };
 
-test("The release signer refuses a non-release tag", async (t) => {
+const keyed = async (t) => {
   const fixture = await committedRepo(t);
-  const key = await makeReleaseKey(join(fixture.dir, "signing-key"));
+  return { fixture, key: await makeReleaseKey(join(fixture.dir, "signing-key")), other: await makeReleaseKey(join(fixture.dir, "other-key")) };
+};
+
+test("The release signer refuses a non-release tag", async (t) => {
+  const { fixture, key } = await keyed(t);
   refused(await sign(fixture, "nightly", key.path), /nightly is not a release tag/);
+  refused(await sign(fixture, "v01.2.3", key.path), /v01.2.3 is not a release tag/);
 });
 
 test("The release signer refuses a release without a signing key", async (t) => {
@@ -42,10 +47,8 @@ test("The release signer refuses a release without a signing key", async (t) => 
 for (const tagged of [true, false]) {
   const source = tagged ? "tagged commit" : "HEAD commit if the tag does not exist";
   test(`The release signer archives and signs the ${source}`, async (t) => {
-    const fixture = await committedRepo(t);
+    const { fixture, key, other } = await keyed(t);
     const tag = "v1.2.3";
-    const key = await makeReleaseKey(join(fixture.dir, "signing-key"));
-    const other = await makeReleaseKey(join(fixture.dir, "other-key"));
     if (!tagged) await commitTrust(fixture, other, "Earlier commit");
     const text = tagged ? "Tagged commit" : "Head commit";
     await commitTrust(fixture, key, text);
@@ -77,9 +80,7 @@ for (const tagged of [true, false]) {
 }
 
 test("The release signer refuses a key that the archived commit does not trust", async (t) => {
-  const fixture = await committedRepo(t);
-  const key = await makeReleaseKey(join(fixture.dir, "signing-key"));
-  const other = await makeReleaseKey(join(fixture.dir, "other-key"));
+  const { fixture, key, other } = await keyed(t);
   await commitTrust(fixture, other, "Commit trusts another key");
   await writeFile(join(fixture.repo, signersPath), key.allowedSigners);
   refused(await sign(fixture, "v1.2.3", key.path), /ssh-keygen -Y verify/);

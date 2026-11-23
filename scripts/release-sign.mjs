@@ -4,6 +4,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { parseRelease } from "../kanso/mods/kanso-chrome/release.js";
 
 export const NAMESPACE = "kanso-release";
 export const SIGNERS = "kanso/mods/kanso-tabs/allowed_signers";
@@ -16,7 +17,7 @@ const commitOf = (tag) => {
 };
 
 export function signRelease(tag, out, { key = process.env.SIGNING_KEY ?? "", keyFile = process.env.KANSO_RELEASE_KEY_FILE ?? "" } = {}) {
-  if (!TAG.test(tag)) throw new Error(`${tag} is not a release tag`);
+  if (!TAG.test(tag) || !parseRelease(tag)) throw new Error(`${tag} is not a release tag`);
   if (!key.trim() && !keyFile) throw new Error("no signing key: set the KANSO_RELEASE_KEY secret, or KANSO_RELEASE_KEY_FILE locally");
   const commit = commitOf(tag);
   const archive = join(out, `kanso-${tag}.tar.gz`);
