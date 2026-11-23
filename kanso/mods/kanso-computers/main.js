@@ -10,7 +10,7 @@ import { lanRecord, resolvedHost } from "./lan-route.js";
 import { setupPrompt } from "./setup.js";
 import { focusOn, tryOrAsync, afterMount } from "./pure.js";
 import { G, T, LH, DIALOG, tokens } from "./ui.js";
-import { button } from "./ui-button.js";
+import { button, quietLink } from "./ui-button.js";
 import { dialog } from "./ui-dialog.js";
 import { row } from "./ui-row.js";
 import { stateBlock } from "./ui-state.js";
@@ -75,16 +75,25 @@ export default class Computers extends View {
       this.explainer = explainer;
       cx.notify();
     });
-    if (this.searching) afterMount(cx, (cx) => cx.spawn(async (cx) => {
+    this.swept = false;
+    if (this.searching) afterMount(cx, (cx) => this.search(cx, false));
+  }
+
+  search(cx, whole) {
+    this.searching = true;
+    this.swept = this.swept || whole;
+    cx.notify();
+    cx.spawn(async (cx) => {
       const near = (hosts) => {
         this.nearby = [...new Map([...(this.nearby ?? []), ...hosts].map((host) => [host.ip, host])).values()];
         cx.notify();
       };
-      this.nearby = await scanNearby(this.platform, cx.timer, near).catch(() => this.nearby ?? []);
+      const found = await scanNearby(this.platform, cx.timer, near, { whole }).catch(() => []);
+      this.nearby = [...new Map([...(this.nearby ?? []), ...found].map((host) => [host.ip, host])).values()];
       this.searching = false;
       setShared(NEARBY, { at: Date.now(), hosts: this.nearby });
       cx.notify();
-    }));
+    });
   }
 
   peers() {
@@ -378,14 +387,15 @@ export default class Computers extends View {
     if (this.nearby === null) return [];
     const hosts = this.nearbyHosts();
     const looking = this.searching ? [skeletonOf("computers-nearby-loading", c, { shape: "row", count: hosts.length ? 1 : 2 })] : [];
-    if (!hosts.length && !looking.length) return [this.heading(c, "On this network"), this.note(c, "No other computer on this network answers ssh.")];
+    const sweep = this.searching || this.swept ? [] : [div().py(G.xs).child(quietLink("computers-sweep", "Search this network", (cx) => this.search(cx, true), c))];
+    if (!hosts.length && !looking.length) return [this.heading(c, "On this network"), this.note(c, "No other computer on this network answers ssh."), ...sweep];
     return [this.heading(c, "On this network"), ...hosts.map((h) => this.computer(c, {
       key: `lan:${h.ip}`, icon: osIcon(h.os), name: h.name || h.ip, ip: h.ip,
       facts: [h.os, h.name ? h.ip : null],
       choice: { peer: null, target: h.ip, name: h.name },
       done: isAdded(this.added, { ip: h.ip, name: h.name }),
       about: { name: h.name || h.ip, os: h.os },
-    })), ...looking];
+    })), ...looking, ...sweep];
   }
 
   sshSection(c) {
