@@ -397,7 +397,7 @@ export class Issues {
     const known = registered();
     if (known !== this.registered) { this.registered = known; if (this.projects) this.load(cx, true); }
     const front = this.frontProject();
-    if (front !== this.front) { this.front = front; if (this.projects) this.refresh(cx); }
+    if (front !== this.front) { this.front = front; if (this.projects) cx.timer.after(0, (next) => this.refresh(next)); }
     const open = this.open ? this.rows.find((r) => r.url === this.open.url && r.project === this.open.project) : null;
     const busy = this.reading.size > 0;
     const projects = projectsInOrder(this.projects ?? [], front);

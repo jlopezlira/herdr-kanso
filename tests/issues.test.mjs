@@ -224,6 +224,30 @@ const startIssues = async (db, host = {}) => {
   return { view, cx, drain, DIALOG };
 };
 
+test("Opening Tasks in a project draws without asking for a redraw while it draws, then reads that project", async (t) => {
+  const { db } = await temporaryKdb(t);
+  await db.addProject({ name: shop.name, folder: shop.folder });
+  const exec = t.mock.fn(async () => ({ code: 1, stdout: "", stderr: "" }));
+  const { Issues } = await load("kanso-panel/issues.js", ["Issues"], {
+    ...viewHost, ...drawingHost(), checking: () => true, exec,
+    spaces: () => [{ active: true, folder: shop.folder, machine: null, tabs: [] }],
+  });
+  const drawing = { now: false };
+  const timers = [];
+  const { cx, drain } = timedContext(timers, { notify() { if (drawing.now) throw new Error("cx.notify() during render"); } });
+  const view = new Issues(db);
+  view.init(cx);
+  await drain();
+  const before = exec.mock.callCount();
+  drawing.now = true;
+  view.render(cx);
+  drawing.now = false;
+  const [, later] = timers.find(([ms]) => ms === 0);
+  later(cx);
+  await drain();
+  assert.ok(exec.mock.callCount() > before);
+});
+
 const remoteShop = { ...shop, machine: "light" };
 const remoteKanso = {
   id: "kanso-space", name: "kansō", machine: "light", folder: "/Users/jj/Apps/herdr/herdr-kanso",
