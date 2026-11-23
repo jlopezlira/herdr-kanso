@@ -32,7 +32,7 @@ the branch's rules.
 
 ### Fixed
 
-- New project asks for the folder first, keeps Create project off until one is chosen, marks the name optional, and its conversation variant says you then choose the agent. Settings › Keys points to kansō help for every key, and Images with no agent in focus offers Show agents.
+- New project asks for the folder first, keeps Create project off until one is chosen, marks the name optional, and its conversation variant says you then choose the agent. Settings › Keys points to kansō help for every key, and Images with no agent in focus offers Show agents. Switching to a project scrolls the Projects list to it once, so a new or far-down project is in view.
 
 ### Changed
 

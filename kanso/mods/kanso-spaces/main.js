@@ -327,6 +327,7 @@ export default class Spaces extends RetryingView {
     this.armed = new Armed();
     this.pulling = false;
     this.needsScroll = ScrollHandle.new();
+    this.listScroll = ScrollHandle.new();
     if (shared("kanso.list")) setShared("kanso.list", null); // a reload: nothing is on the list
     this.git = {}; // place key -> { name, branch, ahead, behind, repo, linked }, null: not a repo
     this.checked = {};
@@ -3035,6 +3036,13 @@ export default class Spaces extends RetryingView {
   list(t, collapsed, view, items) {
     const gap = view === "threads" ? SIDEBAR.threadGap : SIDEBAR.gap;
     const { els, space, agent } = laidOut(items, gap);
+    const projects = !collapsed && view === "spaces";
+    const active = spaces().find((s) => s.active)?.id ?? null;
+    if (projects && active !== this.revealed) {
+      this.revealed = active;
+      const row = items.findLastIndex((it) => it.mark?.kind === "space");
+      if (row >= 0) this.listScroll.scroll_to_item((space ? 1 : 0) + (agent ? 1 : 0) + row);
+    }
     const pills = collapsed ? [] : [
       ...(space ? [pill("pill-space", space.y, space.h, tokens(t).w12)] : []),
       ...(agent ? [pill(`pill-agent-${view}`, agent.y, agent.h, tokens(t).w7)] : []),
@@ -3042,6 +3050,7 @@ export default class Spaces extends RetryingView {
     // Named, so its scroll position survives every redraw (an unnamed one is placed anew and starts at the top).
     // Open, its sides are the sidebar's gutter: each row's ground reaches out past it by the row's own padding, its content stays on it.
     return v_flex().id(`spaces-list-${collapsed ? "rail" : view}`).relative().flex_1().min_h(0).when(!collapsed, (el) => sidebarSides(el, SIDEBAR.gutter)).gap(collapsed ? 0 : gap).pt(collapsed ? G.sm : 0).pb(G.lg).overflow_y_scrollbar().mode(collapsed ? "hover" : "always")
+      .when(projects, (el) => el.track_scroll(this.listScroll))
       .on_mouse_up("left", (_e, cx) => { this.pressed = null; this.over = null; this.draggedAgent = null; this.redraw(cx); })
       // Rows keep their height: shrunk to fit, there would be nothing to scroll.
       .children([...pills, ...els.map((el) => el.flex_none())]);
