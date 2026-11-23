@@ -540,7 +540,7 @@ export class Look {
 
   empty(c) {
     const open = this.agent() ? {} : { action: "Open a folder\u2026" };
-    return v_flex().flex_1().w_full().justify_center().child(emptyState({ icon: "eye", text: this.emptyLine(), ...open })("look-empty", c, { onClick: (cx) => this.openFolder(cx) }));
+    return v_flex().flex_1().w_full().justify_center().child(emptyState({ icon: "eye", text: this.note?.text ?? this.emptyLine(), ...open })("look-empty", c, { onClick: (cx) => this.openFolder(cx) }));
   }
 
   drawing(c) { return v_flex().flex_1().w_full().items_center().justify_center().child(skeletonOf({ shape: "picture" })("kanso-skeleton", c)); }
