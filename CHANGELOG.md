@@ -22,6 +22,12 @@ in version.json, which the stable updater offers. Versions follow
 [Keep a Changelog](https://keepachangelog.com). `npm run check:version` checks
 the branch's rules.
 
+## [Unreleased]
+
+### Security
+
+- The site serves its own fonts under a content security policy, a changelog link cannot leave its address, and the Markdown opener writes paths into the scripts it makes as quoted data.
+
 ## [3.34.0] - 2026-11-23
 
 ### Added
