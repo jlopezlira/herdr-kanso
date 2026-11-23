@@ -1,4 +1,5 @@
 export const FILTERS = ["assigned", "created", "all"];
+export const sourceKey = (l) => (l.source === "github" ? "github" : `${l.source}:${l.ref}`);
 export const FILTER_WORDS = { assigned: "Assigned to me", created: "Created by me", all: "All open" };
 export const OPEN = "Open";
 export const DONE = "Done";
