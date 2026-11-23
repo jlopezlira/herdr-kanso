@@ -174,7 +174,9 @@ Shipped through `gh`, only while their panel is shown (when Settings turns it on
 Shipped adds up your computers in a secret gist: unlisted, but readable by anyone
 with its link); the update check, `git ls-remote` on kansō's
 GitHub repository, and the download of a release you install; Spend's daily
-fetch of OpenRouter's price list;
+fetch of OpenRouter's price list; the hjkl dōjō's pet picker, which downloads
+the agents' pets from persistent.oaistatic.com and codex-pets.net and keeps only
+files whose checksum it knows;
 Add a computer, which reads Tailscale's list of your computers and, unless
 Settings turns it off, asks the computers on this network whether they answer
 ssh. Another computer is reached only through Herdr's own connection to it.
