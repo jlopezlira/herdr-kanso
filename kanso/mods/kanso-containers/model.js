@@ -251,6 +251,7 @@ export function dockerHeld(text, vms = new Set()) {
     .reduce((t, p) => t + p.kb / 1024, 0);
 }
 
+export const pullable = (name) => Boolean(name) && !/\s/.test(name) && !name.startsWith("-");
 export const okRead = (data) => ({ state: "ok", data });
 export const failedRead = (reason, text = reason) => ({ state: "failed", reason, text });
 export const CAP_BYTES = 8 * 1024 * 1024;

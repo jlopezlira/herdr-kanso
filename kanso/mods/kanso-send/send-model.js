@@ -61,7 +61,7 @@ export function sendState({ terms = [], ps = [], spaces = [], computers = [], fr
   const shown = chosen && rows.includes(chosen) ? chosen : null;
   const recipients = toProject ? picked?.recipients ?? [] : shown?.state === "ready" ? [shown] : [];
   const waiting = toProject ? picked?.waiting ?? [] : shown?.state === "waiting" ? [shown] : [];
-  const empty = rows.length ? null : !complete ? "unknown" : q ? "no match" : "none";
+  const empty = rows.some((x) => x.state !== "gone") ? null : !complete ? "unknown" : q ? "no match" : "none";
   return { known, complete, groups, chosen, recipients, waiting, empty, label: toProject ? `Send to ${toProject}  ⌘↩` : "Send  ⌘↩" };
 }
 

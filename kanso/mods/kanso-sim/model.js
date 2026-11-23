@@ -37,6 +37,7 @@ export function deviceList(tools, ios = [], avds = [], android = []) {
 export const canStart = (device, tools) => device?.state === "Off" && (device.platform === "ios" ? tools.ios : device.avd && tools.emulator);
 export const canRotate = (device) => device?.platform === "android" && device.emulator && device.state === "Booted";
 export const bootState = (device, boot, now) => !boot || boot.id !== device?.id ? null : device.state === "Booted" ? null : now >= boot.until ? "Start timed out." : `Starting… ${Math.ceil((boot.until - now) / 1000)}s`;
+export const openable = (url) => /^[a-z][a-z\d+.-]*:\S+$/i.test(url);
 export const age = (at, now) => `as of ${Math.max(0, Math.floor((now - at) / 1000))}s ago`;
 
 const uint = (data, offset, length) => Array.from(data.slice(offset, offset + length)).reduce((out, byte) => out * 256 + byte, 0);

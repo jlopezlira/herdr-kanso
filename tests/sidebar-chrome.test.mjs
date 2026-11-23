@@ -40,7 +40,7 @@ test("Every Toolbar state draws in the app with its tools in order", async () =>
   const drawn = Object.fromEntries(page.states.map(({ label, args }) => [label, drawState(kit, { ...page.args, ...args })]));
   assert.deepEqual(Object.keys(drawn), ["Projects", "Status and Threads", "+ menu", "Sorted", "Sort names its order", "Sort menu, Projects", "Sort menu, Status", "Sort menu, Threads", "Collapsed", "Collapsed, tools open"]);
   const open = drawn.Projects;
-  assert.deepEqual(tipsOf(open), ["Add project", "Sort", "Search", "Hide sidebar"], "+ alone on the left, then Sort, Search and Hide sidebar");
+  assert.deepEqual(tipsOf(open), ["New project", "Sort", "Search", "Hide sidebar"], "+ alone on the left, then Sort, Search and Hide sidebar");
   assert.equal(arg(open, "gap"), G.xs);
   assert.ok(nodes(open).some((kid) => calls(kid, "flex_1").length), "the room between + and the rest grows");
   assert.deepEqual(every(open).filter((kid) => kid.calls.some((call) => call[0] === "w")).map((kid) => arg(kid, "w")), [H.line, H.line, H.line, H.line], "large icon Buttons");
@@ -57,9 +57,9 @@ test("Every Toolbar state draws in the app with its tools in order", async () =>
   assert.deepEqual(texts(drawn["+ menu"]).slice(0, 1), ["Agents, pinned first, then by"], "+ holds the menu it is given, under it");
   const column = drawn.Collapsed;
   assert.equal(arg(column, "gap"), G.sm);
-  assert.deepEqual(tipsOf(column), ["Add project", "Show sidebar", "More tools"], "collapsed, + and Show sidebar head the column, Sort and Search fold under the caret");
+  assert.deepEqual(tipsOf(column), ["New project", "Show sidebar", "More tools"], "collapsed, + and Show sidebar head the column, Sort and Search fold under the caret");
   const tools = drawn["Collapsed, tools open"];
-  assert.deepEqual(tipsOf(tools), ["Add project", "Show sidebar", "Fewer tools", "Sort", "Search"]);
+  assert.deepEqual(tipsOf(tools), ["New project", "Show sidebar", "Fewer tools", "Sort", "Search"]);
   const group = every(tools).find((kid) => calls(kid, "bg").some((call) => call[1] === c.w4));
   assert.deepEqual([arg(group, "rounded"), arg(group, "gap")], [R.card, G.xs], "the caret's tools on a quiet wash");
   const beside = every(drawState(kit, { column: true, open: true, menu: true }, { onOpen() {} })).find((kid) => calls(kid, "content").length);
@@ -74,7 +74,7 @@ test("Each Toolbar tool runs what the app gives under its name, and Sort's menu 
   const presses = pressesOf("plus", "search", "panel-left");
   const press = (el) => arg(el, "on_click")({}, cx);
   const row = drawState(kit, {}, { presses, onOpen: (open) => hits.push(open ? "sort" : "shut") });
-  ["Add project", "Search", "Hide sidebar", "Sort"].forEach((tip) => press(byTip(row, tip)));
+  ["New project", "Search", "Hide sidebar", "Sort"].forEach((tip) => press(byTip(row, tip)));
   press(byTip(drawState(kit, { column: true }, { presses: pressesOf("plus", "panel-left", "chevron-down") }), "More tools"));
   const pop = every(drawState(kit, { menu: true }, { presses, onOpen: (open) => hits.push(open ? "sort" : "shut") })).find((kid) => calls(kid, "content").length);
   assert.equal(calls(arg(pop, "trigger"), "on_click").length, 0, "open, the popover owns the next press");
@@ -103,7 +103,7 @@ test("Every Header state draws in the app: the lights' row, Dawn Mode's sky and 
   const open = draw({});
   assert.deepEqual([arg(open, "pl"), arg(open, "pr"), arg(open, "pb")], [G.sm, G.sm - PANE.gap, G.xs], "8 at the sides seen: the work column's padding shows past its right");
   assert.ok(nodes(open).some((kid) => arg(kid, "h") === H.tabBar), "the lights' row, as tall as the tab bar");
-  assert.ok(nodes(open).some((kid) => arg(kid, "h") === H.row && tipsOf(kid).includes("Add project")), "the Toolbar 40 tall");
+  assert.ok(nodes(open).some((kid) => arg(kid, "h") === H.row && tipsOf(kid).includes("New project")), "the Toolbar 40 tall");
   assert.deepEqual([art(open).length, texts(open).includes("Dawn Mode")], [0, false], "Stable Mode shows nothing");
   const rail = draw({ collapsed: true });
   assert.equal(calls(rail, "items_center").length, 1, "collapsed, it centres the column");
@@ -136,7 +136,7 @@ test("The app sidebar draws its header from the composition, the lights left to 
   withParts(Object.assign(new Spaces(), mountedState({ order: "attention" }))).render();
   assert.ok(drawn.ids.includes("spaces-header"));
   assert.ok(drawn.tips.includes("Sort: Needs you first"), "Sort's tooltip names the order");
-  assert.ok(["Add project", "Search", "Hide sidebar"].every((tip) => drawn.tips.includes(tip)));
+  assert.ok(["New project", "Search", "Hide sidebar"].every((tip) => drawn.tips.includes(tip)));
 });
 
 const laterCx = { timer: { after: () => ({ cancel() {} }) }, notify() {} };

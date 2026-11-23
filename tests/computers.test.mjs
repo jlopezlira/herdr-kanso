@@ -553,3 +553,40 @@ test("A computer saved with hc, and not on the tailnet or in ssh config, shows u
   close.calls.find((call) => call[0] === "on_click")[1]({}, { stop_propagation() {} });
   assert.deepEqual(closed, ["computers-overlay"]);
 });
+
+test("When Tailscale is off, not installed, or has no other computer, Refresh probes again and shows the peers, keeping the typed address", async () => {
+  const running = status({ grey: peer({}) });
+  const notes = {
+    "not installed": { code: 1, stdout: "", stderr: "missing" },
+    off: { code: 0, stdout: status({}, "Stopped"), stderr: "" },
+    "no other computer": { code: 0, stdout: status({}), stderr: "" },
+  };
+  const said = {
+    "not installed": "Tailscale isn't on this computer. Where it is, your computers show up here by themselves.",
+    off: "Tailscale is off on this computer. Turn it on and your computers show up here.",
+    "no other computer": "No other computer is on your tailnet yet.",
+  };
+  for (const [name, first] of Object.entries(notes)) {
+    const answer = { now: first };
+    const asked = [];
+    const { view, cx, flush } = await computersDialog({
+      exec: async (program, args) => { asked.push([program, args]); return answer.now; },
+      hc: async () => ({ code: 0, stdout: JSON.stringify({ machines: [] }), stderr: "" }),
+    });
+    const address = { text: "ada@10.0.0.9" };
+    view.typed = { multiline: false, focused: false, state: {}, on() {}, focus() {}, release() {}, value: () => address.text, set_value(next) { address.text = next; } };
+    const drawn = view.render();
+    assert.ok(texts(drawn).includes(said[name]), name);
+    const refresh = find(drawn, (el) => el.tag === "computers-tailnet-refresh");
+    assert.ok(refresh, name);
+    const before = asked.filter(([, args]) => args?.[0] === "status").length;
+    answer.now = { code: 0, stdout: running, stderr: "" };
+    refresh.calls.find((call) => call[0] === "on_click")[1]({}, cx);
+    await flush();
+    const words = texts(view.render());
+    assert.ok(asked.filter(([, args]) => args?.[0] === "status").length > before, `${name}: Refresh probes Tailscale again`);
+    assert.ok(words.includes("grey") && words.includes("On your tailnet"), words.join(" | "));
+    assert.equal(view.typed.value(), "ada@10.0.0.9");
+    assert.equal(address.text, "ada@10.0.0.9");
+  }
+});
