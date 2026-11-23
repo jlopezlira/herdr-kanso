@@ -3,7 +3,7 @@ import { stampsOf } from "./issues-model.js";
 
 export const LINEAR = "kanso-linear";
 export const LINEAR_ACCOUNT = "api.linear.app";
-const URL = "https://api.linear.app/graphql";
+const LINEAR_URL = "https://api.linear.app/graphql";
 
 const ME = "query{viewer{id name email}}";
 const TEAMS = "query{teams(first:100){nodes{id key name}}}";
@@ -27,7 +27,7 @@ const failureOf = (r, data) => {
 
 export function linearClient(secrets) {
   const ask = async (query, variables = {}) => {
-    const r = await secrets.request({ service: LINEAR, account: LINEAR_ACCOUNT, auth: "raw", method: "POST", body: JSON.stringify({ query, variables }), url: URL });
+    const r = await secrets.request({ service: LINEAR, account: LINEAR_ACCOUNT, auth: "raw", method: "POST", body: JSON.stringify({ query, variables }), url: LINEAR_URL });
     const out = parseOr(r.text, null);
     return r.status === 200 && out?.data && !out.errors?.length ? { data: out.data, failure: null } : { data: null, failure: failureOf(r, out) };
   };
