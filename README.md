@@ -175,8 +175,9 @@ gist of your own statistics); the update check, `git ls-remote` on kansō's
 GitHub repository, and the download of a release you install; Spend's daily
 fetch of OpenRouter's price list;
 Add a computer, which reads Tailscale's list of your computers and, unless
-Settings turns it off, asks the computers on this network whether they answer
-ssh. Another computer is reached only through Herdr's own connection to it.
+Settings turns it off, asks the computers this one already knows on the network
+whether they answer ssh, and the whole network only when you press Search this
+network. Another computer is reached only through Herdr's own connection to it.
 Simulator's pictures and input stay on this computer. Threads and
 Images read the agents' conversation files for the pictures
 they printed; Spend reads the session files your AI tools write, for tokens and

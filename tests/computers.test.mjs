@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { chmod, mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { clone, computersDialog, exec, find, folderWith, gpuiHost, load, texts } from "./helpers.mjs";
+import { arg, clone, computersDialog, exec, find, folderWith, gpuiHost, load, success, texts } from "./helpers.mjs";
 
 const reach = () => load("kanso-computers/reach.js", [
   "tailnet", "planFor", "choiceOf", "addArgs", "probeArgs", "reachOf", "keySetup", "advice", "isAdded",
@@ -132,12 +132,20 @@ test("Adding a computer always installs, and a via command is not a positional t
   assert.equal(via.includes("root@100.64.1.2"), false);
 });
 
-test("A probe accepts the new host key and never asks for a password", async () => {
+const ACCEPT_NEW = "StrictHostKeyChecking=accept-new";
+const UNIX_PROBE_HOSTS = "UserKnownHostsFile=/dev/null";
+
+test("Checking whether a computer answers SSH never asks for a password or saves its host key", async () => {
   const { probeArgs } = await reach();
-  const args = probeArgs("ada@box");
-  assert.ok(args.includes("BatchMode=yes"));
-  assert.ok(args.includes("StrictHostKeyChecking=accept-new"));
-  assert.equal(args.at(-2), "ada@box");
+  for (const [platform, hosts] of [
+    ["macos", UNIX_PROBE_HOSTS], ["linux", UNIX_PROBE_HOSTS], ["windows", "UserKnownHostsFile=NUL"],
+  ]) {
+    const args = probeArgs("ada@box", platform);
+    assert.ok(args.includes("BatchMode=yes"), platform);
+    assert.ok(args.includes(ACCEPT_NEW), platform);
+    assert.equal(args[args.indexOf(hosts) - 1], "-o", platform);
+    assert.equal(args.at(-2), "ada@box", platform);
+  }
 });
 
 test("What ssh said says whether the computer is ready, wants a password, is closed, or cannot be reached", async () => {
@@ -157,7 +165,7 @@ test("What ssh said says whether the computer is ready, wants a password, is clo
 const shForm = process.platform === "win32" && "the sh form runs on macOS and Linux; Windows uses the PowerShell form";
 const PUB = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIKansoOneClickTest kanso";
 const KEY_WORDS = "-i ~/.ssh/id_ed25519_kanso -o IdentitiesOnly=yes -o BatchMode=yes";
-const ASK = "-o PasswordAuthentication=yes -o KbdInteractiveAuthentication=yes -o StrictHostKeyChecking=accept-new";
+const ASK = "-o PasswordAuthentication=yes -o KbdInteractiveAuthentication=yes";
 const signIn = () => load("kanso-computers/sign-in.js", ["signInTab", "routeOf", "keySetup", "lanParts"]);
 
 const writeStub = async (dir, name, body) => {
@@ -235,6 +243,7 @@ test("Signing in to a plain computer, with a port and without one, makes a key, 
     assert.equal((await calls("ssh-keygen"))[0].at(-1), key);
     const ssh = (await calls("ssh"))[0];
     assert.ok(ssh.join(" ").includes(ASK), ssh.join(" "));
+    assert.equal(ssh.includes(ACCEPT_NEW), false, ssh.join(" "));
     assert.equal(ssh.includes("-p"), Boolean(port));
     if (port) assert.equal(ssh[ssh.indexOf("-p") + 1], port);
     assert.ok(ssh.includes(dest));
@@ -328,6 +337,7 @@ test("Signing in on a local-first route asks on the local network first, and fin
   assert.ok(lanAt > 0 && split > lanAt, ask);
   const first = ask.slice(0, lanAt);
   assert.ok(first.includes(ASK), first);
+  assert.equal(ask.includes(ACCEPT_NEW), false, ask);
   assert.ok(first.includes("-o ConnectTimeout=2"), first);
   assert.equal(first.includes("BatchMode"), false, first);
   assert.ok(ask.slice(split).includes(away), ask);
@@ -380,7 +390,9 @@ test("A Tailscale route, a route that is not ssh, a fly route, and a Windows rou
   const keyed = viaOf("O'Brien@box");
   const add = ["machine", "add", "--via", keyed, "--name", "grey", "--install"].map(psQuote).join(" ");
   assert.ok(script.startsWith("$PSNativeCommandArgumentPassing = 'Legacy'"));
-  assert.ok(script.includes("StrictHostKeyChecking=accept-new 'O''Brien@box'"), script);
+  const password = script.split("; ").find((line) => line.startsWith("$said = ssh"));
+  assert.ok(password.includes(`${ASK} 'O''Brien@box'`), password);
+  assert.equal(password.includes(ACCEPT_NEW), false, password);
   assert.ok(script.includes(`& hc ${add}`), script);
   assert.match(script, /if \(\$LASTEXITCODE -ne 0\) \{[^}]*exit 1 \}; Write-Host ''; Write-Host 'Done: this tab can close\.'$/);
   assert.equal(script.split("Done: this tab can close.").length, 2);
@@ -479,7 +491,7 @@ test("A typed ssh option, a blank, or a space is not a computer, and a host with
 
 test("A typed port reaches ssh as -p, and an IPv6 address is not read as a port", async () => {
   const { destinationOf, probeArgs } = await reach();
-  const options = ["-o", "BatchMode=yes", "-o", "ConnectTimeout=8", "-o", "StrictHostKeyChecking=accept-new"];
+  const options = ["-o", "BatchMode=yes", "-o", "ConnectTimeout=8", "-o", ACCEPT_NEW, "-o", UNIX_PROBE_HOSTS];
   assert.deepEqual(clone(destinationOf("can@10.0.0.7:2222")), { dest: "can@10.0.0.7", port: "2222" });
   assert.deepEqual(clone(probeArgs("can@10.0.0.7:2222")), [...options, "-p", "2222", "--", "can@10.0.0.7", "true"]);
   assert.deepEqual(clone(destinationOf("[fe80::1]:2222")), { dest: "fe80::1", port: "2222" });
@@ -589,4 +601,38 @@ test("When Tailscale is off, not installed, or has no other computer, Refresh pr
     assert.equal(view.typed.value(), "ada@10.0.0.9");
     assert.equal(address.text, "ada@10.0.0.9");
   }
+});
+
+const lanDialog = async (t) => {
+  const near = ["192.168.1.1", "192.168.1.3"];
+  const rest = ["192.168.1.4", "192.168.1.5", "192.168.1.6"];
+  const commands = {
+    ifconfig: "inet 192.168.1.2 netmask 0xfffffff8",
+    arp: [...near, "192.168.2.1", "192.168.1.2"].map((ip) => `? (${ip}) at aa:bb:cc:dd:ee:ff`).join("\n"),
+  };
+  const runLocal = t.mock.fn(async (program, args) => success(
+    program === "sh" && args[1].includes("xargs") ? args.slice(3).join("\n") : commands[program] ?? "",
+  ));
+  const dialog = await computersDialog({ exec: runLocal, hc: async () => success('{"machines":[]}') }, true);
+  const knocks = () => runLocal.mock.calls
+    .map(({ arguments: args }) => args)
+    .filter(([program, argv]) => program === "sh" && argv[1].includes("xargs"))
+    .map(([, argv]) => Array.from(argv.slice(3)));
+  return { ...dialog, near, rest, knocks };
+};
+
+test("Opening Add a computer checks only the addresses already known on this network", async (t) => {
+  const { near, knocks } = await lanDialog(t);
+  assert.deepEqual(knocks(), [near]);
+});
+
+test("Search this network checks the whole network once and then is no longer offered", async (t) => {
+  const { cx, flush, view, near, rest, knocks } = await lanDialog(t);
+  const sweep = () => find(view.render(), (el) => el.tag === "computers-sweep");
+  assert.ok(sweep(), "Search this network is offered after opening Add a computer");
+  const before = knocks().length;
+  arg(sweep(), "on_click")({}, cx);
+  await flush();
+  assert.deepEqual(knocks().slice(before), [near, rest]);
+  assert.ok(!sweep(), "Search this network is no longer offered");
 });
