@@ -44,6 +44,7 @@ export const PIECES = [
   piece("toast.memory", "Memory low", "Notifications", SHOW, "show", "draw"),
   piece("update.check", "Check for updates", "Background", SHOW, "show", "work", "git"),
   piece("computers.network", "Look for computers on this network", "Background", SHOW, "show", "work"),
+  piece("agents.checks", "Tell an agent when its pull request's checks finish", "Background", SHOW, "show", "work", "gh"),
 ];
 
 export const STATE_LABEL = { show: "Show", needed: "When needed", hide: "Hide" };

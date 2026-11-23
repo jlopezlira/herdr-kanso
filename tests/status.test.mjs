@@ -1,5 +1,5 @@
 // What the status bar says, and where each click goes.
-import { loadSpaces, loadWorkspaceStatus, loadQuestionOf } from "./mod-fixtures.mjs";
+import { loadSpaces, loadWorkspaceStatus, loadQuestionOf, chromeTheme } from "./mod-fixtures.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { clone, load, tape, repoText } from "./helpers.mjs";
@@ -122,7 +122,7 @@ function bar() {
   const state = { spaces: [], agents: [], terminals: [], machines: [], props: { side: "right" }, platform: "macos", shared: {}, file: null, reads: [] };
   const host = {
     ...drawn.host, Button: { new: (id) => node().id(id) },
-    theme: () => new Proxy({ chrome: "chrome" }, { get: (obj, key) => (key in obj ? obj[key] : String(key)) }),
+    theme: chromeTheme,
     spaces: () => state.spaces, agents: () => state.agents, terminals: () => state.terminals, machines: () => state.machines,
     props: () => state.props, window: () => ({ platform: state.platform }),
     // Herdr's own key table for this platform, as keys() gives it: the palette's chord is read from it.

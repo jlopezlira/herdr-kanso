@@ -210,7 +210,7 @@ test("A right-click opens the tab's menu and the wheel still moves one tab", asy
   assert.equal(b.view.tabMenu, "t2");
   const popover = byTag(b.view.render(b.cx), "tab-menu-t2");
   const words = texts(arg(popover, "content"));
-  for (const row of ["cart-ui", "Rename", "New tab", "Sleep cart-ui…", "Close tab", "Hide “Agent state on tabs”", "Settings for this…"]) assert.ok(words.includes(row), row);
+  for (const row of ["cart-ui", "Rename…", "New tab", "Sleep this tab…", "Close tab", "Hide “Agent state on tabs”", "Settings for this…"]) assert.ok(words.includes(row), row);
   b.view.wheel({ delta_lines: { y: 1 } });
   assert.equal(b.ran.at(-1)[0], "tab.prev");
 });
@@ -582,12 +582,13 @@ test("Each door's easing name has an id of its own, so a fold during the ease ke
   }
 });
 
-test("A tab nobody named is called by its program in its right-click menu and its Sleep action too", async () => {
+test("A tab nobody named is called by its program in its right-click menu, and its Sleep action says Sleep this tab", async () => {
   const b = await unnamedCodex();
   pressOf(tab(b.view.render(b.cx), "t2"), "right")(press, b.cx);
   const said = drawnTexts(b.view.render(b.cx));
   assert.ok(said.includes("Codex"), "the menu's title");
-  assert.ok(said.includes("Sleep Codex\u2026"), "and its Sleep action");
+  assert.ok(said.includes("Sleep this tab\u2026"), "and its Sleep action");
+  assert.equal(said.includes("Sleep Codex\u2026"), false);
   assert.equal(said.some((text) => text === "2" || text === "Sleep 2\u2026"), false);
 });
 

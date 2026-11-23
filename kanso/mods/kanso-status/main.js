@@ -10,8 +10,9 @@ import { computerItem, paletteDoor, statusBar } from "./status-bar.js";
 import { boundChord, hintOf } from "./ui-tooltip.js";
 import { afterMount, aliasText, tryOrAsync } from "./pure.js";
 import { paths } from "./platform-paths.js";
+import { needsOf } from "./needs.js";
 import { MEMORY_MS, NEEDS_COMMAND, STATUS_COMMAND, PALETTE_COMMAND, computerOf, computerShown, waitingItem, questionOf, memoryLow, workingItem } from "./model.js";
-import { pieces, shown, choice } from "./pieces.js";
+import { pieces, shown, choice, runs } from "./pieces.js";
 import { openPieceMenu } from "./piece-lines.js";
 
 const GUARD_NOW = ["data", "kanso-guard", "now.json"];
@@ -63,7 +64,7 @@ export default class WorkspaceStatus extends View {
     const questions = Object.fromEntries(rows.flatMap((row) => {
       const agent = byAgent.get(row?.address);
       return row?.status === "blocked" ? [[row.address, questionOf({
-        msg: byTerm.get(row.address)?.report?.msg, title: agent?.title, name: row.name, program: agent?.program,
+        msg: needsOf(agent, byTerm.get(row.address)?.labels, runs("agents.checks", map)) ?? byTerm.get(row.address)?.report?.msg, title: agent?.title, name: row.name, program: agent?.program,
       })]] : [];
     }));
     const needs = waitingItem(rows, questions);
