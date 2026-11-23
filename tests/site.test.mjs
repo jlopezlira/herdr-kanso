@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { runInNewContext } from "node:vm";
 import { MIN_CONTRAST, SURFACES, THEMES, colour, contrast, loadTokens, pairs, read } from "../scripts/tokens.mjs";
 import { OUT, render, sizeTokens } from "../scripts/build-site-tokens.mjs";
+import { BUILT } from "../scripts/build-site.mjs";
 
 const CSS = ["site/style.css"];
 const PAGES = ["index", "changelog", "credits", "privacy", "terms", "use"].map((p) => `site/${p}.html`);
@@ -105,8 +106,25 @@ test("every variable the site CSS reads is defined", () => {
 });
 
 test("site pages and scripts carry no inline styles", () => {
-  for (const path of PAGES) assert.doesNotMatch(read(path), /<style\b|\sstyle="/, path);
+  for (const path of BUILT) assert.doesNotMatch(read(path), /<style\b|\sstyle="/, path);
   for (const path of SCRIPTS) assert.doesNotMatch(read(path), /\.style\b|style=/, path);
+});
+
+test("Every generated page sets the content security policy and does not link to Google Fonts", () => {
+  const policy = [
+    "default-src 'self'",
+    "connect-src 'self' https://api.github.com",
+    "img-src 'self' data:",
+    "style-src 'self'",
+    "script-src 'self'",
+    "base-uri 'none'",
+    "form-action 'none'",
+  ].join("; ");
+  for (const path of BUILT) {
+    const head = read(path).match(/<head>([\s\S]*?)<\/head>/)?.[1];
+    assert.equal(head?.match(/<meta http-equiv="Content-Security-Policy" content="([^"]+)">/)?.[1], policy, path);
+    assert.doesNotMatch(head, /fonts\.(?:googleapis|gstatic)\.com/, path);
+  }
 });
 
 test("every site page loads the tokens before its stylesheet", () => {
