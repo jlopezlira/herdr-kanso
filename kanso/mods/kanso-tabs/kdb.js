@@ -95,6 +95,8 @@ CREATE TABLE IF NOT EXISTS since_observed(source TEXT PRIMARY KEY, value TEXT NO
 CREATE TABLE IF NOT EXISTS panel_state(project TEXT NOT NULL, panel TEXT NOT NULL, state_json TEXT NOT NULL, updated_at INTEGER NOT NULL, PRIMARY KEY(project, panel));
 CREATE TABLE IF NOT EXISTS machines_off(name TEXT PRIMARY KEY, target TEXT NOT NULL DEFAULT '', via TEXT NOT NULL DEFAULT '', session TEXT NOT NULL DEFAULT '', temporary INTEGER NOT NULL DEFAULT 0);
 CREATE TABLE IF NOT EXISTS computer_alias(route TEXT PRIMARY KEY, name TEXT NOT NULL, at INTEGER NOT NULL, pending INTEGER NOT NULL DEFAULT 0);
+CREATE TABLE IF NOT EXISTS schedule_runs(id INTEGER PRIMARY KEY AUTOINCREMENT, schedule TEXT NOT NULL, at INTEGER NOT NULL, ok INTEGER NOT NULL, why TEXT);
+CREATE INDEX IF NOT EXISTS schedule_runs_schedule ON schedule_runs(schedule, id);
 CREATE TABLE IF NOT EXISTS schedules(id TEXT PRIMARY KEY, project TEXT NOT NULL, agent TEXT NOT NULL, agent_name TEXT, run TEXT NOT NULL, prompt TEXT NOT NULL, when_json TEXT NOT NULL, tree INTEGER NOT NULL DEFAULT 0, base TEXT, paused INTEGER NOT NULL DEFAULT 0, created INTEGER NOT NULL, updated INTEGER NOT NULL);
 INSERT OR IGNORE INTO meta(key,value) VALUES('version','${VERSION}');`;
 // hc once stored the words false and null for a plain ssh machine.
@@ -361,5 +363,6 @@ export class Kdb extends Database {
       ON CONFLICT(id) DO UPDATE SET agent=excluded.agent,agent_name=excluded.agent_name,run=excluded.run,prompt=excluded.prompt,when_json=excluded.when_json,tree=excluded.tree,base=excluded.base,updated=excluded.updated;`);
   }
   pauseSchedule(id, paused, now = Date.now()) { return this.run(`UPDATE schedules SET paused=${paused ? 1 : 0},updated=${n(now)} WHERE id=${q(id)};`); }
-  deleteSchedule(id) { return this.run(`DELETE FROM schedules WHERE id=${q(id)};`); }
+  deleteSchedule(id) { return this.run(`DELETE FROM schedules WHERE id=${q(id)};DELETE FROM schedule_runs WHERE schedule=${q(id)};`); }
+  scheduleRuns() { return this.read("SELECT * FROM schedule_runs WHERE id IN (SELECT MAX(id) FROM schedule_runs GROUP BY schedule) OR id IN (SELECT MAX(id) FROM schedule_runs WHERE ok=1 GROUP BY schedule);"); }
 }

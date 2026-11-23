@@ -1,12 +1,12 @@
-import { spaces, terminals, readTextFile, home } from "herdr";
+import { spaces, terminals, home } from "herdr";
 import { platformOf } from "./platform-host.js";
 import { copiesToViewer } from "./platform-viewer.js";
 import { ADD_WORKTREE } from "./platform-repositories.js";
 import { parseOr } from "./pure.js";
 import { worktreeBase } from "./kdb.js";
 import { keyOfSpace } from "./projects.js";
-import { clockName, waiterPlan, agentLaunch, localId, slugOf, lastOutcome, CLOCK_LABEL } from "./clock-model.js";
-import { armSchedule, stopWaiter, runLog } from "./clock.js";
+import { clockName, waiterPlan, agentLaunch, localId, slugOf, outcomesOf, NO_RUNS, CLOCK_LABEL } from "./clock-model.js";
+import { armSchedule, stopWaiter } from "./clock.js";
 
 export const SCHEDULE_KIND = "schedule";
 export const RUN_FAILURES = "kanso.runs.failed";
@@ -43,27 +43,28 @@ async function argvFor(s, machine) {
   return agentLaunch(platform, copiesToViewer(platform)(s.run), s.prompt);
 }
 
-async function start(name, s, plan, homeDir) {
+async function start(db, name, s, plan, homeDir) {
   const { machine, folder } = placeOfKey(s.project);
   const space = spaceOf(s, spaces(), homeDir);
-  const job = { id: s.id, ...plan, on: machine, folder, space, tree: s.tree, from: s.base, dir: worktreeBase(machine), slug: slugOf(s.prompt), add: ADD_WORKTREE, argv: await argvFor(s, machine) };
+  const job = { id: s.id, db: db.file, ...plan, on: machine, folder, space, tree: s.tree, from: s.base, dir: worktreeBase(machine), slug: slugOf(s.prompt), add: ADD_WORKTREE, argv: await argvFor(s, machine) };
   return armSchedule(name, job, { [SPACE_LABEL]: localId(space), [REV_LABEL]: String(s.updated) });
 }
 
-export async function armFor(s, { now = Date.now(), lastRun = null, homeDir = home() } = {}) {
-  const plan = s.paused ? null : waiterPlan(s.when, { now, since: Math.max(s.updated, lastRun ?? 0) });
-  return plan ? start(scheduleName(s.id), s, plan, homeDir) : null;
+export async function armFor(db, s, { now = Date.now(), lastTry = null, homeDir = home() } = {}) {
+  const plan = s.paused ? null : waiterPlan(s.when, { now, since: Math.max(s.updated, lastTry ?? 0) });
+  return plan ? start(db, scheduleName(s.id), s, plan, homeDir) : null;
 }
 
-export const runNow = (s, { now = Date.now(), homeDir = home() } = {}) => start(nowName(s.id), s, { mode: "at", spec: String(Math.floor(now / 1000)) }, homeDir);
+export const runNow = (db, s, { now = Date.now(), homeDir = home() } = {}) => start(db, nowName(s.id), s, { mode: "at", spec: String(Math.floor(now / 1000)) }, homeDir);
 
-export const outcomeOf = async (id) => lastOutcome(await readTextFile(runLog(id)).catch(() => null));
+export const runOutcomes = async (db) => outcomesOf(await db.scheduleRuns());
+export const outcomeIn = (outcomes, id) => outcomes.get(id) ?? NO_RUNS;
 
 export async function reconcileSchedules(db, homeDir = home()) {
   const list = (await db.schedules()).map(scheduleOf);
-  const outcomes = new Map(await Promise.all(list.map(async (s) => [s.id, await outcomeOf(s.id)])));
+  const outcomes = await runOutcomes(db);
   const { arm, stop } = clockTodo(list, terminals(), spaces(), homeDir);
   for (const name of stop) await stopWaiter(name);
-  for (const s of arm) await armFor(s, { lastRun: outcomes.get(s.id).lastRun, homeDir }).catch(() => null);
-  return list.flatMap((s) => (outcomes.get(s.id).failed ? [{ s, failed: outcomes.get(s.id).failed }] : []));
+  for (const s of arm) await armFor(db, s, { lastTry: outcomeIn(outcomes, s.id).lastTry, homeDir }).catch(() => null);
+  return list.flatMap((s) => (outcomeIn(outcomes, s.id).failed ? [{ s, failed: outcomeIn(outcomes, s.id).failed }] : []));
 }

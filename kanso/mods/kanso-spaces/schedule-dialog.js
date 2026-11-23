@@ -1,11 +1,10 @@
 import { field, labelled, choices } from "./ui-field.js";
 import { tabs } from "./kit.js";
-import { validWhen, whenWords } from "./clock-model.js";
+import { validWhen, whenWords, pad } from "./clock-model.js";
 
 export const KINDS = [{ key: "daily", label: "Time of day" }, { key: "every", label: "Every" }, { key: "once", label: "Once" }];
 export const UNITS = [{ key: "minutes", label: "Minutes" }, { key: "hours", label: "Hours" }];
 export const DAYS = [1, 2, 3, 4, 5, 6, 0].map((d) => ({ key: d, label: ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][d] }));
-const pad = (n) => String(n).padStart(2, "0");
 const stamp = (ms) => { const d = new Date(ms); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`; };
 
 export function draftOf(s, now) {

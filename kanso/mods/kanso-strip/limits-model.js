@@ -6,7 +6,7 @@ export const READ_TRIES = 3;
 export const RETRY_MS = 3000;
 export const UNKNOWN_RESET = "?";
 export const LIMIT_APPS = Object.freeze(["claude-code", "codex"]);
-export const RESUME_GRACE_MS = 60_000;
+export const RESUME_GRACE_MS = 0;
 export const SCREEN_TAIL = 15;
 
 const PROVIDER_OF = Object.freeze({ "claude-code": "claude", codex: "codex" });

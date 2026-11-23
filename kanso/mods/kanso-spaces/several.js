@@ -14,14 +14,18 @@ export async function severalRun(place) {
   return { place, machine, platform, viewed: await viewerFor(machine), space: place.space ?? `sp${newId()}`, tab: `tb${newId()}` };
 }
 
-export async function startInTree(run, agent, { task, from, prompt }) {
+async function startOne(run, agent, { task, from, prompt }) {
   const { place, machine, platform, viewed, space, tab } = run;
-  const made = await addWorktree({ folder: place.folder, machine, branch: treeBranch(task, agent.key), base: worktreeBase(machine), from });
+  const branch = treeBranch(task, agent.key);
+  const launch = agentLaunch(platform, viewed(agent.run), prompt);
+  const made = await addWorktree({ folder: place.folder, machine, branch, base: worktreeBase(machine), from });
   if (made.error) return { agent, error: made.error };
-  const args = [...runArgs({ cwd: made.path, space, on: machine, name: agent.name, tab }), ...agentLaunch(platform, viewed(agent.run), prompt)];
-  const out = await hc(args).catch((e) => ({ code: 1, stderr: String(e?.message ?? e) }));
+  if (!made.made) return { agent, error: `${branch} already has a worktree at ${made.path}. Name the task another way.` };
+  const out = await hc([...runArgs({ cwd: made.path, space, on: machine, name: agent.name, tab }), ...launch]);
   return out.code === 0 ? { agent } : { agent, error: lastLine(out.stderr || out.stdout) };
 }
+
+export const startInTree = (run, agent, ask) => startOne(run, agent, ask).catch((e) => ({ agent, error: lastLine(e?.message ?? e) }));
 
 export const shownTab = (run) => {
   const id = run.machine ? `${run.machine}/${run.tab}` : run.tab;

@@ -2,7 +2,7 @@ import { resumeArgv, isSessionId } from "./resume.js";
 import { limitOf, resumeArmed, resetWords, limitedProviders, limitWords } from "./limits-model.js";
 import { snoozedUntil } from "./agents.js";
 
-const waits = (status) => status === "done" || status === "idle";
+const waits = (status) => status === "done" || status === "idle" || status === "blocked";
 
 export function resumeCommand(app, argv, conversation) {
   if (!isSessionId(conversation)) return [];

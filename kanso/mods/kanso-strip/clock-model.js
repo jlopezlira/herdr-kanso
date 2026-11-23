@@ -3,7 +3,7 @@ import { psQuote } from "./platform-command.js";
 export const CLOCK_LABEL = "kanso.clock";
 export const RUN_LABEL = "kanso.run";
 export const TICK_S = 20;
-export const PLAN_RUNS = 60;
+export const PLAN_RUNS = 7 * 53;
 const NAME_MAX = 32;
 const DAY_MS = 86_400_000;
 const UNIT_MS = Object.freeze({ minutes: 60_000, hours: 3_600_000 });
@@ -18,6 +18,8 @@ export const clockName = (kind, id) => {
 export const localId = (id) => String(id ?? "").split("/").at(-1);
 export const machineOfAddress = (address) => (String(address ?? "").includes("/") ? String(address).split("/")[0] : null);
 const seconds = (ms) => Math.floor(ms / 1000);
+export const pad = (n) => String(n).padStart(2, "0");
+const psWord = (word) => (/[\r\n]/.test(String(word)) ? `(@(${String(word).split(/\r?\n/).map((line) => psQuote(line)).join(", ")}) -join [char]10)` : psQuote(word));
 
 const RESUME_SH = [
   'at=$1; t=$2; tok=$3; cmd=$4',
@@ -38,7 +40,7 @@ const RESUME_SH = [
 ].join("\n");
 
 const resumePs = (at, address, token, cmd) => [
-  `$at = ${Number(at)}; $t = ${psQuote(address)}; $tok = ${psQuote(token)}; $cmd = ${psQuote(cmd ?? "")}`,
+  `$at = ${Number(at)}; $t = ${psWord(address)}; $tok = ${psWord(token)}; $cmd = ${psWord(cmd ?? "")}`,
   "function Clear { hc label $t kanso.limit= kanso.limit.resume= kanso.limit.cmd= | Out-Null; exit 0 }",
   `while ([DateTimeOffset]::UtcNow.ToUnixTimeSeconds() -lt $at) { Start-Sleep -Seconds ${TICK_S} }`,
   "while ($true) { $j = (hc get $t --json 2>$null) | ConvertFrom-Json; if (-not $j -or $j.labels.'kanso.limit.resume' -ne $tok) { exit 0 }; $s = $j.status.state;" +
@@ -47,12 +49,12 @@ const resumePs = (at, address, token, cmd) => [
 ].join("; ");
 
 const waiter = (platform, sh, ps, args) => (platform === "windows"
-  ? ["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", ps]
+  ? ["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", ps()]
   : ["sh", "-c", sh, "kanso-clock", ...args.map(String)]);
 
 export function resumeWaiter({ platform, address, until, token, command = "", grace = 0 }) {
   const at = seconds(until + grace);
-  return waiter(platform, RESUME_SH, resumePs(at, address, token, command), [at, address, token, command]);
+  return waiter(platform, RESUME_SH, () => resumePs(at, address, token, command), [at, address, token, command]);
 }
 
 export function runArgs({ cwd, space, on = null, id = null, name = null, tab = null }) {
@@ -70,23 +72,22 @@ export function runArgs({ cwd, space, on = null, id = null, name = null, tab = n
 }
 
 const SCHEDULE_SH = [
-  'id=$1; log=$2; mode=$3; spec=$4; on=$5; folder=$6; space=$7; tree=$8; from=$9; shift 9; dir=$1; slug=$2; add=$3; shift 3',
+  'id=$1; db=$2; mode=$3; spec=$4; on=$5; folder=$6; space=$7; tree=$8; from=$9; shift 9; dir=$1; slug=$2; add=$3; shift 3',
   'x() { if [ -n "$on" ]; then hc exec --on "$on" -- "$@"; else "$@"; fi; }',
-  'say() { printf \'%s %s\\n\' "$(date +%s)" "$1" >> "$log"; }',
+  'say() { why=$(printf %s "$2" | tr -d "\\r" | tail -n 1 | sed "s/\x27/\x27\x27/g"); sqlite3 -cmd ".timeout 5000" "$db" "INSERT INTO schedule_runs(schedule,at,ok,why) VALUES(\x27$id\x27,$(date +%s)000,$1,\x27$why\x27); DELETE FROM schedule_runs WHERE schedule=\x27$id\x27 AND id NOT IN (SELECT id FROM schedule_runs WHERE schedule=\x27$id\x27 ORDER BY id DESC LIMIT 20);" >/dev/null 2>&1; }',
   'fire() {',
   '  cwd=$folder',
   '  if [ "$tree" = 1 ]; then',
   '    branch="kanso/$slug-$(date +%Y%m%d-%H%M)"',
   '    x git -C "$folder" fetch --quiet origin "$from" >/dev/null 2>&1',
   '    start="origin/$from"; x git -C "$folder" rev-parse --verify --quiet "$start" >/dev/null 2>&1 || start=$from',
-  '    if ! out=$(x sh -c "$add" sh "$folder" "$branch" "$dir" "$start" 2>&1); then say "failed $(printf %s "$out" | tail -n 1)"; return; fi',
+  '    if ! out=$(x sh -c "$add" sh "$folder" "$branch" "$dir" "$start" 2>&1); then say 0 "$out"; return; fi',
   '    cwd=$(printf %s "$out" | tail -n 1 | cut -f2)',
   '  fi',
   '  if [ -n "$on" ]; then out=$(hc run --bg --no-parent --outlive-parent --on "$on" --cwd "$cwd" --label "herdr.space=$space" --label herdr.seen=0 --label "kanso.run=$id" -- "$@" 2>&1)',
   '  else out=$(hc run --bg --no-parent --outlive-parent --cwd "$cwd" --label "herdr.space=$space" --label herdr.seen=0 --label "kanso.run=$id" -- "$@" 2>&1); fi',
-  '  if [ $? -eq 0 ]; then say ran; else say "failed $(printf %s "$out" | tail -n 1)"; fi',
+  '  if [ $? -eq 0 ]; then say 1 ""; else say 0 "$out"; fi',
   '}',
-  'mkdir -p "$(dirname "$log")"',
   'if [ "$mode" = every ]; then',
   '  t=${spec% *}; step=${spec#* }',
   `  while :; do while [ "$(date +%s)" -lt "$t" ]; do sleep ${TICK_S}; done; fire "$@"; now=$(date +%s); while [ "$t" -le "$now" ]; do t=$((t + step)); done; done`,
@@ -100,17 +101,16 @@ const SCHEDULE_SH = [
 ].join("\n");
 
 const schedulePs = (job) => {
-  const q = psQuote;
+  const q = psWord;
   const words = job.argv.map(q).join(", ");
   const on = job.on ? `@('--on', ${q(job.on)})` : "@()";
   return [
-    `$id = ${q(job.id)}; $log = ${q(job.log)}; $mode = ${q(job.mode)}; $spec = ${q(job.spec)}; $folder = ${q(job.folder)}; $space = ${q(localId(job.space))}`,
+    `$id = ${q(job.id)}; $db = ${q(job.db)}; $mode = ${q(job.mode)}; $spec = ${q(job.spec)}; $folder = ${q(job.folder)}; $space = ${q(localId(job.space))}`,
     `$tree = ${job.tree ? 1 : 0}; $from = ${q(job.from ?? "")}; $dir = ${q(job.dir ?? "")}; $slug = ${q(job.slug ?? "run")}; $on = ${on}; $words = @(${words})`,
-    "New-Item -ItemType Directory -Force -Path (Split-Path $log) | Out-Null",
     "function Now { [DateTimeOffset]::UtcNow.ToUnixTimeSeconds() }",
-    "function Say($w) { Add-Content -Path $log -Value \"$(Now) $w\" }",
-    "function Git { if ($on.Count) { hc exec @on -- git @args } else { git @args } }",
-    "function Fire { $cwd = $folder; if ($tree -eq 1) { $stamp = Get-Date -Format 'yyyyMMdd-HHmm'; $branch = \"kanso/$slug-$stamp\"; $cwd = Join-Path $dir \"$slug-$stamp\"; Git -C $folder fetch --quiet origin $from 2>&1 | Out-Null; $start = \"origin/$from\"; Git -C $folder rev-parse --verify --quiet $start 2>&1 | Out-Null; if ($LASTEXITCODE -ne 0) { $start = $from }; $out = Git -C $folder worktree add -b $branch $cwd $start 2>&1; if ($LASTEXITCODE -ne 0) { Say \"failed $(@($out)[-1])\"; return } }; $out = hc run --bg --no-parent --outlive-parent @on --cwd $cwd --label \"herdr.space=$space\" --label herdr.seen=0 --label \"kanso.run=$id\" -- @words 2>&1; if ($LASTEXITCODE -eq 0) { Say 'ran' } else { Say \"failed $(@($out)[-1])\" } }",
+    "function Say($ok, $w) { $why = (@($w | Out-String) -split [char]10 | Where-Object { $_.Trim() })[-1] -replace \"'\", \"''\"; sqlite3 -cmd '.timeout 5000' $db \"INSERT INTO schedule_runs(schedule,at,ok,why) VALUES('$id',$((Now) * 1000),$ok,'$why'); DELETE FROM schedule_runs WHERE schedule='$id' AND id NOT IN (SELECT id FROM schedule_runs WHERE schedule='$id' ORDER BY id DESC LIMIT 20);\" | Out-Null }",
+    "function InRepo { if ($on.Count) { hc exec @on -- git @args } else { & git.exe @args } }",
+    "function Fire { $cwd = $folder; if ($tree -eq 1) { $stamp = Get-Date -Format 'yyyyMMdd-HHmm'; $branch = \"kanso/$slug-$stamp\"; $cwd = Join-Path $dir \"$slug-$stamp\"; InRepo -C $folder fetch --quiet origin $from 2>&1 | Out-Null; $start = \"origin/$from\"; InRepo -C $folder rev-parse --verify --quiet $start 2>&1 | Out-Null; if ($LASTEXITCODE -ne 0) { $start = $from }; $out = InRepo -C $folder worktree add -b $branch $cwd $start 2>&1; if ($LASTEXITCODE -ne 0) { Say 0 $out; return } }; $out = hc run --bg --no-parent --outlive-parent @on --cwd $cwd --label \"herdr.space=$space\" --label herdr.seen=0 --label \"kanso.run=$id\" -- @words 2>&1; if ($LASTEXITCODE -eq 0) { Say 1 '' } else { Say 0 $out } }",
     "function Until($t) { while ((Now) -lt $t) { Start-Sleep -Seconds " + TICK_S + " } }",
     "if ($mode -eq 'every') { $p = $spec -split ' '; $t = [long]$p[0]; $step = [long]$p[1]; while ($true) { Until $t; Fire; $n = Now; while ($t -le $n) { $t += $step } } }",
     "$last = 0; foreach ($t in ($spec -split ' ' | ForEach-Object { [long]$_ })) { if ($t -le $last) { continue }; Until $t; Fire; $last = Now }",
@@ -118,7 +118,7 @@ const schedulePs = (job) => {
 };
 
 export function scheduleWaiter(job) {
-  const args = [job.id, job.log, job.mode, job.spec, job.on ?? "", job.folder, localId(job.space), job.tree ? 1 : 0, job.from ?? "", job.dir ?? "", job.slug ?? "run", job.add ?? "", ...job.argv];
+  const args = [job.id, job.db, job.mode, job.spec, job.on ?? "", job.folder, localId(job.space), job.tree ? 1 : 0, job.from ?? "", job.dir ?? "", job.slug ?? "run", job.add ?? "", ...job.argv];
   return waiter(job.platform, SCHEDULE_SH, schedulePs(job), args);
 }
 
@@ -136,14 +136,13 @@ const LAUNCH = [
   'esac',
 ].join("\n");
 
-const psLine = (words) => `& ${words.map(psQuote).join(" ")}`;
+const psLine = (words) => `& ${words.map(psWord).join(" ")}`;
 
 export function agentLaunch(platform, argv, prompt = "") {
   const words = [...argv, ...(String(prompt).trim() ? [String(prompt).trim()] : [])].map(String);
   return platform === "windows" ? ["powershell.exe", "-NoLogo", "-NoExit", "-Command", psLine(words)] : ["sh", "-c", LAUNCH, "sh", ...words];
 }
 
-const pad = (n) => String(n).padStart(2, "0");
 const dayAt = (ms, i) => { const d = new Date(ms); return new Date(d.getFullYear(), d.getMonth(), d.getDate() + i).getTime(); };
 const atClock = (dayMs, time) => {
   const [h, m] = String(time).split(":").map(Number);
@@ -202,16 +201,16 @@ export function waiterPlan(when, { now, since }) {
   return times.length ? { mode: "at", spec: times.map(seconds).join(" ") } : null;
 }
 
-export function parseRunLog(text) {
-  return String(text ?? "").split(/\r?\n/).map((line) => line.match(/^(\d+) (ran|failed)(?: (.*))?$/)).filter(Boolean)
-    .map(([, at, what, why]) => ({ at: Number(at) * 1000, ok: what === "ran", why: why?.trim() || null }));
+export function outcomesOf(rows) {
+  const by = Map.groupBy((rows ?? []).map((r) => ({ schedule: r.schedule, id: Number(r.id), at: Number(r.at), ok: Boolean(Number(r.ok)), why: r.why || null })), (r) => r.schedule);
+  return new Map([...by].map(([schedule, list]) => {
+    const sorted = list.toSorted((a, b) => a.id - b.id);
+    const last = sorted.at(-1);
+    return [schedule, { lastRun: sorted.filter((r) => r.ok).at(-1)?.at ?? null, lastTry: last.at, failed: last.ok ? null : { at: last.at, why: last.why } }];
+  }));
 }
 
-export function lastOutcome(text) {
-  const rows = parseRunLog(text);
-  const last = rows.at(-1) ?? null;
-  return { lastRun: rows.filter((r) => r.ok).at(-1)?.at ?? null, failed: last && !last.ok ? last : null };
-}
+export const NO_RUNS = Object.freeze({ lastRun: null, lastTry: null, failed: null });
 
 export const slugOf = (text, fallback = "run") => String(text ?? "").toLowerCase().normalize("NFKD").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 24).replace(/-+$/, "") || fallback;
 

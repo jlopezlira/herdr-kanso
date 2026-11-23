@@ -66,9 +66,7 @@ export function field(id, text, c, { label = null, icon = null, onIcon = null, i
   return label && !inline ? labelled(label, ring, c) : ring;
 }
 
-/** A label over what it names: a field, or a row of choices. */
 export const labelled = (label, child, c) => v_flex().gap(G.sm).child(div().text_size(T.value).font_medium().text_color(c.muted).child(label)).child(child);
 
-/** Choices as a row of small buttons; `on(key)` holds the chosen ones down. */
 export const choices = (id, items, on, onPick, c) => h_flex().id(id).flex_wrap().gap(G.xs)
   .children(items.map(({ key, label }) => button(`${id}-${key}`, label, (cx) => onPick(key, cx), c, { kind: "tonal", small: true, held: on(key) })));

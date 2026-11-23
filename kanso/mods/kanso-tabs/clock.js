@@ -1,14 +1,11 @@
-import { hc, appHome } from "herdr";
+import { hc } from "herdr";
 import { localName } from "./platform-host.js";
-import { paths } from "./platform-paths.js";
 import { shellQuote, psQuote } from "./platform-command.js";
 import { clockName, resumeWaiter, waiterArgs, scheduleWaiter, CLOCK_LABEL } from "./clock-model.js";
 import { limitOf, resumeArmed, commandOf, RESUME_GRACE_MS } from "./limits-model.js";
 
-export const CLOCK_DIR = "data/kanso-clock";
 export const RESUME_KIND = "resume";
 export const RESUME_TYPED = "resume-typed";
-export const runLog = (id) => paths.join(appHome(), CLOCK_DIR, `${id}.log`);
 const quiet = (p) => Promise.resolve(p).catch(() => null);
 
 export async function stopWaiter(name) {
@@ -52,5 +49,5 @@ export async function reconcileResumes(terms) {
 }
 
 export function armSchedule(name, job, labels = {}) {
-  return startWaiter(name, "schedule", scheduleWaiter({ ...job, platform: localName(), log: runLog(job.id) }), labels);
+  return startWaiter(name, "schedule", scheduleWaiter({ ...job, platform: localName() }), labels);
 }

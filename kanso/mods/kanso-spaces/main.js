@@ -59,7 +59,7 @@ import { withNeeds } from "./needs.js";
 import { withLimits, limitOf, resumeArmed, commandOf, resetWords, AT_RESET_LABEL, COMMAND_LABEL } from "./limits-model.js";
 import { armResume, disarmResume, stopWaiter } from "./clock.js";
 import { nextRun } from "./clock-model.js";
-import { scheduleOf, armFor, runNow, outcomeOf, scheduleName, RUN_FAILURES } from "./schedules.js";
+import { scheduleOf, armFor, runNow, runOutcomes, outcomeIn, scheduleName, RUN_FAILURES } from "./schedules.js";
 import { draftOf, checkDraft, scheduleBody, scheduleWords } from "./schedule-dialog.js";
 import { severalRun, startInTree, shownTab } from "./several.js";
 import { LimitWatch } from "./limits.js";
@@ -1959,7 +1959,7 @@ export default class Spaces extends RetryingView {
       try {
         await this.db().saveSchedule(s, now);
         const row = (await this.db().schedules()).find((r) => r.id === s.id);
-        await armFor(scheduleOf(row));
+        await armFor(this.db(), scheduleOf(row));
         closeOverlay(props().overlay);
       } catch (e) {
         this.schedError = String(e?.message ?? e);
@@ -1970,8 +1970,8 @@ export default class Spaces extends RetryingView {
   loadSchedules(place, cx) {
     const key = placeKey(place.machine, place.folder || home());
     this.db().schedules().then(async (rows) => {
-      const mine = rows.map(scheduleOf).filter((s) => s.project === key);
-      this.schedules = await Promise.all(mine.map(async (s) => ({ ...s, ...(await outcomeOf(s.id)) })));
+      const outcomes = await runOutcomes(this.db());
+      this.schedules = rows.map(scheduleOf).filter((s) => s.project === key).map((s) => ({ ...s, ...outcomeIn(outcomes, s.id) }));
       this.redraw(cx);
     }).catch(() => {});
   }
@@ -1987,7 +1987,7 @@ export default class Spaces extends RetryingView {
     await this.db().pauseSchedule(s.id, paused);
     if (paused) return stopWaiter(scheduleName(s.id));
     const row = (await this.db().schedules()).find((r) => r.id === s.id);
-    return row ? armFor(scheduleOf(row)) : null;
+    return row ? armFor(this.db(), scheduleOf(row)) : null;
   }
 
   async deleteSchedule(s) {
@@ -1997,7 +1997,7 @@ export default class Spaces extends RetryingView {
 
   retryRun(s) {
     this.retried = { ...(this.retried ?? {}), [s.id]: Date.now() };
-    return runNow(s);
+    return runNow(this.db(), s);
   }
 
   scheduleLines(item, s, place) {
@@ -2005,7 +2005,7 @@ export default class Spaces extends RetryingView {
     return [
       ...(s.failed ? [{ failure: { text: "The last run did not start", source: s.failed.why ?? "-", fix: "Retry", agent: "", onClick: () => this.thenClose(this.retryRun(s)) } }] : []),
       ...this.actions(item, [
-        { act: "run-now", does: () => this.thenClose(runNow(s)) },
+        { act: "run-now", does: () => this.thenClose(runNow(this.db(), s)) },
         s.paused ? { act: "resume-schedule", does: () => this.thenClose(this.pauseSchedule(s, false)) } : { act: "pause-schedule", does: () => this.thenClose(this.pauseSchedule(s, true)) },
         { act: "edit-schedule", does: () => { closeOverlay(props().overlay); this.scheduleDialog(place, s.id); } },
         { act: "delete-schedule", does: (cx) => this.armed.press(key, cx, () => this.thenClose(this.deleteSchedule(s))), keep: true, verb: "delete it", armed: this.armed.is(key) },
