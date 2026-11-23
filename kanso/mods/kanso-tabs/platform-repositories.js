@@ -140,7 +140,7 @@ export function repositoryApi(platform, run) {
     if (platform !== "windows") return shell(PROBE, [folder, String(idle), ...refs]);
     if (!await files.test(folder, "directory")) return { code: 0, stdout: "gone" };
     if (await files.test(paths.join(folder, ".git"), "directory")) return { code: 0, stdout: "replaced" };
-    const status = await git(folder, ["--no-optional-locks", "status", "--porcelain=v1", "--untracked-files=normal"]);
+    const status = await git(folder, [...GIT_READ, "--no-optional-locks", "status", "--porcelain=v1", "--untracked-files=normal"]);
     if (status.code !== 0) return { code: 0, stdout: "broken" };
     const since = Date.now() - Number(idle) * 60000;
     const gitDir = Number(idle) > 0 ? checked(await git(folder, ["rev-parse", "--absolute-git-dir"])).stdout.trim() : null;

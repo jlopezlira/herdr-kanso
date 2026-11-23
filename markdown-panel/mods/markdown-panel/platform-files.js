@@ -1,4 +1,4 @@
-import { checked, jsonRows, powershell, psQuote, windowsArg } from "./platform-command.js";
+import { checked, jsonRows, powershell, psQuote, windowsArg, GIT_READ } from "./platform-command.js";
 
 // 2097150 is a multiple of 3, so only the last read slice's base64 is padded. A write uses WRITE_RAW.
 export const CHUNK = 2097150;
@@ -149,7 +149,7 @@ const unixTree = (platform) => {
     "done",
     "top=$(git -C \"$root\" rev-parse --show-toplevel 2>/dev/null) || top=",
     "printf '\\003%s\\000' \"$top\"",
-    "if [ -n \"$top\" ]; then git -C \"$root\" status --porcelain=v1 -z --no-renames --untracked-files=normal 2>/dev/null | tr '\\000' '\\n'; printf '\\000'; fi",
+    `if [ -n "$top" ]; then git ${GIT_READ.join(" ")} -C "$root" status --porcelain=v1 -z --no-renames --untracked-files=normal 2>/dev/null | tr '\\000' '\\n'; printf '\\000'; fi`,
     "printf '\\004\\000'",
   ].join("\n");
 };
@@ -175,7 +175,7 @@ $top = ''
 if ($top) {
   $psi = New-Object System.Diagnostics.ProcessStartInfo
   $psi.FileName = 'git'
-  $psi.Arguments = '-C ' + ${windowsArg(root)} + ' status --porcelain=v1 -z --no-renames --untracked-files=normal'
+  $psi.Arguments = '${GIT_READ.join(" ")} -C ' + ${windowsArg(root)} + ' status --porcelain=v1 -z --no-renames --untracked-files=normal'
   $psi.RedirectStandardOutput = $true
   $psi.RedirectStandardError = $false
   $psi.UseShellExecute = $false
@@ -191,6 +191,8 @@ if ($top) {
 export function fileApi(platform, run) {
   const ps = (script, options) => powershell(run, "$ErrorActionPreference='Stop'; " + script, options);
   const mkdir = (path, options) => platform === "windows" ? ps(`[IO.Directory]::CreateDirectory(${psQuote(path)}) | Out-Null`, options) : run("mkdir", ["-p", path], options);
+  const ownOnly = (dir, file, options) => platform === "windows" ? mkdir(dir, options)
+    : run("sh", ["-c", 'umask 077 && mkdir -p "$1" && chmod 700 "$1" && touch "$2" && for f in "$2" "$2-wal" "$2-shm" "$2-journal"; do if [ -e "$f" ]; then chmod 600 "$f" || exit 1; fi; done', "sh", dir, file], options);
   const remove = (paths, { recursive = false, ...options } = {}) => platform === "windows"
     ? ps(`foreach ($path in @(${paths.map(psQuote).join(",")})) { if (Test-Path -LiteralPath $path) { Remove-Item -LiteralPath $path -Force${recursive ? " -Recurse" : ""} } }`, options)
     : run("rm", [recursive ? "-rf" : "-f", ...paths], options);
@@ -321,5 +323,5 @@ test -d "$1"`;
   const migrate = (from, to) => platform === "windows"
     ? ps(`$from=${psQuote(from)}; $to=${psQuote(to)}; if (-not (Test-Path -LiteralPath (Join-Path $to 'store.json')) -and (Test-Path -LiteralPath $from -PathType Container)) { [IO.Directory]::CreateDirectory($to) | Out-Null; Get-ChildItem -LiteralPath $from -Force | Copy-Item -Destination $to -Recurse -Force; Get-ChildItem -LiteralPath $to -Filter '*.lock' -Force | Remove-Item -Force -Recurse }`)
     : run("sh", ["-c", 'if [ ! -e "$2/store.json" ] && [ -d "$1" ]; then mkdir -p "$2" && cp -R "$1/." "$2/" && rm -rf "$2"/*.lock; fi', "sh", from, to]);
-  return { recent, migrate, mkdir, remove, copy, move, test, directory, existing, legacyStatus, drain, read, walk, size, touch, stat, encode, tree, decodeBase64File, write };
+  return { recent, migrate, mkdir, ownOnly, remove, copy, move, test, directory, existing, legacyStatus, drain, read, walk, size, touch, stat, encode, tree, decodeBase64File, write };
 }

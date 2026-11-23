@@ -5,6 +5,7 @@
 // The mod's copies (header, edge, ruler, drop card) talk to the controller through shared "strip.req", "strip.intent", "strip.drag" and "strip.drop".
 
 import { View, div, svg } from "gpui-kit";
+import { GIT_READ } from "./platform-command.js";
 import { h_flex, v_flex, HoverCard, Popover } from "gpui-base";
 import { spaces, panes, agents, terminals, machines, focused, layout, run, hc, shared, setShared, theme, nextCommand, props, openOverlay, home, exec, notify, window } from "herdr";
 import { programIcon, givenNames, nameOf, NAME_LABEL } from "./marks.js";
@@ -166,7 +167,7 @@ export async function readDigest(cwd, run, want = {}) {
   const git = (...args) => run("git", ["-C", cwd, ...args]).then(stdout);
   if ((await git("rev-parse", "--is-inside-work-tree"))?.trim() !== "true") return null;
   const [status, stat, upstream, branch] = await Promise.all([
-    git("status", "--porcelain"), git("diff", "--shortstat", "HEAD"),
+    git(...GIT_READ, "status", "--porcelain"), git("diff", "--shortstat", "HEAD"),
     git("rev-list", "--count", "@{upstream}..HEAD"), git("symbolic-ref", "--quiet", "--short", "HEAD")]);
   const files = (status ?? "").split("\n").filter((l) => l.trim()).length;
   const pushed = upstream != null;

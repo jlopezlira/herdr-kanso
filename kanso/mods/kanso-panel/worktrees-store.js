@@ -93,7 +93,7 @@ export class WorktreeStore {
   async open() {
     const ok = await tryOrAsync(() => exec("sqlite3", ["-version"]));
     if (ok?.code !== 0) throw new Error("Install sqlite3 to keep the history of your worktrees.");
-    await localService(fileApi).mkdir(this.dir);
+    await localService(fileApi).ownOnly(this.dir, this.db);
     await this.sql(SCHEMA);
   }
 
