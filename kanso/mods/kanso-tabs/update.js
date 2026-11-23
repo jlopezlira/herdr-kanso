@@ -180,7 +180,7 @@ have=$(version "$home/mods/kanso-chrome/version.json")
 # must still be the one in place: one a dead install half swapped would leave the release's keys out.
 [ -z "$base" ] || [ "$(cat "$home/keys.json" 2>/dev/null)" = "$(printf '%s' "$base")" ] || { echo "your keys.json changed while the update was prepared; try again" >&2; exit 1; }
 mkdir -p "$stage/src"
-curl -fsSL --max-time 120 -o "$stage/release.tar.gz" "$url" || { echo "the download failed" >&2; exit 1; }
+curl -fsSL --proto '=https' --proto-redir '=https' --max-time 120 -o "$stage/release.tar.gz" "$url" || { echo "the download failed" >&2; exit 1; }
 tar -xzf "$stage/release.tar.gz" -C "$stage/src" --strip-components=1 || { echo "the download could not be opened" >&2; exit 1; }
 rm -f "$stage/release.tar.gz"
 src="$stage/src/kanso"

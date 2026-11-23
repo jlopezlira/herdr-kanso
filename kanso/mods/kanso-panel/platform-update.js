@@ -445,7 +445,7 @@ const INSTALL_MAIN = [
   "  $srcDir = Join-Path $stage 'src'",
   "  New-Dir $srcDir",
   "  $tarball = Join-Path $stage 'release.tar.gz'",
-  "  & curl.exe @('-fsSL', '--max-time', '120', '-o', $tarball, $url)",
+  "  & curl.exe @('-fsSL', '--proto', '=https', '--proto-redir', '=https', '--max-time', '120', '-o', $tarball, $url)",
   "  if ($LASTEXITCODE -ne 0) { Die 1 'the download failed' }",
   "  & tar.exe @('-xzf', $tarball, '-C', $srcDir, '--strip-components=1')",
   "  if ($LASTEXITCODE -ne 0) { Die 1 'the download could not be opened' }",
@@ -656,7 +656,7 @@ function posixHost(platform, run, scripts) {
     },
     recover(home, dir) { return run("sh", ["-c", RECOVER, "sh", home, dir]); },
     alive(pidFile) { return run("sh", ["-c", 'kill -0 "$(cat "$1")" 2>/dev/null', "sh", pidFile]); },
-    fetch(url) { return run("curl", ["-fsSL", "--max-time", "15", url]); },
+    fetch(url) { return run("curl", ["-fsSL", "--proto", "=https", "--proto-redir", "=https", "--max-time", "15", url]); },
     claim(from, to) { return run("mv", [from, to]); },
     clear(files) { return run("rm", ["-f", ...files]); },
     pause(seconds) { return sleepFor(platform, run, seconds); },
@@ -683,7 +683,7 @@ function windowsHost(run, writeTextFile) {
       const q = psQuote(pidFile);
       return powershell(run, `$raw=''; if (Test-Path -LiteralPath ${q}) { $raw = [IO.File]::ReadAllText(${q}) }; $n=0; if (-not [int]::TryParse($raw.Trim(), [ref]$n) -or $n -le 0) { exit 1 }; try { $p = Get-Process -Id $n -ErrorAction SilentlyContinue } catch { exit 1 }; if ($p) { exit 0 }; exit 1`);
     },
-    fetch(url) { return run("curl.exe", ["-fsSL", "--max-time", "15", url]); },
+    fetch(url) { return run("curl.exe", ["-fsSL", "--proto", "=https", "--proto-redir", "=https", "--max-time", "15", url]); },
     claim(from, to) { return powershell(run, `Move-Item -LiteralPath ${psQuote(from)} -Destination ${psQuote(to)} -Force`); },
     clear(files) {
       return powershell(run, files.map((file) => `Remove-Item -LiteralPath ${psQuote(file)} -Force -ErrorAction SilentlyContinue`).join("; "));
