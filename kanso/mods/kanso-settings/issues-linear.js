@@ -32,20 +32,20 @@ export function linearClient(secrets) {
     const out = parseOr(r.text, null);
     return r.status === 200 && out?.data && !out.errors?.length ? { data: out.data, failure: null } : { data: null, failure: failureOf(r, out) };
   };
-  const paged = (query, variables, pick, pages) => pagesOf(async (after) => {
+  const paged = (query, variables, pick, pages, start = null) => pagesOf(async (after) => {
     const { data, failure } = await ask(query, { ...variables, after });
     if (failure) return { failure };
     const page = pick(data);
     return { items: page?.nodes ?? [], next: page?.pageInfo?.hasNextPage ? page.pageInfo.endCursor : null };
-  }, pages);
+  }, pages, start);
   return {
     me: async () => {
       const { data, failure } = await ask(ME);
       return failure ? { failure } : { name: data.viewer?.name ?? data.viewer?.email ?? "", email: data.viewer?.email ?? null, id: data.viewer?.id ?? null };
     },
-    projects: async () => {
-      const read = await paged(TEAMS, {}, (data) => data.teams, PICKER_PAGES);
-      return { failure: read.failure, complete: read.complete, list: read.items.map((t) => ({ ref: t.id, name: `${t.key} · ${t.name}` })) };
+    projects: async (start = null) => {
+      const read = await paged(TEAMS, {}, (data) => data.teams, PICKER_PAGES, start);
+      return { failure: read.failure, complete: read.complete, next: read.next, list: read.items.map((t) => ({ ref: t.id, name: `${t.key} · ${t.name}` })) };
     },
     states: async (team) => (await ask(STATES, { team })).data?.team?.states?.nodes ?? [],
     issues: (team, filter) => paged(ISSUES, { filter: issueFilter(team, filter) }, (data) => data.issues),
