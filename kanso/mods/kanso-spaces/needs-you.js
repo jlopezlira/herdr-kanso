@@ -29,7 +29,7 @@ export function waitingSignature(list, terms, excluded, nameLabel) {
 }
 
 export function sameQueue(a, b) {
-  if (!b || a.state !== b.state || a.rows.length !== b.rows.length) return false;
+  if (!b || a.state !== b.state || a.rows.length !== b.rows.length || String(a.unreachable ?? "") !== String(b.unreachable ?? "")) return false;
   return a.rows.every((row, i) => Object.keys(row).every((key) => row[key] === b.rows[i][key]));
 }
 
@@ -55,9 +55,11 @@ export function nextWaiting(rows, cursor = null) {
 
 export function queueState(rows, machines) {
   if (machines.some((m) => m.layout === "loading")) return { rows, state: "loading" };
-  if (machines.some((m) => m.layout === "unavailable")) return { rows, state: "unavailable" };
+  const unreachable = machines.filter((m) => m.layout === "unavailable").map((m) => m.name);
+  if (unreachable.length) return { rows, state: "unavailable", unreachable };
   return { rows, state: "ready" };
 }
 
 export const waitingReason = () => "Waiting for you";
-export const queueMessage = (state) => state === "unavailable" ? "Queue unavailable" : "Nobody is waiting";
+export const cantReach = (names) => `Can't reach ${names.join(", ")}`;
+export const queueMessage = (queue, title = (name) => name) => queue.state === "unavailable" ? cantReach((queue.unreachable ?? []).map(title)) : "Nobody is waiting";

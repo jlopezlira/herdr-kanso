@@ -798,7 +798,7 @@ export default class Spaces extends RetryingView {
   refreshNeeds(sp = spaces(), terms = terminals(), asleep = this.sleepingNow(sp, terms)) {
     const list = withNeeds(agents(), terms, checksOn()), layouts = machines();
     const signature = waitingSignature(list, terms, asleep.dozing, NAME_LABEL);
-    const layoutSignature = layouts.map((m) => m.layout).join(",");
+    const layoutSignature = layouts.map((m) => `${m.name}:${m.layout}`).join(",");
     const changed = signature !== this.needsSignature || this.threadsShown !== this.needsThreads;
     if (!changed && layoutSignature === this.needsLayoutSignature) return this.needsQueue;
     this.needsSignature = signature;
@@ -891,11 +891,15 @@ export default class Spaces extends RetryingView {
     this.redraw(cx);
   }
 
+  computerActs() {
+    return { title: (name) => this.names.title(name), retry: (name, cx) => this.retryMachine(name, cx) };
+  }
+
   needsList(t, queue, now) {
     return queueList(t, queue, (row) => {
       const go = (cx) => this.jumpNeeds(row, cx);
       return { go, selected: this.navMark(`agent:${row.address}`, go) };
-    }, (row) => duration(Math.max(0, now - row.at)), this.needsScroll);
+    }, (row) => duration(Math.max(0, now - row.at)), this.needsScroll, this.computerActs());
   }
 
   // Rows add themselves as they draw (navMark), in screen order; Esc goes back to the pane you came from.
@@ -3018,7 +3022,7 @@ export default class Spaces extends RetryingView {
     const needsOn = shown("sidebar.needs", true, map);
     const needsListOpen = this.needsOpen && needsOn && (queue.rows.length > 0 || queue.state !== "ready");
     const rows = stack({ variant: "sidebar rows" },
-      shown("sidebar.needs", queue.rows.length > 0 || this.needsEmpty, map) ? queueControl(t, queue, collapsed, this.needsEmpty && !queue.rows.length, (cx) => this.toggleNeeds(cx)) : null,
+      shown("sidebar.needs", queue.rows.length > 0 || this.needsEmpty, map) ? queueControl(t, queue, collapsed, this.needsEmpty && !queue.rows.length, (cx) => this.toggleNeeds(cx), this.computerActs().title) : null,
       needsListOpen ? [this.needsList(t, queue, read.now)] : [this.list(t, collapsed, view,
         lens?.none ? [item(emptyState({ icon: "search", text: `No match for \u201c${words}\u201d` })("spaces-find-empty", tokens(t)), H.line * 3)]
           : view === "agents" ? (collapsed ? this.agentsRail(t, shownSp, shownCtx) : this.agentsView(t, shownSp, ps, shownCtx))
