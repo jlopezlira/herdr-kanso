@@ -9,7 +9,7 @@ import { transcriptApi } from "../kanso/mods/kanso-panel/platform-transcripts.js
 import { processApi } from "../kanso/mods/kanso-panel/platform-processes.js";
 import { portApi } from "../kanso/mods/kanso-panel/platform-ports.js";
 import { repositoryApi } from "../kanso/mods/kanso-panel/platform-repositories.js";
-import { exec, nativePlatform, temporary, load } from "./helpers.mjs";
+import { committedRepo, exec, gitOk, nativePlatform, temporary, load } from "./helpers.mjs";
 
 test("native filesystem services preserve Unicode names, literal quotes and recursion boundaries", async (t) => {
   const root = await temporary(t), files = fileApi(nativePlatform, exec);
@@ -105,6 +105,22 @@ test("native repository service creates, discovers and probes a worktree without
   assert.match((await api.probe(path, 60, ["main"])).stdout, /^recent$/m);
   assert.match((await api.probe(path, 0, ["main"])).stdout, /^merged$/m);
   assert.match((await api.bases(folder)).stdout, /^main$/m);
+});
+
+test("On macOS and Linux, checking a linked worktree asks Git to disable its filesystem monitor.", { skip: nativePlatform === "windows" }, async (t) => {
+  const { dir, repo } = await committedRepo(t);
+  const worktree = join(dir, "linked");
+  await gitOk()(repo, "worktree", "add", "--detach", worktree);
+  await writeFile(join(worktree, "readme"), "changed\n");
+  const trace = join(dir, "git-trace.jsonl");
+  const run = (command, args) => exec(command, args, { env: { ...process.env, GIT_TRACE2_EVENT: trace } });
+  const result = await repositoryApi(nativePlatform, run).probe(worktree, 0, []);
+  assert.equal(result.code, 0, result.stderr);
+  assert.match(result.stdout, /^dirty\t1$/m);
+  const events = (await readFile(trace, "utf8")).trim().split("\n").map((line) => JSON.parse(line));
+  const status = events.find(({ event, argv }) => event === "start" && argv.includes("status"));
+  assert.ok(status, "Git ran status in the worktree");
+  assert.deepEqual(status.argv.slice(1, 3), ["-c", "core.fsmonitor=false"]);
 });
 
 test("a file copied in slices matches its bytes, including an empty file and one slice", async (t) => {
