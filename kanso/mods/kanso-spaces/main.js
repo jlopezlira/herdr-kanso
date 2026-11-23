@@ -3036,8 +3036,8 @@ export default class Spaces extends RetryingView {
   list(t, collapsed, view, items) {
     const gap = view === "threads" ? SIDEBAR.threadGap : SIDEBAR.gap;
     const { els, space, agent } = laidOut(items, gap);
-    const projects = !collapsed && view === "spaces";
-    const active = spaces().find((s) => s.active)?.id ?? null;
+    const projects = !collapsed && view === "spaces" && Boolean(this.listScroll);
+    const active = projects ? spaces().find((s) => s.active)?.id ?? null : this.revealed;
     if (projects && active !== this.revealed) {
       this.revealed = active;
       const row = items.findLastIndex((it) => it.mark?.kind === "space");
