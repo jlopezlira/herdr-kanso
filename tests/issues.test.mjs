@@ -130,7 +130,7 @@ test("A detail read keeps the comments and the linked pull requests", async () =
 
 test("The origin remote is the repository", async () => {
   const { repoOf } = await load("kanso-panel/issues-github.js", ["repoOf"]);
-  const repo = await repoOf(async (_cmd, args) => ({ code: 0, stdout: args?.includes("-v") ? "origin\tgit@github.com:acme/shop.git (fetch)\n" : "", stderr: "" }), "/work/shop");
+  const { repo } = await repoOf(async (_cmd, args) => ({ code: 0, stdout: args?.includes("-v") ? "origin\tgit@github.com:acme/shop.git (fetch)\n" : "", stderr: "" }), "/work/shop");
   assert.equal(repo.owner, "acme");
   assert.equal(repo.name, "shop");
   assert.equal(repo.host, "github.com");
@@ -207,7 +207,7 @@ const draw = (view) => {
 const shop = { id: "shop", name: "Shop", folder: "/work/shop", machine: null };
 const acme = { id: "acme", name: "Acme", folder: "/work/acme", machine: null };
 
-const NO_PROJECTS = "Add a project to see its issues";
+const NO_PROJECTS = "Add a project to see its tasks";
 const startIssues = async (db, host = {}) => {
   const { Issues, DIALOG } = await load("kanso-panel/issues.js", ["Issues", "DIALOG"], {
     ...viewHost,

@@ -11,22 +11,25 @@ import { stateBlock } from "./ui-state.js";
 import { emptyState, skeletonOf } from "./kit.js";
 import { scrollPage, pageHeader, refreshTool } from "./ui-page.js";
 import { openApi } from "./platform-open.js";
+import { CLI_URL } from "./pr-verdict.js";
 import { localService } from "./platform-host.js";
 import { localSecrets } from "./platform-secrets.js";
 import { projectKey } from "./kdb.js";
 import { tryOrAsync, plural } from "./pure.js";
-import { FILTERS, FILTER_WORDS, EVERY_MS, OPEN, ACCOUNTS, SOURCE_WORDS, matches, sectionsOf, isFolded, foldKey, projectsInOrder, stale, ageOf, sendText, listOf, kindOf, linkWords } from "./issues-model.js";
+import { FILTERS, FILTER_WORDS, EVERY_MS, OPEN, ACCOUNTS, SOURCE_WORDS, matches, withSpaces, sectionsOf, isFolded, foldKey, projectsInOrder, stale, ageOf, sendText, listOf, kindOf, linkWords } from "./issues-model.js";
 import { readIssues, linkSql } from "./issues-store.js";
 import { issuesGithub, repoText } from "./issues-github.js";
 import { LINKED, linkedOf, syncLinkedBoard, syncLinkedDetail } from "./issues-linked.js";
 
 const PROJECTS = "SELECT id, name, folder, machine FROM projects WHERE removed IS NULL;";
 const REGISTRY = "kanso.registry";
-const registered = () => { const rows = shared(REGISTRY); return Array.isArray(rows) ? rows.map((p) => p.id).join() : ""; };
+const registered = () => { const rows = shared(REGISTRY); return [...(Array.isArray(rows) ? rows.map((p) => p.id) : []), ...spaces().map((s) => projectKey(s, home()))].join(); };
 const SIGNED_OUT = { kind: "signed out", text: "Sign in to GitHub to see your issues" };
 const NO_REMOTE = { kind: "no remote", text: "No GitHub remote" };
+const NO_CLI = { kind: "no cli", text: "GitHub CLI not installed" };
+const GIT_FAILED = (detail) => ({ kind: "offline", text: "Git could not read this project", source: detail });
 const UNREACHED = (detail) => ({ kind: "offline", text: "GitHub can't be reached", source: detail ?? "" });
-const SIGNED_OUT_STATES = new Set(["logged_out", "no_cli"]);
+const SIGNED_OUT_STATES = new Set(["logged_out"]);
 const NO_STORE = { kind: "no store", text: "This computer has no secret store, so Jira and Linear can't sign in here. GitHub keeps working." };
 
 const runOn = (machine) => (cmd, args) => exec(cmd, args, { on: machine || null }).catch((e) => ({ code: -1, stdout: "", stderr: String(e?.message ?? e) }));
@@ -81,7 +84,7 @@ export class Issues {
 
   load(cx, refresh = false) {
     cx.spawn(async (cx) => {
-      this.projects = (await tryOrAsync(() => this.db.read(PROJECTS))) ?? this.projects ?? [];
+      this.projects = withSpaces((await tryOrAsync(() => this.db.read(PROJECTS))) ?? this.projects ?? [], spaces(), home());
       await this.reload();
       cx.notify();
       if (refresh) this.refresh(cx);
@@ -140,8 +143,10 @@ export class Issues {
   async readGithub(project, filter, now) {
     const run = runOn(project.machine);
     const session = await this.loginOn(project.machine);
-    const repo = await issuesGithub.repoOf(run, project.folder, session?.hosts?.length ? session.hosts : ["github.com"]);
+    const { repo, failed } = await issuesGithub.repoOf(run, project.folder, session?.hosts?.length ? session.hosts : ["github.com"]);
+    if (failed) { this.place(project.id, "github", GIT_FAILED(failed)); return; }
     if (!repo) { this.place(project.id, "github", NO_REMOTE); return; }
+    if (session?.status === "no_cli") { this.place(project.id, "github", NO_CLI); return; }
     if (session?.status !== "ok") { this.place(project.id, "github", SIGNED_OUT_STATES.has(session?.status) ? SIGNED_OUT : UNREACHED(session?.detail)); return; }
     this.place(project.id, "github", { repo });
     await issuesGithub.syncBoard(this.db, run, { repo, project: project.id, filter, login: session.login, kept: this.rows, now });
@@ -211,17 +216,28 @@ export class Issues {
   }
 
   signIn(project) {
-    run("terminal.open", { argv: ["gh", "auth", "login"], folder: project.folder, place: "right" });
+    const argv = ["gh", "auth", "login"], place = `${project.machine ?? ""}:${project.folder}`;
+    const open = spaces().filter((s) => projectKey(s, home()) === place);
+    if (open.some((s) => s.active)) run("terminal.open", { argv, folder: project.folder, place: "right" });
+    else if (open.length) run("tab.new", { space: open[0].id, name: "GitHub sign in", folder: project.folder, argv });
+    else run("space.new", { name: project.name, folder: project.folder, machine: project.machine ?? "", argv });
   }
 
   openLinking(project, kind, cx) {
     if (this.linking?.project === project && this.linking.kind === kind) { this.linking = null; cx.notify(); return; }
     this.linking = { project, kind, list: null, failure: null };
+    this.loadLinking(project, kind, null, cx);
+  }
+
+  loadLinking(project, kind, start, cx) {
+    const earlier = start ? this.linking?.list ?? [] : [];
+    this.linking = { project, kind, list: start ? earlier : null, failure: null, more: Boolean(start) };
     cx.notify();
     cx.spawn(async (cx) => {
-      const found = await tryOrAsync(() => this.linkedFor(kind)?.client.projects());
+      const found = await tryOrAsync(() => this.linkedFor(kind)?.client.projects(start));
       if (this.linking?.project !== project || this.linking.kind !== kind) return;
-      this.linking = { ...this.linking, list: found?.list ?? [], complete: found?.complete !== false, failure: found?.failure ?? (found ? null : { text: `${SOURCE_WORDS[kind]} could not be read` }) };
+      this.linking = { project, kind, list: [...earlier, ...(found?.list ?? [])], complete: found?.complete !== false, next: found?.next ?? null, more: false,
+        failure: found?.failure ?? (found ? null : { text: `${SOURCE_WORDS[kind]} could not be read` }) };
       cx.notify();
     });
   }
@@ -245,13 +261,19 @@ export class Issues {
     const failure = this.failureOf(project, source);
     if (!failure) return null;
     const read = this.boardOf(project.id, source)?.read_at;
-    const copy = read && failure.kind !== "no remote" && failure.kind !== "signed out" ? `Showing the copy read at ${clock(read)}` : "";
+    const copy = read && !["no remote", "no cli", "signed out"].includes(failure.kind) ? `Showing the copy read at ${clock(read)}` : "";
     const until = failure.retryAt ? ` until ${clock(failure.retryAt)}` : "";
     const again = { onClick: (cx) => this.refresh(cx, true, source === "github" ? null : { project: project.id, source }) };
-    const fix = failure.kind === "no remote" || failure.kind === "no store" ? {}
-      : source !== "github" ? { fix: "Reconnect", ...(failure.kind === "signed out" ? { onClick: () => this.openSettings() } : again) }
+    const fix = failure.kind === "no store" ? {}
+      : failure.kind === "no remote" ? this.otherSources()
+        : failure.kind === "no cli" ? { fix: "Get the GitHub CLI", onClick: () => openUrl(CLI_URL) }
+          : source !== "github" ? { fix: "Reconnect", ...(failure.kind === "signed out" ? { onClick: () => this.openSettings() } : again) }
         : failure.kind === "signed out" ? { fix: "Sign in", onClick: () => this.signIn(project) } : { fix: "Refresh", ...again };
     return stateBlock(`issues-state-${project.id}-${source}`, c, { text: `${failure.text}${until}`, source: [failure.source, copy].filter(Boolean).join(" · "), ...fix });
+  }
+
+  otherSources() {
+    return this.store === true && !Object.keys(LINKED).some((kind) => this.linkedFor(kind)) ? { fix: "Sign in to Jira or Linear", onClick: () => this.openSettings() } : {};
   }
 
   newProject() {
@@ -276,9 +298,16 @@ export class Issues {
     const l = this.linking;
     if (l?.project !== project.id) return [];
     if (!l.list && !l.failure) return [skeletonOf({ shape: "two lines", count: 2 })(`issues-link-bones-${project.id}`, c)];
-    if (l.failure) return [stateBlock(`issues-link-failure-${project.id}`, c, { text: l.failure.text, source: l.failure.source ?? "", fix: "Reconnect", onClick: () => this.openSettings() })];
+    const things = linkedOf(l.kind).things;
+    if (l.failure) {
+      const fix = l.failure.kind === "signed out" ? { fix: "Reconnect", onClick: () => this.openSettings() } : { fix: "Refresh", onClick: (cx) => this.loadLinking(project.id, l.kind, null, cx) };
+      return [stateBlock(`issues-link-failure-${project.id}`, c, { text: l.failure.text, source: l.failure.source ?? "", ...fix })];
+    }
+    if (!l.list.length) return [emptyState({ text: `No ${things} visible to this account`, action: "Open Accounts" })(`issues-link-none-${project.id}`, c, { onClick: () => this.openSettings() })];
     const linked = new Set(this.links.filter((x) => x.project === project.id && x.source === l.kind).map((x) => x.ref));
-    const more = l.complete ? [] : [div().text_size(T.body).text_color(c.dim).child(`Showing the first ${l.list.length} ${linkedOf(l.kind).things}`)];
+    const more = l.complete ? [] : [h_flex().w_full().gap(G.sm).items_center()
+      .child(div().flex_1().text_size(T.body).text_color(c.dim).child(`Showing the first ${l.list.length} ${things}`))
+      .child(quietLink(`issues-link-more-${project.id}`, "Load more", (cx) => this.loadLinking(project.id, l.kind, l.next, cx), c, { disabled: l.more }))];
     return [...l.list.map((item) => row(`issues-link-${project.id}-${item.ref}`, c, { name: item.name, icon: linked.has(item.ref) ? "check" : null,
       onClick: (cx) => this.link(project.id, l.kind, item, !linked.has(item.ref), cx) })), ...more];
   }
@@ -362,10 +391,10 @@ export class Issues {
     const projects = projectsInOrder(this.projects ?? [], front);
     const body = open ? this.detail(open, c, now)
       : !this.projects ? this.skeleton(c)
-        : !projects.length ? emptyState({ text: "Add a project to see its issues", action: "New project" })("issues-none", c, { onClick: () => this.newProject() })
+        : !projects.length ? emptyState({ text: "Add a project to see its tasks", action: "New project" })("issues-none", c, { onClick: () => this.newProject() })
           : v_flex().w_full().gap(G.xl).children([...this.noStore(c), ...projects.map((p) => this.projectBlock(p, c, now))]);
     return scrollPage("kanso-issues", c, true, (column) => column
-      .child(pageHeader(div().text_size(PR.title).text_color(c.text).child("Issues"),
+      .child(pageHeader(div().text_size(PR.title).text_color(c.text).child("Tasks"),
         [refreshTool("issues-refresh", c, { busy, working: `Reading ${plural(this.reading.size, "board", "boards")}` }, (cx) => this.refresh(cx, true))]))
       .child(body));
   }
