@@ -58,6 +58,8 @@ export function insertCommits(repo, commits, machine) {
   return range(Math.ceil(rows.length / 500)).map((k) => `INSERT OR IGNORE INTO commits(repo,hash,at,adds,dels,machine) VALUES ${rows.slice(k * 500, k * 500 + 500).join(",")};`).join("\n");
 }
 
+const literally = (text) => String(text).replace(/[\\.[\]()*+?{}|^$]/g, "\\$&");
+
 export const seal = (key, text) => sha256(`${key}\n${String(text).trim().toLowerCase()}`);
 
 export function machineFile(machine, identities, rows, key) {
@@ -177,12 +179,17 @@ export class Store extends Database {
     const seals = new Set(sealed?.seals ?? []);
     const sealedAuthors = async (cwd) => {
       if (!seals.size) return [];
-      const r = await exec("git", ["log", "--all", "--no-merges", "--format=%an%n%ae"], { cwd }).catch(() => null);
-      return r?.code === 0 ? [...new Set(r.stdout.split("\n").map((s) => s.trim()).filter(Boolean))].filter((who) => seals.has(seal(sealed.key, who))) : [];
+      const r = await exec("git", ["log", "--all", "--no-merges", "--format=%an%x00%ae"], { cwd }).catch(() => null);
+      if (r?.code !== 0) return [];
+      const known = (who) => who.trim() && !identities.includes(who.trim()) && seals.has(seal(sealed.key, who));
+      return [...new Set(r.stdout.split("\n").flatMap((line) => {
+        const [name = "", email = ""] = line.split("\0");
+        return [...(known(name) ? [`^${literally(name)} <`] : []), ...(known(email) ? [`<${literally(email)}>`] : [])];
+      }))];
     };
     await mapSeries(repos, async (r, i) => {
-      const authors = [...new Set([...identities, ...await sealedAuthors(r.path)])];
-      const log = await exec("git", ["log", "--all", "--no-merges", "-F", ...authors.map((w) => `--author=${w}`), "--format=%x1e%H %at", "--shortstat"], { cwd: r.path }).catch(() => null);
+      const authors = [...new Set([...identities.map(literally), ...await sealedAuthors(r.path)])];
+      const log = await exec("git", ["log", "--all", "--no-merges", "-E", ...authors.map((w) => `--author=${w}`), "--format=%x1e%H %at", "--shortstat"], { cwd: r.path }).catch(() => null);
       if (log?.code === 0) {
         await this.script(`${insertCommits(r.repo, parseLog(log.stdout), machine)}
 INSERT OR REPLACE INTO scans(path,repo,refs,scanned) VALUES(${sqlText(r.path)},${sqlText(r.repo)},${sqlText(r.refs)},${int(Date.now() / 1000)});`);
@@ -218,8 +225,8 @@ INSERT OR REPLACE INTO scans(path,repo,refs,scanned) VALUES(${sqlText(r.path)},$
       const fetched = async () => { const r = await exec("curl", ["-fsSL", "--proto", "=https", "--proto-redir", "=https", "--max-time", "25", f.raw_url]).catch(() => null); return r?.code === 0 ? r.stdout : null; };
       const text = f.truncated && f.raw_url ? await fetched() : f.content;
       const other = text && readMachineFile(text, known);
-      if (!other) return null;
-      await this.script([...Map.groupBy(other.commits, (c) => c.repo)].map(([repo, commits]) => insertCommits(repo, commits, other.machine)).join("\n"));
+      if (!other || other.machine === machine) return null;
+      await this.script(`DELETE FROM commits WHERE machine=${sqlText(other.machine)};\n` + [...Map.groupBy(other.commits, (c) => c.repo)].map(([repo, commits]) => insertCommits(repo, commits, other.machine)).join("\n"));
       return other;
     });
     const others = read.filter(Boolean);

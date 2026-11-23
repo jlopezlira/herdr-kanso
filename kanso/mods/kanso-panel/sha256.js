@@ -11,7 +11,8 @@ const rotr = (x, n) => (x >>> n) | (x << (32 - n));
 const word = (w) => [w >>> 24, (w >>> 16) & 255, (w >>> 8) & 255, w & 255];
 
 const utf8 = (text) => [...String(text)].flatMap((ch) => {
-  const c = ch.codePointAt(0);
+  const point = ch.codePointAt(0);
+  const c = point >= 0xd800 && point <= 0xdfff ? 0xfffd : point;
   if (c < 0x80) return [c];
   if (c < 0x800) return [0xc0 | (c >> 6), 0x80 | (c & 63)];
   if (c < 0x10000) return [0xe0 | (c >> 12), 0x80 | ((c >> 6) & 63), 0x80 | (c & 63)];
