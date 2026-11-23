@@ -342,3 +342,13 @@ test("With two held recipients and one closed, Send goes to the other and says w
   assert.equal(send.error, "Sent. Not sent to Nova: it closed.");
   draftKept(send, closed);
 });
+
+test("When another computer cannot be reached and no agent is seen, Send still offers Start an agent", async () => {
+  const ran = [];
+  const send = await openSend(alone(), { machines: () => [...readyMachines, { name: "grey", layout: "unavailable" }], run: (command) => ran.push(command) });
+  const el = renders(send);
+  assert.ok(texts(el).includes("Can't see the agents right now."));
+  calls(byTag(el, "send-list-action"), "on_click")[0][1]({}, { notify() {}, stop_propagation() {} });
+  assert.deepEqual(ran, ["kanso-spaces.start"]);
+  draftKept(send);
+});

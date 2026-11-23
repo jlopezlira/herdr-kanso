@@ -139,7 +139,7 @@ export default class Send extends View {
       body: [
         field("send-to", this.query, c, { label: "To" }),
         !state.empty ? stack({ variant: "dialog list", scroll: true }, rows)("send-list", c)
-          : emptyState({ text: empty, action: state.empty === "none" ? START : "" })("send-list", c, { onClick: () => run("kanso-spaces.start") }),
+          : emptyState({ text: empty, action: state.empty === "no match" ? "" : START })("send-list", c, { onClick: () => run("kanso-spaces.start") }),
         field("send-message", this.box, c, { label: "Message" }),
       ],
       notes: [{ text: this.error ?? this.note ?? "Pasted into its terminal and sent with Enter, as if you typed it there.", tone: this.error ? "error" : "dim" },
