@@ -70,7 +70,6 @@ export const ACTIONS = Object.freeze({
   connect: action("power", "Connect"),
   disconnect: action("power", "Disconnect"),
   sync: action("arrow-right-left", "Sync"),
-  caffeine: action("coffee", "Caffeine"),
   refresh: action("refresh-cw", "Refresh"),
   "sign-in": action("key", "Sign in…"),
   "new-project": action("plus", "New project"),
