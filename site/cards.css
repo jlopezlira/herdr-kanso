@@ -1,3 +1,7 @@
+.kanso-card {
+  --card-line: 1px solid #3b3a36;
+}
+
 .kanso-card,
 .kanso-card__canvas {
   width: var(--card-width);
@@ -94,7 +98,7 @@
   left: var(--og-inset);
   bottom: 58px;
   padding: 14px 18px;
-  border: 1px solid #3b3a36;
+  border: var(--card-line);
   border-radius: 8px;
   background: #1b1b19;
   font: 500 16.5px "Geist Mono", ui-monospace, monospace;
@@ -104,7 +108,7 @@
 .kanso-card__shot {
   position: absolute;
   overflow: hidden;
-  border: 1px solid #3b3a36;
+  border: var(--card-line);
   box-shadow: var(--shot-glow), 0 var(--shot-shadow-size) rgba(0,0,0,.6);
 }
 
