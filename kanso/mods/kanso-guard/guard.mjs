@@ -2,7 +2,7 @@
 // Kanso's memory guard, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
 
 import { execFile } from "node:child_process";
-import { appendFileSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { appendFileSync, chmodSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -789,7 +789,8 @@ const isMain = process.argv[1] && fileURLToPath(import.meta.url) === (await impo
 const exitWith = (code) => (code ? new Promise(() => process.stdout.write("", () => process.exit(code))) : undefined);
 if (isMain && !host.available) { console.error(host.reason); await exitWith(1); }
 if (isMain && host.available) {
-  mkdirSync(DATA, { recursive: true });
+  mkdirSync(DATA, { recursive: true, mode: 0o700 });
+  if (process.platform !== "win32") chmodSync(DATA, 0o700);
   const [cmd = "check", arg] = process.argv.slice(2);
   const manual = async (fn) => {
     const release = await lock(120_000);

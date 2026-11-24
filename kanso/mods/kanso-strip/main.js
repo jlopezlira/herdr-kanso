@@ -164,10 +164,10 @@ export async function readDigest(cwd, run, want = {}) {
     const read = await pull();
     return read.pr || read.failure ? { files: 0, add: 0, del: 0, ahead: 0, pushed: false, ...read } : null;
   }
-  const git = (...args) => run("git", ["-C", cwd, ...args]).then(stdout);
+  const git = (...args) => run("git", ["-C", cwd, ...GIT_READ, ...args]).then(stdout);
   if ((await git("rev-parse", "--is-inside-work-tree"))?.trim() !== "true") return null;
   const [status, stat, upstream, branch] = await Promise.all([
-    git(...GIT_READ, "status", "--porcelain"), git("diff", "--shortstat", "HEAD"),
+    git("status", "--porcelain"), git("diff", "--shortstat", "HEAD"),
     git("rev-list", "--count", "@{upstream}..HEAD"), git("symbolic-ref", "--quiet", "--short", "HEAD")]);
   const files = (status ?? "").split("\n").filter((l) => l.trim()).length;
   const pushed = upstream != null;

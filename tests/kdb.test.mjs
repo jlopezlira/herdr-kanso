@@ -275,3 +275,19 @@ test("an older picture index gains the prefix mark", async (t) => {
   await db.savePictures("/t.jsonl", 4, [], "9");
   assert.equal((await db.pictures("/t.jsonl")).mark, "9");
 });
+
+test("A data folder that cannot be made private fails the open rather than passing for private.", unixModes, async (t) => {
+  const app = await temporary(t);
+  const run = (command, args, options) => command === "sh" && String(args[1]).startsWith("umask 077 && mkdir")
+    ? Promise.resolve({ code: 1, stdout: "", stderr: "chmod: refused" })
+    : exec(command, args, options);
+  const { store } = await storeIn(t, app, run);
+  await assert.rejects(store.open(), /could not keep its data to you alone: chmod: refused/);
+});
+
+test("The guard's data folder is yours alone even under a permissive umask.", unixModes, async (t) => {
+  const home = await temporary(t);
+  const ran = await exec("sh", ["-c", 'umask 022 && HERDR_APP_HOME="$1" node "$2" status', "sh", home, new URL("../kanso/mods/kanso-guard/guard.mjs", import.meta.url).pathname]);
+  assert.equal(ran.code, 0, ran.stderr);
+  assert.equal(await modeOf(join(home, "data", "kanso-guard")), 0o700);
+});

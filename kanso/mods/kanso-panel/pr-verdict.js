@@ -304,7 +304,7 @@ export function sendText(scene, verdict) {
     const card = verdict.body;
     if (!card) return url;
     const where = `${card.author} ${card.path}${card.line ? `:${card.line}` : ""}`.trim();
-    return [outsideText(where, 300), FROM_GITHUB, outsideText(card.text, 4000), url].filter((line) => line != null && line !== "").join("\n");
+    return [FROM_GITHUB, outsideText(where, 300), outsideText(card.text, 4000), url].filter((line) => line != null && line !== "").join("\n");
   }
   if (verdict?.id === "conflicts") {
     const base = scene.pr?.baseRefName || "main";
