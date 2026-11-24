@@ -22,6 +22,17 @@ in version.json, which the stable updater offers. Versions follow
 [Keep a Changelog](https://keepachangelog.com). `npm run check:version` checks
 the branch's rules.
 
+## [Unreleased]
+
+### Added
+
+- A computer's menu has Remove this computer's key, which takes off the key line kansō added there and removes the computer from Herdr.
+
+### Security
+
+- Signing in to a computer with its password asks before trusting that computer's key the first time, and uses the key in your ssh agent when there is one; kansō makes its own key only when there is none or it does not get in.
+- Add a computer asks only the computers this one already knows on the network until you press Search this network.
+
 ## [3.34.0] - 2026-11-23
 
 ### Added
