@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, s
 import { homedir, tmpdir, totalmem, freemem } from "node:os";
 import { delimiter, join } from "node:path";
 import { platformName, powershell, psQuote, checked, jsonRows, validPid, elapsedSeconds } from "./platform-command.js";
+import { xmlText as x, PLIST_HEAD } from "./platform-plist.js";
 import { pathApi } from "./platform-paths.js";
 import { processApi } from "./platform-processes.js";
 import { openApi } from "./platform-open.js";
@@ -153,10 +154,9 @@ export function guardHost({ platform = platformName(process.platform), run, home
       },
       notify: (title, body) => run("osascript", ["-e", "on run a", "-e", "display notification (item 2 of a) with title (item 1 of a)", "-e", "end run", title, body], 5000),
       install: async () => {
-        const folder = join(home, "Library/LaunchAgents"), plist = join(folder, `${LABEL}.plist`), x = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;");
+        const folder = join(home, "Library/LaunchAgents"), plist = join(folder, `${LABEL}.plist`);
         mkdirSync(folder, { recursive: true });
-        writeFileSync(plist, `<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+        writeFileSync(plist, `${PLIST_HEAD}
 <plist version="1.0">
 <dict>
   <key>Label</key><string>${LABEL}</string>

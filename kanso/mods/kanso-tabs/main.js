@@ -47,6 +47,7 @@ const PANELS = {
   files: { mod: "kanso-panel", props: { panel: "files" } }, pr: { mod: "kanso-panel", props: { panel: "pr" } },
   issues: { mod: "kanso-panel", props: { panel: "issues" } },
   shipped: { mod: "kanso-panel", props: { panel: "shipped" } },
+  caffeine: { mod: "kanso-panel", props: { panel: "caffeine" } },
   worktrees: { mod: "kanso-panel", props: { panel: "worktrees" } },
   ports: { mod: "kanso-panel", props: { panel: "ports" } },
   look: { mod: "kanso-panel", props: { panel: "look" } },
@@ -75,6 +76,7 @@ const BUILTIN = [
   { id: "pr", label: "PR", icon: "lu-git-pull-request" },
   { id: "issues", label: "Tasks", icon: "lu-circle-dot" },
   { id: "shipped", label: "Shipped", icon: "lu-trophy" },
+  { id: "caffeine", label: "Caffeine", icon: "lu-coffee" },
   { id: "worktrees", label: "Worktrees", icon: "lu-git-fork" },
   { id: "ports", label: "Ports", icon: "lu-plug" },
   { id: "containers", label: "Containers", icon: "lu-container" },
@@ -101,6 +103,7 @@ function panelList(tools) {
 }
 
 const drawnPanels = (all) => all.filter((p) => p.on);
+const caffeineOn = () => Object.values(shared("kanso.caffeine") ?? {}).some((look) => look?.on);
 
 function movePanel(from, to, tools) {
   const seen = drawnPanels(panelList(tools)).map((p) => p.id), i = seen.indexOf(from), j = seen.indexOf(to);
@@ -622,7 +625,7 @@ export default class Tabs extends View {
     const bar = tabBar({
       items, value: openTabs.find((tab) => tab.active)?.id ?? null, folded: folded.map((i) => ({ key: openTabs[i].id, label: tabName(openTabs[i], ps), mark: tabMark(openTabs[i]) })),
       overflow: this.moreOpen, panel: now,
-      panels: doors.map((p) => ({ key: p.id, label: p.label, icon: p.icon, reveal: { shown: !p.icon || now === p.id || this.hoverPanel === p.id, width: nameWidth(p.label) }, held: heldOn(p.id, this.dragPanel, this.dropPanel), drop: doorDrops[p.id] ?? false })), state, arrange, help: true, tips, windows,
+      panels: doors.map((p) => ({ key: p.id, label: p.label, icon: p.icon, reveal: { shown: !p.icon || now === p.id || this.hoverPanel === p.id || (p.id === "caffeine" && caffeineOn()), width: nameWidth(p.label) }, held: heldOn(p.id, this.dragPanel, this.dropPanel), drop: doorDrops[p.id] ?? false })), state, arrange, help: true, tips, windows,
     });
     return bar("tab-bar", c, {
       presses, wires,

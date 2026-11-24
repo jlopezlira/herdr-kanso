@@ -24,12 +24,12 @@ export const computerTools = ({ hover = false, focus = false, ...props }) => {
 };
 
 // `word` and `tip`: a word on an on row (Sync can't run) and what the word means; `lit`: the icon of the tool the keyboard's ring is on.
-export const computerRow = ({ name, remote = true, state = 'on', status = 'blocked', count = 0, hover = false, focus = false, pending = false, word = null, tip = null, sync = null, lit = null }) => {
+export const computerRow = ({ name, remote = true, state = 'on', status = 'blocked', count = 0, hover = false, focus = false, pending = false, word = null, tip = null, sync = null, lit = null, caffeine = false }) => {
   const said = words[state] ?? word;
   const { action, actions } = toolsOf({ name, remote, state, pending, sync });
   const ring = (tool) => (tool?.icon === lit ? { ...tool, focus: true } : tool);
   return row({
-    icon: remote ? 'lu-server' : 'lu-monitor', name, heading: true, group: true, names: true, hover, focus, pending,
+    icon: remote ? 'lu-server' : 'lu-monitor', name, heading: true, group: true, names: true, hover, focus, pending, flag: caffeine && state === 'on' ? 'lu-coffee' : null,
     mark: count && state === 'on' ? status : 'none', meta: said ? { text: said, tip } : count || null,
     action: action && { kind: 'icon', ...ring(action) }, actions: actions.map(ring),
   });
