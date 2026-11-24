@@ -2,7 +2,7 @@ import { temporaryKdb, loadGroupInbox, loadAuthTiming } from "./mod-fixtures.mjs
 import assert from "node:assert/strict";
 import test from "node:test";
 import { join } from "node:path";
-import { load, context, callContext, exec as realExec, success, failure, clone as plain, refreshedContext } from "./helpers.mjs";
+import { load, context, callContext, exec as realExec, success, failure, clone as plain, refreshedContext, dataFolder } from "./helpers.mjs";
 import { openedPanel, recorder, refreshAgain, openInbox, drawOpenBoard, SIGNED_IN, SIGNED_OUT } from "./pr-fixtures.mjs";
 
 const AUTH = "github.com\n  Logged in to github.com account jj (keyring)\n  - Active account: true\n  - Token: gho_secret\n";
@@ -147,7 +147,7 @@ async function panelFor(t, { gh, git, dir, host: more = {}, state }) {
     const hosted = command === "env" && args?.[1] === "gh";
     const forwarded = hosted ? args.slice(2) : args;
     calls.push(hosted ? ["gh", ...forwarded, args[0]].join(" ") : [command, ...(args ?? [])].join(" "));
-    if (command === "sqlite3" || command === "mkdir") return realExec(command, args, options);
+    if (command === "sqlite3" || dataFolder(command, args)) return realExec(command, args, options);
     if (command === "git") return git(args, options);
     if (command === "gh" || hosted) return gh(forwarded, hosted ? args[0] : "");
     return failure("");

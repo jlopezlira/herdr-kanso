@@ -7,7 +7,7 @@ import { join, posix } from "node:path";
 import { fileApi } from "../kanso/mods/kanso-panel/platform-files.js";
 import { paths } from "../kanso/mods/kanso-panel/platform-paths.js";
 import test from "node:test";
-import { databaseTimer, load, clone, context, singleUse, drawingHost, drawn, nodes, texts, calls, arg, exec as run, nativeWindow, nativePlatform, until, failure, success, moved, isDecode, decoded } from "./helpers.mjs";
+import { databaseTimer, load, clone, context, singleUse, drawingHost, drawn, nodes, texts, calls, arg, exec as run, nativeWindow, nativePlatform, until, failure, success, moved, isDecode, decoded, dataFolder } from "./helpers.mjs";
 
 const dirs = [];
 process.on("exit", () => { for (const d of dirs) rmSync(d, { recursive: true, force: true }); });
@@ -170,7 +170,7 @@ async function panel({ screen = OUTPUT, files = ["/repo/tests/shot.png", "/repo/
       if (options?.on && cmd === "sh" && String(args[1]).includes("printf %s")) return { code: 0, stdout: "/home/light\n" };
       if (cmd === "sqlite3") return run(cmd, args, options);
       if (cmd === "mkdir") return fileApi(nativePlatform, run).mkdir(args.at(-1), options);
-      if (cmd === "sh" && String(args[1]).startsWith("umask 077 && mkdir")) return run(cmd, args, options);
+      if (dataFolder(cmd, args)) return run(cmd, args, options);
       if (cmd === "ps") return { code: 0, stdout: world.session?.etime ?? "00:05" };
       if (cmd === "sh" && args[1].startsWith('f="$1"')) {
         const from = args[4];
