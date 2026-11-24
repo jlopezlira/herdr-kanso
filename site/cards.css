@@ -1,0 +1,133 @@
+.kanso-card {
+  --card-line: 1px solid #3b3a36;
+}
+
+.kanso-card,
+.kanso-card__canvas {
+  width: var(--card-width);
+  height: var(--card-height);
+  margin: 0;
+  overflow: hidden;
+  background: #161615;
+}
+
+.kanso-card--gallery {
+  --card-width: 1800px;
+  --card-height: 1200px;
+  --gallery-inset: 90px;
+}
+
+.kanso-card--og {
+  --card-width: 1280px;
+  --card-height: 640px;
+  --og-inset: 72px;
+}
+
+.kanso-card__canvas {
+  position: relative;
+  color: #ece8de;
+  font-family: "Geist", -apple-system, sans-serif;
+}
+
+.kanso-card__canvas::before {
+  content: "";
+  position: absolute;
+}
+
+.kanso-card--gallery .kanso-card__canvas::before {
+  left: 50%;
+  top: 120px;
+  width: 1500px;
+  height: 900px;
+  transform: translateX(-50%);
+  background:
+    radial-gradient(closest-side at 50% 60%, rgba(218,98,125,.20), transparent 72%),
+    radial-gradient(closest-side at 20% 30%, rgba(196,176,126,.10), transparent 70%);
+}
+
+.kanso-card--og .kanso-card__canvas::before {
+  inset: -200px auto auto -160px;
+  width: 900px;
+  height: 700px;
+  background:
+    radial-gradient(closest-side at 40% 50%, rgba(218,98,125,.22), transparent 70%),
+    radial-gradient(closest-side at 70% 40%, rgba(196,176,126,.14), transparent 70%);
+}
+
+.kanso-card__header,
+.kanso-card__subtitle {
+  position: absolute;
+  left: var(--gallery-inset);
+  right: var(--gallery-inset);
+  display: flex;
+  justify-content: space-between;
+}
+
+.kanso-card__header {
+  top: 78px;
+  align-items: flex-end;
+}
+
+.kanso-card__brand {
+  display: flex;
+  align-items: center;
+}
+
+.kanso-card--gallery .kanso-card__brand { gap: 26px; }
+.kanso-card--gallery .kanso-card__brand img { width: 118px; height: 118px; }
+.kanso-card__name { font-size: 150px; line-height: .9; font-weight: 700; letter-spacing: -.05em; margin-top: -8px; }
+.kanso-card__pitch { text-align: right; }
+.kanso-card__pitch h1 { margin: 0; font-size: 60px; line-height: 1.05; font-weight: 700; letter-spacing: -.035em; }
+.kanso-card h1 span { display: block; }
+
+.kanso-card__subtitle {
+  top: 246px;
+  font-size: 27px;
+  font-weight: 600;
+  color: #b5b1a7;
+  letter-spacing: -.01em;
+}
+
+.kanso-card__text { position: absolute; left: var(--og-inset); top: 64px; width: 560px; }
+.kanso-card--og .kanso-card__brand { gap: 12px; font-size: 26px; font-weight: 700; letter-spacing: -.01em; }
+.kanso-card__text h1 { margin: 74px 0 0; font-size: 82px; line-height: .98; font-weight: 700; letter-spacing: -.045em; }
+.kanso-card__text p { margin: 26px 0 0; font-size: 24px; line-height: 1.4; color: #b5b1a7; width: 480px; }
+
+.kanso-card__code {
+  position: absolute;
+  left: var(--og-inset);
+  bottom: 58px;
+  padding: 14px 18px;
+  border: var(--card-line);
+  border-radius: 8px;
+  background: #1b1b19;
+  font: 500 16.5px "Geist Mono", ui-monospace, monospace;
+  color: #ece8de;
+}
+
+.kanso-card__shot {
+  position: absolute;
+  overflow: hidden;
+  border: var(--card-line);
+  box-shadow: var(--shot-glow), 0 var(--shot-shadow-size) rgba(0,0,0,.6);
+}
+
+.kanso-card--gallery .kanso-card__shot {
+  left: var(--gallery-inset);
+  top: 330px;
+  width: 1620px;
+  border-radius: 16px;
+  --shot-glow: 0 40px 120px -20px rgba(218,98,125,.30);
+  --shot-shadow-size: 30px 80px;
+}
+
+.kanso-card--og .kanso-card__shot {
+  left: 690px;
+  top: 86px;
+  width: 900px;
+  border-radius: 12px;
+  --shot-glow: 0 30px 90px -20px rgba(218,98,125,.35);
+  --shot-shadow-size: 20px 60px;
+}
+
+.kanso-card__shot img { display: block; width: 100%; }

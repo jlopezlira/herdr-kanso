@@ -3,14 +3,13 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self' https://api.github.com; img-src 'self' data:; style-src 'self'; script-src 'self'; base-uri 'none'; form-action 'none'">
+<link rel="stylesheet" href="fonts.css">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Privacy · kansō</title>
 <meta name="description" content="What kansō and this site do with your data: kansō runs on your computer and sends nothing to its makers.">
 <meta name="theme-color" content="#161615">
 <link rel="icon" href="assets/enso.svg" type="image/svg+xml">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="tokens.css">
 <link rel="stylesheet" href="style.css">
 </head>
@@ -48,7 +47,7 @@
 <p>Your AI agents talk to their own providers as they always do; kansō doesn't change or read that traffic.</p>
 
 <h2>This website</h2>
-<p>This site is hosted on GitHub Pages, so GitHub receives your visit as described in <a href="https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement">GitHub's privacy statement</a>. Its fonts come from Google Fonts, which receives a request for them. Your browser asks GitHub's public API for the star count and keeps the last one it saw in its local storage. There are no cookies, no analytics and no trackers.</p>
+<p>This site is hosted on GitHub Pages, so GitHub receives your visit as described in <a href="https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement">GitHub's privacy statement</a>. This site serves its own fonts and contributor images. Your browser asks GitHub's public API for the star count and keeps the last one it saw in its local storage. There are no cookies, no analytics and no trackers.</p>
 
 <h2>Questions</h2>
 <p>Open an issue on <a href="https://github.com/jlopezlira/herdr-kanso/issues">GitHub</a>. The full list of what each part runs on your computer is in the README, under <a href="https://github.com/jlopezlira/herdr-kanso#privacy-what-it-runs">Privacy: what it runs</a>.</p>
