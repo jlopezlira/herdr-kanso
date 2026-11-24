@@ -86,7 +86,9 @@ try {
     try {
       $archive=Join-Path $work $(if ($pet.zip) {'pet.zip'} else {'spritesheet.webp'})
       $uri=[Uri]$pet.url
-      if ($uri.IsFile) { [IO.File]::Copy($uri.LocalPath,$archive,$true) } elseif ($uri.Scheme -eq 'https') { Invoke-WebRequest -UseBasicParsing -Uri $uri -OutFile $archive -TimeoutSec 90 -MaximumRedirection 3 } else { throw 'Not https' }
+      if ($uri.Scheme -ne 'https') { throw 'Not https' }
+      & curl.exe -fsSL --proto '=https' --proto-redir '=https' --max-filesize ${MAX_BYTES} --max-time 90 -o $archive $uri.AbsoluteUri 2>$null
+      if ($LASTEXITCODE -ne 0) { throw 'Not downloaded' }
       if ((Get-Item -LiteralPath $archive).Length -gt ${MAX_BYTES}) { throw 'Too large' }
       if ($pet.zip) {
         $unpacked=Join-Path $work 'unpacked'; Expand-Archive -LiteralPath $archive -DestinationPath $unpacked

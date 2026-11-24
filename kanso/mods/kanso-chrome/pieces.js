@@ -46,7 +46,7 @@ export const PIECES = [
   piece("computers.network", "Look for computers on this network", "Background", SHOW, "show", "work"),
   piece("agents.checks", "Tell an agent when its pull request's checks finish", "Background", SHOW, "show", "work", "gh"),
   piece("agents.resume", "Resume at reset for every new limit", "Background", SHOW, "hide", "work"),
-  piece("shipped.sync", "Add up Shipped across your computers in a GitHub gist anyone with its link can read", "Background", SHOW, "hide", "work", "gh"),
+  piece("shipped.sync", "Add up Shipped across your computers in a GitHub gist anyone with its link can read: this computer's name and each commit's hash, time and lines, with your identities and repositories sealed", "Background", SHOW, "hide", "work", "gh"),
 ];
 
 export const STATE_LABEL = { show: "Show", needed: "When needed", hide: "Hide" };

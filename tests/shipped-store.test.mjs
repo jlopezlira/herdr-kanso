@@ -50,7 +50,7 @@ test("Shipped resolves known v2 repository seals and still reads v1 files", asyn
     machine: "other", identities: [], seals: [identitySeal],
     commits: [
       { repo, hash: "aaaaaaaaaaaa", at: 1, add: 2, del: 3 },
-      { repo: `other/${unknown.slice(0, 7)}`, hash: "bbbbbbbbbbbb", at: 4, add: 5, del: 6 },
+      { repo: `elsewhere/${unknown.slice(0, 12)}`, hash: "bbbbbbbbbbbb", at: 4, add: 5, del: 6 },
     ],
   });
 
@@ -221,7 +221,7 @@ test("Shipped imports sealed commits under known or abbreviated repository names
   assert.deepEqual(first.seals, other.identities);
   assert.deepEqual(first.identities, []);
   assert.deepEqual(after, [
-    { repo: `other/${otherRepo.slice(0, 7)}`, hash: "eeeeeeeeeeee" },
+    { repo: `elsewhere/${otherRepo.slice(0, 12)}`, hash: "eeeeeeeeeeee" },
     { repo, hash: "ffffffffffff" },
   ]);
   await db.syncMachines([identity]);
@@ -236,7 +236,7 @@ test("Shipped moves a peer commit to its repository name once that name becomes 
   const rows = async () => clone(await db.sql("SELECT repo, hash, adds FROM commits ORDER BY repo;", true));
 
   await db.syncMachines([]);
-  assert.deepEqual(await rows(), [{ repo: `other/${repoSeal.slice(0, 7)}`, hash, adds }]);
+  assert.deepEqual(await rows(), [{ repo: `elsewhere/${repoSeal.slice(0, 12)}`, hash, adds }]);
   await db.saveGithub([{ repo, pushed: null, fetched: 1, weeks: [] }]);
   await db.syncMachines([]);
   assert.deepEqual(await rows(), [{ repo, hash, adds }]);
@@ -281,4 +281,14 @@ test("Shipped fetches truncated gist files over HTTPS only, including redirects"
     assert.ok(args.includes(option), option);
     assert.equal(args[args.indexOf(option) + 1], "=https", option);
   }
+});
+
+test("A commit two other computers report from a repository this one does not know counts once", async () => {
+  const { machineFile, readMachineFile, insertCommits } = await store({}, [...names, "insertCommits"]);
+  const row = { repo: "local/tool", hash: "abcdefabcdef", at: 1793000000, adds: 7, dels: 0 };
+  const read = ["workstation", "laptop"].map((machine) => clone(readMachineFile(JSON.stringify(machineFile(machine, [], [row], "g1")))));
+  const [first, second] = read.map((file) => file.commits[0].repo);
+  assert.equal(first, second, "one key for the repository, whoever reports it");
+  assert.match(first, /^elsewhere\/[0-9a-f]{12}$/);
+  assert.equal(new Set(read.flatMap((file) => file.commits.map((c) => `${c.repo} ${c.hash}`))).size, 1);
 });

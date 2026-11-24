@@ -75,7 +75,7 @@ export function readMachineFile(text, known = new Map()) {
     if (![1, 2].includes(f?.v) || !Array.isArray(f.commits) || !Array.isArray(f.repos)) return null;
     const machine = String(f.machine ?? "another computer");
     const listed = Array.isArray(f.identities) ? f.identities.map(String) : [];
-    const repos = f.v === 1 ? f.repos : f.repos.map((sealed) => known.get(sealed) ?? `${machine}/${String(sealed).slice(0, 7)}`);
+    const repos = f.v === 1 ? f.repos : f.repos.map((sealed) => known.get(sealed) ?? `elsewhere/${String(sealed).slice(0, 12)}`);
     return { machine, identities: f.v === 1 ? listed : [], seals: f.v === 1 ? [] : listed, commits: f.commits.map(([r, hash, at, add, del]) => ({ repo: repos[r], hash, at, add, del })).filter((c) => c.repo && c.hash) };
   } catch { return null; }
 }
