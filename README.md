@@ -81,14 +81,14 @@ On Windows, merge `kanso/keys.windows.json` into your Herdr keys instead of
   Herdr keeps that, so another computer on the same space sees it asleep too,
   and waking from either works.
 - **Your other computers.** Add a computer at the foot of the sidebar: kansō
-  lists your Tailscale computers, your ssh hosts and the computers on this
-  network, or an agent sets one up with you. It reaches a computer on the home
+  lists your Tailscale computers and your ssh hosts, Search this network adds
+  the computers here that answer ssh, or an agent sets one up with you. It reaches a computer on the home
   network first and over Tailscale when you are away (Windows keeps the
   Tailscale route). When one asks for a password or a key's passphrase, Sign in
   opens a tab where you type it once, and kansō puts a key there so Herdr gets in
   on its own: the one in your ssh agent when there is one, otherwise its own
   `~/.ssh/id_ed25519_kanso`, which has no passphrase. Remove this computer's key,
-  in the computer's menu, takes off the line kansō added and removes the
+  in the computer's menu, deletes the key kansō added there and removes the
   computer. A computer you disconnect stays in the sidebar,
   Asleep or Disconnected, until you remove it. Rename it, and the name shows on
   every computer.
@@ -99,6 +99,15 @@ On Windows, merge `kanso/keys.windows.json` into your Herdr keys instead of
 - **Review without leaving.** Pull requests with diff, checks and threads, and
   one click to hand the feedback to an agent. Any file that is not a picture opens in Preview,
   and it can be edited when the read has no NUL and fits in 1 MiB, on this computer or another; `md-review plan.md` from an agent asks for your comments.
+- **Tasks.** Your GitHub issues and your Jira Cloud and Linear tickets in one
+  panel, a board per project in its own columns. Select one to read it, open it
+  on GitHub or send it to an agent. Jira and Linear sign in with your own
+  token, kept in your system's secret store and never in kansō.
+- **While you are away.** An agent stopped by its plan limit can resume on its
+  own when the limit resets. Schedule… in a project's menu starts an agent with a prompt at
+  a time you choose, and New agent in a worktree gives one task to several
+  agents. When every check on an agent's pull request has finished, the agent
+  hears which failed.
 - **Take over.** Open with… opens the pane's folder, worktree included, in your
   editor. Cmd+Alt+S hands a pane's work to another agent, or to every agent in
   a project. Cmd+Alt+T opens Arrangements: save the tab, then open it in any
@@ -173,10 +182,12 @@ sidebar, rebinds kansō's own keys and hides the panels you don't use.
 
 Everything runs on your machine, and reads only the folders you work in:
 `git`, `gh`, `find`, `du`, `lsof` (`ss` and `/proc` on Linux), `ps`, `sqlite3`, `node`, `docker`,
-`xcode-select`, `simctl`, `adb`, `emulator` and Herdr's `hc`. What reaches the network: PR and
+`xcode-select`, `simctl`, `adb`, `emulator`, the secret store's own tool (`security`,
+`secret-tool` or `cmdkey`) and Herdr's `hc`. What reaches the network: PR, Tasks and
 Shipped through `gh`, only while their panel is shown (when Settings turns it on,
 Shipped adds up your computers in a secret gist: unlisted, but readable by anyone
-with its link); the update check, `git ls-remote` on kansō's
+with its link); Tasks' Jira Cloud and Linear boards, only while the panel is
+shown, with the token you gave each; the update check, `git ls-remote` on kansō's
 GitHub repository, and the download of a release you install; Spend's daily
 fetch of OpenRouter's price list; the hjkl dōjō's pet picker, which downloads
 the agents' pets from persistent.oaistatic.com and codex-pets.net and keeps only

@@ -99,7 +99,7 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
         Both have no + and no Arrange.
       - After the tabs, 8 apart, a + (26 square) opens the sidebar's + menu,
         then Arrange.
-      - At the right are the panel buttons: Files, Spend, PR,
+      - At the right are the panel buttons: Files, Spend, PR, Tasks,
         Shipped, Worktrees, Ports, Containers, Memory, Look, Simulator, as icons only (15, in a 26 square ghost
         button), and a wash when their panel is open. While the pointer is
         on one (`on_hover`), its name (12) opens beside the icon: the name's
@@ -193,7 +193,7 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
       - Terminal padding is `[14, 10]`.
     - **Side panel**, at the right of the panes: 368 wide (280 to 900),
       hidden by default. It holds whichever panel is open: `kanso-panel`
-      told `files`, `pr`, `shipped` or `worktrees` (`props.panel`), `kanso-spend`
+      told `files`, `pr`, `issues` (Tasks), `shipped` or `worktrees` (`props.panel`), `kanso-spend`
       (Spend), `kanso-guard` (Memory), `kanso-sim` (Simulator).
       The Worktrees brief, in this one's order: [RECIPE-worktrees.md](RECIPE-worktrees.md).
       The Shipped brief, in this one's order: [RECIPE-shipped.md](RECIPE-shipped.md).
@@ -667,10 +667,14 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
 - **Programs run**: `git` (spaces, Files), `sh` (Files listing),
   `hc` (machines) and, for Open with, `sh`, `open`, `plutil` and `sips`
   (macOS) and the chosen editor. The PR panel runs `gh` and `git` only while
-  shown. The update check runs `git ls-remote` on kansō's GitHub repository,
+  shown. Tasks runs `gh` and asks Jira Cloud and Linear only while shown, with
+  a token read from the secret store (`security`, `secret-tool` or `cmdkey`).
+  The update check runs `git ls-remote` on kansō's GitHub repository,
   Spend fetches OpenRouter's price list once a day, and Add a computer reads
-  Tailscale's list and, unless Settings turns it off, asks the computers on
-  this network whether they answer ssh. Nothing else reaches the network.
+  Tailscale's list and, unless Settings turns it off, asks the computers this
+  one already knows on the network whether they answer ssh, and the whole
+  network only when you press Search this network. Nothing else reaches the
+  network.
 
 ## Watch out
 
