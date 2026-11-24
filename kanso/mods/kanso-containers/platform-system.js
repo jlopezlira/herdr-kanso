@@ -9,6 +9,8 @@ const MEMORY_GUARD = new Set(["macos", "windows", "linux"]);
 const LINUX_DOCKER = `for u in docker-desktop docker; do systemctl --user cat "$u.service" >/dev/null 2>&1 && exec systemctl --user "$1" "$u"; done
 if [ "$1" = start ]; then docker info >/dev/null 2>&1 && exit 0; exec systemctl start docker.service; fi
 exec systemctl stop docker.service docker.socket`;
+export const LINUX_POWER = `for d in "$1"/*; do s=; t=; u=; read -r s 2>/dev/null <"$d/scope"; [ "$s" = Device ] && continue; read -r t 2>/dev/null <"$d/type"; read -r u 2>/dev/null <"$d/status"; [ "$t" = Battery ] && [ "$u" = Discharging ] && { echo 0; exit 0; }; done
+for d in "$1"/*; do s=; o=; read -r s 2>/dev/null <"$d/scope"; [ "$s" = Device ] && continue; read -r o 2>/dev/null <"$d/online"; [ -z "$o" ] || echo "$o"; done`;
 
 export function systemApi(platform, run) {
   const status = (appHome) => platform === "windows"
@@ -24,7 +26,7 @@ export function systemApi(platform, run) {
     }
     const r = platform === "windows"
       ? await powershell(run, "Add-Type -AssemblyName System.Windows.Forms; [Windows.Forms.SystemInformation]::PowerStatus.PowerLineStatus.ToString()")
-      : await run("sh", ["-c", 'for f in /sys/class/power_supply/*/status; do [ "$(cat "$f" 2>/dev/null)" = Discharging ] && { echo 0; exit 0; }; done; for f in /sys/class/power_supply/*/online; do [ -f "$f" ] || continue; cat "$f"; done']);
+      : await run("sh", ["-c", LINUX_POWER, "sh", "/sys/class/power_supply"]);
     if (r.code !== 0 || !r.stdout.trim() || /Unknown/.test(r.stdout)) return null;
     return platform === "windows" ? r.stdout.trim() === "Offline" : !r.stdout.split(/\s+/).includes("1");
   };

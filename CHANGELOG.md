@@ -22,6 +22,12 @@ in version.json, which the stable updater offers. Versions follow
 [Keep a Changelog](https://keepachangelog.com). `npm run check:version` checks
 the branch's rules.
 
+## [Unreleased]
+
+### Fixed
+
+- On Linux, a wireless mouse, keyboard or headset running on its own battery no longer makes kansō think the computer is on battery and stop its motion.
+
 ## [3.34.0] - 2026-11-23
 
 ### Added
