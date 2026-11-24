@@ -22,6 +22,12 @@ in version.json, which the stable updater offers. Versions follow
 [Keep a Changelog](https://keepachangelog.com). `npm run check:version` checks
 the branch's rules.
 
+## [Unreleased]
+
+### Fixed
+
+- Add a computer reaches a computer by the name you typed or the Host in your ssh config, keeping its key and agent settings, and uses its Tailscale address only when that name does not answer; a failed typed attempt shows once.
+
 ## [4.0.0] - 2026-11-24
 
 ### Breaking

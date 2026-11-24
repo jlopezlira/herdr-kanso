@@ -114,7 +114,8 @@ test("A computer on this network is reached there first, and over Tailscale when
   const ssh = planFor(onLan(), { tailscale });
   assert.deepEqual([ssh.lan, ssh.user, ssh.via], ["192.168.1.20", "ada", ""]);
   const sshVia = routeMod.lanRecord({ name: ssh.name, target: ssh.target, via: ssh.via }, ssh.lan, { user: ssh.user }).via;
-  assert.ok(sshVia.indexOf("192.168.1.20") < sshVia.indexOf("100.64.1.2"), sshVia);
+  assert.deepEqual(clone(ssh.also), [`ada@${peer().ip}`]);
+  assert.match(sshVia, /HostName=192\.168\.1\.20.*; exec ssh ada@grey /, sshVia);
   const agent = planFor(onLan({ tailscaleSsh: true }), { tailscale });
   assert.equal(agent.lan, "192.168.1.20");
   assert.equal(agent.user, "ada");
@@ -125,11 +126,15 @@ test("A computer on this network is reached there first, and over Tailscale when
 test("On Windows a computer on Tailscale keeps its Tailscale route, with no shell route", async () => {
   const { planFor } = await reach();
   const tailscale = "C:\\Program Files\\Tailscale\\tailscale.exe";
-  for (const choice of [onLan(), onLan({ tailscaleSsh: true })]) {
+  for (const tailscaleSsh of [false, true]) {
+    const choice = onLan({ tailscaleSsh });
+    const address = `ada@${choice.peer.ip}`;
     const planned = planFor(choice, { tailscale, platform: "windows" });
     assert.equal(planned.lan, undefined);
-    assert.equal(String(planned.via).includes("sh -c"), false);
-    assert.match(`${planned.target} ${planned.via}`, /100\.64\.1\.2/);
+    assert.equal(planned.via.includes("sh -c"), false);
+    assert.equal(planned.target, tailscaleSsh ? address : choice.target);
+    if (tailscaleSsh) assert.ok(planned.via.includes(address));
+    else assert.deepEqual(clone(planned.also), [address]);
   }
 });
 

@@ -137,7 +137,8 @@ export default class Computers extends View {
 
   addTyped(cx) {
     const key = this.typedKey();
-    if (key) this.add(key, choiceOf(this.typed.value(), this.peers()), cx);
+    const choice = choiceOf(this.typed.value(), this.peers());
+    if (key) this.add(key, choice.peer ? { ...choice, alias: this.aliasFor(choice.peer) } : choice, cx);
   }
 
   add(key, choice, cx) {
@@ -161,11 +162,10 @@ export default class Computers extends View {
 
   async connect(key, given) {
     const tried = given.probe ? await this.probe([given.target, ...(given.also ?? [])].filter(Boolean)) : null;
-    if (tried && tried.reach !== "ready") {
-      this.jobs[key] = { ...this.jobs[key], plan: { ...given, target: tried.target } };
-      return this.fail(key, tried.reach, String(tried.result.stderr || tried.result.stdout).trim());
-    }
-    const plan = await this.homeFirst(tried ? { ...given, target: tried.target } : given);
+    const chosen = tried ? { ...given, target: tried.target } : given;
+    this.jobs[key] = { ...this.jobs[key], plan: chosen };
+    if (tried && tried.reach !== "ready") return this.fail(key, tried.reach, String(tried.result.stderr || tried.result.stdout).trim());
+    const plan = await this.homeFirst(chosen);
     const error = hcError(await hc(addArgs(plan)).catch(failed));
     if (error) return this.fail(key, needsLogin(error) ? "password" : reachOf({ code: 1, stderr: error.message }), String(error.message ?? "").trim());
     delete this.jobs[key];
@@ -178,8 +178,9 @@ export default class Computers extends View {
   async probe([target, ...rest], tried = []) {
     const result = await exec("ssh", probeArgs(target, this.platform), { timeout: PROBE_MS }).catch(failed);
     const now = [...tried, { target, result, reach: reachOf(result) }];
-    if (now.at(-1).reach === "ready" || !rest.length) return now.find((t) => t.reach !== "unreachable") ?? now.at(-1);
-    return this.probe(rest, now);
+    const last = now.at(-1);
+    if (last.reach === "ready") return last;
+    return rest.length ? this.probe(rest, now) : now.find((t) => t.reach !== "unreachable") ?? last;
   }
 
   disconnect(key, machine, cx) {
