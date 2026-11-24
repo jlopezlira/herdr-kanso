@@ -529,7 +529,7 @@ export const kansoColours = async () => {
 
 const COMPUTERS_THEME = { foreground: "#d8d4cb", background: "#1b1b19", muted: "#949086", dim: "#6b6862", border: "#33332f", popover: "#222220", hover: "#232321", selected: "#2b2b28", accent: "#da627d" };
 
-export async function computersDialog(host) {
+export async function computersDialog(host, startTimers = false) {
   const { Computers } = await load("kanso-computers/main.js", ["Computers"], {
     ...gpuiHost(),
     theme: () => COMPUTERS_THEME,
@@ -546,16 +546,24 @@ export async function computersDialog(host) {
     ...host,
   });
   const pending = [];
+  const deferred = [];
   const cx = {
     notify() {},
     stop_propagation() {},
     focus_handle: () => ({ focus() {}, is_focused: () => false, release() {} }),
     spawn(fn) { pending.push(fn(cx)); return { cancel() {} }; },
-    timer: { after: () => ({ cancel() {} }), every: () => ({ cancel() {} }) },
+    timer: {
+      after(ms, fn) {
+        if (startTimers && ms === 0) deferred.push(fn);
+        return { cancel() {} };
+      },
+      every: () => ({ cancel() {} }),
+    },
   };
   const flush = async () => { while (pending.length) await pending.shift(); };
   const view = new Computers();
   view.init({}, cx);
+  for (const fn of deferred) fn(cx);
   await flush();
   return { view, cx, flush };
 }

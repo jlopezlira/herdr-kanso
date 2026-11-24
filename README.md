@@ -85,7 +85,11 @@ On Windows, merge `kanso/keys.windows.json` into your Herdr keys instead of
   network, or an agent sets one up with you. It reaches a computer on the home
   network first and over Tailscale when you are away (Windows keeps the
   Tailscale route). When one asks for a password or a key's passphrase, Sign in
-  opens a tab where you type it once. A computer you disconnect stays in the sidebar,
+  opens a tab where you type it once, and kansō puts a key there so Herdr gets in
+  on its own: the one in your ssh agent when there is one, otherwise its own
+  `~/.ssh/id_ed25519_kanso`, which has no passphrase. Remove this computer's key,
+  in the computer's menu, takes off the line kansō added and removes the
+  computer. A computer you disconnect stays in the sidebar,
   Asleep or Disconnected, until you remove it. Rename it, and the name shows on
   every computer.
 - **Images.** The newest picture the agent in focus made, big beside it, and a
@@ -178,8 +182,9 @@ fetch of OpenRouter's price list; the hjkl dōjō's pet picker, which downloads
 the agents' pets from persistent.oaistatic.com and codex-pets.net and keeps only
 files whose checksum it knows;
 Add a computer, which reads Tailscale's list of your computers and, unless
-Settings turns it off, asks the computers on this network whether they answer
-ssh. Another computer is reached only through Herdr's own connection to it.
+Settings turns it off, asks the computers this one already knows on the network
+whether they answer ssh, and the whole network only when you press Search this
+network. Another computer is reached only through Herdr's own connection to it.
 Simulator's pictures and input stay on this computer. Threads and
 Images read the agents' conversation files for the pictures
 they printed; Spend reads the session files your AI tools write, for tokens and

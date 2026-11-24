@@ -24,6 +24,10 @@ the branch's rules.
 
 ## [Unreleased]
 
+### Added
+
+- A computer's menu has Remove this computer's key, which takes off the key line kansō added there and removes the computer from Herdr.
+
 ### Security
 
 - A link in a pull request, an issue or a check opens only when it is an https link, or an http link to this computer or a private network address; anything else stops before it reaches the system's opener.
@@ -33,6 +37,8 @@ the branch's rules.
 - Pets are downloaded over https only and checked against their checksum and size before they are kept.
 - The site serves its own fonts under a content security policy, a changelog link cannot leave its address, and the Markdown opener writes paths into the scripts it makes as quoted data.
 - Releases are signed, and the updater installs only an archive whose signature matches kansō's key; its downloads use https only. The release workflows run with pinned actions and a read-only token by default.
+- Signing in to a computer with its password asks before trusting that computer's key the first time, and uses the key in your ssh agent when there is one; kansō makes its own key only when there is none or it does not get in.
+- Add a computer asks only the computers this one already knows on the network until you press Search this network.
 
 ## [3.34.0] - 2026-11-23
 
