@@ -313,8 +313,9 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     `hc machine add` with those, never `--install`; dropped once
     `hc machine ls` shows it connected. If the save fails after the remove,
     or add keeps failing, it stays with Retry; the hint is its tooltip.
-    This computer has no power. Alone, no header. On keeps it awake; a closed
-    lid still sleeps, and an asleep machine is not woken. Connected, a remote
+    This computer has no power. Alone, no header. On keeps it awake when
+    Settings' Background has Keep connected computers awake on (off by
+    default); a closed lid still sleeps, and an asleep machine is not woken. Connected, a remote
     row has Sync: `text` and always shown when on, `yellow` when it cannot
     run, `dim` on hover when off. A click turns Sync on, and Spend exchanges
     at once.
