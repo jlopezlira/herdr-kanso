@@ -130,6 +130,10 @@ function main() {
     console.error(`error: ${plan.message}`);
     process.exit(1);
   }
+  if (plan.action === "release" && !/^v\d+\.\d+\.\d+(-(beta|rc)\.\d+)?$/.test(plan.tag)) {
+    console.error(`error: ${plan.tag} is not vX.Y.Z, vX.Y.Z-beta.N or vX.Y.Z-rc.N`);
+    process.exit(1);
+  }
   console.log(plan.message);
   if (plan.action === "skip") {
     writeOutputs([["action", "skip"]]);

@@ -9,6 +9,7 @@ permissions:
 jobs:
   rc:
     uses: ./.github/workflows/release.yml
+    secrets: inherit
     with:
       kind: rc --prepare
       branch: develop

@@ -32,6 +32,7 @@ the branch's rules.
 - Shipped adds up your computers in a gist only when you turn it on in Settings, under Background, and the gist no longer holds your e-mails or repository names in the clear: each computer reads back only the repositories it already knows. The README and the privacy page say a secret gist can be read by anyone with its link.
 - Pets are downloaded over https only and checked against their checksum and size before they are kept.
 - The site serves its own fonts under a content security policy, a changelog link cannot leave its address, and the Markdown opener writes paths into the scripts it makes as quoted data.
+- Releases are signed, and the updater installs only an archive whose signature matches kansō's key; its downloads use https only. The release workflows run with pinned actions and a read-only token by default.
 
 ## [3.34.0] - 2026-11-23
 
