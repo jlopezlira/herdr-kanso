@@ -61,6 +61,9 @@ while [ $# -gt 1 ]; do
 done
 exit 0`;
 
+export const isWebLink = (url) => typeof url === "string" && /^(https?:\/\/|mailto:)[^\s]+$/i.test(url);
+const notOption = (target) => (String(target).startsWith("-") ? `./${target}` : target);
+
 export function openApi(platform, run) {
   async function detectEditors(editors) {
     if (platform === "windows") {
@@ -82,7 +85,8 @@ export function openApi(platform, run) {
   const spawn = (program, args = [], options) => platform === "windows"
     ? powershell(run, `Start-Process -FilePath ${psQuote(program)}${args.length ? ` -ArgumentList ${psQuote(args.map(windowsArg).join(" "))}` : ""} -ErrorAction Stop`, options)
     : run("sh", ["-c", 'if command -v setsid >/dev/null 2>&1; then setsid -f "$@" >/dev/null 2>&1; else nohup "$@" >/dev/null 2>&1 & fi', "sh", program, ...args], options);
-  const open = (target, { application, ...options } = {}) => platform === "windows" ? spawn(application || target, application ? [target] : [], options) : platform === "macos" ? run("open", [...(application ? ["-a", application] : []), target], options) : application ? spawn(application, [target], options) : run("xdg-open", [target], options);
+  const open = (target, { application, ...options } = {}) => platform === "windows" ? spawn(application || target, application ? [target] : [], options) : platform === "macos" ? run("open", [...(application ? ["-a", application] : []), notOption(target)], options) : application ? spawn(application, [target], options) : run("xdg-open", [notOption(target)], options);
+  const web = (url, options) => (isWebLink(url) ? open(url, options) : Promise.resolve({ code: 1, stdout: "", stderr: "Only web links open from here" }));
   const terminalLine = (cwd, argv) => platform === "windows" ? `Set-Location -LiteralPath ${psQuote(cwd)}; if ($?) { & ${argv.map(psQuote).join(" ")} }` : `cd ${shellQuote(cwd)} && ${argv.map(shellQuote).join(" ")}`;
   const editorIcons = async (found, dir) => {
     if (platform === "windows") return [];
@@ -97,5 +101,5 @@ export function openApi(platform, run) {
     const result = await run("sh", ["-c", 'out="$1"; shift; for id in "$@"; do [ -f "$out/$id.png" ] && printf "%s\\n" "$id"; done; true', "sh", dir, ...ids]);
     return result.stdout.split("\n").filter((id) => ids.includes(id));
   };
-  return { open, spawn, terminalLine, detectEditors, editorIcons };
+  return { open, web, spawn, terminalLine, detectEditors, editorIcons };
 }
