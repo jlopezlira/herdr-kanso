@@ -163,13 +163,14 @@ export function createCaffeine({ run, local, now = () => Date.now() }) {
       const result = await run({ ...spec, ...(key ? { on: key } : {}), timeout: CALL_MS }).catch(() => ({ threw: true }));
       return { ...answerOf(result), os, verb };
     },
-    settle(key, answer) {
+    settle(key, answer, changed = false) {
       const sure = answer.word === "on" || answer.word === "off";
-      this.put(key, { ...(sure ? { state: answer.word } : {}), unsure: !sure, busy: false, readAt: now(), ...(answer.battery ? { battery: true, told: false } : {}) });
+      const pending = Math.max(0, (this.row(key).pending ?? 0) - (changed ? 1 : 0));
+      this.put(key, { ...(sure ? { state: answer.word } : {}), unsure: !sure, pending, readAt: now(), ...(answer.battery ? { battery: true, told: false } : {}) });
       return answer;
     },
     isOn(key) { return this.row(key).state === "on"; },
-    isBusy(key) { return this.row(key).busy === true; },
+    isBusy(key) { return (this.row(key).pending ?? 0) > 0; },
     isSure(key) { return this.row(key).readAt != null && !this.row(key).unsure; },
     onKeys() { return [...this.rows.entries()].filter(([, value]) => value.state === "on").map(([key]) => key); },
     keep(keys) { [...this.rows.keys()].filter((key) => !keys.includes(key)).forEach((key) => this.rows.delete(key)); },
@@ -179,33 +180,33 @@ export function createCaffeine({ run, local, now = () => Date.now() }) {
       return Boolean(battery && !told);
     },
     look(key) {
-      const { state, busy, want, battery, unsure, readAt, setupUntil } = this.row(key);
-      return { on: state === "on", busy: busy === true, want: want === true, battery: battery === true, read: readAt != null && !unsure, setup: setupUntil > now() };
+      const { state, pending, want, battery, unsure, readAt, setupUntil } = this.row(key);
+      return { on: state === "on", busy: (pending ?? 0) > 0, want: want === true, battery: battery === true, read: readAt != null && !unsure, setup: setupUntil > now() };
     },
-    settingUp(key) { return this.row(key).setupUntil > now(); },
-    setup(key) { this.put(key, { setupUntil: now() + SETUP_FOR_MS }); },
+    settingUp(key) { return this.row(key).setupUntil > now() ? this.row(key).setupVerb : null; },
+    setup(key, verb) { this.put(key, { setupUntil: now() + SETUP_FOR_MS, setupVerb: verb }); },
     done(key) { this.put(key, { setupUntil: 0 }); },
     change(key, on) {
-      this.put(key, { busy: true, want: on ?? !this.isOn(key), battery: false });
-      return this.queued(key, () => this.call(key, (on ?? !this.isOn(key)) ? "on" : "off").then((answer) => this.settle(key, answer)));
+      this.put(key, { pending: (this.row(key).pending ?? 0) + 1, want: on ?? !this.isOn(key), battery: false });
+      return this.queued(key, () => this.call(key, (on ?? !this.isOn(key)) ? "on" : "off").then((answer) => this.settle(key, answer, true)));
     },
     read(key) {
       return this.queued(key, () => this.call(key, "read").then((answer) => this.settle(key, answer)));
     },
     due(keys, at = now()) {
       return keys.filter((key) => {
-        const { readAt, setupUntil, unsure } = this.row(key);
+        const { readAt, setupUntil, unsure, state } = this.row(key);
         if (readAt == null) return true;
         if (setupUntil > at) return at - readAt >= SETUP_EVERY_MS;
-        return unsure && at - readAt >= EVERY_MS;
+        return (unsure || state === "on") && at - readAt >= EVERY_MS;
       });
     },
     nextWait(keys, at = now()) {
       const waits = keys.map((key) => {
-        const { readAt, setupUntil, unsure } = this.row(key);
+        const { readAt, setupUntil, unsure, state } = this.row(key);
         if (readAt == null) return 0;
         if (setupUntil > at) return Math.max(0, readAt + SETUP_EVERY_MS - at);
-        return unsure ? Math.max(0, readAt + EVERY_MS - at) : null;
+        return unsure || state === "on" ? Math.max(0, readAt + EVERY_MS - at) : null;
       }).filter((wait) => wait != null);
       return waits.length ? Math.min(...waits) : null;
     },

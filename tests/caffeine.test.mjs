@@ -189,7 +189,7 @@ test("On macOS Caffeine keeps a guard running, restores sleep when turned off or
   assert.equal(await fileExists(lock), false);
 });
 
-test("Caffeine checks newly connected computers, leaves known states alone, and checks more often during setup", async () => {
+test("Caffeine checks newly connected computers, leaves a computer known off alone, checks one that is on every few minutes, and checks more often during setup", async () => {
   const computer = "remote";
   const keys = [computer];
   let now = 0;
@@ -206,9 +206,10 @@ test("Caffeine checks newly connected computers, leaves known states alone, and 
   checkAfter(EVERY_MS, false);
   reply = "on";
   await caffeine.change(computer, true);
-  checkAfter(EVERY_MS, false);
+  checkAfter(EVERY_MS - 1, false);
+  checkAfter(1, true);
 
-  caffeine.setup(computer);
+  caffeine.setup(computer, "off");
   reply = "off";
   for (const round of [1, 2]) {
     await caffeine.read(computer);
@@ -345,4 +346,32 @@ test("A computer row shows the coffee flag only when the computer and Caffeine a
   assert.equal(hasFlag({ state: "on", caffeine: true }), true);
   assert.equal(hasFlag({ state: "on", caffeine: false }), false);
   for (const state of ["off", "unreachable", "login"]) assert.equal(hasFlag({ state, caffeine: true }), false);
+});
+
+test("A turn on queued behind a status check still shows pending until its own answer comes back", async () => {
+  const replies = [];
+  const caffeine = createCaffeine({ local: "macos", run: () => new Promise((resolve) => replies.push(resolve)) });
+  const answer = async (reply) => {
+    while (!replies.length) await new Promise((resolve) => setImmediate(resolve));
+    replies.shift()(success(reply));
+  };
+  const read = caffeine.read("");
+  const turned = caffeine.change("", true);
+  await answer("off");
+  await read;
+  assert.equal(caffeine.look("").busy, true);
+  await answer("on");
+  await turned;
+  assert.deepEqual([caffeine.look("").busy, caffeine.look("").on], [false, true]);
+});
+
+test("A computer left on is checked again, so a battery turn-off is noticed once and the cup goes away", async () => {
+  let now = 0, reply = "on";
+  const caffeine = createCaffeine({ local: "linux", now: () => now, run: async () => success(reply) });
+  await caffeine.change("", true);
+  now += EVERY_MS;
+  assert.deepEqual(caffeine.due([""]), [""]);
+  reply = "off battery";
+  await caffeine.read("");
+  assert.deepEqual([caffeine.look("").on, caffeine.untold(""), caffeine.untold("")], [false, true, false]);
 });

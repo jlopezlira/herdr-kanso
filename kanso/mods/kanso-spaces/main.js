@@ -1505,13 +1505,13 @@ export default class Spaces extends RetryingView {
   refreshMachines(cx, repeat = false) {
     if (!runs("sidebar.computers", pieces(shared))) { this.followCaffeine(cx); return; }
     this.machineRead ??= new MachineRead();
-    if (repeat && !this.machineRead.busy && ![...(this.machines ?? []), ...(this.parked ?? []), ...machines()].some((row) => row.name)) return;
+    if (repeat && !this.machineRead.busy && ![...(this.machines ?? []), ...(this.parked ?? []), ...machines()].some((row) => row.name)) { this.followCaffeine(cx); return; }
     const job = this.machineRead.start(cx.timer, MACHINE_READ_MS, () => this.readMachines());
     if (job) cx.spawn(async (cx) => { await job; this.followCaffeine(cx); this.redraw(cx); });
   }
 
   caffeineKeys() {
-    return ["", ...(this.machines ?? []).map((row) => row.name).filter((name) => name && this.phaseOf(name) === "connected")];
+    return ["", ...machines().filter((row) => row?.name && machineReaches(row.layout)).map((row) => row.name)];
   }
 
   publishCaffeine() {
@@ -1527,7 +1527,7 @@ export default class Spaces extends RetryingView {
     const keys = this.caffeineKeys();
     const shown = runs("panel.caffeine", pieces(shared));
     this.caffeine.keep(keys);
-    if (shown || !this.caffeineOff) this.caffeineOff = new Set();
+    this.caffeineOff = new Set(shown ? [] : [...(this.caffeineOff ?? [])].filter((key) => keys.includes(key)));
     const off = shown ? [] : keys.filter((key) => !this.caffeineOff?.has(key));
     const reads = shown ? (all ? keys : this.caffeine.due(keys)) : [];
     cx.spawn(async (cx) => {
@@ -1548,7 +1548,7 @@ export default class Spaces extends RetryingView {
     const setting = this.caffeine.settingUp(key);
     const { word } = await this.caffeine.read(key);
     if (this.caffeine.untold(key)) notify({ title: `Caffeine off: ${title}`, body: `Its battery reached ${LOW}%, so it can sleep.`, level: "info" });
-    if (setting && word === "on") { this.caffeine.done(key); this.saidCaffeine(key, title, "on"); }
+    if (setting && word === setting) { this.caffeine.done(key); this.saidCaffeine(key, title, word); }
   }
 
   saidCaffeine(key, title, word) {
@@ -1580,7 +1580,7 @@ export default class Spaces extends RetryingView {
     if (!argv) { notify({ title: `Caffeine on ${title} was not changed`, body: CAFFEINE_WHY.refused, level: "error" }); return; }
     if (space) run("tab.new", { space: space.id, name: "Caffeine", argv });
     else run("space.new", { name: "Caffeine", tab: "Caffeine", machine: key, argv });
-    this.caffeine.setup(key);
+    this.caffeine.setup(key, verb);
     this.followCaffeine(cx);
   }
 
