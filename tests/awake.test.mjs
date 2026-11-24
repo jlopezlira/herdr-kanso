@@ -76,16 +76,21 @@ test("a hold is only for a machine that is connected", async () => {
   assert.equal(osOf(null), null);
 });
 
+function gated(enabled, uname) {
+  const calls = [];
+  const awake = api.createAwake({
+    now: () => 0,
+    enabled,
+    run: (call) => { calls.push(call); return call.command === "uname" ? uname() : new Promise(() => {}); },
+  });
+  return { calls, awake };
+}
+
 test("a connected computer is kept awake only while Keep connected computers awake is on", async () => {
   await loadApi();
   const { runs } = await import("../kanso/mods/kanso-settings/pieces.js");
   let map = {};
-  const calls = [];
-  const awake = api.createAwake({
-    now: () => 0,
-    enabled: () => runs("computers.awake", map),
-    run: (call) => { calls.push(call); return call.command === "uname" ? Promise.resolve(success("Linux\n")) : new Promise(() => {}); },
-  });
+  const { calls, awake } = gated(() => runs("computers.awake", map), () => Promise.resolve(success("Linux\n")));
   await awake.sync([row("grey", "connected")]);
   assert.equal(calls.length, 0, "off until turned on");
   assert.equal(awake.nextWait(), null);
@@ -96,6 +101,20 @@ test("a connected computer is kept awake only while Keep connected computers awa
   await awake.sync([row("grey", "connected")]);
   assert.equal(holds(calls).length, 1, "turning it off starts no new hold");
   assert.equal(awake.nextWait(), null, "and schedules no renew");
+});
+
+test("turning Keep connected computers awake off while a computer is probed starts no hold", async () => {
+  await loadApi();
+  let on = true;
+  let answer;
+  const { calls, awake } = gated(() => on, () => new Promise((resolve) => { answer = resolve; }));
+  const pending = awake.sync([row("grey", "connected"), row("dark", "connected")]);
+  await tick();
+  on = false;
+  answer(success("Linux\n"));
+  await pending;
+  assert.equal(holds(calls).length, 0);
+  assert.equal(awake.nextWait(), null);
 });
 
 test("a lease renews at 270s and overlaps the one still running", async () => {
