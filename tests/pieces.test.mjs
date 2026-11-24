@@ -11,7 +11,7 @@ import {
   migratePieces, loadPieces, pieces, filterPieces, groupsOf, withRoster,
 } from "../kanso/mods/kanso-settings/pieces.js";
 
-const LEFT_OUT = ["status.needs", "status.memory", "status.ports", "status.containers", "status.reviews", "status.spend", "pr.directory", "pr.agent", "pr.write", "files.named", "toast.pr", "toast.agent", "header.actions", "computers.awake"];
+const LEFT_OUT = ["status.needs", "status.memory", "status.ports", "status.containers", "status.reviews", "status.spend", "pr.directory", "pr.agent", "pr.write", "files.named", "toast.pr", "toast.agent", "header.actions"];
 const STATES = new Set(["show", "needed", "hide"]);
 const JOBS = new Set(["git", "gh", "lsof", "docker", "ps", "remote"]);
 
@@ -32,7 +32,7 @@ test("the registry ids are unique and each default is one of its states", () => 
   assert.deepEqual(Object.fromEntries(PIECES.filter((row) => row.job).map((row) => [row.id, row.job])), {
     "sidebar.activity": "ps", "sidebar.tasks": "ps", "sidebar.git": "git", "header.digest": "git", "header.pr": "gh",
     "panel.files": "git", "panel.pr": "gh", "panel.issues": "gh", "panel.shipped": "git", "panel.worktrees": "git", "panel.ports": "lsof",
-    "panel.containers": "docker", "panel.memory": "ps", "update.check": "git", "agents.checks": "gh",
+    "panel.containers": "docker", "panel.memory": "ps", "update.check": "git", "agents.checks": "gh", "shipped.sync": "gh",
   });
   assert.equal(PIECES.find((row) => row.id === "sidebar.away").job, null);
   assert.equal(PIECES.find((row) => row.id === "sidebar.computers").job, null);

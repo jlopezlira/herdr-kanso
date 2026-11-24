@@ -1,7 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { runInNewContext } from "node:vm";
 import { MIN_CONTRAST, SURFACES, THEMES, colour, contrast, loadTokens, pairs, read } from "../scripts/tokens.mjs";
 import { OUT, render, sizeTokens } from "../scripts/build-site-tokens.mjs";
+import { BUILT } from "../scripts/build-site.mjs";
 
 const CSS = ["site/style.css"];
 const PAGES = ["index", "changelog", "credits", "privacy", "terms", "use"].map((p) => `site/${p}.html`);
@@ -104,10 +106,41 @@ test("every variable the site CSS reads is defined", () => {
 });
 
 test("site pages and scripts carry no inline styles", () => {
-  for (const path of PAGES) assert.doesNotMatch(read(path), /<style\b|\sstyle="/, path);
+  for (const path of BUILT) assert.doesNotMatch(read(path), /<style\b|\sstyle="/, path);
   for (const path of SCRIPTS) assert.doesNotMatch(read(path), /\.style\b|style=/, path);
+});
+
+test("Every generated page sets the content security policy and does not link to Google Fonts", () => {
+  const policy = [
+    "default-src 'self'",
+    "connect-src 'self' https://api.github.com",
+    "img-src 'self' data:",
+    "style-src 'self'",
+    "script-src 'self'",
+    "base-uri 'none'",
+    "form-action 'none'",
+  ].join("; ");
+  for (const path of BUILT) {
+    const head = read(path).match(/<head>([\s\S]*?)<\/head>/)?.[1];
+    assert.equal(head?.match(/<meta http-equiv="Content-Security-Policy" content="([^"]+)">/)?.[1], policy, path);
+    assert.doesNotMatch(head, /fonts\.(?:googleapis|gstatic)\.com/, path);
+  }
 });
 
 test("every site page loads the tokens before its stylesheet", () => {
   for (const path of PAGES) assert.match(read(path), /href="tokens\.css">\n<link rel="stylesheet" href="style\.css">/, path);
+});
+
+test("A changelog link keeps the double quote in its address and does not send an opener or referrer", async () => {
+  const url = 'https://example.test/notes/13"screen';
+  const markdown = `## [1.2.3]\n\n### Fixed\n\n- [Screen notes](${url})`;
+  const { promise, resolve } = Promise.withResolvers();
+  const box = { set innerHTML(html) { resolve(html); } };
+  runInNewContext(read("site/changelog.js"), {
+    document: { querySelector: () => box },
+    location: { hash: "" },
+    fetch: async () => ({ ok: true, text: async () => markdown }),
+  });
+  const link = (await promise).match(/<a\b[^>]*>Screen notes<\/a>/)?.[0];
+  assert.equal(link, '<a href="https://example.test/notes/13&quot;screen" rel="noopener noreferrer">Screen notes</a>');
 });

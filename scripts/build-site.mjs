@@ -13,7 +13,6 @@ export const BUILT = PAGES.map((name) => `site/${name}`);
 const generated = (name) => `<!-- Generated from ${SOURCES}${name} by npm run build:site. -->`;
 
 const PIECES = {
-  chrome: ['"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --headless=new --hide-scrollbars \\'],
   pages: ['<a href="changelog.html">Changelog</a>'],
   install: [
     "<code data-copy-text>add herdr.dev/layouts/jlopezlira/herdr-kanso--kanso</code>",
@@ -49,17 +48,18 @@ const FOOTER = `<footer class="foot">
 </footer>
 `;
 
-const page = (name, { head, body, after = "" }) => `<!doctype html>
+const openHead = (name, classes) => `<!doctype html>
 ${generated(name)}
-<html lang="en">
+<html lang="en"${classes ? ` class="${classes}"` : ""}>
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self' https://api.github.com; img-src 'self' data:; style-src 'self'; script-src 'self'; base-uri 'none'; form-action 'none'">
+<link rel="stylesheet" href="fonts.css">
+`;
+
+const page = (name, { head, body, after = "" }) => `${openHead(name)}<meta name="viewport" content="width=device-width, initial-scale=1">
 ${head}<meta name="theme-color" content="#161615">
 <link rel="icon" href="assets/enso.svg" type="image/svg+xml">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="tokens.css">
 <link rel="stylesheet" href="style.css">
 </head>
@@ -69,30 +69,13 @@ ${body}${FOOTER}${after}</body>
 </html>
 `;
 
-const card = (name, { size, fonts, about, glow, style, body }) => {
-  const [width, height] = size.trim().split("x");
-  return `<!doctype html>
-${generated(name)}
-<!--
-${about}-->
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<link href="${fonts.trim()}" rel="stylesheet">
-<style>
-  html, body { margin: 0; width: ${width}px; height: ${height}px; overflow: hidden; background: #161615; }
-  body { position: relative; font-family: "Geist", -apple-system, sans-serif; color: #ece8de; }
-  body::before {
-${glow}  }
-${style}  .shot img { display: block; width: 100%; }
-</style>
+const card = (name, { head, body }) => `${openHead(name, `kanso-card kanso-card--${name.replace(/-card\.html$/, "")}`)}${head}<link rel="stylesheet" href="cards.css">
 </head>
-<body>
-${body}  <div class="shot"><img src="shots/hero.png" alt=""></div>
+<body class="kanso-card__canvas">
+${body}  <div class="kanso-card__shot"><img src="shots/hero.png" alt=""></div>
 </body>
 </html>
 `;
-};
 
 const LAYOUTS = {
   page,

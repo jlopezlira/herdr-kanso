@@ -35,7 +35,7 @@ const knockAll = async (platform, ips, timer) => {
   return (await textOf(() => knock(platform, ips), timer, KNOCKS_MS)).split(/\s+/).filter((ip) => ips.includes(ip));
 };
 
-export async function scanNearby(platform, timer, onNear = () => {}) {
+export async function scanNearby(platform, timer, onNear = () => {}, { whole = false } = {}) {
   const [interfaces, neighbors] = await Promise.all([
     textOf(INTERFACES[platform] ?? INTERFACES.linux, timer).then(interfacesOf),
     textOf(NEIGHBORS[platform] ?? NEIGHBORS.linux, timer).then(neighborsOf),
@@ -43,6 +43,7 @@ export async function scanNearby(platform, timer, onNear = () => {}) {
   const near = nearOf(interfaces, neighbors);
   const first = await knockAll(platform, near, timer);
   onNear(foundHosts(first, neighbors));
+  if (!whole) return foundHosts(first, neighbors);
   const rest = await knockAll(platform, candidates(interfaces, neighbors).filter((ip) => !near.includes(ip)), timer);
   return foundHosts([...first, ...rest], neighbors);
 }

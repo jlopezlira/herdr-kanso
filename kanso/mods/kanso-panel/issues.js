@@ -34,7 +34,7 @@ const SIGNED_OUT_STATES = new Set(["logged_out"]);
 const NO_STORE = { kind: "no store", text: "This computer has no secret store, so Jira and Linear can't sign in here. GitHub keeps working." };
 
 const runOn = (machine) => (cmd, args) => exec(cmd, args, { on: machine || null }).catch((e) => ({ code: -1, stdout: "", stderr: String(e?.message ?? e) }));
-const openUrl = (url) => localService(openApi).open(url).catch(() => {});
+const openUrl = (url) => localService(openApi).web(url).catch(() => {});
 const clock = (at) => (at ? new Date(at).toTimeString().slice(0, 5) : "");
 const accounts = () => {
   const kept = shared(ACCOUNTS);

@@ -1,11 +1,14 @@
 // The dōjō's pets: Codex Pets read from ~/.codex/pets, and installed from codex-pets.net when chosen.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdir, writeFile, readFile, stat } from "node:fs/promises";
-import { join } from "node:path";
+import { createHash } from "node:crypto";
+import { mkdir, readdir, symlink, writeFile, readFile, stat } from "node:fs/promises";
+import { delimiter, join } from "node:path";
 import { pathToFileURL } from "node:url";
+import { petApi } from "../kanso/mods/kanso-dojo/platform-pets.js";
 import { powershell, psQuote } from "../kanso/mods/kanso-panel/platform-command.js";
-import { databaseTimer, load, clone, temporary, exec } from "./helpers.mjs";
+import { databaseTimer, load, clone, temporary, exec, folderWith, nativeWindow, success } from "./helpers.mjs";
+import { httpsFiles } from "./https-fixture.mjs";
 
 const NAMES = ["petOf", "parsePets", "frameOf", "installedPets", "bringAgentPets", "AGENT_PETS", "ROWS", "FRAMES", "HACHI", "Companion"];
 const pets = (host = {}) => load("kanso-dojo/pets.js", NAMES, { div: () => null, image: () => null, exec, appHome: () => "/app", home: () => "/home", ...host });
@@ -73,24 +76,119 @@ test("your installed pets are read from ~/.codex/pets and their atlas is copied 
   assert.ok(await exists(join(app, "data/kanso-dojo/pets/thumbs/seedy.png")), "and a small one for the chooser");
 });
 
-test("the agents' pets are brought into Kanso's folder, never Codex's; one missing is told, one there is not fetched again", async (t) => {
+const windows = process.platform === "win32";
+const digest = (bytes) => createHash("sha256").update(bytes).digest("hex");
+const sheetName = "spritesheet.webp";
+const petName = "pet.json";
+const fixtureDownloads = (t, dir) => httpsFiles(t, dir);
+
+const unixDownloads = async (dir) => {
+  const bin = join(dir, "bin");
+  await mkdir(bin);
+  await writeFile(join(bin, "curl"), [
+    "#!/bin/sh",
+    'while [ "$#" -gt 0 ]; do',
+    '  case "$1" in',
+    '    file://*) file=${1##*/} ;;',
+    '    -o) shift; out=$1 ;;',
+    '  esac',
+    '  shift',
+    'done',
+    '[ -n "$file" ] && [ -n "$out" ] && cp "$PET_FIXTURES/$file" "$out"',
+    "",
+  ].join("\n"), { mode: 0o755 });
+  const env = { PATH: [bin, process.env.PATH].join(delimiter), PET_FIXTURES: dir };
+  return { url: (file) => pathToFileURL(join(dir, file)).href, env };
+};
+
+const petDownloads = async (t, dir) => {
+  const { url, env } = windows ? await fixtureDownloads(t, dir) : await unixDownloads(dir);
+  const run = (command, args, options) => exec(command, args, { ...options, env: { ...process.env, ...env } });
+  return { dir, url, run };
+};
+const petZip = async ({ dir, url }, id, { sheet, json, linked = false, extra = {} }) => {
+  const pack = join(dir, id);
+  const archive = `${id}.zip`;
+  const path = join(dir, archive);
+  await mkdir(pack);
+  const metadata = linked ? "metadata.json" : petName;
+  const files = { [metadata]: json, [sheetName]: sheet, ...extra };
+  await Promise.all(Object.entries(files).map(([name, body]) => writeFile(join(pack, name), body)));
+  if (linked) await symlink(metadata, join(pack, petName));
+  const made = windows
+    ? await powershell(exec, `Compress-Archive -Path ${psQuote(join(pack, "*"))} -DestinationPath ${psQuote(path)}`)
+    : await exec("zip", ["-q", "-y", "-r", path, "."], { cwd: pack });
+  assert.equal(made.code, 0, made.stderr);
+  return { id, name: id, url: url(archive), zip: true, sheet: digest(sheet), json: digest(json) };
+};
+
+test("The Windows pet downloader accepts only HTTPS and limits downloads to 20 MiB", async (t) => {
+  const requests = ["http://127.0.0.1/pet.zip", "file:///pet.zip"].map((url, id) => ({ id: `test-${id}`, url, zip: true }));
+  const run = async (command, args) => {
+    assert.equal(command, "pwsh");
+    assert.equal(args.at(-2), "-Command");
+    return success(args.at(-1));
+  };
+  const { stdout: script } = await petApi("windows", run).bring("pets", requests);
+  const download = script.match(/^[ \t]*& curl\.exe\b[^\r\n]*/m);
+
+  await t.test("curl.exe limits both protocols and caps the download size", () => {
+    assert.ok(download, "The Windows command invokes curl.exe");
+    const [curl] = download;
+    assert.match(curl, /\s--proto '=https'(?=\s|$)/);
+    assert.match(curl, /\s--proto-redir '=https'(?=\s|$)/);
+    assert.match(curl, /\s--max-filesize 20971520(?=\s|$)/);
+  });
+  await t.test("There is no alternate download or file copy", () => {
+    assert.doesNotMatch(script, /\bInvoke-WebRequest\b|\[IO\.File\]\s*::\s*Copy\s*\(/i);
+  });
+  await t.test("HTTP and file URLs throw before the download", () => {
+    assert.ok(script.includes(`$pets=ConvertFrom-Json ${psQuote(JSON.stringify(requests))}`));
+    assert.match(script.slice(0, download?.index), /\$uri=\[Uri\]\$pet\.url\s+if \(\$uri\.Scheme -ne 'https'\) \{ throw 'Not https' \}\s*$/);
+  });
+});
+
+test("The dōjō keeps a pet with matching checksums and names the pets it cannot keep", async (t) => {
   const dir = await temporary(t);
-  const home = join(dir, "home"), app = join(dir, "app"), pack = join(dir, "pack");
-  await mkdir(pack, { recursive: true });
-  await writeFile(join(pack, "pet.json"), JSON.stringify({ id: "clawd", displayName: "Clawd by someone" }));
-  await writeFile(join(pack, "spritesheet.webp"), "webp");
-  await writeFile(join(pack, "extra.sh"), "echo nope");
-  const zipped = process.platform === "win32"
-    ? await powershell(exec, `Compress-Archive -Path ${psQuote(join(pack, "*"))} -DestinationPath ${psQuote(join(dir, "clawd.zip"))}`)
-    : await exec("zip", ["-q", "-j", join(dir, "clawd.zip"), join(pack, "pet.json"), join(pack, "spritesheet.webp"), join(pack, "extra.sh")]);
-  assert.equal(zipped.code, 0, zipped.stderr);
-  await writeFile(join(dir, "rocky.webp"), "webp");
-  const { bringAgentPets } = await pets({ home: () => home, appHome: () => app });
+  const downloads = await petDownloads(t, dir);
+  const source = join(dir, "pets");
+  const fixture = { sheet: "webp", json: '{"displayName":"Clawd"}' };
+  const [matching, wrongSheet, wrongJson, linked] = await Promise.all([
+    petZip(downloads, "matching", fixture),
+    petZip(downloads, "wrong-sheet", fixture),
+    petZip(downloads, "wrong-json", fixture),
+    windows ? null : petZip(downloads, "linked-json", { ...fixture, linked: true }),
+  ]);
+  const refusals = [
+    { ...wrongSheet, sheet: digest("different sheet") },
+    { ...wrongJson, json: digest("different metadata") },
+    ...(linked ? [linked] : []),
+  ];
+  const api = petApi(windows ? "windows" : "linux", downloads.run);
+  const brought = await api.bring(source, [matching, ...refusals]);
+  assert.equal(brought.code, 0, brought.stderr);
+  assert.deepEqual(brought.stderr.trim().split(/\r?\n/), refusals.map(({ id }) => id));
+  assert.deepEqual(await readdir(source), [matching.id]);
+  for (const [file, bytes] of [[sheetName, fixture.sheet], [petName, fixture.json]]) {
+    assert.equal(await readFile(join(source, matching.id, file), "utf8"), bytes);
+  }
+});
+
+test("the agents' pets are brought into Kanso's folder, never Codex's; one missing is told, one there is not fetched again", async (t) => {
+  const { dir, home, app } = await folderWith(t, "home", "app");
+  const downloads = await petDownloads(t, dir);
+  const { url, run } = downloads;
+  const sheet = "webp";
+  const clawd = await petZip(downloads, "clawd", {
+    sheet, json: JSON.stringify({ id: "clawd", displayName: "Clawd by someone" }), extra: { "extra.sh": "echo nope" },
+  });
+  await writeFile(join(dir, "rocky.webp"), sheet);
+  const { bringAgentPets } = await pets({ home: () => home, appHome: () => app, exec: run, window: nativeWindow });
   const list = [
-    { id: "rocky", name: "Rocky", from: "Codex", url: pathToFileURL(join(dir, "rocky.webp")).href },
-    { id: "clawd", name: "Clawd", from: "Claude Code", url: pathToFileURL(join(dir, "clawd.zip")).href, zip: true },
-    { id: "gone", name: "Gone", from: "Codex", url: pathToFileURL(join(dir, "missing.webp")).href },
-    { id: "seedy", name: "Seedy", from: "Codex", url: pathToFileURL(join(dir, "missing.webp")).href },
+    { id: "rocky", name: "Rocky", url: url("rocky.webp"), sheet: digest(sheet) },
+    clawd,
+    { id: "gone", name: "Gone", url: url("missing.webp"), sheet: digest(sheet) },
+    { id: "seedy", name: "Seedy", url: url("missing.webp"), sheet: digest(sheet) },
   ];
   const missed = clone(await bringAgentPets(new Set(["seedy"]), list));
   assert.deepEqual(missed, ["gone"], "one that could not be had is told; one you have is not asked for");

@@ -15,6 +15,8 @@ function runner(output = "", code = 0, stderr = code ? "Access denied" : "") {
   return { calls, run: async (program, args, options) => { calls.push({ program, args, options }); return { code, stdout: output, stderr }; } };
 }
 
+const opener = { macos: "open", linux: "xdg-open", windows: "pwsh" };
+
 for (const name of ["macos", "linux", "windows"]) {
   test(`${name} paths preserve roots, resolve parents and enforce directory boundaries`, () => {
     const api = pathApi(name), native = name === "windows" ? win32 : posix;
@@ -79,6 +81,41 @@ for (const name of ["macos", "linux", "windows"]) {
     assert.equal(r.calls.at(-1).program, name === "windows" ? "pwsh" : "sh");
     assert.match(api.terminalLine("folder", ["claude", "--resume", "a'b"]), name === "windows" ? /Set-Location -LiteralPath/ : /^cd /);
   });
+
+  test(`On ${name}, kansō refuses file links, command options and network paths without launching anything.`, async () => {
+    const r = runner(), api = openApi(name, r.run);
+    for (const target of ["file:///System/Applications/Calculator.app", "-aCalculator", "\\\\evil\\share\\x.exe", "http://example.org/", "mailto:reader@example.org",
+      "https://example.org:invalid/", "https://user@example.org/", "https://example.org:70000/", "http://172.32.0.1/", "https://exa mple.org/", "javascript:alert(1)"]) {
+      assert.equal((await api.web(target)).code, 1, target);
+    }
+    assert.deepEqual(r.calls, []);
+  });
+
+  test(`On ${name}, kansō opens an https link anywhere and an http link only on this computer or a private network.`, async () => {
+    const r = runner(), api = openApi(name, r.run);
+    const links = ["https://example.org:8443/a?b#c", "https://[2001:db8::1]/", "http://localhost:3000/", "http://127.0.0.1:8080", "http://[::1]/", "http://10.0.0.7/",
+      "http://192.168.1.20:5173/x", "http://172.16.0.1/", "http://172.31.255.1/"];
+    for (const link of links) assert.equal((await api.web(link)).code, 0, link);
+    assert.equal(r.calls.length, links.length);
+  });
+
+  test(`On ${name}, kansō opens a GitHub pull request link with the system opener.`, async () => {
+    const r = runner(), api = openApi(name, r.run), url = "https://github.com/x/y/pull/1";
+    assert.equal((await api.web(url)).code, 0);
+    assert.equal(r.calls.length, 1);
+    const { program, args } = r.calls[0];
+    assert.equal(program, opener[name]);
+    if (name === "windows") assert.ok(args.at(-1).endsWith(`; Start-Process -FilePath ${psQuote(url)} -ErrorAction Stop`));
+    else assert.deepEqual(args, [url]);
+  });
+
+  if (name !== "windows") {
+    test(`On ${name}, kansō opens a filename starting with a dash as a relative path.`, async () => {
+      const r = runner(), api = openApi(name, r.run);
+      await api.open("-x");
+      assert.deepEqual(r.calls, [{ program: opener[name], args: ["./-x"], options: {} }]);
+    });
+  }
 
   test(`${name} image clipboard and text use the platform interface`, async () => {
     const r = runner(), api = clipboardApi(name, r.run);

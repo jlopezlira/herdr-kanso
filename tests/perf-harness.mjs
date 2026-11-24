@@ -3,7 +3,7 @@ import { performance } from "node:perf_hooks";
 import { pathToFileURL } from "node:url";
 import { setFlagsFromString } from "node:v8";
 import { runInNewContext } from "node:vm";
-import { load, exec as runFile, clone, until, success, failure, openedKdb, inlineView } from "./helpers.mjs";
+import { load, exec as runFile, clone, until, success, failure, openedKdb, inlineView, dataFolder } from "./helpers.mjs";
 
 export const PANEL_IDS = ["files", "pr", "preview", "shipped", "worktrees", "ports", "look", "find"];
 const source = process.env.PERF_SOURCE_ROOT ? pathToFileURL(`${process.env.PERF_SOURCE_ROOT}/kanso/mods/`) : undefined;
@@ -58,7 +58,7 @@ export function fixture({ dir = "/fixture", blocked = false, quiet = null, worki
     state.flights.push(command);
     state.inFlight += 1;
     try {
-      if (command === "sqlite3" || command === "mkdir") return await runFile(command, args, options);
+      if (command === "sqlite3" || dataFolder(command, args)) return await runFile(command, args, options);
       if (command === "ps") return success(terms.map((t, i) => `${200 + i} 1 00:01 agent`).join("\n"));
       if (command === "hc") {
         if (args[0] === "label") {
@@ -169,6 +169,7 @@ export const sidebarOn = async (f) => {
 
 setFlagsFromString("--expose-gc");
 const collect = runInNewContext("gc");
+const drawCpu = (process.threadCpuUsage ?? process.cpuUsage).bind(process);
 
 export async function firstDraw(id) {
   const f = fixture({ blocked: true });
@@ -180,13 +181,12 @@ export async function firstDraw(id) {
   const moduleMs = performance.now() - start;
   const draw = () => {
     collect();
-    // CPU, not wall time: other test files preempt this one and move performance.now().
-    const opened = process.cpuUsage();
+    const opened = drawCpu();
     const view = new (isPanel ? mod.PANELS[id] : mod[name])();
     f.state.props = isPanel ? { panel: id, ...(id === "preview" ? { path: "/projects/p0/README.md" } : {}) } : {};
     if (isPanel) view.init(f.cx, f.state.props); else view.init(f.state.props, f.cx);
     view.render(f.cx);
-    const used = process.cpuUsage(opened);
+    const used = drawCpu(opened);
     return { ms: (used.user + used.system) / 1000, processes: f.state.processes.length, database: f.state.processes.filter((p) => p.command === "sqlite3").length, files: f.state.reads.length, timers: f.state.timers.length };
   };
   const open = draw();

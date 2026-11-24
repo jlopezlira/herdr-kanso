@@ -28,20 +28,32 @@ on:
         description: More gh release create options.
         type: string
         default: ""
+    secrets:
+      KANSO_RELEASE_KEY:
+        description: The ssh key that signs each release's archive, checked by kanso-tabs/allowed_signers.
+        required: true
+
+permissions:
+  contents: read
 
 jobs:
   release:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     timeout-minutes: 10
     concurrency:
       group: ${{ inputs.group }}
       cancel-in-progress: false
     env:
       KANSO_BRANCH: ${{ github.ref_name }}
+      INPUT_BRANCH: ${{ inputs.branch }}
+      INPUT_KIND: ${{ inputs.kind }}
+      INPUT_OPTIONS: ${{ inputs.options }}
     steps:
-      - name: Require ${{ inputs.branch }}
-        run: test "$GITHUB_REF_NAME" = "${{ inputs.branch }}"
-      - uses: actions/checkout@v4
+      - name: Require the branch
+        run: test "$GITHUB_REF_NAME" = "$INPUT_BRANCH"
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           ref: ${{ inputs.ref }}
           fetch-depth: 0 # tags: the plan compares against the last release
@@ -50,18 +62,18 @@ jobs:
         run: npm run check:version
       - name: Plan
         id: plan
-        run: node scripts/release-plan.mjs ${{ inputs.kind }}
+        run: node scripts/release-plan.mjs $INPUT_KIND
       - name: Tag as the actor
         if: steps.plan.outputs.action == 'release' && inputs.tag != ''
         run: |
           git config user.name "$GITHUB_ACTOR"
           git config user.email "$GITHUB_ACTOR_ID+$GITHUB_ACTOR@users.noreply.github.com"
-          echo "RELEASE_TAG=${{ steps.plan.outputs.tag }}" >> "$GITHUB_ENV"
+          echo "RELEASE_TAG=$PLAN_TAG" >> "$GITHUB_ENV"
+        env:
+          PLAN_TAG: ${{ steps.plan.outputs.tag }}
       - name: Tag the archive
         if: steps.plan.outputs.action == 'release' && inputs.tag == 'archive'
-        run: |
-          node scripts/release-tag.mjs "$RELEASE_TAG"
-          git push origin "refs/tags/$RELEASE_TAG"
+        run: node scripts/release-tag.mjs "$RELEASE_TAG"
       - name: Commit and tag
         if: steps.plan.outputs.action == 'release' && inputs.tag == 'commit'
         run: |
@@ -70,9 +82,24 @@ jobs:
             git commit -m "Prepare $RELEASE_TAG"
           fi
           node scripts/release-tag.mjs "$RELEASE_TAG"
-          git push --atomic origin "HEAD:refs/heads/${{ inputs.branch }}" "refs/tags/$RELEASE_TAG"
+      - name: Sign the archive
+        if: steps.plan.outputs.action == 'release'
+        env:
+          PLAN_TAG: ${{ steps.plan.outputs.tag }}
+          SIGNING_KEY: ${{ secrets.KANSO_RELEASE_KEY }}
+        run: node scripts/release-sign.mjs "$PLAN_TAG" "$RUNNER_TEMP"
+      - name: Push the tag
+        if: steps.plan.outputs.action == 'release' && inputs.tag == 'archive'
+        run: git push origin "refs/tags/$RELEASE_TAG"
+      - name: Push the commit and tag
+        if: steps.plan.outputs.action == 'release' && inputs.tag == 'commit'
+        run: git push --atomic origin "HEAD:refs/heads/$INPUT_BRANCH" "refs/tags/$RELEASE_TAG"
       - name: Publish
         if: steps.plan.outputs.action == 'release'
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "${{ steps.plan.outputs.tag }}" ${{ inputs.options }} --title "${{ steps.plan.outputs.title }}" --notes-file "${{ steps.plan.outputs.notes }}"
+          PLAN_TAG: ${{ steps.plan.outputs.tag }}
+          PLAN_TITLE: ${{ steps.plan.outputs.title }}
+          PLAN_NOTES: ${{ steps.plan.outputs.notes }}
+          TARGET: ${{ inputs.tag == '' && github.sha || '' }}
+        run: gh release create "$PLAN_TAG" $INPUT_OPTIONS ${TARGET:+--target "$TARGET"} --title "$PLAN_TITLE" --notes-file "$PLAN_NOTES" "$RUNNER_TEMP/kanso-$PLAN_TAG.tar.gz" "$RUNNER_TEMP/kanso-$PLAN_TAG.tar.gz.sig"

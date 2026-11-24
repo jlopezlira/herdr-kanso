@@ -31,15 +31,28 @@ SWIFT
   fi
 }
 
+sq() { printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\\\''/g")"; }
+
+desktop_arg() {
+  case "$1" in
+    *[!A-Za-z0-9_./+-]*) printf '"%s"' "$(printf '%s' "$1" | sed -e 's/\\/\\\\\\\\/g' -e 's/["`$]/\\\\&/g' -e 's/%/%%/g')" ;;
+    *) printf '%s' "$1" ;;
+  esac
+}
+
+script_values() {
+  printf 'inbox=%s\nherdr=%s\nhome=%s\nsaved=%s\nexport HERDR_APP_HOME="$home"\n' "$(sq "$INBOX")" "$(sq "$herdr")" "$(sq "$HOME_DIR")" "$(sq "$SAVED")"
+}
+
 hand_to_herdr() {
-  cat <<HAND
-mkdir -p "$INBOX"
-printf '%s' "\$p" > "$INBOX/\$(date +%s)-\$\$.path"
-s=\$("$herdr" status 2>/dev/null)
-case "\$s" in
+  cat <<'HAND'
+mkdir -p "$inbox"
+printf '%s' "$p" > "$inbox/$(date +%s)-$$.path"
+s=$("$herdr" status 2>/dev/null)
+case "$s" in
   *'"layout": "kanso"'*) ;;
-  *) if [ -d "$HOME_DIR/mods/markdown-panel" ]; then
-       case "\$s" in *'"markdown-panel"'*) ;; *) "$herdr" do mod.open '{"name":"markdown-panel"}' >/dev/null 2>&1 ;; esac
+  *) if [ -d "$home/mods/markdown-panel" ]; then
+       case "$s" in *'"markdown-panel"'*) ;; *) "$herdr" do mod.open '{"name":"markdown-panel"}' >/dev/null 2>&1 ;; esac
      fi ;;
 esac
 HAND
@@ -76,7 +89,7 @@ APPLESCRIPT
   cat > "$APP/Contents/Resources/open.sh" <<OPEN
 #!/bin/sh
 p=\$1
-export HERDR_APP_HOME="$HOME_DIR"
+$(script_values)
 /usr/bin/pgrep -xq Herdr || exec /usr/bin/open -a TextEdit "\$p"
 $(hand_to_herdr)
 /usr/bin/open -a Herdr
@@ -117,24 +130,23 @@ linux_install() {
   cat > "$OPENER" <<OPEN
 #!/bin/sh
 p=\$1
-export HERDR_APP_HOME="$HOME_DIR"
+$(script_values)
 if ! pgrep -x herdr-app >/dev/null; then
   case "\$p" in *.md|*.markdown) t=text/markdown ;; *) t=text/plain ;; esac
-  back=\$(sed -n "s|^\$t ||p" "$SAVED" 2>/dev/null)
+  back=\$(sed -n "s|^\$t ||p" "\$saved" 2>/dev/null)
   [ -n "\$back" ] && command -v gtk-launch >/dev/null && exec gtk-launch "\${back%.desktop}" "\$p"
-  exec "$herdr"
+  exec "\$herdr"
 fi
 $(hand_to_herdr)
-command -v omarchy-launch-or-focus >/dev/null && exec omarchy-launch-or-focus herdr-app "$herdr"
+command -v omarchy-launch-or-focus >/dev/null && exec omarchy-launch-or-focus herdr-app "\$herdr"
 exit 0
 OPEN
   chmod +x "$OPENER"
-  case "$OPENER" in *' '*) exec_line="\"$OPENER\" %f" ;; *) exec_line="$OPENER %f" ;; esac
   cat > "$DESKTOP_APPS/$ID.desktop" <<DESKTOP
 [Desktop Entry]
 Type=Application
 Name=Kanso Markdown
-Exec=$exec_line
+Exec=$(desktop_arg "$OPENER") %f
 MimeType=text/markdown;text/x-markdown;text/plain;
 NoDisplay=true
 Terminal=false

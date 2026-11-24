@@ -235,6 +235,15 @@ test("The shared delivery keeps its own deadline: a caller without a timer is re
   assert.notEqual(r.code, 0);
 });
 
+test("Sending to an agent removes escape and bell characters but keeps newlines and tabs.", async () => {
+  const asked = [];
+  const hc = async (args) => { asked.push(args); return { code: 0 }; };
+  const { deliver } = await load("kanso-send/deliver.js", ["deliver"], { hc });
+  const { cx } = timedContext([]);
+  await deliver(cx.timer, "t1", "first\x1b\n\tsecond\x07", "you");
+  assert.deepEqual(clone(asked.find(([verb]) => verb === "send")), ["send", "t1", "first\n\tsecond"]);
+});
+
 const DRAFT = "Look at this.";
 const readyMachines = [{ name: null, layout: "ready" }];
 const source = { from: { terminal: "t0", pane: "p0" }, to: null, text: DRAFT };

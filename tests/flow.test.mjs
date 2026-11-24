@@ -595,3 +595,20 @@ test("Save is dim and says the arrangement needs a name while Name is empty", as
   assert.ok(texts(blank).includes("An arrangement needs a name."));
   assert.equal(primary(saveWith("Review")), false);
 });
+
+test("Every git read behind the header digest turns off the repository's file-system monitor and hooks", async () => {
+  const { readDigest } = await loadReadDigest();
+  const gits = [];
+  const run = async (cmd, args) => {
+    if (cmd === "gh") return failure("no pull requests found");
+    gits.push(Array.from(args));
+    const line = args.join(" ");
+    if (line.includes("is-inside-work-tree")) return success("true\n");
+    if (line.includes("rev-list")) return success("0\n");
+    if (line.includes("symbolic-ref")) return success("feat\n");
+    return success("");
+  };
+  await readDigest("/repo", run);
+  assert.ok(gits.length >= 4);
+  for (const argv of gits) assert.deepEqual(argv.slice(0, 6), ["-C", "/repo", "-c", "core.fsmonitor=false", "-c", "core.hooksPath=/dev/null"], argv.join(" "));
+});

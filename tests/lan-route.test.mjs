@@ -165,3 +165,16 @@ test("Spaces reroutes a listed machine that is not connected", async () => {
   await view.preferHome();
   assert.ok(calls.some((args) => args[1] === "rm" && args[2] === "grey"), calls.map((row) => row.join(" ")).join("\n"));
 });
+
+test("A probe on the home network never trusts a key it has not seen, and an older saved route is still read", async () => {
+  const { lanProbeArgs, lanRecord } = await route();
+  const { lanParts } = await load("kanso-computers/sign-in.js", ["lanParts"]);
+  const args = lanProbeArgs("10.1.2.3", { target: "ada@grey", hostKey: "grey" });
+  assert.ok(args.includes("StrictHostKeyChecking=yes"));
+  assert.equal(args.some((arg) => arg.includes("accept-new")), false);
+  const record = lanRecord({ name: "grey", target: "ada@grey", via: "" }, "10.1.2.3", { hostKey: "grey" });
+  assert.equal(record.via.includes("accept-new"), false);
+  assert.equal(lanParts(record.via)?.ip, "10.1.2.3");
+  const older = record.via.replaceAll("StrictHostKeyChecking=yes", "StrictHostKeyChecking=accept-new");
+  assert.equal(lanParts(older)?.ip, "10.1.2.3");
+});

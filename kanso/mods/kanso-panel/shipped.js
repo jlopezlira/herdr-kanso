@@ -17,6 +17,7 @@ import { factList } from "./ui-facts.js";
 import { segmented } from "./ui-tab.js";
 import { range, tryOrAsync, mapSeries, MONTHS } from "./pure.js";
 import { shippedMemory } from "./panel-state.js";
+import { pieces, runs } from "./pieces.js";
 import { spawnAndNotify, said } from "./lib.js";
 import { dot } from "./ui-dot.js";
 
@@ -358,17 +359,21 @@ export class Shipped {
     await rounds(due, 0);
 
     const ids = await this.identities(databaseId);
-    const idKey = JSON.stringify(ids.all.toSorted());
+    const sealed = JSON.parse((await this.store.meta("identity-seals")) ?? "null");
+    const idKey = JSON.stringify([...ids.all, ...(sealed?.seals ?? [])].toSorted());
     if ((await this.store.meta("scanned-identities")) !== idKey) { await this.store.sql("DELETE FROM scans;"); await this.store.setMeta("scanned-identities", idKey); }
     this.phase = "this computer's repositories"; cx.notify();
-    await this.store.scanLocal(ids.all, (done, total) => { this.phase = `this computer's repositories, ${fmt(total - done)} to go`; cx.notify(); });
+    await this.store.scanLocal(ids.all, (done, total) => { this.phase = `this computer's repositories, ${fmt(total - done)} to go`; cx.notify(); }, sealed);
 
+    if (!runs("shipped.sync", pieces(shared))) { this.machines = []; return; }
     this.phase = "your other computers"; cx.notify();
     try {
       const synced = await this.store.syncMachines(ids.mine);
       const before = JSON.parse((await this.store.meta("identities")) ?? "[]");
       const learned = [...new Set([...before, ...synced.identities])];
-      if (learned.length !== before.length) await this.store.setMeta("identities", JSON.stringify(learned)); // read with them on the next refresh
+      if (learned.length !== before.length) await this.store.setMeta("identities", JSON.stringify(learned));
+      const seals = JSON.stringify({ key: synced.gist, seals: synced.seals });
+      if (seals !== JSON.stringify(sealed)) await this.store.setMeta("identity-seals", seals);
       this.machines = synced.machines;
     } catch (e) { this.machineError = String(e?.message ?? e); }
   }

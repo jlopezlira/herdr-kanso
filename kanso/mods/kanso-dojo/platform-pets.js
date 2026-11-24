@@ -24,20 +24,24 @@ done`;
 
 // The agents' pets not here yet, brought into Kanso's folder: id, name, URL and kind (zip or webp) each.
 // A codex-pets.net zip is unpacked aside and only its pet.json and atlas kept.
+const MAX_BYTES = 20 * 1024 * 1024;
 const BRING = `src="$1"; shift; mkdir -p "$src" || exit 1
 tmp=$(mktemp -d) || exit 1; trap 'rm -rf "$tmp"' EXIT
-while [ $# -ge 4 ]; do
-  id="$1"; name="$2"; url="$3"; kind="$4"; shift 4
+digest() { if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1"; else shasum -a 256 "$1"; fi | cut -c1-64; }
+fits() { [ -f "$1" ] && [ ! -L "$1" ] && [ "$(digest "$1")" = "$2" ]; }
+get() { curl -fsSL --proto '=https' --proto-redir '=https' --max-filesize ${MAX_BYTES} --max-time 90 "$1" -o "$2" 2>/dev/null; }
+while [ $# -ge 6 ]; do
+  id="$1"; name="$2"; url="$3"; kind="$4"; sheet="$5"; json="$6"; shift 6
   case "$id" in ""|.*|*[!A-Za-z0-9._-]*) continue;; esac
   [ -f "$src/$id/pet.json" ] && continue
   rm -rf "$tmp/x" "$tmp/p"; mkdir -p "$tmp/x"
   if [ "$kind" = zip ]; then
-    curl -fsSL --max-time 90 "$url" -o "$tmp/p" 2>/dev/null && unzip -qq "$tmp/p" -d "$tmp/x" 2>/dev/null || { echo "$id" >&2; continue; }
-    j=$(find "$tmp/x" -maxdepth 2 -type f -name pet.json | head -n 1); [ -n "$j" ] || { echo "$id" >&2; continue; }
-    d=$(dirname "$j"); s="$d/spritesheet.webp"; [ -f "$s" ] || s="$d/spritesheet.png"; [ -f "$s" ] || { echo "$id" >&2; continue; }
+    get "$url" "$tmp/p" && unzip -qq "$tmp/p" -d "$tmp/x" 2>/dev/null || { echo "$id" >&2; continue; }
+    j=$(find "$tmp/x" -maxdepth 2 -type f -name pet.json | head -n 1); [ -n "$j" ] && fits "$j" "$json" || { echo "$id" >&2; continue; }
+    d=$(dirname "$j"); s="$d/spritesheet.webp"; [ -f "$s" ] || s="$d/spritesheet.png"; fits "$s" "$sheet" || { echo "$id" >&2; continue; }
     mkdir -p "$src/$id" && cp -f "$s" "$src/$id/" && cp -f "$j" "$src/$id/pet.json"
   else
-    curl -fsSL --max-time 90 "$url" -o "$tmp/x/spritesheet.webp" 2>/dev/null || { echo "$id" >&2; continue; }
+    get "$url" "$tmp/x/spritesheet.webp" && fits "$tmp/x/spritesheet.webp" "$sheet" || { echo "$id" >&2; continue; }
     mkdir -p "$src/$id" && mv -f "$tmp/x/spritesheet.webp" "$src/$id/" && printf '{"id":"%s","displayName":"%s"}\\n' "$id" "$name" > "$src/$id/pet.json"
   fi
 done`;
@@ -82,18 +86,22 @@ try {
     try {
       $archive=Join-Path $work $(if ($pet.zip) {'pet.zip'} else {'spritesheet.webp'})
       $uri=[Uri]$pet.url
-      if ($uri.IsFile) { [IO.File]::Copy($uri.LocalPath,$archive,$true) } else { Invoke-WebRequest -UseBasicParsing -Uri $uri -OutFile $archive -TimeoutSec 90 }
+      if ($uri.Scheme -ne 'https') { throw 'Not https' }
+      & curl.exe -fsSL --proto '=https' --proto-redir '=https' --max-filesize ${MAX_BYTES} --max-time 90 -o $archive $uri.AbsoluteUri 2>$null
+      if ($LASTEXITCODE -ne 0) { throw 'Not downloaded' }
+      if ((Get-Item -LiteralPath $archive).Length -gt ${MAX_BYTES}) { throw 'Too large' }
       if ($pet.zip) {
         $unpacked=Join-Path $work 'unpacked'; Expand-Archive -LiteralPath $archive -DestinationPath $unpacked
         $json=Get-ChildItem -LiteralPath $unpacked -Filter pet.json -Recurse -Depth 1 -File | Select-Object -First 1
-        if (-not $json) { throw 'No pet.json' }
+        if (-not $json -or $json.LinkType -or (Get-FileHash -LiteralPath $json.FullName -Algorithm SHA256).Hash -ne $pet.json) { throw 'No pet.json' }
         $sheet=Join-Path $json.DirectoryName 'spritesheet.webp'
         if (-not (Test-Path -LiteralPath $sheet)) { $sheet=Join-Path $json.DirectoryName 'spritesheet.png' }
-        if (-not (Test-Path -LiteralPath $sheet)) { throw 'No atlas' }
+        if (-not (Test-Path -LiteralPath $sheet) -or (Get-Item -LiteralPath $sheet).LinkType -or (Get-FileHash -LiteralPath $sheet -Algorithm SHA256).Hash -ne $pet.sheet) { throw 'No atlas' }
         [IO.Directory]::CreateDirectory($target) | Out-Null
         Copy-Item -LiteralPath $sheet -Destination $target -Force
         Copy-Item -LiteralPath $json.FullName -Destination (Join-Path $target 'pet.json') -Force
       } else {
+        if ((Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash -ne $pet.sheet) { throw 'No atlas' }
         [IO.Directory]::CreateDirectory($target) | Out-Null
         Move-Item -LiteralPath $archive -Destination (Join-Path $target 'spritesheet.webp') -Force
         [IO.File]::WriteAllText((Join-Path $target 'pet.json'),(@{id=$id;displayName=$pet.name} | ConvertTo-Json -Compress),[Text.UTF8Encoding]::new($false))
@@ -109,6 +117,6 @@ export function petApi(platform, run) {
     : run("sh", ["-c", LIST, "sh", out, ...sources]);
   const bring = (source, pets) => platform === "windows"
     ? powershell(run, `$source=${psQuote(source)}; $pets=ConvertFrom-Json ${psQuote(JSON.stringify(pets))}; ` + WINDOWS_BRING, { timeout: 120000 })
-    : run("sh", ["-c", BRING, "sh", source, ...pets.flatMap((pet) => [pet.id, pet.name, pet.url, pet.zip ? "zip" : "webp"])]);
+    : run("sh", ["-c", BRING, "sh", source, ...pets.flatMap((pet) => [pet.id, pet.name, pet.url, pet.zip ? "zip" : "webp", pet.sheet, pet.json ?? ""])]);
   return { list, bring };
 }

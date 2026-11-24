@@ -265,6 +265,30 @@ test("A pid file names a live process or a dead one", async (t) => {
   assert.notEqual((await host.alive(live)).code, 0, `step dead, file ${live}`);
 });
 
+const downloadProtocols = (args) => ["--proto", "--proto-redir"]
+  .map((option) => args.includes(option) ? args[args.indexOf(option) + 1] : null);
+
+for (const [platform, curl] of [["linux", "curl"], ["windows", "curl.exe"]]) {
+  test(`The updater on ${platform} allows only HTTPS for downloads and redirects`, async (t) => {
+    const run = t.mock.fn(async () => success(""));
+    const update = await updater();
+    const url = "https://example.test/release.tar.gz";
+    await update.updateHost(platform, run, null, update).fetch(url);
+    const [program, args] = run.mock.calls[0].arguments;
+    assert.equal(program, curl);
+    assert.equal(args.at(-1), url);
+
+    const script = platform === "windows"
+      ? update.windowsInstallScript({ url, home: "C:/app", dir: "C:/updates", keys: "{}" }, "C:/updates/op.ps1")
+      : update.INSTALL_SCRIPT;
+    const download = script.split("\n").find((line) => line.trimStart().startsWith(platform === "windows" ? "& curl.exe " : "curl "));
+    assert.ok(download, "the installer downloads the release");
+    const options = download.match(/'[^']*'|"[^"]*"|[^\s,()@&|]+/g).map((token) => token.replace(/^['"]|['"]$/g, ""));
+    const httpsOnly = ["=https", "=https"];
+    assert.deepEqual([downloadProtocols(args), downloadProtocols(options)], [httpsOnly, httpsOnly]);
+  });
+}
+
 test("The Windows updater script keeps the same contract and PowerShell 5.1", async () => {
   const home = join("/tmp", "O'Brien home");
   const dir = join(home, ".kanso-updates");

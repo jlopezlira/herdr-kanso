@@ -42,6 +42,17 @@ test("Remove is on a remote computer in every phase but loading, and never on th
   assert.equal(item({ remote: true, phase: "loading" }), null);
 });
 
+test("Remove this computer's key is offered only for a connected remote computer on a kansō key route", async () => {
+  const [items, said] = await Promise.all([rows(), wordsOf()]);
+  const props = { remote: true, phase: "connected", keyed: true };
+  const removeKey = (menu) => clone(items(menu)).filter((row) => row.act === "remove-key");
+  assert.deepEqual(removeKey(props), [{ key: "unkey", act: "remove-key" }]);
+  assert.equal(said("remove-key"), "Remove this computer's key");
+  assert.deepEqual(removeKey({ ...props, remote: false }), []);
+  assert.deepEqual(removeKey({ ...props, keyed: false }), []);
+  for (const phase of ["off", "unavailable", "login", "loading"]) assert.deepEqual(removeKey({ ...props, phase }), []);
+});
+
 test("Add computer switched off in kansō settings leaves the menu without it or its line", async () => {
   const computerMenuItems = await rows();
   assert.deepEqual(words(computerMenuItems({ remote: true, phase: "off", addComputer: false }), await wordsOf()), ["Rename…", "Connect", "Remove", "—", "Hide “Computers”", "Settings for this…"]);
