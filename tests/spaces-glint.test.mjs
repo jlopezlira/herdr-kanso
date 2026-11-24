@@ -30,14 +30,18 @@ const work = async (f, index = 0) => {
   for (const rows of [f.list, f.terms, f.ps]) rows[index] = { ...rows[index], status: "working" };
   await f.advance(500);
 };
+const mountWorking = async (f, mount) => {
+  const view = await mount();
+  await f.advance(6000);
+  await work(f);
+  return view;
+};
 
 test("The Projects row starts at rest, sweeps 80 ms later and stops without polling for expiry", async (t) => {
   const { f, mount, draw } = await sidebar(t);
   const { GLINT, GLINT_MS } = await loadMod("kanso-spaces/ui.js", ["GLINT", "GLINT_MS"], f.host);
   const duration = GLINT_MS / 2, span = LEAD + duration + LEAD;
-  const view = await mount();
-  await f.advance(6000);
-  await work(f);
+  const view = await mountWorking(f, mount);
   const started = f.state.now;
   const deadlines = () => f.state.timers.filter(({ every, ms, next }) => !every && Number.isFinite(next) && [LEAD, span - LEAD].includes(ms))
     .map(({ next }) => next - started);
@@ -146,9 +150,7 @@ test("Painting the sidebar during a glint reads only one row snapshot", async (t
     const read = f.host[name];
     f.host[name] = () => { reads[name] += 1; return read(); };
   }
-  const view = await mount();
-  await f.advance(6000);
-  await work(f);
+  const view = await mountWorking(f, mount);
   for (const name of Object.keys(reads)) reads[name] = 0;
   view.paint();
   assert.deepEqual(reads, { spaces: 2, panes: 1, terminals: 3, agents: 1, machines: 1, focused: 1 }, "sweep scheduling adds no host reads to a paint");
