@@ -2,12 +2,14 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
+import { once } from "node:events";
 import { mkdir, readdir, symlink, writeFile, readFile, stat } from "node:fs/promises";
-import { delimiter, join } from "node:path";
+import { createServer } from "node:https";
+import { delimiter, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { petApi } from "../kanso/mods/kanso-dojo/platform-pets.js";
 import { powershell, psQuote } from "../kanso/mods/kanso-panel/platform-command.js";
-import { databaseTimer, load, clone, temporary, exec, folderWith } from "./helpers.mjs";
+import { databaseTimer, load, clone, temporary, exec, fileExists, folderWith, nativeWindow, success } from "./helpers.mjs";
 
 const NAMES = ["petOf", "parsePets", "frameOf", "installedPets", "bringAgentPets", "AGENT_PETS", "ROWS", "FRAMES", "HACHI", "Companion"];
 const pets = (host = {}) => load("kanso-dojo/pets.js", NAMES, { div: () => null, image: () => null, exec, appHome: () => "/app", home: () => "/home", ...host });
@@ -79,9 +81,40 @@ const windows = process.platform === "win32";
 const digest = (bytes) => createHash("sha256").update(bytes).digest("hex");
 const sheetName = "spritesheet.webp";
 const petName = "pet.json";
-const fixtureUrl = (dir, file) => pathToFileURL(join(dir, file)).href;
-const petRun = async (dir) => {
-  if (windows) return exec;
+const fixtureDownloads = async (t, dir) => {
+  const key = join(dir, "fixture.key");
+  const cert = join(dir, "fixture.pem");
+  const gitExec = (await exec("git", ["--exec-path"])).stdout.trim();
+  const bundled = gitExec && resolve(gitExec, "../../bin/openssl.exe");
+  const openssl = bundled && await fileExists(bundled) ? bundled : "openssl";
+  const made = await exec(openssl, [
+    "req", "-x509", "-newkey", "ec", "-pkeyopt", "ec_paramgen_curve:P-256", "-nodes",
+    "-subj", "/CN=127.0.0.1", "-addext", "subjectAltName=IP:127.0.0.1",
+    "-days", "1", "-keyout", key, "-out", cert,
+  ]);
+  assert.equal(made.code, 0, made.stderr);
+  await writeFile(join(dir, ".curlrc"), `cacert = ${JSON.stringify(cert)}\n`);
+  const assets = new Map();
+  const server = createServer({ key: await readFile(key), cert: await readFile(cert), maxVersion: "TLSv1.2" }, async (request, response) => {
+    const file = assets.get(request.url);
+    const bytes = file && await readFile(file).catch(() => null);
+    if (!bytes) response.writeHead(404);
+    response.end(bytes || undefined);
+  });
+  t.after(() => { server.close(); server.closeAllConnections(); });
+  const listening = once(server, "listening");
+  server.listen(0, "127.0.0.1");
+  await listening;
+  const url = (file) => {
+    const route = "/" + file;
+    assets.set(route, join(dir, file));
+    return `https://127.0.0.1:${server.address().port}${route}`;
+  };
+  const env = { CURL_HOME: dir, NO_PROXY: "127.0.0.1", no_proxy: "127.0.0.1" };
+  return { url, env };
+};
+
+const unixDownloads = async (dir) => {
   const bin = join(dir, "bin");
   await mkdir(bin);
   await writeFile(join(bin, "curl"), [
@@ -96,10 +129,16 @@ const petRun = async (dir) => {
     '[ -n "$file" ] && [ -n "$out" ] && cp "$PET_FIXTURES/$file" "$out"',
     "",
   ].join("\n"), { mode: 0o755 });
-  const env = { ...process.env, PATH: [bin, process.env.PATH].join(delimiter), PET_FIXTURES: dir };
-  return (command, args, options) => exec(command, args, { ...options, env });
+  const env = { PATH: [bin, process.env.PATH].join(delimiter), PET_FIXTURES: dir };
+  return { url: (file) => pathToFileURL(join(dir, file)).href, env };
 };
-const petZip = async (dir, id, { sheet, json, linked = false, extra = {} }) => {
+
+const petDownloads = async (t, dir) => {
+  const { url, env } = windows ? await fixtureDownloads(t, dir) : await unixDownloads(dir);
+  const run = (command, args, options) => exec(command, args, { ...options, env: { ...process.env, ...env } });
+  return { dir, url, run };
+};
+const petZip = async ({ dir, url }, id, { sheet, json, linked = false, extra = {} }) => {
   const pack = join(dir, id);
   const archive = `${id}.zip`;
   const path = join(dir, archive);
@@ -112,25 +151,52 @@ const petZip = async (dir, id, { sheet, json, linked = false, extra = {} }) => {
     ? await powershell(exec, `Compress-Archive -Path ${psQuote(join(pack, "*"))} -DestinationPath ${psQuote(path)}`)
     : await exec("zip", ["-q", "-y", "-r", path, "."], { cwd: pack });
   assert.equal(made.code, 0, made.stderr);
-  return { id, name: id, url: fixtureUrl(dir, archive), zip: true, sheet: digest(sheet), json: digest(json) };
+  return { id, name: id, url: url(archive), zip: true, sheet: digest(sheet), json: digest(json) };
 };
+
+test("The Windows pet downloader accepts only HTTPS and limits downloads to 20 MiB", async (t) => {
+  const requests = ["http://127.0.0.1/pet.zip", "file:///pet.zip"].map((url, id) => ({ id: `test-${id}`, url, zip: true }));
+  const run = async (command, args) => {
+    assert.equal(command, "pwsh");
+    assert.equal(args.at(-2), "-Command");
+    return success(args.at(-1));
+  };
+  const { stdout: script } = await petApi("windows", run).bring("pets", requests);
+  const download = script.match(/^[ \t]*& curl\.exe\b[^\r\n]*/m);
+
+  await t.test("curl.exe limits both protocols and caps the download size", () => {
+    assert.ok(download, "The Windows command invokes curl.exe");
+    const [curl] = download;
+    assert.match(curl, /\s--proto '=https'(?=\s|$)/);
+    assert.match(curl, /\s--proto-redir '=https'(?=\s|$)/);
+    assert.match(curl, /\s--max-filesize 20971520(?=\s|$)/);
+  });
+  await t.test("There is no alternate download or file copy", () => {
+    assert.doesNotMatch(script, /\bInvoke-WebRequest\b|\[IO\.File\]\s*::\s*Copy\s*\(/i);
+  });
+  await t.test("HTTP and file URLs throw before the download", () => {
+    assert.ok(script.includes(`$pets=ConvertFrom-Json ${psQuote(JSON.stringify(requests))}`));
+    assert.match(script.slice(0, download?.index), /\$uri=\[Uri\]\$pet\.url\s+if \(\$uri\.Scheme -ne 'https'\) \{ throw 'Not https' \}\s*$/);
+  });
+});
 
 test("The dōjō keeps a pet with matching checksums and names the pets it cannot keep", async (t) => {
   const dir = await temporary(t);
+  const downloads = await petDownloads(t, dir);
   const source = join(dir, "pets");
   const fixture = { sheet: "webp", json: '{"displayName":"Clawd"}' };
   const [matching, wrongSheet, wrongJson, linked] = await Promise.all([
-    petZip(dir, "matching", fixture),
-    petZip(dir, "wrong-sheet", fixture),
-    petZip(dir, "wrong-json", fixture),
-    windows ? null : petZip(dir, "linked-json", { ...fixture, linked: true }),
+    petZip(downloads, "matching", fixture),
+    petZip(downloads, "wrong-sheet", fixture),
+    petZip(downloads, "wrong-json", fixture),
+    windows ? null : petZip(downloads, "linked-json", { ...fixture, linked: true }),
   ]);
   const refusals = [
     { ...wrongSheet, sheet: digest("different sheet") },
     { ...wrongJson, json: digest("different metadata") },
     ...(linked ? [linked] : []),
   ];
-  const api = petApi(windows ? "windows" : "linux", await petRun(dir));
+  const api = petApi(windows ? "windows" : "linux", downloads.run);
   const brought = await api.bring(source, [matching, ...refusals]);
   assert.equal(brought.code, 0, brought.stderr);
   assert.deepEqual(brought.stderr.trim().split(/\r?\n/), refusals.map(({ id }) => id));
@@ -142,17 +208,19 @@ test("The dōjō keeps a pet with matching checksums and names the pets it canno
 
 test("the agents' pets are brought into Kanso's folder, never Codex's; one missing is told, one there is not fetched again", async (t) => {
   const { dir, home, app } = await folderWith(t, "home", "app");
+  const downloads = await petDownloads(t, dir);
+  const { url, run } = downloads;
   const sheet = "webp";
-  const clawd = await petZip(dir, "clawd", {
+  const clawd = await petZip(downloads, "clawd", {
     sheet, json: JSON.stringify({ id: "clawd", displayName: "Clawd by someone" }), extra: { "extra.sh": "echo nope" },
   });
   await writeFile(join(dir, "rocky.webp"), sheet);
-  const { bringAgentPets } = await pets({ home: () => home, appHome: () => app, exec: await petRun(dir) });
+  const { bringAgentPets } = await pets({ home: () => home, appHome: () => app, exec: run, window: nativeWindow });
   const list = [
-    { id: "rocky", name: "Rocky", url: fixtureUrl(dir, "rocky.webp"), sheet: digest(sheet) },
+    { id: "rocky", name: "Rocky", url: url("rocky.webp"), sheet: digest(sheet) },
     clawd,
-    { id: "gone", name: "Gone", url: fixtureUrl(dir, "missing.webp"), sheet: digest(sheet) },
-    { id: "seedy", name: "Seedy", url: fixtureUrl(dir, "missing.webp"), sheet: digest(sheet) },
+    { id: "gone", name: "Gone", url: url("missing.webp"), sheet: digest(sheet) },
+    { id: "seedy", name: "Seedy", url: url("missing.webp"), sheet: digest(sheet) },
   ];
   const missed = clone(await bringAgentPets(new Set(["seedy"]), list));
   assert.deepEqual(missed, ["gone"], "one that could not be had is told; one you have is not asked for");
