@@ -243,11 +243,11 @@ test("sidebar.away hidden records nothing", async () => {
 test("sidebar.computers hidden does not list computers", async () => {
   const { view, cx, cmds, flush } = await sidebar({ "sidebar.computers": "hide" });
   let held = 0;
-  view.awake = { sync: async () => { held += 1; }, nextWait: () => null, follow() { return this.nextWait(); } };
+  view.caffeine = { keep() {}, isOn: () => false, due: () => { held += 1; return []; }, nextWait: () => null };
   view.refreshMachines(cx);
   await flush();
   assert.equal(cmds.includes("hc"), false);
-  assert.equal(held, 1, "the hold still renews");
+  assert.equal(held, 1, "Caffeine still follows this computer");
 });
 
 async function digestCmds(map) {
