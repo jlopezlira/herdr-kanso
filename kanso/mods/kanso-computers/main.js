@@ -143,8 +143,7 @@ export default class Computers extends View {
 
   add(key, choice, cx) {
     const plan = planFor(choice, { tailscale: this.tailscale, platform: this.platform });
-    const named = plan.name || plan.target;
-    if (Object.values(this.jobs).some((job) => job.phase === "adding" && (job.plan?.name || job.plan?.target) === named)) return;
+    if (this.inFlight(plan)) return;
     this.jobs[key] = { phase: "adding", choice, plan };
     cx.notify();
     cx.spawn(async (cx) => {
@@ -159,6 +158,11 @@ export default class Computers extends View {
     const resolved = plan.via ? null : await resolvedHost(plan.target, run);
     const record = lanRecord({ name: plan.name, target: plan.via ? "" : plan.target, via: plan.via }, plan.lan, { hostKey: resolved?.hostKey ?? "", user: plan.user });
     return record ? { ...plan, via: record.via } : plan;
+  }
+
+  inFlight(plan) {
+    const named = plan.name || plan.target;
+    return Object.values(this.jobs).some((job) => job.phase === "adding" && (job.plan?.name || job.plan?.target) === named);
   }
 
   async answersAtHome(plan) {
@@ -260,6 +264,7 @@ export default class Computers extends View {
       return;
     }
     if (reach === "hostkey" && job.choice.peer) {
+      if (this.inFlight(plan)) return;
       this.jobs[key] = { ...job, phase: "adding" };
       cx.spawn(async (cx) => {
         const resolved = await resolvedHost(plan.target, (program, args) => exec(program, args, { timeout: PROBE_MS })).catch(() => null);
@@ -437,7 +442,7 @@ export default class Computers extends View {
       h_flex().w_full().gap(G.sm).items_center()
         .child(div().flex_1().min_w(0).child(field("computers-typed", this.typed, c, { spoken: "user@host" })))
         .child(button("computers-add-typed", job?.phase === "adding" ? "Connecting…" : "Add", (cx) => this.addTyped(cx), c, { disabled: !key || job?.phase === "adding" })),
-      job?.phase === "failed" ? this.failure(key, job, c, { name: this.typedName() }) : null];
+      job?.phase === "failed" ? this.failure(key, job, c, { name: this.typedName(), tailnet: Boolean(job.choice?.peer) }) : null];
   }
 
   render() {

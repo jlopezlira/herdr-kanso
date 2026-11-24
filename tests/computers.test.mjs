@@ -941,11 +941,15 @@ const darkDenied = "Permission denied (publickey).";
 const sshRefusal = (stderr) => ({ code: 255, stderr, stdout: "" });
 const addressAnswers = (failure) => (target) => target === darkAddress ? success("") : sshRefusal(failure);
 
-const addTypedDark = async (answer, { typed = darkName, addError = null } = {}) => {
+const addTypedDark = async (answer, { typed = darkName, addError = null, lan = "", clickRow = false } = {}) => {
   const probes = [];
-  const added = [];
+  const installs = [];
   const tabs = [];
-  const tailnet = status({ dark: peer({ DNSName: "dark.tail.ts.net.", HostName: "dark", TailscaleIPs: [darkIp], sshHostKeys: [] }) });
+  const started = Promise.withResolvers();
+  const resume = Promise.withResolvers();
+  const tailnet = status({ dark: peer({
+    DNSName: "dark.tail.ts.net.", HostName: darkHost, TailscaleIPs: [darkIp], sshHostKeys: [], Addrs: lan ? [lan] : [],
+  }) });
   const { view, cx, flush } = await computersDialog({
     window: () => ({ platform: "linux" }),
     InputState: { new: () => fieldWith({ value: typed }) },
@@ -954,21 +958,59 @@ const addTypedDark = async (answer, { typed = darkName, addError = null } = {}) 
     exec: async (program, args) => {
       if (program === "tailscale") return success(tailnet);
       if (program !== "ssh") return success("");
+      if (args[0] === "-G") return success(`hostname ${darkIp}\nuser jj\n`);
       const target = args.at(-2);
       probes.push(target);
-      return answer(target);
+      if (clickRow && probes.length === 1) {
+        started.resolve();
+        await resume.promise;
+      }
+      return answer(target, args);
     },
     hc: async (args) => {
       if (args[1] !== "add") return success(JSON.stringify({ machines: [] }));
-      added.push(args[2]);
+      installs.push(args);
       return addError ?? success("");
     },
   });
+  if (lan) view.nearby = [{ ip: lan, name: darkHost, os: "" }];
   const button = find(view.render(), (el) => el.tag === "computers-add-typed");
   arg(button, "on_click")({}, cx);
+  if (clickRow) {
+    await started.promise;
+    try {
+      const row = find(view.render(), (el) => el.tag === `computer-${darkHost}`);
+      arg(row, "on_click")({}, cx);
+    } finally {
+      resume.resolve();
+    }
+  }
   await flush();
-  return { probes, added, tabs, cx, drawn: view.render() };
+  return { probes, added: installs.map((args) => args[2]), installs, tabs, cx, drawn: view.render() };
 };
+
+test("Typing a computer's ssh name adds it over the local network when the away route does not answer", async () => {
+  const lan = "192.168.4.25";
+  const hostOption = `HostName=${lan}`;
+  const { installs } = await addTypedDark((_target, args) => args.includes(hostOption)
+    ? success("") : sshRefusal("No route to host"), { lan });
+  assert.equal(installs.length, 1);
+  const [install] = installs;
+  const via = install.indexOf("--via");
+  assert.ok(via >= 0 && install[via + 1].includes(hostOption), install.join(" "));
+});
+
+test("A changed key on the typed ssh name shows a warning without adding the computer by address", async () => {
+  const { probes, installs, drawn } = await addTypedDark(addressAnswers("Host key verification failed"));
+  assert.ok(texts(drawn).some((word) => word.includes(`${darkHost}'s key changed since last time`)));
+  assert.deepEqual(probes, [darkName]);
+  assert.equal(installs.length, 0);
+});
+
+test("Clicking a computer's row while its typed Add is still checking the connection adds it only once", async () => {
+  const { installs } = await addTypedDark(() => success(""), { clickRow: true });
+  assert.deepEqual(installs.map((args) => args[args.indexOf("--name") + 1]), [darkHost]);
+});
 
 const checkDarkFallback = ({ probes, added }, first = darkName) => {
   assert.deepEqual(probes, [first, darkAddress]);
