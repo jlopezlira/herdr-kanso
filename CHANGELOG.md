@@ -29,6 +29,8 @@ the branch's rules.
 - A link in a pull request, an issue or a check opens only when it is an https link, or an http link to this computer or a private network address; anything else stops before it reaches the system's opener.
 - kansō's database and its folder are readable only by you, on this computer and on your other computers, and an existing database is corrected the next time it opens.
 - Text read from GitHub reaches an agent marked as text from GitHub and without terminal control characters, and background git reads no longer run a repository's file-system monitor.
+- Shipped adds up your computers in a gist only when you turn it on in Settings, under Background, and the gist no longer holds your e-mails or repository names in the clear: each computer reads back only the repositories it already knows. The README and the privacy page say a secret gist can be read by anyone with its link.
+- Pets are downloaded over https only and checked against their checksum and size before they are kept.
 
 ## [3.34.0] - 2026-11-23
 

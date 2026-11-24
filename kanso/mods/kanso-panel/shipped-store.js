@@ -1,5 +1,5 @@
 import { Database } from "./platform-database.js";
-import { localService } from "./platform-host.js";
+import { localName, localService } from "./platform-host.js";
 import { paths } from "./platform-paths.js";
 import { fileApi } from "./platform-files.js";
 import { repositoryApi } from "./platform-repositories.js";
@@ -9,6 +9,7 @@ import { systemApi } from "./platform-system.js";
 // A repository's week counts the larger of what the machines and GitHub saw.
 import { exec, appHome, home, spaces, panes, writeTextFile } from "herdr";
 import { range, mapSeries } from "./pure.js";
+import { createHash } from "crypto";
 
 export const STORE_DIR = "data/kanso-panel";
 const GIST_DESCRIPTION = "Kanso Shipped stats";
@@ -57,18 +58,25 @@ export function insertCommits(repo, commits, machine) {
   return range(Math.ceil(rows.length / 500)).map((k) => `INSERT OR IGNORE INTO commits(repo,hash,at,adds,dels,machine) VALUES ${rows.slice(k * 500, k * 500 + 500).join(",")};`).join("\n");
 }
 
-export function machineFile(machine, identities, rows) {
+const literally = (text) => String(text).replace(/[\\.[\]()*+?{}|^$]/g, "\\$&");
+
+export const seal = (key, text) => createHash("sha256").update(`${key}\n${String(text).trim().toLowerCase()}`).digest("hex");
+
+export function machineFile(machine, identities, rows, key) {
   const repos = [...new Set(rows.map((r) => r.repo))];
   const index = new Map(repos.map((repo, i) => [repo, i]));
   const commits = rows.map((r) => [index.get(r.repo), r.hash, r.at, r.adds, r.dels]);
-  return { v: 1, machine, updated: Math.floor(Date.now() / 1000), identities, repos, commits };
+  return { v: 2, machine, updated: Math.floor(Date.now() / 1000), identities: identities.map((who) => seal(key, who)), repos: repos.map((repo) => seal(key, repo)), commits };
 }
 
-export function readMachineFile(text) {
+export function readMachineFile(text, known = new Map()) {
   try {
     const f = JSON.parse(text);
-    if (f?.v !== 1 || !Array.isArray(f.commits) || !Array.isArray(f.repos)) return null;
-    return { machine: String(f.machine ?? "another computer"), identities: Array.isArray(f.identities) ? f.identities.map(String) : [], commits: f.commits.map(([r, hash, at, add, del]) => ({ repo: f.repos[r], hash, at, add, del })).filter((c) => c.repo && c.hash) };
+    if (![1, 2].includes(f?.v) || !Array.isArray(f.commits) || !Array.isArray(f.repos)) return null;
+    const machine = String(f.machine ?? "another computer");
+    const listed = Array.isArray(f.identities) ? f.identities.map(String) : [];
+    const repos = f.v === 1 ? f.repos : f.repos.map((sealed) => known.get(sealed) ?? `elsewhere/${String(sealed).slice(0, 12)}`);
+    return { machine, identities: f.v === 1 ? listed : [], seals: f.v === 1 ? [] : listed, commits: f.commits.map(([r, hash, at, add, del]) => ({ repo: repos[r], hash, at, add, del })).filter((c) => c.repo && c.hash) };
   } catch { return null; }
 }
 
@@ -164,12 +172,24 @@ export class Store extends Database {
     return [...Map.groupBy(read.flat(2), (r) => r.common).values()].map(([{ path, repo, refs }]) => ({ path, repo, refs }));
   }
 
-  async scanLocal(identities, progress) {
+  async scanLocal(identities, progress, sealed = null) {
     const machine = await this.machine();
     const seen = new Map((await this.sql("SELECT path, refs FROM scans;", true)).map((r) => [r.path, r.refs]));
     const repos = (await this.localRepos()).filter((r) => seen.get(r.path) !== r.refs);
+    const seals = new Set(sealed?.seals ?? []);
+    const sealedAuthors = async (cwd) => {
+      if (!seals.size) return [];
+      const r = await exec("git", ["log", "--all", "--no-merges", "--format=%an%x00%ae"], { cwd }).catch(() => null);
+      if (r?.code !== 0) return [];
+      const known = (who) => who.trim() && !identities.includes(who.trim()) && seals.has(seal(sealed.key, who));
+      return [...new Set(r.stdout.split("\n").flatMap((line) => {
+        const [name = "", email = ""] = line.split("\0");
+        return [...(known(name) ? [`^${literally(name)} <`] : []), ...(known(email) ? [`<${literally(email)}>`] : [])];
+      }))];
+    };
     await mapSeries(repos, async (r, i) => {
-      const log = await exec("git", ["log", "--all", "--no-merges", "-F", ...identities.map((w) => `--author=${w}`), "--format=%x1e%H %at", "--shortstat"], { cwd: r.path }).catch(() => null);
+      const authors = [...new Set([...identities.map(literally), ...await sealedAuthors(r.path)])];
+      const log = await exec("git", ["log", "--all", "--no-merges", "-E", ...authors.map((w) => `--author=${w}`), "--format=%x1e%H %at", "--shortstat"], { cwd: r.path }).catch(() => null);
       if (log?.code === 0) {
         await this.script(`${insertCommits(r.repo, parseLog(log.stdout), machine)}
 INSERT OR REPLACE INTO scans(path,repo,refs,scanned) VALUES(${sqlText(r.path)},${sqlText(r.repo)},${sqlText(r.refs)},${int(Date.now() / 1000)});`);
@@ -181,37 +201,36 @@ INSERT OR REPLACE INTO scans(path,repo,refs,scanned) VALUES(${sqlText(r.path)},$
 
   async syncMachines(identities) {
     const machine = await this.machine();
-    const stored = await this.meta("gist");
-    // Not kept here yet: the gist another machine made, found by its description.
+    const name = `shipped-${machine}.json`;
     const listed = async () => {
       const list = await exec("gh", ["api", "gists?per_page=100", "--paginate", "--jq", `.[] | select(.description == "${GIST_DESCRIPTION}") | .id`]);
       return list.code === 0 ? list.stdout.split("\n").map((s) => s.trim()).find(Boolean) ?? null : null;
     };
-    const id = stored || await listed();
-    const mine = machineFile(machine, identities, await this.sql(`SELECT repo, hash, at, adds, dels FROM commits WHERE machine=${sqlText(machine)};`, true));
-    const name = `shipped-${machine}.json`;
-    const body = id ? { files: { [name]: { content: JSON.stringify(mine) } } } : { description: GIST_DESCRIPTION, public: false, files: { [name]: { content: JSON.stringify(mine) } } };
-    const path = paths.join(this.dir, `.gist-${Date.now()}.json`);
-    await writeTextFile(path, JSON.stringify(body), null);
-    const send = async () => {
-      try { return await exec("gh", ["api", ...(id ? ["-X", "PATCH", `gists/${id}`] : ["-X", "POST", "gists"]), "--input", path]); }
-      finally { await localService(fileApi).remove([path]).catch(() => {}); }
+    const write = async (id, file) => {
+      const files = { [name]: { content: JSON.stringify(file) } };
+      const path = paths.join(this.dir, `.gist-${Date.now()}.json`);
+      await writeTextFile(path, JSON.stringify(id ? { files } : { description: GIST_DESCRIPTION, public: false, files }), null);
+      if (localName() !== "windows") await exec("chmod", ["600", path]);
+      const sent = await exec("gh", ["api", ...(id ? ["-X", "PATCH", `gists/${id}`] : ["-X", "POST", "gists"]), "--input", path])
+        .finally(() => localService(fileApi).remove([path]).catch(() => {}));
+      if (sent.code !== 0) throw new Error((sent.stderr || "the gist could not be written").trim().split("\n")[0]);
+      return JSON.parse(sent.stdout);
     };
-    const sent = await send();
-    if (sent.code !== 0) throw new Error((sent.stderr || "the gist could not be written").trim().split("\n")[0]);
-    const gist = JSON.parse(sent.stdout);
-    const gistId = id || gist.id;
-    await this.setMeta("gist", gistId);
+    const id = (await this.meta("gist")) || await listed() || (await write(null, machineFile(machine, [], [], ""))).id;
+    const gist = await write(id, machineFile(machine, identities, await this.sql(`SELECT repo, hash, at, adds, dels FROM commits WHERE machine=${sqlText(machine)};`, true), id));
+    await this.setMeta("gist", id);
+    const names = await this.sql("SELECT repo FROM commits UNION SELECT repo FROM scans UNION SELECT repo FROM gh_repos;", true);
+    const known = new Map(names.map((r) => [seal(id, r.repo), r.repo]));
     const read = await mapSeries(Object.entries(gist.files ?? {}), async ([file, f]) => {
       if (file === name || !file.startsWith("shipped-")) return null;
-      const fetched = async () => { const r = await exec("curl", ["-fsSL", "--max-time", "25", f.raw_url]).catch(() => null); return r?.code === 0 ? r.stdout : null; };
+      const fetched = async () => { const r = await exec("curl", ["-fsSL", "--proto", "=https", "--proto-redir", "=https", "--max-time", "25", f.raw_url]).catch(() => null); return r?.code === 0 ? r.stdout : null; };
       const text = f.truncated && f.raw_url ? await fetched() : f.content;
-      const other = text && readMachineFile(text);
-      if (!other) return null;
-      await this.script([...Map.groupBy(other.commits, (c) => c.repo)].map(([repo, commits]) => insertCommits(repo, commits, other.machine)).join("\n"));
+      const other = text && readMachineFile(text, known);
+      if (!other || other.machine === machine) return null;
+      await this.script(`DELETE FROM commits WHERE machine=${sqlText(other.machine)};\n` + [...Map.groupBy(other.commits, (c) => c.repo)].map(([repo, commits]) => insertCommits(repo, commits, other.machine)).join("\n"));
       return other;
     });
     const others = read.filter(Boolean);
-    return { gist: gistId, machines: others.map((o) => o.machine), identities: [...new Set(others.flatMap((o) => o.identities))] };
+    return { gist: id, machines: others.map((o) => o.machine), identities: [...new Set(others.flatMap((o) => o.identities))], seals: [...new Set(others.flatMap((o) => o.seals))].toSorted() };
   }
 }

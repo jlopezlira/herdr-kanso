@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { createHash } from "node:crypto";
 import { join } from "node:path";
-import { databaseTimer, load, context, temporary, clone, exec as run, nativeWindow, success, textFiles } from "./helpers.mjs";
+import { databaseTimer, load, context, temporary, clone, exec as run, nativeWindow, success, failure, textFiles } from "./helpers.mjs";
 
 const names = ["Shipped", "periodRange", "comparedRange", "periodLabel", "streaks", "computeRecords", "mergeRecords", "periodQuery",
   "REPOS", "fmt", "yourWeeks", "weekAt", "sumWeeks", "heatLayout", "contributionsIn"];
@@ -102,16 +103,20 @@ test("Shipped's queries ask GitHub for sums, never lists of pull requests", asyn
 });
 
 // GitHub as the panel sees it; sqlite3, git and the rest run for real.
-function github({ computing = new Set(), weeks = {} } = {}) {
+function github({ computing = new Set(), weeks = {}, gistFiles = {} } = {}) {
   const calls = [];
   const repos = Object.keys(weeks);
   const exec = async (command, args, options) => {
     if (command === "sleep" || command === "pwsh" && args.at(-1).includes("Start-Sleep")) return success("");
+    if (command === "git" && args[0] === "config" && args[1] === "--global") return failure("unset in fixture");
     if (command !== "gh") return run(command, args, options);
-    if (args.some((a) => a.startsWith("gists"))) {
-      if (args[1].startsWith("gists?")) return success("");
-      calls.push("gist");
-      return success(JSON.stringify({ id: "g1", files: {} }));
+    if (args[1].startsWith("gists?")) {
+      calls.push("gist list");
+      return success(Object.keys(gistFiles).length ? "g1\n" : "");
+    }
+    if (args[2] === "POST" || args[2] === "PATCH") {
+      calls.push(`gist ${args[2]}`);
+      return success(JSON.stringify({ id: "g1", files: gistFiles }));
     }
     if (args[1] !== "graphql") {
       const name = args[1].replace(/^repos\//, "").replace(/\/stats\/contributors$/, "");
@@ -142,17 +147,17 @@ function github({ computing = new Set(), weeks = {} } = {}) {
 }
 
 // The Shipped panel opened on `gh`, settled.
-const shownPanel = async (t, gh) => {
-  const p = await panelWith(t, gh);
+const shownPanel = async (t, gh, pieces = {}) => {
+  const p = await panelWith(t, gh, pieces);
   const panel = new p.Shipped();
   panel.init(p.cx); await p.settle();
   return { p, panel };
 };
 
-async function panelWith(t, gh) {
+async function panelWith(t, gh, pieces) {
   const root = await temporary(t);
   const home = join(root, "app");
-  const store = {}, toasts = [];
+  const store = { "kanso.pieces": pieces }, toasts = [];
   const host = {
     window: nativeWindow, exec: gh.exec, appHome: () => home, home: () => join(root, "home"), spaces: () => [], panes: () => [], theme: () => ({}),
     shared: (k) => store[k], setShared: (k, v) => { store[k] = v; },
@@ -167,6 +172,15 @@ async function panelWith(t, gh) {
   return { ...mod, home, store, toasts, cx, settle };
 }
 
+const gistCalls = ({ calls }) => calls.filter((call) => call.startsWith("gist "));
+
+test("Shipped refreshes this computer's stats without asking for a gist by default", async (t) => {
+  const gh = github({ weeks: { "org/app": [{ w: 1793491200, a: 3, d: 0, c: 1 }] } });
+  const { panel } = await shownPanel(t, gh);
+  assert.ok(panel.stats.repos["org/app"]);
+  assert.deepEqual(gistCalls(gh), []);
+});
+
 test("Shipped asks each repository for its sums once, and again only after a push", async (t) => {
   const thisWeek = Math.floor((Date.now() - new Date().getUTCDay() * DAY) / DAY) * DAY / 1000;
   const weeks = {
@@ -175,13 +189,13 @@ test("Shipped asks each repository for its sums once, and again only after a pus
     "other-org/thing": [{ w: thisWeek - 200 * 86400, a: 5000, d: 0, c: 40 }],
   };
   const gh = github({ weeks, computing: new Set(["me/tool"]) });
-  const { p, panel } = await shownPanel(t, gh);
+  const { p, panel } = await shownPanel(t, gh, { "shipped.sync": "show" });
 
   assert.equal(Object.keys(panel.stats.repos).length, 3, "contributed to and reachable, every organization");
   assert.equal(gh.calls.filter((c) => c === "stats me/tool").length, 2, "asked again while GitHub computed it");
   const all = clone(p.sumWeeks(panel.stats, 0, Infinity));
   assert.deepEqual([all.add, all.commits], [6295, 55]);
-  assert.ok(gh.calls.includes("gist"), "this machine published to the gist");
+  assert.deepEqual(gistCalls(gh), ["gist list", "gist POST", "gist PATCH"], "this computer created the gist and published to it when enabled");
   assert.equal(p.toasts.length, 0, "the first reading sets records quietly");
   assert.equal(p.store["kanso.shipped.bests"].bestWeek.add, 5000);
 
@@ -192,6 +206,39 @@ test("Shipped asks each repository for its sums once, and again only after a pus
   assert.deepEqual(gh.calls.filter((c) => c.startsWith("stats")), [], "read from the store");
   assert.equal(Object.keys(again.stats.repos).length, 3);
   assert.equal(again.github[again.key()].ever.issueCount, 4321);
+});
+
+test("Shipped preserves existing scans until it learns identity seals for the next refresh", async (t) => {
+  const key = "g1";
+  const identitySeal = createHash("sha256").update(`${key}\nmequexample.invalid`).digest("hex");
+  const other = { v: 2, machine: "other", identities: [identitySeal], repos: [], commits: [] };
+  const gh = github({ gistFiles: { "shipped-other.json": { content: JSON.stringify(other) } } });
+  const { p, panel } = await shownPanel(t, gh);
+  const identities = ["me", "Me", "me@users.noreply.github.com", "1+me@users.noreply.github.com"];
+  const legacyKey = JSON.stringify(identities.toSorted());
+  assert.equal(await panel.store.meta("scanned-identities"), legacyKey);
+  await panel.store.sql("INSERT INTO scans(path,repo,refs,scanned) VALUES('cached','org/tool','unchanged',1);");
+  const scan = panel.store.scanLocal.bind(panel.store);
+  const passed = [];
+  panel.store.scanLocal = (...args) => { passed.push(clone(args)); return scan(...args); };
+
+  p.store["kanso.pieces"] = { "shipped.sync": "show" };
+  panel.refresh(p.cx, true);
+  await p.settle();
+  assert.equal(await panel.store.meta("scanned-identities"), legacyKey);
+  assert.equal((await panel.store.sql("SELECT path FROM scans;", true))[0]?.path, "cached");
+  const sealed = { key, seals: [identitySeal] };
+  assert.deepEqual(JSON.parse(await panel.store.meta("identity-seals")), sealed);
+
+  panel.refresh(p.cx, true);
+  await p.settle();
+  assert.equal(panel.syncError, null);
+  assert.equal(passed.length, 2);
+  assert.equal(passed[0][2], null);
+  assert.deepEqual(passed[1][0], identities);
+  assert.deepEqual(passed[1][2], sealed);
+  assert.equal(await panel.store.meta("scanned-identities"), JSON.stringify([...identities, identitySeal].toSorted()));
+  assert.equal((await panel.store.sql("SELECT path FROM scans;", true)).length, 0);
 });
 
 test("Shipped keeps going when GitHub keeps computing a repository", async (t) => {

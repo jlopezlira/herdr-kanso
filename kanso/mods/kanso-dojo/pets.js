@@ -36,13 +36,20 @@ const OPENAI = "https://persistent.oaistatic.com/codex/pets/v1";
 // The agents' pets: Codex's eight from OpenAI, Claude's Clawd, a cat who codes, Mistral's cat, and a shiba like Hachi.
 // `from`: who made it; `zip`: a codex-pets.net package, else an OpenAI atlas.
 export const AGENT_PETS = [
-  ...[["codex", "Codex"], ["dewey", "Dewey"], ["fireball", "Fireball"], ["rocky", "Rocky"], ["seedy", "Seedy"],
-    ["stacky", "Stacky"], ["bsod", "BSOD"], ["null-signal", "Null Signal"]]
-    .map(([id, name]) => ({ id, name, from: "Codex", url: `${OPENAI}/${id}-spritesheet-v4.webp` })),
-  { id: "clawd-crab", name: "Clawd", from: "Claude Code", url: `${SITE}/api/pets/clawd-crab/download`, zip: true },
-  { id: "moomew-coder-cat", name: "MooMew", from: "a cat who codes", url: `${SITE}/api/pets/moomew-coder-cat/download`, zip: true },
-  { id: "le-chaton-fat", name: "Le Chaton", from: "Mistral", url: `${SITE}/api/pets/le-chaton-fat/download`, zip: true },
-  { id: "aka-shiba", name: "July", from: "a shiba, like Hachi", url: `${SITE}/api/pets/aka-shiba/download`, zip: true },
+  ...[["codex", "Codex", "5cd7af9cfeae88fe9c6e47a72460e0dc4c6fb04baf7fdc6cca14a212f0bf44d1"],
+    ["dewey", "Dewey", "a53372a73467c5583fe512ed18443d1a8107cfb43060e4398ba1b7c679358ed0"],
+    ["fireball", "Fireball", "2c257615a71374da82c802c78856e8a80ce336cfbeb1077b26051a5f6a7e49df"],
+    ["rocky", "Rocky", "524f3e6ac6508c60cf9d898940ea5f271ca66ca6b9bca66a73ac2b32296290fb"],
+    ["seedy", "Seedy", "4989cc19272ed944261bb4e29bfff842bbbb50aa9da1df9215cfbf47cb83f3ed"],
+    ["stacky", "Stacky", "f532c6701fb5f21d94be898e349f44fb218f1521d3747da1281f7b80fd3c35d1"],
+    ["bsod", "BSOD", "0daf44c643c289772c01df97c5aa1383a4e2b05f4e50cf5e899c005a3876fbad"],
+    ["null-signal", "Null Signal", "6fe899a334f906ce863bf986e5fcf629615bc7513697bba5b075f69564bf5508"]]
+    .map(([id, name, sheet]) => ({ id, name, from: "Codex", url: `${OPENAI}/${id}-spritesheet-v4.webp`, sheet })),
+  ...[["clawd-crab", "Clawd", "Claude Code", "f6ca8e6ad933c8dfe6479d01262b94ad016a3e30bde4d6cfb7d6a0aa21bc92e0", "8152732d5476688b0fe6e0024a1e7fce6c3babe58ccd2d8401c38eab5314c9f0"],
+    ["moomew-coder-cat", "MooMew", "a cat who codes", "0a09c6a33e9d8d45f562d942f4358710d6f9ee9ef27ba0e9f294f90ae1c8f8ca", "4b88abfae7469214cde9a72c88cd68ee1a648578c969c924aa3bb85de38c8816"],
+    ["le-chaton-fat", "Le Chaton", "Mistral", "a6dcc8f01840a0610f512a05bd2f1dfc3e01050fa1631d879941421b4996ef85", "8ab04a4fbe2028b4de1c980c1ac4f9e46fedab295c73e72d74fd367c14c0ee28"],
+    ["aka-shiba", "July", "a shiba, like Hachi", "747c5f0b9346eef68aad26ec20c989d32bb1ce3dd307de2e4012987433ff3e24", "62ffe5a170aed112ef076da591eaa71c8d7ed9b10daf47e3c54edadb3a964128"]]
+    .map(([id, name, from, sheet, json]) => ({ id, name, from, url: `${SITE}/api/pets/${id}/download`, zip: true, sheet, json })),
 ];
 // Pets Kanso brought once and replaced by a better one: gone from its folder, and a choice of one moves to its successor.
 export const RETIRED = { clawd: "clawd-crab" };
