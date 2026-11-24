@@ -26,7 +26,7 @@ the branch's rules.
 
 ### Added
 
-- Caffeine, a panel beside Shipped in the tab bar, lists this computer and every connected one, and Turn on keeps that computer working with its lid closed, on power or on battery, until you turn it off. While any computer has it on, the bar shows Caffeine beside its cup, and a cup sits on that computer's row in the sidebar. The first time on macOS or Linux, a tab asks for that computer's password once, to allow only turning sleep off and on there. On battery, Caffeine turns itself off at 15% and says so; a restart of that computer turns it off too. On Windows it keeps the computer from idle sleep, not with its lid closed. (#496)
+- Caffeine, a panel beside Shipped in the tab bar, lists this computer and every connected one, each with a switch that keeps that computer working with its lid closed, on power or on battery, until you turn it off. While any computer has it on, the bar shows Caffeine beside its cup, and a cup sits on that computer's row in the sidebar. The first time on macOS or Linux, a tab asks for that computer's password once, to allow only turning sleep off and on there. On battery, Caffeine turns itself off at 15% and says so; a restart of that computer turns it off too. On Windows it keeps the computer from idle sleep, not with its lid closed. (#496)
 
 ### Changed
 
