@@ -84,10 +84,19 @@ for (const name of ["macos", "linux", "windows"]) {
 
   test(`On ${name}, kansō refuses file links, command options and network paths without launching anything.`, async () => {
     const r = runner(), api = openApi(name, r.run);
-    for (const target of ["file:///System/Applications/Calculator.app", "-aCalculator", "\\\\evil\\share\\x.exe"]) {
+    for (const target of ["file:///System/Applications/Calculator.app", "-aCalculator", "\\\\evil\\share\\x.exe", "http://example.org/", "mailto:reader@example.org",
+      "https://example.org:invalid/", "https://user@example.org/", "https://example.org:70000/", "http://172.32.0.1/", "https://exa mple.org/", "javascript:alert(1)"]) {
       assert.equal((await api.web(target)).code, 1, target);
     }
     assert.deepEqual(r.calls, []);
+  });
+
+  test(`On ${name}, kansō opens an https link anywhere and an http link only on this computer or a private network.`, async () => {
+    const r = runner(), api = openApi(name, r.run);
+    const links = ["https://example.org:8443/a?b#c", "https://[2001:db8::1]/", "http://localhost:3000/", "http://127.0.0.1:8080", "http://[::1]/", "http://10.0.0.7/",
+      "http://192.168.1.20:5173/x", "http://172.16.0.1/", "http://172.31.255.1/"];
+    for (const link of links) assert.equal((await api.web(link)).code, 0, link);
+    assert.equal(r.calls.length, links.length);
   });
 
   test(`On ${name}, kansō opens a GitHub pull request link with the system opener.`, async () => {

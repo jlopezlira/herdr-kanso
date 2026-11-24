@@ -61,7 +61,13 @@ while [ $# -gt 1 ]; do
 done
 exit 0`;
 
-export const isWebLink = (url) => typeof url === "string" && /^(https?:\/\/|mailto:)[^\s]+$/i.test(url);
+const WEB_LINK = /^(https?):\/\/(\[[0-9a-f:.]+\]|[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)*)(?::(\d{1,5}))?(?:[/?#]\S*)?$/i;
+const NEAR = /^(?:localhost|\[::1\]|127(?:\.\d{1,3}){3}|10(?:\.\d{1,3}){3}|192\.168(?:\.\d{1,3}){2}|172\.(?:1[6-9]|2\d|3[01])(?:\.\d{1,3}){2})$/i;
+export const isWebLink = (url) => {
+  const parts = typeof url === "string" ? WEB_LINK.exec(url) : null;
+  if (!parts || Number(parts[3] ?? 0) > 65535) return false;
+  return parts[1].toLowerCase() === "https" || NEAR.test(parts[2]);
+};
 const notOption = (target) => (String(target).startsWith("-") ? `./${target}` : target);
 
 export function openApi(platform, run) {
