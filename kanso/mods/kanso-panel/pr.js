@@ -49,7 +49,7 @@ const labelColor = (hex) => { const h = String(hex ?? "").replace(/^#/, ""); ret
 // A picker shows this many people or labels, then scrolls; while it reads, four loading items.
 const PICKER_ROWS = 7;
 const PICKER_BONES = Object.freeze(Array.from({ length: 4 }, () => ({ loading: true })));
-const openUrl = (url) => localService(openApi).open(url).catch(() => { });
+const openUrl = (url) => localService(openApi).web(url).catch(() => { });
 
 // One check to show, as either kind GitHub reports: a check run or a commit status.
 // Its state, counts and what they say together come from ghchecks.js, which the pane strip reads too.

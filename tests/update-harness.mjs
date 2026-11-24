@@ -2,9 +2,10 @@ import assert from "node:assert/strict";
 import nodeTest, { after as afterAll } from "node:test";
 import { execFile, execFileSync, spawn } from "node:child_process";
 import { cp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
-import { join } from "node:path";
-import { pathToFileURL } from "node:url";
+import { dirname, join, resolve } from "node:path";
 import { load, context, exec, nativePlatform, nativeWindow, temporary, clone, until, failure, success, readOrNull } from "./helpers.mjs";
+import { makeReleaseKey, signArchive } from "./release-fixture.mjs";
+import { httpsFiles } from "./https-fixture.mjs";
 
 const names = ["Updater", "newestTag", "compareVersions", "mergeKeys", "SOURCE", "HOLD", "INSTALL_SCRIPT", "RECOVER", "LAUNCH", "updateHost", "windowsInstallScript", "windowsLaunchScript", "windowsRecoverScript", "sameVolume"];
 export const repo = new URL("../kanso/", import.meta.url);
@@ -60,10 +61,44 @@ afterAll(() => {
     taskkill(pid);
   }
 });
-const packRelease = async (site) => {
-  const made = await exec("tar", ["-czf", join(site, "v1.1.0.tar.gz"), "-C", join(site, "build"), "herdr-kanso-1.1.0"]);
-  assert.equal(made.code, 0, made.stderr);
+const fixtureRelease = "1.1.0";
+const releaseRoot = `herdr-kanso-${fixtureRelease}`;
+const releaseRoute = (v) => `releases/download/v${v}/kanso-v${v}.tar.gz`;
+export const fixtureSignatureRoute = `/${releaseRoute(fixtureRelease)}.sig`;
+const trust = async (home, key) => {
+  const tabs = join(home, "mods", "kanso-tabs");
+  await mkdir(tabs, { recursive: true });
+  await writeFile(join(tabs, "allowed_signers"), key.allowedSigners);
 };
+const packRelease = async (root, site, home, signature = "valid") => {
+  const key = await makeReleaseKey(join(root, "release-key"));
+  const build = join(site, "build");
+  await Promise.all([trust(home, key), trust(join(build, releaseRoot, "kanso"), key)]);
+  const archive = join(site, releaseRoute(fixtureRelease));
+  await mkdir(dirname(archive), { recursive: true });
+  const made = await exec("tar", ["-czf", archive, "-C", build, releaseRoot]);
+  assert.equal(made.code, 0, made.stderr);
+  if (signature !== "missing") {
+    const signer = signature === "other-key" ? await makeReleaseKey(join(root, "other-key")) : key;
+    await signArchive(signer, archive);
+  }
+  if (signature === "tampered") {
+    const bytes = await readFile(archive);
+    const gzipMtimeStart = 4;
+    bytes[gzipMtimeStart] ^= 1;
+    await writeFile(archive, bytes);
+  }
+};
+const fixtureDownloads = async (t, root, site) => {
+  const { url, env, requested } = await httpsFiles(t, root, site);
+  const tarball = (v) => {
+    const release = releaseRoute(v);
+    url(`${release}.sig`);
+    return url(release);
+  };
+  return { url, env, tarball, requested };
+};
+
 async function stopInstalls(root) {
   const entries = await readdir(root, { withFileTypes: true }).catch(() => []);
   for (const entry of entries) {
@@ -217,9 +252,7 @@ export async function installedUpdater(host) {
 
 const writeKeymaps = (dir, keymap) => Promise.all(["keys.json", "keys.windows.json", "keys.linux.json"].map((name) => writeFile(join(dir, name), keymap)));
 
-// A Herdr home with Kanso 1.0.0 installed and used, and two releases served
-// from file:// URLs: what v1.0.0 shipped and the v1.1.0 tarball.
-export async function fixture(t, { layoutChanged = true, homeName = "O'Brien home" } = {}) {
+export async function fixture(t, { layoutChanged = true, homeName = "O'Brien home", signature } = {}) {
   const root = await temporary(t);
   const home = join(root, homeName), site = join(root, "site");
   const shippedKeys = JSON.parse(await readFile(new URL("keys.json", repo), "utf8"));
@@ -236,11 +269,10 @@ export async function fixture(t, { layoutChanged = true, homeName = "O'Brien hom
   await writeFile(join(site, "v1.0.0/kanso/layouts/kanso.json"), layoutChanged ? '{"root":{"id":"old"}}' : shippedLayout);
 
   // v1.1.0: this repository's kanso/ with version.json saying 1.1.0.
-  const top = join(site, "build/herdr-kanso-1.1.0");
+  const top = join(site, "build", releaseRoot);
   await cp(new URL(".", repo), join(top, "kanso"), { recursive: true });
   await writeFile(join(top, "kanso/mods/kanso-chrome/version.json"), '{ "version": "1.1.0" }\n');
   await writeFile(join(top, "README.md"), "not installed\n");
-  await packRelease(site);
   // And its raw files, which decide the keys and the layout before the download.
   await mkdir(join(site, "v1.1.0/kanso/layouts"), { recursive: true });
   const newKeymap = await readFile(new URL("keys.json", repo), "utf8");
@@ -262,10 +294,11 @@ export async function fixture(t, { layoutChanged = true, homeName = "O'Brien hom
   const userKeys = { global: { "cmd-q": "app.quit" }, "layout:kanso": { ...oldKeys["layout:kanso"], "cmd-shift-o": "mine.open" } };
   await writeFile(join(home, "keys.json"), JSON.stringify(userKeys, null, 2));
 
-  const url = (p) => pathToFileURL(join(site, p)).href;
+  await packRelease(root, site, home, signature);
+  const { url, env, tarball, requested } = await fixtureDownloads(t, root, site);
   const source = {
     remote: "unused",
-    tarball: (v) => url(`v${v}.tar.gz`),
+    tarball,
     file: (v, path) => url(`v${v}/${path}`),
     checker,
     pauseS: 0.05,
@@ -296,13 +329,13 @@ export async function fixture(t, { layoutChanged = true, homeName = "O'Brien hom
         if (command === "git") return success("x\trefs/tags/v1.0.0\ny\trefs/tags/v1.1.0\n");
         if (ctl.abandon && pauses(command, args)) { ctl.stuck += 1; return new Promise(() => {}); }
         if (ctl.holdCurl && fetches(command)) { ctl.held += 1; await gate.promise; }
-        return exec(command, args, { ...options, limit: ctl.limit });
+        return exec(command, args, { ...options, env: { ...process.env, ...env }, limit: ctl.limit });
       },
     };
     const { Updater, HOLD } = await updater(host);
     return { store, toasts, ctl, HOLD, Updater, updater: new Updater(source) };
   };
-  return { root, home, checks, flag, source, window, userKeys, ...(await window()) };
+  return { root, home, checks, flag, source, window, userKeys, requested, ...(await window()) };
 }
 
 // What installs left in the home, besides the lock file (it stays, empty): dot entries, and
@@ -362,14 +395,14 @@ export async function small(t) {
     await writeFile(join(dir, name, "main.js"), `// ${name} ${v}\n`);
     await writeFile(join(dir, name, "icons/a.svg"), `<svg>${name} ${v}</svg>\n`);
   };
-  const top = join(site, "build/herdr-kanso-1.1.0/kanso");
+  const top = join(site, "build", releaseRoot, "kanso");
   for (const name of ["kanso-chrome", "kanso-tabs", "open-with"]) await mod(join(top, "mods"), name, "1.1.0");
   await mkdir(join(top, "themes"), { recursive: true });
   await writeFile(join(top, "themes/kanso-day.json"), '{"theme":"1.1.0"}\n');
   await mkdir(join(top, "layouts"), { recursive: true });
   await writeFile(join(top, "layouts/kanso.json"), '{"root":{"id":"1.1.0"}}\n');
   await writeFile(join(top, "layouts/kanso.png"), "png 1.1.0\n");
-  await packRelease(site);
+  await packRelease(root, site, base);
   for (const name of ["kanso-chrome", "kanso-tabs"]) await mod(join(base, "mods"), name, "1.0.0");
   await mkdir(join(base, "mods/token-spend"), { recursive: true });
   await writeFile(join(base, "mods/token-spend/main.js"), "// someone else's\n");
@@ -380,7 +413,8 @@ export async function small(t) {
   await writeFile(join(base, "layouts/kanso.png"), "png 1.0.0\n");
   await writeFile(join(base, "keys.json"), '{"yours":true}\n');
   const checker = await writeChecker(root);
-  const url = pathToFileURL(join(site, "v1.1.0.tar.gz")).href;
+  const downloads = await fixtureDownloads(t, root, site);
+  const url = downloads.tarball(fixtureRelease);
   const { HOLD, INSTALL_SCRIPT, RECOVER, LAUNCH, updateHost } = await updater({ window: nativeWindow });
   const writer = async (path, text) => { await writeFile(path, text); return null; };
   const host = updateHost(nativePlatform, rawExec, writer, { HOLD, INSTALL_SCRIPT, RECOVER, LAUNCH });
@@ -395,7 +429,7 @@ export async function small(t) {
     const result = await host.foreground({
       url, home, dir, id: "op", want: "1.1.0", from, checker, stamp: "20261108-1200",
       keys, layout, base: base ?? baseKeys,
-    }, { env: { ...process.env, KANSO_UPDATE_STOP: String(stop), ...env }, limit: 60000 });
+    }, { env: { ...process.env, ...downloads.env, KANSO_UPDATE_STOP: String(stop), ...env }, limit: 60000 });
     await rm(join(root, "sabotage"), { force: true });
     return classify(result);
   };
@@ -485,13 +519,11 @@ export async function killed(t, f, stop) {
   delete process.env.KANSO_UPDATE_STOP;
   return { cx, drain };
 }
-// The step right after the new kanso-chrome goes in (its version.json says 1.1.0), before the
-// commit: keys and layout aside and in (4), the picture, each theme and every mod but kanso-chrome
-// in (none of them here before), then kanso-chrome aside and in (2).
 export const chromeIn = async () => {
   const mods = (await readdir(new URL("mods/", repo))).length;
   const themes = (await readdir(new URL("themes/", repo))).length;
-  return 4 + 1 + themes + (mods - 1) + 2;
+  const existingMods = ["kanso-tabs", "kanso-chrome"].length;
+  return 4 + 1 + themes + mods + existingMods;
 };
 
 export async function hostFor(platform) {

@@ -1,9 +1,10 @@
 import { localService, serviceOn, localName } from "./platform-host.js";
 import { copiesToViewer, viewerFor } from "./platform-viewer.js";
-import { signInTab } from "./sign-in.js";
+import { signInTab, removeKeyTab, kansoKeyed, routeOf } from "./sign-in.js";
 import { homeRoute } from "./lan-route.js";
 import { findTailscale } from "./reach.js";
 import { paths } from "./platform-paths.js";
+import { GIT_READ } from "./platform-command.js";
 import { processApi } from "./platform-processes.js";
 import { systemApi } from "./platform-system.js";
 // Derived from the `spaces` mod shipped with Herdr (Apache-2.0, https://github.com/herdrdev/herdr-app).
@@ -795,6 +796,7 @@ export default class Spaces extends RetryingView {
     else if (c.startsWith("power-machine:") && c.length > "power-machine:".length) { const m = c.slice("power-machine:".length); this.setPower(m, this.phaseOf(m) === "off", cx); }
     else if (c.startsWith("sync-machine:") && c.length > "sync-machine:".length) this.toggleSync(c.slice("sync-machine:".length), cx);
     else if (c.startsWith("sign-in-machine:") && c.length > "sign-in-machine:".length) this.signIn(c.slice("sign-in-machine:".length));
+    else if (c.startsWith("remove-key-machine:") && c.length > "remove-key-machine:".length) this.removeKey(c.slice("remove-key-machine:".length));
     else if (c.startsWith("remove-machine:") && c.length > "remove-machine:".length) this.removeMachine(c.slice("remove-machine:".length), cx);
     else if (c.startsWith("restore-machine:") && c.length > "restore-machine:".length) this.restoreMachine(c.slice("restore-machine:".length), cx);
     else if (c === "sidebar") this.toggleRail();
@@ -1623,9 +1625,16 @@ export default class Spaces extends RetryingView {
     });
   }
 
+  knownMachine(name) {
+    return [...(this.machines ?? []), ...(this.parked ?? [])].find((row) => row.name === name) ?? { name };
+  }
+
   signIn(name) {
-    const known = [...(this.machines ?? []), ...(this.parked ?? [])].find((row) => row.name === name) ?? { name };
-    run("terminal.open", signInTab(known, localName()));
+    run("terminal.open", signInTab(this.knownMachine(name), localName()));
+  }
+
+  removeKey(name) {
+    run("terminal.open", removeKeyTab(this.knownMachine(name), localName()));
   }
 
   retryMachine(name, cx) {
@@ -1664,7 +1673,7 @@ export default class Spaces extends RetryingView {
     this.unsure.delete(key);
     try {
       // No optional locks: a status that touched the index would wake the watch again.
-      const r = await exec("git", ["--no-optional-locks", "status", "--porcelain=v2", "--branch"], { cwd, on });
+      const r = await exec("git", [...GIT_READ, "--no-optional-locks", "status", "--porcelain=v2", "--branch"], { cwd, on });
       if (r.code !== 0) {
         // Only git's own "no" is remembered as no repo; anything else is asked again.
         if (!/not a git repository/i.test(r.stderr)) this.unsure.add(key);
@@ -2548,24 +2557,25 @@ export default class Spaces extends RetryingView {
   // A computer's menu, drawn by the kit at the pointer; it reads the phase and sync the row had.
   computerMenu(m, phase) {
     openOverlay({ mod: "kanso-spaces", kind: "popup", frame: "none", width: W.menu, at: "pointer", props: {
-      machineMenu: { route: m ?? "", shown: this.names.title(m), phase, syncOn: Boolean(m) && peerOn(this.sync.config, m) } } });
+      machineMenu: { route: m ?? "", shown: this.names.title(m), phase, syncOn: Boolean(m) && peerOn(this.sync.config, m), keyed: Boolean(m) && kansoKeyed(routeOf(this.knownMachine(m)).via) } } });
   }
 
   computerMenuView(t) {
-    const { route = "", shown: title = "", phase = "connected", syncOn = false } = props().machineMenu;
+    const { route = "", shown: title = "", phase = "connected", syncOn = false, keyed = false } = props().machineMenu;
     const acts = {
       rename: () => this.names.ask(route, title),
       power: () => run(`kanso-spaces.power-machine:${route}`),
       sync: () => run(`kanso-spaces.sync-machine:${route}`),
       retry: () => run(`kanso-spaces.retry-machine:${route}`),
       signin: () => run(`kanso-spaces.sign-in-machine:${route}`),
+      unkey: () => run(`kanso-spaces.remove-key-machine:${route}`),
       remove: () => run(`kanso-spaces.remove-machine:${route}`),
       plus: () => run("space.new", { machine: route }),
       add: () => run("mod.open", { name: "kanso-computers" }),
       hide: () => this.hide("sidebar.computers", true),
       settings: () => openOverlay({ mod: "kanso-settings", kind: "dialog", width: 860, height: 680, props: { page: "pieces", find: "Computers" } }),
     };
-    const rows = computerMenuItems({ remote: Boolean(route), phase, syncOn, addComputer: shown("footer.machine", true, pieces(shared)) });
+    const rows = computerMenuItems({ remote: Boolean(route), phase, syncOn, keyed, addComputer: shown("footer.machine", true, pieces(shared)) });
     const go = (key) => () => { acts[key](); closeOverlay(props().overlay); };
     const acting = rows.filter((row) => row.key);
     this.menuActs = acting.map((row) => go(row.key));

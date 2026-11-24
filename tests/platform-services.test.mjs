@@ -121,10 +121,11 @@ for (const platform of ["macos", "linux", "windows"]) {
   test(`${platform} pet lists and imports use one platform service`, async () => {
     const r = stub(), api = petApi(platform, r.run);
     await api.list("cache", ["source", "brought"]);
-    await api.bring("brought", [{ id: "cat", name: "O'Brien", url: "file:///cat.zip", zip: true }]);
+    const pet = { id: "cat", name: "O'Brien", url: "file:///cat.zip", zip: true, sheet: "a".repeat(64), json: "b".repeat(64) };
+    await api.bring("brought", [pet]);
     assert.equal(r.calls[0].program, windows ? "pwsh" : "sh");
     if (windows) assert.match(r.calls[1].args.at(-1), /Expand-Archive -LiteralPath/);
-    else assert.deepEqual(r.calls[1].args.slice(-4), ["cat", "O'Brien", "file:///cat.zip", "zip"]);
+    else assert.deepEqual(r.calls[1].args.slice(-6), [pet.id, pet.name, pet.url, "zip", pet.sheet, pet.json]);
   });
 
   test(`${platform} repository services dispatch through the injected runner`, async () => {

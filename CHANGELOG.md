@@ -22,6 +22,24 @@ in version.json, which the stable updater offers. Versions follow
 [Keep a Changelog](https://keepachangelog.com). `npm run check:version` checks
 the branch's rules.
 
+## [Unreleased]
+
+### Added
+
+- A computer's menu has Remove this computer's key, which takes off the key line kansō added there and removes the computer from Herdr.
+
+### Security
+
+- A link in a pull request, an issue or a check opens only when it is an https link, or an http link to this computer or a private network address; anything else stops before it reaches the system's opener.
+- kansō's database and its folder are readable only by you, on this computer and on your other computers, and an existing database is corrected the next time it opens.
+- Text read from GitHub reaches an agent marked as text from GitHub and without terminal control characters, and background git reads no longer run a repository's file-system monitor.
+- Shipped adds up your computers in a gist only when you turn it on in Settings, under Background, and the gist no longer holds your e-mails or repository names in the clear: each computer reads back only the repositories it already knows. The README and the privacy page say a secret gist can be read by anyone with its link.
+- Pets are downloaded over https only and checked against their checksum and size before they are kept.
+- The site serves its own fonts under a content security policy, a changelog link cannot leave its address, and the Markdown opener writes paths into the scripts it makes as quoted data.
+- Releases are signed, and the updater installs only an archive whose signature matches kansō's key; its downloads use https only. The release workflows run with pinned actions and a read-only token by default.
+- Signing in to a computer with its password asks before trusting that computer's key the first time, and uses the key in your ssh agent when there is one; kansō makes its own key only when there is none or it does not get in.
+- Add a computer asks only the computers this one already knows on the network until you press Search this network.
+
 ## [3.34.0] - 2026-11-23
 
 ### Added

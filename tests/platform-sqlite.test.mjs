@@ -24,16 +24,18 @@ for (const platform of ["macos", "linux", "windows"]) {
     assert.ok(path.endsWith(".sql"));
     assert.equal(text, sql + "\n;");
     assert.equal(expected, null);
-    assert.ok(calls[1].args.join(" ").length < 1024);
-    assert.match(calls[1].args.at(-1), /^\.read ".+\.sql"$/);
-    assert.ok(calls[2].command === (platform === "windows" ? "pwsh" : "rm"));
+    const own = platform === "windows" ? 0 : 1;
+    if (own) assert.deepEqual(calls[1], { command: "chmod", args: ["600", path] }, "the SQL file is yours alone before sqlite3 reads it");
+    assert.ok(calls[1 + own].args.join(" ").length < 1024);
+    assert.match(calls[1 + own].args.at(-1), /^\.read ".+\.sql"$/);
+    assert.ok(calls[2 + own].command === (platform === "windows" ? "pwsh" : "rm"));
     failure = true;
     await assert.rejects(api.execute(file, sql), /query failed/);
-    assert.equal(calls.length, 5, "a failed query also removes its SQL file");
+    assert.equal(calls.length, 5 + 2 * own, "a failed query also removes its SQL file");
     assert.notEqual(writes[0][0], writes[1][0], "concurrent callers cannot share a SQL file");
     const denied = sqliteApi(platform, run, async () => { throw new Error("Access denied"); });
     await assert.rejects(denied.execute(file, sql), /Access denied/);
-    assert.equal(calls.length, 5, "a failed file write never runs the query");
+    assert.equal(calls.length, 5 + 2 * own, "a failed file write never runs the query");
   });
 }
 

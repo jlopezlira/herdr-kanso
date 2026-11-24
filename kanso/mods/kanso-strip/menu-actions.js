@@ -74,6 +74,7 @@ export const ACTIONS = Object.freeze({
   "sign-in": action("key", "Sign in…"),
   "new-project": action("plus", "New project"),
   "remove-computer": action("x", "Remove"),
+  "remove-key": action("key", "Remove this computer's key"),
   "add-computer": action("server", "Add computer…"),
   "away-dismiss": action(null, "Dismiss"),
   "away-off": action(null, "Switch off"),

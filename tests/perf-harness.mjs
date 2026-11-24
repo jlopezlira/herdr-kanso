@@ -3,7 +3,7 @@ import { performance } from "node:perf_hooks";
 import { pathToFileURL } from "node:url";
 import { setFlagsFromString } from "node:v8";
 import { runInNewContext } from "node:vm";
-import { load, exec as runFile, clone, until, success, failure, openedKdb, inlineView } from "./helpers.mjs";
+import { load, exec as runFile, clone, until, success, failure, openedKdb, inlineView, dataFolder } from "./helpers.mjs";
 
 export const PANEL_IDS = ["files", "pr", "preview", "shipped", "worktrees", "ports", "look", "find"];
 const source = process.env.PERF_SOURCE_ROOT ? pathToFileURL(`${process.env.PERF_SOURCE_ROOT}/kanso/mods/`) : undefined;
@@ -58,7 +58,7 @@ export function fixture({ dir = "/fixture", blocked = false, quiet = null, worki
     state.flights.push(command);
     state.inFlight += 1;
     try {
-      if (command === "sqlite3" || command === "mkdir") return await runFile(command, args, options);
+      if (command === "sqlite3" || dataFolder(command, args)) return await runFile(command, args, options);
       if (command === "ps") return success(terms.map((t, i) => `${200 + i} 1 00:01 agent`).join("\n"));
       if (command === "hc") {
         if (args[0] === "label") {

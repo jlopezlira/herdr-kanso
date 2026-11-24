@@ -3,6 +3,7 @@ import { execFile, execFileSync } from "node:child_process";
 import assert from "node:assert/strict";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { access, mkdir, mkdtemp, readFile, readdir, rename, rmdir, rm, unlink, writeFile } from "node:fs/promises";
+import { createHash, randomBytes, randomUUID, webcrypto } from "node:crypto";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { promisify } from "node:util";
@@ -25,6 +26,7 @@ const HERDR_MODULES = {
   "fs/promises": declaredNames("fs/promises"),
   net: declaredNames("net").filter((name) => name !== "default"),
   websocket: declaredNames("websocket"),
+  crypto: declaredNames("crypto"),
 };
 export function bindHerdrModules(text) {
   return text.replace(/^import\s+(?:(\*\s+as\s+\w+|\{[^}]*\}|\w+)\s+from\s+)?["']([^"']+)["'];[ \t]*(?:\r?\n|$)/gm, (full, clause, from) => {
@@ -60,9 +62,11 @@ const herdrModules = (host) => {
     "fs/promises": overlay("fs/promises", { readFile, writeFile, readdir, exists: fileExists, unlink, rmdir, mkdir }),
     net: overlay("net", { connect() { throw new Error("net.connect is not available to a mod"); } }),
     websocket: overlay("websocket", { WebSocket: { connect() { throw new Error("WebSocket.connect is not available to a mod"); } } }),
+    crypto: overlay("crypto", { createHash, randomBytes, randomUUID, webcrypto }),
   };
 };
 
+export const dataFolder = (command, args) => command === "mkdir" || (command === "sh" && String(args?.[1]).startsWith("umask 077 && mkdir"));
 export const clone = (value) => JSON.parse(JSON.stringify(value));
 export const success = (stdout) => ({ code: 0, stdout, stderr: "" });
 export const failure = (stderr, code = 1) => ({ code, stdout: "", stderr });
@@ -525,7 +529,7 @@ export const kansoColours = async () => {
 
 const COMPUTERS_THEME = { foreground: "#d8d4cb", background: "#1b1b19", muted: "#949086", dim: "#6b6862", border: "#33332f", popover: "#222220", hover: "#232321", selected: "#2b2b28", accent: "#da627d" };
 
-export async function computersDialog(host) {
+export async function computersDialog(host, startTimers = false) {
   const { Computers } = await load("kanso-computers/main.js", ["Computers"], {
     ...gpuiHost(),
     theme: () => COMPUTERS_THEME,
@@ -542,16 +546,24 @@ export async function computersDialog(host) {
     ...host,
   });
   const pending = [];
+  const deferred = [];
   const cx = {
     notify() {},
     stop_propagation() {},
     focus_handle: () => ({ focus() {}, is_focused: () => false, release() {} }),
     spawn(fn) { pending.push(fn(cx)); return { cancel() {} }; },
-    timer: { after: () => ({ cancel() {} }), every: () => ({ cancel() {} }) },
+    timer: {
+      after(ms, fn) {
+        if (startTimers && ms === 0) deferred.push(fn);
+        return { cancel() {} };
+      },
+      every: () => ({ cancel() {} }),
+    },
   };
   const flush = async () => { while (pending.length) await pending.shift(); };
   const view = new Computers();
   view.init({}, cx);
+  for (const fn of deferred) fn(cx);
   await flush();
   return { view, cx, flush };
 }

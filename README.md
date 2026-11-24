@@ -85,7 +85,11 @@ On Windows, merge `kanso/keys.windows.json` into your Herdr keys instead of
   network, or an agent sets one up with you. It reaches a computer on the home
   network first and over Tailscale when you are away (Windows keeps the
   Tailscale route). When one asks for a password or a key's passphrase, Sign in
-  opens a tab where you type it once. A computer you disconnect stays in the sidebar,
+  opens a tab where you type it once, and kansō puts a key there so Herdr gets in
+  on its own: the one in your ssh agent when there is one, otherwise its own
+  `~/.ssh/id_ed25519_kanso`, which has no passphrase. Remove this computer's key,
+  in the computer's menu, takes off the line kansō added and removes the
+  computer. A computer you disconnect stays in the sidebar,
   Asleep or Disconnected, until you remove it. Rename it, and the name shows on
   every computer.
 - **Images.** The newest picture the agent in focus made, big beside it, and a
@@ -170,13 +174,17 @@ sidebar, rebinds kansō's own keys and hides the panels you don't use.
 Everything runs on your machine, and reads only the folders you work in:
 `git`, `gh`, `find`, `du`, `lsof` (`ss` and `/proc` on Linux), `ps`, `sqlite3`, `node`, `docker`,
 `xcode-select`, `simctl`, `adb`, `emulator` and Herdr's `hc`. What reaches the network: PR and
-Shipped through `gh`, only while their panel is shown (Shipped keeps a private
-gist of your own statistics); the update check, `git ls-remote` on kansō's
+Shipped through `gh`, only while their panel is shown (when Settings turns it on,
+Shipped adds up your computers in a secret gist: unlisted, but readable by anyone
+with its link); the update check, `git ls-remote` on kansō's
 GitHub repository, and the download of a release you install; Spend's daily
-fetch of OpenRouter's price list;
+fetch of OpenRouter's price list; the hjkl dōjō's pet picker, which downloads
+the agents' pets from persistent.oaistatic.com and codex-pets.net and keeps only
+files whose checksum it knows;
 Add a computer, which reads Tailscale's list of your computers and, unless
-Settings turns it off, asks the computers on this network whether they answer
-ssh. Another computer is reached only through Herdr's own connection to it.
+Settings turns it off, asks the computers this one already knows on the network
+whether they answer ssh, and the whole network only when you press Search this
+network. Another computer is reached only through Herdr's own connection to it.
 Simulator's pictures and input stay on this computer. Threads and
 Images read the agents' conversation files for the pictures
 they printed; Spend reads the session files your AI tools write, for tokens and

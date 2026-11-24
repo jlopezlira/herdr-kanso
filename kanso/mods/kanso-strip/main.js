@@ -5,6 +5,7 @@
 // The mod's copies (header, edge, ruler, drop card) talk to the controller through shared "strip.req", "strip.intent", "strip.drag" and "strip.drop".
 
 import { View, div, svg } from "gpui-kit";
+import { GIT_READ } from "./platform-command.js";
 import { h_flex, v_flex, HoverCard, Popover } from "gpui-base";
 import { spaces, panes, agents, terminals, machines, focused, layout, run, hc, shared, setShared, theme, nextCommand, props, openOverlay, home, exec, notify, window } from "herdr";
 import { programIcon, givenNames, nameOf, NAME_LABEL } from "./marks.js";
@@ -39,7 +40,7 @@ import { openApi } from "./platform-open.js";
 import { NAME_LIMIT, ENTRIES, PIECE_LINES, actOf, DIGEST_PIECES, PIECE_GROUP, shownAt, foldFor, headerWidths, headerTools, hoverTools, menuEntries, placeOf, paneLabel, headerMark, prTitle } from "./header-model.js";
 
 const N_MAX = 8;
-const openUrl = (url) => localService(openApi).open(url).catch(() => { });
+const openUrl = (url) => localService(openApi).web(url).catch(() => { });
 const DEFAULT_N = 4;
 const MIN_W = 0.08; // narrowest a column can be dragged, as a share of the view
 const W_STEPS = [1 / 4, 1 / 3, 1 / 2, 2 / 3, 1];
@@ -163,7 +164,7 @@ export async function readDigest(cwd, run, want = {}) {
     const read = await pull();
     return read.pr || read.failure ? { files: 0, add: 0, del: 0, ahead: 0, pushed: false, ...read } : null;
   }
-  const git = (...args) => run("git", ["-C", cwd, ...args]).then(stdout);
+  const git = (...args) => run("git", ["-C", cwd, ...GIT_READ, ...args]).then(stdout);
   if ((await git("rev-parse", "--is-inside-work-tree"))?.trim() !== "true") return null;
   const [status, stat, upstream, branch] = await Promise.all([
     git("status", "--porcelain"), git("diff", "--shortstat", "HEAD"),

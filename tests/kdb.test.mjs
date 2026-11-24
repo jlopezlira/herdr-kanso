@@ -4,9 +4,11 @@ import { fileApi } from "../kanso/mods/kanso-panel/platform-files.js";
 // a migration that happens once or not at all.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdir } from "node:fs/promises";
+import { spawn } from "node:child_process";
+import { once } from "node:events";
+import { chmod, mkdir, stat } from "node:fs/promises";
 import { join } from "node:path";
-import { databaseTimer, load, clone, temporary, exec, failure } from "./helpers.mjs";
+import { databaseTimer, load, clone, temporary, exec, failure, fileExists, until } from "./helpers.mjs";
 
 const seen = (conversation, given, space, pos, status = "idle", terminal = "t1") => ({ conversation, given, space, pos, status, terminal, tab: `tb-${space}`, title: null });
 
@@ -92,6 +94,38 @@ async function storeIn(t, dir, run = exec, host = {}) {
   const db = new Kdb(databaseTimer, join(dir, "kanso"));
   return { store: new Store(db, dir), db };
 }
+
+const modeOf = async (path) => (await stat(path)).mode & 0o777;
+const unixModes = { skip: process.platform === "win32" && "Unix file permissions" };
+const sqliteWithDefaultMask = ["-c", 'umask 022; exec sqlite3 "$@"', "sh"];
+
+test("Opening the store makes an existing database and its folder private.", unixModes, async (t) => {
+  const dir = await temporary(t);
+  const { store, db } = await storeIn(t, dir);
+  await mkdir(db.dir);
+  assert.equal((await sh(db.file, "CREATE TABLE existing(value);")).code, 0);
+  await chmod(db.dir, 0o755);
+  await chmod(db.file, 0o644);
+  await store.open();
+  assert.deepEqual(await Promise.all([db.dir, db.file].map(modeOf)), [0o700, 0o600]);
+});
+
+test("A new database gives its SQLite WAL and shared memory files private permissions.", unixModes, async (t) => {
+  const app = await temporary(t);
+  const run = (command, args, options) => command === "sqlite3" ? exec("sh", [...sqliteWithDefaultMask, ...args], options) : exec(command, args, options);
+  const { store, db } = await storeIn(t, app, run);
+  await store.open();
+  const sqlite = spawn("sh", [...sqliteWithDefaultMask, "-batch", "-bail", db.file], { stdio: ["pipe", "ignore", "inherit"] });
+  const closed = once(sqlite, "close");
+  t.after(async () => {
+    sqlite.stdin.end();
+    assert.deepEqual(await closed, [0, null]);
+  });
+  sqlite.stdin.write("PRAGMA journal_mode=WAL;\nBEGIN IMMEDIATE;\nCREATE TABLE pending(value);\n");
+  const sidecars = ["-wal", "-shm"].map((suffix) => db.file + suffix);
+  await until(async () => (await Promise.all(sidecars.map(fileExists))).every(Boolean), 5000);
+  assert.deepEqual(await Promise.all(sidecars.map(modeOf)), [0o600, 0o600]);
+});
 
 test("what panel.db held is taken in once, and nothing kept by terminal address", async (t) => {
   const dir = await temporary(t);
@@ -240,4 +274,20 @@ test("an older picture index gains the prefix mark", async (t) => {
   assert.equal(got.mark, "");
   await db.savePictures("/t.jsonl", 4, [], "9");
   assert.equal((await db.pictures("/t.jsonl")).mark, "9");
+});
+
+test("A data folder that cannot be made private fails the open rather than passing for private.", unixModes, async (t) => {
+  const app = await temporary(t);
+  const run = (command, args, options) => command === "sh" && String(args[1]).startsWith("umask 077 && mkdir")
+    ? Promise.resolve({ code: 1, stdout: "", stderr: "chmod: refused" })
+    : exec(command, args, options);
+  const { store } = await storeIn(t, app, run);
+  await assert.rejects(store.open(), /could not keep its data to you alone: chmod: refused/);
+});
+
+test("The guard's data folder is yours alone even under a permissive umask.", unixModes, async (t) => {
+  const home = await temporary(t);
+  const ran = await exec("sh", ["-c", 'umask 022 && HERDR_APP_HOME="$1" node "$2" status', "sh", home, new URL("../kanso/mods/kanso-guard/guard.mjs", import.meta.url).pathname]);
+  assert.equal(ran.code, 0, ran.stderr);
+  assert.equal(await modeOf(join(home, "data", "kanso-guard")), 0o700);
 });

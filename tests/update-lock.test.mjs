@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { mkdir, readFile, readdir } from "node:fs/promises";
 import { join } from "node:path";
-import { windows, test, updates, staged, pending, holder, took, version, updated, startUpdater, started, landed, installing, secondCopy, offered, chromeMain, installedNew, twoWindows } from "./update-harness.mjs";
+import { tree, windows, test, updates, staged, pending, holder, took, version, updated, startUpdater, started, landed, installing, secondCopy, offered, chromeMain, installedNew, twoWindows } from "./update-harness.mjs";
 
 // A started window, and a holder elsewhere that took the lock.
 const heldElsewhere = async (t) => {
@@ -69,13 +69,15 @@ test("An install longer than exec's limit runs to the end, and keeps the lock al
 test("A swap that fails on its last mod puts back every one before it: the old version stays", async (t) => {
   const { f, cx, drain } = await started(t);
   const keysBefore = await readFile(join(f.home, "keys.json"), "utf8");
+  const mods = join(f.home, "mods");
+  const modsBefore = await tree(mods);
   await f.flag("sabotage"); // kanso-chrome, the last mod moved in, cannot be
   await f.updater.install(cx);
   assert.match(f.updater.error, /could not put kanso-chrome in place/);
   assert.equal(f.toasts.at(-1).level, "error");
   assert.equal(await version(f.home), "1.0.0", "kanso-chrome was moved aside, then put back");
   assert.equal(await chromeMain(f.home), "// 1.0.0\n");
-  assert.deepEqual((await readdir(join(f.home, "mods"))).toSorted(), ["kanso-chrome", "token-spend"], "the mods it brought are gone again");
+  assert.deepEqual(await tree(mods), modsBefore, "the old mods are restored and the new ones are gone");
   assert.equal(await readFile(join(f.home, "keys.json"), "utf8"), keysBefore, "your keys as they were");
   assert.equal(await readFile(join(f.home, "layouts/kanso.json"), "utf8"), '{"root":{"id":"live"}}', "your layout as it was");
   assert.deepEqual(await readdir(join(f.home, "themes")), [], "the release's themes taken back too");

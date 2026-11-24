@@ -3,6 +3,7 @@ import { documentBones } from "./ui-page.js";
 import { serviceOn } from "./platform-host.js";
 import { paths } from "./platform-paths.js";
 import { fileApi } from "./platform-files.js";
+import { GIT_READ } from "./platform-command.js";
 // Derived from the `files` mod shipped with Herdr (Apache-2.0, https://github.com/herdrdev/herdr-app).
 // Modified by 0OZ: root no longer draws its own rounded, bordered card.
 // Modified by José Gutiérrez (minimalistic, 0oz design fork): renamed from oz-files.
@@ -154,7 +155,7 @@ export class Files {
     });
     const top = await exec("git", ["rev-parse", "--show-toplevel"], { cwd, on }).catch(() => null);
     const status = top?.code === 0
-      ? await exec("git", ["status", "--porcelain=v1", "-z", "--no-renames", "--untracked-files=normal"], { cwd, on }).catch(() => null)
+      ? await exec("git", [...GIT_READ, "status", "--porcelain=v1", "-z", "--no-renames", "--untracked-files=normal"], { cwd, on }).catch(() => null)
       : null;
     if (key() !== context) return;
     this.marks = status?.code === 0 ? marksFrom(top.stdout.trim(), status.stdout.split("\0")) : {};

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { chmod, mkdir, open, readFile, stat, writeFile } from "node:fs/promises";
+import { chmod, mkdir, open, readFile, readdir, stat, writeFile } from "node:fs/promises";
 import { delimiter, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { guardHost, linuxMemory, linuxPss, logindIdle, omarchyIdle, systemdService, systemdTimer } from "../kanso/mods/kanso-guard/guard-host.mjs";
@@ -238,7 +238,7 @@ const kansoDefaults = Object.fromEntries(mimeTypes.map((type) => [type, markdown
 const desktopLines = async (path) => (await readFile(path, "utf8")).split("\n");
 const desktopExec = async (path) => (await desktopLines(path)).find((line) => line.startsWith("Exec="));
 
-const linuxMarkdown = async (t, { dataName = "data", appName = "app" } = {}) => {
+const linuxMarkdown = async (t, { dataName = "data", appName = "app", running = false } = {}) => {
   const { dir, bin, home, config, log, state, launched } = await folderWith(
     t, "bin", "home", "config", "log", "state", "launched",
   );
@@ -246,8 +246,9 @@ const linuxMarkdown = async (t, { dataName = "data", appName = "app" } = {}) => 
   const app = join(dir, appName);
   const programs = {
     uname: "echo Linux",
-    pgrep: "exit 1",
-    "herdr-app": "exit 1",
+    pgrep: running ? "exit 0" : "exit 1",
+    "herdr-app": running ? 'printf "%s\\n" "$HERDR_APP_HOME" >> "$LAUNCHED"' : "exit 1",
+    "omarchy-launch-or-focus": "exit 0",
     "update-desktop-database": "exit 0",
     "gtk-launch": "printf '%s\\n' \"$@\" >> \"$LAUNCHED\"",
     "xdg-mime": lines([
@@ -322,6 +323,29 @@ for (const [dataName, quoted, title] of [
     await assert.rejects(stat(dirname(opener)), { code: "ENOENT" });
   });
 }
+
+test("The Omarchy opener installs and hands a Markdown file to kansō when both home paths contain punctuation and spaces", { skip: unixOnly }, async (t) => {
+  const punctuation = "$ ' \" `";
+  const { desktop, dir, env, launched, opener, run } = await linuxMarkdown(t, {
+    dataName: `shared data ${punctuation}`,
+    appName: `app home ${punctuation}`,
+    running: true,
+  });
+  await run("install");
+  assert.equal(await run("status"), "on");
+  const escaped = opener.replace(/["$`]/g, "\\\\$&");
+  assert.equal(await desktopExec(desktop), `Exec="${escaped}" %f`);
+
+  const path = join(dir, "meeting notes.md");
+  await writeFile(path, "A note\n");
+  const result = await exec(opener, [path], { env: { ...env, HERDR_APP_HOME: "" } });
+  assert.equal(result.code, 0, result.stderr);
+  const inbox = join(env.HERDR_APP_HOME, "data", "kanso-open");
+  const entries = await readdir(inbox);
+  assert.equal(entries.length, 1);
+  assert.equal(await readFile(join(inbox, entries[0]), "utf8"), path);
+  assert.equal(await readFile(launched, "utf8"), `${env.HERDR_APP_HOME}\n`);
+});
 
 test("Turning off the Omarchy opener keeps defaults changed by the user", { skip: unixOnly }, async (t) => {
   const { run, state } = await linuxMarkdown(t);
