@@ -11,7 +11,7 @@ import {
   migratePieces, loadPieces, pieces, filterPieces, groupsOf, withRoster,
 } from "../kanso/mods/kanso-settings/pieces.js";
 
-const LEFT_OUT = ["status.needs", "status.memory", "status.ports", "status.containers", "status.reviews", "status.spend", "pr.directory", "pr.agent", "pr.write", "files.named", "toast.pr", "toast.agent", "header.actions"];
+const LEFT_OUT = ["status.needs", "status.memory", "status.ports", "status.containers", "status.reviews", "status.spend", "pr.directory", "pr.agent", "pr.write", "files.named", "toast.pr", "toast.agent", "header.actions", "computers.awake"];
 const STATES = new Set(["show", "needed", "hide"]);
 const JOBS = new Set(["git", "gh", "lsof", "docker", "ps", "remote"]);
 
@@ -37,6 +37,7 @@ test("the registry ids are unique and each default is one of its states", () => 
   assert.equal(PIECES.find((row) => row.id === "sidebar.away").job, null);
   assert.equal(PIECES.find((row) => row.id === "sidebar.computers").job, null);
   assert.equal(pieceOf("panel.workflow").job, null);
+  assert.equal(pieceOf("panel.caffeine").group, "Tab bar and panels");
   for (const id of LEFT_OUT) assert.equal(PIECES.some((row) => row.id === id), false, id);
   assert.equal(PIECES.some((row) => row.id === "sidebar.away"), true);
   assert.equal(PIECES.find((row) => row.id === "sidebar.needs").default, "hide");
@@ -240,10 +241,10 @@ test("sidebar.away hidden records nothing", async () => {
   assert.equal(view.returnSignature, null);
 });
 
-test("sidebar.computers hidden does not list computers", async () => {
+test("Hiding Computers in the sidebar stops listing computers but keeps Caffeine checking", async () => {
   const { view, cx, cmds, flush } = await sidebar({ "sidebar.computers": "hide" });
   let held = 0;
-  view.caffeine = { keep() {}, isOn: () => false, due: () => { held += 1; return []; }, nextWait: () => null };
+  view.caffeine = { keep() {}, look: () => ({ on: false }), due: () => { held += 1; return []; }, nextWait: () => null };
   view.refreshMachines(cx);
   await flush();
   assert.equal(cmds.includes("hc"), false);

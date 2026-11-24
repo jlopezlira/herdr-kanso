@@ -7,7 +7,7 @@ import {
 } from "./helpers.mjs";
 
 const { caffeineCall, answerOf, setupArgv, createCaffeine, EVERY_MS, SETUP_EVERY_MS } =
-  await load("kanso-spaces/caffeine.js", ["caffeineCall", "answerOf", "setupArgv", "createCaffeine", "EVERY_MS", "SETUP_EVERY_MS"]);
+  await load("kanso-panel/caffeine-model.js", ["caffeineCall", "answerOf", "setupArgv", "createCaffeine", "EVERY_MS", "SETUP_EVERY_MS"]);
 const verbs = ["on", "off", "read"];
 const unixSystems = ["macos", "linux"];
 const sh = "/bin/sh";
@@ -31,8 +31,11 @@ test("Caffeine uses the right command for each supported system and none for an 
 
 test("The macOS and Linux commands for Caffeine and its setup have valid shell syntax", { skip: !hasSh && "No /bin/sh" }, async () => {
   for (const system of unixSystems) {
-    for (const verb of [...verbs, "setup"]) {
-      const script = verb === "setup" ? setupArgv(system)[2] : caffeineCall(system, verb).args[1];
+    const scripts = [
+      ...verbs.map((verb) => [verb, caffeineCall(system, verb).args[1]]),
+      ...["on", "off"].map((verb) => [`setup ${verb}`, setupArgv(system, verb)[2]]),
+    ];
+    for (const [verb, script] of scripts) {
       const result = await exec(sh, ["-n", "-c", script]);
       assert.equal(result.code, 0, `${system} ${verb}: ${result.stderr}`);
     }
@@ -51,9 +54,12 @@ test("Caffeine recognizes its replies and whether the battery turned it off, and
 });
 
 const sudoStub = String.raw`[ "$1" = -n ] && shift
-[ "$1" = /usr/bin/pmset ] || exit 1
-shift
-exec pmset "$@"`;
+case "$*" in
+  "/usr/bin/pmset -a disablesleep 0"|"/usr/bin/pmset -a disablesleep 1") shift; exec pmset "$@" ;;
+  "/usr/bin/touch /var/db/kanso-caffeine") exec touch "$CAFFEINE_TEST_DIR/boot-marker" ;;
+  "/bin/rm -f /var/db/kanso-caffeine") exec rm -f "$CAFFEINE_TEST_DIR/boot-marker" ;;
+  *) exit 1 ;;
+esac`;
 
 const pmsetStub = String.raw`case "$*" in
   "-g")
@@ -124,7 +130,7 @@ const fakeMac = async (t) => {
     const output = await stdoutOf(command, args, { env, limit: 15_000 });
     assert.equal(output, word, verb);
   };
-  return { call, guards, read, running, state, write };
+  return { call, guards, read, running, state, write, markerExists: () => fileExists(join(dir, "boot-marker")) };
 };
 
 test("On macOS Caffeine keeps a guard running, restores sleep when turned off or after a restart, and respects low battery and locks", async (t) => {
@@ -132,7 +138,7 @@ test("On macOS Caffeine keeps a guard running, restores sleep when turned off or
     t.skip("Requires /bin/sh and plutil");
     return;
   }
-  const { call, guards, read, running, state, write } = await fakeMac(t);
+  const { call, guards, read, running, state, write, markerExists } = await fakeMac(t);
   const prior = join(state, "prior");
   const start = async () => {
     await call("on", "on");
@@ -143,9 +149,11 @@ test("On macOS Caffeine keeps a guard running, restores sleep when turned off or
     const pid = await start();
     assert.ok(await running(pid), "the guard is running");
     assert.equal(await read("sleep-disabled"), "1");
+    assert.equal(await markerExists(), before === "0", "mark only a change from sleep enabled");
     await call("read", "on");
     await call("off", "off");
     await until(async () => !(await running(pid)), 5_000);
+    assert.equal(await markerExists(), false, "turning Caffeine off clears the marker");
     assert.equal(await read("sleep-disabled"), before);
     assert.equal(await fileExists(prior), false);
   }
@@ -181,7 +189,7 @@ test("On macOS Caffeine keeps a guard running, restores sleep when turned off or
   assert.equal(await fileExists(lock), false);
 });
 
-test("Caffeine checks newly connected computers, stops checking when off, and checks more often during setup", async () => {
+test("Caffeine checks newly connected computers, leaves known states alone, and checks more often during setup", async () => {
   const computer = "remote";
   const keys = [computer];
   let now = 0;
@@ -197,9 +205,8 @@ test("Caffeine checks newly connected computers, stops checking when off, and ch
   await caffeine.read(computer);
   checkAfter(EVERY_MS, false);
   reply = "on";
-  await caffeine.set(computer, true);
-  checkAfter(EVERY_MS - 1, false);
-  checkAfter(1, true);
+  await caffeine.change(computer, true);
+  checkAfter(EVERY_MS, false);
 
   caffeine.setup(computer);
   reply = "off";
@@ -214,6 +221,8 @@ test("Caffeine checks newly connected computers, stops checking when off, and ch
   checkAfter(0, true);
 });
 
+const macScript = (verb) => caffeineCall("macos", verb).args[1];
+
 test("A Caffeine status check waits for a change already running on that computer", async () => {
   const started = Promise.withResolvers();
   const finish = Promise.withResolvers();
@@ -227,31 +236,54 @@ test("A Caffeine status check waits for a change already running on that compute
       return finish.promise;
     },
   });
-  const turningOn = caffeine.set("", true);
+  const turningOn = caffeine.change("", true);
   const checking = caffeine.read("");
-  const script = (verb) => caffeineCall("macos", verb).args[1];
   try {
     await started.promise;
     await new Promise(process.nextTick);
-    assert.deepEqual(commands, [script("on")]);
+    assert.deepEqual(commands, [macScript("on")]);
   } finally {
     finish.resolve(success("on"));
   }
   assert.equal((await turningOn).word, "on");
   assert.equal((await checking).word, "on");
-  assert.deepEqual(commands, [script("on"), script("read")]);
+  assert.deepEqual(commands, [macScript("on"), macScript("read")]);
 });
 
-test("If turning Caffeine off is refused, the computer still shows it on and gets checked again", async () => {
+test("Toggling Caffeine waits for a pending read before deciding whether to turn it on or off", async () => {
+  const finish = Promise.withResolvers();
+  const caffeine = createCaffeine({
+    local: "macos",
+    run: async ({ args }) => args[1] === macScript("read") ? finish.promise : success("off"),
+  });
+  const checking = caffeine.read("");
+  const toggling = caffeine.change("", null);
+  finish.resolve(success("on"));
+  await checking;
+  assert.equal((await toggling).verb, "off");
+});
+
+test("If turning Caffeine off is refused, the last known state stays on and the computer is due for another read", async () => {
   let result = success("on");
   const caffeine = createCaffeine({ local: "macos", now: () => 0, run: async () => result });
-  await caffeine.set("", true);
-  for (const [reply, word] of [[success("setup"), "setup"], [success("busy"), "busy"], [failure("failed"), null]]) {
+  await caffeine.change("", true);
+  for (const [reply, word] of [[success("refused"), "refused"], [success("setup"), "setup"], [success("busy"), "busy"], [failure("failed"), null]]) {
     result = reply;
-    assert.equal((await caffeine.set("", false)).word, word);
-    assert.equal(caffeine.isOn(""), true);
+    assert.equal((await caffeine.change("", false)).word, word);
+    const { on, read } = caffeine.look("");
+    assert.deepEqual({ on, read }, { on: true, read: false });
+    assert.deepEqual(caffeine.due([""], EVERY_MS - 1), []);
     assert.deepEqual(caffeine.due([""], EVERY_MS), [""]);
   }
+});
+
+test("Caffeine reports a turn-off due to low battery only once", async () => {
+  const caffeine = createCaffeine({ local: "macos", run: async () => success("off battery") });
+  const key = "";
+  await caffeine.read(key);
+  const { on, battery } = caffeine.look(key);
+  assert.deepEqual({ on, battery }, { on: false, battery: true });
+  assert.deepEqual([caffeine.untold(key), caffeine.untold(key)], [true, false]);
 });
 
 test("Caffeine checks a remote computer's system once and already knows this computer's system", async () => {
@@ -264,7 +296,7 @@ test("Caffeine checks a remote computer's system once and already knows this com
     },
   });
   await caffeine.read("remote");
-  await caffeine.set("remote", false);
+  await caffeine.change("remote", false);
   await caffeine.read("");
   const expected = (system, verb, on) => {
     const { command, args } = caffeineCall(system, verb);
@@ -276,6 +308,32 @@ test("Caffeine checks a remote computer's system once and already knows this com
     expected("linux", "off", "remote"),
     expected("macos", "read", undefined),
   ]);
+});
+
+test("The Caffeine panel shows each computer's status and offers only the action that fits it", async () => {
+  const commands = [];
+  const { caffeineWord, caffeineVerbs } = await load("kanso-panel/caffeine.js", ["caffeineWord", "caffeineVerbs"], {
+    run: (name) => commands.push(name),
+  });
+  const key = "devbox";
+  const turnOn = [["Turn on", `kanso-spaces.caffeine-on:${key}`]];
+  const cases = [
+    [{ on: true }, "On", [["Turn off", `kanso-spaces.caffeine-off:${key}`]]],
+    [{}, "Off", turnOn],
+    [{ battery: true }, "Off: battery at 15%", turnOn],
+    [{ busy: true, want: true }, "Turning on…", []],
+    [{ busy: true }, "Turning off…", []],
+    [{ setup: true, read: false }, "Waiting for the password in its tab", turnOn],
+    [{ read: false }, "Not read yet", [["Read again", "kanso-spaces.caffeine-read"]]],
+  ];
+  for (const [state, word, actions] of cases) {
+    const look = { read: true, ...state };
+    assert.equal(caffeineWord(look), word);
+    const verbs = caffeineVerbs(key, look);
+    assert.deepEqual(Array.from(verbs, ({ label }) => label), actions.map(([label]) => label), word);
+    verbs.forEach(({ onClick }) => onClick());
+    assert.deepEqual(commands.splice(0), actions.map(([, name]) => name), word);
+  }
 });
 
 test("A computer row shows the coffee flag only when the computer and Caffeine are on", async () => {
