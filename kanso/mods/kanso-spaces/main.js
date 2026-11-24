@@ -1382,7 +1382,7 @@ export default class Spaces extends RetryingView {
     if (!next) { if (steps) this.redraw(cx); return; }
     // A turn ended or began: what was said changed.
     if (this.view === "threads") this.threadsAt = 0;
-    if (this.panelReady) this.began = sweepBegan(this.since, next, now, this.began);
+    this.began = sweepBegan(this.since, next, now, this.began, this.panelReady);
     this.since = next;
     this.panel.set("spaces.since", next);
     this.redraw(cx);

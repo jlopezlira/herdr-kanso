@@ -133,9 +133,9 @@ export const sweepStage = (a, began, now) => {
   if (at == null || now - at >= SWEEP_SPAN_MS) return null;
   return now - at < SWEEP_LEAD_MS ? "start" : "run";
 };
-export const sweepBegan = (since, next, now, began = {}) => ({
+export const sweepBegan = (since, next, now, began = {}, newcomers = true) => ({
   ...Object.fromEntries(Object.entries(began).filter(([, at]) => now - at < SWEEP_SPAN_MS)),
-  ...Object.fromEntries(Object.entries(next).filter(([k, v]) => v.s === "working" && since?.[k]?.s !== "working").map(([k]) => [k, now])),
+  ...Object.fromEntries(Object.entries(next).filter(([k, v]) => v.s === "working" && since?.[k]?.s !== "working" && (newcomers || since?.[k])).map(([k]) => [k, now])),
 });
 export const sweepWake = (began, now) => Object.values(began).flatMap((at) => [at + SWEEP_LEAD_MS, at + SWEEP_SPAN_MS]).filter((t) => t > now).reduce((soonest, t) => Math.min(soonest ?? t, t), null);
 

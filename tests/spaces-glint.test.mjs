@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { openedKdb, temporary } from "./helpers.mjs";
+import { clone, openedKdb, temporary } from "./helpers.mjs";
 import { element, fixture, initialised, loadMod, sidebarOn } from "./perf-harness.mjs";
 
 const LEAD = 80;
@@ -26,8 +26,11 @@ async function sidebar(t, working = 0) {
   return { f, mount, draw };
 }
 
-const work = async (f, index = 0) => {
+const setWorking = (f, index) => {
   for (const rows of [f.list, f.terms, f.ps]) rows[index] = { ...rows[index], status: "working" };
+};
+const work = async (f, index = 0) => {
+  setWorking(f, index);
   await f.advance(500);
 };
 const mountWorking = async (f, mount) => {
@@ -100,14 +103,9 @@ test("Reopening the sidebar does not sweep for an agent remembered as working", 
   assert.deepEqual(draw(view), [], "the stored working state does not replay a glint");
 });
 
-test("An already-working agent does not glint while its saved SQLite state loads", async (t) => {
-  const { f, mount, draw } = await sidebar(t, 1);
-  const key = "spaces.since", at = f.terms[0].status_ms;
-  const { Kdb } = await loadMod("kanso-spaces/kdb.js", ["Kdb"], f.host);
-  const db = await openedKdb(Kdb);
-  await db.setPref(key, JSON.stringify({ t0: { s: "working", at } }));
-  assert.equal(f.host.localStorage.getItem(key), null, "the saved state exists only in SQLite");
+const t0Stage = (view) => new Map(JSON.parse(view.rowsShown()).sweeps).get("t0") ?? null;
 
+const withPrefsHeld = async (f, check) => {
   const prefs = Promise.withResolvers();
   const exec = f.host.exec;
   let prefsRead = false;
@@ -120,27 +118,71 @@ test("An already-working agent does not glint while its saved SQLite state loads
     return result;
   };
 
-  const view = await mount();
-  const glint = () => ({
-    stage: JSON.parse(view.rowsShown()).sweeps.find(([address]) => address === "t0")?.[1] ?? null,
+  try {
+    return await check((view) => assert.ok(prefsRead && !view.panelReady, "the SQLite response is still withheld"));
+  } finally {
+    prefs.resolve();
+    f.host.exec = exec;
+    await f.settle();
+  }
+};
+
+test("An already-working agent does not glint while its saved SQLite state loads", async (t) => {
+  const { f, mount, draw } = await sidebar(t, 1);
+  const key = "spaces.since", at = f.terms[0].status_ms;
+  const { Kdb } = await loadMod("kanso-spaces/kdb.js", ["Kdb"], f.host);
+  const db = await openedKdb(Kdb);
+  await db.setPref(key, JSON.stringify({ t0: { s: "working", at } }));
+  assert.equal(f.host.localStorage.getItem(key), null, "the saved state exists only in SQLite");
+
+  const glint = (view) => ({
+    stage: t0Stage(view),
     transitions: draw(view).filter(({ id }) => id?.startsWith("space-agent-t0-name-sweep-")).length,
   });
-  const initial = glint();
-  await f.advance(500);
-  assert.equal(view.trackedAt, f.state.now, "the first tracking tick ran");
-  assert.ok(prefsRead && !view.panelReady, "the SQLite response is still withheld");
-  const pending = glint();
-
-  prefs.resolve();
-  await f.settle();
+  const { view, initial, pending } = await withPrefsHeld(f, async (assertPending) => {
+    const view = await mount();
+    const initial = glint(view);
+    await f.advance(500);
+    assert.equal(view.trackedAt, f.state.now, "the first tracking tick ran");
+    assertPending(view);
+    return { view, initial, pending: glint(view) };
+  });
   assert.ok(view.panelReady, "the preferences loaded");
   assert.equal(view.since.t0.at, at, "the saved working timestamp came from SQLite");
-  const restored = glint();
+  const restored = glint(view);
   await f.advance(LEAD);
   const rest = { stage: null, transitions: 0 };
-  assert.deepEqual({ initial, pending, restored, later: glint() }, {
+  assert.deepEqual({ initial, pending, restored, later: glint(view) }, {
     initial: rest, pending: rest, restored: rest, later: rest,
   }, "the t0 row stays at rest before and after the SQLite restore");
+});
+
+test("An agent that starts working while SQLite preferences load still sweeps", async (t) => {
+  const { f, mount } = await sidebar(t);
+  await withPrefsHeld(f, async (assertPending) => {
+    const view = await mount();
+    await f.advance(500);
+    assertPending(view);
+    assert.equal(view.since.t0.s, "rest", "the first tracking tick records t0 at rest");
+
+    setWorking(f, 0);
+    await f.advance(2000);
+    assertPending(view);
+    assert.equal(view.since.t0.s, "working", "the sidebar observed t0 start working");
+    assert.equal(view.since.t0.at, f.state.now, "the latest tracking tick recorded the edge");
+    assert.equal(t0Stage(view), "start", "t0 starts its sweep before the preferences load");
+  });
+});
+
+test("The newcomers flag controls first-seen agents without suppressing observed starts", async () => {
+  const { sweepBegan } = await loadMod("kanso-spaces/agents.js", ["sweepBegan"]);
+  const now = 1000;
+  const working = { s: "working", at: 0 };
+  const since = { resumed: { s: "rest", at: 0 }, alreadyWorking: working };
+  const next = { ...since, resumed: working, newcomer: working };
+  const started = (newcomers) => clone(sweepBegan(since, next, now, {}, newcomers));
+  assert.deepEqual(started(false), { resumed: now });
+  assert.deepEqual(started(true), { resumed: now, newcomer: now });
 });
 
 test("Painting the sidebar during a glint reads only one row snapshot", async (t) => {
