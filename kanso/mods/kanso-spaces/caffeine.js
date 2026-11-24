@@ -1,4 +1,5 @@
-import { psQuote, shellQuote, xmlText, PLIST_HEAD } from "./platform-command.js";
+import { psQuote, shellQuote } from "./platform-command.js";
+import { xmlText, PLIST_HEAD } from "./platform-plist.js";
 
 export const LOW = 15;
 export const EVERY_MS = 270_000;

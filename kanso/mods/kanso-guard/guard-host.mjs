@@ -1,7 +1,8 @@
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir, totalmem, freemem } from "node:os";
 import { delimiter, join } from "node:path";
-import { platformName, powershell, psQuote, checked, jsonRows, validPid, elapsedSeconds, xmlText as x, PLIST_HEAD } from "./platform-command.js";
+import { platformName, powershell, psQuote, checked, jsonRows, validPid, elapsedSeconds } from "./platform-command.js";
+import { xmlText as x, PLIST_HEAD } from "./platform-plist.js";
 import { pathApi } from "./platform-paths.js";
 import { processApi } from "./platform-processes.js";
 import { openApi } from "./platform-open.js";
