@@ -44,9 +44,9 @@ export function routeOf(machine) {
   return { name, target, via, session };
 }
 
-const LAN_SSH = "-o BatchMode=yes -o ConnectTimeout=2 -o StrictHostKeyChecking=accept-new";
+const LAN_SSH = "-o BatchMode=yes -o ConnectTimeout=2 -o StrictHostKeyChecking=yes";
 const LAN_ASK = "-o ConnectTimeout=2";
-const lanLine = (args, away) => `ssh ${LAN_SSH} ${args} true </dev/null >/dev/null 2>&1 && exec ssh -o StrictHostKeyChecking=accept-new ${args} "$1"; exec ${away} "$1"`;
+const lanLine = (args, away) => `ssh ${LAN_SSH} ${args} true </dev/null >/dev/null 2>&1 && exec ssh -o StrictHostKeyChecking=yes ${args} "$1"; exec ${away} "$1"`;
 export const lanFirst = (args, away) => `sh -c ${shellQuote(lanLine(args, away))} route`;
 
 export function lanArgs(ip, { target = "", user = "", hostKey = "" } = {}) {
@@ -62,7 +62,7 @@ const LAN_IP = /(?:^|\s)-o HostName=(\S+)(?:\s|$)/;
 export function lanParts(via) {
   const inner = String(via ?? "").match(/^sh -c ('(?:[^']|'\\'')*'|\S+) route$/s);
   const line = inner ? unquote(inner[1]) : "";
-  const found = line.match(/^ssh -o BatchMode=yes -o ConnectTimeout=2 -o StrictHostKeyChecking=accept-new (.+?) true (?:<\/dev\/null )?>\/dev\/null 2>&1 && exec ssh -o StrictHostKeyChecking=accept-new \1 "\$1"; exec (.+) "\$1"$/s);
+  const found = line.match(/^ssh -o BatchMode=yes -o ConnectTimeout=2 -o StrictHostKeyChecking=(?:accept-new|yes) (.+?) true (?:<\/dev\/null )?>\/dev\/null 2>&1 && exec ssh -o StrictHostKeyChecking=(?:accept-new|yes) \1 "\$1"; exec (.+) "\$1"$/s);
   if (!found || `sh -c ${shellQuote(line)} route` !== via) return null;
   const ip = found[1].match(LAN_IP)?.[1] ?? splitTarget(unquote(found[1])).host;
   return { args: found[1], ip, away: found[2] };
@@ -119,22 +119,23 @@ const PS_KEY = [
   "function Read-Key($f) { $script:pub = (Get-Pair $f) + ' kanso'; $script:b64 = (Get-Pair $f).Split(' ')[1] }",
 ];
 
-function shSetup(machine, { replace }) {
+function shSetup(machine, { replace, agentPath, before }) {
   const name = nameOf(machine);
   const { ask, keyed, reach } = keyedRoute(machine);
   const hc = (args) => ["hc", ...args].map(shellQuote).join(" ");
   const back = addLine(machine.target, { via: machine.via, name, session: machine.session });
-  const own = `lines "$k" || exit; push; via=${shellQuote(keyed(KEY))}`;
-  const agentPath = agentKey(name);
+  const own = `lines "$k" || exit; replaced; push; via=${shellQuote(keyed(KEY))}`;
   return [
     `k=${shHome(KEY)}; g=${shHome(agentPath)}`,
     'mkdir -p "$HOME/.ssh" && chmod 700 "$HOME/.ssh" || exit',
+    before ? `prev=$(awk '{ print $1 " " $2 " kanso" }' ${shHome(before)}.pub 2>/dev/null)` : "prev=",
     ...SH_KEY,
+    `replaced() { [ -z "$prev" ] || [ "$prev" = "$pub" ] || line=${shSpliced(forgetLine, "prev")}"$line"; }`,
     `push() { e=$(mktemp) || exit; said=$(${ask} "$line" 2>"$e"); s=$?; cat "$e" >&2; case $said in *kanso-added*) added=1 ;; *) added= ;; esac; [ "$s" -eq 0 ] || { grep -q "Permission denied" "$e" && { echo; echo ${shellQuote(refused(name))}; echo "$pub"; }; rm -f "$e"; exit 1; }; rm -f "$e"; }`,
     "if held || pick; then",
-    '  lines "$g" || exit; push',
+    '  lines "$g" || exit; replaced; push',
     `  if ${reach(agentPath)} true </dev/null >/dev/null 2>&1; then via=${shellQuote(keyed(agentPath))}`,
-    `  else echo ${shellQuote(AGENT_FAILED(name))}; old=$pub; was=$added; own || exit; lines "$k" || exit; [ -z "$was" ] || line=${shSpliced(forgetLine, "old")}"$line"; push; via=${shellQuote(keyed(KEY))}; fi`,
+    `  else echo ${shellQuote(AGENT_FAILED(name))}; old=$pub; was=$added; own || exit; lines "$k" || exit; [ -z "$was" ] || line=${shSpliced(forgetLine, "old")}"$line"; replaced; push; via=${shellQuote(keyed(KEY))}; fi`,
     `else own || exit; ${own}; fi`,
     replace ? `${hc(["machine", "rm", name])} >/dev/null 2>&1` : "",
     `${hc(addLine("", { via: VIA, name, session: machine.session })).replace(VIA, '"$via"')} || { ${replace ? `${hc(back)} >/dev/null 2>&1; ` : ""}exit 1; }`,
@@ -143,17 +144,16 @@ function shSetup(machine, { replace }) {
   ].filter(Boolean).join("\n");
 }
 
-function psSetup(machine, { replace }) {
+function psSetup(machine, { replace, agentPath }) {
   const name = nameOf(machine);
   const { ask, keyed, reach } = keyedRoute(machine, "windows");
   const hc = (args) => `& hc ${args.map(psQuote).join(" ")}`;
   const back = addLine(machine.target, { name, session: machine.session });
-  const agentPath = agentKey(name);
   return [
     ...psStart(agentPath),
     "New-Item -ItemType Directory -Force (Split-Path $k) | Out-Null",
     ...PS_KEY,
-    `function Send-Key { $said = ${ask} "$pre${pushLine("$pub", "$b64")}" 2>&1; $code = $LASTEXITCODE; $script:added = [bool]("$said" -match 'kanso-added'); $said | Where-Object { "$_" -notmatch 'kanso-added' } | Write-Host; if ($code -ne 0) { if ("$said" -match 'Permission denied') { Write-Host ''; Write-Host ${psQuote(refused(name))}; Write-Host $pub }; exit 1 } }`,
+    `function Send-Key { $said = ${ask} "$($pre)${pushLine("$pub", "$b64")}" 2>&1; $code = $LASTEXITCODE; $script:added = [bool]("$said" -match 'kanso-added'); $said | Where-Object { "$_" -notmatch 'kanso-added' } | Write-Host; if ($code -ne 0) { if ("$said" -match 'Permission denied') { Write-Host ''; Write-Host ${psQuote(refused(name))}; Write-Host $pub }; exit 1 } }`,
     "$pre = ''",
     `if ((Test-Held) -or (Select-Agent)) { Read-Key $g; Send-Key; ${reach(agentPath)} true *> $null; if ($LASTEXITCODE -eq 0) { $via = ${psQuote(keyed(agentPath))} } else { Write-Host ${psQuote(AGENT_FAILED(name))}; $old = $pub; $was = $added; New-Own; Read-Key $k; if ($was) { $pre = ${psSpliced(forgetLine, "old")} }; Send-Key; $via = ${psQuote(keyed(KEY))} } } else { New-Own; Read-Key $k; Send-Key; $via = ${psQuote(keyed(KEY))} }`,
     replace ? `${hc(["machine", "rm", name])} *> $null` : "",
@@ -168,9 +168,10 @@ export function keySetup(machine, { platform = "macos", replace = false } = {}) 
   if (!keyable(route, platform)) {
     return replace ? ["hc", "machine", "login", route.name] : ["hc", ...addLine(route.target, { via: route.via, name: nameOf(route), session: route.session })];
   }
+  const keys = { replace, agentPath: agentKey(nameOf(route)), before: kansoKeyed(route.via) ? keyOfRoute(route.via) : "" };
   return platform === "windows"
-    ? ["powershell", "-NoProfile", "-Command", psSetup(route, { replace })]
-    : ["sh", "-c", shSetup(route, { replace })];
+    ? ["powershell", "-NoProfile", "-Command", psSetup(route, keys)]
+    : ["sh", "-c", shSetup(route, keys)];
 }
 
 export const signInTab = (machine, platform = "macos") => ({ argv: keySetup(routeOf(machine), { platform, replace: true }), place: "right" });

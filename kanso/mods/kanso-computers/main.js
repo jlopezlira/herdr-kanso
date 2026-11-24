@@ -81,7 +81,7 @@ export default class Computers extends View {
 
   search(cx, whole) {
     this.searching = true;
-    this.swept = this.swept || whole;
+    this.swept = whole;
     cx.notify();
     cx.spawn(async (cx) => {
       const near = (hosts) => {
@@ -89,7 +89,7 @@ export default class Computers extends View {
         cx.notify();
       };
       const found = await scanNearby(this.platform, cx.timer, near, { whole }).catch(() => []);
-      this.nearby = [...new Map([...(this.nearby ?? []), ...found].map((host) => [host.ip, host])).values()];
+      this.nearby = [...new Map(found.map((host) => [host.ip, host])).values()];
       this.searching = false;
       setShared(NEARBY, { at: Date.now(), hosts: this.nearby });
       cx.notify();

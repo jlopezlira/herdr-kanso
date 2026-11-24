@@ -818,7 +818,7 @@ test("A typed ssh option, a blank, or a space is not a computer, and a host with
 
 test("A typed port reaches ssh as -p, and an IPv6 address is not read as a port", async () => {
   const { destinationOf, probeArgs } = await reach();
-  const options = ["-o", "BatchMode=yes", "-o", "ConnectTimeout=8", "-o", ACCEPT_NEW, "-o", UNIX_PROBE_HOSTS, "-o", "GlobalKnownHostsFile=~/.ssh/known_hosts"];
+  const options = ["-o", "BatchMode=yes", "-o", "ConnectTimeout=8", "-o", ACCEPT_NEW, "-o", UNIX_PROBE_HOSTS, "-o", "GlobalKnownHostsFile=/etc/ssh/ssh_known_hosts /etc/ssh/ssh_known_hosts2 ~/.ssh/known_hosts ~/.ssh/known_hosts2"];
   assert.deepEqual(clone(destinationOf("can@10.0.0.7:2222")), { dest: "can@10.0.0.7", port: "2222" });
   assert.deepEqual(clone(probeArgs("can@10.0.0.7:2222")), [...options, "-p", "2222", "--", "can@10.0.0.7", "true"]);
   assert.deepEqual(clone(destinationOf("[fe80::1]:2222")), { dest: "fe80::1", port: "2222" });
@@ -945,7 +945,7 @@ const lanDialog = async (t) => {
     .map(({ arguments: args }) => args)
     .filter(([program, argv]) => program === "sh" && argv[1].includes("xargs"))
     .map(([, argv]) => Array.from(argv.slice(3)));
-  return { ...dialog, near, rest, knocks };
+  return { ...dialog, near, rest, knocks, commands };
 };
 
 test("Opening Add a computer checks only the addresses already known on this network", async (t) => {
@@ -970,4 +970,26 @@ test("Two computer names that clean up to the same text keep separate agent key 
   assert.equal(new Set(names.map(agentKey)).size, names.length);
   assert.equal(agentKey("alpha"), "~/.ssh/id_kanso_agent_alpha");
   for (const name of names) assert.match(agentKey(name), /^~\/\.ssh\/id_kanso_agent_[\w-]+$/);
+});
+
+test("A later scan replaces what an earlier one found, so a computer that stopped answering leaves the list", async (t) => {
+  const { cx, flush, view, near, commands } = await lanDialog(t);
+  assert.deepEqual(clone(view.nearby.map((host) => host.ip)).toSorted(), near.toSorted());
+  commands.arp = "";
+  view.search(cx, false);
+  await flush();
+  assert.deepEqual(clone(view.nearby), []);
+});
+
+test("Signing in again to a computer takes off the kansō line of the key its saved route used when the key changes", async () => {
+  const { signInTab } = await signIn();
+  const via = "ssh -o IdentityFile=~/.ssh/id_kanso_agent_grey -o IdentitiesOnly=yes -o BatchMode=yes ada@box";
+  const unix = signInTab({ name: "grey", target: via, via: true }).argv[2];
+  assert.match(unix, /^prev=\$\(awk '\{ print \$1 " " \$2 " kanso" \}' "\$HOME"\/\.ssh\/id_kanso_agent_grey\.pub 2>\/dev\/null\)$/m);
+  assert.match(unix, /replaced\(\) \{ \[ -z "\$prev" \] \|\| \[ "\$prev" = "\$pub" \] \|\| line=.*grep -vxF/);
+  assert.match(unix, /lines "\$g" \|\| exit; replaced; push/);
+  assert.match(signInTab({ name: "grey", target: "ada@box", via: false }).argv[2], /^prev=$/m);
+  const windows = signInTab({ name: "grey", target: "ada@box", via: false }, "windows").argv.at(-1);
+  assert.doesNotMatch(windows, /\$preumask/);
+  assert.match(windows, /"\$\(\$pre\)umask 077;/);
 });

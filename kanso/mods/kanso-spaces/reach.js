@@ -92,9 +92,12 @@ export function choiceOf(typed, peers = []) {
 export const addArgs = ({ name = "", target = "", via = "" }, { json = true } = {}) => ["machine", "add", ...(via ? [] : [target]),
   ...(name ? ["--name", name] : []), ...(via ? ["--via", via] : []), "--install", ...(json ? ["--json"] : [])];
 
+const UNIX_KNOWN = "/etc/ssh/ssh_known_hosts /etc/ssh/ssh_known_hosts2 ~/.ssh/known_hosts ~/.ssh/known_hosts2";
+const WINDOWS_KNOWN = "__PROGRAMDATA__/ssh/ssh_known_hosts ~/.ssh/known_hosts ~/.ssh/known_hosts2";
+
 export function probeArgs(target, platform = "macos") {
   const { dest, port } = destinationOf(target);
-  return ["-o", "BatchMode=yes", "-o", "ConnectTimeout=8", "-o", "StrictHostKeyChecking=accept-new", "-o", `UserKnownHostsFile=${platform === "windows" ? "NUL" : "/dev/null"}`, "-o", "GlobalKnownHostsFile=~/.ssh/known_hosts", ...(port ? ["-p", port] : []), "--", dest, "true"];
+  return ["-o", "BatchMode=yes", "-o", "ConnectTimeout=8", "-o", "StrictHostKeyChecking=accept-new", "-o", `UserKnownHostsFile=${platform === "windows" ? "NUL" : "/dev/null"}`, "-o", `GlobalKnownHostsFile=${platform === "windows" ? WINDOWS_KNOWN : UNIX_KNOWN}`, ...(port ? ["-p", port] : []), "--", dest, "true"];
 }
 
 export const forgetArgs = (host) => ["-R", host];
