@@ -3,7 +3,8 @@ import assert from "node:assert/strict";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { delimiter, dirname, join } from "node:path";
 import {
-  arg, drawingHost, exec, failure, fileExists, find, KIT_NIGHT, load, plain, stdoutOf, success, temporary, until,
+  all, arg, context, drawingHost, exec, failure, fileExists, find, KIT_NIGHT,
+  load, one, plain, stdoutOf, success, temporary, texts, until,
 } from "./helpers.mjs";
 
 const { caffeineCall, answerOf, setupArgv, createCaffeine, EVERY_MS, SETUP_EVERY_MS } =
@@ -311,29 +312,40 @@ test("Caffeine checks a remote computer's system once and already knows this com
   ]);
 });
 
-test("The Caffeine panel shows each computer's status and offers only the action that fits it", async () => {
+test("The Caffeine panel shows each computer's status, switch, and available action", async () => {
   const commands = [];
-  const { caffeineWord, caffeineVerbs } = await load("kanso-panel/caffeine.js", ["caffeineWord", "caffeineVerbs"], {
-    run: (name) => commands.push(name),
+  const { Caffeine, tokens } = await load("kanso-panel/caffeine.js", ["Caffeine", "tokens"], {
+    ...drawingHost(), run: (name) => commands.push(name),
   });
+  const panel = new Caffeine();
+  const colors = tokens(KIT_NIGHT);
   const key = "devbox";
-  const turnOn = [["Turn on", `kanso-spaces.caffeine-on:${key}`]];
+  const title = "Dev box";
+  const { cx } = context();
   const cases = [
-    [{ on: true }, "On", [["Turn off", `kanso-spaces.caffeine-off:${key}`]]],
-    [{}, "Off", turnOn],
-    [{ battery: true }, "Off: battery at 15%", turnOn],
-    [{ busy: true, want: true }, "Turning on…", []],
-    [{ busy: true }, "Turning off…", []],
-    [{ setup: true, read: false }, "Waiting for the password in its tab", turnOn],
-    [{ read: false }, "Not read yet", [["Read again", "kanso-spaces.caffeine-read"]]],
+    [{ on: true }, "Awake, lid closed too", true, false],
+    [{}, "Sleeps as usual", false, false],
+    [{ battery: true }, "Off: battery reached 15%", false, false],
+    [{ busy: true, want: true, read: false }, "Turning on…", true, true],
+    [{ on: true, busy: true, want: false }, "Turning off…", false, true],
+    [{ setup: true, read: false }, "Waiting for the password in its tab", false, false],
+    [{ read: false }, "Not read yet", false, true, true],
   ];
-  for (const [state, word, actions] of cases) {
-    const look = { read: true, ...state };
-    assert.equal(caffeineWord(look), word);
-    const verbs = caffeineVerbs(key, look);
-    assert.deepEqual(Array.from(verbs, ({ label }) => label), actions.map(([label]) => label), word);
-    verbs.forEach(({ onClick }) => onClick());
-    assert.deepEqual(commands.splice(0), actions.map(([, name]) => name), word);
+  for (const [state, word, pressed, disabled, retry] of cases) {
+    const look = { on: false, read: true, ...state };
+    const row = panel.computer(colors, { key, title, look });
+    assert.ok(texts(row).includes(word), word);
+    const toggle = find(row, (el) => arg(el, "accessibility_label") === `Caffeine on ${title}`);
+    assert.ok(toggle, word);
+    assert.deepEqual([one(toggle, "pressed"), one(toggle, "disabled")], [pressed, disabled], word);
+
+    const buttons = all(row, (el) => arg(el, "on_click"));
+    assert.deepEqual(buttons.map((el) => one(el, "accessibility_label")), retry ? ["Read again"] : [], word);
+    if (retry) one(buttons[0], "on_click")({}, cx);
+    if (!disabled) one(toggle, "on_change")(!pressed, cx);
+    const expected = retry ? ["kanso-spaces.caffeine-read"]
+      : disabled ? [] : [`kanso-spaces.caffeine-${pressed ? "off" : "on"}:${key}`];
+    assert.deepEqual(commands.splice(0), expected, word);
   }
 });
 
