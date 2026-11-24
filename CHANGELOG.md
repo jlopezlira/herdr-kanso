@@ -22,12 +22,6 @@ in version.json, which the stable updater offers. Versions follow
 [Keep a Changelog](https://keepachangelog.com). `npm run check:version` checks
 the branch's rules.
 
-## [Unreleased]
-
-### Changed
-
-- A connected computer is kept awake only when you turn on Keep connected computers awake in Settings, under Background, so a laptop on battery can sleep again.
-
 ## [4.0.0] - 2026-11-24
 
 ### Breaking
@@ -38,6 +32,10 @@ the branch's rules.
 ### Added
 
 - A computer's menu has Remove this computer's key, which takes off the key line kansō added there and removes the computer from Herdr.
+
+### Changed
+
+- A connected computer is kept awake only when you turn on Keep connected computers awake in Settings, under Background, so a laptop on battery can sleep again.
 
 ### Security
 
