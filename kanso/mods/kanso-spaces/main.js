@@ -387,7 +387,7 @@ export default class Spaces extends RetryingView {
     this.folding = null;
     this.foldH = {};
     this.migrate();
-    this.awake = createAwake({ now: () => Date.now(), run: (call) => exec(call.command, call.args, { on: call.on, timeout: call.timeout }) });
+    this.awake = createAwake({ now: () => Date.now(), run: (call) => exec(call.command, call.args, { on: call.on, timeout: call.timeout }), enabled: () => runs("computers.awake", pieces(shared)) });
     this.machineRead = new MachineRead();
     afterMount(cx, (cx) => this.refreshMachines(cx));
     cx.spawn(async (cx) => {

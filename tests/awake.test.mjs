@@ -76,6 +76,28 @@ test("a hold is only for a machine that is connected", async () => {
   assert.equal(osOf(null), null);
 });
 
+test("a connected computer is kept awake only while Keep connected computers awake is on", async () => {
+  await loadApi();
+  const { runs } = await import("../kanso/mods/kanso-settings/pieces.js");
+  let map = {};
+  const calls = [];
+  const awake = api.createAwake({
+    now: () => 0,
+    enabled: () => runs("computers.awake", map),
+    run: (call) => { calls.push(call); return call.command === "uname" ? Promise.resolve(success("Linux\n")) : new Promise(() => {}); },
+  });
+  await awake.sync([row("grey", "connected")]);
+  assert.equal(calls.length, 0, "off until turned on");
+  assert.equal(awake.nextWait(), null);
+  map = { "computers.awake": "show" };
+  await awake.sync([row("grey", "connected")]);
+  assert.deepEqual(clone(holds(calls).map((call) => call.command)), ["systemd-inhibit"]);
+  map = { "computers.awake": "hide" };
+  await awake.sync([row("grey", "connected")]);
+  assert.equal(holds(calls).length, 1, "turning it off starts no new hold");
+  assert.equal(awake.nextWait(), null, "and schedules no renew");
+});
+
 test("a lease renews at 270s and overlaps the one still running", async () => {
   await loadApi();
   const box = world({});

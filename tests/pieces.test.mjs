@@ -11,7 +11,7 @@ import {
   migratePieces, loadPieces, pieces, filterPieces, groupsOf, withRoster,
 } from "../kanso/mods/kanso-settings/pieces.js";
 
-const LEFT_OUT = ["status.needs", "status.memory", "status.ports", "status.containers", "status.reviews", "status.spend", "pr.directory", "pr.agent", "pr.write", "files.named", "toast.pr", "toast.agent", "header.actions", "computers.awake"];
+const LEFT_OUT = ["status.needs", "status.memory", "status.ports", "status.containers", "status.reviews", "status.spend", "pr.directory", "pr.agent", "pr.write", "files.named", "toast.pr", "toast.agent", "header.actions"];
 const STATES = new Set(["show", "needed", "hide"]);
 const JOBS = new Set(["git", "gh", "lsof", "docker", "ps", "remote"]);
 

@@ -43,9 +43,9 @@ function missingOf(code) {
   return code === "ENOENT" || code === 127 || code === 9009;
 }
 
-export function createAwake({ now = () => Date.now(), run }) {
+export function createAwake({ now = () => Date.now(), run, enabled = () => true }) {
   return {
-    now, run,
+    now, run, enabled,
     slots: new Map(),
     slot(name) { return this.slots.get(name) ?? EMPTY; },
     put(name, row) { this.slots.set(name, row); },
@@ -109,7 +109,7 @@ export function createAwake({ now = () => Date.now(), run }) {
       } finally { this.dropArm(item.name, gen); }
     },
     async sync(list) {
-      const rows = (list ?? []).filter((item) => item?.name);
+      const rows = this.enabled() ? (list ?? []).filter((item) => item?.name) : [];
       const seen = new Set(rows.map((item) => item.name));
       for (const item of rows) {
         if (shouldHold(item)) await this.hold(item);
