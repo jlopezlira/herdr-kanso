@@ -73,16 +73,18 @@ test("The strip polls every 150 ms while a pane is held and stops the fast chain
     polledAt.push(f.state.now - start);
     return poll.call(this, cx);
   });
+  f.state.draw = () => strip.render();
   f.host.setShared("strip.drag", { pane: "p0", at: start });
-  await f.advance(1450);
-  assert.deepEqual(polledAt, [1000, 1150, 1300, 1450]);
+  await f.settle();
+  await f.advance(600);
+  assert.deepEqual(polledAt.filter((at) => at <= 600), [150, 300, 450, 600], "a drag shorter than the idle tick is followed at once");
 
   f.host.setShared("strip.drag", null);
   await f.advance(150);
   const timers = f.state.timers.length;
   polledAt.length = 0;
   await f.advance(1000);
-  assert.deepEqual(polledAt, [2000]);
+  assert.deepEqual(polledAt, [1000], "after the release only the idle tick polls");
   assert.deepEqual(shortTimers(f.state.timers.slice(timers)), []);
 });
 

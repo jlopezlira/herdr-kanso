@@ -1353,6 +1353,7 @@ export default class Strip extends View {
     if (this.kind === "ruler") return this.renderRuler();
     if (this.kind === "drop") return this.renderDrop();
     if (this.kind === "head") return this.renderHead();
+    if (this.later && shared("strip.drag")) this.followDrag(this.later);
     const t = theme();
     if (this.halted && Date.now() - this.halted > 10000) this.resume();
     if (this.halted) return statusBar({ middle: layoutPaused() })("strip-map", tokens(t), { presses: { Resume: () => { this.resume(); this.markDirty(); } } });
