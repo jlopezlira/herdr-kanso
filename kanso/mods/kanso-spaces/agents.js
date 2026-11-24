@@ -125,6 +125,10 @@ export function track(since, list, now, tabOf = () => null) {
   return gone.size ? Object.fromEntries(Object.entries(next).filter(([k]) => !gone.has(k))) : next;
 }
 
+export const SWEEP_MS = 3500;
+export const sweeping = (a, since, now) => a.status === "working" && since?.[a.address]?.at != null && now - since[a.address].at < SWEEP_MS;
+export const sweepEnd = (list, since, now) => list.filter((a) => sweeping(a, since, now)).reduce((end, a) => Math.min(end ?? Infinity, since[a.address].at + SWEEP_MS), null);
+
 export function elapsed(a, since, now) {
   if (!["working", "blocked", "done"].includes(a.status)) return null;
   const at = since?.[a.address]?.at;
@@ -329,6 +333,7 @@ export function sessionProps(a, base, row, more = {}) {
     program: programOf(a),
     name: more.label ?? agentLabel(a),
     status: a.dozing ? "asleep" : a.status,
+    sweep: Boolean(more.sweep),
     activity: two ? more.activity : null,
     step: two ? more.step ?? null : null,
     time: more.time ?? null,

@@ -22,7 +22,7 @@ test("A session shows its program, name, activity, how long on this step, time, 
     tasks: [{ command: "npm test", time: "2m" }],
   });
   assert.deepEqual(plain(props), {
-    program: claude, name: "Atlas", status: "working", activity: "Reviewing step 01", step: { time: "14m", stuck: true }, time: "20m", place: "kansō", placeTip: "Can't read it",
+    program: claude, name: "Atlas", status: "working", sweep: false, activity: "Reviewing step 01", step: { time: "14m", stuck: true }, time: "20m", place: "kansō", placeTip: "Can't read it",
     depth: 1, guides: [], current: false, ground: false, pinned: false, pinnable: false, menu: false, commands: 0, commandsTip: null, tools: [], refresh: false, drop: null, hover: false, selected: false, dimmed: false,
   }, "a working session lists no commands, as today");
   const done = sessionProps({ ...atlas, status: "done", pin: 1, focused: true, address: "dark/t1" }, 1, { hovered: true, pin: () => {}, kbd: true }, { tasks: [{ command: "npm test", time: "2m" }], oneLine: true, activity: "x" });
@@ -113,4 +113,27 @@ test("A dozing or unreadable row fades its program's art, and the activity takes
     const activity = nodes(el).find((kid) => kid.calls.some((call) => call[0] === "child" && call[1] === "x"));
     assert.deepEqual(activity.calls.filter((call) => call[0] === "text_color").map((call) => call[1]), [c[tone]], status);
   }
+});
+
+test("A name glints once, for one sweep after its agent starts working, and then rests", async () => {
+  const { sweeping, sweepEnd, SWEEP_MS } = await load("kanso-spaces/agents.js", ["sweeping", "sweepEnd", "SWEEP_MS"]);
+  const now = 1_000_000;
+  const since = { fresh: { s: "working", at: now - 1000 }, old: { s: "working", at: now - SWEEP_MS - 1 }, waiting: { s: "blocked", at: now - 10 } };
+  assert.equal(sweeping({ address: "fresh", status: "working" }, since, now), true);
+  assert.equal(sweeping({ address: "old", status: "working" }, since, now), false, "an agent already working when the list opened does not glint");
+  assert.equal(sweeping({ address: "waiting", status: "blocked" }, since, now), false);
+  assert.equal(sweeping({ address: "unseen", status: "working" }, since, now), false);
+  const list = [{ address: "fresh", status: "working" }, { address: "old", status: "working" }];
+  assert.equal(sweepEnd(list, since, now), now - 1000 + SWEEP_MS, "the list knows when to draw the rows again");
+  assert.equal(sweepEnd([{ address: "old", status: "working" }], since, now), null);
+  const { sessionProps } = await sidebar();
+  assert.equal(sessionProps({ address: "fresh", status: "working" }, 1, null, { sweep: true }).sweep, true);
+  assert.equal(sessionProps({ address: "fresh", status: "working" }, 1, null, {}).sweep, false);
+});
+
+test("A working row draws moving glint windows only during its sweep", async () => {
+  const { agentSession, c } = await sidebar();
+  const loops = (el) => nodes(el).flatMap((kid) => kid.calls.filter((call) => call[0] === "loop")).length;
+  assert.ok(loops(agentSession(atlas, 1, c, null, { label: "Atlas", sweep: true })) > 0);
+  assert.equal(loops(agentSession(atlas, 1, c, null, { label: "Atlas" })), 0, "a working row at rest draws no animation");
 });

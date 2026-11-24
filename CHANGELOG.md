@@ -22,6 +22,12 @@ in version.json, which the stable updater offers. Versions follow
 [Keep a Changelog](https://keepachangelog.com). `npm run check:version` checks
 the branch's rules.
 
+## [Unreleased]
+
+### Changed
+
+- A name in the sidebar glints once, for one sweep, when its agent starts working, and then rests, so a window with agents at work no longer redraws for the glint all the time.
+
 ## [3.34.0] - 2026-11-23
 
 ### Added

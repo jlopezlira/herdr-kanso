@@ -15,7 +15,7 @@ import { systemApi } from "./platform-system.js";
 
 import { View, div } from "gpui-kit";
 import { v_flex, h_flex, ScrollHandle } from "gpui-base";
-import { agentSession, agentLabel, renameTerminal, SETTLED_LABEL, SNOOZE_LABEL, UNREAD_LABEL, THREAD_LABEL, settledOf, snoozedUntil, isUnread, woke, backFromSettled, threadSections, snoozePresets, THREAD_ORDERS, STATUS_ORDERS, withTerminals, NAME_LABEL, PIN_LABEL, ORDERS, DEFAULT_ORDER, orderSessions, moved, nest, track, elapsed, activityOf, bySection, duration, trackSteps, stepOf, tasksOf, said, FOLD_MS, pill, sessionHeight, mostUrgent } from "./agents.js";
+import { agentSession, agentLabel, renameTerminal, SETTLED_LABEL, SNOOZE_LABEL, UNREAD_LABEL, THREAD_LABEL, settledOf, snoozedUntil, isUnread, woke, backFromSettled, threadSections, snoozePresets, THREAD_ORDERS, STATUS_ORDERS, withTerminals, NAME_LABEL, PIN_LABEL, ORDERS, DEFAULT_ORDER, orderSessions, moved, nest, track, elapsed, sweeping, sweepEnd, activityOf, bySection, duration, trackSteps, stepOf, tasksOf, said, FOLD_MS, pill, sessionHeight, mostUrgent } from "./agents.js";
 import { ThreadLocator, findThreads, sameThread, pidsOf, aliveIn, aliveDue, ALIVE_MS, ALIVE_BEHIND_MS } from "./threads.js";
 import { Panel, sameSeen } from "./panel.js";
 import { Store } from "./store.js";
@@ -470,7 +470,12 @@ export default class Spaces extends RetryingView {
       ...Object.values(this.tasks ?? {}).flat().map((x) => duration(Math.max(0, now - x.start)))];
     return JSON.stringify({ ...host, own: ROW_STATE.map((key) => listed(this[key])), fold, away: away?.rows.length ? [away.project, away.expanded, away.target, away.rows] : null,
       remembered: listed(this.panel?.agents), ring: Boolean(this.kbd && this.handle.is_focused()), narrow: narrowAt(this.width),
-      born: Object.entries(this.born ?? {}).map(([id, at]) => [id, bornBy(at, now)]), times, minute: Math.floor(now / MINUTE_MS) });
+      born: Object.entries(this.born ?? {}).map(([id, at]) => [id, bornBy(at, now)]), times, minute: Math.floor(now / MINUTE_MS),
+      sweeps: host.agents.filter((a) => sweeping(a, this.since ?? {}, now)).map((a) => a.address) });
+  }
+
+  sweepsEnd(now = Date.now()) {
+    return sweepEnd(rowInputs().agents, this.since ?? {}, now);
   }
 
   rowsReplaced() {
@@ -487,6 +492,7 @@ export default class Spaces extends RetryingView {
 
   paint() {
     if (this.rowsChanged()) this.rowsAt = (this.rowsAt ?? 0) + 1;
+    this.sweepEnds = this.sweepsEnd();
     const next = this.looks();
     Object.entries(next).filter(([name, look]) => JSON.stringify(look) !== JSON.stringify(this.drawnLooks?.[name])).forEach(([name, look]) => this.parts[name].set_props(look));
     this.drawnLooks = next;
@@ -1182,6 +1188,7 @@ export default class Spaces extends RetryingView {
   checkNew(cx) {
     this.names.paint(cx);
     const now = Date.now();
+    if (this.sweepEnds != null && now >= this.sweepEnds) { this.sweepEnds = null; this.redraw(cx); }
     const active = window().active;
     if (!active && now - (this.lastLook ?? 0) < 5000) return;
     this.lastLook = now;
@@ -2306,6 +2313,7 @@ export default class Spaces extends RetryingView {
       label: this.nameOf(a),
       lines: e.lines,
       time: timed(a.sub ? null : elapsed(a, this.since ?? {}, ctx.now)),
+      sweep: sweeping(a, this.since ?? {}, ctx.now),
       // A message sent to it from Send and not seen yet: who it is from.
       activity: show ? (fromOf(a) ? `Message from ${fromOf(a)}` : activityOf(a)) : null,
       ...this.extras(a, ctx, show),
