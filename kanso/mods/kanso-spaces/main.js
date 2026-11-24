@@ -28,7 +28,7 @@ import { sleepingNow, asleepGroups, nameOf, seenNow, conversationOfThread, shown
 import { pollable, activePlaces } from "./background.js";
 import { listKey, moveTo, plainKey } from "./listkeys.js";
 import { commitLayout, setRail, foldSidebar, railWidth, dropStripDrag } from "./layout.js";
-import { afterMount, tryOr, mapSeries } from "./pure.js";
+import { afterMount, tryOr, mapSeries, bounded } from "./pure.js";
 import { commandLoop, MachineRead } from "./sidebar.js";
 import { gitFacts, openAhead, AHEAD } from "./sidebar-draw.js";
 import { projectRow } from "./project-row.js";
@@ -67,7 +67,7 @@ import { LimitWatch } from "./limits.js";
 import { resumeCommand, limitLines, providerLimits, shownNow } from "./limit-menu.js";
 import { computerMenuItems } from "./computer-menu.js";
 import { readSync, saveSync } from "./sync-row.js";
-import { createAwake, keepAwake } from "./awake.js";
+import { createCaffeine, setupArgv, CALL_MS, LOW } from "./caffeine.js";
 import { NEEDS_YOU, EMPTY_NOTICE_MS, waitingSignature, sleepingSignature, sameQueue, waitingQueue, nextWaiting, queueState } from "./needs-you.js";
 import { queueControl, queueList } from "./needs-you-view.js";
 import { Visits, visited, stepped, beside } from "./agent-nav.js";
@@ -99,6 +99,12 @@ const CHILD_PAD = SIDEBAR.guideX + ELBOW.w + SIDEBAR.elbowGap - G.sm; // the ico
 // Every height is known before anything is drawn, so a scan (`laidOut`) finds where each pill goes.
 // How long after the sidebar folds or opens its sizes are the layout landing, not a drag.
 const SETTLE = 1000;
+const CAFFEINE_WHY = {
+  low: `It is on battery at ${LOW}% or less.`,
+  missing: "Caffeine could not start there.",
+  refused: "That computer did not let kansō change how it sleeps.",
+  busy: "Another change to Caffeine was still running there. Try again.",
+};
 const item = (el, h = null, mark = null) => ({ el, h, mark });
 // The space above a later section.
 const lift = (h) => item(div().h(h).flex_none(), h);
@@ -387,7 +393,7 @@ export default class Spaces extends RetryingView {
     this.folding = null;
     this.foldH = {};
     this.migrate();
-    this.awake = createAwake({ now: () => Date.now(), run: (call) => exec(call.command, call.args, { on: call.on, timeout: call.timeout }), enabled: () => runs("computers.awake", pieces(shared)) });
+    this.caffeine = createCaffeine({ run: (call) => bounded(exec(call.command, call.args, { ...(call.on ? { on: call.on } : {}), timeout: call.timeout }), this.caffeineTimer, call.timeout + 5000), local: localName() });
     this.machineRead = new MachineRead();
     afterMount(cx, (cx) => this.refreshMachines(cx));
     cx.spawn(async (cx) => {
@@ -470,7 +476,7 @@ export default class Spaces extends RetryingView {
     const times = [...host.agents.map((a) => [elapsed(a, this.since ?? {}, now), stepOf(a, this.steps, now)]),
       ...Object.values(this.tasks ?? {}).flat().map((x) => duration(Math.max(0, now - x.start)))];
     return JSON.stringify({ ...host, own: ROW_STATE.map((key) => listed(this[key])), fold, away: away?.rows.length ? [away.project, away.expanded, away.target, away.rows] : null,
-      remembered: listed(this.panel?.agents), ring: Boolean(this.kbd && this.handle.is_focused()), narrow: narrowAt(this.width),
+      remembered: listed(this.panel?.agents), caffeine: this.caffeine?.onKeys() ?? [], ring: Boolean(this.kbd && this.handle.is_focused()), narrow: narrowAt(this.width),
       born: Object.entries(this.born ?? {}).map(([id, at]) => [id, bornBy(at, now)]), times, minute: Math.floor(now / MINUTE_MS) });
   }
 
@@ -795,6 +801,7 @@ export default class Spaces extends RetryingView {
     // From a computer's menu, which is gone once clicked: the sidebar holds the computer's state.
     else if (c.startsWith("power-machine:") && c.length > "power-machine:".length) { const m = c.slice("power-machine:".length); this.setPower(m, this.phaseOf(m) === "off", cx); }
     else if (c.startsWith("sync-machine:") && c.length > "sync-machine:".length) this.toggleSync(c.slice("sync-machine:".length), cx);
+    else if (c.startsWith("caffeine-on:") || c.startsWith("caffeine-off:")) this.setCaffeine(c.slice(c.indexOf(":") + 1), c.startsWith("caffeine-on:"), cx);
     else if (c.startsWith("sign-in-machine:") && c.length > "sign-in-machine:".length) this.signIn(c.slice("sign-in-machine:".length));
     else if (c.startsWith("remove-key-machine:") && c.length > "remove-key-machine:".length) this.removeKey(c.slice("remove-key-machine:".length));
     else if (c.startsWith("remove-machine:") && c.length > "remove-machine:".length) this.removeMachine(c.slice("remove-machine:".length), cx);
@@ -1494,24 +1501,75 @@ export default class Spaces extends RetryingView {
 
   // One look at a time. A read that never settles is given up, and the next look runs.
   refreshMachines(cx, repeat = false) {
-    if (!runs("sidebar.computers", pieces(shared))) { this.holdAwake(cx); return; }
+    if (!runs("sidebar.computers", pieces(shared))) { this.followCaffeine(cx); return; }
     this.machineRead ??= new MachineRead();
     if (repeat && !this.machineRead.busy && ![...(this.machines ?? []), ...(this.parked ?? []), ...machines()].some((row) => row.name)) return;
     const job = this.machineRead.start(cx.timer, MACHINE_READ_MS, () => this.readMachines());
-    if (job) cx.spawn(async (cx) => { await job; this.holdAwake(cx); this.redraw(cx); });
+    if (job) cx.spawn(async (cx) => { await job; this.followCaffeine(cx); this.redraw(cx); });
   }
 
-  // The list is read every two minutes behind; the hold still renews on time.
-  holdAwake(cx) {
-    if (!this.awake) return;
-    const rows = (this.machines ?? []).map((row) => ({ name: row.name, phase: this.phaseOf(row.name) }));
-    const token = (this.awakeToken ?? 0) + 1;
-    this.awakeToken = token;
+  caffeineKeys() {
+    return ["", ...(this.machines ?? []).map((row) => row.name).filter((name) => name && this.phaseOf(name) === "connected")];
+  }
+
+  followCaffeine(cx) {
+    if (!this.caffeine) return;
+    this.caffeineTimer = cx.timer;
+    const token = (this.caffeineToken ?? 0) + 1;
+    this.caffeineToken = token;
+    const keys = this.caffeineKeys();
+    const on = runs("computers.awake", pieces(shared));
+    this.caffeine.keep(keys);
     cx.spawn(async (cx) => {
-      const wait = await keepAwake(this.awake, rows, cx.timer);
-      if (wait == null || this.awakeToken !== token) return;
-      cx.timer.after(wait, (cx) => { if (this.awakeToken === token) this.holdAwake(cx); });
+      const work = [...this.caffeine.due(keys).map((key) => this.readCaffeine(key, on)), ...(on ? [] : keys.filter(this.caffeine.isOn).map((key) => this.caffeine.set(key, false)))];
+      await bounded(Promise.all(work), cx.timer, CALL_MS * 2).catch(() => null);
+      if (this.caffeineToken !== token) return;
+      this.redraw(cx);
+      const wait = this.caffeine.nextWait(keys);
+      if (wait != null) cx.timer.after(Math.max(wait, 1000), (cx) => { if (this.caffeineToken === token) this.followCaffeine(cx); });
     });
+  }
+
+  async readCaffeine(key, on) {
+    const title = this.names.title(key || null);
+    const setting = this.caffeine.settingUp(key);
+    const { word, battery } = await this.caffeine.read(key);
+    if (battery) notify({ title: `Caffeine off: ${title}`, body: `Its battery reached ${LOW}%, so it can sleep.`, level: "info" });
+    if (setting && word === "on") { this.caffeine.done(key); this.saidCaffeine(key, title, "on"); }
+    if (!on && word === "on") await this.caffeine.set(key, false);
+  }
+
+  saidCaffeine(key, title, word) {
+    notify({ title: `Caffeine ${word}: ${title}`, level: "info", action: { name: `kanso-spaces.caffeine-${word === "on" ? "off" : "on"}:${key}`, args: { label: "Undo" } } });
+  }
+
+  setCaffeine(key, on, cx) {
+    if (on && !runs("computers.awake", pieces(shared))) return;
+    this.caffeineTimer = cx.timer;
+    const title = this.names.title(key || null);
+    const before = this.caffeine.isOn(key);
+    this.caffeine.mark(key, on);
+    this.redraw(cx);
+    cx.spawn(async (cx) => {
+      const { word, os } = await this.caffeine.set(key, on);
+      if (word === "on" || word === "off") this.saidCaffeine(key, title, word);
+      else this.caffeine.mark(key, before);
+      if (word === "setup") this.setUpCaffeine(key, os, title, cx);
+      else if (word !== "on" && word !== "off") notify({ title: `Caffeine on ${title} was not changed`, body: CAFFEINE_WHY[word] ?? undefined, level: "error" });
+      this.redraw(cx);
+      this.followCaffeine(cx);
+    });
+  }
+
+  setUpCaffeine(key, os, title, cx) {
+    const argv = setupArgv(os);
+    const here = spaces().filter((s) => (s.machine ?? "") === key);
+    const space = here.find((s) => s.active) ?? here[0];
+    if (!argv) { notify({ title: `Caffeine on ${title} was not changed`, body: CAFFEINE_WHY.refused, level: "error" }); return; }
+    if (space) run("tab.new", { space: space.id, name: "Caffeine", argv });
+    else run("space.new", { name: "Caffeine", tab: "Caffeine", machine: key, argv });
+    this.caffeine.setup(key);
+    this.followCaffeine(cx);
   }
 
   setPower(name, on, cx) {
@@ -1603,11 +1661,11 @@ export default class Spaces extends RetryingView {
 
   // Both power changes: the machine is held awake, the work runs in the background, and the row frees whatever happened.
   powerRun(name, cx, work) {
-    this.holdAwake(cx);
+    this.followCaffeine(cx);
     this.redraw(cx);
     cx.spawn(async (spawnCx) => {
       try { await work(spawnCx); }
-      finally { this.powerBusy.delete(name); this.holdAwake(spawnCx); this.redraw(spawnCx); }
+      finally { this.powerBusy.delete(name); this.followCaffeine(spawnCx); this.redraw(spawnCx); }
     });
   }
 
@@ -2556,16 +2614,19 @@ export default class Spaces extends RetryingView {
 
   // A computer's menu, drawn by the kit at the pointer; it reads the phase and sync the row had.
   computerMenu(m, phase) {
+    if (phase === "connected" && runs("computers.awake", pieces(shared))) this.caffeine.read(m ?? "").then(() => this.paint(), () => null);
     openOverlay({ mod: "kanso-spaces", kind: "popup", frame: "none", width: W.menu, at: "pointer", props: {
-      machineMenu: { route: m ?? "", shown: this.names.title(m), phase, syncOn: Boolean(m) && peerOn(this.sync.config, m), keyed: Boolean(m) && kansoKeyed(routeOf(this.knownMachine(m)).via) } } });
+      machineMenu: { route: m ?? "", shown: this.names.title(m), phase, syncOn: Boolean(m) && peerOn(this.sync.config, m), keyed: Boolean(m) && kansoKeyed(routeOf(this.knownMachine(m)).via),
+        caffeine: runs("computers.awake", pieces(shared)) ? (this.caffeine.isOn(m ?? "") ? "on" : "off") : null } } });
   }
 
   computerMenuView(t) {
-    const { route = "", shown: title = "", phase = "connected", syncOn = false, keyed = false } = props().machineMenu;
+    const { route = "", shown: title = "", phase = "connected", syncOn = false, keyed = false, caffeine = null } = props().machineMenu;
     const acts = {
       rename: () => this.names.ask(route, title),
       power: () => run(`kanso-spaces.power-machine:${route}`),
       sync: () => run(`kanso-spaces.sync-machine:${route}`),
+      caffeine: () => run(`kanso-spaces.caffeine-${caffeine === "on" ? "off" : "on"}:${route}`),
       retry: () => run(`kanso-spaces.retry-machine:${route}`),
       signin: () => run(`kanso-spaces.sign-in-machine:${route}`),
       unkey: () => run(`kanso-spaces.remove-key-machine:${route}`),
@@ -2575,7 +2636,7 @@ export default class Spaces extends RetryingView {
       hide: () => this.hide("sidebar.computers", true),
       settings: () => openOverlay({ mod: "kanso-settings", kind: "dialog", width: 860, height: 680, props: { page: "pieces", find: "Computers" } }),
     };
-    const rows = computerMenuItems({ remote: Boolean(route), phase, syncOn, keyed, addComputer: shown("footer.machine", true, pieces(shared)) });
+    const rows = computerMenuItems({ remote: Boolean(route), phase, syncOn, keyed, caffeine, addComputer: shown("footer.machine", true, pieces(shared)) });
     const go = (key) => () => { acts[key](); closeOverlay(props().overlay); };
     const acting = rows.filter((row) => row.key);
     this.menuActs = acting.map((row) => go(row.key));
@@ -2643,7 +2704,7 @@ export default class Spaces extends RetryingView {
     };
     // Loading, it breathes until hc answers.
     const look = {
-      name: title, remote: Boolean(m), state: COMPUTER_STATE[phase] ?? "on", pending: phase === "loading", sync: sync?.tip ?? null,
+      name: title, remote: Boolean(m), state: COMPUTER_STATE[phase] ?? "on", pending: phase === "loading", sync: sync?.tip ?? null, caffeine: this.caffeine?.isOn(m ?? "") ?? false,
       hover: machineHot(m, this.hoverMachine, this.kbd, this.navKey), focus: this.navMark(machineStop(m), go),
     };
     const tools = computerTools(look).map((tool) => tool.icon);
