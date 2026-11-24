@@ -100,3 +100,9 @@ test("The kansō layout sends terminal link clicks to the preview panel.", () =>
   const { link_handlers: handlers } = JSON.parse(repoText("kanso/layouts/kanso.json"));
   assert.deepEqual(handlers, ["kanso-panel"]);
 });
+
+test("A remote path starting with a tilde is left to Herdr, so a file found on this computer still opens.", () => {
+  const [{ pattern }] = JSON.parse(repoText("kanso/mods/kanso-panel/mod.json")).link_handlers;
+  const claims = new RegExp(pattern.replace("(?i)", ""), "i");
+  assert.deepEqual(["~/shot.png", "/tmp/shot.png", "shot.png"].map((path) => claims.test(path)), [false, true, true]);
+});
