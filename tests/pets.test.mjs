@@ -2,14 +2,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { once } from "node:events";
 import { mkdir, readdir, symlink, writeFile, readFile, stat } from "node:fs/promises";
-import { createServer } from "node:https";
-import { delimiter, join, resolve } from "node:path";
+import { delimiter, join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { petApi } from "../kanso/mods/kanso-dojo/platform-pets.js";
 import { powershell, psQuote } from "../kanso/mods/kanso-panel/platform-command.js";
-import { databaseTimer, load, clone, temporary, exec, fileExists, folderWith, nativeWindow, success } from "./helpers.mjs";
+import { databaseTimer, load, clone, temporary, exec, folderWith, nativeWindow, success } from "./helpers.mjs";
+import { httpsFiles } from "./https-fixture.mjs";
 
 const NAMES = ["petOf", "parsePets", "frameOf", "installedPets", "bringAgentPets", "AGENT_PETS", "ROWS", "FRAMES", "HACHI", "Companion"];
 const pets = (host = {}) => load("kanso-dojo/pets.js", NAMES, { div: () => null, image: () => null, exec, appHome: () => "/app", home: () => "/home", ...host });
@@ -81,38 +80,7 @@ const windows = process.platform === "win32";
 const digest = (bytes) => createHash("sha256").update(bytes).digest("hex");
 const sheetName = "spritesheet.webp";
 const petName = "pet.json";
-const fixtureDownloads = async (t, dir) => {
-  const key = join(dir, "fixture.key");
-  const cert = join(dir, "fixture.pem");
-  const gitExec = (await exec("git", ["--exec-path"])).stdout.trim();
-  const bundled = gitExec && resolve(gitExec, "../../bin/openssl.exe");
-  const openssl = bundled && await fileExists(bundled) ? bundled : "openssl";
-  const made = await exec(openssl, [
-    "req", "-x509", "-newkey", "ec", "-pkeyopt", "ec_paramgen_curve:P-256", "-nodes",
-    "-subj", "/CN=127.0.0.1", "-addext", "subjectAltName=IP:127.0.0.1",
-    "-days", "1", "-keyout", key, "-out", cert,
-  ]);
-  assert.equal(made.code, 0, made.stderr);
-  await writeFile(join(dir, ".curlrc"), `cacert = ${JSON.stringify(cert)}\n`);
-  const assets = new Map();
-  const server = createServer({ key: await readFile(key), cert: await readFile(cert), maxVersion: "TLSv1.2" }, async (request, response) => {
-    const file = assets.get(request.url);
-    const bytes = file && await readFile(file).catch(() => null);
-    if (!bytes) response.writeHead(404);
-    response.end(bytes || undefined);
-  });
-  t.after(() => { server.close(); server.closeAllConnections(); });
-  const listening = once(server, "listening");
-  server.listen(0, "127.0.0.1");
-  await listening;
-  const url = (file) => {
-    const route = "/" + file;
-    assets.set(route, join(dir, file));
-    return `https://127.0.0.1:${server.address().port}${route}`;
-  };
-  const env = { CURL_HOME: dir, NO_PROXY: "127.0.0.1", no_proxy: "127.0.0.1" };
-  return { url, env };
-};
+const fixtureDownloads = (t, dir) => httpsFiles(t, dir);
 
 const unixDownloads = async (dir) => {
   const bin = join(dir, "bin");

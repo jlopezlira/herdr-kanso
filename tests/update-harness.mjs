@@ -1,12 +1,11 @@
 import assert from "node:assert/strict";
 import nodeTest, { after as afterAll } from "node:test";
 import { execFile, execFileSync, spawn } from "node:child_process";
-import { access, cp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
-import { once } from "node:events";
-import { createServer } from "node:https";
+import { cp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { load, context, exec, nativePlatform, nativeWindow, temporary, clone, until, failure, success, readOrNull } from "./helpers.mjs";
 import { makeReleaseKey, signArchive } from "./release-fixture.mjs";
+import { httpsFiles } from "./https-fixture.mjs";
 
 const names = ["Updater", "newestTag", "compareVersions", "mergeKeys", "SOURCE", "HOLD", "INSTALL_SCRIPT", "RECOVER", "LAUNCH", "updateHost", "windowsInstallScript", "windowsLaunchScript", "windowsRecoverScript", "sameVolume"];
 export const repo = new URL("../kanso/", import.meta.url);
@@ -91,37 +90,7 @@ const packRelease = async (root, site, home, signature = "valid") => {
   }
 };
 const fixtureDownloads = async (t, root, site) => {
-  const key = join(root, "fixture.key");
-  const cert = join(root, "fixture.pem");
-  const gitExec = windows ? (await exec("git", ["--exec-path"])).stdout.trim() : "";
-  const bundled = gitExec && resolve(gitExec, "../../bin/openssl.exe");
-  const openssl = bundled && await access(bundled).then(() => true, () => false) ? bundled : "openssl";
-  const made = await exec(openssl, [
-    "req", "-x509", "-newkey", "ec", "-pkeyopt", "ec_paramgen_curve:P-256", "-nodes",
-    "-subj", "/CN=127.0.0.1", "-addext", "subjectAltName=IP:127.0.0.1",
-    "-days", "1", "-keyout", key, "-out", cert,
-  ]);
-  assert.equal(made.code, 0, made.stderr);
-  await writeFile(join(root, ".curlrc"), `cacert = ${JSON.stringify(cert)}\n`);
-  const assets = new Map();
-  const requested = new Set();
-  const server = createServer({ key: await readFile(key), cert: await readFile(cert), maxVersion: "TLSv1.2" }, async (request, response) => {
-    requested.add(request.url);
-    const file = assets.get(request.url);
-    const bytes = file && await readFile(file).catch(() => null);
-    if (!bytes) response.writeHead(404);
-    response.end(bytes || undefined);
-  });
-  t.after(() => { server.close(); server.closeAllConnections(); });
-  const listening = once(server, "listening");
-  server.listen(0, "127.0.0.1");
-  await listening;
-  const url = (path) => {
-    const route = "/" + path;
-    assets.set(route, join(site, path));
-    return `https://127.0.0.1:${server.address().port}${route}`;
-  };
-  const env = { CURL_HOME: root, NO_PROXY: "127.0.0.1", no_proxy: "127.0.0.1" };
+  const { url, env, requested } = await httpsFiles(t, root, site);
   const tarball = (v) => {
     const release = releaseRoute(v);
     url(`${release}.sig`);
