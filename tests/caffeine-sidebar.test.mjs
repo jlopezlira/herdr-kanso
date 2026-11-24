@@ -19,8 +19,8 @@ async function sidebar({ pieces = {}, replies = {} } = {}) {
     return success(Array.isArray(reply) ? reply.shift() ?? "off" : reply ?? "off");
   };
   const { Spaces } = await loadSpaces({
-    ...storeShared(store, null),
     window: () => ({ active: true, platform: "linux" }),
+    ...storeShared(store, null),
     terminals: () => [], spaces: () => [], panes: () => [], agents: () => [],
     machines: () => connected.map((name) => ({ name, layout: "ready" })),
     home: () => "/tmp", notify: (note) => toasts.push(note), exec, hc: async () => success("[]"), run: (name) => opened.push(name),
