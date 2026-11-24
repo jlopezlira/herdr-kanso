@@ -26,28 +26,30 @@ the branch's rules.
 
 ### Breaking
 
-- The updater installs only releases signed with kansō's key and refuses an archive whose signature does not verify, so a build from another source no longer updates in place.
-- Shipped across computers is off until you turn it on in Settings, under Background, and its gist now uses a sealed format that earlier versions on your other computers do not read: update each computer.
+- Updates install only releases signed with kansō's key, so a build from another source no longer updates in place.
+- Shipped adds up your computers only when you turn on Add up Shipped across your computers in Settings, under Background. Its gist now uses a new format that earlier versions cannot read, so update kansō on each of your computers.
 
 ### Added
 
-- A computer's menu has Remove this computer's key, which takes off the key line kansō added there and removes the computer from Herdr.
+- A computer's menu has Remove this computer's key: it deletes the key kansō added on that computer and removes the computer from Herdr.
 
 ### Changed
 
-- A connected computer is kept awake only when you turn on Keep connected computers awake in Settings, under Background, so a laptop on battery can sleep again.
+- Connected computers stay awake only when you turn on Keep connected computers awake in Settings, under Background, so a laptop on battery can sleep again.
 
 ### Security
 
-- A link in a pull request, an issue or a check opens only when it is an https link, or an http link to this computer or a private network address; anything else stops before it reaches the system's opener.
-- kansō's database and its folder are readable only by you, on this computer and on your other computers, and an existing database is corrected the next time it opens.
-- Text read from GitHub reaches an agent marked as text from GitHub and without terminal control characters, and background git reads no longer run a repository's file-system monitor.
-- Shipped adds up your computers in a gist only when you turn it on in Settings, under Background, and the gist no longer holds your e-mails or repository names in the clear: each computer reads back only the repositories it already knows. The README and the privacy page say a secret gist can be read by anyone with its link.
-- Pets are downloaded over https only and checked against their checksum and size before they are kept.
-- The site serves its own fonts under a content security policy, a changelog link cannot leave its address, and the Markdown opener writes paths into the scripts it makes as quoted data.
-- Releases are signed, and the updater installs only an archive whose signature matches kansō's key; its downloads use https only. The release workflows run with pinned actions and a read-only token by default.
-- Signing in to a computer with its password asks before trusting that computer's key the first time, and uses the key in your ssh agent when there is one; kansō makes its own key only when there is none or it does not get in.
-- Add a computer asks only the computers this one already knows on the network until you press Search this network.
+- A link in a pull request, an issue or a check opens only when it is https, or http to this computer or a private network address. Any other link does not open.
+- Only you can read kansō's database and its folder, on this computer and on your other computers. An existing database is fixed the next time it opens.
+- Text from GitHub reaches an agent marked as coming from GitHub, with terminal control characters removed.
+- Background git reads no longer run a repository's file system monitor.
+- Shipped's gist no longer holds your e-mails or repository names in readable form: each computer reads back only the repositories it already knows. The README and the privacy page say that anyone with a secret gist's link can read it.
+- Pets download over https only and are kept only when their checksum and size match.
+- The site serves its own fonts under a content security policy, and a link in its changelog cannot add code to the page.
+- The Markdown opener treats your home folder's path as plain text, even when it holds quotes or other special characters.
+- The updater downloads over https only, and the workflows that build releases use pinned actions and a read-only token by default.
+- Signing in to a computer with its password asks before trusting that computer's key the first time, and uses the key in your ssh agent when there is one. kansō creates its own key only when there is none or it is refused.
+- Add a computer lists only the computers this one already knows until you press Search this network.
 
 ## [3.34.0] - 2026-11-23
 
