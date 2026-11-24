@@ -33,9 +33,14 @@ on:
         description: The ssh key that signs each release's archive, checked by kanso-tabs/allowed_signers.
         required: true
 
+permissions:
+  contents: read
+
 jobs:
   release:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     timeout-minutes: 10
     concurrency:
       group: ${{ inputs.group }}
@@ -48,7 +53,7 @@ jobs:
     steps:
       - name: Require the branch
         run: test "$GITHUB_REF_NAME" = "$INPUT_BRANCH"
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           ref: ${{ inputs.ref }}
           fetch-depth: 0 # tags: the plan compares against the last release
@@ -96,4 +101,5 @@ jobs:
           PLAN_TAG: ${{ steps.plan.outputs.tag }}
           PLAN_TITLE: ${{ steps.plan.outputs.title }}
           PLAN_NOTES: ${{ steps.plan.outputs.notes }}
-        run: gh release create "$PLAN_TAG" $INPUT_OPTIONS --title "$PLAN_TITLE" --notes-file "$PLAN_NOTES" "$RUNNER_TEMP/kanso-$PLAN_TAG.tar.gz" "$RUNNER_TEMP/kanso-$PLAN_TAG.tar.gz.sig"
+          TARGET: ${{ inputs.tag == '' && github.sha || '' }}
+        run: gh release create "$PLAN_TAG" $INPUT_OPTIONS ${TARGET:+--target "$TARGET"} --title "$PLAN_TITLE" --notes-file "$PLAN_NOTES" "$RUNNER_TEMP/kanso-$PLAN_TAG.tar.gz" "$RUNNER_TEMP/kanso-$PLAN_TAG.tar.gz.sig"

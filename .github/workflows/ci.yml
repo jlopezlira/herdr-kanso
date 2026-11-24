@@ -26,8 +26,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
     steps:
-      # fetch-depth 0 brings the tags: the version check compares against the last release.
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with: { fetch-depth: 0, persist-credentials: false }
       - uses: ./.github/actions/node
         with:
@@ -85,7 +84,6 @@ jobs:
       kind: stable
       branch: main
       group: release
-      options: --target "$GITHUB_SHA"
     secrets: inherit
     permissions:
       contents: write

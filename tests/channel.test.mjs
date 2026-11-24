@@ -2,6 +2,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { readdir, readFile } from "node:fs/promises";
+import { execFileSync } from "node:child_process";
 import { channelOf, compareReleases, hostInstall, installedRelease, newestTag, offerRelease, parseRelease, stableStay } from "../kanso/mods/kanso-chrome/release.js";
 import { planRelease, prepareCandidate } from "../scripts/release-plan.mjs";
 
@@ -249,4 +250,20 @@ test("An install is downloaded by its tag and checked as X.Y.Z, and the channel 
   assert.equal(installedRelease("3.31.0", "3.30.0-beta.2"), "3.31.0");
   assert.equal(installedRelease("3.30.0", "nope"), "3.30.0");
   assert.equal(installedRelease("3.30.0-beta.2", null), null);
+});
+
+test("A stable release targets the commit CI tested, passed as its own argument, and the release workflow reads by default", async () => {
+  const [ci, release] = await Promise.all(["ci.yml", "release.yml"].map(workflow));
+  const stable = ci.slice(ci.indexOf("\n  stable:"));
+  assert.doesNotMatch(stable, /options:.*\$/, "an option is never shell text read again");
+  assert.match(release, /^          TARGET: \$\{\{ inputs\.tag == '' && github\.sha \|\| '' \}\}$/m);
+  const command = release.match(/^        run: (gh release create .+)$/m)?.[1] ?? "";
+  const argv = (target) => execFileSync("bash", ["-c", `gh() { printf '%s\\n' "$@"; }; ${command}`], {
+    encoding: "utf8", env: { ...process.env, INPUT_OPTIONS: "", TARGET: target, PLAN_TAG: "v1.0.0", PLAN_TITLE: "t", PLAN_NOTES: "n", RUNNER_TEMP: "/r" },
+  }).trim().split("\n");
+  const stableArgs = argv("0123abcd");
+  assert.equal(stableArgs[stableArgs.indexOf("--target") + 1], "0123abcd");
+  assert.equal(argv("").includes("--target"), false);
+  assert.match(release.slice(0, release.indexOf("\njobs:")), /^permissions:\n  contents: read$/m);
+  assert.match(release, /^  release:\n(?:    .*\n)*?    permissions:\n      contents: write$/m);
 });
