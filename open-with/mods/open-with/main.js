@@ -4,10 +4,10 @@ import { openApi } from "./platform-open.js";
 // Other mods open it with openOverlay({ mod: "open-with", kind: "popup", props: { folder, machine } }), or props.file (full path) for one file; a text file is also offered to kanso-panel's preview.
 
 import { View } from "gpui-kit";
-import { exec, run, notify, theme, props, closeOverlay, focused, panes, spaces, home, appHome, shared, setShared, layout, window as win } from "herdr";
-import { walkLayout, commitLayout, isKansoTree } from "./layout.js";
+import { exec, run, notify, theme, props, closeOverlay, focused, panes, spaces, home, appHome, shared, setShared, window as win } from "herdr";
 import { listKey, moveTo } from "./listkeys.js";
 import { isText } from "./kinds.js";
+import { hasPanel, showPreview } from "./preview-open.js";
 import { aliasText, machineTitle, focusOn } from "./pure.js";
 import { tokens } from "./ui.js";
 import { menuList } from "./ui-menu.js";
@@ -57,14 +57,6 @@ const TILE_TONES = ["blue", "teal", "violet", "yellow", "green", "red"];
 
 // One shell pass: prints `app|cli|flatpak <tab> key <tab> path` per hit.
 const PREVIEW = { id: "preview", name: "Preview in the panel", icon: "mods/kanso-chrome/icons/file.svg", builtin: true };
-
-const hasPanel = () => isKansoTree(layout()) && Boolean(walkLayout(layout(), "panel-body"));
-
-function showPreview(file, machine) {
-  if (!hasPanel()) return false;
-  const child = { id: "preview", type: "block", content: { mod: "kanso-panel", props: { panel: "preview", path: file, on: machine } } };
-  return commitLayout({ panel: child });
-}
 
 function shortPath(folder, machine) {
   const h = home();

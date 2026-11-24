@@ -1,1 +1,2 @@
-{ "place": "none", "title": "Open with", "overlay": { "kind": "popup", "at": "top", "offset": 40, "width": 380 } }
+{ "place": "none", "title": "Open with", "overlay": { "kind": "popup", "at": "top", "offset": 40, "width": 380 },
+  "link_handlers": [{ "kind": "file", "pattern": "(?i)\\.(md|markdown|mdx|txt|text|log|json|jsonc|yaml|yml|toml|csv|tsv|rst|adoc|org|ini|cfg|conf|env|sh|zsh|bash|fish|js|mjs|cjs|ts|tsx|jsx|py|rb|go|rs|java|kt|swift|c|h|cpp|hpp|cs|php|lua|sql|html|css|scss|xml|svg|png|jpg|jpeg|gif|webp)$" }] }
