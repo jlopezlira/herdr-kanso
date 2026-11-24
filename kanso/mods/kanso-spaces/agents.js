@@ -9,6 +9,7 @@ import { parseProcesses, etimeMs } from "./procs.js";
 import { oneLine } from "./since-left-model.js";
 import { G, GLIDE, H, R, DIALOG, SIDEBAR, sidebarSides } from "./ui.js";
 import { mark, MARK_SIZES } from "./ui-mark.js";
+import { SWEEP_MS } from "./ui-glint.js";
 import { sessionRow } from "./session-row.js";
 import { SNOOZE_LABEL } from "./limits-model.js";
 export { SNOOZE_LABEL };
@@ -125,9 +126,18 @@ export function track(since, list, now, tabOf = () => null) {
   return gone.size ? Object.fromEntries(Object.entries(next).filter(([k]) => !gone.has(k))) : next;
 }
 
-export const SWEEP_MS = 3500;
-export const sweeping = (a, since, now) => a.status === "working" && since?.[a.address]?.at != null && now - since[a.address].at < SWEEP_MS;
-export const sweepEnd = (list, since, now) => list.filter((a) => sweeping(a, since, now)).reduce((end, a) => Math.min(end ?? Infinity, since[a.address].at + SWEEP_MS), null);
+export const SWEEP_LEAD_MS = 80;
+const SWEEP_SPAN_MS = SWEEP_LEAD_MS + SWEEP_MS + SWEEP_LEAD_MS;
+export const sweepStage = (a, began, now) => {
+  const at = a.status === "working" ? began?.[a.address] : null;
+  if (at == null || now - at >= SWEEP_SPAN_MS) return null;
+  return now - at < SWEEP_LEAD_MS ? "start" : "run";
+};
+export const sweepBegan = (since, next, now, began = {}) => ({
+  ...Object.fromEntries(Object.entries(began).filter(([, at]) => now - at < SWEEP_SPAN_MS)),
+  ...Object.fromEntries(Object.entries(next).filter(([k, v]) => v.s === "working" && since?.[k]?.s !== "working").map(([k]) => [k, now])),
+});
+export const sweepWake = (began, now) => Object.values(began).flatMap((at) => [at + SWEEP_LEAD_MS, at + SWEEP_SPAN_MS]).filter((t) => t > now).reduce((soonest, t) => Math.min(soonest ?? t, t), null);
 
 export function elapsed(a, since, now) {
   if (!["working", "blocked", "done"].includes(a.status)) return null;
@@ -333,7 +343,7 @@ export function sessionProps(a, base, row, more = {}) {
     program: programOf(a),
     name: more.label ?? agentLabel(a),
     status: a.dozing ? "asleep" : a.status,
-    sweep: Boolean(more.sweep),
+    sweep: more.sweep ?? null,
     activity: two ? more.activity : null,
     step: two ? more.step ?? null : null,
     time: more.time ?? null,

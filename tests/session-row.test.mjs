@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { load, gpuiHost, nodes, texts, tipsOf, themed, KIT_NIGHT, drawingHost } from "./helpers.mjs";
+import { load, gpuiHost, nodes, texts, tipsOf, calls, one, themed, KIT_NIGHT, drawingHost } from "./helpers.mjs";
 
 const sidebar = async (ran = []) => {
   const host = { ...drawingHost(), run: (name, args) => ran.push([name, args]), openOverlay: (o) => ran.push(["overlay", o.props.title]) };
@@ -22,7 +22,7 @@ test("A session shows its program, name, activity, how long on this step, time, 
     tasks: [{ command: "npm test", time: "2m" }],
   });
   assert.deepEqual(plain(props), {
-    program: claude, name: "Atlas", status: "working", sweep: false, activity: "Reviewing step 01", step: { time: "14m", stuck: true }, time: "20m", place: "kansō", placeTip: "Can't read it",
+    program: claude, name: "Atlas", status: "working", sweep: null, activity: "Reviewing step 01", step: { time: "14m", stuck: true }, time: "20m", place: "kansō", placeTip: "Can't read it",
     depth: 1, guides: [], current: false, ground: false, pinned: false, pinnable: false, menu: false, commands: 0, commandsTip: null, tools: [], refresh: false, drop: null, hover: false, selected: false, dimmed: false,
   }, "a working session lists no commands, as today");
   const done = sessionProps({ ...atlas, status: "done", pin: 1, focused: true, address: "dark/t1" }, 1, { hovered: true, pin: () => {}, kbd: true }, { tasks: [{ command: "npm test", time: "2m" }], oneLine: true, activity: "x" });
@@ -115,25 +115,53 @@ test("A dozing or unreadable row fades its program's art, and the activity takes
   }
 });
 
-test("A name glints once, for one sweep after its agent starts working, and then rests", async () => {
-  const { sweeping, sweepEnd, SWEEP_MS } = await load("kanso-spaces/agents.js", ["sweeping", "sweepEnd", "SWEEP_MS"]);
-  const now = 1_000_000;
-  const since = { fresh: { s: "working", at: now - 1000 }, old: { s: "working", at: now - SWEEP_MS - 1 }, waiting: { s: "blocked", at: now - 10 } };
-  assert.equal(sweeping({ address: "fresh", status: "working" }, since, now), true);
-  assert.equal(sweeping({ address: "old", status: "working" }, since, now), false, "an agent already working when the list opened does not glint");
-  assert.equal(sweeping({ address: "waiting", status: "blocked" }, since, now), false);
-  assert.equal(sweeping({ address: "unseen", status: "working" }, since, now), false);
-  const list = [{ address: "fresh", status: "working" }, { address: "old", status: "working" }];
-  assert.equal(sweepEnd(list, since, now), now - 1000 + SWEEP_MS, "the list knows when to draw the rows again");
-  assert.equal(sweepEnd([{ address: "old", status: "working" }], since, now), null);
-  const { sessionProps } = await sidebar();
-  assert.equal(sessionProps({ address: "fresh", status: "working" }, 1, null, { sweep: true }).sweep, true);
-  assert.equal(sessionProps({ address: "fresh", status: "working" }, 1, null, {}).sweep, false);
+const timing = async () => {
+  const { SWEEP_MS } = await load("kanso-spaces/ui-glint.js", ["SWEEP_MS"]);
+  const sweep = await load("kanso-spaces/agents.js", ["sweepStage", "sweepBegan", "sweepWake", "SWEEP_LEAD_MS"]);
+  const lead = sweep.SWEEP_LEAD_MS;
+  return { ...sweep, lead, span: lead + SWEEP_MS + lead };
+};
+
+test("A working name starts its glint, sweeps at 80 ms and rests at the end", async () => {
+  const { sweepStage, lead, span } = await timing();
+  assert.equal(lead, 80);
+  const began = { t1: 1000 };
+  const stage = (offset) => sweepStage(atlas, began, began.t1 + offset);
+  assert.deepEqual([0, lead - 1, lead, span - 1, span].map(stage), ["start", "start", "run", "run", null]);
+  assert.equal(sweepStage({ ...atlas, status: "blocked" }, began, began.t1), null);
+  assert.equal(sweepStage(atlas, {}, began.t1), null);
 });
 
-test("A working row draws moving glint windows only during its sweep", async () => {
-  const { agentSession, c } = await sidebar();
-  const loops = (el) => nodes(el).flatMap((kid) => kid.calls.filter((call) => call[0] === "loop")).length;
-  assert.ok(loops(agentSession(atlas, 1, c, null, { label: "Atlas", sweep: true })) > 0);
-  assert.equal(loops(agentSession(atlas, 1, c, null, { label: "Atlas" })), 0, "a working row at rest draws no animation");
+test("Only agents starting work begin a glint, and finished glints are pruned", async () => {
+  const { sweepBegan, span } = await timing();
+  const now = 1_000_000;
+  const working = { s: "working", at: null }, rest = { s: "rest", at: now };
+  const before = { resumed: rest, remembered: working, active: working, expired: working };
+  const next = { ...before, resumed: working, arrived: working, waiting: rest };
+  const began = { expired: now - span, active: now - span + 1 };
+  assert.deepEqual(plain(sweepBegan(before, next, now, began)), { active: began.active, resumed: now, arrived: now });
+});
+
+test("The sidebar wakes for the earliest glint boundary still ahead", async () => {
+  const { sweepWake, lead, span } = await timing();
+  const first = 1000, second = first + 1;
+  const began = { first, second };
+  const boundaries = [first + lead, second + lead, first + span, second + span];
+  assert.equal(sweepWake(began, first), boundaries[0]);
+  assert.deepEqual(boundaries.map((now) => sweepWake(began, now)), [...boundaries.slice(1), null]);
+  assert.equal(sweepWake({}, first), null);
+});
+
+test("A working row passes the glint stage to its name and draws no sweep at rest", async () => {
+  const { agentSession, sessionProps, c } = await sidebar();
+  const { GLINT } = await load("kanso-spaces/ui.js", ["GLINT"]);
+  const firstWindow = (status, sweep) => {
+    const row = agentSession({ ...atlas, status }, 1, c, null, { label: "Atlas", sweep });
+    return nodes(row).find((kid) => calls(kid, "id").some(([, id]) => id.endsWith("-sweep-0")));
+  };
+  assert.equal(sessionProps(atlas, 1, null, {}).sweep, null);
+  assert.equal(one(firstWindow("working", "start"), "left"), -GLINT.wide);
+  assert.equal(one(firstWindow("working", "run"), "left"), GLINT.run);
+  assert.equal(firstWindow("working", null), undefined);
+  assert.equal(firstWindow("blocked", "run"), undefined);
 });

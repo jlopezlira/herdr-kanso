@@ -278,9 +278,10 @@ test("Tools are always shown after the action, and key hints close the right sid
 
 test("A working row's name glints, and a program's own art leads it, tinted or in its own colours", async () => {
   const { row, ICON_ROW, c } = await kit();
-  const working = row("r", c, { name: "Atlas", glint: true });
-  assert.ok(all(working).some((kid) => calls(kid, "loop").length), "the name glints");
-  assert.equal(all(row("r", c, { name: "Atlas" })).some((kid) => calls(kid, "loop").length), false);
+  const sweeps = (props) => all(row("r", c, { name: "Atlas", ...props }))
+    .some((kid) => calls(kid, "transition").some(([, property]) => property === "left"));
+  assert.equal(sweeps({ glint: "start" }), true, "the name glints");
+  assert.equal(sweeps({}), false);
   const tinted = row("r", c, { icon: { icon: "programs/claude.svg", tint: true }, name: "Atlas" });
   assert.ok(svgs(tinted).includes("programs/claude.svg"));
   const art = row("r", c, { icon: { icon: "programs/codex.png", tint: false }, name: "Iris" });
