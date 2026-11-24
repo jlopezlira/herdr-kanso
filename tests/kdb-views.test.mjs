@@ -49,10 +49,12 @@ test("a flush that never ran holds up only its own view", async (t) => {
 
 test("the schema is opened once per file, whichever view opens it first", async (t) => {
   const { Kdb, calls } = await views(t);
-  await new Kdb(databaseTimer).open();
+  const first = new Kdb(databaseTimer);
+  await first.open();
   await new Kdb(databaseTimer).read("SELECT 1;");
   assert.equal(calls.filter(([command, args]) => command === "sqlite3" && args[0] === "-version").length, 1);
-  assert.equal(calls.filter(([command]) => command === "mkdir").length, 1);
+  const prepares = calls.filter(([command, args]) => command === "sh" && args[0] === "-c" && args.at(-1) === first.file);
+  assert.deepEqual(clone(prepares.map(([, args]) => args.slice(-2))), [[first.dir, first.file]]);
 });
 
 test("an abandoned call no longer holds up its own view's next calls", async (t) => {

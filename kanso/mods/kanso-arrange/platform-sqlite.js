@@ -13,6 +13,7 @@ export function sqliteApi(platform, run, write) {
     if ([...args, ...statements].reduce((size, value) => size + value.length + 3, 0) < ARG_LIMIT) return run("sqlite3", [...args, ...statements]);
     const path = paths.join(paths.dirname(file), `.kanso-sql-${Date.now()}-${Math.random().toString(36).slice(2)}.sql`);
     await write(path, statements.map((statement) => `${statement}\n;`).join("\n"), null);
+    if (platform !== "windows") await run("chmod", ["600", path]);
     try { return await run("sqlite3", [...args, paths.sqliteRead(path)]); }
     finally { await fileApi(platform, run).remove([path]).catch(() => {}); }
   };

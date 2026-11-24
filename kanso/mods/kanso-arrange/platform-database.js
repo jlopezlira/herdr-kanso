@@ -36,7 +36,8 @@ export class Database {
   async prepare(dir, missing) {
     const ok = await this.call((_platform, run) => run("sqlite3", ["-version"])).catch((error) => { if (error?.late) throw error; return null; });
     if (ok?.code !== 0) throw new Error(missing);
-    await this.call((platform, run) => fileApi(platform, run).mkdir(dir));
+    const made = await this.call((platform, run) => fileApi(platform, run).ownOnly(dir, this.file));
+    if (made && made.code !== 0) throw new Error(`kansō could not keep its data to you alone: ${(made.stderr || "").trim().split("\n")[0] || dir}`);
   }
 
   execute(text, options = {}) {

@@ -1,5 +1,6 @@
 import { checkState, jobLabel } from "./ghchecks.js";
 import { NEEDS_LABEL, needsWord } from "./needs.js";
+import { FROM_GITHUB, outsideText } from "./pure.js";
 
 export const SENT_LABEL = "kanso.checks";
 export const PR_LABEL = "kanso.pr";
@@ -26,7 +27,7 @@ export function checksOutcome(rollup) {
 export function checksMessage({ number, url }, outcome) {
   const named = `pull request #${number}${url ? ` (${url})` : ""}`;
   if (outcome.result === "passed") return `The checks on ${named} passed.`;
-  return [`The checks on ${named} failed:`, ...outcome.failed.map(({ name, url: link }) => `- ${name}${link ? `: ${link}` : ""}`)].join("\n");
+  return [`The checks on ${named} failed. ${FROM_GITHUB}`, ...outcome.failed.map(({ name, url: link }) => `- ${outsideText(name, 200)}${link ? `: ${outsideText(link, 500)}` : ""}`)].join("\n");
 }
 
 export const DELIVERIES = "kanso.checks.deliveries";

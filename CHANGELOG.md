@@ -27,6 +27,8 @@ the branch's rules.
 ### Security
 
 - A link in a pull request, an issue or a check opens only when it is an https link, or an http link to this computer or a private network address; anything else stops before it reaches the system's opener.
+- kansō's database and its folder are readable only by you, on this computer and on your other computers, and an existing database is corrected the next time it opens.
+- Text read from GitHub reaches an agent marked as text from GitHub and without terminal control characters, and background git reads no longer run a repository's file-system monitor.
 
 ## [3.34.0] - 2026-11-23
 

@@ -1,4 +1,4 @@
-import { checked } from "./platform-command.js";
+import { checked, GIT_READ } from "./platform-command.js";
 import { paths } from "./platform-paths.js";
 import { fileApi } from "./platform-files.js";
 
@@ -58,7 +58,7 @@ cd "$1" 2>/dev/null || { echo gone; exit 0; }
 # git can't read it (its .git names where the repository used to be): nothing
 # below would be true, so it says so and stops.
 git rev-parse --git-dir >/dev/null 2>&1 || { echo broken; exit 0; }
-status=$(git --no-optional-locks status --porcelain=v1 --untracked-files=normal 2>/dev/null) || { echo broken; exit 0; }
+status=$(git ${GIT_READ.join(" ")} --no-optional-locks status --porcelain=v1 --untracked-files=normal 2>/dev/null) || { echo broken; exit 0; }
 idle=$2
 shift 2
 if [ "$idle" -gt 0 ] 2>/dev/null; then
@@ -140,7 +140,7 @@ export function repositoryApi(platform, run) {
     if (platform !== "windows") return shell(PROBE, [folder, String(idle), ...refs]);
     if (!await files.test(folder, "directory")) return { code: 0, stdout: "gone" };
     if (await files.test(paths.join(folder, ".git"), "directory")) return { code: 0, stdout: "replaced" };
-    const status = await git(folder, ["--no-optional-locks", "status", "--porcelain=v1", "--untracked-files=normal"]);
+    const status = await git(folder, [...GIT_READ, "--no-optional-locks", "status", "--porcelain=v1", "--untracked-files=normal"]);
     if (status.code !== 0) return { code: 0, stdout: "broken" };
     const since = Date.now() - Number(idle) * 60000;
     const gitDir = Number(idle) > 0 ? checked(await git(folder, ["rev-parse", "--absolute-git-dir"])).stdout.trim() : null;

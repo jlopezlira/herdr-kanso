@@ -63,6 +63,7 @@ const herdrModules = (host) => {
   };
 };
 
+export const dataFolder = (command, args) => command === "mkdir" || (command === "sh" && String(args?.[1]).startsWith("umask 077 && mkdir"));
 export const clone = (value) => JSON.parse(JSON.stringify(value));
 export const success = (stdout) => ({ code: 0, stdout, stderr: "" });
 export const failure = (stderr, code = 1) => ({ code, stdout: "", stderr });

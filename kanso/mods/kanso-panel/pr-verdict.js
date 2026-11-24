@@ -1,5 +1,5 @@
 // What the pull request panel says, and the one action that state can take.
-import { plural } from "./pure.js";
+import { plural, FROM_GITHUB, outsideText } from "./pure.js";
 import { diffText, plus } from "./ui-facts.js";
 import { checkLine, checkSummary, isWriter, jobLabel, mergeReadiness, runIdOf } from "./ghchecks.js";
 
@@ -298,13 +298,13 @@ export function sendText(scene, verdict) {
   const url = scene.pr?.url || "";
   if (verdict?.id === "failed") {
     const card = verdict.body;
-    return [card?.job, card?.step, ...(card?.lines ?? []), url].filter((line) => line != null && line !== "").join("\n");
+    return [FROM_GITHUB, ...[card?.job, card?.step, ...(card?.lines ?? [])].map((line) => (line == null ? line : outsideText(line, 500))), url].filter((line) => line != null && line !== "").join("\n");
   }
   if (verdict?.id === "changes") {
     const card = verdict.body;
     if (!card) return url;
     const where = `${card.author} ${card.path}${card.line ? `:${card.line}` : ""}`.trim();
-    return [where, card.text, url].filter((line) => line != null && line !== "").join("\n");
+    return [FROM_GITHUB, outsideText(where, 300), outsideText(card.text, 4000), url].filter((line) => line != null && line !== "").join("\n");
   }
   if (verdict?.id === "conflicts") {
     const base = scene.pr?.baseRefName || "main";

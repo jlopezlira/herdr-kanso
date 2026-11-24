@@ -2,7 +2,7 @@
 // Kept byte for byte in kanso-send/ and kanso-panel/ (`npm run sync:share`): edit kanso-send/deliver.js.
 // Text for an agent, the same from Send and from Look.
 import { hc } from "herdr";
-import { bounded } from "./pure.js";
+import { bounded, plainText } from "./pure.js";
 
 const saysShell = (record) => record.program?.shell === true || Boolean(record.program && !record.program.agent && !record.status);
 const saysAgent = (record) => Boolean(record.status || record.program?.agent);
@@ -46,7 +46,7 @@ const outcomeOf = (error) => {
 
 export async function deliver(timer, terminal, text, from) {
   if (!timer?.after) throw new TypeError("deliver needs a timer for its deadline");
-  const sent = await bounded(hc(["send", terminal, text]).catch(outcomeOf), timer, SEND_MS);
+  const sent = await bounded(hc(["send", terminal, plainText(text)]).catch(outcomeOf), timer, SEND_MS);
   if (sent?.late) return unconfirmed(`no answer in ${SEND_MS / 1000} s`);
   if (sent.code === 0) void bounded(hc(["label", terminal, "kanso.unread=1", `kanso.from=${from}`]).catch(() => null), timer, SEND_MS);
   return sent;
