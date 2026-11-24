@@ -963,3 +963,11 @@ test("Search this network checks the whole network once and then is no longer of
   assert.deepEqual(knocks().slice(before), [near, rest]);
   assert.ok(!sweep(), "Search this network is no longer offered");
 });
+
+test("Two computer names that clean up to the same text keep separate agent key files", async () => {
+  const { agentKey } = await load("kanso-computers/sign-in.js", ["agentKey"]);
+  const names = ["my box", "my_box", "my-box", "my.box", "alpha"];
+  assert.equal(new Set(names.map(agentKey)).size, names.length);
+  assert.equal(agentKey("alpha"), "~/.ssh/id_kanso_agent_alpha");
+  for (const name of names) assert.match(agentKey(name), /^~\/\.ssh\/id_kanso_agent_[\w-]+$/);
+});

@@ -16,7 +16,11 @@ export function destinationOf(target) {
 }
 
 export const KEY = "~/.ssh/id_ed25519_kanso";
-export const agentKey = (name) => `~/.ssh/id_kanso_agent_${String(name).replace(/[^\w-]/g, "_")}`;
+const nameMark = (text) => [...text].reduce((h, ch) => (Math.imul(h, 31) + ch.codePointAt(0)) >>> 0, 7).toString(36);
+export const agentKey = (name) => {
+  const text = String(name), plain = text.replace(/[^\w-]/g, "_");
+  return `~/.ssh/id_kanso_agent_${plain === text ? plain : `${plain}-${nameMark(text)}`}`;
+};
 const keyedWords = (path) => `-o IdentityFile=${path} -o IdentitiesOnly=yes -o BatchMode=yes `;
 const ROUTE_WORDS = /(?:-o IdentityFile=(~\/\.ssh\/(?:id_ed25519_kanso|id_kanso_agent_[\w-]+))|-i ~\/\.ssh\/id_ed25519_kanso) -o IdentitiesOnly=yes -o BatchMode=yes /g;
 const unkeyed = (via) => String(via ?? "").replace(ROUTE_WORDS, "");
