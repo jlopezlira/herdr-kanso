@@ -20,3 +20,6 @@ export const isText = (path) => TEXT.includes(extOf(path));
 
 // "image" or "convert", or null for a file Images leaves alone.
 export const kindOf = (path) => Object.keys(KINDS).find((k) => KINDS[k].includes(extOf(path))) ?? null;
+
+export const PREVIEWABLE = [...new Set([...TEXT, ...KINDS.image])];
+export const previewable = (path) => PREVIEWABLE.includes(extOf(path));

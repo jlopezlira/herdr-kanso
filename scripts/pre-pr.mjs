@@ -9,6 +9,7 @@ export const checks = (branch = process.env.KANSO_BRANCH || "develop") => [
   ["build:site", "--", "--check"],
   ["build:issue-forms", "--", "--check"],
   ["build:linux-keys", "--", "--check"],
+  ["build:link-rules", "--", "--check"],
   ["check:dupes"],
 ].map(([script, ...args]) => ({ name: ["npm run", script, ...args].join(" "), argv: ["run", "-s", script, ...args] }));
 

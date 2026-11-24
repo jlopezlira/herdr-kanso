@@ -8,6 +8,7 @@ const root = new URL("../", import.meta.url);
 // Each shared file (relative to the repo), and where it is copied.
 const COMMON = [
   { source: "kanso/mods/kanso-panel/caffeine-model.js", copies: ["kanso/mods/kanso-spaces/caffeine-model.js"] },
+  { source: "kanso/mods/kanso-panel/preview-open.js", copies: ["kanso/mods/open-with/preview-open.js"] },
   { source: "kanso/mods/kanso-panel/share.js", copies: ["kanso/mods/kanso-spend/share.js", "kanso/mods/kanso-guard/share.js", "kanso/mods/kanso-dojo/share.js"] },
   // What can be shown, shown when it has something to say, or hidden. Hide stops the work.
   { source: "kanso/mods/kanso-settings/pieces.js", copies: ["kanso-spaces", "kanso-strip", "kanso-chrome", "kanso-tabs", "kanso-status", "kanso-panel", "kanso-sim", "kanso-menu", "kanso-computers"].map((m) => `kanso/mods/${m}/pieces.js`) },
