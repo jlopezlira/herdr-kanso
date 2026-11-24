@@ -147,6 +147,11 @@ test("Workflows publish a beta from develop, a release candidate on demand, and 
   assert.match(pages, /branches: \[main\]/);
   assert.match(pages, /the site deploys only from main/);
   assert.doesNotMatch(pages, /develop/);
+  const [build, deploy] = pages.split("\n  deploy:");
+  assert.match(build, /upload-pages-artifact/);
+  assert.match(deploy, /needs: build/);
+  assert.match(deploy, /deploy-pages/);
+  assert.doesNotMatch(deploy, /upload-pages-artifact/, "the deploy looks for the artifact from its own job, after the upload has finished");
 });
 
 test("CI runs only on pushes to main and develop, never cancels a run, and every job of every workflow has a time limit", async () => {
