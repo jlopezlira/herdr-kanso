@@ -575,13 +575,13 @@ test("A custom panel with no icon is a door as high as the others, its name alwa
   assert.deepEqual(opened(door(root, "Notes")), [true, 1]);
 });
 
-test("The Caffeine door shows its cup and reveals its name while any computer has Caffeine on", async () => {
+test("The Caffeine door shows its cup like every other door, its name hidden even while a computer has Caffeine on", async () => {
   const b = await bar({ tree: withPanel(null) });
   const caffeine = () => door(b.view.render(b.cx), "Caffeine");
   assert.ok(everyDrawn(caffeine()).some((el) => arg(el, "svg")?.endsWith("/coffee.svg")), "the cup is drawn");
   for (const on of [false, true, false]) {
     b.store["kanso.caffeine"] = { "": { on: false }, devbox: { on } };
-    assert.deepEqual(opened(caffeine()), [on, Number(on)]);
+    assert.deepEqual(opened(caffeine()), [false, 0]);
   }
 });
 
