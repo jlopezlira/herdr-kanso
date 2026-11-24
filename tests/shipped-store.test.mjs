@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createHash } from "node:crypto";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { load, exec, temporary, clone, nativeWindow, success, openedKdb, textFiles } from "./helpers.mjs";
 
@@ -90,9 +90,10 @@ async function setup(t, { otherMachine = null, rawUrl = null } = {}) {
       if (command === "curl") { curl.push(args); return success(content); }
       if (command !== "gh") return exec(command, args, options);
       if (args[1].startsWith("gists?")) return success(gist ? `${gist.id}\n` : "");
-      const body = JSON.parse(await readFile(args[args.indexOf("--input") + 1], "utf8"));
+      const input = args[args.indexOf("--input") + 1];
+      const body = JSON.parse(await readFile(input, "utf8"));
       const request = args.indexOf("-X");
-      sent.push({ method: args[request + 1], resource: args[request + 2], body });
+      sent.push({ method: args[request + 1], resource: args[request + 2], body, mode: (await stat(input)).mode & 0o777 });
       gist = { id: gist?.id ?? "new", files: { ...(gist?.files ?? {}), ...Object.fromEntries(Object.entries(body.files).map(([k, v]) => [k, { content: v.content }])) } };
       return success(JSON.stringify(gist));
     },
@@ -291,4 +292,11 @@ test("A commit two other computers report from a repository this one does not kn
   assert.equal(first, second, "one key for the repository, whoever reports it");
   assert.match(first, /^elsewhere\/[0-9a-f]{12}$/);
   assert.equal(new Set(read.flatMap((file) => file.commits.map((c) => `${c.repo} ${c.hash}`))).size, 1);
+});
+
+test("The file handed to gh for the gist is yours alone", { skip: process.platform === "win32" && "Windows keeps the profile's ACL" }, async (t) => {
+  const { s, db } = await opened(t);
+  await db.syncMachines(["me@example.invalid"]);
+  assert.ok(s.sent.length > 0);
+  for (const call of s.sent) assert.equal(call.mode, 0o600);
 });

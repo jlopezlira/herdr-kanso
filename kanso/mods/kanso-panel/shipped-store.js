@@ -1,5 +1,5 @@
 import { Database } from "./platform-database.js";
-import { localService } from "./platform-host.js";
+import { localName, localService } from "./platform-host.js";
 import { paths } from "./platform-paths.js";
 import { fileApi } from "./platform-files.js";
 import { repositoryApi } from "./platform-repositories.js";
@@ -210,6 +210,7 @@ INSERT OR REPLACE INTO scans(path,repo,refs,scanned) VALUES(${sqlText(r.path)},$
       const files = { [name]: { content: JSON.stringify(file) } };
       const path = paths.join(this.dir, `.gist-${Date.now()}.json`);
       await writeTextFile(path, JSON.stringify(id ? { files } : { description: GIST_DESCRIPTION, public: false, files }), null);
+      if (localName() !== "windows") await exec("chmod", ["600", path]);
       const sent = await exec("gh", ["api", ...(id ? ["-X", "PATCH", `gists/${id}`] : ["-X", "POST", "gists"]), "--input", path])
         .finally(() => localService(fileApi).remove([path]).catch(() => {}));
       if (sent.code !== 0) throw new Error((sent.stderr || "the gist could not be written").trim().split("\n")[0]);
