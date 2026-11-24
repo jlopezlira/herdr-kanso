@@ -125,9 +125,14 @@ export default class Computers extends View {
     closeOverlay(props()?.overlay);
   }
 
-  typedKey() {
+  typedName() {
     const text = this.typed.value().trim();
     return validTarget(text) ? choiceOf(text, this.peers()).name ?? splitTarget(text).host : "";
+  }
+
+  typedKey() {
+    const name = this.typedName();
+    return name ? `typed:${name}` : "";
   }
 
   addTyped(cx) {
@@ -155,12 +160,12 @@ export default class Computers extends View {
   }
 
   async connect(key, given) {
-    const plan = await this.homeFirst(given);
-    if (plan.probe) {
-      const probe = await this.probe([plan.target].filter(Boolean));
-      const reach = reachOf(probe);
-      if (reach !== "ready") return this.fail(key, reach, String(probe.stderr || probe.stdout).trim());
+    const tried = given.probe ? await this.probe([given.target, ...(given.also ?? [])].filter(Boolean)) : null;
+    if (tried && tried.reach !== "ready") {
+      this.jobs[key] = { ...this.jobs[key], plan: { ...given, target: tried.target } };
+      return this.fail(key, tried.reach, String(tried.result.stderr || tried.result.stdout).trim());
     }
+    const plan = await this.homeFirst(tried ? { ...given, target: tried.target } : given);
     const error = hcError(await hc(addArgs(plan)).catch(failed));
     if (error) return this.fail(key, needsLogin(error) ? "password" : reachOf({ code: 1, stderr: error.message }), String(error.message ?? "").trim());
     delete this.jobs[key];
@@ -170,9 +175,11 @@ export default class Computers extends View {
     await this.checkMac(plan.name || plan.target);
   }
 
-  async probe([target, ...rest]) {
+  async probe([target, ...rest], tried = []) {
     const result = await exec("ssh", probeArgs(target, this.platform), { timeout: PROBE_MS }).catch(failed);
-    return reachOf(result) === "ready" || !rest.length ? result : this.probe(rest);
+    const now = [...tried, { target, result, reach: reachOf(result) }];
+    if (now.at(-1).reach === "ready" || !rest.length) return now.find((t) => t.reach !== "unreachable") ?? now.at(-1);
+    return this.probe(rest, now);
   }
 
   disconnect(key, machine, cx) {
@@ -417,7 +424,7 @@ export default class Computers extends View {
       h_flex().w_full().gap(G.sm).items_center()
         .child(div().flex_1().min_w(0).child(field("computers-typed", this.typed, c, { spoken: "user@host" })))
         .child(button("computers-add-typed", job?.phase === "adding" ? "Connecting…" : "Add", (cx) => this.addTyped(cx), c, { disabled: !key || job?.phase === "adding" })),
-      job?.phase === "failed" ? this.failure(key, job, c, { name: key }) : null];
+      job?.phase === "failed" ? this.failure(key, job, c, { name: this.typedName() }) : null];
   }
 
   render() {
