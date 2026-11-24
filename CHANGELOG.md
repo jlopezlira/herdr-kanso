@@ -22,7 +22,7 @@ in version.json, which the stable updater offers. Versions follow
 [Keep a Changelog](https://keepachangelog.com). `npm run check:version` checks
 the branch's rules.
 
-## [Unreleased]
+## [4.1.0] - 2026-11-24
 
 ### Added
 
