@@ -169,6 +169,7 @@ export const sidebarOn = async (f) => {
 
 setFlagsFromString("--expose-gc");
 const collect = runInNewContext("gc");
+const drawCpu = (process.threadCpuUsage ?? process.cpuUsage).bind(process);
 
 export async function firstDraw(id) {
   const f = fixture({ blocked: true });
@@ -180,13 +181,12 @@ export async function firstDraw(id) {
   const moduleMs = performance.now() - start;
   const draw = () => {
     collect();
-    // CPU, not wall time: other test files preempt this one and move performance.now().
-    const opened = process.cpuUsage();
+    const opened = drawCpu();
     const view = new (isPanel ? mod.PANELS[id] : mod[name])();
     f.state.props = isPanel ? { panel: id, ...(id === "preview" ? { path: "/projects/p0/README.md" } : {}) } : {};
     if (isPanel) view.init(f.cx, f.state.props); else view.init(f.state.props, f.cx);
     view.render(f.cx);
-    const used = process.cpuUsage(opened);
+    const used = drawCpu(opened);
     return { ms: (used.user + used.system) / 1000, processes: f.state.processes.length, database: f.state.processes.filter((p) => p.command === "sqlite3").length, files: f.state.reads.length, timers: f.state.timers.length };
   };
   const open = draw();
