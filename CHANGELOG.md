@@ -32,6 +32,10 @@ the branch's rules.
 
 - Caffeine replaces Keep connected computers awake under Background in Settings, which kept a connected computer from idle sleep but not from sleeping with its lid closed. Hiding the Caffeine panel in Settings turns it off on every connected computer.
 
+### Fixed
+
+- Add a computer reaches a computer by the name you typed or the Host in your ssh config, keeping its key and agent settings, and uses its Tailscale address only when that name does not answer; a failed typed attempt shows once.
+
 ## [4.0.0] - 2026-11-24
 
 ### Breaking

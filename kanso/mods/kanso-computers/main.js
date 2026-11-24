@@ -6,7 +6,7 @@ import { pieces, runs } from "./pieces.js";
 import { findExplainer, explainWith } from "./explain.js";
 import { scanNearby } from "./nearby-scan.js";
 import { lanOf } from "./nearby.js";
-import { lanRecord, resolvedHost } from "./lan-route.js";
+import { lanProbeArgs, lanRecord, resolvedHost } from "./lan-route.js";
 import { setupPrompt } from "./setup.js";
 import { focusOn, tryOrAsync, afterMount } from "./pure.js";
 import { G, T, LH, DIALOG, tokens } from "./ui.js";
@@ -125,19 +125,25 @@ export default class Computers extends View {
     closeOverlay(props()?.overlay);
   }
 
-  typedKey() {
+  typedName() {
     const text = this.typed.value().trim();
     return validTarget(text) ? choiceOf(text, this.peers()).name ?? splitTarget(text).host : "";
   }
 
+  typedKey() {
+    const name = this.typedName();
+    return name ? `typed:${name}` : "";
+  }
+
   addTyped(cx) {
     const key = this.typedKey();
-    if (key) this.add(key, choiceOf(this.typed.value(), this.peers()), cx);
+    const choice = choiceOf(this.typed.value(), this.peers());
+    if (key) this.add(key, choice.peer ? { ...choice, ...this.peerFacts(choice.peer) } : choice, cx);
   }
 
   add(key, choice, cx) {
-    if (this.jobs[key]?.phase === "adding") return;
     const plan = planFor(choice, { tailscale: this.tailscale, platform: this.platform });
+    if (this.inFlight(plan)) return;
     this.jobs[key] = { phase: "adding", choice, plan };
     cx.notify();
     cx.spawn(async (cx) => {
@@ -154,13 +160,24 @@ export default class Computers extends View {
     return record ? { ...plan, via: record.via } : plan;
   }
 
+  inFlight(plan) {
+    const named = plan.name || plan.target;
+    return Object.values(this.jobs).some((job) => job.phase === "adding" && (job.plan?.name || job.plan?.target) === named);
+  }
+
+  async answersAtHome(plan) {
+    if (!plan.lan || plan.via || !plan.target) return false;
+    const resolved = await resolvedHost(plan.target, (program, args) => exec(program, args, { timeout: PROBE_MS }));
+    const probe = await exec("ssh", lanProbeArgs(plan.lan, { target: plan.target, hostKey: resolved?.hostKey ?? "" }), { timeout: PROBE_MS }).catch(failed);
+    return probe.code === 0;
+  }
+
   async connect(key, given) {
-    const plan = await this.homeFirst(given);
-    if (plan.probe) {
-      const probe = await this.probe([plan.target].filter(Boolean));
-      const reach = reachOf(probe);
-      if (reach !== "ready") return this.fail(key, reach, String(probe.stderr || probe.stdout).trim());
-    }
+    const tried = given.probe && !(await this.answersAtHome(given)) ? await this.probe([given.target, ...(given.also ?? [])].filter(Boolean)) : null;
+    const chosen = tried ? { ...given, target: tried.target } : given;
+    this.jobs[key] = { ...this.jobs[key], plan: chosen };
+    if (tried && tried.reach !== "ready") return this.fail(key, tried.reach, String(tried.result.stderr || tried.result.stdout).trim());
+    const plan = await this.homeFirst(chosen);
     const error = hcError(await hc(addArgs(plan)).catch(failed));
     if (error) return this.fail(key, needsLogin(error) ? "password" : reachOf({ code: 1, stderr: error.message }), String(error.message ?? "").trim());
     delete this.jobs[key];
@@ -170,9 +187,12 @@ export default class Computers extends View {
     await this.checkMac(plan.name || plan.target);
   }
 
-  async probe([target, ...rest]) {
+  async probe([target, ...rest], tried = []) {
     const result = await exec("ssh", probeArgs(target, this.platform), { timeout: PROBE_MS }).catch(failed);
-    return reachOf(result) === "ready" || !rest.length ? result : this.probe(rest);
+    const now = [...tried, { target, result, reach: reachOf(result) }];
+    const last = now.at(-1);
+    if (last.reach === "ready" || last.reach === "hostkey") return last;
+    return rest.length ? this.probe(rest, now) : now.find((t) => t.reach !== "unreachable") ?? last;
   }
 
   disconnect(key, machine, cx) {
@@ -244,9 +264,11 @@ export default class Computers extends View {
       return;
     }
     if (reach === "hostkey" && job.choice.peer) {
+      if (this.inFlight(plan)) return;
       this.jobs[key] = { ...job, phase: "adding" };
       cx.spawn(async (cx) => {
-        await tryOrAsync(() => exec("ssh-keygen", forgetArgs(job.choice.peer.ip), { timeout: PROBE_MS }));
+        const resolved = await resolvedHost(plan.target, (program, args) => exec(program, args, { timeout: PROBE_MS })).catch(() => null);
+        await tryOrAsync(() => exec("ssh-keygen", forgetArgs(resolved?.hostKey || job.choice.peer.ip), { timeout: PROBE_MS }));
         await this.connect(key, plan);
         cx.notify();
       });
@@ -346,8 +368,7 @@ export default class Computers extends View {
     const peers = this.peers();
     if (!peers.length) return this.tailnetNote(c, "No other computer is on your tailnet yet.");
     return [this.heading(c, "On your tailnet"), ...peers.map((peer) => {
-      const alias = this.aliasFor(peer);
-      const seen = lanOf(peer, this.nearby ?? []);
+      const { alias, lan: seen } = this.peerFacts(peer);
       return this.computer(c, {
         key: peer.name, icon: osIcon(peer.os), name: peer.name, ip: peer.ip,
         facts: [osWord(peer.os), peer.ip, peer.tailscaleSsh ? "Tailscale SSH" : null, alias ? `ssh ${alias.alias}` : null, seen ? "On this network" : null],
@@ -356,6 +377,10 @@ export default class Computers extends View {
         about: { name: peer.name, os: peer.os, tailnet: true },
       });
     })];
+  }
+
+  peerFacts(peer) {
+    return { alias: this.aliasFor(peer), lan: lanOf(peer, this.nearby ?? []) };
   }
 
   aliasFor(peer) {
@@ -417,7 +442,7 @@ export default class Computers extends View {
       h_flex().w_full().gap(G.sm).items_center()
         .child(div().flex_1().min_w(0).child(field("computers-typed", this.typed, c, { spoken: "user@host" })))
         .child(button("computers-add-typed", job?.phase === "adding" ? "Connecting…" : "Add", (cx) => this.addTyped(cx), c, { disabled: !key || job?.phase === "adding" })),
-      job?.phase === "failed" ? this.failure(key, job, c, { name: key }) : null];
+      job?.phase === "failed" ? this.failure(key, job, c, { name: this.typedName(), tailnet: Boolean(job.choice?.peer) }) : null];
   }
 
   render() {
