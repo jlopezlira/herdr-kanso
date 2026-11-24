@@ -22,6 +22,12 @@ in version.json, which the stable updater offers. Versions follow
 [Keep a Changelog](https://keepachangelog.com). `npm run check:version` checks
 the branch's rules.
 
+## [Unreleased]
+
+### Security
+
+- A link in a pull request, an issue or a check opens only when it is an https link, or an http link to this computer or a private network address; anything else stops before it reaches the system's opener.
+
 ## [3.34.0] - 2026-11-23
 
 ### Added

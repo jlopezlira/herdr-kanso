@@ -61,6 +61,15 @@ while [ $# -gt 1 ]; do
 done
 exit 0`;
 
+const WEB_LINK = /^(https?):\/\/(\[[0-9a-f:.]+\]|[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)*)(?::(\d{1,5}))?(?:[/?#]\S*)?$/i;
+const NEAR = /^(?:localhost|\[::1\]|127(?:\.\d{1,3}){3}|10(?:\.\d{1,3}){3}|192\.168(?:\.\d{1,3}){2}|172\.(?:1[6-9]|2\d|3[01])(?:\.\d{1,3}){2})$/i;
+export const isWebLink = (url) => {
+  const parts = typeof url === "string" ? WEB_LINK.exec(url) : null;
+  if (!parts || Number(parts[3] ?? 0) > 65535) return false;
+  return parts[1].toLowerCase() === "https" || NEAR.test(parts[2]);
+};
+const notOption = (target) => (String(target).startsWith("-") ? `./${target}` : target);
+
 export function openApi(platform, run) {
   async function detectEditors(editors) {
     if (platform === "windows") {
@@ -82,7 +91,8 @@ export function openApi(platform, run) {
   const spawn = (program, args = [], options) => platform === "windows"
     ? powershell(run, `Start-Process -FilePath ${psQuote(program)}${args.length ? ` -ArgumentList ${psQuote(args.map(windowsArg).join(" "))}` : ""} -ErrorAction Stop`, options)
     : run("sh", ["-c", 'if command -v setsid >/dev/null 2>&1; then setsid -f "$@" >/dev/null 2>&1; else nohup "$@" >/dev/null 2>&1 & fi', "sh", program, ...args], options);
-  const open = (target, { application, ...options } = {}) => platform === "windows" ? spawn(application || target, application ? [target] : [], options) : platform === "macos" ? run("open", [...(application ? ["-a", application] : []), target], options) : application ? spawn(application, [target], options) : run("xdg-open", [target], options);
+  const open = (target, { application, ...options } = {}) => platform === "windows" ? spawn(application || target, application ? [target] : [], options) : platform === "macos" ? run("open", [...(application ? ["-a", application] : []), notOption(target)], options) : application ? spawn(application, [target], options) : run("xdg-open", [notOption(target)], options);
+  const web = (url, options) => (isWebLink(url) ? open(url, options) : Promise.resolve({ code: 1, stdout: "", stderr: "Only web links open from here" }));
   const terminalLine = (cwd, argv) => platform === "windows" ? `Set-Location -LiteralPath ${psQuote(cwd)}; if ($?) { & ${argv.map(psQuote).join(" ")} }` : `cd ${shellQuote(cwd)} && ${argv.map(shellQuote).join(" ")}`;
   const editorIcons = async (found, dir) => {
     if (platform === "windows") return [];
@@ -97,5 +107,5 @@ export function openApi(platform, run) {
     const result = await run("sh", ["-c", 'out="$1"; shift; for id in "$@"; do [ -f "$out/$id.png" ] && printf "%s\\n" "$id"; done; true', "sh", dir, ...ids]);
     return result.stdout.split("\n").filter((id) => ids.includes(id));
   };
-  return { open, spawn, terminalLine, detectEditors, editorIcons };
+  return { open, web, spawn, terminalLine, detectEditors, editorIcons };
 }
