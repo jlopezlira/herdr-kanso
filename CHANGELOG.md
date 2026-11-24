@@ -22,7 +22,12 @@ in version.json, which the stable updater offers. Versions follow
 [Keep a Changelog](https://keepachangelog.com). `npm run check:version` checks
 the branch's rules.
 
-## [Unreleased]
+## [4.0.0] - 2026-11-24
+
+### Breaking
+
+- The updater installs only releases signed with kansō's key and refuses an archive whose signature does not verify, so a build from another source no longer updates in place.
+- Shipped across computers is off until you turn it on in Settings, under Background, and its gist now uses a sealed format that earlier versions on your other computers do not read: update each computer.
 
 ### Added
 
