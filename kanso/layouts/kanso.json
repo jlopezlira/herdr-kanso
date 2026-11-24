@@ -179,5 +179,8 @@
   ],
   "preview": "layouts/kanso.png",
   "terminal_menu": "kanso-menu",
+  "link_handlers": [
+    "kanso-panel"
+  ],
   "toast": "kanso-toast"
 }

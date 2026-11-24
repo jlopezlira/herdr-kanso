@@ -34,6 +34,7 @@ the branch's rules.
 
 ### Fixed
 
+- Cmd+click (Ctrl+click on Linux and Windows) on a file path in a terminal on another computer opens that file in the preview panel, pictures included. Before, nothing happened, because the file is not on the computer you are looking from.
 - Add a computer reaches a computer by the name you typed or the Host in your ssh config, keeping its key and agent settings, and uses its Tailscale address only when that name does not answer; a failed typed attempt shows once.
 
 ## [4.0.0] - 2026-11-24
