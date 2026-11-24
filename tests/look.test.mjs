@@ -170,6 +170,7 @@ async function panel({ screen = OUTPUT, files = ["/repo/tests/shot.png", "/repo/
       if (options?.on && cmd === "sh" && String(args[1]).includes("printf %s")) return { code: 0, stdout: "/home/light\n" };
       if (cmd === "sqlite3") return run(cmd, args, options);
       if (cmd === "mkdir") return fileApi(nativePlatform, run).mkdir(args.at(-1), options);
+      if (cmd === "sh" && String(args[1]).startsWith("umask 077 && mkdir")) return run(cmd, args, options);
       if (cmd === "ps") return { code: 0, stdout: world.session?.etime ?? "00:05" };
       if (cmd === "sh" && args[1].startsWith('f="$1"')) {
         const from = args[4];

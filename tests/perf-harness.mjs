@@ -58,7 +58,7 @@ export function fixture({ dir = "/fixture", blocked = false, quiet = null, worki
     state.flights.push(command);
     state.inFlight += 1;
     try {
-      if (command === "sqlite3" || command === "mkdir") return await runFile(command, args, options);
+      if (command === "sqlite3" || command === "mkdir" || (command === "sh" && String(args[1]).startsWith("umask 077 && mkdir"))) return await runFile(command, args, options);
       if (command === "ps") return success(terms.map((t, i) => `${200 + i} 1 00:01 agent`).join("\n"));
       if (command === "hc") {
         if (args[0] === "label") {
