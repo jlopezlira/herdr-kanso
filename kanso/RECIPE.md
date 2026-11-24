@@ -313,9 +313,9 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     `hc machine add` with those, never `--install`; dropped once
     `hc machine ls` shows it connected. If the save fails after the remove,
     or add keeps failing, it stays with Retry; the hint is its tooltip.
-    This computer has no power. Alone, no header. On keeps it awake when
-    Settings' Background has Keep connected computers awake on (off by
-    default); a closed lid still sleeps, and an asleep machine is not woken. Connected, a remote
+    This computer has no power. Alone, no header. A coffee cup on a
+    computer's row says the Caffeine panel has it on; an asleep machine is
+    not woken. Connected, a remote
     row has Sync: `text` and always shown when on, `yellow` when it cannot
     run, `dim` on hover when off. A click turns Sync on, and Spend exchanges
     at once.
@@ -669,6 +669,10 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
   (macOS) and the chosen editor. The PR panel runs `gh` and `git` only while
   shown. Tasks runs `gh` and asks Jira Cloud and Linear only while shown, with
   a token read from the secret store (`security`, `secret-tool` or `cmdkey`).
+  Caffeine runs `pmset` through `sudo` and `launchctl` (macOS),
+  `systemd-run` and `systemd-inhibit` (Linux) or PowerShell (Windows) on the
+  computer it is turned on for, reads each computer once when it connects and
+  every 4.5 minutes while its panel is open; it reaches no network.
   The update check runs `git ls-remote` on kansō's GitHub repository,
   Spend fetches OpenRouter's price list once a day, and Add a computer reads
   Tailscale's list and, unless Settings turns it off, asks the computers this

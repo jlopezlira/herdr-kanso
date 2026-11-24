@@ -22,6 +22,16 @@ in version.json, which the stable updater offers. Versions follow
 [Keep a Changelog](https://keepachangelog.com). `npm run check:version` checks
 the branch's rules.
 
+## [Unreleased]
+
+### Added
+
+- Caffeine, a panel beside Shipped in the tab bar, lists this computer and every connected one, and Turn on keeps that computer working with its lid closed, on power or on battery, until you turn it off. While any computer has it on, the bar shows Caffeine beside its cup, and a cup sits on that computer's row in the sidebar. The first time on macOS or Linux, a tab asks for that computer's password once, to allow only turning sleep off and on there. On battery, Caffeine turns itself off at 15% and says so; a restart of that computer turns it off too. On Windows it keeps the computer from idle sleep, not with its lid closed. (#496)
+
+### Changed
+
+- Caffeine replaces Keep connected computers awake under Background in Settings, which kept a connected computer from idle sleep but not from sleeping with its lid closed. Hiding the Caffeine panel in Settings turns it off on every connected computer.
+
 ## [4.0.0] - 2026-11-24
 
 ### Breaking
