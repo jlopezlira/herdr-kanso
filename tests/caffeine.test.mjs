@@ -134,10 +134,13 @@ test("On macOS Caffeine keeps a guard running, restores sleep when turned off or
   }
   const { call, guards, read, running, state, write } = await fakeMac(t);
   const prior = join(state, "prior");
+  const start = async () => {
+    await call("on", "on");
+    return (await guards()).at(-1);
+  };
   for (const before of ["0", "1"]) {
     await write("sleep-disabled", before);
-    await call("on", "on");
-    const pid = (await guards()).at(-1);
+    const pid = await start();
     assert.ok(await running(pid), "the guard is running");
     assert.equal(await read("sleep-disabled"), "1");
     await call("read", "on");
@@ -157,8 +160,7 @@ test("On macOS Caffeine keeps a guard running, restores sleep when turned off or
   assert.equal(await fileExists(prior), false);
 
   await write("battery", "90");
-  await call("on", "on");
-  const pid = (await guards()).at(-1);
+  const pid = await start();
   stopGuard(pid);
   await until(async () => !(await running(pid)), 5_000);
   assert.equal((await readFile(prior, "utf8")).trim(), "0");
@@ -187,9 +189,9 @@ test("Caffeine checks newly connected computers, stops checking when off, and ch
   const caffeine = createCaffeine({
     now: () => now, run: async ({ command }) => success(command === "uname" ? "Linux" : reply),
   });
-  const checkAfter = (ms, due) => {
+  const checkAfter = (ms, due, round = 0) => {
     now += ms;
-    assert.deepEqual(caffeine.due(keys), due ? keys : []);
+    assert.deepEqual(caffeine.due(keys), due ? keys : [], `round ${round}`);
   };
   checkAfter(0, true);
   await caffeine.read(computer);
@@ -201,12 +203,11 @@ test("Caffeine checks newly connected computers, stops checking when off, and ch
 
   caffeine.setup(computer);
   reply = "off";
-  await caffeine.read(computer);
-  checkAfter(SETUP_EVERY_MS - 1, false);
-  checkAfter(1, true);
-  await caffeine.read(computer);
-  checkAfter(SETUP_EVERY_MS - 1, false);
-  checkAfter(1, true);
+  for (const round of [1, 2]) {
+    await caffeine.read(computer);
+    checkAfter(SETUP_EVERY_MS - 1, false);
+    checkAfter(1, true, round);
+  }
   await caffeine.read(computer);
   checkAfter(0, false);
   caffeine.keep([]);
@@ -275,19 +276,6 @@ test("Caffeine checks a remote computer's system once and already knows this com
     expected("linux", "off", "remote"),
     expected("macos", "read", undefined),
   ]);
-});
-
-test("The computer menu shows Caffeine with its status only when the computer is connected and supports it", async () => {
-  const { computerMenuItems } = await load("kanso-spaces/computer-menu.js", ["computerMenuItems"]);
-  const { wordsOf } = await load("kanso-spaces/menu-actions.js", ["wordsOf"]);
-  const item = (props) => computerMenuItems(props).find((row) => row.key === "caffeine");
-  for (const remote of [false, true]) {
-    const row = item({ remote, caffeine: "on" });
-    assert.equal(wordsOf(row?.act), "Caffeine");
-    assert.equal(row.hint, "on");
-    assert.equal(item({ remote, caffeine: null }), undefined);
-  }
-  assert.equal(item({ remote: true, phase: "off", caffeine: "on" }), undefined);
 });
 
 test("A computer row shows the coffee flag only when the computer and Caffeine are on", async () => {

@@ -107,3 +107,15 @@ test("The keyboard walks a computer's menu: down lights a row, Enter runs it", a
   onKey({ key: "enter", modifiers: {} }, cx);
   assert.deepEqual(calls, [["space.new", { machine: "" }]]);
 });
+
+test("The computer menu shows Caffeine with its status only when the computer is connected and supports it", async () => {
+  const [items, said] = await Promise.all([rows(), wordsOf()]);
+  const item = (props) => items(props).find((row) => row.key === "caffeine");
+  for (const remote of [false, true]) {
+    const row = item({ remote, caffeine: "on" });
+    assert.equal(said(row?.act), "Caffeine");
+    assert.equal(row.hint, "on");
+    assert.equal(item({ remote, caffeine: null }), undefined);
+  }
+  assert.equal(item({ remote: true, phase: "off", caffeine: "on" }), undefined);
+});

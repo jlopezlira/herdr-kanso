@@ -1521,7 +1521,7 @@ export default class Spaces extends RetryingView {
     const on = runs("computers.awake", pieces(shared));
     this.caffeine.keep(keys);
     cx.spawn(async (cx) => {
-      const work = [...this.caffeine.due(keys).map((key) => this.readCaffeine(key, on)), ...(on ? [] : keys.filter(this.caffeine.isOn).map((key) => this.caffeine.set(key, false)))];
+      const work = [...this.caffeine.due(keys).map((key) => this.readCaffeine(key, on)), ...(on ? [] : keys.filter((key) => this.caffeine.isOn(key)).map((key) => this.caffeine.set(key, false)))];
       await bounded(Promise.all(work), cx.timer, CALL_MS * 2).catch(() => null);
       if (this.caffeineToken !== token) return;
       this.redraw(cx);
@@ -2614,10 +2614,10 @@ export default class Spaces extends RetryingView {
 
   // A computer's menu, drawn by the kit at the pointer; it reads the phase and sync the row had.
   computerMenu(m, phase) {
-    if (phase === "connected" && runs("computers.awake", pieces(shared))) this.caffeine.read(m ?? "").then(() => this.paint(), () => null);
+    if (phase === "connected" && runs("computers.awake", pieces(shared))) this.caffeine?.read(m ?? "").then(() => this.paint(), () => null);
     openOverlay({ mod: "kanso-spaces", kind: "popup", frame: "none", width: W.menu, at: "pointer", props: {
       machineMenu: { route: m ?? "", shown: this.names.title(m), phase, syncOn: Boolean(m) && peerOn(this.sync.config, m), keyed: Boolean(m) && kansoKeyed(routeOf(this.knownMachine(m)).via),
-        caffeine: runs("computers.awake", pieces(shared)) ? (this.caffeine.isOn(m ?? "") ? "on" : "off") : null } } });
+        caffeine: runs("computers.awake", pieces(shared)) ? (this.caffeine?.isOn(m ?? "") ? "on" : "off") : null } } });
   }
 
   computerMenuView(t) {

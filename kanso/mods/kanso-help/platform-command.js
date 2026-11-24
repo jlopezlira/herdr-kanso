@@ -8,6 +8,9 @@ export function psQuote(value) {
 }
 
 export const windowsArg = (value) => '"' + String(value).replace(/(\\*)"/g, (_match, slashes) => slashes + slashes + '\\"').replace(/\\+$/g, (slashes) => slashes + slashes) + '"';
+export const xmlText = (value) => String(value).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+export const PLIST_HEAD = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">`;
 export const shellQuote = (value) => /^[\w@%+=:,./-]+$/.test(String(value)) ? String(value) : `'${String(value).replace(/'/g, `'\\''`)}'`;
 export const unavailable = (feature) => ({ state: "unavailable", reason: `${feature} requires a Herdr API on Windows` });
 export const validPid = (pid) => { if (!Number.isSafeInteger(Number(pid)) || Number(pid) <= 0) throw new Error("Invalid process id"); return String(pid); };

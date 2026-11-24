@@ -1,4 +1,4 @@
-import { psQuote, shellQuote } from "./platform-command.js";
+import { psQuote, shellQuote, xmlText, PLIST_HEAD } from "./platform-command.js";
 
 export const LOW = 15;
 export const EVERY_MS = 270_000;
@@ -14,11 +14,9 @@ export const kindOf = (os) => KIND[String(os ?? "").toLowerCase()] ?? null;
 
 const PMSET = "/usr/bin/pmset -a disablesleep";
 const GUARD = `dev.kanso.caffeine.guard`;
-const xml = (text) => text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-const agent = (args) => `<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+const agent = (args) => `${PLIST_HEAD}
 <plist version="1.0"><dict><key>Label</key><string>LABEL</string><key>RunAtLoad</key><true/>
-<key>ProgramArguments</key><array>${args.map((arg) => `<string>${xml(arg)}</string>`).join("")}</array></dict></plist>`;
+<key>ProgramArguments</key><array>${args.map((arg) => `<string>${xmlText(arg)}</string>`).join("")}</array></dict></plist>`;
 const plistAt = (plist, path) => {
   const [head, tail] = plist.split("SLOT");
   return `printf '%s%s%s\\n' ${shellQuote(head)} "$(printf '%s' ${path} | sed -e 's/&/\\&amp;/g' -e 's/</\\&lt;/g' -e 's/>/\\&gt;/g')" ${shellQuote(tail)}`;
@@ -152,53 +150,53 @@ const EMPTY = Object.freeze({ state: "off", readAt: null, setupUntil: 0 });
 
 /** Caffeine for each computer, keyed by its name ("" is this one): one call at a time per computer. */
 export function createCaffeine({ run, local, now = () => Date.now() }) {
-  const rows = new Map();
-  const systems = new Map();
-  const chains = new Map();
-  const row = (key) => rows.get(key) ?? EMPTY;
-  const put = (key, change) => rows.set(key, { ...row(key), ...change });
-  const queued = (key, work) => {
-    const next = (chains.get(key) ?? Promise.resolve()).then(work, work);
-    chains.set(key, next.catch(() => null));
-    return next;
-  };
-  const probe = async (key) => {
-    if (!key) return kindOf(local);
-    if (systems.has(key)) return systems.get(key);
-    const os = await run({ command: "uname", args: ["-s"], on: key, timeout: CALL_MS }).then(osOfProbe, (error) => osOfProbe({ code: error?.code }));
-    if (os) systems.set(key, os);
-    return os;
-  };
-  const call = async (key, verb) => {
-    const os = await probe(key);
-    const spec = caffeineCall(os, verb);
-    if (!spec) return { word: null, battery: false, os };
-    const result = await run({ ...spec, ...(key ? { on: key } : {}), timeout: CALL_MS }).catch(() => ({ threw: true }));
-    return { ...answerOf(result), os };
-  };
-  const settle = (key, answer, fallback) => {
-    put(key, { state: answer.word === "on" || answer.word === "off" ? answer.word : fallback, readAt: now() });
-    return answer;
-  };
   return {
-    isOn: (key) => row(key).state === "on",
-    onKeys: () => [...rows.entries()].filter(([, value]) => value.state === "on").map(([key]) => key),
-    mark: (key, on) => put(key, { state: on ? "on" : "off" }),
-    keep: (keys) => [...rows.keys()].filter((key) => !keys.includes(key)).forEach((key) => rows.delete(key)),
-    settingUp: (key) => row(key).setupUntil > now(),
-    setup: (key) => put(key, { setupUntil: now() + SETUP_FOR_MS }),
-    done: (key) => put(key, { setupUntil: 0 }),
+    rows: new Map(),
+    systems: new Map(),
+    chains: new Map(),
+    row(key) { return this.rows.get(key) ?? EMPTY; },
+    put(key, change) { this.rows.set(key, { ...this.row(key), ...change }); },
+    queued(key, work) {
+      const next = (this.chains.get(key) ?? Promise.resolve()).then(work, work);
+      this.chains.set(key, next.catch(() => null));
+      return next;
+    },
+    async probe(key) {
+      if (!key) return kindOf(local);
+      if (this.systems.has(key)) return this.systems.get(key);
+      const os = await run({ command: "uname", args: ["-s"], on: key, timeout: CALL_MS }).then(osOfProbe, (error) => osOfProbe({ code: error?.code }));
+      if (os) this.systems.set(key, os);
+      return os;
+    },
+    async call(key, verb) {
+      const os = await this.probe(key);
+      const spec = caffeineCall(os, verb);
+      if (!spec) return { word: null, battery: false, os };
+      const result = await run({ ...spec, ...(key ? { on: key } : {}), timeout: CALL_MS }).catch(() => ({ threw: true }));
+      return { ...answerOf(result), os };
+    },
+    settle(key, answer, fallback) {
+      this.put(key, { state: answer.word === "on" || answer.word === "off" ? answer.word : fallback, readAt: now() });
+      return answer;
+    },
+    isOn(key) { return this.row(key).state === "on"; },
+    onKeys() { return [...this.rows.entries()].filter(([, value]) => value.state === "on").map(([key]) => key); },
+    mark(key, on) { this.put(key, { state: on ? "on" : "off" }); },
+    keep(keys) { [...this.rows.keys()].filter((key) => !keys.includes(key)).forEach((key) => this.rows.delete(key)); },
+    settingUp(key) { return this.row(key).setupUntil > now(); },
+    setup(key) { this.put(key, { setupUntil: now() + SETUP_FOR_MS }); },
+    done(key) { this.put(key, { setupUntil: 0 }); },
     set(key, on) {
-      const before = row(key).state;
-      return queued(key, () => call(key, on ? "on" : "off").then((answer) => settle(key, answer, before)));
+      const before = this.row(key).state;
+      return this.queued(key, () => this.call(key, on ? "on" : "off").then((answer) => this.settle(key, answer, before)));
     },
     read(key) {
-      const before = row(key).state;
-      return queued(key, () => call(key, "read").then((answer) => settle(key, answer, before)));
+      const before = this.row(key).state;
+      return this.queued(key, () => this.call(key, "read").then((answer) => this.settle(key, answer, before)));
     },
     due(keys, at = now()) {
       return keys.filter((key) => {
-        const { state, readAt, setupUntil } = row(key);
+        const { state, readAt, setupUntil } = this.row(key);
         if (readAt == null) return true;
         if (setupUntil > at) return at - readAt >= SETUP_EVERY_MS;
         return state === "on" && at - readAt >= EVERY_MS;
@@ -206,7 +204,7 @@ export function createCaffeine({ run, local, now = () => Date.now() }) {
     },
     nextWait(keys, at = now()) {
       const waits = keys.map((key) => {
-        const { state, readAt, setupUntil } = row(key);
+        const { state, readAt, setupUntil } = this.row(key);
         if (readAt == null) return 0;
         if (setupUntil > at) return Math.max(0, readAt + SETUP_EVERY_MS - at);
         return state === "on" ? Math.max(0, readAt + EVERY_MS - at) : null;
