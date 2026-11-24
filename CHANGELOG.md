@@ -24,6 +24,11 @@ the branch's rules.
 
 ## [Unreleased]
 
+### Breaking
+
+- The updater installs only releases signed with kansō's key and refuses an archive whose signature does not verify, so a build from another source no longer updates in place.
+- Shipped across computers is off until you turn it on in Settings, under Background, and its gist now uses a sealed format that earlier versions on your other computers do not read: update each computer.
+
 ### Added
 
 - A computer's menu has Remove this computer's key, which takes off the key line kansō added there and removes the computer from Herdr.
