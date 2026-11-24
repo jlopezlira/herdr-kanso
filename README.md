@@ -89,7 +89,10 @@ On Windows, merge `kanso/keys.windows.json` into your Herdr keys instead of
   on its own: the one in your ssh agent when there is one, otherwise its own
   `~/.ssh/id_ed25519_kanso`, which has no passphrase. Remove this computer's key,
   in the computer's menu, deletes the key kansō added there and removes the
-  computer. A computer you disconnect stays in the sidebar,
+  computer. Caffeine, in a computer's menu, keeps it working with its lid
+  closed, on power or on battery, until you turn it off, its battery reaches
+  15% or it restarts; the first time, it asks for that computer's password
+  once. A computer you disconnect stays in the sidebar,
   Asleep or Disconnected, until you remove it. Rename it, and the name shows on
   every computer.
 - **Images.** The newest picture the agent in focus made, big beside it, and a
@@ -183,7 +186,8 @@ sidebar, rebinds kansō's own keys and hides the panels you don't use.
 Everything runs on your machine, and reads only the folders you work in:
 `git`, `gh`, `find`, `du`, `lsof` (`ss` and `/proc` on Linux), `ps`, `sqlite3`, `node`, `docker`,
 `xcode-select`, `simctl`, `adb`, `emulator`, the secret store's own tool (`security`,
-`secret-tool` or `cmdkey`) and Herdr's `hc`. What reaches the network: PR, Tasks and
+`secret-tool` or `cmdkey`), Caffeine's `pmset`, `launchctl`, `systemd-run`,
+`systemd-inhibit` and `powercfg`, and Herdr's `hc`. What reaches the network: PR, Tasks and
 Shipped through `gh`, only while their panel is shown (when Settings turns it on,
 Shipped adds up your computers in a secret gist: unlisted, but readable by anyone
 with its link); Tasks' Jira Cloud and Linear boards, only while the panel is
