@@ -151,6 +151,7 @@
       "notify",
       "openOverlay",
       "panes",
+      "pickFiles",
       "pickFolder",
       "placement",
       "playSound",
