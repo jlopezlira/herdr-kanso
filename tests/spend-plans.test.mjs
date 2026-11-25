@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { claudePlan } from "../kanso/mods/kanso-spend/core/detect-plans.mjs";
-import { planLines, withDetected } from "../kanso/mods/kanso-spend/core/plans.mjs";
+import { planLines, withDetected, withPlans } from "../kanso/mods/kanso-spend/core/plans.mjs";
 import { clone, load } from "./helpers.mjs";
 
 const max = { name: "Claude Max 20x", usdPerMonth: 200 };
@@ -31,11 +31,12 @@ test("Two plans on one provider split its work in proportion to their prices.", 
   assert.deepEqual(lines.map((line) => line.detail), ["$60.00 of work for $20.00", "$600 of work for $200"]);
 });
 
-test("A plan with an unrecognized name covers only providers no other plan claims.", () => {
+test("Spend leaves out plans it does not recognize and credits Gemini only for Google and Gemini work.", () => {
   const other = { name: "My subscription", usdPerMonth: 20 };
-  const lines = planLines([max, other], month({ anthropic: 400, openai: 40, xai: 20 }));
+  const gemini = { name: "Gemini Ultra", usdPerMonth: 250 };
+  const lines = planLines([max, other, gemini], month({ anthropic: 400, openai: 40, google: 450, gemini: 50 }));
   const byName = Object.fromEntries(lines.map(({ name, multiple }) => [name, multiple]));
-  assert.deepEqual(byName, { [max.name]: "2×", [other.name]: "3×" });
+  assert.deepEqual(byName, { [max.name]: "2×", [gemini.name]: "2×" });
 });
 
 test("Spend detects Claude Max 20x at $200 a month and shows nothing when no plan is known.", () => {
@@ -50,12 +51,38 @@ test("The user's own Claude plan replaces the detected plan for that provider.",
   assert.deepEqual(withDetected([chat], detected), [chat, ...detected]);
 });
 
+const savings = "Your plans cost $400 in this period, so they saved you $200.";
 const share = () => load("kanso-spend/spend-card.js", ["spendSpec", "spendText"]);
 
-test("The Spend share card lists the multiples for each plan.", async () => {
+test("Spend calculates the selected period's plan savings from the combined total.", () => {
+  const shown = withPlans({
+    planList: [max],
+    month: month({ anthropic: 100 }),
+    range: { months: 2 },
+    local: { usd: 350 },
+    hero: { usd: 600 },
+  });
+  assert.equal(shown.hero.plan, savings);
+});
+
+test("The Spend share card uses the savings sentence as its note.", async () => {
   const { spendSpec } = await share();
-  const spec = spendSpec({ plans: exampleLines() });
-  assert.equal(spec.note, "25× Claude Max 20x · 3.1× ChatGPT Pro · 0.3× SuperGrok");
+  const costs = { plans: exampleLines() };
+  assert.equal(spendSpec({ ...costs, hero: { plan: savings } }).note, savings);
+  assert.equal(spendSpec(costs).note, "");
+});
+
+test("The Spend share card does not reveal a private plan name.", async () => {
+  const [{ spendSpec }, { cardSvg }] = await Promise.all([
+    share(),
+    load("kanso-spend/share.js", ["cardSvg"]),
+  ]);
+  const costs = {
+    hero: { value: "$600", plan: savings },
+    plans: [{ name: "Client Atlas", multiple: "2×" }],
+  };
+  const { svg } = cardSvg(spendSpec(costs), {});
+  assert.doesNotMatch(svg, /Client Atlas/);
 });
 
 test("Sharing spend from several computers leaves out the local-only counts and chart.", async () => {

@@ -9,6 +9,7 @@ import { promisify } from "node:util";
 import { temporary } from "./helpers.mjs";
 
 const runFile = promisify(execFile);
+const { costRange } = await import("../kanso/mods/kanso-spend/core/costs.mjs");
 const { exchange } = await import("../kanso/mods/kanso-spend/sync-probe.mjs");
 const { foldCosts } = await import("../kanso/mods/kanso-spend/sync-spend.js");
 const { clock } = await import("../kanso/mods/kanso-spaces/pure.js");
@@ -138,6 +139,18 @@ test("A computer shares only its own spend after including its peers in the tota
   assert.equal(own.body.usd, 10);
 });
 
+test("Combined spend labels the local task count and cost per task as here.", () => {
+  const hero = { ...todayCosts.hero, stats: [
+    ...todayCosts.hero.stats, { unit: "tasks", value: "2" }, { unit: "per task", value: "$5.00" },
+  ] };
+  const folded = foldCosts({ ...todayCosts, hero }, { self: SELF, rows: [peerToday(5)], options: dayOptions });
+  assert.deepEqual(folded.hero.stats, [
+    { unit: "tokens", value: "15", tip: "15 tokens" },
+    { unit: "tasks here", value: "2" },
+    { unit: "per task here", value: "$5.00" },
+  ]);
+});
+
 test("Today's spend ignores a peer's total for yesterday.", () => {
   const rows = [peerToday(5, { start: "2026-11-09" })];
   assert.equal(foldCosts(todayCosts, { self: SELF, rows, options: dayOptions }).hero.usd, 10);
@@ -166,13 +179,24 @@ test("Spend never shares a filtered or out-of-date view as the requested total."
   }
 });
 
-test("Today's spend accepts an undated peer total updated today, but not one updated yesterday.", () => {
-  const at = (day) => new Date(2026, 10, day, 12).toISOString();
-  const total = (day) => foldCosts(todayCosts, {
-    self: SELF, rows: [spend(PEER, 5, at(day), { period: "day" })], options: dayOptions,
-  }).hero.usd;
-  assert.equal(total(10), 15);
-  assert.equal(total(9), 10);
+test("Spend leaves out undated peer totals in every period, even if they arrived today.", () => {
+  for (const period of ["day", "30d", "month", "year", "all"]) {
+    const costs = { ...todayCosts, range: costRange(period, 0, TODAY) };
+    const rows = [spend(PEER, 5, new Date(NOW).toISOString(), { period })];
+    const folded = foldCosts(costs, { self: SELF, rows, options: { cost: { period } } });
+    assert.equal(folded.hero.usd, 10, period);
+  }
+});
+
+test("Spend keeps its own $10 when a 4.1.0 computer reports an undated $15 and asks it to update.", () => {
+  const rows = [spend(PEER, 15, new Date(NOW).toISOString(), { period: "day" })];
+  const folded = foldCosts(todayCosts, { self: SELF, rows, options: dayOptions });
+  const outcome = { machine: PEER, version: "4.1.0", protocol: 1, rows };
+  const applied = sync.applyExchange([], {}, { id: "odin", name: "odin" }, outcome, NOW, "day:0");
+  assert.equal(folded.hero.value, "$10.00");
+  assert.equal(folded.machines, undefined);
+  assert.equal(applied.status.odin.reason, "update");
+  assert.deepEqual(applied.rows, []);
 });
 
 test("Last month's spend ignores an older computer's report if it does not say which month it covers.", () => {
