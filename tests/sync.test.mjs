@@ -175,6 +175,14 @@ test("Today's spend accepts an undated peer total updated today, but not one upd
   assert.equal(total(9), 10);
 });
 
+test("Last month's spend ignores an older computer's report if it does not say which month it covers.", () => {
+  const cost = { period: "month", offset: -1 };
+  const costs = { ...todayCosts, range: { ...cost, start: "2026-12-01", end: "2026-12-31" } };
+  const total = (row) => foldCosts(costs, { self: SELF, rows: [row], options: { cost } }).hero.usd;
+  assert.equal(total(spend(PEER, 5, "2026-12-02T12:00:00.000Z", cost)), 10);
+  assert.equal(total(spend(PEER, 5, "2027-01-01T12:00:00.000Z", { ...cost, start: costs.range.start })), 15);
+});
+
 test("All time counts a peer even when its history started in a different month.", () => {
   const options = { cost: { period: "all", offset: 0 } };
   const costs = { ...todayCosts, range: { ...todayCosts.range, period: "all", start: "2026-10-01" } };
