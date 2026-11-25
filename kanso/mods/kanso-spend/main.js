@@ -164,7 +164,7 @@ export default class TokenSpend extends View {
 
   wake(cx) {
     if (this.closed) return;
-    if (!this.awake && this.syncOffUntil === 0 && this.syncSettled === null) this.syncWaiting = true;
+    if (!this.awake && !(this.syncOffUntil > Date.now()) && this.syncSettled === null) this.syncWaiting = true;
     this.awake = true;
     if (!this.ticker) {
       this.ticker = cx.timer.every(TICK_MS, (tickCx) => {
@@ -330,7 +330,7 @@ export default class TokenSpend extends View {
     if (this.syncing) { this.syncAgain = true; if (force) this.syncForce = true; return; }
     this.syncing = true;
     cx.spawn(async (syncCx) => {
-      try { await this.exchangeOnce(syncCx, force); } catch { if (this.syncWaiting === true) this.syncWaiting = false; }
+      try { await this.exchangeOnce(syncCx, force); } catch { this.syncWaiting = false; }
       this.syncing = false;
       this.probing = false;
       syncCx.notify();

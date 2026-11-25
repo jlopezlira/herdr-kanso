@@ -6,7 +6,8 @@ const plain = (s) => String(s ?? "").trim();
 
 export function spendSpec(costs) {
   const hero = costs.hero ?? {};
-  const stats = [
+  const several = (costs.machines?.length ?? 0) > 1;
+  const stats = several ? (hero.stats ?? []).filter((x) => plain(x.unit) === "tokens").map((x) => ({ value: plain(x.value), unit: "tokens" })) : [
     ...(hero.stats ?? []).map((x) => ({ value: plain(x.value), unit: plain(x.unit) })),
     ...(costs.projectCount ? [{ value: plain(costs.projectCount), unit: costs.projectCount === "1" ? "project" : "projects" }] : []),
     ...(costs.modelCount ? [{ value: plain(costs.modelCount), unit: costs.modelCount === "1" ? "model" : "models" }] : []),
@@ -19,7 +20,7 @@ export function spendSpec(costs) {
     hero: { big: plain(hero.value) || "—", label: "of AI work at API list price", delta: /more/i.test(note) ? { up: true, text: note } : null }, // a brag: only a rise
     stats,
     note: (costs.plans ?? []).map((plan) => `${plain(plan.multiple)} ${plain(plan.name)}`).join(" · "),
-    blocks: chart?.bars?.length ? [{
+    blocks: !several && chart?.bars?.length ? [{
       kind: "bars", title: plain(chart.title), right: plain(chart.peak),
       values: chart.bars.map((b) => (Number.isFinite(b.ratio) ? b.ratio : 0)),
       ticks: [plain(chart.first), plain(chart.last)].filter(Boolean),
@@ -32,7 +33,7 @@ export function spendText(costs) {
   const when = plain(costs.range?.label ?? hero.title);
   const parts = [
     ...(hero.value ? [`${plain(hero.value)} of AI work at list price${when ? ` in ${when}` : ""}`] : []),
-    ...(hero.stats ?? []).filter((x) => /^(tasks?|tokens)$/.test(plain(x.unit))).map((x) => `${plain(x.value)} ${plain(x.unit)}`),
+    ...(hero.stats ?? []).filter((x) => ((costs.machines?.length ?? 0) > 1 ? /^tokens$/ : /^(tasks?|tokens)$/).test(plain(x.unit))).map((x) => `${plain(x.value)} ${plain(x.unit)}`),
   ];
   return postText(parts, "What my AI work is worth.");
 }

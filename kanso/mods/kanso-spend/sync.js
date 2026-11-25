@@ -135,6 +135,11 @@ export function stampName(rows, machine, name) {
 export const tokensOf = (costs) => (costs?.hero?.stats ?? []).find((stat) => stat.unit === "tokens")?.value ?? "";
 
 export function rowFromCosts(costs, machine, now, options) {
+  const filters = costs?.filters ?? {};
+  const range = costs?.range ?? {};
+  const shown = (filters.project ?? "all") === "all" && (filters.model ?? "all") === "all"
+    && (!range.period || (range.period === (options?.cost?.period ?? "month") && (Number(range.offset) || 0) === (Number(options?.cost?.offset) || 0)));
+  if (!shown) return null;
   const own = costs?.local ?? (costs?.hero ? { ...costs.hero, tokensText: tokensOf(costs), month: costs.month ?? null } : null);
   const usd = Number(own?.usd);
   const tokens = Number(own?.tokens);

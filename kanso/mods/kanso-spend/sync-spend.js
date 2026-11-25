@@ -37,6 +37,16 @@ function foldMonth(month, rows) {
   return { ...month, byProvider };
 }
 
+const dayOf = (at) => {
+  const d = new Date(at);
+  return Number.isNaN(d.getTime()) ? "" : `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+};
+
+function sameSpan(row, period, start) {
+  if (period === "all" || !start) return true;
+  return row.body.start ? row.body.start === start : dayOf(row.updated_at) >= start;
+}
+
 export function foldCosts(costs, { self, rows, options }) {
   const cost = options?.cost ?? {};
   const filtered = (cost.project ?? "all") !== "all" || (cost.model ?? "all") !== "all";
@@ -50,10 +60,9 @@ export function foldCosts(costs, { self, rows, options }) {
   if (filtered) return base;
   const period = cost.period ?? "month";
   const offset = Number(cost.offset) || 0;
-  const start = costs.range?.start;
   const lines = spend.filter((row) => (
     row.body.period === period && Number(row.body.offset) === offset && Number.isFinite(Number(row.body.usd))
-    && (!start || !row.body.start || row.body.start === start)
+    && sameSpan(row, period, costs.range?.start)
   ));
   if (lines.length < 2) return base;
   const usd = lines.reduce((sum, row) => sum + Number(row.body.usd), 0);
