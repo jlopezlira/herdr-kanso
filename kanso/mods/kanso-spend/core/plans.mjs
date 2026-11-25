@@ -19,6 +19,8 @@ export function multipleText(ratio) {
   return `${Number(ratio.toFixed(1))}×`;
 }
 
+const priceText = (usd) => (Number.isInteger(usd) ? `$${usd.toLocaleString("en-US")}` : usdText(usd));
+
 const dayCount = (n) => `${n} ${n === 1 ? "day" : "days"}`;
 
 function workOf(plans, byProvider) {
@@ -49,7 +51,7 @@ export function planLines(plans, month) {
       unit: early ? `${plan.name} · too early to say` : plan.name,
       detail: early
         ? `on pace: ${usdText(work)} in ${dayCount(month.day)}, about ${usdText(pace)} by ${month.name} ${month.days}`
-        : `${usdText(work)} of work for ${usdText(plan.usdPerMonth)}${under ? " · not paying for itself" : ""}`,
+        : `${usdText(work)} of work for ${priceText(plan.usdPerMonth)}${under ? " · not paying for itself" : ""}`,
       tone: early ? "dim" : under ? "working" : "",
     };
   });
