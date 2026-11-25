@@ -1,12 +1,11 @@
 // Machine sync: a stable id, peers, and rows moved each way. No machine is in charge.
 import { isOff, machineState } from "./machines.js";
-import { clock, parseOr, reduceSeries } from "./pure.js";
+import { clock, parseOr } from "./pure.js";
 import { paths, pathApi } from "./platform-paths.js";
 
 export const KINDS = ["spend"];
 export const EXCHANGE_MS = 180_000;
 export const BACKOFF_MAX_MS = 1_800_000;
-export const RETRY_FLOOR_MS = 15_000;
 export const MIN_VERSION = "3.24.0";
 export const PROTOCOL = 1;
 export const UPDATE_TEXT = "Update kanso there";
@@ -133,19 +132,27 @@ export function stampName(rows, machine, name) {
   return rows.map((row) => (row.machine === machine ? { ...row, body: { ...row.body, name } } : row));
 }
 
-const tokensText = (costs) => (costs?.hero?.stats ?? []).find((stat) => stat.unit === "tokens")?.value ?? "";
+export const tokensOf = (costs) => (costs?.hero?.stats ?? []).find((stat) => stat.unit === "tokens")?.value ?? "";
 
 export function rowFromCosts(costs, machine, now, options) {
-  const usd = Number(costs?.hero?.usd);
-  const tokens = Number(costs?.hero?.tokens);
+  const filters = costs?.filters ?? {};
+  const range = costs?.range ?? {};
+  const shown = (filters.project ?? "all") === "all" && (filters.model ?? "all") === "all"
+    && (!range.period || (range.period === (options?.cost?.period ?? "month") && (Number(range.offset) || 0) === (Number(options?.cost?.offset) || 0)));
+  if (!shown) return null;
+  const own = costs?.local ?? (costs?.hero ? { ...costs.hero, tokensText: tokensOf(costs), month: costs.month ?? null } : null);
+  const usd = Number(own?.usd);
+  const tokens = Number(own?.tokens);
   if (!machine || !Number.isFinite(usd) || !Number.isFinite(tokens)) return null;
   return {
     machine,
     updated_at: now,
     kind: "spend",
     body: {
-      usd, tokens, value: costs.hero.value ?? "", tokensText: tokensText(costs),
+      usd, tokens, value: own.value ?? "", tokensText: own.tokensText ?? "",
       period: options?.cost?.period ?? "month", offset: Number(options?.cost?.offset) || 0,
+      ...(costs.range?.start ? { start: costs.range.start } : {}),
+      ...(own.month?.start ? { month: { start: own.month.start, byProvider: own.month.byProvider ?? {} } } : {}),
     },
   };
 }
@@ -174,7 +181,7 @@ export function due(status, now, periodKey) {
   if (!at) return true;
   const failed = status.reason === "unreachable" || status.reason === "update";
   if (failed) return now - at >= delayMs(status.failures);
-  if (periodKey && status.period !== periodKey) return now - at >= RETRY_FLOOR_MS;
+  if (periodKey && status.period !== periodKey) return true;
   return now - at >= EXCHANGE_MS;
 }
 
@@ -223,13 +230,13 @@ export async function exchangeAll(probe, input) {
   const status = input.status ?? {};
   const steps = planExchange({ config: input.config, peers: input.peers, status, now, periodKey, stored: input.stored ?? [], live: input.live ?? [] });
   if (!steps.length) return { rows, status, ran: false };
-  const done = await reduceSeries(steps, async (state, step) => {
-    const payload = JSON.stringify({ push: push(state.rows), options: input.options, kinds: step.kinds });
+  const payload = JSON.stringify({ push: push(rows), options: input.options, kinds: KINDS });
+  const outcomes = await Promise.all(steps.map(async (step) => {
     const result = await probe(step.on, payload).catch(() => null);
     const parsed = result?.code === 0 ? parseOutcome(result.stdout) : null;
-    const outcome = parsed ?? { reason: result ? "update" : "unreachable" };
-    return applyExchange(state.rows, state.status, step, { ...outcome, self: input.self }, now, periodKey);
-  }, { rows, status });
+    return parsed ?? { reason: result ? "update" : "unreachable" };
+  }));
+  const done = steps.reduce((state, step, i) => applyExchange(state.rows, state.status, step, { ...outcomes[i], self: input.self }, now, periodKey), { rows, status });
   return { ...done, ran: true };
 }
 
