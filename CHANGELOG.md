@@ -22,6 +22,17 @@ in version.json, which the stable updater offers. Versions follow
 [Keep a Changelog](https://keepachangelog.com). `npm run check:version` checks
 the branch's rules.
 
+## [Unreleased]
+
+### Fixed
+
+- Spend no longer counts other computers twice: each computer sends only its own spend, a figure from another day or period is not added, and the computers are asked at the same time. Until every computer has answered, the number waits as a placeholder instead of showing a partial total.
+- Share is back in Spend when several computers are summed; the card then carries only the summed total and tokens.
+
+### Changed
+
+- Spend opens on each plan's month: how many times its price the work was worth, said as not paying for itself under 1× and as the pace before the 7th, summed across your computers. A Claude plan is found on its own; other plans come from Settings.
+
 ## [4.1.0] - 2026-11-24
 
 ### Added
