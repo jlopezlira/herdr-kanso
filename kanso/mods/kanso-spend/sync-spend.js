@@ -29,35 +29,38 @@ const localOf = (costs) => costs.local ?? {
   usd: costs.hero.usd, tokens: costs.hero.tokens, value: costs.hero.value ?? "", tokensText: tokensOf(costs), month: costs.month ?? null,
 };
 
-function foldMonth(month, rows) {
-  if (!month?.start) return month;
-  const same = rows.filter((row) => row.body.month?.start === month.start && row.body.month.byProvider);
-  const byProvider = same.reduce((acc, row) => Object.entries(row.body.month.byProvider)
-    .reduce((sum, [provider, usd]) => ({ ...sum, [provider]: (sum[provider] ?? 0) + (Number(usd) || 0) }), acc), {});
-  return { ...month, byProvider };
-}
+const sameMonth = (month, rows) => (month?.start ? rows.filter((row) => row.body.month?.start === month.start && row.body.month.byProvider) : []);
+
+const foldMonth = (month, rows) => ({
+  ...month,
+  byProvider: rows.reduce((acc, row) => Object.entries(row.body.month.byProvider)
+    .reduce((sum, [provider, usd]) => ({ ...sum, [provider]: (sum[provider] ?? 0) + (Number(usd) || 0) }), acc), { ...(month.byProvider ?? {}) }),
+});
 
 const dayOf = (at) => {
   const d = new Date(at);
   return Number.isNaN(d.getTime()) ? "" : `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 };
 
+const UNDATED = new Set(["day", "month", "year"]);
+
 function sameSpan(row, period, start) {
   if (period === "all" || !start) return true;
-  return row.body.start ? row.body.start === start : dayOf(row.updated_at) >= start;
+  if (row.body.start) return row.body.start === start;
+  return UNDATED.has(period) && Number(row.body.offset) === 0 && dayOf(row.updated_at) >= start;
 }
 
 export function foldCosts(costs, { self, rows, options }) {
   const cost = options?.cost ?? {};
   const filtered = (cost.project ?? "all") !== "all" || (cost.model ?? "all") !== "all";
   if (!costs?.hero || costs.machines || !Number.isFinite(Number(costs.hero.usd))) return costs;
-  const own = self ? rowFromCosts(costs, self, new Date().toISOString(), options) : null;
-  const spend = mergeRows(rows ?? [], own ? [own] : []).filter((row) => row.kind === "spend" && row.body);
-  if (spend.length < 2) return costs;
+  const peers = mergeRows((rows ?? []).filter((row) => row?.kind === "spend" && row.body && row.machine !== self), []);
   const local = localOf(costs);
-  const peerMonth = Boolean(costs.month?.start) && spend.some((row) => row.machine !== self && row.body.month?.start === costs.month.start);
-  const base = peerMonth ? { ...costs, local, month: foldMonth(costs.month, spend) } : costs;
-  if (filtered) return base;
+  const months = sameMonth(costs.month, peers);
+  const base = months.length ? { ...costs, local, month: foldMonth(costs.month, months) } : costs;
+  const own = self ? rowFromCosts(costs, self, new Date().toISOString(), options) : null;
+  if (filtered || !own) return base;
+  const spend = [...peers, own];
   const period = cost.period ?? "month";
   const offset = Number(cost.offset) || 0;
   const lines = spend.filter((row) => (
