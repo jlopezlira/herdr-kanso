@@ -520,7 +520,7 @@ export function deriveCosts(rows, { catalog, overrides, labels, options = {}, to
     },
     month: monthOf(rows, price, today),
     planList: plans.map((plan) => ({ ...plan })),
-    range: { period: range.period, start: range.start, end: range.end, label: range.label, unit: range.unit, offset: Number(options.offset) || 0 },
+    range: { period: range.period, start: range.start, end: range.end, label: range.label, unit: range.unit, months: range.months, offset: Number(options.offset) || 0 },
     filters: { project: project ?? "all", model: model ?? "all" },
     chart: {
       title: range.unit === "day" ? "Per day" : "Per month",

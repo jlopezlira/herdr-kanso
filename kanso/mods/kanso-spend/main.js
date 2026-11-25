@@ -645,6 +645,7 @@ export default class TokenSpend extends View {
         .child(metric({ value: hero.value, unit: "API value", facts: hero.empty ? "" : factList(hero.stats), tip: hero.tip, loading: Boolean(this.syncWaiting) })("ins-metric", c))
         .when(Boolean(hero.note), (el) => el.child(div().text_size(T.title).text_color(c.dim).child(hero.note)))
         .when(Boolean(hero.empty), (el) => el.child(div().text_size(T.title).text_color(c.muted).child(hero.empty)))
+        .when(Boolean(hero.plan) && !this.syncWaiting, (el) => el.child(div().text_size(T.value).text_color(c.muted).child(hero.plan)))
         .when(Boolean(this.scan?.partial), (el) => el.child(div().text_size(T.body).text_color(c.dim)
           .child(`Still reading your history: ${this.scan.processed} of ${this.scan.total} files so far.`))));
   }

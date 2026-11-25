@@ -7,7 +7,7 @@ export const KINDS = ["spend"];
 export const EXCHANGE_MS = 180_000;
 export const BACKOFF_MAX_MS = 1_800_000;
 export const MIN_VERSION = "3.24.0";
-export const PROTOCOL = 1;
+export const PROTOCOL = 2;
 export const UPDATE_TEXT = "Update kanso there";
 // The sidebar bumps it after a save, so Spend exchanges at once.
 export const SYNC_KICK = "kanso.sync.kick";

@@ -5,18 +5,13 @@ const FAMILIES = [
   { test: /claude|anthropic/i, providers: ["anthropic"] },
   { test: /chatgpt|openai|codex|gpt/i, providers: ["openai", "openai-codex"] },
   { test: /grok|xai|x\.ai/i, providers: ["xai"] },
+  { test: /gemini|google/i, providers: ["google", "gemini"] },
 ];
 
 const known = (plan) => (Array.isArray(plan.providers) && plan.providers.length
   ? plan.providers.map(String)
   : FAMILIES.find((family) => family.test.test(plan.name))?.providers ?? null);
 
-export function planProviders(plans, byProvider) {
-  const named = plans.map(known);
-  const claimed = new Set(named.flat().filter(Boolean));
-  const rest = Object.keys(byProvider ?? {}).filter((provider) => !claimed.has(provider));
-  return named.map((providers) => providers ?? rest);
-}
 
 export function multipleText(ratio) {
   if (!(ratio > 0)) return "0×";
@@ -27,7 +22,7 @@ export function multipleText(ratio) {
 const dayCount = (n) => `${n} ${n === 1 ? "day" : "days"}`;
 
 function workOf(plans, byProvider) {
-  const covers = planProviders(plans, byProvider);
+  const covers = plans.map(known);
   const priceOn = (provider) => plans.reduce((sum, plan, i) => sum + (covers[i].includes(provider) ? plan.usdPerMonth : 0), 0);
   return plans.map((plan, i) => covers[i].reduce((sum, provider) => {
     const usd = Number(byProvider?.[provider]) || 0;
@@ -37,7 +32,7 @@ function workOf(plans, byProvider) {
 }
 
 export function planLines(plans, month) {
-  const list = (Array.isArray(plans) ? plans : []).filter((plan) => plan?.name && plan.usdPerMonth > 0);
+  const list = (Array.isArray(plans) ? plans : []).filter((plan) => plan?.name && plan.usdPerMonth > 0 && known(plan));
   if (!list.length || !month) return [];
   const early = month.day < EARLY_DAYS;
   const works = workOf(list, month.byProvider);
@@ -66,4 +61,15 @@ export function withDetected(plans, detected) {
   return [...own, ...detected.filter((plan) => !plan.providers.some((provider) => covered.has(provider)))];
 }
 
-export const withPlans = (costs) => (costs?.month ? { ...costs, plans: planLines(costs.planList, costs.month) } : costs);
+export function savingText(plans, usd, months) {
+  const monthly = (Array.isArray(plans) ? plans : []).reduce((sum, plan) => sum + (plan?.usdPerMonth > 0 ? plan.usdPerMonth : 0), 0);
+  if (!(monthly > 0) || !(months > 0) || !Number.isFinite(Number(usd))) return null;
+  const paid = monthly * months;
+  return `Your plans cost ${usdText(paid)} in this period, so they saved you ${usdText(Number(usd) - paid)}.`;
+}
+
+export const withPlans = (costs) => (costs?.month ? {
+  ...costs,
+  plans: planLines(costs.planList, costs.month),
+  hero: costs.hero ? { ...costs.hero, plan: savingText(costs.planList, costs.hero.usd, costs.range?.months) } : costs.hero,
+} : costs);

@@ -37,18 +37,7 @@ const foldMonth = (month, rows) => ({
     .reduce((sum, [provider, usd]) => ({ ...sum, [provider]: (sum[provider] ?? 0) + (Number(usd) || 0) }), acc), { ...(month.byProvider ?? {}) }),
 });
 
-const dayOf = (at) => {
-  const d = new Date(at);
-  return Number.isNaN(d.getTime()) ? "" : `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-};
-
-const UNDATED = new Set(["day", "month", "year"]);
-
-function sameSpan(row, period, start) {
-  if (period === "all" || !start) return true;
-  if (row.body.start) return row.body.start === start;
-  return UNDATED.has(period) && Number(row.body.offset) === 0 && dayOf(row.updated_at) >= start;
-}
+const sameSpan = (row, period, start) => Boolean(row.body.start) && (period === "all" || row.body.start === start);
 
 export function foldCosts(costs, { self, rows, options }) {
   const cost = options?.cost ?? {};
@@ -85,7 +74,7 @@ export function foldCosts(costs, { self, rows, options }) {
       value: usdText(usd),
       tip: `${usdText(usd, true)} at API list price`,
       usd, tokens, note: "", empty: null,
-      stats: (costs.hero.stats ?? []).map((stat) => (stat.unit === "tokens" ? { ...stat, value: compactText(tokens), tip: `${compactText(tokens)} tokens` } : stat)),
+      stats: (costs.hero.stats ?? []).map((stat) => (stat.unit === "tokens" ? { ...stat, value: compactText(tokens), tip: `${compactText(tokens)} tokens` } : { ...stat, unit: `${stat.unit} here` })),
     },
     machines,
   };
