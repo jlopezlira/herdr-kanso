@@ -11,6 +11,8 @@ import { existsSync } from "node:fs";
 import { tryOrAsync } from "./pure.js";
 import { ExitError, parseCommand, unknownCommand, entryPoint, runCommand } from "./core/util.mjs";
 import { attachSync } from "./sync-spend.js";
+import { withDetected, withPlans } from "./core/plans.mjs";
+import { detectPlans } from "./core/detect-plans.mjs";
 
 export const PAYLOAD_KIND = "kanso-spend-costs";
 export const PAYLOAD_VERSION = 1;
@@ -81,11 +83,16 @@ async function costsFor(rows, storePath, home, options, { refresh = false, label
   return deriveCosts(rows, {
     live: live ?? liveSessions(store),
     catalog,
-    overrides: await loadOverrides(storePath),
+    overrides: await plannedOverrides(storePath, home),
     labels: labels ?? await loadLabels(storePath),
     options: options.cost ?? {},
     today: typeof options.today === "string" ? options.today : today(),
   });
+}
+
+async function plannedOverrides(storePath, home) {
+  const overrides = await loadOverrides(storePath);
+  return { ...overrides, plans: withDetected(overrides.plans, await detectPlans(home)) };
 }
 
 async function settingsFor(store, storePath) {
@@ -107,7 +114,7 @@ function payload(command, options, scan, costs, settings) {
 }
 
 async function answer(command, viewOptions, scan, costs, settings, storePath) {
-  const shown = await attachSync(costs, storePath, viewOptions);
+  const shown = withPlans(await attachSync(costs, storePath, viewOptions));
   return { exitCode: 0, stdout: payload(command, viewOptions, scan, shown, settings), stderr: "" };
 }
 

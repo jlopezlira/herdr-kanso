@@ -18,7 +18,7 @@ export function spendSpec(costs) {
     right: plain(costs.range?.label ?? hero.title),
     hero: { big: plain(hero.value) || "—", label: "of AI work at API list price", delta: /more/i.test(note) ? { up: true, text: note } : null }, // a brag: only a rise
     stats,
-    note: hero.plan ? plain(hero.plan) : "",
+    note: (costs.plans ?? []).map((plan) => `${plain(plan.multiple)} ${plain(plan.name)}`).join(" · "),
     blocks: chart?.bars?.length ? [{
       kind: "bars", title: plain(chart.title), right: plain(chart.peak),
       values: chart.bars.map((b) => (Number.isFinite(b.ratio) ? b.ratio : 0)),

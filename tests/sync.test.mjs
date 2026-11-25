@@ -156,7 +156,7 @@ test("A computer out of reach keeps the last figures, then waits longer", async 
   assert.equal(calls, 1);
   assert.equal(out.rows, rows);
   assert.equal(out.status.odin.synced_at, status.odin.synced_at);
-  assert.equal(sync.due({ at: NOW, failures: 0, reason: null, period: "month:0" }, NOW + sync.RETRY_FLOOR_MS, "month:1"), true);
+  assert.equal(sync.due({ at: NOW, failures: 0, reason: null, period: "month:0" }, NOW + 1, "month:1"), true);
   assert.equal(sync.due(undefined, NOW, "month:0"), true);
 });
 

@@ -382,6 +382,13 @@ function breakdownDetail(b, { title, ticket, project, usd, tokens }) {
   };
 }
 
+function monthOf(rows, price, today) {
+  const month = costRange("month", 0, today, null);
+  const items = rows.filter((row) => row.day >= month.start && row.day <= month.end).map((row) => pricedRow(row, price)).filter(Boolean);
+  const byProvider = Object.fromEntries([...Map.groupBy(items, (item) => item.row.provider)].map(([provider, group]) => [provider, sumOf(group, usdOf)]));
+  return { start: month.start, name: MONTHS_LONG[parseDay(month.start).getMonth()], day: parseDay(today).getDate(), days: parseDay(month.end).getDate(), byProvider };
+}
+
 /** Pasted-image markers say nothing about the task. */
 function cleanTitle(text) {
   return String(text ?? "").replace(/\[Image #\d+\]\s*/g, "").trim() || String(text ?? "");
@@ -474,8 +481,6 @@ export function deriveCosts(rows, { catalog, overrides, labels, options = {}, to
   const sessions = total.sessions.size;
   const taskList = [...tasks.values()].toSorted(byUsd);
   const plans = overrides?.plans ?? [];
-  const planMonthly = plans.reduce((sum, plan) => sum + plan.usdPerMonth, 0);
-  const planUsd = planMonthly * range.months;
 
   const change = previous && previousUsd > 0 ? (total.usd - previousUsd) / previousUsd : null;
   const perMonth = range.months > 0 ? total.usd / range.months : total.usd;
@@ -512,8 +517,9 @@ export function deriveCosts(rows, { catalog, overrides, labels, options = {}, to
           tip: `in ${intText(total.input)} · out ${intText(total.output)} · cache read ${intText(total.cacheRead)} · cache write ${intText(total.cacheWrite)}${total.unpriced > 0 ? ` · ${intText(total.unpriced)} without a list price` : ""}`,
         },
       ],
-      plan: planMonthly > 0 ? `Your plans cost ${usdText(planUsd)} in this period, so they saved you ${usdText(total.usd - planUsd)}.` : null,
     },
+    month: monthOf(rows, price, today),
+    planList: plans.map((plan) => ({ ...plan })),
     range: { period: range.period, start: range.start, end: range.end, label: range.label, unit: range.unit, offset: Number(options.offset) || 0 },
     filters: { project: project ?? "all", model: model ?? "all" },
     chart: {
