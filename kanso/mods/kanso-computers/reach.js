@@ -70,9 +70,11 @@ function awayPlan(choice, { tailscale, platform }) {
     const target = joined(user, peer.ip);
     return { name: peer.name, target, via: `${quote(tailscale)} ssh ${quote(target)}`, probe: false };
   }
-  const alias = user ? null : choice.alias ?? null;
-  const target = alias ? (alias.hostname ? alias.alias : joined(alias.user, peer.ip)) : joined(user, peer.ip);
-  return { name: peer.name, target, via: "", probe: true };
+  const typed = splitTarget(choice.target).host;
+  const alias = choice.alias ?? null;
+  const named = typed && typed !== peer.ip ? joined(user, typed) : alias ? joined(user, alias.alias) : "";
+  const direct = joined(user || alias?.user || "", peer.ip);
+  return { name: peer.name, target: named || direct, via: "", probe: true, ...(named && named !== direct ? { also: [direct] } : {}) };
 }
 
 export function planFor(choice, { tailscale = "", platform = "macos" } = {}) {

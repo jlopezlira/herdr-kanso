@@ -18,6 +18,7 @@ test("Pre-PR runs every check CI runs and then the tests, and CI runs the same c
     "npm run build:site -- --check",
     "npm run build:issue-forms -- --check",
     "npm run build:linux-keys -- --check",
+    "npm run build:link-rules -- --check",
     "npm run check:dupes",
   ]);
 });

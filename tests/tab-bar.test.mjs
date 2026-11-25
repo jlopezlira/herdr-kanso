@@ -30,7 +30,7 @@ const panelsBar = async (panels) => {
   const b = await bar({ tree: withPanel(null), stored: { "kanso.panels": panels } });
   return { b, root: b.view.render(b.cx) };
 };
-const ROOM = 2 * 12 + 2 * (28 + 8) + 2 * 8 + 11 * 28 + 10 * 2;
+const ROOM = 2 * 12 + 2 * (28 + 8) + 2 * 8 + 12 * 28 + 11 * 2;
 
 test("A tab out of view whose agent waits carries the blocked mark; working, done and the chosen tab carry none", async () => {
   const { tabMark } = await model();
@@ -254,14 +254,14 @@ test("The panel doors: each one a door at rest, the open one on the active wash,
   const tree = withPanel("pr");
   const b = await bar({ tree });
   const root = b.view.render(b.cx);
-  const labels = ["Files", "Spend", "PR", "Tasks", "Shipped", "Worktrees", "Ports", "Containers", "Memory", "Images", "kansō help"];
+  const labels = [...DOORS.map(([label]) => label), "kansō help"];
   for (const label of labels) assert.ok(door(root, label), label);
   assert.equal(arg(door(root, "PR"), "bg"), b.c.w12, "the open door");
   assert.equal(calls(door(root, "Files"), "bg").length, 0, "a closed door paints nothing");
   assert.match(arg(door(root, "kansō help"), "tooltip"), /^kansō help/);
   pressOf(doorBox(root, "Files"), "left")(press, b.cx);
   handler(doorBox(root, "Ports"), "on_mouse_up")({}, b.cx);
-  assert.deepEqual(clone(b.store["kanso.panels.order"]).slice(0, 7), ["insights", "pr", "issues", "shipped", "worktrees", "ports", "files"]);
+  assert.deepEqual(clone(b.store["kanso.panels.order"]).slice(0, 8), ["insights", "pr", "issues", "shipped", "caffeine", "worktrees", "ports", "files"]);
   pressOf(doorBox(b.view.render(b.cx), "Shipped"), "right")(press, b.cx);
   const menu = byTag(b.view.render(b.cx), "panel-menu-shipped");
   assert.ok(texts(arg(menu, "content")).includes("Panels\u2026"));
@@ -575,6 +575,16 @@ test("A custom panel with no icon is a door as high as the others, its name alwa
   assert.deepEqual(opened(door(root, "Notes")), [true, 1]);
 });
 
+test("The Caffeine door shows its cup like every other door, its name hidden even while a computer has Caffeine on", async () => {
+  const b = await bar({ tree: withPanel(null) });
+  const caffeine = () => door(b.view.render(b.cx), "Caffeine");
+  assert.ok(everyDrawn(caffeine()).some((el) => arg(el, "svg")?.endsWith("/coffee.svg")), "the cup is drawn");
+  for (const on of [false, true, false]) {
+    b.store["kanso.caffeine"] = { "": { on: false }, devbox: { on } };
+    assert.deepEqual(opened(caffeine()), [false, 0]);
+  }
+});
+
 test("Each door's easing name has an id of its own, so a fold during the ease keeps its motion", async () => {
   const { root } = await prOpen();
   for (const [label, key] of [["Files", "files"], ["PR", "pr"], ["Ports", "ports"]]) {
@@ -622,7 +632,7 @@ test("A door being dragged is held on the pressed wash with the accent bar where
   assert.equal(all(after, (el) => calls(el, "bg").some((call) => call[1] === b.c.accent)).length, 0, "and no bar is left");
 });
 
-const DOORS = [["Files", "files"], ["Spend", "insights"], ["PR", "pr"], ["Tasks", "issues"], ["Shipped", "shipped"], ["Worktrees", "worktrees"], ["Ports", "ports"], ["Containers", "containers"], ["Memory", "memory"], ["Images", "look"], ["hjkl dōjō", "dojo"]]
+const DOORS = [["Files", "files"], ["Spend", "insights"], ["PR", "pr"], ["Tasks", "issues"], ["Shipped", "shipped"], ["Caffeine", "caffeine"], ["Worktrees", "worktrees"], ["Ports", "ports"], ["Containers", "containers"], ["Memory", "memory"], ["Images", "look"], ["hjkl dōjō", "dojo"]]
   .map(([label, want]) => [label, { want }]);
 const TOOLS = [["New tab", [["kanso-spaces.start", null]]], ["Arrange", { opened: "kanso-arrange" }]];
 const CHOSEN = [["checkout", []], ["Close checkout", [["tab.close", { id: "t1" }]]]];

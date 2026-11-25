@@ -22,6 +22,21 @@ in version.json, which the stable updater offers. Versions follow
 [Keep a Changelog](https://keepachangelog.com). `npm run check:version` checks
 the branch's rules.
 
+## [4.1.0] - 2026-11-24
+
+### Added
+
+- Caffeine, a panel beside Shipped in the tab bar, lists this computer and every connected one, each with a switch that keeps that computer working with its lid closed, on power or on battery, until you turn it off. While a computer has it on, a cup sits on that computer's row in the sidebar. The first time on macOS or Linux, a tab asks for that computer's password once, to allow only turning sleep off and on there. On battery, Caffeine turns itself off at 15% and says so; a restart of that computer turns it off too. On Windows it keeps the computer from idle sleep, not with its lid closed. (#496)
+
+### Changed
+
+- Caffeine replaces Keep connected computers awake under Background in Settings, which kept a connected computer from idle sleep but not from sleeping with its lid closed. Hiding the Caffeine panel in Settings turns it off on every connected computer.
+
+### Fixed
+
+- Cmd+click (Ctrl+click on Linux and Windows) on a file path in a terminal on another computer opens that file in the preview panel, pictures included. Before, nothing happened, because the file is not on the computer you are looking from.
+- Add a computer reaches a computer by the name you typed or the Host in your ssh config, keeping its key and agent settings, and uses its Tailscale address only when that name does not answer; a failed typed attempt shows once.
+
 ## [4.0.0] - 2026-11-24
 
 ### Breaking

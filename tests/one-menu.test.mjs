@@ -192,6 +192,7 @@ test("The tab, terminal pane, header menu and the sidebar project, session, asle
   const computer = await sidebar("machineMenu", { route: "devbox", shown: "devbox", phase: "connected", syncOn: true });
   assert.ok(computer.includes(wordsOf("disconnect")));
   assert.ok(computer.includes(wordsOf("rename")));
+  assert.equal(Object.hasOwn(ACTIONS, "caffeine"), false);
   const asleep = await sidebar("menu", { address: "zz:t0", name: "checkout", asleep: { tab: "Main", n: 2, terminal: "t0", space: "sp1", resume: "r" } });
   assert.ok(asleep.includes(wordsOf("wake")));
   assert.ok(asleep.includes(wordsOf("forget")));

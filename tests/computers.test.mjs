@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { chmod, mkdir, readFile, writeFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { compare, scan, scannedFiles } from "../scripts/check-dupes.mjs";
-import { arg, clone, computersDialog, exec, find, folderWith, gpuiHost, load, success, texts } from "./helpers.mjs";
+import { arg, clone, computersDialog, exec, fieldWith, find, folderWith, gpuiHost, load, success, texts } from "./helpers.mjs";
 
 const reach = () => load("kanso-computers/reach.js", [
   "tailnet", "planFor", "choiceOf", "addArgs", "probeArgs", "reachOf", "keySetup", "advice", "isAdded",
@@ -80,14 +80,14 @@ test("Tailscale SSH is on only when the computer has a host key", async () => {
   assert.deepEqual(clone(net.peers.map((row) => [row.name, row.tailscaleSsh])), [["empty", false], ["missing", false], ["on", true]]);
 });
 
-test("A Tailscale SSH computer is reached through tailscale, and without it ssh goes to the address", async () => {
+test("A Tailscale SSH computer is reached through tailscale, and without it ssh tries the typed name, then the address", async () => {
   const { planFor } = await reach();
   const choice = { peer: { name: "grey", ip: "100.64.1.2", tailscaleSsh: true }, target: "root@grey", name: "ignored" };
   assert.deepEqual(clone(planFor(choice, { tailscale: "/usr/local/bin/tailscale" })), {
     name: "grey", target: "root@100.64.1.2", via: "/usr/local/bin/tailscale ssh root@100.64.1.2", probe: false,
   });
   assert.deepEqual(clone(planFor(choice, { tailscale: "" })), {
-    name: "grey", target: "root@100.64.1.2", via: "", probe: true,
+    name: "grey", target: "root@grey", via: "", probe: true, also: ["root@100.64.1.2"],
   });
   assert.deepEqual(clone(planFor({ peer: { name: "box", ip: "10.0.0.5", tailscaleSsh: false }, target: "" }, { tailscale: "/usr/bin/tailscale" })), {
     name: "box", target: "10.0.0.5", via: "", probe: true,
@@ -352,10 +352,10 @@ test("Signing in through a local-first route puts the key on every ssh once, and
 test("Signing in on a local-first route asks on the local network first, and finishes there when the away route does not answer", { skip: shForm }, async (t) => {
   const { planFor } = await reach();
   const { signInTab } = await signIn();
-  const away = "100.64.9.9";
+  const away = "ada@grey";
   const plan = planFor({
-    peer: { name: "grey", ip: away, tailscaleSsh: false },
-    target: "ada@grey",
+    peer: { name: "grey", ip: "100.64.9.9", tailscaleSsh: false },
+    target: away,
     lan: "10.99.0.1",
   }, {});
   assert.deepEqual([plan.lan, plan.user, plan.via], ["10.99.0.1", "ada", ""]);
@@ -840,14 +840,16 @@ test("An ssh config host is the tailnet computer when HostName is its address, i
   assert.equal(aliasOf(peer, [{ alias: "other", hostname: "", user: "ada" }]), null);
 });
 
-test("A folded ssh alias is how the computer is reached, unless a user was typed or Tailscale SSH is on", async () => {
+test("A typed user keeps the ssh name, and Tailscale SSH still uses the address", async () => {
   const { planFor } = await reach();
   const peer = { name: "grey", ip: "100.64.1.2", tailscaleSsh: false };
-  const folded = { alias: "build", hostname: "100.64.1.2", user: "deploy" };
-  const bare = { alias: "grey", hostname: "", user: "deploy" };
-  assert.deepEqual(clone(planFor({ peer, target: "", alias: folded })), { name: "grey", target: "build", via: "", probe: true });
-  assert.deepEqual(clone(planFor({ peer, target: "", alias: bare })), { name: "grey", target: "deploy@100.64.1.2", via: "", probe: true });
-  assert.deepEqual(clone(planFor({ peer, target: "root@grey", alias: folded })), { name: "grey", target: "root@100.64.1.2", via: "", probe: true });
+  const folded = { alias: "build", hostname: peer.ip, user: "deploy" };
+  const bare = { ...folded, alias: "grey", hostname: "" };
+  const expected = { name: "grey", via: "", probe: true, also: [`deploy@${peer.ip}`] };
+  assert.deepEqual(clone(planFor({ peer, target: "", alias: folded })), { ...expected, target: "build" });
+  assert.deepEqual(clone(planFor({ peer, target: "", alias: bare })), { ...expected, target: "grey" });
+  const typed = "root@grey";
+  assert.deepEqual(clone(planFor({ peer, target: typed, alias: bare })), { ...expected, target: typed, also: [`root@${peer.ip}`] });
   assert.deepEqual(clone(planFor({ peer: { ...peer, tailscaleSsh: true }, target: "", alias: folded }, { tailscale: "/usr/bin/tailscale" })), {
     name: "grey", target: "100.64.1.2", via: "/usr/bin/tailscale ssh 100.64.1.2", probe: false,
   });
@@ -928,6 +930,132 @@ test("When Tailscale is off, not installed, or has no other computer, Refresh pr
     assert.equal(view.typed.value(), "ada@10.0.0.9");
     assert.equal(address.text, "ada@10.0.0.9");
   }
+});
+
+const darkIp = "100.69.99.51";
+const darkHost = "dark";
+const darkName = `jj@${darkHost}`;
+const darkAddress = `jj@${darkIp}`;
+const darkMissing = `Could not resolve hostname ${darkHost}`;
+const darkDenied = "Permission denied (publickey).";
+const sshRefusal = (stderr) => ({ code: 255, stderr, stdout: "" });
+const addressAnswers = (failure) => (target) => target === darkAddress ? success("") : sshRefusal(failure);
+
+const addTypedDark = async (answer, { typed = darkName, addError = null, lan = "", clickRow = false } = {}) => {
+  const probes = [];
+  const installs = [];
+  const tabs = [];
+  const started = Promise.withResolvers();
+  const resume = Promise.withResolvers();
+  const tailnet = status({ dark: peer({
+    DNSName: "dark.tail.ts.net.", HostName: darkHost, TailscaleIPs: [darkIp], sshHostKeys: [], Addrs: lan ? [lan] : [],
+  }) });
+  const { view, cx, flush } = await computersDialog({
+    window: () => ({ platform: "linux" }),
+    InputState: { new: () => fieldWith({ value: typed }) },
+    readTextFile: async () => `Host ${darkHost}\n  HostName ${darkIp}\n  User jj\n  IdentityFile ~/.ssh/dark_key\n  IdentityAgent ~/.ssh/dark_agent\n`,
+    run: (command, props) => { if (command === "tab.new") tabs.push(props); },
+    exec: async (program, args) => {
+      if (program === "tailscale") return success(tailnet);
+      if (program !== "ssh") return success("");
+      if (args[0] === "-G") return success(`hostname ${darkIp}\nuser jj\n`);
+      const target = args.at(-2);
+      probes.push(target);
+      if (clickRow && probes.length === 1) {
+        started.resolve();
+        await resume.promise;
+      }
+      return answer(target, args);
+    },
+    hc: async (args) => {
+      if (args[1] !== "add") return success(JSON.stringify({ machines: [] }));
+      installs.push(args);
+      return addError ?? success("");
+    },
+  });
+  if (lan) view.nearby = [{ ip: lan, name: darkHost, os: "" }];
+  const button = find(view.render(), (el) => el.tag === "computers-add-typed");
+  arg(button, "on_click")({}, cx);
+  if (clickRow) {
+    await started.promise;
+    try {
+      const row = find(view.render(), (el) => el.tag === `computer-${darkHost}`);
+      arg(row, "on_click")({}, cx);
+    } finally {
+      resume.resolve();
+    }
+  }
+  await flush();
+  return { probes, added: installs.map((args) => args[2]), installs, tabs, cx, drawn: view.render() };
+};
+
+test("Typing a computer's ssh name adds it over the local network when the away route does not answer", async () => {
+  const lan = "192.168.4.25";
+  const hostOption = `HostName=${lan}`;
+  const { installs } = await addTypedDark((_target, args) => args.includes(hostOption)
+    ? success("") : sshRefusal("No route to host"), { lan });
+  assert.equal(installs.length, 1);
+  const [install] = installs;
+  const via = install.indexOf("--via");
+  assert.ok(via >= 0 && install[via + 1].includes(hostOption), install.join(" "));
+});
+
+test("A changed key on the typed ssh name shows a warning without adding the computer by address", async () => {
+  const { probes, installs, drawn } = await addTypedDark(addressAnswers("Host key verification failed"));
+  assert.ok(texts(drawn).some((word) => word.includes(`${darkHost}'s key changed since last time`)));
+  assert.deepEqual(probes, [darkName]);
+  assert.equal(installs.length, 0);
+});
+
+test("Clicking a computer's row while its typed Add is still checking the connection adds it only once", async () => {
+  const { installs } = await addTypedDark(() => success(""), { clickRow: true });
+  assert.deepEqual(installs.map((args) => args[args.indexOf("--name") + 1]), [darkHost]);
+});
+
+const checkDarkFallback = ({ probes, added }, first = darkName) => {
+  assert.deepEqual(probes, [first, darkAddress]);
+  assert.deepEqual(added, [darkAddress]);
+};
+
+test("Typing an ssh name for a Tailscale computer checks and adds that name from your ssh config", async () => {
+  const { probes, added } = await addTypedDark((target) => target === darkName
+    ? success("") : sshRefusal(darkDenied));
+  assert.deepEqual(probes, [darkName]);
+  assert.deepEqual(added, [darkName]);
+});
+
+test("When the typed name does not answer, Add a computer tries and adds its Tailscale address", async () => {
+  checkDarkFallback(await addTypedDark(addressAnswers(darkMissing)));
+});
+
+test("When the typed name refuses your key but the Tailscale address accepts it, the computer is added by its address", async () => {
+  checkDarkFallback(await addTypedDark(addressAnswers(darkDenied)));
+});
+
+test("When adding by the Tailscale address asks for a password, the sign-in tab uses that address", async () => {
+  const addError = sshRefusal(JSON.stringify({ error: { kind: "login_needed", message: "Login required" } }));
+  const { added, tabs, cx, drawn } = await addTypedDark(addressAnswers(darkMissing), { addError });
+  assert.deepEqual(added, [darkAddress]);
+  const enterPassword = find(drawn, (el) => arg(el, "accessibility_label") === "Enter the password");
+  assert.ok(enterPassword);
+  arg(enterPassword, "on_click")({}, cx);
+  assert.equal(tabs.length, 1);
+  const ask = tabs[0].argv.at(-1).split("\n").find((line) => line.includes(ASK));
+  assert.ok(ask?.includes(`${ASK} ${darkAddress} `), ask);
+});
+
+test("When you type only the computer name, its Tailscale address keeps the user from your ssh config", async () => {
+  checkDarkFallback(await addTypedDark(addressAnswers(darkMissing), { typed: darkHost }), darkHost);
+});
+
+test("A failed typed attempt shows its message once, below the field and not on the Tailscale row", async () => {
+  const { drawn } = await addTypedDark(() => sshRefusal(darkDenied));
+  const message = (word) => word.includes("takes keys only");
+  const words = texts(drawn);
+  assert.equal(words.filter(message).length, 1);
+  assert.ok(words.findIndex(message) > words.lastIndexOf("Add"));
+  const list = find(drawn, (el) => arg(el, "id") === "computers-list");
+  assert.equal(texts(list).some(message), false);
 });
 
 const lanDialog = async (t) => {
