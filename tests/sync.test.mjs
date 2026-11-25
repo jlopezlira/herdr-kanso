@@ -31,6 +31,7 @@ const TODAY = "2026-11-10";
 const MONTH_START = "2026-11-01";
 const monthOf = (byProvider, start = MONTH_START) => ({ start, byProvider });
 const dayOptions = { cost: { period: "day", offset: 0, project: "all", model: "all" } };
+const foldToday = (rows) => foldCosts(todayCosts, { self: SELF, rows, options: dayOptions });
 const todayCosts = { ...priced(10).costs, range: { period: "day", start: TODAY, end: TODAY, offset: 0 } };
 const peerToday = (usd, body = {}) => spend(PEER, usd, new Date(NOW).toISOString(), {
   period: "day", start: TODAY, ...body,
@@ -133,7 +134,7 @@ test("Spend adds each computer and leaves one computer as it was", () => {
 
 test("A computer shares only its own spend after including its peers in the total.", () => {
   const rows = [peerToday(5)];
-  const folded = foldCosts(todayCosts, { self: SELF, rows, options: dayOptions });
+  const folded = foldToday(rows);
   const own = sync.rowFromCosts(folded, SELF, new Date(NOW).toISOString(), dayOptions);
   assert.equal(folded.hero.usd, 15);
   assert.equal(own.body.usd, 10);
@@ -190,7 +191,7 @@ test("Spend leaves out undated peer totals in every period, even if they arrived
 
 test("Spend keeps its own $10 when a 4.1.0 computer reports an undated $15 and asks it to update.", () => {
   const rows = [spend(PEER, 15, new Date(NOW).toISOString(), { period: "day" })];
-  const folded = foldCosts(todayCosts, { self: SELF, rows, options: dayOptions });
+  const folded = foldToday(rows);
   const outcome = { machine: PEER, version: "4.1.0", protocol: 1, rows };
   const applied = sync.applyExchange([], {}, { id: "odin", name: "odin" }, outcome, NOW, "day:0");
   assert.equal(folded.hero.value, "$10.00");
