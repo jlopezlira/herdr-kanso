@@ -14,7 +14,7 @@ const exampleLines = () => planLines([max, chat, grok], month({ anthropic: 5_000
 test("Each plan shows its own multiple and flags one that is not paying for itself.", () => {
   const lines = exampleLines();
   assert.deepEqual(lines.map((line) => line.multiple), ["25×", "3.1×", "0.3×"]);
-  assert.equal(lines[2].detail, "$6.00 of work for $20.00 · not paying for itself");
+  assert.equal(lines[2].detail, "$6.00 of work for $20 · not paying for itself");
   assert.equal(lines[2].tone, "working");
 });
 
@@ -28,7 +28,7 @@ test("Before day seven Spend shows a quiet pace estimate instead of judging the 
 test("Two plans on one provider split its work in proportion to their prices.", () => {
   const pro = { name: "Claude Pro", usdPerMonth: 20 };
   const lines = planLines([pro, max], month({ anthropic: 660 }));
-  assert.deepEqual(lines.map((line) => line.detail), ["$60.00 of work for $20.00", "$600 of work for $200"]);
+  assert.deepEqual(lines.map((line) => line.detail), ["$60.00 of work for $20", "$600 of work for $200"]);
 });
 
 test("Spend leaves out plans it does not recognize and credits Gemini only for Google and Gemini work.", () => {
