@@ -24,7 +24,7 @@ import { readPlan, allChoice, chooserOptions, chooserKey } from "./spend-model.j
 import { clock, tryOr, tryOrAsync, afterMount } from "./pure.js";
 import { powerOf } from "./sync-power.js";
 import { Kdb } from "./kdb.js";
-import { EXCHANGE_MS, SYNC_KICK, configFrom, exchangeAll, holdsOf, identityFrom, periodKeyOf, probeApi, rowFromCosts, rowsFrom, rowsText, statusFrom, statusText, syncDir, syncOn } from "./sync.js";
+import { EXCHANGE_MS, SYNC_KICK, configFrom, exchangeAll, holdsOf, identityFrom, periodKeyOf, planExchange, probeApi, rowFromCosts, rowsFrom, rowsText, statusFrom, statusText, syncDir, syncOn } from "./sync.js";
 
 const MOD = "kanso-spend";
 const RUNTIME_FILE = `mods/${MOD}/runtime.json`;
@@ -128,6 +128,10 @@ export default class TokenSpend extends View {
     this.chooserScroll = ScrollHandle.new();
     this.syncHolds = [];
     this.syncStored = [];
+    this.syncWaiting = false;
+    this.syncSettled = null;
+    this.syncEnded = 0;
+    this.probing = false;
     this.db = new Kdb(cx.timer);
     this.syncKick = shared(SYNC_KICK);
 
@@ -160,6 +164,7 @@ export default class TokenSpend extends View {
 
   wake(cx) {
     if (this.closed) return;
+    if (!this.awake && !(this.syncOffUntil > Date.now()) && this.syncSettled === null) this.syncWaiting = true;
     this.awake = true;
     if (!this.ticker) {
       this.ticker = cx.timer.every(TICK_MS, (tickCx) => {
@@ -210,6 +215,7 @@ export default class TokenSpend extends View {
     this.ticker = null;
     this.continueTimer = null;
     this.costs = null;
+    this.syncSettled = null;
     this.menuOptions = null;
     this.openMenu = null;
   }
@@ -240,6 +246,7 @@ export default class TokenSpend extends View {
     this.generation += 1;
     const generation = this.generation;
     const sent = this.options();
+    const startedAt = Date.now();
     this.running = command;
     if (command === "snapshot") this.lastSnapshotAt = Date.now();
     cx.notify();
@@ -263,6 +270,7 @@ export default class TokenSpend extends View {
         (error) => ({ payload: null, failure: sanitizeError(error) }),
       );
       if (generation !== this.generation || this.closed) return;
+      if (this.syncWaiting === "fold" && startedAt >= this.syncEnded) this.syncWaiting = false;
       if (payload) {
         this.scan = payload.scan ?? this.scan;
         if (this.awake) this.costs = payload.costs;
@@ -322,8 +330,10 @@ export default class TokenSpend extends View {
     if (this.syncing) { this.syncAgain = true; if (force) this.syncForce = true; return; }
     this.syncing = true;
     cx.spawn(async (syncCx) => {
-      try { await this.exchangeOnce(syncCx, force); } catch { /* the next open tries again; saved figures stay */ }
+      try { await this.exchangeOnce(syncCx, force); } catch { this.syncWaiting = false; }
       this.syncing = false;
+      this.probing = false;
+      syncCx.notify();
       if (this.syncAgain && this.awake && !this.closed) { const again = this.syncForce; this.syncForce = false; this.syncAgain = false; this.exchange(syncCx, again); }
     });
   }
@@ -334,16 +344,28 @@ export default class TokenSpend extends View {
     if (!force && this.syncOffUntil > now) return;
     const dir = syncDir(appHome());
     const config = configFrom(await readTextFile(paths.join(dir, "config.json")).catch(() => null));
-    if (!syncOn(config)) { this.syncOffUntil = now + EXCHANGE_MS; this.syncHolds = []; return; }
+    if (!syncOn(config)) { this.syncOffUntil = now + EXCHANGE_MS; this.syncHolds = []; this.syncWaiting = false; return; }
     this.syncOffUntil = 0;
     const periodKey = periodKeyOf(this.cost);
     const options = { today: this.options().today, cost: { period: this.cost.period, offset: Number(this.cost.offset) || 0, project: "all", model: "all" } };
+    const settleKey = `${periodKey}:${options.today}`;
     const self = this.costs?.syncSelf || identityFrom(await readTextFile(paths.join(dir, "identity.json")).catch(() => null), () => "", "").id;
     const power = await powerOf(this.db, this.syncStored);
     if (!this.awake || this.closed) return;
     this.syncStored = power.stored;
+    const peers = machines();
+    const status = statusFrom(await readTextFile(paths.join(dir, "status.json")).catch(() => null));
+    const steps = planExchange({ config, peers, status, now, periodKey, stored: power.stored, live: power.live });
+    if (!steps.length) {
+      if (this.syncWaiting === true) this.syncWaiting = false;
+      this.syncSettled = settleKey;
+    } else {
+      this.probing = true;
+      if (this.syncSettled !== settleKey) this.syncWaiting = true;
+      cx.notify();
+    }
     const out = await exchangeAll((on, payload) => serviceOn(probeApi, on).then((probe) => probe.exchange(payload)), {
-      config, peers: machines(), status: statusFrom(await readTextFile(paths.join(dir, "status.json")).catch(() => null)),
+      config, peers, status,
       rows: rowsFrom(await readTextFile(paths.join(dir, "rows.json")).catch(() => null)),
       self, own: self ? rowFromCosts(this.costs, self, new Date(now).toISOString(), options) : null,
       now, periodKey, options, stored: power.stored, live: power.live,
@@ -351,6 +373,9 @@ export default class TokenSpend extends View {
     if (!this.awake || this.closed) return;
     this.syncHolds = holdsOf(out.status, power.stored, power.live);
     if (!out.ran) return;
+    this.syncSettled = settleKey;
+    this.syncEnded = Date.now();
+    if (this.syncWaiting === true) this.syncWaiting = "fold";
     await localService(fileApi).mkdir(dir);
     const rowsFile = paths.join(dir, "rows.json");
     const statusFile = paths.join(dir, "status.json");
@@ -360,7 +385,9 @@ export default class TokenSpend extends View {
   }
 
   setCost(patch, cx) {
+    const moved = ("period" in patch && patch.period !== this.cost.period) || ("offset" in patch && patch.offset !== this.cost.offset);
     this.cost = { ...this.cost, ...patch };
+    if (moved && this.syncOffUntil === 0) this.syncWaiting = true;
     if (patch.period) setShared(PERIOD_KEY, patch.period);
     this.run("prepare", cx);
     this.exchange(cx, true);
@@ -485,8 +512,8 @@ export default class TokenSpend extends View {
 
   // Only the unfiltered totals are shared, so a filter or a detail view hides it.
   canShare() {
-    return this.page === "home" && !this.stack.length && Boolean(this.costs?.hero?.value)
-      && this.cost.project === "all" && this.cost.model === "all" && !(this.costs.machines?.length > 1);
+    return this.page === "home" && !this.stack.length && Boolean(this.costs?.hero?.value) && !this.syncWaiting
+      && this.cost.project === "all" && this.cost.model === "all";
   }
 
   shareCard() {
@@ -510,7 +537,7 @@ export default class TokenSpend extends View {
     return pageHeader(heading, [
       reading ? div().pr(G.xs).text_size(T.micro).text_color(c.dim).child(reading) : null,
       this.canShare() ? iconButton("spend-share", "share", "Share", (cx) => this.share.toggle(cx), c, { active: this.share.open }) : null,
-      refreshTool("spend-refresh", c, { ...this.plan().refresh, working: "Updating…", stamp: updated }, (cx) => this.reload(cx)),
+      refreshTool("spend-refresh", c, { ...this.plan().refresh, busy: this.plan().refresh.busy || this.probing, working: "Updating…", stamp: updated }, (cx) => this.reload(cx)),
       this.page === "settings" ? null : iconButton("spend-settings", "settings", "Settings", (cx) => this.openSettings(cx), c),
     ]);
   }
@@ -528,9 +555,10 @@ export default class TokenSpend extends View {
     const wide = (this.width || 960) >= 860;
     return pageSections(narrow)
       .opacity(this.running === "prepare" ? OPACITY.away : 1)
+      .when(!top && (data.plans?.length ?? 0) > 0, (el) => el.child(this.plans(c, data)))
       .child(this.controls(c, Boolean(top)))
       .child(this.hero(c, data.hero, narrow))
-      .when(!top && (data.machines?.length ?? 0) > 1, (el) => el.child(this.machineSplit(c, data.machines)))
+      .when(!top && !this.syncWaiting && (data.machines?.length ?? 0) > 1, (el) => el.child(this.machineSplit(c, data.machines)))
       .when(!top && (this.syncHolds?.length ?? 0) > 0, (el) => el.child(v_flex().w_full().gap(G.xs).pt(G.sm)
         .children(this.syncHolds.map((hold) => h_flex().w_full().items_center().gap(G.md)
           .child(div().flex_1().min_w(0).truncate().text_size(T.card).text_color(c.text).child(hold.id))
@@ -614,12 +642,19 @@ export default class TokenSpend extends View {
               label: "Next period", disabled: offset >= 0,
             }))
             .when(offset < 0, (row) => row.child(quietLink("ins-now", "Back to now", (cx) => this.setCost({ offset: 0 }, cx), c)))))
-        .child(metric({ value: hero.value, unit: "API value", facts: hero.empty ? "" : factList(hero.stats), tip: hero.tip })("ins-metric", c))
+        .child(metric({ value: hero.value, unit: "API value", facts: hero.empty ? "" : factList(hero.stats), tip: hero.tip, loading: Boolean(this.syncWaiting) })("ins-metric", c))
         .when(Boolean(hero.note), (el) => el.child(div().text_size(T.title).text_color(c.dim).child(hero.note)))
         .when(Boolean(hero.empty), (el) => el.child(div().text_size(T.title).text_color(c.muted).child(hero.empty)))
-        .when(Boolean(hero.plan), (el) => el.child(div().text_size(T.value).text_color(c.muted).child(hero.plan)))
+        .when(Boolean(hero.plan) && !this.syncWaiting, (el) => el.child(div().text_size(T.value).text_color(c.muted).child(hero.plan)))
         .when(Boolean(this.scan?.partial), (el) => el.child(div().text_size(T.body).text_color(c.dim)
           .child(`Still reading your history: ${this.scan.processed} of ${this.scan.total} files so far.`))));
+  }
+
+  plans(c, data) {
+    const loading = Boolean(this.syncWaiting);
+    return v_flex().w_full().gap(G.lg)
+      .child(section(c, data.month.name, ""))
+      .children(data.plans.map((plan, index) => metric({ value: plan.multiple, unit: plan.unit, facts: plan.detail, tone: plan.tone, loading })(`ins-plan-${index}`, c)));
   }
 
   chart(c, chart) {
