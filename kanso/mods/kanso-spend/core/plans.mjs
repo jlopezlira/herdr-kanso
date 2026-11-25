@@ -40,7 +40,10 @@ export function planLines(plans, month) {
   const list = (Array.isArray(plans) ? plans : []).filter((plan) => plan?.name && plan.usdPerMonth > 0);
   if (!list.length || !month) return [];
   const early = month.day < EARLY_DAYS;
-  return workOf(list, month.byProvider).map((work, i) => {
+  const works = workOf(list, month.byProvider);
+  const order = list.map((plan, i) => i).toSorted((a, b) => works[b] / list[b].usdPerMonth - works[a] / list[a].usdPerMonth);
+  return order.map((i) => {
+    const work = works[i];
     const plan = list[i];
     const ratio = work / plan.usdPerMonth;
     const under = !early && ratio < 1;

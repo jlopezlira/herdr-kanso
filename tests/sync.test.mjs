@@ -26,6 +26,14 @@ const spend = (machine, usd, at, extra = {}) => ({
 const priced = (usd) => ({ costs: { hero: { usd, tokens: usd, value: `$${usd}.00`, stats: [{ unit: "tokens", value: String(usd) }] } } });
 const on = (id = "odin") => ({ version: 1, peers: { [id]: { enabled: true } } });
 const ready = (name = "odin") => [{ name, layout: "ready" }];
+const TODAY = "2026-11-10";
+const MONTH_START = "2026-11-01";
+const monthOf = (byProvider, start = MONTH_START) => ({ start, byProvider });
+const dayOptions = { cost: { period: "day", offset: 0, project: "all", model: "all" } };
+const todayCosts = { ...priced(10).costs, range: { period: "day", start: TODAY, end: TODAY, offset: 0 } };
+const peerToday = (usd, body = {}) => spend(PEER, usd, new Date(NOW).toISOString(), {
+  period: "day", start: TODAY, ...body,
+});
 
 // An app home where kansō Spend is installed.
 const withSpend = async (t) => {
@@ -99,12 +107,15 @@ test("A computer does not take another computer's ledger, or give its own away",
 
 test("Spend adds each computer and leaves one computer as it was", () => {
   const costs = {
+    range: { period: "month", start: MONTH_START, end: "2026-11-30", offset: 0 },
     hero: {
       usd: 10, tokens: 100, value: "$10.00", tip: "x", note: "14% more than October",
       stats: [{ unit: "tokens", value: "100", tip: "in 80" }, { unit: "tasks", value: "2" }],
     },
   };
-  const rows = [spend("peer", 5, "2026-11-10T01:00:00.000Z", { name: "Studio", tokens: 50, tokensText: "50" })];
+  const rows = [spend("peer", 5, "2026-11-10T01:00:00.000Z", {
+    name: "Studio", tokens: 50, tokensText: "50", start: MONTH_START,
+  })];
   const options = { cost: { period: "month", offset: 0, project: "all", model: "all" } };
   const folded = foldCosts(costs, { self: SELF, rows, options });
   assert.equal(folded.hero.usd, 15);
@@ -117,6 +128,80 @@ test("Spend adds each computer and leaves one computer as it was", () => {
   assert.equal(foldCosts(costs, { self: SELF, rows: [], options }), costs);
   assert.equal(foldCosts(costs, { self: SELF, rows, options: { cost: { project: "app", model: "all" } } }), costs);
   assert.equal(foldCosts(costs, { self: SELF, rows, options: { cost: { period: "year", offset: 0, project: "all", model: "all" } } }), costs);
+});
+
+test("A computer shares only its own spend after including its peers in the total.", () => {
+  const rows = [peerToday(5)];
+  const folded = foldCosts(todayCosts, { self: SELF, rows, options: dayOptions });
+  const own = sync.rowFromCosts(folded, SELF, new Date(NOW).toISOString(), dayOptions);
+  assert.equal(folded.hero.usd, 15);
+  assert.equal(own.body.usd, 10);
+});
+
+test("Today's spend ignores a peer's total for yesterday.", () => {
+  const rows = [peerToday(5, { start: "2026-11-09" })];
+  assert.equal(foldCosts(todayCosts, { self: SELF, rows, options: dayOptions }).hero.usd, 10);
+});
+
+test("A project filter keeps the monthly plan totals across computers without including last month's work.", () => {
+  const ownMonth = monthOf({ anthropic: 100 });
+  const costs = { ...todayCosts, filters: { project: "app", model: "all" }, month: ownMonth };
+  const options = { cost: { ...dayOptions.cost, project: "app" } };
+  const rows = [
+    peerToday(5, { month: monthOf({ anthropic: 20, openai: 30 }) }),
+    spend("older", 500, "2026-10-31T21:00:00.000Z", { month: monthOf({ anthropic: 500 }, "2026-10-01") }),
+  ];
+  const folded = foldCosts(costs, { self: SELF, rows, options });
+  assert.equal(folded.hero.usd, 10);
+  assert.deepEqual(folded.month, monthOf({ anthropic: 120, openai: 30 }));
+});
+
+test("Spend never shares a filtered or out-of-date view as the requested total.", () => {
+  const at = new Date(NOW).toISOString();
+  for (const filters of [{ project: "app", model: "all" }, { project: "all", model: "opus" }]) {
+    assert.equal(sync.rowFromCosts({ ...todayCosts, filters }, SELF, at, dayOptions), null);
+  }
+  for (const cost of [{ period: "month", offset: 0 }, { period: "day", offset: -1 }]) {
+    assert.equal(sync.rowFromCosts(todayCosts, SELF, at, { cost }), null);
+  }
+});
+
+test("Today's spend accepts an undated peer total updated today, but not one updated yesterday.", () => {
+  const at = (day) => new Date(2026, 10, day, 12).toISOString();
+  const total = (day) => foldCosts(todayCosts, {
+    self: SELF, rows: [spend(PEER, 5, at(day), { period: "day" })], options: dayOptions,
+  }).hero.usd;
+  assert.equal(total(10), 15);
+  assert.equal(total(9), 10);
+});
+
+test("All time counts a peer even when its history started in a different month.", () => {
+  const options = { cost: { period: "all", offset: 0 } };
+  const costs = { ...todayCosts, range: { ...todayCosts.range, period: "all", start: "2026-10-01" } };
+  const rows = [peerToday(5, { period: "all", start: "2026-09-01" })];
+  assert.equal(foldCosts(costs, { self: SELF, rows, options }).hero.usd, 15);
+});
+
+test("Spend asks both due computers before either replies.", async () => {
+  const started = [];
+  const replyGate = Promise.withResolvers();
+  const exchange = sync.exchangeAll((on) => {
+    started.push(on);
+    return replyGate.promise;
+  }, {
+    config: sync.withPeer(on(), "loki", true), peers: [...ready(), ...ready("loki")],
+    status: {}, rows: [], self: SELF, now: NOW, periodKey: "month:0",
+  });
+  await new Promise((resolve) => setImmediate(resolve));
+  const waiting = started.toSorted();
+  replyGate.resolve({ code: 0, stdout: JSON.stringify(reply([])) });
+  await exchange;
+  assert.deepEqual(waiting, ["loki", "odin"]);
+});
+
+test("Changing the period makes a computer due immediately.", () => {
+  const status = { at: NOW, failures: 0, reason: null, period: "month:0" };
+  assert.equal(sync.due(status, NOW, "month:-1"), true);
 });
 
 test("Sync off, or a computer that is not connected, asks nothing", async () => {
@@ -156,7 +241,6 @@ test("A computer out of reach keeps the last figures, then waits longer", async 
   assert.equal(calls, 1);
   assert.equal(out.rows, rows);
   assert.equal(out.status.odin.synced_at, status.odin.synced_at);
-  assert.equal(sync.due({ at: NOW, failures: 0, reason: null, period: "month:0" }, NOW + 1, "month:1"), true);
   assert.equal(sync.due(undefined, NOW, "month:0"), true);
 });
 
