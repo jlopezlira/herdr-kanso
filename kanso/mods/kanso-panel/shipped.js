@@ -2,7 +2,7 @@ import { sizedPage } from "./ui-page.js";
 import { div } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import { theme, shared, setShared, notify } from "herdr";
-import { Store, cohortOf, mergeHours } from "./shipped-store.js";
+import { Store, cohortOf, mergeHours, monthsIn } from "./shipped-store.js";
 import { github, gql } from "./shipped-github.js";
 import { shippedSpec, shareText } from "./shipped-card.js";
 import { Share, shareRows } from "./share.js";
@@ -12,7 +12,7 @@ import { section } from "./ui-section.js";
 import { metric, skeletonOf, failureBlock, tooltip } from "./kit.js";
 import { factList } from "./ui-facts.js";
 import { segmented } from "./ui-tab.js";
-import { MONTHS } from "./pure.js";
+import { MONTHS, mapSeries } from "./pure.js";
 import { shippedMemory } from "./panel-state.js";
 import { spawnAndNotify, said } from "./lib.js";
 import { dot } from "./ui-dot.js";
@@ -23,6 +23,7 @@ const REFRESH_MS = 5 * 60 * 1000;
 const REPO_ROWS = 8;
 const TREND = 6;
 const RATE_FLOOR = 10;
+const SETTLE_MS = 30 * 86400000;
 export const PERIODS = ["day", "week", "month", "year"];
 const PERIOD_NAMES = { day: "Day", week: "Week", month: "Month", year: "Year" };
 const FULL_MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
@@ -102,7 +103,7 @@ export function trendOf(prs, kind, offset, login, now = Date.now(), n = TREND) {
   });
 }
 
-export function computeRecords({ days, prs, login }) {
+export function computeRecords({ days, prs, login }, now = Date.now()) {
   const best = (list, score, make) => list.reduce((top, x) => (score(x) > 0 && (!top || score(x) > top.score) ? { score: score(x), value: make(x) } : top), null)?.value ?? null;
   const bestDay = best(days ?? [], (d) => d.contributionCount, (d) => ({ n: d.contributionCount, date: d.date }));
   const { longest } = streaks(days, null);
@@ -111,7 +112,7 @@ export function computeRecords({ days, prs, login }) {
   const weeks = starts("week").map((start) => ({ start, ...cohortOf(opened, start, periodRange("week", 0, start).end, login) }));
   const months = starts("month").map((start) => ({ start, ...cohortOf(opened, start, periodRange("month", 0, start).end, login) }));
   const prodWeek = best(weeks, (w) => w.prod, (w) => ({ n: w.prod, start: w.start }));
-  const rateMonth = best(months.filter((m) => m.opened >= RATE_FLOOR), (m) => m.rate, (m) => ({ rate: m.rate, n: m.opened, start: m.start }));
+  const rateMonth = best(months.filter((m) => m.opened >= RATE_FLOOR && periodRange("month", 0, m.start).end <= now - SETTLE_MS), (m) => m.rate, (m) => ({ rate: m.rate, n: m.opened, start: m.start }));
   return {
     ...(bestDay ? { bestDay } : {}),
     ...(longest.n ? { longestStreak: longest } : {}),
@@ -131,6 +132,7 @@ export function mergeRecords(stored, found, now = Date.now()) {
     const r = found[k];
     if (!r) return { kept, beaten };
     if (!kept[k]) return { kept: { ...kept, [k]: r }, beaten };
+    if (k === "rateMonth" && (r.start === kept[k].start || !better(r, kept[k]))) return { kept: { ...kept, [k]: r }, beaten };
     if (!better(r, kept[k])) return { kept, beaten };
     const recent = stored?.[k] && now - recordAt(k, r) <= (k === "rateMonth" ? 31 : 7) * DAY;
     return { kept: { ...kept, [k]: r }, beaten: recent ? [...beaten, k] : beaten };
@@ -185,7 +187,7 @@ export class Shipped {
     this.github = {};
     this.prs = null; this.syncing = false; this.syncError = null; this.phase = null;
     this.store = new Store(cx.timer);
-    this.records = shared(RECORDS) ?? {}; this.fresh = new Set();
+    this.records = {}; this.fresh = new Set();
     this.loading = false; this.pending = false; this.reposOpen = false; this.width = 368;
     this.share = new Share("kanso-panel");
     this.refresh(cx);
@@ -210,6 +212,7 @@ export class Shipped {
         if (again || !this.github[key]) {
           try {
             const data = await gql(periodQuery(cur, prev, now));
+            if (data.viewer.login !== this.login) { this.github = {}; this.prs = null; this.covered = null; this.fresh = new Set(); this.records = shared(`${RECORDS}:${data.viewer.login}`) ?? {}; }
             this.github = { ...this.github, [key]: data };
             this.login = data.viewer.login; this.name = data.viewer.name;
             this.weeks = data.viewer.cal.contributionCalendar.weeks;
@@ -232,32 +235,50 @@ export class Shipped {
   }
 
   startSync(cx) {
-    if (this.syncing || !this.login) return;
-    this.syncing = true; this.syncError = null;
+    if (!this.login) return;
+    if (this.syncing) { this.resync = true; return; }
+    this.syncing = true; this.resync = false; this.syncError = null;
+    const login = this.login;
     spawnAndNotify(cx, async (cx) => {
       try {
         await this.store.open();
-        for (const provider of PROVIDERS) await this.store.forAccount(provider.provider, this.login);
+        await mapSeries(PROVIDERS, (provider) => this.store.forAccount(provider.provider, this.login));
+        if (login !== this.login) return;
         this.prs = await this.store.prs();
+        this.covered = await this.coverage();
         this.firstRead = !this.prs.length;
         cx.notify();
         const now = Date.now(), from = periodRange(this.kind, this.offset - TREND + 1, now).start;
-        for (const provider of PROVIDERS) await provider.sync(this.store, { from, now, login: this.login, progress: (phase) => { this.phase = `${provider.name}, ${phase}`; cx.notify(); } });
+        const read = await mapSeries(PROVIDERS, (provider) => provider.sync(this.store, { from, now, login, progress: (phase) => { this.phase = `${provider.name}, ${phase}`; cx.notify(); } }));
+        this.unchecked = read.reduce((n, r) => n + (r?.unchecked ?? 0), 0);
       } catch (e) { this.syncError = String(e?.message ?? e); }
       finally {
         this.syncing = false; this.phase = null; this.firstRead = false;
-        try { this.prs = await this.store.prs(); } catch {}
-        this.checkRecords(); cx.notify();
+        if (login === this.login) {
+          try { this.prs = await this.store.prs(); this.covered = await this.coverage(); } catch {}
+          this.checkRecords();
+        } else { this.prs = null; this.covered = null; this.resync = true; }
+        cx.notify();
+        if (this.resync) this.startSync(cx);
       }
     });
   }
 
+  async coverage() { return Object.fromEntries(await mapSeries(PROVIDERS, async (p) => [p.provider, await this.store.readMonths(p.provider)])); }
+
+  covers(now = Date.now()) {
+    const from = periodRange(this.kind, this.offset - TREND + 1, now).start, end = Math.min(periodRange(this.kind, this.offset, now).end, now + 1);
+    return PROVIDERS.every((p) => monthsIn(from, end).every((m) => this.covered?.[p.provider]?.has(m.month)));
+  }
+
+  recordsKey() { return `${RECORDS}:${this.login ?? ""}`; }
+
   checkRecords() {
     if (!this.days) return;
     const whole = this.prs && !this.syncing ? this.prs : null;
-    const { kept, beaten } = mergeRecords(shared(RECORDS), computeRecords({ days: this.days, prs: whole, login: this.login }));
+    const { kept, beaten } = mergeRecords(shared(this.recordsKey()), computeRecords({ days: this.days, prs: whole, login: this.login }));
     this.records = kept;
-    setShared(RECORDS, kept);
+    setShared(this.recordsKey(), kept);
     this.fresh = new Set([...this.fresh, ...beaten]);
     for (const k of beaten) {
       const t = recordText(k, kept[k]);
@@ -293,9 +314,9 @@ export class Shipped {
     const now = Date.now();
     const { cur, prev } = this.ranges(now);
     const gh = this.github[this.key()], v = gh?.viewer;
-    const mine = this.prs ? cohortOf(this.prs, cur.start, cur.end, this.login) : null;
-    const before = this.prs ? cohortOf(this.prs, prev.start, prev.end, this.login) : null;
-    const settled = !(this.syncing && this.firstRead);
+    const settled = this.covers(now);
+    const mine = this.prs && settled ? cohortOf(this.prs, cur.start, cur.end, this.login) : null;
+    const before = this.prs && settled ? cohortOf(this.prs, prev.start, prev.end, this.login) : null;
     const contributions = v ? contributionsIn(this.days, cur.start, cur.end, v.cur) : null;
     const delta = settled && mine?.rate !== null && mine?.rate !== undefined && before?.rate !== null && before?.rate !== undefined ? Math.round((mine.rate - before.rate) * 100) : null;
     const deltaText = delta === null ? "" : `${delta >= 0 ? "+" : ""}${delta} ${Math.abs(delta) === 1 ? "point" : "points"} ${comparedLabel(this.kind, this.offset)}`;
@@ -338,7 +359,7 @@ export class Shipped {
         .child(div().flex_1().min_w(0).truncate().text_size(T.card).text_color(c.text).child(name))
         .child(div().flex_none().text_size(T.body).text_color(c.dim).child(detail)))
       .child(h_flex().id(id).w_full().h(G.xs).rounded(G.hair).bg(c.subtle)
-        .child(div().h_full().rounded(G.hair).bg(c.accent).w(`${(Math.max(0.02, rate ?? 0) * 100).toFixed(1)}%`)));
+        .child(div().h_full().rounded(G.hair).bg(c.accent).w(`${(rate ? Math.max(0.02, rate) * 100 : 0).toFixed(1)}%`)));
   }
 
   trend(c) {
@@ -384,6 +405,7 @@ export class Shipped {
 
   status(c) {
     if (this.syncError) return failureBlock({ text: "Reading stopped", source: this.syncError })("sh-sync", c);
+    if (!this.syncing && this.unchecked) return div().text_size(T.body).text_color(c.dim).child(`${fmt(this.unchecked)} merged pull ${this.unchecked === 1 ? "request" : "requests"} could not be checked for production yet; they count as not there.`);
     if (!this.syncing || !this.phase) return null;
     return div().text_size(T.body).text_color(this.firstRead ? c.muted : c.dim)
       .child(`${this.firstRead ? "Reading" : "Updating"}: ${this.phase}.${this.firstRead ? " The first time takes a minute; after that only what changed is read." : ""}`);

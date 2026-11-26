@@ -42,7 +42,7 @@ export const prodSql = (urls) => (urls.length ? `UPDATE prs SET prod=1 WHERE url
 export function pendingByRepo(rows) {
   const waiting = rows.filter((r) => r.merged && !r.prod && r.main && r.base !== r.main && r.merge_oid);
   return [...Map.groupBy(waiting, (r) => r.repo)].map(([repo, list]) => ({
-    repo, main: list[0].main, since: Math.min(...list.map((r) => r.merged)) - DAY, oids: new Map(list.map((r) => [r.merge_oid, r.url])),
+    repo, main: list[0].main, since: Math.min(...list.map((r) => r.merged)) - DAY, until: Math.max(...list.map((r) => r.merged)) + DAY, oids: new Map(list.map((r) => [r.merge_oid, r.url])),
   }));
 }
 

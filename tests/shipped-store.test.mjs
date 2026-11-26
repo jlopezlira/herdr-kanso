@@ -40,8 +40,14 @@ test("Shipped looks in the default branch only for waiting merges with a known c
     { ...newer, base: newer.main }, prRow(pullRequest(4, start, { base: "develop" })),
   ]);
   same(waiting.map(({ oids, ...repo }) => ({ ...repo, oids: [...oids] })), [
-    { repo: "me/tool", main: "main", since: older.merged - DAY, oids: [[newer.merge_oid, newer.url], [older.merge_oid, older.url]] },
-    { repo: "org/app", main: "trunk", since: other.merged - DAY, oids: [[other.merge_oid, other.url]] },
+    {
+      repo: "me/tool", main: "main", since: older.merged - DAY, until: newer.merged + DAY,
+      oids: [[newer.merge_oid, newer.url], [older.merge_oid, older.url]],
+    },
+    {
+      repo: "org/app", main: "trunk", since: other.merged - DAY, until: other.merged + DAY,
+      oids: [[other.merge_oid, other.url]],
+    },
   ]);
 });
 
