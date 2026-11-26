@@ -194,7 +194,7 @@ const loadTranscripts = () => load("kanso-panel/platform-transcripts.js", ["tran
 const listingAt = (home, transcriptApi) => transcriptApi("macos", (command, args, options) =>
   exec(command, args, { ...options, env: { ...process.env, HOME: home } }));
 
-test("A folder's conversations are the newest of that folder, only as many as asked, and a modern Codex line still has its first prompt", async (t) => {
+test("A folder's conversations are the newest of that folder, only as many as asked, and a modern Codex line still has its first prompt", { skip: process.platform === "win32" }, async (t) => {
   const home = await temporary(t);
   const alpha = join(home, ".claude", "projects", "-work-alpha");
   const beta = join(home, ".claude", "projects", "-work-beta");
