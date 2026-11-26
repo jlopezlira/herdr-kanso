@@ -33,12 +33,9 @@ the branch's rules.
 
 ### Changed
 
-- Shipped measures pull requests, not lines: how many of those you opened in the period reached production (merged into the repository's default branch, or into a branch released to it), that share and its change against the period before, your last six periods, opened, merged, time to merge, closed unmerged, reviews and pull requests merged in others' repositories. Records, When you merge and By repository count pull requests. It reads everything from GitHub, so it is the same on every computer.
-
-### Removed
-
 - Tasks no longer shows GitHub issues, GitHub Projects, Jira or Linear boards, and Settings no longer has Accounts. Their boards and saved copies leave kansō's database; a Jira or Linear token you saved stays in your system's secret store until you remove it there (named "kansō Jira" or "kansō Linear").
 - Shipped's line and commit counts, its scan of this computer's repositories and Add up Shipped across your computers: Shipped no longer writes the "Kanso Shipped stats" gist (the one it made stays in your GitHub account until you delete it).
+- Shipped measures pull requests, not lines: how many of those you opened in the period reached production (merged into the repository's default branch, or into a branch released to it), that share and its change against the period before, your last six periods, opened, merged, time to merge, closed unmerged, reviews and pull requests merged in others' repositories. Records, When you merge and By repository count pull requests. It reads everything from GitHub, so it is the same on every computer.
 
 ## [4.1.1] - 2026-11-25
 
