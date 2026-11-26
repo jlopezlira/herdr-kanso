@@ -125,8 +125,9 @@ On Windows, merge `kanso/keys.windows.json` into your Herdr keys instead of
 - **Weeks without a restart.** On macOS, Windows and Linux, the memory guard recycles
   bloated idle Claude agents on the same conversation; the Memory panel shows
   what it sees.
-- **Spend and Shipped.** What your AI work is worth at list price, and what you
-  delivered on GitHub, with share images that carry totals only. Turn Sync on
+- **Spend and Shipped.** What your AI work is worth at list price, and how many
+  of the pull requests you open reach production, period by period, with share
+  images that carry totals only. Turn Sync on
   from another computer's row and Spend adds that computer's tokens.
 - **The device beside the agent.** Simulator is kansō's own panel, using only
   Xcode's and Android's tools. It installs nothing. The iOS screen is a view;
@@ -189,9 +190,7 @@ Everything runs on your machine, and reads only the folders you work in:
 `git`, `gh`, `find`, `du`, `lsof` (`ss` and `/proc` on Linux), `ps`, `sqlite3`, `node`, `docker`,
 `xcode-select`, `simctl`, `adb`, `emulator`, Caffeine's `pmset`, `launchctl`, `systemd-run`
 and `systemd-inhibit`, and Herdr's `hc`. What reaches the network: PR and
-Shipped through `gh`, only while their panel is shown (when Settings turns it on,
-Shipped adds up your computers in a secret gist: unlisted, but readable by anyone
-with its link); the update check, `git ls-remote` on kansō's
+Shipped through `gh`, only while their panel is shown; the update check, `git ls-remote` on kansō's
 GitHub repository, and the download of a release you install; Spend's daily
 fetch of OpenRouter's price list; the hjkl dōjō's pet picker, which downloads
 the agents' pets from persistent.oaistatic.com and codex-pets.net and keeps only

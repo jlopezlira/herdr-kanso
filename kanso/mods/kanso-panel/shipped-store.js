@@ -1,93 +1,85 @@
 import { Database } from "./platform-database.js";
-import { localName, localService } from "./platform-host.js";
 import { paths } from "./platform-paths.js";
-import { fileApi } from "./platform-files.js";
-import { repositoryApi } from "./platform-repositories.js";
-import { systemApi } from "./platform-system.js";
-// Shipped's store, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
-// Statistics only: no messages, file names or code.
-// A repository's week counts the larger of what the machines and GitHub saw.
-import { exec, appHome, home, spaces, panes, writeTextFile } from "herdr";
-import { range, mapSeries } from "./pure.js";
-import { createHash } from "crypto";
+import { appHome } from "herdr";
+import { q } from "./kdb.js";
+import { num } from "./pr-inbox.js";
 
 export const STORE_DIR = "data/kanso-panel";
-const GIST_DESCRIPTION = "Kanso Shipped stats";
-const ROOTS = ["Apps", "Projects", "Developer", "code", "src", "dev", "work", "repos", "git", "github"];
-const HASH = 12; // enough to tell commits apart, and short
-export const WEEK0 = 3 * 86400; // 4 Jan 1970, the first Sunday: GitHub's weeks start on Sunday, UTC
-export const weekOf = (sec) => Math.floor((sec - WEEK0) / 604800) * 604800 + WEEK0;
+const DAY = 86400000;
 
 const SCHEMA = `
-CREATE TABLE IF NOT EXISTS commits(repo TEXT NOT NULL, hash TEXT NOT NULL, at INTEGER NOT NULL, adds INTEGER NOT NULL, dels INTEGER NOT NULL, machine TEXT NOT NULL, PRIMARY KEY(repo, hash));
-CREATE INDEX IF NOT EXISTS commits_at ON commits(at);
-CREATE TABLE IF NOT EXISTS gh_weeks(repo TEXT NOT NULL, week INTEGER NOT NULL, adds INTEGER NOT NULL, dels INTEGER NOT NULL, commits INTEGER NOT NULL, PRIMARY KEY(repo, week));
-CREATE TABLE IF NOT EXISTS gh_repos(repo TEXT PRIMARY KEY, pushed TEXT, fetched INTEGER NOT NULL DEFAULT 0, pending INTEGER NOT NULL DEFAULT 0);
-CREATE TABLE IF NOT EXISTS scans(path TEXT PRIMARY KEY, repo TEXT NOT NULL, refs TEXT NOT NULL, scanned INTEGER NOT NULL);
+DROP TABLE IF EXISTS commits;
+DROP TABLE IF EXISTS gh_weeks;
+DROP TABLE IF EXISTS gh_repos;
+DROP TABLE IF EXISTS scans;
+CREATE TABLE IF NOT EXISTS prs(url TEXT PRIMARY KEY, provider TEXT NOT NULL, repo TEXT NOT NULL, owner TEXT NOT NULL, number INTEGER NOT NULL, created INTEGER NOT NULL, merged INTEGER, closed INTEGER, base TEXT, main TEXT, merge_oid TEXT, prod INTEGER NOT NULL DEFAULT 0);
+CREATE INDEX IF NOT EXISTS prs_created ON prs(created);
+CREATE TABLE IF NOT EXISTS months(provider TEXT NOT NULL, month TEXT NOT NULL, read INTEGER NOT NULL, PRIMARY KEY(provider, month));
 CREATE TABLE IF NOT EXISTS meta(k TEXT PRIMARY KEY, v TEXT);`;
 
-export const sqlText = (s) => `'${String(s ?? "").replace(/'/g, "''")}'`;
-const int = (n) => String(Math.round(Number(n) || 0));
+export const sqlText = q;
+const int = num;
+const at = (iso) => (iso ? Date.parse(iso) : null);
 
-export function repoName(url, folder) {
-  const u = String(url ?? "").trim().replace(/\.git$/, "").replace(/\/+$/, "");
-  const gh = /github\.com[:/]+([^/]+\/[^/]+)$/i.exec(u);
-  if (gh) return gh[1];
-  const other = /^(?:[a-z+]+:\/\/)?(?:[^@/]+@)?([^/:]+)[:/]+(.+)$/i.exec(u);
-  if (other) return `${other[1]}/${other[2]}`;
-  return `local/${paths.basename(folder) || "repository"}`;
+export function prRow(node, provider = "github") {
+  const repo = node.repository ?? {};
+  const main = repo.defaultBranchRef?.name ?? null;
+  const merged = at(node.mergedAt);
+  return {
+    url: node.url, provider, repo: repo.nameWithOwner ?? "", owner: repo.owner?.login ?? "", number: node.number,
+    created: at(node.createdAt), merged, closed: at(node.closedAt), base: node.baseRefName ?? null, main,
+    merge_oid: node.mergeCommit?.oid ?? null, prod: merged && main && node.baseRefName === main ? 1 : 0,
+  };
 }
 
-// `git log --format='%x1e%H %at' --shortstat` as [{ hash, at (s), add, del }].
-export function parseLog(stdout) {
-  return String(stdout).split("\x1e").slice(1).map((chunk) => {
-    const [head, ...rest] = chunk.trim().split("\n");
-    const [hash, at] = head.trim().split(/\s+/);
-    const stat = rest.join(" ");
-    return {
-      hash: hash.slice(0, HASH), at: Number(at),
-      add: Number(/(\d+) insertions?\(\+\)/.exec(stat)?.[1] ?? 0),
-      del: Number(/(\d+) deletions?\(-\)/.exec(stat)?.[1] ?? 0),
-    };
+const COLS = ["url", "provider", "repo", "owner", "number", "created", "merged", "closed", "base", "main", "merge_oid", "prod"];
+const NUMS = new Set(["number", "created", "merged", "closed", "prod"]);
+
+export const upsertPrs = (rows) => rows.map((r) => `INSERT INTO prs(${COLS.join(",")}) VALUES(${COLS.map((k) => (NUMS.has(k) ? int(r[k]) : sqlText(r[k]))).join(",")}) ON CONFLICT(url) DO UPDATE SET ${COLS.filter((k) => k !== "url" && k !== "prod").map((k) => `${k}=excluded.${k}`).join(",")},prod=MAX(prs.prod,excluded.prod);`).join("\n");
+
+export const prodSql = (urls) => (urls.length ? `UPDATE prs SET prod=1 WHERE url IN (${urls.map(sqlText).join(",")});` : "");
+
+export function pendingByRepo(rows) {
+  const waiting = rows.filter((r) => r.merged && !r.prod && r.main && r.base !== r.main && r.merge_oid);
+  return [...Map.groupBy(waiting, (r) => r.repo)].map(([repo, list]) => ({
+    repo, main: list[0].main, since: Math.min(...list.map((r) => r.merged)) - DAY, until: Math.max(...list.map((r) => r.merged)) + DAY, oids: new Map(list.map((r) => [r.merge_oid, r.url])),
+  }));
+}
+
+export function monthsIn(start, end) {
+  const first = new Date(start), last = new Date(end - 1);
+  const count = (last.getFullYear() - first.getFullYear()) * 12 + last.getMonth() - first.getMonth() + 1;
+  return Array.from({ length: Math.max(0, count) }, (_, i) => {
+    const d = new Date(first.getFullYear(), first.getMonth() + i, 1);
+    return { month: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`, start: d.getTime(), end: new Date(d.getFullYear(), d.getMonth() + 1, 1).getTime() };
   });
 }
 
-// INSERT OR IGNORE: a hash already read on another machine is kept as it was.
-export function insertCommits(repo, commits, machine) {
-  const rows = commits.map((c) => `(${sqlText(repo)},${sqlText(c.hash)},${int(c.at)},${int(c.add)},${int(c.del)},${sqlText(machine)})`);
-  return range(Math.ceil(rows.length / 500)).map((k) => `INSERT OR IGNORE INTO commits(repo,hash,at,adds,dels,machine) VALUES ${rows.slice(k * 500, k * 500 + 500).join(",")};`).join("\n");
+const median = (list) => {
+  if (!list.length) return null;
+  const s = list.toSorted((a, b) => a - b), mid = Math.floor(s.length / 2);
+  return s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2;
+};
+
+export function cohortOf(prs, start, end, login = "") {
+  const opened = prs.filter((p) => p.created >= start && p.created < end);
+  const merged = opened.filter((p) => p.merged);
+  const prod = merged.filter((p) => p.prod);
+  const byRepo = [...Map.groupBy(opened, (p) => p.repo)].map(([repo, list]) => ({ repo, opened: list.length, prod: list.filter((p) => p.prod).length }))
+    .toSorted((a, b) => b.prod - a.prod || b.opened - a.opened || a.repo.localeCompare(b.repo));
+  const me = String(login).toLowerCase();
+  return {
+    opened: opened.length, merged: merged.length, prod: prod.length,
+    dropped: opened.filter((p) => p.closed && !p.merged).length, open: opened.filter((p) => !p.closed && !p.merged).length,
+    rate: opened.length ? prod.length / opened.length : null,
+    toMerge: median(merged.map((p) => p.merged - p.created)),
+    elsewhere: merged.filter((p) => me && p.owner.toLowerCase() !== me).length,
+    repos: byRepo,
+  };
 }
 
-const literally = (text) => String(text).replace(/[\\.[\]()*+?{}|^$]/g, "\\$&");
-
-export const seal = (key, text) => createHash("sha256").update(`${key}\n${String(text).trim().toLowerCase()}`).digest("hex");
-
-export function machineFile(machine, identities, rows, key) {
-  const repos = [...new Set(rows.map((r) => r.repo))];
-  const index = new Map(repos.map((repo, i) => [repo, i]));
-  const commits = rows.map((r) => [index.get(r.repo), r.hash, r.at, r.adds, r.dels]);
-  return { v: 2, machine, updated: Math.floor(Date.now() / 1000), identities: identities.map((who) => seal(key, who)), repos: repos.map((repo) => seal(key, repo)), commits };
-}
-
-export function readMachineFile(text, known = new Map()) {
-  try {
-    const f = JSON.parse(text);
-    if (![1, 2].includes(f?.v) || !Array.isArray(f.commits) || !Array.isArray(f.repos)) return null;
-    const machine = String(f.machine ?? "another computer");
-    const listed = Array.isArray(f.identities) ? f.identities.map(String) : [];
-    const repos = f.v === 1 ? f.repos : f.repos.map((sealed) => known.get(sealed) ?? `elsewhere/${String(sealed).slice(0, 12)}`);
-    return { machine, identities: f.v === 1 ? listed : [], seals: f.v === 1 ? [] : listed, commits: f.commits.map(([r, hash, at, add, del]) => ({ repo: repos[r], hash, at, add, del })).filter((c) => c.repo && c.hash) };
-  } catch { return null; }
-}
-
-// Each week takes the larger of the machines' and GitHub's sums.
-export const WEEKLY = `WITH l AS (SELECT repo, (at - ${WEEK0}) / 604800 * 604800 + ${WEEK0} AS week, SUM(adds) a, SUM(dels) d, COUNT(*) c FROM commits GROUP BY repo, week),
-u AS (SELECT repo, week, a, d, c FROM l UNION ALL SELECT repo, week, adds, dels, commits FROM gh_weeks)
-SELECT repo, week, MAX(a) a, MAX(d) d, MAX(c) c FROM u GROUP BY repo, week ORDER BY repo, week;`;
-
-export function weeklyStats(rows) {
-  const repos = Object.fromEntries([...Map.groupBy(rows, (r) => r.repo)].map(([repo, list]) => [repo, { weeks: list.map((r) => [r.week * 1000, r.a, r.d, r.c]) }]));
-  return { repos };
+export function mergeHours(prs, start, end) {
+  return Array.from({ length: 24 }, (_, h) => prs.filter((p) => p.merged && p.merged >= start && p.merged < end && new Date(p.merged).getHours() === h).length);
 }
 
 export class Store extends Database {
@@ -104,133 +96,21 @@ export class Store extends Database {
   async open() {
     await this.prepare(this.dir, "Install sqlite3 to keep Shipped's statistics.");
     await this.sql(SCHEMA);
-    await this.call((platform, run, write) => fileApi(platform, run, write).remove([paths.join(this.dir, "shipped.json")])).catch(() => {}); // the cache before the database
   }
 
   async meta(k) { return (await this.sql(`SELECT v FROM meta WHERE k=${sqlText(k)};`, true))[0]?.v ?? null; }
   async setMeta(k, v) { await this.sql(`INSERT OR REPLACE INTO meta(k,v) VALUES(${sqlText(k)},${sqlText(v)});`); }
 
-  async machine() {
-    if (this.name) return this.name;
-    const stored = await this.meta("machine");
-    const named = async () => {
-      const r = await localService(systemApi).hostname().catch(() => null);
-      const name = (r?.stdout ?? "").trim().replace(/[^A-Za-z0-9._-]+/g, "-") || `machine-${Date.now().toString(36)}`;
-      await this.setMeta("machine", name);
-      return name;
-    };
-    const name = stored || await named();
-    this.name = name;
-    return name;
+  async prs() { return this.sql("SELECT * FROM prs;", true); }
+
+  async forAccount(provider, login) {
+    const key = `${provider}.login`;
+    if ((await this.meta(key)) === login) return;
+    await this.script(`DELETE FROM prs WHERE provider=${sqlText(provider)};\nDELETE FROM months WHERE provider=${sqlText(provider)};\nDELETE FROM meta WHERE k=${sqlText(`${provider}.updated`)};\nINSERT OR REPLACE INTO meta(k,v) VALUES(${sqlText(key)},${sqlText(login)});`);
   }
+  async save(rows) { await this.script(upsertPrs(rows)); }
+  async markProd(urls) { await this.script(prodSql(urls)); }
 
-  async weekly() { return weeklyStats(await this.sql(WEEKLY, true)); }
-
-  // [start, end) in seconds.
-  async rhythm(start, end) {
-    const span = `at >= ${int(start)} AND at < ${int(end)}`;
-    const [hours, machines] = await Promise.all([
-      this.sql(`SELECT CAST(strftime('%H', at, 'unixepoch', 'localtime') AS INTEGER) h, COUNT(*) n FROM commits WHERE ${span} GROUP BY h;`, true),
-      this.sql(`SELECT machine, COUNT(*) n, SUM(adds) a, SUM(dels) d FROM commits WHERE ${span} GROUP BY machine ORDER BY n DESC;`, true),
-    ]);
-    const counts = new Map(hours.map((r) => [r.h, r.n]));
-    const byHour = range(24).map((h) => (counts.has(h) ? counts.get(h) : 0));
-    return { hours: byHour, machines };
-  }
-
-  async ghRepos() { return this.sql("SELECT repo, pushed, fetched, pending FROM gh_repos;", true); }
-
-  async saveGithub(entries) {
-    const out = entries.flatMap((e) => [
-      `INSERT OR REPLACE INTO gh_repos(repo,pushed,fetched,pending) VALUES(${sqlText(e.repo)},${sqlText(e.pushed)},${int(e.fetched)},${e.pending ? 1 : 0});`,
-      // A repository GitHub is still counting keeps the weeks it had.
-      ...(e.pending ? [] : [
-        `DELETE FROM gh_weeks WHERE repo=${sqlText(e.repo)};`,
-        ...e.weeks.map(([w, a, d, c]) => `INSERT INTO gh_weeks(repo,week,adds,dels,commits) VALUES(${sqlText(e.repo)},${int(w / 1000)},${int(a)},${int(d)},${int(c)});`),
-      ]),
-    ]);
-    await this.script(out.join("\n"));
-  }
-
-  async localRepos() {
-    const known = [
-      ...panes().filter((p) => p.cwd && !String(p.pane).includes("/")).map((p) => p.cwd),
-      ...spaces().filter((s) => !s.machine && s.folder).map((s) => s.folder),
-      ...(await this.sql("SELECT path FROM scans;", true)).map((r) => r.path),
-    ];
-    const found = await localService(fileApi).walk(ROOTS.map((r) => paths.join(home(), r)), { depth: 4, names: [".git"] }).catch(() => []);
-    const list = [...new Set([...known, ...found.map((path) => paths.dirname(path))])];
-    const read = await mapSeries(range(Math.ceil(list.length / 8)), (k) => Promise.all(list.slice(k * 8, k * 8 + 8).map(async (folder) => {
-      const r = await localService(repositoryApi).fingerprint(folder).catch(() => null);
-      if (r?.code !== 0) return [];
-      const [common, top, url, refs] = r.stdout.split("\n").map((s) => s.trim());
-      if (!common) return [];
-      const main = paths.basename(common) === ".git" ? paths.dirname(common) : top;
-      return [{ common, path: main, repo: repoName(url, main), refs: refs ?? "" }];
-    })));
-    // A repository reached from several folders (its worktrees) counts once, as first read.
-    return [...Map.groupBy(read.flat(2), (r) => r.common).values()].map(([{ path, repo, refs }]) => ({ path, repo, refs }));
-  }
-
-  async scanLocal(identities, progress, sealed = null) {
-    const machine = await this.machine();
-    const seen = new Map((await this.sql("SELECT path, refs FROM scans;", true)).map((r) => [r.path, r.refs]));
-    const repos = (await this.localRepos()).filter((r) => seen.get(r.path) !== r.refs);
-    const seals = new Set(sealed?.seals ?? []);
-    const sealedAuthors = async (cwd) => {
-      if (!seals.size) return [];
-      const r = await exec("git", ["log", "--all", "--no-merges", "--format=%an%x00%ae"], { cwd }).catch(() => null);
-      if (r?.code !== 0) return [];
-      const known = (who) => who.trim() && !identities.includes(who.trim()) && seals.has(seal(sealed.key, who));
-      return [...new Set(r.stdout.split("\n").flatMap((line) => {
-        const [name = "", email = ""] = line.split("\0");
-        return [...(known(name) ? [`^${literally(name)} <`] : []), ...(known(email) ? [`<${literally(email)}>`] : [])];
-      }))];
-    };
-    await mapSeries(repos, async (r, i) => {
-      const authors = [...new Set([...identities.map(literally), ...await sealedAuthors(r.path)])];
-      const log = await exec("git", ["log", "--all", "--no-merges", "-E", ...authors.map((w) => `--author=${w}`), "--format=%x1e%H %at", "--shortstat"], { cwd: r.path }).catch(() => null);
-      if (log?.code === 0) {
-        await this.script(`${insertCommits(r.repo, parseLog(log.stdout), machine)}
-INSERT OR REPLACE INTO scans(path,repo,refs,scanned) VALUES(${sqlText(r.path)},${sqlText(r.repo)},${sqlText(r.refs)},${int(Date.now() / 1000)});`);
-      }
-      progress?.(i + 1, repos.length);
-    });
-    return repos.length;
-  }
-
-  async syncMachines(identities) {
-    const machine = await this.machine();
-    const name = `shipped-${machine}.json`;
-    const listed = async () => {
-      const list = await exec("gh", ["api", "gists?per_page=100", "--paginate", "--jq", `.[] | select(.description == "${GIST_DESCRIPTION}") | .id`]);
-      return list.code === 0 ? list.stdout.split("\n").map((s) => s.trim()).find(Boolean) ?? null : null;
-    };
-    const write = async (id, file) => {
-      const files = { [name]: { content: JSON.stringify(file) } };
-      const path = paths.join(this.dir, `.gist-${Date.now()}.json`);
-      await writeTextFile(path, JSON.stringify(id ? { files } : { description: GIST_DESCRIPTION, public: false, files }), null);
-      if (localName() !== "windows") await exec("chmod", ["600", path]);
-      const sent = await exec("gh", ["api", ...(id ? ["-X", "PATCH", `gists/${id}`] : ["-X", "POST", "gists"]), "--input", path])
-        .finally(() => localService(fileApi).remove([path]).catch(() => {}));
-      if (sent.code !== 0) throw new Error((sent.stderr || "the gist could not be written").trim().split("\n")[0]);
-      return JSON.parse(sent.stdout);
-    };
-    const id = (await this.meta("gist")) || await listed() || (await write(null, machineFile(machine, [], [], ""))).id;
-    const gist = await write(id, machineFile(machine, identities, await this.sql(`SELECT repo, hash, at, adds, dels FROM commits WHERE machine=${sqlText(machine)};`, true), id));
-    await this.setMeta("gist", id);
-    const names = await this.sql("SELECT repo FROM commits UNION SELECT repo FROM scans UNION SELECT repo FROM gh_repos;", true);
-    const known = new Map(names.map((r) => [seal(id, r.repo), r.repo]));
-    const read = await mapSeries(Object.entries(gist.files ?? {}), async ([file, f]) => {
-      if (file === name || !file.startsWith("shipped-")) return null;
-      const fetched = async () => { const r = await exec("curl", ["-fsSL", "--proto", "=https", "--proto-redir", "=https", "--max-time", "25", f.raw_url]).catch(() => null); return r?.code === 0 ? r.stdout : null; };
-      const text = f.truncated && f.raw_url ? await fetched() : f.content;
-      const other = text && readMachineFile(text, known);
-      if (!other || other.machine === machine) return null;
-      await this.script(`DELETE FROM commits WHERE machine=${sqlText(other.machine)};\n` + [...Map.groupBy(other.commits, (c) => c.repo)].map(([repo, commits]) => insertCommits(repo, commits, other.machine)).join("\n"));
-      return other;
-    });
-    const others = read.filter(Boolean);
-    return { gist: id, machines: others.map((o) => o.machine), identities: [...new Set(others.flatMap((o) => o.identities))], seals: [...new Set(others.flatMap((o) => o.seals))].toSorted() };
-  }
+  async readMonths(provider) { return new Set((await this.sql(`SELECT month FROM months WHERE provider=${sqlText(provider)};`, true)).map((r) => r.month)); }
+  async monthRead(provider, month, now = Date.now()) { await this.sql(`INSERT OR REPLACE INTO months(provider,month,read) VALUES(${sqlText(provider)},${sqlText(month)},${int(now)});`); }
 }

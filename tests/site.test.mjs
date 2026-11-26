@@ -9,6 +9,11 @@ const CSS = ["site/style.css"];
 const PAGES = ["index", "changelog", "credits", "privacy", "terms", "use"].map((p) => `site/${p}.html`);
 const SCRIPTS = ["site/main.js", "site/changelog.js"];
 
+test("The landing page's share section explains what Shipped measures for your pull requests.", () => {
+  const share = read("site/index.html").match(/<section\b[^>]*\bid="share"[^>]*>([\s\S]*?)<\/section>/)?.[1];
+  assert.match(share ?? "", /\bShipped\b[^<]*\bpull requests\b[^<]*\bproduction\b/i);
+});
+
 const strip = (css) => css.replace(/\/\*[\s\S]*?\*\//g, "");
 const declarations = (body) => body.split(";").map((d) => d.trim()).filter(Boolean)
   .map((d) => [d.slice(0, d.indexOf(":")).trim(), d.slice(d.indexOf(":") + 1).trim()]);

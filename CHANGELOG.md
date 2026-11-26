@@ -31,9 +31,14 @@ the branch's rules.
 - Tasks is each project's to-do, kept by your agents: turn on Agents keep the to-do, in Settings, Pieces, and Claude Code, Pi and Codex add each step of their work to the project's to-do and close it when done; each row names the agent that added it. It writes a short rule to each agent's own instructions, never over one of yours, and takes it out when turned off; agents use the `kanso-todo` command, which you can run too. Tasks shows the project you are in and every project with a to-do. Type one and press Enter; a click marks it done, and Done keeps the finished ones folded. Send one to an agent working in that project, start a new conversation with it, or delete it, with Undo. The list stays on this computer.
 - Timeline, a new panel: the conversation in focus prompt by prompt, with when each one ended, how long it took, the files it changed and the first sentence of its answer. Open one to read the whole prompt, what you sent while it worked and the full answer. It reads Claude Code and Codex, on this computer or another.
 
+### Changed
+
+- Shipped measures pull requests, not lines: how many of those you opened in the period reached production (merged into the repository's default branch, or into a branch released to it), that share and its change against the period before, your last six periods, opened, merged, time to merge, closed unmerged, reviews and pull requests merged in others' repositories. Records, When you merge and By repository count pull requests. It reads everything from GitHub, so it is the same on every computer.
+
 ### Removed
 
 - Tasks no longer shows GitHub issues, GitHub Projects, Jira or Linear boards, and Settings no longer has Accounts. Their boards and saved copies leave kansō's database; a Jira or Linear token you saved stays in your system's secret store until you remove it there (named "kansō Jira" or "kansō Linear").
+- Shipped's line and commit counts, its scan of this computer's repositories and Add up Shipped across your computers: Shipped no longer writes the "Kanso Shipped stats" gist (the one it made stays in your GitHub account until you delete it).
 
 ## [4.1.1] - 2026-11-25
 

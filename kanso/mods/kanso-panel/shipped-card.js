@@ -2,10 +2,8 @@
 import { postText } from "./share.js";
 
 export function shareText(s, extra) {
-  const merged = s.stats.find((x) => x.unit === "pull requests merged");
   const parts = [
-    ...(s.big ? [`${s.big} ${s.byDay ? "contributions" : "lines shipped"} ${s.period.toLowerCase()}`] : []),
-    ...(merged && merged.value !== "—" && merged.value !== "0" ? [`${merged.value} pull requests merged`] : []),
+    ...(s.big ? [`${s.big} pull requests in production ${s.period.toLowerCase()}${s.small ? `, ${s.small} of those I opened` : ""}`] : []),
     ...(extra.streak > 1 ? [`a ${extra.streak}-day streak`] : []),
   ];
   return postText(parts, "What I shipped.");
