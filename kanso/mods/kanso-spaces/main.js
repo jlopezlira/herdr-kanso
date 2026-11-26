@@ -2296,19 +2296,18 @@ export default class Spaces extends RetryingView {
     const title = scoped ? `Resume in ${place.name ?? folderName(place.folder)}` : "Resume a conversation";
     const finder = { field: "Find a conversation", text: this.resumeFind ?? null };
     const icon = (program) => (this.known ?? []).find((a) => a.key === program)?.icon ?? null;
-    if (failed) return { title, count: 0, items: [finder, { failure: { text: `Can't list conversations on ${place.machine || "this computer"}`, source: failed, fix: "Refresh", onClick: (cx) => { this.loadRecent(place, cx); this.redraw(cx); } } }] };
-    if (!recent) return { title, count: 0, items: [finder, { loading: true }, { loading: true }, { loading: true }] };
-    const listed = recent.filter(findsIn(query));
-    if (!listed.length) {
-      const fresh = () => (scoped ? this.newAgentMenu(place) : this.newConversationMenu());
-      return { title, count: 0, items: [finder, item(recent.length ? "No conversation matches" : "No past conversations here", () => {}, { disabled: true, keep: true }), item("New conversation", fresh, { icon: "plus" })] };
-    }
-    const now = Date.now();
+    const everywhere = scoped ? [{ separator: true }, item("Every project and computer\u{2026}", () => this.resumeMenu({}), { icon: "history" })] : [];
+    const listed = (recent ?? []).filter(findsIn(query));
     const open = shared(OPEN_CONVERSATIONS) ?? {};
     const isOpen = (c) => !c.machine && agents().some((a) => a.address === open[c.file]);
+    const now = Date.now();
     const rows = listed.map((c) => item(c.title, () => this.resumeOne(place, c), { icon: icon(c.program), hint: isOpen(c) ? "Open" : resumeHint(c, { scoped, now }) }));
-    const everywhere = scoped ? [{ separator: true }, item("Every project and computer\u{2026}", () => this.resumeMenu({}), { icon: "history" })] : [];
-    return { title, count: rows.length, items: [finder, { scroll: rows, rows: Math.min(rows.length, RESUME_ROWS), handle: this.resumeScroll }, ...everywhere] };
+    const fresh = () => (scoped ? this.newAgentMenu(place) : this.newConversationMenu());
+    const middle = failed ? [{ failure: { text: `Can't list conversations on ${place.machine || "this computer"}`, source: failed, fix: "Refresh", onClick: (cx) => { this.loadRecent(place, cx); this.redraw(cx); } } }]
+      : !recent ? [{ loading: true }, { loading: true }, { loading: true }]
+        : !rows.length ? [item(recent.length ? "No conversation matches" : "No past conversations here", () => {}, { disabled: true, keep: true }), item("New conversation", fresh, { icon: "plus" })]
+          : [{ scroll: rows, rows: Math.min(rows.length, RESUME_ROWS), handle: this.resumeScroll }];
+    return { title, count: rows.length, items: [finder, ...middle, ...everywhere] };
   }
 
   resumeView(t) {
