@@ -12,7 +12,7 @@ const THREE = ["show", "needed", "hide"];
 const piece = (id, label, group, states, def, stops, job = null) => ({ id, label, group, states, default: def, stops, job });
 
 const PANELS = [
-  ["files", "Files", "git"], ["insights", "Spend"], ["pr", "PR", "gh"], ["issues", "Tasks", "gh"], ["shipped", "Shipped", "git"], ["caffeine", "Caffeine"], ["worktrees", "Worktrees", "git"],
+  ["files", "Files", "git"], ["insights", "Spend"], ["pr", "PR", "gh"], ["issues", "Tasks", "gh"], ["shipped", "Shipped", "gh"], ["caffeine", "Caffeine"], ["worktrees", "Worktrees", "git"],
   ["ports", "Ports", "lsof"], ["containers", "Containers", "docker"], ["memory", "Memory", "ps"], ["look", "Images"], ["timeline", "Timeline"], ["sim", "Simulator"], ["dojo", "hjkl dōjō"],
 ];
 
@@ -46,7 +46,6 @@ export const PIECES = [
   piece("computers.network", "Look for computers on this network", "Background", SHOW, "show", "work"),
   piece("agents.checks", "Tell an agent when its pull request's checks finish", "Background", SHOW, "show", "work", "gh"),
   piece("agents.resume", "Resume at reset for every new limit", "Background", SHOW, "hide", "work"),
-  piece("shipped.sync", "Add up Shipped across your computers in a GitHub gist anyone with its link can read: this computer's name and each commit's hash, time and lines, with your identities and repositories sealed", "Background", SHOW, "hide", "work", "gh"),
 ];
 
 export const STATE_LABEL = { show: "Show", needed: "When needed", hide: "Hide" };

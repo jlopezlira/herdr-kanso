@@ -1,0 +1,78 @@
+import { exec } from "herdr";
+import { prRow, pendingByRepo, monthsIn } from "./shipped-store.js";
+import { mapSeries } from "./pure.js";
+
+const PAGES = 10;
+const HISTORY_PAGES = 20;
+const SEARCH_CAP = 1000;
+const STALE_MS = 7 * 86400000;
+const iso = (ms) => new Date(ms).toISOString().replace(/\.\d{3}Z$/, "Z");
+
+const PR_FIELDS = "... on PullRequest{url number createdAt mergedAt closedAt baseRefName mergeCommit{oid} repository{nameWithOwner owner{login} defaultBranchRef{name}}}";
+export const SEARCH = `query($q:String!,$after:String){search(query:$q,type:ISSUE,first:100,after:$after){issueCount pageInfo{hasNextPage endCursor} nodes{${PR_FIELDS}}}}`;
+export const HISTORY = "query($owner:String!,$name:String!,$ref:String!,$since:GitTimestamp!,$after:String){repository(owner:$owner,name:$name){ref(qualifiedName:$ref){target{... on Commit{history(first:100,since:$since,after:$after){pageInfo{hasNextPage endCursor} nodes{oid}}}}}}}";
+export const createdIn = (start, end) => `is:pr author:@me created:${iso(start)}..${iso(end - 1000)}`;
+export const updatedSince = (since) => `is:pr author:@me updated:>=${iso(since)}`;
+
+export async function gh(args) {
+  const r = await exec("gh", args);
+  if (r.code !== 0) throw new Error((r.stderr || r.stdout).trim().split("\n")[0] || "GitHub could not be read.");
+  return r.stdout;
+}
+
+export async function gql(query, vars = {}) {
+  const args = ["api", "graphql", "-f", `query=${query}`, ...Object.entries(vars).flatMap(([k, v]) => (v !== null && v !== undefined ? ["-f", `${k}=${v}`] : []))];
+  const out = JSON.parse(await gh(args));
+  if (!out.data) throw new Error(out.errors?.[0]?.message ?? "GitHub could not be read.");
+  return out.data;
+}
+
+export async function searchPrs(q, read = gql, after = null, got = [], page = 0) {
+  const s = (await read(SEARCH, { q, after })).search;
+  const all = [...got, ...(s.nodes ?? []).filter((n) => n?.url).map((n) => prRow(n))];
+  return s.pageInfo.hasNextPage && page + 1 < PAGES ? searchPrs(q, read, s.pageInfo.endCursor, all, page + 1) : { rows: all, count: s.issueCount };
+}
+
+export async function prsCreated(start, end, read = gql) {
+  const found = await searchPrs(createdIn(start, end), read);
+  if (found.count <= SEARCH_CAP || end - start < 2 * 3600000) return found.rows;
+  const mid = start + Math.floor((end - start) / 2);
+  return [...await prsCreated(start, mid, read), ...await prsCreated(mid, end, read)];
+}
+
+export async function inMain(pending, read = gql) {
+  const found = await mapSeries(pending, async ({ repo, main, since, oids }) => {
+    const [owner, name] = repo.split("/");
+    const walk = async (after, hits, page) => {
+      const h = (await read(HISTORY, { owner, name, ref: `refs/heads/${main}`, since: iso(since), after })).repository?.ref?.target?.history;
+      if (!h) return hits;
+      const more = [...hits, ...h.nodes.filter((n) => oids.has(n.oid)).map((n) => oids.get(n.oid))];
+      return h.pageInfo.hasNextPage && page + 1 < HISTORY_PAGES && more.length < oids.size ? walk(h.pageInfo.endCursor, more, page + 1) : more;
+    };
+    return walk(null, [], 0).catch(() => []);
+  });
+  return found.flat();
+}
+
+export const github = {
+  provider: "github",
+  name: "GitHub",
+  async sync(store, { from, now, login, progress = () => {} }) {
+    await store.forAccount("github", login);
+    const done = await store.readMonths("github");
+    const since = Number(await store.meta("github.updated")) || 0;
+    const fresh = since && now - since < STALE_MS;
+    const waiting = (await store.prs()).filter((p) => p.provider === "github" && !p.merged && !p.closed).map((p) => p.created);
+    const back = since ? Math.min(since, ...waiting) : from;
+    const due = monthsIn(Math.min(from, fresh ? from : back), now + 1).filter((m) => !done.has(m.month) || (!fresh && m.end > back));
+    await mapSeries(due, async (m, i) => {
+      progress(`pull requests, ${due.length - i} ${due.length - i === 1 ? "month" : "months"} to go`);
+      await store.save(await prsCreated(m.start, Math.min(m.end, now + 1000)));
+      await store.monthRead("github", m.month, now);
+    });
+    if (since) await store.save((await searchPrs(updatedSince(since - 3600000))).rows);
+    await store.setMeta("github.updated", String(now));
+    progress("what reached production");
+    await store.markProd(await inMain(pendingByRepo(await store.prs())));
+  },
+};

@@ -32,6 +32,15 @@ the branch's rules.
 - GitHub Projects in Tasks: Add a board, GitHub Projects, lists the projects of the repository and its owner. A project's items show under its Status columns, issues, pull requests and drafts, with the same filters as GitHub issues. It needs the GitHub CLI's read:project permission; Allow access asks for it.
 - Timeline, a new panel: the conversation in focus prompt by prompt, with when each one ended, how long it took, the files it changed and the first sentence of its answer. Open one to read the whole prompt, what you sent while it worked and the full answer. It reads Claude Code and Codex, on this computer or another.
 
+### Changed
+
+- Shipped measures pull requests, not lines: how many of those you opened in the period reached production (merged into the repository's default branch, or into a branch released to it), that share and its change against the period before, your last six periods, opened, merged, time to merge, closed unmerged, reviews and pull requests merged in others' repositories. Records, When you merge and By repository count pull requests. It reads everything from GitHub, so it is the same on every computer.
+
+### Removed
+
+- Shipped's line and commit counts, its scan of this computer's repositories and Add up Shipped across your computers: Shipped no longer writes the "Kanso Shipped stats" gist (the one it made stays in your GitHub account until you delete it).
+
+
 ## [4.1.1] - 2026-11-25
 
 ### Changed

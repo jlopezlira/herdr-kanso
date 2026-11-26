@@ -170,7 +170,7 @@ test("the side panels show the shared skeleton before they are ready and while t
   const { Shipped } = await load("kanso-panel/shipped.js", ["Shipped"], host);
   const shipped = new Shipped();
   Object.assign(shipped, {
-    kind: "week", offset: 0, github: {}, stats: null, syncing: false, syncError: null, phase: null, rhythm: {},
+    kind: "week", offset: 0, github: {}, prs: null, syncing: false, syncError: null, phase: null,
     width: 368, share: { open: false }, loading: false, days: null, records: {}, fresh: new Set(), reposOpen: false,
   });
   assertSkeleton(shipped.render({}));

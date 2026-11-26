@@ -11,14 +11,15 @@ const spend = async () => load("kanso-spend/spend-card.js", ["spendSpec", "spend
 
 const colors = { canvas: "#161615", text: "#e8e4dc", muted: "#9a958c", dim: "#6f6b64", border: "#2a2927", subtle: "#232220", accent: "#a7b59bff", green: "#8fbf7f", red: "#d0776b" };
 const summary = {
-  login: "me", period: "This week", byDay: false, big: "+137,013", small: "−52,410", label: "lines shipped, this week", delta: 480, deltaText: "5.8x vs last week",
-  stats: [{ value: "59", unit: "contributions" }, { value: "30", unit: "pull requests merged" }, { value: "620", unit: "commits" }],
-  everText: "3,683 pull requests merged, +12,128,050 lines and 12,440 commits in 118 repositories since you joined GitHub in 2011.",
+  login: "me", period: "This week", big: "24", small: "60%", label: "pull requests in production, this week",
+  delta: 10, deltaText: "+10 points vs last week",
+  stats: [{ value: "40", unit: "opened" }, { value: "30", unit: "merged" }, { value: "59", unit: "contributions" }],
+  everText: "3,683 pull requests merged since you joined GitHub in 2011.",
 };
 const extra = {
   streak: 17, longest: 39,
   weeks: [{ contributionDays: [{ weekday: 0, contributionLevel: "FOURTH_QUARTILE" }, { weekday: 1, contributionLevel: "NONE" }] }],
-  records: [{ name: "Best week", value: "+785,158", unit: "lines", detail: "week of 5 Oct 2026" }],
+  records: [{ name: "Most pull requests in production in a week", value: "52", unit: "pull requests", detail: "week of 5 Oct 2026" }],
   rhythm: { hours: Array.from({ length: 24 }, (_, h) => (h === 15 ? 9 : 1)), note: "most at 15:00" },
 };
 // What Spend's presenter answers, with names that must never reach a post.
@@ -48,14 +49,15 @@ test("One share.js for every panel: the copies Herdr loads are the same file", a
   assert.equal(copy, source, "run npm run sync:share");
 });
 
-test("Shipped's card carries the global numbers and nothing that names your work", async () => {
+test("Shipped's card shares the production numbers without naming your work.", async () => {
   const { cardSvg } = await share();
   const { shippedSpec } = await shipped();
   const { svg, width, height } = cardSvg(shippedSpec(summary, extra), colors);
   assert.equal(width, 1200);
   assert.ok(height > 1000 && height < 2600, `${height}: one tall post`);
   wellFormed(svg);
-  for (const shown of ["+137,013", "5.8x vs last week", "pull requests merged", "Streak", "Records", "+785,158", "When you ship", "most at 15:00", "@me"]) assert.ok(svg.includes(shown), shown);
+  const facts = [summary.big, summary.small, summary.label, summary.deltaText, "pull requests merged", "Streak", "Records", "52", "most at 15:00", "@me"];
+  for (const shown of facts) assert.ok(svg.includes(shown), shown);
   assert.doesNotMatch(svg, /github\.com\/(?!jlopezlira\/herdr-kanso)/, "no repository links but Kanso's");
   assert.ok(cardSvg(shippedSpec({ ...summary, login: "a<b&c" }, extra), colors).svg.includes("@a&lt;b&amp;c"));
 });
@@ -75,13 +77,14 @@ test("Spend's card carries the totals and never a project, task or session", asy
   assert.ok(words.length <= 280);
 });
 
-test("Sharing words fit a post and the networks take them from a link", async () => {
+test("Shipped shares its production count, share and streak in a post the networks can open.", async () => {
   const { NETWORKS, wrap } = await share();
   const { shareText } = await shipped();
   const words = shareText(summary, extra);
   assert.ok(words.length <= 280);
-  assert.match(words, /^\+137,013 lines shipped this week, 30 pull requests merged, a 17-day streak\./);
-  assert.match(NETWORKS.x.url(words), /^https:\/\/x\.com\/intent\/post\?text=%2B137%2C013/);
+  assert.equal(words.split("\n")[0], "24 pull requests in production this week, 60% of those I opened, a 17-day streak.");
+  assert.match(shareText({ ...summary, big: null }, { ...extra, streak: 0 }), /^What I shipped\./);
+  assert.match(NETWORKS.x.url(words), /^https:\/\/x\.com\/intent\/post\?text=24%20pull%20requests/);
   assert.match(NETWORKS.linkedin.url(words), /^https:\/\/www\.linkedin\.com\/feed\/\?shareActive=true&text=/);
   assert.match(NETWORKS.bluesky.url(words), /^https:\/\/bsky\.app\/intent\/compose\?text=/);
   assert.deepEqual([...wrap("one two three four", 9)], ["one two", "three", "four"]);
