@@ -87,12 +87,7 @@ sys.stdout.write("\n".join(kept))
 fh.close()
 `;
 
-async function unixSlice(run, file, from, budget, longest) {
-  const args = ["-c", SLICE_PY, file, String(from), String(budget), String(longest)];
-  const read = (command) => Promise.resolve(run(command, args, { timeout: 60000 })).catch(() => null);
-  const first = await read("python3");
-  return first && (first.code === 0 || first.code === 2) ? first : read("python");
-}
+const unixSlice = (run, file, from, budget, longest) => python(run, SLICE_PY, [file, String(from), String(budget), String(longest)]);
 
 const LOCATE = String.raw`pid="$1"; kind="$2"
 if [ "$kind" = claude ]; then
@@ -110,13 +105,16 @@ done`;
 
 // Files grow to tens of MB: only the first and last 4 MB are searched, and lines over 16 KB (a pasted image) are left out to spare the heap.
 // Claude Code writes the title again every few turns, so the whole file is searched only when the end has none.
-const READ = String.raw`f="$1"; said() { grep -h -e '"type":"user"' -e '"user_message"' | grep -v '"tool_result"' | awk 'length($0) < 16000'; }
-t=$(tail -c 4000000 "$f" | grep -h '"type":"ai-title"' | awk 'length($0) < 16000' | tail -1)
-[ -n "$t" ] || t=$(grep -h '"type":"ai-title"' "$f" | awk 'length($0) < 16000' | tail -1)
+const READ_BODY = String.raw`said() { grep -h -e '"type":"user"' -e '"user_message"' -e '"role":"user"' -e '"type":"UserMessage"' | grep -v '"tool_result"' | awk 'length($0) < 16000'; }
+named() { grep -h -e '"type":"ai-title"' -e '"type":"session_info"' | awk 'length($0) < 16000' | tail -1; }
+t=$(tail -c "$big" "$f" | named)
+[ -n "$t" ] || [ -z "$whole" ] || t=$(named < "$f")
 printf '%s\n\036\n' "$t"
-head -c 4000000 "$f" | said | head -n 60; printf '\n\036\n'
-tail -c 4000000 "$f" | said | tail -n 40; printf '\n\036\n'
+head -c "$big" "$f" | said | head -n 60; printf '\n\036\n'
+tail -c "$big" "$f" | said | tail -n 40; printf '\n\036\n'
 tail -c ${TAIL} "$f"`;
+const READ = `f="$1"; big=4000000; whole=1; ${READ_BODY}`;
+const THREADS = String.raw`big=600000; for f in "$@"; do ${READ_BODY}; case "$f" in *"/.codex/"*) i=$(basename "$f" .jsonl | tail -c 37); printf '\n\035\n'; grep -h "\"id\":\"$i\"" "$HOME/.codex/session_index.jsonl" 2>/dev/null | tail -1;; esac; printf '\n\034\n'; done`;
 
 
 const windowsStream = (body) => `$stream=[IO.File]::Open($file,[IO.FileMode]::Open,[IO.FileAccess]::Read,[IO.FileShare]::ReadWrite)
@@ -158,12 +156,12 @@ const WINDOWS_THREAD = windowsStream(String.raw`
   $head=part 0 4000000
   $recent=part ([Math]::Max(0,$stream.Length-4000000)) 4000000
   $tail=part ([Math]::Max(0,$stream.Length-8192)) 8192
-  $titles=@($recent -split [string][char]10 | Where-Object { $_.Length -lt 16000 -and $_ -match '"type":"ai-title"' })
+  $titles=@($recent -split [string][char]10 | Where-Object { $_.Length -lt 16000 -and $_ -match '"type":"ai-title"|"type":"session_info"' })
   if (-not $titles.Count) {
     $reader=New-Object IO.StreamReader($file)
-    try { while ($null -ne ($line=$reader.ReadLine())) { if ($line.Length -lt 16000 -and $line -match '"type":"ai-title"') { $titles=@($line) } } } finally { $reader.Dispose() }
+    try { while ($null -ne ($line=$reader.ReadLine())) { if ($line.Length -lt 16000 -and $line -match '"type":"ai-title"|"type":"session_info"') { $titles=@($line) } } } finally { $reader.Dispose() }
   }
-  function said($text) { $text -split [string][char]10 | Where-Object { $_.Length -lt 16000 -and $_ -match '"type":"user"|"user_message"' -and $_ -notmatch '"tool_result"' } }
+  function said($text) { $text -split [string][char]10 | Where-Object { $_.Length -lt 16000 -and $_ -match '"type":"user"|"user_message"|"role":"user"|"type":"UserMessage"' -and $_ -notmatch '"tool_result"' } }
   $separator=[string][char]10+[char]30+[string][char]10
   [Console]::Write((@(($titles | Select-Object -Last 1), ((said $head | Select-Object -First 60) -join [string][char]10), ((said $recent | Select-Object -Last 40) -join [string][char]10), $tail) -join $separator))
 `);
@@ -231,6 +229,54 @@ public static class KansoTranscript {
   }
 }`;
 
+
+export const LISTED = 3000;
+export const SHOWN = 30;
+
+export function projectDir(cwd) {
+  const path = String(cwd ?? "");
+  const slug = path.replace(/[^A-Za-z0-9]/g, "-");
+  if (slug.length <= 200) return slug;
+  const h = Array.from({ length: path.length }, (_, i) => path.charCodeAt(i)).reduce((n, c) => ((n << 5) - n + c) | 0, 0);
+  return `${slug.slice(0, 200)}-${Math.abs(h).toString(36)}`;
+}
+
+const LIST = String.raw`h="$1"; c="$2"; want="$3"; n="$4"; most="$5"
+if [ -n "$c" ]; then set -- "$h/.claude/projects/$c"/*.jsonl; else set -- "$h"/.claude/projects/*/*.jsonl; fi
+set -- "$@" "$h"/.codex/sessions/*/*/*/rollout-*.jsonl "$h"/.pi/agent/sessions/*/*.jsonl
+ls -t "$@" 2>/dev/null | head -n "$most" | tr '\n' '\0' | xargs -0 awk -v want="$want" '
+function out(f, d, i) { if (d == "" && claude && want != "") d = want; if (d != "" && (want == "" || d == want)) print f "\t" d "\t" i; shown = 1 }
+FNR == 1 { if (prev != "" && !shown && pending) out(prev, cwd, id); prev = FILENAME; shown = 0; pending = 1; claude = FILENAME ~ /\/\.claude\//; cwd = ""; id = "" }
+shown { nextfile }
+{ if (cwd == "" && match($0, /"cwd":"[^"]*"/)) cwd = substr($0, RSTART + 7, RLENGTH - 8)
+  if (!claude && id == "" && match($0, /"id":"[^"]*"/)) id = substr($0, RSTART + 6, RLENGTH - 7) }
+claude && (cwd != "" || FNR > 50) { out(FILENAME, cwd, ""); nextfile }
+!claude { out(FILENAME, cwd, id); nextfile }
+END { if (prev != "" && !shown && pending) out(prev, cwd, id) }' 2>/dev/null | head -n "$n"`;
+
+const WINDOWS_LIST = String.raw`
+$found=@()
+$claude=if ($c) { Join-Path $h (Join-Path '.claude\projects' $c) } else { Join-Path $h '.claude\projects' }
+$found+=Get-ChildItem -LiteralPath $claude -Filter *.jsonl -File -Recurse -Depth 1 -ErrorAction SilentlyContinue
+$found+=Get-ChildItem -LiteralPath (Join-Path $h '.codex\sessions') -Filter 'rollout-*.jsonl' -File -Recurse -ErrorAction SilentlyContinue
+$found+=Get-ChildItem -LiteralPath (Join-Path $h '.pi\agent\sessions') -Filter *.jsonl -File -Recurse -Depth 1 -ErrorAction SilentlyContinue
+$shown=0
+foreach ($item in ($found | Sort-Object LastWriteTime -Descending | Select-Object -First $most)) {
+  if ($shown -ge $n) { break }
+  $cwd=''; $id=''; $isClaude=$item.FullName -match '\\.claude\\'; $reader=New-Object IO.StreamReader($item.FullName)
+  try { $i=0; while ($i -lt 50 -and $null -ne ($line=$reader.ReadLine())) { $i++
+    if (-not $cwd -and $line -match '"cwd":"([^"]*)"') { $cwd=$Matches[1] }
+    if (-not $isClaude -and -not $id -and $line -match '"id":"([^"]*)"') { $id=$Matches[1] }
+    if (-not $isClaude -or $cwd) { break } } } finally { $reader.Dispose() }
+  if (-not $cwd -and $isClaude -and $want) { $cwd=$want }
+  if ($cwd -and (-not $want -or $cwd -eq $want)) { [Console]::WriteLine($item.FullName+[char]9+$cwd+[char]9+$id); $shown++ } }`;
+
+async function python(run, script, args) {
+  const read = (command) => Promise.resolve(run(command, ["-c", script, ...args], { timeout: 60000 })).catch(() => null);
+  const first = await read("python3");
+  return first && (first.code === 0 || first.code === 2) ? first : read("python");
+}
+
 export function transcriptApi(platform, run) {
   const ps = (script) => powershell(run, "$ErrorActionPreference='Stop'; [Console]::OutputEncoding=[Text.UTF8Encoding]::new($false); " + script, { timeout: 60000 });
   return {
@@ -247,6 +293,12 @@ export function transcriptApi(platform, run) {
     },
     size: async (file) => platform === "windows" ? Number((await ps(`(Get-Item -LiteralPath ${psQuote(file)}).Length`)).stdout.trim()) : Number((await run("wc", ["-c", file])).stdout.trim().split(/\s+/)[0]),
     thread: (file) => platform === "windows" ? ps(`$file=${psQuote(file)}; `+WINDOWS_THREAD) : run("sh", ["-c", READ, "sh", file]),
+    listing: (home, { claudeDir = "", folder = "", most = LISTED, shown = SHOWN } = {}) => platform === "windows"
+      ? ps(`$h=${psQuote(home)}; $c=${psQuote(claudeDir)}; $want=${psQuote(folder)}; $n=${Number(shown)}; $most=${Number(most)}; `+WINDOWS_LIST)
+      : run("sh", ["-c", LIST, "sh", home, claudeDir, folder, String(shown), String(most)], { timeout: 60000 }),
+    threads: (files) => platform === "windows"
+      ? ps(`$files=@(${files.map(psQuote).join(",")}); foreach ($file in $files) { ${WINDOWS_THREAD}; [Console]::Write([string][char]10+[char]28+[string][char]10) }`)
+      : run("sh", ["-c", THREADS, "sh", ...files], { timeout: 60000 }),
     slice: (file, from, budget, longest) => platform === "windows" ? ps(`$file=${psQuote(file)}; $from=${Number(from)}; $budget=${Number(budget)}; $longest=${Number(longest)}; `+WINDOWS_SLICE) : unixSlice(run, file, from, budget, longest),
   };
 }

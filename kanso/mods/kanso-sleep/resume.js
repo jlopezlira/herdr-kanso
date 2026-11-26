@@ -87,6 +87,11 @@ export const SLEEP_WAKING = "kanso.sleep.waking";
 export const SLEEP_FAILED = "kanso.sleep.failed";
 export const COULD_NOT_SLEEP = "could not sleep";
 export const isSessionId = (id) => /^[0-9a-f-]{36}$/.test(String(id ?? ""));
+export function resumeOf(program, run, { id, file } = {}) {
+  if (program === "claude") return resumeArgv(run, id);
+  if (program === "codex") return isSessionId(id) ? [...run, "resume", id] : null;
+  return program === "pi" && file ? [...run, "--session", file] : null;
+}
 export const resumeLine = (session) => (isSessionId(session) ? `claude --resume ${session}` : null);
 export const asleepTerminal = (k) => isSessionId(k?.labels?.[RESUME_LABEL]) && k.program?.shell === true && (!k.state || k.state === "live");
 export const failedTerminals = (record) => (Array.isArray(record?.terminals) ? record.terminals : []);

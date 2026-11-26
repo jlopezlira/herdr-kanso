@@ -17,7 +17,7 @@ import { systemApi } from "./platform-system.js";
 import { View, div } from "gpui-kit";
 import { v_flex, h_flex, ScrollHandle } from "gpui-base";
 import { agentSession, agentLabel, renameTerminal, SETTLED_LABEL, SNOOZE_LABEL, UNREAD_LABEL, THREAD_LABEL, settledOf, snoozedUntil, isUnread, woke, backFromSettled, threadSections, snoozePresets, THREAD_ORDERS, STATUS_ORDERS, withTerminals, NAME_LABEL, PIN_LABEL, ORDERS, DEFAULT_ORDER, orderSessions, moved, nest, track, elapsed, activityOf, bySection, duration, trackSteps, stepOf, tasksOf, said, FOLD_MS, pill, sessionHeight, mostUrgent } from "./agents.js";
-import { ThreadLocator, findThreads, sameThread, pidsOf, aliveIn, aliveDue, ALIVE_MS, ALIVE_BEHIND_MS } from "./threads.js";
+import { ThreadLocator, findThreads, sameThread, pidsOf, aliveIn, aliveDue, ALIVE_MS, ALIVE_BEHIND_MS, threadIn } from "./threads.js";
 import { Panel, sameSeen } from "./panel.js";
 import { Store } from "./store.js";
 import { Kdb, restDue, machinesToAsk, kansoDir, worktreeBase, newId } from "./kdb.js";
@@ -36,7 +36,9 @@ import { computerRow, computerTools } from "./computer-row.js";
 import { section } from "./section.js";
 import { asleep } from "./asleep.js";
 import { machineReaches, asleepLook, withPending, withoutWaking, FORGET_HELD, forgetHeld, holdForget } from "./row-states.js";
-import { SLEEP_PENDING, SLEEP_WAKING, SLEEP_FAILED, COULD_NOT_SLEEP, failedTerminals, withoutTerminals, RESUME_LABEL, asleepTerminal } from "./resume.js";
+import { SLEEP_PENDING, SLEEP_WAKING, SLEEP_FAILED, COULD_NOT_SLEEP, failedTerminals, withoutTerminals, RESUME_LABEL, asleepTerminal, resumeOf } from "./resume.js";
+import { transcriptApi, projectDir } from "./platform-transcripts.js";
+import { RECENT, listedOf, recordsOf, newestFirst, findsIn, resumeHint, openSpaceAt } from "./resume-list.js";
 import { tile } from "./tile.js";
 import { views, viewSwitch } from "./view-switch.js";
 import { pullKey, runPull, canWake, enterOpens, sectionMarkOf, sectionCount, rowDirectory, unnamedComputer, threadWord, threadActions, noProjectsOn, sortOf, foldTail, readWord } from "./sidebar-rows.js";
@@ -90,6 +92,8 @@ function placesOf(sp, ps) {
   }));
 }
 const CONV_ROWS = 11; // the conversation picker's projects show this many, then scroll
+const RESUME_ROWS = 8;
+const SKETCHED = Object.freeze({ title: "", cwd: "", at: null });
 // A right click on the item does what a left one does.
 const rightToo = (line) => ({ ...line, onSecondaryClick: line.onClick });
 // An item's look without its act: a popup measured before it opens.
@@ -332,12 +336,13 @@ export default class Spaces extends RetryingView {
     this.clock = cx.timer;
     this.settleUntil = Date.now() + SETTLE;
     // Opened as a row's right-click menu (props().menu): nothing else to run.
-    if (props()?.menu || props()?.awayMenu || props()?.railMenu || props()?.spaceMenu || props()?.newAgent || props()?.trees || props()?.worktree || props()?.schedule || props()?.newConversation || props()?.newProject || props()?.machineMenu) {
+    if (props()?.menu || props()?.awayMenu || props()?.railMenu || props()?.spaceMenu || props()?.newAgent || props()?.trees || props()?.worktree || props()?.schedule || props()?.newConversation || props()?.newProject || props()?.machineMenu || props()?.resume) {
       // Nothing is chosen for you: no row lit until the keyboard moves.
       this.armed = new Armed(); this.menuAt = -1; this.handle = cx.focus_handle();
       // A scroll handle is state: made here, never during render (Herdr refuses it there).
       if (props()?.newConversation || props()?.railMenu) this.convScroll = ScrollHandle.new();
       if (props()?.newAgent) this.agentScroll = ScrollHandle.new();
+      if (props()?.resume) this.resumeScroll = ScrollHandle.new();
       this.openPopup(cx); return;
     }
     this.loadNames().catch(() => {});
@@ -530,6 +535,10 @@ export default class Spaces extends RetryingView {
       this.openSchedule(p.schedule, cx);
       return;
     }
+    if (p.resume) {
+      this.openResume(p.resume, cx);
+      return;
+    }
     this.handle.focus();
     if (p.newAgent) {
       this.askAgents(p.newAgent, cx);
@@ -664,6 +673,7 @@ export default class Spaces extends RetryingView {
   conversationActions() {
     const machine = shown("footer.machine", true, pieces(shared));
     return [
+      { id: "conv-resume", label: "Resume a conversation\u{2026}", act: () => this.resumeMenu({}), icon: "history" },
       { id: "conv-add-project", label: "New project with a conversation\u2026", act: () => this.addProject(true), icon: "folder-plus" },
       { id: "conv-folder", label: "Open a folder, no project\u2026", act: () => run("kanso-spaces.open-folder"), icon: "file" },
       ...(machine ? [{ id: "conv-machine", label: "Add computer\u2026", act: () => run("mod.open", { name: "kanso-computers" }), icon: "server" }] : []),
@@ -711,7 +721,8 @@ export default class Spaces extends RetryingView {
       ...(repo ? [newTree(), ...(trees?.length ? [item("Open worktree\u2026", () => this.treesMenu(place, this.trees), { icon: "git-fork" })] : [])] : []),
       { separator: true }, item("Arrange\u2026", () => run("kanso-strip.arrange"), { icon: "panels-top-left", hint: chordOf("kanso-strip.arrange") || null })]
       : place.tree ? [] : [newTree()];
-    const ends = rest.length ? [{ separator: true }, ...rest] : [];
+    const resume = item("Resume a conversation\u{2026}", () => this.resumeMenu(place), { icon: "history" });
+    const ends = [{ separator: true }, resume, ...rest];
     const row = menuHeight({ items: [sketch("")] }) - menuHeight({ items: [] });
     const fit = Math.max(1, Math.floor((room - menuHeight({ items: [...head, ...failed, ...ends] })) / row));
     const listed = rows.length ? [{ scroll: rows, rows: Math.min(rows.length, fit), handle: this.agentScroll }] : !failure && pending && !agents ? [{ loading: true }, { loading: true }] : [];
@@ -2227,6 +2238,91 @@ export default class Spaces extends RetryingView {
 
 
 
+  resumeMenu(place) {
+    const height = menuHeight(this.resumeLines(place, { item: sketch, recent: Array.from({ length: RESUME_ROWS }, () => SKETCHED) }));
+    openOverlay({ mod: "kanso-spaces", kind: "popup", width: W.menu, height, at: "pointer", props: { resume: place } });
+  }
+
+  openResume(place, cx) {
+    this.resumeFind = new TextField({ placeholder: "Find a conversation" });
+    this.resumeFind.on("change", (_e, cx) => this.redraw(cx));
+    this.resumeFind.on("submit", () => {
+      const first = (this.recent ?? []).find(findsIn(this.resumeFind.value()));
+      if (!first) return;
+      this.resumeOne(place, first);
+      closeOverlay(props().overlay);
+    });
+    this.resumeFind.focus();
+    this.askAgents(place, cx);
+    this.loadRecent(place, cx);
+  }
+
+  loadRecent(place, cx) {
+    this.recent = null;
+    this.recentFailed = null;
+    const ask = this.recentAsked = (this.recentAsked ?? 0) + 1;
+    const settle = (list, failed) => {
+      if (ask !== this.recentAsked) return;
+      this.recent = list;
+      this.recentFailed = failed;
+      this.redraw(cx);
+    };
+    const deadline = cx.timer.after(MACHINE_READ_MS, () => settle(null, "no answer in time"));
+    const where = place.folder ? [place.machine || null] : [null, ...machines().filter((m) => m.name && machineReaches(m.layout)).map((m) => m.name)];
+    Promise.all(where.map((on) => this.recentOn(on, place.folder ?? "").catch((e) => (on ? [] : Promise.reject(e)))))
+      .then((lists) => { deadline.cancel(); settle(newestFirst(lists.flat()).slice(0, RECENT), null); })
+      .catch((e) => { deadline.cancel(); settle(null, String(e?.message ?? e)); });
+  }
+
+  async recentOn(on, folder) {
+    const homeDir = on ? await (await serviceOn(systemApi, on)).userHome() : home();
+    const api = await serviceOn(transcriptApi, on);
+    const r = await api.listing(homeDir, { claudeDir: folder ? projectDir(folder) : "", folder });
+    if (r?.code !== 0) throw new Error(String(r?.stdout || "no listing").trim().split("\n").at(-1));
+    const listed = listedOf(r.stdout, on);
+    if (!listed.length) return [];
+    const read = await api.threads(listed.map((c) => c.file));
+    const records = recordsOf(read?.stdout);
+    return listed.map((c, i) => {
+      const thread = threadIn(c.program, records[i] ?? "");
+      return { ...c, title: thread.title ?? null, at: thread.at ?? thread.said ?? null };
+    }).filter((c) => c.title);
+  }
+
+  resumeLines(place, { item, recent = null, failed = null, query = "" }) {
+    const scoped = Boolean(place.folder);
+    const title = scoped ? `Resume in ${place.name ?? folderName(place.folder)}` : "Resume a conversation";
+    const finder = { field: "Find a conversation", text: this.resumeFind ?? null };
+    const icon = (program) => (this.known ?? []).find((a) => a.key === program)?.icon ?? null;
+    if (failed) return { title, count: 0, items: [finder, { failure: { text: `Can't list conversations on ${place.machine || "this computer"}`, source: failed, fix: "Refresh", onClick: (cx) => { this.loadRecent(place, cx); this.redraw(cx); } } }] };
+    if (!recent) return { title, count: 0, items: [finder, { loading: true }, { loading: true }, { loading: true }] };
+    const listed = recent.filter(findsIn(query));
+    if (!listed.length) {
+      const fresh = () => (scoped ? this.newAgentMenu(place) : this.newConversationMenu());
+      return { title, count: 0, items: [finder, item(recent.length ? "No conversation matches" : "No past conversations here", () => {}, { disabled: true, keep: true }), item("New conversation", fresh, { icon: "plus" })] };
+    }
+    const now = Date.now();
+    const rows = listed.map((c) => item(c.title, () => this.resumeOne(place, c), { icon: icon(c.program), hint: resumeHint(c, { scoped, now }) }));
+    return { title, count: rows.length, items: [finder, { scroll: rows, rows: Math.min(rows.length, RESUME_ROWS), handle: this.resumeScroll }] };
+  }
+
+  resumeView(t) {
+    const place = props().resume;
+    const lines = this.resumeLines(place, { item: this.lines(), recent: this.recent, failed: this.recentFailed, query: this.resumeFind?.value() ?? "" });
+    this.menuScroll = lines.count ? { handle: this.resumeScroll, count: lines.count, from: 0 } : null;
+    return this.popup(t, lines.title, lines.items);
+  }
+
+  resumeOne(place, c) {
+    const machine = c.machine ?? (place.machine || null);
+    const agent = (this.known ?? []).find((a) => a.key === c.program && a.installed);
+    const argv = resumeOf(c.program, agent?.run ?? [c.program], c);
+    if (!argv) return;
+    const open = openSpaceAt(spaces(), c.cwd, machine);
+    const target = place.folder ? place : open ? placeOfSpace(open) : placeOfKey(`${machine ?? ""}:${c.cwd}`);
+    viewerFor(machine).then((viewed) => startIn(target, viewed(argv)));
+  }
+
   treesLines(place, trees, item) {
     return { title: `Worktrees of ${place.name ?? "this project"}`, items: trees.map((x) => item(x.branch ?? "detached", () => this.openTree(place, x), { icon: "git-branch" })) };
   }
@@ -3292,6 +3388,7 @@ export default class Spaces extends RetryingView {
     if (props()?.spaceMenu) return this.spaceMenuView(t);
     if (props()?.newAgent) return this.newAgentView(t);
     if (props()?.trees) return this.treesView(t);
+    if (props()?.resume) return this.resumeView(t);
     if (props()?.newConversation) return this.newConversationView(t);
     if (props()?.newProject) return this.newProjectView(t);
     if (props()?.worktree) return this.worktreeView(t);

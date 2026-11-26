@@ -1,4 +1,5 @@
-import { transcriptApi } from "./platform-transcripts.js";
+import { transcriptApi, projectDir } from "./platform-transcripts.js";
+export { projectDir };
 import { atOf, textOf, toolName, eventsOf } from "./transcript-events.js";
 import { processApi } from "./platform-processes.js";
 import { paths } from "./platform-paths.js";
@@ -17,15 +18,6 @@ const MARK = /\p{M}/u;
 // A tool's delivery note is not a turn: the words are already in what was said.
 const DELIVERY = /^(?:message\s+)?(?:successfully\s+)?(?:delivered|sent)(?:\s+to(?:\s+the)?\s+user)?\.?$/i;
 
-// Claude Code names the folder after the working folder: anything not a letter or digit becomes "-", and a
-// folder over 200 characters is cut there with a hash of the whole (Claude Code 2.1).
-export function projectDir(cwd) {
-  const path = String(cwd ?? "");
-  const slug = path.replace(/[^A-Za-z0-9]/g, "-");
-  if (slug.length <= 200) return slug;
-  const h = Array.from({ length: path.length }, (_, i) => path.charCodeAt(i)).reduce((n, c) => ((n << 5) - n + c) | 0, 0);
-  return `${slug.slice(0, 200)}-${Math.abs(h).toString(36)}`;
-}
 export const sessionPath = (homeDir, pid) => paths.join(homeDir, ".claude", "sessions", `${pid}.json`);
 export const transcriptPath = (session, homeDir) =>
   session?.sessionId && session.cwd && homeDir

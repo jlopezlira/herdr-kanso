@@ -124,6 +124,17 @@ export async function findAsync(list, test, i = 0) {
 }
 
 // Halves joined once each, so no list is copied per item and depth stays log n.
+export async function inLanes(list, fn, lanes) {
+  const queue = list.entries();
+  const lane = async (got = []) => {
+    const { value, done } = queue.next();
+    if (done) return got;
+    return lane([...got, [value[0], await fn(value[1], value[0])]]);
+  };
+  const found = await Promise.all(Array.from({ length: Math.min(lanes, list.length) }, () => lane()));
+  return found.flat().toSorted((a, b) => a[0] - b[0]).map(([, v]) => v);
+}
+
 export async function mapSeries(list, fn, from = 0, to = list.length) {
   if (to - from <= 0) return [];
   if (to - from === 1) return [await fn(list[from], from)];
