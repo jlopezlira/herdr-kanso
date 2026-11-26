@@ -1,0 +1,85 @@
+#!/bin/sh
+home=${HERDR_APP_HOME:-$HOME/.config/herdr-app}
+db=$home/data/kanso/kanso.db
+me="sh '$(cd "$(dirname "$0")" && pwd -P)/$(basename "$0")'"
+mark="kanso-todo"
+claude_rule=$HOME/.claude/rules/kanso-todo.md
+pi_append=$HOME/.pi/agent/APPEND_SYSTEM.md
+codex_config=$HOME/.codex/config.toml
+
+q() { printf "'%s'" "$(printf '%s' "$1" | sed "s/'/''/g")"; }
+sql() { sqlite3 -cmd ".timeout 5000" "$db" "$@"; }
+fail() { echo "kanso-todo: $1" >&2; exit 1; }
+now() { echo "$(date +%s)000"; }
+new_id() { printf '%x%s' "$(date +%s)" "$(od -An -N4 -tx4 /dev/urandom | tr -d ' \n')"; }
+
+rule() {
+  cat <<RULE
+## To-do in kansō
+Keep this project's to-do list in kansō while you work, without being asked. When you plan work, add each step: \`$me add "<one short line>"\`. When you finish a step, close it: \`$me done <id>\`. \`$me list\` shows the open ones with their ids.
+RULE
+}
+
+project() {
+  here=$(pwd -P)
+  found=$(sql "SELECT id FROM projects WHERE removed IS NULL AND machine='' AND (folder=$(q "$here") OR substr($(q "$here"),1,length(folder)+1)=folder||'/') ORDER BY length(folder) DESC LIMIT 1;") || fail "cannot read $db"
+  if [ -z "$found" ]; then
+    top=$(git -C "$here" rev-parse --show-toplevel 2>/dev/null || printf '%s' "$here")
+    found=$(sql "INSERT INTO projects(id,name,folder,machine,added) VALUES($(q "$(new_id)"),$(q "$(basename "$top")"),$(q "$top"),'',$(now)) ON CONFLICT(machine,folder) DO UPDATE SET removed=NULL RETURNING id;") || fail "cannot add this folder as a project"
+  fi
+  sql "INSERT OR IGNORE INTO issue_links(project,source,ref,name) VALUES($(q "$found"),'todo','list','To-do');" || fail "cannot add the To-do board"
+  printf '%s' "$found"
+}
+
+has_block() { [ -f "$1" ] && grep -q "^# $mark\$" "$1"; }
+top_key() { [ -f "$2" ] && sed '/^[[:space:]]*\[/q' "$2" | grep -q "^[[:space:]]*$1[[:space:]]*="; }
+end_line() { [ -s "$1" ] && [ -n "$(tail -c1 "$1")" ] && echo >> "$1"; true; }
+drop_block() { [ -f "$1" ] && has_block "$1" && { sed "/^# $mark\$/,/^# \/$mark\$/d" "$1" > "$1.kanso" && mv "$1.kanso" "$1"; }; }
+
+status() {
+  if [ -f "$claude_rule" ] || has_block "$pi_append" || has_block "$codex_config"; then echo on; else echo off; fi
+}
+
+install() {
+  [ -f "$db" ] || fail "kansō has not made its database yet; open kansō once and try again"
+  if [ -d "$HOME/.claude" ]; then mkdir -p "$(dirname "$claude_rule")" && rule > "$claude_rule" && echo "Claude Code: on"; fi
+  if [ -d "$HOME/.pi/agent" ]; then drop_block "$pi_append"; end_line "$pi_append"; { echo "# $mark"; rule; echo "# /$mark"; } >> "$pi_append" && echo "Pi: on"; fi
+  if [ -f "$codex_config" ]; then
+    drop_block "$codex_config"
+    if top_key developer_instructions "$codex_config"; then echo "Codex: it already has developer_instructions; add the rule from \`$me rule\` there"
+    else { echo "# $mark"; printf "developer_instructions = '''\n"; rule; printf "'''\n"; echo "# /$mark"; cat "$codex_config"; } > "$codex_config.kanso" && mv "$codex_config.kanso" "$codex_config" && echo "Codex: on"; fi
+  fi
+  echo on
+}
+
+uninstall() {
+  rm -f "$claude_rule"
+  drop_block "$pi_append"
+  [ -f "$pi_append" ] && [ ! -s "$pi_append" ] && rm -f "$pi_append"
+  drop_block "$codex_config"
+  echo off
+}
+
+case "$1" in
+  add)
+    shift
+    text=$(printf '%s' "$*" | tr '\n\t' '  ' | sed 's/  */ /g; s/^ //; s/ $//')
+    [ -n "$text" ] || fail 'usage: kanso-todo add "<text>"'
+    p=$(project) || exit 1
+    id=$(new_id)
+    sql "INSERT INTO todos(id,project,text,created,by) VALUES($(q "$id"),$(q "$p"),$(q "$text"),$(now),$(q "${HC_TERMINAL_ID:-}"));" || fail "cannot add the to-do"
+    echo "$id" ;;
+  list)
+    p=$(project) || exit 1
+    sql -separator "$(printf '\t')" "SELECT id, text FROM todos WHERE project=$(q "$p") AND done_at IS NULL ORDER BY created;" ;;
+  done)
+    [ -n "$2" ] || fail "usage: kanso-todo done <id>"
+    p=$(project) || exit 1
+    n=$(sql "UPDATE todos SET done_at=$(now) WHERE id=$(q "$2") AND project=$(q "$p") AND done_at IS NULL; SELECT changes();") || fail "cannot close $2"
+    [ "$n" = 1 ] || fail "no open to-do $2 in this project" ;;
+  rule) rule ;;
+  status) status ;;
+  install) install ;;
+  uninstall) uninstall ;;
+  *) fail 'usage: kanso-todo add "<text>" | list | done <id> | rule' ;;
+esac

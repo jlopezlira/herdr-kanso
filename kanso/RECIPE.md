@@ -689,7 +689,10 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
   (macOS) and the chosen editor. The PR panel runs `gh` and `git` only while
   shown. Tasks runs `gh` (GitHub issues and GitHub Projects, `issues-ghprojects.js`) and asks Jira Cloud and
   Linear only while shown, with a token read from the secret store (`security`, `secret-tool` or `cmdkey`). Its
-  To-do board (`todo.js`) is the `todos` table of this computer's kanso.db and reaches nothing.
+  To-do board (`todo.js`) is the `todos` table of this computer's kanso.db and reaches nothing; Tasks rereads it every 4 seconds while shown.
+  Agents write it with `kanso-panel/kanso-todo` (`sh`, `sqlite3`, `git`): add, list, done. Settings, Pieces, Agents keep the to-do
+  runs its install and uninstall, which write the rule to `~/.claude/rules/kanso-todo.md`, a marked block in
+  `~/.pi/agent/APPEND_SYSTEM.md` and a marked top-level `developer_instructions` in `~/.codex/config.toml`, and remove them.
   Caffeine runs `pmset` through `sudo` and `launchctl` (macOS),
   `systemd-run` and `systemd-inhibit` (Linux) or PowerShell (Windows) on the
   computer it is turned on for, reads each computer once when it connects and

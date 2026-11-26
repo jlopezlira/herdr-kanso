@@ -6,14 +6,15 @@ import { toggleSwitch } from "./ui-toggle.js";
 import { stateBlock } from "./ui-state.js";
 import { paths } from "./platform-paths.js";
 
-const SCRIPT = () => paths.join(appHome(), "mods", "kanso-tabs", "markdown-handler.sh");
 const SUPPORTED = new Set(["macos", "linux"]);
-const LABELS = { macos: "Open .md files in kansō", linux: "Open .md and text files in kansō" };
 
 const lastLine = (text) => String(text ?? "").trim().split("\n").at(-1) ?? "";
 
-export class MarkdownOpener {
-  constructor(cx) {
+export class ScriptSwitch {
+  constructor(cx, { id, script, labels }) {
+    this.id = id;
+    this.script = script;
+    this.labels = labels;
     this.platform = window()?.platform ?? "macos";
     this.on = null;
     this.busy = false;
@@ -23,7 +24,7 @@ export class MarkdownOpener {
   }
 
   async run(verb) {
-    return exec("sh", [SCRIPT(), verb], { timeout: 120_000 }).catch((e) => ({ code: -1, stdout: "", stderr: String(e?.message ?? e) }));
+    return exec("sh", [paths.join(appHome(), "mods", ...this.script), verb], { timeout: 120_000 }).catch((e) => ({ code: -1, stdout: "", stderr: String(e?.message ?? e) }));
   }
 
   async status() {
@@ -31,7 +32,7 @@ export class MarkdownOpener {
     return r.code === 0 ? lastLine(r.stdout) === "on" : null;
   }
 
-  label() { return LABELS[this.platform] ?? ""; }
+  label() { return this.labels[this.platform] ?? ""; }
 
   matches(query) {
     const q = String(query ?? "").trim().toLowerCase();
@@ -61,7 +62,10 @@ export class MarkdownOpener {
         .child(v_flex().flex_1().min_w(0).gap(G.hair)
           .child(div().text_size(T.card).text_color(c.text).child(label))
           .when(looking, (el) => el.child(div().text_size(T.body).text_color(c.dim).child("Looking…"))))
-        .child(toggleSwitch("markdown-opener", this.busy ? this.wanted === true : this.on === true, (next, cx) => this.set(next, cx), c, { label, disabled: this.busy || this.on === null })))
-      .children(this.said ? [stateBlock("markdown-opener-error", c, { text: this.said.text })] : []);
+        .child(toggleSwitch(this.id, this.busy ? this.wanted === true : this.on === true, (next, cx) => this.set(next, cx), c, { label, disabled: this.busy || this.on === null })))
+      .children(this.said ? [stateBlock(`${this.id}-error`, c, { text: this.said.text })] : []);
   }
 }
+
+export const markdownOpener = (cx) => new ScriptSwitch(cx, { id: "markdown-opener", script: ["kanso-tabs", "markdown-handler.sh"], labels: { macos: "Open .md files in kansō", linux: "Open .md and text files in kansō" } });
+export const agentsTodo = (cx) => new ScriptSwitch(cx, { id: "agents-todo", script: ["kanso-panel", "kanso-todo"], labels: { macos: "Agents keep the to-do", linux: "Agents keep the to-do" } });

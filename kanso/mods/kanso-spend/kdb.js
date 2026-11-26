@@ -65,7 +65,7 @@ export function asOfText(at, now) {
 export const conversationOf = (file) => String(file ?? "").match(/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.jsonl$/)?.[1] ?? null;
 
 // Columns added after a table's first release: [table, name, type].
-const ADDED = [["agents", "project", "TEXT"], ["agents", "project_at", "INTEGER"], ["picture_scans", "mark", "TEXT"], ["since_events", "did", "TEXT"], ["pr_items", "checks", "TEXT"], ["pr_items", "created_at", "TEXT"]];
+const ADDED = [["agents", "project", "TEXT"], ["agents", "project_at", "INTEGER"], ["picture_scans", "mark", "TEXT"], ["since_events", "did", "TEXT"], ["pr_items", "checks", "TEXT"], ["pr_items", "created_at", "TEXT"], ["todos", "by", "TEXT"]];
 // What the old Sleep kept, dropped once: a sleep is now a label on its terminal.
 const DROPPED = ["sleep_id", "restore", "step", "step_at", "sent_at", "nudged_at", "why"];
 const DROP_SLEEPS = `DROP TRIGGER IF EXISTS agents_one_sleep;DROP TABLE IF EXISTS sleeps;DROP TABLE IF EXISTS spaces;
@@ -98,7 +98,7 @@ CREATE TABLE IF NOT EXISTS computer_alias(route TEXT PRIMARY KEY, name TEXT NOT 
 CREATE TABLE IF NOT EXISTS issues(url TEXT NOT NULL, source TEXT NOT NULL, project TEXT NOT NULL, ticket TEXT NOT NULL, number INTEGER, repo TEXT, title TEXT NOT NULL, status TEXT, priority TEXT, labels TEXT, assignees TEXT, author TEXT, created_at TEXT, updated_at TEXT, body TEXT, comments TEXT, prs TEXT, read_at INTEGER NOT NULL, PRIMARY KEY(project, url));
 CREATE INDEX IF NOT EXISTS issues_project ON issues(project, source);
 CREATE TABLE IF NOT EXISTS issue_links(project TEXT NOT NULL, source TEXT NOT NULL, ref TEXT NOT NULL, name TEXT NOT NULL, PRIMARY KEY(project, source, ref));
-CREATE TABLE IF NOT EXISTS todos(id TEXT PRIMARY KEY, project TEXT NOT NULL, text TEXT NOT NULL, created INTEGER NOT NULL, done_at INTEGER);
+CREATE TABLE IF NOT EXISTS todos(id TEXT PRIMARY KEY, project TEXT NOT NULL, text TEXT NOT NULL, created INTEGER NOT NULL, done_at INTEGER, by TEXT);
 CREATE TABLE IF NOT EXISTS issue_boards(project TEXT NOT NULL, source TEXT NOT NULL, filter TEXT NOT NULL, who TEXT, repo TEXT, columns TEXT NOT NULL DEFAULT '[]', total INTEGER, read_at INTEGER, retry_at INTEGER, failure TEXT, PRIMARY KEY(project, source));
 CREATE TABLE IF NOT EXISTS schedule_runs(id INTEGER PRIMARY KEY AUTOINCREMENT, schedule TEXT NOT NULL, at INTEGER NOT NULL, ok INTEGER NOT NULL, why TEXT);
 CREATE INDEX IF NOT EXISTS schedule_runs_schedule ON schedule_runs(schedule, id);

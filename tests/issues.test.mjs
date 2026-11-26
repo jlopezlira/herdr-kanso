@@ -1,6 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { arg, chain, drawingHost, failure, fieldWith, find, keyboard, KIT_NIGHT, load, one, press, same, success, tape, texts, timedContext } from "./helpers.mjs";
+import { mkdir, readFile, realpath, writeFile } from "node:fs/promises";
+import { basename, dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { arg, chain, committedRepo, drawingHost, exec, failure, fieldWith, fileExists, find, keyboard, KIT_NIGHT, load, one, press, same, stdoutOf, success, tape, temporary, texts, timedContext } from "./helpers.mjs";
 import { temporaryKdb } from "./mod-fixtures.mjs";
 
 const PR_URL = "https://github.com/acme/shop/issues/12";
@@ -245,7 +248,7 @@ const expectGithubBoard = async (db, id, panel) => {
   assert.ok(control(panel, removeGithub(id)));
 };
 const clickIssues = (panel, id, cx) => one(control(panel, id), "on_click")(null, cx);
-const startIssues = async (db, host = {}, { timers = [], ...context } = {}) => {
+const startIssues = async (db, host = {}, { timers = [], every, ...context } = {}) => {
   const ui = drawingHost();
   const { Issues, DIALOG } = await load("kanso-panel/issues.js", ["Issues", "DIALOG"], {
     ...viewHost,
@@ -258,7 +261,7 @@ const startIssues = async (db, host = {}, { timers = [], ...context } = {}) => {
   });
   const { cx, drain, pending } = timedContext(timers, context);
   const view = new Issues(db);
-  view.init(cx);
+  view.init(every ? { ...cx, timer: { ...cx.timer, every } } : cx);
   await drain();
   const page = () => view.render(cx);
   return { view, cx, drain, pending, DIALOG, page, click: (id) => clickIssues(page(), id, cx) };
@@ -362,6 +365,213 @@ const withoutIssues = (db) => startIssues(db, { exec: githubAnswer([]) });
 
 const TODO_WORDS = "Pack the release notes";
 const todoLink = (project) => ({ project, source: "todo", ref: "list", name: "To-do" });
+const todoScript = fileURLToPath(new URL("../kanso/mods/kanso-panel/kanso-todo", import.meta.url));
+const unixTodo = { skip: process.platform === "win32" && "The agent's command uses POSIX sh" };
+const terminalId = "t42";
+
+const agentTodo = async (t, cwd) => {
+  const HOME = await temporary(t);
+  const { db, dir } = await temporaryKdb(t);
+  const options = { cwd: cwd ?? HOME, env: { ...process.env, HOME, HERDR_APP_HOME: dir, HC_TERMINAL_ID: terminalId } };
+  const invoke = (run, at = options.cwd) => (...args) => run("sh", [todoScript, ...args], { ...options, cwd: at });
+  return { db, HOME, run: invoke(stdoutOf), at: (path) => invoke(stdoutOf, path), result: invoke(exec) };
+};
+
+test("An agent can add, list and finish to-dos in its project from a subfolder.", unixTodo, async (t) => {
+  const { repo } = await committedRepo(t);
+  const folder = await realpath(repo);
+  const nested = join(folder, "src");
+  await mkdir(nested);
+  const { db, run, at, result } = await agentTodo(t, nested);
+  const text = "Pack the user's release notes";
+  const id = await run("add", `  ${text}  `);
+  assert.ok(id, "Add returns an ID");
+  const projects = await db.projects();
+  same(projects.map(({ name, folder }) => ({ name, folder })), [{ name: basename(repo), folder }]);
+  const [project] = projects;
+  same(await issueLinks(db), [todoLink(project.id)]);
+  const open = { id, project: project.id, text, by: terminalId, done_at: null };
+  const saved = () => db.read("SELECT id, project, text, by, done_at FROM todos;");
+  same(await saved(), [open]);
+  assert.equal(await at(folder)("list"), `${id}\t${text}`);
+
+  const unknown = await result("done", "no-such-id");
+  assert.equal(unknown.code, 1);
+  assert.match(unknown.stderr, /no open to-do no-such-id/);
+  same(await saved(), [open]);
+
+  await run("done", id);
+  const [{ done_at }] = await saved();
+  assert.ok(Number.isInteger(done_at) && done_at > 0);
+  assert.equal(await run("list"), "");
+  same(await issueLinks(db), [todoLink(project.id)]);
+});
+
+const agentInstructionFiles = async (t, config, userAppend = "Keep my own Pi instructions.\n") => {
+  const { HOME, run } = await agentTodo(t);
+  const claude = join(HOME, ".claude", "rules", "kanso-todo.md");
+  const pi = join(HOME, ".pi", "agent", "APPEND_SYSTEM.md");
+  const codex = join(HOME, ".codex", "config.toml");
+  await Promise.all([dirname(dirname(claude)), dirname(pi), dirname(codex)].map((dir) => mkdir(dir, { recursive: true })));
+  await Promise.all([writeFile(pi, userAppend), writeFile(codex, config)]);
+  return { run, claude, pi, codex, userAppend, readInstructions: () => Promise.all([claude, pi, codex].map((path) => readFile(path, "utf8"))) };
+};
+
+const CODEX_TABLE = '[profiles.work]\nmodel = "work-model"\n';
+
+test("Installing the to-do rule twice leaves one copy per agent, and uninstalling keeps the user's instructions.", unixTodo, async (t) => {
+  const { run, claude, pi, codex, userAppend, readInstructions } = await agentInstructionFiles(t, CODEX_TABLE);
+  const status = () => run("status");
+  assert.equal(await status(), "off");
+  const rule = await run("rule");
+  assert.match(rule, /^## To-do in kansō\n/);
+  for (const verb of ['add "<one short line>"', "done <id>", "list"]) assert.ok(rule.includes(`kanso-todo' ${verb}`), verb);
+
+  await run("install");
+  assert.equal(await status(), "on");
+  const marked = (body) => `# kanso-todo\n${body}\n# /kanso-todo\n`;
+  const installed = [rule + "\n", userAppend + marked(rule), marked(`developer_instructions = '''\n${rule}\n'''`) + CODEX_TABLE];
+  assert.deepEqual(await readInstructions(), installed, "Codex's top-level rule comes before the first table");
+  await run("install");
+  assert.deepEqual(await readInstructions(), installed, "Reinstalling keeps exactly one copy");
+
+  await run("uninstall");
+  assert.equal(await status(), "off");
+  assert.equal(await fileExists(claude), false);
+  assert.equal(await readFile(pi, "utf8"), userAppend);
+  assert.equal(await readFile(codex, "utf8"), CODEX_TABLE);
+});
+
+test("Pi can remove the to-do rule when the user's last line has no newline.", unixTodo, async (t) => {
+  const userAppend = "Keep my own Pi instructions.";
+  const { run, pi } = await agentInstructionFiles(t, CODEX_TABLE, userAppend);
+  const install = () => run("install");
+  await install();
+  const installed = await readFile(pi, "utf8");
+  assert.ok(installed.startsWith(userAppend + "\n# kanso-todo\n"), "The opening marker starts its own line");
+  await install();
+  assert.equal(await readFile(pi, "utf8"), installed, "Reinstalling replaces rather than appends the rule");
+  await run("uninstall");
+  assert.equal(await readFile(pi, "utf8"), userAppend + "\n");
+});
+
+test("Installing or uninstalling the to-do rule leaves an existing Codex developer instruction alone.", unixTodo, async (t) => {
+  const config = 'developer_instructions = "Keep my own Codex instructions."\n' + CODEX_TABLE;
+  const { run, codex } = await agentInstructionFiles(t, config);
+  assert.match(await run("install"), /Codex: it already has developer_instructions/);
+  assert.equal(await readFile(codex, "utf8"), config);
+  await run("uninstall");
+  assert.equal(await readFile(codex, "utf8"), config);
+});
+
+test("Codex skips an indented top-level developer instruction, but not one inside a table.", unixTodo, async (t) => {
+  const instruction = '  developer_instructions = "Keep my own Codex instructions."\n';
+  const topLevel = instruction + CODEX_TABLE;
+  const { run, codex } = await agentInstructionFiles(t, topLevel);
+  const install = () => run("install");
+  const config = () => readFile(codex, "utf8");
+  assert.match(await install(), /Codex: it already has developer_instructions/);
+  assert.equal(await config(), topLevel);
+
+  const inTable = CODEX_TABLE + instruction;
+  await writeFile(codex, inTable);
+  assert.match(await install(), /Codex: on/);
+  const installed = await config();
+  assert.match(installed, /^# kanso-todo\ndeveloper_instructions = /);
+  assert.ok(installed.endsWith(inTable), "The top-level rule leaves the table's instruction untouched");
+});
+
+const storedTodo = (project, extra = {}) => ({ id: project, project, text: TODO_WORDS, created: 1000, ...extra });
+const writeTodo = async (db, todo) => {
+  const { addTodoSql } = await load("kanso-panel/todo.js", ["addTodoSql"]);
+  await db.run(addTodoSql(todo));
+};
+
+test("The to-do read returns rows for the requested projects and counts all active To-do boards.", async (t) => {
+  const { db, readTodos } = await storeDb(t, ["readTodos"]);
+  const [current, other, removed] = await Promise.all([shop, acme, remoteShop].map(async ({ name, folder, machine }) => (
+    await db.addProject({ name, folder, machine: machine ?? undefined })
+  ).row));
+  for (const { id } of [current, other, removed]) await linkBoard(db, todoLink(id));
+  await linkGithub(db, current.id);
+  await db.removeProject(removed.id);
+  const mine = storedTodo(current.id);
+  await writeTodo(db, mine);
+  await writeTodo(db, storedTodo(other.id));
+
+  const { todos, links } = await readTodos(db, [current.id]);
+  same(todos.map(({ id, project, text, created }) => ({ id, project, text, created })), [mine]);
+  assert.equal(links, 2, "Count the other active To-do board, but not the removed one or GitHub");
+});
+
+const polledTasks = async (t, db) => {
+  const every = t.mock.fn(() => ({ cancel() {} }));
+  const notify = t.mock.fn();
+  const tasks = await startIssues(db, todoInputHost(t), { every, notify });
+  const tick = every.mock.calls.find(({ arguments: [ms] }) => ms === 4000)?.arguments[1];
+  assert.equal(typeof tick, "function", "Tasks schedules the to-do poll every four seconds");
+  return {
+    ...tasks, notify,
+    poll: async () => { tick(tasks.cx); await tasks.drain(); },
+  };
+};
+
+test("The to-do poll redraws when an agent changes the list but keeps the same rows when nothing changed.", async (t) => {
+  const { db, project: { id } } = await kdbWithShop(t, false);
+  await linkBoard(db, todoLink(id));
+  const { view, page, notify, poll } = await polledTasks(t, db);
+  const load = t.mock.method(view, "load");
+  const redraws = notify.mock.callCount();
+  const before = view.todos;
+  await writeTodo(db, storedTodo(id));
+  await poll();
+  assert.notEqual(view.todos, before);
+  assert.ok(texts(page()).includes(TODO_WORDS));
+  assert.equal(notify.mock.callCount(), redraws + 1);
+  const after = view.todos;
+  await poll();
+  assert.equal(view.todos, after);
+  assert.equal(notify.mock.callCount(), redraws + 1);
+  assert.equal(load.mock.callCount(), 0, "An unchanged link count needs no full reload");
+});
+
+const expectNewPolledTodo = async (db, { page, poll }) => {
+  assert.ok(texts(page()).includes(NO_BOARDS));
+  const { row: { id } } = await db.addProject({ name: acme.name, folder: acme.folder });
+  await linkBoard(db, todoLink(id));
+  await writeTodo(db, storedTodo(id));
+  await poll();
+  const words = texts(page());
+  for (const word of [acme.name, TODO_WORDS]) assert.ok(words.includes(word), word);
+};
+
+test("The to-do poll reloads Tasks when an agent adds a new project and To-do board.", async (t) => {
+  const { db } = await kdbWithShop(t, false);
+  await expectNewPolledTodo(db, await polledTasks(t, db));
+});
+
+test("The to-do poll finds the first project and board when Tasks started with no projects.", async (t) => {
+  const { db } = await temporaryKdb(t);
+  const tasks = await polledTasks(t, db);
+  assert.equal(tasks.view.projects.length, 0);
+  await expectNewPolledTodo(db, tasks);
+});
+
+test("A to-do names the agent while its terminal is live, and keeps just the age after it leaves.", async (t) => {
+  const name = "Release agent";
+  const terminals = t.mock.fn(() => [{ address: terminalId, labels: { "kanso.shown": name } }]);
+  const { Issues } = await load("kanso-panel/issues.js", ["Issues"], { ...drawingHost(), terminals });
+  const { tokens } = await load("kanso-panel/ui.js", ["tokens"]);
+  const view = new Issues();
+  const todo = storedTodo(shop.id, { by: terminalId });
+  const metadata = () => texts(view.todoRow(todo, tokens(KIT_NIGHT), todo.created + 5 * 60_000));
+  assert.ok(metadata().includes(`${name} · 5m`));
+  terminals.mock.mockImplementation(() => []);
+  const words = metadata();
+  assert.ok(words.includes("5m"));
+  assert.equal(words.some((word) => word.includes(name)), false);
+});
+
 const todoInputHost = (t) => ({
   Input: { new: (state) => chain("Input").state(state) },
   InputState: { new: ({ value = "" } = {}) => {

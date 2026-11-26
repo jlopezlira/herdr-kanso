@@ -20,6 +20,15 @@ export async function readIssues(db, projects) {
   return { rows, boards, links, todos };
 }
 
+export async function readTodos(db, projects) {
+  const ids = projects.map((p) => q(p)).join(",");
+  const [todos, [{ n = 0 } = {}]] = await Promise.all([
+    db.read(`SELECT * FROM todos WHERE project IN (${ids});`),
+    db.read("SELECT count(*) AS n FROM issue_links JOIN projects ON projects.id=issue_links.project WHERE issue_links.source='todo' AND projects.removed IS NULL;"),
+  ]);
+  return { todos, links: n };
+}
+
 export const linkSql = ({ project, source, ref, name }, on, cached = sourceKey({ source, ref })) => (on
   ? `INSERT OR IGNORE INTO issue_links(project,source,ref,name) VALUES(${q(project)},${q(source)},${q(ref)},${q(name)});`
   : `BEGIN;DELETE FROM issue_links WHERE project=${q(project)} AND source=${q(source)} AND ref=${q(ref)};DELETE FROM issues WHERE project=${q(project)} AND source=${q(cached)};DELETE FROM issue_boards WHERE project=${q(project)} AND source=${q(cached)};COMMIT;`);

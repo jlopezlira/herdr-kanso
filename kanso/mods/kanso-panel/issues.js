@@ -20,9 +20,9 @@ import { localService } from "./platform-host.js";
 import { localSecrets } from "./platform-secrets.js";
 import { projectKey, newId } from "./kdb.js";
 import { tryOrAsync, plural } from "./pure.js";
-import { TODO, TODO_BOARD, isTodo, todoText, todosOf, addTodoSql, doneSql, dropTodoSql } from "./todo.js";
+import { TODO, TODO_MS, TODO_BOARD, isTodo, todoText, todosOf, addTodoSql, doneSql, dropTodoSql } from "./todo.js";
 import { sourceKey, FILTERS, FILTER_WORDS, EVERY_MS, OPEN, DONE, ACCOUNTS, SOURCE_WORDS, matches, withSpaces, placeOf, sectionsOf, isFolded, foldKey, projectsInOrder, stale, ageOf, sendText, listOf, kindOf, linkWords } from "./issues-model.js";
-import { readIssues, linkSql } from "./issues-store.js";
+import { readIssues, readTodos, linkSql } from "./issues-store.js";
 import { GH_PROJECT, NEEDS_SCOPE, listProjects, syncProjectBoard, isIssueItem } from "./issues-ghprojects.js";
 import { issuesGithub, repoText } from "./issues-github.js";
 import { LINKED, linkedOf, syncLinkedBoard, syncLinkedDetail } from "./issues-linked.js";
@@ -88,6 +88,7 @@ export class Issues {
     if (!checking()) cx.spawn(async (cx) => { this.store = await this.secrets.available(); cx.notify(); });
     this.load(cx, true);
     cx.timer.every(EVERY_MS, (next) => this.refresh(next));
+    cx.timer.every(TODO_MS, (next) => this.pollTodos(next));
   }
 
   filterOf(project) { return FILTERS.includes(this.filters[project]) ? this.filters[project] : "assigned"; }
@@ -105,6 +106,21 @@ export class Issues {
       this.todoFieldsFor(this.links.filter((l) => l.source === TODO).map((l) => l.project));
       cx.notify();
       if (refresh) this.refresh(cx);
+    });
+  }
+
+  pollTodos(cx) {
+    const projects = (this.projects ?? []).map((p) => p.id);
+    if (this.pollingTodos) return;
+    this.pollingTodos = true;
+    cx.spawn(async (cx) => {
+      try {
+        const read = await tryOrAsync(() => readTodos(this.db, projects));
+        if (!read) return;
+        const links = this.links.filter((l) => l.source === TODO).length;
+        if (read.links !== links) { this.load(cx); return; }
+        if (JSON.stringify(read.todos) !== JSON.stringify(this.todos)) { this.todos = read.todos; cx.notify(); }
+      } finally { this.pollingTodos = false; }
     });
   }
 
@@ -525,7 +541,8 @@ export class Issues {
   todoRow(todo, c, now) {
     const open = todo.done_at == null;
     return row(`issues-todo-${todo.id}`, c, {
-      name: todo.text, icon: open ? "square" : "check", dimmed: !open, pending: Boolean(todo.pending), meta: ageOf(new Date(todo.done_at ?? todo.created).toISOString(), now),
+      name: todo.text, icon: open ? "square" : "check", dimmed: !open, pending: Boolean(todo.pending),
+      meta: [todo.by && terminals().some((k) => k.address === todo.by) ? shownName(todo.by) : null, ageOf(new Date(todo.done_at ?? todo.created).toISOString(), now)].filter(Boolean).join(" · "),
       tools: [{ icon: "send", label: "Send to agent", onClick: (cx) => this.openSend(todo, cx) }, { icon: "x", label: "Delete", onClick: (cx) => this.dropTodo(todo, cx) }].map(tool(`issues-todo-${todo.id}`, c)),
       onClick: (cx) => this.markTodo(todo, cx),
     });

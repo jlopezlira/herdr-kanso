@@ -377,11 +377,14 @@ const markdownLabel = {
   macos: "Open .md files in kansō",
 };
 
-const markdownSettings = async (t, platform, responses = []) => {
+const markdownSwitch = { id: "markdown-opener", script: "kanso-tabs/markdown-handler.sh" };
+const todoSwitch = { id: "agents-todo", script: "kanso-panel/kanso-todo" };
+
+const switchSettings = async (t, platform, responses = [], { id, script } = markdownSwitch) => {
   const appHome = "/tmp/kanso settings app";
-  const script = appHome + "/mods/kanso-tabs/markdown-handler.sh";
+  const path = `${appHome}/mods/${script}`;
   const replies = responses.values();
-  const command = t.mock.fn(async () => replies.next().value ?? failure("Unexpected Markdown command"));
+  const command = t.mock.fn(async () => replies.next().value ?? failure(`Unexpected ${id} command`));
   const { Settings } = await loadSettings({
     ...gpuiHost(),
     InputState: { new: fieldState },
@@ -392,51 +395,65 @@ const markdownSettings = async (t, platform, responses = []) => {
     readTextFile: async () => null,
     exec: (program, args) => args[0] === "-c" || program === "security" || program === "cmdkey"
       ? Promise.resolve(failure("No secret store"))
-      : command(program, args),
+      : args[0] === path ? command(program, args) : Promise.resolve(success("off\n")),
   });
   const { cx, drain } = context();
   const settings = new Settings();
   settings.init({}, cx);
   await drain();
   const page = () => settings.render();
-  const toggle = (drawn = page()) => find(drawn, (el) => el.tag === "markdown-opener");
+  const toggle = (drawn = page()) => find(drawn, (el) => el.tag === id);
   return {
     page, toggle,
     type: (query) => settings.find.state.type(query, cx),
     calls: () => clone(command.mock.calls.map((call) => call.arguments)),
-    expected: (...verbs) => verbs.map((verb) => ["sh", [script, verb]]),
+    expected: (...verbs) => verbs.map((verb) => ["sh", [path, verb]]),
     change: async (on) => {
       const control = toggle();
-      assert.ok(control, "The .md opener switch is visible");
+      assert.ok(control, `The ${id} switch is visible`);
       const change = arg(control, "on_change");
-      assert.equal(typeof change, "function", "The .md opener switch is enabled");
+      assert.equal(typeof change, "function", `The ${id} switch is enabled`);
       change(on, cx);
       await drain();
     },
   };
 };
 
+const checkSwitchChanges = async (settings, wasOn) => {
+  const pressed = () => arg(settings.toggle(), "pressed");
+  assert.equal(pressed(), wasOn);
+  for (const on of [!wasOn, wasOn]) {
+    await settings.change(on);
+    assert.equal(pressed(), on);
+  }
+  const verbs = wasOn ? ["uninstall", "install"] : ["install", "uninstall"];
+  assert.deepEqual(settings.calls(), settings.expected("status", ...verbs.flatMap((verb) => [verb, "status"])));
+};
+
 for (const [platform, name] of Object.entries({ linux: "Linux", macos: "macOS" })) {
   test(`On ${name}, Settings switches .md files between kansō and the previous app`, async (t) => {
-    const settings = await markdownSettings(t, platform, [
+    const settings = await switchSettings(t, platform, [
       success("on\n"), success("Restored"), success("off\n"), success("Installed"), success("on\n"),
     ]);
     assert.ok(texts(settings.page()).includes(markdownLabel[platform]), markdownLabel[platform]);
-    assert.equal(arg(settings.toggle(), "pressed"), true);
-    await settings.change(false);
-    assert.equal(arg(settings.toggle(), "pressed"), false);
-    await settings.change(true);
-    assert.equal(arg(settings.toggle(), "pressed"), true);
-    assert.deepEqual(settings.calls(), settings.expected("status", "uninstall", "status", "install", "status"));
+    await checkSwitchChanges(settings, true);
   });
 }
+
+test("Settings checks, installs and removes the rule when the agent to-do switch changes.", async (t) => {
+  const replies = ["off", "Installed", "on", "Removed", "off"].map((word) => success(word + "\n"));
+  const settings = await switchSettings(t, "macos", replies, todoSwitch);
+  settings.type("agents keep the to-do");
+  assert.ok(texts(settings.page()).includes("Agents keep the to-do"));
+  await checkSwitchChanges(settings, false);
+});
 
 for (const [query, matches, title] of [
   ["text files", true, "Find shows the opener without an empty message when only the opener matches"],
   ["zzzz", false, "Find hides the opener and says no piece matches when nothing matches"],
 ]) {
   test(title, async (t) => {
-    const settings = await markdownSettings(t, "linux", [success("off\n")]);
+    const settings = await switchSettings(t, "linux", [success("off\n")]);
     settings.type(query);
     const page = settings.page();
     assert.equal(find(page, (el) => arg(el, "id")?.startsWith("piece-row-")), null);
@@ -447,7 +464,7 @@ for (const [query, matches, title] of [
 
 test("The opener switch shows on and is disabled while kansō sets the default app", async (t) => {
   const { promise, resolve } = Promise.withResolvers();
-  const settings = await markdownSettings(t, "linux", [success("off\n"), promise, success("on\n")]);
+  const settings = await switchSettings(t, "linux", [success("off\n"), promise, success("on\n")]);
   assert.equal(arg(settings.toggle(), "pressed"), false, "The opener starts off");
   const pending = settings.change(true);
   try {
@@ -464,7 +481,7 @@ test("The opener switch shows on and is disabled while kansō sets the default a
 test("Settings shows the last error line if .md files cannot be set to open in kansō", async (t) => {
   const detail = "Trying to register the opener";
   const error = "Could not set the default app";
-  const settings = await markdownSettings(t, "linux", [success("off\n"), failure(detail + "\n" + error + "\n"), success("off\n")]);
+  const settings = await switchSettings(t, "linux", [success("off\n"), failure(detail + "\n" + error + "\n"), success("off\n")]);
   await settings.change(true);
   const rendered = texts(settings.page());
   assert.ok(rendered.includes(error));
@@ -474,7 +491,7 @@ test("Settings shows the last error line if .md files cannot be set to open in k
 });
 
 test("Settings does not offer to open .md files in kansō on Windows", async (t) => {
-  const settings = await markdownSettings(t, "windows");
+  const settings = await switchSettings(t, "windows");
   const rendered = texts(settings.page());
   assert.ok(Object.values(markdownLabel).every((label) => !rendered.includes(label)));
   assert.equal(settings.toggle(), null);

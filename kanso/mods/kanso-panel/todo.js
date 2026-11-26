@@ -4,6 +4,7 @@ import { kindOf } from "./issues-model.js";
 
 export const TODO = "todo";
 export const TODO_BOARD = { ref: "list", name: "To-do" };
+export const TODO_MS = 4000;
 export const isTodo = (source) => kindOf(source) === TODO;
 export const todoText = (text) => String(text ?? "").replace(/\s+/g, " ").trim();
 
