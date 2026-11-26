@@ -232,6 +232,7 @@ public static class KansoTranscript {
 
 export const LISTED = 3000;
 export const SHOWN = 30;
+export const PER_FOLDER = 20;
 
 export function projectDir(cwd) {
   const path = String(cwd ?? "");
@@ -241,10 +242,13 @@ export function projectDir(cwd) {
   return `${slug.slice(0, 200)}-${Math.abs(h).toString(36)}`;
 }
 
-const LIST = String.raw`h="$1"; c="$2"; want="$3"; n="$4"; most="$5"
-if [ -n "$c" ]; then set -- "$h/.claude/projects/$c"/*.jsonl; else set -- "$h"/.claude/projects/*/*.jsonl; fi
-set -- "$@" "$h"/.codex/sessions/*/*/*/rollout-*.jsonl "$h"/.pi/agent/sessions/*/*.jsonl
-ls -t "$@" 2>/dev/null | head -n "$most" | tr '\n' '\0' | xargs -0 awk -v want="$want" '
+const LIST = String.raw`h="$1"; c="$2"; want="$3"; n="$4"; most="$5"; per="$6"
+folders() {
+  if [ -n "$c" ]; then printf '%s\n' "$h/.claude/projects/$c"; else ls -td "$h"/.claude/projects/*/ 2>/dev/null | head -n 100; fi
+  ls -d "$h"/.codex/sessions/*/*/*/ 2>/dev/null | sort -r | head -n 30
+  ls -td "$h"/.pi/agent/sessions/*/ 2>/dev/null | head -n 100
+}
+folders | sed 's|/$||' | while IFS= read -r d; do ls -t "$d" 2>/dev/null | grep '\.jsonl$' | head -n "$per" | sed "s|^|$d/|"; done | tr '\n' '\0' | xargs -0 ls -t 2>/dev/null | head -n "$most" | tr '\n' '\0' | xargs -0 awk -v want="$want" '
 function out(f, d, i) { if (d == "" && claude && want != "") d = want; if (d != "" && (want == "" || d == want)) print f "\t" d "\t" i; shown = 1 }
 FNR == 1 { if (prev != "" && !shown && pending) out(prev, cwd, id); prev = FILENAME; shown = 0; pending = 1; claude = FILENAME ~ /\/\.claude\//; cwd = ""; id = "" }
 shown { nextfile }
@@ -295,9 +299,9 @@ export function transcriptApi(platform, run) {
     thread: (file) => platform === "windows" ? ps(`$file=${psQuote(file)}; `+WINDOWS_THREAD) : run("sh", ["-c", READ, "sh", file]),
     listing: (home, { claudeDir = "", folder = "", most = LISTED, shown = SHOWN } = {}) => platform === "windows"
       ? ps(`$h=${psQuote(home)}; $c=${psQuote(claudeDir)}; $want=${psQuote(folder)}; $n=${Number(shown)}; $most=${Number(most)}; `+WINDOWS_LIST)
-      : run("sh", ["-c", LIST, "sh", home, claudeDir, folder, String(shown), String(most)], { timeout: 60000 }),
+      : run("sh", ["-c", LIST, "sh", home, claudeDir, folder, String(shown), String(most), String(claudeDir ? Math.max(shown, PER_FOLDER) : PER_FOLDER)], { timeout: 60000 }),
     threads: (files) => platform === "windows"
-      ? ps(`$files=@(${files.map(psQuote).join(",")}); $index=Join-Path (Join-Path $HOME '.codex') 'session_index.jsonl'; foreach ($file in $files) { ${WINDOWS_THREAD}; if ($file -match '\\.codex\\' -and (Test-Path -LiteralPath $index)) { $id=[IO.Path]::GetFileNameWithoutExtension($file); $id=$id.Substring([Math]::Max(0,$id.Length-36)); [Console]::Write([string][char]10+[char]29+[string][char]10+(@(Select-String -LiteralPath $index -SimpleMatch ('"id":"'+$id+'"') | Select-Object -Last 1 | ForEach-Object { $_.Line }) -join '')) }; [Console]::Write([string][char]10+[char]28+[string][char]10) }`)
+      ? ps(`$files=@(${files.map(psQuote).join(",")}); $index=Join-Path (Join-Path $HOME '.codex') 'session_index.jsonl'; foreach ($file in $files) { ${WINDOWS_THREAD}; if ($file -match '[\\\\/]\\.codex[\\\\/]' -and (Test-Path -LiteralPath $index)) { $id=[IO.Path]::GetFileNameWithoutExtension($file); $id=$id.Substring([Math]::Max(0,$id.Length-36)); [Console]::Write([string][char]10+[char]29+[string][char]10+(@(Select-String -LiteralPath $index -SimpleMatch ('"id":"'+$id+'"') | Select-Object -Last 1 | ForEach-Object { $_.Line }) -join '')) }; [Console]::Write([string][char]10+[char]28+[string][char]10) }`)
       : run("sh", ["-c", THREADS, "sh", ...files], { timeout: 60000 }),
     slice: (file, from, budget, longest) => platform === "windows" ? ps(`$file=${psQuote(file)}; $from=${Number(from)}; $budget=${Number(budget)}; $longest=${Number(longest)}; `+WINDOWS_SLICE) : unixSlice(run, file, from, budget, longest),
   };

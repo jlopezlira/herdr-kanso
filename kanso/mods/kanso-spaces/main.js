@@ -2271,7 +2271,7 @@ export default class Spaces extends RetryingView {
     };
     const deadline = this.machineDeadline(cx, settle);
     const where = place.folder ? [place.machine || null] : [null, ...machines().filter((m) => m.name && machineReaches(m.layout)).map((m) => m.name)];
-    Promise.all(where.map((on) => this.recentOn(on, place.folder ?? "").catch((e) => (on ? [] : Promise.reject(e)))))
+    Promise.all(where.map((on) => this.recentOn(on, place.folder ?? "").catch((e) => (on && where.length > 1 ? [] : Promise.reject(e)))))
       .then((lists) => { deadline.cancel(); settle(newestFirst(lists.flat()).slice(0, RECENT), null); })
       .catch((e) => { deadline.cancel(); settle(null, String(e?.message ?? e)); });
   }
@@ -2284,6 +2284,7 @@ export default class Spaces extends RetryingView {
     const listed = listedOf(r.stdout, on);
     if (!listed.length) return [];
     const read = await api.threads(listed.map((c) => c.file));
+    if (read?.code !== 0 && !read?.stdout) throw new Error(String(read?.stderr || "no titles").trim().split("\n").at(-1));
     const records = recordsOf(read?.stdout);
     return listed.map((c, i) => {
       const thread = threadIn(c.program, records[i] ?? "");
@@ -2296,7 +2297,6 @@ export default class Spaces extends RetryingView {
     const title = scoped ? `Resume in ${place.name ?? folderName(place.folder)}` : "Resume a conversation";
     const finder = { field: "Find a conversation", text: this.resumeFind ?? null };
     const icon = (program) => (this.known ?? []).find((a) => a.key === program)?.icon ?? null;
-    const everywhere = scoped ? [{ separator: true }, item("Every project and computer\u{2026}", () => this.resumeMenu({}), { icon: "history" })] : [];
     const listed = (recent ?? []).filter(findsIn(query));
     const open = shared(OPEN_CONVERSATIONS) ?? {};
     const isOpen = (c) => !c.machine && agents().some((a) => a.address === open[c.file]);
@@ -2307,6 +2307,7 @@ export default class Spaces extends RetryingView {
       : !recent ? [{ loading: true }, { loading: true }, { loading: true }]
         : !rows.length ? [item(recent.length ? "No conversation matches" : "No past conversations here", () => {}, { disabled: true, keep: true }), item("New conversation", fresh, { icon: "plus" })]
           : [{ scroll: rows, rows: Math.min(rows.length, RESUME_ROWS), handle: this.resumeScroll }];
+    const everywhere = scoped ? [{ separator: true }, item("Every project and computer\u{2026}", () => this.resumeMenu({}), { icon: "history" })] : [];
     return { title, count: rows.length, items: [finder, ...middle, ...everywhere] };
   }
 

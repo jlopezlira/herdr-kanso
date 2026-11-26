@@ -8,6 +8,7 @@ import { run, props, closeOverlay, theme, terminals, panes, spaces, agents, shar
 import { listKey, moveTo } from "./listkeys.js";
 import { focusOn, readCommands } from "./pure.js";
 import { switchRows, land, REVEAL_MS, SWITCH_ROWS } from "./switcher.js";
+import { currentAgent } from "./recent.js";
 import { openWithPopup } from "./popup.js";
 import { openSend, openSleep } from "./launch.js";
 import { tokens } from "./ui.js";
@@ -82,7 +83,7 @@ export default class KansoMenu extends View {
 
   openSwitcher(cx) {
     this.rows = switchRows();
-    this.at = this.rows.length > 1 ? 1 : 0;
+    this.at = this.rows.length > 1 && this.rows[0].address === currentAgent() ? 1 : 0;
     this.scroll = ScrollHandle.new();
     this.shown = false;
     this.landed = false;

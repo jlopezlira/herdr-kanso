@@ -79,6 +79,7 @@ export class Timeline {
     const at = focused();
     const now = [at?.terminal, at?.agent].find((address) => agentOf(address)) ?? null;
     if (now) return now;
+    if (at?.terminal) return null;
     if (agentOf(this.follow)) return this.follow;
     const tab = at?.tab ?? spaces().find((s) => s.active)?.tabs?.find((t) => t.active)?.id;
     return agents().find((a) => a.focused)?.address ?? agents().find((a) => a.tab === tab)?.address ?? null;
