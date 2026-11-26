@@ -67,6 +67,7 @@ export const conversationOf = (file) => String(file ?? "").match(/([0-9a-f]{8}-[
 // Columns added after a table's first release: [table, name, type].
 const ADDED = [["agents", "project", "TEXT"], ["agents", "project_at", "INTEGER"], ["picture_scans", "mark", "TEXT"], ["since_events", "did", "TEXT"], ["pr_items", "checks", "TEXT"], ["pr_items", "created_at", "TEXT"], ["todos", "by", "TEXT"]];
 // What the old Sleep kept, dropped once: a sleep is now a label on its terminal.
+const GONE_TABLES = ["issues", "issue_boards", "issue_links"];
 const DROPPED = ["sleep_id", "restore", "step", "step_at", "sent_at", "nudged_at", "why"];
 const DROP_SLEEPS = `DROP TRIGGER IF EXISTS agents_one_sleep;DROP TABLE IF EXISTS sleeps;DROP TABLE IF EXISTS spaces;
 DELETE FROM since_events WHERE kind IN ('sleep_finished','sleep_failed');DELETE FROM meta WHERE key LIKE 'moved:%' OR key LIKE 'replacing:%';`;
@@ -95,11 +96,7 @@ CREATE TABLE IF NOT EXISTS since_observed(source TEXT PRIMARY KEY, value TEXT NO
 CREATE TABLE IF NOT EXISTS panel_state(project TEXT NOT NULL, panel TEXT NOT NULL, state_json TEXT NOT NULL, updated_at INTEGER NOT NULL, PRIMARY KEY(project, panel));
 CREATE TABLE IF NOT EXISTS machines_off(name TEXT PRIMARY KEY, target TEXT NOT NULL DEFAULT '', via TEXT NOT NULL DEFAULT '', session TEXT NOT NULL DEFAULT '', temporary INTEGER NOT NULL DEFAULT 0);
 CREATE TABLE IF NOT EXISTS computer_alias(route TEXT PRIMARY KEY, name TEXT NOT NULL, at INTEGER NOT NULL, pending INTEGER NOT NULL DEFAULT 0);
-CREATE TABLE IF NOT EXISTS issues(url TEXT NOT NULL, source TEXT NOT NULL, project TEXT NOT NULL, ticket TEXT NOT NULL, number INTEGER, repo TEXT, title TEXT NOT NULL, status TEXT, priority TEXT, labels TEXT, assignees TEXT, author TEXT, created_at TEXT, updated_at TEXT, body TEXT, comments TEXT, prs TEXT, read_at INTEGER NOT NULL, PRIMARY KEY(project, url));
-CREATE INDEX IF NOT EXISTS issues_project ON issues(project, source);
-CREATE TABLE IF NOT EXISTS issue_links(project TEXT NOT NULL, source TEXT NOT NULL, ref TEXT NOT NULL, name TEXT NOT NULL, PRIMARY KEY(project, source, ref));
 CREATE TABLE IF NOT EXISTS todos(id TEXT PRIMARY KEY, project TEXT NOT NULL, text TEXT NOT NULL, created INTEGER NOT NULL, done_at INTEGER, by TEXT);
-CREATE TABLE IF NOT EXISTS issue_boards(project TEXT NOT NULL, source TEXT NOT NULL, filter TEXT NOT NULL, who TEXT, repo TEXT, columns TEXT NOT NULL DEFAULT '[]', total INTEGER, read_at INTEGER, retry_at INTEGER, failure TEXT, PRIMARY KEY(project, source));
 CREATE TABLE IF NOT EXISTS schedule_runs(id INTEGER PRIMARY KEY AUTOINCREMENT, schedule TEXT NOT NULL, at INTEGER NOT NULL, ok INTEGER NOT NULL, why TEXT);
 CREATE INDEX IF NOT EXISTS schedule_runs_schedule ON schedule_runs(schedule, id);
 CREATE TABLE IF NOT EXISTS schedules(id TEXT PRIMARY KEY, project TEXT NOT NULL, agent TEXT NOT NULL, agent_name TEXT, run TEXT NOT NULL, prompt TEXT NOT NULL, when_json TEXT NOT NULL, tree INTEGER NOT NULL DEFAULT 0, base TEXT, paused INTEGER NOT NULL DEFAULT 0, created INTEGER NOT NULL, updated INTEGER NOT NULL);
@@ -175,7 +172,8 @@ export class Kdb extends Database {
     const has = Object.fromEntries(await mapSeries([...new Set(ADDED.map(([table]) => table))], async (table) => [table, (await this.sql(`PRAGMA table_info(${table});`)).map((c) => c.name)]));
     const missing = ADDED.filter(([table, name]) => !has[table].includes(name));
     const dropped = DROPPED.filter((name) => has.agents.includes(name));
-    const changes = [...missing.map(([table, name, type]) => `ALTER TABLE ${table} ADD COLUMN ${name} ${type};`), ...(dropped.length ? statements(DROP_SLEEPS) : []), ...dropped.map((name) => `ALTER TABLE agents DROP COLUMN ${name};`)];
+    const gone = (await this.sql(`SELECT name FROM sqlite_master WHERE type='table' AND name IN (${GONE_TABLES.map((t) => `'${t}'`).join(",")});`)).map((t) => t.name);
+    const changes = [...gone.map((t) => `DROP TABLE ${t};`), ...missing.map(([table, name, type]) => `ALTER TABLE ${table} ADD COLUMN ${name} ${type};`), ...(dropped.length ? statements(DROP_SLEEPS) : []), ...dropped.map((name) => `ALTER TABLE agents DROP COLUMN ${name};`)];
     if (changes.length) await this.sql(["BEGIN IMMEDIATE;", ...changes, "COMMIT;"]);
   }
 

@@ -378,24 +378,26 @@ const markdownLabel = {
 };
 
 const markdownSwitch = { id: "markdown-opener", script: "kanso-tabs/markdown-handler.sh" };
-const todoSwitch = { id: "agents-todo", script: "kanso-panel/kanso-todo" };
+const todoSwitch = { id: "agents-todo", script: "kanso-panel/kanso-todo", find: "Agents keep the to-do" };
 
-const switchSettings = async (t, platform, responses = [], { id, script } = markdownSwitch) => {
+const switchSettings = async (t, platform, responses = [], { id, script, find: query } = markdownSwitch) => {
   const appHome = "/tmp/kanso settings app";
   const path = `${appHome}/mods/${script}`;
   const replies = responses.values();
   const command = t.mock.fn(async () => replies.next().value ?? failure(`Unexpected ${id} command`));
   const { Settings } = await loadSettings({
     ...gpuiHost(),
-    InputState: { new: fieldState },
+    InputState: { new: ({ value } = {}) => {
+      const input = fieldState();
+      input.set_value(value);
+      return input;
+    } },
     window: () => ({ platform }),
-    props: () => ({ page: "pieces" }),
+    props: () => ({ page: "pieces", find: query }),
     theme: () => KIT_NIGHT,
     appHome: () => appHome,
     readTextFile: async () => null,
-    exec: (program, args) => args[0] === "-c" || program === "security" || program === "cmdkey"
-      ? Promise.resolve(failure("No secret store"))
-      : args[0] === path ? command(program, args) : Promise.resolve(success("off\n")),
+    exec: (program, args) => args[0] === path ? command(program, args) : Promise.resolve(success("off\n")),
   });
   const { cx, drain } = context();
   const settings = new Settings();
@@ -440,11 +442,14 @@ for (const [platform, name] of Object.entries({ linux: "Linux", macos: "macOS" }
   });
 }
 
+const hasPieceRows = (page) => Boolean(find(page, (el) => arg(el, "id")?.startsWith("piece-row-")));
+
 test("Settings checks, installs and removes the rule when the agent to-do switch changes.", async (t) => {
   const replies = ["off", "Installed", "on", "Removed", "off"].map((word) => success(word + "\n"));
   const settings = await switchSettings(t, "macos", replies, todoSwitch);
-  settings.type("agents keep the to-do");
-  assert.ok(texts(settings.page()).includes("Agents keep the to-do"));
+  const page = settings.page();
+  assert.ok(texts(page).includes(todoSwitch.find));
+  assert.equal(hasPieceRows(page), false);
   await checkSwitchChanges(settings, false);
 });
 
@@ -456,7 +461,7 @@ for (const [query, matches, title] of [
     const settings = await switchSettings(t, "linux", [success("off\n")]);
     settings.type(query);
     const page = settings.page();
-    assert.equal(find(page, (el) => arg(el, "id")?.startsWith("piece-row-")), null);
+    assert.equal(hasPieceRows(page), false);
     assert.equal(Boolean(settings.toggle(page)), matches, "The opener switch is shown only when it matches");
     assert.equal(texts(page).includes("No piece matches."), !matches);
   });

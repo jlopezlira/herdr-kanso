@@ -28,10 +28,12 @@ the branch's rules.
 
 - A session switcher on Ctrl+Tab: every session on every computer, the most recent first, opening on the one you were in before. Keep Ctrl down and press Tab to move, let go to switch; Enter and a click work too, Esc stays. Sessions put to sleep are listed last and wake when you pick one. Change or remove its key in Settings, Keys; switching tabs stays on Cmd+Shift+] and Cmd+Shift+[.
 - Resume a conversation, in the + menu: your past Claude Code, Codex and Pi conversations, newest first, on this computer and the ones you added; type to find one. A project's + lists that project's. None starts twice: one open on any computer, in Claude Code, Codex or Pi, takes you to it, and one asleep wakes.
-- A to-do list in Tasks: Add a board, To-do list kept here. Type a to-do and press Enter; a click marks it done, and Done keeps the finished ones folded. Send one to an agent working in that project, or start a new conversation with it, or delete it, with Undo. The list stays on this computer.
-- GitHub Projects in Tasks: Add a board, GitHub Projects, lists the projects of the repository and its owner. A project's items show under its Status columns, issues, pull requests and drafts, with the same filters as GitHub issues. It needs the GitHub CLI's read:project permission; Allow access asks for it.
-- Agents keep the to-do, in Settings, Pieces: turned on, Claude Code, Pi and Codex add each step of their work to the project's to-do and close it when done, and each row names the agent that added it. It writes a short rule to each agent's own instructions and takes it out when turned off. Agents use the `kanso-todo` command, which you can run too.
+- Tasks is each project's to-do, kept by your agents: turn on Agents keep the to-do, in Settings, Pieces, and Claude Code, Pi and Codex add each step of their work to the project's to-do and close it when done; each row names the agent that added it. It writes a short rule to each agent's own instructions, never over one of yours, and takes it out when turned off; agents use the `kanso-todo` command, which you can run too. Tasks shows the project you are in and every project with a to-do. Type one and press Enter; a click marks it done, and Done keeps the finished ones folded. Send one to an agent working in that project, start a new conversation with it, or delete it, with Undo. The list stays on this computer.
 - Timeline, a new panel: the conversation in focus prompt by prompt, with when each one ended, how long it took, the files it changed and the first sentence of its answer. Open one to read the whole prompt, what you sent while it worked and the full answer. It reads Claude Code and Codex, on this computer or another.
+
+### Removed
+
+- Tasks no longer shows GitHub issues, GitHub Projects, Jira or Linear boards, and Settings no longer has Accounts. Their boards and saved copies leave kansō's database; a Jira or Linear token you saved stays in your system's secret store until you remove it there (named "kansō Jira" or "kansō Linear").
 
 ## [4.1.1] - 2026-11-25
 

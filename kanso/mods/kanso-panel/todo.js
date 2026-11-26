@@ -1,14 +1,13 @@
 import { q } from "./kdb.js";
 import { num } from "./pr-inbox.js";
-import { kindOf } from "./issues-model.js";
 
-export const TODO = "todo";
-export const TODO_BOARD = { ref: "list", name: "To-do" };
 export const TODO_MS = 4000;
-export const isTodo = (source) => kindOf(source) === TODO;
+export const DONE = "Done";
+export const PROJECTS = "SELECT id, name, folder, machine FROM projects WHERE removed IS NULL;";
+export const TODOS = "SELECT todos.* FROM todos JOIN projects ON projects.id=todos.project WHERE projects.removed IS NULL;";
 export const todoText = (text) => String(text ?? "").replace(/\s+/g, " ").trim();
 
-export const addTodoSql = ({ id, project, text, created }) => `INSERT OR IGNORE INTO todos(id,project,text,created) VALUES(${q(id)},${q(project)},${q(text)},${num(created)});`;
+export const addTodoSql = ({ id, project, text, created, by = null }) => `INSERT OR IGNORE INTO todos(id,project,text,created,by) VALUES(${q(id)},${q(project)},${q(text)},${num(created)},${q(by)});`;
 export const doneSql = (id, at) => `UPDATE todos SET done_at=${at == null ? "NULL" : num(at)} WHERE id=${q(id)};`;
 export const dropTodoSql = (id) => `DELETE FROM todos WHERE id=${q(id)};`;
 
@@ -18,4 +17,28 @@ export function todosOf(todos, project) {
     open: mine.filter((t) => t.done_at == null).toSorted((a, b) => b.created - a.created),
     done: mine.filter((t) => t.done_at != null).toSorted((a, b) => b.done_at - a.done_at),
   };
+}
+
+export const placeOf = (machine, folder) => `${machine ?? ""}:${String(folder ?? "").replace(/\/+$/, "")}`;
+
+export function withSpaces(projects, spaces, homeDir) {
+  const known = new Set(projects.map((p) => placeOf(p.machine, p.folder)));
+  const opened = spaces.filter((s) => s.folder && placeOf(s.machine, s.folder) !== placeOf(null, homeDir))
+    .map((s) => ({ id: placeOf(s.machine, s.folder), name: s.name, folder: s.folder, machine: s.machine ?? null, auto: true }));
+  return [...projects, ...opened.filter((p, i) => !known.has(p.id) && opened.findIndex((x) => x.id === p.id) === i)];
+}
+
+export function shownProjects(projects, todos, front) {
+  const held = new Set(todos.map((t) => t.project));
+  return projects.filter((p) => p.id === front || held.has(p.id))
+    .toSorted((a, b) => Number(b.id === front) - Number(a.id === front) || String(a.name).localeCompare(String(b.name)));
+}
+
+export function ageOf(at, now) {
+  const minutes = Math.max(0, Math.floor((now - at) / 60_000));
+  if (minutes < 60) return `${minutes}m`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h`;
+  const days = Math.floor(hours / 24);
+  return days < 30 ? `${days}d` : days < 365 ? `${Math.floor(days / 30)}mo` : `${Math.floor(days / 365)}y`;
 }

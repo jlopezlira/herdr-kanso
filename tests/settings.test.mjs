@@ -148,7 +148,6 @@ test("Settings has Pieces, Keys and Updates", async () => {
   assert.deepEqual(clone(PAGES), [
     { key: "pieces", label: "Pieces" },
     { key: "keys", label: "Keys" },
-    { key: "accounts", label: "Accounts" },
     { key: "updates", label: "Updates" },
   ]);
 });
