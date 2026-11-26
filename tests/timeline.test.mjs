@@ -108,7 +108,7 @@ test("An older Codex file counts the message and a patch once", () => {
   const prompts = readTimeline([
     line({ type: "response_item", payload: { type: "message", role: "user", content: [{ type: "input_text", text: "copy" }] }, timestamp: at }),
     line({ type: "event_msg", payload: { type: "user_message", message: "real question" }, timestamp: at }),
-    line({ type: "response_item", payload: { type: "message", role: "assistant", content: [{ type: "output_text", text: "nope" }] }, timestamp: at }),
+    line({ type: "response_item", payload: { type: "message", role: "assistant", content: [{ type: "output_text", text: "a copy" }] }, timestamp: at }),
     line({ type: "event_msg", payload: { type: "agent_message", message: "the answer" }, timestamp: at }),
     line({ type: "response_item", payload: { type: "custom_tool_call", call_id: "p1", name: "apply_patch", input: "*** Update File: src/app.js\n" }, timestamp: at }),
     line({ type: "response_item", payload: { type: "custom_tool_call_output", call_id: "p1", output: "Success. Updated the following files:\nM src/app.js" }, timestamp: at }),
@@ -233,14 +233,17 @@ async function became(check, view) {
   }));
 }
 
+const claudeOf = (more = {}) => agent({ address: "a", pid: 41, sessionId: "sess-a", key: "claude", name: "Claude Code", app: "Claude", argv: "claude", ...more });
+const worldOf = (agents, platform = "macos") => ({ platform, active: true, focus: "a", agents });
+const oneRead = async (more = {}) => {
+  const world = worldOf([claudeOf(more)]);
+  const opened = await openTimeline(world);
+  await became(() => opened.pending.length === 1, opened.view);
+  return { world, ...opened };
+};
+
 test("Switching agent while a read is still out does not leave the new agent empty", async () => {
-  const world = {
-    platform: "macos", active: true, focus: "a",
-    agents: [
-      agent({ address: "a", pid: 41, sessionId: "sess-a", key: "claude", name: "Claude Code", app: "Claude", argv: "claude" }),
-      agent({ address: "b", pid: 42, sessionId: "sess-b", key: "claude", name: "Claude Code", app: "Claude", argv: "claude" }),
-    ],
-  };
+  const world = worldOf([claudeOf(), claudeOf({ address: "b", pid: 42, sessionId: "sess-b" })]);
   const { view, cx, pending } = await openTimeline(world);
   await became(() => pending.some((item) => item.file.includes("sess-a")), view);
   world.focus = "b";
@@ -256,12 +259,7 @@ test("Switching agent while a read is still out does not leave the new agent emp
 });
 
 test("A status change during a read queues one more read", async () => {
-  const world = {
-    platform: "macos", active: true, focus: "a",
-    agents: [agent({ address: "a", pid: 41, sessionId: "sess-a", key: "claude", name: "Claude Code", app: "Claude", argv: "claude" })],
-  };
-  const { view, cx, pending } = await openTimeline(world);
-  await became(() => pending.length === 1, view);
+  const { world, view, cx, pending } = await oneRead();
   world.agents[0].status = "working";
   world.agents[0].seq = 2;
   view.tick(cx);
@@ -273,12 +271,7 @@ test("A status change during a read queues one more read", async () => {
 });
 
 test("A missing conversation file says nothing was asked, not that the read failed", async () => {
-  const world = {
-    platform: "macos", active: true, focus: "a",
-    agents: [agent({ address: "a", pid: 41, sessionId: "sess-a", key: "claude", name: "Claude Code", app: "Claude", argv: "claude" })],
-  };
-  const { view, cx, pending } = await openTimeline(world);
-  await became(() => pending.length === 1, view);
+  const { world, view, cx, pending } = await oneRead();
   pending[0].resolve({ code: 2, stdout: "", stderr: "" });
   await became(() => view.located && view.reading == null, view);
   const said = texts(view.render(cx));
@@ -287,10 +280,7 @@ test("A missing conversation file says nothing was asked, not that the read fail
 });
 
 test("A Codex conversation that cannot be found on this computer says so", async () => {
-  const world = {
-    platform: "windows", active: true, focus: "a",
-    agents: [agent({ address: "a", pid: 41, sessionId: "sess-a", key: "codex", name: "Codex", app: "Codex", argv: "codex" })],
-  };
+  const world = worldOf([claudeOf({ key: "codex", name: "Codex", app: "Codex", argv: "codex" })], "windows");
   const { view, cx } = await openTimeline(world);
   await became(() => view.located, view);
   const said = texts(view.render(cx));
@@ -300,10 +290,7 @@ test("A Codex conversation that cannot be found on this computer says so", async
 });
 
 test("An agent that is not Claude Code or Codex says Timeline reads those conversations", async () => {
-  const world = {
-    platform: "macos", active: true, focus: "a",
-    agents: [agent({ address: "a", pid: 41, sessionId: "sess-a", key: "zsh", name: "Terminal", app: "Terminal", argv: "zsh" })],
-  };
+  const world = worldOf([claudeOf({ key: "zsh", name: "Terminal", app: "Terminal", argv: "zsh" })]);
   const { view, cx, pending } = await openTimeline(world);
   await until(() => view.located);
   const said = texts(view.render(cx));
@@ -312,12 +299,7 @@ test("An agent that is not Claude Code or Codex says Timeline reads those conver
 });
 
 test("Once a conversation was read, nothing is read while the window is behind", async () => {
-  const world = {
-    platform: "macos", active: true, focus: "a",
-    agents: [agent({ address: "a", pid: 41, sessionId: "sess-a", key: "claude", name: "Claude Code", app: "Claude", argv: "claude", status: "working" })],
-  };
-  const { view, cx, pending } = await openTimeline(world);
-  await became(() => pending.length === 1, view);
+  const { world, view, cx, pending } = await oneRead({ status: "working" });
   world.active = false;
   pending[0].resolve(sliceOut(promptLine("asked"), 10, 100));
   await became(() => view.state.size > 0, view);
