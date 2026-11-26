@@ -76,7 +76,7 @@ const chipOf = (id, c, count) => {
 
 // Nor does a press on it start the row's drag or double-click.
 const held = (el) => el.on_mouse_down("left", (_e, cx) => cx.stop_propagation());
-const tool = (id, c) => ({ label, onClick, ...rest }, i) => held(button(`${id}-tool-${i}`, label, alone(onClick), c, { kind: "icon", size: "sm", ...rest }));
+export const tool = (id, c) => ({ label, onClick, ...rest }, i) => held(button(`${id}-tool-${i}`, label, alone(onClick), c, { kind: "icon", size: "sm", ...rest }));
 const actionOf = (id, c, { label, onClick, ...rest }) => held(button(`${id}-action`, label, alone(onClick), c, { size: "sm", ...rest }));
 
 const verb = (id, c) => ({ label, onClick, ...rest }, i) => button(`${id}-verb-${i}`, label, alone(onClick), c, { kind: "quiet", size: "sm", ...rest });

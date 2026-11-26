@@ -30,7 +30,7 @@ const panelsBar = async (panels) => {
   const b = await bar({ tree: withPanel(null), stored: { "kanso.panels": panels } });
   return { b, root: b.view.render(b.cx) };
 };
-const ROOM = 2 * 12 + 2 * (28 + 8) + 2 * 8 + 12 * 28 + 11 * 2;
+const ROOM = 2 * 12 + 2 * (28 + 8) + 2 * 8 + 13 * 28 + 12 * 2;
 
 test("A tab out of view whose agent waits carries the blocked mark; working, done and the chosen tab carry none", async () => {
   const { tabMark } = await model();
@@ -632,7 +632,7 @@ test("A door being dragged is held on the pressed wash with the accent bar where
   assert.equal(all(after, (el) => calls(el, "bg").some((call) => call[1] === b.c.accent)).length, 0, "and no bar is left");
 });
 
-const DOORS = [["Files", "files"], ["Spend", "insights"], ["PR", "pr"], ["Tasks", "issues"], ["Shipped", "shipped"], ["Caffeine", "caffeine"], ["Worktrees", "worktrees"], ["Ports", "ports"], ["Containers", "containers"], ["Memory", "memory"], ["Images", "look"], ["hjkl dōjō", "dojo"]]
+const DOORS = [["Files", "files"], ["Spend", "insights"], ["PR", "pr"], ["Tasks", "issues"], ["Shipped", "shipped"], ["Caffeine", "caffeine"], ["Worktrees", "worktrees"], ["Ports", "ports"], ["Containers", "containers"], ["Memory", "memory"], ["Images", "look"], ["Timeline", "timeline"], ["hjkl dōjō", "dojo"]]
   .map(([label, want]) => [label, { want }]);
 const TOOLS = [["New tab", [["kanso-spaces.start", null]]], ["Arrange", { opened: "kanso-arrange" }]];
 const CHOSEN = [["checkout", []], ["Close checkout", [["tab.close", { id: "t1" }]]]];

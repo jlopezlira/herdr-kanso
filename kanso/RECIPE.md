@@ -100,7 +100,7 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
       - After the tabs, 8 apart, a + (26 square) opens the sidebar's + menu,
         then Arrange.
       - At the right are the panel buttons: Files, Spend, PR, Tasks,
-        Shipped, Worktrees, Ports, Containers, Memory, Look, Simulator, as icons only (15, in a 26 square ghost
+        Shipped, Worktrees, Ports, Containers, Memory, Look, Timeline, Simulator, as icons only (15, in a 26 square ghost
         button), and a wash when their panel is open. While the pointer is
         on one (`on_hover`), its name (12) opens beside the icon: the name's
         box eases from 0 to its width and fades in over 180 ms
@@ -193,7 +193,7 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
       - Terminal padding is `[14, 10]`.
     - **Side panel**, at the right of the panes: 368 wide (280 to 900),
       hidden by default. It holds whichever panel is open: `kanso-panel`
-      told `files`, `pr`, `issues` (Tasks), `shipped` or `worktrees` (`props.panel`), `kanso-spend`
+      told `files`, `pr`, `issues` (Tasks), `shipped`, `worktrees` or `timeline` (`props.panel`), `kanso-spend`
       (Spend), `kanso-guard` (Memory), `kanso-sim` (Simulator).
       The Worktrees brief, in this one's order: [RECIPE-worktrees.md](RECIPE-worktrees.md).
       The Shipped brief, in this one's order: [RECIPE-shipped.md](RECIPE-shipped.md).
@@ -650,6 +650,26 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     at}}`, read on render; Cancel drops a new pin). ⌘↩ sends "About <path>:"
     and a line per noted pin (`deliver.js`).
     `herdr-app do 'kanso-tabs.look <path>'` (or `.gallery`) opens one.
+    The session switcher (`kanso-tabs.switch`, Ctrl+Tab; `switcher.js` in `kanso-menu`, a frameless window): sessions
+    by `kanso.recent`, which the tab bar keeps from the focused agent (`recent.js`), then the rest in sidebar order, then
+    asleep ones; it opens on the second row and shows after 140 ms (`k-w-menu-wide`); Ctrl+Tab and Ctrl+Shift+Tab move
+    (`mod:kanso-menu`), letting go of Ctrl, Enter or a click lands (`land` in `recent.js`: `pane.focus`, or Wake for an
+    asleep one), Esc closes.
+    Resume a conversation (the + menus of `kanso-spaces`): `listing` in `platform-transcripts.js` lists the newest
+    conversation files (Claude Code under the project's own folder name, Codex, Pi) with their folder and id, then
+    `threads` reads each one's title and first prompt the way Threads does, one call per computer. A row starts the
+    program's resume command (`resumeOf` in `resume.js`) in a new tab of its project. None starts twice: `heldIn` in
+    `conversation-at.js` names the conversation each agent holds on every computer (the file it writes, else the id its
+    command resumed; Pi, by its folder and start), an asleep one by its label, one just started for 30 s
+    (`kanso.resume.starting`); such a row says Open, Asleep or Starting and lands on it (`land`) instead.
+    `timeline.js` (Timeline, panel id `timeline`, `history.svg`): the conversation of the agent in focus (pinnable),
+    Claude Code or Codex, here or on another computer (`conversationIn` in `conversation-at.js`). It reads the file in
+    slices from the last offset (`slice` in `platform-transcripts.js`) when the agent's status or `seq` changes,
+    every 3 s (6 s remote) while it works, and never while the window is behind. `transcript-events.js` turns
+    each record into events that Find and Timeline both project; `timeline-model.js` makes one prompt per thing
+    you typed: what you sent while it worked, when it ended and how long it took (`turn_duration`,
+    `task_complete`), files whose write succeeded and commands run, and the last reply. A row: the prompt, its
+    end time, the reply's first sentence, its length and files. Enter or a click opens it whole; Esc goes back.
   - `kanso-containers` (own mod): `docker ps -a`, `images`, `stats` in front.
   - Mods: Herdr (Apache-2.0) via 0OZ/minimalistic; `"place": "none"`.
   - Own-folder imports only: `scripts/sync-share.mjs` copies shared files;
@@ -667,8 +687,12 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
 - **Programs run**: `git` (spaces, Files), `sh` (Files listing),
   `hc` (machines) and, for Open with, `sh`, `open`, `plutil` and `sips`
   (macOS) and the chosen editor. The PR panel runs `gh` and `git` only while
-  shown. Tasks runs `gh` and asks Jira Cloud and Linear only while shown, with
-  a token read from the secret store (`security`, `secret-tool` or `cmdkey`).
+  shown. Tasks (`tasks.js`, `todo.js`) is the `todos` table of the kanso.db on the computer that holds each
+  project (another computer's through `hc`, as the sidebar reads it): the project you are in, then every project
+  with a to-do, reread every 4 seconds while shown.
+  Agents write it with `kanso-panel/kanso-todo` (`sh`, `sqlite3`, `git`): add, list, done. Settings, Pieces, Agents keep the to-do
+  runs its install and uninstall, which write the rule to `~/.claude/rules/kanso-todo.md`, a marked block in
+  `~/.pi/agent/APPEND_SYSTEM.md` and a marked top-level `developer_instructions` in `~/.codex/config.toml`, and remove them.
   Caffeine runs `pmset` through `sudo` and `launchctl` (macOS),
   `systemd-run` and `systemd-inhibit` (Linux) or PowerShell (Windows) on the
   computer it is turned on for, reads each computer once when it connects and

@@ -276,15 +276,15 @@ test("New conversation's menu ends with Add computer, last for the keyboard too,
     return { view, calls, made, height: heights.at(-1) };
   };
   const { view, calls, made, height } = await menuOf(null);
-  assert.deepEqual(made, ["New project with a conversation\u2026", "Open a folder, no project\u2026", "Add computer\u2026"]);
+  assert.deepEqual(made, ["Resume a conversation\u2026", "New project with a conversation\u2026", "Open a folder, no project\u2026", "Add computer\u2026"]);
   view.menuActs.at(-1)({});
   assert.deepEqual(calls, [["mod.open", { name: "kanso-computers" }]], "the last row the keyboard reaches opens Add computer");
-  assert.equal(height, 8 + 28 + 0 + 9 + 3 * 32, "no project: 4 at each edge, the title, the line and three items");
-  assert.equal((await menuOf(null, 12)).height, 8 + 28 + 11 * 32 + 9 + 3 * 32, "a long run stops at 11 items and Add computer still fits under it");
+  assert.equal(height, 8 + 28 + 0 + 9 + 4 * 32, "no project: 4 at each edge, the title, the line and four items");
+  assert.equal((await menuOf(null, 12)).height, 8 + 28 + 11 * 32 + 9 + 4 * 32, "a long run stops at 11 items and Add computer still fits under it");
   const off = await menuOf({ "footer.machine": "hide" }, 12);
   assert.deepEqual(off.made.slice(-2), ["New project with a conversation\u2026", "Open a folder, no project\u2026"], "switched off in kansō settings, it is left out");
   assert.ok(!off.made.includes("Add computer\u2026"));
-  assert.equal(off.height, 8 + 28 + 11 * 32 + 9 + 2 * 32, "and its room goes with it");
+  assert.equal(off.height, 8 + 28 + 11 * 32 + 9 + 3 * 32, "and its room goes with it");
 });
 
 const AGENT_THEME = { foreground: "#fff", muted: "#888", dim: "#666", border: "#333", selected: "#444" };
@@ -360,15 +360,15 @@ test("The + menu is the approved one: where it opens, Terminal with its key, the
   const menu = (state) => plusMenu(Spaces, state);
   const known = TWO_AGENTS;
   const { view, lines } = menu({ known, repo: true, trees: [{ path: "/work/api-feat", branch: "feat" }] });
-  assert.deepEqual(lines.map(([text]) => text), ["Terminal", "Claude Code", "Codex", "New project", "New worktree\u2026", "Open worktree\u2026", "Arrange\u2026"]);
-  assert.deepEqual(lines.map(([, hint]) => hint), ["⌘T", "1", "2", null, null, null, "⌥⌘T"]);
-  view.menuActs[5]({});
+  assert.deepEqual(lines.map(([text]) => text), ["Terminal", "Claude Code", "Codex", "Resume a conversation\u2026", "New project", "New worktree\u2026", "Open worktree\u2026", "Arrange\u2026"]);
+  assert.deepEqual(lines.map(([, hint]) => hint), ["⌘T", "1", "2", null, null, null, null, "⌥⌘T"]);
+  view.menuActs[6]({});
   assert.deepEqual(overlays.at(-1), { height: 4 + 28 + 32 + 4, props: { trees: { place, trees: [{ path: "/work/api-feat", branch: "feat" }] } } }, "Open worktree… lists the others, as tall as its menu draws");
   view.menuDigits[1]({ notify() {} });
   await flushed();
   assert.deepEqual(calls, [["space.select", { id: "sp-api" }], ["tab.new", { space: "sp-api", folder: "/work/api", argv: ["codex"] }]], "2 starts the second agent");
   assert.equal(menu({ known, repo: false }).lines.some(([text]) => text.includes("worktree")), false, "outside a repository: no worktree rows");
-  assert.deepEqual(menu({ known: null }).lines.map(([text]) => text), ["Terminal", "New project", "Arrange\u2026"], "the first time no agent is offered until the computer answers");
+  assert.deepEqual(menu({ known: null }).lines.map(([text]) => text), ["Terminal", "Resume a conversation\u2026", "New project", "Arrange\u2026"], "the first time no agent is offered until the computer answers");
   const failed = menu({ known: null, agentsFailed: "ssh: connect timed out" });
   assert.equal(failed.lines.some(([text]) => text === "Claude Code"), false);
 });
@@ -384,7 +384,7 @@ test("Tab walks every row of the New tab + menu in order, each with its focus wa
   const keys = keyboard(view.newAgentView(AGENT_THEME));
   const rows = [
     ["Terminal", ["tab.new", { space: "sp-api", folder: "/work/api" }]], ["Claude Code", ["tab.new", { space: "sp-api", folder: "/work/api", argv: ["claude"] }]],
-    ["Codex", ["tab.new", { space: "sp-api", folder: "/work/api", argv: ["codex"] }]], ["New project", ["add project"]], ["New worktree…", ["new worktree"]],
+    ["Codex", ["tab.new", { space: "sp-api", folder: "/work/api", argv: ["codex"] }]], ["Resume a conversation…", "resume"], ["New project", ["add project"]], ["New worktree…", ["new worktree"]],
     ["Open worktree…", "trees"], ["Arrange…", ["kanso-strip.arrange", null]],
   ];
   assert.equal(keys.stops.length, rows.length, "every row and nothing else takes the keyboard");

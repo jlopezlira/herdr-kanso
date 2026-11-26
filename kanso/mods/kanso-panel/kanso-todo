@@ -1,0 +1,102 @@
+#!/bin/sh
+home=${HERDR_APP_HOME:-$HOME/.config/herdr-app}
+db=$home/data/kanso/kanso.db
+me="sh '$(cd "$(dirname "$0")" && pwd -P)/$(basename "$0")'"
+mark="kanso-todo"
+here=$(pwd -P)
+umask 077
+claude_rule=$HOME/.claude/rules/kanso-todo.md
+pi_append=$HOME/.pi/agent/APPEND_SYSTEM.md
+codex_config=$HOME/.codex/config.toml
+
+q() { printf "'%s'" "$(printf '%s' "$1" | sed "s/'/''/g")"; }
+sql() { sqlite3 -cmd ".timeout 5000" "$db" "$@"; }
+fail() { echo "kanso-todo: $1" >&2; exit 1; }
+now() { echo "$(date +%s)000"; }
+new_id() { printf '%x%s' "$(date +%s)" "$(od -An -N4 -tx4 /dev/urandom | tr -d ' \n')"; }
+
+rule() {
+  cat <<RULE
+## To-do in kansō
+Keep this project's to-do list in kansō while you work, without being asked. When you plan work, add each step: \`$me add "<one short line>"\`. When you finish a step, close it: \`$me done <id>\`. \`$me list\` shows the open ones with their ids.
+RULE
+}
+
+find_project() {
+  sql "SELECT id FROM projects WHERE removed IS NULL AND machine='' AND (folder=$(q "$here") OR substr($(q "$here"),1,length(folder)+1)=folder||'/') ORDER BY length(folder) DESC LIMIT 1;" || fail "cannot read $db"
+}
+
+project() {
+  found=$(find_project) || exit 1
+  if [ -z "$found" ]; then
+    top=$(git -C "$here" rev-parse --show-toplevel 2>/dev/null || printf '%s' "$here")
+    found=$(sql "INSERT INTO projects(id,name,folder,machine,added) VALUES($(q "$(new_id)"),$(q "$(basename "$top")"),$(q "$top"),'',$(now)) ON CONFLICT(machine,folder) DO UPDATE SET removed=NULL RETURNING id;") || fail "cannot add this folder as a project"
+  fi
+  printf '%s' "$found"
+}
+
+put() { cat "$2" > "$1"; wrote=$?; rm -f "$2"; return $wrote; }
+has_block() { [ -f "$1" ] && grep -q "^# $mark\$" "$1"; }
+drop_block() { has_block "$1" || return 0; sed "/^# $mark\$/,/^# \/$mark\$/d" "$1" > "$1.kanso" && put "$1" "$1.kanso" || { rm -f "$1.kanso"; return 1; }; }
+ours() { [ -f "$claude_rule" ] && [ "$(head -n 1 "$claude_rule")" = "<!-- $mark -->" ]; }
+top_key() { [ -f "$2" ] && sed '/^[[:space:]]*\[/q' "$2" | grep -Eq "^[[:space:]]*(\"$1\"|'$1'|$1|\"[^\"]*\\\\[^\"]*\")[[:space:]]*="; }
+end_line() { [ -s "$1" ] && [ -n "$(tail -c1 "$1")" ] && echo >> "$1"; true; }
+
+status() {
+  if ours || has_block "$pi_append" || has_block "$codex_config"; then echo on; else echo off; fi
+}
+
+install() {
+  [ -f "$db" ] || fail "kansō has not made its database yet; open kansō once and try again"
+  missed=""
+  if [ -d "$HOME/.claude" ]; then
+    if [ -f "$claude_rule" ] && ! ours; then missed="Claude Code already has its own $claude_rule: add the rule there yourself"
+    elif mkdir -p "$(dirname "$claude_rule")" && { echo "<!-- $mark -->"; rule; } > "$claude_rule"; then echo "Claude Code: on"
+    else missed="kansō could not write $claude_rule"; fi
+  fi
+  if [ -d "$HOME/.pi/agent" ]; then
+    if drop_block "$pi_append" && end_line "$pi_append" && { echo "# $mark"; rule; echo "# /$mark"; } >> "$pi_append"; then echo "Pi: on"
+    else missed="${missed:+$missed; }kansō could not write $pi_append"; fi
+  fi
+  if [ -f "$codex_config" ]; then
+    if ! drop_block "$codex_config"; then missed="${missed:+$missed; }kansō could not write $codex_config"
+    elif top_key developer_instructions "$codex_config"; then missed="${missed:+$missed; }Codex already has developer_instructions in $codex_config: add the rule there yourself"
+    elif { echo "# $mark"; printf "developer_instructions = '''\n"; rule; printf "'''\n"; echo "# /$mark"; cat "$codex_config"; } > "$codex_config.kanso" && put "$codex_config" "$codex_config.kanso"; then echo "Codex: on"
+    else missed="${missed:+$missed; }kansō could not write $codex_config"; fi
+  fi
+  [ -z "$missed" ] || fail "$missed; $me rule prints the rule"
+  echo on
+}
+
+uninstall() {
+  if ours; then rm -f "$claude_rule"; fi
+  drop_block "$pi_append" || fail "kansō could not write $pi_append"
+  [ -f "$pi_append" ] && [ ! -s "$pi_append" ] && rm -f "$pi_append"
+  drop_block "$codex_config" || fail "kansō could not write $codex_config"
+  echo off
+}
+
+case "$1" in
+  add)
+    shift
+    text=$(printf '%s' "$*" | tr '\n\t' '  ' | sed 's/  */ /g; s/^ //; s/ $//')
+    [ -n "$text" ] || fail 'usage: kanso-todo add "<text>"'
+    p=$(project) || exit 1
+    id=$(new_id)
+    sql "INSERT INTO todos(id,project,text,created,by) VALUES($(q "$id"),$(q "$p"),$(q "$text"),$(now),$(q "${HC_TERMINAL_ID:-}"));" || fail "cannot add the to-do"
+    echo "$id" ;;
+  list)
+    p=$(find_project) || exit 1
+    [ -n "$p" ] || exit 0
+    sql -separator "$(printf '\t')" "SELECT id, text FROM todos WHERE project=$(q "$p") AND done_at IS NULL ORDER BY created;" ;;
+  done)
+    [ -n "$2" ] || fail "usage: kanso-todo done <id>"
+    p=$(find_project) || exit 1
+    n=$(sql "UPDATE todos SET done_at=$(now) WHERE id=$(q "$2") AND project=$(q "$p") AND done_at IS NULL; SELECT changes();") || fail "cannot close $2"
+    [ "$n" = 1 ] || fail "no open to-do $2 in this project" ;;
+  rule) rule ;;
+  status) status ;;
+  install) install ;;
+  uninstall) uninstall ;;
+  *) fail 'usage: kanso-todo add "<text>" | list | done <id> | rule' ;;
+esac

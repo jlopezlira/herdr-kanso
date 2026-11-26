@@ -124,6 +124,19 @@ export async function findAsync(list, test, i = 0) {
 }
 
 // Halves joined once each, so no list is copied per item and depth stays log n.
+export const ticking = (cx, ms, tick) => { tick(cx); cx.timer.every(ms, tick); };
+
+export async function inLanes(list, fn, lanes) {
+  const queue = list.entries();
+  const lane = async (got = []) => {
+    const { value, done } = queue.next();
+    if (done) return got;
+    return lane([...got, [value[0], await fn(value[1], value[0])]]);
+  };
+  const found = await Promise.all(Array.from({ length: Math.min(lanes, list.length) }, () => lane()));
+  return found.flat().toSorted((a, b) => a[0] - b[0]).map(([, v]) => v);
+}
+
 export async function mapSeries(list, fn, from = 0, to = list.length) {
   if (to - from <= 0) return [];
   if (to - from === 1) return [await fn(list[from], from)];
@@ -184,6 +197,21 @@ export function machineTitle(name, hostName, alias) {
 
 export function aliasText(names, machine) {
   return String((names ?? {})[machine || ""] ?? "").trim();
+}
+
+export function typedText(text) {
+  const t = String(text ?? "").replace(/\s+/g, " ").trim();
+  if (!t || /^(<|\/|# AGENTS\.md|Caveat:|\[Request interrupted|This session is being continued)/.test(t)) return null;
+  return t;
+}
+
+export function span(ms) {
+  const s = Math.max(0, Math.round(ms / 1000));
+  const m = Math.floor(s / 60);
+  const h = Math.floor(m / 60);
+  if (h > 0) return `${h}h ${m % 60}m`;
+  if (m > 0) return `${m}m ${s % 60}s`;
+  return `${s}s`;
 }
 
 export const plainText = (text) => String(text ?? "").replace(/[\x00-\x08\x0b-\x1f\x7f]/g, "");

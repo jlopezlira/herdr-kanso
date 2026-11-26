@@ -276,6 +276,36 @@ test("an older picture index gains the prefix mark", async (t) => {
   assert.equal((await db.pictures("/t.jsonl")).mark, "9");
 });
 
+test("Opening an older to-do list adds room for agent attribution without changing saved items.", async (t) => {
+  const db = await madeDatabase(t);
+  const before = { id: "task", project: "shop", text: "Pack the release notes", created: 1000, done_at: 2000 };
+  const seed = await sh(db.file, `
+    CREATE TABLE todos(id TEXT PRIMARY KEY, project TEXT NOT NULL, text TEXT NOT NULL, created INTEGER NOT NULL, done_at INTEGER);
+    INSERT INTO todos VALUES('task','shop','Pack the release notes',1000,2000);
+  `);
+  assert.equal(seed.code, 0, seed.stderr);
+
+  await db.open();
+  assert.deepEqual(clone(await db.read("SELECT * FROM todos;")), [{ ...before, by: null }]);
+  await db.run("UPDATE todos SET by='t42' WHERE id='task';");
+  assert.deepEqual(clone(await db.read("SELECT * FROM todos;")), [{ ...before, by: "t42" }]);
+});
+
+test("Opening an older database drops the issue and board caches but keeps the to-do list.", async (t) => {
+  const db = await madeDatabase(t);
+  const retired = ["issues", "issue_boards", "issue_links"];
+  const seed = await sh(db.file, retired.map((name) => `CREATE TABLE ${name}(id TEXT); INSERT INTO ${name} VALUES('old');`).join("\n"));
+  assert.equal(seed.code, 0, seed.stderr);
+  const tables = "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name;";
+  const before = await sh(db.file, tables);
+  assert.deepEqual(before.stdout.trim().split(/\r?\n/), [...retired].sort());
+
+  await db.open();
+  const names = (await db.read(tables)).map(({ name }) => name);
+  assert.ok(names.includes("todos"));
+  assert.deepEqual(clone(names.filter((name) => retired.includes(name))), []);
+});
+
 test("A data folder that cannot be made private fails the open rather than passing for private.", unixModes, async (t) => {
   const app = await temporary(t);
   const run = (command, args, options) => command === "sh" && String(args[1]).startsWith("umask 077 && mkdir")

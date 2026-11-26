@@ -1,12 +1,9 @@
 import { sizedPage } from "./ui-page.js";
-import { localSleep } from "./platform-host.js";
-// Kanso's Shipped panel, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
-// Statistics only, never one item at a time from GitHub.
-// One of the kanso-panel mod's panels: it exists only while shown.
 import { div } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
-import { exec, theme, shared, setShared, notify } from "herdr";
-import { Store } from "./shipped-store.js";
+import { theme, shared, setShared, notify } from "herdr";
+import { Store, cohortOf, mergeHours, monthsIn } from "./shipped-store.js";
+import { github, gql } from "./shipped-github.js";
 import { shippedSpec, shareText } from "./shipped-card.js";
 import { Share, shareRows } from "./share.js";
 import { R, G, T, HEATMAP_GAP, TINT, alpha, tokens } from "./ui.js";
@@ -15,24 +12,27 @@ import { section } from "./ui-section.js";
 import { metric, skeletonOf, failureBlock, tooltip } from "./kit.js";
 import { factList } from "./ui-facts.js";
 import { segmented } from "./ui-tab.js";
-import { range, tryOrAsync, mapSeries, MONTHS } from "./pure.js";
+import { MONTHS, mapSeries } from "./pure.js";
 import { shippedMemory } from "./panel-state.js";
-import { pieces, runs } from "./pieces.js";
 import { spawnAndNotify, said } from "./lib.js";
 import { dot } from "./ui-dot.js";
 
 const DAY = 86400000;
-const RECORDS = "kanso.shipped.bests";
+const RECORDS = "kanso.shipped.records";
 const REFRESH_MS = 5 * 60 * 1000;
-const PARALLEL = 6;
-const RETRIES = 6; // GitHub answers 202 while it computes a repository's statistics
 const REPO_ROWS = 8;
+const TREND = 6;
+const RATE_FLOOR = 10;
+const SETTLE_MS = 30 * 86400000;
 export const PERIODS = ["day", "week", "month", "year"];
 const PERIOD_NAMES = { day: "Day", week: "Week", month: "Month", year: "Year" };
 const FULL_MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const PROVIDERS = [github];
 
 export const fmt = (n) => String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+export const pct = (rate) => `${Math.round(rate * 100)}%`;
+export const span = (ms) => (ms < 3600000 ? `${Math.max(1, Math.round(ms / 60000))}m` : ms < 2 * DAY ? `${Math.round(ms / 3600000)}h` : `${Math.round(ms / DAY)}d`);
 const dayName = (ms) => { const d = new Date(ms); return `${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`; };
 const monthName = (ms) => { const d = new Date(ms); return `${FULL_MONTHS[d.getMonth()]} ${d.getFullYear()}`; };
 const isoDay = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -67,34 +67,9 @@ export function periodLabel(kind, offset, now = Date.now()) {
   return offset === 0 ? "This year" : String(s.getFullYear());
 }
 
-// Weekly sums can't be cut inside a week, so a running week compares with the whole last one.
 const comparedLabel = (kind, offset) => offset === 0
-  ? { day: "vs this time yesterday", week: "vs last week", month: "vs this point last month", year: "vs this point last year" }[kind]
+  ? { day: "vs yesterday", week: "vs last week", month: "vs last month", year: "vs last year" }[kind]
   : { day: "vs the day before", week: "vs the week before", month: "vs the month before", year: "vs the year before" }[kind];
-
-// Null while GitHub is still computing the statistics (it answers {} then).
-export function yourWeeks(body, login) {
-  if (!Array.isArray(body)) return null;
-  const me = body.find((e) => e?.author?.login?.toLowerCase() === String(login).toLowerCase());
-  return (me?.weeks ?? []).filter((w) => w.a || w.d || w.c).map((w) => [w.w * 1000, w.a, w.d, w.c]);
-}
-
-// GitHub's weeks start Sunday UTC; at Monday noon a week lands in the local Monday-to-Sunday week it mostly covers, any time zone.
-export const weekAt = (w) => w + 1.5 * DAY;
-
-// A plain function of its inputs: the panel caches it per reading (sumsIn below).
-export function sumWeeks(stats, start, end) {
-  const sum = (list, pick) => list.reduce((n, x) => n + pick(x), 0);
-  const repos = Object.entries(stats?.repos ?? {}).map(([name, entry]) => {
-    const weeks = (entry.weeks ?? []).filter((w) => { const at = weekAt(w[0]); return at >= start && at < end; });
-    return { name, add: sum(weeks, (w) => w[1]), del: sum(weeks, (w) => w[2]), commits: sum(weeks, (w) => w[3]) };
-  });
-  const byRepo = repos.filter((r) => r.add || r.del || r.commits).toSorted((x, y) => (y.add + y.del) - (x.add + x.del) || y.commits - x.commits);
-  return { add: sum(repos, (r) => r.add), del: sum(repos, (r) => r.del), commits: sum(repos, (r) => r.commits), byRepo };
-}
-
-// A draw asks for up to four spans, and a running period's compare point is a new span on every draw.
-const KEPT_SPANS = 8;
 
 // Today without a contribution yet does not break the current run.
 export function streaks(days, today) {
@@ -121,45 +96,45 @@ export function contributionsIn(days, start, end, totals) {
     + totals.totalIssueContributions + totals.restrictedContributionsCount;
 }
 
-export function computeRecords({ days, stats }) {
+export function trendOf(prs, kind, offset, login, now = Date.now(), n = TREND) {
+  return Array.from({ length: n }, (_, i) => {
+    const at = offset - (n - 1 - i), r = periodRange(kind, at, now);
+    return { label: periodLabel(kind, at, now), ...cohortOf(prs, r.start, r.end, login) };
+  });
+}
+
+export function computeRecords({ days, prs, login }, now = Date.now()) {
   const best = (list, score, make) => list.reduce((top, x) => (score(x) > 0 && (!top || score(x) > top.score) ? { score: score(x), value: make(x) } : top), null)?.value ?? null;
   const bestDay = best(days ?? [], (d) => d.contributionCount, (d) => ({ n: d.contributionCount, date: d.date }));
   const { longest } = streaks(days, null);
-  const rows = Object.values(stats?.repos ?? {}).flatMap((entry) => (entry.weeks ?? []).map(([w, a, , c]) => {
-    const at = weekAt(w);
-    return { week: periodRange("week", 0, at).start, month: periodRange("month", 0, at).start, a, c };
-  }));
-  const weeks = [...Map.groupBy(rows, (x) => x.week)].map(([start, list]) => ({
-    start, add: list.reduce((n, x) => n + x.a, 0), commits: list.reduce((n, x) => n + x.c, 0),
-  }));
-  const months = [...Map.groupBy(rows, (x) => x.month)].map(([start, list]) => ({ start, add: list.reduce((n, x) => n + x.a, 0) }));
-  const bestWeek = best(weeks, (w) => w.add, (w) => ({ add: w.add, start: w.start }));
-  const busiestWeek = best(weeks, (w) => w.commits, (w) => ({ n: w.commits, start: w.start }));
-  const bestMonth = best(months, (m) => m.add, (m) => ({ add: m.add, start: m.start }));
+  const opened = prs ?? [];
+  const starts = (kind) => [...new Set(opened.map((p) => periodRange(kind, 0, p.created).start))];
+  const weeks = starts("week").map((start) => ({ start, ...cohortOf(opened, start, periodRange("week", 0, start).end, login) }));
+  const months = starts("month").map((start) => ({ start, ...cohortOf(opened, start, periodRange("month", 0, start).end, login) }));
+  const prodWeek = best(weeks, (w) => w.prod, (w) => ({ n: w.prod, start: w.start }));
+  const rateMonth = best(months.filter((m) => m.opened >= RATE_FLOOR && periodRange("month", 0, m.start).end <= now - SETTLE_MS), (m) => m.rate, (m) => ({ rate: m.rate, n: m.opened, start: m.start }));
   return {
     ...(bestDay ? { bestDay } : {}),
     ...(longest.n ? { longestStreak: longest } : {}),
-    ...(bestWeek ? { bestWeek } : {}),
-    ...(busiestWeek ? { busiestWeek } : {}),
-    ...(bestMonth ? { bestMonth } : {}),
+    ...(prodWeek ? { prodWeek } : {}),
+    ...(rateMonth ? { rateMonth } : {}),
   };
 }
 
 const BETTER = {
-  bestDay: (a, b) => a.n > b.n, bestWeek: (a, b) => a.add > b.add, bestMonth: (a, b) => a.add > b.add,
-  longestStreak: (a, b) => a.n > b.n, busiestWeek: (a, b) => a.n > b.n,
+  bestDay: (a, b) => a.n > b.n, longestStreak: (a, b) => a.n > b.n, prodWeek: (a, b) => a.n > b.n, rateMonth: (a, b) => a.rate > b.rate,
 };
-export const RECORD_NAMES = { bestDay: "Best day", bestWeek: "Best week", bestMonth: "Best month", longestStreak: "Longest streak", busiestWeek: "Most commits in a week" };
-const recordAt = (k, r) => k === "bestDay" ? fromIsoDay(r.date) : k === "longestStreak" ? (r.end ? fromIsoDay(r.end) : 0) : r.start;
+export const RECORD_NAMES = { bestDay: "Best day", longestStreak: "Longest streak", prodWeek: "Most pull requests in production in a week", rateMonth: "Best month to production" };
+const recordAt = (k, r) => (k === "bestDay" ? fromIsoDay(r.date) : k === "longestStreak" ? (r.end ? fromIsoDay(r.end) : 0) : r.start);
 
-// `beaten`: records set within the last week (a month for best month); an older best found later updates quietly, no toast.
 export function mergeRecords(stored, found, now = Date.now()) {
   return Object.entries(BETTER).reduce(({ kept, beaten }, [k, better]) => {
     const r = found[k];
     if (!r) return { kept, beaten };
     if (!kept[k]) return { kept: { ...kept, [k]: r }, beaten };
+    if (k === "rateMonth" && (r.start === kept[k].start || !better(r, kept[k]))) return { kept: { ...kept, [k]: r }, beaten };
     if (!better(r, kept[k])) return { kept, beaten };
-    const recent = stored?.[k] && now - recordAt(k, r) <= (k === "bestMonth" ? 31 : 7) * DAY;
+    const recent = stored?.[k] && now - recordAt(k, r) <= (k === "rateMonth" ? 31 : 7) * DAY;
     return { kept: { ...kept, [k]: r }, beaten: recent ? [...beaten, k] : beaten };
   }, { kept: { ...(stored ?? {}) }, beaten: [] });
 }
@@ -167,9 +142,8 @@ export function mergeRecords(stored, found, now = Date.now()) {
 export function recordText(k, r) {
   if (k === "bestDay") return { value: fmt(r.n), unit: r.n === 1 ? "contribution" : "contributions", detail: dayName(fromIsoDay(r.date)) };
   if (k === "longestStreak") return { value: fmt(r.n), unit: r.n === 1 ? "day" : "days", detail: r.end ? `to ${dayName(fromIsoDay(r.end))}` : "" };
-  if (k === "bestWeek") return { value: `+${fmt(r.add)}`, unit: "lines", detail: `week of ${dayName(r.start)}` };
-  if (k === "bestMonth") return { value: `+${fmt(r.add)}`, unit: "lines", detail: monthName(r.start) };
-  return { value: fmt(r.n), unit: "commits", detail: `week of ${dayName(r.start)}` };
+  if (k === "prodWeek") return { value: fmt(r.n), unit: "pull requests", detail: `week of ${dayName(r.start)}` };
+  return { value: pct(r.rate), unit: "in production", detail: `${monthName(r.start)}, ${fmt(r.n)} opened` };
 }
 
 export function heatLayout(width) {
@@ -181,21 +155,14 @@ export function heatLayout(width) {
 
 export function periodQuery(cur, prev, now) {
   const end = (r) => Math.max(r.start, Math.min(r.end, now) - 1000);
-  const span = (r) => `from:"${iso(r.start)}",to:"${iso(end(r))}"`;
-  const merged = (r) => `is:pr author:@me is:merged merged:${iso(r.start)}..${iso(end(r))}`;
+  const range = (r) => `from:"${iso(r.start)}",to:"${iso(end(r))}"`;
   const totals = "totalCommitContributions totalPullRequestContributions totalPullRequestReviewContributions totalIssueContributions restrictedContributionsCount";
   return `query{viewer{login name createdAt
 cal:contributionsCollection(from:"${iso(now - 364 * DAY)}",to:"${iso(now)}"){contributionCalendar{weeks{contributionDays{date contributionCount contributionLevel weekday}}}}
-cur:contributionsCollection(${span(cur)}){${totals}}
-prev:contributionsCollection(${span(prev)}){${totals}}}
-curMerged:search(query:"${merged(cur)}",type:ISSUE,first:0){issueCount}
-prevMerged:search(query:"${merged(prev)}",type:ISSUE,first:0){issueCount}
+cur:contributionsCollection(${range(cur)}){${totals}}
+prev:contributionsCollection(${range(prev)}){${totals}}}
 ever:search(query:"is:pr author:@me is:merged",type:ISSUE,first:0){issueCount}}`;
 }
-
-export const REPOS = `query($after:String,$own:String){viewer{databaseId
-contributed:repositoriesContributedTo(first:100,after:$after,includeUserRepositories:true,contributionTypes:[COMMIT,PULL_REQUEST,PULL_REQUEST_REVIEW,REPOSITORY]){pageInfo{hasNextPage endCursor} nodes{nameWithOwner pushedAt}}
-access:repositories(first:100,after:$own,affiliations:[OWNER,COLLABORATOR,ORGANIZATION_MEMBER],ownerAffiliations:[OWNER,COLLABORATOR,ORGANIZATION_MEMBER],orderBy:{field:PUSHED_AT,direction:DESC}){pageInfo{hasNextPage endCursor} nodes{nameWithOwner pushedAt}}}}`;
 
 export function rhythmNote(hours) {
   const total = hours.reduce((a, b) => a + b, 0);
@@ -203,20 +170,6 @@ export function rhythmNote(hours) {
   const peak = hours.indexOf(Math.max(...hours));
   const late = hours.slice(21).reduce((a, b) => a + b, 0) + hours.slice(0, 5).reduce((a, b) => a + b, 0);
   return [`most at ${String(peak).padStart(2, "0")}:00`, late ? `${Math.round((late / total) * 100)}% after 9 pm` : ""].filter(Boolean).join(" · ");
-}
-
-async function gh(args) {
-  const r = await exec("gh", args);
-  if (r.code !== 0) throw new Error((r.stderr || r.stdout).trim().split("\n")[0] || "GitHub could not be read.");
-  return r.stdout;
-}
-
-async function gql(query, vars = {}) {
-  const args = ["api", "graphql", "-f", `query=${query}`,
-    ...Object.entries(vars).flatMap(([k, v]) => (v !== null && v !== undefined ? ["-f", `${k}=${v}`] : []))];
-  const out = JSON.parse(await gh(args));
-  if (!out.data) throw new Error(out.errors?.[0]?.message ?? "GitHub could not be read.");
-  return out.data;
 }
 
 export class Shipped {
@@ -231,10 +184,10 @@ export class Shipped {
 
   init(cx) {
     this.kind = this.keptKind ?? "week"; this.offset = this.keptOffset ?? 0;
-    this.github = {}; // by period key: the period query's data, or { error }
-    this.stats = null; this.syncing = false; this.syncError = null; this.phase = null; this.rhythm = {};
+    this.github = {};
+    this.prs = null; this.syncing = false; this.syncError = null; this.phase = null;
     this.store = new Store(cx.timer);
-    this.records = shared(RECORDS) ?? {}; this.fresh = new Set();
+    this.records = {}; this.fresh = new Set();
     this.loading = false; this.pending = false; this.reposOpen = false; this.width = 368;
     this.share = new Share("kanso-panel");
     this.refresh(cx);
@@ -243,20 +196,10 @@ export class Shipped {
 
   key() { return `${this.kind}:${this.offset}`; }
 
-  // Cached per span while the stats are the same reading: a draw asks several times, on every shared write anywhere.
-  sumsIn(start, end) {
-    const span = `${start}:${end}`, kept = this.sums?.stats === this.stats ? this.sums.bySpan : [];
-    const hit = kept.find(([s]) => s === span);
-    if (hit) return hit[1];
-    const out = sumWeeks(this.stats, start, end);
-    this.sums = { stats: this.stats, bySpan: [...kept.slice(1 - KEPT_SPANS), [span, out]] };
-    return out;
-  }
-
   pick(kind, offset, cx) {
     this.kind = kind; this.offset = Math.min(0, offset);
     this.refresh(cx);
-    spawnAndNotify(cx, async (cx) => { await this.readRhythm(); cx.notify(); });
+    this.startSync(cx);
   }
 
   refresh(cx, again = false) {
@@ -269,6 +212,7 @@ export class Shipped {
         if (again || !this.github[key]) {
           try {
             const data = await gql(periodQuery(cur, prev, now));
+            if (data.viewer.login !== this.login) { this.github = {}; this.prs = null; this.covered = null; this.fresh = new Set(); this.records = shared(`${RECORDS}:${data.viewer.login}`) ?? {}; }
             this.github = { ...this.github, [key]: data };
             this.login = data.viewer.login; this.name = data.viewer.name;
             this.weeks = data.viewer.cal.contributionCalendar.weeks;
@@ -283,7 +227,7 @@ export class Shipped {
       finally {
         this.loading = false;
         cx.notify();
-        if (again || !this.stats) this.startSync(cx);
+        if (again || !this.prs) this.startSync(cx);
         const next = this.pending; this.pending = false;
         if (next) this.refresh(cx, next === true);
       }
@@ -291,100 +235,50 @@ export class Shipped {
   }
 
   startSync(cx) {
-    if (this.syncing || !this.login) return;
-    this.syncing = true; this.syncError = null;
+    if (!this.login) return;
+    if (this.syncing) { this.resync = true; return; }
+    this.syncing = true; this.resync = false; this.syncError = null;
+    const login = this.login;
     spawnAndNotify(cx, async (cx) => {
-      try { await this.sync(cx); }
-      catch (e) { this.syncError = String(e?.message ?? e); }
+      try {
+        await this.store.open();
+        await mapSeries(PROVIDERS, (provider) => this.store.forAccount(provider.provider, this.login));
+        if (login !== this.login) return;
+        this.prs = await this.store.prs();
+        this.covered = await this.coverage();
+        this.firstRead = !this.prs.length;
+        cx.notify();
+        const now = Date.now(), from = periodRange(this.kind, this.offset - TREND + 1, now).start;
+        const read = await mapSeries(PROVIDERS, (provider) => provider.sync(this.store, { from, now, login, progress: (phase) => { this.phase = `${provider.name}, ${phase}`; cx.notify(); } }));
+        this.unchecked = read.reduce((n, r) => n + (r?.unchecked ?? 0), 0);
+      } catch (e) { this.syncError = String(e?.message ?? e); }
       finally {
         this.syncing = false; this.phase = null; this.firstRead = false;
-        try { this.stats = await this.store.weekly(); } catch {}
-        this.rhythm = {}; await this.readRhythm();
-        this.checkRecords(); cx.notify();
+        if (login === this.login) {
+          try { this.prs = await this.store.prs(); this.covered = await this.coverage(); } catch {}
+          this.checkRecords();
+        } else { this.prs = null; this.covered = null; this.resync = true; }
+        cx.notify();
+        if (this.resync) this.startSync(cx);
       }
     });
   }
 
-  async readRhythm() {
-    const key = this.key();
-    if (this.rhythm[key] || !this.stats) return;
-    const r = periodRange(this.kind, this.offset);
-    try { this.rhythm[key] = await this.store.rhythm(r.start / 1000, r.end / 1000); } catch {}
+  async coverage() { return Object.fromEntries(await mapSeries(PROVIDERS, async (p) => [p.provider, await this.store.readMonths(p.provider)])); }
+
+  covers(now = Date.now()) {
+    const from = periodRange(this.kind, this.offset - TREND + 1, now).start, end = Math.min(periodRange(this.kind, this.offset, now).end, now + 1);
+    return PROVIDERS.every((p) => monthsIn(from, end).every((m) => this.covered?.[p.provider]?.has(m.month)));
   }
 
-  async identities(databaseId) {
-    const conf = await Promise.all(["user.email", "user.name"].map((k) => exec("git", ["config", "--global", k]).catch(() => null)));
-    const synced = JSON.parse((await this.store.meta("identities")) ?? "[]");
-    const mine = [this.login, this.name, `${this.login}@users.noreply.github.com`, databaseId ? `${databaseId}+${this.login}@users.noreply.github.com` : null,
-      ...conf.map((r) => (r?.code === 0 ? r.stdout.trim() : null))];
-    return { mine: [...new Set(mine.filter(Boolean))], all: [...new Set([...mine, ...synced].filter(Boolean))] };
-  }
+  recordsKey() { return `${RECORDS}:${this.login ?? ""}`; }
 
-  async sync(cx) {
-    await this.store.open();
-    this.stats = await this.store.weekly();
-    this.firstRead = !Object.keys(this.stats.repos).length;
-    cx.notify();
-
-    this.phase = "your repositories on GitHub"; cx.notify();
-    const pagesOf = async (field, after = null, got = []) => {
-      const v = (await gql(REPOS, field === "contributed" ? { after } : { own: after })).viewer;
-      const page = v[field];
-      const all = [...got, { databaseId: v.databaseId, nodes: page.nodes ?? [] }];
-      return page.pageInfo.hasNextPage ? pagesOf(field, page.pageInfo.endCursor, all) : all;
-    };
-    const pages = (await mapSeries(["contributed", "access"], (field) => pagesOf(field))).flat();
-    const databaseId = pages.at(-1).databaseId;
-    const listed = new Map(pages.flatMap((p) => p.nodes.filter((n) => n?.nameWithOwner).map((n) => [n.nameWithOwner, n.pushedAt])));
-    const known = new Map((await this.store.ghRepos()).map((r) => [r.repo, r]));
-    const repos = new Map([...listed, ...[...known].filter(([name]) => !listed.has(name)).map(([name, r]) => [name, r.pushed])]);
-    const due = [...repos].filter(([name, pushed]) => { const had = known.get(name); return !had || had.pending || (pushed && Date.parse(pushed) > had.fetched); });
-    const rounds = async (due, round) => {
-      if (!due.length || round >= RETRIES) return;
-      if (round) await localSleep(5);
-      const answers = await mapSeries(range(Math.ceil(due.length / PARALLEL)), async (k) => {
-        this.phase = `GitHub's sums, ${fmt(Math.max(0, due.length - k * PARALLEL))} repositories to go`; cx.notify();
-        return Promise.all(due.slice(k * PARALLEL, k * PARALLEL + PARALLEL).map(async ([repo, pushed]) => {
-          // Gone, or not yours to read: nothing to add.
-          const weeks = await tryOrAsync(async () => yourWeeks(JSON.parse(await gh(["api", `repos/${repo}/stats/contributors`]) || "{}"), this.login), []);
-          return weeks === null
-            ? { later: [repo, pushed], read: { repo, pushed, fetched: known.get(repo)?.fetched ?? 0, pending: true } }
-            : { later: null, read: { repo, pushed, fetched: Date.now(), weeks } };
-        }));
-      });
-      const read = answers.flat();
-      await this.store.saveGithub(read.map((x) => x.read)); // GitHub still computing after a while: asked again next time
-      return rounds(read.filter((x) => x.later).map((x) => x.later), round + 1);
-    };
-    await rounds(due, 0);
-
-    const ids = await this.identities(databaseId);
-    const sealed = JSON.parse((await this.store.meta("identity-seals")) ?? "null");
-    const idKey = JSON.stringify([...ids.all, ...(sealed?.seals ?? [])].toSorted());
-    if ((await this.store.meta("scanned-identities")) !== idKey) { await this.store.sql("DELETE FROM scans;"); await this.store.setMeta("scanned-identities", idKey); }
-    this.phase = "this computer's repositories"; cx.notify();
-    await this.store.scanLocal(ids.all, (done, total) => { this.phase = `this computer's repositories, ${fmt(total - done)} to go`; cx.notify(); }, sealed);
-
-    if (!runs("shipped.sync", pieces(shared))) { this.machines = []; return; }
-    this.phase = "your other computers"; cx.notify();
-    try {
-      const synced = await this.store.syncMachines(ids.mine);
-      const before = JSON.parse((await this.store.meta("identities")) ?? "[]");
-      const learned = [...new Set([...before, ...synced.identities])];
-      if (learned.length !== before.length) await this.store.setMeta("identities", JSON.stringify(learned));
-      const seals = JSON.stringify({ key: synced.gist, seals: synced.seals });
-      if (seals !== JSON.stringify(sealed)) await this.store.setMeta("identity-seals", seals);
-      this.machines = synced.machines;
-    } catch (e) { this.machineError = String(e?.message ?? e); }
-  }
-
-  // The sums' records wait until every repository is in: a half-read one is never a "new record".
   checkRecords() {
     if (!this.days) return;
-    const whole = this.stats && !this.syncing ? this.stats : null;
-    const { kept, beaten } = mergeRecords(shared(RECORDS), computeRecords({ days: this.days, stats: whole }));
+    const whole = this.prs && !this.syncing ? this.prs : null;
+    const { kept, beaten } = mergeRecords(shared(this.recordsKey()), computeRecords({ days: this.days, prs: whole, login: this.login }));
     this.records = kept;
-    setShared(RECORDS, kept);
+    setShared(this.recordsKey(), kept);
     this.fresh = new Set([...this.fresh, ...beaten]);
     for (const k of beaten) {
       const t = recordText(k, kept[k]);
@@ -392,12 +286,11 @@ export class Shipped {
     }
   }
 
-  // Never a repository or machine name.
   cardData() {
     const { current, longest } = streaks(this.days, isoDay(new Date()));
     const records = Object.keys(RECORD_NAMES).filter((k) => this.records[k]).map((k) => ({ name: RECORD_NAMES[k], ...recordText(k, this.records[k]) }));
-    const r = this.rhythm[this.key()];
-    return { streak: current, longest: longest.n, weeks: this.weeks ?? [], records, rhythm: r ? { hours: r.hours, note: rhythmNote(r.hours) } : null };
+    const hours = this.hours();
+    return { streak: current, longest: longest.n, weeks: this.weeks ?? [], records, rhythm: hours ? { hours, note: rhythmNote(hours) } : null };
   }
 
   shareCard() {
@@ -415,51 +308,43 @@ export class Shipped {
         .child(iconButton("shipped-next", "chevron-right", "Next period", (cx) => this.pick(this.kind, this.offset + 1, cx), c, { disabled: this.offset >= 0 })));
   }
 
-  ranges(now) { return { cur: periodRange(this.kind, this.offset, now), prev: comparedRange(this.kind, this.offset, now) }; }
+  ranges(now) { return { cur: periodRange(this.kind, this.offset, now), prev: periodRange(this.kind, this.offset - 1, now) }; }
 
   summary() {
     const now = Date.now();
     const { cur, prev } = this.ranges(now);
-    // A running week compares with the whole last one: its sum can't be cut.
-    const before = this.kind === "week" && this.offset === 0 ? periodRange("week", -1, now) : prev;
     const gh = this.github[this.key()], v = gh?.viewer;
+    const settled = this.covers(now);
+    const mine = this.prs && settled ? cohortOf(this.prs, cur.start, cur.end, this.login) : null;
+    const before = this.prs && settled ? cohortOf(this.prs, prev.start, prev.end, this.login) : null;
     const contributions = v ? contributionsIn(this.days, cur.start, cur.end, v.cur) : null;
-    const contributionsBefore = v ? contributionsIn(this.days, prev.start, prev.end, v.prev) : null;
-    const sums = this.stats ? this.sumsIn(cur.start, cur.end) : null;
-    const sumsBefore = this.stats ? this.sumsIn(before.start, before.end) : null;
-    const byDay = this.kind === "day"; // GitHub's sums are weekly: a day leads with contributions
-    const value = byDay ? contributions : sums?.add, was = byDay ? contributionsBefore : sumsBefore?.add;
-    const settled = byDay || !(this.syncing && this.firstRead);
-    const delta = settled && value !== null && value !== undefined && was > 0 ? Math.round(((value - was) / was) * 100) : null;
-    // Past double, a multiple reads better than a four-digit percentage.
-    const deltaText = delta === null ? "" : `${delta >= 200 ? `${fmt(value / was)}x` : `${delta >= 0 ? "+" : ""}${delta}%`} ${comparedLabel(this.kind, this.offset)}`;
+    const delta = settled && mine?.rate !== null && mine?.rate !== undefined && before?.rate !== null && before?.rate !== undefined ? Math.round((mine.rate - before.rate) * 100) : null;
+    const deltaText = delta === null ? "" : `${delta >= 0 ? "+" : ""}${delta} ${Math.abs(delta) === 1 ? "point" : "points"} ${comparedLabel(this.kind, this.offset)}`;
     const when = periodLabel(this.kind, this.offset).toLowerCase();
     const stats = [
-      byDay ? null : { value: contributions === null ? "—" : fmt(contributions), unit: "contributions" },
-      { value: gh?.curMerged ? fmt(gh.curMerged.issueCount) : "—", unit: "pull requests merged" },
-      { value: sums && !byDay ? fmt(Math.max(sums.commits, v?.cur.totalCommitContributions ?? 0)) : v ? fmt(v.cur.totalCommitContributions) : "—", unit: "commits" },
+      { value: mine ? fmt(mine.opened) : "—", unit: "opened" },
+      { value: mine ? fmt(mine.merged) : "—", unit: "merged" },
+      { value: mine?.toMerge !== null && mine?.toMerge !== undefined ? span(mine.toMerge) : "—", unit: "to merge" },
+      { value: mine ? fmt(mine.dropped) : "—", unit: "closed unmerged" },
       { value: v ? fmt(v.cur.totalPullRequestReviewContributions) : "—", unit: "reviews" },
-      byDay ? null : { value: sums ? fmt(sums.byRepo.length) : "—", unit: sums?.byRepo.length === 1 ? "repository" : "repositories" },
-    ].filter(Boolean);
-    const ever = this.stats ? this.sumsIn(0, Infinity) : null;
-    const everText = gh?.ever ? [
-      `${fmt(gh.ever.issueCount)} pull requests merged`,
-      ever?.add ? `+${fmt(ever.add)} lines and ${fmt(ever.commits)} commits in ${fmt(ever.byRepo.length)} repositories` : "",
-    ].filter(Boolean).join(", ") + `${v?.createdAt ? ` since you joined GitHub in ${new Date(v.createdAt).getFullYear()}` : ""}.` : "";
+      { value: mine ? fmt(mine.elsewhere) : "—", unit: "merged in others' repositories" },
+      { value: contributions === null ? "—" : fmt(contributions), unit: "contributions" },
+    ];
+    const everText = gh?.ever ? `${fmt(gh.ever.issueCount)} pull requests merged${v?.createdAt ? ` since you joined GitHub in ${new Date(v.createdAt).getFullYear()}` : ""}.` : "";
     return {
-      login: v?.login ?? this.login ?? null, period: periodLabel(this.kind, this.offset), byDay, settled,
-      big: value === null || value === undefined ? null : byDay ? fmt(value) : `+${fmt(value)}`,
-      small: !byDay && sums ? `−${fmt(sums.del)}` : "",
-      label: byDay ? `contributions, ${when}` : `lines shipped, ${when}`,
+      login: v?.login ?? this.login ?? null, period: periodLabel(this.kind, this.offset), settled,
+      big: mine && settled ? fmt(mine.prod) : null,
+      small: mine?.rate !== null && mine?.rate !== undefined ? pct(mine.rate) : "",
+      label: `pull requests in production, ${when}`,
       delta, deltaText, stats, everText, error: gh?.error ?? null,
     };
   }
 
-  hero(c, narrow) {
+  hero(c) {
     const s = this.summary();
     return v_flex().w_full().gap(G.lg)
       .child(v_flex().w_full().gap(G.xs)
-        .child(metric({ value: s.big ?? "…", unit: [s.small, `${s.label}${s.settled ? "" : ", still adding up"}`].filter(Boolean).join(" "), facts: factList(s.stats) })("sh-metric", c))
+        .child(metric({ value: s.big ?? "…", unit: [`${s.label}${s.settled ? "" : ", still reading"}`, s.small ? `${s.small} of those you opened` : ""].filter(Boolean).join(" · "), facts: factList(s.stats) })("sh-metric", c))
         .when(s.delta !== null, (el) => el.child(h_flex().gap(6).items_center()
           .child(dot(c, s.delta >= 0 ? c.green : c.red))
           .child(div().text_size(T.value).text_color(s.delta >= 0 ? c.green : c.red).child(s.deltaText)))))
@@ -467,25 +352,23 @@ export class Shipped {
       .when(Boolean(s.error), (el) => el.child(failureBlock(s.error)("sh-error", c)));
   }
 
-  streak(c, width) {
-    const { current, longest } = streaks(this.days, isoDay(new Date()));
-    const level = { NONE: null, FIRST_QUARTILE: "40", SECOND_QUARTILE: "70", THIRD_QUARTILE: "b0", FOURTH_QUARTILE: "ff" };
-    const { weeks: n, cell } = heatLayout(width);
-    const weeks = (this.weeks ?? []).slice(-n);
-    const radius = Math.max(2, Math.round(cell / 5));
-    const square = (d, key) => {
-      if (!d) return div().id(key).size(cell).flex_none(); // before the calendar, or still to come
-      const a = level[d.contributionLevel];
-      return div().id(key).size(cell).flex_none().rounded(radius).bg(a ? c.accent + a : c.subtle)
-        .tooltip(tooltip({ label: `${fmt(d.contributionCount)} ${d.contributionCount === 1 ? "contribution" : "contributions"} on ${dayName(fromIsoDay(d.date))}` }));
-    };
-    return v_flex().w_full().gap(G.md)
-      .child(section(c, "Streak", `longest ${fmt(longest.n)} ${longest.n === 1 ? "day" : "days"}`))
-      .child(metric({ value: fmt(current), unit: current === 1 ? "day in a row" : "days in a row" })("sh-streak", c))
-      .child(h_flex().w_full().gap(HEATMAP_GAP).children(weeks.map((w, wi) => {
-        const byDay = new Map(w.contributionDays.map((d) => [d.weekday, d]));
-        return v_flex().flex_none().gap(HEATMAP_GAP).children([0, 1, 2, 3, 4, 5, 6].map((i) => square(byDay.get(i), `heat-${wi}-${i}`)));
-      })));
+  rateRow(id, name, detail, rate, c, first) {
+    return v_flex().w_full().py(G.sm).gap(G.xs)
+      .when(!first, (el) => el.border_t_1().border_color(c.border))
+      .child(h_flex().w_full().flex_wrap().gap_x(G.md).gap_y(G.hair).items_center()
+        .child(div().flex_1().min_w(0).truncate().text_size(T.card).text_color(c.text).child(name))
+        .child(div().flex_none().text_size(T.body).text_color(c.dim).child(detail)))
+      .child(h_flex().id(id).w_full().h(G.xs).rounded(G.hair).bg(c.subtle)
+        .child(div().h_full().rounded(G.hair).bg(c.accent).w(`${(rate ? Math.max(0.02, rate) * 100 : 0).toFixed(1)}%`)));
+  }
+
+  trend(c) {
+    if (!this.prs) return null;
+    const list = trendOf(this.prs, this.kind, this.offset, this.login);
+    if (!list.some((p) => p.opened)) return null;
+    return v_flex().w_full()
+      .child(section(c, "Your trend", "reached production"))
+      .children(list.map((p, i) => this.rateRow(`trend-${i}`, p.label, p.opened ? `${fmt(p.prod)} of ${fmt(p.opened)} · ${pct(p.rate)}` : "none opened", p.rate, c, i === 0)));
   }
 
   recordsList(c) {
@@ -509,52 +392,43 @@ export class Shipped {
   }
 
   byRepo(c) {
-    const now = Date.now(), cur = periodRange(this.kind, this.kind === "day" ? 0 : this.offset, now);
-    // A day's lines live in its week: the breakdown shows that week.
-    const span = this.kind === "day" ? periodRange("week", 0, cur.start) : cur;
-    const { byRepo } = this.sumsIn(span.start, span.end);
-    const note = this.kind === "day" ? `this week · ${fmt(byRepo.length)}` : fmt(byRepo.length);
-    if (!byRepo.length) return v_flex().w_full().child(section(c, "By repository", "")).child(div().text_size(T.body).text_color(c.dim).child(this.syncing ? "Adding up…" : "Nothing in this period yet."));
-    const top = Math.max(1, ...byRepo.map((r) => r.add + r.del)), rows = this.reposOpen ? byRepo : byRepo.slice(0, REPO_ROWS);
+    const r = periodRange(this.kind, this.offset);
+    const repos = this.prs ? cohortOf(this.prs, r.start, r.end, this.login).repos : [];
+    if (!repos.length) return v_flex().w_full().child(section(c, "By repository", "")).child(div().text_size(T.body).text_color(c.dim).child(this.syncing ? "Reading…" : "No pull requests opened in this period."));
+    const rows = this.reposOpen ? repos : repos.slice(0, REPO_ROWS);
     return v_flex().w_full()
-      .child(section(c, "By repository", note))
-      .children(rows.map((r, i) => v_flex().w_full().py(G.sm).gap(6)
-        .when(i > 0, (el) => el.border_t_1().border_color(c.border))
-        .child(h_flex().w_full().flex_wrap().gap_x(G.md).gap_y(2).items_center()
-          .child(div().flex_1().min_w(120).truncate().text_size(T.card).text_color(c.text).child(r.name))
-          .child(div().flex_none().text_size(T.body).text_color(c.dim).child(`${fmt(r.commits)} commits · +${fmt(r.add)} −${fmt(r.del)}`)))
-        .child(h_flex().w_full().h(4).rounded(2).bg(c.subtle)
-          .child(div().h_full().rounded(2).bg(c.accent).w(`${(Math.max(0.02, (r.add + r.del) / top) * 100).toFixed(1)}%`)))))
-      .when(byRepo.length > REPO_ROWS, (el) => el.child(h_flex().pt(G.sm).child(quietLink("shipped-repos-more", this.reposOpen ? "Show fewer" : `Show ${byRepo.length - REPO_ROWS} more`,
+      .child(section(c, "By repository", fmt(repos.length)))
+      .children(rows.map((x, i) => this.rateRow(`repo-${i}`, x.repo, `${fmt(x.prod)} of ${fmt(x.opened)} in production`, x.opened ? x.prod / x.opened : 0, c, i === 0)))
+      .when(repos.length > REPO_ROWS, (el) => el.child(h_flex().pt(G.sm).child(quietLink("shipped-repos-more", this.reposOpen ? "Show fewer" : `Show ${repos.length - REPO_ROWS} more`,
         (cx) => { this.reposOpen = !this.reposOpen; cx.notify(); }, c))));
   }
 
   status(c) {
-    if (this.syncError) return failureBlock({ text: "Adding up stopped", source: this.syncError })("sh-sync", c);
+    if (this.syncError) return failureBlock({ text: "Reading stopped", source: this.syncError })("sh-sync", c);
+    if (!this.syncing && this.unchecked) return div().text_size(T.body).text_color(c.dim).child(`${fmt(this.unchecked)} merged pull ${this.unchecked === 1 ? "request" : "requests"} could not be checked for production yet; they count as not there.`);
     if (!this.syncing || !this.phase) return null;
     return div().text_size(T.body).text_color(this.firstRead ? c.muted : c.dim)
-      .child(`${this.firstRead ? "Adding up" : "Updating"}: ${this.phase}.${this.firstRead ? " The first time takes a few minutes; after that only what changed is read." : ""}`);
+      .child(`${this.firstRead ? "Reading" : "Updating"}: ${this.phase}.${this.firstRead ? " The first time takes a minute; after that only what changed is read." : ""}`);
   }
 
-  // From the commits the machines read, not GitHub's sums.
+  hours() {
+    if (!this.prs) return null;
+    const r = periodRange(this.kind, this.offset), hours = mergeHours(this.prs, r.start, r.end);
+    return hours.some(Boolean) ? hours : null;
+  }
+
   rhythmView(c) {
-    const r = this.rhythm[this.key()];
-    const total = r ? r.hours.reduce((a, b) => a + b, 0) : 0;
-    if (!total) return null;
-    const top = Math.max(...r.hours), peak = r.hours.indexOf(top), note = rhythmNote(r.hours);
+    const hours = this.hours();
+    if (!hours) return null;
+    const r = { hours }, top = Math.max(...hours), peak = hours.indexOf(top);
     const hour = (h) => `${String(h).padStart(2, "0")}:00`;
     return v_flex().w_full().gap(G.md)
-      .child(section(c, "When you ship", note))
+      .child(section(c, "When you merge", rhythmNote(hours)))
       .child(h_flex().w_full().h(56).items_end().gap(G.hair).children(r.hours.map((n, h) => div().id(`hour-${h}`).flex_1().min_w(2)
         .h(Math.max(2, Math.round((n / top) * 56))).rounded(2).bg(n ? c.accent + (h === peak ? "ff" : "90") : c.subtle)
-        .tooltip(tooltip({ label: `${fmt(n)} ${n === 1 ? "commit" : "commits"} at ${hour(h)}` })))))
+        .tooltip(tooltip({ label: `${fmt(n)} ${n === 1 ? "pull request" : "pull requests"} merged at ${hour(h)}` })))))
       .child(h_flex().w_full().justify_between().text_size(T.micro).text_color(c.dim)
-        .children(["00", "06", "12", "18", "23"].map((t) => div().child(t))))
-      .when(r.machines.length > 0, (el) => el.child(v_flex().w_full().pt(G.sm)
-        .children(r.machines.map((m, i) => h_flex().w_full().py(6).gap(G.md).items_center()
-          .when(i > 0, (e) => e.border_t_1().border_color(c.border))
-          .child(div().flex_1().min_w(0).truncate().text_size(T.card).text_color(c.text).child(m.machine))
-          .child(div().flex_none().text_size(T.body).text_color(c.dim).child(`${fmt(m.n)} commits · +${fmt(m.a)} −${fmt(m.d)}`))))));
+        .children(["00", "06", "12", "18", "23"].map((t) => div().child(t))));
   }
 
   skeleton(c) { return skeletonOf({ shape: "metric" })("kanso-skeleton", c); }
@@ -564,12 +438,13 @@ export class Shipped {
     const width = this.width || 368, narrow = width < 560;
     const pad = narrow ? G.lg : 32;
     const inner = Math.min(1080, width - 2 * pad);
-    const gh = this.github[this.key()], status = this.status(c), rhythm = this.rhythmView(c);
-    const body = !gh && !this.stats
+    const gh = this.github[this.key()], status = this.status(c), rhythm = this.rhythmView(c), trend = this.trend(c);
+    const body = !gh && !this.prs
       ? this.skeleton(c)
       : v_flex().w_full().gap(narrow ? 36 : 48)
-        .child(this.hero(c, narrow))
+        .child(this.hero(c))
         .when(Boolean(status), (el) => el.child(status))
+        .when(Boolean(trend), (el) => el.child(trend))
         .when(Boolean(this.days), (el) => el.child(this.streak(c, inner)))
         .when(Object.keys(this.records).length > 0, (el) => el.child(this.recordsList(c)))
         .when(Boolean(rhythm), (el) => el.child(rhythm))
@@ -580,8 +455,30 @@ export class Shipped {
             .child(h_flex().gap(G.xs).items_center()
               .child(iconButton("shipped-share", "share", "Share", (cx) => this.share.toggle(cx), c, { disabled: !this.days }))
               .child(iconButton("shipped-refresh", "refresh-cw", "Refresh", (cx) => this.refresh(cx, true), c, { spin: this.loading || this.syncing }))))
-          .children(shareRows(this, c, "Only the totals, streak, records and hours: no repository or computer names. The post opens with the image in it."))
+          .children(shareRows(this, c, "Only the totals, streak, records and hours: no repository names. The post opens with the image in it."))
           .child(this.periods(c))
           .child(body));
   }
+
+  streak(c, width) {
+    const { current, longest } = streaks(this.days, isoDay(new Date()));
+    const level = { NONE: null, FIRST_QUARTILE: "40", SECOND_QUARTILE: "70", THIRD_QUARTILE: "b0", FOURTH_QUARTILE: "ff" };
+    const { weeks: n, cell } = heatLayout(width);
+    const weeks = (this.weeks ?? []).slice(-n);
+    const radius = Math.max(2, Math.round(cell / 5));
+    const square = (d, key) => {
+      if (!d) return div().id(key).size(cell).flex_none(); // before the calendar, or still to come
+      const a = level[d.contributionLevel];
+      return div().id(key).size(cell).flex_none().rounded(radius).bg(a ? c.accent + a : c.subtle)
+        .tooltip(tooltip({ label: `${fmt(d.contributionCount)} ${d.contributionCount === 1 ? "contribution" : "contributions"} on ${dayName(fromIsoDay(d.date))}` }));
+    };
+    return v_flex().w_full().gap(G.md)
+      .child(section(c, "Streak", `longest ${fmt(longest.n)} ${longest.n === 1 ? "day" : "days"}`))
+      .child(metric({ value: fmt(current), unit: current === 1 ? "day in a row" : "days in a row" })("sh-streak", c))
+      .child(h_flex().w_full().gap(HEATMAP_GAP).children(weeks.map((w, wi) => {
+        const byDay = new Map(w.contributionDays.map((d) => [d.weekday, d]));
+        return v_flex().flex_none().gap(HEATMAP_GAP).children([0, 1, 2, 3, 4, 5, 6].map((i) => square(byDay.get(i), `heat-${wi}-${i}`)));
+      })));
+  }
+
 }

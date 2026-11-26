@@ -13,8 +13,8 @@
 <h2>What reaches the network, and when</h2>
 <ul>
   <li><strong>Updates.</strong> kansō asks GitHub for its newest release tag every few minutes, and downloads a release from GitHub when you update. Stable looks at the finished releases. Early, if you turn it on, also looks at a beta or a release candidate.</li>
-  <li><strong>The pull request panel and Shipped</strong>, only while they are shown, talk to GitHub through your own GitHub CLI (<code>gh</code>). When you turn it on in Settings, Shipped adds up your computers in a secret gist in your account, "Kanso Shipped stats": unlisted, but anyone with its link can read it. It holds commit counts and sizes: no messages, file names or code.</li>
-  <li><strong>Tasks</strong>, only while it is shown, reads your GitHub issues through <code>gh</code>, and your Jira Cloud and Linear tickets with the token you gave each. The token stays in your system's secret store (Keychain on macOS, Credential Manager on Windows, Secret Service on Linux) and goes only to Jira or Linear.</li>
+  <li><strong>The pull request panel and Shipped</strong>, only while they are shown, talk to GitHub through your own GitHub CLI (<code>gh</code>). Shipped keeps your pull requests' links, repositories, times and whether each reached production: no titles, messages or code.</li>
+  <li><strong>Tasks</strong> keeps each project's to-do in kansō's database on the computer that holds the project, and sends a to-do's text only to the agent you send it to.</li>
   <li><strong>Spend</strong> downloads OpenRouter's public model price list once a day.</li>
   <li><strong>Simulator</strong> uses only this computer's Xcode and Android SDK tools. It installs nothing. Screenshots stay in its local data folder, replacing older frames. Pictures and Android input stay on this computer; the iOS screen is a view, touched in Apple's Simulator. No pictures are taken while the panel is hidden or the window is behind.</li>
   <li><strong>Share</strong> opens X, LinkedIn or Bluesky only when you press it, with the image and text you see first. The cards hold counts and sizes, never a project, a path or a conversation.</li>

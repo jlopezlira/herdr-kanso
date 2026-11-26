@@ -3,7 +3,7 @@ import { paths } from "./platform-paths.js";
 import { transcriptApi } from "./platform-transcripts.js";
 // Kanso only reads what already lives on this computer, only while the Threads view is open, and never sends the agent anything.
 import { home } from "herdr";
-import { tryOr } from "./pure.js";
+import { tryOr, typedText, inLanes } from "./pure.js";
 
 export const claudeFile = (home, cwd, session) => paths.join(home, ".claude", "projects", String(cwd ?? "").replace(/[^A-Za-z0-9]/g, "-"), `${session}.jsonl`);
 
@@ -24,28 +24,31 @@ export function parseLocated(text, home) {
 
 const lines = (text) => (text ?? "").split("\n").map((l) => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean);
 
-// Skips the wrappers agents put around what a person typed: commands, reminders, context, the compaction note.
-function typed(text) {
-  const t = String(text ?? "").replace(/\s+/g, " ").trim();
-  if (!t || /^(<|\/|# AGENTS\.md|Caveat:|\[Request interrupted|This session is being continued)/.test(t)) return null;
-  return t;
-}
 function claudePrompt(e) {
   if (e?.type !== "user" || e.isMeta || e.isSidechain) return null;
   const c = e.message?.content;
-  if (typeof c === "string") return typed(c);
-  if (Array.isArray(c) && !c.some((p) => p?.type === "tool_result")) return typed(c.filter((p) => p?.type === "text").map((p) => p.text).join(" "));
+  if (typeof c === "string") return typedText(c);
+  if (Array.isArray(c) && !c.some((p) => p?.type === "tool_result")) return typedText(c.filter((p) => p?.type === "text").map((p) => p.text).join(" "));
   return null;
 }
-const codexPrompt = (e) => (e?.type === "event_msg" && e.payload?.type === "user_message" ? typed(e.payload.message) : null);
+const modernPrompt = (item) => (item?.type === "UserMessage" ? claudePrompt({ type: "user", message: { content: item.content } }) : null);
+const codexPrompt = (e) => {
+  if (e?.type !== "event_msg") return null;
+  if (e.payload?.type === "user_message") return typedText(e.payload.message);
+  return e.payload?.type === "item_completed" ? modernPrompt(e.payload.item) : null;
+};
 const ms = (stamp) => { const n = stamp ? Date.parse(stamp) : NaN; return Number.isNaN(n) ? null : n; };
 
+const piPrompt = (e) => (e?.type === "message" && e.message?.role === "user" ? claudePrompt({ type: "user", message: { content: e.message.content } }) : null);
+const PROMPTS = { claude: claudePrompt, codex: codexPrompt, pi: piPrompt };
+const TITLES = { claude: (e) => (e?.type === "ai-title" ? e.aiTitle : null), pi: (e) => (e?.type === "session_info" ? e.name : null) };
+
 export function readThread(kind, titleLine, head, recent, tail, name = null) {
-  const prompt = kind === "codex" ? codexPrompt : claudePrompt;
+  const prompt = PROMPTS[kind] ?? claudePrompt;
   const firstPrompt = lines(head).map(prompt).find(Boolean) ?? null;
   // Only what you wrote lately: an agent that has only heard from other agents shows none.
   const last = lines(recent).findLast((e) => prompt(e));
-  const title = name ?? (kind === "claude" ? lines(titleLine).find((e) => e?.type === "ai-title" && e.aiTitle)?.aiTitle ?? null : null);
+  const title = name ?? lines(titleLine).map((e) => TITLES[kind]?.(e)).find(Boolean) ?? null;
   return {
     title: title ?? firstPrompt,
     prompt: last ? prompt(last) : null,
@@ -90,25 +93,23 @@ async function findThread({ address, app }, known, home, got, locator) {
   if (known?.file === where.file && known.size === size && known.name === where.name && known.pid === pid) return { ...known, checked };
   const r = await localService(transcriptApi).thread(where.file);
   if (r.code !== 0 && !r.stdout) return null;
-  const [titleLine, head, recent, tail] = r.stdout.split("\n\u001e\n");
-  return { kind, file: where.file, name: where.name, size, pid, checked, ...readThread(kind, titleLine, head, recent, tail, where.name) };
+  return { kind, file: where.file, name: where.name, size, pid, checked, ...threadIn(kind, r.stdout, where.name) };
 }
 
-// Read up to four terminals concurrently.
-const AT_ONCE = 4;
+export function threadIn(kind, stdout, name = null) {
+  const [read, named = ""] = String(stdout ?? "").split("\n\x1d\n");
+  const [titleLine = "", head = "", recent = "", tail = ""] = read.split("\n\x1e\n");
+  return readThread(kind, titleLine, head, recent, tail, name ?? (tryOr(() => JSON.parse(named.trim()))?.thread_name || null));
+}
+
+export const AT_ONCE = 4;
 
 export async function findThreads(list, known = {}, terms = [], locator = new ThreadLocator()) {
   locator.retain(list);
   const byAddress = new Map(terms.map((term) => [term.address, term]));
   const here = home();
-  const queue = list.values();
-  const lane = async (got = []) => {
-    const { value: item, done } = queue.next();
-    if (done) return got;
-    return lane([...got, [item.address, await findThread(item, known[item.address], here, byAddress.get(item.address), locator)]]);
-  };
-  const found = await Promise.all(Array.from({ length: Math.min(AT_ONCE, list.length) }, lane));
-  return Object.fromEntries(found.flat().filter(([, thread]) => thread));
+  const found = await inLanes(list, async (item) => [item.address, await findThread(item, known[item.address], here, byAddress.get(item.address), locator)], AT_ONCE);
+  return Object.fromEntries(found.filter(([, thread]) => thread));
 }
 
 // Conversation liveness shares the task process table.

@@ -99,10 +99,10 @@ On Windows, merge `kanso/keys.windows.json` into your Herdr keys instead of
 - **Review without leaving.** Pull requests with diff, checks and threads, and
   one click to hand the feedback to an agent. Any file that is not a picture opens in Preview,
   and it can be edited when the read has no NUL and fits in 1 MiB, on this computer or another; `md-review plan.md` from an agent asks for your comments.
-- **Tasks.** Your GitHub issues and your Jira Cloud and Linear tickets in one
-  panel, a board per project in its own columns. Select one to read it, open it
-  on GitHub or send it to an agent. Jira and Linear sign in with your own
-  token, kept in your system's secret store and never in kansō.
+- **Tasks.** Each project's to-do, kept by your agents as they work: turn on
+  Agents keep the to-do in Settings and Claude Code, Codex and Pi add each step
+  and close it when done. Add one yourself, send one to an agent, or start a
+  new conversation with it. It stays in kansō's database on this computer.
 - **While you are away.** An agent stopped by its plan limit can resume on its
   own when the limit resets. Schedule… in a project's menu starts an agent with a prompt at
   a time you choose, and New agent in a worktree gives one task to several
@@ -125,8 +125,9 @@ On Windows, merge `kanso/keys.windows.json` into your Herdr keys instead of
 - **Weeks without a restart.** On macOS, Windows and Linux, the memory guard recycles
   bloated idle Claude agents on the same conversation; the Memory panel shows
   what it sees.
-- **Spend and Shipped.** What your AI work is worth at list price, and what you
-  delivered on GitHub, with share images that carry totals only. Turn Sync on
+- **Spend and Shipped.** What your AI work is worth at list price, and how many
+  of the pull requests you open reach production, period by period, with share
+  images that carry totals only. Turn Sync on
   from another computer's row and Spend adds that computer's tokens.
 - **The device beside the agent.** Simulator is kansō's own panel, using only
   Xcode's and Android's tools. It installs nothing. The iOS screen is a view;
@@ -187,13 +188,9 @@ sidebar, rebinds kansō's own keys and hides the panels you don't use.
 
 Everything runs on your machine, and reads only the folders you work in:
 `git`, `gh`, `find`, `du`, `lsof` (`ss` and `/proc` on Linux), `ps`, `sqlite3`, `node`, `docker`,
-`xcode-select`, `simctl`, `adb`, `emulator`, the secret store's own tool (`security`,
-`secret-tool` or `cmdkey`), Caffeine's `pmset`, `launchctl`, `systemd-run`
-and `systemd-inhibit`, and Herdr's `hc`. What reaches the network: PR, Tasks and
-Shipped through `gh`, only while their panel is shown (when Settings turns it on,
-Shipped adds up your computers in a secret gist: unlisted, but readable by anyone
-with its link); Tasks' Jira Cloud and Linear boards, only while the panel is
-shown, with the token you gave each; the update check, `git ls-remote` on kansō's
+`xcode-select`, `simctl`, `adb`, `emulator`, Caffeine's `pmset`, `launchctl`, `systemd-run`
+and `systemd-inhibit`, and Herdr's `hc`. What reaches the network: PR and
+Shipped through `gh`, only while their panel is shown; the update check, `git ls-remote` on kansō's
 GitHub repository, and the download of a release you install; Spend's daily
 fetch of OpenRouter's price list; the hjkl dōjō's pet picker, which downloads
 the agents' pets from persistent.oaistatic.com and codex-pets.net and keeps only

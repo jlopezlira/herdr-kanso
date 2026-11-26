@@ -1,5 +1,5 @@
 // What the pull request panel says, and the one action that state can take.
-import { plural, FROM_GITHUB, outsideText } from "./pure.js";
+import { plural, FROM_GITHUB, outsideText, span } from "./pure.js";
 import { diffText, plus } from "./ui-facts.js";
 import { checkLine, checkSummary, isWriter, jobLabel, mergeReadiness, runIdOf } from "./ghchecks.js";
 
@@ -42,12 +42,7 @@ export function elapsed(from, to, now) {
   const start = Date.parse(from);
   const end = to == null ? now : Date.parse(to);
   if (!Number.isFinite(start) || !Number.isFinite(end)) return "";
-  const s = Math.max(0, Math.round((end - start) / 1000));
-  const m = Math.floor(s / 60);
-  const h = Math.floor(m / 60);
-  if (h > 0) return `${h}h ${m % 60}m`;
-  if (m > 0) return `${m}m ${s % 60}s`;
-  return `${s}s`;
+  return span(end - start);
 }
 
 export function firstLines(text, n) {

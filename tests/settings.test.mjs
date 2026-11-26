@@ -40,7 +40,12 @@ test("A new key says what it takes over, and keys.json comes back changed only w
 
 // macOS keys taken because you asked for them: ⌘⌥h is vim's left (with
 // ⌘⌥j/k/l), over Hide Others, while the Kanso layout shows.
-const ASKED = new Set(["cmd-alt-h"]);
+const ASKED = new Set(["cmd-alt-h", "ctrl-tab", "ctrl-shift-tab"]);
+const ASKED_SWITCHER = {
+  "layout:kanso ctrl-tab": "kanso-tabs.switch",
+  "mod:kanso-menu ctrl-tab": "kanso-menu.next",
+  "mod:kanso-menu ctrl-shift-tab": "kanso-menu.prev",
+};
 
 // Herdr's sidebar key on Linux and Windows (its AGENTS.md); the macOS file has cmd-b.
 const ELSEWHERE = { "ctrl-shift-b": "layout.toggle:sidebar" };
@@ -58,9 +63,12 @@ test("The Keys page lists Kanso's own keys only, and Reset knows them all", asyn
   for (const [section, map] of Object.entries(shipped)) {
     for (const [chord, action] of Object.entries(map)) {
       if (action === "terminal") continue;
+      const asked = ASKED_SWITCHER[`${section} ${chord}`];
+      if (asked) assert.equal(action, asked, `${section} ${chord}`);
       const rows = GROUPS.filter((g) => g.section === section).flatMap((g) => g.actions);
       const listed = rows.some((r) => ofRow(r, action));
       if (HERDRS.test(action)) { assert.ok(!listed, `${action} is Herdr's command: not on Kanso's Keys page`); assert.ok(herdrChords.has(chord), `${chord} = ${action} is not on Herdr's key`); continue; }
+      if (asked && section !== "layout:kanso") continue;
       assert.ok(listed, `${chord} = ${action} has no row on the Keys page`);
       if (section === "layout:kanso" && !ASKED.has(chord)) assert.ok(!herdrChords.has(chord), `${chord} = ${action}: Kanso's own key on one of Herdr's`);
     }
@@ -116,10 +124,21 @@ test("Kanso's keys never give Herdr's or macOS's keys another meaning", () => {
   for (const [section, keys] of Object.entries(kanso)) {
     for (const [chord, action] of Object.entries(keys)) {
       if (MACOS.includes(chord) && !ASKED.has(chord)) wrong.push(`${section} ${chord} is macOS's`);
+      const asked = ASKED_SWITCHER[`${section} ${chord}`];
+      if (asked) { if (action !== asked) wrong.push(`${section} ${chord}: approved ${asked}, found ${action}`); continue; }
       if (!theirs.has(chord) || ASKED.has(chord)) continue;
       const herdrAction = String(theirs.get(chord)).split(":")[0];
       if (!SAME_AS_HERDR[herdrAction]?.test(action)) wrong.push(`${section} ${chord}: Herdr's ${herdrAction}, Kanso's ${action}`);
     }
+  }
+  const stays = ["cmd-shift-]", "cmd-shift-[", "alt-]", "alt-[", "ctrl-pagedown", "ctrl-pageup"];
+  for (const file of ["kanso/keys.json", "kanso/keys.windows.json", "kanso/keys.linux.json"]) {
+    const keys = JSON.parse(readFileSync(new URL(`../${file}`, import.meta.url), "utf8"));
+    for (const [key, action] of Object.entries(ASKED_SWITCHER)) {
+      const [section, chord] = key.split(" ");
+      if (keys[section]?.[chord] !== action) wrong.push(`${file} ${key}: approved ${action}`);
+    }
+    for (const chord of stays) if (Object.values(keys).some((map) => Object.hasOwn(map, chord))) wrong.push(`${file} ${chord} stays for switching tabs`);
   }
   assert.deepEqual(wrong, []);
 });
@@ -129,7 +148,6 @@ test("Settings has Pieces, Keys and Updates", async () => {
   assert.deepEqual(clone(PAGES), [
     { key: "pieces", label: "Pieces" },
     { key: "keys", label: "Keys" },
-    { key: "accounts", label: "Accounts" },
     { key: "updates", label: "Updates" },
   ]);
 });
@@ -157,6 +175,9 @@ test("Settings opened with page news shows Updates", async () => {
 const TAKEN_OVER_ON_PURPOSE = {
   "layout:kanso alt-up": ["agent.prev", "kanso-strip.go-up"],
   "layout:kanso alt-down": ["agent.next", "kanso-strip.go-down"],
+  "layout:kanso ctrl-tab": ["tab.next", "kanso-tabs.switch"],
+  "mod:kanso-menu ctrl-tab": ["tab.next", "kanso-menu.next"],
+  "mod:kanso-menu ctrl-shift-tab": ["tab.prev", "kanso-menu.prev"],
 };
 
 test("Windows takes Herdr keys for the same intent, except the named agent navigation takeovers", (t) => {
