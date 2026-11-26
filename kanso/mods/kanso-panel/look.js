@@ -24,6 +24,7 @@ import { walkLayout } from "./layout.js";
 import { lookMemory } from "./panel-state.js";
 import { Front } from "./front.js";
 import { transcriptPaths, MOST } from "./transcript.js";
+import { ticking } from "./pure.js";
 
 const LINES = 400;
 const NOTE_ROWS = 5; // notes shown before the list scrolls
@@ -68,8 +69,7 @@ export class Look {
     this.handle = cx.focus_handle();
     if (p.path) this.ask(p.path, cx);
     else if (this.keptPath) { const path = this.keptPath; this.keptPath = null; this.ask(path, cx); }
-    this.tick(cx);
-    cx.timer.every(TICK_MS, (cx) => this.tick(cx));
+    ticking(cx, TICK_MS, (cx) => this.tick(cx));
   }
 
   saveState() { return this.selected?.path ? { path: this.selected.path, on: machineOf(this.agent()) } : null; }

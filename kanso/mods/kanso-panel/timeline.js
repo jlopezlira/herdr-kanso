@@ -1,20 +1,20 @@
 import { div } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
-import { hc, run, theme, focused, agents, terminals, panes, spaces, readTextFile, home, window, shared, setShared } from "herdr";
+import { hc, run, theme, focused, agents, terminals, panes, spaces, readTextFile, window, shared, setShared } from "herdr";
 import { G, T, PR, tokens } from "./ui.js";
 import { iconButton } from "./ui-button.js";
 import { row } from "./ui-row.js";
 import { section } from "./ui-section.js";
 import { markdown } from "./ui-markdown.js";
 import { stateBlock } from "./ui-state.js";
-import { emptyState, skeletonOf } from "./kit.js";
-import { scrollPage, pageHeader, refreshTool } from "./ui-page.js";
-import { serviceOn, REMOTE_TIMEOUT } from "./platform-host.js";
+import { emptyState } from "./kit.js";
+import { scrollPage, pageHeader, refreshTool, listBones, backRow } from "./ui-page.js";
+import { serviceOn, homeOn, REMOTE_TIMEOUT } from "./platform-host.js";
 import { stateWithin, LATE } from "./panel-state.js";
 import { processApi } from "./platform-processes.js";
-import { systemApi } from "./platform-system.js";
 import { transcriptApi } from "./platform-transcripts.js";
 import { machineOf } from "./remote-file.js";
+import { ticking } from "./pure.js";
 import { shownName } from "./marks.js";
 import { conversationIn, parseSlice, kindOf, SLICE_BUDGET, LINE_MAX } from "./find.js";
 import { freshTimeline, applyTimeline, factsOf, detailOf, firstSentence, oneLine, shortPath } from "./timeline-model.js";
@@ -41,7 +41,7 @@ async function sliceOf(on, file, from) {
 
 async function locate(address) {
   const on = machineOf(address);
-  const homeDir = on ? await (await serviceOn(systemApi, on)).userHome() : home();
+  const homeDir = await homeOn(on);
   const processes = await serviceOn(processApi, on);
   return conversationIn({ hc, readTextFile: (path) => readTextFile(path, on ? { on } : undefined), home: () => homeDir, platform: { processes } }, address, hintOf(agentOf(address)));
 }
@@ -56,8 +56,7 @@ export class Timeline {
     this.reading = null;
     this.reset();
     this.handle = cx.focus_handle();
-    this.tick(cx);
-    cx.timer.every(TICK_MS, (cx) => this.tick(cx));
+    ticking(cx, TICK_MS, (cx) => this.tick(cx));
   }
 
   reset() {
@@ -115,12 +114,7 @@ export class Timeline {
       const got = await stateWithin(locate(address).catch(() => LOST), cx.timer, REMOTE_TIMEOUT);
       const where = got === LATE ? LOST : got;
       if (gen !== this.gen) return;
-      if (where.file !== this.where.file) {
-        this.gen += 1;
-        this.state = freshTimeline();
-        this.open = null;
-        this.at = 0;
-      }
+      if (where.file !== this.where.file) { this.restart(); this.at = 0; }
       this.where = where;
       this.located = true;
       cx.notify();
@@ -173,10 +167,14 @@ export class Timeline {
     cx.spawn(async (cx) => this.catchUp(cx));
   }
 
-  refresh(cx) {
+  restart() {
     this.gen += 1;
     this.state = freshTimeline();
     this.open = null;
+  }
+
+  refresh(cx) {
+    this.restart();
     this.failed = false;
     this.relocate(cx);
   }
@@ -229,9 +227,7 @@ export class Timeline {
     const folder = this.folder();
     const back = (cx) => { this.open = null; this.handle.focus(); cx.notify(); };
     return v_flex().w_full().gap(G.lg)
-      .child(h_flex().w_full().gap(G.sm).items_center()
-        .child(iconButton("timeline-back", "chevron-left", "Back", back, c))
-        .child(div().flex_1().min_w(0).truncate().text_size(T.body).text_color(c.dim).child(detailOf(p))))
+      .child(backRow("timeline-back", c, detailOf(p), back))
       .child(markdown(`timeline-prompt-${p.n}`, c, { source: p.text }))
       .when(p.also.length > 0, (el) => el.child(v_flex().w_full().gap(G.sm).child(section(c, "While it worked", String(p.also.length)))
         .children(p.also.map((m, i) => markdown(`timeline-also-${p.n}-${i}`, c, { source: m.text })))))
@@ -253,10 +249,10 @@ export class Timeline {
     return v_flex().w_full().children(list.map((p, i) => this.promptRow(p, i, c, now)));
   }
 
-  skeleton(c) { return skeletonOf({ shape: "two lines", count: 4 })("kanso-skeleton", c); }
+  skeleton(c) { return listBones(c); }
 
   render(cx) {
-    const c = tokens(theme()), now = Date.now();
+    const c = tokens(theme());
     const a = agentOf(this.follow);
     const named = a ? shownName(this.follow, panes().find((p) => p.terminal === this.follow)) : "";
     const count = this.state.count;
@@ -270,6 +266,6 @@ export class Timeline {
     ];
     return scrollPage.call(this, "kanso-timeline", c, true, (column) => column
       .child(pageHeader(title, tools))
-      .child(v_flex().w_full().track_focus(this.handle).on_key_down((e, cx) => this.key(e, cx)).child(this.body(c, now))));
+      .child(v_flex().w_full().track_focus(this.handle).on_key_down((e, cx) => this.key(e, cx)).child(this.body(c, Date.now()))));
   }
 }

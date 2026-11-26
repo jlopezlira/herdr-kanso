@@ -297,7 +297,7 @@ export function transcriptApi(platform, run) {
       ? ps(`$h=${psQuote(home)}; $c=${psQuote(claudeDir)}; $want=${psQuote(folder)}; $n=${Number(shown)}; $most=${Number(most)}; `+WINDOWS_LIST)
       : run("sh", ["-c", LIST, "sh", home, claudeDir, folder, String(shown), String(most)], { timeout: 60000 }),
     threads: (files) => platform === "windows"
-      ? ps(`$files=@(${files.map(psQuote).join(",")}); foreach ($file in $files) { ${WINDOWS_THREAD}; [Console]::Write([string][char]10+[char]28+[string][char]10) }`)
+      ? ps(`$files=@(${files.map(psQuote).join(",")}); $index=Join-Path (Join-Path $HOME '.codex') 'session_index.jsonl'; foreach ($file in $files) { ${WINDOWS_THREAD}; if ($file -match '\\.codex\\' -and (Test-Path -LiteralPath $index)) { $id=[IO.Path]::GetFileNameWithoutExtension($file); $id=$id.Substring([Math]::Max(0,$id.Length-36)); [Console]::Write([string][char]10+[char]29+[string][char]10+(@(Select-String -LiteralPath $index -SimpleMatch ('"id":"'+$id+'"') | Select-Object -Last 1 | ForEach-Object { $_.Line }) -join '')) }; [Console]::Write([string][char]10+[char]28+[string][char]10) }`)
       : run("sh", ["-c", THREADS, "sh", ...files], { timeout: 60000 }),
     slice: (file, from, budget, longest) => platform === "windows" ? ps(`$file=${psQuote(file)}; $from=${Number(from)}; $budget=${Number(budget)}; $longest=${Number(longest)}; `+WINDOWS_SLICE) : unixSlice(run, file, from, budget, longest),
   };

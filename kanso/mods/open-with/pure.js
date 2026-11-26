@@ -124,6 +124,8 @@ export async function findAsync(list, test, i = 0) {
 }
 
 // Halves joined once each, so no list is copied per item and depth stays log n.
+export const ticking = (cx, ms, tick) => { tick(cx); cx.timer.every(ms, tick); };
+
 export async function inLanes(list, fn, lanes) {
   const queue = list.entries();
   const lane = async (got = []) => {

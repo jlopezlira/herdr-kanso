@@ -1,12 +1,14 @@
 import { duration } from "./agents.js";
 import { folderName, trimmed } from "./projects.js";
+import { parseOr } from "./pure.js";
 
 export const RECENT = 30;
 const KINDS = [["claude", /[\\/]\.claude[\\/]/], ["codex", /[\\/]\.codex[\\/]/], ["pi", /[\\/]\.pi[\\/]/]];
 const base = (file) => String(file).split(/[\\/]/).at(-1).replace(/\.jsonl$/, "");
 
 export const listedOf = (stdout, machine = null) => String(stdout ?? "").split("\n").flatMap((line) => {
-  const [file = "", cwd = "", found = ""] = line.split("\t");
+  const [file = "", raw = "", found = ""] = line.split("\t");
+  const cwd = parseOr(`"${raw}"`);
   const program = KINDS.find(([, pattern]) => pattern.test(file))?.[0];
   const id = program === "claude" ? base(file) : found;
   return program && cwd && id ? [{ program, file, cwd, id, machine }] : [];

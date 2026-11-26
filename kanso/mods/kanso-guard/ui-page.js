@@ -47,6 +47,9 @@ export function scrollPage(id, c, narrow, draw, sizing) {
 
 export const pageHeader = (title, tools) => h_flex().w_full().items_center().justify_between().gap(G.md).child(title)
   .child(h_flex().gap(G.xs).items_center().flex_none().children(tools.filter(Boolean)));
+export const backRow = (id, c, words, onBack) => h_flex().w_full().gap(G.sm).items_center()
+  .child(iconButton(id, "chevron-left", "Back", onBack, c))
+  .child(div().flex_1().min_w(0).truncate().text_size(T.body).text_color(c.dim).child(words));
 export const pageSections = (narrow) => v_flex().w_full().gap(narrow ? 36 : 48);
 
 const REFRESH = "Refresh";

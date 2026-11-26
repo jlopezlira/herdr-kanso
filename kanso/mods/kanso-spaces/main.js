@@ -1,4 +1,4 @@
-import { localService, serviceOn, localName } from "./platform-host.js";
+import { localService, serviceOn, localName, homeOn } from "./platform-host.js";
 import { copiesToViewer, viewerFor } from "./platform-viewer.js";
 import { signInTab, removeKeyTab, kansoKeyed, routeOf } from "./sign-in.js";
 import { homeRoute } from "./lan-route.js";
@@ -2178,6 +2178,8 @@ export default class Spaces extends RetryingView {
     ]);
   }
 
+  machineDeadline(cx, settle) { return cx.timer.after(MACHINE_READ_MS, () => settle(null, "no answer in time")); }
+
   askAgents(place, cx) {
     const on = place.machine || "";
     const kept = shared(KNOWN_AGENTS)?.[on];
@@ -2195,7 +2197,7 @@ export default class Spaces extends RetryingView {
     if (on && !shared(KNOWN_AGENTS)?.[""]) {
       knownAgents({ on: null }).then((list) => { setShared(KNOWN_AGENTS, { ...(shared(KNOWN_AGENTS) ?? {}), "": JSON.parse(JSON.stringify(list)) }); this.redraw(cx); }).catch(() => {});
     }
-    const deadline = cx.timer.after(MACHINE_READ_MS, () => settle(null, "no answer in time"));
+    const deadline = this.machineDeadline(cx, settle);
     knownAgents({ on: on || null }).then((list) => { deadline.cancel(); settle(JSON.parse(JSON.stringify(list)), null); })
       .catch((e) => { deadline.cancel(); settle(null, String(e?.message ?? e)); });
   }
@@ -2267,7 +2269,7 @@ export default class Spaces extends RetryingView {
       this.recentFailed = failed;
       this.redraw(cx);
     };
-    const deadline = cx.timer.after(MACHINE_READ_MS, () => settle(null, "no answer in time"));
+    const deadline = this.machineDeadline(cx, settle);
     const where = place.folder ? [place.machine || null] : [null, ...machines().filter((m) => m.name && machineReaches(m.layout)).map((m) => m.name)];
     Promise.all(where.map((on) => this.recentOn(on, place.folder ?? "").catch((e) => (on ? [] : Promise.reject(e)))))
       .then((lists) => { deadline.cancel(); settle(newestFirst(lists.flat()).slice(0, RECENT), null); })
@@ -2275,9 +2277,9 @@ export default class Spaces extends RetryingView {
   }
 
   async recentOn(on, folder) {
-    const homeDir = on ? await (await serviceOn(systemApi, on)).userHome() : home();
+    const homeDir = await homeOn(on);
     const api = await serviceOn(transcriptApi, on);
-    const r = await api.listing(homeDir, { claudeDir: folder ? projectDir(folder) : "", folder });
+    const r = await api.listing(homeDir, { claudeDir: folder ? projectDir(folder) : "", folder: folder ? JSON.stringify(folder).slice(1, -1) : "" });
     if (r?.code !== 0) throw new Error(String(r?.stdout || "no listing").trim().split("\n").at(-1));
     const listed = listedOf(r.stdout, on);
     if (!listed.length) return [];
@@ -2303,8 +2305,10 @@ export default class Spaces extends RetryingView {
     }
     const now = Date.now();
     const open = shared(OPEN_CONVERSATIONS) ?? {};
-    const rows = listed.map((c) => item(c.title, () => this.resumeOne(place, c), { icon: icon(c.program), hint: c.machine || !open[c.file] ? resumeHint(c, { scoped, now }) : "Open" }));
-    return { title, count: rows.length, items: [finder, { scroll: rows, rows: Math.min(rows.length, RESUME_ROWS), handle: this.resumeScroll }] };
+    const isOpen = (c) => !c.machine && agents().some((a) => a.address === open[c.file]);
+    const rows = listed.map((c) => item(c.title, () => this.resumeOne(place, c), { icon: icon(c.program), hint: isOpen(c) ? "Open" : resumeHint(c, { scoped, now }) }));
+    const everywhere = scoped ? [{ separator: true }, item("Every project and computer\u{2026}", () => this.resumeMenu({}), { icon: "history" })] : [];
+    return { title, count: rows.length, items: [finder, { scroll: rows, rows: Math.min(rows.length, RESUME_ROWS), handle: this.resumeScroll }, ...everywhere] };
   }
 
   resumeView(t) {
@@ -2316,7 +2320,7 @@ export default class Spaces extends RetryingView {
 
   resumeOne(place, c) {
     const live = c.machine ? null : (shared(OPEN_CONVERSATIONS) ?? {})[c.file];
-    if (live) { run("pane.focus", { terminal: live }); return; }
+    if (live && agents().some((a) => a.address === live)) { run("pane.focus", { terminal: live }); return; }
     const machine = c.machine ?? (place.machine || null);
     const agent = (this.known ?? []).find((a) => a.key === c.program && a.installed);
     const argv = resumeOf(c.program, agent?.run ?? [c.program], c);
@@ -2608,7 +2612,7 @@ export default class Spaces extends RetryingView {
     // Agents on this computer (another machine's files are not here).
     const background = this.background();
     const list = agents().filter((a) => !a.address.includes("/") && background.allows(a.address)).map((a) => ({ address: a.address, app: a.app }));
-    if (!list.length) { this.readingThreads = false; return; }
+    if (!list.length) { this.readingThreads = false; setShared(OPEN_CONVERSATIONS, {}); return; }
     this.threadLocator ??= new ThreadLocator();
     cx.spawn(async (cx) => {
       try {
