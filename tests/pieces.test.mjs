@@ -31,12 +31,13 @@ test("the registry ids are unique and each default is one of its states", () => 
   }
   assert.deepEqual(Object.fromEntries(PIECES.filter((row) => row.job).map((row) => [row.id, row.job])), {
     "sidebar.activity": "ps", "sidebar.tasks": "ps", "sidebar.git": "git", "header.digest": "git", "header.pr": "gh",
-    "panel.files": "git", "panel.pr": "gh", "panel.issues": "gh", "panel.shipped": "gh", "panel.worktrees": "git", "panel.ports": "lsof",
+    "panel.files": "git", "panel.pr": "gh", "panel.shipped": "gh", "panel.worktrees": "git", "panel.ports": "lsof",
     "panel.containers": "docker", "panel.memory": "ps", "update.check": "git", "agents.checks": "gh",
   });
   assert.equal(PIECES.find((row) => row.id === "sidebar.away").job, null);
   assert.equal(PIECES.find((row) => row.id === "sidebar.computers").job, null);
   assert.equal(pieceOf("panel.workflow").job, null);
+  assert.equal(pieceOf("panel.issues").job, null, "Tasks does not need the GitHub CLI");
   assert.equal(pieceOf("panel.caffeine").group, "Tab bar and panels");
   for (const id of LEFT_OUT) assert.equal(PIECES.some((row) => row.id === id), false, id);
   assert.equal(PIECES.some((row) => row.id === "sidebar.away"), true);

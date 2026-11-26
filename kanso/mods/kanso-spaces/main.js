@@ -20,7 +20,7 @@ import { agentSession, agentLabel, renameTerminal, SETTLED_LABEL, SNOOZE_LABEL, 
 import { ThreadLocator, findThreads, sameThread, pidsOf, aliveIn, aliveDue, ALIVE_MS, ALIVE_BEHIND_MS, threadIn, AT_ONCE } from "./threads.js";
 import { Panel, sameSeen } from "./panel.js";
 import { Store } from "./store.js";
-import { Kdb, restDue, machinesToAsk, kansoDir, worktreeBase, newId } from "./kdb.js";
+import { Kdb, kdbOn, restDue, machinesToAsk, worktreeBase, newId } from "./kdb.js";
 import { agentSnapshot, agentTargets, observedAgents, targetOf, parseTarget, returnSignature, RETURN_LABEL, AWAY_PIECE, destinationOf, livePlaces } from "./since-left-model.js";
 import { SinceLeft } from "./since-left.js";
 import { REGISTRY, keyOfSpace, keyOfProject, placeKey, defaultBranch, closedProjects, shownNames, startingProjects, folderName, addWorktree, worktreesOf, missingFolders, trimmed, sameProjects } from "./projects.js";
@@ -773,11 +773,7 @@ export default class Spaces extends RetryingView {
   storeOn(machine) {
     this.remoteStores ??= new Map();
     if (!this.remoteStores.has(machine)) {
-      const store = serviceOn(async (platform, run) => {
-        const there = await systemApi(platform, run).userHome();
-        if (!there) throw new Error(`${machine}'s home could not be read`);
-        return new Store(new Kdb(this.clock, kansoDir(there, platform), machine));
-      }, machine);
+      const store = kdbOn(this.clock, machine).then((kdb) => new Store(kdb));
       store.catch(() => this.remoteStores.delete(machine));
       this.remoteStores.set(machine, store);
     }

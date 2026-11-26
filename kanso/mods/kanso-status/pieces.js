@@ -12,7 +12,7 @@ const THREE = ["show", "needed", "hide"];
 const piece = (id, label, group, states, def, stops, job = null) => ({ id, label, group, states, default: def, stops, job });
 
 const PANELS = [
-  ["files", "Files", "git"], ["insights", "Spend"], ["pr", "PR", "gh"], ["issues", "Tasks", "gh"], ["shipped", "Shipped", "gh"], ["caffeine", "Caffeine"], ["worktrees", "Worktrees", "git"],
+  ["files", "Files", "git"], ["insights", "Spend"], ["pr", "PR", "gh"], ["issues", "Tasks"], ["shipped", "Shipped", "gh"], ["caffeine", "Caffeine"], ["worktrees", "Worktrees", "git"],
   ["ports", "Ports", "lsof"], ["containers", "Containers", "docker"], ["memory", "Memory", "ps"], ["look", "Images"], ["timeline", "Timeline"], ["sim", "Simulator"], ["dojo", "hjkl dōjō"],
 ];
 
