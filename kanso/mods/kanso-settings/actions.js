@@ -18,6 +18,7 @@ export const GROUPS = [
     { action: "kanso-spaces.agent-down", label: "Agent below" },
     { action: "kanso-spaces.agent-back", label: "Back through the agents visited" },
     { action: "kanso-spaces.agent-forward", label: "Forward through the agents visited" },
+    { action: "kanso-tabs.switch", label: "Session switcher, most recent first" },
     { action: "kanso-strip.send", label: "Send the pane's work to an agent" },
     { action: "kanso-strip.pin", label: "Pin the pane to its side" },
     { action: "kanso-strip.arrange", label: "Arrangements" },

@@ -650,6 +650,10 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     at}}`, read on render; Cancel drops a new pin). ⌘↩ sends "About <path>:"
     and a line per noted pin (`deliver.js`).
     `herdr-app do 'kanso-tabs.look <path>'` (or `.gallery`) opens one.
+    The session switcher (`kanso-tabs.switch`, Ctrl+Tab; `switcher.js` in `kanso-menu`, a frameless window): sessions
+    by `kanso.recent`, which the tab bar keeps from the focused agent (`recent.js`), then the rest in sidebar order, then
+    asleep ones; it opens on the second row and shows after 140 ms; Ctrl+Tab and Ctrl+Shift+Tab move
+    (`mod:kanso-menu`), letting go of Ctrl, Enter or a click lands (`pane.focus`, or Wake for an asleep one), Esc closes.
     Resume a conversation (the + menus of `kanso-spaces`): `listing` in `platform-transcripts.js` lists the newest
     conversation files (Claude Code under the project's own folder name, Codex, Pi) with their folder and id, then
     `threads` reads each one's title and first prompt the way Threads does, one call per computer. A row starts the

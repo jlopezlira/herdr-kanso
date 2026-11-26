@@ -2256,7 +2256,7 @@ export default class Spaces extends RetryingView {
     });
     this.resumeFind.focus();
     this.askAgents(place, cx);
-    this.loadRecent(place, cx);
+    cx.timer.after(0, (next) => this.loadRecent(place, next));
   }
 
   loadRecent(place, cx) {
