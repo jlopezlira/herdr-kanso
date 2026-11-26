@@ -3,7 +3,7 @@ import { paths } from "./platform-paths.js";
 import { transcriptApi } from "./platform-transcripts.js";
 // Kanso only reads what already lives on this computer, only while the Threads view is open, and never sends the agent anything.
 import { home } from "herdr";
-import { tryOr } from "./pure.js";
+import { tryOr, typedText } from "./pure.js";
 
 export const claudeFile = (home, cwd, session) => paths.join(home, ".claude", "projects", String(cwd ?? "").replace(/[^A-Za-z0-9]/g, "-"), `${session}.jsonl`);
 
@@ -24,20 +24,14 @@ export function parseLocated(text, home) {
 
 const lines = (text) => (text ?? "").split("\n").map((l) => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean);
 
-// Skips the wrappers agents put around what a person typed: commands, reminders, context, the compaction note.
-function typed(text) {
-  const t = String(text ?? "").replace(/\s+/g, " ").trim();
-  if (!t || /^(<|\/|# AGENTS\.md|Caveat:|\[Request interrupted|This session is being continued)/.test(t)) return null;
-  return t;
-}
 function claudePrompt(e) {
   if (e?.type !== "user" || e.isMeta || e.isSidechain) return null;
   const c = e.message?.content;
-  if (typeof c === "string") return typed(c);
-  if (Array.isArray(c) && !c.some((p) => p?.type === "tool_result")) return typed(c.filter((p) => p?.type === "text").map((p) => p.text).join(" "));
+  if (typeof c === "string") return typedText(c);
+  if (Array.isArray(c) && !c.some((p) => p?.type === "tool_result")) return typedText(c.filter((p) => p?.type === "text").map((p) => p.text).join(" "));
   return null;
 }
-const codexPrompt = (e) => (e?.type === "event_msg" && e.payload?.type === "user_message" ? typed(e.payload.message) : null);
+const codexPrompt = (e) => (e?.type === "event_msg" && e.payload?.type === "user_message" ? typedText(e.payload.message) : null);
 const ms = (stamp) => { const n = stamp ? Date.parse(stamp) : NaN; return Number.isNaN(n) ? null : n; };
 
 export function readThread(kind, titleLine, head, recent, tail, name = null) {

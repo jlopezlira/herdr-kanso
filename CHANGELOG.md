@@ -22,6 +22,12 @@ in version.json, which the stable updater offers. Versions follow
 [Keep a Changelog](https://keepachangelog.com). `npm run check:version` checks
 the branch's rules.
 
+## [Unreleased]
+
+### Added
+
+- Timeline, a new panel: the conversation in focus prompt by prompt, with when each one ended, how long it took, the files it changed and the first sentence of its answer. Open one to read the whole prompt, what you sent while it worked and the full answer. It reads Claude Code and Codex, on this computer or another.
+
 ## [4.1.1] - 2026-11-25
 
 ### Changed

@@ -16,7 +16,7 @@ import { G, H, T, tokens } from "./ui.js";
 import { button, quietLink, iconButton } from "./ui-button.js";
 import { row } from "./ui-row.js";
 import { emptyState, skeletonOf, thumbnail } from "./kit.js";
-import { programIcon, givenNames, nameOf } from "./marks.js";
+import { programIcon, shownName } from "./marks.js";
 import { deliver, classify, reachable, sendKey, waitingNote, NOT_CONFIRMED, MAY_HAVE_ARRIVED } from "./deliver.js";
 import { openPath, toPng } from "./share.js";
 import { mentions, resolvePath, itemOf, shows, arrived, pinFrom, aboutMessage, noted, keyOf, colorOf, indexRows } from "./look-model.js";
@@ -480,7 +480,7 @@ export class Look {
   who(address) {
     const k = terminals().find((x) => x.address === address);
     const pane = panes().find((q) => q.terminal === address);
-    return { name: k?.labels?.["kanso.shown"] || nameOf(pane ?? { terminal: address }, givenNames()), status: k?.status ?? pane?.status ?? null, pane, kind: kindOf(address, k, pane) };
+    return { name: shownName(address, pane), status: k?.status ?? pane?.status ?? null, pane, kind: kindOf(address, k, pane) };
   }
 
   send(cx) {

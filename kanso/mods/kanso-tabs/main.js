@@ -51,6 +51,7 @@ const PANELS = {
   worktrees: { mod: "kanso-panel", props: { panel: "worktrees" } },
   ports: { mod: "kanso-panel", props: { panel: "ports" } },
   look: { mod: "kanso-panel", props: { panel: "look" } },
+  timeline: { mod: "kanso-panel", props: { panel: "timeline" } },
   containers: { mod: "kanso-containers" },
   insights: { mod: "kanso-spend" },
   memory: { mod: "kanso-guard" },
@@ -82,6 +83,7 @@ const BUILTIN = [
   { id: "containers", label: "Containers", icon: "lu-container" },
   { id: "memory", label: "Memory", icon: "lu-memory-stick" },
   { id: "look", label: "Images", icon: "lu-image" },
+  { id: "timeline", label: "Timeline", icon: "lu-history" },
   { id: "sim", label: "Simulator", icon: "lu-smartphone" },
   { id: "dojo", label: "hjkl dōjō", icon: "lu-gamepad-2" },
 ];

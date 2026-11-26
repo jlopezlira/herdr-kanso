@@ -1,9 +1,10 @@
 import { transcriptApi } from "./platform-transcripts.js";
+import { atOf, textOf, toolName, eventsOf } from "./transcript-events.js";
 import { processApi } from "./platform-processes.js";
 import { paths } from "./platform-paths.js";
 // Find in an agent's conversation on disk: each turn's text, matched without case or accents.
 import { FIND } from "./find-key.js";
-import { MONTHS, parseOr as parsed } from "./pure.js";
+import { MONTHS, parseOr as parsed, tryOr } from "./pure.js";
 export { FIND };
 
 export const START_SLACK = 120000; // ps counts whole seconds from a start a little before the record was written
@@ -262,78 +263,24 @@ export function retarget(index, query, prev) {
 export const extendIndex = (index, turns, from, reindex) =>
   (reindex || index.length > turns.length ? indexTurns(turns) : index.concat(indexTurns(turns, from)));
 
-const atOf = (stamp) => {
-  if (typeof stamp === "number" && Number.isFinite(stamp)) return stamp;
-  const n = Date.parse(stamp);
-  return Number.isNaN(n) ? null : n;
-};
-
-function textOf(content) {
-  if (typeof content === "string") return content;
-  if (!Array.isArray(content)) return "";
-  return content.flatMap((p) => {
-    if (typeof p === "string") return [p];
-    if (!p || typeof p !== "object") return [];
-    if (String(p.type ?? "").toLowerCase().includes("image")) return [];
-    return typeof p.text === "string" ? [p.text] : [];
-  }).join("\n");
-}
-
-function toolName(command) {
-  const word = String(command ?? "").trim().split(/\s+/)[0] ?? "";
-  const base = word.split(/[/\\]/).filter(Boolean).at(-1) || "tool";
-  return base.slice(0, 24);
-}
+export { atOf, textOf };
 
 export function readable(turn) {
   const text = String(turn?.text ?? "").replace(/\s+/g, " ").trim();
   if (!text) return false;
   return turn?.role !== "tool" || !DELIVERY.test(text);
 }
-const keep = (turn) => readable(turn);
-const add = (state, turn) => (keep(turn) ? { ...state, turns: state.turns.concat([turn]) } : state);
+const add = (state, turn) => (readable(turn) ? { ...state, turns: state.turns.concat([turn]) } : state);
+const told = (state, e) => add(state, { role: e.role, text: e.text, at: e.at });
+const named = (state, e) => (e.id && e.name ? { ...state, tools: { ...state.tools, [e.id]: toolName(e.name) } } : state);
+const answered = (state, e) => add(state, { role: "tool", name: state.tools[e.id] || "tool", text: e.text, at: e.at });
 
-function claudeLine(tools, obj) {
-  if (!obj || (obj.type !== "user" && obj.type !== "assistant")) return null;
-  if (obj.isMeta || obj.isSidechain) return { tools, turns: [] };
-  const at = atOf(obj.timestamp);
-  const role = obj.type === "user" ? "user" : "assistant";
-  const content = obj.message?.content;
-  if (typeof content === "string") return { tools, turns: [{ role, text: content, at }] };
-  if (!Array.isArray(content)) return { tools, turns: [] };
-  const step = content.reduce((acc, p) => {
-    if (!p || typeof p !== "object") return acc;
-    if (p.type === "tool_use" && p.id) return { ...acc, tools: { ...acc.tools, [p.id]: toolName(p.name) } };
-    if (p.type === "thinking" || String(p.type ?? "").toLowerCase().includes("image")) return acc;
-    if (p.type === "tool_result") {
-      const turn = { role: "tool", name: acc.tools[p.tool_use_id] || "tool", text: textOf(p.content), at };
-      return keep(turn) ? { ...acc, turns: acc.turns.concat([turn]) } : acc;
-    }
-    return typeof p.text === "string" ? { ...acc, texts: acc.texts.concat([p.text]) } : acc;
-  }, { tools, turns: [], texts: [] });
-  const text = step.texts.join("\n");
-  const said = text.trim() ? [{ role, text, at }] : [];
-  return { tools: step.tools, turns: said.concat(step.turns) };
-}
-
-function codexItem(obj) {
-  if (obj?.type !== "event_msg" || obj.payload?.type !== "item_completed") return undefined;
-  const item = obj.payload.item ?? {};
-  const at = atOf(obj.timestamp);
-  if (item.type === "UserMessage" || item.type === "AgentMessage") {
-    const text = textOf(item.content);
-    return text.trim() ? { role: item.type === "UserMessage" ? "user" : "assistant", text, at } : null;
-  }
-  if (item.type === "CommandExecution") {
-    const text = typeof item.aggregated_output === "string" ? item.aggregated_output : textOf(item.aggregated_output);
-    return text.trim() ? { role: "tool", name: toolName(item.command), text, at } : null;
-  }
-  if (item.type === "FileChange") {
-    const text = [item.stdout, item.stderr].filter((s) => typeof s === "string").join("\n");
-    return text.trim() ? { role: "tool", name: "file", text, at } : null;
-  }
-  return null;
-}
+const CLAUDE = { say: told, call: named, result: answered };
+const MODERN = {
+  say: told,
+  command: (state, e) => add(state, { role: "tool", name: e.name, text: e.text, at: e.at }),
+  files: (state, e) => add(state, { role: "tool", name: "file", text: e.text, at: e.at }),
+};
 
 function dropResponse(state) {
   if (state.legacyFrom !== "response") return { ...state, legacyFrom: "event" };
@@ -343,66 +290,46 @@ function dropResponse(state) {
     : { ...state, turns: kept, epoch: state.epoch + 1, legacyFrom: "event" };
 }
 
-function legacyLine(state, obj) {
-  if (!obj || typeof obj !== "object") return null;
-  const at = atOf(obj.timestamp);
-  if (obj.type === "event_msg") {
-    const p = obj.payload ?? {};
-    if (p.type !== "user_message" && p.type !== "agent_message") return null;
-    const text = typeof p.message === "string" ? p.message : textOf(p.message);
-    return { state: dropResponse(state), turns: [{ role: p.type === "user_message" ? "user" : "assistant", text, at }] };
-  }
-  const item = obj.type === "response_item" ? (obj.payload ?? {}) : obj;
-  const kind = obj.type === "response_item" ? item.type : obj.type;
-  if (kind === "message") {
-    if (state.legacyFrom === "event" || (item.role !== "user" && item.role !== "assistant")) return { state, turns: [] };
-    return { state: { ...state, legacyFrom: "response" }, turns: [{ role: item.role, text: textOf(item.content), at }] };
-  }
-  if (kind === "custom_tool_call" || kind === "function_call") {
-    const tools = item.call_id && item.name ? { ...state.tools, [item.call_id]: toolName(item.name) } : state.tools;
-    return { state: { ...state, tools }, turns: [] };
-  }
-  if (kind === "custom_tool_call_output" || kind === "function_call_output") {
-    const text = typeof item.output === "string" ? item.output : textOf(item.output);
-    return { state, turns: [{ role: "tool", name: state.tools[item.call_id] || "tool", text, at }] };
-  }
-  return null;
-}
+const LEGACY = {
+  say: (state, e) => {
+    if (e.from === "event") return told(dropResponse(state), e);
+    return state.legacyFrom === "event" ? state : told({ ...state, legacyFrom: "response" }, e);
+  },
+  call: named,
+  result: answered,
+};
+
+const project = (state, events, steps) => events.reduce((acc, e) => (steps[e.kind] ? steps[e.kind](acc, e) : acc), state);
 
 function absorb(state, obj) {
-  if (state.mode !== "claude") {
-    const item = codexItem(obj);
-    if (item !== undefined) {
-      const cleared = state.mode === "modern" ? state : {
-        ...state, mode: "modern", turns: state.turns.length ? [] : state.turns, epoch: state.turns.length ? state.epoch + 1 : state.epoch,
-      };
-      return item ? add(cleared, item) : cleared;
-    }
+  const { format, events } = eventsOf(obj);
+  if (format === "modern") {
+    const cleared = state.mode === "modern" ? state : {
+      ...state, mode: "modern", turns: state.turns.length ? [] : state.turns, epoch: state.turns.length ? state.epoch + 1 : state.epoch,
+    };
+    return project(cleared, events, MODERN);
   }
-  if (state.mode === "modern") return state;
-  if (state.mode !== "legacy") {
-    const got = claudeLine(state.tools, obj);
-    if (got) return got.turns.reduce(add, { ...state, mode: "claude", tools: got.tools });
-  }
-  if (state.mode === "claude") return state;
-  const legacy = legacyLine(state, obj);
-  if (!legacy) return state;
-  return legacy.turns.reduce(add, { ...legacy.state, mode: "legacy" });
+  if (!format || format === "codex" || state.mode === "modern") return state;
+  if (format === "claude") return state.mode === "legacy" ? state : project({ ...state, mode: "claude" }, events, CLAUDE);
+  return state.mode === "claude" ? state : project({ ...state, mode: "legacy" }, events, LEGACY);
 }
 
 export function freshRead() {
   return { from: 0, size: 0, mode: null, turns: [], legacyFrom: null, tools: {}, rest: "", epoch: 0 };
 }
 
-export function moreTurns(state, chunk, eof = false) {
-  const lines = `${state.rest}${chunk ?? ""}`.split("\n");
-  const rest = eof ? "" : (lines.at(-1) ?? "");
+export function recordsIn(rest, chunk, eof = false) {
+  const lines = `${rest ?? ""}${chunk ?? ""}`.split("\n");
   const body = eof ? lines : lines.slice(0, -1);
-  const next = body.reduce((acc, raw) => {
-    const line = raw.endsWith("\r") ? raw.slice(0, -1) : raw;
-    if (!line) return acc;
-    try { return absorb(acc, JSON.parse(line)); } catch { return acc; }
-  }, { ...state, rest });
+  const records = body.map((raw) => (raw.endsWith("\r") ? raw.slice(0, -1) : raw)).filter(Boolean).map((line) => parsed(line)).filter((obj) => obj && typeof obj === "object");
+  return { rest: eof ? "" : (lines.at(-1) ?? ""), records };
+}
+
+export const absorbEach = (records, step, start) => records.reduce((acc, obj) => tryOr(() => step(acc, obj), acc), start);
+
+export function moreTurns(state, chunk, eof = false) {
+  const { rest, records } = recordsIn(state.rest, chunk, eof);
+  const next = absorbEach(records, absorb, { ...state, rest });
   return { state: next, rebuild: next.mode !== state.mode || next.epoch !== state.epoch || next.turns.length < state.turns.length };
 }
 
@@ -449,6 +376,11 @@ export function resolveFind(where) {
 
 export async function locateConversation(host, address, hint = "") {
   if (!address || String(address).includes("/")) return { kind: null, file: null };
+  return conversationIn(host, address, hint);
+}
+
+export async function conversationIn(host, address, hint = "") {
+  if (!address) return { kind: null, file: null };
   const got = await host.hc(["get", address, "--json"]).catch(() => null);
   const front = got?.code === 0 ? parsed(got.stdout)?.foreground : null;
   const pid = front?.pid;

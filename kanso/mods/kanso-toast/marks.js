@@ -42,6 +42,8 @@ export function givenNames() {
   }));
 }
 
+export const shownName = (address, pane = null) => terminals().find((k) => k.address === address)?.labels?.["kanso.shown"] || nameOf(pane ?? { terminal: address }, givenNames());
+
 export function nameOf(info, given) {
   const prog = info?.program;
   return given?.get(info?.terminal) || (prog?.agent || prog?.shell) && prog.name || info?.title || prog?.name || "Pane";
