@@ -717,11 +717,11 @@ export default class Spaces extends RetryingView {
     const rows = agents ? agents(item) : [];
     const failed = failure ? [failure()] : [];
     const newTree = () => item("New worktree\u2026", () => this.worktreeDialog(place), { icon: "git-branch" });
+    const resume = item("Resume a conversation\u{2026}", () => this.resumeMenu(place), { icon: "history" });
     const rest = start ? [item("New project", () => this.addProject(), { icon: "folder-plus" }),
       ...(repo ? [newTree(), ...(trees?.length ? [item("Open worktree\u2026", () => this.treesMenu(place, this.trees), { icon: "git-fork" })] : [])] : []),
       { separator: true }, item("Arrange\u2026", () => run("kanso-strip.arrange"), { icon: "panels-top-left", hint: chordOf("kanso-strip.arrange") || null })]
       : place.tree ? [] : [newTree()];
-    const resume = item("Resume a conversation\u{2026}", () => this.resumeMenu(place), { icon: "history" });
     const ends = [{ separator: true }, resume, ...rest];
     const row = menuHeight({ items: [sketch("")] }) - menuHeight({ items: [] });
     const fit = Math.max(1, Math.floor((room - menuHeight({ items: [...head, ...failed, ...ends] })) / row));
