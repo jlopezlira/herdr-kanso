@@ -298,6 +298,21 @@ test("An agent that is not Claude Code or Codex says Timeline reads those conver
   assert.equal(pending.length, 0);
 });
 
+test("An unpinned Timeline keeps its conversation when focused, but clears it when a shell takes focus.", async () => {
+  const { world, view, cx, pending } = await oneRead();
+  pending[0].resolve(sliceOut(promptLine("asked")));
+  await became(() => view.state.prompts.length === 1, view);
+
+  world.focus = null;
+  assert.equal(view.target(), world.agents[0].address);
+
+  world.focus = "shell";
+  const target = view.target();
+  view.tick(cx);
+  const said = texts(view.render(cx));
+  assert.deepEqual({ target, empty: said.includes("No conversation in this pane") }, { target: null, empty: true });
+});
+
 test("Once a conversation was read, nothing is read while the window is behind", async () => {
   const { world, view, cx, pending } = await oneRead({ status: "working" });
   world.active = false;
