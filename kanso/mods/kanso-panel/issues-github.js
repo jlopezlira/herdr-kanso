@@ -11,7 +11,7 @@ export const listQuery = (withStatus) => `query($owner:String!,$name:String!,$as
 export const DETAIL = "query($owner:String!,$name:String!,$number:Int!){repository(owner:$owner,name:$name){issue(number:$number){body comments(last:20){nodes{author{login} body createdAt}} closedByPullRequestsReferences(first:5,includeClosedPrs:true){nodes{number title url state}}}}}";
 
 const OFFLINE = /could not resolve host|network is unreachable|connection refused|no such host|timeout|dial tcp|i\/o timeout/i;
-const NO_SCOPE = /INSUFFICIENT_SCOPES|read:project|required scopes/i;
+export const NO_SCOPE = /INSUFFICIENT_SCOPES|read:project|required scopes/i;
 
 export function remoteOf(text, hosts) {
   const known = new Set((hosts ?? []).map((h) => String(h?.host ?? h).toLowerCase()));
@@ -27,7 +27,7 @@ export async function repoOf(run, folder, hosts = ["github.com"]) {
   return /not a git repository/i.test(said) ? { repo: null } : { repo: null, failed: said || "git did not answer" };
 }
 
-const vars = (pairs) => Object.entries(pairs).flatMap(([k, v]) => (v === null || v === undefined ? [] : [typeof v === "number" ? "-F" : "-f", `${k}=${v}`]));
+export const vars = (pairs) => Object.entries(pairs).flatMap(([k, v]) => (v === null || v === undefined ? [] : [typeof v === "number" ? "-F" : "-f", `${k}=${v}`]));
 const graphql = (run, repo, query, extra) => ask(run, repo.host, ["api", "graphql", "-f", `query=${query}`, ...vars({ owner: repo.owner, name: repo.name, ...extra })]);
 
 const filterVars = (filter, login) => ({ assignee: filter === "assigned" ? login : null, author: filter === "created" ? login : null });
@@ -57,7 +57,7 @@ export function rowsOf(nodes, repo, project, now) {
   }));
 }
 
-const failure = (r, now) => {
+export const failure = (r, now) => {
   const rate = rateFrom(r, now);
   if (rate) return { kind: "rate", text: rate.error, retryAt: rate.retryAt };
   const said = firstLine(r);

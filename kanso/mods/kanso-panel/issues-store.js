@@ -9,14 +9,15 @@ const KEPT = COLS.filter((col) => col !== "url" && col !== "project").map((col) 
 const upsert = (row) => `INSERT INTO issues(${COLS.join(",")}) VALUES(${COLS.map((col) => value(col, row)).join(",")}) ON CONFLICT(project,url) DO UPDATE SET ${KEPT};`;
 
 export async function readIssues(db, projects) {
-  if (!projects.length) return { rows: [], boards: [], links: [] };
+  if (!projects.length) return { rows: [], boards: [], links: [], todos: [] };
   const ids = projects.map((p) => q(p)).join(",");
-  const [rows, boards, links] = await Promise.all([
+  const [rows, boards, links, todos] = await Promise.all([
     db.read(`SELECT * FROM issues WHERE project IN (${ids});`),
     db.read(`SELECT * FROM issue_boards WHERE project IN (${ids});`),
     db.read(`SELECT * FROM issue_links WHERE project IN (${ids});`),
+    db.read(`SELECT * FROM todos WHERE project IN (${ids});`),
   ]);
-  return { rows, boards, links };
+  return { rows, boards, links, todos };
 }
 
 export const linkSql = ({ project, source, ref, name }, on, cached = sourceKey({ source, ref })) => (on
