@@ -650,6 +650,10 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     at}}`, read on render; Cancel drops a new pin). ⌘↩ sends "About <path>:"
     and a line per noted pin (`deliver.js`).
     `herdr-app do 'kanso-tabs.look <path>'` (or `.gallery`) opens one.
+    Resume a conversation (the + menus of `kanso-spaces`): `listing` in `platform-transcripts.js` lists the newest
+    conversation files (Claude Code under the project's own folder name, Codex, Pi) with their folder and id, then
+    `threads` reads each one's title and first prompt the way Threads does, one call per computer. A row starts the
+    program's resume command (`resumeOf` in `resume.js`) in a new tab of its project; one open in a terminal is focused.
     `timeline.js` (Timeline, panel id `timeline`, `history.svg`): the conversation of the agent in focus (pinnable),
     Claude Code or Codex, here or on another computer (`conversationIn` in `find.js`). It reads the file in
     slices from the last offset (`slice` in `platform-transcripts.js`) when the agent's status or `seq` changes,

@@ -38,7 +38,7 @@ import { asleep } from "./asleep.js";
 import { machineReaches, asleepLook, withPending, withoutWaking, FORGET_HELD, forgetHeld, holdForget } from "./row-states.js";
 import { SLEEP_PENDING, SLEEP_WAKING, SLEEP_FAILED, COULD_NOT_SLEEP, failedTerminals, withoutTerminals, RESUME_LABEL, asleepTerminal, resumeOf } from "./resume.js";
 import { transcriptApi, projectDir } from "./platform-transcripts.js";
-import { RECENT, listedOf, recordsOf, newestFirst, findsIn, resumeHint, openSpaceAt } from "./resume-list.js";
+import { RECENT, OPEN_CONVERSATIONS, openConversations, listedOf, recordsOf, newestFirst, findsIn, resumeHint, openSpaceAt } from "./resume-list.js";
 import { tile } from "./tile.js";
 import { views, viewSwitch } from "./view-switch.js";
 import { pullKey, runPull, canWake, enterOpens, sectionMarkOf, sectionCount, rowDirectory, unnamedComputer, threadWord, threadActions, noProjectsOn, sortOf, foldTail, readWord } from "./sidebar-rows.js";
@@ -2302,7 +2302,8 @@ export default class Spaces extends RetryingView {
       return { title, count: 0, items: [finder, item(recent.length ? "No conversation matches" : "No past conversations here", () => {}, { disabled: true, keep: true }), item("New conversation", fresh, { icon: "plus" })] };
     }
     const now = Date.now();
-    const rows = listed.map((c) => item(c.title, () => this.resumeOne(place, c), { icon: icon(c.program), hint: resumeHint(c, { scoped, now }) }));
+    const open = shared(OPEN_CONVERSATIONS) ?? {};
+    const rows = listed.map((c) => item(c.title, () => this.resumeOne(place, c), { icon: icon(c.program), hint: c.machine || !open[c.file] ? resumeHint(c, { scoped, now }) : "Open" }));
     return { title, count: rows.length, items: [finder, { scroll: rows, rows: Math.min(rows.length, RESUME_ROWS), handle: this.resumeScroll }] };
   }
 
@@ -2314,6 +2315,8 @@ export default class Spaces extends RetryingView {
   }
 
   resumeOne(place, c) {
+    const live = c.machine ? null : (shared(OPEN_CONVERSATIONS) ?? {})[c.file];
+    if (live) { run("pane.focus", { terminal: live }); return; }
     const machine = c.machine ?? (place.machine || null);
     const agent = (this.known ?? []).find((a) => a.key === c.program && a.installed);
     const argv = resumeOf(c.program, agent?.run ?? [c.program], c);
@@ -2615,6 +2618,7 @@ export default class Spaces extends RetryingView {
         this.threads = next;
         if (same) return;
         this.threadsShown = next;
+        setShared(OPEN_CONVERSATIONS, openConversations(next));
         this.redraw();
       } catch { this.threads ??= {}; this.threadsShown ??= this.threads; }
       finally { this.readingThreads = false; }

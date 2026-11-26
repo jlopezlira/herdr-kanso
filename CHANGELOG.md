@@ -26,6 +26,7 @@ the branch's rules.
 
 ### Added
 
+- Resume a conversation, in the + menu: your past Claude Code, Codex and Pi conversations, newest first, on this computer and the ones you added; type to find one. A project's + lists that project's. One already open takes you to it.
 - Timeline, a new panel: the conversation in focus prompt by prompt, with when each one ended, how long it took, the files it changed and the first sentence of its answer. Open one to read the whole prompt, what you sent while it worked and the full answer. It reads Claude Code and Codex, on this computer or another.
 
 ## [4.1.1] - 2026-11-25

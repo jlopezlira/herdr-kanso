@@ -12,6 +12,9 @@ export const listedOf = (stdout, machine = null) => String(stdout ?? "").split("
   return program && cwd && id ? [{ program, file, cwd, id, machine }] : [];
 });
 
+export const OPEN_CONVERSATIONS = "kanso.conversations.open";
+export const openConversations = (threads) => Object.fromEntries(Object.entries(threads ?? {}).flatMap(([address, th]) => (th?.file ? [[th.file, address]] : [])));
+
 export const recordsOf = (stdout) => String(stdout ?? "").split("\n\x1c\n");
 
 export const newestFirst = (list) => list.toSorted((a, b) => (b.at ?? 0) - (a.at ?? 0));
