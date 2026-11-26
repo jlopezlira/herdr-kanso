@@ -25,6 +25,7 @@ export function guideSections(bindings, platform, home) {
     ]],
     ["Panels", [
       `The icons at the top right open a panel beside the strip: Files, PR, Ports, Memory, Spend and more. Open them by place${family("kanso-tabs.panel-")}.`,
+      "Timeline shows the conversation in focus prompt by prompt: what you asked, how long it took, the files it changed and how it answered.",
     ]],
     ["Sleep and Arrangements", [
       "Sleep puts a tab, or a whole project, away: its agents exit and keep their conversations; Wake brings them back on the same ones. Right-click a project, or the moon in a pane's header.",

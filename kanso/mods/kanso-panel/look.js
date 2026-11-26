@@ -16,7 +16,7 @@ import { G, H, T, tokens } from "./ui.js";
 import { button, quietLink, iconButton } from "./ui-button.js";
 import { row } from "./ui-row.js";
 import { emptyState, skeletonOf, thumbnail } from "./kit.js";
-import { programIcon, givenNames, nameOf } from "./marks.js";
+import { programIcon, shownName } from "./marks.js";
 import { deliver, classify, reachable, sendKey, waitingNote, NOT_CONFIRMED, MAY_HAVE_ARRIVED } from "./deliver.js";
 import { openPath, toPng } from "./share.js";
 import { mentions, resolvePath, itemOf, shows, arrived, pinFrom, aboutMessage, noted, keyOf, colorOf, indexRows } from "./look-model.js";
@@ -24,6 +24,7 @@ import { walkLayout } from "./layout.js";
 import { lookMemory } from "./panel-state.js";
 import { Front } from "./front.js";
 import { transcriptPaths, MOST } from "./transcript.js";
+import { ticking } from "./pure.js";
 
 const LINES = 400;
 const NOTE_ROWS = 5; // notes shown before the list scrolls
@@ -68,8 +69,7 @@ export class Look {
     this.handle = cx.focus_handle();
     if (p.path) this.ask(p.path, cx);
     else if (this.keptPath) { const path = this.keptPath; this.keptPath = null; this.ask(path, cx); }
-    this.tick(cx);
-    cx.timer.every(TICK_MS, (cx) => this.tick(cx));
+    ticking(cx, TICK_MS, (cx) => this.tick(cx));
   }
 
   saveState() { return this.selected?.path ? { path: this.selected.path, on: machineOf(this.agent()) } : null; }
@@ -480,7 +480,7 @@ export class Look {
   who(address) {
     const k = terminals().find((x) => x.address === address);
     const pane = panes().find((q) => q.terminal === address);
-    return { name: k?.labels?.["kanso.shown"] || nameOf(pane ?? { terminal: address }, givenNames()), status: k?.status ?? pane?.status ?? null, pane, kind: kindOf(address, k, pane) };
+    return { name: shownName(address, pane), status: k?.status ?? pane?.status ?? null, pane, kind: kindOf(address, k, pane) };
   }
 
   send(cx) {

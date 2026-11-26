@@ -44,6 +44,7 @@
     "cmd-shift-down": "kanso-spaces.agent-down",
     "cmd-shift-left": "kanso-spaces.agent-back",
     "cmd-shift-right": "kanso-spaces.agent-forward",
+    "ctrl-tab": "kanso-tabs.switch",
     "cmd-alt-s": "kanso-strip.send",
     "cmd-alt-t": "kanso-strip.arrange",
     "cmd-1": "kanso-tabs.tab-1",
@@ -96,5 +97,9 @@
   },
   "terminal": {
     "cmd-f": "kanso-strip.find"
+  },
+  "mod:kanso-menu": {
+    "ctrl-tab": "kanso-menu.next",
+    "ctrl-shift-tab": "kanso-menu.prev"
   }
 }

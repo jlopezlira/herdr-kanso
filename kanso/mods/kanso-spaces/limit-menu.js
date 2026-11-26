@@ -1,4 +1,4 @@
-import { resumeArgv, isSessionId } from "./resume.js";
+import { resumeArgv, isSessionId, resumeOf } from "./resume.js";
 import { limitOf, resumeArmed, resetWords, limitedProviders, limitWords, waits } from "./limits-model.js";
 import { snoozedUntil } from "./agents.js";
 
@@ -9,7 +9,7 @@ export function resumeCommand(app, argv, conversation) {
     const back = resumeArgv(argv, conversation);
     return back ? [...back, "continue"] : [];
   }
-  return app === "codex" ? ["codex", "resume", conversation, "continue"] : [];
+  return app === "codex" ? [...resumeOf("codex", ["codex"], { id: conversation }), "continue"] : [];
 }
 
 export function limitLines({ labels, status, now, atReset, snooze, snoozed }) {

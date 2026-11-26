@@ -13,7 +13,7 @@ const piece = (id, label, group, states, def, stops, job = null) => ({ id, label
 
 const PANELS = [
   ["files", "Files", "git"], ["insights", "Spend"], ["pr", "PR", "gh"], ["issues", "Tasks", "gh"], ["shipped", "Shipped", "git"], ["caffeine", "Caffeine"], ["worktrees", "Worktrees", "git"],
-  ["ports", "Ports", "lsof"], ["containers", "Containers", "docker"], ["memory", "Memory", "ps"], ["look", "Images"], ["sim", "Simulator"], ["dojo", "hjkl dōjō"],
+  ["ports", "Ports", "lsof"], ["containers", "Containers", "docker"], ["memory", "Memory", "ps"], ["look", "Images"], ["timeline", "Timeline"], ["sim", "Simulator"], ["dojo", "hjkl dōjō"],
 ];
 
 export const PIECES = [

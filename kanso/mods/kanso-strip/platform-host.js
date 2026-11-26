@@ -1,5 +1,6 @@
-import { exec, window, writeTextFile } from "herdr";
+import { exec, window, writeTextFile, home } from "herdr";
 import { platformName, powershell, checked } from "./platform-command.js";
+import { systemApi } from "./platform-system.js";
 
 export const localName = () => platformName(window()?.platform ?? "macos");
 export const localService = (factory) => factory(localName(), exec, writeTextFile);
@@ -23,6 +24,7 @@ class RemoteServices {
 }
 const remoteServices = new RemoteServices();
 export const serviceOn = (factory, on) => remoteServices.get(factory, on);
+export const homeOn = async (on) => (on ? (await serviceOn(systemApi, on)).userHome() : home());
 export const platformOf = (machine) => (machine ? serviceOn((platform) => platform, machine).catch(() => "linux") : Promise.resolve(localName()));
 const withTimeout = (run, timeout) => (timeout == null ? run : (cmd, args, options = {}) => run(cmd, args, { timeout, ...options }));
 export function serviceFor(factory, machine = null, timeout = null, remote = null) {

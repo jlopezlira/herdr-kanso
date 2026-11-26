@@ -2,9 +2,13 @@
 // Apache-2.0; derived from Herdr's shipped `menu` mod.
 // In the strip Herdr's menu gets the block id ("term-<pane>"), so pane commands fail: this menu resolves the real pane.
 import { View } from "gpui-kit";
-import { run, props, closeOverlay, theme, terminals, panes, spaces, agents, shared, setShared } from "herdr";
+import { ScrollHandle } from "gpui-base";
+import { menu } from "./ui-menu.js";
+import { run, props, closeOverlay, theme, terminals, panes, spaces, agents, shared, setShared, nextCommand } from "herdr";
 import { listKey, moveTo } from "./listkeys.js";
-import { focusOn } from "./pure.js";
+import { focusOn, readCommands } from "./pure.js";
+import { switchRows, REVEAL_MS, SWITCH_ROWS } from "./switcher.js";
+import { currentAgent, land } from "./recent.js";
 import { openWithPopup } from "./popup.js";
 import { openSend, openSleep } from "./launch.js";
 import { tokens } from "./ui.js";
@@ -74,6 +78,48 @@ export default class KansoMenu extends View {
     this.at = -1; // nothing chosen for you: j or the down arrow lights the first
     this.handle = focusOn(cx);
     this.armed = new Armed();
+    if (props()?.switcher) this.openSwitcher(cx);
+  }
+
+  openSwitcher(cx) {
+    this.rows = switchRows();
+    this.at = this.rows.length > 1 && this.rows[0].address === currentAgent() ? 1 : 0;
+    this.scroll = ScrollHandle.new();
+    this.shown = false;
+    this.landed = false;
+    cx.timer.after(REVEAL_MS, (cx) => { this.shown = true; cx.notify(); });
+    cx.timer.every(REVEAL_MS, () => { if (this.shown && !this.handle.is_focused()) this.go(null); });
+    readCommands(cx, () => nextCommand(), (c, cx) => this.switchStep(String(c).endsWith(".prev") ? -1 : 1, cx));
+  }
+
+  switchStep(by, cx) {
+    const n = this.rows.length;
+    this.at = n ? (this.at + by + n) % n : 0;
+    this.scroll.scroll_to_item(this.at);
+    this.shown = true;
+    cx.notify();
+  }
+
+  go(row) {
+    if (this.landed) return;
+    this.landed = true;
+    closeOverlay(props()?.overlay);
+    land(row);
+  }
+
+  switcherView(c) {
+    const rows = this.rows.map((r, i) => ({ icon: r.program?.icon ?? null, label: r.name, hint: r.place, mark: r.asleep ? "asleep" : null, selected: i === this.at, onClick: () => this.go(r) }));
+    const items = rows.length ? [{ scroll: rows, rows: Math.min(rows.length, SWITCH_ROWS), handle: this.scroll }] : [{ label: "No other sessions", disabled: true }];
+    return menu("kanso-switcher", { items, wide: true }, c).opacity(this.shown ? 1 : 0).track_focus(this.handle)
+      .on_modifiers_changed((e) => { if (!e.modifiers.control) this.go(this.rows[this.at]); })
+      .on_key_down((e, cx) => {
+        const k = e?.key;
+        if (k === "escape") this.go(null);
+        else if (k === "enter") this.go(this.rows[this.at]);
+        else if (k === "down" || k === "up" || k === "tab") { this.switchStep(k === "up" || (k === "tab" && e.modifiers?.shift) ? -1 : 1, cx); }
+        else return;
+        cx.stop_propagation();
+      });
   }
 
   // The pending g (for gg) is kept on the view between keys.
@@ -111,6 +157,7 @@ export default class KansoMenu extends View {
   }
 
   render() {
+    if (props()?.switcher) return this.switcherView(tokens(theme()));
     const target = props()?.target ?? {};
     const { title, lines: drawn } = target.piece ? this.pieceView(target.piece) : this.paneView(target);
     const list = drawn.filter((line) => line.onClick && !line.disabled);

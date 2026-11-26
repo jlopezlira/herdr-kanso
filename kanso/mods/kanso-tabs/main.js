@@ -14,7 +14,7 @@ import { Updater } from "./update.js";
 import { arriveOnLinux, herdrIsTerminal } from "./linux-arrival.js";
 import { tryOr, readCommands, bounded, afterMount } from "./pure.js";
 import { openArrange } from "./open.js";
-import { DIALOG, G, T, glyphOf, tokens } from "./ui.js";
+import { DIALOG, G, T, W, glyphOf, tokens } from "./ui.js";
 import { pressAgain, Armed } from "./ui-button.js";
 import { TextField } from "./ui-field.js";
 import { plus, tooltip } from "./kit.js";
@@ -32,6 +32,7 @@ import { commandOn, machineKey, offered, toolsFor, toolKey, withoutNegatives, fo
 import { pieces, runs, shown, setPiece, STORE, choice } from "./pieces.js";
 import { reconcileSchedules, RUN_FAILURES } from "./schedules.js";
 import { reconcileResumes } from "./clock.js";
+import { noteFocus } from "./recent.js";
 
 const SCHEDULES_MS = 60_000;
 
@@ -51,6 +52,7 @@ const PANELS = {
   worktrees: { mod: "kanso-panel", props: { panel: "worktrees" } },
   ports: { mod: "kanso-panel", props: { panel: "ports" } },
   look: { mod: "kanso-panel", props: { panel: "look" } },
+  timeline: { mod: "kanso-panel", props: { panel: "timeline" } },
   containers: { mod: "kanso-containers" },
   insights: { mod: "kanso-spend" },
   memory: { mod: "kanso-guard" },
@@ -82,6 +84,7 @@ const BUILTIN = [
   { id: "containers", label: "Containers", icon: "lu-container" },
   { id: "memory", label: "Memory", icon: "lu-memory-stick" },
   { id: "look", label: "Images", icon: "lu-image" },
+  { id: "timeline", label: "Timeline", icon: "lu-history" },
   { id: "sim", label: "Simulator", icon: "lu-smartphone" },
   { id: "dojo", label: "hjkl dōjō", icon: "lu-gamepad-2" },
 ];
@@ -244,7 +247,8 @@ export default class Tabs extends View {
     // Herdr passes a mod command no arguments, so the path rides in its name: `herdr-app do 'kanso-tabs.look <path>'`.
     // `at` makes each one new props, so an open Images starts over on it. (`gallery`, its old command, too).
     const look = /^(?:look|gallery)(?:[\s:]+([\s\S]+))?$/.exec(name);
-    if (look) this.show("look", look[1]?.trim() ? { panel: "look", path: look[1].trim(), at: Date.now() } : { panel: "look" });
+    if (name === "switch") openOverlay({ mod: "kanso-menu", kind: "window", frame: "none", width: W.menuWide, props: { switcher: { at: Date.now() } } });
+    else if (look) this.show("look", look[1]?.trim() ? { panel: "look", path: look[1].trim(), at: Date.now() } : { panel: "look" });
     else if (tab) {
       const shown = shownTabs(spaces().find((s) => s.active)?.tabs)[Number(tab[1]) - 1];
       if (shown) chooseTab(shown.id);
@@ -554,6 +558,7 @@ export default class Tabs extends View {
   }
 
   render(cx) {
+    cx?.timer?.after(0, () => noteFocus());
     const space = spaces().find(p => p.active);
     this.here = machineKey(space);
     this.askCommands(cx, space);

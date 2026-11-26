@@ -119,4 +119,4 @@ export const menuList = (id, { title = null, items = [] }, c) => v_flex().id(id)
   .children(drawn(id, items, c));
 
 /** A Menu that draws its own frame, where it hangs from a control. */
-export const menu = (id, { title = null, items = [] }, c) => menuList(id, { title, items }, c).w(W.menu).rounded(R.card).border_1().border_color(c.border).shadow_md();
+export const menu = (id, { title = null, items = [], wide = false }, c) => menuList(id, { title, items }, c).w(wide ? W.menuWide : W.menu).rounded(R.card).border_1().border_color(c.border).shadow_md();

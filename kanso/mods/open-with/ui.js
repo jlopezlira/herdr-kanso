@@ -6,7 +6,7 @@ import { shared, settings } from "herdr";
 export const G = { hair: 2, xs: 4, sm: 8, md: 12, lg: 16, xl: 24 };
 export const H = { bar: 28, control: 32, compact: 24, tabBar: 48, icon: 28, row: 40, line: 32, two: 52, badge: 20, petPicture: 84, petStage: 128, append: 120 };
 export const R = { sm: 4, control: 6, card: 8, full: 999 };
-export const W = { paneName: 256, paneSegment: 224, menu: 252, question: 260, tabLabel: 170, tabSkeleton: 92, tabSkeletonShort: 64, keyTile: 78, petTile: 104, buttonLabel: 170, prose: 760, tableCell: 96 };
+export const W = { paneName: 256, paneSegment: 224, menu: 252, menuWide: 420, question: 260, tabLabel: 170, tabSkeleton: 92, tabSkeletonShort: 64, keyTile: 78, petTile: 104, buttonLabel: 170, prose: 760, tableCell: 96 };
 export const T = { display: 48, page: 20, title: 16, card: 14, value: 13, body: 12, mono: 12, micro: 11 };
 export const ICON = 16;
 export const ICON_ROW = 16;

@@ -14,6 +14,10 @@ const onBoth2 = {
   "ctrl-shift-b": "kanso-spaces.sidebar",
   "ctrl-shift-,": "kanso-tabs.settings",
 };
+const onBoth3 = {
+  "ctrl-tab": "kanso-menu.next",
+  "ctrl-shift-tab": "kanso-menu.prev",
+};
 
 export const DEFAULT_KEYS = {
   "kanso/keys.json": {
@@ -62,6 +66,7 @@ export const DEFAULT_KEYS = {
       "cmd-shift-down": "kanso-spaces.agent-down",
       "cmd-shift-left": "kanso-spaces.agent-back",
       "cmd-shift-right": "kanso-spaces.agent-forward",
+      "ctrl-tab": "kanso-tabs.switch",
       "cmd-alt-s": "kanso-strip.send",
       "cmd-alt-t": "kanso-strip.arrange",
       "cmd-1": "kanso-tabs.tab-1",
@@ -105,6 +110,9 @@ export const DEFAULT_KEYS = {
     },
     "terminal": {
       "cmd-f": "kanso-strip.find",
+    },
+    "mod:kanso-menu": {
+      ...onBoth3,
     },
   },
   "kanso/keys.windows.json": {
@@ -155,6 +163,7 @@ export const DEFAULT_KEYS = {
       "ctrl-shift-down": "kanso-spaces.agent-down",
       "ctrl-shift-left": "kanso-spaces.agent-back",
       "ctrl-shift-right": "kanso-spaces.agent-forward",
+      "ctrl-tab": "kanso-tabs.switch",
       "ctrl-1": "kanso-tabs.tab-1",
       "ctrl-2": "kanso-tabs.tab-2",
       "ctrl-3": "kanso-tabs.tab-3",
@@ -196,6 +205,9 @@ export const DEFAULT_KEYS = {
     },
     "terminal": {
       "ctrl-shift-f": "kanso-strip.find",
+    },
+    "mod:kanso-menu": {
+      ...onBoth3,
     },
   },
 };

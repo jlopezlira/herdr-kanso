@@ -22,6 +22,14 @@ in version.json, which the stable updater offers. Versions follow
 [Keep a Changelog](https://keepachangelog.com). `npm run check:version` checks
 the branch's rules.
 
+## [Unreleased]
+
+### Added
+
+- A session switcher on Ctrl+Tab: every session on every computer, the most recent first, opening on the one you were in before. Keep Ctrl down and press Tab to move, let go to switch; Enter and a click work too, Esc stays. Sessions put to sleep are listed last and wake when you pick one. Change or remove its key in Settings, Keys; switching tabs stays on Cmd+Shift+] and Cmd+Shift+[.
+- Resume a conversation, in the + menu: your past Claude Code, Codex and Pi conversations, newest first, on this computer and the ones you added; type to find one. A project's + lists that project's. None starts twice: one open on any computer, in Claude Code, Codex or Pi, takes you to it, and one asleep wakes.
+- Timeline, a new panel: the conversation in focus prompt by prompt, with when each one ended, how long it took, the files it changed and the first sentence of its answer. Open one to read the whole prompt, what you sent while it worked and the full answer. It reads Claude Code and Codex, on this computer or another.
+
 ## [4.1.1] - 2026-11-25
 
 ### Changed

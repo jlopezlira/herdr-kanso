@@ -44,6 +44,7 @@
     "ctrl-shift-down": "kanso-spaces.agent-down",
     "ctrl-shift-left": "kanso-spaces.agent-back",
     "ctrl-shift-right": "kanso-spaces.agent-forward",
+    "ctrl-tab": "kanso-tabs.switch",
     "ctrl-alt-shift-s": "kanso-strip.send",
     "cmd-alt-t": "kanso-strip.arrange",
     "alt-shift-1": "kanso-tabs.tab-1",
@@ -126,5 +127,9 @@
     "ctrl-insert": "terminal.copy",
     "ctrl-shift-v": "terminal.paste",
     "shift-insert": "terminal.paste"
+  },
+  "mod:kanso-menu": {
+    "ctrl-tab": "kanso-menu.next",
+    "ctrl-shift-tab": "kanso-menu.prev"
   }
 }
