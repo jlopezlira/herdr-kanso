@@ -6,19 +6,20 @@ import { PAGES, NO_SCOPE, vars, failure } from "./issues-github.js";
 
 export const GH_PROJECT = "ghproject";
 export const NEEDS_SCOPE = { kind: "no scope", text: "GitHub Projects needs permission to read your projects" };
-const LIST = "query($owner:String!,$name:String!){repository(owner:$owner,name:$name){projectsV2(first:50){nodes{id title closed}} owner{... on ProjectV2Owner{projectsV2(first:50){nodes{id title closed}}}}}}";
+const LIST = 'query($owner:String!,$name:String!,$after:String){repository(owner:$owner,name:$name){projectsV2(first:100,query:"is:open"){nodes{id title closed}} owner{... on ProjectV2Owner{projectsV2(first:100,after:$after,query:"is:open"){pageInfo{hasNextPage endCursor} nodes{id title closed}}}}}}';
 const CONTENT = "number title url body createdAt updatedAt author{login} assignees(first:10){nodes{login}} labels(first:10){nodes{name}} repository{nameWithOwner}";
 export const ITEMS = `query($id:ID!,$after:String){node(id:$id){... on ProjectV2{url field(name:"Status"){... on ProjectV2SingleSelectField{options{name}}} items(first:100,after:$after){totalCount pageInfo{hasNextPage endCursor} nodes{id databaseId fieldValueByName(name:"Status"){... on ProjectV2ItemFieldSingleSelectValue{name}} content{__typename ... on Issue{${CONTENT}} ... on PullRequest{${CONTENT}} ... on DraftIssue{title body createdAt updatedAt creator{login} assignees(first:10){nodes{login}}}}}}}}}`;
 
 const graphql = (run, host, query, pairs) => ask(run, host, ["api", "graphql", "-f", `query=${query}`, ...vars(pairs)]);
 const scoped = (r) => NO_SCOPE.test(`${r?.stderr ?? ""}${r?.stdout ?? ""}`);
 
-export async function listProjects(run, repo) {
-  const r = await graphql(run, repo.host, LIST, { owner: repo.owner, name: repo.name });
+export async function listProjects(run, repo, after = null) {
+  const r = await graphql(run, repo.host, LIST, { owner: repo.owner, name: repo.name, after });
   const found = r?.code === 0 ? parseOr(r.stdout, null)?.data?.repository : null;
   if (!found) return { failure: scoped(r) ? NEEDS_SCOPE : { text: "GitHub Projects could not be read", source: firstLine(r) } };
   const all = [...(found.projectsV2?.nodes ?? []), ...(found.owner?.projectsV2?.nodes ?? [])].filter((p) => p?.id && !p.closed);
-  return { list: all.filter((p, i) => all.findIndex((q) => q.id === p.id) === i).map((p) => ({ ref: p.id, name: p.title ?? "" })), complete: true, next: null };
+  const page = found.owner?.projectsV2?.pageInfo;
+  return { list: all.filter((p, i) => all.findIndex((q) => q.id === p.id) === i).map((p) => ({ ref: p.id, name: p.title ?? "" })), complete: !page?.hasNextPage, next: page?.hasNextPage ? page.endCursor : null };
 }
 
 const TICKETS = { DraftIssue: () => "Draft", PullRequest: (c) => `PR #${c.number}`, Issue: (c) => `#${c.number}` };

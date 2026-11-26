@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { arg, chain, drawingHost, failure, fieldWith, find, KIT_NIGHT, load, one, press, same, success, tape, texts, timedContext } from "./helpers.mjs";
+import { arg, chain, drawingHost, failure, fieldWith, find, keyboard, KIT_NIGHT, load, one, press, same, success, tape, texts, timedContext } from "./helpers.mjs";
 import { temporaryKdb } from "./mod-fixtures.mjs";
 
 const PR_URL = "https://github.com/acme/shop/issues/12";
@@ -224,9 +224,9 @@ const linkBoard = async (db, board) => {
   await db.run(linkSql(board, true));
 };
 const linkGithub = (db, project) => linkBoard(db, githubLink(project));
-const kdbWithShop = async (t, linked = true) => {
+const kdbWithShop = async (t, linked = true, { name, folder, machine } = shop) => {
   const { db } = await temporaryKdb(t);
-  const { row } = await db.addProject({ name: shop.name, folder: shop.folder });
+  const { row } = await db.addProject({ name, folder, machine: machine ?? undefined });
   if (linked) await linkGithub(db, row.id);
   return { db, project: row };
 };
@@ -256,12 +256,12 @@ const startIssues = async (db, host = {}, { timers = [], ...context } = {}) => {
     exec: async () => ({ code: 1, stdout: "", stderr: "" }),
     ...host,
   });
-  const { cx, drain } = timedContext(timers, context);
+  const { cx, drain, pending } = timedContext(timers, context);
   const view = new Issues(db);
   view.init(cx);
   await drain();
   const page = () => view.render(cx);
-  return { view, cx, drain, DIALOG, page, click: (id) => clickIssues(page(), id, cx) };
+  return { view, cx, drain, pending, DIALOG, page, click: (id) => clickIssues(page(), id, cx) };
 };
 const openProjectStep = async (db, host) => {
   const tasks = await startIssues(db, host);
@@ -287,6 +287,17 @@ test("Opening Tasks in a project draws without asking for a redraw while it draw
 });
 
 const remoteShop = { ...shop, machine: "light" };
+const terminalLaunchMocks = (t) => ({ spaces: t.mock.fn(() => []), run: t.mock.fn() });
+const terminalPlacements = () => {
+  const { folder, machine } = remoteShop;
+  const samePlace = { id: "shop-on-light", folder, machine };
+  const anotherComputer = { ...samePlace, id: "shop-local", machine: null, active: true };
+  return [
+    [[{ ...samePlace, active: true }], "terminal.open", { folder, place: "right" }],
+    [[anotherComputer, samePlace], "tab.new", { folder, space: samePlace.id }],
+    [[anotherComputer], "space.new", { folder, machine }],
+  ];
+};
 const remoteKanso = {
   id: "kanso-space", name: "kansō", machine: "light", folder: "/Users/jj/Apps/herdr/herdr-kanso",
 };
@@ -362,21 +373,27 @@ const todoInputHost = (t) => ({
   } },
 });
 const labelledControl = (panel, label) => find(panel, (el) => arg(el, "accessibility_label") === label);
-const todoTasks = async (t, { linked = true, ...host } = {}) => {
-  const { db, project: { id } } = await kdbWithShop(t, false);
+const todoRowIdOf = ({ id }) => `issues-todo-${id}`;
+const todoTasks = async (t, { linked = true, project = shop, ...host } = {}) => {
+  const { db, project: { id } } = await kdbWithShop(t, false, project);
   if (linked) await linkBoard(db, todoLink(id));
-  const tasks = await startIssues(db, { ...todoInputHost(t), ...host }, { stop_propagation() {} });
+  const stop_propagation = t.mock.fn();
+  const makeButton = t.mock.fn(drawingHost().Button.new);
+  const tasks = await startIssues(db, { ...todoInputHost(t), Button: { new: makeButton }, ...host }, { stop_propagation });
   const input = () => {
     const editor = labelledControl(tasks.page(), "Add a to-do");
     assert.ok(editor, "Tasks shows an Add a to-do field");
     return arg(editor, "state");
   };
-  const submit = async (words = TODO_WORDS) => {
+  const enterTodo = (words) => {
     const state = input();
     const event = state.on.mock.calls.find(({ arguments: [name] }) => name === "submit");
     assert.ok(event, "Enter submits the to-do");
     state.set_value(words);
     event.arguments[1]({}, tasks.cx);
+  };
+  const submit = async (words = TODO_WORDS) => {
+    enterTodo(words);
     await tasks.drain();
     return input().value();
   };
@@ -384,9 +401,9 @@ const todoTasks = async (t, { linked = true, ...host } = {}) => {
   const todoRowId = async () => {
     const [row] = await saved();
     assert.ok(row, "The to-do is in SQLite");
-    return `issues-todo-${row.id}`;
+    return todoRowIdOf(row);
   };
-  return { ...tasks, db, id, submit, saved, todoRowId };
+  return { ...tasks, db, id, enterTodo, submit, saved, todoRowId, makeButton };
 };
 
 const chooseBoardProject = ({ id, click }, action = ADD_ACTION) => {
@@ -455,6 +472,8 @@ test("Submitting a to-do saves it, clears the field, and shows it first; blank t
   assert.deepEqual(words.filter((word) => [TODO_WORDS, newer].includes(word)), [newer, TODO_WORDS]);
 });
 
+const pendingTodo = (el) => /^issues-todo-.*-pending$/.test(arg(el, "id"));
+
 test("A submitted to-do appears pending before it is saved.", async (t) => {
   const { db, page, submit, saved, todoRowId } = await todoTasks(t);
   const write = Promise.withResolvers();
@@ -464,11 +483,10 @@ test("A submitted to-do appears pending before it is saved.", async (t) => {
     return run(sql);
   });
   const submitted = submit();
-  const marker = (el) => String(arg(el, "id")).startsWith("issues-todo-") && arg(el, "id").endsWith("-pending");
   try {
     const pending = page();
     assert.ok(texts(pending).includes(TODO_WORDS), "The to-do appears before SQLite replies");
-    assert.ok(find(pending, marker), "The row is marked pending");
+    assert.ok(find(pending, pendingTodo), "The row is marked pending");
     assert.equal((await saved()).length, 0);
   } finally {
     write.resolve();
@@ -476,7 +494,42 @@ test("A submitted to-do appears pending before it is saved.", async (t) => {
   }
   const confirmed = control(page(), await todoRowId());
   assert.ok(confirmed);
-  assert.equal(find(confirmed, marker), null);
+  assert.equal(find(confirmed, pendingTodo), null);
+});
+
+test("A to-do marked done while it is being added stays done and pending until that mark is saved.", async (t) => {
+  const { db, id, view, page, pending, enterTodo, click, drain, saved } = await todoTasks(t);
+  const insert = Promise.withResolvers();
+  const mark = Promise.withResolvers();
+  const write = db.run.bind(db);
+  t.mock.method(db, "run", async (sql) => {
+    await (sql.startsWith("INSERT") ? insert : mark).promise;
+    return write(sql);
+  });
+
+  enterTodo(TODO_WORDS);
+  const [adding] = pending;
+  const row = todoRowIdOf(view.shownTodos()[0]);
+  const done = `issues-todo-done-${id}`;
+  try {
+    click(row);
+    click(done);
+    assert.ok(find(control(page(), row), pendingTodo), "The mark appears pending in Done");
+
+    insert.resolve();
+    await adding;
+    assert.equal((await saved())[0].done_at, null, "Only the insert has reached SQLite");
+    const panel = page();
+    assert.deepEqual(wordsAt(panel, done), ["Done", "1"], "Finishing the insert does not reopen the row");
+    assert.ok(find(control(panel, row), pendingTodo), "The later mark is still pending");
+  } finally {
+    insert.resolve();
+    await adding;
+    mark.resolve();
+    await drain();
+  }
+  assert.ok((await saved())[0].done_at > 0);
+  assert.equal(find(control(page(), row), pendingTodo), null);
 });
 
 const finishedTodoTasks = async (t) => {
@@ -508,47 +561,158 @@ test("Clicking a to-do moves it into folded Done and clicking it there brings it
   for (const word of ["1 open", TODO_WORDS]) assert.ok(texts(reopened).includes(word), word);
 });
 
-const clickTodoTool = (tasks, rowId, label) => {
-  const { page, cx } = tasks;
-  const row = control(page(), rowId);
+const todoTool = ({ page, makeButton }, rowId, label) => {
+  const panel = page();
+  const row = control(panel, rowId);
   assert.ok(row);
-  arg(row, "on_hover")?.(true, cx);
-  const tool = labelledControl(control(page(), rowId), label);
-  assert.ok(tool, `Hovering a to-do offers ${label}`);
+  const tool = labelledControl(row, label);
+  assert.ok(tool, `The to-do offers ${label} without hover`);
+  assert.ok(makeButton.mock.calls.some(({ result }) => result === tool), `${label} is a button`);
+  assert.ok(keyboard(panel).stops.includes(tool), `Tab reaches ${label}`);
+  return tool;
+};
+const pressTodoTool = (tasks, rowId, label) => {
+  const { cx } = tasks;
+  const tool = todoTool(tasks, rowId, label);
+  const before = cx.stop_propagation.mock.callCount();
   one(tool, "on_click")(null, cx);
+  assert.equal(cx.stop_propagation.mock.callCount(), before + 1, `${label} does not pass the press to the row`);
 };
 
-test("Deleting a done to-do removes it, and Undo brings it back still done.", async (t) => {
-  const tasks = await finishedTodoTasks(t);
-  const { id, page, click, drain, saved, row } = tasks;
-  const before = await saved();
-  click(`issues-todo-done-${id}`);
-
-  clickTodoTool(tasks, row, "Delete");
-  await drain();
-  same(await saved(), []);
-  assert.equal(control(page(), row), null);
-  assert.deepEqual(wordsAt(page(), "issues-removed"), [`Deleted ${TODO_WORDS}`, "Undo"]);
-
-  click("issues-removed-undo");
-  await drain();
-  assert.deepEqual(await saved(), before);
-  assert.ok(wordsAt(page(), row).includes(TODO_WORDS));
-});
-
-test("Send to agent opens kanso-send with the to-do text without changing the to-do.", async (t) => {
+const PROJECT_AGENT = "light/t1";
+const INSTALLED_AGENTS = [
+  { key: "claude", name: "Claude Code", run: ["claude"], installed: true },
+  { key: "pi", name: "Pi", run: ["pi", "--model", "sol"], installed: true },
+];
+const conversationLabel = (name) => `New conversation · ${name}`;
+const todoSendTasks = async (t, host = {}) => {
+  const { folder } = remoteShop;
+  const terminals = [
+    [PROJECT_AGENT, folder, "Shop agent"],
+    ["light/t2", `${folder}/src`, "Nested agent"],
+    ["light/t3", "/work/acme", "Other project agent"],
+    ["light/t4", `${folder}-other`, "Similar folder agent"],
+    ["t5", folder, "Other computer agent"],
+    ["light/t6", folder, "Shell only"],
+  ].map(([address, cwd, name]) => ({ address, cwd, labels: { "kanso.shown": name } }));
+  const knownAgents = t.mock.fn(async () => [...INSTALLED_AGENTS, { key: "absent", name: "Uninstalled", installed: false }]);
   const openOverlay = t.mock.fn();
-  const tasks = await todoTasks(t, { openOverlay });
+  const tasks = await todoTasks(t, {
+    project: remoteShop, knownAgents, openOverlay, terminals: () => terminals,
+    agents: () => terminals.slice(0, -1).map(({ address }) => ({ address })),
+    ...host,
+  });
   await tasks.submit();
-  clickTodoTool(tasks, await tasks.todoRowId(), "Send to agent");
-  await tasks.drain();
+  const [todo] = await tasks.saved();
+  const row = todoRowIdOf(todo);
+  const recipient = `issues-todo-to-${todo.id}-${PROJECT_AGENT}`;
+  const fresh = (agent) => `issues-todo-new-${todo.id}-${agent.key}`;
+  const openSend = async () => {
+    pressTodoTool(tasks, row, "Send to agent");
+    await tasks.drain();
+  };
+  return { ...tasks, todo: { ...todo }, row, recipient, fresh, openSend, knownAgents, openOverlay };
+};
+const sentTo = (hc) => hc.mock.calls.map(({ arguments: [argv] }) => argv).filter(([verb]) => verb === "send");
+const expectedSend = ["send", PROJECT_AGENT, TODO_WORDS];
 
-  assert.equal(openOverlay.mock.callCount(), 1);
-  const [dialog] = openOverlay.mock.calls[0].arguments;
-  assert.equal(dialog.mod, "kanso-send");
-  assert.equal(dialog.props.text, TODO_WORDS);
-  assert.equal((await tasks.saved())[0].done_at, null);
+const sendChoices = ["In this project", "Shop agent", "Nested agent", ...INSTALLED_AGENTS.map(({ name }) => conversationLabel(name))];
+const expectTodoSendChoices = (panel, row) => {
+  const todoRow = control(panel, row);
+  assert.ok(todoRow, "Opening Send does not move the to-do to another column");
+  const siblings = todoRow.parent.kids;
+  const start = siblings.indexOf(todoRow) + 1;
+  assert.deepEqual(siblings.slice(start, start + sendChoices.length).map((el) => texts(el)[0]),
+    sendChoices, "The send choices appear directly below their to-do");
+};
+
+test("Send opens choices under the to-do for this project's agents and installed agents, then sends and closes.", async (t) => {
+  const hc = t.mock.fn(async () => success(""));
+  const { todo, row, recipient, page, click, drain, saved, openSend, knownAgents, openOverlay } = await todoSendTasks(t, { hc });
+  await openSend();
+
+  const panel = page();
+  expectTodoSendChoices(panel, row);
+  for (const absent of ["Other project agent", "Similar folder agent", "Other computer agent", "Shell only", conversationLabel("Uninstalled")]) {
+    assert.equal(texts(panel).includes(absent), false, absent);
+  }
+  assert.equal(openOverlay.mock.callCount(), 0);
+  same(knownAgents.mock.calls.map(({ arguments: args }) => args), [[{ on: remoteShop.machine }]]);
+  assert.deepEqual(sentTo(hc), []);
+
+  click(recipient);
+  await drain();
+  same(sentTo(hc), [expectedSend]);
+  assert.equal(texts(page()).some((word) => sendChoices.includes(word)), false, "The send choices close");
+  same(await saved(), [todo]);
 });
+
+test("New conversation starts the chosen agent with the to-do in the project's terminal, tab, or space.", async (t) => {
+  const { spaces, run } = terminalLaunchMocks(t);
+  const { page, click, openSend, fresh } = await todoSendTasks(t, { spaces, run });
+  const agent = INSTALLED_AGENTS[1];
+  const choice = fresh(agent);
+  for (const [open, command, options] of terminalPlacements()) {
+    spaces.mock.mockImplementation(() => open);
+    await openSend();
+    assert.deepEqual(wordsAt(page(), choice), [conversationLabel(agent.name)]);
+    click(choice);
+    const name = command === "tab.new" ? agent.name : command === "space.new" ? remoteShop.name : null;
+    same(run.mock.calls.at(-1).arguments, [command, { ...options, ...(name ? { name } : {}), argv: [...agent.run, TODO_WORDS] }]);
+    assert.equal(control(page(), choice), null);
+  }
+  assert.equal(run.mock.callCount(), terminalPlacements().length);
+});
+
+test("A failed send says Can't send and Retry sends the same to-do to the same agent.", async (t) => {
+  const hc = t.mock.fn(async () => success(""));
+  hc.mock.mockImplementationOnce(async () => failure("Agent disconnected"));
+  const { page, click, drain, recipient, openSend } = await todoSendTasks(t, { hc });
+  await openSend();
+  assert.ok(control(page(), recipient), "Send offers the running agent");
+  click(recipient);
+  await drain();
+
+  const failed = "issues-save-failed";
+  const retry = `${failed}-fix`;
+  assert.ok(wordsAt(page(), failed).includes(`Can't send ${TODO_WORDS}`));
+  assert.deepEqual(wordsAt(page(), retry), ["Retry"]);
+  same(sentTo(hc), [expectedSend]);
+  click(retry);
+  await drain();
+  same(sentTo(hc), [expectedSend, expectedSend]);
+  assert.equal(control(page(), failed), null);
+});
+
+for (const state of ["open", "done"]) {
+  test(`Send and Delete are available on ${state} to-dos without hover, and neither toggles completion.`, async (t) => {
+    const tasks = await todoSendTasks(t);
+    const { id, page, click, drain, saved, row, openSend } = tasks;
+    if (state === "done") {
+      click(row);
+      await drain();
+      click(`issues-todo-done-${id}`);
+    }
+    const before = await saved();
+    assert.equal(before[0].done_at != null, state === "done");
+    todoTool(tasks, row, "Delete");
+
+    await openSend();
+    expectTodoSendChoices(page(), row);
+    assert.deepEqual(await saved(), before);
+
+    pressTodoTool(tasks, row, "Delete");
+    await drain();
+    same(await saved(), []);
+    assert.equal(control(page(), row), null);
+    assert.deepEqual(wordsAt(page(), "issues-removed"), [`Deleted ${TODO_WORDS}`, "Undo"]);
+
+    click("issues-removed-undo");
+    await drain();
+    assert.deepEqual(await saved(), before);
+    assert.ok(wordsAt(page(), row).includes(TODO_WORDS));
+  });
+}
 
 test("A project with only a To-do board shows its count but no issue filter or empty issue message.", async (t) => {
   const { id, page } = await todoTasks(t);
@@ -573,15 +737,20 @@ const PROJECT_SOURCE = `${GH_BOARD.source}:${GH_BOARD.ref}`;
 const GITHUB_PROJECTS_CHOICE = "issues-add-ghproject";
 const PROJECT_SCOPE_ERROR = failure("INSUFFICIENT_SCOPES: read:project");
 const projectEntry = (id, title, closed = false) => ({ id, title, closed });
-const ghProjectList = () => {
+const OWNER_PROJECT = projectEntry("PVT_OWNER", "Owner board");
+const LATER_PROJECT = projectEntry("PVT_LATER", "Another owner board");
+const OWNER_CURSOR = "more-owner-projects";
+const ghProjectList = ({ extra = [], pageInfo } = {}) => {
   const repo = projectEntry(GH_BOARD.ref, GH_BOARD.name);
-  const owner = projectEntry("PVT_OWNER", "Owner board");
   const closed = projectEntry("PVT_CLOSED", "Closed board", true);
   return success(JSON.stringify({ data: { repository: {
     projectsV2: { nodes: [repo, closed] },
-    owner: { projectsV2: { nodes: [repo, owner, closed] } },
+    owner: { projectsV2: { nodes: [repo, OWNER_PROJECT, closed, ...extra], pageInfo } },
   } } }));
 };
+const ownerProjectPages = (args) => args.includes(`after=${OWNER_CURSOR}`)
+  ? ghProjectList({ extra: [LATER_PROJECT], pageInfo: { hasNextPage: false } })
+  : ghProjectList({ pageInfo: { hasNextPage: true, endCursor: OWNER_CURSOR } });
 const GH_PROJECT_URL = "https://github.com/orgs/acme/projects/2";
 const projectItem = (id, name, content, databaseId = null) => ({ id, databaseId, fieldValueByName: { name }, content });
 const PROJECT_COLUMNS = ["Review", "Backlog", "Done"];
@@ -606,7 +775,7 @@ const ghProjectTasks = async (t, { links = [GH_BOARD], board = ghProjectPage(), 
     if (cmd === "env" && args.includes("graphql")) {
       if (named(args, "id=")) return board;
       const query = args.find((arg) => arg.startsWith("query="));
-      if (query?.includes("projectsV2(")) return picker;
+      if (query?.includes("projectsV2(")) return typeof picker === "function" ? picker(args) : picker;
       if (detail && named(args, "number=")) return detail;
     }
     return github(cmd, args);
@@ -645,6 +814,37 @@ test("The GitHub Projects picker lists open repository and owner projects once, 
   await drain();
   same(await issueLinks(db), [link]);
   assert.ok(control(page(), remove));
+});
+
+test("GitHub project discovery requests only open boards and reports when the owner has more.", async (t) => {
+  const { listProjects } = await load("kanso-panel/issues-ghprojects.js", ["listProjects"]);
+  const run = t.mock.fn(async (_cmd, args) => ownerProjectPages(args));
+  const projects = await listProjects(run, REPO);
+  const query = run.mock.calls[0].arguments[1].find((part) => part.startsWith("query="));
+  const connections = [...query.matchAll(/projectsV2\(([^)]*)\)/g)].map(([, args]) => args);
+  assert.deepEqual(connections.map((args) => /\bquery:\s*"is:open"/.test(args)), [true, true],
+    "The repository and owner connections both ask for open projects");
+  same(projects, {
+    list: [{ ref: GH_BOARD.ref, name: GH_BOARD.name }, { ref: OWNER_PROJECT.id, name: OWNER_PROJECT.title }],
+    complete: false, next: OWNER_CURSOR,
+  });
+});
+
+test("Load more appends the next GitHub Projects page without repeating a project.", async (t) => {
+  const tasks = await ghProjectTasks(t, { links: [], picker: ownerProjectPages });
+  const { id, page, click, drain, exec } = tasks;
+  await openGhProjectPicker(tasks);
+  const more = `issues-link-more-${id}`;
+  const names = [GH_BOARD.name, OWNER_PROJECT.title, LATER_PROJECT.title];
+  const choices = () => texts(page()).filter((word) => names.includes(word));
+  assert.deepEqual(choices(), names.slice(0, -1));
+  assert.deepEqual(wordsAt(page(), more), ["Load more"]);
+
+  click(more);
+  await drain();
+  assert.ok(exec.mock.calls.some(({ arguments: [, args] }) => args.includes(`after=${OWNER_CURSOR}`)));
+  assert.deepEqual(choices(), names);
+  assert.equal(control(page(), more), null);
 });
 
 test("A GitHub Projects picker and a linked board both offer Allow access when read:project is missing.", async (t) => {
@@ -975,20 +1175,11 @@ const githubTasks = async (t, answer, host = {}) => {
 };
 
 test("GitHub sign-in uses a pane in the active project space, a tab in an inactive one, or a new space on that computer", async (t) => {
-  const samePlace = { id: "shop-on-light", folder: shop.folder, machine: remoteShop.machine };
-  const anotherComputer = { ...samePlace, id: "shop-local", machine: null, active: true };
-  const spaces = t.mock.fn(() => []);
-  const run = t.mock.fn();
+  const { spaces, run } = terminalLaunchMocks(t);
   const answer = async (cmd) => cmd === "git" ? success(GITHUB_REMOTE) : signedOut();
   const { page, action } = await githubTasks(t, answer, { spaces, run });
   const argv = ["gh", "auth", "login"];
-  const folder = shop.folder;
-  const cases = [
-    [[{ ...samePlace, active: true }], "terminal.open", { folder, place: "right" }],
-    [[anotherComputer, samePlace], "tab.new", { folder, space: samePlace.id }],
-    [[anotherComputer], "space.new", { folder, machine: remoteShop.machine }],
-  ];
-  for (const [open, command, expected] of cases) {
+  for (const [open, command, expected] of terminalPlacements()) {
     spaces.mock.mockImplementation(() => open);
     run.mock.resetCalls();
     press(page(), action);

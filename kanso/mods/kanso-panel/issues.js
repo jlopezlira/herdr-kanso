@@ -1,9 +1,12 @@
 import { div } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
-import { exec, run, theme, spaces, home, openOverlay, shared, checking } from "herdr";
+import { exec, run, theme, spaces, home, openOverlay, shared, checking, agents, terminals, knownAgents } from "herdr";
+import { deliver } from "./deliver.js";
+import { shownName } from "./marks.js";
+import { machineOf } from "./remote-file.js";
 import { G, T, PR, DIALOG, tokens } from "./ui.js";
 import { iconButton, quietLink } from "./ui-button.js";
-import { row } from "./ui-row.js";
+import { row, tool } from "./ui-row.js";
 import { segmented } from "./ui-tab.js";
 import { section } from "./ui-section.js";
 import { markdown } from "./ui-markdown.js";
@@ -208,10 +211,10 @@ export class Issues {
     else await syncProjectBoard(this.db, gh.run, { host: gh.repo.host, ref: refOf(source), ...read });
   }
 
-  async projectsOn(id) {
+  async projectsOn(id, after = null) {
     const project = (this.projects ?? []).find((p) => p.id === id);
     const gh = project ? await this.githubOf(project) : { failure: NO_REMOTE };
-    return gh.failure ? { failure: gh.failure } : listProjects(gh.run, gh.repo);
+    return gh.failure ? { failure: gh.failure } : listProjects(gh.run, gh.repo, after);
   }
 
   async readLinked(project, source, filter, now) {
@@ -275,10 +278,54 @@ export class Issues {
     });
   }
 
-  sendToAgent(issue) { this.sendWords(sendText(issue)); }
+  sendToAgent(issue) {
+    openOverlay({ mod: "kanso-send", kind: "dialog", width: DIALOG.wide, props: { text: sendText(issue), whenWaiting: true } });
+  }
 
-  sendWords(text) {
-    openOverlay({ mod: "kanso-send", kind: "dialog", width: DIALOG.wide, props: { text, whenWaiting: true } });
+  openSend(todo, cx) {
+    if (this.sendingTodo?.id === todo.id) { this.sendingTodo = null; cx.notify(); return; }
+    const project = (this.projects ?? []).find((p) => p.id === todo.project);
+    this.sendingTodo = { id: todo.id, known: null };
+    cx.notify();
+    cx.spawn(async (cx) => {
+      const known = await knownAgents({ on: project?.machine || null }).catch(() => []);
+      if (this.sendingTodo?.id !== todo.id) return;
+      this.sendingTodo = { id: todo.id, known: JSON.parse(JSON.stringify(known)).filter((a) => a.installed) };
+      cx.notify();
+    });
+  }
+
+  agentsIn(project) {
+    const folder = String(project.folder ?? "").replace(/[\\/]+$/, "");
+    const inside = (k) => (machineOf(k.address) ?? "") === (project.machine ?? "") && [folder, `${folder}/`, `${folder}\\`].some((at, i) => (i ? String(k.cwd ?? "").startsWith(at) : k.cwd === at));
+    const held = new Set(terminals().filter(inside).map((k) => k.address));
+    return agents().filter((a) => held.has(a.address));
+  }
+
+  sendTodoTo(todo, address, cx) {
+    this.sendingTodo = null;
+    this.saveFailure = null;
+    cx.notify();
+    cx.spawn(async (cx) => {
+      const sent = await deliver(cx.timer, address, todo.text, "you").catch(() => ({ code: 1 }));
+      if (sent.code !== 0) this.saveFailure = { text: `Can't send ${todo.text}`, retry: (cx) => this.sendTodoTo(todo, address, cx) };
+      cx.notify();
+    });
+  }
+
+  startWith(todo, project, agent, cx) {
+    this.sendingTodo = null;
+    this.openTerminal(project, [...agent.run, todo.text], agent.name);
+    cx.notify();
+  }
+
+  sendRows(todo, project, c) {
+    if (this.sendingTodo?.id !== todo.id) return [];
+    const known = this.sendingTodo.known;
+    const running = this.agentsIn(project).map((a) => row(`issues-todo-to-${todo.id}-${a.address}`, c, { name: shownName(a.address), icon: a.program?.icon ? a.program : "terminal", depth: 1, onClick: (cx) => this.sendTodoTo(todo, a.address, cx) }));
+    const fresh = known ? known.map((a) => row(`issues-todo-new-${todo.id}-${a.key}`, c, { name: `New conversation · ${a.name}`, icon: a.icon ? a : "plus", depth: 1, onClick: (cx) => this.startWith(todo, project, a, cx) }))
+      : [skeletonOf({ shape: "two lines", count: 1 })(`issues-todo-new-bones-${todo.id}`, c)];
+    return [...(running.length ? [section(c, "In this project", String(running.length)), ...running] : []), ...fresh];
   }
 
   todoFieldsFor(projects) {
@@ -292,7 +339,8 @@ export class Issues {
 
   todoWrite(sql, failed, change, cx, after = () => {}) {
     this.saveFailure = null;
-    this.todoPending = { ...this.todoPending, [change.id]: change };
+    const op = { ...change };
+    this.todoPending = { ...this.todoPending, [change.id]: op };
     cx.notify();
     cx.spawn(async (cx) => {
       try {
@@ -302,7 +350,7 @@ export class Issues {
         this.saveFailure = { text: failed, retry: (cx) => this.todoWrite(sql, failed, change, cx, after) };
       }
       await this.reload();
-      this.todoPending = Object.fromEntries(Object.entries(this.todoPending).filter(([id]) => id !== change.id));
+      this.todoPending = Object.fromEntries(Object.entries(this.todoPending).filter(([id, held]) => id !== change.id || held !== op));
       cx.notify();
     });
   }
@@ -334,7 +382,9 @@ export class Issues {
     });
   }
 
-  signIn(project, argv = ["gh", "auth", "login"], name = "GitHub sign in") {
+  signIn(project) { this.openTerminal(project, ["gh", "auth", "login"], "GitHub sign in"); }
+
+  openTerminal(project, argv, name) {
     const place = placeOf(project.machine, project.folder);
     const open = spaces().filter((s) => placeOf(s.machine, s.folder || home()) === place);
     if (open.some((s) => s.active)) run("terminal.open", { argv, folder: project.folder, place: "right" });
@@ -354,10 +404,10 @@ export class Issues {
     this.linking = { project, kind, list: start ? earlier : null, failure: null, more: Boolean(start), next: start, asked };
     cx.notify();
     cx.spawn(async (cx) => {
-      const found = await tryOrAsync(() => (kind === GH_PROJECT ? this.projectsOn(project) : this.linkedFor(kind)?.client.projects(start)));
+      const found = await tryOrAsync(() => (kind === GH_PROJECT ? this.projectsOn(project, start) : this.linkedFor(kind)?.client.projects(start)));
       if (this.linking?.asked !== asked) return;
       const failure = found?.failure ?? (found ? null : { text: `${SOURCE_WORDS[kind]} could not be read` });
-      this.linking = { project, kind, list: [...earlier, ...(found?.list ?? [])], complete: !failure && found?.complete !== false,
+      this.linking = { project, kind, list: [...earlier, ...(found?.list ?? []).filter((item) => !earlier.some((e) => e.ref === item.ref))], complete: !failure && found?.complete !== false,
         next: found?.next ?? (failure ? start : null), more: false, failure, asked };
       cx.notify();
     });
@@ -417,7 +467,7 @@ export class Issues {
 
   githubFix(project, failure) {
     if (failure.kind === "no cli") return { fix: "Get the GitHub CLI", onClick: () => openUrl(CLI_URL) };
-    if (failure.kind === NEEDS_SCOPE.kind) return { fix: "Allow access", onClick: () => this.signIn(project, ["gh", "auth", "refresh", "-s", "read:project"], "GitHub Projects access") };
+    if (failure.kind === NEEDS_SCOPE.kind) return { fix: "Allow access", onClick: () => this.openTerminal(project, ["gh", "auth", "refresh", "-s", "read:project"], "GitHub Projects access") };
     return failure.kind === "signed out" && failure.text === SIGNED_OUT.text ? { fix: "Sign in", onClick: () => this.signIn(project) } : null;
   }
 
@@ -476,9 +526,7 @@ export class Issues {
     const open = todo.done_at == null;
     return row(`issues-todo-${todo.id}`, c, {
       name: todo.text, icon: open ? "square" : "check", dimmed: !open, pending: Boolean(todo.pending), meta: ageOf(new Date(todo.done_at ?? todo.created).toISOString(), now),
-      actions: [{ icon: "send", label: "Send to agent", onClick: () => this.sendWords(todo.text) }, { icon: "x", label: "Delete", onClick: (cx) => this.dropTodo(todo, cx) }],
-      hover: this.hoverTodo === todo.id,
-      onHover: (on, cx) => { if (on ? this.hoverTodo !== todo.id : this.hoverTodo === todo.id) { this.hoverTodo = on ? todo.id : null; cx.notify(); } },
+      tools: [{ icon: "send", label: "Send to agent", onClick: (cx) => this.openSend(todo, cx) }, { icon: "x", label: "Delete", onClick: (cx) => this.dropTodo(todo, cx) }].map(tool(`issues-todo-${todo.id}`, c)),
       onClick: (cx) => this.markTodo(todo, cx),
     });
   }
@@ -490,9 +538,9 @@ export class Issues {
     return [
       this.boardHeading(project, `${TODO}:${TODO_BOARD.ref}`, TODO_BOARD.name, `${open.length} open`, c),
       ...(this.todoFields[project.id] ? [field(`issues-todo-field-${project.id}`, this.todoFields[project.id], c, { lead: "plus", spoken: "Add a to-do" })] : []),
-      ...open.map((todo) => this.todoRow(todo, c, now)),
+      ...open.flatMap((todo) => [this.todoRow(todo, c, now), ...this.sendRows(todo, project, c)]),
       ...(done.length ? [row(`issues-todo-done-${project.id}`, c, { name: DONE, level: 0, open: !folded, chip: String(done.length), onClick: (cx) => this.toggle(folds, DONE, cx) })] : []),
-      ...(folded ? [] : done.map((todo) => this.todoRow(todo, c, now))),
+      ...(folded ? [] : done.flatMap((todo) => [this.todoRow(todo, c, now), ...this.sendRows(todo, project, c)])),
     ];
   }
 
