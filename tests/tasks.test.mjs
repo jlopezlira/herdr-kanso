@@ -1,11 +1,17 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { arg, chain, drawingHost, failure, fieldWith, find, keyboard, KIT_NIGHT, load, one, same, success, texts, timedContext } from "./helpers.mjs";
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
+import {
+  arg, chain, databaseTimer, drawingHost, exec, failure, fieldWith, find, keyboard, KIT_NIGHT, load,
+  nativePlatform, nativeWindow, one, same, success, temporary, texts, timedContext,
+} from "./helpers.mjs";
 import { temporaryKdb } from "./mod-fixtures.mjs";
 
 const shop = { id: "shop", name: "Shop", folder: "/work/shop", machine: null };
 const acme = { id: "acme", name: "Acme", folder: "/work/acme", machine: null };
 const remoteShop = { ...shop, machine: "light" };
+const remoteShopWithSlash = { ...remoteShop, folder: `${remoteShop.folder}/` };
 const terminalPlacements = () => {
   const { folder, machine } = remoteShop;
   const samePlace = { id: "shop-on-light", folder, machine };
@@ -136,7 +142,7 @@ test("Open spaces count once per project, preferring saved projects and skipping
   const { withSpaces } = await load("kanso-panel/todo.js", ["withSpaces"]);
   const home = "/Users/jj";
   const remoteHome = { name: "Remote home", folder: home, machine: "light" };
-  const open = [remoteShop, { ...remoteShop, folder: remoteShop.folder + "/" }, shop, { name: "Home", folder: home }, remoteHome];
+  const open = [remoteShop, remoteShopWithSlash, shop, { name: "Home", folder: home }, remoteHome];
   const projects = withSpaces([shop], open, home);
   same(projects.map(({ name, folder, machine, auto }) => [name, folder, machine, Boolean(auto)]), [
     [shop.name, shop.folder, shop.machine, false],
@@ -155,6 +161,14 @@ test("Empty Tasks opens Settings at the switch that lets agents keep the to-do."
   const [{ arguments: [opened] }] = openOverlay.mock.calls;
   const { mod, kind, props } = opened;
   same({ mod, kind, props }, { mod: "kanso-settings", kind: "dialog", props: { page: "pieces", find: toggle } });
+});
+
+test("Empty Tasks on Windows tells me where to-dos appear without offering an unavailable switch.", async (t) => {
+  const { page } = await todoTasks(t, { window: () => ({ platform: "windows" }) });
+  const panel = page();
+  const empty = "tasks-none";
+  assert.ok(wordsAt(panel, empty).length, "Windows still shows an empty-state message");
+  assert.ok(!control(panel, `${empty}-action`), "Windows does not offer the agent switch");
 });
 
 test("A to-do names the agent while its terminal is live, and keeps just the age after it leaves.", async (t) => {
@@ -184,12 +198,31 @@ const todoInputHost = (t) => ({
 });
 const labelledControl = (panel, label) => find(panel, (el) => arg(el, "accessibility_label") === label);
 const todoRowIdOf = ({ id }) => `tasks-todo-${id}`;
+const remoteTodoHost = async (t, Kdb, machine) => {
+  const home = await temporary(t);
+  const config = nativePlatform === "windows" ? ["AppData", "Roaming"] : [".config"];
+  const db = new Kdb(databaseTimer, join(home, ...config, "herdr-app", "data", "kanso"));
+  await db.open();
+  const run = async (command, args, options) => {
+    assert.equal(options?.on, machine);
+    if (args.at(-1)?.includes("OSVersion.Platform")) {
+      return nativePlatform === "windows" ? success("Win32NT\n") : failure("Command not found", 127);
+    }
+    if (args.at(-1)?.endsWith("$HOME") || args.at(-1) === 'printf %s "$HOME"') return success(home);
+    return exec(command, args, options);
+  };
+  return { db, host: { exec: run, window: nativeWindow } };
+};
+
 const todoTasks = async (t, { project = shop, unsaved = false, ...host } = {}) => {
-  const { db } = await temporaryKdb(t);
+  const { db, Kdb } = await temporaryKdb(t);
+  const remote = project.machine ? await remoteTodoHost(t, Kdb, project.machine) : null;
   const savedProject = unsaved ? null : await saveProject(db, project);
   const stop_propagation = t.mock.fn();
   const makeButton = t.mock.fn(drawingHost().Button.new);
-  const tasks = await startTasks(db, { ...todoInputHost(t), spaces: activeSpace(project), Button: { new: makeButton }, ...host }, { stop_propagation });
+  const tasks = await startTasks(db, {
+    ...todoInputHost(t), spaces: activeSpace(project), Button: { new: makeButton }, ...remote?.host, ...host,
+  }, { stop_propagation });
   const input = () => {
     const editor = labelledControl(tasks.page(), "Add a to-do");
     assert.ok(editor, "Tasks shows an Add a to-do field");
@@ -207,13 +240,13 @@ const todoTasks = async (t, { project = shop, unsaved = false, ...host } = {}) =
     await tasks.drain();
     return input().value();
   };
-  const saved = () => db.read("SELECT id, project, text, done_at FROM todos;");
+  const saved = () => (remote?.db ?? db).read("SELECT id, project, text, done_at FROM todos;");
   const todoRowId = async () => {
     const [row] = await saved();
     assert.ok(row, "The to-do is in SQLite");
     return todoRowIdOf(row);
   };
-  return { ...tasks, db, id: savedProject?.id, enterTodo, submit, saved, todoRowId, makeButton };
+  return { ...tasks, db, remoteDb: remote?.db, id: savedProject?.id, enterTodo, submit, saved, todoRowId, makeButton };
 };
 
 test("Opening Tasks shows a skeleton before its first load.", async () => {
@@ -256,16 +289,27 @@ test("Submitting a to-do saves it, clears the field, and shows it first; blank t
   assert.deepEqual(words.filter((word) => [TODO_WORDS, newer].includes(word)), [newer, TODO_WORDS]);
 });
 
-test("Adding a to-do in an unsaved space saves its project and shows the item.", async (t) => {
-  const { db, page, submit, saved } = await todoTasks(t, { project: remoteShop, unsaved: true });
-  same(await db.projects(), []);
+test("Adding a to-do in an unsaved connected space saves its project there and shows the item.", async (t) => {
+  const { db, remoteDb, page, submit, saved } = await todoTasks(t, { project: remoteShopWithSlash, unsaved: true });
+  same(await remoteDb.projects(), []);
   assert.equal(await submit(), "");
-  const [project] = await db.projects();
+  const [project] = await remoteDb.projects();
   assert.ok(project.id);
   const { name, folder, machine } = project;
-  assert.deepEqual({ name, folder, machine }, { name: remoteShop.name, folder: remoteShop.folder, machine: remoteShop.machine });
+  assert.deepEqual({ name, folder, machine }, { name: shop.name, folder: shop.folder, machine: "" });
   same((await saved()).map((row) => [row.project, row.text]), [[project.id, TODO_WORDS]]);
+  same(await db.projects(), []);
   assert.ok(texts(page()).includes(TODO_WORDS));
+});
+
+test("Adding a to-do with a trailing slash reuses the connected computer's project.", async (t) => {
+  const { remoteDb, submit, saved } = await todoTasks(t, { project: remoteShopWithSlash });
+  const home = await saveProject(remoteDb, shop);
+  await submit();
+
+  const [todo] = await saved();
+  assert.equal(todo?.project, home.id, "Add writes to the existing project, not a duplicate");
+  assert.equal((await remoteDb.projects()).length, 1);
 });
 
 const pendingTodo = (el) => /^tasks-todo-.*-pending$/.test(arg(el, "id"));
@@ -412,6 +456,12 @@ const todoSendTasks = async (t, host = {}) => {
 const sentTo = (hc) => hc.mock.calls.map(({ arguments: [argv] }) => argv).filter(([verb]) => verb === "send");
 const expectedSend = ["send", PROJECT_AGENT, TODO_WORDS];
 
+test("The Tasks privacy notice says who receives the text when I send a to-do.", async () => {
+  const html = await readFile(new URL("../site/privacy.html", import.meta.url), "utf8");
+  const disclosure = html.match(/<li><strong>Tasks<\/strong>([^<]*)<\/li>/)?.[1] ?? "";
+  assert.match(disclosure, /\bsends\b[^.]*\btext\b[^.]*\bonly to the agent you send it to\b/);
+});
+
 const sendChoices = ["In this project", "Shop agent", "Nested agent", ...INSTALLED_AGENTS.map(({ name }) => conversationLabel(name))];
 const expectTodoSendChoices = (panel, row) => {
   const todoRow = control(panel, row);
@@ -481,10 +531,51 @@ test("A failed send says Can't send and Retry sends the same to-do to the same a
   assert.equal(control(page(), failed), null);
 });
 
+const deleteTodo = async (tasks, row) => {
+  pressTodoTool(tasks, row, "Delete");
+  await tasks.drain();
+};
 const undoRemoval = async ({ click, drain }) => {
   click("tasks-removed-undo");
   await drain();
 };
+
+test("Tasks shows a connected computer's agent to-do and keeps changes on that computer.", async (t) => {
+  const name = "Release agent on light";
+  const terminals = () => [{ address: `${remoteShop.machine}/${terminalId}`, labels: { "kanso.shown": name } }];
+  const tasks = await todoTasks(t, { project: remoteShop, terminals });
+  const { db, remoteDb, id, view, cx, drain, click, page, submit } = tasks;
+  const home = await saveProject(remoteDb, shop);
+  assert.notEqual(home.id, id);
+  const todo = storedTodo(home.id, { by: terminalId });
+  await writeTodo(remoteDb, todo);
+  view.load(cx);
+  await drain();
+
+  const row = todoRowIdOf(todo);
+  const words = wordsAt(page(), row);
+  assert.ok(words.includes(todo.text), "The viewer finds the agent's to-do by project folder, not by its local project ID");
+  assert.ok(words.some((word) => word.startsWith(`${name} · `)), "The viewer names the agent on the connected computer");
+
+  const saved = () => remoteDb.read("SELECT * FROM todos ORDER BY created;");
+  click(row);
+  await drain();
+  const beforeDelete = await saved();
+  assert.ok(beforeDelete[0]?.done_at > 0);
+  click(`tasks-done-${id}`);
+  await deleteTodo(tasks, row);
+  assert.equal((await saved()).length, 0, "Delete removes the item from the connected database");
+  await undoRemoval(tasks);
+  assert.deepEqual(await saved(), beforeDelete, "Undo restores the original project, author and completion");
+
+  const added = "Publish the beta from light";
+  await submit(added);
+  const [, manual] = await saved();
+  assert.equal(manual?.project, home.id);
+  assert.equal(manual?.text, added);
+  assert.ok(texts(page()).includes(added));
+  same(await db.read("SELECT * FROM todos;"), []);
+});
 
 for (const state of ["open", "done"]) {
   test(`Send and Delete are available on ${state} to-dos without hover, and neither toggles completion.`, async (t) => {
@@ -503,8 +594,7 @@ for (const state of ["open", "done"]) {
     expectTodoSendChoices(page(), row);
     assert.deepEqual(await saved(), before);
 
-    pressTodoTool(tasks, row, "Delete");
-    await drain();
+    await deleteTodo(tasks, row);
     same(await saved(), []);
     assert.equal(control(page(), row), null);
     assert.deepEqual(wordsAt(page(), "tasks-removed"), [`Deleted ${TODO_WORDS}`, "Undo"]);
@@ -524,8 +614,7 @@ test("Undo after deleting an agent's to-do keeps its author.", async (t) => {
   view.load(cx);
   await drain();
 
-  pressTodoTool(tasks, todoRowIdOf(todo), "Delete");
-  await drain();
+  await deleteTodo(tasks, todoRowIdOf(todo));
   const authors = () => db.read("SELECT by FROM todos;");
   same(await authors(), []);
   await undoRemoval(tasks);

@@ -687,8 +687,9 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
 - **Programs run**: `git` (spaces, Files), `sh` (Files listing),
   `hc` (machines) and, for Open with, `sh`, `open`, `plutil` and `sips`
   (macOS) and the chosen editor. The PR panel runs `gh` and `git` only while
-  shown. Tasks (`tasks.js`, `todo.js`) is the `todos` table of this computer's kanso.db and reaches nothing: the
-  project you are in, then every project with a to-do, reread every 4 seconds while shown.
+  shown. Tasks (`tasks.js`, `todo.js`) is the `todos` table of the kanso.db on the computer that holds each
+  project (another computer's through `hc`, as the sidebar reads it): the project you are in, then every project
+  with a to-do, reread every 4 seconds while shown.
   Agents write it with `kanso-panel/kanso-todo` (`sh`, `sqlite3`, `git`): add, list, done. Settings, Pieces, Agents keep the to-do
   runs its install and uninstall, which write the rule to `~/.claude/rules/kanso-todo.md`, a marked block in
   `~/.pi/agent/APPEND_SYSTEM.md` and a marked top-level `developer_instructions` in `~/.codex/config.toml`, and remove them.

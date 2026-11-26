@@ -111,11 +111,16 @@ const expectSkip = ({ code, stderr }, ...agents) => {
   for (const agent of agents) assert.match(stderr, agent);
 };
 
-test("Installing or uninstalling the to-do rule leaves an existing Codex developer instruction alone.", unixTodo, async (t) => {
-  const config = OWN_CODEX + CODEX_TABLE;
-  const { run, result, codex } = await agentInstructionFiles(t, config);
+const expectCodexConflict = async ({ result, codex }, config) => {
   expectSkip(await result("install"), CODEX_SKIPPED);
   assert.equal(await readFile(codex, "utf8"), config);
+};
+
+test("Installing or uninstalling the to-do rule leaves an existing Codex developer instruction alone.", unixTodo, async (t) => {
+  const config = OWN_CODEX + CODEX_TABLE;
+  const command = await agentInstructionFiles(t, config);
+  const { run, codex } = command;
+  await expectCodexConflict(command, config);
   await run("uninstall");
   assert.equal(await readFile(codex, "utf8"), config);
 });
@@ -134,6 +139,21 @@ test("Codex skips an indented top-level developer instruction, but not one insid
   const installed = await config();
   assert.match(installed, /^# kanso-todo\ndeveloper_instructions = /);
   assert.ok(installed.endsWith(inTable), "The top-level rule leaves the table's instruction untouched");
+});
+
+test("Installing the to-do rule leaves quoted top-level Codex developer instructions alone.", unixTodo, async (t) => {
+  const command = await agentInstructionFiles(t, CODEX_TABLE);
+  for (const quote of ['"', "'"]) {
+    const config = OWN_CODEX.replace("developer_instructions", `${quote}developer_instructions${quote}`) + CODEX_TABLE;
+    await writeFile(command.codex, config);
+    await expectCodexConflict(command, config);
+  }
+});
+
+test("Installing the to-do rule leaves an escaped Codex developer instruction alone.", unixTodo, async (t) => {
+  const key = String.raw`"\u0064eveloper_instructions"`;
+  const config = OWN_CODEX.replace("developer_instructions", key) + CODEX_TABLE;
+  await expectCodexConflict(await agentInstructionFiles(t, config), config);
 });
 
 const OWN_CLAUDE = "Keep my own Claude instructions.\n";
@@ -176,6 +196,33 @@ test("Install reports both skipped agents and still installs the Pi rule.", unix
 });
 
 const modeOf = async (path) => (await stat(path)).mode & 0o777;
+
+const restrictedTodo = { skip: unixTodo.skip || (process.getuid?.() === 0 && "Root can write read-only files") };
+
+test("Installing and uninstalling report a read-only Codex config without leaving a copy behind.", restrictedTodo, async (t) => {
+  const { HOME, run, result } = await agentTodo(t);
+  const config = join(HOME, ".codex", "config.toml");
+  await mkdir(dirname(config));
+  await writeFile(config, CODEX_TABLE);
+  const rejectWrite = async (verb) => {
+    const before = await readFile(config, "utf8");
+    await chmod(config, 0o400);
+    try {
+      const { code, stdout, stderr } = await result(verb);
+      assert.equal(code, 1, `${verb}: ${stderr}`);
+      assert.ok(stderr.includes(config), stderr);
+      assert.equal(stdout, "");
+      assert.equal(await readFile(config, "utf8"), before);
+      assert.equal(await modeOf(config), 0o400);
+      assert.equal(await fileExists(`${config}.kanso`), false);
+    } finally {
+      await chmod(config, 0o600);
+    }
+  };
+  await rejectWrite("install");
+  await run("install");
+  await rejectWrite("uninstall");
+});
 
 for (const agent of ["pi", "codex"]) {
   test(`Installing and removing the to-do rule preserves the mode of my ${agent} file.`, unixTodo, async (t) => {

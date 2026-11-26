@@ -5,6 +5,7 @@ export const TODO_MS = 4000;
 export const DONE = "Done";
 export const PROJECTS = "SELECT id, name, folder, machine FROM projects WHERE removed IS NULL;";
 export const TODOS = "SELECT todos.* FROM todos JOIN projects ON projects.id=todos.project WHERE projects.removed IS NULL;";
+export const HELD_TODOS = "SELECT todos.*, projects.folder AS folder FROM todos JOIN projects ON projects.id=todos.project WHERE projects.removed IS NULL AND projects.machine='';";
 export const todoText = (text) => String(text ?? "").replace(/\s+/g, " ").trim();
 
 export const addTodoSql = ({ id, project, text, created, by = null }) => `INSERT OR IGNORE INTO todos(id,project,text,created,by) VALUES(${q(id)},${q(project)},${q(text)},${num(created)},${q(by)});`;

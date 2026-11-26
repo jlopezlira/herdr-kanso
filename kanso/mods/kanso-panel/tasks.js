@@ -1,6 +1,6 @@
 import { div } from "gpui-kit";
 import { v_flex } from "gpui-base";
-import { run, theme, spaces, home, openOverlay, agents, terminals, knownAgents } from "herdr";
+import { run, theme, spaces, home, openOverlay, agents, terminals, knownAgents, window } from "herdr";
 import { deliver } from "./deliver.js";
 import { shownName } from "./marks.js";
 import { machineOf } from "./remote-file.js";
@@ -11,9 +11,9 @@ import { stateBlock, undoLine } from "./ui-state.js";
 import { emptyState, skeletonOf } from "./kit.js";
 import { field, TextField } from "./ui-field.js";
 import { scrollPage, pageHeader } from "./ui-page.js";
-import { newId } from "./kdb.js";
+import { kdbOn, newId, seenAddress } from "./kdb.js";
 import { tryOrAsync } from "./pure.js";
-import { TODO_MS, DONE, PROJECTS, TODOS, todoText, todosOf, addTodoSql, doneSql, dropTodoSql, placeOf, withSpaces, shownProjects, ageOf } from "./todo.js";
+import { TODO_MS, DONE, PROJECTS, TODOS, HELD_TODOS, todoText, todosOf, addTodoSql, doneSql, dropTodoSql, placeOf, withSpaces, shownProjects, ageOf } from "./todo.js";
 
 const AGENTS_SWITCH = "Agents keep the to-do";
 
@@ -37,6 +37,8 @@ export class Tasks {
     this.sending = null;
     this.removed = null;
     this.failure = null;
+    this.timer = cx.timer;
+    this.remote = {};
     this.load(cx);
     cx.timer.every(TODO_MS, (next) => this.load(next));
   }
@@ -47,10 +49,31 @@ export class Tasks {
     return (this.projects ?? []).find((p) => placeOf(p.machine, p.folder) === key)?.id ?? null;
   }
 
+  dbOn(machine) {
+    if (!machine) return Promise.resolve(this.db);
+    if (!this.remote[machine]) {
+      const made = kdbOn(this.timer, machine);
+      made.catch(() => { this.remote = Object.fromEntries(Object.entries(this.remote).filter(([m]) => m !== machine)); });
+      this.remote = { ...this.remote, [machine]: made };
+    }
+    return this.remote[machine];
+  }
+
+  async heldOn(machine, projects) {
+    const rows = await tryOrAsync(async () => (await this.dbOn(machine)).read(HELD_TODOS));
+    if (!rows) return this.todos.filter((t) => t.on === machine);
+    return rows.flatMap(({ folder, ...t }) => {
+      const mine = projects.find((p) => p.machine === machine && placeOf(machine, p.folder) === placeOf(machine, folder));
+      return mine ? [{ ...t, home: t.project, project: mine.id, on: machine }] : [];
+    });
+  }
+
   async read() {
-    const [projects, todos] = await Promise.all([tryOrAsync(() => this.db.read(PROJECTS)), tryOrAsync(() => this.db.read(TODOS))]);
+    const [projects, local] = await Promise.all([tryOrAsync(() => this.db.read(PROJECTS)), tryOrAsync(() => this.db.read(TODOS))]);
     const nextProjects = withSpaces(projects ?? this.projects ?? [], spaces(), home());
-    const nextTodos = todos ?? this.todos;
+    const machines = [...new Set(nextProjects.map((p) => p.machine).filter(Boolean))];
+    const held = await Promise.all(machines.map((m) => this.heldOn(m, nextProjects)));
+    const nextTodos = [...(local ? local.map((t) => ({ ...t, home: t.project, on: "" })) : this.todos.filter((t) => !t.on)), ...held.flat()];
     if (this.projects && JSON.stringify([nextProjects, nextTodos]) === JSON.stringify([this.projects, this.todos])) return false;
     this.projects = nextProjects;
     this.todos = nextTodos;
@@ -75,24 +98,28 @@ export class Tasks {
     if (made.length) this.fields = { ...this.fields, ...Object.fromEntries(made) };
   }
 
-  async ownId(id) {
+  async homeOf(id) {
     const project = (this.projects ?? []).find((p) => p.id === id);
+    if (project?.machine) {
+      const there = await this.dbOn(project.machine);
+      const held = (await there.read(PROJECTS)).find((p) => !p.machine && placeOf("", p.folder) === placeOf("", project.folder));
+      return held?.id ?? (await there.addProject({ name: project.name, folder: placeOf("", project.folder).slice(1), machine: "" })).row.id;
+    }
     if (!project?.auto) return id;
-    const { row: made } = await this.db.addProject({ name: project.name, folder: project.folder, machine: project.machine ?? "" });
-    return made.id;
+    return (await this.db.addProject({ name: project.name, folder: project.folder, machine: "" })).row.id;
   }
 
-  write(sql, failed, change, cx, after = () => {}) {
+  write(on, sql, failed, change, cx, after = () => {}) {
     this.failure = null;
     const op = { ...change };
     this.pending = { ...this.pending, [change.id]: op };
     cx.notify();
     cx.spawn(async (cx) => {
       try {
-        await this.db.run(await sql());
+        await (await this.dbOn(on)).run(await sql());
         after();
       } catch {
-        this.failure = { text: failed, retry: (cx) => this.write(sql, failed, change, cx, after) };
+        this.failure = { text: failed, retry: (cx) => this.write(on, sql, failed, change, cx, after) };
       }
       await this.read();
       this.pending = Object.fromEntries(Object.entries(this.pending).filter(([id, held]) => id !== change.id || held !== op));
@@ -110,19 +137,20 @@ export class Tasks {
     const words = todoText(text.value());
     if (!words) return;
     text.set_value("");
-    const todo = { id: newId(), project, text: words, created: Date.now(), done_at: null };
-    this.write(async () => addTodoSql({ ...todo, project: await this.ownId(project) }), `Can't add ${words}`, { id: todo.id, todo }, cx);
+    const on = (this.projects ?? []).find((p) => p.id === project)?.machine ?? "";
+    const todo = { id: newId(), project, text: words, created: Date.now(), done_at: null, on };
+    this.write(on, async () => addTodoSql({ ...todo, project: await this.homeOf(project) }), `Can't add ${words}`, { id: todo.id, todo }, cx);
   }
 
   mark(todo, cx) {
     const done_at = todo.done_at == null ? Date.now() : null;
-    this.write(async () => doneSql(todo.id, done_at), `Can't change ${todo.text}`, { id: todo.id, todo: { ...todo, done_at } }, cx);
+    this.write(todo.on, async () => doneSql(todo.id, done_at), `Can't change ${todo.text}`, { id: todo.id, todo: { ...todo, done_at } }, cx);
   }
 
   drop(todo, cx) {
     this.removed = null;
-    this.write(async () => dropTodoSql(todo.id), `Can't delete ${todo.text}`, { id: todo.id, gone: true }, cx, () => {
-      this.removed = { words: `Deleted ${todo.text}`, undo: (cx) => this.write(async () => `${addTodoSql(todo)}${doneSql(todo.id, todo.done_at)}`, `Can't bring back ${todo.text}`, { id: todo.id, todo }, cx, () => { this.removed = null; }) };
+    this.write(todo.on, async () => dropTodoSql(todo.id), `Can't delete ${todo.text}`, { id: todo.id, gone: true }, cx, () => {
+      this.removed = { words: `Deleted ${todo.text}`, undo: (cx) => this.write(todo.on, async () => `${addTodoSql({ ...todo, project: todo.home ?? todo.project })}${doneSql(todo.id, todo.done_at)}`, `Can't bring back ${todo.text}`, { id: todo.id, todo }, cx, () => { this.removed = null; }) };
     });
   }
 
@@ -177,11 +205,16 @@ export class Tasks {
     return [...(running.length ? [section(c, "In this project", String(running.length)), ...running] : []), ...fresh];
   }
 
+  liveBy(todo) {
+    const address = todo.by ? seenAddress(todo.by, todo.on) : null;
+    return address && terminals().some((k) => k.address === address) ? shownName(address) : null;
+  }
+
   todoRow(todo, c, now) {
     const open = todo.done_at == null;
     return row(`tasks-todo-${todo.id}`, c, {
       name: todo.text, icon: open ? "square" : "check", dimmed: !open, pending: Boolean(todo.pending),
-      meta: [todo.by && terminals().some((k) => k.address === todo.by) ? shownName(todo.by) : null, ageOf(todo.done_at ?? todo.created, now)].filter(Boolean).join(" · "),
+      meta: [this.liveBy(todo), ageOf(todo.done_at ?? todo.created, now)].filter(Boolean).join(" · "),
       tools: [{ icon: "send", label: "Send to agent", onClick: (cx) => this.openSend(todo, cx) }, { icon: "x", label: "Delete", onClick: (cx) => this.drop(todo, cx) }].map(tool(`tasks-todo-${todo.id}`, c)),
       onClick: (cx) => this.mark(todo, cx),
     });
@@ -227,7 +260,8 @@ export class Tasks {
       : v_flex().w_full().gap(G.xl).children([
         ...this.notes(c),
         ...listed.map((p) => this.projectBlock(p, todos, c, now)),
-        ...(todos.length ? [] : [emptyState({ text: "Your agents' to-do for each project shows here as they work", action: AGENTS_SWITCH })("tasks-none", c, { onClick: () => this.openSwitch() })]),
+        ...(todos.length ? [] : [window()?.platform === "windows" ? emptyState({ text: "Each project's to-do shows here" })("tasks-none", c)
+          : emptyState({ text: "Your agents' to-do for each project shows here as they work", action: AGENTS_SWITCH })("tasks-none", c, { onClick: () => this.openSwitch() })]),
       ]);
     return scrollPage("kanso-tasks", c, true, (column) => column
       .child(pageHeader(div().text_size(PR.title).text_color(c.text).child("Tasks"), []))

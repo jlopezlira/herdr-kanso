@@ -6,6 +6,8 @@ import { appHome } from "herdr";
 import { mapSeries, parseOr } from "./pure.js";
 import { Database, lostCall } from "./platform-database.js";
 import { sqliteLimit, CALL_MS } from "./platform-sqlite.js";
+import { serviceOn } from "./platform-host.js";
+import { systemApi } from "./platform-system.js";
 export { CALL_MS };
 
 export const DIR = "data/kanso";
@@ -29,6 +31,12 @@ export const kansoDir = (home, platform) => {
   const api = pathApi(platform === "windows" ? "windows" : "macos");
   return api.join(appHomeDir(platform, home), DIR);
 };
+
+export const kdbOn = (timer, machine) => serviceOn(async (platform, run) => {
+  const there = await systemApi(platform, run).userHome();
+  if (!there) throw new Error(`${machine}'s home could not be read`);
+  return new Kdb(timer, kansoDir(there, platform), machine);
+}, machine);
 
 // What this window calls a terminal ("light/t90") and what that computer stores ("t90").
 export function seenAddress(local, machine) {
