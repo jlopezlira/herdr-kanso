@@ -8,7 +8,7 @@ import { Files } from "./files.js";
 import { PullRequest } from "./pr.js";
 import { Preview } from "./preview.js";
 import { Shipped } from "./shipped.js";
-import { Issues } from "./issues.js";
+import { Tasks } from "./tasks.js";
 import { Worktrees } from "./worktrees.js";
 import { Ports } from "./ports.js";
 import { Look } from "./look.js";
@@ -19,7 +19,7 @@ import { Kdb, projectKey } from "./kdb.js";
 import { takeState, giveState, stateWithin, LATE } from "./panel-state.js";
 import { afterMount } from "./pure.js";
 
-const PANELS = { files: Files, pr: PullRequest, issues: Issues, preview: Preview, shipped: Shipped, caffeine: Caffeine, worktrees: Worktrees, ports: Ports, look: Look, timeline: Timeline, find: Find };
+const PANELS = { files: Files, pr: PullRequest, issues: Tasks, preview: Preview, shipped: Shipped, caffeine: Caffeine, worktrees: Worktrees, ports: Ports, look: Look, timeline: Timeline, find: Find };
 
 const projectNow = () => { try { return projectKey(spaces().find((s) => s.active), home()); } catch { return null; } };
 

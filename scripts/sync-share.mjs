@@ -56,7 +56,6 @@ const COMMON = [
   // One SQLite file under the app's folder: the stores of arrangements and of the dōjō (and help's copy of it).
   { source: "kanso/mods/kanso-dojo/file-store.js", copies: ["kanso/mods/kanso-arrange/file-store.js"] },
   // Lists by keyboard (j/k, gg/G, Enter, Esc), the same in every menu and list.
-  ...["issues-jira.js", "issues-linear.js", "issues-model.js"].map((file) => ({ source: `kanso/mods/kanso-panel/${file}`, copies: [`kanso/mods/kanso-settings/${file}`] })),
   ...["menu-actions.js", "context-menu.js"].map((file) => ({ source: `kanso/mods/kanso-menu/${file}`, copies: ["kanso-tabs", "kanso-strip", "kanso-spaces"].map((m) => `kanso/mods/${m}/${file}`) })),
   { source: "kanso/mods/kanso-strip/needs.js", copies: ["kanso/mods/kanso-spaces/needs.js", "kanso/mods/kanso-status/needs.js"] },
   ...["schedules.js", "projects.js"].map((file) => ({ source: `kanso/mods/kanso-spaces/${file}`, copies: [`kanso/mods/kanso-tabs/${file}`] })),
