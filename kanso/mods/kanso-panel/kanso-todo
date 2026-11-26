@@ -1,7 +1,8 @@
 #!/bin/sh
 home=${HERDR_APP_HOME:-$HOME/.config/herdr-app}
 db=$home/data/kanso/kanso.db
-me="sh '$(cd "$(dirname "$0")" && pwd -P)/$(basename "$0")'"
+shq() { printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\\\''/g")"; }
+me="sh $(shq "$(cd "$(dirname "$0")" && pwd -P)/$(basename "$0")")"
 mark="kanso-todo"
 here=$(pwd -P)
 umask 077
@@ -39,7 +40,24 @@ put() { cat "$2" > "$1"; wrote=$?; rm -f "$2"; return $wrote; }
 has_block() { [ -f "$1" ] && grep -q "^# $mark\$" "$1"; }
 drop_block() { has_block "$1" || return 0; sed "/^# $mark\$/,/^# \/$mark\$/d" "$1" > "$1.kanso" && put "$1" "$1.kanso" || { rm -f "$1.kanso"; return 1; }; }
 ours() { [ -f "$claude_rule" ] && [ "$(head -n 1 "$claude_rule")" = "<!-- $mark -->" ]; }
-top_key() { [ -f "$2" ] && sed '/^[[:space:]]*\[/q' "$2" | grep -Eq "^[[:space:]]*(\"$1\"|'$1'|$1|\"[^\"]*\\\\[^\"]*\")[[:space:]]*="; }
+top_key() {
+  [ -f "$2" ] || return 1
+  awk -v k="$1" '
+    function count(s, t,   n, i) { n = 0; while ((i = index(s, t)) > 0) { n++; s = substr(s, i + length(t)) } return n }
+    function code(s,   i, c, q) { q = ""; for (i = 1; i <= length(s); i++) { c = substr(s, i, 1); if (q == "" && c == "#") return substr(s, 1, i - 1); if (q == "" && (c == "\"" || c == "\047")) q = c; else if (q != "" && c == q && substr(s, i - 1, 1) != "\\") q = "" } return s }
+    {
+      line = $0; rest = 0
+      if (ml != "") { i = index(line, ml); if (i == 0) next; line = substr(line, i + length(ml)); ml = ""; rest = 1 }
+      line = code(line)
+      if (!rest && line ~ /^[[:space:]]*\[/) exit
+      if (!rest && index(line, "=") > 0) {
+        key = substr(line, 1, index(line, "=") - 1); gsub(/^[[:space:]]+|[[:space:]]+$/, "", key)
+        if (key == k || key == "\"" k "\"" || key == "\047" k "\047" || (key ~ /^"/ && index(key, "\\") > 0)) { found = 1; exit }
+      }
+      if (count(line, "\"\"\"") % 2 == 1) ml = "\"\"\""; else if (count(line, "\047\047\047") % 2 == 1) ml = "\047\047\047"
+    }
+    END { exit found ? 0 : 1 }' "$2"
+}
 end_line() { [ -s "$1" ] && [ -n "$(tail -c1 "$1")" ] && echo >> "$1"; true; }
 
 status() {

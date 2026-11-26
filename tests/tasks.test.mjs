@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
+import { setImmediate as nextTurn } from "node:timers/promises";
 import {
   arg, chain, databaseTimer, drawingHost, exec, failure, fieldWith, find, keyboard, KIT_NIGHT, load,
   nativePlatform, nativeWindow, one, same, success, temporary, texts, timedContext,
@@ -23,7 +24,11 @@ const terminalPlacements = () => {
   ];
 };
 
-const EMPTY = "Your agents' to-do for each project shows here as they work";
+const TURN_ON = "Turn on for my agents";
+const TELL = "Tell running agents";
+const TOLD_ONE = "Told 1 running agent; new conversations read it when they start.";
+const TODO_APP_HOME = "/app";
+const TODO_SCRIPT = `${TODO_APP_HOME}/mods/kanso-panel/kanso-todo`;
 const TODO_WORDS = "Pack the release notes";
 const terminalId = "t42";
 
@@ -35,12 +40,18 @@ const wordsAt = (panel, id) => {
   const element = control(panel, id);
   return element ? texts(element) : [];
 };
-const startTasks = async (db, host = {}, { every, ...context } = {}) => {
+const startTasks = async (
+  db, { exec: hostExec, todoExec = async () => success("off\n"), ...host } = {}, { every, ...context } = {},
+) => {
   const { Tasks } = await load("kanso-panel/tasks.js", ["Tasks"], {
     ...drawingHost(),
     theme: () => KIT_NIGHT,
     spaces: () => [],
     home: () => "/Users/jj",
+    appHome: () => TODO_APP_HOME,
+    exec: (program, args, options) => program === "sh" && args[0] === TODO_SCRIPT
+      ? todoExec(args[1])
+      : hostExec?.(program, args, options) ?? Promise.resolve(failure("Unexpected command")),
     ...host,
   });
   const { cx, drain, pending } = timedContext([], context);
@@ -93,7 +104,7 @@ test("The to-do poll redraws when an agent changes the list but keeps the same r
 test("The to-do poll finds an agent's first item in a newly saved project.", async (t) => {
   const { db } = await temporaryKdb(t);
   const { page, poll } = await polledTasks(t, db);
-  assert.ok(texts(page()).includes(EMPTY));
+  assert.ok(control(page(), "tasks-none"));
   const { id } = await saveProject(db, acme);
   await writeTodo(db, storedTodo(id));
   await poll();
@@ -105,7 +116,7 @@ test("The to-do poll shows an unsaved project when its space opens.", async (t) 
   const { db } = await temporaryKdb(t);
   const spaces = t.mock.fn(() => []);
   const { page, poll } = await polledTasks(t, db, { spaces });
-  assert.ok(texts(page()).includes(EMPTY));
+  assert.ok(control(page(), "tasks-none"));
   spaces.mock.mockImplementation(activeSpace(remoteShop));
   await poll();
   assert.ok(texts(page()).includes(remoteShop.name));
@@ -151,16 +162,54 @@ test("Open spaces count once per project, preferring saved projects and skipping
   ]);
 });
 
-test("Empty Tasks opens Settings at the switch that lets agents keep the to-do.", async (t) => {
-  const openOverlay = t.mock.fn();
-  const { page, click } = await todoTasks(t, { openOverlay });
-  const empty = "tasks-none";
-  const toggle = "Agents keep the to-do";
-  assert.deepEqual(wordsAt(page(), empty), [EMPTY, toggle]);
-  click(`${empty}-action`);
-  const [{ arguments: [opened] }] = openOverlay.mock.calls;
-  const { mod, kind, props } = opened;
-  same({ mod, kind, props }, { mod: "kanso-settings", kind: "dialog", props: { page: "pieces", find: toggle } });
+test("Empty Tasks turns on the to-do rule and can tell running agents on this computer again without reinstalling.", async (t) => {
+  let installed = false;
+  const rule = "Keep the project to-do up to date.";
+  const todoExec = t.mock.fn(async (verb) => {
+    if (verb === "rule") return success(rule + "\n");
+    if (verb === "install") installed = true;
+    return success(installed ? "on\n" : "off\n");
+  });
+  const local = "t1";
+  const refused = "t2";
+  const hc = t.mock.fn(async ([verb, address]) =>
+    verb === "send" && address === refused ? failure("Agent disconnected") : success(""));
+  const agents = () => [
+    { address: local, status: "working" },
+    { address: refused, status: "idle" },
+    { address: "t3", status: "blocked" },
+    { address: "light/t4", status: "working" },
+  ];
+  const { page, click, drain } = await todoTasks(t, { todoExec, agents, hc });
+  const action = "tasks-none-action";
+  for (const label of [TURN_ON, TELL]) {
+    assert.deepEqual(wordsAt(page(), action), [label]);
+    click(action);
+    await drain();
+    assert.ok(texts(page()).includes(TOLD_ONE));
+  }
+  assert.deepEqual(todoExec.mock.calls.flatMap(({ arguments: args }) => args), [
+    "status", "install", "status", "rule", "status", "rule",
+  ]);
+  same(sentTo(hc), [local, refused, local, refused].map((address) => ["send", address, rule]));
+});
+
+test("Tasks shows what could not be installed alongside the note about who was told.", async (t) => {
+  const skipped = "Codex already has developer instructions.";
+  const replies = [success("off\n"), failure(skipped), success("on\n"), success("Keep your to-do up to date.")].values();
+  const { page, click, drain } = await todoTasks(t, {
+    todoExec: async () => replies.next().value,
+    agents: () => [{ address: terminalId, status: "working" }],
+    hc: async () => success(""),
+  });
+
+  click("tasks-none-action");
+  await drain();
+  const panel = page();
+  const words = texts(panel).join("\n");
+  assert.ok(words.includes(TOLD_ONE), "Tasks still confirms that a running agent was told");
+  assert.ok(words.includes(skipped), "Tasks shows the install warning even when the switch is on");
+  assert.deepEqual(wordsAt(panel, "tasks-none-action"), [TELL]);
 });
 
 test("Empty Tasks on Windows tells me where to-dos appear without offering an unavailable switch.", async (t) => {
@@ -370,6 +419,39 @@ test("A to-do marked done while it is being added stays done and pending until t
   }
   assert.ok((await saved())[0].done_at > 0);
   assert.equal(find(control(page(), row), pendingTodo), null);
+});
+
+test("Marking a new to-do done while it looks up a connected project saves it as done.", async (t) => {
+  const { view, enterTodo, click, drain, saved } = await todoTasks(t, { project: remoteShop, unsaved: true });
+  const lookup = Promise.withResolvers();
+  const reached = Promise.withResolvers();
+  const homeOf = view.homeOf.bind(view);
+  t.mock.method(view, "homeOf", async (id) => {
+    reached.resolve();
+    await lookup.promise;
+    return homeOf(id);
+  });
+  const db = await view.dbOn(remoteShop.machine);
+  const run = db.run.bind(db);
+  const writes = [];
+  t.mock.method(db, "run", async (sql) => {
+    if (/^(INSERT OR IGNORE INTO|UPDATE) todos\b/.test(sql)) writes.push(sql.split(" ")[0]);
+    return run(sql);
+  });
+
+  enterTodo(TODO_WORDS);
+  try {
+    await reached.promise;
+    click(todoRowIdOf(view.shown()[0]));
+    await nextTurn();
+  } finally {
+    lookup.resolve();
+    await drain();
+  }
+  assert.deepEqual(writes, ["INSERT", "UPDATE"]);
+  const [row] = await saved();
+  assert.equal(row?.text, TODO_WORDS);
+  assert.ok(row.done_at > 0, "The done mark persists on the connected computer");
 });
 
 const finishedTodoTasks = async (t) => {

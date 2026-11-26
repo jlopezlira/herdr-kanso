@@ -380,7 +380,7 @@ const markdownLabel = {
 const markdownSwitch = { id: "markdown-opener", script: "kanso-tabs/markdown-handler.sh" };
 const todoSwitch = { id: "agents-todo", script: "kanso-panel/kanso-todo", find: "Agents keep the to-do" };
 
-const switchSettings = async (t, platform, responses = [], { id, script, find: query } = markdownSwitch) => {
+const switchSettings = async (t, platform, responses = [], { id, script, find: query } = markdownSwitch, host = {}) => {
   const appHome = "/tmp/kanso settings app";
   const path = `${appHome}/mods/${script}`;
   const replies = responses.values();
@@ -398,16 +398,18 @@ const switchSettings = async (t, platform, responses = [], { id, script, find: q
     appHome: () => appHome,
     readTextFile: async () => null,
     exec: (program, args) => args[0] === path ? command(program, args) : Promise.resolve(success("off\n")),
+    ...host,
   });
-  const { cx, drain } = context();
+  const work = context();
+  work.cx.timer = { after() {} };
   const settings = new Settings();
-  settings.init({}, cx);
-  await drain();
+  settings.init({}, work.cx);
+  await work.drain();
   const page = () => settings.render();
   const toggle = (drawn = page()) => find(drawn, (el) => el.tag === id);
   return {
     page, toggle,
-    type: (query) => settings.find.state.type(query, cx),
+    type: (query) => settings.find.state.type(query, work.cx),
     calls: () => clone(command.mock.calls.map((call) => call.arguments)),
     expected: (...verbs) => verbs.map((verb) => ["sh", [path, verb]]),
     change: async (on) => {
@@ -415,8 +417,8 @@ const switchSettings = async (t, platform, responses = [], { id, script, find: q
       assert.ok(control, `The ${id} switch is visible`);
       const change = arg(control, "on_change");
       assert.equal(typeof change, "function", `The ${id} switch is enabled`);
-      change(on, cx);
-      await drain();
+      change(on, work.cx);
+      await work.drain();
     },
   };
 };
@@ -444,13 +446,31 @@ for (const [platform, name] of Object.entries({ linux: "Linux", macos: "macOS" }
 
 const hasPieceRows = (page) => Boolean(find(page, (el) => arg(el, "id")?.startsWith("piece-row-")));
 
-test("Settings checks, installs and removes the rule when the agent to-do switch changes.", async (t) => {
-  const replies = ["off", "Installed", "on", "Removed", "off"].map((word) => success(word + "\n"));
-  const settings = await switchSettings(t, "macos", replies, todoSwitch);
+test("Turning on the agent to-do rule in Settings tells running agents and shows who was told.", async (t) => {
+  const rule = "Keep your to-do in kansō.";
+  const address = "t1";
+  const hc = t.mock.fn(async () => success(""));
+  const replies = ["off", "Installed", "on", rule, "Removed", "off"].map((word) => success(word + "\n"));
+  const settings = await switchSettings(t, "macos", replies, todoSwitch, {
+    agents: () => [{ address, status: "idle" }],
+    hc,
+  });
   const page = settings.page();
+  const pressed = () => arg(settings.toggle(), "pressed");
+  const note = "Told 1 running agent; new conversations read it when they start.";
   assert.ok(texts(page).includes(todoSwitch.find));
   assert.equal(hasPieceRows(page), false);
-  await checkSwitchChanges(settings, false);
+  assert.equal(pressed(), false);
+
+  await settings.change(true);
+  assert.equal(pressed(), true);
+  assert.ok(texts(settings.page()).includes(note));
+  await settings.change(false);
+  assert.equal(pressed(), false);
+  assert.ok(!texts(settings.page()).includes(note));
+  assert.deepEqual(settings.calls(), settings.expected("status", "install", "status", "rule", "uninstall", "status"));
+  const sends = hc.mock.calls.flatMap(({ arguments: [args] }) => args[0] === "send" ? [args] : []);
+  assert.deepEqual(clone(sends), [["send", address, rule]]);
 });
 
 for (const [query, matches, title] of [
