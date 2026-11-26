@@ -5,7 +5,7 @@ import { setFlagsFromString } from "node:v8";
 import { runInNewContext } from "node:vm";
 import { load, exec as runFile, clone, until, success, failure, openedKdb, inlineView, dataFolder } from "./helpers.mjs";
 
-export const PANEL_IDS = ["files", "pr", "preview", "shipped", "worktrees", "ports", "look", "find"];
+export const PANEL_IDS = ["files", "pr", "preview", "shipped", "worktrees", "ports", "look", "timeline", "find"];
 const source = process.env.PERF_SOURCE_ROOT ? pathToFileURL(`${process.env.PERF_SOURCE_ROOT}/kanso/mods/`) : undefined;
 export const loadMod = (file, names, host) => load(file, names, host, source);
 
