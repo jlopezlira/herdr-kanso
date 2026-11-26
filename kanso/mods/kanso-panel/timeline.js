@@ -1,6 +1,6 @@
 import { div } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
-import { hc, run, theme, focused, agents, terminals, panes, spaces, readTextFile, window, shared, setShared } from "herdr";
+import { run, theme, focused, agents, terminals, panes, spaces, window, shared, setShared } from "herdr";
 import { G, T, PR, tokens } from "./ui.js";
 import { iconButton } from "./ui-button.js";
 import { row } from "./ui-row.js";
@@ -9,14 +9,15 @@ import { markdown } from "./ui-markdown.js";
 import { stateBlock } from "./ui-state.js";
 import { emptyState } from "./kit.js";
 import { scrollPage, pageHeader, refreshTool, listBones, backRow } from "./ui-page.js";
-import { serviceOn, homeOn, REMOTE_TIMEOUT } from "./platform-host.js";
+import { serviceOn, REMOTE_TIMEOUT } from "./platform-host.js";
 import { stateWithin, LATE } from "./panel-state.js";
-import { processApi } from "./platform-processes.js";
 import { transcriptApi } from "./platform-transcripts.js";
 import { machineOf } from "./remote-file.js";
 import { ticking } from "./pure.js";
 import { shownName } from "./marks.js";
-import { conversationIn, parseSlice, kindOf, SLICE_BUDGET, LINE_MAX } from "./find.js";
+import { parseSlice, SLICE_BUDGET, LINE_MAX } from "./find.js";
+import { kindOf, agentHint } from "./conversation-at.js";
+import { locateOn } from "./conversation-on.js";
 import { freshTimeline, applyTimeline, factsOf, detailOf, firstSentence, oneLine, shortPath } from "./timeline-model.js";
 
 const TICK_MS = 1000;
@@ -29,8 +30,7 @@ const DOT = " \u{b7} ";
 
 const agentOf = (address) => (address ? agents().find((a) => a.address === address) ?? null : null);
 const pulse = (address) => { const a = agentOf(address); return a ? `${a.status}:${a.seq}` : ""; };
-const hintOf = (a) => [a?.app, a?.program?.key].filter(Boolean).join(" ");
-const readable = (address) => Boolean(kindOf(agentOf(address)?.program?.key ?? "", hintOf(agentOf(address))));
+const readable = (address) => Boolean(kindOf(agentOf(address)?.program?.key ?? "", agentHint(agentOf(address))));
 
 async function sliceOf(on, file, from) {
   const api = await serviceOn(transcriptApi, on);
@@ -39,12 +39,7 @@ async function sliceOf(on, file, from) {
   return r?.code === 0 && typeof r.stdout === "string" ? parseSlice(r.stdout) : null;
 }
 
-async function locate(address) {
-  const on = machineOf(address);
-  const homeDir = await homeOn(on);
-  const processes = await serviceOn(processApi, on);
-  return conversationIn({ hc, readTextFile: (path) => readTextFile(path, on ? { on } : undefined), home: () => homeDir, platform: { processes } }, address, hintOf(agentOf(address)));
-}
+const locate = (address) => locateOn(machineOf(address), address, agentHint(agentOf(address)));
 
 export class Timeline {
   constructor(db) { this.db = db; }

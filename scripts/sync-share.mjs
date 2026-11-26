@@ -33,6 +33,8 @@ const COMMON = [
   { source: "kanso/mods/kanso-panel/ghchecks.js", copies: ["kanso/mods/kanso-strip/ghchecks.js"] },
   // The key a second Cmd+F or Ctrl+F uses to select the query in the open bar.
   { source: "kanso/mods/kanso-panel/find-key.js", copies: ["kanso/mods/kanso-strip/find-key.js"] },
+  { source: "kanso/mods/kanso-panel/conversation-at.js", copies: ["kanso/mods/kanso-spaces/conversation-at.js"] },
+  { source: "kanso/mods/kanso-panel/conversation-on.js", copies: ["kanso/mods/kanso-spaces/conversation-on.js"] },
   // Hachi, the dōjō's shiba, also on kansō help's way into the dōjō.
   // Your pet and the one to choose, in the dōjō and on kansō help's dōjō page; the choice kept in the dōjō's SQLite.
   // The cap a key press lights for a moment, in the dōjō and on help's keyboard page.
@@ -67,7 +69,7 @@ const COMMON = [
   // How a Claude Code command resumes a conversation: Sleep labels and wakes with it, Memory
   // recycles with it (under Node), and a tab opened fresh drops what it names.
   { source: "kanso/mods/kanso-sleep/resume.js", copies: ["kanso/mods/kanso-guard/resume.js", "kanso/mods/kanso-arrange/resume.js", "kanso/mods/kanso-spaces/resume.js", "kanso/mods/kanso-menu/resume.js"] },
-  { source: "kanso/mods/kanso-menu/recent.js", copies: ["kanso/mods/kanso-tabs/recent.js"] },
+  { source: "kanso/mods/kanso-menu/recent.js", copies: ["kanso/mods/kanso-tabs/recent.js", "kanso/mods/kanso-spaces/recent.js"] },
   // The left nav's one database: the sidebar owns it, the panels read the same files.
   { source: "kanso/mods/kanso-spaces/since-left-model.js", copies: ["kanso/mods/kanso-panel/since-left-model.js"] },
   { source: "kanso/mods/kanso-spaces/since-left-store.js", copies: ["kanso/mods/kanso-panel/since-left-store.js"] },

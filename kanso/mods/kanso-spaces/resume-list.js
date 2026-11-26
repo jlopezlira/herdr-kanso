@@ -14,8 +14,24 @@ export const listedOf = (stdout, machine = null) => String(stdout ?? "").split("
   return program && cwd && id ? [{ program, file, cwd, id, machine }] : [];
 });
 
-export const OPEN_CONVERSATIONS = "kanso.conversations.open";
-export const openConversations = (threads) => Object.fromEntries(Object.entries(threads ?? {}).flatMap(([address, th]) => (th?.file ? [[th.file, address]] : [])));
+export const STARTING = "kanso.resume.starting";
+export const STARTING_MS = 30000;
+export const keyOf = (c) => `${c?.machine ?? ""}\t${String(c?.id ?? "").toLowerCase()}`;
+
+export const onceEach = (list) => list.filter((c, i) => list.findIndex((d) => keyOf(d) === keyOf(c)) === i);
+
+const writtenSince = (rows, h, taken) => rows.find((c) => c.program === h.program && !taken.has(keyOf(c)) && (c.machine ?? "") === (h.machine ?? "")
+  && trimmed(c.cwd ?? "") === trimmed(h.cwd ?? "") && (c.at ?? -Infinity) >= h.since);
+
+export function heldBy(rows, held) {
+  const named = new Map(held.filter((h) => h.id).map((h) => [keyOf(h), h]));
+  return held.filter((h) => !h.id).reduce((by, h) => {
+    const c = writtenSince(rows, h, by);
+    return c ? new Map([...by, [keyOf(c), h]]) : by;
+  }, named);
+}
+
+export const startingNow = (record, now = Date.now()) => Object.fromEntries(Object.entries(record ?? {}).filter(([, at]) => now - at < STARTING_MS));
 
 export const recordsOf = (stdout) => String(stdout ?? "").split("\n\x1c\n");
 

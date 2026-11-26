@@ -7,8 +7,8 @@ import { menu } from "./ui-menu.js";
 import { run, props, closeOverlay, theme, terminals, panes, spaces, agents, shared, setShared, nextCommand } from "herdr";
 import { listKey, moveTo } from "./listkeys.js";
 import { focusOn, readCommands } from "./pure.js";
-import { switchRows, land, REVEAL_MS, SWITCH_ROWS } from "./switcher.js";
-import { currentAgent } from "./recent.js";
+import { switchRows, REVEAL_MS, SWITCH_ROWS } from "./switcher.js";
+import { currentAgent, land } from "./recent.js";
 import { openWithPopup } from "./popup.js";
 import { openSend, openSleep } from "./launch.js";
 import { tokens } from "./ui.js";
@@ -103,13 +103,14 @@ export default class KansoMenu extends View {
   go(row) {
     if (this.landed) return;
     this.landed = true;
+    closeOverlay(props()?.overlay);
     land(row);
   }
 
   switcherView(c) {
     const rows = this.rows.map((r, i) => ({ icon: r.program?.icon ?? null, label: r.name, hint: r.place, mark: r.asleep ? "asleep" : null, selected: i === this.at, onClick: () => this.go(r) }));
     const items = rows.length ? [{ scroll: rows, rows: Math.min(rows.length, SWITCH_ROWS), handle: this.scroll }] : [{ label: "No other sessions", disabled: true }];
-    return menu("kanso-switcher", { items }, c).opacity(this.shown ? 1 : 0).track_focus(this.handle)
+    return menu("kanso-switcher", { items, wide: true }, c).opacity(this.shown ? 1 : 0).track_focus(this.handle)
       .on_modifiers_changed((e) => { if (!e.modifiers.control) this.go(this.rows[this.at]); })
       .on_key_down((e, cx) => {
         const k = e?.key;

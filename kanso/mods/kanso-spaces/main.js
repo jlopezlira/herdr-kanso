@@ -1,4 +1,4 @@
-import { localService, serviceOn, localName, homeOn } from "./platform-host.js";
+import { localService, serviceOn, localName, homeOn, REMOTE_TIMEOUT } from "./platform-host.js";
 import { copiesToViewer, viewerFor } from "./platform-viewer.js";
 import { signInTab, removeKeyTab, kansoKeyed, routeOf } from "./sign-in.js";
 import { homeRoute } from "./lan-route.js";
@@ -17,7 +17,7 @@ import { systemApi } from "./platform-system.js";
 import { View, div } from "gpui-kit";
 import { v_flex, h_flex, ScrollHandle } from "gpui-base";
 import { agentSession, agentLabel, renameTerminal, SETTLED_LABEL, SNOOZE_LABEL, UNREAD_LABEL, THREAD_LABEL, settledOf, snoozedUntil, isUnread, woke, backFromSettled, threadSections, snoozePresets, THREAD_ORDERS, STATUS_ORDERS, withTerminals, NAME_LABEL, PIN_LABEL, ORDERS, DEFAULT_ORDER, orderSessions, moved, nest, track, elapsed, activityOf, bySection, duration, trackSteps, stepOf, tasksOf, said, FOLD_MS, pill, sessionHeight, mostUrgent } from "./agents.js";
-import { ThreadLocator, findThreads, sameThread, pidsOf, aliveIn, aliveDue, ALIVE_MS, ALIVE_BEHIND_MS, threadIn } from "./threads.js";
+import { ThreadLocator, findThreads, sameThread, pidsOf, aliveIn, aliveDue, ALIVE_MS, ALIVE_BEHIND_MS, threadIn, AT_ONCE } from "./threads.js";
 import { Panel, sameSeen } from "./panel.js";
 import { Store } from "./store.js";
 import { Kdb, restDue, machinesToAsk, kansoDir, worktreeBase, newId } from "./kdb.js";
@@ -28,7 +28,7 @@ import { sleepingNow, asleepGroups, nameOf, seenNow, conversationOfThread, shown
 import { pollable, activePlaces } from "./background.js";
 import { listKey, moveTo, plainKey } from "./listkeys.js";
 import { commitLayout, setRail, foldSidebar, railWidth, dropStripDrag } from "./layout.js";
-import { afterMount, tryOr, mapSeries, bounded } from "./pure.js";
+import { afterMount, tryOr, mapSeries, bounded, inLanes } from "./pure.js";
 import { commandLoop, MachineRead } from "./sidebar.js";
 import { gitFacts, openAhead, AHEAD } from "./sidebar-draw.js";
 import { projectRow } from "./project-row.js";
@@ -38,7 +38,10 @@ import { asleep } from "./asleep.js";
 import { machineReaches, asleepLook, withPending, withoutWaking, FORGET_HELD, forgetHeld, holdForget } from "./row-states.js";
 import { SLEEP_PENDING, SLEEP_WAKING, SLEEP_FAILED, COULD_NOT_SLEEP, failedTerminals, withoutTerminals, RESUME_LABEL, asleepTerminal, resumeOf } from "./resume.js";
 import { transcriptApi, projectDir } from "./platform-transcripts.js";
-import { RECENT, OPEN_CONVERSATIONS, openConversations, listedOf, recordsOf, newestFirst, findsIn, resumeHint, openSpaceAt } from "./resume-list.js";
+import { RECENT, STARTING, keyOf, onceEach, heldBy, startingNow, listedOf, recordsOf, newestFirst, findsIn, resumeHint, openSpaceAt } from "./resume-list.js";
+import { agentHint } from "./conversation-at.js";
+import { heldOn } from "./conversation-on.js";
+import { land } from "./recent.js";
 import { tile } from "./tile.js";
 import { views, viewSwitch } from "./view-switch.js";
 import { pullKey, runPull, canWake, enterOpens, sectionMarkOf, sectionCount, rowDirectory, unnamedComputer, threadWord, threadActions, noProjectsOn, sortOf, foldTail, readWord } from "./sidebar-rows.js";
@@ -2242,7 +2245,7 @@ export default class Spaces extends RetryingView {
 
   resumeMenu(place) {
     const height = menuHeight(this.resumeLines(place, { item: sketch, recent: Array.from({ length: RESUME_ROWS }, () => SKETCHED) }));
-    openOverlay({ mod: "kanso-spaces", kind: "popup", width: W.menu, height, at: "pointer", props: { resume: place } });
+    openOverlay({ mod: "kanso-spaces", kind: "popup", width: W.menuWide, height, at: "pointer", props: { resume: place } });
   }
 
   openResume(place, cx) {
@@ -2256,7 +2259,27 @@ export default class Spaces extends RetryingView {
     });
     this.resumeFind.focus();
     this.askAgents(place, cx);
+    this.loadHeld(cx);
     cx.timer.after(0, (next) => this.loadRecent(place, next));
+  }
+
+  loadHeld(cx) {
+    const ask = this.heldAsked = (this.heldAsked ?? 0) + 1;
+    this.held = null;
+    this.heldFound = terminals().filter(asleepTerminal).map((k) => ({ address: k.address, machine: machineOf(k.address), id: k.labels[RESUME_LABEL], asleep: true }));
+    const show = () => {
+      if (ask !== this.heldAsked) return;
+      this.held = this.heldFound;
+      this.redraw(cx);
+    };
+    const deadline = cx.timer.after(REMOTE_TIMEOUT, show);
+    this.heldReady = inLanes(agents(), async (a) => {
+      const machine = machineOf(a.address);
+      const h = await heldOn(machine, a.address, agentHint(a)).catch(() => null);
+      if (!h || ask !== this.heldAsked) return;
+      this.heldFound = [...this.heldFound, { ...h, address: a.address, machine }];
+      if (this.held) show();
+    }, AT_ONCE).finally(() => { deadline.cancel(); show(); });
   }
 
   loadRecent(place, cx) {
@@ -2272,7 +2295,7 @@ export default class Spaces extends RetryingView {
     const deadline = this.machineDeadline(cx, settle);
     const where = place.folder ? [place.machine || null] : [null, ...machines().filter((m) => m.name && machineReaches(m.layout)).map((m) => m.name)];
     Promise.all(where.map((on) => this.recentOn(on, place.folder ?? "").catch((e) => (on && where.length > 1 ? [] : Promise.reject(e)))))
-      .then((lists) => { deadline.cancel(); settle(newestFirst(lists.flat()).slice(0, RECENT), null); })
+      .then((lists) => { deadline.cancel(); settle(onceEach(newestFirst(lists.flat())).slice(0, RECENT), null); })
       .catch((e) => { deadline.cancel(); settle(null, String(e?.message ?? e)); });
   }
 
@@ -2298,10 +2321,11 @@ export default class Spaces extends RetryingView {
     const finder = { field: "Find a conversation", text: this.resumeFind ?? null };
     const icon = (program) => (this.known ?? []).find((a) => a.key === program)?.icon ?? null;
     const listed = (recent ?? []).filter(findsIn(query));
-    const open = shared(OPEN_CONVERSATIONS) ?? {};
-    const isOpen = (c) => !c.machine && agents().some((a) => a.address === open[c.file]);
+    const held = heldBy(recent ?? [], this.held ?? []);
+    const starting = startingNow(shared(STARTING));
     const now = Date.now();
-    const rows = listed.map((c) => item(c.title, () => this.resumeOne(place, c), { icon: icon(c.program), hint: isOpen(c) ? "Open" : resumeHint(c, { scoped, now }) }));
+    const state = (c) => (held.get(keyOf(c))?.asleep ? "Asleep" : held.has(keyOf(c)) ? "Open" : starting[keyOf(c)] ? "Starting" : null);
+    const rows = listed.map((c) => item(c.title, () => this.resumeOne(place, c), { icon: icon(c.program), hint: state(c) ?? resumeHint(c, { scoped, now }) }));
     const fresh = () => (scoped ? this.newAgentMenu(place) : this.newConversationMenu());
     const middle = failed ? [{ failure: { text: `Can't list conversations on ${place.machine || "this computer"}`, source: failed, fix: "Refresh", onClick: (cx) => { this.loadRecent(place, cx); this.redraw(cx); } } }]
       : !recent ? [{ loading: true }, { loading: true }, { loading: true }]
@@ -2318,13 +2342,17 @@ export default class Spaces extends RetryingView {
     return this.popup(t, lines.title, lines.items);
   }
 
-  resumeOne(place, c) {
-    const live = c.machine ? null : (shared(OPEN_CONVERSATIONS) ?? {})[c.file];
-    if (live && agents().some((a) => a.address === live)) { run("pane.focus", { terminal: live }); return; }
+  async resumeOne(place, c) {
+    await this.heldReady;
+    const held = heldBy(this.recent ?? [c], this.held ?? []).get(keyOf(c));
+    if (held) { land(held); return; }
+    const starting = startingNow(shared(STARTING));
+    if (starting[keyOf(c)]) return;
     const machine = c.machine ?? (place.machine || null);
     const agent = (this.known ?? []).find((a) => a.key === c.program && a.installed);
     const argv = resumeOf(c.program, agent?.run ?? [c.program], c);
     if (!argv) return;
+    setShared(STARTING, { ...starting, [keyOf(c)]: Date.now() });
     const open = openSpaceAt(spaces(), c.cwd, machine);
     const target = place.folder ? place : open ? placeOfSpace(open) : placeOfKey(`${machine ?? ""}:${c.cwd}`);
     viewerFor(machine).then((viewed) => startIn(target, viewed(argv)));
@@ -2612,7 +2640,7 @@ export default class Spaces extends RetryingView {
     // Agents on this computer (another machine's files are not here).
     const background = this.background();
     const list = agents().filter((a) => !a.address.includes("/") && background.allows(a.address)).map((a) => ({ address: a.address, app: a.app }));
-    if (!list.length) { this.readingThreads = false; setShared(OPEN_CONVERSATIONS, {}); return; }
+    if (!list.length) { this.readingThreads = false; return; }
     this.threadLocator ??= new ThreadLocator();
     cx.spawn(async (cx) => {
       try {
@@ -2622,7 +2650,6 @@ export default class Spaces extends RetryingView {
         this.threads = next;
         if (same) return;
         this.threadsShown = next;
-        setShared(OPEN_CONVERSATIONS, openConversations(next));
         this.redraw();
       } catch { this.threads ??= {}; this.threadsShown ??= this.threads; }
       finally { this.readingThreads = false; }

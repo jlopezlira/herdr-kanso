@@ -1,4 +1,5 @@
-import { agents, focused, shared, setShared } from "herdr";
+import { agents, focused, shared, setShared, panes, spaces, run, openOverlay } from "herdr";
+import { DIALOG } from "./ui.js";
 
 export const RECENT = "kanso.recent";
 export const KEPT = 50;
@@ -16,4 +17,13 @@ export function noteFocus() {
   const list = shared(RECENT);
   if (!now || (Array.isArray(list) && list[0] === now)) return;
   setShared(RECENT, recentWith(list, now, live));
+}
+
+export const spaceOfTab = (tab) => spaces().find((s) => (s.tabs ?? []).some((t) => t.id === tab)) ?? null;
+
+export function land(row) {
+  if (!row) return;
+  if (!row.asleep) { run("pane.focus", { terminal: row.address }); return; }
+  const space = spaceOfTab(panes().find((p) => p.terminal === row.address)?.tab);
+  openOverlay({ mod: "kanso-sleep", kind: "dialog", width: DIALOG.wide, props: { wake: { space: space?.id, terminal: row.address } } });
 }

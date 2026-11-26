@@ -247,7 +247,7 @@ export default class Tabs extends View {
     // Herdr passes a mod command no arguments, so the path rides in its name: `herdr-app do 'kanso-tabs.look <path>'`.
     // `at` makes each one new props, so an open Images starts over on it. (`gallery`, its old command, too).
     const look = /^(?:look|gallery)(?:[\s:]+([\s\S]+))?$/.exec(name);
-    if (name === "switch") openOverlay({ mod: "kanso-menu", kind: "window", frame: "none", width: W.menu, props: { switcher: { at: Date.now() } } });
+    if (name === "switch") openOverlay({ mod: "kanso-menu", kind: "window", frame: "none", width: W.menuWide, props: { switcher: { at: Date.now() } } });
     else if (look) this.show("look", look[1]?.trim() ? { panel: "look", path: look[1].trim(), at: Date.now() } : { panel: "look" });
     else if (tab) {
       const shown = shownTabs(spaces().find((s) => s.active)?.tabs)[Number(tab[1]) - 1];

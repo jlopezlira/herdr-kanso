@@ -1,14 +1,13 @@
 import { transcriptApi, projectDir } from "./platform-transcripts.js";
 export { projectDir };
 import { atOf, textOf, toolName, eventsOf } from "./transcript-events.js";
-import { processApi } from "./platform-processes.js";
-import { paths } from "./platform-paths.js";
+import { START_SLACK, sessionPath, transcriptPath, sessionLive, kindOf, conversationIn } from "./conversation-at.js";
+export { START_SLACK, sessionPath, transcriptPath, sessionLive, kindOf, conversationIn };
 // Find in an agent's conversation on disk: each turn's text, matched without case or accents.
 import { FIND } from "./find-key.js";
 import { MONTHS, parseOr as parsed, tryOr } from "./pure.js";
 export { FIND };
 
-export const START_SLACK = 120000; // ps counts whole seconds from a start a little before the record was written
 export const LINE_MAX = 100000;
 export const SLICE_BUDGET = 2000000;
 export const DRAW = 50;
@@ -17,18 +16,6 @@ const WORDS = 22;
 const MARK = /\p{M}/u;
 // A tool's delivery note is not a turn: the words are already in what was said.
 const DELIVERY = /^(?:message\s+)?(?:successfully\s+)?(?:delivered|sent)(?:\s+to(?:\s+the)?\s+user)?\.?$/i;
-
-export const sessionPath = (homeDir, pid) => paths.join(homeDir, ".claude", "sessions", `${pid}.json`);
-export const transcriptPath = (session, homeDir) =>
-  session?.sessionId && session.cwd && homeDir
-    ? paths.join(homeDir, ".claude", "projects", projectDir(session.cwd), `${session.sessionId}.jsonl`)
-    : null;
-
-export function sessionLive(record, pid, started) {
-  if (!record || record.pid !== pid || !record.sessionId) return false;
-  const at = Number(record.startedAt);
-  return Number.isFinite(started) && Number.isFinite(at) && Math.abs(started - at) <= START_SLACK;
-}
 
 function foldPoint(ch) {
   if (ch.length === 1) {
@@ -353,15 +340,6 @@ export async function readSlice(exec, file, from = 0, budget = SLICE_BUDGET, lon
   return parseSlice(r.stdout);
 }
 
-// The program in front, or Herdr's app name ("claude-code"), says whose conversation this is.
-export function kindOf(program, hint = "") {
-  const text = `${String(program ?? "").split(/[/\\]/).at(-1)} ${hint}`.toLowerCase();
-  if (/(^|[^a-z])codex/.test(text)) return "codex";
-  if (/(^|[^a-z])claude/.test(text)) return "claude";
-  return null;
-}
-
-
 export function resolveFind(where) {
   return where?.file ? { action: "find", file: where.file, kind: where.kind ?? null } : { action: "terminal.search" };
 }
@@ -369,34 +347,6 @@ export function resolveFind(where) {
 export async function locateConversation(host, address, hint = "") {
   if (!address || String(address).includes("/")) return { kind: null, file: null };
   return conversationIn(host, address, hint);
-}
-
-export async function conversationIn(host, address, hint = "") {
-  if (!address) return { kind: null, file: null };
-  const got = await host.hc(["get", address, "--json"]).catch(() => null);
-  const front = got?.code === 0 ? parsed(got.stdout)?.foreground : null;
-  const pid = front?.pid;
-  if (!pid) return { kind: null, file: null };
-  const program = paths.basename(front.argv?.[0] ?? "").replace(/\.(exe|cmd|bat)$/i, "");
-  const kind = kindOf(program, hint);
-  const processes = host.platform?.processes ?? processApi("linux", host.exec);
-  if (kind === "claude") {
-    const record = parsed(await host.readTextFile(sessionPath(host.home(), pid)).catch(() => null));
-    const started = record?.sessionId ? await processes.startTime(pid).catch(() => NaN) : NaN;
-    if (!sessionLive(record, pid, started)) return { kind: null, file: null };
-    const file = transcriptPath(record, host.home());
-    return file ? { kind: "claude", file } : { kind: null, file: null };
-  }
-  if (kind === "codex") {
-    const ownFiles = await processes.openFiles([pid]);
-    if (ownFiles.state === "unavailable") return { kind: null, file: null, unavailable: ownFiles.reason };
-    const table = await processes.list();
-    const children = (table.byParent.get(pid) ?? []).map((row) => row.pid);
-    const childFiles = children.length ? await processes.openFiles(children) : { values: [] };
-    const file = [...ownFiles.values, ...childFiles.values].find((row) => /rollout-.*\.jsonl$/.test(row.path))?.path ?? null;
-    return file ? { kind: "codex", file } : { kind: null, file: null };
-  }
-  return { kind: null, file: null };
 }
 
 const dateOf = (ms) => {

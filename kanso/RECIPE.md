@@ -652,14 +652,18 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     `herdr-app do 'kanso-tabs.look <path>'` (or `.gallery`) opens one.
     The session switcher (`kanso-tabs.switch`, Ctrl+Tab; `switcher.js` in `kanso-menu`, a frameless window): sessions
     by `kanso.recent`, which the tab bar keeps from the focused agent (`recent.js`), then the rest in sidebar order, then
-    asleep ones; it opens on the second row and shows after 140 ms; Ctrl+Tab and Ctrl+Shift+Tab move
-    (`mod:kanso-menu`), letting go of Ctrl, Enter or a click lands (`pane.focus`, or Wake for an asleep one), Esc closes.
+    asleep ones; it opens on the second row and shows after 140 ms (`k-w-menu-wide`); Ctrl+Tab and Ctrl+Shift+Tab move
+    (`mod:kanso-menu`), letting go of Ctrl, Enter or a click lands (`land` in `recent.js`: `pane.focus`, or Wake for an
+    asleep one), Esc closes.
     Resume a conversation (the + menus of `kanso-spaces`): `listing` in `platform-transcripts.js` lists the newest
     conversation files (Claude Code under the project's own folder name, Codex, Pi) with their folder and id, then
     `threads` reads each one's title and first prompt the way Threads does, one call per computer. A row starts the
-    program's resume command (`resumeOf` in `resume.js`) in a new tab of its project; one open in a terminal is focused.
+    program's resume command (`resumeOf` in `resume.js`) in a new tab of its project. None starts twice: `heldIn` in
+    `conversation-at.js` names the conversation each agent holds on every computer (the file it writes, else the id its
+    command resumed; Pi, by its folder and start), an asleep one by its label, one just started for 30 s
+    (`kanso.resume.starting`); such a row says Open, Asleep or Starting and lands on it (`land`) instead.
     `timeline.js` (Timeline, panel id `timeline`, `history.svg`): the conversation of the agent in focus (pinnable),
-    Claude Code or Codex, here or on another computer (`conversationIn` in `find.js`). It reads the file in
+    Claude Code or Codex, here or on another computer (`conversationIn` in `conversation-at.js`). It reads the file in
     slices from the last offset (`slice` in `platform-transcripts.js`) when the agent's status or `seq` changes,
     every 3 s (6 s remote) while it works, and never while the window is behind. `transcript-events.js` turns
     each record into events that Find and Timeline both project; `timeline-model.js` makes one prompt per thing
