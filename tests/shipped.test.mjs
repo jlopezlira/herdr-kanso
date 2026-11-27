@@ -325,8 +325,8 @@ const holdSearch = () => {
 const sqlitePeriods = async (t, now, { viewer, login = () => "me", onSearch = () => {}, calendars }) => {
   const read = (query, { q }) => {
     if (viewerQuery(query)) {
-      calendars?.push(calendarFrom(query));
-      return viewer();
+      if (query.includes("cal:")) calendars?.push(calendarFrom(query));
+      return viewer(query);
     }
     onSearch(q);
     return search([]);
@@ -338,28 +338,28 @@ const sqlitePeriods = async (t, now, { viewer, login = () => "me", onSearch = ()
   return () => settledShipped(host);
 };
 
-test("Shipped checks the local login but makes no GitHub API call while the saved period is fresh.", async (t) => {
+test("Shipped checks the account without reading GitHub stats or pull requests while the saved period is fresh.", async (t) => {
   const first = monthAt(11, 4);
   let now = first, reviews = 5;
   const requested = [];
   const reopen = await sqlitePeriods(t, () => now, {
-    viewer: () => { requested.push("viewer"); return reviewed("me", reviews); },
+    viewer: (query) => { requested.push(query.includes("cal:") ? "stats" : "viewer"); return reviewed("me", reviews); },
     login: () => { requested.push("local login"); return "me"; },
     onSearch: (query) => requested.push(query),
   });
   await reopen();
-  assert.ok(requested.includes("viewer"));
+  assert.ok(requested.includes("stats"));
   requested.length = 0;
 
   now += HALF_DAY - 1000;
   reviews += 1;
   const { panel, cx, drain } = await reopen();
-  assert.deepEqual(requested.splice(0), ["local login"]);
+  assert.deepEqual(requested.splice(0), ["local login", "viewer"]);
   assert.equal(reviewsShown(panel), "5");
 
   panel.refresh(cx, true);
   await drain();
-  assert.deepEqual(requested, ["local login", "viewer", updatedQuery(first - HOUR, now + 1000)]);
+  assert.deepEqual(requested, ["local login", "stats", "viewer", updatedQuery(first - HOUR, now + 1000)]);
   assert.equal(reviewsShown(panel), "6");
 });
 
@@ -380,24 +380,51 @@ test("Shipped reads pull requests under the API account when the saved Day is fr
   assert.deepEqual(accounts, ["bob", "bob"]);
 });
 
-test("Shipped does not write pull requests or advance the cursor when Refresh cannot confirm the switched account.", async (t) => {
+test("Shipped shows the API account when reopening a fully cached Day after a token change.", async (t) => {
   const first = monthAt(11, 10) + 12 * HOUR;
-  let now = first, login = "alice";
+  let now = first, viewer = "alice";
+  const queries = [];
+  const host = await ghShippedHost(t, () => now, (query) => {
+    queries.push(query);
+    return viewerQuery(query) ? viewerOf(viewer) : search([]);
+  }, () => "alice");
+  const initial = await settledShipped(host, "day");
+  assert.equal(initial.panel.summary().login, "alice");
+  assert.equal(initial.panel.covers(), true);
+  queries.length = 0;
+  viewer = "bob";
+  now += HOUR;
+
+  const reopened = await settledShipped(host, "day");
+  assert.equal(reopened.panel.summary().login, "bob");
+  assert.equal(await reopened.panel.store.meta("github.login"), "bob");
+  assert.equal(queries[0], "query{viewer{login}}");
+});
+
+const refreshWithoutViewer = async (t, { cliSwitch }) => {
+  const first = monthAt(11, 10) + 12 * HOUR;
+  let now = first, failed = false;
   const incoming = pullRequest(1, first, { repo: "bob/tool" });
   const host = await ghShippedHost(t, () => now, (query) => {
-    if (!viewerQuery(query)) return search(login === "alice" ? [] : [incoming]);
-    if (login === "alice") return viewerOf(login);
+    if (!viewerQuery(query)) return search(failed ? [incoming] : []);
+    if (!failed) return viewerOf("alice");
     throw new Error("GitHub viewer unavailable");
-  }, () => login);
+  }, () => failed && cliSwitch ? "bob" : "alice");
   const { panel, cx, drain } = await settledShipped(host, "day");
 
-  login = "bob";
+  failed = true;
   now += HOUR;
   panel.refresh(cx, true);
   await drain();
   same(await panel.store.prs(), []);
   assert.equal(await panel.store.meta("github.updated"), String(first));
-});
+};
+
+test("Shipped does not write pull requests or advance the cursor when Refresh cannot confirm the switched account.", (t) =>
+  refreshWithoutViewer(t, { cliSwitch: true }));
+
+test("Shipped does not ingest as the previous API viewer after Refresh fails with the same local login.", (t) =>
+  refreshWithoutViewer(t, { cliSwitch: false }));
 
 test("Shipped shows the new account and reads its full calendar when you reopen after switching accounts.", async (t) => {
   const now = new Date(2026, 10, 10, 12).getTime();
@@ -637,6 +664,30 @@ test("Shipped counts a pull request opened last month and merged today on the fi
   const { panel } = await settledShipped(host, "day");
   const { bars } = panel.derived().bars;
   assert.equal(Number(bars[9].value), 1);
+});
+
+test("Shipped backfills merges once for a Day already covered before the upgrade.", async (t) => {
+  const day = monthAt(11, 10), merge = day + 9 * HOUR, cursor = merge + 1.5 * HOUR, now = merge + 2 * HOUR;
+  const earlier = pullRequest(1, monthAt(10, 20), { merged: merge });
+  const merges = [], merged = mergedQuery(monthAt(11), now + 1000);
+  const host = await ghShippedHost(t, now, (query, { q }) => {
+    if (viewerQuery(query)) return viewerOf("me");
+    if (q.includes("merged:")) merges.push(q);
+    return search(q === merged ? [earlier] : []);
+  });
+  const store = await openedShippedStore(host);
+  await store.forAccount("github", "me");
+  await store.setPeriod(`day:${day}`, viewerOf("me"), cursor);
+  await store.monthRead("github", "2026-11", cursor, "me");
+  await store.setOwnMeta("github.updated", String(cursor), "me");
+
+  const { panel, cx, drain } = await settledShipped(host, "day");
+  const count = () => Number(panel.derived().bars.bars[9].value);
+  assert.equal(count(), 1);
+  panel.refresh(cx, true);
+  await drain();
+  assert.equal(count(), 1);
+  assert.deepEqual(merges, [merged]);
 });
 
 test("Shipped tells you when a merged pull request could not be checked for production.", async (t) => {

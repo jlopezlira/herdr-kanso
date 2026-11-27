@@ -253,6 +253,15 @@ const snapshotClock = (state, now) => ({
   Date: class extends Date { static now() { return now(); } },
 });
 
+const spendTicker = (cx) => {
+  let tick;
+  cx.timer.every = (_ms, fire) => {
+    tick = fire;
+    return { cancel() {} };
+  };
+  return () => tick(cx);
+};
+
 const peerHost = ({ probe, presenter = async () => success(""), files = {} }) => {
   const disk = {
     "runtime.json": repaired,
@@ -350,6 +359,39 @@ test("Spend saves a snapshot time only after a successful scan and retries a fai
   assert.equal(page.error, null);
 });
 
+test("Spend retries a locked source in ten minutes but treats a permanently skipped row as fresh.", async (t) => {
+  const f = await fixture(t);
+  const source = join(f.home, ".local", "share", "opencode");
+  await mkdir(source, { recursive: true });
+  const { DatabaseSync } = await import("node:sqlite");
+  const db = new DatabaseSync(join(source, "opencode.db"));
+  try {
+    db.exec("CREATE TABLE message (session_id, id, time_created, data); INSERT INTO message VALUES ('s', 'm', 0, 'not JSON'); BEGIN EXCLUSIVE;");
+    const state = {}, attempts = [];
+    const { cx, drain } = timedContext([]);
+    const started = Date.UTC(2026, 10, 10, 12), retryAt = started + 10 * 60_000;
+    let now = started;
+    const page = await spendPage({
+      nodeBinary: "node", lastSnapshotAt: 0, exchange() {},
+      async ask(command) {
+        const answer = await run(f, command);
+        attempts.push([command, now, answer.scan.errors]);
+        return answer;
+      },
+    }, snapshotClock(state, () => now));
+    const catchUp = async () => { page.catchUp(cx); await drain(); };
+
+    await catchUp();
+    const lockedAt = state["kanso.spend.snapshotAt"];
+    db.exec("COMMIT;");
+    for (now of [retryAt - 1, retryAt, retryAt + 12 * 60 * 60_000 - 1]) await catchUp();
+
+    assert.deepEqual({ lockedAt, savedAt: state["kanso.spend.snapshotAt"], attempts }, {
+      lockedAt: undefined, savedAt: retryAt, attempts: [["snapshot", started, 1], ["snapshot", retryAt, 1]],
+    });
+  } finally { db.close(); }
+});
+
 test("Spend forces a peer exchange after the Refresh queued behind a read finishes.", async () => {
   const events = [];
   const { cx, drain } = timedContext([]);
@@ -397,20 +439,22 @@ test("Spend sends only refreshed totals to a peer after the scan and its queued 
   assert.deepEqual(sent, [12]);
 });
 
-test("Spend exchanges with everyone once, with the final totals from a two-part Refresh.", async () => {
+test("Spend exchanges only final Refresh totals even when a peer exchange is due between scan chunks.", async () => {
   const timers = [], exchanges = [];
   const { cx, drain } = timedContext(timers);
+  const tick = spendTicker(cx);
   let usd = 0;
   const page = await spendPage({
     async ask() {
       usd += 1;
       return { ...spendPayload({ ...bare, local: { usd } }), scan: { partial: usd === 1 } };
     },
-    exchange(_cx, force, everyone) { exchanges.push([this.costs.local.usd, force, everyone]); },
+    async exchangeOnce(_cx, force, everyone) { exchanges.push([this.costs.local.usd, force, everyone]); },
   }, peerHost({ probe() {} }));
 
   page.reload(cx);
   await drain();
+  tick();
   const [, continueScan] = timers.find(([ms]) => ms === 1000);
   continueScan(cx);
   await drain();
@@ -451,11 +495,7 @@ test("Spend retries a timed-out scan ten minutes after its watchdog fires.", asy
 test("Spend skips a due peer exchange while a Refresh scan is still running.", async () => {
   const scan = Promise.withResolvers(), exchanges = [];
   const { cx, drain, pending } = timedContext([]);
-  let tick;
-  cx.timer.every = (_ms, fire) => {
-    tick = fire;
-    return { cancel() {} };
-  };
+  const tick = spendTicker(cx);
   const page = await spendPage({
     costs: bare, ask: () => scan.promise,
     exchange(_cx, force, everyone) { exchanges.push([this.running, force, everyone]); },
@@ -465,7 +505,7 @@ test("Spend skips a due peer exchange while a Refresh scan is still running.", a
   try {
     await pending[0];
     assert.equal(page.running, "snapshot");
-    tick(cx);
+    tick();
   } finally {
     scan.resolve(spendPayload());
     await drain();
