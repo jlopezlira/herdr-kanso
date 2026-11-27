@@ -200,8 +200,8 @@ export default class TokenSpend extends View {
 
   catchUp(cx) {
     if (this.due()) this.run("snapshot", cx);
-    else if (!this.costs) this.run("prepare", cx);
-    if (this.running || this.unfinished()) return;
+    else if (!this.costs || this.behind()) this.run("prepare", cx);
+    if (this.running || this.stale()) return;
     const all = this.takeForced();
     this.exchange(cx, all, all);
   }
@@ -209,6 +209,10 @@ export default class TokenSpend extends View {
   due() { return Date.now() - (Number(shared(SNAPSHOT_AT)) || 0) >= REFRESH_MS; }
 
   unfinished() { return shared(UNFINISHED) ?? null; }
+
+  behind() { return Boolean(this.scan?.partial) && !this.unfinished(); }
+
+  stale() { return Boolean(this.unfinished() || this.scan?.partial); }
 
   takeForced() {
     const all = this.forceNext === true;
@@ -297,7 +301,7 @@ export default class TokenSpend extends View {
         if (!failure) setShared(UNFINISHED, payload?.scan?.partial ? payload.scan : null);
       }
       if (payload) {
-        this.scan = scans || !this.scan ? payload.scan ?? this.scan : { ...this.scan, lastScanAt: payload.scan?.lastScanAt ?? this.scan.lastScanAt };
+        this.scan = scans || !this.scan ? payload.scan ?? this.scan : { ...this.scan, partial: Boolean(this.scan.partial && this.unfinished()), lastScanAt: payload.scan?.lastScanAt ?? this.scan.lastScanAt };
         if (this.awake) this.costs = payload.costs;
         if (payload.settings) this.settings = payload.settings;
         // Filters changed while this ran: price again with the current ones.
@@ -342,16 +346,16 @@ export default class TokenSpend extends View {
         try { this.continueTimer?.cancel(); } catch { /* already gone */ }
         this.continueTimer = cx.timer.after(1000, (timerCx) => {
           this.continueTimer = null;
-          if (this.unfinished() && this.awake) this.run("snapshot", timerCx);
+          if (this.awake) this.run(this.unfinished() ? "snapshot" : "prepare", timerCx);
         });
       }
     }
-    if (this.awake && !this.closed && !this.running && !this.unfinished()) this.exchange(cx, true, this.takeForced());
+    if (this.awake && !this.closed && !this.running && !this.stale()) this.exchange(cx, true, this.takeForced());
     cx.notify();
   }
 
   exchange(cx, force = false, everyone = false) {
-    if (this.closed || !this.awake || !this.nodeBinary || this.unfinished()) return;
+    if (this.closed || !this.awake || !this.nodeBinary || this.stale()) return;
     if (this.syncing) { this.syncAgain = true; if (force) this.syncForce = true; if (everyone) this.syncEveryone = true; return; }
     this.syncing = true;
     cx.spawn(async (syncCx) => {
