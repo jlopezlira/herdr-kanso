@@ -77,7 +77,7 @@ export class Tasks {
   }
 
   switchOn(machine, cx, again = false) {
-    if (window()?.platform === "windows" || (!again && this.agentsOn[machine] != null)) return;
+    if (window()?.platform === "windows" || this.turnOf(machine).busy || (!again && this.agentsOn[machine] != null)) return;
     const asked = (this.asked[machine] ?? 0) + 1;
     this.asked = { ...this.asked, [machine]: asked };
     cx.spawn(async (cx) => {
@@ -118,7 +118,7 @@ export class Tasks {
     const held = await Promise.all(machines.map((m) => this.heldOn(m, nextProjects)));
     const nextTodos = [...(local ? local.map((t) => ({ ...t, home: t.project, on: "" })) : this.todos.filter((t) => !t.on)), ...held.flat()];
     if (this.projects && JSON.stringify([nextProjects, nextTodos]) === JSON.stringify([this.projects, this.todos])) return false;
-    this.projects = nextProjects;
+    this.projects = withSpaces(nextProjects.filter((p) => !p.auto), spaces(), home());
     this.todos = nextTodos;
     this.fieldsFor(this.projects.map((p) => p.id));
     return true;

@@ -30,10 +30,12 @@ const TOLD_ONE = "Told 1 running agent. New conversations read it when they star
 const TODO_APP_HOME = "/app";
 const TODO_SCRIPT = `${TODO_APP_HOME}/mods/kanso-panel/kanso-todo`;
 const TODO_WORDS = "Pack the release notes";
+const FOLLOW_MS = 300;
 const terminalId = "t42";
 
 const saveProject = async (db, { name, folder, machine }) => (await db.addProject({ name, folder, machine: machine ?? undefined })).row;
 const activeSpace = (project) => () => [{ ...project, active: true }];
+const selectProject = (project) => () => [shop, acme].map((p) => ({ ...p, active: p === project }));
 
 const control = (panel, id) => find(panel, (el) => el.tag === id || arg(el, "id") === id);
 const wordsAt = (panel, id) => {
@@ -59,18 +61,23 @@ const startTasks = async (
   view.init(every ? { ...cx, timer: { ...cx.timer, every } } : cx);
   await drain();
   const page = () => view.render();
-  const click = (id) => {
+  const press = (id) => {
     const target = control(page(), id);
     assert.ok(target, id);
-    one(target, "on_click")(null, cx);
+    const handler = one(target, "on_click");
+    return () => handler(null, cx);
   };
-  return { view, cx, drain, pending, page, click };
+  const click = (id) => press(id)();
+  return { view, cx, drain, pending, page, click, press };
 };
 
 const storedTodo = (project, extra = {}) => ({ id: project, project, text: TODO_WORDS, created: 1000, ...extra });
 const writeTodo = async (db, todo) => {
   const { addTodoSql } = await load("kanso-panel/todo.js", ["addTodoSql"]);
   await db.run(addTodoSql(todo));
+};
+const followWithin = (every, cx) => {
+  for (const { arguments: [ms, tick] } of every.mock.calls) if (ms <= FOLLOW_MS) tick(cx);
 };
 const polledTasks = async (t, db, host = {}) => {
   const every = t.mock.fn(() => ({ cancel() {} }));
@@ -80,6 +87,7 @@ const polledTasks = async (t, db, host = {}) => {
   assert.equal(typeof tick, "function", "Tasks schedules the to-do poll every four seconds");
   return {
     ...tasks, notify,
+    follow: () => followWithin(every, tasks.cx),
     poll: async () => { tick(tasks.cx); await tasks.drain(); },
   };
 };
@@ -87,7 +95,7 @@ const polledTasks = async (t, db, host = {}) => {
 test("The to-do poll redraws when an agent changes the list but keeps the same rows when nothing changed.", async (t) => {
   const { db } = await temporaryKdb(t);
   const { id } = await saveProject(db, shop);
-  const { view, page, notify, poll } = await polledTasks(t, db);
+  const { view, page, notify, poll } = await polledTasks(t, db, { spaces: activeSpace(shop) });
   const redraws = notify.mock.callCount();
   const before = view.todos;
   await writeTodo(db, storedTodo(id));
@@ -103,7 +111,7 @@ test("The to-do poll redraws when an agent changes the list but keeps the same r
 
 test("The to-do poll finds an agent's first item in a newly saved project.", async (t) => {
   const { db } = await temporaryKdb(t);
-  const { page, poll } = await polledTasks(t, db);
+  const { page, poll } = await polledTasks(t, db, { spaces: activeSpace(acme) });
   assert.ok(control(page(), "tasks-none"));
   const { id } = await saveProject(db, acme);
   await writeTodo(db, storedTodo(id));
@@ -112,15 +120,35 @@ test("The to-do poll finds an agent's first item in a newly saved project.", asy
   for (const word of [acme.name, TODO_WORDS]) assert.ok(words.includes(word), word);
 });
 
-test("The to-do poll shows an unsaved project when its space opens.", async (t) => {
+test("Tasks shows a newly opened unsaved project and its editor within 300 ms.", async (t) => {
   const { db } = await temporaryKdb(t);
-  const spaces = t.mock.fn(() => []);
-  const { page, poll } = await polledTasks(t, db, { spaces });
-  assert.ok(control(page(), "tasks-none"));
-  spaces.mock.mockImplementation(activeSpace(remoteShop));
-  await poll();
-  assert.ok(texts(page()).includes(remoteShop.name));
+  const spaces = t.mock.fn(activeSpace(shop));
+  const { page, follow } = await polledTasks(t, db, { spaces });
+  assert.ok(texts(page()).includes(shop.name));
+  spaces.mock.mockImplementation(activeSpace(acme));
+  follow();
+
+  const panel = page();
+  assert.ok(texts(panel).includes(acme.name));
+  assert.ok(labelledControl(panel, "Add a to-do"));
   same(await db.projects(), []);
+});
+
+test("Tasks redraws for the sidebar's active project within 300 ms even when no to-dos change.", async (t) => {
+  const { db } = await temporaryKdb(t);
+  const reads = t.mock.method(db, "read");
+  const spaces = t.mock.fn(selectProject(shop));
+  const { page, follow, drain, notify } = await polledTasks(t, db, { spaces });
+  const visibleProjects = () => texts(page()).filter((word) => [shop.name, acme.name].includes(word));
+
+  assert.deepEqual(visibleProjects(), [shop.name]);
+  const before = { redraws: notify.mock.callCount(), reads: reads.mock.callCount() };
+  spaces.mock.mockImplementation(selectProject(acme));
+  follow();
+  assert.ok(notify.mock.callCount() > before.redraws, "Switching spaces requests a redraw without waiting on I/O");
+  await drain();
+  assert.equal(reads.mock.callCount(), before.reads, "Following the active space does not reread to-dos");
+  assert.deepEqual(visibleProjects(), [acme.name]);
 });
 
 test("Tasks shows to-dos for saved projects but not for removed projects.", async (t) => {
@@ -131,22 +159,20 @@ test("Tasks shows to-dos for saved projects but not for removed projects.", asyn
   await writeTodo(db, storedTodo(removed.id, { text: "An item from a removed project" }));
   await db.removeProject(removed.id);
 
-  const { page } = await startTasks(db);
-  const words = texts(page());
-  assert.ok(words.includes(TODO_WORDS));
-  assert.ok(!words.includes(acme.name));
-  assert.ok(!words.includes("An item from a removed project"));
+  const { page, view } = await startTasks(db, { spaces: activeSpace(shop) });
+  assert.ok(texts(page()).includes(TODO_WORDS));
+  assert.equal(view.todos.some((todo) => todo.project === removed.id), false);
 });
 
-test("Tasks shows the front project first, then projects with to-dos by name.", async () => {
-  const { shownProjects } = await load("kanso-panel/todo.js", ["shownProjects"]);
-  const front = { id: "front", name: "Zebra" };
-  const withDone = { id: "done", name: "Mill" };
-  const empty = { id: "empty", name: "Bakery" };
-  const projects = [withDone, front, empty, acme];
-  const todos = [storedTodo(acme.id), storedTodo(withDone.id, { done_at: 2000 })];
-  same(shownProjects(projects, todos, front.id), [front, acme, withDone]);
-  assert.deepEqual(projects, [withDone, front, empty, acme]);
+test("Tasks shows only the viewed project even when another project has an open to-do.", async (t) => {
+  const { db } = await temporaryKdb(t);
+  const other = await saveProject(db, acme);
+  await writeTodo(db, storedTodo(other.id));
+  const { page } = await startTasks(db, { ...todoInputHost(t), spaces: activeSpace(shop) });
+  const panel = page();
+  const words = texts(panel);
+  assert.deepEqual(words.filter((word) => [shop.name, acme.name, TODO_WORDS].includes(word)), [shop.name]);
+  assert.deepEqual(wordsAt(panel, "tasks-none-action"), [TURN_ON]);
 });
 
 test("Open spaces count once per project, preferring saved projects and skipping the local home.", async () => {
@@ -190,7 +216,7 @@ test("Empty Tasks turns on the to-do rule and can tell running agents on this co
       + " 1 is waiting on its own question; answer, then tell agents again. New conversations read it when they start.";
     assert.ok(texts(page()).includes(note));
   }
-  assert.deepEqual(todoExec.mock.calls.flatMap(({ arguments: args }) => args), [
+  assert.deepEqual(todoVerbs(todoExec), [
     "status", "install", "status", "rule", "status", "rule",
   ]);
   same(sentTo(hc), [local, refused, local, refused].map((address) => ["send", address, rule]));
@@ -288,6 +314,11 @@ test("Telling running agents distinguishes a refusal, an unanswered send, and no
   }
 });
 
+test("Telling agents on light names light when no agents are running there.", async () => {
+  const { toldWords } = await load("kanso-panel/todo-switch.js", ["toldWords"]);
+  assert.equal(toldWords({}, false, remoteShop.machine), "No agent is running on light now.");
+});
+
 test("Telling running agents skips an agent waiting for my answer and says to answer before trying again.", async () => {
   const { result, text } = await deliverTodoTo([terminalId], "blocked");
   assert.match(text, /No agent was told\. 1 is waiting on its own question; answer, then tell agents again/);
@@ -336,10 +367,12 @@ const todoInputHost = (t) => ({
 });
 const labelledControl = (panel, label) => find(panel, (el) => arg(el, "accessibility_label") === label);
 const todoRowIdOf = ({ id }) => `tasks-todo-${id}`;
-const remoteTodoHost = async (t, Kdb, machine) => {
+const remoteTodoHost = async (t, Kdb, machine, todoExec = async () => success("off\n")) => {
   const home = await temporary(t);
   const config = nativePlatform === "windows" ? ["AppData", "Roaming"] : [".config"];
-  const db = new Kdb(databaseTimer, join(home, ...config, "herdr-app", "data", "kanso"));
+  const app = join(home, ...config, "herdr-app");
+  const script = join(app, "mods", "kanso-panel", "kanso-todo");
+  const db = new Kdb(databaseTimer, join(app, "data", "kanso"));
   await db.open();
   const run = async (command, args, options) => {
     assert.equal(options?.on, machine);
@@ -347,6 +380,7 @@ const remoteTodoHost = async (t, Kdb, machine) => {
       return nativePlatform === "windows" ? success("Win32NT\n") : failure("Command not found", 127);
     }
     if (args.at(-1)?.endsWith("$HOME") || args.at(-1) === 'printf %s "$HOME"') return success(home);
+    if (command === "sh" && args[0] === script) return todoExec(args[1]);
     return exec(command, args, options);
   };
   return { db, host: { exec: run, window: nativeWindow } };
@@ -386,6 +420,97 @@ const todoTasks = async (t, { project = shop, unsaved = false, ...host } = {}) =
   };
   return { ...tasks, db, remoteDb: remote?.db, id: savedProject?.id, enterTodo, submit, saved, todoRowId, makeButton };
 };
+
+const tasksOnLight = async (t, remoteExec, { todoExec, ...host } = {}) => {
+  const { db, Kdb } = await temporaryKdb(t);
+  const remote = await remoteTodoHost(t, Kdb, remoteShop.machine, remoteExec);
+  return startTasks(db, {
+    ...todoInputHost(t), ...remote.host, window: () => ({ platform: "macos" }),
+    spaces: activeSpace(remoteShop), todoExec, ...host,
+  });
+};
+const todoVerbs = (mock) => mock.mock.calls.flatMap(({ arguments: args }) => args);
+
+test("One press in Tasks turns on the to-do on light and tells only light's running agents.", async (t) => {
+  const rule = "Keep the project to-do up to date.";
+  let installed = false;
+  const remote = t.mock.fn(async (verb) => {
+    if (verb === "install") installed = true;
+    return success(verb === "rule" ? rule : installed ? "on\n" : "off\n");
+  });
+  const local = t.mock.fn(async (verb) => success(verb === "rule" ? "Local to-do rule" : "off\n"));
+  const running = `${remoteShop.machine}/t3`;
+  const agents = () => [
+    ...[terminalId, "grey/t2", running].map((address) => ({ address, status: "working" })),
+    { address: `${remoteShop.machine}/t4`, status: "blocked" },
+  ];
+  const hc = t.mock.fn(async () => success(""));
+  const { click, drain } = await tasksOnLight(t, remote, { todoExec: local, agents, hc });
+  click("tasks-none-action");
+  await drain();
+
+  same(
+    { light: todoVerbs(remote), local: todoVerbs(local), sent: sentTo(hc) },
+    { light: ["status", "install", "status", "rule"], local: [], sent: [["send", running, rule]] },
+  );
+});
+
+test("Empty Tasks reads light's switch rather than this computer's switch.", async (t) => {
+  const { page } = await tasksOnLight(t, async () => success("on\n"), {
+    todoExec: async () => success("off\n"),
+  });
+  assert.deepEqual(wordsAt(page(), "tasks-none-action"), [TELL]);
+});
+
+const selectAt = (tasks, spaces) => (project) => {
+  spaces.mock.mockImplementation(activeSpace(project));
+  tasks.view.follow(tasks.cx);
+};
+
+test("Tasks rereads light's switch when returning from a project on this computer.", async (t) => {
+  let turnedOn = true;
+  const spaces = t.mock.fn(activeSpace(remoteShop));
+  const tasks = await tasksOnLight(t, async () => success(turnedOn ? "on\n" : "off\n"), { spaces });
+  const visit = selectAt(tasks, spaces);
+  const label = () => wordsAt(tasks.page(), "tasks-none-action");
+  assert.deepEqual(label(), [TELL]);
+
+  visit(shop);
+  await tasks.drain();
+  turnedOn = false;
+  visit(remoteShop);
+  await tasks.drain();
+
+  assert.deepEqual(label(), [TURN_ON]);
+});
+
+test("A late status reply from light cannot overwrite a successful Turn on.", { timeout: 10000 }, async (t) => {
+  const stale = Promise.withResolvers();
+  const reading = Promise.withResolvers();
+  let installed = false;
+  const remote = async (verb) => {
+    if (verb === "status" && !installed) {
+      reading.resolve();
+      return stale.promise;
+    }
+    if (verb === "install") installed = true;
+    return success(verb === "rule" ? "Keep the to-do up to date." : "on\n");
+  };
+  const spaces = t.mock.fn(activeSpace(shop));
+  const tasks = await tasksOnLight(t, remote, { spaces });
+  const action = "tasks-none-action";
+  selectAt(tasks, spaces)(remoteShop);
+  await reading.promise;
+  try {
+    tasks.click(action);
+    await tasks.pending.at(-1);
+    assert.deepEqual(wordsAt(tasks.page(), action), [TELL]);
+  } finally {
+    stale.resolve(success("off\n"));
+    await tasks.drain();
+  }
+  assert.deepEqual(wordsAt(tasks.page(), action), [TELL]);
+});
 
 test("Opening Tasks shows a skeleton before its first load.", async () => {
   const { Panel } = await load("kanso-panel/main.js", ["Panel"], {
@@ -672,14 +797,16 @@ test("Send opens choices under the to-do for this project's agents and installed
 test("New conversation starts the chosen agent with the to-do in the project's terminal, tab, or space.", async (t) => {
   const spaces = t.mock.fn(activeSpace(remoteShop));
   const run = t.mock.fn();
-  const { page, click, openSend, fresh } = await todoSendTasks(t, { spaces, run });
+  const { page, press, openSend, fresh } = await todoSendTasks(t, { spaces, run });
   const agent = INSTALLED_AGENTS[1];
   const choice = fresh(agent);
   for (const [open, command, options] of terminalPlacements()) {
-    spaces.mock.mockImplementation(() => open);
     await openSend();
     assert.deepEqual(wordsAt(page(), choice), [conversationLabel(agent.name)]);
-    click(choice);
+    const start = press(choice);
+    spaces.mock.mockImplementation(() => open);
+    start();
+    spaces.mock.mockImplementation(activeSpace(remoteShop));
     const name = command === "tab.new" ? agent.name : command === "space.new" ? remoteShop.name : null;
     same(run.mock.calls.at(-1).arguments, [command, { ...options, ...(name ? { name } : {}), argv: [...agent.run, TODO_WORDS] }]);
     assert.equal(control(page(), choice), null);
@@ -780,6 +907,27 @@ for (const state of ["open", "done"]) {
     assert.ok(wordsAt(page(), row).includes(TODO_WORDS));
   });
 }
+
+test("Tasks hides another project's deletion feedback and offers Undo when I return.", async (t) => {
+  const spaces = t.mock.fn(activeSpace(shop));
+  const tasks = await todoTasks(t, { spaces });
+  const visit = selectAt(tasks, spaces);
+  const note = `Deleted ${TODO_WORDS}`;
+  const feedback = () => wordsAt(tasks.page(), "tasks-removed");
+  await tasks.submit();
+  await deleteTodo(tasks, await tasks.todoRowId());
+  assert.ok(feedback().includes(note));
+
+  visit(acme);
+  await tasks.drain();
+  assert.deepEqual(feedback(), []);
+
+  visit(shop);
+  await tasks.drain();
+  assert.ok(feedback().includes(note));
+  await undoRemoval(tasks);
+  assert.ok(texts(tasks.page()).includes(TODO_WORDS));
+});
 
 test("Undo restores a to-do deleted while it was finding its connected project.", async (t) => {
   const tasks = await todoTasks(t, { project: remoteShop, unsaved: true });
