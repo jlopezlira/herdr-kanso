@@ -37,12 +37,12 @@ const syncedGitHub = async (t, read) => {
   return { store, github, searches };
 };
 
-const searchWindow = (field) => (start, end) => {
+const searchWindow = (field) => (start, end, login = "me") => {
   const seconds = (ms) => iso(Math.floor(ms / 1000) * 1000);
-  return `is:pr author:@me ${field}:${seconds(start)}..${seconds(end - 1000)}`;
+  return `is:pr author:${login} ${field}:${seconds(start)}..${seconds(end - 1000)}`;
 };
 const createdQuery = searchWindow("created"), mergedQuery = searchWindow("merged"), updatedQuery = searchWindow("updated");
-const monthQueries = (start, end) => [createdQuery(start, end), mergedQuery(start, end)];
+const monthQueries = (start, end, login) => [createdQuery(start, end, login), mergedQuery(start, end, login)];
 const clockAt = (now) => class extends Date {
   constructor(...args) { super(...(args.length ? args : [new.target.now()])); }
   static now() { return typeof now === "function" ? now() : now; }
@@ -110,7 +110,7 @@ test("Shipped splits a GitHub search over 1,000 pull requests and collects the p
     assert.equal(q, right);
     return search([pullRequest(3, mid)]);
   };
-  const prs = await prsCreated(start, end, read);
+  const prs = await prsCreated("me", start, end, read);
   same(prs.map((p) => p.number), [1, 2, 3]);
   assert.deepEqual(calls, [[full, null], [left, null], [left, "page-2"], [right, null]]);
 });
@@ -149,8 +149,8 @@ test("GitHub reads each month once, follows changes, and reads the missed months
       return history([pending.mergeCommit.oid]);
     }
     if (vars.q.includes("updated:")) return search([merged]);
-    if (vars.q.startsWith(`is:pr author:@me created:${iso(monthAt(9))}`)) return search([old]);
-    if (vars.q.startsWith(`is:pr author:@me created:${iso(monthAt(10))}`)) return search([pending]);
+    if (vars.q.startsWith(`is:pr author:me created:${iso(monthAt(9))}`)) return search([old]);
+    if (vars.q.startsWith(`is:pr author:me created:${iso(monthAt(10))}`)) return search([pending]);
     return search([]);
   });
   await github.sync(store, { from, now: first, login: "me" });
@@ -253,8 +253,8 @@ test("Shipped replaces the previous GitHub account's pull requests and re-reads 
   const old = pullRequest(1, monthAt(9, 3), { repo: "first/tool" });
   const current = pullRequest(2, monthAt(10, 2), { repo: "second/tool" });
   const { store, github, searches } = await syncedGitHub(t, ({ q }) => {
-    if (q === createdQuery(september, october)) return search([old]);
-    if (q === createdQuery(october, second + 1000) || q.includes("updated:")) return search([current]);
+    if (q === createdQuery(september, october, "first")) return search([old]);
+    if (q === createdQuery(october, second + 1000, "second") || q.includes("updated:")) return search([current]);
     return search([]);
   });
   await github.sync(store, { from: september, now: first, login: "first" });
@@ -263,7 +263,7 @@ test("Shipped replaces the previous GitHub account's pull requests and re-reads 
   const before = searches.length;
   await github.sync(store, { from: october, now: second, login: "second" });
   same((await store.prs()).map((p) => p.url), [current.url]);
-  assert.deepEqual(searches.slice(before), monthQueries(october, second + 1000));
+  assert.deepEqual(searches.slice(before), monthQueries(october, second + 1000, "second"));
   assert.deepEqual([...(await store.readMonths("github"))], ["2026-10"]);
 });
 
@@ -280,7 +280,7 @@ const checkCappedUpdates = async (t, openedMonth) => {
     if (q === createdQuery(openedMonth, initialEnd)) return search([closed]);
     if (q === createdQuery(openedMonth, november) && openedMonth === october) return search([merged]);
     if (q === earlier) return search([merged]);
-    if (![increment, later, `is:pr author:@me updated:>=${iso(start)}`].includes(q)) return search([]);
+    if (![increment, later, `is:pr author:me updated:>=${iso(start)}`].includes(q)) return search([]);
     const page = Number(after ?? 0);
     const cursor = page < 9 ? String(page + 1) : null;
     const issueCount = q === later ? 1000 : 1001;
@@ -374,7 +374,8 @@ test("Shipped checks the account without reading GitHub stats or pull requests w
 
   panel.refresh(cx, true);
   await drain();
-  assert.deepEqual(requested, ["local login", "stats", "viewer", updatedQuery(first - HOUR, now + 1000)]);
+  assert.deepEqual(requested.filter((query) => query !== "viewer"), ["local login", "stats", updatedQuery(first - HOUR, now + 1000)]);
+  assert.ok(requested.includes("viewer"));
   assert.equal(reviewsShown(panel), "6");
 });
 
@@ -440,6 +441,66 @@ test("Shipped does not write pull requests or advance the cursor when Refresh ca
 
 test("Shipped does not ingest as the previous API viewer after Refresh fails with the same local login.", (t) =>
   refreshWithoutViewer(t, { cliSwitch: false }));
+
+const switchDuringSearch = async (t) => {
+  const now = monthAt(11, 10), created = now - 2 * HOUR;
+  const alice = pullRequest(1, created, { repo: "alice/tool" });
+  const bob = pullRequest(2, created, { repo: "bob/tool", merged: now - HOUR });
+  const authors = [];
+  let account = "alice";
+  const host = await ghShippedHost(t, now, (query, { q }) => {
+    if (viewerQuery(query)) {
+      if (account === "bob" && query.includes("cal:")) throw new Error("Bob's period is unavailable");
+      return viewerOf(account);
+    }
+    const requested = /author:(\S+)/.exec(q)[1];
+    const author = requested === "@me" ? account : requested;
+    authors.push(author);
+    if (q.includes("created:")) {
+      account = "bob";
+      return search(author === "alice" ? [alice] : []);
+    }
+    return search(author === "bob" ? [bob] : []);
+  }, () => account);
+  const { panel } = await settledShipped(host, "day");
+  assert.equal(account, "bob");
+  assert.equal(await panel.store.meta("github.login"), "alice");
+  return { store: panel.store, authors, bob };
+};
+
+test("Shipped keeps the confirmed author when the CLI account switches between created and merged searches.", async (t) => {
+  const { store, authors, bob } = await switchDuringSearch(t);
+  assert.ok(!(await store.prs()).some(({ url }) => url === bob.url), "Bob's pull request must not appear under Alice");
+  assert.deepEqual(authors, ["alice", "alice"]);
+});
+
+test("Shipped leaves the month uncovered when the API viewer switches during its search.", async (t) => {
+  const { store } = await switchDuringSearch(t);
+  assert.equal((await store.readMonths("github")).size, 0);
+  same(await store.prs(), []);
+});
+
+test("Shipped does not save production history results after the API viewer changes.", async (t) => {
+  const now = monthAt(11, 10), merge = now - HOUR;
+  const pr = pullRequest(1, merge - HOUR, { base: "develop", merged: merge });
+  let login = "alice";
+  const host = await ghShippedHost(t, now, (query, { q, ref }) => {
+    if (viewerQuery(query)) {
+      if (login === "bob" && query.includes("cal:")) throw new Error("Bob's period is unavailable");
+      return viewerOf(login);
+    }
+    if (ref) {
+      login = "bob";
+      return history([pr.mergeCommit.oid]);
+    }
+    return search(q.includes("created:") ? [pr] : []);
+  }, () => login);
+  const { panel } = await settledShipped(host, "day");
+  assert.equal(login, "bob");
+  assert.equal(await panel.store.meta("github.login"), "alice");
+  const [row] = await panel.store.prs();
+  assert.deepEqual([row.prod, await panel.store.meta("github.unchecked")], [0, null]);
+});
 
 test("Shipped shows the new account and reads its full calendar when you reopen after switching accounts.", async (t) => {
   const now = new Date(2026, 10, 10, 12).getTime();
@@ -614,7 +675,7 @@ test("Shipped does not preview the previous account's PR count while GitHub read
     Date: clockAt(now),
     exec: withGitHub((query, { q }) => {
       if (viewerQuery(query)) return viewerOf("new");
-      return q === createdQuery(monthAt(11), now + 1000) ? held.pause() : search([]);
+      return q === createdQuery(monthAt(11), now + 1000, "new") ? held.pause() : search([]);
     }),
   });
   const store = await openedShippedStore(host);
@@ -733,7 +794,7 @@ test("Shipped drops the previous account's records from the share card when you 
   const now = monthAt(11, 4), held = holdSearch();
   const previous = { prodWeek: { n: 27, start: monthAt(11, 2) } };
   const state = { [recordsKey]: previous, [`${recordsKey}:old`]: previous };
-  const currentQuery = createdQuery(monthAt(11), now + 1000);
+  const currentQuery = createdQuery(monthAt(11), now + 1000, "new");
   const account = { login: "old" };
   const { panel, cx, drain, settled } = await mountAccountRecords(t, now, state, account, (q) =>
     account.login === "new" && q === currentQuery ? held.pause() : search([]));
@@ -753,7 +814,7 @@ test("Shipped drops the previous account's records from the share card when you 
 
 test("Shipped discards the previous account's results when you switch accounts during a read.", async (t) => {
   const now = monthAt(11, 4), held = holdSearch(), switched = Promise.withResolvers();
-  const current = createdQuery(monthAt(11), now + 1000);
+  const current = createdQuery(monthAt(11), now + 1000, "old");
   const oldPr = pullRequest(1, monthAt(11, 2), { merged: monthAt(11, 3) });
   const state = {}, account = { login: "old" };
   const mounted = await mountAccountRecords(t, now, state, account, (q) =>

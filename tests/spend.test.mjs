@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import fs, { mkdir, readFile, realpath, stat, writeFile } from "node:fs/promises";
+import fs, { chmod, mkdir, readFile, realpath, stat, writeFile } from "node:fs/promises";
 import { syncBuiltinESMExports } from "node:module";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { zstdCompressSync } from "node:zlib";
 import { arg, calls, exec, find, KIT_NIGHT, load, popoverHost, storeShared, success, temporary, texts, timedContext } from "./helpers.mjs";
 import { keyDown, loadTokenSpend, spendPage } from "./mod-fixtures.mjs";
 import { chooserKey, readPlan } from "../kanso/mods/kanso-spend/spend-model.js";
@@ -250,6 +251,10 @@ test("After a snapshot fails on the Node named in runtime.json, Refresh reads th
 
 
 const spendPayload = (costs = bare) => ({ kind: "kanso-spend-costs", version: 1, costs });
+const pricedScan = (usd, partial) => ({ ...spendPayload({ ...bare, local: { usd } }), scan: { partial } });
+const captureExchange = (exchanges) => async function (_cx, force, everyone) {
+  exchanges.push([this.costs.local.usd, force, everyone]);
+};
 const snapshotClock = (state, now) => ({
   ...storeShared(state),
   Date: class extends Date { static now() { return now(); } },
@@ -370,9 +375,10 @@ const timedSnapshots = async (ask) => {
     nodeBinary: "node", lastSnapshotAt: 0, exchange() {},
     ask: (command) => ask(command, now),
   }, snapshotClock(state, () => now));
-  const readAt = async (at) => {
+  const readAt = async (at, command) => {
     now = at;
-    page.catchUp(cx);
+    if (command) page.run(command, cx);
+    else page.catchUp(cx);
     await drain();
     assert.equal(page.error, null);
     return state["kanso.spend.snapshotAt"];
@@ -406,6 +412,37 @@ test("Spend retries a locked source in ten minutes but treats a permanently skip
       lockedAt: undefined, savedAt: retryAt, attempts: [["snapshot", started, 1], ["snapshot", retryAt, 1]],
     });
   } finally { db.close(); }
+});
+
+test("Spend retries a newly enabled source ten minutes after configuration could not read it.", async () => {
+  const commands = [];
+  const { started, readAt } = await timedSnapshots(async (command) => {
+    commands.push(command);
+    return { ...spendPayload(), scan: { retry: command === "configure" ? 1 : 0 } };
+  });
+  const retryAt = started + 10 * 60_000;
+  await readAt(started);
+  await readAt(started, "configure");
+  await readAt(retryAt - 1);
+  const savedAt = await readAt(retryAt);
+  assert.deepEqual({ commands, savedAt }, { commands: ["snapshot", "configure", "snapshot"], savedAt: retryAt });
+});
+
+test("Spend retries an archive whose file permissions prevent it from reading.", {
+  skip: process.platform === "win32" || process.getuid?.() === 0,
+}, async (t) => {
+  const f = await fixture(t);
+  const folder = join(f.home, ".codex", "sessions");
+  await mkdir(folder, { recursive: true });
+  const archive = join(folder, "session.jsonl.zst");
+  await writeFile(archive, zstdCompressSync(Buffer.from("{}\n")));
+  try {
+    await chmod(archive, 0o000);
+    const { scan } = await run(f, "snapshot");
+    assert.deepEqual([scan.partial, scan.errors, scan.retry], [false, 1, 1]);
+  } finally {
+    await chmod(archive, 0o600);
+  }
 });
 
 test("Spend marks a capped source fresh without scanning the unchanged root again in ten minutes.", async (t) => {
@@ -494,9 +531,9 @@ const checkTwoChunkRefresh = async (betweenChunks) => {
   const page = await spendPage({
     async ask() {
       usd += 1;
-      return { ...spendPayload({ ...bare, local: { usd } }), scan: { partial: usd === 1 } };
+      return pricedScan(usd, usd === 1);
     },
-    async exchangeOnce(_cx, force, everyone) { exchanges.push([this.costs.local.usd, force, everyone]); },
+    exchangeOnce: captureExchange(exchanges),
   }, peerHost({ probe() {} }));
 
   page.reload(cx);
@@ -513,6 +550,53 @@ test("Spend exchanges only final Refresh totals even when a peer exchange is due
 
 test("Opening Spend between scan chunks still exchanges the final Refresh totals with everyone.", () =>
   checkTwoChunkRefresh(({ page, cx }) => page.wake(cx)));
+
+const queuePrepareDuringSnapshot = (page, { cx, drain }) => {
+  page.run("snapshot", cx);
+  page.run("prepare", cx);
+  return drain();
+};
+
+test("Spend continues a partial Refresh through a queued prepare and exchanges only the final totals.", async () => {
+  const timers = [], exchanges = [], commands = [];
+  const { cx, drain } = timedContext(timers);
+  const page = await spendPage({
+    nodeBinary: "node", forceNext: true,
+    async ask(command) {
+      commands.push(command);
+      if (command === "prepare") return pricedScan(1, false);
+      return commands.length === 1 ? pricedScan(1, true) : pricedScan(2, false);
+    },
+    exchangeOnce: captureExchange(exchanges),
+  });
+  await queuePrepareDuringSnapshot(page, { cx, drain });
+  timers.find(([ms]) => ms === 1000)?.[1](cx);
+  await drain();
+  assert.deepEqual({ commands, exchanges }, {
+    commands: ["snapshot", "prepare", "snapshot"], exchanges: [[2, true, true]],
+  });
+});
+
+test("Spend retries a partial snapshot in ten minutes if the queued prepare fails.", async () => {
+  const { cx, drain } = timedContext([]);
+  const commands = [], first = Date.UTC(2026, 10, 10, 12), retryAt = first + 10 * 60_000;
+  let now = first;
+  const page = await spendPage({
+    nodeBinary: "node", exchange() {},
+    async ask(command) {
+      commands.push([command, now]);
+      if (command === "prepare") throw new Error("Pricing unavailable");
+      return pricedScan(1, now === first);
+    },
+  }, snapshotClock({}, () => now));
+  await queuePrepareDuringSnapshot(page, { cx, drain });
+  assert.equal(page.error, "Pricing unavailable");
+  for (now of [retryAt - 1, retryAt]) {
+    page.catchUp(cx);
+    await drain();
+  }
+  assert.deepEqual(commands, [["snapshot", first], ["prepare", first], ["snapshot", retryAt]]);
+});
 
 test("Spend retries a timed-out scan ten minutes after its watchdog fires.", async () => {
   const state = {}, timers = [], attempts = [];
