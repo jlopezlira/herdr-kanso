@@ -192,10 +192,9 @@ test("Containers behind reads once for its first picture and then nothing, reads
 test("Ports brought forward while its first read is still going reads once more when that read ends", async (t) => {
   const f = fixture({ dir: await temporary(t) });
   f.state.active = false;
-  let release;
-  const held = new Promise((resolve) => { release = resolve; });
+  const held = Promise.withResolvers();
   const exec = f.host.exec;
-  f.host.exec = async (command, args, options) => { if (command === "ps") await held; return exec(command, args, options); };
+  f.host.exec = async (command, args, options) => { if (command === "ps") await held.promise; return exec(command, args, options); };
   const { Ports } = await loadMod("kanso-panel/ports.js", ["Ports"], f.host);
   const view = new Ports();
   view.init(f.cx);
@@ -205,7 +204,7 @@ test("Ports brought forward while its first read is still going reads once more 
   assert.equal(view.list, null, "the first read is still going");
   await broughtForward(f, view);
   assert.equal(lsof(), 0, "no second scan beside the one going");
-  release();
+  held.resolve();
   await f.settle();
   assert.equal(lsof(), 1, "the front's read follows the one that began behind");
   assert.notEqual(view.list, null);
