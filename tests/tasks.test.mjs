@@ -483,6 +483,7 @@ test("Tasks offers no Turn on button when light runs Windows.", async (t) => {
     if (command.includes("OSVersion.Platform")) return success("Win32NT");
     if (command.endsWith("$HOME")) return success("C:\\Users\\agent");
     if (program === "sqlite3") return success(args.filter((arg) => arg.startsWith(".print ")).map((arg) => arg.slice(7)).join("\n"));
+    if (program === "sh") return failure("The term 'sh' is not recognized as a name of a cmdlet, function, script file, or executable program.");
     return program === "pwsh" ? success("") : failure("Command not found");
   };
   const { page } = await todoTasks(t, { spaces: activeSpace(remoteShop), exec: windows });
