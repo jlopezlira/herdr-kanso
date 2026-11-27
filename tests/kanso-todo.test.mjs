@@ -3,8 +3,8 @@ import assert from "node:assert/strict";
 import { appendFile, chmod, copyFile, mkdir, readFile, realpath, stat, symlink, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { exec, fileExists, git, same, temporary } from "./helpers.mjs";
-import { temporaryKdb } from "./mod-fixtures.mjs";
+import { clone, exec, fileExists, git, same, stdoutOf, temporary } from "./helpers.mjs";
+import { temporaryKdb, temporaryKdbFile } from "./mod-fixtures.mjs";
 
 const todoScript = fileURLToPath(new URL("../kanso/mods/kanso-panel/kanso-todo", import.meta.url));
 const unixTodo = { skip: process.platform === "win32" && "The agent's command uses POSIX sh" };
@@ -13,18 +13,20 @@ const addUsage = 'add "<step>" "<detail>"';
 const startUsage = "start <id>";
 const doneUsage = "done <id>";
 
-const agentTodo = async (t, cwd, script = todoScript) => {
+const commandText = async (result) => {
+  const { code, stdout, stderr } = await result;
+  assert.equal(code, 0, stderr);
+  return stdout.trim();
+};
+
+const agentTodo = async (t, cwd, { script = todoScript, database = temporaryKdb } = {}) => {
   const HOME = await temporary(t);
-  const { db, dir } = await temporaryKdb(t);
+  const { db, dir } = await database(t);
   const options = { cwd: cwd ?? HOME, env: { ...process.env, HOME, HERDR_APP_HOME: dir, HC_TERMINAL_ID: terminalId } };
   const at = (cwd, by = terminalId) => (...args) =>
-    exec("sh", ["-c", 'umask 022; exec sh "$@"', "sh", script, ...args], { ...options, cwd, env: { ...options.env, HC_TERMINAL_ID: by } });
+    exec("sh", ["-c", 'umask 022; exec sh "$@"', "sh", script, ...args], { ...options, cwd, env: { ...options.env, HC_TERMINAL_ID: by ?? undefined } });
   const result = at(options.cwd);
-  const run = async (...args) => {
-    const { code, stdout, stderr } = await result(...args);
-    assert.equal(code, 0, stderr);
-    return stdout.trim();
-  };
+  const run = (...args) => commandText(result(...args));
   return { db, HOME, run, at, result, options };
 };
 
@@ -101,7 +103,7 @@ test("An agent can run the command printed in the rule when the install path has
   await mkdir(folder);
   const script = join(folder, basename(todoScript));
   await copyFile(todoScript, script);
-  const { run, options } = await agentTodo(t, folder, script);
+  const { run, options } = await agentTodo(t, folder, { script });
   const text = "Check the release";
   const id = await run("add", text, "Read the upgrade notes");
   const rule = await run("rule");
@@ -109,6 +111,93 @@ test("An agent can run the command printed in the rule when the install path has
   assert.ok(list, "The rule prints a shell command for listing to-dos");
   const { code, stdout, stderr } = await exec("sh", ["-c", list], options);
   expectCommand({ code, stdout, stderr }, listLine(id, "next", text));
+});
+
+const planState = (db) => Promise.all([
+  db.read("SELECT * FROM projects ORDER BY id;"),
+  db.read("SELECT * FROM todos ORDER BY id;"),
+]);
+
+const refuseWithoutChanges = async (db, command, ...args) => {
+  const before = clone(await planState(db));
+  const { code, stdout, stderr } = await command(...args);
+  same(await planState(db), before);
+  assert.equal(code, 1, stderr);
+  assert.equal(stdout, "");
+  return stderr;
+};
+
+const ownedPlan = async (t) => {
+  const { db, at, HOME } = await agentTodo(t);
+  const as = (by) => at(HOME, by);
+  const id = await commandText(as("t1")("add", "Prepare the release", "Read the upgrade notes"));
+  return { db, as, id };
+};
+
+for (const [verb, args] of [["add", ["Publish the release", "Wait for the checks"]], ["list", []], ["start"], ["done"]]) {
+  test(`Without a terminal ID, ${verb} exits 1 without changing the plan.`, unixTodo, async (t) => {
+    const { db, as, id } = await ownedPlan(t);
+    const stderr = await refuseWithoutChanges(db, as(null), verb, ...(args ?? [id]));
+    assert.match(stderr, /HC_TERMINAL_ID/);
+  });
+}
+
+for (const verb of ["start", "done"]) {
+  test(`Terminal t2 cannot use ${verb} on a step from terminal t1.`, unixTodo, async (t) => {
+    const { db, as, id } = await ownedPlan(t);
+    await refuseWithoutChanges(db, as("t2"), verb, id);
+  });
+}
+
+for (const [shape, args] of [
+  ["only a step", ["Fix the blue widget"]],
+  ["three arguments", ["fix", "the", "widget"]],
+  ["four arguments", ["fix", "the", "blue", "widget"]],
+  ["a blank detail", ["Fix the blue widget", " \t\n "]],
+]) {
+  test(`Add with ${shape} exits 1 without saving a project or step.`, unixTodo, async (t) => {
+    const { db, result } = await agentTodo(t);
+    const stderr = await refuseWithoutChanges(db, result, "add", ...args);
+    assert.ok(stderr.includes(addUsage));
+  });
+}
+
+test("A saved repository with a trailing slash keeps the step and its apostrophes.", unixTodo, async (t) => {
+  const folder = join(await realpath(await temporary(t)), "repo");
+  await mkdir(folder);
+  const { db, run } = await agentTodo(t, folder);
+  const savedFolder = `${folder}/`;
+  const { row: project } = await db.addProject({ name: "Repo", folder: savedFolder });
+  const text = "Check the user's plan";
+  const detail = "Read the agent's notes";
+  const id = await run("add", text, detail);
+
+  assert.equal(await run("list"), listLine(id, "next", text));
+  same(await db.read("SELECT id, project, text, detail FROM todos;"), [{ id, project: project.id, text, detail }]);
+  same(await db.projects(), [clone(project)]);
+});
+
+const legacyTodoDb = async (t) => {
+  const { dir, SCHEMA } = await temporaryKdbFile(t, ["SCHEMA"]);
+  const data = join(dir, "data", "kanso");
+  await mkdir(data, { recursive: true });
+  const legacy = "CREATE TABLE todos(id TEXT PRIMARY KEY, project TEXT NOT NULL, text TEXT NOT NULL, created INTEGER NOT NULL, done_at INTEGER, by TEXT);";
+  await stdoutOf("sqlite3", [join(data, "kanso.db"), legacy, SCHEMA]);
+  return { dir };
+};
+
+test("An agent can add, list and start a step before kansō migrates an old plan database.", unixTodo, async (t) => {
+  const { run } = await agentTodo(t, undefined, { database: legacyTodoDb });
+  const text = "Check the migration";
+  const id = await run("add", text, "Keep the existing plan");
+  assert.equal(await run("list"), listLine(id, "next", text));
+  await run("start", id);
+  assert.equal(await run("list"), listLine(id, "doing", text));
+});
+
+test("The steps command reports the four plan commands without a terminal ID.", unixTodo, async (t) => {
+  const { at, HOME } = await agentTodo(t);
+  expectCommand(await at(HOME, null)("steps"), "add start done list");
 });
 
 const agentInstructionFiles = async (t, config, userAppend = "Keep my own Pi instructions.\n") => {

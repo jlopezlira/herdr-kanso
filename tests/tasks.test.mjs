@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { join } from "node:path";
 import { setImmediate as nextTurn } from "node:timers/promises";
 import {
-  all, arg, databaseTimer, drawingHost, exec, failure, find, KIT_NIGHT, load,
+  all, arg, calls, databaseTimer, drawingHost, exec, failure, find, KIT_NIGHT, load,
   nativePlatform, nativeWindow, one, same, success, svgsOf, temporary, texts, timedContext,
 } from "./helpers.mjs";
 import { temporaryKdb } from "./mod-fixtures.mjs";
@@ -348,7 +348,9 @@ test("Empty Tasks on Windows tells me where to-dos appear without offering an un
   assert.ok(!control(panel, `${empty}-action`), "Windows does not offer the agent switch");
 });
 
-const remoteTodoHost = async (t, Kdb, machine, todoExec = async () => success("off\n")) => {
+const remoteTodoHost = async (t, Kdb, machine, {
+  todoExec = async () => success("off\n"), readPlans = () => undefined,
+} = {}) => {
   const home = await temporary(t);
   const config = nativePlatform === "windows" ? ["AppData", "Roaming"] : [".config"];
   const app = join(home, ...config, "herdr-app");
@@ -362,6 +364,10 @@ const remoteTodoHost = async (t, Kdb, machine, todoExec = async () => success("o
     }
     if (args.at(-1)?.endsWith("$HOME") || args.at(-1) === 'printf %s "$HOME"') return success(home);
     if (command === "sh" && args[0] === script) return todoExec(args[1]);
+    if (command === "sqlite3" && args.some((arg) => arg.includes("SELECT todos.*"))) {
+      const reply = readPlans();
+      if (reply) return reply;
+    }
     return exec(command, args, options);
   };
   return { db, host: { exec: run, window: nativeWindow } };
@@ -372,14 +378,14 @@ const todoTasks = async (t, host = {}) => {
   return startTasks(db, { spaces: activeSpace(shop), ...host });
 };
 
-const tasksOnLight = async (t, remoteExec, { todoExec, withTodo = false, ...host } = {}) => {
+const tasksOnLight = async (t, remoteExec, { todoExec, heldProject, readPlans, ...host } = {}) => {
   const { db, Kdb } = await temporaryKdb(t);
-  const remote = await remoteTodoHost(t, Kdb, remoteShop.machine, remoteExec);
-  if (withTodo) {
-    const { id } = await saveProject(remote.db, shop);
+  const remote = await remoteTodoHost(t, Kdb, remoteShop.machine, { todoExec: remoteExec, readPlans });
+  if (heldProject) {
+    const { id } = await saveProject(remote.db, heldProject);
     await writeTodo(remote.db, storedTodo(id));
   }
-  return startTasks(db, {
+  return polledTasks(t, db, {
     ...remote.host, window: () => ({ platform: "macos" }),
     spaces: activeSpace(remoteShop), todoExec, ...host,
   });
@@ -411,7 +417,7 @@ const lightTodoSwitch = async (t, { initiallyOn = false, ...host } = {}) => {
 };
 
 test("Tasks can turn on agents on light when the project already has a to-do.", async (t) => {
-  const { page, installFrom } = await lightTodoSwitch(t, { withTodo: true });
+  const { page, installFrom } = await lightTodoSwitch(t, { heldProject: shop });
   assert.ok(texts(page()).includes(TODO_WORDS), "The project already shows a to-do");
   await installFrom("tasks-switch", TURN_ON);
 });
@@ -454,6 +460,86 @@ test("Empty Tasks reads light's switch rather than this computer's switch.", asy
     todoExec: async () => success("off\n"),
   });
   assert.deepEqual(wordsAt(page(), "tasks-none-action"), [TELL]);
+});
+
+test("Turn on tells me to update light's older kansō without installing or reading the rule.", async (t) => {
+  const unsupported = failure('kanso-todo: usage: kanso-todo add "<step>" "<detail>"');
+  const remote = t.mock.fn(async (verb) => verb === "steps" ? unsupported : success("off\n"));
+  const { click, drain, page } = await tasksOnLight(t, remote);
+  const action = "tasks-none-action";
+  assert.deepEqual(wordsAt(page(), action), [TURN_ON]);
+  click(action);
+  await drain();
+
+  const notice = "light has an older kansō: update it there, then turn this on again.";
+  assert.ok(wordsAt(page(), "tasks-turned").includes(notice));
+  assert.deepEqual(todoVerbs(remote), ["status", "steps"]);
+});
+
+test("Tasks offers no Turn on button when light runs Windows.", async (t) => {
+  const windows = async (program, args, { on }) => {
+    assert.equal(on, remoteShop.machine);
+    const command = args.at(-1);
+    if (command.includes("OSVersion.Platform")) return success("Win32NT");
+    if (command.endsWith("$HOME")) return success("C:\\Users\\agent");
+    if (program === "sqlite3") return success(args.filter((arg) => arg.startsWith(".print ")).map((arg) => arg.slice(7)).join("\n"));
+    return program === "pwsh" ? success("") : failure("Command not found");
+  };
+  const { page } = await todoTasks(t, { spaces: activeSpace(remoteShop), exec: windows });
+  const panel = page();
+  assert.ok(wordsAt(panel, "tasks-none").length, "The Windows project has loaded");
+  assert.equal(control(panel, "tasks-none-action"), null);
+});
+
+test("Tasks refreshes light's switch after 15 seconds without leaving the project.", async (t) => {
+  let now = 1_800_000_000_000;
+  const { page, poll, remote, turnOff } = await lightTodoSwitch(t, {
+    initiallyOn: true,
+    Date: class extends globalThis.Date { static now() { return now; } },
+  });
+  const label = () => wordsAt(page(), "tasks-none-action");
+  assert.deepEqual(label(), [TELL]);
+  turnOff();
+
+  now += 14_999;
+  await poll();
+  assert.deepEqual(label(), [TELL]);
+  now += 1;
+  await poll();
+  assert.deepEqual(label(), [TURN_ON]);
+  assert.deepEqual(todoVerbs(remote), ["status", "status"]);
+});
+
+const unreachablePlans = () => failure("Connection to light failed");
+
+test("Tasks says it cannot read light's plans and hides Turn on when it has no cached steps.", async (t) => {
+  const { page } = await tasksOnLight(t, undefined, { readPlans: unreachablePlans });
+  const panel = page();
+  assert.ok(wordsAt(panel, "tasks-unread").includes("Could not reach light to read its plans"));
+  assert.ok(!texts(panel).includes(TURN_ON));
+});
+
+test("Tasks keeps light's cached steps and warns they may be out of date after a failed read.", async (t) => {
+  let reachable = true;
+  const { page, poll } = await tasksOnLight(t, undefined, {
+    heldProject: shop,
+    readPlans: () => reachable ? undefined : unreachablePlans(),
+  });
+  assert.ok(texts(page()).includes(TODO_WORDS));
+  assert.equal(control(page(), "tasks-unread"), null);
+
+  reachable = false;
+  await poll();
+  const panel = page();
+  assert.ok(texts(panel).includes(TODO_WORDS));
+  assert.ok(wordsAt(panel, "tasks-unread").includes("Could not reach light; these steps may be out of date"));
+});
+
+test("Tasks shows the plan kept in light's saved repository from an unsaved subfolder on light.", async (t) => {
+  const repo = { ...shop, folder: "/repo" };
+  const spaces = activeSpace({ ...remoteShop, folder: `${repo.folder}/pkg` });
+  const { page } = await tasksOnLight(t, undefined, { heldProject: repo, spaces });
+  assert.ok(texts(page()).includes(TODO_WORDS));
 });
 
 const selectAt = (tasks, spaces) => (project) => {
@@ -541,6 +627,37 @@ test("Tasks groups plan steps by computer and agent, in creation order, with wor
 });
 
 const iconsIn = (element) => svgsOf(element).map((path) => path.split("/").at(-1));
+
+test("Tasks puts a step created before a terminal was reused under the ended agent without the working mark.", async (t) => {
+  const { db, id } = await shopKdb(t);
+  const earlier = storedTodo(id, { by: terminalId, started_at: 1200 });
+  const name = "Current agent";
+  await writeTodo(db, earlier);
+  const { page } = await startTasks(db, {
+    spaces: activeSpace(shop),
+    terminals: () => [{ address: terminalId, created_ms: 2000, labels: { "kanso.shown": name } }],
+  });
+
+  const panel = page();
+  const item = control(panel, stepId(earlier));
+  assert.ok(item, "The ended agent's step still shows");
+  assert.ok(texts(item.parent).includes("An agent that has ended"));
+  assert.ok(!iconsIn(item).includes("working.svg"));
+});
+
+test("A Tasks step wraps its detail instead of truncating it.", async (t) => {
+  const { db, id } = await shopKdb(t);
+  const detail = "Read the upgrade guide and check that each supported version can still open the project.";
+  const step = storedTodo(id, { detail });
+  await writeTodo(db, step);
+  const { page } = await startTasks(db, { spaces: activeSpace(shop) });
+
+  const item = control(page(), stepId(step));
+  assert.ok(item, "The step is visible");
+  const second = find(item, (element) => arg(element, "child") === detail);
+  assert.ok(second, "The row shows the entire detail");
+  assert.equal(calls(second, "truncate").length, 0);
+});
 
 test("Tasks shows each agent's read-only plan with detail, progress, and finished steps under Done.", async (t) => {
   const { db, id } = await shopKdb(t);
