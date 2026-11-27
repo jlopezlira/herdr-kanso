@@ -6,7 +6,7 @@ import { pieces, runs } from "./pieces.js";
 import { findExplainer, explainWith } from "./explain.js";
 import { scanNearby, homesOf } from "./nearby-scan.js";
 import { lanOf } from "./nearby.js";
-import { lanProbeArgs, lanRecord, resolvedHost } from "./lan-route.js";
+import { lanProbeArgs, lanRecord, resolvedHost, preferHome } from "./lan-route.js";
 import { setupPrompt } from "./setup.js";
 import { focusOn, tryOrAsync, afterMount, bounded } from "./pure.js";
 import { G, T, LH, DIALOG, tokens } from "./ui.js";
@@ -26,7 +26,8 @@ import {
 const PROBE_MS = 15000;
 const HOME_WAIT_MS = 8000;
 const NEW_KEY = /No \S+ host key is known for/i;
-const HOME_SIGN_IN = new Set(["password", "keyonly", "hostkey"]);
+const HOME_SIGN_IN = new Set(["password", "keyonly"]);
+const HOME_UNTRUSTED = new Set(["unknown", "hostkey"]);
 const FDA_PANE = "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles";
 const failed = (error) => ({ code: 1, stdout: "", stderr: String(error?.message ?? error) });
 const said = (result) => String(result.stderr || result.stdout).trim();
@@ -187,7 +188,8 @@ export default class Computers extends View {
     if (!plan.lan || plan.via || !plan.target) return null;
     const resolved = await resolvedHost(plan.target, (program, args) => exec(program, args, { timeout: PROBE_MS }));
     const result = await exec("ssh", lanProbeArgs(plan.lan, { target: plan.target, hostKey: resolved?.hostKey ?? "" }), { timeout: PROBE_MS }).catch(failed);
-    return { result, reach: NEW_KEY.test(result.stderr) ? "unknown" : reachOf(result) };
+    const reach = NEW_KEY.test(result.stderr) ? "unknown" : reachOf(result);
+    return { result, reach: HOME_UNTRUSTED.has(reach) ? "unknown" : reach };
   }
 
   async connect(key, planned) {
@@ -208,7 +210,16 @@ export default class Computers extends View {
     delete this.dropped[key];
     if (key === this.typedKey()) this.typed.set_value("");
     await this.refresh();
+    await this.goHome(plan);
     await this.checkMac(plan.name || plan.target);
+  }
+
+  async goHome(plan) {
+    if (this.platform === "windows" || !this.looksHome) return;
+    const record = this.added.map(machineRecord).find((row) => row && (row.name === plan.name || (!plan.name && row.target === plan.target)));
+    if (!record) return;
+    const run = (program, args) => exec(program, args, { timeout: PROBE_MS });
+    if (await preferHome(record, { run, hc, exec, timeout: PROBE_MS })) await this.refresh();
   }
 
   async probe([target, ...rest], tried = []) {

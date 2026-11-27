@@ -17,13 +17,16 @@ export function destinationOf(target) {
 
 export const KEY = "~/.ssh/id_ed25519_kanso";
 const nameMark = (text) => [...text].reduce((h, ch) => (Math.imul(h, 31) + ch.codePointAt(0)) >>> 0, 7).toString(36);
-export const agentKey = (name) => {
+const fileWord = (name) => {
   const text = String(name), plain = text.replace(/[^\w-]/g, "_");
-  return `~/.ssh/id_kanso_agent_${plain === text ? plain : `${plain}-${nameMark(text)}`}`;
+  return plain === text ? plain : `${plain}-${nameMark(text)}`;
 };
+export const agentKey = (name) => `~/.ssh/id_kanso_agent_${fileWord(name)}`;
+export const KNOWN_PREFIX = "known_hosts_kanso_";
+export const knownFile = (name) => `${KNOWN_PREFIX}${fileWord(name)}`;
 const keyedWords = (path) => `-o IdentityFile=${path} -o IdentitiesOnly=yes -o BatchMode=yes `;
 const ROUTE_WORDS = /(?:-o IdentityFile=(~\/\.ssh\/(?:id_ed25519_kanso|id_kanso_agent_[\w-]+))|-i ~\/\.ssh\/id_ed25519_kanso) -o IdentitiesOnly=yes -o BatchMode=yes /g;
-const unkeyed = (via) => String(via ?? "").replace(ROUTE_WORDS, "");
+export const unkeyed = (via) => String(via ?? "").replace(ROUTE_WORDS, "");
 export const kansoKeyed = (via) => new RegExp(ROUTE_WORDS.source).test(String(via ?? ""));
 export const keyOfRoute = (via) => new RegExp(ROUTE_WORDS.source).exec(String(via ?? ""))?.[1] ?? KEY;
 const ASK = "-o PasswordAuthentication=yes -o KbdInteractiveAuthentication=yes ";
@@ -44,31 +47,49 @@ export function routeOf(machine) {
   return { name, target, via, session };
 }
 
-const LAN_SSH = "-o BatchMode=yes -o ConnectTimeout=2 -o StrictHostKeyChecking=yes";
-const LAN_ASK = "-o ConnectTimeout=2";
-const lanLine = (args, away) => `ssh ${LAN_SSH} ${args} true </dev/null >/dev/null 2>&1 && exec ssh -o StrictHostKeyChecking=yes ${args} "$1"; exec ${away} "$1"`;
+export const LAN_PROBE = ["-o", "BatchMode=yes", "-o", "ConnectTimeout=1", "-o", "StrictHostKeyChecking=yes"];
+export const LAN_WAIT_S = 3;
+const LAN_ASK = "-o ConnectTimeout=2 -o StrictHostKeyChecking=yes";
+const lanLine = (args, away) => `ssh ${LAN_PROBE.join(" ")} ${args} true </dev/null >/dev/null 2>&1 & p=$!; (sleep ${LAN_WAIT_S}; kill -9 $p) </dev/null >/dev/null 2>&1 & w=$!; wait $p 2>/dev/null && { kill -9 $w 2>/dev/null; exec ssh -o StrictHostKeyChecking=yes ${args} "$1"; }; kill -9 $w 2>/dev/null; exec ${away} "$1"`;
 export const lanFirst = (args, away) => `sh -c ${shellQuote(lanLine(args, away))} route`;
 
 export const hostNameOption = (ip) => `HostName=${String(ip).replace(/%/g, "%%")}`;
 
-export function lanArgs(ip, { target = "", user = "", hostKey = "" } = {}) {
-  if (!target) return shellQuote(joined(user, ip));
-  const { dest, port } = destinationOf(target);
-  const key = hostKey || splitTarget(dest).host;
-  return [`-o ${hostNameOption(ip)}`, `-o HostKeyAlias=${shellQuote(key)}`, ...(port ? [`-p ${port}`] : []), shellQuote(dest)].join(" ");
+export const lanDest = (host, { target = "", user = "" } = {}) => (target ? destinationOf(target) : { dest: joined(user, host), port: "" });
+
+export function lanOptions(host, { target = "", hostKey = "", known = "" } = {}) {
+  const key = hostKey || (target ? splitTarget(destinationOf(target).dest).host : "");
+  return [
+    "-o", hostNameOption(host),
+    ...(key ? ["-o", `HostKeyAlias=${key}`] : []),
+    ...(known ? ["-o", `UserKnownHostsFile=~/.ssh/${known}`] : []),
+    ...(known ? ["-o", "GlobalKnownHostsFile=/dev/null", "-o", "VerifyHostKeyDNS=no"] : []),
+    "-o", "ProxyCommand=none", "-o", "ControlMaster=no", "-o", "ControlPath=none",
+  ];
+}
+
+export function lanArgs(host, { target = "", user = "", hostKey = "", known = "" } = {}) {
+  const { dest, port } = lanDest(host, { target, user });
+  return [...lanOptions(host, { target, hostKey, known }), ...(port ? ["-p", port] : []), dest].map(shellQuote).join(" ");
 }
 
 export const unquote = (word) => (/^'.*'$/s.test(word) ? word.slice(1, -1).replace(/'\\''/g, "'") : word);
 const LAN_IP = /(?:^|\s)-o HostName=(\S+)(?:\s|$)/;
+const LAN_LINE = new RegExp(`^${lanLine("(.+?)", "(.+)").replace(/[$()&{}]/g, (ch) => `\\${ch}`).replace("\\(.+?\\)", "(.+?)").replace("\\(.+?\\)", "\\1").replace("\\(.+\\)", "(.+)")}$`, "s");
+const OLD_LAN_LINE = /^ssh -o BatchMode=yes -o ConnectTimeout=2 -o StrictHostKeyChecking=(?:accept-new|yes) (.+?) true (?:<\/dev\/null )?>\/dev\/null 2>&1 && exec ssh -o StrictHostKeyChecking=(?:accept-new|yes) \1 "\$1"; exec (.+) "\$1"$/s;
 
 export function lanParts(via) {
-  const inner = String(via ?? "").match(/^sh -c ('(?:[^']|'\\'')*'|\S+) route$/s);
+  const plain = unkeyed(via);
+  const inner = plain.match(/^sh -c ('(?:[^']|'\\'')*'|\S+) route$/s);
   const line = inner ? unquote(inner[1]) : "";
-  const found = line.match(/^ssh -o BatchMode=yes -o ConnectTimeout=2 -o StrictHostKeyChecking=(?:accept-new|yes) (.+?) true (?:<\/dev\/null )?>\/dev\/null 2>&1 && exec ssh -o StrictHostKeyChecking=(?:accept-new|yes) \1 "\$1"; exec (.+) "\$1"$/s);
-  if (!found || `sh -c ${shellQuote(line)} route` !== via) return null;
-  const ip = found[1].match(LAN_IP)?.[1].replace(/%%/g, "%") ?? splitTarget(unquote(found[1])).host;
-  return { args: found[1], ip, away: found[2] };
+  const found = line.match(LAN_LINE) ?? line.match(OLD_LAN_LINE);
+  if (!found || `sh -c ${shellQuote(line)} route` !== plain) return null;
+  const words = found[1];
+  const ip = words.match(LAN_IP)?.[1].replace(/%%/g, "%") ?? splitTarget(unquote(words.split(" ").at(-1))).host;
+  return { args: words, ip, away: found[2], named: words.includes(`UserKnownHostsFile=~/.ssh/${KNOWN_PREFIX}`), key: kansoKeyed(via) ? keyOfRoute(via) : "" };
 }
+
+export const rekeyed = (via, key) => (key ? withSsh(via, keyedWords(key)) : via);
 
 export function keyable({ target = "", via = "" }, platform = "macos") {
   if (!via) return Boolean(target);
@@ -80,7 +101,7 @@ export function keyedRoute({ target = "", via = "" }, platform = "macos") {
   const windows = platform === "windows";
   const base = (quote) => unkeyed(via) || sshLine(target, quote);
   const lan = lanParts(base(shellQuote));
-  const ask = lan ? `sh -c ${shellQuote(`ssh ${ASK}${LAN_ASK} ${lan.args} "$1" || exec ${withSsh(lan.away, ASK)} "$1"`)} route` : withSsh(base(windows ? psQuote : shellQuote), ASK);
+  const ask = lan ? `sh -c ${shellQuote(`ssh ${ASK}${LAN_ASK} ${lan.args} "$1"; s=$?; [ "$s" -eq 255 ] || exit "$s"; exec ${withSsh(lan.away, ASK)} "$1"`)} route` : withSsh(base(windows ? psQuote : shellQuote), ASK);
   return {
     ask,
     keyed: (path = KEY) => withSsh(base(windows ? String : shellQuote), keyedWords(path)),
