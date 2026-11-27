@@ -22,9 +22,15 @@ export class AccountChanged extends AccountError {
   constructor(login) { super("GitHub account changed."); this.login = login; }
 }
 
+export class GitHubError extends Error {
+  constructor(message, data) { super(message); this.data = data; }
+}
+
+const answered = (text) => { try { return JSON.parse(text)?.data ?? null; } catch { return null; } };
+
 export async function gh(args) {
   const r = await exec("gh", args);
-  if (r.code !== 0) throw new Error((r.stderr || r.stdout).trim().split("\n")[0] || "GitHub could not be read.");
+  if (r.code !== 0) throw new GitHubError((r.stderr || r.stdout).trim().split("\n")[0] || "GitHub could not be read.", answered(r.stdout));
   return r.stdout;
 }
 
@@ -76,7 +82,11 @@ export const github = {
     const waiting = (await store.prs()).filter((p) => p.provider === "github" && !p.merged && !p.closed).map((p) => p.created);
     const back = since ? Math.min(since, ...waiting) : from;
     const due = monthsIn(Math.min(from, fresh ? from : back), now + 1).filter((m) => !done.has(m.month) || (!fresh && m.end > back));
-    const read = async (query, vars) => { const data = await gql(query, vars); verify(data.viewer?.login); return data; };
+    const read = async (query, vars) => {
+      const data = await gql(query, vars).catch((e) => { verify(e.data?.viewer?.login); throw e; });
+      verify(data.viewer?.login);
+      return data;
+    };
     const keep = (rows) => store.save(rows, login);
     const readMonths = (months) => mapSeries(months, async (m, i) => {
       progress(`pull requests, ${months.length - i} ${months.length - i === 1 ? "month" : "months"} to go`);
@@ -96,7 +106,6 @@ export const github = {
     await store.setOwnMeta("github.updated", String(now), login);
     progress("what reached production");
     const prod = await inMain(pendingByRepo(await store.prs()), read);
-    if (prod.unchecked) await read("query{viewer{login}}", {});
     await store.markProd(prod.urls, login);
     await store.setOwnMeta("github.unchecked", String(prod.unchecked), login);
     return { unchecked: prod.unchecked };

@@ -270,6 +270,7 @@ export default class TokenSpend extends View {
     const sent = this.options();
     const startedAt = Date.now();
     const scans = command !== "prepare";
+    const settled = !this.unfinished();
     this.running = command;
     if (scans) setShared(SNAPSHOT_AT, startedAt - REFRESH_MS + RETRY_MS);
     cx.notify();
@@ -298,10 +299,10 @@ export default class TokenSpend extends View {
       if (scans) {
         const again = failure || payload?.scan?.retry || payload?.scan?.partial;
         setShared(SNAPSHOT_AT, again ? Date.now() - REFRESH_MS + RETRY_MS : startedAt);
-        if (!failure) setShared(UNFINISHED, payload?.scan?.partial ? payload.scan : null);
+        if (!failure) setShared(UNFINISHED, payload?.scan?.partial ? { ...payload.scan, run: startedAt } : null);
       }
       if (payload) {
-        this.scan = scans || !this.scan ? payload.scan ?? this.scan : { ...this.scan, partial: Boolean(this.scan.partial && this.unfinished()), lastScanAt: payload.scan?.lastScanAt ?? this.scan.lastScanAt };
+        this.scan = scans || !this.scan ? payload.scan ?? this.scan : { ...this.scan, partial: Boolean(this.scan.partial && !settled), lastScanAt: payload.scan?.lastScanAt ?? this.scan.lastScanAt };
         if (this.awake) this.costs = payload.costs;
         if (payload.settings) this.settings = payload.settings;
         // Filters changed while this ran: price again with the current ones.
@@ -341,12 +342,17 @@ export default class TokenSpend extends View {
       } else if (this.queued.prepare) {
         this.queued = { ...this.queued, prepare: false };
         this.run("prepare", cx);
+      } else if (this.behind() && !failure && this.awake) {
+        this.run("prepare", cx);
       } else if (this.scan?.partial && this.unfinished() && !failure && this.awake) {
         // The first scan is time-boxed; keep going until it has read everything.
         try { this.continueTimer?.cancel(); } catch { /* already gone */ }
+        const scan = this.unfinished().run;
         this.continueTimer = cx.timer.after(1000, (timerCx) => {
           this.continueTimer = null;
-          if (this.awake) this.run(this.unfinished() ? "snapshot" : "prepare", timerCx);
+          const now = this.unfinished();
+          if (!this.awake || (now && now.run !== scan)) return;
+          this.run(now ? "snapshot" : "prepare", timerCx);
         });
       }
     }
