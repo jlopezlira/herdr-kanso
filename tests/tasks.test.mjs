@@ -186,7 +186,8 @@ test("Empty Tasks turns on the to-do rule and can tell running agents on this co
     assert.deepEqual(wordsAt(page(), action), [label]);
     click(action);
     await drain();
-    const note = "Told 1 of 2 running agents. 1 could not be reached. New conversations read it when they start.";
+    const note = "Told 1 of 2 running agents. 1 could not be reached."
+      + " 1 is waiting on its own question; answer, then tell agents again. New conversations read it when they start.";
     assert.ok(texts(page()).includes(note));
   }
   assert.deepEqual(todoExec.mock.calls.flatMap(({ arguments: args }) => args), [
@@ -254,7 +255,7 @@ test("Tasks and Settings do not promise the rule to new conversations when setup
   assert.deepEqual(notices.filter((words) => /new conversations read it/i.test(words)), []);
 });
 
-const deliverTodoTo = async (addresses) => {
+const deliverTodoTo = async (addresses, status = "idle") => {
   const { promise: unanswered } = Promise.withResolvers();
   const outcomes = {
     refused: failure("Agent disconnected"),
@@ -263,7 +264,7 @@ const deliverTodoTo = async (addresses) => {
   const { tellAgents, toldWords } = await load("kanso-panel/todo-switch.js", ["tellAgents", "toldWords"], {
     appHome: () => TODO_APP_HOME,
     exec: async () => success("Keep your to-do up to date."),
-    agents: () => addresses.map((address) => ({ address, status: "idle" })),
+    agents: () => addresses.map((address) => ({ address, status })),
     hc: async ([, address]) => outcomes[address] ?? success(""),
   });
   const deadlines = [];
@@ -283,8 +284,14 @@ test("Telling running agents distinguishes a refusal, an unanswered send, and no
   ]) {
     const { result, text } = await deliverTodoTo(addresses);
     assert.match(text, words);
-    same(result, expected);
+    same(result, { ...expected, waiting: 0 });
   }
+});
+
+test("Telling running agents skips an agent waiting for my answer and says to answer before trying again.", async () => {
+  const { result, text } = await deliverTodoTo([terminalId], "blocked");
+  assert.match(text, /No agent was told\. 1 is waiting on its own question; answer, then tell agents again/);
+  same(result, { tried: 0, sent: 0, unsure: 0, waiting: 1, failed: false });
 });
 
 test("Telling running agents counts unanswered sends separately from refusals.", async () => {

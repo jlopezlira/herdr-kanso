@@ -178,6 +178,36 @@ const inInstallEnvironments = async (t, check, setup = codexOnly) => {
   }
 };
 
+const statusBeforeUninstall = async (run) => {
+  const status = await run("status");
+  await run("uninstall");
+  return status;
+};
+
+test("Codex can turn off the to-do rule after I add settings above it.", unixTodo, async (t) => {
+  await inInstallEnvironments(t, async (makeCodex) => {
+    const { run, codex } = await makeCodex("");
+    const settings = 'model = "gpt-5"\n';
+    await run("install");
+    await writeFile(codex, settings + await readFile(codex, "utf8"));
+    const before = await statusBeforeUninstall(run);
+    assert.equal(await readFile(codex, "utf8"), settings);
+    assert.equal(before, "on", "My setting above the rule does not hide it");
+    assert.equal(await run("status"), "off");
+  });
+});
+
+test("A refused Codex reinstall keeps my working to-do rule.", unixTodo, async (t) => {
+  await inInstallEnvironments(t, async (makeCodex) => {
+    const command = await makeCodex("");
+    await command.run("install");
+    await appendFile(command.codex, "# developer_instructions\n");
+    const original = await readFile(command.codex, "utf8");
+    await expectCodexConflict(command, original);
+    assert.equal(await command.run("status"), "on");
+  });
+});
+
 const expectMarkedTextKept = async (makeConfig, original, agent) => {
   const { run, file } = await makeConfig(original);
   const before = await run("status");
@@ -202,6 +232,19 @@ test("Codex install and uninstall do not touch marker-like lines in my configura
   await inInstallEnvironments(t, async (makeCodex) => {
     const config = ['notes = """', "# kanso-todo", "Keep these notes.", "# /kanso-todo", '"""', ""].join("\n");
     await expectMarkedTextKept(makeCodex, config, "Codex");
+  });
+});
+
+test("Uninstalling keeps my Codex notes when they look like the to-do rule without its heading.", unixTodo, async (t) => {
+  await inInstallEnvironments(t, async (makeCodex) => {
+    const config = [
+      'model = "gpt-5"', 'notes = """', "# kanso-todo", "developer_instructions = '''",
+      "Keep my notes.", "'''", "# /kanso-todo", '"""', "",
+    ].join("\n");
+    const { run, file } = await makeCodex(config);
+    const before = await statusBeforeUninstall(run);
+    assert.equal(await readFile(file, "utf8"), config);
+    assert.equal(before, "off", "My notes are not an installed rule");
   });
 });
 
