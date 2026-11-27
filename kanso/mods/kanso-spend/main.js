@@ -342,7 +342,7 @@ export default class TokenSpend extends View {
         try { this.continueTimer?.cancel(); } catch { /* already gone */ }
         this.continueTimer = cx.timer.after(1000, (timerCx) => {
           this.continueTimer = null;
-          this.run("snapshot", timerCx);
+          if (this.unfinished() && this.awake) this.run("snapshot", timerCx);
         });
       }
     }
