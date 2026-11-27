@@ -801,7 +801,7 @@ test("An exchange already reading peers cannot send new partial Spend totals.", 
   assert.deepEqual(rows.sent, []);
 });
 
-const checkDisplacedForcedExchange = async (partialDuringRetry = false) => {
+const checkDisplacedForcedExchange = async ({ partialDuringRetry = false, overlapRefresh = false } = {}) => {
   const now = Date.UTC(2026, 10, 10, 12);
   const rows = holdPeerRows({
     files: { "status.json": JSON.stringify({ peers: { odin: { at: now, failures: 0, period: "day:0" } } }) },
@@ -811,10 +811,11 @@ const checkDisplacedForcedExchange = async (partialDuringRetry = false) => {
     async ask(command) {
       if (command === "snapshot") {
         snapshots += 1;
-        const usd = snapshots === 1 ? 1 : snapshots + 1;
-        return { ...spendPayload(peerCosts(usd)), scan: { partial: snapshots === 2 } };
+        const partial = partialDuringRetry && snapshots === 2;
+        const usd = partialDuringRetry && snapshots > 1 ? snapshots + 1 : snapshots;
+        return { ...spendPayload(peerCosts(usd)), scan: { partial } };
       }
-      return spendPayload(peerCosts(snapshots > 1 ? snapshots + 1 : 2));
+      return spendPayload(peerCosts(partialDuringRetry && snapshots > 1 ? snapshots + 1 : 2));
     },
   }, { ...rows.host, ...snapshotClock({}, () => now) });
 
@@ -823,8 +824,13 @@ const checkDisplacedForcedExchange = async (partialDuringRetry = false) => {
     await pending[0];
     await pending[1];
     assert.equal(await Promise.race([rows.reading, pending[2]]), true);
-    page.run("prepare", cx);
+    if (overlapRefresh) page.reload(cx);
+    else page.run("prepare", cx);
     await pending[3];
+    if (overlapRefresh) {
+      await pending[4];
+      assert.equal(page.syncEveryone, true);
+    }
     assert.equal(page.costs.local.usd, 2);
     assert.equal(page.syncAgain, true);
     if (partialDuringRetry) {
@@ -843,13 +849,17 @@ const checkDisplacedForcedExchange = async (partialDuringRetry = false) => {
     await drain();
   }
   assert.deepEqual(rows.sent, [partialDuringRetry ? 4 : 2]);
+  if (overlapRefresh) assert.equal(snapshots, 2);
 };
 
 test("A forced Spend exchange displaced by prepare reaches even a fresh peer once with the new totals.", () =>
   checkDisplacedForcedExchange());
 
 test("A forced Spend exchange refused during a partial scan still reaches a fresh peer after completion.", () =>
-  checkDisplacedForcedExchange(true));
+  checkDisplacedForcedExchange({ partialDuringRetry: true }));
+
+test("Two overlapping Spend Refreshes send the latest total to a fresh peer only once.", () =>
+  checkDisplacedForcedExchange({ overlapRefresh: true }));
 
 const checkTwoChunkRefresh = async (betweenChunks) => {
   const timers = [], exchanges = [];
