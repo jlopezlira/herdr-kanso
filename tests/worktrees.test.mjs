@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join, basename } from "node:path";
 import { load, loadSystemApi, context, temporary, clone, exec, failure, gitOk, committedRepo, tape, fileExists as exists } from "./helpers.mjs";
 
-const names = ["Worktrees", "removable", "losses", "lastDays", "spaceBy", "freedSpec", "freedText", "explainPrompt", "reviewPrompt", "rootsFor", "parseDiscovery", "basesFrom", "parseWorktrees", "parseProbe", "stateOf", "safe", "consequence", "fmtSize", "fmtAge", "inside", "openIn", "branchLoss", "tokens"];
+const names = ["Worktrees", "removable", "losses", "lastDays", "spaceBy", "freedSpec", "freedText", "explainPrompt", "reviewPrompt", "rootsFor", "parseDiscovery", "basesFrom", "parseWorktrees", "parseProbe", "parseProbeSet", "completeProbe", "probeRows", "stateOf", "safe", "consequence", "fmtSize", "fmtAge", "inside", "openIn", "branchLoss", "tokens"];
 const writeTextFile = (path, text) => writeFile(path, text);
 const storeOf = (app) => load("kanso-panel/worktrees-store.js", ["WorktreeStore", "upsertSql", "rowOf", "itemOf"], { exec, appHome: () => app, writeTextFile });
 const worktrees = async (host = {}) => load("kanso-panel/worktrees.js", names, {
@@ -108,11 +108,36 @@ test("A temp folder lookup that fails, answers nothing or is refused infers no r
 });
 
 test("Worktrees parses git's worktree list and the probes", async () => {
-  const { parseWorktrees, parseProbe, basesFrom, parseDiscovery } = await worktrees();
+  const { parseWorktrees, parseProbe, parseProbeSet, completeProbe, probeRows, basesFrom, parseDiscovery } = await worktrees();
   const list = clone(parseWorktrees("worktree /r\0HEAD a\0branch refs/heads/main\0\0worktree /w1\0HEAD b\0detached\0locked\0\0worktree /w2\0HEAD c\0branch refs/heads/feat/x\0prunable gitdir file points to non-existent location\0\0"));
   assert.deepEqual(list.map((w) => [w.path, w.main, w.branch, w.detached, w.locked, w.prunable]),
     [["/r", true, "main", false, false, false], ["/w1", false, null, true, true, false], ["/w2", false, "feat/x", false, false, true]]);
   assert.deepEqual(clone(parseProbe("recent\nonly\t1\ndirty\t3\nlast\t100\nmerged\nahead\t2\n")), { gone: false, replaced: false, broken: false, dirty: 3, last: 100000, ahead: 2, merged: true, recent: true, only: 1 });
+  const set = parseProbeSet("#0\ndirty\t1\nahead\t2\n#1\ngone\n");
+  assert.equal(set[0].probe.dirty, 1);
+  assert.equal(set[0].probe.ahead, 2);
+  assert.equal(set[1].probe.gone, true);
+  const frame = (index, body) => `#${index} ${body.replace(/\n$/, "").replaceAll("\n", "\u001f")}\n`;
+  const partial = probeRows([{ path: "/a" }, { path: "/b" }], "#0 dirty\t1\n#1\n");
+  assert.equal(partial.records.length, 0);
+  assert.deepEqual(partial.missing.map((row) => row.path), ["/a", "/b"]);
+  const gone = probeRows([{ path: "/a" }], frame(0, "gone"));
+  assert.equal(gone.records[0].probe.gone, true);
+  const full = probeRows([{ path: "/a" }, { path: "/b" }], frame(0, "only\t0\ndirty\t1\nlast\t1\nahead\t2"));
+  assert.equal(full.records.length, 1);
+  assert.equal(full.records[0].probe.dirty, 1);
+  assert.deepEqual(full.missing.map((row) => row.path), ["/b"]);
+  const unknown = probeRows([{ path: "/a" }], frame(0, "only\t0\ndirty\t0\nlast\t1\nahead\t"));
+  assert.equal(unknown.records[0].probe.ahead, null);
+  const mixed = probeRows([{ path: "/a" }, { path: "/b" }], frame(1, "only\t0\ndirty\t2\nlast\t1\nahead\t0") + frame(0, "only\t1\ndirty\t4\nlast\t1\nahead\t3"));
+  assert.equal(mixed.records.find((row) => row.index === 0).probe.dirty, 4);
+  assert.equal(mixed.records.find((row) => row.index === 1).probe.ahead, 0);
+  const cut = probeRows([{ path: "/a" }], "#0 only\u001fdirty\u001f0\u001flast\u001f1\u001fahead\t0");
+  assert.equal(cut.records.length, 0);
+  assert.equal(completeProbe("only\t0\ndirty\t0\nlast\t1\nahead"), null);
+  assert.equal(completeProbe("only\t0\ndirty\t0\nlast\t1\nahead\t").ahead, null);
+  assert.equal(completeProbe("gone").gone, true);
+  assert.equal(completeProbe(""), null);
   assert.equal(parseProbe("gone\n").gone, true);
   assert.equal(parseProbe("replaced\n").replaced, true);
   assert.deepEqual(clone(basesFrom("origin/main\nmain\norigin/master\n")), ["origin/main", "main"]);

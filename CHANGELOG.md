@@ -27,6 +27,8 @@ the branch's rules.
 
 ### Changed
 
+- Worktrees starts fewer Git processes when checking which branches have landed.
+- Worktrees checks each repository in one pass, and asks again the next time it opens.
 - After a restart changes a disk's device number, Spend no longer reads every session again: a file with the same inode, size and time is known, so the history read finishes in one run instead of stalling on "Still reading your history".
 - When kansō starts, including after an update, it brings the agents' plan rule up to date if it is on, so the rule always matches the command it names.
 - Tasks shows each agent's plan for the project you are viewing: every step in order with a line of detail, the step it is doing now, and what it has finished, written by the agent itself; there is nothing to tick or add by hand. Turning it on, or telling running agents, also brings their rule up to date.

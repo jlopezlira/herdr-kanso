@@ -1,6 +1,6 @@
 import { spawnAndNotify, commandOk, tilde, pool, said } from "./lib.js";
 import { sizedPage, heroStack, heroHeading } from "./ui-page.js";
-import { localService } from "./platform-host.js";
+import { localService, localName } from "./platform-host.js";
 import { paths } from "./platform-paths.js";
 import { fileApi } from "./platform-files.js";
 import { repositoryApi } from "./platform-repositories.js";
@@ -91,6 +91,44 @@ export function parseProbe(out) {
     if (k === "ahead" && v !== undefined && v !== "") return { ...p, ahead: Number(v) };
     return p;
   }, start);
+}
+
+export function parseProbeSet(out) {
+  const lines = String(out).split(/\r?\n/);
+  const groups = lines.reduce((acc, line) => {
+    if (/^#\d+$/.test(line)) return { records: [...acc.records, { index: Number(line.slice(1)), lines: [] }] };
+    if (!acc.records.length || !line) return acc;
+    const last = acc.records.at(-1);
+    return { records: [...acc.records.slice(0, -1), { ...last, lines: [...last.lines, line] }] };
+  }, { records: [] });
+  return groups.records.map((record) => ({ index: record.index, lines: record.lines, probe: parseProbe(record.lines.join("\n")) }));
+}
+
+const valued = (lines, name) => lines.some((line) => line.startsWith(name + "\t") && line.slice(name.length + 1) !== "");
+
+export function completeProbe(text) {
+  const frame = String(text ?? "");
+  const lines = frame.split(/\r?\n/).filter((line) => line !== "");
+  const stopped = lines.some((line) => line === "gone" || line === "replaced" || line === "broken");
+  const ahead = lines.find((line) => line.startsWith("ahead\t"));
+  const finished = stopped || (valued(lines, "only") && valued(lines, "dirty") && valued(lines, "last") && ahead !== undefined && /^ahead\t\d*$/.test(ahead));
+  return finished ? parseProbe(frame) : null;
+}
+
+const FRAME = "\u001f";
+
+export function probeRows(rows, out) {
+  const text = String(out ?? "");
+  const complete = text.endsWith("\n") ? text.slice(0, -1).split("\n") : text.split("\n").slice(0, -1);
+  const records = complete.flatMap((line) => {
+    const match = line.match(/^#(\d+) (.*)$/);
+    if (!match) return [];
+    const index = Number(match[1]);
+    const probe = rows[index] ? completeProbe(match[2].split(FRAME).join("\n")) : null;
+    return probe ? [{ index, probe }] : [];
+  });
+  const found = new Set(records.map((record) => record.index));
+  return { records, missing: rows.filter((_, index) => !found.has(index)) };
 }
 
 const foldersInUse = () => {
@@ -344,7 +382,7 @@ export class Worktrees {
   async keep(repos, search) {
     if (!this.stored) return;
     const all = [...this.groups.flatMap((g) => g.items), ...this.orphans];
-    await this.store.save(all);
+    await this.store.save(all.filter((w) => w.probed || w.missing || w.orphan));
     const covered = (p) => search.some((root) => inside(root, p));
     await this.store.sweep(new Set(all.map((w) => w.path)), { has: (repo) => repos.has(repo) || covered(repo) });
     const live = all.filter((w) => !w.missing && !w.orphan), plan = this.plan();
@@ -418,18 +456,42 @@ export class Worktrees {
         cx.notify();
         // What each one holds, then what each one weighs: the list is usable before the sizes are in.
         const idle = idleMinutes();
-        const live = groups.flatMap((g) => g.items.filter((w) => !w.missing).map((w) => [w.path, g.bases]));
+        const live = groups.flatMap((g) => g.items.filter((w) => !w.missing));
         this.counted = 0;
-        await pool(live, 8, async ([path, bases]) => {
-          const r = await localService(repositoryApi).probe(path, idle, bases);
-          if (id !== this.scan) return;
-          this.apply(path, parseProbe(r.stdout));
+        const noteChecked = () => {
           this.counted = this.counted + 1;
           this.phase = `Checking ${this.counted} of ${live.length}`;
           this.soon(cx);
-        });
+        };
+        const probeOne = async (item, bases) => {
+          const r = await localService(repositoryApi).probe(item.path, idle, bases);
+          if (id !== this.scan || r.code !== 0) return;
+          const probe = completeProbe(r.stdout);
+          if (!probe) return;
+          this.apply(item.path, probe);
+          noteChecked();
+        };
+        const probeSafely = async (item, bases) => { try { await probeOne(item, bases); } catch { return null; } };
+        if (localName() === "windows") {
+          const jobs = groups.flatMap((group) => group.items.filter((item) => !item.missing).map((item) => ({ item, bases: group.bases })));
+          await pool(jobs, 8, ({ item, bases }) => probeSafely(item, bases));
+        } else {
+          await pool(groups, 4, async (group) => {
+            const rows = group.items.filter((item) => !item.missing);
+            if (!rows.length || id !== this.scan) return;
+            const answered = await localService(repositoryApi).probeAll(group.repo, rows, idle, group.bases).then((r) => {
+              if (id !== this.scan || r.code !== 0) return null;
+              const parsed = probeRows(rows, r.stdout ?? "");
+              parsed.records.forEach((record) => { this.apply(rows[record.index].path, record.probe); noteChecked(); });
+              return parsed.missing;
+            }).catch(() => null);
+            if (id !== this.scan) return;
+            const missing = answered ?? rows;
+            if (missing.length) await pool(missing, 8, (item) => probeSafely(item, group.bases));
+          });
+        }
         if (id !== this.scan) return;
-        const sized = [...live.map(([path]) => this.item(path)).filter((w) => w && !w.missing), ...this.orphans].map((w) => w.path);
+        const sized = [...live.map((item) => this.item(item.path)).filter((item) => item && !item.missing), ...this.orphans].map((item) => item.path);
         this.counted = 0;
         await pool(sized, 4, async (path) => {
           const measured = await localService(fileApi).size(path);
