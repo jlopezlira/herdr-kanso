@@ -479,17 +479,15 @@ export class Worktrees {
           await pool(groups, 4, async (group) => {
             const rows = group.items.filter((item) => !item.missing);
             if (!rows.length || id !== this.scan) return;
-            let missing = rows;
-            try {
-              const r = await localService(repositoryApi).probeAll(group.repo, rows, idle, group.bases);
-              if (id !== this.scan) return;
-              if (r.code === 0) {
-                const parsed = probeRows(rows, r.stdout ?? "");
-                parsed.records.forEach((record) => { this.apply(rows[record.index].path, record.probe); noteChecked(); });
-                missing = parsed.missing;
-              }
-            } catch { missing = rows; }
-            if (missing.length && id === this.scan) await pool(missing, 8, (item) => probeSafely(item, group.bases));
+            const answered = await localService(repositoryApi).probeAll(group.repo, rows, idle, group.bases).then((r) => {
+              if (id !== this.scan || r.code !== 0) return null;
+              const parsed = probeRows(rows, r.stdout ?? "");
+              parsed.records.forEach((record) => { this.apply(rows[record.index].path, record.probe); noteChecked(); });
+              return parsed.missing;
+            }).catch(() => null);
+            if (id !== this.scan) return;
+            const missing = answered ?? rows;
+            if (missing.length) await pool(missing, 8, (item) => probeSafely(item, group.bases));
           });
         }
         if (id !== this.scan) return;

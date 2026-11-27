@@ -177,21 +177,21 @@ const parsedRows = async (text, count) => {
   return probeRows(Array.from({ length: count }, (_, index) => ({ path: String(index) })), text);
 };
 
-test("one repository probe reads every worktree again, including a new file", { skip: nativePlatform === "windows" }, async (t) => {
-  const root = await temporary(t), folder = join(root, "repo"), files = fileApi(nativePlatform, exec);
-  await files.mkdir(folder);
-  const git = async (...args) => {
-    const result = await exec("git", ["-C", folder, "-c", "user.name=Test", "-c", "user.email=test@example.test", "-c", "commit.gpgsign=false", ...args]);
-    assert.equal(result.code, 0, result.stderr);
-    return result.stdout.trim();
-  };
-  await git("init", "-b", "main");
+const seeded = async (t) => {
+  const root = await temporary(t), folder = join(root, "repo"), commit = gitOk();
+  await fileApi(nativePlatform, exec).mkdir(folder);
+  await commit(folder, "init", "-b", "main");
   await writeFile(join(folder, "one.txt"), "one\n");
-  await git("add", "."); await git("commit", "-m", "Initial");
-  const api = repositoryApi(nativePlatform, exec);
-  const made = await api.createWorktree(folder, "feature", join(root, "trees"), root);
-  const other = await api.createWorktree(folder, "other", join(root, "trees"), root);
-  const first = made.stdout.trim().split("\t")[1], second = other.stdout.trim().split("\t")[1];
+  await commit(folder, "add", "one.txt");
+  await commit(folder, "commit", "-m", "Seed");
+  return { root, folder, api: repositoryApi(nativePlatform, exec) };
+};
+
+const worktreeAt = async (api, folder, root, branch) => (await api.createWorktree(folder, branch, join(root, "trees"), root)).stdout.trim().split("\t")[1];
+
+test("one repository probe reads every worktree again, including a new file", { skip: nativePlatform === "windows" }, async (t) => {
+  const { root, folder, api } = await seeded(t);
+  const first = await worktreeAt(api, folder, root, "feature"), second = await worktreeAt(api, folder, root, "other");
   let bash = 0;
   const counted = repositoryApi(nativePlatform, async (command, args) => { if (command === "bash") bash += 1; return exec(command, args); });
   const opened = await counted.probeAll(folder, [{ path: first }, { path: second }], 0, ["main"]);
@@ -215,20 +215,10 @@ test("one repository probe reads every worktree again, including a new file", { 
 });
 
 test("mixed worktree answers stay on their own line across waves", { skip: nativePlatform === "windows" }, async (t) => {
-  const root = await temporary(t), folder = join(root, "repo"), files = fileApi(nativePlatform, exec);
-  await files.mkdir(folder);
-  const git = async (...args) => {
-    const result = await exec("git", ["-C", folder, "-c", "user.name=Test", "-c", "user.email=test@example.test", "-c", "commit.gpgsign=false", ...args]);
-    assert.equal(result.code, 0, result.stderr);
-  };
-  await git("init", "-b", "main");
-  await writeFile(join(folder, "one.txt"), "one\n");
-  await git("add", "."); await git("commit", "-m", "Initial");
-  const api = repositoryApi(nativePlatform, exec);
+  const { root, folder, api } = await seeded(t);
   const paths = [];
   for (let index = 0; index < 9; index += 1) {
-    const made = await api.createWorktree(folder, `branch-${index}`, join(root, "trees"), root);
-    const path = made.stdout.trim().split("\t")[1];
+    const path = await worktreeAt(api, folder, root, `branch-${index}`);
     paths.push(path);
     for (let file = 0; file < index + 1; file += 1) await writeFile(join(path, `extra-${file}.txt`), "x\n");
   }
