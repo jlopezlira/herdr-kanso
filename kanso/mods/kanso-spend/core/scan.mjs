@@ -685,6 +685,7 @@ async function scanOneFile(work, tally, source, filePath) {
   const afterZstd = zstdBack ? resetFileEntry(afterMigration.work, key, afterMigration.entry) : afterMigration;
   const current = afterZstd.entry;
   const replaced =
+    current.dev !== dev ||
     current.ino !== ino ||
     fileStat.size < current.size ||
     fileStat.size < current.offset;
@@ -694,7 +695,7 @@ async function scanOneFile(work, tally, source, filePath) {
       const next = { ...reset.entry, dev, ino };
       return { work: putEntry(reset.work, key, next), entry: next };
     })()
-    : current.dev === dev ? afterZstd : { work: putEntry(afterZstd.work, key, { ...current, dev }), entry: { ...current, dev } };
+    : afterZstd;
   const forceRead = migrated || zstdBack || replaced;
   const dirtyBefore = isNew || forceRead;
   const ready = afterReplace.entry;
