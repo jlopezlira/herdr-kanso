@@ -19,28 +19,36 @@ export const steps = (argv = process.argv) => (argv.includes("--checks-only") ? 
 
 export const CONTEXT = "kanso/pre-pr";
 
-export const marks = ({ env = process.env, argv = process.argv, dirty = "" } = {}) => !env.CI && !argv.includes("--checks-only") && !dirty.trim();
+export const marks = ({ env = process.env, argv = process.argv, before, after }) =>
+  !env.CI && !argv.includes("--checks-only") && (env.KANSO_BRANCH || "develop") === "develop"
+  && Boolean(before?.sha) && before.clean && after?.sha === before.sha && after.clean;
 
-const run = (command, args) => spawnSync(command, args, { cwd: REPO_ROOT, encoding: "utf8", shell: process.platform === "win32" });
+const run = (command, args) => spawnSync(command, args, { cwd: REPO_ROOT, encoding: "utf8" });
+const firstLine = (r) => (r.error?.message ?? (r.stderr || r.stdout || "").trim().split("\n")[0]) || `exit ${r.status}`;
 
-function mark(ok) {
-  const dirty = run("git", ["status", "--porcelain", "--untracked-files=no"]).stdout ?? "";
-  if (!marks({ dirty })) {
-    if (dirty.trim()) console.log("Uncommitted changes: no commit is marked on GitHub.");
+export function tree() {
+  const head = run("git", ["rev-parse", "HEAD"]);
+  const status = run("git", ["status", "--porcelain"]);
+  return { sha: head.status === 0 ? head.stdout.trim() : null, clean: status.status === 0 && !status.stdout.trim() };
+}
+
+function mark(ok, before) {
+  const after = tree();
+  if (!marks({ before, after })) {
+    if (!process.env.CI && !process.argv.includes("--checks-only")) console.log("No commit marked on GitHub: the run needs a committed, unchanged tree checked against develop.");
     return;
   }
-  const sha = run("git", ["rev-parse", "HEAD"]).stdout.trim();
-  const repo = run("gh", ["repo", "view", "--json", "nameWithOwner", "-q", ".nameWithOwner"]).stdout?.trim();
+  const repo = run("gh", ["repo", "view", "--json", "nameWithOwner", "-q", ".nameWithOwner"]);
+  if (repo.status !== 0) { console.log(`No commit marked on GitHub: ${firstLine(repo)}`); return; }
   const state = ok ? "success" : "failure";
-  const posted = repo && run("gh", ["api", `repos/${repo}/statuses/${sha}`, "-f", `state=${state}`, "-f", `context=${CONTEXT}`, "-f", `description=npm run pre-pr ${ok ? "passed" : "failed"}`]);
-  console.log(posted?.status === 0
-    ? `${CONTEXT}: ${state} on ${sha.slice(0, 8)}`
-    : `${sha.slice(0, 8)} is not on GitHub yet: push it, then run npm run pre-pr again so the pull request can merge.`);
+  const posted = run("gh", ["api", `repos/${repo.stdout.trim()}/statuses/${before.sha}`, "-f", `state=${state}`, "-f", `context=${CONTEXT}`, "-f", `description=npm run pre-pr ${ok ? "passed" : "failed"}`]);
+  console.log(posted.status === 0 ? `${CONTEXT}: ${state} on ${before.sha.slice(0, 8)}` : `No commit marked on GitHub (push ${before.sha.slice(0, 8)} first if it is not there): ${firstLine(posted)}`);
 }
 
 export const summary = (results) => results.map(({ name, ok }) => `- ${name}: ${ok ? "passed" : "failed"}`).join("\n");
 
 function main() {
+  const before = tree();
   const results = steps().map(({ name, argv }) => {
     console.log(`\n> ${name}`);
     const run = spawnSync(npm, argv, { cwd: REPO_ROOT, stdio: "inherit", shell: process.platform === "win32" });
@@ -48,7 +56,7 @@ function main() {
   });
   console.log(`\nPre-PR\n${summary(results)}`);
   const ok = results.every((r) => r.ok);
-  mark(ok);
+  mark(ok, before);
   process.exitCode = ok ? 0 : 1;
 }
 
