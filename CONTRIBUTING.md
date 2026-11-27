@@ -46,7 +46,7 @@ Set `HERDR_APP_HOME` to a separate directory, so the try does not use your own H
 
 Use `type(scope): subject` for the PR title, with `type` one of `feat`, `fix`, `perf`, `test`, `ci`, `docs` or `chore`. Do not use `bug` as a type or put a version or issue number in the title. Branch names use `<type>/<slug>`.
 
-CI does not run on pull requests, and it is not where a change gets checked. Before opening one, run `npm run pre-pr`: it runs every check CI runs, then `npm test`, and ends with one line per step. Paste those lines under Tests in the PR body, failures included. CI runs on pushes to develop and main only to gate the beta and stable releases; a check that fails there was skipped before the PR.
+CI does not run on pull requests, and it is not where a change gets checked. Before opening one, run `npm run pre-pr`: it runs every check CI runs, then `npm test`, and ends with one line per step. Paste those lines under Tests in the PR body, failures included. Run on a pushed commit with nothing uncommitted, it marks that commit `kanso/pre-pr` on GitHub, and develop merges a pull request only when its head carries a passing mark, Greptile has reviewed that head, and the branch is up to date with develop: a commit pushed after the run, a merge of develop included, needs `npm run pre-pr` again. CI runs on pushes to develop and main only to gate the beta and stable releases; a check that fails there was skipped before the PR.
 
 Kansō tracks users' GitHub issues, not tickets. When a user's issue prompted the change, put `Closes #N` under Why in the PR body and end the related CHANGELOG entry with `(#N)`. With no issue, omit both references.
 
