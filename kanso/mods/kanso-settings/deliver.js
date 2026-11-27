@@ -7,7 +7,7 @@ import { bounded, plainText } from "./pure.js";
 const saysShell = (record) => record.program?.shell === true || Boolean(record.program && !record.program.agent && !record.status);
 const saysAgent = (record) => Boolean(record.status || record.program?.agent);
 
-const machineOf = (address) => /^([^/]+)\//.exec(String(address))?.[1] ?? null;
+export const machineOf = (address) => /^([^/]+)\//.exec(String(address))?.[1] ?? null;
 export const reachable = (address, computers) => {
   if (!Array.isArray(computers)) throw new TypeError("reachable needs the machines snapshot");
   const at = machineOf(address);

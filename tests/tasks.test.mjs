@@ -134,6 +134,18 @@ test("Tasks shows a newly opened unsaved project and its editor within 300 ms.",
   same(await db.projects(), []);
 });
 
+test("Tasks shows the saved repository's to-do from an unsaved space in a subfolder.", async (t) => {
+  const { db } = await temporaryKdb(t);
+  const repo = { ...shop, folder: "/work/repo" };
+  const mobile = { id: "mobile", name: "Mobile", folder: `${repo.folder}/mobile` };
+  const { id } = await saveProject(db, repo);
+  const todo = storedTodo(id);
+  await writeTodo(db, todo);
+
+  const { page } = await startTasks(db, { spaces: activeSpace(mobile) });
+  assert.ok(wordsAt(page(), todoRowIdOf(todo)).includes(TODO_WORDS), "The repository's to-do is visible in Mobile");
+});
+
 test("Tasks redraws for the sidebar's active project within 300 ms even when no to-dos change.", async (t) => {
   const { db } = await temporaryKdb(t);
   const reads = t.mock.method(db, "read");
@@ -217,14 +229,14 @@ test("Empty Tasks turns on the to-do rule and can tell running agents on this co
     assert.ok(texts(page()).includes(note));
   }
   assert.deepEqual(todoVerbs(todoExec), [
-    "status", "install", "status", "rule", "status", "rule",
+    "status", "status", "install", "status", "rule", "status", "rule",
   ]);
   same(sentTo(hc), [local, refused, local, refused].map((address) => ["send", address, rule]));
 });
 
 test("Tasks shows what could not be installed alongside the note about who was told.", async (t) => {
   const skipped = "Codex already has developer instructions.";
-  const replies = [success("off\n"), failure(skipped), success("on\n"), success("Keep your to-do up to date.")].values();
+  const replies = [success("off\n"), success("off\n"), failure(skipped), success("on\n"), success("Keep your to-do up to date.")].values();
   const { page, click, drain } = await todoTasks(t, {
     todoExec: async () => replies.next().value,
     agents: () => [{ address: terminalId, status: "working" }],
@@ -421,23 +433,60 @@ const todoTasks = async (t, { project = shop, unsaved = false, ...host } = {}) =
   return { ...tasks, db, remoteDb: remote?.db, id: savedProject?.id, enterTodo, submit, saved, todoRowId, makeButton };
 };
 
-const tasksOnLight = async (t, remoteExec, { todoExec, ...host } = {}) => {
+const tasksOnLight = async (t, remoteExec, { todoExec, withTodo = false, ...host } = {}) => {
   const { db, Kdb } = await temporaryKdb(t);
   const remote = await remoteTodoHost(t, Kdb, remoteShop.machine, remoteExec);
+  if (withTodo) {
+    const { id } = await saveProject(remote.db, shop);
+    await writeTodo(remote.db, storedTodo(id));
+  }
   return startTasks(db, {
     ...todoInputHost(t), ...remote.host, window: () => ({ platform: "macos" }),
     spaces: activeSpace(remoteShop), todoExec, ...host,
   });
 };
 const todoVerbs = (mock) => mock.mock.calls.flatMap(({ arguments: args }) => args);
+const LIGHT_TODO_RULE = "Keep the project to-do up to date.";
 
-test("One press in Tasks turns on the to-do on light and tells only light's running agents.", async (t) => {
-  const rule = "Keep the project to-do up to date.";
-  let installed = false;
+const lightTodoSwitch = async (t, { initiallyOn = false, ...host } = {}) => {
+  let installed = initiallyOn;
   const remote = t.mock.fn(async (verb) => {
     if (verb === "install") installed = true;
-    return success(verb === "rule" ? rule : installed ? "on\n" : "off\n");
+    return success(verb === "rule" ? LIGHT_TODO_RULE : installed ? "on\n" : "off\n");
   });
+  const tasks = await tasksOnLight(t, remote, host);
+  const installFrom = async (action, label) => {
+    assert.deepEqual(wordsAt(tasks.page(), action), [label]);
+    const before = remote.mock.callCount();
+    tasks.click(action);
+    await tasks.drain();
+    assert.deepEqual(todoVerbs(remote).slice(before), ["status", "install", "status", "rule"]);
+  };
+  return { ...tasks, remote, installFrom, turnOff: () => { installed = false; } };
+};
+
+test("Tasks can turn on agents on light when the project already has a to-do.", async (t) => {
+  const { page, installFrom } = await lightTodoSwitch(t, { withTodo: true });
+  assert.ok(texts(page()).includes(TODO_WORDS), "The project already shows a to-do");
+  await installFrom("tasks-switch", TURN_ON);
+});
+
+test("Tasks on Windows can turn on agents for the active project on light.", async (t) => {
+  const { installFrom } = await lightTodoSwitch(t, { window: () => ({ platform: "windows" }) });
+  await installFrom("tasks-none-action", TURN_ON);
+});
+
+test("Tell running agents turns the rule back on when it was turned off on light.", async (t) => {
+  const { view, cx, drain, installFrom, turnOff } = await lightTodoSwitch(t, { initiallyOn: true });
+  turnOff();
+  view.follow(cx);
+  view.load(cx);
+  await drain();
+
+  await installFrom("tasks-none-action", TELL);
+});
+
+test("One press in Tasks turns on the to-do on light and tells only light's running agents.", async (t) => {
   const local = t.mock.fn(async (verb) => success(verb === "rule" ? "Local to-do rule" : "off\n"));
   const running = `${remoteShop.machine}/t3`;
   const agents = () => [
@@ -445,13 +494,13 @@ test("One press in Tasks turns on the to-do on light and tells only light's runn
     { address: `${remoteShop.machine}/t4`, status: "blocked" },
   ];
   const hc = t.mock.fn(async () => success(""));
-  const { click, drain } = await tasksOnLight(t, remote, { todoExec: local, agents, hc });
+  const { click, drain, remote } = await lightTodoSwitch(t, { todoExec: local, agents, hc });
   click("tasks-none-action");
   await drain();
 
   same(
     { light: todoVerbs(remote), local: todoVerbs(local), sent: sentTo(hc) },
-    { light: ["status", "install", "status", "rule"], local: [], sent: [["send", running, rule]] },
+    { light: ["status", "status", "install", "status", "rule"], local: [], sent: [["send", running, LIGHT_TODO_RULE]] },
   );
 });
 
@@ -487,14 +536,15 @@ test("Tasks rereads light's switch when returning from a project on this compute
 test("A late status reply from light cannot overwrite a successful Turn on.", { timeout: 10000 }, async (t) => {
   const stale = Promise.withResolvers();
   const reading = Promise.withResolvers();
-  let installed = false;
+  let installed = false, held = false;
   const remote = async (verb) => {
-    if (verb === "status" && !installed) {
+    if (verb === "status" && !held) {
+      held = true;
       reading.resolve();
       return stale.promise;
     }
     if (verb === "install") installed = true;
-    return success(verb === "rule" ? "Keep the to-do up to date." : "on\n");
+    return success(verb === "rule" ? LIGHT_TODO_RULE : installed ? "on\n" : "off\n");
   };
   const spaces = t.mock.fn(activeSpace(shop));
   const tasks = await tasksOnLight(t, remote, { spaces });
@@ -929,23 +979,38 @@ test("Tasks hides another project's deletion feedback and offers Undo when I ret
   assert.ok(texts(tasks.page()).includes(TODO_WORDS));
 });
 
-test("Undo restores a to-do deleted while it was finding its connected project.", async (t) => {
-  const tasks = await todoTasks(t, { project: remoteShop, unsaved: true });
-  const { view, enterTodo, drain, remoteDb, saved, page } = tasks;
+const deletePendingFirstTodo = async (t, tasks) => {
+  const { view, enterTodo, drain } = tasks;
   const { lookup, reached } = holdTodoHome(t, view);
-
   enterTodo(TODO_WORDS);
-  let row;
   try {
     await reached.promise;
     const pending = view.shown()[0];
-    assert.equal(pending.home, undefined, "Delete acts on a row without a remote project ID");
-    row = todoRowIdOf(pending);
+    assert.equal(pending.home, undefined, "Delete acts on a row before its project ID is resolved");
+    const row = todoRowIdOf(pending);
     pressTodoTool(tasks, row, "Delete");
+    return row;
   } finally {
     lookup.resolve();
     await drain();
   }
+};
+
+test("Tasks still offers Undo after saving the local project whose first pending to-do I deleted.", async (t) => {
+  const tasks = await todoTasks(t, { unsaved: true });
+  const { db, saved, page } = tasks;
+  await deletePendingFirstTodo(t, tasks);
+
+  const [project] = await db.projects();
+  assert.equal(project?.folder, shop.folder, "The previously unsaved local project is now saved");
+  same(await saved(), []);
+  assert.deepEqual(wordsAt(page(), "tasks-removed-undo"), ["Undo"]);
+});
+
+test("Undo restores a to-do deleted while it was finding its connected project.", async (t) => {
+  const tasks = await todoTasks(t, { project: remoteShop, unsaved: true });
+  const { remoteDb, saved, page } = tasks;
+  const row = await deletePendingFirstTodo(t, tasks);
   assert.equal((await saved()).length, 0, "Delete reaches the connected database before Undo");
   assert.equal(control(page(), row), null);
   await undoRemoval(tasks);

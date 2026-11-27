@@ -59,8 +59,17 @@ export class Tasks {
 
   frontProject() {
     const key = this.frontPlace();
-    return (this.projects ?? []).find((p) => placeOf(p.machine, p.folder) === key)?.id ?? null;
+    const holds = (p) => key === placeOf(p.machine, p.folder) || key.startsWith(`${placeOf(p.machine, p.folder)}/`);
+    const saved = (this.projects ?? []).filter((p) => !p.auto && holds(p)).toSorted((a, b) => b.folder.length - a.folder.length)[0];
+    return (saved ?? (this.projects ?? []).find((p) => placeOf(p.machine, p.folder) === key))?.id ?? null;
   }
+
+  placeOfProject(id) {
+    const p = (this.projects ?? []).find((x) => x.id === id);
+    return p ? placeOf(p.machine, p.folder) : null;
+  }
+
+  scripted(machine) { return Boolean(machine) || window()?.platform !== "windows"; }
 
   follow(cx) {
     const front = this.frontPlace();
@@ -77,7 +86,7 @@ export class Tasks {
   }
 
   switchOn(machine, cx, again = false) {
-    if (window()?.platform === "windows" || this.turnOf(machine).busy || (!again && this.agentsOn[machine] != null)) return;
+    if (!this.scripted(machine) || this.turnOf(machine).busy || (!again && this.agentsOn[machine] != null)) return;
     const asked = (this.asked[machine] ?? 0) + 1;
     this.asked = { ...this.asked, [machine]: asked };
     cx.spawn(async (cx) => {
@@ -162,7 +171,7 @@ export class Tasks {
         await (await this.dbOn(on)).run(await sql());
         after();
       } catch {
-        this.failure = { project: change.todo?.project ?? this.todos.find((t) => t.id === change.id)?.project, text: failed, retry: (cx) => this.write(on, sql, failed, change, cx, after) };
+        this.failure = { place: this.placeOfProject(change.todo?.project ?? this.todos.find((t) => t.id === change.id)?.project), text: failed, retry: (cx) => this.write(on, sql, failed, change, cx, after) };
       }
     });
     this.queued = { ...this.queued, [change.id]: done };
@@ -197,8 +206,9 @@ export class Tasks {
 
   drop(todo, cx) {
     this.removed = null;
+    const place = this.placeOfProject(todo.project);
     this.write(todo.on, async () => dropTodoSql(todo.id), `Can't delete ${todo.text}`, { id: todo.id, gone: true }, cx, () => {
-      this.removed = { project: todo.project, words: `Deleted ${todo.text}`, undo: (cx) => this.write(todo.on, async () => `${addTodoSql({ ...todo, project: todo.home ?? await this.homeOf(todo.project) })}${doneSql(todo.id, todo.done_at)}`, `Can't bring back ${todo.text}`, { id: todo.id, todo }, cx, () => { this.removed = null; }) };
+      this.removed = { place, words: `Deleted ${todo.text}`, undo: (cx) => this.write(todo.on, async () => `${addTodoSql({ ...todo, project: todo.home ?? await this.homeOf(todo.project) })}${doneSql(todo.id, todo.done_at)}`, `Can't bring back ${todo.text}`, { id: todo.id, todo }, cx, () => { this.removed = null; }) };
     });
   }
 
@@ -228,7 +238,7 @@ export class Tasks {
     cx.notify();
     cx.spawn(async (cx) => {
       const sent = await deliver(cx.timer, address, todo.text, "you").catch(() => ({ code: 1 }));
-      if (sent.code !== 0) this.failure = { project: todo.project, text: `Can't send ${todo.text}`, retry: (cx) => this.sendTo(todo, address, cx) };
+      if (sent.code !== 0) this.failure = { place: this.placeOfProject(todo.project), text: `Can't send ${todo.text}`, retry: (cx) => this.sendTo(todo, address, cx) };
       cx.notify();
     });
   }
@@ -294,8 +304,9 @@ export class Tasks {
     this.asked = { ...this.asked, [machine]: (this.asked[machine] ?? 0) + 1 };
     cx.notify();
     cx.spawn(async (cx) => {
-      const r = this.agentsOn[machine] ? { code: 0 } : await runTodo("install", machine || null);
-      const on = await todoOn(machine || null);
+      const before = await todoOn(machine || null);
+      const r = before ? { code: 0 } : await runTodo("install", machine || null);
+      const on = before || await todoOn(machine || null);
       this.agentsOn = { ...this.agentsOn, [machine]: on };
       const told = await tellAgents(cx.timer, machine || null);
       const warned = r.code === 0 ? "" : String(r.stderr || r.stdout || "It could not be turned on").trim().split("\n").at(-1);
@@ -304,20 +315,23 @@ export class Tasks {
     });
   }
 
-  emptyBlock(c) {
-    if (window()?.platform === "windows") return emptyState({ text: "Each project's to-do shows here" })("tasks-none", c);
+  emptyBlock(c, listed) {
     const machine = this.frontMachine(), turn = this.turnOf(machine), agentsOn = this.agentsOn[machine];
+    if (!this.scripted(machine)) return listed ? div() : emptyState({ text: "Each project's to-do shows here" })("tasks-none", c);
     const action = turn.busy ? "" : agentsOn ? "Tell running agents" : "Turn on for my agents";
     const text = agentsOn ? "Your agents add each step here as they work" : "Turn this on and Claude Code, Codex and Pi add each step of their work here";
+    const control = listed
+      ? (action ? row("tasks-switch", c, { name: action, icon: agentsOn ? "send" : "power", onClick: (cx) => this.turnOn(cx) }) : div())
+      : emptyState({ text, action })("tasks-none", c, { onClick: (cx) => this.turnOn(cx) });
     return v_flex().w_full().gap(G.sm)
-      .child(emptyState({ text, action })("tasks-none", c, { onClick: (cx) => this.turnOn(cx) }))
+      .child(control)
       .children(turn.text ? [turn.failed ? stateBlock("tasks-turned", c, { text: turn.text }) : div().text_size(T.body).text_color(c.dim).text_center().child(turn.text)] : []);
   }
 
-  notes(c, front) {
+  notes(c, place) {
     return [
-      ...(this.failure?.project === front ? [stateBlock("tasks-failed", c, { text: this.failure.text, fix: "Retry", onClick: this.failure.retry })] : []),
-      ...(this.removed?.project === front ? [undoLine("tasks-removed", this.removed.words, this.removed.undo, c)] : []),
+      ...(this.failure?.place === place ? [stateBlock("tasks-failed", c, { text: this.failure.text, fix: "Retry", onClick: this.failure.retry })] : []),
+      ...(this.removed?.place === place ? [undoLine("tasks-removed", this.removed.words, this.removed.undo, c)] : []),
     ];
   }
 
@@ -330,9 +344,9 @@ export class Tasks {
     const listed = (this.projects ?? []).filter((p) => p.id === front);
     const body = !this.projects ? this.skeleton(c)
       : v_flex().w_full().gap(G.xl).children([
-        ...this.notes(c, front),
+        ...this.notes(c, this.placeOfProject(front)),
         ...listed.map((p) => this.projectBlock(p, todos, c, now)),
-        ...(todos.some((t) => t.project === front) ? [] : [this.emptyBlock(c)]),
+        this.emptyBlock(c, todos.some((t) => t.project === front)),
       ]);
     return scrollPage("kanso-tasks", c, true, (column) => column
       .child(pageHeader(div().text_size(PR.title).text_color(c.text).child("Tasks"), []))
