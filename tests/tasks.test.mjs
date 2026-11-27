@@ -20,6 +20,8 @@ const TODO_SCRIPT = `${TODO_APP_HOME}/mods/kanso-panel/kanso-todo`;
 const TODO_WORDS = "Pack the release notes";
 const FOLLOW_MS = 300;
 const terminalId = "t42";
+const EARLIER = "tasks-earlier";
+const GO_TO_AGENT = "Go to agent";
 
 const saveProject = async (db, { name, folder, machine }) => (await db.addProject({ name, folder, machine: machine ?? undefined })).row;
 const activeSpace = (project) => () => [{ ...project, active: true }];
@@ -44,7 +46,7 @@ const startTasks = async (
       : hostExec?.(program, args, options) ?? Promise.resolve(failure("Unexpected command")),
     ...host,
   });
-  const { cx, drain, pending } = timedContext([], context);
+  const { cx, drain, pending } = timedContext([], { stop_propagation() {}, ...context });
   const view = new Tasks(db);
   view.init(every ? { ...cx, timer: { ...cx.timer, every } } : cx);
   await drain();
@@ -58,10 +60,16 @@ const startTasks = async (
 };
 
 const storedTodo = (project, extra = {}) => ({ id: project, project, text: TODO_WORDS, created: 1000, ...extra });
-const writeTodo = async (db, { id, project, text, created, by, detail, started_at, done_at }) => {
+const writeTodo = async (db, { id, project, text, created, by, detail, started_at, done_at, by_name }) => {
   const { q } = await load("kanso-panel/kdb.js", ["q"]);
-  const values = [id, project, text, created, by, detail, started_at, done_at].map(q).join(",");
-  await db.run(`INSERT INTO todos(id,project,text,created,by,detail,started_at,done_at) VALUES(${values});`);
+  const values = [id, project, text, created, by, detail, started_at, done_at, by_name].map(q).join(",");
+  await db.run(`INSERT INTO todos(id,project,text,created,by,detail,started_at,done_at,by_name) VALUES(${values});`);
+};
+const todoNames = (db) => db.read("SELECT id, by_name FROM todos ORDER BY created;");
+const NAME_UPDATE = "UPDATE todos SET by_name=";
+const interceptSql = (t, db, intercept) => {
+  const sql = db.sql.bind(db);
+  t.mock.method(db, "sql", (statement) => intercept(String(statement), () => sql(statement)));
 };
 const stepId = ({ id }) => `tasks-step-${id}`;
 const sentTo = (hc) => hc.mock.calls.map(({ arguments: [argv] }) => argv).filter(([verb]) => verb === "send");
@@ -85,6 +93,17 @@ const shopKdb = async (t) => {
   const { db } = await temporaryKdb(t);
   return { db, ...(await saveProject(db, shop)) };
 };
+
+const shopAgentTodo = async (t, extra = {}) => {
+  const { db, id } = await shopKdb(t);
+  const step = storedTodo(id, { by: terminalId, ...extra });
+  await writeTodo(db, step);
+  return { db, step };
+};
+const namedAgentInShop = (name, terminal = {}) => ({
+  spaces: activeSpace(shop),
+  terminals: () => [{ address: terminalId, labels: { "kanso.shown": name }, ...terminal }],
+});
 
 test("The to-do poll redraws when an agent changes the list but keeps the same rows when nothing changed.", async (t) => {
   const { db, id } = await shopKdb(t);
@@ -378,9 +397,14 @@ const todoTasks = async (t, host = {}) => {
   return startTasks(db, { spaces: activeSpace(shop), ...host });
 };
 
-const tasksOnLight = async (t, remoteExec, { todoExec, heldProject, readPlans, ...host } = {}) => {
+const tasksDatabases = async (t, options) => {
   const { db, Kdb } = await temporaryKdb(t);
-  const remote = await remoteTodoHost(t, Kdb, remoteShop.machine, { todoExec: remoteExec, readPlans });
+  const remote = await remoteTodoHost(t, Kdb, remoteShop.machine, options);
+  return { db, remote };
+};
+
+const tasksOnLight = async (t, remoteExec, { todoExec, heldProject, readPlans, ...host } = {}) => {
+  const { db, remote } = await tasksDatabases(t, { todoExec: remoteExec, readPlans });
   if (heldProject) {
     const { id } = await saveProject(remote.db, heldProject);
     await writeTodo(remote.db, storedTodo(id));
@@ -628,6 +652,12 @@ test("Tasks groups plan steps by computer and agent, in creation order, with wor
 });
 
 const iconsIn = (element) => svgsOf(element).map((path) => path.split("/").at(-1));
+const endedRows = (panel) => all(panel, ({ tag }) => tag?.startsWith("tasks-ended-"));
+const planWith = (panel, subject) => {
+  const plan = endedRows(panel).find((row) => texts(row).includes(subject));
+  assert.ok(plan, `Earlier includes a plan for ${subject}`);
+  return plan;
+};
 
 test("Tasks puts a step created before a terminal was reused under the ended agent without the working mark.", async (t) => {
   const { db, id } = await shopKdb(t);
@@ -640,12 +670,152 @@ test("Tasks puts a step created before a terminal was reused under the ended age
   });
   const { page, click } = reused;
 
-  const endedRow = `tasks-ended-:${terminalId}:gone`;
-  assert.ok(wordsAt(page(), endedRow).includes("An agent that has ended"));
-  click(endedRow);
+  click(EARLIER);
+  const plan = planWith(page(), earlier.text);
+  assert.ok(!texts(plan).includes(name), "The new session does not get credit for an earlier step");
+  click(plan.tag);
   const item = control(page(), stepId(earlier));
   assert.ok(item, "The ended agent's step shows once its plan is open");
   assert.ok(!iconsIn(item).includes("working.svg"));
+});
+
+test("Tasks saves the live agent's name on its steps and shows it after the agent ends.", async (t) => {
+  const { db, id } = await shopKdb(t);
+  const name = "O'Connor";
+  const earlier = storedTodo(id, { id: "older-step", by: terminalId, text: "Check the installer" });
+  const current = { ...earlier, id: "new-step", text: "Review the release", created: 2000 };
+  for (const step of [earlier, current]) await writeTodo(db, step);
+
+  let live = [{ address: terminalId, created_ms: current.created, labels: { "kanso.shown": name } }];
+  const { page, click, poll } = await polledTasks(t, db, { spaces: activeSpace(shop), terminals: () => live });
+  same(await todoNames(db), [{ id: earlier.id, by_name: null }, { id: current.id, by_name: name }]);
+
+  const later = { ...current, id: "later-step", text: "Tag the release", created: 3000 };
+  await writeTodo(db, later);
+  await poll();
+  await poll();
+  same(await db.read(`SELECT by_name FROM todos WHERE id='${later.id}';`), [{ by_name: name }]);
+
+  live = [];
+  await poll();
+  click(EARLIER);
+  assert.equal(texts(planWith(page(), current.text))[0], name);
+  assert.ok(!texts(planWith(page(), earlier.text)).includes(name));
+});
+
+test("A live agent's name updates on its own steps without naming a previous session's late step.", async (t) => {
+  const { db, id } = await shopKdb(t);
+  const earlier = storedTodo(id, { id: "previous-session", by: terminalId });
+  const current = { ...earlier, id: "live-session", created: 2000 };
+  await writeTodo(db, current);
+  let arrived = false;
+  interceptSql(t, db, async (sql, execute) => {
+    if (sql.startsWith(NAME_UPDATE) && !arrived) {
+      arrived = true;
+      await writeTodo(db, earlier);
+    }
+    return execute();
+  });
+
+  const program = { name: "Claude", agent: true };
+  let terminal = { address: terminalId, program };
+  const { poll } = await polledTasks(t, db, { spaces: activeSpace(shop), terminals: () => [terminal] });
+  const first = await todoNames(db);
+  const name = "Checker";
+  terminal = { ...terminal, created_ms: current.created, labels: { "kanso.shown": name } };
+  await poll();
+
+  const previous = { id: earlier.id, by_name: null };
+  same({ first, renamed: await todoNames(db) }, {
+    first: [previous, { id: current.id, by_name: program.name }],
+    renamed: [previous, { id: current.id, by_name: name }],
+  });
+});
+
+test("A step written in the terminal's first second appears in the live agent's plan.", async (t) => {
+  const { db, step } = await shopAgentTodo(t);
+  const name = "Builder";
+  const { page } = await startTasks(db, namedAgentInShop(name, { created_ms: step.created + 500 }));
+
+  assert.ok(wordsAt(page(), stepId(step)).includes(step.text), "The live plan shows the step without opening Earlier");
+  same(await todoNames(db), [{ id: step.id, by_name: name }]);
+});
+
+test("Tasks saves the agent's name on the next poll after a write fails.", async (t) => {
+  const { db, step } = await shopAgentTodo(t);
+  let attempts = 0;
+  interceptSql(t, db, async (sql, execute) => {
+    if (sql.startsWith(NAME_UPDATE) && ++attempts === 1) throw new Error("Name write failed");
+    return execute();
+  });
+  const name = "Reviewer";
+  const { poll } = await polledTasks(t, db, namedAgentInShop(name));
+
+  same(await todoNames(db), [{ id: step.id, by_name: null }]);
+  await poll();
+  same(await todoNames(db), [{ id: step.id, by_name: name }]);
+  assert.equal(attempts, 2);
+});
+
+test("Earlier starts folded with a count and opens named plans and their step details.", async (t) => {
+  const { db, id } = await shopKdb(t);
+  const finished = storedTodo(id, {
+    id: "build", by: "t1", by_name: "Builder", text: "Build the beta", detail: "Use the signed binaries",
+    started_at: 1100, done_at: 1200,
+  });
+  const waiting = { ...finished, id: "sign", text: "Sign the installer", detail: "Use the release key", created: 1300,
+    started_at: 1400, done_at: null };
+  const completed = storedTodo(id, {
+    id: "review", by: "t2", by_name: "Reviewer", text: "Review the changes", done_at: 1500,
+  });
+  const steps = [finished, waiting, completed];
+  for (const step of steps) await writeTodo(db, step);
+  const { page, click } = await startTasks(db, { spaces: activeSpace(shop) });
+
+  const folded = page();
+  assert.deepEqual(wordsAt(folded, EARLIER), ["Earlier", "2"]);
+  assert.equal(endedRows(folded).length, 0);
+  assert.ok(!texts(folded).includes(finished.text));
+  click(EARLIER);
+  const expanded = page();
+  const stopped = planWith(expanded, finished.text);
+  const done = planWith(expanded, completed.text);
+  for (const [row, step, status] of [[stopped, finished, "Stopped at 1 of 2"], [done, completed, "Done"]]) {
+    const words = texts(row);
+    assert.equal(words[0], step.by_name, "The plan starts with the agent's name");
+    assert.equal(words.at(-1), step.text, "The first step is the subject on the second line");
+    assert.ok(words.includes(status));
+  }
+  for (const step of steps) assert.equal(control(expanded, stepId(step)), null, step.text);
+
+  click(stopped.tag);
+  for (const step of [finished, waiting]) {
+    const key = stepId(step);
+    assert.ok(wordsAt(page(), key).includes(step.text));
+    assert.ok(!wordsAt(page(), key).includes(step.detail));
+    click(key);
+    assert.ok(wordsAt(page(), key).includes(step.detail));
+  }
+  assert.equal(control(page(), stepId(completed)), null);
+});
+
+test("Earlier keeps two named agents' plans separate when they used the same terminal address.", async (t) => {
+  const { db, id } = await shopKdb(t);
+  const first = storedTodo(id, { id: "pack", by: terminalId, by_name: "Packer", text: "Pack the release" });
+  const second = { ...first, id: "check", by_name: "Checker", text: "Check the release", created: 2000 };
+  for (const step of [first, second]) await writeTodo(db, step);
+  const { page, click } = await startTasks(db, { spaces: activeSpace(shop) });
+
+  assert.deepEqual(wordsAt(page(), EARLIER), ["Earlier", "2"]);
+  click(EARLIER);
+  for (const [mine, other] of [[first, second], [second, first]]) {
+    const plan = planWith(page(), mine.text);
+    assert.equal(texts(plan)[0], mine.by_name);
+    click(plan.tag);
+    assert.ok(control(page(), stepId(mine)));
+    assert.equal(control(page(), stepId(other)), null);
+    click(plan.tag);
+  }
 });
 
 test("A Tasks step wraps its detail instead of truncating it.", async (t) => {
@@ -679,22 +849,20 @@ test("Tasks shows each agent's read-only plan with detail, progress, and finishe
   const makeInput = t.mock.fn();
   const makeCheckbox = t.mock.fn();
   const { page, click } = await startTasks(db, {
-    spaces: activeSpace(shop),
-    terminals: () => [{ address: terminalId, labels: { "kanso.shown": name } }],
+    ...namedAgentInShop(name),
     Date: class extends globalThis.Date { static now() { return now; } },
     Input: { new: makeInput }, InputState: { new: makeInput }, Checkbox: { new: makeCheckbox },
   });
 
   const panel = page();
-  const headings = all(panel, ({ kids }) => {
-    const note = kids.length === 2 && arg(kids[1], "child");
-    return typeof note === "string" && /^\d+ of \d+ done$/.test(note);
-  });
-  assert.deepEqual(headings.map(texts), [
-    [name, "1 of 3 done"],
-    ["Steps without an agent", "0 of 1 done"],
-  ]);
-  const [livePlan, anonymousPlan] = headings.map(({ parent }) => parent);
+  const liveHeading = control(panel, `tasks-agent-:${terminalId}`);
+  const anonymousHeading = find(panel, ({ kids }) =>
+    kids.length === 2 && arg(kids[0], "child") === "Steps without an agent");
+  assert.ok(liveHeading && anonymousHeading);
+  assert.deepEqual(texts(liveHeading), [name, "1 of 3 done", GO_TO_AGENT]);
+  assert.deepEqual(texts(anonymousHeading), ["Steps without an agent", "0 of 1 done"]);
+  const { parent: livePlan } = liveHeading;
+  const { parent: anonymousPlan } = anonymousHeading;
   const stepIn = (plan, step) => {
     const item = control(plan, stepId(step));
     assert.ok(item, step.text);
@@ -719,11 +887,19 @@ test("Tasks shows each agent's read-only plan with detail, progress, and finishe
   click(stepId(next));
   assert.ok(wordsAt(page(), stepId(next)).includes(next.detail), "A later step opens its detail on a press");
 
-  const endedRow = "tasks-ended-:t8:gone";
-  assert.deepEqual(wordsAt(panel, endedRow), ["An agent that has ended", "0 of 1 done"]);
   assert.equal(control(panel, stepId(ended)), null, "An ended agent's plan starts folded");
-  click(endedRow);
-  checkStep(page(), ended, "14m", "circle.svg");
+  click(EARLIER);
+  const plan = planWith(page(), ended.text);
+  assert.deepEqual(texts(plan), [ended.text, "14m", "Stopped at 0 of 1"]);
+  const endedStep = stepId(ended);
+  click(plan.tag);
+  checkShort(page(), ended, "14m", "circle.svg");
+  click(endedStep);
+  const item = stepIn(page(), ended);
+  assert.deepEqual(texts(item), [ended.text, "14m", ended.detail]);
+  assert.deepEqual(iconsIn(item), ["circle.svg"]);
+  click(endedStep);
+  checkShort(page(), ended, "14m", "circle.svg");
 
   const done = `tasks-done-:${terminalId}:`;
   assert.deepEqual(wordsAt(livePlan, done), ["Done", "1"]);
@@ -741,8 +917,7 @@ test("Tasks shows each agent's read-only plan with detail, progress, and finishe
 });
 
 test("Tasks follows a project on light by folder, and names the agent from light's live terminal.", async (t) => {
-  const { db, Kdb } = await temporaryKdb(t);
-  const remote = await remoteTodoHost(t, Kdb, remoteShop.machine);
+  const { db, remote } = await tasksDatabases(t);
   const home = await saveProject(remote.db, shop);
   const saved = await saveProject(db, remoteShopWithSlash);
   assert.notEqual(home.id, saved.id);
@@ -765,6 +940,91 @@ test("Tasks follows a project on light by folder, and names the agent from light
   assert.ok(!words.includes("Local agent"));
   for (const word of [step.text, step.detail]) assert.ok(wordsAt(panel, stepId(step)).includes(word), word);
   same(await db.read("SELECT * FROM todos;"), []);
+  same(await remote.db.read("SELECT by_name FROM todos;"), [{ by_name: name }]);
+});
+
+test("Go to agent focuses the live plan's terminal on its computer.", async (t) => {
+  const { db, remote } = await tasksDatabases(t);
+  const { id } = await saveProject(remote.db, shop);
+  await writeTodo(remote.db, storedTodo(id, { by: terminalId }));
+
+  const address = `${remoteShop.machine}/${terminalId}`;
+  const run = t.mock.fn();
+  const { page, click } = await startTasks(db, {
+    ...remote.host, spaces: activeSpace(remoteShop), terminals: () => [{ address }], run,
+  });
+
+  const action = `tasks-agent-${remoteShop.machine}:${terminalId}-action`;
+  assert.deepEqual(wordsAt(page(), action), [GO_TO_AGENT]);
+  click(action);
+  same(run.mock.calls.map(({ arguments: args }) => args), [["pane.focus", { terminal: address }]]);
+});
+
+test("Clear removes only the viewed earlier plan on its computer, and Undo restores every column.", async (t) => {
+  const { db, remote } = await tasksDatabases(t);
+  const remoteProject = await saveProject(remote.db, shop);
+  const localProject = await saveProject(db, acme);
+  const finished = storedTodo(remoteProject.id, {
+    id: "release", by: terminalId, by_name: "O'Connor", text: "Pack the release",
+    detail: "Include the user's guide", started_at: 1100, done_at: 1200,
+  });
+  const next = storedTodo(remoteProject.id, { id: "notes", by: terminalId, by_name: finished.by_name, created: 1300 });
+  const current = storedTodo(remoteProject.id, { id: "current", text: "Check the current build", created: 1400 });
+  for (const step of [finished, next, current]) await writeTodo(remote.db, step);
+  await writeTodo(db, { ...finished, project: localProject.id, text: "Keep the local step with the same ID" });
+  const readBoth = () => Promise.all([db, remote.db].map((database) => database.read("SELECT * FROM todos ORDER BY created;")));
+  const before = await readBoth();
+  const { page, click, drain } = await startTasks(db, { ...remote.host, spaces: activeSpace(remoteShop) });
+
+  const clear = `${EARLIER}-action`;
+  assert.equal(control(page(), clear), null, "Clear is hidden until Earlier opens");
+  click(EARLIER);
+  assert.deepEqual(wordsAt(page(), clear), ["Clear"]);
+  click(clear);
+  assert.equal(control(page(), EARLIER), null, "The cleared plan disappears immediately");
+  const undo = "tasks-cleared-action";
+  assert.deepEqual(wordsAt(page(), "tasks-cleared"), ["Cleared 1 earlier plan", "Undo"]);
+  await drain();
+  const [localRows, remoteRows] = before;
+  assert.deepEqual(await readBoth(), [localRows, remoteRows.filter((s) => s.id === current.id)]);
+  assert.ok(control(page(), stepId(current)));
+
+  click(undo);
+  await drain();
+  assert.deepEqual(await readBoth(), before);
+  assert.equal(control(page(), undo), null);
+  assert.equal(texts(planWith(page(), finished.text))[0], finished.by_name);
+});
+
+test("Undo restores earlier steps even when pressed before Clear finishes deleting them.", async (t) => {
+  const { db, step } = await shopAgentTodo(t, { by_name: "Packer" });
+  const deletion = Promise.withResolvers();
+  let deleting = false;
+  let restoring;
+  interceptSql(t, db, (sql, execute) => {
+    if (sql.startsWith("DELETE FROM todos")) {
+      deleting = true;
+      return deletion.promise.then(execute);
+    }
+    const result = execute();
+    if (sql.startsWith("INSERT OR IGNORE INTO todos")) restoring = result;
+    return result;
+  });
+  const tasks = await startTasks(db, { spaces: activeSpace(shop) });
+
+  try {
+    tasks.click(EARLIER);
+    tasks.click(`${EARLIER}-action`);
+    await nextTurn();
+    assert.ok(deleting, "Clear has started, but the DELETE is still waiting");
+    tasks.click("tasks-cleared-action");
+    await nextTurn();
+    await restoring;
+  } finally {
+    deletion.resolve();
+    await tasks.drain();
+  }
+  same(await todoNames(db), [{ id: step.id, by_name: step.by_name }]);
 });
 
 const shopAndAcme = async (t) => {
@@ -783,7 +1043,7 @@ test("Tasks shows, per agent, the plans of the agents in a space that has no fol
     storedTodo(id, { id: "deep", text: "Check one fix", detail: "A helper's helper", by: "t3", created: 25 }),
   ];
   for (const step of steps) await writeTodo(db, step);
-  const { page } = await startTasks(db, {
+  const { page, click } = await startTasks(db, {
     spaces: () => [{ id: "kanso", name: "herdr-kanso", folder: "", machine: null, active: true }, { id: "acme", name: "Acme", folder: "", machine: null, active: false }],
     agents: () => [{ address: "t1", space: "kanso", status: "working" }, { address: "t7", space: "acme", status: "working" }],
     terminals: () => [
@@ -796,10 +1056,16 @@ test("Tasks shows, per agent, the plans of the agents in a space that has no fol
   const panel = page();
   for (const step of [steps[0], steps[1], steps[5]]) assert.ok(control(panel, stepId(step)), step.text);
   for (const step of steps.slice(2, 5)) assert.equal(control(panel, stepId(step)), null, step.text);
-  assert.ok(control(panel, "tasks-ended-:t9:gone"), "The ended agent's plan is there, folded");
   const words = texts(panel);
-  for (const name of ["Lead", "Tester", "Checker", "An agent that has ended"]) assert.ok(words.includes(name), name);
+  for (const name of ["Lead", "Tester", "Checker"]) assert.ok(words.includes(name), name);
   assert.ok(!words.includes("Other"));
+  assert.deepEqual(wordsAt(panel, EARLIER), ["Earlier", "1"]);
+  click(EARLIER);
+  const plan = planWith(page(), steps[2].text);
+  assert.equal(control(page(), stepId(steps[2])), null, "The earlier plan is still folded");
+  click(plan.tag);
+  assert.ok(control(page(), stepId(steps[2])));
+  for (const step of steps.slice(3, 5)) assert.equal(control(page(), stepId(step)), null, step.text);
 });
 
 test("Tasks for a space with a folder leaves out its agents' steps in other projects.", async (t) => {

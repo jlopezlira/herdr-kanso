@@ -10,7 +10,7 @@ export const stepState = (step) => (step.done_at != null ? "done" : step.started
 
 export function plansOf(todos) {
   const steps = todos.toSorted((a, b) => a.created - b.created);
-  const keyOf = (step) => `${step.on ?? ""}:${step.by ?? ""}:${step.gone ? "gone" : ""}`;
+  const keyOf = (step) => `${step.on ?? ""}:${step.by ?? ""}:${step.gone ? `gone:${step.by_name ?? ""}` : ""}`;
   const plans = [...new Set(steps.map(keyOf))].map((key) => steps.filter((s) => keyOf(s) === key))
     .map((mine) => ({ by: mine[0].by ?? null, on: mine[0].on ?? "", gone: Boolean(mine[0].gone), steps: mine }));
   const last = (plan) => Math.max(...plan.steps.map((s) => s.done_at ?? s.started_at ?? s.created));

@@ -276,7 +276,7 @@ test("an older picture index gains the prefix mark", async (t) => {
   assert.equal((await db.pictures("/t.jsonl")).mark, "9");
 });
 
-test("Opening an older to-do list adds attribution, detail and start times without changing saved steps.", async (t) => {
+test("Opening an older to-do list adds attribution, the agent's name, detail and start times without changing saved steps.", async (t) => {
   const db = await madeDatabase(t);
   const before = { id: "task", project: "shop", text: "Pack the release notes", created: 1000, done_at: 2000 };
   const seed = await sh(db.file, `
@@ -287,9 +287,9 @@ test("Opening an older to-do list adds attribution, detail and start times witho
 
   const steps = async () => clone(await db.read("SELECT * FROM todos;"));
   await db.open();
-  assert.deepEqual(await steps(), [{ ...before, by: null, detail: null, started_at: null }]);
-  await db.run("UPDATE todos SET by='t42', detail='Check the changelog', started_at=1500 WHERE id='task';");
-  assert.deepEqual(await steps(), [{ ...before, by: "t42", detail: "Check the changelog", started_at: 1500 }]);
+  assert.deepEqual(await steps(), [{ ...before, by: null, detail: null, started_at: null, by_name: null }]);
+  await db.run("UPDATE todos SET by='t42', detail='Check the changelog', started_at=1500, by_name='Builder' WHERE id='task';");
+  assert.deepEqual(await steps(), [{ ...before, by: "t42", detail: "Check the changelog", started_at: 1500, by_name: "Builder" }]);
 });
 
 test("Opening an older database drops the issue and board caches but keeps the to-do list.", async (t) => {
