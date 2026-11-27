@@ -287,7 +287,7 @@ export default class TokenSpend extends View {
       if (generation !== this.generation || this.closed) return;
       if (this.syncWaiting === "fold" && startedAt >= this.syncEnded) this.syncWaiting = false;
       if (command === "snapshot") {
-        if (failure) this.lastSnapshotAt = Date.now() - REFRESH_MS + RETRY_MS;
+        if (failure || payload?.scan?.retry) this.lastSnapshotAt = Date.now() - REFRESH_MS + RETRY_MS;
         else if (!payload?.scan?.partial) setShared(SNAPSHOT_AT, this.lastSnapshotAt);
       }
       if (payload) {
@@ -340,12 +340,12 @@ export default class TokenSpend extends View {
         });
       }
     }
-    if (this.awake && !this.closed && !this.running && !this.continueTimer) this.exchange(cx, true, this.takeForced());
+    if (this.awake && !this.closed && !this.running && !this.scan?.partial) this.exchange(cx, true, this.takeForced());
     cx.notify();
   }
 
   exchange(cx, force = false, everyone = false) {
-    if (this.closed || !this.awake || !this.nodeBinary) return;
+    if (this.closed || !this.awake || !this.nodeBinary || this.scan?.partial) return;
     if (this.syncing) { this.syncAgain = true; if (force) this.syncForce = true; if (everyone) this.syncEveryone = true; return; }
     this.syncing = true;
     cx.spawn(async (syncCx) => {

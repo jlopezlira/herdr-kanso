@@ -37,6 +37,7 @@ function newTally(sources) {
       bytesRead: 0,
       unchangedFiles: 0,
       errors: 0,
+      retry: 0,
     },
     sources: Object.fromEntries(sources.map((source) => [source.id, {
       enabled: source.enabled,
@@ -97,6 +98,15 @@ function firstSight(tally, file, inode) {
 
 function sourceWarn(tally, source, message) {
   return tallyWarn(tally, `[${source.id}] ${message}`, source.id);
+}
+
+function tallyRetry(tally, message, sourceId) {
+  const warned = tallyWarn(tally, message, sourceId);
+  return { ...warned, stats: { ...warned.stats, retry: warned.stats.retry + 1 } };
+}
+
+function sourceRetry(tally, source, message) {
+  return tallyRetry(tally, `[${source.id}] ${message}`, source.id);
 }
 
 function isEligible(adapter, filePath) {
@@ -168,7 +178,7 @@ export async function discoverFiles(config, home, tally) {
       return tallyNote(current, `[${source.id}] source ${source.id}: root ${rootText} is not available.`);
     }
     if (result.fatal) {
-      return tallyWarn(
+      return tallyRetry(
         current,
         `[${source.id}] source ${source.id}: cannot read root ${rootText}: ${result.fatal.message}`,
         source.id,
@@ -401,7 +411,7 @@ async function scanPlainFile(work, tally, key, entry, source, filePath, fileStat
   const parsed = closeParserState(run.acc.state);
   const read = streamed.error ? { ...parsed, readFailed: true } : withoutKey(parsed, "readFailed");
   const failedRead = streamed.error
-    ? sourceWarn(run.acc.tally, source, `${adapter} ${entry.path}: read failed; accepted prefix retained: ${streamed.error.message}`)
+    ? sourceRetry(run.acc.tally, source, `${adapter} ${entry.path}: read failed; accepted prefix retained: ${streamed.error.message}`)
     : run.acc.tally;
   const counted = run.lines.fed > 0
     ? count(count(failedRead, "bytesRead", run.lines.fed), "filesRead")
@@ -478,7 +488,7 @@ async function scanCompressedFile(work, tally, key, entry, source, filePath, fil
     const next = { ...dropped.entry, state: { ...dropped.entry.state, readFailed: true } };
     return {
       work: putEntry(dropped.work, key, next),
-      tally: sourceWarn(
+      tally: sourceRetry(
         streamed.value.acc.tally,
         source,
         `${source.adapter} ${entry.path}: zstd file could not be decompressed: ${streamed.error.message}`,
@@ -607,7 +617,7 @@ async function scanOpenCodeDb(work, tally, source, filePath, dbStat) {
     }
   })();
   if (read.failed) {
-    return { work: made.work, tally: sourceWarn(tally, source, `opencode ${filePath}: scan failed: ${read.error.message}`), dirty: isNew };
+    return { work: made.work, tally: sourceRetry(tally, source, `opencode ${filePath}: scan failed: ${read.error.message}`), dirty: isNew };
   }
   const { malformedRows } = read;
   const next = {
@@ -729,7 +739,7 @@ export async function scanSources(store, { home, onProgress, deadline } = {}) {
       if (statted.error?.code === "ENOENT") return done;
       return {
         ...done,
-        tally: sourceWarn(done.tally, found.source, `${found.source.adapter} ${found.file}: cannot stat file: ${statted.error.message}`),
+        tally: sourceRetry(done.tally, found.source, `${found.source.adapter} ${found.file}: cannot stat file: ${statted.error.message}`),
       };
     }
     const { fileStat } = statted;
@@ -739,7 +749,7 @@ export async function scanSources(store, { home, onProgress, deadline } = {}) {
     const before = countFor(count(sighted, "files"), found.source.id, "files");
     const scanned = await scanOneFile(done.work, before, found.source, found.file).catch((error) => ({
       work: done.work,
-      tally: sourceWarn(before, found.source, `${found.source.adapter} ${found.file}: scan failed: ${error.message}`),
+      tally: sourceRetry(before, found.source, `${found.source.adapter} ${found.file}: scan failed: ${error.message}`),
       dirty: false,
     }));
     const read = countFor(scanned.tally, found.source.id, "filesRead", scanned.tally.stats.filesRead - before.stats.filesRead);
@@ -794,7 +804,7 @@ async function scanFileStat(tally, source, filePath) {
     return { found: await stat(filePath) };
   } catch (error) {
     return { tally: error?.code === "ENOENT" ? tally
-      : sourceWarn(tally, source, `${source.adapter} ${filePath}: cannot stat file: ${error.message}`) };
+      : sourceRetry(tally, source, `${source.adapter} ${filePath}: cannot stat file: ${error.message}`) };
   }
 }
 

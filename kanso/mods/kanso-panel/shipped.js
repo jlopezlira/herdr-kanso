@@ -181,6 +181,10 @@ export async function signedIn() {
   return r?.code === 0 ? r.stdout.trim() || null : null;
 }
 
+class AccountChanged extends Error {
+  constructor(login) { super("GitHub account changed."); this.login = login; }
+}
+
 export async function apiLogin() {
   const data = await gql("query{viewer{login}}").catch(() => null);
   return data?.viewer?.login ?? null;
@@ -260,8 +264,14 @@ export class Shipped {
         if (signed && this.login && signed !== this.login) { this.github = {}; this.prs = null; this.covered = null; this.login = null; this.verified = null; }
         const kept = this.github[key] && !again ? null : await this.store.period(key).catch(() => null);
         const ours = kept && (!signed || kept.data.viewer.login === signed) && (!this.verified || kept.data.viewer.login === this.verified);
-        if (ours && !again && now - kept.at < REFRESH_MS) this.take(key, kept.data, kept.at);
-        else if (again || !this.github[key]) {
+        if (ours && !again && now - kept.at < REFRESH_MS) {
+          this.take(key, kept.data, kept.at);
+          if (!this.verified) {
+            cx.notify();
+            this.verified = await apiLogin();
+            if (this.verified && this.verified !== this.login) { this.github = {}; this.prs = null; this.covered = null; this.login = null; this.pending = true; }
+          }
+        } else if (again || !this.github[key]) {
           try {
             const stored = await this.store.meta("github.login").catch(() => null);
             const calendar = signed && stored && signed !== stored ? null : await this.store.calendar().catch(() => null);
@@ -311,12 +321,14 @@ export class Shipped {
     this.forced = false;
     this.syncing = true; this.resync = false; this.syncError = null;
     const login = this.login;
+    this.syncConfirmed = null;
     const verify = async () => {
-      if (this.verified === login) return;
+      if (this.syncConfirmed === login) return;
       const who = await apiLogin();
       if (!who) throw new Error("GitHub could not be read.");
-      if (who !== login) throw Object.assign(new Error("GitHub account changed."), { switched: who });
       this.verified = who;
+      if (who !== login) throw new AccountChanged(who);
+      this.syncConfirmed = who;
     };
     spawnAndNotify(cx, async (cx) => {
       try {
@@ -331,7 +343,7 @@ export class Shipped {
         const read = await mapSeries(PROVIDERS, (provider) => provider.sync(this.store, { from, now, login, verify, force: forced, every: REFRESH_MS, progress: (phase) => { this.phase = `${provider.name}, ${phase}`; cx.notify(); } }));
         this.unchecked = read.reduce((n, r) => n + (r?.unchecked ?? 0), 0);
       } catch (e) {
-        if (e?.switched && login === this.login) { this.github = {}; this.prs = null; this.covered = null; this.login = null; this.verified = e.switched; this.switched = true; }
+        if (e instanceof AccountChanged && login === this.login) { this.github = {}; this.prs = null; this.covered = null; this.login = null; this.switched = true; }
         else this.syncError = String(e?.message ?? e);
       }
       finally {

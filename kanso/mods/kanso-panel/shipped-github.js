@@ -75,8 +75,13 @@ export const github = {
       await store.save([...await prsCreated(m.start, end), ...await prsIn(mergedIn, m.start, end)], login);
       await store.monthRead("github", m.month, now, login);
     });
-    if (due.length) await verify();
-    await read(due);
+    const merged = await store.meta("github.merged");
+    const startOf = (month) => new Date(Number(month.slice(0, 4)), Number(month.slice(5)) - 1, 1).getTime();
+    const backfill = merged || !done.size ? [] : monthsIn(Math.min(...[...done].map(startOf)), now + 1).filter((m) => done.has(m.month) && !due.some((d) => d.month === m.month));
+    const months = [...due, ...backfill].toSorted((a, b) => a.start - b.start);
+    if (months.length) await verify();
+    await read(months);
+    if (!merged) await store.setOwnMeta("github.merged", "1", login);
     if (since && !force && now - since < every) return { unchecked: Number(await store.meta("github.unchecked")) || 0 };
     await verify();
     if (since) await store.save(await prsIn(updatedIn, since - 3600000, now + 1000), login);
