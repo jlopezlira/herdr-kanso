@@ -14,7 +14,7 @@ import { scrollPage, pageHeader } from "./ui-page.js";
 import { kdbOn, newId, seenAddress } from "./kdb.js";
 import { runTodo, todoOn, tellAgents, toldWords } from "./todo-switch.js";
 import { tryOrAsync } from "./pure.js";
-import { TODO_MS, FOLLOW_MS, DONE, PROJECTS, TODOS, HELD_TODOS, todoText, todosOf, addTodoSql, doneSql, dropTodoSql, placeOf, withSpaces, shownProjects, ageOf } from "./todo.js";
+import { TODO_MS, FOLLOW_MS, DONE, PROJECTS, TODOS, HELD_TODOS, todoText, todosOf, addTodoSql, doneSql, dropTodoSql, placeOf, withSpaces, ageOf } from "./todo.js";
 
 
 export class Tasks {
@@ -40,8 +40,8 @@ export class Tasks {
     this.timer = cx.timer;
     this.remote = {};
     this.agentsOn = {};
-    this.turning = false;
-    this.turned = null;
+    this.asking = new Set();
+    this.turns = {};
     this.front = this.frontPlace();
     this.switchOn(this.frontMachine(), cx);
     this.load(cx);
@@ -65,16 +65,24 @@ export class Tasks {
     const front = this.frontPlace();
     if (front === this.front) return;
     this.front = front;
-    this.turned = null;
     this.switchOn(this.frontMachine(), cx);
     cx.notify();
   }
 
   switchOn(machine, cx) {
-    if (window()?.platform === "windows" || machine in this.agentsOn) return;
-    this.agentsOn = { ...this.agentsOn, [machine]: null };
-    cx.spawn(async (cx) => { this.agentsOn = { ...this.agentsOn, [machine]: await todoOn(machine || null) }; cx.notify(); });
+    if (window()?.platform === "windows" || this.agentsOn[machine] != null || this.asking.has(machine)) return;
+    this.asking.add(machine);
+    cx.spawn(async (cx) => {
+      const on = await todoOn(machine || null);
+      this.asking.delete(machine);
+      this.agentsOn = { ...this.agentsOn, [machine]: on };
+      cx.notify();
+    });
   }
+
+  turnOf(machine) { return this.turns[machine] ?? {}; }
+
+  setTurn(machine, turn) { this.turns = { ...this.turns, [machine]: turn }; }
 
   dbOn(machine) {
     if (!machine) return Promise.resolve(this.db);
@@ -272,30 +280,29 @@ export class Tasks {
   }
 
   turnOn(cx) {
-    if (this.turning) return;
-    this.turning = true;
-    this.turned = null;
-    cx.notify();
     const machine = this.frontMachine();
+    if (this.turnOf(machine).busy) return;
+    this.setTurn(machine, { busy: true });
+    cx.notify();
     cx.spawn(async (cx) => {
       const r = this.agentsOn[machine] ? { code: 0 } : await runTodo("install", machine || null);
-      this.agentsOn = { ...this.agentsOn, [machine]: await todoOn(machine || null) };
+      const on = await todoOn(machine || null);
+      this.agentsOn = { ...this.agentsOn, [machine]: on };
       const told = await tellAgents(cx.timer, machine || null);
       const warned = r.code === 0 ? "" : String(r.stderr || r.stdout || "It could not be turned on").trim().split("\n").at(-1);
-      this.turned = { text: [warned, toldWords(told, this.agentsOn[machine] === true, machine || null)].filter(Boolean).join(" "), failed: Boolean(warned) || told.failed };
-      this.turning = false;
+      this.setTurn(machine, { text: [warned, toldWords(told, on === true, machine || null)].filter(Boolean).join(" "), failed: Boolean(warned) || told.failed });
       cx.notify();
     });
   }
 
   emptyBlock(c) {
     if (window()?.platform === "windows") return emptyState({ text: "Each project's to-do shows here" })("tasks-none", c);
-    const agentsOn = this.agentsOn[this.frontMachine()];
-    const action = this.turning ? "" : agentsOn ? "Tell running agents" : "Turn on for my agents";
+    const machine = this.frontMachine(), turn = this.turnOf(machine), agentsOn = this.agentsOn[machine];
+    const action = turn.busy ? "" : agentsOn ? "Tell running agents" : "Turn on for my agents";
     const text = agentsOn ? "Your agents add each step here as they work" : "Turn this on and Claude Code, Codex and Pi add each step of their work here";
     return v_flex().w_full().gap(G.sm)
       .child(emptyState({ text, action })("tasks-none", c, { onClick: (cx) => this.turnOn(cx) }))
-      .children(this.turned ? [this.turned.failed ? stateBlock("tasks-turned", c, { text: this.turned.text }) : div().text_size(T.body).text_color(c.dim).text_center().child(this.turned.text)] : []);
+      .children(turn.text ? [turn.failed ? stateBlock("tasks-turned", c, { text: turn.text }) : div().text_size(T.body).text_color(c.dim).text_center().child(turn.text)] : []);
   }
 
   notes(c) {
@@ -310,12 +317,13 @@ export class Tasks {
   render() {
     const c = tokens(theme()), now = Date.now();
     const todos = this.shown();
-    const listed = this.projects ? shownProjects(this.projects, todos, this.frontProject()) : [];
+    const front = this.frontProject();
+    const listed = (this.projects ?? []).filter((p) => p.id === front);
     const body = !this.projects ? this.skeleton(c)
       : v_flex().w_full().gap(G.xl).children([
         ...this.notes(c),
         ...listed.map((p) => this.projectBlock(p, todos, c, now)),
-        ...(todos.length ? [] : [this.emptyBlock(c)]),
+        ...(todos.some((t) => t.project === front) ? [] : [this.emptyBlock(c)]),
       ]);
     return scrollPage("kanso-tasks", c, true, (column) => column
       .child(pageHeader(div().text_size(PR.title).text_color(c.text).child("Tasks"), []))

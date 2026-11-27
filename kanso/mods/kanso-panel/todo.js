@@ -30,12 +30,6 @@ export function withSpaces(projects, spaces, homeDir) {
   return [...projects, ...opened.filter((p, i) => !known.has(p.id) && opened.findIndex((x) => x.id === p.id) === i)];
 }
 
-export function shownProjects(projects, todos, front) {
-  const held = new Set(todos.map((t) => t.project));
-  return projects.filter((p) => p.id === front || held.has(p.id))
-    .toSorted((a, b) => Number(b.id === front) - Number(a.id === front) || String(a.name).localeCompare(String(b.name)));
-}
-
 export function ageOf(at, now) {
   const minutes = Math.max(0, Math.floor((now - at) / 60_000));
   if (minutes < 60) return `${minutes}m`;
