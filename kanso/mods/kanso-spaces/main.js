@@ -460,6 +460,15 @@ export default class Spaces extends RetryingView {
     this.glowAt = Infinity;
   }
 
+  *drawnGlowKeys() {
+    for (let row = this.drawnGlow; row; row = row.previous) yield row.key;
+  }
+
+  redrawGlow() {
+    this.rowsAt = (this.rowsAt ?? 0) + 1;
+    this.paint();
+  }
+
   followGlow(agents, now) {
     this.glows = glowState(this.glows, agents, now);
     const at = glowDeadline(this.glows);
@@ -470,8 +479,7 @@ export default class Spaces extends RetryingView {
       if (this.glowAt !== at) return;
       this.glowAt = Infinity;
       this.glowTimer = null;
-      this.rowsAt = (this.rowsAt ?? 0) + 1;
-      this.paint();
+      this.redrawGlow();
     }) : null;
   }
 
@@ -2543,8 +2551,9 @@ export default class Spaces extends RetryingView {
   }
 
   extras(a, ctx, show = true) {
-    const entering = a.status === "working" && !this.glowReady?.has(a.address);
-    this.drawnGlow?.add(a.address);
+    const key = JSON.stringify([ctx.glowScope ?? a.space, a.address]);
+    const entering = a.status === "working" && !this.glowReady?.has(key);
+    this.drawnGlow = { key, previous: this.drawnGlow };
     if (entering) this.glowEntry = true;
     return {
       glowEntering: entering,
@@ -3054,7 +3063,7 @@ export default class Spaces extends RetryingView {
       const laid = this.unfolded(id, open, ctx.now) ? (s.id === "asleep" ? this.asleepStatus(s, t, c, ctx) : s.entries.map((e, k) => {
         if (e.a.asleep) return { focused: false, rh: H.line, el: this.asleepLine(e.a, t) };
         const where = machineOf(e.a.address);
-        const m = this.more(e, ctx, e.lines.length ? unnamedComputer(where, machineOf(tops[k]?.address)) : rowDirectory(project(e.a.space)?.name, where)), rh = sessionHeight(m);
+        const m = this.more(e, { ...ctx, glowScope: id }, e.lines.length ? unnamedComputer(where, machineOf(tops[k]?.address)) : rowDirectory(project(e.a.space)?.name, where)), rh = sessionHeight(m);
         return { focused: e.a.focused, rh, el: agentSession(e.a, 0, c, this.navRow(e.a, this.rowFor(e.a)), m) };
       })) : [];
       const { h, focus, focusH } = laid.reduce((acc, r) => ({ h: acc.h + r.rh + 1, focus: r.focused ? acc.h : acc.focus, focusH: r.focused ? r.rh : acc.focusH }), { h: 0, focus: null, focusH: 0 });
@@ -3487,7 +3496,7 @@ export default class Spaces extends RetryingView {
     const rowsCtx = { ...read, asleep, spaces: sp, registry: registry(), spaceIds: new Set(sp.map((w) => w.id)), all: this.listed(ps, sp, read.terms).filter((a) => !asleep.dozing.has(a.address)) };
     if (this.glowView !== view) this.glowReady = new Set();
     this.glowView = view;
-    this.drawnGlow = new Set();
+    this.drawnGlow = null;
     this.glowEntry = false;
     this.followGlow(rowsCtx.all, read.now);
     const ctx = { ...rowsCtx, rowsBy: new Map(sp.map((w) => [w.id, this.spaceRows(w.id, rowsCtx)])), project: this.projectOf(sp, t) };
@@ -3506,10 +3515,9 @@ export default class Spaces extends RetryingView {
           : view === "agents" ? (collapsed ? this.agentsRail(t, shownSp, shownCtx) : this.agentsView(t, shownSp, ps, shownCtx))
           : view === "threads" ? (collapsed ? this.threadsRail(t, shownSp, shownCtx) : this.threadsView(t, shownSp, ps, shownCtx)) : this.grouped(t, collapsed, shownSp, ps, shownCtx)),
         collapsed ? null : this.awayCard(t, active)])("spaces-rows", tokens(t));
-    this.glowReady = this.drawnGlow;
+    this.glowReady = new Set(this.drawnGlowKeys());
     if (this.glowEntry) this.paintTimer.after(0, () => {
-      this.rowsAt = (this.rowsAt ?? 0) + 1;
-      this.paint();
+      this.redrawGlow();
     });
     this.nav = this.navNext;
     // The row the ring was on is gone: it stays at the same place in the list.
