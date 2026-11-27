@@ -1,6 +1,6 @@
 import { div } from "gpui-kit";
 import { v_flex } from "gpui-base";
-import { run, theme, focused, agents, terminals, spaces, window, shared, setShared } from "herdr";
+import { run, theme, focused, agents, terminals, panes, spaces, window, shared, setShared } from "herdr";
 import { G, PR, tokens } from "./ui.js";
 import { iconButton } from "./ui-button.js";
 import { row } from "./ui-row.js";
@@ -14,6 +14,7 @@ import { stateWithin, LATE } from "./panel-state.js";
 import { transcriptApi } from "./platform-transcripts.js";
 import { machineOf } from "./remote-file.js";
 import { ticking } from "./pure.js";
+import { shownName } from "./marks.js";
 import { parseSlice, SLICE_BUDGET, LINE_MAX } from "./find.js";
 import { kindOf, agentHint } from "./conversation-at.js";
 import { locateOn } from "./conversation-on.js";
@@ -248,8 +249,10 @@ export class Timeline {
   render(cx) {
     const c = tokens(theme());
     const title = div().text_size(PR.title).text_color(c.text).child("Timeline");
+    const count = this.state.count;
+    const whose = this.follow ? [shownName(this.follow, panes().find((p) => p.terminal === this.follow)), machineOf(this.follow), count ? `${count} ${count === 1 ? "prompt" : "prompts"}` : null].filter(Boolean).join(" \u{b7} ") : "";
     const tools = [
-      this.follow ? iconButton("timeline-pin", "pin", this.pinned ? "Follow the pane in focus" : "Stay on this agent", (cx) => this.pin(cx), c, { active: Boolean(this.pinned) }) : null,
+      this.follow ? iconButton("timeline-pin", "pin", this.pinned ? `On ${whose}. Follow the pane in focus` : `Stay on ${whose}`, (cx) => this.pin(cx), c, { active: Boolean(this.pinned) }) : null,
       refreshTool("timeline-refresh", c, { busy: this.reading != null, enabled: Boolean(this.follow), working: "Reading the conversation" }, (cx) => this.refresh(cx)),
     ];
     return scrollPage.call(this, "kanso-timeline", c, true, (column) => column
