@@ -3,9 +3,10 @@ import { num } from "./pr-inbox.js";
 
 export const TODO_MS = 4000;
 export const FOLLOW_MS = 300;
+export const SWITCH_MS = 15_000;
 export const DONE = "Done";
 export const PROJECTS = "SELECT id, name, folder, machine FROM projects WHERE removed IS NULL;";
-export const TODOS = "SELECT todos.* FROM todos JOIN projects ON projects.id=todos.project WHERE projects.removed IS NULL;";
+export const TODOS = "SELECT todos.*, projects.folder AS folder, projects.machine AS machine FROM todos JOIN projects ON projects.id=todos.project WHERE projects.removed IS NULL;";
 export const HELD_TODOS = "SELECT todos.*, projects.folder AS folder FROM todos JOIN projects ON projects.id=todos.project WHERE projects.removed IS NULL AND projects.machine='';";
 export const todoText = (text) => String(text ?? "").replace(/\s+/g, " ").trim();
 
@@ -23,11 +24,11 @@ export function todosOf(todos, project) {
 
 export const stepState = (step) => (step.done_at != null ? "done" : step.started_at != null ? "doing" : "next");
 
-export function plansOf(todos, project) {
-  const steps = todos.filter((t) => t.project === project).toSorted((a, b) => a.created - b.created);
-  const keyOf = (step) => `${step.on ?? ""}:${step.by ?? ""}`;
+export function plansOf(todos, place) {
+  const steps = todos.filter((t) => t.place === place).toSorted((a, b) => a.created - b.created);
+  const keyOf = (step) => `${step.on ?? ""}:${step.by ?? ""}:${step.gone ? "gone" : ""}`;
   const plans = [...new Set(steps.map(keyOf))].map((key) => steps.filter((s) => keyOf(s) === key))
-    .map((mine) => ({ by: mine[0].by ?? null, on: mine[0].on ?? "", steps: mine }));
+    .map((mine) => ({ by: mine[0].by ?? null, on: mine[0].on ?? "", gone: Boolean(mine[0].gone), steps: mine }));
   const last = (plan) => Math.max(...plan.steps.map((s) => s.done_at ?? s.started_at ?? s.created));
   const doing = (plan) => plan.steps.some((s) => stepState(s) === "doing");
   return plans.toSorted((a, b) => Number(doing(b)) - Number(doing(a)) || last(b) - last(a));

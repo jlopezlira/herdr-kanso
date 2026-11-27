@@ -11,7 +11,7 @@ import { scrollPage, pageHeader } from "./ui-page.js";
 import { kdbOn, seenAddress } from "./kdb.js";
 import { runTodo, todoOn, tellAgents, toldWords } from "./todo-switch.js";
 import { tryOrAsync } from "./pure.js";
-import { TODO_MS, FOLLOW_MS, DONE, PROJECTS, TODOS, HELD_TODOS, placeOf, withSpaces, ageOf, plansOf, stepState } from "./todo.js";
+import { TODO_MS, FOLLOW_MS, SWITCH_MS, DONE, PROJECTS, TODOS, HELD_TODOS, placeOf, withSpaces, ageOf, plansOf, stepState } from "./todo.js";
 
 
 export class Tasks {
@@ -34,6 +34,8 @@ export class Tasks {
     this.agentsOn = {};
     this.asked = {};
     this.turns = {};
+    this.checked = {};
+    this.unread = {};
     this.front = this.frontPlace();
     this.frontOn = this.frontMachine();
     this.switchOn(this.frontOn, cx);
@@ -51,17 +53,12 @@ export class Tasks {
 
   frontProject() {
     const key = this.frontPlace();
-    const holds = (p) => key === placeOf(p.machine, p.folder) || key.startsWith(`${placeOf(p.machine, p.folder)}/`);
-    const saved = (this.projects ?? []).filter((p) => !p.auto && holds(p)).toSorted((a, b) => b.folder.length - a.folder.length)[0];
-    return (saved ?? (this.projects ?? []).find((p) => placeOf(p.machine, p.folder) === key))?.id ?? null;
+    const holds = (place) => key === place || key.startsWith(`${place}/`);
+    const places = [...(this.projects ?? []).filter((p) => !p.auto).map((p) => placeOf(p.machine, p.folder)), ...this.todos.map((t) => t.place)];
+    return places.filter(holds).toSorted((a, b) => b.length - a.length)[0] ?? key;
   }
 
-  placeOfProject(id) {
-    const p = (this.projects ?? []).find((x) => x.id === id);
-    return p ? placeOf(p.machine, p.folder) : null;
-  }
-
-  scripted(machine) { return Boolean(machine) || window()?.platform !== "windows"; }
+  scripted(machine) { return machine ? this.agentsOn[machine] !== "windows" : window()?.platform !== "windows"; }
 
   follow(cx) {
     const front = this.frontPlace();
@@ -78,6 +75,7 @@ export class Tasks {
     if (!this.scripted(machine) || this.turnOf(machine).busy || (!again && this.agentsOn[machine] != null)) return;
     const asked = (this.asked[machine] ?? 0) + 1;
     this.asked = { ...this.asked, [machine]: asked };
+    this.checked = { ...this.checked, [machine]: Date.now() };
     cx.spawn(async (cx) => {
       const on = await todoOn(machine || null);
       if (this.asked[machine] !== asked) return;
@@ -100,28 +98,29 @@ export class Tasks {
     return this.remote[machine];
   }
 
-  async heldOn(machine, projects) {
+  async heldOn(machine) {
     const rows = await tryOrAsync(async () => (await this.dbOn(machine)).read(HELD_TODOS));
-    if (!rows) return this.todos.filter((t) => t.on === machine);
-    return rows.flatMap(({ folder, ...t }) => {
-      const mine = projects.find((p) => p.machine === machine && placeOf(machine, p.folder) === placeOf(machine, folder));
-      return mine ? [{ ...t, home: t.project, project: mine.id, on: machine }] : [];
-    });
+    return rows ? rows.map(({ folder, ...t }) => ({ ...t, home: t.project, place: placeOf(machine, folder), on: machine })) : null;
   }
 
   async read() {
     const [projects, local] = await Promise.all([tryOrAsync(() => this.db.read(PROJECTS)), tryOrAsync(() => this.db.read(TODOS))]);
     const nextProjects = withSpaces(projects ?? this.projects ?? [], spaces(), home());
     const machines = [...new Set(nextProjects.map((p) => p.machine).filter(Boolean))];
-    const held = await Promise.all(machines.map((m) => this.heldOn(m, nextProjects)));
-    const nextTodos = [...(local ? local.map((t) => ({ ...t, home: t.project, on: "" })) : this.todos.filter((t) => !t.on)), ...held.flat()];
-    if (this.projects && JSON.stringify([nextProjects, nextTodos]) === JSON.stringify([this.projects, this.todos])) return false;
+    const held = await Promise.all(machines.map((m) => this.heldOn(m)));
+    const unread = Object.fromEntries(machines.map((m, i) => [m, !held[i]]));
+    const kept = machines.flatMap((m, i) => held[i] ?? this.todos.filter((t) => t.on === m));
+    const nextTodos = [...(local ? local.map(({ folder, machine, ...t }) => ({ ...t, home: t.project, place: placeOf(machine, folder), on: "" })) : this.todos.filter((t) => !t.on)), ...kept];
+    if (this.projects && JSON.stringify([nextProjects, nextTodos, unread]) === JSON.stringify([this.projects, this.todos, this.unread])) return false;
     this.projects = withSpaces(nextProjects.filter((p) => !p.auto), spaces(), home());
     this.todos = nextTodos;
+    this.unread = unread;
     return true;
   }
 
   load(cx) {
+    const machine = this.frontMachine();
+    if (Date.now() - (this.checked[machine] ?? 0) >= SWITCH_MS) this.switchOn(machine, cx, true);
     if (this.loading) return;
     this.loading = true;
     cx.spawn(async (cx) => {
@@ -129,32 +128,46 @@ export class Tasks {
     });
   }
 
-  agentName(by, on) {
-    if (!by) return "Steps without an agent";
+  liveAt(by, on) {
     const address = seenAddress(by, on);
-    return terminals().some((k) => k.address === address) ? shownName(address) : "An agent that has ended";
+    return terminals().find((k) => k.address === address) ?? null;
   }
 
-  stepRow(step, c, now) {
+  withAgents(todos) {
+    return todos.map((t) => {
+      const k = t.by ? this.liveAt(t.by, t.on) : null;
+      return { ...t, gone: Boolean(t.by) && (!k || t.created < (k.created_ms ?? 0)) };
+    });
+  }
+
+  agentName(plan) {
+    if (!plan.by) return "Steps without an agent";
+    if (plan.gone) return "An agent that has ended";
+    const address = seenAddress(plan.by, plan.on), k = this.liveAt(plan.by, plan.on);
+    return shownName(address, { terminal: address, program: k?.program, title: k?.title });
+  }
+
+  stepRow(step, c, now, gone) {
     const state = stepState(step);
+    const working = state === "doing" && !gone;
     return row(`tasks-step-${step.id}`, c, {
-      name: step.text, second: step.detail || null, wrap: !step.detail,
-      icon: state === "done" ? "check" : state === "next" ? "circle" : null, mark: state === "doing" ? "working" : "none",
-      dimmed: state === "done", current: state === "doing",
+      name: step.text, second: step.detail || null, wrap: true, wrapSecond: true,
+      icon: state === "done" ? "check" : working ? null : "circle", mark: working ? "working" : "none",
+      dimmed: state === "done", current: working,
       meta: ageOf(step.done_at ?? step.started_at ?? step.created, now),
     });
   }
 
   planBlock(plan, c, now) {
-    const key = `${plan.on}:${plan.by ?? ""}`;
+    const key = `${plan.on}:${plan.by ?? ""}:${plan.gone ? "gone" : ""}`;
     const folded = this.folded(key);
     const steps = plan.steps.filter((s) => stepState(s) !== "done");
     const done = plan.steps.filter((s) => stepState(s) === "done");
     return v_flex().w_full().gap(G.sm)
-      .child(section(c, this.agentName(plan.by, plan.on), `${done.length} of ${plan.steps.length} done`))
-      .children(steps.map((s) => this.stepRow(s, c, now)))
+      .child(section(c, this.agentName(plan), `${done.length} of ${plan.steps.length} done`))
+      .children(steps.map((s) => this.stepRow(s, c, now, plan.gone)))
       .children(done.length ? [row(`tasks-done-${key}`, c, { name: DONE, level: 0, open: !folded, chip: String(done.length), onClick: (cx) => this.fold(key, cx) })] : [])
-      .children(folded ? [] : done.map((s) => this.stepRow(s, c, now)));
+      .children(folded ? [] : done.map((s) => this.stepRow(s, c, now, plan.gone)));
   }
 
   folded(project) { return this.folds[project] ?? true; }
@@ -171,6 +184,12 @@ export class Tasks {
     this.asked = { ...this.asked, [machine]: (this.asked[machine] ?? 0) + 1 };
     cx.notify();
     cx.spawn(async (cx) => {
+      const fresh = await runTodo("steps", machine || null);
+      if (fresh.code !== 0 && /usage: kanso-todo/.test(fresh.stderr ?? "")) {
+        this.setTurn(machine, { text: `${machine || "This computer"} has an older kansō: update it there, then turn this on again.`, failed: true });
+        cx.notify();
+        return;
+      }
       const r = await runTodo("install", machine || null);
       const on = await todoOn(machine || null);
       this.agentsOn = { ...this.agentsOn, [machine]: on };
@@ -199,11 +218,14 @@ export class Tasks {
   render() {
     const c = tokens(theme()), now = Date.now();
     const front = this.frontProject();
-    const plans = plansOf(this.todos, front);
+    const plans = plansOf(this.withAgents(this.todos), front);
+    const machine = this.frontMachine(), unread = Boolean(machine) && this.unread[machine];
+    const warned = unread ? [stateBlock("tasks-unread", c, { text: plans.length ? `Could not reach ${machine}; these steps may be out of date` : `Could not reach ${machine} to read its plans` })] : [];
     const body = !this.projects ? this.skeleton(c)
       : v_flex().w_full().gap(G.xl).children([
+        ...warned,
         ...plans.map((plan) => this.planBlock(plan, c, now)),
-        this.emptyBlock(c, plans.length > 0),
+        ...(unread && !plans.length ? [] : [this.emptyBlock(c, plans.length > 0)]),
       ]);
     return scrollPage("kanso-tasks", c, true, (column) => column
       .child(pageHeader(div().text_size(PR.title).text_color(c.text).child("Tasks"), []))

@@ -225,14 +225,14 @@ test("Empty Tasks installs the rule before telling running agents, even if the s
     assert.ok(texts(page()).includes(note));
   }
   assert.deepEqual(todoVerbs(todoExec), [
-    "status", "install", "status", "rule", "install", "status", "rule",
+    "status", "steps", "install", "status", "rule", "steps", "install", "status", "rule",
   ]);
   same(sentTo(hc), [local, refused, local, refused].map((address) => ["send", address, rule]));
 });
 
 test("Tasks shows what could not be installed alongside the note about who was told.", async (t) => {
   const skipped = "Codex already has developer instructions.";
-  const replies = [success("off\n"), failure(skipped), success("on\n"), success("Keep your to-do up to date.")].values();
+  const replies = [success("off\n"), success("add start done list\n"), failure(skipped), success("on\n"), success("Keep your to-do up to date.")].values();
   const { page, click, drain } = await todoTasks(t, {
     todoExec: async () => replies.next().value,
     agents: () => [{ address: terminalId, status: "working" }],
@@ -405,7 +405,7 @@ const lightTodoSwitch = async (t, { initiallyOn = false, ...host } = {}) => {
     const before = remote.mock.callCount();
     tasks.click(action);
     await tasks.drain();
-    assert.deepEqual(todoVerbs(remote).slice(before), ["install", "status", "rule"]);
+    assert.deepEqual(todoVerbs(remote).slice(before), ["steps", "install", "status", "rule"]);
   };
   return { ...tasks, remote, installFrom, turnOff: script.turnOff };
 };
@@ -445,7 +445,7 @@ test("One press in Tasks turns on the to-do on light and tells only light's runn
 
   same(
     { light: todoVerbs(remote), local: todoVerbs(local), sent: sentTo(hc) },
-    { light: ["status", "install", "status", "rule"], local: [], sent: [["send", running, LIGHT_TODO_RULE]] },
+    { light: ["status", "steps", "install", "status", "rule"], local: [], sent: [["send", running, LIGHT_TODO_RULE]] },
   );
 });
 
@@ -524,16 +524,16 @@ test("Opening Tasks shows a skeleton before its first load.", async () => {
 
 test("Tasks groups plan steps by computer and agent, in creation order, with work in progress first.", async () => {
   const { plansOf, stepState } = await load("kanso-panel/todo.js", ["plansOf", "stepState"]);
-  const step = (id, created, props = {}) => storedTodo(shop.id, { id, created, by: terminalId, ...props });
+  const step = (id, created, props = {}) => ({ place: "shop", ...storedTodo(shop.id, { id, created, by: terminalId, ...props }) });
   const todos = [
     step("next", 30),
     step("remote", 90, { on: remoteShop.machine }),
     step("finished", 10, { started_at: 11, done_at: 15 }),
     step("doing", 20, { started_at: 25 }),
     step("other agent", 80, { by: "t2" }),
-    step("other project", 100, { project: acme.id, started_at: 101 }),
+    step("other project", 100, { project: acme.id, place: "acme", started_at: 101 }),
   ];
-  same(plansOf(todos, shop.id).map(({ on, by, steps }) => [on, by, steps.map((s) => [s.id, stepState(s)])]), [
+  same(plansOf(todos, "shop").map(({ on, by, steps }) => [on, by, steps.map((s) => [s.id, stepState(s)])]), [
     ["", terminalId, [["finished", "done"], ["doing", "doing"], ["next", "next"]]],
     [remoteShop.machine, terminalId, [["remote", "next"]]],
     ["", "t2", [["other agent", "next"]]],
@@ -589,7 +589,7 @@ test("Tasks shows each agent's read-only plan with detail, progress, and finishe
   checkStep(livePlan, next, "10m", "circle.svg");
   checkStep(endedPlan, ended, "14m", "circle.svg");
   checkStep(anonymousPlan, anonymous, "15m", "circle.svg");
-  const done = `tasks-done-:${terminalId}`;
+  const done = `tasks-done-:${terminalId}:`;
   assert.deepEqual(wordsAt(livePlan, done), ["Done", "1"]);
   assert.equal(control(panel, stepId(finished)), null);
 

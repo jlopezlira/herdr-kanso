@@ -5,6 +5,7 @@ shq() { printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\\\''/g")"; }
 me="sh $(shq "$(cd "$(dirname "$0")" && pwd -P)/$(basename "$0")")"
 mark="kanso-todo"
 here=$(pwd -P)
+who=${HC_TERMINAL_ID:-}
 umask 077
 claude_rule=$HOME/.claude/rules/kanso-todo.md
 pi_append=$HOME/.pi/agent/APPEND_SYSTEM.md
@@ -15,6 +16,13 @@ sql() { sqlite3 -cmd ".timeout 5000" "$db" "$@"; }
 fail() { echo "kanso-todo: $1" >&2; exit 1; }
 one_line() { printf '%s' "$1" | tr '\n\t' '  ' | sed 's/  */ /g; s/^ //; s/ $//'; }
 now() { echo "$(date +%s)000"; }
+mine() { [ -n "$who" ] || fail "run this from an agent's terminal in kansō: HC_TERMINAL_ID is not set"; }
+columns() {
+  have=$(sql "SELECT group_concat(name,' ') FROM pragma_table_info('todos');") || fail "cannot read $db"
+  for col in "detail TEXT" "started_at INTEGER"; do
+    case " $have " in *" ${col% *} "*) ;; *) sql "ALTER TABLE todos ADD COLUMN $col;" >/dev/null 2>&1 || true ;; esac
+  done
+}
 new_id() { printf '%x%s' "$(date +%s)" "$(od -An -N4 -tx4 /dev/urandom | tr -d ' \n')"; }
 
 rule() {
@@ -25,7 +33,8 @@ RULE
 }
 
 find_project() {
-  sql "SELECT id FROM projects WHERE removed IS NULL AND machine='' AND (folder=$(q "$here") OR substr($(q "$here"),1,length(folder)+1)=folder||'/') ORDER BY length(folder) DESC LIMIT 1;" || fail "cannot read $db"
+  h=$(q "$here")
+  sql "SELECT id FROM projects WHERE removed IS NULL AND machine='' AND ($h=rtrim(folder,'/') OR substr($h,1,length(rtrim(folder,'/'))+1)=rtrim(folder,'/')||'/') ORDER BY length(rtrim(folder,'/')) DESC LIMIT 1;" || fail "cannot read $db"
 }
 
 project() {
@@ -116,28 +125,36 @@ uninstall() {
 
 case "$1" in
   add)
+    mine
     text=$(one_line "$2")
     detail=$(one_line "$3")
-    [ -n "$text" ] || fail 'usage: kanso-todo add "<step>" "<detail>"'
+    [ $# -eq 3 ] && [ -n "$text" ] && [ -n "$detail" ] || fail 'usage: kanso-todo add "<step>" "<detail>"'
+    columns
     p=$(project) || exit 1
     id=$(new_id)
-    sql "INSERT INTO todos(id,project,text,detail,created,by) VALUES($(q "$id"),$(q "$p"),$(q "$text"),$(q "$detail"),$(now),$(q "${HC_TERMINAL_ID:-}"));" || fail "cannot add the step"
+    sql "INSERT INTO todos(id,project,text,detail,created,by) VALUES($(q "$id"),$(q "$p"),$(q "$text"),$(q "$detail"),$(now),$(q "$who"));" || fail "cannot add the step"
     echo "$id" ;;
   list)
+    mine
+    columns
     p=$(find_project) || exit 1
     [ -n "$p" ] || exit 0
-    sql -separator "$(printf '\t')" "SELECT id, CASE WHEN done_at IS NOT NULL THEN 'done' WHEN started_at IS NOT NULL THEN 'doing' ELSE 'next' END, text FROM todos WHERE project=$(q "$p") AND (by=$(q "${HC_TERMINAL_ID:-}") OR $(q "${HC_TERMINAL_ID:-}")='') ORDER BY created;" ;;
+    sql -separator "$(printf '\t')" "SELECT id, CASE WHEN done_at IS NOT NULL THEN 'done' WHEN started_at IS NOT NULL THEN 'doing' ELSE 'next' END, text FROM todos WHERE project=$(q "$p") AND by=$(q "$who") ORDER BY created;" ;;
   start)
+    mine
     [ -n "$2" ] || fail "usage: kanso-todo start <id>"
+    columns
     p=$(find_project) || exit 1
-    n=$(sql "UPDATE todos SET started_at=$(now) WHERE id=$(q "$2") AND project=$(q "$p") AND done_at IS NULL; SELECT changes();") || fail "cannot start $2"
-    [ "$n" = 1 ] || fail "no open step $2 in this project" ;;
+    n=$(sql "UPDATE todos SET started_at=$(now) WHERE id=$(q "$2") AND project=$(q "$p") AND by=$(q "$who") AND done_at IS NULL; SELECT changes();") || fail "cannot start $2"
+    [ "$n" = 1 ] || fail "you have no open step $2 in this project" ;;
   done)
+    mine
     [ -n "$2" ] || fail "usage: kanso-todo done <id>"
     p=$(find_project) || exit 1
-    n=$(sql "UPDATE todos SET done_at=$(now) WHERE id=$(q "$2") AND project=$(q "$p") AND done_at IS NULL; SELECT changes();") || fail "cannot close $2"
-    [ "$n" = 1 ] || fail "no open step $2 in this project" ;;
+    n=$(sql "UPDATE todos SET done_at=$(now) WHERE id=$(q "$2") AND project=$(q "$p") AND by=$(q "$who") AND done_at IS NULL; SELECT changes();") || fail "cannot close $2"
+    [ "$n" = 1 ] || fail "you have no open step $2 in this project" ;;
   rule) rule ;;
+  steps) echo "add start done list" ;;
   status) status ;;
   install) install ;;
   uninstall) uninstall ;;
