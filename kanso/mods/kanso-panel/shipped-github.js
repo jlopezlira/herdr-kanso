@@ -16,7 +16,9 @@ export const createdIn = authored("created");
 export const mergedIn = authored("merged");
 export const updatedIn = authored("updated");
 
-export class AccountChanged extends Error {
+export class AccountError extends Error {}
+
+export class AccountChanged extends AccountError {
   constructor(login) { super("GitHub account changed."); this.login = login; }
 }
 
@@ -58,7 +60,7 @@ export async function inMain(pending, read = gql) {
       if (more.length === oids.size || !h.pageInfo.hasNextPage) return { hits: more, unchecked: 0 };
       return page + 1 < HISTORY_PAGES ? walk(h.pageInfo.endCursor, more, page + 1) : { hits: more, unchecked: oids.size - more.length };
     };
-    return walk(null, [], 0).catch((e) => { if (e instanceof AccountChanged) throw e; return { hits: [], unchecked: oids.size }; });
+    return walk(null, [], 0).catch((e) => { if (e instanceof AccountError) throw e; return { hits: [], unchecked: oids.size }; });
   });
   return { urls: found.flatMap((f) => f.hits), unchecked: found.reduce((n, f) => n + f.unchecked, 0) };
 }

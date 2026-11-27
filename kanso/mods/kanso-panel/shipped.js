@@ -3,7 +3,7 @@ import { div } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import { theme, shared, setShared, notify, exec } from "herdr";
 import { Store, cohortOf, mergeHours, monthsIn } from "./shipped-store.js";
-import { github, gql, AccountChanged } from "./shipped-github.js";
+import { github, gql, AccountChanged, AccountError } from "./shipped-github.js";
 import { shippedSpec, shareText } from "./shipped-card.js";
 import { Share, shareRows } from "./share.js";
 import { R, G, T, CHART, HEATMAP_GAP, TINT, alpha, tokens } from "./ui.js";
@@ -318,7 +318,7 @@ export class Shipped {
     this.syncing = true; this.resync = false; this.syncError = null;
     const login = this.login;
     const verify = (who) => {
-      if (!who) throw new Error("GitHub could not be read.");
+      if (!who) throw new AccountError("GitHub could not be read.");
       this.verified = who;
       if (who !== login) throw new AccountChanged(who);
     };
