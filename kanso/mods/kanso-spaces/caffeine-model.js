@@ -60,7 +60,7 @@ const shScripts = (os) => ({
   on: [...shHead(os), "lock", "alive && { echo on; exit 0; }", "low && { echo low; exit 0; }", 'rm -f "$d/reason" "$d/pid"',
     `printf '%s\\n' ${shellQuote(shGuard(os))} > "$d/guard.sh" || exit 1`, ...os.hold, `{ ${os.start}; } || { ${os.failed}; exit 0; }`, SH_WAIT, os.failed].join("\n"),
   off: [...shHead(os), "lock", 'if alive; then kill "$p" 2>/dev/null; fi', 'rm -f "$d/pid"', "stop", 'if [ -f "$d/prior" ]; then restore || { echo setup; exit 0; }; fi', "echo off"].join("\n"),
-  read: [...shHead(os), "lock", 'r=$(cat "$d/reason" 2>/dev/null); rm -f "$d/reason"', "alive && { echo on; exit 0; }", 'if [ -f "$d/prior" ]; then restore || { echo on; exit 0; }; fi', 'rm -f "$d/pid"', "stop", 'echo "off $r"'].join("\n"),
+  read: [...shHead(os), "lock", 'r=$(cat "$d/reason" 2>/dev/null); rm -f "$d/reason"', "alive && { echo on; exit 0; }", 'if [ -f "$d/prior" ]; then restore || { echo on; exit 0; }; fi', 'rm -f "$d/pid"', "stop", '[ -n "$r" ] || ! low || r=low', 'echo "off $r"'].join("\n"),
 });
 
 const PS_HEAD = [
@@ -82,7 +82,7 @@ const PS = {
     "Start-Process powershell -WindowStyle Hidden -ArgumentList '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', ('\"' + $gf + '\"')",
     "for ($i = 0; $i -lt 20; $i++) { if (Test-Alive) { 'on'; exit }; Start-Sleep -Milliseconds 100 }", "'missing'"].join("\n"),
   off: [...PS_HEAD, "if (Test-Alive) { Stop-Process -Id ((Get-Content $pf -Raw) -as [int]) -Force -ErrorAction SilentlyContinue }", "Remove-Item $pf -ErrorAction SilentlyContinue", "'off'"].join("\n"),
-  read: [...PS_HEAD, "$r = Get-Content $rf -Raw -ErrorAction SilentlyContinue; Remove-Item $rf -ErrorAction SilentlyContinue", "if (Test-Alive) { 'on'; exit }", "Remove-Item $pf -ErrorAction SilentlyContinue", "'off ' + \"$r\".Trim()"].join("\n"),
+  read: [...PS_HEAD, "$r = Get-Content $rf -Raw -ErrorAction SilentlyContinue; Remove-Item $rf -ErrorAction SilentlyContinue", "if (Test-Alive) { 'on'; exit }", "Remove-Item $pf -ErrorAction SilentlyContinue", "if (-not \"$r\".Trim() -and (Test-Low)) { $r = 'low' }", "'off ' + \"$r\".Trim()"].join("\n"),
 };
 
 const SCRIPTS = { macos: shScripts(MAC), linux: shScripts(LINUX) };
@@ -95,9 +95,9 @@ export function caffeineCall(os, verb) {
 }
 
 export function answerOf(result) {
-  if (!result || result.threw || !(result.ok === true || result.code === 0)) return { word: null, battery: false };
+  if (!result || result.threw || !(result.ok === true || result.code === 0)) return { word: null, battery: false, low: false };
   const [word = "", why = ""] = String(result.stdout ?? "").trim().split(/\s+/);
-  return { word: WORDS.includes(word) ? word : null, battery: word === "off" && why === "battery" };
+  return { word: WORDS.includes(word) ? word : null, battery: word === "off" && why === "battery", low: word === "off" && why === "low" };
 }
 
 const SUDOERS = `printf '%s ALL=(root) NOPASSWD: ${PMSET} 1, ${PMSET} 0, /usr/bin/touch ${MARKER}, /bin/rm -f ${MARKER}\n' "$(id -un)" > "$f"`;
@@ -126,8 +126,8 @@ export function setupArgv(os, verb = "on") {
   const steps = SETUP[kind];
   if (!steps || !DONE[verb]) return null;
   const then = `sh -c ${shellQuote(SCRIPTS[kind][verb])}`;
-  return ["sh", "-c", [...steps, `[ "$ok" = 0 ] || { echo 'Caffeine was not set up.'; exit 1; }`, SH_DIR, `r=$(${then})`,
-    `if [ "$r" = ${verb} ]; then echo ${shellQuote(DONE[verb])}; elif [ "$r" = low ]; then echo battery > "$d/reason"; echo 'Caffeine is set up but did not turn on: the battery is at ${LOW}% or less.'; else echo 'Caffeine is set up but did not change.'; fi`].join("\n")];
+  return ["sh", "-c", [...steps, `[ "$ok" = 0 ] || { echo 'Caffeine was not set up.'; exit 1; }`, `r=$(${then})`,
+    `if [ "$r" = ${verb} ]; then echo ${shellQuote(DONE[verb])}; elif [ "$r" = low ]; then echo 'Caffeine is set up but did not turn on: the battery is at ${LOW}% or less.'; else echo 'Caffeine is set up but did not change.'; fi`].join("\n")];
 }
 
 const osOfProbe = (result) => {
@@ -165,12 +165,11 @@ export function createCaffeine({ run, local, now = () => Date.now() }) {
       return { ...answerOf(result), os, verb };
     },
     settle(key, answer, changed = false) {
-      const low = answer.word === "low";
-      const state = low ? "off" : answer.word;
+      const low = answer.word === "low" || (answer.low && this.settingUp(key) === "on");
+      const state = answer.word === "low" ? "off" : answer.word;
       const sure = state === "on" || state === "off";
-      const { pending = 0, battery, told } = this.row(key);
-      const known = battery === true && told === true;
-      const reason = answer.battery || low ? { battery: true, told: low || known } : state === "on" ? { battery: false } : {};
+      const { pending = 0 } = this.row(key);
+      const reason = low ? { battery: true, told: true } : answer.battery ? { battery: true, told: false } : state === "on" ? { battery: false } : {};
       this.put(key, { ...(sure ? { state } : {}), ...(changed && sure ? { setupUntil: 0 } : {}), unsure: !sure, pending: Math.max(0, pending - (changed ? 1 : 0)), readAt: now(), ...reason });
       return answer;
     },

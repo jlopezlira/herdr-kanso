@@ -66,12 +66,14 @@ test("The Caffeine panel lists every connected computer even with Computers hidd
 });
 
 test("A turn on through its set up that the battery refuses stops waiting for the password and says so once", async () => {
-  const s = await sidebar({ replies: { "grey on": "setup", "grey read": ["off battery", "off"] } });
+  const s = await sidebar({ replies: { "grey on": "setup", "grey read": "off low" } });
   s.connected.push("grey");
   s.view.setCaffeine("grey", true, s.cx);
   await s.afterSetup();
-  assert.equal(s.view.caffeine.look("grey").setup, false);
-  assert.deepEqual(s.toasts.map((toast) => toast.title), ["Caffeine off: grey"]);
+  await s.afterSetup();
+  const { setup, battery } = s.view.caffeine.look("grey");
+  assert.deepEqual({ setup, battery }, { setup: false, battery: true });
+  assert.deepEqual(s.toasts.map((toast) => toast.title), ["Caffeine on grey was not changed"]);
 });
 
 test("Turning Caffeine off through its set up ends with it off and a toast with Undo", async () => {

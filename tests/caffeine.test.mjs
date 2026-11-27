@@ -44,11 +44,12 @@ test("The macOS and Linux commands for Caffeine and its setup have valid shell s
 });
 
 test("Caffeine recognizes its replies and whether the battery turned it off, and ignores unsuccessful or unknown replies", () => {
-  const answer = (result, word, battery = false) => assert.deepEqual(plain(answerOf(result)), { word, battery });
+  const answer = (result, word, battery = false, low = false) => assert.deepEqual(plain(answerOf(result)), { word, battery, low });
   for (const word of ["on", "off", "setup", "low", "missing", "refused", "busy"]) {
     answer(success(` ${word}\n`), word);
   }
   answer(success("off battery"), "off", true);
+  answer(success("off low"), "off", false, true);
   answer(success("unexpected"), null);
   answer({ ...failure("failed"), stdout: "on" }, null);
   answer({ ...success("on"), threw: true }, null);
@@ -164,6 +165,7 @@ test("On macOS Caffeine keeps a guard running, restores sleep when turned off or
   await write("battery", "12");
   const started = (await guards()).length;
   await call("on", "low");
+  await call("read", "off low");
   assert.equal(await read("sleep-disabled"), "0");
   assert.equal((await guards()).length, started);
   assert.equal(await fileExists(prior), false);
@@ -281,18 +283,18 @@ test("If turning Caffeine off is refused, the last known state stays on and the 
 
 const answering = (reply) => createCaffeine({ local: "macos", now: () => 0, run: async () => success(reply()) });
 
-test("A turn on refused for low battery shows the computer off from its battery at once, and the battery notice is not sent again", async () => {
+test("A turn on refused for low battery shows the computer off from its battery at once, without a second battery notice", async () => {
   let reply = "low";
   const caffeine = answering(() => reply);
   assert.equal((await caffeine.change("", true)).word, "low");
   const { on, read, busy, battery } = caffeine.look("");
   assert.deepEqual({ on, read, busy, battery }, { on: false, read: true, busy: false, battery: true });
   assert.deepEqual([caffeine.untold(""), caffeine.due([""], EVERY_MS)], [false, []]);
-  reply = "off battery";
+  for (reply of ["off", "off battery"]) await caffeine.read("");
+  assert.equal(caffeine.untold(""), true, "a later battery turn-off is announced");
+  reply = "on";
   await caffeine.read("");
-  assert.equal(caffeine.untold(""), false);
-  for (reply of ["on", "off battery"]) await caffeine.read("");
-  assert.equal(caffeine.untold(""), true, "a new battery turn-off after it was on again is announced");
+  assert.equal(caffeine.look("").battery, false, "found on again, it no longer shows the battery reason");
 });
 
 test("A turn on from the panel while its set up is waiting for the password ends the wait when the computer answers", async () => {
