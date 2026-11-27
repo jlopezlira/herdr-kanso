@@ -183,7 +183,7 @@ const registry = () => { const rows = shared(REGISTRY); return Array.isArray(row
 // A sleep's key as a project's (a trailing / never makes two of one place).
 const sameKey = (key) => { const i = String(key).indexOf(":"); return `${key.slice(0, i)}:${trimmed(key.slice(i + 1))}`; };
 const projectAt = (key) => registry().find((p) => keyOfProject(p) === sameKey(key)) ?? null;
-const ROW_SHARED = [REGISTRY, NEEDS_YOU, RUN_FAILURES, "strip.state", SLEEP_PENDING, SLEEP_WAKING, SLEEP_FAILED, FORGET_HELD, KNOWN_AGENTS, "kanso.battery", "space.colors"];
+const ROW_SHARED = [REGISTRY, NEEDS_YOU, RUN_FAILURES, "strip.state", SLEEP_PENDING, SLEEP_WAKING, SLEEP_FAILED, FORGET_HELD, KNOWN_AGENTS, "space.colors"];
 const checksOn = () => runs("agents.checks", pieces(shared));
 const rowInputs = () => ({ spaces: spaces(), panes: panes(), terminals: terminals(), agents: withLimits(withNeeds(agents(), terminals(), checksOn()), terminals()), machines: machines(), focused: focused(), front: window()?.active === true, keys: keys(),
   shared: ROW_SHARED.map((key) => shared(key)), pieces: Object.entries(pieces(shared)).filter(([id]) => id.startsWith("sidebar.")) });

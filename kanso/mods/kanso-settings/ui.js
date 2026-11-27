@@ -58,8 +58,6 @@ export const ARM_MS = 4000;
 export const BREATH = { from: 0.35, to: 0.8, period: 1800 };
 // A native loop: it keeps going behind other windows, where a still mark reads as a stalled agent.
 export const breathe = (el, policy = BREATH) => el.loop("opacity", policy);
-// A native loop redraws the whole window about 30 times a second, so on battery motion steps instead of gliding.
-export const onBattery = () => shared("kanso.battery") === true;
 /** The terminal's own mono family: a tool's words are drawn in it. */
 export const monoFont = () => settings().font_family ?? "JetBrains Mono";
 export const ICONS = "mods/kanso-chrome/icons/";
