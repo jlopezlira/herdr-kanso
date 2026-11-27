@@ -57,10 +57,10 @@ const shGuard = (os) => [`: ${MARK}`, ...shHead(os), 'echo $$ > "$d/pid"',
   `while sleep ${CHECK_S}; do [ "$(cat "$d/pid" 2>/dev/null)" = "$$" ] || exit 0; if low; then lock; rm -f "$d/pid"; echo battery > "$d/reason"; restore; exit 0; fi; done`].join("\n");
 
 const shScripts = (os) => ({
-  on: [...shHead(os), "lock", 'rm -f "$d/refused"', "alive && { echo on; exit 0; }", 'low && { [ -z "${KANSO_CAFFEINE_ATTEMPT:-}" ] || echo "$KANSO_CAFFEINE_ATTEMPT" > "$d/refused"; echo low; exit 0; }', 'rm -f "$d/reason" "$d/pid"',
+  on: [...shHead(os), "lock", "alive && { echo on; exit 0; }", 'low && { [ -z "${KANSO_CAFFEINE_ATTEMPT:-}" ] || : > "$d/refused.$KANSO_CAFFEINE_ATTEMPT"; echo low; exit 0; }', 'rm -f "$d/reason" "$d/pid"',
     `printf '%s\\n' ${shellQuote(shGuard(os))} > "$d/guard.sh" || exit 1`, ...os.hold, `{ ${os.start}; } || { ${os.failed}; exit 0; }`, SH_WAIT, os.failed].join("\n"),
-  off: [...shHead(os), "lock", 'rm -f "$d/refused"', 'if alive; then kill "$p" 2>/dev/null; fi', 'rm -f "$d/pid"', "stop", 'if [ -f "$d/prior" ]; then restore || { echo setup; exit 0; }; fi', "echo off"].join("\n"),
-  read: [...shHead(os), "lock", 'r=$(cat "$d/reason" 2>/dev/null); rm -f "$d/reason"', "alive && { echo on; exit 0; }", 'if [ -f "$d/prior" ]; then restore || { echo on; exit 0; }; fi', 'rm -f "$d/pid"', "stop", '[ -n "$r" ] || { a=$(cat "$d/refused" 2>/dev/null); [ -z "$a" ] || r="low $a"; }', 'echo "off $r"'].join("\n"),
+  off: [...shHead(os), "lock", 'rm -f "$d"/refused.*', 'if alive; then kill "$p" 2>/dev/null; fi', 'rm -f "$d/pid"', "stop", 'if [ -f "$d/prior" ]; then restore || { echo setup; exit 0; }; fi', "echo off"].join("\n"),
+  read: [...shHead(os), "lock", 'r=$(cat "$d/reason" 2>/dev/null); rm -f "$d/reason"', "alive && { echo on; exit 0; }", 'if [ -f "$d/prior" ]; then restore || { echo on; exit 0; }; fi', 'rm -f "$d/pid"', "stop", '[ -n "$r" ] || { a=$(cd "$d" && for f in refused.*; do [ -e "$f" ] && printf "%s," "${f#refused.}"; done); [ -z "$a" ] || r="low $a"; }', 'echo "off $r"'].join("\n"),
 });
 
 const PS_HEAD = [
@@ -95,9 +95,9 @@ export function caffeineCall(os, verb) {
 }
 
 export function answerOf(result) {
-  if (!result || result.threw || !(result.ok === true || result.code === 0)) return { word: null, battery: false, refused: null };
+  if (!result || result.threw || !(result.ok === true || result.code === 0)) return { word: null, battery: false, refused: [] };
   const [word = "", why = "", attempt = ""] = String(result.stdout ?? "").trim().split(/\s+/);
-  return { word: WORDS.includes(word) ? word : null, battery: word === "off" && why === "battery", refused: word === "off" && why === "low" && attempt ? attempt : null };
+  return { word: WORDS.includes(word) ? word : null, battery: word === "off" && why === "battery", refused: word === "off" && why === "low" ? attempt.split(",").filter(Boolean) : [] };
 }
 
 const SUDOERS = `printf '%s ALL=(root) NOPASSWD: ${PMSET} 1, ${PMSET} 0, /usr/bin/touch ${MARKER}, /bin/rm -f ${MARKER}\n' "$(id -un)" > "$f"`;
@@ -190,7 +190,7 @@ export function createCaffeine({ run, local, now = () => Date.now() }) {
     settingUp(key) { return this.row(key).setupUntil > now() ? this.row(key).setupVerb : null; },
     nextAttempt() { return `${now().toString(36)}${Math.random().toString(36).slice(2, 8)}`; },
     setup(key, verb, attempt = null) { this.put(key, { setupUntil: now() + SETUP_FOR_MS, setupVerb: verb, setupAttempt: attempt }); },
-    refusedBy(key, answer) { return this.settingUp(key) === "on" && answer.refused != null && answer.refused === this.row(key).setupAttempt; },
+    refusedBy(key, answer) { return this.settingUp(key) === "on" && (answer.refused ?? []).includes(this.row(key).setupAttempt); },
     done(key) { this.put(key, { setupUntil: 0 }); },
     change(key, on) {
       this.put(key, { pending: (this.row(key).pending ?? 0) + 1, want: on ?? !this.isOn(key), battery: false });

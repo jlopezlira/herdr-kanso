@@ -71,7 +71,7 @@ test("A turn on through its set up that the battery refuses stops waiting for th
   const s = await sidebar({ replies });
   s.connected.push("grey");
   await s.turnOn("grey");
-  replies["grey read"] = `off low ${s.view.caffeine.row("grey").setupAttempt}`;
+  replies["grey read"] = `off low other,${s.view.caffeine.row("grey").setupAttempt}`;
   await Promise.all([s.view.readCaffeine("grey"), s.view.readCaffeine("grey")]);
   await s.afterSetup();
   const { setup, battery } = s.view.caffeine.look("grey");
