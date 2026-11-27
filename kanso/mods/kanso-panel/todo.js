@@ -2,6 +2,7 @@ import { q } from "./kdb.js";
 import { num } from "./pr-inbox.js";
 
 export const TODO_MS = 4000;
+export const FOLLOW_MS = 300;
 export const DONE = "Done";
 export const PROJECTS = "SELECT id, name, folder, machine FROM projects WHERE removed IS NULL;";
 export const TODOS = "SELECT todos.* FROM todos JOIN projects ON projects.id=todos.project WHERE projects.removed IS NULL;";

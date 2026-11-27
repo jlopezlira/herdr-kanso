@@ -27,6 +27,7 @@ the branch's rules.
 
 ### Changed
 
+- Tasks follows the project selected in the sidebar as soon as you switch, and one click turns the agents' to-do on and tells the agents on the computer where that project runs, even from another computer.
 - In Dawn Mode, the pill at the top of the sidebar names the installed release, such as 4.2.0-rc.3, instead of "Dawn Mode".
 - Timeline's header shows only its title; the conversation's name, computer and prompt count moved into the pin's tooltip.
 - Shipped leads with the share of the pull requests you opened that reached production, draws the pull requests merged over the period as a chart like Memory's, lists its trend with the current period first, and says less.
