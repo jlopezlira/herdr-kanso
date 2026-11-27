@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -57,7 +58,29 @@ export function prepareCandidate({ version, changelog, tags, date = new Date().t
   return { version: next, changelog: `${before}${before ? "\n" : ""}## [${next}] - ${candidate?.date || date}\n\n${body}\n${history ? `\n${history}` : ""}` };
 }
 
-export function planRelease({ kind, branch, version, changelog, tags, installedChangedSince: changedSince = () => true }) {
+const commitOf = (ref) => execFileSync("git", ["rev-parse", "--verify", "--quiet", `${ref}^{commit}`], { encoding: "utf8" }).trim();
+
+function isAncestor(a, b) {
+  try {
+    execFileSync("git", ["merge-base", "--is-ancestor", a, b], { stdio: "ignore" });
+    return true;
+  } catch (error) {
+    if (error.status === 1) return false;
+    throw error;
+  }
+}
+
+export function releasedAfter(sha, tags, branchRef) {
+  const head = commitOf(sha);
+  for (const tag of tags) {
+    const commit = commitOf(`v${tag}`);
+    const source = isAncestor(commit, branchRef) ? commit : commitOf(`${commit}^`);
+    if (source !== head && isAncestor(head, source)) return tag;
+  }
+  return null;
+}
+
+export function planRelease({ kind, branch, version, changelog, tags, installedChangedSince: changedSince = () => true, releasedAfter: later = () => null }) {
   const versionText = String(version ?? "");
   if (!parse(versionText)) return fail(`${versionText || "missing"} is not a stable version (X.Y.Z)`);
   const names = [...new Set(tags.map(bareRelease).filter((name) => parseRelease(name)))];
@@ -77,13 +100,15 @@ export function planRelease({ kind, branch, version, changelog, tags, installedC
       return errors.length ? fail(errors.join("; ")) : plan;
     }
     if (notes(changelog, UNRELEASED) === null) return skip("no Unreleased entries; no beta.");
+    const newer = later();
+    if (newer) return skip(`v${newer} was published from a newer commit; no beta.`);
     const next = nextVersion(changelog, tags);
     const base = baseline(names, next);
     if (base && !changedSince(base)) return skip(`what Kanso installs has not changed since v${base}; no beta.`);
     const channel = prereleasesOf(names, next, "rc").length ? "rc" : "beta";
     const plan = publish(`${next}-${channel}.${nextN(names, next, channel)}`, true);
-    const newer = names.find((name) => compareReleases(plan.tag, name) <= 0);
-    return newer ? fail(`${plan.tag} would not reach Early: v${newer} already ranks above it`) : plan;
+    const above = names.find((name) => compareReleases(plan.tag, name) <= 0 && compareReleases(plan.tag, name) !== null);
+    return above ? fail(`${plan.tag} would not reach Early: v${above} already ranks above it`) : plan;
   } catch (error) {
     return fail(error.message);
   }
@@ -130,7 +155,8 @@ function main() {
     process.exit(1);
   }
   const changedSince = kind === "beta" ? (tag) => installedChangedSince(tag, { ignoreVersion: true }) : installedChangedSince;
-  const plan = planRelease({ kind, branch, ...read, tags, installedChangedSince: changedSince });
+  const sha = process.env.KANSO_RELEASE_SHA;
+  const plan = planRelease({ kind, branch, ...read, tags, installedChangedSince: changedSince, releasedAfter: () => (sha ? releasedAfter(sha, tags.filter((tag) => parseRelease(tag)), `origin/${branch}`) : null) });
   if (plan.action === "fail") {
     console.error(`error: ${plan.message}`);
     process.exit(1);

@@ -50,17 +50,20 @@ const releaseFixture = (t) => {
     write("kanso/mods/kanso-chrome/feature.js", "export const feature = true;\n");
     commit("Add feature");
   };
-  return { write, read, git, commit, node, run, root, addFeature };
+  const pushDevelop = () => {
+    git("init", "--bare", join(root, "remote.git"));
+    git("remote", "add", "origin", join(root, "remote.git"));
+    git("push", "origin", "develop");
+  };
+  return { write, read, git, commit, node, run, root, addFeature, pushDevelop };
 };
 
 test("Workflow commands preserve PR history, publish computed notes and prepare successive RCs", (t) => {
-  const { write, read, git, commit, run, node, root, addFeature } = releaseFixture(t);
+  const { write, read, git, commit, run, node, root, addFeature, pushDevelop } = releaseFixture(t);
   git("tag", "v1.2.0-beta.13");
   const base = git("rev-parse", "HEAD");
   addFeature();
-  git("init", "--bare", join(root, "remote.git"));
-  git("remote", "add", "origin", join(root, "remote.git"));
-  git("push", "origin", "develop");
+  pushDevelop();
   // The next release candidate prepared, and the version file it leaves.
   const prepareRc = () => {
     run("release-plan", ["rc", "--prepare"]);
@@ -122,18 +125,18 @@ test("Workflow commands preserve PR history, publish computed notes and prepare 
   write("event.json", JSON.stringify({ pull_request: { base: { sha: fixedBase } } }));
   checkedBeta();
   assert.equal(read("kanso-release-notes.md"), `### Fixed\n\n- Bug.\n\n${footer}\n`);
-  assert.match(read("output"), /tag=v1\.2\.0-beta\.15\n/);
+  assert.match(read("output"), /tag=v1\.2\.0-rc\.2\n/, "a develop release after an RC is the next RC, which Early ranks above every beta");
   const fixHead = git("rev-parse", "develop");
-  run("release-tag", ["v1.2.0-beta.15"]);
-  assert.equal(git("rev-parse", "v1.2.0-beta.15^"), fixHead);
+  run("release-tag", ["v1.2.0-rc.2"]);
+  assert.equal(git("rev-parse", "v1.2.0-rc.2"), fixHead, "the develop commit already has the candidate's core version");
   assert.equal(git("rev-parse", "develop"), fixHead);
-  assert.equal(git("diff", "--name-only", fixHead, "v1.2.0-beta.15"), "", "a beta after an RC already has the matching core version");
   git("checkout", "develop");
   assert.equal(prepareRc(), fixedVersion);
   assert.match(read("CHANGELOG.md"), /- Feature\.[\s\S]*- Bug\./);
   assert.equal(read("kanso-release-notes.md"), `${rcIntro}\n\n## Changes\n\n${pending}\n\n### Fixed\n\n- Bug.\n\n${footer}\n`);
+  assert.match(read("output"), /tag=v1\.2\.0-rc\.3\n/);
   commit("Update release candidate");
-  run("release-tag", ["v1.2.0-rc.2"]);
+  run("release-tag", ["v1.2.0-rc.3"]);
   const minorHead = git("rev-parse", "HEAD");
   write("CHANGELOG.md", read("CHANGELOG.md").replace("## [1.2.0]", "## [Unreleased]\n\n### Removed\n\n- Old behavior.\n\n## [1.2.0]"));
   write("kanso/mods/kanso-chrome/feature.js", "export const feature = null;\n");
@@ -168,6 +171,62 @@ test("Workflow commands preserve PR history, publish computed notes and prepare 
   assert.equal(git("rev-parse", "v2.0.1-rc.1^"), stableHead);
   assert.equal(JSON.parse(git("show", `v2.0.1-rc.1:${versionFile}`)).version, "2.0.1");
   assert.equal(JSON.parse(git("show", `develop:${versionFile}`)).version, "2.0.0");
+});
+
+const queuedDevelopFixture = (t) => {
+  const { write, read, git, commit, node, run, addFeature, pushDevelop } = releaseFixture(t);
+  addFeature();
+  const green = git("rev-parse", "HEAD");
+  write("CHANGELOG.md", read("CHANGELOG.md").replace(stable, `### Fixed\n\n- Follow-up.\n\n${stable}`));
+  write("kanso/mods/kanso-chrome/feature.js", "export const feature = false;\n");
+  commit("Fix feature");
+  const newer = git("rev-parse", "HEAD");
+  pushDevelop();
+  const tag = "v1.2.0-beta.1";
+  const plan = (sha, ref = sha) => {
+    git("checkout", "--detach", ref);
+    return node("release-plan", ["beta"], { KANSO_RELEASE_SHA: sha });
+  };
+  const publishNewer = () => {
+    run("release-tag", [tag]);
+    assert.equal(git("rev-parse", `${tag}^`), newer);
+    git("push", "origin", `refs/tags/${tag}`);
+  };
+  return { read, green, newer, plan, publishNewer, tag };
+};
+
+test("A green develop run still publishes when a newer push has not released", (t) => {
+  const { read, green, plan, tag } = queuedDevelopFixture(t);
+  const planned = plan(green);
+  assert.equal(planned.status, 0, planned.stderr);
+  assert.ok(read("output").includes(`tag=${tag}\n`), planned.stdout);
+});
+
+test("A late develop run skips after an archive from a newer commit was published", (t) => {
+  const { read, green, plan, publishNewer, tag } = queuedDevelopFixture(t);
+  publishNewer();
+  const planned = plan(green);
+  assert.equal(planned.status, 0, planned.stderr);
+  assert.equal(planned.stdout.trim(), `${tag} was published from a newer commit; no beta.`);
+  assert.equal(read("output"), "action=skip\n");
+});
+
+test("A develop run treats its own detached release tag as unchanged, not newer", (t) => {
+  const { read, newer, plan, publishNewer, tag } = queuedDevelopFixture(t);
+  publishNewer();
+  const planned = plan(newer);
+  assert.equal(planned.status, 0, planned.stderr);
+  assert.equal(planned.stdout.trim(), `what Kanso installs has not changed since ${tag}; no beta.`);
+  assert.equal(read("output"), "action=skip\n");
+});
+
+test("A develop run fails rather than skipping when its release commit is unknown", (t) => {
+  const { read, green, plan } = queuedDevelopFixture(t);
+  const unknown = "f".repeat(green.length);
+  const planned = plan(unknown, green);
+  assert.equal(planned.status, 1, planned.stdout);
+  assert.ok(planned.stderr.includes(unknown), planned.stderr);
+  assert.equal(read("output"), "");
 });
 
 test("The release planner refuses a beta whose planned tag is not a release version", (t) => {

@@ -159,10 +159,6 @@ test("Workflows publish a beta from develop, a release candidate on demand, and 
   assert.doesNotMatch(release, /\n\s*(push|workflow_dispatch|pull_request):/, "no workflow publishes a stable release beside CI");
   assert.match(release, /INPUT_KIND: \$\{\{ inputs\.kind \}\}/);
   assert.match(release, /release-plan\.mjs \$INPUT_KIND/);
-  const plan = release.slice(release.indexOf("- name: Plan"), release.indexOf("- name: Tag as the actor"));
-  assert.match(release, /INPUT_TAG: \$\{\{ inputs\.tag \}\}/);
-  assert.match(plan, /"\$INPUT_TAG" = archive \] && \[ "\$\(git ls-remote origin "refs\/heads\/\$INPUT_BRANCH" \| cut -f1\)" != "\$GITHUB_SHA" \]/, "a run whose commit is no longer the branch head publishes nothing");
-  assert.ok(plan.indexOf('echo "action=skip"') < plan.indexOf("release-plan.mjs"), "the superseded run skips before it plans");
   assert.match(release, /INPUT_BRANCH: \$\{\{ inputs\.branch \}\}/);
   assert.match(release, /test "\$GITHUB_REF_NAME" = "\$INPUT_BRANCH"/);
   const archive = release.slice(release.indexOf("Tag the archive"), release.indexOf("Commit and tag"));
