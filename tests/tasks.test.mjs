@@ -633,15 +633,17 @@ test("Tasks puts a step created before a terminal was reused under the ended age
   const earlier = storedTodo(id, { by: terminalId, started_at: 1200 });
   const name = "Current agent";
   await writeTodo(db, earlier);
-  const { page } = await startTasks(db, {
+  const reused = await startTasks(db, {
     spaces: activeSpace(shop),
     terminals: () => [{ address: terminalId, created_ms: 2000, labels: { "kanso.shown": name } }],
   });
+  const { page, click } = reused;
 
-  const panel = page();
-  const item = control(panel, stepId(earlier));
-  assert.ok(item, "The ended agent's step still shows");
-  assert.ok(texts(item.parent).includes("An agent that has ended"));
+  const endedRow = `tasks-ended-:${terminalId}:gone`;
+  assert.ok(wordsAt(page(), endedRow).includes("An agent that has ended"));
+  click(endedRow);
+  const item = control(page(), stepId(earlier));
+  assert.ok(item, "The ended agent's step shows once its plan is open");
   assert.ok(!iconsIn(item).includes("working.svg"));
 });
 
@@ -689,30 +691,46 @@ test("Tasks shows each agent's read-only plan with detail, progress, and finishe
   });
   assert.deepEqual(headings.map(texts), [
     [name, "1 of 3 done"],
-    ["An agent that has ended", "0 of 1 done"],
     ["Steps without an agent", "0 of 1 done"],
   ]);
-  const [livePlan, endedPlan, anonymousPlan] = headings.map(({ parent }) => parent);
-  const checkStep = (plan, step, time, icon) => {
+  const [livePlan, anonymousPlan] = headings.map(({ parent }) => parent);
+  const stepIn = (plan, step) => {
     const item = control(plan, stepId(step));
     assert.ok(item, step.text);
+    return item;
+  };
+  const checkStep = (plan, step, time, icon) => {
+    const item = stepIn(plan, step);
     const [first, second] = item.kids[0].kids;
     assert.deepEqual(texts(first), [step.text, time]);
     assert.deepEqual(texts(second), [step.detail]);
     assert.deepEqual(iconsIn(item), [icon]);
-    assert.equal(arg(item, "on_click"), undefined, "A step is not a toggle");
+    assert.equal(arg(item, "on_click"), undefined, "The step in progress is not a toggle");
+  };
+  const checkShort = (plan, step, time, icon) => {
+    const item = stepIn(plan, step);
+    assert.deepEqual(texts(item), [step.text, time]);
+    assert.deepEqual(iconsIn(item), [icon]);
   };
   checkStep(livePlan, doing, "3m", "working.svg");
-  checkStep(livePlan, next, "10m", "circle.svg");
-  checkStep(endedPlan, ended, "14m", "circle.svg");
   checkStep(anonymousPlan, anonymous, "15m", "circle.svg");
+  checkShort(livePlan, next, "10m", "circle.svg");
+  click(stepId(next));
+  assert.ok(wordsAt(page(), stepId(next)).includes(next.detail), "A later step opens its detail on a press");
+
+  const endedRow = "tasks-ended-:t8:gone";
+  assert.deepEqual(wordsAt(panel, endedRow), ["An agent that has ended", "0 of 1 done"]);
+  assert.equal(control(panel, stepId(ended)), null, "An ended agent's plan starts folded");
+  click(endedRow);
+  checkStep(page(), ended, "14m", "circle.svg");
+
   const done = `tasks-done-:${terminalId}:`;
   assert.deepEqual(wordsAt(livePlan, done), ["Done", "1"]);
   assert.equal(control(panel, stepId(finished)), null);
 
   click(done);
   const expanded = page();
-  checkStep(expanded, finished, "7m", "check.svg");
+  checkShort(expanded, finished, "7m", "check.svg");
   click(done);
   assert.equal(control(page(), stepId(finished)), null);
 
@@ -775,8 +793,9 @@ test("Tasks shows, per agent, the plans of the agents in a space that has no fol
     ],
   });
   const panel = page();
-  for (const step of [...steps.slice(0, 3), steps[5]]) assert.ok(control(panel, stepId(step)), step.text);
-  for (const step of steps.slice(3, 5)) assert.equal(control(panel, stepId(step)), null, step.text);
+  for (const step of [steps[0], steps[1], steps[5]]) assert.ok(control(panel, stepId(step)), step.text);
+  for (const step of steps.slice(2, 5)) assert.equal(control(panel, stepId(step)), null, step.text);
+  assert.ok(control(panel, "tasks-ended-:t9:gone"), "The ended agent's plan is there, folded");
   const words = texts(panel);
   for (const name of ["Lead", "Tester", "Checker", "An agent that has ended"]) assert.ok(words.includes(name), name);
   assert.ok(!words.includes("Other"));

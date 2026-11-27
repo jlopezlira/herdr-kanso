@@ -14,6 +14,8 @@ import { tryOrAsync } from "./pure.js";
 import { TODO_MS, FOLLOW_MS, SWITCH_MS, DONE, PROJECTS, TODOS, HELD_TODOS, placeOf, withSpaces, ageOf, plansOf, stepState } from "./todo.js";
 
 
+const NEXT_SHOWN = 3;
+
 export class Tasks {
   constructor(db) { this.db = db; }
 
@@ -36,6 +38,8 @@ export class Tasks {
     this.turns = {};
     this.checked = {};
     this.unread = {};
+    this.more = {};
+    this.opened = {};
     this.front = this.frontKey();
     this.frontOn = this.frontMachine();
     this.switchOn(this.frontOn, cx);
@@ -172,25 +176,40 @@ export class Tasks {
     return shownName(address, { terminal: address, program: k?.program, title: k?.title });
   }
 
-  stepRow(step, c, now, gone) {
+  stepRow(step, c, now, gone, { lead = false, open = false } = {}) {
     const state = stepState(step);
     const working = state === "doing" && !gone;
+    const told = lead || open;
     return row(`tasks-step-${step.id}`, c, {
-      name: step.text, second: step.detail || null, wrap: true, wrapSecond: true,
+      name: step.text, second: told ? step.detail || null : null, wrap: told, wrapSecond: told,
       icon: state === "done" ? "check" : working ? null : "circle", mark: working ? "working" : "none",
-      dimmed: state === "done", current: working,
+      dimmed: state === "done" || (!lead && !open && state === "next"), current: working,
       meta: ageOf(step.done_at ?? step.started_at ?? step.created, now),
+      onClick: lead || !step.detail ? null : (cx) => this.toggle("opened", step.id, cx),
     });
+  }
+
+  toggle(field, key, cx) {
+    this[field] = { ...this[field], [key]: !this[field][key] };
+    cx.notify();
   }
 
   planBlock(plan, c, now) {
     const key = `${plan.on}:${plan.by ?? ""}:${plan.gone ? "gone" : ""}`;
-    const folded = this.folded(key);
-    const steps = plan.steps.filter((s) => stepState(s) !== "done");
     const done = plan.steps.filter((s) => stepState(s) === "done");
+    const open = plan.steps.filter((s) => stepState(s) !== "done");
+    const lead = open.find((s) => stepState(s) === "doing") ?? open[0];
+    const rest = open.filter((s) => s !== lead);
+    const shown = this.more[key] ? rest : rest.slice(0, NEXT_SHOWN);
+    const folded = this.folded(key);
+    const progress = `${done.length} of ${plan.steps.length} done`;
+    const ended = (opened) => row(`tasks-ended-${key}`, c, { name: this.agentName(plan), level: 0, open: opened, dimmed: true, chip: progress, onClick: (cx) => this.toggle("more", key, cx) });
+    if (plan.gone && !this.more[key]) return ended(false);
     return v_flex().w_full().gap(G.sm)
-      .child(section(c, this.agentName(plan), `${done.length} of ${plan.steps.length} done`))
-      .children(steps.map((s) => this.stepRow(s, c, now, plan.gone)))
+      .child(plan.gone ? ended(true) : section(c, this.agentName(plan), progress))
+      .children(lead ? [this.stepRow(lead, c, now, plan.gone, { lead: true })] : [])
+      .children(shown.map((s) => this.stepRow(s, c, now, plan.gone, { open: Boolean(this.opened[s.id]) })))
+      .children(rest.length > shown.length ? [row(`tasks-more-${key}`, c, { name: `${rest.length - shown.length} more steps`, level: 0, open: false, onClick: (cx) => this.toggle("more", key, cx) })] : [])
       .children(done.length ? [row(`tasks-done-${key}`, c, { name: DONE, level: 0, open: !folded, chip: String(done.length), onClick: (cx) => this.fold(key, cx) })] : [])
       .children(folded ? [] : done.map((s) => this.stepRow(s, c, now, plan.gone)));
   }
