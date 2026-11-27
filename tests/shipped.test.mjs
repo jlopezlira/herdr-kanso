@@ -26,6 +26,7 @@ const withGitHub = (read, signedIn = () => null, apiViewer = () => "me") => asyn
   const { query, ...vars } = fields;
   const login = apiViewer();
   const data = await read(query, vars);
+  if (data.code) return data;
   return success(JSON.stringify({ data: { viewer: { login }, ...data } }));
 };
 const syncedGitHub = async (t, read) => {
@@ -494,7 +495,7 @@ test("Shipped rejects a search page read as Bob even when the token switches bac
   assert.deepEqual({ count: (await store.prs()).length, months: (await store.readMonths("github")).size }, { count: 0, months: 0 });
 });
 
-const checkUnconfirmedHistory = async (t, missingViewer = false) => {
+const checkUnconfirmedHistory = async (t, { missingViewer = false, inaccessible = false } = {}) => {
   const now = monthAt(11, 10), merge = now - HOUR;
   const pr = pullRequest(1, merge - HOUR, { base: "develop", merged: merge });
   let login = "alice";
@@ -505,6 +506,10 @@ const checkUnconfirmedHistory = async (t, missingViewer = false) => {
     }
     if (ref) {
       if (!missingViewer) login = "bob";
+      if (inaccessible) return {
+        ...failure("gh: Could not resolve to a Repository"),
+        stdout: JSON.stringify({ data: { viewer: { login }, repository: null }, errors: [{ type: "NOT_FOUND" }] }),
+      };
       return { ...history([pr.mergeCommit.oid]), viewer: missingViewer ? undefined : { login } };
     }
     return search(q.includes("created:") ? [pr] : []);
@@ -518,7 +523,11 @@ const checkUnconfirmedHistory = async (t, missingViewer = false) => {
 
 test("Shipped does not save production history results after the API viewer changes.", (t) => checkUnconfirmedHistory(t));
 
-test("Shipped does not save production history results from an answer without a viewer.", (t) => checkUnconfirmedHistory(t, true));
+test("Shipped does not save production history results from an answer without a viewer.", (t) =>
+  checkUnconfirmedHistory(t, { missingViewer: true }));
+
+test("Shipped does not save Alice's unchecked count when GitHub history fails under Bob.", (t) =>
+  checkUnconfirmedHistory(t, { inaccessible: true }));
 
 test("Shipped shows the new account and reads its full calendar when you reopen after switching accounts.", async (t) => {
   const now = new Date(2026, 10, 10, 12).getTime();

@@ -260,6 +260,9 @@ const snapshotClock = (state, now) => ({
   Date: class extends Date { static now() { return now(); } },
 });
 
+const clockedSpend = (fields, state, now) =>
+  spendPage({ nodeBinary: "node", exchange() {}, ...fields }, snapshotClock(state, now));
+
 const spendTicker = (cx) => {
   let tick;
   cx.timer.every = (_ms, fire) => {
@@ -292,14 +295,21 @@ const peerHost = ({ probe, presenter = async () => success(""), files = {} }) =>
   };
 };
 
-const mountSpend = async (TokenSpend) => {
+const initSpend = (TokenSpend) => {
   const timers = [];
   const { cx, drain } = timedContext(timers, { focus_handle: () => ({ release() {} }) });
   const view = new TokenSpend();
   view.init({}, cx);
-  for (const [ms, fn] of timers.filter(([ms]) => ms === 0)) fn(cx);
-  await drain();
-  return { view, cx, drain };
+  const start = async () => {
+    for (const [ms, fn] of timers.filter(([ms]) => ms === 0)) fn(cx);
+    await drain();
+  };
+  return { view, cx, drain, timers, start };
+};
+const mountSpend = async (TokenSpend) => {
+  const mounted = initSpend(TokenSpend);
+  await mounted.start();
+  return mounted;
 };
 
 test("Spend reopens from its ledger within twelve hours and scans and exchanges again on Refresh.", async () => {
@@ -334,10 +344,14 @@ test("Spend reopens from its ledger within twelve hours and scans and exchanges 
   });
 });
 
-test("Spend resumes an unfinished scan when reopened at ten minutes and shares only the completed totals.", async () => {
+const HOUR_MS = 60 * 60_000;
+const RETRY_MS = 10 * 60_000;
+const retryStamp = (deadline) => deadline - 12 * HOUR_MS;
+
+const sharedSpend = async ({ failResumption = false, sleepingBeforeRefresh = false } = {}) => {
   const commands = [], exchanges = [];
   let now = Date.UTC(2026, 10, 10, 12), snapshots = 0;
-  const state = { "kanso.spend.snapshotAt": now - 60 * 60_000 };
+  const state = { "kanso.spend.snapshotAt": now - HOUR_MS };
   const { TokenSpend } = await loadTokenSpend({
     ...mountedSpendHost(), ...snapshotClock(state, () => now), ...peerHost({ probe() {} }),
   });
@@ -345,31 +359,93 @@ test("Spend resumes an unfinished scan when reopened at ten minutes and shares o
     async ask(command) {
       commands.push(command);
       if (command === "snapshot") snapshots += 1;
-      return pricedScan(Math.max(snapshots, 1), command === "snapshot" && snapshots === 1);
+      if (failResumption && command === "snapshot" && snapshots === 2) throw new Error("Scan could not resume");
+      if (snapshots === 1 && command === "snapshot") {
+        const payload = pricedScan(1, true);
+        return { ...payload, scan: { ...payload.scan, processed: 8, total: 20 } };
+      }
+      return pricedScan(Math.max(snapshots, 1), false);
     }
   }
   Spend.prototype.exchangeOnce = captureExchange(exchanges);
   const first = await mountSpend(Spend);
+  const sleeping = sleepingBeforeRefresh ? initSpend(Spend) : null;
   commands.length = 0;
   exchanges.length = 0;
   first.view.reload(first.cx);
   await first.drain();
   assert.equal(first.view.scan.partial, true);
-  first.view.close();
+  const continueFirst = async () => {
+    first.timers.find(([ms]) => ms === 1000)[1](first.cx);
+    await first.drain();
+  };
+  return { Spend, first, sleeping, continueFirst, commands, exchanges, advance: (ms) => { now += ms; } };
+};
 
-  now += 10 * 60_000 + 1;
+test("Spend resumes an unfinished scan when reopened at ten minutes and shares only the completed totals.", async () => {
+  const { Spend, first, commands, exchanges, advance } = await sharedSpend();
+  first.view.close();
+  advance(RETRY_MS + 1);
+
   const reopened = await mountSpend(Spend);
   reopened.view.close();
   assert.deepEqual({ commands, exchanges }, { commands: ["snapshot", "snapshot"], exchanges: [[2, true, false]] });
 });
 
-test("Spend saves a snapshot time only after a successful scan and retries a failed scan in ten minutes.", async () => {
+test("A sleeping Spend view does not exchange another view's partial ledger when it wakes.", async () => {
+  const { sleeping, commands, exchanges } = await sharedSpend({ sleepingBeforeRefresh: true });
+  await sleeping.start();
+  assert.deepEqual({ commands, exchanges }, { commands: ["snapshot", "prepare"], exchanges: [] });
+});
+
+test("A sleeping Spend view forgets partial progress if another view completes before it wakes.", async () => {
+  const { Spend, commands, continueFirst } = await sharedSpend();
+  const sleeping = initSpend(Spend);
+  await continueFirst();
+
+  await sleeping.start();
+  assert.ok(!texts(sleeping.view.hero({}, bare.hero, false)).some((line) => line.includes("8 of 20")));
+  assert.ok(!sleeping.timers.some(([ms]) => ms === 1000));
+  assert.deepEqual(commands, ["snapshot", "snapshot", "prepare"]);
+});
+
+test("Spend backs off a failed resumption across another reopen until the new retry deadline.", async () => {
+  const scenario = await sharedSpend({ failResumption: true });
+  const { Spend, commands, exchanges, advance } = scenario;
+  scenario.first.view.close();
+  advance(RETRY_MS + 1);
+  const resumed = await mountSpend(Spend);
+  assert.equal(resumed.view.error, "Scan could not resume");
+  resumed.view.close();
+
+  advance(RETRY_MS - 1);
+  const reopened = await mountSpend(Spend);
+  assert.deepEqual({ commands, exchanges }, { commands: ["snapshot", "snapshot", "prepare"], exchanges: [] });
+  advance(1);
+  reopened.view.catchUp(reopened.cx);
+  await reopened.drain();
+  assert.deepEqual(commands, ["snapshot", "snapshot", "prepare", "snapshot"]);
+});
+
+test("A pending Spend continuation does not rescan after another view completes the ledger.", async () => {
+  const { Spend, commands, continueFirst } = await sharedSpend();
+  const second = await mountSpend(Spend);
+  second.view.run("snapshot", second.cx);
+  await second.drain();
+  assert.equal(second.view.scan.partial, false);
+
+  const before = commands.slice();
+  await continueFirst();
+  assert.deepEqual(commands, before);
+});
+
+test("Spend saves a ten-minute retry deadline instead of marking a failed scan fresh.", async () => {
   const started = Date.UTC(2026, 10, 10, 12), retryAt = started + 10 * 60 * 1000;
   const state = {}, commands = [];
   const { cx, drain } = timedContext([]);
   let now = started, failed = true;
   const page = await spendPage({
-    nodeBinary: "node", lastSnapshotAt: 0, costs: bare, exchange() {},
+    nodeBinary: "node", costs: bare, exchange() {},
     async ask(command) {
       commands.push(command);
       if (failed) throw new Error("scan failed");
@@ -380,7 +456,7 @@ test("Spend saves a snapshot time only after a successful scan and retries a fai
   page.catchUp(cx);
   await drain();
   assert.equal(page.error, "scan failed");
-  assert.equal(state["kanso.spend.snapshotAt"], undefined);
+  assert.equal(state["kanso.spend.snapshotAt"], retryStamp(retryAt));
   now = retryAt - 1;
   page.catchUp(cx);
   await drain();
@@ -400,10 +476,7 @@ const timedSnapshots = async (ask) => {
   const { cx, drain } = timedContext([]);
   const started = Date.UTC(2026, 10, 10, 12);
   let now = started;
-  const page = await spendPage({
-    nodeBinary: "node", lastSnapshotAt: 0, exchange() {},
-    ask: (command) => ask(command, now),
-  }, snapshotClock(state, () => now));
+  const page = await clockedSpend({ ask: (command) => ask(command, now) }, state, () => now);
   const readAt = async (at, command) => {
     now = at;
     if (command) page.run(command, cx);
@@ -438,7 +511,7 @@ test("Spend retries a locked source in ten minutes but treats a permanently skip
     const savedAt = await readAt(retryAt + 12 * 60 * 60_000 - 1);
 
     assert.deepEqual({ lockedAt, savedAt, attempts }, {
-      lockedAt: retryAt - 12 * 60 * 60_000,
+      lockedAt: retryStamp(retryAt),
       savedAt: retryAt,
       attempts: [["snapshot", started, 1], ["snapshot", retryAt, 1]],
     });
@@ -626,14 +699,13 @@ test("Spend retries a partial snapshot in ten minutes if the queued prepare fail
   const { cx, drain } = timedContext([]);
   const commands = [], first = Date.UTC(2026, 10, 10, 12), retryAt = first + 10 * 60_000;
   let now = first;
-  const page = await spendPage({
-    nodeBinary: "node", exchange() {},
+  const page = await clockedSpend({
     async ask(command) {
       commands.push([command, now]);
       if (command === "prepare") throw new Error("Pricing unavailable");
       return pricedScan(1, now === first);
     },
-  }, snapshotClock({}, () => now));
+  }, {}, () => now);
   await queuePrepareDuringSnapshot(page, { cx, drain });
   assert.equal(page.error, "Pricing unavailable");
   for (now of [retryAt - 1, retryAt]) {
@@ -649,7 +721,8 @@ test("Spend retries a timed-out scan ten minutes after its watchdog fires.", asy
   const hung = Promise.withResolvers();
   let now = Date.UTC(2026, 10, 10, 12);
   const page = await spendPage({
-    costs: bare, nodeBinary: "node", lastSnapshotAt: 0, exchange() {},
+    costs: bare, nodeBinary: "node",
+    exchange() {},
     ask(command) {
       attempts.push([command, now]);
       return attempts.length === 1 ? hung.promise : Promise.resolve(spendPayload());
@@ -663,9 +736,9 @@ test("Spend retries a timed-out scan ten minutes after its watchdog fires.", asy
   hung.resolve(spendPayload());
   await drain();
   assert.match(page.error, /took too long/);
-  assert.equal(state["kanso.spend.snapshotAt"], undefined);
+  const retry = now + RETRY_MS;
+  assert.equal(state["kanso.spend.snapshotAt"], retryStamp(retry));
 
-  const retry = now + 10 * 60_000;
   for (now of [retry - 1, retry]) {
     page.catchUp(cx);
     await drain();
