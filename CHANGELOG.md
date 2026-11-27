@@ -27,12 +27,17 @@ the branch's rules.
 
 ### Changed
 
+- After a restart changes a disk's device number, Spend no longer reads every session again: a file with the same inode, size and time is known, so the history read finishes in one run instead of stalling on "Still reading your history".
+- When kansō starts, including after an update, it brings the agents' plan rule up to date if it is on, so the rule always matches the command it names.
+- Tasks shows each agent's plan for the project you are viewing: every step in order with a line of detail, the step it is doing now, and what it has finished, written by the agent itself; there is nothing to tick or add by hand. Turning it on, or telling running agents, also brings their rule up to date.
 - Tasks follows the project selected in the sidebar as soon as you switch, and one click turns the agents' to-do on and tells the agents on the computer where that project runs, even from another computer.
 - In Dawn Mode, the pill at the top of the sidebar names the installed release, such as 4.2.0-rc.3, instead of "Dawn Mode".
 - Timeline's header shows only its title; the conversation's name, computer and prompt count moved into the pin's tooltip.
 - Shipped leads with the share of the pull requests you opened that reached production, draws the pull requests merged over the period as a chart like Memory's, lists its trend with the current period first, and says less.
 - Shipped and Spend keep what they read and update it every 12 hours, or when you press Refresh, reading only what is new: Shipped asks GitHub only for what changed, and Spend rescans and exchanges with your other computers on that schedule instead of every minute.
 - On Mac and Linux, kansō reaches your other computers over your home network whenever you are home, with or without Tailscale. It remembers each computer by its .local name instead of an address that can change, checks the key the computer presents there against the one it read over a trusted connection, and goes through Tailscale or your usual route only when you are away.
+- A name in the sidebar glints once, for one sweep, when its agent starts working, and then rests, so a window with agents at work no longer redraws for the glint all the time. It does the same on battery, where it used to stand still, and kansō no longer reads the battery every two minutes.
+- The strip and the updater no longer wake several times a second while nothing changes: the strip writes its layout only after a change and follows a divider closely only while it is dragged, and the updater looks for releases again when Settings changes the channel.
 
 ### Fixed
 
@@ -43,6 +48,7 @@ the branch's rules.
 - A to-do marked done or deleted while it is still being saved on another computer keeps that change.
 - Resume a conversation on another computer starts it with that computer's own agent command, once however fast you choose it.
 - Agents keep the to-do leaves a Codex config.toml alone when its own developer_instructions sits after a multiline string or a comment, and works when kansō's folder has an apostrophe.
+- Ports and Containers opened while the Herdr window is behind another show what they read instead of staying on their loading placeholder, which kept the window redrawing about 20 times a second.
 
 ## [4.2.0] - 2026-11-26
 

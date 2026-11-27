@@ -90,9 +90,6 @@ for (const platform of ["macos", "linux", "windows"]) {
       await api.guardStop("node", "guard.mjs", ["123", "456:force"]);
       assert.match(r.calls.at(-1).args.at(-1), /stop-server.*123.*456.*force/s);
     }
-    const battery = (text) => systemApi(platform, stub(() => text).run).battery();
-    assert.equal(await battery(windows ? "Offline" : platform === "macos" ? "Battery Power" : "0\n"), true);
-    assert.equal(await battery(windows ? "Online" : platform === "macos" ? "AC Power" : "1\n"), false);
   });
 
   test(`${platform} file walkers and migration keep names literal`, async () => {

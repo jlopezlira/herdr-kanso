@@ -37,8 +37,6 @@ export default class WorkspaceChrome extends View {
     // Command names stay kanso-tabs.* for keys bound to them before.
     readCommands(cx, () => nextCommand(), (c) => this.command(c));
     cx.timer.every(SAMPLE_MS, (cx) => this.watch(cx));
-    this.power(cx);
-    cx.timer.every(SAMPLE_MS, (cx) => this.power(cx));
   }
 
   command(c) {
@@ -46,15 +44,6 @@ export default class WorkspaceChrome extends View {
     if (TAB_BAR_COMMANDS.has(name)) run(`kanso-tabs.${name}`);
     else if (name === "restart") this.restart();
     else if (name === "piece-undo") undoHide();
-  }
-
-  // Written only when it changes: every mod draws again on a shared write.
-  power(cx) {
-    cx.spawn(async () => {
-      const on = await localService(systemApi).battery().catch(() => null);
-      if (on === null) return;
-      if (shared("kanso.battery") !== on) setShared("kanso.battery", on);
-    });
   }
 
   // Hot reloads (each update is some) leak mod-runtime memory until the window restarts; terminals live in herdr-core and survive it.

@@ -17,17 +17,6 @@ export function systemApi(platform, run) {
   const restart = (appHome) => platform === "windows"
     ? powershell(run, `Start-Process -FilePath powershell -WindowStyle Hidden -ArgumentList @('-NoProfile','-NonInteractive','-Command',${psQuote(`Start-Sleep -Seconds 1; $env:HERDR_APP_HOME=${psQuote(appHome)}; Start-Process herdr-app`)}) -ErrorAction Stop`)
     : run("sh", ["-c", '(sleep 1; HERDR_APP_HOME="$1" nohup herdr-app >/dev/null 2>&1 &) >/dev/null 2>&1', "_", appHome]);
-  const battery = async () => {
-    if (platform === "macos") {
-      const r = await run("pmset", ["-g", "ps"]);
-      return r.code === 0 ? /Battery Power/.test(r.stdout) : null;
-    }
-    const r = platform === "windows"
-      ? await powershell(run, "Add-Type -AssemblyName System.Windows.Forms; [Windows.Forms.SystemInformation]::PowerStatus.PowerLineStatus.ToString()")
-      : await run("sh", ["-c", 'for f in /sys/class/power_supply/*/status; do [ "$(cat "$f" 2>/dev/null)" = Discharging ] && { echo 0; exit 0; }; done; for f in /sys/class/power_supply/*/online; do [ -f "$f" ] || continue; cat "$f"; done']);
-    if (r.code !== 0 || !r.stdout.trim() || /Unknown/.test(r.stdout)) return null;
-    return platform === "windows" ? r.stdout.trim() === "Offline" : !r.stdout.split(/\s+/).includes("1");
-  };
   const hostname = ({ short = true } = {}) => platform === "windows" ? powershell(run, "[Environment]::MachineName") : run("hostname", short ? ["-s"] : []);
   const temporary = async () => {
     const r = await (platform === "windows" ? powershell(run, "[IO.Path]::GetTempPath()") : run("sh", ["-c", 'printf %s "${TMPDIR:-/tmp}"'])).catch(() => null);
@@ -55,5 +44,5 @@ export function systemApi(platform, run) {
     }).join("; ")].map(windowsArg).join(" "))} -ErrorAction Stop`)
     : run("sh", ["-c", DETACHED, "sh", "-c", STOP_LOOP, node, file, ...args]);
   const containerShell = (name, os) => ["docker", "exec", "-it", name, ...(os === "windows" ? ["cmd.exe"] : ["sh", "-c", "command -v bash >/dev/null 2>&1 && exec bash || exec sh"])];
-  return { guardRun, guardStop, containerShell, status, restart, battery, hostname, temporary, userHome, startDocker, stopDocker, memoryGuardAvailable: MEMORY_GUARD.has(platform), memoryGuardReason };
+  return { guardRun, guardStop, containerShell, status, restart, hostname, temporary, userHome, startDocker, stopDocker, memoryGuardAvailable: MEMORY_GUARD.has(platform), memoryGuardReason };
 }
