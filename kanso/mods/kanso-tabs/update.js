@@ -308,12 +308,6 @@ export class Updater {
       else if (!this.busy) await this.readInstalled();
       cx.notify();
     }));
-    if (polls) cx.timer.every(1500, (cx) => {
-      const channel = this.channel();
-      const changed = this.seenChannel != null && this.seenChannel !== channel;
-      this.seenChannel = channel;
-      if (changed) cx.spawn((cx) => this.check(cx, true));
-    });
   }
 
   // The updater of an older release notes `done` before its swap; the copy that swap starts reports it.

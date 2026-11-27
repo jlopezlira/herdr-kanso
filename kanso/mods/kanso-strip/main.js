@@ -59,6 +59,7 @@ const WHEEL_STEP = 0.25; // of a view width of wheel travel moves one column
 const MIN_VIEW = 0.2; // pinned columns always leave this much of the view to slide
 // Layout writes are throttled: a burst writes its first step at once, then its latest state every WRITE_MS.
 const WRITE_MS = 100;
+const DRAG_POLL_MS = 150;
 const SETTLE = 250; // ms without the dragged sizes changing before the strip adopts them
 
 const TAB_BLOCK = {
@@ -256,8 +257,8 @@ export default class Strip extends View {
     this.pendingFocus = null;
     this.sets = [];
     this.seq = 0; // bumped by whatever changes the model outside render (see render's key)
-    cx.timer.every(WRITE_MS / 2, (cx) => { if (this.dirty) { this.dirty = false; this.seq += 1; cx.notify(); } });
-    cx.timer.every(150, (cx) => this.pollAdopt(cx));
+    this.later = cx;
+    cx.timer.every(1000, (cx) => this.pollAdopt(cx));
     this.lastStatus = new Map();
     this.digesting = new Set();
     this.polling = new Set();
@@ -775,7 +776,7 @@ export default class Strip extends View {
     const at = this.where(st, id)?.ci ?? null;
     const { cols, page } = paged(st.cols, { n: st.n, view: this.viewW(st), at, opened });
     const started = page ? { ...st, cols, vx: this.start({ ...st, cols }, page[0]) } : { ...st, cols };
-    if (started.vx !== st.vx) this.dirty = true;
+    if (started.vx !== st.vx) this.markDirty();
     const shown = this.clampView(started);
     return id ? this.reveal(shown, id) : shown;
   }
@@ -801,7 +802,7 @@ export default class Strip extends View {
     if (!me) return st;
     const vx = me.s < st.vx - EPS ? me.s
       : me.e > st.vx + vw + EPS ? (row.find((r) => me.e - r.s <= vw + EPS) ?? me).s : st.vx;
-    if (vx !== st.vx) this.dirty = true;
+    if (vx !== st.vx) this.markDirty();
     return this.clampView(vx === st.vx ? st : { ...st, vx });
   }
 
@@ -1031,9 +1032,29 @@ export default class Strip extends View {
   }
   isCol(n) { const id = String(n.id); return id.startsWith("strip-") && !id.startsWith("strip-edge"); }
 
+  markDirty() {
+    this.dirty = true;
+    if (this.flushing || !this.later) return;
+    this.flushing = true;
+    this.later.timer.after(WRITE_MS / 2, (cx) => {
+      this.flushing = false;
+      if (!this.dirty) return;
+      this.dirty = false;
+      this.seq += 1;
+      cx.notify();
+    });
+  }
+
+  followDrag(cx) {
+    if (this.following) return;
+    this.following = true;
+    cx.timer.after(DRAG_POLL_MS, (cx) => { this.following = false; this.pollAdopt(cx); });
+  }
+
   pollAdopt(cx) {
     const now = Date.now(), held = shared("strip.drag");
     if (held && now - held.at > DRAG_MAX) endDrag();
+    else if (held) this.followDrag(cx);
     if (!held && now - (this.adoptedAt ?? -Infinity) < 1000) return;
     this.adoptedAt = now;
     if (this.adopt()) { this.seq += 1; cx.notify(); }
@@ -1095,7 +1116,7 @@ export default class Strip extends View {
     const to = Math.min(row[k].s, this.lastStart(st));
     if (Math.abs(to - st.vx) < EPS) return st;
     const moved = { ...st, vx: to };
-    this.dirty = true;
+    this.markDirty();
     this.slidAt = Date.now();
     const shown = new Set(this.shownCols(moved));
     const at = this.where(moved, moved.focus);
@@ -1141,13 +1162,13 @@ export default class Strip extends View {
     if (c.pin) {
       const { pin: _pin, ...free } = c;
       const freed = this.reveal({ ...st, cols: st.cols.with(at.ci, free) }, id);
-      this.dirty = true;
+      this.markDirty();
       return freed;
     }
     if (1 - this.pinnedW(st) - c.w < MIN_VIEW) return st;
     const left = this.start(st, at.ci) + c.w / 2 - st.vx < this.viewW(st) / 2;
     const pinned = this.clampView(this.order({ ...st, cols: st.cols.with(at.ci, { ...c, pin: left ? "left" : "right" }) }));
-    this.dirty = true;
+    this.markDirty();
     return pinned;
   }
 
@@ -1250,7 +1271,7 @@ export default class Strip extends View {
     const now = Date.now();
     // Coalesce before reading anything: a write skipped here costs no tree read; the timer sends the latest state.
     const tabBlock = nodes.length === 1 && nodes[0] === TAB_BLOCK;
-    if (!tabBlock && now - (this.sets.at(-1) ?? 0) < WRITE_MS) { this.dirty = true; return false; }
+    if (!tabBlock && now - (this.sets.at(-1) ?? 0) < WRITE_MS) { this.markDirty(); return false; }
     const tree = layout();
     const body = walkLayout(tree, "work-body");
     if (!body?.children || !isKansoTree(tree)) return false;
@@ -1260,7 +1281,7 @@ export default class Strip extends View {
       setShared(STRIP_INTENT, { nodes, sizesBefore: this.sizesOf(body.children) });
       return false;
     }
-    if (tabBlock && now - (this.sets.at(-1) ?? 0) < WRITE_MS) { this.dirty = true; return false; }
+    if (tabBlock && now - (this.sets.at(-1) ?? 0) < WRITE_MS) { this.markDirty(); return false; }
     this.sets = this.sets.filter((t) => now - t < 3000);
     // More writes than the coalescing allows means something is rewriting the tree in a loop.
     if (this.sets.length > 3000 / WRITE_MS) { this.halted = now; return false; }
@@ -1333,9 +1354,10 @@ export default class Strip extends View {
     if (this.kind === "ruler") return this.renderRuler();
     if (this.kind === "drop") return this.renderDrop();
     if (this.kind === "head") return this.renderHead();
+    if (this.later && shared("strip.drag")) this.followDrag(this.later);
     const t = theme();
     if (this.halted && Date.now() - this.halted > 10000) this.resume();
-    if (this.halted) return statusBar({ middle: layoutPaused() })("strip-map", tokens(t), { presses: { Resume: () => { this.resume(); this.dirty = true; } } });
+    if (this.halted) return statusBar({ middle: layoutPaused() })("strip-map", tokens(t), { presses: { Resume: () => { this.resume(); this.markDirty(); } } });
 
     const tab = this.tab();
     const ps = tab ? panes().filter((p) => p.tab === tab) : [];
@@ -1355,7 +1377,7 @@ export default class Strip extends View {
     const tone = (ci, ri, pin) => (at?.ci === ci && at?.ri === ri ? "current" : at?.ci === ci || pin || this.shown?.has(ci) ? "seen" : "away");
     const columns = st.cols.map((col, i) => ({ width: widths[i], panes: col.panes.map((_id, r) => tone(i, r, col.pin)) }));
     const n = st.n ?? DEFAULT_N;
-    const act = (change) => () => { this.edit(tab, st, change); this.dirty = true; };
+    const act = (change) => () => { this.edit(tab, st, change); this.markDirty(); };
     const chords = { fewer: boundChord("kanso-strip.fewer"), more: boundChord("kanso-strip.more"), fit: boundChord("kanso-strip.fit") };
     const hover = Boolean(this.overStepper) || Object.values(this.stepperFocus).some((handle) => handle.is_focused());
     // Past what fits, the extra marks are cut in their own box, never the stepper.
