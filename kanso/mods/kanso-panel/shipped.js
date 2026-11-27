@@ -181,6 +181,11 @@ export async function signedIn() {
   return r?.code === 0 ? r.stdout.trim() || null : null;
 }
 
+export async function apiLogin() {
+  const data = await gql("query{viewer{login}}").catch(() => null);
+  return data?.viewer?.login ?? null;
+}
+
 export function mergeDays(kept, fresh, now = Date.now()) {
   const byDate = new Map([...kept, ...fresh].map((d) => [d.date, d]));
   const from = isoDay(new Date(now - 370 * DAY));
@@ -224,7 +229,7 @@ export class Shipped {
 
   init(cx) {
     this.kind = this.keptKind ?? "week"; this.offset = this.keptOffset ?? 0;
-    this.github = {};
+    this.github = {}; this.verified = null;
     this.prs = null; this.syncing = false; this.syncError = null; this.phase = null;
     this.store = new Store(cx.timer);
     this.records = {}; this.fresh = new Set();
@@ -252,15 +257,18 @@ export class Shipped {
         this.storeError = null;
         await this.opened().catch((e) => { this.storeError = String(e?.message ?? e); throw e; });
         const signed = await signedIn();
-        if (signed && this.login && signed !== this.login) { this.github = {}; this.prs = null; this.covered = null; }
+        if (signed && this.login && signed !== this.login) { this.github = {}; this.prs = null; this.covered = null; this.login = null; this.verified = null; }
         const kept = this.github[key] && !again ? null : await this.store.period(key).catch(() => null);
-        const ours = kept && (!signed || kept.data.viewer.login === signed);
+        const ours = kept && (!signed || kept.data.viewer.login === signed) && (!this.verified || kept.data.viewer.login === this.verified);
         if (ours && !again && now - kept.at < REFRESH_MS) this.take(key, kept.data, kept.at);
         else if (again || !this.github[key]) {
           try {
             const stored = await this.store.meta("github.login").catch(() => null);
             const calendar = signed && stored && signed !== stored ? null : await this.store.calendar().catch(() => null);
-            const data = await gql(periodQuery(cur, prev, now, calendar?.days?.at(-1)?.date ?? null));
+            const since = calendar?.days?.at(-1)?.date ?? null;
+            const first = await gql(periodQuery(cur, prev, now, since));
+            const data = since && first.viewer.login !== stored ? await gql(periodQuery(cur, prev, now)) : first;
+            this.verified = data.viewer.login;
             await this.store.forAccount("github", data.viewer.login).catch(() => {});
             const days = mergeDays(stored === data.viewer.login ? calendar?.days ?? [] : [], data.viewer.cal.contributionCalendar.weeks.flatMap((w) => w.contributionDays), now);
             await this.store.setCalendar(days, now).catch(() => {});
@@ -303,6 +311,13 @@ export class Shipped {
     this.forced = false;
     this.syncing = true; this.resync = false; this.syncError = null;
     const login = this.login;
+    const verify = async () => {
+      if (this.verified === login) return;
+      const who = await apiLogin();
+      if (!who) throw new Error("GitHub could not be read.");
+      if (who !== login) throw Object.assign(new Error("GitHub account changed."), { switched: who });
+      this.verified = who;
+    };
     spawnAndNotify(cx, async (cx) => {
       try {
         await this.opened();
@@ -313,9 +328,12 @@ export class Shipped {
         this.firstRead = !this.prs.length;
         cx.notify();
         const now = Date.now(), from = periodRange(this.kind, this.offset - TREND + 1, now).start;
-        const read = await mapSeries(PROVIDERS, (provider) => provider.sync(this.store, { from, now, login, force: forced, every: REFRESH_MS, progress: (phase) => { this.phase = `${provider.name}, ${phase}`; cx.notify(); } }));
+        const read = await mapSeries(PROVIDERS, (provider) => provider.sync(this.store, { from, now, login, verify, force: forced, every: REFRESH_MS, progress: (phase) => { this.phase = `${provider.name}, ${phase}`; cx.notify(); } }));
         this.unchecked = read.reduce((n, r) => n + (r?.unchecked ?? 0), 0);
-      } catch (e) { this.syncError = String(e?.message ?? e); }
+      } catch (e) {
+        if (e?.switched && login === this.login) { this.github = {}; this.prs = null; this.covered = null; this.login = null; this.verified = e.switched; this.switched = true; }
+        else this.syncError = String(e?.message ?? e);
+      }
       finally {
         this.syncing = false; this.phase = null; this.firstRead = false;
         if (login === this.login) {
@@ -323,7 +341,8 @@ export class Shipped {
           this.checkRecords();
         } else { this.prs = null; this.covered = null; this.resync = true; }
         cx.notify();
-        if (this.resync) this.startSync(cx);
+        if (this.switched) { this.switched = false; this.refresh(cx, true); }
+        else if (this.resync) this.startSync(cx);
       }
     });
   }
@@ -336,7 +355,8 @@ export class Shipped {
   }
 
   derived() {
-    const key = `${this.key()}:${this.login}:${isoDay(new Date())}`;
+    const at = new Date();
+    const key = `${this.key()}:${this.login}:${isoDay(at)}T${at.getHours()}`;
     if (this.cached?.prs === this.prs && this.cached.key === key) return this.cached.value;
     const now = Date.now(), cur = periodRange(this.kind, this.offset, now), prev = periodRange(this.kind, this.offset - 1, now);
     const value = {

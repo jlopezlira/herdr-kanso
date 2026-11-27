@@ -12,6 +12,7 @@ const PR_FIELDS = "... on PullRequest{url number createdAt mergedAt closedAt bas
 export const SEARCH = `query($q:String!,$after:String){search(query:$q,type:ISSUE,first:100,after:$after){issueCount pageInfo{hasNextPage endCursor} nodes{${PR_FIELDS}}}}`;
 export const HISTORY = "query($owner:String!,$name:String!,$ref:String!,$since:GitTimestamp!,$until:GitTimestamp!,$after:String){repository(owner:$owner,name:$name){ref(qualifiedName:$ref){target{... on Commit{history(first:100,since:$since,until:$until,after:$after){pageInfo{hasNextPage endCursor} nodes{oid}}}}}}}";
 export const createdIn = (start, end) => `is:pr author:@me created:${iso(start)}..${iso(end - 1000)}`;
+export const mergedIn = (start, end) => `is:pr author:@me merged:${iso(start)}..${iso(end - 1000)}`;
 export const updatedIn = (start, end) => `is:pr author:@me updated:${iso(start)}..${iso(end - 1000)}`;
 
 export async function gh(args) {
@@ -60,7 +61,7 @@ export async function inMain(pending, read = gql) {
 export const github = {
   provider: "github",
   name: "GitHub",
-  async sync(store, { from, now, login, force = false, every = 0, progress = () => {} }) {
+  async sync(store, { from, now, login, verify = async () => {}, force = false, every = 0, progress = () => {} }) {
     await store.forAccount("github", login);
     const done = await store.readMonths("github");
     const since = Number(await store.meta("github.updated")) || 0;
@@ -70,11 +71,14 @@ export const github = {
     const due = monthsIn(Math.min(from, fresh ? from : back), now + 1).filter((m) => !done.has(m.month) || (!fresh && m.end > back));
     const read = (months) => mapSeries(months, async (m, i) => {
       progress(`pull requests, ${months.length - i} ${months.length - i === 1 ? "month" : "months"} to go`);
-      await store.save(await prsCreated(m.start, Math.min(m.end, now + 1000)), login);
+      const end = Math.min(m.end, now + 1000);
+      await store.save([...await prsCreated(m.start, end), ...await prsIn(mergedIn, m.start, end)], login);
       await store.monthRead("github", m.month, now, login);
     });
+    if (due.length) await verify();
     await read(due);
     if (since && !force && now - since < every) return { unchecked: Number(await store.meta("github.unchecked")) || 0 };
+    await verify();
     if (since) await store.save(await prsIn(updatedIn, since - 3600000, now + 1000), login);
     await store.setOwnMeta("github.updated", String(now), login);
     progress("what reached production");

@@ -340,7 +340,7 @@ export default class TokenSpend extends View {
         });
       }
     }
-    if (this.awake && !this.closed && !this.running) this.exchange(cx, true, this.takeForced());
+    if (this.awake && !this.closed && !this.running && !this.continueTimer) this.exchange(cx, true, this.takeForced());
     cx.notify();
   }
 
