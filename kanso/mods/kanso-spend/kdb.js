@@ -73,7 +73,7 @@ export function asOfText(at, now) {
 export const conversationOf = (file) => String(file ?? "").match(/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.jsonl$/)?.[1] ?? null;
 
 // Columns added after a table's first release: [table, name, type].
-const ADDED = [["agents", "project", "TEXT"], ["agents", "project_at", "INTEGER"], ["picture_scans", "mark", "TEXT"], ["since_events", "did", "TEXT"], ["pr_items", "checks", "TEXT"], ["pr_items", "created_at", "TEXT"], ["todos", "by", "TEXT"], ["todos", "detail", "TEXT"], ["todos", "started_at", "INTEGER"]];
+const ADDED = [["agents", "project", "TEXT"], ["agents", "project_at", "INTEGER"], ["picture_scans", "mark", "TEXT"], ["since_events", "did", "TEXT"], ["pr_items", "checks", "TEXT"], ["pr_items", "created_at", "TEXT"], ["todos", "by", "TEXT"], ["todos", "detail", "TEXT"], ["todos", "started_at", "INTEGER"], ["todos", "by_name", "TEXT"], ["todos", "by_since", "INTEGER"]];
 // What the old Sleep kept, dropped once: a sleep is now a label on its terminal.
 const GONE_TABLES = ["issues", "issue_boards", "issue_links"];
 const DROPPED = ["sleep_id", "restore", "step", "step_at", "sent_at", "nudged_at", "why"];

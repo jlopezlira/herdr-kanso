@@ -8,9 +8,17 @@ export const HELD_TODOS = "SELECT todos.*, projects.folder AS folder FROM todos 
 
 export const stepState = (step) => (step.done_at != null ? "done" : step.started_at != null ? "doing" : "next");
 
+const second = (ms) => Math.floor(Number(ms) / 1000);
+
+function sessionOf(step, all) {
+  if (!step.gone || step.by_since != null) return step.by_since;
+  const starts = all.filter((s) => s.gone && s.by_since != null && s.on === step.on && s.by === step.by && second(s.by_since) <= second(step.created)).map((s) => Number(s.by_since));
+  return starts.length ? Math.max(...starts) : null;
+}
+
 export function plansOf(todos) {
-  const steps = todos.toSorted((a, b) => a.created - b.created);
-  const keyOf = (step) => `${step.on ?? ""}:${step.by ?? ""}:${step.gone ? "gone" : ""}`;
+  const steps = todos.map((t, _i, all) => ({ ...t, by_since: sessionOf(t, all) })).toSorted((a, b) => a.created - b.created);
+  const keyOf = (step) => `${step.on ?? ""}:${step.by ?? ""}:${step.gone ? `gone:${step.by_since ?? ""}` : ""}`;
   const plans = [...new Set(steps.map(keyOf))].map((key) => steps.filter((s) => keyOf(s) === key))
     .map((mine) => ({ by: mine[0].by ?? null, on: mine[0].on ?? "", gone: Boolean(mine[0].gone), steps: mine }));
   const last = (plan) => Math.max(...plan.steps.map((s) => s.done_at ?? s.started_at ?? s.created));

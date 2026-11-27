@@ -30,6 +30,23 @@ const agentTodo = async (t, cwd, { script = todoScript, database = temporaryKdb 
   return { db, HOME, run, at, result, options };
 };
 
+const restrictedPath = async (t, programs) => {
+  const bin = await temporary(t);
+  for (const program of programs) {
+    const path = await stdoutOf("sh", ["-c", 'command -v "$1"', "sh", program]);
+    await symlink(path.trim(), join(bin, program));
+  }
+  return bin;
+};
+
+const todoAddPath = (t) => restrictedPath(t, [
+  "basename", "date", "dirname", "git", "od", "sed", "sh", "sqlite3", "tr",
+]);
+
+const readTodoIdentity = async (dir) => JSON.parse(await stdoutOf("sqlite3", [
+  "-json", join(dir, "data", "kanso", "kanso.db"), "SELECT id, by, by_name, by_since FROM todos ORDER BY rowid;",
+]));
+
 const listLine = (...parts) => parts.join("\t");
 const expectCommand = ({ code, stdout, stderr }, expected) => {
   assert.equal(code, 0, stderr);
@@ -195,6 +212,46 @@ test("An agent can add, list and start a step before kansō migrates an old plan
   assert.equal(await run("list"), listLine(id, "doing", text));
 });
 
+test("An agent's to-do records its terminal's start time and displayed name before Tasks opens.", unixTodo, async (t) => {
+  const { run, options } = await agentTodo(t);
+  const bin = await todoAddPath(t);
+  await writeFile(join(bin, "hc"), [
+    "#!/bin/sh",
+    '[ "$#" -eq 2 ] && [ "$1" = get ] && [ "$2" = "$HC_TERMINAL_ID" ] || exit 1',
+    'printf "%s\\n" "$TODO_TERMINAL_CARD"',
+  ].join("\n"), { mode: 0o755 });
+  options.env.PATH = bin;
+  const created_ms = 1_800_000_000_321;
+  const title = "Release terminal";
+  const name = "Builder";
+  const shown = "O'Connor";
+  const cards = [
+    [{ created_ms, title, name, labels: { "kanso.shown": shown } }, shown],
+    [{ created_ms, title, name }, name],
+    [{ created_ms, title }, title],
+    [null, null],
+  ];
+
+  const expected = [];
+  for (const [card, by_name] of cards) {
+    options.env.TODO_TERMINAL_CARD = card ? JSON.stringify(card) : "";
+    const id = await run("add", "Check the build", "Read the package log");
+    expected.push({ id, by: terminalId, by_name, by_since: card?.created_ms ?? null });
+  }
+  assert.deepEqual(await readTodoIdentity(options.env.HERDR_APP_HOME), expected);
+});
+
+test("Without hc, an agent can add a step to an older list and leave its session identity unknown.", unixTodo, async (t) => {
+  const { run, options } = await agentTodo(t, undefined, { database: legacyTodoDb });
+  options.env.PATH = await todoAddPath(t);
+  const hc = await exec("sh", ["-c", "command -v hc"], options);
+  assert.notEqual(hc.code, 0, "The agent cannot find hc in this fixture");
+  const id = await run("add", "Read the notes", "Check the signed build");
+  assert.deepEqual(await readTodoIdentity(options.env.HERDR_APP_HOME), [
+    { id, by: terminalId, by_name: null, by_since: null },
+  ]);
+});
+
 test("The steps command reports the four plan commands without a terminal ID.", unixTodo, async (t) => {
   const { at, HOME } = await agentTodo(t);
   expectCommand(await at(HOME, null)("steps"), "add start done list");
@@ -272,14 +329,8 @@ const checkCodexConflicts = async (command, configs) => {
 const agentTodoOnPath = async (t, withoutPython) => {
   const command = await agentTodo(t);
   if (withoutPython) {
-    const bin = await temporary(t);
     const programs = ["awk", "basename", "cat", "dirname", "grep", "head", "rm", "sed", "sh", "tail"];
-    for (const name of programs) {
-      const found = await exec("sh", ["-c", 'command -v "$1"', "sh", name]);
-      assert.equal(found.code, 0, found.stderr);
-      await symlink(found.stdout.trim(), join(bin, name));
-    }
-    command.options.env.PATH = bin;
+    command.options.env.PATH = await restrictedPath(t, programs);
     const python = await exec("sh", ["-c", "command -v python3"], command.options);
     assert.notEqual(python.code, 0, "The installer cannot find python3 in this fixture");
   }
