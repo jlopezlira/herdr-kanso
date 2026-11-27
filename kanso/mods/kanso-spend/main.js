@@ -376,6 +376,7 @@ export default class TokenSpend extends View {
 
   async exchangeOnce(cx, force = false, everyone = false) {
     if (!this.awake || this.closed) return;
+    const costs = this.costs;
     const now = Date.now();
     this.exchangeTriedAt = now;
     if (!force && this.syncOffUntil > now) return;
@@ -404,7 +405,7 @@ export default class TokenSpend extends View {
     const out = await exchangeAll((on, payload) => serviceOn(probeApi, on).then((probe) => probe.exchange(payload)), {
       config, peers, status,
       rows: rowsFrom(await readTextFile(paths.join(dir, "rows.json")).catch(() => null)),
-      self, own: self ? rowFromCosts(this.costs, self, new Date(now).toISOString(), options) : null,
+      self, own: self && this.costs === costs && !this.stale() ? rowFromCosts(costs, self, new Date(now).toISOString(), options) : null,
       now, periodKey, options, stored: power.stored, live: power.live, force: everyone,
     });
     if (!this.awake || this.closed) return;

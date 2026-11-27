@@ -101,10 +101,12 @@ export const github = {
     if (backfill.length) progress("merged pull requests");
     await mapSeries(backfill, async (m) => keep(await prsIn(mergedIn(login), m.start, Math.min(m.end, now + 1000), read)));
     if (!merged) await store.setOwnMeta("github.merged", "1", login);
-    if (since && !force && now - since < every) return { unchecked: Number(await store.meta("github.unchecked")) || 0 };
+    const pending = (await store.meta("github.unchecked")) === "pending";
+    if (since && !force && !pending && now - since < every) return { unchecked: Number(await store.meta("github.unchecked")) || 0 };
     if (since) await keep(await prsIn(updatedIn(login), since - 3600000, now + 1000, read));
     await store.setOwnMeta("github.updated", String(now), login);
     progress("what reached production");
+    await store.setOwnMeta("github.unchecked", "pending", login);
     const prod = await inMain(pendingByRepo(await store.prs()), read);
     await store.markProd(prod.urls, login);
     await store.setOwnMeta("github.unchecked", String(prod.unchecked), login);
