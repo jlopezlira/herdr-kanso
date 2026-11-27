@@ -1,6 +1,6 @@
 import { spawnAndNotify, commandOk, tilde, pool, said } from "./lib.js";
 import { sizedPage, heroStack, heroHeading } from "./ui-page.js";
-import { localService } from "./platform-host.js";
+import { localService, localName } from "./platform-host.js";
 import { paths } from "./platform-paths.js";
 import { fileApi } from "./platform-files.js";
 import { repositoryApi } from "./platform-repositories.js";
@@ -102,6 +102,12 @@ export function parseProbeSet(out) {
     return { records: [...acc.records.slice(0, -1), { ...last, lines: [...last.lines, line] }] };
   }, { records: [] });
   return groups.records.map((record) => ({ index: record.index, probe: parseProbe(record.lines.join("\n")) }));
+}
+
+export function probeRows(rows, out) {
+  const records = parseProbeSet(out).filter((record) => rows[record.index]);
+  const found = new Set(records.map((record) => record.index));
+  return { records, missing: rows.filter((_, index) => !found.has(index)) };
 }
 
 const foldersInUse = () => {
@@ -431,16 +437,35 @@ export class Worktrees {
         const idle = idleMinutes();
         const live = groups.flatMap((g) => g.items.filter((w) => !w.missing));
         this.counted = 0;
-        await pool(groups, 4, async (group) => {
-          const rows = group.items.filter((w) => !w.missing);
-          if (!rows.length || id !== this.scan) return;
-          const r = await localService(repositoryApi).probeAll(group.repo, rows, idle, group.bases);
-          if (id !== this.scan) return;
-          parseProbeSet(r.stdout).forEach((record) => { if (rows[record.index]) this.apply(rows[record.index].path, record.probe); });
-          this.counted = this.counted + rows.length;
+        const noteChecked = () => {
+          this.counted = this.counted + 1;
           this.phase = `Checking ${this.counted} of ${live.length}`;
           this.soon(cx);
-        });
+        };
+        const probeOne = async (item, bases) => {
+          const r = await localService(repositoryApi).probe(item.path, idle, bases);
+          if (id !== this.scan) return;
+          this.apply(item.path, parseProbe(r.stdout));
+          noteChecked();
+        };
+        if (localName() === "windows") {
+          const jobs = groups.flatMap((group) => group.items.filter((item) => !item.missing).map((item) => ({ item, bases: group.bases })));
+          await pool(jobs, 8, async ({ item, bases }) => probeOne(item, bases));
+        } else {
+          await pool(groups, 4, async (group) => {
+            const rows = group.items.filter((item) => !item.missing);
+            if (!rows.length || id !== this.scan) return;
+            let missing = rows;
+            try {
+              const r = await localService(repositoryApi).probeAll(group.repo, rows, idle, group.bases);
+              if (id !== this.scan) return;
+              const parsed = probeRows(rows, r.stdout ?? "");
+              parsed.records.forEach((record) => { this.apply(rows[record.index].path, record.probe); noteChecked(); });
+              missing = parsed.missing;
+            } catch { missing = rows; }
+            if (missing.length && id === this.scan) await pool(missing, 8, (item) => probeOne(item, group.bases));
+          });
+        }
         if (id !== this.scan) return;
         const sized = [...live.map((item) => this.item(item.path)).filter((item) => item && !item.missing), ...this.orphans].map((item) => item.path);
         this.counted = 0;

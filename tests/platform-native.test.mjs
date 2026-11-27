@@ -164,10 +164,11 @@ test("a file copied in slices matches its bytes, including an empty file and one
 
 test("probing many worktrees of one repository starts one shell", async () => {
   const calls = [];
-  const api = repositoryApi("linux", async (command, args) => { calls.push([command, args]); return { code: 0, stdout: "#0\ndirty\t0\n" }; });
+  const api = repositoryApi("linux", async (command, args, options) => { calls.push([command, args, options]); return { code: 0, stdout: "#0\ndirty\t0\n" }; });
   await api.probeAll("/repo", [{ path: "/a" }, { path: "/b" }], 0, ["main"]);
   assert.equal(calls.length, 1);
   assert.equal(calls[0][0], "bash");
+  assert.equal(calls[0][2].timeout, 30000);
   assert.deepEqual(calls[0][1].filter((arg) => arg === "/a" || arg === "/b"), ["/a", "/b"]);
 });
 

@@ -91,13 +91,29 @@ shift 3
 refs=()
 i=0
 while [ "$i" -lt "$nrefs" ]; do refs+=("$1"); shift; i=$((i + 1)); done
+paths=()
+i=0
+while [ "$i" -lt "$nitems" ]; do paths+=("$1"); shift; i=$((i + 1)); done
+dir=$(mktemp -d "\${TMPDIR:-/tmp}/kanso-wt.XXXXXX")
+i=0
+while [ "$i" -lt "$nitems" ]; do
+  end=$((i + 8))
+  if [ "$end" -gt "$nitems" ]; then end=$nitems; fi
+  j=$i
+  while [ "$j" -lt "$end" ]; do
+    probe_one "\${paths[$j]}" "$idle" "\${refs[@]}" > "$dir/$j" &
+    j=$((j + 1))
+  done
+  wait
+  i=$end
+done
 i=0
 while [ "$i" -lt "$nitems" ]; do
   printf '#%s\n' "$i"
-  probe_one "$1" "$idle" "\${refs[@]}"
-  shift
+  cat "$dir/$i" 2>/dev/null
   i=$((i + 1))
 done
+rm -rf "$dir"
 exit 0
 `;
 const FORGET = `
@@ -121,7 +137,10 @@ const childLines = (text) => String(text ?? "").split(/\r?\n/).flatMap((line) =>
 export function repositoryApi(platform, run) {
   const files = fileApi(platform, run);
   const git = (folder, args) => run("git", ["-C", folder, ...args]);
-  const shell = (script, args) => run("bash", ["-c", script, "worktrees", ...args]);
+  const shell = (script, args, timeout) => {
+    const argv = ["-c", script, "worktrees", ...args];
+    return timeout == null ? run("bash", argv) : run("bash", argv, { timeout });
+  };
   const bases = async (folder) => {
     if (platform !== "windows") return shell(BASES, [folder]);
     const origin = (await git(folder, ["symbolic-ref", "-q", "--short", "refs/remotes/origin/HEAD"])).stdout.trim();
@@ -221,21 +240,8 @@ export function repositoryApi(platform, run) {
   };
   const probeAll = async (_repo, items, idle, refs) => {
     const list = Array.isArray(items) ? items : [];
-    if (platform === "windows") {
-      const parts = new Array(list.length);
-      let next = 0;
-      const worker = async () => {
-        while (next < list.length) {
-          const index = next;
-          next += 1;
-          const one = await probe(list[index].path, idle, refs);
-          parts[index] = "#" + index + "\n" + one.stdout.trimEnd();
-        }
-      };
-      await Promise.all(Array.from({ length: Math.min(8, list.length) }, worker));
-      return { code: 0, stdout: parts.filter(Boolean).join("\n") };
-    }
-    return shell(PROBE_ALL, [String(idle), String(refs.length), String(list.length), ...refs, ...list.map((item) => item.path)]);
+    const waves = Math.max(1, Math.ceil(list.length / 8));
+    return shell(PROBE_ALL, [String(idle), String(refs.length), String(list.length), ...refs, ...list.map((item) => item.path)], waves * 30000);
   };
   return { createWorktree: add, discover, bases, probe, probeAll, forget, removeOrphan, fingerprint, children };
 }
