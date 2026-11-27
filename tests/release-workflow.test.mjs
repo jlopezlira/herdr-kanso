@@ -55,11 +55,12 @@ const releaseFixture = (t) => {
     git("remote", "add", "origin", join(root, "remote.git"));
     git("push", "origin", "develop");
   };
-  return { write, read, git, commit, node, run, root, addFeature, pushDevelop };
+  const setFeature = (value) => write("kanso/mods/kanso-chrome/feature.js", `export const feature = ${value};\n`);
+  return { write, read, git, commit, node, run, root, addFeature, pushDevelop, setFeature };
 };
 
 test("Workflow commands preserve PR history, publish computed notes and prepare successive RCs", (t) => {
-  const { write, read, git, commit, run, node, root, addFeature, pushDevelop } = releaseFixture(t);
+  const { write, read, git, commit, run, node, root, addFeature, pushDevelop, setFeature } = releaseFixture(t);
   git("tag", "v1.2.0-beta.13");
   const base = git("rev-parse", "HEAD");
   addFeature();
@@ -120,7 +121,7 @@ test("Workflow commands preserve PR history, publish computed notes and prepare 
   assert.match(read("output"), /tag=v1\.2\.0-rc\.2\n/);
   const fixedBase = git("rev-parse", "HEAD");
   write("CHANGELOG.md", fixedLog.replace("## [1.2.0]", "## [Unreleased]\n\n### Fixed\n\n- Bug.\n\n## [1.2.0]"));
-  write("kanso/mods/kanso-chrome/feature.js", "export const feature = false;\n");
+  setFeature(false);
   commit("Fix feature");
   write("event.json", JSON.stringify({ pull_request: { base: { sha: fixedBase } } }));
   checkedBeta();
@@ -139,7 +140,7 @@ test("Workflow commands preserve PR history, publish computed notes and prepare 
   run("release-tag", ["v1.2.0-rc.3"]);
   const minorHead = git("rev-parse", "HEAD");
   write("CHANGELOG.md", read("CHANGELOG.md").replace("## [1.2.0]", "## [Unreleased]\n\n### Removed\n\n- Old behavior.\n\n## [1.2.0]"));
-  write("kanso/mods/kanso-chrome/feature.js", "export const feature = null;\n");
+  setFeature(null);
   commit("Remove old behavior");
   write("event.json", JSON.stringify({ pull_request: { base: { sha: minorHead } } }));
   checkedBeta();
@@ -174,11 +175,11 @@ test("Workflow commands preserve PR history, publish computed notes and prepare 
 });
 
 const queuedDevelopFixture = (t) => {
-  const { write, read, git, commit, node, run, addFeature, pushDevelop } = releaseFixture(t);
+  const { write, read, git, commit, node, run, addFeature, pushDevelop, setFeature } = releaseFixture(t);
   addFeature();
   const green = git("rev-parse", "HEAD");
   write("CHANGELOG.md", read("CHANGELOG.md").replace(stable, `### Fixed\n\n- Follow-up.\n\n${stable}`));
-  write("kanso/mods/kanso-chrome/feature.js", "export const feature = false;\n");
+  setFeature(false);
   commit("Fix feature");
   const newer = git("rev-parse", "HEAD");
   pushDevelop();
@@ -195,18 +196,22 @@ const queuedDevelopFixture = (t) => {
   return { read, green, newer, plan, publishNewer, tag };
 };
 
-test("A green develop run still publishes when a newer push has not released", (t) => {
-  const { read, green, plan, tag } = queuedDevelopFixture(t);
+const plannedGreen = (plan, green) => {
   const planned = plan(green);
   assert.equal(planned.status, 0, planned.stderr);
+  return planned;
+};
+
+test("A green develop run still publishes when a newer push has not released", (t) => {
+  const { read, green, plan, tag } = queuedDevelopFixture(t);
+  const planned = plannedGreen(plan, green);
   assert.ok(read("output").includes(`tag=${tag}\n`), planned.stdout);
 });
 
 test("A late develop run skips after an archive from a newer commit was published", (t) => {
   const { read, green, plan, publishNewer, tag } = queuedDevelopFixture(t);
   publishNewer();
-  const planned = plan(green);
-  assert.equal(planned.status, 0, planned.stderr);
+  const planned = plannedGreen(plan, green);
   assert.equal(planned.stdout.trim(), `${tag} was published from a newer commit; no beta.`);
   assert.equal(read("output"), "action=skip\n");
 });
