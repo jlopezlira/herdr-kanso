@@ -27,6 +27,11 @@ the branch's rules.
 
 ### Changed
 
+- Worktrees starts fewer Git processes when checking which branches have landed.
+- Worktrees checks each repository in one pass, and asks again the next time it opens.
+- After a restart changes a disk's device number, Spend no longer reads every session again: a file with the same inode, size and time is known, so the history read finishes in one run instead of stalling on "Still reading your history".
+- When kansō starts, including after an update, it brings the agents' plan rule up to date if it is on, so the rule always matches the command it names.
+- Tasks shows each agent's plan for the project you are viewing: every step in order with a line of detail, the step it is doing now, and what it has finished, written by the agent itself; there is nothing to tick or add by hand. Turning it on, or telling running agents, also brings their rule up to date.
 - Tasks follows the project selected in the sidebar as soon as you switch, and one click turns the agents' to-do on and tells the agents on the computer where that project runs, even from another computer.
 - In Dawn Mode, the pill at the top of the sidebar names the installed release, such as 4.2.0-rc.3, instead of "Dawn Mode".
 - Timeline's header shows only its title; the conversation's name, computer and prompt count moved into the pin's tooltip.
@@ -37,6 +42,8 @@ the branch's rules.
 
 ### Fixed
 
+- Caffeine says when a computer's battery is too low to keep it awake, instead of showing it as not read and then as sleeping as usual.
+- Check for updates gives its answer even when an automatic check is already looking.
 - Shipped no longer stops drawing ("This view could not be re-rendered") with a few thousand pull requests, and its streak is not reset by a calendar day that GitHub already started.
 - On Windows, an update that was interrupted no longer makes the next update fail while it resets the permissions of the files it replaces.
 - Tasks turns Agents keep the to-do on itself when it is empty, and turning it on, here or in Settings, sends the rule to the agents already running on this computer, so they start using it without a new conversation.

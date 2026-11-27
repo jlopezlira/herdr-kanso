@@ -114,11 +114,15 @@ test("On macOS and Linux, checking a linked worktree asks Git to disable its fil
   await writeFile(join(worktree, "readme"), "changed\n");
   const trace = join(dir, "git-trace.jsonl");
   const run = (command, args) => exec(command, args, { env: { ...process.env, GIT_TRACE2_EVENT: trace } });
-  const result = await repositoryApi(nativePlatform, run).probe(worktree, 0, []);
+  const result = await repositoryApi(nativePlatform, run).probe(worktree, 0, ["HEAD", "HEAD"]);
   assert.equal(result.code, 0, result.stderr);
   assert.match(result.stdout, /^dirty\t1$/m);
   const events = (await readFile(trace, "utf8")).trim().split("\n").map((line) => JSON.parse(line));
   const status = events.find(({ event, argv }) => event === "start" && argv.includes("status"));
+  const started = events.filter(({ event }) => event === "start");
+  assert.equal(started.filter(({ argv }) => argv.includes("HEAD..HEAD")).length, 1);
+  assert.ok(!started.some(({ argv }) => argv.includes("merge-base") || argv.includes("merge-tree")));
+  assert.match(result.stdout, /^ahead\t0$/m);
   assert.ok(status, "Git ran status in the worktree");
   assert.deepEqual(status.argv.slice(1, 3), ["-c", "core.fsmonitor=false"]);
 });
@@ -156,4 +160,72 @@ test("a file copied in slices matches its bytes, including an empty file and one
   await copy("empty.bin", Buffer.alloc(0));
   await copy("one.bin", randomBytes(CHUNK));
   await copy("O'Brien picture.bin", randomBytes(5 * 1024 * 1024));
+});
+
+test("probing many worktrees of one repository starts one shell", async () => {
+  const calls = [];
+  const api = repositoryApi("linux", async (command, args, options) => { calls.push([command, args, options]); return { code: 0, stdout: "#0\ndirty\t0\n" }; });
+  await api.probeAll("/repo", [{ path: "/a" }, { path: "/b" }], 0, ["main"]);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0][0], "bash");
+  assert.equal(calls[0][2].timeout, 30000);
+  assert.deepEqual(calls[0][1].filter((arg) => arg === "/a" || arg === "/b"), ["/a", "/b"]);
+});
+
+const parsedRows = async (text, count) => {
+  const { probeRows } = await load("kanso-panel/worktrees.js", ["probeRows"]);
+  return probeRows(Array.from({ length: count }, (_, index) => ({ path: String(index) })), text);
+};
+
+const seeded = async (t) => {
+  const root = await temporary(t), folder = join(root, "repo"), commit = gitOk();
+  await fileApi(nativePlatform, exec).mkdir(folder);
+  await commit(folder, "init", "-b", "main");
+  await writeFile(join(folder, "one.txt"), "one\n");
+  await commit(folder, "add", "one.txt");
+  await commit(folder, "commit", "-m", "Seed");
+  return { root, folder, api: repositoryApi(nativePlatform, exec) };
+};
+
+const worktreeAt = async (api, folder, root, branch) => (await api.createWorktree(folder, branch, join(root, "trees"), root)).stdout.trim().split("\t")[1];
+
+test("one repository probe reads every worktree again, including a new file", { skip: nativePlatform === "windows" }, async (t) => {
+  const { root, folder, api } = await seeded(t);
+  const first = await worktreeAt(api, folder, root, "feature"), second = await worktreeAt(api, folder, root, "other");
+  let bash = 0;
+  const counted = repositoryApi(nativePlatform, async (command, args) => { if (command === "bash") bash += 1; return exec(command, args); });
+  const opened = await counted.probeAll(folder, [{ path: first }, { path: second }], 0, ["main"]);
+  assert.equal(opened.code, 0, opened.stderr);
+  assert.equal(bash, 1);
+  const openedRows = await parsedRows(opened.stdout, 2);
+  assert.equal(openedRows.missing.length, 0);
+  assert.equal(openedRows.records[0].probe.ahead, 0);
+  const noBase = await counted.probeAll(folder, [{ path: first }, { path: second }], 0, []);
+  const unknown = await parsedRows(noBase.stdout, 2);
+  assert.equal(unknown.missing.length, 0);
+  assert.equal(unknown.records[0].probe.ahead, null);
+  assert.equal(openedRows.records[1].probe.dirty, 0);
+  await writeFile(join(first, "two.txt"), "two\n");
+  const edited = await counted.probeAll(folder, [{ path: first }, { path: second }], 0, ["main"]);
+  assert.equal(bash, 3);
+  const editedRows = await parsedRows(edited.stdout, 2);
+  assert.equal(editedRows.missing.length, 0);
+  assert.equal(editedRows.records.find((row) => row.index === 0).probe.dirty, 1);
+  assert.equal(editedRows.records.find((row) => row.index === 1).probe.dirty, 0);
+});
+
+test("mixed worktree answers stay on their own line across waves", { skip: nativePlatform === "windows" }, async (t) => {
+  const { root, folder, api } = await seeded(t);
+  const paths = [];
+  for (let index = 0; index < 9; index += 1) {
+    const path = await worktreeAt(api, folder, root, `branch-${index}`);
+    paths.push(path);
+    for (let file = 0; file < index + 1; file += 1) await writeFile(join(path, `extra-${file}.txt`), "x\n");
+  }
+  const opened = await api.probeAll(folder, paths.map((path) => ({ path })), 0, ["main"]);
+  assert.equal(opened.code, 0, opened.stderr);
+  const parsed = await parsedRows(opened.stdout, 9);
+  assert.equal(parsed.missing.length, 0);
+  assert.equal(parsed.records.length, 9);
+  parsed.records.forEach((row) => assert.equal(row.probe.dirty, row.index + 1));
 });

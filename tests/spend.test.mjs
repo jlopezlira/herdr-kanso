@@ -11,6 +11,7 @@ import { chooserKey, readPlan } from "../kanso/mods/kanso-spend/spend-model.js";
 import { run as presentSpend } from "../kanso/mods/kanso-spend/presenter.mjs";
 
 const presenter = fileURLToPath(new URL("../kanso/mods/kanso-spend/presenter.mjs", import.meta.url));
+const collector = fileURLToPath(new URL("../kanso/mods/kanso-spend/collector.mjs", import.meta.url));
 
 // A home with one Claude Code session, and a fresh price list so nothing is fetched.
 async function fixture(t) {
@@ -78,6 +79,37 @@ test("Spend moves a store.json from before into SQLite once", async (t) => {
   const db = new DatabaseSync(join(old, "spend.db"), { readOnly: true });
   try { assert.equal(db.prepare("SELECT COUNT(*) n FROM files").get().n, Object.keys(legacy.files).length); }
   finally { db.close(); }
+});
+
+const movedDevice = async (t) => {
+  const f = await fixture(t);
+  assert.equal((await run(f, "snapshot")).costs.hero.value, "$22.50");
+  const { DatabaseSync } = await import("node:sqlite");
+  const db = new DatabaseSync(join(f.data, "spend.db"));
+  try { db.exec("UPDATE files SET v = json_set(v, '$.dev', '1')"); }
+  finally { db.close(); }
+  return f;
+};
+
+test("A session whose device number changed after a restart is not read again, and keeps its cost", async (t) => {
+  const f = await movedDevice(t);
+  const r = await exec(process.execPath, [collector, "snapshot", "--store", join(f.data, "store.json"), "--home", f.home]);
+  assert.equal(r.code, 0, r.stderr);
+  const { stats } = JSON.parse(r.stdout);
+  assert.equal(stats.filesRead, 0, "nothing is read again");
+  assert.equal(stats.unchangedFiles, 1);
+  assert.ok(!stats.partial, "the scan finishes in one run");
+  assert.equal((await run(f, "snapshot")).costs.hero.value, "$22.50");
+});
+
+test("A session rewritten in place after its device number changed is read again from the start", async (t) => {
+  const f = await movedDevice(t);
+  const session = join(f.home, ".claude", "projects", "-Users-me-Apps-secret-project", "s1.jsonl");
+  const text = await readFile(session, "utf8");
+  await writeFile(session, text.replace('"input_tokens":1000000', '"input_tokens":2000000'));
+  const later = new Date(Date.now() + 5000);
+  await fs.utimes(session, later, later);
+  assert.equal((await run(f, "snapshot")).costs.hero.value, "$37.50", "2M in at $15/M plus 100K out at $75/M");
 });
 
 const said = "token-spend: store is locked", unread = "Spend could not read your sessions.";

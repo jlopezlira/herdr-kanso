@@ -658,9 +658,10 @@ async function scanOneFile(work, tally, source, filePath) {
   const parserKey = `${entry.adapter}ParserVersion`;
   const parserCurrent = (!parserVersion || entry.state[parserKey] === parserVersion)
     && !(entry.state.unsupported === "zstd" && hasZstdSupport());
-  if (parserCurrent && !entry.state.readFailed && entry.dev === dev && entry.ino === ino
+  if (parserCurrent && !entry.state.readFailed && entry.ino === ino
     && entry.size === fileStat.size && entry.mtimeMs === fileStat.mtimeMs) {
-    return { work: made.work, tally: count(tally, "unchangedFiles"), dirty: isNew };
+    const moved = entry.dev !== dev;
+    return { work: moved ? putEntry(made.work, key, { ...entry, dev }) : made.work, tally: count(tally, "unchangedFiles"), dirty: isNew || moved };
   }
   // Verify a changed archive decompresses before any reset, so a bad archive leaves the store as it was.
   if (entry.compressed && hasZstdSupport() && filePath.endsWith(".jsonl.zst")) {

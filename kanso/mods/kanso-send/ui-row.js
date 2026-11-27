@@ -47,9 +47,9 @@ const detailOf = (c, id, detail, names) => {
 
 // The second line: a string, or facts in a row where the first one gives way.
 // A sidebar row's facts are told apart by a dot, the way the story reads "Run npm publish? · 2m".
-const secondOf = (c, id, second, names) => {
+const secondOf = (c, id, second, names, wrap = false) => {
   const line = div().w_full().min_w(0).text_size(T.body).text_color(c.dim);
-  if (typeof second === "string") return line.truncate().child(second);
+  if (typeof second === "string") return (wrap ? line : line.truncate()).child(second);
   const parts = second.filter(Boolean).map((part, i) => textOf(c, `${id}-second-${i}`, factOf(part)).when(i > 0, (el) => el.flex_none()));
   const told = names ? parts.flatMap((part, i) => (i ? [div().flex_none().text_color(c.dim).child("\u00b7"), part] : [part])) : parts;
   return h_flex().w_full().min_w(0).items_center().gap(names ? G.xs : G.sm).whitespace_nowrap().text_size(T.body).text_color(c.dim).children(told);
@@ -176,7 +176,7 @@ const withoutPress = (detail) => [detail ?? []].flat().filter(Boolean).map((part
 export function row(id, c, {
   icon = null, tone = null, letter = null, level = null, open = null, name, detail: told = null, meta = null, chip: count = null, flag = null, mark: status = "none", second = null, heading = false, group = false, title = false,
   depth = 0, selected: picked = false, current = false, dimmed = false, busy = false, pending = false, hover: hovering = false, focus: focusing = false, actions: offered = [], action: offer = null, verbs: said = [], start: leading = [], tools: own = [], keys = [],
-  glint = false, wrap = false, drop = null, wash = null, guides = [], names = false, nameInk = null, lead = null,
+  glint = false, wrap = false, wrapSecond = false, drop = null, wash = null, guides = [], names = false, nameInk = null, lead = null,
   onClick: pressed = null, onHover: hovered = null, onKey: keyed = null, focusHandle: kept = null,
 } = {}) {
   const { selected, hover, focus, actions, action, verbs, start, tools, detail, onClick, onHover, onKey, focusHandle } = busy ? { ...INERT, detail: withoutPress(told) }
@@ -212,5 +212,5 @@ export function row(id, c, {
     .when(pending, (el) => el.opacity(PENDING))
     .children([...guidesOf(c, depth, guides), dropOf(c, drop)].filter(Boolean))
     .child(besideOf(lead, under ? v_flex().w_full().min_w(0).gap(two && !names ? G.xs : G.sm).child(first)
-      .children([second ? secondOf(c, id, second, names) : null, verbsOf(id, c, verbs)].filter(Boolean)) : first)), c, { onClick, onHover, onKey, focusHandle });
+      .children([second ? secondOf(c, id, second, names, wrapSecond) : null, verbsOf(id, c, verbs)].filter(Boolean)) : first)), c, { onClick, onHover, onKey, focusHandle });
 }
