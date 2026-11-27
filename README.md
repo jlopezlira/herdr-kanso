@@ -99,10 +99,10 @@ On Windows, merge `kanso/keys.windows.json` into your Herdr keys instead of
 - **Review without leaving.** Pull requests with diff, checks and threads, and
   one click to hand the feedback to an agent. Any file that is not a picture opens in Preview,
   and it can be edited when the read has no NUL and fits in 1 MiB, on this computer or another; `md-review plan.md` from an agent asks for your comments.
-- **Tasks.** Each project's to-do, kept by your agents as they work: turn on
-  Agents keep the to-do in Settings and Claude Code, Codex and Pi add each step
-  and close it when done. Add one yourself, send one to an agent, or start a
-  new conversation with it. It stays in kansō's database on this computer.
+- **Tasks.** What each agent will do in the project you are viewing: one press
+  in Tasks turns it on, and Claude Code, Codex and Pi write their plan step by
+  step, each with a line on what it changes, then mark the step they are on and
+  each one they finish. It follows the project on whichever computer holds it.
 - **While you are away.** An agent stopped by its plan limit can resume on its
   own when the limit resets. Schedule… in a project's menu starts an agent with a prompt at
   a time you choose, and New agent in a worktree gives one task to several
@@ -217,8 +217,9 @@ request, `npm run pre-pr` runs every check and `npm test`. `npm test` also check
 against the Herdr names in `tests/herdr-api.json` (`node scripts/herdr-api.mjs`
 rewrites that file from this machine's declarations), and `npm run check:mods`
 runs `herdr-app check` on every mod when the app is installed. A push
-to `develop` publishes `vX.Y.Z-beta.N`, once CI passes on all three platforms,
-when what kansō installs changed since the last beta or the newest stable tag. Running the Release candidate workflow
+to `develop` publishes `vX.Y.Z-beta.N`, or the next `vX.Y.Z-rc.N` once a release
+candidate of that version exists, so Early always ranks it newest; once CI passes on all three platforms,
+when what kansō installs changed since the newest prerelease of that version or the newest stable tag. Running the Release candidate workflow
 on `develop` publishes `vX.Y.Z-rc.N`. Merging `develop` into `main` publishes
 the stable `vX.Y.Z`. Docs do not bump the version. How to work on it:
 [CONTRIBUTING.md](CONTRIBUTING.md). How every part is built:

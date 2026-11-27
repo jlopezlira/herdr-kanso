@@ -1,23 +1,21 @@
-import { q } from "./kdb.js";
-import { num } from "./pr-inbox.js";
-
 export const TODO_MS = 4000;
+export const FOLLOW_MS = 300;
+export const SWITCH_MS = 15_000;
 export const DONE = "Done";
 export const PROJECTS = "SELECT id, name, folder, machine FROM projects WHERE removed IS NULL;";
-export const TODOS = "SELECT todos.* FROM todos JOIN projects ON projects.id=todos.project WHERE projects.removed IS NULL;";
+export const TODOS = "SELECT todos.*, projects.folder AS folder, projects.machine AS machine FROM todos JOIN projects ON projects.id=todos.project WHERE projects.removed IS NULL;";
 export const HELD_TODOS = "SELECT todos.*, projects.folder AS folder FROM todos JOIN projects ON projects.id=todos.project WHERE projects.removed IS NULL AND projects.machine='';";
-export const todoText = (text) => String(text ?? "").replace(/\s+/g, " ").trim();
 
-export const addTodoSql = ({ id, project, text, created, by = null }) => `INSERT OR IGNORE INTO todos(id,project,text,created,by) VALUES(${q(id)},${q(project)},${q(text)},${num(created)},${q(by)});`;
-export const doneSql = (id, at) => `UPDATE todos SET done_at=${at == null ? "NULL" : num(at)} WHERE id=${q(id)};`;
-export const dropTodoSql = (id) => `DELETE FROM todos WHERE id=${q(id)};`;
+export const stepState = (step) => (step.done_at != null ? "done" : step.started_at != null ? "doing" : "next");
 
-export function todosOf(todos, project) {
-  const mine = todos.filter((t) => t.project === project);
-  return {
-    open: mine.filter((t) => t.done_at == null).toSorted((a, b) => b.created - a.created),
-    done: mine.filter((t) => t.done_at != null).toSorted((a, b) => b.done_at - a.done_at),
-  };
+export function plansOf(todos) {
+  const steps = todos.toSorted((a, b) => a.created - b.created);
+  const keyOf = (step) => `${step.on ?? ""}:${step.by ?? ""}:${step.gone ? "gone" : ""}`;
+  const plans = [...new Set(steps.map(keyOf))].map((key) => steps.filter((s) => keyOf(s) === key))
+    .map((mine) => ({ by: mine[0].by ?? null, on: mine[0].on ?? "", gone: Boolean(mine[0].gone), steps: mine }));
+  const last = (plan) => Math.max(...plan.steps.map((s) => s.done_at ?? s.started_at ?? s.created));
+  const doing = (plan) => plan.steps.some((s) => stepState(s) === "doing");
+  return plans.toSorted((a, b) => Number(doing(b)) - Number(doing(a)) || last(b) - last(a));
 }
 
 export const placeOf = (machine, folder) => `${machine ?? ""}:${String(folder ?? "").replace(/\/+$/, "")}`;
@@ -27,12 +25,6 @@ export function withSpaces(projects, spaces, homeDir) {
   const opened = spaces.filter((s) => s.folder && placeOf(s.machine, s.folder) !== placeOf(null, homeDir))
     .map((s) => ({ id: placeOf(s.machine, s.folder), name: s.name, folder: s.folder, machine: s.machine ?? null, auto: true }));
   return [...projects, ...opened.filter((p, i) => !known.has(p.id) && opened.findIndex((x) => x.id === p.id) === i)];
-}
-
-export function shownProjects(projects, todos, front) {
-  const held = new Set(todos.map((t) => t.project));
-  return projects.filter((p) => p.id === front || held.has(p.id))
-    .toSorted((a, b) => Number(b.id === front) - Number(a.id === front) || String(a.name).localeCompare(String(b.name)));
 }
 
 export function ageOf(at, now) {

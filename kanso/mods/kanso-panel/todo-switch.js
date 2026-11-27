@@ -1,22 +1,37 @@
 import { exec, appHome, agents } from "herdr";
-import { paths } from "./platform-paths.js";
-import { deliver } from "./deliver.js";
+import { paths, pathApi, appHomeDir } from "./platform-paths.js";
+import { serviceOn } from "./platform-host.js";
+import { systemApi } from "./platform-system.js";
+import { deliver, machineOf } from "./deliver.js";
 
 export const TODO_SCRIPT = ["kanso-panel", "kanso-todo"];
-const here = (address) => !/^[^/]+\//.test(String(address ?? ""));
+const TODO_RUN_MS = 120_000;
+const NO_SH = /spawn sh ENOENT|'sh' is not recognized|^sh: (command )?not found/im;
+const on = (machine) => (address) => (machineOf(address) ?? "") === (machine ?? "");
 
-export const runTodo = (verb) => exec("sh", [paths.join(appHome(), "mods", ...TODO_SCRIPT), verb], { timeout: 120_000 })
+const scriptThere = async (platform, run) => {
+  const home = await systemApi(platform, run).userHome();
+  return pathApi(platform === "windows" ? "windows" : "macos").join(appHomeDir(platform, home), "mods", ...TODO_SCRIPT);
+};
+
+export const runTodo = (verb, machine = null) => (machine
+  ? serviceOn(async (platform, run) => {
+    const r = await run("sh", [await scriptThere(platform, run), verb], { timeout: TODO_RUN_MS }).catch((e) => ({ code: -1, stdout: "", stderr: String(e?.message ?? e) }));
+    return platform === "windows" && r.code !== 0 && NO_SH.test(r.stderr ?? "") ? { ...r, windows: true } : r;
+  }, machine)
+  : exec("sh", [paths.join(appHome(), "mods", ...TODO_SCRIPT), verb], { timeout: TODO_RUN_MS }))
   .catch((e) => ({ code: -1, stdout: "", stderr: String(e?.message ?? e) }));
 
-export const todoOn = async () => {
-  const r = await runTodo("status");
+export const todoOn = async (machine = null) => {
+  const r = await runTodo("status", machine);
+  if (r.windows) return "windows";
   return r.code === 0 ? r.stdout.trim().split("\n").at(-1) === "on" : null;
 };
 
-export async function tellAgents(timer) {
-  const rule = await runTodo("rule");
+export async function tellAgents(timer, machine = null) {
+  const rule = await runTodo("rule", machine);
   if (rule.code !== 0 || !rule.stdout.trim()) return { tried: 0, sent: 0, unsure: 0, waiting: 0, failed: true };
-  const local = agents().filter((a) => here(a.address));
+  const local = agents().filter((a) => on(machine)(a.address));
   const told = local.filter((a) => a.status !== "blocked");
   const waiting = local.length - told.length;
   const sent = await Promise.all(told.map((a) => deliver(timer, a.address, rule.stdout.trim(), "kansō").catch(() => ({ code: 1 }))));
@@ -25,11 +40,11 @@ export async function tellAgents(timer) {
 
 const agentsWord = (n) => (n === 1 ? "agent" : "agents");
 
-export function toldWords({ tried = 0, sent = 0, unsure = 0, waiting = 0, failed = false } = {}, installed = true) {
+export function toldWords({ tried = 0, sent = 0, unsure = 0, waiting = 0, failed = false } = {}, installed = true, machine = null) {
   if (failed) return "The rule could not be read, so no agent was told.";
   const later = installed ? " New conversations read it when they start." : "";
   const held = waiting ? ` ${waiting} ${waiting === 1 ? "is" : "are"} waiting on ${waiting === 1 ? "its" : "their"} own question; answer, then tell agents again.` : "";
-  if (!tried) return waiting ? `No agent was told.${held}${later}` : `No agent is running here now.${later}`;
+  if (!tried) return waiting ? `No agent was told.${held}${later}` : `No agent is running ${machine ? `on ${machine}` : "here"} now.${later}`;
   const refused = tried - sent - unsure;
   const parts = [
     sent === tried ? `Told ${sent} running ${agentsWord(sent)}.` : `Told ${sent} of ${tried} running agents.`,

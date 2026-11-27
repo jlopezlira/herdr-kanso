@@ -1,7 +1,7 @@
 import { div } from "gpui-kit";
-import { v_flex, h_flex } from "gpui-base";
+import { v_flex } from "gpui-base";
 import { run, theme, focused, agents, terminals, panes, spaces, window, shared, setShared } from "herdr";
-import { G, T, PR, tokens } from "./ui.js";
+import { G, PR, tokens } from "./ui.js";
 import { iconButton } from "./ui-button.js";
 import { row } from "./ui-row.js";
 import { section } from "./ui-section.js";
@@ -26,7 +26,6 @@ const PASSES = 64;
 const KEPT = "kanso.timeline";
 const NONE = Object.freeze({ kind: null, file: null });
 const LOST = Object.freeze({ kind: null, file: null, lost: true });
-const DOT = " \u{b7} ";
 
 const agentOf = (address) => (address ? agents().find((a) => a.address === address) ?? null : null);
 const pulse = (address) => { const a = agentOf(address); return a ? `${a.status}:${a.seq}` : ""; };
@@ -249,15 +248,11 @@ export class Timeline {
 
   render(cx) {
     const c = tokens(theme());
-    const a = agentOf(this.follow);
-    const named = a ? shownName(this.follow, panes().find((p) => p.terminal === this.follow)) : "";
+    const title = div().text_size(PR.title).text_color(c.text).child("Timeline");
     const count = this.state.count;
-    const meta = [named, machineOf(this.follow), count ? `${count} ${count === 1 ? "prompt" : "prompts"}` : null].filter(Boolean).join(DOT);
-    const title = h_flex().min_w(0).gap(G.sm).items_center()
-      .child(div().flex_none().text_size(PR.title).text_color(c.text).child("Timeline"))
-      .child(div().min_w(0).truncate().text_size(T.body).text_color(c.dim).child(meta));
+    const whose = this.follow ? [shownName(this.follow, panes().find((p) => p.terminal === this.follow)), machineOf(this.follow), count ? `${count} ${count === 1 ? "prompt" : "prompts"}` : null].filter(Boolean).join(" \u{b7} ") : "";
     const tools = [
-      this.follow ? iconButton("timeline-pin", "pin", this.pinned ? "Follow the pane in focus" : "Stay on this agent", (cx) => this.pin(cx), c, { active: Boolean(this.pinned) }) : null,
+      this.follow ? iconButton("timeline-pin", "pin", this.pinned ? `On ${whose}. Follow the pane in focus` : `Stay on ${whose}`, (cx) => this.pin(cx), c, { active: Boolean(this.pinned) }) : null,
       refreshTool("timeline-refresh", c, { busy: this.reading != null, enabled: Boolean(this.follow), working: "Reading the conversation" }, (cx) => this.refresh(cx)),
     ];
     return scrollPage.call(this, "kanso-timeline", c, true, (column) => column

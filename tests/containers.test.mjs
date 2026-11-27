@@ -198,10 +198,11 @@ test("the panel draws every part with each element in one place", async () => {
 });
 
 // The panel open and nothing changing: Docker answers as a fixed engine, every command counted.
-async function openPanel({ hung = false, drawn = false, failing = [], inspect = inspected(["aa11aa11aa11"]), images = null, disk = "" } = {}) {
+async function openPanel({ hung = false, drawn = false, failing = [], inspect = inspected(["aa11aa11aa11"]), images = null, disk = "", active = true, down = false } = {}) {
   const { fixture, loadMod } = await import("./perf-harness.mjs");
   const f = fixture();
-  const docker = { ps: [webRow()], images: images ?? row("sha256:1111aaaa2222", "web", "latest", "100MB", "2 days ago"), down: false,
+  f.state.active = active;
+  const docker = { ps: [webRow()], images: images ?? row("sha256:1111aaaa2222", "web", "latest", "100MB", "2 days ago"), down,
     failing: new Set(failing), inspect, disk, partialFind: false, engines: { "desktop-linux": LOCAL }, config: JSON.stringify({ currentContext: "desktop-linux" }), volumes: "pgdata\tlocal", hung, rejects: null, broken: false };
   if (drawn) Object.assign(f.host, gpuiHost());
   const spaces = f.host.spaces;
@@ -235,13 +236,14 @@ async function openPanel({ hung = false, drawn = false, failing = [], inspect = 
   const plain = (args) => (args[0] === "--context" ? args.slice(2) : args);
   const asked = (verb) => f.state.processes.filter((p) => (verb === "find" ? p.command === "find" : p.command === "docker" && plain(p.args).join(" ").startsWith(verb))).length;
   const fresh = () => { f.state.processes.length = 0; };
+  const forward = async () => { f.state.active = true; view.render(f.cx); await f.advance(0); };
   const words = () => texts(view.render(f.cx));
   const again = async () => { view.refresh(f.cx, true, true); await f.settle(); };
   const lose = async () => { docker.psResult = failure("host unavailable"); await again(); };
   const click = (tag) => calls(find(view.render(f.cx), (el) => el.tag === tag), "on_click").at(-1).at(-1)({}, f.cx);
   const press = async (tag) => { click(tag); click(tag); await f.settle(); };
   const removed = () => f.state.processes.filter((p) => p.command === "docker" && p.args.some((arg) => DESTRUCTIVE.includes(arg))).map((p) => p.args.join(" "));
-  return { f, view, docker, asked, fresh, words, again, lose, click, press, removed };
+  return { f, view, docker, asked, fresh, forward, words, again, lose, click, press, removed };
 }
 
 test("the Containers panel at rest asks Docker only what can change by itself in a minute", async () => {
@@ -305,6 +307,56 @@ test("another Docker context chosen outside kansō is read within a minute, with
   fresh();
   await f.advance(60_000);
   assert.deepEqual([asked("context inspect"), asked("info")], [1, 1], "a new context: it and its memory limit are read");
+});
+
+test("Containers opened behind the window reads once and shows its containers, then waits for the front", async () => {
+  const { f, view, asked, fresh, forward } = await openPanel({ active: false });
+  assert.equal(asked("ps"), 1, "nothing to show yet: one read");
+  assert.deepEqual(clone(view.groups.flatMap((g) => g.containers.map((c) => c.name))), ["web-1"]);
+  fresh();
+  await f.advance(60_000);
+  assert.equal(f.state.processes.filter((p) => p.command === "docker").length, 0, "with its containers shown it asks Docker nothing while behind");
+  await forward();
+  assert.equal(asked("ps"), 1, "coming forward reads again");
+});
+
+test("A refresh asked in front while the first read is slow waits for the front again when the window went behind meanwhile", async () => {
+  const { f, docker, asked, forward } = await openPanel({ active: false, hung: true });
+  await forward();
+  f.state.active = false;
+  docker.hung = false;
+  await f.advance(15_000);
+  assert.equal(asked("context inspect"), 1, "the first read, and no second one behind");
+  await forward();
+  assert.equal(asked("context inspect"), 2, "the front gets its read");
+});
+
+test("A forced refresh that waited behind the window still walks the compose files when the window is back", async () => {
+  const { f, view, docker, asked, fresh, forward } = await openPanel();
+  await f.advance(5_000);
+  docker.hung = true;
+  await f.advance(5_000);
+  assert.equal(view.reading, true, "the third read is held");
+  view.refresh(f.cx, true, true);
+  f.state.active = false;
+  docker.hung = false;
+  fresh();
+  await f.advance(20_000);
+  assert.equal(view.reading, false);
+  assert.equal(asked("find"), 0, "nothing starts behind");
+  await forward();
+  assert.ok(asked("find") > 0, "the forced walk was kept for the front");
+});
+
+test("Containers that showed Docker stopped asks nothing more once the window is behind", async () => {
+  const { f, view, fresh } = await openPanel({ down: true });
+  assert.equal(view.state, "down");
+  assert.equal(view.groups, null);
+  f.state.active = false;
+  await f.advance(10_000);
+  fresh();
+  await f.advance(60_000);
+  assert.equal(f.state.processes.filter((p) => p.command === "docker").length, 0);
 });
 
 test("coming forward after being behind reads everything at once", async () => {

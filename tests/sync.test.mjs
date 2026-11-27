@@ -6,7 +6,7 @@ import { copyFile, mkdir, readdir, readFile, writeFile } from "node:fs/promises"
 import path from "node:path";
 import test from "node:test";
 import { promisify } from "node:util";
-import { success, temporary, timedContext } from "./helpers.mjs";
+import { storeShared, success, temporary, timedContext } from "./helpers.mjs";
 
 const runFile = promisify(execFile);
 const { costRange } = await import("../kanso/mods/kanso-spend/core/costs.mjs");
@@ -453,11 +453,12 @@ test("Spend's fifteen-second tick discovers peers only once per twelve hours.", 
   let now = NOW;
   const { cx, drain } = timedContext([]);
   cx.timer.every = (ms, tick) => { ticks.push({ ms, tick }); return { cancel() {} }; };
+  const state = { "kanso.spend.snapshotAt": now };
   const view = await spendPage({
-    costs: {}, nodeBinary: "node", lastSnapshotAt: now,
+    costs: {}, nodeBinary: "node",
     db: { async machinesOff() { calls.push("stored"); return []; } },
   }, {
-    Date: class extends Date { static now() { return now; } },
+    ...storeShared(state), Date: class extends Date { static now() { return now; } },
     readTextFile: async (file) => file.endsWith("config.json") ? JSON.stringify(on()) : null,
     hc: async (args) => { calls.push(Array.from(args)); return success("[]"); },
   });
@@ -470,7 +471,7 @@ test("Spend's fifteen-second tick discovers peers only once per twelve hours.", 
 
   for (const elapsed of [ms, ms * 2, sync.EXCHANGE_MS - 1, sync.EXCHANGE_MS]) {
     now = NOW + elapsed;
-    view.lastSnapshotAt = now;
+    state["kanso.spend.snapshotAt"] = now;
     tick(cx);
     await drain();
     assert.deepEqual(calls.splice(0), elapsed === sync.EXCHANGE_MS ? discovery : [], `after ${elapsed} ms`);

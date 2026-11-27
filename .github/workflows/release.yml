@@ -49,6 +49,7 @@ jobs:
       KANSO_BRANCH: ${{ github.ref_name }}
       INPUT_BRANCH: ${{ inputs.branch }}
       INPUT_KIND: ${{ inputs.kind }}
+      KANSO_RELEASE_SHA: ${{ github.sha }}
       INPUT_OPTIONS: ${{ inputs.options }}
     steps:
       - name: Require the branch
