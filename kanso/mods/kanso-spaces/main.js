@@ -2511,7 +2511,7 @@ export default class Spaces extends RetryingView {
       const span = entries.slice(i, starts[k + 1] ?? entries.length), slab = keys[i] && span.length > 1;
       const rows = span.map((e) => {
         if (e.a.asleep) return { a: e.a, h: H.line, el: this.asleepLine(e.a, t) };
-        const m = this.more(e, { ...ctx, glowScope: [space?.id ?? e.a.space, keys[i]] }, unnamedComputer(machineOf(e.a.address), heading));
+        const m = this.more(e, { ...ctx, glowScope: [space, slab ? keys[i] : null] }, unnamedComputer(machineOf(e.a.address), heading));
         return { a: e.a, h: sessionHeight(m), el: agentSession(e.a, indent ? 2 : 1, c, this.navRow(e.a, e.lines.length ? this.rowFor(e.a) : e.a.pane ? this.rowOf(e.a, mine, space) : null), m) };
       });
       return { key: keys[i], rows, slab };
@@ -2548,7 +2548,7 @@ export default class Spaces extends RetryingView {
     const state = glowState(this.glowReady?.[a.address], scope, a.status === "working" && !a.dozing, ctx.now);
     if (this.drawnGlow) this.drawnGlow[a.address] = state;
     return {
-      glow: state.pose,
+      glow: state.fade ? { pose: state.pose, ...state.fade } : state.pose,
       step: show ? stepOf(a, this.steps, ctx.now) : null,
       tasks: this.showTasks === false || a.sub ? [] : (this.tasks[a.address] ?? []).map((x) => ({ command: x.command, time: duration(Math.max(0, ctx.now - x.start)) })),
     };

@@ -2,9 +2,15 @@ import { EASE } from "./ui.js";
 
 export const glowState = (prior, scope, working, now) => {
   const moved = prior?.scope !== scope;
-  if (working) return { scope, pose: moved ? "entering" : "working", next: moved ? now : Infinity };
-  if (moved && prior?.pose === "working") return { scope, pose: "release", next: now };
-  if (prior?.pose === "working" || prior?.pose === "release") return { scope, pose: "leaving", next: now + EASE.duration };
-  if (!moved && prior?.pose === "leaving" && prior.next > now) return prior;
-  return { scope, pose: "rest", next: Infinity };
+  const frame = (pose, next = Infinity, fade = null) => ({ scope, pose, next, fade });
+  if (working) return !prior || (moved && prior.pose !== "working") ? frame("entering", now) : frame("working");
+  if (prior?.pose === "working" || prior?.pose === "release" || prior?.pose === "leaving") {
+    const until = prior.fade?.until ?? now + EASE.duration;
+    if (until > now) {
+      const left = until - now;
+      const fade = { until, opacity: (left / EASE.duration) ** 3, duration: left };
+      return moved ? frame("release", now, fade) : frame("leaving", until, prior.pose === "leaving" ? prior.fade : fade);
+    }
+  }
+  return frame("rest");
 };
