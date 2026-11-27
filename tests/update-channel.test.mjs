@@ -96,6 +96,12 @@ test("The toast names the tag, and Stable never offers an older release", async 
   assert.equal(ahead.updater.current(), "3.31.0-beta.1");
 });
 
+const tabBarOn = async (host, state = {}) => {
+  const { Tabs } = await loadTabs(host);
+  const { Updater } = await loadUpdater(host);
+  return Object.assign(new Tabs(), { updater: Object.assign(new Updater(), state) });
+};
+
 test("Choosing Early looks again, and Stable stays the default until then", async () => {
   const store = {
     "kanso.update": { autoCheck: true, tag: "3.30.0-beta.2", latest: "3.29.0" },
@@ -111,9 +117,7 @@ test("Choosing Early looks again, and Stable stays the default until then", asyn
       return success("");
     },
   });
-  const { Tabs } = await loadTabs(host);
-  const { Updater } = await loadUpdater(host);
-  const tabBar = Object.assign(new Tabs(), { updater: new Updater() });
+  const tabBar = await tabBarOn(host);
   const { cx, drain } = tickingContext([]);
   tabBar.updater.start(cx);
   await drain();
@@ -143,9 +147,7 @@ test("Changing the channel leaves the tab bar free for the next command while Gi
   let answer;
   const held = new Promise((resolve) => { answer = resolve; });
   const host = updaterHost({ store, onExec: async (command) => { if (command === "git") await held; return command === "git" ? success(listing) : success(""); } });
-  const { Tabs } = await loadTabs(host);
-  const { Updater } = await loadUpdater(host);
-  const tabBar = Object.assign(new Tabs(), { updater: Object.assign(new Updater(), { installed: "3.30.0" }) });
+  const tabBar = await tabBarOn(host, { installed: "3.30.0" });
   const { cx, drain } = tickingContext([]);
   const waited = new Promise((resolve) => { setTimeout(() => resolve("held"), 200); });
   const handled = await Promise.race([tabBar.barCommand("kanso-tabs.channel", cx).then(() => "free"), waited]);
