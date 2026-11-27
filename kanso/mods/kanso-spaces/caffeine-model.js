@@ -57,10 +57,10 @@ const shGuard = (os) => [`: ${MARK}`, ...shHead(os), 'echo $$ > "$d/pid"',
   `while sleep ${CHECK_S}; do [ "$(cat "$d/pid" 2>/dev/null)" = "$$" ] || exit 0; if low; then lock; rm -f "$d/pid"; echo battery > "$d/reason"; restore; exit 0; fi; done`].join("\n");
 
 const shScripts = (os) => ({
-  on: [...shHead(os), "lock", "alive && { echo on; exit 0; }", "low && { echo low; exit 0; }", 'rm -f "$d/reason" "$d/pid"',
+  on: [...shHead(os), "lock", 'rm -f "$d/setup"', "alive && { echo on; exit 0; }", "low && { echo low; exit 0; }", 'rm -f "$d/reason" "$d/pid"',
     `printf '%s\\n' ${shellQuote(shGuard(os))} > "$d/guard.sh" || exit 1`, ...os.hold, `{ ${os.start}; } || { ${os.failed}; exit 0; }`, SH_WAIT, os.failed].join("\n"),
-  off: [...shHead(os), "lock", 'if alive; then kill "$p" 2>/dev/null; fi', 'rm -f "$d/pid"', "stop", 'if [ -f "$d/prior" ]; then restore || { echo setup; exit 0; }; fi', "echo off"].join("\n"),
-  read: [...shHead(os), "lock", 'r=$(cat "$d/reason" 2>/dev/null); rm -f "$d/reason"', "alive && { echo on; exit 0; }", 'if [ -f "$d/prior" ]; then restore || { echo on; exit 0; }; fi', 'rm -f "$d/pid"', "stop", '[ -n "$r" ] || ! low || r=low', 'echo "off $r"'].join("\n"),
+  off: [...shHead(os), "lock", 'rm -f "$d/setup"', 'if alive; then kill "$p" 2>/dev/null; fi', 'rm -f "$d/pid"', "stop", 'if [ -f "$d/prior" ]; then restore || { echo setup; exit 0; }; fi', "echo off"].join("\n"),
+  read: [...shHead(os), "lock", 'r=$(cat "$d/reason" 2>/dev/null); rm -f "$d/reason"', "alive && { echo on; exit 0; }", 'if [ -f "$d/prior" ]; then restore || { echo on; exit 0; }; fi', 'rm -f "$d/pid"', "stop", '[ -n "$r" ] || r=$(cat "$d/setup" 2>/dev/null)', 'echo "off $r"'].join("\n"),
 });
 
 const PS_HEAD = [
@@ -82,7 +82,7 @@ const PS = {
     "Start-Process powershell -WindowStyle Hidden -ArgumentList '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', ('\"' + $gf + '\"')",
     "for ($i = 0; $i -lt 20; $i++) { if (Test-Alive) { 'on'; exit }; Start-Sleep -Milliseconds 100 }", "'missing'"].join("\n"),
   off: [...PS_HEAD, "if (Test-Alive) { Stop-Process -Id ((Get-Content $pf -Raw) -as [int]) -Force -ErrorAction SilentlyContinue }", "Remove-Item $pf -ErrorAction SilentlyContinue", "'off'"].join("\n"),
-  read: [...PS_HEAD, "$r = Get-Content $rf -Raw -ErrorAction SilentlyContinue; Remove-Item $rf -ErrorAction SilentlyContinue", "if (Test-Alive) { 'on'; exit }", "Remove-Item $pf -ErrorAction SilentlyContinue", "if (-not \"$r\".Trim() -and (Test-Low)) { $r = 'low' }", "'off ' + \"$r\".Trim()"].join("\n"),
+  read: [...PS_HEAD, "$r = Get-Content $rf -Raw -ErrorAction SilentlyContinue; Remove-Item $rf -ErrorAction SilentlyContinue", "if (Test-Alive) { 'on'; exit }", "Remove-Item $pf -ErrorAction SilentlyContinue", "'off ' + \"$r\".Trim()"].join("\n"),
 };
 
 const SCRIPTS = { macos: shScripts(MAC), linux: shScripts(LINUX) };
@@ -126,8 +126,8 @@ export function setupArgv(os, verb = "on") {
   const steps = SETUP[kind];
   if (!steps || !DONE[verb]) return null;
   const then = `sh -c ${shellQuote(SCRIPTS[kind][verb])}`;
-  return ["sh", "-c", [...steps, `[ "$ok" = 0 ] || { echo 'Caffeine was not set up.'; exit 1; }`, `r=$(${then})`,
-    `if [ "$r" = ${verb} ]; then echo ${shellQuote(DONE[verb])}; elif [ "$r" = low ]; then echo 'Caffeine is set up but did not turn on: the battery is at ${LOW}% or less.'; else echo 'Caffeine is set up but did not change.'; fi`].join("\n")];
+  return ["sh", "-c", [...steps, `[ "$ok" = 0 ] || { echo 'Caffeine was not set up.'; exit 1; }`, SH_DIR, `r=$(${then})`,
+    `if [ "$r" = ${verb} ]; then echo ${shellQuote(DONE[verb])}; elif [ "$r" = low ]; then echo low > "$d/setup"; echo 'Caffeine is set up but did not turn on: the battery is at ${LOW}% or less.'; else echo 'Caffeine is set up but did not change.'; fi`].join("\n")];
 }
 
 const osOfProbe = (result) => {

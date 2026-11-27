@@ -65,11 +65,12 @@ test("The Caffeine panel lists every connected computer even with Computers hidd
   assert.deepEqual(Object.keys(s.store["kanso.caffeine"]).toSorted(), ["", "grey"]);
 });
 
-test("A turn on through its set up that the battery refuses stops waiting for the password and says so once", async () => {
+test("A turn on through its set up that the battery refuses stops waiting for the password and says so once, even read twice at the same time", async () => {
   const s = await sidebar({ replies: { "grey on": "setup", "grey read": "off low" } });
   s.connected.push("grey");
   s.view.setCaffeine("grey", true, s.cx);
-  await s.afterSetup();
+  await s.drain();
+  await Promise.all([s.view.readCaffeine("grey"), s.view.readCaffeine("grey")]);
   await s.afterSetup();
   const { setup, battery } = s.view.caffeine.look("grey");
   assert.deepEqual({ setup, battery }, { setup: false, battery: true });

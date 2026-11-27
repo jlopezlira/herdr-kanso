@@ -103,6 +103,12 @@ const stopGuard = (pid) => {
   try { process.kill(-pid, "SIGKILL"); } catch (error) { if (error.code !== "ESRCH") throw error; }
 };
 
+const macTools = async (t) => {
+  const ready = hasSh && (await exec(sh, ["-c", "command -v plutil"])).code === 0;
+  if (!ready) t.skip("Requires /bin/sh and plutil");
+  return ready;
+};
+
 const fakeMac = async (t) => {
   const dir = await temporary(t);
   const home = join(dir, "Home & <test>");
@@ -132,14 +138,11 @@ const fakeMac = async (t) => {
     const output = await stdoutOf(command, args, { env, limit: 15_000 });
     assert.equal(output, word, verb);
   };
-  return { call, guards, read, running, state, write, markerExists: () => fileExists(join(dir, "boot-marker")) };
+  return { call, env, guards, read, running, state, write, markerExists: () => fileExists(join(dir, "boot-marker")) };
 };
 
 test("On macOS Caffeine keeps a guard running, restores sleep when turned off or after a restart, and respects low battery and locks", async (t) => {
-  if (!hasSh || (await exec(sh, ["-c", "command -v plutil"])).code !== 0) {
-    t.skip("Requires /bin/sh and plutil");
-    return;
-  }
+  if (!(await macTools(t))) return;
   const { call, guards, read, running, state, write, markerExists } = await fakeMac(t);
   const prior = join(state, "prior");
   const start = async () => {
@@ -165,7 +168,6 @@ test("On macOS Caffeine keeps a guard running, restores sleep when turned off or
   await write("battery", "12");
   const started = (await guards()).length;
   await call("on", "low");
-  await call("read", "off low");
   assert.equal(await read("sleep-disabled"), "0");
   assert.equal((await guards()).length, started);
   assert.equal(await fileExists(prior), false);
@@ -304,6 +306,20 @@ test("A turn on from the panel while its set up is waiting for the password ends
     await caffeine.change("", true);
     assert.equal(caffeine.look("").setup, false, reply);
   }
+});
+
+test("A turn on through the macOS set up that the battery refuses is read by every reader, whatever the power, until Caffeine changes", async (t) => {
+  if (!(await macTools(t))) return;
+  const { call, env, write } = await fakeMac(t);
+  await write("sudo", `#!/bin/sh\ncase "$1" in /usr/sbin/visudo|install) exit 0 ;; esac\n${sudoStub}\n`);
+  await write("battery", "12");
+  const [command, ...args] = setupArgv("macos", "on");
+  assert.match(await stdoutOf(command, args, { env, limit: 15_000 }), /did not turn on/);
+  await call("read", "off low");
+  await write("battery", "90");
+  await call("read", "off low");
+  await call("off", "off");
+  await call("read", "off");
 });
 
 test("Caffeine reports a turn-off due to low battery only once", async () => {
