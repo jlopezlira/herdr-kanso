@@ -756,6 +756,8 @@ test("Tasks shows, per agent, the plans of the agents in a space that has no fol
     storedTodo(id, { id: "helper", text: "Write the tests", detail: "One per fix", by: "t2", created: 20 }),
     storedTodo(id, { id: "earlier", text: "Earlier work", detail: "From a session that ended", by: "t9", created: 5 }),
     storedTodo(other.id, { id: "elsewhere", text: "Another project", detail: "Not in this space", by: "t7", created: 30 }),
+    storedTodo(other.id, { id: "lead-elsewhere", text: "Old acme step", detail: "Another project of the same agent", by: "t1", created: 1 }),
+    storedTodo(id, { id: "deep", text: "Check one fix", detail: "A helper's helper", by: "t3", created: 25 }),
   ];
   for (const step of steps) await writeTodo(db, step);
   const { page } = await startTasks(db, {
@@ -764,13 +766,29 @@ test("Tasks shows, per agent, the plans of the agents in a space that has no fol
     terminals: () => [
       { address: "t1", labels: { "kanso.shown": "Lead" } },
       { address: "t2", parent: "t1", labels: { "kanso.shown": "Tester" } },
+      { address: "t3", parent: "t2", labels: { "kanso.shown": "Checker" } },
       { address: "t7", labels: { "kanso.shown": "Other" } },
     ],
   });
   const panel = page();
-  for (const step of steps.slice(0, 3)) assert.ok(control(panel, stepId(step)), step.text);
-  assert.equal(control(panel, stepId(steps[3])), null);
+  for (const step of [...steps.slice(0, 3), steps[5]]) assert.ok(control(panel, stepId(step)), step.text);
+  for (const step of steps.slice(3, 5)) assert.equal(control(panel, stepId(step)), null, step.text);
   const words = texts(panel);
-  for (const name of ["Lead", "Tester", "An agent that has ended"]) assert.ok(words.includes(name), name);
+  for (const name of ["Lead", "Tester", "Checker", "An agent that has ended"]) assert.ok(words.includes(name), name);
   assert.ok(!words.includes("Other"));
+});
+
+test("Tasks for a space with a folder leaves out its agents' steps in other projects.", async (t) => {
+  const { db, id } = await shopKdb(t);
+  const other = await saveProject(db, acme);
+  const here = storedTodo(id, { id: "here", text: "Shop plan", detail: "In this project", by: "t1", created: 10 });
+  const away = storedTodo(other.id, { id: "away", text: "Old acme step", detail: "Another project", by: "t1", created: 20 });
+  for (const step of [here, away]) await writeTodo(db, step);
+  const { page } = await startTasks(db, {
+    spaces: () => [{ ...shop, id: "shop-space", active: true }],
+    agents: () => [{ address: "t1", space: "shop-space", status: "working" }],
+    terminals: () => [{ address: "t1", labels: { "kanso.shown": "Lead" } }],
+  });
+  assert.ok(control(page(), stepId(here)));
+  assert.equal(control(page(), stepId(away)), null);
 });

@@ -56,17 +56,24 @@ export class Tasks {
   spaceAgents() {
     const id = spaces().find((s) => s.active)?.id;
     const top = new Set(agents().filter((a) => id && a.space === id).map((a) => a.address));
-    const under = (seen) => new Set([...seen, ...terminals().filter((k) => seen.has(k.parent)).map((k) => k.address)]);
-    return under(under(top));
+    const under = (seen) => {
+      const next = new Set([...seen, ...terminals().filter((k) => seen.has(k.parent)).map((k) => k.address)]);
+      return next.size === seen.size ? seen : under(next);
+    };
+    return under(top);
+  }
+
+  viewedPlace() {
+    const active = spaces().find((s) => s.active);
+    if (active?.folder && (active.machine || placeOf(null, active.folder) !== placeOf(null, home()))) return this.frontProject();
+    const mine = this.spaceAgents();
+    const touched = (t) => Math.max(t.created ?? 0, t.started_at ?? 0, t.done_at ?? 0);
+    return this.todos.filter((t) => t.by && mine.has(seenAddress(t.by, t.on))).toSorted((a, b) => touched(b) - touched(a))[0]?.place ?? null;
   }
 
   shownSteps() {
-    const active = spaces().find((s) => s.active);
-    const foldered = Boolean(active?.folder) && (Boolean(active.machine) || placeOf(null, active.folder) !== placeOf(null, home()));
-    const mine = this.spaceAgents();
-    const ours = (t) => Boolean(t.by) && mine.has(seenAddress(t.by, t.on));
-    const places = new Set([...this.todos.filter(ours).map((t) => t.place), ...(foldered ? [this.frontProject()] : [])]);
-    return this.todos.filter((t) => ours(t) || places.has(t.place));
+    const place = this.viewedPlace();
+    return place ? this.todos.filter((t) => t.place === place) : [];
   }
 
   frontProject() {
