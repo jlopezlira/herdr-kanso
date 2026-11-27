@@ -1,8 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { load, nodes, texts, svgsOf, themed, calls, arg, KIT_NIGHT, popoverHost as host, everyDrawn as every, blockedDots, repoText, numberArguments } from "./helpers.mjs";
+import { load, nodes, texts, svgsOf, themed, calls, arg, KIT_NIGHT, popoverHost as host, everyDrawn as every, blockedDots, repoText, numberArguments, timedContext } from "./helpers.mjs";
 import { loadSidebar, mountedState, withParts, recorder } from "./sidebar-fixtures.mjs";
-import { mountChrome } from "./mod-fixtures.mjs";
+import { loadWorkspaceChrome, mountChrome } from "./mod-fixtures.mjs";
 
 const compositions = async () => themed({
   kit: await load("kanso-panel/kit.js", ["menu", "stack"], host()),
@@ -157,6 +157,54 @@ test("The window's title block draws the Header's lights' row: in Dawn Mode the 
   assert.deepEqual(texts((await draw({ "kanso.update": { channel: "beta", tag: "4.1.1-beta.1" } })).el), ["4.2.0"], "a recorded tag of another version yields to the files on disk");
   assert.deepEqual(texts((await draw({ "kanso.update": { channel: "beta" } }, null)).el), [], "nothing until the installed version is read");
   assert.deepEqual(texts((await draw({ "kanso.update": { channel: "beta" }, "sidebar.collapsed": true })).el), [], "collapsed, the pill does not fit");
+});
+
+const dawnVersion = async (readTextFile) => {
+  const timers = [];
+  const { cx, drain } = timedContext(timers);
+  const update = { channel: "beta", tag: "4.2.0-rc.3" };
+  const { WorkspaceChrome } = await loadWorkspaceChrome({
+    ...host(), theme: () => KIT_NIGHT, props: () => ({}), appHome: () => "/app",
+    shared: (key) => key === "kanso.update" ? update : null, readTextFile,
+  });
+  const view = new WorkspaceChrome();
+  view.power = () => {};
+  view.init({}, cx);
+  await drain();
+  const retry = async () => {
+    const index = timers.findIndex(([ms]) => ms > 0);
+    assert.notEqual(index, -1, "a miss schedules a retry");
+    const [[, run]] = timers.splice(index, 1);
+    run(cx);
+    await drain();
+  };
+  return { draw: () => view.render(cx), drain, retry, delays: () => timers.map(([ms]) => ms).filter((ms) => ms > 0) };
+};
+
+test("When the version file stays missing, Dawn Mode waits between reads even if the sidebar redraws", async () => {
+  let reads = 0;
+  const { draw, drain, retry, delays } = await dawnVersion(async () => { reads += 1; return null; });
+  for (let i = 0; i < 3; i += 1) {
+    assert.deepEqual(texts(draw()), []);
+    await drain();
+  }
+  assert.equal(reads, 1, "redraws do not read the file again");
+  assert.deepEqual(delays(), [5_000]);
+  await retry();
+  assert.equal(reads, 2, "the timer reads the file again");
+  assert.deepEqual(delays(), [5_000], "only one subsequent retry is scheduled");
+});
+
+test("Dawn Mode shows the version and restores sunrise replay after an invalid version file is corrected", async () => {
+  let manifest = '{"version":"invalid"}';
+  const { draw, retry, delays } = await dawnVersion(async () => manifest);
+  assert.deepEqual(texts(draw()), []);
+  manifest = '{"version":"4.2.0"}';
+  await retry();
+  const header = draw();
+  assert.deepEqual(texts(header), ["4.2.0-rc.3"]);
+  assert.ok(byTip(header, "Replay the sunrise"));
+  assert.deepEqual(delays(), [], "a valid version stops retries");
 });
 
 // The collapsed sidebar, recorded, with one agent that needs you.

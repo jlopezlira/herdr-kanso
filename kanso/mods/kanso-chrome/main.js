@@ -79,7 +79,7 @@ export default class WorkspaceChrome extends View {
 
   readInstalled(cx) {
     whenInstalled(cx, (version) => {
-      if (parseRelease(version)) this.installed = version;
+      if (parseRelease(version) && !parseRelease(version).channel) this.installed = version;
       else this.timer.after(INSTALLED_RETRY_MS, (later) => this.readInstalled(later));
     });
   }
