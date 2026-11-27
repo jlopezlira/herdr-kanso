@@ -5,14 +5,17 @@ import { G, T } from "./ui.js";
 import { toggleSwitch } from "./ui-toggle.js";
 import { stateBlock } from "./ui-state.js";
 import { paths } from "./platform-paths.js";
+import { tellAgents, toldWords } from "./todo-switch.js";
 
 const SUPPORTED = new Set(["macos", "linux"]);
 
 const lastLine = (text) => String(text ?? "").trim().split("\n").at(-1) ?? "";
 
 export class ScriptSwitch {
-  constructor(cx, { id, script, labels }) {
+  constructor(cx, { id, script, labels, after = null }) {
     this.id = id;
+    this.after = after;
+    this.note = null;
     this.script = script;
     this.labels = labels;
     this.platform = window()?.platform ?? "macos";
@@ -48,6 +51,7 @@ export class ScriptSwitch {
       const r = await this.run(next ? "install" : "uninstall");
       this.on = await this.status();
       this.said = r.code === 0 ? null : { text: lastLine(r.stderr) || lastLine(r.stdout) || "It could not be changed" };
+      this.note = next && this.after ? await this.after(after.timer, this.on === true) : null;
       this.busy = false;
       this.wanted = null;
       after.notify();
@@ -61,11 +65,12 @@ export class ScriptSwitch {
       .child(h_flex().w_full().gap(G.md).items_center()
         .child(v_flex().flex_1().min_w(0).gap(G.hair)
           .child(div().text_size(T.card).text_color(c.text).child(label))
-          .when(looking, (el) => el.child(div().text_size(T.body).text_color(c.dim).child("Looking…"))))
+          .when(looking, (el) => el.child(div().text_size(T.body).text_color(c.dim).child("Looking…")))
+          .when(Boolean(this.note) && !looking, (el) => el.child(div().text_size(T.body).text_color(c.dim).child(this.note))))
         .child(toggleSwitch(this.id, this.busy ? this.wanted === true : this.on === true, (next, cx) => this.set(next, cx), c, { label, disabled: this.busy || this.on === null })))
       .children(this.said ? [stateBlock(`${this.id}-error`, c, { text: this.said.text })] : []);
   }
 }
 
 export const markdownOpener = (cx) => new ScriptSwitch(cx, { id: "markdown-opener", script: ["kanso-tabs", "markdown-handler.sh"], labels: { macos: "Open .md files in kansō", linux: "Open .md and text files in kansō" } });
-export const agentsTodo = (cx) => new ScriptSwitch(cx, { id: "agents-todo", script: ["kanso-panel", "kanso-todo"], labels: { macos: "Agents keep the to-do", linux: "Agents keep the to-do" } });
+export const agentsTodo = (cx) => new ScriptSwitch(cx, { id: "agents-todo", script: ["kanso-panel", "kanso-todo"], labels: { macos: "Agents keep the to-do", linux: "Agents keep the to-do" }, after: async (timer, installed) => toldWords(await tellAgents(timer), installed) });

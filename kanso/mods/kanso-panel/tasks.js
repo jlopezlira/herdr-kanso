@@ -1,10 +1,10 @@
 import { div } from "gpui-kit";
 import { v_flex } from "gpui-base";
-import { run, theme, spaces, home, openOverlay, agents, terminals, knownAgents, window } from "herdr";
+import { run, theme, spaces, home, agents, terminals, knownAgents, window } from "herdr";
 import { deliver } from "./deliver.js";
 import { shownName } from "./marks.js";
 import { machineOf } from "./remote-file.js";
-import { G, PR, DIALOG, tokens } from "./ui.js";
+import { G, T, PR, tokens } from "./ui.js";
 import { row, tool } from "./ui-row.js";
 import { section } from "./ui-section.js";
 import { stateBlock, undoLine } from "./ui-state.js";
@@ -12,10 +12,10 @@ import { emptyState, skeletonOf } from "./kit.js";
 import { field, TextField } from "./ui-field.js";
 import { scrollPage, pageHeader } from "./ui-page.js";
 import { kdbOn, newId, seenAddress } from "./kdb.js";
+import { runTodo, todoOn, tellAgents, toldWords } from "./todo-switch.js";
 import { tryOrAsync } from "./pure.js";
 import { TODO_MS, DONE, PROJECTS, TODOS, HELD_TODOS, todoText, todosOf, addTodoSql, doneSql, dropTodoSql, placeOf, withSpaces, shownProjects, ageOf } from "./todo.js";
 
-const AGENTS_SWITCH = "Agents keep the to-do";
 
 export class Tasks {
   constructor(db) { this.db = db; }
@@ -39,6 +39,10 @@ export class Tasks {
     this.failure = null;
     this.timer = cx.timer;
     this.remote = {};
+    this.agentsOn = null;
+    this.turning = false;
+    this.turned = null;
+    if (window()?.platform !== "windows") cx.spawn(async (cx) => { this.agentsOn = await todoOn(); cx.notify(); });
     this.load(cx);
     cx.timer.every(TODO_MS, (next) => this.load(next));
   }
@@ -114,13 +118,18 @@ export class Tasks {
     const op = { ...change };
     this.pending = { ...this.pending, [change.id]: op };
     cx.notify();
-    cx.spawn(async (cx) => {
+    const done = (this.queued?.[change.id] ?? Promise.resolve()).then(async () => {
       try {
         await (await this.dbOn(on)).run(await sql());
         after();
       } catch {
         this.failure = { text: failed, retry: (cx) => this.write(on, sql, failed, change, cx, after) };
       }
+    });
+    this.queued = { ...this.queued, [change.id]: done };
+    cx.spawn(async (cx) => {
+      await done;
+      if (this.queued[change.id] === done) this.queued = Object.fromEntries(Object.entries(this.queued).filter(([id]) => id !== change.id));
       await this.read();
       this.pending = Object.fromEntries(Object.entries(this.pending).filter(([id, held]) => id !== change.id || held !== op));
       cx.notify();
@@ -150,7 +159,7 @@ export class Tasks {
   drop(todo, cx) {
     this.removed = null;
     this.write(todo.on, async () => dropTodoSql(todo.id), `Can't delete ${todo.text}`, { id: todo.id, gone: true }, cx, () => {
-      this.removed = { words: `Deleted ${todo.text}`, undo: (cx) => this.write(todo.on, async () => `${addTodoSql({ ...todo, project: todo.home ?? todo.project })}${doneSql(todo.id, todo.done_at)}`, `Can't bring back ${todo.text}`, { id: todo.id, todo }, cx, () => { this.removed = null; }) };
+      this.removed = { words: `Deleted ${todo.text}`, undo: (cx) => this.write(todo.on, async () => `${addTodoSql({ ...todo, project: todo.home ?? await this.homeOf(todo.project) })}${doneSql(todo.id, todo.done_at)}`, `Can't bring back ${todo.text}`, { id: todo.id, todo }, cx, () => { this.removed = null; }) };
     });
   }
 
@@ -239,8 +248,29 @@ export class Tasks {
       .children(folded ? [] : listed(done));
   }
 
-  openSwitch() {
-    openOverlay({ mod: "kanso-settings", kind: "dialog", width: DIALOG.settingsW, height: DIALOG.settingsH, props: { page: "pieces", find: AGENTS_SWITCH } });
+  turnOn(cx) {
+    if (this.turning) return;
+    this.turning = true;
+    this.turned = null;
+    cx.notify();
+    cx.spawn(async (cx) => {
+      const r = this.agentsOn ? { code: 0 } : await runTodo("install");
+      this.agentsOn = await todoOn();
+      const told = await tellAgents(cx.timer);
+      const warned = r.code === 0 ? "" : String(r.stderr || r.stdout || "It could not be turned on").trim().split("\n").at(-1);
+      this.turned = { text: [warned, toldWords(told, this.agentsOn === true)].filter(Boolean).join(" "), failed: Boolean(warned) || told.failed };
+      this.turning = false;
+      cx.notify();
+    });
+  }
+
+  emptyBlock(c) {
+    if (window()?.platform === "windows") return emptyState({ text: "Each project's to-do shows here" })("tasks-none", c);
+    const action = this.turning ? "" : this.agentsOn ? "Tell running agents" : "Turn on for my agents";
+    const text = this.agentsOn ? "Your agents add each step here as they work" : "Turn this on and Claude Code, Codex and Pi add each step of their work here";
+    return v_flex().w_full().gap(G.sm)
+      .child(emptyState({ text, action })("tasks-none", c, { onClick: (cx) => this.turnOn(cx) }))
+      .children(this.turned ? [this.turned.failed ? stateBlock("tasks-turned", c, { text: this.turned.text }) : div().text_size(T.body).text_color(c.dim).text_center().child(this.turned.text)] : []);
   }
 
   notes(c) {
@@ -260,8 +290,7 @@ export class Tasks {
       : v_flex().w_full().gap(G.xl).children([
         ...this.notes(c),
         ...listed.map((p) => this.projectBlock(p, todos, c, now)),
-        ...(todos.length ? [] : [window()?.platform === "windows" ? emptyState({ text: "Each project's to-do shows here" })("tasks-none", c)
-          : emptyState({ text: "Your agents' to-do for each project shows here as they work", action: AGENTS_SWITCH })("tasks-none", c, { onClick: () => this.openSwitch() })]),
+        ...(todos.length ? [] : [this.emptyBlock(c)]),
       ]);
     return scrollPage("kanso-tasks", c, true, (column) => column
       .child(pageHeader(div().text_size(PR.title).text_color(c.text).child("Tasks"), []))

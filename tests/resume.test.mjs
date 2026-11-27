@@ -374,6 +374,56 @@ test("Resume shows Open on another computer and focuses that terminal instead of
   });
 });
 
+test("Resume uses the agent command installed on the conversation's computer, not this computer.", async (t) => {
+  const machine = "lab";
+  const program = "claude";
+  const remoteRun = ["C:/lab/claude.exe", "--model", "sonnet"];
+  const knownAgents = t.mock.fn(async () => [{ key: program, run: remoteRun, installed: true }]);
+  const run = t.mock.fn();
+  const { Spaces } = await loadSpaces({
+    knownAgents, run, spaces: () => [], home: () => home,
+    exec: async () => success("Win32NT"),
+  });
+  const view = new Spaces();
+  view.known = [{ key: program, run: ["/local/claude"], installed: true }];
+  const folder = "C:/work/shop";
+  await view.resumeOne({}, { id: ID, program, cwd: folder, machine });
+  await nextTurn();
+
+  same(run.mock.calls.map(({ arguments: args }) => args), [
+    ["space.new", { folder, machine, argv: [...remoteRun, "--resume", ID] }],
+  ]);
+  same(knownAgents.mock.calls.map(({ arguments: args }) => args), [[{ on: machine }]]);
+});
+
+test("Two remote Resume choices start one space even while the computer is looking up the agent.", async (t) => {
+  const lookup = Promise.withResolvers();
+  const knownAgents = t.mock.fn(() => lookup.promise);
+  knownAgents.mock.mockImplementationOnce(async () => []);
+  const launches = [];
+  const { Spaces } = await loadSpaces({
+    ...storeShared({}),
+    knownAgents,
+    exec: async () => success("Win32NT"),
+    run: (command) => launches.push(command),
+    spaces: () => [],
+    home: () => home,
+  });
+  const resume = (conversation) => new Spaces().resumeOne({}, conversation);
+  const conversation = { id: ID, program: "pi", cwd: "C:/work/shop", machine: "lab" };
+  await resume(conversation);
+  assert.deepEqual(launches, [], "An attempt without a transcript starts nothing");
+
+  const ready = { ...conversation, file: "C:/work/chat.jsonl" };
+  const attempts = [resume(ready), resume(ready)];
+  await nextTurn();
+  lookup.resolve([{ key: "pi", installed: true, run: ["pi"] }]);
+  await Promise.all(attempts);
+  await nextTurn();
+  assert.deepEqual(launches, ["space.new"], "Retry is allowed but the same conversation only opens once");
+  assert.equal(knownAgents.mock.callCount(), 2, "Only the first attempt and one retry look up the agent");
+});
+
 test("Resume waits for a lookup past the 12-second deadline and focuses the existing terminal.", async () => {
   const address = "t1";
   const conversation = { id: ID, program: "codex", cwd };
