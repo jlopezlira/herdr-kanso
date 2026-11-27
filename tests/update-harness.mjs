@@ -141,7 +141,8 @@ function classify(result) {
 }
 export function stopped(result, log) {
   const how = classify(result);
-  return how === "killed" || lastLine(log) === "killed" ? "killed" : how;
+  if (how === "killed" || how !== "failed: ") return how;
+  return lastLine(log) === "killed" ? "killed" : how;
 }
 async function writeChecker(root, { record = false } = {}) {
   if (!windows) {
@@ -434,6 +435,7 @@ export async function small(t) {
     if (sabotage) await writeFile(join(root, "sabotage"), "");
     const plan = from === "1.0.0" ? ['{"merged":true}', "1", '{"yours":true}\n'] : ["", "", ""];
     const [keys, layout, baseKeys] = plan;
+    await rm(join(dir, "op.log"), { force: true });
     const result = await host.foreground({
       url, home, dir, id: "op", want: "1.1.0", from, checker, stamp: "20261108-1200",
       keys, layout, base: base ?? baseKeys,

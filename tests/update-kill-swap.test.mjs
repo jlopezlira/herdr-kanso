@@ -8,7 +8,8 @@ test("a stop whose exit code never arrives still counts as killed", () => {
   assert.equal(stopped({ code: 1, stderr: "", signal: null }, "running\nkilled\n"), "killed");
   assert.equal(stopped({ code: "137", stderr: "", signal: null }, ""), "killed");
   assert.equal(stopped({ code: 1, stderr: "killed\n", signal: null }, ""), "killed");
-  assert.equal(stopped({ code: 1, stderr: "the download failed\n", signal: null }, "the download failed\n"), "failed: the download failed");
+  assert.equal(stopped({ code: 0, stderr: "", signal: null }, "killed\n"), "ok");
+  assert.equal(stopped({ code: 1, stderr: "the download failed\n", signal: null }, "killed\n"), "failed: the download failed");
 });
 
 test("An undoing killed as its stage was being removed never takes back what it put back", async (t) => {
