@@ -93,14 +93,15 @@ const groundOf = (c, { current, hover, title, wash }) => {
 // A wrapped name runs over as many lines as it needs, such as a review thread's comment.
 // A group's head stands over the rows of its group: strong, in the row's ink, one step up the type scale from a heading.
 // In the sidebar (`names`) every name is the name size: a head strong, a session medium, in the ink its state gives it.
-const nameOf = (id, c, { name, heading, group, title, ink, glint, wrap, names }) => (glint ? glinting(name, c, id, glint) : div().min_w(0).text_color(ink)
-  .when(wrap, (el) => el.flex_1().line_height(LH.body))
-  .when(!wrap, (el) => el.truncate())
+const typed = (el, { heading, group, title, names }) => el
   .when(heading || group || title, (el) => el.font_semibold())
   .when(names && !(heading || group || title), (el) => el.font_medium())
   .when(group || names, (el) => el.text_size(T.card))
   .when(names && (heading || group), (el) => el.flex_none().max_w(W.buttonLabel))
-  .when(title, (el) => el.text_size(T.page))
+  .when(title, (el) => el.text_size(T.page));
+const nameOf = (id, c, { name, ink, glint, wrap, ...kind }) => (glint ? typed(glinting(name, c, id, glint), kind) : typed(div().min_w(0).text_color(ink)
+  .when(wrap, (el) => el.flex_1().line_height(LH.body))
+  .when(!wrap, (el) => el.truncate()), kind)
   .child(name));
 
 // Meta and flag give way to the tools while they show.

@@ -88,11 +88,14 @@ test("The strip polls every 150 ms while a pane is held and stops the fast chain
 test("The strip's idle tick reads the dividers every time it fires, also a moment early", async (t) => {
   const { f, strip } = await mountStrip();
   const adopt = t.mock.method(strip, "adopt", () => false);
+  const idle = f.state.timers.filter(({ every, ms }) => every && ms === 1000);
+  assert.equal(idle.length, 1);
   await f.advance(1000);
   const reads = adopt.mock.callCount();
-  strip.adoptedAt = Date.now() - 999;
-  strip.pollAdopt(f.cx, true);
+  strip.adoptedAt = f.state.now - 999;
+  idle[0].fn(f.cx);
   assert.equal(adopt.mock.callCount(), reads + 1);
+  strip.adoptedAt = f.state.now - 999;
   strip.pollAdopt(f.cx);
   assert.equal(adopt.mock.callCount(), reads + 1, "a poll left over from a drag does not read again within the second");
 });
