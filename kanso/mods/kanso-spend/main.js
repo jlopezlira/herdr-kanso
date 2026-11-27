@@ -288,7 +288,7 @@ export default class TokenSpend extends View {
       if (generation !== this.generation || this.closed) return;
       if (this.syncWaiting === "fold" && startedAt >= this.syncEnded) this.syncWaiting = false;
       if (scans) {
-        if (failure || payload?.scan?.retry) this.lastSnapshotAt = Date.now() - REFRESH_MS + RETRY_MS;
+        if (failure || payload?.scan?.retry || payload?.scan?.partial) this.lastSnapshotAt = Date.now() - REFRESH_MS + RETRY_MS;
         else if (!payload?.scan?.partial) setShared(SNAPSHOT_AT, this.lastSnapshotAt);
       }
       if (payload) {

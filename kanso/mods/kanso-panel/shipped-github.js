@@ -70,23 +70,23 @@ export const github = {
     const waiting = (await store.prs()).filter((p) => p.provider === "github" && !p.merged && !p.closed).map((p) => p.created);
     const back = since ? Math.min(since, ...waiting) : from;
     const due = monthsIn(Math.min(from, fresh ? from : back), now + 1).filter((m) => !done.has(m.month) || (!fresh && m.end > back));
+    const keep = async (rows) => { await verify(); await store.save(rows, login); };
     const read = (months) => mapSeries(months, async (m, i) => {
       progress(`pull requests, ${months.length - i} ${months.length - i === 1 ? "month" : "months"} to go`);
       const end = Math.min(m.end, now + 1000);
-      await store.save([...await prsCreated(login, m.start, end), ...await prsIn(mergedIn(login), m.start, end)], login);
+      await keep([...await prsCreated(login, m.start, end), ...await prsIn(mergedIn(login), m.start, end)]);
       await store.monthRead("github", m.month, now, login);
     });
     const merged = await store.meta("github.merged");
     const startOf = (month) => new Date(Number(month.slice(0, 4)), Number(month.slice(5)) - 1, 1).getTime();
     const backfill = merged || !done.size ? [] : monthsIn(Math.min(...[...done].map(startOf)), now + 1).filter((m) => done.has(m.month) && !due.some((d) => d.month === m.month));
-    if (due.length || backfill.length) await verify();
     await read(due);
     if (backfill.length) progress("merged pull requests");
-    await mapSeries(backfill, async (m) => store.save(await prsIn(mergedIn(login), m.start, Math.min(m.end, now + 1000)), login));
+    await mapSeries(backfill, async (m) => keep(await prsIn(mergedIn(login), m.start, Math.min(m.end, now + 1000))));
     if (!merged) await store.setOwnMeta("github.merged", "1", login);
     if (since && !force && now - since < every) return { unchecked: Number(await store.meta("github.unchecked")) || 0 };
-    await verify();
-    if (since) await store.save(await prsIn(updatedIn(login), since - 3600000, now + 1000), login);
+    if (since) await keep(await prsIn(updatedIn(login), since - 3600000, now + 1000));
+    else await verify();
     await store.setOwnMeta("github.updated", String(now), login);
     progress("what reached production");
     const prod = await inMain(pendingByRepo(await store.prs()));

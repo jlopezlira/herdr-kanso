@@ -321,14 +321,11 @@ export class Shipped {
     this.forced = false;
     this.syncing = true; this.resync = false; this.syncError = null;
     const login = this.login;
-    this.syncConfirmed = null;
     const verify = async () => {
-      if (this.syncConfirmed === login) return;
       const who = await apiLogin();
       if (!who) throw new Error("GitHub could not be read.");
       this.verified = who;
       if (who !== login) throw new AccountChanged(who);
-      this.syncConfirmed = who;
     };
     spawnAndNotify(cx, async (cx) => {
       try {
