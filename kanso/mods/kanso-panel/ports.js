@@ -201,7 +201,7 @@ export class Ports {
   pictureTask(work) { return (cx) => work(cx, this.picture()); }
 
   refresh(cx, { history = false, then = null, now = false } = {}) {
-    if (this.front.behind()) { this.front.rest(); return; }
+    if (this.front.rests(this.list !== null || this.reading)) return;
     this.front.woke();
     this.readRemotes(cx, now);
     if (this.reading) { if (then) cx.timer.after(1000, (cx) => this.refresh(cx, { history, then })); return; }

@@ -113,8 +113,7 @@ export default class Containers extends View {
   // `now`: after an action, a read that overtakes any still going; the timer's waits its turn.
   // `all` (Refresh, coming forward): everything, the memory limit and context too.
   refresh(cx, soon = false, again = false) {
-    if (this.front.behind()) {
-      this.front.rest();
+    if (this.front.rests(this.groups !== null || this.reading)) {
       try { this.ticker?.cancel(); } catch { /* already gone */ }
       this.ticker = null;
       return;

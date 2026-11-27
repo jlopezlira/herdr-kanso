@@ -41,6 +41,7 @@ the branch's rules.
 - A to-do marked done or deleted while it is still being saved on another computer keeps that change.
 - Resume a conversation on another computer starts it with that computer's own agent command, once however fast you choose it.
 - Agents keep the to-do leaves a Codex config.toml alone when its own developer_instructions sits after a multiline string or a comment, and works when kansō's folder has an apostrophe.
+- Ports and Containers opened while the Herdr window is behind another show what they read instead of staying on their loading placeholder, which kept the window redrawing about 20 times a second.
 
 ## [4.2.0] - 2026-11-26
 

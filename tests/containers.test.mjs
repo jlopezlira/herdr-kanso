@@ -198,9 +198,10 @@ test("the panel draws every part with each element in one place", async () => {
 });
 
 // The panel open and nothing changing: Docker answers as a fixed engine, every command counted.
-async function openPanel({ hung = false, drawn = false, failing = [], inspect = inspected(["aa11aa11aa11"]), images = null, disk = "" } = {}) {
+async function openPanel({ hung = false, drawn = false, failing = [], inspect = inspected(["aa11aa11aa11"]), images = null, disk = "", active = true } = {}) {
   const { fixture, loadMod } = await import("./perf-harness.mjs");
   const f = fixture();
+  f.state.active = active;
   const docker = { ps: [webRow()], images: images ?? row("sha256:1111aaaa2222", "web", "latest", "100MB", "2 days ago"), down: false,
     failing: new Set(failing), inspect, disk, partialFind: false, engines: { "desktop-linux": LOCAL }, config: JSON.stringify({ currentContext: "desktop-linux" }), volumes: "pgdata\tlocal", hung, rejects: null, broken: false };
   if (drawn) Object.assign(f.host, gpuiHost());
@@ -305,6 +306,19 @@ test("another Docker context chosen outside kansō is read within a minute, with
   fresh();
   await f.advance(60_000);
   assert.deepEqual([asked("context inspect"), asked("info")], [1, 1], "a new context: it and its memory limit are read");
+});
+
+test("Containers opened behind the window reads once and shows its containers, then waits for the front", async () => {
+  const { f, view, asked, fresh } = await openPanel({ active: false });
+  assert.equal(asked("ps"), 1, "nothing to show yet: one read");
+  assert.deepEqual(clone(view.groups.flatMap((g) => g.containers.map((c) => c.name))), ["web-1"]);
+  fresh();
+  await f.advance(60_000);
+  assert.equal(f.state.processes.filter((p) => p.command === "docker").length, 0, "with its containers shown it asks Docker nothing while behind");
+  f.state.active = true;
+  view.render(f.cx);
+  await f.advance(0);
+  assert.equal(asked("ps"), 1, "coming forward reads again");
 });
 
 test("coming forward after being behind reads everything at once", async () => {

@@ -36,6 +36,19 @@ test("a panel behind the window rests, then reads once when it is in front", asy
   assert.deepEqual(reads, [cx]);
 });
 
+test("behind the window a panel with something to show waits, and one with nothing reads, both due a read in front", async () => {
+  const state = { active: false };
+  const { Front } = await fronted(state);
+  for (const showing of [true, false]) {
+    const front = new Front();
+    assert.equal(front.rests(showing), showing);
+    state.active = true;
+    assert.equal(front.woke(), true, "the front owes a read either way");
+    assert.equal(front.rests(showing), false, "in front nothing rests");
+    state.active = false;
+  }
+});
+
 test("in front can mean shown as well as the window", async () => {
   const state = { active: true, hidden: true };
   const { Front, timers } = await fronted(state);
