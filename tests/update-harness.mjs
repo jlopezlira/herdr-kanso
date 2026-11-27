@@ -129,12 +129,20 @@ function rawExec(command, args, options = {}) {
     });
   });
 }
+function lastLine(text) {
+  const lines = String(text ?? "").replace(/^\uFEFF/, "").trim().split(/\r?\n/).filter(Boolean);
+  return lines.findLast((l) => !/^\s*(\+|At |~)/.test(l)) ?? lines.at(-1) ?? "";
+}
 function classify(result) {
-  if (result?.signal === "SIGKILL" || result?.signal === "SIGTERM" || result?.code === 137) return "killed";
+  if (result?.signal === "SIGKILL" || result?.signal === "SIGTERM" || Number(result?.code) === 137) return "killed";
   if (result?.code === 0) return "ok";
-  const lines = String(result?.stderr ?? "").replace(/^\uFEFF/, "").trim().split(/\r?\n/).filter(Boolean);
-  const line = lines.findLast((l) => !/^\s*(\+|At |~)/.test(l)) ?? lines.at(-1) ?? "";
-  return `failed: ${line}`;
+  const line = lastLine(result?.stderr);
+  return line === "killed" ? "killed" : `failed: ${line}`;
+}
+export function stopped(result, log) {
+  const how = classify(result);
+  if (how === "killed" || how !== "failed: ") return how;
+  return lastLine(log) === "killed" ? "killed" : how;
 }
 async function writeChecker(root, { record = false } = {}) {
   if (!windows) {
@@ -427,12 +435,14 @@ export async function small(t) {
     if (sabotage) await writeFile(join(root, "sabotage"), "");
     const plan = from === "1.0.0" ? ['{"merged":true}', "1", '{"yours":true}\n'] : ["", "", ""];
     const [keys, layout, baseKeys] = plan;
+    await rm(join(dir, "op.log"), { force: true });
     const result = await host.foreground({
       url, home, dir, id: "op", want: "1.1.0", from, checker, stamp: "20261108-1200",
       keys, layout, base: base ?? baseKeys,
     }, { env: { ...process.env, ...downloads.env, KANSO_UPDATE_STOP: String(stop), ...env }, limit: 60000 });
     await rm(join(root, "sabotage"), { force: true });
-    return classify(result);
+    const log = await readFile(join(dir, "op.log"), "utf8").catch(() => "");
+    return stopped(result, log);
   };
   const recover = (home) => host.recover(home, join(home, ".kanso-updates"));
   const fresh = async (name) => { const home = join(root, name); await cp(base, home, { recursive: true }); return home; };
