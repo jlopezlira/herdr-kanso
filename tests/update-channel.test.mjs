@@ -222,3 +222,16 @@ test("Updates offers Stable or Early, and Early is the only place that asks for 
   assert.equal(drawn(ui).includes("Star on GitHub"), false);
   assert.match(drawn(ui), /3\.30\.0-beta\.2/);
 });
+
+test("At start the tab bar brings the agents' to-do rule up to date, except on Windows", async () => {
+  const calls = [];
+  const exec = async (program, args) => { calls.push([program, ...args]); return { code: 0, stdout: "", stderr: "" }; };
+  const on = async (platform) => {
+    const { Tabs } = await loadTabs({ exec, appHome: () => "/app", window: () => ({ platform }) });
+    await new Tabs().refreshTodoRule();
+  };
+  await on("macos");
+  assert.deepEqual(calls, [["sh", "/app/mods/kanso-panel/kanso-todo", "refresh"]]);
+  await on("windows");
+  assert.equal(calls.length, 1);
+});

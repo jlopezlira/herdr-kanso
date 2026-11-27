@@ -664,3 +664,21 @@ for (const [verb, args, exit] of [["list", [], 0], ["done", ["nonexistent"], 1]]
     assert.equal(ran.stdout, "");
   });
 }
+
+test("Refresh brings an older installed rule up to date, leaves a current one untouched, and installs nothing while off.", unixTodo, async (t) => {
+  const { run, claude, pi, codex, readInstructions } = await agentInstructionFiles(t, CODEX_TABLE);
+  await run("refresh");
+  assert.equal(await run("status"), "off");
+
+  await run("install");
+  const current = await readInstructions();
+  const older = (text) => text.replace("Show your plan in kansō", "Keep this project's to-do list in kansō");
+  for (const path of [claude, pi, codex]) await writeFile(path, older(await readFile(path, "utf8")));
+  await run("refresh");
+  assert.deepEqual(await readInstructions(), current);
+
+  const before = await Promise.all([claude, pi, codex].map(async (path) => (await stat(path)).mtimeMs));
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  await run("refresh");
+  assert.deepEqual(await Promise.all([claude, pi, codex].map(async (path) => (await stat(path)).mtimeMs)), before);
+});

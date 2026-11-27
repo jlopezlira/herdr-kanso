@@ -72,6 +72,13 @@ ours() { [ -f "$claude_rule" ] && [ "$(head -n 1 "$claude_rule")" = "<!-- $mark 
 top_key() { [ -f "$2" ] || return 1; grep -Eq "$1|\\\\[uU][0-9a-fA-F]{4}" "$2"; [ $? -ne 1 ]; }
 end_line() { [ -s "$1" ] && [ -n "$(tail -c1 "$1")" ] && echo >> "$1"; true; }
 
+fresh() {
+  line=$(rule | sed -n 2p)
+  for f in "$claude_rule" "$pi_append" "$codex_config"; do
+    if [ -f "$f" ] && grep -q "$mark" "$f" && ! grep -qxF -- "$line" "$f"; then return 1; fi
+  done
+}
+
 status() {
   if ours || has_block "$pi_append" || top_block "$codex_config"; then echo on; else echo off; fi
 }
@@ -155,6 +162,7 @@ case "$1" in
     [ "$n" = 1 ] || fail "you have no open step $2 in this project" ;;
   rule) rule ;;
   steps) echo "add start done list" ;;
+  refresh) if [ "$(status)" = on ] && ! fresh; then install >/dev/null; fi; exit 0 ;;
   status) status ;;
   install) install ;;
   uninstall) uninstall ;;
