@@ -43,10 +43,10 @@ test("The network interfaces are read from macOS ifconfig, from Linux ip address
 
 test("The home lookup on Mac and Linux lists only home addresses, with IPv4 first and scoped link-local last", async () => {
   const { homeAddresses } = await nearby();
-  const lan = ["192.168.4.91", "fd3a::5", "fe80::2%en0"];
+  const lan = ["192.168.7.91", "fd12::5", "fe80::2%en0"];
   const found = [...lan.toReversed(), "fd7a:115c:a1e0::1", "100.64.1.2", "8.8.8.8", "2001:4860::8888", "fe80::2"];
   const mac = found.map((ip) => `${ip.includes(":") ? "ipv6_address" : "ip_address"}: ${ip}`).join("\n");
-  const linux = [...found.map((ip) => `${ip} STREAM light.local`), "192.168.4.92 DGRAM", `${lan[0]} DGRAM`].join("\n");
+  const linux = [...found.map((ip) => `${ip} STREAM light.local`), "192.168.7.92 DGRAM", `${lan[0]} DGRAM`].join("\n");
   for (const text of [mac, linux]) assert.deepEqual(clone(homeAddresses(text)), lan);
 });
 
@@ -55,12 +55,12 @@ test("The Mac home lookup keeps the interface of a link-local address and lists 
   const resolved = [
     "name: dark.local",
     "ipv6_address: fe80:e::86c:554f:de80:21a5",
-    "ipv6_address: fd3a:e205:4a50:1:c97:da:9640:4717",
+    "ipv6_address: fd12:3456:789a:1:c97:da:9640:4717",
     "",
     "name: dark.local",
-    "ip_address: 192.168.4.136",
+    "ip_address: 192.168.7.136",
   ].join("\n");
-  assert.deepEqual(clone(homeAddresses(resolved)), ["192.168.4.136", "fd3a:e205:4a50:1:c97:da:9640:4717", "fe80:0::86c:554f:de80:21a5%14"]);
+  assert.deepEqual(clone(homeAddresses(resolved)), ["192.168.7.136", "fd12:3456:789a:1:c97:da:9640:4717", "fe80:0::86c:554f:de80:21a5%14"]);
 });
 
 test("Neighbours on this computer's own networks come first, then the rest of its /24 or /22, never this computer or a far network", async () => {
@@ -119,12 +119,12 @@ test("A Tailscale computer keeps the private addresses it has on this network", 
         TailscaleIPs: ["100.64.1.2"],
         CurAddr: "192.168.1.20:41641",
         Addrs: [
-          "192.168.1.20:41641", "10.1.2.3:41641", "[fd3a::5]:41641", "100.64.1.2:41641", "8.8.8.8:53", "fd7a:115c:a1e0::1",
+          "192.168.1.20:41641", "10.1.2.3:41641", "[fd12::5]:41641", "100.64.1.2:41641", "8.8.8.8:53", "fd7a:115c:a1e0::1",
         ],
       },
     },
   });
-  assert.deepEqual(clone(tailnet(text).peers[0].lan), ["192.168.1.20", "10.1.2.3", "fd3a::5"]);
+  assert.deepEqual(clone(tailnet(text).peers[0].lan), ["192.168.1.20", "10.1.2.3", "fd12::5"]);
 });
 
 const peer = (over = {}) => ({ name: "grey", ip: "100.64.1.2", tailscaleSsh: false, ...over });

@@ -308,7 +308,7 @@ test("Signing in to a plain computer, with a port and without one, makes a key, 
   await once({ name: "can", target: "can@10.0.0.7:2222", via: "" }, "can@10.0.0.7", "2222");
 });
 
-const bareAddress = "192.168.4.135";
+const bareAddress = "192.168.7.135";
 const keyDenied = "Permission denied (publickey).";
 const userLookup = ["-G", "--", bareAddress];
 const sshUserLine = (user) => `user ${user}`;
@@ -1096,7 +1096,7 @@ test("The setup action and both guides are disabled when no agent is installed",
   }
 });
 
-const darkIp = "100.69.99.51";
+const darkIp = "100.64.0.12";
 const darkHost = "dark";
 const darkName = `jj@${darkHost}`;
 const darkAddress = `jj@${darkIp}`;
@@ -1198,7 +1198,7 @@ const addTypedDark = async (answer, { typed = darkName, addError = null, lan = "
 };
 
 test("Typing a computer's ssh name adds it over the local network when the away route does not answer", async () => {
-  const lan = "192.168.4.25";
+  const lan = "192.168.7.25";
   const hostOption = `HostName=${lan}`;
   const { installs } = await addTypedDark((_target, args) => args.includes(hostOption)
     ? success("") : sshRefusal("No route to host"), { lan });
@@ -1268,9 +1268,9 @@ test("A failed typed attempt shows its message once, below the field and not on 
 
 const isLanKnock = (program, args) => program === "sh" && args[1].includes("xargs");
 const arpOf = (ips) => ips.map((ip) => `? (${ip}) at aa:bb:cc:dd:ee:ff`).join("\n");
-const lightIp = "192.168.4.91";
+const lightIp = "192.168.7.91";
 const plainLightAdd = ["machine", "add", "light", "--install", "--json"];
-const lightTailnetIp = "100.100.235.59";
+const lightTailnetIp = "100.64.0.11";
 const lightTailnetName = "light-1";
 const lightPeer = (over = {}) => peer({
   DNSName: `${lightTailnetName}.tail.ts.net.`, HostName: "light", TailscaleIPs: [lightTailnetIp], sshHostKeys: [], ...over,
@@ -1313,11 +1313,11 @@ const lightDialog = async ({
         const ip = args.at(-1) === "light.local" ? lightIp : "";
         return success(ip ? (program === "getent" ? `${ip} STREAM light.local` : `ip_address: ${ip}\n`) : "");
       }
-      if (program === "ifconfig") return success("inet 192.168.4.2 netmask 0xffffff00");
+      if (program === "ifconfig") return success("inet 192.168.7.2 netmask 0xffffff00");
       if (program === "arp") return success(arpOf(neighbors));
       if (program === "pwsh" && platform === "windows") {
         const script = args.at(-1);
-        if (script.includes("Get-NetIPAddress")) return success("192.168.4.2/24");
+        if (script.includes("Get-NetIPAddress")) return success("192.168.7.2/24");
         if (script.includes("ConnectAsync") && script.includes(lightIp)) {
           knocks.push(lightIp);
           return success(answers ? lightIp : "");
@@ -1419,7 +1419,7 @@ const assertLightVia = (install, name) => {
   assert.equal(install[nameFlag + 1], name);
   const via = install.indexOf("--via");
   assert.notEqual(via, -1);
-  assert.match(install[via + 1], /HostName=192\.168\.4\.91.*; exec ssh light /);
+  assert.match(install[via + 1], /HostName=192\.168\.7\.91.*; exec ssh light /);
 };
 
 test("A computer from ssh config that answers at home is marked On this network and added over that network first", async () => {
@@ -1455,7 +1455,7 @@ test("When only the home route answers and asks for a key, Sign in uses that rou
   assert.deepEqual(installs, []);
   const job = view.jobs["ssh:light"];
   assert.equal(job.reach, "keyonly");
-  assert.match(job.plan.via, /HostName=192\.168\.4\.91/);
+  assert.match(job.plan.via, /HostName=192\.168\.7\.91/);
   const drawn = view.render();
   assert.ok(texts(drawn).some((word) => word.includes("takes keys only")));
   const sign = find(drawn, (el) => arg(el, "accessibility_label") === "Sign in");
@@ -1533,11 +1533,11 @@ test("A port typed with a computer's name takes priority over its SSH config on 
   assert.equal(installs.length, 1);
   const via = installs[0].indexOf("--via");
   assert.notEqual(via, -1);
-  assert.match(installs[0][via + 1], /HostName=192\.168\.4\.91.*-p 2222 jj@light .*; exec ssh -p 2222 jj@light /);
+  assert.match(installs[0][via + 1], /HostName=192\.168\.7\.91.*-p 2222 jj@light .*; exec ssh -p 2222 jj@light /);
 });
 
 test("A computer already listed from ssh config is not listed again by its home address", async () => {
-  const other = "192.168.4.92";
+  const other = "192.168.7.92";
   const dialog = await lightDialog({ neighbors: [lightIp, other] });
   const { view, knocks } = dialog;
   assert.ok(knocks.includes(lightIp) && knocks.includes(other));
