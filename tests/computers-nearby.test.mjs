@@ -4,7 +4,6 @@ import { clone, load } from "./helpers.mjs";
 
 const nearby = () => load("kanso-computers/nearby.js", ["interfacesOf", "neighborsOf", "candidates", "homeAddresses"]);
 const reach = () => load("kanso-computers/reach.js", ["nearbyOnly", "tailnet", "planFor"]);
-const setup = () => load("kanso-computers/setup.js", ["setupPrompt"]);
 
 const IFCONFIG = [
   "en0: flags=8863<UP,BROADCAST,SMART,RUNNING,SIMPLEX,MULTICAST> mtu 1500",
@@ -162,10 +161,23 @@ test("On Windows a computer on Tailscale keeps its Tailscale route, with no shel
   }
 });
 
-test("Set up with an agent names the local route and the Tailscale route, and never asks for a password", async () => {
-  const { setupPrompt } = await setup();
-  const text = setupPrompt({ platform: "linux" });
-  assert.match(text, /native ssh/);
-  assert.match(text, /Tailscale/);
-  assert.match(text, /Never ask me for a password/);
+test("The home network guide explains how to turn on SSH and copy the key without Tailscale or sharing a password", async () => {
+  const { homeSetupPrompt } = await load("kanso-computers/setup.js", ["homeSetupPrompt"]);
+  const prompt = homeSetupPrompt({ platform: "linux" });
+  for (const step of [
+    /one step at a time/,
+    /<name>\.local/,
+    /Remote Login/,
+    /openssh-server/,
+    /OpenSSH Server/,
+    /ask me to run `ssh-copy-id <user>@<name>\.local` myself/,
+    /Do not install or use Tailscale/,
+    /Never ask me for a password/,
+  ]) assert.match(prompt, step);
+});
+
+test("The Tailscale guide explains how to sign in and turn on Tailscale SSH one step at a time", async () => {
+  const { tailscaleSetupPrompt } = await load("kanso-computers/setup.js", ["tailscaleSetupPrompt"]);
+  const prompt = tailscaleSetupPrompt();
+  for (const step of [/one step at a time/, /`tailscale up`/, /tailscale set --ssh/]) assert.match(prompt, step);
 });

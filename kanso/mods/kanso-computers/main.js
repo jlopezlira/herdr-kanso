@@ -7,7 +7,7 @@ import { findExplainer, explainWith } from "./explain.js";
 import { scanNearby, homesOf } from "./nearby-scan.js";
 import { lanOf } from "./nearby.js";
 import { lanProbeArgs, lanRecord, resolvedHost, preferHome } from "./lan-route.js";
-import { setupPrompt } from "./setup.js";
+import { homeSetupPrompt, tailscaleSetupPrompt } from "./setup.js";
 import { focusOn, tryOrAsync, afterMount, bounded } from "./pure.js";
 import { G, T, LH, DIALOG, tokens } from "./ui.js";
 import { button, quietLink } from "./ui-button.js";
@@ -20,7 +20,7 @@ import { code } from "./ui-code.js";
 import { hcError, needsLogin, listedMachines, machineRecord, canRestore, addArgs as restoreArgs, rmArgs } from "./machines.js";
 import {
   findTailscale, planFor, choiceOf, addArgs, probeArgs, forgetArgs, reachOf, keySetup, advice, isAdded,
-  sshConfigHosts, includesOf, splitTarget, destinationOf, validTarget, aliasOf, usesTailscaleSsh, nearbyOnly,
+  sshConfigHosts, includesOf, splitTarget, destinationOf, validTarget, aliasOf, usesTailscaleSsh, nearbyOnly, hostOf,
 } from "./reach.js";
 
 const PROBE_MS = 15000;
@@ -35,6 +35,7 @@ const OS_WORD = { macos: "Mac", linux: "Linux", windows: "Windows", freebsd: "Fr
 const osWord = (os) => OS_WORD[String(os).toLowerCase()] ?? os;
 const osIcon = (os) => (/^(macos|windows)$/i.test(os) ? "monitor" : "server");
 const SIDEBAR_REFRESH = "kanso-spaces.retry-machine:";
+const AWAY = "Away from home";
 const NEARBY = "computers.nearby";
 const NEARBY_FRESH_MS = 120_000;
 const freshNearby = (now = Date.now()) => {
@@ -268,13 +269,21 @@ export default class Computers extends View {
     });
   }
 
-  setUp() {
-    explainWith(this.explainer, { name: "Set up a computer", folder: home(), task: setupPrompt({ platform: this.platform }) });
+  setUp(route) {
+    const [name, prompt] = route === "tailscale" ? ["Set up Tailscale", tailscaleSetupPrompt] : ["Set up a computer", homeSetupPrompt];
+    explainWith(this.explainer, { name, folder: home(), task: prompt({ platform: this.platform }) });
     this.close();
   }
 
-  fail(key, reach, words) {
-    this.jobs[key] = { ...this.jobs[key], phase: "failed", reach, words };
+  async userAt(target, reach) {
+    if (!HOME_SIGN_IN.has(reach) || !target || splitTarget(target).user) return "";
+    const r = await tryOrAsync(() => exec("ssh", ["-G", "--", destinationOf(target).dest], { timeout: PROBE_MS }));
+    return String(r?.stdout ?? "").match(/^user (.+)$/m)?.[1].trim() ?? "";
+  }
+
+  async fail(key, reach, words) {
+    const user = await this.userAt(this.jobs[key]?.plan?.target, reach);
+    this.jobs[key] = { ...this.jobs[key], phase: "failed", reach, words, user };
   }
 
   async checkMac(name) {
@@ -326,7 +335,7 @@ export default class Computers extends View {
   }
 
   failure(key, job, c, about) {
-    const said = advice(job.reach, about);
+    const said = advice(job.reach, { ...about, user: job.user, host: hostOf(job.plan?.target ?? "") });
     return v_flex().w_full().gap(G.sm).pt(G.xs).pb(G.sm)
       .child(stateBlock(`computer-fail-${key}`, c, {
         text: job.text || said.text || `${about.name} wasn't added.`, source: job.words ?? "", fix: said.fix,
@@ -391,27 +400,43 @@ export default class Computers extends View {
     return div().py(G.xs).text_size(T.value).line_height(LH.body).text_color(c.muted).child(text);
   }
 
-  tailnetNote(c, text) {
-    return [this.heading(c, "Tailscale"), this.noteBlock(c, text)
-      .child(h_flex().child(button("computers-tailnet-refresh", "Refresh", (cx) => this.rediscover(cx), c, { kind: "tonal", small: true })))];
+  guide(c, route) {
+    return h_flex().w_full().gap(G.sm).items_center()
+      .child(button(`computers-guide-${route}`, route === "tailscale" ? "Set up Tailscale with an agent" : "Set up with an agent", () => this.setUp(route), c,
+        { kind: "quiet", small: true, disabled: !this.explainer }));
+  }
+
+  tailnetNote(c, text, refresh = true) {
+    return [this.heading(c, AWAY), this.noteBlock(c, text).child(this.guide(c, "tailscale")
+      .when(refresh, (el) => el.child(button("computers-tailnet-refresh", "Refresh", (cx) => this.rediscover(cx), c, { kind: "quiet", small: true }))))];
+  }
+
+  peerRow(c, peer, home) {
+    const { alias, lan: seen } = this.peerFacts(peer);
+    return this.computer(c, {
+      key: peer.name, icon: osIcon(peer.os), name: peer.name, ip: peer.ip,
+      facts: home ? [osWord(peer.os), seen, alias ? `ssh ${alias.alias}` : null] : [osWord(peer.os), peer.ip, peer.tailscaleSsh ? "Tailscale SSH" : null, alias ? `ssh ${alias.alias}` : null],
+      choice: { peer, target: "", name: peer.name, alias, lan: seen },
+      done: isAdded(this.added, { name: peer.name, ip: peer.ip, target: alias?.alias }), offline: !home && !peer.online,
+      about: { name: peer.name, os: peer.os, tailnet: !home },
+    });
+  }
+
+  atHome(peer) {
+    return this.platform !== "windows" && Boolean(this.peerFacts(peer).lan);
+  }
+
+  homePeers() {
+    return this.peers().filter((peer) => this.atHome(peer));
   }
 
   tailnetSection(c) {
-    if (this.net === undefined) return [this.heading(c, "Tailscale"), skeletonOf("computers-tailnet-loading", c, { shape: "row", count: 2 })];
-    if (this.net === null) return [];
-    if (this.net.state !== "Running") return this.tailnetNote(c, "Tailscale is off on this computer. Turn it on and your computers show up here.");
-    const peers = this.peers();
-    if (!peers.length) return this.tailnetNote(c, "No other computer is on your tailnet yet.");
-    return [this.heading(c, "On your tailnet"), ...peers.map((peer) => {
-      const { alias, lan: seen } = this.peerFacts(peer);
-      return this.computer(c, {
-        key: peer.name, icon: osIcon(peer.os), name: peer.name, ip: peer.ip,
-        facts: [osWord(peer.os), peer.ip, peer.tailscaleSsh ? "Tailscale SSH" : null, alias ? `ssh ${alias.alias}` : null, seen ? "On this network" : null],
-        choice: { peer, target: "", name: peer.name, alias, lan: seen },
-        done: isAdded(this.added, { name: peer.name, ip: peer.ip, target: alias?.alias }), offline: !peer.online,
-        about: { name: peer.name, os: peer.os, tailnet: true },
-      });
-    })];
+    if (this.net === undefined) return [this.heading(c, AWAY), skeletonOf("computers-tailnet-loading", c, { shape: "row", count: 1 })];
+    if (this.net === null) return this.tailnetNote(c, "Tailscale reaches your computers when you're away. It isn't on this computer yet.", false);
+    if (this.net.state !== "Running") return this.tailnetNote(c, "Tailscale is off on this computer. Turn it on to reach your computers when you're away.");
+    if (!this.peers().length) return this.tailnetNote(c, "No other computer is on your tailnet yet.");
+    const away = this.peers().filter((peer) => !this.atHome(peer));
+    return [this.heading(c, AWAY), ...away.map((peer) => this.peerRow(c, peer, false)), div().py(G.xs).child(this.guide(c, "tailscale"))];
   }
 
   peerFacts(peer) {
@@ -449,12 +474,15 @@ export default class Computers extends View {
   }
 
   nearbySection(c) {
-    if (this.nearby === null) return [];
+    const peers = this.homePeers().map((peer) => this.peerRow(c, peer, true));
+    if (this.nearby === null) return peers.length ? [this.heading(c, "On this network"), ...peers] : [];
     const hosts = this.nearbyHosts();
-    const looking = this.searching ? [skeletonOf("computers-nearby-loading", c, { shape: "row", count: hosts.length ? 1 : 2 })] : [];
+    const looking = this.searching ? [skeletonOf("computers-nearby-loading", c, { shape: "row", count: hosts.length || peers.length ? 1 : 2 })] : [];
     const sweep = this.searching || this.swept ? [] : [div().py(G.xs).child(quietLink("computers-sweep", "Search this network", (cx) => this.search(cx, true), c))];
-    if (!hosts.length && !looking.length) return [this.heading(c, "On this network"), ...(this.homes.size ? [] : [this.note(c, "No other computer on this network answers ssh.")]), ...sweep];
-    return [this.heading(c, "On this network"), ...hosts.map((h) => this.computer(c, {
+    if (!hosts.length && !peers.length && !looking.length) {
+      return [this.heading(c, "On this network"), ...(this.homes.size ? [] : [this.noteBlock(c, "No other computer on this network answers ssh yet.").child(this.guide(c, "home"))]), ...sweep];
+    }
+    return [this.heading(c, "On this network"), ...peers, ...hosts.map((h) => this.computer(c, {
       key: `lan:${h.ip}`, icon: osIcon(h.os), name: h.name || h.ip, ip: h.ip,
       facts: [h.os, h.name ? h.ip : null],
       choice: { peer: null, target: h.ip, name: h.name },
@@ -489,12 +517,12 @@ export default class Computers extends View {
     const c = tokens(theme());
     return dialog("kanso-computers", c, {
       title: "Add a computer", focusHandle: this.handle, secondary: "Close", onCancel: () => this.close(),
-      primary: "Set up with an agent", kind: "tonal", state: this.explainer === undefined ? "disabled" : "default", onPrimary: () => this.setUp(),
+      primary: "Set up with an agent", kind: "tonal", state: this.explainer ? "default" : "disabled", onPrimary: () => this.setUp("home"),
       body: [
         div().text_size(T.value).line_height(LH.body).text_color(c.muted)
           .child("A Mac mini, a box at home, a VPS: its agents show in this sidebar and keep running while this laptop sleeps. Pick it and press Add."),
         v_flex().id("computers-list").w_full().max_h(DIALOG.computers).min_h(0).flex_shrink(1).mx(-G.sm).px(G.sm).overflow_y_scroll()
-          .children([...this.tailnetSection(c), ...this.nearbySection(c), ...this.sshSection(c), ...this.addedSection(c)].filter(Boolean)),
+          .children([...this.nearbySection(c), ...this.sshSection(c), ...this.tailnetSection(c), ...this.addedSection(c)].filter(Boolean)),
         ...this.typedSection(c).filter(Boolean),
       ],
     });

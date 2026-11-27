@@ -1,8 +1,8 @@
 import { shellQuote, windowsArg } from "./platform-command.js";
 import { privateIp } from "./nearby.js";
-import { splitTarget, joined, destinationOf, keySetup } from "./sign-in.js";
+import { splitTarget, joined, destinationOf, keySetup, hostOf } from "./sign-in.js";
 
-export { splitTarget, destinationOf, keySetup };
+export { splitTarget, destinationOf, keySetup, hostOf };
 
 export const TAILSCALE_PATHS = {
   macos: ["tailscale", "/usr/local/bin/tailscale", "/opt/homebrew/bin/tailscale", "/Applications/Tailscale.app/Contents/MacOS/Tailscale"],
@@ -125,7 +125,11 @@ export function reachOf(result) {
 const MAC = /^mac/i;
 export const ACCESS_CONTROLS = "https://login.tailscale.com/admin/acls";
 
-export function advice(reach, { name, os = "", tailnet: onTailnet = false } = {}) {
+const otherUser = (name, user, host, then) => `${name} didn't let ${user} in. If you sign in there as someone else, type user@${host || name} below and press Add. If not, ${then}`;
+
+export function advice(reach, { name, os = "", tailnet: onTailnet = false, user = "", host = "" } = {}) {
+  if (reach === "password" && user) return { text: otherUser(name, user, host, "type the password once in the tab that opens."), fix: "Enter the password" };
+  if (reach === "keyonly" && user) return { text: otherUser(name, user, host, "press Sign in."), fix: "Sign in" };
   if (reach === "password") return { text: `${name} wants its password once. Type it in the tab that opens, and ${name} is added right after.`, fix: "Enter the password" };
   if (reach === "keyonly") return { text: `${name} takes keys only. Type your key's passphrase once in the tab that opens, and ${name} is added right after.`, fix: "Sign in" };
   if (reach === "closed" && MAC.test(os)) return { text: `${name} doesn't let ssh in. On ${name}: System Settings › General › Sharing › Remote Login, on. Then Retry.`, fix: "Retry" };

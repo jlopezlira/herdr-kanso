@@ -8,6 +8,8 @@ export function splitTarget(text) {
 }
 
 export const joined = (user, host) => (user ? `${user}@${host}` : host);
+export const withPort = (host, port) => (!port ? host : host.includes(":") ? `[${host}]:${port}` : `${host}:${port}`);
+export const hostOf = (target) => { const { dest, port } = destinationOf(target); return withPort(splitTarget(dest).host, port); };
 
 export function destinationOf(target) {
   const { user, host } = splitTarget(target);
@@ -34,6 +36,22 @@ const SSH = /(^|['"]|\bexec )ssh (?=\S)/g;
 const DONE = "Done: this tab can close.";
 const AGENT_FAILED = (name) => `The key in your ssh agent did not open ${name} on its own, so kansō makes its own key and asks once more.`;
 const refused = (name) => `${name} didn't let this computer in. Put this line in ~/.ssh/authorized_keys on ${name}, then sign in again:`;
+const refusedAs = (name, host) => [`${name} didn't let `, ` in. If you sign in there as someone else, close this tab and add user@${host} instead. If not, put this line in ~/.ssh/authorized_keys on ${name}, then sign in again:`];
+
+function refusal(machine, windows) {
+  const name = nameOf(machine);
+  const out = windows ? (text) => `Write-Host (${text})` : (text) => `echo ${text}`;
+  const quote = windows ? psQuote : shellQuote;
+  if (!machine.target) return out(quote(refused(name)));
+  const { dest, port } = destinationOf(machine.target);
+  const { user, host } = splitTarget(dest);
+  const [before, after] = refusedAs(name, withPort(host, port));
+  const asked = windows
+    ? `(((ssh -G -- ${psQuote(dest)} 2>$null) -match '^user ' | Select-Object -First 1) -replace '^user ', '')`
+    : `"$(ssh -G -- ${shellQuote(dest)} 2>/dev/null | awk '$1 == "user" { sub(/^user /, ""); print; exit }')"`;
+  const who = user ? quote(user) : asked;
+  return out(windows ? `${psQuote(before)} + ${who} + ${psQuote(after)}` : `${shellQuote(before)}${who}${shellQuote(after)}`);
+}
 
 const withSsh = (via, words) => unkeyed(via).replace(SSH, `$1ssh ${words}`);
 const sshLine = (target, quote) => {
@@ -154,7 +172,7 @@ function shSetup(machine, { replace, agentPath, before }) {
     before ? `prev=$(awk '{ print $1 " " $2 " kanso" }' ${shHome(before)}.pub 2>/dev/null)` : "prev=",
     ...SH_KEY,
     `replaced() { [ -z "$prev" ] || [ "$prev" = "$pub" ] || line=${shSpliced(forgetLine, "prev")}"$line"; }`,
-    `push() { e=$(mktemp) || exit; said=$(${ask} "$line" 2>"$e"); s=$?; cat "$e" >&2; case $said in *kanso-added*) added=1 ;; *) added= ;; esac; [ "$s" -eq 0 ] || { grep -q "Permission denied" "$e" && { echo; echo ${shellQuote(refused(name))}; echo "$pub"; }; rm -f "$e"; exit 1; }; rm -f "$e"; }`,
+    `push() { e=$(mktemp) || exit; said=$(${ask} "$line" 2>"$e"); s=$?; cat "$e" >&2; case $said in *kanso-added*) added=1 ;; *) added= ;; esac; [ "$s" -eq 0 ] || { grep -q "Permission denied" "$e" && { echo; ${refusal(machine, false)}; echo "$pub"; }; rm -f "$e"; exit 1; }; rm -f "$e"; }`,
     "if held || pick; then",
     '  lines "$g" || exit; replaced; push',
     `  if ${reach(agentPath)} true </dev/null >/dev/null 2>&1; then via=${shellQuote(keyed(agentPath))}`,
@@ -176,7 +194,7 @@ function psSetup(machine, { replace, agentPath }) {
     ...psStart(agentPath),
     "New-Item -ItemType Directory -Force (Split-Path $k) | Out-Null",
     ...PS_KEY,
-    `function Send-Key { $said = ${ask} "$($pre)${pushLine("$pub", "$b64")}" 2>&1; $code = $LASTEXITCODE; $script:added = [bool]("$said" -match 'kanso-added'); $said | Where-Object { "$_" -notmatch 'kanso-added' } | Write-Host; if ($code -ne 0) { if ("$said" -match 'Permission denied') { Write-Host ''; Write-Host ${psQuote(refused(name))}; Write-Host $pub }; exit 1 } }`,
+    `function Send-Key { $said = ${ask} "$($pre)${pushLine("$pub", "$b64")}" 2>&1; $code = $LASTEXITCODE; $script:added = [bool]("$said" -match 'kanso-added'); $said | Where-Object { "$_" -notmatch 'kanso-added' } | Write-Host; if ($code -ne 0) { if ("$said" -match 'Permission denied') { Write-Host ''; ${refusal(machine, true)}; Write-Host $pub }; exit 1 } }`,
     "$pre = ''",
     `if ((Test-Held) -or (Select-Agent)) { Read-Key $g; Send-Key; ${reach(agentPath)} true *> $null; if ($LASTEXITCODE -eq 0) { $via = ${psQuote(keyed(agentPath))} } else { Write-Host ${psQuote(AGENT_FAILED(name))}; $old = $pub; $was = $added; New-Own; Read-Key $k; if ($was) { $pre = ${psSpliced(forgetLine, "old")} }; Send-Key; $via = ${psQuote(keyed(KEY))} } } else { New-Own; Read-Key $k; Send-Key; $via = ${psQuote(keyed(KEY))} }`,
     replace ? `${hc(["machine", "rm", name])} *> $null` : "",

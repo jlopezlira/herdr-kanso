@@ -2,8 +2,9 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { chmod, mkdir, readFile, writeFile } from "node:fs/promises";
 import { basename, join } from "node:path";
+import { setImmediate as nextTurn } from "node:timers/promises";
 import { compare, scan, scannedFiles } from "../scripts/check-dupes.mjs";
-import { arg, clone, computersDialog, exec, fieldWith, find, folderWith, gpuiHost, load, success, texts } from "./helpers.mjs";
+import { arg, clone, computersDialog, exec, fieldWith, find, folderWith, gpuiHost, load, press, success, texts } from "./helpers.mjs";
 
 const reach = () => load("kanso-computers/reach.js", [
   "tailnet", "planFor", "choiceOf", "addArgs", "probeArgs", "reachOf", "keySetup", "advice", "isAdded",
@@ -192,7 +193,7 @@ const KEY_WORDS = identityWords(KEY_PATH);
 const agentWords = (suffix) => identityWords(agentPath(suffix));
 const OLD_KEY_WORDS = `-i ${KEY_PATH} ${KEY_OPTIONS}`;
 const ASK = "-o PasswordAuthentication=yes -o KbdInteractiveAuthentication=yes";
-const signIn = () => load("kanso-computers/sign-in.js", ["signInTab", "routeOf", "keySetup", "lanParts"]);
+const signIn = () => load("kanso-computers/sign-in.js", ["signInTab", "routeOf", "keySetup", "lanParts", "hostOf"]);
 const lanRoute = () => load("kanso-computers/lan-route.js", ["lanRecord", "lanProbeArgs"]);
 
 const writeStub = async (dir, name, body) => {
@@ -307,24 +308,70 @@ test("Signing in to a plain computer, with a port and without one, makes a key, 
   await once({ name: "can", target: "can@10.0.0.7:2222", via: "" }, "can@10.0.0.7", "2222");
 });
 
-test("When the computer denies the key, the tab says it didn't let this computer in and shows the key; a timeout or a refused port shows only that error", { skip: shForm }, async (t) => {
+const bareAddress = "192.168.4.135";
+const keyDenied = "Permission denied (publickey).";
+const userLookup = ["-G", "--", bareAddress];
+const sshUserLine = (user) => `user ${user}`;
+const refusingLogin = (user) => ({
+  sshBody: [
+    `if [ "$1" = -G ]; then echo "${sshUserLine(user)}"; exit 0; fi`,
+    `echo "${keyDenied}" >&2`,
+    "exit 255",
+  ].join("\n"),
+});
+const refusedKeySetup = (t, keySetup, route) => runSh(t, keySetup({ name: bareAddress, ...route }), refusingLogin("jj"));
+
+test("When a bare address denies the key, the sign-in tab names the SSH user and suggests adding user at the address", { skip: shForm }, async (t) => {
+  const { keySetup } = await signIn();
+  const { ran, calls } = await refusedKeySetup(t, keySetup, { target: bareAddress });
+  assert.notEqual(ran.code, 0);
+  assert.ok(ran.stdout.includes(`${bareAddress} didn't let jj in`));
+  assert.ok(ran.stdout.includes(`add user@${bareAddress} instead`));
+  assert.ok(ran.stdout.includes(PUB));
+  assert.deepEqual((await calls("ssh")).filter(([flag]) => flag === "-G"), [userLookup]);
+  assert.deepEqual(await calls("hc"), []);
+});
+
+test("The suggested user@ address keeps a typed port, and an IPv6 address keeps its brackets", { skip: shForm }, async (t) => {
+  const { keySetup, hostOf } = await signIn();
+  const { ran } = await refusedKeySetup(t, keySetup, { target: `${bareAddress}:2222` });
+  assert.ok(ran.stdout.includes(`add user@${bareAddress}:2222 instead`), ran.stdout);
+  assert.deepEqual(["grey", "jj@10.0.0.7:2222", "[fe80::1%en0]:22"].map(hostOf), ["grey", "10.0.0.7:2222", "[fe80::1%en0]:22"]);
+});
+
+const assertSignInRefusal = (ran, message) => {
+  assert.equal(ran.code, 1);
+  assert.ok(ran.stdout.includes(message), ran.stdout);
+};
+
+test("When the key is denied, the sign-in tab names the typed user without a lookup and keeps the old advice for a route without a target", { skip: shForm }, async (t) => {
+  const { keySetup } = await signIn();
+  const target = `jj@${bareAddress}`;
+  const cases = [
+    [{ via: `ssh ${target}` }, "didn't let this computer in"],
+    [{ target }, "didn't let jj in"],
+  ];
+  for (const [route, message] of cases) {
+    const { ran, calls } = await refusedKeySetup(t, keySetup, route);
+    assertSignInRefusal(ran, message);
+    assert.equal(ran.stdout.includes(`add user@${bareAddress} instead`), Boolean(route.target));
+    assert.equal((await calls("ssh")).some(([flag]) => flag === "-G"), false);
+  }
+});
+
+test("When sign-in times out or the port is refused, the tab shows only that error", { skip: shForm }, async (t) => {
   const { keySetup } = await signIn();
   const machine = { name: "grey", target: "ada@box", via: "" };
-  const denied = await runSh(t, keySetup(machine), { sshCode: 1, sshSaid: "Permission denied (publickey)." });
-  assert.notEqual(denied.ran.code, 0);
-  assert.match(denied.ran.stdout, /didn't let this computer in/);
-  assert.ok(denied.ran.stdout.includes(PUB));
-  assert.deepEqual(await denied.calls("hc"), []);
   const refused = await runSh(t, keySetup(machine), { sshCode: 1, sshSaid: "ssh: connect to host box port 22: Connection refused" });
   assert.notEqual(refused.ran.code, 0);
   assert.match(refused.ran.stderr, /Connection refused/);
-  assert.doesNotMatch(refused.ran.stdout, /didn't let this computer in/);
+  assert.doesNotMatch(refused.ran.stdout, /didn't let/);
   assert.equal(refused.ran.stdout.includes(PUB), false);
   assert.deepEqual(await refused.calls("hc"), []);
   const timed = await runSh(t, keySetup(machine), { sshCode: 1, sshSaid: "ssh: connect to host box port 22: Operation timed out" });
   assert.notEqual(timed.ran.code, 0);
   assert.match(timed.ran.stderr, /timed out/);
-  assert.doesNotMatch(timed.ran.stdout, /didn't let this computer in/);
+  assert.doesNotMatch(timed.ran.stdout, /didn't let/);
   assert.equal(timed.ran.stdout.includes(PUB), false);
   assert.deepEqual(await timed.calls("hc"), []);
 });
@@ -634,6 +681,14 @@ test("The Windows key setup checks its agent, probes without prompting, and gene
   for (const words of [AGENT_WORDS, KEY_WORDS]) assert.ok(script.includes(`$via = '${keyedMachine(words).via}'`));
 });
 
+test("The Windows sign-in script asks SSH which user it uses for a bare address", async () => {
+  const { keySetup } = await signIn();
+  const script = windowsScript(keySetup({ target: bareAddress }, { platform: "windows" }));
+  assert.ok(script.includes(`ssh -G -- '${bareAddress}'`));
+  assert.match(script, /-match '\^user '/);
+  assert.ok(script.includes(`add user@${bareAddress} instead`));
+});
+
 test("The Windows key removal uses the saved public key and removes the computer only after SSH reports removal", async () => {
   const { keyRemoval } = await load(KEY_ACTIONS, ["keyRemoval"]);
   const argv = keyRemoval(keyedMachine(OLD_KEY_WORDS), "windows");
@@ -798,6 +853,23 @@ test("A refusal says what to do: the password, Remote Login, Tailscale SSH, or a
   assert.equal(off.fix, "Retry");
 });
 
+test("Key and password refusals suggest another username when the SSH user is known and keep the old advice otherwise", async () => {
+  const { advice } = await reach();
+  const name = "grey";
+  const cases = [
+    ["keyonly", "Sign in", `${name} takes keys only. Type your key's passphrase once in the tab that opens, and ${name} is added right after.`],
+    ["password", "Enter the password", `${name} wants its password once. Type it in the tab that opens, and ${name} is added right after.`],
+  ];
+  for (const [refusal, fix, previous] of cases) {
+    const withoutUser = advice(refusal, { name, host: bareAddress });
+    assert.deepEqual(clone(withoutUser), { text: previous, fix });
+    const withUser = advice(refusal, { name, host: bareAddress, user: "jj" });
+    assert.match(withUser.text, /grey didn't let jj in/);
+    assert.ok(withUser.text.includes(`type user@${bareAddress} below`));
+    assert.equal(withUser.fix, fix);
+  }
+});
+
 test("A computer already added is known by its name, its target, its address, or an address inside via", async () => {
   const { isAdded } = await reach();
   const added = [
@@ -937,7 +1009,7 @@ test("A computer saved with hc, and not on the tailnet or in ssh config, shows u
   assert.deepEqual(closed, ["computers-overlay"]);
 });
 
-test("Add a computer hides Tailscale when it is not installed; when it is off or has no other computer, Refresh lists computers without clearing the typed address", async () => {
+test("Add a computer offers the Tailscale guide when Tailscale is missing, off, or empty and refreshes without clearing the address", async () => {
   const running = status({ grey: peer({}) });
   const notes = {
     "not installed": { code: 1, stdout: "", stderr: "missing" },
@@ -945,8 +1017,8 @@ test("Add a computer hides Tailscale when it is not installed; when it is off or
     "no other computer": { code: 0, stdout: status({}), stderr: "" },
   };
   const said = {
-    "not installed": "Tailscale isn't on this computer. Where it is, your computers show up here by themselves.",
-    off: "Tailscale is off on this computer. Turn it on and your computers show up here.",
+    "not installed": "Tailscale reaches your computers when you're away. It isn't on this computer yet.",
+    off: "Tailscale is off on this computer. Turn it on to reach your computers when you're away.",
     "no other computer": "No other computer is on your tailnet yet.",
   };
   for (const [name, first] of Object.entries(notes)) {
@@ -960,14 +1032,14 @@ test("Add a computer hides Tailscale when it is not installed; when it is off or
     view.typed = { multiline: false, focused: false, state: {}, on() {}, focus() {}, release() {}, value: () => address.text, set_value(next) { address.text = next; } };
     const drawn = view.render();
     const beforeWords = texts(drawn);
+    assert.ok(beforeWords.includes("Away from home"), name);
+    assert.ok(beforeWords.includes("Set up Tailscale with an agent"), name);
+    assert.ok(beforeWords.includes(said[name]), name);
     const refresh = find(drawn, (el) => el.tag === "computers-tailnet-refresh");
     if (name === "not installed") {
-      assert.equal(beforeWords.includes("Tailscale"), false, "no Tailscale heading");
-      assert.equal(beforeWords.includes(said[name]), false, "no Tailscale note");
       assert.equal(refresh, null, "no Tailscale Refresh");
       continue;
     }
-    assert.ok(beforeWords.includes(said[name]), name);
     assert.ok(refresh, name);
     const before = asked.filter(([, args]) => args?.[0] === "status").length;
     answer.now = { code: 0, stdout: running, stderr: "" };
@@ -975,9 +1047,52 @@ test("Add a computer hides Tailscale when it is not installed; when it is off or
     await flush();
     const words = texts(view.render());
     assert.ok(asked.filter(([, args]) => args?.[0] === "status").length > before, `${name}: Refresh probes Tailscale again`);
-    assert.ok(words.includes("grey") && words.includes("On your tailnet"), words.join(" | "));
+    assert.ok(words.includes("grey") && words.includes("Away from home"), words.join(" | "));
     assert.equal(view.typed.value(), "ada@10.0.0.9");
     assert.equal(address.text, "ada@10.0.0.9");
+  }
+});
+
+const primarySetup = "kanso-computers-primary";
+const homeGuide = "computers-guide-home";
+const tailscaleGuide = "computers-guide-tailscale";
+const agentSetupLabel = "Set up with an agent";
+const tailscaleGuideLabel = "Set up Tailscale with an agent";
+const installedAgent = async () => [{ installed: true, run: ["codex"] }];
+
+test("The primary setup button opens the home network guide and the Tailscale button opens the away guide", async (t) => {
+  const cases = [
+    [primarySetup, agentSetupLabel, /Do not install or use Tailscale/],
+    [tailscaleGuide, tailscaleGuideLabel, /tailscale set --ssh/],
+  ];
+  for (const [id, label, guide] of cases) {
+    const run = t.mock.fn();
+    const { view } = await computersDialog({
+      knownAgents: installedAgent,
+      run,
+    });
+    const drawn = view.render();
+    const button = find(drawn, (el) => el.tag === id);
+    assert.ok(button, label);
+    assert.equal(arg(button, "accessibility_label"), label);
+    press(drawn, id);
+    await nextTurn();
+    assert.equal(run.mock.callCount(), 1, label);
+    const [command, tab] = run.mock.calls[0].arguments;
+    assert.equal(command, "tab.new");
+    assert.match(tab.task, guide);
+  }
+});
+
+test("The setup action and both guides are disabled when no agent is installed", async () => {
+  const { view } = await computersDialog({ knownAgents: async () => [] }, true);
+  const drawn = view.render();
+  const controls = new Map([[primarySetup, agentSetupLabel], [homeGuide, agentSetupLabel], [tailscaleGuide, tailscaleGuideLabel]]);
+  for (const [id, label] of controls) {
+    const button = find(drawn, (el) => el.tag === id);
+    assert.ok(button, id);
+    assert.equal(arg(button, "accessibility_label"), label);
+    assert.equal(arg(button, "disabled"), true, id);
   }
 });
 
@@ -986,13 +1101,54 @@ const darkHost = "dark";
 const darkName = `jj@${darkHost}`;
 const darkAddress = `jj@${darkIp}`;
 const darkMissing = `Could not resolve hostname ${darkHost}`;
-const darkDenied = "Permission denied (publickey).";
 const sshRefusal = (stderr) => ({ code: 255, stderr, stdout: "" });
 const addressAnswers = (failure) => (target) => target === darkAddress ? success("") : sshRefusal(failure);
 const clickAddTyped = (view, cx) => {
   const button = find(view.render(), (el) => el.tag === "computers-add-typed");
   arg(button, "on_click")({}, cx);
 };
+
+const deniedBareAddress = async (user) => {
+  const lookups = [];
+  const tabs = [];
+  const { view, cx, flush } = await computersDialog({
+    InputState: { new: () => fieldWith({ value: bareAddress }) },
+    run: (command, tab) => { if (command === "tab.new") tabs.push(tab); },
+    exec: async (program, args) => {
+      if (program !== "ssh") return sshRefusal("missing");
+      if (args[0] !== "-G") return sshRefusal(keyDenied);
+      lookups.push(clone(args));
+      return success(`host ${bareAddress}\n${sshUserLine(user)}\n`);
+    },
+  });
+  clickAddTyped(view, cx);
+  await flush();
+  return { drawn: view.render(), lookups, tabs };
+};
+
+test("A refused bare address shows the SSH user and the user at address hint below the input", async () => {
+  const { drawn, lookups } = await deniedBareAddress("jj");
+  const words = texts(drawn);
+  const message = words.findIndex((word) => word.includes(`${bareAddress} didn't let jj in`));
+  assert.ok(message > words.lastIndexOf("Add"), words.join(" | "));
+  assert.ok(words[message].includes(`type user@${bareAddress} below`));
+  assert.ok(words.includes("Sign in"));
+  assert.deepEqual(lookups, [userLookup]);
+});
+
+test("The dialog and sign-in tab name the full SSH user when it contains a space", async (t) => {
+  const user = "john doe";
+  const message = `didn't let ${user} in`;
+  const { drawn, tabs } = await deniedBareAddress(user);
+  const words = texts(drawn);
+  assert.ok(words.some((word) => word.includes(message)), words.join(" | "));
+  await t.test("The shell sign-in names the same user", { skip: shForm }, async (t) => {
+    press(drawn, `computer-fail-typed:${bareAddress}-fix`);
+    assert.equal(tabs.length, 1);
+    const { ran } = await runSh(t, tabs[0].argv, refusingLogin(user));
+    assertSignInRefusal(ran, message);
+  });
+});
 
 const addTypedDark = async (answer, { typed = darkName, addError = null, lan = "", clickRow = false } = {}) => {
   const probes = [];
@@ -1071,7 +1227,7 @@ const checkDarkFallback = ({ probes, added }, first = darkName) => {
 
 test("Typing an ssh name for a Tailscale computer checks and adds that name from your ssh config", async () => {
   const { probes, added } = await addTypedDark((target) => target === darkName
-    ? success("") : sshRefusal(darkDenied));
+    ? success("") : sshRefusal(keyDenied));
   assert.deepEqual(probes, [darkName]);
   assert.deepEqual(added, [darkName]);
 });
@@ -1081,7 +1237,7 @@ test("When the typed name does not answer, Add a computer tries and adds its Tai
 });
 
 test("When the typed name refuses your key but the Tailscale address accepts it, the computer is added by its address", async () => {
-  checkDarkFallback(await addTypedDark(addressAnswers(darkDenied)));
+  checkDarkFallback(await addTypedDark(addressAnswers(keyDenied)));
 });
 
 test("When adding by the Tailscale address asks for a password, the sign-in tab uses that address", async () => {
@@ -1101,7 +1257,7 @@ test("When you type only the computer name, its Tailscale address keeps the user
 });
 
 test("A failed typed attempt shows its message once, below the field and not on the Tailscale row", async () => {
-  const { drawn } = await addTypedDark(() => sshRefusal(darkDenied));
+  const { drawn } = await addTypedDark(() => sshRefusal(keyDenied));
   const message = (word) => word.includes("takes keys only");
   const words = texts(drawn);
   assert.equal(words.filter(message).length, 1);
@@ -1116,15 +1272,18 @@ const lightIp = "192.168.4.91";
 const plainLightAdd = ["machine", "add", "light", "--install", "--json"];
 const lightTailnetIp = "100.100.235.59";
 const lightTailnetName = "light-1";
-const lightTailnet = status({ light: peer({
-  DNSName: `${lightTailnetName}.tail.ts.net.`, HostName: "light", TailscaleIPs: [lightTailnetIp], sshHostKeys: [],
-}) });
+const lightPeer = (over = {}) => peer({
+  DNSName: `${lightTailnetName}.tail.ts.net.`, HostName: "light", TailscaleIPs: [lightTailnetIp], sshHostKeys: [], ...over,
+});
+const lightTailnet = status({ light: lightPeer() });
+const lightAtHome = lightPeer({ Addrs: [lightIp] });
 const lightPeerRow = (drawn) => find(drawn, (el) => el.tag === `computer-${lightTailnetName}`);
 const lightRow = (drawn) => find(drawn, (el) => el.tag === "computer-ssh:light");
 const lightDialog = async ({
   answers = true, neighbors = [], host = "light.example", homeRefusal = "",
   tailnet = "", platform = "macos", shared = () => null, sshPort = 22,
   awayAnswers = !answers, awayRefusal = "", typed = "", homePort = sshPort, trustedHome = false,
+  knownAgents = async () => [],
 } = {}) => {
   const lookups = [];
   const probes = [];
@@ -1140,6 +1299,7 @@ const lightDialog = async ({
     window: () => ({ platform }),
     InputState: { new: () => fieldWith({ value: typed }) },
     shared,
+    knownAgents,
     run: (command, props) => { if (command === "tab.new") tabs.push(props); },
     readTextFile: async () => `Host light\n  HostName ${host}\n  Port ${sshPort}`,
     exec: async (program, args, options) => {
@@ -1155,6 +1315,14 @@ const lightDialog = async ({
       }
       if (program === "ifconfig") return success("inet 192.168.4.2 netmask 0xffffff00");
       if (program === "arp") return success(arpOf(neighbors));
+      if (program === "pwsh" && platform === "windows") {
+        const script = args.at(-1);
+        if (script.includes("Get-NetIPAddress")) return success("192.168.4.2/24");
+        if (script.includes("ConnectAsync") && script.includes(lightIp)) {
+          knocks.push(lightIp);
+          return success(answers ? lightIp : "");
+        }
+      }
       if (isLanKnock(program, args)) {
         const ips = args.slice(3);
         knocks.push(...ips);
@@ -1193,6 +1361,40 @@ const lightDialog = async ({
   }, true);
   return { view, cx, flush, lookups, knocks, knockCommands, installs, upgrades, homeReads, tabs, probes, forgotten };
 };
+const assertSectionOrder = (view, ordered) => {
+  assert.deepEqual(texts(view.render()).filter((word) => ordered.includes(word)), ordered);
+};
+
+test("Add a computer lists a Tailscale computer seen at home only on this network, before computers that are away", async () => {
+  const tailnet = status({ light: lightAtHome, grey: peer() });
+  const { view } = await lightDialog({ neighbors: [lightIp], tailnet });
+  assertSectionOrder(view, ["On this network", lightTailnetName, "From your ssh config", "Away from home", "grey"]);
+});
+
+test("The Away from home guide stays available whether the tailnet computers are home or away", async () => {
+  for (const [where, light] of [["away", lightPeer()], ["at home", lightAtHome]]) {
+    const tailnet = status({ light });
+    const { view, tabs } = await lightDialog({ neighbors: [lightIp], tailnet, knownAgents: installedAgent });
+    const drawn = view.render();
+    const sectionWords = texts(drawn);
+    const away = sectionWords.indexOf("Away from home");
+    assert.ok(away >= 0 && sectionWords.indexOf(tailscaleGuideLabel) > away, where);
+    press(drawn, tailscaleGuide);
+    await nextTurn();
+    assert.equal(tabs.length, 1, where);
+    const { task } = tabs[0];
+    assert.match(task, /tailscale set --ssh/);
+    assert.match(task, /press Add.*under On this network when it is at home.*or Away from home otherwise/);
+  }
+});
+
+test("On Windows a tailnet computer that answers nearby is still listed under Away from home", async () => {
+  const tailnet = status({ light: lightAtHome });
+  const { view, knocks } = await lightDialog({ neighbors: [lightIp], tailnet, platform: "windows" });
+  assert.deepEqual(knocks, [lightIp], "the nearby scan heard from the peer");
+  assertSectionOrder(view, ["On this network", "Away from home", lightTailnetName]);
+});
+
 const clickComputer = async ({ cx, flush }, row) => {
   assert.ok(row, "the computer row is listed");
   const button = find(row, (el) => el.tag === `${row.tag}-action`);
@@ -1346,7 +1548,7 @@ test("A Tailscale computer uses its SSH alias to find and try the home network f
   const row = () => lightPeerRow(dialog.view.render());
   const install = await addComputerRow(dialog, row());
   assert.deepEqual(dialog.lookups.map((command) => command.at(-1)).sort(), ["light-1.local", "light.local"]);
-  assert.ok(texts(row()).includes("On this network"), "the tailnet row shows its LAN route");
+  assert.ok(texts(row()).includes(lightIp), "the Tailscale computer shows its home address");
   assertLightVia(install, lightTailnetName);
 });
 
