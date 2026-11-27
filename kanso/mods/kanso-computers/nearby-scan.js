@@ -61,16 +61,17 @@ export async function scanNearby(platform, timer, onNear = () => {}, { whole = f
   return foundHosts([...first, ...rest], neighbors);
 }
 
-const homeOf = async (platform, name, timer) => {
-  const [text, port] = await Promise.all([textOf(() => RESOLVE[platform](name), timer, RESOLVE_MS), sshPortOf(name, timer)]);
+const homeOf = async (platform, name, timer, given) => {
+  const [text, port] = await Promise.all([textOf(() => RESOLVE[platform](name), timer, RESOLVE_MS), given ?? sshPortOf(name, timer)]);
   const addresses = homeAddresses(text);
   const answered = await knockAll(platform, addresses, timer, port);
   const ip = addresses.find((address) => answered.includes(address));
   return ip ? [[name, ip]] : [];
 };
 
-export async function homesOf(platform, names, timer) {
+export async function homesOf(platform, names, timer, port = null) {
   if (!RESOLVE[platform]) return new Map();
-  const found = await Promise.all([...new Set(names.filter((name) => /^[a-z0-9][a-z0-9-]*$/i.test(name)))].map((name) => homeOf(platform, name, timer)));
+  const given = Number.isInteger(port) && port > 0 && port < 65536 ? port : null;
+  const found = await Promise.all([...new Set(names.filter((name) => /^[a-z0-9][a-z0-9-]*$/i.test(name)))].map((name) => homeOf(platform, name, timer, given)));
   return new Map(found.flat());
 }

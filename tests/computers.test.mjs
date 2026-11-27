@@ -988,6 +988,10 @@ const darkMissing = `Could not resolve hostname ${darkHost}`;
 const darkDenied = "Permission denied (publickey).";
 const sshRefusal = (stderr) => ({ code: 255, stderr, stdout: "" });
 const addressAnswers = (failure) => (target) => target === darkAddress ? success("") : sshRefusal(failure);
+const clickAddTyped = (view, cx) => {
+  const button = find(view.render(), (el) => el.tag === "computers-add-typed");
+  arg(button, "on_click")({}, cx);
+};
 
 const addTypedDark = async (answer, { typed = darkName, addError = null, lan = "", clickRow = false } = {}) => {
   const probes = [];
@@ -1022,8 +1026,7 @@ const addTypedDark = async (answer, { typed = darkName, addError = null, lan = "
     },
   });
   if (lan) view.nearby = [{ ip: lan, name: darkHost, os: "" }];
-  const button = find(view.render(), (el) => el.tag === "computers-add-typed");
-  arg(button, "on_click")({}, cx);
+  clickAddTyped(view, cx);
   if (clickRow) {
     await started.promise;
     try {
@@ -1113,14 +1116,17 @@ const lightRow = (drawn) => find(drawn, (el) => el.tag === "computer-ssh:light")
 const lightDialog = async ({
   answers = true, neighbors = [], host = "light.example", homeRefusal = "",
   tailnet = "", platform = "macos", shared = () => null, sshPort = 22,
+  awayAnswers = !answers, typed = "", homePort = sshPort,
 } = {}) => {
   const lookups = [];
+  const probes = [];
   const knocks = [];
   const knockCommands = [];
   const installs = [];
   const tabs = [];
   const { view, cx, flush } = await computersDialog({
     window: () => ({ platform }),
+    InputState: { new: () => fieldWith({ value: typed }) },
     shared,
     run: (command, props) => { if (command === "tab.new") tabs.push(props); },
     readTextFile: async () => `Host light\n  HostName ${host}\n  Port ${sshPort}`,
@@ -1137,13 +1143,15 @@ const lightDialog = async ({
         const ips = args.slice(3);
         knocks.push(...ips);
         knockCommands.push(args[1]);
-        return success(answers ? ips.join("\n") : "");
+        const socket = platform === "linux" ? `/dev/tcp/$1/${homePort}"` : `"$1" ${homePort} >`;
+        return success(answers && args[1].includes(socket) ? ips.join("\n") : "");
       }
       if (program === "ssh" && args[0] === "-G") return success(`hostname ${host}\nport ${sshPort}\n`);
-      if (program === "ssh" && args.at(-2) === "light") {
+      if (program === "ssh" && ["light", "jj@light"].includes(args.at(-2))) {
         const atHome = args.includes(`HostName=${lightIp}`);
+        probes.push(atHome ? "home" : "away");
         if (atHome && homeRefusal) return sshRefusal(homeRefusal);
-        return atHome === answers ? success("") : sshRefusal("No route to host");
+        return (atHome ? answers : awayAnswers) ? success("") : sshRefusal("No route to host");
       }
       return success("");
     },
@@ -1152,7 +1160,7 @@ const lightDialog = async ({
       return success('{"machines":[]}');
     },
   }, true);
-  return { view, cx, flush, lookups, knocks, knockCommands, installs, tabs };
+  return { view, cx, flush, lookups, knocks, knockCommands, installs, tabs, probes };
 };
 const clickComputer = async ({ cx, flush }, row) => {
   assert.ok(row, "the computer row is listed");
@@ -1223,6 +1231,33 @@ test("When only the home route answers and asks for a key, Sign in uses that rou
   const { keySetup } = await signIn();
   assert.deepEqual(clone(tabs), [{ name: "Add light", argv: clone(keySetup(job.plan, { platform: "macos" })) }]);
   assert.ok(tabs[0].argv[2].includes(`HostName=${lightIp}`));
+});
+
+for (const [name, homeRefusal, reach] of [
+  ["Add stops for home sign-in even when the usual SSH route works", "Permission denied (publickey)", "keyonly"],
+  ["Add shows a changed home key even when the usual SSH route works", "REMOTE HOST IDENTIFICATION HAS CHANGED!", "hostkey"],
+]) {
+  test(name, async () => {
+    const dialog = await lightDialog({ host: "100.100.235.59", homeRefusal, awayAnswers: true });
+    const { view, installs, probes } = dialog;
+    await clickComputer(dialog, lightRow(view.render()));
+    assert.equal(view.jobs["ssh:light"]?.reach, reach);
+    assert.deepEqual(installs, []);
+    assert.deepEqual(probes, ["home"], "the usual route was not tried");
+  });
+}
+
+test("A port typed with a computer's name takes priority over its SSH config on the home network", async () => {
+  const dialog = await lightDialog({ typed: "jj@light:2222", homePort: 2222, awayAnswers: true });
+  const { view, cx, flush, knockCommands, installs } = dialog;
+  clickAddTyped(view, cx);
+  await flush();
+  assert.equal(knockCommands.length, 1);
+  assert.ok(knockCommands[0].includes('"$1" 2222 >'), knockCommands[0]);
+  assert.equal(installs.length, 1);
+  const via = installs[0].indexOf("--via");
+  assert.notEqual(via, -1);
+  assert.match(installs[0][via + 1], /HostName=192\.168\.4\.91.*-p 2222 jj@light .*; exec ssh -p 2222 jj@light /);
 });
 
 test("A computer already listed from ssh config is not listed again by its home address", async () => {

@@ -109,8 +109,9 @@ export default class Computers extends View {
 
   async withHome(plan) {
     if (plan.lan || !this.looksHome) return plan;
-    const host = splitTarget(destinationOf(plan.target).dest).host;
-    const found = await bounded(homesOf(this.platform, [plan.name, host].filter(Boolean), this.timer), this.timer, HOME_WAIT_MS);
+    const { dest, port } = destinationOf(plan.target);
+    const host = splitTarget(dest).host;
+    const found = await bounded(homesOf(this.platform, [plan.name, host].filter(Boolean), this.timer, Number(port) || null), this.timer, HOME_WAIT_MS);
     const homes = found instanceof Map ? found : new Map();
     this.homes = new Map([...this.homes, ...homes]);
     const ip = homes.get(plan.name) ?? homes.get(host);
@@ -193,11 +194,11 @@ export default class Computers extends View {
   async connect(key, planned) {
     const given = this.jobs[key]?.choice?.record ? planned : await this.withHome(planned);
     const home = await this.homeProbe(given);
-    const tried = given.probe && home?.reach !== "ready" ? await this.probe([given.target, ...(given.also ?? [])].filter(Boolean)) : null;
-    if (tried && tried.reach !== "ready" && HOME_SIGN_IN.has(home?.reach)) {
+    if (HOME_SIGN_IN.has(home?.reach)) {
       this.jobs[key] = { ...this.jobs[key], plan: await this.homeFirst(given) };
       return this.fail(key, home.reach, said(home.result));
     }
+    const tried = given.probe && home?.reach !== "ready" ? await this.probe([given.target, ...(given.also ?? [])].filter(Boolean)) : null;
     const chosen = tried ? { ...given, target: tried.target } : given;
     this.jobs[key] = { ...this.jobs[key], plan: chosen };
     if (tried && tried.reach !== "ready") return this.fail(key, tried.reach, said(tried.result));
