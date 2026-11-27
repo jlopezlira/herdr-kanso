@@ -131,7 +131,7 @@ async function walkRoot(root, adapter) {
     return { files: isEligible(adapter, canonical) ? [canonical] : [], sortBase: root };
   }
   const walked = await walkDir(canonical, root, adapter, { traversed: 0, fatal: null, stopped: false });
-  return { files: walked.files.flat(Infinity), sortBase: canonical, unavailable: false, fatal: walked.fatal };
+  return { files: walked.files.flat(Infinity), sortBase: canonical, unavailable: false, fatal: walked.fatal, capped: walked.stopped };
 }
 
 async function walkDir(dir, root, adapter, seen) {
@@ -178,7 +178,7 @@ export async function discoverFiles(config, home, tally) {
       return tallyNote(current, `[${source.id}] source ${source.id}: root ${rootText} is not available.`);
     }
     if (result.fatal) {
-      return tallyRetry(
+      return (result.capped ? tallyWarn : tallyRetry)(
         current,
         `[${source.id}] source ${source.id}: cannot read root ${rootText}: ${result.fatal.message}`,
         source.id,

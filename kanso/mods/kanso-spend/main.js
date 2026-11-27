@@ -201,7 +201,7 @@ export default class TokenSpend extends View {
   catchUp(cx) {
     if (Date.now() - this.lastSnapshotAt >= REFRESH_MS) this.run("snapshot", cx);
     else if (!this.costs) this.run("prepare", cx);
-    if (this.running) return;
+    if (this.running || this.scan?.partial) return;
     const all = this.takeForced();
     this.exchange(cx, all, all);
   }
