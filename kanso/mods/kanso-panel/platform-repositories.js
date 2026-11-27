@@ -101,8 +101,8 @@ while [ "$i" -lt "$nitems" ]; do
   j=$i
   while [ "$j" -lt "$end" ]; do
     (
-      out=$(probe_one "\${paths[$j]}" "$idle" "\${refs[@]}")
-      printf '#%s\n%s\n' "$j" "$out"
+      flat=$(printf '%s' "$(probe_one "\${paths[$j]}" "$idle" "\${refs[@]}")" | tr '\\n' '')
+      printf '%s\\n' "#$j $flat"
     ) &
     j=$((j + 1))
   done

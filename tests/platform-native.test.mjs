@@ -173,9 +173,8 @@ test("probing many worktrees of one repository starts one shell", async () => {
 });
 
 const recordOf = (text, index) => {
-  const start = text.indexOf(`#${index}\n`);
-  const next = text.indexOf("\n#", start + 1);
-  return text.slice(start, next === -1 ? text.length : next);
+  const line = String(text).split("\n").find((row) => row.startsWith(`#${index} `));
+  return line ? line.slice(line.indexOf(" ") + 1).split("\u001f").join("\n") : "";
 };
 
 test("one repository probe reads every worktree again, including a new file", { skip: nativePlatform === "windows" }, async (t) => {
@@ -205,4 +204,33 @@ test("one repository probe reads every worktree again, including a new file", { 
   assert.equal(bash, 2);
   assert.match(recordOf(edited.stdout, 0), /dirty\t1/);
   assert.match(recordOf(edited.stdout, 1), /dirty\t0/);
+});
+
+test("mixed worktree answers stay on their own line across waves", { skip: nativePlatform === "windows" }, async (t) => {
+  const root = await temporary(t), folder = join(root, "repo"), files = fileApi(nativePlatform, exec);
+  await files.mkdir(folder);
+  const git = async (...args) => {
+    const result = await exec("git", ["-C", folder, "-c", "user.name=Test", "-c", "user.email=test@example.test", "-c", "commit.gpgsign=false", ...args]);
+    assert.equal(result.code, 0, result.stderr);
+  };
+  await git("init", "-b", "main");
+  await writeFile(join(folder, "one.txt"), "one\n");
+  await git("add", "."); await git("commit", "-m", "Initial");
+  const api = repositoryApi(nativePlatform, exec);
+  const paths = [];
+  for (let index = 0; index < 9; index += 1) {
+    const made = await api.createWorktree(folder, `branch-${index}`, join(root, "trees"), root);
+    const path = made.stdout.trim().split("\t")[1];
+    paths.push(path);
+    for (let file = 0; file < index + 1; file += 1) await writeFile(join(path, `extra-${file}.txt`), "x\n");
+  }
+  const opened = await api.probeAll(folder, paths.map((path) => ({ path })), 0, ["main"]);
+  assert.equal(opened.code, 0, opened.stderr);
+  const lines = opened.stdout.split("\n").filter(Boolean);
+  assert.equal(lines.length, 9);
+  lines.forEach((line) => {
+    assert.match(line, /^#\d+ /);
+    const index = Number(line.slice(1, line.indexOf(" ")));
+    assert.match(recordOf(opened.stdout, index), new RegExp(`^dirty\\t${index + 1}$`, "m"));
+  });
 });
