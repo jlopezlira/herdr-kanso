@@ -348,7 +348,7 @@ const HOUR_MS = 60 * 60_000;
 const RETRY_MS = 10 * 60_000;
 const retryStamp = (deadline) => deadline - 12 * HOUR_MS;
 
-const sharedSpend = async ({ failResumption = false, sleepingBeforeRefresh = false } = {}) => {
+const sharedSpend = async ({ failResumption = false, sleepingBeforeRefresh = false, restartPartial = false } = {}) => {
   const commands = [], exchanges = [];
   let now = Date.UTC(2026, 10, 10, 12), snapshots = 0;
   const state = { "kanso.spend.snapshotAt": now - HOUR_MS };
@@ -360,9 +360,9 @@ const sharedSpend = async ({ failResumption = false, sleepingBeforeRefresh = fal
       commands.push(command);
       if (command === "snapshot") snapshots += 1;
       if (failResumption && command === "snapshot" && snapshots === 2) throw new Error("Scan could not resume");
-      if (snapshots === 1 && command === "snapshot") {
-        const payload = pricedScan(1, true);
-        return { ...payload, scan: { ...payload.scan, processed: 8, total: 20 } };
+      if (command === "snapshot" && (snapshots === 1 || (restartPartial && snapshots === 3))) {
+        const payload = pricedScan(snapshots, true);
+        return { ...payload, scan: { ...payload.scan, processed: snapshots === 1 ? 8 : 2, total: 20 } };
       }
       return pricedScan(Math.max(snapshots, 1), false);
     }
@@ -427,13 +427,18 @@ test("Spend backs off a failed resumption across another reopen until the new re
   assert.deepEqual(commands, ["snapshot", "snapshot", "prepare", "snapshot"]);
 });
 
-const sharedSpendCompleted = async () => {
-  const scenario = await sharedSpend();
+const finishInOtherSpendView = async (scenario) => {
   const second = await mountSpend(scenario.Spend);
   second.view.run("snapshot", second.cx);
   await second.drain();
   assert.equal(second.view.scan.partial, false);
-  second.view.close();
+  return second;
+};
+
+const sharedSpendCompleted = async () => {
+  const scenario = await sharedSpend();
+  const other = await finishInOtherSpendView(scenario);
+  other.view.close();
   return scenario;
 };
 
@@ -445,17 +450,24 @@ test("A pending Spend continuation prices the completed ledger without rescannin
   assert.deepEqual(commands.slice(start), ["prepare"]);
 });
 
+const interceptSpendPrepare = (view, prepare) => {
+  const ask = view.ask.bind(view);
+  view.ask = (command, ...args) => {
+    const answer = ask(command, ...args);
+    return command === "prepare" ? prepare(answer) : answer;
+  };
+};
+
 const checkShareAfterRepricing = async (reopen) => {
   const { first, commands, exchanges, continueFirst } = await sharedSpendCompleted();
   const start = commands.length;
   exchanges.length = 0;
   const priced = Promise.withResolvers();
-  const ask = first.view.ask.bind(first.view);
-  first.view.ask = async (command) => {
-    const payload = await ask(command);
-    if (command === "prepare") await priced.promise;
+  interceptSpendPrepare(first.view, async (answer) => {
+    const payload = await answer;
+    await priced.promise;
     return payload;
-  };
+  });
 
   if (reopen) first.view.wake(first.cx);
   const done = reopen ? first.drain() : continueFirst();
@@ -473,6 +485,73 @@ const checkShareAfterRepricing = async (reopen) => {
 test("Waking Spend after another view completes shares only repriced totals.", () => checkShareAfterRepricing(true));
 
 test("Spend's continuation after another view completes shares only repriced totals.", () => checkShareAfterRepricing(false));
+
+test("Reopening an already-awake Spend view cannot overwrite the other view's completed total.", async () => {
+  const { first, exchanges } = await sharedSpendCompleted();
+  const start = exchanges.findIndex(([usd]) => usd === 2);
+  assert.notEqual(start, -1);
+  first.view.wake(first.cx);
+  await first.drain();
+  assert.deepEqual(exchanges.slice(start).map(([usd]) => usd), [2, 2]);
+});
+
+const checkPrepareDuringPartial = async (fresh) => {
+  const scenario = await sharedSpend();
+  const { first, exchanges } = scenario;
+  const pricingView = fresh ? initSpend(scenario.Spend) : first;
+  const partial = Promise.withResolvers(), complete = Promise.withResolvers();
+  const pricing = Promise.withResolvers(), repricing = Promise.withResolvers();
+  let prepares = 0;
+  interceptSpendPrepare(pricingView.view, async (answer) => {
+    const payload = await answer;
+    prepares += 1;
+    if (prepares === 1) {
+      pricing.resolve(payload.costs.local.usd);
+      await partial.promise;
+    } else {
+      repricing.resolve();
+      await complete.promise;
+    }
+    return payload;
+  });
+  if (!fresh) pricingView.view.run("prepare", pricingView.cx);
+  const done = fresh ? pricingView.start() : pricingView.drain();
+  let other;
+  try {
+    assert.equal(await Promise.race([pricing.promise, done]), 1);
+    other = await finishInOtherSpendView(scenario);
+    exchanges.length = 0;
+    partial.resolve();
+    await Promise.race([repricing.promise, done]);
+    assert.deepEqual(exchanges, []);
+    assert.equal(prepares, 2);
+  } finally {
+    partial.resolve();
+    complete.resolve();
+    await done;
+    other?.view.close();
+  }
+  assert.deepEqual(exchanges, [[2, true, !fresh]]);
+};
+
+test("The Spend view that started a partial scan reprices if another view completes during prepare.", () =>
+  checkPrepareDuringPartial(false));
+
+test("A fresh Spend view reprices if another view completes while it is pricing partial totals.", () =>
+  checkPrepareDuringPartial(true));
+
+test("A pending Spend continuation does not follow a newer partial scan from another view.", async () => {
+  const scenario = await sharedSpend({ restartPartial: true });
+  const other = await finishInOtherSpendView(scenario);
+  scenario.advance(1);
+  other.view.run("snapshot", other.cx);
+  await other.drain();
+  assert.equal(other.view.scan.partial, true);
+
+  const before = scenario.commands.length;
+  await scenario.continueFirst();
+  assert.deepEqual(scenario.commands.slice(before), []);
+});
 
 test("Spend saves a ten-minute retry deadline instead of marking a failed scan fresh.", async () => {
   const started = Date.UTC(2026, 10, 10, 12), retryAt = started + 10 * 60 * 1000;

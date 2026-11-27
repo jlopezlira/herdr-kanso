@@ -495,27 +495,34 @@ test("Shipped rejects a search page read as Bob even when the token switches bac
   assert.deepEqual({ count: (await store.prs()).length, months: (await store.readMonths("github")).size }, { count: 0, months: 0 });
 });
 
-const checkUnconfirmedHistory = async (t, { missingViewer = false, inaccessible = false } = {}) => {
+const failedHistory = (login) => ({
+  ...failure("gh: Could not resolve to a Repository"),
+  stdout: JSON.stringify({ data: { viewer: { login }, repository: null }, errors: [{ type: "NOT_FOUND" }] }),
+});
+
+const checkUnconfirmedHistory = async (t, { missingViewer = false, inaccessible = false, switchBack = false } = {}) => {
   const now = monthAt(11, 10), merge = now - HOUR;
   const pr = pullRequest(1, merge - HOUR, { base: "develop", merged: merge });
-  let login = "alice";
+  let login = "alice", readHistory = false;
   const host = await ghShippedHost(t, now, (query, { q, ref }) => {
     if (viewerQuery(query)) {
-      if (login === "bob" && query.includes("cal:")) throw new Error("Bob's period is unavailable");
+      if (readHistory && query.includes("cal:")) throw new Error("The new period is unavailable");
       return viewerOf(login);
     }
     if (ref) {
+      readHistory = true;
       if (!missingViewer) login = "bob";
-      if (inaccessible) return {
-        ...failure("gh: Could not resolve to a Repository"),
-        stdout: JSON.stringify({ data: { viewer: { login }, repository: null }, errors: [{ type: "NOT_FOUND" }] }),
-      };
+      if (inaccessible) {
+        const response = failedHistory(login);
+        if (switchBack) login = "alice";
+        return response;
+      }
       return { ...history([pr.mergeCommit.oid]), viewer: missingViewer ? undefined : { login } };
     }
     return search(q.includes("created:") ? [pr] : []);
   }, () => login, () => login);
   const { panel } = await settledShipped(host, "day");
-  assert.equal(login, missingViewer ? "alice" : "bob");
+  assert.equal(login, missingViewer || switchBack ? "alice" : "bob");
   assert.equal(await panel.store.meta("github.login"), "alice");
   const [row] = await panel.store.prs();
   assert.deepEqual([row.prod, await panel.store.meta("github.unchecked")], [0, null]);
@@ -528,6 +535,9 @@ test("Shipped does not save production history results from an answer without a 
 
 test("Shipped does not save Alice's unchecked count when GitHub history fails under Bob.", (t) =>
   checkUnconfirmedHistory(t, { inaccessible: true }));
+
+test("Shipped does not save Bob's failed history after the viewer switches back to Alice.", (t) =>
+  checkUnconfirmedHistory(t, { inaccessible: true, switchBack: true }));
 
 test("Shipped shows the new account and reads its full calendar when you reopen after switching accounts.", async (t) => {
   const now = new Date(2026, 10, 10, 12).getTime();
@@ -802,7 +812,7 @@ test("Shipped tells you when a merged pull request could not be checked for prod
     ...gpuiHost(), Date: clockAt(now),
     exec: withGitHub((query, { q, ref }) => {
       if (viewerQuery(query)) return viewerOf("me");
-      if (ref) throw new Error("Repository history is unavailable");
+      if (ref) return failedHistory("me");
       return search(q === createdQuery(monthAt(11), now + 1000) ? [checked, unchecked] : []);
     }),
   }));
