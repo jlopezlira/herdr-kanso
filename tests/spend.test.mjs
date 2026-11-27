@@ -727,13 +727,17 @@ test("Spend forces a peer exchange after the Refresh queued behind a read finish
 const peerSelf = "11111111-2222-4333-8444-555555555555";
 const peerCosts = (usd) => ({ ...bare, syncSelf: peerSelf, local: { usd, tokens: 100 } });
 const ownSpendFrom = (push) => push.find((row) => row.machine === peerSelf)?.body.usd;
+const spendExchangeContext = async (fields, host) => {
+  const context = timedContext([]);
+  const page = await spendPage({ db: { machinesOff: async () => [] }, ...fields }, host);
+  return { ...context, page };
+};
 
 test("Spend sends only refreshed totals to a peer after the scan and its queued prepare finish.", async () => {
   const sent = [], reads = [];
   const scan = Promise.withResolvers(), prepare = Promise.withResolvers();
-  const { cx, drain, pending } = timedContext([]);
-  const page = await spendPage({
-    costs: peerCosts(2), db: { machinesOff: async () => [] },
+  const { cx, drain, pending, page } = await spendExchangeContext({
+    costs: peerCosts(2),
     async ask(command) {
       reads.push(command);
       if (command === "snapshot") return scan.promise;
@@ -758,37 +762,94 @@ test("Spend sends only refreshed totals to a peer after the scan and its queued 
   assert.deepEqual(sent, [12]);
 });
 
-test("An exchange already reading peers cannot send new partial Spend totals.", async () => {
+const holdPeerRows = ({ files } = {}) => {
   const sent = [], stalled = Promise.withResolvers(), reading = Promise.withResolvers();
-  const host = peerHost({ probe: (_peer, { push }) => sent.push(ownSpendFrom(push)) });
-  const { cx, drain, pending } = timedContext([]);
+  const host = peerHost({ files, probe: (_peer, { push }) => sent.push(ownSpendFrom(push)) });
   let held = false;
-  const page = await spendPage({
-    nodeBinary: "node", costs: peerCosts(1), db: { machinesOff: async () => [] },
-    async ask() { return { ...spendPayload(peerCosts(2)), scan: { partial: true } }; },
-  }, {
-    ...host,
-    readTextFile(file) {
-      if (held || !file.endsWith("rows.json")) return host.readTextFile(file);
-      held = true;
-      reading.resolve(true);
-      return stalled.promise;
+  return {
+    sent, reading: reading.promise, release: () => stalled.resolve(null),
+    host: {
+      ...host,
+      readTextFile(file) {
+        if (held || !file.endsWith("rows.json")) return host.readTextFile(file);
+        held = true;
+        reading.resolve(true);
+        return stalled.promise;
+      },
     },
-  });
+  };
+};
+
+test("An exchange already reading peers cannot send new partial Spend totals.", async () => {
+  const rows = holdPeerRows();
+  const { cx, drain, pending, page } = await spendExchangeContext({
+    nodeBinary: "node", costs: peerCosts(1),
+    async ask() { return { ...spendPayload(peerCosts(2)), scan: { partial: true } }; },
+  }, rows.host);
 
   page.exchange(cx, true, true);
   try {
-    assert.equal(await Promise.race([reading.promise, pending[0]]), true);
+    assert.equal(await Promise.race([rows.reading, pending[0]]), true);
     page.run("snapshot", cx);
     await pending[1];
     assert.equal(page.costs.local.usd, 2);
     assert.equal(page.stale(), true);
   } finally {
-    stalled.resolve(null);
+    rows.release();
     await drain();
   }
-  assert.deepEqual(sent, [undefined]);
+  assert.deepEqual(rows.sent, []);
 });
+
+const checkDisplacedForcedExchange = async (partialDuringRetry = false) => {
+  const now = Date.UTC(2026, 10, 10, 12);
+  const rows = holdPeerRows({
+    files: { "status.json": JSON.stringify({ peers: { odin: { at: now, failures: 0, period: "day:0" } } }) },
+  });
+  let snapshots = 0;
+  const { page, cx, drain, pending } = await spendExchangeContext({
+    async ask(command) {
+      if (command === "snapshot") {
+        snapshots += 1;
+        const usd = snapshots === 1 ? 1 : snapshots + 1;
+        return { ...spendPayload(peerCosts(usd)), scan: { partial: snapshots === 2 } };
+      }
+      return spendPayload(peerCosts(snapshots > 1 ? snapshots + 1 : 2));
+    },
+  }, { ...rows.host, ...snapshotClock({}, () => now) });
+
+  page.reload(cx);
+  try {
+    await pending[0];
+    await pending[1];
+    assert.equal(await Promise.race([rows.reading, pending[2]]), true);
+    page.run("prepare", cx);
+    await pending[3];
+    assert.equal(page.costs.local.usd, 2);
+    assert.equal(page.syncAgain, true);
+    if (partialDuringRetry) {
+      page.run("snapshot", cx);
+      await pending[4];
+      assert.equal(page.stale(), true);
+    }
+    assert.deepEqual(rows.sent, []);
+  } finally {
+    rows.release();
+    await drain();
+  }
+  if (partialDuringRetry) {
+    assert.deepEqual(rows.sent, []);
+    page.run("snapshot", cx);
+    await drain();
+  }
+  assert.deepEqual(rows.sent, [partialDuringRetry ? 4 : 2]);
+};
+
+test("A forced Spend exchange displaced by prepare reaches even a fresh peer once with the new totals.", () =>
+  checkDisplacedForcedExchange());
+
+test("A forced Spend exchange refused during a partial scan still reaches a fresh peer after completion.", () =>
+  checkDisplacedForcedExchange(true));
 
 const checkTwoChunkRefresh = async (betweenChunks) => {
   const timers = [], exchanges = [];
