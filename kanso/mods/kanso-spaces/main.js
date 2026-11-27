@@ -2344,11 +2344,12 @@ export default class Spaces extends RetryingView {
     if (held) { land(held); return; }
     const starting = startingNow(shared(STARTING));
     if (starting[keyOf(c)]) return;
-    const machine = c.machine ?? (place.machine || null);
-    const agent = (this.known ?? []).find((a) => a.key === c.program && a.installed);
-    const argv = resumeOf(c.program, agent?.run ?? [c.program], c);
-    if (!argv) return;
     setShared(STARTING, { ...starting, [keyOf(c)]: Date.now() });
+    const machine = c.machine ?? (place.machine || null);
+    const known = machine ? JSON.parse(JSON.stringify(await knownAgents({ on: machine }).catch(() => []))) : (this.known ?? []);
+    const agent = known.find((a) => a.key === c.program && a.installed);
+    const argv = resumeOf(c.program, agent?.run ?? [c.program], c);
+    if (!argv) { setShared(STARTING, Object.fromEntries(Object.entries(startingNow(shared(STARTING))).filter(([k]) => k !== keyOf(c)))); return; }
     const open = openSpaceAt(spaces(), c.cwd, machine);
     const target = place.folder ? place : open ? placeOfSpace(open) : placeOfKey(`${machine ?? ""}:${c.cwd}`);
     viewerFor(machine).then((viewed) => startIn(target, viewed(argv)));

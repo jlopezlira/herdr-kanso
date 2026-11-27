@@ -18,7 +18,8 @@ const COMMON = [
   // An agent's program icon and name, and the key caps, the same in the tabs, headers, status bar, sidebar and Send.
   { source: "kanso/mods/kanso-spaces/marks.js", copies: ["kanso/mods/kanso-strip/marks.js", "kanso/mods/kanso-status/marks.js", "kanso/mods/kanso-send/marks.js", "kanso/mods/kanso-settings/marks.js", "kanso/mods/kanso-help/marks.js", "kanso/mods/kanso-panel/marks.js", "kanso/mods/kanso-toast/marks.js", "kanso/mods/kanso-menu/marks.js", "kanso/mods/kanso-chrome/marks.js"] },
   // Text for an agent, delivered the same from Send and from Look.
-  { source: "kanso/mods/kanso-send/deliver.js", copies: ["kanso/mods/kanso-panel/deliver.js", "kanso/mods/kanso-strip/deliver.js"] },
+  { source: "kanso/mods/kanso-send/deliver.js", copies: ["kanso/mods/kanso-panel/deliver.js", "kanso/mods/kanso-strip/deliver.js", "kanso/mods/kanso-settings/deliver.js"] },
+  { source: "kanso/mods/kanso-panel/todo-switch.js", copies: ["kanso/mods/kanso-settings/todo-switch.js"] },
   // What a file is by its name: the preview panel's text, Look's pictures, Open with's "Preview in the panel".
   { source: "kanso/mods/kanso-panel/kinds.js", copies: ["kanso/mods/open-with/kinds.js"] },
   // The layout writers' helpers: what each keeps, and how a write puts it all back.

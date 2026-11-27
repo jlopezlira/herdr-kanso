@@ -32,6 +32,10 @@ the branch's rules.
 ### Fixed
 
 - Shipped no longer stops drawing ("This view could not be re-rendered") with a few thousand pull requests, and its streak is not reset by a calendar day that GitHub already started.
+- Tasks turns Agents keep the to-do on itself when it is empty, and turning it on, here or in Settings, sends the rule to the agents already running on this computer, so they start using it without a new conversation.
+- A to-do marked done or deleted while it is still being saved on another computer keeps that change.
+- Resume a conversation on another computer starts it with that computer's own agent command, once however fast you choose it.
+- Agents keep the to-do leaves a Codex config.toml alone when its own developer_instructions sits after a multiline string or a comment, and works when kansō's folder has an apostrophe.
 
 ## [4.2.0] - 2026-11-26
 

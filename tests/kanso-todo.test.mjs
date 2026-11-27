@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { chmod, mkdir, readFile, realpath, stat, writeFile } from "node:fs/promises";
+import { appendFile, chmod, copyFile, mkdir, readFile, realpath, stat, symlink, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { committedRepo, exec, fileExists, same, temporary } from "./helpers.mjs";
@@ -10,18 +10,18 @@ const todoScript = fileURLToPath(new URL("../kanso/mods/kanso-panel/kanso-todo",
 const unixTodo = { skip: process.platform === "win32" && "The agent's command uses POSIX sh" };
 const terminalId = "t42";
 
-const agentTodo = async (t, cwd) => {
+const agentTodo = async (t, cwd, script = todoScript) => {
   const HOME = await temporary(t);
   const { db, dir } = await temporaryKdb(t);
   const options = { cwd: cwd ?? HOME, env: { ...process.env, HOME, HERDR_APP_HOME: dir, HC_TERMINAL_ID: terminalId } };
-  const at = (cwd) => (...args) => exec("sh", ["-c", 'umask 022; exec sh "$@"', "sh", todoScript, ...args], { ...options, cwd });
+  const at = (cwd) => (...args) => exec("sh", ["-c", 'umask 022; exec sh "$@"', "sh", script, ...args], { ...options, cwd });
   const result = at(options.cwd);
   const run = async (...args) => {
     const { code, stdout, stderr } = await result(...args);
     assert.equal(code, 0, stderr);
     return stdout.trim();
   };
-  return { db, HOME, run, at, result };
+  return { db, HOME, run, at, result, options };
 };
 
 test("An agent can add, list and finish to-dos in its project from a subfolder.", unixTodo, async (t) => {
@@ -52,6 +52,22 @@ test("An agent can add, list and finish to-dos in its project from a subfolder."
   const [{ done_at }] = await saved();
   assert.ok(Number.isInteger(done_at) && done_at > 0);
   assert.equal(await run("list"), "");
+});
+
+test("An agent can run the command printed in the rule when the install path has an apostrophe.", unixTodo, async (t) => {
+  const folder = join(await temporary(t), "Agent's tools");
+  await mkdir(folder);
+  const script = join(folder, basename(todoScript));
+  await copyFile(todoScript, script);
+  const { run, options } = await agentTodo(t, folder, script);
+  const text = "Check the release";
+  const id = await run("add", text);
+  const rule = await run("rule");
+  const list = rule.split("\u0060").find((part) => part.startsWith("sh ") && part.endsWith(" list"));
+  assert.ok(list, "The rule prints a shell command for listing to-dos");
+  const { code, stdout, stderr } = await exec("sh", ["-c", list], options);
+  assert.equal(code, 0, stderr);
+  assert.equal(stdout.trim(), `${id}\t${text}`);
 });
 
 const agentInstructionFiles = async (t, config, userAppend = "Keep my own Pi instructions.\n") => {
@@ -116,38 +132,298 @@ const expectCodexConflict = async ({ result, codex }, config) => {
   assert.equal(await readFile(codex, "utf8"), config);
 };
 
+const checkCodexConflicts = async (command, configs) => {
+  for (const config of configs) {
+    await writeFile(command.codex, config);
+    await expectCodexConflict(command, config);
+  }
+};
+
+const agentTodoOnPath = async (t, withoutPython) => {
+  const command = await agentTodo(t);
+  if (withoutPython) {
+    const bin = await temporary(t);
+    const programs = ["awk", "basename", "cat", "dirname", "grep", "head", "rm", "sed", "sh", "tail"];
+    for (const name of programs) {
+      const found = await exec("sh", ["-c", 'command -v "$1"', "sh", name]);
+      assert.equal(found.code, 0, found.stderr);
+      await symlink(found.stdout.trim(), join(bin, name));
+    }
+    command.options.env.PATH = bin;
+    const python = await exec("sh", ["-c", "command -v python3"], command.options);
+    assert.notEqual(python.code, 0, "The installer cannot find python3 in this fixture");
+  }
+  return command;
+};
+
+const agentSettingsFile = async (t, config, withoutPython, parts) => {
+  const command = await agentTodoOnPath(t, withoutPython);
+  const file = join(command.HOME, ...parts);
+  await mkdir(dirname(file), { recursive: true });
+  await writeFile(file, config);
+  return { ...command, file };
+};
+
+const codexOnly = async (t, config, withoutPython) => {
+  const command = await agentSettingsFile(t, config, withoutPython, [".codex", "config.toml"]);
+  return { ...command, codex: command.file };
+};
+
+const piOnly = (t, config, withoutPython) =>
+  agentSettingsFile(t, config, withoutPython, [".pi", "agent", "APPEND_SYSTEM.md"]);
+
+const inInstallEnvironments = async (t, check, setup = codexOnly) => {
+  for (const [name, withoutPython] of [["regular PATH", false], ["no python3 on PATH", true]]) {
+    await t.test(name, (test) => check((config) => setup(test, config, withoutPython)));
+  }
+};
+
+const statusBeforeUninstall = async (run) => {
+  const status = await run("status");
+  await run("uninstall");
+  return status;
+};
+
+test("Codex can turn off the to-do rule after I add settings above it.", unixTodo, async (t) => {
+  await inInstallEnvironments(t, async (makeCodex) => {
+    const { run, codex } = await makeCodex("");
+    const settings = 'model = "gpt-5"\n';
+    await run("install");
+    await writeFile(codex, settings + await readFile(codex, "utf8"));
+    const before = await statusBeforeUninstall(run);
+    assert.equal(await readFile(codex, "utf8"), settings);
+    assert.equal(before, "on", "My setting above the rule does not hide it");
+    assert.equal(await run("status"), "off");
+  });
+});
+
+test("A refused Codex reinstall keeps my working to-do rule.", unixTodo, async (t) => {
+  await inInstallEnvironments(t, async (makeCodex) => {
+    const command = await makeCodex("");
+    await command.run("install");
+    await appendFile(command.codex, "# developer_instructions\n");
+    const original = await readFile(command.codex, "utf8");
+    await expectCodexConflict(command, original);
+    assert.equal(await command.run("status"), "on");
+  });
+});
+
+const expectMarkedTextKept = async (makeConfig, original, agent) => {
+  const { run, file } = await makeConfig(original);
+  const before = await run("status");
+  assert.match(await run("install"), new RegExp(`${agent}: on`));
+  const installed = await readFile(file, "utf8");
+  assert.ok(installed.includes(original), "Install preserves the user's text");
+  assert.equal(await run("status"), "on");
+  await run("uninstall");
+  assert.equal(await readFile(file, "utf8"), original);
+  assert.equal(await run("status"), "off");
+  assert.equal(before, "off", "Marker-like text alone is not an installed rule");
+};
+
+test("A Codex array value does not hide the existing top-level developer instructions.", unixTodo, async (t) => {
+  await inInstallEnvironments(t, async (codex) => {
+    const config = "values = [\n  [1, 2],\n]\n" + OWN_CODEX;
+    await expectCodexConflict(await codex(config), config);
+  });
+});
+
+test("Codex install and uninstall do not touch marker-like lines in my configuration text.", unixTodo, async (t) => {
+  await inInstallEnvironments(t, async (makeCodex) => {
+    const config = ['notes = """', "# kanso-todo", "Keep these notes.", "# /kanso-todo", '"""', ""].join("\n");
+    await expectMarkedTextKept(makeCodex, config, "Codex");
+  });
+});
+
+test("Uninstalling keeps my Codex notes when they look like the to-do rule without its heading.", unixTodo, async (t) => {
+  await inInstallEnvironments(t, async (makeCodex) => {
+    const config = [
+      'model = "gpt-5"', 'notes = """', "# kanso-todo", "developer_instructions = '''",
+      "Keep my notes.", "'''", "# /kanso-todo", '"""', "",
+    ].join("\n");
+    const { run, file } = await makeCodex(config);
+    const before = await statusBeforeUninstall(run);
+    assert.equal(await readFile(file, "utf8"), config);
+    assert.equal(before, "off", "My notes are not an installed rule");
+  });
+});
+
+test("Installing leaves a dotted Codex key alone when its first part is developer_instructions.", unixTodo, async (t) => {
+  await inInstallEnvironments(t, async (codexOnly) => {
+    const shapes = ["developer_instructions.text", '"developer_instructions" . text', "'developer_instructions'.text"];
+    const body = ' = "Keep this table."\n';
+    await checkCodexConflicts(await codexOnly(CODEX_TABLE), shapes.map((key) => key + body));
+  });
+});
+
+test("A Codex table named developer_instructions blocks installation without changing the file.", unixTodo, async (t) => {
+  await inInstallEnvironments(t, async (makeCodex) => {
+    const config = '[developer_instructions]\ntext = "Keep this table."\n';
+    await expectCodexConflict(await makeCodex(config), config);
+  });
+});
+
+test("Four closing quotes before a comment do not hide existing Codex developer instructions.", unixTodo, async (t) => {
+  await inInstallEnvironments(t, async (makeCodex) => {
+    const config = 'notes = """Hello"""" # """"\n' + OWN_CODEX;
+    await expectCodexConflict(await makeCodex(config), config);
+  });
+});
+
+test("A marker pair at the top of Codex settings does not make my settings a managed rule.", unixTodo, async (t) => {
+  await inInstallEnvironments(t, async (makeCodex) => {
+    const config = '# kanso-todo\nmodel = "mine"\n# /kanso-todo\n';
+    await expectMarkedTextKept(makeCodex, config, "Codex");
+  });
+});
+
+const PI_HEADINGLESS = "# kanso-todo\nKeep my Pi notes.\n# /kanso-todo\n";
+
+test("Pi keeps my marker-like text when it does not contain the managed rule heading.", unixTodo, async (t) => {
+  await inInstallEnvironments(t, async (makePi) => {
+    await expectMarkedTextKept(makePi, PI_HEADINGLESS, "Pi");
+  }, piOnly);
+});
+
+const PI_UNTERMINATED = "# kanso-todo\n## To-do in kansō\nKeep these user notes.\n";
+
+const uninstallPiKeepingNotes = async ({ run, file }, original = PI_UNTERMINATED) => {
+  await run("uninstall");
+  assert.ok(await fileExists(file), "Uninstall keeps the Pi append file");
+  assert.equal(await readFile(file, "utf8"), original);
+};
+
+test("Uninstalling leaves Pi notes alone when the to-do block has no closing marker.", unixTodo, async (t) => {
+  const command = await piOnly(t, PI_UNTERMINATED, false);
+  const before = await command.run("status");
+  await uninstallPiKeepingNotes(command);
+  assert.equal(before, "off", "An unterminated block is not an installed rule");
+});
+
+test("Pi uninstall removes a complete block and keeps neighboring unterminated notes in either order.", unixTodo, async (t) => {
+  for (const [name, notesFirst] of [["complete block first", false], ["unterminated block first", true]]) {
+    await t.test(name, async (order) => {
+      const command = await piOnly(order, notesFirst ? PI_UNTERMINATED : "", false);
+      assert.match(await command.run("install"), /Pi: on/);
+      if (!notesFirst) await appendFile(command.file, PI_UNTERMINATED);
+      assert.equal(await command.run("status"), "on");
+      await uninstallPiKeepingNotes(command);
+      assert.equal(await command.run("status"), "off");
+    });
+  }
+});
+
+test("Pi uninstall keeps both unfinished notes and the heading-less marker pair that follows them.", unixTodo, async (t) => {
+  const notes = PI_UNTERMINATED + PI_HEADINGLESS;
+  await uninstallPiKeepingNotes(await piOnly(t, notes, false), notes);
+});
+
+test("Installing explains when this computer has no supported agent settings.", unixTodo, async (t) => {
+  const { run, result } = await agentTodo(t);
+  const installed = await result("install");
+  expectSkip(installed, /found no Claude Code, Codex or Pi settings on this computer/);
+  assert.equal(installed.stdout, "");
+  assert.equal(await run("status"), "off");
+});
+
+test("Installing keeps Codex instructions even when ordinary TOML text looks like a multiline delimiter.", unixTodo, async (t) => {
+  const reported = [
+    'compact_prompt = \'Use """ for Python docstrings.\'',
+    'developer_instructions = "Keep my instructions."',
+    "",
+  ].join("\n");
+  const command = await agentInstructionFiles(t, reported);
+  await expectCodexConflict(command, reported);
+
+  const python = (source, ...args) => exec("python3", ["-c", source, ...args], command.options);
+  if ((await python("import tomllib")).code !== 0) {
+    t.diagnostic("Skipping TOML parser checks: python3 with tomllib is unavailable.");
+    return;
+  }
+  const parsed = async () => {
+    const checked = await python(
+      "import json, sys, tomllib; print(json.dumps(tomllib.load(open(sys.argv[1], 'rb'))))",
+      command.codex,
+    );
+    assert.equal(checked.code, 0, checked.stderr);
+    return JSON.parse(checked.stdout);
+  };
+  const cases = [
+    ["reviewer's literal string", reported, true],
+    ["basic string with escaped quotes and a hash", String.raw`notes = "Use \"\"\" after #"` + "\n" + OWN_CODEX, true],
+    ["comment before a basic quoted key", '# """\n' + OWN_CODEX.replace("developer_instructions", '"developer_instructions"'), true],
+    ["multiline basic with escaped quote and closing comment", [
+      'notes = """', String.raw`Use \""" here.`, '""" # """', OWN_CODEX,
+    ].join("\n"), true],
+    ["multiline literal with a lookalike key, then a literal quoted key", [
+      "notes = '''", OWN_CODEX.trimEnd(), "'''", OWN_CODEX.replace("developer_instructions", "'developer_instructions'"),
+    ].join("\n"), true],
+    ["escaped quoted key", OWN_CODEX.replace("developer_instructions", String.raw`"\u0064eveloper_instructions"`), true],
+    ["table-level instructions after a multiline string", [
+      "notes = '''", OWN_CODEX.trimEnd(), "'''", CODEX_TABLE, OWN_CODEX,
+    ].join("\n"), true],
+    ["multiline string and table without a possible conflict", 'notes = """\nKeep these notes.\n"""\n' + CODEX_TABLE, false],
+    ["dotted key with an existing instruction namespace", 'developer_instructions.text = "Keep this table."\n', true],
+  ];
+  for (const [shape, config, conflict] of cases) {
+    await writeFile(command.codex, config);
+    const before = await parsed();
+    const installed = await command.result("install");
+    if (conflict) {
+      expectSkip(installed, CODEX_SKIPPED);
+      assert.equal(await readFile(command.codex, "utf8"), config, shape);
+      assert.equal(await fileExists(`${command.codex}.kanso`), false, shape);
+      assert.deepEqual(await parsed(), before, shape);
+    } else {
+      assert.equal(installed.code, 0, `${shape}: ${installed.stderr}`);
+      const { developer_instructions: rule, ...rest } = await parsed();
+      assert.match(rule, /## To-do in kansō/);
+      assert.deepEqual(rest, before, shape);
+    }
+  }
+
+  const malformed = "notes = [1,,2]\n";
+  await writeFile(command.codex, malformed);
+  expectSkip(await command.result("install"), /the rule would not fit/);
+  assert.equal(await readFile(command.codex, "utf8"), malformed);
+});
+
 test("Installing or uninstalling the to-do rule leaves an existing Codex developer instruction alone.", unixTodo, async (t) => {
   const config = OWN_CODEX + CODEX_TABLE;
   const command = await agentInstructionFiles(t, config);
-  const { run, codex } = command;
   await expectCodexConflict(command, config);
-  await run("uninstall");
-  assert.equal(await readFile(codex, "utf8"), config);
+  await command.run("uninstall");
+  assert.equal(await readFile(command.codex, "utf8"), config);
 });
 
-test("Codex skips an indented top-level developer instruction, but not one inside a table.", unixTodo, async (t) => {
+test("Codex leaves an indented developer instruction alone both at the top level and in a table.", unixTodo, async (t) => {
   const instruction = `  ${OWN_CODEX}`;
-  const topLevel = instruction + CODEX_TABLE;
-  const { run, result, codex } = await agentInstructionFiles(t, topLevel);
-  const config = () => readFile(codex, "utf8");
-  expectSkip(await result("install"), CODEX_SKIPPED);
-  assert.equal(await config(), topLevel);
+  const command = await agentInstructionFiles(t, CODEX_TABLE);
+  await checkCodexConflicts(command, [instruction + CODEX_TABLE, CODEX_TABLE + instruction]);
+});
 
-  const inTable = CODEX_TABLE + instruction;
-  await writeFile(codex, inTable);
-  assert.match(await run("install"), /Codex: on/);
-  const installed = await config();
-  assert.match(installed, /^# kanso-todo\ndeveloper_instructions = /);
-  assert.ok(installed.endsWith(inTable), "The top-level rule leaves the table's instruction untouched");
+test("Codex safely skips a config that mentions developer_instructions only inside a multiline string.", unixTodo, async (t) => {
+  const banner = ['banner = """', OWN_CODEX.trimEnd(), "[not.a.table]", '"""', ""].join("\n");
+  const config = banner + CODEX_TABLE;
+  await expectCodexConflict(await agentInstructionFiles(t, config), config);
+});
+
+test("A comment with triple quotes does not hide a Codex developer instruction from the installer.", unixTodo, async (t) => {
+  const config = '# These triple quotes are not a string: """\n' + OWN_CODEX;
+  await expectCodexConflict(await agentInstructionFiles(t, config), config);
+});
+
+test("Triple quotes in a comment after multiline notes do not hide the Codex developer instruction.", unixTodo, async (t) => {
+  const notes = ['notes = """', "Keep these notes.", '""" # """', ""].join("\n");
+  const config = notes + OWN_CODEX;
+  await expectCodexConflict(await agentInstructionFiles(t, config), config);
 });
 
 test("Installing the to-do rule leaves quoted top-level Codex developer instructions alone.", unixTodo, async (t) => {
   const command = await agentInstructionFiles(t, CODEX_TABLE);
-  for (const quote of ['"', "'"]) {
-    const config = OWN_CODEX.replace("developer_instructions", `${quote}developer_instructions${quote}`) + CODEX_TABLE;
-    await writeFile(command.codex, config);
-    await expectCodexConflict(command, config);
-  }
+  const configs = ['"', "'"].map((quote) =>
+    OWN_CODEX.replace("developer_instructions", `${quote}developer_instructions${quote}`) + CODEX_TABLE);
+  await checkCodexConflicts(command, configs);
 });
 
 test("Installing the to-do rule leaves an escaped Codex developer instruction alone.", unixTodo, async (t) => {
