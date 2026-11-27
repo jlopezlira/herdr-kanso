@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { checks, steps, summary, TESTS } from "../scripts/pre-pr.mjs";
+import { checks, marks, steps, summary, TESTS } from "../scripts/pre-pr.mjs";
 
 const ci = () => readFile(new URL("../.github/workflows/ci.yml", import.meta.url), "utf8");
 
@@ -26,6 +26,17 @@ test("Pre-PR runs every check CI runs and then the tests, and CI runs the same c
 test("Pre-PR checks a pull request against develop's version rules unless CI names the branch", () => {
   assert.equal(checks()[0].argv.at(-1), process.env.KANSO_BRANCH || "develop");
   assert.equal(checks("main")[0].argv.at(-1), "main");
+});
+
+test("Pre-PR marks a clean, full local run", () => {
+  assert.equal(marks({ env: {}, argv: [], dirty: "" }), true);
+});
+
+test("Pre-PR does not mark CI, checks-only runs, or uncommitted tracked changes", () => {
+  const local = { env: {}, argv: [], dirty: "" };
+  assert.equal(marks({ ...local, env: { CI: "true" } }), false);
+  assert.equal(marks({ ...local, argv: ["--checks-only"] }), false);
+  assert.equal(marks({ ...local, dirty: " M scripts/pre-pr.mjs\n" }), false);
 });
 
 test("Pre-PR ends with one line per step, ready for the Tests section", () => {
