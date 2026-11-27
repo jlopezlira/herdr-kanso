@@ -13,7 +13,8 @@ const footer = REPORT_LINE;
 const rcIntro = "Release candidate for 1.2.0. It becomes 1.2.0 stable if nothing blocks it.";
 const pending = "### Added\n\n- Feature.\n\n  Detail kept in release notes.";
 
-const releaseFixture = (t) => {
+const releaseFixture = (t, baseVersion = "1.1.0") => {
+  const history = stable.replace("1.1.0", baseVersion);
   const root = mkdtempSync(join(project, ".release-fixture-"));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const write = (path, text) => writeFileSync(join(root, path), text);
@@ -28,13 +29,13 @@ const releaseFixture = (t) => {
   for (const path of [".gitattributes", "scripts/check-version.mjs", "scripts/release-plan.mjs", "scripts/release-tag.mjs", "kanso/mods/kanso-chrome/release.js"]) copyFileSync(join(project, path), join(root, path));
   write("package.json", '{"type":"module"}\n');
   write(".gitignore", "output\nkanso-release-notes.md\nevent.json\nremote.git/\n");
-  write(versionFile, '{ "version": "1.1.0" }\n');
-  write("CHANGELOG.md", `# Changelog\n\n${stable}`);
+  write(versionFile, `{ "version": "${baseVersion}" }\n`);
+  write("CHANGELOG.md", `# Changelog\n\n${history}`);
   git("init", "-b", "develop");
   git("config", "user.name", "Release");
   git("config", "user.email", "release@example.test");
   commit("Stable");
-  git("tag", "v1.1.0");
+  git("tag", `v${baseVersion}`);
   const env = { ...process.env, KANSO_BRANCH: "develop", GITHUB_EVENT_NAME: "push", GITHUB_OUTPUT: join(root, "output"), RUNNER_TEMP: root };
   const node = (script, args = [], extra = {}) => {
     write("output", "");
@@ -46,21 +47,25 @@ const releaseFixture = (t) => {
     return result;
   };
   const addFeature = () => {
-    write("CHANGELOG.md", `# Changelog\n\n## [Unreleased]\n\n${pending}\n\n${stable}`);
+    write("CHANGELOG.md", `# Changelog\n\n## [Unreleased]\n\n${pending}\n\n${history}`);
     write("kanso/mods/kanso-chrome/feature.js", "export const feature = true;\n");
     commit("Add feature");
   };
-  return { write, read, git, commit, node, run, root, addFeature };
+  const pushDevelop = () => {
+    git("init", "--bare", join(root, "remote.git"));
+    git("remote", "add", "origin", join(root, "remote.git"));
+    git("push", "origin", "develop");
+  };
+  const setFeature = (value) => write("kanso/mods/kanso-chrome/feature.js", `export const feature = ${value};\n`);
+  return { write, read, git, commit, node, run, root, addFeature, pushDevelop, setFeature };
 };
 
 test("Workflow commands preserve PR history, publish computed notes and prepare successive RCs", (t) => {
-  const { write, read, git, commit, run, node, root, addFeature } = releaseFixture(t);
+  const { write, read, git, commit, run, node, root, addFeature, pushDevelop, setFeature } = releaseFixture(t);
   git("tag", "v1.2.0-beta.13");
   const base = git("rev-parse", "HEAD");
   addFeature();
-  git("init", "--bare", join(root, "remote.git"));
-  git("remote", "add", "origin", join(root, "remote.git"));
-  git("push", "origin", "develop");
+  pushDevelop();
   // The next release candidate prepared, and the version file it leaves.
   const prepareRc = () => {
     run("release-plan", ["rc", "--prepare"]);
@@ -117,26 +122,26 @@ test("Workflow commands preserve PR history, publish computed notes and prepare 
   assert.match(read("output"), /tag=v1\.2\.0-rc\.2\n/);
   const fixedBase = git("rev-parse", "HEAD");
   write("CHANGELOG.md", fixedLog.replace("## [1.2.0]", "## [Unreleased]\n\n### Fixed\n\n- Bug.\n\n## [1.2.0]"));
-  write("kanso/mods/kanso-chrome/feature.js", "export const feature = false;\n");
+  setFeature(false);
   commit("Fix feature");
   write("event.json", JSON.stringify({ pull_request: { base: { sha: fixedBase } } }));
   checkedBeta();
   assert.equal(read("kanso-release-notes.md"), `### Fixed\n\n- Bug.\n\n${footer}\n`);
-  assert.match(read("output"), /tag=v1\.2\.0-beta\.15\n/);
+  assert.match(read("output"), /tag=v1\.2\.0-rc\.2\n/, "a develop release after an RC is the next RC, which Early ranks above every beta");
   const fixHead = git("rev-parse", "develop");
-  run("release-tag", ["v1.2.0-beta.15"]);
-  assert.equal(git("rev-parse", "v1.2.0-beta.15^"), fixHead);
+  run("release-tag", ["v1.2.0-rc.2"]);
+  assert.equal(git("rev-parse", "v1.2.0-rc.2"), fixHead, "the develop commit already has the candidate's core version");
   assert.equal(git("rev-parse", "develop"), fixHead);
-  assert.equal(git("diff", "--name-only", fixHead, "v1.2.0-beta.15"), "", "a beta after an RC already has the matching core version");
   git("checkout", "develop");
   assert.equal(prepareRc(), fixedVersion);
   assert.match(read("CHANGELOG.md"), /- Feature\.[\s\S]*- Bug\./);
   assert.equal(read("kanso-release-notes.md"), `${rcIntro}\n\n## Changes\n\n${pending}\n\n### Fixed\n\n- Bug.\n\n${footer}\n`);
+  assert.match(read("output"), /tag=v1\.2\.0-rc\.3\n/);
   commit("Update release candidate");
-  run("release-tag", ["v1.2.0-rc.2"]);
+  run("release-tag", ["v1.2.0-rc.3"]);
   const minorHead = git("rev-parse", "HEAD");
   write("CHANGELOG.md", read("CHANGELOG.md").replace("## [1.2.0]", "## [Unreleased]\n\n### Removed\n\n- Old behavior.\n\n## [1.2.0]"));
-  write("kanso/mods/kanso-chrome/feature.js", "export const feature = null;\n");
+  setFeature(null);
   commit("Remove old behavior");
   write("event.json", JSON.stringify({ pull_request: { base: { sha: minorHead } } }));
   checkedBeta();
@@ -168,6 +173,111 @@ test("Workflow commands preserve PR history, publish computed notes and prepare 
   assert.equal(git("rev-parse", "v2.0.1-rc.1^"), stableHead);
   assert.equal(JSON.parse(git("show", `v2.0.1-rc.1:${versionFile}`)).version, "2.0.1");
   assert.equal(JSON.parse(git("show", `develop:${versionFile}`)).version, "2.0.0");
+});
+
+const skippedAsNewer = (planned, read, tag) => {
+  assert.equal(planned.stdout.trim(), `${tag} was published from a newer commit; no beta.`);
+  assert.equal(read("output"), "action=skip\n");
+};
+
+const queuedDevelopFixture = (t) => {
+  const { write, read, git, commit, node, run, addFeature, pushDevelop, setFeature } = releaseFixture(t);
+  addFeature();
+  const green = git("rev-parse", "HEAD");
+  write("CHANGELOG.md", read("CHANGELOG.md").replace(stable, `### Fixed\n\n- Follow-up.\n\n${stable}`));
+  setFeature(false);
+  commit("Fix feature");
+  const newer = git("rev-parse", "HEAD");
+  pushDevelop();
+  const tag = "v1.2.0-beta.1";
+  const plan = (sha, ref = sha) => {
+    git("checkout", "--detach", ref);
+    return node("release-plan", ["beta"], { KANSO_RELEASE_SHA: sha });
+  };
+  const publishNewer = () => {
+    run("release-tag", [tag]);
+    assert.equal(git("rev-parse", `${tag}^`), newer);
+    git("push", "origin", `refs/tags/${tag}`);
+  };
+  return { read, green, newer, plan, publishNewer, tag };
+};
+
+const plannedGreen = (plan, green) => {
+  const planned = plan(green);
+  assert.equal(planned.status, 0, planned.stderr);
+  return planned;
+};
+
+test("A green develop run still publishes when a newer push has not released", (t) => {
+  const { read, green, plan, tag } = queuedDevelopFixture(t);
+  const planned = plannedGreen(plan, green);
+  assert.ok(read("output").includes(`tag=${tag}\n`), planned.stdout);
+});
+
+test("A late develop run skips after an archive from a newer commit was published", (t) => {
+  const { read, green, plan, publishNewer, tag } = queuedDevelopFixture(t);
+  publishNewer();
+  skippedAsNewer(plannedGreen(plan, green), read, tag);
+});
+
+test("A late develop run skips after a newer commit is tagged directly as a release candidate", (t) => {
+  const { read, git, commit, run, addFeature, pushDevelop, setFeature } = releaseFixture(t);
+  addFeature();
+  pushDevelop();
+  const green = git("rev-parse", "origin/develop");
+  run("release-plan", ["rc", "--prepare"]);
+  setFeature(false);
+  commit("Prepare release candidate");
+  const tag = "v1.2.0-rc.1";
+  run("release-tag", [tag]);
+  git("push", "--atomic", "origin", "develop", `refs/tags/${tag}`);
+  git("update-ref", "refs/remotes/origin/develop", green);
+  assert.equal(git("rev-parse", tag), git("rev-parse", "develop"));
+  assert.equal(git("rev-parse", `${tag}^`), green);
+  assert.equal(git("rev-parse", "origin/develop"), green);
+
+  git("checkout", "--detach", green);
+  skippedAsNewer(run("release-plan", ["beta"], { KANSO_RELEASE_SHA: green }), read, tag);
+});
+
+test("A develop run treats its own detached release tag as unchanged, not newer", (t) => {
+  const { read, newer, plan, publishNewer, tag } = queuedDevelopFixture(t);
+  publishNewer();
+  const planned = plan(newer);
+  assert.equal(planned.status, 0, planned.stderr);
+  assert.equal(planned.stdout.trim(), `what Kanso installs has not changed since ${tag}; no beta.`);
+  assert.equal(read("output"), "action=skip\n");
+});
+
+test("A develop run fails rather than skipping when its release commit is unknown", (t) => {
+  const { read, green, plan } = queuedDevelopFixture(t);
+  const unknown = "f".repeat(green.length);
+  const planned = plan(unknown, green);
+  assert.equal(planned.status, 1, planned.stdout);
+  assert.ok(planned.stderr.includes(unknown), planned.stderr);
+  assert.equal(read("output"), "");
+});
+
+test("A develop run continues a published beta train after the changelog computes a lower version", (t) => {
+  const { write, read, git, commit, run, addFeature, pushDevelop, setFeature } = releaseFixture(t, "4.1.1");
+  addFeature();
+  const minorLog = read("CHANGELOG.md");
+  write("CHANGELOG.md", minorLog.replace("### Added", "### Breaking"));
+  commit("Mark feature as breaking");
+  pushDevelop();
+  const firstTag = "v5.0.0-beta.1";
+  run("release-plan", ["beta"]);
+  assert.match(read("output"), /tag=v5\.0\.0-beta\.1\n/);
+  run("release-tag", [firstTag]);
+  git("push", "origin", `refs/tags/${firstTag}`);
+  git("checkout", "develop");
+
+  write("CHANGELOG.md", minorLog);
+  setFeature(false);
+  commit("Correct the release bump and fix the feature");
+  git("push", "origin", "develop");
+  run("release-plan", ["beta"], { KANSO_RELEASE_SHA: git("rev-parse", "HEAD") });
+  assert.match(read("output"), /tag=v5\.0\.0-beta\.2\n/);
 });
 
 test("The release planner refuses a beta whose planned tag is not a release version", (t) => {
