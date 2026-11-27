@@ -11,10 +11,10 @@ const spend = async () => load("kanso-spend/spend-card.js", ["spendSpec", "spend
 
 const colors = { canvas: "#161615", text: "#e8e4dc", muted: "#9a958c", dim: "#6f6b64", border: "#2a2927", subtle: "#232220", accent: "#a7b59bff", green: "#8fbf7f", red: "#d0776b" };
 const summary = {
-  login: "me", period: "This week", big: "24", small: "60%", label: "pull requests in production, this week",
-  delta: 10, deltaText: "+10 points vs last week",
+  login: "me", period: "This week", big: "60%", small: "", prod: 24, opened: 40, label: "in production · 24 of 40",
+  delta: 10, deltaText: "+10 pts vs last week",
   stats: [{ value: "40", unit: "opened" }, { value: "30", unit: "merged" }, { value: "59", unit: "contributions" }],
-  everText: "3,683 pull requests merged since you joined GitHub in 2011.",
+  everText: "3,683 merged since 2011",
 };
 const extra = {
   streak: 17, longest: 39,
@@ -56,7 +56,7 @@ test("Shipped's card shares the production numbers without naming your work.", a
   assert.equal(width, 1200);
   assert.ok(height > 1000 && height < 2600, `${height}: one tall post`);
   wellFormed(svg);
-  const facts = [summary.big, summary.small, summary.label, summary.deltaText, "pull requests merged", "Streak", "Records", "52", "most at 15:00", "@me"];
+  const facts = [summary.big, summary.label, summary.deltaText, summary.everText, "Streak", "Records", "52", "most at 15:00", "@me"];
   for (const shown of facts) assert.ok(svg.includes(shown), shown);
   assert.doesNotMatch(svg, /github\.com\/(?!jlopezlira\/herdr-kanso)/, "no repository links but Kanso's");
   assert.ok(cardSvg(shippedSpec({ ...summary, login: "a<b&c" }, extra), colors).svg.includes("@a&lt;b&amp;c"));
@@ -82,9 +82,9 @@ test("Shipped shares its production count, share and streak in a post the networ
   const { shareText } = await shipped();
   const words = shareText(summary, extra);
   assert.ok(words.length <= 280);
-  assert.equal(words.split("\n")[0], "24 pull requests in production this week, 60% of those I opened, a 17-day streak.");
+  assert.equal(words.split("\n")[0], "24 of the 40 pull requests I opened this week reached production (60%), a 17-day streak.");
   assert.match(shareText({ ...summary, big: null }, { ...extra, streak: 0 }), /^What I shipped\./);
-  assert.match(NETWORKS.x.url(words), /^https:\/\/x\.com\/intent\/post\?text=24%20pull%20requests/);
+  assert.match(NETWORKS.x.url(words), /^https:\/\/x\.com\/intent\/post\?text=24%20of%20the%2040/);
   assert.match(NETWORKS.linkedin.url(words), /^https:\/\/www\.linkedin\.com\/feed\/\?shareActive=true&text=/);
   assert.match(NETWORKS.bluesky.url(words), /^https:\/\/bsky\.app\/intent\/compose\?text=/);
   assert.deepEqual([...wrap("one two three four", 9)], ["one two", "three", "four"]);

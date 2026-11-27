@@ -3,8 +3,8 @@ import test from "node:test";
 import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { arg, calls, exec, find, KIT_NIGHT, load, popoverHost, temporary, texts, timedContext } from "./helpers.mjs";
-import { keyDown, spendPage } from "./mod-fixtures.mjs";
+import { arg, calls, exec, find, KIT_NIGHT, load, popoverHost, storeShared, success, temporary, texts, timedContext } from "./helpers.mjs";
+import { keyDown, loadTokenSpend, spendPage } from "./mod-fixtures.mjs";
 import { chooserKey, readPlan } from "../kanso/mods/kanso-spend/spend-model.js";
 
 const presenter = fileURLToPath(new URL("../kanso/mods/kanso-spend/presenter.mjs", import.meta.url));
@@ -163,6 +163,10 @@ test("The chooser shows the lit choice when it opens, and Spend lets go of its h
 });
 
 const repaired = JSON.stringify({ node: "/usr/local/bin/node" });
+const mountedSpendHost = () => ({
+  ...popoverHost(), theme: () => KIT_NIGHT, appHome: () => "/app", home: () => "/home/me",
+  ScrollHandle: { new: () => ({ release() {} }) },
+});
 const runtimeHost = (reads, ran) => ({
   readTextFile: async (file) => {
     reads.push(file);
@@ -188,9 +192,9 @@ test("Pressing Retry, or kanso-spend.refresh, after runtime.json was repaired re
   const again = [], asked = [];
   let deliver, open = true;
   const { TokenSpend } = await load("kanso-spend/main.js", ["TokenSpend"], {
-    ...popoverHost(), theme: () => KIT_NIGHT, appHome: () => "/app", home: () => "/home/me",
+    ...mountedSpendHost(),
     layout: () => ({ content: { mod: "kanso-spend" }, hidden: true }), shared: () => null, setShared() {},
-    ScrollHandle: { new: () => ({}) }, ...runtimeHost(again, asked),
+    ...runtimeHost(again, asked),
     nextCommand: () => new Promise((resolve, reject) => {
       if (!open) reject(new Error("stop"));
       else deliver = (command) => { open = false; resolve(command); };
@@ -242,3 +246,54 @@ test("After a snapshot fails on the Node named in runtime.json, Refresh reads th
   assert.deepEqual(snapshots(), ["/old-node", process.execPath]);
 });
 
+
+test("Spend reopens from its ledger within twelve hours and scans and exchanges again on Refresh.", async () => {
+  const commands = [], probes = [], state = {};
+  const firstAt = Date.UTC(2026, 10, 10, 12);
+  let now = firstAt;
+  const files = {
+    "runtime.json": repaired,
+    "config.json": JSON.stringify({ version: 1, peers: { odin: { enabled: true } } }),
+    "status.json": JSON.stringify({ peers: { odin: { at: firstAt, failures: 0, period: "day:0" } } }),
+  };
+  const { TokenSpend } = await loadTokenSpend({
+    ...mountedSpendHost(), ...storeShared(state), Date: class extends Date { static now() { return now; } },
+    machines: () => [{ name: "odin", layout: "ready" }],
+    readTextFile: async (file) => files[String(file).split(/[/\\]/).at(-1)] ?? null,
+    writeTextFile: async (file, text) => { files[String(file).split(/[/\\]/).at(-1)] = text; },
+    exec: async (command, args, options) => {
+      if (options?.on && command === "uname") return success("Linux");
+      if (options?.on && command === "node") {
+        probes.push(options.on);
+        return success(JSON.stringify({ version: "4.2.0", protocol: 2, rows: [] }));
+      }
+      if (command !== "/usr/local/bin/node") return success("");
+      commands.push(args[2]);
+      return success(JSON.stringify({ kind: "kanso-spend-costs", version: 1, costs: bare }));
+    },
+  });
+  const mount = async () => {
+    const timers = [];
+    const { cx, drain } = timedContext(timers, { focus_handle: () => ({ release() {} }) });
+    const view = new TokenSpend();
+    view.init({}, cx);
+    for (const [ms, fn] of timers.filter(([ms]) => ms === 0)) fn(cx);
+    await drain();
+    return { view, cx, drain };
+  };
+
+  const first = await mount();
+  first.view.close();
+  assert.deepEqual(commands.splice(0), ["snapshot"]);
+  assert.deepEqual(probes, []);
+
+  now += 12 * 60 * 60 * 1000 - 1000;
+  const { view, cx, drain } = await mount();
+  const onOpen = { commands: commands.splice(0), probes: probes.splice(0) };
+  view.reload(cx);
+  await drain();
+  assert.deepEqual({ onOpen, onRefresh: { commands, probes } }, {
+    onOpen: { commands: ["prepare"], probes: [] },
+    onRefresh: { commands: ["snapshot", "prepare"], probes: ["odin"] },
+  });
+});

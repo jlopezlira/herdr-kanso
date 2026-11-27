@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
-  context, databaseTimer, exec, gpuiHost, load, nodes, same, storeShared, success, texts,
+  context, databaseTimer, exec, gpuiHost, KIT_NIGHT, load, nodes, popoverHost, same, storeShared, success, texts,
 } from "./helpers.mjs";
 import { DAY, HOUR, iso, openedShippedStore, pullRequest, shippedHost, shippedStore } from "./shipped-fixture.mjs";
 
@@ -41,6 +41,7 @@ const clockAt = (now) => class extends Date { static now() { return now; } };
 const viewerQuery = (query) => query.startsWith("query{viewer");
 const viewerOf = (login, cur = {}) => ({ viewer: { login, cal: { contributionCalendar: { weeks: [] } }, cur } });
 const recordsKey = "kanso.shipped.records";
+const HALF_DAY = 12 * HOUR;
 
 test("Shipped's weeks start on Monday and older periods show their calendar dates.", async () => {
   const { periodRange, periodLabel } = await shipped(["periodRange", "periodLabel"]);
@@ -62,6 +63,12 @@ test("Shipped keeps today's streak and counts contributions, including private o
   assert.match(q, /cur:contributionsCollection\(from:"2026-11-03T12:00:00Z",to:"2026-11-04T11:59:59Z"\)/);
   assert.match(q, /restrictedContributionsCount/);
   assert.match(q, /ever:search\(query:"is:pr author:@me is:merged"/);
+});
+
+test("Shipped keeps the streak when GitHub is already on tomorrow in UTC.", async () => {
+  const { streaks } = await shipped(["streaks"]);
+  const days = [3, 1, 0].map((contributionCount, i) => ({ date: `2026-11-0${2 + i}`, contributionCount }));
+  same(streaks(days, "2026-11-03"), { current: 2, longest: { n: 2, end: "2026-11-03" } });
 });
 
 test("Shipped's heat map fits the panel and shows up to a year.", async () => {
@@ -149,6 +156,40 @@ test("GitHub reads each month once, follows changes, and reads the missed months
   assert.deepEqual([...(await store.readMonths("github"))].toSorted(), ["2026-09", "2026-10", "2026-11"]);
   assert.equal(await store.meta("github.updated"), String(stale));
   assert.equal(refs.length, 1, "a confirmed merge is not searched again");
+});
+
+test("Shipped fills missing months but waits twelve hours to check changes and production unless refreshed.", async (t) => {
+  const first = monthAt(11, 4), october = monthAt(10), november = monthAt(11);
+  const pending = pullRequest(1, november, { base: "develop", merged: monthAt(11, 2) });
+  let checks = 0;
+  const { store, github, searches } = await syncedGitHub(t, ({ q, ref }) => {
+    if (ref) { checks += 1; return history([], "more"); }
+    return search(q === createdQuery(november, first + 1000) ? [pending] : []);
+  });
+  const sync = (from, now, force = false) => github.sync(store, { from, now, login: "me", every: HALF_DAY, force });
+  same(await sync(november, first), { unchecked: 1 });
+  const initialChecks = checks;
+  assert.ok(initialChecks > 0);
+  searches.length = 0;
+
+  const forced = first + HOUR;
+  same(await sync(october, forced), { unchecked: 1 });
+  assert.deepEqual(searches.splice(0), [createdQuery(october, november)]);
+  assert.equal(checks, initialChecks);
+  assert.equal(await store.meta("github.updated"), String(first));
+
+  await sync(october, forced, true);
+  assert.deepEqual(searches.splice(0), [updatedQuery(first - HOUR, forced + 1000)]);
+  assert.ok(checks > initialChecks);
+  const forcedChecks = checks;
+
+  const due = forced + HALF_DAY;
+  await sync(october, due - 1);
+  assert.deepEqual(searches, []);
+  assert.equal(checks, forcedChecks);
+  await sync(october, due);
+  assert.deepEqual(searches, [updatedQuery(forced - HOUR, due + 1000)]);
+  assert.ok(checks > forcedChecks);
 });
 
 test("Shipped finds a merge after a week away even if the pull request opened outside the current trend.", async (t) => {
@@ -258,7 +299,37 @@ const holdSearch = () => {
   };
 };
 
-test("Shipped shows an ellipsis on the first read, then the production count, share and change in points.", async (t) => {
+test("Shipped reopens from SQLite without a GitHub call while fresh and fetches the latest totals on Refresh.", async (t) => {
+  const first = monthAt(11, 4);
+  let now = first, reviews = 5;
+  const requested = [];
+  const host = await shippedHost(t, {
+    Date: class extends Date { static now() { return now; } },
+    exec: withGitHub((query, { q }) => {
+      requested.push(q ?? "viewer");
+      return viewerQuery(query) ? viewerOf("me", { totalPullRequestReviewContributions: reviews }) : search([]);
+    }),
+  });
+  const original = await mountShipped(host);
+  await original.settled;
+  assert.ok(requested.includes("viewer"));
+  requested.length = 0;
+
+  now += HALF_DAY - 1000;
+  reviews += 1;
+  const { panel, cx, drain, settled } = await mountShipped(host);
+  await settled;
+  const shown = () => panel.summary().stats.find(({ unit }) => unit === "reviews").value;
+  assert.deepEqual(requested, []);
+  assert.equal(shown(), "5");
+
+  panel.refresh(cx, true);
+  await drain();
+  assert.deepEqual(requested, ["viewer", updatedQuery(first - HOUR, now + 1000)]);
+  assert.equal(shown(), "6");
+});
+
+test("Shipped shows an ellipsis on the first read, then the production share, count and change in points.", async (t) => {
   const now = monthAt(11, 4);
   const october = [
     pullRequest(1, monthAt(10, 2), { merged: monthAt(10, 3) }),
@@ -286,14 +357,15 @@ test("Shipped shows an ellipsis on the first read, then the production count, sh
     assert.equal(summary.big, null);
     const pending = texts(panel.hero(colors));
     assert.ok(pending.includes("…"));
-    assert.ok(pending.includes("pull requests in production, this month, still reading"));
+    assert.ok(pending.includes("in production"));
+    assert.deepEqual(texts(panel.status(colors)), ["Reading GitHub…"]);
   }, search(november));
-  const { big, small, delta, deltaText, settled: ready, stats } = panel.summary();
+  const { big, prod, delta, deltaText, settled: ready, stats } = panel.summary();
   assert.equal(panel.syncError, null);
-  assert.deepEqual([ready, big, small, delta, deltaText], [true, "3", "75%", 25, "+25 points vs last month"]);
+  assert.deepEqual([ready, big, prod, delta, deltaText], [true, "75%", 3, 25, "+25 pts vs last month"]);
   assert.equal(stats.find((s) => s.unit === "opened").value, "4");
   const shown = texts(panel.hero(colors));
-  assert.ok(shown.includes("pull requests in production, this month · 75% of those you opened"));
+  assert.ok(shown.includes("in production · 3 of 4"));
   assert.ok(shown.includes(deltaText));
   same(state[`${recordsKey}:me`].prodWeek, { n: 3, start: monthAt(11, 2) });
 });
@@ -322,7 +394,7 @@ test("Shipped does not preview the previous account's PR count while GitHub read
     assert.equal(big, null, "new account must not show the cached count of 1");
   }, search(current));
   assert.equal(mounted.panel.syncError, null);
-  assert.equal(mounted.panel.summary().big, "2");
+  assert.equal(mounted.panel.summary().prod, 2);
 });
 
 test("Shipped reads the whole Year trend when you switch from Week during a read.", async (t) => {
@@ -354,12 +426,12 @@ test("Shipped reads the whole Year trend when you switch from Week during a read
   assert.equal(ranges.filter((q) => !seen.has(q)).length, 0, "the queued read fills the missing months");
   assert.equal(duringYear.length, 1);
   const [reading] = duringYear;
-  assert.deepEqual([reading.settled, reading.big, reading.small], [false, null, ""]);
+  assert.deepEqual([reading.settled, reading.big, reading.prod], [false, null, null]);
   const cohortFacts = (summary) => summary.stats
     .filter(({ unit }) => !["reviews", "contributions"].includes(unit)).map(({ value }) => value);
   same(cohortFacts(reading), Array(5).fill("—"));
   const summary = panel.summary();
-  assert.deepEqual([summary.settled, summary.big, summary.small], [true, "2", "100%"]);
+  assert.deepEqual([summary.settled, summary.big, summary.prod], [true, "100%", 2]);
   same(cohortFacts(summary).slice(0, 2), ["2", "2"]);
 });
 
@@ -377,9 +449,9 @@ test("Shipped tells you when a merged pull request could not be checked for prod
   }));
   await settled;
   assert.equal(panel.syncError, null);
-  assert.equal(panel.summary().big, "1");
+  assert.equal(panel.summary().big, "50%");
   const status = panel.status({});
-  assert.match(status ? texts(status).join(" ") : "", /1 merged pull request could not be checked for production/);
+  assert.match(status ? texts(status).join(" ") : "", /1 not checked for production yet/);
 });
 
 const mountAccountRecords = async (t, now, state, account, read) => mountShipped(await shippedHost(t, {
@@ -425,7 +497,7 @@ test("Shipped discards the previous account's results when you switch accounts d
     assert.equal(panel.login, "new");
   }, search([oldPr]));
   assert.equal(panel.syncError, null);
-  assert.equal(panel.summary().big, "0");
+  assert.equal(panel.summary().prod, 0);
   assert.equal(panel.cardData().records.length, 0);
   same(state[`${recordsKey}:new`], {});
 });
@@ -458,7 +530,7 @@ test("Shipped refreshes a previously visited period's GitHub totals after you sw
   panel.pick("month", 0, cx);
   await drain();
   const { login, everText } = panel.summary();
-  assert.deepEqual([login, everText], ["new", "2 pull requests merged."]);
+  assert.deepEqual([login, everText], ["new", "2 merged"]);
 });
 
 test("Shipped shows GitHub totals on the first read for each account.", async (t) => {
@@ -467,9 +539,9 @@ test("Shipped shows GitHub totals on the first read for each account.", async (t
     const { everText, stats } = panel.summary();
     return [everText, stats.find(({ unit }) => unit === "reviews").value];
   };
-  assert.deepEqual(totals(), ["27 pull requests merged.", "4"]);
+  assert.deepEqual(totals(), ["27 merged", "4"]);
   await switchAccount();
-  assert.deepEqual(totals(), ["2 pull requests merged.", "6"]);
+  assert.deepEqual(totals(), ["2 merged", "6"]);
 });
 
 test("Shipped draws no filled share bar when no pull requests reach production.", async () => {
@@ -481,6 +553,39 @@ test("Shipped draws no filled share bar when no pull requests reach production."
     return track.kids.map((bar) => parseFloat(bar.calls.find(([method]) => method === "w")?.[1]));
   });
   assert.deepEqual(widths.map((bars) => bars.reduce((total, width) => total + width, 0)), [0, 0]);
+});
+
+const drawnShipped = async (prs, now) => {
+  const { Shipped } = await shipped(["Shipped"], { ...popoverHost(), Date: clockAt(now), theme: () => KIT_NIGHT });
+  return Object.assign(new Shipped(), {
+    prs, github: {}, login: "me", kind: "month", offset: 0, records: {}, share: { open: false },
+    covered: { github: new Set(["2026-06", "2026-07", "2026-08", "2026-09", "2026-10", "2026-11"]) },
+  });
+};
+
+test("Shipped does not scan the same pull requests again on redraw, but reads a new snapshot.", async () => {
+  const created = monthAt(11, 2), merged = monthAt(11, 3);
+  const { prRow } = await shippedStore();
+  let reads = 0;
+  const row = prRow(pullRequest(1, created, { merged }));
+  const observed = { ...row, get created() { reads += 1; return created; } };
+  const panel = await drawnShipped([observed], monthAt(11, 4));
+  const draw = () => panel.render({});
+  draw();
+  const once = reads;
+  assert.ok(once > 0, "the first draw reads the snapshot");
+  draw();
+  assert.equal(reads, once);
+  panel.prs = [...panel.prs, prRow(pullRequest(2, created))];
+  assert.ok(texts(draw()).includes("in production · 1 of 2"));
+  assert.ok(reads > once, "a new snapshot is read");
+});
+
+test("Shipped shows the current month first in the trend.", async () => {
+  const { prRow } = await shippedStore();
+  const panel = await drawnShipped([prRow(pullRequest(1, monthAt(11, 2)))], monthAt(11, 4));
+  const labels = texts(panel.trend({})).filter((word) => word === "This month" || word.endsWith("2026"));
+  assert.deepEqual(labels, ["This month", "October 2026", "September 2026", "August 2026", "July 2026", "June 2026"]);
 });
 
 test("Shipped's trend shows the six cohorts in order through the selected period.", async () => {
@@ -497,6 +602,37 @@ test("Shipped's trend shows the six cohorts in order through the selected period
     ["May 2026", 1, 1], ["June 2026", 0, null], ["July 2026", 2, 0.5],
     ["August 2026", 0, null], ["September 2026", 0, null], ["October 2026", 1, 1],
   ]);
+});
+
+test("Shipped groups the day by hours, the week by four hours, the month by days, and the year by weeks.", async () => {
+  const { bucketsOf, periodRange } = await shipped(["bucketsOf", "periodRange"]);
+  const now = new Date(2028, 1, 16, 12).getTime();
+  for (const [kind, count] of [["day", 24], ["week", 42], ["month", 29], ["year", 53]]) {
+    const buckets = bucketsOf(kind, 0, now), { start, end } = periodRange(kind, 0, now);
+    assert.equal(buckets.length, count, kind);
+    assert.deepEqual([buckets[0].start, buckets.at(-1).end], [start, end], kind);
+    assert.ok(buckets.every((b, i) => b.end > b.start && (i === 0 || b.start === buckets[i - 1].end)), kind);
+  }
+});
+
+test("Shipped counts merges in each bucket and marks the current bucket or a past period's peak.", async () => {
+  const { mergedBars } = await shipped(["mergedBars"]);
+  const today = monthAt(11, 4), yesterday = monthAt(11, 3), tomorrow = monthAt(11, 5);
+  const merges = [today + HOUR, today + HOUR, today + 2 * HOUR, yesterday + 2 * HOUR, tomorrow, null];
+  const prs = merges.map((merged) => ({ created: yesterday - DAY, merged }));
+  const now = today + 3 * HOUR;
+  const current = mergedBars(prs, "day", 0, now);
+  const past = mergedBars(prs, "day", -1, now);
+  const marked = ({ bars }) => Array.from(bars.keys()).filter((i) => bars[i].mark);
+  assert.deepEqual([marked(current), marked(past)], [[3], [2]]);
+  const counts = ({ bars }) => Array.from(bars, ({ value }) => Number(value));
+  assert.deepEqual(counts(current).slice(0, 4), [0, 2, 1, 0]);
+  assert.equal(counts(current).reduce((n, value) => n + value, 0), 3);
+  assert.equal(past.bars[2].value, "1");
+  const thursday = monthAt(11, 5) + 8 * HOUR;
+  const week = mergedBars([{ merged: thursday }], "week", 0, thursday);
+  assert.equal(week.bars.find(({ mark }) => mark).tip, "1 merged · Thu 08:00");
+  assert.deepEqual([current.bars[1].ratio, current.bars[2].ratio, current.bars[4].future], [1, 0.5, true]);
 });
 
 const recordFixtures = async () => {

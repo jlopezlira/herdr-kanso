@@ -22,6 +22,17 @@ in version.json, which the stable updater offers. Versions follow
 [Keep a Changelog](https://keepachangelog.com). `npm run check:version` checks
 the branch's rules.
 
+## [Unreleased]
+
+### Changed
+
+- Shipped leads with the share of the pull requests you opened that reached production, draws the pull requests merged over the period as a chart like Memory's, lists its trend with the current period first, and says less.
+- Shipped and Spend keep what they read and update it every 12 hours, or when you press Refresh, reading only what is new: Shipped asks GitHub only for what changed, and Spend rescans and exchanges with your other computers on that schedule instead of every minute.
+
+### Fixed
+
+- Shipped no longer stops drawing ("This view could not be re-rendered") with a few thousand pull requests, and its streak is not reset by a calendar day that GitHub already started.
+
 ## [4.2.0] - 2026-11-26
 
 ### Added

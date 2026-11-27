@@ -237,6 +237,14 @@ test("Changing the period makes a computer due immediately.", () => {
   assert.equal(sync.due(status, NOW, "month:-1"), true);
 });
 
+test("Spend exchanges figures with the same computer again after twelve hours.", () => {
+  const periodKey = "month:0", every = 12 * 60 * 60 * 1000;
+  const status = { odin: { at: NOW, failures: 0, reason: null, period: periodKey } };
+  const plans = (now) => sync.planExchange({ config: on(), peers: ready(), status, now, periodKey });
+  assert.deepEqual(plans(NOW + every - 1), []);
+  assert.deepEqual(plans(NOW + every).map(({ id }) => id), ["odin"]);
+});
+
 test("Sync off, or a computer that is not connected, asks nothing", async () => {
   let calls = 0;
   const runner = async () => { calls += 1; return { code: 0, stdout: "" }; };

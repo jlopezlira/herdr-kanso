@@ -4,7 +4,7 @@ import { clock, parseOr } from "./pure.js";
 import { paths, pathApi } from "./platform-paths.js";
 
 export const KINDS = ["spend"];
-export const EXCHANGE_MS = 180_000;
+export const EXCHANGE_MS = 12 * 60 * 60 * 1000;
 export const BACKOFF_MAX_MS = 1_800_000;
 export const MIN_VERSION = "3.24.0";
 export const PROTOCOL = 2;
@@ -176,18 +176,18 @@ export function versionBelow(version, min = MIN_VERSION) {
   return i !== undefined && (pa[i] ?? 0) < (pb[i] ?? 0);
 }
 
-export function due(status, now, periodKey) {
+export function due(status, now, periodKey, force = false) {
   const at = Number(status?.at) || 0;
-  if (!at) return true;
+  if (!at || force) return true;
   const failed = status.reason === "unreachable" || status.reason === "update";
   if (failed) return now - at >= delayMs(status.failures);
   if (periodKey && status.period !== periodKey) return true;
   return now - at >= EXCHANGE_MS;
 }
 
-export function planExchange({ config, peers, status, now, periodKey, stored = [], live = [] }) {
+export function planExchange({ config, peers, status, now, periodKey, stored = [], live = [], force = false }) {
   return peersOf(peers, stored, live).flatMap((peer) => {
-    if (peer.off || peer.layout !== "ready" || !peerOn(config, peer.id) || !due(status?.[peer.id], now, periodKey)) return [];
+    if (peer.off || peer.layout !== "ready" || !peerOn(config, peer.id) || !due(status?.[peer.id], now, periodKey, force)) return [];
     return [{ id: peer.id, on: peer.id, name: peer.name, kinds: KINDS }];
   });
 }
@@ -228,7 +228,7 @@ export async function exchangeAll(probe, input) {
   const periodKey = input.periodKey;
   const rows = input.own ? mergeRows(input.rows ?? [], [input.own]) : (input.rows ?? []);
   const status = input.status ?? {};
-  const steps = planExchange({ config: input.config, peers: input.peers, status, now, periodKey, stored: input.stored ?? [], live: input.live ?? [] });
+  const steps = planExchange({ config: input.config, peers: input.peers, status, now, periodKey, stored: input.stored ?? [], live: input.live ?? [], force: Boolean(input.force) });
   if (!steps.length) return { rows, status, ran: false };
   const payload = JSON.stringify({ push: push(rows), options: input.options, kinds: KINDS });
   const outcomes = await Promise.all(steps.map(async (step) => {

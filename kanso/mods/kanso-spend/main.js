@@ -36,8 +36,8 @@ const PAYLOAD_KIND = "kanso-spend-costs";
 const PAYLOAD_VERSION = 1;
 const STEP_TIMEOUT_MS = 35_000;
 const TICK_MS = 15_000;
-const REFRESH_MS = 60_000;
-const LIVE_REFRESH_MS = 30_000;
+const REFRESH_MS = 12 * 60 * 60 * 1000;
+const SNAPSHOT_AT = "kanso.spend.snapshotAt";
 const LIST_ROWS = 6;
 const TASK_ROWS = 8;
 
@@ -112,7 +112,7 @@ export default class TokenSpend extends View {
     this.task = null;
     this.watchdog = null;
     this.continueTimer = null;
-    this.lastSnapshotAt = 0;
+    this.lastSnapshotAt = Number(shared(SNAPSHOT_AT)) || 0;
     this.cost = { period: spendPeriod(shared(PERIOD_KEY)), offset: 0, project: "all", model: "all" };
     this.expanded = {};
     this.page = "home";
@@ -172,8 +172,7 @@ export default class TokenSpend extends View {
           this.sleep();
           return;
         }
-        const every = this.costs?.live?.length ? LIVE_REFRESH_MS : REFRESH_MS;
-        if (Date.now() - this.lastSnapshotAt >= every) this.run("snapshot", tickCx);
+        if (Date.now() - this.lastSnapshotAt >= REFRESH_MS) this.run("snapshot", tickCx);
         this.exchange(tickCx, false);
       });
     }
@@ -189,18 +188,25 @@ export default class TokenSpend extends View {
         }
         this.runtimeTask = null;
         if (this.closed) return;
-        if (this.nodeBinary) { this.run("snapshot", runtimeCx); this.exchange(runtimeCx, true); }
+        if (this.nodeBinary) this.catchUp(runtimeCx);
         runtimeCx.notify();
       });
       return;
     }
-    if (Date.now() - this.lastSnapshotAt >= REFRESH_MS) this.run("snapshot", cx);
-    else if (!this.costs) this.run("prepare", cx);
-    this.exchange(cx, true);
+    this.catchUp(cx);
     cx.notify();
   }
 
+  catchUp(cx) {
+    if (Date.now() - this.lastSnapshotAt >= REFRESH_MS) this.run("snapshot", cx);
+    else if (!this.costs) this.run("prepare", cx);
+    this.exchange(cx, this.forceNext === true, this.forceNext === true);
+    this.forceNext = false;
+  }
+
   reload(cx) {
+    this.lastSnapshotAt = 0;
+    this.forceNext = true;
     if (this.running) { this.run("snapshot", cx); return; }
     this.nodeBinary = null;
     this.runtimeError = null;
@@ -248,7 +254,7 @@ export default class TokenSpend extends View {
     const sent = this.options();
     const startedAt = Date.now();
     this.running = command;
-    if (command === "snapshot") this.lastSnapshotAt = Date.now();
+    if (command === "snapshot") { this.lastSnapshotAt = Date.now(); setShared(SNAPSHOT_AT, this.lastSnapshotAt); }
     cx.notify();
 
     try { this.watchdog?.cancel(); } catch { /* already gone */ }
@@ -325,20 +331,20 @@ export default class TokenSpend extends View {
     cx.notify();
   }
 
-  exchange(cx, force = false) {
+  exchange(cx, force = false, everyone = false) {
     if (this.closed || !this.awake || !this.nodeBinary) return;
-    if (this.syncing) { this.syncAgain = true; if (force) this.syncForce = true; return; }
+    if (this.syncing) { this.syncAgain = true; if (force) this.syncForce = true; if (everyone) this.syncEveryone = true; return; }
     this.syncing = true;
     cx.spawn(async (syncCx) => {
-      try { await this.exchangeOnce(syncCx, force); } catch { this.syncWaiting = false; }
+      try { await this.exchangeOnce(syncCx, force, everyone); } catch { this.syncWaiting = false; }
       this.syncing = false;
       this.probing = false;
       syncCx.notify();
-      if (this.syncAgain && this.awake && !this.closed) { const again = this.syncForce; this.syncForce = false; this.syncAgain = false; this.exchange(syncCx, again); }
+      if (this.syncAgain && this.awake && !this.closed) { const again = this.syncForce, all = this.syncEveryone; this.syncForce = false; this.syncEveryone = false; this.syncAgain = false; this.exchange(syncCx, again, all); }
     });
   }
 
-  async exchangeOnce(cx, force = false) {
+  async exchangeOnce(cx, force = false, everyone = false) {
     if (!this.awake || this.closed) return;
     const now = Date.now();
     if (!force && this.syncOffUntil > now) return;
@@ -355,7 +361,7 @@ export default class TokenSpend extends View {
     this.syncStored = power.stored;
     const peers = machines();
     const status = statusFrom(await readTextFile(paths.join(dir, "status.json")).catch(() => null));
-    const steps = planExchange({ config, peers, status, now, periodKey, stored: power.stored, live: power.live });
+    const steps = planExchange({ config, peers, status, now, periodKey, stored: power.stored, live: power.live, force: everyone });
     if (!steps.length) {
       if (this.syncWaiting === true) this.syncWaiting = false;
       this.syncSettled = settleKey;
@@ -368,7 +374,7 @@ export default class TokenSpend extends View {
       config, peers, status,
       rows: rowsFrom(await readTextFile(paths.join(dir, "rows.json")).catch(() => null)),
       self, own: self ? rowFromCosts(this.costs, self, new Date(now).toISOString(), options) : null,
-      now, periodKey, options, stored: power.stored, live: power.live,
+      now, periodKey, options, stored: power.stored, live: power.live, force: everyone,
     });
     if (!this.awake || this.closed) return;
     this.syncHolds = holdsOf(out.status, power.stored, power.live);
