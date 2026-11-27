@@ -11,6 +11,7 @@ import { chooserKey, readPlan } from "../kanso/mods/kanso-spend/spend-model.js";
 import { run as presentSpend } from "../kanso/mods/kanso-spend/presenter.mjs";
 
 const presenter = fileURLToPath(new URL("../kanso/mods/kanso-spend/presenter.mjs", import.meta.url));
+const collector = fileURLToPath(new URL("../kanso/mods/kanso-spend/collector.mjs", import.meta.url));
 
 // A home with one Claude Code session, and a fresh price list so nothing is fetched.
 async function fixture(t) {
@@ -78,6 +79,22 @@ test("Spend moves a store.json from before into SQLite once", async (t) => {
   const db = new DatabaseSync(join(old, "spend.db"), { readOnly: true });
   try { assert.equal(db.prepare("SELECT COUNT(*) n FROM files").get().n, Object.keys(legacy.files).length); }
   finally { db.close(); }
+});
+
+test("A session whose device number changed after a restart is not read again, and keeps its cost", async (t) => {
+  const f = await fixture(t);
+  assert.equal((await run(f, "snapshot")).costs.hero.value, "$22.50");
+  const { DatabaseSync } = await import("node:sqlite");
+  const db = new DatabaseSync(join(f.data, "spend.db"));
+  try { db.exec("UPDATE files SET v = json_set(v, '$.dev', '1')"); }
+  finally { db.close(); }
+  const r = await exec(process.execPath, [collector, "snapshot", "--store", join(f.data, "store.json"), "--home", f.home]);
+  assert.equal(r.code, 0, r.stderr);
+  const { stats } = JSON.parse(r.stdout);
+  assert.equal(stats.filesRead, 0, "nothing is read again");
+  assert.equal(stats.unchangedFiles, 1);
+  assert.ok(!stats.partial, "the scan finishes in one run");
+  assert.equal((await run(f, "snapshot")).costs.hero.value, "$22.50");
 });
 
 const said = "token-spend: store is locked", unread = "Spend could not read your sessions.";

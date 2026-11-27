@@ -658,9 +658,10 @@ async function scanOneFile(work, tally, source, filePath) {
   const parserKey = `${entry.adapter}ParserVersion`;
   const parserCurrent = (!parserVersion || entry.state[parserKey] === parserVersion)
     && !(entry.state.unsupported === "zstd" && hasZstdSupport());
-  if (parserCurrent && !entry.state.readFailed && entry.dev === dev && entry.ino === ino
+  if (parserCurrent && !entry.state.readFailed && entry.ino === ino
     && entry.size === fileStat.size && entry.mtimeMs === fileStat.mtimeMs) {
-    return { work: made.work, tally: count(tally, "unchangedFiles"), dirty: isNew };
+    const moved = entry.dev !== dev;
+    return { work: moved ? putEntry(made.work, key, { ...entry, dev }) : made.work, tally: count(tally, "unchangedFiles"), dirty: isNew || moved };
   }
   // Verify a changed archive decompresses before any reset, so a bad archive leaves the store as it was.
   if (entry.compressed && hasZstdSupport() && filePath.endsWith(".jsonl.zst")) {
@@ -684,7 +685,6 @@ async function scanOneFile(work, tally, source, filePath) {
   const afterZstd = zstdBack ? resetFileEntry(afterMigration.work, key, afterMigration.entry) : afterMigration;
   const current = afterZstd.entry;
   const replaced =
-    current.dev !== dev ||
     current.ino !== ino ||
     fileStat.size < current.size ||
     fileStat.size < current.offset;
@@ -694,7 +694,7 @@ async function scanOneFile(work, tally, source, filePath) {
       const next = { ...reset.entry, dev, ino };
       return { work: putEntry(reset.work, key, next), entry: next };
     })()
-    : afterZstd;
+    : current.dev === dev ? afterZstd : { work: putEntry(afterZstd.work, key, { ...current, dev }), entry: { ...current, dev } };
   const forceRead = migrated || zstdBack || replaced;
   const dirtyBefore = isNew || forceRead;
   const ready = afterReplace.entry;
