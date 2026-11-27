@@ -247,30 +247,50 @@ test("After a snapshot fails on the Node named in runtime.json, Refresh reads th
 });
 
 
+const spendPayload = (costs = bare) => ({ kind: "kanso-spend-costs", version: 1, costs });
+const snapshotClock = (state, now) => ({
+  ...storeShared(state),
+  Date: class extends Date { static now() { return now(); } },
+});
+
+const peerHost = ({ probe, presenter = async () => success(""), files = {} }) => {
+  const disk = {
+    "runtime.json": repaired,
+    "config.json": JSON.stringify({ peers: { odin: { enabled: true } } }),
+    ...files,
+  };
+  const basename = (file) => String(file).split(/[/\\]/).at(-1);
+  return {
+    hc: async () => success("[]"),
+    machines: () => [{ name: "odin", layout: "ready" }],
+    readTextFile: async (file) => disk[basename(file)] ?? null,
+    writeTextFile: async (file, text) => { disk[basename(file)] = text; },
+    exec: async (command, args, options) => {
+      if (options?.on && command === "uname") return success("Linux");
+      if (options?.on && command === "node") {
+        probe(options.on, JSON.parse(args[1]));
+        return success(JSON.stringify({ version: "4.2.0", protocol: 2, rows: [] }));
+      }
+      return presenter(command, args);
+    },
+  };
+};
+
 test("Spend reopens from its ledger within twelve hours and scans and exchanges again on Refresh.", async () => {
   const commands = [], probes = [], state = {};
   const firstAt = Date.UTC(2026, 10, 10, 12);
   let now = firstAt;
-  const files = {
-    "runtime.json": repaired,
-    "config.json": JSON.stringify({ version: 1, peers: { odin: { enabled: true } } }),
-    "status.json": JSON.stringify({ peers: { odin: { at: firstAt, failures: 0, period: "day:0" } } }),
-  };
   const { TokenSpend } = await loadTokenSpend({
     ...mountedSpendHost(), ...storeShared(state), Date: class extends Date { static now() { return now; } },
-    machines: () => [{ name: "odin", layout: "ready" }],
-    readTextFile: async (file) => files[String(file).split(/[/\\]/).at(-1)] ?? null,
-    writeTextFile: async (file, text) => { files[String(file).split(/[/\\]/).at(-1)] = text; },
-    exec: async (command, args, options) => {
-      if (options?.on && command === "uname") return success("Linux");
-      if (options?.on && command === "node") {
-        probes.push(options.on);
-        return success(JSON.stringify({ version: "4.2.0", protocol: 2, rows: [] }));
-      }
-      if (command !== "/usr/local/bin/node") return success("");
-      commands.push(args[2]);
-      return success(JSON.stringify({ kind: "kanso-spend-costs", version: 1, costs: bare }));
-    },
+    ...peerHost({
+      files: { "status.json": JSON.stringify({ peers: { odin: { at: firstAt, failures: 0, period: "day:0" } } }) },
+      probe: (peer) => probes.push(peer),
+      presenter: async (command, args) => {
+        if (command !== "/usr/local/bin/node") return success("");
+        commands.push(args[2]);
+        return success(JSON.stringify(spendPayload()));
+      },
+    }),
   });
   const mount = async () => {
     const timers = [];
@@ -296,4 +316,139 @@ test("Spend reopens from its ledger within twelve hours and scans and exchanges 
     onOpen: { commands: ["prepare"], probes: [] },
     onRefresh: { commands: ["snapshot", "prepare"], probes: ["odin"] },
   });
+});
+
+test("Spend saves a snapshot time only after a successful scan and retries a failed scan in ten minutes.", async () => {
+  const started = Date.UTC(2026, 10, 10, 12), retryAt = started + 10 * 60 * 1000;
+  const state = {}, commands = [];
+  const { cx, drain } = timedContext([]);
+  let now = started, failed = true;
+  const page = await spendPage({
+    nodeBinary: "node", lastSnapshotAt: 0, costs: bare, exchange() {},
+    async ask(command) {
+      commands.push(command);
+      if (failed) throw new Error("scan failed");
+      return spendPayload();
+    },
+  }, snapshotClock(state, () => now));
+
+  page.catchUp(cx);
+  await drain();
+  assert.equal(page.error, "scan failed");
+  assert.equal(state["kanso.spend.snapshotAt"], undefined);
+  now = retryAt - 1;
+  page.catchUp(cx);
+  await drain();
+  assert.deepEqual(commands, ["snapshot"]);
+
+  failed = false;
+  now = retryAt;
+  page.catchUp(cx);
+  await drain();
+  assert.deepEqual(commands, ["snapshot", "snapshot"]);
+  assert.equal(state["kanso.spend.snapshotAt"], retryAt);
+  assert.equal(page.error, null);
+});
+
+test("Spend forces a peer exchange after the Refresh queued behind a read finishes.", async () => {
+  const events = [];
+  const { cx, drain } = timedContext([]);
+  const page = await spendPage({
+    nodeBinary: "node",
+    async ask(command) { events.push(command); return spendPayload(); },
+    exchange(_cx, force, everyone) { events.push({ force, everyone }); },
+  });
+  page.run("prepare", cx);
+  page.reload(cx);
+  await drain();
+  assert.deepEqual(events, ["prepare", "snapshot", { force: true, everyone: true }]);
+});
+
+test("Spend sends only refreshed totals to a peer after the scan and its queued prepare finish.", async () => {
+  const me = "11111111-2222-4333-8444-555555555555", sent = [], reads = [];
+  const costs = (usd) => ({ ...bare, syncSelf: me, local: { usd, tokens: 100 } });
+  const scan = Promise.withResolvers(), prepare = Promise.withResolvers();
+  const { cx, drain, pending } = timedContext([]);
+  const page = await spendPage({
+    costs: costs(2), db: { machinesOff: async () => [] },
+    async ask(command) {
+      reads.push(command);
+      if (command === "snapshot") return scan.promise;
+      if (reads.length === 2) return prepare.promise;
+      return spendPayload(costs(12));
+    },
+  }, peerHost({
+    probe: (_peer, { push }) => sent.push(push.find((row) => row.machine === me)?.body.usd),
+  }));
+  page.reload(cx);
+  try {
+    await pending[0];
+    assert.deepEqual(reads, ["snapshot"], page.runtimeError);
+    page.run("prepare", cx);
+    await Promise.all(pending.slice(2));
+    scan.resolve(spendPayload(costs(8)));
+    await pending[1];
+    assert.deepEqual(reads, ["snapshot", "prepare"]);
+  } finally {
+    scan.resolve(spendPayload(costs(8)));
+    prepare.resolve(spendPayload(costs(12)));
+    await drain();
+  }
+  assert.deepEqual(sent, [12]);
+});
+
+test("Spend retries a timed-out scan ten minutes after its watchdog fires.", async () => {
+  const state = {}, timers = [], attempts = [];
+  const { cx, drain } = timedContext(timers);
+  const hung = Promise.withResolvers();
+  let now = Date.UTC(2026, 10, 10, 12);
+  const page = await spendPage({
+    costs: bare, nodeBinary: "node", lastSnapshotAt: 0, exchange() {},
+    ask(command) {
+      attempts.push([command, now]);
+      return attempts.length === 1 ? hung.promise : Promise.resolve(spendPayload());
+    },
+  }, snapshotClock(state, () => now));
+  const first = now;
+  page.catchUp(cx);
+  const [[watchdog, expire]] = timers;
+  now += watchdog;
+  expire(cx);
+  hung.resolve(spendPayload());
+  await drain();
+  assert.match(page.error, /took too long/);
+  assert.equal(state["kanso.spend.snapshotAt"], undefined);
+
+  const retry = now + 10 * 60_000;
+  for (now of [retry - 1, retry]) {
+    page.catchUp(cx);
+    await drain();
+  }
+  assert.deepEqual(attempts, [["snapshot", first], ["snapshot", retry]]);
+  assert.equal(state["kanso.spend.snapshotAt"], retry);
+});
+
+test("Spend skips a due peer exchange while a Refresh scan is still running.", async () => {
+  const scan = Promise.withResolvers(), exchanges = [];
+  const { cx, drain, pending } = timedContext([]);
+  let tick;
+  cx.timer.every = (_ms, fire) => {
+    tick = fire;
+    return { cancel() {} };
+  };
+  const page = await spendPage({
+    costs: bare, ask: () => scan.promise,
+    exchange(_cx, force, everyone) { exchanges.push([this.running, force, everyone]); },
+  }, peerHost({ probe() {} }));
+
+  page.reload(cx);
+  try {
+    await pending[0];
+    assert.equal(page.running, "snapshot");
+    tick(cx);
+  } finally {
+    scan.resolve(spendPayload());
+    await drain();
+  }
+  assert.deepEqual(exchanges, [[null, true, true]]);
 });

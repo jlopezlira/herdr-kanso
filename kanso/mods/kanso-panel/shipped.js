@@ -1,18 +1,18 @@
-import { sizedPage, barChart, chartColumn, chartRoom } from "./ui-page.js";
+import { sizedPage, barChart, chartBar, chartRoom } from "./ui-page.js";
 import { div } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
-import { theme, shared, setShared, notify } from "herdr";
+import { theme, shared, setShared, notify, exec } from "herdr";
 import { Store, cohortOf, mergeHours, monthsIn } from "./shipped-store.js";
 import { github, gql } from "./shipped-github.js";
 import { shippedSpec, shareText } from "./shipped-card.js";
 import { Share, shareRows } from "./share.js";
-import { R, G, T, HEATMAP_GAP, TINT, OPACITY, alpha, tokens } from "./ui.js";
+import { R, G, T, CHART, HEATMAP_GAP, TINT, alpha, tokens } from "./ui.js";
 import { quietLink, iconButton } from "./ui-button.js";
 import { section } from "./ui-section.js";
 import { metric, skeletonOf, failureBlock, tooltip } from "./kit.js";
 import { factList } from "./ui-facts.js";
 import { segmented } from "./ui-tab.js";
-import { MONTHS, mapSeries } from "./pure.js";
+import { MONTHS, mapSeries, clock } from "./pure.js";
 import { shippedMemory } from "./panel-state.js";
 import { spawnAndNotify, said } from "./lib.js";
 import { dot } from "./ui-dot.js";
@@ -176,12 +176,29 @@ export function heatLayout(width) {
   return { weeks, cell };
 }
 
-export function periodQuery(cur, prev, now) {
+export async function signedIn() {
+  const r = await exec("gh", ["config", "get", "user", "-h", "github.com"]).catch(() => null);
+  return r?.code === 0 ? r.stdout.trim() || null : null;
+}
+
+export function mergeDays(kept, fresh, now = Date.now()) {
+  const byDate = new Map([...kept, ...fresh].map((d) => [d.date, d]));
+  const from = isoDay(new Date(now - 370 * DAY));
+  return [...byDate.values()].filter((d) => d.date >= from).toSorted((a, b) => a.date.localeCompare(b.date));
+}
+
+export function weeksOf(days) {
+  return days.reduce((weeks, d, i) => (i === 0 || d.weekday === 0
+    ? [...weeks, { contributionDays: [d] }]
+    : [...weeks.slice(0, -1), { contributionDays: [...weeks.at(-1).contributionDays, d] }]), []);
+}
+
+export function periodQuery(cur, prev, now, since = null) {
   const end = (r) => Math.max(r.start, Math.min(r.end, now) - 1000);
   const range = (r) => `from:"${iso(r.start)}",to:"${iso(end(r))}"`;
   const totals = "totalCommitContributions totalPullRequestContributions totalPullRequestReviewContributions totalIssueContributions restrictedContributionsCount";
   return `query{viewer{login name createdAt
-cal:contributionsCollection(from:"${iso(now - 364 * DAY)}",to:"${iso(now)}"){contributionCalendar{weeks{contributionDays{date contributionCount contributionLevel weekday}}}}
+cal:contributionsCollection(from:"${iso(since ? Math.max(now - 364 * DAY, fromIsoDay(since) - DAY) : now - 364 * DAY)}",to:"${iso(now)}"){contributionCalendar{weeks{contributionDays{date contributionCount contributionLevel weekday}}}}
 cur:contributionsCollection(${range(cur)}){${totals}}
 prev:contributionsCollection(${range(prev)}){${totals}}}
 ever:search(query:"is:pr author:@me is:merged",type:ISSUE,first:0){issueCount}}`;
@@ -217,7 +234,7 @@ export class Shipped {
     cx.timer.every(REFRESH_MS, (cx) => this.refresh(cx, true));
   }
 
-  key() { return `${this.kind}:${this.offset}`; }
+  key() { return `${this.kind}:${periodRange(this.kind, this.offset).start}`; }
 
   pick(kind, offset, cx) {
     this.kind = kind; this.offset = Math.min(0, offset);
@@ -232,19 +249,28 @@ export class Shipped {
       try {
         const key = this.key(), now = Date.now();
         const { cur, prev } = this.ranges(now);
-        await this.opened();
-        const kept = again || this.github[key] ? null : await this.store.period(key).catch(() => null);
-        const account = kept ? await this.store.meta("github.login").catch(() => null) : null;
-        if (kept && now - kept.at < REFRESH_MS && kept.data.viewer.login === account) this.take(key, kept.data);
+        this.storeError = null;
+        await this.opened().catch((e) => { this.storeError = String(e?.message ?? e); throw e; });
+        const signed = await signedIn();
+        if (signed && this.login && signed !== this.login) { this.github = {}; this.prs = null; this.covered = null; }
+        const kept = this.github[key] && !again ? null : await this.store.period(key).catch(() => null);
+        const ours = kept && (!signed || kept.data.viewer.login === signed);
+        if (ours && !again && now - kept.at < REFRESH_MS) this.take(key, kept.data, kept.at);
         else if (again || !this.github[key]) {
           try {
-            const data = await gql(periodQuery(cur, prev, now));
+            const stored = await this.store.meta("github.login").catch(() => null);
+            const calendar = signed && stored && signed !== stored ? null : await this.store.calendar().catch(() => null);
+            const data = await gql(periodQuery(cur, prev, now, calendar?.days?.at(-1)?.date ?? null));
             await this.store.forAccount("github", data.viewer.login).catch(() => {});
-            await this.store.setPeriod(key, data, now).catch(() => {});
-            this.take(key, data);
+            const days = mergeDays(stored === data.viewer.login ? calendar?.days ?? [] : [], data.viewer.cal.contributionCalendar.weeks.flatMap((w) => w.contributionDays), now);
+            await this.store.setCalendar(days, now).catch(() => {});
+            const whole = { ...data, viewer: { ...data.viewer, cal: { contributionCalendar: { weeks: weeksOf(days) } } } };
+            await this.store.setPeriod(key, whole, now).catch(() => {});
+            this.take(key, whole, now);
           } catch (e) {
             const why = String(e?.message ?? e);
-            this.github = { ...this.github, [key]: { error: why.includes("ENOENT") ? said("Install the GitHub CLI (gh) and run `gh auth login`.") : said("Can't read GitHub", why) } };
+            if (ours) this.take(key, kept.data, kept.at, why);
+            else this.github = { ...this.github, [key]: { error: why.includes("ENOENT") ? said("Install the GitHub CLI (gh) and run `gh auth login`.") : said("Can't read GitHub", why) } };
           }
         }
         this.checkRecords();
@@ -261,7 +287,8 @@ export class Shipped {
 
   opened() { return (this.opening ??= this.store.open().catch((e) => { this.opening = null; throw e; })); }
 
-  take(key, data) {
+  take(key, data, at = Date.now(), failed = null) {
+    this.readAt = at; this.updateFailed = failed;
     if (data.viewer.login !== this.login) { this.github = {}; this.prs = null; this.covered = null; this.fresh = new Set(); this.records = shared(`${RECORDS}:${data.viewer.login}`) ?? {}; }
     this.github = { ...this.github, [key]: data };
     this.login = data.viewer.login; this.name = data.viewer.name;
@@ -309,7 +336,7 @@ export class Shipped {
   }
 
   derived() {
-    const key = `${this.kind}:${this.offset}:${this.login}`;
+    const key = `${this.key()}:${this.login}:${isoDay(new Date())}`;
     if (this.cached?.prs === this.prs && this.cached.key === key) return this.cached.value;
     const now = Date.now(), cur = periodRange(this.kind, this.offset, now), prev = periodRange(this.kind, this.offset - 1, now);
     const value = {
@@ -384,7 +411,7 @@ export class Shipped {
     const everText = gh?.ever ? `${fmt(gh.ever.issueCount)} merged${v?.createdAt ? ` since ${new Date(v.createdAt).getFullYear()}` : ""}` : "";
     return {
       login: v?.login ?? this.login ?? null, period: periodLabel(this.kind, this.offset), settled,
-      big: mine?.rate !== null && mine?.rate !== undefined ? pct(mine.rate) : null,
+      big: mine ? (mine.rate === null ? "—" : pct(mine.rate)) : null,
       small: "",
       label: mine ? `in production · ${fmt(mine.prod)} of ${fmt(mine.opened)}` : "in production",
       prod: mine?.prod ?? null, opened: mine?.opened ?? null,
@@ -455,6 +482,8 @@ export class Shipped {
   }
 
   status(c) {
+    if (this.storeError) return failureBlock({ text: "Shipped can't keep its data", source: this.storeError, fix: "Retry" })("sh-store", c, { onClick: (cx) => this.refresh(cx, true) });
+    if (this.updateFailed) return div().text_size(T.body).text_color(c.dim).child(`Couldn't update · showing ${clock(this.readAt)}`);
     if (this.syncError) return failureBlock({ text: "Reading stopped", source: this.syncError })("sh-sync", c);
     if (!this.syncing && this.unchecked) return div().text_size(T.body).text_color(c.dim).child(`${fmt(this.unchecked)} not checked for production yet`);
     if (!this.syncing || !this.firstRead) return null;
@@ -469,16 +498,19 @@ export class Shipped {
 
   chart(c) {
     if (!this.prs || !this.covers()) return null;
-    const height = 96, { bars, first, last } = this.derived().bars;
-    return barChart(c, {
-      columns: bars.map((bar) => chartColumn(c, { tip: bar.tip, marked: bar.mark, value: bar.value }, chartRoom(height))
-        .child(div().w(bar.mark ? 3 : 2).flex_none().rounded_t(G.hair)
-          .h(bar.ratio > 0 ? Math.max(2, Math.round(bar.ratio * height)) : 1)
-          .bg(bar.mark ? c.accent : bar.ratio > 0 ? c.muted : c.border)
-          .opacity(bar.mark || bar.ratio === 0 ? 1 : OPACITY.quiet))),
-      room: chartRoom(height),
-      axis: [first, "Merged", last],
-    });
+    const { bars, first, last } = this.derived().bars;
+    return barChart(c, { columns: bars.map((bar) => chartBar(c, bar)), room: chartRoom(CHART.h), axis: [first, "Merged", last] });
+  }
+
+  rhythmView(c) {
+    const hours = this.hours();
+    if (!hours) return null;
+    const top = Math.max(...hours), peak = hours.indexOf(top);
+    const hour = (h) => `${String(h).padStart(2, "0")}:00`;
+    const bars = hours.map((n, h) => ({ ratio: n / top, mark: h === peak, value: fmt(n), tip: `${fmt(n)} merged at ${hour(h)}` }));
+    return v_flex().w_full().gap(G.md)
+      .child(section(c, "When you merge", rhythmNote(hours)))
+      .child(barChart(c, { columns: bars.map((bar) => chartBar(c, bar, CHART.small)), room: chartRoom(CHART.small), axis: ["00:00", "12:00", "23:00"] }));
   }
 
   skeleton(c) { return skeletonOf({ shape: "metric" })("kanso-skeleton", c); }
@@ -488,8 +520,8 @@ export class Shipped {
     const width = this.width || 368, narrow = width < 560;
     const pad = narrow ? G.lg : 32;
     const inner = Math.min(1080, width - 2 * pad);
-    const gh = this.github[this.key()], status = this.status(c), chart = this.chart(c), trend = this.trend(c);
-    const body = !gh && !this.prs
+    const gh = this.github[this.key()], status = this.status(c), chart = this.chart(c), trend = this.trend(c), rhythm = this.rhythmView(c);
+    const body = this.storeError ? status : !gh && !this.prs
       ? this.skeleton(c)
       : v_flex().w_full().gap(narrow ? 36 : 48)
         .child(this.hero(c))
@@ -498,6 +530,7 @@ export class Shipped {
         .when(Boolean(trend), (el) => el.child(trend))
         .when(Boolean(this.days), (el) => el.child(this.streak(c, inner)))
         .when(Object.keys(this.records).length > 0, (el) => el.child(this.recordsList(c)))
+        .when(Boolean(rhythm), (el) => el.child(rhythm))
         .child(this.byRepo(c));
     return sizedPage.call(this, v_flex().id("kanso-shipped").size_full().min_h(0).bg(c.canvas).text_color(c.text).overflow_y_scrollbar(), narrow, (column) => column
           .child(h_flex().w_full().items_center().justify_between().gap(G.md)

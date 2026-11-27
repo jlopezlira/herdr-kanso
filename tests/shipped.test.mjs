@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
-  context, databaseTimer, exec, gpuiHost, KIT_NIGHT, load, nodes, popoverHost, same, storeShared, success, texts,
+  arg, context, databaseTimer, exec, failure, find, gpuiHost, KIT_NIGHT, load, nodes, popoverHost, same, storeShared, success, texts, tipsOf,
 } from "./helpers.mjs";
 import { DAY, HOUR, iso, openedShippedStore, pullRequest, shippedHost, shippedStore } from "./shipped-fixture.mjs";
 
@@ -14,8 +14,13 @@ const search = (nodes, { issueCount = nodes.length, cursor = null } = {}) =>
 const history = (oids, cursor = null) => ({
   repository: { ref: { target: { history: { nodes: oids.map((oid) => ({ oid })), pageInfo: pageInfo(cursor) } } } },
 });
-const withGitHub = (read) => async (command, args, options) => {
+const withGitHub = (read, signedIn = () => null) => async (command, args, options) => {
   if (command !== "gh") return exec(command, args, options);
+  if (args[0] === "config") {
+    assert.deepEqual(Array.from(args), ["config", "get", "user", "-h", "github.com"]);
+    const login = signedIn();
+    return login ? success(`${login}\n`) : failure("No stored login");
+  }
   assert.deepEqual([args[0], args[1]], ["api", "graphql"]);
   const fields = Object.fromEntries(args.slice(2).filter((_, i) => i % 2 === 1).map((s) => [s.slice(0, s.indexOf("=")), s.slice(s.indexOf("=") + 1)]));
   const { query, ...vars } = fields;
@@ -37,9 +42,17 @@ const searchWindow = (field) => (start, end) => {
   return `is:pr author:@me ${field}:${seconds(start)}..${seconds(end - 1000)}`;
 };
 const createdQuery = searchWindow("created"), updatedQuery = searchWindow("updated");
-const clockAt = (now) => class extends Date { static now() { return now; } };
+const clockAt = (now) => class extends Date {
+  constructor(...args) { super(...(args.length ? args : [new.target.now()])); }
+  static now() { return typeof now === "function" ? now() : now; }
+};
 const viewerQuery = (query) => query.startsWith("query{viewer");
-const viewerOf = (login, cur = {}) => ({ viewer: { login, cal: { contributionCalendar: { weeks: [] } }, cur } });
+const viewerOf = (login, cur = {}, days = []) => ({
+  viewer: { login, cal: { contributionCalendar: { weeks: days.length ? [{ contributionDays: days }] : [] } }, cur },
+});
+const reviewed = (login, reviews, days) => viewerOf(login, { totalPullRequestReviewContributions: reviews }, days);
+const reviewsShown = (panel) => panel.summary().stats.find(({ unit }) => unit === "reviews").value;
+const calendarFrom = (query) => /cal:contributionsCollection\(from:"([^"]+)"/.exec(query)[1];
 const recordsKey = "kanso.shipped.records";
 const HALF_DAY = 12 * HOUR;
 
@@ -299,34 +312,148 @@ const holdSearch = () => {
   };
 };
 
-test("Shipped reopens from SQLite without a GitHub call while fresh and fetches the latest totals on Refresh.", async (t) => {
+const sqlitePeriods = async (t, now, { viewer, login = () => "me", onSearch = () => {}, calendars }) => {
+  const read = (query, { q }) => {
+    if (viewerQuery(query)) {
+      calendars?.push(calendarFrom(query));
+      return viewer();
+    }
+    onSearch(q);
+    return search([]);
+  };
+  const host = await shippedHost(t, {
+    ...gpuiHost(), Date: clockAt(now),
+    exec: withGitHub(read, login),
+  });
+  return async () => {
+    const mounted = await mountShipped(host);
+    await mounted.settled;
+    return mounted;
+  };
+};
+
+test("Shipped checks the local login but makes no GitHub API call while the saved period is fresh.", async (t) => {
   const first = monthAt(11, 4);
   let now = first, reviews = 5;
   const requested = [];
-  const host = await shippedHost(t, {
-    Date: class extends Date { static now() { return now; } },
-    exec: withGitHub((query, { q }) => {
-      requested.push(q ?? "viewer");
-      return viewerQuery(query) ? viewerOf("me", { totalPullRequestReviewContributions: reviews }) : search([]);
-    }),
+  const reopen = await sqlitePeriods(t, () => now, {
+    viewer: () => { requested.push("viewer"); return reviewed("me", reviews); },
+    login: () => { requested.push("local login"); return "me"; },
+    onSearch: (query) => requested.push(query),
   });
-  const original = await mountShipped(host);
-  await original.settled;
+  await reopen();
   assert.ok(requested.includes("viewer"));
   requested.length = 0;
 
   now += HALF_DAY - 1000;
   reviews += 1;
-  const { panel, cx, drain, settled } = await mountShipped(host);
-  await settled;
-  const shown = () => panel.summary().stats.find(({ unit }) => unit === "reviews").value;
-  assert.deepEqual(requested, []);
-  assert.equal(shown(), "5");
+  const { panel, cx, drain } = await reopen();
+  assert.deepEqual(requested.splice(0), ["local login"]);
+  assert.equal(reviewsShown(panel), "5");
 
   panel.refresh(cx, true);
   await drain();
-  assert.deepEqual(requested, ["viewer", updatedQuery(first - HOUR, now + 1000)]);
-  assert.equal(shown(), "6");
+  assert.deepEqual(requested, ["local login", "viewer", updatedQuery(first - HOUR, now + 1000)]);
+  assert.equal(reviewsShown(panel), "6");
+});
+
+test("Shipped shows the new account and reads its full calendar when you reopen after switching accounts.", async (t) => {
+  const now = new Date(2026, 10, 10, 12).getTime();
+  const calendars = [];
+  let login = "old";
+  const reopen = await sqlitePeriods(t, () => now, {
+    viewer: () => login === "old" ? reviewed(login, 17, [{ date: "2026-11-09", contributionCount: 9, weekday: 1 }]) : reviewed(login, 2),
+    login: () => login,
+    calendars,
+  });
+  await reopen();
+  login = "new";
+  const reopened = await reopen();
+  assert.deepEqual([reopened.panel.summary().login, reviewsShown(reopened.panel)], ["new", "2"]);
+  assert.deepEqual(calendars, Array(2).fill(iso(now - 364 * DAY)));
+  assert.equal(reopened.panel.days.length, 0, "no previous-account calendar days remain");
+});
+
+test("Shipped replaces a mounted month's totals when you switch GitHub accounts without pressing Refresh.", async (t) => {
+  let login = "old";
+  const mount = await sqlitePeriods(t, () => monthAt(11, 10), {
+    viewer: () => reviewed(login, login === "old" ? 17 : 3), login: () => login,
+  });
+  const { panel, cx, drain } = await mount();
+  assert.equal(reviewsShown(panel), "17");
+
+  login = "new";
+  panel.pick("month", 0, cx);
+  await drain();
+  assert.deepEqual([panel.summary().login, reviewsShown(panel)], ["new", "3"]);
+});
+
+test("Shipped keeps the saved calendar across remounts and Refresh asks only for its recent end.", async (t) => {
+  const first = new Date(2026, 10, 10, 12).getTime();
+  const dates = ["2026-11-09", "2026-11-10", "2026-11-11"];
+  let now = first, fresh = false;
+  const calendars = [];
+  const day = (i, contributionCount) => ({ date: dates[i], weekday: i + 1, contributionCount });
+  const reopen = await sqlitePeriods(t, () => now, {
+    viewer: () => viewerOf("me", {}, fresh ? [day(1, 4), day(2, 5)] : [day(0, 2), day(1, 1)]),
+    calendars,
+  });
+  await reopen();
+  now = first + HOUR;
+  const reopened = await reopen();
+  now += DAY;
+  fresh = true;
+  reopened.panel.refresh(reopened.cx, true);
+  await reopened.drain();
+  const overlap = iso(new Date(2026, 10, 10).getTime() - DAY);
+  assert.deepEqual(calendars, [iso(first - 364 * DAY), overlap]);
+  same(reopened.panel.days.map((d) => [d.date, d.contributionCount]), dates.map((d, i) => [d, [2, 4, 5][i]]));
+});
+
+test("Shipped reads this month's totals after midnight even when last month's totals are still fresh.", async (t) => {
+  const december = monthAt(12);
+  let now = december - HOUR;
+  const reopen = await sqlitePeriods(t, () => now, { viewer: () => reviewed("me", now < december ? 17 : 3) });
+  const november = await reopen();
+  assert.equal(reviewsShown(november.panel), "17");
+  now = december + HOUR;
+  const reopened = await reopen();
+  assert.deepEqual([reopened.panel.summary().period, reviewsShown(reopened.panel)], ["This month", "3"]);
+});
+
+test("Shipped shows the last totals and their time when a dated snapshot cannot be updated.", async (t) => {
+  const first = new Date(2026, 10, 10, 6, 30).getTime();
+  let now = first, online = true;
+  const reopen = await sqlitePeriods(t, () => now, {
+    viewer: () => {
+      if (!online) throw new Error("GitHub is offline");
+      return reviewed("me", 17);
+    },
+  });
+  await reopen();
+  now += HALF_DAY + HOUR;
+  online = false;
+  const reopened = await reopen();
+  assert.deepEqual([reopened.panel.summary().login, reviewsShown(reopened.panel)], ["me", "17"]);
+  assert.deepEqual(texts(reopened.panel.status({})), ["Couldn't update · showing 06:30"]);
+});
+
+test("Shipped offers Retry instead of a skeleton when its database cannot open.", async (t) => {
+  let blocked = true;
+  const github = withGitHub((query) => viewerQuery(query) ? reviewed("me", 2) : search([]), () => "me");
+  const { panel, cx, drain, settled } = await mountShipped(await shippedHost(t, {
+    ...popoverHost(), Date: clockAt(monthAt(11, 4)), theme: () => KIT_NIGHT,
+    exec: (cmd, args, opts) => blocked && cmd === "sqlite3" ? Promise.resolve(failure("database unavailable")) : github(cmd, args, opts),
+  }));
+  await settled;
+  const drawn = panel.render(cx), words = texts(drawn);
+  assert.ok(words.includes("Shipped can't keep its data"), words.join(" · "));
+  assert.ok(words.includes("Retry"));
+  assert.equal(find(drawn, (el) => arg(el, "id") === "kanso-skeleton"), null);
+  blocked = false;
+  arg(find(drawn, (el) => el.tag === "sh-store-fix"), "on_click")({}, cx);
+  await drain();
+  assert.equal(reviewsShown(panel), "2");
 });
 
 test("Shipped shows an ellipsis on the first read, then the production share, count and change in points.", async (t) => {
@@ -563,6 +690,25 @@ const drawnShipped = async (prs, now) => {
   });
 };
 
+test("Shipped shows separate merge hours for pull requests merged on the same date.", async () => {
+  const { prRow } = await shippedStore();
+  const at = (hour) => new Date(2026, 10, 3, hour).getTime();
+  const panel = await drawnShipped([9, 17].map((hour, i) => prRow(pullRequest(i + 1, at(8), { merged: at(hour) }))), monthAt(11, 4));
+  const drawn = panel.render({});
+  assert.ok(texts(drawn).includes("When you merge"));
+  const tooltips = tipsOf(drawn).filter((tip) => typeof tip === "string" && tip.includes("merged at"));
+  assert.equal(tooltips.length, 24);
+  assert.deepEqual([tooltips[9], tooltips[17]], ["1 merged at 09:00", "1 merged at 17:00"]);
+});
+
+test("Shipped shows a dash instead of the loading mark for a settled empty month.", async () => {
+  const panel = await drawnShipped([], monthAt(11, 4));
+  const words = texts(panel.hero({}));
+  assert.deepEqual([panel.summary().settled, panel.summary().big], [true, "—"]);
+  assert.ok(words.includes("in production · 0 of 0"));
+  assert.ok(!words.includes("…"));
+});
+
 test("Shipped does not scan the same pull requests again on redraw, but reads a new snapshot.", async () => {
   const created = monthAt(11, 2), merged = monthAt(11, 3);
   const { prRow } = await shippedStore();
@@ -586,6 +732,22 @@ test("Shipped shows the current month first in the trend.", async () => {
   const panel = await drawnShipped([prRow(pullRequest(1, monthAt(11, 2)))], monthAt(11, 4));
   const labels = texts(panel.trend({})).filter((word) => word === "This month" || word.endsWith("2026"));
   assert.deepEqual(labels, ["This month", "October 2026", "September 2026", "August 2026", "July 2026", "June 2026"]);
+});
+
+test("Shipped moves today's bar at midnight and rolls the trend into the new month without remounting.", async () => {
+  const { prRow } = await shippedStore();
+  const november = prRow(pullRequest(1, monthAt(11, 2)));
+  let now = monthAt(11, 29) + 12 * HOUR;
+  const panel = await drawnShipped([november], () => now);
+  const view = () => {
+    const { bars, trend } = panel.derived();
+    return [bars.bars.findIndex((bar) => bar.mark) + 1, trend.at(-2).label];
+  };
+  const initial = view();
+  now = monthAt(11, 30) + 12 * HOUR;
+  const nextDay = view();
+  now = monthAt(12) + HOUR;
+  assert.deepEqual([initial, nextDay, view()], [[29, "October 2026"], [30, "October 2026"], [1, "November 2026"]]);
 });
 
 test("Shipped's trend shows the six cohorts in order through the selected period.", async () => {

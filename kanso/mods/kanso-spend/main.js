@@ -1,4 +1,4 @@
-import { detailColumn, detailRow, scrollPage, pageHeader, pageSections, refreshTool, moreLink, barChart, chartColumn, chartRoom, heroStack, heroHeading } from "./ui-page.js";
+import { detailColumn, detailRow, scrollPage, pageHeader, pageSections, refreshTool, moreLink, barChart, chartBar, chartRoom, heroStack, heroHeading } from "./ui-page.js";
 import { localService, serviceOn } from "./platform-host.js";
 import { paths } from "./platform-paths.js";
 import { fileApi } from "./platform-files.js";
@@ -7,7 +7,7 @@ import { fileApi } from "./platform-files.js";
 import { View, div } from "gpui-kit";
 import { v_flex, h_flex, Popover, ScrollHandle } from "gpui-base";
 import { exec, appHome, home, theme, nextCommand, readTextFile, writeTextFile, layout, machines, shared, setShared } from "herdr";
-import { T, G, H, OPACITY, breathe, tokens } from "./ui.js";
+import { T, G, H, CHART, OPACITY, breathe, tokens } from "./ui.js";
 import { mark } from "./ui-mark.js";
 import { quietLink, iconButton } from "./ui-button.js";
 import { field, TextField } from "./ui-field.js";
@@ -38,6 +38,7 @@ const STEP_TIMEOUT_MS = 35_000;
 const TICK_MS = 15_000;
 const REFRESH_MS = 12 * 60 * 60 * 1000;
 const SNAPSHOT_AT = "kanso.spend.snapshotAt";
+const RETRY_MS = 10 * 60 * 1000;
 const LIST_ROWS = 6;
 const TASK_ROWS = 8;
 
@@ -173,7 +174,7 @@ export default class TokenSpend extends View {
           return;
         }
         if (Date.now() - this.lastSnapshotAt >= REFRESH_MS) this.run("snapshot", tickCx);
-        this.exchange(tickCx, false);
+        if (!this.running && Date.now() - (this.exchangeTriedAt ?? 0) >= EXCHANGE_MS) this.exchange(tickCx, false);
       });
     }
     if (!this.nodeBinary && !this.runtimeError) {
@@ -200,8 +201,15 @@ export default class TokenSpend extends View {
   catchUp(cx) {
     if (Date.now() - this.lastSnapshotAt >= REFRESH_MS) this.run("snapshot", cx);
     else if (!this.costs) this.run("prepare", cx);
-    this.exchange(cx, this.forceNext === true, this.forceNext === true);
+    if (this.running) return;
+    const all = this.takeForced();
+    this.exchange(cx, all, all);
+  }
+
+  takeForced() {
+    const all = this.forceNext === true;
     this.forceNext = false;
+    return all;
   }
 
   reload(cx) {
@@ -254,7 +262,7 @@ export default class TokenSpend extends View {
     const sent = this.options();
     const startedAt = Date.now();
     this.running = command;
-    if (command === "snapshot") { this.lastSnapshotAt = Date.now(); setShared(SNAPSHOT_AT, this.lastSnapshotAt); }
+    if (command === "snapshot") this.lastSnapshotAt = Date.now();
     cx.notify();
 
     try { this.watchdog?.cancel(); } catch { /* already gone */ }
@@ -262,6 +270,7 @@ export default class TokenSpend extends View {
       if (generation !== this.generation) return;
       this.generation += 1;
       try { this.task?.cancel(); } catch { /* already gone */ }
+      if (command === "snapshot") this.lastSnapshotAt = Date.now() - REFRESH_MS + RETRY_MS;
       this.finish(timerCx, "Spend took too long to answer. It will try again shortly.");
     });
 
@@ -277,6 +286,10 @@ export default class TokenSpend extends View {
       );
       if (generation !== this.generation || this.closed) return;
       if (this.syncWaiting === "fold" && startedAt >= this.syncEnded) this.syncWaiting = false;
+      if (command === "snapshot") {
+        if (failure) this.lastSnapshotAt = Date.now() - REFRESH_MS + RETRY_MS;
+        else setShared(SNAPSHOT_AT, this.lastSnapshotAt);
+      }
       if (payload) {
         this.scan = payload.scan ?? this.scan;
         if (this.awake) this.costs = payload.costs;
@@ -327,7 +340,7 @@ export default class TokenSpend extends View {
         });
       }
     }
-    if (this.awake && !this.closed) this.exchange(cx, true);
+    if (this.awake && !this.closed && !this.running) this.exchange(cx, true, this.takeForced());
     cx.notify();
   }
 
@@ -347,6 +360,7 @@ export default class TokenSpend extends View {
   async exchangeOnce(cx, force = false, everyone = false) {
     if (!this.awake || this.closed) return;
     const now = Date.now();
+    this.exchangeTriedAt = now;
     if (!force && this.syncOffUntil > now) return;
     const dir = syncDir(appHome());
     const config = configFrom(await readTextFile(paths.join(dir, "config.json")).catch(() => null));
@@ -664,13 +678,9 @@ export default class TokenSpend extends View {
   }
 
   chart(c, chart) {
-    const height = 132;
     return barChart(c, {
-      columns: chart.bars.map((bar) => chartColumn(c, { tip: bar.tip, marked: Boolean(bar.peak), value: bar.value }, chartRoom(height))
-        .child(div().w(bar.peak ? 3 : 2).flex_none().rounded_t(1)
-          .h(bar.ratio > 0 ? Math.max(3, Math.round(bar.ratio * height)) : 1)
-          .bg(bar.peak ? c.accent : bar.ratio > 0 ? c.muted : c.border)
-          .opacity(bar.peak || bar.ratio === 0 ? 1 : OPACITY.quiet))),
+      columns: chart.bars.map((bar) => chartBar(c, { ...bar, mark: bar.peak })),
+      room: chartRoom(CHART.h),
       axis: [chart.first, chart.title, chart.last],
     });
   }

@@ -5,7 +5,7 @@ import { systemApi } from "./platform-system.js";
 import { View, div } from "gpui-kit";
 import { v_flex, h_flex, Button } from "gpui-base";
 import { appHome, theme, nextCommand, readTextFile } from "herdr";
-import { G, T, OPACITY, breathe, tokens } from "./ui.js";
+import { G, T, CHART, OPACITY, breathe, tokens } from "./ui.js";
 import { mark } from "./ui-mark.js";
 import { Armed, quietLink, iconButton } from "./ui-button.js";
 import { section } from "./ui-section.js";
@@ -15,7 +15,7 @@ import { segmented } from "./ui-tab.js";
 import { Share } from "./share.js";
 import { tryOr, tryOrAsync, afterMount, readCommands, num } from "./pure.js";
 import { hiddenInLayout } from "./page.js";
-import { scrollPage, pageHeader, pageSections, refreshTool, moreLink, barChart, chartColumn, chartRoom } from "./ui-page.js";
+import { scrollPage, pageHeader, pageSections, refreshTool, moreLink, barChart, chartBar, chartRoom } from "./ui-page.js";
 import { memorySpec, memoryText } from "./memory-card.js";
 import { RANGES, size, span, clock, parseNow, agentsMB, agentMeta, limitsNote, sparkFor, digestHistory, groupAgents, freedEstimate, parseBatch, staleAgents, idleWords, installError, leaveShowAll, unreadable, refreshPlan } from "./model.js";
 
@@ -332,13 +332,11 @@ export default class Memory extends View {
       .when(Boolean(w.reason), (el) => el.child(div().text_size(T.body).text_color(c.muted).child(w.reason)));
   }
 
-  chart(c) {
-    const height = 96;
-    const series = this.digest?.series?.[this.range];
+  chart(c, series = this.digest?.series?.[this.range]) {
     return barChart(c, {
       head: this.chartHead(c, series),
-      columns: (series?.bars ?? []).map((bar) => this.chartBar(bar, height, c)),
-      room: chartRoom(height),
+      columns: (series?.bars ?? []).map((bar) => chartBar(c, { ...bar, ratio: bar.empty ? 0 : bar.ratio })),
+      room: chartRoom(CHART.h),
       axis: [series?.first ?? "", "Free", series?.last ?? ""],
     });
   }
@@ -347,14 +345,6 @@ export default class Memory extends View {
     return h_flex().w_full().items_center().justify_between().gap(G.md).pb(G.xs)
       .child(segmented("guard-range", RANGES.map((r) => ({ key: r.key, label: r.label })), this.range, (key, cx) => { this.range = key; cx.notify(); }, c))
       .child(div().text_size(T.body).text_color(c.dim).child(series?.lowest ? `lowest ${series.lowest}` : ""));
-  }
-
-  chartBar(bar, height, c) {
-    return chartColumn(c, { tip: bar.tip, marked: Boolean(bar.mark), value: bar.value }, chartRoom(height))
-      .child(div().w(bar.mark ? 3 : 2).flex_none().rounded_t(1)
-        .h(bar.empty ? 1 : Math.max(2, Math.round(bar.ratio * height)))
-        .bg(bar.mark ? c.accent : bar.empty ? c.border : bar.low ? c.red : c.muted)
-        .opacity(bar.mark || bar.empty ? 1 : OPACITY.quiet));
   }
 
   spark(c, ratios) {

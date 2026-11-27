@@ -110,12 +110,15 @@ export class Store extends Database {
     return kept && Number.isFinite(kept.at) && kept.data?.viewer ? kept : null;
   }
 
+  async calendar() { return JSON.parse((await this.meta("github.calendar")) ?? "null"); }
+  setCalendar(days, at = Date.now()) { return this.setMeta("github.calendar", JSON.stringify({ at, days })); }
+
   setPeriod(key, data, at = Date.now()) { return this.setMeta(`period:${key}`, JSON.stringify({ at, data })); }
 
   async forAccount(provider, login) {
     const key = `${provider}.login`;
     if ((await this.meta(key)) === login) return;
-    await this.script(`DELETE FROM prs WHERE provider=${sqlText(provider)};\nDELETE FROM months WHERE provider=${sqlText(provider)};\nDELETE FROM meta WHERE k=${sqlText(`${provider}.updated`)} OR k LIKE 'period:%';\nINSERT OR REPLACE INTO meta(k,v) VALUES(${sqlText(key)},${sqlText(login)});`);
+    await this.script(`DELETE FROM prs WHERE provider=${sqlText(provider)};\nDELETE FROM months WHERE provider=${sqlText(provider)};\nDELETE FROM meta WHERE k=${sqlText(`${provider}.updated`)} OR k LIKE 'period:%' OR k=${sqlText(`${provider}.calendar`)};\nINSERT OR REPLACE INTO meta(k,v) VALUES(${sqlText(key)},${sqlText(login)});`);
   }
   async save(rows, login = null) { await this.script(upsertPrs(rows, login)); }
   async markProd(urls, login = null) { await this.script(prodSql(urls, login)); }

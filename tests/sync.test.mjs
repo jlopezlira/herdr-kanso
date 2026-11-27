@@ -1,12 +1,12 @@
 // Each computer keeps its own spend ledger. Sync only adds the others.
-import { loadTokenSpend } from "./mod-fixtures.mjs";
+import { loadTokenSpend, spendPage } from "./mod-fixtures.mjs";
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { copyFile, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 import { promisify } from "node:util";
-import { temporary } from "./helpers.mjs";
+import { success, temporary, timedContext } from "./helpers.mjs";
 
 const runFile = promisify(execFile);
 const { costRange } = await import("../kanso/mods/kanso-spend/core/costs.mjs");
@@ -446,4 +446,33 @@ test("Spend exchanges at once when the sidebar changes Sync, and not on other re
   view.kicked(cx);
   view.kicked(cx);
   assert.deepEqual(forced, [true]);
+});
+
+test("Spend's fifteen-second tick discovers peers only once per twelve hours.", async () => {
+  const calls = [], ticks = [];
+  let now = NOW;
+  const { cx, drain } = timedContext([]);
+  cx.timer.every = (ms, tick) => { ticks.push({ ms, tick }); return { cancel() {} }; };
+  const view = await spendPage({
+    costs: {}, nodeBinary: "node", lastSnapshotAt: now,
+    db: { async machinesOff() { calls.push("stored"); return []; } },
+  }, {
+    Date: class extends Date { static now() { return now; } },
+    readTextFile: async (file) => file.endsWith("config.json") ? JSON.stringify(on()) : null,
+    hc: async (args) => { calls.push(Array.from(args)); return success("[]"); },
+  });
+  view.wake(cx);
+  await drain();
+  const [{ ms, tick }] = ticks;
+  assert.equal(ms, 15_000);
+  const discovery = ["stored", ["machine", "ls", "--json"]];
+  assert.deepEqual(calls.splice(0), discovery);
+
+  for (const elapsed of [ms, ms * 2, sync.EXCHANGE_MS - 1, sync.EXCHANGE_MS]) {
+    now = NOW + elapsed;
+    view.lastSnapshotAt = now;
+    tick(cx);
+    await drain();
+    assert.deepEqual(calls.splice(0), elapsed === sync.EXCHANGE_MS ? discovery : [], `after ${elapsed} ms`);
+  }
 });

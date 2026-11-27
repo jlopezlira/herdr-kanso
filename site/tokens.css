@@ -172,6 +172,11 @@
   --k-markdown-text: 13px;
   --k-metric-unit-gap: 8px;
   --k-metric-unit-y: 3px;
+  --k-chart-tall: 96px;
+  --k-chart-small: 56px;
+  --k-chart-bar: 2px;
+  --k-chart-mark: 3px;
+  --k-chart-floor: 1px;
   --k-board-w: 1176px;
   --k-board-sidebar-h: 1105px;
   --k-window-board-w: 1300px;
