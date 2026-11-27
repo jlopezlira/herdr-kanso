@@ -1,14 +1,37 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { loadTokens, read } from "../scripts/tokens.mjs";
-import { UI, withTokens } from "../scripts/build-ui-tokens.mjs";
+import { UI, px, withTokens } from "../scripts/build-ui-tokens.mjs";
 import { check, compare, looks, named, violations } from "../scripts/check-tokens.mjs";
+
+import { arg, gpuiHost, load } from "./helpers.mjs";
 
 const tokens = loadTokens();
 
 test("ui.js carries the sizes of kanso/tokens.json", () => {
   const text = read(UI);
   assert.equal(withTokens(text, tokens), text, "run npm run build:ui-tokens");
+});
+
+test("Memory, Spend and Shipped use the same chart bars sized by chart tokens.", async () => {
+  const consumers = ["kanso-guard/main.js", "kanso-spend/main.js", "kanso-panel/shipped.js"];
+  for (const file of consumers) {
+    const source = read(`kanso/mods/${file}`);
+    assert.match(source, /^import \{[^}]*\bchartBar\b[^}]*\} from "\.\/ui-page\.js";/m, file);
+    assert.match(source, /\bchartBar\(c,/, file);
+  }
+
+  const { chartBar, chartRoom } = await load("kanso-panel/ui-page.js", ["chartBar", "chartRoom"], gpuiHost());
+  const chartSize = px(tokens);
+  const barSizes = (bar) => {
+    const column = chartBar({}, bar);
+    const rect = column.kids.at(-1);
+    return [arg(column, "h"), arg(rect, "w"), arg(rect, "h"), arg(rect, "rounded_t")];
+  };
+  const height = chartSize("k-chart-tall"), normal = chartSize("k-chart-bar"), mark = chartSize("k-chart-mark"), floor = chartSize("k-chart-floor");
+  assert.deepEqual(barSizes({ ratio: 1, mark: true }), [chartRoom(height), mark, height, floor]);
+  assert.deepEqual(barSizes({ ratio: 0.001 }), [chartRoom(height), normal, normal, floor]);
+  assert.deepEqual(barSizes({ ratio: 0 }), [chartRoom(height), normal, floor, floor]);
 });
 
 test("Mods draw no size outside the tokens beyond the baseline", () => {

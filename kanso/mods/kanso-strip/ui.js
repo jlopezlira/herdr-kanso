@@ -23,6 +23,7 @@ export const GLINT = { run: 240, wide: 44, mid: 26, narrow: 12 };
 export const SWITCH = { w: 28, h: 16, knob: 12 };
 export const PAGE = { w: 1080, toolbar: 42, toolbarX: 14, note: 12, markdown: 13, unitGap: 8, unitY: 3, findList: 300 };
 export const SIDEBAR = { w: 256, narrow: 240, min: 120, railRow: 48, tile: 36, guideX: 12, agentX: 34, elbowGap: 8, gap: 0, gutter: 16, groupGap: 12, computerGap: 16, threadGap: 8 };
+export const CHART = { h: 96, small: 56, bar: 2, mark: 3, floor: 1 };
 export const PANE = { edge: 28, gap: 6, minW: 140, minH: 90, pills: 110 };
 export const KEY = { x: 4, text: 11, unit: 40, gap: 5 };
 export const DIALOG = { wide: 480, small: 340, sidebar: 460, worktree: 440, prompt: 420, list: 202, pad: 20, settingsW: 860, settingsH: 680, computers: 440 };

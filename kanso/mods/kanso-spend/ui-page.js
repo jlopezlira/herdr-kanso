@@ -2,7 +2,7 @@
 // Kept byte for byte by `npm run sync:share`: edit kanso-panel/ui-page.js.
 import { div } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
-import { G, T, PAGE } from "./ui.js";
+import { G, T, PAGE, CHART, OPACITY } from "./ui.js";
 import { iconButton, quietLink } from "./ui-button.js";
 import { skeletonOf } from "./ui-skeleton.js";
 import { tipText } from "./ui-tooltip.js";
@@ -63,6 +63,11 @@ export const moreLink = (id, c, { open, hidden, ruled = false }, onClick) => h_f
 export const chartRoom = (height) => height + 18;
 export const chartColumn = (c, { tip, marked = false, value = "" }, room) => v_flex().flex_1().min_w(0).h(room).items_center().justify_end().gap(G.xs).tooltip(tipText({ label: tip }))
   .when(marked, (el) => el.child(div().text_size(T.micro).text_color(c.text).whitespace_nowrap().child(value)));
+export const chartBar = (c, bar, height = CHART.h) => chartColumn(c, { tip: bar.tip, marked: Boolean(bar.mark), value: bar.value }, chartRoom(height))
+  .child(div().w(bar.mark ? CHART.mark : CHART.bar).flex_none().rounded_t(CHART.floor)
+    .h(bar.ratio > 0 ? Math.max(CHART.bar, Math.round(bar.ratio * height)) : CHART.floor)
+    .bg(bar.mark ? c.accent : !(bar.ratio > 0) ? c.border : bar.low ? c.red : c.muted)
+    .opacity(bar.mark || !(bar.ratio > 0) ? 1 : OPACITY.quiet));
 export const barChart = (c, { head = null, columns, room = 0, axis }) => v_flex().w_full().gap(G.sm)
   .when(Boolean(head), (el) => el.child(head))
   .child(h_flex().w_full().when(room > 0, (el) => el.h(room)).items_end().children(columns))
