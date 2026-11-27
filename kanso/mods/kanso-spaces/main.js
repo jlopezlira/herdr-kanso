@@ -19,6 +19,7 @@ import { v_flex, h_flex, ScrollHandle } from "gpui-base";
 import { agentSession, agentLabel, renameTerminal, SETTLED_LABEL, SNOOZE_LABEL, UNREAD_LABEL, THREAD_LABEL, settledOf, snoozedUntil, isUnread, woke, backFromSettled, threadSections, snoozePresets, THREAD_ORDERS, STATUS_ORDERS, withTerminals, NAME_LABEL, PIN_LABEL, ORDERS, DEFAULT_ORDER, orderSessions, moved, nest, track, elapsed, activityOf, bySection, duration, trackSteps, stepOf, tasksOf, said, FOLD_MS, pill, sessionHeight, mostUrgent } from "./agents.js";
 import { ThreadLocator, findThreads, sameThread, pidsOf, aliveIn, aliveDue, ALIVE_MS, ALIVE_BEHIND_MS, threadIn, AT_ONCE } from "./threads.js";
 import { Panel, sameSeen } from "./panel.js";
+import { glowDeadline, glowState } from "./glow-state.js";
 import { Store } from "./store.js";
 import { Kdb, kdbOn, restDue, machinesToAsk, worktreeBase, newId } from "./kdb.js";
 import { agentSnapshot, agentTargets, observedAgents, targetOf, parseTarget, returnSignature, RETURN_LABEL, AWAY_PIECE, destinationOf, livePlaces } from "./since-left-model.js";
@@ -454,6 +455,23 @@ export default class Spaces extends RetryingView {
     this.parts = { header: cx.new(Part, looks.header), switch: cx.new(Part, looks.switch), rows: cx.new(Part, looks.rows), footer: cx.new(SidebarFooter, looks.footer) };
     this.drawnLooks = looks;
     this.paintTimer = cx.timer;
+    this.glows = { working: new Set(), leaving: new Map() };
+    this.glowAt = Infinity;
+  }
+
+  followGlow(agents, now) {
+    this.glows = glowState(this.glows, agents, now);
+    const at = glowDeadline(this.glows);
+    if (at === this.glowAt) return;
+    this.glowTimer?.cancel();
+    this.glowAt = at;
+    this.glowTimer = Number.isFinite(at) ? this.paintTimer.after(at - now, () => {
+      if (this.glowAt !== at) return;
+      this.glowAt = Infinity;
+      this.glowTimer = null;
+      this.rowsAt = (this.rowsAt ?? 0) + 1;
+      this.paint();
+    }) : null;
   }
 
   looks() {
@@ -558,6 +576,8 @@ export default class Spaces extends RetryingView {
   }
 
   close() {
+    this.glowAt = Infinity;
+    this.glowTimer?.cancel();
     try { this.wtPrompt?.release(); this.wtBase?.release(); Object.values(this.fields ?? {}).forEach((f) => f.release()); this.branch?.release(); this.projectName?.release(); this.convScroll?.release(); this.agentScroll?.release(); this.find?.release(); } catch { /* already gone */ }
   }
 
@@ -2524,6 +2544,7 @@ export default class Spaces extends RetryingView {
   extras(a, ctx, show = true) {
     return {
       step: show ? stepOf(a, this.steps, ctx.now) : null,
+      glowLeaving: this.glows?.leaving.has(a.address) ?? false,
       tasks: this.showTasks === false || a.sub ? [] : (this.tasks[a.address] ?? []).map((x) => ({ command: x.command, time: duration(Math.max(0, ctx.now - x.start)) })),
     };
   }
@@ -3459,6 +3480,7 @@ export default class Spaces extends RetryingView {
     // Every row built once per draw, for every view.
     const asleep = this.sleepingNow(sp, read.terms, ps);
     const rowsCtx = { ...read, asleep, spaces: sp, registry: registry(), spaceIds: new Set(sp.map((w) => w.id)), all: this.listed(ps, sp, read.terms).filter((a) => !asleep.dozing.has(a.address)) };
+    this.followGlow(rowsCtx.all, read.now);
     const ctx = { ...rowsCtx, rowsBy: new Map(sp.map((w) => [w.id, this.spaceRows(w.id, rowsCtx)])), project: this.projectOf(sp, t) };
     const queue = this.refreshNeeds(sp, read.terms, asleep);
     const words = (query ?? "").trim();

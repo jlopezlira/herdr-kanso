@@ -329,6 +329,7 @@ export function sessionProps(a, base, row, more = {}) {
     program: programOf(a),
     name: more.label ?? agentLabel(a),
     status: a.dozing ? "asleep" : a.status,
+    ...(more.glowLeaving ? { glowLeaving: true } : {}),
     activity: two ? more.activity : null,
     step: two ? more.step ?? null : null,
     time: more.time ?? null,

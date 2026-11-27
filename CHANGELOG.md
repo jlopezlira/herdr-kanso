@@ -32,7 +32,7 @@ the branch's rules.
 - Timeline's header shows only its title; the conversation's name, computer and prompt count moved into the pin's tooltip.
 - Shipped leads with the share of the pull requests you opened that reached production, draws the pull requests merged over the period as a chart like Memory's, lists its trend with the current period first, and says less.
 - Shipped and Spend keep what they read and update it every 12 hours, or when you press Refresh, reading only what is new: Shipped asks GitHub only for what changed, and Spend rescans and exchanges with your other computers on that schedule instead of every minute.
-- A working agent's name glints on battery too, where it used to stand still, and keeps the weight and size of the other names while it glints. kansō no longer reads the battery every two minutes.
+- The glow on an agent’s name fades in when it starts working, keeps moving throughout the turn, and fades out when it finishes. The name stays in place, and the glow works on battery too.
 - The strip and the updater no longer wake several times a second while nothing changes: the strip writes its layout only after a change and follows a divider closely only while it is dragged, and the updater looks for releases again when Settings changes the channel.
 
 ### Fixed
