@@ -50,7 +50,7 @@ export function routeOf(machine) {
 export const LAN_PROBE = ["-o", "BatchMode=yes", "-o", "ConnectTimeout=1", "-o", "StrictHostKeyChecking=yes"];
 export const LAN_WAIT_S = 3;
 const LAN_ASK = "-o ConnectTimeout=2 -o StrictHostKeyChecking=yes";
-const lanLine = (args, away) => `ssh ${LAN_PROBE.join(" ")} ${args} true </dev/null >/dev/null 2>&1 & p=$!; (sleep ${LAN_WAIT_S}; kill -9 $p) </dev/null >/dev/null 2>&1 & w=$!; wait $p 2>/dev/null && { kill -9 $w 2>/dev/null; exec ssh -o StrictHostKeyChecking=yes ${args} "$1"; }; kill -9 $w 2>/dev/null; exec ${away} "$1"`;
+const lanLine = (args, away) => `ssh ${LAN_PROBE.join(" ")} ${args} true </dev/null >/dev/null 2>&1 & p=$!; (trap 'kill $s 2>/dev/null; exit 0' TERM; sleep ${LAN_WAIT_S} & s=$!; wait $s; kill -9 $p) </dev/null >/dev/null 2>&1 & w=$!; wait $p 2>/dev/null && { kill $w 2>/dev/null; exec ssh -o StrictHostKeyChecking=yes ${args} "$1"; }; kill $w 2>/dev/null; exec ${away} "$1"`;
 export const lanFirst = (args, away) => `sh -c ${shellQuote(lanLine(args, away))} route`;
 
 export const hostNameOption = (ip) => `HostName=${String(ip).replace(/%/g, "%%")}`;
@@ -75,7 +75,7 @@ export function lanArgs(host, { target = "", user = "", hostKey = "", known = ""
 
 export const unquote = (word) => (/^'.*'$/s.test(word) ? word.slice(1, -1).replace(/'\\''/g, "'") : word);
 const LAN_IP = /(?:^|\s)-o HostName=(\S+)(?:\s|$)/;
-const LAN_LINE = new RegExp(`^${lanLine("(.+?)", "(.+)").replace(/[$()&{}]/g, (ch) => `\\${ch}`).replace("\\(.+?\\)", "(.+?)").replace("\\(.+?\\)", "\\1").replace("\\(.+\\)", "(.+)")}$`, "s");
+const LAN_LINE = new RegExp(`^${lanLine("\0A", "\0B").replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace("\0A", "(.+?)").replace("\0A", "\\1").replace("\0B", "(.+)")}$`, "s");
 const OLD_LAN_LINE = /^ssh -o BatchMode=yes -o ConnectTimeout=2 -o StrictHostKeyChecking=(?:accept-new|yes) (.+?) true (?:<\/dev\/null )?>\/dev\/null 2>&1 && exec ssh -o StrictHostKeyChecking=(?:accept-new|yes) \1 "\$1"; exec (.+) "\$1"$/s;
 
 export function lanParts(via) {
