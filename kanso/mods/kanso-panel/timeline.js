@@ -1,7 +1,7 @@
 import { div } from "gpui-kit";
-import { v_flex, h_flex } from "gpui-base";
-import { run, theme, focused, agents, terminals, panes, spaces, window, shared, setShared } from "herdr";
-import { G, T, PR, tokens } from "./ui.js";
+import { v_flex } from "gpui-base";
+import { run, theme, focused, agents, terminals, spaces, window, shared, setShared } from "herdr";
+import { G, PR, tokens } from "./ui.js";
 import { iconButton } from "./ui-button.js";
 import { row } from "./ui-row.js";
 import { section } from "./ui-section.js";
@@ -14,7 +14,6 @@ import { stateWithin, LATE } from "./panel-state.js";
 import { transcriptApi } from "./platform-transcripts.js";
 import { machineOf } from "./remote-file.js";
 import { ticking } from "./pure.js";
-import { shownName } from "./marks.js";
 import { parseSlice, SLICE_BUDGET, LINE_MAX } from "./find.js";
 import { kindOf, agentHint } from "./conversation-at.js";
 import { locateOn } from "./conversation-on.js";
@@ -26,7 +25,6 @@ const PASSES = 64;
 const KEPT = "kanso.timeline";
 const NONE = Object.freeze({ kind: null, file: null });
 const LOST = Object.freeze({ kind: null, file: null, lost: true });
-const DOT = " \u{b7} ";
 
 const agentOf = (address) => (address ? agents().find((a) => a.address === address) ?? null : null);
 const pulse = (address) => { const a = agentOf(address); return a ? `${a.status}:${a.seq}` : ""; };
@@ -249,13 +247,7 @@ export class Timeline {
 
   render(cx) {
     const c = tokens(theme());
-    const a = agentOf(this.follow);
-    const named = a ? shownName(this.follow, panes().find((p) => p.terminal === this.follow)) : "";
-    const count = this.state.count;
-    const meta = [named, machineOf(this.follow), count ? `${count} ${count === 1 ? "prompt" : "prompts"}` : null].filter(Boolean).join(DOT);
-    const title = h_flex().min_w(0).gap(G.sm).items_center()
-      .child(div().flex_none().text_size(PR.title).text_color(c.text).child("Timeline"))
-      .child(div().min_w(0).truncate().text_size(T.body).text_color(c.dim).child(meta));
+    const title = div().text_size(PR.title).text_color(c.text).child("Timeline");
     const tools = [
       this.follow ? iconButton("timeline-pin", "pin", this.pinned ? "Follow the pane in focus" : "Stay on this agent", (cx) => this.pin(cx), c, { active: Boolean(this.pinned) }) : null,
       refreshTool("timeline-refresh", c, { busy: this.reading != null, enabled: Boolean(this.follow), working: "Reading the conversation" }, (cx) => this.refresh(cx)),
