@@ -8,6 +8,8 @@ export function splitTarget(text) {
 }
 
 export const joined = (user, host) => (user ? `${user}@${host}` : host);
+export const withPort = (host, port) => (!port ? host : host.includes(":") ? `[${host}]:${port}` : `${host}:${port}`);
+export const hostOf = (target) => { const { dest, port } = destinationOf(target); return withPort(splitTarget(dest).host, port); };
 
 export function destinationOf(target) {
   const { user, host } = splitTarget(target);
@@ -17,13 +19,16 @@ export function destinationOf(target) {
 
 export const KEY = "~/.ssh/id_ed25519_kanso";
 const nameMark = (text) => [...text].reduce((h, ch) => (Math.imul(h, 31) + ch.codePointAt(0)) >>> 0, 7).toString(36);
-export const agentKey = (name) => {
+const fileWord = (name) => {
   const text = String(name), plain = text.replace(/[^\w-]/g, "_");
-  return `~/.ssh/id_kanso_agent_${plain === text ? plain : `${plain}-${nameMark(text)}`}`;
+  return plain === text ? plain : `${plain}-${nameMark(text)}`;
 };
+export const agentKey = (name) => `~/.ssh/id_kanso_agent_${fileWord(name)}`;
+export const KNOWN_PREFIX = "known_hosts_kanso_";
+export const knownFile = (name) => `${KNOWN_PREFIX}${fileWord(name)}`;
 const keyedWords = (path) => `-o IdentityFile=${path} -o IdentitiesOnly=yes -o BatchMode=yes `;
 const ROUTE_WORDS = /(?:-o IdentityFile=(~\/\.ssh\/(?:id_ed25519_kanso|id_kanso_agent_[\w-]+))|-i ~\/\.ssh\/id_ed25519_kanso) -o IdentitiesOnly=yes -o BatchMode=yes /g;
-const unkeyed = (via) => String(via ?? "").replace(ROUTE_WORDS, "");
+export const unkeyed = (via) => String(via ?? "").replace(ROUTE_WORDS, "");
 export const kansoKeyed = (via) => new RegExp(ROUTE_WORDS.source).test(String(via ?? ""));
 export const keyOfRoute = (via) => new RegExp(ROUTE_WORDS.source).exec(String(via ?? ""))?.[1] ?? KEY;
 const ASK = "-o PasswordAuthentication=yes -o KbdInteractiveAuthentication=yes ";
@@ -31,6 +36,22 @@ const SSH = /(^|['"]|\bexec )ssh (?=\S)/g;
 const DONE = "Done: this tab can close.";
 const AGENT_FAILED = (name) => `The key in your ssh agent did not open ${name} on its own, so kansō makes its own key and asks once more.`;
 const refused = (name) => `${name} didn't let this computer in. Put this line in ~/.ssh/authorized_keys on ${name}, then sign in again:`;
+const refusedAs = (name, host) => [`${name} didn't let `, ` in. If you sign in there as someone else, close this tab and add user@${host} instead. If not, put this line in ~/.ssh/authorized_keys on ${name}, then sign in again:`];
+
+function refusal(machine, windows) {
+  const name = nameOf(machine);
+  const out = windows ? (text) => `Write-Host (${text})` : (text) => `echo ${text}`;
+  const quote = windows ? psQuote : shellQuote;
+  if (!machine.target) return out(quote(refused(name)));
+  const { dest, port } = destinationOf(machine.target);
+  const { user, host } = splitTarget(dest);
+  const [before, after] = refusedAs(name, withPort(host, port));
+  const asked = windows
+    ? `(((ssh -G -- ${psQuote(dest)} 2>$null) -match '^user ' | Select-Object -First 1) -replace '^user ', '')`
+    : `"$(ssh -G -- ${shellQuote(dest)} 2>/dev/null | awk '$1 == "user" { sub(/^user /, ""); print; exit }')"`;
+  const who = user ? quote(user) : asked;
+  return out(windows ? `${psQuote(before)} + ${who} + ${psQuote(after)}` : `${shellQuote(before)}${who}${shellQuote(after)}`);
+}
 
 const withSsh = (via, words) => unkeyed(via).replace(SSH, `$1ssh ${words}`);
 const sshLine = (target, quote) => {
@@ -44,29 +65,49 @@ export function routeOf(machine) {
   return { name, target, via, session };
 }
 
-const LAN_SSH = "-o BatchMode=yes -o ConnectTimeout=2 -o StrictHostKeyChecking=yes";
-const LAN_ASK = "-o ConnectTimeout=2";
-const lanLine = (args, away) => `ssh ${LAN_SSH} ${args} true </dev/null >/dev/null 2>&1 && exec ssh -o StrictHostKeyChecking=yes ${args} "$1"; exec ${away} "$1"`;
+export const LAN_PROBE = ["-o", "BatchMode=yes", "-o", "ConnectTimeout=1", "-o", "StrictHostKeyChecking=yes"];
+export const LAN_WAIT_S = 3;
+const LAN_ASK = "-o ConnectTimeout=2 -o StrictHostKeyChecking=yes";
+const lanLine = (args, away) => `ssh ${LAN_PROBE.join(" ")} ${args} true </dev/null >/dev/null 2>&1 & p=$!; (trap 'kill $s 2>/dev/null; exit 0' TERM; sleep ${LAN_WAIT_S} & s=$!; wait $s; kill -9 $p) </dev/null >/dev/null 2>&1 & w=$!; wait $p 2>/dev/null && { kill $w 2>/dev/null; exec ssh -o StrictHostKeyChecking=yes ${args} "$1"; }; kill $w 2>/dev/null; exec ${away} "$1"`;
 export const lanFirst = (args, away) => `sh -c ${shellQuote(lanLine(args, away))} route`;
 
-export function lanArgs(ip, { target = "", user = "", hostKey = "" } = {}) {
-  if (!target) return shellQuote(joined(user, ip));
-  const { dest, port } = destinationOf(target);
-  const key = hostKey || splitTarget(dest).host;
-  return [`-o HostName=${ip}`, `-o HostKeyAlias=${shellQuote(key)}`, ...(port ? [`-p ${port}`] : []), shellQuote(dest)].join(" ");
+export const hostNameOption = (ip) => `HostName=${String(ip).replace(/%/g, "%%")}`;
+
+export const lanDest = (host, { target = "", user = "" } = {}) => (target ? destinationOf(target) : { dest: joined(user, host), port: "" });
+
+export function lanOptions(host, { target = "", hostKey = "", known = "" } = {}) {
+  const key = hostKey || (target ? splitTarget(destinationOf(target).dest).host : "");
+  return [
+    "-o", hostNameOption(host),
+    ...(key ? ["-o", `HostKeyAlias=${key}`] : []),
+    ...(known ? ["-o", `UserKnownHostsFile=~/.ssh/${known}`] : []),
+    ...(known ? ["-o", "GlobalKnownHostsFile=/dev/null", "-o", "VerifyHostKeyDNS=no"] : []),
+    "-o", "ProxyCommand=none", "-o", "ControlMaster=no", "-o", "ControlPath=none",
+  ];
+}
+
+export function lanArgs(host, { target = "", user = "", hostKey = "", known = "" } = {}) {
+  const { dest, port } = lanDest(host, { target, user });
+  return [...lanOptions(host, { target, hostKey, known }), ...(port ? ["-p", port] : []), dest].map(shellQuote).join(" ");
 }
 
 export const unquote = (word) => (/^'.*'$/s.test(word) ? word.slice(1, -1).replace(/'\\''/g, "'") : word);
 const LAN_IP = /(?:^|\s)-o HostName=(\S+)(?:\s|$)/;
+const LAN_LINE = new RegExp(`^${lanLine("\0A", "\0B").replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace("\0A", "(.+?)").replace("\0A", "\\1").replace("\0B", "(.+)")}$`, "s");
+const OLD_LAN_LINE = /^ssh -o BatchMode=yes -o ConnectTimeout=2 -o StrictHostKeyChecking=(?:accept-new|yes) (.+?) true (?:<\/dev\/null )?>\/dev\/null 2>&1 && exec ssh -o StrictHostKeyChecking=(?:accept-new|yes) \1 "\$1"; exec (.+) "\$1"$/s;
 
 export function lanParts(via) {
-  const inner = String(via ?? "").match(/^sh -c ('(?:[^']|'\\'')*'|\S+) route$/s);
+  const plain = unkeyed(via);
+  const inner = plain.match(/^sh -c ('(?:[^']|'\\'')*'|\S+) route$/s);
   const line = inner ? unquote(inner[1]) : "";
-  const found = line.match(/^ssh -o BatchMode=yes -o ConnectTimeout=2 -o StrictHostKeyChecking=(?:accept-new|yes) (.+?) true (?:<\/dev\/null )?>\/dev\/null 2>&1 && exec ssh -o StrictHostKeyChecking=(?:accept-new|yes) \1 "\$1"; exec (.+) "\$1"$/s);
-  if (!found || `sh -c ${shellQuote(line)} route` !== via) return null;
-  const ip = found[1].match(LAN_IP)?.[1] ?? splitTarget(unquote(found[1])).host;
-  return { args: found[1], ip, away: found[2] };
+  const found = line.match(LAN_LINE) ?? line.match(OLD_LAN_LINE);
+  if (!found || `sh -c ${shellQuote(line)} route` !== plain) return null;
+  const words = found[1];
+  const ip = words.match(LAN_IP)?.[1].replace(/%%/g, "%") ?? splitTarget(unquote(words.split(" ").at(-1))).host;
+  return { args: words, ip, away: found[2], named: words.includes(`UserKnownHostsFile=~/.ssh/${KNOWN_PREFIX}`), key: kansoKeyed(via) ? keyOfRoute(via) : "" };
 }
+
+export const rekeyed = (via, key) => (key ? withSsh(via, keyedWords(key)) : via);
 
 export function keyable({ target = "", via = "" }, platform = "macos") {
   if (!via) return Boolean(target);
@@ -78,7 +119,7 @@ export function keyedRoute({ target = "", via = "" }, platform = "macos") {
   const windows = platform === "windows";
   const base = (quote) => unkeyed(via) || sshLine(target, quote);
   const lan = lanParts(base(shellQuote));
-  const ask = lan ? `sh -c ${shellQuote(`ssh ${ASK}${LAN_ASK} ${lan.args} "$1" || exec ${withSsh(lan.away, ASK)} "$1"`)} route` : withSsh(base(windows ? psQuote : shellQuote), ASK);
+  const ask = lan ? `sh -c ${shellQuote(`ssh ${ASK}${LAN_ASK} ${lan.args} "$1"; s=$?; [ "$s" -eq 255 ] || exit "$s"; exec ${withSsh(lan.away, ASK)} "$1"`)} route` : withSsh(base(windows ? psQuote : shellQuote), ASK);
   return {
     ask,
     keyed: (path = KEY) => withSsh(base(windows ? String : shellQuote), keyedWords(path)),
@@ -131,7 +172,7 @@ function shSetup(machine, { replace, agentPath, before }) {
     before ? `prev=$(awk '{ print $1 " " $2 " kanso" }' ${shHome(before)}.pub 2>/dev/null)` : "prev=",
     ...SH_KEY,
     `replaced() { [ -z "$prev" ] || [ "$prev" = "$pub" ] || line=${shSpliced(forgetLine, "prev")}"$line"; }`,
-    `push() { e=$(mktemp) || exit; said=$(${ask} "$line" 2>"$e"); s=$?; cat "$e" >&2; case $said in *kanso-added*) added=1 ;; *) added= ;; esac; [ "$s" -eq 0 ] || { grep -q "Permission denied" "$e" && { echo; echo ${shellQuote(refused(name))}; echo "$pub"; }; rm -f "$e"; exit 1; }; rm -f "$e"; }`,
+    `push() { e=$(mktemp) || exit; said=$(${ask} "$line" 2>"$e"); s=$?; cat "$e" >&2; case $said in *kanso-added*) added=1 ;; *) added= ;; esac; [ "$s" -eq 0 ] || { grep -q "Permission denied" "$e" && { echo; ${refusal(machine, false)}; echo "$pub"; }; rm -f "$e"; exit 1; }; rm -f "$e"; }`,
     "if held || pick; then",
     '  lines "$g" || exit; replaced; push',
     `  if ${reach(agentPath)} true </dev/null >/dev/null 2>&1; then via=${shellQuote(keyed(agentPath))}`,
@@ -153,7 +194,7 @@ function psSetup(machine, { replace, agentPath }) {
     ...psStart(agentPath),
     "New-Item -ItemType Directory -Force (Split-Path $k) | Out-Null",
     ...PS_KEY,
-    `function Send-Key { $said = ${ask} "$($pre)${pushLine("$pub", "$b64")}" 2>&1; $code = $LASTEXITCODE; $script:added = [bool]("$said" -match 'kanso-added'); $said | Where-Object { "$_" -notmatch 'kanso-added' } | Write-Host; if ($code -ne 0) { if ("$said" -match 'Permission denied') { Write-Host ''; Write-Host ${psQuote(refused(name))}; Write-Host $pub }; exit 1 } }`,
+    `function Send-Key { $said = ${ask} "$($pre)${pushLine("$pub", "$b64")}" 2>&1; $code = $LASTEXITCODE; $script:added = [bool]("$said" -match 'kanso-added'); $said | Where-Object { "$_" -notmatch 'kanso-added' } | Write-Host; if ($code -ne 0) { if ("$said" -match 'Permission denied') { Write-Host ''; ${refusal(machine, true)}; Write-Host $pub }; exit 1 } }`,
     "$pre = ''",
     `if ((Test-Held) -or (Select-Agent)) { Read-Key $g; Send-Key; ${reach(agentPath)} true *> $null; if ($LASTEXITCODE -eq 0) { $via = ${psQuote(keyed(agentPath))} } else { Write-Host ${psQuote(AGENT_FAILED(name))}; $old = $pub; $was = $added; New-Own; Read-Key $k; if ($was) { $pre = ${psSpliced(forgetLine, "old")} }; Send-Key; $via = ${psQuote(keyed(KEY))} } } else { New-Own; Read-Key $k; Send-Key; $via = ${psQuote(keyed(KEY))} }`,
     replace ? `${hc(["machine", "rm", name])} *> $null` : "",

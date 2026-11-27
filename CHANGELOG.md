@@ -37,11 +37,15 @@ the branch's rules.
 - Timeline's header shows only its title; the conversation's name, computer and prompt count moved into the pin's tooltip.
 - Shipped leads with the share of the pull requests you opened that reached production, draws the pull requests merged over the period as a chart like Memory's, lists its trend with the current period first, and says less.
 - Shipped and Spend keep what they read and update it every 12 hours, or when you press Refresh, reading only what is new: Shipped asks GitHub only for what changed, and Spend rescans and exchanges with your other computers on that schedule instead of every minute.
+- Add a computer lists the computers on your home network first and Tailscale second, under Away from home. Set up with an agent walks you through ssh on your home network one step at a time, and Set up Tailscale with an agent does the same for Tailscale.
+- On Mac and Linux, kansō reaches your other computers over your home network whenever you are home, with or without Tailscale. It remembers each computer by its .local name instead of an address that can change, checks the key the computer presents there against the one it read over a trusted connection, and goes through Tailscale or your usual route only when you are away.
 - The glow on an agent’s name fades in when it starts working, keeps moving throughout the turn, and fades out when it finishes. The name stays in place, and the glow works on battery too.
 - The strip and the updater no longer wake several times a second while nothing changes: the strip writes its layout only after a change and follows a divider closely only while it is dragged, and the updater looks for releases again when Settings changes the channel.
 
 ### Fixed
 
+- When a computer turns kansō away, Add a computer and its sign-in tab say which user was tried and that you can type user@address if you sign in there as someone else, instead of only asking for a key that may already be there.
+- Add a computer finds Tailscale when it was installed from the Mac App Store and no longer shows a notice when Tailscale isn't installed.
 - Caffeine says when a computer's battery is too low to keep it awake, instead of showing it as not read and then as sleeping as usual.
 - Check for updates gives its answer even when an automatic check is already looking.
 - Shipped no longer stops drawing ("This view could not be re-rendered") with a few thousand pull requests, and its streak is not reset by a calendar day that GitHub already started.

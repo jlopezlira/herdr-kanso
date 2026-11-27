@@ -1,7 +1,5 @@
-import { awayLine, destinationOf, joined, lanArgs, lanFirst, lanParts, splitTarget, unquote } from "./sign-in.js";
-import { privateIp } from "./nearby.js";
-
-const LAN_PROBE = ["-o", "BatchMode=yes", "-o", "ConnectTimeout=2", "-o", "StrictHostKeyChecking=yes"];
+import { awayLine, destinationOf, kansoKeyed, keyOfRoute, knownFile, lanArgs, lanDest, lanFirst, lanOptions, lanParts, rekeyed, unkeyed, unquote, LAN_PROBE } from "./sign-in.js";
+import { addArgs, hcError, listedMachines, machineRecord, rmArgs } from "./machines.js";
 
 export function sshSettings(text) {
   return Object.fromEntries(String(text ?? "").split("\n").map((line) => line.trim().split(/\s+/)).filter((words) => words.length > 1)
@@ -17,8 +15,9 @@ export function targetOfAway(away) {
 
 export function awayOf(record) {
   const parts = lanParts(record?.via);
-  const away = parts?.away ?? (record?.via || (record?.target ? awayLine(record.target) : ""));
-  return { away, target: record?.target || targetOfAway(away), lan: parts };
+  const via = unkeyed(record?.via);
+  const away = parts?.away ?? (via || (record?.target ? awayLine(record.target) : ""));
+  return { away, target: record?.target || targetOfAway(away), lan: parts, key: parts?.key ?? (kansoKeyed(record?.via) ? keyOfRoute(record.via) : "") };
 }
 
 export async function resolvedHost(target, run) {
@@ -29,36 +28,84 @@ export async function resolvedHost(target, run) {
   return settings.hostname ? { hostname: settings.hostname, hostKey: key, user: settings.user ?? "" } : null;
 }
 
-export const peerFor = (peers, { host, hostname }) => (peers ?? []).find((peer) => peer.ip === hostname || peer.ip === host || peer.name === host || peer.name === hostname) ?? null;
-
-export const lanCandidates = (peer) => [...new Set((peer?.lan ?? []).filter(privateIp))];
-
-export function lanRecord(record, ip, { hostKey = "", user = "" } = {}) {
-  const { away, target } = awayOf(record);
+export function lanRecord(record, host, { hostKey = "", user = "", known = "" } = {}) {
+  const { away, target, key } = awayOf(record);
   if (!away) return null;
-  const args = target ? lanArgs(ip, { target, hostKey }) : lanArgs(ip, { user });
-  const via = lanFirst(args, away);
+  const via = rekeyed(lanFirst(lanArgs(host, { target, user, hostKey, known }), away), key);
   return via === record.via ? null : { ...record, target: "", via };
 }
 
-export const lanProbeArgs = (ip, { target = "", hostKey = "", user = "" } = {}) => {
-  if (!target) return [...LAN_PROBE, "--", joined(user, ip), "true"];
-  const { dest, port } = destinationOf(target);
-  return [...LAN_PROBE, "-o", `HostName=${ip}`, "-o", `HostKeyAlias=${hostKey || splitTarget(dest).host}`, ...(port ? ["-p", port] : []), "--", dest, "true"];
+export const lanProbeArgs = (host, { target = "", hostKey = "", user = "", known = "", key = "" } = {}) => {
+  const { dest, port } = lanDest(host, { target, user });
+  const identity = key ? ["-o", `IdentityFile=${key}`, "-o", "IdentitiesOnly=yes"] : [];
+  return [...LAN_PROBE, ...identity, ...lanOptions(host, { target, hostKey, known }), ...(port ? ["-p", port] : []), "--", dest, "true"];
 };
 
-export async function homeRoute(record, peers, run) {
-  const { target, lan } = awayOf(record);
-  if (!target) return null;
-  const host = splitTarget(destinationOf(target).dest).host;
+export const HOME_FACTS = [
+  'n=$(busctl --system call org.freedesktop.Avahi / org.freedesktop.Avahi.Server GetHostNameFqdn 2>/dev/null | sed -n \'s/^s "\\(.*\\)"$/\\1/p\')',
+  '[ -n "$n" ] || n=$(scutil --get LocalHostName 2>/dev/null || hostname -s 2>/dev/null || hostname)',
+  'printf "home %s\\nuser %s\\n" "$n" "$(id -un)"',
+  'for f in /etc/ssh/ssh_host_*_key.pub; do [ -r "$f" ] && sed "s/^/key /" "$f"; done',
+  "exit 0",
+].join("; ");
+
+const HOME_NAME = /^[a-z0-9][a-z0-9-]{0,62}$/;
+const HOST_KEY = /^((?:ssh-ed25519|ssh-rsa|ecdsa-sha2-nistp\d+|sk-[\w@.-]+) [A-Za-z0-9+/]+={0,3})(?:\s|$)/;
+
+export function homeFacts(text) {
+  const lines = String(text ?? "").split("\n").map((line) => line.trim());
+  const field = (word) => lines.find((line) => line.startsWith(`${word} `))?.slice(word.length + 1).trim() ?? "";
+  const name = field("home").toLowerCase().replace(/\.local$/, "");
+  const keys = [...new Set(lines.filter((line) => line.startsWith("key ")).map((line) => line.slice(4).match(HOST_KEY)?.[1]).filter(Boolean))];
+  return HOME_NAME.test(name) && keys.length ? { home: `${name}.local`, user: field("user"), keys } : null;
+}
+
+const PIN = 'f="$HOME/.ssh/$1"; h=$2; shift 2; umask 077; mkdir -p "$HOME/.ssh" || exit 1; t=$(mktemp "$f.XXXXXX") || exit 1; for k in "$@"; do printf "%s %s\\n" "$h" "$k"; done > "$t" && mv -f "$t" "$f" || { rm -f "$t"; exit 1; }';
+export const pinArgs = (known, { home, keys }) => ["-c", PIN, "pin", known, home, ...keys];
+
+export async function homeRoute(record, { run, remote }) {
+  const { target, lan, away, key } = awayOf(record);
+  if (!away) return null;
+  const facts = homeFacts((await remote(["sh", "-c", HOME_FACTS]).catch(() => null))?.stdout);
+  if (!facts) return null;
+  const known = knownFile(record.name);
+  const pinned = await run("sh", pinArgs(known, facts)).catch(() => null);
+  if (pinned?.code !== 0 || (lan?.named && lan.ip === facts.home)) return null;
+  const where = { target, user: facts.user, hostKey: facts.home, known };
+  const probe = await run("ssh", lanProbeArgs(facts.home, { ...where, key })).catch(() => null);
+  const next = probe?.code === 0 ? lanRecord(record, facts.home, where) : null;
+  return next ? { home: facts.home, record: next } : null;
+}
+
+const savedRoute = async (name, hc) => {
+  const result = await hc(["machine", "ls", "--json"]).catch(() => null);
+  if (result?.code !== 0) return undefined;
+  return machineRecord(listedMachines(result).find((row) => row.name === name)) ?? null;
+};
+const sameRoute = (a, b) => Boolean(a && b) && a.target === b.target && a.via === b.via;
+
+export async function reroute(was, next, hc) {
+  if (!sameRoute(await savedRoute(was.name, hc), was)) return false;
+  if (hcError(await hc(rmArgs(was.name)).catch((e) => ({ code: 1, stderr: String(e?.message ?? e) })))) return false;
+  if (!hcError(await hc(addArgs(next)).catch((e) => ({ code: 1, stderr: String(e?.message ?? e) })))) return true;
+  if ((await savedRoute(was.name, hc)) === null) await hc(addArgs(was)).catch(() => null);
+  return false;
+}
+
+export async function knownHome(record, run) {
+  const { target, lan, key } = awayOf(record);
+  const home = `${String(record.name).toLowerCase()}.local`;
+  if (!target || lan?.named || !HOME_NAME.test(home.slice(0, -6))) return null;
   const resolved = await resolvedHost(target, run);
   if (!resolved) return null;
-  const peer = peerFor(peers, { host, hostname: resolved.hostname });
-  const candidates = lanCandidates(peer);
-  if (!candidates.length || (lan?.ip && candidates.includes(lan.ip) && lanFirst(lan.args, lan.away) === record.via && /HostKeyAlias=/.test(lan.args))) return null;
-  for (const ip of candidates) {
-    const probe = await run("ssh", lanProbeArgs(ip, { target, hostKey: resolved.hostKey })).catch(() => null);
-    if (probe?.code === 0) return { ip, record: lanRecord(record, ip, { hostKey: resolved.hostKey }) };
-  }
-  return null;
+  const where = { target, hostKey: resolved.hostKey };
+  const probe = await run("ssh", lanProbeArgs(home, { ...where, key })).catch(() => null);
+  const next = probe?.code === 0 ? lanRecord(record, home, where) : null;
+  return next ? { home, record: next } : null;
+}
+
+export async function preferHome(record, { run, hc, exec, timeout, connected = true }) {
+  const remote = ([program, ...args]) => exec(program, args, { on: record.name, timeout });
+  const found = await (connected ? homeRoute(record, { run, remote }) : knownHome(record, run)).catch(() => null);
+  return found && (await reroute(record, found.record, hc)) ? found : null;
 }
