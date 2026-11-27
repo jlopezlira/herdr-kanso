@@ -187,22 +187,21 @@ export default class Computers extends View {
     if (!plan.lan || plan.via || !plan.target) return null;
     const resolved = await resolvedHost(plan.target, (program, args) => exec(program, args, { timeout: PROBE_MS }));
     const result = await exec("ssh", lanProbeArgs(plan.lan, { target: plan.target, hostKey: resolved?.hostKey ?? "" }), { timeout: PROBE_MS }).catch(failed);
-    const reach = reachOf(result);
-    return { result, reach: reach === "hostkey" && NEW_KEY.test(result.stderr) ? "password" : reach };
+    return { result, reach: NEW_KEY.test(result.stderr) ? "unknown" : reachOf(result) };
   }
 
   async connect(key, planned) {
     const given = this.jobs[key]?.choice?.record ? planned : await this.withHome(planned);
     const home = await this.homeProbe(given);
     if (HOME_SIGN_IN.has(home?.reach)) {
-      this.jobs[key] = { ...this.jobs[key], plan: await this.homeFirst(given) };
+      this.jobs[key] = { ...this.jobs[key], plan: await this.homeFirst(given), home: given };
       return this.fail(key, home.reach, said(home.result));
     }
     const tried = given.probe && home?.reach !== "ready" ? await this.probe([given.target, ...(given.also ?? [])].filter(Boolean)) : null;
     const chosen = tried ? { ...given, target: tried.target } : given;
-    this.jobs[key] = { ...this.jobs[key], plan: chosen };
+    this.jobs[key] = { ...this.jobs[key], plan: chosen, home: undefined };
     if (tried && tried.reach !== "ready") return this.fail(key, tried.reach, said(tried.result));
-    const plan = await this.homeFirst(chosen);
+    const plan = !home || home.reach === "ready" ? await this.homeFirst(chosen) : { ...chosen, name: planned.name, lan: undefined };
     const error = hcError(await hc(addArgs(plan)).catch(failed));
     if (error) return this.fail(key, needsLogin(error) ? "password" : reachOf({ code: 1, stderr: error.message }), String(error.message ?? "").trim());
     delete this.jobs[key];
@@ -294,7 +293,7 @@ export default class Computers extends View {
       cx.spawn(async (cx) => {
         const resolved = await resolvedHost(plan.target, (program, args) => exec(program, args, { timeout: PROBE_MS })).catch(() => null);
         await tryOrAsync(() => exec("ssh-keygen", forgetArgs(resolved?.hostKey || job.choice.peer.ip), { timeout: PROBE_MS }));
-        await this.connect(key, plan);
+        await this.connect(key, job.home ?? plan);
         cx.notify();
       });
       cx.notify();
