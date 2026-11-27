@@ -114,11 +114,15 @@ test("On macOS and Linux, checking a linked worktree asks Git to disable its fil
   await writeFile(join(worktree, "readme"), "changed\n");
   const trace = join(dir, "git-trace.jsonl");
   const run = (command, args) => exec(command, args, { env: { ...process.env, GIT_TRACE2_EVENT: trace } });
-  const result = await repositoryApi(nativePlatform, run).probe(worktree, 0, []);
+  const result = await repositoryApi(nativePlatform, run).probe(worktree, 0, ["HEAD", "HEAD"]);
   assert.equal(result.code, 0, result.stderr);
   assert.match(result.stdout, /^dirty\t1$/m);
   const events = (await readFile(trace, "utf8")).trim().split("\n").map((line) => JSON.parse(line));
   const status = events.find(({ event, argv }) => event === "start" && argv.includes("status"));
+  const started = events.filter(({ event }) => event === "start");
+  assert.equal(started.filter(({ argv }) => argv.includes("HEAD..HEAD")).length, 1);
+  assert.ok(!started.some(({ argv }) => argv.includes("merge-base") || argv.includes("merge-tree")));
+  assert.match(result.stdout, /^ahead\t0$/m);
   assert.ok(status, "Git ran status in the worktree");
   assert.deepEqual(status.argv.slice(1, 3), ["-c", "core.fsmonitor=false"]);
 });

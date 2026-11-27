@@ -57,7 +57,6 @@ cd "$1" 2>/dev/null || { echo gone; exit 0; }
 [ -d .git ] && { echo replaced; exit 0; }
 # git can't read it (its .git names where the repository used to be): nothing
 # below would be true, so it says so and stops.
-git rev-parse --git-dir >/dev/null 2>&1 || { echo broken; exit 0; }
 status=$(git ${GIT_READ.join(" ")} --no-optional-locks status --porcelain=v1 --untracked-files=normal 2>/dev/null) || { echo broken; exit 0; }
 idle=$2
 shift 2
@@ -73,7 +72,7 @@ ahead=
 for b in "$@"; do
   a=$(git rev-list --count "$b..HEAD" 2>/dev/null) || continue
   if [ -z "$ahead" ] || [ "$a" -lt "$ahead" ]; then ahead=$a; fi
-  if git merge-base --is-ancestor HEAD "$b" 2>/dev/null; then echo merged; continue; fi
+  if [ "$a" = 0 ]; then echo merged; break; fi
   t=$(git merge-tree --write-tree "$b" HEAD 2>/dev/null) && [ "$t" = "$(git rev-parse "$b^{tree}" 2>/dev/null)" ] && echo merged
 done
 printf 'ahead\\t%s\\n' "$ahead"
@@ -151,7 +150,7 @@ export function repositoryApi(platform, run) {
     const ancestors = await Promise.all(refs.map(async (ref) => {
       const count = await git(folder, ["rev-list", "--count", `${ref}..HEAD`]);
       if (count.code !== 0) return null;
-      if ((await git(folder, ["merge-base", "--is-ancestor", "HEAD", ref])).code === 0) return { ahead: Number(count.stdout), merged: true };
+      if (count.stdout.trim() === "0") return { ahead: 0, merged: true };
       const tree = await git(folder, ["merge-tree", "--write-tree", ref, "HEAD"]);
       return { ahead: Number(count.stdout), merged: tree.code === 0 && tree.stdout.trim() === (await git(folder, ["rev-parse", `${ref}^{tree}`])).stdout.trim() };
     }));
