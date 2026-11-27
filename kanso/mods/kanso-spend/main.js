@@ -104,7 +104,7 @@ export default class TokenSpend extends View {
     this.nodeBinary = null;
     this.runtimeError = null;
     this.runtimeTask = null;
-    this.scan = shared(UNFINISHED) ?? null;
+    this.scan = null;
     this.costs = null;
     this.share = new Share(MOD, paths.join(appHome(), DATA_DIR));
     this.error = null;
@@ -114,7 +114,6 @@ export default class TokenSpend extends View {
     this.task = null;
     this.watchdog = null;
     this.continueTimer = null;
-    this.lastSnapshotAt = Number(shared(SNAPSHOT_AT)) || 0;
     this.cost = { period: spendPeriod(shared(PERIOD_KEY)), offset: 0, project: "all", model: "all" };
     this.expanded = {};
     this.page = "home";
@@ -174,7 +173,7 @@ export default class TokenSpend extends View {
           this.sleep();
           return;
         }
-        if (Date.now() - this.lastSnapshotAt >= REFRESH_MS) this.run("snapshot", tickCx);
+        if (this.due()) this.run("snapshot", tickCx);
         if (!this.running && Date.now() - (this.exchangeTriedAt ?? 0) >= EXCHANGE_MS) this.exchange(tickCx, false);
       });
     }
@@ -200,12 +199,16 @@ export default class TokenSpend extends View {
   }
 
   catchUp(cx) {
-    if (Date.now() - this.lastSnapshotAt >= REFRESH_MS) this.run("snapshot", cx);
+    if (this.due()) this.run("snapshot", cx);
     else if (!this.costs) this.run("prepare", cx);
-    if (this.running || this.scan?.partial) return;
+    if (this.running || this.unfinished()) return;
     const all = this.takeForced();
     this.exchange(cx, all, all);
   }
+
+  due() { return Date.now() - (Number(shared(SNAPSHOT_AT)) || 0) >= REFRESH_MS; }
+
+  unfinished() { return shared(UNFINISHED) ?? null; }
 
   takeForced() {
     const all = this.forceNext === true;
@@ -214,7 +217,7 @@ export default class TokenSpend extends View {
   }
 
   reload(cx) {
-    this.lastSnapshotAt = 0;
+    setShared(SNAPSHOT_AT, 0);
     this.forceNext = true;
     if (this.running) { this.run("snapshot", cx); return; }
     this.nodeBinary = null;
@@ -264,7 +267,7 @@ export default class TokenSpend extends View {
     const startedAt = Date.now();
     const scans = command !== "prepare";
     this.running = command;
-    if (scans) this.lastSnapshotAt = Date.now();
+    if (scans) setShared(SNAPSHOT_AT, startedAt - REFRESH_MS + RETRY_MS);
     cx.notify();
 
     try { this.watchdog?.cancel(); } catch { /* already gone */ }
@@ -272,7 +275,7 @@ export default class TokenSpend extends View {
       if (generation !== this.generation) return;
       this.generation += 1;
       try { this.task?.cancel(); } catch { /* already gone */ }
-      if (scans) this.lastSnapshotAt = Date.now() - REFRESH_MS + RETRY_MS;
+      if (scans) setShared(SNAPSHOT_AT, Date.now() - REFRESH_MS + RETRY_MS);
       this.finish(timerCx, "Spend took too long to answer. It will try again shortly.");
     });
 
@@ -289,11 +292,9 @@ export default class TokenSpend extends View {
       if (generation !== this.generation || this.closed) return;
       if (this.syncWaiting === "fold" && startedAt >= this.syncEnded) this.syncWaiting = false;
       if (scans) {
-        if (failure || payload?.scan?.retry || payload?.scan?.partial) this.lastSnapshotAt = Date.now() - REFRESH_MS + RETRY_MS;
-        if (!failure) {
-          setShared(SNAPSHOT_AT, this.lastSnapshotAt);
-          setShared(UNFINISHED, payload?.scan?.partial ? payload.scan : null);
-        }
+        const again = failure || payload?.scan?.retry || payload?.scan?.partial;
+        setShared(SNAPSHOT_AT, again ? Date.now() - REFRESH_MS + RETRY_MS : startedAt);
+        if (!failure) setShared(UNFINISHED, payload?.scan?.partial ? payload.scan : null);
       }
       if (payload) {
         this.scan = scans || !this.scan ? payload.scan ?? this.scan : { ...this.scan, lastScanAt: payload.scan?.lastScanAt ?? this.scan.lastScanAt };
@@ -336,7 +337,7 @@ export default class TokenSpend extends View {
       } else if (this.queued.prepare) {
         this.queued = { ...this.queued, prepare: false };
         this.run("prepare", cx);
-      } else if (this.scan?.partial && !failure && this.awake) {
+      } else if (this.scan?.partial && this.unfinished() && !failure && this.awake) {
         // The first scan is time-boxed; keep going until it has read everything.
         try { this.continueTimer?.cancel(); } catch { /* already gone */ }
         this.continueTimer = cx.timer.after(1000, (timerCx) => {
@@ -345,12 +346,12 @@ export default class TokenSpend extends View {
         });
       }
     }
-    if (this.awake && !this.closed && !this.running && !this.scan?.partial) this.exchange(cx, true, this.takeForced());
+    if (this.awake && !this.closed && !this.running && !this.unfinished()) this.exchange(cx, true, this.takeForced());
     cx.notify();
   }
 
   exchange(cx, force = false, everyone = false) {
-    if (this.closed || !this.awake || !this.nodeBinary || this.scan?.partial) return;
+    if (this.closed || !this.awake || !this.nodeBinary || this.unfinished()) return;
     if (this.syncing) { this.syncAgain = true; if (force) this.syncForce = true; if (everyone) this.syncEveryone = true; return; }
     this.syncing = true;
     cx.spawn(async (syncCx) => {
@@ -548,8 +549,9 @@ export default class TokenSpend extends View {
   header(c, narrow) {
     const busy = Boolean(this.running);
     const updated = this.scan?.lastScanAt ? `Updated ${formatTime(this.scan.lastScanAt)}` : "";
-    const reading = this.running !== "prepare" && busy && this.scan?.partial
-      ? `Reading sessions, ${this.scan.processed} of ${this.scan.total}` : "";
+    const unfinished = this.unfinished();
+    const reading = this.running !== "prepare" && busy && unfinished
+      ? `Reading sessions, ${unfinished.processed} of ${unfinished.total}` : "";
     const top = this.stack[this.stack.length - 1];
     const inner = this.page === "settings" || Boolean(top);
     const title = this.page === "settings" ? "Settings" : top ? top.label : "Spend";
@@ -671,8 +673,8 @@ export default class TokenSpend extends View {
         .when(Boolean(hero.note), (el) => el.child(div().text_size(T.title).text_color(c.dim).child(hero.note)))
         .when(Boolean(hero.empty), (el) => el.child(div().text_size(T.title).text_color(c.muted).child(hero.empty)))
         .when(Boolean(hero.plan) && !this.syncWaiting, (el) => el.child(div().text_size(T.value).text_color(c.muted).child(hero.plan)))
-        .when(Boolean(this.scan?.partial), (el) => el.child(div().text_size(T.body).text_color(c.dim)
-          .child(`Still reading your history: ${this.scan.processed} of ${this.scan.total} files so far.`))));
+        .when(Boolean(this.unfinished()), (el) => el.child(div().text_size(T.body).text_color(c.dim)
+          .child(`Still reading your history: ${this.unfinished().processed} of ${this.unfinished().total} files so far.`))));
   }
 
   plans(c, data) {

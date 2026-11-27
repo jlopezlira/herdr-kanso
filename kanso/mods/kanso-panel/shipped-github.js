@@ -96,6 +96,7 @@ export const github = {
     await store.setOwnMeta("github.updated", String(now), login);
     progress("what reached production");
     const prod = await inMain(pendingByRepo(await store.prs()), read);
+    if (prod.unchecked) await read("query{viewer{login}}", {});
     await store.markProd(prod.urls, login);
     await store.setOwnMeta("github.unchecked", String(prod.unchecked), login);
     return { unchecked: prod.unchecked };
