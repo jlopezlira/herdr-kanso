@@ -38,11 +38,13 @@ test("A working name glints with three windows at the kit's widths, strengths an
   }
 });
 
-test("On battery a working name stands still in full ink", async () => {
-  const { glint, c } = await kit(true);
-  const el = glint("Atlas", c, "a", "run");
-  for (const method of ["loop", "transition", "left"]) assert.deepEqual(callsIn(el, method), []);
-  assert.deepEqual(callsIn(el, "text_color"), [["text_color", c.text]]);
+test("On battery a working name sweeps once too", async () => {
+  const mains = await kit(false), battery = await kit(true);
+  for (const stage of ["start", "run"]) {
+    const drawn = ({ glint, c }) => JSON.stringify(["transition", "left", "loop"].map((method) => callsIn(glint("Atlas", c, "a", stage), method)));
+    assert.equal(drawn(battery), drawn(mains), stage);
+  }
+  assert.equal(callsIn(battery.glint("Atlas", battery.c, "a", "run"), "transition").length, 6);
 });
 
 test("A working name draws no dots after it, glinting or still on battery", async () => {

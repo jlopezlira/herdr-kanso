@@ -138,6 +138,24 @@ test("Choosing Early looks again, and Stable stays the default until then", asyn
   assert.deepEqual(toasts, [], "the channel check respects hidden update toasts");
 });
 
+test("Changing the channel leaves the tab bar free for the next command while GitHub answers", async () => {
+  const store = { "kanso.update": { autoCheck: true, channel: "beta", tag: "3.30.0-beta.2", latest: "3.29.0" }, "kanso.pieces": { "toast.update": "hide" } };
+  let answer;
+  const held = new Promise((resolve) => { answer = resolve; });
+  const host = updaterHost({ store, onExec: async (command) => { if (command === "git") await held; return command === "git" ? success(listing) : success(""); } });
+  const { Tabs } = await loadTabs(host);
+  const { Updater } = await loadUpdater(host);
+  const tabBar = Object.assign(new Tabs(), { updater: Object.assign(new Updater(), { installed: "3.30.0" }) });
+  const { cx, drain } = tickingContext([]);
+  const waited = new Promise((resolve) => { setTimeout(() => resolve("held"), 200); });
+  const handled = await Promise.race([tabBar.barCommand("kanso-tabs.channel", cx).then(() => "free"), waited]);
+  assert.equal(handled, "free", "the command returns before GitHub answers");
+  assert.equal(tabBar.updater.available(), null);
+  answer();
+  await drain();
+  assert.equal(tabBar.updater.available(), "3.31.0-beta.1", "the look still lands");
+});
+
 const colors = () => ({
   foreground: "#111", background: "#fff", muted: "#888", dim: "#999", border: "#ccc", input: "#ccc",
   raised: "#eee", canvas: "#fff", accent: "#a00", popover: "#fff", solid: "#111", solid_foreground: "#fff",
