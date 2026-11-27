@@ -331,6 +331,23 @@ test("A refresh asked in front while the first read is slow waits for the front 
   assert.equal(asked("context inspect"), 2, "the front gets its read");
 });
 
+test("A forced refresh that waited behind the window still walks the compose files when the window is back", async () => {
+  const { f, view, docker, asked, fresh, forward } = await openPanel();
+  await f.advance(5_000);
+  docker.hung = true;
+  await f.advance(5_000);
+  assert.equal(view.reading, true, "the third read is held");
+  view.refresh(f.cx, true, true);
+  f.state.active = false;
+  docker.hung = false;
+  fresh();
+  await f.advance(20_000);
+  assert.equal(view.reading, false);
+  assert.equal(asked("find"), 0, "nothing starts behind");
+  await forward();
+  assert.ok(asked("find") > 0, "the forced walk was kept for the front");
+});
+
 test("Containers that showed Docker stopped asks nothing more once the window is behind", async () => {
   const { f, view, fresh } = await openPanel({ down: true });
   assert.equal(view.state, "down");

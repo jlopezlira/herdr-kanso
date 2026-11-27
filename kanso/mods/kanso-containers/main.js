@@ -121,8 +121,11 @@ export default class Containers extends View {
     const back = this.front.woke();
     const ask = { now: soon || back, all: again || back, again };
     this.armTicker(cx);
-    if (!this.reading) { this.read(cx, ask); return; }
-    if (ask.now) this.queued = { now: true, all: ask.all || Boolean(this.queued?.all), again: ask.again || Boolean(this.queued?.again) };
+    const kept = this.queued;
+    const next = kept || (this.reading && ask.now) ? { now: true, all: ask.all || Boolean(kept?.all), again: ask.again || Boolean(kept?.again) } : ask;
+    if (this.reading) { if (next.now) this.queued = next; return; }
+    this.queued = null;
+    this.read(cx, next);
   }
 
   retry(cx) {
@@ -200,8 +203,9 @@ export default class Containers extends View {
         this.conclude(n);
         this.reading = false;
         const next = this.queued;
+        if (!next || this.front.rests(true)) { cx.notify(); return; }
         this.queued = null;
-        if (next && !this.front.rests(true)) this.read(cx, next); else cx.notify();
+        this.read(cx, next);
       }
     });
   }
