@@ -170,7 +170,8 @@ export function createCaffeine({ run, local, now = () => Date.now() }) {
       const sure = state === "on" || state === "off";
       const { pending = 0, battery, told } = this.row(key);
       const known = battery === true && told === true;
-      this.put(key, { ...(sure ? { state } : {}), unsure: !sure, pending: Math.max(0, pending - (changed ? 1 : 0)), readAt: now(), ...(answer.battery || low ? { battery: true, told: low || known } : {}) });
+      const reason = answer.battery || low ? { battery: true, told: low || known } : state === "on" ? { battery: false } : {};
+      this.put(key, { ...(sure ? { state } : {}), ...(changed && sure ? { setupUntil: 0 } : {}), unsure: !sure, pending: Math.max(0, pending - (changed ? 1 : 0)), readAt: now(), ...reason });
       return answer;
     },
     isOn(key) { return this.row(key).state === "on"; },
