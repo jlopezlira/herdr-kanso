@@ -198,11 +198,11 @@ test("the panel draws every part with each element in one place", async () => {
 });
 
 // The panel open and nothing changing: Docker answers as a fixed engine, every command counted.
-async function openPanel({ hung = false, drawn = false, failing = [], inspect = inspected(["aa11aa11aa11"]), images = null, disk = "", active = true } = {}) {
+async function openPanel({ hung = false, drawn = false, failing = [], inspect = inspected(["aa11aa11aa11"]), images = null, disk = "", active = true, down = false } = {}) {
   const { fixture, loadMod } = await import("./perf-harness.mjs");
   const f = fixture();
   f.state.active = active;
-  const docker = { ps: [webRow()], images: images ?? row("sha256:1111aaaa2222", "web", "latest", "100MB", "2 days ago"), down: false,
+  const docker = { ps: [webRow()], images: images ?? row("sha256:1111aaaa2222", "web", "latest", "100MB", "2 days ago"), down,
     failing: new Set(failing), inspect, disk, partialFind: false, engines: { "desktop-linux": LOCAL }, config: JSON.stringify({ currentContext: "desktop-linux" }), volumes: "pgdata\tlocal", hung, rejects: null, broken: false };
   if (drawn) Object.assign(f.host, gpuiHost());
   const spaces = f.host.spaces;
@@ -319,6 +319,17 @@ test("Containers opened behind the window reads once and shows its containers, t
   view.render(f.cx);
   await f.advance(0);
   assert.equal(asked("ps"), 1, "coming forward reads again");
+});
+
+test("Containers that showed Docker stopped asks nothing more once the window is behind", async () => {
+  const { f, view, fresh } = await openPanel({ down: true });
+  assert.equal(view.state, "down");
+  assert.equal(view.groups, null);
+  f.state.active = false;
+  await f.advance(10_000);
+  fresh();
+  await f.advance(60_000);
+  assert.equal(f.state.processes.filter((p) => p.command === "docker").length, 0);
 });
 
 test("coming forward after being behind reads everything at once", async () => {
