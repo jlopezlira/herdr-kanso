@@ -24,9 +24,12 @@ import {
 } from "./reach.js";
 
 const PROBE_MS = 15000;
-const HOME_WAIT_MS = 5000;
+const HOME_WAIT_MS = 8000;
+const NEW_KEY = /No \S+ host key is known for/i;
+const HOME_SIGN_IN = new Set(["password", "keyonly", "hostkey"]);
 const FDA_PANE = "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles";
 const failed = (error) => ({ code: 1, stdout: "", stderr: String(error?.message ?? error) });
+const said = (result) => String(result.stderr || result.stdout).trim();
 const OS_WORD = { macos: "Mac", linux: "Linux", windows: "Windows", freebsd: "FreeBSD" };
 const osWord = (os) => OS_WORD[String(os).toLowerCase()] ?? os;
 const osIcon = (os) => (/^(macos|windows)$/i.test(os) ? "monitor" : "server");
@@ -65,8 +68,6 @@ export default class Computers extends View {
     this.nearby = this.searching ? freshNearby() : null;
     this.dropped = {};
     this.homes = new Map();
-    this.homesReady = null;
-    this.homeRound = 0;
     this.looksHome = runs("computers.network", pieces(shared));
     this.timer = cx.timer;
     this.explainer = undefined;
@@ -77,7 +78,7 @@ export default class Computers extends View {
     this.typed.on("change", (_e, cx) => cx.notify());
     this.typed.on("submit", (_e, cx) => this.addTyped(cx));
     cx.spawn(async (cx) => {
-      const [explainer] = await Promise.all([findExplainer(), this.discoverAll(cx)]);
+      const [explainer] = await Promise.all([findExplainer(), this.discover()]);
       this.explainer = explainer;
       cx.notify();
     });
@@ -106,29 +107,14 @@ export default class Computers extends View {
     return this.net?.peers ?? [];
   }
 
-  async findHomes(cx) {
-    if (!this.looksHome) return;
-    const round = this.homeRound + 1;
-    this.homeRound = round;
-    const names = [...this.peers().filter((peer) => peer.online).map((peer) => peer.name), ...(this.hosts ?? []).map((host) => host.alias)];
-    const homes = await homesOf(this.platform, names, cx.timer);
-    if (round !== this.homeRound) return;
-    this.homes = homes;
-    cx.notify();
-  }
-
   async withHome(plan) {
-    if (plan.lan) return plan;
-    await bounded(this.homesReady ?? Promise.resolve(), this.timer, HOME_WAIT_MS);
+    if (plan.lan || !this.looksHome) return plan;
     const host = splitTarget(destinationOf(plan.target).dest).host;
-    const ip = this.homes.get(plan.name) ?? this.homes.get(host);
+    const found = await bounded(homesOf(this.platform, [plan.name, host].filter(Boolean), this.timer), this.timer, HOME_WAIT_MS);
+    const homes = found instanceof Map ? found : new Map();
+    this.homes = new Map([...this.homes, ...homes]);
+    const ip = homes.get(plan.name) ?? homes.get(host);
     return ip ? { ...plan, name: plan.name || host, lan: ip, user: plan.user ?? splitTarget(plan.target).user } : plan;
-  }
-
-  discoverAll(cx) {
-    const discovered = this.discover();
-    this.homesReady = discovered.then(() => this.findHomes(cx)).catch(() => {});
-    return discovered;
   }
 
   async refresh() {
@@ -147,7 +133,7 @@ export default class Computers extends View {
     this.net = undefined;
     cx.notify();
     cx.spawn(async (cx) => {
-      await this.discoverAll(cx);
+      await this.discover();
       cx.notify();
     });
   }
@@ -196,19 +182,25 @@ export default class Computers extends View {
     return Object.values(this.jobs).some((job) => job.phase === "adding" && (job.plan?.name || job.plan?.target) === named);
   }
 
-  async answersAtHome(plan) {
-    if (!plan.lan || plan.via || !plan.target) return false;
+  async homeProbe(plan) {
+    if (!plan.lan || plan.via || !plan.target) return null;
     const resolved = await resolvedHost(plan.target, (program, args) => exec(program, args, { timeout: PROBE_MS }));
-    const probe = await exec("ssh", lanProbeArgs(plan.lan, { target: plan.target, hostKey: resolved?.hostKey ?? "" }), { timeout: PROBE_MS }).catch(failed);
-    return probe.code === 0;
+    const result = await exec("ssh", lanProbeArgs(plan.lan, { target: plan.target, hostKey: resolved?.hostKey ?? "" }), { timeout: PROBE_MS }).catch(failed);
+    const reach = reachOf(result);
+    return { result, reach: reach === "hostkey" && NEW_KEY.test(result.stderr) ? "password" : reach };
   }
 
   async connect(key, planned) {
     const given = this.jobs[key]?.choice?.record ? planned : await this.withHome(planned);
-    const tried = given.probe && !(await this.answersAtHome(given)) ? await this.probe([given.target, ...(given.also ?? [])].filter(Boolean)) : null;
+    const home = await this.homeProbe(given);
+    const tried = given.probe && home?.reach !== "ready" ? await this.probe([given.target, ...(given.also ?? [])].filter(Boolean)) : null;
+    if (tried && tried.reach !== "ready" && HOME_SIGN_IN.has(home?.reach)) {
+      this.jobs[key] = { ...this.jobs[key], plan: await this.homeFirst(given) };
+      return this.fail(key, home.reach, said(home.result));
+    }
     const chosen = tried ? { ...given, target: tried.target } : given;
     this.jobs[key] = { ...this.jobs[key], plan: chosen };
-    if (tried && tried.reach !== "ready") return this.fail(key, tried.reach, String(tried.result.stderr || tried.result.stdout).trim());
+    if (tried && tried.reach !== "ready") return this.fail(key, tried.reach, said(tried.result));
     const plan = await this.homeFirst(chosen);
     const error = hcError(await hc(addArgs(plan)).catch(failed));
     if (error) return this.fail(key, needsLogin(error) ? "password" : reachOf({ code: 1, stderr: error.message }), String(error.message ?? "").trim());
