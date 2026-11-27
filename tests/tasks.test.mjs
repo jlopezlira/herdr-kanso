@@ -748,9 +748,13 @@ test("Tasks follows a project on light by folder, and names the agent from light
   same(await db.read("SELECT * FROM todos;"), []);
 });
 
-test("Tasks shows, per agent, the plans of the agents in a space that has no folder, and of their helpers.", async (t) => {
+const shopAndAcme = async (t) => {
   const { db, id } = await shopKdb(t);
-  const other = await saveProject(db, acme);
+  return { db, id, other: await saveProject(db, acme) };
+};
+
+test("Tasks shows, per agent, the plans of the agents in a space that has no folder, and of their helpers.", async (t) => {
+  const { db, id, other } = await shopAndAcme(t);
   const steps = [
     storedTodo(id, { id: "lead", text: "Plan the release", detail: "Order the work", by: "t1", created: 10 }),
     storedTodo(id, { id: "helper", text: "Write the tests", detail: "One per fix", by: "t2", created: 20 }),
@@ -779,8 +783,7 @@ test("Tasks shows, per agent, the plans of the agents in a space that has no fol
 });
 
 test("Tasks for a space with a folder leaves out its agents' steps in other projects.", async (t) => {
-  const { db, id } = await shopKdb(t);
-  const other = await saveProject(db, acme);
+  const { db, id, other } = await shopAndAcme(t);
   const here = storedTodo(id, { id: "here", text: "Shop plan", detail: "In this project", by: "t1", created: 10 });
   const away = storedTodo(other.id, { id: "away", text: "Old acme step", detail: "Another project", by: "t1", created: 20 });
   for (const step of [here, away]) await writeTodo(db, step);
