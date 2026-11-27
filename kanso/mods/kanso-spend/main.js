@@ -370,7 +370,7 @@ export default class TokenSpend extends View {
       this.syncing = false;
       this.probing = false;
       syncCx.notify();
-      if (this.syncAgain && this.awake && !this.closed) { const again = this.syncForce, all = this.syncEveryone; this.syncForce = false; this.syncEveryone = false; this.syncAgain = false; this.exchange(syncCx, again, all); }
+      if (this.syncAgain && this.awake && !this.closed) { const again = this.syncForce, all = this.syncEveryone || this.takeForced(); this.syncForce = false; this.syncEveryone = false; this.syncAgain = false; this.exchange(syncCx, again, all); }
     });
   }
 
@@ -402,10 +402,14 @@ export default class TokenSpend extends View {
       if (this.syncSettled !== settleKey) this.syncWaiting = true;
       cx.notify();
     }
+    const rows = rowsFrom(await readTextFile(paths.join(dir, "rows.json")).catch(() => null));
+    if (this.costs !== costs || this.stale()) {
+      if (everyone) this.forceNext = true;
+      return;
+    }
     const out = await exchangeAll((on, payload) => serviceOn(probeApi, on).then((probe) => probe.exchange(payload)), {
-      config, peers, status,
-      rows: rowsFrom(await readTextFile(paths.join(dir, "rows.json")).catch(() => null)),
-      self, own: self && this.costs === costs && !this.stale() ? rowFromCosts(costs, self, new Date(now).toISOString(), options) : null,
+      config, peers, status, rows,
+      self, own: self ? rowFromCosts(costs, self, new Date(now).toISOString(), options) : null,
       now, periodKey, options, stored: power.stored, live: power.live, force: everyone,
     });
     if (!this.awake || this.closed) return;
