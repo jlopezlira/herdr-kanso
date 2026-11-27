@@ -78,9 +78,10 @@ export const github = {
     const merged = await store.meta("github.merged");
     const startOf = (month) => new Date(Number(month.slice(0, 4)), Number(month.slice(5)) - 1, 1).getTime();
     const backfill = merged || !done.size ? [] : monthsIn(Math.min(...[...done].map(startOf)), now + 1).filter((m) => done.has(m.month) && !due.some((d) => d.month === m.month));
-    const months = [...due, ...backfill].toSorted((a, b) => a.start - b.start);
-    if (months.length) await verify();
-    await read(months);
+    if (due.length || backfill.length) await verify();
+    await read(due);
+    if (backfill.length) progress("merged pull requests");
+    await mapSeries(backfill, async (m) => store.save(await prsIn(mergedIn, m.start, Math.min(m.end, now + 1000)), login));
     if (!merged) await store.setOwnMeta("github.merged", "1", login);
     if (since && !force && now - since < every) return { unchecked: Number(await store.meta("github.unchecked")) || 0 };
     await verify();
