@@ -31,6 +31,7 @@ the branch's rules.
 
 ### Fixed
 
+- Caffeine says when a computer's battery is too low to keep it awake, instead of showing it as not read and then as sleeping as usual.
 - Shipped no longer stops drawing ("This view could not be re-rendered") with a few thousand pull requests, and its streak is not reset by a calendar day that GitHub already started.
 - Tasks turns Agents keep the to-do on itself when it is empty, and turning it on, here or in Settings, sends the rule to the agents already running on this computer, so they start using it without a new conversation.
 - A to-do marked done or deleted while it is still being saved on another computer keeps that change.

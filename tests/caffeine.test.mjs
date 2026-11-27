@@ -279,6 +279,16 @@ test("If turning Caffeine off is refused, the last known state stays on and the 
   }
 });
 
+test("A turn on refused for low battery or a guard that did not start shows the computer off at once, and low battery as the reason", async () => {
+  for (const [reply, battery] of [["low", true], ["missing", false]]) {
+    const caffeine = createCaffeine({ local: "macos", now: () => 0, run: async () => success(reply) });
+    assert.equal((await caffeine.change("", true)).word, reply);
+    const { on, read, busy } = caffeine.look("");
+    assert.deepEqual({ on, read, busy, battery: caffeine.look("").battery }, { on: false, read: true, busy: false, battery }, reply);
+    assert.deepEqual([caffeine.untold(""), caffeine.due([""], EVERY_MS)], [false, []], reply);
+  }
+});
+
 test("Caffeine reports a turn-off due to low battery only once", async () => {
   const caffeine = createCaffeine({ local: "macos", run: async () => success("off battery") });
   const key = "";

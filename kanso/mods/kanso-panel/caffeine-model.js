@@ -9,6 +9,7 @@ export const CALL_MS = 30_000;
 const CHECK_S = 60;
 const MARK = "kanso-caffeine";
 const WORDS = ["on", "off", "setup", "low", "missing", "refused", "busy"];
+const LEFT_OFF = { low: "off", missing: "off" };
 const KIND = { darwin: "macos", macos: "macos", linux: "linux", windows: "windows" };
 
 export const kindOf = (os) => KIND[String(os ?? "").toLowerCase()] ?? null;
@@ -164,9 +165,11 @@ export function createCaffeine({ run, local, now = () => Date.now() }) {
       return { ...answerOf(result), os, verb };
     },
     settle(key, answer, changed = false) {
-      const sure = answer.word === "on" || answer.word === "off";
+      const state = LEFT_OFF[answer.word] ?? answer.word;
+      const sure = state === "on" || state === "off";
+      const low = answer.word === "low";
       const pending = Math.max(0, (this.row(key).pending ?? 0) - (changed ? 1 : 0));
-      this.put(key, { ...(sure ? { state: answer.word } : {}), unsure: !sure, pending, readAt: now(), ...(answer.battery ? { battery: true, told: false } : {}) });
+      this.put(key, { ...(sure ? { state } : {}), unsure: !sure, pending, readAt: now(), ...(answer.battery || low ? { battery: true, told: low } : {}) });
       return answer;
     },
     isOn(key) { return this.row(key).state === "on"; },
