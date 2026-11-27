@@ -78,8 +78,9 @@ export async function homeRoute(record, { run, remote }) {
 }
 
 const savedRoute = async (name, hc) => {
-  const rows = listedMachines(await hc(["machine", "ls", "--json"]).catch(() => null));
-  return machineRecord(rows.find((row) => row.name === name)) ?? null;
+  const result = await hc(["machine", "ls", "--json"]).catch(() => null);
+  if (result?.code !== 0) return undefined;
+  return machineRecord(listedMachines(result).find((row) => row.name === name)) ?? null;
 };
 const sameRoute = (a, b) => Boolean(a && b) && a.target === b.target && a.via === b.via;
 
@@ -87,7 +88,7 @@ export async function reroute(was, next, hc) {
   if (!sameRoute(await savedRoute(was.name, hc), was)) return false;
   if (hcError(await hc(rmArgs(was.name)).catch((e) => ({ code: 1, stderr: String(e?.message ?? e) })))) return false;
   if (!hcError(await hc(addArgs(next)).catch((e) => ({ code: 1, stderr: String(e?.message ?? e) })))) return true;
-  if (!(await savedRoute(was.name, hc))) await hc(addArgs(was)).catch(() => null);
+  if ((await savedRoute(was.name, hc)) === null) await hc(addArgs(was)).catch(() => null);
   return false;
 }
 

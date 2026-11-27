@@ -1,180 +1,256 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { load } from "./helpers.mjs";
+import { chmod, readFile, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import { clone, exec, failure, folderWith, load, success } from "./helpers.mjs";
 import { loadSpaces } from "./mod-fixtures.mjs";
 
-const sign = () => load("kanso-computers/sign-in.js", ["lanArgs", "lanFirst", "lanParts"]);
-const route = () => load("kanso-computers/lan-route.js", ["homeRoute", "lanRecord", "lanProbeArgs", "targetOfAway"]);
+const sign = () => load("kanso-computers/sign-in.js", ["lanArgs", "lanFirst", "lanParts", "keyedRoute"]);
+const route = (...names) => load("kanso-computers/lan-route.js", names);
 const quote = () => load("kanso-computers/platform-command.js", ["shellQuote"]);
+const shForm = process.platform === "win32" && "LAN-first shell routes run on macOS and Linux";
+const saved = { name: "grey", target: "ada@grey:2222", via: "", session: "sess" };
+const home = "desk.local";
+const known = "known_hosts_kanso_grey";
+const key = "~/.ssh/id_kanso_agent_grey";
+const hostKey = "ssh-ed25519 AAAA";
+const facts = (name = "Desk.LOCAL", pub = hostKey) => `home ${name}\nuser ada\nkey ${pub} comment\n`;
+const lanRefusal = failure("The home SSH key did not match");
 
-const grey = (lan = ["10.0.0.5", "192.168.1.20"]) => [{ name: "grey", ip: "100.64.1.2", lan }];
-const saved = { name: "grey", target: "ada@grey", via: "", session: "sess" };
-const resolved = "hostname 100.64.1.2\nuser ada\nhostkeyalias grey\n";
-
-const fakeRun = (probes) => {
-  const calls = [];
-  const run = async (program, args) => {
-    calls.push([program, [...args]]);
-    if (args[0] === "-G") return { code: 0, stdout: resolved };
-    const named = args.find((word) => String(word).startsWith("HostName="));
-    const ip = named ? named.slice("HostName=".length) : String(args.at(-2)).split("@").at(-1);
-    return probes[ip] ?? { code: 1, stdout: "", stderr: "no" };
-  };
-  return { calls, run };
-};
-
-const oldVia = (args, away, shellQuote) => {
+const oldVia = async (args, away) => {
+  const { shellQuote } = await quote();
   const head = "ssh -o BatchMode=yes -o ConnectTimeout=2 -o StrictHostKeyChecking=accept-new";
   const live = "exec ssh -o StrictHostKeyChecking=accept-new";
   const line = `${head} ${args} true >/dev/null 2>&1 && ${live} ${args} "$1"; exec ${away} "$1"`;
   return `sh -c ${shellQuote(line)} route`;
 };
 
-test("lanFirst closes the probe's input, and the exec that follows keeps its own", async () => {
-  const { lanFirst } = await sign();
-  const via = lanFirst("ada@10.0.0.7", "ssh ada@10.0.0.9");
-  const cut = via.indexOf("&& exec");
-  assert.ok(cut > 0, via);
-  assert.ok(via.slice(0, cut).includes("</dev/null"), via);
-  assert.equal(via.slice(cut).includes("</dev/null"), false, via);
-});
+const namedVia = ({ lanArgs, lanFirst }, away = "ssh -p 2222 ada@grey") =>
+  lanFirst(lanArgs(home, { target: saved.target, hostKey: home, known }), away);
 
-test("lanParts reads the new route and the old one, and only an exact shell-quoted route", async () => {
-  const { lanArgs, lanFirst, lanParts } = await sign();
-  const { shellQuote } = await quote();
-  const args = lanArgs("10.0.0.7", { target: "ada@box", hostKey: "box" });
-  const built = lanFirst(args, "ssh ada@9.9.9.9");
-  const parsed = lanParts(built);
-  assert.equal(lanFirst(parsed.args, parsed.away), built);
-  assert.equal(parsed.ip, "10.0.0.7");
-  const aged = oldVia("ada@10.0.0.7", "ssh ada@10.0.0.9", shellQuote);
-  const old = lanParts(aged);
-  assert.equal(old.ip, "10.0.0.7");
-  assert.equal(old.args, "ada@10.0.0.7");
-  assert.notEqual(lanFirst(old.args, old.away), aged);
+test("A saved home name survives reading the route with or without a kansō key, and older IP routes still work", async () => {
+  const signIn = await sign();
+  const { keyedRoute, lanFirst, lanParts } = signIn;
+  const via = namedVia(signIn);
+  const parts = lanParts(via);
+  assert.ok(parts.named);
+  assert.equal(parts.ip, home);
+  assert.equal(lanFirst(parts.args, parts.away), via);
+
+  const keyed = keyedRoute({ via }).keyed(key);
+  const parsed = lanParts(keyed);
+  assert.deepEqual({ ...parsed }, { ...parts, key });
+  assert.equal(keyedRoute({ via: lanFirst(parsed.args, parsed.away) }).keyed(parsed.key), keyed);
+
+  const aged = await oldVia("ada@10.0.0.7", parts.away);
+  assert.equal(lanParts(aged)?.ip, "10.0.0.7");
+  assert.equal(lanParts(aged)?.away, parts.away);
   assert.equal(lanParts(aged.slice(0, -1)), null);
-  assert.equal(lanParts("ssh ada@box"), null);
 });
 
-test("lanProbeArgs names the LAN host, the key alias and the port", async () => {
-  const { lanProbeArgs } = await route();
-  const args = lanProbeArgs("10.1.2.3", { target: "ada@grey:2222", hostKey: "grey" });
-  assert.ok(args.includes("HostName=10.1.2.3"));
-  assert.ok(args.includes("HostKeyAlias=grey"));
-  assert.equal(args[args.indexOf("-p") + 1], "2222");
+test("A computer supplies its lowercase home name, login and public keys without counting junk", async () => {
+  const { homeFacts } = await route("homeFacts");
+  const rsa = "ssh-rsa BBBB";
+  const lines = facts() + `key garbage BBBB\nkey ${rsa}\nkey ${hostKey}\n`;
+  assert.deepEqual(clone(homeFacts(lines)), { home, user: "ada", keys: [hostKey, rsa] });
+  assert.equal(homeFacts(facts("lab.example")), null);
+  assert.equal(homeFacts(facts("desk", "junk")), null);
 });
 
-test("targetOfAway reads a quoted ssh target, with a port and without", () => {
-  return route().then(({ targetOfAway }) => {
-    assert.equal(targetOfAway("ssh 'ada@box'"), "ada@box");
-    assert.equal(targetOfAway("ssh -p 2222 'ada@box'"), "ada@box:2222");
-  });
+const homeCheck = (name, probe = success(""), pub = hostKey) => {
+  const calls = [];
+  return {
+    calls,
+    remote: async (args) => {
+      assert.deepEqual(Array.from(args.slice(0, 2)), ["sh", "-c"]);
+      return success(facts(name, pub));
+    },
+    run: async (program, args) => {
+      calls.push([program, [...args]]);
+      return program === "sh" ? success("") : probe;
+    },
+  };
+};
+const assertPin = ([program, args], hostname, pub = hostKey) => {
+  assert.equal(program, "sh");
+  assert.deepEqual(args.slice(2), ["pin", known, hostname, pub]);
+};
+
+test("A trusted computer is pinned and probed by home name without losing the alias, port or identity", async (t) => {
+  const { homeRoute } = await route("homeRoute");
+  const { lanParts, keyedRoute } = await sign();
+  const via = keyedRoute(saved).keyed(key);
+  const check = homeCheck();
+  const found = await homeRoute({ ...saved, target: "", via }, check);
+  assert.equal(found.home, home);
+  assert.equal(found.record.session, saved.session);
+  assert.equal(found.record.target, "");
+  const [pin, [program, args]] = check.calls;
+  assertPin(pin, home);
+  if (!shForm) {
+    const { dir } = await folderWith(t);
+    const pinned = await exec(pin[0], pin[1], { env: { PATH: "/bin:/usr/bin", HOME: dir } });
+    assert.equal(pinned.code, 0, pinned.stderr);
+    assert.equal(await readFile(join(dir, ".ssh", known), "utf8"), `${home} ${hostKey}\n`);
+  }
+  assert.equal(program, "ssh");
+  assert.deepEqual(args.slice(-5), ["-p", "2222", "--", "ada@grey", "true"]);
+  for (const option of [
+    "HostName=desk.local", "HostKeyAlias=desk.local", "StrictHostKeyChecking=yes", `UserKnownHostsFile=~/.ssh/${known}`,
+    "GlobalKnownHostsFile=/dev/null", "VerifyHostKeyDNS=no", "ProxyCommand=none", "ControlMaster=no", "ControlPath=none",
+    `IdentityFile=${key}`,
+  ]) assert.ok(args.includes(option), option);
+  const parts = lanParts(found.record.via);
+  assert.equal(parts.away, "ssh -p 2222 ada@grey");
+  assert.equal(parts.key, key);
+  assert.ok(parts.args.includes("-p 2222 ada@grey"));
+  assert.ok(parts.named);
 });
 
-test("lanRecord keeps the away route and the session", async () => {
+test("A failed home probe leaves the saved route alone, but a renamed computer gets a new route", async () => {
+  const { homeRoute } = await route("homeRoute");
+  const signIn = await sign();
+  const current = { ...saved, target: "", via: namedVia(signIn) };
+  assert.equal(await homeRoute(saved, homeCheck("desk", lanRefusal)), null);
+
+  const rotated = "ssh-ed25519 CCCC";
+  const held = homeCheck("desk", success(""), rotated);
+  assert.equal(await homeRoute(current, held), null);
+  assert.equal(held.calls.length, 1);
+  assertPin(held.calls[0], home, rotated);
+
+  const moved = homeCheck("desk-2");
+  const found = await homeRoute(current, moved);
+  assertPin(moved.calls[0], "desk-2.local");
+  assert.equal(signIn.lanParts(found.record.via)?.ip, "desk-2.local");
+  assert.equal(signIn.lanParts(found.record.via)?.away, signIn.lanParts(current.via).away);
+});
+
+test("A disconnected computer can return through a home address using its already trusted SSH key", async () => {
+  const { knownHome } = await route("knownHome");
   const { lanParts } = await sign();
-  const { lanRecord } = await route();
-  const next = lanRecord(saved, "192.168.1.20", { hostKey: "grey" });
-  const parts = lanParts(next.via);
-  assert.equal(next.session, "sess");
-  assert.equal(next.target, "");
-  assert.equal(parts.away, "ssh ada@grey");
-  assert.ok(parts.args.includes("HostName=192.168.1.20"), parts.args);
-});
-
-test("homeRoute uses the first LAN address whose probe answers", async () => {
-  const { homeRoute } = await route();
-  const { calls, run } = fakeRun({ "10.0.0.5": { code: 1, stdout: "" }, "192.168.1.20": { code: 0, stdout: "" } });
-  const found = await homeRoute(saved, grey(), run);
-  assert.equal(found.ip, "192.168.1.20");
-  assert.ok(found.record.via.includes("HostName=192.168.1.20"), found.record.via);
-  assert.equal(found.record.session, "sess");
-  const probed = calls.filter((call) => call[1].includes("true")).map((call) => call[1].find((word) => String(word).startsWith("HostName=")));
-  assert.deepEqual(probed, ["HostName=10.0.0.5", "HostName=192.168.1.20"]);
-});
-
-const routeAndSign = async () => ({ ...(await route()), ...(await sign()) });
-
-test("homeRoute leaves the route when nothing on the LAN answers, or the peer has no LAN address, or the route is already the current LAN form, or Tailscale SSH has no target", async () => {
-  const { homeRoute, lanArgs, lanFirst } = await routeAndSign();
-  const quiet = fakeRun({ "10.0.0.5": { code: 1, stdout: "" }, "192.168.1.20": { code: 1, stdout: "" } });
-  assert.equal(await homeRoute(saved, grey(), quiet.run), null);
-  const bare = fakeRun({});
-  assert.equal(await homeRoute(saved, grey([]), bare.run), null);
-  assert.equal(bare.calls.some((call) => call[1].includes("true")), false);
-  const args = lanArgs("192.168.1.20", { target: "ada@grey", hostKey: "grey" });
-  const current = { ...saved, target: "", via: lanFirst(args, "ssh ada@grey") };
-  const held = fakeRun({ "192.168.1.20": { code: 0, stdout: "" } });
-  assert.equal(await homeRoute(current, grey(["192.168.1.20"]), held.run), null);
-  assert.equal(held.calls.some((call) => call[1].includes("true")), false);
-  const tailscale = { name: "grey", target: "", via: "'/usr/local/bin/tailscale' ssh 'ada@100.64.1.2'" };
-  assert.equal(await homeRoute(tailscale, grey(), fakeRun({}).run), null);
-});
-
-test("homeRoute rebuilds an old LAN route even when that address is already current", async () => {
-  const { homeRoute, lanArgs, lanFirst } = await routeAndSign();
-  const { shellQuote } = await quote();
-  const args = lanArgs("192.168.1.20", { target: "ada@grey", hostKey: "grey" });
-  const away = "ssh ada@grey";
-  const aged = { ...saved, target: "", via: oldVia(args, away, shellQuote) };
-  const { calls, run } = fakeRun({ "192.168.1.20": { code: 0, stdout: "" } });
-  const found = await homeRoute(aged, grey(["192.168.1.20"]), run);
-  assert.equal(found.ip, "192.168.1.20");
-  assert.equal(found.record.via, lanFirst(args, away));
-  assert.ok(calls.some((call) => call[1].includes("true")));
-});
-
-test("Spaces puts the old route back when the LAN route cannot be added", async () => {
   const calls = [];
-  const { Spaces } = await loadSpaces({
-    hc: async (args) => {
-      const row = [...args];
-      calls.push(row);
-      return row[1] === "add" && calls.filter((item) => item[1] === "add").length === 1 ? { code: 1, stderr: "refused" } : { code: 0, stdout: "" };
-    },
-    notify() { throw new Error("a failed add sends no notice"); },
-  });
-  const view = new Spaces();
-  const was = { name: "grey", target: "ada@grey", via: "", session: "sess" };
-  const next = { name: "grey", target: "", via: "sh -c 'true' route", session: "sess" };
-  await view.reroute(was, next, "192.168.1.20");
-  assert.deepEqual(calls[0], ["machine", "rm", "grey"]);
-  assert.ok(calls[1].includes(next.via), calls[1].join(" "));
-  assert.ok(calls[2].includes("ada@grey"), calls[2].join(" "));
-  assert.equal(calls[2].includes(next.via), false);
-});
-
-test("Spaces reroutes a listed machine that is not connected", async () => {
-  const calls = [];
-  const status = JSON.stringify({
-    BackendState: "Running",
-    Peer: { grey: { DNSName: "grey.tail.ts.net.", OS: "linux", Online: false, TailscaleIPs: ["100.64.1.2"], CurAddr: "192.168.1.20:41641", Addrs: ["192.168.1.20:41641"] } },
-  });
-  const { Spaces } = await loadSpaces({
-    exec: async (program, args) => {
-      if (args[0] === "status") return { code: 0, stdout: status };
-      if (args[0] === "-G") return { code: 0, stdout: resolved };
-      return { code: 0, stdout: "" };
-    },
-    hc: async (args) => { calls.push([...args]); return { code: 0, stdout: "" }; },
-    notify() {},
-  });
-  const view = new Spaces();
-  view.machines = [{ name: "grey", target: "ada@grey", via: false, state: "offline" }];
-  view.homeAt = 0;
-  await view.preferHome();
-  assert.ok(calls.some((args) => args[1] === "rm" && args[2] === "grey"), calls.map((row) => row.join(" ")).join("\n"));
-});
-
-test("A probe on the home network never trusts a key it has not seen, and an older saved route is still read", async () => {
-  const { lanProbeArgs, lanRecord } = await route();
-  const { lanParts } = await load("kanso-computers/sign-in.js", ["lanParts"]);
-  const args = lanProbeArgs("10.1.2.3", { target: "ada@grey", hostKey: "grey" });
+  const run = async (program, args) => {
+    calls.push([program, [...args]]);
+    if (args[0] === "-G") return success("hostname 100.64.1.2\nhostkeyalias grey-away\n");
+    return success("");
+  };
+  const found = await knownHome(saved, run);
+  assert.deepEqual(calls[0], ["ssh", ["-G", "ada@grey"]]);
+  const [program, args] = calls[1];
+  assert.equal(program, "ssh");
+  assert.ok(args.includes("HostKeyAlias=grey-away"));
   assert.ok(args.includes("StrictHostKeyChecking=yes"));
-  assert.equal(args.some((arg) => arg.includes("accept-new")), false);
-  const record = lanRecord({ name: "grey", target: "ada@grey", via: "" }, "10.1.2.3", { hostKey: "grey" });
-  assert.equal(record.via.includes("accept-new"), false);
-  assert.equal(lanParts(record.via)?.ip, "10.1.2.3");
-  const older = record.via.replaceAll("StrictHostKeyChecking=yes", "StrictHostKeyChecking=accept-new");
-  assert.equal(lanParts(older)?.ip, "10.1.2.3");
+  const parts = lanParts(found.record.via);
+  assert.equal(parts.ip, "grey.local");
+  assert.equal(parts.named, false);
+  assert.equal(parts.away, "ssh -p 2222 ada@grey");
+});
+
+const machineList = (...rows) => success(JSON.stringify({ machines: rows }));
+const next = { ...saved, target: "", via: "ssh ada@desk.local" };
+const machineChanges = ({ rows = [saved], remove = success(""), add = success(""), after = [] } = {}) => {
+  const calls = [];
+  let checked = false;
+  let added = false;
+  const hc = async (args) => {
+    if (args[1] === "ls") {
+      const list = checked ? after : rows;
+      checked = true;
+      return list ? machineList(...list) : failure("could not list machines");
+    }
+    calls.push([...args]);
+    if (args[1] === "rm") return remove;
+    const result = added ? success("") : add;
+    added = true;
+    return result;
+  };
+  return { calls, hc };
+};
+
+test("Automatic route replacement does not proceed after the route changes or removal is refused", async () => {
+  const { reroute } = await route("reroute");
+  const changed = machineChanges({ rows: [next] });
+  assert.equal(await reroute(saved, next, changed.hc), false);
+  assert.deepEqual(changed.calls, []);
+  const refused = machineChanges({ remove: failure("could not remove") });
+  assert.equal(await reroute(saved, next, refused.hc), false);
+  assert.deepEqual(refused.calls.map((args) => args[1]), ["rm"]);
+});
+
+test("A failed route replacement restores the old route only if the computer is still absent", async () => {
+  const { reroute } = await route("reroute");
+  for (const [after, shouldRestore] of [[[], true], [[next], false], [null, false]]) {
+    const failed = machineChanges({ after, add: failure("could not add") });
+    assert.equal(await reroute(saved, next, failed.hc), false);
+    const adds = failed.calls.filter((args) => args[1] === "add");
+    assert.ok(adds[0].includes(next.via));
+    assert.deepEqual(adds.slice(1).map((args) => args[2]), shouldRestore ? [saved.target] : []);
+  }
+});
+
+const stubRoute = async (t, body) => {
+  const { dir, ssh } = await folderWith(t, "ssh");
+  await writeFile(ssh, `#!/bin/sh\n${body}\n`);
+  await chmod(ssh, 0o755);
+  return (via, command = "command", env = {}) =>
+    exec("sh", ["-c", `printf 'input\\n' | ${via} "$1"`, "test", command], { env: { PATH: `${dir}:/bin:/usr/bin`, ...env }, limit: 5500 });
+};
+
+test("A stalled home SSH probe falls back in about three seconds without consuming the away command's input", { skip: shForm }, async (t) => {
+  const { lanFirst } = await sign();
+  const run = await stubRoute(t, [
+    'case " $* " in *" ada@10.0.0.7 "*) exec sleep 7 ;; esac',
+    'for word do last=$word; done',
+    'printf "%s\\n" "$last"; cat',
+  ].join("\n"));
+  const start = performance.now();
+  const result = await run(lanFirst("ada@10.0.0.7", "ssh ada@grey"), "away command");
+  assert.equal(result.code, 0, result.stderr);
+  assert.equal(result.stdout, "away command\ninput\n");
+  assert.ok(performance.now() - start >= 2000, "a stalled home connection must actually be given time to answer");
+});
+
+test("Signing in checks the home key strictly and tries away only when home SSH cannot connect", { skip: shForm }, async (t) => {
+  const signIn = await sign();
+  const { ask } = signIn.keyedRoute({ via: namedVia(signIn) });
+  const run = await stubRoute(t, [
+    'case " $* " in',
+    '  *" HostName=desk.local "*)',
+    '    case " $* " in *" StrictHostKeyChecking=yes "*) ;; *) exit 90 ;; esac',
+    '    printf "home\\n"; exit "$HOME_CODE" ;;',
+    '  *) printf "away\\n" ;;',
+    'esac',
+  ].join("\n"));
+  for (const [code, tried, result] of [[0, "home\n", 0], [1, "home\n", 1], [255, "home\naway\n", 0]]) {
+    const answer = await run(ask, "append key", { HOME_CODE: String(code) });
+    assert.deepEqual([answer.stdout, answer.code], [tried, result]);
+  }
+});
+
+test("The sidebar switches to the home network without Tailscale unless network discovery is hidden", async () => {
+  const connected = { ...saved, state: "connected" };
+  for (const hidden of [false, true]) {
+    const reached = [];
+    const notices = [];
+    const changes = machineChanges({ rows: [connected] });
+    const { Spaces } = await loadSpaces({
+      window: () => ({ platform: "macos" }),
+      shared: (name) => name === "kanso.pieces" && hidden ? { "computers.network": "hide" } : null,
+      exec: async (program, args, options) => {
+        reached.push([program, options?.on ?? null]);
+        if (options?.on === saved.name) return success(facts());
+        if (program === "sh" || program === "ssh") return success("");
+        return failure("not installed");
+      },
+      hc: changes.hc,
+      notify: (notice) => notices.push(notice),
+    });
+    const view = new Spaces();
+    view.machines = [connected];
+    await view.preferHome();
+    assert.deepEqual(reached, hidden ? [] : [["sh", saved.name], ["sh", null], ["ssh", null]]);
+    assert.deepEqual(changes.calls.map((args) => args[1]), hidden ? [] : ["rm", "add"]);
+    assert.equal(notices.length, hidden ? 0 : 1);
+  }
 });

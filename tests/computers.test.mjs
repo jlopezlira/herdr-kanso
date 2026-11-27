@@ -383,7 +383,7 @@ test("Signing in on a local-first route asks on the local network first, and fin
   const script = tab.argv[2];
   const ask = script.split("\n").find((line) => line.includes("PasswordAuthentication"));
   const lanAt = ask.indexOf("HostName=10.99.0.1");
-  const split = ask.indexOf("|| exec");
+  const split = ask.indexOf("exec ssh", lanAt);
   assert.ok(lanAt > 0 && split > lanAt, ask);
   const first = ask.slice(0, lanAt);
   assert.ok(first.includes(ASK), first);
@@ -411,6 +411,7 @@ test("Signing in on a local-first route asks on the local network first, and fin
   const ssh = pushed[0];
   assert.ok(ssh.join(" ").includes(ASK), ssh.join(" "));
   assert.ok(ssh.includes("ConnectTimeout=2"), ssh.join(" "));
+  assert.ok(ssh.includes("StrictHostKeyChecking=yes"), ssh.join(" "));
   assert.equal(ssh.join(" ").includes("BatchMode"), false, ssh.join(" "));
   assert.ok(ssh.includes("HostName=10.99.0.1"));
   assert.ok(ssh.at(-1).includes(PUB), ssh.at(-1));
@@ -1123,22 +1124,29 @@ const lightRow = (drawn) => find(drawn, (el) => el.tag === "computer-ssh:light")
 const lightDialog = async ({
   answers = true, neighbors = [], host = "light.example", homeRefusal = "",
   tailnet = "", platform = "macos", shared = () => null, sshPort = 22,
-  awayAnswers = !answers, typed = "", homePort = sshPort,
+  awayAnswers = !answers, awayRefusal = "", typed = "", homePort = sshPort, trustedHome = false,
 } = {}) => {
   const lookups = [];
   const probes = [];
   const knocks = [];
   const knockCommands = [];
   const installs = [];
+  const upgrades = [];
+  const homeReads = [];
   const tabs = [];
   const forgotten = [];
+  let machine = null;
   const { view, cx, flush } = await computersDialog({
     window: () => ({ platform }),
     InputState: { new: () => fieldWith({ value: typed }) },
     shared,
     run: (command, props) => { if (command === "tab.new") tabs.push(props); },
     readTextFile: async () => `Host light\n  HostName ${host}\n  Port ${sshPort}`,
-    exec: async (program, args) => {
+    exec: async (program, args, options) => {
+      if (options?.on && program === "sh" && args[1]?.includes("LocalHostName")) {
+        homeReads.push([options.on, installs.length]);
+        return success("home light\nuser jj\nkey ssh-ed25519 AAAA\n");
+      }
       if (program === "tailscale" && tailnet) return success(tailnet);
       if (program === "dscacheutil" || program === "getent") {
         lookups.push([program, ...args]);
@@ -1160,19 +1168,30 @@ const lightDialog = async ({
       }
       if (program === "ssh" && args[0] === "-G") return success(`hostname ${host}\nport ${sshPort}\n`);
       if (program === "ssh" && ["light", "jj@light", host].includes(args.at(-2))) {
+        if (args.includes("HostName=light.local")) {
+          probes.push("named home");
+          return success("");
+        }
         const atHome = args.includes(`HostName=${lightIp}`);
         probes.push(atHome ? "home" : "away");
-        if (atHome && homeRefusal && !forgotten.length) return sshRefusal(homeRefusal);
+        const refusal = atHome ? homeRefusal : awayRefusal;
+        if (refusal && !forgotten.length) return sshRefusal(refusal);
         return (atHome ? answers : awayAnswers) ? success("") : sshRefusal("No route to host");
       }
       return success("");
     },
     hc: async (args) => {
-      if (args[1] === "add") installs.push(args);
-      return success('{"machines":[]}');
+      if (args[1] === "add") {
+        (args.includes("--install") ? installs : upgrades).push(args);
+        const via = args.indexOf("--via");
+        const name = args.indexOf("--name");
+        if (trustedHome) machine = { name: name < 0 ? "light" : args[name + 1], target: args[via < 0 ? 2 : via + 1], via: via >= 0 };
+      }
+      if (args[1] === "rm") machine = null;
+      return success(JSON.stringify({ machines: machine ? [machine] : [] }));
     },
   }, true);
-  return { view, cx, flush, lookups, knocks, knockCommands, installs, tabs, probes, forgotten };
+  return { view, cx, flush, lookups, knocks, knockCommands, installs, upgrades, homeReads, tabs, probes, forgotten };
 };
 const clickComputer = async ({ cx, flush }, row) => {
   assert.ok(row, "the computer row is listed");
@@ -1245,23 +1264,32 @@ test("When only the home route answers and asks for a key, Sign in uses that rou
   assert.ok(tabs[0].argv[2].includes(`HostName=${lightIp}`));
 });
 
-for (const [name, homeRefusal, reach] of [
-  ["Add stops for home sign-in even when the usual SSH route works", "Permission denied (publickey)", "keyonly"],
-  ["Add shows a changed home key even when the usual SSH route works", "REMOTE HOST IDENTIFICATION HAS CHANGED!", "hostkey"],
-]) {
-  test(name, async () => {
-    const dialog = await lightDialog({ host: "100.100.235.59", homeRefusal, awayAnswers: true });
-    const { view, installs, probes } = dialog;
-    await clickComputer(dialog, lightRow(view.render()));
-    assert.equal(view.jobs["ssh:light"]?.reach, reach);
-    assert.deepEqual(installs, []);
-    assert.deepEqual(probes, ["home"], "the usual route was not tried");
+const refusedHome = (homeRefusal) => lightDialog({ host: lightTailnetIp, homeRefusal, awayAnswers: true });
+
+test("Add stops for home sign-in even when the usual SSH route works", async () => {
+  const dialog = await refusedHome("Permission denied (publickey)");
+  const { view, installs, probes } = dialog;
+  await clickComputer(dialog, lightRow(view.render()));
+  assert.equal(view.jobs["ssh:light"]?.reach, "keyonly");
+  assert.deepEqual(installs, []);
+  assert.deepEqual(probes, ["home"], "the usual route was not tried");
+});
+
+test("A different home SSH key does not stop Add or ask the user to forget the trusted key", async () => {
+  const dialog = await lightDialog({
+    host: lightTailnetIp, tailnet: lightTailnet, homeRefusal: "REMOTE HOST IDENTIFICATION HAS CHANGED!", awayAnswers: true,
   });
-}
+  const { view, probes, forgotten } = dialog;
+  const install = await addComputerRow(dialog, lightPeerRow(view.render()));
+  assert.deepEqual(probes, ["home", "away"]);
+  assert.deepEqual(forgotten, []);
+  assert.equal(find(view.render(), (el) => arg(el, "accessibility_label") === "Forget the old key"), null);
+  assert.equal(install.includes("--via"), false);
+});
 
 test("When the home SSH key is unknown, Add uses the usual route without offering home Sign in", async () => {
   const homeRefusal = `No ED25519 host key is known for ${lightTailnetIp} and you have requested strict checking.\nHost key verification failed.`;
-  const dialog = await lightDialog({ host: lightTailnetIp, homeRefusal, awayAnswers: true });
+  const dialog = await refusedHome(homeRefusal);
   const install = await addComputerRow(dialog);
   assert.deepEqual(dialog.probes, ["home", "away"]);
   assert.equal(find(dialog.view.render(), (el) => arg(el, "accessibility_label") === "Sign in"), null);
@@ -1269,23 +1297,22 @@ test("When the home SSH key is unknown, Add uses the usual route without offerin
   assert.deepEqual(clone(install), plainLightAdd, "the untrusted home address is not saved as a route");
 });
 
-test("Forgetting a changed key on a tailnet computer checks the home route again before adding it", async () => {
+test("A changed key on the usual route still requires the user to forget that key before adding", async () => {
   const dialog = await lightDialog({
-    host: lightTailnetIp, tailnet: lightTailnet, homeRefusal: "REMOTE HOST IDENTIFICATION HAS CHANGED!",
+    host: lightTailnetIp, tailnet: lightTailnet, answers: false, awayRefusal: "REMOTE HOST IDENTIFICATION HAS CHANGED!",
   });
   const { view, cx, flush, installs, probes, forgotten } = dialog;
   await clickComputer(dialog, lightPeerRow(view.render()));
   assert.equal(view.jobs[lightTailnetName]?.reach, "hostkey");
-  assert.deepEqual(probes, ["home"]);
+  assert.deepEqual(probes, ["away"]);
   assert.deepEqual(installs, []);
   const forget = find(view.render(), (el) => arg(el, "accessibility_label") === "Forget the old key");
   assert.ok(forget);
   arg(forget, "on_click")({}, cx);
   await flush();
   assert.deepEqual(forgotten, [["-R", lightTailnetIp]]);
-  assert.deepEqual(probes, ["home", "home"]);
+  assert.deepEqual(probes, ["away", "away"]);
   assert.equal(installs.length, 1);
-  assertLightVia(installs[0], lightTailnetName);
 });
 
 test("A port typed with a computer's name takes priority over its SSH config on the home network", async () => {
@@ -1326,11 +1353,22 @@ test("A Tailscale computer uses its SSH alias to find and try the home network f
 test("With network discovery hidden, neither opening Add a computer nor adding a computer looks up its home address", async () => {
   const store = { "kanso.pieces": { "computers.network": "hide" } };
   for (const platform of ["macos", "linux"]) {
-    const dialog = await lightDialog({ platform, answers: false, shared: (key) => store[key] });
+    const dialog = await lightDialog({ platform, answers: false, trustedHome: true, shared: (key) => store[key] });
     await addComputerRow(dialog);
     assert.deepEqual(dialog.lookups, [], `${platform}: no local name lookup`);
     assert.deepEqual(dialog.knockCommands, [], `${platform}: no SSH knock`);
+    assert.deepEqual(dialog.homeReads, [], `${platform}: no home upgrade after Add`);
   }
+});
+
+test("Add reads the computer's home name over its working route and saves it right away", async () => {
+  const dialog = await lightDialog({ answers: false, trustedHome: true });
+  await addComputerRow(dialog);
+  assert.deepEqual(dialog.homeReads, [["light", 1]]);
+  assert.deepEqual(dialog.probes, ["away", "named home"]);
+  assert.equal(dialog.upgrades.length, 1);
+  const [install] = dialog.upgrades;
+  assert.match(install[install.indexOf("--via") + 1], /HostName=light\.local/);
 });
 
 test("Add a computer checks the SSH port set for a computer in ssh config", async () => {
