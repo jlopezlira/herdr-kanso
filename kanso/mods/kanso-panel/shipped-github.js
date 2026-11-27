@@ -103,8 +103,10 @@ export const github = {
     if (!merged) await store.setOwnMeta("github.merged", "1", login);
     const pending = (await store.meta("github.unchecked")) === "pending";
     if (since && !force && !pending && now - since < every) return { unchecked: Number(await store.meta("github.unchecked")) || 0 };
-    if (since) await keep(await prsIn(updatedIn(login), since - 3600000, now + 1000, read));
-    await store.setOwnMeta("github.updated", String(now), login);
+    if (!(pending && since && !force && now - since < every)) {
+      if (since) await keep(await prsIn(updatedIn(login), since - 3600000, now + 1000, read));
+      await store.setOwnMeta("github.updated", String(now), login);
+    }
     progress("what reached production");
     await store.setOwnMeta("github.unchecked", "pending", login);
     const prod = await inMain(pendingByRepo(await store.prs()), read);
