@@ -2,23 +2,21 @@
 // Kept byte for byte by `npm run sync:share`: edit kanso-panel/ui-glint.js.
 import { div } from "gpui-kit";
 import { h_flex } from "gpui-base";
-import { GLINT, GLINT_MS, GLINT_STAGGER, GLINT_EASE, OPACITY, onBattery } from "./ui.js";
+import { GLINT, GLINT_MS, GLINT_EASE, OPACITY, onBattery } from "./ui.js";
 
-// Seven paces, so names side by side do not glint in step.
-const PACES = 7;
+export const SWEEP_MS = GLINT_MS / 2;
 const WINDOWS = [[GLINT.wide, OPACITY.glintFaint], [GLINT.mid, OPACITY.glintMid], [GLINT.narrow, 1]];
-const paceOf = (seed) => GLINT_MS + ([...seed].reduce((sum, ch) => sum + ch.charCodeAt(0), 0) % PACES) * GLINT_STAGGER;
+const SLIDE = { duration: SWEEP_MS, easing: GLINT_EASE };
 
-// Each window slides one way while its copy of the text slides the other, so the lit letters stay in place.
-const lit = (text, c, period) => ([width, strength]) => div().absolute().top_0().bottom_0().w(width).overflow_hidden().opacity(strength)
-  .loop("left", { from: -width, to: GLINT.run, period, easing: GLINT_EASE })
-  .child(div().absolute().top_0().whitespace_nowrap().text_color(c.text).child(text)
-    .loop("left", { from: width, to: -GLINT.run, period, easing: GLINT_EASE }));
+const lit = (text, c, id, run) => ([width, strength], k) => div().id(`${id}-sweep-${k}`).absolute().top_0().bottom_0().w(width).overflow_hidden().opacity(strength)
+  .left(run ? GLINT.run : -width).transition("left", SLIDE)
+  .child(div().id(`${id}-sweep-${k}-text`).absolute().top_0().whitespace_nowrap().text_color(c.text).child(text)
+    .left(run ? -GLINT.run : width).transition("left", SLIDE));
 
 const still = (text, c) => div().min_w(0).flex_shrink_1().truncate().text_color(c.text).child(text);
-const moving = (text, c, seed) => div().relative().min_w(0).flex_shrink_1().overflow_hidden()
+const moving = (text, c, id, run) => div().relative().min_w(0).flex_shrink_1().overflow_hidden()
   .child(div().truncate().text_color(c.muted).child(text))
-  .children(WINDOWS.map(lit(text, c, paceOf(seed))));
+  .children(WINDOWS.map(lit(text, c, id, run)));
 
-export const glint = (text, c, seed = "") => h_flex().min_w(0).items_center()
-  .child(onBattery() ? still(text, c) : moving(text, c, seed));
+export const glint = (text, c, id = "", stage = null) => h_flex().min_w(0).items_center()
+  .child(onBattery() ? still(text, c) : moving(text, c, id, stage !== "start"));

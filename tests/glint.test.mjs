@@ -1,41 +1,55 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { load, chain, gpuiHost, numberArguments, nodes, themed, KIT_NIGHT } from "./helpers.mjs";
+import { load, gpuiHost, numberArguments, nodes, calls, one, same, themed, KIT_NIGHT } from "./helpers.mjs";
 
-const host = (battery = false) => ({ ...gpuiHost(), div: () => chain("div"), shared: (key) => (key === "kanso.battery" ? battery : null) });
+const host = (battery = false) => ({ ...gpuiHost(), shared: (key) => (key === "kanso.battery" ? battery : null) });
 const kit = async (battery) => themed({
-  ...await load("kanso-panel/ui.js", ["tokens", "GLINT", "GLINT_MS", "GLINT_STAGGER", "OPACITY"], host(battery)),
-  ...await load("kanso-panel/ui-glint.js", ["glint"], host(battery)),
+  ...await load("kanso-panel/ui.js", ["tokens", "GLINT", "GLINT_MS", "GLINT_EASE", "OPACITY"], host(battery)),
+  ...await load("kanso-panel/ui-glint.js", ["glint", "SWEEP_MS"], host(battery)),
 }, KIT_NIGHT);
-const calls = (el, name) => nodes(el).flatMap((kid) => kid.calls.filter((call) => call[0] === name));
+const callsIn = (el, name) => nodes(el).flatMap((kid) => calls(kid, name));
 
 test("A working name glints with three windows at the kit's widths, strengths and pace", async () => {
-  const { glint, GLINT, GLINT_MS, GLINT_STAGGER, OPACITY, c } = await kit(false);
-  const el = glint("Atlas", c, "a");
-  const loops = calls(el, "loop");
-  assert.equal(loops.length, 6, "each window and its copy of the text move");
-  const periods = new Set(loops.map(([, , policy]) => policy.period));
-  assert.equal(periods.size, 1);
-  const period = [...periods][0];
-  assert.ok(period >= GLINT_MS && (period - GLINT_MS) % GLINT_STAGGER === 0, String(period));
-  assert.deepEqual(calls(el, "opacity").map(([, share]) => share), [OPACITY.glintFaint, OPACITY.glintMid, 1]);
-  assert.deepEqual(calls(el, "w").map(([, width]) => width), [GLINT.wide, GLINT.mid, GLINT.narrow]);
-  const paces = new Set(["a", "b", "c", "d", "e", "f", "g"].map((seed) => calls(glint("x", c, seed), "loop")[0][2].period));
-  assert.ok(paces.size > 1, "names side by side do not glint in step");
+  const { glint, GLINT, GLINT_MS, GLINT_EASE, OPACITY, SWEEP_MS, c } = await kit(false);
+  assert.equal(SWEEP_MS, GLINT_MS / 2);
+  const windows = [[GLINT.wide, OPACITY.glintFaint], [GLINT.mid, OPACITY.glintMid], [GLINT.narrow, 1]];
+  const slide = (el, id, left) => {
+    assert.deepEqual(calls(el, "id"), [["id", id]]);
+    assert.deepEqual(calls(el, "left"), [["left", left]]);
+    same(calls(el, "transition"), [["transition", "left", { duration: SWEEP_MS, easing: GLINT_EASE }]]);
+  };
+  for (const stage of ["start", "run"]) {
+    const el = glint("Atlas", c, "a", stage);
+    const drawn = nodes(el).filter((kid) => calls(kid, "opacity").length);
+    assert.equal(drawn.length, windows.length);
+    windows.forEach(([width, opacity], k) => {
+      const window = drawn[k], id = `a-sweep-${k}`;
+      const left = stage === "start" ? -width : GLINT.run;
+      assert.equal(one(window, "w"), width);
+      assert.equal(one(window, "opacity"), opacity);
+      slide(window, id, left);
+      assert.equal(window.kids.length, 1);
+      const [copy] = window.kids;
+      slide(copy, `${id}-text`, -left);
+      assert.equal(one(copy, "child"), "Atlas");
+    });
+    assert.equal(callsIn(el, "transition").length, windows.length * 2);
+    assert.deepEqual(callsIn(el, "loop"), []);
+  }
 });
 
 test("On battery a working name stands still in full ink", async () => {
   const { glint, c } = await kit(true);
-  const el = glint("Atlas", c, "a");
-  assert.equal(calls(el, "loop").length, 0);
-  assert.ok(calls(el, "text_color").some(([, ink]) => ink === c.text));
+  const el = glint("Atlas", c, "a", "run");
+  for (const method of ["loop", "transition", "left"]) assert.deepEqual(callsIn(el, method), []);
+  assert.deepEqual(callsIn(el, "text_color"), [["text_color", c.text]]);
 });
 
 test("A working name draws no dots after it, glinting or still on battery", async () => {
   for (const battery of [false, true]) {
     const { glint, c } = await kit(battery);
-    const el = glint("Atlas", c, "a");
-    assert.deepEqual(calls(el, "frames"), [], "no dots step");
+    const el = glint("Atlas", c, "a", "start");
+    assert.deepEqual(callsIn(el, "frames"), [], "no dots step");
     assert.equal(el.kids.length, 1, "no room is kept for them");
   }
 });
