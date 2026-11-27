@@ -217,8 +217,9 @@ request, `npm run pre-pr` runs every check and `npm test`. `npm test` also check
 against the Herdr names in `tests/herdr-api.json` (`node scripts/herdr-api.mjs`
 rewrites that file from this machine's declarations), and `npm run check:mods`
 runs `herdr-app check` on every mod when the app is installed. A push
-to `develop` publishes `vX.Y.Z-beta.N`, once CI passes on all three platforms,
-when what kansō installs changed since the last beta or the newest stable tag. Running the Release candidate workflow
+to `develop` publishes `vX.Y.Z-beta.N`, or the next `vX.Y.Z-rc.N` once a release
+candidate of that version exists, so Early always ranks it newest; once CI passes on all three platforms,
+when what kansō installs changed since the newest prerelease of that version or the newest stable tag. Running the Release candidate workflow
 on `develop` publishes `vX.Y.Z-rc.N`. Merging `develop` into `main` publishes
 the stable `vX.Y.Z`. Docs do not bump the version. How to work on it:
 [CONTRIBUTING.md](CONTRIBUTING.md). How every part is built:

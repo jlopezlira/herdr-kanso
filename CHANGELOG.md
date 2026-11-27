@@ -3,7 +3,8 @@
 Pull requests to develop add entries under `## [Unreleased]` and never change
 `kanso/mods/kanso-chrome/version.json` or numbered sections. The version file
 stays at the newest stable version until the Release candidate workflow prepares
-the next version. A push to develop publishes a beta with the Unreleased notes.
+the next version. A push to develop publishes a beta with the Unreleased notes,
+or the next release candidate number once a candidate of that version exists.
 Its version is computed from the newest stable tag: Breaking or Removed means
 a major bump, Added or Deprecated means a minor bump, anything else a patch.
 Use Upgrade for steps users must take before updating. Like Fixed and Changed,
@@ -26,6 +27,8 @@ the branch's rules.
 
 ### Changed
 
+- In Dawn Mode, the pill at the top of the sidebar names the installed release, such as 4.2.0-rc.3, instead of "Dawn Mode".
+- Timeline's header shows only its title; the conversation's name, computer and prompt count moved into the pin's tooltip.
 - Shipped leads with the share of the pull requests you opened that reached production, draws the pull requests merged over the period as a chart like Memory's, lists its trend with the current period first, and says less.
 - Shipped and Spend keep what they read and update it every 12 hours, or when you press Refresh, reading only what is new: Shipped asks GitHub only for what changed, and Spend rescans and exchanges with your other computers on that schedule instead of every minute.
 - On Mac and Linux, Add a computer looks up computers you already know by their .local names and tries your home network first over IPv4 or IPv6. If a VPN takes over one route, Add a computer can still use another home address that answers.
@@ -34,6 +37,7 @@ the branch's rules.
 
 - Add a computer finds Tailscale when it was installed from the Mac App Store and no longer shows a notice when Tailscale isn't installed.
 - Shipped no longer stops drawing ("This view could not be re-rendered") with a few thousand pull requests, and its streak is not reset by a calendar day that GitHub already started.
+- On Windows, an update that was interrupted no longer makes the next update fail while it resets the permissions of the files it replaces.
 - Tasks turns Agents keep the to-do on itself when it is empty, and turning it on, here or in Settings, sends the rule to the agents already running on this computer, so they start using it without a new conversation.
 - A to-do marked done or deleted while it is still being saved on another computer keeps that change.
 - Resume a conversation on another computer starts it with that computer's own agent command, once however fast you choose it.
