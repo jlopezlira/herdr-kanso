@@ -71,6 +71,7 @@ printf 'last\\t%s\\n' "$(git log -1 --format=%ct 2>/dev/null)"
 ahead=
 for b in "$@"; do
   a=$(git rev-list --count "$b..HEAD" 2>/dev/null) || continue
+  case "$a" in ""|*[!0-9]*) continue ;; esac
   if [ -z "$ahead" ] || [ "$a" -lt "$ahead" ]; then ahead=$a; fi
   if [ "$a" = 0 ]; then echo merged; break; fi
   t=$(git merge-tree --write-tree "$b" HEAD 2>/dev/null) && [ "$t" = "$(git rev-parse "$b^{tree}" 2>/dev/null)" ] && echo merged
@@ -149,7 +150,7 @@ export function repositoryApi(platform, run) {
     const last = checked(await git(folder, ["log", "-1", "--format=%ct"])).stdout.trim();
     const ancestors = await Promise.all(refs.map(async (ref) => {
       const count = await git(folder, ["rev-list", "--count", `${ref}..HEAD`]);
-      if (count.code !== 0) return null;
+      if (count.code !== 0 || !/^\d+$/.test(count.stdout.trim())) return null;
       if (count.stdout.trim() === "0") return { ahead: 0, merged: true };
       const tree = await git(folder, ["merge-tree", "--write-tree", ref, "HEAD"]);
       return { ahead: Number(count.stdout), merged: tree.code === 0 && tree.stdout.trim() === (await git(folder, ["rev-parse", `${ref}^{tree}`])).stdout.trim() };
