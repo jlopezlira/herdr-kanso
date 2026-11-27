@@ -3,7 +3,7 @@ import { div } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import { theme, shared, setShared, notify, exec } from "herdr";
 import { Store, cohortOf, mergeHours, monthsIn } from "./shipped-store.js";
-import { github, gql } from "./shipped-github.js";
+import { github, gql, AccountChanged } from "./shipped-github.js";
 import { shippedSpec, shareText } from "./shipped-card.js";
 import { Share, shareRows } from "./share.js";
 import { R, G, T, CHART, HEATMAP_GAP, TINT, alpha, tokens } from "./ui.js";
@@ -181,10 +181,6 @@ export async function signedIn() {
   return r?.code === 0 ? r.stdout.trim() || null : null;
 }
 
-class AccountChanged extends Error {
-  constructor(login) { super("GitHub account changed."); this.login = login; }
-}
-
 export async function apiLogin() {
   const data = await gql("query{viewer{login}}").catch(() => null);
   return data?.viewer?.login ?? null;
@@ -321,8 +317,7 @@ export class Shipped {
     this.forced = false;
     this.syncing = true; this.resync = false; this.syncError = null;
     const login = this.login;
-    const verify = async () => {
-      const who = await apiLogin();
+    const verify = (who) => {
       if (!who) throw new Error("GitHub could not be read.");
       this.verified = who;
       if (who !== login) throw new AccountChanged(who);

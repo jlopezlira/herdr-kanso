@@ -38,6 +38,7 @@ const STEP_TIMEOUT_MS = 35_000;
 const TICK_MS = 15_000;
 const REFRESH_MS = 12 * 60 * 60 * 1000;
 const SNAPSHOT_AT = "kanso.spend.snapshotAt";
+const UNFINISHED = "kanso.spend.unfinished";
 const RETRY_MS = 10 * 60 * 1000;
 const LIST_ROWS = 6;
 const TASK_ROWS = 8;
@@ -103,7 +104,7 @@ export default class TokenSpend extends View {
     this.nodeBinary = null;
     this.runtimeError = null;
     this.runtimeTask = null;
-    this.scan = null;
+    this.scan = shared(UNFINISHED) ?? null;
     this.costs = null;
     this.share = new Share(MOD, paths.join(appHome(), DATA_DIR));
     this.error = null;
@@ -289,10 +290,13 @@ export default class TokenSpend extends View {
       if (this.syncWaiting === "fold" && startedAt >= this.syncEnded) this.syncWaiting = false;
       if (scans) {
         if (failure || payload?.scan?.retry || payload?.scan?.partial) this.lastSnapshotAt = Date.now() - REFRESH_MS + RETRY_MS;
-        else if (!payload?.scan?.partial) setShared(SNAPSHOT_AT, this.lastSnapshotAt);
+        if (!failure) {
+          setShared(SNAPSHOT_AT, this.lastSnapshotAt);
+          setShared(UNFINISHED, payload?.scan?.partial ? payload.scan : null);
+        }
       }
       if (payload) {
-        this.scan = scans || !this.scan ? payload.scan ?? this.scan : { ...payload.scan, partial: this.scan.partial, retry: this.scan.retry };
+        this.scan = scans || !this.scan ? payload.scan ?? this.scan : { ...this.scan, lastScanAt: payload.scan?.lastScanAt ?? this.scan.lastScanAt };
         if (this.awake) this.costs = payload.costs;
         if (payload.settings) this.settings = payload.settings;
         // Filters changed while this ran: price again with the current ones.
