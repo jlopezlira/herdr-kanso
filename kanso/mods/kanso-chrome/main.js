@@ -31,7 +31,7 @@ export default class WorkspaceChrome extends View {
     // The one migration. A later read must not write, or every mod draws again.
     loadPieces(shared, setShared);
     if (props()?.footer) return;
-    whenInstalled(cx, (version) => { this.installed = version; });
+    this.readInstalled(cx);
     // Command names stay kanso-tabs.* for keys bound to them before.
     readCommands(cx, () => nextCommand(), (c) => this.command(c));
     cx.timer.every(SAMPLE_MS, (cx) => this.watch(cx));
@@ -75,6 +75,12 @@ export default class WorkspaceChrome extends View {
     });
   }
 
+  readInstalled(cx) {
+    if (this.reading) return;
+    this.reading = true;
+    whenInstalled(cx, (version) => { this.installed = version; this.reading = false; });
+  }
+
   // Started detached, so the new window survives this one quitting.
   restart() {
     localService(systemApi).restart(appHome()).catch(() => {});
@@ -89,6 +95,7 @@ export default class WorkspaceChrome extends View {
     const c = tokens(theme());
     if (this.brandDawn !== dawn) { this.brandDawn = dawn; cx.timer.after(0, () => run("layout.resize", { id: "brand", px: dawn ? H.tabBar + G.lg : H.tabBar })); }
     if (!dawn) return header({ collapsed, dawn })("brand", c);
+    if (this.installed == null) this.readInstalled(cx);
     const version = installedRelease(this.installed, shared("kanso.update")?.tag);
     if (!this.dawnScheduled) { this.dawnScheduled = true; cx.timer.after(0, (later) => this.rise(later)); }
     const sky = { width: this.width ?? DAWN_W, run: this.dawnRun ?? 0, rising: Boolean(this.dawnRising), ring: this.dawnRing ?? 0 };
