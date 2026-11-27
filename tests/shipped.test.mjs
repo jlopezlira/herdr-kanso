@@ -41,11 +41,13 @@ const searchWindow = (field) => (start, end) => {
   const seconds = (ms) => iso(Math.floor(ms / 1000) * 1000);
   return `is:pr author:@me ${field}:${seconds(start)}..${seconds(end - 1000)}`;
 };
-const createdQuery = searchWindow("created"), updatedQuery = searchWindow("updated");
+const createdQuery = searchWindow("created"), mergedQuery = searchWindow("merged"), updatedQuery = searchWindow("updated");
+const monthQueries = (start, end) => [createdQuery(start, end), mergedQuery(start, end)];
 const clockAt = (now) => class extends Date {
   constructor(...args) { super(...(args.length ? args : [new.target.now()])); }
   static now() { return typeof now === "function" ? now() : now; }
 };
+const ghShippedHost = (t, now, read, login) => shippedHost(t, { Date: clockAt(now), exec: withGitHub(read, login) });
 const viewerQuery = (query) => query.startsWith("query{viewer");
 const viewerOf = (login, cur = {}, days = []) => ({
   viewer: { login, cal: { contributionCalendar: { weeks: days.length ? [{ contributionDays: days }] : [] } }, cur },
@@ -152,7 +154,7 @@ test("GitHub reads each month once, follows changes, and reads the missed months
     return search([]);
   });
   await github.sync(store, { from, now: first, login: "me" });
-  assert.deepEqual(searches.splice(0), [createdQuery(monthAt(9), monthAt(10)), createdQuery(monthAt(10), first + 1000)]);
+  assert.deepEqual(searches.splice(0), [...monthQueries(monthAt(9), monthAt(10)), ...monthQueries(monthAt(10), first + 1000)]);
   assert.deepEqual(refs, ["refs/heads/main"]);
   const rows = async () => (await store.prs()).toSorted((a, b) => a.number - b.number).map((p) => [p.number, p.prod]);
   same(await rows(), [[1, 0], [2, 1]]);
@@ -163,7 +165,7 @@ test("GitHub reads each month once, follows changes, and reads the missed months
 
   await github.sync(store, { from, now: stale, login: "me" });
   assert.deepEqual(searches, [
-    createdQuery(monthAt(10), monthAt(11)), createdQuery(monthAt(11), stale + 1000),
+    ...monthQueries(monthAt(10), monthAt(11)), ...monthQueries(monthAt(11), stale + 1000),
     updatedQuery(second - HOUR, stale + 1000),
   ]);
   assert.deepEqual([...(await store.readMonths("github"))].toSorted(), ["2026-09", "2026-10", "2026-11"]);
@@ -187,7 +189,7 @@ test("Shipped fills missing months but waits twelve hours to check changes and p
 
   const forced = first + HOUR;
   same(await sync(october, forced), { unchecked: 1 });
-  assert.deepEqual(searches.splice(0), [createdQuery(october, november)]);
+  assert.deepEqual(searches.splice(0), monthQueries(october, november));
   assert.equal(checks, initialChecks);
   assert.equal(await store.meta("github.updated"), String(first));
 
@@ -220,11 +222,12 @@ test("Shipped finds a merge after a week away even if the pull request opened ou
   });
   await github.sync(store, { from: september, now: first, login: "me" });
   assert.equal((await store.prs())[0].merged, null);
+  const before = searches.length;
   await github.sync(store, { from: october, now: returning, login: "me" });
   const [pr] = await store.prs();
   assert.deepEqual([pr.merged, pr.prod], [merged, 1]);
-  assert.deepEqual(searches.slice(2), [
-    createdQuery(september, october), createdQuery(october, november), createdQuery(november, returning + 1000),
+  assert.deepEqual(searches.slice(before), [
+    ...monthQueries(september, october), ...monthQueries(october, november), ...monthQueries(november, returning + 1000),
     updatedQuery(first - HOUR, returning + 1000),
   ]);
 });
@@ -242,9 +245,10 @@ test("Shipped replaces the previous GitHub account's pull requests and re-reads 
   await github.sync(store, { from: september, now: first, login: "first" });
   same((await store.prs()).map((p) => p.url), [old.url]);
 
+  const before = searches.length;
   await github.sync(store, { from: october, now: second, login: "second" });
   same((await store.prs()).map((p) => p.url), [current.url]);
-  assert.deepEqual(searches.slice(2), [createdQuery(october, second + 1000)]);
+  assert.deepEqual(searches.slice(before), monthQueries(october, second + 1000));
   assert.deepEqual([...(await store.readMonths("github"))], ["2026-10"]);
 });
 
@@ -273,7 +277,7 @@ const checkCappedUpdates = async (t, openedMonth) => {
   const pr = (await store.prs()).find((row) => row.url === closed.url);
   assert.equal(pr.prod, 1, "the merge missing from the change search reaches the local totals");
   assert.deepEqual(searches.slice(before), [
-    createdQuery(november, end), ...Array(10).fill(increment), earlier, ...Array(10).fill(later),
+    ...monthQueries(november, end), ...Array(10).fill(increment), earlier, ...Array(10).fill(later),
   ]);
   assert.equal(await store.meta("github.updated"), String(now));
 };
@@ -291,6 +295,12 @@ const mountShipped = async (host, kind = "month") => {
   panel.restoreState({ kind, offset: 0 });
   panel.init(cx);
   return { panel, cx, drain, settled: drain() };
+};
+
+const settledShipped = async (host, kind) => {
+  const mounted = await mountShipped(host, kind);
+  await mounted.settled;
+  return mounted;
 };
 
 const holdSearch = () => {
@@ -325,11 +335,7 @@ const sqlitePeriods = async (t, now, { viewer, login = () => "me", onSearch = ()
     ...gpuiHost(), Date: clockAt(now),
     exec: withGitHub(read, login),
   });
-  return async () => {
-    const mounted = await mountShipped(host);
-    await mounted.settled;
-    return mounted;
-  };
+  return () => settledShipped(host);
 };
 
 test("Shipped checks the local login but makes no GitHub API call while the saved period is fresh.", async (t) => {
@@ -355,6 +361,42 @@ test("Shipped checks the local login but makes no GitHub API call while the save
   await drain();
   assert.deepEqual(requested, ["local login", "viewer", updatedQuery(first - HOUR, now + 1000)]);
   assert.equal(reviewsShown(panel), "6");
+});
+
+test("Shipped reads pull requests under the API account when the saved Day is fresh but its pull requests are missing.", async (t) => {
+  const day = monthAt(11, 10), now = day + 12 * HOUR;
+  const accounts = [];
+  const host = await ghShippedHost(t, now, async (query) => {
+    if (viewerQuery(query)) return viewerOf("bob");
+    accounts.push(await store.meta("github.login"));
+    return search([]);
+  }, () => "alice");
+  const store = await openedShippedStore(host);
+  await store.forAccount("github", "alice");
+  await store.setPeriod(`day:${day}`, viewerOf("alice"), now - HOUR);
+
+  const { panel } = await settledShipped(host, "day");
+  assert.equal(panel.summary().login, "bob");
+  assert.deepEqual(accounts, ["bob", "bob"]);
+});
+
+test("Shipped does not write pull requests or advance the cursor when Refresh cannot confirm the switched account.", async (t) => {
+  const first = monthAt(11, 10) + 12 * HOUR;
+  let now = first, login = "alice";
+  const incoming = pullRequest(1, first, { repo: "bob/tool" });
+  const host = await ghShippedHost(t, () => now, (query) => {
+    if (!viewerQuery(query)) return search(login === "alice" ? [] : [incoming]);
+    if (login === "alice") return viewerOf(login);
+    throw new Error("GitHub viewer unavailable");
+  }, () => login);
+  const { panel, cx, drain } = await settledShipped(host, "day");
+
+  login = "bob";
+  now += HOUR;
+  panel.refresh(cx, true);
+  await drain();
+  same(await panel.store.prs(), []);
+  assert.equal(await panel.store.meta("github.updated"), String(first));
 });
 
 test("Shipped shows the new account and reads its full calendar when you reopen after switching accounts.", async (t) => {
@@ -386,6 +428,31 @@ test("Shipped replaces a mounted month's totals when you switch GitHub accounts 
   panel.pick("month", 0, cx);
   await drain();
   assert.deepEqual([panel.summary().login, reviewsShown(panel)], ["new", "3"]);
+});
+
+test("Shipped backfills the API account's older calendar days when Refresh reveals a switch.", async (t) => {
+  const now = monthAt(11, 10) + 12 * HOUR;
+  const old = { date: "2026-11-10", weekday: 2, contributionCount: 9 };
+  const earlier = { date: "2026-01-01", weekday: 4, contributionCount: 3 };
+  const recent = { ...old, contributionCount: 1 };
+  const starts = [];
+  let viewer = "alice";
+  const host = await ghShippedHost(t, now, (query) => {
+    if (!viewerQuery(query)) return search([]);
+    const start = calendarFrom(query);
+    starts.push(start);
+    const days = viewer === "alice" ? [old] : [earlier, recent].filter(({ date }) => date >= start.slice(0, 10));
+    return viewerOf(viewer, {}, days);
+  }, () => "alice");
+  const { panel, cx, drain } = await settledShipped(host);
+  starts.length = 0;
+
+  viewer = "bob";
+  panel.refresh(cx, true);
+  await drain();
+  assert.equal(panel.summary().login, viewer);
+  same((await panel.store.calendar()).days, [earlier, recent]);
+  assert.deepEqual(starts, [iso(monthAt(11, 9)), iso(now - 364 * DAY)]);
 });
 
 test("Shipped keeps the saved calendar across remounts and Refresh asks only for its recent end.", async (t) => {
@@ -560,6 +627,16 @@ test("Shipped reads the whole Year trend when you switch from Week during a read
   const summary = panel.summary();
   assert.deepEqual([summary.settled, summary.big, summary.prod], [true, "100%", 2]);
   same(cohortFacts(summary).slice(0, 2), ["2", "2"]);
+});
+
+test("Shipped counts a pull request opened last month and merged today on the first Day read.", async (t) => {
+  const merge = monthAt(11, 10) + 9 * HOUR, now = merge + HOUR;
+  const earlier = pullRequest(1, monthAt(10, 20), { merged: merge });
+  const host = await ghShippedHost(t, now, (query, { q }) => viewerQuery(query)
+    ? viewerOf("me") : search(q === mergedQuery(monthAt(11), now + 1000) ? [earlier] : []));
+  const { panel } = await settledShipped(host, "day");
+  const { bars } = panel.derived().bars;
+  assert.equal(Number(bars[9].value), 1);
 });
 
 test("Shipped tells you when a merged pull request could not be checked for production.", async (t) => {
@@ -748,6 +825,16 @@ test("Shipped moves today's bar at midnight and rolls the trend into the new mon
   const nextDay = view();
   now = monthAt(12) + HOUR;
   assert.deepEqual([initial, nextDay, view()], [[29, "October 2026"], [30, "October 2026"], [1, "November 2026"]]);
+});
+
+test("Shipped moves the Day marker to the next hour without reading pull requests again.", async () => {
+  let now = monthAt(11, 10) + 9 * HOUR;
+  const panel = await drawnShipped([], () => now);
+  panel.kind = "day";
+  const marked = () => panel.derived().bars.bars.findIndex(({ mark }) => mark);
+  const first = marked();
+  now += HOUR;
+  assert.deepEqual([first, marked()], [9, 10]);
 });
 
 test("Shipped's trend shows the six cohorts in order through the selected period.", async () => {

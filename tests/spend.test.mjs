@@ -397,6 +397,26 @@ test("Spend sends only refreshed totals to a peer after the scan and its queued 
   assert.deepEqual(sent, [12]);
 });
 
+test("Spend exchanges with everyone once, with the final totals from a two-part Refresh.", async () => {
+  const timers = [], exchanges = [];
+  const { cx, drain } = timedContext(timers);
+  let usd = 0;
+  const page = await spendPage({
+    async ask() {
+      usd += 1;
+      return { ...spendPayload({ ...bare, local: { usd } }), scan: { partial: usd === 1 } };
+    },
+    exchange(_cx, force, everyone) { exchanges.push([this.costs.local.usd, force, everyone]); },
+  }, peerHost({ probe() {} }));
+
+  page.reload(cx);
+  await drain();
+  const [, continueScan] = timers.find(([ms]) => ms === 1000);
+  continueScan(cx);
+  await drain();
+  assert.deepEqual(exchanges, [[2, true, true]]);
+});
+
 test("Spend retries a timed-out scan ten minutes after its watchdog fires.", async () => {
   const state = {}, timers = [], attempts = [];
   const { cx, drain } = timedContext(timers);
