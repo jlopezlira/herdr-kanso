@@ -427,17 +427,52 @@ test("Spend backs off a failed resumption across another reopen until the new re
   assert.deepEqual(commands, ["snapshot", "snapshot", "prepare", "snapshot"]);
 });
 
-test("A pending Spend continuation does not rescan after another view completes the ledger.", async () => {
-  const { Spend, commands, continueFirst } = await sharedSpend();
-  const second = await mountSpend(Spend);
+const sharedSpendCompleted = async () => {
+  const scenario = await sharedSpend();
+  const second = await mountSpend(scenario.Spend);
   second.view.run("snapshot", second.cx);
   await second.drain();
   assert.equal(second.view.scan.partial, false);
+  second.view.close();
+  return scenario;
+};
 
-  const before = commands.slice();
+test("A pending Spend continuation prices the completed ledger without rescanning it.", async () => {
+  const { commands, continueFirst } = await sharedSpendCompleted();
+
+  const start = commands.length;
   await continueFirst();
-  assert.deepEqual(commands, before);
+  assert.deepEqual(commands.slice(start), ["prepare"]);
 });
+
+const checkShareAfterRepricing = async (reopen) => {
+  const { first, commands, exchanges, continueFirst } = await sharedSpendCompleted();
+  const start = commands.length;
+  exchanges.length = 0;
+  const priced = Promise.withResolvers();
+  const ask = first.view.ask.bind(first.view);
+  first.view.ask = async (command) => {
+    const payload = await ask(command);
+    if (command === "prepare") await priced.promise;
+    return payload;
+  };
+
+  if (reopen) first.view.wake(first.cx);
+  const done = reopen ? first.drain() : continueFirst();
+  try {
+    assert.deepEqual(exchanges, [], "The partial total must not go out while pricing is pending");
+    assert.deepEqual(commands.slice(start), ["prepare"]);
+  } finally {
+    priced.resolve();
+    await done;
+    first.view.close();
+  }
+  assert.deepEqual(exchanges, [[2, true, true]]);
+};
+
+test("Waking Spend after another view completes shares only repriced totals.", () => checkShareAfterRepricing(true));
+
+test("Spend's continuation after another view completes shares only repriced totals.", () => checkShareAfterRepricing(false));
 
 test("Spend saves a ten-minute retry deadline instead of marking a failed scan fresh.", async () => {
   const started = Date.UTC(2026, 10, 10, 12), retryAt = started + 10 * 60 * 1000;
