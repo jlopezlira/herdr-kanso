@@ -210,9 +210,9 @@ export default class TokenSpend extends View {
 
   unfinished() { return shared(UNFINISHED) ?? null; }
 
-  behind() { return Boolean(this.scan?.partial) && !this.unfinished(); }
+  behind() { return this.costsSettled === false && !this.unfinished(); }
 
-  stale() { return Boolean(this.unfinished() || this.scan?.partial); }
+  stale() { return Boolean(this.unfinished()) || this.costsSettled === false; }
 
   takeForced() {
     const all = this.forceNext === true;
@@ -300,10 +300,11 @@ export default class TokenSpend extends View {
         const again = failure || payload?.scan?.retry || payload?.scan?.partial;
         setShared(SNAPSHOT_AT, again ? Date.now() - REFRESH_MS + RETRY_MS : startedAt);
         if (!failure) setShared(UNFINISHED, payload?.scan?.partial ? { ...payload.scan, run: startedAt } : null);
+        if (payload?.scan?.partial) this.ownRun = startedAt;
       }
       if (payload) {
-        this.scan = scans || !this.scan ? payload.scan ?? this.scan : { ...this.scan, partial: Boolean(this.scan.partial && !settled), lastScanAt: payload.scan?.lastScanAt ?? this.scan.lastScanAt };
-        if (this.awake) this.costs = payload.costs;
+        this.scan = scans || !this.scan ? payload.scan ?? this.scan : { ...this.scan, lastScanAt: payload.scan?.lastScanAt ?? this.scan.lastScanAt };
+        if (this.awake) { this.costs = payload.costs; this.costsSettled = scans ? !payload.scan?.partial : settled; }
         if (payload.settings) this.settings = payload.settings;
         // Filters changed while this ran: price again with the current ones.
         if (JSON.stringify(sent.cost) !== JSON.stringify(this.cost)) this.queued = { ...this.queued, prepare: true };
@@ -344,10 +345,10 @@ export default class TokenSpend extends View {
         this.run("prepare", cx);
       } else if (this.behind() && !failure && this.awake) {
         this.run("prepare", cx);
-      } else if (this.scan?.partial && this.unfinished() && !failure && this.awake) {
+      } else if (this.ownRun && this.unfinished()?.run === this.ownRun && !failure && this.awake) {
         // The first scan is time-boxed; keep going until it has read everything.
         try { this.continueTimer?.cancel(); } catch { /* already gone */ }
-        const scan = this.unfinished().run;
+        const scan = this.ownRun;
         this.continueTimer = cx.timer.after(1000, (timerCx) => {
           this.continueTimer = null;
           const now = this.unfinished();
