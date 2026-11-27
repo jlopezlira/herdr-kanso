@@ -299,14 +299,6 @@ test("A turn on refused for low battery shows the computer off from its battery 
   assert.equal(caffeine.look("").battery, false, "found on again, it no longer shows the battery reason");
 });
 
-test("Only the refusal of the set up being waited for ends that wait", async () => {
-  const caffeine = createCaffeine({ local: "macos", now: () => 0, run: async () => success("off low first") });
-  caffeine.setup("", "on", "second");
-  await caffeine.read("");
-  assert.equal(caffeine.look("").setup, true);
-  assert.equal(caffeine.refusedBy("", { refused: ["first", "second"] }), true);
-});
-
 test("A turn on from the panel while its set up is waiting for the password ends the wait when the computer answers", async () => {
   for (const reply of ["low", "on"]) {
     const caffeine = answering(() => reply);

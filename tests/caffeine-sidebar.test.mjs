@@ -71,6 +71,9 @@ test("A turn on through its set up that the battery refuses stops waiting for th
   const s = await sidebar({ replies });
   s.connected.push("grey");
   await s.turnOn("grey");
+  replies["grey read"] = "off low other";
+  await s.view.readCaffeine("grey");
+  assert.deepEqual([s.view.caffeine.look("grey").setup, s.toasts.length], [true, 0], "another set up's refusal leaves this one waiting");
   replies["grey read"] = `off low other,${s.view.caffeine.row("grey").setupAttempt}`;
   await Promise.all([s.view.readCaffeine("grey"), s.view.readCaffeine("grey")]);
   await s.afterSetup();
