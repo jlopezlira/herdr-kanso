@@ -19,11 +19,15 @@ const NEXT_SHOWN = 3;
 export class Tasks {
   constructor(db) { this.db = db; }
 
-  saveState() { return { folds: this.folds }; }
+  saveState() { return { folds: this.folds, more: this.more, opened: this.opened, ended: this.ended }; }
 
   restoreState(state) {
     if (!state || typeof state !== "object") return false;
-    this.folds = state.folds && typeof state.folds === "object" ? state.folds : {};
+    const kept = (field) => (state[field] && typeof state[field] === "object" ? state[field] : {});
+    this.folds = kept("folds");
+    this.more = kept("more");
+    this.opened = kept("opened");
+    this.ended = kept("ended");
     return true;
   }
 
@@ -38,8 +42,9 @@ export class Tasks {
     this.turns = {};
     this.checked = {};
     this.unread = {};
-    this.more = {};
-    this.opened = {};
+    this.more ??= {};
+    this.opened ??= {};
+    this.ended ??= {};
     this.front = this.frontKey();
     this.frontOn = this.frontMachine();
     this.switchOn(this.frontOn, cx);
@@ -75,8 +80,7 @@ export class Tasks {
     return this.todos.filter((t) => t.by && mine.has(seenAddress(t.by, t.on))).toSorted((a, b) => touched(b) - touched(a))[0]?.place ?? null;
   }
 
-  shownSteps() {
-    const place = this.viewedPlace();
+  shownSteps(place = this.viewedPlace()) {
     return place ? this.todos.filter((t) => t.place === place) : [];
   }
 
@@ -194,24 +198,31 @@ export class Tasks {
     cx.notify();
   }
 
-  planBlock(plan, c, now) {
+  planBlock(plan, c, now, place) {
     const key = `${plan.on}:${plan.by ?? ""}:${plan.gone ? "gone" : ""}`;
+    const kept = `${place}|${key}`;
     const done = plan.steps.filter((s) => stepState(s) === "done");
     const open = plan.steps.filter((s) => stepState(s) !== "done");
-    const lead = open.find((s) => stepState(s) === "doing") ?? open[0];
+    const started = open.filter((s) => stepState(s) === "doing").toSorted((a, b) => b.started_at - a.started_at);
+    const lead = started[0] ?? open[0];
     const rest = open.filter((s) => s !== lead);
-    const shown = this.more[key] ? rest : rest.slice(0, NEXT_SHOWN);
-    const folded = this.folded(key);
+    const more = Boolean(this.more[kept]);
+    const shown = more ? rest : rest.slice(0, NEXT_SHOWN);
+    const folded = this.folded(kept);
     const progress = `${done.length} of ${plan.steps.length} done`;
-    const ended = (opened) => row(`tasks-ended-${key}`, c, { name: this.agentName(plan), level: 0, open: opened, dimmed: true, chip: progress, onClick: (cx) => this.toggle("more", key, cx) });
-    if (plan.gone && !this.more[key]) return ended(false);
+    const opened = (s) => ({ open: Boolean(this.opened[s.id]) });
+    const ended = (isOpen) => row(`tasks-ended-${key}`, c, { name: this.agentName(plan), level: 0, open: isOpen, dimmed: true, chip: progress, onClick: (cx) => this.toggle("ended", kept, cx) });
+    if (plan.gone && !this.ended[kept]) return ended(false);
+    const extra = rest.length > NEXT_SHOWN
+      ? [row(`tasks-more-${key}`, c, { name: more ? "Fewer steps" : `${rest.length - shown.length} more ${rest.length - shown.length === 1 ? "step" : "steps"}`, level: 0, open: more, onClick: (cx) => this.toggle("more", kept, cx) })]
+      : [];
     return v_flex().w_full().gap(G.sm)
       .child(plan.gone ? ended(true) : section(c, this.agentName(plan), progress))
       .children(lead ? [this.stepRow(lead, c, now, plan.gone, { lead: true })] : [])
-      .children(shown.map((s) => this.stepRow(s, c, now, plan.gone, { open: Boolean(this.opened[s.id]) })))
-      .children(rest.length > shown.length ? [row(`tasks-more-${key}`, c, { name: `${rest.length - shown.length} more steps`, level: 0, open: false, onClick: (cx) => this.toggle("more", key, cx) })] : [])
-      .children(done.length ? [row(`tasks-done-${key}`, c, { name: DONE, level: 0, open: !folded, chip: String(done.length), onClick: (cx) => this.fold(key, cx) })] : [])
-      .children(folded ? [] : done.map((s) => this.stepRow(s, c, now, plan.gone)));
+      .children(shown.map((s) => this.stepRow(s, c, now, plan.gone, opened(s))))
+      .children(extra)
+      .children(done.length ? [row(`tasks-done-${key}`, c, { name: DONE, level: 0, open: !folded, chip: String(done.length), onClick: (cx) => this.fold(kept, cx) })] : [])
+      .children(folded ? [] : done.map((s) => this.stepRow(s, c, now, plan.gone, opened(s))));
   }
 
   folded(project) { return this.folds[project] ?? true; }
@@ -261,13 +272,14 @@ export class Tasks {
 
   render() {
     const c = tokens(theme()), now = Date.now();
-    const plans = plansOf(this.withAgents(this.shownSteps()));
+    const place = this.viewedPlace();
+    const plans = plansOf(this.withAgents(this.shownSteps(place)));
     const machine = this.frontMachine(), unread = Boolean(machine) && this.unread[machine];
     const warned = unread ? [stateBlock("tasks-unread", c, { text: plans.length ? `Could not reach ${machine}; these steps may be out of date` : `Could not reach ${machine} to read its plans` })] : [];
     const body = !this.projects ? this.skeleton(c)
       : v_flex().w_full().gap(G.xl).children([
         ...warned,
-        ...plans.map((plan) => this.planBlock(plan, c, now)),
+        ...plans.map((plan) => this.planBlock(plan, c, now, place)),
         ...(unread && !plans.length ? [] : [this.emptyBlock(c, plans.length > 0)]),
       ]);
     return scrollPage("kanso-tasks", c, true, (column) => column

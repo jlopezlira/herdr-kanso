@@ -814,3 +814,29 @@ test("Tasks for a space with a folder leaves out its agents' steps in other proj
   assert.ok(control(page(), stepId(here)));
   assert.equal(control(page(), stepId(away)), null);
 });
+
+test("Tasks shows three later steps, opens and closes the rest, opens a finished step's detail, and keeps that after a remount.", async (t) => {
+  const { db, id } = await shopKdb(t);
+  const step = (key, created, props = {}) => storedTodo(id, { id: key, text: `Step ${key}`, detail: `Why ${key}`, by: terminalId, created, ...props });
+  const steps = [step("a", 1, { started_at: 2 }), step("b", 3), step("c", 4), step("d", 5), step("e", 6), step("f", 7, { done_at: 8 })];
+  for (const s of steps) await writeTodo(db, s);
+  const host = { spaces: activeSpace(shop), terminals: () => [{ address: terminalId, labels: { "kanso.shown": "Lead" } }] };
+  const { view, page, click } = await startTasks(db, host);
+  const more = `tasks-more-:${terminalId}:`;
+  assert.equal(control(page(), stepId(steps[4])), null);
+  assert.deepEqual(wordsAt(page(), more), ["1 more step"]);
+  click(more);
+  assert.ok(control(page(), stepId(steps[4])));
+  assert.deepEqual(wordsAt(page(), more), ["Fewer steps"]);
+  click(more);
+  assert.equal(control(page(), stepId(steps[4])), null);
+  click(more);
+  click(`tasks-done-:${terminalId}:`);
+  click(stepId(steps[5]));
+  assert.ok(wordsAt(page(), stepId(steps[5])).includes("Why f"));
+
+  const again = await startTasks(db, host);
+  again.view.restoreState(view.saveState());
+  assert.ok(control(again.page(), stepId(steps[4])), "More stays open");
+  assert.ok(wordsAt(again.page(), stepId(steps[5])).includes("Why f"), "The opened detail stays open");
+});
