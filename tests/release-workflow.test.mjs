@@ -175,6 +175,11 @@ test("Workflow commands preserve PR history, publish computed notes and prepare 
   assert.equal(JSON.parse(git("show", `develop:${versionFile}`)).version, "2.0.0");
 });
 
+const skippedAsNewer = (planned, read, tag) => {
+  assert.equal(planned.stdout.trim(), `${tag} was published from a newer commit; no beta.`);
+  assert.equal(read("output"), "action=skip\n");
+};
+
 const queuedDevelopFixture = (t) => {
   const { write, read, git, commit, node, run, addFeature, pushDevelop, setFeature } = releaseFixture(t);
   addFeature();
@@ -212,9 +217,7 @@ test("A green develop run still publishes when a newer push has not released", (
 test("A late develop run skips after an archive from a newer commit was published", (t) => {
   const { read, green, plan, publishNewer, tag } = queuedDevelopFixture(t);
   publishNewer();
-  const planned = plannedGreen(plan, green);
-  assert.equal(planned.stdout.trim(), `${tag} was published from a newer commit; no beta.`);
-  assert.equal(read("output"), "action=skip\n");
+  skippedAsNewer(plannedGreen(plan, green), read, tag);
 });
 
 test("A late develop run skips after a newer commit is tagged directly as a release candidate", (t) => {
@@ -234,9 +237,7 @@ test("A late develop run skips after a newer commit is tagged directly as a rele
   assert.equal(git("rev-parse", "origin/develop"), green);
 
   git("checkout", "--detach", green);
-  const planned = run("release-plan", ["beta"], { KANSO_RELEASE_SHA: green });
-  assert.equal(planned.stdout.trim(), `${tag} was published from a newer commit; no beta.`);
-  assert.equal(read("output"), "action=skip\n");
+  skippedAsNewer(run("release-plan", ["beta"], { KANSO_RELEASE_SHA: green }), read, tag);
 });
 
 test("A develop run treats its own detached release tag as unchanged, not newer", (t) => {
