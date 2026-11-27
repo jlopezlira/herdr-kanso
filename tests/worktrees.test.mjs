@@ -117,9 +117,14 @@ test("Worktrees parses git's worktree list and the probes", async () => {
   assert.equal(set[0].probe.dirty, 1);
   assert.equal(set[0].probe.ahead, 2);
   assert.equal(set[1].probe.gone, true);
-  const partial = probeRows([{ path: "/a" }, { path: "/b" }], "#0\ndirty\t1\n");
-  assert.equal(partial.records.length, 1);
-  assert.deepEqual(partial.missing.map((row) => row.path), ["/b"]);
+  const partial = probeRows([{ path: "/a" }, { path: "/b" }], "#0\ndirty\t1\n#1\n");
+  assert.equal(partial.records.length, 0);
+  assert.deepEqual(partial.missing.map((row) => row.path), ["/a", "/b"]);
+  const gone = probeRows([{ path: "/a" }], "#0\ngone\n");
+  assert.equal(gone.records[0].probe.gone, true);
+  const full = probeRows([{ path: "/a" }, { path: "/b" }], "#0\nonly\t0\ndirty\t1\nlast\t1\nahead\t2\n");
+  assert.equal(full.records.length, 1);
+  assert.deepEqual(full.missing.map((row) => row.path), ["/b"]);
   assert.equal(parseProbe("gone\n").gone, true);
   assert.equal(parseProbe("replaced\n").replaced, true);
   assert.deepEqual(clone(basesFrom("origin/main\nmain\norigin/master\n")), ["origin/main", "main"]);

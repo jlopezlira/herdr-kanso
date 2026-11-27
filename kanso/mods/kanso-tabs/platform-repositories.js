@@ -94,26 +94,21 @@ while [ "$i" -lt "$nrefs" ]; do refs+=("$1"); shift; i=$((i + 1)); done
 paths=()
 i=0
 while [ "$i" -lt "$nitems" ]; do paths+=("$1"); shift; i=$((i + 1)); done
-dir=$(mktemp -d "\${TMPDIR:-/tmp}/kanso-wt.XXXXXX")
 i=0
 while [ "$i" -lt "$nitems" ]; do
   end=$((i + 8))
   if [ "$end" -gt "$nitems" ]; then end=$nitems; fi
   j=$i
   while [ "$j" -lt "$end" ]; do
-    probe_one "\${paths[$j]}" "$idle" "\${refs[@]}" > "$dir/$j" &
+    (
+      out=$(probe_one "\${paths[$j]}" "$idle" "\${refs[@]}")
+      printf '#%s\n%s\n' "$j" "$out"
+    ) &
     j=$((j + 1))
   done
   wait
   i=$end
 done
-i=0
-while [ "$i" -lt "$nitems" ]; do
-  printf '#%s\n' "$i"
-  cat "$dir/$i" 2>/dev/null
-  i=$((i + 1))
-done
-rm -rf "$dir"
 exit 0
 `;
 const FORGET = `

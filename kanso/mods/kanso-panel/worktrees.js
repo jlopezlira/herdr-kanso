@@ -101,11 +101,17 @@ export function parseProbeSet(out) {
     const last = acc.records.at(-1);
     return { records: [...acc.records.slice(0, -1), { ...last, lines: [...last.lines, line] }] };
   }, { records: [] });
-  return groups.records.map((record) => ({ index: record.index, probe: parseProbe(record.lines.join("\n")) }));
+  return groups.records.map((record) => ({ index: record.index, lines: record.lines, probe: parseProbe(record.lines.join("\n")) }));
 }
 
+const finishedProbe = (lines) => {
+  const keys = new Set(lines.map((line) => line.split("\t")[0]).filter(Boolean));
+  if (keys.has("gone") || keys.has("replaced") || keys.has("broken")) return true;
+  return keys.has("only") && keys.has("dirty") && keys.has("last") && keys.has("ahead");
+};
+
 export function probeRows(rows, out) {
-  const records = parseProbeSet(out).filter((record) => rows[record.index]);
+  const records = parseProbeSet(out).filter((record) => rows[record.index] && finishedProbe(record.lines));
   const found = new Set(records.map((record) => record.index));
   return { records, missing: rows.filter((_, index) => !found.has(index)) };
 }
@@ -448,9 +454,10 @@ export class Worktrees {
           this.apply(item.path, parseProbe(r.stdout));
           noteChecked();
         };
+        const probeSafely = async (item, bases) => { try { await probeOne(item, bases); } catch { return null; } };
         if (localName() === "windows") {
           const jobs = groups.flatMap((group) => group.items.filter((item) => !item.missing).map((item) => ({ item, bases: group.bases })));
-          await pool(jobs, 8, async ({ item, bases }) => probeOne(item, bases));
+          await pool(jobs, 8, ({ item, bases }) => probeSafely(item, bases));
         } else {
           await pool(groups, 4, async (group) => {
             const rows = group.items.filter((item) => !item.missing);
@@ -459,11 +466,13 @@ export class Worktrees {
             try {
               const r = await localService(repositoryApi).probeAll(group.repo, rows, idle, group.bases);
               if (id !== this.scan) return;
-              const parsed = probeRows(rows, r.stdout ?? "");
-              parsed.records.forEach((record) => { this.apply(rows[record.index].path, record.probe); noteChecked(); });
-              missing = parsed.missing;
+              if (r.code === 0) {
+                const parsed = probeRows(rows, r.stdout ?? "");
+                parsed.records.forEach((record) => { this.apply(rows[record.index].path, record.probe); noteChecked(); });
+                missing = parsed.missing;
+              }
             } catch { missing = rows; }
-            if (missing.length && id === this.scan) await pool(missing, 8, (item) => probeOne(item, group.bases));
+            if (missing.length && id === this.scan) await pool(missing, 8, (item) => probeSafely(item, group.bases));
           });
         }
         if (id !== this.scan) return;
