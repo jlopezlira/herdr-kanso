@@ -130,6 +130,19 @@ WHERE path=${sqlText(w.path)} AND gone_at IS NULL;`);
   }
 
   // Disk per day is the day's last scan.
+  async stamps() {
+    const rows = await this.sql("SELECT v FROM meta WHERE k='probe-stamps';", true);
+    const raw = rows[0]?.v;
+    if (!raw) return new Map();
+    const entries = JSON.parse(raw);
+    return new Map(Array.isArray(entries) ? entries.filter((row) => Array.isArray(row) && row.length === 2) : []);
+  }
+
+  async saveStamps(stamps) {
+    const entries = [...stamps.entries()].map(([path, row]) => [path, { head: row.head, stamp: row.stamp, index: row.index, refs: row.refs, idle: row.idle, probe: row.probe }]);
+    await this.sql(`INSERT INTO meta(k, v) VALUES('probe-stamps', ${sqlText(JSON.stringify(entries))}) ON CONFLICT(k) DO UPDATE SET v=excluded.v;`);
+  }
+
   async history() {
     const [totals, byDay, disk, first] = await Promise.all([
       this.sql(`SELECT COALESCE(SUM(freed),0) kb, COALESCE(SUM(CASE WHEN gone_by='kanso' THEN freed END),0) kanso,

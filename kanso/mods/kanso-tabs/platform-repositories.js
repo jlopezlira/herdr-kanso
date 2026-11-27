@@ -52,32 +52,205 @@ for r in origin/develop develop origin/dev dev; do
   git rev-parse -q --verify "$r^{commit}" >/dev/null 2>&1 && echo "+$r"
 done
 exit 0`;
+const probeOne = `
+probe_one() {
+  cd "$1" 2>/dev/null || { echo gone; return 0; }
+  [ -d .git ] && { echo replaced; return 0; }
+  status=$(git ${GIT_READ.join(" ")} --no-optional-locks status --porcelain=v1 --untracked-files=normal 2>/dev/null) || { echo broken; return 0; }
+  idle=$2
+  shift 2
+  if [ "$idle" -gt 0 ] 2>/dev/null; then
+    gd=$(git rev-parse --absolute-git-dir 2>/dev/null)
+    if [ -n "$(find . -maxdepth 3 \\( -name node_modules -o -name .git \\) -prune -o -mmin -"$idle" -print 2>/dev/null | head -n 1)" ] ||
+       { [ -n "$gd" ] && [ -n "$(find "$gd/HEAD" "$gd/logs/HEAD" -mmin -"$idle" 2>/dev/null | head -n 1)" ]; }; then echo recent; fi
+  fi
+  printf 'only\\t%s\\n' "$(git rev-list --count HEAD --not --branches --tags --remotes 2>/dev/null)"
+  printf 'dirty\\t%s\\n' "$(printf '%s' "$status" | grep -c .)"
+  printf 'last\\t%s\\n' "$(git log -1 --format=%ct 2>/dev/null)"
+  ahead=
+  for b in "$@"; do
+    a=$(git rev-list --count "$b..HEAD" 2>/dev/null) || continue
+    case "$a" in ""|*[!0-9]*) continue ;; esac
+    if [ -z "$ahead" ] || [ "$a" -lt "$ahead" ]; then ahead=$a; fi
+    if [ "$a" = 0 ]; then echo merged; break; fi
+    t=$(git merge-tree --write-tree "$b" HEAD 2>/dev/null) && [ "$t" = "$(git rev-parse "$b^{tree}" 2>/dev/null)" ] && echo merged
+  done
+  printf 'ahead\\t%s\\n' "$ahead"
+}
+`;
 const PROBE = `
-cd "$1" 2>/dev/null || { echo gone; exit 0; }
-[ -d .git ] && { echo replaced; exit 0; }
-# git can't read it (its .git names where the repository used to be): nothing
-# below would be true, so it says so and stops.
-status=$(git ${GIT_READ.join(" ")} --no-optional-locks status --porcelain=v1 --untracked-files=normal 2>/dev/null) || { echo broken; exit 0; }
-idle=$2
-shift 2
-if [ "$idle" -gt 0 ] 2>/dev/null; then
-  gd=$(git rev-parse --absolute-git-dir 2>/dev/null)
-  if [ -n "$(find . -maxdepth 3 \\( -name node_modules -o -name .git \\) -prune -o -mmin -"$idle" -print 2>/dev/null | head -n 1)" ] ||
-     { [ -n "$gd" ] && [ -n "$(find "$gd/HEAD" "$gd/logs/HEAD" -mmin -"$idle" 2>/dev/null | head -n 1)" ]; }; then echo recent; fi
-fi
-printf 'only\\t%s\\n' "$(git rev-list --count HEAD --not --branches --tags --remotes 2>/dev/null)"
-printf 'dirty\\t%s\\n' "$(printf '%s' "$status" | grep -c .)"
-printf 'last\\t%s\\n' "$(git log -1 --format=%ct 2>/dev/null)"
-ahead=
-for b in "$@"; do
-  a=$(git rev-list --count "$b..HEAD" 2>/dev/null) || continue
-  case "$a" in ""|*[!0-9]*) continue ;; esac
-  if [ -z "$ahead" ] || [ "$a" -lt "$ahead" ]; then ahead=$a; fi
-  if [ "$a" = 0 ]; then echo merged; break; fi
-  t=$(git merge-tree --write-tree "$b" HEAD 2>/dev/null) && [ "$t" = "$(git rev-parse "$b^{tree}" 2>/dev/null)" ] && echo merged
-done
-printf 'ahead\\t%s\\n' "$ahead"
+${probeOne}
+probe_one "$1" "$2" "\${@:3}"
 exit 0`;
+const PROBE_ALL = `
+${probeOne}
+
+gitdir_of() {
+  folder=$1
+  if [ -d "$folder/.git" ]; then printf '%s' "$folder/.git"; return 0; fi
+  [ -f "$folder/.git" ] || return 1
+  IFS= read -r line < "$folder/.git" || return 1
+  case "$line" in
+    gitdir:\\ *) gd=\${line#gitdir: } ;;
+    *) return 1 ;;
+  esac
+  case "$gd" in
+    /*) ;;
+    *) gd="$folder/$gd" ;;
+  esac
+  printf '%s' "$gd"
+}
+worktree_head() {
+  gd=$(gitdir_of "$1") || return 1
+  IFS= read -r line < "$gd/HEAD" || return 1
+  case "$line" in
+    ref:\\ *)
+      ref=\${line#ref: }
+      ref=\${ref# }
+      common=$gd
+      if [ -f "$gd/commondir" ]; then
+        IFS= read -r c < "$gd/commondir" || c=
+        case "$c" in
+          /*) common=$c ;;
+          "") ;;
+          *) common="$gd/$c" ;;
+        esac
+      fi
+      for base in "$gd" "$common"; do
+        if [ -f "$base/$ref" ]; then IFS= read -r sha < "$base/$ref"; printf '%s' "$sha"; return 0; fi
+      done
+      for base in "$gd" "$common"; do
+        [ -f "$base/packed-refs" ] || continue
+        while IFS= read -r row; do
+          case "$row" in \\#*) continue ;; esac
+          sha=\${row%% *}
+          name=\${row#* }
+          if [ "$name" = "$ref" ]; then printf '%s' "$sha"; return 0; fi
+        done < "$base/packed-refs"
+      done
+      return 1
+      ;;
+    "") return 1 ;;
+    *) printf '%s' "$line" ;;
+  esac
+}
+idle=$1
+nrefs=$2
+nitems=$3
+repo=$4
+want_fp=$5
+shift 5
+refs=()
+i=0
+while [ "$i" -lt "$nrefs" ]; do refs+=("$1"); shift; i=$((i + 1)); done
+fp=$(git -C "$repo" for-each-ref --format='%(objectname) %(refname)' 2>/dev/null | cksum | awk '{print $1}')
+printf 'refs\\t%s\\n' "$fp"
+fresh=0
+if [ -z "$want_fp" ] || [ "$fp" != "$want_fp" ]; then fresh=1; fi
+paths=(); heads=(); stamps=(); indexes=()
+i=0
+while [ "$i" -lt "$nitems" ]; do paths+=("$1"); heads+=("$2"); stamps+=("$3"); indexes+=("$4"); shift 4; i=$((i + 1)); done
+min=
+i=0
+while [ "$i" -lt "$nitems" ]; do
+  case "\${stamps[$i]}" in ""|*[!0-9]*) ;; *) if [ -z "$min" ] || [ "\${stamps[$i]}" -lt "$min" ]; then min=\${stamps[$i]}; fi ;; esac
+  i=$((i + 1))
+done
+stampfile=
+newerfile=
+if [ "$fresh" -eq 0 ] && [ -n "$min" ]; then
+  stampfile=$(mktemp "\${TMPDIR:-/tmp}/kanso-wt.XXXXXX")
+  newerfile=$(mktemp "\${TMPDIR:-/tmp}/kanso-wt.XXXXXX")
+  since=$min
+  if date -r "$since" +%Y%m%d%H%M.%S >/dev/null 2>&1; then touch -t "$(date -r "$since" +%Y%m%d%H%M.%S)" "$stampfile"
+  else touch -d "@$since" "$stampfile"; fi
+  find "\${paths[@]}" \\( -name node_modules -o -name .git -o -name target -o -name dist -o -name .next -o -name build \\) -prune -o \\( -type f -o -type d \\) -newer "$stampfile" -print > "$newerfile" 2>/dev/null
+
+  fi
+hit=()
+i=0
+while [ "$i" -lt "$nitems" ]; do hit[$i]=0; i=$((i + 1)); done
+if [ -n "$newerfile" ]; then
+  while IFS= read -r path; do
+    [ -n "$path" ] || continue
+    i=0
+    while [ "$i" -lt "$nitems" ]; do
+      folder=\${paths[$i]}
+      case "$path" in
+        "$folder"|"$folder"/*) hit[$i]=1 ;;
+      esac
+      i=$((i + 1))
+    done
+  done < "$newerfile"
+fi
+index_mtime() {
+  if [ ! -f "$1" ]; then printf '0'; return; fi
+  if stat -f '%m' "$1" >/dev/null 2>&1; then stat -f '%m' "$1"; else stat -c '%Y' "$1"; fi
+}
+index_now=()
+stat_paths=()
+j=0
+while [ "$j" -lt "$nitems" ]; do
+  gd=$(gitdir_of "\${paths[$j]}") || gd=
+  if [ -n "$gd" ] && [ -f "$gd/index" ]; then stat_paths+=("$gd/index"); else stat_paths+=(""); fi
+  index_now[$j]=
+  j=$((j + 1))
+done
+if [ "$fresh" -eq 0 ] && [ "\${#stat_paths[@]}" -gt 0 ]; then
+  present=()
+  j=0
+  while [ "$j" -lt "$nitems" ]; do
+    [ -n "\${stat_paths[$j]}" ] && present+=("\${stat_paths[$j]}")
+    j=$((j + 1))
+done
+  listed=
+  if [ "\${#present[@]}" -gt 0 ]; then
+    if stat -f '%m' "\${present[0]}" >/dev/null 2>&1; then listed=$(stat -f '%m' "\${present[@]}")
+    else listed=$(stat -c '%Y' "\${present[@]}"); fi
+  fi
+  lines=()
+  while IFS= read -r row; do
+    [ -n "$row" ] && lines+=("$row")
+  done <<EOF
+$listed
+EOF
+  k=0
+  j=0
+  while [ "$j" -lt "$nitems" ]; do
+    if [ -n "\${stat_paths[$j]}" ]; then
+      index_now[$j]=\${lines[$k]}
+      k=$((k + 1))
+    fi
+    j=$((j + 1))
+  done
+fi
+i=0
+while [ "$i" -lt "$nitems" ]; do
+  printf '#%s\\n' "$i"
+  folder=\${paths[$i]}
+  keep=0
+    if [ "$fresh" -eq 0 ] && [ -n "\${heads[$i]}" ] && [ -n "\${stamps[$i]}" ] && [ "\${hit[$i]}" -eq 0 ]; then
+    got=$(worktree_head "$folder") || got=
+    want_index=\${indexes[$i]}
+    now_index=\${index_now[$i]}
+    if [ "$got" = "\${heads[$i]}" ] && [ -n "$want_index" ] && [ -n "$now_index" ] && [ "$now_index" -le "$want_index" ]; then keep=1; fi
+  fi
+  if [ "$keep" -eq 1 ]; then echo same
+  else
+    probe_one "$folder" "$idle" "\${refs[@]}"
+    hd=$(git -C "$folder" rev-parse HEAD 2>/dev/null) || hd=
+    printf 'head\\t%s\\n' "$hd"
+    gd=$(gitdir_of "\${paths[$i]}") || gd=
+    idx=0
+    if [ -n "$gd" ] && [ -f "$gd/index" ]; then idx=$(index_mtime "$gd/index"); fi
+    printf 'index\\t%s\\n' "$idx"
+    printf 'stamp\\t%s\\n' "$(( $(date +%s) + 1 ))"
+  fi
+  i=$((i + 1))
+done
+rm -f "$stampfile" "$newerfile"
+exit 0
+`;
 const FORGET = `
 c=$(git -C "$1" rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || exit 3
 [ -d "$2/.git" ] || exit 4
@@ -197,5 +370,18 @@ export function repositoryApi(platform, run) {
       return { folder: repo, remote: origin.code === 0 ? origin.stdout.trim() : "" };
     }));
   };
-  return { createWorktree: add, discover, bases, probe, forget, removeOrphan, fingerprint, children };
+  const probeAll = async (repo, items, idle, refs, wantRefs = "") => {
+    const list = Array.isArray(items) ? items : [];
+    if (platform === "windows") {
+      const parts = [];
+      for (const [index, item] of list.entries()) {
+        const one = await probe(item.path, idle, refs);
+        const head = (await git(item.path, ["rev-parse", "HEAD"])).stdout.trim();
+        parts.push(["#" + index, one.stdout.trimEnd(), "head\t" + head, "stamp\t" + (Math.floor(Date.now() / 1000) - 1)].filter(Boolean).join("\n"));
+      }
+      return { code: 0, stdout: parts.join("\n") };
+    }
+    return shell(PROBE_ALL, [String(idle), String(refs.length), String(list.length), repo, wantRefs, ...refs, ...list.flatMap((item) => [item.path, item.head ?? "", item.stamp ?? "", item.index ?? ""])]);
+  };
+  return { createWorktree: add, discover, bases, probe, probeAll, forget, removeOrphan, fingerprint, children };
 }

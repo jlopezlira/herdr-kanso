@@ -93,6 +93,41 @@ export function parseProbe(out) {
   }, start);
 }
 
+export function parseProbeSet(out) {
+  const lines = String(out).split(/\r?\n/);
+  const refs = lines.find((line) => line.startsWith("refs\t"))?.slice(5) ?? "";
+  const groups = lines.reduce((acc, line) => {
+    if (/^#\d+$/.test(line)) return { records: [...acc.records, { index: Number(line.slice(1)), lines: [] }] };
+    if (!acc.records.length || !line) return acc;
+    const last = acc.records.at(-1);
+    return { records: [...acc.records.slice(0, -1), { ...last, lines: [...last.lines, line] }] };
+  }, { records: [] });
+  return {
+    refs,
+    records: groups.records.map((record) => {
+      if (record.lines.length === 1 && record.lines[0] === "same") return { index: record.index, same: true };
+      const field = (name) => record.lines.find((line) => line.startsWith(name + "\t"))?.slice(name.length + 1) ?? "";
+      const stamp = Number(field("stamp"));
+      const index = Number(field("index"));
+      const probe = parseProbe(record.lines.filter((line) => !line.startsWith("head\t") && !line.startsWith("stamp\t") && !line.startsWith("index\t")).join("\n"));
+      return { index: record.index, same: false, probe, head: field("head"), stamp: Number.isFinite(stamp) ? stamp : null, indexTime: Number.isFinite(index) ? index : null };
+    }),
+  };
+}
+
+export function probeAsks(items, remembered, idle = "") {
+  const kept = items.map((item) => remembered.get(item.path)).filter((row) => row?.refs);
+  const wantRefs = kept.length && kept.every((row) => row.refs === kept[0].refs) ? kept[0].refs : "";
+  return {
+    wantRefs,
+    items: items.map((item) => {
+      const row = remembered.get(item.path);
+      const reusable = Boolean(wantRefs && row?.refs === wantRefs && row.head === item.head && Number.isFinite(row.stamp) && Number.isFinite(row.index) && row.probe && String(row.idle) === String(idle));
+      return { path: item.path, head: reusable ? item.head : "", stamp: reusable ? String(row.stamp) : "", index: reusable ? String(row.index) : "" };
+    }),
+  };
+}
+
 const foldersInUse = () => {
   const local = spaces().filter((s) => s.machine === null), tabs = new Set(local.flatMap((s) => (s.tabs ?? []).map((t) => t.id)));
   return [...local.map((s) => s.folder), ...panes().filter((p) => tabs.has(p.tab)).map((p) => p.cwd)];
@@ -304,7 +339,7 @@ export class Worktrees {
     this.working = null; this.batch = null; this.phase = null; this.note = null; this.notice = null;
     this.width = 368; this.done = false;
     this.share = new Share("kanso-panel");
-    this.store = new WorktreeStore(); this.stored = false; this.known = new Map(); this.hist = null;
+    this.store = new WorktreeStore(); this.stored = false; this.known = new Map(); this.stamps = new Map(); this.reused = new Set(); this.hist = null;
     // The one agent Explain names and starts: the first installed, looked up once.
     this.explainer = null;
     cx.spawn(async (cx) => {
@@ -317,6 +352,7 @@ export class Worktrees {
         await this.store.open();
         const items = await this.store.live();
         this.known = new Map(items.map((w) => [w.path, w.size]));
+        this.stamps = await this.store.stamps();
         if (!this.groups.length && !this.orphans.length) this.show(items);
         this.hist = await this.store.history();
         this.stored = true;
@@ -345,6 +381,7 @@ export class Worktrees {
     if (!this.stored) return;
     const all = [...this.groups.flatMap((g) => g.items), ...this.orphans];
     await this.store.save(all);
+    await this.store.saveStamps(this.stamps);
     const covered = (p) => search.some((root) => inside(root, p));
     await this.store.sweep(new Set(all.map((w) => w.path)), { has: (repo) => repos.has(repo) || covered(repo) });
     const live = all.filter((w) => !w.missing && !w.orphan), plan = this.plan();
@@ -418,18 +455,34 @@ export class Worktrees {
         cx.notify();
         // What each one holds, then what each one weighs: the list is usable before the sizes are in.
         const idle = idleMinutes();
-        const live = groups.flatMap((g) => g.items.filter((w) => !w.missing).map((w) => [w.path, g.bases]));
+        const live = groups.flatMap((g) => g.items.filter((w) => !w.missing));
         this.counted = 0;
-        await pool(live, 8, async ([path, bases]) => {
-          const r = await localService(repositoryApi).probe(path, idle, bases);
+        this.reused = new Set();
+        await pool(groups, 4, async (group) => {
+          const rows = group.items.filter((w) => !w.missing);
+          if (!rows.length || id !== this.scan) return;
+          const ask = probeAsks(rows, this.stamps, idle);
+          const r = await localService(repositoryApi).probeAll(group.repo, ask.items, idle, group.bases, ask.wantRefs);
           if (id !== this.scan) return;
-          this.apply(path, parseProbe(r.stdout));
-          this.counted = this.counted + 1;
+          const parsed = parseProbeSet(r.stdout);
+          rows.forEach((item, index) => {
+            const record = parsed.records.find((row) => row.index === index);
+            const kept = this.stamps.get(item.path);
+            if (record?.same && kept?.probe) {
+              this.apply(item.path, kept.probe);
+              this.reused.add(item.path);
+              if (parsed.refs) this.stamps.set(item.path, { ...kept, refs: parsed.refs, idle: String(idle) });
+            } else if (record && !record.same) {
+              this.apply(item.path, record.probe);
+              if (record.head && record.stamp && record.indexTime && parsed.refs) this.stamps.set(item.path, { head: record.head, stamp: record.stamp, index: record.indexTime, refs: parsed.refs, idle: String(idle), probe: record.probe });
+            }
+          });
+          this.counted = this.counted + rows.length;
           this.phase = `Checking ${this.counted} of ${live.length}`;
           this.soon(cx);
         });
         if (id !== this.scan) return;
-        const sized = [...live.map(([path]) => this.item(path)).filter((w) => w && !w.missing), ...this.orphans].map((w) => w.path);
+        const sized = [...groups.flatMap((group) => group.items).map((item) => this.item(item.path)).filter((item) => item && !item.missing && !(this.reused.has(item.path) && this.known.get(item.path) != null)), ...this.orphans].map((item) => item.path);
         this.counted = 0;
         await pool(sized, 4, async (path) => {
           const measured = await localService(fileApi).size(path);
