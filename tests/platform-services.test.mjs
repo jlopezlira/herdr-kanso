@@ -1,5 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { mkdir, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import { processApi, parseLook } from "../kanso/mods/kanso-panel/platform-processes.js";
 import { transcriptApi } from "../kanso/mods/kanso-panel/platform-transcripts.js";
 import { repositoryApi } from "../kanso/mods/kanso-panel/platform-repositories.js";
@@ -10,7 +12,7 @@ import { petApi } from "../kanso/mods/kanso-panel/platform-pets.js";
 import { clipboardApi } from "../kanso/mods/kanso-panel/platform-clipboard.js";
 import { fileApi } from "../kanso/mods/kanso-panel/platform-files.js";
 import { openApi } from "../kanso/mods/kanso-panel/platform-open.js";
-import { load, clone, success, failure } from "./helpers.mjs";
+import { load, clone, success, failure, exec, temporary } from "./helpers.mjs";
 
 function stub(answer = () => "") {
   const calls = [];
@@ -137,6 +139,40 @@ for (const platform of ["macos", "linux", "windows"]) {
       await api.discover(["repo"]); await api.bases("repo"); await api.probe("repo", 0, []); await api.forget("repo", "tree");
       assert.deepEqual(r.calls.map(({ program }) => program), ["sh", "bash", "bash", "bash", "bash"]);
     }
+  });
+}
+
+const mains = (online) => ({ type: "Mains", online });
+const laptopBattery = (status) => ({ type: "Battery", status });
+const usb = (online) => ({ type: "USB", scope: "System", online });
+const usbSupplies = (status) => ({
+  AC: mains("1"), BAT0: laptopBattery(status), USBC0: usb("1"), USBC1: usb("0"),
+});
+
+const linuxPowerCases = [
+  ["Linux reports AC power even when a wireless mouse battery is discharging.", {
+    AC: mains("1"),
+    BAT0: laptopBattery("Charging"),
+    "hid-mouse-battery": { ...laptopBattery("Discharging"), scope: "Device" },
+  }, false],
+  ["Linux reports battery power when AC is offline and the laptop battery is discharging.", {
+    AC: mains("0"), BAT0: laptopBattery("Discharging"),
+  }, true],
+  ["Linux reports AC power while charging with mixed USB power supplies.", usbSupplies("Charging"), false],
+  ["Linux reports battery power when the laptop battery is discharging despite an online USB-C source.", usbSupplies("Discharging"), true],
+  ["Linux leaves the power source unknown when there are no supplies.", {}, null],
+];
+
+for (const [name, supplies, expected] of linuxPowerCases) {
+  test(name, { skip: process.platform === "win32" }, async (t) => {
+    const root = await temporary(t);
+    for (const [name, files] of Object.entries(supplies)) {
+      const dir = join(root, name);
+      await mkdir(dir);
+      for (const [file, value] of Object.entries(files)) await writeFile(join(dir, file), value + "\n");
+    }
+    const run = (program, args) => exec(program, args.map((arg) => arg === "/sys/class/power_supply" ? root : arg));
+    assert.equal(await systemApi("linux", run).battery(), expected);
   });
 }
 
