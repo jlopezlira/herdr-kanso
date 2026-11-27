@@ -80,9 +80,9 @@ test("Early selects the tag planned on develop and offers it to users on the pre
   }
 });
 
-test("A develop release refuses to publish when Early already sees a higher version", () => {
-  const plan = beta({ tags: [...afterCandidate, "1.3.0-beta.1"] });
-  assert.deepEqual(plan, { action: "fail", message: "v1.2.0-rc.2 would not reach Early: v1.3.0-beta.1 already ranks above it" });
+test("A develop release stays on the highest prerelease train when the changelog computes a lower version", () => {
+  assert.equal(beta({ tags: [...afterCandidate, "1.3.0-beta.1"] }).tag, "v1.3.0-beta.2");
+  assert.equal(beta({ tags: [...afterCandidate, "2.0.0-rc.1"] }).tag, "v2.0.0-rc.2");
 });
 
 test("The first RC moves Unreleased, fixes the version, and keeps stable history", () => {

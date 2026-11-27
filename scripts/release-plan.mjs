@@ -23,6 +23,11 @@ const prereleasesOf = (names, version, channel = null) => names.filter((name) =>
   return rel?.channel && (!channel || rel.channel === channel) && core(rel) === version;
 });
 
+function trainOf(names, computed) {
+  const highest = names.map(parseRelease).filter((rel) => rel?.channel).map(core).sort(compare).at(-1);
+  return highest && compare(highest, computed) > 0 ? highest : computed;
+}
+
 function baseline(names, version) {
   const prereleases = prereleasesOf(names, version);
   const pool = prereleases.length ? prereleases : names.filter((name) => parse(name));
@@ -70,11 +75,13 @@ function isAncestor(a, b) {
   }
 }
 
-export function releasedAfter(sha, tags, branchRef) {
+const subjectOf = (commit) => execFileSync("git", ["log", "-1", "--format=%s", commit], { encoding: "utf8" }).trim();
+
+export function releasedAfter(sha, tags) {
   const head = commitOf(sha);
   for (const tag of tags) {
     const commit = commitOf(`v${tag}`);
-    const source = isAncestor(commit, branchRef) ? commit : commitOf(`${commit}^`);
+    const source = subjectOf(commit) === `Prepare v${tag}` ? commitOf(`${commit}^`) : commit;
     if (source !== head && isAncestor(head, source)) return tag;
   }
   return null;
@@ -102,7 +109,7 @@ export function planRelease({ kind, branch, version, changelog, tags, installedC
     if (notes(changelog, UNRELEASED) === null) return skip("no Unreleased entries; no beta.");
     const newer = later();
     if (newer) return skip(`v${newer} was published from a newer commit; no beta.`);
-    const next = nextVersion(changelog, tags);
+    const next = trainOf(names, nextVersion(changelog, tags));
     const base = baseline(names, next);
     if (base && !changedSince(base)) return skip(`what Kanso installs has not changed since v${base}; no beta.`);
     const channel = prereleasesOf(names, next, "rc").length ? "rc" : "beta";
@@ -156,7 +163,7 @@ function main() {
   }
   const changedSince = kind === "beta" ? (tag) => installedChangedSince(tag, { ignoreVersion: true }) : installedChangedSince;
   const sha = process.env.KANSO_RELEASE_SHA;
-  const plan = planRelease({ kind, branch, ...read, tags, installedChangedSince: changedSince, releasedAfter: () => (sha ? releasedAfter(sha, tags.filter((tag) => parseRelease(tag)), `origin/${branch}`) : null) });
+  const plan = planRelease({ kind, branch, ...read, tags, installedChangedSince: changedSince, releasedAfter: () => (sha ? releasedAfter(sha, tags.filter((tag) => parseRelease(tag))) : null) });
   if (plan.action === "fail") {
     console.error(`error: ${plan.message}`);
     process.exit(1);

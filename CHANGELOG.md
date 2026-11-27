@@ -3,7 +3,8 @@
 Pull requests to develop add entries under `## [Unreleased]` and never change
 `kanso/mods/kanso-chrome/version.json` or numbered sections. The version file
 stays at the newest stable version until the Release candidate workflow prepares
-the next version. A push to develop publishes a beta with the Unreleased notes.
+the next version. A push to develop publishes a beta with the Unreleased notes,
+or the next release candidate number once a candidate of that version exists.
 Its version is computed from the newest stable tag: Breaking or Removed means
 a major bump, Added or Deprecated means a minor bump, anything else a patch.
 Use Upgrade for steps users must take before updating. Like Fixed and Changed,
