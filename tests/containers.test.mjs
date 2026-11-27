@@ -321,6 +321,21 @@ test("Containers opened behind the window reads once and shows its containers, t
   assert.equal(asked("ps"), 1, "coming forward reads again");
 });
 
+test("A refresh asked in front while the first read is slow waits for the front again when the window went behind meanwhile", async () => {
+  const { f, view, docker, asked } = await openPanel({ active: false, hung: true });
+  f.state.active = true;
+  view.render(f.cx);
+  await f.advance(0);
+  f.state.active = false;
+  docker.hung = false;
+  await f.advance(15_000);
+  assert.equal(asked("context inspect"), 1, "the first read, and no second one behind");
+  f.state.active = true;
+  view.render(f.cx);
+  await f.advance(0);
+  assert.equal(asked("context inspect"), 2, "the front gets its read");
+});
+
 test("Containers that showed Docker stopped asks nothing more once the window is behind", async () => {
   const { f, view, fresh } = await openPanel({ down: true });
   assert.equal(view.state, "down");

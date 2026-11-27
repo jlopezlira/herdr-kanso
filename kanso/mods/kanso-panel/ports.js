@@ -137,6 +137,7 @@ export class Ports {
     this.digest = null; // what the history draws, worked out once per read
     this.histAt = 0; this.range = this.keptPorts?.range ?? "day"; this.tab = this.keptPorts?.tab ?? null; this.showAll = this.keptPorts?.showAll ?? false; this.busy = {};
     this.front = new Front();
+    this.due = false;
     this.refresh(cx);
     cx.timer.every(EVERY_MS, (cx) => this.refresh(cx));
   }
@@ -202,16 +203,20 @@ export class Ports {
 
   refresh(cx, { history = false, then = null, now = false } = {}) {
     if (this.front.rests(this.list !== null || this.reading)) return;
-    this.front.woke();
+    const back = this.front.woke();
     this.readRemotes(cx, now);
-    if (this.reading) { if (then) cx.timer.after(1000, (cx) => this.refresh(cx, { history, then })); return; }
+    if (this.reading) { this.due = this.due || back; if (then) cx.timer.after(1000, (cx) => this.refresh(cx, { history, then })); return; }
     this.reading = true;
     cx.spawn(this.pictureTask(async (cx, before) => {
       try {
         if (history || Date.now() - this.histAt >= HISTORY_MS) await this.readHistory();
         this.list = await this.read(); this.note = this.attribution;
       } catch (e) { this.note = said("Can't read the ports", e?.message ?? e); this.list = this.list ?? []; }
-      finally { this.reading = false; then?.(); if (this.picture() !== before) cx.notify(); }
+      finally {
+        this.reading = false; then?.();
+        if (this.picture() !== before) cx.notify();
+        if (this.due) { this.due = false; this.refresh(cx); }
+      }
     }));
   }
 

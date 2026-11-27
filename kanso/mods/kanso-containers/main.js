@@ -201,7 +201,7 @@ export default class Containers extends View {
         this.reading = false;
         const next = this.queued;
         this.queued = null;
-        if (next) this.read(cx, next); else cx.notify();
+        if (next && !this.front.rests(true)) this.read(cx, next); else cx.notify();
       }
     });
   }
