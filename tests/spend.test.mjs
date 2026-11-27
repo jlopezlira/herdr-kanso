@@ -1,11 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
+import fs, { mkdir, readFile, realpath, stat, writeFile } from "node:fs/promises";
+import { syncBuiltinESMExports } from "node:module";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { arg, calls, exec, find, KIT_NIGHT, load, popoverHost, storeShared, success, temporary, texts, timedContext } from "./helpers.mjs";
 import { keyDown, loadTokenSpend, spendPage } from "./mod-fixtures.mjs";
 import { chooserKey, readPlan } from "../kanso/mods/kanso-spend/spend-model.js";
+import { run as presentSpend } from "../kanso/mods/kanso-spend/presenter.mjs";
 
 const presenter = fileURLToPath(new URL("../kanso/mods/kanso-spend/presenter.mjs", import.meta.url));
 
@@ -359,6 +361,25 @@ test("Spend saves a snapshot time only after a successful scan and retries a fai
   assert.equal(page.error, null);
 });
 
+const timedSnapshots = async (ask) => {
+  const state = {};
+  const { cx, drain } = timedContext([]);
+  const started = Date.UTC(2026, 10, 10, 12);
+  let now = started;
+  const page = await spendPage({
+    nodeBinary: "node", lastSnapshotAt: 0, exchange() {},
+    ask: (command) => ask(command, now),
+  }, snapshotClock(state, () => now));
+  const readAt = async (at) => {
+    now = at;
+    page.catchUp(cx);
+    await drain();
+    assert.equal(page.error, null);
+    return state["kanso.spend.snapshotAt"];
+  };
+  return { started, readAt };
+};
+
 test("Spend retries a locked source in ten minutes but treats a permanently skipped row as fresh.", async (t) => {
   const f = await fixture(t);
   const source = join(f.home, ".local", "share", "opencode");
@@ -367,29 +388,55 @@ test("Spend retries a locked source in ten minutes but treats a permanently skip
   const db = new DatabaseSync(join(source, "opencode.db"));
   try {
     db.exec("CREATE TABLE message (session_id, id, time_created, data); INSERT INTO message VALUES ('s', 'm', 0, 'not JSON'); BEGIN EXCLUSIVE;");
-    const state = {}, attempts = [];
-    const { cx, drain } = timedContext([]);
-    const started = Date.UTC(2026, 10, 10, 12), retryAt = started + 10 * 60_000;
-    let now = started;
-    const page = await spendPage({
-      nodeBinary: "node", lastSnapshotAt: 0, exchange() {},
-      async ask(command) {
-        const answer = await run(f, command);
-        attempts.push([command, now, answer.scan.errors]);
-        return answer;
-      },
-    }, snapshotClock(state, () => now));
-    const catchUp = async () => { page.catchUp(cx); await drain(); };
+    const attempts = [];
+    const { started, readAt } = await timedSnapshots(async (command, now) => {
+      const answer = await run(f, command);
+      attempts.push([command, now, answer.scan.errors]);
+      return answer;
+    });
+    const retryAt = started + 10 * 60_000;
 
-    await catchUp();
-    const lockedAt = state["kanso.spend.snapshotAt"];
+    const lockedAt = await readAt(started);
     db.exec("COMMIT;");
-    for (now of [retryAt - 1, retryAt, retryAt + 12 * 60 * 60_000 - 1]) await catchUp();
+    await readAt(retryAt - 1);
+    await readAt(retryAt);
+    const savedAt = await readAt(retryAt + 12 * 60 * 60_000 - 1);
 
-    assert.deepEqual({ lockedAt, savedAt: state["kanso.spend.snapshotAt"], attempts }, {
+    assert.deepEqual({ lockedAt, savedAt, attempts }, {
       lockedAt: undefined, savedAt: retryAt, attempts: [["snapshot", started, 1], ["snapshot", retryAt, 1]],
     });
   } finally { db.close(); }
+});
+
+test("Spend marks a capped source fresh without scanning the unchanged root again in ten minutes.", async (t) => {
+  const f = await fixture(t);
+  const root = join(f.home, ".local", "share", "opencode");
+  await mkdir(root, { recursive: true });
+  const canonical = await realpath(root);
+  const entry = { name: "directory", isDirectory: () => true };
+  const entries = Array(250_001).fill(entry);
+  const readdir = fs.readdir;
+  const directory = t.mock.method(fs, "readdir", (dir, options) =>
+    dir === canonical && options?.withFileTypes ? Promise.resolve(entries) : readdir(dir, options));
+  syncBuiltinESMExports();
+  try {
+    const scans = [];
+    const { started, readAt } = await timedSnapshots(async (command, now) => {
+      const out = await presentSpend([command, "--store", join(f.data, "store.json"), "--home", f.home]);
+      const payload = JSON.parse(out.stdout);
+      assert.equal(payload.scan.errors, 1);
+      assert.ok(payload.scan.warnings > 0);
+      scans.push(now);
+      return payload;
+    });
+
+    await readAt(started);
+    const savedAt = await readAt(started + 10 * 60_000);
+    assert.deepEqual({ savedAt, scans }, { savedAt: started, scans: [started] });
+  } finally {
+    directory.mock.restore();
+    syncBuiltinESMExports();
+  }
 });
 
 test("Spend forces a peer exchange after the Refresh queued behind a read finishes.", async () => {
@@ -439,7 +486,7 @@ test("Spend sends only refreshed totals to a peer after the scan and its queued 
   assert.deepEqual(sent, [12]);
 });
 
-test("Spend exchanges only final Refresh totals even when a peer exchange is due between scan chunks.", async () => {
+const checkTwoChunkRefresh = async (betweenChunks) => {
   const timers = [], exchanges = [];
   const { cx, drain } = timedContext(timers);
   const tick = spendTicker(cx);
@@ -454,12 +501,18 @@ test("Spend exchanges only final Refresh totals even when a peer exchange is due
 
   page.reload(cx);
   await drain();
-  tick();
+  betweenChunks({ page, cx, tick });
   const [, continueScan] = timers.find(([ms]) => ms === 1000);
   continueScan(cx);
   await drain();
   assert.deepEqual(exchanges, [[2, true, true]]);
-});
+};
+
+test("Spend exchanges only final Refresh totals even when a peer exchange is due between scan chunks.", () =>
+  checkTwoChunkRefresh(({ tick }) => tick()));
+
+test("Opening Spend between scan chunks still exchanges the final Refresh totals with everyone.", () =>
+  checkTwoChunkRefresh(({ page, cx }) => page.wake(cx)));
 
 test("Spend retries a timed-out scan ten minutes after its watchdog fires.", async () => {
   const state = {}, timers = [], attempts = [];
