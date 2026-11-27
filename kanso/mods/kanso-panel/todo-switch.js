@@ -2,12 +2,12 @@ import { exec, appHome, agents } from "herdr";
 import { paths, pathApi, appHomeDir } from "./platform-paths.js";
 import { serviceOn } from "./platform-host.js";
 import { systemApi } from "./platform-system.js";
-import { machineOf } from "./remote-file.js";
 import { deliver } from "./deliver.js";
 
 export const TODO_SCRIPT = ["kanso-panel", "kanso-todo"];
 const TODO_RUN_MS = 120_000;
-const on = (machine) => (address) => (machineOf(address) ?? "") === (machine ?? "");
+const machineAt = (address) => /^([^/]+)\//.exec(String(address ?? ""))?.[1] ?? "";
+const on = (machine) => (address) => machineAt(address) === (machine ?? "");
 
 const scriptThere = async (platform, run) => {
   const home = await systemApi(platform, run).userHome();
