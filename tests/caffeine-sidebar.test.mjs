@@ -33,7 +33,8 @@ async function sidebar({ pieces = {}, replies = {} } = {}) {
     caffeine: createCaffeine({ local: "linux", now: () => clock.at, run: (call) => exec(call.command, call.args, call) }),
   });
   const follow = async () => { calls.length = 0; view.followCaffeine(cx); await drain(); return calls; };
-  return { view, cx, drain, calls, toasts, store, connected, follow, opened, clock };
+  const afterSetup = async () => { await drain(); clock.at += SETUP_EVERY_MS; return follow(); };
+  return { view, cx, drain, calls, toasts, store, connected, follow, afterSetup, opened, clock };
 }
 
 test("Hiding Caffeine turns it off on this computer when no other computer is added", async () => {
@@ -68,9 +69,7 @@ test("A turn on through its set up that the battery refuses stops waiting for th
   const s = await sidebar({ replies: { "grey on": "setup", "grey read": ["off battery", "off"] } });
   s.connected.push("grey");
   s.view.setCaffeine("grey", true, s.cx);
-  await s.drain();
-  s.clock.at += SETUP_EVERY_MS;
-  await s.follow();
+  await s.afterSetup();
   assert.equal(s.view.caffeine.look("grey").setup, false);
   assert.deepEqual(s.toasts.map((toast) => toast.title), ["Caffeine off: grey"]);
 });
@@ -80,9 +79,7 @@ test("Turning Caffeine off through its set up ends with it off and a toast with 
   s.connected.push("grey");
   await s.view.caffeine.change("grey", true);
   s.view.setCaffeine("grey", false, s.cx);
-  await s.drain();
-  s.clock.at += SETUP_EVERY_MS;
-  await s.follow();
+  await s.afterSetup();
   assert.deepEqual(s.opened, ["space.new"], "the set up opens in a new space on grey");
   assert.equal(s.view.caffeine.look("grey").setup, false);
   assert.equal(s.toasts.at(-1)?.title, "Caffeine off: grey");
