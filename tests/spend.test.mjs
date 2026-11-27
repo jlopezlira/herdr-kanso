@@ -292,6 +292,16 @@ const peerHost = ({ probe, presenter = async () => success(""), files = {} }) =>
   };
 };
 
+const mountSpend = async (TokenSpend) => {
+  const timers = [];
+  const { cx, drain } = timedContext(timers, { focus_handle: () => ({ release() {} }) });
+  const view = new TokenSpend();
+  view.init({}, cx);
+  for (const [ms, fn] of timers.filter(([ms]) => ms === 0)) fn(cx);
+  await drain();
+  return { view, cx, drain };
+};
+
 test("Spend reopens from its ledger within twelve hours and scans and exchanges again on Refresh.", async () => {
   const commands = [], probes = [], state = {};
   const firstAt = Date.UTC(2026, 10, 10, 12);
@@ -308,23 +318,13 @@ test("Spend reopens from its ledger within twelve hours and scans and exchanges 
       },
     }),
   });
-  const mount = async () => {
-    const timers = [];
-    const { cx, drain } = timedContext(timers, { focus_handle: () => ({ release() {} }) });
-    const view = new TokenSpend();
-    view.init({}, cx);
-    for (const [ms, fn] of timers.filter(([ms]) => ms === 0)) fn(cx);
-    await drain();
-    return { view, cx, drain };
-  };
-
-  const first = await mount();
+  const first = await mountSpend(TokenSpend);
   first.view.close();
   assert.deepEqual(commands.splice(0), ["snapshot"]);
   assert.deepEqual(probes, []);
 
   now += 12 * 60 * 60 * 1000 - 1000;
-  const { view, cx, drain } = await mount();
+  const { view, cx, drain } = await mountSpend(TokenSpend);
   const onOpen = { commands: commands.splice(0), probes: probes.splice(0) };
   view.reload(cx);
   await drain();
@@ -332,6 +332,35 @@ test("Spend reopens from its ledger within twelve hours and scans and exchanges 
     onOpen: { commands: ["prepare"], probes: [] },
     onRefresh: { commands: ["snapshot", "prepare"], probes: ["odin"] },
   });
+});
+
+test("Spend resumes an unfinished scan when reopened at ten minutes and shares only the completed totals.", async () => {
+  const commands = [], exchanges = [];
+  let now = Date.UTC(2026, 10, 10, 12), snapshots = 0;
+  const state = { "kanso.spend.snapshotAt": now - 60 * 60_000 };
+  const { TokenSpend } = await loadTokenSpend({
+    ...mountedSpendHost(), ...snapshotClock(state, () => now), ...peerHost({ probe() {} }),
+  });
+  class Spend extends TokenSpend {
+    async ask(command) {
+      commands.push(command);
+      if (command === "snapshot") snapshots += 1;
+      return pricedScan(Math.max(snapshots, 1), command === "snapshot" && snapshots === 1);
+    }
+  }
+  Spend.prototype.exchangeOnce = captureExchange(exchanges);
+  const first = await mountSpend(Spend);
+  commands.length = 0;
+  exchanges.length = 0;
+  first.view.reload(first.cx);
+  await first.drain();
+  assert.equal(first.view.scan.partial, true);
+  first.view.close();
+
+  now += 10 * 60_000 + 1;
+  const reopened = await mountSpend(Spend);
+  reopened.view.close();
+  assert.deepEqual({ commands, exchanges }, { commands: ["snapshot", "snapshot"], exchanges: [[2, true, false]] });
 });
 
 test("Spend saves a snapshot time only after a successful scan and retries a failed scan in ten minutes.", async () => {
@@ -409,7 +438,9 @@ test("Spend retries a locked source in ten minutes but treats a permanently skip
     const savedAt = await readAt(retryAt + 12 * 60 * 60_000 - 1);
 
     assert.deepEqual({ lockedAt, savedAt, attempts }, {
-      lockedAt: undefined, savedAt: retryAt, attempts: [["snapshot", started, 1], ["snapshot", retryAt, 1]],
+      lockedAt: retryAt - 12 * 60 * 60_000,
+      savedAt: retryAt,
+      attempts: [["snapshot", started, 1], ["snapshot", retryAt, 1]],
     });
   } finally { db.close(); }
 });
@@ -575,6 +606,20 @@ test("Spend continues a partial Refresh through a queued prepare and exchanges o
   assert.deepEqual({ commands, exchanges }, {
     commands: ["snapshot", "prepare", "snapshot"], exchanges: [[2, true, true]],
   });
+});
+
+test("Spend keeps the scan's 8 of 20 file progress after pricing the partial ledger.", async () => {
+  const partial = pricedScan(1, true);
+  const page = await spendPage({
+    nodeBinary: "node",
+    async ask(command) {
+      return command === "snapshot"
+        ? { ...partial, scan: { ...partial.scan, processed: 8, total: 20 } }
+        : { ...pricedScan(1, false), scan: { partial: false, processed: 0, total: 0 } };
+    },
+  });
+  await queuePrepareDuringSnapshot(page, timedContext([]));
+  assert.deepEqual([page.scan.processed, page.scan.total], [8, 20]);
 });
 
 test("Spend retries a partial snapshot in ten minutes if the queued prepare fails.", async () => {
