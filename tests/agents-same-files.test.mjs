@@ -89,7 +89,7 @@ const checkoutPath = (outcome) => {
   return realpath(outcome.path);
 };
 
-test("Agents launched seconds apart get separate worktrees and never reuse one when all branch names are taken.", async (t) => {
+test("Agents launched seconds apart get separate worktrees and never reuse one, even when every numbered branch name is taken.", async (t) => {
   const { dir, repo, start } = await treeStarter(t);
   const time = at + 1000;
   const initial = await start(), later = await start(time);
@@ -100,8 +100,16 @@ test("Agents launched seconds apart get separate worktrees and never reuse one w
     await gitOk()(repo, "worktree", "add", "-b", taken, join(dir, taken));
   }
   const collision = await start(time);
-  assert.ok(collision?.error?.startsWith(`${later.branch}-5 already has a worktree`), collision?.error);
-  assert.equal(collision.path, undefined);
+  assert.match(collision.branch, new RegExp(`^${later.branch}-[a-z0-9]{1,4}$`));
+  assert.ok(![initial, later].map(checkoutPath).includes(await checkoutPath(collision)));
+  assert.notEqual(await checkoutPath(collision), await checkoutPath(later));
+});
+
+test("A project folder that is not tracked in Git starts at the new worktree's root instead of a folder that does not exist.", async (t) => {
+  const { start } = await treeStarter(t, async (repo) => { const fresh = join(repo, "new-project"); await mkdir(fresh); return fresh; });
+  const outcome = await start();
+  const folder = await checkoutPath(outcome);
+  assert.equal(folder, await realpath(await gitOk()(folder, "rev-parse", "--show-toplevel")));
 });
 
 test("An agent using a symlink to the project still occupies its Git checkout.", async (t) => {
@@ -424,6 +432,13 @@ test("The macOS temporary folder aliases count as the same busy checkout and the
   same({ busy, warnings: await history.scan(group) }, {
     busy: group.map((agent) => agent.address), warnings: pairWarnings(`/private${changed}`),
   });
+});
+
+test("A Codex patch whose result failed does not count as an edit.", posixScan, async (t) => {
+  const history = await transcripts(t);
+  await history.write(second, { ...patchCall("*** Update File: main.js\n"), payload: { ...patchCall("").payload, input: "*** Update File: main.js\n", call_id: "c1" } },
+    { timestamp: iso(), type: "response_item", payload: { type: "custom_tool_call_output", call_id: "c1", output: "apply_patch verification failed: no match" } });
+  same(await history.edits(second), []);
 });
 
 test("A Claude Code edit counts even when replace_all comes before the file path.", posixScan, async (t) => {

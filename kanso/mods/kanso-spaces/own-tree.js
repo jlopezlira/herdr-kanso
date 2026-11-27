@@ -7,6 +7,7 @@ import { treeBranch } from "./several.js";
 const two = (n) => String(n).padStart(2, "0");
 const stamp = (now) => { const d = new Date(now); return `${d.getFullYear()}${two(d.getMonth() + 1)}${two(d.getDate())}-${two(d.getHours())}${two(d.getMinutes())}${two(d.getSeconds())}`; };
 const TRIES = 5;
+const spare = () => Math.random().toString(36).slice(2, 6);
 export const machineOf = (address) => (String(address ?? "").includes("/") ? String(address).split("/")[0] : "");
 export const cwdIn = (shown) => (a) => a.cwd ?? shown.find((p) => p.terminal === a.address)?.cwd ?? null;
 
@@ -32,10 +33,16 @@ async function madeTree(place, machine, name, tries = 1) {
   const made = await addWorktree({ folder: place.folder, machine, branch, base: worktreeBase(machine) });
   const taken = !made.error ? !made.made : /already exists|already checked out|already used/i.test(made.error);
   if (!taken) return made.error ? { error: made.error } : { path: made.path, branch };
-  return tries < TRIES ? madeTree(place, machine, name, tries + 1) : { error: made.error || `${branch} already has a worktree at ${made.path}` };
+  if (tries < TRIES) return madeTree(place, machine, name, tries + 1);
+  if (tries > TRIES) return { error: made.error || `${branch} already has a worktree at ${made.path}` };
+  const fresh = `${name}-${spare()}`;
+  const last = await addWorktree({ folder: place.folder, machine, branch: fresh, base: worktreeBase(machine) });
+  return last.made ? { path: last.path, branch: fresh } : { error: last.error || `${fresh} already has a worktree at ${last.path}` };
 }
 
-export async function ownTree(place, agent, now = Date.now(), { rootFor = rootOf, prefixFor = prefixOf, list, shown } = {}) {
+const isFolder = async (path, machine) => (await exec("test", ["-d", path], machine ? { on: machine } : {}).catch(() => null))?.code === 0;
+
+export async function ownTree(place, agent, now = Date.now(), { rootFor = rootOf, prefixFor = prefixOf, folderAt = isFolder, list, shown } = {}) {
   if (!place.folder || !agent) return null;
   const machine = place.machine || null;
   const root = await rootFor(place.folder, machine);
@@ -45,5 +52,6 @@ export async function ownTree(place, agent, now = Date.now(), { rootFor = rootOf
   const made = await madeTree(place, machine, treeBranch(stamp(now), agent.key));
   if (made.error) return { error: made.error, busy };
   const inside = await prefixFor(place.folder, machine);
-  return { path: inside ? paths.join(made.path, inside) : made.path, branch: made.branch, busy };
+  const at = inside ? paths.join(made.path, inside) : made.path;
+  return { path: at !== made.path && !(await folderAt(at, machine)) ? made.path : at, branch: made.branch, busy };
 }
