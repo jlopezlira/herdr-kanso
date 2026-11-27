@@ -2,6 +2,7 @@ import { q } from "./kdb.js";
 import { num } from "./pr-inbox.js";
 
 export const TODO_MS = 4000;
+export const FOLLOW_MS = 300;
 export const DONE = "Done";
 export const PROJECTS = "SELECT id, name, folder, machine FROM projects WHERE removed IS NULL;";
 export const TODOS = "SELECT todos.* FROM todos JOIN projects ON projects.id=todos.project WHERE projects.removed IS NULL;";
@@ -27,12 +28,6 @@ export function withSpaces(projects, spaces, homeDir) {
   const opened = spaces.filter((s) => s.folder && placeOf(s.machine, s.folder) !== placeOf(null, homeDir))
     .map((s) => ({ id: placeOf(s.machine, s.folder), name: s.name, folder: s.folder, machine: s.machine ?? null, auto: true }));
   return [...projects, ...opened.filter((p, i) => !known.has(p.id) && opened.findIndex((x) => x.id === p.id) === i)];
-}
-
-export function shownProjects(projects, todos, front) {
-  const held = new Set(todos.map((t) => t.project));
-  return projects.filter((p) => p.id === front || held.has(p.id))
-    .toSorted((a, b) => Number(b.id === front) - Number(a.id === front) || String(a.name).localeCompare(String(b.name)));
 }
 
 export function ageOf(at, now) {
