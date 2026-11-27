@@ -59,6 +59,7 @@ function scanState(snapshot, lastScanAt) {
     processed: Number(stats.processed) || 0,
     total: Number(stats.total) || 0,
     errors: Number(stats.errors) || 0,
+    retry: Number(stats.retry) || 0,
     warnings: Array.isArray(snapshot?.warnings) ? snapshot.warnings.length : 0,
   };
 }

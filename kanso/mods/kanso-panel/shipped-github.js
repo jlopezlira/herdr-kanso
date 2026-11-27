@@ -9,14 +9,28 @@ const STALE_MS = 7 * 86400000;
 const iso = (ms) => new Date(ms).toISOString().replace(/\.\d{3}Z$/, "Z");
 
 const PR_FIELDS = "... on PullRequest{url number createdAt mergedAt closedAt baseRefName mergeCommit{oid} repository{nameWithOwner owner{login} defaultBranchRef{name}}}";
-export const SEARCH = `query($q:String!,$after:String){search(query:$q,type:ISSUE,first:100,after:$after){issueCount pageInfo{hasNextPage endCursor} nodes{${PR_FIELDS}}}}`;
-export const HISTORY = "query($owner:String!,$name:String!,$ref:String!,$since:GitTimestamp!,$until:GitTimestamp!,$after:String){repository(owner:$owner,name:$name){ref(qualifiedName:$ref){target{... on Commit{history(first:100,since:$since,until:$until,after:$after){pageInfo{hasNextPage endCursor} nodes{oid}}}}}}}";
-export const createdIn = (start, end) => `is:pr author:@me created:${iso(start)}..${iso(end - 1000)}`;
-export const updatedIn = (start, end) => `is:pr author:@me updated:${iso(start)}..${iso(end - 1000)}`;
+export const SEARCH = `query($q:String!,$after:String){viewer{login} search(query:$q,type:ISSUE,first:100,after:$after){issueCount pageInfo{hasNextPage endCursor} nodes{${PR_FIELDS}}}}`;
+export const HISTORY = "query($owner:String!,$name:String!,$ref:String!,$since:GitTimestamp!,$until:GitTimestamp!,$after:String){viewer{login} repository(owner:$owner,name:$name){ref(qualifiedName:$ref){target{... on Commit{history(first:100,since:$since,until:$until,after:$after){pageInfo{hasNextPage endCursor} nodes{oid}}}}}}}";
+const authored = (field) => (login) => (start, end) => `is:pr author:${login} ${field}:${iso(start)}..${iso(end - 1000)}`;
+export const createdIn = authored("created");
+export const mergedIn = authored("merged");
+export const updatedIn = authored("updated");
+
+export class AccountError extends Error {}
+
+export class AccountChanged extends AccountError {
+  constructor(login) { super("GitHub account changed."); this.login = login; }
+}
+
+export class GitHubError extends Error {
+  constructor(message, data) { super(message); this.data = data; }
+}
+
+const answered = (text) => { try { return JSON.parse(text)?.data ?? null; } catch { return null; } };
 
 export async function gh(args) {
   const r = await exec("gh", args);
-  if (r.code !== 0) throw new Error((r.stderr || r.stdout).trim().split("\n")[0] || "GitHub could not be read.");
+  if (r.code !== 0) throw new GitHubError((r.stderr || r.stdout).trim().split("\n")[0] || "GitHub could not be read.", answered(r.stdout));
   return r.stdout;
 }
 
@@ -40,7 +54,7 @@ export async function prsIn(query, start, end, read = gql) {
   return [...await prsIn(query, start, mid, read), ...await prsIn(query, mid, end, read)];
 }
 
-export const prsCreated = (start, end, read = gql) => prsIn(createdIn, start, end, read);
+export const prsCreated = (login, start, end, read = gql) => prsIn(createdIn(login), start, end, read);
 
 export async function inMain(pending, read = gql) {
   const found = await mapSeries(pending, async ({ repo, main, since, until, oids }) => {
@@ -52,7 +66,7 @@ export async function inMain(pending, read = gql) {
       if (more.length === oids.size || !h.pageInfo.hasNextPage) return { hits: more, unchecked: 0 };
       return page + 1 < HISTORY_PAGES ? walk(h.pageInfo.endCursor, more, page + 1) : { hits: more, unchecked: oids.size - more.length };
     };
-    return walk(null, [], 0).catch(() => ({ hits: [], unchecked: oids.size }));
+    return walk(null, [], 0).catch((e) => { if (e instanceof AccountError) throw e; return { hits: [], unchecked: oids.size }; });
   });
   return { urls: found.flatMap((f) => f.hits), unchecked: found.reduce((n, f) => n + f.unchecked, 0) };
 }
@@ -60,7 +74,7 @@ export async function inMain(pending, read = gql) {
 export const github = {
   provider: "github",
   name: "GitHub",
-  async sync(store, { from, now, login, force = false, every = 0, progress = () => {} }) {
+  async sync(store, { from, now, login, verify = () => {}, force = false, every = 0, progress = () => {} }) {
     await store.forAccount("github", login);
     const done = await store.readMonths("github");
     const since = Number(await store.meta("github.updated")) || 0;
@@ -68,17 +82,34 @@ export const github = {
     const waiting = (await store.prs()).filter((p) => p.provider === "github" && !p.merged && !p.closed).map((p) => p.created);
     const back = since ? Math.min(since, ...waiting) : from;
     const due = monthsIn(Math.min(from, fresh ? from : back), now + 1).filter((m) => !done.has(m.month) || (!fresh && m.end > back));
-    const read = (months) => mapSeries(months, async (m, i) => {
+    const read = async (query, vars) => {
+      const data = await gql(query, vars).catch((e) => { verify(e.data?.viewer?.login); throw e; });
+      verify(data.viewer?.login);
+      return data;
+    };
+    const keep = (rows) => store.save(rows, login);
+    const readMonths = (months) => mapSeries(months, async (m, i) => {
       progress(`pull requests, ${months.length - i} ${months.length - i === 1 ? "month" : "months"} to go`);
-      await store.save(await prsCreated(m.start, Math.min(m.end, now + 1000)), login);
+      const end = Math.min(m.end, now + 1000);
+      await keep([...await prsCreated(login, m.start, end, read), ...await prsIn(mergedIn(login), m.start, end, read)]);
       await store.monthRead("github", m.month, now, login);
     });
-    await read(due);
-    if (since && !force && now - since < every) return { unchecked: Number(await store.meta("github.unchecked")) || 0 };
-    if (since) await store.save(await prsIn(updatedIn, since - 3600000, now + 1000), login);
-    await store.setOwnMeta("github.updated", String(now), login);
+    const merged = await store.meta("github.merged");
+    const startOf = (month) => new Date(Number(month.slice(0, 4)), Number(month.slice(5)) - 1, 1).getTime();
+    const backfill = merged || !done.size ? [] : monthsIn(Math.min(...[...done].map(startOf)), now + 1).filter((m) => done.has(m.month) && !due.some((d) => d.month === m.month));
+    await readMonths(due);
+    if (backfill.length) progress("merged pull requests");
+    await mapSeries(backfill, async (m) => keep(await prsIn(mergedIn(login), m.start, Math.min(m.end, now + 1000), read)));
+    if (!merged) await store.setOwnMeta("github.merged", "1", login);
+    const pending = (await store.meta("github.unchecked")) === "pending";
+    if (since && !force && !pending && now - since < every) return { unchecked: Number(await store.meta("github.unchecked")) || 0 };
+    if (!(pending && since && !force && now - since < every)) {
+      if (since) await keep(await prsIn(updatedIn(login), since - 3600000, now + 1000, read));
+      await store.setOwnMeta("github.updated", String(now), login);
+    }
     progress("what reached production");
-    const prod = await inMain(pendingByRepo(await store.prs()));
+    await store.setOwnMeta("github.unchecked", "pending", login);
+    const prod = await inMain(pendingByRepo(await store.prs()), read);
     await store.markProd(prod.urls, login);
     await store.setOwnMeta("github.unchecked", String(prod.unchecked), login);
     return { unchecked: prod.unchecked };

@@ -1,6 +1,6 @@
 // Named loaders for production modules used by multiple tests.
 import { join } from "node:path";
-import { chain, databaseTimer, drawingHost, exec, gpuiHost, load, nodes, openedKdb, popoverHost, temporary, KIT_NIGHT } from "./helpers.mjs";
+import { chain, databaseTimer, drawingHost, exec, gpuiHost, load, nodes, openedKdb, popoverHost, storeShared, temporary, KIT_NIGHT } from "./helpers.mjs";
 
 export const loadSpaces = (host) => load("kanso-spaces/main.js", ["Spaces"], host);
 export const loadDescribe = (host) => load("kanso-help/keymap.js", ["describe"], host);
@@ -82,7 +82,7 @@ export const memoryPage = async (fields = {}, host = {}) => {
   return Object.assign(new Memory(), onScreen, { now: null, digest: null, range: "day", batch: null, showAll: false, armed: new Armed(), actionError: null }, fields);
 };
 export const spendPage = async (fields = {}, host = {}) => {
-  const { TokenSpend } = await loadTokenSpend(pageHost(host));
+  const { TokenSpend } = await loadTokenSpend(pageHost({ ...storeShared({}), ...host }));
   const handle = { focus() {}, scroll_to_item() {} };
   return Object.assign(new TokenSpend(), onScreen, { costs: null, scan: null, error: null, runtimeError: null, running: null, page: "home", stack: [], settings: null, planInputs: [], queuedSources: null, expanded: {}, syncHolds: [],
     cost: { period: "day", offset: 0, project: "all", model: "all" }, nodeBinary: null, generation: 0, queued: { snapshot: false, prepare: false }, openMenu: null, menuOptions: null, menuAt: -1, menuG: 0, chooserFocus: { project: handle, model: handle }, chooserScroll: handle }, fields);
