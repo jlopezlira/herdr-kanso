@@ -8,7 +8,17 @@ const ipText = (n) => [24, 16, 8, 0].map((shift) => Math.floor(n / 2 ** shift) %
 const validIp = (ip) => IPV4.test(ip) && String(ip).split(".").every((part) => Number(part) <= 255);
 const RANGES = [["10.0.0.0", 8], ["172.16.0.0", 12], ["192.168.0.0", 16]];
 const within = (ip, [base, bits]) => Math.floor(ipNumber(ip) / 2 ** (32 - bits)) === Math.floor(ipNumber(base) / 2 ** (32 - bits));
-export const privateIp = (ip) => validIp(ip) && RANGES.some((range) => within(ip, range));
+const V6 = /^[0-9a-f]{0,4}(?::[0-9a-f]{0,4}){2,7}$/i;
+const TAILNET_V6 = /^fd7a:115c:a1e0:/i;
+const localV6 = (ip) => V6.test(ip) && /^f[cd][0-9a-f]{2}:/i.test(ip) && !TAILNET_V6.test(ip);
+const linkV6 = (ip) => /^fe80:[0-9a-f:]*%[\w.-]+$/i.test(ip) && V6.test(ip.split("%")[0]);
+const familyRank = (ip) => (validIp(ip) ? 0 : localV6(ip) ? 1 : 2);
+export const privateIp = (ip) => (validIp(ip) && RANGES.some((range) => within(ip, range))) || localV6(String(ip)) || linkV6(String(ip));
+
+export function homeAddresses(text) {
+  const words = String(text ?? "").split("\n").map((line) => line.match(/^\s*(?:ip_address|ipv6_address):\s*(\S+)/)?.[1] ?? line.match(/^(\S+)\s+STREAM\b/)?.[1]);
+  return [...new Set(words.filter(privateIp))].toSorted((a, b) => familyRank(a) - familyRank(b));
+}
 
 const bitsOf = (hex) => [...parseInt(hex, 16).toString(2)].filter((bit) => bit === "1").length;
 

@@ -1,4 +1,4 @@
-import { awayLine, destinationOf, joined, lanArgs, lanFirst, lanParts, splitTarget, unquote } from "./sign-in.js";
+import { awayLine, destinationOf, hostNameOption, joined, lanArgs, lanFirst, lanParts, splitTarget, unquote } from "./sign-in.js";
 import { privateIp } from "./nearby.js";
 
 const LAN_PROBE = ["-o", "BatchMode=yes", "-o", "ConnectTimeout=2", "-o", "StrictHostKeyChecking=yes"];
@@ -44,7 +44,7 @@ export function lanRecord(record, ip, { hostKey = "", user = "" } = {}) {
 export const lanProbeArgs = (ip, { target = "", hostKey = "", user = "" } = {}) => {
   if (!target) return [...LAN_PROBE, "--", joined(user, ip), "true"];
   const { dest, port } = destinationOf(target);
-  return [...LAN_PROBE, "-o", `HostName=${ip}`, "-o", `HostKeyAlias=${hostKey || splitTarget(dest).host}`, ...(port ? ["-p", port] : []), "--", dest, "true"];
+  return [...LAN_PROBE, "-o", hostNameOption(ip), "-o", `HostKeyAlias=${hostKey || splitTarget(dest).host}`, ...(port ? ["-p", port] : []), "--", dest, "true"];
 };
 
 export async function homeRoute(record, peers, run) {

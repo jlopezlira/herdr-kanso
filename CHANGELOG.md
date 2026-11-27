@@ -28,9 +28,11 @@ the branch's rules.
 
 - Shipped leads with the share of the pull requests you opened that reached production, draws the pull requests merged over the period as a chart like Memory's, lists its trend with the current period first, and says less.
 - Shipped and Spend keep what they read and update it every 12 hours, or when you press Refresh, reading only what is new: Shipped asks GitHub only for what changed, and Spend rescans and exchanges with your other computers on that schedule instead of every minute.
+- On Mac and Linux, Add a computer looks up computers you already know by their .local names and tries your home network first over IPv4 or IPv6. If a VPN takes over one route, Add a computer can still use another home address that answers.
 
 ### Fixed
 
+- Add a computer finds Tailscale when it was installed from the Mac App Store and no longer shows a notice when Tailscale isn't installed.
 - Shipped no longer stops drawing ("This view could not be re-rendered") with a few thousand pull requests, and its streak is not reset by a calendar day that GitHub already started.
 - Tasks turns Agents keep the to-do on itself when it is empty, and turning it on, here or in Settings, sends the rule to the agents already running on this computer, so they start using it without a new conversation.
 - A to-do marked done or deleted while it is still being saved on another computer keeps that change.

@@ -7,9 +7,11 @@ import { arg, clone, computersDialog, exec, fieldWith, find, folderWith, gpuiHos
 
 const reach = () => load("kanso-computers/reach.js", [
   "tailnet", "planFor", "choiceOf", "addArgs", "probeArgs", "reachOf", "keySetup", "advice", "isAdded",
-  "sshConfigHosts", "includesOf", "ACCESS_CONTROLS", "validTarget", "destinationOf", "aliasOf",
+  "sshConfigHosts", "includesOf", "ACCESS_CONTROLS", "validTarget", "destinationOf", "aliasOf", "findTailscale",
 ]);
 const quote = () => load("kanso-computers/platform-command.js", ["windowsArg", "psQuote"]);
+const tailscaleApp = "/Applications/Tailscale.app/Contents/MacOS/Tailscale";
+const tailscaleCli = "TAILSCALE_BE_CLI=1";
 
 const peer = (over = {}) => ({
   DNSName: "grey.tail.ts.net.", HostName: "grey", OS: "linux", Online: true,
@@ -49,6 +51,19 @@ test("A tailscale status with a warning line still lists the computers, and phon
   assert.deepEqual(clone(names(net)), ["grey"]);
 });
 
+test("A Mac with only the App Store version of Tailscale finds the computers on its tailnet", async () => {
+  const { findTailscale } = await reach();
+  const appArgs = [tailscaleCli, tailscaleApp, "status", "--json"];
+  const { net } = await findTailscale("macos", async (program, args) => {
+    if (program === tailscaleApp) return success("The Tailscale GUI failed to start: no display");
+    if (program === "env" && args.length === appArgs.length && appArgs.every((word, i) => word === args[i])) {
+      return success(status({ grey: peer({}) }));
+    }
+    throw Object.assign(new Error(`${program} not found`), { code: "ENOENT" });
+  });
+  assert.deepEqual(net && clone(names(net)), ["grey"]);
+});
+
 test("A tailnet that is not running, or garbage, lists no computers", async () => {
   const { tailnet } = await reach();
   assert.deepEqual(clone(tailnet(status({ grey: peer({}) }, "Stopped"))), { state: "Stopped", peers: [] });
@@ -86,6 +101,8 @@ test("A Tailscale SSH computer is reached through tailscale, and without it ssh 
   assert.deepEqual(clone(planFor(choice, { tailscale: "/usr/local/bin/tailscale" })), {
     name: "grey", target: "root@100.64.1.2", via: "/usr/local/bin/tailscale ssh root@100.64.1.2", probe: false,
   });
+  const app = planFor(choice, { tailscale: tailscaleApp, platform: "macos" });
+  assert.equal(app.via, `env ${tailscaleCli} ${tailscaleApp} ssh root@100.64.1.2`);
   assert.deepEqual(clone(planFor(choice, { tailscale: "" })), {
     name: "grey", target: "root@grey", via: "", probe: true, also: ["root@100.64.1.2"],
   });
@@ -176,6 +193,7 @@ const agentWords = (suffix) => identityWords(agentPath(suffix));
 const OLD_KEY_WORDS = `-i ${KEY_PATH} ${KEY_OPTIONS}`;
 const ASK = "-o PasswordAuthentication=yes -o KbdInteractiveAuthentication=yes";
 const signIn = () => load("kanso-computers/sign-in.js", ["signInTab", "routeOf", "keySetup", "lanParts"]);
+const lanRoute = () => load("kanso-computers/lan-route.js", ["lanRecord", "lanProbeArgs"]);
 
 const writeStub = async (dir, name, body) => {
   const file = join(dir, name);
@@ -359,7 +377,7 @@ test("Signing in on a local-first route asks on the local network first, and fin
     lan: "10.99.0.1",
   }, {});
   assert.deepEqual([plan.lan, plan.user, plan.via], ["10.99.0.1", "ada", ""]);
-  const { lanRecord } = await load("kanso-computers/lan-route.js", ["lanRecord"]);
+  const { lanRecord } = await lanRoute();
   const built = lanRecord({ name: plan.name, target: plan.target, via: "" }, plan.lan, { user: plan.user });
   const tab = signInTab({ name: built.name, target: built.target, via: built.via });
   const script = tab.argv[2];
@@ -401,6 +419,29 @@ test("Signing in on a local-first route asks on the local network first, and fin
   assert.ok(via.includes(KEY_WORDS), via);
   assert.ok(via.includes("HostName=10.99.0.1"), via);
   assert.ok(via.includes(away), via);
+});
+
+test("A home route through a scoped IPv6 address keeps its interface when checking and saving SSH", async (t) => {
+  const { lanRecord, lanProbeArgs } = await lanRoute();
+  const { lanParts } = await signIn();
+  const ip = "fe80::5%en0";
+  const hostOption = "HostName=fe80::5%%en0";
+  const target = "light";
+  const probe = lanProbeArgs(ip, { target });
+  const saved = lanRecord({ name: target, target, via: "" }, ip);
+  assert.ok(probe.includes(hostOption), "the SSH probe escapes the scope");
+  assert.ok(saved.via.includes(hostOption), "the saved SSH route escapes the scope");
+  assert.equal(lanParts(saved.via)?.ip, ip, "reading the route restores the original scope");
+
+  const { config } = await folderWith(t, "config");
+  await writeFile(config, "");
+  const parsed = await exec("ssh", ["-F", config, "-G", ...probe]);
+  if (parsed.code === "ENOENT") {
+    t.diagnostic("OpenSSH is unavailable; only the generated route was checked");
+    return;
+  }
+  assert.equal(parsed.code, 0, parsed.stderr);
+  assert.ok(parsed.stdout.split(/\r?\n/).includes(`hostname ${ip}`), "OpenSSH keeps the interface in the address");
 });
 
 test("A route that is not the local-first shape has no local part", async () => {
@@ -895,7 +936,7 @@ test("A computer saved with hc, and not on the tailnet or in ssh config, shows u
   assert.deepEqual(closed, ["computers-overlay"]);
 });
 
-test("When Tailscale is off, not installed, or has no other computer, Refresh probes again and shows the peers, keeping the typed address", async () => {
+test("Add a computer hides Tailscale when it is not installed; when it is off or has no other computer, Refresh lists computers without clearing the typed address", async () => {
   const running = status({ grey: peer({}) });
   const notes = {
     "not installed": { code: 1, stdout: "", stderr: "missing" },
@@ -917,8 +958,15 @@ test("When Tailscale is off, not installed, or has no other computer, Refresh pr
     const address = { text: "ada@10.0.0.9" };
     view.typed = { multiline: false, focused: false, state: {}, on() {}, focus() {}, release() {}, value: () => address.text, set_value(next) { address.text = next; } };
     const drawn = view.render();
-    assert.ok(texts(drawn).includes(said[name]), name);
+    const beforeWords = texts(drawn);
     const refresh = find(drawn, (el) => el.tag === "computers-tailnet-refresh");
+    if (name === "not installed") {
+      assert.equal(beforeWords.includes("Tailscale"), false, "no Tailscale heading");
+      assert.equal(beforeWords.includes(said[name]), false, "no Tailscale note");
+      assert.equal(refresh, null, "no Tailscale Refresh");
+      continue;
+    }
+    assert.ok(beforeWords.includes(said[name]), name);
     assert.ok(refresh, name);
     const before = asked.filter(([, args]) => args?.[0] === "status").length;
     answer.now = { code: 0, stdout: running, stderr: "" };
@@ -1058,20 +1106,122 @@ test("A failed typed attempt shows its message once, below the field and not on 
   assert.equal(texts(list).some(message), false);
 });
 
+const isLanKnock = (program, args) => program === "sh" && args[1].includes("xargs");
+const arpOf = (ips) => ips.map((ip) => `? (${ip}) at aa:bb:cc:dd:ee:ff`).join("\n");
+const lightIp = "192.168.4.91";
+const lightRow = (drawn) => find(drawn, (el) => el.tag === "computer-ssh:light");
+const lightDialog = async ({ answers = true, lookup = () => lightIp, neighbors = [] } = {}) => {
+  const knocks = [];
+  const installs = [];
+  const { view, cx, flush } = await computersDialog({
+    readTextFile: async () => "Host light\n  HostName light.example",
+    exec: async (program, args) => {
+      if (program === "dscacheutil" && args.join(" ") === "-q host -a name light.local") {
+        const ip = await lookup();
+        return success(ip ? `ip_address: ${ip}\n` : "");
+      }
+      if (program === "ifconfig") return success("inet 192.168.4.2 netmask 0xffffff00");
+      if (program === "arp") return success(arpOf(neighbors));
+      if (isLanKnock(program, args)) {
+        const ips = args.slice(3);
+        knocks.push(...ips);
+        return success(answers ? ips.join("\n") : "");
+      }
+      if (program === "ssh" && args[0] === "-G") return success("hostname light.example\n");
+      if (program === "ssh" && args.at(-2) === "light") {
+        const reaches = answers ? args.includes(`HostName=${lightIp}`) : !args.some((word) => word.startsWith("HostName="));
+        return reaches ? success("") : sshRefusal("No route to host");
+      }
+      return success("");
+    },
+    hc: async (args) => {
+      if (args[1] === "add") installs.push(args);
+      return success('{"machines":[]}');
+    },
+  }, true);
+  return { view, cx, flush, knocks, installs };
+};
+const addLight = async (answers) => {
+  const { view, cx, flush, knocks, installs } = await lightDialog({ answers });
+  await view.homesReady;
+  const drawn = view.render();
+  const row = lightRow(drawn);
+  assert.ok(row, "light is listed from ssh config");
+  const button = find(row, (el) => el.tag === "computer-ssh:light-action");
+  arg(button, "on_click")({}, cx);
+  await flush();
+  assert.deepEqual(knocks, [lightIp], "SSH is checked at the address from light.local");
+  assert.equal(installs.length, 1);
+  return { drawn, row, install: installs[0] };
+};
+
+test("A computer from ssh config that answers at home is marked On this network and added over that network first", async () => {
+  const { drawn, row, install } = await addLight(true);
+  assert.ok(texts(row).includes("On this network"));
+  assert.ok(!texts(drawn).includes("No other computer on this network answers ssh."));
+  assert.ok(find(drawn, (el) => el.tag === "computers-sweep"), "Search this network is still offered");
+  const name = install.indexOf("--name");
+  assert.notEqual(name, -1, "hc machine add --via requires --name");
+  assert.equal(install[name + 1], "light");
+  const via = install.indexOf("--via");
+  assert.notEqual(via, -1);
+  assert.match(install[via + 1], /HostName=192\.168\.4\.91.*; exec ssh light /);
+});
+
+test("A computer from ssh config that does not answer at its home address is added through its usual ssh route", async () => {
+  const { row, install } = await addLight(false);
+  assert.ok(!texts(row).includes("On this network"));
+  assert.deepEqual(clone(install), ["machine", "add", "light", "--install", "--json"]);
+});
+
+test("A slow lookup from opening Add a computer cannot undo what Refresh found", async () => {
+  const startup = Promise.withResolvers();
+  const started = Promise.withResolvers();
+  let lookups = 0;
+  const { view, cx, flush } = await lightDialog({
+    lookup: () => {
+      if (++lookups > 1) return lightIp;
+      started.resolve();
+      return startup.promise;
+    },
+  });
+  await started.promise;
+  const initial = view.homesReady;
+  view.rediscover(cx);
+  await flush();
+  await view.homesReady;
+  assert.ok(texts(lightRow(view.render())).includes("On this network"), "Refresh found light");
+  startup.resolve("");
+  await initial;
+  assert.ok(texts(lightRow(view.render())).includes("On this network"), "the older lookup does not hide the newer result");
+});
+
+test("A computer already listed from ssh config is not listed again by its home address", async () => {
+  const other = "192.168.4.92";
+  const { view, knocks } = await lightDialog({ neighbors: [lightIp, other] });
+  await view.homesReady;
+  assert.ok(knocks.includes(lightIp) && knocks.includes(other));
+  const drawn = view.render();
+  const lanRow = (ip) => find(drawn, (el) => el.tag === `computer-lan:${ip}`);
+  assert.ok(lanRow(other), "another computer on this network is still listed");
+  assert.ok(texts(lightRow(drawn)).includes("On this network"));
+  assert.equal(lanRow(lightIp), null, "light has no duplicate LAN row");
+});
+
 const lanDialog = async (t) => {
   const near = ["192.168.1.1", "192.168.1.3"];
   const rest = ["192.168.1.4", "192.168.1.5", "192.168.1.6"];
   const commands = {
     ifconfig: "inet 192.168.1.2 netmask 0xfffffff8",
-    arp: [...near, "192.168.2.1", "192.168.1.2"].map((ip) => `? (${ip}) at aa:bb:cc:dd:ee:ff`).join("\n"),
+    arp: arpOf([...near, "192.168.2.1", "192.168.1.2"]),
   };
   const runLocal = t.mock.fn(async (program, args) => success(
-    program === "sh" && args[1].includes("xargs") ? args.slice(3).join("\n") : commands[program] ?? "",
+    isLanKnock(program, args) ? args.slice(3).join("\n") : commands[program] ?? "",
   ));
   const dialog = await computersDialog({ exec: runLocal, hc: async () => success('{"machines":[]}') }, true);
   const knocks = () => runLocal.mock.calls
     .map(({ arguments: args }) => args)
-    .filter(([program, argv]) => program === "sh" && argv[1].includes("xargs"))
+    .filter(([program, argv]) => isLanKnock(program, argv))
     .map(([, argv]) => Array.from(argv.slice(3)));
   return { ...dialog, near, rest, knocks, commands };
 };

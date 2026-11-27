@@ -4,11 +4,11 @@ import { theme, props, closeOverlay, exec, hc, home, readTextFile, run, shared, 
 import { localName } from "./platform-host.js";
 import { pieces, runs } from "./pieces.js";
 import { findExplainer, explainWith } from "./explain.js";
-import { scanNearby } from "./nearby-scan.js";
+import { scanNearby, homesOf } from "./nearby-scan.js";
 import { lanOf } from "./nearby.js";
 import { lanProbeArgs, lanRecord, resolvedHost } from "./lan-route.js";
 import { setupPrompt } from "./setup.js";
-import { focusOn, tryOrAsync, afterMount } from "./pure.js";
+import { focusOn, tryOrAsync, afterMount, bounded } from "./pure.js";
 import { G, T, LH, DIALOG, tokens } from "./ui.js";
 import { button, quietLink } from "./ui-button.js";
 import { dialog } from "./ui-dialog.js";
@@ -20,10 +20,11 @@ import { code } from "./ui-code.js";
 import { hcError, needsLogin, listedMachines, machineRecord, canRestore, addArgs as restoreArgs, rmArgs } from "./machines.js";
 import {
   findTailscale, planFor, choiceOf, addArgs, probeArgs, forgetArgs, reachOf, keySetup, advice, isAdded,
-  sshConfigHosts, includesOf, splitTarget, validTarget, aliasOf, usesTailscaleSsh, nearbyOnly,
+  sshConfigHosts, includesOf, splitTarget, destinationOf, validTarget, aliasOf, usesTailscaleSsh, nearbyOnly,
 } from "./reach.js";
 
 const PROBE_MS = 15000;
+const HOME_WAIT_MS = 5000;
 const FDA_PANE = "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles";
 const failed = (error) => ({ code: 1, stdout: "", stderr: String(error?.message ?? error) });
 const OS_WORD = { macos: "Mac", linux: "Linux", windows: "Windows", freebsd: "FreeBSD" };
@@ -63,6 +64,10 @@ export default class Computers extends View {
     this.searching = runs("computers.network", pieces(shared));
     this.nearby = this.searching ? freshNearby() : null;
     this.dropped = {};
+    this.homes = new Map();
+    this.homesReady = null;
+    this.homeRound = 0;
+    this.timer = cx.timer;
     this.explainer = undefined;
     this.jobs = {};
     this.macs = {};
@@ -71,7 +76,7 @@ export default class Computers extends View {
     this.typed.on("change", (_e, cx) => cx.notify());
     this.typed.on("submit", (_e, cx) => this.addTyped(cx));
     cx.spawn(async (cx) => {
-      const [explainer] = await Promise.all([findExplainer(), this.discover()]);
+      const [explainer] = await Promise.all([findExplainer(), this.discoverAll(cx)]);
       this.explainer = explainer;
       cx.notify();
     });
@@ -100,6 +105,30 @@ export default class Computers extends View {
     return this.net?.peers ?? [];
   }
 
+  async findHomes(cx) {
+    const round = this.homeRound + 1;
+    this.homeRound = round;
+    const names = [...this.peers().filter((peer) => peer.online).map((peer) => peer.name), ...this.shownHosts().map((host) => host.alias)];
+    const homes = await homesOf(this.platform, names, cx.timer);
+    if (round !== this.homeRound) return;
+    this.homes = homes;
+    cx.notify();
+  }
+
+  async withHome(plan) {
+    if (plan.lan) return plan;
+    await bounded(this.homesReady ?? Promise.resolve(), this.timer, HOME_WAIT_MS);
+    const host = splitTarget(destinationOf(plan.target).dest).host;
+    const ip = this.homes.get(plan.name) ?? this.homes.get(host);
+    return ip ? { ...plan, name: plan.name || host, lan: ip, user: plan.user ?? splitTarget(plan.target).user } : plan;
+  }
+
+  discoverAll(cx) {
+    const discovered = this.discover();
+    this.homesReady = discovered.then(() => this.findHomes(cx)).catch(() => {});
+    return discovered;
+  }
+
   async refresh() {
     this.added = listedMachines(await tryOrAsync(() => hc(["machine", "ls", "--json"])));
   }
@@ -116,7 +145,7 @@ export default class Computers extends View {
     this.net = undefined;
     cx.notify();
     cx.spawn(async (cx) => {
-      await this.discover();
+      await this.discoverAll(cx);
       cx.notify();
     });
   }
@@ -172,7 +201,8 @@ export default class Computers extends View {
     return probe.code === 0;
   }
 
-  async connect(key, given) {
+  async connect(key, planned) {
+    const given = this.jobs[key]?.choice?.record ? planned : await this.withHome(planned);
     const tried = given.probe && !(await this.answersAtHome(given)) ? await this.probe([given.target, ...(given.also ?? [])].filter(Boolean)) : null;
     const chosen = tried ? { ...given, target: tried.target } : given;
     this.jobs[key] = { ...this.jobs[key], plan: chosen };
@@ -363,7 +393,7 @@ export default class Computers extends View {
 
   tailnetSection(c) {
     if (this.net === undefined) return [this.heading(c, "Tailscale"), skeletonOf("computers-tailnet-loading", c, { shape: "row", count: 2 })];
-    if (this.net === null) return this.tailnetNote(c, "Tailscale isn't on this computer. Where it is, your computers show up here by themselves.");
+    if (this.net === null) return [];
     if (this.net.state !== "Running") return this.tailnetNote(c, "Tailscale is off on this computer. Turn it on and your computers show up here.");
     const peers = this.peers();
     if (!peers.length) return this.tailnetNote(c, "No other computer is on your tailnet yet.");
@@ -380,7 +410,7 @@ export default class Computers extends View {
   }
 
   peerFacts(peer) {
-    return { alias: this.aliasFor(peer), lan: lanOf(peer, this.nearby ?? []) };
+    return { alias: this.aliasFor(peer), lan: lanOf(peer, this.nearby ?? []) || this.homes.get(peer.name) || "" };
   }
 
   aliasFor(peer) {
@@ -393,7 +423,8 @@ export default class Computers extends View {
   }
 
   nearbyHosts() {
-    return nearbyOnly(this.nearby ?? [], { peers: this.peers(), hosts: this.hosts ?? [], added: [] });
+    const home = new Set(this.homes.values());
+    return nearbyOnly(this.nearby ?? [], { peers: this.peers(), hosts: this.hosts ?? [], added: [] }).filter((host) => !home.has(host.ip));
   }
 
   addedSection(c) {
@@ -413,7 +444,7 @@ export default class Computers extends View {
     const hosts = this.nearbyHosts();
     const looking = this.searching ? [skeletonOf("computers-nearby-loading", c, { shape: "row", count: hosts.length ? 1 : 2 })] : [];
     const sweep = this.searching || this.swept ? [] : [div().py(G.xs).child(quietLink("computers-sweep", "Search this network", (cx) => this.search(cx, true), c))];
-    if (!hosts.length && !looking.length) return [this.heading(c, "On this network"), this.note(c, "No other computer on this network answers ssh."), ...sweep];
+    if (!hosts.length && !looking.length) return [this.heading(c, "On this network"), ...(this.homes.size ? [] : [this.note(c, "No other computer on this network answers ssh.")]), ...sweep];
     return [this.heading(c, "On this network"), ...hosts.map((h) => this.computer(c, {
       key: `lan:${h.ip}`, icon: osIcon(h.os), name: h.name || h.ip, ip: h.ip,
       facts: [h.os, h.name ? h.ip : null],
@@ -428,7 +459,7 @@ export default class Computers extends View {
     if (!hosts.length) return [];
     return [this.heading(c, "From your ssh config"), ...hosts.map((h) => this.computer(c, {
       key: `ssh:${h.alias}`, icon: "server", name: h.alias,
-      facts: [[h.user, h.hostname].filter(Boolean).join("@")],
+      facts: [[h.user, h.hostname].filter(Boolean).join("@"), this.homes.has(h.alias) ? "On this network" : null],
       choice: { peer: null, target: h.alias, name: "" },
       done: isAdded(this.added, { name: h.alias, target: h.alias }),
       about: { name: h.alias },

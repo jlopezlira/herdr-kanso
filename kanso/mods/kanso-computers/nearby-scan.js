@@ -1,7 +1,7 @@
 import { exec } from "herdr";
 import { powershell, psQuote } from "./platform-command.js";
 import { bounded, tryOrAsync } from "./pure.js";
-import { interfacesOf, neighborsOf, nearOf, candidates, foundHosts } from "./nearby.js";
+import { interfacesOf, neighborsOf, nearOf, candidates, foundHosts, homeAddresses } from "./nearby.js";
 
 const READ_MS = 5000;
 const KNOCKS_MS = 45000;
@@ -27,6 +27,12 @@ const windowsKnocks = (_platform, ips) => powershell(exec, `$all = @(${ips.map(p
   + "try { [void][Threading.Tasks.Task]::WaitAll(@($all.task), 2000) } catch {}; $all | Where-Object { $_.task.Status -eq 'RanToCompletion' } | ForEach-Object { $_.ip }");
 const KNOCKS = { windows: windowsKnocks };
 
+const RESOLVE_MS = 3000;
+const RESOLVE = {
+  macos: (name) => exec("dscacheutil", ["-q", "host", "-a", "name", `${name}.local`], { timeout: RESOLVE_MS }),
+  linux: (name) => exec("getent", ["ahosts", `${name}.local`], { timeout: RESOLVE_MS }),
+};
+
 const textOf = async (read, timer, ms = READ_MS) => String((await bounded(tryOrAsync(read), timer, ms))?.stdout ?? "");
 
 const knockAll = async (platform, ips, timer) => {
@@ -46,4 +52,17 @@ export async function scanNearby(platform, timer, onNear = () => {}, { whole = f
   if (!whole) return foundHosts(first, neighbors);
   const rest = await knockAll(platform, candidates(interfaces, neighbors).filter((ip) => !near.includes(ip)), timer);
   return foundHosts([...first, ...rest], neighbors);
+}
+
+const homeOf = async (platform, name, timer) => {
+  const addresses = homeAddresses(await textOf(() => RESOLVE[platform](name), timer, RESOLVE_MS));
+  const answered = await knockAll(platform, addresses, timer);
+  const ip = addresses.find((address) => answered.includes(address));
+  return ip ? [[name, ip]] : [];
+};
+
+export async function homesOf(platform, names, timer) {
+  if (!RESOLVE[platform]) return new Map();
+  const found = await Promise.all([...new Set(names.filter((name) => /^[a-z0-9][a-z0-9-]*$/i.test(name)))].map((name) => homeOf(platform, name, timer)));
+  return new Map(found.flat());
 }
