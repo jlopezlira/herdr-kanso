@@ -653,6 +653,28 @@ test("Tasks groups plan steps by computer and agent, in creation order, with wor
   ]);
 });
 
+test("An ended agent's step written before its session was known joins that session's plan, and older steps stay apart.", async () => {
+  const { plansOf } = await load("kanso-panel/todo.js", ["plansOf"]);
+  const step = (id, created, by_since) => ({ ...storedTodo(shop.id, { id, created, by: terminalId }), gone: true, by_since });
+  const plans = plansOf([step("before", 1000, null), step("first", 5000, null), step("second", 6000, 4000)]);
+  same(plans.map((plan) => plan.steps.map((s) => s.id)), [["first", "second"], ["before"]]);
+});
+
+test("An Undo that finishes after another Clear leaves the newer Undo in place.", async () => {
+  const { Tasks } = await load("kanso-panel/tasks.js", ["Tasks"]);
+  let finish;
+  const slow = new Promise((resolve) => { finish = resolve; });
+  const view = Object.assign(Object.create(Tasks.prototype), { byMachine: () => slow, read: async () => false });
+  const cx = { notify() {}, spawn: (work) => work(cx) };
+  view.cleared = { place: "shop", plans: 1, steps: [{ id: "a", on: "" }] };
+  view.undoClear(cx);
+  const newer = { place: "acme", plans: 1, steps: [{ id: "b", on: "" }] };
+  view.cleared = newer;
+  finish(true);
+  await view.writing;
+  assert.equal(view.cleared, newer);
+});
+
 const iconsIn = (element) => svgsOf(element).map((path) => path.split("/").at(-1));
 const endedRows = (panel) => all(panel, ({ tag }) => tag?.startsWith("tasks-ended-"));
 const planWith = (panel, subject) => {

@@ -329,7 +329,7 @@ export class Tasks {
     const value = (v) => (typeof v === "number" ? String(Math.round(v)) : q(v ?? null));
     this.queued(cx, async () => {
       const ok = await this.byMachine(steps, (mine) => mine.map((s) => `INSERT OR IGNORE INTO todos(${cols.join(",")}) VALUES(${cols.map((k) => value(s[k])).join(",")});`).join("\n"));
-      this.cleared = ok ? null : { ...cleared, undoing: false, failed: true };
+      if (this.cleared?.steps === steps) this.cleared = ok ? null : { ...cleared, undoing: false, failed: true };
     });
   }
 
