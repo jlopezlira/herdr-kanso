@@ -1,6 +1,4 @@
 import { exec } from "herdr";
-import { locateOn } from "./conversation-on.js";
-import { agentHint } from "./conversation-at.js";
 import { paths } from "./platform-paths.js";
 import { machineOf } from "./own-tree.js";
 import { bounded, LATE } from "./pure.js";
@@ -26,14 +24,16 @@ export function editsIn(text, cwd) {
 }
 
 export function overlaps(group, dirty, editedBy, committedAt = {}) {
-  const found = {};
-  for (const file of dirty) {
-    const since = committedAt[file] ?? 0;
-    const editors = group.filter((a) => (editedBy[a.address] ?? []).some((e) => same(e.file, file) && e.at > since));
-    if (editors.length < 2) continue;
-    for (const a of editors) found[a.address] = [...(found[a.address] ?? []), { file, others: editors.filter((b) => b !== a) }];
-  }
-  return found;
+  const shared = dirty.map((file) => ({ file, editors: group.filter((a) => (editedBy[a.address] ?? []).some((e) => same(e.file, file) && e.at > (committedAt[file] ?? 0))) }))
+    .filter(({ editors }) => editors.length > 1);
+  return Object.fromEntries(group.map((a) => [a.address, shared.filter(({ editors }) => editors.includes(a)).map(({ file, editors }) => ({ file, others: editors.filter((b) => b !== a) }))])
+    .filter(([, files]) => files.length));
+}
+
+export function groupsOf(list, cwdOf) {
+  const live = list.filter((a) => a.program?.agent && cwdOf(a)).map((a) => ({ a, machine: machineOf(a.address), cwd: cwdOf(a) }));
+  return [...new Set(live.map((x) => x.machine))].map((machine) => live.filter((x) => x.machine === machine))
+    .filter((agents) => agents.length > 1).map((agents) => ({ key: agents[0].machine, machine: agents[0].machine, agents }));
 }
 
 export function warningOf(found, nameOf) {
@@ -59,11 +59,10 @@ export class SharedEdits {
     return this.roots.get(key);
   }
 
-  async editedBy(a, machine, cwd) {
-    const where = await timed(locateOn(machine || null, a.address, agentHint(a)), this.timer);
-    if (!where?.file) return [];
-    const key = `${machine}\0${where.file}`, kept = this.read.get(key) ?? { size: 0, edits: [] };
-    const readFrom = (from) => timed(exec("sh", ["-c", EDITED, "sh", where.file, String(from)], on(machine)), this.timer);
+  async editedBy(transcript, machine, cwd) {
+    if (!transcript) return [];
+    const key = `${machine}\0${transcript}`, kept = this.read.get(key) ?? { size: 0, edits: [] };
+    const readFrom = (from) => timed(exec("sh", ["-c", EDITED, "sh", transcript, String(from)], on(machine)), this.timer);
     const r = await readFrom(kept.size);
     if (r?.code !== 0) return kept.edits;
     const got = editsIn(r.stdout, cwd);
@@ -82,20 +81,23 @@ export class SharedEdits {
     return Object.fromEntries(times);
   }
 
-  async scan(list, cwdOf, nameOf) {
-    const live = list.filter((a) => a.program?.agent && cwdOf(a));
-    const rooted = await Promise.all(live.map(async (a) => ({ a, machine: machineOf(a.address), cwd: cwdOf(a), root: await this.rootOf(machineOf(a.address), cwdOf(a)) })));
-    const keyOf = (x) => `${x.machine}\0${paths.canonical(x.root)}`;
-    const groups = [...new Set(rooted.filter((x) => x.root).map(keyOf))].map((key) => rooted.filter((x) => x.root && keyOf(x) === key)).filter((g) => g.length > 1);
-    const warned = await Promise.all(groups.map(async (g) => {
-      const { machine, root } = g[0];
+  async checkout(machine, agents) {
+    const rooted = await Promise.all(agents.map(async (x) => ({ ...x, root: await this.rootOf(machine, x.cwd) })));
+    const keyOf = (x) => paths.canonical(x.root);
+    return [...new Set(rooted.filter((x) => x.root).map(keyOf))].map((key) => rooted.filter((x) => x.root && keyOf(x) === key)).filter((g) => g.length > 1);
+  }
+
+  async scan(groups, fileOf, nameOf) {
+    const checkouts = (await Promise.all(groups.map(async ({ machine, agents }) => (await this.checkout(machine, agents)).map((g) => ({ machine, agents: g }))))).flat();
+    const warned = await Promise.all(checkouts.map(async ({ machine, agents }) => {
+      const root = agents[0].root;
       const status = await timed(exec("git", ["-C", root, "status", "--porcelain=v1", "-z", "--untracked-files=all"], on(machine)), this.timer);
       const dirty = status?.code === 0 ? changedIn(String(status.stdout)).map((file) => paths.join(root, file)) : [];
       if (!dirty.length) return {};
-      const edited = Object.fromEntries(await Promise.all(g.map(async (x) => [x.a.address, await this.editedBy(x.a, machine, x.cwd)])));
-      const touched = dirty.filter((file) => g.filter((x) => edited[x.a.address].some((e) => same(e.file, file))).length > 1);
+      const edited = Object.fromEntries(await Promise.all(agents.map(async (x) => [x.a.address, await this.editedBy(fileOf(x.a), machine, x.cwd)])));
+      const touched = dirty.filter((file) => agents.filter((x) => edited[x.a.address].some((e) => same(e.file, file))).length > 1);
       if (!touched.length) return {};
-      const found = overlaps(g.map((x) => x.a), touched, edited, await this.committed(machine, root, touched));
+      const found = overlaps(agents.map((x) => x.a), touched, edited, await this.committed(machine, root, touched));
       return Object.fromEntries(Object.entries(found).map(([address, files]) => [address, warningOf(files, nameOf)]));
     }));
     return Object.assign({}, ...warned);

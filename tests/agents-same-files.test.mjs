@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { appendFile, realpath, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, realpath, writeFile } from "node:fs/promises";
 import { join, posix } from "node:path";
 import { load, same, success, failure, exec, gitOk, temporary, committedRepo, themed, KIT_NIGHT, drawingHost, texts, tipsOf, one } from "./helpers.mjs";
 import { loadSpaces } from "./mod-fixtures.mjs";
@@ -21,20 +21,21 @@ const file = `${root}/src/main.js`;
 const nameOf = (agent) => agent.title;
 const cwdOf = (agent) => agent.cwd;
 const sharedEdits = (names, host) => load("kanso-spaces/shared-edits.js", names, host);
-const scanner = async (host, timer) => {
-  const { SharedEdits } = await sharedEdits(["SharedEdits"], {
-    locateOn: async (_machine, address) => ({ file: address }),
-    ...host,
-  });
-  return new SharedEdits(timer);
+const scanner = async (run, { timer, fileOf = (agent) => agent.address } = {}) => {
+  const { SharedEdits, groupsOf } = await sharedEdits(["SharedEdits", "groupsOf"], { exec: run });
+  const shared = new SharedEdits(timer);
+  return {
+    scan: (agents = [first, second]) => shared.scan(groupsOf(agents, cwdOf), fileOf, nameOf),
+    edits: (agent) => shared.editedBy(fileOf(agent), "", agent.cwd),
+  };
 };
-const scanPair = (scan, group = [first, second]) => scan.scan(group, cwdOf, nameOf);
 const iso = (time = at) => new Date(time).toISOString();
 const editsOf = (...files) => files.map((file) => ({ at, file }));
 const editRows = (...files) => ["256", ...files.map((file) => `${iso()}\t${file}`), ""].join("\n");
-const pairWarnings = (path = file) => Object.fromEntries([first, second].map((agent, i, pair) => {
+const pairWarnings = (path = file, pair = [first, second]) => Object.fromEntries(pair.map((agent, i) => {
   const other = pair[1 - i].title;
-  return [agent.address, { text: `Also changed by ${other}: ${posix.basename(path)}`, tip: `${path}: ${other}` }];
+  const base = posix.basename(path.replaceAll("\\", "/"));
+  return [agent.address, { text: `Also changed by ${other}: ${base}`, tip: `${path}: ${other}` }];
 }));
 
 test("An agent in the project or a subfolder counts, but an agent in its own worktree, a remote agent and a shell do not.", async () => {
@@ -147,43 +148,125 @@ test("Three editors see the other two, and the tooltip names everyone on each ov
   });
 });
 
-test("The scan groups agents by Git checkout and compares absolute and relative edits against renamed and untracked files.", async () => {
-  const changed = `${root}/new notes.md`;
-  const local = { ...third, cwd: nested };
-  const machine = "dev";
-  const onDev = (agent) => ({ ...agent, address: `${machine}/${agent.address}` });
-  const agents = [onDev(first), onDev(second), onDev(local), first];
-  const roots = [], statuses = [], located = [], logs = [];
-  const output = {
-    [agents[0].address]: editRows("src/main.js", "new notes.md", "src/old.js", "solo.js"),
-    [agents[1].address]: editRows("main.js", changed, "old.js"),
-  };
-  const scan = await scanner({
-    locateOn: async (where, address, hint) => {
-      located.push([where, address, hint]);
-      return { file: address };
-    },
-    exec: async (command, args, options) => {
-      if (command === "sh") return success(output[args[3]]);
-      const [, cwd, action, ...flags] = args;
-      if (action === "rev-parse") {
-        roots.push([command, cwd, flags, options.on]);
-        return success(cwd === nested ? nested : root);
-      }
-      if (action === "log") {
-        logs.push([cwd, flags, options.on]);
-        return success("");
-      }
-      statuses.push([command, cwd, flags, options.on]);
-      return success("R  src/main.js\0src/old.js\0?? new notes.md\0 M solo.js\0");
-    },
+const machine = "dev";
+const onDev = (agent) => ({ ...agent, address: `${machine}/${agent.address}` });
+
+const groupsFor = async (agents) => {
+  const { groupsOf } = await sharedEdits(["groupsOf"]);
+  return groupsOf(agents, cwdOf);
+};
+
+test("Agents on different computers do not share a group even when their paths match.", async () => {
+  const local = [first, second], remote = local.map(onDev);
+  same(await groupsFor([...local, ...remote]), [local, remote].map((agents, i) => {
+    const key = i ? machine : "";
+    return { key, machine: key, agents: agents.map((a) => ({ a, machine: key, cwd: a.cwd })) };
+  }));
+});
+
+test("One agent on a computer does not form a group.", async () => {
+  same(await groupsFor([first, onDev(second)]), []);
+});
+
+const tmpCheckout = "/tmp/app";
+const aliases = [tmpCheckout, `/private${tmpCheckout}`];
+const inFolders = (...folders) => folders.map((cwd, i) => ({ ...[first, second, third][i], cwd }));
+const scanEdits = (gitRun, edits) => scanner((command, args, options) => command === "sh"
+  ? Promise.resolve(success(editRows(...(edits[args[3]] ?? []))))
+  : gitRun(command, args, options));
+const sharedFileEdits = (agents, changed) => Object.fromEntries(agents.map(({ address }) => [address, [changed]]));
+
+for (const [name, folders, roots] of [
+  ["Agents in the same folder are compared in one checkout.", [root, root], [root, root]],
+  ["An agent in a subfolder is compared with an agent at the checkout root.", [second.cwd, root], [root, root]],
+  ["Git roots using the two macOS temporary folder aliases are compared in one checkout.", aliases, aliases],
+]) {
+  test(name, async () => {
+    const agents = inFolders(...folders);
+    const changed = `${roots[0]}/src/main.js`;
+    const statuses = [];
+    const { scan } = await scanEdits(async (_command, [, cwd, action]) => {
+      if (action === "rev-parse") return success(roots[folders.indexOf(cwd)]);
+      if (action !== "status") return success("");
+      statuses.push(cwd);
+      return success(" M src/main.js\0");
+    }, sharedFileEdits(agents, `${roots[1]}/src/main.js`));
+    same(await scan(agents), pairWarnings(changed, agents));
+    assert.deepEqual(statuses, [roots[0]]);
   });
-  const warnings = await scanPair(scan, agents);
-  same(roots, agents.map((agent) => ["git", agent.cwd, ["--show-toplevel"], agent.address.includes("/") ? machine : null]));
-  same(statuses, [["git", root, ["--porcelain=v1", "-z", "--untracked-files=all"], machine]]);
-  same(located, agents.slice(0, 2).map((agent) => [machine, agent.address, agent.program.key]));
-  same(logs, [file, changed].map((path) => [root, ["-1", "--format=%cI", "--", path], machine]));
-  same(warnings, Object.fromEntries(agents.slice(0, 2).map((agent, i) => {
+}
+
+const realCheckout = async (t) => realpath((await committedRepo(t)).repo);
+
+const dirtyCheckout = async (t) => {
+  const checkout = await realCheckout(t);
+  const changed = join(checkout, "draft.txt");
+  await writeFile(changed, "not committed\n");
+  return { checkout, changed };
+};
+
+test("Agents in sibling folders of one checkout are warned about their shared edit.", async (t) => {
+  const { checkout, changed } = await dirtyCheckout(t);
+  const folders = ["frontend", "backend"].map((folder) => join(checkout, folder));
+  await Promise.all(folders.map((folder) => mkdir(folder)));
+  const agents = inFolders(...folders);
+  const { scan } = await scanEdits(exec, sharedFileEdits(agents, changed));
+  same(await scan(agents), pairWarnings(changed, agents));
+});
+
+test("An agent in a nested Git worktree is not counted as an editor in the enclosing checkout.", async (t) => {
+  const { checkout, changed } = await dirtyCheckout(t);
+  const worktree = join(checkout, ".worktrees", "topic");
+  await gitOk()(checkout, "worktree", "add", "--detach", worktree);
+  const agents = inFolders(checkout, checkout, worktree);
+  const { scan } = await scanEdits(exec, sharedFileEdits(agents, changed));
+  same(await scan(agents), pairWarnings(changed, agents.slice(0, 2)));
+});
+
+test("Git on a remote computer receives the raw temporary folder paths.", async () => {
+  const agents = inFolders(tmpCheckout, `${tmpCheckout}/src`).map(onDev);
+  const changed = `${agents[1].cwd}/main.js`;
+  const lookups = [];
+  const { scan } = await scanEdits(async (_command, [, cwd, action], { on }) => {
+    assert.equal(on, machine);
+    if (action === "rev-parse") {
+      lookups.push(cwd);
+      return agents.some((agent) => agent.cwd === cwd) ? success(tmpCheckout) : failure("Not a directory");
+    }
+    assert.equal(cwd, tmpCheckout);
+    return success(action === "status" ? " M src/main.js\0" : "");
+  }, sharedFileEdits(agents, changed));
+  same(await scan(agents), pairWarnings(changed, agents));
+  assert.deepEqual(lookups, agents.map(cwdOf));
+});
+
+test("The scan checks Git status once per checkout and compares known transcripts with renamed and untracked files.", async () => {
+  const dir = second.cwd;
+  const changed = `${dir}/new notes.md`;
+  const agents = [onDev({ ...first, cwd: dir }), onDev({ ...second, cwd: `${dir}/tools` })];
+  const fileOf = (agent) => `/logs/${agent.address}.jsonl`;
+  const requests = [], reads = [];
+  const output = {
+    [fileOf(agents[0])]: editRows("main.js", "new notes.md", "old.js", "solo.js"),
+    [fileOf(agents[1])]: editRows("../main.js", changed, "../old.js"),
+  };
+  const porcelain = "R  src/main.js\0src/old.js\0?? src/new notes.md\0 M src/solo.js\0";
+  const { scan } = await scanner(async (command, args, { on }) => {
+    if (command === "sh") {
+      reads.push([args[3], on]);
+      return success(output[args[3]]);
+    }
+    requests.push([command, args, on]);
+    return success({ "rev-parse": root, status: porcelain, log: "" }[args[2]]);
+  }, { fileOf });
+  const warnings = await scan([...agents, first]);
+  same(requests, [
+    ...agents.map(({ cwd }) => ["git", ["-C", cwd, "rev-parse", "--show-toplevel"], machine]),
+    ["git", ["-C", root, "status", "--porcelain=v1", "-z", "--untracked-files=all"], machine],
+    ...[file, changed].map((path) => ["git", ["-C", root, "log", "-1", "--format=%cI", "--", path], machine]),
+  ]);
+  same(reads, agents.map((agent) => [fileOf(agent), machine]));
+  same(warnings, Object.fromEntries(agents.map((agent, i) => {
     const other = agents[1 - i].title;
     return [agent.address, { text: `Also changed by ${other}: main.js and 1 more`, tip: `${file}: ${other}\n${changed}: ${other}` }];
   })));
@@ -192,26 +275,22 @@ test("The scan groups agents by Git checkout and compares absolute and relative 
 test("Rename and copy source records never make unrelated clean paths look dirty.", async () => {
   const porcelain = "R  src/main.js\0src/untouched.js\0 C copy.js\0src/clean.js\0";
   const edits = editRows(file, `${root}/untouched.js`, `${root}/clean.js`);
-  const scan = await scanner({
-    exec: async (command, args) => {
-      if (command === "sh") return success(edits);
-      return success(args.includes("status") ? porcelain : root);
-    },
+  const { scan } = await scanner(async (command, args) => {
+    if (command === "sh") return success(edits);
+    return success(args.includes("status") ? porcelain : root);
   });
-  same(await scanPair(scan), pairWarnings());
+  same(await scan(), pairWarnings());
 });
 
 const posixScan = { skip: process.platform === "win32" && "The transcript scan uses POSIX sh" };
 const jsonl = (...entries) => entries.map((entry) => JSON.stringify(entry) + "\n").join("");
 const transcripts = async (t, run = exec) => {
   const dir = await temporary(t);
-  const fileOf = (address) => join(dir, `${address}.jsonl`);
-  const scan = await scanner({ exec: run, locateOn: async (_machine, address) => ({ file: fileOf(address) }) });
+  const fileOf = (agent) => join(dir, `${agent.address}.jsonl`);
   return {
-    write: (agent, ...entries) => writeFile(fileOf(agent.address), jsonl(...entries)),
-    append: (agent, ...entries) => appendFile(fileOf(agent.address), jsonl(...entries)),
-    edits: (agent) => scan.editedBy(agent, "", agent.cwd),
-    scan,
+    ...await scanner(run, { fileOf }),
+    write: (agent, ...entries) => writeFile(fileOf(agent), jsonl(...entries)),
+    append: (agent, ...entries) => appendFile(fileOf(agent), jsonl(...entries)),
   };
 };
 const toolCall = (name, input, time = at) => ({
@@ -250,12 +329,10 @@ test("The macOS temporary folder aliases count as the same busy checkout and the
   const group = [{ ...first, cwd: canonical }, { ...second, cwd: `${folder}/src` }];
   const { workingIn } = await load("kanso-spaces/own-tree.js", ["workingIn"]);
   const busy = workingIn(folder, "", { list: group, trees: [{ path: canonical }] }).map((agent) => agent.address);
-  const git = mockGit(folder);
-  const history = await transcripts(t, async (command, args, options) =>
-    args[2] === "rev-parse" && args[1] === canonical ? success(canonical) : git(command, args, options));
+  const history = await transcripts(t, mockGit(canonical));
   await history.write(first, claudeEdit(`/private${changed}`));
   await history.write(second, patchCall("*** Update File: main.js\n"));
-  same({ busy, warnings: await scanPair(history.scan, group) }, {
+  same({ busy, warnings: await history.scan(group) }, {
     busy: group.map((agent) => agent.address), warnings: pairWarnings(`/private${changed}`),
   });
 });
@@ -264,12 +341,11 @@ test("A Claude Code edit counts even when replace_all comes before the file path
   const history = await transcripts(t, mockGit());
   await history.write(first, toolCall("Edit", { replace_all: true, file_path: file, old_string: "a", new_string: "b" }));
   await history.write(second, patchCall("*** Update File: main.js\n"));
-  same(await scanPair(history.scan), pairWarnings());
+  same(await history.scan(), pairWarnings());
 });
 
 test("An agent's edit before the file's last commit does not warn about another agent's later edit.", posixScan, async (t) => {
-  const { repo } = await committedRepo(t);
-  const checkout = await realpath(repo);
+  const checkout = await realCheckout(t);
   const changed = join(checkout, "readme");
   const committedAt = Date.parse(await gitOk()(checkout, "log", "-1", "--format=%cI", "--", changed));
   assert.ok(Number.isFinite(committedAt));
@@ -278,7 +354,7 @@ test("An agent's edit before the file's last commit does not warn about another 
   await history.write(second, claudeEdit(changed, committedAt + 1000));
   await writeFile(changed, "dirty\n");
   const group = [first, second].map((agent) => ({ ...agent, cwd: checkout }));
-  same(await scanPair(history.scan, group), {});
+  same(await history.scan(group), {});
 });
 
 test("The next transcript scan reads only appended bytes and starts over when the transcript shrinks.", posixScan, async (t) => {
@@ -302,68 +378,161 @@ test("The next transcript scan reads only appended bytes and starts over when th
   same({ restarted, next }, { restarted: editsOf(replacement), next: editsOf(replacement) });
 });
 
+const trackScan = async (reply, options) => {
+  const requests = [];
+  const { scan } = await scanner(async (_command, [, cwd, action]) => {
+    requests.push([action, cwd]);
+    return reply(action, requests.length);
+  }, options);
+  return { scan, requests };
+};
+
 test("A failed checkout lookup is retried and the next scan checks for shared edits.", async () => {
-  const checked = [], lookedUp = [];
-  const scan = await scanner({
-    exec: async (_command, [, cwd, action]) => {
-      if (action === "status") {
-        checked.push(cwd);
-        return success("");
-      }
-      lookedUp.push(cwd);
-      return lookedUp.length === 1 ? failure("Git could not find the checkout") : success(root);
-    },
+  const { scan, requests } = await trackScan((action, count) => {
+    if (count === 1) return failure("Git could not find the checkout");
+    return success(action === "rev-parse" ? root : "");
   });
-  await scanPair(scan);
-  assert.deepEqual(checked, []);
-  await scanPair(scan);
-  assert.deepEqual(lookedUp, [first.cwd, second.cwd, first.cwd]);
-  assert.deepEqual(checked, [root]);
+  await scan();
+  const firstPass = [["rev-parse", root], ["rev-parse", second.cwd]];
+  assert.deepEqual(requests, firstPass);
+  await scan();
+  assert.deepEqual(requests.slice(firstPass.length), [["rev-parse", root], ["status", root]]);
 });
 
 test("An unanswered Git status times out and does not prevent the next scan.", async () => {
-  const timers = [], requests = [];
-  const scan = await scanner({
-    exec: async (_command, [, cwd, action]) => {
-      if (action === "rev-parse") return success(root);
-      requests.push([action, cwd]);
-      return requests.length === 1 ? new Promise(() => {}) : success("");
-    },
-  }, { after: (ms, fn) => timers.push([ms, fn]) });
-  const pending = scanPair(scan);
+  const timers = [];
+  const { scan, requests } = await trackScan((action, count) => {
+    if (action === "rev-parse") return success(root);
+    return count === 3 ? new Promise(() => {}) : success("");
+  }, { timer: { after: (ms, fn) => timers.push([ms, fn]) } });
+  const pending = scan();
   await new Promise(setImmediate);
-  assert.deepEqual(requests, [["status", root]]);
+  const firstPass = [["rev-parse", root], ["rev-parse", second.cwd], ["status", root]];
+  assert.deepEqual(requests, firstPass);
   const [ms, expire] = timers.at(-1) ?? [];
   assert.equal(ms, 15_000);
   expire();
   same(await Promise.race([pending, new Promise((resolve) => setImmediate(() => resolve("still waiting")))]), {});
-  await scanPair(scan);
-  assert.deepEqual(requests.map(([action]) => action), ["status", "status"]);
+  await scan();
+  assert.deepEqual(requests.slice(firstPass.length), [["status", root]]);
+});
+
+const idlePair = [first, second].map((agent) => ({ ...agent, status: "idle" }));
+const workingPair = [{ ...idlePair[0], status: "working" }, idlePair[1]];
+const otherCheckout = "/projects/other";
+const sharingSidebar = async () => {
+  let now = at, list = idlePair, dirty = false;
+  const commands = [];
+  const fileOf = (agent) => `/logs/${agent.address}.jsonl`;
+  const threads = Object.fromEntries(idlePair.map((agent) => [agent.address, { file: fileOf(agent) }]));
+  const { Spaces } = await loadSpaces({
+    Date: class extends Date { static now() { return now; } },
+    agents: () => list,
+    spaces: () => [],
+    exec: async (command, args) => {
+      const action = command === "git" ? args[2] : command;
+      commands.push(action);
+      const checkout = args[1] === otherCheckout ? otherCheckout : root;
+      const result = { "rev-parse": checkout, status: dirty ? " M src/main.js\0" : "", log: "" };
+      if (action === "sh") return success(Object.values(threads).some(({ file }) => file === args[3]) ? editRows(file) : "");
+      return success(result[action]);
+    },
+  });
+  const view = Object.assign(new Spaces(), { names: { book: {} }, threads });
+  return {
+    view,
+    setDirty: (value) => { dirty = value; },
+    tick: async (elapsed, next = list) => {
+      now = at + elapsed;
+      list = next;
+      const start = commands.length;
+      let pending, notifies = 0;
+      const notify = () => { notifies += 1; };
+      view.checkShared({ notify, spawn: (task) => { pending = task({ notify }); } });
+      await pending;
+      return { commands: commands.slice(start), notifies };
+    },
+  };
+};
+
+const sharedTick = 20_000;
+const fiveMinutes = 5 * 60_000;
+
+test("An idle group starts no shared-edit processes.", async () => {
+  const { tick } = await sharingSidebar();
+  const idle = await tick(0);
+  const stillIdle = await tick(sharedTick);
+  assert.deepEqual([idle.commands, stillIdle.commands], [[], []]);
+});
+
+test("An agent's finished turn triggers a scan before the five-minute rescan.", async () => {
+  const { tick } = await sharingSidebar();
+  await tick(0, workingPair);
+  const continuing = await tick(sharedTick);
+  const ended = await tick(2 * sharedTick, idlePair);
+  const resting = await tick(3 * sharedTick);
+  assert.deepEqual([continuing.commands, ended.commands, resting.commands], [[], ["status"], []]);
+});
+
+test("A continuously working group is rescanned only after five minutes.", async () => {
+  const { tick } = await sharingSidebar();
+  const start = await tick(0, workingPair);
+  const early = await tick(sharedTick);
+  const justBefore = await tick(fiveMinutes - 1);
+  const due = await tick(fiveMinutes);
+  const after = await tick(fiveMinutes + sharedTick);
+  assert.deepEqual(start.commands, ["rev-parse", "rev-parse", "status"]);
+  assert.deepEqual([early.commands, justBefore.commands, due.commands, after.commands], [[], [], ["status"], []]);
+});
+
+for (const [name, remaining, expected] of [
+  ["Both warnings clear without Git when only one agent remains on the computer.", idlePair.slice(0, 1), []],
+  ["Both warnings clear when one agent moves to a different checkout.", [idlePair[0], { ...idlePair[1], cwd: otherCheckout }], ["rev-parse"]],
+]) {
+  test(name, async () => {
+    const { view, setDirty, tick } = await sharingSidebar();
+    setDirty(true);
+    await tick(0, workingPair);
+    await tick(sharedTick, idlePair);
+    same(view.sharedFound, pairWarnings());
+    const { commands, notifies } = await tick(2 * sharedTick, remaining);
+    same(view.sharedFound, {});
+    assert.deepEqual(commands, expected);
+    assert.equal(notifies, 1);
+  });
+}
+
+test("A departed editor's warning clears even when two other agents remain in the checkout.", async () => {
+  const { view, setDirty, tick } = await sharingSidebar();
+  const observer = { ...third, status: "idle" };
+  setDirty(true);
+  await tick(0, [...workingPair, observer]);
+  same(view.sharedFound, pairWarnings());
+  await tick(sharedTick, [...idlePair, observer]);
+  same(view.sharedFound, pairWarnings());
+  const unchanged = await tick(2 * sharedTick);
+  const afterDeparture = await tick(3 * sharedTick, [idlePair[0], observer]);
+  same(view.sharedFound, {});
+  assert.deepEqual(unchanged.commands, []);
+  assert.equal(afterDeparture.notifies, 1);
 });
 
 test("A new or cleared shared-edit warning invalidates the sidebar rows without waiting for other changes.", async () => {
-  const { Spaces } = await loadSpaces({
-    Date: class extends Date { static now() { return at; } },
-    spaces: () => [],
-  });
-  const view = new Spaces();
-  view.names = { book: {} };
-  const warning = { text: "Also changed by Lin: main.js", tip: `${file}: Lin` };
-  const scan = async (found) => {
-    view.shared = { scan: async () => found };
-    let pending, notifies = 0;
-    view.checkShared({ spawn: (task) => { pending = task({ notify: () => { notifies += 1; } }); } });
-    await pending;
-    assert.equal(notifies, 1);
-  };
+  const { view, setDirty, tick } = await sharingSidebar();
   const expectRedraw = () => {
     assert.equal(view.rowsChanged(), true);
     assert.equal(view.rowsChanged(), false);
   };
   expectRedraw();
-  await scan({ [first.address]: warning });
+  setDirty(true);
+  const added = await tick(0, workingPair);
+  same(view.sharedFound, pairWarnings());
+  assert.equal(added.notifies, 1);
   expectRedraw();
-  await scan({});
+  setDirty(false);
+  const cleared = await tick(sharedTick, idlePair);
+  same(view.sharedFound, {});
+  assert.equal(cleared.notifies, 1);
   expectRedraw();
 });
 
