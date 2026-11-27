@@ -42,6 +42,8 @@ import { RECENT, STARTING, keyOf, onceEach, heldBy, startingNow, listedOf, recor
 import { agentHint } from "./conversation-at.js";
 import { heldOn } from "./conversation-on.js";
 import { land } from "./recent.js";
+import { ownTree } from "./own-tree.js";
+import { SharedEdits } from "./shared-edits.js";
 import { tile } from "./tile.js";
 import { views, viewSwitch } from "./view-switch.js";
 import { pullKey, runPull, canWake, enterOpens, sectionMarkOf, sectionCount, rowDirectory, unnamedComputer, threadWord, threadActions, noProjectsOn, sortOf, foldTail, readWord } from "./sidebar-rows.js";
@@ -96,6 +98,7 @@ function placesOf(sp, ps) {
 }
 const CONV_ROWS = 11; // the conversation picker's projects show this many, then scroll
 const RESUME_ROWS = 8;
+const SHARED_MS = 20_000;
 const SKETCHED = Object.freeze({ title: "", cwd: "", at: null });
 // A right click on the item does what a left one does.
 const rightToo = (line) => ({ ...line, onSecondaryClick: line.onClick });
@@ -437,6 +440,7 @@ export default class Spaces extends RetryingView {
     cx.timer.every(ALIVE_MS, (cx) => this.checkTasks(cx));
     // Another window's names and projects arrive.
     cx.timer.every(30000, () => this.loadNames(false).catch(() => {}));
+    cx.timer.every(SHARED_MS, (cx) => this.checkShared(cx));
     // keys.json: ⌃1-9 and ⌃⌥P/S/T arrive here as commands.
     afterMount(cx, (cx) => cx.spawn((cx) => commandLoop(
       () => nextCommand(),
@@ -770,10 +774,19 @@ export default class Spaces extends RetryingView {
     if (this.starting) return;
     this.starting = true;
     const project = registry().find((p) => p.id === place.project) ?? null;
-    viewerFor(place.machine).then((viewed) => {
+    viewerFor(place.machine).then(async (viewed) => {
       const argv = viewed(a?.run ?? null);
-      if (place.tree) openAt(place, place.tree.folder, argv, place.tree.branch);
-      else startIn(place, argv);
+      if (place.tree) { openAt(place, place.tree.folder, argv, place.tree.branch); return; }
+      const own = place.folder && a ? await ownTree(place, a).catch(() => null) : null;
+      const other = own?.busy?.[0];
+      const who = other ? other.title || other.program?.name || "Another agent" : "";
+      if (own?.path) {
+        openAt(place, own.path, argv, own.branch);
+        notify({ title: `${a.name} has its own worktree`, body: `${who} is working in ${place.name ?? "this project"}, so ${a.name} started on branch ${own.branch}.`, level: "info", timeout: 6000 });
+        return;
+      }
+      if (own?.error) notify({ title: `${a.name} shares the folder with ${who}`, body: `Its own worktree could not be made: ${own.error}`, level: "warning", timeout: 8000 });
+      startIn(place, argv);
     });
     this.thenClose(project && a ? this.db().setProjectAgent(project.id, a.key) : null);
   }
@@ -2548,7 +2561,23 @@ export default class Spaces extends RetryingView {
       glow: state.fade ? { pose: state.pose, ...state.fade } : state.pose,
       step: show ? stepOf(a, this.steps, ctx.now) : null,
       tasks: this.showTasks === false || a.sub ? [] : (this.tasks[a.address] ?? []).map((x) => ({ command: x.command, time: duration(Math.max(0, ctx.now - x.start)) })),
+      shared: this.sharedFound?.[a.address] ?? null,
     };
+  }
+
+  checkShared(cx) {
+    if (this.sharing || window()?.active === false) return;
+    this.sharing = true;
+    this.shared ??= new SharedEdits();
+    const shown = panes();
+    const cwdOf = (a) => a.cwd ?? shown.find((p) => p.terminal === a.address)?.cwd ?? null;
+    const nameOf = (a) => this.nameOf(a);
+    cx.spawn(async (cx) => {
+      try {
+        const found = await this.shared.scan(agents(), cwdOf, nameOf).catch(() => ({}));
+        if (JSON.stringify(found) !== JSON.stringify(this.sharedFound ?? {})) { this.sharedFound = found; cx.notify(); }
+      } finally { this.sharing = false; }
+    });
   }
 
   listed(ps, sp, terms) {
