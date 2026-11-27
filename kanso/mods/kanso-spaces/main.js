@@ -455,13 +455,9 @@ export default class Spaces extends RetryingView {
     this.parts = { header: cx.new(Part, looks.header), switch: cx.new(Part, looks.switch), rows: cx.new(Part, looks.rows), footer: cx.new(SidebarFooter, looks.footer) };
     this.drawnLooks = looks;
     this.paintTimer = cx.timer;
-    this.glowReady = new Set();
+    this.glowReady = {};
     this.glows = { working: new Set(), leaving: new Map() };
     this.glowAt = Infinity;
-  }
-
-  *drawnGlowKeys() {
-    for (let row = this.drawnGlow; row; row = row.previous) yield row.key;
   }
 
   redrawGlow() {
@@ -2552,8 +2548,8 @@ export default class Spaces extends RetryingView {
 
   extras(a, ctx, show = true) {
     const key = JSON.stringify([ctx.glowScope ?? a.space, a.address]);
-    const entering = a.status === "working" && !this.glowReady?.has(key);
-    this.drawnGlow = { key, previous: this.drawnGlow };
+    const entering = a.status === "working" && !this.glowReady?.[key];
+    if (this.drawnGlow) this.drawnGlow[key] = true;
     if (entering) this.glowEntry = true;
     return {
       glowEntering: entering,
@@ -3494,9 +3490,9 @@ export default class Spaces extends RetryingView {
     // Every row built once per draw, for every view.
     const asleep = this.sleepingNow(sp, read.terms, ps);
     const rowsCtx = { ...read, asleep, spaces: sp, registry: registry(), spaceIds: new Set(sp.map((w) => w.id)), all: this.listed(ps, sp, read.terms).filter((a) => !asleep.dozing.has(a.address)) };
-    if (this.glowView !== view) this.glowReady = new Set();
+    if (this.glowView !== view) this.glowReady = {};
     this.glowView = view;
-    this.drawnGlow = null;
+    this.drawnGlow = {};
     this.glowEntry = false;
     this.followGlow(rowsCtx.all, read.now);
     const ctx = { ...rowsCtx, rowsBy: new Map(sp.map((w) => [w.id, this.spaceRows(w.id, rowsCtx)])), project: this.projectOf(sp, t) };
@@ -3515,7 +3511,7 @@ export default class Spaces extends RetryingView {
           : view === "agents" ? (collapsed ? this.agentsRail(t, shownSp, shownCtx) : this.agentsView(t, shownSp, ps, shownCtx))
           : view === "threads" ? (collapsed ? this.threadsRail(t, shownSp, shownCtx) : this.threadsView(t, shownSp, ps, shownCtx)) : this.grouped(t, collapsed, shownSp, ps, shownCtx)),
         collapsed ? null : this.awayCard(t, active)])("spaces-rows", tokens(t));
-    this.glowReady = new Set(this.drawnGlowKeys());
+    this.glowReady = this.drawnGlow;
     if (this.glowEntry) this.paintTimer.after(0, () => {
       this.redrawGlow();
     });
