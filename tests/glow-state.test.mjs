@@ -14,7 +14,7 @@ test("A working row fades on first mount and on moving across folds in either di
   assert.equal(release.pose, "release");
   const exit = glowState(release, "done", false, 3);
   const moved = glowState(exit, "blocked", false, 4);
-  assert.ok(moved.fade.opacity < 1 && moved.fade.opacity > 0);
+  assert.equal(moved.fade.opacity, ((exit.next - 4) / (exit.next - 3)) ** 3);
   assert.equal(glowState(moved, "blocked", false, 5).next, exit.next);
   assert.equal(exit.pose, "leaving");
   assert.equal(glowState(exit, "done", false, exit.next - 1).next, exit.next);

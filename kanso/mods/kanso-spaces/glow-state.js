@@ -8,7 +8,8 @@ export const glowState = (prior, scope, working, now) => {
     const until = prior.fade?.until ?? now + EASE.duration;
     if (until > now) {
       const left = until - now;
-      const fade = { until, opacity: (left / EASE.duration) ** 3, duration: left };
+      const opacity = prior.pose === "leaving" ? prior.fade.opacity * (left / prior.fade.duration) ** 3 : prior.fade?.opacity ?? 1;
+      const fade = { until, opacity, duration: left };
       return moved ? frame("release", now, fade) : frame("leaving", until, prior.pose === "leaving" ? prior.fade : fade);
     }
   }
