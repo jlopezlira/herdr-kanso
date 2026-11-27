@@ -1110,24 +1110,34 @@ const isLanKnock = (program, args) => program === "sh" && args[1].includes("xarg
 const arpOf = (ips) => ips.map((ip) => `? (${ip}) at aa:bb:cc:dd:ee:ff`).join("\n");
 const lightIp = "192.168.4.91";
 const lightRow = (drawn) => find(drawn, (el) => el.tag === "computer-ssh:light");
-const lightDialog = async ({ answers = true, lookup = () => lightIp, neighbors = [] } = {}) => {
+const lightDialog = async ({
+  answers = true, lookup = () => lightIp, neighbors = [], host = "light.example",
+  tailnet = "", platform = "macos", shared = () => null, sshPort = 22,
+} = {}) => {
+  const lookups = [];
   const knocks = [];
+  const knockCommands = [];
   const installs = [];
   const { view, cx, flush } = await computersDialog({
-    readTextFile: async () => "Host light\n  HostName light.example",
+    window: () => ({ platform }),
+    shared,
+    readTextFile: async () => `Host light\n  HostName ${host}\n  Port ${sshPort}`,
     exec: async (program, args) => {
-      if (program === "dscacheutil" && args.join(" ") === "-q host -a name light.local") {
-        const ip = await lookup();
-        return success(ip ? `ip_address: ${ip}\n` : "");
+      if (program === "tailscale" && tailnet) return success(tailnet);
+      if (program === "dscacheutil" || program === "getent") {
+        lookups.push([program, ...args]);
+        const ip = args.at(-1) === "light.local" ? await lookup() : "";
+        return success(ip ? (program === "getent" ? `${ip} STREAM light.local` : `ip_address: ${ip}\n`) : "");
       }
       if (program === "ifconfig") return success("inet 192.168.4.2 netmask 0xffffff00");
       if (program === "arp") return success(arpOf(neighbors));
       if (isLanKnock(program, args)) {
         const ips = args.slice(3);
         knocks.push(...ips);
+        knockCommands.push(args[1]);
         return success(answers ? ips.join("\n") : "");
       }
-      if (program === "ssh" && args[0] === "-G") return success("hostname light.example\n");
+      if (program === "ssh" && args[0] === "-G") return success(`hostname ${host}\nport ${sshPort}\n`);
       if (program === "ssh" && args.at(-2) === "light") {
         const reaches = answers ? args.includes(`HostName=${lightIp}`) : !args.some((word) => word.startsWith("HostName="));
         return reaches ? success("") : sshRefusal("No route to host");
@@ -1139,20 +1149,32 @@ const lightDialog = async ({ answers = true, lookup = () => lightIp, neighbors =
       return success('{"machines":[]}');
     },
   }, true);
-  return { view, cx, flush, knocks, installs };
+  return { view, cx, flush, lookups, knocks, knockCommands, installs };
 };
-const addLight = async (answers) => {
-  const { view, cx, flush, knocks, installs } = await lightDialog({ answers });
-  await view.homesReady;
-  const drawn = view.render();
-  const row = lightRow(drawn);
-  assert.ok(row, "light is listed from ssh config");
-  const button = find(row, (el) => el.tag === "computer-ssh:light-action");
+const addComputerRow = async ({ cx, flush, installs }, row) => {
+  assert.ok(row, "the computer row is listed");
+  const button = find(row, (el) => el.tag === `${row.tag}-action`);
   arg(button, "on_click")({}, cx);
   await flush();
-  assert.deepEqual(knocks, [lightIp], "SSH is checked at the address from light.local");
   assert.equal(installs.length, 1);
-  return { drawn, row, install: installs[0] };
+  return installs[0];
+};
+const addLight = async (answers) => {
+  const dialog = await lightDialog({ answers });
+  await dialog.view.homesReady;
+  const drawn = dialog.view.render();
+  const row = lightRow(drawn);
+  const install = await addComputerRow(dialog, row);
+  assert.deepEqual(dialog.knocks, [lightIp], "SSH is checked at the address from light.local");
+  return { drawn, row, install };
+};
+const assertLightVia = (install, name) => {
+  const nameFlag = install.indexOf("--name");
+  assert.notEqual(nameFlag, -1, "hc machine add --via requires --name");
+  assert.equal(install[nameFlag + 1], name);
+  const via = install.indexOf("--via");
+  assert.notEqual(via, -1);
+  assert.match(install[via + 1], /HostName=192\.168\.4\.91.*; exec ssh light /);
 };
 
 test("A computer from ssh config that answers at home is marked On this network and added over that network first", async () => {
@@ -1160,12 +1182,7 @@ test("A computer from ssh config that answers at home is marked On this network 
   assert.ok(texts(row).includes("On this network"));
   assert.ok(!texts(drawn).includes("No other computer on this network answers ssh."));
   assert.ok(find(drawn, (el) => el.tag === "computers-sweep"), "Search this network is still offered");
-  const name = install.indexOf("--name");
-  assert.notEqual(name, -1, "hc machine add --via requires --name");
-  assert.equal(install[name + 1], "light");
-  const via = install.indexOf("--via");
-  assert.notEqual(via, -1);
-  assert.match(install[via + 1], /HostName=192\.168\.4\.91.*; exec ssh light /);
+  assertLightVia(install, "light");
 });
 
 test("A computer from ssh config that does not answer at its home address is added through its usual ssh route", async () => {
@@ -1206,6 +1223,38 @@ test("A computer already listed from ssh config is not listed again by its home 
   assert.ok(lanRow(other), "another computer on this network is still listed");
   assert.ok(texts(lightRow(drawn)).includes("On this network"));
   assert.equal(lanRow(lightIp), null, "light has no duplicate LAN row");
+});
+
+test("A Tailscale computer uses its SSH alias to find and try the home network first", async () => {
+  const host = "100.100.235.59";
+  const name = "light-1";
+  const tailnet = status({ light: peer({
+    DNSName: `${name}.tail.ts.net.`, HostName: "light", TailscaleIPs: [host], sshHostKeys: [],
+  }) });
+  const dialog = await lightDialog({ host, tailnet });
+  await dialog.view.homesReady;
+  assert.ok(dialog.lookups.some((command) => command.join(" ") === "dscacheutil -q host -a name light.local"), "the folded SSH alias is looked up");
+  const drawn = dialog.view.render();
+  const row = find(drawn, (el) => el.tag === `computer-${name}`);
+  assert.ok(row && texts(row).includes("On this network"), "the tailnet row shows its LAN route");
+  assertLightVia(await addComputerRow(dialog, row), name);
+});
+
+test("Opening Add a computer does not look up names or knock on SSH ports when network discovery is hidden", async () => {
+  const store = { "kanso.pieces": { "computers.network": "hide" } };
+  for (const platform of ["macos", "linux"]) {
+    const { view, lookups, knockCommands } = await lightDialog({ platform, shared: (key) => store[key] });
+    await view.homesReady;
+    assert.deepEqual(lookups, [], `${platform}: no local name lookup`);
+    assert.deepEqual(knockCommands, [], `${platform}: no SSH knock`);
+  }
+});
+
+test("Add a computer checks the SSH port set for a computer in ssh config", async () => {
+  const { view, knockCommands } = await lightDialog({ sshPort: 2222 });
+  await view.homesReady;
+  assert.equal(knockCommands.length, 1);
+  assert.match(knockCommands[0], /nc -z -G 2 "\$1" 2222 >/);
 });
 
 const lanDialog = async (t) => {

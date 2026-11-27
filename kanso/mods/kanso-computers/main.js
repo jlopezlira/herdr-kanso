@@ -67,6 +67,7 @@ export default class Computers extends View {
     this.homes = new Map();
     this.homesReady = null;
     this.homeRound = 0;
+    this.looksHome = runs("computers.network", pieces(shared));
     this.timer = cx.timer;
     this.explainer = undefined;
     this.jobs = {};
@@ -106,9 +107,10 @@ export default class Computers extends View {
   }
 
   async findHomes(cx) {
+    if (!this.looksHome) return;
     const round = this.homeRound + 1;
     this.homeRound = round;
-    const names = [...this.peers().filter((peer) => peer.online).map((peer) => peer.name), ...this.shownHosts().map((host) => host.alias)];
+    const names = [...this.peers().filter((peer) => peer.online).map((peer) => peer.name), ...(this.hosts ?? []).map((host) => host.alias)];
     const homes = await homesOf(this.platform, names, cx.timer);
     if (round !== this.homeRound) return;
     this.homes = homes;
@@ -410,7 +412,11 @@ export default class Computers extends View {
   }
 
   peerFacts(peer) {
-    return { alias: this.aliasFor(peer), lan: lanOf(peer, this.nearby ?? []) || this.homes.get(peer.name) || "" };
+    return { alias: this.aliasFor(peer), lan: lanOf(peer, this.nearby ?? []) || this.homeOfPeer(peer) };
+  }
+
+  homeOfPeer(peer) {
+    return this.homes.get(peer.name) || this.homes.get(this.aliasFor(peer)?.alias) || "";
   }
 
   aliasFor(peer) {

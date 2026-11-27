@@ -15,8 +15,14 @@ const linkV6 = (ip) => /^fe80:[0-9a-f:]*%[\w.-]+$/i.test(ip) && V6.test(ip.split
 const familyRank = (ip) => (validIp(ip) ? 0 : localV6(ip) ? 1 : 2);
 export const privateIp = (ip) => (validIp(ip) && RANGES.some((range) => within(ip, range))) || localV6(String(ip)) || linkV6(String(ip));
 
+const KAME = /^fe80:([0-9a-f]{1,4}):(.*)$/i;
+const scoped = (ip) => {
+  const kame = String(ip ?? "").match(KAME);
+  return kame && !ip.includes("%") && Number.parseInt(kame[1], 16) > 0 ? `fe80:0:${kame[2]}%${Number.parseInt(kame[1], 16)}` : ip;
+};
+
 export function homeAddresses(text) {
-  const words = String(text ?? "").split("\n").map((line) => line.match(/^\s*(?:ip_address|ipv6_address):\s*(\S+)/)?.[1] ?? line.match(/^(\S+)\s+STREAM\b/)?.[1]);
+  const words = String(text ?? "").split("\n").map((line) => line.match(/^\s*(?:ip_address|ipv6_address):\s*(\S+)/)?.[1] ?? line.match(/^(\S+)\s+STREAM\b/)?.[1]).map(scoped);
   return [...new Set(words.filter(privateIp))].toSorted((a, b) => familyRank(a) - familyRank(b));
 }
 

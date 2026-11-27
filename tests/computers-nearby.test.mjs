@@ -51,6 +51,19 @@ test("The home lookup on Mac and Linux lists only home addresses, with IPv4 firs
   for (const text of [mac, linux]) assert.deepEqual(clone(homeAddresses(text)), lan);
 });
 
+test("The Mac home lookup keeps the interface of a link-local address and lists it after IPv4 and private IPv6", async () => {
+  const { homeAddresses } = await nearby();
+  const resolved = [
+    "name: dark.local",
+    "ipv6_address: fe80:e::86c:554f:de80:21a5",
+    "ipv6_address: fd3a:e205:4a50:1:c97:da:9640:4717",
+    "",
+    "name: dark.local",
+    "ip_address: 192.168.4.136",
+  ].join("\n");
+  assert.deepEqual(clone(homeAddresses(resolved)), ["192.168.4.136", "fd3a:e205:4a50:1:c97:da:9640:4717", "fe80:0::86c:554f:de80:21a5%14"]);
+});
+
 test("Neighbours on this computer's own networks come first, then the rest of its /24 or /22, never this computer or a far network", async () => {
   const { candidates } = await nearby();
   const interfaces = [{ ip: "192.168.1.10", prefix: 24 }, { ip: "10.8.1.4", prefix: 22 }];
