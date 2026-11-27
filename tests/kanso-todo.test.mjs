@@ -3,18 +3,22 @@ import assert from "node:assert/strict";
 import { appendFile, chmod, copyFile, mkdir, readFile, realpath, stat, symlink, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { committedRepo, exec, fileExists, same, temporary } from "./helpers.mjs";
+import { exec, fileExists, git, same, temporary } from "./helpers.mjs";
 import { temporaryKdb } from "./mod-fixtures.mjs";
 
 const todoScript = fileURLToPath(new URL("../kanso/mods/kanso-panel/kanso-todo", import.meta.url));
 const unixTodo = { skip: process.platform === "win32" && "The agent's command uses POSIX sh" };
 const terminalId = "t42";
+const addUsage = 'add "<step>" "<detail>"';
+const startUsage = "start <id>";
+const doneUsage = "done <id>";
 
 const agentTodo = async (t, cwd, script = todoScript) => {
   const HOME = await temporary(t);
   const { db, dir } = await temporaryKdb(t);
   const options = { cwd: cwd ?? HOME, env: { ...process.env, HOME, HERDR_APP_HOME: dir, HC_TERMINAL_ID: terminalId } };
-  const at = (cwd) => (...args) => exec("sh", ["-c", 'umask 022; exec sh "$@"', "sh", script, ...args], { ...options, cwd });
+  const at = (cwd, by = terminalId) => (...args) =>
+    exec("sh", ["-c", 'umask 022; exec sh "$@"', "sh", script, ...args], { ...options, cwd, env: { ...options.env, HC_TERMINAL_ID: by } });
   const result = at(options.cwd);
   const run = async (...args) => {
     const { code, stdout, stderr } = await result(...args);
@@ -24,34 +28,72 @@ const agentTodo = async (t, cwd, script = todoScript) => {
   return { db, HOME, run, at, result, options };
 };
 
-test("An agent can add, list and finish to-dos in its project from a subfolder.", unixTodo, async (t) => {
-  const { repo } = await committedRepo(t);
-  const folder = await realpath(repo);
+const listLine = (...parts) => parts.join("\t");
+const expectCommand = ({ code, stdout, stderr }, expected) => {
+  assert.equal(code, 0, stderr);
+  assert.equal(stdout.trim(), expected);
+};
+
+test("An agent in a subfolder can add detailed steps, start and finish them, and list only its own plan.", unixTodo, async (t) => {
+  const folder = await realpath(await temporary(t));
+  const init = await git(folder, "init");
+  assert.equal(init.code, 0, init.stderr);
   const nested = join(folder, "src");
   await mkdir(nested);
   const { db, run, at, result } = await agentTodo(t, nested);
   const text = "Pack the user's release notes";
-  const id = await run("add", `  ${text}  `);
-  assert.ok(id, "Add returns an ID");
-  const projects = await db.projects();
-  same(projects.map(({ name, folder }) => ({ name, folder })), [{ name: basename(repo), folder }]);
-  const [project] = projects;
-  const open = { id, project: project.id, text, by: terminalId, done_at: null };
-  const saved = () => db.read("SELECT id, project, text, by, done_at FROM todos;");
-  same(await saved(), [open]);
-  const listed = await at(folder)("list");
-  assert.equal(listed.code, 0, listed.stderr);
-  assert.equal(listed.stdout.trim(), `${id}\t${text}`);
+  const detail = "Use the PR's changelog";
+  const id = await run("add", `  ${text}  `, "  Use the PR's\n\tchangelog  ");
+  assert.ok(id, "Add returns a step ID");
+  const [project, ...others] = await db.projects();
+  assert.equal(others.length, 0);
+  same({ name: project.name, folder: project.folder }, { name: basename(folder), folder });
+
+  const saved = async () => (await db.read("SELECT id, project, text, by, detail, started_at, done_at FROM todos;"))[0];
+  const step = { id, project: project.id, text, by: terminalId, detail, started_at: null, done_at: null };
+  same(await saved(), step);
+  expectCommand(await at(folder)("list"), listLine(id, "next", text));
 
   const unknown = await result("done", "no-such-id");
   assert.equal(unknown.code, 1);
-  assert.match(unknown.stderr, /no open to-do no-such-id/);
-  same(await saved(), [open]);
+  assert.match(unknown.stderr, /no open step no-such-id/);
+  same(await saved(), step);
+
+  await run("start", id);
+  const { started_at } = await saved();
+  assert.ok(Number.isInteger(started_at) && started_at > 0);
+  assert.equal(await run("list"), listLine(id, "doing", text));
 
   await run("done", id);
-  const [{ done_at }] = await saved();
-  assert.ok(Number.isInteger(done_at) && done_at > 0);
-  assert.equal(await run("list"), "");
+  const { done_at } = await saved();
+  assert.ok(Number.isInteger(done_at) && done_at >= started_at);
+  same(await saved(), { ...step, started_at, done_at });
+
+  const next = "Publish the beta";
+  const doing = "Review the summary";
+  const nextId = await run("add", next, "Wait for all checks");
+  const doingId = await run("add", doing, "Verify the upgrade note");
+  await run("start", doingId);
+  const other = at(nested, "t8");
+  const otherText = "Check the Linux build";
+  const added = await other("add", otherText, "Read the package log");
+  assert.equal(added.code, 0, added.stderr);
+  expectCommand(await other("list"), listLine(added.stdout.trim(), "next", otherText));
+  assert.deepEqual((await run("list")).split("\n").sort(), [
+    listLine(id, "done", text),
+    listLine(doingId, "doing", doing),
+    listLine(nextId, "next", next),
+  ].sort());
+});
+
+test("The agent command shows how to add, start, finish and list steps.", unixTodo, async (t) => {
+  const { result } = await agentTodo(t);
+  const usage = [addUsage, startUsage, doneUsage, "list", "rule"].join(" | ");
+  for (const [args, expected] of [[["help"], usage], [["add"], addUsage], [["start"], startUsage], [["done"], doneUsage]]) {
+    const { code, stderr } = await result(...args);
+    assert.equal(code, 1);
+    assert.equal(stderr.trim(), `kanso-todo: usage: kanso-todo ${expected}`);
+  }
 });
 
 test("An agent can run the command printed in the rule when the install path has an apostrophe.", unixTodo, async (t) => {
@@ -61,13 +103,12 @@ test("An agent can run the command printed in the rule when the install path has
   await copyFile(todoScript, script);
   const { run, options } = await agentTodo(t, folder, script);
   const text = "Check the release";
-  const id = await run("add", text);
+  const id = await run("add", text, "Read the upgrade notes");
   const rule = await run("rule");
   const list = rule.split("\u0060").find((part) => part.startsWith("sh ") && part.endsWith(" list"));
   assert.ok(list, "The rule prints a shell command for listing to-dos");
   const { code, stdout, stderr } = await exec("sh", ["-c", list], options);
-  assert.equal(code, 0, stderr);
-  assert.equal(stdout.trim(), `${id}\t${text}`);
+  expectCommand({ code, stdout, stderr }, listLine(id, "next", text));
 });
 
 const agentInstructionFiles = async (t, config, userAppend = "Keep my own Pi instructions.\n") => {
@@ -89,7 +130,7 @@ test("Installing the to-do rule twice leaves one copy per agent, and uninstallin
   assert.equal(await status(), "off");
   const rule = await run("rule");
   assert.match(rule, /^## To-do in kansō\n/);
-  for (const verb of ['add "<one short line>"', "done <id>", "list"]) assert.ok(rule.includes(`kanso-todo' ${verb}`), verb);
+  for (const verb of [addUsage, startUsage, doneUsage, "list"]) assert.ok(rule.includes(`kanso-todo' ${verb}`), verb);
 
   await run("install");
   assert.equal(await status(), "on");
