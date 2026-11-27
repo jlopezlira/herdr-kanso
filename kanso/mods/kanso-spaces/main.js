@@ -42,7 +42,7 @@ import { RECENT, STARTING, keyOf, onceEach, heldBy, startingNow, listedOf, recor
 import { agentHint } from "./conversation-at.js";
 import { heldOn } from "./conversation-on.js";
 import { land } from "./recent.js";
-import { ownTree } from "./own-tree.js";
+import { ownTree, cwdIn } from "./own-tree.js";
 import { SharedEdits } from "./shared-edits.js";
 import { tile } from "./tile.js";
 import { views, viewSwitch } from "./view-switch.js";
@@ -192,7 +192,7 @@ const rowInputs = () => ({ spaces: spaces(), panes: panes(), terminals: terminal
   shared: ROW_SHARED.map((key) => shared(key)), pieces: Object.entries(pieces(shared)).filter(([id]) => id.startsWith("sidebar.")) });
 const ROW_STATE = ["hoverRow", "hoverSpace", "hoverHead", "hoverMachine", "pressed", "over", "draggedAgent", "overAgent", "kbd", "navKey", "needsOpen", "needsEmpty", "foldH", "folded",
   "agentsFolded", "sectionsFolded", "asleepOpen", "shelvesOpen", "alive", "git", "held", "custom", "machines", "parked", "waking", "login", "failed", "pulling", "hints", "sync", "hostName", "retried"];
-const ROW_REPLACED = ["threadsShown", "steps", "since", "tasks"];
+const ROW_REPLACED = ["threadsShown", "steps", "since", "tasks", "sharedFound"];
 const listed = (value) => (value instanceof Set || value instanceof Map ? [...value] : value);
 const MINUTE_MS = 60_000;
 const LIMIT_MS = 2000;
@@ -779,7 +779,7 @@ export default class Spaces extends RetryingView {
       if (place.tree) { openAt(place, place.tree.folder, argv, place.tree.branch); return; }
       const own = place.folder && a ? await ownTree(place, a).catch(() => null) : null;
       const other = own?.busy?.[0];
-      const who = other ? other.title || other.program?.name || "Another agent" : "";
+      const who = other ? this.nameOf(other) : "";
       if (own?.path) {
         openAt(place, own.path, argv, own.branch);
         notify({ title: `${a.name} has its own worktree`, body: `${who} is working in ${place.name ?? "this project"}, so ${a.name} started on branch ${own.branch}.`, level: "info", timeout: 6000 });
@@ -2568,9 +2568,8 @@ export default class Spaces extends RetryingView {
   checkShared(cx) {
     if (this.sharing || window()?.active === false) return;
     this.sharing = true;
-    this.shared ??= new SharedEdits();
-    const shown = panes();
-    const cwdOf = (a) => a.cwd ?? shown.find((p) => p.terminal === a.address)?.cwd ?? null;
+    this.shared ??= new SharedEdits(cx.timer);
+    const cwdOf = cwdIn(panes());
     const nameOf = (a) => this.nameOf(a);
     cx.spawn(async (cx) => {
       try {
