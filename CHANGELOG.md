@@ -32,6 +32,7 @@ the branch's rules.
 ### Fixed
 
 - Shipped no longer stops drawing ("This view could not be re-rendered") with a few thousand pull requests, and its streak is not reset by a calendar day that GitHub already started.
+- On Windows, an update that was interrupted no longer makes the next update fail while it resets the permissions of the files it replaces.
 - Tasks turns Agents keep the to-do on itself when it is empty, and turning it on, here or in Settings, sends the rule to the agents already running on this computer, so they start using it without a new conversation.
 - A to-do marked done or deleted while it is still being saved on another computer keeps that change.
 - Resume a conversation on another computer starts it with that computer's own agent command, once however fast you choose it.
