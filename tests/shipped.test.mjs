@@ -525,7 +525,7 @@ const checkUnconfirmedHistory = async (t, { missingViewer = false, inaccessible 
   assert.equal(login, missingViewer || switchBack ? "alice" : "bob");
   assert.equal(await panel.store.meta("github.login"), "alice");
   const [row] = await panel.store.prs();
-  assert.deepEqual([row.prod, await panel.store.meta("github.unchecked")], [0, null]);
+  assert.deepEqual([row.prod, await panel.store.meta("github.unchecked")], [0, "pending"]);
 };
 
 test("Shipped does not save production history results after the API viewer changes.", (t) => checkUnconfirmedHistory(t));
@@ -821,6 +821,35 @@ test("Shipped tells you when a merged pull request could not be checked for prod
   assert.equal(panel.summary().big, "50%");
   const status = panel.status({});
   assert.match(status ? texts(status).join(" ") : "", /1 not checked for production yet/);
+});
+
+test("Shipped retries interrupted production history on reopen without searching pull requests again.", async (t) => {
+  const firstAt = monthAt(11, 10) + 12 * HOUR, merged = firstAt - HOUR;
+  const pr = pullRequest(1, merged - HOUR, { merged, base: "develop" });
+  let now = firstAt, historyReads = 0;
+  const searches = [];
+  const host = await ghShippedHost(t, () => now, (query, { q, ref }) => {
+    if (viewerQuery(query)) return viewerOf("me");
+    if (ref) {
+      historyReads += 1;
+      return historyReads === 1 ? failure("Network unavailable") : history([pr.mergeCommit.oid]);
+    }
+    searches.push(q);
+    return search(q.includes("created:") ? [pr] : []);
+  });
+  const initial = await settledShipped(host, "day");
+  assert.ok(initial.panel.syncError);
+  const searchCount = searches.length;
+
+  now += HOUR / 60;
+  const { panel } = await settledShipped(host, "day");
+  const [row] = await panel.store.prs();
+  assert.equal(panel.syncError, null);
+  assert.deepEqual({ historyReads, prod: row.prod, newSearches: searches.slice(searchCount) }, {
+    historyReads: 2, prod: 1, newSearches: [],
+  });
+  assert.equal(panel.summary().prod, 1);
+  assert.equal(await panel.store.meta("github.updated"), String(firstAt));
 });
 
 const mountAccountRecords = async (t, now, state, account, read) => mountShipped(await shippedHost(t, {
