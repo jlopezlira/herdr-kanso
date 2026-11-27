@@ -373,7 +373,7 @@ export default class TokenSpend extends View {
       this.syncing = false;
       this.probing = false;
       syncCx.notify();
-      if (this.syncAgain && this.awake && !this.closed) { const again = this.syncForce, all = this.syncEveryone || this.takeForced(); this.syncForce = false; this.syncEveryone = false; this.syncAgain = false; this.exchange(syncCx, again, all); }
+      if (this.syncAgain && this.awake && !this.closed) { const forced = this.takeForced(), again = this.syncForce, all = this.syncEveryone || forced; this.syncForce = false; this.syncEveryone = false; this.syncAgain = false; this.exchange(syncCx, again, all); }
     });
   }
 
