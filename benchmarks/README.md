@@ -41,3 +41,56 @@ session with agents running. Other apps kept running during the runs. The
 layout figure comes from a simulated host; during a fast fling the strip now
 moves at most 10 times a second instead of 20, which is where most of its
 saving comes from.
+
+## Compare
+
+`compare.mjs` measures two checkouts that already exist, on macOS or Linux, in
+one isolated Herdr window at a time. It does not create a worktree, and it does
+not call osascript, hyprctl, or raise. Herdr activates its own new window on
+launch; this script does not restore the previous app. Pass checkouts, not refs.
+
+```sh
+node benchmarks/compare.mjs --base-repo <dir> --current-repo <dir>
+node benchmarks/compare.mjs --current-repo <dir> --repeats 1   # exploratory
+```
+
+Defaults are 3 repeats, 30 seconds, 1800×1050, zoom 1. One repeat is labeled
+exploratory. Results go to `benchmarks/results/compare/`, which is not committed.
+
+- **S1**: the window is up, 3 agents working and 1 done. The done agent is the
+  visible pane. Agents send one status line, then sleep, so the terminal does
+  not stream. No `herdr-app status` probes during the sample.
+- **S2**: 4 done agents, nothing working.
+- **S3**: status latency (p50 and p95) on the S1 scene, after S1. Those probes
+  are not mixed into S1's CPU.
+
+A number that was not observed is null, not zero. Working and done counts must
+match the terminals this run created. The draws/s difference is a diagnostic. It
+does not prove the motion was the same.
+
+`s1_main_lower` is only the S1 main-thread question. It is not a pass for the
+run. `gate` stays null unless S1, S2 and S3 are complete and comparable, the
+window was inspected on screen, and an independently reviewed temporal record
+names the same elements, the same cycles, and on-screen visibility for every
+recorded run of that measurement. The names have to be those exact ids, once
+each. A duplicate, a missing id, an extra id, or an id from another measurement
+leaves the gate null. Draws/s and a PNG hash never fill that record. An equal
+hash does not prove the motion matched. A different hash does not prove it did not.
+
+`--display-free` is your confirmation that this display may be interrupted.
+A connected display is not that confirmation. The script does not launch
+without the flag.
+
+`--geometry` asks macOS, by the exact process id, whether that window is on
+screen and what bounds it has. It uses a read-only window list. It does not
+focus anything. Other systems, and a failed read, stay `unknown`.
+
+After a run, judge a saved measurement without launching again:
+
+```sh
+node benchmarks/compare.mjs --evaluate measurement.json --temporal review.json
+```
+
+The review file is one you write. It is not written by the script. `runs` must
+list every `id` in that measurement. Cleanup stops only the core, window,
+display hold, and terminals this run started.

@@ -319,27 +319,37 @@ export class Updater {
     if (shown("toast.update", true, pieces(shared))) notify(updated(done.version, done.notes));
   }
 
+  joinLookup(looking, report) {
+    if (!fresh(looking, LOOK_MS)) return false;
+    if (report && !looking.report) this.setState({ looking: { ...looking, report: true } });
+    return true;
+  }
+
   async check(cx, force = false, report = false) {
+    if (this.joinLookup(this.state().looking, report)) return;
     if (!this.busy) await this.readInstalled();
     const { checked, looking } = this.state();
-    if (this.busy || fresh(looking, LOOK_MS) || (!force && checked && Date.now() - checked < EVERY)) return;
+    if (this.joinLookup(looking, report)) return;
+    if (this.busy || (!force && !looking?.report && checked && Date.now() - checked < EVERY)) return;
     // Marked in the window's shared state, so the other copy does not look at the same time.
     const id = opId();
-    this.setState({ looking: { id, at: Date.now() } });
+    this.setState({ looking: { id, at: Date.now(), report: report || looking?.report === true } });
     // The git flags keep a credential prompt or a stalled remote from hanging the check.
     const r = await tryOrAsync(() => exec("git", ["-c", "core.askPass=true", "-c", "credential.interactive=never", "-c", "http.lowSpeedLimit=1000", "-c", "http.lowSpeedTime=20", "ls-remote", "--tags", "--refs", this.source.remote]));
-    if (this.state().looking?.id === id) this.setState({ looking: null });
+    const lookup = this.state().looking;
+    if (lookup?.id !== id) return;
+    this.setState({ looking: null });
     if (r?.code !== 0) {
-      if (report) notify(checkFailed());
+      if (lookup.report) notify(checkFailed());
       return;
     }
     this.setState({ latest: newestTag(r.stdout, this.channel()), checked: Date.now() });
     const v = this.available();
-    if (report && !v) notify(upToDate());
-    if (report && v && this.state().notified === v) this.setState({ notified: null }); // an explicit check re-notifies for the same version
+    if (lookup.report && !v) notify(upToDate());
+    if (lookup.report && v && this.state().notified === v) this.setState({ notified: null }); // an explicit check re-notifies for the same version
     if (v && this.state().notified !== v) {
       this.setState({ notified: v });
-      if (report || shown("toast.update", true, pieces(shared))) notify(updateAvailable(v));
+      if (lookup.report || shown("toast.update", true, pieces(shared))) notify(updateAvailable(v));
     }
   }
 

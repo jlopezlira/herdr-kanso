@@ -280,6 +280,7 @@ test("Windows repository operations cover discovery, safety probes and metadata 
   assert.match((await api.bases("C:\\repo")).stdout, /^main$/m);
   assert.equal((await api.probe("C:\\missing", 0, ["main"])).stdout, "gone");
   assert.match((await api.probe("C:\\worktree", 60, ["main"])).stdout, /^merged$/m);
+  assert.ok(!r.calls.some(({ args }) => args.includes("merge-base") || args.includes("merge-tree")));
   assert.equal((await api.forget("C:\\repo", "C:\\tree")).stdout, "forgot");
   await assert.rejects(api.removeOrphan("C:\\absent"), /marker is no longer a file/);
   assert.ok(r.calls.every(({ program }) => program === "git" || program === "pwsh"));

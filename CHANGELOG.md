@@ -27,6 +27,8 @@ the branch's rules.
 
 ### Changed
 
+- Worktrees starts fewer Git processes when checking which branches have landed.
+- Worktrees checks each repository in one pass, and asks again the next time it opens.
 - After a restart changes a disk's device number, Spend no longer reads every session again: a file with the same inode, size and time is known, so the history read finishes in one run instead of stalling on "Still reading your history".
 - When kansō starts, including after an update, it brings the agents' plan rule up to date if it is on, so the rule always matches the command it names.
 - Tasks shows each agent's plan for the project you are viewing: every step in order with a line of detail, the step it is doing now, and what it has finished, written by the agent itself; there is nothing to tick or add by hand. Turning it on, or telling running agents, also brings their rule up to date.
@@ -44,6 +46,8 @@ the branch's rules.
 
 - When a computer turns kansō away, Add a computer and its sign-in tab say which user was tried and that you can type user@address if you sign in there as someone else, instead of only asking for a key that may already be there.
 - Add a computer finds Tailscale when it was installed from the Mac App Store and no longer shows a notice when Tailscale isn't installed.
+- Caffeine says when a computer's battery is too low to keep it awake, instead of showing it as not read and then as sleeping as usual.
+- Check for updates gives its answer even when an automatic check is already looking.
 - Shipped no longer stops drawing ("This view could not be re-rendered") with a few thousand pull requests, and its streak is not reset by a calendar day that GitHub already started.
 - On Windows, an update that was interrupted no longer makes the next update fail while it resets the permissions of the files it replaces.
 - Tasks turns Agents keep the to-do on itself when it is empty, and turning it on, here or in Settings, sends the rule to the agents already running on this computer, so they start using it without a new conversation.

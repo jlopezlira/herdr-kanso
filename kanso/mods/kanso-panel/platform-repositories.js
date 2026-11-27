@@ -52,32 +52,65 @@ for r in origin/develop develop origin/dev dev; do
   git rev-parse -q --verify "$r^{commit}" >/dev/null 2>&1 && echo "+$r"
 done
 exit 0`;
+const probeOne = `
+probe_one() {
+  cd "$1" 2>/dev/null || { echo gone; return 0; }
+  [ -d .git ] && { echo replaced; return 0; }
+  status=$(git ${GIT_READ.join(" ")} --no-optional-locks status --porcelain=v1 --untracked-files=normal 2>/dev/null) || { echo broken; return 0; }
+  idle=$2
+  shift 2
+  if [ "$idle" -gt 0 ] 2>/dev/null; then
+    gd=$(git rev-parse --absolute-git-dir 2>/dev/null)
+    if [ -n "$(find . -maxdepth 3 \\( -name node_modules -o -name .git \\) -prune -o -mmin -"$idle" -print 2>/dev/null | head -n 1)" ] ||
+       { [ -n "$gd" ] && [ -n "$(find "$gd/HEAD" "$gd/logs/HEAD" -mmin -"$idle" 2>/dev/null | head -n 1)" ]; }; then echo recent; fi
+  fi
+  printf 'only\\t%s\\n' "$(git rev-list --count HEAD --not --branches --tags --remotes 2>/dev/null)"
+  printf 'dirty\\t%s\\n' "$(printf '%s' "$status" | grep -c .)"
+  printf 'last\\t%s\\n' "$(git log -1 --format=%ct 2>/dev/null)"
+  ahead=
+  for b in "$@"; do
+    a=$(git rev-list --count "$b..HEAD" 2>/dev/null) || continue
+    case "$a" in ""|*[!0-9]*) continue ;; esac
+    if [ -z "$ahead" ] || [ "$a" -lt "$ahead" ]; then ahead=$a; fi
+    if [ "$a" = 0 ]; then echo merged; break; fi
+    t=$(git merge-tree --write-tree "$b" HEAD 2>/dev/null) && [ "$t" = "$(git rev-parse "$b^{tree}" 2>/dev/null)" ] && echo merged
+  done
+  printf 'ahead\\t%s\\n' "$ahead"
+}
+`;
 const PROBE = `
-cd "$1" 2>/dev/null || { echo gone; exit 0; }
-[ -d .git ] && { echo replaced; exit 0; }
-# git can't read it (its .git names where the repository used to be): nothing
-# below would be true, so it says so and stops.
-git rev-parse --git-dir >/dev/null 2>&1 || { echo broken; exit 0; }
-status=$(git ${GIT_READ.join(" ")} --no-optional-locks status --porcelain=v1 --untracked-files=normal 2>/dev/null) || { echo broken; exit 0; }
-idle=$2
-shift 2
-if [ "$idle" -gt 0 ] 2>/dev/null; then
-  gd=$(git rev-parse --absolute-git-dir 2>/dev/null)
-  if [ -n "$(find . -maxdepth 3 \\( -name node_modules -o -name .git \\) -prune -o -mmin -"$idle" -print 2>/dev/null | head -n 1)" ] ||
-     { [ -n "$gd" ] && [ -n "$(find "$gd/HEAD" "$gd/logs/HEAD" -mmin -"$idle" 2>/dev/null | head -n 1)" ]; }; then echo recent; fi
-fi
-printf 'only\\t%s\\n' "$(git rev-list --count HEAD --not --branches --tags --remotes 2>/dev/null)"
-printf 'dirty\\t%s\\n' "$(printf '%s' "$status" | grep -c .)"
-printf 'last\\t%s\\n' "$(git log -1 --format=%ct 2>/dev/null)"
-ahead=
-for b in "$@"; do
-  a=$(git rev-list --count "$b..HEAD" 2>/dev/null) || continue
-  if [ -z "$ahead" ] || [ "$a" -lt "$ahead" ]; then ahead=$a; fi
-  if git merge-base --is-ancestor HEAD "$b" 2>/dev/null; then echo merged; continue; fi
-  t=$(git merge-tree --write-tree "$b" HEAD 2>/dev/null) && [ "$t" = "$(git rev-parse "$b^{tree}" 2>/dev/null)" ] && echo merged
-done
-printf 'ahead\\t%s\\n' "$ahead"
+${probeOne}
+probe_one "$1" "$2" "\${@:3}"
 exit 0`;
+const PROBE_ALL = `
+${probeOne}
+idle=$1
+nrefs=$2
+nitems=$3
+shift 3
+refs=()
+i=0
+while [ "$i" -lt "$nrefs" ]; do refs+=("$1"); shift; i=$((i + 1)); done
+paths=()
+i=0
+while [ "$i" -lt "$nitems" ]; do paths+=("$1"); shift; i=$((i + 1)); done
+i=0
+while [ "$i" -lt "$nitems" ]; do
+  end=$((i + 8))
+  if [ "$end" -gt "$nitems" ]; then end=$nitems; fi
+  j=$i
+  while [ "$j" -lt "$end" ]; do
+    (
+      flat=$(printf '%s' "$(probe_one "\${paths[$j]}" "$idle" "\${refs[@]}")" | tr '\\n' '')
+      printf '%s\\n' "#$j $flat"
+    ) &
+    j=$((j + 1))
+  done
+  wait
+  i=$end
+done
+exit 0
+`;
 const FORGET = `
 c=$(git -C "$1" rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || exit 3
 [ -d "$2/.git" ] || exit 4
@@ -99,7 +132,10 @@ const childLines = (text) => String(text ?? "").split(/\r?\n/).flatMap((line) =>
 export function repositoryApi(platform, run) {
   const files = fileApi(platform, run);
   const git = (folder, args) => run("git", ["-C", folder, ...args]);
-  const shell = (script, args) => run("bash", ["-c", script, "worktrees", ...args]);
+  const shell = (script, args, timeout) => {
+    const argv = ["-c", script, "worktrees", ...args];
+    return timeout == null ? run("bash", argv) : run("bash", argv, { timeout });
+  };
   const bases = async (folder) => {
     if (platform !== "windows") return shell(BASES, [folder]);
     const origin = (await git(folder, ["symbolic-ref", "-q", "--short", "refs/remotes/origin/HEAD"])).stdout.trim();
@@ -150,8 +186,8 @@ export function repositoryApi(platform, run) {
     const last = checked(await git(folder, ["log", "-1", "--format=%ct"])).stdout.trim();
     const ancestors = await Promise.all(refs.map(async (ref) => {
       const count = await git(folder, ["rev-list", "--count", `${ref}..HEAD`]);
-      if (count.code !== 0) return null;
-      if ((await git(folder, ["merge-base", "--is-ancestor", "HEAD", ref])).code === 0) return { ahead: Number(count.stdout), merged: true };
+      if (count.code !== 0 || !/^\d+$/.test(count.stdout.trim())) return null;
+      if (count.stdout.trim() === "0") return { ahead: 0, merged: true };
       const tree = await git(folder, ["merge-tree", "--write-tree", ref, "HEAD"]);
       return { ahead: Number(count.stdout), merged: tree.code === 0 && tree.stdout.trim() === (await git(folder, ["rev-parse", `${ref}^{tree}`])).stdout.trim() };
     }));
@@ -197,5 +233,10 @@ export function repositoryApi(platform, run) {
       return { folder: repo, remote: origin.code === 0 ? origin.stdout.trim() : "" };
     }));
   };
-  return { createWorktree: add, discover, bases, probe, forget, removeOrphan, fingerprint, children };
+  const probeAll = async (_repo, items, idle, refs) => {
+    const list = Array.isArray(items) ? items : [];
+    const waves = Math.max(1, Math.ceil(list.length / 8));
+    return shell(PROBE_ALL, [String(idle), String(refs.length), String(list.length), ...refs, ...list.map((item) => item.path)], waves * 30000);
+  };
+  return { createWorktree: add, discover, bases, probe, probeAll, forget, removeOrphan, fingerprint, children };
 }
