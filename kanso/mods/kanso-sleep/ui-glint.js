@@ -2,9 +2,10 @@
 // Kept byte for byte by `npm run sync:share`: edit kanso-panel/ui-glint.js.
 import { div } from "gpui-kit";
 import { h_flex } from "gpui-base";
-import { GLINT, GLINT_MS, GLINT_EASE, OPACITY, onBattery } from "./ui.js";
+import { GLINT, GLINT_MS, GLINT_STAGGER, GLINT_EASE, OPACITY, onBattery } from "./ui.js";
 
 export const SWEEP_MS = GLINT_MS / 2;
+export const SWEEP_LEAD_MS = GLINT_STAGGER;
 const WINDOWS = [[GLINT.wide, OPACITY.glintFaint], [GLINT.mid, OPACITY.glintMid], [GLINT.narrow, 1]];
 const SLIDE = { duration: SWEEP_MS, easing: GLINT_EASE };
 

@@ -6,15 +6,12 @@ import { fixture, firstDraw, PANEL_IDS, loadMod, sidebarOn } from "./perf-harnes
 
 for (const id of [...PANEL_IDS, "spaces", "tabs", "strip"]) {
   test(`${id} opens and switches projects within the first-draw budget`, async (t) => {
-    const fits = (r) => [r.open, r.switchProject].every((row) => row.ms < 100);
-    const runs = [await firstDraw(id)];
-    while (runs.length < 3 && !fits(runs.at(-1))) runs.push(await firstDraw(id));
-    const result = runs.find(fits) ?? runs.at(-1);
+    const result = await firstDraw(id);
     for (const [path, row] of [["open", result.open], ["switch", result.switchProject]]) {
       assert.ok(row.processes <= 3, `${id} ${path} started ${row.processes} processes before first draw; budget 3`);
       assert.ok(row.ms < 100, `${id} ${path} took ${row.ms.toFixed(2)} ms of CPU before first draw; budget 100 ms`);
     }
-    t.diagnostic(JSON.stringify({ ...result, attempts: runs.length }));
+    t.diagnostic(JSON.stringify(result));
   });
 }
 
@@ -86,6 +83,18 @@ test("The strip polls every 150 ms while a pane is held and stops the fast chain
   await f.advance(1000);
   assert.deepEqual(polledAt, [1000], "after the release only the idle tick polls");
   assert.deepEqual(shortTimers(f.state.timers.slice(timers)), []);
+});
+
+test("The strip's idle tick reads the dividers every time it fires, also a moment early", async (t) => {
+  const { f, strip } = await mountStrip();
+  const adopt = t.mock.method(strip, "adopt", () => false);
+  await f.advance(1000);
+  const reads = adopt.mock.callCount();
+  strip.adoptedAt = Date.now() - 999;
+  strip.pollAdopt(f.cx, true);
+  assert.equal(adopt.mock.callCount(), reads + 1);
+  strip.pollAdopt(f.cx);
+  assert.equal(adopt.mock.callCount(), reads + 1, "a poll left over from a drag does not read again within the second");
 });
 
 for (const mod of ["kanso-tabs", "kanso-spaces"]) {

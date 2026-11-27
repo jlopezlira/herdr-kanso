@@ -116,15 +116,15 @@ test("A dozing or unreadable row fades its program's art, and the activity takes
 });
 
 const timing = async () => {
-  const { SWEEP_MS } = await load("kanso-spaces/ui-glint.js", ["SWEEP_MS"]);
-  const sweep = await load("kanso-spaces/agents.js", ["sweepStage", "sweepBegan", "sweepWake", "SWEEP_LEAD_MS"]);
-  const lead = sweep.SWEEP_LEAD_MS;
-  return { ...sweep, lead, span: lead + SWEEP_MS + lead };
+  const { SWEEP_MS, SWEEP_LEAD_MS: lead } = await load("kanso-spaces/ui-glint.js", ["SWEEP_MS", "SWEEP_LEAD_MS"]);
+  const { GLINT_STAGGER } = await load("kanso-spaces/ui.js", ["GLINT_STAGGER"]);
+  const sweep = await load("kanso-spaces/agents.js", ["sweepStage", "sweepBegan", "sweepWake"]);
+  return { ...sweep, lead, token: GLINT_STAGGER, span: lead + SWEEP_MS + lead };
 };
 
-test("A working name starts its glint, sweeps at 80 ms and rests at the end", async () => {
-  const { sweepStage, lead, span } = await timing();
-  assert.equal(lead, 80);
+test("A working name starts its glint, sweeps after the kit's lead and rests at the end", async () => {
+  const { sweepStage, lead, token, span } = await timing();
+  assert.equal(lead, token);
   const began = { t1: 1000 };
   const stage = (offset) => sweepStage(atlas, began, began.t1 + offset);
   assert.deepEqual([0, lead - 1, lead, span - 1, span].map(stage), ["start", "start", "run", "run", null]);

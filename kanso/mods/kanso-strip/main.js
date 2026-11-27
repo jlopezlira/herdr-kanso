@@ -60,6 +60,7 @@ const MIN_VIEW = 0.2; // pinned columns always leave this much of the view to sl
 // Layout writes are throttled: a burst writes its first step at once, then its latest state every WRITE_MS.
 const WRITE_MS = 100;
 const DRAG_POLL_MS = 150;
+const IDLE_POLL_MS = 1000;
 const SETTLE = 250; // ms without the dragged sizes changing before the strip adopts them
 
 const TAB_BLOCK = {
@@ -258,7 +259,7 @@ export default class Strip extends View {
     this.sets = [];
     this.seq = 0; // bumped by whatever changes the model outside render (see render's key)
     this.later = cx;
-    cx.timer.every(1000, (cx) => this.pollAdopt(cx));
+    cx.timer.every(IDLE_POLL_MS, (cx) => this.pollAdopt(cx, true));
     this.lastStatus = new Map();
     this.digesting = new Set();
     this.polling = new Set();
@@ -1051,11 +1052,11 @@ export default class Strip extends View {
     cx.timer.after(DRAG_POLL_MS, (cx) => { this.following = false; this.pollAdopt(cx); });
   }
 
-  pollAdopt(cx) {
+  pollAdopt(cx, idleTick = false) {
     const now = Date.now(), held = shared("strip.drag");
     if (held && now - held.at > DRAG_MAX) endDrag();
     else if (held) this.followDrag(cx);
-    if (!held && now - (this.adoptedAt ?? -Infinity) < 1000) return;
+    if (!held && !idleTick && now - (this.adoptedAt ?? -Infinity) < IDLE_POLL_MS) return;
     this.adoptedAt = now;
     if (this.adopt()) { this.seq += 1; cx.notify(); }
   }

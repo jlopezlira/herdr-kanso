@@ -9,7 +9,7 @@ import { parseProcesses, etimeMs } from "./procs.js";
 import { oneLine } from "./since-left-model.js";
 import { G, GLIDE, H, R, DIALOG, SIDEBAR, sidebarSides } from "./ui.js";
 import { mark, MARK_SIZES } from "./ui-mark.js";
-import { SWEEP_MS } from "./ui-glint.js";
+import { SWEEP_MS, SWEEP_LEAD_MS } from "./ui-glint.js";
 import { sessionRow } from "./session-row.js";
 import { SNOOZE_LABEL } from "./limits-model.js";
 export { SNOOZE_LABEL };
@@ -126,7 +126,6 @@ export function track(since, list, now, tabOf = () => null) {
   return gone.size ? Object.fromEntries(Object.entries(next).filter(([k]) => !gone.has(k))) : next;
 }
 
-export const SWEEP_LEAD_MS = 80;
 const SWEEP_SPAN_MS = SWEEP_LEAD_MS + SWEEP_MS + SWEEP_LEAD_MS;
 export const sweepStage = (a, began, now) => {
   const at = a.status === "working" ? began?.[a.address] : null;

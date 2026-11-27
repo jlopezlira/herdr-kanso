@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { clone, openedKdb, temporary } from "./helpers.mjs";
 import { element, fixture, initialised, loadMod, sidebarOn } from "./perf-harness.mjs";
 
-const LEAD = 80;
+const { SWEEP_LEAD_MS: LEAD } = await loadMod("kanso-spaces/ui-glint.js", ["SWEEP_LEAD_MS"], fixture().host);
 
 async function sidebar(t, working = 0) {
   const f = fixture({ dir: await temporary(t), working });
@@ -40,7 +40,7 @@ const mountWorking = async (f, mount) => {
   return view;
 };
 
-test("The Projects row starts at rest, sweeps 80 ms later and stops without polling for expiry", async (t) => {
+test("The Projects row starts at rest, sweeps after the kit's lead and stops without polling for expiry", async (t) => {
   const { f, mount, draw } = await sidebar(t);
   const { GLINT, GLINT_MS } = await loadMod("kanso-spaces/ui.js", ["GLINT", "GLINT_MS"], f.host);
   const duration = GLINT_MS / 2, span = LEAD + duration + LEAD;
@@ -51,14 +51,14 @@ test("The Projects row starts at rest, sweeps 80 ms later and stops without poll
   const left = () => draw(view).find(({ id }) => id?.endsWith("-sweep-0"))?.left;
 
   view.paint();
-  assert.deepEqual(deadlines(), [LEAD], "one timer wakes the row at +80 ms, even after a repeat paint");
+  assert.deepEqual(deadlines(), [LEAD], "one timer wakes the row at the lead, even after a repeat paint");
   assert.equal(left(), -GLINT.wide, "the first paint puts the window at the start");
   const revision = () => view.parts.rows.view.look.at;
   const startRevision = revision();
   await f.advance(LEAD - 1);
   assert.equal(revision(), startRevision);
   await f.advance(1);
-  assert.ok(revision() > startRevision, "the boundary timer invalidates the rows at +80 ms");
+  assert.ok(revision() > startRevision, "the boundary timer invalidates the rows at the lead");
   assert.equal(left(), GLINT.run, "the new target starts the sweep");
   assert.deepEqual(deadlines(), [span], "one more timer wakes the row at expiry");
   await f.advance(span - LEAD - 1);
