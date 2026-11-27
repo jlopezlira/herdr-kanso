@@ -270,7 +270,7 @@ export default class TokenSpend extends View {
     const sent = this.options();
     const startedAt = Date.now();
     const scans = command !== "prepare";
-    const settled = !this.unfinished();
+    const before = { done: !this.unfinished(), at: shared(SNAPSHOT_AT) };
     this.running = command;
     if (scans) setShared(SNAPSHOT_AT, startedAt - REFRESH_MS + RETRY_MS);
     cx.notify();
@@ -304,7 +304,7 @@ export default class TokenSpend extends View {
       }
       if (payload) {
         this.scan = scans || !this.scan ? payload.scan ?? this.scan : { ...this.scan, lastScanAt: payload.scan?.lastScanAt ?? this.scan.lastScanAt };
-        if (this.awake) { this.costs = payload.costs; this.costsSettled = scans ? !payload.scan?.partial : settled; }
+        if (this.awake) { this.costs = payload.costs; this.costsSettled = scans ? !payload.scan?.partial : before.done && !this.unfinished() && shared(SNAPSHOT_AT) === before.at; }
         if (payload.settings) this.settings = payload.settings;
         // Filters changed while this ran: price again with the current ones.
         if (JSON.stringify(sent.cost) !== JSON.stringify(this.cost)) this.queued = { ...this.queued, prepare: true };
