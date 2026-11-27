@@ -44,12 +44,12 @@ test("The macOS and Linux commands for Caffeine and its setup have valid shell s
 });
 
 test("Caffeine recognizes its replies and whether the battery turned it off, and ignores unsuccessful or unknown replies", () => {
-  const answer = (result, word, battery = false, low = false) => assert.deepEqual(plain(answerOf(result)), { word, battery, low });
+  const answer = (result, word, battery = false, refused = null) => assert.deepEqual(plain(answerOf(result)), { word, battery, refused });
   for (const word of ["on", "off", "setup", "low", "missing", "refused", "busy"]) {
     answer(success(` ${word}\n`), word);
   }
   answer(success("off battery"), "off", true);
-  answer(success("off low"), "off", false, true);
+  answer(success("off low a1"), "off", false, "a1");
   answer(success("unexpected"), null);
   answer({ ...failure("failed"), stdout: "on" }, null);
   answer({ ...success("on"), threw: true }, null);
@@ -299,6 +299,14 @@ test("A turn on refused for low battery shows the computer off from its battery 
   assert.equal(caffeine.look("").battery, false, "found on again, it no longer shows the battery reason");
 });
 
+test("Only the refusal of the set up being waited for ends that wait", async () => {
+  const caffeine = createCaffeine({ local: "macos", now: () => 0, run: async () => success("off low first") });
+  caffeine.setup("", "on", "second");
+  await caffeine.read("");
+  assert.equal(caffeine.look("").setup, true);
+  assert.equal(caffeine.refusedBy("", { refused: "second" }), true);
+});
+
 test("A turn on from the panel while its set up is waiting for the password ends the wait when the computer answers", async () => {
   for (const reply of ["low", "on"]) {
     const caffeine = answering(() => reply);
@@ -313,11 +321,11 @@ test("A turn on through the macOS set up that the battery refuses is read by eve
   const { call, env, write } = await fakeMac(t);
   await write("sudo", `#!/bin/sh\ncase "$1" in /usr/sbin/visudo|install) exit 0 ;; esac\n${sudoStub}\n`);
   await write("battery", "12");
-  const [command, ...args] = setupArgv("macos", "on");
+  const [command, ...args] = setupArgv("macos", "on", "a1");
   assert.match(await stdoutOf(command, args, { env, limit: 15_000 }), /did not turn on/);
-  await call("read", "off low");
+  await call("read", "off low a1");
   await write("battery", "90");
-  await call("read", "off low");
+  await call("read", "off low a1");
   await call("off", "off");
   await call("read", "off");
 });

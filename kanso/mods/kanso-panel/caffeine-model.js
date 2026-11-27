@@ -57,10 +57,10 @@ const shGuard = (os) => [`: ${MARK}`, ...shHead(os), 'echo $$ > "$d/pid"',
   `while sleep ${CHECK_S}; do [ "$(cat "$d/pid" 2>/dev/null)" = "$$" ] || exit 0; if low; then lock; rm -f "$d/pid"; echo battery > "$d/reason"; restore; exit 0; fi; done`].join("\n");
 
 const shScripts = (os) => ({
-  on: [...shHead(os), "lock", 'rm -f "$d/refused"', "alive && { echo on; exit 0; }", 'low && { echo low > "$d/refused"; echo low; exit 0; }', 'rm -f "$d/reason" "$d/pid"',
+  on: [...shHead(os), "lock", 'rm -f "$d/refused"', "alive && { echo on; exit 0; }", 'low && { [ -z "${KANSO_CAFFEINE_ATTEMPT:-}" ] || echo "$KANSO_CAFFEINE_ATTEMPT" > "$d/refused"; echo low; exit 0; }', 'rm -f "$d/reason" "$d/pid"',
     `printf '%s\\n' ${shellQuote(shGuard(os))} > "$d/guard.sh" || exit 1`, ...os.hold, `{ ${os.start}; } || { ${os.failed}; exit 0; }`, SH_WAIT, os.failed].join("\n"),
   off: [...shHead(os), "lock", 'rm -f "$d/refused"', 'if alive; then kill "$p" 2>/dev/null; fi', 'rm -f "$d/pid"', "stop", 'if [ -f "$d/prior" ]; then restore || { echo setup; exit 0; }; fi', "echo off"].join("\n"),
-  read: [...shHead(os), "lock", 'r=$(cat "$d/reason" 2>/dev/null); rm -f "$d/reason"', "alive && { echo on; exit 0; }", 'if [ -f "$d/prior" ]; then restore || { echo on; exit 0; }; fi', 'rm -f "$d/pid"', "stop", '[ -n "$r" ] || r=$(cat "$d/refused" 2>/dev/null)', 'echo "off $r"'].join("\n"),
+  read: [...shHead(os), "lock", 'r=$(cat "$d/reason" 2>/dev/null); rm -f "$d/reason"', "alive && { echo on; exit 0; }", 'if [ -f "$d/prior" ]; then restore || { echo on; exit 0; }; fi', 'rm -f "$d/pid"', "stop", '[ -n "$r" ] || { a=$(cat "$d/refused" 2>/dev/null); [ -z "$a" ] || r="low $a"; }', 'echo "off $r"'].join("\n"),
 });
 
 const PS_HEAD = [
@@ -95,9 +95,9 @@ export function caffeineCall(os, verb) {
 }
 
 export function answerOf(result) {
-  if (!result || result.threw || !(result.ok === true || result.code === 0)) return { word: null, battery: false, low: false };
-  const [word = "", why = ""] = String(result.stdout ?? "").trim().split(/\s+/);
-  return { word: WORDS.includes(word) ? word : null, battery: word === "off" && why === "battery", low: word === "off" && why === "low" };
+  if (!result || result.threw || !(result.ok === true || result.code === 0)) return { word: null, battery: false, refused: null };
+  const [word = "", why = "", attempt = ""] = String(result.stdout ?? "").trim().split(/\s+/);
+  return { word: WORDS.includes(word) ? word : null, battery: word === "off" && why === "battery", refused: word === "off" && why === "low" && attempt ? attempt : null };
 }
 
 const SUDOERS = `printf '%s ALL=(root) NOPASSWD: ${PMSET} 1, ${PMSET} 0, /usr/bin/touch ${MARKER}, /bin/rm -f ${MARKER}\n' "$(id -un)" > "$f"`;
@@ -121,11 +121,11 @@ const SETUP = {
 
 const DONE = { on: "Caffeine is on. This tab can close.", off: "Caffeine is off. This tab can close." };
 
-export function setupArgv(os, verb = "on") {
+export function setupArgv(os, verb = "on", attempt = "") {
   const kind = kindOf(os);
   const steps = SETUP[kind];
   if (!steps || !DONE[verb]) return null;
-  const then = `sh -c ${shellQuote(SCRIPTS[kind][verb])}`;
+  const then = `KANSO_CAFFEINE_ATTEMPT=${shellQuote(attempt)} sh -c ${shellQuote(SCRIPTS[kind][verb])}`;
   return ["sh", "-c", [...steps, `[ "$ok" = 0 ] || { echo 'Caffeine was not set up.'; exit 1; }`, `r=$(${then})`,
     `if [ "$r" = ${verb} ]; then echo ${shellQuote(DONE[verb])}; elif [ "$r" = low ]; then echo 'Caffeine is set up but did not turn on: the battery is at ${LOW}% or less.'; else echo 'Caffeine is set up but did not change.'; fi`].join("\n")];
 }
@@ -165,7 +165,7 @@ export function createCaffeine({ run, local, now = () => Date.now() }) {
       return { ...answerOf(result), os, verb };
     },
     settle(key, answer, changed = false) {
-      const low = answer.word === "low" || (answer.low && this.settingUp(key) === "on");
+      const low = answer.word === "low" || this.refusedBy(key, answer);
       const state = answer.word === "low" ? "off" : answer.word;
       const sure = state === "on" || state === "off";
       const { pending = 0 } = this.row(key);
@@ -188,7 +188,9 @@ export function createCaffeine({ run, local, now = () => Date.now() }) {
       return { on: state === "on", busy: (pending ?? 0) > 0, want: want === true, battery: battery === true, read: readAt != null && !unsure, setup: setupUntil > now() };
     },
     settingUp(key) { return this.row(key).setupUntil > now() ? this.row(key).setupVerb : null; },
-    setup(key, verb) { this.put(key, { setupUntil: now() + SETUP_FOR_MS, setupVerb: verb }); },
+    nextAttempt() { return `${now().toString(36)}${Math.random().toString(36).slice(2, 8)}`; },
+    setup(key, verb, attempt = null) { this.put(key, { setupUntil: now() + SETUP_FOR_MS, setupVerb: verb, setupAttempt: attempt }); },
+    refusedBy(key, answer) { return this.settingUp(key) === "on" && answer.refused != null && answer.refused === this.row(key).setupAttempt; },
     done(key) { this.put(key, { setupUntil: 0 }); },
     change(key, on) {
       this.put(key, { pending: (this.row(key).pending ?? 0) + 1, want: on ?? !this.isOn(key), battery: false });

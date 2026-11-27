@@ -1555,10 +1555,11 @@ export default class Spaces extends RetryingView {
 
   async readCaffeine(key) {
     const title = this.names.title(key || null);
-    const { word, battery, low } = await this.caffeine.read(key);
+    const answer = await this.caffeine.read(key);
+    const { word, battery } = answer;
     const setting = this.caffeine.settingUp(key);
     if (this.caffeine.untold(key)) notify({ title: `Caffeine off: ${title}`, body: `Its battery reached ${LOW}%, so it can sleep.`, level: "info" });
-    const refused = setting === "on" && low;
+    const refused = this.caffeine.refusedBy(key, answer);
     if (setting && (word === setting || battery || refused)) this.caffeine.done(key);
     if (setting && word === setting) this.saidCaffeine(key, title, word);
     if (refused) notify({ title: `Caffeine on ${title} was not changed`, body: CAFFEINE_WHY.low, level: "error" });
@@ -1587,14 +1588,14 @@ export default class Spaces extends RetryingView {
   }
 
   setUpCaffeine(key, os, verb, title, cx) {
-    if (this.caffeine.settingUp(key) === verb) return;
-    const argv = setupArgv(os, verb);
+    const attempt = this.caffeine.nextAttempt();
+    const argv = setupArgv(os, verb, attempt);
     const here = spaces().filter((s) => (s.machine ?? "") === key);
     const space = here.find((s) => s.active) ?? here[0];
     if (!argv) { notify({ title: `Caffeine on ${title} was not changed`, body: CAFFEINE_WHY.refused, level: "error" }); return; }
     if (space) run("tab.new", { space: space.id, name: "Caffeine", argv });
     else run("space.new", { name: "Caffeine", tab: "Caffeine", machine: key, argv });
-    this.caffeine.setup(key, verb);
+    this.caffeine.setup(key, verb, attempt);
     this.followCaffeine(cx);
   }
 

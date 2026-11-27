@@ -67,22 +67,16 @@ test("The Caffeine panel lists every connected computer even with Computers hidd
 });
 
 test("A turn on through its set up that the battery refuses stops waiting for the password and says so once, even read twice at the same time", async () => {
-  const s = await sidebar({ replies: { "grey on": "setup", "grey read": "off low" } });
+  const replies = { "grey on": "setup" };
+  const s = await sidebar({ replies });
   s.connected.push("grey");
   await s.turnOn("grey");
+  replies["grey read"] = `off low ${s.view.caffeine.row("grey").setupAttempt}`;
   await Promise.all([s.view.readCaffeine("grey"), s.view.readCaffeine("grey")]);
   await s.afterSetup();
   const { setup, battery } = s.view.caffeine.look("grey");
   assert.deepEqual({ setup, battery }, { setup: false, battery: true });
   assert.deepEqual(s.toasts.map((toast) => toast.title), ["Caffeine on grey was not changed"]);
-});
-
-test("Turning Caffeine on again while its set up waits for the password opens no second set up", async () => {
-  const s = await sidebar({ replies: { "grey on": "setup" } });
-  s.connected.push("grey");
-  await s.turnOn("grey");
-  await s.turnOn("grey");
-  assert.deepEqual(s.opened, ["space.new"]);
 });
 
 test("Turning Caffeine off through its set up ends with it off and a toast with Undo", async () => {
