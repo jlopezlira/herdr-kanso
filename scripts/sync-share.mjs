@@ -51,7 +51,7 @@ const COMMON = [
   { source: "kanso/mods/kanso-send/folder.js", copies: ["kanso/mods/kanso-strip/folder.js"] },
   // The one window kansō help and kansō settings share.
   { source: "kanso/mods/kanso-settings/pages.js", copies: ["kanso/mods/kanso-help/pages.js"] },
-  { source: "kanso/mods/kanso-settings/installed.js", copies: ["kanso/mods/kanso-help/installed.js"] },
+  { source: "kanso/mods/kanso-settings/installed.js", copies: ["kanso/mods/kanso-help/installed.js", "kanso/mods/kanso-chrome/installed.js"] },
   // The shell of a full-page mod view: Memory draws in it, Containers the same.
   { source: "kanso/mods/kanso-guard/page.js", copies: ["kanso/mods/kanso-containers/page.js"] },
   // One SQLite file under the app's folder: the stores of arrangements and of the dōjō (and help's copy of it).

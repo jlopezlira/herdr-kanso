@@ -12,7 +12,8 @@ import { undoHide } from "./piece-lines.js";
 import { outOfMemory } from "./notices.js";
 import { tokens, DAWN_W, G, H } from "./ui.js";
 import { DAWN_RING_MS, RING_FRAMES } from "./ui-dawn.js";
-import { channelOf } from "./release.js";
+import { channelOf, installedRelease } from "./release.js";
+import { whenInstalled } from "./installed.js";
 import { COLLAPSED } from "./footer-model.js";
 import { header } from "./header.js";
 
@@ -30,6 +31,7 @@ export default class WorkspaceChrome extends View {
     // The one migration. A later read must not write, or every mod draws again.
     loadPieces(shared, setShared);
     if (props()?.footer) return;
+    whenInstalled(cx, (version) => { this.installed = version; });
     // Command names stay kanso-tabs.* for keys bound to them before.
     readCommands(cx, () => nextCommand(), (c) => this.command(c));
     cx.timer.every(SAMPLE_MS, (cx) => this.watch(cx));
@@ -82,15 +84,16 @@ export default class WorkspaceChrome extends View {
   render(cx) {
     if (props()?.footer) return div();
     const collapsed = shared(COLLAPSED) === true;
-    // The title bar: Herdr's own lights, and in Dawn Mode the sky behind them and, open, the pill that says the mode.
+    // The title bar: Herdr's own lights, and in Dawn Mode the sky behind them and, open, the pill that names the installed version.
     const dawn = channelOf(shared("kanso.update")?.channel) === "beta";
     const c = tokens(theme());
     if (this.brandDawn !== dawn) { this.brandDawn = dawn; cx.timer.after(0, () => run("layout.resize", { id: "brand", px: dawn ? H.tabBar + G.lg : H.tabBar })); }
     if (!dawn) return header({ collapsed, dawn })("brand", c);
+    const version = installedRelease(this.installed, shared("kanso.update")?.tag);
     if (!this.dawnScheduled) { this.dawnScheduled = true; cx.timer.after(0, (later) => this.rise(later)); }
     const sky = { width: this.width ?? DAWN_W, run: this.dawnRun ?? 0, rising: Boolean(this.dawnRising), ring: this.dawnRing ?? 0 };
     return div().id("brand-sky").size_full().relative().on_size_change((size, later) => { this.width = size.width; later.notify(); })
-      .child(header({ collapsed, dawn })("brand", { ...c, dawn: { ...c.dawn, sky } }, { presses: collapsed ? {} : { "Dawn Mode": (later) => this.rise(later) } }));
+      .child(header({ collapsed, dawn, version })("brand", { ...c, dawn: { ...c.dawn, sky } }, { presses: collapsed || !version ? {} : { [version]: (later) => this.rise(later) } }));
   }
 
   // The sunrise from its first frame: the night, then the Storybook's keyframes, the ring stepping round as its dash moves.
