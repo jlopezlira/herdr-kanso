@@ -14,12 +14,13 @@ const scriptThere = async (platform, run) => {
 };
 
 export const runTodo = (verb, machine = null) => (machine
-  ? serviceOn(async (platform, run) => run("sh", [await scriptThere(platform, run), verb], { timeout: TODO_RUN_MS }), machine)
+  ? serviceOn(async (platform, run) => (platform === "windows" ? { code: -1, stdout: "", stderr: "", windows: true } : run("sh", [await scriptThere(platform, run), verb], { timeout: TODO_RUN_MS })), machine)
   : exec("sh", [paths.join(appHome(), "mods", ...TODO_SCRIPT), verb], { timeout: TODO_RUN_MS }))
   .catch((e) => ({ code: -1, stdout: "", stderr: String(e?.message ?? e) }));
 
 export const todoOn = async (machine = null) => {
   const r = await runTodo("status", machine);
+  if (r.windows) return "windows";
   return r.code === 0 ? r.stdout.trim().split("\n").at(-1) === "on" : null;
 };
 

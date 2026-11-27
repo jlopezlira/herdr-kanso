@@ -175,9 +175,15 @@ export default class Tabs extends View {
       // The bar is always on screen and the sidebar's footer may not be, so the bar polls for releases.
       this.updater = new Updater();
       this.updater.start(cx);
+      afterMount(cx, (later) => later.spawn(() => this.refreshTodoRule()));
       cx.timer.after(0, (next) => this.probeSimulator(next));
       readCommands(cx, () => nextCommand(), (c, cx) => this.barCommand(c, cx));
     }
+  }
+
+  refreshTodoRule() {
+    if (window()?.platform === "windows") return Promise.resolve(null);
+    return exec("sh", [paths.join(appHome(), "mods", "kanso-panel", "kanso-todo"), "refresh"], { timeout: 60_000 }).catch(() => null);
   }
 
   // keys.json: tab-N and panel-N arrive here as commands.

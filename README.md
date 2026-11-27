@@ -99,10 +99,10 @@ On Windows, merge `kanso/keys.windows.json` into your Herdr keys instead of
 - **Review without leaving.** Pull requests with diff, checks and threads, and
   one click to hand the feedback to an agent. Any file that is not a picture opens in Preview,
   and it can be edited when the read has no NUL and fits in 1 MiB, on this computer or another; `md-review plan.md` from an agent asks for your comments.
-- **Tasks.** Each project's to-do, kept by your agents as they work: turn on
-  Agents keep the to-do in Settings and Claude Code, Codex and Pi add each step
-  and close it when done. Add one yourself, send one to an agent, or start a
-  new conversation with it. It stays in kansō's database on this computer.
+- **Tasks.** What each agent will do in the project you are viewing: one press
+  in Tasks turns it on, and Claude Code, Codex and Pi write their plan step by
+  step, each with a line on what it changes, then mark the step they are on and
+  each one they finish. It follows the project on whichever computer holds it.
 - **While you are away.** An agent stopped by its plan limit can resume on its
   own when the limit resets. Schedule… in a project's menu starts an agent with a prompt at
   a time you choose, and New agent in a worktree gives one task to several

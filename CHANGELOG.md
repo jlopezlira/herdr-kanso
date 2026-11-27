@@ -27,6 +27,8 @@ the branch's rules.
 
 ### Changed
 
+- When kansō starts, including after an update, it brings the agents' plan rule up to date if it is on, so the rule always matches the command it names.
+- Tasks shows each agent's plan for the project you are viewing: every step in order with a line of detail, the step it is doing now, and what it has finished, written by the agent itself; there is nothing to tick or add by hand. Turning it on, or telling running agents, also brings their rule up to date.
 - Tasks follows the project selected in the sidebar as soon as you switch, and one click turns the agents' to-do on and tells the agents on the computer where that project runs, even from another computer.
 - In Dawn Mode, the pill at the top of the sidebar names the installed release, such as 4.2.0-rc.3, instead of "Dawn Mode".
 - Timeline's header shows only its title; the conversation's name, computer and prompt count moved into the pin's tooltip.
