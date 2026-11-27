@@ -15,9 +15,10 @@ import { systemApi } from "./platform-system.js";
 
 import { View, div } from "gpui-kit";
 import { v_flex, h_flex, ScrollHandle } from "gpui-base";
-import { agentSession, agentLabel, renameTerminal, SETTLED_LABEL, SNOOZE_LABEL, UNREAD_LABEL, THREAD_LABEL, settledOf, snoozedUntil, isUnread, woke, backFromSettled, threadSections, snoozePresets, THREAD_ORDERS, STATUS_ORDERS, withTerminals, NAME_LABEL, PIN_LABEL, ORDERS, DEFAULT_ORDER, orderSessions, moved, nest, track, elapsed, sweepStage, sweepBegan, sweepWake, activityOf, bySection, duration, trackSteps, stepOf, tasksOf, said, FOLD_MS, pill, sessionHeight, mostUrgent } from "./agents.js";
+import { agentSession, agentLabel, renameTerminal, SETTLED_LABEL, SNOOZE_LABEL, UNREAD_LABEL, THREAD_LABEL, settledOf, snoozedUntil, isUnread, woke, backFromSettled, threadSections, snoozePresets, THREAD_ORDERS, STATUS_ORDERS, withTerminals, NAME_LABEL, PIN_LABEL, ORDERS, DEFAULT_ORDER, orderSessions, moved, nest, track, elapsed, activityOf, bySection, duration, trackSteps, stepOf, tasksOf, said, FOLD_MS, pill, sessionHeight, mostUrgent } from "./agents.js";
 import { ThreadLocator, findThreads, sameThread, pidsOf, aliveIn, aliveDue, ALIVE_MS, ALIVE_BEHIND_MS, threadIn, AT_ONCE } from "./threads.js";
 import { Panel, sameSeen } from "./panel.js";
+import { glowState } from "./glow-state.js";
 import { Store } from "./store.js";
 import { Kdb, kdbOn, restDue, machinesToAsk, worktreeBase, newId } from "./kdb.js";
 import { agentSnapshot, agentTargets, observedAgents, targetOf, parseTarget, returnSignature, RETURN_LABEL, AWAY_PIECE, destinationOf, livePlaces } from "./since-left-model.js";
@@ -453,6 +454,25 @@ export default class Spaces extends RetryingView {
     this.parts = { header: cx.new(Part, looks.header), switch: cx.new(Part, looks.switch), rows: cx.new(Part, looks.rows), footer: cx.new(SidebarFooter, looks.footer) };
     this.drawnLooks = looks;
     this.paintTimer = cx.timer;
+    this.glowReady = {};
+    this.glowAt = Infinity;
+  }
+
+  redrawGlow() {
+    this.rowsAt = (this.rowsAt ?? 0) + 1;
+    this.paint();
+  }
+
+  followGlow(at, now) {
+    if (at === this.glowAt) return;
+    this.glowTimer?.cancel();
+    this.glowAt = at;
+    this.glowTimer = Number.isFinite(at) ? this.paintTimer.after(at - now, () => {
+      if (this.glowAt !== at) return;
+      this.glowAt = Infinity;
+      this.glowTimer = null;
+      this.redrawGlow();
+    }) : null;
   }
 
   looks() {
@@ -485,15 +505,7 @@ export default class Spaces extends RetryingView {
       ...Object.values(this.tasks ?? {}).flat().map((x) => duration(Math.max(0, now - x.start)))];
     return JSON.stringify({ ...host, own: ROW_STATE.map((key) => listed(this[key])), fold, away: away?.rows.length ? [away.project, away.expanded, away.target, away.rows] : null,
       remembered: listed(this.panel?.agents), caffeine: shared(CAFFEINE) ?? null, ring: Boolean(this.kbd && this.handle.is_focused()), narrow: narrowAt(this.width),
-      born: Object.entries(this.born ?? {}).map(([id, at]) => [id, bornBy(at, now)]), times, minute: Math.floor(now / MINUTE_MS),
-      sweeps: host.agents.map((a) => [a.address, sweepStage(a, this.began, now)]).filter(([, stage]) => stage) });
-  }
-
-  wakeForSweep(now = Date.now()) {
-    const wake = sweepWake(this.began ?? {}, now);
-    if (wake === this.sweepWake) return;
-    this.sweepWake = wake;
-    if (wake != null) this.paintTimer.after(Math.max(0, wake - now), () => { if (this.sweepWake === wake) { this.sweepWake = null; this.paint(); } });
+      born: Object.entries(this.born ?? {}).map(([id, at]) => [id, bornBy(at, now)]), times, minute: Math.floor(now / MINUTE_MS) });
   }
 
   rowsReplaced() {
@@ -510,7 +522,6 @@ export default class Spaces extends RetryingView {
 
   paint() {
     if (this.rowsChanged()) this.rowsAt = (this.rowsAt ?? 0) + 1;
-    this.wakeForSweep();
     const next = this.looks();
     Object.entries(next).filter(([name, look]) => JSON.stringify(look) !== JSON.stringify(this.drawnLooks?.[name])).forEach(([name, look]) => this.parts[name].set_props(look));
     this.drawnLooks = next;
@@ -566,6 +577,8 @@ export default class Spaces extends RetryingView {
   }
 
   close() {
+    this.glowAt = Infinity;
+    this.glowTimer?.cancel();
     try { this.wtPrompt?.release(); this.wtBase?.release(); Object.values(this.fields ?? {}).forEach((f) => f.release()); this.branch?.release(); this.projectName?.release(); this.convScroll?.release(); this.agentScroll?.release(); this.find?.release(); } catch { /* already gone */ }
   }
 
@@ -1402,7 +1415,6 @@ export default class Spaces extends RetryingView {
     if (!next) { if (steps) this.redraw(cx); return; }
     // A turn ended or began: what was said changed.
     if (this.view === "threads") this.threadsAt = 0;
-    this.began = sweepBegan(this.since, next, now, this.began, this.panelReady);
     this.since = next;
     this.panel.set("spaces.since", next);
     this.redraw(cx);
@@ -2496,7 +2508,7 @@ export default class Spaces extends RetryingView {
       const span = entries.slice(i, starts[k + 1] ?? entries.length), slab = keys[i] && span.length > 1;
       const rows = span.map((e) => {
         if (e.a.asleep) return { a: e.a, h: H.line, el: this.asleepLine(e.a, t) };
-        const m = this.more(e, ctx, unnamedComputer(machineOf(e.a.address), heading));
+        const m = this.more(e, { ...ctx, glowScope: [space, slab ? keys[i] : null] }, unnamedComputer(machineOf(e.a.address), heading));
         return { a: e.a, h: sessionHeight(m), el: agentSession(e.a, indent ? 2 : 1, c, this.navRow(e.a, e.lines.length ? this.rowFor(e.a) : e.a.pane ? this.rowOf(e.a, mine, space) : null), m) };
       });
       return { key: keys[i], rows, slab };
@@ -2529,9 +2541,12 @@ export default class Spaces extends RetryingView {
   }
 
   extras(a, ctx, show = true) {
+    const scope = JSON.stringify([this.glowView, ctx.glowScope ?? a.space]);
+    const state = glowState(this.glowReady?.[a.address], scope, a.status === "working" && !a.dozing, ctx.now);
+    if (this.drawnGlow) this.drawnGlow[a.address] = state;
     return {
+      glow: state.fade ? { pose: state.pose, ...state.fade } : state.pose,
       step: show ? stepOf(a, this.steps, ctx.now) : null,
-      sweep: sweepStage(a, this.began, ctx.now),
       tasks: this.showTasks === false || a.sub ? [] : (this.tasks[a.address] ?? []).map((x) => ({ command: x.command, time: duration(Math.max(0, ctx.now - x.start)) })),
     };
   }
@@ -3036,7 +3051,7 @@ export default class Spaces extends RetryingView {
       const laid = this.unfolded(id, open, ctx.now) ? (s.id === "asleep" ? this.asleepStatus(s, t, c, ctx) : s.entries.map((e, k) => {
         if (e.a.asleep) return { focused: false, rh: H.line, el: this.asleepLine(e.a, t) };
         const where = machineOf(e.a.address);
-        const m = this.more(e, ctx, e.lines.length ? unnamedComputer(where, machineOf(tops[k]?.address)) : rowDirectory(project(e.a.space)?.name, where)), rh = sessionHeight(m);
+        const m = this.more(e, { ...ctx, glowScope: id }, e.lines.length ? unnamedComputer(where, machineOf(tops[k]?.address)) : rowDirectory(project(e.a.space)?.name, where)), rh = sessionHeight(m);
         return { focused: e.a.focused, rh, el: agentSession(e.a, 0, c, this.navRow(e.a, this.rowFor(e.a)), m) };
       })) : [];
       const { h, focus, focusH } = laid.reduce((acc, r) => ({ h: acc.h + r.rh + 1, focus: r.focused ? acc.h : acc.focus, focusH: r.focused ? r.rh : acc.focusH }), { h: 0, focus: null, focusH: 0 });
@@ -3194,7 +3209,7 @@ export default class Spaces extends RetryingView {
     if (!rows.length) return [item(emptyState({ icon: "message-square", text: "No conversations yet" })("threads-empty", c))];
     const sections = threadSections(rows, { order: this.threadOrder, group: this.threadGroup, now: ctx.now, since: this.since ?? {} });
     // Under its project's header a conversation is nested: indented, the agent's icon as its mark, and no project line.
-    const row = ({ a, th }, nested = false) => {
+    const row = ({ a, th }, nested = false, glowScope = "active") => {
       if (a.asleep) return { rh: H.line, el: this.asleepLine(a, t) };
       const when = (this.threadOrder === "started" ? th?.began : th?.said ?? th?.at) ?? this.since?.[a.address]?.at;
       const unread = isUnread(a.labels), up = woke(a, ctx.now), settled = Boolean(settledOf(a.labels)) && !backFromSettled(a);
@@ -3213,7 +3228,7 @@ export default class Spaces extends RetryingView {
         // What the agent says it is on, or said last; else the last thing you wrote.
         activity: unreadable ? null : said(a) ?? (th?.prompt ? `You: ${th.prompt}` : null),
         oneLine: this.narrow,
-        ...this.extras(a, ctx),
+        ...this.extras(a, { ...ctx, glowScope }),
       };
       return { rh: sessionHeight(more), el: agentSession(a, nested ? 1 : 0, c, this.navRow(a, this.rowFor(a, actions, { title: th?.title ?? null, session: th?.file ?? null })), more) };
     };
@@ -3221,7 +3236,7 @@ export default class Spaces extends RetryingView {
     const stack = (laid, gap) => laid.reduce((acc, r, k) => ({ h: acc.h + r.rh + (k ? gap : 0), tops: [...acc.tops, acc.h + (k ? gap : 0)] }), { h: 0, tops: [] });
     const quiet = (g, nested) => {
       const zOpen = this.asleepOpenOf(g.id);
-      const drawn = this.unfolded(`asleep-${g.id}`, zOpen, ctx.now) ? g.rows.map((r) => row(r, nested)) : [];
+      const drawn = this.unfolded(`asleep-${g.id}`, zOpen, ctx.now) ? g.rows.map((r) => row(r, nested, g.id)) : [];
       const box = this.foldBox(`asleep-${g.id}`, zOpen, drawn.map((r) => r.el), ctx.now, 6);
       const h = drawn.reduce((n, r, k) => n + r.rh + (k ? 6 : 0), 0);
       const a = g.rows[0].a;
@@ -3259,7 +3274,7 @@ export default class Spaces extends RetryingView {
         { title: headName, status: whole ? "asleep" : "none", count: sectionCount(open, s.rows.length), add, hover: this.hoverHead === s.id, onHover }), H.line)];
       const body = whole ? s.rows : split.live;
       const show = this.unfolded(foldId, open, ctx.now);
-      const laid = show ? body.map((r) => row(r, Boolean(s.project))) : [];
+      const laid = show ? body.map((r) => row(r, Boolean(s.project), foldId)) : [];
       const tabs = !whole && show ? split.groups.flatMap((g) => quiet(g, true).map((it) => it.el)) : [];
       const { h: stackH, tops } = stack(laid, 6);
       const k = laid.findIndex((_r, j) => body[j].a.focused);
@@ -3467,6 +3482,9 @@ export default class Spaces extends RetryingView {
     // Every row built once per draw, for every view.
     const asleep = this.sleepingNow(sp, read.terms, ps);
     const rowsCtx = { ...read, asleep, spaces: sp, registry: registry(), spaceIds: new Set(sp.map((w) => w.id)), all: this.listed(ps, sp, read.terms).filter((a) => !asleep.dozing.has(a.address)) };
+    if (this.glowView !== view) this.glowReady = {};
+    this.glowView = view;
+    this.drawnGlow = {};
     const ctx = { ...rowsCtx, rowsBy: new Map(sp.map((w) => [w.id, this.spaceRows(w.id, rowsCtx)])), project: this.projectOf(sp, t) };
     const queue = this.refreshNeeds(sp, read.terms, asleep);
     const words = (query ?? "").trim();
@@ -3483,6 +3501,8 @@ export default class Spaces extends RetryingView {
           : view === "agents" ? (collapsed ? this.agentsRail(t, shownSp, shownCtx) : this.agentsView(t, shownSp, ps, shownCtx))
           : view === "threads" ? (collapsed ? this.threadsRail(t, shownSp, shownCtx) : this.threadsView(t, shownSp, ps, shownCtx)) : this.grouped(t, collapsed, shownSp, ps, shownCtx)),
         collapsed ? null : this.awayCard(t, active)])("spaces-rows", tokens(t));
+    this.glowReady = this.drawnGlow;
+    this.followGlow(Object.values(this.drawnGlow).reduce((at, state) => Math.min(at, state.next), Infinity), read.now);
     this.nav = this.navNext;
     // The row the ring was on is gone: it stays at the same place in the list.
     if (this.kbd && this.nav.length && !this.nav.some((n) => n.key === this.navKey)) this.navKey = this.nav[Math.min(this.navAt ?? 0, this.nav.length - 1)].key;

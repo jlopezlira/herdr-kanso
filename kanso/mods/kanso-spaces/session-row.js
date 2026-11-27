@@ -10,8 +10,8 @@ const inkOf = ({ status, depth, current, dimmed }) => {
   return depth > 1 ? 'dim' : 'muted';
 };
 
-export const sessionRow = ({ program = 'p-claude', name, activity = null, step = null, time = null, place = null, placeTip = null, status = 'working', sweep = null, depth = 1, guides = [], current = false, ground = true, selected = false, pinned = false, pinnable = true, menu = true, commands = 0, commandsTip = null, tools = [], refresh = false, drop = null, hover = false, focus = false, dimmed = false, failure = null }) => row({
-  icon: program, name, mark: status, depth, guides, current: current && ground, selected, dimmed, hover, focus, drop, glint: status === 'working' && sweep,
+export const sessionRow = ({ program = 'p-claude', name, activity = null, step = null, time = null, place = null, placeTip = null, status = 'working', glow = null, depth = 1, guides = [], current = false, ground = true, selected = false, pinned = false, pinnable = true, menu = true, commands = 0, commandsTip = null, tools = [], refresh = false, drop = null, hover = false, focus = false, dimmed = false, failure = null }) => row({
+  icon: program, name, mark: status, depth, guides, current: current && ground, selected, dimmed, hover, focus, drop, glint: glow ?? (status === 'working' ? 'working' : 'rest'),
   names: true, nameInk: inkOf({ status, depth, current, dimmed }),
   // Under its activity a session's time reads inline, "Run npm publish? · 2m"; a one-line row keeps it at the end.
   second: activity && [{ text: activity, tone: ACTIVITY_TONE[status] ?? 'dim' }, step ? { text: step.time, tone: step.stuck ? 'blocked' : 'dim' } : time && { text: time, tone: 'dim' }],
