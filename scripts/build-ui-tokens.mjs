@@ -42,6 +42,7 @@ const PICK = {
 const LEADINGS = { LH: { body: "k-lh-body" } };
 // Durations in milliseconds.
 const TIMING = { SPIN: "k-spin-ms", GLINT_MS: "k-glint-ms", GLINT_STAGGER: "k-glint-stagger", LIT_MS: "k-key-lit-ms" };
+const COUNTS = { GLINT_PACES: "k-glint-paces" };
 // Transitions: a duration and an easing.
 const MOTION = { EASE: { duration: "k-fade-ms", easing: "k-glide-ease" }, GLIDE: { duration: "k-glide-ms", easing: "k-glide-ease" } };
 const EASINGS = { GLINT_EASE: "k-ease-out" };
@@ -122,7 +123,7 @@ export function block(tokens, dawnMotion) {
   const of = share(tokens);
   const motion = Object.entries(MOTION).map(([name, pick]) => `export const ${name} = { duration: ${duration(pick.duration)}, easing: ${ease(pick.easing)} };`);
   const beats = `export const BEAT = { ${Object.entries(BEATS).map(([key, pick]) => `${key}: { from: ${of(pick.from)}, to: 1, period: ${duration(pick.period)} }`).join(", ")} };`;
-  return [START, ...constants(PICK, px(tokens)), ...constants(LEADINGS, reader("")(tokens)), ...constants(TIMING, duration), ...motion, ...constants(EASINGS, ease), beats, ...constants(SHARES, of),
+  return [START, ...constants(PICK, px(tokens)), ...constants(LEADINGS, reader("")(tokens)), ...constants(TIMING, duration), ...constants(COUNTS, reader("")(tokens)), ...motion, ...constants(EASINGS, ease), beats, ...constants(SHARES, of),
     washes(tokens), dawnInks(tokens), dawnMotion, constant("INK", INK, ink(tokens)), END].join("\n");
 }
 
