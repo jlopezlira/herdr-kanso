@@ -99,7 +99,7 @@ const typed = (el, { heading, group, title, names }) => el
   .when(group || names, (el) => el.text_size(T.card))
   .when(names && (heading || group), (el) => el.flex_none().max_w(W.buttonLabel))
   .when(title, (el) => el.text_size(T.page));
-const nameOf = (id, c, { name, ink, glint, wrap, ...kind }) => (glint ? typed(glinting(name, c, id, glint), kind) : typed(div().min_w(0).text_color(ink)
+const nameOf = (id, c, { name, ink, glint, wrap, ...kind }) => (glint ? typed(glinting(name, c, id), kind) : typed(div().min_w(0).text_color(ink)
   .when(wrap, (el) => el.flex_1().line_height(LH.body))
   .when(!wrap, (el) => el.truncate()), kind)
   .child(name));

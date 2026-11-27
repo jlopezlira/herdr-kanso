@@ -16,7 +16,7 @@ import { systemApi } from "./platform-system.js";
 
 import { View, div } from "gpui-kit";
 import { v_flex, h_flex, ScrollHandle } from "gpui-base";
-import { agentSession, agentLabel, renameTerminal, SETTLED_LABEL, SNOOZE_LABEL, UNREAD_LABEL, THREAD_LABEL, settledOf, snoozedUntil, isUnread, woke, backFromSettled, threadSections, snoozePresets, THREAD_ORDERS, STATUS_ORDERS, withTerminals, NAME_LABEL, PIN_LABEL, ORDERS, DEFAULT_ORDER, orderSessions, moved, nest, track, elapsed, sweepStage, sweepBegan, sweepWake, activityOf, bySection, duration, trackSteps, stepOf, tasksOf, said, FOLD_MS, pill, sessionHeight, mostUrgent } from "./agents.js";
+import { agentSession, agentLabel, renameTerminal, SETTLED_LABEL, SNOOZE_LABEL, UNREAD_LABEL, THREAD_LABEL, settledOf, snoozedUntil, isUnread, woke, backFromSettled, threadSections, snoozePresets, THREAD_ORDERS, STATUS_ORDERS, withTerminals, NAME_LABEL, PIN_LABEL, ORDERS, DEFAULT_ORDER, orderSessions, moved, nest, track, elapsed, activityOf, bySection, duration, trackSteps, stepOf, tasksOf, said, FOLD_MS, pill, sessionHeight, mostUrgent } from "./agents.js";
 import { ThreadLocator, findThreads, sameThread, pidsOf, aliveIn, aliveDue, ALIVE_MS, ALIVE_BEHIND_MS, threadIn, AT_ONCE } from "./threads.js";
 import { Panel, sameSeen } from "./panel.js";
 import { Store } from "./store.js";
@@ -486,15 +486,7 @@ export default class Spaces extends RetryingView {
       ...Object.values(this.tasks ?? {}).flat().map((x) => duration(Math.max(0, now - x.start)))];
     return JSON.stringify({ ...host, own: ROW_STATE.map((key) => listed(this[key])), fold, away: away?.rows.length ? [away.project, away.expanded, away.target, away.rows] : null,
       remembered: listed(this.panel?.agents), caffeine: shared(CAFFEINE) ?? null, ring: Boolean(this.kbd && this.handle.is_focused()), narrow: narrowAt(this.width),
-      born: Object.entries(this.born ?? {}).map(([id, at]) => [id, bornBy(at, now)]), times, minute: Math.floor(now / MINUTE_MS),
-      sweeps: host.agents.map((a) => [a.address, sweepStage(a, this.began, now)]).filter(([, stage]) => stage) });
-  }
-
-  wakeForSweep(now = Date.now()) {
-    const wake = sweepWake(this.began ?? {}, now);
-    if (wake === this.sweepWake) return;
-    this.sweepWake = wake;
-    if (wake != null) this.paintTimer.after(Math.max(0, wake - now), () => { if (this.sweepWake === wake) { this.sweepWake = null; this.paint(); } });
+      born: Object.entries(this.born ?? {}).map(([id, at]) => [id, bornBy(at, now)]), times, minute: Math.floor(now / MINUTE_MS) });
   }
 
   rowsReplaced() {
@@ -511,7 +503,6 @@ export default class Spaces extends RetryingView {
 
   paint() {
     if (this.rowsChanged()) this.rowsAt = (this.rowsAt ?? 0) + 1;
-    this.wakeForSweep();
     const next = this.looks();
     Object.entries(next).filter(([name, look]) => JSON.stringify(look) !== JSON.stringify(this.drawnLooks?.[name])).forEach(([name, look]) => this.parts[name].set_props(look));
     this.drawnLooks = next;
@@ -1403,7 +1394,6 @@ export default class Spaces extends RetryingView {
     if (!next) { if (steps) this.redraw(cx); return; }
     // A turn ended or began: what was said changed.
     if (this.view === "threads") this.threadsAt = 0;
-    this.began = sweepBegan(this.since, next, now, this.began, this.panelReady);
     this.since = next;
     this.panel.set("spaces.since", next);
     this.redraw(cx);
@@ -2534,7 +2524,6 @@ export default class Spaces extends RetryingView {
   extras(a, ctx, show = true) {
     return {
       step: show ? stepOf(a, this.steps, ctx.now) : null,
-      sweep: sweepStage(a, this.began, ctx.now),
       tasks: this.showTasks === false || a.sub ? [] : (this.tasks[a.address] ?? []).map((x) => ({ command: x.command, time: duration(Math.max(0, ctx.now - x.start)) })),
     };
   }
