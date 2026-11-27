@@ -12,7 +12,7 @@ import { undoHide } from "./piece-lines.js";
 import { outOfMemory } from "./notices.js";
 import { tokens, DAWN_W, G, H } from "./ui.js";
 import { DAWN_RING_MS, RING_FRAMES } from "./ui-dawn.js";
-import { channelOf, installedRelease } from "./release.js";
+import { channelOf, installedRelease, parseRelease } from "./release.js";
 import { whenInstalled } from "./installed.js";
 import { COLLAPSED } from "./footer-model.js";
 import { header } from "./header.js";
@@ -25,12 +25,14 @@ const TAB_BAR_COMMANDS = new Set(["update", "check", "settings", "settings-mods"
 export const exhausted = (e) => /out of memory|\bNull\b\s*["'“]?null/i.test(String(e));
 
 const DAWN_START_MS = 34;
+const INSTALLED_RETRY_MS = 5_000;
 
 export default class WorkspaceChrome extends View {
   init(_props, cx) {
     // The one migration. A later read must not write, or every mod draws again.
     loadPieces(shared, setShared);
     if (props()?.footer) return;
+    this.timer = cx.timer;
     this.readInstalled(cx);
     // Command names stay kanso-tabs.* for keys bound to them before.
     readCommands(cx, () => nextCommand(), (c) => this.command(c));
@@ -76,9 +78,10 @@ export default class WorkspaceChrome extends View {
   }
 
   readInstalled(cx) {
-    if (this.reading) return;
-    this.reading = true;
-    whenInstalled(cx, (version) => { this.installed = version; this.reading = false; });
+    whenInstalled(cx, (version) => {
+      if (parseRelease(version)) this.installed = version;
+      else this.timer.after(INSTALLED_RETRY_MS, (later) => this.readInstalled(later));
+    });
   }
 
   // Started detached, so the new window survives this one quitting.
@@ -95,7 +98,6 @@ export default class WorkspaceChrome extends View {
     const c = tokens(theme());
     if (this.brandDawn !== dawn) { this.brandDawn = dawn; cx.timer.after(0, () => run("layout.resize", { id: "brand", px: dawn ? H.tabBar + G.lg : H.tabBar })); }
     if (!dawn) return header({ collapsed, dawn })("brand", c);
-    if (this.installed == null) this.readInstalled(cx);
     const version = installedRelease(this.installed, shared("kanso.update")?.tag);
     if (!this.dawnScheduled) { this.dawnScheduled = true; cx.timer.after(0, (later) => this.rise(later)); }
     const sky = { width: this.width ?? DAWN_W, run: this.dawnRun ?? 0, rising: Boolean(this.dawnRising), ring: this.dawnRing ?? 0 };
