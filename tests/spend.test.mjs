@@ -348,7 +348,7 @@ const HOUR_MS = 60 * 60_000;
 const RETRY_MS = 10 * 60_000;
 const retryStamp = (deadline) => deadline - 12 * HOUR_MS;
 
-const sharedSpend = async ({ failResumption = false, sleepingBeforeRefresh = false, restartPartial = false } = {}) => {
+const sharedSpend = async ({ failResumption = false, sleepingBeforeRefresh = false, restartPartial = false, deferRefresh = false } = {}) => {
   const commands = [], exchanges = [];
   let now = Date.UTC(2026, 10, 10, 12), snapshots = 0;
   const state = { "kanso.spend.snapshotAt": now - HOUR_MS };
@@ -370,16 +370,19 @@ const sharedSpend = async ({ failResumption = false, sleepingBeforeRefresh = fal
   Spend.prototype.exchangeOnce = captureExchange(exchanges);
   const first = await mountSpend(Spend);
   const sleeping = sleepingBeforeRefresh ? initSpend(Spend) : null;
-  commands.length = 0;
-  exchanges.length = 0;
-  first.view.reload(first.cx);
-  await first.drain();
-  assert.equal(first.view.scan.partial, true);
+  const refresh = async () => {
+    commands.length = 0;
+    exchanges.length = 0;
+    first.view.reload(first.cx);
+    await first.drain();
+    assert.equal(first.view.scan.partial, true);
+  };
+  if (!deferRefresh) await refresh();
   const continueFirst = async () => {
     first.timers.find(([ms]) => ms === 1000)[1](first.cx);
     await first.drain();
   };
-  return { Spend, first, sleeping, continueFirst, commands, exchanges, advance: (ms) => { now += ms; } };
+  return { Spend, first, sleeping, refresh, continueFirst, commands, exchanges, advance: (ms) => { now += ms; } };
 };
 
 test("Spend resumes an unfinished scan when reopened at ten minutes and shares only the completed totals.", async () => {
@@ -452,10 +455,8 @@ test("A pending Spend continuation prices the completed ledger without rescannin
 
 const interceptSpendPrepare = (view, prepare) => {
   const ask = view.ask.bind(view);
-  view.ask = (command, ...args) => {
-    const answer = ask(command, ...args);
-    return command === "prepare" ? prepare(answer) : answer;
-  };
+  view.ask = (command, ...args) =>
+    command === "prepare" ? prepare(() => ask(command, ...args)) : ask(command, ...args);
 };
 
 const checkShareAfterRepricing = async (reopen) => {
@@ -463,8 +464,8 @@ const checkShareAfterRepricing = async (reopen) => {
   const start = commands.length;
   exchanges.length = 0;
   const priced = Promise.withResolvers();
-  interceptSpendPrepare(first.view, async (answer) => {
-    const payload = await answer;
+  interceptSpendPrepare(first.view, async (read) => {
+    const payload = await read();
     await priced.promise;
     return payload;
   });
@@ -495,29 +496,40 @@ test("Reopening an already-awake Spend view cannot overwrite the other view's co
   assert.deepEqual(exchanges.slice(start).map(([usd]) => usd), [2, 2]);
 });
 
-const checkPrepareDuringPartial = async (fresh) => {
-  const scenario = await sharedSpend();
+const checkPrepareDuringPartial = async (fresh, beforeScan = false) => {
+  const scenario = await sharedSpend({ deferRefresh: beforeScan });
   const { first, exchanges } = scenario;
   const pricingView = fresh ? initSpend(scenario.Spend) : first;
   const partial = Promise.withResolvers(), complete = Promise.withResolvers();
   const pricing = Promise.withResolvers(), repricing = Promise.withResolvers();
+  const started = Promise.withResolvers(), allowRead = Promise.withResolvers();
   let prepares = 0;
-  interceptSpendPrepare(pricingView.view, async (answer) => {
-    const payload = await answer;
+  interceptSpendPrepare(pricingView.view, async (read) => {
     prepares += 1;
-    if (prepares === 1) {
-      pricing.resolve(payload.costs.local.usd);
-      await partial.promise;
-    } else {
+    if (prepares > 1) {
+      const payload = await read();
       repricing.resolve();
       await complete.promise;
+      return payload;
     }
+    if (beforeScan) {
+      started.resolve(true);
+      await allowRead.promise;
+    }
+    const payload = await read();
+    pricing.resolve(payload.costs.local.usd);
+    await partial.promise;
     return payload;
   });
   if (!fresh) pricingView.view.run("prepare", pricingView.cx);
   const done = fresh ? pricingView.start() : pricingView.drain();
   let other;
   try {
+    if (beforeScan) {
+      assert.equal(await Promise.race([started.promise, done]), true);
+      await scenario.refresh();
+      allowRead.resolve();
+    }
     assert.equal(await Promise.race([pricing.promise, done]), 1);
     other = await finishInOtherSpendView(scenario);
     exchanges.length = 0;
@@ -526,6 +538,7 @@ const checkPrepareDuringPartial = async (fresh) => {
     assert.deepEqual(exchanges, []);
     assert.equal(prepares, 2);
   } finally {
+    allowRead.resolve();
     partial.resolve();
     complete.resolve();
     await done;
@@ -539,6 +552,9 @@ test("The Spend view that started a partial scan reprices if another view comple
 
 test("A fresh Spend view reprices if another view completes while it is pricing partial totals.", () =>
   checkPrepareDuringPartial(true));
+
+test("Spend discards partial pricing read by a prepare that started before another view's scan.", () =>
+  checkPrepareDuringPartial(true, true));
 
 test("A pending Spend continuation does not follow a newer partial scan from another view.", async () => {
   const scenario = await sharedSpend({ restartPartial: true });
