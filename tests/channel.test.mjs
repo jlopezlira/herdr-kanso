@@ -32,7 +32,6 @@ test("A beta computes its version from stable and Unreleased, and continues exis
   assert.deepEqual(beta({ installedChangedSince: (tag) => { seen.push(tag); return true; } }), { action: "release", tag: "v1.2.0-beta.1", title: "Kanso 1.2.0-beta.1", prerelease: true, message: "publish v1.2.0-beta.1" });
   assert.deepEqual(seen, ["1.1.0"]);
   assert.equal(beta({ tags: ["v1.1.0", "v1.2.0-beta.1", "1.2.0-beta.2", "v1.2.0-beta.13"] }).tag, "v1.2.0-beta.14");
-  assert.equal(beta({ tags: ["1.1.0", "1.2.0-beta.1", "1.2.0-beta.4"] }).tag, "v1.2.0-beta.5");
   const again = [];
   assert.equal(beta({ tags: ["1.1.0", "1.2.0-beta.10"], installedChangedSince: (tag) => { again.push(tag); return true; } }).tag, "v1.2.0-beta.11");
   assert.deepEqual(again, ["1.2.0-beta.10"]);
@@ -50,6 +49,40 @@ test("A beta skips unchanged installs and missing entries, and refuses the wrong
   assert.deepEqual(beta({ branch: "main" }), { action: "fail", message: "a beta is published only from develop (this is main)" });
   assert.match(beta({ branch: "" }).message, /unknown branch/);
   assert.equal(beta({ version: "1.2.0-beta.1" }).action, "fail");
+});
+
+const beforeCandidate = ["1.1.0", "1.2.0-beta.1", "1.2.0-beta.2"];
+const afterCandidate = ["1.1.0", "1.2.0-beta.1", "1.2.0-rc.1", "1.2.0-beta.2"];
+const remote = (tags) => tags.map((tag, i) => `${i}\trefs/tags/${/^\d/.test(tag) ? `v${tag}` : tag}`).join("\n");
+
+test("A develop release continues the beta numbers before a release candidate exists", () => {
+  assert.equal(beta({ tags: beforeCandidate }).tag, "v1.2.0-beta.3");
+});
+
+test("A develop release checks changes against the release candidate and publishes the next candidate", () => {
+  const baselines = [];
+  const plan = beta({ tags: afterCandidate, installedChangedSince: (tag) => { baselines.push(tag); return true; } });
+  assert.deepEqual({ tag: plan.tag, baselines }, { tag: "v1.2.0-rc.2", baselines: ["1.2.0-rc.1"] });
+});
+
+test("A develop release skips when the install has not changed since the release candidate", () => {
+  const plan = beta({ tags: afterCandidate, installedChangedSince: (tag) => tag !== "1.2.0-rc.1" });
+  assert.deepEqual(plan, { action: "skip", message: "what Kanso installs has not changed since v1.2.0-rc.1; no beta." });
+});
+
+test("Early selects the tag planned on develop and offers it to users on the previous prerelease", () => {
+  for (const tags of [beforeCandidate, afterCandidate]) {
+    const { tag } = beta({ tags });
+    const previous = newestTag(remote(tags), "beta");
+    const latest = newestTag(remote([...tags, tag]), "beta");
+    assert.equal(latest, tag.slice(1));
+    assert.equal(offerRelease(latest, previous, "beta"), latest);
+  }
+});
+
+test("A develop release refuses to publish when Early already sees a higher version", () => {
+  const plan = beta({ tags: [...afterCandidate, "1.3.0-beta.1"] });
+  assert.deepEqual(plan, { action: "fail", message: "v1.2.0-rc.2 would not reach Early: v1.3.0-beta.1 already ranks above it" });
 });
 
 test("The first RC moves Unreleased, fixes the version, and keeps stable history", () => {
@@ -79,8 +112,8 @@ test("Later RCs retain the version when the combined categories need no larger b
   assert.ok(merged.changelog.endsWith(stableLog));
   assert.ok(!merged.changelog.includes("[Unreleased]"));
   assert.equal(planRelease({ ...first, changelog, tags, kind: "rc", branch: "develop" }).tag, "v1.2.0-rc.3");
-  assert.equal(beta({ ...first, changelog, tags }).tag, "v1.2.0-beta.14");
-  assert.equal(beta({ ...first, changelog: changelog.replace("### Added\n\n- Another feature.\n\n", ""), tags }).tag, "v1.2.0-beta.14", "Fixed entries keep the candidate's minor version");
+  assert.equal(beta({ ...first, changelog, tags }).tag, "v1.2.0-rc.3");
+  assert.equal(beta({ ...first, changelog: changelog.replace("### Added\n\n- Another feature.\n\n", ""), tags }).tag, "v1.2.0-rc.3", "Fixed entries keep the candidate's minor version");
 });
 
 test("A later RC recomputes all unreleased entries and renames a minor candidate for Breaking or Removed", () => {
@@ -126,6 +159,10 @@ test("Workflows publish a beta from develop, a release candidate on demand, and 
   assert.doesNotMatch(release, /\n\s*(push|workflow_dispatch|pull_request):/, "no workflow publishes a stable release beside CI");
   assert.match(release, /INPUT_KIND: \$\{\{ inputs\.kind \}\}/);
   assert.match(release, /release-plan\.mjs \$INPUT_KIND/);
+  const plan = release.slice(release.indexOf("- name: Plan"), release.indexOf("- name: Tag as the actor"));
+  assert.match(release, /INPUT_TAG: \$\{\{ inputs\.tag \}\}/);
+  assert.match(plan, /"\$INPUT_TAG" = archive \] && \[ "\$\(git ls-remote origin "refs\/heads\/\$INPUT_BRANCH" \| cut -f1\)" != "\$GITHUB_SHA" \]/, "a run whose commit is no longer the branch head publishes nothing");
+  assert.ok(plan.indexOf('echo "action=skip"') < plan.indexOf("release-plan.mjs"), "the superseded run skips before it plans");
   assert.match(release, /INPUT_BRANCH: \$\{\{ inputs\.branch \}\}/);
   assert.match(release, /test "\$GITHUB_REF_NAME" = "\$INPUT_BRANCH"/);
   const archive = release.slice(release.indexOf("Tag the archive"), release.indexOf("Commit and tag"));
@@ -202,7 +239,6 @@ test("Windows runs its tests in three shards, each on its own runner, and the ot
   assert.match(ci, /run: npm test\$\{\{ matrix\.shard && format\(' -- --test-shard=\{0\}', matrix\.shard\) \|\| '' \}\}/);
 });
 
-const remote = (tags) => tags.map((tag, i) => `${i}\trefs/tags/${/^\d/.test(tag) ? `v${tag}` : tag}`).join("\n");
 const mixed = remote(["3.29.0", "3.30.0-beta.1", "3.30.0-beta.2", "3.30.0-rc.1", "3.30.0", "3.31.0-beta.1", "nightly", "v2.0.0-beta"]);
 
 test("Stable takes the newest finished release, and Early takes the newest of beta, rc and stable", () => {

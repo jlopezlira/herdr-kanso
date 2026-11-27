@@ -17,12 +17,14 @@ function nextN(names, version, channel) {
   return (ns.length ? Math.max(...ns) : 0) + 1;
 }
 
+const prereleasesOf = (names, version, channel = null) => names.filter((name) => {
+  const rel = parseRelease(name);
+  return rel?.channel && (!channel || rel.channel === channel) && core(rel) === version;
+});
+
 function baseline(names, version) {
-  const betas = names.filter((name) => {
-    const rel = parseRelease(name);
-    return rel?.channel === "beta" && core(rel) === version;
-  });
-  const pool = betas.length ? betas : names.filter((name) => parse(name));
+  const prereleases = prereleasesOf(names, version);
+  const pool = prereleases.length ? prereleases : names.filter((name) => parse(name));
   return pool.length ? [...pool].sort(compareReleases).at(-1) : null;
 }
 
@@ -78,7 +80,10 @@ export function planRelease({ kind, branch, version, changelog, tags, installedC
     const next = nextVersion(changelog, tags);
     const base = baseline(names, next);
     if (base && !changedSince(base)) return skip(`what Kanso installs has not changed since v${base}; no beta.`);
-    return publish(`${next}-beta.${nextN(names, next, "beta")}`, true);
+    const channel = prereleasesOf(names, next, "rc").length ? "rc" : "beta";
+    const plan = publish(`${next}-${channel}.${nextN(names, next, channel)}`, true);
+    const newer = names.find((name) => compareReleases(plan.tag, name) <= 0);
+    return newer ? fail(`${plan.tag} would not reach Early: v${newer} already ranks above it`) : plan;
   } catch (error) {
     return fail(error.message);
   }
