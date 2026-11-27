@@ -6,6 +6,7 @@ import { deliver, machineOf } from "./deliver.js";
 
 export const TODO_SCRIPT = ["kanso-panel", "kanso-todo"];
 const TODO_RUN_MS = 120_000;
+const NO_SH = /not found|not recognized|ENOENT|cannot find/i;
 const on = (machine) => (address) => (machineOf(address) ?? "") === (machine ?? "");
 
 const scriptThere = async (platform, run) => {
@@ -14,7 +15,10 @@ const scriptThere = async (platform, run) => {
 };
 
 export const runTodo = (verb, machine = null) => (machine
-  ? serviceOn(async (platform, run) => (platform === "windows" ? { code: -1, stdout: "", stderr: "", windows: true } : run("sh", [await scriptThere(platform, run), verb], { timeout: TODO_RUN_MS })), machine)
+  ? serviceOn(async (platform, run) => {
+    const r = await run("sh", [await scriptThere(platform, run), verb], { timeout: TODO_RUN_MS }).catch((e) => ({ code: -1, stdout: "", stderr: String(e?.message ?? e) }));
+    return platform === "windows" && r.code !== 0 && NO_SH.test(r.stderr ?? "") ? { ...r, windows: true } : r;
+  }, machine)
   : exec("sh", [paths.join(appHome(), "mods", ...TODO_SCRIPT), verb], { timeout: TODO_RUN_MS }))
   .catch((e) => ({ code: -1, stdout: "", stderr: String(e?.message ?? e) }));
 
