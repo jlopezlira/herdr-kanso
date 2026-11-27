@@ -668,7 +668,7 @@ for (const [verb, args, exit] of [["list", [], 0], ["done", ["nonexistent"], 1]]
 test("Refresh brings an older installed rule up to date, leaves a current one untouched, and installs nothing while off.", unixTodo, async (t) => {
   const { run, claude, pi, codex, readInstructions } = await agentInstructionFiles(t, CODEX_TABLE);
   await run("refresh");
-  assert.equal(await run("status"), "off");
+  assert.equal(await run("status"), "off", "Refresh installs nothing while off");
 
   await run("install");
   const current = await readInstructions();
