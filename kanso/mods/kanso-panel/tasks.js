@@ -1,6 +1,6 @@
 import { div } from "gpui-kit";
 import { v_flex } from "gpui-base";
-import { theme, spaces, home, terminals, window } from "herdr";
+import { theme, spaces, home, terminals, agents, window } from "herdr";
 import { shownName } from "./marks.js";
 import { G, T, PR, tokens } from "./ui.js";
 import { row } from "./ui-row.js";
@@ -36,7 +36,7 @@ export class Tasks {
     this.turns = {};
     this.checked = {};
     this.unread = {};
-    this.front = this.frontPlace();
+    this.front = this.frontKey();
     this.frontOn = this.frontMachine();
     this.switchOn(this.frontOn, cx);
     this.load(cx);
@@ -51,6 +51,24 @@ export class Tasks {
 
   frontMachine() { return spaces().find((s) => s.active)?.machine ?? ""; }
 
+  frontKey() { return `${spaces().find((s) => s.active)?.id ?? ""}|${this.frontPlace()}`; }
+
+  spaceAgents() {
+    const id = spaces().find((s) => s.active)?.id;
+    const top = new Set(agents().filter((a) => id && a.space === id).map((a) => a.address));
+    const under = (seen) => new Set([...seen, ...terminals().filter((k) => seen.has(k.parent)).map((k) => k.address)]);
+    return under(under(top));
+  }
+
+  shownSteps() {
+    const active = spaces().find((s) => s.active);
+    const foldered = Boolean(active?.folder) && (Boolean(active.machine) || placeOf(null, active.folder) !== placeOf(null, home()));
+    const mine = this.spaceAgents();
+    const ours = (t) => Boolean(t.by) && mine.has(seenAddress(t.by, t.on));
+    const places = new Set([...this.todos.filter(ours).map((t) => t.place), ...(foldered ? [this.frontProject()] : [])]);
+    return this.todos.filter((t) => ours(t) || places.has(t.place));
+  }
+
   frontProject() {
     const key = this.frontPlace();
     const holds = (place) => key === place || key.startsWith(`${place}/`);
@@ -61,7 +79,7 @@ export class Tasks {
   scripted(machine) { return machine ? this.agentsOn[machine] !== "windows" : window()?.platform !== "windows"; }
 
   follow(cx) {
-    const front = this.frontPlace();
+    const front = this.frontKey();
     if (front === this.front) return;
     this.front = front;
     if (this.projects) this.projects = withSpaces(this.projects.filter((p) => !p.auto), spaces(), home());
@@ -217,8 +235,7 @@ export class Tasks {
 
   render() {
     const c = tokens(theme()), now = Date.now();
-    const front = this.frontProject();
-    const plans = plansOf(this.withAgents(this.todos), front);
+    const plans = plansOf(this.withAgents(this.shownSteps()));
     const machine = this.frontMachine(), unread = Boolean(machine) && this.unread[machine];
     const warned = unread ? [stateBlock("tasks-unread", c, { text: plans.length ? `Could not reach ${machine}; these steps may be out of date` : `Could not reach ${machine} to read its plans` })] : [];
     const body = !this.projects ? this.skeleton(c)

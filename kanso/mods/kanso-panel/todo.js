@@ -8,8 +8,8 @@ export const HELD_TODOS = "SELECT todos.*, projects.folder AS folder FROM todos 
 
 export const stepState = (step) => (step.done_at != null ? "done" : step.started_at != null ? "doing" : "next");
 
-export function plansOf(todos, place) {
-  const steps = todos.filter((t) => t.place === place).toSorted((a, b) => a.created - b.created);
+export function plansOf(todos) {
+  const steps = todos.toSorted((a, b) => a.created - b.created);
   const keyOf = (step) => `${step.on ?? ""}:${step.by ?? ""}:${step.gone ? "gone" : ""}`;
   const plans = [...new Set(steps.map(keyOf))].map((key) => steps.filter((s) => keyOf(s) === key))
     .map((mine) => ({ by: mine[0].by ?? null, on: mine[0].on ?? "", gone: Boolean(mine[0].gone), steps: mine }));

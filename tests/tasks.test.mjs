@@ -619,7 +619,7 @@ test("Tasks groups plan steps by computer and agent, in creation order, with wor
     step("other agent", 80, { by: "t2" }),
     step("other project", 100, { project: acme.id, place: "acme", started_at: 101 }),
   ];
-  same(plansOf(todos, "shop").map(({ on, by, steps }) => [on, by, steps.map((s) => [s.id, stepState(s)])]), [
+  same(plansOf(todos.filter((s) => s.place === "shop")).map(({ on, by, steps }) => [on, by, steps.map((s) => [s.id, stepState(s)])]), [
     ["", terminalId, [["finished", "done"], ["doing", "doing"], ["next", "next"]]],
     [remoteShop.machine, terminalId, [["remote", "next"]]],
     ["", "t2", [["other agent", "next"]]],
@@ -746,4 +746,31 @@ test("Tasks follows a project on light by folder, and names the agent from light
   assert.ok(!words.includes("Local agent"));
   for (const word of [step.text, step.detail]) assert.ok(wordsAt(panel, stepId(step)).includes(word), word);
   same(await db.read("SELECT * FROM todos;"), []);
+});
+
+test("Tasks shows, per agent, the plans of the agents in a space that has no folder, and of their helpers.", async (t) => {
+  const { db, id } = await shopKdb(t);
+  const other = await saveProject(db, acme);
+  const steps = [
+    storedTodo(id, { id: "lead", text: "Plan the release", detail: "Order the work", by: "t1", created: 10 }),
+    storedTodo(id, { id: "helper", text: "Write the tests", detail: "One per fix", by: "t2", created: 20 }),
+    storedTodo(id, { id: "earlier", text: "Earlier work", detail: "From a session that ended", by: "t9", created: 5 }),
+    storedTodo(other.id, { id: "elsewhere", text: "Another project", detail: "Not in this space", by: "t7", created: 30 }),
+  ];
+  for (const step of steps) await writeTodo(db, step);
+  const { page } = await startTasks(db, {
+    spaces: () => [{ id: "kanso", name: "herdr-kanso", folder: "", machine: null, active: true }, { id: "acme", name: "Acme", folder: "", machine: null, active: false }],
+    agents: () => [{ address: "t1", space: "kanso", status: "working" }, { address: "t7", space: "acme", status: "working" }],
+    terminals: () => [
+      { address: "t1", labels: { "kanso.shown": "Lead" } },
+      { address: "t2", parent: "t1", labels: { "kanso.shown": "Tester" } },
+      { address: "t7", labels: { "kanso.shown": "Other" } },
+    ],
+  });
+  const panel = page();
+  for (const step of steps.slice(0, 3)) assert.ok(control(panel, stepId(step)), step.text);
+  assert.equal(control(panel, stepId(steps[3])), null);
+  const words = texts(panel);
+  for (const name of ["Lead", "Tester", "An agent that has ended"]) assert.ok(words.includes(name), name);
+  assert.ok(!words.includes("Other"));
 });
