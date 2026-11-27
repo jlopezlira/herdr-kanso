@@ -28,7 +28,7 @@ const firstLine = (r) => (r.error?.message ?? (r.stderr || r.stdout || "").trim(
 
 export function tree() {
   const head = run("git", ["rev-parse", "HEAD"]);
-  const status = run("git", ["status", "--porcelain"]);
+  const status = run("git", ["status", "--porcelain", "--untracked-files=normal"]);
   return { sha: head.status === 0 ? head.stdout.trim() : null, clean: status.status === 0 && !status.stdout.trim() };
 }
 
