@@ -33,7 +33,9 @@ async function sidebar({ pieces = {}, replies = {} } = {}) {
     caffeine: createCaffeine({ local: "linux", now: () => clock.at, run: (call) => exec(call.command, call.args, call) }),
   });
   const follow = async () => { calls.length = 0; view.followCaffeine(cx); await drain(); return calls; };
-  return { view, cx, drain, calls, toasts, store, connected, follow, opened, clock };
+  const afterSetup = async () => { await drain(); clock.at += SETUP_EVERY_MS; return follow(); };
+  const turnOn = async (key) => { view.setCaffeine(key, true, cx); await drain(); };
+  return { view, cx, drain, calls, toasts, store, connected, follow, afterSetup, turnOn, opened, clock };
 }
 
 test("Hiding Caffeine turns it off on this computer when no other computer is added", async () => {
@@ -64,14 +66,28 @@ test("The Caffeine panel lists every connected computer even with Computers hidd
   assert.deepEqual(Object.keys(s.store["kanso.caffeine"]).toSorted(), ["", "grey"]);
 });
 
+test("A turn on through its set up that the battery refuses stops waiting for the password and says so once, even read twice at the same time", async () => {
+  const replies = { "grey on": "setup" };
+  const s = await sidebar({ replies });
+  s.connected.push("grey");
+  await s.turnOn("grey");
+  replies["grey read"] = "off low other";
+  await s.view.readCaffeine("grey");
+  assert.deepEqual([s.view.caffeine.look("grey").setup, s.toasts.length], [true, 0], "another set up's refusal leaves this one waiting");
+  replies["grey read"] = `off low other,${s.view.caffeine.row("grey").setupAttempt}`;
+  await Promise.all([s.view.readCaffeine("grey"), s.view.readCaffeine("grey")]);
+  await s.afterSetup();
+  const { setup, battery } = s.view.caffeine.look("grey");
+  assert.deepEqual({ setup, battery }, { setup: false, battery: true });
+  assert.deepEqual(s.toasts.map((toast) => toast.title), ["Caffeine on grey was not changed"]);
+});
+
 test("Turning Caffeine off through its set up ends with it off and a toast with Undo", async () => {
   const s = await sidebar({ replies: { "grey on": "on", "grey off": "setup", "grey read": "off" } });
   s.connected.push("grey");
   await s.view.caffeine.change("grey", true);
   s.view.setCaffeine("grey", false, s.cx);
-  await s.drain();
-  s.clock.at += SETUP_EVERY_MS;
-  await s.follow();
+  await s.afterSetup();
   assert.deepEqual(s.opened, ["space.new"], "the set up opens in a new space on grey");
   assert.equal(s.view.caffeine.look("grey").setup, false);
   assert.equal(s.toasts.at(-1)?.title, "Caffeine off: grey");
