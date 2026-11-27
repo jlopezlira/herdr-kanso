@@ -164,8 +164,8 @@ test("a file copied in slices matches its bytes, including an empty file and one
 
 test("probing many worktrees of one repository starts one shell", async () => {
   const calls = [];
-  const api = repositoryApi("linux", async (command, args) => { calls.push([command, args]); return { code: 0, stdout: "refs\t1\n#0\nsame\n" }; });
-  await api.probeAll("/repo", [{ path: "/a", head: "", stamp: "" }, { path: "/b", head: "h", stamp: "1" }], 0, ["main"], "fp");
+  const api = repositoryApi("linux", async (command, args) => { calls.push([command, args]); return { code: 0, stdout: "#0\ndirty\t0\n" }; });
+  await api.probeAll("/repo", [{ path: "/a" }, { path: "/b" }], 0, ["main"]);
   assert.equal(calls.length, 1);
   assert.equal(calls[0][0], "bash");
   assert.deepEqual(calls[0][1].filter((arg) => arg === "/a" || arg === "/b"), ["/a", "/b"]);
@@ -177,7 +177,7 @@ const recordOf = (text, index) => {
   return text.slice(start, next === -1 ? text.length : next);
 };
 
-test("an unchanged worktree keeps its answer, and a moved base or a new file does not", { skip: nativePlatform === "windows" }, async (t) => {
+test("one repository probe reads every worktree again, including a new file", { skip: nativePlatform === "windows" }, async (t) => {
   const root = await temporary(t), folder = join(root, "repo"), files = fileApi(nativePlatform, exec);
   await files.mkdir(folder);
   const git = async (...args) => {
@@ -192,32 +192,16 @@ test("an unchanged worktree keeps its answer, and a moved base or a new file doe
   const made = await api.createWorktree(folder, "feature", join(root, "trees"), root);
   const other = await api.createWorktree(folder, "other", join(root, "trees"), root);
   const first = made.stdout.trim().split("\t")[1], second = other.stdout.trim().split("\t")[1];
-  const head = async (path) => (await exec("git", ["-C", path, "rev-parse", "HEAD"])).stdout.trim();
   let bash = 0;
   const counted = repositoryApi(nativePlatform, async (command, args) => { if (command === "bash") bash += 1; return exec(command, args); });
-  bash = 0;
-  const opened = await counted.probeAll(folder, [{ path: first, head: "", stamp: "" }, { path: second, head: "", stamp: "" }], 0, ["main"], "");
+  const opened = await counted.probeAll(folder, [{ path: first }, { path: second }], 0, ["main"]);
   assert.equal(opened.code, 0, opened.stderr);
   assert.equal(bash, 1);
-  assert.match(opened.stdout, /^refs\t\S+/m);
   assert.match(recordOf(opened.stdout, 0), /ahead\t0/);
-  const refs = opened.stdout.match(/^refs\t(\S+)/m)[1];
-  const kept = await Promise.all([first, second].map(async (path, index) => {
-    const block = recordOf(opened.stdout, index);
-    return { path, head: await head(path), stamp: block.match(/^stamp\t(\d+)/m)[1], index: block.match(/^index\t(\d+)/m)[1] };
-  }));
-  bash = 0;
-  const again = await counted.probeAll(folder, kept, 0, ["main"], refs);
-  assert.equal(bash, 1);
-  assert.match(recordOf(again.stdout, 0), /same/);
-  assert.match(recordOf(again.stdout, 1), /same/);
-  await new Promise((resolve) => setTimeout(resolve, 1100));
+  assert.match(recordOf(opened.stdout, 1), /dirty\t0/);
   await writeFile(join(first, "two.txt"), "two\n");
-  const edited = await counted.probeAll(folder, kept, 0, ["main"], refs);
+  const edited = await counted.probeAll(folder, [{ path: first }, { path: second }], 0, ["main"]);
+  assert.equal(bash, 2);
   assert.match(recordOf(edited.stdout, 0), /dirty\t1/);
-  assert.match(recordOf(edited.stdout, 1), /same/);
-  await writeFile(join(folder, "three.txt"), "three\n");
-  await git("add", "."); await git("commit", "-m", "Move base");
-  const moved = await counted.probeAll(folder, kept, 0, ["main"], refs);
-  assert.doesNotMatch(recordOf(moved.stdout, 1), /same/);
+  assert.match(recordOf(edited.stdout, 1), /dirty\t0/);
 });
