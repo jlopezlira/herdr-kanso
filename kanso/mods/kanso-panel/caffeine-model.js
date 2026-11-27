@@ -9,7 +9,6 @@ export const CALL_MS = 30_000;
 const CHECK_S = 60;
 const MARK = "kanso-caffeine";
 const WORDS = ["on", "off", "setup", "low", "missing", "refused", "busy"];
-const LEFT_OFF = { low: "off", missing: "off" };
 const KIND = { darwin: "macos", macos: "macos", linux: "linux", windows: "windows" };
 
 export const kindOf = (os) => KIND[String(os ?? "").toLowerCase()] ?? null;
@@ -127,7 +126,8 @@ export function setupArgv(os, verb = "on") {
   const steps = SETUP[kind];
   if (!steps || !DONE[verb]) return null;
   const then = `sh -c ${shellQuote(SCRIPTS[kind][verb])}`;
-  return ["sh", "-c", [...steps, `[ "$ok" = 0 ] || { echo 'Caffeine was not set up.'; exit 1; }`, `[ "$(${then})" = ${verb} ] && echo ${shellQuote(DONE[verb])} || echo 'Caffeine is set up but did not change.'`].join("\n")];
+  return ["sh", "-c", [...steps, `[ "$ok" = 0 ] || { echo 'Caffeine was not set up.'; exit 1; }`, SH_DIR, `r=$(${then})`,
+    `if [ "$r" = ${verb} ]; then echo ${shellQuote(DONE[verb])}; elif [ "$r" = low ]; then echo battery > "$d/reason"; echo 'Caffeine is set up but did not turn on: the battery is at ${LOW}% or less.'; else echo 'Caffeine is set up but did not change.'; fi`].join("\n")];
 }
 
 const osOfProbe = (result) => {
@@ -165,11 +165,12 @@ export function createCaffeine({ run, local, now = () => Date.now() }) {
       return { ...answerOf(result), os, verb };
     },
     settle(key, answer, changed = false) {
-      const state = LEFT_OFF[answer.word] ?? answer.word;
-      const sure = state === "on" || state === "off";
       const low = answer.word === "low";
-      const pending = Math.max(0, (this.row(key).pending ?? 0) - (changed ? 1 : 0));
-      this.put(key, { ...(sure ? { state } : {}), unsure: !sure, pending, readAt: now(), ...(answer.battery || low ? { battery: true, told: low } : {}) });
+      const state = low ? "off" : answer.word;
+      const sure = state === "on" || state === "off";
+      const { pending = 0, battery, told } = this.row(key);
+      const known = battery === true && told === true;
+      this.put(key, { ...(sure ? { state } : {}), unsure: !sure, pending: Math.max(0, pending - (changed ? 1 : 0)), readAt: now(), ...(answer.battery || low ? { battery: true, told: low || known } : {}) });
       return answer;
     },
     isOn(key) { return this.row(key).state === "on"; },

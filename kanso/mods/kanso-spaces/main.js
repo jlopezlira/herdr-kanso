@@ -1556,9 +1556,10 @@ export default class Spaces extends RetryingView {
   async readCaffeine(key) {
     const title = this.names.title(key || null);
     const setting = this.caffeine.settingUp(key);
-    const { word } = await this.caffeine.read(key);
+    const { word, battery } = await this.caffeine.read(key);
     if (this.caffeine.untold(key)) notify({ title: `Caffeine off: ${title}`, body: `Its battery reached ${LOW}%, so it can sleep.`, level: "info" });
-    if (setting && word === setting) { this.caffeine.done(key); this.saidCaffeine(key, title, word); }
+    if (setting && (word === setting || battery)) this.caffeine.done(key);
+    if (setting && word === setting) this.saidCaffeine(key, title, word);
   }
 
   saidCaffeine(key, title, word) {
