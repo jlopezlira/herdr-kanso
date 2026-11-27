@@ -2567,20 +2567,26 @@ export default class Spaces extends RetryingView {
   }
 
   checkShared(cx) {
-    if (this.sharing || window()?.active === false) return;
+    if (!runs("sidebar.shared", pieces(shared))) {
+      this.sharedMembers = undefined;
+      if (this.sharedFound && Object.keys(this.sharedFound).length) { this.sharedFound = {}; cx.notify(); }
+      return;
+    }
+    if (this.sharing || window()?.active === false || shared(COLLAPSED) === true) return;
     const list = agents(), now = Date.now(), was = this.sharedStatus ?? {};
     const groups = groupsOf(list, cwdIn(panes()));
-    this.sharedStatus = Object.fromEntries(list.map((a) => [a.address, a.status]));
-    const ended = (a) => was[a.address] === "working" && a.status !== "working";
-    const members = Object.fromEntries(groups.map((g) => [g.key, g.agents.map(({ a, cwd }) => `${a.address}@${cwd}`).toSorted().join(" ")]));
+    this.sharedStatus = Object.fromEntries(list.map((a) => [a.address, `${a.status}:${a.seq ?? ""}`]));
+    const ended = (a) => a.status !== "working" && was[a.address] !== undefined && was[a.address] !== `${a.status}:${a.seq ?? ""}`;
+    const located = (a) => (this.threads?.[a.address]?.file ? "+" : "-");
+    const members = Object.fromEntries(groups.map((g) => [g.key, g.agents.map(({ a, cwd }) => `${a.address}@${cwd}${located(a)}`).toSorted().join(" ")]));
     const before = this.sharedMembers;
-    const moved = (g) => Boolean(before) && members[g.key] !== before[g.key];
+    const moved = (g) => members[g.key] !== before?.[g.key];
     const due = groups.filter((g) => moved(g) || g.agents.some(({ a }) => ended(a) || (a.status === "working" && now - (this.sharedAt?.[g.key] ?? 0) >= SHARED_WORKING_MS)));
     this.sharedMembers = members;
     const grouped = new Set(groups.flatMap((g) => g.agents.map(({ a }) => a.address)));
     const scanned = new Set(due.flatMap((g) => g.agents.map(({ a }) => a.address)));
     const kept = Object.fromEntries(Object.entries(this.sharedFound ?? {}).filter(([address]) => grouped.has(address) && !scanned.has(address)));
-    const show = (found, cx) => { const next = { ...kept, ...found }; if (JSON.stringify(next) !== JSON.stringify(this.sharedFound ?? {})) { this.sharedFound = next; cx.notify(); } };
+    const show = (found, cx) => { if (!runs("sidebar.shared", pieces(shared))) return; const next = { ...kept, ...found }; if (JSON.stringify(next) !== JSON.stringify(this.sharedFound ?? {})) { this.sharedFound = next; cx.notify(); } };
     if (!due.length) { show({}, cx); return; }
     this.sharedAt = { ...this.sharedAt, ...Object.fromEntries(due.map((g) => [g.key, now])) };
     this.sharing = true;

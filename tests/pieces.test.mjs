@@ -30,7 +30,7 @@ test("the registry ids are unique and each default is one of its states", () => 
     else assert.equal(row.stops, "draw", row.id);
   }
   assert.deepEqual(Object.fromEntries(PIECES.filter((row) => row.job).map((row) => [row.id, row.job])), {
-    "sidebar.activity": "ps", "sidebar.tasks": "ps", "sidebar.git": "git", "header.digest": "git", "header.pr": "gh",
+    "sidebar.activity": "ps", "sidebar.tasks": "ps", "sidebar.git": "git", "sidebar.shared": "git", "header.digest": "git", "header.pr": "gh",
     "panel.files": "git", "panel.pr": "gh", "panel.shipped": "gh", "panel.worktrees": "git", "panel.ports": "lsof",
     "panel.containers": "docker", "panel.memory": "ps", "update.check": "git", "agents.checks": "gh",
   });

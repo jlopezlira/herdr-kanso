@@ -353,6 +353,7 @@ export function sessionProps(a, base, row, more = {}) {
     dimmed: Boolean(more.quiet || a.dozing),
     ...(row?.failure ? { failure: row.failure } : {}),
     ...(two && more.shared ? { warning: more.shared } : {}),
+    ...(!two && more.shared ? { place: more.shared.text, placeTip: more.shared.tip } : {}),
   };
 }
 

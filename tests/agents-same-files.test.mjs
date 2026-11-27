@@ -1,8 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { appendFile, mkdir, realpath, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, realpath, symlink, writeFile } from "node:fs/promises";
 import { join, posix } from "node:path";
-import { load, same, success, failure, exec, gitOk, temporary, committedRepo, themed, KIT_NIGHT, drawingHost, texts, tipsOf, one } from "./helpers.mjs";
+import { load, same, success, failure, exec, gitOk, temporary, committedRepo, themed, KIT_NIGHT, drawingHost, texts, tipsOf, one, storeShared } from "./helpers.mjs";
 import { loadSpaces } from "./mod-fixtures.mjs";
 
 const root = "/projects/app";
@@ -13,7 +13,7 @@ const session = (address, title, cwd, key = "claude") => ({ address, title, cwd,
 const first = session("t1", "Ada", root);
 const second = session("t2", "Lin", `${root}/src`, "codex");
 const third = session("t3", "Sam", root);
-const worktrees = [{ path: root }, { path: nested }];
+const ownTreeModule = (names, host) => load("kanso-spaces/own-tree.js", names, host);
 const at = new Date(2026, 10, 27, 9, 5).getTime();
 const branch = "20261127-090500-codex";
 const treePath = `/worktrees/app/${branch}`;
@@ -39,51 +39,139 @@ const pairWarnings = (path = file, pair = [first, second]) => Object.fromEntries
 }));
 
 test("An agent in the project or a subfolder counts, but an agent in its own worktree, a remote agent and a shell do not.", async () => {
-  const { workingIn } = await load("kanso-spaces/own-tree.js", ["workingIn"]);
+  const { workingIn } = await ownTreeModule(["workingIn"]);
   const inPane = { ...second, cwd: undefined };
   const list = [first, inPane, session("t4", "Dev", nested), session("dev/t5", "Chris", root), { address: "t6", cwd: root }];
   const shown = [{ terminal: second.address, cwd: second.cwd }];
-  same(workingIn(root, "", { list, shown, trees: worktrees }).map((agent) => agent.address), [first.address, second.address]);
+  const lookups = [];
+  const rootFor = async (folder, machine) => {
+    lookups.push([folder, machine]);
+    return folder === nested ? nested : root;
+  };
+  const busy = await workingIn(root, "", { list, shown, rootFor });
+  same(busy.map((agent) => agent.address), [first.address, second.address]);
+  assert.deepEqual(lookups, [root, second.cwd, nested].map((cwd) => [cwd, null]));
 });
 
 test("Starting in an occupied Git project reserves a branch for the new agent and returns its worktree or Git's error.", async () => {
   const error = "The worktree folder is already there.";
   const worktreeArgs = { folder: root, machine: null, branch, base: "/app/data/kanso/worktrees" };
-  for (const [trees, list, made, expected] of [
-    [[], [first], null, null],
-    [worktrees, [], null, null],
-    [worktrees, [first], { path: treePath, made: true }, { path: treePath, branch, busy: [first] }],
-    [worktrees, [first], { error }, { error, busy: [first] }],
+  for (const [checkout, list, made, expected] of [
+    ["", [first], null, null],
+    [root, [], null, null],
+    [root, [first], { path: treePath, made: true }, { path: treePath, branch, busy: [first] }],
+    [root, [first], { error }, { error, busy: [first] }],
   ]) {
     const creates = [];
-    const { ownTree } = await load("kanso-spaces/own-tree.js", ["ownTree"], {
-      agents: () => list,
-      worktreesOf: async () => trees,
+    const { ownTree } = await ownTreeModule(["ownTree"], {
       appHome: () => "/app",
       addWorktree: async (args) => { creates.push(args); return made; },
     });
-    same(await ownTree(place, codex, at), expected);
+    same(await ownTree(place, codex, at, { list, rootFor: async () => checkout }), expected);
     same(creates, made ? [worktreeArgs] : []);
   }
 });
 
-test("Same-type agents launched seconds apart get separate worktrees, and an existing worktree is never reused.", async (t) => {
+const treeStarter = async (t, folderIn = (repo) => repo, host = {}) => {
   const { dir, repo } = await committedRepo(t);
-  const { ownTree } = await load("kanso-spaces/own-tree.js", ["ownTree"], {
+  const folder = await folderIn(repo, dir);
+  const { ownTree } = await ownTreeModule(["ownTree"], {
     exec,
-    agents: () => [{ ...first, cwd: repo }],
+    agents: () => [{ ...first, cwd: folder }],
     appHome: () => dir,
+    ...host,
   });
-  const target = { ...place, folder: repo };
-  const start = await ownTree(target, codex, at);
-  const later = await ownTree(target, codex, at + 1000);
-  assert.ok(start?.path, start?.error);
-  assert.ok(later?.path, later?.error);
-  assert.notEqual(start.branch, later.branch);
-  assert.notEqual(await realpath(start.path), await realpath(later.path));
-  const collision = await ownTree(target, codex, at + 1000);
-  assert.match(collision?.error ?? "", /already has a worktree/);
+  return { dir, repo, start: (time = at) => ownTree({ ...place, folder }, codex, time) };
+};
+
+const checkoutPath = (outcome) => {
+  assert.ok(outcome?.path, outcome?.error);
+  return realpath(outcome.path);
+};
+
+test("Agents launched seconds apart get separate worktrees and never reuse one when all branch names are taken.", async (t) => {
+  const { dir, repo, start } = await treeStarter(t);
+  const time = at + 1000;
+  const initial = await start(), later = await start(time);
+  assert.notEqual(await checkoutPath(initial), await checkoutPath(later));
+  assert.notEqual(initial.branch, later.branch);
+  for (const suffix of [2, 3, 4, 5]) {
+    const taken = `${later.branch}-${suffix}`;
+    await gitOk()(repo, "worktree", "add", "-b", taken, join(dir, taken));
+  }
+  const collision = await start(time);
+  assert.ok(collision?.error?.startsWith(`${later.branch}-5 already has a worktree`), collision?.error);
   assert.equal(collision.path, undefined);
+});
+
+test("An agent using a symlink to the project still occupies its Git checkout.", async (t) => {
+  const { dir, repo } = await committedRepo(t);
+  const alias = join(dir, "alias");
+  await symlink(repo, alias, "junction");
+  const agent = { ...first, cwd: alias };
+  const { workingIn } = await ownTreeModule(["workingIn"], { exec });
+  same(await workingIn(repo, "", { list: [agent] }), [agent]);
+});
+
+const sourceFolder = async (repo) => {
+  const folder = join(repo, "src");
+  await mkdir(folder);
+  await writeFile(join(folder, "main.js"), "export {};\n");
+  const git = gitOk();
+  await git(repo, "add", "src");
+  await git(repo, "commit", "-m", "add source");
+  return folder;
+};
+
+const assertSourceCheckout = async (outcome) => {
+  const folder = await checkoutPath(outcome);
+  const git = gitOk();
+  const checkout = await realpath(await git(folder, "rev-parse", "--show-toplevel"));
+  assert.equal(folder, join(checkout, "src"));
+  assert.equal(await git(folder, "branch", "--show-current"), outcome.branch);
+};
+
+test("An isolated agent starts in the same project subfolder inside its new worktree.", async (t) => {
+  const { start } = await treeStarter(t, sourceFolder);
+  await assertSourceCheckout(await start());
+});
+
+test("A symlink to a project subfolder still starts an isolated agent in that subfolder.", async (t) => {
+  const { start } = await treeStarter(t, async (repo, dir) => {
+    const alias = join(dir, "source-link");
+    await symlink(await sourceFolder(repo), alias, "junction");
+    return alias;
+  });
+  await assertSourceCheckout(await start());
+});
+
+test("Two starts of the same agent in one second use separate worktrees and the second branch gets a suffix.", async (t) => {
+  const { start } = await treeStarter(t);
+  const initial = await start(), next = await start();
+  assert.deepEqual([initial.branch, next?.branch], [branch, `${branch}-2`]);
+  assert.notEqual(await checkoutPath(initial), await checkoutPath(next));
+});
+
+test("Git branch collision errors make an isolated start try each suffix until it finds a free branch.", async (t) => {
+  const errors = [
+    `fatal: a branch named '${branch}' already exists`,
+    `fatal: '${branch}-2' is already checked out`,
+    `fatal: '${branch}-3' is already used by worktree at '/other'`,
+    `fatal: a branch named '${branch}-4' already exists`,
+  ];
+  const branches = [];
+  const { start } = await treeStarter(t, undefined, {
+    addWorktree: async ({ branch }) => {
+      const error = errors[branches.length];
+      branches.push(branch);
+      return error ? { error } : { path: treePath, made: true };
+    },
+  });
+  const expected = [branch, ...[2, 3, 4, 5].map((n) => `${branch}-${n}`)];
+  const outcome = await start();
+  assert.deepEqual(branches, expected);
+  assert.equal(outcome.branch, expected.at(-1));
+  assert.equal(outcome.path, treePath);
 });
 
 test("The agent picker starts in the new worktree and says why, stays in a free folder, and warns if isolation fails.", async () => {
@@ -293,10 +381,10 @@ const transcripts = async (t, run = exec) => {
     append: (agent, ...entries) => appendFile(fileOf(agent), jsonl(...entries)),
   };
 };
-const toolCall = (name, input, time = at) => ({
-  type: "assistant", timestamp: iso(time), message: { content: [{ type: "tool_use", name, input }] },
+const toolCall = (name, input, time = at, id) => ({
+  type: "assistant", timestamp: iso(time), message: { content: [{ type: "tool_use", id, name, input }] },
 });
-const claudeEdit = (file_path, time) => toolCall("Edit", { file_path }, time);
+const claudeEdit = (file_path, time, id) => toolCall("Edit", { file_path }, time, id);
 const patchCall = (input, type = "custom_tool_call") => ({
   timestamp: iso(), type: "response_item", payload: { type, name: "apply_patch", input },
 });
@@ -327,9 +415,10 @@ test("Patch text in conversation or in a Claude Code edit does not count as a Co
 test("The macOS temporary folder aliases count as the same busy checkout and the same edited file.", posixScan, async (t) => {
   const folder = "/tmp/app", canonical = `/private${folder}`, changed = `${folder}/src/main.js`;
   const group = [{ ...first, cwd: canonical }, { ...second, cwd: `${folder}/src` }];
-  const { workingIn } = await load("kanso-spaces/own-tree.js", ["workingIn"]);
-  const busy = workingIn(folder, "", { list: group, trees: [{ path: canonical }] }).map((agent) => agent.address);
-  const history = await transcripts(t, mockGit(canonical));
+  const run = mockGit(canonical);
+  const { workingIn } = await ownTreeModule(["workingIn"], { exec: run });
+  const busy = (await workingIn(folder, "", { list: group })).map((agent) => agent.address);
+  const history = await transcripts(t, run);
   await history.write(first, claudeEdit(`/private${changed}`));
   await history.write(second, patchCall("*** Update File: main.js\n"));
   same({ busy, warnings: await history.scan(group) }, {
@@ -342,6 +431,35 @@ test("A Claude Code edit counts even when replace_all comes before the file path
   await history.write(first, toolCall("Edit", { replace_all: true, file_path: file, old_string: "a", new_string: "b" }));
   await history.write(second, patchCall("*** Update File: main.js\n"));
   same(await history.scan(), pairWarnings());
+});
+
+const resultOf = (tool_use_id, content, is_error = false) => ({ type: "tool_result", tool_use_id, content, is_error });
+const toolResults = (...content) => ({ type: "user", timestamp: iso(at + 1000), message: { content } });
+
+test("A failed Claude Code edit does not warn, even when its error arrives after a transcript scan.", posixScan, async (t) => {
+  const history = await transcripts(t, mockGit());
+  const id = "toolu_failed";
+  const attempted = claudeEdit(file, at, id);
+  const failed = toolResults(resultOf(id, "The file has not been read.", true));
+  await history.write(first, attempted, failed);
+  await history.write(second, patchCall("*** Update File: main.js\n"));
+  const fresh = await history.scan();
+  await history.write(first, attempted);
+  await history.edits(first);
+  await history.append(first, failed);
+  const incremental = await history.scan();
+  same({ fresh, incremental }, { fresh: {}, incremental: {} });
+});
+
+test("A batch of Claude Code results drops only the edit whose result failed.", posixScan, async (t) => {
+  const history = await transcripts(t);
+  const kept = `${root}/kept.js`;
+  const passed = "toolu_passed", failed = "toolu_failed";
+  await history.write(first, claudeEdit(kept, at, passed), claudeEdit(file, at, failed), toolResults(
+    resultOf(passed, "File updated."),
+    resultOf(failed, "The file has not been read.", true),
+  ));
+  same((await history.edits(first)).map(({ file }) => file), [kept]);
 });
 
 test("An agent's edit before the file's last commit does not warn about another agent's later edit.", posixScan, async (t) => {
@@ -420,27 +538,33 @@ test("An unanswered Git status times out and does not prevent the next scan.", a
 const idlePair = [first, second].map((agent) => ({ ...agent, status: "idle" }));
 const workingPair = [{ ...idlePair[0], status: "working" }, idlePair[1]];
 const otherCheckout = "/projects/other";
-const sharingSidebar = async () => {
+const sharingSidebar = async ({ beforeStatus } = {}) => {
   let now = at, list = idlePair, dirty = false;
-  const commands = [];
+  const commands = [], store = {};
   const fileOf = (agent) => `/logs/${agent.address}.jsonl`;
   const threads = Object.fromEntries(idlePair.map((agent) => [agent.address, { file: fileOf(agent) }]));
   const { Spaces } = await loadSpaces({
+    ...storeShared(store),
     Date: class extends Date { static now() { return now; } },
     agents: () => list,
     spaces: () => [],
     exec: async (command, args) => {
       const action = command === "git" ? args[2] : command;
       commands.push(action);
+      if (action === "status") await beforeStatus?.();
       const checkout = args[1] === otherCheckout ? otherCheckout : root;
       const result = { "rev-parse": checkout, status: dirty ? " M src/main.js\0" : "", log: "" };
       if (action === "sh") return success(Object.values(threads).some(({ file }) => file === args[3]) ? editRows(file) : "");
       return success(result[action]);
     },
   });
-  const view = Object.assign(new Spaces(), { names: { book: {} }, threads });
+  const mount = () => Object.assign(new Spaces(), { names: { book: {} }, threads: { ...threads } });
+  let view = mount();
   return {
-    view,
+    get view() { return view; },
+    remount: () => { view = mount(); },
+    hideWarnings: () => { store["kanso.pieces"] = { "sidebar.shared": "hide" }; },
+    locate: (agent, known) => { view.threads[agent.address] = known ? threads[agent.address] : null; },
     setDirty: (value) => { dirty = value; },
     tick: async (elapsed, next = list) => {
       now = at + elapsed;
@@ -458,11 +582,78 @@ const sharingSidebar = async () => {
 const sharedTick = 20_000;
 const fiveMinutes = 5 * 60_000;
 
-test("An idle group starts no shared-edit processes.", async () => {
+const checkoutScan = ["rev-parse", "rev-parse", "status"];
+
+test("An idle group is scanned once, then starts no shared-edit processes while it stays idle.", async () => {
   const { tick } = await sharingSidebar();
   const idle = await tick(0);
   const stillIdle = await tick(sharedTick);
-  assert.deepEqual([idle.commands, stillIdle.commands], [[], []]);
+  const muchLater = await tick(fiveMinutes);
+  assert.deepEqual([idle.commands, stillIdle.commands, muchLater.commands], [checkoutScan, [], []]);
+});
+
+test("Hiding shared edits clears the warnings and starts no shared-edit processes.", async () => {
+  const { view, setDirty, hideWarnings, tick } = await sharingSidebar();
+  setDirty(true);
+  await tick(0, workingPair);
+  same(view.sharedFound, pairWarnings());
+  hideWarnings();
+  assert.deepEqual(await tick(sharedTick, idlePair), { commands: [], notifies: 1 });
+  same(view.sharedFound, {});
+  assert.deepEqual(await tick(fiveMinutes, workingPair), { commands: [], notifies: 0 });
+});
+
+test("A running shared-edit scan cannot bring warnings back after they are hidden.", async () => {
+  const started = Promise.withResolvers(), release = Promise.withResolvers();
+  const { view, setDirty, hideWarnings, tick } = await sharingSidebar({
+    beforeStatus: () => { started.resolve(true); return release.promise; },
+  });
+  setDirty(true);
+  const pending = tick(0, workingPair);
+  assert.equal(await Promise.race([started.promise, pending]), true);
+  hideWarnings();
+  const hidden = await tick(sharedTick);
+  release.resolve();
+  const finished = await pending;
+  assert.deepEqual([hidden.notifies, finished.notifies], [0, 0]);
+  same(view.sharedFound ?? {}, {});
+});
+
+test("Finding a missing transcript scans once and shows shared edits without waiting for another turn.", async () => {
+  const { view, setDirty, locate, tick } = await sharingSidebar();
+  locate(second, false);
+  setDirty(true);
+  const missing = await tick(0, workingPair);
+  assert.deepEqual(missing.commands, []);
+  same(view.sharedFound ?? {}, {});
+  locate(second, true);
+  const found = await tick(sharedTick);
+  const unchanged = await tick(2 * sharedTick);
+  assert.deepEqual([found.commands.slice(0, checkoutScan.length), unchanged.commands], [checkoutScan, []]);
+  same(view.sharedFound, pairWarnings());
+});
+
+test("The remounted sidebar finds shared edits on its first tick even when both editors are idle.", async () => {
+  const sidebar = await sharingSidebar();
+  sidebar.setDirty(true);
+  await sidebar.tick(0, workingPair);
+  same(sidebar.view.sharedFound, pairWarnings());
+  sidebar.remount();
+  const result = await sidebar.tick(sharedTick, idlePair);
+  assert.deepEqual(result.commands.slice(0, checkoutScan.length), checkoutScan);
+  assert.equal(result.notifies, 1);
+  same(sidebar.view.sharedFound, pairWarnings());
+});
+
+test("A turn that starts and finishes between ticks triggers a scan while the agent looks idle.", async () => {
+  const { view, setDirty, tick } = await sharingSidebar();
+  const turn = (seq) => [{ ...idlePair[0], seq }, idlePair[1]];
+  await tick(0, turn(1));
+  setDirty(true);
+  const finished = await tick(sharedTick, turn(2));
+  assert.equal(finished.commands[0], "status");
+  same(view.sharedFound, pairWarnings());
+  assert.deepEqual((await tick(2 * sharedTick)).commands, []);
 });
 
 test("An agent's finished turn triggers a scan before the five-minute rescan.", async () => {
@@ -481,7 +672,7 @@ test("A continuously working group is rescanned only after five minutes.", async
   const justBefore = await tick(fiveMinutes - 1);
   const due = await tick(fiveMinutes);
   const after = await tick(fiveMinutes + sharedTick);
-  assert.deepEqual(start.commands, ["rev-parse", "rev-parse", "status"]);
+  assert.deepEqual(start.commands, checkoutScan);
   assert.deepEqual([early.commands, justBefore.commands, due.commands, after.commands], [[], [], ["status"], []]);
 });
 
@@ -536,19 +727,31 @@ test("A new or cleared shared-edit warning invalidates the sidebar rows without 
   expectRedraw();
 });
 
-test("The sidebar puts the shared-edit warning on its second line even without activity, and keeps narrow rows to one line.", async () => {
+const warningRow = async () => {
   const host = drawingHost();
   const { agentSession, sessionHeight } = await load("kanso-spaces/agents.js", ["agentSession", "sessionHeight"], host);
   const { c, H } = themed(await load("kanso-spaces/ui.js", ["tokens", "H"], host), KIT_NIGHT);
-  const agent = { ...first, status: "idle" };
-  const warning = { text: "Also changed by Lin: main.js", tip: `${file}: Lin` };
-  const draw = (more) => agentSession(agent, 1, c, null, { label: first.title, shared: warning, ...more });
-  const wide = draw(), busy = draw({ activity: "Editing" }), narrow = draw({ oneLine: true });
-  assert.deepEqual(texts(wide), [first.title, warning.text]);
-  assert.deepEqual(texts(busy), texts(wide));
-  assert.ok(tipsOf(wide).includes(warning.tip));
-  assert.deepEqual([one(wide, "h"), sessionHeight({ shared: warning })], [H.two, H.two]);
-  assert.deepEqual([one(narrow, "h"), sessionHeight({ shared: warning, oneLine: true })], [H.line, H.line]);
-  assert.deepEqual(texts(narrow), [first.title]);
-  assert.ok(!tipsOf(narrow).includes(warning.tip));
+  const warning = pairWarnings()[first.address];
+  const draw = (more) => agentSession(idlePair[0], 1, c, null, { label: first.title, shared: warning, ...more });
+  const check = (row, height, more) => {
+    assert.deepEqual(texts(row), [first.title, warning.text]);
+    assert.ok(tipsOf(row).includes(warning.tip));
+    assert.deepEqual([one(row, "h"), sessionHeight({ shared: warning, ...more })], [height, height]);
+  };
+  return { draw, check, H };
+};
+
+test("The sidebar puts the shared-edit warning on its second line even without activity.", async () => {
+  const { draw, check, H } = await warningRow();
+  const editing = { activity: "Editing" };
+  check(draw(), H.two);
+  check(draw(editing), H.two, editing);
+});
+
+test("A narrow sidebar row replaces the place fact and tooltip with the warning without adding a second line.", async () => {
+  const { draw, check, H } = await warningRow();
+  const more = { oneLine: true, directory: "App", wordTip: root };
+  const narrow = draw(more);
+  check(narrow, H.line, more);
+  assert.ok(!tipsOf(narrow).includes(more.wordTip));
 });

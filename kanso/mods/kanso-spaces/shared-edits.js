@@ -3,7 +3,7 @@ import { paths } from "./platform-paths.js";
 import { machineOf } from "./own-tree.js";
 import { bounded, LATE } from "./pure.js";
 
-const AWK = "/\"name\":\"(Edit|Write|MultiEdit|NotebookEdit)\"/ { ts = \"\"; if (match($0, /\"timestamp\":\"[^\"]+\"/)) ts = substr($0, RSTART + 13, RLENGTH - 14); s = $0; while (match(s, /\"(file_path|notebook_path)\":\"[^\"]+\"/)) { v = substr(s, RSTART, RLENGTH); sub(/^\"[a-z_]+\":\"/, \"\", v); sub(/\"$/, \"\", v); print ts \"\\t\" v; s = substr(s, RSTART + RLENGTH) } } /\"type\":\"(custom_tool_call|function_call)\"/ { ts = \"\"; if (match($0, /\"timestamp\":\"[^\"]+\"/)) ts = substr($0, RSTART + 13, RLENGTH - 14); s = $0; while (match(s, /\\*\\*\\* (Update|Add|Delete) File: [^\\\\\"]+/)) { v = substr(s, RSTART, RLENGTH); sub(/^\\*\\*\\* (Update|Add|Delete) File: /, \"\", v); print ts \"\\t\" v; s = substr(s, RSTART + RLENGTH) } }";
+const AWK = "/\"name\":\"(Edit|Write|MultiEdit|NotebookEdit)\"/ { ts = \"\"; id = \"\"; if (match($0, /\"timestamp\":\"[^\"]+\"/)) ts = substr($0, RSTART + 13, RLENGTH - 14); if (match($0, /\"id\":\"[^\"]+\",\"name\":\"(Edit|Write|MultiEdit|NotebookEdit)\"/)) { id = substr($0, RSTART + 6); sub(/\".*/, \"\", id) } s = $0; while (match(s, /\"(file_path|notebook_path)\":\"[^\"]+\"/)) { v = substr(s, RSTART, RLENGTH); sub(/^\"[a-z_]+\":\"/, \"\", v); sub(/\"$/, \"\", v); print ts \"\\t\" v \"\\t\" id; s = substr(s, RSTART + RLENGTH) } } /\"is_error\":true/ { n = split($0, part, /\"tool_use_id\":\"/); for (i = 2; i <= n; i++) { v = part[i]; sub(/\".*/, \"\", v); if (part[i] ~ /\"is_error\":true/) print \"\\t\\t\" v \"\\terror\" } } /\"type\":\"(custom_tool_call|function_call)\"/ { ts = \"\"; if (match($0, /\"timestamp\":\"[^\"]+\"/)) ts = substr($0, RSTART + 13, RLENGTH - 14); s = $0; while (match(s, /\\*\\*\\* (Update|Add|Delete) File: [^\\\\\"]+/)) { v = substr(s, RSTART, RLENGTH); sub(/^\\*\\*\\* (Update|Add|Delete) File: /, \"\", v); print ts \"\\t\" v; s = substr(s, RSTART + RLENGTH) } }";
 const EDITED = `f=$1; from=$2; [ -f "$f" ] || exit 0; size=$(wc -c < "$f" | tr -d ' '); echo "$size"; [ "$size" -gt "$from" ] || exit 0; tail -c +$((from + 1)) "$f" | awk '${AWK}'`;
 const STEP_MS = 15_000;
 const on = (machine) => (machine ? { on: machine } : {});
@@ -18,9 +18,11 @@ export function changedIn(porcelain) {
 
 export function editsIn(text, cwd) {
   const [size, ...rows] = String(text ?? "").split("\n");
-  const edits = rows.map((row) => row.split("\t")).filter(([, file]) => file)
-    .map(([at, file]) => ({ at: Date.parse(at) || 0, file: paths.isAbsolute(file) ? file : paths.join(cwd, file) }));
-  return { size: Number(size) || 0, edits };
+  const cells = rows.map((row) => row.split("\t"));
+  const failed = new Set(cells.filter((c) => c[3] === "error").map((c) => c[2]));
+  const edits = cells.filter(([, file, id]) => file && !(id && failed.has(id)))
+    .map(([at, file, id]) => ({ at: Date.parse(at) || 0, file: paths.isAbsolute(file) ? file : paths.join(cwd, file), ...(id ? { id } : {}) }));
+  return { size: Number(size) || 0, edits, failed: [...failed] };
 }
 
 export function overlaps(group, dirty, editedBy, committedAt = {}) {
@@ -68,7 +70,8 @@ export class SharedEdits {
     const got = editsIn(r.stdout, cwd);
     const again = got.size < kept.size ? await readFrom(0) : null;
     if (again && again.code !== 0) return [];
-    const next = again ? editsIn(again.stdout, cwd) : { size: got.size, edits: [...kept.edits, ...got.edits] };
+    const failed = new Set(got.failed);
+    const next = again ? editsIn(again.stdout, cwd) : { size: got.size, edits: [...kept.edits.filter((e) => !(e.id && failed.has(e.id))), ...got.edits] };
     this.read.set(key, next);
     return next.edits;
   }
