@@ -40,10 +40,11 @@ export class Tasks {
     this.timer = cx.timer;
     this.remote = {};
     this.agentsOn = {};
-    this.asking = new Set();
+    this.asked = {};
     this.turns = {};
     this.front = this.frontPlace();
-    this.switchOn(this.frontMachine(), cx);
+    this.frontOn = this.frontMachine();
+    this.switchOn(this.frontOn, cx);
     this.load(cx);
     cx.timer.every(TODO_MS, (next) => this.load(next));
     cx.timer.every(FOLLOW_MS, (next) => this.follow(next));
@@ -65,16 +66,23 @@ export class Tasks {
     const front = this.frontPlace();
     if (front === this.front) return;
     this.front = front;
-    this.switchOn(this.frontMachine(), cx);
+    if (this.projects) {
+      this.projects = withSpaces(this.projects.filter((p) => !p.auto), spaces(), home());
+      this.fieldsFor(this.projects.map((p) => p.id));
+    }
+    const machine = this.frontMachine();
+    if (machine !== this.frontOn) this.switchOn(machine, cx, true);
+    this.frontOn = machine;
     cx.notify();
   }
 
-  switchOn(machine, cx) {
-    if (window()?.platform === "windows" || this.agentsOn[machine] != null || this.asking.has(machine)) return;
-    this.asking.add(machine);
+  switchOn(machine, cx, again = false) {
+    if (window()?.platform === "windows" || (!again && this.agentsOn[machine] != null)) return;
+    const asked = (this.asked[machine] ?? 0) + 1;
+    this.asked = { ...this.asked, [machine]: asked };
     cx.spawn(async (cx) => {
       const on = await todoOn(machine || null);
-      this.asking.delete(machine);
+      if (this.asked[machine] !== asked) return;
       this.agentsOn = { ...this.agentsOn, [machine]: on };
       cx.notify();
     });
@@ -154,7 +162,7 @@ export class Tasks {
         await (await this.dbOn(on)).run(await sql());
         after();
       } catch {
-        this.failure = { text: failed, retry: (cx) => this.write(on, sql, failed, change, cx, after) };
+        this.failure = { project: change.todo?.project ?? this.todos.find((t) => t.id === change.id)?.project, text: failed, retry: (cx) => this.write(on, sql, failed, change, cx, after) };
       }
     });
     this.queued = { ...this.queued, [change.id]: done };
@@ -190,7 +198,7 @@ export class Tasks {
   drop(todo, cx) {
     this.removed = null;
     this.write(todo.on, async () => dropTodoSql(todo.id), `Can't delete ${todo.text}`, { id: todo.id, gone: true }, cx, () => {
-      this.removed = { words: `Deleted ${todo.text}`, undo: (cx) => this.write(todo.on, async () => `${addTodoSql({ ...todo, project: todo.home ?? await this.homeOf(todo.project) })}${doneSql(todo.id, todo.done_at)}`, `Can't bring back ${todo.text}`, { id: todo.id, todo }, cx, () => { this.removed = null; }) };
+      this.removed = { project: todo.project, words: `Deleted ${todo.text}`, undo: (cx) => this.write(todo.on, async () => `${addTodoSql({ ...todo, project: todo.home ?? await this.homeOf(todo.project) })}${doneSql(todo.id, todo.done_at)}`, `Can't bring back ${todo.text}`, { id: todo.id, todo }, cx, () => { this.removed = null; }) };
     });
   }
 
@@ -220,7 +228,7 @@ export class Tasks {
     cx.notify();
     cx.spawn(async (cx) => {
       const sent = await deliver(cx.timer, address, todo.text, "you").catch(() => ({ code: 1 }));
-      if (sent.code !== 0) this.failure = { text: `Can't send ${todo.text}`, retry: (cx) => this.sendTo(todo, address, cx) };
+      if (sent.code !== 0) this.failure = { project: todo.project, text: `Can't send ${todo.text}`, retry: (cx) => this.sendTo(todo, address, cx) };
       cx.notify();
     });
   }
@@ -283,6 +291,7 @@ export class Tasks {
     const machine = this.frontMachine();
     if (this.turnOf(machine).busy) return;
     this.setTurn(machine, { busy: true });
+    this.asked = { ...this.asked, [machine]: (this.asked[machine] ?? 0) + 1 };
     cx.notify();
     cx.spawn(async (cx) => {
       const r = this.agentsOn[machine] ? { code: 0 } : await runTodo("install", machine || null);
@@ -305,10 +314,10 @@ export class Tasks {
       .children(turn.text ? [turn.failed ? stateBlock("tasks-turned", c, { text: turn.text }) : div().text_size(T.body).text_color(c.dim).text_center().child(turn.text)] : []);
   }
 
-  notes(c) {
+  notes(c, front) {
     return [
-      ...(this.failure ? [stateBlock("tasks-failed", c, { text: this.failure.text, fix: "Retry", onClick: this.failure.retry })] : []),
-      ...(this.removed ? [undoLine("tasks-removed", this.removed.words, this.removed.undo, c)] : []),
+      ...(this.failure?.project === front ? [stateBlock("tasks-failed", c, { text: this.failure.text, fix: "Retry", onClick: this.failure.retry })] : []),
+      ...(this.removed?.project === front ? [undoLine("tasks-removed", this.removed.words, this.removed.undo, c)] : []),
     ];
   }
 
@@ -321,7 +330,7 @@ export class Tasks {
     const listed = (this.projects ?? []).filter((p) => p.id === front);
     const body = !this.projects ? this.skeleton(c)
       : v_flex().w_full().gap(G.xl).children([
-        ...this.notes(c),
+        ...this.notes(c, front),
         ...listed.map((p) => this.projectBlock(p, todos, c, now)),
         ...(todos.some((t) => t.project === front) ? [] : [this.emptyBlock(c)]),
       ]);
