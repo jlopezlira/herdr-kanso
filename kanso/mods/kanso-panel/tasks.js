@@ -45,7 +45,7 @@ export class Tasks {
     this.more ??= {};
     this.opened ??= {};
     this.ended ??= {};
-    this.named = new Set();
+    this.named = new Map();
     this.cleared = null;
     this.front = this.frontKey();
     this.frontOn = this.frontMachine();
@@ -168,13 +168,13 @@ export class Tasks {
 
   async keepNames() {
     const live = plansOf(this.withAgents(this.todos.filter((t) => t.by))).filter((plan) => !plan.gone)
-      .map((plan) => ({ plan, name: this.agentName(plan), steps: plan.steps }))
-      .map((it) => ({ ...it, stale: it.steps.filter((s) => s.by_name !== it.name) }))
-      .filter(({ stale, plan, name }) => stale.length && !this.named.has(`${plan.on}:${name}:${stale.map((s) => s.id).join(",")}`));
-    await Promise.all(live.map(async ({ plan, name, stale }) => {
-      const key = `${plan.on}:${name}:${stale.map((s) => s.id).join(",")}`;
-      this.named.add(key);
-      const sql = `UPDATE todos SET by_name=${q(name)} WHERE id IN (${stale.map((s) => q(s.id)).join(",")}) AND by=${q(plan.by)};`;
+      .map((plan) => ({ plan, name: this.agentName(plan), since: this.liveAt(plan.by, plan.on)?.created_ms }))
+      .map((it) => ({ ...it, stale: it.plan.steps.filter((s) => s.by_name !== it.name || (s.by_since == null && it.since != null)) }))
+      .map((it) => ({ ...it, key: `${it.plan.on}:${it.stale.map((s) => s.id).join(",")}` }))
+      .filter(({ stale, key, name }) => stale.length && this.named.get(key) !== name);
+    await Promise.all(live.map(async ({ plan, name, since, stale, key }) => {
+      this.named.set(key, name);
+      const sql = `UPDATE todos SET by_name=${q(name)}, by_since=coalesce(by_since, ${since == null ? "NULL" : Math.round(since)}) WHERE id IN (${stale.map((s) => q(s.id)).join(",")}) AND by=${q(plan.by)};`;
       try { await (await this.dbOn(plan.on || null)).sql(sql); } catch { this.named.delete(key); }
     }));
   }
@@ -187,7 +187,9 @@ export class Tasks {
   withAgents(todos) {
     return todos.map((t) => {
       const k = t.by ? this.liveAt(t.by, t.on) : null;
-      return { ...t, gone: Boolean(t.by) && (!k || seconds(t.created) < seconds(k.created_ms ?? 0)) };
+      const since = k?.created_ms;
+      const other = t.by_since != null && since != null ? Number(t.by_since) !== Number(since) : seconds(t.created) < seconds(since ?? 0);
+      return { ...t, gone: Boolean(t.by) && (!k || other) };
     });
   }
 
@@ -199,7 +201,10 @@ export class Tasks {
   }
 
   goTo(plan) {
-    run("pane.focus", { terminal: seenAddress(plan.by, plan.on) });
+    const address = seenAddress(plan.by, plan.on);
+    const pane = agents().find((a) => a.address === address)?.pane;
+    if (pane) run("pane.focus", { pane });
+    else run("terminal.peek", { terminal: address });
   }
 
   stepRow(step, c, now, gone, { lead = false, open = false } = {}) {
@@ -283,23 +288,26 @@ export class Tasks {
       })] : [])
       .children(open ? ended.map((plan) => this.endedPlan(plan, c, now, place)) : [])
       .children(cleared ? [row("tasks-cleared", c, {
-        name: `Cleared ${cleared.plans} earlier ${cleared.plans === 1 ? "plan" : "plans"}`, icon: "check", dimmed: true,
-        action: { label: "Undo", kind: "quiet", onClick: (cx) => this.undoClear(cx) },
+        name: cleared.failed ? "Undo did not reach the to-do list" : `Cleared ${cleared.plans} earlier ${cleared.plans === 1 ? "plan" : "plans"}`,
+        icon: cleared.failed ? null : "check", dimmed: !cleared.failed, busy: Boolean(cleared.undoing),
+        action: { label: cleared.failed ? "Try again" : "Undo", kind: "quiet", onClick: (cx) => this.undoClear(cx) },
       })] : []);
   }
 
-  byMachine(steps, each) {
-    return Promise.all([...new Set(steps.map((s) => s.on))].map(async (on) => {
+  async byMachine(steps, each) {
+    const done = await Promise.all([...new Set(steps.map((s) => s.on))].map(async (on) => {
       const mine = steps.filter((s) => s.on === on);
-      await tryOrAsync(async () => (await this.dbOn(on || null)).sql(each(mine)));
+      try { await (await this.dbOn(on || null)).sql(each(mine)); return true; } catch { return false; }
     }));
+    return done.every(Boolean);
   }
 
   queued(cx, work) {
     this.writing = (this.writing ?? Promise.resolve()).then(work).catch(() => null);
     cx.spawn(async (cx) => {
       await this.writing;
-      if (await this.read()) cx.notify();
+      await this.read();
+      cx.notify();
     });
   }
 
@@ -312,12 +320,17 @@ export class Tasks {
   }
 
   undoClear(cx) {
-    const { steps } = this.cleared ?? { steps: [] };
-    this.cleared = null;
+    const cleared = this.cleared;
+    if (!cleared || cleared.undoing) return;
+    const { steps } = cleared;
+    this.cleared = { ...cleared, undoing: true, failed: false };
     cx.notify();
-    const cols = ["id", "project", "text", "created", "done_at", "by", "detail", "started_at", "by_name"];
+    const cols = ["id", "project", "text", "created", "done_at", "by", "detail", "started_at", "by_name", "by_since"];
     const value = (v) => (typeof v === "number" ? String(Math.round(v)) : q(v ?? null));
-    this.queued(cx, () => this.byMachine(steps, (mine) => mine.map((s) => `INSERT OR IGNORE INTO todos(${cols.join(",")}) VALUES(${cols.map((k) => value(s[k])).join(",")});`).join("\n")));
+    this.queued(cx, async () => {
+      const ok = await this.byMachine(steps, (mine) => mine.map((s) => `INSERT OR IGNORE INTO todos(${cols.join(",")}) VALUES(${cols.map((k) => value(s[k])).join(",")});`).join("\n"));
+      this.cleared = ok ? null : { ...cleared, undoing: false, failed: true };
+    });
   }
 
   folded(project) { return this.folds[project] ?? true; }

@@ -60,16 +60,18 @@ const startTasks = async (
 };
 
 const storedTodo = (project, extra = {}) => ({ id: project, project, text: TODO_WORDS, created: 1000, ...extra });
-const writeTodo = async (db, { id, project, text, created, by, detail, started_at, done_at, by_name }) => {
+const writeTodo = async (db, step) => {
   const { q } = await load("kanso-panel/kdb.js", ["q"]);
-  const values = [id, project, text, created, by, detail, started_at, done_at, by_name].map(q).join(",");
-  await db.run(`INSERT INTO todos(id,project,text,created,by,detail,started_at,done_at,by_name) VALUES(${values});`);
+  const columns = ["id", "project", "text", "created", "by", "detail", "started_at", "done_at", "by_name"]
+    .concat(step.by_since == null ? [] : ["by_since"]);
+  const values = columns.map((key) => q(step[key])).join(",");
+  await db.run(`INSERT INTO todos(${columns.join(",")}) VALUES(${values});`);
 };
 const todoNames = (db) => db.read("SELECT id, by_name FROM todos ORDER BY created;");
 const NAME_UPDATE = "UPDATE todos SET by_name=";
 const interceptSql = (t, db, intercept) => {
   const sql = db.sql.bind(db);
-  t.mock.method(db, "sql", (statement) => intercept(String(statement), () => sql(statement)));
+  t.mock.method(db, "sql", (statement) => intercept(String(statement), (next = statement) => sql(next)));
 };
 const stepId = ({ id }) => `tasks-step-${id}`;
 const sentTo = (hc) => hc.mock.calls.map(({ arguments: [argv] }) => argv).filter(([verb]) => verb === "send");
@@ -732,6 +734,22 @@ test("A live agent's name updates on its own steps without naming a previous ses
   });
 });
 
+test("A live plan saves the original name again when its agent changes back to it.", async (t) => {
+  const { db, step } = await shopAgentTodo(t);
+  const original = "Builder";
+  let name = original;
+  const { poll } = await polledTasks(t, db, {
+    spaces: activeSpace(shop),
+    terminals: () => namedAgentInShop(name).terminals(),
+  });
+
+  for (const next of [original, "Checker", original]) {
+    name = next;
+    await poll();
+    same(await todoNames(db), [{ id: step.id, by_name: next }]);
+  }
+});
+
 test("A step written in the terminal's first second appears in the live agent's plan.", async (t) => {
   const { db, step } = await shopAgentTodo(t);
   const name = "Builder";
@@ -801,8 +819,10 @@ test("Earlier starts folded with a count and opens named plans and their step de
 
 test("Earlier keeps two named agents' plans separate when they used the same terminal address.", async (t) => {
   const { db, id } = await shopKdb(t);
-  const first = storedTodo(id, { id: "pack", by: terminalId, by_name: "Packer", text: "Pack the release" });
-  const second = { ...first, id: "check", by_name: "Checker", text: "Check the release", created: 2000 };
+  const first = storedTodo(id, {
+    id: "pack", by: terminalId, by_name: "Packer", by_since: 800, text: "Pack the release",
+  });
+  const second = { ...first, id: "check", by_name: "Checker", by_since: 1800, text: "Check the release", created: 2000 };
   for (const step of [first, second]) await writeTodo(db, step);
   const { page, click } = await startTasks(db, { spaces: activeSpace(shop) });
 
@@ -816,6 +836,20 @@ test("Earlier keeps two named agents' plans separate when they used the same ter
     assert.equal(control(page(), stepId(other)), null);
     click(plan.tag);
   }
+});
+
+test("Earlier keeps an ended agent's named and unnamed steps in one plan.", async (t) => {
+  const { db, step } = await shopAgentTodo(t, { by_name: "Builder", by_since: 800 });
+  const later = { ...step, id: "sign", by_name: null, text: "Sign the installer", created: 2000 };
+  await writeTodo(db, later);
+  const { page, click } = await startTasks(db, { spaces: activeSpace(shop) });
+
+  assert.deepEqual(wordsAt(page(), EARLIER), ["Earlier", "1"]);
+  click(EARLIER);
+  const plan = planWith(page(), step.text);
+  assert.equal(texts(plan)[0], step.by_name);
+  click(plan.tag);
+  for (const item of [step, later]) assert.ok(wordsAt(page(), stepId(item)).includes(item.text));
 });
 
 test("A Tasks step wraps its detail instead of truncating it.", async (t) => {
@@ -943,32 +977,38 @@ test("Tasks follows a project on light by folder, and names the agent from light
   same(await remote.db.read("SELECT by_name FROM todos;"), [{ by_name: name }]);
 });
 
-test("Go to agent focuses the live plan's terminal on its computer.", async (t) => {
-  const { db, remote } = await tasksDatabases(t);
-  const { id } = await saveProject(remote.db, shop);
-  await writeTodo(remote.db, storedTodo(id, { by: terminalId }));
+for (const [description, pane] of [["focuses the live agent's pane", "p7"], ["opens a background helper", null]]) {
+  test(`Go to agent ${description} on its computer.`, async (t) => {
+    const { db, remote } = await tasksDatabases(t);
+    const { id } = await saveProject(remote.db, shop);
+    await writeTodo(remote.db, storedTodo(id, { by: terminalId }));
 
-  const address = `${remoteShop.machine}/${terminalId}`;
-  const run = t.mock.fn();
-  const { page, click } = await startTasks(db, {
-    ...remote.host, spaces: activeSpace(remoteShop), terminals: () => [{ address }], run,
+    const address = `${remoteShop.machine}/${terminalId}`;
+    const run = t.mock.fn();
+    const agent = pane ? { address, pane } : { address };
+    const { page, click } = await startTasks(db, {
+      ...remote.host, spaces: activeSpace(remoteShop), terminals: () => [{ address }], agents: () => [agent], run,
+    });
+
+    const action = `tasks-agent-${remoteShop.machine}:${terminalId}-action`;
+    assert.deepEqual(wordsAt(page(), action), [GO_TO_AGENT]);
+    click(action);
+    const expected = pane ? ["pane.focus", { pane }] : ["terminal.peek", { terminal: address }];
+    same(run.mock.calls.map(({ arguments: args }) => args), [expected]);
   });
-
-  const action = `tasks-agent-${remoteShop.machine}:${terminalId}-action`;
-  assert.deepEqual(wordsAt(page(), action), [GO_TO_AGENT]);
-  click(action);
-  same(run.mock.calls.map(({ arguments: args }) => args), [["pane.focus", { terminal: address }]]);
-});
+}
 
 test("Clear removes only the viewed earlier plan on its computer, and Undo restores every column.", async (t) => {
   const { db, remote } = await tasksDatabases(t);
   const remoteProject = await saveProject(remote.db, shop);
   const localProject = await saveProject(db, acme);
   const finished = storedTodo(remoteProject.id, {
-    id: "release", by: terminalId, by_name: "O'Connor", text: "Pack the release",
+    id: "release", by: terminalId, by_name: "O'Connor", by_since: 800, text: "Pack the release",
     detail: "Include the user's guide", started_at: 1100, done_at: 1200,
   });
-  const next = storedTodo(remoteProject.id, { id: "notes", by: terminalId, by_name: finished.by_name, created: 1300 });
+  const next = storedTodo(remoteProject.id, {
+    id: "notes", by: terminalId, by_name: finished.by_name, by_since: finished.by_since, created: 1300,
+  });
   const current = storedTodo(remoteProject.id, { id: "current", text: "Check the current build", created: 1400 });
   for (const step of [finished, next, current]) await writeTodo(remote.db, step);
   await writeTodo(db, { ...finished, project: localProject.id, text: "Keep the local step with the same ID" });
@@ -996,6 +1036,12 @@ test("Clear removes only the viewed earlier plan on its computer, and Undo resto
   assert.equal(texts(planWith(page(), finished.text))[0], finished.by_name);
 });
 
+const clearEarlier = (click) => {
+  click(EARLIER);
+  click(`${EARLIER}-action`);
+};
+const RESTORE_STEPS = "INSERT OR IGNORE INTO todos";
+
 test("Undo restores earlier steps even when pressed before Clear finishes deleting them.", async (t) => {
   const { db, step } = await shopAgentTodo(t, { by_name: "Packer" });
   const deletion = Promise.withResolvers();
@@ -1007,14 +1053,13 @@ test("Undo restores earlier steps even when pressed before Clear finishes deleti
       return deletion.promise.then(execute);
     }
     const result = execute();
-    if (sql.startsWith("INSERT OR IGNORE INTO todos")) restoring = result;
+    if (sql.startsWith(RESTORE_STEPS)) restoring = result;
     return result;
   });
   const tasks = await startTasks(db, { spaces: activeSpace(shop) });
 
   try {
-    tasks.click(EARLIER);
-    tasks.click(`${EARLIER}-action`);
+    clearEarlier(tasks.click);
     await nextTurn();
     assert.ok(deleting, "Clear has started, but the DELETE is still waiting");
     tasks.click("tasks-cleared-action");
@@ -1025,6 +1070,39 @@ test("Undo restores earlier steps even when pressed before Clear finishes deleti
     await tasks.drain();
   }
   same(await todoNames(db), [{ id: step.id, by_name: step.by_name }]);
+});
+
+test("Undo keeps the cleared plan for a retry when SQLite refuses to restore it.", async (t) => {
+  const { db, step } = await shopAgentTodo(t, { by_name: "Packer" });
+  const saved = () => db.read("SELECT * FROM todos;");
+  const before = await saved();
+  let refused = false;
+  interceptSql(t, db, (sql, execute) => {
+    if (refused || !sql.startsWith(RESTORE_STEPS)) return execute();
+    refused = true;
+    return execute(`PRAGMA query_only=ON;${sql}`);
+  });
+  const notify = t.mock.fn();
+  const tasks = await startTasks(db, { spaces: activeSpace(shop) }, { notify });
+  const cleared = "tasks-cleared";
+  const undo = `${cleared}-action`;
+
+  clearEarlier(tasks.click);
+  await tasks.drain();
+  tasks.click(undo);
+  const pendingPaints = notify.mock.callCount();
+  await tasks.drain();
+  const notificationAfterFailure = notify.mock.callCount() > pendingPaints;
+  assert.ok(refused, "Undo attempted to write to SQLite");
+  same(await saved(), []);
+  assert.deepEqual(wordsAt(tasks.page(), cleared), ["Undo did not reach the to-do list", "Try again"]);
+
+  tasks.click(undo);
+  await tasks.drain();
+  assert.deepEqual(await saved(), before);
+  assert.equal(control(tasks.page(), cleared), null);
+  assert.equal(texts(planWith(tasks.page(), step.text))[0], step.by_name);
+  assert.ok(notificationAfterFailure, "The failed Undo asks the panel to show Try again");
 });
 
 const shopAndAcme = async (t) => {

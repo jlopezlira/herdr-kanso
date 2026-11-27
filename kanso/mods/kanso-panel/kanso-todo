@@ -19,7 +19,7 @@ now() { echo "$(date +%s)000"; }
 mine() { [ -n "$who" ] || fail "run this from an agent's terminal in kansō: HC_TERMINAL_ID is not set"; }
 columns() {
   have=$(sql "SELECT group_concat(name,' ') FROM pragma_table_info('todos');") || fail "cannot read $db"
-  for col in "detail TEXT" "started_at INTEGER"; do
+  for col in "detail TEXT" "started_at INTEGER" "by_name TEXT" "by_since INTEGER"; do
     case " $have " in *" ${col% *} "*) ;; *) sql "ALTER TABLE todos ADD COLUMN $col;" >/dev/null 2>&1 || true ;; esac
   done
 }
@@ -161,7 +161,8 @@ case "$1" in
     columns
     p=$(project) || exit 1
     id=$(new_id)
-    sql "INSERT INTO todos(id,project,text,detail,created,by) VALUES($(q "$id"),$(q "$p"),$(q "$text"),$(q "$detail"),$(now),$(q "$who"));" || fail "cannot add the step"
+    card=$(hc get "$who" 2>/dev/null) || card=
+    sql "INSERT INTO todos(id,project,text,detail,created,by,by_since,by_name) SELECT $(q "$id"),$(q "$p"),$(q "$text"),$(q "$detail"),$(now),$(q "$who"),CASE WHEN json_valid(c) THEN json_extract(c,'\$.created_ms') END,CASE WHEN json_valid(c) THEN coalesce(nullif(json_extract(c,'\$.labels.\"kanso.shown\"'),''),nullif(json_extract(c,'\$.name'),''),nullif(json_extract(c,'\$.title'),'')) END FROM (SELECT $(q "$card") AS c);" || fail "cannot add the step"
     echo "$id" ;;
   list)
     mine
