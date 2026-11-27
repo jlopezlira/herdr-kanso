@@ -225,7 +225,7 @@ test("Memory redraws 0 times a minute when the reading has not changed", async (
   assert.equal(redraws.n, 0, `an unchanged Memory reading redrawn ${redraws.n} times per minute; budget 0`);
 });
 
-test("the sidebar's footer arms no fit timer, and the title bar reads battery and the memory warning every 2 minutes", async (t) => {
+test("the sidebar's footer arms no fit timer, and the title bar reads the memory warning every 2 minutes and never the battery", async (t) => {
   const dir = await temporary(t), f = fixture({ dir });
   const { SidebarFooter } = await loadMod("kanso-spaces/main.js", ["SidebarFooter"], f.host);
   new SidebarFooter().init({ collapsed: false, update: null, ready: null, hint: null }, f.cx);
@@ -234,14 +234,13 @@ test("the sidebar's footer arms no fit timer, and the title bar reads battery an
   view.init({}, f.cx);
   await f.settle();
   assert.equal(f.state.timers.filter((timer) => timer.ms === 1500).length, 0, "the footer does not arm the fit timer");
-  assert.equal(f.state.timers.filter((timer) => timer.ms === 30_000 || timer.ms === 60_000).length, 0, "battery and the memory warning are not read every 30 or 60 seconds");
-  assert.equal(f.state.timers.filter((timer) => timer.ms === 120_000).length, 2);
+  assert.equal(f.state.timers.filter((timer) => timer.ms === 30_000 || timer.ms === 60_000).length, 0, "the memory warning is not read every 30 or 60 seconds");
+  assert.equal(f.state.timers.filter((timer) => timer.ms === 120_000).length, 1);
   const pmset = () => f.state.processes.filter((p) => p.command === "pmset");
   const status = () => f.state.processes.filter((p) => p.command === "sh" && String(p.args[1]).includes("herdr-app status"));
   await freshAdvance(f, 60_000);
-  assert.equal(pmset().length, 0, "battery is not read in the first minute");
   assert.equal(status().length, 0, "the memory warning is not read in the first minute");
   await f.advance(60_000);
-  assert.equal(pmset().length, 1, "battery is read at 2 minutes");
+  assert.equal(pmset().length, 0, "nothing reads the battery: no motion depends on it");
   assert.equal(status().length, 1, "the memory warning is read at 2 minutes");
 });

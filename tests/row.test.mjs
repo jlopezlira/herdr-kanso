@@ -278,14 +278,26 @@ test("Tools are always shown after the action, and key hints close the right sid
 
 test("A working row's name glints, and a program's own art leads it, tinted or in its own colours", async () => {
   const { row, ICON_ROW, c } = await kit();
-  const working = row("r", c, { name: "Atlas", glint: true });
-  assert.ok(all(working).some((kid) => calls(kid, "loop").length), "the name glints");
-  assert.equal(all(row("r", c, { name: "Atlas" })).some((kid) => calls(kid, "loop").length), false);
+  const sweeps = (props) => all(row("r", c, { name: "Atlas", ...props }))
+    .some((kid) => calls(kid, "transition").some(([, property]) => property === "left"));
+  assert.equal(sweeps({ glint: "start" }), true, "the name glints");
+  assert.equal(sweeps({}), false);
   const tinted = row("r", c, { icon: { icon: "programs/claude.svg", tint: true }, name: "Atlas" });
   assert.ok(svgs(tinted).includes("programs/claude.svg"));
   const art = row("r", c, { icon: { icon: "programs/codex.png", tint: false }, name: "Iris" });
   const picture = all(art).find((kid) => kid.tag === "image");
   assert.deepEqual([one(picture, "w"), one(picture, "h")], [ICON_ROW, ICON_ROW]);
+});
+
+test("A sidebar name keeps its weight and size while it glints", async () => {
+  const { row, T, c } = await kit();
+  const typeOf = (props) => {
+    const name = all(row("r", c, { name: "Atlas", names: true, ...props })).find((kid) => calls(kid, "font_medium").length);
+    return name ? [calls(name, "font_medium").length, one(name, "text_size")] : null;
+  };
+  assert.deepEqual(typeOf({}), [1, T.card]);
+  assert.deepEqual(typeOf({ glint: "start" }), typeOf({}));
+  assert.deepEqual(typeOf({ glint: "run" }), typeOf({}));
 });
 
 test("Facts, the second line, the meta and the chip take a tone and a tip", async () => {

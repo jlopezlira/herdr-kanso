@@ -1,5 +1,5 @@
 // The update channel: what the shell is given, what the toast says, and the What's new row.
-import { loadUpdater, loadSettings } from "./mod-fixtures.mjs";
+import { loadUpdater, loadSettings, loadTabs } from "./mod-fixtures.mjs";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { hostInstall } from "../kanso/mods/kanso-chrome/release.js";
@@ -96,33 +96,66 @@ test("The toast names the tag, and Stable never offers an older release", async 
   assert.equal(ahead.updater.current(), "3.31.0-beta.1");
 });
 
+const tabBarOn = async (host, state = {}) => {
+  const { Tabs } = await loadTabs(host);
+  const { Updater } = await loadUpdater(host);
+  return Object.assign(new Tabs(), { updater: Object.assign(new Updater(), state) });
+};
+
 test("Choosing Early looks again, and Stable stays the default until then", async () => {
-  const store = { "kanso.update": { autoCheck: true, tag: "3.30.0-beta.2", latest: "3.29.0" } };
+  const store = {
+    "kanso.update": { autoCheck: true, tag: "3.30.0-beta.2", latest: "3.29.0" },
+    "kanso.pieces": { "toast.update": "hide" },
+  };
+  const toasts = [], commands = [];
   let asked = 0;
-  const Updater = await updaterWith({
+  const host = updaterHost({
     store,
+    toasts,
     onExec: async (command) => {
       if (command === "git") { asked += 1; return success(listing); }
       return success("");
     },
   });
-  const updater = new Updater();
-  const timers = [];
-  const { cx, drain } = tickingContext(timers);
-  updater.start(cx);
+  const tabBar = await tabBarOn(host);
+  const { cx, drain } = tickingContext([]);
+  tabBar.updater.start(cx);
   await drain();
-  const seen = asked;
-  const fit = timers.filter((timer) => timer.ms === 1500);
-  assert.equal(fit.length, 1);
-  fit[0].fn(cx);
+  assert.equal(asked, 1, "startup checks once");
+  assert.equal(tabBar.updater.channel(), "stable");
+  assert.equal(tabBar.updater.available(), "3.30.0");
+
+  const { ui, settings } = await settingsOf(store, (command) => {
+    commands.push({ command, channel: store["kanso.update"].channel });
+    cx.spawn(() => tabBar.barCommand(command, cx));
+  });
+  settings.updatesPage(colors(), colors());
+  ui.handlers.get("updates-channel-stable")(null, cx);
   await drain();
-  assert.equal(asked, seen, "the first look at the channel does not check again");
-  store["kanso.update"] = { ...store["kanso.update"], channel: "beta" };
-  fit[0].fn(cx);
+  assert.equal(asked, 1, "choosing the current channel does not check again");
+
+  ui.handlers.get("updates-channel-beta")(null, cx);
   await drain();
-  assert.equal(asked, seen + 1);
-  assert.equal(updater.available(), "3.31.0-beta.1");
-  assert.equal(updater.channel(), "beta");
+  assert.deepEqual(commands, [{ command: "kanso-tabs.channel", channel: "beta" }]);
+  assert.equal(asked, 2, "Early checks without waiting for a timer");
+  assert.equal(tabBar.updater.available(), "3.31.0-beta.1");
+  assert.deepEqual(toasts, [], "the channel check respects hidden update toasts");
+});
+
+test("Changing the channel leaves the tab bar free for the next command while GitHub answers", async () => {
+  const store = { "kanso.update": { autoCheck: true, channel: "beta", tag: "3.30.0-beta.2", latest: "3.29.0" }, "kanso.pieces": { "toast.update": "hide" } };
+  let answer;
+  const held = new Promise((resolve) => { answer = resolve; });
+  const host = updaterHost({ store, onExec: async (command) => { if (command === "git") await held; return command === "git" ? success(listing) : success(""); } });
+  const tabBar = await tabBarOn(host, { installed: "3.30.0" });
+  const { cx, drain } = tickingContext([]);
+  const waited = new Promise((resolve) => { setTimeout(() => resolve("held"), 200); });
+  const handled = await Promise.race([tabBar.barCommand("kanso-tabs.channel", cx).then(() => "free"), waited]);
+  assert.equal(handled, "free", "the command returns before GitHub answers");
+  assert.equal(tabBar.updater.available(), null);
+  answer();
+  await drain();
+  assert.equal(tabBar.updater.available(), "3.31.0-beta.1", "the look still lands");
 });
 
 const colors = () => ({
@@ -131,9 +164,10 @@ const colors = () => ({
   ansi2: "#070", hover: "#eee",
 });
 
-async function settingsOf(store) {
+async function settingsOf(store, run = () => {}) {
   const ui = settingsTape();
   const settings = await settingsView(loadSettings, ui, {
+    run,
     theme: colors,
     props: () => ({}),
     ...storeShared(store),
