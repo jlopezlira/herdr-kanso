@@ -448,12 +448,18 @@ const tasksOnLight = async (t, remoteExec, { todoExec, withTodo = false, ...host
 const todoVerbs = (mock) => mock.mock.calls.flatMap(({ arguments: args }) => args);
 const LIGHT_TODO_RULE = "Keep the project to-do up to date.";
 
-const lightTodoSwitch = async (t, { initiallyOn = false, ...host } = {}) => {
-  let installed = initiallyOn;
-  const remote = t.mock.fn(async (verb) => {
+const switchScript = (installed = false) => {
+  const script = (verb) => {
     if (verb === "install") installed = true;
     return success(verb === "rule" ? LIGHT_TODO_RULE : installed ? "on\n" : "off\n");
-  });
+  };
+  script.turnOff = () => { installed = false; };
+  return script;
+};
+
+const lightTodoSwitch = async (t, { initiallyOn = false, ...host } = {}) => {
+  const remote = t.mock.fn(async (verb) => script(verb));
+  const script = switchScript(initiallyOn);
   const tasks = await tasksOnLight(t, remote, host);
   const installFrom = async (action, label) => {
     assert.deepEqual(wordsAt(tasks.page(), action), [label]);
@@ -462,7 +468,7 @@ const lightTodoSwitch = async (t, { initiallyOn = false, ...host } = {}) => {
     await tasks.drain();
     assert.deepEqual(todoVerbs(remote).slice(before), ["status", "install", "status", "rule"]);
   };
-  return { ...tasks, remote, installFrom, turnOff: () => { installed = false; } };
+  return { ...tasks, remote, installFrom, turnOff: script.turnOff };
 };
 
 test("Tasks can turn on agents on light when the project already has a to-do.", async (t) => {
@@ -536,15 +542,15 @@ test("Tasks rereads light's switch when returning from a project on this compute
 test("A late status reply from light cannot overwrite a successful Turn on.", { timeout: 10000 }, async (t) => {
   const stale = Promise.withResolvers();
   const reading = Promise.withResolvers();
-  let installed = false, held = false;
+  let held = false;
+  const script = switchScript();
   const remote = async (verb) => {
     if (verb === "status" && !held) {
       held = true;
       reading.resolve();
       return stale.promise;
     }
-    if (verb === "install") installed = true;
-    return success(verb === "rule" ? LIGHT_TODO_RULE : installed ? "on\n" : "off\n");
+    return script(verb);
   };
   const spaces = t.mock.fn(activeSpace(shop));
   const tasks = await tasksOnLight(t, remote, { spaces });
