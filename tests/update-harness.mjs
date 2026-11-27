@@ -132,7 +132,8 @@ function rawExec(command, args, options = {}) {
 function classify(result) {
   if (result?.signal === "SIGKILL" || result?.signal === "SIGTERM" || result?.code === 137) return "killed";
   if (result?.code === 0) return "ok";
-  const line = String(result?.stderr ?? "").replace(/^\uFEFF/, "").trim().split(/\r?\n/).filter(Boolean).at(-1) ?? "";
+  const lines = String(result?.stderr ?? "").replace(/^\uFEFF/, "").trim().split(/\r?\n/).filter(Boolean);
+  const line = lines.findLast((l) => !/^\s*(\+|At |~)/.test(l)) ?? lines.at(-1) ?? "";
   return `failed: ${line}`;
 }
 async function writeChecker(root, { record = false } = {}) {
