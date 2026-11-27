@@ -1587,6 +1587,7 @@ export default class Spaces extends RetryingView {
   }
 
   setUpCaffeine(key, os, verb, title, cx) {
+    if (this.caffeine.settingUp(key) === verb) return;
     const argv = setupArgv(os, verb);
     const here = spaces().filter((s) => (s.machine ?? "") === key);
     const space = here.find((s) => s.active) ?? here[0];

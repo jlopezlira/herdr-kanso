@@ -34,7 +34,8 @@ async function sidebar({ pieces = {}, replies = {} } = {}) {
   });
   const follow = async () => { calls.length = 0; view.followCaffeine(cx); await drain(); return calls; };
   const afterSetup = async () => { await drain(); clock.at += SETUP_EVERY_MS; return follow(); };
-  return { view, cx, drain, calls, toasts, store, connected, follow, afterSetup, opened, clock };
+  const turnOn = async (key) => { view.setCaffeine(key, true, cx); await drain(); };
+  return { view, cx, drain, calls, toasts, store, connected, follow, afterSetup, turnOn, opened, clock };
 }
 
 test("Hiding Caffeine turns it off on this computer when no other computer is added", async () => {
@@ -68,13 +69,20 @@ test("The Caffeine panel lists every connected computer even with Computers hidd
 test("A turn on through its set up that the battery refuses stops waiting for the password and says so once, even read twice at the same time", async () => {
   const s = await sidebar({ replies: { "grey on": "setup", "grey read": "off low" } });
   s.connected.push("grey");
-  s.view.setCaffeine("grey", true, s.cx);
-  await s.drain();
+  await s.turnOn("grey");
   await Promise.all([s.view.readCaffeine("grey"), s.view.readCaffeine("grey")]);
   await s.afterSetup();
   const { setup, battery } = s.view.caffeine.look("grey");
   assert.deepEqual({ setup, battery }, { setup: false, battery: true });
   assert.deepEqual(s.toasts.map((toast) => toast.title), ["Caffeine on grey was not changed"]);
+});
+
+test("Turning Caffeine on again while its set up waits for the password opens no second set up", async () => {
+  const s = await sidebar({ replies: { "grey on": "setup" } });
+  s.connected.push("grey");
+  await s.turnOn("grey");
+  await s.turnOn("grey");
+  assert.deepEqual(s.opened, ["space.new"]);
 });
 
 test("Turning Caffeine off through its set up ends with it off and a toast with Undo", async () => {
