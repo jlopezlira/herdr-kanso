@@ -44,7 +44,6 @@ the branch's rules.
 
 ### Fixed
 
-- A Windows update stopped mid-way is still told apart from one that failed without saying why.
 - When a computer turns kansō away, Add a computer and its sign-in tab say which user was tried and that you can type user@address if you sign in there as someone else, instead of only asking for a key that may already be there.
 - Add a computer finds Tailscale when it was installed from the Mac App Store and no longer shows a notice when Tailscale isn't installed.
 - Caffeine says when a computer's battery is too low to keep it awake, instead of showing it as not read and then as sleeping as usual.
