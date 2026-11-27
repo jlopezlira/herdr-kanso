@@ -13,13 +13,14 @@ codex_config=$HOME/.codex/config.toml
 q() { printf "'%s'" "$(printf '%s' "$1" | sed "s/'/''/g")"; }
 sql() { sqlite3 -cmd ".timeout 5000" "$db" "$@"; }
 fail() { echo "kanso-todo: $1" >&2; exit 1; }
+one_line() { printf '%s' "$1" | tr '\n\t' '  ' | sed 's/  */ /g; s/^ //; s/ $//'; }
 now() { echo "$(date +%s)000"; }
 new_id() { printf '%x%s' "$(date +%s)" "$(od -An -N4 -tx4 /dev/urandom | tr -d ' \n')"; }
 
 rule() {
   cat <<RULE
 ## To-do in kansō
-Keep this project's to-do list in kansō while you work, without being asked. When you plan work, add each step: \`$me add "<one short line>"\`. When you finish a step, close it: \`$me done <id>\`. \`$me list\` shows the open ones with their ids.
+Show your plan in kansō while you work, without being asked, so the person sees what you will do. Before you start work, add every step you plan, in order, each with one line saying what it changes or why: \`$me add "<step>" "<detail>"\`. When you begin a step: \`$me start <id>\`. When you finish it: \`$me done <id>\`. When the plan changes, add the new steps. \`$me list\` shows your steps with their ids and states.
 RULE
 }
 
@@ -115,25 +116,30 @@ uninstall() {
 
 case "$1" in
   add)
-    shift
-    text=$(printf '%s' "$*" | tr '\n\t' '  ' | sed 's/  */ /g; s/^ //; s/ $//')
-    [ -n "$text" ] || fail 'usage: kanso-todo add "<text>"'
+    text=$(one_line "$2")
+    detail=$(one_line "$3")
+    [ -n "$text" ] || fail 'usage: kanso-todo add "<step>" "<detail>"'
     p=$(project) || exit 1
     id=$(new_id)
-    sql "INSERT INTO todos(id,project,text,created,by) VALUES($(q "$id"),$(q "$p"),$(q "$text"),$(now),$(q "${HC_TERMINAL_ID:-}"));" || fail "cannot add the to-do"
+    sql "INSERT INTO todos(id,project,text,detail,created,by) VALUES($(q "$id"),$(q "$p"),$(q "$text"),$(q "$detail"),$(now),$(q "${HC_TERMINAL_ID:-}"));" || fail "cannot add the step"
     echo "$id" ;;
   list)
     p=$(find_project) || exit 1
     [ -n "$p" ] || exit 0
-    sql -separator "$(printf '\t')" "SELECT id, text FROM todos WHERE project=$(q "$p") AND done_at IS NULL ORDER BY created;" ;;
+    sql -separator "$(printf '\t')" "SELECT id, CASE WHEN done_at IS NOT NULL THEN 'done' WHEN started_at IS NOT NULL THEN 'doing' ELSE 'next' END, text FROM todos WHERE project=$(q "$p") AND (by=$(q "${HC_TERMINAL_ID:-}") OR $(q "${HC_TERMINAL_ID:-}")='') ORDER BY created;" ;;
+  start)
+    [ -n "$2" ] || fail "usage: kanso-todo start <id>"
+    p=$(find_project) || exit 1
+    n=$(sql "UPDATE todos SET started_at=$(now) WHERE id=$(q "$2") AND project=$(q "$p") AND done_at IS NULL; SELECT changes();") || fail "cannot start $2"
+    [ "$n" = 1 ] || fail "no open step $2 in this project" ;;
   done)
     [ -n "$2" ] || fail "usage: kanso-todo done <id>"
     p=$(find_project) || exit 1
     n=$(sql "UPDATE todos SET done_at=$(now) WHERE id=$(q "$2") AND project=$(q "$p") AND done_at IS NULL; SELECT changes();") || fail "cannot close $2"
-    [ "$n" = 1 ] || fail "no open to-do $2 in this project" ;;
+    [ "$n" = 1 ] || fail "no open step $2 in this project" ;;
   rule) rule ;;
   status) status ;;
   install) install ;;
   uninstall) uninstall ;;
-  *) fail 'usage: kanso-todo add "<text>" | list | done <id> | rule' ;;
+  *) fail 'usage: kanso-todo add "<step>" "<detail>" | start <id> | done <id> | list | rule' ;;
 esac

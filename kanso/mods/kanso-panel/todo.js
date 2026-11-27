@@ -21,6 +21,20 @@ export function todosOf(todos, project) {
   };
 }
 
+export const stepState = (step) => (step.done_at != null ? "done" : step.started_at != null ? "doing" : "next");
+
+export function plansOf(todos, project) {
+  const plans = new Map();
+  for (const step of todos.filter((t) => t.project === project).toSorted((a, b) => a.created - b.created)) {
+    const key = `${step.on ?? ""}:${step.by ?? ""}`;
+    if (!plans.has(key)) plans.set(key, { by: step.by ?? null, on: step.on ?? "", steps: [] });
+    plans.get(key).steps.push(step);
+  }
+  const last = (plan) => Math.max(...plan.steps.map((s) => s.done_at ?? s.started_at ?? s.created));
+  const doing = (plan) => plan.steps.some((s) => stepState(s) === "doing");
+  return [...plans.values()].toSorted((a, b) => Number(doing(b)) - Number(doing(a)) || last(b) - last(a));
+}
+
 export const placeOf = (machine, folder) => `${machine ?? ""}:${String(folder ?? "").replace(/\/+$/, "")}`;
 
 export function withSpaces(projects, spaces, homeDir) {
