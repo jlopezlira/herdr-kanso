@@ -11,9 +11,10 @@ const iso = (ms) => new Date(ms).toISOString().replace(/\.\d{3}Z$/, "Z");
 const PR_FIELDS = "... on PullRequest{url number createdAt mergedAt closedAt baseRefName mergeCommit{oid} repository{nameWithOwner owner{login} defaultBranchRef{name}}}";
 export const SEARCH = `query($q:String!,$after:String){search(query:$q,type:ISSUE,first:100,after:$after){issueCount pageInfo{hasNextPage endCursor} nodes{${PR_FIELDS}}}}`;
 export const HISTORY = "query($owner:String!,$name:String!,$ref:String!,$since:GitTimestamp!,$until:GitTimestamp!,$after:String){repository(owner:$owner,name:$name){ref(qualifiedName:$ref){target{... on Commit{history(first:100,since:$since,until:$until,after:$after){pageInfo{hasNextPage endCursor} nodes{oid}}}}}}}";
-export const createdIn = (start, end) => `is:pr author:@me created:${iso(start)}..${iso(end - 1000)}`;
-export const mergedIn = (start, end) => `is:pr author:@me merged:${iso(start)}..${iso(end - 1000)}`;
-export const updatedIn = (start, end) => `is:pr author:@me updated:${iso(start)}..${iso(end - 1000)}`;
+const authored = (field) => (login) => (start, end) => `is:pr author:${login} ${field}:${iso(start)}..${iso(end - 1000)}`;
+export const createdIn = authored("created");
+export const mergedIn = authored("merged");
+export const updatedIn = authored("updated");
 
 export async function gh(args) {
   const r = await exec("gh", args);
@@ -41,7 +42,7 @@ export async function prsIn(query, start, end, read = gql) {
   return [...await prsIn(query, start, mid, read), ...await prsIn(query, mid, end, read)];
 }
 
-export const prsCreated = (start, end, read = gql) => prsIn(createdIn, start, end, read);
+export const prsCreated = (login, start, end, read = gql) => prsIn(createdIn(login), start, end, read);
 
 export async function inMain(pending, read = gql) {
   const found = await mapSeries(pending, async ({ repo, main, since, until, oids }) => {
@@ -72,7 +73,7 @@ export const github = {
     const read = (months) => mapSeries(months, async (m, i) => {
       progress(`pull requests, ${months.length - i} ${months.length - i === 1 ? "month" : "months"} to go`);
       const end = Math.min(m.end, now + 1000);
-      await store.save([...await prsCreated(m.start, end), ...await prsIn(mergedIn, m.start, end)], login);
+      await store.save([...await prsCreated(login, m.start, end), ...await prsIn(mergedIn(login), m.start, end)], login);
       await store.monthRead("github", m.month, now, login);
     });
     const merged = await store.meta("github.merged");
@@ -81,11 +82,11 @@ export const github = {
     if (due.length || backfill.length) await verify();
     await read(due);
     if (backfill.length) progress("merged pull requests");
-    await mapSeries(backfill, async (m) => store.save(await prsIn(mergedIn, m.start, Math.min(m.end, now + 1000)), login));
+    await mapSeries(backfill, async (m) => store.save(await prsIn(mergedIn(login), m.start, Math.min(m.end, now + 1000)), login));
     if (!merged) await store.setOwnMeta("github.merged", "1", login);
     if (since && !force && now - since < every) return { unchecked: Number(await store.meta("github.unchecked")) || 0 };
     await verify();
-    if (since) await store.save(await prsIn(updatedIn, since - 3600000, now + 1000), login);
+    if (since) await store.save(await prsIn(updatedIn(login), since - 3600000, now + 1000), login);
     await store.setOwnMeta("github.updated", String(now), login);
     progress("what reached production");
     const prod = await inMain(pendingByRepo(await store.prs()));

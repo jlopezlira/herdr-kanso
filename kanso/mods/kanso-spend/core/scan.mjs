@@ -668,7 +668,7 @@ async function scanOneFile(work, tally, source, filePath) {
     if (failure) {
       return {
         work: made.work,
-        tally: sourceWarn(tally, source, `${source.adapter} ${filePath}: zstd file could not be decompressed: ${failure.message}`),
+        tally: (failure.syscall ? sourceRetry : sourceWarn)(tally, source, `${source.adapter} ${filePath}: zstd file could not be decompressed: ${failure.message}`),
         dirty: isNew,
       };
     }

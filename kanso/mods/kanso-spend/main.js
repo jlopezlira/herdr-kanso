@@ -261,8 +261,9 @@ export default class TokenSpend extends View {
     const generation = this.generation;
     const sent = this.options();
     const startedAt = Date.now();
+    const scans = command !== "prepare";
     this.running = command;
-    if (command === "snapshot") this.lastSnapshotAt = Date.now();
+    if (scans) this.lastSnapshotAt = Date.now();
     cx.notify();
 
     try { this.watchdog?.cancel(); } catch { /* already gone */ }
@@ -270,7 +271,7 @@ export default class TokenSpend extends View {
       if (generation !== this.generation) return;
       this.generation += 1;
       try { this.task?.cancel(); } catch { /* already gone */ }
-      if (command === "snapshot") this.lastSnapshotAt = Date.now() - REFRESH_MS + RETRY_MS;
+      if (scans) this.lastSnapshotAt = Date.now() - REFRESH_MS + RETRY_MS;
       this.finish(timerCx, "Spend took too long to answer. It will try again shortly.");
     });
 
@@ -286,12 +287,12 @@ export default class TokenSpend extends View {
       );
       if (generation !== this.generation || this.closed) return;
       if (this.syncWaiting === "fold" && startedAt >= this.syncEnded) this.syncWaiting = false;
-      if (command === "snapshot") {
+      if (scans) {
         if (failure || payload?.scan?.retry) this.lastSnapshotAt = Date.now() - REFRESH_MS + RETRY_MS;
         else if (!payload?.scan?.partial) setShared(SNAPSHOT_AT, this.lastSnapshotAt);
       }
       if (payload) {
-        this.scan = payload.scan ?? this.scan;
+        this.scan = scans || !this.scan ? payload.scan ?? this.scan : { ...payload.scan, partial: this.scan.partial, retry: this.scan.retry };
         if (this.awake) this.costs = payload.costs;
         if (payload.settings) this.settings = payload.settings;
         // Filters changed while this ran: price again with the current ones.
