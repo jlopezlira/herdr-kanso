@@ -166,7 +166,7 @@ test("Files without a folder watch still asks git every 10 seconds", async (t) =
   assert.ok(gitOf(f).length > 0, "no watch: the 10 second tick still asks git");
 });
 
-test("Containers does nothing while behind, reads at once in front, and splits usage from the file walk", async (t) => {
+test("Containers behind reads once for its first picture and then nothing, reads at once in front, and splits usage from the file walk", async (t) => {
   const { readPlan } = await loadMod("kanso-containers/main.js", ["Containers", "readPlan"], fixture().host);
   const plan = (reads) => { const row = readPlan(reads); return [Boolean(row.files), Boolean(row.stats)]; };
   assert.deepEqual(plan(1), [true, true]);
@@ -180,14 +180,37 @@ test("Containers does nothing while behind, reads at once in front, and splits u
   f.state.active = false;
   const { Containers } = await loadMod("kanso-containers/main.js", ["Containers", "readPlan"], f.host);
   const view = await initialised(f, new Containers(), {}, f.cx);
-  await f.advance(60_000);
   const docker = () => f.state.processes.filter((p) => p.command === "docker");
-  assert.equal(docker().length, 0, `Containers behind started ${docker().length} docker processes per minute; budget 0`);
+  await f.advance(0);
+  assert.ok(docker().length > 0, "with nothing to show it reads docker once, also behind");
+  await freshAdvance(f, 60_000);
+  assert.equal(docker().length, 0, `Containers behind started ${docker().length} docker processes per minute after its first read; budget 0`);
   await broughtForward(f, view);
   assert.ok(docker().length > 0, "coming forward reads docker at once");
 });
 
-test("Ports reads 0 times while behind, reads at once in front, and skips a redraw when the list is the same", async (t) => {
+test("Ports brought forward while its first read is still going reads once more when that read ends", async (t) => {
+  const f = fixture({ dir: await temporary(t) });
+  f.state.active = false;
+  const held = Promise.withResolvers();
+  const exec = f.host.exec;
+  f.host.exec = async (command, args, options) => { if (command === "ps") await held.promise; return exec(command, args, options); };
+  const { Ports } = await loadMod("kanso-panel/ports.js", ["Ports"], f.host);
+  const view = new Ports();
+  view.init(f.cx);
+  await f.settle();
+  const lsof = () => f.state.processes.filter((p) => p.command === "lsof").length;
+  assert.equal(lsof(), 1);
+  assert.equal(view.list, null, "the first read is still going");
+  await broughtForward(f, view);
+  assert.equal(lsof(), 0, "no second scan beside the one going");
+  held.resolve();
+  await f.settle();
+  assert.equal(lsof(), 1, "the front's read follows the one that began behind");
+  assert.notEqual(view.list, null);
+});
+
+test("Ports behind reads once for its first picture and then 0 times, reads at once in front, and skips a redraw when the list is the same", async (t) => {
   const quiet = await temporary(t);
   const behind = fixture({ dir: quiet });
   behind.state.active = false;
@@ -196,9 +219,12 @@ test("Ports reads 0 times while behind, reads at once in front, and skips a redr
   const hidden = new Ports();
   hidden.init(behind.cx);
   await behind.settle();
-  await behind.advance(60_000);
   const lsof = (f) => f.state.processes.filter((p) => p.command === "lsof");
-  assert.equal(lsof(behind).length, 0, `Ports behind started ${lsof(behind).length} process-table reads per minute; budget 0`);
+  assert.equal(lsof(behind).length, 1, "with nothing to show it reads the ports once, also behind");
+  assert.notEqual(hidden.list, null, "and leaves its loading skeleton");
+  redraws.n = 0;
+  await freshAdvance(behind, 60_000);
+  assert.equal(lsof(behind).length, 0, `Ports behind started ${lsof(behind).length} process-table reads per minute after its first read; budget 0`);
   assert.equal(redraws.n, 0, "Ports behind does not redraw");
   await broughtForward(behind, hidden);
   assert.ok(lsof(behind).length > 0, "coming forward reads the ports at once");
