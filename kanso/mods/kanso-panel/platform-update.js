@@ -225,7 +225,7 @@ const LIB = [
   "  $script:n = $script:n + 1",
   "  $stop = 0",
   "  [void][int]::TryParse([string]$env:KANSO_UPDATE_STOP, [ref]$stop)",
-  "  if ($stop -ne 0 -and $script:n -eq $stop) { [Environment]::Exit(137) }",
+  "  if ($stop -ne 0 -and $script:n -eq $stop) { Note 'killed'; [Environment]::Exit(137) }",
   "}",
   "function Hold([string]$Lock) {",
   "  $deadline = Update-Budget",
