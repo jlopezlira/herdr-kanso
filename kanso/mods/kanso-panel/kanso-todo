@@ -72,11 +72,28 @@ ours() { [ -f "$claude_rule" ] && [ "$(head -n 1 "$claude_rule")" = "<!-- $mark 
 top_key() { [ -f "$2" ] || return 1; grep -Eq "$1|\\\\[uU][0-9a-fA-F]{4}" "$2"; [ $? -ne 1 ]; }
 end_line() { [ -s "$1" ] && [ -n "$(tail -c1 "$1")" ] && echo >> "$1"; true; }
 
+lock=$home/kanso-todo.lock
+[ -d "$home" ] || lock=$HOME/.kanso-todo.lock
+take() { ( set -C; echo $$ > "$lock" ) 2>/dev/null; }
+locked() {
+  if ! take; then
+    holder=$(cat "$lock" 2>/dev/null)
+    if [ -n "$holder" ] && kill -0 "$holder" 2>/dev/null; then return 1; fi
+    rm -f "$lock"
+    take || return 1
+  fi
+  trap 'rm -f "$lock"' EXIT
+  trap 'exit 1' INT TERM
+}
+block_of() { awk -v m="$mark" -v first="$2" 'on && $0 == "# /" m { exit } on { print } !on && $0 == "# " m { if ((getline n) > 0 && n == first) { on = 1; print n } }' "$1"; }
 fresh() {
-  line=$(rule | sed -n 2p)
-  for f in "$claude_rule" "$pi_append" "$codex_config"; do
-    if [ -f "$f" ] && grep -q "$mark" "$f" && ! grep -qxF -- "$line" "$f"; then return 1; fi
-  done
+  r=$(rule)
+  if [ -d "$HOME/.claude" ] && [ ! -f "$claude_rule" ]; then return 1; fi
+  if ours && [ "$(sed 1d "$claude_rule")" != "$r" ]; then return 1; fi
+  if [ -d "$HOME/.pi/agent" ] && { ! has_block "$pi_append" || [ "$(block_of "$pi_append" "## To-do in kansō")" != "$r" ]; }; then return 1; fi
+  if top_block "$codex_config" && [ "$(block_of "$codex_config" "developer_instructions = '''")" != "$(printf "developer_instructions = '''\n%s\n'''" "$r")" ]; then return 1; fi
+  if [ -f "$codex_config" ] && ! top_block "$codex_config" && ! top_key developer_instructions "$codex_config"; then return 1; fi
+  return 0
 }
 
 status() {
@@ -162,9 +179,9 @@ case "$1" in
     [ "$n" = 1 ] || fail "you have no open step $2 in this project" ;;
   rule) rule ;;
   steps) echo "add start done list" ;;
-  refresh) if [ "$(status)" = on ] && ! fresh; then install >/dev/null; fi; exit 0 ;;
+  refresh) [ "$(status)" = on ] || exit 0; locked || exit 0; fresh || install >/dev/null; exit 0 ;;
   status) status ;;
-  install) install ;;
-  uninstall) uninstall ;;
+  install) locked || fail "another kansō is changing the rule; try again"; install ;;
+  uninstall) locked || fail "another kansō is changing the rule; try again"; uninstall ;;
   *) fail 'usage: kanso-todo add "<step>" "<detail>" | start <id> | done <id> | list | rule' ;;
 esac

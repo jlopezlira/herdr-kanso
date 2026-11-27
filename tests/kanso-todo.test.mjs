@@ -666,7 +666,7 @@ for (const [verb, args, exit] of [["list", [], 0], ["done", ["nonexistent"], 1]]
 }
 
 test("Refresh brings an older installed rule up to date, leaves a current one untouched, and installs nothing while off.", unixTodo, async (t) => {
-  const { run, claude, pi, codex, readInstructions } = await agentInstructionFiles(t, CODEX_TABLE);
+  const { run, claude, pi, codex, userAppend, readInstructions } = await agentInstructionFiles(t, CODEX_TABLE);
   await run("refresh");
   assert.equal(await run("status"), "off", "Refresh installs nothing while off");
 
@@ -676,6 +676,14 @@ test("Refresh brings an older installed rule up to date, leaves a current one un
   for (const path of [claude, pi, codex]) await writeFile(path, older(await readFile(path, "utf8")));
   await run("refresh");
   assert.deepEqual(await readInstructions(), current);
+
+  await writeFile(pi, userAppend);
+  await run("refresh");
+  assert.deepEqual(await readInstructions(), current, "A copy that went missing comes back");
+
+  for (const path of [claude, pi, codex]) await writeFile(path, older(await readFile(path, "utf8")));
+  await Promise.all(Array.from({ length: 6 }, () => run("refresh")));
+  assert.deepEqual(await readInstructions(), current, "Refreshes at the same time leave every file whole");
 
   const before = await Promise.all([claude, pi, codex].map(async (path) => (await stat(path)).mtimeMs));
   await new Promise((resolve) => setTimeout(resolve, 20));
