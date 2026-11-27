@@ -362,7 +362,10 @@ export default class TokenSpend extends View {
   }
 
   exchange(cx, force = false, everyone = false) {
-    if (this.closed || !this.awake || !this.nodeBinary || this.stale()) return;
+    if (this.closed || !this.awake || !this.nodeBinary || this.stale()) {
+      if (everyone) this.forceNext = true;
+      return;
+    }
     if (this.syncing) { this.syncAgain = true; if (force) this.syncForce = true; if (everyone) this.syncEveryone = true; return; }
     this.syncing = true;
     cx.spawn(async (syncCx) => {
