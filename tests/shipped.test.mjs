@@ -207,6 +207,21 @@ test("Shipped fills missing months but waits twelve hours to check changes and p
   assert.ok(checks > forcedChecks);
 });
 
+test("Shipped searches only for merges when backfilling months it already covered.", async (t) => {
+  const now = monthAt(11, 10), cursor = now - HOUR;
+  const { store, github, searches } = await syncedGitHub(t, () => search([]));
+  await store.forAccount("github", "me");
+  for (const month of ["2026-09", "2026-10", "2026-11"]) await store.monthRead("github", month, cursor, "me");
+  await store.setOwnMeta("github.updated", String(cursor), "me");
+
+  await github.sync(store, { from: monthAt(11), now, login: "me", every: HALF_DAY });
+  assert.deepEqual(searches, [
+    mergedQuery(monthAt(9), monthAt(10)),
+    mergedQuery(monthAt(10), monthAt(11)),
+    mergedQuery(monthAt(11), now + 1000),
+  ]);
+});
+
 test("Shipped finds a merge after a week away even if the pull request opened outside the current trend.", async (t) => {
   const september = monthAt(9), october = monthAt(10), november = monthAt(11);
   const first = monthAt(10, 30), returning = first + 8 * DAY;
