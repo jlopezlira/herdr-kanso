@@ -173,7 +173,17 @@ test("The home network guide explains how to turn on SSH and copy the key withou
     /ask me to run `ssh-copy-id <user>@<name>\.local` myself/,
     /Do not install or use Tailscale/,
     /Never ask me for a password/,
+    /type <user>@<name>\.local where it asks how ssh reaches it, with the user we just checked/,
   ]) assert.match(prompt, step);
+});
+
+test("On Windows the guides use PowerShell commands and do not promise a home route", async () => {
+  const { homeSetupPrompt, tailscaleSetupPrompt } = await load("kanso-computers/setup.js", ["homeSetupPrompt", "tailscaleSetupPrompt"]);
+  const home = homeSetupPrompt({ platform: "windows" });
+  assert.match(home, /Test-NetConnection <name>\.local -Port 22/);
+  assert.doesNotMatch(home, /ssh-copy-id|nc -z/);
+  assert.doesNotMatch(tailscaleSetupPrompt({ platform: "windows" }), /over the home network when I am home/);
+  assert.match(tailscaleSetupPrompt({ platform: "macos" }), /over the home network when I am home/);
 });
 
 test("The Tailscale guide explains how to sign in and turn on Tailscale SSH one step at a time", async () => {

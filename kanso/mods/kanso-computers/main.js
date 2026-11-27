@@ -418,7 +418,7 @@ export default class Computers extends View {
       facts: home ? [osWord(peer.os), seen, alias ? `ssh ${alias.alias}` : null] : [osWord(peer.os), peer.ip, peer.tailscaleSsh ? "Tailscale SSH" : null, alias ? `ssh ${alias.alias}` : null],
       choice: { peer, target: "", name: peer.name, alias, lan: seen },
       done: isAdded(this.added, { name: peer.name, ip: peer.ip, target: alias?.alias }), offline: !home && !peer.online,
-      about: { name: peer.name, os: peer.os, tailnet: !home },
+      about: { name: peer.name, os: peer.os, tailnet: true },
     });
   }
 

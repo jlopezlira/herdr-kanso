@@ -125,7 +125,7 @@ export function reachOf(result) {
 const MAC = /^mac/i;
 export const ACCESS_CONTROLS = "https://login.tailscale.com/admin/acls";
 
-const otherUser = (name, user, host, then) => `${name} didn't let ${user} in. If you sign in there as someone else, type user@${host || name} below and press Add. If not, ${then}`;
+const otherUser = (name, user, host, then) => `${name} didn't let ${user} in. If you sign in there as someone else, type user@${host || name} where kansō asks how ssh reaches it, and press Add. If not, ${then}`;
 
 export function advice(reach, { name, os = "", tailnet: onTailnet = false, user = "", host = "" } = {}) {
   if (reach === "password" && user) return { text: otherUser(name, user, host, "type the password once in the tab that opens."), fix: "Enter the password" };

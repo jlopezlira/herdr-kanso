@@ -865,7 +865,7 @@ test("Key and password refusals suggest another username when the SSH user is kn
     assert.deepEqual(clone(withoutUser), { text: previous, fix });
     const withUser = advice(refusal, { name, host: bareAddress, user: "jj" });
     assert.match(withUser.text, /grey didn't let jj in/);
-    assert.ok(withUser.text.includes(`type user@${bareAddress} below`));
+    assert.ok(withUser.text.includes(`type user@${bareAddress} where kansō asks how ssh reaches it`));
     assert.equal(withUser.fix, fix);
   }
 });
@@ -1126,12 +1126,12 @@ const deniedBareAddress = async (user) => {
   return { drawn: view.render(), lookups, tabs };
 };
 
-test("A refused bare address shows the SSH user and the user at address hint below the input", async () => {
+test("A refused bare address shows the SSH user and the user at address hint after the address field", async () => {
   const { drawn, lookups } = await deniedBareAddress("jj");
   const words = texts(drawn);
   const message = words.findIndex((word) => word.includes(`${bareAddress} didn't let jj in`));
   assert.ok(message > words.lastIndexOf("Add"), words.join(" | "));
-  assert.ok(words[message].includes(`type user@${bareAddress} below`));
+  assert.ok(words[message].includes(`type user@${bareAddress} where kansō asks how ssh reaches it`));
   assert.ok(words.includes("Sign in"));
   assert.deepEqual(lookups, [userLookup]);
 });
@@ -1384,7 +1384,7 @@ test("The Away from home guide stays available whether the tailnet computers are
     assert.equal(tabs.length, 1, where);
     const { task } = tabs[0];
     assert.match(task, /tailscale set --ssh/);
-    assert.match(task, /press Add.*under On this network when it is at home.*or Away from home otherwise/);
+    assert.match(task, /type <user>@<its Tailscale name> where it asks how ssh reaches it, with the user we just checked/);
   }
 });
 
@@ -1499,22 +1499,28 @@ test("When the home SSH key is unknown, Add uses the usual route without offerin
   assert.deepEqual(clone(install), plainLightAdd, "the untrusted home address is not saved as a route");
 });
 
+const changedAwayKey = async (home) => {
+  const dialog = await lightDialog({ host: lightTailnetIp, tailnet: lightTailnet, awayRefusal: "REMOTE HOST IDENTIFICATION HAS CHANGED!", ...home });
+  await clickComputer(dialog, lightPeerRow(dialog.view.render()));
+  assert.equal(dialog.view.jobs[lightTailnetName]?.reach, "hostkey");
+  return { ...dialog, forget: find(dialog.view.render(), (el) => arg(el, "accessibility_label") === "Forget the old key") };
+};
+
 test("A changed key on the usual route still requires the user to forget that key before adding", async () => {
-  const dialog = await lightDialog({
-    host: lightTailnetIp, tailnet: lightTailnet, answers: false, awayRefusal: "REMOTE HOST IDENTIFICATION HAS CHANGED!",
-  });
-  const { view, cx, flush, installs, probes, forgotten } = dialog;
-  await clickComputer(dialog, lightPeerRow(view.render()));
-  assert.equal(view.jobs[lightTailnetName]?.reach, "hostkey");
+  const { cx, flush, installs, probes, forgotten, forget } = await changedAwayKey({ answers: false });
   assert.deepEqual(probes, ["away"]);
   assert.deepEqual(installs, []);
-  const forget = find(view.render(), (el) => arg(el, "accessibility_label") === "Forget the old key");
   assert.ok(forget);
   arg(forget, "on_click")({}, cx);
   await flush();
   assert.deepEqual(forgotten, [["-R", lightTailnetIp]]);
   assert.deepEqual(probes, ["away", "away"]);
   assert.equal(installs.length, 1);
+});
+
+test("A computer listed at home whose usual route has a changed key still offers Forget the old key", async () => {
+  const { forget } = await changedAwayKey({ homeRefusal: "ssh: connect to host light.local port 22: Operation timed out" });
+  assert.ok(forget);
 });
 
 test("A port typed with a computer's name takes priority over its SSH config on the home network", async () => {
