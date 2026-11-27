@@ -37,52 +37,62 @@ project() {
 }
 
 put() { cat "$2" > "$1"; wrote=$?; rm -f "$2"; return $wrote; }
-has_block() { [ -f "$1" ] && grep -q "^# $mark\$" "$1"; }
-drop_block() { has_block "$1" || return 0; sed "/^# $mark\$/,/^# \/$mark\$/d" "$1" > "$1.kanso" && put "$1" "$1.kanso" || { rm -f "$1.kanso"; return 1; }; }
+has_block() { [ -f "$1" ] && awk -v m="$mark" 'open && $0 == "# /" m { found = 1; exit } $0 == "# " m { if ((getline n) > 0 && n == "## To-do in kansō") open = 1 } END { exit found ? 0 : 1 }' "$1"; }
+drop_block() { has_block "$1" || return 0; awk -v m="$mark" '
+    function flush(   i) { for (i = 1; i <= nb; i++) print buf[i]; nb = 0; held = 0 }
+    function open(   n) { if ((getline n) <= 0) { print; return } if (n == "## To-do in kansō") { held = 1; buf[++nb] = $0; buf[++nb] = n } else { print; $0 = n; if ($0 == "# " m) open(); else print } }
+    held && $0 == "# /" m { nb = 0; held = 0; next }
+    held && $0 == "# " m { flush(); open(); next }
+    held { buf[++nb] = $0; next }
+    $0 == "# " m { open(); next }
+    { print }
+    END { flush() }' "$1" > "$1.kanso" && put "$1" "$1.kanso" || { rm -f "$1.kanso"; return 1; }; }
+top_block() { [ -f "$1" ] && awk -v m="$mark" 'NR == 1 { if ($0 != "# " m) { bad = 1; exit } next } NR == 2 { if ($0 != "developer_instructions = \047\047\047") { bad = 1; exit } next } $0 == "# /" m { ok = (prev == "\047\047\047"); exit } { prev = $0 } END { exit (ok && !bad) ? 0 : 1 }' "$1"; }
+drop_top() { top_block "$1" || return 0; awk -v m="# /$mark" 'done { print; next } $0 == m { done = 1; next } NR > 1 && !done { next } NR == 1 { next }' "$1" > "$1.kanso" && put "$1" "$1.kanso" || { rm -f "$1.kanso"; return 1; }; }
 ours() { [ -f "$claude_rule" ] && [ "$(head -n 1 "$claude_rule")" = "<!-- $mark -->" ]; }
-top_key() {
-  [ -f "$2" ] || return 1
-  awk -v k="$1" '
-    function count(s, t,   n, i) { n = 0; while ((i = index(s, t)) > 0) { n++; s = substr(s, i + length(t)) } return n }
-    function code(s,   i, c, q) { q = ""; for (i = 1; i <= length(s); i++) { c = substr(s, i, 1); if (q == "" && c == "#") return substr(s, 1, i - 1); if (q == "" && (c == "\"" || c == "\047")) q = c; else if (q != "" && c == q && substr(s, i - 1, 1) != "\\") q = "" } return s }
-    {
-      line = $0; rest = 0
-      if (ml != "") { i = index(line, ml); if (i == 0) next; line = substr(line, i + length(ml)); ml = ""; rest = 1 }
-      line = code(line)
-      if (!rest && line ~ /^[[:space:]]*\[/) exit
-      if (!rest && index(line, "=") > 0) {
-        key = substr(line, 1, index(line, "=") - 1); gsub(/^[[:space:]]+|[[:space:]]+$/, "", key)
-        if (key == k || key == "\"" k "\"" || key == "\047" k "\047" || (key ~ /^"/ && index(key, "\\") > 0)) { found = 1; exit }
-      }
-      if (count(line, "\"\"\"") % 2 == 1) ml = "\"\"\""; else if (count(line, "\047\047\047") % 2 == 1) ml = "\047\047\047"
-    }
-    END { exit found ? 0 : 1 }' "$2"
-}
+top_key() { [ -f "$2" ] || return 1; grep -Eq "$1|\\\\[uU][0-9a-fA-F]{4}" "$2"; [ $? -ne 1 ]; }
 end_line() { [ -s "$1" ] && [ -n "$(tail -c1 "$1")" ] && echo >> "$1"; true; }
 
 status() {
-  if ours || has_block "$pi_append" || has_block "$codex_config"; then echo on; else echo off; fi
+  if ours || has_block "$pi_append" || top_block "$codex_config"; then echo on; else echo off; fi
+}
+
+toml_ok() {
+  command -v python3 >/dev/null 2>&1 || return 0
+  python3 - "$1" <<'PY' 2>/dev/null
+import sys
+try:
+    import tomllib
+except ImportError:
+    sys.exit(0)
+with open(sys.argv[1], "rb") as f:
+    tomllib.load(f)
+PY
 }
 
 install() {
   [ -f "$db" ] || fail "kansō has not made its database yet; open kansō once and try again"
   missed=""
+  wrote=0
   if [ -d "$HOME/.claude" ]; then
     if [ -f "$claude_rule" ] && ! ours; then missed="Claude Code already has its own $claude_rule: add the rule there yourself"
-    elif mkdir -p "$(dirname "$claude_rule")" && { echo "<!-- $mark -->"; rule; } > "$claude_rule"; then echo "Claude Code: on"
+    elif mkdir -p "$(dirname "$claude_rule")" && { echo "<!-- $mark -->"; rule; } > "$claude_rule"; then echo "Claude Code: on"; wrote=$((wrote + 1))
     else missed="kansō could not write $claude_rule"; fi
   fi
   if [ -d "$HOME/.pi/agent" ]; then
-    if drop_block "$pi_append" && end_line "$pi_append" && { echo "# $mark"; rule; echo "# /$mark"; } >> "$pi_append"; then echo "Pi: on"
+    if drop_block "$pi_append" && end_line "$pi_append" && { echo "# $mark"; rule; echo "# /$mark"; } >> "$pi_append"; then echo "Pi: on"; wrote=$((wrote + 1))
     else missed="${missed:+$missed; }kansō could not write $pi_append"; fi
   fi
   if [ -f "$codex_config" ]; then
-    if ! drop_block "$codex_config"; then missed="${missed:+$missed; }kansō could not write $codex_config"
+    if ! drop_top "$codex_config"; then missed="${missed:+$missed; }kansō could not write $codex_config"
     elif top_key developer_instructions "$codex_config"; then missed="${missed:+$missed; }Codex already has developer_instructions in $codex_config: add the rule there yourself"
-    elif { echo "# $mark"; printf "developer_instructions = '''\n"; rule; printf "'''\n"; echo "# /$mark"; cat "$codex_config"; } > "$codex_config.kanso" && put "$codex_config" "$codex_config.kanso"; then echo "Codex: on"
+    elif ! { echo "# $mark"; printf "developer_instructions = '''\n"; rule; printf "'''\n"; echo "# /$mark"; cat "$codex_config"; } > "$codex_config.kanso"; then rm -f "$codex_config.kanso"; missed="${missed:+$missed; }kansō could not write $codex_config"
+    elif ! toml_ok "$codex_config.kanso"; then rm -f "$codex_config.kanso"; missed="${missed:+$missed; }kansō left $codex_config as it was: the rule would not fit in it"
+    elif put "$codex_config" "$codex_config.kanso"; then echo "Codex: on"; wrote=$((wrote + 1))
     else missed="${missed:+$missed; }kansō could not write $codex_config"; fi
   fi
   [ -z "$missed" ] || fail "$missed; $me rule prints the rule"
+  [ "$wrote" -gt 0 ] || fail "found no Claude Code, Codex or Pi settings on this computer"
   echo on
 }
 
@@ -90,7 +100,7 @@ uninstall() {
   if ours; then rm -f "$claude_rule"; fi
   drop_block "$pi_append" || fail "kansō could not write $pi_append"
   [ -f "$pi_append" ] && [ ! -s "$pi_append" ] && rm -f "$pi_append"
-  drop_block "$codex_config" || fail "kansō could not write $codex_config"
+  drop_top "$codex_config" || fail "kansō could not write $codex_config"
   echo off
 }
 

@@ -159,7 +159,7 @@ export class Tasks {
   drop(todo, cx) {
     this.removed = null;
     this.write(todo.on, async () => dropTodoSql(todo.id), `Can't delete ${todo.text}`, { id: todo.id, gone: true }, cx, () => {
-      this.removed = { words: `Deleted ${todo.text}`, undo: (cx) => this.write(todo.on, async () => `${addTodoSql({ ...todo, project: todo.home ?? todo.project })}${doneSql(todo.id, todo.done_at)}`, `Can't bring back ${todo.text}`, { id: todo.id, todo }, cx, () => { this.removed = null; }) };
+      this.removed = { words: `Deleted ${todo.text}`, undo: (cx) => this.write(todo.on, async () => `${addTodoSql({ ...todo, project: todo.home ?? await this.homeOf(todo.project) })}${doneSql(todo.id, todo.done_at)}`, `Can't bring back ${todo.text}`, { id: todo.id, todo }, cx, () => { this.removed = null; }) };
     });
   }
 
@@ -256,9 +256,9 @@ export class Tasks {
     cx.spawn(async (cx) => {
       const r = this.agentsOn ? { code: 0 } : await runTodo("install");
       this.agentsOn = await todoOn();
-      const told = this.agentsOn ? await tellAgents(cx.timer) : 0;
+      const told = await tellAgents(cx.timer);
       const warned = r.code === 0 ? "" : String(r.stderr || r.stdout || "It could not be turned on").trim().split("\n").at(-1);
-      this.turned = this.agentsOn ? { text: [warned, toldWords(told)].filter(Boolean).join(" "), failed: Boolean(warned) } : { text: warned, failed: true };
+      this.turned = { text: [warned, toldWords(told, this.agentsOn === true)].filter(Boolean).join(" "), failed: Boolean(warned) || told.failed };
       this.turning = false;
       cx.notify();
     });

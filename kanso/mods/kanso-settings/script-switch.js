@@ -51,7 +51,7 @@ export class ScriptSwitch {
       const r = await this.run(next ? "install" : "uninstall");
       this.on = await this.status();
       this.said = r.code === 0 ? null : { text: lastLine(r.stderr) || lastLine(r.stdout) || "It could not be changed" };
-      this.note = next && this.on && this.after ? await this.after(after.timer) : null;
+      this.note = next && this.after ? await this.after(after.timer, this.on === true) : null;
       this.busy = false;
       this.wanted = null;
       after.notify();
@@ -73,4 +73,4 @@ export class ScriptSwitch {
 }
 
 export const markdownOpener = (cx) => new ScriptSwitch(cx, { id: "markdown-opener", script: ["kanso-tabs", "markdown-handler.sh"], labels: { macos: "Open .md files in kansō", linux: "Open .md and text files in kansō" } });
-export const agentsTodo = (cx) => new ScriptSwitch(cx, { id: "agents-todo", script: ["kanso-panel", "kanso-todo"], labels: { macos: "Agents keep the to-do", linux: "Agents keep the to-do" }, after: async (timer) => toldWords(await tellAgents(timer)) });
+export const agentsTodo = (cx) => new ScriptSwitch(cx, { id: "agents-todo", script: ["kanso-panel", "kanso-todo"], labels: { macos: "Agents keep the to-do", linux: "Agents keep the to-do" }, after: async (timer, installed) => toldWords(await tellAgents(timer), installed) });

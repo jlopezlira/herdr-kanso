@@ -15,10 +15,23 @@ export const todoOn = async () => {
 
 export async function tellAgents(timer) {
   const rule = await runTodo("rule");
-  if (rule.code !== 0 || !rule.stdout.trim()) return 0;
+  if (rule.code !== 0 || !rule.stdout.trim()) return { tried: 0, sent: 0, unsure: 0, failed: true };
   const told = agents().filter((a) => here(a.address) && a.status !== "blocked");
   const sent = await Promise.all(told.map((a) => deliver(timer, a.address, rule.stdout.trim(), "kansō").catch(() => ({ code: 1 }))));
-  return sent.filter((s) => s.code === 0).length;
+  return { tried: told.length, sent: sent.filter((s) => s.code === 0).length, unsure: sent.filter((s) => s.code !== 0 && s.unconfirmed).length, failed: false };
 }
 
-export const toldWords = (n) => (n ? `Told ${n} running ${n === 1 ? "agent" : "agents"}; new conversations read it when they start.` : "New conversations read it when they start.");
+const agentsWord = (n) => (n === 1 ? "agent" : "agents");
+
+export function toldWords({ tried = 0, sent = 0, unsure = 0, failed = false } = {}, installed = true) {
+  if (failed) return "The rule could not be read, so no agent was told.";
+  const later = installed ? " New conversations read it when they start." : "";
+  if (!tried) return `No agent is running here now.${later}`;
+  const refused = tried - sent - unsure;
+  const parts = [
+    sent === tried ? `Told ${sent} running ${agentsWord(sent)}.` : `Told ${sent} of ${tried} running agents.`,
+    unsure ? `${unsure} did not answer; look at ${unsure === 1 ? "it" : "them"} before telling again.` : "",
+    refused ? `${refused} could not be reached.` : "",
+  ];
+  return parts.filter(Boolean).join(" ") + later;
+}

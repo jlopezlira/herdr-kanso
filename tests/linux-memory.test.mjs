@@ -457,7 +457,7 @@ test("Turning on the agent to-do rule in Settings tells running agents and shows
   });
   const page = settings.page();
   const pressed = () => arg(settings.toggle(), "pressed");
-  const note = "Told 1 running agent; new conversations read it when they start.";
+  const note = "Told 1 running agent. New conversations read it when they start.";
   assert.ok(texts(page).includes(todoSwitch.find));
   assert.equal(hasPieceRows(page), false);
   assert.equal(pressed(), false);

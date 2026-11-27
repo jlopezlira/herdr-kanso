@@ -26,7 +26,7 @@ const terminalPlacements = () => {
 
 const TURN_ON = "Turn on for my agents";
 const TELL = "Tell running agents";
-const TOLD_ONE = "Told 1 running agent; new conversations read it when they start.";
+const TOLD_ONE = "Told 1 running agent. New conversations read it when they start.";
 const TODO_APP_HOME = "/app";
 const TODO_SCRIPT = `${TODO_APP_HOME}/mods/kanso-panel/kanso-todo`;
 const TODO_WORDS = "Pack the release notes";
@@ -186,7 +186,8 @@ test("Empty Tasks turns on the to-do rule and can tell running agents on this co
     assert.deepEqual(wordsAt(page(), action), [label]);
     click(action);
     await drain();
-    assert.ok(texts(page()).includes(TOLD_ONE));
+    const note = "Told 1 of 2 running agents. 1 could not be reached. New conversations read it when they start.";
+    assert.ok(texts(page()).includes(note));
   }
   assert.deepEqual(todoExec.mock.calls.flatMap(({ arguments: args }) => args), [
     "status", "install", "status", "rule", "status", "rule",
@@ -210,6 +211,87 @@ test("Tasks shows what could not be installed alongside the note about who was t
   assert.ok(words.includes(TOLD_ONE), "Tasks still confirms that a running agent was told");
   assert.ok(words.includes(skipped), "Tasks shows the install warning even when the switch is on");
   assert.deepEqual(wordsAt(panel, "tasks-none-action"), [TELL]);
+});
+
+const tryTodoInstallWithConflict = async (t) => {
+  const warning = "Codex already has developer instructions.";
+  const rule = "Keep the project to-do up to date.";
+  const todoExec = async (verb) => {
+    if (verb === "install") return failure(warning);
+    return success(verb === "rule" ? rule : "off");
+  };
+  const hc = t.mock.fn(async () => success(""));
+  const host = { agents: () => [{ address: terminalId, status: "idle" }], hc };
+  const tasks = await todoTasks(t, { ...host, todoExec });
+  tasks.click("tasks-none-action");
+  await tasks.drain();
+
+  const { agentsTodo } = await load("kanso-settings/script-switch.js", ["agentsTodo"], {
+    ...host, ...drawingHost(), appHome: () => TODO_APP_HOME,
+    exec: async (_program, [, verb]) => todoExec(verb),
+  });
+  const { cx, drain } = timedContext([]);
+  const setting = agentsTodo(cx);
+  await drain();
+  setting.set(true, cx);
+  await drain();
+
+  const notices = [tasks.page(), setting.row({}, "")].map((page) => texts(page).join("\n"));
+  return { tasks, setting, hc, warning, rule, notices };
+};
+
+test("Tasks and Settings tell running agents even when the to-do rule cannot be installed.", async (t) => {
+  const { tasks, setting, hc, warning, rule, notices } = await tryTodoInstallWithConflict(t);
+  for (const words of notices) assert.ok(words.includes(warning), "The installation warning remains visible");
+  assert.deepEqual(wordsAt(tasks.page(), "tasks-none-action"), [TURN_ON]);
+  assert.equal(setting.on, false);
+  same(sentTo(hc), Array.from({ length: 2 }, () => ["send", terminalId, rule]));
+  for (const words of notices) assert.match(words, /Told 1 running agent/);
+});
+
+test("Tasks and Settings do not promise the rule to new conversations when setup stays off.", async (t) => {
+  const { notices } = await tryTodoInstallWithConflict(t);
+  assert.deepEqual(notices.filter((words) => /new conversations read it/i.test(words)), []);
+});
+
+const deliverTodoTo = async (addresses) => {
+  const { promise: unanswered } = Promise.withResolvers();
+  const outcomes = {
+    refused: failure("Agent disconnected"),
+    silent: unanswered,
+  };
+  const { tellAgents, toldWords } = await load("kanso-panel/todo-switch.js", ["tellAgents", "toldWords"], {
+    appHome: () => TODO_APP_HOME,
+    exec: async () => success("Keep your to-do up to date."),
+    agents: () => addresses.map((address) => ({ address, status: "idle" })),
+    hc: async ([, address]) => outcomes[address] ?? success(""),
+  });
+  const deadlines = [];
+  const { cx } = timedContext(deadlines);
+  const delivery = tellAgents(cx.timer);
+  await nextTurn();
+  for (const [, expire] of deadlines) expire();
+  const result = await delivery;
+  return { result, text: toldWords(result) };
+};
+
+test("Telling running agents distinguishes a refusal, an unanswered send, and no running agents.", async () => {
+  for (const [addresses, expected, words] of [
+    [["refused"], { tried: 1, sent: 0, unsure: 0, failed: false }, /Told 0 of 1.*1 could not be reached/],
+    [["silent"], { tried: 1, sent: 0, unsure: 1, failed: false }, /Told 0 of 1.*1 did not answer/],
+    [[], { tried: 0, sent: 0, unsure: 0, failed: false }, /No agent is running here now/],
+  ]) {
+    const { result, text } = await deliverTodoTo(addresses);
+    assert.match(text, words);
+    same(result, expected);
+  }
+});
+
+test("Telling running agents counts unanswered sends separately from refusals.", async () => {
+  const { text } = await deliverTodoTo(["confirmed", "silent", "refused"]);
+  assert.match(text, /Told 1 of 3 running agents/);
+  assert.match(text, /1 did not answer; look at it before telling again/);
+  assert.match(text, /1 could not be reached/);
 });
 
 test("Empty Tasks on Windows tells me where to-dos appear without offering an unavailable switch.", async (t) => {
@@ -421,8 +503,7 @@ test("A to-do marked done while it is being added stays done and pending until t
   assert.equal(find(control(page(), row), pendingTodo), null);
 });
 
-test("Marking a new to-do done while it looks up a connected project saves it as done.", async (t) => {
-  const { view, enterTodo, click, drain, saved } = await todoTasks(t, { project: remoteShop, unsaved: true });
+const holdTodoHome = (t, view) => {
   const lookup = Promise.withResolvers();
   const reached = Promise.withResolvers();
   const homeOf = view.homeOf.bind(view);
@@ -431,6 +512,12 @@ test("Marking a new to-do done while it looks up a connected project saves it as
     await lookup.promise;
     return homeOf(id);
   });
+  return { lookup, reached };
+};
+
+test("Marking a new to-do done while it looks up a connected project saves it as done.", async (t) => {
+  const { view, enterTodo, click, drain, saved } = await todoTasks(t, { project: remoteShop, unsaved: true });
+  const { lookup, reached } = holdTodoHome(t, view);
   const db = await view.dbOn(remoteShop.machine);
   const run = db.run.bind(db);
   const writes = [];
@@ -686,6 +773,33 @@ for (const state of ["open", "done"]) {
     assert.ok(wordsAt(page(), row).includes(TODO_WORDS));
   });
 }
+
+test("Undo restores a to-do deleted while it was finding its connected project.", async (t) => {
+  const tasks = await todoTasks(t, { project: remoteShop, unsaved: true });
+  const { view, enterTodo, drain, remoteDb, saved, page } = tasks;
+  const { lookup, reached } = holdTodoHome(t, view);
+
+  enterTodo(TODO_WORDS);
+  let row;
+  try {
+    await reached.promise;
+    const pending = view.shown()[0];
+    assert.equal(pending.home, undefined, "Delete acts on a row without a remote project ID");
+    row = todoRowIdOf(pending);
+    pressTodoTool(tasks, row, "Delete");
+  } finally {
+    lookup.resolve();
+    await drain();
+  }
+  assert.equal((await saved()).length, 0, "Delete reaches the connected database before Undo");
+  assert.equal(control(page(), row), null);
+  await undoRemoval(tasks);
+
+  const [home] = await remoteDb.projects();
+  const [restored] = await saved();
+  assert.equal(restored?.project, home.id, "Undo saves the row under the connected computer's project ID");
+  assert.ok(wordsAt(page(), row).includes(TODO_WORDS));
+});
 
 test("Undo after deleting an agent's to-do keeps its author.", async (t) => {
   const tasks = await todoTasks(t);
