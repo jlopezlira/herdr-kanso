@@ -1,13 +1,10 @@
 import { EASE } from "./ui.js";
 
-export const glowState = (previous, agents, now) => {
-  const live = new Set(agents.map(({ address }) => address));
-  const working = new Set(agents.filter(({ status }) => status === "working").map(({ address }) => address));
-  const leaving = new Map([
-    ...[...previous.leaving].filter(([id, until]) => live.has(id) && !working.has(id) && until > now),
-    ...[...previous.working].filter((id) => live.has(id) && !working.has(id)).map((id) => [id, now + EASE.duration]),
-  ]);
-  return { working, leaving };
+export const glowState = (prior, scope, working, now) => {
+  const moved = prior?.scope !== scope;
+  if (working) return { scope, pose: moved ? "entering" : "working", next: moved ? now : Infinity };
+  if (moved && prior?.pose === "working") return { scope, pose: "release", next: now };
+  if (prior?.pose === "working" || prior?.pose === "release") return { scope, pose: "leaving", next: now + EASE.duration };
+  if (!moved && prior?.pose === "leaving" && prior.next > now) return prior;
+  return { scope, pose: "rest", next: Infinity };
 };
-
-export const glowDeadline = (state) => Array.from(state.leaving.values()).reduce((first, until) => Math.min(first, until), Infinity);

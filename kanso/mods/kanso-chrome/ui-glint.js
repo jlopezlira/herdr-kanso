@@ -13,6 +13,6 @@ const lit = (text, c, period) => ([width, strength]) => div().absolute().top_0()
 
 export const glint = (text, c, id, ink = c.text, state = "working") => div().relative().min_w(0).flex_shrink_1().overflow_hidden()
   .child(div().truncate().text_color(ink).child(text))
-  .child(div().id(`${id}-glow`).absolute().inset_0().overflow_hidden().opacity(Number(state === "working")).transition("opacity", EASE)
+  .child(div().id(`${id}-glow`).absolute().inset_0().overflow_hidden().opacity(Number(state === "working" || state === "release")).transition("opacity", EASE)
     .when(state !== "rest", (el) => el.child(div().truncate().text_color(c.muted).child(text))
       .children(WINDOWS.map(lit(text, c, paceOf(id))))));

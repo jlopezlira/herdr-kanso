@@ -2,18 +2,20 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { load } from "./helpers.mjs";
 
-test("A finishing agent keeps its sweep for the fade, unless it starts working again", async () => {
-  const { glowState, glowDeadline } = await load("kanso-spaces/glow-state.js", ["glowState", "glowDeadline"]);
+test("A working row fades on first mount and on moving across folds in either direction", async () => {
+  const { glowState } = await load("kanso-spaces/glow-state.js", ["glowState"]);
   const { EASE } = await load("kanso-spaces/ui.js", ["EASE"]);
-  const agent = (status) => [{ address: "t1", status }];
-  const state = (previous, status, at) => glowState(previous, agent(status), at);
-  const start = state({ working: new Set(), leaving: new Map() }, "working", 0);
-  assert.equal(glowDeadline(start), Infinity);
-  const stop = state(start, "done", 1);
-  const end = 1 + EASE.duration;
-  assert.equal(glowDeadline(stop), end);
-  assert.equal(glowDeadline(state(stop, "done", end - 1)), end);
-  assert.equal(glowDeadline(state(stop, "done", end)), Infinity);
-  assert.equal(glowDeadline(state(stop, "working", end - 1)), Infinity);
-  assert.equal(glowDeadline(glowState(stop, [], end - 1)), Infinity);
+  const start = glowState(null, "active", true, 0);
+  assert.equal(start.pose, "entering");
+  const working = glowState(start, "active", true, 1);
+  assert.equal(working.next, Infinity);
+  const release = glowState(working, "done", false, 2);
+  assert.equal(release.pose, "release");
+  const exit = glowState(release, "done", false, 3);
+  assert.equal(exit.pose, "leaving");
+  assert.equal(glowState(exit, "done", false, exit.next - 1), exit);
+  assert.equal(exit.next, 3 + EASE.duration);
+  assert.equal(glowState(exit, "done", false, exit.next).pose, "rest");
+  assert.equal(glowState(exit, "done", true, 4).pose, "working");
+  assert.equal(glowState(exit, "active", true, 4).pose, "entering");
 });
