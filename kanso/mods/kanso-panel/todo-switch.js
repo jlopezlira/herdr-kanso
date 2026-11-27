@@ -6,7 +6,7 @@ import { deliver, machineOf } from "./deliver.js";
 
 export const TODO_SCRIPT = ["kanso-panel", "kanso-todo"];
 const TODO_RUN_MS = 120_000;
-const NO_SH = /not found|not recognized|ENOENT|cannot find/i;
+const NO_SH = /spawn sh ENOENT|'sh' is not recognized|^sh: (command )?not found/im;
 const on = (machine) => (address) => (machineOf(address) ?? "") === (machine ?? "");
 
 const scriptThere = async (platform, run) => {
