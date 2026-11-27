@@ -28,15 +28,24 @@ test("Pre-PR checks a pull request against develop's version rules unless CI nam
   assert.equal(checks("main")[0].argv.at(-1), "main");
 });
 
-test("Pre-PR marks a clean, full local run", () => {
-  assert.equal(marks({ env: {}, argv: [], dirty: "" }), true);
+const clean = { sha: "checked", clean: true };
+const local = { env: {}, argv: [], before: clean, after: clean };
+
+test("Pre-PR marks a clean, unchanged commit after a full local run against develop", () => {
+  assert.equal(marks(local), true);
 });
 
-test("Pre-PR does not mark CI, checks-only runs, or uncommitted tracked changes", () => {
-  const local = { env: {}, argv: [], dirty: "" };
+test("Pre-PR does not mark CI, checks-only runs, or checks against another branch", () => {
   assert.equal(marks({ ...local, env: { CI: "true" } }), false);
   assert.equal(marks({ ...local, argv: ["--checks-only"] }), false);
-  assert.equal(marks({ ...local, dirty: " M scripts/pre-pr.mjs\n" }), false);
+  assert.equal(marks({ ...local, env: { KANSO_BRANCH: "main" } }), false);
+});
+
+test("Pre-PR does not mark a changed HEAD or a tree with uncommitted changes before or after checking", () => {
+  const dirty = { ...clean, clean: false };
+  assert.equal(marks({ ...local, before: dirty }), false);
+  assert.equal(marks({ ...local, after: dirty }), false);
+  assert.equal(marks({ ...local, after: { ...clean, sha: "not-checked" } }), false);
 });
 
 test("Pre-PR ends with one line per step, ready for the Tests section", () => {
