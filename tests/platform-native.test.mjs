@@ -172,9 +172,9 @@ test("probing many worktrees of one repository starts one shell", async () => {
   assert.deepEqual(calls[0][1].filter((arg) => arg === "/a" || arg === "/b"), ["/a", "/b"]);
 });
 
-const recordOf = (text, index) => {
-  const line = String(text).split("\n").find((row) => row.startsWith(`#${index} `));
-  return line ? line.slice(line.indexOf(" ") + 1).split("\u001f").join("\n") : "";
+const parsedRows = async (text, count) => {
+  const { probeRows } = await load("kanso-panel/worktrees.js", ["probeRows"]);
+  return probeRows(Array.from({ length: count }, (_, index) => ({ path: String(index) })), text);
 };
 
 test("one repository probe reads every worktree again, including a new file", { skip: nativePlatform === "windows" }, async (t) => {
@@ -197,13 +197,21 @@ test("one repository probe reads every worktree again, including a new file", { 
   const opened = await counted.probeAll(folder, [{ path: first }, { path: second }], 0, ["main"]);
   assert.equal(opened.code, 0, opened.stderr);
   assert.equal(bash, 1);
-  assert.match(recordOf(opened.stdout, 0), /ahead\t0/);
-  assert.match(recordOf(opened.stdout, 1), /dirty\t0/);
+  const openedRows = await parsedRows(opened.stdout, 2);
+  assert.equal(openedRows.missing.length, 0);
+  assert.equal(openedRows.records[0].probe.ahead, 0);
+  const noBase = await counted.probeAll(folder, [{ path: first }, { path: second }], 0, []);
+  const unknown = await parsedRows(noBase.stdout, 2);
+  assert.equal(unknown.missing.length, 0);
+  assert.equal(unknown.records[0].probe.ahead, null);
+  assert.equal(openedRows.records[1].probe.dirty, 0);
   await writeFile(join(first, "two.txt"), "two\n");
   const edited = await counted.probeAll(folder, [{ path: first }, { path: second }], 0, ["main"]);
-  assert.equal(bash, 2);
-  assert.match(recordOf(edited.stdout, 0), /dirty\t1/);
-  assert.match(recordOf(edited.stdout, 1), /dirty\t0/);
+  assert.equal(bash, 3);
+  const editedRows = await parsedRows(edited.stdout, 2);
+  assert.equal(editedRows.missing.length, 0);
+  assert.equal(editedRows.records.find((row) => row.index === 0).probe.dirty, 1);
+  assert.equal(editedRows.records.find((row) => row.index === 1).probe.dirty, 0);
 });
 
 test("mixed worktree answers stay on their own line across waves", { skip: nativePlatform === "windows" }, async (t) => {
@@ -226,11 +234,8 @@ test("mixed worktree answers stay on their own line across waves", { skip: nativ
   }
   const opened = await api.probeAll(folder, paths.map((path) => ({ path })), 0, ["main"]);
   assert.equal(opened.code, 0, opened.stderr);
-  const lines = opened.stdout.split("\n").filter(Boolean);
-  assert.equal(lines.length, 9);
-  lines.forEach((line) => {
-    assert.match(line, /^#\d+ /);
-    const index = Number(line.slice(1, line.indexOf(" ")));
-    assert.match(recordOf(opened.stdout, index), new RegExp(`^dirty\\t${index + 1}$`, "m"));
-  });
+  const parsed = await parsedRows(opened.stdout, 9);
+  assert.equal(parsed.missing.length, 0);
+  assert.equal(parsed.records.length, 9);
+  parsed.records.forEach((row) => assert.equal(row.probe.dirty, row.index + 1));
 });

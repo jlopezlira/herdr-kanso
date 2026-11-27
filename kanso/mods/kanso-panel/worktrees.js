@@ -108,10 +108,10 @@ const valued = (lines, name) => lines.some((line) => line.startsWith(name + "\t"
 
 export function completeProbe(text) {
   const frame = String(text ?? "");
-  if (!frame.endsWith("\n")) return null;
   const lines = frame.split(/\r?\n/).filter((line) => line !== "");
   const stopped = lines.some((line) => line === "gone" || line === "replaced" || line === "broken");
-  const finished = stopped || (valued(lines, "only") && valued(lines, "dirty") && valued(lines, "last") && lines.some((line) => /^ahead\t\d+$/.test(line)));
+  const ahead = lines.find((line) => line.startsWith("ahead\t"));
+  const finished = stopped || (valued(lines, "only") && valued(lines, "dirty") && valued(lines, "last") && ahead !== undefined && /^ahead\t\d*$/.test(ahead));
   return finished ? parseProbe(frame) : null;
 }
 
