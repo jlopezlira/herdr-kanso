@@ -185,6 +185,7 @@ export default class Tabs extends View {
     const name = String(c).replace(/^kanso-tabs\./, "");
     if (name === "update") this.updater.install(cx);
     else if (name === "check") await this.updater.check(cx, true, true);
+    else if (name === "channel") cx.spawn((task) => this.updater.check(task, true));
     else if (name === "settings" || name.startsWith("settings-")) {
       const asked = name.slice(9);
       openSettings(!asked || asked === "mods" ? "pieces" : asked);

@@ -15,6 +15,12 @@ export class Front {
 
   rest() { this.skipped = true; }
 
+  rests(showing) {
+    if (!this.behind()) return false;
+    this.rest();
+    return showing;
+  }
+
   // A timer takes the skip once the panel is in front. render's wake leaves it until that read runs.
   woke() {
     if (!this.skipped || !this.inFront()) return false;

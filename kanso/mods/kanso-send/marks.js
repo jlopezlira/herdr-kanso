@@ -1,6 +1,5 @@
 // This is the source copy; `npm run sync:share` copies it into every mod, and a test fails when a copy differs.
 // Motion is native and keeps going behind other windows: a ring that stops when the window loses the keyboard reads as a stalled agent.
-export { onBattery } from "./ui.js";
 import { KEY, TINT, alpha } from "./ui.js";
 // A chord as this computer writes it lives with the tooltip that shows it.
 import { MAC, OTHER, LINUX, modifierGlyphs, chordParts, glyphs } from "./ui-tooltip.js";

@@ -12,7 +12,7 @@ test("strip adopt polls at most once a second at rest and every 150 ms during a 
   const view = new Strip();
   view.seq = 0;
   view.adopt = () => { state.reads += 1; return true; };
-  const cx = { notify() { state.notices += 1; } };
+  const cx = { notify() { state.notices += 1; }, timer: { after() {} } };
   for (const now of Array.from({ length: 400 }, (_, i) => i * 150)) { state.now = now; view.pollAdopt(cx); }
   assert.ok(state.reads <= 60, `strip adopt read ${state.reads} times at rest in a minute; budget 60`);
   state.reads = 0;
