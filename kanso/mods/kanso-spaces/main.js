@@ -455,6 +455,7 @@ export default class Spaces extends RetryingView {
     this.parts = { header: cx.new(Part, looks.header), switch: cx.new(Part, looks.switch), rows: cx.new(Part, looks.rows), footer: cx.new(SidebarFooter, looks.footer) };
     this.drawnLooks = looks;
     this.paintTimer = cx.timer;
+    this.glowReady = new Set();
     this.glows = { working: new Set(), leaving: new Map() };
     this.glowAt = Infinity;
   }
@@ -2542,7 +2543,11 @@ export default class Spaces extends RetryingView {
   }
 
   extras(a, ctx, show = true) {
+    const entering = a.status === "working" && !this.glowReady?.has(a.address);
+    this.drawnGlow?.add(a.address);
+    if (entering) this.glowEntry = true;
     return {
+      glowEntering: entering,
       step: show ? stepOf(a, this.steps, ctx.now) : null,
       glowLeaving: this.glows?.leaving.has(a.address) ?? false,
       tasks: this.showTasks === false || a.sub ? [] : (this.tasks[a.address] ?? []).map((x) => ({ command: x.command, time: duration(Math.max(0, ctx.now - x.start)) })),
@@ -3480,6 +3485,10 @@ export default class Spaces extends RetryingView {
     // Every row built once per draw, for every view.
     const asleep = this.sleepingNow(sp, read.terms, ps);
     const rowsCtx = { ...read, asleep, spaces: sp, registry: registry(), spaceIds: new Set(sp.map((w) => w.id)), all: this.listed(ps, sp, read.terms).filter((a) => !asleep.dozing.has(a.address)) };
+    if (this.glowView !== view) this.glowReady = new Set();
+    this.glowView = view;
+    this.drawnGlow = new Set();
+    this.glowEntry = false;
     this.followGlow(rowsCtx.all, read.now);
     const ctx = { ...rowsCtx, rowsBy: new Map(sp.map((w) => [w.id, this.spaceRows(w.id, rowsCtx)])), project: this.projectOf(sp, t) };
     const queue = this.refreshNeeds(sp, read.terms, asleep);
@@ -3497,6 +3506,11 @@ export default class Spaces extends RetryingView {
           : view === "agents" ? (collapsed ? this.agentsRail(t, shownSp, shownCtx) : this.agentsView(t, shownSp, ps, shownCtx))
           : view === "threads" ? (collapsed ? this.threadsRail(t, shownSp, shownCtx) : this.threadsView(t, shownSp, ps, shownCtx)) : this.grouped(t, collapsed, shownSp, ps, shownCtx)),
         collapsed ? null : this.awayCard(t, active)])("spaces-rows", tokens(t));
+    this.glowReady = this.drawnGlow;
+    if (this.glowEntry) this.paintTimer.after(0, () => {
+      this.rowsAt = (this.rowsAt ?? 0) + 1;
+      this.paint();
+    });
     this.nav = this.navNext;
     // The row the ring was on is gone: it stays at the same place in the list.
     if (this.kbd && this.nav.length && !this.nav.some((n) => n.key === this.navKey)) this.navKey = this.nav[Math.min(this.navAt ?? 0, this.nav.length - 1)].key;

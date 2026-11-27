@@ -43,7 +43,7 @@ test("A working name draws no dots after it, glinting or still on battery", asyn
 
 test("The glow fades on the same layer and sweeps until the exit ends", async () => {
   const { glint, c, EASE } = await kit(false);
-  for (const [state, alpha, moving] of [["rest", 0, false], ["working", 1, true], ["leaving", 0, true]]) {
+  for (const [state, alpha, moving] of [["rest", 0, false], ["entering", 0, true], ["working", 1, true], ["leaving", 0, true]]) {
     const el = glint("Atlas", c, "name", c.dim, state);
     const [label, layer] = el.kids;
     same(calls(label, "text_color"), [["text_color", c.dim]]);
