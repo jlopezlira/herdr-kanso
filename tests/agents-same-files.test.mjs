@@ -117,8 +117,8 @@ test("An agent using a symlink to the project still occupies its Git checkout.",
   const alias = join(dir, "alias");
   await symlink(repo, alias, "junction");
   const agent = { ...first, cwd: alias };
-  const { workingIn } = await ownTreeModule(["workingIn"], { exec });
-  same(await workingIn(repo, "", { list: [agent] }), [agent]);
+  const { workingIn, rootOf } = await ownTreeModule(["workingIn", "rootOf"], { exec });
+  same(await workingIn(await rootOf(repo, ""), "", { list: [agent] }), [agent]);
 });
 
 const sourceFolder = async (repo) => {
