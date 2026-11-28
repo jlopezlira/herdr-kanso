@@ -2566,6 +2566,12 @@ export default class Spaces extends RetryingView {
     };
   }
 
+  helpers() {
+    const top = new Set(agents().map((a) => a.address));
+    return terminals().filter((k) => k.parent && !top.has(k.address) && k.report?.app && k.state === "live")
+      .map((k) => ({ address: k.address, app: k.report.app, program: { agent: true }, status: k.status, seq: k.turn ?? 0, cwd: k.cwd, title: k.title, name: k.name ?? undefined, labels: k.labels ?? {} }));
+  }
+
   checkShared(cx) {
     if (!runs("sidebar.shared", pieces(shared))) {
       this.sharedMembers = undefined;
@@ -2573,7 +2579,7 @@ export default class Spaces extends RetryingView {
       return;
     }
     if (this.sharing || window()?.active === false || shared(COLLAPSED) === true) return;
-    const list = agents(), now = Date.now(), was = this.sharedStatus ?? {};
+    const list = [...agents(), ...this.helpers()], now = Date.now(), was = this.sharedStatus ?? {};
     const groups = groupsOf(list, cwdIn(panes()));
     this.sharedStatus = Object.fromEntries(list.map((a) => [a.address, `${a.status}:${a.seq ?? ""}`]));
     const ended = (a) => a.status !== "working" && was[a.address] !== undefined && was[a.address] !== `${a.status}:${a.seq ?? ""}`;
@@ -2707,7 +2713,7 @@ export default class Spaces extends RetryingView {
     this.readingThreads = true;
     // Agents on this computer (another machine's files are not here).
     const background = this.background();
-    const list = agents().filter((a) => !a.address.includes("/") && background.allows(a.address)).map((a) => ({ address: a.address, app: a.app }));
+    const list = [...agents(), ...(runs("sidebar.shared", pieces(shared)) ? this.helpers() : [])].filter((a) => !a.address.includes("/") && background.allows(a.address)).map((a) => ({ address: a.address, app: a.app }));
     if (!list.length) { this.readingThreads = false; return; }
     this.threadLocator ??= new ThreadLocator();
     cx.spawn(async (cx) => {

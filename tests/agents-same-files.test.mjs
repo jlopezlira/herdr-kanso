@@ -770,3 +770,14 @@ test("A narrow sidebar row replaces the place fact and tooltip with the warning 
   check(narrow, H.line, more);
   assert.ok(!tipsOf(narrow).includes(more.wordTip));
 });
+
+test("Helpers started by an agent count as agents in the shared-edit check, under the name their sidebar row shows.", async () => {
+  const term = (address, extra = {}) => ({ address, parent: "t1", state: "live", status: "done", turn: 2, cwd: "/repo", title: "Edit notes", name: `helper-${address}`, labels: {}, report: { app: "claude-code", state: "done" }, ...extra });
+  const host = {
+    agents: () => [{ address: "t1", app: "claude-code", program: { agent: true }, status: "working", cwd: "/repo" }],
+    terminals: () => [term("t2"), term("t3"), term("t4", { report: null }), term("t5", { state: "finished" }), term("t1", { parent: null })],
+  };
+  const { Spaces } = await loadSpaces(host);
+  const view = new Spaces();
+  same(view.helpers().map((a) => [a.address, a.name, a.status, a.seq, a.program.agent]), [["t2", "helper-t2", "done", 2, true], ["t3", "helper-t3", "done", 2, true]]);
+});
