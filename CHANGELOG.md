@@ -23,18 +23,25 @@ in version.json, which the stable updater offers. Versions follow
 [Keep a Changelog](https://keepachangelog.com). `npm run check:version` checks
 the branch's rules.
 
-## [Unreleased]
+## [4.2.0] - 2026-11-26
+
+### Added
+
+- A session switcher on Ctrl+Tab: every session on every computer, the most recent first, opening on the one you were in before. Keep Ctrl down and press Tab to move, let go to switch; Enter and a click work too, Esc stays. Sessions put to sleep are listed last and wake when you pick one. Change or remove its key in Settings, Keys; switching tabs stays on Cmd+Shift+] and Cmd+Shift+[.
+- Resume a conversation, in the + menu: your past Claude Code, Codex and Pi conversations, newest first, on this computer and the ones you added; type to find one. A project's + lists that project's. None starts twice: one open on any computer, in Claude Code, Codex or Pi, takes you to it, and one asleep wakes.
+- Tasks shows each agent's plan for the project you are viewing, written by the agent itself: turn on Agents keep the to-do, in Settings, Pieces, or with one click in Tasks, and Claude Code, Pi and Codex write every step in order with a line of detail, then mark the step they are on and each one they finish, on whichever computer holds the project; there is nothing to tick or add by hand. Each running agent's plan is headed with its name and Go to agent; the plans of agents that have ended fold under Earlier, each saying who made it, what it was about and whether it finished, and Clear removes them, with Undo. It writes a short rule to each agent's own instructions, never over one of yours, takes it out when turned off, and tells the agents already running; agents use the `kanso-todo` command, which you can run too. Tasks follows the project selected in the sidebar.
+- Timeline, a new panel: the conversation in focus prompt by prompt, with when each one ended, how long it took, the files it changed and the first sentence of its answer. Open one to read the whole prompt, what you sent while it worked and the full answer. It reads Claude Code and Codex, on this computer or another.
 
 ### Changed
 
+- Tasks no longer shows GitHub issues, GitHub Projects, Jira or Linear boards, and Settings no longer has Accounts. Their boards and saved copies leave kansō's database; a Jira or Linear token you saved stays in your system's secret store until you remove it there (named "kansō Jira" or "kansō Linear").
+- Shipped's line and commit counts, its scan of this computer's repositories and Add up Shipped across your computers: Shipped no longer writes the "Kanso Shipped stats" gist (the one it made stays in your GitHub account until you delete it).
+- Shipped measures pull requests, not lines: how many of those you opened in the period reached production (merged into the repository's default branch, or into a branch released to it), that share and its change against the period before, your last six periods, opened, merged, time to merge, closed unmerged, reviews and pull requests merged in others' repositories. Records, When you merge and By repository count pull requests. It reads everything from GitHub, so it is the same on every computer.
 - Worktrees starts fewer Git processes when checking which branches have landed.
 - Worktrees checks each repository in one pass, and asks again the next time it opens.
 - After a restart changes a disk's device number, Spend no longer reads every session again: a file with the same inode, size and time is known, so the history read finishes in one run instead of stalling on "Still reading your history".
 - When kansō starts, including after an update, it brings the agents' plan rule up to date if it is on, so the rule always matches the command it names.
 - A second agent started in a project folder where another agent is already working opens in its own worktree on a new branch, so neither commits the other's unsaved changes; kansō says which branch it took. When two agents still have unsaved changes in the same file, each one's row in the sidebar says which file and who else changed it.
-- Tasks heads each running agent's plan with its name and Go to agent, and folds the plans of agents that have ended under Earlier: each says who made it, what it was about and whether it finished, opens to its steps, and Clear removes them, with Undo.
-- Tasks shows each agent's plan for the project you are viewing: every step in order with a line of detail, the step it is doing now, and what it has finished, written by the agent itself; there is nothing to tick or add by hand. Turning it on, or telling running agents, also brings their rule up to date.
-- Tasks follows the project selected in the sidebar as soon as you switch, and one click turns the agents' to-do on and tells the agents on the computer where that project runs, even from another computer.
 - In Dawn Mode, the pill at the top of the sidebar names the installed release, such as 4.2.0-rc.3, instead of "Dawn Mode".
 - Timeline's header shows only its title; the conversation's name, computer and prompt count moved into the pin's tooltip.
 - Shipped leads with the share of the pull requests you opened that reached production, draws the pull requests merged over the period as a chart like Memory's, lists its trend with the current period first, and says less.
@@ -58,21 +65,6 @@ the branch's rules.
 - Resume a conversation on another computer starts it with that computer's own agent command, once however fast you choose it.
 - Agents keep the to-do leaves a Codex config.toml alone when its own developer_instructions sits after a multiline string or a comment, and works when kansō's folder has an apostrophe.
 - Ports and Containers opened while the Herdr window is behind another show what they read instead of staying on their loading placeholder, which kept the window redrawing about 20 times a second.
-
-## [4.2.0] - 2026-11-26
-
-### Added
-
-- A session switcher on Ctrl+Tab: every session on every computer, the most recent first, opening on the one you were in before. Keep Ctrl down and press Tab to move, let go to switch; Enter and a click work too, Esc stays. Sessions put to sleep are listed last and wake when you pick one. Change or remove its key in Settings, Keys; switching tabs stays on Cmd+Shift+] and Cmd+Shift+[.
-- Resume a conversation, in the + menu: your past Claude Code, Codex and Pi conversations, newest first, on this computer and the ones you added; type to find one. A project's + lists that project's. None starts twice: one open on any computer, in Claude Code, Codex or Pi, takes you to it, and one asleep wakes.
-- Tasks is each project's to-do, kept by your agents: turn on Agents keep the to-do, in Settings, Pieces, and Claude Code, Pi and Codex add each step of their work to the project's to-do and close it when done; each row names the agent that added it. It writes a short rule to each agent's own instructions, never over one of yours, and takes it out when turned off; agents use the `kanso-todo` command, which you can run too. Tasks shows the project you are in and every project with a to-do. Type one and press Enter; a click marks it done, and Done keeps the finished ones folded. Send one to an agent working in that project, start a new conversation with it, or delete it, with Undo. The list stays on this computer.
-- Timeline, a new panel: the conversation in focus prompt by prompt, with when each one ended, how long it took, the files it changed and the first sentence of its answer. Open one to read the whole prompt, what you sent while it worked and the full answer. It reads Claude Code and Codex, on this computer or another.
-
-### Changed
-
-- Tasks no longer shows GitHub issues, GitHub Projects, Jira or Linear boards, and Settings no longer has Accounts. Their boards and saved copies leave kansō's database; a Jira or Linear token you saved stays in your system's secret store until you remove it there (named "kansō Jira" or "kansō Linear").
-- Shipped's line and commit counts, its scan of this computer's repositories and Add up Shipped across your computers: Shipped no longer writes the "Kanso Shipped stats" gist (the one it made stays in your GitHub account until you delete it).
-- Shipped measures pull requests, not lines: how many of those you opened in the period reached production (merged into the repository's default branch, or into a branch released to it), that share and its change against the period before, your last six periods, opened, merged, time to merge, closed unmerged, reviews and pull requests merged in others' repositories. Records, When you merge and By repository count pull requests. It reads everything from GitHub, so it is the same on every computer.
 
 ## [4.1.1] - 2026-11-25
 
