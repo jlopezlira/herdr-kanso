@@ -111,6 +111,9 @@ test("a failure says whether the computer is quiet or the folder cannot be read"
   assert.deepEqual(clone(pure.svgPixels('<svg width="10px" height="20"></svg>')), { width: 10, height: 20 });
   assert.deepEqual(clone(pure.svgPixels('<svg viewBox="0 0 12 34"></svg>')), { width: 12, height: 34 });
   assert.equal(pure.svgPixels("<svg></svg>"), null);
+  assert.deepEqual(clone(pure.svgPixels('<svg data-width="1" width="800" height="600"></svg>')), { width: 800, height: 600 });
+  assert.deepEqual(clone(pure.svgPixels('<svg width="2in" height="96px" viewBox="0 0 10 10"></svg>')), { width: 192, height: 96 });
+  assert.deepEqual(clone(pure.svgPixels('<svg width="50%" height="50%" viewBox="0 0 12 34"></svg>')), { width: 12, height: 34 });
   assert.deepEqual(clone(pure.markdownParts("Hi ![a](./a.png) and ![b](https://x/b.png)").map((part) => part.kind === "image" ? part.url : "text")), ["text", "./a.png", "text"]);
   assert.deepEqual(clone(pure.markdownParts("see ![a](https://x/a.png)").map((part) => part.kind)), ["text"]);
   assert.deepEqual(clone(pure.markdownParts("<img src='./c.gif'>").map((part) => part.url)), ["./c.gif"]);

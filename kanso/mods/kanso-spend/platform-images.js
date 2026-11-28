@@ -71,7 +71,7 @@ const firstPage = async (file, size, pngPath) => await quickLook(file, size, png
   const pixels = async (file) => {
     const r = platform === "macos" ? await run("sips", ["-g", "pixelWidth", "-g", "pixelHeight", file]).catch(() => null)
       : platform === "windows" ? await powershell(run, `$ErrorActionPreference='Stop'; Add-Type -AssemblyName System.Drawing; $image=[Drawing.Image]::FromFile(${psQuote(file)}); try { '{0} {1}' -f $image.Width, $image.Height } finally { $image.Dispose() }`).catch(() => null)
-      : await run("magick", ["identify", "-format", "%w %h", file]).catch(() => null);
+      : await run("magick", ["identify", "-format", "%w %h\n", file]).catch(() => null);
     if (r?.code !== 0) return null;
     const width = Number(/pixelWidth:\s*(\d+)/.exec(r.stdout)?.[1] ?? r.stdout.trim().split(/\s+/)[0]);
     const height = Number(/pixelHeight:\s*(\d+)/.exec(r.stdout)?.[1] ?? r.stdout.trim().split(/\s+/)[1]);
