@@ -74,6 +74,13 @@ for (const platform of ["macos", "linux", "windows"]) {
     assert.equal(await failed.firstPage("file.pdf", 800, "out.png"), false);
   });
 
+  test(`${platform} picture size reads the first frame of an animated picture`, async () => {
+    const frame = { width: 800, height: 600 };
+    const r = stub((program, args) => program === "sips" ? `pixelWidth: ${frame.width}\npixelHeight: ${frame.height}\n`
+      : program === "magick" ? args[2].replace("%w", frame.width).replace("%h", frame.height).repeat(2) : `${frame.width} ${frame.height}`);
+    assert.deepEqual(await imageApi(platform, r.run).pixels("loop.gif"), frame);
+  });
+
   test(`${platform} system operations resolve host directories and container shells`, async () => {
     const r = stub(() => windows ? "C:\\Temp" : "/tmp"), api = systemApi(platform, r.run);
     assert.ok((await api.temporary()).length > 0);

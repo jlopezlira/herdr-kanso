@@ -111,7 +111,7 @@ test("A note to the agent names the file and where each pin sits on the picture"
 // The panel in a fake Herdr: agent t1 whose screen shows `screen`, a shell t2, and the files in `files`.
 // `copy(args)`: what cp answers, a promise a test can hold back.
 async function panel({ screen = OUTPUT, files = ["/repo/tests/shot.png", "/repo/images/hero.jpg", "/repo/docs/plan.md"], status = "idle", focus = "t1",
-  copy = async () => ({ code: 0, stdout: "" }), pickFolder = async () => null,
+  copy = async () => ({ code: 0, stdout: "" }), pickFolder = async () => null, pixelQuery = failure(""),
   session = null, transcript = "", appHome = "/app", bad = [], remote = null, statText = "4 1700000000\n", drawing = null, sending = null } = {}) {
   if (appHome !== "/app") dirs.push(appHome);
   const calls = [], ons = [], store = {};
@@ -183,7 +183,10 @@ async function panel({ screen = OUTPUT, files = ["/repo/tests/shot.png", "/repo/
       if (cmd === "sh" && args[1].startsWith("for f;")) return { code: 0, stdout: args.slice(3).filter((p) => world.files.includes(p)).map((p) => `${p}\n`).join("") };
       if (cmd === "sh" && args[1].includes("kanso-dot")) return { code: 0, stdout: "#c45a3a\n" };
       if (cmd === "sh" && args[1].startsWith("head -c 800")) return { code: world.bad.includes(args[3]) ? 1 : 0, stdout: "" };
-      if (cmd === "sips" && args[0] === "-g") return { code: 0, stdout: world.bad.includes(args.at(-1)) ? "pixelWidth: <nil>\n" : "pixelWidth: 32\n" };
+      if (cmd === "sips" && args[0] === "-g") {
+        if (args[3] === "pixelHeight") return pixelQuery;
+        return success(world.bad.includes(args.at(-1)) ? "pixelWidth: <nil>\n" : "pixelWidth: 32\n");
+      }
       if (cmd === "sips" && world.bad.includes(sipsPath(args))) return { code: 1, stdout: "" };
       return cmd === "cp" ? copy(args) : { code: 0, stdout: "" };
     },
@@ -475,11 +478,61 @@ test("Look draws a HEIC with sips or ImageMagick and a PDF's first page with Qui
   assert.deepEqual(clone(mac.calls.at(-2)), ["pdftoppm", "-png", "-singlefile", "-f", "1", "-scale-to", "736", "/r/spec.pdf", "/app/k"]);
 });
 
+const drawnPanel = (pixelQuery = success("pixelWidth: 800\npixelHeight: 600")) => panel({ drawing: drawingHost(), pixelQuery });
+const nodeOf = ({ look, cx }, id) => nodes(look.render(cx)).find((kid) => arg(kid, "id") === id);
+const pictureOf = (view) => nodeOf(view, "look-picture");
+const imageOf = (picture) => picture.kids.find((kid) => kid.tag === "image");
+
+test("Images keeps the sideways-scrolling thumbnail strip at a fixed height", async () => {
+  const strip = nodeOf(await drawnPanel(), "look-thumbnails");
+  assert.equal(strip.tag, "h_flex");
+  assert.equal(calls(strip, "overflow_x_scrollbar").length, 1);
+  const height = arg(strip, "h");
+  assert.ok(Number.isFinite(height) && height > 0, "the strip reserves a definite height");
+});
+
+test("Images keeps the displayed picture in the proportions of its drawn copy", async () => {
+  const view = await drawnPanel();
+  const { image, pixels } = view.look.shown;
+  const query = view.calls.find(([cmd, , , , metric]) => cmd === "sips" && metric === "pixelHeight");
+  assert.deepEqual(query, ["sips", "-g", "pixelWidth", "-g", "pixelHeight", `/app/${image}`]);
+  assert.deepEqual(clone(pixels), { width: 800, height: 600 });
+  const picture = pictureOf(view);
+  assert.equal(arg(picture, "pb"), "75%");
+  const drawn = imageOf(picture);
+  assert.equal(arg(drawn, "image"), image);
+  for (const style of ["absolute", "inset_0", "size_full"]) assert.equal(calls(drawn, style).length, 1, style);
+});
+
+test("Images anchors a comment pin at the same percentages inside the fitted picture", async () => {
+  const view = await drawnPanel();
+  const [, , pinAt] = calls(pictureOf(view), "on_mouse_down")[0];
+  pinAt({ local_position: { x: 240, y: 150 }, bounds: { width: 800, height: 600 } }, view.cx);
+  const picture = pictureOf(view);
+  const pin = picture.kids.find((kid) => calls(kid, "left").length);
+  assert.deepEqual([arg(pin, "left"), arg(pin, "top")], ["30%", "25%"]);
+  assert.equal(calls(pin, "absolute").length, 1);
+  assert.ok(calls(picture, "relative").length && calls(picture, "pb").length, "the pin is positioned against a box sized to the picture");
+});
+
+test("Images draws the picture at full width when its dimensions are unavailable", async () => {
+  const view = await drawnPanel(failure("cannot read image dimensions"));
+  const picture = pictureOf(view);
+  const drawn = imageOf(picture);
+  assert.equal(calls(picture, "pb").length, 0);
+  assert.equal(calls(drawn, "w_full").length, 1);
+  assert.equal(arg(drawn, "image"), view.look.shown.image);
+  assert.equal(view.look.shown.pixels, null);
+});
+
+test("Images scrolls a tall picture vertically instead of clipping it", async () => {
+  const view = nodeOf(await drawnPanel(), "look-view");
+  assert.equal(calls(view, "overflow_y_scrollbar").length, 1);
+  assert.equal(calls(view, "overflow_hidden").length, 0);
+});
+
 test("Images keeps the picture big and one kit thumbnail per picture: the one shown draws its copy, breathing while it is copied, the others their own colour", async () => {
   const src = await readFile(new URL("../kanso/mods/kanso-panel/look.js", import.meta.url), "utf8");
-  const strip = src.slice(src.indexOf("thumbnails(list, c) {"), src.indexOf("picture(c) {"));
-  assert.match(strip, /h_flex\(\)\.id\("look-thumbnails"\)/, "a strip of thumbnails");
-  assert.match(strip, /overflow_x_scrollbar\(\)/, "scrolled sideways when it does not fit");
   assert.match(src, /Pictures this agent writes show up here, from its conversation"/);
   assert.doesNotMatch(src, /look-dot|flex_wrap\(\)/, "no circles, and nothing wraps into a grid");
   const { look, cx, drain } = await panel({ drawing: drawingHost() });
