@@ -28,7 +28,7 @@ export function pill(id, y, h, color) {
 
 // The height the session row draws: lists sum these to place the pill.
 // `more.oneLine`: a narrow sidebar keeps the first line only. A second line only when there is something to say.
-const twoLines = (more) => !more.oneLine && Boolean(more.activity);
+const twoLines = (more) => !more.oneLine && Boolean(more.activity || more.shared);
 export const sessionHeight = (more = {}) => (twoLines(more) ? H.two : H.line);
 
 // Asleep is one more status: its own section, after the awake ones.
@@ -352,6 +352,8 @@ export function sessionProps(a, base, row, more = {}) {
     selected: Boolean(row?.kbd),
     dimmed: Boolean(more.quiet || a.dozing),
     ...(row?.failure ? { failure: row.failure } : {}),
+    ...(two && more.shared ? { warning: more.shared } : {}),
+    ...(!two && more.shared ? { place: more.shared.text, placeTip: more.shared.tip } : {}),
   };
 }
 
