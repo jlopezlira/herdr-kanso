@@ -1,8 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { load, nodes, texts, svgsOf, themed, calls, arg, KIT_NIGHT, popoverHost as host, everyDrawn as every, blockedDots, repoText, numberArguments } from "./helpers.mjs";
+import { load, nodes, texts, svgsOf, themed, calls, arg, KIT_NIGHT, popoverHost as host, everyDrawn as every, blockedDots, repoText, numberArguments, timedContext } from "./helpers.mjs";
 import { loadSidebar, mountedState, withParts, recorder } from "./sidebar-fixtures.mjs";
-import { mountChrome } from "./mod-fixtures.mjs";
+import { loadWorkspaceChrome, mountChrome } from "./mod-fixtures.mjs";
 
 const compositions = async () => themed({
   kit: await load("kanso-panel/kit.js", ["menu", "stack"], host()),
@@ -104,18 +104,20 @@ test("Every Header state draws in the app: the lights' row, Dawn Mode's sky and 
   assert.deepEqual([arg(open, "pl"), arg(open, "pr"), arg(open, "pb")], [G.sm, G.sm - PANE.gap, G.xs], "8 at the sides seen: the work column's padding shows past its right");
   assert.ok(nodes(open).some((kid) => arg(kid, "h") === H.tabBar), "the lights' row, as tall as the tab bar");
   assert.ok(nodes(open).some((kid) => arg(kid, "h") === H.row && tipsOf(kid).includes("New project")), "the Toolbar 40 tall");
-  assert.deepEqual([art(open).length, texts(open).includes("Dawn Mode")], [0, false], "Stable Mode shows nothing");
+  assert.deepEqual([art(open).length, texts(open).includes("4.2.0-rc.3")], [0, false], "Stable Mode shows nothing");
   const rail = draw({ collapsed: true });
   assert.equal(calls(rail, "items_center").length, 1, "collapsed, it centres the column");
   assert.ok(nodes(rail).some((kid) => arg(kid, "pt") === G.hair && tipsOf(kid).includes("Show sidebar")));
-  const dawn = draw({ dawn: true });
+  const dawn = draw({ dawn: true, version: "4.2.0-rc.3" });
+  assert.equal(texts(draw({ dawn: true })).length, 0, "no pill until the installed version is read");
+  assert.equal(texts(dawn).includes("Dawn Mode"), false, "the pill names the version, never the mode");
   const layers = ["sky", "night", "glow", "stars", "clouds", "sun", "ring-12", "fade", "horizon"].map((layer) => DAWN.dark.art.replace(/\.svg$/, `-${layer}.svg`));
   assert.deepEqual(art(dawn).map((kid) => arg(kid, "image")), layers, "the sky lies behind the lights, layer by layer as its art paints it");
   assert.ok(art(dawn).every((kid) => calls(kid, "absolute").length && arg(kid, "h") === DAWN_H), "each layer fills the sky at the sidebar's width");
-  const pill = nodes(dawn).find((kid) => calls(kid, "child").some((call) => call[1] === "Dawn Mode"));
+  const pill = nodes(dawn).find((kid) => calls(kid, "child").some((call) => call[1] === "4.2.0-rc.3"));
   assert.deepEqual([arg(pill, "bg"), arg(pill, "text_color")], [DAWN.dark.top, DAWN.dark.star], "the pill: the night of the sky with light words");
-  const dawnRail = draw({ collapsed: true, dawn: true });
-  assert.deepEqual([art(dawnRail).length, texts(dawnRail).includes("Dawn Mode")], [9, false], "collapsed, the sky stays, all nine layers, and the pill does not fit");
+  const dawnRail = draw({ collapsed: true, dawn: true, version: "4.2.0-rc.3" });
+  assert.deepEqual([art(dawnRail).length, texts(dawnRail).includes("4.2.0-rc.3")], [9, false], "collapsed, the sky stays, all nine layers, and the pill does not fit");
   assert.equal(art(draw({ dawn: true, art: false })).length, 0, "the sky can be turned off");
   const under = draw({ title: false });
   assert.equal(nodes(under).some((kid) => arg(kid, "h") === H.tabBar), false, "Proposed: under the window's title bar, the Toolbar alone");
@@ -142,16 +144,67 @@ test("The app sidebar draws its header from the composition, the lights left to 
 const laterCx = { timer: { after: () => ({ cancel() {} }) }, notify() {} };
 
 test("The window's title block draws the Header's lights' row: in Dawn Mode the sky and, open, the pill", async () => {
-  const draw = async (shared) => {
+  const draw = async (shared, installed = "4.2.0") => {
     const view = await mountChrome({ ...host(), theme: () => KIT_NIGHT, props: () => ({}), shared: (key) => shared[key] ?? null, setShared() {} });
+    view.installed = installed;
     return { el: view.render(laterCx) }; // wrapped: a drawn element answers every name, `then` too
   };
   const { el: stable } = await draw({});
   assert.deepEqual([svgsOf(stable).length, nodes(stable).filter((kid) => calls(kid, "image").length).length, texts(stable)], [0, 0, []], "Stable Mode shows nothing");
-  const { el: dawn } = await draw({ "kanso.update": { channel: "beta" } });
+  const { el: dawn } = await draw({ "kanso.update": { channel: "beta", tag: "4.2.0-rc.3" } });
   assert.equal(nodes(dawn).filter((kid) => calls(kid, "image").length).length, 9, "the sky's nine layers");
-  assert.deepEqual(texts(dawn), ["Dawn Mode"]);
+  assert.deepEqual(texts(dawn), ["4.2.0-rc.3"], "the pill names the installed release");
+  assert.deepEqual(texts((await draw({ "kanso.update": { channel: "beta", tag: "4.1.1-beta.1" } })).el), ["4.2.0"], "a recorded tag of another version yields to the files on disk");
+  assert.deepEqual(texts((await draw({ "kanso.update": { channel: "beta" } }, null)).el), [], "nothing until the installed version is read");
   assert.deepEqual(texts((await draw({ "kanso.update": { channel: "beta" }, "sidebar.collapsed": true })).el), [], "collapsed, the pill does not fit");
+});
+
+const dawnVersion = async (readTextFile) => {
+  const timers = [];
+  const { cx, drain } = timedContext(timers);
+  const update = { channel: "beta", tag: "4.2.0-rc.3" };
+  const { WorkspaceChrome } = await loadWorkspaceChrome({
+    ...host(), theme: () => KIT_NIGHT, props: () => ({}), appHome: () => "/app",
+    shared: (key) => key === "kanso.update" ? update : null, readTextFile,
+  });
+  const view = new WorkspaceChrome();
+  view.power = () => {};
+  view.init({}, cx);
+  await drain();
+  const retry = async () => {
+    const index = timers.findIndex(([ms]) => ms > 0);
+    assert.notEqual(index, -1, "a miss schedules a retry");
+    const [[, run]] = timers.splice(index, 1);
+    run(cx);
+    await drain();
+  };
+  return { draw: () => view.render(cx), drain, retry, delays: () => timers.map(([ms]) => ms).filter((ms) => ms > 0) };
+};
+
+test("When the version file stays missing, Dawn Mode waits between reads even if the sidebar redraws", async () => {
+  let reads = 0;
+  const { draw, drain, retry, delays } = await dawnVersion(async () => { reads += 1; return null; });
+  for (let i = 0; i < 3; i += 1) {
+    assert.deepEqual(texts(draw()), []);
+    await drain();
+  }
+  assert.equal(reads, 1, "redraws do not read the file again");
+  assert.deepEqual(delays(), [5_000]);
+  await retry();
+  assert.equal(reads, 2, "the timer reads the file again");
+  assert.deepEqual(delays(), [5_000], "only one subsequent retry is scheduled");
+});
+
+test("Dawn Mode shows the version and restores sunrise replay after an invalid version file is corrected", async () => {
+  let manifest = '{"version":"invalid"}';
+  const { draw, retry, delays } = await dawnVersion(async () => manifest);
+  assert.deepEqual(texts(draw()), []);
+  manifest = '{"version":"4.2.0"}';
+  await retry();
+  const header = draw();
+  assert.deepEqual(texts(header), ["4.2.0-rc.3"]);
+  assert.ok(byTip(header, "Replay the sunrise"));
+  assert.deepEqual(delays(), [], "a valid version stops retries");
 });
 
 // The collapsed sidebar, recorded, with one agent that needs you.

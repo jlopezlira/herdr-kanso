@@ -174,13 +174,16 @@ export const appRelative = (file, root) => {
 
 export const drawablePath = (machine, image, path) => machine ? (image || null) : path;
 
+const SVG_UNITS = { px: 1, in: 96, cm: 96 / 2.54, mm: 96 / 25.4, pt: 4 / 3, pc: 16 };
+
 export const svgPixels = (text) => {
   const tag = /<svg\b([^>]*)>/i.exec(String(text));
   const attr = (name) => {
-    const n = Number(String(new RegExp(`\\b${name}\\s*=\\s*["']([^"']+)["']`, "i").exec(tag?.[1] ?? "")?.[1] ?? "").replace(/px$/i, ""));
+    const [, value, unit = "px"] = /^\s*([\d.]+)\s*(px|in|cm|mm|pt|pc)?\s*$/i.exec(new RegExp(`(?:^|\\s)${name}\\s*=\\s*["']([^"']+)["']`, "i").exec(tag?.[1] ?? "")?.[1] ?? "") ?? [];
+    const n = Number(value) * SVG_UNITS[unit.toLowerCase()];
     return Number.isFinite(n) && n > 0 ? Math.round(n) : null;
   };
-  const raw = /\bviewBox\s*=\s*["']([^"']+)["']/i.exec(tag?.[1] ?? "");
+  const raw = /(?:^|\s)viewBox\s*=\s*["']([^"']+)["']/i.exec(tag?.[1] ?? "");
   const box = raw ? raw[1].trim().split(/[\s,]+/).map(Number) : [];
   const width = attr("width") ?? (box.length === 4 && box[2] > 0 ? Math.round(box[2]) : null);
   const height = attr("height") ?? (box.length === 4 && box[3] > 0 ? Math.round(box[3]) : null);

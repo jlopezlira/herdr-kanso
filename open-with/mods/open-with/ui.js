@@ -23,6 +23,7 @@ export const GLINT = { run: 240, wide: 44, mid: 26, narrow: 12 };
 export const SWITCH = { w: 28, h: 16, knob: 12 };
 export const PAGE = { w: 1080, toolbar: 42, toolbarX: 14, note: 12, markdown: 13, unitGap: 8, unitY: 3, findList: 300 };
 export const SIDEBAR = { w: 256, narrow: 240, min: 120, railRow: 48, tile: 36, guideX: 12, agentX: 34, elbowGap: 8, gap: 0, gutter: 16, groupGap: 12, computerGap: 16, threadGap: 8 };
+export const CHART = { h: 96, small: 56, bar: 2, mark: 3, floor: 1 };
 export const PANE = { edge: 28, gap: 6, minW: 140, minH: 90, pills: 110 };
 export const KEY = { x: 4, text: 11, unit: 40, gap: 5 };
 export const DIALOG = { wide: 480, small: 340, sidebar: 460, worktree: 440, prompt: 420, list: 202, pad: 20, settingsW: 860, settingsH: 680, computers: 440 };
@@ -37,6 +38,7 @@ export const SPIN = 900;
 export const GLINT_MS = 2200;
 export const GLINT_STAGGER = 160;
 export const LIT_MS = 650;
+export const GLINT_PACES = 7;
 export const EASE = { duration: 180, easing: "ease-out" };
 export const GLIDE = { duration: 220, easing: "ease-out" };
 export const GLINT_EASE = "linear";
@@ -57,8 +59,6 @@ export const ARM_MS = 4000;
 export const BREATH = { from: 0.35, to: 0.8, period: 1800 };
 // A native loop: it keeps going behind other windows, where a still mark reads as a stalled agent.
 export const breathe = (el, policy = BREATH) => el.loop("opacity", policy);
-// A native loop redraws the whole window about 30 times a second, so on battery motion steps instead of gliding.
-export const onBattery = () => shared("kanso.battery") === true;
 /** The terminal's own mono family: a tool's words are drawn in it. */
 export const monoFont = () => settings().font_family ?? "JetBrains Mono";
 export const ICONS = "mods/kanso-chrome/icons/";

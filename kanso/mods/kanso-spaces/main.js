@@ -1,8 +1,7 @@
 import { localService, serviceOn, localName, homeOn, REMOTE_TIMEOUT } from "./platform-host.js";
 import { copiesToViewer, viewerFor } from "./platform-viewer.js";
 import { signInTab, removeKeyTab, kansoKeyed, routeOf } from "./sign-in.js";
-import { homeRoute } from "./lan-route.js";
-import { findTailscale } from "./reach.js";
+import { preferHome } from "./lan-route.js";
 import { paths } from "./platform-paths.js";
 import { GIT_READ } from "./platform-command.js";
 import { processApi } from "./platform-processes.js";
@@ -19,6 +18,7 @@ import { v_flex, h_flex, ScrollHandle } from "gpui-base";
 import { agentSession, agentLabel, renameTerminal, SETTLED_LABEL, SNOOZE_LABEL, UNREAD_LABEL, THREAD_LABEL, settledOf, snoozedUntil, isUnread, woke, backFromSettled, threadSections, snoozePresets, THREAD_ORDERS, STATUS_ORDERS, withTerminals, NAME_LABEL, PIN_LABEL, ORDERS, DEFAULT_ORDER, orderSessions, moved, nest, track, elapsed, activityOf, bySection, duration, trackSteps, stepOf, tasksOf, said, FOLD_MS, pill, sessionHeight, mostUrgent } from "./agents.js";
 import { ThreadLocator, findThreads, sameThread, pidsOf, aliveIn, aliveDue, ALIVE_MS, ALIVE_BEHIND_MS, threadIn, AT_ONCE } from "./threads.js";
 import { Panel, sameSeen } from "./panel.js";
+import { glowState } from "./glow-state.js";
 import { Store } from "./store.js";
 import { Kdb, kdbOn, restDue, machinesToAsk, worktreeBase, newId } from "./kdb.js";
 import { agentSnapshot, agentTargets, observedAgents, targetOf, parseTarget, returnSignature, RETURN_LABEL, AWAY_PIECE, destinationOf, livePlaces } from "./since-left-model.js";
@@ -42,6 +42,8 @@ import { RECENT, STARTING, keyOf, onceEach, heldBy, startingNow, listedOf, recor
 import { agentHint } from "./conversation-at.js";
 import { heldOn } from "./conversation-on.js";
 import { land } from "./recent.js";
+import { ownTree, cwdIn } from "./own-tree.js";
+import { SharedEdits, groupsOf } from "./shared-edits.js";
 import { tile } from "./tile.js";
 import { views, viewSwitch } from "./view-switch.js";
 import { pullKey, runPull, canWake, enterOpens, sectionMarkOf, sectionCount, rowDirectory, unnamedComputer, threadWord, threadActions, noProjectsOn, sortOf, foldTail, readWord } from "./sidebar-rows.js";
@@ -96,6 +98,8 @@ function placesOf(sp, ps) {
 }
 const CONV_ROWS = 11; // the conversation picker's projects show this many, then scroll
 const RESUME_ROWS = 8;
+const SHARED_MS = 20_000;
+const SHARED_WORKING_MS = 5 * 60_000;
 const SKETCHED = Object.freeze({ title: "", cwd: "", at: null });
 // A right click on the item does what a left one does.
 const rightToo = (line) => ({ ...line, onSecondaryClick: line.onClick });
@@ -183,13 +187,13 @@ const registry = () => { const rows = shared(REGISTRY); return Array.isArray(row
 // A sleep's key as a project's (a trailing / never makes two of one place).
 const sameKey = (key) => { const i = String(key).indexOf(":"); return `${key.slice(0, i)}:${trimmed(key.slice(i + 1))}`; };
 const projectAt = (key) => registry().find((p) => keyOfProject(p) === sameKey(key)) ?? null;
-const ROW_SHARED = [REGISTRY, NEEDS_YOU, RUN_FAILURES, "strip.state", SLEEP_PENDING, SLEEP_WAKING, SLEEP_FAILED, FORGET_HELD, KNOWN_AGENTS, "kanso.battery", "space.colors"];
+const ROW_SHARED = [REGISTRY, NEEDS_YOU, RUN_FAILURES, "strip.state", SLEEP_PENDING, SLEEP_WAKING, SLEEP_FAILED, FORGET_HELD, KNOWN_AGENTS, "space.colors"];
 const checksOn = () => runs("agents.checks", pieces(shared));
 const rowInputs = () => ({ spaces: spaces(), panes: panes(), terminals: terminals(), agents: withLimits(withNeeds(agents(), terminals(), checksOn()), terminals()), machines: machines(), focused: focused(), front: window()?.active === true, keys: keys(),
   shared: ROW_SHARED.map((key) => shared(key)), pieces: Object.entries(pieces(shared)).filter(([id]) => id.startsWith("sidebar.")) });
 const ROW_STATE = ["hoverRow", "hoverSpace", "hoverHead", "hoverMachine", "pressed", "over", "draggedAgent", "overAgent", "kbd", "navKey", "needsOpen", "needsEmpty", "foldH", "folded",
   "agentsFolded", "sectionsFolded", "asleepOpen", "shelvesOpen", "alive", "git", "held", "custom", "machines", "parked", "waking", "login", "failed", "pulling", "hints", "sync", "hostName", "retried"];
-const ROW_REPLACED = ["threadsShown", "steps", "since", "tasks"];
+const ROW_REPLACED = ["threadsShown", "steps", "since", "tasks", "sharedFound"];
 const listed = (value) => (value instanceof Set || value instanceof Map ? [...value] : value);
 const MINUTE_MS = 60_000;
 const LIMIT_MS = 2000;
@@ -437,6 +441,7 @@ export default class Spaces extends RetryingView {
     cx.timer.every(ALIVE_MS, (cx) => this.checkTasks(cx));
     // Another window's names and projects arrive.
     cx.timer.every(30000, () => this.loadNames(false).catch(() => {}));
+    cx.timer.every(SHARED_MS, (cx) => this.checkShared(cx));
     // keys.json: ⌃1-9 and ⌃⌥P/S/T arrive here as commands.
     afterMount(cx, (cx) => cx.spawn((cx) => commandLoop(
       () => nextCommand(),
@@ -454,6 +459,25 @@ export default class Spaces extends RetryingView {
     this.parts = { header: cx.new(Part, looks.header), switch: cx.new(Part, looks.switch), rows: cx.new(Part, looks.rows), footer: cx.new(SidebarFooter, looks.footer) };
     this.drawnLooks = looks;
     this.paintTimer = cx.timer;
+    this.glowReady = {};
+    this.glowAt = Infinity;
+  }
+
+  redrawGlow() {
+    this.rowsAt = (this.rowsAt ?? 0) + 1;
+    this.paint();
+  }
+
+  followGlow(at, now) {
+    if (at === this.glowAt) return;
+    this.glowTimer?.cancel();
+    this.glowAt = at;
+    this.glowTimer = Number.isFinite(at) ? this.paintTimer.after(at - now, () => {
+      if (this.glowAt !== at) return;
+      this.glowAt = Infinity;
+      this.glowTimer = null;
+      this.redrawGlow();
+    }) : null;
   }
 
   looks() {
@@ -558,6 +582,8 @@ export default class Spaces extends RetryingView {
   }
 
   close() {
+    this.glowAt = Infinity;
+    this.glowTimer?.cancel();
     try { this.wtPrompt?.release(); this.wtBase?.release(); Object.values(this.fields ?? {}).forEach((f) => f.release()); this.branch?.release(); this.projectName?.release(); this.convScroll?.release(); this.agentScroll?.release(); this.find?.release(); } catch { /* already gone */ }
   }
 
@@ -749,10 +775,19 @@ export default class Spaces extends RetryingView {
     if (this.starting) return;
     this.starting = true;
     const project = registry().find((p) => p.id === place.project) ?? null;
-    viewerFor(place.machine).then((viewed) => {
+    viewerFor(place.machine).then(async (viewed) => {
       const argv = viewed(a?.run ?? null);
-      if (place.tree) openAt(place, place.tree.folder, argv, place.tree.branch);
-      else startIn(place, argv);
+      if (place.tree) { openAt(place, place.tree.folder, argv, place.tree.branch); return; }
+      const own = place.folder && a ? await ownTree(place, a).catch(() => null) : null;
+      const other = own?.busy?.[0];
+      const who = other ? this.nameOf(other) : "";
+      if (own?.path) {
+        openAt(place, own.path, argv, own.branch);
+        notify({ title: `${a.name} has its own worktree`, body: `${who} is working in ${place.name ?? "this project"}, so ${a.name} started on branch ${own.branch}.`, level: "info", timeout: 6000 });
+        return;
+      }
+      if (own?.error) notify({ title: `${a.name} shares the folder with ${who}`, body: `Its own worktree could not be made: ${own.error}`, level: "warning", timeout: 8000 });
+      startIn(place, argv);
     });
     this.thenClose(project && a ? this.db().setProjectAgent(project.id, a.key) : null);
   }
@@ -1470,30 +1505,23 @@ export default class Spaces extends RetryingView {
   }
 
   async preferHome() {
-    if (localName() === "windows" || this.homeBusy || Date.now() - (this.homeAt ?? 0) < HOME_EVERY_MS) return;
+    if (localName() === "windows" || this.homeBusy || !runs("computers.network", pieces(shared))) return;
+    const now = Date.now();
+    this.homeAt ??= new Map();
+    const due = (this.machines ?? []).filter((row) => now - (this.homeAt.get(row.name) ?? 0) >= HOME_EVERY_MS)
+      .map((row) => ({ record: machineRecord(row), connected: row.state === "connected" })).filter(({ record }) => canRestore(record));
+    if (!due.length) return;
     this.homeBusy = true;
-    this.homeAt = Date.now();
     try {
       const run = (program, args) => exec(program, args, { timeout: HOME_PROBE_MS });
-      const peers = (await findTailscale(localName(), run)).net?.peers ?? [];
-      if (!peers.length) return;
-      const rows = (this.machines ?? []).map(machineRecord).filter(canRestore);
-      for (const record of rows) {
-        const found = await homeRoute(record, peers, run).catch(() => null);
-        if (found?.record) await this.reroute(record, found.record, found.ip);
+      for (const { record, connected } of due) {
+        this.homeAt.set(record.name, now);
+        const found = await preferHome(record, { run, hc, exec, timeout: HOME_PROBE_MS, connected });
+        if (found) notify({ title: `${record.name} now uses your home network`, body: `At home kansō goes straight to it as ${found.home}, and the usual way when you are away.`, level: "success" });
       }
     } finally {
       this.homeBusy = false;
     }
-  }
-
-  async reroute(was, next, ip) {
-    await hc(rmArgs(was.name)).catch(() => null);
-    if (hcError(await hc(addArgs(next)).catch((e) => ({ code: 1, stderr: String(e?.message ?? e) })))) {
-      await hc(addArgs(was)).catch(() => null);
-      return;
-    }
-    notify({ title: `${was.name} now uses your home network`, body: `At ${ip} when you are home, and Tailscale when you are away.`, level: "success" });
   }
 
   async settleParked() {
@@ -1555,10 +1583,14 @@ export default class Spaces extends RetryingView {
 
   async readCaffeine(key) {
     const title = this.names.title(key || null);
+    const answer = await this.caffeine.read(key);
+    const { word, battery } = answer;
     const setting = this.caffeine.settingUp(key);
-    const { word } = await this.caffeine.read(key);
     if (this.caffeine.untold(key)) notify({ title: `Caffeine off: ${title}`, body: `Its battery reached ${LOW}%, so it can sleep.`, level: "info" });
-    if (setting && word === setting) { this.caffeine.done(key); this.saidCaffeine(key, title, word); }
+    const refused = this.caffeine.refusedBy(key, answer);
+    if (setting && (word === setting || battery || refused)) this.caffeine.done(key);
+    if (setting && word === setting) this.saidCaffeine(key, title, word);
+    if (refused) notify({ title: `Caffeine on ${title} was not changed`, body: CAFFEINE_WHY.low, level: "error" });
   }
 
   saidCaffeine(key, title, word) {
@@ -1584,13 +1616,14 @@ export default class Spaces extends RetryingView {
   }
 
   setUpCaffeine(key, os, verb, title, cx) {
-    const argv = setupArgv(os, verb);
+    const attempt = this.caffeine.nextAttempt();
+    const argv = setupArgv(os, verb, attempt);
     const here = spaces().filter((s) => (s.machine ?? "") === key);
     const space = here.find((s) => s.active) ?? here[0];
     if (!argv) { notify({ title: `Caffeine on ${title} was not changed`, body: CAFFEINE_WHY.refused, level: "error" }); return; }
     if (space) run("tab.new", { space: space.id, name: "Caffeine", argv });
     else run("space.new", { name: "Caffeine", tab: "Caffeine", machine: key, argv });
-    this.caffeine.setup(key, verb);
+    this.caffeine.setup(key, verb, attempt);
     this.followCaffeine(cx);
   }
 
@@ -2344,11 +2377,12 @@ export default class Spaces extends RetryingView {
     if (held) { land(held); return; }
     const starting = startingNow(shared(STARTING));
     if (starting[keyOf(c)]) return;
-    const machine = c.machine ?? (place.machine || null);
-    const agent = (this.known ?? []).find((a) => a.key === c.program && a.installed);
-    const argv = resumeOf(c.program, agent?.run ?? [c.program], c);
-    if (!argv) return;
     setShared(STARTING, { ...starting, [keyOf(c)]: Date.now() });
+    const machine = c.machine ?? (place.machine || null);
+    const known = machine ? JSON.parse(JSON.stringify(await knownAgents({ on: machine }).catch(() => []))) : (this.known ?? []);
+    const agent = known.find((a) => a.key === c.program && a.installed);
+    const argv = resumeOf(c.program, agent?.run ?? [c.program], c);
+    if (!argv) { setShared(STARTING, Object.fromEntries(Object.entries(startingNow(shared(STARTING))).filter(([k]) => k !== keyOf(c)))); return; }
     const open = openSpaceAt(spaces(), c.cwd, machine);
     const target = place.folder ? place : open ? placeOfSpace(open) : placeOfKey(`${machine ?? ""}:${c.cwd}`);
     viewerFor(machine).then((viewed) => startIn(target, viewed(argv)));
@@ -2488,7 +2522,7 @@ export default class Spaces extends RetryingView {
       const span = entries.slice(i, starts[k + 1] ?? entries.length), slab = keys[i] && span.length > 1;
       const rows = span.map((e) => {
         if (e.a.asleep) return { a: e.a, h: H.line, el: this.asleepLine(e.a, t) };
-        const m = this.more(e, ctx, unnamedComputer(machineOf(e.a.address), heading));
+        const m = this.more(e, { ...ctx, glowScope: [space, slab ? keys[i] : null] }, unnamedComputer(machineOf(e.a.address), heading));
         return { a: e.a, h: sessionHeight(m), el: agentSession(e.a, indent ? 2 : 1, c, this.navRow(e.a, e.lines.length ? this.rowFor(e.a) : e.a.pane ? this.rowOf(e.a, mine, space) : null), m) };
       });
       return { key: keys[i], rows, slab };
@@ -2521,10 +2555,54 @@ export default class Spaces extends RetryingView {
   }
 
   extras(a, ctx, show = true) {
+    const scope = JSON.stringify([this.glowView, ctx.glowScope ?? a.space]);
+    const state = glowState(this.glowReady?.[a.address], scope, a.status === "working" && !a.dozing, ctx.now);
+    if (this.drawnGlow) this.drawnGlow[a.address] = state;
     return {
+      glow: state.fade ? { pose: state.pose, ...state.fade } : state.pose,
       step: show ? stepOf(a, this.steps, ctx.now) : null,
       tasks: this.showTasks === false || a.sub ? [] : (this.tasks[a.address] ?? []).map((x) => ({ command: x.command, time: duration(Math.max(0, ctx.now - x.start)) })),
+      shared: this.sharedFound?.[a.address] ?? null,
     };
+  }
+
+  helpers() {
+    const top = new Set(agents().map((a) => a.address));
+    return terminals().filter((k) => k.parent && !top.has(k.address) && k.report?.app && k.state === "live")
+      .map((k) => ({ address: k.address, app: k.report.app, program: { agent: true }, status: k.status, seq: k.turn ?? 0, cwd: k.cwd, title: k.title, name: k.name ?? undefined, labels: k.labels ?? {} }));
+  }
+
+  checkShared(cx) {
+    if (!runs("sidebar.shared", pieces(shared))) {
+      this.sharedMembers = undefined;
+      if (this.sharedFound && Object.keys(this.sharedFound).length) { this.sharedFound = {}; cx.notify(); }
+      return;
+    }
+    if (this.sharing || window()?.active === false || shared(COLLAPSED) === true) return;
+    const list = [...agents(), ...this.helpers()], now = Date.now(), was = this.sharedStatus ?? {};
+    const groups = groupsOf(list, cwdIn(panes()));
+    this.sharedStatus = Object.fromEntries(list.map((a) => [a.address, `${a.status}:${a.seq ?? ""}`]));
+    const ended = (a) => a.status !== "working" && was[a.address] !== undefined && was[a.address] !== `${a.status}:${a.seq ?? ""}`;
+    const located = (a) => (this.threads?.[a.address]?.file ? "+" : "-");
+    const members = Object.fromEntries(groups.map((g) => [g.key, g.agents.map(({ a, cwd }) => `${a.address}@${cwd}${located(a)}`).toSorted().join(" ")]));
+    const before = this.sharedMembers;
+    const moved = (g) => members[g.key] !== before?.[g.key];
+    const due = groups.filter((g) => moved(g) || g.agents.some(({ a }) => ended(a) || (a.status === "working" && now - (this.sharedAt?.[g.key] ?? 0) >= SHARED_WORKING_MS)));
+    this.sharedMembers = members;
+    const grouped = new Set(groups.flatMap((g) => g.agents.map(({ a }) => a.address)));
+    const scanned = new Set(due.flatMap((g) => g.agents.map(({ a }) => a.address)));
+    const kept = Object.fromEntries(Object.entries(this.sharedFound ?? {}).filter(([address]) => grouped.has(address) && !scanned.has(address)));
+    const show = (found, cx) => { if (!runs("sidebar.shared", pieces(shared))) return; const next = { ...kept, ...found }; if (JSON.stringify(next) !== JSON.stringify(this.sharedFound ?? {})) { this.sharedFound = next; cx.notify(); } };
+    if (!due.length) { show({}, cx); return; }
+    this.sharedAt = { ...this.sharedAt, ...Object.fromEntries(due.map((g) => [g.key, now])) };
+    this.sharing = true;
+    this.shared ??= new SharedEdits(cx.timer);
+    cx.spawn(async (cx) => {
+      const fileOf = (a) => this.threads?.[a.address]?.file ?? null;
+      const readable = due.map((g) => ({ ...g, agents: g.agents.filter(({ a }) => fileOf(a)) })).filter((g) => g.agents.length > 1);
+      try { show(readable.length ? await this.shared.scan(readable, fileOf, (a) => this.nameOf(a)).catch(() => ({})) : {}, cx); }
+      finally { this.sharing = false; }
+    });
   }
 
   listed(ps, sp, terms) {
@@ -2635,7 +2713,7 @@ export default class Spaces extends RetryingView {
     this.readingThreads = true;
     // Agents on this computer (another machine's files are not here).
     const background = this.background();
-    const list = agents().filter((a) => !a.address.includes("/") && background.allows(a.address)).map((a) => ({ address: a.address, app: a.app }));
+    const list = [...agents(), ...(runs("sidebar.shared", pieces(shared)) ? this.helpers() : [])].filter((a) => !a.address.includes("/") && background.allows(a.address)).map((a) => ({ address: a.address, app: a.app }));
     if (!list.length) { this.readingThreads = false; return; }
     this.threadLocator ??= new ThreadLocator();
     cx.spawn(async (cx) => {
@@ -3027,7 +3105,7 @@ export default class Spaces extends RetryingView {
       const laid = this.unfolded(id, open, ctx.now) ? (s.id === "asleep" ? this.asleepStatus(s, t, c, ctx) : s.entries.map((e, k) => {
         if (e.a.asleep) return { focused: false, rh: H.line, el: this.asleepLine(e.a, t) };
         const where = machineOf(e.a.address);
-        const m = this.more(e, ctx, e.lines.length ? unnamedComputer(where, machineOf(tops[k]?.address)) : rowDirectory(project(e.a.space)?.name, where)), rh = sessionHeight(m);
+        const m = this.more(e, { ...ctx, glowScope: id }, e.lines.length ? unnamedComputer(where, machineOf(tops[k]?.address)) : rowDirectory(project(e.a.space)?.name, where)), rh = sessionHeight(m);
         return { focused: e.a.focused, rh, el: agentSession(e.a, 0, c, this.navRow(e.a, this.rowFor(e.a)), m) };
       })) : [];
       const { h, focus, focusH } = laid.reduce((acc, r) => ({ h: acc.h + r.rh + 1, focus: r.focused ? acc.h : acc.focus, focusH: r.focused ? r.rh : acc.focusH }), { h: 0, focus: null, focusH: 0 });
@@ -3185,7 +3263,7 @@ export default class Spaces extends RetryingView {
     if (!rows.length) return [item(emptyState({ icon: "message-square", text: "No conversations yet" })("threads-empty", c))];
     const sections = threadSections(rows, { order: this.threadOrder, group: this.threadGroup, now: ctx.now, since: this.since ?? {} });
     // Under its project's header a conversation is nested: indented, the agent's icon as its mark, and no project line.
-    const row = ({ a, th }, nested = false) => {
+    const row = ({ a, th }, nested = false, glowScope = "active") => {
       if (a.asleep) return { rh: H.line, el: this.asleepLine(a, t) };
       const when = (this.threadOrder === "started" ? th?.began : th?.said ?? th?.at) ?? this.since?.[a.address]?.at;
       const unread = isUnread(a.labels), up = woke(a, ctx.now), settled = Boolean(settledOf(a.labels)) && !backFromSettled(a);
@@ -3204,7 +3282,7 @@ export default class Spaces extends RetryingView {
         // What the agent says it is on, or said last; else the last thing you wrote.
         activity: unreadable ? null : said(a) ?? (th?.prompt ? `You: ${th.prompt}` : null),
         oneLine: this.narrow,
-        ...this.extras(a, ctx),
+        ...this.extras(a, { ...ctx, glowScope }),
       };
       return { rh: sessionHeight(more), el: agentSession(a, nested ? 1 : 0, c, this.navRow(a, this.rowFor(a, actions, { title: th?.title ?? null, session: th?.file ?? null })), more) };
     };
@@ -3212,7 +3290,7 @@ export default class Spaces extends RetryingView {
     const stack = (laid, gap) => laid.reduce((acc, r, k) => ({ h: acc.h + r.rh + (k ? gap : 0), tops: [...acc.tops, acc.h + (k ? gap : 0)] }), { h: 0, tops: [] });
     const quiet = (g, nested) => {
       const zOpen = this.asleepOpenOf(g.id);
-      const drawn = this.unfolded(`asleep-${g.id}`, zOpen, ctx.now) ? g.rows.map((r) => row(r, nested)) : [];
+      const drawn = this.unfolded(`asleep-${g.id}`, zOpen, ctx.now) ? g.rows.map((r) => row(r, nested, g.id)) : [];
       const box = this.foldBox(`asleep-${g.id}`, zOpen, drawn.map((r) => r.el), ctx.now, 6);
       const h = drawn.reduce((n, r, k) => n + r.rh + (k ? 6 : 0), 0);
       const a = g.rows[0].a;
@@ -3250,7 +3328,7 @@ export default class Spaces extends RetryingView {
         { title: headName, status: whole ? "asleep" : "none", count: sectionCount(open, s.rows.length), add, hover: this.hoverHead === s.id, onHover }), H.line)];
       const body = whole ? s.rows : split.live;
       const show = this.unfolded(foldId, open, ctx.now);
-      const laid = show ? body.map((r) => row(r, Boolean(s.project))) : [];
+      const laid = show ? body.map((r) => row(r, Boolean(s.project), foldId)) : [];
       const tabs = !whole && show ? split.groups.flatMap((g) => quiet(g, true).map((it) => it.el)) : [];
       const { h: stackH, tops } = stack(laid, 6);
       const k = laid.findIndex((_r, j) => body[j].a.focused);
@@ -3458,6 +3536,9 @@ export default class Spaces extends RetryingView {
     // Every row built once per draw, for every view.
     const asleep = this.sleepingNow(sp, read.terms, ps);
     const rowsCtx = { ...read, asleep, spaces: sp, registry: registry(), spaceIds: new Set(sp.map((w) => w.id)), all: this.listed(ps, sp, read.terms).filter((a) => !asleep.dozing.has(a.address)) };
+    if (this.glowView !== view) this.glowReady = {};
+    this.glowView = view;
+    this.drawnGlow = {};
     const ctx = { ...rowsCtx, rowsBy: new Map(sp.map((w) => [w.id, this.spaceRows(w.id, rowsCtx)])), project: this.projectOf(sp, t) };
     const queue = this.refreshNeeds(sp, read.terms, asleep);
     const words = (query ?? "").trim();
@@ -3474,6 +3555,8 @@ export default class Spaces extends RetryingView {
           : view === "agents" ? (collapsed ? this.agentsRail(t, shownSp, shownCtx) : this.agentsView(t, shownSp, ps, shownCtx))
           : view === "threads" ? (collapsed ? this.threadsRail(t, shownSp, shownCtx) : this.threadsView(t, shownSp, ps, shownCtx)) : this.grouped(t, collapsed, shownSp, ps, shownCtx)),
         collapsed ? null : this.awayCard(t, active)])("spaces-rows", tokens(t));
+    this.glowReady = this.drawnGlow;
+    this.followGlow(Object.values(this.drawnGlow).reduce((at, state) => Math.min(at, state.next), Infinity), read.now);
     this.nav = this.navNext;
     // The row the ring was on is gone: it stays at the same place in the list.
     if (this.kbd && this.nav.length && !this.nav.some((n) => n.key === this.navKey)) this.navKey = this.nav[Math.min(this.navAt ?? 0, this.nav.length - 1)].key;

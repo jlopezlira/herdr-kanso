@@ -3,7 +3,8 @@
 Pull requests to develop add entries under `## [Unreleased]` and never change
 `kanso/mods/kanso-chrome/version.json` or numbered sections. The version file
 stays at the newest stable version until the Release candidate workflow prepares
-the next version. A push to develop publishes a beta with the Unreleased notes.
+the next version. A push to develop publishes a beta with the Unreleased notes,
+or the next release candidate number once a candidate of that version exists.
 Its version is computed from the newest stable tag: Breaking or Removed means
 a major bump, Added or Deprecated means a minor bump, anything else a patch.
 Use Upgrade for steps users must take before updating. Like Fixed and Changed,
@@ -28,7 +29,7 @@ the branch's rules.
 
 - A session switcher on Ctrl+Tab: every session on every computer, the most recent first, opening on the one you were in before. Keep Ctrl down and press Tab to move, let go to switch; Enter and a click work too, Esc stays. Sessions put to sleep are listed last and wake when you pick one. Change or remove its key in Settings, Keys; switching tabs stays on Cmd+Shift+] and Cmd+Shift+[.
 - Resume a conversation, in the + menu: your past Claude Code, Codex and Pi conversations, newest first, on this computer and the ones you added; type to find one. A project's + lists that project's. None starts twice: one open on any computer, in Claude Code, Codex or Pi, takes you to it, and one asleep wakes.
-- Tasks is each project's to-do, kept by your agents: turn on Agents keep the to-do, in Settings, Pieces, and Claude Code, Pi and Codex add each step of their work to the project's to-do and close it when done; each row names the agent that added it. It writes a short rule to each agent's own instructions, never over one of yours, and takes it out when turned off; agents use the `kanso-todo` command, which you can run too. Tasks shows the project you are in and every project with a to-do. Type one and press Enter; a click marks it done, and Done keeps the finished ones folded. Send one to an agent working in that project, start a new conversation with it, or delete it, with Undo. The list stays on this computer.
+- Tasks shows each agent's plan for the project you are viewing, written by the agent itself: turn on Agents keep the to-do, in Settings, Pieces, or with one click in Tasks, and Claude Code, Pi and Codex write every step in order with a line of detail, then mark the step they are on and each one they finish, on whichever computer holds the project; there is nothing to tick or add by hand. Each running agent's plan is headed with its name and Go to agent; the plans of agents that have ended fold under Earlier, each saying who made it, what it was about and whether it finished, and Clear removes them, with Undo. It writes a short rule to each agent's own instructions, never over one of yours, takes it out when turned off, and tells the agents already running; agents use the `kanso-todo` command, which you can run too. Tasks follows the project selected in the sidebar.
 - Timeline, a new panel: the conversation in focus prompt by prompt, with when each one ended, how long it took, the files it changed and the first sentence of its answer. Open one to read the whole prompt, what you sent while it worked and the full answer. It reads Claude Code and Codex, on this computer or another.
 
 ### Changed
@@ -36,6 +37,34 @@ the branch's rules.
 - Tasks no longer shows GitHub issues, GitHub Projects, Jira or Linear boards, and Settings no longer has Accounts. Their boards and saved copies leave kansō's database; a Jira or Linear token you saved stays in your system's secret store until you remove it there (named "kansō Jira" or "kansō Linear").
 - Shipped's line and commit counts, its scan of this computer's repositories and Add up Shipped across your computers: Shipped no longer writes the "Kanso Shipped stats" gist (the one it made stays in your GitHub account until you delete it).
 - Shipped measures pull requests, not lines: how many of those you opened in the period reached production (merged into the repository's default branch, or into a branch released to it), that share and its change against the period before, your last six periods, opened, merged, time to merge, closed unmerged, reviews and pull requests merged in others' repositories. Records, When you merge and By repository count pull requests. It reads everything from GitHub, so it is the same on every computer.
+- Worktrees starts fewer Git processes when checking which branches have landed.
+- Worktrees checks each repository in one pass, and asks again the next time it opens.
+- After a restart changes a disk's device number, Spend no longer reads every session again: a file with the same inode, size and time is known, so the history read finishes in one run instead of stalling on "Still reading your history".
+- When kansō starts, including after an update, it brings the agents' plan rule up to date if it is on, so the rule always matches the command it names.
+- A second agent started in a project folder where another agent is already working opens in its own worktree on a new branch, so neither commits the other's unsaved changes; kansō says which branch it took. When two agents still have unsaved changes in the same file, each one's row in the sidebar says which file and who else changed it.
+- In Dawn Mode, the pill at the top of the sidebar names the installed release, such as 4.2.0-rc.3, instead of "Dawn Mode".
+- Timeline's header shows only its title; the conversation's name, computer and prompt count moved into the pin's tooltip.
+- Shipped leads with the share of the pull requests you opened that reached production, draws the pull requests merged over the period as a chart like Memory's, lists its trend with the current period first, and says less.
+- Shipped and Spend keep what they read and update it every 12 hours, or when you press Refresh, reading only what is new: Shipped asks GitHub only for what changed, and Spend rescans and exchanges with your other computers on that schedule instead of every minute.
+- Add a computer lists the computers on your home network first and Tailscale second, under Away from home. Set up with an agent walks you through ssh on your home network one step at a time, and Set up Tailscale with an agent does the same for Tailscale.
+- On Mac and Linux, kansō reaches your other computers over your home network whenever you are home, with or without Tailscale. It remembers each computer by its .local name instead of an address that can change, checks the key the computer presents there against the one it read over a trusted connection, and goes through Tailscale or your usual route only when you are away.
+- The glow on an agent’s name fades in when it starts working, keeps moving throughout the turn, and fades out when it finishes. The name stays in place, and the glow works on battery too.
+- The strip and the updater no longer wake several times a second while nothing changes: the strip writes its layout only after a change and follows a divider closely only while it is dragged, and the updater looks for releases again when Settings changes the channel.
+
+### Fixed
+
+- Images shows the picture you picked at the panel's width again, with its pins, their notes and the bar with Send; a picture taller than the panel scrolls, and each pin stays on the spot you clicked.
+- When a computer turns kansō away, Add a computer and its sign-in tab say which user was tried and that you can type user@address if you sign in there as someone else, instead of only asking for a key that may already be there.
+- Add a computer finds Tailscale when it was installed from the Mac App Store and no longer shows a notice when Tailscale isn't installed.
+- Caffeine says when a computer's battery is too low to keep it awake, instead of showing it as not read and then as sleeping as usual.
+- Check for updates gives its answer even when an automatic check is already looking.
+- Shipped no longer stops drawing ("This view could not be re-rendered") with a few thousand pull requests, and its streak is not reset by a calendar day that GitHub already started.
+- On Windows, an update that was interrupted no longer makes the next update fail while it resets the permissions of the files it replaces.
+- Tasks turns Agents keep the to-do on itself when it is empty, and turning it on, here or in Settings, sends the rule to the agents already running on this computer, so they start using it without a new conversation.
+- A to-do marked done or deleted while it is still being saved on another computer keeps that change.
+- Resume a conversation on another computer starts it with that computer's own agent command, once however fast you choose it.
+- Agents keep the to-do leaves a Codex config.toml alone when its own developer_instructions sits after a multiline string or a comment, and works when kansō's folder has an apostrophe.
+- Ports and Containers opened while the Herdr window is behind another show what they read instead of staying on their loading placeholder, which kept the window redrawing about 20 times a second.
 
 ## [4.1.1] - 2026-11-25
 

@@ -1,8 +1,8 @@
 import { shellQuote, windowsArg } from "./platform-command.js";
 import { privateIp } from "./nearby.js";
-import { splitTarget, joined, destinationOf, keySetup } from "./sign-in.js";
+import { splitTarget, joined, destinationOf, keySetup, hostOf } from "./sign-in.js";
 
-export { splitTarget, destinationOf, keySetup };
+export { splitTarget, destinationOf, keySetup, hostOf };
 
 export const TAILSCALE_PATHS = {
   macos: ["tailscale", "/usr/local/bin/tailscale", "/opt/homebrew/bin/tailscale", "/Applications/Tailscale.app/Contents/MacOS/Tailscale"],
@@ -11,9 +11,13 @@ export const TAILSCALE_PATHS = {
 };
 export const tailscalePaths = (platform) => TAILSCALE_PATHS[platform] ?? TAILSCALE_PATHS.linux;
 
+const APP_CLI = "TAILSCALE_BE_CLI=1";
+export const tailscaleCommand = (path) => (/\.app\/Contents\/MacOS\//.test(path) ? ["env", APP_CLI, path] : [path]);
+
 export async function findTailscale(platform, run) {
   for (const path of tailscalePaths(platform)) {
-    const r = await run(path, ["status", "--json"]).catch(() => null);
+    const [program, ...words] = tailscaleCommand(path);
+    const r = await run(program, [...words, "status", "--json"]).catch(() => null);
     if (r && (r.code === 0 || String(r.stdout ?? "").includes("{"))) return { path, net: tailnet(r.stdout) };
   }
   return { path: "", net: null };
@@ -21,7 +25,7 @@ export async function findTailscale(platform, run) {
 
 const PHONES = new Set(["ios", "android", "tvos"]);
 const ipv4 = (ip) => /^\d+\.\d+\.\d+\.\d+$/.test(ip);
-const hostOfAddress = (address) => String(address ?? "").replace(/:\d+$/, "");
+const hostOfAddress = (address) => String(address ?? "").replace(/^\[([^\]]+)\]:\d+$/, "$1").replace(/^([\d.]+):\d+$/, "$1");
 const lanOfPeer = (peer) => [...new Set([peer.CurAddr, ...(peer.Addrs ?? [])].map(hostOfAddress).filter(privateIp))];
 const labelOf = (peer) => String(peer.DNSName ?? "").split(".")[0] || String(peer.HostName ?? "").toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-+|-+$/g, "");
 
@@ -68,7 +72,7 @@ function awayPlan(choice, { tailscale, platform }) {
   if (usesTailscaleSsh(peer, tailscale)) {
     const quote = platform === "windows" ? windowsArg : shellQuote;
     const target = joined(user, peer.ip);
-    return { name: peer.name, target, via: `${quote(tailscale)} ssh ${quote(target)}`, probe: false };
+    return { name: peer.name, target, via: `${tailscaleCommand(tailscale).map(quote).join(" ")} ssh ${quote(target)}`, probe: false };
   }
   const typed = splitTarget(choice.target).host;
   const alias = choice.alias ?? null;
@@ -121,7 +125,11 @@ export function reachOf(result) {
 const MAC = /^mac/i;
 export const ACCESS_CONTROLS = "https://login.tailscale.com/admin/acls";
 
-export function advice(reach, { name, os = "", tailnet: onTailnet = false } = {}) {
+const otherUser = (name, user, host, then) => `${name} didn't let ${user} in. If you sign in there as someone else, type user@${host || name} where kansō asks how ssh reaches it, and press Add. If not, ${then}`;
+
+export function advice(reach, { name, os = "", tailnet: onTailnet = false, user = "", host = "" } = {}) {
+  if (reach === "password" && user) return { text: otherUser(name, user, host, "type the password once in the tab that opens."), fix: "Enter the password" };
+  if (reach === "keyonly" && user) return { text: otherUser(name, user, host, "press Sign in."), fix: "Sign in" };
   if (reach === "password") return { text: `${name} wants its password once. Type it in the tab that opens, and ${name} is added right after.`, fix: "Enter the password" };
   if (reach === "keyonly") return { text: `${name} takes keys only. Type your key's passphrase once in the tab that opens, and ${name} is added right after.`, fix: "Sign in" };
   if (reach === "closed" && MAC.test(os)) return { text: `${name} doesn't let ssh in. On ${name}: System Settings › General › Sharing › Remote Login, on. Then Retry.`, fix: "Retry" };

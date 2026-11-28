@@ -2,9 +2,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { clone, load } from "./helpers.mjs";
 
-const nearby = () => load("kanso-computers/nearby.js", ["interfacesOf", "neighborsOf", "candidates"]);
+const nearby = () => load("kanso-computers/nearby.js", ["interfacesOf", "neighborsOf", "candidates", "homeAddresses"]);
 const reach = () => load("kanso-computers/reach.js", ["nearbyOnly", "tailnet", "planFor"]);
-const setup = () => load("kanso-computers/setup.js", ["setupPrompt"]);
 
 const IFCONFIG = [
   "en0: flags=8863<UP,BROADCAST,SMART,RUNNING,SIMPLEX,MULTICAST> mtu 1500",
@@ -40,6 +39,28 @@ test("The network interfaces are read from macOS ifconfig, from Linux ip address
   assert.deepEqual(clone(interfacesOf(IFCONFIG)), lan);
   assert.deepEqual(clone(interfacesOf(LINUX_ADDR)), lan);
   assert.deepEqual(clone(interfacesOf(WINDOWS_ADDR)), lan);
+});
+
+test("The home lookup on Mac and Linux lists only home addresses, with IPv4 first and scoped link-local last", async () => {
+  const { homeAddresses } = await nearby();
+  const lan = ["192.168.7.91", "fd12::5", "fe80::2%en0"];
+  const found = [...lan.toReversed(), "fd7a:115c:a1e0::1", "100.64.1.2", "8.8.8.8", "2001:4860::8888", "fe80::2"];
+  const mac = found.map((ip) => `${ip.includes(":") ? "ipv6_address" : "ip_address"}: ${ip}`).join("\n");
+  const linux = [...found.map((ip) => `${ip} STREAM light.local`), "192.168.7.92 DGRAM", `${lan[0]} DGRAM`].join("\n");
+  for (const text of [mac, linux]) assert.deepEqual(clone(homeAddresses(text)), lan);
+});
+
+test("The Mac home lookup keeps the interface of a link-local address and lists it after IPv4 and private IPv6", async () => {
+  const { homeAddresses } = await nearby();
+  const resolved = [
+    "name: dark.local",
+    "ipv6_address: fe80:e::86c:554f:de80:21a5",
+    "ipv6_address: fd12:3456:789a:1:c97:da:9640:4717",
+    "",
+    "name: dark.local",
+    "ip_address: 192.168.7.136",
+  ].join("\n");
+  assert.deepEqual(clone(homeAddresses(resolved)), ["192.168.7.136", "fd12:3456:789a:1:c97:da:9640:4717", "fe80:0::86c:554f:de80:21a5%14"]);
 });
 
 test("Neighbours on this computer's own networks come first, then the rest of its /24 or /22, never this computer or a far network", async () => {
@@ -97,11 +118,13 @@ test("A Tailscale computer keeps the private addresses it has on this network", 
         Online: true,
         TailscaleIPs: ["100.64.1.2"],
         CurAddr: "192.168.1.20:41641",
-        Addrs: ["192.168.1.20:41641", "10.1.2.3:41641", "100.64.1.2:41641", "8.8.8.8:53", "fd7a:115c:a1e0::1"],
+        Addrs: [
+          "192.168.1.20:41641", "10.1.2.3:41641", "[fd12::5]:41641", "100.64.1.2:41641", "8.8.8.8:53", "fd7a:115c:a1e0::1",
+        ],
       },
     },
   });
-  assert.deepEqual(clone(tailnet(text).peers[0].lan), ["192.168.1.20", "10.1.2.3"]);
+  assert.deepEqual(clone(tailnet(text).peers[0].lan), ["192.168.1.20", "10.1.2.3", "fd12::5"]);
 });
 
 const peer = (over = {}) => ({ name: "grey", ip: "100.64.1.2", tailscaleSsh: false, ...over });
@@ -138,10 +161,33 @@ test("On Windows a computer on Tailscale keeps its Tailscale route, with no shel
   }
 });
 
-test("Set up with an agent names the local route and the Tailscale route, and never asks for a password", async () => {
-  const { setupPrompt } = await setup();
-  const text = setupPrompt({ platform: "linux" });
-  assert.match(text, /native ssh/);
-  assert.match(text, /Tailscale/);
-  assert.match(text, /Never ask me for a password/);
+test("The home network guide explains how to turn on SSH and copy the key without Tailscale or sharing a password", async () => {
+  const { homeSetupPrompt } = await load("kanso-computers/setup.js", ["homeSetupPrompt"]);
+  const prompt = homeSetupPrompt({ platform: "linux" });
+  for (const step of [
+    /one step at a time/,
+    /<name>\.local/,
+    /Remote Login/,
+    /openssh-server/,
+    /OpenSSH Server/,
+    /ask me to run `ssh-copy-id <user>@<name>\.local` myself/,
+    /Do not install or use Tailscale/,
+    /Never ask me for a password/,
+    /type <user>@<name>\.local where it asks how ssh reaches it, with the user we just checked/,
+  ]) assert.match(prompt, step);
+});
+
+test("On Windows the guides use PowerShell commands and do not promise a home route", async () => {
+  const { homeSetupPrompt, tailscaleSetupPrompt } = await load("kanso-computers/setup.js", ["homeSetupPrompt", "tailscaleSetupPrompt"]);
+  const home = homeSetupPrompt({ platform: "windows" });
+  assert.match(home, /Test-NetConnection <name>\.local -Port 22/);
+  assert.doesNotMatch(home, /ssh-copy-id|nc -z/);
+  assert.doesNotMatch(tailscaleSetupPrompt({ platform: "windows" }), /over the home network when I am home/);
+  assert.match(tailscaleSetupPrompt({ platform: "macos" }), /over the home network when I am home/);
+});
+
+test("The Tailscale guide explains how to sign in and turn on Tailscale SSH one step at a time", async () => {
+  const { tailscaleSetupPrompt } = await load("kanso-computers/setup.js", ["tailscaleSetupPrompt"]);
+  const prompt = tailscaleSetupPrompt();
+  for (const step of [/one step at a time/, /`tailscale up`/, /tailscale set --ssh/]) assert.match(prompt, step);
 });

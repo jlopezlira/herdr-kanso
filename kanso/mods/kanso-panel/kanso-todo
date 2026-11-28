@@ -1,9 +1,11 @@
 #!/bin/sh
 home=${HERDR_APP_HOME:-$HOME/.config/herdr-app}
 db=$home/data/kanso/kanso.db
-me="sh '$(cd "$(dirname "$0")" && pwd -P)/$(basename "$0")'"
+shq() { printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\\\''/g")"; }
+me="sh $(shq "$(cd "$(dirname "$0")" && pwd -P)/$(basename "$0")")"
 mark="kanso-todo"
 here=$(pwd -P)
+who=${HC_TERMINAL_ID:-}
 umask 077
 claude_rule=$HOME/.claude/rules/kanso-todo.md
 pi_append=$HOME/.pi/agent/APPEND_SYSTEM.md
@@ -12,18 +14,27 @@ codex_config=$HOME/.codex/config.toml
 q() { printf "'%s'" "$(printf '%s' "$1" | sed "s/'/''/g")"; }
 sql() { sqlite3 -cmd ".timeout 5000" "$db" "$@"; }
 fail() { echo "kanso-todo: $1" >&2; exit 1; }
+one_line() { printf '%s' "$1" | tr '\n\t' '  ' | sed 's/  */ /g; s/^ //; s/ $//'; }
 now() { echo "$(date +%s)000"; }
+mine() { [ -n "$who" ] || fail "run this from an agent's terminal in kansō: HC_TERMINAL_ID is not set"; }
+columns() {
+  have=$(sql "SELECT group_concat(name,' ') FROM pragma_table_info('todos');") || fail "cannot read $db"
+  for col in "detail TEXT" "started_at INTEGER" "by_name TEXT" "by_since INTEGER"; do
+    case " $have " in *" ${col% *} "*) ;; *) sql "ALTER TABLE todos ADD COLUMN $col;" >/dev/null 2>&1 || true ;; esac
+  done
+}
 new_id() { printf '%x%s' "$(date +%s)" "$(od -An -N4 -tx4 /dev/urandom | tr -d ' \n')"; }
 
 rule() {
   cat <<RULE
 ## To-do in kansō
-Keep this project's to-do list in kansō while you work, without being asked. When you plan work, add each step: \`$me add "<one short line>"\`. When you finish a step, close it: \`$me done <id>\`. \`$me list\` shows the open ones with their ids.
+Show your plan in kansō while you work, without being asked, so the person sees what you will do. Before you start work, add every step you plan, in order, each with one line saying what it changes or why: \`$me add "<step>" "<detail>"\`. When you begin a step: \`$me start <id>\`. When you finish it: \`$me done <id>\`. When the plan changes, add the new steps. \`$me list\` shows your steps with their ids and states.
 RULE
 }
 
 find_project() {
-  sql "SELECT id FROM projects WHERE removed IS NULL AND machine='' AND (folder=$(q "$here") OR substr($(q "$here"),1,length(folder)+1)=folder||'/') ORDER BY length(folder) DESC LIMIT 1;" || fail "cannot read $db"
+  h=$(q "$here")
+  sql "SELECT id FROM projects WHERE removed IS NULL AND machine='' AND ($h=rtrim(folder,'/') OR substr($h,1,length(rtrim(folder,'/'))+1)=rtrim(folder,'/')||'/') ORDER BY length(rtrim(folder,'/')) DESC LIMIT 1;" || fail "cannot read $db"
 }
 
 project() {
@@ -35,36 +46,101 @@ project() {
   printf '%s' "$found"
 }
 
-put() { cat "$2" > "$1"; wrote=$?; rm -f "$2"; return $wrote; }
-has_block() { [ -f "$1" ] && grep -q "^# $mark\$" "$1"; }
-drop_block() { has_block "$1" || return 0; sed "/^# $mark\$/,/^# \/$mark\$/d" "$1" > "$1.kanso" && put "$1" "$1.kanso" || { rm -f "$1.kanso"; return 1; }; }
+put() { [ -f "$2" ] || return 1; cat "$2" > "$1"; wrote=$?; rm -f "$2"; return $wrote; }
+has_block() { [ -f "$1" ] && awk -v m="$mark" 'open && $0 == "# /" m { found = 1; exit } $0 == "# " m { if ((getline n) > 0 && n == "## To-do in kansō") open = 1 } END { exit found ? 0 : 1 }' "$1"; }
+drop_block() { has_block "$1" || return 0; awk -v m="$mark" '
+    function flush(   i) { for (i = 1; i <= nb; i++) print buf[i]; nb = 0; held = 0 }
+    function open(   n) { if ((getline n) <= 0) { print; return } if (n == "## To-do in kansō") { held = 1; buf[++nb] = $0; buf[++nb] = n } else { print; $0 = n; if ($0 == "# " m) open(); else print } }
+    held && $0 == "# /" m { nb = 0; held = 0; next }
+    held && $0 == "# " m { flush(); open(); next }
+    held { buf[++nb] = $0; next }
+    $0 == "# " m { open(); next }
+    { print }
+    END { flush() }' "$1" > "$1.kanso" && put "$1" "$1.kanso" || { rm -f "$1.kanso"; return 1; }; }
+codex_strip() { awk -v m="$mark" '
+    function flush(   i) { for (i = 1; i <= nb; i++) print buf[i]; nb = 0; st = 0 }
+    st == 0 && $0 == "# " m { st = 1; buf[++nb] = $0; next }
+    st == 1 { buf[++nb] = $0; if ($0 == "developer_instructions = \047\047\047") st = 4; else flush(); next }
+    st == 4 { buf[++nb] = $0; if ($0 == "## To-do in kansō") st = 2; else flush(); next }
+    st == 2 { buf[++nb] = $0; if ($0 == "\047\047\047") st = 3; next }
+    st == 3 { if ($0 == "# /" m) { nb = 0; st = 0; found = 1; next } flush(); print; next }
+    { print }
+    END { flush(); exit found ? 0 : 1 }' "$1"; }
+top_block() { [ -f "$1" ] && codex_strip "$1" >/dev/null; }
+drop_top() { top_block "$1" || return 0; codex_strip "$1" > "$1.kanso"; put "$1" "$1.kanso" || { rm -f "$1.kanso"; return 1; }; }
 ours() { [ -f "$claude_rule" ] && [ "$(head -n 1 "$claude_rule")" = "<!-- $mark -->" ]; }
-top_key() { [ -f "$2" ] && sed '/^[[:space:]]*\[/q' "$2" | grep -Eq "^[[:space:]]*(\"$1\"|'$1'|$1|\"[^\"]*\\\\[^\"]*\")[[:space:]]*="; }
+top_key() { [ -f "$2" ] || return 1; grep -Eq "$1|\\\\[uU][0-9a-fA-F]{4}" "$2"; [ $? -ne 1 ]; }
 end_line() { [ -s "$1" ] && [ -n "$(tail -c1 "$1")" ] && echo >> "$1"; true; }
 
+lock=$HOME/.kanso-todo.lock
+take() { ( set -C; echo $$ > "$1" ) 2>/dev/null; }
+alive() { holder=$(cat "$1" 2>/dev/null); [ -n "$holder" ] && kill -0 "$holder" 2>/dev/null; }
+locked() {
+  if ! take "$lock"; then
+    alive "$lock" && return 1
+    if ! take "$lock.steal"; then alive "$lock.steal" && return 1; rm -f "$lock.steal"; return 1; fi
+    alive "$lock" || rm -f "$lock"
+    take "$lock"; got=$?
+    rm -f "$lock.steal"
+    [ "$got" -eq 0 ] || return 1
+  fi
+  trap 'rm -f "$lock"' EXIT
+  trap 'exit 1' INT TERM
+}
+block_of() { awk -v m="$mark" -v first="$2" '
+    $0 == "# " m { if ((getline n) > 0 && n == first) { on = 1; buf = n; next } if (on) buf = buf "\n" $0 "\n" n; next }
+    on && $0 == "# /" m { print buf; exit }
+    on { buf = buf "\n" $0 }' "$1"; }
+fresh() {
+  r=$(rule)
+  if [ -d "$HOME/.claude" ] && [ ! -f "$claude_rule" ]; then return 1; fi
+  if ours && [ "$(sed 1d "$claude_rule")" != "$r" ]; then return 1; fi
+  if [ -d "$HOME/.pi/agent" ] && { ! has_block "$pi_append" || [ "$(block_of "$pi_append" "## To-do in kansō")" != "$r" ]; }; then return 1; fi
+  if top_block "$codex_config" && [ "$(block_of "$codex_config" "developer_instructions = '''")" != "$(printf "developer_instructions = '''\n%s\n'''" "$r")" ]; then return 1; fi
+  if [ -f "$codex_config" ] && ! top_block "$codex_config" && ! top_key developer_instructions "$codex_config"; then return 1; fi
+  return 0
+}
+
 status() {
-  if ours || has_block "$pi_append" || has_block "$codex_config"; then echo on; else echo off; fi
+  if ours || has_block "$pi_append" || top_block "$codex_config"; then echo on; else echo off; fi
+}
+
+toml_ok() {
+  command -v python3 >/dev/null 2>&1 || return 0
+  python3 - "$1" <<'PY' 2>/dev/null
+import sys
+try:
+    import tomllib
+except ImportError:
+    sys.exit(0)
+with open(sys.argv[1], "rb") as f:
+    tomllib.load(f)
+PY
 }
 
 install() {
   [ -f "$db" ] || fail "kansō has not made its database yet; open kansō once and try again"
   missed=""
+  wrote=0
   if [ -d "$HOME/.claude" ]; then
     if [ -f "$claude_rule" ] && ! ours; then missed="Claude Code already has its own $claude_rule: add the rule there yourself"
-    elif mkdir -p "$(dirname "$claude_rule")" && { echo "<!-- $mark -->"; rule; } > "$claude_rule"; then echo "Claude Code: on"
+    elif mkdir -p "$(dirname "$claude_rule")" && { echo "<!-- $mark -->"; rule; } > "$claude_rule"; then echo "Claude Code: on"; wrote=$((wrote + 1))
     else missed="kansō could not write $claude_rule"; fi
   fi
   if [ -d "$HOME/.pi/agent" ]; then
-    if drop_block "$pi_append" && end_line "$pi_append" && { echo "# $mark"; rule; echo "# /$mark"; } >> "$pi_append"; then echo "Pi: on"
+    if drop_block "$pi_append" && end_line "$pi_append" && { echo "# $mark"; rule; echo "# /$mark"; } >> "$pi_append"; then echo "Pi: on"; wrote=$((wrote + 1))
     else missed="${missed:+$missed; }kansō could not write $pi_append"; fi
   fi
   if [ -f "$codex_config" ]; then
-    if ! drop_block "$codex_config"; then missed="${missed:+$missed; }kansō could not write $codex_config"
-    elif top_key developer_instructions "$codex_config"; then missed="${missed:+$missed; }Codex already has developer_instructions in $codex_config: add the rule there yourself"
-    elif { echo "# $mark"; printf "developer_instructions = '''\n"; rule; printf "'''\n"; echo "# /$mark"; cat "$codex_config"; } > "$codex_config.kanso" && put "$codex_config" "$codex_config.kanso"; then echo "Codex: on"
+    codex_strip "$codex_config" > "$codex_config.mine"
+    if top_key developer_instructions "$codex_config.mine"; then rm -f "$codex_config.mine"; missed="${missed:+$missed; }Codex already has developer_instructions in $codex_config: add the rule there yourself"
+    elif ! { echo "# $mark"; printf "developer_instructions = '''\n"; rule; printf "'''\n"; echo "# /$mark"; cat "$codex_config.mine"; } > "$codex_config.kanso"; then rm -f "$codex_config.kanso" "$codex_config.mine"; missed="${missed:+$missed; }kansō could not write $codex_config"
+    elif ! toml_ok "$codex_config.kanso"; then rm -f "$codex_config.kanso" "$codex_config.mine"; missed="${missed:+$missed; }kansō left $codex_config as it was: the rule would not fit in it"
+    elif rm -f "$codex_config.mine" && put "$codex_config" "$codex_config.kanso"; then echo "Codex: on"; wrote=$((wrote + 1))
     else missed="${missed:+$missed; }kansō could not write $codex_config"; fi
   fi
   [ -z "$missed" ] || fail "$missed; $me rule prints the rule"
+  [ "$wrote" -gt 0 ] || fail "found no Claude Code, Codex or Pi settings on this computer"
   echo on
 }
 
@@ -72,31 +148,46 @@ uninstall() {
   if ours; then rm -f "$claude_rule"; fi
   drop_block "$pi_append" || fail "kansō could not write $pi_append"
   [ -f "$pi_append" ] && [ ! -s "$pi_append" ] && rm -f "$pi_append"
-  drop_block "$codex_config" || fail "kansō could not write $codex_config"
+  drop_top "$codex_config" || fail "kansō could not write $codex_config"
   echo off
 }
 
 case "$1" in
   add)
-    shift
-    text=$(printf '%s' "$*" | tr '\n\t' '  ' | sed 's/  */ /g; s/^ //; s/ $//')
-    [ -n "$text" ] || fail 'usage: kanso-todo add "<text>"'
+    mine
+    text=$(one_line "$2")
+    detail=$(one_line "$3")
+    [ $# -eq 3 ] && [ -n "$text" ] && [ -n "$detail" ] || fail 'usage: kanso-todo add "<step>" "<detail>"'
+    columns
     p=$(project) || exit 1
     id=$(new_id)
-    sql "INSERT INTO todos(id,project,text,created,by) VALUES($(q "$id"),$(q "$p"),$(q "$text"),$(now),$(q "${HC_TERMINAL_ID:-}"));" || fail "cannot add the to-do"
+    card=$(hc get "$who" 2>/dev/null) || card=
+    sql "INSERT INTO todos(id,project,text,detail,created,by,by_since,by_name) SELECT $(q "$id"),$(q "$p"),$(q "$text"),$(q "$detail"),$(now),$(q "$who"),CASE WHEN json_valid(c) THEN json_extract(c,'\$.created_ms') END,CASE WHEN json_valid(c) THEN coalesce(nullif(json_extract(c,'\$.labels.\"kanso.shown\"'),''),nullif(json_extract(c,'\$.name'),''),nullif(json_extract(c,'\$.title'),'')) END FROM (SELECT $(q "$card") AS c);" || fail "cannot add the step"
     echo "$id" ;;
   list)
+    mine
+    columns
     p=$(find_project) || exit 1
     [ -n "$p" ] || exit 0
-    sql -separator "$(printf '\t')" "SELECT id, text FROM todos WHERE project=$(q "$p") AND done_at IS NULL ORDER BY created;" ;;
+    sql -separator "$(printf '\t')" "SELECT id, CASE WHEN done_at IS NOT NULL THEN 'done' WHEN started_at IS NOT NULL THEN 'doing' ELSE 'next' END, text FROM todos WHERE project=$(q "$p") AND by=$(q "$who") ORDER BY created;" ;;
+  start)
+    mine
+    [ -n "$2" ] || fail "usage: kanso-todo start <id>"
+    columns
+    p=$(find_project) || exit 1
+    n=$(sql "UPDATE todos SET started_at=$(now) WHERE id=$(q "$2") AND project=$(q "$p") AND by=$(q "$who") AND done_at IS NULL; SELECT changes();") || fail "cannot start $2"
+    [ "$n" = 1 ] || fail "you have no open step $2 in this project" ;;
   done)
+    mine
     [ -n "$2" ] || fail "usage: kanso-todo done <id>"
     p=$(find_project) || exit 1
-    n=$(sql "UPDATE todos SET done_at=$(now) WHERE id=$(q "$2") AND project=$(q "$p") AND done_at IS NULL; SELECT changes();") || fail "cannot close $2"
-    [ "$n" = 1 ] || fail "no open to-do $2 in this project" ;;
+    n=$(sql "UPDATE todos SET done_at=$(now) WHERE id=$(q "$2") AND project=$(q "$p") AND by=$(q "$who") AND done_at IS NULL; SELECT changes();") || fail "cannot close $2"
+    [ "$n" = 1 ] || fail "you have no open step $2 in this project" ;;
   rule) rule ;;
+  steps) echo "add start done list" ;;
+  refresh) locked || exit 0; [ "$(status)" = on ] || exit 0; fresh || install >/dev/null; exit 0 ;;
   status) status ;;
-  install) install ;;
-  uninstall) uninstall ;;
-  *) fail 'usage: kanso-todo add "<text>" | list | done <id> | rule' ;;
+  install) locked || fail "another kansō is changing the rule; try again"; install ;;
+  uninstall) locked || fail "another kansō is changing the rule; try again"; uninstall ;;
+  *) fail 'usage: kanso-todo add "<step>" "<detail>" | start <id> | done <id> | list | rule' ;;
 esac

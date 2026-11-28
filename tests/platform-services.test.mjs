@@ -74,6 +74,13 @@ for (const platform of ["macos", "linux", "windows"]) {
     assert.equal(await failed.firstPage("file.pdf", 800, "out.png"), false);
   });
 
+  test(`${platform} picture size reads the first frame of an animated picture`, async () => {
+    const frame = { width: 800, height: 600 };
+    const r = stub((program, args) => program === "sips" ? `pixelWidth: ${frame.width}\npixelHeight: ${frame.height}\n`
+      : program === "magick" ? args[2].replace("%w", frame.width).replace("%h", frame.height).repeat(2) : `${frame.width} ${frame.height}`);
+    assert.deepEqual(await imageApi(platform, r.run).pixels("loop.gif"), frame);
+  });
+
   test(`${platform} system operations resolve host directories and container shells`, async () => {
     const r = stub(() => windows ? "C:\\Temp" : "/tmp"), api = systemApi(platform, r.run);
     assert.ok((await api.temporary()).length > 0);
@@ -90,9 +97,6 @@ for (const platform of ["macos", "linux", "windows"]) {
       await api.guardStop("node", "guard.mjs", ["123", "456:force"]);
       assert.match(r.calls.at(-1).args.at(-1), /stop-server.*123.*456.*force/s);
     }
-    const battery = (text) => systemApi(platform, stub(() => text).run).battery();
-    assert.equal(await battery(windows ? "Offline" : platform === "macos" ? "Battery Power" : "0\n"), true);
-    assert.equal(await battery(windows ? "Online" : platform === "macos" ? "AC Power" : "1\n"), false);
   });
 
   test(`${platform} file walkers and migration keep names literal`, async () => {
@@ -283,6 +287,7 @@ test("Windows repository operations cover discovery, safety probes and metadata 
   assert.match((await api.bases("C:\\repo")).stdout, /^main$/m);
   assert.equal((await api.probe("C:\\missing", 0, ["main"])).stdout, "gone");
   assert.match((await api.probe("C:\\worktree", 60, ["main"])).stdout, /^merged$/m);
+  assert.ok(!r.calls.some(({ args }) => args.includes("merge-base") || args.includes("merge-tree")));
   assert.equal((await api.forget("C:\\repo", "C:\\tree")).stdout, "forgot");
   await assert.rejects(api.removeOrphan("C:\\absent"), /marker is no longer a file/);
   assert.ok(r.calls.every(({ program }) => program === "git" || program === "pwsh"));

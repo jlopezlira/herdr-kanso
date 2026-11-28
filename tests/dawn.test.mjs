@@ -37,10 +37,10 @@ test("The sky starts at night and rises to its last frame, with its timing", asy
   assert.equal(arg(layerOf(wide, "sky"), "h"), DAWN_H * 2, "scaled as a slice: its top kept, the rest cut");
 });
 
-test("Pressing the Dawn Mode pill replays the sunrise; Tab reaches it", async () => {
+test("Pressing the version pill replays the sunrise; Tab reaches it", async () => {
   const { header, c } = await kit();
   let replays = 0;
-  const drawn = header({ dawn: true })("h", c, { presses: { "Dawn Mode": () => { replays += 1; } } });
+  const drawn = header({ dawn: true, version: "4.2.0-rc.3" })("h", c, { presses: { "4.2.0-rc.3": () => { replays += 1; } } });
   const pill = nodes(drawn).find((kid) => calls(kid, "on_click").length && calls(kid, "tooltip").some((call) => call[1] === "Replay the sunrise"));
   assert.ok(pill, "the pill is a button that says what it does");
   calls(pill, "on_click")[0][1]({}, {});

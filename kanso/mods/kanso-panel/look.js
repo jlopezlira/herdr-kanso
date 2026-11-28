@@ -5,13 +5,13 @@ import { paths } from "./platform-paths.js";
 import { fileApi } from "./platform-files.js";
 import { imageApi } from "./platform-images.js";
 import { systemApi } from "./platform-system.js";
-import { bring, machineOf, copyFailure, drawablePath, remoteDue, ArmPoll, pollStart, pollNext, takeStamp, staleView, asOf, bytesLabel, listFailure, sweepLook } from "./remote-file.js";
+import { bring, machineOf, copyFailure, drawablePath, remoteDue, ArmPoll, pollStart, pollNext, takeStamp, staleView, asOf, bytesLabel, listFailure, sweepLook, svgPixels } from "./remote-file.js";
 // Images (the panel is "look" inside): pictures an agent made, beside it, and notes pinned to the spots
 // they are about. Herdr tells no mod about a click on a terminal's link, so it reads what the agent
 // printed: its screen, and the conversation on disk, from the byte it stored last time.
 import { div, image } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
-import { hc, focused, panes, terminals, machines, theme, appHome, home, shared, setShared, watchFolder, openOverlay, window, layout, pickFolder } from "herdr";
+import { hc, focused, panes, terminals, machines, theme, appHome, home, shared, setShared, watchFolder, openOverlay, window, layout, pickFolder, readTextFile } from "herdr";
 import { G, H, T, tokens } from "./ui.js";
 import { button, quietLink, iconButton } from "./ui-button.js";
 import { row } from "./ui-row.js";
@@ -393,8 +393,10 @@ export class Look {
     const name = `${key}-${Date.now()}.${item.kind === "image" ? ext : "png"}`, out = paths.join(dir, name);
     await localService(imageApi).fresh(dir, key);
     const made = item.kind === "image" ? (await localService(fileApi).copy(source, out)).code === 0 : await toPng(source, out);
-    if (made) await sweepLook(dir, key, name);
-    return made ? { image: `${DIR}/${name}`, picture: item.kind === "image" ? item.path : out } : null;
+    if (!made) return null;
+    await sweepLook(dir, key, name);
+    const pixels = ext === "svg" && item.kind === "image" ? svgPixels(await readTextFile(out).catch(() => "")) : await localService(imageApi).pixels(out).catch(() => null);
+    return { image: `${DIR}/${name}`, picture: item.kind === "image" ? item.path : out, pixels };
   }
 
   sample(item, file, cx) {
@@ -524,7 +526,7 @@ export class Look {
   }
 
   thumbnails(list, c) {
-    return h_flex().id("look-thumbnails").flex_none().px(G.lg).py(G.sm).gap(G.xs).items_center().overflow_x_scrollbar()
+    return h_flex().id("look-thumbnails").flex_none().px(G.lg).py(G.sm).gap(G.xs).items_center().h(H.row + G.sm * 2).overflow_x_scrollbar()
       .children(list.map((item) => this.thumbnail(item, c)));
   }
 
@@ -532,9 +534,11 @@ export class Look {
     const s = this.shown;
     if (!s?.image) return null;
     const mark = (p, i) => pinBadge(c, p, i).absolute().left(`${p.x * 100}%`).top(`${p.y * 100}%`).ml(-G.sm).mt(-G.sm);
-    return div().id("look-picture").relative().w_full().cursor_crosshair()
+    const ratio = s.pixels ? s.pixels.height / s.pixels.width : null;
+    return div().id("look-picture").relative().w_full().my_auto().flex_none().cursor_crosshair()
+      .when(Boolean(ratio), (el) => el.pb(`${ratio * 100}%`))
       .on_mouse_down("left", (e, cx) => this.pin(e, cx))
-      .child(image(s.image).w_full())
+      .child(ratio ? image(s.image).absolute().inset_0().size_full() : image(s.image).w_full())
       .children(this.pins.map(mark));
   }
 
@@ -584,7 +588,7 @@ export class Look {
         .when(Boolean(address), (el) => el.child(iconButton("look-pin", "pin", this.pinned ? "Follow the pane in focus" : "Stay on this agent",
           (cx) => { this.pinned = this.pinned ? null : address; this.keep(); cx.notify(); }, c, { active: Boolean(this.pinned) })))
         .child(iconButton("look-refresh", "refresh-cw", this.held ? "Retry" : "Read again", (cx) => { this.poll = pollStart(); this.arm = null; this.read(cx); if (item && shows(item) && !this.shown?.deferred) this.draw(item, cx); }, c, { spin: this.reading })))
-      .child(v_flex().id("look-view").flex_1().min_h(0).w_full().overflow_hidden().items_center().justify_center().child(this.view(c)))
+      .child(v_flex().id("look-view").flex_1().min_h(0).w_full().items_center().overflow_y_scrollbar().child(this.view(c)))
       .when(list.length > 0, (el) => el.child(this.thumbnails(list, c)))
       .when(this.pins.length > 0, (el) => el.child(v_flex().id("look-notes").flex_none().max_h(H.line * NOTE_ROWS).px(G.lg).py(G.sm).overflow_y_scrollbar().border_t(1).border_color(c.border)
         .children(this.pins.map((p, i) => this.noteRow(p, i, c)))))

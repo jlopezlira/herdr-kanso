@@ -35,9 +35,10 @@ export function prRow(node, provider = "github") {
 const COLS = ["url", "provider", "repo", "owner", "number", "created", "merged", "closed", "base", "main", "merge_oid", "prod"];
 const NUMS = new Set(["number", "created", "merged", "closed", "prod"]);
 
-export const upsertPrs = (rows) => rows.map((r) => `INSERT INTO prs(${COLS.join(",")}) VALUES(${COLS.map((k) => (NUMS.has(k) ? int(r[k]) : sqlText(r[k]))).join(",")}) ON CONFLICT(url) DO UPDATE SET ${COLS.filter((k) => k !== "url" && k !== "prod").map((k) => `${k}=excluded.${k}`).join(",")},prod=MAX(prs.prod,excluded.prod);`).join("\n");
+const owned = (login) => (login == null ? "1" : `EXISTS(SELECT 1 FROM meta WHERE k=${sqlText(`${"github"}.login`)} AND v=${sqlText(login)})`);
+export const upsertPrs = (rows, login = null) => rows.map((r) => `INSERT INTO prs(${COLS.join(",")}) SELECT ${COLS.map((k) => (NUMS.has(k) ? int(r[k]) : sqlText(r[k]))).join(",")} WHERE ${owned(login)} ON CONFLICT(url) DO UPDATE SET ${COLS.filter((k) => k !== "url" && k !== "prod").map((k) => `${k}=excluded.${k}`).join(",")},prod=MAX(prs.prod,excluded.prod);`).join("\n");
 
-export const prodSql = (urls) => (urls.length ? `UPDATE prs SET prod=1 WHERE url IN (${urls.map(sqlText).join(",")});` : "");
+export const prodSql = (urls, login = null) => (urls.length ? `UPDATE prs SET prod=1 WHERE url IN (${urls.map(sqlText).join(",")}) AND ${owned(login)};` : "");
 
 export function pendingByRepo(rows) {
   const waiting = rows.filter((r) => r.merged && !r.prod && r.main && r.base !== r.main && r.merge_oid);
@@ -79,7 +80,8 @@ export function cohortOf(prs, start, end, login = "") {
 }
 
 export function mergeHours(prs, start, end) {
-  return Array.from({ length: 24 }, (_, h) => prs.filter((p) => p.merged && p.merged >= start && p.merged < end && new Date(p.merged).getHours() === h).length);
+  const hours = prs.filter((p) => p.merged && p.merged >= start && p.merged < end).map((p) => new Date(p.merged).getHours());
+  return Array.from({ length: 24 }, (_, h) => hours.filter((x) => x === h).length);
 }
 
 export class Store extends Database {
@@ -103,14 +105,25 @@ export class Store extends Database {
 
   async prs() { return this.sql("SELECT * FROM prs;", true); }
 
+  async period(key) {
+    const kept = JSON.parse((await this.meta(`period:${key}`)) ?? "null");
+    return kept && Number.isFinite(kept.at) && kept.data?.viewer ? kept : null;
+  }
+
+  async calendar() { return JSON.parse((await this.meta("github.calendar")) ?? "null"); }
+  setCalendar(days, at = Date.now()) { return this.setMeta("github.calendar", JSON.stringify({ at, days })); }
+
+  setPeriod(key, data, at = Date.now()) { return this.setMeta(`period:${key}`, JSON.stringify({ at, data })); }
+
   async forAccount(provider, login) {
     const key = `${provider}.login`;
     if ((await this.meta(key)) === login) return;
-    await this.script(`DELETE FROM prs WHERE provider=${sqlText(provider)};\nDELETE FROM months WHERE provider=${sqlText(provider)};\nDELETE FROM meta WHERE k=${sqlText(`${provider}.updated`)};\nINSERT OR REPLACE INTO meta(k,v) VALUES(${sqlText(key)},${sqlText(login)});`);
+    await this.script(`DELETE FROM prs WHERE provider=${sqlText(provider)};\nDELETE FROM months WHERE provider=${sqlText(provider)};\nDELETE FROM meta WHERE k=${sqlText(`${provider}.updated`)} OR k LIKE 'period:%' OR k=${sqlText(`${provider}.calendar`)};\nINSERT OR REPLACE INTO meta(k,v) VALUES(${sqlText(key)},${sqlText(login)});`);
   }
-  async save(rows) { await this.script(upsertPrs(rows)); }
-  async markProd(urls) { await this.script(prodSql(urls)); }
+  async save(rows, login = null) { await this.script(upsertPrs(rows, login)); }
+  async markProd(urls, login = null) { await this.script(prodSql(urls, login)); }
 
   async readMonths(provider) { return new Set((await this.sql(`SELECT month FROM months WHERE provider=${sqlText(provider)};`, true)).map((r) => r.month)); }
-  async monthRead(provider, month, now = Date.now()) { await this.sql(`INSERT OR REPLACE INTO months(provider,month,read) VALUES(${sqlText(provider)},${sqlText(month)},${int(now)});`); }
+  async monthRead(provider, month, now = Date.now(), login = null) { await this.sql(`INSERT OR REPLACE INTO months(provider,month,read) SELECT ${sqlText(provider)},${sqlText(month)},${int(now)} WHERE ${owned(login)};`); }
+  async setOwnMeta(k, v, login) { await this.sql(`INSERT OR REPLACE INTO meta(k,v) SELECT ${sqlText(k)},${sqlText(v)} WHERE ${owned(login)};`); }
 }

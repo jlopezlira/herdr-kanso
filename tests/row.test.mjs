@@ -288,6 +288,16 @@ test("A working row's name glints, and a program's own art leads it, tinted or i
   assert.deepEqual([one(picture, "w"), one(picture, "h")], [ICON_ROW, ICON_ROW]);
 });
 
+test("A sidebar name keeps its weight and size while it glints", async () => {
+  const { row, T, c } = await kit();
+  const typeOf = (props) => {
+    const name = all(row("r", c, { name: "Atlas", names: true, ...props })).find((kid) => calls(kid, "font_medium").length);
+    return name ? [calls(name, "font_medium").length, one(name, "text_size")] : null;
+  };
+  assert.deepEqual(typeOf({}), [1, T.card]);
+  assert.deepEqual(typeOf({ glint: true }), typeOf({}));
+});
+
 test("Facts, the second line, the meta and the chip take a tone and a tip", async () => {
   const { row, c } = await kit();
   const el = row("r", c, {

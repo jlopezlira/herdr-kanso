@@ -1,4 +1,4 @@
-import { detailColumn, detailRow, scrollPage, pageHeader, pageSections, refreshTool, moreLink, barChart, chartColumn, chartRoom, heroStack, heroHeading } from "./ui-page.js";
+import { detailColumn, detailRow, scrollPage, pageHeader, pageSections, refreshTool, moreLink, barChart, chartBar, chartRoom, heroStack, heroHeading } from "./ui-page.js";
 import { localService, serviceOn } from "./platform-host.js";
 import { paths } from "./platform-paths.js";
 import { fileApi } from "./platform-files.js";
@@ -7,7 +7,7 @@ import { fileApi } from "./platform-files.js";
 import { View, div } from "gpui-kit";
 import { v_flex, h_flex, Popover, ScrollHandle } from "gpui-base";
 import { exec, appHome, home, theme, nextCommand, readTextFile, writeTextFile, layout, machines, shared, setShared } from "herdr";
-import { T, G, H, OPACITY, breathe, tokens } from "./ui.js";
+import { T, G, H, CHART, OPACITY, breathe, tokens } from "./ui.js";
 import { mark } from "./ui-mark.js";
 import { quietLink, iconButton } from "./ui-button.js";
 import { field, TextField } from "./ui-field.js";
@@ -36,8 +36,10 @@ const PAYLOAD_KIND = "kanso-spend-costs";
 const PAYLOAD_VERSION = 1;
 const STEP_TIMEOUT_MS = 35_000;
 const TICK_MS = 15_000;
-const REFRESH_MS = 60_000;
-const LIVE_REFRESH_MS = 30_000;
+const REFRESH_MS = 12 * 60 * 60 * 1000;
+const SNAPSHOT_AT = "kanso.spend.snapshotAt";
+const UNFINISHED = "kanso.spend.unfinished";
+const RETRY_MS = 10 * 60 * 1000;
 const LIST_ROWS = 6;
 const TASK_ROWS = 8;
 
@@ -112,7 +114,6 @@ export default class TokenSpend extends View {
     this.task = null;
     this.watchdog = null;
     this.continueTimer = null;
-    this.lastSnapshotAt = 0;
     this.cost = { period: spendPeriod(shared(PERIOD_KEY)), offset: 0, project: "all", model: "all" };
     this.expanded = {};
     this.page = "home";
@@ -172,9 +173,8 @@ export default class TokenSpend extends View {
           this.sleep();
           return;
         }
-        const every = this.costs?.live?.length ? LIVE_REFRESH_MS : REFRESH_MS;
-        if (Date.now() - this.lastSnapshotAt >= every) this.run("snapshot", tickCx);
-        this.exchange(tickCx, false);
+        if (this.due()) this.run("snapshot", tickCx);
+        if (!this.running && Date.now() - (this.exchangeTriedAt ?? 0) >= EXCHANGE_MS) this.exchange(tickCx, false);
       });
     }
     if (!this.nodeBinary && !this.runtimeError) {
@@ -189,18 +189,40 @@ export default class TokenSpend extends View {
         }
         this.runtimeTask = null;
         if (this.closed) return;
-        if (this.nodeBinary) { this.run("snapshot", runtimeCx); this.exchange(runtimeCx, true); }
+        if (this.nodeBinary) this.catchUp(runtimeCx);
         runtimeCx.notify();
       });
       return;
     }
-    if (Date.now() - this.lastSnapshotAt >= REFRESH_MS) this.run("snapshot", cx);
-    else if (!this.costs) this.run("prepare", cx);
-    this.exchange(cx, true);
+    this.catchUp(cx);
     cx.notify();
   }
 
+  catchUp(cx) {
+    if (this.due()) this.run("snapshot", cx);
+    else if (!this.costs || this.behind()) this.run("prepare", cx);
+    if (this.running || this.stale()) return;
+    const all = this.takeForced();
+    this.exchange(cx, all, all);
+  }
+
+  due() { return Date.now() - (Number(shared(SNAPSHOT_AT)) || 0) >= REFRESH_MS; }
+
+  unfinished() { return shared(UNFINISHED) ?? null; }
+
+  behind() { return this.costsSettled === false && !this.unfinished(); }
+
+  stale() { return Boolean(this.unfinished()) || this.costsSettled === false; }
+
+  takeForced() {
+    const all = this.forceNext === true;
+    this.forceNext = false;
+    return all;
+  }
+
   reload(cx) {
+    setShared(SNAPSHOT_AT, 0);
+    this.forceNext = true;
     if (this.running) { this.run("snapshot", cx); return; }
     this.nodeBinary = null;
     this.runtimeError = null;
@@ -247,8 +269,10 @@ export default class TokenSpend extends View {
     const generation = this.generation;
     const sent = this.options();
     const startedAt = Date.now();
+    const scans = command !== "prepare";
+    const before = { done: !this.unfinished(), at: shared(SNAPSHOT_AT) };
     this.running = command;
-    if (command === "snapshot") this.lastSnapshotAt = Date.now();
+    if (scans) setShared(SNAPSHOT_AT, startedAt - REFRESH_MS + RETRY_MS);
     cx.notify();
 
     try { this.watchdog?.cancel(); } catch { /* already gone */ }
@@ -256,6 +280,7 @@ export default class TokenSpend extends View {
       if (generation !== this.generation) return;
       this.generation += 1;
       try { this.task?.cancel(); } catch { /* already gone */ }
+      if (scans) setShared(SNAPSHOT_AT, Date.now() - REFRESH_MS + RETRY_MS);
       this.finish(timerCx, "Spend took too long to answer. It will try again shortly.");
     });
 
@@ -271,9 +296,15 @@ export default class TokenSpend extends View {
       );
       if (generation !== this.generation || this.closed) return;
       if (this.syncWaiting === "fold" && startedAt >= this.syncEnded) this.syncWaiting = false;
+      if (scans) {
+        const again = failure || payload?.scan?.retry || payload?.scan?.partial;
+        setShared(SNAPSHOT_AT, again ? Date.now() - REFRESH_MS + RETRY_MS : startedAt);
+        if (!failure) setShared(UNFINISHED, payload?.scan?.partial ? { ...payload.scan, run: startedAt } : null);
+        if (payload?.scan?.partial) this.ownRun = startedAt;
+      }
       if (payload) {
-        this.scan = payload.scan ?? this.scan;
-        if (this.awake) this.costs = payload.costs;
+        this.scan = scans || !this.scan ? payload.scan ?? this.scan : { ...this.scan, lastScanAt: payload.scan?.lastScanAt ?? this.scan.lastScanAt };
+        if (this.awake) { this.costs = payload.costs; this.costsSettled = scans ? !payload.scan?.partial : before.done && !this.unfinished() && shared(SNAPSHOT_AT) === before.at; }
         if (payload.settings) this.settings = payload.settings;
         // Filters changed while this ran: price again with the current ones.
         if (JSON.stringify(sent.cost) !== JSON.stringify(this.cost)) this.queued = { ...this.queued, prepare: true };
@@ -312,35 +343,45 @@ export default class TokenSpend extends View {
       } else if (this.queued.prepare) {
         this.queued = { ...this.queued, prepare: false };
         this.run("prepare", cx);
-      } else if (this.scan?.partial && !failure && this.awake) {
+      } else if (this.behind() && !failure && this.awake) {
+        this.run("prepare", cx);
+      } else if (this.ownRun && this.unfinished()?.run === this.ownRun && !failure && this.awake) {
         // The first scan is time-boxed; keep going until it has read everything.
         try { this.continueTimer?.cancel(); } catch { /* already gone */ }
+        const scan = this.ownRun;
         this.continueTimer = cx.timer.after(1000, (timerCx) => {
           this.continueTimer = null;
-          this.run("snapshot", timerCx);
+          const now = this.unfinished();
+          if (!this.awake || (now && now.run !== scan)) return;
+          this.run(now ? "snapshot" : "prepare", timerCx);
         });
       }
     }
-    if (this.awake && !this.closed) this.exchange(cx, true);
+    if (this.awake && !this.closed && !this.running && !this.stale()) this.exchange(cx, true, this.takeForced());
     cx.notify();
   }
 
-  exchange(cx, force = false) {
-    if (this.closed || !this.awake || !this.nodeBinary) return;
-    if (this.syncing) { this.syncAgain = true; if (force) this.syncForce = true; return; }
+  exchange(cx, force = false, everyone = false) {
+    if (this.closed || !this.awake || !this.nodeBinary || this.stale()) {
+      if (everyone) this.forceNext = true;
+      return;
+    }
+    if (this.syncing) { this.syncAgain = true; if (force) this.syncForce = true; if (everyone) this.syncEveryone = true; return; }
     this.syncing = true;
     cx.spawn(async (syncCx) => {
-      try { await this.exchangeOnce(syncCx, force); } catch { this.syncWaiting = false; }
+      try { await this.exchangeOnce(syncCx, force, everyone); } catch { this.syncWaiting = false; }
       this.syncing = false;
       this.probing = false;
       syncCx.notify();
-      if (this.syncAgain && this.awake && !this.closed) { const again = this.syncForce; this.syncForce = false; this.syncAgain = false; this.exchange(syncCx, again); }
+      if (this.syncAgain && this.awake && !this.closed) { const forced = this.takeForced(), again = this.syncForce, all = this.syncEveryone || forced; this.syncForce = false; this.syncEveryone = false; this.syncAgain = false; this.exchange(syncCx, again, all); }
     });
   }
 
-  async exchangeOnce(cx, force = false) {
+  async exchangeOnce(cx, force = false, everyone = false) {
     if (!this.awake || this.closed) return;
+    const costs = this.costs;
     const now = Date.now();
+    this.exchangeTriedAt = now;
     if (!force && this.syncOffUntil > now) return;
     const dir = syncDir(appHome());
     const config = configFrom(await readTextFile(paths.join(dir, "config.json")).catch(() => null));
@@ -355,7 +396,7 @@ export default class TokenSpend extends View {
     this.syncStored = power.stored;
     const peers = machines();
     const status = statusFrom(await readTextFile(paths.join(dir, "status.json")).catch(() => null));
-    const steps = planExchange({ config, peers, status, now, periodKey, stored: power.stored, live: power.live });
+    const steps = planExchange({ config, peers, status, now, periodKey, stored: power.stored, live: power.live, force: everyone });
     if (!steps.length) {
       if (this.syncWaiting === true) this.syncWaiting = false;
       this.syncSettled = settleKey;
@@ -364,11 +405,15 @@ export default class TokenSpend extends View {
       if (this.syncSettled !== settleKey) this.syncWaiting = true;
       cx.notify();
     }
+    const rows = rowsFrom(await readTextFile(paths.join(dir, "rows.json")).catch(() => null));
+    if (this.costs !== costs || this.stale()) {
+      if (everyone) this.forceNext = true;
+      return;
+    }
     const out = await exchangeAll((on, payload) => serviceOn(probeApi, on).then((probe) => probe.exchange(payload)), {
-      config, peers, status,
-      rows: rowsFrom(await readTextFile(paths.join(dir, "rows.json")).catch(() => null)),
-      self, own: self ? rowFromCosts(this.costs, self, new Date(now).toISOString(), options) : null,
-      now, periodKey, options, stored: power.stored, live: power.live,
+      config, peers, status, rows,
+      self, own: self ? rowFromCosts(costs, self, new Date(now).toISOString(), options) : null,
+      now, periodKey, options, stored: power.stored, live: power.live, force: everyone,
     });
     if (!this.awake || this.closed) return;
     this.syncHolds = holdsOf(out.status, power.stored, power.live);
@@ -523,8 +568,9 @@ export default class TokenSpend extends View {
   header(c, narrow) {
     const busy = Boolean(this.running);
     const updated = this.scan?.lastScanAt ? `Updated ${formatTime(this.scan.lastScanAt)}` : "";
-    const reading = this.running !== "prepare" && busy && this.scan?.partial
-      ? `Reading sessions, ${this.scan.processed} of ${this.scan.total}` : "";
+    const unfinished = this.unfinished();
+    const reading = this.running !== "prepare" && busy && unfinished
+      ? `Reading sessions, ${unfinished.processed} of ${unfinished.total}` : "";
     const top = this.stack[this.stack.length - 1];
     const inner = this.page === "settings" || Boolean(top);
     const title = this.page === "settings" ? "Settings" : top ? top.label : "Spend";
@@ -646,8 +692,8 @@ export default class TokenSpend extends View {
         .when(Boolean(hero.note), (el) => el.child(div().text_size(T.title).text_color(c.dim).child(hero.note)))
         .when(Boolean(hero.empty), (el) => el.child(div().text_size(T.title).text_color(c.muted).child(hero.empty)))
         .when(Boolean(hero.plan) && !this.syncWaiting, (el) => el.child(div().text_size(T.value).text_color(c.muted).child(hero.plan)))
-        .when(Boolean(this.scan?.partial), (el) => el.child(div().text_size(T.body).text_color(c.dim)
-          .child(`Still reading your history: ${this.scan.processed} of ${this.scan.total} files so far.`))));
+        .when(Boolean(this.unfinished()), (el) => el.child(div().text_size(T.body).text_color(c.dim)
+          .child(`Still reading your history: ${this.unfinished().processed} of ${this.unfinished().total} files so far.`))));
   }
 
   plans(c, data) {
@@ -658,13 +704,9 @@ export default class TokenSpend extends View {
   }
 
   chart(c, chart) {
-    const height = 132;
     return barChart(c, {
-      columns: chart.bars.map((bar) => chartColumn(c, { tip: bar.tip, marked: Boolean(bar.peak), value: bar.value }, chartRoom(height))
-        .child(div().w(bar.peak ? 3 : 2).flex_none().rounded_t(1)
-          .h(bar.ratio > 0 ? Math.max(3, Math.round(bar.ratio * height)) : 1)
-          .bg(bar.peak ? c.accent : bar.ratio > 0 ? c.muted : c.border)
-          .opacity(bar.peak || bar.ratio === 0 ? 1 : OPACITY.quiet))),
+      columns: chart.bars.map((bar) => chartBar(c, { ...bar, mark: bar.peak })),
+      room: chartRoom(CHART.h),
       axis: [chart.first, chart.title, chart.last],
     });
   }

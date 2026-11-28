@@ -3,7 +3,7 @@ import { postText } from "./share.js";
 
 export function shareText(s, extra) {
   const parts = [
-    ...(s.big ? [`${s.big} pull requests in production ${s.period.toLowerCase()}${s.small ? `, ${s.small} of those I opened` : ""}`] : []),
+    ...(s.big && s.opened ? [`${s.prod} of the ${s.opened} pull requests I opened ${s.period.toLowerCase()} reached production (${s.big})`] : []),
     ...(extra.streak > 1 ? [`a ${extra.streak}-day streak`] : []),
   ];
   return postText(parts, "What I shipped.");

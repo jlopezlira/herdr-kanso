@@ -27,6 +27,7 @@ const PICK = {
   SWITCH: { w: "k-sw-w", h: "k-sw-h", knob: "k-sw-knob" },
   PAGE: { w: "k-w-page", toolbar: "k-h-file-toolbar", toolbarX: "k-file-toolbar-x", note: "k-note-text", markdown: "k-markdown-text", unitGap: "k-metric-unit-gap", unitY: "k-metric-unit-y", findList: "k-h-find-list" },
   SIDEBAR: { w: "k-w-sidebar", narrow: "k-w-sidebar-narrow", min: "k-w-sidebar-min", railRow: "k-rail-row", tile: "k-rail-tile", guideX: "k-guide-x", agentX: "k-sidebar-agent-x", elbowGap: "k-sidebar-elbow-gap", gap: "k-sidebar-row-gap", gutter: "k-sidebar-gutter", groupGap: "k-sidebar-group-gap", computerGap: "k-sidebar-computer-gap", threadGap: "k-sidebar-thread-gap" },
+  CHART: { h: "k-chart-tall", small: "k-chart-small", bar: "k-chart-bar", mark: "k-chart-mark", floor: "k-chart-floor" },
   PANE: { edge: "k-edge-w", gap: "k-pane-gap", minW: "k-pane-min-w", minH: "k-pane-min-h", pills: "k-w-pills" },
   KEY: { x: "k-keycap-x", text: "k-keycap-text", unit: "k-help-key", gap: "k-help-key-gap" },
   DIALOG: { wide: "k-dialog-w", small: "k-dialog-small", sidebar: "k-dialog-sidebar", worktree: "k-dialog-worktree", prompt: "k-dialog-prompt", list: "k-h-dialog-list", pad: "k-dialog-paged-pad", settingsW: "k-settings-w", settingsH: "k-settings-tall", computers: "k-dialog-computers" },
@@ -41,6 +42,7 @@ const PICK = {
 const LEADINGS = { LH: { body: "k-lh-body" } };
 // Durations in milliseconds.
 const TIMING = { SPIN: "k-spin-ms", GLINT_MS: "k-glint-ms", GLINT_STAGGER: "k-glint-stagger", LIT_MS: "k-key-lit-ms" };
+const COUNTS = { GLINT_PACES: "k-glint-paces" };
 // Transitions: a duration and an easing.
 const MOTION = { EASE: { duration: "k-fade-ms", easing: "k-glide-ease" }, GLIDE: { duration: "k-glide-ms", easing: "k-glide-ease" } };
 const EASINGS = { GLINT_EASE: "k-ease-out" };
@@ -121,7 +123,7 @@ export function block(tokens, dawnMotion) {
   const of = share(tokens);
   const motion = Object.entries(MOTION).map(([name, pick]) => `export const ${name} = { duration: ${duration(pick.duration)}, easing: ${ease(pick.easing)} };`);
   const beats = `export const BEAT = { ${Object.entries(BEATS).map(([key, pick]) => `${key}: { from: ${of(pick.from)}, to: 1, period: ${duration(pick.period)} }`).join(", ")} };`;
-  return [START, ...constants(PICK, px(tokens)), ...constants(LEADINGS, reader("")(tokens)), ...constants(TIMING, duration), ...motion, ...constants(EASINGS, ease), beats, ...constants(SHARES, of),
+  return [START, ...constants(PICK, px(tokens)), ...constants(LEADINGS, reader("")(tokens)), ...constants(TIMING, duration), ...constants(COUNTS, reader("")(tokens)), ...motion, ...constants(EASINGS, ease), beats, ...constants(SHARES, of),
     washes(tokens), dawnInks(tokens), dawnMotion, constant("INK", INK, ink(tokens)), END].join("\n");
 }
 

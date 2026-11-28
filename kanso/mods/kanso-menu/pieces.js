@@ -22,6 +22,7 @@ export const PIECES = [
   piece("sidebar.time", "Time in its state", "Sidebar", SHOW, "show", "draw"),
   piece("sidebar.tasks", "Commands still running", "Sidebar", SHOW, "show", "work", "ps"),
   piece("sidebar.git", "Branch, ahead, behind", "Sidebar", SHOW, "show", "work", "git"),
+  piece("sidebar.shared", "Files two agents changed", "Sidebar", SHOW, "show", "work", "git"),
   piece("sidebar.away", "While you were away", "Sidebar", THREE, "needed", "work"),
   // The blocked row and the status bar already say it.
   piece("sidebar.needs", "Needs you", "Sidebar", THREE, "hide", "draw"),
